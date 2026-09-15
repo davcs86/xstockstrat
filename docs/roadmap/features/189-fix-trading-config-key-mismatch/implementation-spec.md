@@ -276,7 +276,7 @@ coverage; the `internal/service` gate test is excluded from the number but still
 
 ### Step 4 — service: config-service — rename trading_state key in the authz allowlist + SetConfig enum guard
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/grpc/authz.ts` — modify
@@ -313,7 +313,7 @@ WatchConfig stream stability
 
 ### Step 5 — test: config-service — enum guard + internal-caller authz fire on the full-dotted key
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/**/*.test.ts` — modify (the existing authz / SetConfig test files)

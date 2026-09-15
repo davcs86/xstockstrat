@@ -169,3 +169,20 @@ Spec re-validated against live tree at boot — all Codebase Evidence resolves; 
 - Files modified: `internal/config/config_test.go`, `internal/service/trading_state_gate_test.go`,
   `internal/service/trading_reconciliation_test.go` (deviation — writer-rename regression assertion).
 - Deviations: 2 (reconciliation-test key update; golangci-lint→go vet CI-equivalent) — see Deviation Log.
+
+### Step 4 — service: config authz allowlist + SetConfig enum guard key rename [done]
+- authz.ts:70 INTERNAL_CALLER_ALLOWLIST grant key 'trading_state'→'platform.trading_state';
+  configServiceImpl.ts:397 SetConfig enum guard `key === 'trading_state'`→`'platform.trading_state'`.
+  Lockstep with Step 1/029 + Step 2's writer.
+- Files modified: `src/grpc/authz.ts`, `src/grpc/configServiceImpl.ts`. Verified with Step 5.
+
+### Step 5 — test: config enum guard + internal-caller authz on the full-dotted key [done]
+- Updated internalCallerAuthz.test.ts / tradingStateValidation.test.ts / internalCallerSetConfig.test.ts
+  to the full-dotted `platform.trading_state`; added a regression test that the pre-189 bare
+  `trading_state` is no longer authorized.
+- TDD red→green: RED — reverting Step 4 to the bare key made 7 tests fail (authz REDUCE_ONLY/HALTED,
+  the bare-key-denied regression, the SetConfig enum-reject + internal-caller write). GREEN — with the
+  rename applied all 108 config tests pass; `pnpm run lint` 0 errors (143 pre-existing any-warnings),
+  `pnpm run test:coverage` 81.03% lines (≥40%).
+- Files modified: `src/__tests__/{internalCallerAuthz,tradingStateValidation,internalCallerSetConfig}.test.ts`
+- Deviations: none.
