@@ -2,11 +2,13 @@ import { useQuery, useInfiniteQuery } from '@tanstack/react-query';
 import { analysisClient } from '@/lib/browserClients/analysisClient';
 import { useInvalidatingMutation } from '@/hooks/useInvalidatingMutation';
 import { isNotFoundError } from '@/lib/scoreDisplay';
+import { OpportunityActionTag, OpportunitySort } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import type { OpportunityAction, ReadinessRule } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 
 /**
  * Decide-surface read-only hooks (insights BFF). ListOpportunities takes the user from the
- * x-user-id header, so the request carries only the min-conviction filter.
+ * x-user-id header; feature 190 threads the min-conviction floor, source multi-select, action
+ * filter, and sort into the request so all filtering/sorting is server-side.
  */
 
 type EvaluateReadinessResult = Awaited<ReturnType<typeof analysisClient.evaluateReadiness>>;
@@ -14,14 +16,24 @@ type EvaluateReadinessResult = Awaited<ReturnType<typeof analysisClient.evaluate
 /**
  * Ranked opportunity queue with infinite pagination, polled every 15s (feature 187).
  * Returns `useInfiniteQuery` — consumers flatten via `data?.pages.flatMap(p => p.opportunities)`.
- * Response-level signals (`computing`, `computeFailed`) ride on page 0.
+ * Response-level signals (`computing`, `computeFailed`) and the `availableSources` facet ride on
+ * page 0 (feature 190). All four controls are folded into the query key so an in-place
+ * `refetchInterval` refetch AND a filter change both re-fetch (fails.md:1648).
  */
-export function useOpportunities(minConviction = 0) {
+export function useOpportunities(
+  minConviction = 0,
+  sources: string[] = [],
+  actionFilter: OpportunityActionTag = OpportunityActionTag.UNSPECIFIED,
+  sort: OpportunitySort = OpportunitySort.UNSPECIFIED,
+) {
   return useInfiniteQuery({
-    queryKey: ['opportunities', minConviction],
+    queryKey: ['opportunities', minConviction, [...sources].sort(), actionFilter, sort],
     queryFn: ({ pageParam }) =>
       analysisClient.listOpportunities({
         minConviction,
+        sources,
+        actionFilter,
+        sort,
         page: { pageSize: 50, pageToken: pageParam ?? '' },
       }),
     initialPageParam: '',

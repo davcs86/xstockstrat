@@ -535,6 +535,15 @@ enum OpportunityActionTag {
   OPPORTUNITY_ACTION_TAG_REDUCE = 3;  // sell signal, held (trim or exit — human decides)
 }
 
+// Sort order for the opportunity queue read (feature 190). Closed set → enum (C-04).
+// UNSPECIFIED = the legacy feature-187 blended-rank default ((1-w)·conviction + w·signal_axis) —
+// NOT an alias of CONVICTION; non-UI callers (agent list_opportunities) keep the blended order.
+enum OpportunitySort {
+  OPPORTUNITY_SORT_UNSPECIFIED = 0;
+  OPPORTUNITY_SORT_CONVICTION = 1;  // raw o.conviction ordering (the UI's explicit "Conviction")
+  OPPORTUNITY_SORT_EXPIRY = 2;      // soonest valid_until first (NULLS last)
+}
+
 // Per-condition-leaf evaluation state. Closed set → enum (C-04).
 enum ConditionState {
   CONDITION_STATE_UNSPECIFIED = 0;
@@ -627,6 +636,10 @@ message StrategyAnalytics {
 message ListOpportunitiesRequest {
   xstockstrat.common.v1.PageRequest page = 1;
   double min_conviction = 2;
+  // feature 190 — server-side filters/sort. All applied in the analysis read path.
+  repeated string sources = 3;              // empty = all sources; matches derived _primary_source
+  OpportunityActionTag action_filter = 4;   // UNSPECIFIED(0) = any action
+  OpportunitySort sort = 5;                  // UNSPECIFIED(0) = legacy blended rank (not CONVICTION)
 }
 message ListOpportunitiesResponse {
   repeated Opportunity opportunities = 1;
@@ -637,6 +650,10 @@ message ListOpportunitiesResponse {
   // feature 185 — a persistently-failing cold recompute (past the bounded attempt count):
   // renders a terminal error instead of an infinite "computing" spinner.
   bool compute_failed = 4;
+  // feature 190 — the distinct derived primary sources present in the user's full valid queue
+  // (independent of the request filters), so the UI's source chips stay complete under pagination.
+  // Populated on page 0 only (the client reads page 0).
+  repeated string available_sources = 5;
 }
 
 // Which rule tree EvaluateReadiness traces (feature 138). Closed set → enum (C-04).

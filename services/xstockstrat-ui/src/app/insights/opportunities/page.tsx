@@ -5,7 +5,6 @@ import { AppShell } from '@/components/insights/AppShell';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { cn } from '@/components/ui/utils';
 import {
   Select,
@@ -15,8 +14,18 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { ChevronsUpDown } from 'lucide-react';
+import {
   OpportunityActionTag,
   OpportunityAction,
+  OpportunitySort,
 } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import type { Opportunity } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import {
@@ -62,16 +71,6 @@ function opportunityChips(o: Opportunity): string[] {
   return Array.from(new Set([o.source, ...(o.provenance ?? [])].filter(Boolean)));
 }
 
-/** Shared pill styling for the source-filter row ("All sources" + each `ToggleGroupItem`). */
-function sourceFilterPillClass(active: boolean): string {
-  return cn(
-    'rounded-full border px-3 py-1 text-xs transition-colors',
-    active
-      ? 'border-primary bg-primary/20 text-foreground'
-      : 'border-border text-muted-foreground hover:text-foreground',
-  );
-}
-
 /** `HH:MM` local expiry from a protobuf-es Timestamp ({ seconds: bigint }); `—` when unset. */
 function expiresLabel(validUntil: { seconds: bigint } | undefined): string {
   if (!validUntil || !validUntil.seconds) return '—';
@@ -79,27 +78,55 @@ function expiresLabel(validUntil: { seconds: bigint } | undefined): string {
   return d.toTimeString().slice(0, 5);
 }
 
-function msUntil(validUntil: { seconds: bigint } | undefined): number | null {
-  if (!validUntil || !validUntil.seconds) return null;
-  return Number(validUntil.seconds) * 1000 - Date.now();
-}
-
 /**
  * The ranked opportunity queue over analysis.ListOpportunities, as conviction cards. Conviction is
  * a defined value (never a fabricated %); live-market stats are shown only when present, never faked.
  */
 export default function OpportunitiesPage() {
-  const { data, isLoading, error, fetchNextPage, hasNextPage, isFetchingNextPage } =
-    useOpportunities(0);
-  const opportunities = useMemo(() => data?.pages.flatMap((p) => p.opportunities) ?? [], [data]);
-
   const [minConviction, setMinConviction] = useState(0);
   const [activeSources, setActiveSources] = useState<string[]>([]);
   const [actionFilter, setActionFilter] = useState<string>('any');
   const [sortKey, setSortKey] = useState<SortKey>('conviction');
+  // feature 190 — the source-facet from the server (page 0), held in state so `effectiveSources`
+  // (the request param) can be derived before the hook call without a render cycle: the facet is
+  // filter-independent, so an effect-driven sync converges in one step. `activeSources` (the user's
+  // selection) is never mutated by the sync — it survives a source's temporary disappearance.
+  const [availableSources, setAvailableSources] = useState<string[]>([]);
+
+  // feature 190 — map UI control state → proto request enums (server does the filtering/sorting).
+  const actionFilterEnum: OpportunityActionTag =
+    actionFilter === 'any' ? OpportunityActionTag.UNSPECIFIED : Number(actionFilter);
+  const sortEnum: OpportunitySort =
+    sortKey === 'expiry' ? OpportunitySort.EXPIRY : OpportunitySort.CONVICTION;
+
+  // Effective request filter = stored selection ∩ sources still in the queue (feature 155 intent,
+  // now the server `sources` param): a vanished sole-selection yields [] → server returns all rows
+  // (no strand, @AC-12), while the selection survives in `activeSources`.
+  const effectiveSources = useMemo(
+    () => activeSources.filter((s) => availableSources.includes(s)),
+    [activeSources, availableSources],
+  );
+
+  const { data, isLoading, error, fetchNextPage, hasNextPage, isFetchingNextPage } =
+    useOpportunities(minConviction, effectiveSources, actionFilterEnum, sortEnum);
+  // Server-filtered/sorted rows — rendered directly (no client re-filter/re-sort, @AC-15).
+  const opportunities = useMemo(() => data?.pages.flatMap((p) => p.opportunities) ?? [], [data]);
   // Actions are server-persisted (SetOpportunityAction) and the read is filtered server-side, so
   // acting on a row + invalidating drops it on the next fetch.
   const setAction = useSetOpportunityAction();
+
+  // Sync the page-0 facet into state (feature 190, O1 — page 0 only, never flat-mapped). Only when
+  // the facet is actually PRESENT: while a filter-change refetch is in flight `data` is momentarily
+  // undefined for the new query key, and resetting to [] would collapse effectiveSources → flip the
+  // key back → an infinite loop (React #185). Keep the last-known facet across the refetch; the
+  // content-equality guard then prevents a redundant re-render once the response lands.
+  const facet = data?.pages?.[0]?.availableSources;
+  useEffect(() => {
+    if (facet === undefined) return;
+    setAvailableSources((prev) =>
+      prev.length === facet.length && prev.every((s, i) => s === facet[i]) ? prev : [...facet],
+    );
+  }, [facet]);
 
   // Hydrate persisted floor in an effect, not initial state — reading it there mismatches SSR.
   useEffect(() => {
@@ -119,40 +146,6 @@ export default function OpportunitiesPage() {
     }
   };
 
-  const sources = useMemo(
-    () => Array.from(new Set(opportunities.map((o) => o.source).filter(Boolean))).sort(),
-    [opportunities],
-  );
-
-  // Effective filter = stored selection ∩ sources still in the queue, intersected at render (not a
-  // mutating effect): a vanished source can't silently empty the queue, and the selection survives.
-  const effectiveSources = useMemo(
-    () => activeSources.filter((s) => sources.includes(s)),
-    [activeSources, sources],
-  );
-
-  const rows = useMemo(() => {
-    const filtered = opportunities.filter(
-      (o) =>
-        // A muted (deny-listed) row and a data-unavailable row (feature 185) each carry conviction 0
-        // by design and must bypass the min-conviction filter — the mute / the unavailable sentinel
-        // IS the signal, not a low score. Exempt at every layer (mirrors the backend read floor,
-        // fails.md:1547) so raising the slider never silently hides an unavailable row.
-        (o.muted || o.dataUnavailable || o.conviction >= minConviction) &&
-        (effectiveSources.length === 0 || effectiveSources.includes(o.source)) &&
-        (actionFilter === 'any' || String(o.action) === actionFilter),
-    );
-    const sorted = [...filtered];
-    if (sortKey === 'conviction') {
-      sorted.sort((a, b) => b.conviction - a.conviction);
-    } else {
-      sorted.sort(
-        (a, b) => (msUntil(a.validUntil) ?? Infinity) - (msUntil(b.validUntil) ?? Infinity),
-      );
-    }
-    return sorted;
-  }, [opportunities, minConviction, effectiveSources, actionFilter, sortKey]);
-
   const act = (o: Opportunity, action: OpportunityAction) =>
     setAction.mutate({ opportunityKey: o.opportunityKey, action });
 
@@ -161,16 +154,17 @@ export default function OpportunitiesPage() {
       ? `/trader/positions/${o.symbol}?strategy=${o.strategyId}`
       : `/trader/positions/${o.symbol}`;
 
-  // rows is already sorted, so each symbol's card position follows its highest-ranked row.
+  // `opportunities` is already server-filtered + server-sorted with symbol grouping (feature 190),
+  // so Map insertion order yields contiguous per-symbol cards positioned by the server's ordering.
   const symbolGroups = useMemo(() => {
     const map = new Map<string, Opportunity[]>();
-    for (const o of rows) {
+    for (const o of opportunities) {
       const arr = map.get(o.symbol);
       if (arr) arr.push(o);
       else map.set(o.symbol, [o]);
     }
     return [...map.entries()].map(([symbol, opps]) => ({ symbol, opps }));
-  }, [rows]);
+  }, [opportunities]);
 
   // OHLC bars fetched async per-symbol — decoupled from the ListOpportunities read path.
   const ohlcSymbols = useMemo(() => symbolGroups.map((g) => g.symbol), [symbolGroups]);
@@ -210,30 +204,45 @@ export default function OpportunitiesPage() {
 
         <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setActiveSources([])}
-              aria-pressed={effectiveSources.length === 0}
-              className={sourceFilterPillClass(effectiveSources.length === 0)}
-            >
-              All sources
-            </button>
-            <ToggleGroup
-              type="multiple"
-              value={activeSources}
-              onValueChange={setActiveSources}
-              className="max-w-full flex-wrap"
-            >
-              {sources.map((s) => (
-                <ToggleGroupItem
-                  key={s}
-                  value={s}
-                  className={sourceFilterPillClass(activeSources.includes(s))}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 gap-1"
+                  aria-label="source filter"
                 >
-                  {s}
-                </ToggleGroupItem>
-              ))}
-            </ToggleGroup>
+                  {effectiveSources.length === 0
+                    ? 'All sources'
+                    : `${effectiveSources.length} ${effectiveSources.length === 1 ? 'source' : 'sources'}`}
+                  <ChevronsUpDown className="h-3.5 w-3.5 opacity-60" aria-hidden="true" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="max-h-72 overflow-y-auto">
+                <DropdownMenuItem
+                  onSelect={() => setActiveSources([])}
+                  disabled={activeSources.length === 0}
+                >
+                  All sources
+                </DropdownMenuItem>
+                {availableSources.length > 0 && <DropdownMenuSeparator />}
+                {availableSources.map((s) => (
+                  <DropdownMenuCheckboxItem
+                    key={s}
+                    checked={activeSources.includes(s)}
+                    // Keep the menu open so several sources can be toggled in one pass (multi-select).
+                    onSelect={(e) => e.preventDefault()}
+                    onCheckedChange={(checked) =>
+                      setActiveSources((prev) =>
+                        checked ? [...prev, s] : prev.filter((x) => x !== s),
+                      )
+                    }
+                  >
+                    {s}
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
             <div className="ml-auto flex items-center gap-2">
               <Select value={actionFilter} onValueChange={setActionFilter}>
                 <SelectTrigger className="h-8 w-[130px]" aria-label="action filter">
@@ -297,7 +306,7 @@ export default function OpportunitiesPage() {
               <p className="text-sm text-muted-foreground">Computing your opportunities…</p>
               <Skeleton className="h-14 w-full" />
             </div>
-          ) : rows.length === 0 ? (
+          ) : opportunities.length === 0 ? (
             <EmptyState
               title="No opportunities match the filter"
               description="Loosen the min-conviction slider or clear the source chips to see more."
@@ -326,7 +335,7 @@ export default function OpportunitiesPage() {
               <p className="text-sm text-muted-foreground">Computing your opportunities…</p>
               <Skeleton className="h-28 w-full" />
             </div>
-          ) : rows.length === 0 ? (
+          ) : opportunities.length === 0 ? (
             <EmptyState
               title="No opportunities match the filter"
               description="Loosen the min-conviction slider or clear the source chips to see more."
