@@ -2,7 +2,7 @@
 
 **Status**: `complete`
 **Created**: 2026-09-15
-**Feature**: `docs/roadmap/features/189-fix-trading-config-key-mismatch/feature.md`
+**Feature**: `docs/roadmap/features/192-fix-trading-config-key-mismatch/feature.md`
 **Total Steps**: 8
 **Feature Branch**: `claude/halted-account-94ldka` (harness-assigned; PR targets `main-dev` — see feature.md)
 

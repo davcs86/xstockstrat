@@ -2254,7 +2254,7 @@ ambiguity is logged here).
 - **Mistake (caught in design, not shipped)**: pushing user-facing FILTERING (source/action) plus a derived-`_primary_source` SQL predicate into `analysis.ListOpportunities` while the ENTIRE `xstockstrat-analysis` repo SQL surface is fake/mock-verified — `tests/conftest.py` is proto-path-only, there is no testcontainers/live-PG fixture, `scripts/integration-test.sh` is dead and CI-wired to nothing, and `_FakeOppRepo` (`tests/test_analysis_servicer.py:4030`) re-implements the SQL semantics in Python. So no test executes the real `read()`/`available_sources` SQL against Postgres: a subtly-wrong `LATERAL ... WITH ORDINALITY`, `ORDER BY`, or `= ANY($sources)` guard can ship GREEN. SQL-text/bind assertions (`tests/test_opportunities_repo.py`) prove the query string was built, never that Postgres evaluates it as intended.
 - **Evidence**: feature 190 design.md § Verification strategy + Open Risk O10; `services/xstockstrat-analysis/tests/conftest.py`, `tests/test_opportunities_repo.py:19-34`, `tests/test_analysis_servicer.py:4030-4091`; `scripts/integration-test.sh:4-11`.
 - **Rule it implies**: (1) kill *marker-set drift* by construction — hoist a shared skip-list/enum to one constant and BIND it (`= ANY($n::text[])`), never re-type the literal in both SQL and Python, so the two cannot diverge by edit. (2) SQL-text assertions + a fake that mirrors intended semantics are a vacuous-green cousin of fails.md:577 for *runtime* semantics — pin the pure logic as a unit test, spy on the repo boundary for consumption (don't teach the fake the new logic), and record the residual runtime-`LATERAL`/`ORDER BY` gap explicitly. (3) The durable fix is a **shared analysis conftest real-DB fixture** benefiting every repo query — a platform follow-up, not a per-feature one-off harness (C-18: don't half-build a rotting testcontainers rig inside one feature branch). Any analysis feature that moves *filtering* (not just ranking) server-side should weigh seeding that fixture.
-### 2026-09-15 — fix-trading-config-key-mismatch (189) — design trap
+### 2026-09-15 — fix-trading-config-key-mismatch (192) — design trap
 - **Mistake (caught in design R3, not shipped):** a data migration that heals a config `key` column from
   namespace-relative to full-dotted fixes every reader keyed on the NEW (full-dotted) form but silently
   breaks every reader still keyed on the OLD (bare) form — and those readers are not only the service that
@@ -2274,3 +2274,73 @@ ambiguity is logged here).
   with a per-namespace SNAPSHOT-scoped replace (delete-by-`ns.`-prefix + insert in one lock) and a
   per-namespace readiness latch — never a single wholesale `w.snapshot = snap.Values` (a second stream would
   clobber the first). Config supports only one namespace per `WatchConfig` request.
+
+### 2026-09-16 — readiness-caching-poll-discipline — migration
+- **Mistake**: An in-band sentinel row (a conviction-0 "computed but empty" record in `opportunities`) is filtered out by the consumer's read conviction-floor, so it re-triggers recompute every poll, blocks empty→non-empty transitions, and trips the NOT-NULL multi-consumer INSERT trap (fails.md:757-769). A dedicated state table (`opportunity_compute_state`) is the fix.
+- **Evidence**: feature 177 (archived) context.md Archive Synthesis; migration 023_opportunity_compute_state.
+- **Rule it implies**: model "computed-empty" as a dedicated compute-state row, never as a filtered-out in-band record.
+
+### 2026-09-16 — readiness-caching-poll-discipline — assumption
+- **Mistake**: A multi-writer freshness gate stayed stale because only one of three completion paths (`_kick._run`) stamped it — the cold `_materialize_opportunities` and the daily `_opportunity_refresh_tick` paths did not — so the empty-universe gate silently never engaged (FR-3 unmet).
+- **Evidence**: feature 177 (archived) context.md Archive Synthesis; shared `_replace_and_stamp_compute_state` helper.
+- **Rule it implies**: when a freshness gate is read on one path, stamp it on EVERY write path that can produce the gated state; centralize in one helper.
+
+### 2026-09-16 — readiness-caching-poll-discipline — config
+- **Mistake**: A read-through live-enrichment memo that caches misses/failures suppresses a recovered value or persists a stale price as current (@AC-11) — the memo must be success-only (`last_price is not None AND spark is not None`) and tightly TTL-bounded, with `ttl==0` disabling it.
+- **Evidence**: feature 177 (archived) context.md Archive Synthesis.
+- **Rule it implies**: memoize only successful reads; never cache an unavailable/failed fetch.
+
+### 2026-09-16 — readiness-caching-poll-discipline — assumption
+- **Mistake**: recon.md line-number anchors drifted because a coupled sibling feature (176) merged into the branch mid-flight; the spec had to re-anchor every evidence citation against the post-merge tree before speccing.
+- **Evidence**: feature 177 (archived) context.md Archive Synthesis (sdd-spec session).
+- **Rule it implies**: re-anchor recon evidence against HEAD whenever a coupled sibling merges before /sdd-spec.
+
+### 2026-09-16 — quote-fanout-batching — assumption
+- **Mistake**: The product spec and its source performance-audit both asserted marketdata "already exposes a batch `GetLatestQuotesMulti`" RPC — it was an internal Go helper (`MultiSymbolSource`), never a gRPC RPC. Product-spec review FAILED first pass; the feature scope and the audit report both had to be reworked/corrected.
+- **Evidence**: feature 178 (archived) context.md Archive Synthesis (2026-09-04 sdd-review).
+- **Rule it implies**: verify any "the RPC already exists" claim against the `.proto` source, not against an internal helper name or a cited audit.
+
+### 2026-09-16 — quote-fanout-batching — assumption
+- **Mistake**: Batching a cross-service read silently changed the failure aggregate — one transport error now drops the entire cold set (a different denominator) instead of one symbol, observably changing `checkRiskLimits` concentration, `broadcastSnapshot` equity, `GetPnL` unrealized, and whether `emitRiskAlert` fires on a first-read-under-live-fault. Shipped WAIVED and covered by no partial-failure parity test.
+- **Evidence**: feature 178 (archived) context.md Archive Synthesis (design open risk; ROUND 2/3).
+- **Rule it implies**: when collapsing N calls into one, state the failure-mode divergence in aggregate terms and either test it or explicitly waive with the bounding rationale.
+
+### 2026-09-16 — ui-resume-halted-account — assumption
+- **Mistake**: The shared confirm-menu `RowActionsMenu` keeps its Radix dropdown mounted through the confirm flow (`onSelect` → `preventDefault`) and renders the confirm text in BOTH the AlertDialog and the row behind it — assuming a normal close / single match cost two GREEN-phase test fixes (an `Escape` reset before re-opening, and `alertdialog`-scoped assertions).
+- **Evidence**: feature 179 (archived) context.md Archive Synthesis (execute Deviation Log).
+- **Rule it implies**: when reusing `RowActionsMenu` with a `confirm:` action, expect the trigger to stay mounted and the confirm text to duplicate — scope assertions to the dialog and reset the menu between interactions.
+
+### 2026-09-16 — ui-resume-halted-account — assumption
+- **Mistake**: The product-spec cited `docs/context-constitution-findings.md` as the source recording the admin-vs-operator scope discrepancy; the file does not record it (caught only at recon). The discrepancy was real but undocumented.
+- **Evidence**: feature 179 (archived) context.md Archive Synthesis; recon.md:64.
+- **Rule it implies**: ground every "resolved Open Question" citation against the named file at recon before treating it as settled.
+
+### 2026-09-16 — watchlist-readiness-precompute — assumption
+- **Mistake**: design.md asserted `live_loop._drain_watchlist` returns `(strategy_id→symbols)` bindings suitable for the materializer, but that method collapses each binding to a bare symbol and discards `strategy_id`. The unverified claim about an existing method's return shape propagated from design into the spec and was caught only at /sdd-spec / execute (shipped code reused the servicer's own `_drain_watchlist_bindings` instead).
+- **Evidence**: feature 180 (archived) context.md Archive Synthesis (D-1); `live_loop.py`.
+- **Rule it implies**: a design/spec claim that an existing method "already returns X" must be grounded by reading that method's return path, not its name or call-site intent.
+
+### 2026-09-16 — watchlist-readiness-list-ux — assumption
+- **Mistake**: Swapping a component's backend data source (per-strategy `EvaluateReadiness` fan-out → single `GetWatchlistReadiness`) reddened 5 tests in a pre-existing *sibling* e2e spec (`watchlists.spec.ts`) that still asserted the old call, and silently lost the implicit "refetch-on-rebind" the removed `useQueries` got for free by keying on symbols.
+- **Evidence**: feature 181 (archived) context.md Archive Synthesis; `e2e/insights/watchlists.spec.ts`.
+- **Rule it implies**: when changing which backend RPC a component calls, grep all existing e2e specs (not just the feature's own) for the old RPC path, and verify the new query key preserves every refetch trigger the old one had.
+
+### 2026-09-16 — readiness-materializer-config-keys — config
+- **Mistake**: A shared config lookup (`SCALAR_BOUNDS_REGISTRY`) silently assumed a single `key`-column convention (namespace-stripped). A feature using the other valid convention (full-dotted, required by the reader) computes a double-prefixed lookup key (`analysis.analysis.readiness_materializer.*`), misses, and its bounds **silently do not fire** — no error, passes offline checks. Caught only by adversarial spec-time discovery, not by any gate.
+- **Evidence**: feature 182 (archived) context.md Archive Synthesis; `lookupScalarBounds`.
+- **Rule it implies**: any config-path-keyed registry must tolerate both the stripped and full-dotted `key`-column forms, or fail loudly when a registered key does not resolve. (Candidate CONFIG-* invariant.)
+
+### 2026-09-16 — readiness-materializer-config-keys — migration
+- **Mistake**: A config seed migration that stores a namespace-stripped `key` column creates a silent reader-orphan — the consuming service does an exact-string `values.get("<full.dotted.key>")`, so config-ui edits never reach it. The bug is invisible whenever the seeded value equals the code default (migration 019's decay key has shipped this way and is still unfixed).
+- **Evidence**: feature 182 (archived) context.md Archive Synthesis; migration 019 vs 027.
+- **Rule it implies**: the seeded `key` column MUST be the exact full-dotted string the consuming service reads; verify with a post-apply read-back against the reader's getter string, never just a row count. (Candidate CONFIG-* invariant.)
+
+### 2026-09-16 — opportunity-compute-robustness — duplication
+- **Mistake**: The "exempt the sentinel at every filter layer" rule (fails.md:1547) was known and cited in the spec, yet a **fourth** layer — the UI page's client-side min-conviction slider `useMemo`, which exempted only `muted` — was missed; a `conviction=0` `data_unavailable` row vanished when the user raised the slider, caught only at execute.
+- **Evidence**: feature 185 (archived) context.md Archive Synthesis (Deviation Log).
+- **Rule it implies**: when adding a filter-exempt sentinel, enumerate *client-side* filters too, not just the backend read-floor + mock + read. (Extends fails.md:1547.)
+
+### 2026-09-16 — opportunity-compute-robustness — assumption
+- **Mistake**: Tests drove production compute through an *incidental* path (the cold synchronous `ListOpportunities` read); making that path non-blocking (a sibling FR) silently emptied many unrelated `TestListOpportunitiesMaterialized` assertions, forcing a broad mid-execute test migration (a drain helper with a non-obvious budget of 20000 loop turns for a 240-candidate compute).
+- **Evidence**: feature 185 (archived) context.md Archive Synthesis (Deviation Log).
+- **Rule it implies**: don't couple behavioral tests to an incidental request path that a sibling FR is about to change; drive the unit under test directly.

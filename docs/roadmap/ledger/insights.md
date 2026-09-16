@@ -3187,3 +3187,128 @@ reusing.
 - **Pattern**: When testing a config/request-builder fix, prefer a whole-request wire-object seam (`_build_watch_request() -> ProtoMessage`) over a string-source seam (`_client_id() -> str`). The wire-object seam catches a future inline revert that re-hardcodes a value directly on the request construction — a str-source seam stays green because it asserts the accessor, not the call site.
 - **Evidence**: feature 174 design.md:31-34; R1 adversary feedback on fails-074 trap.
 - **Rule it implies**: for any test guarding a request-field value, assert the built request object, not the intermediate variable. Reinforces C-08/P-06 (non-vacuous).
+
+### 2026-09-16 — readiness-caching-poll-discipline — design
+- **Pattern**: Cache-invalidation over daily (1d) bars must key on the *observed* newest bar time across every input series including the benchmark — `bar_epoch = max(evaluated newest, benchmark newest)`. A wall-clock epoch or a same-`time.seconds` JSON reuse both serve stale-as-fresh, because a current-day 1d bar mutates in place (moving OHLC, identical `time.seconds`) until session close.
+- **Evidence**: feature 177 (archived) context.md Archive Synthesis; ROUND 1/2/3 objections; `services/xstockstrat-analysis/app/services/readiness.py`.
+- **Rule it implies**: for any bar-derived cache, invalidate on the max observed bar time across all input series, never on wall-clock — candidate ANALYSIS-* freshness invariant.
+
+### 2026-09-16 — readiness-caching-poll-discipline — perf
+- **Pattern**: Fast-path-only caching (a `valid_until` gate that skips fetch+evaluate) delivered the entire win; the tempting slow-path CPU-trace reuse ("if fingerprint+epoch match, reuse persisted JSON") was a false economy that reintroduced a correctness hole on the in-place-updating 1d bar.
+- **Evidence**: feature 177 (archived) context.md Archive Synthesis; ROUND 3 obj-1.
+- **Rule it implies**: cache the expensive I/O path, not the cheap pure-CPU recompute — a reuse that saves only CPU rarely justifies the staleness risk.
+
+### 2026-09-16 — readiness-caching-poll-discipline — ordering
+- **Pattern**: A served-stale window must be server-bounded below the data's own refresh cadence (`stale_after_seconds < 86400` for 1d bars), enforced at the `SetConfig` write edge via `SCALAR_BOUNDS_REGISTRY`, so a stale serve can never outlive a new bar.
+- **Evidence**: feature 177 (archived) context.md Archive Synthesis; `services/xstockstrat-config/src/grpc/configServiceImpl.ts` SCALAR_BOUNDS_REGISTRY.
+- **Rule it implies**: bound any staleness/SWR window strictly below the underlying data cadence, enforced at config write, not just documented.
+
+### 2026-09-16 — readiness-caching-poll-discipline — reuse
+- **Pattern**: New per-user materialized caches should mirror the existing `OpportunitiesRepository` + migration-011 stack (`read_many`/`upsert_many`, `computed_at`/`valid_until`, fire-and-forget single-flight kick) rather than invent a new SWR mechanism.
+- **Evidence**: feature 177 (archived) context.md Archive Synthesis; migration 022_readiness_cache.
+- **Rule it implies**: prefer extending the established materialize-on-read SWR template for analysis caches.
+
+### 2026-09-16 — readiness-caching-poll-discipline — design
+- **Pattern**: Client freshness must be a per-query `staleTime`, never a `QueryClient` default — a default forces a whole-list refetch and breaks a sibling feature's single-row-patch guarantee (@AC-6/feature-167).
+- **Evidence**: feature 177 (archived) context.md Archive Synthesis; `services/xstockstrat-ui` readiness hooks.
+- **Rule it implies**: scope React-Query `staleTime` per query when a list patches rows individually.
+
+### 2026-09-16 — quote-fanout-batching — design
+- **Pattern**: When batching an N+1 read whose serial version has per-item guards, the batch symbol set is NOT uniform across call sites — `enrichPositions` batches only `CurrentPrice==0` positions (broker mark-to-market is authoritative), while the unconditional loops batch the full set. Collect the exact serial-guarded subset per site.
+- **Evidence**: feature 178 (archived) context.md Archive Synthesis; `services/xstockstrat-portfolio` enrich sites.
+- **Rule it implies**: a batch refactor must reproduce each call site's *pre-fetch* filter, not just its post-fetch loop.
+
+### 2026-09-16 — quote-fanout-batching — design
+- **Pattern**: A set-keyed singleflight (key = sorted-joined cold set) is a legitimate partial-coalescing scope cut when an upstream warm-cache keeps cold sets tiny; it coalesces only identical cold sets and does NOT cover overlapping-but-unequal sets. Document the uncovered case and name per-symbol fan-in as the deferred alternative.
+- **Evidence**: feature 178 (archived) context.md Archive Synthesis; `services/xstockstrat-marketdata` GetLatestQuotes cold path.
+- **Rule it implies**: record singleflight keying granularity and its uncovered case explicitly, tied to the cache assumption that justifies it.
+
+### 2026-09-16 — quote-fanout-batching — reuse
+- **Pattern**: A latest-per-symbol batch read is `DISTINCT ON (symbol) … ORDER BY symbol, time DESC` riding an existing `(symbol, time DESC)` composite index — index-shaped, no sort, no new migration. It is NOT a generalization of the singular `WHERE symbol=$1 … LIMIT 1`.
+- **Evidence**: feature 178 (archived) context.md Archive Synthesis; migration 001_marketdata_hypertables.up.sql (idx_quotes_symbol_time).
+- **Rule it implies**: before writing a migration for a batch read, check whether an existing composite index already shapes a `DISTINCT ON`.
+
+### 2026-09-16 — ui-resume-halted-account — design
+- **Pattern**: Optimistic full-replace + fail-loud from the mutation RPC's returned entity, then a background refetch — closes a swallowed-`catch{}` refetch so the UI clear stands even if the refetch fails. Safe only because the response is always a complete record and the context replaces objects wholesale.
+- **Evidence**: feature 179 (archived) context.md Archive Synthesis; `applyAccountUpdate`, `trading.go:2651`.
+- **Rule it implies**: when a mutation RPC returns the full updated entity, apply it optimistically with fail-loud on a missing id rather than trusting a fire-and-forget refetch.
+
+### 2026-09-16 — ui-resume-halted-account — design
+- **Pattern**: Pick a semantic badge token by collision-avoidance, not just meaning — `warning`/amber for "halted" to keep it distinct from two existing red badges (`destructive` credential + `RECONCILIATION` `role:'sell'`) on the same surface; distinctness = icon + label + color.
+- **Evidence**: feature 179 (archived) context.md Archive Synthesis.
+- **Rule it implies**: before reusing a status color, inventory the other badges on the same surface to avoid a same-color pile-up that erases the "distinct marker" intent (relates to C-17).
+
+### 2026-09-16 — ui-resume-halted-account — design
+- **Pattern**: Render a status indicator in the unconditional block but gate the mutating action — the indicator survives orthogonal state (`halted && !isActive`, a deregistered-while-halted row) while the action stays correctly `isActive`-gated. Rests on the verified `trading.go:2720` contract that `DeregisterBrokerAccountSvc` clears `is_active` without clearing `halted`.
+- **Evidence**: feature 179 (archived) context.md Archive Synthesis; `accountShared.tsx`.
+- **Rule it implies**: place read-only status where it survives lifecycle deregistration; gate only the action that mutates live state.
+
+### 2026-09-16 — watchlist-readiness-precompute — design
+- **Pattern**: A materialized-cache correctness argument that leans on a platform granularity assumption ("benchmark-newer edge self-heals at the next daily bar") must record that assumption *as* the invariant, not just its consequence — the whole `bar_epoch = max(symbol, benchmark)` gate is sound only because bars are 1d. Post-deletion the stamped epoch reads as an unexplained choice.
+- **Evidence**: feature 180 (archived) context.md Archive Synthesis; `servicer.py` readiness materializer.
+- **Rule it implies**: when a cache-freshness proof depends on a platform-wide granularity (bar interval, poll floor), state the dependency at the predicate so an intraday-bar migration surfaces it. (Extends the same feature's insights.md:3046-3078; ANALYSIS-* context-constitution candidate.)
+
+### 2026-09-16 — watchlist-readiness-list-ux — design
+- **Pattern**: When a read-shape/UI feature uncovers a latent correctness bug in a *shared* compute path, surface it as an explicit operator-approved scope deviation rather than silently fixing it or forcing an out-of-scope workaround. The `bar_epoch=-1` sentinel corrected an infinite-`PENDING` trap latent in shipped features 177/180 and landed with same-PR re-verification of 177 @AC-1/@AC-2.
+- **Evidence**: feature 181 (archived) context.md Archive Synthesis; `app/services/readiness.py` compute seam.
+- **Rule it implies**: a behavior change to a compute path shared by other shipped features requires explicit operator sign-off (C-11/P-03) recorded in context.md AND same-PR regression re-verification of the sibling features' @ACs.
+
+### 2026-09-16 — watchlist-readiness-list-ux — design
+- **Pattern**: A new decorating query must live on its own React Query key (`['watchlistReadiness',…]`), disjoint from the sibling feature's cache (`['watchlists']`), and add no `invalidateQueries` on it — preserving feature-167's targeted single-row cache patch (@AC-6).
+- **Evidence**: feature 181 (archived) context.md Archive Synthesis; `useWatchlistReadiness.ts`.
+- **Rule it implies**: layer a new query on a disjoint key over an existing cache rather than re-keying/invalidating it when a sibling feature guarantees no-full-refetch.
+
+### 2026-09-16 — watchlist-readiness-list-ux — design
+- **Pattern**: Compute a polling "keep-alive" predicate from the *rendered* (binding⋈readiness) rows, not from the decorating response alone — otherwise a row added via a mutation that only touches the *other* cache has no readiness entry, is never polled, and hangs on Skeleton forever.
+- **Evidence**: feature 181 (archived) context.md Archive Synthesis; `WatchlistReadiness.tsx`.
+- **Rule it implies**: poll-alive/loading predicates for a joined view must be derived from the joined render state, not one of the two sources.
+
+### 2026-09-16 — readiness-materializer-config-keys — design
+- **Pattern**: Registering config keys for config-ui editability can safely add server-side write-bounds without breaking a "no-behavior-change" contract, because `SCALAR_BOUNDS_REGISTRY` bounds fire only at the `SetConfig` write edge and touch no read path. Use it to gate an operator-editable numeric key that maps to a known operational risk (here `max_concurrent_bars_fetches`, the feature-141 SEV-2 pool-exhaustion lever; and `refresh_hour_utc`, which has no reader-side clamp).
+- **Evidence**: feature 182 (archived) context.md Archive Synthesis; `services/xstockstrat-config/src/grpc/configServiceImpl.ts` SCALAR_BOUNDS_REGISTRY; migration 027.
+- **Rule it implies**: when a seed migration makes a numeric tuning key operator-editable, add write-bounds in the same feature if the key has any operational blast radius — bounds are write-path-only so they don't violate no-behavior-change.
+
+### 2026-09-16 — readiness-materializer-config-keys — design
+- **Pattern**: When one registry/lookup must serve two incompatible config `key`-column conventions (namespace-stripped vs full-dotted), a two-operand fallback lookup (`registry[key] ?? registry[${ns}.${key}]`) bridges both without migrating existing rows or double-prefixing new ones.
+- **Evidence**: feature 182 (archived) context.md Archive Synthesis; `lookupScalarBounds` in `configServiceImpl.ts`.
+- **Rule it implies**: a config-path-keyed lookup should resolve both the bare and full-dotted key forms rather than assume one convention.
+
+### 2026-09-16 — mcp-user-profile-roles — design
+- **Pattern**: When a self-scoped RPC needs an admin cross-user counterpart, add *additive* admin RPCs with a body `user_id` selector and pay DRY below the tool boundary (shared row→proto mapper, SELECT, SET-builder), rather than overloading the self tool with a `target_user_id` arg — this keeps the two authz models (self via `x-user-id`, admin via scope + body selector) from mixing and preserves the self-tool's acceptance guarantees.
+- **Evidence**: feature 183 (archived) context.md Archive Synthesis; identity `AdminGetUserMetadata`/`AdminUpdateUserMetadata`.
+- **Rule it implies**: admin-vs-self access divergence belongs at the RPC/tool boundary, not inside one overloaded handler (reinforces C-03: subject from `x-user-id`, never body).
+
+### 2026-09-16 — mcp-user-profile-roles — design
+- **Pattern**: A cross-language proto projection-parity guard must reflect fields via protobuf-es schema (`Schema.fields`), because ts-proto stubs expose no field reflection — pick the generated flavor that supports reflection for the guard.
+- **Evidence**: feature 183 (archived) context.md Archive Synthesis (`UserMetadataSchema.fields`).
+- **Rule it implies**: for any TS proto projection/parity test, use the protobuf-es flavor; a ts-proto stub cannot enumerate fields.
+
+### 2026-09-16 — opportunity-config-operability — reuse
+- **Pattern**: To run the config-ui Playwright e2e suite in the harness sandbox when the pinned browser build is missing, override `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` to the provisioned build **and** set `CI=1` — the isCI path builds a prod server with a 30s per-test timeout, whereas dev-mode's 10s timeout dies on the cold SSR warmup compile. This is real e2e matching CI, not the `tsc`+lint last resort. (Recurred verbatim in feature 185 — one shared environment recipe.)
+- **Evidence**: feature 184 (archived) context.md Archive Synthesis; also feature 185.
+- **Rule it implies**: for sandbox e2e verification of `xstockstrat-ui`, prefer the `CI=1` prod-server path over dev-mode to avoid cold-compile timeouts.
+
+### 2026-09-16 — opportunity-compute-robustness — design
+- **Pattern**: New bars-fetch concurrency must join an *existing* background semaphore budget rather than add an independent `[1,5]` semaphore — the sum of all concurrent bars-fetch semaphores must stay ≤ the marketdata PgBouncer pool ceiling (5); three independent `[1,5]` sems = 15 re-opens the feature-141 SEV-2 pool exhaustion.
+- **Evidence**: feature 185 (archived) context.md Archive Synthesis; FR-3 operator decision.
+- **Rule it implies**: treat concurrent bars-fetch concurrency as one shared budget capped at the marketdata pool ceiling, not per-caller — propose as an ANALYSIS-* runtime invariant.
+
+### 2026-09-16 — opportunity-compute-robustness — perf
+- **Pattern**: Read-time recovery from a transient data outage is a per-symbol surgical UPDATE-in-place (heal-only, no resurrection of dropped keys), never a full recompute — a full re-run fanned out per user during an outage is a thundering-herd that recreates the feature-141 multi-user pressure.
+- **Evidence**: feature 185 (archived) context.md Archive Synthesis; `replace_symbols` heal-only.
+- **Rule it implies**: outage-recovery paths that fan out per user must bound their footprint to the failed subset, never re-run the full unit of work.
+
+### 2026-09-16 — opportunity-compute-robustness — reuse
+- **Pattern**: A compute-side marker riding existing `provenance` JSONB plus a bool derived at read (the `muted` → `data_unavailable` template) adds a distinct presentation state with no migration and survives the persistence round-trip.
+- **Evidence**: feature 185 (archived) context.md Archive Synthesis; feature-131 `muted` precedent.
+- **Rule it implies**: prefer a JSONB provenance marker + read-derived additive bool over a new column/enum for a binary presentation state.
+
+### 2026-09-16 — fundamentals-blend-strategy-restrictions — design
+- **Pattern**: Gate a protected/always-on resource by branching on its stable **identity** (`strategy_id == blend_id`), never on mutable enable/state flags — state-based folds and order-sensitive `elif`s both leave a fall-through hole where the resource re-enters the default path when the flag is off.
+- **Evidence**: feature 186 (archived) context.md Archive Synthesis; analysis `live_loop.py` blend branch.
+- **Rule it implies**: protected-resource execution guards branch on identity, not state — propose as an ANALYSIS-* runtime invariant.
+
+### 2026-09-16 — fundamentals-blend-strategy-restrictions — reuse
+- **Pattern**: Place a protected-resource guard **before** the ownership check (anti-IDOR ordering) so non-owners get `FAILED_PRECONDITION` rather than `PERMISSION_DENIED`; this existence leak is acceptable only because the protected ID is itself a config value, not a secret.
+- **Evidence**: feature 186 (archived) context.md Archive Synthesis; recon.md:69.
+- **Rule it implies**: guard-before-ownership is correct for config-identified protected resources; document the leak tradeoff at the guard.

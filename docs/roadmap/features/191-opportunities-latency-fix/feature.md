@@ -5,6 +5,8 @@
 **Last Updated**: 2026-09-09
 **Committed to main**: aab3fa8de30b9f2ab7f9a9299e39570dcf9406e1
 **Launched date**: 2026-09-11
+**Archived**: 2026-09-16
+**Renumbered**: 2026-09-16 — `183` → `191` to resolve the `183` collision with `mcp-user-profile-roles`. Overrides the "immutable once launched" numbering rule with explicit operator sign-off (recorded in context.md). Slug and branch unchanged.
 
 ---
 
@@ -19,6 +21,8 @@
 | 2026-09-09 | `in-progress` → `code-completed` | /sdd-execute | All 13 steps done (sequential mode) |
 
 | 2026-09-11 | `code-completed` → `launched` | CI workflow | Promoted via PR #1137; committed aab3fa8de30b9f2ab7f9a9299e39570dcf9406e1 |
+| 2026-09-16 | `launched` (unchanged) | /sdd-archiver | Renumbered dir `183` → `191` to resolve the `183` collision; operator-approved override of "immutable once launched". Updated self-ref paths, 12 `@feature-183` → `@feature-191` provenance tags across 3 promoted suites (marketdata/analysis/ui), and cross-refs in features 187/190. |
+| 2026-09-16 | `launched` (unchanged) | /sdd-archiver | Archived: synthesis → context.md + Ledger (insights/fails already written by /sdd-execute at integration, slug-keyed); scenarios promoted at launch (now @feature-191); pruned 4 specs |
 ---
 
 ## Artifacts

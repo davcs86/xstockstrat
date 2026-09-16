@@ -5,6 +5,7 @@
 **Last Updated**: 2026-09-05
 **Committed to main**: 83743049da1ec2e2337ef49bad54c49a10721841
 **Launched date**: 2026-09-06
+**Archived**: 2026-09-16
 
 ---
 
@@ -20,6 +21,7 @@
 | 2026-09-05 | `in-progress` → `code-completed` | /sdd-execute | All 7 steps done (sequential); analysis suite 696 passed @ 84.66%, ruff clean |
 
 | 2026-09-06 | `code-completed` → `launched` | CI workflow | Promoted via PR #1104; committed 83743049da1ec2e2337ef49bad54c49a10721841 |
+| 2026-09-16 | `launched` (unchanged) | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(1); promoted @AC-2..6 to analysis suite; pruned 4 specs |
 ---
 
 ## Artifacts

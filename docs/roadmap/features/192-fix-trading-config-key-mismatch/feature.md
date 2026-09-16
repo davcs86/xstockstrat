@@ -5,6 +5,7 @@
 **Defect Report**: `docs/reports/2026-09-15-trading-config-namespace-key-mismatch-defect.md` (GitHub Issues disabled — report is the audit trail)
 **Severity**: SEV-1
 **Created**: 2026-09-15
+**Renumbered**: 2026-09-16 — `189` → `192` to resolve the `189` collision with `screener-preset-criteria` (renumbered the later-created, not-yet-launched member). Slug and branch unchanged.
 **Last Updated**: 2026-09-15
 **Committed to main**: c91e0c535f10c15962ea856e909ea1a2c659f29a
 **Launched date**: 2026-09-16
@@ -20,6 +21,7 @@
 | 2026-09-15 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 8 steps. Resolved open risks: daily_loss_limit has no reader (behavior-neutral); DB audit still blocked → forward-only DOWN; page.tsx:120-121 confirmed sole runtime bare-key reader. |
 | 2026-09-15 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential mode started; Step 1 (migration 029) done. |
 | 2026-09-15 | `in-progress` → `code-completed` | /sdd-execute | All 8 steps done (sequential). Backend Go+config red→green locally; UI e2e as CI-equivalent (Dockerfile.e2e on PR). |
+| 2026-09-16 | `code-completed` (unchanged) | /sdd-archiver | Renumbered dir `189` → `192` to resolve the `189` collision with `screener-preset-criteria` (no override needed — not launched). Updated self-ref path in implementation-spec.md, the `docs/.../189-...` path ref in `services/xstockstrat-trading/CLAUDE.md`, and the `(189)` citation in `docs/roadmap/ledger/fails.md`. The feature's implementation PR #1141 (branch `claude/halted-account-94ldka`) is already MERGED into main-dev (2026-09-15), so this rename has no open-PR conflict; the renumber ships via the archiving PR #1146, not a separate PR. |
 
 | 2026-09-16 | `code-completed` → `launched` | CI workflow | Promoted via PR #1145; committed c91e0c535f10c15962ea856e909ea1a2c659f29a |
 ---

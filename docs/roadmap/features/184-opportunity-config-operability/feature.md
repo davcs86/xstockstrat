@@ -5,6 +5,7 @@
 **Last Updated**: 2026-09-07
 **Committed to main**: 19c6d036e603077557cf93e305f7299c950568d0
 **Launched date**: 2026-09-09
+**Archived**: 2026-09-16
 
 ---
 
@@ -20,6 +21,7 @@
 | 2026-09-07 | `in-progress` → `code-completed` | /sdd-execute | All 5 steps done (migration 028 + 10 bounds + red-green tests + config-ui e2e + docs). Integration PR next |
 
 | 2026-09-09 | `code-completed` → `launched` | CI workflow | Promoted via PR #1118; committed 19c6d036e603077557cf93e305f7299c950568d0 |
+| 2026-09-16 | `launched` (unchanged) | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(0); scenarios already promoted (DUP); pruned 4 specs |
 ---
 
 ## Artifacts
