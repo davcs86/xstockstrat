@@ -2324,3 +2324,23 @@ ambiguity is logged here).
 - **Mistake**: Swapping a component's backend data source (per-strategy `EvaluateReadiness` fan-out → single `GetWatchlistReadiness`) reddened 5 tests in a pre-existing *sibling* e2e spec (`watchlists.spec.ts`) that still asserted the old call, and silently lost the implicit "refetch-on-rebind" the removed `useQueries` got for free by keying on symbols.
 - **Evidence**: feature 181 (archived) context.md Archive Synthesis; `e2e/insights/watchlists.spec.ts`.
 - **Rule it implies**: when changing which backend RPC a component calls, grep all existing e2e specs (not just the feature's own) for the old RPC path, and verify the new query key preserves every refetch trigger the old one had.
+
+### 2026-09-16 — readiness-materializer-config-keys — config
+- **Mistake**: A shared config lookup (`SCALAR_BOUNDS_REGISTRY`) silently assumed a single `key`-column convention (namespace-stripped). A feature using the other valid convention (full-dotted, required by the reader) computes a double-prefixed lookup key (`analysis.analysis.readiness_materializer.*`), misses, and its bounds **silently do not fire** — no error, passes offline checks. Caught only by adversarial spec-time discovery, not by any gate.
+- **Evidence**: feature 182 (archived) context.md Archive Synthesis; `lookupScalarBounds`.
+- **Rule it implies**: any config-path-keyed registry must tolerate both the stripped and full-dotted `key`-column forms, or fail loudly when a registered key does not resolve. (Candidate CONFIG-* invariant.)
+
+### 2026-09-16 — readiness-materializer-config-keys — migration
+- **Mistake**: A config seed migration that stores a namespace-stripped `key` column creates a silent reader-orphan — the consuming service does an exact-string `values.get("<full.dotted.key>")`, so config-ui edits never reach it. The bug is invisible whenever the seeded value equals the code default (migration 019's decay key has shipped this way and is still unfixed).
+- **Evidence**: feature 182 (archived) context.md Archive Synthesis; migration 019 vs 027.
+- **Rule it implies**: the seeded `key` column MUST be the exact full-dotted string the consuming service reads; verify with a post-apply read-back against the reader's getter string, never just a row count. (Candidate CONFIG-* invariant.)
+
+### 2026-09-16 — opportunity-compute-robustness — duplication
+- **Mistake**: The "exempt the sentinel at every filter layer" rule (fails.md:1547) was known and cited in the spec, yet a **fourth** layer — the UI page's client-side min-conviction slider `useMemo`, which exempted only `muted` — was missed; a `conviction=0` `data_unavailable` row vanished when the user raised the slider, caught only at execute.
+- **Evidence**: feature 185 (archived) context.md Archive Synthesis (Deviation Log).
+- **Rule it implies**: when adding a filter-exempt sentinel, enumerate *client-side* filters too, not just the backend read-floor + mock + read. (Extends fails.md:1547.)
+
+### 2026-09-16 — opportunity-compute-robustness — assumption
+- **Mistake**: Tests drove production compute through an *incidental* path (the cold synchronous `ListOpportunities` read); making that path non-blocking (a sibling FR) silently emptied many unrelated `TestListOpportunitiesMaterialized` assertions, forcing a broad mid-execute test migration (a drain helper with a non-obvious budget of 20000 loop turns for a 240-candidate compute).
+- **Evidence**: feature 185 (archived) context.md Archive Synthesis (Deviation Log).
+- **Rule it implies**: don't couple behavioral tests to an incidental request path that a sibling FR is about to change; drive the unit under test directly.

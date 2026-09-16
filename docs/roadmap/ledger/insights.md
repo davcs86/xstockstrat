@@ -3262,3 +3262,53 @@ reusing.
 - **Pattern**: Compute a polling "keep-alive" predicate from the *rendered* (binding⋈readiness) rows, not from the decorating response alone — otherwise a row added via a mutation that only touches the *other* cache has no readiness entry, is never polled, and hangs on Skeleton forever.
 - **Evidence**: feature 181 (archived) context.md Archive Synthesis; `WatchlistReadiness.tsx`.
 - **Rule it implies**: poll-alive/loading predicates for a joined view must be derived from the joined render state, not one of the two sources.
+
+### 2026-09-16 — readiness-materializer-config-keys — design
+- **Pattern**: Registering config keys for config-ui editability can safely add server-side write-bounds without breaking a "no-behavior-change" contract, because `SCALAR_BOUNDS_REGISTRY` bounds fire only at the `SetConfig` write edge and touch no read path. Use it to gate an operator-editable numeric key that maps to a known operational risk (here `max_concurrent_bars_fetches`, the feature-141 SEV-2 pool-exhaustion lever; and `refresh_hour_utc`, which has no reader-side clamp).
+- **Evidence**: feature 182 (archived) context.md Archive Synthesis; `services/xstockstrat-config/src/grpc/configServiceImpl.ts` SCALAR_BOUNDS_REGISTRY; migration 027.
+- **Rule it implies**: when a seed migration makes a numeric tuning key operator-editable, add write-bounds in the same feature if the key has any operational blast radius — bounds are write-path-only so they don't violate no-behavior-change.
+
+### 2026-09-16 — readiness-materializer-config-keys — design
+- **Pattern**: When one registry/lookup must serve two incompatible config `key`-column conventions (namespace-stripped vs full-dotted), a two-operand fallback lookup (`registry[key] ?? registry[${ns}.${key}]`) bridges both without migrating existing rows or double-prefixing new ones.
+- **Evidence**: feature 182 (archived) context.md Archive Synthesis; `lookupScalarBounds` in `configServiceImpl.ts`.
+- **Rule it implies**: a config-path-keyed lookup should resolve both the bare and full-dotted key forms rather than assume one convention.
+
+### 2026-09-16 — mcp-user-profile-roles — design
+- **Pattern**: When a self-scoped RPC needs an admin cross-user counterpart, add *additive* admin RPCs with a body `user_id` selector and pay DRY below the tool boundary (shared row→proto mapper, SELECT, SET-builder), rather than overloading the self tool with a `target_user_id` arg — this keeps the two authz models (self via `x-user-id`, admin via scope + body selector) from mixing and preserves the self-tool's acceptance guarantees.
+- **Evidence**: feature 183 (archived) context.md Archive Synthesis; identity `AdminGetUserMetadata`/`AdminUpdateUserMetadata`.
+- **Rule it implies**: admin-vs-self access divergence belongs at the RPC/tool boundary, not inside one overloaded handler (reinforces C-03: subject from `x-user-id`, never body).
+
+### 2026-09-16 — mcp-user-profile-roles — design
+- **Pattern**: A cross-language proto projection-parity guard must reflect fields via protobuf-es schema (`Schema.fields`), because ts-proto stubs expose no field reflection — pick the generated flavor that supports reflection for the guard.
+- **Evidence**: feature 183 (archived) context.md Archive Synthesis (`UserMetadataSchema.fields`).
+- **Rule it implies**: for any TS proto projection/parity test, use the protobuf-es flavor; a ts-proto stub cannot enumerate fields.
+
+### 2026-09-16 — opportunity-config-operability — reuse
+- **Pattern**: To run the config-ui Playwright e2e suite in the harness sandbox when the pinned browser build is missing, override `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` to the provisioned build **and** set `CI=1` — the isCI path builds a prod server with a 30s per-test timeout, whereas dev-mode's 10s timeout dies on the cold SSR warmup compile. This is real e2e matching CI, not the `tsc`+lint last resort. (Recurred verbatim in feature 185 — one shared environment recipe.)
+- **Evidence**: feature 184 (archived) context.md Archive Synthesis; also feature 185.
+- **Rule it implies**: for sandbox e2e verification of `xstockstrat-ui`, prefer the `CI=1` prod-server path over dev-mode to avoid cold-compile timeouts.
+
+### 2026-09-16 — opportunity-compute-robustness — design
+- **Pattern**: New bars-fetch concurrency must join an *existing* background semaphore budget rather than add an independent `[1,5]` semaphore — the sum of all concurrent bars-fetch semaphores must stay ≤ the marketdata PgBouncer pool ceiling (5); three independent `[1,5]` sems = 15 re-opens the feature-141 SEV-2 pool exhaustion.
+- **Evidence**: feature 185 (archived) context.md Archive Synthesis; FR-3 operator decision.
+- **Rule it implies**: treat concurrent bars-fetch concurrency as one shared budget capped at the marketdata pool ceiling, not per-caller — propose as an ANALYSIS-* runtime invariant.
+
+### 2026-09-16 — opportunity-compute-robustness — perf
+- **Pattern**: Read-time recovery from a transient data outage is a per-symbol surgical UPDATE-in-place (heal-only, no resurrection of dropped keys), never a full recompute — a full re-run fanned out per user during an outage is a thundering-herd that recreates the feature-141 multi-user pressure.
+- **Evidence**: feature 185 (archived) context.md Archive Synthesis; `replace_symbols` heal-only.
+- **Rule it implies**: outage-recovery paths that fan out per user must bound their footprint to the failed subset, never re-run the full unit of work.
+
+### 2026-09-16 — opportunity-compute-robustness — reuse
+- **Pattern**: A compute-side marker riding existing `provenance` JSONB plus a bool derived at read (the `muted` → `data_unavailable` template) adds a distinct presentation state with no migration and survives the persistence round-trip.
+- **Evidence**: feature 185 (archived) context.md Archive Synthesis; feature-131 `muted` precedent.
+- **Rule it implies**: prefer a JSONB provenance marker + read-derived additive bool over a new column/enum for a binary presentation state.
+
+### 2026-09-16 — fundamentals-blend-strategy-restrictions — design
+- **Pattern**: Gate a protected/always-on resource by branching on its stable **identity** (`strategy_id == blend_id`), never on mutable enable/state flags — state-based folds and order-sensitive `elif`s both leave a fall-through hole where the resource re-enters the default path when the flag is off.
+- **Evidence**: feature 186 (archived) context.md Archive Synthesis; analysis `live_loop.py` blend branch.
+- **Rule it implies**: protected-resource execution guards branch on identity, not state — propose as an ANALYSIS-* runtime invariant.
+
+### 2026-09-16 — fundamentals-blend-strategy-restrictions — reuse
+- **Pattern**: Place a protected-resource guard **before** the ownership check (anti-IDOR ordering) so non-owners get `FAILED_PRECONDITION` rather than `PERMISSION_DENIED`; this existence leak is acceptable only because the protected ID is itself a config value, not a secret.
+- **Evidence**: feature 186 (archived) context.md Archive Synthesis; recon.md:69.
+- **Rule it implies**: guard-before-ownership is correct for config-identified protected resources; document the leak tradeoff at the guard.

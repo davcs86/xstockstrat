@@ -5,6 +5,7 @@
 **Last Updated**: 2026-09-07
 **Committed to main**: 19c6d036e603077557cf93e305f7299c950568d0
 **Launched date**: 2026-09-09
+**Archived**: 2026-09-16
 
 ---
 
@@ -20,6 +21,7 @@
 | 2026-09-07 | `in-progress` → `code-completed` | /sdd-execute | All 15 steps landed RED-green across proto/analysis/agent/ui/docs. analysis suite 730 passed 84%; agent 392 passed 81%; UI e2e 439 passed. C-16 scenarios promoted to per-service suites. Teardown: context-forge plugin unavailable → manual reconciliation performed (see PR body). |
 
 | 2026-09-09 | `code-completed` → `launched` | CI workflow | Promoted via PR #1118; committed 19c6d036e603077557cf93e305f7299c950568d0 |
+| 2026-09-16 | `launched` (unchanged) | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(3)/fails(2); scenarios already promoted (DUP); pruned 4 specs |
 ---
 
 ## Artifacts

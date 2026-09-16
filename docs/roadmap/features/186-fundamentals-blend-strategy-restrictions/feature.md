@@ -5,6 +5,7 @@
 **Last Updated**: 2026-09-08
 **Committed to main**: 19c6d036e603077557cf93e305f7299c950568d0
 **Launched date**: 2026-09-09
+**Archived**: 2026-09-16
 
 
 ---
@@ -21,6 +22,7 @@
 | 2026-09-08 | `in-progress` → `code-completed` | /sdd-execute | All 6 steps completed |
 
 | 2026-09-09 | `code-completed` → `launched` | CI workflow | Promoted via PR #1118; committed 19c6d036e603077557cf93e305f7299c950568d0 |
+| 2026-09-16 | `launched` (unchanged) | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(0); scenarios already promoted (DUP); pruned 4 specs |
 ---
 
 ## Artifacts

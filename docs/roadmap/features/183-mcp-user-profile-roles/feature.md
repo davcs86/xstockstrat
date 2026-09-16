@@ -5,6 +5,7 @@
 **Last Updated**: 2026-09-06
 **Committed to main**: 19c6d036e603077557cf93e305f7299c950568d0
 **Launched date**: 2026-09-09
+**Archived**: 2026-09-16
 
 ---
 
@@ -20,6 +21,7 @@
 | 2026-09-06 | `in-progress` → `code-completed` | /sdd-execute | All 9 steps done (proto + identity + agent + docs); integration PR next |
 
 | 2026-09-09 | `code-completed` → `launched` | CI workflow | Promoted via PR #1118; committed 19c6d036e603077557cf93e305f7299c950568d0 |
+| 2026-09-16 | `launched` (unchanged) | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(0, all DUP); promoted 10 @AC → NEW agent + identity suites (C-16 launch-gap backfill); pruned 4 specs |
 ---
 
 ## Artifacts
