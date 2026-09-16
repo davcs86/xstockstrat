@@ -84,7 +84,7 @@ class TestSandboxEnvIsolation:
             "BROKER_ACCOUNTS_ENCRYPTION_KEY",
         ):
             assert secret not in env, f"{secret} must not reach the sandbox child"
-        # Thread pins are preserved so numpy imports under the memory cap; PYTHONPATH for resolution.
+        # Thread pins preserved (numpy import under the cap); PYTHONPATH kept for resolution.
         assert env["OPENBLAS_NUM_THREADS"] == "1"
         assert "PYTHONPATH" in env
 
