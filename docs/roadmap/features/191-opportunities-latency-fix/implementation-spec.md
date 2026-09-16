@@ -2,7 +2,7 @@
 
 **Status**: `pending`
 **Created**: 2026-09-09
-**Feature**: `docs/roadmap/features/183-opportunities-latency-fix/feature.md`
+**Feature**: `docs/roadmap/features/191-opportunities-latency-fix/feature.md`
 **Total Steps**: 13
 **Feature Branch**: `feature/opportunities-latency-fix`
 

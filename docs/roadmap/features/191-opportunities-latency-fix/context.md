@@ -1,10 +1,17 @@
 # Context: opportunities-latency-fix
 
-**Feature**: `docs/roadmap/features/183-opportunities-latency-fix/feature.md`
-**Product Spec**: `docs/roadmap/features/183-opportunities-latency-fix/product-spec.md`
-**Implementation Spec**: `docs/roadmap/features/183-opportunities-latency-fix/implementation-spec.md`
+**Feature**: `docs/roadmap/features/191-opportunities-latency-fix/feature.md`
+**Product Spec**: `docs/roadmap/features/191-opportunities-latency-fix/product-spec.md`
+**Implementation Spec**: `docs/roadmap/features/191-opportunities-latency-fix/implementation-spec.md`
 
 ---
+
+## Session 2026-09-16 — /sdd-archiver (collision renumber)
+
+- **Renumbered `183` → `191`.** This feature shared the `183` prefix with `mcp-user-profile-roles` (a numbering collision from two `/sdd-story` runs). Both features were `launched`, so the numbering rule's "immutable once launched" invariant applied.
+- **Operator override (explicit sign-off).** The operator explicitly authorized overriding "immutable once launched" to renumber the later-launched member (this feature, launched 2026-09-11, vs `mcp-user-profile-roles` launched 2026-09-09) to the next-free number `191` (`max(existing)+1`; `187`–`190` were already taken). Recorded here per the root CLAUDE.md Commandment-override rule.
+- **Blast radius handled (full consistent renumber):** `git mv` of the dir; self-referential path lines in context.md + implementation-spec.md; 12 `@feature-183` → `@feature-191` provenance tags across the three promoted C-16 suites (`services/xstockstrat-{marketdata,analysis,ui}/acceptance/opportunities-latency-fix.feature`); cross-feature `@feature-183` references in features 187 (recon.md, design.md) and 190 (recon.md). `CHANGELOG.md` and ledger `insights.md` key off the slug, so no change there.
+- Slug and git branch (`feature/opportunities-latency-fix`) unchanged.
 
 ## Session 2026-09-08 — sdd-story
 

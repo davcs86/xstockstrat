@@ -57,8 +57,8 @@ All 22 relevant existing guarantees are **PRESERVE** — no EXTEND or CHANGE. Ke
 - **PRESERVE** `@AC-6 @feature-185` "Cold read returns empty page + computing signal" — auto-drain must detect `computing=true` on first page and stop (not loop forever)
 - **PRESERVE** `@AC-7 @feature-185` "Terminal compute-failed" — auto-drain must propagate `compute_failed` to caller
 - **PRESERVE** `@AC-8 @feature-185` "Surgical self-heal on read" — paginated reads must still trigger recovery for stale unavailable rows (recovery is per-row in the handler, not per-call — confirmed)
-- **PRESERVE** `@AC-9 @feature-183` "Memo TTL >= poll interval" — rapid paginated drain within one poll must honor memo; sequential calls within same cycle hit the memo
-- **PRESERVE** `@AC-1 @feature-183` "BFF 30s gRPC deadline" — each paginated call carries its own deadline; total drain worst-case = N × 30s
+- **PRESERVE** `@AC-9 @feature-191` "Memo TTL >= poll interval" — rapid paginated drain within one poll must honor memo; sequential calls within same cycle hit the memo
+- **PRESERVE** `@AC-1 @feature-191` "BFF 30s gRPC deadline" — each paginated call carries its own deadline; total drain worst-case = N × 30s
 - **PRESERVE** `@AC-14 @feature-095` "Live quote enrichment does not alter ranking" — page size change must not alter ranking logic (it doesn't — ranking is pre-pagination)
 - **PRESERVE** `@AC-1 @feature-176` "Concurrent compute yields identical set + rank order" — auto-drain must surface the full identical set across pages
 

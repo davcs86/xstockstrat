@@ -155,7 +155,7 @@ read/return path and the UI change — the compute/materialization path is untou
 - **C-16 EXTEND vs CHANGE** — `@AC-11`/`@AC-12 @feature-155` are authored as client-side behaviors;
   relocating them server-side is EXTEND *iff* observable outcomes hold. Design must confirm and, if it
   judges any outcome altered, get user sign-off recorded in `context.md` (defaulted to EXTEND here).
-- **Latency guard** (`@AC-1 @feature-183`, 30s BFF deadline) — server-side filter/sort + one facet
+- **Latency guard** (`@AC-1 @feature-191`, 30s BFF deadline) — server-side filter/sort + one facet
   aggregate must stay well under it (SQL filtering returns *fewer* rows than today's full read; low
   risk, confirm in design).
 - **`"unavailable"` as a source token** — since `_primary_source` does not skip it, an
