@@ -9,6 +9,7 @@ import (
 	grpcstatus "google.golang.org/grpc/status"
 
 	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
+	configv1 "github.com/xstockstrat/contracts/gen/go/config/v1"
 	portfoliov1 "github.com/xstockstrat/contracts/gen/go/portfolio/v1"
 	tradingv1 "github.com/xstockstrat/contracts/gen/go/trading/v1"
 	"github.com/xstockstrat/trading/internal/config"
@@ -144,5 +145,35 @@ func TestCheckTradingStateForReplace_HaltedBlocksWithoutTouchingPortfolio(t *tes
 	}
 	if grpcstatus.Code(err) != codes.FailedPrecondition {
 		t.Errorf("got code %v, want FailedPrecondition", grpcstatus.Code(err))
+	}
+}
+
+// ── checkTradingStateForPlaceOrder: full-dotted platform.trading_state resolves the live state ──
+// Feature 189: the watcher now delivers `platform.trading_state` (full-dotted, post-029). AC-1: an
+// ACTIVE state lets an exposure-increasing order pass the gate; a HALTED state blocks it. Injected
+// via config.NewSnapshotWatcher since the snapshot field is unexported.
+func TestCheckTradingStateForPlaceOrder_FullDottedActive_PassesGate(t *testing.T) {
+	cfgW := config.NewSnapshotWatcher(map[string]*configv1.ConfigValue{
+		"platform.trading_state": {Value: &configv1.ConfigValue_StringVal{StringVal: "ACTIVE"}},
+	})
+	s := &TradingService{cfgW: cfgW}
+	err := s.checkTradingStateForPlaceOrder(
+		context.Background(), "u1", "AAPL", commonv1.TradingMode_TRADING_MODE_PAPER, tradingv1.OrderSide_ORDER_SIDE_BUY,
+	)
+	if err != nil {
+		t.Fatalf("ACTIVE platform.trading_state must not reject the order (AC-1), got: %v", err)
+	}
+}
+
+func TestCheckTradingStateForPlaceOrder_FullDottedHalted_BlocksGate(t *testing.T) {
+	cfgW := config.NewSnapshotWatcher(map[string]*configv1.ConfigValue{
+		"platform.trading_state": {Value: &configv1.ConfigValue_StringVal{StringVal: "HALTED"}},
+	})
+	s := &TradingService{cfgW: cfgW}
+	err := s.checkTradingStateForPlaceOrder(
+		context.Background(), "u1", "AAPL", commonv1.TradingMode_TRADING_MODE_PAPER, tradingv1.OrderSide_ORDER_SIDE_BUY,
+	)
+	if grpcstatus.Code(err) != codes.FailedPrecondition {
+		t.Fatalf("HALTED platform.trading_state must block with FailedPrecondition, got: %v", err)
 	}
 }

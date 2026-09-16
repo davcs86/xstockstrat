@@ -116,7 +116,7 @@ test.describe('Positions reconciliation status + halt display', () => {
             // (mock-backend.ts's own getConfig handler, `{value: {case, value}}`) and is parsed
             // browser-side by fromJson(), which expects the standard flattened proto3 JSON oneof
             // form — the member's own field name directly, not a `{case, value}` wrapper.
-            trading_state: { stringVal: 'REDUCE_ONLY' },
+            'platform.trading_state': { stringVal: 'REDUCE_ONLY' },
           },
         }),
       });

@@ -105,7 +105,8 @@ structured header (fast to scan, the current state) and an append-only session l
 
 - **Header = live state; log = history.** Update `## Decisions` / `## Open Threads` /
   `## Files Modified` in place as state changes; **append** `## Session …` entries, never rewrite
-  them.
+  them — with exactly two sanctioned exceptions that *compact* the log without losing meaning:
+  `/sdd-distill` mid-lifecycle (below) and `/sdd-archiver` at terminal state.
 - **Read before you write code.** Every SDD skill reloads `context.md` at session start (see each
   skill's boot sequence) — the root `CLAUDE.md` requires reading it before touching a related file.
 - **No vague deferrals.** An unresolved item becomes an `## Open Threads` checkbox with a target
@@ -113,6 +114,19 @@ structured header (fast to scan, the current state) and an append-only session l
 - **Backward compatible.** The header is additive: features created before this schema keep their
   plain session logs and remain valid. Adopt the header when a feature accumulates decisions worth
   scanning at a glance.
+
+### Mid-lifecycle distillation (`/sdd-distill`)
+
+An append-only log grows without bound, and every session reloads all of it — so a long-running
+feature pays a rising per-session tax. `/sdd-distill` compacts an **in-progress** feature's
+`context.md` **non-destructively**: the `context-distiller` subagent (read-only, the mid-lifecycle
+sibling of `feature-synthesizer`) hoists durable state into the header and compresses older
+`## Session` blocks into short summaries — the most recent sessions stay verbatim — then an
+adversarial `verify` pass proves nothing irrecoverable is dropped, a consent gate precedes the
+single-writer rewrite, and the commit leaves the original prose recoverable in git history. It is the
+one mid-lifecycle rewriter of the log; `/sdd-archiver` is its terminal-state counterpart (which also
+distils the Ledger and deletes the verbose specs). Distillation itself never writes the Ledger — only
+archival does.
 
 ### Cross-feature memory — the Ledger
 

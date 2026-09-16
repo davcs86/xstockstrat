@@ -25,7 +25,7 @@ describe('hasInternalCallerAuthority', () => {
       hasInternalCallerAuthority(
         mdWith('trading-reconciliation-poller'),
         'platform',
-        'trading_state',
+        'platform.trading_state',
         'REDUCE_ONLY',
       ),
       true,
@@ -37,7 +37,7 @@ describe('hasInternalCallerAuthority', () => {
       hasInternalCallerAuthority(
         mdWith('trading-reconciliation-poller'),
         'platform',
-        'trading_state',
+        'platform.trading_state',
         'HALTED',
       ),
       true,
@@ -49,7 +49,7 @@ describe('hasInternalCallerAuthority', () => {
       hasInternalCallerAuthority(
         mdWith('trading-reconciliation-poller'),
         'platform',
-        'trading_state',
+        'platform.trading_state',
         'ACTIVE',
       ),
       false,
@@ -58,7 +58,7 @@ describe('hasInternalCallerAuthority', () => {
 
   it('denies an unlisted caller id even for an otherwise-allowed value', () => {
     assert.equal(
-      hasInternalCallerAuthority(mdWith('some-other-caller'), 'platform', 'trading_state', 'HALTED'),
+      hasInternalCallerAuthority(mdWith('some-other-caller'), 'platform', 'platform.trading_state', 'HALTED'),
       false,
     );
   });
@@ -76,6 +76,20 @@ describe('hasInternalCallerAuthority', () => {
   });
 
   it('fails closed on absent metadata', () => {
-    assert.equal(hasInternalCallerAuthority(undefined, 'platform', 'trading_state', 'HALTED'), false);
+    assert.equal(hasInternalCallerAuthority(undefined, 'platform', 'platform.trading_state', 'HALTED'), false);
+  });
+
+  it('no longer authorizes the pre-189 bare `trading_state` key (feature 189 rename)', () => {
+    // Migration 029 healed the stored key to `platform.trading_state`; the grant matches the
+    // full-dotted key only, so a stale caller sending the bare key is denied (fail-closed).
+    assert.equal(
+      hasInternalCallerAuthority(
+        mdWith('trading-reconciliation-poller'),
+        'platform',
+        'trading_state',
+        'REDUCE_ONLY',
+      ),
+      false,
+    );
   });
 });

@@ -5,8 +5,8 @@
 //   protoc               unknown
 // source: analysis/v1/analysis.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ScreenResult_CriterionScoresEntry = exports.ScreenResult = exports.ScreenCriterion = exports.SetStrategyLiveResponse = exports.SetStrategyLiveRequest = exports.ListStrategyDefinitionsResponse = exports.ListStrategyDefinitionsRequest = exports.GetStrategyRequest = exports.ManageStrategyRequest = exports.StrategyDefinition = exports.StrategyComponent_ParamsEntry = exports.StrategyComponent = exports.GetStrategyReportRequest = exports.ListStrategiesResponse = exports.ListStrategiesRequest = exports.GetBacktestRequest = exports.ListBacktestsResponse = exports.BacktestRunSummary = exports.ListBacktestsRequest = exports.StrategyReport = exports.StrategyScore_ComponentScoresEntry = exports.StrategyScore = exports.ScoreStrategyRequest = exports.SymbolDiagnostics = exports.BarDiagnostic_IndicatorsEntry = exports.BarDiagnostic = exports.TradeRecord = exports.EquityPoint = exports.PortfolioCapitalSkip = exports.BacktestResult = exports.CoverageGap = exports.RunBacktestRequest = exports.FactorType = exports.SnapshotEventType = exports.OpportunityAction = exports.ReadinessState = exports.ReadinessRule = exports.ConditionState = exports.OpportunityActionTag = exports.ScreenResultStatus = exports.ScreenKind = exports.Comparator = exports.StrategyOperation = exports.ComponentKind = exports.NoTradeReason = exports.BarAction = exports.FillModel = exports.SizingMode = exports.BacktestStatus = exports.protobufPackage = void 0;
-exports.AnalysisServiceClient = exports.AnalysisServiceService = exports.GetAttributionResponse = exports.SourceAttribution = exports.GetAttributionRequest = exports.QueryPnLPatternsResponse = exports.QueryPnLPatternsRequest = exports.PnLPatternFactor = exports.OrderSnapshot_IndicatorValuesEntry = exports.OrderSnapshot = exports.SignalEntry = exports.IndicatorValue = exports.NamedSeries = exports.ComponentSeries = exports.GetIndicatorSeriesResponse = exports.GetIndicatorSeriesRequest = exports.GetStrategyAnalyticsRequest = exports.SetOpportunityActionResponse = exports.SetOpportunityActionRequest = exports.GetWatchlistReadinessResponse = exports.GetWatchlistReadinessRequest = exports.WatchlistReadinessRow = exports.EvaluateReadinessResponse = exports.EvaluateReadinessRequest = exports.ListOpportunitiesResponse = exports.ListOpportunitiesRequest = exports.StrategyAnalytics = exports.SymbolReadiness = exports.ConditionEval = exports.SparklinePoint = exports.Opportunity = exports.FundamentalsScanSummary = exports.RunFundamentalsScanRequest = exports.ScreenSymbolsResponse = exports.ScreenSymbolsRequest = exports.ScreenResult_CriterionPassedEntry = exports.ScreenResult_CriterionRawValuesEntry = void 0;
+exports.ScreenResult = exports.ScreenCriterion = exports.SetStrategyLiveResponse = exports.SetStrategyLiveRequest = exports.ListStrategyDefinitionsResponse = exports.ListStrategyDefinitionsRequest = exports.GetStrategyRequest = exports.ManageStrategyRequest = exports.StrategyDefinition = exports.StrategyComponent_ParamsEntry = exports.StrategyComponent = exports.GetStrategyReportRequest = exports.ListStrategiesResponse = exports.ListStrategiesRequest = exports.GetBacktestRequest = exports.ListBacktestsResponse = exports.BacktestRunSummary = exports.ListBacktestsRequest = exports.StrategyReport = exports.StrategyScore_ComponentScoresEntry = exports.StrategyScore = exports.ScoreStrategyRequest = exports.SymbolDiagnostics = exports.BarDiagnostic_IndicatorsEntry = exports.BarDiagnostic = exports.TradeRecord = exports.EquityPoint = exports.PortfolioCapitalSkip = exports.BacktestResult = exports.CoverageGap = exports.RunBacktestRequest = exports.FactorType = exports.SnapshotEventType = exports.OpportunityAction = exports.ReadinessState = exports.ReadinessRule = exports.ConditionState = exports.OpportunitySort = exports.OpportunityActionTag = exports.ScreenResultStatus = exports.ScreenKind = exports.Comparator = exports.StrategyOperation = exports.ComponentKind = exports.NoTradeReason = exports.BarAction = exports.FillModel = exports.SizingMode = exports.BacktestStatus = exports.protobufPackage = void 0;
+exports.AnalysisServiceClient = exports.AnalysisServiceService = exports.GetAttributionResponse = exports.SourceAttribution = exports.GetAttributionRequest = exports.QueryPnLPatternsResponse = exports.QueryPnLPatternsRequest = exports.PnLPatternFactor = exports.OrderSnapshot_IndicatorValuesEntry = exports.OrderSnapshot = exports.SignalEntry = exports.IndicatorValue = exports.NamedSeries = exports.ComponentSeries = exports.GetIndicatorSeriesResponse = exports.GetIndicatorSeriesRequest = exports.GetStrategyAnalyticsRequest = exports.SetOpportunityActionResponse = exports.SetOpportunityActionRequest = exports.GetWatchlistReadinessResponse = exports.GetWatchlistReadinessRequest = exports.WatchlistReadinessRow = exports.EvaluateReadinessResponse = exports.EvaluateReadinessRequest = exports.ListOpportunitiesResponse = exports.ListOpportunitiesRequest = exports.StrategyAnalytics = exports.SymbolReadiness = exports.ConditionEval = exports.SparklinePoint = exports.Opportunity = exports.FundamentalsScanSummary = exports.RunFundamentalsScanRequest = exports.ScreenSymbolsResponse = exports.ScreenSymbolsRequest = exports.ScreenResult_CriterionPassedEntry = exports.ScreenResult_CriterionRawValuesEntry = exports.ScreenResult_CriterionScoresEntry = void 0;
 exports.backtestStatusFromJSON = backtestStatusFromJSON;
 exports.backtestStatusToJSON = backtestStatusToJSON;
 exports.backtestStatusToNumber = backtestStatusToNumber;
@@ -40,6 +40,9 @@ exports.screenResultStatusToNumber = screenResultStatusToNumber;
 exports.opportunityActionTagFromJSON = opportunityActionTagFromJSON;
 exports.opportunityActionTagToJSON = opportunityActionTagToJSON;
 exports.opportunityActionTagToNumber = opportunityActionTagToNumber;
+exports.opportunitySortFromJSON = opportunitySortFromJSON;
+exports.opportunitySortToJSON = opportunitySortToJSON;
+exports.opportunitySortToNumber = opportunitySortToNumber;
 exports.conditionStateFromJSON = conditionStateFromJSON;
 exports.conditionStateToJSON = conditionStateToJSON;
 exports.conditionStateToNumber = conditionStateToNumber;
@@ -761,6 +764,63 @@ function opportunityActionTagToNumber(object) {
         case OpportunityActionTag.OPPORTUNITY_ACTION_TAG_REDUCE:
             return 3;
         case OpportunityActionTag.UNRECOGNIZED:
+        default:
+            return -1;
+    }
+}
+/**
+ * Sort order for the opportunity queue read (feature 190). Closed set → enum (C-04).
+ * UNSPECIFIED = the legacy feature-187 blended-rank default ((1-w)·conviction + w·signal_axis) —
+ * NOT an alias of CONVICTION; non-UI callers (agent list_opportunities) keep the blended order.
+ */
+var OpportunitySort;
+(function (OpportunitySort) {
+    OpportunitySort["OPPORTUNITY_SORT_UNSPECIFIED"] = "OPPORTUNITY_SORT_UNSPECIFIED";
+    /** OPPORTUNITY_SORT_CONVICTION - raw o.conviction ordering (the UI's explicit "Conviction") */
+    OpportunitySort["OPPORTUNITY_SORT_CONVICTION"] = "OPPORTUNITY_SORT_CONVICTION";
+    /** OPPORTUNITY_SORT_EXPIRY - soonest valid_until first (NULLS last) */
+    OpportunitySort["OPPORTUNITY_SORT_EXPIRY"] = "OPPORTUNITY_SORT_EXPIRY";
+    OpportunitySort["UNRECOGNIZED"] = "UNRECOGNIZED";
+})(OpportunitySort || (exports.OpportunitySort = OpportunitySort = {}));
+function opportunitySortFromJSON(object) {
+    switch (object) {
+        case 0:
+        case "OPPORTUNITY_SORT_UNSPECIFIED":
+            return OpportunitySort.OPPORTUNITY_SORT_UNSPECIFIED;
+        case 1:
+        case "OPPORTUNITY_SORT_CONVICTION":
+            return OpportunitySort.OPPORTUNITY_SORT_CONVICTION;
+        case 2:
+        case "OPPORTUNITY_SORT_EXPIRY":
+            return OpportunitySort.OPPORTUNITY_SORT_EXPIRY;
+        case -1:
+        case "UNRECOGNIZED":
+        default:
+            return OpportunitySort.UNRECOGNIZED;
+    }
+}
+function opportunitySortToJSON(object) {
+    switch (object) {
+        case OpportunitySort.OPPORTUNITY_SORT_UNSPECIFIED:
+            return "OPPORTUNITY_SORT_UNSPECIFIED";
+        case OpportunitySort.OPPORTUNITY_SORT_CONVICTION:
+            return "OPPORTUNITY_SORT_CONVICTION";
+        case OpportunitySort.OPPORTUNITY_SORT_EXPIRY:
+            return "OPPORTUNITY_SORT_EXPIRY";
+        case OpportunitySort.UNRECOGNIZED:
+        default:
+            return "UNRECOGNIZED";
+    }
+}
+function opportunitySortToNumber(object) {
+    switch (object) {
+        case OpportunitySort.OPPORTUNITY_SORT_UNSPECIFIED:
+            return 0;
+        case OpportunitySort.OPPORTUNITY_SORT_CONVICTION:
+            return 1;
+        case OpportunitySort.OPPORTUNITY_SORT_EXPIRY:
+            return 2;
+        case OpportunitySort.UNRECOGNIZED:
         default:
             return -1;
     }
@@ -7164,7 +7224,13 @@ exports.StrategyAnalytics = {
     },
 };
 function createBaseListOpportunitiesRequest() {
-    return { page: undefined, minConviction: 0 };
+    return {
+        page: undefined,
+        minConviction: 0,
+        sources: [],
+        actionFilter: OpportunityActionTag.OPPORTUNITY_ACTION_TAG_UNSPECIFIED,
+        sort: OpportunitySort.OPPORTUNITY_SORT_UNSPECIFIED,
+    };
 }
 exports.ListOpportunitiesRequest = {
     encode(message, writer = new wire_1.BinaryWriter()) {
@@ -7173,6 +7239,15 @@ exports.ListOpportunitiesRequest = {
         }
         if (message.minConviction !== 0) {
             writer.uint32(17).double(message.minConviction);
+        }
+        for (const v of message.sources) {
+            writer.uint32(26).string(v);
+        }
+        if (message.actionFilter !== OpportunityActionTag.OPPORTUNITY_ACTION_TAG_UNSPECIFIED) {
+            writer.uint32(32).int32(opportunityActionTagToNumber(message.actionFilter));
+        }
+        if (message.sort !== OpportunitySort.OPPORTUNITY_SORT_UNSPECIFIED) {
+            writer.uint32(40).int32(opportunitySortToNumber(message.sort));
         }
         return writer;
     },
@@ -7197,6 +7272,27 @@ exports.ListOpportunitiesRequest = {
                     message.minConviction = reader.double();
                     continue;
                 }
+                case 3: {
+                    if (tag !== 26) {
+                        break;
+                    }
+                    message.sources.push(reader.string());
+                    continue;
+                }
+                case 4: {
+                    if (tag !== 32) {
+                        break;
+                    }
+                    message.actionFilter = opportunityActionTagFromJSON(reader.int32());
+                    continue;
+                }
+                case 5: {
+                    if (tag !== 40) {
+                        break;
+                    }
+                    message.sort = opportunitySortFromJSON(reader.int32());
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -7213,6 +7309,13 @@ exports.ListOpportunitiesRequest = {
                 : isSet(object.min_conviction)
                     ? globalThis.Number(object.min_conviction)
                     : 0,
+            sources: globalThis.Array.isArray(object?.sources) ? object.sources.map((e) => globalThis.String(e)) : [],
+            actionFilter: isSet(object.actionFilter)
+                ? opportunityActionTagFromJSON(object.actionFilter)
+                : isSet(object.action_filter)
+                    ? opportunityActionTagFromJSON(object.action_filter)
+                    : OpportunityActionTag.OPPORTUNITY_ACTION_TAG_UNSPECIFIED,
+            sort: isSet(object.sort) ? opportunitySortFromJSON(object.sort) : OpportunitySort.OPPORTUNITY_SORT_UNSPECIFIED,
         };
     },
     toJSON(message) {
@@ -7222,6 +7325,15 @@ exports.ListOpportunitiesRequest = {
         }
         if (message.minConviction !== 0) {
             obj.minConviction = message.minConviction;
+        }
+        if (message.sources?.length) {
+            obj.sources = message.sources;
+        }
+        if (message.actionFilter !== OpportunityActionTag.OPPORTUNITY_ACTION_TAG_UNSPECIFIED) {
+            obj.actionFilter = opportunityActionTagToJSON(message.actionFilter);
+        }
+        if (message.sort !== OpportunitySort.OPPORTUNITY_SORT_UNSPECIFIED) {
+            obj.sort = opportunitySortToJSON(message.sort);
         }
         return obj;
     },
@@ -7234,11 +7346,14 @@ exports.ListOpportunitiesRequest = {
             ? common_1.PageRequest.fromPartial(object.page)
             : undefined;
         message.minConviction = object.minConviction ?? 0;
+        message.sources = object.sources?.map((e) => e) || [];
+        message.actionFilter = object.actionFilter ?? OpportunityActionTag.OPPORTUNITY_ACTION_TAG_UNSPECIFIED;
+        message.sort = object.sort ?? OpportunitySort.OPPORTUNITY_SORT_UNSPECIFIED;
         return message;
     },
 };
 function createBaseListOpportunitiesResponse() {
-    return { opportunities: [], page: undefined, computing: false, computeFailed: false };
+    return { opportunities: [], page: undefined, computing: false, computeFailed: false, availableSources: [] };
 }
 exports.ListOpportunitiesResponse = {
     encode(message, writer = new wire_1.BinaryWriter()) {
@@ -7253,6 +7368,9 @@ exports.ListOpportunitiesResponse = {
         }
         if (message.computeFailed !== false) {
             writer.uint32(32).bool(message.computeFailed);
+        }
+        for (const v of message.availableSources) {
+            writer.uint32(42).string(v);
         }
         return writer;
     },
@@ -7291,6 +7409,13 @@ exports.ListOpportunitiesResponse = {
                     message.computeFailed = reader.bool();
                     continue;
                 }
+                case 5: {
+                    if (tag !== 42) {
+                        break;
+                    }
+                    message.availableSources.push(reader.string());
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -7311,6 +7436,11 @@ exports.ListOpportunitiesResponse = {
                 : isSet(object.compute_failed)
                     ? globalThis.Boolean(object.compute_failed)
                     : false,
+            availableSources: globalThis.Array.isArray(object?.availableSources)
+                ? object.availableSources.map((e) => globalThis.String(e))
+                : globalThis.Array.isArray(object?.available_sources)
+                    ? object.available_sources.map((e) => globalThis.String(e))
+                    : [],
         };
     },
     toJSON(message) {
@@ -7327,6 +7457,9 @@ exports.ListOpportunitiesResponse = {
         if (message.computeFailed !== false) {
             obj.computeFailed = message.computeFailed;
         }
+        if (message.availableSources?.length) {
+            obj.availableSources = message.availableSources;
+        }
         return obj;
     },
     create(base) {
@@ -7340,6 +7473,7 @@ exports.ListOpportunitiesResponse = {
             : undefined;
         message.computing = object.computing ?? false;
         message.computeFailed = object.computeFailed ?? false;
+        message.availableSources = object.availableSources?.map((e) => e) || [];
         return message;
     },
 };

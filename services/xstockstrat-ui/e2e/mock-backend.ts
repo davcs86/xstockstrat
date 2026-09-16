@@ -824,16 +824,45 @@ export async function startMockBackend(): Promise<void> {
             status: 'completed',
           };
         },
-        // feature 083 — ranked opportunity queue; honors the min_conviction filter.
+        // feature 083 — ranked opportunity queue; feature 190 — server-side filters/sort + facet.
         async listOpportunities(req) {
           const min = req.minConviction ?? 0;
-          // feature 132/185: muted (deny-listed) AND data-unavailable rows are exempt from the
-          // conviction floor (both carry conviction 0 by design) — mirrors the backend
-          // `OR provenance ? 'denied' OR provenance ? 'unavailable'` read exemption (fails.md:1547).
+          const reqSources: string[] = req.sources ?? [];
+          const actionFilter = req.actionFilter ?? 0;
+          const sort = req.sort ?? 0;
+          const MARKERS = ['watchlist', 'position', 'denied'];
+          type Opp = (typeof OPPORTUNITIES)[number];
+          const expirySec = (o: Opp) =>
+            o.validUntil?.seconds ? Number(o.validUntil.seconds) : Infinity;
+          const rows = OPPORTUNITIES.filter(
+            (o) =>
+              // feature 132/185: muted + data-unavailable rows are exempt from the CONVICTION floor
+              // only (both carry conviction 0 by design) — mirrors the backend exemption (fails.md:1547).
+              (o.muted || o.dataUnavailable || o.conviction >= min) &&
+              // feature 190: source/action filters apply to ALL rows (muted/unavailable NOT exempt).
+              (reqSources.length === 0 || reqSources.includes(o.source)) &&
+              (actionFilter === 0 || o.action === actionFilter),
+          );
+          // feature 190: symbol-grouped sort mirroring the server ORDER BY — group positioned by its
+          // best member (conviction desc, or soonest expiry for EXPIRY), rows contiguous per symbol.
+          const groupKey = (sym: string) =>
+            sort === 2 // OPPORTUNITY_SORT_EXPIRY
+              ? Math.min(...rows.filter((o) => o.symbol === sym).map(expirySec))
+              : -Math.max(...rows.filter((o) => o.symbol === sym).map((o) => o.conviction));
+          const sorted = [...rows].sort(
+            (a, b) =>
+              groupKey(a.symbol) - groupKey(b.symbol) ||
+              a.symbol.localeCompare(b.symbol) ||
+              (sort === 2 ? expirySec(a) - expirySec(b) : b.conviction - a.conviction),
+          );
+          // feature 190: the source facet — distinct real sources over the FULL queue, independent of
+          // the request filters (O3), so a selected source can never vanish from the chip menu.
+          const availableSources = [
+            ...new Set(OPPORTUNITIES.map((o) => o.source).filter((s) => s && !MARKERS.includes(s))),
+          ].sort();
           return {
-            opportunities: OPPORTUNITIES.filter(
-              (o) => o.muted || o.dataUnavailable || o.conviction >= min,
-            ),
+            opportunities: sorted,
+            availableSources,
             // feature 185 FR-4 — the cold/failed pending signals default false here; a per-test
             // page.route mock overrides them to exercise the computing / compute-failed UI states.
             computing: false,
@@ -1287,7 +1316,8 @@ export async function startMockBackend(): Promise<void> {
             namespace: 'platform',
             version: '1',
             values: {
-              trading_state: { value: { case: 'stringVal', value: 'ACTIVE' } },
+              // Full-dotted key per feature 189 — matches the post-029 server shape the page reads.
+              'platform.trading_state': { value: { case: 'stringVal', value: 'ACTIVE' } },
             },
           };
         },

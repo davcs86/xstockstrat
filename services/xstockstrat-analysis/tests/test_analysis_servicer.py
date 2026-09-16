@@ -4047,7 +4047,12 @@ class _FakeOppRepo:
         now = datetime.now(UTC)
         return any(r["valid_until"] > now for r in self.rows.get(user_id, []))
 
-    async def read(self, user_id, min_conviction, w, *, include_expired):
+    async def read(
+        self, user_id, min_conviction, w, *, include_expired, sources=None, action_filter=0, sort=0
+    ):
+        # feature 190: accept the new filter/sort kwargs but do NOT re-implement them here — the
+        # forwarding is asserted at the servicer→repo boundary (test_*_forwards_*), never by a fake
+        # that mirrors the SQL (that would be a vacuous-green cousin of fails.md:577).
         now = datetime.now(UTC)
         ww = min(max(w, 0.0), 1.0)
         out = []
@@ -4089,6 +4094,20 @@ class _FakeOppRepo:
             )
         )
         return out
+
+    async def available_sources(self, user_id, *, include_expired):
+        # feature 190 — distinct derived primary sources over stored rows (mirrors the skip-list),
+        # so the servicer's offset==0 facet call resolves. Independence is asserted at the boundary.
+        now = datetime.now(UTC)
+        out = set()
+        for r in self.rows.get(user_id, []):
+            if not include_expired and r["valid_until"] <= now:
+                continue
+            for origin in r.get("provenance") or []:
+                if origin not in ("watchlist", "position", "denied"):
+                    out.add(origin)
+                    break
+        return sorted(out)
 
     async def replace_symbols(self, user_id, rows):
         # feature 185 FR-5: heal-only UPDATE-in-place — mirror the real SQL (UPDATE … WHERE
@@ -7036,3 +7055,120 @@ class TestBacktestOffloadFeature176:
         assert [(t.side, t.qty, t.entry_price, t.exit_price, t.pnl) for t in t1] == [
             (t.side, t.qty, t.entry_price, t.exit_price, t.pnl) for t in t2
         ]
+
+
+class TestListOpportunitiesServerFilters190:
+    """feature 190 — the servicer forwards the new filter/sort request fields into the repo read
+    (not accepted-and-ignored, fails.md:577) and computes the source facet only on page 0 with the
+    served freshness (O1/O4/O7). Behavioral SQL correctness is covered by the repo SQL tests."""
+
+    def _svc_with_row(self, provenance, conviction, valid_until):
+        svc = _materialized_svc()
+        svc._kick_opportunity_retry = MagicMock()
+        svc._kick_opportunity_recompute = MagicMock()
+        svc._marketdata.BatchGetLatestPrice = AsyncMock(return_value=SimpleNamespace(results=[]))
+        recent = datetime.now(UTC)
+        svc._opportunities_repo.rows["u1"] = [
+            {
+                "opportunity_key": f"u1|{sym}|s",
+                "symbol": sym,
+                "strategy_id": "s",
+                "action": int(analysis_pb2.OPPORTUNITY_ACTION_TAG_ENTER),
+                "conviction": conv,
+                "readiness_json": {"passing_conditions": 1, "total_conditions": 1},
+                "signal_axis": 0.0,
+                "provenance": prov,
+                "thesis": "",
+                "valid_until": valid_until,
+                "computed_at": recent,
+            }
+            for sym, prov, conv in zip(("AAA", "BBB", "CCC"), provenance, conviction, strict=False)
+        ]
+        return svc
+
+    @pytest.mark.asyncio
+    async def test_forwards_filters_and_facets_page0(self):
+        """O4 — the fresh read receives sources/action_filter/sort/min_conviction verbatim, and the
+        facet is fetched once with include_expired=False on page 0 (@AC-1/@AC-11)."""
+        valid = datetime.now(UTC) + timedelta(hours=24)
+        svc = self._svc_with_row([["live_strategy"]], [0.9], valid)
+        svc._opportunities_repo.read = AsyncMock(wraps=svc._opportunities_repo.read)
+        svc._opportunities_repo.available_sources = AsyncMock(
+            wraps=svc._opportunities_repo.available_sources
+        )
+        resp = await svc.ListOpportunities(
+            analysis_pb2.ListOpportunitiesRequest(
+                page=common_pb2.PageRequest(page_size=50),
+                min_conviction=0.5,
+                sources=["live_strategy"],
+                action_filter=analysis_pb2.OPPORTUNITY_ACTION_TAG_REDUCE,
+                sort=analysis_pb2.OPPORTUNITY_SORT_EXPIRY,
+            ),
+            _ctx(_HEADERS),
+        )
+        svc._opportunities_repo.read.assert_awaited()
+        call = svc._opportunities_repo.read.await_args
+        assert call.args[1] == 0.5  # min_conviction forwarded (no longer hard-coded 0)
+        assert call.kwargs["sources"] == ["live_strategy"]
+        assert call.kwargs["action_filter"] == int(analysis_pb2.OPPORTUNITY_ACTION_TAG_REDUCE)
+        assert call.kwargs["sort"] == int(analysis_pb2.OPPORTUNITY_SORT_EXPIRY)
+        svc._opportunities_repo.available_sources.assert_awaited_once()
+        assert (
+            svc._opportunities_repo.available_sources.await_args.kwargs["include_expired"] is False
+        )
+        assert list(resp.available_sources) == ["live_strategy"]
+
+    @pytest.mark.asyncio
+    async def test_facet_not_computed_past_page0(self):
+        """O1 — a page>0 request never calls the facet and returns empty available_sources."""
+        valid = datetime.now(UTC) + timedelta(hours=24)
+        svc = self._svc_with_row([["live_strategy"]], [0.9], valid)
+        svc._opportunities_repo.available_sources = AsyncMock(
+            wraps=svc._opportunities_repo.available_sources
+        )
+        resp = await svc.ListOpportunities(
+            analysis_pb2.ListOpportunitiesRequest(
+                page=common_pb2.PageRequest(page_size=50, page_token="50"),
+            ),
+            _ctx(_HEADERS),
+        )
+        svc._opportunities_repo.available_sources.assert_not_awaited()
+        assert list(resp.available_sources) == []
+
+    @pytest.mark.asyncio
+    async def test_stale_path_facet_uses_expired_freshness(self):
+        """O7 — when the served rows come from the stale (include_expired=True) read, the facet is
+        fetched with include_expired=True so chips match the served (stale) rows."""
+        expired = datetime.now(UTC) - timedelta(hours=1)
+        svc = self._svc_with_row([["live_strategy"]], [0.9], expired)
+        svc._opportunities_repo.available_sources = AsyncMock(
+            wraps=svc._opportunities_repo.available_sources
+        )
+        resp = await svc.ListOpportunities(
+            analysis_pb2.ListOpportunitiesRequest(page=common_pb2.PageRequest(page_size=50)),
+            _ctx(_HEADERS),
+        )
+        assert [o.symbol for o in resp.opportunities] == ["AAA"]  # stale row served
+        svc._opportunities_repo.available_sources.assert_awaited_once()
+        assert (
+            svc._opportunities_repo.available_sources.await_args.kwargs["include_expired"] is True
+        )
+
+    @pytest.mark.asyncio
+    async def test_muted_and_unavailable_survive_raised_floor(self):
+        """@AC-2/@AC-3/O8 — a muted (denied) and a data-unavailable row survive min_conviction=0.5
+        (floor-exempt), while a normal 0.3 row is dropped."""
+        valid = datetime.now(UTC) + timedelta(hours=24)
+        svc = self._svc_with_row(
+            [["denied"], ["unavailable"], ["live_strategy"]], [0.0, 0.0, 0.3], valid
+        )
+        resp = await svc.ListOpportunities(
+            analysis_pb2.ListOpportunitiesRequest(
+                page=common_pb2.PageRequest(page_size=50), min_conviction=0.5
+            ),
+            _ctx(_HEADERS),
+        )
+        by_symbol = {o.symbol: o for o in resp.opportunities}
+        assert set(by_symbol) == {"AAA", "BBB"}  # CCC (0.3, no exemption) dropped
+        assert by_symbol["AAA"].muted is True
+        assert by_symbol["BBB"].data_unavailable is True
