@@ -155,3 +155,10 @@ Advisory warnings from the third spec review resolved before /sdd-design:
 - Step 13: Full CI gate — 365 tests PASS, 76.61% coverage (threshold 40%), ruff clean. AC-8 (COPILOT_MCP_TOOL_COUNT=42) and AC-9 (42-name test set) confirmed.
 - Status: in-progress → code-completed.
 - Review warnings resolved: [x] Step 12 TS lint gate (ruff clean, copilot.ts bare constant — no TS lint needed for .ts file with bare constant change); [x] E2E coverage note (copilot.ts change is a bare constant — no new branching logic, existing E2E suite unchanged).
+
+## Session 2026-09-16 (CI: feature status automation)
+
+- Promotion PR #1145 merged to main
+- Feature promoted and committed: c91e0c535f10c15962ea856e909ea1a2c659f29a
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-09-16

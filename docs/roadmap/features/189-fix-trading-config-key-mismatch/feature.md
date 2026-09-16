@@ -6,6 +6,8 @@
 **Severity**: SEV-1
 **Created**: 2026-09-15
 **Last Updated**: 2026-09-15
+**Committed to main**: c91e0c535f10c15962ea856e909ea1a2c659f29a
+**Launched date**: 2026-09-16
 
 ---
 
@@ -19,6 +21,7 @@
 | 2026-09-15 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential mode started; Step 1 (migration 029) done. |
 | 2026-09-15 | `in-progress` → `code-completed` | /sdd-execute | All 8 steps done (sequential). Backend Go+config red→green locally; UI e2e as CI-equivalent (Dockerfile.e2e on PR). |
 
+| 2026-09-16 | `code-completed` → `launched` | CI workflow | Promoted via PR #1145; committed c91e0c535f10c15962ea856e909ea1a2c659f29a |
 ---
 
 ## Artifacts

@@ -3,6 +3,8 @@
 **Development Branch**: `feature/opportunities-server-side-filters`
 **Created**: 2026-09-15
 **Last Updated**: 2026-09-16
+**Committed to main**: c91e0c535f10c15962ea856e909ea1a2c659f29a
+**Launched date**: 2026-09-16
 
 ---
 
@@ -17,6 +19,7 @@
 | 2026-09-15 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential execution started (Steps 1–2: proto + codegen) |
 | 2026-09-16 | `in-progress` → `code-completed` | /sdd-execute | All 9 steps done — backend suite 763 passed/83.97% cov, UI e2e 27 passed; merge-order gate + C-16 promotion + integration PR next |
 
+| 2026-09-16 | `code-completed` → `launched` | CI workflow | Promoted via PR #1145; committed c91e0c535f10c15962ea856e909ea1a2c659f29a |
 ---
 
 ## Artifacts

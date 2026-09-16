@@ -3,6 +3,8 @@
 **Development Branch**: `feature/agent-postgres-mcp`
 **Created**: 2026-09-02
 **Last Updated**: 2026-09-02
+**Committed to main**: c91e0c535f10c15962ea856e909ea1a2c659f29a
+**Launched date**: 2026-09-16
 
 
 ---
@@ -20,6 +22,7 @@
 | 2026-09-02 | `implementation-ready` → `in-progress` | /sdd-execute | Execution started (sequential mode); Steps 1-5 done |
 | 2026-09-02 | `in-progress` → `code-completed` | /sdd-execute | All 13 steps done; 365 tests pass (76.61% coverage); ruff clean; AC-8/9 confirmed |
 
+| 2026-09-16 | `code-completed` → `launched` | CI workflow | Promoted via PR #1145; committed c91e0c535f10c15962ea856e909ea1a2c659f29a |
 ---
 
 ## Artifacts
