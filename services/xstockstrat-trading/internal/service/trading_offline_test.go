@@ -441,6 +441,7 @@ func TestCancelOrder_RejectsOfflineOrder(t *testing.T) {
 		orders: map[string]*tradingv1.Order{
 			"off-ord-1": {
 				OrderId:    "off-ord-1",
+				UserId:     "user-1",
 				AccountId:  "off-1",
 				BrokerType: commonv1.BrokerType_BROKER_TYPE_OFFLINE,
 				Status:     tradingv1.OrderStatus_ORDER_STATUS_NEW,
@@ -454,7 +455,7 @@ func TestCancelOrder_RejectsOfflineOrder(t *testing.T) {
 		// Pre-fix, this reaches the unconditional CANCELED transition and then panics at the nil-repo
 		// UpsertOrder; post-fix, guard A returns before any repo access (no panic).
 		defer func() { _ = recover() }()
-		_, err = svc.CancelOrder(context.Background(), &tradingv1.CancelOrderRequest{OrderId: "off-ord-1"})
+		_, err = svc.CancelOrder(ctxAsUser("user-1"), &tradingv1.CancelOrderRequest{OrderId: "off-ord-1"})
 	}()
 
 	if grpcstatus.Code(err) != codes.FailedPrecondition {
@@ -492,7 +493,7 @@ func TestPlaceOrder_RoutesAuthoritativeOfflineToRecord(t *testing.T) {
 
 	func() {
 		defer func() { _ = recover() }() // offline record path panics at the nil-repo UpsertOrder
-		_, _ = svc.PlaceOrder(context.Background(), &tradingv1.PlaceOrderRequest{
+		_, _ = svc.PlaceOrder(ctxAsUser("user-1"), &tradingv1.PlaceOrderRequest{
 			Symbol: "HONA", Side: tradingv1.OrderSide_ORDER_SIDE_BUY, OrderType: tradingv1.OrderType_ORDER_TYPE_MARKET,
 			Qty: 1, ClientOrderId: "c-159-b", AccountId: "acct-1",
 		})

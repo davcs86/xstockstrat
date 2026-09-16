@@ -4,7 +4,7 @@ These exercise the real subprocess path — no DB, no gRPC. Run with:
     pytest tests/test_sandbox.py
 """
 
-from app.services.sandbox import execute_formula
+from app.services.sandbox import _sandbox_env, execute_formula
 
 
 class TestSandboxExecution:
@@ -63,6 +63,30 @@ class TestSandboxExecution:
         )
         assert res.success is False
         assert res.exit_reason == "import_blocked"
+
+
+class TestSandboxEnvIsolation:
+    """The sandbox child runs untrusted formula source with a minimal env (C-4): it must never
+    inherit the service's secrets, so an escaped formula has nothing sensitive to exfiltrate."""
+
+    def test_sandbox_env_excludes_service_secrets(self, monkeypatch):
+        monkeypatch.setenv("DATABASE_URL", "postgres://user:pw@host/db")
+        monkeypatch.setenv("JWT_SECRET", "top-secret")
+        monkeypatch.setenv("CONFIG_SECRETS_ENCRYPTION_KEY", "deadbeefdeadbeef")
+        monkeypatch.setenv("BROKER_ACCOUNTS_ENCRYPTION_KEY", "cafebabecafebabe")
+
+        env = _sandbox_env()
+
+        for secret in (
+            "DATABASE_URL",
+            "JWT_SECRET",
+            "CONFIG_SECRETS_ENCRYPTION_KEY",
+            "BROKER_ACCOUNTS_ENCRYPTION_KEY",
+        ):
+            assert secret not in env, f"{secret} must not reach the sandbox child"
+        # Thread pins are preserved so numpy imports under the memory cap; PYTHONPATH for resolution.
+        assert env["OPENBLAS_NUM_THREADS"] == "1"
+        assert "PYTHONPATH" in env
 
 
 class TestSandboxNumericLibraries:

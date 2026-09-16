@@ -675,6 +675,16 @@ func (s *PortfolioService) GetPnL(ctx context.Context, req *portfoliov1.GetPnLRe
 
 // GetSnapshot retrieves a historical portfolio snapshot.
 func (s *PortfolioService) GetSnapshot(ctx context.Context, req *portfoliov1.GetSnapshotRequest) (*portfoliov1.PortfolioSnapshot, error) {
+	// Ownership gate: a snapshot's portfolio_id IS the owning user_id (snapshots are written as
+	// InsertSnapshot(userID, userID, …)), so a caller (trusted x-user-id header) may read only their
+	// own snapshot — never another user's by passing their id as portfolio_id.
+	callerID, err := requireUserID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if req.PortfolioId != callerID {
+		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("snapshot does not belong to caller"))
+	}
 	at := time.Now()
 	if req.AtTime != nil {
 		at = req.AtTime.AsTime()
@@ -1133,8 +1143,23 @@ func (s *PortfolioService) buildAccountPortfolio(ctx context.Context, accountID 
 // ListPortfolios returns a Portfolio per broker account: a specific account_id returns just that one;
 // without one it aggregates every account owned by the requesting user (from x-user-id).
 func (s *PortfolioService) ListPortfolios(ctx context.Context, req *portfoliov1.ListPortfoliosRequest) (*portfoliov1.ListPortfoliosResponse, error) {
+	userID := middleware.FromContext(ctx).UserID
+	if userID == "" {
+		return &portfoliov1.ListPortfoliosResponse{}, nil
+	}
+
 	accountID := req.GetAccountId()
 	if accountID != "" {
+		// Ownership gate: a caller may read only an account they own. The owned universe is the same
+		// balance ∪ offline set the all-accounts branch below trusts — a caller passing another user's
+		// account_id no longer receives that account's equity/positions.
+		owned, err := s.callerOwnsAccount(ctx, userID, accountID)
+		if err != nil {
+			return nil, err
+		}
+		if !owned {
+			return nil, connect.NewError(connect.CodePermissionDenied, errors.New("account does not belong to caller"))
+		}
 		bal, err := s.repo.GetAccountBalance(ctx, accountID)
 		if err != nil {
 			slog.Warn("ListPortfolios: GetAccountBalance failed", "account_id", accountID, "error", err)
@@ -1148,10 +1173,6 @@ func (s *PortfolioService) ListPortfolios(ctx context.Context, req *portfoliov1.
 		}, nil
 	}
 
-	userID := middleware.FromContext(ctx).UserID
-	if userID == "" {
-		return &portfoliov1.ListPortfoliosResponse{}, nil
-	}
 	accounts, err := s.repo.ListAccountBalancesByUser(ctx, userID)
 	if err != nil {
 		return nil, err
@@ -1202,6 +1223,33 @@ func offlineIDsToAppend(balanceAccountIDs, offlineIDs []string) []string {
 		out = append(out, id)
 	}
 	return out
+}
+
+// callerOwnsAccount reports whether accountID belongs to userID, using the same balance ∪ offline
+// owned-account universe ListPortfolios' all-accounts branch trusts. It is the ownership gate for a
+// caller-supplied account_id (an unsynced own account with no balance row and no positions is treated
+// as not-yet-owned; such an account has no portfolio data to leak and its order sizing fails closed
+// on unavailable equity regardless).
+func (s *PortfolioService) callerOwnsAccount(ctx context.Context, userID, accountID string) (bool, error) {
+	balances, err := s.repo.ListAccountBalancesByUser(ctx, userID)
+	if err != nil {
+		return false, err
+	}
+	for _, acct := range balances {
+		if acct.AccountID == accountID {
+			return true, nil
+		}
+	}
+	offlineIDs, err := s.repo.ListOfflineAccountIdsByUser(ctx, userID)
+	if err != nil {
+		return false, err
+	}
+	for _, id := range offlineIDs {
+		if id == accountID {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // ─── Watchlists (feature 058) ────────────────────────────────────────────────

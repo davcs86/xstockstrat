@@ -119,7 +119,7 @@ type TradingService struct {
 	orders map[string]*tradingv1.Order
 	// Fan-out channels for StreamOrderUpdates
 	mu   sync.Mutex
-	subs map[string]chan *tradingv1.Order
+	subs map[string]orderSubscriber
 	// credStatus tracks the last-persisted CredentialStatus per account so the health poller
 	// skips DB writes when unchanged. Seeded from the DB in LoadBrokerPool.
 	credStatus   map[string]int32
@@ -199,7 +199,7 @@ func NewTradingService(
 		orderIntentRepo:      orderIntentRepo,
 		bracketRepo:          bracketRepo,
 		orders:               make(map[string]*tradingv1.Order),
-		subs:                 make(map[string]chan *tradingv1.Order),
+		subs:                 make(map[string]orderSubscriber),
 		credStatus:           make(map[string]int32),
 		credSkipLoggedAt:     make(map[string]time.Time),
 		halted:               make(map[string]bool),
@@ -309,11 +309,21 @@ func (s *TradingService) resolveAccount(accountID string) (resolvedID string, en
 	return "", brokerPoolEntry{}, grpcstatus.Errorf(codes.InvalidArgument, "multiple broker accounts registered; account_id is required")
 }
 
-// SubscribeOrderUpdates registers a subscriber channel for order update broadcasts.
-func (s *TradingService) SubscribeOrderUpdates(id string) <-chan *tradingv1.Order {
+// orderSubscriber is a StreamOrderUpdates subscriber channel plus its per-subscription user
+// filter. userID == "" means "all users" (the documented internal cross-user selector); a
+// non-empty userID scopes delivery to that user's own orders so one tenant can never receive
+// another tenant's live order updates.
+type orderSubscriber struct {
+	ch     chan *tradingv1.Order
+	userID string
+}
+
+// SubscribeOrderUpdates registers a subscriber channel for order update broadcasts, scoped to
+// userID (empty = all users — the internal cross-user selector).
+func (s *TradingService) SubscribeOrderUpdates(id, userID string) <-chan *tradingv1.Order {
 	ch := make(chan *tradingv1.Order, 64)
 	s.mu.Lock()
-	s.subs[id] = ch
+	s.subs[id] = orderSubscriber{ch: ch, userID: userID}
 	s.mu.Unlock()
 	return ch
 }
@@ -321,20 +331,24 @@ func (s *TradingService) SubscribeOrderUpdates(id string) <-chan *tradingv1.Orde
 // UnsubscribeOrderUpdates removes a subscriber channel.
 func (s *TradingService) UnsubscribeOrderUpdates(id string) {
 	s.mu.Lock()
-	if ch, ok := s.subs[id]; ok {
-		close(ch)
+	if sub, ok := s.subs[id]; ok {
+		close(sub.ch)
 		delete(s.subs, id)
 	}
 	s.mu.Unlock()
 }
 
-// broadcastOrder fans out an order update to all subscribers.
+// broadcastOrder fans out an order update only to subscribers whose user filter matches the
+// order's owner — a scoped subscriber (userID != "") never receives another user's order.
 func (s *TradingService) broadcastOrder(order *tradingv1.Order) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for _, ch := range s.subs {
+	for _, sub := range s.subs {
+		if sub.userID != "" && order.UserId != sub.userID {
+			continue
+		}
 		select {
-		case ch <- order:
+		case sub.ch <- order:
 		default:
 		}
 	}
@@ -366,6 +380,15 @@ func (s *TradingService) PlaceOrder(ctx context.Context, req *tradingv1.PlaceOrd
 	resolvedAccountID, accountEntry, err := s.resolveAccount(req.AccountId)
 	if err != nil {
 		return nil, err
+	}
+
+	// Ownership gate: the caller — the trusted x-user-id header, never a request-body field — may
+	// place orders only on their own account. resolveAccount returns the account's owner; a mismatch
+	// (or a missing caller) is cross-account access and is refused before any order is recorded or
+	// routed to a broker. The internal bracket-flatten path calls submitOrder directly, not PlaceOrder,
+	// so it is unaffected.
+	if callerID := middleware.FromContext(ctx).UserID; callerID == "" || accountEntry.userID != callerID {
+		return nil, grpcstatus.Errorf(codes.PermissionDenied, "account %q does not belong to caller", req.AccountId)
 	}
 
 	// Route on the authoritative persisted broker_type as well as the pool tag, so a stale pool
@@ -830,8 +853,9 @@ func (s *TradingService) ConfirmOrder(ctx context.Context, req *tradingv1.Confir
 	if order.BrokerType != commonv1.BrokerType_BROKER_TYPE_OFFLINE {
 		return nil, grpcstatus.Errorf(codes.FailedPrecondition, "ConfirmOrder applies only to offline accounts")
 	}
-	if callerID := middleware.FromContext(ctx).UserID; callerID != "" && order.UserId != callerID {
-		return nil, grpcstatus.Errorf(codes.FailedPrecondition, "order %q does not belong to caller", req.OrderId)
+	// Fail-closed ownership gate: an empty caller owns nothing.
+	if callerID := middleware.FromContext(ctx).UserID; callerID == "" || order.UserId != callerID {
+		return nil, grpcstatus.Errorf(codes.PermissionDenied, "order %q does not belong to caller", req.OrderId)
 	}
 
 	// Serialize persist→recompute→emit per account (idempotency depends on a consistent recompute).
@@ -985,6 +1009,12 @@ func (s *TradingService) SnapshotOfflinePositions(ctx context.Context, req *trad
 	if err != nil {
 		return nil, grpcstatus.Errorf(codes.NotFound, "account %q not found: %v", req.AccountId, err)
 	}
+	// Ownership gate: req.UserId is the handler-injected caller (from the trusted x-user-id header,
+	// which overwrites any client-supplied value), so only the account's owner may snapshot it.
+	// Checked before the offline-type gate so a non-owner cannot probe account existence or type.
+	if rec.UserID != req.UserId {
+		return nil, grpcstatus.Errorf(codes.PermissionDenied, "account %q does not belong to caller", req.AccountId)
+	}
 	if rec.BrokerType != int32(commonv1.BrokerType_BROKER_TYPE_OFFLINE) {
 		return nil, grpcstatus.Errorf(codes.FailedPrecondition, "snapshots apply to OFFLINE accounts only")
 	}
@@ -1088,6 +1118,12 @@ func (s *TradingService) CancelOrder(ctx context.Context, req *tradingv1.CancelO
 		s.mu.Lock()
 		s.orders[order.OrderId] = order
 		s.mu.Unlock()
+	}
+
+	// Ownership gate: only the order's owner (trusted x-user-id header) may cancel it. Fail-closed —
+	// an empty caller owns nothing. Checked before the offline-type gate so a non-owner cannot probe.
+	if callerID := middleware.FromContext(ctx).UserID; callerID == "" || order.UserId != callerID {
+		return nil, grpcstatus.Errorf(codes.PermissionDenied, "order %q does not belong to caller", req.OrderId)
 	}
 
 	// An offline order never reaches a broker, so CancelOrder must reject it (it's un-placed via
@@ -1221,6 +1257,12 @@ func (s *TradingService) ReplaceOrder(ctx context.Context, req *tradingv1.Replac
 		s.mu.Lock()
 		s.orders[order.OrderId] = order
 		s.mu.Unlock()
+	}
+
+	// Ownership gate: only the order's owner (trusted x-user-id header) may replace it. Fail-closed —
+	// an empty caller owns nothing.
+	if callerID := middleware.FromContext(ctx).UserID; callerID == "" || order.UserId != callerID {
+		return nil, grpcstatus.Errorf(codes.PermissionDenied, "order %q does not belong to caller", req.OrderId)
 	}
 
 	// Fill-state gate: only NEW / PARTIALLY_FILLED may be replaced. req.Qty is passed straight
