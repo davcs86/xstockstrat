@@ -684,8 +684,10 @@ func TestReconcileTick_SystemicThresholdCrossed_EscalatesToReduceOnly(t *testing
 		t.Fatalf("expected exactly 1 SetConfig call, got %d", len(setter.calls))
 	}
 	req := setter.calls[0]
-	if req.Namespace != "platform" || req.Key != "trading_state" {
-		t.Errorf("SetConfig target = %s.%s, want platform.trading_state", req.Namespace, req.Key)
+	// Feature 189: escalateSystemic writes the full-dotted key `platform.trading_state` (config
+	// migration 029 healed the row's key column), so the reader/authz/enum-guard all match it.
+	if req.Namespace != "platform" || req.Key != "platform.trading_state" {
+		t.Errorf("SetConfig target = namespace=%s key=%s, want namespace=platform key=platform.trading_state", req.Namespace, req.Key)
 	}
 	if req.Value.GetStringVal() != "REDUCE_ONLY" {
 		t.Errorf("SetConfig value = %q, want REDUCE_ONLY", req.Value.GetStringVal())

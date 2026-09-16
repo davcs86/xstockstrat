@@ -2254,3 +2254,23 @@ ambiguity is logged here).
 - **Mistake (caught in design, not shipped)**: pushing user-facing FILTERING (source/action) plus a derived-`_primary_source` SQL predicate into `analysis.ListOpportunities` while the ENTIRE `xstockstrat-analysis` repo SQL surface is fake/mock-verified — `tests/conftest.py` is proto-path-only, there is no testcontainers/live-PG fixture, `scripts/integration-test.sh` is dead and CI-wired to nothing, and `_FakeOppRepo` (`tests/test_analysis_servicer.py:4030`) re-implements the SQL semantics in Python. So no test executes the real `read()`/`available_sources` SQL against Postgres: a subtly-wrong `LATERAL ... WITH ORDINALITY`, `ORDER BY`, or `= ANY($sources)` guard can ship GREEN. SQL-text/bind assertions (`tests/test_opportunities_repo.py`) prove the query string was built, never that Postgres evaluates it as intended.
 - **Evidence**: feature 190 design.md § Verification strategy + Open Risk O10; `services/xstockstrat-analysis/tests/conftest.py`, `tests/test_opportunities_repo.py:19-34`, `tests/test_analysis_servicer.py:4030-4091`; `scripts/integration-test.sh:4-11`.
 - **Rule it implies**: (1) kill *marker-set drift* by construction — hoist a shared skip-list/enum to one constant and BIND it (`= ANY($n::text[])`), never re-type the literal in both SQL and Python, so the two cannot diverge by edit. (2) SQL-text assertions + a fake that mirrors intended semantics are a vacuous-green cousin of fails.md:577 for *runtime* semantics — pin the pure logic as a unit test, spy on the repo boundary for consumption (don't teach the fake the new logic), and record the residual runtime-`LATERAL`/`ORDER BY` gap explicitly. (3) The durable fix is a **shared analysis conftest real-DB fixture** benefiting every repo query — a platform follow-up, not a per-feature one-off harness (C-18: don't half-build a rotting testcontainers rig inside one feature branch). Any analysis feature that moves *filtering* (not just ranking) server-side should weigh seeding that fixture.
+### 2026-09-15 — fix-trading-config-key-mismatch (189) — design trap
+- **Mistake (caught in design R3, not shipped):** a data migration that heals a config `key` column from
+  namespace-relative to full-dotted fixes every reader keyed on the NEW (full-dotted) form but silently
+  breaks every reader still keyed on the OLD (bare) form — and those readers are not only the service that
+  owns the namespace. Feature 189's first "atomic edit set" listed the three backend writers
+  (`escalateSystemic`, config `authz.ts` allowlist, `SetConfig` enum guard) but omitted a live **frontend**
+  reader: `services/xstockstrat-ui/.../trader/positions/page.tsx:120-121` reads bare
+  `getConfig(...).values['trading_state']`, which the rename turns to `undefined` → the platform-wide
+  restriction banner goes dark. Same class as the config bare-vs-full `namespace.key` seam in
+  `fails.md:2005-2016`.
+- **Rule it implies:** when a change alters the KEY (or shape) a config value is served under, grep EVERY
+  consumer across all languages/services (Go getters, Node/TS `values['<key>']`, Python, e2e fixtures/mocks)
+  for both the old and new key string before calling the edit set "atomic" — a key-format migration is a
+  cross-service consumer-surface change (C-10/C-14), not a single-service data fix. Its tests' fixtures must
+  use the post-migration (server-shaped) key form or they pass vacuously (fails.md:1650/2005).
+- **Also (reusable pattern):** a Go WatchConfig consumer that must read keys from a namespace other than its
+  own subscribes to MULTIPLE namespaces via one `watchLoop` goroutine per namespace merged under one mutex,
+  with a per-namespace SNAPSHOT-scoped replace (delete-by-`ns.`-prefix + insert in one lock) and a
+  per-namespace readiness latch — never a single wholesale `w.snapshot = snap.Values` (a second stream would
+  clobber the first). Config supports only one namespace per `WatchConfig` request.

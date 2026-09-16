@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -57,35 +58,46 @@ func getEnv(key, fallback string) string {
 	return fallback
 }
 
-// Watcher subscribes to xstockstrat-config WatchConfig stream.
+// Watcher subscribes to one or more xstockstrat-config WatchConfig streams (one per namespace).
+// The snapshot is keyed by the full-dotted `<namespace>.<key>` that the config server streams
+// (CONFIG-9); getters look it up verbatim. Trading subscribes to both `trading` (its own keys) and
+// `platform` (the kill-switch / maintenance keys), because config serves one namespace per stream.
 type Watcher struct {
-	namespace   string
+	namespaces  []string
 	client      configv1.ConfigServiceClient
 	environment commonv1.Environment
 	tradingMode commonv1.TradingMode
 
-	mu       sync.RWMutex
-	snapshot map[string]*configv1.ConfigValue
-	ready    chan struct{}
-	once     sync.Once
+	mu        sync.RWMutex
+	snapshot  map[string]*configv1.ConfigValue
+	pending   map[string]struct{} // subscribed namespaces that have not yet delivered a first snapshot
+	ready     chan struct{}
+	closeOnce sync.Once
 }
 
-// NewWatcher dials the config service and starts the background watch loop. applicationEnv/
-// tradingMode scope every WatchConfig request to this deployment's own config rows.
-func NewWatcher(endpoint, namespace, applicationEnv, tradingMode string) (*Watcher, error) {
+// NewWatcher dials the config service and starts one background watch loop per namespace.
+// applicationEnv/tradingMode scope every WatchConfig request to this deployment's own config rows.
+func NewWatcher(endpoint, applicationEnv, tradingMode string, namespaces ...string) (*Watcher, error) {
 	conn, err := grpc.NewClient(endpoint, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return nil, fmt.Errorf("dial config service: %w", err)
 	}
+	pending := make(map[string]struct{}, len(namespaces))
+	for _, ns := range namespaces {
+		pending[ns] = struct{}{}
+	}
 	w := &Watcher{
-		namespace:   namespace,
+		namespaces:  namespaces,
 		client:      configv1.NewConfigServiceClient(conn),
 		ready:       make(chan struct{}),
 		snapshot:    make(map[string]*configv1.ConfigValue),
+		pending:     pending,
 		environment: resolveEnvironment(applicationEnv),
 		tradingMode: resolveTradingMode(tradingMode),
 	}
-	go w.watchLoop()
+	for _, ns := range namespaces {
+		go w.watchLoop(ns)
+	}
 	return w, nil
 }
 
@@ -107,13 +119,13 @@ func resolveTradingMode(tradingMode string) commonv1.TradingMode {
 	return commonv1.TradingMode_TRADING_MODE_PAPER
 }
 
-func (w *Watcher) watchLoop() {
+func (w *Watcher) watchLoop(ns string) {
 	backoff := 2 * time.Second
 	for {
 		// stream() only ever returns on error, so a reconnect+backoff always applies —
 		// there is no nil-error branch to guard (SA4023).
-		err := w.stream()
-		slog.Warn("config watcher stream error, reconnecting", "error", err, "backoff", backoff)
+		err := w.stream(ns)
+		slog.Warn("config watcher stream error, reconnecting", "namespace", ns, "error", err, "backoff", backoff)
 		time.Sleep(backoff)
 		if backoff < 30*time.Second {
 			backoff *= 2
@@ -121,10 +133,10 @@ func (w *Watcher) watchLoop() {
 	}
 }
 
-func (w *Watcher) stream() error {
+func (w *Watcher) stream(ns string) error {
 	req := &configv1.WatchConfigRequest{
-		Namespace:   w.namespace,
-		ClientId:    fmt.Sprintf("go-trading-%d", os.Getpid()),
+		Namespace:   ns,
+		ClientId:    fmt.Sprintf("go-trading-%s-%d", ns, os.Getpid()),
 		Environment: w.environment,
 		// trading_mode is deprecated and ignored by the config server; paper/live derives from
 		// environment. user_id is left empty — services subscribe at global scope.
@@ -141,15 +153,37 @@ func (w *Watcher) stream() error {
 		w.mu.Lock()
 		if snap.UpdateType == configv1.ConfigUpdateType_CONFIG_UPDATE_TYPE_SNAPSHOT ||
 			snap.UpdateType == configv1.ConfigUpdateType_CONFIG_UPDATE_TYPE_RELOAD {
-			w.snapshot = snap.Values
+			// Namespace-scoped replace (NOT a wholesale `w.snapshot = snap.Values`): drop only this
+			// namespace's own keys, then insert its values. With multiple streams into one map, a
+			// wholesale replace would let the `trading` stream's RELOAD (fired on any trading.* set)
+			// wipe the `platform.*` keys the other stream owns — a transient false HALTED. Deleting by
+			// the `ns+"."` prefix keeps each stream confined to its own keys.
+			prefix := ns + "."
+			for k := range w.snapshot {
+				if strings.HasPrefix(k, prefix) {
+					delete(w.snapshot, k)
+				}
+			}
+			for k, v := range snap.Values {
+				w.snapshot[k] = v
+			}
 		} else {
 			for k, v := range snap.Values {
 				w.snapshot[k] = v
 			}
 		}
+		// Per-namespace readiness: mark this namespace delivered and close `ready` only once every
+		// subscribed namespace has delivered its first snapshot, so WaitForSnapshot never unblocks
+		// on a partial view (which would let the platform.trading_state getter serve its fail-closed
+		// HALTED default as if it were live). closeOnce makes a later SNAPSHOT on a reconnected stream
+		// a safe no-op (no double-close panic).
+		delete(w.pending, ns)
+		allReady := len(w.pending) == 0
 		w.mu.Unlock()
-		w.once.Do(func() { close(w.ready) })
-		slog.Debug("config snapshot received", "namespace", w.namespace, "update_type", snap.UpdateType)
+		if allReady {
+			w.closeOnce.Do(func() { close(w.ready) })
+		}
+		slog.Debug("config snapshot received", "namespace", ns, "update_type", snap.UpdateType)
 	}
 }
 
@@ -202,6 +236,16 @@ func (w *Watcher) GetFloat(key string, def float64) float64 {
 		return def
 	}
 	return v.GetFloatVal()
+}
+
+// NewSnapshotWatcher builds a Watcher around a fixed, already-delivered snapshot and performs no
+// network I/O. It exists so tests in other packages (e.g. internal/service's kill-switch gate) can
+// inject a config state — the snapshot field is unexported, so an external test cannot populate a
+// Watcher any other way. The keys must be the full-dotted form the config server streams (CONFIG-9).
+func NewSnapshotWatcher(snapshot map[string]*configv1.ConfigValue) *Watcher {
+	ready := make(chan struct{})
+	close(ready)
+	return &Watcher{snapshot: snapshot, ready: ready}
 }
 
 // SetConfig forwards to xstockstrat-config's SetConfig RPC, attaching the x-internal-caller authz
