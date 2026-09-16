@@ -226,3 +226,10 @@ Spec re-validated against live tree at boot — all Codebase Evidence resolves; 
   prod without them; `/sdd-archiver` is the other promotion path. No behavior change; guarantee still lives
   in the per-feature `acceptance.feature` (C-15). Promotion plan is preserved above for a later run.
 - **Integration PR #1141** refreshed from the docs-only triage body to the full feature description.
+
+## Session 2026-09-16 (CI: feature status automation)
+
+- Promotion PR #1145 merged to main
+- Feature promoted and committed: c91e0c535f10c15962ea856e909ea1a2c659f29a
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-09-16

@@ -267,3 +267,10 @@ branch. **Regression guard** (`test_read_every_bound_param_is_referenced_in_ever
 sort ∈ {0,1,2}, assert every bound `$1..$N` appears in the SQL text — a static proxy for the missing
 real-DB harness that fails RED on the orphaned `$3`. Full analysis suite 764 passed, ruff clean.
 Delivered as a fresh branch off main-dev (the #1143 PR was already merged).
+
+## Session 2026-09-16 (CI: feature status automation)
+
+- Promotion PR #1145 merged to main
+- Feature promoted and committed: c91e0c535f10c15962ea856e909ea1a2c659f29a
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-09-16
