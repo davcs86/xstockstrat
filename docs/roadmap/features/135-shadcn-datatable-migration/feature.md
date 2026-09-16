@@ -29,10 +29,10 @@
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Recon](recon.md) — grounded codebase dossier (15-table inventory, all 4 UI segments)
-- [Design](design.md) — debated, approved architecture (shared DataTable composite, onRowClick safety mechanism, row 2/3 exceptions)
-- [Implementation Spec](implementation-spec.md) — 35 steps: composite build (2) + 16 table migrations (32, service+test pairs — 15 planned + Steps 34-35 added mid-execution for a 16th table found during the regression sweep) + full regression sweep (1) — grounded evidence for every table site
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Recon — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

@@ -63,3 +63,30 @@ Feature: agent-postgres-mcp — database analysis tools via postgres-mcp co-proc
     Given a valid admin OAuth JWT (x-access-scope bit 0x04 set) is presented
     When the caller sends a tools/call request for "db_execute_sql" with SQL containing "UPDATE" and confirm=true
     Then the agent forwards the call to postgres-mcp
+
+  @AC-3 @FR-2 @feature-169
+  Scenario: postgres-mcp is not reachable from outside the container
+    Given the agent container is running with postgres-mcp bound to localhost
+    When a network probe attempts TCP connection to the postgres-mcp port from outside the container
+    Then the connection is refused
+
+  @AC-7 @FR-5 @feature-169
+  Scenario: Unauthenticated caller cannot discover or invoke db_ tools
+    Given no Authorization header is present
+    When the caller sends a GET request to the agent MCP endpoint
+    Then the response status is 401
+    And the response body does not list any "db_" tool names
+
+  @AC-8 @FR-6 @feature-169
+  Scenario: All postgres-mcp tools are re-exposed with the db_ prefix
+    Given the agent is running with postgres-mcp co-process active
+    When an admin caller sends a tools/list request to the agent MCP endpoint
+    Then every tool originating from postgres-mcp appears with a "db_" name prefix
+    And no postgres-mcp tool name appears without the "db_" prefix
+
+  @AC-10 @FR-8 @feature-169
+  Scenario: postgres-mcp respects the connection pool budget
+    Given the connection budget table shows 1 new direct slot for postgres-mcp (xstockstrat_agent)
+    When the agent container is running and postgres-mcp is initialized
+    Then exactly 1 backend connection from the xstockstrat_agent role appears in pg_stat_activity
+    And the direct-backend total in root CLAUDE.md is updated to reflect this new slot (verified by PR diff review)

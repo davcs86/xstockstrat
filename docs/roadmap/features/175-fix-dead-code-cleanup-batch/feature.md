@@ -45,11 +45,11 @@
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — bug description and fix scope (FR-3 = five services incl. ui + bounce rule)
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-1..4`, C-15)
-- [Recon Dossier](recon.md) — grounded codebase facts (all four propagation.ts dead; shared config_test.go; vestigial per-service locks; 6 teardown docs)
-- [Design](design.md) — debated, approved architecture (4 rounds; locked verification mechanics + 23-path landed-diff gate)
-- [Implementation Spec](implementation-spec.md) — 7 numbered steps with grep-cited evidence + 23-path landed-diff gate
+- Recon Dossier — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

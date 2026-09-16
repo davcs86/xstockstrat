@@ -5,6 +5,7 @@
 **Last Updated**: 2026-09-16
 **Committed to main**: c91e0c535f10c15962ea856e909ea1a2c659f29a
 **Launched date**: 2026-09-16
+**Archived**: 2026-09-16
 
 ---
 
@@ -20,15 +21,16 @@
 | 2026-09-16 | `in-progress` → `code-completed` | /sdd-execute | All 9 steps done — backend suite 763 passed/83.97% cov, UI e2e 27 passed; merge-order gate + C-16 promotion + integration PR next |
 
 | 2026-09-16 | `code-completed` → `launched` | CI workflow | Promoted via PR #1145; committed c91e0c535f10c15962ea856e909ea1a2c659f29a |
+| 2026-09-16 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(1); promoted 15 acceptance scenarios (@feature-190) to new analysis+ui suites; pruned 4 specs |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
-- [Recon Dossier](recon.md) — grounded codebase map (Phase 0)
-- [Design](design.md) — chosen approach, rejected alternatives, O1–O10 pins (Phase 1.75)
-- [Implementation Spec](implementation-spec.md) — 9 numbered steps with codebase evidence
+- Product Spec — pruned by /sdd-archiver 2026-09-16; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15); promoted to `services/xstockstrat-analysis/acceptance/opportunities-server-side-filters.feature` + `services/xstockstrat-ui/acceptance/opportunities-server-side-filters.feature` (C-16)
+- Recon Dossier — pruned by /sdd-archiver 2026-09-16; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver 2026-09-16; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver 2026-09-16; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
