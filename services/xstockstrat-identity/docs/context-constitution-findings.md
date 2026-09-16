@@ -20,5 +20,17 @@ findings log.
 - ⚠ **security** — `revokeToken` decodes the token **without verifying the signature** and revokes all refresh tokens for the decoded `user_id`, returning `success:true` for empty/garbage tokens. This allows revoking any known user's sessions from an unsigned/forged token (a logout-DoS). Is accepting an unverified `user_id` to revoke sessions an accepted trade-off, or should it verify (allowing expired-but-signed only)? `identityServiceImpl.ts:232-238` — status: **open** (note: the new `updatePassword`/`setUserActive` sidestep it by revoking on the target `user_id`)
 - `jwt.verify(token, secret)` pins no `algorithms` list — intentional reliance on jsonwebtoken's HMAC-only default for string secrets, or should `algorithms:['HS256']` be pinned? `identityServiceImpl.ts:148` — status: **open**
 
+## Resolved (2026-09-16 security audit)
+
+- **Default seed admin (`admin@localhost` / `admin`) authenticated in production.** Migration
+  `002_seed_admin` seeds a known bcrypt hash of `"admin"` into **every** environment (the db-migrator
+  runs it in prod), and the "rotate in production" comment relied on manual action. Migration 002 is
+  applied and immutable, so the fix is a code guard: `authenticateUser` now refuses any account still
+  carrying the committed seed hash when `APPLICATION_ENV === 'production'` (`isBlockedDefaultAdmin`),
+  forcing an operator to rotate it via `scripts/manage-users.py reset-password` before the default
+  admin can log in. Dev/staging keep the convenience login. Covered by
+  `src/__tests__/identityServiceImpl.test.ts` ("default seed-admin lockout"). `identityServiceImpl.ts`
+  (`SEED_ADMIN_PASSWORD_HASH` / `isBlockedDefaultAdmin` + the `authenticateUser` guard).
+
 ---
 _Surfaced by [context-forge](https://github.com/davcs86/agent-plugins). Defects to action, not rules. Re-run `/context-constitution` to refresh._

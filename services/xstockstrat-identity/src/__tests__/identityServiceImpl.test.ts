@@ -22,11 +22,15 @@ import * as crypto from 'crypto';
 let IdentityServiceImpl: any;
 let userIdFrom: any;
 let first: any;
+let isBlockedDefaultAdmin: any;
+let SEED_ADMIN_PASSWORD_HASH: any;
 
 before(async () => {
   try {
     const mod = await import('../grpc/identityServiceImpl.js');
     IdentityServiceImpl = mod.IdentityServiceImpl;
+    isBlockedDefaultAdmin = mod.isBlockedDefaultAdmin;
+    SEED_ADMIN_PASSWORD_HASH = mod.SEED_ADMIN_PASSWORD_HASH;
     const authz = await import('../grpc/authz.js');
     userIdFrom = authz.userIdFrom;
     first = authz.first;
@@ -113,6 +117,44 @@ describe('authenticateUser', () => {
         resolve();
       });
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// authenticateUser — default seed-admin lockout in production (H-4)
+// ---------------------------------------------------------------------------
+
+describe('default seed-admin lockout', () => {
+  it('isBlockedDefaultAdmin blocks the committed seed hash only in production', () => {
+    if (!isBlockedDefaultAdmin) return;
+    assert.strictEqual(isBlockedDefaultAdmin(SEED_ADMIN_PASSWORD_HASH, 'production'), true);
+    assert.strictEqual(isBlockedDefaultAdmin(SEED_ADMIN_PASSWORD_HASH, 'development'), false);
+    assert.strictEqual(isBlockedDefaultAdmin(SEED_ADMIN_PASSWORD_HASH, undefined), false);
+    assert.strictEqual(isBlockedDefaultAdmin('$2b$10$someOtherRealUserHashValueHere0000000000000', 'production'), false);
+  });
+
+  it('authenticateUser refuses the default seed-admin credential in production (code 16)', async () => {
+    const impl = makeImpl([
+      { user_id: 'u-admin', password_hash: SEED_ADMIN_PASSWORD_HASH, roles: ['admin', 'trader'] },
+    ]);
+    if (!impl) return;
+    const prev = process.env.APPLICATION_ENV;
+    process.env.APPLICATION_ENV = 'production';
+    try {
+      await new Promise<void>((resolve) => {
+        impl.authenticateUser(
+          makeCall({ email: 'admin@localhost', password: 'admin' }),
+          (err: any) => {
+            assert.ok(err, 'expected the seed-admin login to be refused');
+            assert.strictEqual(err.code, 16);
+            resolve();
+          }
+        );
+      });
+    } finally {
+      if (prev === undefined) delete process.env.APPLICATION_ENV;
+      else process.env.APPLICATION_ENV = prev;
+    }
   });
 });
 

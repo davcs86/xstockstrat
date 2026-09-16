@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
-import { getSessionFromRequest } from '@/lib/auth';
+import { getSessionFromRequest, hasAdminScope } from '@/lib/auth';
 
 let pool: Pool | null = null;
 
@@ -38,6 +38,12 @@ export async function GET(req: NextRequest) {
   const claims = await getSessionFromRequest(req);
   if (!claims) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  // Admin-only: the audit log is cross-user, cross-namespace config-change history (who changed
+  // what, old/new values, per-user scope). A non-admin session must not read it — mirrors the
+  // requireAdminScope gate the config-ui BFF applies to setConfig/user-management (configUiBff.ts).
+  if (!hasAdminScope(claims.roles)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
   const { searchParams } = new URL(req.url);
   const namespace = searchParams.get('namespace');

@@ -510,10 +510,10 @@ func TestIsAccountHalted_GateBlocksPlaceOrderAndReplaceOrder(t *testing.T) {
 		svc := &TradingService{
 			cfg:     &config.Config{},
 			cfgW:    &config.Watcher{},
-			brokers: map[string]brokerPoolEntry{"acct-1": {client: &fakeBroker{}, brokerType: int32(commonv1.BrokerType_BROKER_TYPE_ALPACA)}},
+			brokers: map[string]brokerPoolEntry{"acct-1": {client: &fakeBroker{}, brokerType: int32(commonv1.BrokerType_BROKER_TYPE_ALPACA), userID: "user-1"}},
 			halted:  map[string]bool{"acct-1": true},
 		}
-		_, err := svc.PlaceOrder(context.Background(), &tradingv1.PlaceOrderRequest{
+		_, err := svc.PlaceOrder(ctxAsUser("user-1"), &tradingv1.PlaceOrderRequest{
 			Symbol: "AAPL", Side: tradingv1.OrderSide_ORDER_SIDE_BUY, OrderType: tradingv1.OrderType_ORDER_TYPE_MARKET,
 			Qty: 10, ClientOrderId: "c1", AccountId: "acct-1",
 		})
@@ -527,10 +527,10 @@ func TestIsAccountHalted_GateBlocksPlaceOrderAndReplaceOrder(t *testing.T) {
 			cfgW:   &config.Watcher{},
 			halted: map[string]bool{"acct-1": true},
 			orders: map[string]*tradingv1.Order{
-				"ord-1": {OrderId: "ord-1", AccountId: "acct-1", Status: tradingv1.OrderStatus_ORDER_STATUS_NEW},
+				"ord-1": {OrderId: "ord-1", UserId: "user-1", AccountId: "acct-1", Status: tradingv1.OrderStatus_ORDER_STATUS_NEW},
 			},
 		}
-		_, err := svc.ReplaceOrder(context.Background(), &tradingv1.ReplaceOrderRequest{OrderId: "ord-1", Qty: 5})
+		_, err := svc.ReplaceOrder(ctxAsUser("user-1"), &tradingv1.ReplaceOrderRequest{OrderId: "ord-1", Qty: 5})
 		if grpcstatus.Code(err) != codes.FailedPrecondition {
 			t.Errorf("ReplaceOrder on a halted account: got code %v, want FailedPrecondition", grpcstatus.Code(err))
 		}
@@ -552,12 +552,12 @@ func TestIsAccountHalted_GateBlocksPlaceOrderAndReplaceOrder(t *testing.T) {
 			brokers:         map[string]brokerPoolEntry{"acct-1": {client: fb, brokerType: int32(commonv1.BrokerType_BROKER_TYPE_ALPACA)}},
 			halted:          map[string]bool{"acct-1": true},
 			orders: map[string]*tradingv1.Order{
-				"ord-2": {OrderId: "ord-2", AccountId: "acct-1", BrokerOrderId: "brk-1", Status: tradingv1.OrderStatus_ORDER_STATUS_NEW},
+				"ord-2": {OrderId: "ord-2", UserId: "user-1", AccountId: "acct-1", BrokerOrderId: "brk-1", Status: tradingv1.OrderStatus_ORDER_STATUS_NEW},
 			},
 		}
 		func() {
 			defer func() { _ = recover() }()
-			_, _ = svc.CancelOrder(context.Background(), &tradingv1.CancelOrderRequest{OrderId: "ord-2"})
+			_, _ = svc.CancelOrder(ctxAsUser("user-1"), &tradingv1.CancelOrderRequest{OrderId: "ord-2"})
 		}()
 		fb.mu.Lock()
 		defer fb.mu.Unlock()
@@ -696,12 +696,12 @@ func TestCancelOrder_CancelsActiveBracketLegs(t *testing.T) {
 		cfgW: &config.Watcher{}, orderIntentRepo: &fakeOrderIntentRepo{}, bracketRepo: brokers, ledger: &fakeLedgerClient{},
 		brokers: map[string]brokerPoolEntry{"acct-1": {client: fb, brokerType: int32(commonv1.BrokerType_BROKER_TYPE_ALPACA)}},
 		orders: map[string]*tradingv1.Order{
-			"ord-1": {OrderId: "ord-1", AccountId: "acct-1", BrokerOrderId: "brk-order-1", Status: tradingv1.OrderStatus_ORDER_STATUS_NEW},
+			"ord-1": {OrderId: "ord-1", UserId: "user-1", AccountId: "acct-1", BrokerOrderId: "brk-order-1", Status: tradingv1.OrderStatus_ORDER_STATUS_NEW},
 		},
 	}
 	func() {
 		defer func() { _ = recover() }()
-		_, _ = svc.CancelOrder(context.Background(), &tradingv1.CancelOrderRequest{OrderId: "ord-1"})
+		_, _ = svc.CancelOrder(ctxAsUser("user-1"), &tradingv1.CancelOrderRequest{OrderId: "ord-1"})
 	}()
 
 	fb.mu.Lock()
@@ -725,12 +725,12 @@ func TestCancelOrder_NoBracketIsNoop(t *testing.T) {
 		cfgW: &config.Watcher{}, orderIntentRepo: &fakeOrderIntentRepo{}, bracketRepo: &fakeBracketRepo{}, ledger: &fakeLedgerClient{},
 		brokers: map[string]brokerPoolEntry{"acct-1": {client: fb, brokerType: int32(commonv1.BrokerType_BROKER_TYPE_ALPACA)}},
 		orders: map[string]*tradingv1.Order{
-			"ord-2": {OrderId: "ord-2", AccountId: "acct-1", BrokerOrderId: "brk-order-2", Status: tradingv1.OrderStatus_ORDER_STATUS_NEW},
+			"ord-2": {OrderId: "ord-2", UserId: "user-1", AccountId: "acct-1", BrokerOrderId: "brk-order-2", Status: tradingv1.OrderStatus_ORDER_STATUS_NEW},
 		},
 	}
 	func() {
 		defer func() { _ = recover() }()
-		_, _ = svc.CancelOrder(context.Background(), &tradingv1.CancelOrderRequest{OrderId: "ord-2"})
+		_, _ = svc.CancelOrder(ctxAsUser("user-1"), &tradingv1.CancelOrderRequest{OrderId: "ord-2"})
 	}()
 
 	fb.mu.Lock()

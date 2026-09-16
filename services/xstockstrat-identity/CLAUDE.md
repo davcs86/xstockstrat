@@ -50,6 +50,12 @@ on `RefreshOAuthToken` revokes the presented token and inserts a new one). TTLs 
 ## Database / Migrations
 
 - `000_schema`, `001_identity_tables` (`users`, `api_keys`, `refresh_tokens`), `002_seed_admin`.
+  **`002_seed_admin` seeds `admin@localhost` with the committed bcrypt hash of `"admin"` in every
+  environment** (the db-migrator runs it in prod too). Because that migration is applied and
+  immutable, `authenticateUser` refuses that known seed credential when `APPLICATION_ENV ===
+  'production'` (`isBlockedDefaultAdmin`), forcing an operator to rotate it via
+  `scripts/manage-users.py reset-password` before the default admin can log in; dev/staging keep the
+  convenience login (2026-09-16 security audit, H-4).
 - `003_oauth` (feature 049 Part B) — adds `identity.oauth_clients` + `identity.oauth_auth_codes`;
   OAuth refresh tokens reuse `identity.refresh_tokens` (no new table).
 - `004_refresh_token_client` (feature 051) — tags `refresh_tokens` with `client_id`/`last_used_at`

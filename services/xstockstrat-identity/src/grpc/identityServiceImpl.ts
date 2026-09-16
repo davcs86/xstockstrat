@@ -24,6 +24,21 @@ function stringsToRoles(roles: string[] | undefined): number[] {
   return (roles ?? []).map((s) => ROLE_STRING_TO_ENUM[s] ?? 0);
 }
 
+// The bcrypt hash of the string "admin" seeded as the default admin by migration
+// 002_seed_admin — safe for local dev only, but the migration runs unconditionally in every
+// environment. Migration 002 is already applied and must not be edited, so this known credential
+// is neutralized in code: authenticateUser refuses any account still carrying it in production,
+// forcing an operator to rotate it (scripts/manage-users.py reset-password) before login works.
+export const SEED_ADMIN_PASSWORD_HASH =
+  '$2b$10$qLw/k7U.sIgBzT67i/VsJOi.TZqxmIgJWAAV3YW4aR4DAm.IExWWm';
+
+// isBlockedDefaultAdmin reports whether a login must be refused because it targets an account
+// still carrying the committed default-admin seed hash in a production deployment. Dev/staging
+// (APPLICATION_ENV != 'production') keep the convenience login.
+export function isBlockedDefaultAdmin(passwordHash: string, appEnv: string | undefined): boolean {
+  return (appEnv ?? 'development') === 'production' && passwordHash === SEED_ADMIN_PASSWORD_HASH;
+}
+
 function toUserView(row: any) {
   return {
     userId: row.user_id,
@@ -128,6 +143,17 @@ export class IdentityServiceImpl {
         return callback({ code: 16, message: 'invalid credentials' });
       }
       const user = result.rows[0];
+
+      // Refuse the committed default-admin seed credential in production (migration 002 seeds a
+      // known "admin" password for local dev only). This blocks a known-credential takeover until
+      // an operator rotates it via scripts/manage-users.py; dev/staging keep the convenience login.
+      if (isBlockedDefaultAdmin(user.password_hash, process.env.APPLICATION_ENV)) {
+        log.warn(
+          'Refused default seed-admin login in production; rotate its password via scripts/manage-users.py reset-password',
+          { email }
+        );
+        return callback({ code: 16, message: 'invalid credentials' });
+      }
 
       const passwordValid = await bcrypt.compare(password, user.password_hash);
       if (!passwordValid) {
