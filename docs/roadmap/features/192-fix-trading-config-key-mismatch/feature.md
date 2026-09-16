@@ -9,6 +9,7 @@
 **Last Updated**: 2026-09-15
 **Committed to main**: c91e0c535f10c15962ea856e909ea1a2c659f29a
 **Launched date**: 2026-09-16
+**Archived**: 2026-09-16
 
 ---
 
@@ -24,15 +25,16 @@
 | 2026-09-16 | `code-completed` (unchanged) | /sdd-archiver | Renumbered dir `189` → `192` to resolve the `189` collision with `screener-preset-criteria` (no override needed — not launched). Updated self-ref path in implementation-spec.md, the `docs/.../189-...` path ref in `services/xstockstrat-trading/CLAUDE.md`, and the `(189)` citation in `docs/roadmap/ledger/fails.md`. The feature's implementation PR #1141 (branch `claude/halted-account-94ldka`) is already MERGED into main-dev (2026-09-15), so this rename has no open-PR conflict; the renumber ships via the archiving PR #1146, not a separate PR. |
 
 | 2026-09-16 | `code-completed` → `launched` | CI workflow | Promoted via PR #1145; committed c91e0c535f10c15962ea856e909ea1a2c659f29a |
+| 2026-09-16 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(0)/fails(4); promoted 3 acceptance scenarios (@feature-192) — closes the operator-deferred C-16 gap; pruned 4 specs |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — bug description and fix scope
-- [Recon](recon.md) — grounded codebase dossier + runtime log evidence + C-16 business rules
-- [Design](design.md) — chosen 4-part approach, rejected alternatives, open risks, honored prod-delta ledger
-- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
-- [Implementation Spec](implementation-spec.md) — 8 numbered steps with grounded codebase evidence
+- Product Spec — pruned by /sdd-archiver 2026-09-16; see [Context Log](context.md) Archive Synthesis
+- Recon — pruned by /sdd-archiver 2026-09-16; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver 2026-09-16; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15); promoted to `services/xstockstrat-trading/acceptance/fix-trading-config-key-mismatch.feature` (C-16 backfill)
+- Implementation Spec — pruned by /sdd-archiver 2026-09-16; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
