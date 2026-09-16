@@ -2,7 +2,7 @@
 
 **Development Branch**: `feature/opportunities-server-side-filters`
 **Created**: 2026-09-15
-**Last Updated**: 2026-09-15
+**Last Updated**: 2026-09-16
 
 ---
 
@@ -15,6 +15,7 @@
 | 2026-09-15 | `spec-ready` → `design-approved` | /sdd-design | Design debated (4 rounds, full) and approved; recon.md + design.md written; O1–O10 pins |
 | 2026-09-15 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 9 steps |
 | 2026-09-15 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential execution started (Steps 1–2: proto + codegen) |
+| 2026-09-16 | `in-progress` → `code-completed` | /sdd-execute | All 9 steps done — backend suite 763 passed/83.97% cov, UI e2e 27 passed; merge-order gate + C-16 promotion + integration PR next |
 
 ---
 
@@ -50,4 +51,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review opportunities-server-side-filters impl-spec` — validate implementation spec, then `/sdd-execute opportunities-server-side-filters`
+Merge-order gate + C-16 acceptance-scenario promotion, then finalize integration PR into `main-dev`.

@@ -1,6 +1,6 @@
 # Implementation Spec: opportunities-server-side-filters
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-09-15
 **Feature**: `docs/roadmap/features/190-opportunities-server-side-filters/feature.md`
 **Total Steps**: 9
@@ -471,7 +471,7 @@ New tests pass; coverage ≥ 40%.
 
 ### Step 7 — service: UI hook — send four controls, expose `availableSources`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/hooks/useOpportunities.ts` — modify
@@ -510,7 +510,7 @@ safety
 
 ### Step 8 — service: UI page — drop in-memory filter/sort, dropdown from facet, server floor
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/opportunities/page.tsx` — modify
@@ -575,7 +575,7 @@ rendered
 
 ### Step 9 — test: Playwright e2e — mock honors new fields, specs re-pointed, in-place RED
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/mock-backend.ts` — modify

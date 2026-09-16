@@ -200,3 +200,48 @@ exit 0). Docker daemon started. Dev-branch adapted to `claude/opportunities-serv
 
 **Backend surface complete (Steps 1–6).** Checkpoint at the backend→UI seam next.
 
+
+## Session 2026-09-16 — sdd-execute (sequential, UI Steps 7–9)
+
+### Step 7 — UI hook: send four controls, expose availableSources [done]
+- `useOpportunities(minConviction=0, sources=[], actionFilter=UNSPECIFIED, sort=UNSPECIFIED)`; all four
+  folded into the query key (`['opportunities', minConviction, [...sources].sort(), actionFilter, sort]`)
+  so an in-place `refetchInterval` refetch AND a filter change both re-fetch (fails.md:1648). Request
+  carries the four fields; `availableSources` rides page 0 of the infinite query.
+- Files modified: `src/hooks/useOpportunities.ts`.
+
+### Step 8 — UI page: drop in-memory filter/sort, dropdown from facet, server floor [done]
+- Removed all client-side filtering/sorting; page state = `minConviction/activeSources/actionFilter/
+  sortKey/availableSources`; `actionFilterEnum`/`sortEnum` derived; hook called with the four controls.
+- Source control converted from inline chips to a shadcn `DropdownMenu` (per user decision "convert to
+  drop-down on the UI") — `DropdownMenuCheckboxItem` per source (multi-select via `onSelect preventDefault`),
+  "All sources" reset item; trigger is a `Button aria-label="source filter"` + `ChevronsUpDown`.
+- **Deviation (design→impl):** spec Step 8 named a naive direct read of `data.pages[0].availableSources`
+  into the dropdown. That created a render cycle: `effectiveSources` (activeSources ∩ availableSources)
+  feeds the query key, but availableSources itself arrives *from* the query, so a source selection →
+  key change → `data` momentarily undefined → facet read collapses to `[]` → effectiveSources empties →
+  key changes again → oscillation, surfacing as **React #185 (max update depth)**. Fixed by keeping
+  `availableSources` in component state hydrated by an effect that (a) returns early while the page-0
+  facet is `undefined` (never resets to `[]` on an in-flight refetch), and (b) writes only on real
+  change (length + element-wise equality guard, no NUL-join). `effectiveSources = useMemo(activeSources ∩
+  availableSources)`. Debugged with a throwaway `_dbg.spec.ts` capturing `pageerror` (deleted after).
+- Files modified: `src/app/insights/opportunities/page.tsx`.
+
+### Step 9 — Playwright e2e: mock honors new fields, specs re-pointed, in-place RED [done]
+- `mock-backend.ts` `listOpportunities` now honors `req.sources`/`actionFilter`/`sort` + the min-conviction
+  floor (muted/unavailable exempt — fails.md:1547), applies symbol-grouped expiry sort (feature-187
+  grouping preserved), and emits `availableSources` (structural markers + empty sources excluded).
+- Spec rewrite: per-page `mockOpportunities` applies filter/sort/facet/hidden; added `selectSource`/
+  `clearSources` dropdown helpers; 4 source tests re-pointed to the dropdown; added action-filter,
+  facet-completeness, and sort tests. AC-12 in-place test asserts NO `page.reload()` (fails.md:1648).
+- **Deviation (fixture):** AC-11 originally drove source `'alpaca'` → but `'alpaca'` is a standalone CAPR
+  fixture row (mock-backend.ts:46), not an OPPORTUNITIES-queue provenance source (those rows carry
+  `'watchlist'` markers). Re-pointed AC-11 to `'dividendology'`→TSLA and the facet test to the 3 real
+  queue sources `['dividendology','marketwatch','unusual_whales']`.
+- **Deviation (harness):** Playwright dev-server cold-compile blew the 10s default; ran under `CI=true`
+  (production build, 30s timeouts) with `E2E_PREBUILT=1` to reuse the build across re-runs. Result:
+  **27 passed** for `e2e/insights/opportunities.spec.ts --project=chromium`.
+- Files modified: `e2e/mock-backend.ts`, `e2e/insights/opportunities.spec.ts`.
+
+**UI surface complete (Steps 7–9). All 9 steps done.** Backend suite 763 passed / 83.97% cov; UI e2e 27
+passed. Feature → code-completed; merge-order gate + C-16 promotion + integration PR next.
