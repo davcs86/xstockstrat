@@ -1,235 +1,45 @@
-# Context Log: fix-trading-config-key-mismatch
+# Context: fix-trading-config-key-mismatch  (archived 2026-09-16)
 
-Append-only. Each session appends a new ## Session entry. Never delete or edit prior entries.
+**Feature**: ./feature.md
+**Status**: launched — archived by /sdd-archiver; verbose specs pruned (recoverable via git history).
 
----
+## Archive Synthesis — 2026-09-16 — /sdd-archiver
 
-## Session 2026-09-15 (/sdd-triage)
+**What**: A SEV-1 "trading halted" staging outage root-caused to TWO orthogonal config faults: (1) the trading watcher subscribed to only its own `trading` namespace, so every `platform` broadcast reached `subscribers=0` and `platform.trading_state` never arrived; (2) deviating seed rows were stored namespace-relative (`trading_state`) while consumers read full-dotted (`platform.trading_state`), violating CONFIG-9. The fix healed storage to full-dotted via config migration 029, gave trading a second `platform` WatchConfig stream with a namespace-scoped snapshot replace, and carried the key rename through every writer/validator/reader in lockstep. Shipped as feature-dir **192** but every internal artifact and the shipped service docs call it **"189"** (see scar).
 
-- Bug reported via defect report `docs/reports/2026-09-15-trading-config-namespace-key-mismatch-defect.md`
-  (GitHub Issues disabled on this repo → from-report path; the report is the audit trail).
-- Origin: user reported the trader UI rejecting orders with
-  `trading halted: platform.trading_state=HALTED` ("Fix halted account", screenshot on a PAPER/Alpaca-test
-  account → staging).
-- Severity: **SEV-1** (runbook indicator "orders not executing on the live Alpaca API"). Failure mode is
-  **fail-safe** (orders blocked, never wrongly executed) → no financial-integrity bleed, only an outage.
-- Routed to **Track C (SDD path)** by explicit user decision, over the mechanical SEV-1 → Track A routing.
-  Rationale (user-approved): fail-safe failure mode removes the hotfix urgency, and the chosen fix is
-  **systemic/cross-service** (shared Go config-watcher contract), which warrants a full design debate; also
-  honors the harness branch mandate (`claude/halted-account-94ldka` → main-dev) that Track A (off `main`)
-  would violate.
-- Created: feature.md, product-spec.md, acceptance.feature (3 regression scenarios), context.md, status.md.
-- Affected services: xstockstrat-trading (primary); xstockstrat-portfolio, xstockstrat-marketdata (same
-  latent watcher pattern); xstockstrat-config only if the seed-key-migration approach (B) is chosen.
-- Root cause (four independent confirmations — live get_config, config-server source, trading reader source,
-  constitution CONFIG-9 / insights.md:905): trading subscribes to the single `trading` namespace and reads
-  full-dotted getter strings against a snapshot keyed by the raw namespace-relative `key` column, so
-  `platform.trading_state` never matches → fail-closed `HALTED`. The same verbatim-snapshot + dotted-read
-  gap silently defaults all `trading.*` reads; it only surfaces on `platform.trading_state` because that is
-  the one key whose code default (HALTED) diverges from its intended seed (ACTIVE).
-- Recommended design depth: **full** → `/sdd-design fix-trading-config-key-mismatch`
-  (rationale: ≥2 affected services + a likely seed-key migration + safety-critical contract).
-- Candidate fix approaches recorded in product-spec.md (A watcher-prefix + multi-namespace [preferred
-  hypothesis], B seed/writer migration, C reader alignment) — **not** pre-committed; the design phase decides
-  under adversarial review.
+**Why (irrecoverable rationale)**:
+- The bug had been silently defaulting *all* `trading.*` reads the whole time; it became visible only on `platform.trading_state` because that is the single key whose code default (`HALTED`) diverges from its intended seed (`ACTIVE`) — every other key's default happened to equal its seed, so the mismatch was invisible.
+- Routed to Track C (SDD, off `main-dev`) rather than the mechanical SEV-1 → Track A hotfix (off `main`), by explicit user decision: the failure mode is fail-safe (orders blocked, never wrongly executed → an outage, not financial bleed), the fix is systemic/cross-service warranting a design debate, and Track A off `main` would violate the harness branch mandate.
 
-### Interim operational action already taken (this session, before triage)
-- Set `platform.trading_state = ACTIVE` in **staging** via `set_config` (author davcs86@gmail.com) to clear
-  the incident-time `REDUCE_ONLY` value. This does **not** unblock trading (the reader never sees it) and is
-  recorded only so the stored value is not left mid-incident. The code fix is required to actually resolve
-  the halt. No code was changed on any branch by the triage.
+**Rejected alternatives**:
+- Watcher idempotent-prefix — lost: leaves DB storage bare (doesn't advance the full-dotted contract), re-derives the prefix in three copied watchers, and would double-prefix + corrupt already-dotted keys (namespaces hold mixed formats).
+- Reader alignment (getters → bare) — lost: re-keys ~28 getters AND is a CHANGE to the feature-147/184 full-dotted storage contract needing separate sign-off.
+- Server-side key-format namespace-folding (config emits `${ns}.${key}` to all consumers) — lost: widens the snapshot contract for every consumer, risks redaction/overlay edges, and still doesn't *deliver* `platform.*` to trading.
+- Delivery-side server-merge (fold the `platform` namespace into EVERY consumer's subscription) — lost: broadens portfolio/marketdata snapshots with keys they don't read; the trading-only second stream is the localized C-18 choice.
+- Shared Go config module across the three watchers — lost: YAGNI/C-18 for a bug fix; only trading needs multi-namespace.
 
-### Development branch
-- `claude/halted-account-94ldka` (harness-assigned; PR targets `main-dev`). SDD skills normally use
-  `feature/<slug>`; the harness mandate governs here.
+**Scars & gotchas**:
+- **Feature-number drift (189 vs 192)** — every internal artifact and the *shipped* `services/xstockstrat-trading/CLAUDE.md` + migration `029_..down.sql` comment refer to this feature as "189". Grepping `feature 192` for the bracket-override rationale finds nothing; grepping `189` lands on the wrong feature. A renumber-on-collision whose "189" references were not all rewritten.
+- **DOWN migration forced forward-only (`SELECT 1;` no-op)** — the per-row DB audit needed to author an exact-inverse DOWN was blocked (postgres-mcp co-process unavailable at recon+spec time); a symmetric prefix-strip can't distinguish rows 029 healed from rows already dotted pre-029 (`portfolio.watchlist.*` @AC-13), so it would re-break CONFIG-9. Rollback = redeploy the prior image.
+- **The read-path test gap was the exact hole the bug slipped through** — trading's `config_test.go` `fakeConfigServiceClient.WatchConfig` just `panic`ed, so no test ever exercised a getter against a populated snapshot. The RED test deliberately uses full-dotted *server-shaped* fixtures (a bare-key override fixture would mask exactly this class of bug). (Ledgered.)
+- **Deploy window is fail-safe** — order: migrate 029 → deploy config (authz+enum rename) → deploy trading. An old trading binary firing `escalateSystemic` with the bare `Key:"trading_state"` mid-window is refused (PERMISSION_DENIED on the renamed allowlist / NOT_FOUND via the existence gate); its `EmitAlert` still pages a human.
+- **SNAPSHOT/RELOAD is a namespace-scoped delete-prefix+insert, not a verbatim `w.snapshot = snap.Values` replace** — because a `trading`-stream RELOAD (fires on any `trading.*` SetConfig) would otherwise wipe `platform.*` and cause a transient false `HALTED`.
+- **Spec under-scoped the rename's own regression test** — `trading_reconciliation_test.go` asserted the bare writer key, was not in any step's Files list, and broke on the writer rename (`platform.platform.trading_state`); fixed as a Step 3 deviation. (Ledgered.)
+- **e2e structural-RED** — the reduce-only banner Playwright e2e could not run locally (host `next dev` SSR-warmup budget; Docker build impractical); RED verified structurally, authoritative gate deferred to CI (PR #1141). Same class as the golangci-lint 2.5.0 (go1.25) refusing a go1.27 target → local fell back to `go vet`; CI's pinned 2.13.1 is authoritative.
 
-## Session 2026-09-15 — sdd-design
+**Permanent deviations**:
+- Production `trading.risk.bracket_orders_enabled` false → true, reversing feature-030's deliberate "false pending feature 103" — explicit user sign-off recorded per C-16; honoring the seed would have turned bracket protection OFF.
+- Healing storage silently reactivated ALL dormant production seeds, not just bracket: `approval.require_above_qty` 500→100, `require_above_notional` 50000→10000, `max_position_pct` 0.05→0.02 (migration 002 `live` rows that had never resolved). Operator chose to HONOR these (all tighten toward safety). Staging (=paper) seeds already matched the Go defaults, so every delta is production-only.
 
-- **Phase 0 Recon:** wrote recon.md from 5 parallel discovery agents (trading/portfolio/marketdata/config
-  + scenario-recon) grounded against staging config-service logs (platform broadcasts reach
-  `subscribers=0`; my triage-time `platform.trading_state=ACTIVE` write at 07:39:19 reached 0 subscribers —
-  runtime proof of the namespace fault). Key reuse patterns: CONFIG-9 seed↔reader match; the
-  `lookupScalarBounds` two-operand probe; existing `newTestWatcher` harnesses.
-- **Phase 1 Grilling:** 3 full rounds (proposer↔adversary, mediated).
-  - R1 — proposer split the fix into Layer A (platform delivery) + Layer B (key format); adversary
-    (NEEDS WORK) surfaced the migration deploy/collision/down hazards and the **behavior-flip blast
-    radius** (bracket_orders_enabled prod false vs default true).
-  - R2 — operator locked **Layer B = data migration 029** and **preserve prod bracket behavior**;
-    adversary (NEEDS WORK) then found **finding #1**: the rename reactivates ALL dormant seeds, not just
-    bracket — confirmed prod deltas `approval.require_above_qty` 500→100, `require_above_notional`
-    50000→10000, `max_position_pct` 0.05→0.02 (migration 002 `live` rows); plus the SetConfig enum-guard,
-    literal-bracket-bump, and non-vacuous-test must-fixes.
-  - R3 — operator chose **HONOR the conservative prod seeds** (all tighten toward safety); adversary
-    (NEEDS WORK→resolved) found the **new C-14 forward regression**: `/trader/positions` reads bare
-    `values['trading_state']` (`page.tsx:120-121`), which the rename silently breaks (banner goes dark) —
-    folded into the atomic edit set. Confirmed `page.tsx:120-121` is the only runtime bare-key reader in
-    ui/agent.
-- **Chosen approach (design.md):** (A) trading watcher variadic multi-namespace + namespace-scoped
-  snapshot replace + per-namespace ready latch; (B) migration 029 heals `platform/trading/portfolio/marketdata`
-  non-secret bare keys → full-dotted (guarded, `is_secret=false`, `NOT LIKE`) + deterministic prod
-  bracket→true; (C) three-part atomic rename edit set (escalateSystemic writer + authz allowlist + SetConfig
-  enum guard → `platform.trading_state`); (D) `/trader` frontend reader + e2e to the post-029 shape (C-14).
-- **Rejected:** watcher-prefix (leaves storage mixed), reader→bare (@feature-184 CHANGE), server-side
-  folding (widens contract), shared Go module (YAGNI).
-- **Constitution:** F-01/F-06/F-07 honored; C-08/P-06 (sequenced non-vacuous RED); C-10/C-14 (UI consumer
-  surface in scope); C-18 (minimum footprint). **Floor breaches: none.**
-- **C-16 CHANGE — operator sign-off (this session):** production `trading.risk.bracket_orders_enabled`
-  false→true reverses feature 030's deliberate "false pending feature 103" decision. **User explicitly
-  approved** this reversal (preserve current runtime behavior; honoring the seed would turn bracket
-  protection OFF). Recorded here per C-16. The honored conservative prod deltas (approval/max_position
-  tightening) were likewise operator-approved as intended feature-002 production limits finally activating.
-- **Affected services updated:** added `xstockstrat-ui` (C-14 consumer surface) to the original
-  trading/portfolio/marketdata/config set.
-- **Open Risks carried to /sdd-spec** (see design.md § Open Risks): DOWN reversibility (forward-only vs
-  enumerated — needs the blocked DB audit), per-row DB audit, `daily_loss_limit` reader confirmation,
-  deploy sequencing/window, concurrency invariants, full bare-key reader re-audit.
-- Status: draft → design-approved. Next: `/sdd-spec fix-trading-config-key-mismatch`.
+**Cross-feature signal**:
+- The identical watcher (`internal/config/config.go`) is copy-pasted across trading/portfolio/marketdata with no shared module; the same latent silent-default fault lived in all three and was fixed only in trading — portfolio/marketdata were healed by migration 029 alone (no code change) because they read no `platform.*` key. The copy-paste watcher is the recurrence vector. (Ledgered.)
+- feature-172 drawdown enforcement (`portfolio.risk.max_drawdown_pct`) and feature-110 position sizing (`trading.risk.*`) were silently running on their CODE DEFAULTS in production pre-029 (bare-key storage never resolved through the full-dotted read path); migration 029 RESTORES them to their intended seed values as a pure side effect with NO code change in those services. A future agent debugging a behavior shift at the 029 deploy with no code diff in portfolio/trading needs this.
 
-### Interim operational note (unchanged from triage session)
-`platform.trading_state=ACTIVE` remains set in staging; it does not unblock trading (the reader never
-receives it) and the code fix is required. No service code changed by the design phase.
+**Deferred follow-ons**:
+- C-16 scenario promotion was DEFERRED by operator at launch ("skip promotion, just finalize PR"). **Closed at archive time** — the three `@AC-*` regression scenarios are now promoted to `services/xstockstrat-trading/acceptance/fix-trading-config-key-mismatch.feature` (`@feature-192`) by this /sdd-archiver run.
+- DOWN migration should be upgraded to an enumerated exact-inverse strip if/when a per-row DB audit becomes runnable (postgres-mcp restored).
+- Post-deploy smoke owed: confirm no unintended `portfolio.*`/`marketdata.*` production behavior regressed from the dormant-seed activation (UP-side blast radius shipped unverified — audit was blocked).
 
-## Session 2026-09-15 — sdd-spec
-
-- Generated implementation-spec.md with 8 steps. Status → implementation-ready.
-- Key codebase findings:
-  - Next config migration = **029** (last is `028_analysis_opportunity_keys`). Current schema (post
-    feature-147 `017`) has **no `trading_mode` column**; unique index is
-    `(namespace, key, environment, COALESCE(user_id, ''))`; env CHECK is `('staging','production')`.
-    The design's guarded blanket UP (`key = namespace||'.'||key WHERE key NOT LIKE namespace||'.%'
-    AND is_secret=false AND namespace IN (...)`) and the literal production bracket bump are valid
-    against this schema. `is_secret=true` guard protects the `017:110-121` vendor-credential rows
-    (GetSecret path, namespace-relative keys — must stay bare).
-  - Open Risk RESOLVED — `trading.risk.daily_loss_limit` has **no code reader** (grep: only 002/012
-    seeds + trading/CLAUDE.md:82 + findings.md:15, both "documented, not yet implemented"). Healing it
-    is behavior-neutral. Honored-delta ledger updated accordingly.
-  - Open Risk PARTIALLY RESOLVED — per-row DB audit STILL BLOCKED (`db_execute_sql` →
-    "postgres-mcp co-process is unavailable" again at spec time). Decision: **DOWN is forward-only**
-    (documented no-op; rollback = redeploy prior image) since an enumerated exact-inverse strip cannot
-    be authored without the audit and a symmetric strip would over-revert pre-dotted @AC-13/feature-184
-    rows (P-03/C-01 — not invented). Also flagged: healing activates dormant production `portfolio.*`/
-    `marketdata.*` seeds — verify by dev/staging smoke test (Step 1 note).
-  - Open Risk RESOLVED — bare-key reader re-audit: `page.tsx:120-121` (`resp.values['trading_state']`)
-    is the **sole** runtime bare-key reader across ui/agent (agent grep = no matches). `configKeys.ts:64`
-    (ListKeys fixture) + `NamespaceEditor.tsx:95` already full-dotted. Of the 3 config-ui specs touching
-    `trading_state`: `reason-capture`/`value-persists-after-save` already full-dotted (read from the
-    ListKeys fixture) → no change; `audit.spec.ts:13` is synthetic audit-display mock data → leave it.
-    Only `mock-backend.ts:1290` + `positions-reconciliation.spec.ts:119` (GetConfig response maps) need
-    the bare→full-dotted key change (Step 7).
-  - Grounded the Part C atomic edit set: authz grant `authz.ts:70` + SetConfig enum guard
-    `configServiceImpl.ts:397` (both key `'trading_state'`→`'platform.trading_state'`) + escalateSystemic
-    writer `trading.go:1905` (`Key:"trading_state"`→`"platform.trading_state"`; namespace stays `platform`).
-  - Trading watcher `internal/config/config.go` confirmed: single-namespace `NewWatcher` (`:75`),
-    verbatim `w.snapshot = snap.Values` (`:144`), raw getters (`:167-205`), `once`/`ready` (`:69-70`).
-    `config_test.go` `fakeConfigServiceClient.WatchConfig` panics (`:60-62`) — no populated-snapshot
-    read-path test exists (the P-06 RED target for Step 3).
-
-## Session 2026-09-15 — sdd-execute (sequential mode)
-
-Toolchain confirmed: Go 1.27.0 at /usr/local/go/bin (matches go.mod; PATH-exported per command),
-golangci-lint 2.5.0 (vs pinned 2.13.1 — minor, CI uses pinned), Node v22.22.2 (vs pinned 24 — used
-for config/ui lint+test), pnpm 9.15.9, uv 0.8.17, ruff 0.15.8, docker 29.3.1 (daemon startable).
-Spec re-validated against live tree at boot — all Codebase Evidence resolves; no re-spec needed.
-
-### Step 1 — migration: config 029 heal keys to full-dotted + prod bracket override [done]
-- Created `029_heal_config_keys_full_dotted.up.sql` (guarded blanket key heal for platform/trading/
-  portfolio/marketdata non-secret bare rows → full-dotted, `NOT LIKE`+`is_secret=false` guards; then
-  deterministic `value_data='true'` bump of the production `trading.risk.bracket_orders_enabled` row
-  on the post-rename key) and `029_..down.sql` (forward-only no-op `SELECT 1;` + rationale — a
-  symmetric strip would over-revert pre-dotted rows; rollback = redeploy prior image).
-- Verified offline (HARD CONSTRAINT: no DB started): both files present, NNN 028→029 no gap,
-  value_type never touched. Real apply/rollback runs in CI/deploy.
-- Files modified: `services/xstockstrat-config/migrations/029_heal_config_keys_full_dotted.{up,down}.sql`
-- Deviations: none.
-
-### Step 2 — service: trading watcher multi-namespace delivery + escalateSystemic writer rename [done]
-- config.go: `Watcher.namespace string` → `namespaces []string`; `NewWatcher` now variadic
-  `NewWatcher(endpoint, applicationEnv, tradingMode, namespaces ...string)` spawning one `watchLoop(ns)`
-  per namespace; SNAPSHOT/RELOAD is now a NAMESPACE-SCOPED replace (delete `ns.`-prefix keys then insert)
-  in one mu.Lock section; single `once`/`ready` → per-namespace `pending` set + `closeOnce` latch so
-  WaitForSnapshot blocks until ALL namespaces deliver. Added `NewSnapshotWatcher` test-support ctor
-  (snapshot field unexported → external gate test needs it). main.go:61 subscribes ("trading","platform").
-  trading.go:1905 escalateSystemic writer Key "trading_state"→"platform.trading_state" (Part C, lockstep
-  with 029).
-- Verified paired with Step 3.
-- Files modified: `internal/config/config.go`, `cmd/server/main.go`, `internal/service/trading.go`
-- Deviations: none in Step 2 itself (see Step 3 for the reconciliation-test key update).
-
-### Step 3 — test: trading config read-path, multi-namespace delivery, kill-switch gate [done]
-- config_test.go: added a scripted WatchConfig streaming fake + read-path (AC-2 GetString
-  platform.trading_state, AC-3 GetFloat trading.risk.max_position_pct, full-dotted fixtures),
-  multi-namespace delivery, scoped-replace no-clobber, and per-namespace latch tests.
-  trading_state_gate_test.go: AC-1 checkTradingStateForPlaceOrder returns nil under ACTIVE, blocks
-  under HALTED (via config.NewSnapshotWatcher).
-- TDD red→green (P-06): RED — with the pre-fix wholesale-replace + single-latch, the three behavioral
-  tests FAILED for the right reasons (MultiNamespaceDelivery/ScopedReplace: platform.trading_state="HALTED"
-  wiped by the trading stream; WaitForSnapshot: ready closed after only 1 of 2 namespaces). GREEN — with
-  the namespace-scoped replace + per-namespace latch they pass; `go test ./internal/config ./internal/service
-  -race` OK; internal/config coverage 57.1% (≥40%); `go vet` clean.
-- Files modified: `internal/config/config_test.go`, `internal/service/trading_state_gate_test.go`,
-  `internal/service/trading_reconciliation_test.go` (deviation — writer-rename regression assertion).
-- Deviations: 2 (reconciliation-test key update; golangci-lint→go vet CI-equivalent) — see Deviation Log.
-
-### Step 4 — service: config authz allowlist + SetConfig enum guard key rename [done]
-- authz.ts:70 INTERNAL_CALLER_ALLOWLIST grant key 'trading_state'→'platform.trading_state';
-  configServiceImpl.ts:397 SetConfig enum guard `key === 'trading_state'`→`'platform.trading_state'`.
-  Lockstep with Step 1/029 + Step 2's writer.
-- Files modified: `src/grpc/authz.ts`, `src/grpc/configServiceImpl.ts`. Verified with Step 5.
-
-### Step 5 — test: config enum guard + internal-caller authz on the full-dotted key [done]
-- Updated internalCallerAuthz.test.ts / tradingStateValidation.test.ts / internalCallerSetConfig.test.ts
-  to the full-dotted `platform.trading_state`; added a regression test that the pre-189 bare
-  `trading_state` is no longer authorized.
-- TDD red→green: RED — reverting Step 4 to the bare key made 7 tests fail (authz REDUCE_ONLY/HALTED,
-  the bare-key-denied regression, the SetConfig enum-reject + internal-caller write). GREEN — with the
-  rename applied all 108 config tests pass; `pnpm run lint` 0 errors (143 pre-existing any-warnings),
-  `pnpm run test:coverage` 81.03% lines (≥40%).
-- Files modified: `src/__tests__/{internalCallerAuthz,tradingStateValidation,internalCallerSetConfig}.test.ts`
-- Deviations: none.
-
-### Step 6 — service: /trader positions page reads full-dotted platform.trading_state [done]
-- page.tsx:120-121 `resp.values['trading_state']` → `resp.values['platform.trading_state']` (both reads).
-  Without it the platform restriction banner silently goes dark post-029 (C-14). Verified with Step 7.
-- Files modified: `src/app/trader/positions/page.tsx`. Deviations: none.
-
-### Step 7 — test: /trader restriction-banner e2e on the full-dotted key shape [done]
-- mock-backend.ts:1290 + positions-reconciliation.spec.ts:119 key `trading_state` → `platform.trading_state`.
-- Verification: `pnpm run lint` clean; changed files type-consistent. Playwright spec could not run locally
-  (host next-dev SSR-warmup timeout ×2; Docker e2e image build impractical) → CI-equivalent (Dockerfile.e2e
-  runs it on PR #1141). RED structurally guaranteed. See Deviation Log.
-- Files modified: `e2e/mock-backend.ts`, `e2e/trader/positions-reconciliation.spec.ts`. Deviations: 1.
-
-### Step 8 — docs: reconcile the three Go services' config-key CLAUDE.md [done]
-- trading/CLAUDE.md: replaced the false "all config values served by namespace `trading`" line with the
-  accurate two-namespace (trading + platform) full-dotted CONFIG-9 statement; updated the
-  bracket_orders_enabled row + brackets-section prose (production now `true` per feature 189 override).
-- portfolio/ + marketdata/CLAUDE.md: added the full-dotted CONFIG-9 note (portfolio fixed by migration
-  029 with no watcher code change; marketdata non-secret keys already full-dotted, secrets stay bare via
-  GetSecret).
-- Teardown (root CLAUDE.md): the `/context-forge:context-constitution refresh` skill is NOT available
-  this session → did the manual equivalent (re-read each edited CLAUDE.md section against the Step 1-7
-  code changes; all accurate/grounded). Recorded in the PR body per the teardown rule.
-- Files modified: `services/xstockstrat-{trading,portfolio,marketdata}/CLAUDE.md`. Deviations: none.
-
-## Session 2026-09-15 — sdd-execute complete (all 8 steps)
-**Progress**: 8 done / 8 total. Status → code-completed. Next: integration PR #1141 (C-16 promotion + body).
-
-## Session 2026-09-15 — integration-PR finalization (§5.6)
-- **Merge-order gate: PASS.** `fix-trading-config-key-mismatch` (189) has no row in the Feature column
-  of `docs/roadmap/features/merge-order.md`; config migration `029` is next-free (tip on disk was `028`).
-  No hard blocking dependency; branch is current with `main-dev` (0 behind, 15 ahead of `5a7f7d4`).
-- **C-16 scenario promotion: DEFERRED by operator decision.** The `scenario-promoter` plan mapped all
-  three `@AC-*` regression scenarios to a new `services/xstockstrat-trading/acceptance/fix-trading-config-key-mismatch.feature`
-  (0 dedup hits — orthogonal to the per-account `resume-halted-account.feature`; nothing routes to
-  `platform.feature`). Operator chose **"Skip promotion, just finalize PR"** — the durable suite file was
-  **not** written this session. The `/promote` backstop flags un-promoted scenarios if the feature reaches
-  prod without them; `/sdd-archiver` is the other promotion path. No behavior change; guarantee still lives
-  in the per-feature `acceptance.feature` (C-15). Promotion plan is preserved above for a later run.
-- **Integration PR #1141** refreshed from the docs-only triage body to the full feature description.
-
-## Session 2026-09-16 (CI: feature status automation)
-
-- Promotion PR #1145 merged to main
-- Feature promoted and committed: c91e0c535f10c15962ea856e909ea1a2c659f29a
-- Status updated: `code-completed` → `launched`
-- Launched date: 2026-09-16
+**Ledger entries written**: insights.md (0), fails.md (4) — see the 2026-09-16 entries. (Both insight candidates — namespace-scoped snapshot replace + per-namespace readiness, and the config-key-rename atomic-edit-set rule — were already captured by the design-trap entry at fails.md:2257 and were not re-appended.)
+**Runtime-invariant recommendations (→ /context-constitution)**: TRADING-* candidate — xstockstrat-trading subscribes to TWO config namespaces (`trading` + `platform`); the kill-switch/maintenance keys (`platform.trading_state`, `platform.maintenance_mode`) live under `platform`, not `trading`. CONFIG-* candidate — storage is now uniformly full-dotted across `platform/trading/portfolio/marketdata` non-secret rows (migration 029); `is_secret=true` vendor-credential rows stay namespace-relative because the `GetSecret` path sends `Namespace`+`Key` separately; a future blanket key operation must preserve that split.
+**Pruned artifacts**: product-spec.md, recon.md, design.md, implementation-spec.md — last present at 594ea7e.

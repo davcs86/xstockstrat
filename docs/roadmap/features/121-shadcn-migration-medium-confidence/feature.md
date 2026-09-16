@@ -28,12 +28,12 @@
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Recon](recon.md) — codebase dossier (Phase 0)
-- [Design](design.md) — approved architecture (Phase 1). FR-13's original self-run "keep as-is"
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Recon — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
   recommendation (see § Process Note) was superseded 2026-08-08 by a live user decision to
   **replace** — see § Round 3, resolved and no longer outstanding.
-- [Implementation Spec](implementation-spec.md) — 37 steps across 2 tranches, all `done`. Tranche 1
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
   (Steps 1-21): FR-1/FR-2/FR-3/FR-10/FR-11/FR-12/FR-13 — FR-13 (Steps 17-20) migrates
   `PlatformHeader.tsx`/`BottomTabBar.tsx` onto `NavigationMenu`, per `design.md`'s Round 3
   user-directed override. Tranche 2 (Steps 22-37, added mid-session by user direction once `120`'s

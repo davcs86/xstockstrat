@@ -3312,3 +3312,18 @@ reusing.
 - **Pattern**: Place a protected-resource guard **before** the ownership check (anti-IDOR ordering) so non-owners get `FAILED_PRECONDITION` rather than `PERMISSION_DENIED`; this existence leak is acceptable only because the protected ID is itself a config value, not a secret.
 - **Evidence**: feature 186 (archived) context.md Archive Synthesis; recon.md:69.
 - **Rule it implies**: guard-before-ownership is correct for config-identified protected resources; document the leak tradeoff at the guard.
+
+### 2026-09-16 — agent-postgres-mcp — design
+- **Pattern**: An MCP tool with no downstream gRPC service that re-checks scope must enforce the admin gate (`_caller_access_scope` + the `& 0x04` admin bit) *inside its own handler* — the delegate-to-backend pattern used by tools like `trigger_backfill`/`manage_signal_source` (which lean on a gRPC backend to re-enforce) does not apply and silently leaves the tool ungated if copied verbatim.
+- **Evidence**: feature 169 (archived) context.md Archive Synthesis; recon.md:112; agent `app/tools.py` `db_*` handlers.
+- **Rule it implies**: an agent-side-only MCP tool owns its own authorization gate — propose as an AGENT-* runtime invariant.
+
+### 2026-09-16 — agent-postgres-mcp — design
+- **Pattern**: When embedding a third-party co-process for safety-sensitive operations, push the safety boundary into layers you own (the Postgres role's privilege grants + an agent-side confirmation gate) rather than relying on the vendor binary's own restriction flag — this lets you run it "unrestricted" while keeping enforceable control at boundaries you can audit.
+- **Evidence**: feature 169 (archived) context.md Archive Synthesis; product-spec.md § safety model.
+- **Rule it implies**: never treat a vendor binary's built-in restriction mode as the only guardrail; own the privilege boundary.
+
+### 2026-09-16 — opportunities-server-side-filters — design
+- **Pattern**: A react-query value that is BOTH derived from a query result AND fed back into that query's `queryKey` (here a source-facet) oscillates if read live (`data.pages[0].x`): key change → data momentarily `undefined` → facet collapses to `[]` → key changes again → React #185 max-update-depth. Buffer it in component state hydrated by an effect that (a) returns early while the page-0 result is `undefined` (never resets to `[]` mid-refetch) and (b) writes only on a real element-wise change.
+- **Evidence**: feature 190 (archived) context.md Archive Synthesis (React #185 render-loop deviation).
+- **Rule it implies**: a query-derived value that also participates in its own queryKey must be state-buffered with an in-flight-undefined guard, never read live into dependent selectors.

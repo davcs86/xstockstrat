@@ -30,10 +30,10 @@
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — bug description and fix scope
-- [Recon](recon.md) — codebase map, patterns to reuse
-- [Design](design.md) — chosen approach, rejected alternatives, open risks
-- [Implementation Spec](implementation-spec.md) — 8 steps: BFF write guard + native-scope helper (Steps 1-4), UI gating on both named consumer surfaces (Steps 5-8)
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Recon — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
