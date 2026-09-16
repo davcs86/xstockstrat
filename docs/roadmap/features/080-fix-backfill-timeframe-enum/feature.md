@@ -37,12 +37,12 @@
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — defect description, evidence, fix scope (FR-1–FR-14, AC-1–AC-15)
-- [Recon](recon.md) — Phase 0 dossier: codebase map, patterns to reuse, 12 risks
-- [Design](design.md) — the 4-round debate: chosen approach, the readers-sweep completeness proof,
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Recon — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
   rejected alternatives, 7 open risks, Constitution rules touched
 - [Context Log](context.md) — session history and every user ruling
-- [Implementation Spec](implementation-spec.md) — 8 numbered steps across 4 services + 1 data migration.
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 
 ---
 

@@ -24,11 +24,11 @@
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
-- [Recon](recon.md) — grounded codebase dossier (Phase 0)
-- [Design](design.md) — debated, approved architecture (Phase 1)
-- [Implementation Spec](implementation-spec.md) — 8 numbered steps with codebase evidence (C-01)
+- Recon — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

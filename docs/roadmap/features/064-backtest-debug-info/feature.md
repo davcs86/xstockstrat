@@ -26,10 +26,10 @@
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Recon Dossier](recon.md) — grounded codebase map (Phase 0)
-- [Design](design.md) — debated, approved architecture (Phase 1)
-- [Implementation Spec](implementation-spec.md)
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Recon Dossier — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

@@ -2344,3 +2344,33 @@ ambiguity is logged here).
 - **Mistake**: Tests drove production compute through an *incidental* path (the cold synchronous `ListOpportunities` read); making that path non-blocking (a sibling FR) silently emptied many unrelated `TestListOpportunitiesMaterialized` assertions, forcing a broad mid-execute test migration (a drain helper with a non-obvious budget of 20000 loop turns for a 240-candidate compute).
 - **Evidence**: feature 185 (archived) context.md Archive Synthesis (Deviation Log).
 - **Rule it implies**: don't couple behavioral tests to an incidental request path that a sibling FR is about to change; drive the unit under test directly.
+
+### 2026-09-16 — agent-postgres-mcp — config
+- **Mistake**: Python `configparser.ConfigParser` cannot parse a supervisord conf that uses `%(ENV_*)s` env-substitution — configparser's own interpolation engine raises `InterpolationMissingOptionError`; the conf-validation test had to switch to `RawConfigParser` to read the file verbatim. The surviving test shows `RawConfigParser` but not why, so a future edit reverting it silently re-triggers the error.
+- **Evidence**: feature 169 (archived) context.md Archive Synthesis; `services/xstockstrat-agent/.../test_supervisord_conf.py`.
+- **Rule it implies**: parse supervisord / `%(ENV_*)s` INI files with `RawConfigParser` only.
+
+### 2026-09-16 — opportunities-server-side-filters — assumption
+- **Mistake (SHIPPED, staging outage)**: A bound query parameter referenced in only ONE conditional `ORDER BY` branch (`$3` signal_rank_weight, used only by the sort=0 blended branch) shipped green through fake-pool unit tests + JS-mock e2e, then aborted asyncpg PREPARE with `IndeterminateDatatypeError` for every request selecting a branch that omits it — here 100% of UI Opportunities loads (CONVICTION/EXPIRY sorts), while the agent tool (always sort=0) masked it. This is the SHIPPED realization of the design-caught runtime-SQL gap logged at fails.md:2253.
+- **Evidence**: feature 190 (archived) context.md Archive Synthesis; fix `AND $3::double precision IS NOT NULL` + regression guard `test_read_every_bound_param_is_referenced_in_every_sort_branch`.
+- **Rule it implies**: any bound param whose referencing SQL is branch-conditional must be type-anchored unconditionally (e.g. `AND $n::type IS NOT NULL`), and a static test must assert every `$1..$N` appears in every branch's SQL text — the mandatory stopgap until the shared analysis real-DB fixture (fails.md:2253) exists.
+
+### 2026-09-16 — fix-trading-config-key-mismatch — config
+- **Mistake**: A config-contract mismatch (consumer reads full-dotted `platform.trading_state`; the trading watcher never even subscribed to the `platform` namespace, so every broadcast reached `subscribers=0`) fails SILENT-CLOSED and defaults every affected read — invisible until the ONE key whose code default diverges from its intended seed surfaces it (here code default `HALTED` vs seed `ACTIVE`; every other key's default happened to equal its seed). The fault sat latent across trading/portfolio/marketdata.
+- **Evidence**: feature 192 (archived) context.md Archive Synthesis; trading `config_test.go` read-path gap (fake `WatchConfig` panicked, so no getter was ever exercised against a populated snapshot).
+- **Rule it implies**: every config getter needs a read-path test resolving a realistically-keyed populated snapshot; a defaulted read must be observable, not silent. (Complements the migration-side trap at fails.md:2257 and the bare-vs-full key seam at fails.md:2005.)
+
+### 2026-09-16 — fix-trading-config-key-mismatch — migration
+- **Mistake**: A blanket key-heal `UPDATE` reactivates ALL previously-dormant seeds in the healed namespaces, not just the intended one — production `trading.risk.bracket_orders_enabled` (false→true, reversing feature-030's deliberate "false pending 103"), `approval.require_above_qty` (500→100), `require_above_notional` (50000→10000), `max_position_pct` (0.05→0.02) all went live alongside the target. Worse, the UP-side blast radius on `portfolio.*`/`marketdata.*` dormant seeds shipped UNVERIFIED because the per-row audit was blocked (postgres-mcp co-process unavailable) — the activated-row set was never enumerated, only smoke-tested post-deploy (feature-172 drawdown + feature-110 sizing were among the silently-restored consumers, with no code change in those services).
+- **Evidence**: feature 192 (archived) context.md Archive Synthesis; config migration 029.
+- **Rule it implies**: a storage-healing migration must enumerate every row whose *behavior* it changes (not just the rows it targets) and get operator sign-off; when a per-row audit is unavailable the DOWN must be forward-only (a symmetric strip over-reverts pre-existing already-dotted rows).
+
+### 2026-09-16 — fix-trading-config-key-mismatch — duplication
+- **Mistake**: The Go config watcher (`internal/config/config.go`) is copy-pasted across trading/portfolio/marketdata with no shared module, so one latent silent-default fault lived in all three; it was fixed only in trading (portfolio/marketdata were healed by migration 029 alone, no code change, because they read no `platform.*` key). The copy-paste watcher is the recurrence vector for this whole bug class.
+- **Evidence**: feature 192 (archived) context.md Archive Synthesis; recon.md:147-149.
+- **Rule it implies**: duplicated infra (the watcher) is a bug-multiplier — weigh extraction into a shared module when a fix would otherwise be applied N× (C-18/YAGNI tension acknowledged, not auto-binding).
+
+### 2026-09-16 — fix-trading-config-key-mismatch — scope-creep
+- **Mistake**: The spec under-scoped the writer-rename's own regression test — `trading_reconciliation_test.go` asserted the bare writer key and was not in any step's Files list, so the rename broke it (`platform.platform.trading_state`) and it was patched as an unplanned Step 3 deviation.
+- **Evidence**: feature 192 (archived) context.md Archive Synthesis; implementation-spec.md deviation log.
+- **Rule it implies**: a key/literal-rename step must enumerate the tests that assert the old literal among its Files.
