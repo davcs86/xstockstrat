@@ -30,11 +30,11 @@
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Recon](recon.md) — grounded codebase dossier
-- [Design](design.md) — debated (7 rounds — 5 to the design skill's normal cap, 2 more under an
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Recon — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
   explicit user override), approved architecture
-- [Implementation Spec](implementation-spec.md) — 33 steps (26 core + FR-6 steps 27-33)
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
