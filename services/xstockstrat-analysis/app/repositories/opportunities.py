@@ -189,6 +189,10 @@ class OpportunitiesRepository:
               WHERE elem <> ALL($6::text[]) ORDER BY ord LIMIT 1
             ) ps ON true
             WHERE o.user_id = $1
+              -- feature 190 fix: $3 (signal_rank_weight) is referenced ONLY by the sort=0 blended
+              -- ORDER BY; a CONVICTION/EXPIRY sort omits it, so PREPARE can't infer its type
+              -- (asyncpg IndeterminateDatatypeError). Anchor the type here (always true for w).
+              AND $3::double precision IS NOT NULL
               {valid_clause}
               -- feature 132: a min_conviction floor must still return muted (deny-listed) rows,
               -- which carry conviction 0 by design (the mute is the signal, not a low score).

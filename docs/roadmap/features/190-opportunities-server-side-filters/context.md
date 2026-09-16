@@ -245,3 +245,25 @@ exit 0). Docker daemon started. Dev-branch adapted to `claude/opportunities-serv
 
 **UI surface complete (Steps 7–9). All 9 steps done.** Backend suite 763 passed / 83.97% cov; UI e2e 27
 passed. Feature → code-completed; merge-order gate + C-16 promotion + integration PR next.
+
+## Session 2026-09-16 — post-merge hotfix: ListOpportunities IndeterminateDatatypeError
+
+**Symptom:** after #1143 squash-merged to main-dev (d938217) and auto-deployed to staging, the UI
+Opportunities list stopped loading. Staging analysis logs showed
+`asyncpg.exceptions.IndeterminateDatatypeError: could not determine data type of parameter $3` on
+every `read()`.
+
+**Root cause (the fails.md:190 runtime-SQL gap, realized):** `$3` (signal_rank_weight) is referenced
+ONLY inside the sort=0 blended-rank `ORDER BY`. The UI's sort mapping (`page.tsx:99-100`) never emits
+`UNSPECIFIED(0)` — it is always `CONVICTION(1)` or `EXPIRY(2)`, whose `ORDER BY` fragments omit `$3`.
+With `$3` bound but referenced nowhere, Postgres/asyncpg cannot infer its type at PREPARE and aborts
+the whole query. The MCP `list_opportunities` tool only ever sends sort=0 (uses `$3`), which is why it
+worked while 100% of UI loads failed. Fake-pool unit tests + JS mock e2e never execute a real PREPARE,
+so it shipped green — exactly the residual gap flagged in fails.md 2026-09-15 (190).
+
+**Fix:** anchor `$3`'s type unconditionally in the `read()` WHERE clause
+(`AND $3::double precision IS NOT NULL`, always true for w∈[0,1]) so PREPARE can type it in every sort
+branch. **Regression guard** (`test_read_every_bound_param_is_referenced_in_every_sort_branch`): for
+sort ∈ {0,1,2}, assert every bound `$1..$N` appears in the SQL text — a static proxy for the missing
+real-DB harness that fails RED on the orphaned `$3`. Full analysis suite 764 passed, ruff clean.
+Delivered as a fresh branch off main-dev (the #1143 PR was already merged).

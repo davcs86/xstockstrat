@@ -146,6 +146,24 @@ async def test_read_sort_branches_lead_expression():
         assert "o.opportunity_key ASC" in sql
 
 
+async def test_read_every_bound_param_is_referenced_in_every_sort_branch():
+    """Regression (fails.md:190) — an asyncpg PREPARE fails with IndeterminateDatatypeError
+    ('could not determine data type of parameter $N') if a positional bind is referenced NOWHERE
+    in the statement. $3 (signal_rank_weight) is used only by the sort=0 blended ORDER BY, so a
+    CONVICTION/EXPIRY sort orphaned it and every UI load (which never sends sort=0) aborted against
+    real Postgres — invisible to the fake-pool tests. Guard: for all three sort branches every
+    bound param $1..$N must appear in the SQL text."""
+    import re
+
+    for sort in (0, 1, 2):
+        sql, binds = await _read(sort=sort)
+        for i in range(1, len(binds) + 1):
+            assert re.search(rf"\${i}(?![0-9])", sql), f"param ${i} unreferenced for sort={sort}"
+    # $3 specifically — the regressed param — is anchored even when the ORDER BY does not use it.
+    sql1, _ = await _read(sort=1)
+    assert "$3::double precision IS NOT NULL" in sql1
+
+
 async def test_read_floor_stays_sole_with_exemption():
     """@AC-2/@AC-3/O8 — the min-conviction floor + muted/unavailable exemption is unchanged and
     orthogonal to the new source/action predicates (never re-introduces fails.md:1547)."""
