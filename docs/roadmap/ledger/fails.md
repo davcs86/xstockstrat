@@ -2274,3 +2274,53 @@ ambiguity is logged here).
   with a per-namespace SNAPSHOT-scoped replace (delete-by-`ns.`-prefix + insert in one lock) and a
   per-namespace readiness latch — never a single wholesale `w.snapshot = snap.Values` (a second stream would
   clobber the first). Config supports only one namespace per `WatchConfig` request.
+
+### 2026-09-16 — readiness-caching-poll-discipline — migration
+- **Mistake**: An in-band sentinel row (a conviction-0 "computed but empty" record in `opportunities`) is filtered out by the consumer's read conviction-floor, so it re-triggers recompute every poll, blocks empty→non-empty transitions, and trips the NOT-NULL multi-consumer INSERT trap (fails.md:757-769). A dedicated state table (`opportunity_compute_state`) is the fix.
+- **Evidence**: feature 177 (archived) context.md Archive Synthesis; migration 023_opportunity_compute_state.
+- **Rule it implies**: model "computed-empty" as a dedicated compute-state row, never as a filtered-out in-band record.
+
+### 2026-09-16 — readiness-caching-poll-discipline — assumption
+- **Mistake**: A multi-writer freshness gate stayed stale because only one of three completion paths (`_kick._run`) stamped it — the cold `_materialize_opportunities` and the daily `_opportunity_refresh_tick` paths did not — so the empty-universe gate silently never engaged (FR-3 unmet).
+- **Evidence**: feature 177 (archived) context.md Archive Synthesis; shared `_replace_and_stamp_compute_state` helper.
+- **Rule it implies**: when a freshness gate is read on one path, stamp it on EVERY write path that can produce the gated state; centralize in one helper.
+
+### 2026-09-16 — readiness-caching-poll-discipline — config
+- **Mistake**: A read-through live-enrichment memo that caches misses/failures suppresses a recovered value or persists a stale price as current (@AC-11) — the memo must be success-only (`last_price is not None AND spark is not None`) and tightly TTL-bounded, with `ttl==0` disabling it.
+- **Evidence**: feature 177 (archived) context.md Archive Synthesis.
+- **Rule it implies**: memoize only successful reads; never cache an unavailable/failed fetch.
+
+### 2026-09-16 — readiness-caching-poll-discipline — assumption
+- **Mistake**: recon.md line-number anchors drifted because a coupled sibling feature (176) merged into the branch mid-flight; the spec had to re-anchor every evidence citation against the post-merge tree before speccing.
+- **Evidence**: feature 177 (archived) context.md Archive Synthesis (sdd-spec session).
+- **Rule it implies**: re-anchor recon evidence against HEAD whenever a coupled sibling merges before /sdd-spec.
+
+### 2026-09-16 — quote-fanout-batching — assumption
+- **Mistake**: The product spec and its source performance-audit both asserted marketdata "already exposes a batch `GetLatestQuotesMulti`" RPC — it was an internal Go helper (`MultiSymbolSource`), never a gRPC RPC. Product-spec review FAILED first pass; the feature scope and the audit report both had to be reworked/corrected.
+- **Evidence**: feature 178 (archived) context.md Archive Synthesis (2026-09-04 sdd-review).
+- **Rule it implies**: verify any "the RPC already exists" claim against the `.proto` source, not against an internal helper name or a cited audit.
+
+### 2026-09-16 — quote-fanout-batching — assumption
+- **Mistake**: Batching a cross-service read silently changed the failure aggregate — one transport error now drops the entire cold set (a different denominator) instead of one symbol, observably changing `checkRiskLimits` concentration, `broadcastSnapshot` equity, `GetPnL` unrealized, and whether `emitRiskAlert` fires on a first-read-under-live-fault. Shipped WAIVED and covered by no partial-failure parity test.
+- **Evidence**: feature 178 (archived) context.md Archive Synthesis (design open risk; ROUND 2/3).
+- **Rule it implies**: when collapsing N calls into one, state the failure-mode divergence in aggregate terms and either test it or explicitly waive with the bounding rationale.
+
+### 2026-09-16 — ui-resume-halted-account — assumption
+- **Mistake**: The shared confirm-menu `RowActionsMenu` keeps its Radix dropdown mounted through the confirm flow (`onSelect` → `preventDefault`) and renders the confirm text in BOTH the AlertDialog and the row behind it — assuming a normal close / single match cost two GREEN-phase test fixes (an `Escape` reset before re-opening, and `alertdialog`-scoped assertions).
+- **Evidence**: feature 179 (archived) context.md Archive Synthesis (execute Deviation Log).
+- **Rule it implies**: when reusing `RowActionsMenu` with a `confirm:` action, expect the trigger to stay mounted and the confirm text to duplicate — scope assertions to the dialog and reset the menu between interactions.
+
+### 2026-09-16 — ui-resume-halted-account — assumption
+- **Mistake**: The product-spec cited `docs/context-constitution-findings.md` as the source recording the admin-vs-operator scope discrepancy; the file does not record it (caught only at recon). The discrepancy was real but undocumented.
+- **Evidence**: feature 179 (archived) context.md Archive Synthesis; recon.md:64.
+- **Rule it implies**: ground every "resolved Open Question" citation against the named file at recon before treating it as settled.
+
+### 2026-09-16 — watchlist-readiness-precompute — assumption
+- **Mistake**: design.md asserted `live_loop._drain_watchlist` returns `(strategy_id→symbols)` bindings suitable for the materializer, but that method collapses each binding to a bare symbol and discards `strategy_id`. The unverified claim about an existing method's return shape propagated from design into the spec and was caught only at /sdd-spec / execute (shipped code reused the servicer's own `_drain_watchlist_bindings` instead).
+- **Evidence**: feature 180 (archived) context.md Archive Synthesis (D-1); `live_loop.py`.
+- **Rule it implies**: a design/spec claim that an existing method "already returns X" must be grounded by reading that method's return path, not its name or call-site intent.
+
+### 2026-09-16 — watchlist-readiness-list-ux — assumption
+- **Mistake**: Swapping a component's backend data source (per-strategy `EvaluateReadiness` fan-out → single `GetWatchlistReadiness`) reddened 5 tests in a pre-existing *sibling* e2e spec (`watchlists.spec.ts`) that still asserted the old call, and silently lost the implicit "refetch-on-rebind" the removed `useQueries` got for free by keying on symbols.
+- **Evidence**: feature 181 (archived) context.md Archive Synthesis; `e2e/insights/watchlists.spec.ts`.
+- **Rule it implies**: when changing which backend RPC a component calls, grep all existing e2e specs (not just the feature's own) for the old RPC path, and verify the new query key preserves every refetch trigger the old one had.

@@ -5,6 +5,7 @@
 **Last Updated**: 2026-09-04
 **Committed to main**: 83743049da1ec2e2337ef49bad54c49a10721841
 **Launched date**: 2026-09-06
+**Archived**: 2026-09-16
 
 ---
 
@@ -20,6 +21,7 @@
 | 2026-09-05 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential run started; Steps 1–2 (proto computed_at + codegen) landed |
 | 2026-09-05 | `in-progress` → `code-completed` | /sdd-execute | All 13 steps done (FR-1 readiness FAST/SLOW cache, FR-3 empty-universe compute-state, FR-4 live-enrich memo, FR-2 UI staleTime + e2e); analysis suite 680 green + UI e2e 420 green |
 | 2026-09-06 | `code-completed` → `launched` | CI workflow | Promoted via PR #1104; committed 83743049da1ec2e2337ef49bad54c49a10721841 |
+| 2026-09-16 | `launched` (unchanged) | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(5)/fails(4); pruned 4 specs |
 ---
 
 ## Artifacts

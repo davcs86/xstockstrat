@@ -5,6 +5,7 @@
 **Last Updated**: 2026-09-05
 **Committed to main**: 83743049da1ec2e2337ef49bad54c49a10721841
 **Launched date**: 2026-09-06
+**Archived**: 2026-09-16
 
 ---
 
@@ -20,6 +21,7 @@
 | 2026-09-05 | `in-progress` → `code-completed` | /sdd-execute | All 8 steps done; e2e GREEN (6/6 @AC-* scenarios); C-16 promotion + teardown pending integration PR |
 
 | 2026-09-06 | `code-completed` → `launched` | CI workflow | Promoted via PR #1104; committed 83743049da1ec2e2337ef49bad54c49a10721841 |
+| 2026-09-16 | `launched` (unchanged) | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(3)/fails(2); pruned 4 specs |
 ---
 
 ## Artifacts
