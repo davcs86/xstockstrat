@@ -65,3 +65,17 @@ Feature: sysadmin-db-write-role
     When the access scope is derived by the agent (app/scopes.py roles_to_access_scope) and by the UI (src/lib/auth.ts rolesToAccessScope)
     Then both derivations set the SYSADMIN bit (0x10)
     And both leave the SYSADMIN bit unset for the roles list ["admin"]
+
+  @AC-10 @FR-5
+  Scenario: sysadmin is a superset of admin (implies the ADMIN bit)
+    Given a user whose only role is "sysadmin"
+    When their access scope is derived from the roles list ["sysadmin"]
+    Then the derived scope has BOTH the ADMIN bit (0x04) and the SYSADMIN bit (0x10) set
+    And the same caller can invoke an admin-gated read-only db tool (e.g. db_list_schemas) successfully without also holding a separate "admin" role
+
+  @AC-11 @FR-6
+  Scenario: A sysadmin user's privilege is auditable via the server-side script
+    Given the user ops@localhost has roles ["sysadmin","admin"] in identity.users.roles
+    When an operator runs "uv run scripts/manage-users.py list-users"
+    Then the row for ops@localhost lists "sysadmin" among its roles
+    And no admin surface presents ops@localhost as a non-privileged user

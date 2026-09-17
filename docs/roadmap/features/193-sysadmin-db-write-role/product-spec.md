@@ -44,14 +44,20 @@ FR-4. The SYSADMIN scope bit and the `sysadmin`→bit mapping are one platform c
 mirrored consistently across every scope-derivation site (agent `app/scopes.py`,
 UI `src/lib/auth.ts`) — no drift between mirrors.
 
-FR-5. `sysadmin` implies ADMIN for the read-only `db_*` tools (a sysadmin is a superset of admin),
-so granting `sysadmin` does not require also granting `admin` separately. _(Design to confirm
-superset vs orthogonal — see Open Questions.)_
+FR-5. `sysadmin` is a **superset of `admin`**: a user carrying `sysadmin` has **both** the ADMIN
+(`0x04`) and SYSADMIN (`0x10`) bits set in their derived access-scope, so granting `sysadmin` alone
+suffices for every admin-gated `db_*` **read** tool as well as writes — no separate `admin` grant
+required. _(Provisional WHAT decision, pinned by `@AC-10`; `/sdd-design` (full) may still weigh
+superset vs orthogonal, but the superset behavior is the default the acceptance scenario asserts.)_
 
-FR-6. Admin user-listing surfaces (`list_users`/`get_user`) must not silently misrepresent a
-`sysadmin` user's roles. The closed proto `Role` enum cannot represent `sysadmin` (by design, FR-3),
-so the enum-typed `User` view drops it — this display gap must be resolved (faithfully surface, or
-document as script-managed-and-hidden). _(Design to decide — see Open Questions.)_
+FR-6. A `sysadmin` user's privilege must remain **auditable**: `scripts/manage-users.py list-users`
+(which reads `identity.users.roles` directly) MUST show the `sysadmin` role, and no admin surface may
+present a `sysadmin` user as fully **non-privileged**. Because the closed proto `Role` enum cannot
+represent `sysadmin` (FR-3), the enum-typed agent/UI `User` views (`list_users`/`get_user`) cannot
+show it without a change; whether to *also* surface it there — via a minimal **additive** (non-breaking)
+`User` field, an explicit `is_sysadmin`/privileged flag, or an accepted-and-documented gap — is a
+`/sdd-design` decision. The acceptance scenario (`@AC-11`) pins only the authoritative-audit observable
+(the script shows it), not the enum-view mechanism.
 
 ## Out of Scope
 
@@ -68,7 +74,8 @@ Exact service names from CLAUDE.md Service Registry:
   SYSADMIN bit + `sysadmin` role mapping.
 - `xstockstrat-identity` — issues JWT `roles` claims from the DB `roles` string array (already
   free-string; carries `sysadmin` with no proto change); the `User` admin-view enum-display gap
-  (FR-6) is resolved here.
+  (FR-6) is addressed here — the authoritative audit path is `manage-users.py list-users`; any
+  enum-view surfacing is a `/sdd-design` decision (see FR-6 + Proto note).
 - `xstockstrat-ui` — `src/lib/auth.ts` `rolesToAccessScope`/`ADMIN_SCOPE` mirror gains the SYSADMIN
   bit + `sysadmin` mapping (contract parity; no user-facing UI view required).
 - `scripts/manage-users.py` — `VALID_ROLES` gains `sysadmin`; the sole assignment path.
@@ -96,6 +103,11 @@ _Constitution **C-14**._
   express it (FR-3). **Known trap (fails.md 2026-08-06, C-10(a/d)):** *if* design later chooses to add
   the enum value, every exhaustive `Record<Enum,…>`/switch consumer (TS/Go/Python) must be updated in
   the same feature with a build/reachability test.
+  - _FR-6 note:_ if `/sdd-design` elects to also surface `sysadmin` in the enum-typed agent/UI admin
+    `User` views, that would add **one additive, non-breaking** field to the identity `User` message
+    (a `repeated string` roles mirror or an `is_sysadmin` bool — **not** a `Role` enum value) — a
+    design-phase option, **not required** by the pinned FRs (FR-6 is satisfied by the
+    `manage-users.py list-users` audit path alone). If chosen, it is a non-breaking proto add (1 owner).
 
 ## Config Key Changes
 
@@ -124,18 +136,26 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 
 ## Open Questions
 
-- [ ] **postgres-mcp `--unrestricted`:** keep it (tool-layer SYSADMIN gate is the control, preserving
-  FR-2 write capability) or move postgres-mcp to restricted read-only as defense-in-depth? DT-2
-  recommended the tool-layer gate; design to decide whether to also restrict the co-process.
-- [ ] **Superset vs orthogonal (FR-5):** does `sysadmin` imply `admin` (recommended — a sysadmin can
-  do everything an admin can, plus DB writes), or is it a separate bit a user holds alongside `admin`?
-- [ ] **Write-vs-read classification (FR-2):** reuse the existing `_is_destructive` (agent
-  `app/tools.py`) and extend it so **all** writes (incl. `INSERT`, currently un-gated) require
-  SYSADMIN, fail-closed on parse ambiguity? Confirm the read allowlist (`SELECT`/`EXPLAIN`/`SHOW`).
-- [ ] **Enum-display gap (FR-6):** faithfully surface `sysadmin` in `list_users`/`get_user` (needs a
-  non-enum representation path), or document it as script-managed and intentionally not shown?
-- [ ] **`confirm` flag fate:** with the SYSADMIN gate, is the model-satisfiable `confirm=true` gate
-  kept as a UX guardrail or removed as redundant-for-security?
-- [ ] **Known trap (fails.md 2026-08-05, scope-creep near-miss):** never forward a blanket admin/
-  sysadmin `x-access-scope` from any entry point that hasn't authenticated it — the bit must be
-  derived from verified JWT roles only.
+Each item carries a **provisional decision** (checked) so the spec is complete enough to gate; every
+one is an explicit **input to full `/sdd-design`**, which may overturn it with recorded rationale.
+None is a blocking unknown.
+
+- [x] **postgres-mcp `--unrestricted` (defense-in-depth):** *Provisional:* **keep `--unrestricted`** —
+  the tool-layer SYSADMIN gate on `db_execute_sql` is the control (preserves FR-2 per DT-2). Design
+  may additionally restrict the co-process as belt-and-suspenders.
+- [x] **Superset vs orthogonal (FR-5):** *Decided (provisional):* **superset** — `sysadmin` implies
+  `admin` (both bits set). Pinned by FR-5 / `@AC-10`.
+- [x] **Write-vs-read classification (FR-2):** *Provisional:* extend `_is_destructive`
+  (`agent/app/tools.py`) so **every** non-read statement (incl. `INSERT`, currently un-gated) requires
+  SYSADMIN, **fail-closed** on parse ambiguity; read allowlist = `SELECT`/`EXPLAIN`/`SHOW`/`WITH…SELECT`.
+  Design finalizes the exact classifier + allowlist.
+- [x] **Enum-display gap (FR-6):** *Provisional:* authoritative audit path is `manage-users.py
+  list-users` (pinned by FR-6 / `@AC-11`); surfacing `sysadmin` in the enum-typed agent/UI `User`
+  views (a minimal additive non-breaking field or an `is_sysadmin` flag) is a design **option**, not
+  required.
+- [x] **`confirm` flag fate:** *Provisional:* **keep** the `confirm=true` flag as a UX guardrail (no
+  security reliance — the SYSADMIN bit is the real gate). Design may drop it.
+- [x] **Design constraint (not a question) — fails.md 2026-08-05 scope-creep near-miss:** the SYSADMIN
+  bit MUST be derived only from verified JWT roles; **never** forward a blanket admin/sysadmin
+  `x-access-scope` from any entry point that has not authenticated it. Carried as a hard constraint
+  into design + review.
