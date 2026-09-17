@@ -28,3 +28,26 @@
   enum-display gap in list_users/get_user; fate of the `confirm` flag.
 - Next: `/sdd-review sysadmin-db-write-role product-spec`, then `/sdd-design sysadmin-db-write-role`
   (full mode, operator-requested).
+
+## Session 2026-09-17 — sdd-review product-spec
+
+- Product spec approved. Status: `draft` → `spec-ready`. Verdict: **PASS WITH WARNINGS** (0 blockers).
+- First pass FAILed on two blockers, both fixed before this PASS:
+  - **C-15 acceptance coverage** — FR-5/FR-6 had no covering scenario. Fixed: added `@AC-10`
+    (FR-5 superset) and `@AC-11` (FR-6 auditable-via-script).
+  - **Criterion 9 open questions** — 6 items were `- [ ]`. Fixed: all resolved to `- [x]`
+    provisional decisions (each an explicit input to full `/sdd-design`, overturnable with rationale).
+- **Warnings carried into `/sdd-design` (must be resolved/acknowledged there — P-03 no-silent-deviation):**
+  - [ ] **C-10 / C-04 mirror enumeration** — FR-4's "no drift between mirrors" names only
+    `app/scopes.py` (agent) + `src/lib/auth.ts` (UI), but the scope bitmap is ALSO
+    defined/checked in `services/xstockstrat-config/src/grpc/authz.ts` (`ADMIN_SCOPE = 0x04`) and
+    the Python servicers' `_has_admin_scope` (per `services/xstockstrat-agent/app/scopes.py:4-6`).
+    Design MUST explicitly confirm whether those sites need the SYSADMIN bit or are correctly out
+    of scope (the write-gate is tool-layer in the agent, so backend ADMIN-checkers may legitimately
+    not need it) — so the "every site / no drift" parity claim is complete.
+  - [ ] **AC-8 / AC-11 firm-up (NOTE-level)** — AC-8 uses "any write statement" (vs concrete SQL in
+    siblings); AC-11's 2nd `Then` ("no admin surface presents … as non-privileged") is qualitative.
+    Neither weakens the gate; pin exact values at `/sdd-spec` / test-design time.
+- Overlap findings: only a rebase-only same-file overlap with feature 187 in `agent/app/tools.py`
+  (no merge-order entry needed); no config-key / proto-field / migration-NNN collisions.
+- Next: `/sdd-design sysadmin-db-write-role` (FULL mode, operator-requested).
