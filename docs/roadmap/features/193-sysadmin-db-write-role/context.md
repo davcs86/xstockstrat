@@ -167,3 +167,40 @@
     **Carry into `/sdd-design`** (deployment-topology decision) and revisit for a merge-order entry once
     both have impl-specs.
 - Next: `/sdd-design sysadmin-db-write-role` (full) — debate the three candidate architectures above.
+
+### Session 2026-09-17 — sdd-design Phase 1 (resumed, psql-MCP-split) — Round 1
+
+- **Round 1** debate ran (proposer + adversary, mediated) against the re-baselined spec.
+- Proposer: **Option A** — new `services/xstockstrat-psql-mcp/` = the agent's `mcp`-SDK Streamable-HTTP
+  scaffold (`main.py:63-66,124-128`) with the OAuth gate swapped for a static-bearer check, fronting a
+  localhost postgres-mcp co-process; native tool names, db_ prefix + confirm dropped; new DO component +
+  `/psql` ingress; DML-only role kept; tool count 49→40. Chose A over C (native MCP protocol fidelity,
+  one owned boundary, avoids re-adding a reverse-proxy container post-nginx). Flagged its own risk:
+  nine hand-registered passthrough tools drift vs a transparent proxy.
+- Adversary verdict **NEEDS WORK** (no Floor breach; F-07/F-06/F-01 explicitly cleared). Headline: the
+  drafted mechanism (public `/psql` + SINGLE static bearer + `--unrestricted` + no confirm) trades H-5's
+  injection vector for an internet-facing-static-secret vector (leaked token → arbitrary writes/DoS on
+  prod). Plus: single token has no per-actor attribution/rotation; no audit trail; nine wrappers drift
+  (transparent proxy is less code + zero drift); **C-16 disposition omitted 6 of 13 launched
+  @feature-169 scenarios** (@AC-1/2/3/8/10/11); dropping @AC-12/@AC-13 conflates the mooted security
+  gate with a still-valid human fat-finger net; `test_deployment_env_vars.py` becomes vacuously green;
+  C-05 env-secret rationale must be recorded. Ledger: fails.md 2026-08-05 COMPLIED (no scope
+  forwarding — credit); insights 092 argues for per-operator (not shared) credentials.
+
+- **>>> OPERATOR DECISIONS at the Round-1 gate <<<**
+  1. **Reachability = PUBLIC authenticated endpoint** (own `/psql` ingress route), consistent with the
+     earlier pick — adopted WITH mandatory compensating controls and this **recorded accepted-risk
+     sign-off**: the operator accepts that a public arbitrary-SQL-write endpoint's credential is the
+     internet-facing boundary, mitigated by per-operator tokens + rate-limiting + TLS + full audit
+     logging + ≥256-bit generated tokens + no-token-in-logs. (C-18 "recorded trade-off = compliance".)
+  2. **Credential model = PER-OPERATOR TOKEN FILE** — multiple provisioned tokens, each mapped to an
+     operator identity for the audit log; per-operator revocation/rotation. (Borrows the pgEdge
+     token-file auth model, decoupled from its rejected tool model; satisfies insights 092.)
+- **Folded into Round 2 as decided refinements (no fork):** transparent MCP proxy (not 9 hand-registered
+  wrappers); per-statement audit logging (statement + operator + source IP + timestamp); full per-ID
+  C-16 disposition of all 13 @feature-169 scenarios (relocate w/ @feature-169 provenance into a new
+  xstockstrat-psql-mcp suite; delete removed ones citing this sign-off); keep a lightweight fat-finger
+  write-confirmation on destructive DML (explicitly NON-security); relocate/re-author the feature-169
+  env-var tests; record the C-05 env-secret rationale + the fails.md-2026-08-05 compliance; ≥256-bit
+  token + rate-limiting + no-token-in-logs; add an operator runbook; coordinate the `/psql` route with
+  feature 084's Caddy topology (merge-order once both have impl-specs).
