@@ -55,9 +55,11 @@ as a localhost-bound co-process behind it). The exact auth mechanism is a `/sdd-
 out-of-band credential).
 
 FR-4. **No prompt-injectable path to SQL.** A prompt-injected `xstockstrat-agent` session has no
-`db_*` tool, no `postgres-mcp` co-process, and no credential or network route that reaches the psql
-MCP. A valid xstockstrat OAuth/JWT (even admin) presented to the psql MCP is **rejected** — xstockstrat
-auth confers no psql access (the independence is verifiable, not incidental).
+`db_*` tool, no `postgres-mcp` co-process, and **no psql-MCP credential** — so although `/psql` is a
+reachable public endpoint (the trusted-IP allowlist was waived, FR-8), the agent cannot authenticate
+to it: the per-operator credential it does not hold is the boundary. A valid xstockstrat OAuth/JWT
+(even admin) presented to the psql MCP is **rejected** — xstockstrat auth confers no psql access (the
+independence is verifiable, not incidental).
 
 FR-5. The psql MCP connects to Postgres with a **dedicated, least-privilege DB role**. The existing
 DML-only `xstockstrat_agent` grant (SELECT/INSERT/UPDATE/DELETE, **no DDL**) is retained as
@@ -180,9 +182,10 @@ an explicit **input to full `/sdd-design`**, which may overturn it with recorded
 - [x] **Feature-169 acceptance reconciliation (C-16)** — the launched `agent-postgres-mcp.feature`
   scenarios largely **CHANGE/relocate**: the `db_*` tools leave the agent; the client-side
   `confirm`-gate scenarios `@AC-12`/`@AC-13` are **removed** (the model-satisfiable gate is gone); the
-  DML/DDL boundary `@AC-4` is **preserved but relocated** to the psql MCP; and **`@AC-9` (asserts the
-  agent tool count `42` and the `db_` prefix contract) is CHANGED** — the count drops (to `40` on the
-  current 49-baseline) and the `db_` prefix leaves the agent surface entirely. Operator has signed off
+  DML/DDL boundary `@AC-4` is **preserved but relocated** to the psql MCP; and the count/prefix
+  guarantees are **CHANGED** — `@AC-9` (agent tool count `42`) drops to `40` on the current 49-baseline,
+  and `@AC-8` (the `db_` prefix contract) is removed as the `db_` prefix leaves the agent surface
+  entirely. (design.md carries the exact per-`@AC-*` disposition.) Operator has signed off
   on the pivot (`context.md`); design records the exact preserve/change/remove disposition per `@AC-*`
   ID and the promotion reconciliation.
 - [x] **`confirm` flag fate** — *Resolved (design):* **kept as a NON-security fat-finger net** on the

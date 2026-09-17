@@ -15,6 +15,7 @@
 | 2026-09-17 | `spec-ready` → `draft` | /sdd-design | **Operator pivot** — superseded the in-ACL SYSADMIN-bit approach; re-baselined to privilege separation (extract db_* tooling into a standalone independently-authenticated psql MCP). Spec + acceptance rewritten; re-review required |
 | 2026-09-17 | `draft` → `spec-ready` | /sdd-review | Re-baselined spec approved (PASS WITH WARNINGS: 0 blockers, no Floor breach; overlap WARN-only — rebase vs 187, deployment coordination vs 084). Advisory @AC-9 enumeration folded in |
 | 2026-09-17 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved. Chosen: standalone `xstockstrat-psql-mcp` (Option A, transparent low-level-Server proxy over localhost postgres-mcp) with per-operator token-file auth + durable audit; public /psql, IP allowlist WAIVED (accepted-risk). Spec augmented FR-7/FR-8 + @AC-11..@AC-14, @AC-8 credential-only. recon.md + design.md written |
+| 2026-09-17 | `design-approved` (unchanged) | /sdd-review | Re-validated the FR-7/FR-8 augmentation — PASS WITH WARNINGS (0 blockers, no Floor breach). Fixed FR-4 stale "no network route" wording + @AC-8/@AC-9 attribution. Status not regressed |
 
 ---
 

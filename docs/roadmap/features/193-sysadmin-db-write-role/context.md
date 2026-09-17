@@ -237,3 +237,20 @@
 - Constitution rules touched: C-05/C-08/C-10/C-14/C-15/C-16/C-18; F-01/F-02/F-03/F-06/F-07 all honored.
   No Floor breach.
 - Status: `spec-ready` → `design-approved`. Next: `/sdd-spec sysadmin-db-write-role`.
+
+## Session 2026-09-17 — sdd-review product-spec (re-validation of the FR-7/FR-8 augmentation)
+
+- Operator-requested AI review of the spec augmented AFTER design approval (FR-7/FR-8, @AC-11..@AC-14,
+  @AC-8 re-authored). Verdict: **PASS WITH WARNINGS** (0 blockers, no Floor breach). Treated as a
+  **re-validation** — status left at `design-approved` (not regressed to `spec-ready`).
+- Every FR (incl. FR-7/FR-8) has ≥1 well-formed covering scenario; all Open Questions `[x]`; all
+  re-verified code-checkable claims hold (9 db_* names + tools.py; 49→40 via copilot.ts + test frozenset;
+  postgres-mcp 0.3.0 pin `uv.lock:1399`; DML-only role `db-migrate.sh:193`, no DDL; no proto/config/
+  migration deltas; C-16 all 13 feature-169 scenarios enumerated in design.md).
+- Advisory fixed: **FR-4** reworded — dropped the stale "no network route" clause (contradicted by the
+  waived-allowlist public endpoint) → now "no psql-MCP credential; the credential it does not hold is
+  the boundary," coherent with @AC-8/FR-8. Also corrected the Open-Question @AC attribution (`@AC-8` =
+  db_ prefix, `@AC-9` = tool count 42).
+- Overlap: not re-scanned — the augmentation added no new files/config-keys/protos/migrations, so the
+  prior verdict stands (187 rebase on tools.py/mcp-tools.md; 084 deployment coordination on /psql+Caddy).
+- Next: `/sdd-spec sysadmin-db-write-role`.
