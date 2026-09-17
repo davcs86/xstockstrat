@@ -51,3 +51,48 @@
 - Overlap findings: only a rebase-only same-file overlap with feature 187 in `agent/app/tools.py`
   (no merge-order entry needed); no config-key / proto-field / migration-NNN collisions.
 - Next: `/sdd-design sysadmin-db-write-role` (FULL mode, operator-requested).
+
+## Session 2026-09-17 — sdd-design (Phase 0 recon + Phase 1 round 1, then OPERATOR PIVOT)
+
+- **Phase 0 Recon** (full mode): wrote `recon.md` from 5 read-only discovery passes (agent, identity +
+  manage-users.py, ui, config cross-repo scope-mirror enumeration, scenario-recon C-16 guard). Committed
+  `dea933d`. Key grounded facts: exactly 2 roles→bitmap DERIVE sites; superset would leave every `& 0x04`
+  CHECK site admitting sysadmin unchanged; no migration/config-key/proto-enum change; the ADMIN→SYSADMIN
+  write move CHANGES launched `@AC-12`/`@AC-13` (feature 169); last-admin guard keyed on the `admin` role
+  STRING vs a bit-superset is a correctness fork.
+- **Phase 1 Round 1** debate ran (proposer + adversary, mediated). Proposer: 5-layer design (SYSADMIN=0x10
+  in the 2 derivers, superset; `db_execute_sql` read-allowlist gate on `& 0x10`; `manage-users.py VALID_ROLES
+  += sysadmin`; additive `bool is_sysadmin = 6` on `User`; drop `confirm`). Adversary verdict NEEDS WORK
+  (no Floor breach): the load-bearing residual is that a **read-SHAPED statement can still perform writes via
+  side-effect functions** (`SELECT dblink_exec('INSERT …')`, `nextval`, `pg_terminate_backend`) — parses as
+  pure read nodes, so a tool-layer classifier structurally cannot catch it; an admin-only injected session
+  keeps that narrow write vector. Also flagged: last-admin-guard string-vs-bit inconsistency; drop-`confirm`
+  as unnecessary API churn.
+
+- **>>> OPERATOR PIVOT (this session, authoritative WHAT change) <<<**
+  At the round-1 gate the operator steered away from the in-ACL SYSADMIN-bit approach entirely:
+  > "Separate the MCPs. Xstockstrat keeps trader/admin. Psql MCP is purely a system admin tool, with the
+  > existing manual user setup but independent from xstockstrat auth login and ACL."
+  Follow-up decisions (via design-gate clarification):
+  1. **Move ALL `db_*` tools out** of `xstockstrat-agent` (all 9 + the postgres-mcp co-process) into a
+     standalone **psql MCP** service → the prompt-injectable xstockstrat-agent has ZERO direct SQL access.
+     This closes H-5 at the trust boundary (no route to SQL) rather than in a syntactic classifier, and
+     resolves the round-1 read-shaped-write residual by construction.
+  2. **Auth mechanism = deferred to the psql-MCP server library's capabilities** — the operator was unsure;
+     the design MUST ground the auth model in what the actual library (postgres-mcp / crystaldba) supports,
+     independent of xstockstrat's OAuth/JWT + access-scope ACL.
+  3. **Separate authenticated endpoint** — its own path/port on the DO ingress, gated solely by its own
+     credential (not the xstockstrat login).
+- **Consequence (spec re-baseline required):** the sysadmin-role/`0x10`-bit/superset/`is_sysadmin`-field
+  design (product-spec FR-1/FR-4/FR-5/FR-6) is **superseded**; the `@AC-12`/`@AC-13` ADMIN→SYSADMIN sign-off
+  question is mooted (operator marked it "superseded"). The `sysadmin` scope bit no longer exists in this
+  direction. Feature number 193 + branch `feature/sysadmin-db-write-role` retained (number immutable; slug
+  kept as a broad "lock down privileged DB access" label though the mechanism changed).
+- **Plan:** (a) targeted recon addendum on the psql-MCP extraction — library transport/auth capabilities
+  (item the auth choice hinges on), deployment topology (docker-compose / supervisord / Dockerfile /
+  `.do/app*.yaml` routing), and the feature-169 acceptance scenarios affected (tool-count invariant + the
+  `db_*` scenarios that move); (b) re-baseline `product-spec.md` + `acceptance.feature` to the new WHAT;
+  (c) re-run `/sdd-review product-spec`; (d) resume the FULL design debate against the new spec.
+- This is the operator's explicit authority over the feature's WHAT (recorded here per C-11 / C-16 —
+  the launched feature-169 `db_*` scenarios that this pivot changes/relocates are re-baselined with
+  operator sign-off, not silently altered).
