@@ -204,3 +204,36 @@
   env-var tests; record the C-05 env-secret rationale + the fails.md-2026-08-05 compliance; ≥256-bit
   token + rate-limiting + no-token-in-logs; add an operator runbook; coordinate the `/psql` route with
   feature 084's Caddy topology (merge-order once both have impl-specs).
+
+## Session 2026-09-17 — sdd-design (Phase 1 Round 2 + DESIGN APPROVED)
+
+- **Round 2** consolidated the design; **Round-2 adversary verdict NEEDS WORK (no Floor breach)** — its
+  objections were coverage-completeness + accepted-risk hardening, not architectural. Resolved before
+  approval: SDK transparent-proxy capability CONFIRMED viable (Context7 `/modelcontextprotocol/python-sdk`
+  — low-level `Server` `on_list_tools`/`on_call_tool` constructor handlers return tools with explicit
+  name/description/inputSchema → zero-drift proxy, no per-tool hand-shaping fallback needed); the
+  compensating-controls coverage gap closed by adding **FR-7/FR-8 + @AC-11..@AC-14**; **@AC-8 re-authored
+  credential-only** (public endpoint ⇒ a network route exists; the per-operator credential is the
+  boundary); durable non-optional audit sink adopted over stdout/OTEL-gated; C-05 env-secret rationale
+  and fails.md-2026-08-05 compliance recorded in design.md.
+- **>>> DESIGN APPROVED at the Round-2 gate <<<** — operator chose "**Approve, but WAIVE the IP
+  allowlist**": accept a **public arbitrary-origin `/psql`** endpoint with the per-operator token as the
+  sole internet-facing boundary (recorded accepted-risk), mitigated by FR-7 (per-operator tokens +
+  durable audit + DML-only role) + FR-8 (rate-limiting/429 lockout + TLS + no-token-in-logs). The
+  trusted-IP allowlist is recorded as an available future hardening, not adopted.
+- **Chosen approach:** standalone `services/xstockstrat-psql-mcp/` = the agent's `mcp`-SDK
+  Streamable-HTTP scaffold with the OAuth gate replaced by a per-operator-token gate + a transparent
+  low-level-Server proxy over a localhost `postgres-mcp` co-process; native tool names; `execute_sql`
+  keeps a non-security fat-finger confirm; new DO component + public `/psql` ingress; DML-only role kept;
+  agent stripped of all 9 db_* tools + postgres-mcp (tool count 49→40). No proto/config/migration change.
+- **Rejected:** in-ACL SYSADMIN bit (can't close read-shaped side-effect writes); Option C gateway
+  (net-new proxy container, boundary in 3rd-party config); Option B pgEdge (read-only query_database +
+  NL/RAG tools + LLM dep — fails tool-parity); 9 hand-wrappers (vendor drift); single shared token
+  (no attribution); mandatory IP allowlist (operator-waived); stdout/OTEL-only audit (can silently no-op).
+- **Open risks carried to /sdd-spec (design.md Open Risks):** [ ] public-endpoint accepted-risk mitigated
+  by FR-8; [ ] rate-limiter topology (client-IP behind ingress + instance_count=1); [ ] durable audit-sink
+  choice; [ ] token revocation RTO in the runbook; [ ] feature-084 deployment coordination (merge-order
+  084→193, 187→193).
+- Constitution rules touched: C-05/C-08/C-10/C-14/C-15/C-16/C-18; F-01/F-02/F-03/F-06/F-07 all honored.
+  No Floor breach.
+- Status: `spec-ready` → `design-approved`. Next: `/sdd-spec sysadmin-db-write-role`.

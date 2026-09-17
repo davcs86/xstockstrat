@@ -59,8 +59,10 @@ Feature: sysadmin-db-write-role (privilege-separated psql MCP)
     Given an xstockstrat-agent session whose LLM has ingested a prompt-injection payload instructing it to run arbitrary SQL
     When the injected instructions attempt to execute SQL
     Then no db_ tool exists in the agent to call
-    And the agent holds no psql-MCP credential and has no network route to the psql MCP endpoint
+    And the agent holds no psql-MCP credential, so any request it makes to the psql MCP endpoint is rejected fail-closed
     And no SQL reaches the database through the agent
+    # NOTE: /psql is a public endpoint (IP allowlist waived), so a network route exists; the per-operator
+    # credential the agent does not hold is the boundary. The agent carries no PSQL_MCP token.
 
   @AC-9 @FR-5
   Scenario: The psql MCP connects with the DML-only role so DDL stays denied at the grant level
@@ -75,3 +77,32 @@ Feature: sysadmin-db-write-role (privilege-separated psql MCP)
     When the psql MCP owns the postgres-mcp direct connection instead of xstockstrat-agent
     Then the postgres-mcp process still holds exactly one direct connection
     And the direct-backend connection total is unchanged (the budget row is re-labeled to the psql MCP, not added)
+
+  @AC-11 @FR-7
+  Scenario: A DB statement is attributed to the resolved operator in a durable audit record
+    Given operator "alice" holds a provisioned per-operator token in PSQL_MCP_TOKENS and operator "bob" holds a different one
+    When alice calls execute_sql "UPDATE analysis.strategies SET is_live=false WHERE strategy_id='s1'" through the psql MCP
+    Then the psql MCP resolves the presented token to operator-id "alice" (not "bob") in constant time
+    And a durable audit record is written containing the statement, operator-id "alice", the source IP, and a timestamp
+    And that audit record is stored where the DML role cannot modify or delete it
+
+  @AC-12 @FR-7
+  Scenario: Revoking one operator's token does not affect another's, and audit is non-optional
+    Given operators "alice" and "bob" each hold a distinct active token
+    When alice's entry is marked active=false and the service reloads its token set
+    Then alice's token is rejected fail-closed while bob's token still authenticates
+    And the psql MCP refuses to start (or refuses requests) if its durable audit sink is unavailable, rather than serving with auditing silently disabled
+
+  @AC-13 @FR-8
+  Scenario: Repeated failed authentication is rate-limited and locked out
+    Given the public /psql endpoint with no trusted-IP allowlist
+    When a caller presents invalid bearer tokens repeatedly beyond the failed-auth threshold
+    Then the endpoint returns HTTP 429 for further attempts from that source for the lockout window
+    And no tool name or catalog is ever returned to an unauthenticated caller
+
+  @AC-14 @FR-8
+  Scenario: The bearer token is never written to any log
+    Given a request to the psql MCP carrying "Authorization: Bearer <token>"
+    When the request is processed (whether it authenticates or is rejected)
+    Then no access log, application log, audit record, or SDK log line contains the bearer token value
+    And any audit record instead names the resolved operator-id

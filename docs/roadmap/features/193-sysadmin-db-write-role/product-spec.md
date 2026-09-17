@@ -68,6 +68,21 @@ FR-6. The shared DB **connection-pool budget is preserved**: `postgres-mcp` keep
 connection; the budget table row is **re-labeled** to the new service, not added (direct-backend total
 unchanged).
 
+FR-7. **Per-operator authentication + durable attribution.** The psql MCP resolves each caller to a
+**distinct operator identity** via a per-operator token provisioned out-of-band (a token file /
+`PSQL_MCP_TOKENS` secret; not routed through the config service), and records **every** DB tool call
+(statement/args + resolved operator-id + source IP + timestamp) to a **durable, tamper-evident audit
+trail** that the DML role cannot mutate. Audit emission is a **hard startup precondition** — never
+silently disabled (e.g. not gated on `OTEL_ENABLED`). Revocation/rotation of one operator's token does
+not affect others.
+
+FR-8. **Public-endpoint compensating controls** (the operator accepted a public `/psql` endpoint and
+**declined** a trusted-IP allowlist, so these controls are the boundary — see Open Questions): the
+endpoint (a) **fails closed** on missing/invalid/unknown token (401, no tool-name leak, and **without**
+consulting the xstockstrat identity service or ACL); (b) enforces **rate-limiting** with a stricter
+**failed-authentication lockout** (429); (c) is **TLS-terminated** at the ingress edge; and (d) **never
+writes the bearer token** to any access/application/SDK log.
+
 ## Out of Scope
 
 - The `extract_*` SSRF / prompt-injection **ingress** — a related follow-on tracked in the security
@@ -170,9 +185,14 @@ an explicit **input to full `/sdd-design`**, which may overturn it with recorded
   current 49-baseline) and the `db_` prefix leaves the agent surface entirely. Operator has signed off
   on the pivot (`context.md`); design records the exact preserve/change/remove disposition per `@AC-*`
   ID and the promotion reconciliation.
-- [x] **`confirm` flag fate** — *Provisional:* **removed** with the tools' relocation; the security
-  model is now endpoint auth + off-surface, not a confirm flag. (Superseded design debated keeping it;
-  moot here.)
+- [x] **`confirm` flag fate** — *Resolved (design):* **kept as a NON-security fat-finger net** on the
+  relocated `execute_sql` (a human write-safety affordance, distinct from the mooted model-satisfiable
+  security gate). The security model is endpoint auth + off-injectable-surface.
+- [x] **Trusted-IP allowlist on `/psql`** — *Resolved (operator, design gate):* **WAIVED.** The operator
+  accepted a public arbitrary-origin `/psql` endpoint with the per-operator token as the sole
+  internet-facing boundary, mitigated by the FR-8 compensating controls (rate-limiting + failed-auth
+  lockout + TLS + no-token-in-logs) and the FR-7 durable audit + DML-only role. An allowlist remains an
+  available future hardening. (Recorded accepted-risk — `context.md`, `design.md` Open Risks.)
 - [x] **Design constraint (not a question) — fails.md 2026-08-05 scope-creep near-miss:** the psql
   MCP's auth MUST NOT reuse or forward a blanket xstockstrat admin `x-access-scope`; it authenticates
   its own principal independently. Carried as a hard constraint into design + review.
