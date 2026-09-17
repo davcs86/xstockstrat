@@ -13,6 +13,7 @@
 | 2026-09-17 | `idea` → `draft` | /sdd-story | Product spec generated (closes security audit H-5 / DT-2) |
 | 2026-09-17 | `draft` → `spec-ready` | /sdd-review | Product spec approved (PASS WITH WARNINGS: 1 advisory C-10 mirror-enumeration warning carried into design; 0 blockers) |
 | 2026-09-17 | `spec-ready` → `draft` | /sdd-design | **Operator pivot** — superseded the in-ACL SYSADMIN-bit approach; re-baselined to privilege separation (extract db_* tooling into a standalone independently-authenticated psql MCP). Spec + acceptance rewritten; re-review required |
+| 2026-09-17 | `draft` → `spec-ready` | /sdd-review | Re-baselined spec approved (PASS WITH WARNINGS: 0 blockers, no Floor breach; overlap WARN-only — rebase vs 187, deployment coordination vs 084). Advisory @AC-9 enumeration folded in |
 
 ---
 
@@ -51,4 +52,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review sysadmin-db-write-role product-spec` — re-gate the re-baselined spec, then resume `/sdd-design` (full)
+`/sdd-design sysadmin-db-write-role` (full) — recon + adversarial debate over the three grounded psql-MCP candidate architectures

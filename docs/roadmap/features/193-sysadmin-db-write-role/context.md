@@ -130,3 +130,40 @@
 - **Feature identity:** keeping number 193 + branch `feature/sysadmin-db-write-role` (number immutable;
   slug retained as a broad "lock down privileged DB access" label though the mechanism changed to the
   MCP split).
+
+### Alternative-library research (operator-requested) — feeds the design debate
+
+- **pgEdge Postgres MCP (`pgedge/pgedge-postgres-mcp`)** has **native HTTP Bearer-token auth** built in
+  (`PGEDGE_HTTP_ENABLED`/`PGEDGE_AUTH_ENABLED`/`PGEDGE_AUTH_TOKEN_FILE`; `POST /mcp/v1` requires
+  `Authorization: Bearer <token>` → 401; `/health` open). The **token file IS the "manual user setup"** —
+  operator-provisioned tokens, independent of xstockstrat identity/JWT/ACL. Directly satisfies FR-3/FR-4
+  with no custom auth code. (Context7 `/pgedge/pgedge-postgres-mcp`.)
+- **crystaldba postgres-mcp v0.3.0 has NO native auth** (confirmed) — isolation is network-binding only.
+- Three grounded candidate architectures for the debate:
+  - **A. crystaldba postgres-mcp + thin auth-proxy MCP** (reuse the agent's `mcp`-SDK shape, static token):
+    most new code; keeps today's exact 9 tools + Python stack.
+  - **B. pgEdge postgres-mcp (native Bearer auth)**: least code (config only); BUT different server
+    (Go binary, `PGEDGE_*`, likely different tool set + "read-only protection" posture) → **write-support
+    + tool-parity MUST be verified** by the proposer before adopting.
+  - **C. crystaldba postgres-mcp + generic auth gateway** (oauth2-proxy / MCP gateway sidecar): no MCP
+    code, adds gateway infra.
+  - MCP remote-auth standard is OAuth 2.1+PKCE (Mar-2025 spec), but static API-key/Bearer is the
+    sanctioned pattern for internal machine-to-machine tooling — which this psql MCP is. FR-3 is written
+    library-agnostically, so all three fit the spec without further rewrite.
+
+### Session 2026-09-17 — sdd-review product-spec (re-baselined spec) — PASS
+
+- Verdict: **PASS WITH WARNINGS** (0 blockers, no Floor breach). Status `draft` → `spec-ready`.
+- Criteria: all code-checkable claims verified against the repo (9 `db_*` names + location; 49→40 count;
+  postgres-mcp no-auth launch; unauthenticated localhost SSE client; DML-only role; all 6 FRs covered).
+- Advisory folded in: C-16 reconciliation now enumerates feature-169 **`@AC-9`** (tool count 42→40 +
+  `db_` prefix) by ID, alongside `@AC-12`/`@AC-13` (removed) and `@AC-4` (relocated).
+- **Overlap (WARN-only, no FAIL-level):**
+  - [ ] **187-opportunities-pagination-drain** (`in-progress`) — same-file `tools.py` + `mcp-tools.md`,
+    **disjoint functions → rebase-only**. 187 lands first; 193 rebases its `db_*` removals onto it.
+  - [ ] **084-droplet-compose-deploy** (`spec-ready`) — `docker-compose.yml` + ingress: 084 restructures
+    dev deployment around Caddy blue/green; **more than a trivial rebase**. Whichever lands second must
+    reconcile the new `xstockstrat-psql-mcp` component + its ingress route into the other's topology.
+    **Carry into `/sdd-design`** (deployment-topology decision) and revisit for a merge-order entry once
+    both have impl-specs.
+- Next: `/sdd-design sysadmin-db-write-role` (full) — debate the three candidate architectures above.

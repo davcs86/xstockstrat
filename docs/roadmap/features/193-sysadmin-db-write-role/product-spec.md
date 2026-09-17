@@ -163,11 +163,13 @@ an explicit **input to full `/sdd-design`**, which may overturn it with recorded
   legitimate write path); the security boundary is the fronting auth + being off the injectable
   surface, not the vendor restriction flag. Design may reconsider.
 - [x] **Feature-169 acceptance reconciliation (C-16)** — the launched `agent-postgres-mcp.feature`
-  scenarios largely **CHANGE/relocate** (the `db_*` tools leave the agent; the client-side
-  `confirm`-gate scenarios `@AC-12`/`@AC-13` are **removed** — the model-satisfiable gate is gone; the
-  DML/DDL boundary `@AC-4` is **preserved but relocated** to the psql MCP). Operator has signed off on
-  the pivot (`context.md`); design records the exact preserve/change/remove disposition and the
-  promotion reconciliation.
+  scenarios largely **CHANGE/relocate**: the `db_*` tools leave the agent; the client-side
+  `confirm`-gate scenarios `@AC-12`/`@AC-13` are **removed** (the model-satisfiable gate is gone); the
+  DML/DDL boundary `@AC-4` is **preserved but relocated** to the psql MCP; and **`@AC-9` (asserts the
+  agent tool count `42` and the `db_` prefix contract) is CHANGED** — the count drops (to `40` on the
+  current 49-baseline) and the `db_` prefix leaves the agent surface entirely. Operator has signed off
+  on the pivot (`context.md`); design records the exact preserve/change/remove disposition per `@AC-*`
+  ID and the promotion reconciliation.
 - [x] **`confirm` flag fate** — *Provisional:* **removed** with the tools' relocation; the security
   model is now endpoint auth + off-surface, not a confirm flag. (Superseded design debated keeping it;
   moot here.)
