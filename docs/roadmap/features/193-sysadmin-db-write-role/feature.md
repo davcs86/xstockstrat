@@ -12,6 +12,7 @@
 |---|---|---|---|
 | 2026-09-17 | `idea` → `draft` | /sdd-story | Product spec generated (closes security audit H-5 / DT-2) |
 | 2026-09-17 | `draft` → `spec-ready` | /sdd-review | Product spec approved (PASS WITH WARNINGS: 1 advisory C-10 mirror-enumeration warning carried into design; 0 blockers) |
+| 2026-09-17 | `spec-ready` → `draft` | /sdd-design | **Operator pivot** — superseded the in-ACL SYSADMIN-bit approach; re-baselined to privilege separation (extract db_* tooling into a standalone independently-authenticated psql MCP). Spec + acceptance rewritten; re-review required |
 
 ---
 
@@ -26,12 +27,14 @@
 
 ## Summary
 
-A dedicated `sysadmin` role — the **sole** privilege permitted to execute write/destructive SQL
-through the MCP agent's `db_execute_sql` tool, and grantable **only** via the server-side
-`scripts/manage-users.py` (never through any consumer surface) — so a prompt-injected or compromised
-admin session cannot perform arbitrary cross-schema DB writes. Closes security-audit finding **H-5**
-(`docs/reports/2026-09-16-trading-system-security-audit.md`, DT-2) while preserving feature 169's
-FR-2 write capability behind a privilege no consumer can obtain.
+**Privilege separation of the DB tooling** — extract all nine `db_*` tools and the `postgres-mcp`
+co-process out of the prompt-injectable `xstockstrat-agent` MCP into a **standalone "psql MCP"**
+service that authenticates on its **own out-of-band credential**, independent of the xstockstrat
+OAuth/JWT login and access-scope ACL, exposed on its **own ingress endpoint**. A prompt-injected or
+compromised agent session is thereby left with **no tool, credential, or network path to execute any
+SQL** — closing security-audit finding **H-5** (`docs/reports/2026-09-16-trading-system-security-audit.md`,
+DT-2) at the trust boundary rather than via a model-satisfiable in-agent gate. _(Re-baselined
+2026-09-17 from the original in-ACL `sysadmin`-role/scope-bit design — see `context.md`.)_
 
 ## Reviewers
 
@@ -41,11 +44,11 @@ re-run /sdd-spec if the registry changes.)_
 
 | Role | Review Focus |
 |---|---|
-| Security | Auth-scope correctness; a new privilege bit must not be consumer-assignable; no blanket `x-access-scope` forwarding (fails.md 2026-08-05) |
-| `xstockstrat-agent` | MCP tool contract stability (`db_execute_sql`), admin/scope forwarding, `docs/runbooks/mcp-tools.md` parity + tool-count surfaces |
-| `xstockstrat-identity` | JWT role→claim mapping, role scoping, closed proto `Role` set integrity |
-| `xstockstrat-ui` | Access-scope bit mirror correctness (`src/lib/auth.ts`), no privilege drift between mirrors |
+| Security | Trust-boundary correctness: the psql MCP's auth is independent of the xstockstrat ACL; the "no prompt-injectable path to SQL" invariant (no tool, credential, or route); no blanket `x-access-scope` reuse (fails.md 2026-08-05) |
+| Platform lead | New service in the registry + deployment topology (new DO component + ingress route); connection-pool budget re-label (FR-6) |
+| `xstockstrat-agent` | Removal correctness: all nine `db_*` tools + postgres-mcp co-process gone; `docs/runbooks/mcp-tools.md` parity + every tool-count surface (49→40) |
+| `xstockstrat-ui` | `src/lib/copilot.ts` `COPILOT_MCP_TOOL_COUNT` mirror (49→40), no drift |
 
 ## Next Action
 
-`/sdd-design sysadmin-db-write-role` (full mode) — recon + adversarial design debate before /sdd-spec
+`/sdd-review sysadmin-db-write-role product-spec` — re-gate the re-baselined spec, then resume `/sdd-design` (full)

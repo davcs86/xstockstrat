@@ -1,81 +1,77 @@
-Feature: sysadmin-db-write-role
-  As a platform operator, I want a dedicated sysadmin role that is the only privilege permitted to
-  execute write/destructive SQL through the agent's db_execute_sql tool and is grantable only via
-  scripts/manage-users.py, so that a prompt-injected or compromised admin session cannot perform
-  arbitrary DB writes.
+Feature: sysadmin-db-write-role (privilege-separated psql MCP)
+  As a platform operator, I want the database tooling separated out of the AI agent into a standalone
+  "psql MCP" service that authenticates independently of the xstockstrat login and ACL, so that a
+  prompt-injected or compromised xstockstrat-agent session has no tool, credential, or network path to
+  execute any SQL, while a human operator reaches the DB tools through their own out-of-band credential.
 
-  @AC-1 @FR-1 @FR-4
-  Scenario: An admin without sysadmin is denied a write via db_execute_sql
-    Given a caller whose verified JWT roles are ["admin"] (derived access-scope has ADMIN 0x04 set, SYSADMIN 0x10 unset)
-    When they call db_execute_sql with sql "UPDATE trading.orders SET status='CANCELED' WHERE order_id='x'" and confirm=true
-    Then the tool returns a PERMISSION_DENIED error naming the missing sysadmin privilege
-    And no statement is forwarded to postgres-mcp
+  @AC-1 @FR-1
+  Scenario: The xstockstrat-agent MCP no longer advertises any db_ tool
+    Given the running xstockstrat-agent MCP server (Streamable HTTP on :9000)
+    When an authenticated admin lists the agent's tools (tools/list)
+    Then the response contains none of db_execute_sql, db_list_schemas, db_list_objects, db_get_object_details, db_explain_query, db_get_top_queries, db_analyze_workload_indexes, db_analyze_query_indexes, db_analyze_db_health
+    And the advertised tool count is 40
 
-  @AC-2 @FR-1 @FR-2
-  Scenario: A sysadmin may execute a write via db_execute_sql
-    Given a caller whose verified JWT roles are ["sysadmin"] (derived access-scope has SYSADMIN 0x10 set)
-    When they call db_execute_sql with sql "UPDATE analysis.strategies SET is_live=false WHERE strategy_id='s1'"
-    Then the statement is forwarded to postgres-mcp and executed
-    And the tool returns the execution result
+  @AC-2 @FR-1
+  Scenario: Every tool-count/inventory surface agrees on 40
+    Given the db_ tools have been removed from xstockstrat-agent
+    When the CI-enforced inventory surfaces are checked
+    Then src/lib/copilot.ts COPILOT_MCP_TOOL_COUNT equals 40
+    And the tests/test_tools_endpoint.py expected-name set omits all nine db_ tool names
+    And the app/tools.py docstring and services/xstockstrat-agent/CLAUDE.md and docs/runbooks/mcp-tools.md state forty tools
 
-  @AC-3 @FR-2
-  Scenario: An admin without sysadmin may still run read-only SQL
-    Given a caller whose verified JWT roles are ["admin"] (ADMIN 0x04 set, SYSADMIN 0x10 unset)
-    When they call db_execute_sql with sql "SELECT count(*) FROM trading.orders"
-    Then the statement is forwarded to postgres-mcp and executed
-    And the tool returns the row count
+  @AC-3 @FR-1
+  Scenario: The xstockstrat-agent container no longer runs or connects to postgres-mcp
+    Given the xstockstrat-agent container is running
+    When its process table and configuration are inspected
+    Then there is no postgres-mcp co-process and no POSTGRES_MCP_DATABASE_URI / POSTGRES_MCP_PORT wiring in the agent
+    And no agent code path opens a connection to a postgres-mcp SSE endpoint
 
-  @AC-4 @FR-2 @FR-4
-  Scenario: INSERT is treated as a write and requires sysadmin
-    Given a caller whose verified JWT roles are ["admin"] (SYSADMIN 0x10 unset)
-    When they call db_execute_sql with sql "INSERT INTO config.config_audit (namespace) VALUES ('x')"
-    Then the tool returns a PERMISSION_DENIED error naming the missing sysadmin privilege
-    And no statement is forwarded to postgres-mcp
+  @AC-4 @FR-2
+  Scenario: The psql MCP is reachable at its own endpoint, distinct from /agent
+    Given the deployed platform ingress
+    When a client connects to the psql MCP route (a distinct prefix/port, e.g. /psql)
+    Then it reaches the standalone psql MCP service, not xstockstrat-agent
+    And the /agent route continues to serve only the xstockstrat-agent MCP with no db_ tools
 
-  @AC-5 @FR-3
-  Scenario: The agent manage_user tool cannot grant sysadmin
-    Given an authenticated admin caller using the agent manage_user tool with action "set_roles"
-    When they attempt to set a target user's roles to include "sysadmin"
-    Then the request cannot express the sysadmin role (the proto Role enum has no sysadmin value)
-    And the target user's stored roles do not contain "sysadmin"
+  @AC-5 @FR-3 @FR-2
+  Scenario: A caller with the psql MCP's own credential can invoke the DB tools
+    Given an operator presenting the psql MCP's out-of-band credential (e.g. its configured bearer token)
+    When they call a DB tool through the psql MCP (e.g. execute_sql "SELECT count(*) FROM trading.orders")
+    Then the psql MCP authenticates the caller against its own credential (not the xstockstrat identity service)
+    And the statement is executed via the fronted postgres-mcp and the result is returned
 
-  @AC-6 @FR-3
-  Scenario: The identity SetUserRoles RPC cannot assign sysadmin
-    Given a SetUserRolesRequest whose repeated Role field is populated from the closed proto enum {ADMIN, TRADER, VIEWER}
-    When the request is sent for any target user
-    Then no combination of enum values yields the "sysadmin" role string on the persisted user
+  @AC-6 @FR-3 @FR-4
+  Scenario: A valid xstockstrat admin JWT confers no access to the psql MCP
+    Given a caller holding a valid xstockstrat OAuth/JWT whose roles include "admin"
+    When they present that JWT (and no psql-MCP credential) to the psql MCP endpoint
+    Then the psql MCP rejects the request fail-closed (no DB tool is executed)
+    And the rejection does not consult the xstockstrat identity service or access-scope ACL
 
   @AC-7 @FR-3
-  Scenario: manage-users.py can grant sysadmin (the sole assignment path)
-    Given an operator running "uv run scripts/manage-users.py update-roles ops@localhost --roles sysadmin,admin"
-    When the command completes
-    Then identity.users.roles for ops@localhost contains "sysadmin"
-    And a subsequent login for ops@localhost issues a JWT whose roles claim includes "sysadmin"
+  Scenario: A caller with no psql credential is denied fail-closed
+    Given a caller presenting no psql-MCP credential
+    When they attempt to list or invoke any psql MCP tool
+    Then the psql MCP returns an authentication error
+    And no tool is executed and no DB tool names are leaked to an unauthenticated caller
 
   @AC-8 @FR-4
-  Scenario: An unauthenticated / roleless caller is denied a write fail-closed
-    Given a caller with no verified roles (derived access-scope 0)
-    When they call db_execute_sql with any write statement
-    Then the tool returns a PERMISSION_DENIED error
-    And no statement is forwarded to postgres-mcp
+  Scenario: A prompt-injected xstockstrat-agent session cannot reach SQL
+    Given an xstockstrat-agent session whose LLM has ingested a prompt-injection payload instructing it to run arbitrary SQL
+    When the injected instructions attempt to execute SQL
+    Then no db_ tool exists in the agent to call
+    And the agent holds no psql-MCP credential and has no network route to the psql MCP endpoint
+    And no SQL reaches the database through the agent
 
-  @AC-9 @FR-1 @FR-4
-  Scenario: The sysadmin role maps to the SYSADMIN scope bit consistently across mirrors
-    Given the roles list ["sysadmin"]
-    When the access scope is derived by the agent (app/scopes.py roles_to_access_scope) and by the UI (src/lib/auth.ts rolesToAccessScope)
-    Then both derivations set the SYSADMIN bit (0x10)
-    And both leave the SYSADMIN bit unset for the roles list ["admin"]
+  @AC-9 @FR-5
+  Scenario: The psql MCP connects with the DML-only role so DDL stays denied at the grant level
+    Given the psql MCP's fronted postgres-mcp connects as the dedicated DML-only DB role (SELECT/INSERT/UPDATE/DELETE, no DDL)
+    When an authenticated psql-MCP caller runs "INSERT INTO config.config_audit (namespace) VALUES ('x')" and separately "CREATE TABLE public.evil (id int)"
+    Then the INSERT succeeds
+    And the CREATE TABLE is rejected by Postgres at the grant level, independent of the tool layer
 
-  @AC-10 @FR-5
-  Scenario: sysadmin is a superset of admin (implies the ADMIN bit)
-    Given a user whose only role is "sysadmin"
-    When their access scope is derived from the roles list ["sysadmin"]
-    Then the derived scope has BOTH the ADMIN bit (0x04) and the SYSADMIN bit (0x10) set
-    And the same caller can invoke an admin-gated read-only db tool (e.g. db_list_schemas) successfully without also holding a separate "admin" role
-
-  @AC-11 @FR-6
-  Scenario: A sysadmin user's privilege is auditable via the server-side script
-    Given the user ops@localhost has roles ["sysadmin","admin"] in identity.users.roles
-    When an operator runs "uv run scripts/manage-users.py list-users"
-    Then the row for ops@localhost lists "sysadmin" among its roles
-    And no admin surface presents ops@localhost as a non-privileged user
+  @AC-10 @FR-6
+  Scenario: The shared DB connection-pool budget is preserved
+    Given the connection-pool budget table in the root CLAUDE.md
+    When the psql MCP owns the postgres-mcp direct connection instead of xstockstrat-agent
+    Then the postgres-mcp process still holds exactly one direct connection
+    And the direct-backend connection total is unchanged (the budget row is re-labeled to the psql MCP, not added)

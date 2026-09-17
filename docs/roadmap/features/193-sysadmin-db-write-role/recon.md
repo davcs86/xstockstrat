@@ -1,3 +1,10 @@
+> **⚠️ SUPERSEDED (2026-09-17).** This dossier grounds the ORIGINAL in-ACL `sysadmin`-role/scope-bit
+> approach, which the operator pivoted away from at the design gate. The current direction is
+> **privilege separation** (extract the db_* tooling into a standalone independently-authenticated psql
+> MCP). The grounded facts for the new direction are in `context.md` → "Recon addendum — psql-MCP
+> extraction". This file is retained for audit history and will be regenerated when `/sdd-design`
+> Phase 0 re-runs against the re-baselined spec. Do not treat the sections below as the current design.
+
 # Recon: sysadmin-db-write-role
 
 **Created**: 2026-09-17

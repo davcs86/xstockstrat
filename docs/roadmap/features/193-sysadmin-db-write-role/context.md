@@ -96,3 +96,37 @@
 - This is the operator's explicit authority over the feature's WHAT (recorded here per C-11 / C-16 —
   the launched feature-169 `db_*` scenarios that this pivot changes/relocates are re-baselined with
   operator sign-off, not silently altered).
+
+### Recon addendum — psql-MCP extraction (grounded)
+
+- **postgres-mcp is `postgres-mcp` v0.3.0** (crystaldba), launched by supervisord as a co-process:
+  `postgres-mcp --unrestricted --transport sse --port $POSTGRES_MCP_PORT` (`supervisord.conf:15`),
+  localhost-bound (no `--host`), reached over an **unauthenticated** SSE channel
+  `http://localhost:{port}/sse` (`postgres_mcp_client.py:26-43`).
+- **The 9 `db_*` tools** are thin `@server.tool()` wrappers over `postgres_mcp_client.call_tool(...)`,
+  admin-gated `& 0x04`, at `app/tools.py:1955-2077`.
+- **Tool-count invariant is 49** (the feature-169 acceptance snapshot of 42 is stale). Removing 9 → **40**.
+  CI-enforced surfaces: `services/xstockstrat-ui/src/lib/copilot.ts:20` (`COPILOT_MCP_TOOL_COUNT`),
+  `services/xstockstrat-agent/tests/test_tools_endpoint.py:23-73` (exact name frozenset, db_* at `:64-72`),
+  `app/tools.py:4,45-53` docstring, `services/xstockstrat-agent/CLAUDE.md:43,88-96`,
+  `docs/runbooks/mcp-tools.md:3,37`, and the stale `acceptance/agent-postgres-mcp.feature:43-46`.
+- **DB credential:** `POSTGRES_MCP_DATABASE_URI` env (docker-compose:552, `.do/app.yaml:310-312`,
+  `.do/app.dev.yaml:307-309`), the DML-only `xstockstrat_agent` role (SELECT/INSERT/UPDATE/DELETE, no DDL)
+  provisioned by `scripts/db-migrate.sh:178-200`. Pool budget: 1 direct connection (root `CLAUDE.md:238`;
+  `test_deployment_env_vars.py:64` freezes direct-backend total = 9).
+- **Deployment:** single agent container, supervisord runs both the MCP server (`mcp` SDK, Streamable HTTP
+  :9000, OAuth 2.1 aud-bound JWT — reusable framework in `main.py`/`auth.py`/`oauth_server.py`) and the
+  postgres-mcp co-process. DO: agent from a prebuilt GHCR image, `http_port 9000`, ingress `/agent`→agent,
+  `/`→ui (`.do/app.yaml:10-21,254-315`). A separate endpoint = a NEW DO component with its own `http_port`
+  + a distinct ingress `prefix` rule.
+- **>>> LIBRARY-AUTH FINDING (resolves the operator's deferred auth question) <<<**
+  Context7 (`/crystaldba/postgres-mcp`) confirms postgres-mcp's entire CLI is `--access-mode
+  {unrestricted,restricted}` + `--transport {stdio,sse,streamable-http}` + host/port flags — and **NO
+  authentication flag** of any kind. Its isolation model is network binding, not auth. Therefore a
+  "separate AUTHENTICATED endpoint" **cannot be postgres-mcp exposed directly**; it must be **fronted by
+  an auth layer** — a thin auth-proxy MCP (reuse the agent's `mcp`-SDK server shape with an INDEPENDENT
+  out-of-band credential, NOT the xstockstrat OAuth/JWT flow) forwarding to a localhost postgres-mcp
+  co-process. This is a grounded design constraint the debate will build on.
+- **Feature identity:** keeping number 193 + branch `feature/sysadmin-db-write-role` (number immutable;
+  slug retained as a broad "lock down privileged DB access" label though the mechanism changed to the
+  MCP split).
