@@ -32,3 +32,16 @@ feature in the today's-triage session.
   - Added `@AC-4` (enum-value reservation) to acceptance.feature — closes the constraint-2 enum-reservation coverage gap.
 - Deferred to /sdd-design (per reviewer): no numbered `## Functional Requirements` / `@FR-N` tags (program has no FR-N; the numbered Hard constraints serve the role) — expand at design/spec.
 - Overlap findings: NO FAIL-level collision. Only a rebase-only textual overlap with feature 032 (walk-forward-backtesting) on `analysis.proto` — region-disjoint (032 adds a new `RunSegmentedBacktest` message; 196 removes `ListStrategiesRequest.user_id`), different message, no field-number clash. Both `draft`. Re-run overlap at /sdd-spec (Mode B); no merge-order row required now.
+
+## Session 2026-09-19 — sdd-design (steer at Round-2 gate)
+
+- Rounds 1-2 (full) converged on Option 1 (park / deprecate-don't-delete) because in-place
+  removal violates PROTO-2 + BSR + no procedure. No Floor breach.
+- **User steer at the gate:** "Filter out the deprecated fields from the responses, not from the
+  proto definitions." → a NEW approach (Option 4, response-edge omission): keep the proto fields
+  (`[deprecated=true]`) intact, but stop **populating** them in outbound responses. Same pattern as
+  feature 194/R1-D1 (strip dead `signal_params` keys at the read edge). Key advantage: NOT a proto
+  change → not a `buf breaking` change → no v2, no BSR schema break, no 2-owner/platform-lead gate;
+  implementable as a normal runtime change.
+- Running Round 3 to pressure-test Option 4 against the recon reader-audit (which deprecated fields
+  actually appear in responses, and whether omitting them silently breaks in-repo/external readers).
