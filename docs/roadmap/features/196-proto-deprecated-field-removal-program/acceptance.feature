@@ -21,3 +21,9 @@ Feature: proto-deprecated-field-removal-program (tech-debt / breaking-change pro
     Given an enum value with stored numeric values in persisted rows or in-flight messages
     When its removal is considered
     Then it is not removed until a data audit confirms no stored/in-flight value decodes to it
+
+  @AC-4
+  Scenario: a removed enum value's number is reserved
+    Given a deprecated enum value cleared by the data audit for removal
+    When it is removed from the enum
+    Then its numeric value is added to a reserved statement (never silently reused by a later value)
