@@ -2387,6 +2387,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # Normalize benchmark source_symbol server-side (uppercase/trim, empty → unset) on every
         # write path before serialization — never client-side (bypassable) and never two sites.
         _normalize_source_symbols(definition)
+        # R1-D1: strip the dead feature-097 blend keys from the request so a REGISTER (or a
+        # signal_params-touching UPDATE) is born clean; the read path strips existing rows on serve.
+        _strip_dead_signal_params(definition)
 
         if op == analysis_pb2.STRATEGY_OPERATION_REGISTER:
             await self._validate_definition_proto(definition, context)
@@ -2482,7 +2485,11 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                         "definition_json": merged_json,
                         "display_name": merged_json.get("display_name", current["display_name"]),
                     }
-                    to_write = _row_to_strategy_definition(synthetic)
+                    # strip_dead_signal_params=False: this output is PERSISTED, so re-keying a
+                    # dirty row here (e.g. on a rename) would churn its fingerprint (R1-D1).
+                    to_write = _row_to_strategy_definition(
+                        synthetic, strip_dead_signal_params=False
+                    )
                     # Persist what was validated, not the raw merged dict: ParseDict drops
                     # unknown keys and coerces map<string,double>, so the two can differ.
                     new_json = json_format.MessageToDict(to_write, preserving_proto_field_name=True)
@@ -3899,6 +3906,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         denied_covered: list[tuple[str, str]] = []
         if self._strategies_repo is not None:
             from app.engine.live_loop import (  # noqa: PLC0415 (avoids import cycle)
+                resolve_fundamentals_universe,
                 resolve_universe,
             )
 
@@ -3906,9 +3914,33 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             # watchlist ∪ held ∪ signals-iff-eligible), already normalized.
             wl_set = set(watchlist_by_symbol)
             sig_set = set(signals_by_symbol)
-            for row in await self._strategies_repo.list_live_enabled(user_id):
+            live_rows = list(await self._strategies_repo.list_live_enabled(user_id))
+            # feature 168: the blend force-run runs on the fundamentals universe and nowhere else —
+            # the queue MUST apply the same restriction as the live loop, else it over-attributes.
+            blend_id = self._cfg.get_str(
+                "analysis.engine.fundamentals_blend_strategy_id", "fundamentals_macd_blend"
+            )
+            blend_enabled = self._cfg.get_bool("analysis.engine.fundamentals_blend_enabled", True)
+            blend_active = blend_enabled and any(r["strategy_id"] == blend_id for r in live_rows)
+            fundamentals_universe = (
+                await resolve_fundamentals_universe(self._ingest, self._marketdata, self._cfg)
+                if blend_active
+                else set()
+            )
+            for row in live_rows:
                 definition = _row_to_strategy_definition(row)
-                resolved = resolve_universe(definition, wl_set, held_norm, sig_set)
+                if definition.strategy_id == blend_id and not (
+                    blend_active and fundamentals_universe
+                ):
+                    continue  # blend inactive/empty → contributes no queue rows (loop-skip parity)
+                resolved = resolve_universe(
+                    definition,
+                    wl_set,
+                    held_norm,
+                    sig_set,
+                    blend_id=blend_id,
+                    fundamentals_universe=fundamentals_universe,
+                )
                 for sym in resolved.union:
                     live_by_symbol.setdefault(sym, set()).add(row["strategy_id"])
                 created_at_by_strategy[row["strategy_id"]] = row["created_at"]
@@ -5390,8 +5422,33 @@ def _row_to_score(row: dict) -> "analysis_pb2.StrategyScore":
     )
 
 
-def _row_to_strategy_definition(row: dict) -> "analysis_pb2.StrategyDefinition":
-    """Convert an analysis.strategies row (definition_json JSONB) to a StrategyDefinition proto."""
+# Dead feature-097 blend keys (no StrategyDefinition consumer reads them); stripped at READ only —
+# re-keying stored definition_json would churn the fingerprint. Load-bearing: symbols/target/stop.
+_DEAD_SIGNAL_PARAM_KEYS = frozenset(
+    {"signal_sources", "signal_weight", "technical_weight", "min_conviction"}
+)
+
+
+def _strip_dead_signal_params(definition) -> None:
+    """Drop the dead feature-097 blend keys from a definition's ``signal_params`` in place, keeping
+    every load-bearing key (``symbols``/``target``/``stop``). No-op when the struct is unset."""
+    if not definition.HasField("signal_params"):
+        return
+    fields = definition.signal_params.fields
+    for key in _DEAD_SIGNAL_PARAM_KEYS:
+        if key in fields:
+            del fields[key]
+
+
+def _row_to_strategy_definition(
+    row: dict, *, strip_dead_signal_params: bool = True
+) -> "analysis_pb2.StrategyDefinition":
+    """Convert an analysis.strategies row (definition_json JSONB) to a StrategyDefinition proto.
+
+    ``strip_dead_signal_params`` (default True) drops the dead feature-097 blend keys so every
+    served payload is clean. The persist-building UPDATE-merge site passes **False** so a masked
+    update that does not touch ``signal_params`` (e.g. a rename) never re-keys an existing dirty
+    row's JSON and thereby churns its fingerprint (R1-D1 — see ``_DEAD_SIGNAL_PARAM_KEYS``)."""
     definition_json = row.get("definition_json") or {}
     definition = json_format.ParseDict(
         definition_json, analysis_pb2.StrategyDefinition(), ignore_unknown_fields=True
@@ -5405,6 +5462,8 @@ def _row_to_strategy_definition(row: dict) -> "analysis_pb2.StrategyDefinition":
     # The user_id column is authoritative — a migrated row carries its owner only on the column;
     # the live loop keys its state by this value (must match the cooldown rows).
     definition.user_id = row.get("user_id", "") or ""
+    if strip_dead_signal_params:
+        _strip_dead_signal_params(definition)
     return definition
 
 
