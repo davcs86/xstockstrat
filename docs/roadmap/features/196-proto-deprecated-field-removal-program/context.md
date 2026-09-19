@@ -67,3 +67,21 @@ feature in the today's-triage session.
   external BSR-consumer proof required). Open Threads: (1) per-field consumer-confirmation gate must
   clear before any omission ships; (2) if the gate never clears, shipped outcome = zero code change
   (equivalent to park, acceptable — PROTO-2 already prevents number reuse).
+
+## Session 2026-09-19 — sdd-review product-spec (re-run) + reconciliation
+
+- Re-ran the AI review at operator request (status was design-approved). Overlap: **CLEAN** (the
+  omission approach removed the prior 032 analysis.proto overlap; note: feature 188 reads
+  Bar.open/high/low/close while 196 omits Bar.timeframe — disjoint fields).
+- Criteria pass: **FAIL** — product-spec still framed removal+reserved (contradicts the approved
+  omission design); @AC-1/@AC-4 asserted rejected behavior; no @FR-N traceability.
+- **Addressed all blockers + actionable warnings:**
+  - Rewrote product-spec.md to the response-edge-omission approach (Objective, Governance gates → no
+    breaking-change approval, added a framing-update banner, per-field plan, Affected Services in
+    registry names + Inventory labeled as proto modules, trading-domain no-op note).
+  - Added numbered ## Functional Requirements FR-1..FR-6 (KEEP / omit-pure-edges-only / GATED+gate /
+    proto-unchanged / request-only-no-op / enum-out-of-scope).
+  - acceptance.feature: kept @AC-1..@AC-4 (append-only); annotated @AC-1/@AC-4 @out-of-scope
+    @rejected-removal; tagged @AC-2→@FR-1, @AC-3→@FR-6; appended @AC-5(@FR-4)/@AC-6(@FR-3)/
+    @AC-7(@FR-1)/@AC-8(@FR-2)/@AC-9(@FR-5). Every FR now covered by ≥1 @AC.
+- Status unchanged (design-approved). Proceeding to /sdd-spec with the reconciled spec.
