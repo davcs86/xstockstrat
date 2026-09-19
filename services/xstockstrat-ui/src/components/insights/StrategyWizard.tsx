@@ -13,7 +13,8 @@ import {
   QuestionnaireItem,
   QuestionnaireProgress,
 } from '@/components/ui/questionnaire';
-import { RuleEditor, summarizeRule } from '@/components/insights/RuleEditor';
+import { RuleEditor } from '@/components/insights/RuleEditor';
+import { RuleSummary } from '@/components/insights/RuleSummary';
 import {
   ComponentEditor,
   emptyComponent,
@@ -497,33 +498,6 @@ export function StrategyWizard({ mode, initial, onSubmitDone }: StrategyWizardPr
               </Button>
             )}
           </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/** Read-only, human-readable rendering of an entry/exit rule for the Review step. */
-function RuleSummary({ label, value }: { label: string; value: string }) {
-  const summary = summarizeRule(value);
-
-  return (
-    <div>
-      <span className="text-muted-foreground">{label}:</span>{' '}
-      {!summary || summary.parts.length === 0 ? (
-        <span className="text-muted-foreground">(none)</span>
-      ) : (
-        <div className="mt-1 rounded-md border border-border p-2">
-          <p className="text-xs text-muted-foreground">
-            Match {summary.op === 'AND' ? 'ALL' : 'ANY'} of:
-          </p>
-          <ul className="ml-4 list-disc">
-            {summary.parts.map((p, i) => (
-              <li key={i} className="text-sm">
-                {p}
-              </li>
-            ))}
-          </ul>
         </div>
       )}
     </div>

@@ -81,7 +81,15 @@ class ResolvedUniverse(NamedTuple):
     denied: set  # normalized denied_symbols
 
 
-def resolve_universe(definition, watchlist, held, signals) -> "ResolvedUniverse":
+def resolve_universe(
+    definition,
+    watchlist,
+    held,
+    signals,
+    *,
+    blend_id: str = "",
+    fundamentals_universe=None,
+) -> "ResolvedUniverse":
     """Owner-scoped evaluation universe for a strategy, with the deny list applied (feature 132).
 
     Supersedes the feature-089 ``strategy_symbols`` allowlist-only contract. ``watchlist`` /
@@ -94,16 +102,75 @@ def resolve_universe(definition, watchlist, held, signals) -> "ResolvedUniverse"
     - ``universe`` (entry-eligible): ``(union − denied) ∪ (held ∩ denied)`` — a held+denied symbol
       is retained so its EXIT edge still traces (entry-only deny); caller suppresses only its entry.
     - ``deny_entry``: ``held ∩ denied`` — held+denied members whose entry edge is muted.
+
+    Feature 168 (blend force-run): when ``blend_id`` is set and this strategy IS it, the pre-deny
+    coverage is the platform-wide ``fundamentals_universe`` (fundamentals-source signals ∩ symbols
+    with fundamentals data) rather than watchlist/held/signals, so the blend evaluates on the
+    fundamentals universe "and nowhere else" on **every** caller (the live loop, the opportunity
+    queue, and the boot entry-backfill) — not only the loop. ``signal_eligible`` is inert for the
+    blend by construction. A held+denied symbol is still retained (exit-only). Callers pass these
+    kwargs only when the blend is active (kill-switch on AND that strategy live) with a non-empty
+    universe; otherwise the blend contributes nothing and the caller skips it (loop-pacing parity).
     """
     denied = {_normalize_symbol(s) for s in definition.denied_symbols}
-    allowlist = {_normalize_symbol(s) for s in strategy_symbols(definition)}
-    watchlist = {_normalize_symbol(s) for s in watchlist}
     held = {_normalize_symbol(s) for s in held}
-    signals = {_normalize_symbol(s) for s in signals}
-    union = allowlist or (watchlist | held | (signals if definition.signal_eligible else set()))
     deny_entry = held & denied
+    if blend_id and definition.strategy_id == blend_id:
+        # Pre-deny coverage = the fundamentals universe; deny_entry re-adds held+denied for exits.
+        union = {_normalize_symbol(s) for s in (fundamentals_universe or ())} | deny_entry
+    else:
+        allowlist = {_normalize_symbol(s) for s in strategy_symbols(definition)}
+        watchlist = {_normalize_symbol(s) for s in watchlist}
+        signals = {_normalize_symbol(s) for s in signals}
+        union = allowlist or (watchlist | held | (signals if definition.signal_eligible else set()))
     universe = (union - denied) | deny_entry
     return ResolvedUniverse(universe=universe, deny_entry=deny_entry, union=union, denied=denied)
+
+
+async def resolve_fundamentals_universe(ingest, marketdata, cfg) -> set:
+    """feature 168 — the platform-wide fundamentals universe shared by every caller of the blend
+    force-run: symbols with an active signal from the fundamentals source AND actual fundamentals
+    data (a ``GetFundamentalsMulti`` row). Fails **closed to empty** on any error (FR-6/AC-6) —
+    never a broad watchlist/held fallback. Platform-wide background reads carry no per-request
+    x-user-id (mirrors ``_drain_signals``). Extracted from the loop so the opportunity queue and the
+    entry-backfill resolve the identical set (the single seam that keeps the three callers aligned).
+    """
+    try:
+        if ingest is None or marketdata is None:
+            return set()
+        # The fundamentals source slug is config-driven, never hardcoded.
+        slug = cfg.get_str("analysis.fundsignal.source_slug", "fundamentals")
+        # Signals set S: active signals filtered to the fundamentals source, paginated.
+        now = Timestamp()
+        now.GetCurrentTime()
+        window = common_pb2.TimeRange(start=now, end=now)
+        signal_symbols: set = set()
+        page_token = ""
+        for _ in range(_DRAIN_PAGES):
+            resp = await ingest.QuerySignals(
+                ingest_pb2.QuerySignalsRequest(
+                    source=slug,
+                    active_window=window,
+                    page=common_pb2.PageRequest(page_size=_DRAIN_PAGE_SIZE, page_token=page_token),
+                ),
+            )
+            signal_symbols.update(_normalize_symbol(s.symbol) for s in resp.signals)
+            page_token = resp.page.next_page_token
+            if not page_token:
+                break
+        # Fundamentals set F: keep only symbols marketdata has a fundamentals row for.
+        fundamentals_symbols: set = set()
+        ordered = sorted(signal_symbols)
+        for i in range(0, len(ordered), _FUNDAMENTALS_CHUNK):
+            chunk = ordered[i : i + _FUNDAMENTALS_CHUNK]
+            resp = await marketdata.GetFundamentalsMulti(
+                marketdata_pb2.GetFundamentalsMultiRequest(symbols=chunk),
+            )
+            fundamentals_symbols.update(_normalize_symbol(f.symbol) for f in resp.fundamentals)
+        return signal_symbols & fundamentals_symbols
+    except Exception as e:  # fail-closed to empty; no broad fallback
+        log.warning("fundamentals-universe resolve failed: %s", e)
+        return set()
 
 
 def _apply_transition(
@@ -294,19 +361,24 @@ class LiveEvaluationLoop:
                 watch_cache[owner] = await self._drain_watchlist(owner)
             created_at = d.get("created_at")
             if definition.strategy_id == blend_id:
-                # Blend strategy — fundamentals-only execution (FR-1, FR-4)
+                # Blend strategy — fundamentals-only execution (FR-1, FR-4).
                 if not blend_active or not fundamentals_universe:
-                    continue  # skip entirely — never resolve_universe
-                denied = {_normalize_symbol(s) for s in definition.denied_symbols}
-                deny_entry = held_cache[owner] & denied
-                universe = (fundamentals_universe - denied) | deny_entry
+                    continue  # skip entirely — never evaluate off the fundamentals universe
+                resolved = resolve_universe(
+                    definition,
+                    watch_cache[owner],
+                    held_cache[owner],
+                    signal_symbols,
+                    blend_id=blend_id,
+                    fundamentals_universe=fundamentals_universe,
+                )
             else:
                 # Every other strategy uses ordinary owner-scoped resolution.
                 resolved = resolve_universe(
                     definition, watch_cache[owner], held_cache[owner], signal_symbols
                 )
-                universe = resolved.universe
-                deny_entry = resolved.deny_entry
+            universe = resolved.universe
+            deny_entry = resolved.deny_entry
             for symbol in sorted(universe):
                 records.append(
                     (
@@ -393,50 +465,10 @@ class LiveEvaluationLoop:
         return out
 
     async def _resolve_fundamentals_universe(self) -> set:
-        """feature 168 — the fundamentals universe for the blend force-run: symbols with an active
-        signal from the fundamentals source AND actual fundamentals data (a GetFundamentalsMulti
-        row).
-        Resolved once per cycle. Fails **closed to empty** on any error (FR-6/AC-6) — never a broad
-        watchlist/held fallback. Platform-wide background reads carry no per-request x-user-id
-        (mirrors _drain_signals)."""
-        try:
-            if self._ingest is None or self._marketdata is None:
-                return set()
-            # The fundamentals source slug is config-driven, never hardcoded.
-            slug = self._cfg.get_str("analysis.fundsignal.source_slug", "fundamentals")
-            # Signals set S: active signals filtered to the fundamentals source, paginated.
-            now = Timestamp()
-            now.GetCurrentTime()
-            window = common_pb2.TimeRange(start=now, end=now)
-            signal_symbols: set = set()
-            page_token = ""
-            for _ in range(_DRAIN_PAGES):
-                resp = await self._ingest.QuerySignals(
-                    ingest_pb2.QuerySignalsRequest(
-                        source=slug,
-                        active_window=window,
-                        page=common_pb2.PageRequest(
-                            page_size=_DRAIN_PAGE_SIZE, page_token=page_token
-                        ),
-                    ),
-                )
-                signal_symbols.update(_normalize_symbol(s.symbol) for s in resp.signals)
-                page_token = resp.page.next_page_token
-                if not page_token:
-                    break
-            # Fundamentals set F: keep only symbols marketdata has a fundamentals row for.
-            fundamentals_symbols: set = set()
-            ordered = sorted(signal_symbols)
-            for i in range(0, len(ordered), _FUNDAMENTALS_CHUNK):
-                chunk = ordered[i : i + _FUNDAMENTALS_CHUNK]
-                resp = await self._marketdata.GetFundamentalsMulti(
-                    marketdata_pb2.GetFundamentalsMultiRequest(symbols=chunk),
-                )
-                fundamentals_symbols.update(_normalize_symbol(f.symbol) for f in resp.fundamentals)
-            return signal_symbols & fundamentals_symbols
-        except Exception as e:  # fail-closed to empty; no broad fallback
-            log.warning("live_loop: fundamentals-universe resolve failed: %s", e)
-            return set()
+        """feature 168 — resolve the blend force-run's fundamentals universe once per cycle. Thin
+        wrapper over the shared ``resolve_fundamentals_universe`` so the loop, the opportunity
+        queue, and the entry-backfill resolve the identical set (feature-168 single-seam)."""
+        return await resolve_fundamentals_universe(self._ingest, self._marketdata, self._cfg)
 
     async def _drain_held(self, owner: str) -> set:
         """Owner's held symbols (normalized). Synthetic ``x-user-id`` metadata scopes ownership

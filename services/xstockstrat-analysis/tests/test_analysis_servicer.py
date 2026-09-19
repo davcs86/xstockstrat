@@ -2979,6 +2979,134 @@ class TestResolveUniverse:
         assert "NVDA" in r.universe  # retained so exit still traces (entry-only deny)
         assert r.denied == {"NVDA"}
 
+    def test_blend_uses_fundamentals_universe_not_watchlist_held_signals(self):
+        from app.engine.live_loop import resolve_universe
+
+        # feature 168 / R2: for the blend strategy, coverage IS the fundamentals universe — the
+        # owner's watchlist/held/platform-signals are ignored (the queue-over-attribution defect).
+        d = analysis_pb2.StrategyDefinition(strategy_id="blend", signal_eligible=True)
+        r = resolve_universe(
+            d,
+            watchlist={"WMT"},
+            held={"NVDA"},
+            signals={"COIN"},
+            blend_id="blend",
+            fundamentals_universe={"AAPL", "MSFT"},
+        )
+        assert r.union == {"AAPL", "MSFT"}
+        assert r.universe == {"AAPL", "MSFT"}
+        # signal_eligible is inert for the blend — the cross-user signal pool never leaks in.
+        assert not ({"COIN", "WMT", "NVDA"} & r.universe)
+
+    def test_blend_applies_deny_and_retains_held_denied_exit(self):
+        from app.engine.live_loop import resolve_universe
+
+        # A denied fundamentals symbol drops for entry; held+denied is retained (exit-only).
+        d = analysis_pb2.StrategyDefinition(strategy_id="blend", denied_symbols=["MSFT", "NVDA"])
+        r = resolve_universe(
+            d,
+            watchlist=set(),
+            held={"NVDA"},
+            signals=set(),
+            blend_id="blend",
+            fundamentals_universe={"AAPL", "MSFT"},
+        )
+        assert r.universe == {"AAPL", "NVDA"}  # MSFT denied+unheld drops; NVDA held+denied kept
+        assert r.deny_entry == {"NVDA"}
+
+    def test_blend_kwargs_ignored_for_non_blend_strategy(self):
+        from app.engine.live_loop import resolve_universe
+
+        # A non-blend strategy ignores the blend kwargs entirely (ordinary owner-scoped resolution).
+        d = analysis_pb2.StrategyDefinition(strategy_id="other", signal_eligible=True)
+        r = resolve_universe(
+            d,
+            watchlist={"WMT"},
+            held={"NVDA"},
+            signals={"COIN"},
+            blend_id="blend",
+            fundamentals_universe={"AAPL"},
+        )
+        assert r.union == {"WMT", "NVDA", "COIN"}
+        assert "AAPL" not in r.union
+
+
+class TestDeadSignalParamsStrip:
+    """R1-D1: the dead feature-097 blend keys are stripped from every served StrategyDefinition
+    payload (read-side), while symbols/target/stop stay, and the stored definition_json — hence the
+    scoring fingerprint — is never re-keyed by a read or by a rename of an existing dirty row."""
+
+    def _dirty_row(self, strategy_id="sx", display_name="SX"):
+        from google.protobuf.struct_pb2 import Struct
+
+        sp = Struct()
+        sp.update(
+            {
+                "signal_sources": ["fundamentals"],
+                "signal_weight": 0.4,
+                "technical_weight": 0.6,
+                "min_conviction": 0.5,
+                "symbols": ["AAPL"],
+                "target": 150.0,
+                "stop": 90.0,
+            }
+        )
+        defn = analysis_pb2.StrategyDefinition(strategy_id=strategy_id, signal_params=sp)
+        return {
+            "strategy_id": strategy_id,
+            "display_name": display_name,
+            "active": True,
+            "live_enabled": False,
+            "definition_json": json_format.MessageToDict(defn, preserving_proto_field_name=True),
+        }
+
+    def test_read_strips_blend_keys_keeps_load_bearing(self):
+        from app.handlers.servicer import _row_to_strategy_definition
+
+        d = _row_to_strategy_definition(self._dirty_row())
+        sp = json_format.MessageToDict(d.signal_params)
+        assert set(sp) == {"symbols", "target", "stop"}  # 4 dead blend keys gone
+        assert sp["symbols"] == ["AAPL"]
+
+    def test_read_opt_out_preserves_for_persist(self):
+        from app.handlers.servicer import _row_to_strategy_definition
+
+        d = _row_to_strategy_definition(self._dirty_row(), strip_dead_signal_params=False)
+        sp = json_format.MessageToDict(d.signal_params)
+        assert "signal_weight" in sp and "min_conviction" in sp  # preserved for the persist path
+
+    def test_rename_of_dirty_row_does_not_change_fingerprint(self):
+        # Safety property: a masked rename must NOT re-key a dirty row and drop its evidence grade.
+        from app.handlers.servicer import (
+            _definition_fingerprint,
+            _merge_definition_json,
+            _row_to_strategy_definition,
+        )
+
+        row = self._dirty_row()
+        before = _definition_fingerprint(row["definition_json"])
+        rename = analysis_pb2.StrategyDefinition(display_name="Renamed")
+        merged = _merge_definition_json(row["definition_json"], rename, ["display_name"])
+        synthetic = {**row, "definition_json": merged, "display_name": "Renamed"}
+        to_write = _row_to_strategy_definition(synthetic, strip_dead_signal_params=False)
+        new_json = json_format.MessageToDict(to_write, preserving_proto_field_name=True)
+        assert _definition_fingerprint(new_json) == before  # grade survives the rename
+
+    @pytest.mark.asyncio
+    async def test_get_strategy_response_is_clean(self):
+        # End-to-end read edge: GetStrategy serves a payload free of the dead blend keys.
+        dead = {"signal_sources", "signal_weight", "technical_weight", "min_conviction"}
+        svc = make_servicer()
+        row = self._dirty_row()
+        svc._strategies_repo = AsyncMock()
+        svc._strategies_repo.get_by_id = AsyncMock(return_value=row)
+        svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=row)
+        result = await svc.GetStrategy(
+            analysis_pb2.GetStrategyRequest(strategy_id="sx"), context=_owned_ctx()
+        )
+        sp = json_format.MessageToDict(result.signal_params)
+        assert not (dead & set(sp)) and set(sp) == {"symbols", "target", "stop"}
+
 
 class TestDenyListMaskingAndValidation:
     """feature 132 — denied_symbols/signal_eligible masking + allowlist×eligible reject."""
@@ -4808,6 +4936,57 @@ class TestListOpportunitiesMaterialized:
         r = by_symbol["AAPL"]
         assert "live_strategy" not in r.provenance
         assert r.strategy_id == ""  # unattributed signal-only row
+
+    @pytest.mark.asyncio
+    async def test_blend_queue_restricted_to_fundamentals_universe(self):
+        """R2 (feature 168): the fundamentals-blend force-run is attributed on the opportunity
+        queue ONLY to symbols in the fundamentals universe — never to a platform signal or a held
+        symbol outside it (the shipped queue-over-attribution defect). ``signal_eligible=True`` must
+        stay inert for the blend here, exactly as it already is in the live loop."""
+        blend = _strat_row(
+            "fundamentals_macd_blend",
+            entry=_GT_100,
+            exit_=_GT_100,
+            signal_eligible=True,
+            created_at=datetime(2024, 1, 1, tzinfo=UTC),
+        )
+        svc = _materialized_svc(
+            signals=[
+                _sig("AAPL", "buy", 0.9, source="sec_edgar_form4"),
+                _sig("COIN", "buy", 0.9, source="sec_edgar_form4"),
+            ],
+            held=["NVDA"],
+            strategies={"fundamentals_macd_blend": blend},
+            live_strategies=[blend],
+            bars={s: _FIRING_BARS for s in ("AAPL", "COIN", "NVDA")},
+        )
+        svc._cfg.get_bool = MagicMock(side_effect=lambda key, default=False: default)
+        # The fundamentals-source drain sees only AAPL; the general pool (above) sees AAPL + COIN.
+        general_qs = svc._ingest.QuerySignals
+
+        async def _qs(req, metadata=None):
+            if req.source == "fundamentals":
+                return SimpleNamespace(
+                    signals=[SimpleNamespace(symbol="AAPL")],
+                    page=SimpleNamespace(next_page_token=""),
+                )
+            return await general_qs(req, metadata=metadata)
+
+        svc._ingest.QuerySignals = AsyncMock(side_effect=_qs)
+        # Only AAPL has a fundamentals row → fundamentals_universe == {AAPL}.
+        svc._marketdata.GetFundamentalsMulti = AsyncMock(
+            return_value=SimpleNamespace(fundamentals=[SimpleNamespace(symbol="AAPL")])
+        )
+
+        by_symbol, _ = await _list_opps(svc)
+
+        # In-universe: the blend is attributed with real live_strategy provenance.
+        assert by_symbol["AAPL"].strategy_id == "fundamentals_macd_blend"
+        assert "live_strategy" in by_symbol["AAPL"].provenance
+        # Out-of-universe: neither the Form-4 signal (COIN) nor the held position (NVDA) may carry
+        # the blend attribution — the defect attributed both to fundamentals_macd_blend.
+        for off in ("COIN", "NVDA"):
+            assert by_symbol[off].strategy_id != "fundamentals_macd_blend"
 
     @pytest.mark.asyncio
     async def test_live_only_candidate_survives_tiny_universe_cap(self):

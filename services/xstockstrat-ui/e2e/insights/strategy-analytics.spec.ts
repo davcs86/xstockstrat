@@ -21,4 +21,18 @@ test.describe('Strategy analytics', () => {
     // active && !live_enabled → Paused (never Live/Paper).
     await expect(page.getByText('Paused', { exact: true })).toBeVisible();
   });
+
+  // Defect fix: the detail page must render the strategy's definition (components + entry/exit
+  // rules) — data useGetStrategy already fetches but the page previously never displayed.
+  test('detail page renders the strategy definition card', async ({ page }) => {
+    await addAuthCookie(page);
+    await page.goto('/insights/strategies/strat-high-001');
+
+    const def = page.getByTestId('strategy-definition');
+    await expect(def).toBeVisible({ timeout: 8000 });
+    await expect(def).toContainText('sma_fast'); // component ref name
+    await expect(def).toContainText('SMA'); // indicator
+    await expect(def).toContainText('Entry rule');
+    await expect(def).toContainText('Exit rule');
+  });
 });
