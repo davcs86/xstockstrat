@@ -45,3 +45,25 @@ feature in the today's-triage session.
   implementable as a normal runtime change.
 - Running Round 3 to pressure-test Option 4 against the recon reader-audit (which deprecated fields
   actually appear in responses, and whether omitting them silently breaks in-repo/external readers).
+
+## Session 2026-09-19 — sdd-design (completion)
+
+- Phase 0 Recon: wrote recon.md (services: analysis/config/indicators/ingest/marketdata/portfolio/
+  trading + ui/agent; key reuse: deprecate-don't-delete PROTO-2, header-authoritative identity,
+  timeframe_enum co-emission). Decisive facts: in-place removal violates PROTO-2 + no procedure + BSR
+  external consumers; only ~12 of 33 are dead (10 user_id + is_paper + VALUE_TYPE_FLOAT_MAP).
+- Phase 1 Grilling: 3 rounds (full). R1-R2 converged on park (Option 1); **user steered at R2 gate to
+  response-edge omission** (keep proto fields, stop populating in responses — feature-194 pattern). R3
+  pressure-tested it and caught the `barFromAlpaca` DB-coupling trap (omitting there corrupts the ohlcv
+  store, breaks @AC-1/@AC-2/@AC-3).
+- Chosen approach: response-edge omission. Per-field — KEEP Watchlist.symbols (live reader + mirror);
+  EXCLUDE Bar.timeframe@barFromAlpaca (DB write-path); GATED Bar.timeframe@scanBars+stream.go:247 &
+  BackfillJob.timeframe@servicer.py:149 (external-consumer confirmation gate); NO-OP the 10 dead
+  request-only user_id + is_paper + operation + request timeframes; enum values OUT OF SCOPE.
+- Constitution touched: C-10/C-14 (all producer paths + consumer surfaces), C-15 (@AC-1/@AC-4
+  annotated out-of-scope not inverted; @AC-2/@AC-3 remain valid), C-16 (PRESERVE all; PROTO-2 kept
+  intact so no structural CHANGE/sign-off), C-18 (reversibility tie-breaker), P-03/F-11 (no Floor breach).
+- Status: spec-ready → design-approved. **Implementation steps GATED** (non-executable this session —
+  external BSR-consumer proof required). Open Threads: (1) per-field consumer-confirmation gate must
+  clear before any omission ships; (2) if the gate never clears, shipped outcome = zero code change
+  (equivalent to park, acceptable — PROTO-2 already prevents number reuse).
