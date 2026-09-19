@@ -41,7 +41,12 @@ Python 3.13 (asyncio, grpc.aio, mcp SDK v2 MCPServer)
 ## MCP Tools
 
 The agent registers forty-nine tools (see `docs/runbooks/mcp-tools.md` for full parameter/return/error
-reference):
+reference). It also registers **one MCP prompt** — `list_correlation_guide` (feature 197), wired by
+`register_prompts` (`app/tools.py`) and served through the same OAuth-gated transport — plus a
+server-level `instructions` string (`create_server`, `app/main.py`) returned in the MCP `initialize`
+result; both carry the same guide for correlating the `list_accounts` / `get_positions` /
+`get_positions_by_account_id` / `list_opportunities` / `list_strategies` responses on
+`account_id` / `strategy_id` / `symbol`. A prompt is not a tool — the tool count stays forty-nine:
 
 | Tool | Purpose |
 |---|---|

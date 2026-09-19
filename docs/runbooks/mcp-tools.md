@@ -3,6 +3,14 @@
 Complete reference for the forty-nine tools exposed by `xstockstrat-agent` via the Model Context Protocol (MCP).
 Connection setup → `services/xstockstrat-agent/claude_mcp_config.json`.
 
+The agent also exposes one MCP **prompt** — `list_correlation_guide` (feature 197), the consolidated
+guide for joining the account/position/opportunity/strategy list responses (see § Correlating list
+responses under Usage Patterns) — and a server-level `instructions` string returned in the MCP
+`initialize` result carrying the same join summary. A prompt is not a tool; the tool count stays
+forty-nine. **This runbook is a maintainer reference: a wire-connected agent cannot read it — the
+correlation guidance reaches consumer agents through the tool docstrings, the `initialize`
+instructions, and the `list_correlation_guide` prompt, which this file only mirrors for parity.**
+
 ---
 
 ## Transport Modes
@@ -1436,6 +1444,30 @@ emit_alert(severity="info", category="system",
 3. run_backtest(strategy_id="rsi_sma_combo", symbols=["NVDA"])
    → backtest_id
 ```
+
+### Correlating list responses
+
+The `list_accounts`, `get_positions`, `get_positions_by_account_id`, `list_opportunities`, and
+`list_strategies` responses correlate on three keys. Join **only** on these; the two non-joins below
+have no linking field, so do not invent them. (This is the same guidance the `list_correlation_guide`
+prompt and the server `instructions` deliver to a connected agent — mirrored here for maintainers.)
+
+| Join key | Left | Right | Meaning |
+|---|---|---|---|
+| `account_id` | `list_accounts[].id` | `get_positions[].account_id` | Which account holds a position. The same `id` is the `account_id` argument to `get_positions_by_account_id`. |
+| `strategy_id` | `list_strategies[].strategy_id` | `list_opportunities[].strategy_id` | Which stored strategy produced a ranked opportunity. |
+| `symbol` | `get_positions[].symbol` | `list_opportunities[].symbol` | What you hold vs. what the Decide-queue recommends for the same ticker. An opportunity's `provenance` also carries `"position"` when a holding seeded the row. |
+
+**Non-joins (no linking field — never fabricate them):**
+
+- A position carries **no `strategy_id`** — you cannot join `get_positions` to `list_strategies`
+  directly (only inferred via `symbol` → `list_opportunities`).
+- An opportunity and a strategy carry **no `account_id`** — `list_opportunities` and
+  `list_strategies` are user-scoped, not account-scoped.
+
+Stitch order: `list_accounts` → `get_positions` (group by `account_id`) → match `symbol` in
+`list_opportunities` → look up `strategy_id` in `list_strategies`. All five tools are user-scoped
+(caller's own data only).
 
 ---
 
