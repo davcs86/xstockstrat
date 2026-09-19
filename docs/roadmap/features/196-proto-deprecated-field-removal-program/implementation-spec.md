@@ -89,8 +89,8 @@ Proto/Platform sign-off the omission steps rely on.)
   cites `deploy-prod.yml:28-31` (published) / `deploy-dev.yml:28-32` (draft); runbook
   `proto-versioning.md:95-100`.
 - The named in-repo/consumer surfaces to re-confirm read `timeframe_enum`, not the string:
-  - analysis GetBars reader and the `xstockstrat-ui` backfills page — `recon.md` cites
-    `services/xstockstrat-ui/src/app/insights/backfills/page.tsx:37-38,112`.
+  - analysis GetBars reader and the `xstockstrat-ui` backfills page — the `timeframeEnum` bind is
+    `services/xstockstrat-ui/src/app/insights/backfills/page.tsx:138` (`timeframeEnum: Timeframe.TIMEFRAME_1DAY`).
   - agent MCP tools that surface backfill/bar timeframe.
 - The exact silent-break class this gate exists to prevent: `fails.md:168` (empty timeframe silently
   defaults to `"1d"`) and `fails.md:667` (TS reading a proto field by wrong casing → `undefined`, no error).
@@ -256,7 +256,7 @@ behavioral assertion runs in Step 5.
 **Status**: `blocked`
 **Service**: `xstockstrat-ingest`
 **Files**:
-- `services/xstockstrat-ingest/tests/` — modify | create (a `job_row_to_proto` unit test)
+- `services/xstockstrat-ingest/tests/test_backfill_jobs.py` — modify (add a `job_row_to_proto` case asserting `timeframe` unset while `timeframe_enum` stays populated)
 
 **Reviewers**: `xstockstrat-ingest` owner — signal normalization correctness, idempotent ingestion.
 

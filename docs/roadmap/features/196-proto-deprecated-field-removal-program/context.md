@@ -118,3 +118,17 @@ feature in the today's-triage session.
   `timeframe_enum` not the string; (2) the BSR deprecation window is formally closed; (3) sign-off is
   recorded here. Until then, Steps 2-7 stay `blocked` and nothing ships. Zero code change if the gate
   never clears is an accepted, design-recorded park-equivalent outcome — not a spec defect.
+
+## Session 2026-09-19 — sdd-review impl-spec (advisory)
+
+- Result: **0 failures, 3 warnings** (PASS WITH WARNINGS; advisory — did not block). No Floor risk.
+  Overlap: CLEAN (no in-flight feature touches 196's marketdata/ingest producer edges). 7/7 steps
+  grounded; EXCLUDE (barFromAlpaca) and KEEP (Watchlist.symbols) fences + C-08 pairing verified.
+- Warnings — resolution:
+  - Step 5 `**Files**` named a directory (B2 exact-path) — [x] fixed: now `tests/test_backfill_jobs.py`.
+  - Step 1 evidence cited a stale UI line (`page.tsx:37-38,112`) — [x] fixed: real `timeframeEnum`
+    bind is `page.tsx:138`.
+  - Steps 3 & 6 report service-wide coverage (changed edges sit in CI-excluded `repository/`,`alpaca/`
+    packages) — [x] accepted (disclosed in-spec; acceptable, no change).
+- No unresolved items carried into execution. Note: execution itself remains blocked on the FR-3
+  external-consumer gate (Step 1) — unchanged by this review.
