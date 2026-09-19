@@ -34,7 +34,9 @@ LIST_CORRELATION_INSTRUCTIONS = (
     "takes), strategy_id (list_strategies[].strategy_id ⟷ list_opportunities[].strategy_id), and "
     "symbol (get_positions[].symbol ⟷ list_opportunities[].symbol). Note the non-joins: a position "
     "carries no strategy_id, and an opportunity or strategy carries no account_id. "
-    "For the full guide with a worked example, fetch the 'list_correlation_guide' prompt."
+    "This MCP server also exposes a prompt named 'list_correlation_guide' (retrieve it via the "
+    "prompts/get request, or list it with prompts/list) that holds the full join graph and a "
+    "worked example — fetch it before correlating these responses."
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")

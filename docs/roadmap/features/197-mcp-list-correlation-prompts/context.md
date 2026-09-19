@@ -93,3 +93,15 @@
 - Validation: `ruff check` + `ruff format --check` clean; `pytest --cov=app --cov-fail-under=40` →
   441 passed, 79.17% coverage; end-to-end SDK probe confirmed instructions in initialize +
   `prompts/list`/`get` + tool count 49.
+
+## Session 2026-09-19T02:00Z — instructions refinement (post-staging test)
+
+- Live-tested feature 197 against the deployed staging agent: all three joins + both non-joins
+  verified against real data; server `instructions` observed verbatim in the `initialize` result;
+  the `list_correlation_guide` prompt fetched live via `prompts/get` (returns the full guide).
+- Per user request, strengthened `LIST_CORRELATION_INSTRUCTIONS` (`app/main.py`) so the
+  auto-surfaced instructions explicitly tell an autonomous agent the prompt EXISTS and how to get
+  it: names `list_correlation_guide` and points at `prompts/get` / `prompts/list` (previously just
+  "fetch the 'list_correlation_guide' prompt"). Parity test unchanged/green (imports the constant;
+  still asserts all three keys + both non-joins). No doc drift — runbook/CLAUDE.md already describe
+  the instructions + prompt surfaces.
