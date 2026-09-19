@@ -85,3 +85,36 @@ feature in the today's-triage session.
     @rejected-removal; tagged @AC-2→@FR-1, @AC-3→@FR-6; appended @AC-5(@FR-4)/@AC-6(@FR-3)/
     @AC-7(@FR-1)/@AC-8(@FR-2)/@AC-9(@FR-5). Every FR now covered by ≥1 @AC.
 - Status unchanged (design-approved). Proceeding to /sdd-spec with the reconciled spec.
+
+## Session 2026-09-19 — sdd-spec
+
+- Generated implementation-spec.md with **7 steps**. Status → `implementation-ready`. All 7 steps
+  carry `**Status**: blocked` — every one depends on Step 1 (the FR-3 consumer-confirmation gate),
+  which cannot clear in a harness session (external BSR consumers cannot be enumerated). Faithful to
+  design.md's "encode as gated steps, not runnable ones"; zero-ship if the gate never clears.
+- Step layout: Step 1 = FR-3 gate (docs, records sign-off in context.md); Steps 2-3 = marketdata
+  Bar.timeframe omission at the two pure edges + test; Steps 4-5 = ingest BackfillJob.timeframe
+  omission + test; Step 6 = portfolio Watchlist.symbols KEEP guard; Step 7 = proto-integrity /
+  enum-retention / request-only no-op verification.
+- Scenario coverage (C-15): @AC-2/@AC-7→Step 6; @AC-3/@AC-5/@AC-9→Step 7; @AC-6→Step 5; @AC-8→Step 3.
+  @AC-1/@AC-4 deliberately covered by no step (tagged @out-of-scope @rejected-removal).
+- Key codebase findings (grep-verified this session, exact lines):
+  - GATED omittable edges: `marketdata_repo.go:144` (scanBars `Timeframe: tf`, enum co-emit `:153`);
+    `stream.go:247` (`Timeframe: streamBarTimeframe`, enum co-emit `:255` = deprecated TIMEFRAME_1MIN,
+    accepted Open Risk); `ingest servicer.py:149` (`timeframe=row[...]`, enum co-emit `:152`).
+  - EXCLUDE (feeds persistence, NOT omittable): `alpaca/client.go:142` `barFromAlpaca` → `InsertBars`
+    (`marketdata_repo.go:71` reads `b.Timeframe`) → `ohlcv.timeframe` column; `QueryBars` filters
+    `WHERE symbol=$1 AND timeframe=$2` (`:100`). Omitting here corrupts the store (@AC-8).
+  - KEEP readers confirmed live: `portfolio_service.go:1691` (`AddWatchlistSymbols` cap from
+    `existing.Symbols`); `analysis live_loop.py:525` (`wl.symbols` legacy-row fallback).
+  - No migrations, no config keys, no new env vars/ports (proto-only feature; recon confirmed).
+- Reviewers snapshot written to feature.md: Proto Reviewer, Platform Lead, marketdata/ingest/portfolio
+  owners.
+
+### Open Threads (carried)
+
+- **The FR-3 gate is the sole blocker.** `/sdd-execute` must hold at Step 1 until: (1) every named
+  consumer (analysis GetBars reader, `xstockstrat-ui` backfills page, agent) is grep-confirmed reading
+  `timeframe_enum` not the string; (2) the BSR deprecation window is formally closed; (3) sign-off is
+  recorded here. Until then, Steps 2-7 stay `blocked` and nothing ships. Zero code change if the gate
+  never clears is an accepted, design-recorded park-equivalent outcome — not a spec defect.
