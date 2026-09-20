@@ -211,3 +211,29 @@
 - Verification: offline (HARD CONSTRAINT — no DB spin-up). Both files exist; tip was 004 → 005
   correct; .down reverses .up exactly. TDD: N/A (migration; live apply in CI/deploy).
 - Files: services/xstockstrat-marketdata/migrations/005_fundamentals_history.{up,down}.sql. Deviations: none.
+
+### Step 4 — service: marketdata EDGAR client + PIT store/read + backfill worker [done]
+- Added source.HistoricalFundamentalsPeriod + HistoricalFundamentalsSource interface; internal/edgar
+  companyfacts client (CIK resolve via company_tickers.json, duration-based quarterly/annual
+  classification rejecting YTD rollups, earliest-filed idempotency, keyless UA); repo
+  InsertHistoricalFundamentals (ON CONFLICT DO NOTHING), QueryHistoricalFundamentals (filed_date<asOf,
+  period_end range), CloseAt (OHLCV price-join); service GetHistoricalFundamentals (authoritative
+  filterAsOf T+1 guard) + BackfillFundamentals worker (EDGAR fetch → PIT price-join market_cap=close×shares,
+  pe=close/ttm_eps → dedicated FMP-cap-guarded enrichment seam → insert; fail-closed per symbol);
+  main.go constructs edgar.NewClient and passes it as the new NewMarketDataService param (NOT via the
+  provider selector — FR-2/T-3).
+- Verification: `GOWORK=off go build ./...` clean. (full tests in Step 5). TDD: red-green (Step 5).
+- Files modified: source.go, internal/edgar/edgar_client.go (new), repository/marketdata_repo.go,
+  service/marketdata_service.go, cmd/server/main.go, **internal/handler/marketdata_handler.go (deviation — see Deviation Log)**.
+- Deviations: handler file added beyond the spec Files list (RPC wiring); service-level filterAsOf guard. See Deviation Log.
+
+### Step 5 — test: marketdata PIT persistence, as-of read, FMP-cap degrade [done]
+- edgar_client_test.go: fake HTTP transport + canned companyfacts → AC-1 (AAPL Q1-2020 period_end
+  2019-12-28, filed 2020-01-29, quarterly, source edgar, eps set), AC-2 (8 quarterly + 3 annual, none
+  dropped), + a YTD-duration-rejection test. marketdata_service_test.go: fakeHistRepo/fakeHistSource/
+  fakeEnricher → AC-3 (T+1: as-of 2020-01-15 & 2020-01-29 hide the filing, 2020-01-30 shows it), AC-5
+  (cap=0 → enrichment skipped, edgar row persisted source=edgar pb_ratio nil; under cap → edgar+fmp).
+- Verification: go test ./... -race -count=1 PASS; golangci-lint (pinned v2.13.1) 0 issues; coverage
+  total **63.0% ≥ 40%**. TDD red: tests reference symbols absent pre-Step-4 (compile-fail red) → green now.
+- Covers: AC-1, AC-2, AC-3, AC-5. Files: internal/edgar/edgar_client_test.go (new),
+  internal/service/marketdata_service_test.go. Deviations: golangci-lint pin install (see Deviation Log).

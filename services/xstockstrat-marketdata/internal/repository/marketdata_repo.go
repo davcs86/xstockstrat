@@ -542,3 +542,111 @@ func (r *MarketDataRepo) CountFundamentalsFetchedSince(ctx context.Context, sinc
 	}
 	return n, nil
 }
+
+// --- Historical point-in-time fundamentals (feature 198) ---
+
+// histFundamentalsColumns is the shared SELECT/scan order for a fundamentals_history row.
+const histFundamentalsColumns = `symbol, fiscal_period, period_type, period_end, filed_date, accepted_date, source, currency, market_cap, pe_ratio, pb_ratio, dividend_yield, eps, beta, roe, debt_to_equity, price, year_high, year_low, extra_metrics`
+
+// InsertHistoricalFundamentals persists one point-in-time period. ON CONFLICT DO NOTHING keeps the
+// original as-reported filing (earliest filed_date) — the triple PK is the @AC-1 idempotency guard,
+// so a same-range re-backfill never duplicates and a later 10-K comparative never overwrites.
+func (r *MarketDataRepo) InsertHistoricalFundamentals(ctx context.Context, p source.HistoricalFundamentalsPeriod) error {
+	extraJSON, err := json.Marshal(p.ExtraMetrics)
+	if err != nil {
+		return fmt.Errorf("marshal extra_metrics: %w", err)
+	}
+	if len(extraJSON) == 0 {
+		extraJSON = []byte("{}")
+	}
+	const q = `
+		INSERT INTO marketdata.fundamentals_history
+		  (symbol, fiscal_period, period_type, period_end, filed_date, accepted_date, source, currency,
+		   market_cap, pe_ratio, pb_ratio, dividend_yield, eps, beta, roe, debt_to_equity, price,
+		   year_high, year_low, extra_metrics)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20::jsonb)
+		ON CONFLICT (symbol, fiscal_period, period_type) DO NOTHING`
+	// jsonb bound as string so the ::jsonb cast is a text parse (not bytea) under DB_PGBOUNCER.
+	_, err = r.db.Exec(ctx, q,
+		p.Symbol, p.FiscalPeriod, p.PeriodType, p.PeriodEnd, p.FiledDate, p.AcceptedDate, p.Source, p.Currency,
+		p.MarketCap, p.PERatio, p.PBRatio, p.DividendYield, p.EPS, p.Beta, p.ROE, p.DebtToEquity, p.Price,
+		p.YearHigh, p.YearLow, string(extraJSON))
+	if err != nil {
+		return fmt.Errorf("insert fundamentals_history %s %s: %w", p.Symbol, p.FiscalPeriod, err)
+	}
+	return nil
+}
+
+// QueryHistoricalFundamentals returns point-in-time periods for a symbol. asOf enforces T+1
+// availability (filed_date STRICTLY before asOf); rangeStart/rangeEnd filter period_end (inclusive)
+// when non-zero; periodTypes filters period_type when non-empty. Ordered by period_end ascending.
+func (r *MarketDataRepo) QueryHistoricalFundamentals(ctx context.Context, symbol string, asOf, rangeStart, rangeEnd time.Time, periodTypes []string) ([]source.HistoricalFundamentalsPeriod, error) {
+	q := `SELECT ` + histFundamentalsColumns + ` FROM marketdata.fundamentals_history WHERE symbol = $1`
+	args := []any{symbol}
+	if !asOf.IsZero() {
+		args = append(args, asOf)
+		q += fmt.Sprintf(" AND filed_date < $%d", len(args))
+	}
+	if !rangeStart.IsZero() {
+		args = append(args, rangeStart)
+		q += fmt.Sprintf(" AND period_end >= $%d", len(args))
+	}
+	if !rangeEnd.IsZero() {
+		args = append(args, rangeEnd)
+		q += fmt.Sprintf(" AND period_end <= $%d", len(args))
+	}
+	if len(periodTypes) > 0 {
+		args = append(args, periodTypes)
+		q += fmt.Sprintf(" AND period_type = ANY($%d)", len(args))
+	}
+	q += " ORDER BY period_end"
+	rows, err := r.pool.Query(ctx, q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query fundamentals_history %s: %w", symbol, err)
+	}
+	defer rows.Close()
+	var out []source.HistoricalFundamentalsPeriod
+	for rows.Next() {
+		var (
+			sym, fp, ptype, currency, src                                        string
+			periodEnd, filed                                                     time.Time
+			accepted                                                             *time.Time
+			extraJSON                                                            []byte
+			marketCap, pe, pb, divYield, eps, beta, roe, dte, price, yHigh, yLow *float64
+		)
+		if scanErr := rows.Scan(&sym, &fp, &ptype, &periodEnd, &filed, &accepted, &src, &currency,
+			&marketCap, &pe, &pb, &divYield, &eps, &beta, &roe, &dte, &price, &yHigh, &yLow, &extraJSON); scanErr != nil {
+			return nil, fmt.Errorf("scan fundamentals_history %s: %w", symbol, scanErr)
+		}
+		extra := map[string]float64{}
+		if len(extraJSON) > 0 {
+			_ = json.Unmarshal(extraJSON, &extra)
+		}
+		out = append(out, source.HistoricalFundamentalsPeriod{
+			Symbol: sym, FiscalPeriod: fp, PeriodType: ptype, PeriodEnd: periodEnd, FiledDate: filed,
+			AcceptedDate: accepted, MarketCap: marketCap, PERatio: pe, PBRatio: pb, DividendYield: divYield,
+			EPS: eps, Beta: beta, ROE: roe, DebtToEquity: dte, Price: price, YearHigh: yHigh, YearLow: yLow,
+			ExtraMetrics: extra, Currency: currency, Source: src,
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate fundamentals_history %s: %w", symbol, err)
+	}
+	return out, nil
+}
+
+// CloseAt returns the adjusted daily close at/nearest-before `date` for the PIT price-join
+// (market_cap/pe at filed_date). Returns nil (fail-closed) when no bar exists — never a fabricated 0.
+func (r *MarketDataRepo) CloseAt(ctx context.Context, symbol string, date time.Time) (*float64, error) {
+	var close float64
+	err := r.pool.QueryRow(ctx,
+		`SELECT close FROM marketdata.ohlcv WHERE symbol = $1 AND timeframe = '1d' AND time <= $2
+		 ORDER BY time DESC LIMIT 1`, symbol, date).Scan(&close)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("close at %s %s: %w", symbol, date.Format("2006-01-02"), err)
+	}
+	return &close, nil
+}

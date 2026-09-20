@@ -128,6 +128,25 @@ func (h *MarketDataHandler) BackfillBars(ctx context.Context, req *connect.Reque
 	return connect.NewResponse(resp), nil
 }
 
+// GetHistoricalFundamentals serves point-in-time historical fundamentals (feature 198). The
+// service returns typed connect errors (e.g. InvalidArgument), so pass them through unwrapped.
+func (h *MarketDataHandler) GetHistoricalFundamentals(ctx context.Context, req *connect.Request[marketdatav1.GetHistoricalFundamentalsRequest]) (*connect.Response[marketdatav1.GetHistoricalFundamentalsResponse], error) {
+	resp, err := h.svc.GetHistoricalFundamentals(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(resp), nil
+}
+
+// BackfillFundamentals triggers a point-in-time fundamentals backfill (feature 198).
+func (h *MarketDataHandler) BackfillFundamentals(ctx context.Context, req *connect.Request[marketdatav1.BackfillFundamentalsRequest]) (*connect.Response[marketdatav1.BackfillFundamentalsResponse], error) {
+	resp, err := h.svc.BackfillFundamentals(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(resp), nil
+}
+
 // GetDataCoverage reports stored OHLCV coverage for a symbol+timeframe.
 func (h *MarketDataHandler) GetDataCoverage(ctx context.Context, req *connect.Request[marketdatav1.GetDataCoverageRequest]) (*connect.Response[marketdatav1.GetDataCoverageResponse], error) {
 	if req.Msg.Symbol == "" {
@@ -272,6 +291,22 @@ func (a *grpcMarketDataAdapter) GetLatestPrice(ctx context.Context, req *marketd
 
 func (a *grpcMarketDataAdapter) BackfillBars(ctx context.Context, req *marketdatav1.BackfillBarsRequest) (*marketdatav1.BackfillBarsResponse, error) {
 	resp, err := a.h.BackfillBars(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, toGRPCError(err)
+	}
+	return resp.Msg, nil
+}
+
+func (a *grpcMarketDataAdapter) GetHistoricalFundamentals(ctx context.Context, req *marketdatav1.GetHistoricalFundamentalsRequest) (*marketdatav1.GetHistoricalFundamentalsResponse, error) {
+	resp, err := a.h.GetHistoricalFundamentals(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, toGRPCError(err)
+	}
+	return resp.Msg, nil
+}
+
+func (a *grpcMarketDataAdapter) BackfillFundamentals(ctx context.Context, req *marketdatav1.BackfillFundamentalsRequest) (*marketdatav1.BackfillFundamentalsResponse, error) {
+	resp, err := a.h.BackfillFundamentals(ctx, connect.NewRequest(req))
 	if err != nil {
 		return nil, toGRPCError(err)
 	}

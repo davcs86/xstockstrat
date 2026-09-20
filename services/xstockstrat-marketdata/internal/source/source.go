@@ -67,6 +67,43 @@ type FundamentalsSource interface {
 	GetFundamentalsMulti(ctx context.Context, symbols []string) ([]*Fundamentals, error)
 }
 
+// HistoricalFundamentalsPeriod is one as-reported fiscal period, keyed on when it became public
+// (FiledDate). Distinct from the latest-snapshot Fundamentals: this is a point-in-time time series.
+// Metric fields are *float64 (nil = not supplied by the source, never a real 0.0). SharesOutstanding
+// is an internal intermediate used for the PIT price-join (market_cap = close(filed) × shares) and
+// is not persisted as its own column (feature 198).
+type HistoricalFundamentalsPeriod struct {
+	Symbol        string
+	FiscalPeriod  string // e.g. "Q1-2020", "FY2019"
+	PeriodType    string // "quarterly" | "annual"
+	PeriodEnd     time.Time
+	FiledDate     time.Time
+	AcceptedDate  *time.Time
+	MarketCap     *float64
+	PERatio       *float64
+	PBRatio       *float64
+	DividendYield *float64
+	EPS           *float64
+	Beta          *float64
+	ROE           *float64
+	DebtToEquity  *float64
+	Price         *float64
+	YearHigh      *float64
+	YearLow       *float64
+	// SharesOutstanding is used by the service price-join, not persisted directly.
+	SharesOutstanding *float64
+	ExtraMetrics      map[string]float64
+	Currency          string
+	Source            string
+}
+
+// HistoricalFundamentalsSource fetches a point-in-time historical fundamentals time series for a
+// symbol from an as-reported source (SEC EDGAR). Separate from the snapshot FundamentalsSource and
+// never registered in the provider selector — held as its own service field (feature 198, FR-2).
+type HistoricalFundamentalsSource interface {
+	FetchHistorical(ctx context.Context, symbol string, from, to time.Time, periodTypes []string) ([]HistoricalFundamentalsPeriod, error)
+}
+
 // Registry maps named source slugs to DataSourceClient implementations.
 // The default source is "alpaca"; pass an empty string to Get to use it.
 type Registry struct {

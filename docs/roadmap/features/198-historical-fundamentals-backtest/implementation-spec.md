@@ -162,7 +162,7 @@ ls services/xstockstrat-marketdata/migrations/005_fundamentals_history.up.sql \
 
 ### Step 4 — service: marketdata EDGAR client, PIT store/read, FMP-ratio enrichment, backfill worker
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/source/source.go` — modify (add `HistoricalFundamentalsSource` interface + `HistoricalFundamentalsPeriod` model, beside `FundamentalsSource`)
@@ -197,7 +197,7 @@ ls services/xstockstrat-marketdata/migrations/005_fundamentals_history.up.sql \
 
 ### Step 5 — test: marketdata PIT persistence, as-of read, FMP-cap degrade
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/edgar/edgar_client_test.go` — create
@@ -614,4 +614,18 @@ integration PR.
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+- **Step 2 (verification fallback):** the pinned Docker codegen image's final `tsc` step lacks
+  `gen/ts` node_modules, so the TS→JS `dist/` was recompiled on the host via `pnpm install`'s
+  `prepare` hook (same lockfile tsc). **Disposition:** CI-equivalent fallback.
+- **Step 4 (Files scope):** the step's `**Files**` list omitted
+  `internal/handler/marketdata_handler.go`, but the two new RPCs (`GetHistoricalFundamentals`,
+  `BackfillFundamentals`) cannot be served without their Connect handler + gRPC adapter methods —
+  the same 3-place wiring every marketdata RPC needs. Added them there (2 Connect methods + 2
+  adapter methods, pass-through to the service). **Disposition:** necessary in-intent completion of
+  the step; recorded here and announced (not silent), staged with Step 4's commit.
+- **Step 4/5 (design refinement):** the authoritative T+1 no-look-ahead filter (`filed_date < as_of`)
+  is applied in the service (`filterAsOf`) in addition to the repo SQL push-down, so @AC-3 is
+  unit-testable offline (no DB) and the service is the enforcement point (T-1). **Disposition:**
+  additive safety guard, consistent with design.md §5.
+- **Step 5 (tooling):** host `golangci-lint` was 2.5.0 (built with go1.25, refuses go1.27 target);
+  installed the CI-pinned **v2.13.1** (built with go1.27) to lint. **Disposition:** match CI toolchain.
