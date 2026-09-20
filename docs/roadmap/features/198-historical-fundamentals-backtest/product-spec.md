@@ -24,21 +24,29 @@ I can research and validate fundamental strategies **without look-ahead bias**.
 
 ## Functional Requirements
 
-FR-1. **Historical point-in-time fundamentals store.** A new time-series store in
-`xstockstrat-marketdata` persists, per `(symbol, fiscal period, period type)`, the as-reported
-statement line items + derived ratios **plus both `period_end` and the `filed_date`/`accepted_date`**
-(when the figure became public). Multiple periods per symbol are retained (a real time series), not
-overwritten like the snapshot cache.
+FR-1. **Historical point-in-time fundamentals store.** A new store in `xstockstrat-marketdata`
+(`marketdata.fundamentals_history` — a **plain table**, not a hypertable; design decision) persists,
+per `(symbol, fiscal period, period type)` (the PK), the as-reported statement line items + derived
+metrics **plus both `period_end` and the `filed_date`/`accepted_date`** (when the figure became
+public). Many periods per symbol are retained (a real time series), unlike the one-row snapshot cache.
+v1 stores the **original as-reported** filing per period (earliest `filed_date`; restatement/amendment
+history is out of scope — see Out of Scope).
 
-FR-2. **Primary source = SEC EDGAR.** As-reported statement values and their SEC `filed` date are
-sourced from EDGAR (XBRL `companyfacts`/`frames`), which requires no API key — only a fair-use
-descriptive `User-Agent`. This is the point-in-time base of record for look-ahead-safe backtesting.
+FR-2. **Primary source = SEC EDGAR + point-in-time price-join.** As-reported statement values and
+their SEC `filed` date come from EDGAR (XBRL `companyfacts`), which needs no API key — only a fair-use
+`User-Agent`. Price-derived metrics EDGAR cannot supply (`pe_ratio`, `market_cap`) are computed
+**point-in-time** from the adjusted close **at `filed_date`** already stored in `marketdata.ohlcv`
+(`pe_ratio = close(filed_date)/eps_ttm`, `market_cap = close(filed_date)×shares_outstanding`) — the
+price is historical and the EPS/shares are from the filing, so the value is look-ahead-free. This is
+the point-in-time base of record.
 
-FR-3. **Derived-ratio enrichment = FMP Free (best-effort, cap-aware).** Derived ratios EDGAR does
-not directly expose (e.g. P/E, P/B, dividend yield) are opportunistically enriched from FMP using the
-already-wired FMP credential (feature 147), **respecting FMP Free's ~250 requests/day cap** — ratio
-enrichment degrades gracefully (is skipped, not failed) when the cap is exhausted or a symbol is
-uncovered. No paid FMP plan is required for v1.
+FR-3. **Optional FMP-Free ratio enrichment (best-effort, cap-aware).** For a ratio neither EDGAR nor
+the price-join yields, an optional FMP pass may fill it, using the already-wired FMP credential
+(feature 147) and guarded by a **dedicated** `marketdata.fmp.daily_request_cap` check with its own
+request counter (NOT the snapshot `fundamentalsQuota()`, which is provider-dispatched). Enrichment
+degrades gracefully (skipped, not failed) when the cap is exhausted or a symbol is uncovered; the
+EDGAR row still persists with null ratio fields. FMP's current-snapshot `ratios-ttm` is **never** used
+to fill a historical row (that would be look-ahead). No paid FMP plan is required for v1.
 
 FR-4. **Fundamentals backfill path.** The backfill machinery (`xstockstrat-ingest.TriggerBackfill`
 → a marketdata worker RPC) is extended to backfill **fundamentals** over a symbol universe and a date
@@ -46,15 +54,21 @@ range, for **both quarterly and annual** periods, resumably and idempotently —
 **data kind** distinct from the existing OHLCV-`1d`-only path (feature 143), not a new timeframe
 value. Job progress is observable via the existing `GetBackfillStatus`/`ListBackfillJobs` surface.
 
-FR-5. **Point-in-time read for the backtest.** `xstockstrat-marketdata` exposes an as-of / ranged
-read that, given a symbol and an as-of date, returns only fundamentals whose `filed_date` ≤ the as-of
-date (never a value from a filing not yet public at that simulated date).
+FR-5. **Point-in-time read (T+1 availability).** `xstockstrat-marketdata` exposes an as-of / ranged
+read that, given a symbol and an as-of date, returns only fundamentals whose **`filed_date` < the
+as-of date** (T+1 — a filing is usable only the trading day *after* it was filed, since SEC filings
+often accept post-close; design decision), never a value from a filing not yet public at that
+simulated date.
 
-FR-6. **Fundamental operand in the backtest evaluator.** `xstockstrat-analysis`'s backtest evaluator
-gains a fundamental operand kind so a `StrategyComponent` can reference a point-in-time fundamental
-series (e.g. `pe_ratio`, `eps`, `revenue`, `roe`, `debt_to_equity`); at each simulated bar the
-evaluator resolves the operand via the FR-5 as-of read, guaranteeing no look-ahead bias. Backtest
-results remain reproducible and deterministic.
+FR-6. **Fundamental operand in the evaluator, backtest AND live.** `xstockstrat-analysis`'s **shared**
+evaluator gains a fundamental operand kind (`COMPONENT_KIND_FUNDAMENTAL`) so a `StrategyComponent` can
+reference a point-in-time fundamental series (`pe_ratio`, `eps`, `revenue`, `roe`, `debt_to_equity`,
+…). At each simulated bar the operand resolves via the FR-5 read as a **carry-forward as-of** join
+(latest filing with `filed_date < bar_date`, carried forward until the next filing; `None`/hold before
+the first filing; never a future filing). The operand resolves identically in the **live** loop,
+readiness, and opportunities paths — not backtest-only — preserving backtest/live parity. Backtest
+results stay reproducible and deterministic; an unset operand leaves existing runs byte-for-byte
+unchanged.
 
 FR-7. **Consumer surfaces.** The capability is reachable end-to-end: the `/insights` backfills UI can
 trigger a fundamentals backfill, and the agent's `trigger_backfill` / `run_backtest` MCP tools accept
@@ -149,11 +163,13 @@ _Constitution **C-14**._
 - [ ] No schema changes
 - New `xstockstrat-marketdata` migration, as a paired `NNN_description.up.sql` + `.down.sql`
   (NNN = `ls services/xstockstrat-marketdata/migrations/` at spec time — **do not assume**;
-  verified snapshot: dir holds `000`–`004`, so next free is `005`): a TimescaleDB hypertable for the
-  point-in-time fundamentals time series, partitioned on the time dimension (`filed_date` vs
-  `period_end` — see design-deferred D-1 below), keyed to `(symbol, fiscal_period, period_type)`
-  uniqueness, statement columns + `extra_metrics jsonb` + `source`. The `.down.sql` drops the
-  hypertable.
+  verified snapshot: dir holds `000`–`004`, so next free is `005`): `marketdata.fundamentals_history`
+  as a **plain PostgreSQL table** (D-1 resolved — *not* a hypertable: ~200k slow-growing rows, the read
+  filters `period_end` not the time axis, and a hypertable would re-import the feature-153 chunk-lock
+  risk for no planner gain), PK `(symbol, fiscal_period, period_type)` + `filed_date`/`accepted_date`/
+  `period_end` columns + statement/metric columns + `extra_metrics jsonb` + `source`, btree index
+  `(symbol, period_end, filed_date)`. Idempotency via `ON CONFLICT (PK) DO NOTHING` (keep earliest
+  `filed_date`). The `.down.sql` drops the table.
 - Possible `xstockstrat-ingest` migration (paired up/down; **verified next free is `012`** — trunk
   tip is `011_signal_source_type_mcp_client`, corrected from the earlier stale `006` guess) to carry
   a `data_kind` column on `ingest.backfill_jobs`/`backfill_chunks` if the fundamentals kind is not

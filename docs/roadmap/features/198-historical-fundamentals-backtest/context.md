@@ -75,3 +75,46 @@
   both draft; no field-number clash). Trunk 150/151 occupy `BacktestResult` 17–20 /
   `RunBacktestRequest` 8–9 → 198's additive fields start after those. No FAIL collision; no
   `merge-order.md` entry required now (revisit if 032 & 198 hit impl-spec concurrently).
+
+## Session 2026-09-20 — sdd-design (quick)
+
+- Phase 0 Recon: wrote recon.md (6 parallel agents: marketdata/ingest/analysis/agent/ui discovery +
+  scenario-recon C-16 scan). Key reuse patterns: feature-152 `source_symbol` operand seam
+  (`evaluator._assemble_component_series:368`); plain-table snapshot precedent; `GetSecret` for FMP key.
+- Phase 1 Grilling: 1 round (quick). Proposer = separate-lane PIT design; adversary = NEEDS WORK (no
+  Floor breach) with 3 HIGH holes. Synthesis + 3 user forks resolved → design.md approved.
+
+### Chosen approach (design.md)
+- **Storage:** plain table `marketdata.fundamentals_history`, PK `(symbol,fiscal_period,period_type)`,
+  `filed_date`/`accepted_date`/`period_end` cols, `ON CONFLICT DO NOTHING` (keep earliest filing).
+  NOT a hypertable (adversary C-18/ledger-153; read filters `period_end`, ~200k rows).
+- **Source:** separate `HistoricalFundamentalsSource` + `internal/edgar` client (keyless, non-secret
+  UA); EDGAR **never** in the `marketdata.fundamentals.provider` switch (preserves feature-154 FMP-cap gate).
+- **Backfill:** `BackfillDataKind{UNSPECIFIED=0,BARS=1,FUNDAMENTALS=2}` (C-04 sentinel; servicer maps
+  UNSPECIFIED→BARS), branch before the `1d` reject → new `marketdata.BackfillFundamentals` worker.
+- **Operand:** `COMPONENT_KIND_FUNDAMENTAL=3` in the shared `_assemble_component_series`; carry-forward
+  as-of join (distinct from feature-152 none-on-miss); resolves in backtest AND live.
+
+### User decisions (this session — AskUserQuestion, the design forks)
+1. **PIT price-join** for `pe_ratio`/`market_cap` = adjusted close at `filed_date` (from OHLCV) ÷ EPS /
+   × shares (from filing). FMP `ratios-ttm` never used for historical rows (look-ahead).
+2. **Full live parity** — operand threads through the shared evaluator (backtest + live/readiness/opportunities).
+3. **T+1 availability** — `filed_date < bar_date` (filing usable the day AFTER filing; SEC post-close
+   accepts). **Reworded @AC-3/@AC-4** in acceptance.feature (same-day → T+1). This is the user sign-off
+   for the acceptance change; not yet promoted to a durable suite, so no C-16 amendment.
+
+### Adversary fixes folded in (accepted corrections)
+- Plain table over hypertable; C-04 enum sentinel; **dedicated FMP-enrichment cap** (not the
+  provider-dispatched `fundamentalsQuota()`, which returns the wrong cap under default `finnhub` and
+  counts the snapshot table — AC-5 correctness); carry-forward documented as distinct from the 152
+  join; bounded per-symbol fan-out; strat-lab skill same PR.
+
+### Constitution: no Floor breach. C-16: PRESERVE/EXTEND only (operand added beside source_symbol) →
+  no durable-rule CHANGE, no C-16 sign-off. Status: spec-ready → design-approved.
+
+## Open Threads (from design.md Open Risks — resolve at /sdd-spec/execute)
+- [ ] D-2 EDGAR XBRL tag → `_FUNDAMENTAL_FIELDS` mapping depth — marketdata step.
+- [ ] EDGAR `filed_date` earliest-per-period determinism — validate in backfill tests.
+- [ ] T-1 RED test must probe the T+1 boundary (filed D invisible on bar D, visible D+1) + between-filings gap.
+- [ ] Price-join coverage: missing OHLCV at filed_date → null metric (fail-closed), not crash.
+- [ ] 032 seam: keep operand in StrategyComponent/_assemble_component_series; pre-assign proto field #s if concurrent.

@@ -18,20 +18,23 @@ Feature: historical-fundamentals-backtest
     And no earlier period row was overwritten by a later fetch
 
   @AC-3 @FR-5
-  Scenario: As-of read hides a filing not yet public at the simulated date
+  Scenario: As-of read hides a filing until the trading day after it was filed (T+1)
     Given AAPL's Q4-2019 result has period_end "2019-12-28" and filed_date "2020-01-29"
     When the point-in-time read is requested for AAPL as of "2020-01-15"
     Then the Q4-2019 period is NOT returned
-    When the point-in-time read is requested for AAPL as of "2020-02-01"
+    When the point-in-time read is requested for AAPL as of "2020-01-29"
+    Then the Q4-2019 period is NOT returned
+    When the point-in-time read is requested for AAPL as of "2020-01-30"
     Then the Q4-2019 period IS returned with its filed_date "2020-01-29"
 
   @AC-4 @FR-6
-  Scenario: Backtest resolves a fundamental operand with no look-ahead bias
+  Scenario: Backtest resolves a fundamental operand with no look-ahead bias (T+1 availability)
     Given a strategy whose entry rule is "pe_ratio < 15" using the fundamental operand
-    And AAPL's period reporting pe_ratio 12 has filed_date "2020-01-29"
+    And AAPL's period reporting a point-in-time pe_ratio 12 has filed_date "2020-01-29"
     When the strategy is backtested over 2020-01-01..2020-03-31
-    Then no entry is evaluated using that pe_ratio on any simulated bar dated before "2020-01-29"
-    And entries on bars dated "2020-01-29" or later may use pe_ratio 12
+    Then no entry is evaluated using that pe_ratio on any simulated bar dated on or before "2020-01-29"
+    And entries on bars dated "2020-01-30" or later may use pe_ratio 12
+    And the pe_ratio was computed point-in-time from the adjusted close at the filing date, not a current snapshot
 
   @AC-5 @FR-3
   Scenario: FMP-Free ratio enrichment degrades gracefully at the daily cap
