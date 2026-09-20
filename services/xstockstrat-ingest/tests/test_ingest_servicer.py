@@ -1699,3 +1699,97 @@ class TestSignalSourceReliabilityWeight:
             resp = await svc.ManageSignalSource(req, _admin_ctx())
         assert captured["reliability_weight"] == 0.0
         assert resp.source.reliability_weight == 0.0
+
+
+# ---------------------------------------------------------------------------
+# feature 198 — fundamentals backfill data-kind (a distinct axis, not a timeframe)
+# ---------------------------------------------------------------------------
+
+
+def _mk_fund_resp(periods_written: int, failed_symbols: list[str]):
+    resp = MagicMock()
+    resp.periods_written = periods_written
+    resp.failed_symbols = failed_symbols
+    return resp
+
+
+def _make_fund_req(symbols):
+    req = MagicMock()
+    req.symbols = symbols
+    req.data_kind = ingest_pb2.BACKFILL_DATA_KIND_FUNDAMENTALS
+    req.overwrite = False
+    req.range = common_pb2.TimeRange()
+    return req
+
+
+class TestFundamentalsBackfill:
+    @pytest.mark.asyncio
+    async def test_fundamentals_skips_timeframe_reject_AC6(self):
+        """AC-6: a FUNDAMENTALS request with NO timeframe is accepted (no INVALID_ARGUMENT) and the
+        job is persisted with data_kind='FUNDAMENTALS'."""
+        svc = make_servicer(db=MagicMock())
+        req = MagicMock()
+        req.symbols = ["AAPL"]
+        req.data_kind = ingest_pb2.BACKFILL_DATA_KIND_FUNDAMENTALS
+        req.range = common_pb2.TimeRange()
+        ctx = _ctx("4")  # admin
+        with (
+            patch("asyncio.create_task"),
+            patch(f"{_REPO}.insert_job", AsyncMock()) as insert,
+        ):
+            resp = await svc.TriggerBackfill(req, ctx)
+        assert resp.status == ingest_pb2.BACKFILL_STATUS_QUEUED
+        ctx.abort.assert_not_called()  # the 1d timeframe reject must NOT fire for fundamentals
+        insert.assert_awaited_once()
+        assert insert.await_args.kwargs["data_kind"] == "FUNDAMENTALS"
+        assert insert.await_args.kwargs["timeframe"] == ""  # fundamentals carry no bar timeframe
+
+    @pytest.mark.asyncio
+    async def test_bars_default_routes_to_backfillbars_AC6(self):
+        """AC-6 back-compat: an explicit BARS job still routes to BackfillBars, not the new path."""
+        svc = make_servicer(db=MagicMock())
+        svc._marketdata = MagicMock()
+        svc._marketdata.BackfillBars = AsyncMock(return_value=_mk_backfill_resp(100, []))
+        svc._marketdata.BackfillFundamentals = AsyncMock()
+        req = _make_backfill_req(["AAPL"])
+        req.data_kind = ingest_pb2.BACKFILL_DATA_KIND_BARS
+        with patch_chunk_repo([_chunk(["AAPL"])]):
+            await svc._run_backfill("job-bars", req)
+        svc._marketdata.BackfillBars.assert_awaited()
+        svc._marketdata.BackfillFundamentals.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_fundamentals_routes_to_backfillfundamentals(self):
+        """A FUNDAMENTALS job dispatches to BackfillFundamentals (not BackfillBars), completes, and
+        a same-range re-run does not error (@AC-1 job idempotency; marketdata dedups)."""
+        svc = make_servicer(db=MagicMock())
+        svc._marketdata = MagicMock()
+        svc._marketdata.BackfillBars = AsyncMock()
+        svc._marketdata.BackfillFundamentals = AsyncMock(return_value=_mk_fund_resp(11, []))
+        req = _make_fund_req(["AAPL"])
+        with patch(f"{_REPO}.update_job", AsyncMock()) as uj:
+            await svc._run_backfill("job-fund", req)
+            final = uj.await_args_list[-1].kwargs
+            assert final["status"] == ingest_pb2.BACKFILL_STATUS_COMPLETED
+            assert final["bars_processed"] == 11  # periods written
+            # outbound call carries no period_types → marketdata applies its 'both' default (@AC-2)
+            sent = svc._marketdata.BackfillFundamentals.await_args.args[0]
+            assert list(sent.period_types) == []
+            assert list(sent.symbols) == ["AAPL"]
+            # re-run same range: no error (idempotent at marketdata's ON CONFLICT layer, @AC-1)
+            await svc._run_backfill("job-fund", req)
+        svc._marketdata.BackfillBars.assert_not_called()
+        assert svc._marketdata.BackfillFundamentals.await_count == 2
+
+    @pytest.mark.asyncio
+    async def test_fundamentals_partial_on_failed_symbols(self):
+        """Failed symbols from the worker → job PARTIAL, not FAILED (fail-closed per symbol)."""
+        svc = make_servicer(db=MagicMock())
+        svc._marketdata = MagicMock()
+        svc._marketdata.BackfillFundamentals = AsyncMock(return_value=_mk_fund_resp(5, ["TSLA"]))
+        req = _make_fund_req(["AAPL", "TSLA"])
+        with patch(f"{_REPO}.update_job", AsyncMock()) as uj:
+            await svc._run_backfill("job-fund-partial", req)
+        final = uj.await_args_list[-1].kwargs
+        assert final["status"] == ingest_pb2.BACKFILL_STATUS_PARTIAL
+        assert final["failed_symbols"] == ["TSLA"]
