@@ -85,6 +85,20 @@ UI `/insights` (opportunities queue) + `/trader` (per-symbol page) + Agent `list
 - [ ] Signal presence predicate: key on signal-evidence existence (sig_contribs non-empty), NEVER s_signal>0 — a present-but-zero (full-conflict) signal is an active pull-down (@AC-4), not a dropped term.
 - [ ] Rebase re-derivation: re-confirm proto field 21 + migration 024 against the merged tree (soft overlap with features 187/193/188).
 
+## Session 2026-09-20 — sdd-spec
+
+- Generated implementation-spec.md with 11 steps. Status → implementation-ready.
+- Key codebase findings (re-derived against the current tree, per the design Open Risk):
+  - Proto: `Opportunity` max field is `data_unavailable = 20` (`analysis.proto:592`) → **field 21** confirmed free; optional-double presence convention matches `signal_confidence = 19`.
+  - Migration: disk tip is `023_opportunity_compute_state` → **024** confirmed next-free (root CLAUDE.md's 026/027/028 is drift). Table `analysis.opportunities` from `011_opportunities.up.sql`; nullable column, no DEFAULT (NULL = not-yet-computed, @AC-10/11/12).
+  - Analysis wiring anchors: `_candidate` init `servicer.py:3966-3980`; decay fold `sig_contribs.append` `:4088` + `signal_axis` max `:4094` + raw-conviction `best_direction` `:4095-4097`; `_row_for` `:4253`; `sym_unavailable` axis-zeroing `:4326-4336`; `_retry_unavailable_symbols` heal `:3671`; `_row_to_opportunity` optional-map pattern `:5045-5047`; EB shape to reuse-by-shape (not extract — ANALYSIS-2) `_aggregate_cells:5187-5226`; `get_float_present` `watcher.py:132`.
+  - Persistence: `replace_for_user` INSERT `opportunities.py:81-97`, `replace_symbols` UPDATE `:120-145`, `read()` SELECT cols `:180-183` — all three need `composite_score`.
+  - Config keys cut to **three** (`composite_shrinkage_k`, `composite_weight_readiness`, `composite_weight_signal`) — the product-spec's `_fundamentals`/`_technical` weight keys are dropped with the 2-axis FR-5 change.
+  - Agent: `_opportunity_to_dict` HasField-gated optionals `client.py:770-798`; descriptor-parity test `test_opportunity_projection.py:18-52` (regen at Step 2 turns it RED until Step 8 projects field 21 — the built-in red-before-green gate); `mcp-tools.md:865-920` return-shape doc.
+  - UI: no 3-decimal formatter in `scoreDisplay.ts` (add `formatComposite`); render sites `OpportunityRow` `page.tsx:483-522`, mobile `SignalRow` map `:170-182`, trader `OpportunitySection` `positions/[symbol]/page.tsx:934-995`; vitest home `src/lib/scoreDisplay.test.ts`; fixtures `e2e/fixtures/opportunities.ts` + `INVENTORY.md:28`.
+- Cardinal guard materialized as Step 1 (proto field-21 doc-comment) + Step 7 (`ANALYSIS-10` invariant in analysis context-constitution.md).
+- All 12 scenarios (@AC-1..12) mapped to steps; C-14 surfaces (UI + agent) each have implementation steps.
+
 ### Grounding (pre-story exploration, this session)
 
 - Analysis scoring: `_score_from_metrics`/`_grade`/`_aggregate_cells` (feature 065 empirical-Bayes),
