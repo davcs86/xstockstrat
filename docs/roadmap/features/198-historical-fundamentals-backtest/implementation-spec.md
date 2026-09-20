@@ -355,7 +355,7 @@ cd services/xstockstrat-ingest && pytest --cov=app --cov-fail-under=40
 
 ### Step 10 — service: analysis fundamental operand (as-of carry-forward, live parity, no look-ahead)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/services/evaluator.py` — modify (`_compute_component`, `_assemble_component_series`)
@@ -637,3 +637,24 @@ integration PR.
   9's "@AC-2 both-period-types coverage" is asserted at the **marketdata** layer (Step 5 edgar test:
   8 quarterly + 3 annual) rather than via ingest chunk-planning; ingest asserts the single dispatch
   carries empty `period_types` so marketdata applies its `both` default.
+- **Step 10 (operand seam):** instruction 1 placed the new `COMPONENT_KIND_FUNDAMENTAL` branch in
+  `_compute_component`; it is instead a short-circuit at the top of `_assemble_component_series`
+  (before the `source_symbol` / `_compute_component` dispatch). Rationale: a fundamental operand
+  resolves from the preloaded PIT series against `eval_dates` (the bar-date timeline), neither of
+  which `_compute_component(comp, closes)` receives — `_assemble_component_series` is the only seam
+  that carries both. Behaviorally identical to the spec intent (no indicator/formula compute; as-of
+  carry-forward join). **Disposition:** cleaner seam placement, same result.
+- **Step 10 (gate chokepoint):** the `analysis.backtest.fundamentals.enabled` kill-switch (default
+  OFF) is enforced once in the servicer `_load_fundamentals` + the live-loop `_load_fundamentals`
+  (the single per-symbol PIT-preload every consumer routes through), rather than per-call at each of
+  the 6+ evaluate sites. Disabled ⇒ preload returns `None` ⇒ the operand reads all-`None` → hold on
+  **every** surface (true platform-wide kill-switch, parity preserved). **Disposition:** one
+  chokepoint over 6+ scattered gate reads.
+- **Step 10 (parity fan-out):** per instruction 3, the PIT preload is threaded through **all**
+  consumers — backtest (`_backtest_symbol_evaluated`), live loop (`_eval_pair`), `EvaluateReadiness`
+  (SLOW path), the readiness materializer, the `GetWatchlistReadiness` on-read kick, the opportunities
+  compute (Phase 2 `_row_for` + the surgical unavailable-retry heal), and `GetIndicatorSeries`. Each
+  read-path site loads under the background bars-fetch sem with a per-symbol dedup cache; the pure
+  evaluator (`compute_readiness_row`, `evaluate*`) gained an additive `fundamentals=None` kwarg.
+  Existing tests that stub `evaluate`/`evaluate_conditions_traced` were extended to accept the new
+  kwarg (no behavior change). **Disposition:** required by the full-parity user decision.

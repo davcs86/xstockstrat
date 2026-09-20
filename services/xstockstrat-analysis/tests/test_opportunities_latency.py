@@ -167,7 +167,9 @@ async def test_phase1_uses_batch_get_bars():
     # Patch the evaluator to short-circuit (the test is about the batch fetch, not evaluation).
     from app.handlers.servicer import _empty_readiness
 
-    async def _stub_evaluate(definition, bars, sym, rule="entry", benchmark_bars=None):
+    async def _stub_evaluate(
+        definition, bars, sym, rule="entry", benchmark_bars=None, fundamentals=None
+    ):
         r = _empty_readiness(sym)
         r["conviction"] = 0.5
         return r

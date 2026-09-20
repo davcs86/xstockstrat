@@ -274,3 +274,34 @@
   + BackfillFundamentals + data_kind kwarg absent pre-Step-8 → red; green now.
 - Covers: AC-6, AC-1, AC-2 (AC-2 both-types at marketdata layer per Deviation Log).
 - Files: tests/_helpers.py, tests/test_ingest_servicer.py. Deviations: AC-2 coverage layer (Deviation Log).
+
+### Step 10 — service: analysis fundamental operand (as-of carry-forward, live parity, no look-ahead) [done]
+- evaluator.py (edited pre-Step-10 session): FundamentalPeriod dataclass (filed_date: date, values: dict);
+  _needs_eval_dates(definition) (source_symbol OR COMPONENT_KIND_FUNDAMENTAL); _fundamental_as_of_series
+  (metric, eval_dates, fundamentals) — carry-forward, strict filed_date < bar_date (T+1), None before
+  first filing, never a future filing; _FUNDAMENTAL_METRICS (11 canonical, mirrors screener). fundamentals
+  param threaded through evaluate / evaluate_with_series / evaluate_conditions_traced / _assemble_component_series.
+  _assemble_component_series short-circuits COMPONENT_KIND_FUNDAMENTAL → {"value": _fundamental_as_of_series(...)}
+  (Deviation Log: seam is _assemble not _compute_component — only _assemble carries eval_dates+fundamentals).
+  _validate_definition already rejects a FUNDAMENTAL comp with unset/unknown fundamental_metric.
+- servicer.py: module-level _definition_has_fundamental + _fundamental_periods_from_response (shared with
+  live_loop — DRY; drops filed_date-unset periods = look-ahead guard; missing_metrics→None). New
+  _load_fundamentals(symbol, definition, propagation_meta, *, sem=None, cache=None): the single PIT-preload
+  chokepoint — gate check (analysis.backtest.fundamentals.enabled, get_bool default False → None when OFF),
+  full-history fetch (as_of/range open; per-bar T+1 in evaluator is sole authority), best-effort → [] on
+  failure. Threaded through: _backtest_symbol_evaluated (:1550 evaluate_with_series), GetIndicatorSeries
+  (elif FUNDAMENTAL → _assemble_component_series), _compute_opportunities Phase 2 _row_for (+fundamentals_cache),
+  surgical unavailable-retry heal (+fundamentals_cache, both traced + compute_readiness_row), EvaluateReadiness
+  SLOW (_readiness_for), GetWatchlistReadiness on-read kick, readiness materializer. readiness.py
+  compute_readiness_row gained fundamentals=None kwarg → evaluate_conditions_traced.
+- live_loop.py: imports the two shared module fns; _load_fundamentals(definition, symbol) mirror (gate-honoring,
+  no propagation_meta — background loop); _eval_pair now always evaluate(defn, bars, None, benchmark_bars, fundamentals).
+- Write path: _validate_definition on REGISTER (_validate_definition_proto) + UPDATE (_apply) validates the
+  operand; fundamental_metric + kind ride definition_json → fingerprint fold (no extra code; @AC-6 @feature-152).
+- Existing test stubs extended for the additive fundamentals kwarg: test_analysis_servicer (_selective_fail,
+  _maybe_raise, _boom), test_opportunities_latency (_stub_evaluate), test_live_loop (fake_evaluate). No behavior change.
+- Verification: uv run ruff check clean; full suite 773 passed. Config gate default OFF → no existing test
+  perturbed (baseline byte-identical; @AC-1 @feature-152). Step 11 adds the T+1 RED test on the pure evaluator.
+- Files: app/services/evaluator.py (pre-session), app/handlers/servicer.py, app/engine/live_loop.py,
+  app/services/readiness.py, tests/{test_analysis_servicer,test_opportunities_latency,test_live_loop}.py.
+  Deviations: operand seam, gate chokepoint, parity fan-out (Deviation Log).

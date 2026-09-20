@@ -58,7 +58,9 @@ from app.repositories.strategy_scores import StrategyScoresRepository
 from app.services import scoring, warmup
 from app.services.cooldown import effective_cooldown_days, is_cooldown_active
 from app.services.evaluator import (
+    _FUNDAMENTAL_METRICS,
     FormulaExecutionError,
+    FundamentalPeriod,
     StrategyEvaluator,
     _empty_readiness,
     _validate_definition,
@@ -1447,6 +1449,49 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             out[sym] = bars
         return out
 
+    async def _load_fundamentals(
+        self, symbol, definition, propagation_meta, *, sem=None, cache=None
+    ):
+        """Feature 198 — preload the evaluated symbol's point-in-time fundamentals filings for a
+        backtest/live/readiness/opportunities evaluation, or ``None`` when the definition references
+        no fundamental operand (the common case — the evaluator then skips all fundamental work).
+
+        The full filing history is fetched (``as_of_date`` / ``range`` left open): the evaluator's
+        per-bar ``filed_date < bar_date`` carry-forward (``_fundamental_as_of_series``) is the sole
+        no-look-ahead authority, so clipping the RPC window would drop an older filing that must
+        still carry forward into the early part of the window. ``sem`` bounds fetch concurrency on
+        the read-path fan-out; ``cache`` (keyed by symbol) dedups a symbol's history across an
+        opportunities/readiness compute pass. A fetch failure degrades to ``[]`` (every fundamental
+        leaf reads ``None`` → hold), never aborting the evaluation.
+
+        The single chokepoint every consumer (backtest/live/readiness/opportunities) routes through,
+        so the ``analysis.backtest.fundamentals.enabled`` kill-switch (default OFF) is enforced here
+        once: disabled ⇒ ``None`` (the operand reads all-``None`` → hold on every surface)."""
+        if not _definition_has_fundamental(definition):
+            return None
+        if not self._cfg.get_bool("analysis.backtest.fundamentals.enabled", False):
+            return None
+        if cache is not None and symbol in cache:
+            return cache[symbol]
+        req = marketdata_pb2.GetHistoricalFundamentalsRequest(symbol=symbol)
+        try:
+            if sem is not None:
+                async with sem:
+                    resp = await self._marketdata.GetHistoricalFundamentals(
+                        req, metadata=propagation_meta
+                    )
+            else:
+                resp = await self._marketdata.GetHistoricalFundamentals(
+                    req, metadata=propagation_meta
+                )
+            out = _fundamental_periods_from_response(resp)
+        except Exception as e:  # noqa: BLE001 — fundamentals fetch is best-effort (degrade to hold)
+            log.warning("GetHistoricalFundamentals fetch failed for %s: %s", symbol, e)
+            out = []
+        if cache is not None:
+            cache[symbol] = out
+        return out
+
     async def _load_benchmark_bars_windowed(
         self, definition, range_msg, propagation_meta, *, cache=None, sem=None
     ):
@@ -1545,10 +1590,13 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
 
         # Batch backtest path: SERIAL component assembly (component_sem=None).
         evaluator = StrategyEvaluator(self._indicators, propagation_meta, component_sem=None)
+        # Per-symbol point-in-time fundamentals (feature 198) — None unless the definition carries a
+        # COMPONENT_KIND_FUNDAMENTAL operand; the evaluator applies the per-bar T+1 carry-forward.
+        fundamentals = await self._load_fundamentals(symbol, definition, propagation_meta)
         # Capture the computed component series for diagnostics. benchmark_bars (preloaded once
         # per run, shared across symbols) resolve source_symbol components via the evaluator.
         decisions, component_series = await evaluator.evaluate_with_series(
-            definition, bars, None, benchmark_bars
+            definition, bars, None, benchmark_bars, fundamentals
         )
 
         n = len(bars)
@@ -2871,6 +2919,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 )
             # SLOW body extracted to the shared compute path (feature 180) so the interactive
             # handler and the readiness materializer produce byte-identical rows.
+            fundamentals = await self._load_fundamentals(
+                symbol, definition, propagation_meta, sem=self._bars_fetch_sem
+            )
             staged = await compute_readiness_row(
                 symbol,
                 fetch_bars=self._fetch_bars_paged,
@@ -2887,6 +2938,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 now=now,
                 valid_until=now + timedelta(seconds=stale_after),
                 benchmark_epoch=_benchmark_epoch(),
+                fundamentals=fundamentals,
             )
             return _readiness_to_proto(staged["readiness_json"]), staged, now
 
@@ -3117,7 +3169,15 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                         for bench in benchmark_bars.values():
                             if bench:
                                 bench_epoch = max(bench_epoch, bench[-1].time.seconds)
+                    fundamentals_cache: dict[str, list] = {}  # feature 198 — per-symbol PIT dedup
                     for sym in syms:
+                        fundamentals = await self._load_fundamentals(
+                            sym,
+                            definition,
+                            propagation_meta,
+                            sem=self._readiness_materializer_bars_sem,
+                            cache=fundamentals_cache,
+                        )
                         staged_all.append(
                             await compute_readiness_row(
                                 sym,
@@ -3137,6 +3197,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                                     now, valid_window_hours=valid_window
                                 ),
                                 benchmark_epoch=bench_epoch,
+                                fundamentals=fundamentals,
                             )
                         )
                 if staged_all and self._readiness_cache_repo is not None:
@@ -3324,11 +3385,19 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         component_series = []
         # Sequential loop (no gather) so the singleton semaphore bounds cross-request compute.
         # Benchmark components compute on the benchmark's own bars, aligned onto request.times.
+        # Fundamental operands (feature 198) also need the request-times date timeline for the
+        # as-of carry-forward join.
         eval_dates = (
             [t.ToDatetime(tzinfo=UTC).date() for t in request.times]
-            if any(c.source_symbol for c in definition.components)
+            if any(
+                c.source_symbol or c.kind == analysis_pb2.COMPONENT_KIND_FUNDAMENTAL
+                for c in definition.components
+            )
             else None
         )
+        # feature 198 — the evaluated symbol's PIT fundamentals, fetched once per RPC (single
+        # symbol); None unless a component is a fundamental operand.
+        fundamentals = await self._load_fundamentals(request.symbol, definition, propagation_meta)
         for comp in definition.components:
             try:
                 async with self._component_series_sem:
@@ -3341,6 +3410,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                             closes,
                             eval_dates,
                             {comp.source_symbol: bench_bars} if bench_bars else {},
+                        )
+                    elif comp.kind == analysis_pb2.COMPONENT_KIND_FUNDAMENTAL:
+                        series_map = await evaluator._assemble_component_series(
+                            comp, closes, eval_dates, None, fundamentals
                         )
                     else:
                         series_map = await evaluator._compute_component(comp, closes)
@@ -3729,6 +3802,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             return strat_rows[strategy_id]
 
         benchmark_cache: dict[str, list] = {}
+        fundamentals_cache: dict[str, list] = {}  # feature 198 — per-symbol PIT history dedup
         session_end_seconds = 0
         heal_rows: list[dict] = []
         readiness_stage: list[dict] = []
@@ -3756,9 +3830,21 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                         cache=benchmark_cache,
                         sem=self._readiness_materializer_bars_sem,
                     )
+                    fundamentals = await self._load_fundamentals(
+                        sym,
+                        definition,
+                        propagation_meta,
+                        sem=self._readiness_materializer_bars_sem,
+                        cache=fundamentals_cache,
+                    )
                     try:
                         readiness = await evaluator.evaluate_conditions_traced(
-                            definition, bars, sym, rule=rule, benchmark_bars=benchmark_bars
+                            definition,
+                            bars,
+                            sym,
+                            rule=rule,
+                            benchmark_bars=benchmark_bars,
+                            fundamentals=fundamentals,
                         )
                     except (
                         grpc.RpcError
@@ -3819,6 +3905,14 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     for bench in benchmark_bars.values():
                         if bench:
                             benchmark_epoch = max(benchmark_epoch, bench[-1].time.seconds)
+                # feature 198 — cache hit (this symbol's PIT history was loaded above for the eval).
+                fundamentals = await self._load_fundamentals(
+                    sym,
+                    definition,
+                    propagation_meta,
+                    sem=self._readiness_materializer_bars_sem,
+                    cache=fundamentals_cache,
+                )
                 staged = await compute_readiness_row(
                     sym,
                     fetch_bars=self._fetch_bars_paged,
@@ -3835,6 +3929,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     now=now_utc,
                     valid_until=readiness_valid_until(now_utc, valid_window_hours=window_hours),
                     benchmark_epoch=benchmark_epoch,
+                    fundamentals=fundamentals,
                 )
                 if staged.get("bar_epoch", -1) >= 0:  # success-only
                     readiness_stage.append(staged)
@@ -4147,6 +4242,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # evaluated symbols/strategies, bounded by the background _readiness_materializer_bars_sem
         # (feature 185 FR-3, same background bucket as the primary fetch).
         benchmark_bars_cache: dict[str, list] = {}
+        # feature 198 — per-symbol PIT fundamentals history deduped once per compute pass (each
+        # symbol distinct, so keyed by symbol not source_symbol); populated only for candidates
+        # whose strategy carries a fundamental operand.
+        fundamentals_cache: dict[str, list] = {}
         session_end_seconds = 0
         window_hours = self._cfg.get_int("analysis.opportunity.valid_window_hours", 24)
 
@@ -4272,11 +4371,25 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                             cache=benchmark_bars_cache,
                             sem=self._readiness_materializer_bars_sem,
                         )
+                        # feature 198 — per-symbol PIT fundamentals (None unless a fundamental
+                        # operand), same background sem; per-symbol cache dedups repeat candidates.
+                        fundamentals = await self._load_fundamentals(
+                            sym,
+                            definition,
+                            propagation_meta,
+                            sem=self._readiness_materializer_bars_sem,
+                            cache=fundamentals_cache,
+                        )
                         # Held + attributed → exit-rule trace (FR-8); else entry-rule trace.
                         rule = "exit" if c["is_held"] else "entry"
                         try:
                             readiness = await evaluator.evaluate_conditions_traced(
-                                definition, bars, sym, rule=rule, benchmark_bars=benchmark_bars
+                                definition,
+                                bars,
+                                sym,
+                                rule=rule,
+                                benchmark_bars=benchmark_bars,
+                                fundamentals=fundamentals,
                             )
                         except grpc.RpcError as e:
                             # feature 185 — an indicators TRANSPORT outage is a data-unavailable
@@ -4505,6 +4618,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 for bench in benchmark_bars.values():
                     if bench:
                         benchmark_epoch = max(benchmark_epoch, bench[-1].time.seconds)
+            fundamentals_cache: dict[str, list] = {}  # feature 198 — per-symbol PIT dedup
             existing = (
                 await self._readiness_cache_repo.read_many(owner, strategy_id, "entry", symbols)
                 if self._readiness_cache_repo is not None
@@ -4537,6 +4651,13 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     latest_bar_epoch=latest_bar_epoch.get(symbol, 0),
                 ):
                     continue  # skip-fresh (fails.md:118 steady state)
+                fundamentals = await self._load_fundamentals(
+                    symbol,
+                    definition,
+                    meta,
+                    sem=self._readiness_materializer_bars_sem,
+                    cache=fundamentals_cache,
+                )
                 staged_rows.append(
                     await compute_readiness_row(
                         symbol,
@@ -4554,6 +4675,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                         now=now,
                         valid_until=readiness_valid_until(now, valid_window_hours=valid_window),
                         benchmark_epoch=benchmark_epoch,
+                        fundamentals=fundamentals,
                     )
                 )
         if staged_rows and self._readiness_cache_repo is not None:
@@ -4921,6 +5043,33 @@ def _normalize_source_symbols(definition) -> None:
     normalization."""
     for comp in definition.components:
         comp.source_symbol = _normalize_symbol(comp.source_symbol)
+
+
+def _definition_has_fundamental(definition) -> bool:
+    """True when any component is a COMPONENT_KIND_FUNDAMENTAL operand (feature 198). Module-level
+    so both the servicer backtest path and the live loop share one definition-scan predicate."""
+    return any(c.kind == analysis_pb2.COMPONENT_KIND_FUNDAMENTAL for c in definition.components)
+
+
+def _fundamental_periods_from_response(resp) -> list[FundamentalPeriod]:
+    """Map a marketdata ``GetHistoricalFundamentalsResponse`` to evaluator ``FundamentalPeriod``s
+    (feature 198), shared by the servicer backtest path and the live loop so the PIT-mapping rules
+    never drift between backtest and live (backtest/live parity).
+
+    A period with no ``filed_date`` is dropped — without a filing date its point-in-time visibility
+    is undefined, and admitting it as an epoch-0 filing would leak it into every bar (a look-ahead
+    hole). A metric listed in the proto's ``missing_metrics`` is stored as ``None`` so a genuine
+    ``0.0`` reading is never confused with 'not reported' (marketdata.proto field 21)."""
+    out: list[FundamentalPeriod] = []
+    for p in resp.periods:
+        if not (p.filed_date.seconds or p.filed_date.nanos):
+            continue
+        missing = set(p.missing_metrics)
+        values = {m: (None if m in missing else getattr(p, m)) for m in _FUNDAMENTAL_METRICS}
+        out.append(
+            FundamentalPeriod(filed_date=p.filed_date.ToDatetime(tzinfo=UTC).date(), values=values)
+        )
+    return out
 
 
 def _signal_decay(sig, source_weights: dict, now_utc: datetime, half_life: float):
