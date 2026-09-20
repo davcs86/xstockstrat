@@ -51,6 +51,17 @@
 
 UI `/insights` (opportunities queue) + `/trader` (per-symbol page) + Agent `list_opportunities`.
 
+## Session 2026-09-20 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready. (Operator chose: review spec, then FULL design cycle — not quick.)
+- Result: PASS WITH WARNINGS — 0 blockers, 3 advisory warnings.
+- Warnings:
+  1. Criterion 9 — 7 unchecked Open Questions, all design-routed (advisory, map to no C/P/F rule). Carried as the /sdd-design agenda; the ordinal-vs-probability normalization + the Σwᵢ=0 NULL-vs-0.5 boundary must be resolved before /sdd-spec.
+  2. AC-6 was qualitative → strengthened with distinct per-evidence weights + concrete value 0.656 (proves readiness weight 2.0 is applied, not collapsed).
+  3. NOTE (pre-existing, out of scope): duplicate NNN `065` in the registry (cross-stock-score-derivation vs second-market-data-vendor); our citation resolves unambiguously to the former.
+- Overlap findings: no hard collisions. Additive `Opportunity` proto field → next free **21** (max is `data_unavailable=20`). New analysis migration → **024** (tip `023_opportunity_compute_state`). Five `analysis.scoring.composite_*` keys uncontested. Three SOFT same-file rebase risks to reconcile at /sdd-spec time by rebasing onto landed: 187 (`opportunities.py` read ORDER BY), 193 (`_compute_opportunities` body), 188 (`OpportunityRow` markup). Re-derive field/migration numbers from the merged tree at spec time.
+- Verified against code: `conviction` ordinal-not-probability comment `analysis.proto:555-557`; empirical-Bayes precedent `scoring.md:27-30`; `signal_axis` col `migrations/011_opportunities.up.sql:16`; `get_float_present` `app/config/watcher.py:132`.
+
 ### Grounding (pre-story exploration, this session)
 
 - Analysis scoring: `_score_from_metrics`/`_grade`/`_aggregate_cells` (feature 065 empirical-Bayes),

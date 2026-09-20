@@ -41,10 +41,11 @@ Feature: opportunity-composite-score
     Then opportunity A's composite is strictly greater than opportunity B's composite
 
   @AC-6 @FR-5
-  Scenario: All four evidence types feed the v1 fusion when present
-    Given an opportunity with readiness, signal_axis, a fundamentals_value_quality composite output, and a technical signal all available
+  Scenario: All four evidence types feed the fusion, each weighted by its own configured weight
+    Given k = 4.0, prior = 0.5, and four sub-scores with distinct weights: readiness 0.90 weight 2.0, signal 0.70 weight 1.0, fundamentals 0.60 weight 1.0, technical 0.80 weight 1.0
     When the composite is computed
-    Then all four normalized sub-scores appear in the numerator with their configured weights
+    Then composite = (2.0*0.90 + 1.0*0.70 + 1.0*0.60 + 1.0*0.80 + 4.0*0.5) / (2.0+1.0+1.0+1.0 + 4.0)
+    And composite equals 0.656 (3-decimal), proving the readiness weight of 2.0 is applied and not collapsed to 1.0
     And each sub-score used is in [0.0, 1.0]
 
   @AC-7 @FR-6
