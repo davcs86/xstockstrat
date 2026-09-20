@@ -70,7 +70,9 @@ existing `scoreColor` convention; no A–F grade band.
 
 - Any **symbol-level** roll-up that consolidates a symbol's multiple per-strategy opportunity rows
   into one number (this feature is per-opportunity fusion across evidence types, not across
-  strategies). A symbol-level leaderboard is a possible named follow-up, not this feature.
+  strategies). That symbol-level ranking is **feature 199 (symbol-opportunity-ranking)**, which
+  consumes this feature's `composite_score` as its per-opportunity input (operator sign-off 2026-09-20;
+  see `docs/roadmap/features/199-symbol-opportunity-ranking/`).
 - Overriding or removing the never-fold invariant — `conviction` and `signal_axis` stay as
   first-class, separately-queryable columns.
 - Changing the existing `rank` sort blend (feature 190) or `signal_rank_weight` semantics.
