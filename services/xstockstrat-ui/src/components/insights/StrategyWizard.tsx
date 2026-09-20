@@ -126,6 +126,7 @@ export function StrategyWizard({ mode, initial, onSubmitDone }: StrategyWizardPr
       indicator: c.indicator,
       formulaId: c.formulaId,
       params: { ...c.params },
+      fundamentalMetric: c.fundamentalMetric,
     })),
   );
   const [entryRule, setEntryRule] = useState(initial?.entryRule ?? '');

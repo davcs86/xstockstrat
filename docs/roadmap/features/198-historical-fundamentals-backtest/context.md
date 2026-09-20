@@ -362,3 +362,32 @@
 - Verification: uv run ruff check + format --check clean; pytest --cov=app --cov-fail-under=40 →
   445 passed, coverage 79.27%.
 - Covers: AC-8. Files: tests/test_strategy_builders.py, tests/test_client.py. Deviations: test placement (Deviation Log).
+
+### Step 15 — service: UI backfills data-kind selector + ComponentEditor fundamental operand [done]
+- backfills/page.tsx: BackfillDataKind import + Select primitives; dataKind state (default BARS);
+  a "Data kind" Select (aria-label "backfill data kind", Bars/Fundamentals) in the create form;
+  handleCreate omits timeframeEnum + sends dataKind when Fundamentals (bars unchanged); reset to BARS
+  on success. insightsBff triggerBackfill is a generic forward → no BFF change (dataKind rides through).
+- ComponentEditor.tsx: StrategyComponentDraft + emptyComponent gain fundamentalMetric; a FUNDAMENTAL
+  SelectItem ("Fundamental metric"); when FUNDAMENTAL, a metric Select (aria-label "fundamental metric")
+  reusing strategyCatalog.FUNDAMENTAL_METRICS (DRY, no dup const) + a PIT/no-look-ahead helper note.
+  StrategyWizard initial-components map carries fundamentalMetric so edit preserves it. operandRefs
+  fall-through already exposes the FUNDAMENTAL bare ref_name (no strategyCatalog change).
+- Verification: pnpm run lint (only pre-existing warnings in unrelated files); tsc clean for the three
+  touched files (the lone tsc error is a pre-existing middleware.test.ts mock-typing quirk).
+- Files: src/app/insights/backfills/page.tsx, src/components/insights/ComponentEditor.tsx,
+  src/components/insights/StrategyWizard.tsx.
+
+### Step 16 — test: UI e2e for fundamentals backfill + fundamental operand [done]
+- e2e/insights/backfills.spec.ts: "creating a fundamentals backfill sends data_kind and omits the
+  timeframe (AC-7)" — selects Fundamentals, asserts posted dataKind == 'BACKFILL_DATA_KIND_FUNDAMENTALS'
+  and timeframeEnum undefined; job created/observable via the stubbed TriggerBackfill.
+- e2e/insights/strategy-authoring.spec.ts: "wizard builds a fundamental operand (eps) and submits it
+  (AC-8)" — ComponentEditor kind→Fundamental, metric→eps; asserts captured ManageStrategy component
+  kind == 'COMPONENT_KIND_FUNDAMENTAL', fundamentalMetric == 'eps'.
+- Both stub at browser level (page.route/captureManageStrategy) → mock-backend.ts untouched; no new
+  fixtures → INVENTORY.md unchanged; auth via helpers/auth addAdminCookie (no inline JWT).
+- Verification: playwright chromium (dev-server harness, --timeout 90000 for first-compile) → 3 passed
+  (setup warmup + both new tests). WebServer ECONNRESET lines are dev-server prewarm noise, not failures.
+- Covers: AC-7, AC-8. Files: e2e/insights/{backfills,strategy-authoring}.spec.ts. Deviations: test
+  placement + mock (Deviation Log).

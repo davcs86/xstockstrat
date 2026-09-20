@@ -516,7 +516,7 @@ tests are the behavioral gate on top of that threshold.)
 
 ### Step 15 — service: UI backfills data-kind selector + ComponentEditor fundamental operand
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/backfills/page.tsx` — modify
@@ -547,7 +547,7 @@ tests are the behavioral gate on top of that threshold.)
 
 ### Step 16 — test: UI e2e for fundamentals backfill + fundamental operand
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/backfills.spec.ts` — modify
@@ -675,3 +675,19 @@ integration PR.
   no-allow-list-drift descriptor parity (proven by the extended `_build_component` parity test).
   `GET /api/tools` catalog shape is unchanged (tools extended, not added; count stays 49), so
   `test_tools_endpoint.py` needed no change. **Disposition:** convention-consistent placement.
+- **Step 16 (test placement + mock):** the fundamental-operand builder e2e was added to
+  `e2e/insights/strategy-authoring.spec.ts` (the StrategyWizard/ComponentEditor e2e home) rather than
+  `e2e/insights/backtest-*.spec.ts` which the step named — those specs drive backtest RUN mechanics
+  (fill model, sizing, coverage), not the strategy builder. `e2e/mock-backend.ts` was NOT modified:
+  both new tests stub at the browser level (`page.route`/`captureManageStrategy`), matching the
+  existing backfills + authoring specs, so the mock backend never sees the fundamentals data-kind or
+  operand. No new fixture module was needed (existing `backfillJobs.ts` + inline scenario values), so
+  `INVENTORY.md` is unchanged. **Disposition:** convention-consistent placement; browser-level stub
+  is the established pattern for these RPCs.
+- **Step 15 (BFF + FUNDAMENTAL_METRICS reuse):** `insightsBff.ts` needed no change — `triggerBackfill`
+  is a generic `forward((req,opts)=>…)` that proxies the whole request, so `dataKind` passes through
+  automatically. The ComponentEditor metric list reuses the existing
+  `strategyCatalog.FUNDAMENTAL_METRICS` (the screener's `_FUNDAMENTAL_FIELDS` mirror) rather than a
+  new UI const (DRY). `operandRefsForComponent` already exposes a FUNDAMENTAL component's bare
+  `ref_name` via its fall-through, so no rule-operand change was needed. **Disposition:** reuse over
+  duplication.
