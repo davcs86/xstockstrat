@@ -68,3 +68,67 @@ UI `/insights` (SymbolGroupCard orderable by symbol_score) + Agent (`list_opport
 - Overlap findings: no FAIL-class collision (199 has reserved no concrete field/migration/key yet). HARD merge-order dependency on 198 (consumes composite_score; buf breaking/golang-migrate can't see 198's uncommitted claims). Blocking row added to merge-order.md. Soft same-file rebase overlap on servicer.py _compute_opportunities, opportunities.py ORDER BY, insights/opportunities/page.tsx, agent list_opportunities — shared with 198/187/193/188.
 - Verified against code: feature-065 _grade A-F at servicer.py:5174-5184 (strategy grade source real); current MAX-partition sort default at opportunities.py:35 (the behavior FR-2 replaces); composite_score does not yet exist in source (198 spec-only → merge-order dep confirmed).
 - Fixed stale label: product-spec said 198 "design-approved" → now implementation-ready (both pre-merge).
+
+## Session 2026-09-20 — sdd-design (IN-FLIGHT, PAUSED by operator — NOT approved)
+
+- Operator stopped the debate after 3 rounds: "review the design and plan once 198 gets done."
+  Status stays **spec-ready** (no design.md written, no lifecycle flip). Rationale: 199's key
+  unknowns are post-198 facts (composite_score column shape, ANALYSIS-10, proto field/migration
+  numbers) — resume round 4 + write design.md against the MERGED 198 tree, not 198's spec text.
+- Phase 0 Recon: recon.md written (committed). Phase 1 Grilling: rounds 1-3 run, verdict SOUND /
+  APPROVABLE (no Floor breach) — but NOT approved (paused before the gate).
+
+### Converged design so far (resume from here — do NOT re-derive)
+
+- **Roll-up**: symbol_score computed app-side in `_compute_opportunities` after the candidates dict
+  (servicer.py:3962), one scalar per symbol group stamped on every row; persisted per-row column.
+- **Fold (UNBOUNDED, operator decision)**: `symbol_score = Σ_i γ^i · t_(i)`, terms `t = composite_score
+  × strategy_weight` sorted DESC, `γ = analysis.scoring.symbol_score_decay` (0.5). NULL composite →
+  term skipped; no surviving term → symbol_score NULL. Raw unbounded scalar (can exceed 1.0).
+- **strategy_weight** = `affine(overall_score) × override`, `affine(x) = floor + (1-floor)·x`,
+  `floor = analysis.scoring.strategy_weight_floor` (0.5). Grade from `self._strategies.get(strategy_id)`
+  ∩ owned ids (servicer.py:2260,2273). **Provisional/absent/unattributed → floor (0.5) = proven
+  grade-F** (operator decision; drops the separate provisional_weight key; unproven can never outrank
+  an evidenced strategy). Overrides = one structured JSON value `analysis.scoring.strategy_weight_overrides`
+  (malformed → ignored, never crash).
+- **Sort**: opt-in `OPPORTUNITY_SORT_SYMBOL_SCORE = 3` (analysis.proto:541) → `_SORT_ORDER_BY[3] =
+  MAX(o.symbol_score) OVER (PARTITION BY o.symbol) DESC NULLS LAST, o.symbol ASC, o.opportunity_key ASC`
+  (opportunities.py:33). Default stays CONVICTION (no @AC-10 CHANGE, no sign-off).
+- **Surfaces**: per-row `Opportunity.symbol_score` field (next-free after 198's composite_score=21 →
+  22, re-derive vs merged tree); UI = plain 3-decimal number (NOT scoreColor — unbounded), rendered
+  only under the server-applied symbol_score sort; agent = raw float via _opportunity_to_dict + omit on
+  NULL + descriptor-parity. Migration 025 (after 198's 024, re-derive).
+- **Cardinal guard**: extend feature-198's ANALYSIS-10 invariant + a symbol_score proto doc-comment
+  ("unbounded ordinal RANKING scalar … NOT a probability/expected-return/sizing input").
+- **Heal (corrected, round 3)**: new disposition-free `OpportunitiesRepository.symbol_composite_terms
+  (user_id, symbol)` (no opportunity_actions join / no valid_until / no floor) → re-fold the whole
+  symbol via the SHARED `_symbol_score` helper (recovered rows' fresh composite + others' persisted)
+  → `stamp_symbol_score(user_id, symbol, score)` symbol-wide UPDATE of ALL rows (NOT replace_symbols).
+  Heal-parity test asserts against the RAW table (not read()) that every row incl. dismissed carries
+  the identical score AND equals a full compute pass. Requeue-full-recompute rejected (latency +
+  never-resurrect). Main compute already path-independent (candidates has no disposition filter).
+
+### Mandatory acceptance orderings (worked, verified)
+
+- @AC-2: AAPL 2×0.80 → 1.20 > MSFT 1×1.00 → 1.00 (flips legacy MAX). @AC-3: AAPL 2×0.80 → 1.20 >
+  PENNY 6×0.30 → 0.591 (geometric cap 2×top-term). @AC-4: grade-A 0.919 > grade-C 0.814. @AC-7:
+  floor 0.5 > 0 contributes; unproven never outranks evidenced. (@AC-9 to be updated to unbounded
+  values 1.20/0.75 when design.md is written.)
+
+## Open Threads (resolve at round 4 / against merged 198 tree)
+
+- [ ] **Post-198 coupling (fails.md:378/412/422 trap)**: re-derive `symbol_composite_terms` against
+  198's LANDED shape — is composite_score a queryable column (198 design says yes) or in readiness_json?
+  Re-derive proto field 22, sort enum value, migration 025 from the merged tree.
+- [ ] **NULL-composite fold semantics** must match the main-compute fold exactly (198 persists NULL on
+  Σw≤0) or the heal-parity test passes on a subtle divergence.
+- [ ] **Order-insensitive fold**: `_symbol_score` must sort terms internally so heal (persisted
+  universe) and compute (candidates dict) are byte-identical regardless of input row order.
+- [ ] **Concurrency residual** (adversary ruled acceptable/self-healing, NOT must-fix): decide at
+  round 4 whether to MANDATE the FOR-UPDATE-txn / per-user advisory-lock mitigation or leave to /sdd-spec.
+- [ ] **floor=0.5 collapses proven-grade-F and provisional** into one weight — record as deliberate in
+  design.md Rejected Alternatives (operator decision).
+- [ ] **Config**: assign real 3-segment key names + decide floor=0 / decay=0 read semantics
+  (get_float_present vs get_float zero-trap) + declare defaults in analysis CLAUDE.md.
+- [ ] **Round 4 focus** was requested but redirected: resume the design debate (write design.md +
+  flip to design-approved) AFTER 198 lands, then /sdd-spec 199.
