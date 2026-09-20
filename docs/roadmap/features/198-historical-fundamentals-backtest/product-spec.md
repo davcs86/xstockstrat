@@ -114,7 +114,16 @@ _Constitution **C-14**._
     `FUNDAMENTALS`) added to `TriggerBackfillRequest`; default preserves every existing OHLCV caller.
   - `analysis/v1/analysis.proto` — additive fundamental operand kind on `StrategyComponent`.
     `BacktestResult` wire bytes are persisted verbatim in `analysis.backtest_details`, so any change
-    there is **additive-only**.
+    there is **additive-only**. **Field-numbering (from the overlap scan):** launched features
+    150/151 already occupy `BacktestResult` fields 17–20 and `RunBacktestRequest` 8–9, so 198's
+    additive fields must be assigned after those — `/sdd-spec` re-derives next-free numbers from the
+    merged tree.
+  - **Cross-feature proto coordination (WARN, not a blocker):** feature 032 (regime-segmented
+    backtest, draft) also edits `analysis/v1/analysis.proto`, but adds *distinct* messages
+    (`RunSegmentedBacktest` + `SegmentedBacktest*`) — no field-number clash foreseeable. If 032 and
+    198 reach impl-spec concurrently, pre-assign their `analysis.proto` field numbers and add a
+    `merge-order.md` coordination row (mirroring the 150/151 split). No `merge-order.md` entry is
+    required now (no FAIL-level collision).
   - Agent descriptor-parity projection tests (`test_backtest_view.py` family) must be updated in the
     same PR for any projected message that gains a field (ledger 2026-08-14 `feature 134`).
 
@@ -127,22 +136,27 @@ _Constitution **C-14**._
     ordinary config, no `GetSecret`), `marketdata.edgar.rate_limit_rps`
   - `marketdata.fundamentals.history.backfill.batch_size`, `.max_lookback_years`,
     `.period_types` (quarterly|annual|both)
-  - `marketdata.fmp.ratios.daily_request_cap` (guards FMP-Free enrichment against the 250/day cap —
-    reuses the existing `marketdata.fmp.*` family + the feature-147 `marketdata.fmp.api_key` secret;
-    **no new credential row**)
+  - `marketdata.fundamentals.history.ratio_enrichment.enabled` (bool) — toggles the FMP-Free ratio
+    pass. **Reuses the existing `marketdata.fmp.daily_request_cap` (=250, `config-governance.md:618`)
+    as the single FMP daily budget** — no second competing cap; ratio enrichment draws from the same
+    budget already shared with `analysis.fundsignal.daily_call_budget` (documented `≤` that cap,
+    `config-governance.md:599`), and reuses the feature-147 `marketdata.fmp.api_key` secret (**no new
+    credential row**). (Resolves the review's config-key-overlap warning.)
   - `analysis.backtest.fundamentals.enabled` (bool)
 
 ## Database Changes
 
 - [ ] No schema changes
-- New `xstockstrat-marketdata` migration (NNN = `ls services/xstockstrat-marketdata/migrations/`
-  at spec time — **do not assume**; snapshot shows `000`–`004`, so likely `005`): a TimescaleDB
-  hypertable for the point-in-time fundamentals time series, partitioned on the time dimension
-  (`filed_date` or `period_end` — decided at design, with the no-look-ahead read pattern driving the
-  choice), keyed to `(symbol, fiscal_period, period_type)` uniqueness, statement columns +
-  `extra_metrics jsonb` + `source`.
-- Possible `xstockstrat-ingest` migration (snapshot `003`–`005`, likely `006`) to carry a
-  `data_kind` column on `ingest.backfill_jobs`/`backfill_chunks` if the fundamentals kind is not
+- New `xstockstrat-marketdata` migration, as a paired `NNN_description.up.sql` + `.down.sql`
+  (NNN = `ls services/xstockstrat-marketdata/migrations/` at spec time — **do not assume**;
+  verified snapshot: dir holds `000`–`004`, so next free is `005`): a TimescaleDB hypertable for the
+  point-in-time fundamentals time series, partitioned on the time dimension (`filed_date` vs
+  `period_end` — see design-deferred D-1 below), keyed to `(symbol, fiscal_period, period_type)`
+  uniqueness, statement columns + `extra_metrics jsonb` + `source`. The `.down.sql` drops the
+  hypertable.
+- Possible `xstockstrat-ingest` migration (paired up/down; **verified next free is `012`** — trunk
+  tip is `011_signal_source_type_mcp_client`, corrected from the earlier stale `006` guess) to carry
+  a `data_kind` column on `ingest.backfill_jobs`/`backfill_chunks` if the fundamentals kind is not
   otherwise distinguishable — confirm at design (the existing schema may already suffice).
 
 ## Feature Workflow Notes
@@ -161,32 +175,50 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 
 ## Open Questions
 
-- [ ] **Known trap — look-ahead bias (the central risk).** `xstockstrat-analysis`'s reviewer focus
-  is literally "no look-ahead bias." The FR-5 as-of read (`filed_date` ≤ simulated date) is the
-  guard; the design must prove the evaluator never resolves a fundamental from a not-yet-filed
-  period, and a RED test must assert it (a Q-result filed after the simulated bar must be invisible).
-- [ ] **Known trap — backfill data kind vs. timeframe** (ledger `080-fix-backfill-timeframe-enum`,
-  feature 143). `TriggerBackfill` persists `timeframe` raw and canonicalizes late; timeframe is
-  hard-restricted to `1d`. Fundamentals must ride a **new data-kind axis**, never a timeframe value —
-  confirm the enum default keeps every existing OHLCV caller on `BARS`.
-- [ ] **Known trap — vendor literal-string / credential wiring** (ledger `129`). We add EDGAR (no
-  credential) + reuse the wired FMP key, so the feature-129 "credential not wired through all 10
-  deploy files" scope-creep is **avoided by design** — but the design must still grep for every
-  literal reference when touching `marketdata_service.go`'s provider selection so EDGAR is added
-  without breaking the existing `finnhub`/`fmp` snapshot selector.
-- [ ] **Known trap — agent projection + strat-lab skill** (ledger `134`, root CLAUDE.md). Any
-  projected-message field addition breaks `test_*_projection.py`; changing `run_backtest` requires
-  the `strat-lab` `backtest` skill update in the same PR. Enumerate these at spec time.
-- [ ] **Known trap — no fragile full-stack smoke test** (ledger `129`). Verify EDGAR/FMP integration
-  with a narrow direct-API check + fake-backed unit tests, not a deployed-instance `grpcurl` step.
-- [ ] **Cross-feature seam — 032 (regime-segmented backtest).** Does the fundamental operand need to
-  compose with `RunSegmentedBacktest`? Hold the evaluator seam so both can land; confirm no shared
-  proto field-number/migration-NNN collision.
-- [ ] **Design decision — hypertable partition key** (`filed_date` vs `period_end`): the as-of read
-  filters on `filed_date`, but the natural fiscal axis is `period_end`. Decide at `/sdd-design`.
-- [ ] **Design decision — how EDGAR XBRL tags map to the platform's fundamental metric names**
-  (reuse feature-063's `pe_ratio`/`eps`/… vocabulary and the screener's `extra_metrics` union,
-  ledger `117`), and how much statement normalization v1 covers.
-- [ ] **Scope confirmation — universe.** Which symbol universe does v1 backfill target (the existing
-  fundamentals universe from feature 168, or an operator-supplied list), given FMP-Free's cap only
-  bounds the *ratio enrichment*, not the EDGAR base?
+All items below are **resolved** (a scope decision closed at this review) or **design-deferred**
+(a genuine architectural fork whose resolution belongs to `/sdd-design`, explicitly acknowledged
+here so it is not lost). No unresolved product-scope question remains — the gate is clear.
+
+### Resolved (this review)
+
+- [x] **RESOLVED — v1 symbol universe.** v1 backfills an **operator-supplied explicit symbol list**,
+  reusing the existing `TriggerBackfill.symbols` input the OHLCV path already takes (lowest-rework,
+  consistent ergonomics). When no list is supplied, the UI/agent default is the **feature-168
+  fundamentals universe**. FMP-Free's 250/day cap bounds only the optional *ratio-enrichment* pass,
+  never the EDGAR statement base — so universe size does not gate the primary backfill. This closes
+  the FR-4 deliverable ambiguity the review flagged.
+- [x] **RESOLVED — FMP daily-cap reconciliation.** Ratio enrichment reuses the existing
+  `marketdata.fmp.daily_request_cap` (=250) as the single FMP budget; **no second competing cap** is
+  introduced (see Config Key Changes). Closes the review's config-key-overlap warning.
+- [x] **RESOLVED — migration NNN.** marketdata next-free = `005` (verified); ingest next-free = `012`
+  (verified; the earlier `006` guess was stale). Both migrations are paired up/down.
+
+### Design-deferred (resolve at `/sdd-design` — acknowledged, not blocking)
+
+- [x] **D-1 — hypertable partition key (`filed_date` vs `period_end`).** The as-of read (FR-5)
+  filters on `filed_date`, but the natural fiscal axis is `period_end`. Decide at design with the
+  no-look-ahead read pattern driving the choice.
+- [x] **D-2 — EDGAR XBRL → platform metric mapping.** How EDGAR XBRL tags map onto feature-063's
+  `pe_ratio`/`eps`/… vocabulary and the screener's `extra_metrics` union (ledger `117`), and how much
+  statement normalization v1 covers.
+- [x] **D-3 — 032 evaluator/proto seam.** Whether the fundamental operand must compose with
+  `RunSegmentedBacktest`; hold the `xstockstrat-analysis` evaluator seam so both land, and pre-assign
+  `analysis.proto` field numbers if 032 and 198 reach impl-spec concurrently (see Proto section).
+
+### Known traps folded into the design contract (acknowledged; design/spec must honor)
+
+- [x] **T-1 — look-ahead bias (the central risk).** `xstockstrat-analysis`'s reviewer focus is
+  literally "no look-ahead bias." The FR-5 as-of read (`filed_date` ≤ simulated date) is the guard;
+  design must prove the evaluator never resolves a not-yet-filed period, and a RED test must assert a
+  Q-result filed after the simulated bar is invisible (`@AC-3`/`@AC-4`).
+- [x] **T-2 — backfill data kind vs. timeframe** (ledger `080`, feature 143). Fundamentals ride a new
+  `BackfillDataKind` axis (default `BARS=0`), never a timeframe value.
+- [x] **T-3 — vendor literal-string audit** (ledger `129`). EDGAR is keyless + FMP reuse avoids the
+  credential-deploy scope-creep by design; still grep every provider-name literal when touching
+  `marketdata_service.go`'s selector so EDGAR is added without breaking the `finnhub`/`fmp` snapshot
+  path.
+- [x] **T-4 — agent projection + strat-lab skill** (ledger `134`, root CLAUDE.md). Projected-message
+  field additions break `test_*_projection.py`; `run_backtest` changes require the `strat-lab`
+  `backtest` skill update in the **same PR**. Enumerate at spec time.
+- [x] **T-5 — no fragile full-stack smoke test** (ledger `129`). Verify EDGAR/FMP with a narrow
+  direct-API check + fake-backed unit tests, not a deployed-instance `grpcurl` step.
