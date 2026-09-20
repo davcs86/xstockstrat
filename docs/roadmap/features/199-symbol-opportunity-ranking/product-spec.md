@@ -119,8 +119,9 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 - [x] DBA review + service owner (schema migration) — **only if** `symbol_score` is persisted
 
 **Merge-order dependency:** depends on **feature 198 (opportunity-composite-score)** — this feature
-consumes `Opportunity.composite_score`. 198 is `design-approved`, not merged. 199 must not merge before
-198, and shares the analysis opportunity path (soft rebase overlap with 198, plus in-flight 187/193/188).
+consumes `Opportunity.composite_score`. 198 is `implementation-ready` (both are pre-merge). 199 must not
+merge before 198, and shares the analysis opportunity path (soft rebase overlap with 198, plus in-flight
+187/193/188). Recorded as a blocking row in `docs/roadmap/features/merge-order.md`.
 
 ## Acceptance Criteria
 

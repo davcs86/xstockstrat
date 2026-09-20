@@ -57,3 +57,14 @@ Depends on **feature 198** (`Opportunity.composite_score` column + proto field).
 ### Consumer surfaces (C-14)
 
 UI `/insights` (SymbolGroupCard orderable by symbol_score) + Agent (`list_opportunities` / symbol-compare projection).
+
+## Session 2026-09-20 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready.
+- Result: PASS WITH WARNINGS — 0 blockers.
+- Warnings:
+  1. Config key `analysis.scoring.strategy_weight_override.<strategy_id>` uses a non-standard 4-segment (dynamic-suffix) form — no 4-segment precedent in the analysis namespace (all ~40 keys are 3-segment). Already an Open Question; resolve at design (per-strategy dynamic keys vs one structured JSON value). (C-05)
+  2. Migration up/down pairing (C-07) implied not restated in the conditional persisted branch — confirm at design if symbol_score is persisted.
+- Overlap findings: no FAIL-class collision (199 has reserved no concrete field/migration/key yet). HARD merge-order dependency on 198 (consumes composite_score; buf breaking/golang-migrate can't see 198's uncommitted claims). Blocking row added to merge-order.md. Soft same-file rebase overlap on servicer.py _compute_opportunities, opportunities.py ORDER BY, insights/opportunities/page.tsx, agent list_opportunities — shared with 198/187/193/188.
+- Verified against code: feature-065 _grade A-F at servicer.py:5174-5184 (strategy grade source real); current MAX-partition sort default at opportunities.py:35 (the behavior FR-2 replaces); composite_score does not yet exist in source (198 spec-only → merge-order dep confirmed).
+- Fixed stale label: product-spec said 198 "design-approved" → now implementation-ready (both pre-merge).

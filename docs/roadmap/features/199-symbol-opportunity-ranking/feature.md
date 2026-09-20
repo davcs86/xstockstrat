@@ -11,6 +11,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-09-20 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-09-20 | `draft` → `spec-ready` | /sdd-review | Product spec approved (1 advisory warning: 4-segment override key shape → design; 0 blockers). Merge-order row added: 199 depends on 198 |
 
 ---
 
@@ -47,4 +48,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review symbol-opportunity-ranking product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-design symbol-opportunity-ranking` — recon + design debate (pick the diminishing-returns function shape, grade→weight map, override key shape) before /sdd-spec
