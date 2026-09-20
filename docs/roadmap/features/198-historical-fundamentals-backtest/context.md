@@ -246,3 +246,8 @@
 - Verification: grep confirms all keys present in both docs. TDD: N/A (config docs; reads default-guarded in step 4).
 - Files: services/xstockstrat-marketdata/CLAUDE.md, docs/patterns/config-governance.md. Deviations: none.
 - NOTE: config-governance.md + service CLAUDE.md changed → context-constitution refresh due at teardown (step 17).
+
+### Step 7 — migration: ingest 012 data_kind column [done]
+- 012_backfill_data_kind.up.sql: ADD COLUMN data_kind text NOT NULL DEFAULT 'BARS' on both
+  ingest.backfill_jobs and ingest.backfill_chunks (default preserves existing OHLCV jobs, @AC-6).
+  .down.sql drops both. Offline-verified (tip 011→012; ADD↔DROP inverse). TDD: N/A. Deviations: none.

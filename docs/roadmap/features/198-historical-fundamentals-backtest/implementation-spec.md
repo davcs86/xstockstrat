@@ -262,7 +262,7 @@ and the naming is `<service>.<category>.<key>` (C-05).
 
 ### Step 7 — migration: ingest `012` data_kind column
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/migrations/012_backfill_data_kind.up.sql` — create
