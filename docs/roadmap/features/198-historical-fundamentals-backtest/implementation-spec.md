@@ -1,6 +1,6 @@
 # Implementation Spec: historical-fundamentals-backtest
 
-**Status**: `pending`
+**Status**: `code-completed`
 **Created**: 2026-09-20
 **Feature**: `docs/roadmap/features/198-historical-fundamentals-backtest/feature.md`
 **Total Steps**: 17
@@ -583,7 +583,7 @@ fixture change.
 
 ### Step 17 — docs: runbook + context-constitution teardown
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`
 **Files**:
 - `docs/runbooks/historical-backfill.md` — modify (fundamentals data-kind note)

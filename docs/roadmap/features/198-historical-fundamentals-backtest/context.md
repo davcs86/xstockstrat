@@ -391,3 +391,27 @@
   (setup warmup + both new tests). WebServer ECONNRESET lines are dev-server prewarm noise, not failures.
 - Covers: AC-7, AC-8. Files: e2e/insights/{backfills,strategy-authoring}.spec.ts. Deviations: test
   placement + mock (Deviation Log).
+
+### Step 17 — docs: runbook + context-constitution teardown [done]
+- docs/runbooks/historical-backfill.md: new "Fundamentals backfill (data kind, feature 198)" section
+  under Step 1 — UI Data-kind selector + trigger_backfill data_kind="fundamentals"; EDGAR base source,
+  PIT price-join for price-derived metrics, FMP-Free ratio enrichment best-effort/cap-bounded; the
+  analysis.backtest.fundamentals.enabled gate (default OFF).
+- **Teardown audit (manual — context-forge plugin UNAVAILABLE in this session):** no
+  `/context-forge:context-constitution refresh` skill present (not in the skills list, no
+  .claude/skills/context-forge). Performed the manual equivalent per root CLAUDE.md § Teardown:
+  re-read every context file this session touched (or whose behavior it changed) against the code and
+  reconciled the drift found:
+  - services/xstockstrat-agent/CLAUDE.md — trigger_backfill MCP-tool table row said "OHLCV history
+    backfill"; updated to note the data_kind bars/fundamentals split (behavior I changed).
+  - services/xstockstrat-analysis/docs/context-constitution.md — added **ANALYSIS-10** (strict
+    filed_date < bar_date T+1 no-look-ahead + the single `_load_fundamentals` chokepoint every evaluate
+    consumer must route through + the gate) — a genuinely non-obvious, parity-load-bearing invariant.
+  - Verified consistent (no edit needed): services/xstockstrat-analysis/CLAUDE.md config-key row
+    (get_bool/default false/chokepoint), docs/patterns/config-governance.md feature-198 row,
+    docs/runbooks/mcp-tools.md trigger_backfill + components rows (error wording matches client.py),
+    strat-lab SKILL.md + reference/backfill.md.
+  This manual reconciliation + the "plugin unavailable" note must be carried into the integration PR body.
+- Verification: grep -n -i "fundamental" docs/runbooks/historical-backfill.md → section present.
+- Files: docs/runbooks/historical-backfill.md, services/xstockstrat-agent/CLAUDE.md,
+  services/xstockstrat-analysis/docs/context-constitution.md.

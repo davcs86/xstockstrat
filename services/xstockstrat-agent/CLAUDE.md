@@ -65,7 +65,7 @@ result; both carry the same guide for correlating the `list_accounts` / `get_pos
 | `manage_signal_source` | Register/update/reactivate/deactivate signal sources (honest verbs — feature 088) |
 | `set_strategy_live` | Enable/disable continuous live evaluation + alerting for a strategy (feature 048) |
 | `run_fundamentals_scan` | Manually trigger the fundamentals signal producer scan (admin-scoped write, feature 156); wraps the existing `RunFundamentalsScan` RPC — `force`/`dry_run`/`symbols` |
-| `trigger_backfill` | Trigger an OHLCV history backfill via xstockstrat-ingest (admin-scoped write, feature 066) |
+| `trigger_backfill` | Trigger a history backfill via xstockstrat-ingest (admin-scoped write, feature 066); `data_kind` selects `bars` (daily OHLCV, default) or `fundamentals` (point-in-time filings history, feature 198) |
 | `get_backfill_status` | Check one backfill job or list recent jobs (read-only, feature 066) |
 | `cancel_backfill` | Cancel a queued/running backfill job (admin-scoped, feature 087) |
 | `test_formula` | Dry-run inline formula source in the sandbox, registers nothing (read-only, feature 087) |

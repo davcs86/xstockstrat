@@ -15,6 +15,7 @@
 | 2026-09-20 | `spec-ready` → `design-approved` | /sdd-design | Design debated (1 round, quick) and approved; recon.md + design.md written; 3 forks resolved (PIT price-join, full live parity, T+1 availability) |
 | 2026-09-20 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 17 steps |
 | 2026-09-20 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential execution started; Step 1 (proto) done |
+| 2026-09-20 | `in-progress` → `code-completed` | /sdd-execute | All 17 steps done (proto→marketdata→ingest→analysis→agent→UI→docs); per-service suites green; teardown reconciled (context-forge plugin unavailable, manual audit performed) |
 
 ---
 
