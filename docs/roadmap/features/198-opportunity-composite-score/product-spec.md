@@ -45,10 +45,17 @@ the opportunity's declared `direction` (`buy`/`sell`/`hold`/`watchlist`). Eviden
 that direction raises the magnitude; evidence contradicting it discounts the magnitude. The composite
 is a magnitude in the declared direction, not a signed number and not direction-agnostic.
 
-FR-5. **Evidence set (v1) = all four types.** The v1 fusion inputs are: readiness (`conviction`),
-decayed signal strength (`signal_axis`), fundamentals value+quality composite (the seeded
-`fundamentals_value_quality` formula output), and the per-strategy technical signal. Each must have a
-defined normalization onto the [0,1] fusion scale and a defined presence/confidence weight.
+FR-5. **Evidence set (v1) = the two axes present at the opportunity write path.** _(Changed from the
+original "all four types" by explicit user sign-off, 2026-09-20 — see `context.md`; `/sdd-design`
+recon proved fundamentals and technical are not distinct axes in this path.)_ The v1 fusion inputs are
+exactly: readiness (`conviction`) and decayed directional signal strength (derived from the same
+signals `signal_axis` maxes). **Fundamentals is excluded as a distinct axis** — it re-enters
+generically as `ExternalSignal`s feeding the signal evidence, so a separate fundamentals term would
+double-count. **Technical is excluded** — it is screener/backtest-only, behind the deliberate
+`_compute_opportunities` boundary, and pulling it in would add per-symbol RPC cost. The readiness
+sub-score uses the identity map (the ordinal is used directly as its `[0,1]` sub-score); the signal
+sub-score is direction-scoped multiplicative attenuation. The fusion function is written to accept N
+weighted `(sᵢ, wᵢ)` pairs so it remains extensible if a future feature adds a genuinely distinct axis.
 
 FR-6. **Determinism.** For a fixed opportunity input set (same evidence values, same config), the
 composite is deterministic and reproducible (analysis service review focus: scoring determinism, no

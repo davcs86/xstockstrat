@@ -62,6 +62,29 @@ UI `/insights` (opportunities queue) + `/trader` (per-symbol page) + Agent `list
 - Overlap findings: no hard collisions. Additive `Opportunity` proto field → next free **21** (max is `data_unavailable=20`). New analysis migration → **024** (tip `023_opportunity_compute_state`). Five `analysis.scoring.composite_*` keys uncontested. Three SOFT same-file rebase risks to reconcile at /sdd-spec time by rebasing onto landed: 187 (`opportunities.py` read ORDER BY), 193 (`_compute_opportunities` body), 188 (`OpportunityRow` markup). Re-derive field/migration numbers from the merged tree at spec time.
 - Verified against code: `conviction` ordinal-not-probability comment `analysis.proto:555-557`; empirical-Bayes precedent `scoring.md:27-30`; `signal_axis` col `migrations/011_opportunities.up.sql:16`; `get_float_present` `app/config/watcher.py:132`.
 
+## Session 2026-09-20 — sdd-design
+
+- Phase 0 Recon: wrote recon.md (services: analysis, ui, agent; scenario-recon C-16 digest). Key reuse: feature-065 EB shrinkage shape (_aggregate_cells:5187), get_float_present, scoreColor, replace_for_user/replace_symbols, agent _opportunity_to_dict + descriptor-parity test.
+- Phase 1 Grilling: 4 rounds (full). Verdict SOUND/APPROVABLE, no Floor breach.
+- **Chosen approach**: 2-axis per-opportunity composite = (Σwᵢ·sᵢ + 0.5·k)/(Σwᵢ+k), Σw≤0→NULL, inlined EB (not refactoring _aggregate_cells / ANALYSIS-2). s_readiness = conviction (IDENTITY map, declared ordinal ranking device). s_signal = clamp(max_agree,0,1)·(1−clamp(max_conflict,0,1)) over decayed effective_conviction, direction vs best_direction (raw). k=1.0, weights 1.0/1.0 → band [0.167,0.833]. Computed in _row_for before axis-zeroing; heal path recomputes via same fn. Proto field 21; migration 024; agent projection; UI /insights+/trader+mobile, em-dash on NULL.
+- **Rejected**: all four axes (fundamentals double-counts via signal_axis, technical out-of-path servicer.py:667); one-sided readiness transform 0.5+0.5·conv (inflates weak setups, compresses range); k=4.0 (dimensionally wrong for unit weights, caps at 0.667); linear-cancellation direction discount (parity cliff); ratio a/(a+c) (scale-free); (net+1)/2 fold (incommensurable 0.5-neutral); extract _eb_shrink (touches ANALYSIS-2 binding path).
+
+### C-16 / C-15 SIGN-OFF (recorded per C-16, C-11)
+
+- **FR-5 CHANGED** from "Evidence set (v1) = all four types" to "the two axes present at the opportunity write path (readiness + directional signal)". **Explicit user sign-off given 2026-09-20** (this session). Rationale: /sdd-design Phase 0 recon proved fundamentals is not a distinct axis (re-enters via signal_axis → double-count) and technical is screener/backtest-only behind servicer.py:667. `@AC-4`/`@AC-6` amended to the two-axis reality; `@AC-2/3/5` recomputed under the identity map + k=1.0; new `@AC-11` (data-unavailable→NULL) + `@AC-12` (muted 0/0→NULL) added. No other opportunity `@AC-*` guarantee changed (all PRESERVE/EXTEND).
+
+### MUST-FIX promoted (round 4): forward-looking cardinal guard
+
+- `composite_score` is ranking-only, NEVER a cardinal sizing/alert/risk input (the fails.md:313 next-occurrence guard). Materialized as: (a) proto field-21 doc-comment mirroring conviction's "NOT a probability" (analysis.proto:555-557); (b) a new ANALYSIS-N invariant in services/xstockstrat-analysis/docs/context-constitution.md naming ExternalSignal.conviction (ingest.proto:110) as the correct confidence-to-size producer. Not an @AC (no consumer to assert against yet). These are blocking /sdd-spec steps.
+
+## Open Threads (carry into /sdd-spec)
+
+- [ ] Heal-path direction parity: derive best_direction from RAW conviction in the heal recompute; heal-parity test must cover a MIXED-direction (buy+sell) symbol. → analysis service+test steps.
+- [ ] Anchor/measure split (raw best_direction vs decayed agree/conflict magnitudes): intended, document in the test step so it isn't "fixed" as a bug.
+- [ ] @AC-14 (feature-095) determinism: carry an EXECUTABLE assertion, not prose (holds by construction — composite computed before read-time live enrichment).
+- [ ] Signal presence predicate: key on signal-evidence existence (sig_contribs non-empty), NEVER s_signal>0 — a present-but-zero (full-conflict) signal is an active pull-down (@AC-4), not a dropped term.
+- [ ] Rebase re-derivation: re-confirm proto field 21 + migration 024 against the merged tree (soft overlap with features 187/193/188).
+
 ### Grounding (pre-story exploration, this session)
 
 - Analysis scoring: `_score_from_metrics`/`_grade`/`_aggregate_cells` (feature 065 empirical-Bayes),

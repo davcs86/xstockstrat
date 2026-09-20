@@ -12,6 +12,7 @@
 |---|---|---|---|
 | 2026-09-20 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-09-20 | `draft` → `spec-ready` | /sdd-review | Product spec approved (3 advisory warnings; 0 blockers; no hard overlaps) |
+| 2026-09-20 | `spec-ready` → `design-approved` | /sdd-design | Design debated (4 rounds, full) and approved; recon.md + design.md written. FR-5 changed to 2 axes (user sign-off); identity readiness map + multiplicative direction discount + EB shrinkage k=1.0 |
 
 ---
 
@@ -19,6 +20,8 @@
 
 - [Product Spec](product-spec.md) — requirements and governance
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
+- [Recon Dossier](recon.md) — grounded codebase map + Existing Business Rules
+- [Design](design.md) — chosen approach, rejected alternatives, open risks (4-round debate)
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec opportunity-composite-score`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -49,4 +52,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-design opportunity-composite-score` — full design debate (resolve the ordinal-vs-probability normalization risk) before /sdd-spec
+`/sdd-spec opportunity-composite-score` — generate implementation spec from the approved design
