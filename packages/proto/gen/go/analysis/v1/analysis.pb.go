@@ -299,6 +299,7 @@ const (
 	ComponentKind_COMPONENT_KIND_UNSPECIFIED       ComponentKind = 0
 	ComponentKind_COMPONENT_KIND_BUILTIN_INDICATOR ComponentKind = 1
 	ComponentKind_COMPONENT_KIND_CUSTOM_FORMULA    ComponentKind = 2
+	ComponentKind_COMPONENT_KIND_FUNDAMENTAL       ComponentKind = 3 // feature 198: a point-in-time fundamental metric series
 )
 
 // Enum value maps for ComponentKind.
@@ -307,11 +308,13 @@ var (
 		0: "COMPONENT_KIND_UNSPECIFIED",
 		1: "COMPONENT_KIND_BUILTIN_INDICATOR",
 		2: "COMPONENT_KIND_CUSTOM_FORMULA",
+		3: "COMPONENT_KIND_FUNDAMENTAL",
 	}
 	ComponentKind_value = map[string]int32{
 		"COMPONENT_KIND_UNSPECIFIED":       0,
 		"COMPONENT_KIND_BUILTIN_INDICATOR": 1,
 		"COMPONENT_KIND_CUSTOM_FORMULA":    2,
+		"COMPONENT_KIND_FUNDAMENTAL":       3,
 	}
 )
 
@@ -2548,9 +2551,13 @@ type StrategyComponent struct {
 	// optional benchmark/reference symbol (feature 152): when non-empty the component is
 	// computed on this symbol's bars (e.g. "VOO") and its output series is aligned onto the
 	// evaluated symbol's bar timeline; empty = computed on the evaluated symbol (unchanged).
-	SourceSymbol  string `protobuf:"bytes,6,opt,name=source_symbol,json=sourceSymbol,proto3" json:"source_symbol,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	SourceSymbol string `protobuf:"bytes,6,opt,name=source_symbol,json=sourceSymbol,proto3" json:"source_symbol,omitempty"`
+	// used when kind == COMPONENT_KIND_FUNDAMENTAL (feature 198): a point-in-time metric name from
+	// the _FUNDAMENTAL_FIELDS ∪ extra_metrics vocabulary (e.g. "pe_ratio", "eps"). Resolved as-of
+	// each bar via GetHistoricalFundamentals with filed_date < bar_date (T+1, no look-ahead).
+	FundamentalMetric string `protobuf:"bytes,7,opt,name=fundamental_metric,json=fundamentalMetric,proto3" json:"fundamental_metric,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *StrategyComponent) Reset() {
@@ -2621,6 +2628,13 @@ func (x *StrategyComponent) GetParams() map[string]float64 {
 func (x *StrategyComponent) GetSourceSymbol() string {
 	if x != nil {
 		return x.SourceSymbol
+	}
+	return ""
+}
+
+func (x *StrategyComponent) GetFundamentalMetric() string {
+	if x != nil {
+		return x.FundamentalMetric
 	}
 	return ""
 }
@@ -5894,7 +5908,7 @@ const file_analysis_v1_analysis_proto_rawDesc = "" +
 	"\x04page\x18\x02 \x01(\v2#.xstockstrat.common.v1.PageResponseR\x04page\";\n" +
 	"\x18GetStrategyReportRequest\x12\x1f\n" +
 	"\vstrategy_id\x18\x01 \x01(\tR\n" +
-	"strategyId\"\xd7\x02\n" +
+	"strategyId\"\x86\x03\n" +
 	"\x11StrategyComponent\x12\x19\n" +
 	"\bref_name\x18\x01 \x01(\tR\arefName\x12:\n" +
 	"\x04kind\x18\x02 \x01(\x0e2&.xstockstrat.analysis.v1.ComponentKindR\x04kind\x12\x1c\n" +
@@ -5902,7 +5916,8 @@ const file_analysis_v1_analysis_proto_rawDesc = "" +
 	"\n" +
 	"formula_id\x18\x04 \x01(\tR\tformulaId\x12N\n" +
 	"\x06params\x18\x05 \x03(\v26.xstockstrat.analysis.v1.StrategyComponent.ParamsEntryR\x06params\x12#\n" +
-	"\rsource_symbol\x18\x06 \x01(\tR\fsourceSymbol\x1a9\n" +
+	"\rsource_symbol\x18\x06 \x01(\tR\fsourceSymbol\x12-\n" +
+	"\x12fundamental_metric\x18\a \x01(\tR\x11fundamentalMetric\x1a9\n" +
 	"\vParamsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\x01R\x05value:\x028\x01\"\xe4\x04\n" +
@@ -6239,11 +6254,12 @@ const file_analysis_v1_analysis_proto_rawDesc = "" +
 	"#NO_TRADE_REASON_ENTIRE_RANGE_WARMUP\x10\x01\x12$\n" +
 	" NO_TRADE_REASON_ENTRY_NEVER_TRUE\x10\x02\x12(\n" +
 	"$NO_TRADE_REASON_INSUFFICIENT_CAPITAL\x10\x03\x12!\n" +
-	"\x1dNO_TRADE_REASON_FORMULA_ERROR\x10\x04*x\n" +
+	"\x1dNO_TRADE_REASON_FORMULA_ERROR\x10\x04*\x98\x01\n" +
 	"\rComponentKind\x12\x1e\n" +
 	"\x1aCOMPONENT_KIND_UNSPECIFIED\x10\x00\x12$\n" +
 	" COMPONENT_KIND_BUILTIN_INDICATOR\x10\x01\x12!\n" +
-	"\x1dCOMPONENT_KIND_CUSTOM_FORMULA\x10\x02*\xbd\x01\n" +
+	"\x1dCOMPONENT_KIND_CUSTOM_FORMULA\x10\x02\x12\x1e\n" +
+	"\x1aCOMPONENT_KIND_FUNDAMENTAL\x10\x03*\xbd\x01\n" +
 	"\x11StrategyOperation\x12\"\n" +
 	"\x1eSTRATEGY_OPERATION_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bSTRATEGY_OPERATION_REGISTER\x10\x01\x12\x1d\n" +

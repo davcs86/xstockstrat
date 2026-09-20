@@ -98,7 +98,7 @@ Constitution **C-09**.
 
 ### Step 2 — proto-gen: regenerate Go/Python/TS stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/**` — modify (generated; never hand-edited)

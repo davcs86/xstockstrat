@@ -660,6 +660,222 @@ export type GetFundamentalsMultiResponse = Message<"xstockstrat.marketdata.v1.Ge
  */
 export declare const GetFundamentalsMultiResponseSchema: GenMessage<GetFundamentalsMultiResponse>;
 /**
+ * One as-reported fiscal period for a symbol, keyed on when it became public (filed_date).
+ * Distinct from the latest-snapshot Fundamentals message: this is a repeated time series and
+ * carries the filing dates that make look-ahead-safe backtesting possible.
+ *
+ * @generated from message xstockstrat.marketdata.v1.HistoricalFundamentalsPeriod
+ */
+export type HistoricalFundamentalsPeriod = Message<"xstockstrat.marketdata.v1.HistoricalFundamentalsPeriod"> & {
+    /**
+     * @generated from field: string symbol = 1;
+     */
+    symbol: string;
+    /**
+     * e.g. "Q1-2020", "FY2019"
+     *
+     * @generated from field: string fiscal_period = 2;
+     */
+    fiscalPeriod: string;
+    /**
+     * "quarterly" | "annual"
+     *
+     * @generated from field: string period_type = 3;
+     */
+    periodType: string;
+    /**
+     * @generated from field: google.protobuf.Timestamp period_end = 4;
+     */
+    periodEnd?: Timestamp | undefined;
+    /**
+     * SEC filing date — the point-in-time key
+     *
+     * @generated from field: google.protobuf.Timestamp filed_date = 5;
+     */
+    filedDate?: Timestamp | undefined;
+    /**
+     * SEC acceptance timestamp (often post-close)
+     *
+     * @generated from field: google.protobuf.Timestamp accepted_date = 6;
+     */
+    acceptedDate?: Timestamp | undefined;
+    /**
+     * Reused metric vocabulary (names mirror Fundamentals); pe_ratio/market_cap are PIT price-joined.
+     *
+     * @generated from field: double market_cap = 7;
+     */
+    marketCap: number;
+    /**
+     * @generated from field: double pe_ratio = 8;
+     */
+    peRatio: number;
+    /**
+     * @generated from field: double pb_ratio = 9;
+     */
+    pbRatio: number;
+    /**
+     * @generated from field: double dividend_yield = 10;
+     */
+    dividendYield: number;
+    /**
+     * @generated from field: double eps = 11;
+     */
+    eps: number;
+    /**
+     * @generated from field: double beta = 12;
+     */
+    beta: number;
+    /**
+     * @generated from field: double roe = 13;
+     */
+    roe: number;
+    /**
+     * @generated from field: double debt_to_equity = 14;
+     */
+    debtToEquity: number;
+    /**
+     * @generated from field: double price = 15;
+     */
+    price: number;
+    /**
+     * @generated from field: double year_high = 16;
+     */
+    yearHigh: number;
+    /**
+     * @generated from field: double year_low = 17;
+     */
+    yearLow: number;
+    /**
+     * raw XBRL overflow (keys are EDGAR tag names)
+     *
+     * @generated from field: map<string, double> extra_metrics = 18;
+     */
+    extraMetrics: {
+        [key: string]: number;
+    };
+    /**
+     * @generated from field: string currency = 19;
+     */
+    currency: string;
+    /**
+     * "edgar" (base) or "edgar+fmp" when a ratio was FMP-enriched
+     *
+     * @generated from field: string source = 20;
+     */
+    source: string;
+    /**
+     * canonical names not sourceable for this period
+     *
+     * @generated from field: repeated string missing_metrics = 21;
+     */
+    missingMetrics: string[];
+};
+/**
+ * Describes the message xstockstrat.marketdata.v1.HistoricalFundamentalsPeriod.
+ * Use `create(HistoricalFundamentalsPeriodSchema)` to create a new message.
+ */
+export declare const HistoricalFundamentalsPeriodSchema: GenMessage<HistoricalFundamentalsPeriod>;
+/**
+ * @generated from message xstockstrat.marketdata.v1.GetHistoricalFundamentalsRequest
+ */
+export type GetHistoricalFundamentalsRequest = Message<"xstockstrat.marketdata.v1.GetHistoricalFundamentalsRequest"> & {
+    /**
+     * @generated from field: string symbol = 1;
+     */
+    symbol: string;
+    /**
+     * Only periods with filed_date STRICTLY BEFORE as_of_date are returned (T+1 availability).
+     *
+     * @generated from field: google.protobuf.Timestamp as_of_date = 2;
+     */
+    asOfDate?: Timestamp | undefined;
+    /**
+     * filter on period_end (inclusive); unset = open
+     *
+     * @generated from field: google.protobuf.Timestamp range_start = 3;
+     */
+    rangeStart?: Timestamp | undefined;
+    /**
+     * filter on period_end (inclusive); unset = open
+     *
+     * @generated from field: google.protobuf.Timestamp range_end = 4;
+     */
+    rangeEnd?: Timestamp | undefined;
+    /**
+     * e.g. ["quarterly","annual"]; empty = both
+     *
+     * @generated from field: repeated string period_types = 5;
+     */
+    periodTypes: string[];
+};
+/**
+ * Describes the message xstockstrat.marketdata.v1.GetHistoricalFundamentalsRequest.
+ * Use `create(GetHistoricalFundamentalsRequestSchema)` to create a new message.
+ */
+export declare const GetHistoricalFundamentalsRequestSchema: GenMessage<GetHistoricalFundamentalsRequest>;
+/**
+ * @generated from message xstockstrat.marketdata.v1.GetHistoricalFundamentalsResponse
+ */
+export type GetHistoricalFundamentalsResponse = Message<"xstockstrat.marketdata.v1.GetHistoricalFundamentalsResponse"> & {
+    /**
+     * @generated from field: repeated xstockstrat.marketdata.v1.HistoricalFundamentalsPeriod periods = 1;
+     */
+    periods: HistoricalFundamentalsPeriod[];
+};
+/**
+ * Describes the message xstockstrat.marketdata.v1.GetHistoricalFundamentalsResponse.
+ * Use `create(GetHistoricalFundamentalsResponseSchema)` to create a new message.
+ */
+export declare const GetHistoricalFundamentalsResponseSchema: GenMessage<GetHistoricalFundamentalsResponse>;
+/**
+ * @generated from message xstockstrat.marketdata.v1.BackfillFundamentalsRequest
+ */
+export type BackfillFundamentalsRequest = Message<"xstockstrat.marketdata.v1.BackfillFundamentalsRequest"> & {
+    /**
+     * @generated from field: repeated string symbols = 1;
+     */
+    symbols: string[];
+    /**
+     * period_end window to backfill
+     *
+     * @generated from field: xstockstrat.common.v1.TimeRange range = 2;
+     */
+    range?: TimeRange | undefined;
+    /**
+     * empty = both quarterly + annual
+     *
+     * @generated from field: repeated string period_types = 3;
+     */
+    periodTypes: string[];
+    /**
+     * @generated from field: bool overwrite = 4;
+     */
+    overwrite: boolean;
+};
+/**
+ * Describes the message xstockstrat.marketdata.v1.BackfillFundamentalsRequest.
+ * Use `create(BackfillFundamentalsRequestSchema)` to create a new message.
+ */
+export declare const BackfillFundamentalsRequestSchema: GenMessage<BackfillFundamentalsRequest>;
+/**
+ * @generated from message xstockstrat.marketdata.v1.BackfillFundamentalsResponse
+ */
+export type BackfillFundamentalsResponse = Message<"xstockstrat.marketdata.v1.BackfillFundamentalsResponse"> & {
+    /**
+     * @generated from field: int64 periods_written = 1;
+     */
+    periodsWritten: bigint;
+    /**
+     * @generated from field: repeated string failed_symbols = 2;
+     */
+    failedSymbols: string[];
+};
+/**
+ * Describes the message xstockstrat.marketdata.v1.BackfillFundamentalsResponse.
+ * Use `create(BackfillFundamentalsResponseSchema)` to create a new message.
+ */
+export declare const BackfillFundamentalsResponseSchema: GenMessage<BackfillFundamentalsResponse>;
+/**
  * @generated from message xstockstrat.marketdata.v1.GetLatestQuotesRequest
  */
 export type GetLatestQuotesRequest = Message<"xstockstrat.marketdata.v1.GetLatestQuotesRequest"> & {
@@ -924,5 +1140,27 @@ export declare const MarketDataService: GenService<{
         methodKind: "unary";
         input: typeof BatchGetLatestPriceRequestSchema;
         output: typeof BatchGetLatestPriceResponseSchema;
+    };
+    /**
+     * Point-in-time historical fundamentals read (feature 198): returns only periods whose
+     * filed_date < as_of_date (T+1 availability), for look-ahead-safe backtesting.
+     *
+     * @generated from rpc xstockstrat.marketdata.v1.MarketDataService.GetHistoricalFundamentals
+     */
+    getHistoricalFundamentals: {
+        methodKind: "unary";
+        input: typeof GetHistoricalFundamentalsRequestSchema;
+        output: typeof GetHistoricalFundamentalsResponseSchema;
+    };
+    /**
+     * Worker RPC driven by ingest.TriggerBackfill(data_kind=FUNDAMENTALS) (feature 198): fetches
+     * as-reported statements from SEC EDGAR + a point-in-time price-join and persists them.
+     *
+     * @generated from rpc xstockstrat.marketdata.v1.MarketDataService.BackfillFundamentals
+     */
+    backfillFundamentals: {
+        methodKind: "unary";
+        input: typeof BackfillFundamentalsRequestSchema;
+        output: typeof BackfillFundamentalsResponseSchema;
     };
 }>;

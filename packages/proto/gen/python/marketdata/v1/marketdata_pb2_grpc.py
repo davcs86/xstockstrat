@@ -106,6 +106,16 @@ class MarketDataServiceStub(object):
                 request_serializer=marketdata_dot_v1_dot_marketdata__pb2.BatchGetLatestPriceRequest.SerializeToString,
                 response_deserializer=marketdata_dot_v1_dot_marketdata__pb2.BatchGetLatestPriceResponse.FromString,
                 _registered_method=True)
+        self.GetHistoricalFundamentals = channel.unary_unary(
+                '/xstockstrat.marketdata.v1.MarketDataService/GetHistoricalFundamentals',
+                request_serializer=marketdata_dot_v1_dot_marketdata__pb2.GetHistoricalFundamentalsRequest.SerializeToString,
+                response_deserializer=marketdata_dot_v1_dot_marketdata__pb2.GetHistoricalFundamentalsResponse.FromString,
+                _registered_method=True)
+        self.BackfillFundamentals = channel.unary_unary(
+                '/xstockstrat.marketdata.v1.MarketDataService/BackfillFundamentals',
+                request_serializer=marketdata_dot_v1_dot_marketdata__pb2.BackfillFundamentalsRequest.SerializeToString,
+                response_deserializer=marketdata_dot_v1_dot_marketdata__pb2.BackfillFundamentalsResponse.FromString,
+                _registered_method=True)
 
 
 class MarketDataServiceServicer(object):
@@ -212,6 +222,22 @@ class MarketDataServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def GetHistoricalFundamentals(self, request, context):
+        """Point-in-time historical fundamentals read (feature 198): returns only periods whose
+        filed_date < as_of_date (T+1 availability), for look-ahead-safe backtesting.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def BackfillFundamentals(self, request, context):
+        """Worker RPC driven by ingest.TriggerBackfill(data_kind=FUNDAMENTALS) (feature 198): fetches
+        as-reported statements from SEC EDGAR + a point-in-time price-join and persists them.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_MarketDataServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -284,6 +310,16 @@ def add_MarketDataServiceServicer_to_server(servicer, server):
                     servicer.BatchGetLatestPrice,
                     request_deserializer=marketdata_dot_v1_dot_marketdata__pb2.BatchGetLatestPriceRequest.FromString,
                     response_serializer=marketdata_dot_v1_dot_marketdata__pb2.BatchGetLatestPriceResponse.SerializeToString,
+            ),
+            'GetHistoricalFundamentals': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetHistoricalFundamentals,
+                    request_deserializer=marketdata_dot_v1_dot_marketdata__pb2.GetHistoricalFundamentalsRequest.FromString,
+                    response_serializer=marketdata_dot_v1_dot_marketdata__pb2.GetHistoricalFundamentalsResponse.SerializeToString,
+            ),
+            'BackfillFundamentals': grpc.unary_unary_rpc_method_handler(
+                    servicer.BackfillFundamentals,
+                    request_deserializer=marketdata_dot_v1_dot_marketdata__pb2.BackfillFundamentalsRequest.FromString,
+                    response_serializer=marketdata_dot_v1_dot_marketdata__pb2.BackfillFundamentalsResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -666,6 +702,60 @@ class MarketDataService(object):
             '/xstockstrat.marketdata.v1.MarketDataService/BatchGetLatestPrice',
             marketdata_dot_v1_dot_marketdata__pb2.BatchGetLatestPriceRequest.SerializeToString,
             marketdata_dot_v1_dot_marketdata__pb2.BatchGetLatestPriceResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetHistoricalFundamentals(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.marketdata.v1.MarketDataService/GetHistoricalFundamentals',
+            marketdata_dot_v1_dot_marketdata__pb2.GetHistoricalFundamentalsRequest.SerializeToString,
+            marketdata_dot_v1_dot_marketdata__pb2.GetHistoricalFundamentalsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def BackfillFundamentals(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.marketdata.v1.MarketDataService/BackfillFundamentals',
+            marketdata_dot_v1_dot_marketdata__pb2.BackfillFundamentalsRequest.SerializeToString,
+            marketdata_dot_v1_dot_marketdata__pb2.BackfillFundamentalsResponse.FromString,
             options,
             channel_credentials,
             insecure,

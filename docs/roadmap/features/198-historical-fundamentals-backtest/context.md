@@ -190,3 +190,16 @@
   clean (exit 0 — additive only). TDD: N/A (proto contract).
 - Files modified: `packages/proto/{ingest,analysis,marketdata}/v1/*.proto`.
 - Deviations: none.
+
+### Step 2 — proto-gen: regenerate Go/Python/TS stubs [done]
+- Regenerated via the pinned Docker codegen image (`./scripts/localenv-setup.sh` → `Dockerfile.codegen`,
+  buf 1.72.0 / protoc-gen-go 1.36.11 / go-grpc 1.6.2 / connect-go 1.19.2 / grpcio-tools 1.80.0 — CI
+  parity). The container's final `tsc` compile step failed (gen/ts node_modules absent in image), so
+  the TS→JS `dist/` was recompiled on the host via `pnpm install` (its `prepare` hook runs `tsc`).
+- Verification: 28 files changed under `packages/proto/gen/` (16 source across go/python/ts for
+  analysis+ingest+marketdata, plus recompiled `dist/`); new symbols present in Go (`BackfillDataKind`,
+  `GetHistoricalFundamentals` connect stub), TS source + `dist/`; a second in-container `buf generate`
+  left the tree unchanged (idempotent — the `proto-freshness` gate). TDD: N/A (mechanical codegen).
+- Deviation: container `tsc` unavailable → `dist/` compiled on host via pnpm `prepare`
+  (CI-equivalent: same lockfile tsc). Disposition: CI-equivalent fallback (sequential-mode §Verification fallbacks).
+- Files modified: `packages/proto/gen/**`.

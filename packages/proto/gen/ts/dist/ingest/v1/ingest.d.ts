@@ -29,6 +29,23 @@ export declare enum FillMode {
 export declare function fillModeFromJSON(object: any): FillMode;
 export declare function fillModeToJSON(object: FillMode): string;
 export declare function fillModeToNumber(object: FillMode): number;
+/**
+ * BackfillDataKind selects WHAT a backfill fetches (feature 198). Distinct from the timeframe
+ * axis: FUNDAMENTALS carries no bar timeframe (the servicer branches around the 1d-only reject).
+ * UNSPECIFIED == BARS for back-compat — every existing OHLCV caller omits the field.
+ */
+export declare enum BackfillDataKind {
+    /** BACKFILL_DATA_KIND_UNSPECIFIED - treated as BARS by the servicer */
+    BACKFILL_DATA_KIND_UNSPECIFIED = "BACKFILL_DATA_KIND_UNSPECIFIED",
+    /** BACKFILL_DATA_KIND_BARS - OHLCV bars (marketdata.BackfillBars) */
+    BACKFILL_DATA_KIND_BARS = "BACKFILL_DATA_KIND_BARS",
+    /** BACKFILL_DATA_KIND_FUNDAMENTALS - point-in-time fundamentals (marketdata.BackfillFundamentals) */
+    BACKFILL_DATA_KIND_FUNDAMENTALS = "BACKFILL_DATA_KIND_FUNDAMENTALS",
+    UNRECOGNIZED = "UNRECOGNIZED"
+}
+export declare function backfillDataKindFromJSON(object: any): BackfillDataKind;
+export declare function backfillDataKindToJSON(object: BackfillDataKind): string;
+export declare function backfillDataKindToNumber(object: BackfillDataKind): number;
 /** Health of a registered signal source (feature 083). Closed set → enum (C-04). */
 export declare enum SourceHealthStatus {
     SOURCE_HEALTH_STATUS_UNSPECIFIED = "SOURCE_HEALTH_STATUS_UNSPECIFIED",
@@ -82,6 +99,8 @@ export interface BackfillJob {
     chunksTotal: number;
     /** chunks in COMPLETED state (FR-5) */
     chunksCompleted: number;
+    /** what the job backfills; UNSPECIFIED == BARS (feature 198) */
+    dataKind: BackfillDataKind;
 }
 export interface TriggerBackfillRequest {
     symbols: string[];
@@ -96,6 +115,8 @@ export interface TriggerBackfillRequest {
     timeframeEnum: Timeframe;
     /** FR-4; UNSPECIFIED == FULL. Independent of `overwrite`. */
     fillMode: FillMode;
+    /** feature 198; UNSPECIFIED == BARS. FUNDAMENTALS ignores timeframe. */
+    dataKind: BackfillDataKind;
 }
 export interface TriggerBackfillResponse {
     jobId: string;

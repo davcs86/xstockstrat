@@ -392,6 +392,8 @@ var ComponentKind;
     ComponentKind["COMPONENT_KIND_UNSPECIFIED"] = "COMPONENT_KIND_UNSPECIFIED";
     ComponentKind["COMPONENT_KIND_BUILTIN_INDICATOR"] = "COMPONENT_KIND_BUILTIN_INDICATOR";
     ComponentKind["COMPONENT_KIND_CUSTOM_FORMULA"] = "COMPONENT_KIND_CUSTOM_FORMULA";
+    /** COMPONENT_KIND_FUNDAMENTAL - feature 198: a point-in-time fundamental metric series */
+    ComponentKind["COMPONENT_KIND_FUNDAMENTAL"] = "COMPONENT_KIND_FUNDAMENTAL";
     ComponentKind["UNRECOGNIZED"] = "UNRECOGNIZED";
 })(ComponentKind || (exports.ComponentKind = ComponentKind = {}));
 function componentKindFromJSON(object) {
@@ -405,6 +407,9 @@ function componentKindFromJSON(object) {
         case 2:
         case "COMPONENT_KIND_CUSTOM_FORMULA":
             return ComponentKind.COMPONENT_KIND_CUSTOM_FORMULA;
+        case 3:
+        case "COMPONENT_KIND_FUNDAMENTAL":
+            return ComponentKind.COMPONENT_KIND_FUNDAMENTAL;
         case -1:
         case "UNRECOGNIZED":
         default:
@@ -419,6 +424,8 @@ function componentKindToJSON(object) {
             return "COMPONENT_KIND_BUILTIN_INDICATOR";
         case ComponentKind.COMPONENT_KIND_CUSTOM_FORMULA:
             return "COMPONENT_KIND_CUSTOM_FORMULA";
+        case ComponentKind.COMPONENT_KIND_FUNDAMENTAL:
+            return "COMPONENT_KIND_FUNDAMENTAL";
         case ComponentKind.UNRECOGNIZED:
         default:
             return "UNRECOGNIZED";
@@ -432,6 +439,8 @@ function componentKindToNumber(object) {
             return 1;
         case ComponentKind.COMPONENT_KIND_CUSTOM_FORMULA:
             return 2;
+        case ComponentKind.COMPONENT_KIND_FUNDAMENTAL:
+            return 3;
         case ComponentKind.UNRECOGNIZED:
         default:
             return -1;
@@ -4063,6 +4072,7 @@ function createBaseStrategyComponent() {
         formulaId: "",
         params: {},
         sourceSymbol: "",
+        fundamentalMetric: "",
     };
 }
 exports.StrategyComponent = {
@@ -4084,6 +4094,9 @@ exports.StrategyComponent = {
         });
         if (message.sourceSymbol !== "") {
             writer.uint32(50).string(message.sourceSymbol);
+        }
+        if (message.fundamentalMetric !== "") {
+            writer.uint32(58).string(message.fundamentalMetric);
         }
         return writer;
     },
@@ -4139,6 +4152,13 @@ exports.StrategyComponent = {
                     message.sourceSymbol = reader.string();
                     continue;
                 }
+                case 7: {
+                    if (tag !== 58) {
+                        break;
+                    }
+                    message.fundamentalMetric = reader.string();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -4172,6 +4192,11 @@ exports.StrategyComponent = {
                 : isSet(object.source_symbol)
                     ? globalThis.String(object.source_symbol)
                     : "",
+            fundamentalMetric: isSet(object.fundamentalMetric)
+                ? globalThis.String(object.fundamentalMetric)
+                : isSet(object.fundamental_metric)
+                    ? globalThis.String(object.fundamental_metric)
+                    : "",
         };
     },
     toJSON(message) {
@@ -4200,6 +4225,9 @@ exports.StrategyComponent = {
         if (message.sourceSymbol !== "") {
             obj.sourceSymbol = message.sourceSymbol;
         }
+        if (message.fundamentalMetric !== "") {
+            obj.fundamentalMetric = message.fundamentalMetric;
+        }
         return obj;
     },
     create(base) {
@@ -4218,6 +4246,7 @@ exports.StrategyComponent = {
             return acc;
         }, {});
         message.sourceSymbol = object.sourceSymbol ?? "";
+        message.fundamentalMetric = object.fundamentalMetric ?? "";
         return message;
     },
 };
