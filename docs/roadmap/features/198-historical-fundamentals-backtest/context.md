@@ -160,10 +160,12 @@
 - Unresolved ⚠ carried into execution (address at the cited step):
   - Step 14 (C-08): agent test uses bare `pytest -q` and claims "no coverage threshold", but
     `services/xstockstrat-agent/CLAUDE.md` documents a CI-enforced `pytest --cov=app --cov-fail-under=40`
-    (feature 065). Use `pytest --cov=app --cov-fail-under=40` to match the real gate. — [ ] unaddressed
+    (feature 065). Use `pytest --cov=app --cov-fail-under=40` to match the real gate. — [x] resolved
+    (pre-execution spec edit 2026-09-20: Step 14 verification now uses `--cov-fail-under=40`).
   - Step 1 (C-09): the new `HistoricalFundamentalsPeriod` proto message leaves its reused metric
     fields (numbers ≥7) without explicit field numbers ("mirroring Fundamentals"). Assign explicit
-    numbers at execution rather than inferring. — [ ] unaddressed
+    numbers at execution rather than inferring. — [x] resolved (pre-execution spec edit 2026-09-20:
+    Step 1 instruction 3 now assigns explicit numbers 7–21).
   - Step 2 (NOTE, non-blocking): `Files: packages/proto/gen/**` wildcard is acceptable for mechanical
     codegen; no action.
 - Overlap findings (WARN-level shared files — rebase/reconcile only, no merge-order row required):
