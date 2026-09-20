@@ -14,6 +14,7 @@
 | 2026-09-20 | `draft` → `spec-ready` | /sdd-review | Product spec approved (0 warnings; criterion-9 blocker + 3 advisory warnings resolved and re-verified; overlap WARN-only, no FAIL) |
 | 2026-09-20 | `spec-ready` → `design-approved` | /sdd-design | Design debated (1 round, quick) and approved; recon.md + design.md written; 3 forks resolved (PIT price-join, full live parity, T+1 availability) |
 | 2026-09-20 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 17 steps |
+| 2026-09-20 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential execution started; Step 1 (proto) done |
 
 ---
 

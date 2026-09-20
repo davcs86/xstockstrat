@@ -171,3 +171,22 @@
 - Overlap findings (WARN-level shared files — rebase/reconcile only, no merge-order row required):
   ingest `servicer.py` + marketdata `marketdata_repo.go` with feature 196; agent `client.py`/`tools.py`
   + `e2e/mock-backend.ts` + `e2e/fixtures/INVENTORY.md` with features 187/188. Later-landing feature reconciles.
+
+## Session 2026-09-20 — sdd-execute (sequential)
+
+- Mode-entry confirmed; user directive: run through checkpoints, **stop only at blockers**, one
+  integration PR (#1158) at end. Branch reconciliation: dev-branch = claude/historical-fundamentals-backtest-tj92kd
+  (harness-assigned; holds authoritative spec). Tooling: dockerd started (29.3.1); buf 1.72.0 installed
+  on PATH; go 1.27, ruff, uv, node 22, pnpm 9.15.9, golangci 2.5 present. Python host is 3.11 (CI target 3.13).
+
+### Step 1 — proto: additive fundamentals contracts [done]
+- Added (additive-only): ingest `BackfillDataKind{UNSPECIFIED=0,BARS=1,FUNDAMENTALS=2}` enum +
+  `TriggerBackfillRequest.data_kind=7` + `BackfillJob.data_kind=15`; analysis
+  `ComponentKind.COMPONENT_KIND_FUNDAMENTAL=3` + `StrategyComponent.fundamental_metric=7`; marketdata
+  `HistoricalFundamentalsPeriod` (fields 1-21) + `GetHistoricalFundamentals` + `BackfillFundamentals`
+  RPCs and their request/response messages. Snapshot `Fundamentals`, `RunBacktestRequest`,
+  `BacktestResult` untouched.
+- Verification: `buf lint` clean; `buf breaking packages/proto --against .git#branch=main-dev,subdir=packages/proto`
+  clean (exit 0 — additive only). TDD: N/A (proto contract).
+- Files modified: `packages/proto/{ingest,analysis,marketdata}/v1/*.proto`.
+- Deviations: none.

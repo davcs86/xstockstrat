@@ -62,7 +62,7 @@ new operand). Both consumer surfaces named in `product-spec.md` § Consumer Surf
 
 ### Step 1 — proto: additive fundamentals contracts across ingest, analysis, marketdata
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/ingest/v1/ingest.proto` — modify
