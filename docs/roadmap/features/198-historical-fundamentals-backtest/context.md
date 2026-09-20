@@ -151,3 +151,21 @@
     `ComponentKind` Select `:103-106`; `/insights/backfills` in `NAV_GROUPS` not `PLATFORM_SUBNAV` (no C-10(a)).
 - Reviewers snapshot finalized in feature.md (8 distinct roles: Proto Reviewer, DBA, marketdata/ingest/
   analysis/agent/ui/config owners). Next: `/sdd-review historical-fundamentals-backtest impl-spec`.
+
+## Session 2026-09-20 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 2 warnings, 1 note (advisory — did not block). Overall PASS WITH WARNINGS.
+  Overlap scan: CLEAN — no FAIL-level collision (marketdata migration 005, ingest 012, all proto
+  field numbers, and all new config keys verified free/unclaimed).
+- Unresolved ⚠ carried into execution (address at the cited step):
+  - Step 14 (C-08): agent test uses bare `pytest -q` and claims "no coverage threshold", but
+    `services/xstockstrat-agent/CLAUDE.md` documents a CI-enforced `pytest --cov=app --cov-fail-under=40`
+    (feature 065). Use `pytest --cov=app --cov-fail-under=40` to match the real gate. — [ ] unaddressed
+  - Step 1 (C-09): the new `HistoricalFundamentalsPeriod` proto message leaves its reused metric
+    fields (numbers ≥7) without explicit field numbers ("mirroring Fundamentals"). Assign explicit
+    numbers at execution rather than inferring. — [ ] unaddressed
+  - Step 2 (NOTE, non-blocking): `Files: packages/proto/gen/**` wildcard is acceptable for mechanical
+    codegen; no action.
+- Overlap findings (WARN-level shared files — rebase/reconcile only, no merge-order row required):
+  ingest `servicer.py` + marketdata `marketdata_repo.go` with feature 196; agent `client.py`/`tools.py`
+  + `e2e/mock-backend.ts` + `e2e/fixtures/INVENTORY.md` with features 187/188. Later-landing feature reconciles.
