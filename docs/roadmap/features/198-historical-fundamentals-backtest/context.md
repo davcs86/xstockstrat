@@ -325,3 +325,12 @@
 - Verification: uv run ruff check + format --check clean; pytest --cov=app --cov-fail-under=40 →
   786 passed, coverage 83.70%.
 - Covers: AC-4, AC-3 (+ AC-1 baseline). Files: tests/test_fundamental_operand.py.
+
+### Step 12 — config: analysis backtest-fundamentals key [done]
+- Added analysis.backtest.fundamentals.enabled (bool, default false) to the analysis CLAUDE.md
+  Config Keys Consumed table — documents the kill-switch as read in Step 10's _load_fundamentals
+  chokepoint (gates all consumers uniformly). The config-governance.md feature-198 registered-keys
+  row already carried the key (prior session). Both docs now present.
+- Verification: grep -n found the key in both services/xstockstrat-analysis/CLAUDE.md and
+  docs/patterns/config-governance.md. TDD N/A (config doc).
+- Files: services/xstockstrat-analysis/CLAUDE.md.

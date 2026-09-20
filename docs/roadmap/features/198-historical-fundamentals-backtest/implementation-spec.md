@@ -419,7 +419,7 @@ cd services/xstockstrat-analysis && pytest --cov=app --cov-fail-under=40
 
 ### Step 12 — config: analysis backtest-fundamentals key
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/CLAUDE.md` — modify (defaults table)
