@@ -118,3 +118,36 @@
 - [ ] T-1 RED test must probe the T+1 boundary (filed D invisible on bar D, visible D+1) + between-filings gap.
 - [ ] Price-join coverage: missing OHLCV at filed_date → null metric (fail-closed), not crash.
 - [ ] 032 seam: keep operand in StrategyComponent/_assemble_component_series; pre-assign proto field #s if concurrent.
+
+## Session 2026-09-20 — sdd-spec
+
+- Generated implementation-spec.md with 17 steps. Status `design-approved` → `implementation-ready`.
+- Slice order: proto (1) → proto-gen (2) → marketdata migration 005 + service + tests + config (3-6)
+  → ingest migration 012 + service + tests (7-9) → analysis operand + tests + config (10-12) → agent
+  + tests (13-14) → UI + e2e (15-16) → docs/teardown (17). All 8 `@AC-*` scenarios traced to steps
+  (coverage table in Execution Summary); both named consumer surfaces (Agent + `/insights` UI) earn steps.
+- Key codebase findings (verified `path:line`, load-bearing for the proto step):
+  - `ingest.proto` `TriggerBackfillRequest` max field = 6 (`fill_mode`, `:69`) → `data_kind = 7`;
+    `BackfillJob` max = 14 (`:42`) → `data_kind = 15`.
+  - `analysis.proto` `ComponentKind` {0,1,2} (`:301-305`) → `COMPONENT_KIND_FUNDAMENTAL = 3`;
+    `StrategyComponent` max = 6 (`source_symbol`, `:316`) → `fundamental_metric = 7`. `RunBacktestRequest`
+    max = 9 and `BacktestResult` max = 20 are BOTH left untouched (design §5: @AC-8 reads existing shape).
+  - `marketdata.proto` snapshot `Fundamentals` max = 18 (`:220`) untouched; no historical RPCs exist —
+    new `HistoricalFundamentalsPeriod` + `GetHistoricalFundamentals` + `BackfillFundamentals` are greenfield.
+  - Migration tips confirmed: marketdata `004` → next `005`; ingest `011` → next `012`.
+  - Evaluator seams: `_compute_component` `evaluator.py:276`, `_assemble_component_series` `:368`,
+    `_bar_date` `:34` (T+1 enforced here: `filed_date < bar_date`). Metric allow-list `_FUNDAMENTAL_FIELDS`
+    `screener.py:40` + `_validate_fundamental_metrics` `:377`.
+  - ingest 1d reject at `servicer.py:236-240` (branch point is BEFORE it); `_propagation_meta` `:213`;
+    `_UPDATABLE_COLUMNS` `backfill_jobs.py:13`; shared `job_row` fixture `tests/_helpers.py:53` (15→16 cols).
+  - marketdata provider selector is boot-only `newFundamentalsSource` `main.go:185` — EDGAR stays OUT of
+    it (T-3; preserves @AC-6/@AC-9 feature-154). FMP cap `marketdata.fmp.daily_request_cap`
+    `marketdata_service.go:1373` reused (no second cap); dedicated enrichment counter.
+  - agent: `_build_component` `client.py:639` (kind_map `:645`, ValueError `:650`); `trigger_backfill`
+    client `:1606`/tool `tools.py:1078`; `run_backtest` tool `tools.py:534`; `get_strategy` projects via
+    `MessageToDict(always_print_fields_with_no_presence=True)` `:915-921` (new fields auto-project);
+    strat-lab skill `plugins/strat-lab/skills/backtest/{SKILL.md,reference/backfill.md}` same-PR (ledger-134).
+  - UI: backfills `page.tsx:135-141` hardcodes `TIMEFRAME_1DAY` (no selector today); `ComponentEditor.tsx`
+    `ComponentKind` Select `:103-106`; `/insights/backfills` in `NAV_GROUPS` not `PLATFORM_SUBNAV` (no C-10(a)).
+- Reviewers snapshot finalized in feature.md (8 distinct roles: Proto Reviewer, DBA, marketdata/ingest/
+  analysis/agent/ui/config owners). Next: `/sdd-review historical-fundamentals-backtest impl-spec`.
