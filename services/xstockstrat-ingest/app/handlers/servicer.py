@@ -99,6 +99,11 @@ _HEALTH_ENUM = {
 # 1m/5m enums intentionally omitted so sub-15m intervals no longer resolve.
 _STR_TO_ENUM = {"15m": 5, "1h": 3, "1d": 4}
 _ENUM_TO_STR = {v: k for k, v in _STR_TO_ENUM.items()}
+# Backfill data-kind <-> DB string (feature 198). The DB column stores 'BARS'/'FUNDAMENTALS'.
+_DATA_KIND_STR_TO_ENUM = {
+    "BARS": ingest_pb2.BACKFILL_DATA_KIND_BARS,
+    "FUNDAMENTALS": ingest_pb2.BACKFILL_DATA_KIND_FUNDAMENTALS,
+}
 # Normalizes the legacy "1Day" spelling on the read path (_row_timeframe); real "1Day"
 # rows exist. Only "1d" is servable, so no other legacy spellings are mapped.
 _TF_ALIASES = {
@@ -157,6 +162,9 @@ def job_row_to_proto(row: dict) -> ingest_pb2.BackfillJob:
         chunks_completed=row["chunks_completed"] or 0,
         failed_symbols=list(row["failed_symbols"] or []),
         error=row["error"] or "",
+        data_kind=_DATA_KIND_STR_TO_ENUM.get(
+            (row.get("data_kind") or "BARS"), ingest_pb2.BACKFILL_DATA_KIND_BARS
+        ),
     )
     if row.get("range_start") or row.get("range_end"):
         tr = common_pb2.TimeRange()
@@ -228,17 +236,26 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             return
         job_id = str(uuid.uuid4())
         propagation_meta = self._propagation_meta(context)
-        # Canonicalize BEFORE persisting: _canonical_timeframe prefers the request enum, so an
-        # enum-only caller (the UI) no longer stores '' as the timeframe.
-        canonical_tf = _canonical_timeframe(request)
-        # Only "1d" is servable — reject before persisting a job or spending quota.
-        # Mirrors marketdata's own GetBars/BackfillBars gate.
-        if canonical_tf != "1d":
-            await context.abort(
-                grpc.StatusCode.INVALID_ARGUMENT,
-                f"timeframe {canonical_tf!r} not supported; only '1d' is servable",
-            )
-            return
+        # feature 198: fundamentals ride a distinct data-kind axis, never the bar-timeframe axis.
+        # A FUNDAMENTALS job skips the 1d timeframe reject entirely (it has no bar timeframe, @AC-6)
+        # and stores an empty timeframe with data_kind='FUNDAMENTALS'.
+        is_fundamentals = request.data_kind == ingest_pb2.BACKFILL_DATA_KIND_FUNDAMENTALS
+        if is_fundamentals:
+            canonical_tf = ""
+            data_kind = "FUNDAMENTALS"
+        else:
+            # Canonicalize BEFORE persisting: _canonical_timeframe prefers the request enum, so an
+            # enum-only caller (the UI) no longer stores '' as the timeframe.
+            canonical_tf = _canonical_timeframe(request)
+            data_kind = "BARS"
+            # Only "1d" is servable — reject before persisting a job or spending quota.
+            # Mirrors marketdata's own GetBars/BackfillBars gate. (BARS path only.)
+            if canonical_tf != "1d":
+                await context.abort(
+                    grpc.StatusCode.INVALID_ARGUMENT,
+                    f"timeframe {canonical_tf!r} not supported; only '1d' is servable",
+                )
+                return
         await backfill_jobs.insert_job(
             self._db,
             job_id=job_id,
@@ -247,13 +264,14 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             range_start=_ts_to_dt(request.range.start),
             range_end=_ts_to_dt(request.range.end),
             status=ingest_pb2.BACKFILL_STATUS_QUEUED,
+            data_kind=data_kind,
         )
         await self._emit_backfill_event(
             "ingest.backfill.queued",
             job_id,
             # Untyped Struct payload — no lint/type check covers it, so it must carry the
             # canonical value too.
-            {"symbols": list(request.symbols), "timeframe": canonical_tf},
+            {"symbols": list(request.symbols), "timeframe": canonical_tf, "data_kind": data_kind},
             propagation_meta,
         )
         asyncio.create_task(self._run_backfill(job_id, request, propagation_meta))
@@ -322,7 +340,12 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                     "ingest.backfill.running", job_id, {"symbols": symbols}, propagation_meta
                 )
                 log.info("backfill job %s running symbols=%s", job_id, symbols)
-                await self._execute_backfill(job_id, request, symbols, propagation_meta)
+                if request.data_kind == ingest_pb2.BACKFILL_DATA_KIND_FUNDAMENTALS:
+                    await self._execute_fundamentals_backfill(
+                        job_id, request, symbols, propagation_meta
+                    )
+                else:
+                    await self._execute_backfill(job_id, request, symbols, propagation_meta)
         except Exception as e:
             log.error("backfill job %s failed: %s", job_id, e)
             await backfill_jobs.update_job(
@@ -338,6 +361,49 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             await self._emit_backfill_alert(
                 job_id, ingest_pb2.BACKFILL_STATUS_FAILED, symbols, str(e), propagation_meta
             )
+
+    async def _execute_fundamentals_backfill(self, job_id, request, symbols, propagation_meta):
+        """Feature 198: a fundamentals job bypasses the bar-density chunk planner (no bars). One
+        marketdata.BackfillFundamentals call fetches the as-reported EDGAR periods + PIT price-join
+        and persists them for all symbols (marketdata iterates per symbol, fail-closed via ON
+        CONFLICT DO NOTHING — a same-range re-run is idempotent, @AC-1). Period types come from
+        marketdata's own config default when unset (@AC-2, both quarterly + annual)."""
+        resp = await self._marketdata.BackfillFundamentals(
+            marketdata_pb2.BackfillFundamentalsRequest(
+                symbols=list(symbols),
+                range=request.range,
+                overwrite=request.overwrite,
+            ),
+            metadata=propagation_meta,
+        )
+        failed = list(resp.failed_symbols)
+        status = (
+            ingest_pb2.BACKFILL_STATUS_PARTIAL if failed else ingest_pb2.BACKFILL_STATUS_COMPLETED
+        )
+        await backfill_jobs.update_job(
+            self._db,
+            job_id,
+            status=status,
+            bars_processed=int(resp.periods_written),  # reused as periods-written for fundamentals
+            failed_symbols=failed,
+            completed_at=datetime.now(UTC),
+        )
+        await self._emit_backfill_event(
+            "ingest.backfill.completed",
+            job_id,
+            {
+                "periods_written": int(resp.periods_written),
+                "failed_symbols": failed,
+                "data_kind": "FUNDAMENTALS",
+            },
+            propagation_meta,
+        )
+        log.info(
+            "fundamentals backfill job %s completed: %d periods, %d failed symbols",
+            job_id,
+            resp.periods_written,
+            len(failed),
+        )
 
     async def _plan_work_ranges(self, request, symbols, timeframe, propagation_meta):
         """Return a list of plan_chunks() inputs as (symbols, start, end) work units.

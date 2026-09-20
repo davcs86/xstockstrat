@@ -251,3 +251,26 @@
 - 012_backfill_data_kind.up.sql: ADD COLUMN data_kind text NOT NULL DEFAULT 'BARS' on both
   ingest.backfill_jobs and ingest.backfill_chunks (default preserves existing OHLCV jobs, @AC-6).
   .down.sql drops both. Offline-verified (tip 011→012; ADD↔DROP inverse). TDD: N/A. Deviations: none.
+
+### Step 8 — service: ingest TriggerBackfill data-kind branch → BackfillFundamentals [done]
+- TriggerBackfill: is_fundamentals branch BEFORE the 1d reject (fundamentals skip it, @AC-6),
+  insert_job(data_kind='FUNDAMENTALS', timeframe=''); BARS path unchanged (data_kind='BARS').
+  backfill_jobs.py: insert_job gains data_kind param, _UPDATABLE_COLUMNS gains data_kind,
+  job_row_to_proto surfaces data_kind (BACKFILL_DATA_KIND enum). _run_backfill branches on
+  request.data_kind → new _execute_fundamentals_backfill (single marketdata.BackfillFundamentals
+  call, bypasses the bar-density chunk planner — see Deviation Log; status COMPLETED/PARTIAL on
+  failed_symbols; C-03 propagation_meta forwarded).
+- Verification: ruff clean; py syntax OK. (full tests Step 9). TDD red-green (Step 9).
+- Files: app/handlers/servicer.py, app/repositories/backfill_jobs.py. Deviations: chunk-planner bypass (Deviation Log).
+
+### Step 9 — test: ingest fundamentals data-kind, BARS default, idempotent re-backfill [done]
+- _helpers.py job_row 15→16 cols (+data_kind, feature-080 column-exact guard). test_ingest_servicer.py:
+  AC-6 (fundamentals skips timeframe reject, insert data_kind=FUNDAMENTALS timeframe=''), AC-6
+  back-compat (explicit BARS → BackfillBars), routing (FUNDAMENTALS → BackfillFundamentals not
+  BackfillBars; COMPLETED; empty period_types → marketdata 'both' default @AC-2; re-run no error @AC-1),
+  partial-on-failed-symbols.
+- Verification: uv run ruff check clean; pytest --cov=app --cov-fail-under=40 → 216 passed, coverage
+  77%; uv lock --check clean (no pyproject change). TDD red: tests reference BACKFILL_DATA_KIND_FUNDAMENTALS
+  + BackfillFundamentals + data_kind kwarg absent pre-Step-8 → red; green now.
+- Covers: AC-6, AC-1, AC-2 (AC-2 both-types at marketdata layer per Deviation Log).
+- Files: tests/_helpers.py, tests/test_ingest_servicer.py. Deviations: AC-2 coverage layer (Deviation Log).

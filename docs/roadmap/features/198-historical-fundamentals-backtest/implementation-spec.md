@@ -293,7 +293,7 @@ ls services/xstockstrat-ingest/migrations/012_backfill_data_kind.up.sql \
 
 ### Step 8 — service: ingest TriggerBackfill data-kind branch → BackfillFundamentals
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/handlers/servicer.py` — modify
@@ -323,7 +323,7 @@ ls services/xstockstrat-ingest/migrations/012_backfill_data_kind.up.sql \
 
 ### Step 9 — test: ingest fundamentals data-kind, BARS default, idempotent re-backfill
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/test_ingest_servicer.py` — modify
@@ -629,3 +629,11 @@ integration PR.
   additive safety guard, consistent with design.md §5.
 - **Step 5 (tooling):** host `golangci-lint` was 2.5.0 (built with go1.25, refuses go1.27 target);
   installed the CI-pinned **v2.13.1** (built with go1.27) to lint. **Disposition:** match CI toolchain.
+- **Step 8 (design):** a FUNDAMENTALS job **bypasses the bar-density chunk planner** (`plan_chunks`/
+  `_run_chunks`/`estimate_bars` are bars-only — fundamentals have no bars). It runs one
+  `_execute_fundamentals_backfill` → a single `marketdata.BackfillFundamentals` call over all symbols
+  (marketdata iterates per symbol, fail-closed, idempotent via ON CONFLICT). **Disposition:** cleaner
+  than forcing fundamentals through a bar chunker; the chunk tables stay bars-only. Consequently Step
+  9's "@AC-2 both-period-types coverage" is asserted at the **marketdata** layer (Step 5 edgar test:
+  8 quarterly + 3 annual) rather than via ingest chunk-planning; ingest asserts the single dispatch
+  carries empty `period_types` so marketdata applies its `both` default.
