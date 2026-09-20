@@ -447,7 +447,7 @@ grep -n "analysis.backtest.fundamentals.enabled" services/xstockstrat-analysis/C
 
 ### Step 13 — service: agent trigger_backfill data-kind + fundamental operand + strat-lab skill
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/client.py` — modify (`trigger_backfill`, `_build_component`)
@@ -482,7 +482,7 @@ grep -n "analysis.backtest.fundamentals.enabled" services/xstockstrat-analysis/C
 
 ### Step 14 — test: agent tool contract + descriptor-parity projection
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_backtest_view.py` — modify (descriptor-parity family)
@@ -662,3 +662,16 @@ integration PR.
   new tests live in `tests/test_fundamental_operand.py` instead, matching this repo's feature-scoped
   test-file convention (feature 152's `test_source_symbol_parity.py`) rather than a generic
   `test_evaluator.py` that never existed. **Disposition:** convention-consistent placement.
+- **Step 14 (test placement):** the `_build_component` fundamental-mapping + descriptor-parity
+  assertions were added to `tests/test_strategy_builders.py` (the existing home of the
+  `_build_component` parity test — `_COMPONENT_INTENTIONALLY_UNSET`), and the `trigger_backfill`
+  `data_kind` enum/timeframe-skip + bad-value assertions to `tests/test_client.py` (the
+  `TestTriggerBackfillClient` home), rather than `tests/test_backtest_view.py` which the step's
+  `**Files**` named. Rationale: those parity/contract families already live in those two files;
+  `test_backtest_view.py` covers `BacktestResult`/`SymbolDiagnostics` projection, not
+  `StrategyComponent` or the backfill client. Step 14 instruction 2's "run_backtest entries gated on
+  PIT eps" is covered at the analysis layer (Step 11) — the agent `run_backtest` is a pure
+  forward+project with no fundamental logic of its own, so the agent-layer guarantee is the
+  no-allow-list-drift descriptor parity (proven by the extended `_build_component` parity test).
+  `GET /api/tools` catalog shape is unchanged (tools extended, not added; count stays 49), so
+  `test_tools_endpoint.py` needed no change. **Disposition:** convention-consistent placement.

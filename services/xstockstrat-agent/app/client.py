@@ -644,10 +644,11 @@ def _build_component(c: dict[str, Any]):
     kind_map = {
         "builtin": analysis_pb2.COMPONENT_KIND_BUILTIN_INDICATOR,
         "formula": analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA,
+        "fundamental": analysis_pb2.COMPONENT_KIND_FUNDAMENTAL,
     }
     kind = c.get("kind", "builtin")
     if kind not in kind_map:
-        raise ValueError(f"unknown component kind '{kind}' (expected builtin/formula)")
+        raise ValueError(f"unknown component kind '{kind}' (expected builtin/formula/fundamental)")
     return analysis_pb2.StrategyComponent(
         ref_name=c.get("ref_name", ""),
         kind=kind_map[kind],
@@ -657,6 +658,9 @@ def _build_component(c: dict[str, Any]):
         # Optional benchmark symbol; empty = evaluated symbol. Normalized (uppercase/trim)
         # server-side.
         source_symbol=c.get("source_symbol", ""),
+        # Point-in-time fundamental metric name (feature 198); only meaningful when
+        # kind == "fundamental". Validated against the analysis allow-list server-side.
+        fundamental_metric=c.get("fundamental_metric", ""),
     )
 
 
@@ -1600,6 +1604,8 @@ async def get_config_value(
 _TF_ALIASES = {"1d": "1d", "1Day": "1d"}
 _TF_TO_ENUM = {"1d": 4}  # common.v1.Timeframe values
 _FILL_MODE_MAP = {"full": 1, "gaps_only": 2}  # ingest.v1.FillMode; None → UNSPECIFIED (server FULL)
+# ingest.v1.BackfillDataKind (feature 198): bars = daily OHLCV; fundamentals = PIT filings history.
+_DATA_KIND_MAP = {"bars": 1, "fundamentals": 2}
 _BACKFILL_MAX_SYMBOLS = 50  # client-side cost-sanity cap on a paid-fetch operation
 
 
@@ -1610,9 +1616,14 @@ async def trigger_backfill(
     end: str | None = None,
     overwrite: bool = False,
     fill_mode: str | None = None,
+    data_kind: str = "bars",
     access_scope: int = 0,
 ) -> dict[str, Any]:
-    """Trigger a historical OHLCV backfill via gRPC TriggerBackfill (admin-scoped write).
+    """Trigger a historical backfill via gRPC TriggerBackfill (admin-scoped write).
+
+    ``data_kind`` selects what is backfilled: ``"bars"`` (daily OHLCV, the default — requires a
+    valid ``timeframe``) or ``"fundamentals"`` (point-in-time fundamentals filings history, feature
+    198 — timeframe-independent, so the ``timeframe`` arg is ignored).
 
     Ingest queues unconditionally (no synchronous input validation), so the ValueError
     guards below are the caller's only immediate feedback — bad input that passes them
@@ -1627,7 +1638,12 @@ async def trigger_backfill(
         raise ValueError(
             f"too many symbols ({len(symbols)}) — max {_BACKFILL_MAX_SYMBOLS} per call"
         )
-    if timeframe not in _TF_ALIASES:
+    if data_kind not in _DATA_KIND_MAP:
+        raise ValueError(f"unknown data_kind '{data_kind}' (expected bars/fundamentals)")
+    is_fundamentals = data_kind == "fundamentals"
+    # Fundamentals are timeframe-independent (filings, not bars) — ingest routes them past the
+    # 1d-only timeframe gate, so a timeframe requirement here would be a spurious rejection.
+    if not is_fundamentals and timeframe not in _TF_ALIASES:
         raise ValueError(f"unknown timeframe '{timeframe}' (expected 1d/1Day)")
     if fill_mode is not None and fill_mode not in _FILL_MODE_MAP:
         raise ValueError(f"unknown fill_mode '{fill_mode}' (expected full/gaps_only)")
@@ -1641,15 +1657,16 @@ async def trigger_backfill(
     ):
         raise ValueError("start must not be after end")
 
-    canonical = _TF_ALIASES[timeframe]
+    # Fundamentals carry no timeframe; bars send both the canonical string and the enum (never the
+    # string alone — ingest persists it raw).
+    canonical = "" if is_fundamentals else _TF_ALIASES[timeframe]
     req = ingest_pb2.TriggerBackfillRequest(
         symbols=list(symbols),
-        # Send both the canonical string and the enum — never the string alone
-        # (ingest persists it raw).
         timeframe=canonical,
-        timeframe_enum=_TF_TO_ENUM[canonical],
+        timeframe_enum=0 if is_fundamentals else _TF_TO_ENUM[canonical],
         overwrite=overwrite,
         fill_mode=_FILL_MODE_MAP[fill_mode] if fill_mode else 0,
+        data_kind=_DATA_KIND_MAP[data_kind],
     )
     if start_ts is not None or end_ts is not None:
         tr = common_pb2.TimeRange()

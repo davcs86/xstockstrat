@@ -334,3 +334,31 @@
 - Verification: grep -n found the key in both services/xstockstrat-analysis/CLAUDE.md and
   docs/patterns/config-governance.md. TDD N/A (config doc).
 - Files: services/xstockstrat-analysis/CLAUDE.md.
+
+### Step 13 — service: agent trigger_backfill data-kind + fundamental operand + strat-lab skill [done]
+- client.py: _build_component kind_map gains "fundamental"→COMPONENT_KIND_FUNDAMENTAL + passes
+  fundamental_metric; ValueError message updated (builtin/formula/fundamental). trigger_backfill gains
+  data_kind: str = "bars" (_DATA_KIND_MAP bars=1/fundamentals=2); fundamentals skips the _TF_ALIASES
+  timeframe requirement (timeframe="" + enum 0) and sets req.data_kind. Shared by manage_strategy +
+  screen_symbols (fundamental kind flows through both).
+- tools.py: trigger_backfill wrapper gains data_kind arg + docstring; manage_strategy components-dict
+  doc documents kind='fundamental' + fundamental_metric allow-list + backfill/gate prerequisites;
+  run_backtest docstring notes the fundamentals prerequisite (backfill data_kind + gate ON).
+- strat-lab plugin (same PR): SKILL.md new "Point-in-time fundamental operand" section (metric list,
+  T+1 no-look-ahead, backfill+gate prerequisites, backtest/live parity); reference/backfill.md documents
+  the data_kind selector. docs/runbooks/mcp-tools.md: trigger_backfill data_kind param row + error row;
+  manage_strategy components row + unknown-kind error row updated.
+- Files: services/xstockstrat-agent/app/{client,tools}.py, plugins/strat-lab/skills/backtest/SKILL.md,
+  plugins/strat-lab/skills/backtest/reference/backfill.md, docs/runbooks/mcp-tools.md.
+
+### Step 14 — test: agent tool contract + descriptor-parity projection [done]
+- tests/test_strategy_builders.py: parity test input gains fundamental_metric (descriptor parity —
+  _COMPONENT_INTENTIONALLY_UNSET stays empty, so the builder must set every proto field);
+  test_build_component_maps_fundamental_kind_and_metric (kind + value); test_build_component_rejects_unknown_kind.
+- tests/test_client.py TestTriggerBackfillClient: test_trigger_defaults_to_bars_data_kind (data_kind==1),
+  test_trigger_fundamentals_kind_skips_timeframe (data_kind==2, timeframe ""/enum 0, junk tf ignored),
+  bad-data_kind ValueError added to test_trigger_validation_valueerrors.
+- GET /api/tools catalog unchanged (tool count stays 49) → test_tools_endpoint.py untouched.
+- Verification: uv run ruff check + format --check clean; pytest --cov=app --cov-fail-under=40 →
+  445 passed, coverage 79.27%.
+- Covers: AC-8. Files: tests/test_strategy_builders.py, tests/test_client.py. Deviations: test placement (Deviation Log).

@@ -583,7 +583,11 @@ def register_tools(server: MCPServer) -> None:
           fills at the signal bar's own close, an optimistically-biased fill. The effective model is
           echoed in the summary. Note (display-only): in next-bar mode a diagnostics row can show an
           ENTER/EXIT on a bar whose conviction reads hold — the action lands on the fill bar while
-          conviction stays that bar's own value; the grade is unaffected."""
+          conviction stays that bar's own value; the grade is unaffected.
+        Fundamental operands (feature 198): if the stored strategy uses a kind='fundamental'
+          component, its metric resolves point-in-time (as-of each bar, no look-ahead). The symbol's
+          fundamentals history must be backfilled first (trigger_backfill data_kind='fundamentals')
+          and 'analysis.backtest.fundamentals.enabled' must be ON, else the operand reads hold."""
         # Forward the caller's own user id so analysis resolves ownership from the header; wrap the
         # RPC so a PERMISSION_DENIED surfaces as a tool-level error, not a raw AioRpcError.
         user_id = _caller_user_id(ctx, "run_backtest")
@@ -682,12 +686,20 @@ def register_tools(server: MCPServer) -> None:
         operation: 'register' | 'update' | 'deactivate' | 'reactivate'.
         strategy_id: lowercase/underscore identifier (e.g. 'sma_crossover').
         display_name: human-readable name.
-        components: list of {ref_name, kind ('builtin'|'formula'), indicator, formula_id, params,
-            source_symbol}.
+        components: list of {ref_name, kind ('builtin'|'formula'|'fundamental'), indicator,
+            formula_id, params, source_symbol, fundamental_metric}.
             kind='builtin': indicator must be one of the built-in enum ATR, BB, EMA, MACD, RSI,
             SMA, STOCH, VWAP (case-insensitive). For an indicator outside this set (e.g. a
             z-score or efficiency-ratio calculation), register a custom formula first via
             manage_formula and reference it here as kind='formula', formula_id=<id>.
+            kind='fundamental' (feature 198): a point-in-time fundamentals metric operand.
+            fundamental_metric must be one of market_cap, pe_ratio, pb_ratio, dividend_yield,
+            eps, beta, roe, debt_to_equity, price, year_high, year_low. The operand resolves to
+            the latest filing available as-of each bar (strict filed_date < bar_date, T+1 — no
+            look-ahead), carried forward until the next filing; before the first filing the leaf
+            holds. Requires the symbol's fundamentals history to be backfilled first
+            (trigger_backfill data_kind='fundamentals') and the analysis
+            'analysis.backtest.fundamentals.enabled' key ON.
             source_symbol (optional, feature 152): a fixed benchmark/reference ticker (e.g.
             'VOO'). When set, the component is computed on THAT symbol's bars and its output is
             aligned onto the evaluated symbol's bar timeline — enabling cross-symbol
@@ -1083,17 +1095,23 @@ def register_tools(server: MCPServer) -> None:
         end: str | None = None,
         overwrite: bool = False,
         fill_mode: str | None = None,
+        data_kind: str = "bars",
     ) -> dict:
-        """Trigger a historical OHLCV backfill in xstockstrat-ingest (admin-scoped write).
+        """Trigger a historical backfill in xstockstrat-ingest (admin-scoped write).
         symbols: explicit ticker list, e.g. ["AAPL", "MSFT"]; max 50 per call.
-        timeframe: '1d' or '1Day' (canonicalized; default '1d'). Only daily bars are supported.
+        data_kind: 'bars' (daily OHLCV, default) or 'fundamentals' (point-in-time fundamentals
+            filings history, feature 198 — needed before backtesting a strategy that uses a
+            'fundamental' operand). 'fundamentals' is timeframe-independent (the timeframe arg is
+            ignored).
+        timeframe: '1d' or '1Day' (canonicalized; default '1d'). Only daily bars are supported;
+            ignored when data_kind='fundamentals'.
         start / end: optional ISO 8601 datetimes bounding the range; one-sided allowed; both
             omitted = the service default, a 365-day lookback ending now (range_end − 365d).
         overwrite: true re-fetches bars that already exist.
         fill_mode: 'full' | 'gaps_only'; omitted = server default FULL. 'gaps_only'
             fetches only missing ranges (cheaper on provider quota).
         Client-side guards raise ValueError BEFORE anything is queued: empty symbols, > 50
-            symbols, an unknown timeframe or fill_mode, or start after end.
+            symbols, an unknown data_kind/timeframe/fill_mode, or start after end.
         Returns {"job_id", "status"}. Ingest performs NO synchronous input validation —
         it queues unconditionally and bad input surfaces as a terminal FAILED/PARTIAL
         job; poll get_backfill_status with the returned job_id to observe the outcome."""
@@ -1106,6 +1124,7 @@ def register_tools(server: MCPServer) -> None:
                 end=end,
                 overwrite=overwrite,
                 fill_mode=fill_mode,
+                data_kind=data_kind,
                 access_scope=access_scope,
             )
         except grpc.aio.AioRpcError as e:
