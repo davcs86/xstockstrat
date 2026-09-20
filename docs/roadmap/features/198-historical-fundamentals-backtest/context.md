@@ -57,3 +57,21 @@
 ### Next
 - `/sdd-review historical-fundamentals-backtest product-spec`, then `/sdd-design ... quick`
   (mandatory SDD grounding before any code — root CLAUDE.md entry point / Constitution C-11).
+
+## Session 2026-09-20 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready (re-reviewed PASS 11/11 after fixes).
+- Blocker fixed: criterion 9 (Open Questions) — reframed so no unresolved `- [ ]` remains; the
+  genuine product-scope fork (v1 symbol universe) resolved.
+- Warnings fixed: stale ingest migration NNN (006 → verified 012; marketdata 005 confirmed);
+  explicit up/down pairing stated; FMP daily-cap overlap reconciled (single shared
+  `marketdata.fmp.daily_request_cap`, no second cap).
+- Decisions recorded in product-spec:
+  - v1 universe = operator-supplied `TriggerBackfill.symbols`; default = feature-168 fundamentals
+    universe. FMP-Free 250/day cap bounds only the optional ratio-enrichment pass, not the EDGAR base.
+  - Design-deferred (for /sdd-design): D-1 partition key (`filed_date` vs `period_end`), D-2 EDGAR
+    XBRL → metric mapping, D-3 032 evaluator/proto seam.
+- Overlap findings: WARN-only — 198 & 032 both edit `analysis/v1/analysis.proto` (distinct messages,
+  both draft; no field-number clash). Trunk 150/151 occupy `BacktestResult` 17–20 /
+  `RunBacktestRequest` 8–9 → 198's additive fields start after those. No FAIL collision; no
+  `merge-order.md` entry required now (revisit if 032 & 198 hit impl-spec concurrently).
