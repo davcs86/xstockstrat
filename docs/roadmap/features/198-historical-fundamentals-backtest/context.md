@@ -203,3 +203,11 @@
 - Deviation: container `tsc` unavailable → `dist/` compiled on host via pnpm `prepare`
   (CI-equivalent: same lockfile tsc). Disposition: CI-equivalent fallback (sequential-mode §Verification fallbacks).
 - Files modified: `packages/proto/gen/**`.
+
+### Step 3 — migration: marketdata 005 fundamentals_history plain table [done]
+- Created 005_fundamentals_history.up.sql (plain table, PK (symbol,fiscal_period,period_type) +
+  filed_date/accepted_date/period_end cols + reused metric columns + extra_metrics jsonb + btree
+  idx on (symbol,period_end,filed_date)) and .down.sql (DROP INDEX + DROP TABLE).
+- Verification: offline (HARD CONSTRAINT — no DB spin-up). Both files exist; tip was 004 → 005
+  correct; .down reverses .up exactly. TDD: N/A (migration; live apply in CI/deploy).
+- Files: services/xstockstrat-marketdata/migrations/005_fundamentals_history.{up,down}.sql. Deviations: none.

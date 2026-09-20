@@ -128,7 +128,7 @@ Then confirm the new symbols exist in source-level checks the consuming steps re
 
 ### Step 3 — migration: marketdata `005` fundamentals_history plain table
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/migrations/005_fundamentals_history.up.sql` — create
