@@ -305,3 +305,23 @@
 - Files: app/services/evaluator.py (pre-session), app/handlers/servicer.py, app/engine/live_loop.py,
   app/services/readiness.py, tests/{test_analysis_servicer,test_opportunities_latency,test_live_loop}.py.
   Deviations: operand seam, gate chokepoint, parity fan-out (Deviation Log).
+
+### Step 11 — test: analysis operand resolution + T+1 look-ahead RED test [done]
+- New tests/test_fundamental_operand.py (feature-scoped file, mirrors test_source_symbol_parity.py
+  convention rather than the spec's placeholder name test_evaluator.py — Deviation Log). Real
+  marketdata_pb2.Bar (bar.time), never MagicMock.
+- TestFundamentalAsOfSeries (pure _fundamental_as_of_series): strict T+1 boundary (filing filed
+  2020-01-29 invisible on bars ≤ 01-29, visible from 01-30 — @AC-4), carry-forward between filings
+  (never a future filing), None before first filing (@AC-3), None-valued-metric span, empty inputs.
+- TestFundamentalOperandEvaluate (evaluate_with_series end-to-end): entry `pe_ratio < 15` never fires
+  on boundary bar 2020-01-29, fires 01-30+ (entered == [F,F,F,T,T]; series["pe"] proves boundary is
+  None not fabricated — @AC-4). Unset-operand baseline byte-identity: a supplied fundamentals list is
+  ignored for a builtin-only strategy (@AC-1 @feature-152).
+- TestFundamentalValidation: accepts known metric; rejects unset + unknown fundamental_metric.
+- TestFundamentalPeriodMapping (servicer _fundamental_periods_from_response): PIT value carried by
+  filed_date (@AC-4 analysis layer); missing_metrics→None not 0.0; filed_date-unset period dropped.
+- RED discipline: the boundary tests only pass with strict `filed_date < bar_date`; `<=` or a
+  current-snapshot read would fail test_t_plus_1_boundary_strict + test_entry_respects_t_plus_1.
+- Verification: uv run ruff check + format --check clean; pytest --cov=app --cov-fail-under=40 →
+  786 passed, coverage 83.70%.
+- Covers: AC-4, AC-3 (+ AC-1 baseline). Files: tests/test_fundamental_operand.py.

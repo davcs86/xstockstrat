@@ -388,7 +388,7 @@ cd services/xstockstrat-ingest && pytest --cov=app --cov-fail-under=40
 
 ### Step 11 — test: analysis operand resolution + T-1 look-ahead RED test
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_evaluator.py` — modify (or create if absent; confirm at execute via `find services/xstockstrat-analysis/tests`)
@@ -658,3 +658,7 @@ integration PR.
   evaluator (`compute_readiness_row`, `evaluate*`) gained an additive `fundamentals=None` kwarg.
   Existing tests that stub `evaluate`/`evaluate_conditions_traced` were extended to accept the new
   kwarg (no behavior change). **Disposition:** required by the full-parity user decision.
+- **Step 11 (test file name):** the step's `**Files**` named `tests/test_evaluator.py` (absent); the
+  new tests live in `tests/test_fundamental_operand.py` instead, matching this repo's feature-scoped
+  test-file convention (feature 152's `test_source_symbol_parity.py`) rather than a generic
+  `test_evaluator.py` that never existed. **Disposition:** convention-consistent placement.
