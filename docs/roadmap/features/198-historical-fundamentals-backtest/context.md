@@ -237,3 +237,12 @@
   total **63.0% ≥ 40%**. TDD red: tests reference symbols absent pre-Step-4 (compile-fail red) → green now.
 - Covers: AC-1, AC-2, AC-3, AC-5. Files: internal/edgar/edgar_client_test.go (new),
   internal/service/marketdata_service_test.go. Deviations: golangci-lint pin install (see Deviation Log).
+
+### Step 6 — config: marketdata fundamentals-history keys [done]
+- Appended 8 keys to marketdata CLAUDE.md defaults table (marketdata.fundamentals.history.*,
+  marketdata.edgar.*) + a feature-198 Per-Feature Registered Keys section in config-governance.md
+  (incl. analysis.backtest.fundamentals.enabled). Documented: no new secret/credential, no second FMP
+  cap (reuses marketdata.fmp.daily_request_cap), EDGAR UA non-secret. C-05 naming verified.
+- Verification: grep confirms all keys present in both docs. TDD: N/A (config docs; reads default-guarded in step 4).
+- Files: services/xstockstrat-marketdata/CLAUDE.md, docs/patterns/config-governance.md. Deviations: none.
+- NOTE: config-governance.md + service CLAUDE.md changed → context-constitution refresh due at teardown (step 17).

@@ -230,7 +230,7 @@ those carry the threshold; the `service`/`repository` glue is CI-excluded — no
 
 ### Step 6 — config: marketdata fundamentals-history keys (defaults + registry)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/CLAUDE.md` — modify (defaults table)
