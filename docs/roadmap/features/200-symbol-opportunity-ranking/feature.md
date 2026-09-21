@@ -14,6 +14,7 @@
 | 2026-09-20 | `draft` → `spec-ready` | /sdd-review | Product spec approved (1 advisory warning: 4-segment override key shape → design; 0 blockers). Merge-order row added: 200 depends on 199 |
 | 2026-09-20 | `spec-ready` (unchanged) | /sdd-design | Recon + 3-round debate run (SOUND, no Floor breach); **paused by operator before approval** pending feature 199 landing. recon.md written; converged design + Open Threads in context.md; design.md NOT yet written |
 | 2026-09-21 | `spec-ready` (unchanged) | sync | Re-grounded recon.md + context.md against what feature 199 BUILT (`code-completed`, PR #1157): composite_score is a queryable column (migration `024`, proto `= 21`); reserved `symbol_score = 22`, `OPPORTUNITY_SORT_SYMBOL_SCORE = 3`, migration `025`, `ANALYSIS-12`; Post-199-coupling + NULL-fold Open Threads resolved. No lifecycle flip — design resume (round 4) still pending |
+| 2026-09-21 | `spec-ready` (unchanged) | /sdd-review | Re-review PASS WITH WARNINGS (0 blockers; overlap CLEAN). Fixed the stale 199 dependency label (implementation-ready → code-completed); config-key-shape / migration-pairing / Open-Questions warnings carried into the design round |
 
 ---
 
