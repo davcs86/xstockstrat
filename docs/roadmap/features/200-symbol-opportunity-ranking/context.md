@@ -90,7 +90,7 @@ UI `/insights` (SymbolGroupCard orderable by symbol_score) + Agent (`list_opport
   ∩ owned ids (servicer.py:2260,2273). **Provisional/absent/unattributed → floor (0.5) = proven
   grade-F** (operator decision; drops the separate provisional_weight key; unproven can never outrank
   an evidenced strategy). Overrides = one structured JSON value `analysis.scoring.strategy_weight_overrides`
-  (malformed → ignored, never crash).
+  (malformed → ignored, never crash). **SUPERSEDED at round-4 design (2026-09-21): the override moved onto the strategy entity (`StrategyDefinition.rank_weight_override`), not a config blob — see design.md.**
 - **Sort**: opt-in `OPPORTUNITY_SORT_SYMBOL_SCORE = 3` (analysis.proto:541) → `_SORT_ORDER_BY[3] =
   MAX(o.symbol_score) OVER (PARTITION BY o.symbol) DESC NULLS LAST, o.symbol ASC, o.opportunity_key ASC`
   (opportunities.py:33). Default stays CONVICTION (no @AC-10 CHANGE, no sign-off).
@@ -197,3 +197,33 @@ then `/sdd-spec 200`. Merge still sequences after 199 (merge-order.md unchanged)
      design (converged design persists + reserves `025`).
   4. Open Questions still `- [ ]` — legitimately design-deferred; resolve when design.md is written.
 - Warnings 2–4 are carried into the `/sdd-design` round-4 run (next); status stays `spec-ready`.
+
+## Session 2026-09-21 — sdd-design (round 4, APPROVED → design-approved)
+
+- Phase 0 Recon: recon.md already current (synced against merged 199 earlier this session); services:
+  analysis, packages/proto, xstockstrat-ui, xstockstrat-agent, xstockstrat-config. Key reuse: 199's
+  `composite_score` column + `read()` projection; the `self._strategies` grade cache + owner-intersect;
+  the `_SORT_ORDER_BY` branch map; `_row_to_opportunity` explicit-presence mapping.
+- Phase 1 Grilling: round 4 (full) — proposer produced the final design, adversary returned
+  SOUND-WITH-RISKS (no Floor breach). design.md written.
+- **Chosen approach**: geometric rank-decay fold `Σ γ^i·(composite × strategy_weight)` (γ=0.5), one
+  SHARED compute/heal fold helper (determinism parity by construction), owner-scoped grade derived
+  from drained bindings∪live-enabled (no extra `list(user_id)` query), unbounded scalar, persisted
+  `symbol_score = 22` (migration `025`) + opt-in `OPPORTUNITY_SORT_SYMBOL_SCORE = 3`, `ANALYSIS-12`
+  cardinal guard, plain 3-decimal UI (NOT scoreColor).
+- **Operator-decision (gate)**: the per-strategy override is moved **onto the strategy entity**
+  (`StrategyDefinition.rank_weight_override`, mirroring feature-134 `SignalSource.reliabilityWeight`) —
+  **supersedes** the earlier converged `analysis.scoring.strategy_weight_overrides` JSON-blob config
+  key, which the adversary flagged as a repeat of the deleted `source_weights` anti-pattern
+  (`fails.md:1155/1537`). This adds a proto field + strategies-table migration + `ManageStrategy` write
+  path + agent `manage_strategy` surface to 200's scope.
+- **Config now**: only two 3-segment keys — `analysis.scoring.symbol_score_decay` (0.5) and
+  `analysis.scoring.strategy_weight_floor` (0.5), both `get_float_present`.
+- Rejected: config-blob overrides; extra owner-list query (YAGNI); FOR-UPDATE heal lock (self-heals);
+  persist-pre-weighted-term (shared helper is cheaper); scoreColor on an unbounded scalar.
+- Constitution rules touched: C-05, C-07, C-09, C-10, C-14, C-15, C-16, C-18, P-05, F-04, F-06, F-07.
+  Floor breaches: none.
+- Open risks (also design.md): grade-VALUE collision residual (133 D-2, accepted); owned_ids-from-
+  drained-set assumes no 4th attribution path (grep at /sdd-spec); compute/heal shared-helper lockstep
+  (heal-parity test guards); `rank_weight_override` scope; soft rebase overlap 187/193/188.
+- Status: spec-ready → design-approved. Next: /sdd-spec symbol-opportunity-ranking.

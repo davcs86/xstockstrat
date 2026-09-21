@@ -15,6 +15,7 @@
 | 2026-09-20 | `spec-ready` (unchanged) | /sdd-design | Recon + 3-round debate run (SOUND, no Floor breach); **paused by operator before approval** pending feature 199 landing. recon.md written; converged design + Open Threads in context.md; design.md NOT yet written |
 | 2026-09-21 | `spec-ready` (unchanged) | sync | Re-grounded recon.md + context.md against what feature 199 BUILT (`code-completed`, PR #1157): composite_score is a queryable column (migration `024`, proto `= 21`); reserved `symbol_score = 22`, `OPPORTUNITY_SORT_SYMBOL_SCORE = 3`, migration `025`, `ANALYSIS-12`; Post-199-coupling + NULL-fold Open Threads resolved. No lifecycle flip — design resume (round 4) still pending |
 | 2026-09-21 | `spec-ready` (unchanged) | /sdd-review | Re-review PASS WITH WARNINGS (0 blockers; overlap CLEAN). Fixed the stale 199 dependency label (implementation-ready → code-completed); config-key-shape / migration-pairing / Open-Questions warnings carried into the design round |
+| 2026-09-21 | `spec-ready` → `design-approved` | /sdd-design | Design debated (round 4, full — resumed against the built 199 tree) and approved; recon.md + design.md written. Key decisions: geometric rank-decay fold (γ=0.5) over `composite × strategy_weight`; owner-scoped grade from drained bindings∪live (no extra query); **per-strategy override moved onto the strategy entity** (not a config blob — adversary caught the deleted `source_weights` anti-pattern, user signed off); shared compute/heal fold helper for determinism parity; unbounded scalar, opt-in sort, `ANALYSIS-12` guard |
 
 ---
 
@@ -22,6 +23,8 @@
 
 - [Product Spec](product-spec.md) — requirements and governance
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
+- [Recon Dossier](recon.md) — grounded codebase map, patterns to reuse, existing business rules (C-16)
+- [Design](design.md) — debated + approved architecture, rejected alternatives, open risks, Constitution rules
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec symbol-opportunity-ranking`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -51,4 +54,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-**Ready to resume `/sdd-design symbol-opportunity-ranking`** (round 4 + write design.md), then `/sdd-spec`. Feature 199 is now `code-completed` (PR #1157) and its shape has been **synced into recon.md + context.md** (2026-09-21): composite_score is a queryable column (migration `024`, proto `= 21`, projected in `read()`); reserved surfaces re-derived — `symbol_score = 22`, `OPPORTUNITY_SORT_SYMBOL_SCORE = 3`, migration `025`, `ANALYSIS-12`. Design debated 3 rounds (SOUND, unapproved); converged state + resolved Open Threads in `context.md`. Merge still sequences after 199 (merge-order.md).
+`/sdd-spec symbol-opportunity-ranking` — generate the implementation spec from the approved design. Design is approved (`design.md`); reserved surfaces `symbol_score = 22`, `OPPORTUNITY_SORT_SYMBOL_SCORE = 3`, migration `025`, `ANALYSIS-12` + a `StrategyDefinition.rank_weight_override` field + strategies-table migration. Merge still sequences after feature 199 (`merge-order.md`).
