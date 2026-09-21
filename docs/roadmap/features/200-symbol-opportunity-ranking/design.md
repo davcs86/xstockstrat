@@ -1,7 +1,7 @@
 # Design: symbol-opportunity-ranking
 
 **Created**: 2026-09-21
-**Rounds**: 5 (full; termination: approved. Rounds 1–3 converged pre-merge; round 4 resumed against the built feature-199 tree; round 5 pressure-tested the round-4 override decision and led to deferring the operator override — see below.)
+**Rounds**: 6 (full; termination: approved. Rounds 1–3 converged pre-merge; round 4 resumed against the built feature-199 tree; round 5 pressure-tested the round-4 override decision → deferred the override; round 6 pressure-tested the grade-only shape → verified the mandated orderings + owned_ids cover, added the γ read-clamp, and corrected the "unbounded" framing to "bounded".)
 **Approved by**: user @ 2026-09-21 (round-4 gate: override on the strategy entity; round-5 gate: **defer the operator override to a follow-up feature — v1 is grade-only**)
 **Grounded in**: recon.md
 
@@ -15,13 +15,23 @@ migration `024`, projected in `read()`). No new inter-service edge, no new fetch
 already-drained rows, preserving the `@AC-6..9 @feature-191` latency bound.
 
 **Fold.** `symbol_score = Σ_i γ^i · t_(i)`, terms `t = composite_score × strategy_weight` sorted
-DESC, geometric rank-decay `γ = 0.5`. An **unbounded** raw scalar (multi-term sums can exceed 1.0).
+DESC, geometric rank-decay `γ = 0.5`, **read-clamped to `[0, 0.99]`** at the config read. The clamp is
+load-bearing: a decay `γ ≥ 1` degenerates the fold to a plain (or growing) sum and **inverts the @AC-3
+saturation ordering** — PENNY (6×0.30) would overtake AAPL (2×0.80) — so the clamp makes that mandated
+ordering un-breakable by operator config without a config-service bounds-registry entry. The result is a
+**bounded** ordinal scalar: with the override deferred `strategy_weight ≤ 1.0`, so `symbol_score <
+2·max_composite` (`< 2.0`) for any `γ < 1` — not a `[0,1]` probability, but bounded, not unbounded.
 A NULL-composite row contributes no term; a symbol with no surviving term → `symbol_score = NULL`.
 Two new **module-level pure helpers** in `servicer.py`, beside `_composite_score`/`_composite_signal_subscore`
 (`servicer.py:5216,5236`):
 - `_strategy_weight(overall_score, provisional, floor)` → `floor` when the grade is `None`/provisional,
   else `floor + (1−floor)·clamp01(overall_score)`. **v1 has no override term** (see Deferred below);
-  the affine map alone realizes FR-3's grade weighting.
+  the affine map alone realizes FR-3's grade weighting. The input is the **continuous cached
+  `overall_score` (∈[0,1]) + `provisional`** from the feature-065 `StrategyScore` (`_row_to_score`,
+  `servicer.py:5665`) — NOT the A–F letter grade; a strategy with no cached `StrategyScore` (score `None`,
+  `servicer.py:2237`) maps to floor. Because grade-A (`overall ≥ 0.8`) and grade-C (`overall ∈ [0.5,0.65)`)
+  ranges are disjoint, `w_A ≥ 0.9 > w_C < 0.825` strictly → @AC-4 (`fundamental_macd_blend` grade-A
+  outranks grade-C) holds by construction, no override needed.
 - `_symbol_score(terms, gamma)` → `None` on empty terms, else `Σ_i gamma**i · t` over
   `sorted(terms, reverse=True)`.
 
@@ -66,14 +76,16 @@ heal-parity test asserts against the RAW table that every row (incl. dismissed) 
 score AND equals a full compute pass.
 
 **Consumer surfaces (C-14).** UI `/insights`: a `symbol_score` value rendered **only under the
-server-applied `symbol_score` sort**, as a plain 3-decimal number — **NOT `scoreColor`** (unbounded;
-the recon's `scoreColor` suggestion is a bug for an unbounded scalar and must not reach the impl-spec).
+server-applied `symbol_score` sort**, as a plain 3-decimal number — **NOT `scoreColor`** (it is a bounded
+`[0, <2)` ordinal ranking scalar on a non-`[0,1]` scale; `scoreColor`'s `[0,1]` cardinal thresholds do not
+apply — the recon's `scoreColor` suggestion is a bug and must not reach the impl-spec).
 Agent `list_opportunities`: raw float via `_opportunity_to_dict` (`client.py:747`) with omit-on-NULL +
 descriptor-parity test + `mcp-tools.md` — same-PR (`fails.md:1151`, `@AC-10 @feature-185`).
 
 **Cardinal guard.** Companion invariant `ANALYSIS-12` + a `symbol_score` proto doc-comment
-("unbounded ordinal RANKING scalar; NOT a probability/expected-return/sizing/alert input") — mirrors
-landed `ANALYSIS-11` and discharges `fails.md:313/:418`.
+("bounded (`< 2·max_composite` for γ<1) ordinal RANKING scalar on a non-`[0,1]` scale; NOT a
+probability/expected-return/sizing/alert input") — mirrors landed `ANALYSIS-11` and discharges
+`fails.md:313/:418`.
 
 ## Deferred to a follow-up feature (named, C-14)
 
@@ -110,8 +122,9 @@ grounded):
   fold helper gives structural compute/heal parity more cheaply.
 - **Mandate a FOR-UPDATE / advisory lock on the heal symbol-wide UPDATE** — rejected: single idempotent
   statement; converges by the next read/recompute (feature-097/185 stale-while-revalidate tolerance).
-- **`scoreColor` for the UI value (recon line 38)** — rejected: `symbol_score` is unbounded; a `[0,1]`
-  color scale is the `fails.md:313/:418` ordinal-as-cardinal bug. Plain 3-decimal number instead.
+- **`scoreColor` for the UI value (recon line 38)** — rejected: `symbol_score` is a bounded `[0,<2)`
+  ordinal on a non-`[0,1]` scale; a `[0,1]` cardinal color scale is the `fails.md:313/:418`
+  ordinal-as-cardinal bug. Plain 3-decimal number instead.
 - **Read-time (non-persisted) computation** — rejected: the geometric fold is a rank-dependent ordered
   fold, not a SQL window aggregate; must be computed app-side and persisted to be sortable.
 

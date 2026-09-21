@@ -262,3 +262,34 @@ Constitution/Business-Rules, Rounds=5); product-spec FR-3 + config section + aff
 override Open Question; `acceptance.feature` `@AC-5` annotated `@deferred-followup` (append-only, not
 renumbered). Retained open risks: owned_ids fourth-path (grep at /sdd-spec), grade-value collision
 residual, shared-helper lockstep. Status stays `design-approved`. Next: /sdd-spec (v1 scope).
+
+## Session 2026-09-21 — sdd-design round 6 (operator-requested, past 5-round cap) → grade-only VERIFIED
+
+Operator asked for one last round; noted it is past the documented 5-round cap and proceeded on
+explicit direction. Round 6 attacked the final GRADE-ONLY shape (round 5 had been consumed by the
+override). Verdict: **SOUND-WITH-RISKS, no Floor breach.** All four load-bearing claims verified against
+code: owned_ids complete-cover, `overall_score`∈[0,1], migration `025` free, heal-parity inputs.
+
+Addressed before approval:
+- **γ read-clamp [0,0.99] (robustness / @AC-3).** `analysis.scoring.symbol_score_decay` had no
+  write-time bound; at γ≥1 the geometric fold degenerates to a plain/growing sum and PENNY (6×0.30)
+  overtakes AAPL (2×0.80) — inverting the mandated @AC-3 saturation ordering. Chose a **read-side clamp
+  to [0,0.99]** in `_compute_opportunities` (cheapest robust fix; no config-service bounds-registry
+  diff, stays in-analysis, matches the "code-default only" choice for these keys) over registering a
+  SCALAR_BOUNDS_REGISTRY bound. Documented in design.md fold paragraph.
+- **"unbounded" → "bounded".** With the override deferred, `strategy_weight ≤ 1.0` ⇒ `symbol_score <
+  2·max_composite (<2.0)` for γ<1. Reworded the 4 "unbounded" spots + the `ANALYSIS-12`/proto
+  doc-comment framing to "bounded ordinal ranking scalar on a non-[0,1] scale". The NOT-scoreColor
+  decision stands (a [0,<2) ordinal still doesn't fit a [0,1] cardinal color scale).
+- **grade_lookup clarified**: returns the **continuous** cached `overall_score`+`provisional`
+  (`_row_to_score`), floor on `None` — NOT the A–F letter. Grade-A (`overall≥0.8`) vs grade-C
+  (`[0.5,0.65)`) ranges are disjoint ⇒ @AC-4 holds by construction without an override.
+- **owned_ids RESOLVED at design (not deferred)**: grepped every `_candidate(sym, strat)` site — `strat`
+  comes only from owner watchlist bindings or `list_live_enabled(user_id)`; the fundamentals-blend fires
+  only when the user owns a live blend strategy ⇒ no fourth path, no `list(user_id)` fallback needed.
+- **recon.md stale override refs fixed**: added a round-6 "design.md is authoritative" note + corrected
+  the Objective and Config-keys lines (override deferred, not on the entity).
+
+Status stays `design-approved`. Ledger: round-6 confirmed no repeat of fails.md:313/1153/1155. Next:
+/sdd-spec (grade-only v1 scope; γ read-clamp + the two mandated orderings pinned at default γ in the
+C-15 analysis test step).
