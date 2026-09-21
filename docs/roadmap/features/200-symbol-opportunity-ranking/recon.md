@@ -10,9 +10,14 @@
 
 A single comparable symbol-level `symbol_score` that rolls up a symbol's opportunity rows via a
 diminishing-returns sum of `(feature-199 composite_score × strategy_weight)`, where
-`strategy_weight = feature-065 derived-grade weight × operator per-strategy override`, so a trader can
-rank *which symbol to trade*. Exposed as a new opt-in sort on the `/insights` queue and to the MCP
-agent. **Layers on feature 199** (consumes `composite_score`).
+`strategy_weight = feature-065 derived-grade weight` (the affine `floor + (1−floor)·overall_score`), so a
+trader can rank *which symbol to trade*. Exposed as a new opt-in sort on the `/insights` queue and to
+the MCP agent. **Layers on feature 199** (consumes `composite_score`).
+
+> **Round-6 note (2026-09-21): `design.md` is authoritative where it and this recon differ.** The
+> per-strategy **operator override is DEFERRED to a follow-up feature** (not in v1, not a config key,
+> not a `StrategyDefinition` field) — ignore the override references remaining below. v1's
+> `strategy_weight` is grade-only. See `design.md` § Deferred.
 
 ## Codebase Map
 
@@ -61,7 +66,7 @@ agent. **Layers on feature 199** (consumes `composite_score`).
 - **Hard dependency: feature 199 — now BUILT (`code-completed`, PR #1157).** `Opportunity.composite_score` LANDED as `optional double composite_score = 21` + a nullable `DOUBLE PRECISION` column (migration `024`), persisted on both write paths and **projected/queryable** (the `read()` SELECT carries `o.composite_score`; `_row_to_opportunity` maps it with explicit presence). 200 must still merge after 199 (blocking row in merge-order.md). **Post-199 coupling resolved** — the per-row quality input exists in proto + code + column, so 200's roll-up can read it directly (no readiness_json extraction).
 - Proto/RPC: additive `OPPORTUNITY_SORT_SYMBOL_SCORE = 3` (`OpportunitySort` max value is 2 → 3 free) + a per-row `Opportunity.symbol_score` field at the **next-free = 22** (after 199's landed `composite_score = 21`). Non-breaking; regen `gen/`.
 - Migration: **`025`** (next-free after 199's landed `024`) if `symbol_score` is persisted; nullable column on `analysis.opportunities`.
-- Config keys (RESOLVED at design.md): two 3-segment `analysis.scoring.*` keys — `symbol_score_decay` (γ, 0.5) and `strategy_weight_floor` (0.5), both `get_float_present`. The per-strategy override is NOT a config key — it moved onto the strategy entity (`StrategyDefinition.rank_weight_override`), avoiding the deleted `source_weights` config-blob anti-pattern (`fails.md:1155/1537`).
+- Config keys (RESOLVED at design.md): two 3-segment `analysis.scoring.*` keys — `symbol_score_decay` (γ, 0.5, read-clamped to `[0,0.99]`) and `strategy_weight_floor` (0.5), both `get_float_present`. The per-strategy override is **DEFERRED to a follow-up feature** (round 5) — neither a config key nor a `StrategyDefinition` field in v1.
 - Inter-service edges: none new (grade already in-memory; composite already on the row post-199).
 
 ## Risks / Not-found
