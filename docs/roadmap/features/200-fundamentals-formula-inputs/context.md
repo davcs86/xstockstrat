@@ -50,3 +50,18 @@
   → `200-fundamentals-formula-inputs` and updated all internal path references. `main-dev` had no
   199/200/201 feature dir; 200 chosen as next free. If 200 is also taken on another branch, renumber
   again to the next free.
+
+## Session 2026-09-21 — sdd-review product-spec
+
+- Product spec approved (PASS WITH WARNINGS, no blockers). Status: draft → spec-ready.
+- Warnings (advisory): (1) six Open Questions unchecked — all legitimate design forks routed to
+  /sdd-design (central fork = how the evaluator distinguishes a fundamentals formula from a bars
+  formula; must be closed in design before /sdd-spec); (2) C-10 integration completeness — the shared
+  `_assemble_component_series` seam also feeds `GetIndicatorSeries`; added it to FR-3's snapshot-path
+  enumeration (fixed this session).
+- Overlap findings: CLEAN — no duplicate config key, no shared proto field number, no shared
+  migration NNN. Soft/rebase source-file overlaps only (analysis servicer.py/evaluator.py vs
+  193/194/187, all disjoint regions). Build-order dependency on feature 198 (reuses its PIT
+  `_load_fundamentals` seam + `analysis.backtest.fundamentals.enabled` gate).
+- Branch: relocated to its own `claude/fundamentals-formula-inputs-*` off main-dev (own PR); cleaned
+  off the feature-198 branch (PR #1158 is feature-198-only again).

@@ -29,9 +29,11 @@ when evaluated, the strategy evaluator supplies the symbol's fundamentals as the
 FR-2. **In a backtest, the fundamentals are point-in-time as-of each bar** — resolved from the
 feature-198 PIT store with the strict `filed_date < bar_date` (T+1) carry-forward, so a fundamentals
 formula in a backtest never sees a filing before it was filed (no look-ahead).
-FR-3. **In live / screener / readiness / opportunities evaluation, the fundamentals are the current
-snapshot** (marketdata `GetFundamentalsMulti` cache) — the same inputs the signal producer's formula
-receives.
+FR-3. **In live / screener / readiness / opportunities / `GetIndicatorSeries` evaluation, the
+fundamentals are the current snapshot** (marketdata `GetFundamentalsMulti` cache) — the same inputs
+the signal producer's formula receives. (`GetIndicatorSeries`, the Symbol-page series consumer, rides
+the same shared `_assemble_component_series` seam, so it is enumerated here for snapshot-path parity —
+the review's C-10 integration-completeness note.)
 FR-4. The component's output reduces to a series the **same way other formula components do** (primary
 `value`, or a declared `<ref_name>.<series>` output), so rule-operand referencing is unchanged and a
 fundamentals formula composes with technical operands in one condition tree.

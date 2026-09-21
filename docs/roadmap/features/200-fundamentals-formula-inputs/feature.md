@@ -12,6 +12,7 @@
 |---|---|---|---|
 | 2026-09-21 | `idea` → `draft` | /sdd-story | Product spec generated (initial scope: formula signal producer) |
 | 2026-09-21 | `draft` → `draft` | /sdd-story | Rescoped after user correction: NOT a producer/loop — a fundamentals-fed custom formula usable as a strategy component; renamed from `formula-signal-producer` |
+| 2026-09-21 | `draft` → `spec-ready` | /sdd-review | Product spec approved (2 advisory warnings: Open Questions deferred to design; GetIndicatorSeries added to FR-3 snapshot parity). Overlap clean. |
 
 ---
 
@@ -48,4 +49,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review fundamentals-formula-inputs product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-design fundamentals-formula-inputs` — recon + adversarial design debate (full mode)
