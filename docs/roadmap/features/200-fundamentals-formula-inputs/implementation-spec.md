@@ -128,7 +128,7 @@ Both pass (no lint error, no breaking-change finding).
 
 ### Step 2 — proto-gen: regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/` — modify (generated; never hand-edited)

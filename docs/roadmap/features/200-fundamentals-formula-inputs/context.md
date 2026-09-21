@@ -359,3 +359,11 @@
 - Verify: `buf lint` exit 0; `buf breaking --against origin/main-dev` exit 0 (no findings).
 - Files modified: `packages/proto/indicators/v1/indicators.proto`. Deviations: none.
 - TDD: N/A (proto).
+
+### Step 2 — proto-gen: regenerate stubs [done]
+- Ran containerized codegen via `./scripts/localenv-setup.sh` (Docker up; built the pinned
+  `xstockstrat-codegen` image, ran `buf-gen.sh` inside). Regenerated Go/Python/TS stubs + TS dist.
+- Verify: `git status --short packages/proto/gen/` = 8 files, ALL under `indicators/v1` (Go, Python,
+  TS, TS dist) — no unrelated proto churn. `FundamentalMetric`/`FUNDAMENTAL_METRIC_*` present in the
+  generated Python/TS/Go indicators stubs.
+- Files modified: `packages/proto/gen/**` (generated; never hand-edited). Deviations: none. TDD: N/A.
