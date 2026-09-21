@@ -14,6 +14,7 @@
 | 2026-09-21 | `draft` → `draft` | /sdd-story | Rescoped after user correction: NOT a producer/loop — a fundamentals-fed custom formula usable as a strategy component; renamed from `formula-signal-producer` |
 | 2026-09-21 | `draft` → `spec-ready` | /sdd-review | Product spec approved (2 advisory warnings: Open Questions deferred to design; GetIndicatorSeries added to FR-3 snapshot parity). Overlap clean. |
 | 2026-09-21 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full mode) and approved; `recon.md` + `design.md` written. Chosen: disjoint formula categories (indicator-only vs fundamentals-only), additive `FormulaDefinition.fundamental_inputs` = new `FundamentalMetric` enum, epoch-model PIT in backtest / `GetFundamentalsMulti` snapshot elsewhere, single reused `analysis.backtest.fundamentals.enabled` gate. No Constitution Floor breach; no C-16 sign-off (no rule CHANGED). |
+| 2026-09-21 | `design-approved` → `design-approved` | /sdd-design | R3 (user-requested extra round). Adversary NEEDS-WORK → 4 MAJOR seam fixes: two-chokepoints/one-key gate (snapshot loader ≠ PIT loader), eval-time prefetch routing map + `_definition_wants_fundamentals_formula` predicate, scalar-broadcast keeping value-primary (`@AC-1` → `fscore.composite`), 0-warmup for bars-free formulas; +198 C-16 PRESERVE. User sign-off: **keep the closed enum** (declined the string reversal); `@AC-6` relocated to indicators `RegisterFormula`. Disjoint-kind untouched; still no Floor breach / no rule CHANGED. Design sharpened, gate not re-opened. |
 
 ---
 

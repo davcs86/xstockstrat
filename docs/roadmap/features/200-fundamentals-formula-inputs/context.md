@@ -139,3 +139,60 @@
   the gate-read test step must add it; real `Bar` fixtures keyed on `bar.time` (fails.md:727) for the
   PIT/epoch and byte-identity tests.
 - **Status:** `spec-ready` → `design-approved`. Termination: user-approved at the R2 gate.
+
+## Session 2026-09-21 — sdd-design Phase 1, Round 3 (user-requested extra round)
+
+- User asked for **another design round** on the already-approved (`design-approved`) design. Ran a
+  full mediated R3: design-adversary attacked the standing disjoint-category design, proposer
+  responded, both verified every claim against the code (P-02 mediated, orchestrator-synthesized).
+- **Adversary verdict: NEEDS WORK** — not mere confirmation. Four MAJOR seam collisions R1–R2 missed,
+  each grounded in real `path:line`:
+  - **MAJOR-1** — the snapshot path (live/screener/opportunities/readiness/GetIndicatorSeries) does
+    **not** flow through `_load_fundamentals` (that's the PIT/`GetHistoricalFundamentals` loader,
+    `servicer.py:1452`); the only `GetFundamentalsMulti` uses are the producer/screener/blend-resolver,
+    none feeding the evaluator operand. So the reused `analysis.backtest.fundamentals.enabled` gate did
+    **not** gate the snapshot path — design.md's "one switch, no asymmetry" was false. And 198's *live*
+    operand routes through the PIT loader (`live_loop.py:585`, gate `:597`), so 198 was **not** the
+    snapshot-gating precedent design.md claimed.
+  - **MAJOR-2** — `_definition_has_fundamental` (`servicer.py:5051`) + `_needs_eval_dates`
+    (`evaluator.py:63`) match only `COMPONENT_KIND_FUNDAMENTAL`; a fundamentals *formula*
+    (`CUSTOM_FORMULA`) is invisible → loader short-circuits `None` → formula fed nothing, silent hold.
+    And the `{formula_id:[metric]}` map can't come from `_fetch_formula_outputs` (write-time, not
+    persisted) — it must ride the eval-time `GetFormula` warmup prefetch.
+  - **MAJOR-3** — producer reads `composite` (`fundsignal_loop.py:416`); evaluator bare-ref resolves to
+    `value` (`evaluator.py:306`); `_compute_component` **drops scalar outputs** (`:381`) and requires a
+    `value` series — so a scalar-returning formula would `FormulaExecutionError` today, and `@AC-1`
+    (0.72 = composite) was unsatisfiable under bare-ref.
+  - **MAJOR-4** — with the closed enum on `FormulaDefinition` validated at indicators `RegisterFormula`,
+    a non-member is unrepresentable, so `@AC-6`'s ManageStrategy-path reject can't be exercised as
+    written; analysis-side revalidation is vacuous.
+  - **Obj-6** (198 `@AC-3/@AC-4` missing from PRESERVE) + **Obj-7** (enum DRY/home-of-truth: the enum is
+    a 4th representation alongside marketdata fields + analysis `_FUNDAMENTAL_METRICS` + UI list).
+  - **Conceded correct:** the epoch model is O(filings) and look-ahead is structurally impossible
+    (no `close[]` fed) — with two spec pins (all-`None`/pre-first-filing epoch skips ExecuteFormula &
+    emits None; epoch grouping from the per-metric as-of series incl. None-reset).
+- **Proposer resolutions (verified):** MAJOR-1 → **two chokepoints, one key** (PIT loader +
+  new `_load_fundamentals_snapshot` + live twin, both read the same gate; C-05 non-landmine — key is
+  already the platform-wide fundamentals kill-switch; `.backtest.` token a pre-existing 198 misnomer,
+  rename out of scope). MAJOR-2 → routing map from the **extended `GetFormula` warmup prefetch**
+  (`declared_formula_warmups` / `_declared_formula_warmup`), new predicate
+  `_definition_wants_fundamentals_formula`, `_needs_eval_dates` extended, `formula_fundamentals`
+  threaded like feature-152 `benchmark_bars`; RpcError → fed `close` → `FormulaExecutionError`
+  (fail-loud). MAJOR-3 → keep value-primary, **implement the deferred scalar-broadcast** so
+  value/quality/composite all addressable; **edit `@AC-1` to gate on `fscore.composite`**. MAJOR-5 →
+  fundamentals-only formula caches **0 warmup bars** at the prefetch. Obj-6 → add 198 PRESERVE.
+- **The one sign-off item — MAJOR-4/Obj-7 (enum home):** proposer *recommended reversing* to
+  `repeated string fundamental_inputs` validated against the existing `_FUNDAMENTAL_METRICS`
+  (DRY, no cross-service enum, `@AC-6` exercisable on the ManageStrategy path). Put to the **user via
+  AskUserQuestion; user chose to KEEP the closed `FundamentalMetric` enum** (C-04 compile-time proto
+  safety), accepting the 4th-representation cost + one named enum→field-name lowering site (the analysis
+  loader boundary) and relocating `@AC-6`'s reject to indicators `RegisterFormula` (reject the
+  `FUNDAMENTAL_METRIC_UNSPECIFIED` sentinel). Recorded here as the explicit R3 decision.
+- **acceptance.feature edits (ids preserved, C-15):** `@AC-1` body → gate on `fscore.composite` +
+  three scalar outputs broadcast; `@AC-6` body → validation at indicators `RegisterFormula` on the
+  enum sentinel.
+- **Carried to /sdd-spec:** add `get_bool` to `make_servicer` (fails.md:1395); real `Bar` on `bar.time`
+  (fails.md:727); assert the mid-window filing-boundary transition (fails.md:1853), not just ragged
+  ends; seed edit (not raw DB backfill) to set the seeded formula's `fundamental_inputs` (C-10(c)).
+- **Disjoint-kind decision untouched; no Floor breach; no rule CHANGED → no C-16 sign-off.** Status
+  stays `design-approved`; R3 sharpened the mechanism, it did not re-open the phase gate.

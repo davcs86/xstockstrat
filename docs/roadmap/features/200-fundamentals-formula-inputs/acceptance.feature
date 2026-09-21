@@ -5,10 +5,11 @@ Feature: fundamentals-formula-inputs
 
   @AC-1 @FR-1 @FR-4
   Scenario: A fundamentals-scoring formula component resolves to a score series a rule can gate on
-    Given a strategy with a custom-formula component "fscore" (formula id "value_quality") and an entry rule {"fn": ">", "lhs": "fscore", "rhs": 0.6}
-    And the "value_quality" formula reads fundamentals input_data and returns a composite output
+    Given a strategy with a custom-formula component "fscore" (formula id "value_quality") and an entry rule {"fn": ">", "lhs": "fscore.composite", "rhs": 0.6}
+    And the "value_quality" formula reads fundamentals input_data and returns value, quality, and composite scalar outputs
     When the strategy is evaluated over AAPL bars where AAPL's fundamentals yield composite 0.72
-    Then the "fscore" component series carries 0.72 on those bars and the entry rule fires
+    Then the "fscore.composite" component series carries 0.72 broadcast across those bars and the entry rule fires
+    # bare "fscore" resolves to the primary "value" sub-score per the value-primary convention; the headline score is the dotted "fscore.composite" (what the producer reads). All three scalar outputs are broadcast and addressable.
 
   @AC-2 @FR-2
   Scenario: In a backtest the formula sees point-in-time fundamentals, no look-ahead
@@ -40,11 +41,12 @@ Feature: fundamentals-formula-inputs
     And AAPL is scored normally and the evaluation does not abort
 
   @AC-6 @FR-7
-  Scenario: A fundamentals input the formula consumes is validated at strategy write time
-    Given a ManageStrategy REGISTER whose formula component consumes a fundamentals input named "not_a_metric"
-    When the strategy is written
-    Then the write is rejected INVALID_ARGUMENT naming the unknown fundamentals input
-    And a formula consuming only allowed fundamentals inputs (e.g. pe_ratio, roe) is accepted
+  Scenario: A formula's declared fundamentals inputs are validated at formula-registration write time
+    Given a RegisterFormula (or UpdateFormula) whose fundamental_inputs contains FUNDAMENTAL_METRIC_UNSPECIFIED (the zero-value sentinel)
+    When the formula is written
+    Then indicators rejects the write INVALID_ARGUMENT naming the unspecified fundamentals metric
+    And a formula declaring only valid FundamentalMetric enum values (e.g. PE_RATIO, ROE) is accepted and can then be bound into a strategy component
+    # Validation lives at indicators RegisterFormula/UpdateFormula because fundamental_inputs is a closed FundamentalMetric enum on FormulaDefinition (R3: relocated here from the ManageStrategy path; a closed enum makes a non-member structurally unrepresentable, so the only invalid value is the zero-value sentinel).
 
   @AC-7 @FR-1
   Scenario: A technical (non-fundamentals) formula component is byte-for-byte unaffected
