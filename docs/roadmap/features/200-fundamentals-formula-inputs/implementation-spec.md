@@ -478,12 +478,12 @@ Coverage ≥ 40%; AC-1/AC-2/AC-5/AC-8 assertions RED before Step 6, green after;
 - Write-time validation seam: `_validate_definition_proto` (`servicer.py:601`) calls
   `_refuse_deleted_bindings` (`:609`) and `_fetch_formula_outputs` (`:611`); `_fetch_formula_outputs`
   (`:537-560`) already loops formula components issuing one `GetFormula` each.
-- Live loop `_load_fundamentals(definition, symbol)` (`live_loop.py:585-604`) reads the same gate
+- Live loop `_load_fundamentals(definition, symbol)` (`live_loop.py:585-606`) reads the same gate
   (`:597`) and calls `GetHistoricalFundamentals` (`:600`); it imports `_definition_has_fundamental`
   (`:39`) and calls `self._evaluator.evaluate(…, fundamentals)` (`:628-629`). It already has a
   `GetFundamentalsMulti` chunk fetch helper (`:171-172`, `_MULTI_CHUNK` at `:53`).
 - Snapshot source: marketdata `GetFundamentalsMulti` (`packages/proto/marketdata/v1/marketdata.proto:44`,
-  handler `internal/service/marketdata_service.go:1256`); `Fundamentals` fields + `missing_metrics`
+  handler `internal/service/marketdata_service.go:1284`); `Fundamentals` fields + `missing_metrics`
   (`marketdata.proto:208-228`; null-not-zero at `:200-208`).
 - Header propagation: every `_load_fundamentals`/`evaluate*` call already forwards `propagation_meta`
   (the `x-user-id`/`x-access-scope`/`x-trace-id` trio filtered at `servicer.py:603-606`); the new

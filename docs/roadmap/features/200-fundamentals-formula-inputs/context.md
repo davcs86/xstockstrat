@@ -324,3 +324,24 @@
   component. The spec keeps the two loaders on separate channels to preserve 198 byte-identically
   (C-16 PRESERVE `@AC-3` `@feature-198`); resolve/record at execute time.
 - **Next:** `/sdd-review fundamentals-formula-inputs impl-spec`, then `/sdd-execute`.
+
+## Session 2026-09-21 — sdd-review impl-spec (advisory)
+
+- Result: **0 failures, 1 warning, 2 informational NOTEs** (advisory — did not block). Criteria pass
+  PASS: every code-checkable `path:line` re-verified against merged `main-dev`; all 7 design decisions
+  + 4 ledger traps correctly encoded; C-08 test-step pairing (steps 4/6/8 → 5/7/9), C-15 coverage
+  (@AC-1..8 all mapped: AC-1/2/5/7/8→Step7, AC-3/4→Step9, AC-6→Step5), B3 ordering all OK. No Floor risk.
+- Overlap pass CLEAN: migration `006`, proto fields (14/10/11) + `FundamentalMetric` enum, and the
+  reused config key all uncontested; 196 disjoint-region soft rebase, 198 recorded build-order ancestor,
+  187 clean. No new hard merge-order row.
+- Items carried into execution:
+  - Step 11: UI e2e test has **no numeric coverage threshold** (inherent to Playwright/`src/lib`-scoped
+    unit coverage, feature 065; frontend pair, not a C-08 gate) — [x] acknowledged, advisory-only, no fix.
+  - Line-ref drift NOTEs — [x] FIXED pre-execution (F-09 not yet in force): `marketdata_service.go:1256`
+    → `:1284`, `live_loop.py:585-604` → `:585-606`. All symbols resolved; cosmetic corrections applied.
+  - Residual (from /sdd-spec): 198-single-metric operand + fundamentals-formula on a non-backtest
+    surface co-occurrence — [ ] carried; the two loaders stay on separate channels (preserves 198,
+    C-16); execution must not merge them. Announce at checkpoints (P-03).
+  - Ledger-081 caveat — [ ] re-derive indicators migration next-free NNN against the merged tree at the
+    migration step (Step 3), not just the local checkout.
+- Overlap findings: none blocking.
