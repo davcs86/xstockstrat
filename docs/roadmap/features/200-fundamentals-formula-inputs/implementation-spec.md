@@ -202,7 +202,7 @@ fundamental_inputs` in `.down`. Live apply/rollback is proven in CI/deploy, not 
 
 ### Step 4 — service: persist, validate, and seed `fundamental_inputs` in indicators
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/services/formulas_repository.py` — modify
@@ -281,7 +281,7 @@ fundamental_inputs` in `.down`. Live apply/rollback is proven in CI/deploy, not 
 
 ### Step 5 — test: indicators persistence + validation round-trip
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/` — modify/create (place beside the existing servicer/repo

@@ -376,3 +376,30 @@
   inverse DROP COLUMN in `.down`. Live apply/rollback is CI/deploy's job.
 - Files created: `services/xstockstrat-indicators/migrations/006_add_formula_fundamental_inputs.{up,down}.sql`.
   Deviations: none. TDD: N/A (migration).
+
+### Step 4 — indicators persist/validate/seed fundamental_inputs [done]
+- Repository (`formulas_repository.py`): added `fundamental_inputs` JSONB column to `create`/`upsert`/
+  `update` (11th `$::jsonb` bind) + `_to_dict` parse block, mirroring `outputs`.
+- Validation (`parameters.py`): `validate_fundamental_inputs` rejects `FUNDAMENTAL_METRIC_UNSPECIFIED`
+  (the only invalid value for the closed enum).
+- Servicer (`servicer.py`): RegisterFormula validates + sets `fundamental_inputs` (proto builder +
+  `create` call as `[int(m) …]`); UpdateFormula adds it to `_FORMULA_MASKABLE_PATHS`, `eff_fundamental_inputs`
+  (masked→request ints / unmasked→row), validate-when-masked, passed to `update`; `_row_to_formula`
+  maps it back.
+- Seeded formula (`fundamentals_value_quality.py`): `FUNDAMENTAL_INPUTS` = its 6 metrics; wired into
+  the idempotent `seed_formulas.py` `upsert` (C-10(c) — never a raw backfill). indicators CLAUDE.md updated.
+- Files modified: `app/services/formulas_repository.py`, `app/services/parameters.py`,
+  `app/handlers/servicer.py`, `app/formulas/fundamentals_value_quality.py`,
+  `app/services/seed_formulas.py`, `CLAUDE.md`. Deviations: none. TDD: paired with Step 5 (red→green).
+
+### Step 5 — test: indicators persistence + validation round-trip [done]
+- Added `TestFundamentalInputs` (test_formulas.py): register-rejects-UNSPECIFIED (AC-6), register
+  stores fundamental_inputs, `_row_to_formula` maps them (GetFormula round-trip), seeded formula
+  declares its 6 metrics. Added `TestValidateFundamentalInputs` (test_parameters.py): empty ok, valid
+  ok, rejects sentinel. Reconciled the pre-existing `test_create_round_trips_warmup_period` (warmup is
+  now the 2nd-to-last bind; `fundamental_inputs` is the trailing 11th).
+- **TDD (AC-6) red→green:** with the Step 4 impl `git stash`ed, all 7 new tests failed
+  (`AttributeError: no attribute 'FUNDAMENTAL_INPUTS'`, `validate_fundamental_inputs` missing, stored
+  fundamental_inputs empty) → RED. After `stash pop`: 7/7 green; full suite `pytest --cov` 140 passed,
+  coverage **81.44%** (≥50%); `ruff check` + `ruff format --check` clean.
+- Files modified: `tests/test_formulas.py`, `tests/test_parameters.py`. Deviations: none.
