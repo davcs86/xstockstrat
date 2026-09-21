@@ -48,9 +48,14 @@ sign-off recorded in `context.md`.)_
 FR-6. **Graceful degradation, no fabrication:** a formula execution failure, or fundamentals
 unavailable for a symbol/bar, degrades that component to `None`/hold for that span (never a fabricated
 `0.0` score) and never aborts the backtest/evaluation.
-FR-7. **Write-time validation:** a fundamentals-scoring formula component is validated at strategy
-write time — the fundamentals inputs it consumes are checked against the allowed fundamentals input
-set — reusing the existing formula-component validation seam (`GetFormula`-at-write, feature 067/152).
+FR-7. **Write-time validation:** a formula's declared fundamentals inputs are validated at
+**formula-registration** write time — indicators `RegisterFormula`/`UpdateFormula` rejects an invalid
+`fundamental_inputs` (`INVALID_ARGUMENT`). _(Updated by the /sdd-design R3 debate: because
+`fundamental_inputs` is a **closed `FundamentalMetric` enum** on `FormulaDefinition`, a non-member is
+structurally unrepresentable, so the only invalid value is the `FUNDAMENTAL_METRIC_UNSPECIFIED` zero
+sentinel, and the natural enforcement point is indicators registration — not the analysis
+`ManageStrategy`/`GetFormula`-at-write seam, which still runs for the ANALYSIS-6 soft-delete guard but
+is no longer the input-set validator. Covered by `@AC-6`.)_
 
 ## Out of Scope
 
@@ -75,8 +80,11 @@ Exact service names from CLAUDE.md Service Registry:
   inferred.
 - `xstockstrat-marketdata` — **consumed unchanged**: `GetHistoricalFundamentals` (PIT, feature 198)
   and `GetFundamentalsMulti` (snapshot).
-- `xstockstrat-ui` — possibly a `ComponentEditor` affordance to mark/pick a fundamentals-scoring
-  formula (design decides; may be none).
+- `xstockstrat-ui` — a **read-only `ComponentEditor` badge** (design decided, R4/R5): when the picked
+  formula declares `fundamental_inputs`, show a static "Fundamentals input — requires the fundamentals
+  gate ON; use `.composite` for the headline" hint. The formula picker + `<ref>.composite` operand
+  already surface (`strategyCatalog.ts:213-244`); no new route/write. (Deferral, if any, points at the
+  named follow-up `insights-fundamentals-formula-affordance`.)
 - `xstockstrat-agent` — **consumed unchanged**: `manage_strategy` already builds formula components.
 
 ## Consumer Surface(s)
@@ -84,9 +92,10 @@ Exact service names from CLAUDE.md Service Registry:
 _Constitution **C-14**._
 
 - [x] **UI** — `/insights` strategy builder (`ComponentEditor` / `StrategyWizard`): a formula
-  component can be a fundamentals-scoring formula. Whether a new affordance is required (vs. the
-  existing formula picker just working) is a design question; the surface itself is the existing
-  strategy-authoring page — no new route.
+  component can be a fundamentals-scoring formula. The formula picker + `<ref>.composite` operand
+  already surface it (`strategyCatalog.ts:213-244`); **the feature adds one read-only `ComponentEditor`
+  badge** (a "fundamentals input / requires gate / use `.composite`" hint when the picked formula
+  declares `fundamental_inputs`) — no new route, no write path (design R4/R5).
 - [x] **Agent** — `xstockstrat-agent` `manage_strategy`: already registers formula components; a
   fundamentals-scoring formula rides that existing tool (documented, no new tool). Backtests run via
   the existing `run_backtest`.
@@ -120,8 +129,9 @@ fundamentals-capable, rather than adding a new surface.
   `fundamental_inputs`: migration **`006_add_formula_fundamental_inputs`** (`ALTER TABLE
   indicators.formulas ADD COLUMN fundamental_inputs JSONB NOT NULL DEFAULT '[]'`, mirroring the
   `003_formula_outputs` JSONB precedent) — without it `GetFormula` can't return the field and the
-  eval-time routing map is always empty. Adds a **DBA** review gate (C-07). Resolved in the
-  `/sdd-design` R4/R5 debate.
+  eval-time routing map is always empty. Adds a **DBA** review gate (C-07). Ships the paired
+  `006_add_formula_fundamental_inputs.up.sql` + `.down.sql` (the `.down` drops the column), run via
+  `scripts/db-migrate.sh` after the on-disk `005` (C-07). Resolved in the `/sdd-design` R4/R5 debate.
 
 ## Feature Workflow Notes
 
@@ -138,24 +148,25 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 
 ## Open Questions
 
-- [ ] **How the evaluator knows a formula component needs fundamentals `input_data` vs bars
-  (design):** infer from the formula's declared `FormulaParameter` names matching the fundamentals
-  set, a `FormulaDefinition` marker, or a component-level flag? This is the central design fork.
-- [ ] **Fundamentals input set (design):** the producer's scoring path feeds 6 fields (`pe_ratio`,
-  `pb_ratio`, `dividend_yield`, `roe`, `debt_to_equity`, `eps`). Does a strategy formula get the same
-  6, or the wider feature-198 metric set (`market_cap`, `beta`, `price`, `year_high`, `year_low`)?
-  FR-5 (one contract) pulls toward matching the producer's 6; confirm.
-- [ ] **Per-bar PIT recompute cost (design):** in a backtest the as-of fundamentals change only at
-  filing boundaries, so the composite should be recomputed **only when the as-of inputs change** and
-  carried forward — not one `ExecuteFormula` per bar per symbol. Confirm the carry-forward/dedup
-  strategy (reuse the feature-198 as-of carry-forward shape).
-- [ ] **Gate reuse (design):** reuse `analysis.backtest.fundamentals.enabled`, or mint a dedicated
-  gate? (Config value_type immutability — any new key is new, never a rewiden — fails.md C-10(b)/F-11.)
-- [ ] **Known trap — shared/seeded formula protection (fails.md:76):** a strategy binding to a
-  fundamentals-scoring formula must degrade gracefully when that formula is soft-deleted/edited
-  (reuse the feature-086 soft-delete-on-read guard, ANALYSIS-6); do not introduce an `author="system"`
-  sentinel without a governance entry.
-- [ ] **Known trap — real `Bar` fixtures + `bar.time` (fails.md:727):** the PIT path keys on bar
-  dates (`bar.time`, never `bar.timestamp`); tests use real `Bar` protos, not `MagicMock`.
+_All resolved by the `/sdd-design` debate (see `design.md`); kept here as a resolved audit trail._
+
+- [x] **How the evaluator knows a formula needs fundamentals vs bars** — RESOLVED: a non-empty
+  `FormulaDefinition.fundamental_inputs` (the new closed enum) is the category marker; disjoint
+  indicator-only vs fundamentals-only kinds. (`design.md` § Chosen Approach / Routing predicate.)
+- [x] **Fundamentals input set** — RESOLVED: the **11-metric `FundamentalMetric` enum** vocabulary
+  (the seeded producer formula declares its own subset of 6). Supersedes the earlier "6 vs 11?" framing
+  — the Proto Contract Changes section above commits to the enum. (`design.md` § Declaration.)
+- [x] **Per-bar PIT recompute cost** — RESOLVED: the **filing-boundary epoch model** — one
+  `ExecuteFormula` per epoch (contiguous constant-as-of span), broadcast across the span → O(filings),
+  not O(bars); reuses feature-198 `_fundamental_as_of_series`. (`design.md` § Backtest (PIT).)
+- [x] **Gate reuse** — RESOLVED: reuse the existing feature-198 `analysis.backtest.fundamentals.enabled`
+  (no new key), read at **two sites** (PIT loader + the new snapshot loader). (`design.md` § Gate.)
+- [x] **Known trap — seeded formula protection (fails.md:76/:75):** the seeded `author="system"`
+  formula stays mutation-protected (indicators `servicer.py:315-318`); its `fundamental_inputs` is set
+  via the idempotent seed edit, never a raw DB backfill (C-10(c)). No new ownership sentinel.
+- [x] **Known trap — real `Bar` fixtures + `bar.time` (fails.md:727):** carried into the test plan —
+  PIT/epoch tests use real `Bar` protos keyed on `bar.time`, and assert a mid-window filing transition
+  (fails.md:1853). Plus `get_bool` must be stubbed in `make_servicer` (fails.md:1395). (`design.md`
+  Open Risks; carried to `/sdd-spec`.)
 - [ ] **Known trap — analysis test-helper config accessors (fails.md:1395):** any gate read via a
   presence-aware accessor must be stubbed in the service test-helper factory.

@@ -253,3 +253,30 @@
   FR-5 narrowing edits *this feature's own* not-yet-promoted scenarios (allowed pre-launch, C-15) and
   carried a user sign-off. Disjoint-kind + closed-enum decisions untouched. **Design converges at R5
   (full mode's cap) — no R6.** Status stays `design-approved`.
+
+## Session 2026-09-21 — sdd-review product-spec (post-design re-review)
+
+- Re-ran the AI review on the R3–R5-revised product-spec (spec-reviewer + feature-overlap subagents).
+  **Result: PASS WITH WARNINGS — no blockers, no Floor breach.** All code-checkable claims verified
+  against the repo: service names match the registry; proto field numbers free (`FormulaDefinition`
+  `fundamental_inputs`=14, `RegisterFormulaRequest`=10, `UpdateFormulaRequest`=11); indicators migration
+  `006` is genuinely next-free (on-disk `001`–`005`); the JSONB `ADD COLUMN … DEFAULT '[]'` mirrors the
+  `003_formula_outputs` precedent; config key format + reuse OK.
+- **Status kept `design-approved`** (NOT downgraded to `spec-ready`): the review re-ran on an
+  already-designed feature, and the skill's PASS path (overwrite → `spec-ready`) is written for the
+  `draft`→`spec-ready` gate; applying it here would regress the lifecycle and destroy the design phase.
+  Deliberate orchestrator override, recorded here.
+- **4 advisory warnings — all documentation drift, all addressed this session:**
+  1. FR-7 prose was stale (said analysis `GetFormula`-at-write) → reworded to name indicators
+     `RegisterFormula`/`UpdateFormula` enum-sentinel validation (matches `@AC-6`).
+  2. Open Questions all unchecked (esp. OQ-2 "6 vs 11?" contradicting the Proto section) → all six
+     marked `[x]` RESOLVED with pointers to the resolving `design.md` sections.
+  3. DB section didn't state the paired `.down.sql`/run order → added.
+  4. UI consumer surface was tentative ("may be none") → firmed to the read-only `ComponentEditor`
+     badge the design ships (`strategyCatalog.ts:213-244` already surfaces the picker + `.composite`).
+- **Overlap: no blocking collision.** Migration `006`, the additive proto field/enum, and the reused
+  config key are all CLEAN. Only soft same-file (disjoint-region) rebases with 198/196 in the analysis
+  dir. **Added a merge-order row:** `fundamentals-formula-inputs` (200) **must wait for**
+  `historical-fundamentals-backtest` (198) — consumed-seam build-order dependency (198 is
+  code-completed, not yet launched).
+- **Next:** proceed to `/sdd-spec fundamentals-formula-inputs` (review clear, design approved).
