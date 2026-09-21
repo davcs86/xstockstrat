@@ -15,7 +15,7 @@ then the analysis compute (config-key reads → pure fusion `_composite_score` �
 `_row_for`/heal path → persist on the two write paths + read/project), then the two named
 consumer surfaces (agent `list_opportunities` projection, UI `/insights` queue + `/trader` panel),
 each with its paired test. The cardinal-guard (fails.md:313 next-occurrence guard) lands as a
-proto doc-comment (Step 1) plus a durable `ANALYSIS-10` invariant (Step 7). Ordering is driven by
+proto doc-comment (Step 1) plus a durable `ANALYSIS-11` invariant (Step 7). Ordering is driven by
 the descriptor-parity constraint: once Step 2 regenerates stubs, the agent parity test
 (`test_opportunity_projection.py`) goes RED until Step 8/9 project the new field — this is the
 intended red-before-green gate, not a defect.
@@ -290,7 +290,7 @@ design.md §Consumer surfaces). No surface is deferred.
 
 ---
 
-### Step 7 — docs: Add `ANALYSIS-10` cardinal-guard invariant
+### Step 7 — docs: Add `ANALYSIS-11` cardinal-guard invariant
 
 **Status**: `pending`
 **Service**: `xstockstrat-analysis`
@@ -300,7 +300,7 @@ design.md §Consumer surfaces). No surface is deferred.
 **Reviewers**: none
 
 **Codebase Evidence**:
-- Existing invariants `ANALYSIS-1 … ANALYSIS-9` in `services/xstockstrat-analysis/docs/context-constitution.md` (table rows `:17-24`); next id = **ANALYSIS-10**.
+- Existing invariants `ANALYSIS-1 … ANALYSIS-10` in `services/xstockstrat-analysis/docs/context-constitution.md` (ANALYSIS-10 is feature-198 historical-fundamentals, merged via #1158); next free id = **ANALYSIS-11**.
 - ANALYSIS-2 already names the EB formula (`:18`); the new invariant is the *cardinal-vs-ordinal* guard (design §Cardinal guard, part (b)).
 - The trap being guarded: `fails.md:313` (conviction ordinal proposed as a confidence input); `ExternalSignal.conviction` is the correct 0–1 confidence producer (`ingest.proto:110`).
 
@@ -309,11 +309,11 @@ design.md §Consumer surfaces). No surface is deferred.
 **Covers**: `—`
 
 **Instructions**:
-- Add an `ANALYSIS-10` row: `composite_score` (feature 199) is a **shrunk ranking ordinal, NOT a cardinal probability** — never wire it into position sizing, alert cutoffs, or any risk/expected-return input. The confidence-to-size producer is `ExternalSignal.conviction` (`ingest.proto:110`), surfaced as `Opportunity.signal_confidence` (`analysis.proto:588`). Cite the fusion (`_composite_score`, `servicer.py`) and the `fails.md:313` next-occurrence rationale.
+- Add an `ANALYSIS-11` row: `composite_score` (feature 199) is a **shrunk ranking ordinal, NOT a cardinal probability** — never wire it into position sizing, alert cutoffs, or any risk/expected-return input. The confidence-to-size producer is `ExternalSignal.conviction` (`ingest.proto:110`), surfaced as `Opportunity.signal_confidence` (`analysis.proto:588`). Cite the fusion (`_composite_score`, `servicer.py`) and the `fails.md:313` next-occurrence rationale.
 - This edits a context-constitution file → the CLAUDE.md teardown audit applies (run `/context-forge:context-constitution refresh` scoped to this file before the PR, or record the manual reconciliation in the PR body).
 
 **Verification**:
-- `grep -n "ANALYSIS-10" services/xstockstrat-analysis/docs/context-constitution.md` — the invariant is present and names `ExternalSignal.conviction` as the correct producer.
+- `grep -n "ANALYSIS-11" services/xstockstrat-analysis/docs/context-constitution.md` — the invariant is present and names `ExternalSignal.conviction` as the correct producer.
 
 ---
 
@@ -455,4 +455,25 @@ design.md §Consumer surfaces). No surface is deferred.
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+- **Renumber 198 → 199 (merge collision).** `main-dev` merged `198-historical-fundamentals-backtest`
+  (#1158), which owns feature number 198 immutably. This feature was renumbered `198 → 199` (and its
+  dependent `symbol-opportunity-ranking` `199 → 200`) per the CLAUDE.md numbering rule. Proto field
+  (`composite_score = 21`) and analysis migration (`024`) re-derived against the merged tree and
+  confirmed still free (the 198 change touched a different `Opportunity`-sibling message and
+  marketdata migrations, not these).
+- **`ANALYSIS-10` → `ANALYSIS-11` (invariant-id collision).** The merged feature-198 added
+  `ANALYSIS-10` (the `COMPONENT_KIND_FUNDAMENTAL` PIT operand). Step 7's cardinal-guard invariant
+  is therefore `ANALYSIS-11`; Step 7 body + Execution Summary updated to match.
+- **Step 6 repo tests are mock-bind, not live-DB.** The existing `test_opportunities_repo.py` uses
+  the AsyncMock-pool pattern (asserts SQL text + positional binds), so the `@AC-1/@AC-10/@AC-11`
+  persistence coverage asserts the `composite_score` column/bind (value + `None` passthrough) at
+  that layer rather than a live round-trip; the pure fusion math is fully exercised in
+  `test_composite_score.py`.
+- **Extra test touched (analysis-side parity guard).** `test_analysis_servicer.py`
+  `TestOpportunityRowParity._MAPPED` (the analysis producer↔reader descriptor-parity guard, analogous
+  to the agent guard in Step 9) went RED when the proto gained field 21; added `composite_score` to
+  the mapped set in Step 6 to keep `_row_to_opportunity` covering every field.
+- **Per-step commits + draft PR (operator directive).** Executed in sequential mode with each step
+  as its own commit pushed to `claude/symbol-consolidation-scoring-7kgk9t`; PR #1157 converted to
+  draft. buf/codegen ran through the `Dockerfile.codegen` container (no host `buf`); `gen/ts/dist`
+  compiled with the isolated proto TS package install.
