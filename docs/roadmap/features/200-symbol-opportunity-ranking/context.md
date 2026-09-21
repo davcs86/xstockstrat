@@ -98,7 +98,8 @@ UI `/insights` (SymbolGroupCard orderable by symbol_score) + Agent (`list_opport
   22, re-derive vs merged tree); UI = plain 3-decimal number (NOT scoreColor — unbounded), rendered
   only under the server-applied symbol_score sort; agent = raw float via _opportunity_to_dict + omit on
   NULL + descriptor-parity. Migration 025 (after 199's 024, re-derive).
-- **Cardinal guard**: extend feature-199's ANALYSIS-10 invariant + a symbol_score proto doc-comment
+- **Cardinal guard**: feature-199's composite guard landed as **ANALYSIS-11**, so 200 adds a companion
+  **ANALYSIS-12** for symbol_score + a symbol_score proto doc-comment
   ("unbounded ordinal RANKING scalar … NOT a probability/expected-return/sizing input").
 - **Heal (corrected, round 3)**: new disposition-free `OpportunitiesRepository.symbol_composite_terms
   (user_id, symbol)` (no opportunity_actions join / no valid_until / no floor) → re-fold the whole
@@ -115,13 +116,37 @@ UI `/insights` (SymbolGroupCard orderable by symbol_score) + Agent (`list_opport
   floor 0.5 > 0 contributes; unproven never outranks evidenced. (@AC-9 to be updated to unbounded
   values 1.20/0.75 when design.md is written.)
 
-## Open Threads (resolve at round 4 / against merged 199 tree)
+## Post-199 sync (2026-09-21) — facts re-grounded against what feature 199 BUILT
 
-- [ ] **Post-199 coupling (fails.md:378/412/422 trap)**: re-derive `symbol_composite_terms` against
-  199's LANDED shape — is composite_score a queryable column (199 design says yes) or in readiness_json?
-  Re-derive proto field 22, sort enum value, migration 025 from the merged tree.
-- [ ] **NULL-composite fold semantics** must match the main-compute fold exactly (199 persists NULL on
-  Σw≤0) or the heal-parity test passes on a subtle divergence.
+Feature 199 (opportunity-composite-score) is `code-completed` (PR #1157). Re-grounded against the
+landed code on this branch — these were the "resolve against the merged tree" unknowns:
+
+- **composite_score is a real, queryable column.** `analysis.opportunities.composite_score`
+  `DOUBLE PRECISION` NULL (migration `024`); `read()` SELECTs `o.composite_score`;
+  `_row_to_opportunity` maps it (explicit presence). NOT in `readiness_json`. → 200's roll-up reads
+  it straight off the row / `read()` — no JSONB extraction, no re-fold from readiness.
+- **Reserved surface numbers (re-derived, confirmed free):** proto `Opportunity.symbol_score = 22`
+  (after landed `composite_score = 21`); `OPPORTUNITY_SORT_SYMBOL_SCORE = 3` (OpportunitySort max = 2);
+  analysis migration `025` (after landed `024`); invariant `ANALYSIS-12` (after landed `ANALYSIS-11`).
+- **NULL-composite fold contract (nail it in the heal-parity test):** the main compute persists
+  `composite_score = NULL` exactly when `Σw ≤ 0` (`_composite_score([...], k) is None`). 200's fold
+  must **skip** a NULL-composite term (never coerce it to 0), so heal (persisted universe) and compute
+  (candidates dict) agree. The composite fold anchors `best_direction` on RAW conviction; 200's
+  strategy-weight layer is orthogonal to that and does not touch it.
+- **Reusable fusion helpers 200 layers beside** (module-level in `servicer.py`):
+  `_composite_score(scored, k)`, `_composite_signal_subscore(contribs, best_direction)`. 200's
+  `_symbol_score` is a NEW helper (geometric rank-decay fold), not an extension of these.
+
+**Still open for /sdd-design round 4** (design decisions, NOT facts about 199): the order-insensitive
+fold internal sort, the concurrency mitigation (FOR-UPDATE-txn / advisory lock), the floor=0.5
+collapse rationale, and the config-key names/read-semantics — see the checklist below.
+
+## Open Threads (resolve at round 4)
+
+- [x] **Post-199 coupling** — RESOLVED by the sync above: composite_score is a queryable column;
+  proto field 22 / sort value 3 / migration 025 / ANALYSIS-12 re-derived and free.
+- [x] **NULL-composite fold semantics** — RESOLVED: 199 persists NULL on `Σw ≤ 0`; 200's fold skips
+  NULL terms (contract captured above for the heal-parity test).
 - [ ] **Order-insensitive fold**: `_symbol_score` must sort terms internally so heal (persisted
   universe) and compute (candidates dict) are byte-identical regardless of input row order.
 - [ ] **Concurrency residual** (adversary ruled acceptable/self-healing, NOT must-fix): decide at
@@ -130,5 +155,28 @@ UI `/insights` (SymbolGroupCard orderable by symbol_score) + Agent (`list_opport
   design.md Rejected Alternatives (operator decision).
 - [ ] **Config**: assign real 3-segment key names + decide floor=0 / decay=0 read semantics
   (get_float_present vs get_float zero-trap) + declare defaults in analysis CLAUDE.md.
-- [ ] **Round 4 focus** was requested but redirected: resume the design debate (write design.md +
-  flip to design-approved) AFTER 199 lands, then /sdd-spec 200.
+- [ ] **Round 4 focus**: the post-199 facts are now known (sync above), so `/sdd-design
+  symbol-opportunity-ranking` round 4 can run against the built 199 code on this branch — write
+  design.md + flip to design-approved, then `/sdd-spec 200`. (Merge still sequences after 199 via
+  merge-order.md; the design no longer waits on 199's shape being unknown.)
+
+## Session 2026-09-21 — sync with what feature 199 built
+
+Operator: "sync feature 200 with what 199 built." Feature 199 (opportunity-composite-score) is now
+`code-completed` (PR #1157). Re-grounded 200's dependency facts against the landed 199 code (all on
+`claude/symbol-consolidation-scoring-7kgk9t`):
+
+- recon.md: corrected the migration tip (`024` composite LANDED, not `023`; killed the stale
+  "024–028 drift" note — those are config-service seed migrations), the proto next-free field
+  (`symbol_score = 22` after landed `composite_score = 21`), the sort value (`= 3`, OpportunitySort
+  max 2), the dependency block (199 BUILT, composite_score is a queryable column), the Risks
+  "composite_score not landed" → LANDED, and the cardinal-guard id (`ANALYSIS-11` landed → 200 =
+  `ANALYSIS-12`).
+- context.md: added the "Post-199 sync" fact block; marked the Post-199-coupling and NULL-fold Open
+  Threads RESOLVED (composite is a real column read via `read()`; NULL on `Σw ≤ 0` → 200 skips NULL
+  terms); updated the cardinal-guard line to ANALYSIS-11→ANALYSIS-12; re-pointed the round-4 thread
+  (design can now run against the built code).
+
+Status unchanged (`spec-ready`) — this is a fact re-grounding, NOT the design resume. Next: run
+`/sdd-design symbol-opportunity-ranking` round 4 to write design.md and flip to design-approved,
+then `/sdd-spec 200`. Merge still sequences after 199 (merge-order.md unchanged).
