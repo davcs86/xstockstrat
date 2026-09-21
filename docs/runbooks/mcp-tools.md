@@ -882,6 +882,10 @@ ranking axes and **distinct** from an evaluated 0-of-N "quiet" row). The live-ma
 - `valid_until` — the row's expiry as an ISO-8601 string; omitted when unset (feature 185 back-fill).
 - `signal_confidence` — the raw max active-signal conviction (0.0–1.0); omitted when the symbol has
   no active signal, never a fabricated `0.0` (feature 185 back-fill).
+- `composite_score` — the shrunk **0–1 ranking ordinal** fusing readiness + directional signal
+  (feature 199); omitted when the row has nothing to fuse (NULL / never-computed / data-unavailable),
+  never a fabricated `0.0`. It is a **ranking aid, not a cardinal probability** — do not treat it as a
+  sizing or alert input (that is `signal_confidence`).
 - `sparkline` — a list of recent daily closes; a warm-up/missing bar is JSON `null` (never `NaN`).
 - `conditions` — the traced `{ref_name, lhs_value, threshold, fn, state, distance_to_threshold}`
   leaves; an unattributed row omits the key.

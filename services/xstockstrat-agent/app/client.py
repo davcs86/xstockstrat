@@ -800,6 +800,10 @@ def _opportunity_to_dict(o, analysis_pb2) -> dict[str, Any]:
         d["signal_confidence"] = o.signal_confidence
     if o.HasField("valid_until"):
         d["valid_until"] = o.valid_until.ToDatetime(tzinfo=UTC).isoformat()
+    # feature 199 — composite_score: shrunk 0–1 ranking ordinal; omit-not-fabricate (unset when the
+    # row has nothing to fuse / NULL, never a fabricated 0.0). A ranking aid, not a cardinal input.
+    if o.HasField("composite_score"):
+        d["composite_score"] = o.composite_score
     return d
 
 

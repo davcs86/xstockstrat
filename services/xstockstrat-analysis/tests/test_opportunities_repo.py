@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.handlers.servicer import _primary_source
+from app.handlers.servicer import _primary_source, _row_to_opportunity
 from app.repositories.opportunities import (
     _PROVENANCE_STRUCTURAL_MARKERS,
     OpportunitiesRepository,
@@ -224,3 +224,147 @@ def test_primary_source_parity(provenance, expected):
     """@AC-12 — the pure Python derivation the SQL LATERAL mirrors: skip exactly the structural
     markers, take the first remaining token."""
     assert _primary_source(provenance) == expected
+
+
+# ── feature 199 — composite_score persistence + projection ───────────────────────────────────
+
+
+async def test_replace_for_user_binds_composite_score_alongside_axes():
+    """@AC-1 — the full-replace INSERT carries composite_score as its own column/bind, WITHOUT
+    disturbing the independently-queryable conviction / signal_axis binds."""
+    pool, conn = _mock_pool()
+    repo = OpportunitiesRepository(pool)
+    valid = datetime(2999, 1, 1, tzinfo=UTC)
+    await repo.replace_for_user(
+        "u1",
+        [
+            {
+                "opportunity_key": "u1|AAPL|sx",
+                "symbol": "AAPL",
+                "strategy_id": "sx",
+                "action": 1,
+                "conviction": 0.80,
+                "readiness_json": {"passing_conditions": 1, "total_conditions": 1},
+                "signal_axis": 0.60,
+                "provenance": ["watchlist"],
+                "thesis": "t",
+                "valid_until": valid,
+                "composite_score": 0.732,
+            }
+        ],
+    )
+    sql, params = conn.executemany.await_args.args
+    assert "composite_score" in sql
+    assert "$12" in sql  # the added positional bind
+    (bind,) = params
+    assert bind[5] == 0.80  # conviction — unchanged
+    assert bind[7] == 0.60  # signal_axis — unchanged
+    assert bind[11] == 0.732  # composite_score — the new tail bind
+
+
+async def test_replace_for_user_null_composite_passes_through():
+    """@AC-10/@AC-11 — a NULL composite (nothing-to-fuse / data-unavailable) binds None straight
+    through (never a fabricated 0.0), and a row that omits the key defaults to None."""
+    pool, conn = _mock_pool()
+    repo = OpportunitiesRepository(pool)
+    valid = datetime(2999, 1, 1, tzinfo=UTC)
+    base = {
+        "opportunity_key": "u1|X|sx",
+        "symbol": "X",
+        "strategy_id": "sx",
+        "action": 1,
+        "conviction": 0.0,
+        "readiness_json": {},
+        "signal_axis": 0.0,
+        "provenance": ["unavailable"],
+        "thesis": "",
+        "valid_until": valid,
+    }
+    await repo.replace_for_user(
+        "u1",
+        [
+            {**base, "opportunity_key": "u1|X|sx", "composite_score": None},
+            {**base, "opportunity_key": "u1|Y|sx"},  # key omitted entirely
+        ],
+    )
+    _, params = conn.executemany.await_args.args
+    assert params[0][11] is None  # explicit None
+    assert params[1][11] is None  # .get default
+
+
+async def test_replace_symbols_binds_composite_score():
+    """@AC-11 — the heal UPDATE sets composite_score = $9 and binds it (None on a still-unavailable
+    row, recomputed value on a healed row)."""
+    pool, conn = _mock_pool()
+    repo = OpportunitiesRepository(pool)
+    valid = datetime(2999, 1, 1, tzinfo=UTC)
+    await repo.replace_symbols(
+        "u1",
+        [
+            {
+                "opportunity_key": "u1|AAPL|sx",
+                "conviction": 0.8,
+                "readiness_json": {"total_conditions": 1},
+                "signal_axis": 0.5,
+                "provenance": ["watchlist"],
+                "thesis": "t",
+                "valid_until": valid,
+                "composite_score": 0.65,
+            },
+            {
+                "opportunity_key": "u1|MSFT|sx",
+                "conviction": 0.0,
+                "readiness_json": {},
+                "signal_axis": 0.0,
+                "provenance": ["unavailable"],
+                "thesis": "",
+                "valid_until": valid,
+                "composite_score": None,
+            },
+        ],
+    )
+    sql, params = conn.executemany.await_args.args
+    assert "composite_score = $9" in sql
+    assert params[0][8] == 0.65  # healed row
+    assert params[1][8] is None  # still-unavailable row
+
+
+async def test_read_selects_composite_score():
+    """The queue read projects the composite_score column so _row_to_opportunity can carry it."""
+    sql, _ = await _read()
+    assert "o.composite_score" in sql
+
+
+def test_row_to_opportunity_composite_presence():
+    """@AC-10 — the proto projection carries composite_score with explicit presence: set when the
+    column has a value, UNSET (never a fabricated 0.0) when the column is NULL/absent."""
+    present = _row_to_opportunity(
+        {
+            "opportunity_key": "u1|AAPL|sx",
+            "symbol": "AAPL",
+            "strategy_id": "sx",
+            "action": 1,
+            "conviction": 0.8,
+            "readiness_json": {},
+            "provenance": [],
+            "thesis": "",
+            "composite_score": 0.512,
+        }
+    )
+    assert present.HasField("composite_score")
+    assert present.composite_score == pytest.approx(0.512)
+
+    absent = _row_to_opportunity(
+        {
+            "opportunity_key": "u1|X|sx",
+            "symbol": "X",
+            "strategy_id": "sx",
+            "action": 1,
+            "conviction": 0.0,
+            "readiness_json": {},
+            "provenance": ["unavailable"],
+            "thesis": "",
+            "composite_score": None,
+        }
+    )
+    assert not absent.HasField("composite_score")

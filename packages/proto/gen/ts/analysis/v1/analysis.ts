@@ -1763,6 +1763,13 @@ export interface Opportunity {
    * Distinct from an evaluated 0/N row; conviction+signal_axis are zeroed so it sinks in ranking.
    */
   dataUnavailable: boolean;
+  /**
+   * feature 199 — a single shrunk 0–1 ranking ordinal fusing readiness + directional signal
+   * (empirical-Bayes over the two axes present at compute; NULL/unset = nothing to fuse). Like
+   * conviction=3 it is NOT a probability and NEVER a cardinal sizing/alert/risk input — that is
+   * ExternalSignal.conviction (ingest.proto:110). Explicit-presence: unset = not-yet/nothing-to-fuse.
+   */
+  compositeScore?: number | undefined;
 }
 
 /**
@@ -7733,6 +7740,7 @@ function createBaseOpportunity(): Opportunity {
     conditions: [],
     signalConfidence: undefined,
     dataUnavailable: false,
+    compositeScore: undefined,
   };
 }
 
@@ -7797,6 +7805,9 @@ export const Opportunity: MessageFns<Opportunity> = {
     }
     if (message.dataUnavailable !== false) {
       writer.uint32(160).bool(message.dataUnavailable);
+    }
+    if (message.compositeScore !== undefined) {
+      writer.uint32(169).double(message.compositeScore);
     }
     return writer;
   },
@@ -7968,6 +7979,14 @@ export const Opportunity: MessageFns<Opportunity> = {
           message.dataUnavailable = reader.bool();
           continue;
         }
+        case 21: {
+          if (tag !== 169) {
+            break;
+          }
+
+          message.compositeScore = reader.double();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -8051,6 +8070,11 @@ export const Opportunity: MessageFns<Opportunity> = {
         : isSet(object.data_unavailable)
         ? globalThis.Boolean(object.data_unavailable)
         : false,
+      compositeScore: isSet(object.compositeScore)
+        ? globalThis.Number(object.compositeScore)
+        : isSet(object.composite_score)
+        ? globalThis.Number(object.composite_score)
+        : undefined,
     };
   },
 
@@ -8116,6 +8140,9 @@ export const Opportunity: MessageFns<Opportunity> = {
     if (message.dataUnavailable !== false) {
       obj.dataUnavailable = message.dataUnavailable;
     }
+    if (message.compositeScore !== undefined) {
+      obj.compositeScore = message.compositeScore;
+    }
     return obj;
   },
 
@@ -8144,6 +8171,7 @@ export const Opportunity: MessageFns<Opportunity> = {
     message.conditions = object.conditions?.map((e) => ConditionEval.fromPartial(e)) || [];
     message.signalConfidence = object.signalConfidence ?? undefined;
     message.dataUnavailable = object.dataUnavailable ?? false;
+    message.compositeScore = object.compositeScore ?? undefined;
     return message;
   },
 };

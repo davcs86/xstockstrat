@@ -65,6 +65,7 @@ export const OPPORTUNITIES = [
     // feature 097 — stable server-issued key (user|symbol_norm|strategy_id) + de-dup provenance.
     opportunityKey: 'u1|AAPL|strat-001',
     provenance: ['watchlist', 'unusual_whales'],
+    compositeScore: 0.732, // feature 199 — text-paper band (>=0.6, <0.8)
   },
   {
     symbol: 'MSFT',
@@ -78,6 +79,7 @@ export const OPPORTUNITIES = [
     validUntil: VALID_UNTIL,
     opportunityKey: 'u1|MSFT|strat-001',
     provenance: ['position', 'marketwatch'],
+    compositeScore: 0.512, // feature 199 — text-destructive band (<0.6)
   },
   {
     symbol: 'TSLA',

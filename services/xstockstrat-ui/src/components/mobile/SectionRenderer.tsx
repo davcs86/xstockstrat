@@ -8,6 +8,7 @@ import { cn } from '../ui/utils';
 import { Alert, AlertDescription } from '../ui/alert';
 import { Badge } from '../ui/badge';
 import { Progress } from '../ui/progress';
+import { scoreColor, formatComposite } from '@/lib/scoreDisplay';
 import type { Section, SignalItem } from './sections';
 
 // Every interactive row is at least 44px tall (tap-target floor).
@@ -185,6 +186,15 @@ function SignalRow({ item: s, showSymbol = true }: { item: SignalItem; showSymbo
           ))}
         </div>
         <div className="flex shrink-0 items-center gap-1">
+          {/* feature 199 — composite ranking ordinal tag; omitted (not 0.000) when unset. */}
+          {s.compositeScore !== undefined && (
+            <span
+              className={cn('font-mono text-[11px] tabular-nums', scoreColor(s.compositeScore))}
+              data-testid={`opp-composite-mobile-${s.symbol}`}
+            >
+              {formatComposite(s.compositeScore)}
+            </span>
+          )}
           {s.expiry && s.expiry !== '—' && (
             <span className="font-mono text-[11px] text-muted-foreground">exp {s.expiry}</span>
           )}

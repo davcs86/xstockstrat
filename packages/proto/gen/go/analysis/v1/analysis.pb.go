@@ -3754,8 +3754,13 @@ type Opportunity struct {
 	// data-unavailable), derived at read from the "unavailable" provenance marker (no column).
 	// Distinct from an evaluated 0/N row; conviction+signal_axis are zeroed so it sinks in ranking.
 	DataUnavailable bool `protobuf:"varint,20,opt,name=data_unavailable,json=dataUnavailable,proto3" json:"data_unavailable,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// feature 199 — a single shrunk 0–1 ranking ordinal fusing readiness + directional signal
+	// (empirical-Bayes over the two axes present at compute; NULL/unset = nothing to fuse). Like
+	// conviction=3 it is NOT a probability and NEVER a cardinal sizing/alert/risk input — that is
+	// ExternalSignal.conviction (ingest.proto:110). Explicit-presence: unset = not-yet/nothing-to-fuse.
+	CompositeScore *float64 `protobuf:"fixed64,21,opt,name=composite_score,json=compositeScore,proto3,oneof" json:"composite_score,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *Opportunity) Reset() {
@@ -3926,6 +3931,13 @@ func (x *Opportunity) GetDataUnavailable() bool {
 		return x.DataUnavailable
 	}
 	return false
+}
+
+func (x *Opportunity) GetCompositeScore() float64 {
+	if x != nil && x.CompositeScore != nil {
+		return *x.CompositeScore
+	}
+	return 0
 }
 
 // One recent daily-bar close for the Decide-surface sparkline (feature 095). Explicit presence — an
@@ -6034,7 +6046,7 @@ const file_analysis_v1_analysis_proto_rawDesc = "" +
 	"\x0edeferred_count\x18\x05 \x01(\x05R\rdeferredCount\x12\x16\n" +
 	"\x06status\x18\x06 \x01(\tR\x06status\x12;\n" +
 	"\vfinished_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"finishedAt\"\xa7\a\n" +
+	"finishedAt\"\xe9\a\n" +
 	"\vOpportunity\x12\x16\n" +
 	"\x06symbol\x18\x01 \x01(\tR\x06symbol\x12E\n" +
 	"\x06action\x18\x02 \x01(\x0e2-.xstockstrat.analysis.v1.OpportunityActionTagR\x06action\x12\x1e\n" +
@@ -6067,12 +6079,14 @@ const file_analysis_v1_analysis_proto_rawDesc = "" +
 	"conditions\x18\x12 \x03(\v2&.xstockstrat.analysis.v1.ConditionEvalR\n" +
 	"conditions\x120\n" +
 	"\x11signal_confidence\x18\x13 \x01(\x01H\x04R\x10signalConfidence\x88\x01\x01\x12)\n" +
-	"\x10data_unavailable\x18\x14 \x01(\bR\x0fdataUnavailableB\r\n" +
+	"\x10data_unavailable\x18\x14 \x01(\bR\x0fdataUnavailable\x12,\n" +
+	"\x0fcomposite_score\x18\x15 \x01(\x01H\x05R\x0ecompositeScore\x88\x01\x01B\r\n" +
 	"\v_live_priceB\r\n" +
 	"\v_change_pctB\x0f\n" +
 	"\r_target_priceB\r\n" +
 	"\v_stop_priceB\x14\n" +
-	"\x12_signal_confidence\"5\n" +
+	"\x12_signal_confidenceB\x12\n" +
+	"\x10_composite_score\"5\n" +
 	"\x0eSparklinePoint\x12\x19\n" +
 	"\x05close\x18\x01 \x01(\x01H\x00R\x05close\x88\x01\x01B\b\n" +
 	"\x06_close\"\xe8\x01\n" +
