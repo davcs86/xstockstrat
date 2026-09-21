@@ -227,3 +227,38 @@ then `/sdd-spec 200`. Merge still sequences after 199 (merge-order.md unchanged)
   drained-set assumes no 4th attribution path (grep at /sdd-spec); compute/heal shared-helper lockstep
   (heal-parity test guards); `rank_weight_override` scope; soft rebase overlap 187/193/188.
 - Status: spec-ready → design-approved. Next: /sdd-spec symbol-opportunity-ranking.
+
+## Session 2026-09-21 — sdd-design round 5 (pressure test) → override DEFERRED
+
+Operator requested one more round. Round 5 (hard cap) aimed the adversary at the round-4
+override-on-entity decision, which had NEVER been adversarially tested (it was decided AT the round-4
+gate, after that round's adversary ran). Verdict: SOUND-WITH-RISKS, no Floor breach — but the override
+mechanism was under-grounded, with four must-fixes for a knob that defaults to a no-op 1.0:
+1. **Phantom migration / contradictory persistence** — `analysis.strategies` stores the whole
+   `StrategyDefinition` as one JSONB `definition_json` (`migrations/001`); new fields ride the blob
+   (no migration, like `denied_symbols`/`signal_eligible`) OR need a discrete column (the
+   `SignalSource.reliabilityWeight` shape). design.md conflated both.
+2. **Grade-fingerprint wipe (C-16, @AC-5 feature-150)** — a blob-riding override enters
+   `_definition_fingerprint`; tuning it would discard the strategy's feature-065 grade evidence →
+   grade→floor, the opposite of intent.
+3. **Full-replace wipe (feature-148 class)** — the UI's full-definition `ManageStrategy` update omits an
+   unset optional → resets the override to 1.0; also not in `_MASKABLE_PATHS`.
+4. **Heal/compute parity gap** — the override lives on `definition_json`, but heal's
+   `symbol_composite_terms` + the `self._strategies` grade cache don't carry it → heal would fold with
+   override=1.0 while compute used the real value.
+Plus: "config-ui-visible/bounds-checkable for free" false on a JSONB field; unbounded `symbol_score` +
+`override=1e9` dominates; and a genuinely-open owned_ids fourth path (the fundamentals-blend force-run
+attributing a non-owned global strategy_id → floor).
+
+**Gate decision: DEFER the override to a follow-up feature; v1 = grade-only** (`strategy_weight =
+affine(grade)`, override ≡ 1.0). Removes all four must-fixes + both override objections in one move;
+the grade-weighting value (FR-3, @AC-4) and breadth examples (FR-2) ship intact. The override becomes a
+named follow-up (`per-strategy-rank-weight-override`), to be built with the reliabilityWeight shape
+(column + CHECK bound + maskable write + fingerprint-exclusion) — recorded in design.md § Deferred so
+the follow-up starts grounded.
+
+Propagated the descope: design.md rewritten (grade-only, § Deferred, updated Rejected/Open-Risks/
+Constitution/Business-Rules, Rounds=5); product-spec FR-3 + config section + affected-services +
+override Open Question; `acceptance.feature` `@AC-5` annotated `@deferred-followup` (append-only, not
+renumbered). Retained open risks: owned_ids fourth-path (grep at /sdd-spec), grade-value collision
+residual, shared-helper lockstep. Status stays `design-approved`. Next: /sdd-spec (v1 scope).

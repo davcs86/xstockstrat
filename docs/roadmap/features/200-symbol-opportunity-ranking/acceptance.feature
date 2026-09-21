@@ -41,11 +41,15 @@ Feature: symbol-opportunity-ranking
     When both symbol_scores are computed
     Then AAPL ranks strictly above MSFT, because fundamental_macd_blend's grade-A weight exceeds grade C
 
-  @AC-5 @FR-3
+  # @AC-5 is DEFERRED (round-5 design decision, 2026-09-21): the per-strategy operator override is
+  # descoped from v1 and moved to a follow-up feature. This scenario is NOT covered by a v1 test step;
+  # it carries forward (append-only, never renumbered) to the override follow-up. FR-3's grade-weighting
+  # stays covered by @AC-4. See design.md § Deferred.
+  @AC-5 @FR-3 @deferred-followup
   Scenario: An operator per-strategy override raises symbols carrying that strategy
     Given symbols "AAPL" and "MSFT" have identical opportunity sets except AAPL has one opportunity from strategy "fundamental_macd_blend" where MSFT's is from a same-grade strategy "foo"
     And AAPL and MSFT are initially tied in symbol_score
-    When the operator sets the config override for "fundamental_macd_blend" to 1.5 (from the default 1.0)
+    When the operator sets the per-strategy override for "fundamental_macd_blend" to 1.5 (from the default 1.0)
     Then AAPL's symbol_score increases and AAPL ranks strictly above MSFT
 
   @AC-6 @FR-4

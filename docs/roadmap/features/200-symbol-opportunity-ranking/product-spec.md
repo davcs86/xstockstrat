@@ -34,12 +34,14 @@ symbol's opportunities (that is the current sort's behavior this feature exists 
 comparison). **Mandatory ordering:** a symbol with 2 opportunities at conviction 0.80 + full readiness
 ranks strictly **above** a symbol with 1 opportunity at conviction 1.00.
 
-FR-3. **Strategy weighting = derived grade × operator override.** Each opportunity's contribution is
-weighted by its strategy's derived quality grade (feature-065 `StrategyScore` A–F, mapped to a numeric
-weight), multiplied by an explicit **operator per-strategy config override** (default override = 1.0).
+FR-3. **Strategy weighting = derived grade.** Each opportunity's contribution is weighted by its
+strategy's derived quality grade (feature-065 `StrategyScore`, mapped via `floor + (1−floor)·overall_score`).
 **Mandatory ordering:** a symbol whose opportunity set includes the `fundamental_macd_blend` strategy
 ranks strictly **above** a symbol with the same count of opportunities none of which is
-`fundamental_macd_blend`, when `fundamental_macd_blend` carries a higher effective strategy weight.
+`fundamental_macd_blend`, when `fundamental_macd_blend` carries a higher derived grade.
+_(Deferred to a follow-up feature per the round-5 design pressure test: the **per-strategy operator
+override** — a knob defaulting to a no-op 1.0 whose entity-persistence carries a grade-fingerprint-wipe +
+replace-wipe + bounds hazard. v1 ships grade-only; see `design.md` § Deferred.)_
 
 FR-4. **Missing/degenerate inputs degrade gracefully.** An opportunity whose `composite_score` is NULL
 (feature-199 "not computed" / data-unavailable) contributes nothing to the sum (it is not treated as 0
@@ -71,7 +73,7 @@ Exact service names from CLAUDE.md Service Registry:
 - `xstockstrat-ui` — `/insights` queue ordering by symbol roll-up.
 - `xstockstrat-agent` — expose `symbol_score` for symbol comparison via `list_opportunities` (or a
   symbol-level projection).
-- `xstockstrat-config` — new config keys (saturation parameter, per-strategy overrides, grade→weight map).
+- `xstockstrat-config` — two new `analysis.scoring.*` float keys (`symbol_score_decay`, `strategy_weight_floor`); no per-strategy override key (deferred).
 
 ## Consumer Surface(s)
 
@@ -98,11 +100,9 @@ _Resolved at design (design.md):_ two 3-segment `analysis.scoring.*` keys, both 
 - `analysis.scoring.symbol_score_decay` — geometric rank-decay `γ` (default `0.5`) for the fold (FR-2).
 - `analysis.scoring.strategy_weight_floor` — the grade-weight affine floor (default `0.5`) (FR-3).
 
-The per-strategy **operator override is NOT a config key** — the design moved it onto the strategy
-entity (`StrategyDefinition.rank_weight_override`, mirroring feature-134 `SignalSource.reliabilityWeight`),
-because a per-entity-weights config blob repeats the deleted `analysis.signals.source_weights`
-anti-pattern (ledger `fails.md:1155/1537`). The grade→weight mapping is the affine
-`floor + (1−floor)·overall_score`, not a separate A–F weight-map config.
+The per-strategy **operator override is deferred to a follow-up feature** (round-5 design decision) — it
+is neither a config key nor an entity field in v1. v1's grade→weight mapping is the affine
+`floor + (1−floor)·overall_score` (no override term, no separate A–F weight-map config).
 
 ## Database Changes
 
@@ -144,8 +144,9 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 - [ ] **Grade→weight map + provisional fallback (FR-3).** The A–F→numeric mapping, and the neutral
   weight for a strategy whose grade is provisional/absent (feature-065 evidence floor). Must not be 0
   (that would zero out a legitimate opportunity from an unproven strategy).
-- [ ] **Operator override key shape (FR-3 / C-05).** Per-strategy dynamic config keys
-  (`...override.<strategy_id>`) vs one structured JSON value — governance + config-ui implications.
+- [x] **Operator override key shape (FR-3 / C-05).** RESOLVED at design: the per-strategy override is
+  **deferred to a follow-up feature** (round-5 pressure test) — neither a config key nor an entity field
+  in v1. See `design.md` § Deferred.
 - [ ] **Persist vs compute-on-read (FR-1/FR-5).** Persisted `symbol_score` column (enables server-side
   ORDER BY + a leaderboard, needs a migration + heal/refresh parity) vs query-time roll-up (no schema,
   but the sort must then be expressible server-side to preserve the "client does not re-sort"
