@@ -93,14 +93,16 @@ _Constitution **C-14**._
 
 ## Config Key Changes
 
-- [ ] New keys under `analysis` (finalized at design; follow the `analysis.scoring.shrinkage_days`
-  precedent, `get_float_present`):
-  - `analysis.opportunity.symbol_score_saturation` (or similar) — the diminishing-returns saturation
-    parameter (FR-2).
-  - `analysis.scoring.strategy_grade_weight_*` — the A–F→numeric weight map (FR-3).
-  - `analysis.scoring.strategy_weight_override.<strategy_id>` (or a structured override key) — the
-    operator per-strategy override (FR-3). **Naming/shape is an Open Question** (per-strategy dynamic
-    keys vs a single structured value).
+_Resolved at design (design.md):_ two 3-segment `analysis.scoring.*` keys, both `get_float_present`
+(the `analysis.scoring.composite_*` precedent):
+- `analysis.scoring.symbol_score_decay` — geometric rank-decay `γ` (default `0.5`) for the fold (FR-2).
+- `analysis.scoring.strategy_weight_floor` — the grade-weight affine floor (default `0.5`) (FR-3).
+
+The per-strategy **operator override is NOT a config key** — the design moved it onto the strategy
+entity (`StrategyDefinition.rank_weight_override`, mirroring feature-134 `SignalSource.reliabilityWeight`),
+because a per-entity-weights config blob repeats the deleted `analysis.signals.source_weights`
+anti-pattern (ledger `fails.md:1155/1537`). The grade→weight mapping is the affine
+`floor + (1−floor)·overall_score`, not a separate A–F weight-map config.
 
 ## Database Changes
 
