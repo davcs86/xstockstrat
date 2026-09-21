@@ -12,6 +12,13 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { FormDialog } from '@/components/shared/FormDialog';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
   AlertDialog,
   AlertDialogTrigger,
   AlertDialogContent,
@@ -26,7 +33,7 @@ import {
   useTriggerBackfill,
 } from '@/hooks/useBackfills';
 import { useIsAdmin } from '@/hooks/useLiveStrategies';
-import { BackfillStatus } from '@xstockstrat/proto/ingest/v1/ingest_pb';
+import { BackfillStatus, BackfillDataKind } from '@xstockstrat/proto/ingest/v1/ingest_pb';
 import type { BackfillJob } from '@xstockstrat/proto/ingest/v1/ingest_pb';
 import { Timeframe } from '@xstockstrat/proto/common/v1/common_pb';
 
@@ -104,6 +111,9 @@ export default function BackfillsPage() {
   const [createStart, setCreateStart] = useState('');
   const [createEnd, setCreateEnd] = useState('');
   const [overwrite, setOverwrite] = useState(false);
+  // Bars (daily OHLCV) or Fundamentals (point-in-time filings history, feature 198). Fundamentals
+  // are timeframe-independent, so the create form omits timeframeEnum for that kind.
+  const [dataKind, setDataKind] = useState<BackfillDataKind>(BackfillDataKind.BARS);
   const [newOpen, setNewOpen] = useState(false);
 
   const [statusFilter, setStatusFilter] = useState<BackfillStatus>(BackfillStatus.UNSPECIFIED);
@@ -132,10 +142,14 @@ export default function BackfillsPage() {
       .map((s) => s.trim().toUpperCase())
       .filter(Boolean);
     if (list.length === 0) return;
+    const isFundamentals = dataKind === BackfillDataKind.FUNDAMENTALS;
     trigger.mutate(
       {
         symbols: list,
-        timeframeEnum: Timeframe.TIMEFRAME_1DAY,
+        // Fundamentals carry no timeframe (ingest routes them past the 1d-only gate); bars stay
+        // daily-only.
+        ...(isFundamentals ? {} : { timeframeEnum: Timeframe.TIMEFRAME_1DAY }),
+        dataKind,
         range: buildRange(createStart, createEnd),
         overwrite,
       },
@@ -144,6 +158,7 @@ export default function BackfillsPage() {
           setSymbols('');
           setCreateStart('');
           setCreateEnd('');
+          setDataKind(BackfillDataKind.BARS);
           setNewOpen(false);
         },
       },
@@ -217,6 +232,25 @@ export default function BackfillsPage() {
                     onChange={(e) => setSymbols(e.target.value)}
                     autoFocus
                   />
+                  <div>
+                    <label className="mb-1 block text-xs text-muted-foreground">Data kind</label>
+                    <Select
+                      value={String(dataKind)}
+                      onValueChange={(v) => setDataKind(Number(v) as BackfillDataKind)}
+                    >
+                      <SelectTrigger aria-label="backfill data kind">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={String(BackfillDataKind.BARS)}>
+                          Bars (daily OHLCV)
+                        </SelectItem>
+                        <SelectItem value={String(BackfillDataKind.FUNDAMENTALS)}>
+                          Fundamentals (point-in-time)
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="mb-1 block text-xs text-muted-foreground">Start</label>

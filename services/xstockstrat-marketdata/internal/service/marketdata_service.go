@@ -73,6 +73,16 @@ type MarketDataService struct {
 	// behind interfaces so the cache/quota/gate logic is unit-testable with stubs.
 	fundCfg  fundamentalsConfig
 	fundRepo fundamentalsRepo
+	// historical point-in-time fundamentals (feature 198) — a separate lane from the snapshot
+	// source above; EDGAR is held here and is never in the provider selector (FR-2 / T-3).
+	histFundamentals source.HistoricalFundamentalsSource
+	histRepo         histFundamentalsRepo
+	// ratioEnricher is the optional FMP ratio-fill pass; nil in v1 (no point-in-time FMP ratio
+	// source exists — ratios-ttm is a current snapshot, look-ahead), the cap seam still guards it.
+	ratioEnricher ratioEnricher
+	enrichMu      sync.Mutex
+	enrichDay     string // UTC day bucket for the dedicated FMP-enrichment counter
+	enrichCount   int
 	// quotaAlert dedupes the 80%-quota WARNING to one emit per active window (UTC day for FMP,
 	// rolling window for Finnhub — see maybeAlertQuota/fundamentalsQuota).
 	quotaAlertMu     sync.Mutex
@@ -94,6 +104,19 @@ type fundamentalsRepo interface {
 	CountFundamentalsFetchedSince(ctx context.Context, since time.Time) (int, error)
 }
 
+// histFundamentalsRepo is the persistence surface for the point-in-time fundamentals store
+// (feature 198), behind an interface so the RPC logic is unit-testable with stubs.
+type histFundamentalsRepo interface {
+	InsertHistoricalFundamentals(ctx context.Context, p source.HistoricalFundamentalsPeriod) error
+	QueryHistoricalFundamentals(ctx context.Context, symbol string, asOf, rangeStart, rangeEnd time.Time, periodTypes []string) ([]source.HistoricalFundamentalsPeriod, error)
+	CloseAt(ctx context.Context, symbol string, date time.Time) (*float64, error)
+}
+
+// ratioEnricher optionally fills a ratio EDGAR + the price-join cannot supply. v1 wires nil.
+type ratioEnricher interface {
+	Enrich(ctx context.Context, p *source.HistoricalFundamentalsPeriod) error
+}
+
 // NewMarketDataService creates the service and dials ledger + notify. fundamentals is the
 // active source (always non-nil); provider names it and is frozen here, never re-read live.
 func NewMarketDataService(
@@ -104,6 +127,7 @@ func NewMarketDataService(
 	notifyEndpoint string,
 	fundamentals source.FundamentalsSource,
 	provider string,
+	histFundamentals source.HistoricalFundamentalsSource,
 ) (*MarketDataService, error) {
 	ledgerConn, err := grpc.NewClient(ledgerEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
 	if err != nil {
@@ -114,19 +138,21 @@ func NewMarketDataService(
 		return nil, fmt.Errorf("dial notify: %w", err)
 	}
 	return &MarketDataService{
-		registry:       registry,
-		repo:           repo,
-		cfg:            cfgWatcher,
-		ledger:         ledgerv1.NewLedgerServiceClient(ledgerConn),
-		notify:         notifyv1.NewNotifyServiceClient(notifyConn),
-		barSubs:        make(map[string]chan *marketdatav1.Bar),
-		quoteSubs:      make(map[string]chan *marketdatav1.Quote),
-		warmSymbols:    make(map[string]struct{}),
-		lastStaleCheck: make(map[string]time.Time),
-		fundamentals:   fundamentals,
-		fundProvider:   provider,
-		fundCfg:        cfgWatcher,
-		fundRepo:       repo,
+		registry:         registry,
+		repo:             repo,
+		cfg:              cfgWatcher,
+		ledger:           ledgerv1.NewLedgerServiceClient(ledgerConn),
+		notify:           notifyv1.NewNotifyServiceClient(notifyConn),
+		barSubs:          make(map[string]chan *marketdatav1.Bar),
+		quoteSubs:        make(map[string]chan *marketdatav1.Quote),
+		warmSymbols:      make(map[string]struct{}),
+		lastStaleCheck:   make(map[string]time.Time),
+		fundamentals:     fundamentals,
+		fundProvider:     provider,
+		fundCfg:          cfgWatcher,
+		fundRepo:         repo,
+		histFundamentals: histFundamentals,
+		histRepo:         repo,
 	}, nil
 }
 
@@ -1477,4 +1503,228 @@ func (s *MarketDataService) toProtoFundamentals(f *source.Fundamentals, stale bo
 		pb.AsOf = timestamppb.New(f.AsOf)
 	}
 	return pb
+}
+
+// --- Historical point-in-time fundamentals (feature 198) ---
+
+// GetHistoricalFundamentals serves point-in-time periods (filed_date < as_of, T+1) for a symbol.
+// The read is always served from stored rows (no gate) — a stored filing is already public data.
+func (s *MarketDataService) GetHistoricalFundamentals(ctx context.Context, req *marketdatav1.GetHistoricalFundamentalsRequest) (*marketdatav1.GetHistoricalFundamentalsResponse, error) {
+	if req.GetSymbol() == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("symbol is required"))
+	}
+	var asOf, rangeStart, rangeEnd time.Time
+	if req.GetAsOfDate() != nil {
+		asOf = req.GetAsOfDate().AsTime()
+	}
+	if req.GetRangeStart() != nil {
+		rangeStart = req.GetRangeStart().AsTime()
+	}
+	if req.GetRangeEnd() != nil {
+		rangeEnd = req.GetRangeEnd().AsTime()
+	}
+	periods, err := s.histRepo.QueryHistoricalFundamentals(ctx, req.GetSymbol(), asOf, rangeStart, rangeEnd, req.GetPeriodTypes())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	// Authoritative T+1 no-look-ahead guard (T-1): a filing is visible only STRICTLY after its
+	// filed_date. The repo SQL also pushes this down, but the service is the enforcement point so a
+	// stub/misconfigured read can never leak a not-yet-public filing into a backtest.
+	periods = filterAsOf(periods, asOf)
+	out := make([]*marketdatav1.HistoricalFundamentalsPeriod, 0, len(periods))
+	for i := range periods {
+		out = append(out, toProtoHistoricalPeriod(&periods[i]))
+	}
+	return &marketdatav1.GetHistoricalFundamentalsResponse{Periods: out}, nil
+}
+
+// BackfillFundamentals is the worker driven by ingest.TriggerBackfill(data_kind=FUNDAMENTALS): per
+// symbol it fetches as-reported EDGAR periods, computes the PIT price-join, optionally enriches
+// ratios (cap-guarded), and persists. Fail-closed per symbol (one symbol's error never aborts the run).
+func (s *MarketDataService) BackfillFundamentals(ctx context.Context, req *marketdatav1.BackfillFundamentalsRequest) (*marketdatav1.BackfillFundamentalsResponse, error) {
+	if !s.fundCfg.GetBool("marketdata.fundamentals.history.enabled", false) {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("marketdata.fundamentals.history.enabled is false"))
+	}
+	if s.histFundamentals == nil {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("no historical fundamentals source configured"))
+	}
+	var from, to time.Time
+	if req.GetRange() != nil {
+		if req.GetRange().GetStart() != nil {
+			from = req.GetRange().GetStart().AsTime()
+		}
+		if req.GetRange().GetEnd() != nil {
+			to = req.GetRange().GetEnd().AsTime()
+		}
+	}
+	if from.IsZero() {
+		years := int(s.fundCfg.GetInt("marketdata.fundamentals.history.backfill.max_lookback_years", 10))
+		from = time.Now().UTC().AddDate(-years, 0, 0)
+	}
+	periodTypes := req.GetPeriodTypes()
+	if len(periodTypes) == 0 {
+		if pt := s.fundCfg.GetString("marketdata.fundamentals.history.backfill.period_types", "both"); pt != "" && pt != "both" {
+			periodTypes = strings.Split(pt, ",")
+		}
+	}
+	enrichEnabled := s.fundCfg.GetBool("marketdata.fundamentals.history.ratio_enrichment.enabled", false)
+
+	var written int64
+	var failed []string
+	for _, sym := range req.GetSymbols() {
+		n, err := s.backfillOneSymbol(ctx, sym, from, to, periodTypes, enrichEnabled)
+		if err != nil {
+			slog.WarnContext(ctx, "fundamentals backfill: symbol failed (skipped)", "symbol", sym, "error", err)
+			failed = append(failed, sym)
+			continue
+		}
+		written += n
+	}
+	return &marketdatav1.BackfillFundamentalsResponse{PeriodsWritten: written, FailedSymbols: failed}, nil
+}
+
+// backfillOneSymbol fetches, price-joins, optionally enriches, and persists one symbol's periods.
+func (s *MarketDataService) backfillOneSymbol(ctx context.Context, symbol string, from, to time.Time, periodTypes []string, enrichEnabled bool) (int64, error) {
+	periods, err := s.histFundamentals.FetchHistorical(ctx, symbol, from, to, periodTypes)
+	if err != nil {
+		return 0, err
+	}
+	// Sort chronologically so the TTM-EPS rolling sum sees prior quarters first.
+	sort.Slice(periods, func(i, j int) bool { return periods[i].PeriodEnd.Before(periods[j].PeriodEnd) })
+	var quarterlyEPS []float64 // trailing quarterly EPS for the TTM rollup
+	var written int64
+	for i := range periods {
+		p := &periods[i]
+		s.priceJoin(ctx, p, &quarterlyEPS)
+		if enrichEnabled && s.ratioEnricher != nil && s.enrichmentUnderCap() {
+			if err := s.ratioEnricher.Enrich(ctx, p); err != nil {
+				slog.WarnContext(ctx, "fundamentals ratio enrichment failed (edgar row kept)", "symbol", symbol, "period", p.FiscalPeriod, "error", err)
+			} else {
+				p.Source = "edgar+fmp"
+			}
+		}
+		if err := s.histRepo.InsertHistoricalFundamentals(ctx, *p); err != nil {
+			return written, err
+		}
+		written++
+	}
+	return written, nil
+}
+
+// priceJoin computes the PIT price-derived metrics from the adjusted close AT filed_date (already
+// public), never a current snapshot: market_cap = close × shares, pe_ratio = close / ttm_eps. A
+// missing OHLCV bar leaves the metrics nil (fail-closed), never a fabricated 0.
+func (s *MarketDataService) priceJoin(ctx context.Context, p *source.HistoricalFundamentalsPeriod, quarterlyEPS *[]float64) {
+	var ttmEPS *float64
+	switch p.PeriodType {
+	case "annual":
+		ttmEPS = p.EPS
+	case "quarterly":
+		if p.EPS != nil {
+			*quarterlyEPS = append(*quarterlyEPS, *p.EPS)
+			if len(*quarterlyEPS) > 4 {
+				*quarterlyEPS = (*quarterlyEPS)[len(*quarterlyEPS)-4:]
+			}
+			if len(*quarterlyEPS) == 4 {
+				sum := 0.0
+				for _, e := range *quarterlyEPS {
+					sum += e
+				}
+				ttmEPS = &sum
+			}
+		}
+	}
+	close, err := s.histRepo.CloseAt(ctx, p.Symbol, p.FiledDate)
+	if err != nil {
+		slog.WarnContext(ctx, "fundamentals price-join: close lookup failed", "symbol", p.Symbol, "period", p.FiscalPeriod, "error", err)
+		return
+	}
+	if close == nil {
+		return // no bar at filed_date → leave price-derived metrics nil (fail-closed)
+	}
+	price := *close
+	p.Price = &price
+	if p.SharesOutstanding != nil {
+		mc := price * (*p.SharesOutstanding)
+		p.MarketCap = &mc
+	}
+	if ttmEPS != nil && *ttmEPS > 0 {
+		pe := price / *ttmEPS
+		p.PERatio = &pe
+	}
+}
+
+// enrichmentUnderCap gates the FMP ratio-enrichment pass against the shared FMP daily cap using a
+// dedicated in-memory UTC-day counter — NOT fundamentalsQuota() (provider-dispatched + counts the
+// snapshot table, so it cannot govern this path — design.md §2 / @AC-5).
+func (s *MarketDataService) enrichmentUnderCap() bool {
+	cap := int(s.fundCfg.GetInt("marketdata.fmp.daily_request_cap", 250))
+	day := time.Now().UTC().Format("2006-01-02")
+	s.enrichMu.Lock()
+	defer s.enrichMu.Unlock()
+	if s.enrichDay != day {
+		s.enrichDay = day
+		s.enrichCount = 0
+	}
+	if s.enrichCount >= cap {
+		return false
+	}
+	s.enrichCount++
+	return true
+}
+
+func toProtoHistoricalPeriod(p *source.HistoricalFundamentalsPeriod) *marketdatav1.HistoricalFundamentalsPeriod {
+	var missing []string
+	add := func(name string, v *float64) float64 {
+		if v == nil {
+			missing = append(missing, name)
+			return 0
+		}
+		return *v
+	}
+	pb := &marketdatav1.HistoricalFundamentalsPeriod{
+		Symbol:        p.Symbol,
+		FiscalPeriod:  p.FiscalPeriod,
+		PeriodType:    p.PeriodType,
+		MarketCap:     add("market_cap", p.MarketCap),
+		PeRatio:       add("pe_ratio", p.PERatio),
+		PbRatio:       add("pb_ratio", p.PBRatio),
+		DividendYield: add("dividend_yield", p.DividendYield),
+		Eps:           add("eps", p.EPS),
+		Beta:          add("beta", p.Beta),
+		Roe:           add("roe", p.ROE),
+		DebtToEquity:  add("debt_to_equity", p.DebtToEquity),
+		Price:         add("price", p.Price),
+		YearHigh:      add("year_high", p.YearHigh),
+		YearLow:       add("year_low", p.YearLow),
+		ExtraMetrics:  p.ExtraMetrics,
+		Currency:      p.Currency,
+		Source:        p.Source,
+	}
+	if !p.PeriodEnd.IsZero() {
+		pb.PeriodEnd = timestamppb.New(p.PeriodEnd)
+	}
+	if !p.FiledDate.IsZero() {
+		pb.FiledDate = timestamppb.New(p.FiledDate)
+	}
+	if p.AcceptedDate != nil {
+		pb.AcceptedDate = timestamppb.New(*p.AcceptedDate)
+	}
+	pb.MissingMetrics = missing
+	return pb
+}
+
+// filterAsOf keeps only periods whose filed_date is STRICTLY before asOf (T+1 availability). A zero
+// asOf means "no as-of constraint" (return all). This is the pure, unit-tested no-look-ahead guard.
+func filterAsOf(periods []source.HistoricalFundamentalsPeriod, asOf time.Time) []source.HistoricalFundamentalsPeriod {
+	if asOf.IsZero() {
+		return periods
+	}
+	out := make([]source.HistoricalFundamentalsPeriod, 0, len(periods))
+	for _, p := range periods {
+		if p.FiledDate.Before(asOf) {
+			out = append(out, p)
+		}
+	}
+	return out
 }

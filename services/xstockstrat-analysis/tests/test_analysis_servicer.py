@@ -5117,6 +5117,7 @@ class TestOpportunityDataUnavailable:
             *,
             rule="entry",
             benchmark_bars=None,
+            fundamentals=None,
         ):
             if symbol == "AAPL":
                 raise grpc.RpcError()
@@ -5128,6 +5129,7 @@ class TestOpportunityDataUnavailable:
                 signals_map,
                 rule=rule,
                 benchmark_bars=benchmark_bars,
+                fundamentals=fundamentals,
             )
 
         with patch.object(StrategyEvaluator, "evaluate_conditions_traced", _selective_fail):
@@ -5219,7 +5221,15 @@ class TestOpportunityDataUnavailable:
         _real = StrategyEvaluator.evaluate_conditions_traced
 
         async def _maybe_raise(
-            self, definition, bars, symbol, signals_map=None, *, rule="entry", benchmark_bars=None
+            self,
+            definition,
+            bars,
+            symbol,
+            signals_map=None,
+            *,
+            rule="entry",
+            benchmark_bars=None,
+            fundamentals=None,
         ):
             if symbol == "AAPL":
                 raise grpc.RpcError("indicators transport down")
@@ -5231,6 +5241,7 @@ class TestOpportunityDataUnavailable:
                 signals_map,
                 rule=rule,
                 benchmark_bars=benchmark_bars,
+                fundamentals=fundamentals,
             )
 
         with patch.object(StrategyEvaluator, "evaluate_conditions_traced", _maybe_raise):
@@ -5252,7 +5263,15 @@ class TestOpportunityDataUnavailable:
         )
 
         async def _boom(
-            self, definition, bars, symbol, signals_map=None, *, rule="entry", benchmark_bars=None
+            self,
+            definition,
+            bars,
+            symbol,
+            signals_map=None,
+            *,
+            rule="entry",
+            benchmark_bars=None,
+            fundamentals=None,
         ):
             raise FormulaExecutionError("f-bad", "boom")
 

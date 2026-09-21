@@ -370,6 +370,8 @@ export enum ComponentKind {
   COMPONENT_KIND_UNSPECIFIED = "COMPONENT_KIND_UNSPECIFIED",
   COMPONENT_KIND_BUILTIN_INDICATOR = "COMPONENT_KIND_BUILTIN_INDICATOR",
   COMPONENT_KIND_CUSTOM_FORMULA = "COMPONENT_KIND_CUSTOM_FORMULA",
+  /** COMPONENT_KIND_FUNDAMENTAL - feature 198: a point-in-time fundamental metric series */
+  COMPONENT_KIND_FUNDAMENTAL = "COMPONENT_KIND_FUNDAMENTAL",
   UNRECOGNIZED = "UNRECOGNIZED",
 }
 
@@ -384,6 +386,9 @@ export function componentKindFromJSON(object: any): ComponentKind {
     case 2:
     case "COMPONENT_KIND_CUSTOM_FORMULA":
       return ComponentKind.COMPONENT_KIND_CUSTOM_FORMULA;
+    case 3:
+    case "COMPONENT_KIND_FUNDAMENTAL":
+      return ComponentKind.COMPONENT_KIND_FUNDAMENTAL;
     case -1:
     case "UNRECOGNIZED":
     default:
@@ -399,6 +404,8 @@ export function componentKindToJSON(object: ComponentKind): string {
       return "COMPONENT_KIND_BUILTIN_INDICATOR";
     case ComponentKind.COMPONENT_KIND_CUSTOM_FORMULA:
       return "COMPONENT_KIND_CUSTOM_FORMULA";
+    case ComponentKind.COMPONENT_KIND_FUNDAMENTAL:
+      return "COMPONENT_KIND_FUNDAMENTAL";
     case ComponentKind.UNRECOGNIZED:
     default:
       return "UNRECOGNIZED";
@@ -413,6 +420,8 @@ export function componentKindToNumber(object: ComponentKind): number {
       return 1;
     case ComponentKind.COMPONENT_KIND_CUSTOM_FORMULA:
       return 2;
+    case ComponentKind.COMPONENT_KIND_FUNDAMENTAL:
+      return 3;
     case ComponentKind.UNRECOGNIZED:
     default:
       return -1;
@@ -1468,6 +1477,12 @@ export interface StrategyComponent {
    * evaluated symbol's bar timeline; empty = computed on the evaluated symbol (unchanged).
    */
   sourceSymbol: string;
+  /**
+   * used when kind == COMPONENT_KIND_FUNDAMENTAL (feature 198): a point-in-time metric name from
+   * the _FUNDAMENTAL_FIELDS ∪ extra_metrics vocabulary (e.g. "pe_ratio", "eps"). Resolved as-of
+   * each bar via GetHistoricalFundamentals with filed_date < bar_date (T+1, no look-ahead).
+   */
+  fundamentalMetric: string;
 }
 
 export interface StrategyComponent_ParamsEntry {
@@ -5171,6 +5186,7 @@ function createBaseStrategyComponent(): StrategyComponent {
     formulaId: "",
     params: {},
     sourceSymbol: "",
+    fundamentalMetric: "",
   };
 }
 
@@ -5193,6 +5209,9 @@ export const StrategyComponent: MessageFns<StrategyComponent> = {
     });
     if (message.sourceSymbol !== "") {
       writer.uint32(50).string(message.sourceSymbol);
+    }
+    if (message.fundamentalMetric !== "") {
+      writer.uint32(58).string(message.fundamentalMetric);
     }
     return writer;
   },
@@ -5255,6 +5274,14 @@ export const StrategyComponent: MessageFns<StrategyComponent> = {
           message.sourceSymbol = reader.string();
           continue;
         }
+        case 7: {
+          if (tag !== 58) {
+            break;
+          }
+
+          message.fundamentalMetric = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -5292,6 +5319,11 @@ export const StrategyComponent: MessageFns<StrategyComponent> = {
         : isSet(object.source_symbol)
         ? globalThis.String(object.source_symbol)
         : "",
+      fundamentalMetric: isSet(object.fundamentalMetric)
+        ? globalThis.String(object.fundamentalMetric)
+        : isSet(object.fundamental_metric)
+        ? globalThis.String(object.fundamental_metric)
+        : "",
     };
   },
 
@@ -5321,6 +5353,9 @@ export const StrategyComponent: MessageFns<StrategyComponent> = {
     if (message.sourceSymbol !== "") {
       obj.sourceSymbol = message.sourceSymbol;
     }
+    if (message.fundamentalMetric !== "") {
+      obj.fundamentalMetric = message.fundamentalMetric;
+    }
     return obj;
   },
 
@@ -5343,6 +5378,7 @@ export const StrategyComponent: MessageFns<StrategyComponent> = {
       {},
     );
     message.sourceSymbol = object.sourceSymbol ?? "";
+    message.fundamentalMetric = object.fundamentalMetric ?? "";
     return message;
   },
 };

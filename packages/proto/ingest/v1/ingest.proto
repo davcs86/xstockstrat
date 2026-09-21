@@ -40,6 +40,7 @@ message BackfillJob {
   xstockstrat.common.v1.Timeframe timeframe_enum = 12;
   int32 chunks_total = 13;      // planned chunk count (FR-5)
   int32 chunks_completed = 14;  // chunks in COMPLETED state (FR-5)
+  BackfillDataKind data_kind = 15;  // what the job backfills; UNSPECIFIED == BARS (feature 198)
 }
 
 enum BackfillStatus {
@@ -59,6 +60,15 @@ enum FillMode {
   FILL_MODE_GAPS_ONLY = 2;    // fetch only ranges missing per GetDataCoverage
 }
 
+// BackfillDataKind selects WHAT a backfill fetches (feature 198). Distinct from the timeframe
+// axis: FUNDAMENTALS carries no bar timeframe (the servicer branches around the 1d-only reject).
+// UNSPECIFIED == BARS for back-compat — every existing OHLCV caller omits the field.
+enum BackfillDataKind {
+  BACKFILL_DATA_KIND_UNSPECIFIED = 0;   // treated as BARS by the servicer
+  BACKFILL_DATA_KIND_BARS = 1;          // OHLCV bars (marketdata.BackfillBars)
+  BACKFILL_DATA_KIND_FUNDAMENTALS = 2;  // point-in-time fundamentals (marketdata.BackfillFundamentals)
+}
+
 message TriggerBackfillRequest {
   repeated string symbols = 1;
   // DEPRECATED: use timeframe_enum. Removed in a future release once all callers migrate.
@@ -67,6 +77,7 @@ message TriggerBackfillRequest {
   bool overwrite = 4;
   xstockstrat.common.v1.Timeframe timeframe_enum = 5;
   FillMode fill_mode = 6;  // FR-4; UNSPECIFIED == FULL. Independent of `overwrite`.
+  BackfillDataKind data_kind = 7;  // feature 198; UNSPECIFIED == BARS. FUNDAMENTALS ignores timeframe.
 }
 
 message TriggerBackfillResponse {

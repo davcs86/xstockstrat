@@ -751,6 +751,14 @@ export type StrategyComponent = Message<"xstockstrat.analysis.v1.StrategyCompone
      * @generated from field: string source_symbol = 6;
      */
     sourceSymbol: string;
+    /**
+     * used when kind == COMPONENT_KIND_FUNDAMENTAL (feature 198): a point-in-time metric name from
+     * the _FUNDAMENTAL_FIELDS ∪ extra_metrics vocabulary (e.g. "pe_ratio", "eps"). Resolved as-of
+     * each bar via GetHistoricalFundamentals with filed_date < bar_date (T+1, no look-ahead).
+     *
+     * @generated from field: string fundamental_metric = 7;
+     */
+    fundamentalMetric: string;
 };
 /**
  * Describes the message xstockstrat.analysis.v1.StrategyComponent.
@@ -2333,7 +2341,13 @@ export declare enum ComponentKind {
     /**
      * @generated from enum value: COMPONENT_KIND_CUSTOM_FORMULA = 2;
      */
-    CUSTOM_FORMULA = 2
+    CUSTOM_FORMULA = 2,
+    /**
+     * feature 198: a point-in-time fundamental metric series
+     *
+     * @generated from enum value: COMPONENT_KIND_FUNDAMENTAL = 3;
+     */
+    FUNDAMENTAL = 3
 }
 /**
  * Describes the enum xstockstrat.analysis.v1.ComponentKind.

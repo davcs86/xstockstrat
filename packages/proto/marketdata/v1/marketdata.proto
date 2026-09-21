@@ -52,6 +52,14 @@ service MarketDataService {
 
   // Batched latest price for multiple symbols in a single round-trip (feature 183).
   rpc BatchGetLatestPrice(BatchGetLatestPriceRequest) returns (BatchGetLatestPriceResponse);
+
+  // Point-in-time historical fundamentals read (feature 198): returns only periods whose
+  // filed_date < as_of_date (T+1 availability), for look-ahead-safe backtesting.
+  rpc GetHistoricalFundamentals(GetHistoricalFundamentalsRequest) returns (GetHistoricalFundamentalsResponse);
+
+  // Worker RPC driven by ingest.TriggerBackfill(data_kind=FUNDAMENTALS) (feature 198): fetches
+  // as-reported statements from SEC EDGAR + a point-in-time price-join and persists them.
+  rpc BackfillFundamentals(BackfillFundamentalsRequest) returns (BackfillFundamentalsResponse);
 }
 
 message Bar {
@@ -234,6 +242,61 @@ message GetFundamentalsMultiRequest {
 
 message GetFundamentalsMultiResponse {
   repeated Fundamentals fundamentals = 1;
+}
+
+// --- Historical point-in-time fundamentals (feature 198) ---
+
+// One as-reported fiscal period for a symbol, keyed on when it became public (filed_date).
+// Distinct from the latest-snapshot Fundamentals message: this is a repeated time series and
+// carries the filing dates that make look-ahead-safe backtesting possible.
+message HistoricalFundamentalsPeriod {
+  string symbol = 1;
+  string fiscal_period = 2;  // e.g. "Q1-2020", "FY2019"
+  string period_type = 3;    // "quarterly" | "annual"
+  google.protobuf.Timestamp period_end = 4;
+  google.protobuf.Timestamp filed_date = 5;      // SEC filing date — the point-in-time key
+  google.protobuf.Timestamp accepted_date = 6;   // SEC acceptance timestamp (often post-close)
+  // Reused metric vocabulary (names mirror Fundamentals); pe_ratio/market_cap are PIT price-joined.
+  double market_cap = 7;
+  double pe_ratio = 8;
+  double pb_ratio = 9;
+  double dividend_yield = 10;
+  double eps = 11;
+  double beta = 12;
+  double roe = 13;
+  double debt_to_equity = 14;
+  double price = 15;
+  double year_high = 16;
+  double year_low = 17;
+  map<string, double> extra_metrics = 18;  // raw XBRL overflow (keys are EDGAR tag names)
+  string currency = 19;
+  string source = 20;  // "edgar" (base) or "edgar+fmp" when a ratio was FMP-enriched
+  repeated string missing_metrics = 21;  // canonical names not sourceable for this period
+}
+
+message GetHistoricalFundamentalsRequest {
+  string symbol = 1;
+  // Only periods with filed_date STRICTLY BEFORE as_of_date are returned (T+1 availability).
+  google.protobuf.Timestamp as_of_date = 2;
+  google.protobuf.Timestamp range_start = 3;  // filter on period_end (inclusive); unset = open
+  google.protobuf.Timestamp range_end = 4;    // filter on period_end (inclusive); unset = open
+  repeated string period_types = 5;           // e.g. ["quarterly","annual"]; empty = both
+}
+
+message GetHistoricalFundamentalsResponse {
+  repeated HistoricalFundamentalsPeriod periods = 1;
+}
+
+message BackfillFundamentalsRequest {
+  repeated string symbols = 1;
+  xstockstrat.common.v1.TimeRange range = 2;  // period_end window to backfill
+  repeated string period_types = 3;           // empty = both quarterly + annual
+  bool overwrite = 4;
+}
+
+message BackfillFundamentalsResponse {
+  int64 periods_written = 1;
+  repeated string failed_symbols = 2;
 }
 
 message GetLatestQuotesRequest {

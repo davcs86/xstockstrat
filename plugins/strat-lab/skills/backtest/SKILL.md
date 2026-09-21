@@ -88,6 +88,21 @@ component, the backtest returns `BACKTEST_STATUS_INSUFFICIENT_DATA` naming the *
 `coverage_gaps` — `trigger_backfill` the benchmark and re-run. v1 covers a single reference symbol per
 component; true universe breadth (e.g. "% of a universe above its 200-day") is a deferred follow-on.
 
+**Point-in-time fundamental operand (feature 198).** A component with `kind:"fundamental"` and a
+`fundamental_metric` (one of `market_cap`, `pe_ratio`, `pb_ratio`, `dividend_yield`, `eps`, `beta`,
+`roe`, `debt_to_equity`, `price`, `year_high`, `year_low`) resolves that metric **point-in-time**: on
+each bar it uses the latest filing available as-of that bar — strictly `filed_date < bar_date` (T+1,
+so a filing filed on day D is first visible on D+1) — carried forward until the next filing, and
+holds before the first filing. **No look-ahead**: a backtest never sees a filing before it was filed.
+Example: buy only when trailing P/E is cheap —
+`components=[{"ref_name":"pe","kind":"fundamental","fundamental_metric":"pe_ratio"}]` with an entry
+leaf `{"fn":"<","lhs":"pe","rhs":15}`. Two prerequisites: (1) backfill the symbols' fundamentals
+history first — `trigger_backfill` with `data_kind="fundamentals"` (separate from bars); (2) the
+platform key `analysis.backtest.fundamentals.enabled` must be ON (default OFF) — while OFF the operand
+reads hold on every surface (backtest, live, readiness, opportunities). Like any component, the metric
+is scoring-relevant (enters the definition fingerprint). Backtest and live evaluation share the same
+as-of resolver, so a live strategy fires on exactly the filings a backtest would have used.
+
 **Rule encoding.** `entry_rule`/`exit_rule` accept **either** a JSON string **or** a JSON object
 (dict) — an MCP client that pre-parses JSON arguments may pass the object directly; the tool
 serializes a dict to the canonical JSON string before sending. Passing a rule both as a value and

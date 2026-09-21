@@ -274,7 +274,7 @@ class TestLiveEvaluationLoopIsolation:
         # The evaluator raises FormulaExecutionError for AAA, returns a clean entry for BBB.
         evaluated = []
 
-        async def fake_evaluate(defn, bars, signals):
+        async def fake_evaluate(defn, bars, signals, benchmark_bars=None, fundamentals=None):
             symbol = "AAA" if not evaluated else "BBB"
             evaluated.append(symbol)
             if symbol == "AAA":

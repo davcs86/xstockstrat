@@ -53,9 +53,10 @@ def transaction_conn(*, db_fetchrow_side_effect=None, conn_fetchrow_side_effect=
 def job_row(job_id: str, status: int, **over) -> dict:
     """A backfill_jobs row dict as asyncpg would return it.
 
-    The 15 keys are exactly the DDL columns: `get_job`/`list_jobs` are
+    The 16 keys are exactly the DDL columns: `get_job`/`list_jobs` are
     `SELECT *`, so the mapper's input keys are the table's columns and nothing
-    else. Do not add a key the database cannot produce.
+    else. Do not add a key the database cannot produce. (`data_kind` added by
+    migration 012 — feature 198.)
     """
     row = {
         "job_id": job_id,
@@ -73,6 +74,7 @@ def job_row(job_id: str, status: int, **over) -> dict:
         "started_at": None,
         "completed_at": None,
         "created_at": None,
+        "data_kind": "BARS",
     }
     row.update(over)
     return row

@@ -43,6 +43,53 @@ def _bar_date(bar):
     return bar.time.ToDatetime(tzinfo=UTC).date()
 
 
+@dataclass
+class FundamentalPeriod:
+    """One point-in-time fundamentals filing for the evaluated symbol (feature 198).
+
+    ``filed_date`` is a ``datetime.date`` (when the filing became public); ``values`` maps a
+    metric name (e.g. ``"pe_ratio"``, ``"eps"``) to its value, or ``None`` when the filing did not
+    report it. The servicer builds these from marketdata ``HistoricalFundamentalsPeriod`` protos so
+    the evaluator stays proto-free and unit-testable.
+    """
+
+    filed_date: Any  # datetime.date
+    values: dict
+
+
+def _needs_eval_dates(definition) -> bool:
+    """True when any component needs the bar-date timeline: a ``source_symbol`` benchmark
+    (feature 152) or a ``COMPONENT_KIND_FUNDAMENTAL`` operand (feature 198)."""
+    return any(
+        c.source_symbol or c.kind == analysis_pb2.COMPONENT_KIND_FUNDAMENTAL
+        for c in definition.components
+    )
+
+
+def _fundamental_as_of_series(metric: str, eval_dates: list, fundamentals: list | None) -> list:
+    """Carry-forward as-of series for a fundamental metric (feature 198 — no look-ahead, T+1).
+
+    For each evaluated bar date ``d``, the value is ``metric`` from the LATEST filing whose
+    ``filed_date`` is **strictly before** ``d`` (T+1 availability — a filing is usable only the day
+    after it was filed), carried forward until the next filing; ``None`` before the first such
+    filing. Never a future filing (the no-look-ahead guarantee). A None-valued metric on the latest
+    filing yields None for that span (the filing simply did not report it)."""
+    n = len(eval_dates) if eval_dates else 0
+    if not fundamentals or not eval_dates:
+        return [None] * n
+    periods = sorted(fundamentals, key=lambda p: p.filed_date)
+    out: list = []
+    for d in eval_dates:
+        val = None
+        for p in periods:
+            if p.filed_date < d:
+                val = p.values.get(metric)
+            else:
+                break
+        out.append(val)
+    return out
+
+
 class FormulaExecutionError(Exception):
     """A custom-formula component failed to execute or returned an out-of-contract
     series (feature 067). Carries the ``formula_id`` and the indicators ``resp.error``
@@ -69,6 +116,22 @@ def _finite_or_none(v) -> float | None:
 
 
 _SUPPORTED_INDICATORS = {"SMA", "EMA", "RSI", "MACD", "BB", "ATR", "VWAP", "STOCH"}
+
+# Canonical fundamental-metric vocabulary a COMPONENT_KIND_FUNDAMENTAL operand may reference
+# (feature 198) — mirrors the screener's _FUNDAMENTAL_FIELDS. Write-time allow-list.
+_FUNDAMENTAL_METRICS = {
+    "market_cap",
+    "pe_ratio",
+    "pb_ratio",
+    "dividend_yield",
+    "eps",
+    "beta",
+    "roe",
+    "debt_to_equity",
+    "price",
+    "year_high",
+    "year_low",
+}
 
 # First entry ("value") is the primary series a bare ref_name resolves to; the rest are
 # addressable as "<ref_name>.<series>". Must mirror xstockstrat-indicators' indicators_engine.py.
@@ -126,6 +189,7 @@ class StrategyEvaluator:
         bars: list,  # list of OHLCV bar proto messages with .close, .timestamp
         signals_map: dict[str, list] | None = None,
         benchmark_bars: dict | None = None,
+        fundamentals: list | None = None,
     ) -> list[BarDecision]:
         """
         Compute per-bar entry/exit decisions for the given strategy definition.
@@ -139,7 +203,7 @@ class StrategyEvaluator:
         resolves to hold (see ``_assemble_component_series``).
         """
         decisions, _ = await self.evaluate_with_series(
-            definition, bars, signals_map, benchmark_bars
+            definition, bars, signals_map, benchmark_bars, fundamentals
         )
         return decisions
 
@@ -149,6 +213,7 @@ class StrategyEvaluator:
         bars: list,  # list of OHLCV bar proto messages with .close, .timestamp
         signals_map: dict[str, list] | None = None,
         benchmark_bars: dict | None = None,
+        fundamentals: list | None = None,
     ) -> tuple[list[BarDecision], dict[str, list]]:
         """
         Like ``evaluate`` but also returns the computed ``component_series`` dict (feature 064).
@@ -169,17 +234,13 @@ class StrategyEvaluator:
 
         closes = [b.close for b in bars]
         # Computed lazily: the no-source path must never touch bar.time, or list-mocked bars
-        # without a .time field break and byte-identity is lost.
-        eval_dates = (
-            [_bar_date(b) for b in bars]
-            if any(c.source_symbol for c in definition.components)
-            else None
-        )
+        # without a .time field break and byte-identity is lost. Fundamentals also need dates (198).
+        eval_dates = [_bar_date(b) for b in bars] if _needs_eval_dates(definition) else None
 
         component_series = {}
         for comp in definition.components:
             series_map = await self._assemble_component_series(
-                comp, closes, eval_dates, benchmark_bars
+                comp, closes, eval_dates, benchmark_bars, fundamentals
             )
             primary = series_map.get("value", [None] * len(closes))
             component_series[comp.ref_name] = primary
@@ -209,6 +270,7 @@ class StrategyEvaluator:
         *,
         rule: str = "entry",
         benchmark_bars: dict | None = None,
+        fundamentals: list | None = None,
     ) -> dict:
         """Additive sibling (feature 083). Trace the ``entry_rule`` (default) or, with
         ``rule="exit"`` (feature 097), the ``exit_rule`` condition leaves at the LAST bar —
@@ -232,18 +294,14 @@ class StrategyEvaluator:
             return _empty_readiness(symbol)
         _validate_definition(definition)
         closes = [b.close for b in bars]
-        eval_dates = (
-            [_bar_date(b) for b in bars]
-            if any(c.source_symbol for c in definition.components)
-            else None
-        )
+        eval_dates = [_bar_date(b) for b in bars] if _needs_eval_dates(definition) else None
         component_series: dict[str, list] = {}
         if self._component_sem is None:
             # SERIAL — byte-for-byte the pre-176 behavior; the backtest (:1463) and score
             # (:2892, which already holds _component_series_sem) sites depend on this.
             for comp in definition.components:
                 series_map = await self._assemble_component_series(
-                    comp, closes, eval_dates, benchmark_bars
+                    comp, closes, eval_dates, benchmark_bars, fundamentals
                 )
                 primary = series_map.get("value", [None] * len(closes))
                 component_series[comp.ref_name] = primary
@@ -255,7 +313,7 @@ class StrategyEvaluator:
             async def _assemble(comp):
                 async with self._component_sem:
                     return comp.ref_name, await self._assemble_component_series(
-                        comp, closes, eval_dates, benchmark_bars
+                        comp, closes, eval_dates, benchmark_bars, fundamentals
                     )
 
             # gather preserves input order, so `assembled` is in definition.components order —
@@ -371,9 +429,10 @@ class StrategyEvaluator:
         closes: list[float],
         eval_dates: list,
         benchmark_bars: dict | None = None,
+        fundamentals: list | None = None,
     ) -> dict[str, list[float | None]]:
         """Compute a component's output series, honoring an optional ``source_symbol``
-        benchmark operand (feature 152).
+        benchmark operand (feature 152) and the fundamental operand (feature 198).
 
         This is the single computation unit behind every StrategyComponent-consuming
         site (backtest, live, readiness/opportunities, GetIndicatorSeries), so a
@@ -393,6 +452,17 @@ class StrategyEvaluator:
           benchmark therefore degrade to hold rather than to a wrong-symbol value.
         """
         n = len(closes)
+        # Fundamental operand (feature 198): a point-in-time metric series carry-forward-aligned
+        # onto the evaluated symbol's bar dates, resolved as-of each bar (filed_date < bar_date,
+        # T+1 — no look-ahead). No indicator/formula compute; source_symbol is ignored (the operand
+        # is the EVALUATED symbol's fundamentals). No preloaded fundamentals → all-None (safe hold).
+        if comp.kind == analysis_pb2.COMPONENT_KIND_FUNDAMENTAL:
+            return {
+                "value": _fundamental_as_of_series(
+                    comp.fundamental_metric, eval_dates, fundamentals
+                )
+            }
+
         source_symbol = comp.source_symbol
         if not source_symbol:
             return await self._compute_component(comp, closes)
@@ -481,6 +551,16 @@ def _validate_definition(definition, formula_outputs: dict | None = None) -> Non
         elif comp.kind == analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA:
             if not comp.formula_id:
                 raise ValueError("COMPONENT_KIND_CUSTOM_FORMULA component must have formula_id set")
+        elif comp.kind == analysis_pb2.COMPONENT_KIND_FUNDAMENTAL:
+            if not comp.fundamental_metric:
+                raise ValueError(
+                    "COMPONENT_KIND_FUNDAMENTAL component must have fundamental_metric set"
+                )
+            if comp.fundamental_metric not in _FUNDAMENTAL_METRICS:
+                raise ValueError(
+                    f"Unknown fundamental_metric '{comp.fundamental_metric}'. "
+                    f"Supported: {sorted(_FUNDAMENTAL_METRICS)}"
+                )
         else:
             raise ValueError(f"Unknown ComponentKind: {comp.kind}")
 

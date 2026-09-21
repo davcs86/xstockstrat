@@ -84,6 +84,8 @@ export declare enum ComponentKind {
     COMPONENT_KIND_UNSPECIFIED = "COMPONENT_KIND_UNSPECIFIED",
     COMPONENT_KIND_BUILTIN_INDICATOR = "COMPONENT_KIND_BUILTIN_INDICATOR",
     COMPONENT_KIND_CUSTOM_FORMULA = "COMPONENT_KIND_CUSTOM_FORMULA",
+    /** COMPONENT_KIND_FUNDAMENTAL - feature 198: a point-in-time fundamental metric series */
+    COMPONENT_KIND_FUNDAMENTAL = "COMPONENT_KIND_FUNDAMENTAL",
     UNRECOGNIZED = "UNRECOGNIZED"
 }
 export declare function componentKindFromJSON(object: any): ComponentKind;
@@ -497,6 +499,12 @@ export interface StrategyComponent {
      * evaluated symbol's bar timeline; empty = computed on the evaluated symbol (unchanged).
      */
     sourceSymbol: string;
+    /**
+     * used when kind == COMPONENT_KIND_FUNDAMENTAL (feature 198): a point-in-time metric name from
+     * the _FUNDAMENTAL_FIELDS ∪ extra_metrics vocabulary (e.g. "pe_ratio", "eps"). Resolved as-of
+     * each bar via GetHistoricalFundamentals with filed_date < bar_date (T+1, no look-ahead).
+     */
+    fundamentalMetric: string;
 }
 export interface StrategyComponent_ParamsEntry {
     key: string;

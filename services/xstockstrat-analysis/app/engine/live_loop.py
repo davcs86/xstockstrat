@@ -35,7 +35,12 @@ from google.protobuf.struct_pb2 import Struct
 from google.protobuf.timestamp_pb2 import Timestamp
 from opentelemetry import metrics
 
-from app.handlers.servicer import _normalize_symbol, _row_to_strategy_definition
+from app.handlers.servicer import (
+    _definition_has_fundamental,
+    _fundamental_periods_from_response,
+    _normalize_symbol,
+    _row_to_strategy_definition,
+)
 from app.repositories.strategies import LIVE_ENABLED_PREDICATE_SQL
 from app.services import warmup
 from app.services.cooldown import effective_cooldown_days, is_cooldown_active
@@ -577,6 +582,29 @@ class LiveEvaluationLoop:
                 out[sym] = bench_bars
         return out or None
 
+    async def _load_fundamentals(self, definition, symbol):
+        """Feature 198 — preload the evaluated symbol's point-in-time fundamentals for the live
+        path, mirroring the servicer backtest preload for backtest/live parity. Returns ``None``
+        when the definition references no fundamental operand (the common case), else the full
+        filing history (the evaluator applies the per-bar ``filed_date < bar_date`` T+1 gate — the
+        sole no-look-ahead authority, so the window is deliberately unclipped). A fetch failure
+        degrades to ``[]`` (every fundamental leaf reads hold), never crashing the loop.
+
+        Honors the ``analysis.backtest.fundamentals.enabled`` kill-switch (default OFF) so the live
+        path stays in parity with the servicer chokepoint — disabled ⇒ ``None`` (operand → hold)."""
+        if not _definition_has_fundamental(definition):
+            return None
+        if not self._cfg.get_bool("analysis.backtest.fundamentals.enabled", False):
+            return None
+        try:
+            resp = await self._marketdata.GetHistoricalFundamentals(
+                marketdata_pb2.GetHistoricalFundamentalsRequest(symbol=symbol)
+            )
+        except Exception as e:  # noqa: BLE001 — a fundamentals fetch must never crash the loop
+            log.warning("live_loop: GetHistoricalFundamentals(%s) failed: %s", symbol, e)
+            return []
+        return _fundamental_periods_from_response(resp)
+
     async def _eval_pair(self, definition, symbol, throttle, deny_entry=False):
         bars_resp = await self._marketdata.GetBars(
             marketdata_pb2.GetBarsRequest(
@@ -595,10 +623,12 @@ class LiveEvaluationLoop:
         # Preload benchmark (source_symbol) bars for backtest/live parity; the call shape is
         # unchanged when no component sets a source_symbol (the common case).
         benchmark_bars = await self._load_benchmark_bars(definition)
-        if benchmark_bars:
-            decisions = await self._evaluator.evaluate(definition, bars, None, benchmark_bars)
-        else:
-            decisions = await self._evaluator.evaluate(definition, bars, None)
+        # Preload point-in-time fundamentals (feature 198) for backtest/live parity — None unless a
+        # COMPONENT_KIND_FUNDAMENTAL operand is present; the evaluator applies the per-bar T+1 gate.
+        fundamentals = await self._load_fundamentals(definition, symbol)
+        decisions = await self._evaluator.evaluate(
+            definition, bars, None, benchmark_bars, fundamentals
+        )
         if not decisions:
             return
 
