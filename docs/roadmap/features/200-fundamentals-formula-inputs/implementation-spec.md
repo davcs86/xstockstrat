@@ -321,7 +321,7 @@ Coverage ≥ 50%; all new assertions pass; the AC-6 assertion is proven RED befo
 
 ### Step 6 — service: analysis evaluator — fundamentals-only scalar-broadcast branch
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/services/evaluator.py` — modify

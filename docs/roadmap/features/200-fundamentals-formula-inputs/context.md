@@ -403,3 +403,26 @@
   fundamental_inputs empty) → RED. After `stash pop`: 7/7 green; full suite `pytest --cov` 140 passed,
   coverage **81.44%** (≥50%); `ruff check` + `ruff format --check` clean.
 - Files modified: `tests/test_formulas.py`, `tests/test_parameters.py`. Deviations: none.
+
+### Step 6 — analysis evaluator fundamentals-only scalar-broadcast branch [done]
+- Added `_FUNDAMENTAL_METRIC_DATA_KEY` (enum int → snake data-key, the ONE lowering site) and derived
+  `_FUNDAMENTAL_METRICS` from its values (Obj-5). Extended `_needs_eval_dates(definition,
+  formula_fund_map)`. Factored shared `_decode_formula_output` (used by the list path + the new
+  scalar path). New `_fundamentals_formula_series` helper: per-metric as-of series →
+  filing-boundary epochs → one `ExecuteFormula` per non-None epoch (omit-absent input_data) →
+  broadcast every finite scalar output; all-None epoch holds None (no call, no fabrication).
+  Threaded `formula_fundamentals` through `evaluate`/`evaluate_with_series`/
+  `evaluate_conditions_traced`/`_assemble_component_series`; the new branch fires only when the
+  formula_id is in the map (indicator-only formulas byte-identical, @AC-7).
+- Files modified: `app/services/evaluator.py`. Deviations: none. TDD: paired with Step 7 (red→green).
+
+### Step 7 — analysis evaluator tests: broadcast/PIT/degradation/byte-identity [done]
+- New `tests/test_fundamentals_formula_operand.py` (real `Bar` on `bar.time`, fails.md:727):
+  AC-1 (composite broadcast + `fscore.composite` rule fires, bare `fscore`→value), AC-2 (two PIT
+  epochs, once-per-epoch call, mid-window transition at 2020-01-30, fails.md:1853), AC-5 (whole-row
+  missing → None hold + no call; formula error → FormulaExecutionError), AC-7 (technical formula fed
+  `{"close":…}`, no fundamentals added), AC-8 (partial row omits `roe`, never 0.0).
+- **TDD red→green:** with evaluator.py stashed, 6 tests failed (evaluate_with_series rejected the
+  `formula_fundamentals` arg / branch absent) → RED; after pop 6/6 green. Full analysis suite
+  `pytest --cov` **810 passed**, coverage **84.07%** (≥40%); ruff check + format clean.
+- Files modified: `tests/test_fundamentals_formula_operand.py`. Deviations: none.
