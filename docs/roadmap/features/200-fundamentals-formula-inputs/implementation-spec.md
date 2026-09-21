@@ -158,7 +158,7 @@ The diff contains only the additive enum/field additions (no unrelated churn).
 
 ### Step 3 — migration: persist `fundamental_inputs` on `indicators.formulas`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/migrations/006_add_formula_fundamental_inputs.up.sql` — create

@@ -367,3 +367,12 @@
   TS, TS dist) — no unrelated proto churn. `FundamentalMetric`/`FUNDAMENTAL_METRIC_*` present in the
   generated Python/TS/Go indicators stubs.
 - Files modified: `packages/proto/gen/**` (generated; never hand-edited). Deviations: none. TDD: N/A.
+
+### Step 3 — migration 006_add_formula_fundamental_inputs [done]
+- Created `.up.sql` (`ALTER TABLE indicators.formulas ADD COLUMN fundamental_inputs JSONB NOT NULL
+  DEFAULT '[]'`) + `.down.sql` (`DROP COLUMN fundamental_inputs`), mirroring the `003_formula_outputs`
+  JSONB precedent. `006` re-confirmed next-free (C-07, ledger 081).
+- Verify: offline (HARD CONSTRAINT — no DB started). Both files present; the `.up` ADD COLUMN has its
+  inverse DROP COLUMN in `.down`. Live apply/rollback is CI/deploy's job.
+- Files created: `services/xstockstrat-indicators/migrations/006_add_formula_fundamental_inputs.{up,down}.sql`.
+  Deviations: none. TDD: N/A (migration).
