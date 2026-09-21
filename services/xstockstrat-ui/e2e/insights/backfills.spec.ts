@@ -109,6 +109,33 @@ test.describe('Backfills page — list, create, cancel (AC-1/2/3)', () => {
     await expect.poll(() => triggered?.symbols).toEqual(['AAPL', 'TSLA']);
   });
 
+  test('creating a fundamentals backfill sends data_kind and omits the timeframe (AC-7)', async ({
+    page,
+  }) => {
+    await addAdminCookie(page);
+    await stubList(page, []);
+
+    let triggered: Record<string, unknown> | null = null;
+    await page.route(IngestPath('TriggerBackfill'), async (route) => {
+      triggered = route.request().postDataJSON() as Record<string, unknown>;
+      await fulfillJson(route, { jobId: 'job-fund', status: 'BACKFILL_STATUS_QUEUED' });
+    });
+
+    await page.goto('/insights/backfills');
+    await page.getByRole('button', { name: 'New backfill' }).click();
+    await page.getByPlaceholder('Symbols (AAPL, TSLA)').fill('aapl');
+    // Switch the data kind to Fundamentals (feature 198).
+    await page.getByRole('combobox', { name: 'backfill data kind' }).click();
+    await page.getByRole('option', { name: /Fundamentals/ }).click();
+    await page.getByRole('button', { name: 'Start backfill' }).click();
+
+    // The job is created and observable, and the payload carries the fundamentals data-kind with
+    // NO timeframe (fundamentals are timeframe-independent).
+    await expect.poll(() => triggered?.symbols).toEqual(['AAPL']);
+    expect(triggered?.dataKind).toBe('BACKFILL_DATA_KIND_FUNDAMENTALS');
+    expect(triggered?.timeframeEnum).toBeUndefined();
+  });
+
   test('cancel transitions a running job to CANCELED', async ({ page }) => {
     await addAdminCookie(page);
 

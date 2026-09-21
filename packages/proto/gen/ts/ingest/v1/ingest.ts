@@ -176,6 +176,67 @@ export function fillModeToNumber(object: FillMode): number {
   }
 }
 
+/**
+ * BackfillDataKind selects WHAT a backfill fetches (feature 198). Distinct from the timeframe
+ * axis: FUNDAMENTALS carries no bar timeframe (the servicer branches around the 1d-only reject).
+ * UNSPECIFIED == BARS for back-compat — every existing OHLCV caller omits the field.
+ */
+export enum BackfillDataKind {
+  /** BACKFILL_DATA_KIND_UNSPECIFIED - treated as BARS by the servicer */
+  BACKFILL_DATA_KIND_UNSPECIFIED = "BACKFILL_DATA_KIND_UNSPECIFIED",
+  /** BACKFILL_DATA_KIND_BARS - OHLCV bars (marketdata.BackfillBars) */
+  BACKFILL_DATA_KIND_BARS = "BACKFILL_DATA_KIND_BARS",
+  /** BACKFILL_DATA_KIND_FUNDAMENTALS - point-in-time fundamentals (marketdata.BackfillFundamentals) */
+  BACKFILL_DATA_KIND_FUNDAMENTALS = "BACKFILL_DATA_KIND_FUNDAMENTALS",
+  UNRECOGNIZED = "UNRECOGNIZED",
+}
+
+export function backfillDataKindFromJSON(object: any): BackfillDataKind {
+  switch (object) {
+    case 0:
+    case "BACKFILL_DATA_KIND_UNSPECIFIED":
+      return BackfillDataKind.BACKFILL_DATA_KIND_UNSPECIFIED;
+    case 1:
+    case "BACKFILL_DATA_KIND_BARS":
+      return BackfillDataKind.BACKFILL_DATA_KIND_BARS;
+    case 2:
+    case "BACKFILL_DATA_KIND_FUNDAMENTALS":
+      return BackfillDataKind.BACKFILL_DATA_KIND_FUNDAMENTALS;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return BackfillDataKind.UNRECOGNIZED;
+  }
+}
+
+export function backfillDataKindToJSON(object: BackfillDataKind): string {
+  switch (object) {
+    case BackfillDataKind.BACKFILL_DATA_KIND_UNSPECIFIED:
+      return "BACKFILL_DATA_KIND_UNSPECIFIED";
+    case BackfillDataKind.BACKFILL_DATA_KIND_BARS:
+      return "BACKFILL_DATA_KIND_BARS";
+    case BackfillDataKind.BACKFILL_DATA_KIND_FUNDAMENTALS:
+      return "BACKFILL_DATA_KIND_FUNDAMENTALS";
+    case BackfillDataKind.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
+export function backfillDataKindToNumber(object: BackfillDataKind): number {
+  switch (object) {
+    case BackfillDataKind.BACKFILL_DATA_KIND_UNSPECIFIED:
+      return 0;
+    case BackfillDataKind.BACKFILL_DATA_KIND_BARS:
+      return 1;
+    case BackfillDataKind.BACKFILL_DATA_KIND_FUNDAMENTALS:
+      return 2;
+    case BackfillDataKind.UNRECOGNIZED:
+    default:
+      return -1;
+  }
+}
+
 /** Health of a registered signal source (feature 083). Closed set → enum (C-04). */
 export enum SourceHealthStatus {
   SOURCE_HEALTH_STATUS_UNSPECIFIED = "SOURCE_HEALTH_STATUS_UNSPECIFIED",
@@ -338,6 +399,8 @@ export interface BackfillJob {
   chunksTotal: number;
   /** chunks in COMPLETED state (FR-5) */
   chunksCompleted: number;
+  /** what the job backfills; UNSPECIFIED == BARS (feature 198) */
+  dataKind: BackfillDataKind;
 }
 
 export interface TriggerBackfillRequest {
@@ -353,6 +416,8 @@ export interface TriggerBackfillRequest {
   timeframeEnum: Timeframe;
   /** FR-4; UNSPECIFIED == FULL. Independent of `overwrite`. */
   fillMode: FillMode;
+  /** feature 198; UNSPECIFIED == BARS. FUNDAMENTALS ignores timeframe. */
+  dataKind: BackfillDataKind;
 }
 
 export interface TriggerBackfillResponse {
@@ -528,6 +593,7 @@ function createBaseBackfillJob(): BackfillJob {
     timeframeEnum: Timeframe.TIMEFRAME_UNSPECIFIED,
     chunksTotal: 0,
     chunksCompleted: 0,
+    dataKind: BackfillDataKind.BACKFILL_DATA_KIND_UNSPECIFIED,
   };
 }
 
@@ -574,6 +640,9 @@ export const BackfillJob: MessageFns<BackfillJob> = {
     }
     if (message.chunksCompleted !== 0) {
       writer.uint32(112).int32(message.chunksCompleted);
+    }
+    if (message.dataKind !== BackfillDataKind.BACKFILL_DATA_KIND_UNSPECIFIED) {
+      writer.uint32(120).int32(backfillDataKindToNumber(message.dataKind));
     }
     return writer;
   },
@@ -697,6 +766,14 @@ export const BackfillJob: MessageFns<BackfillJob> = {
           message.chunksCompleted = reader.int32();
           continue;
         }
+        case 15: {
+          if (tag !== 120) {
+            break;
+          }
+
+          message.dataKind = backfillDataKindFromJSON(reader.int32());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -758,6 +835,11 @@ export const BackfillJob: MessageFns<BackfillJob> = {
         : isSet(object.chunks_completed)
         ? globalThis.Number(object.chunks_completed)
         : 0,
+      dataKind: isSet(object.dataKind)
+        ? backfillDataKindFromJSON(object.dataKind)
+        : isSet(object.data_kind)
+        ? backfillDataKindFromJSON(object.data_kind)
+        : BackfillDataKind.BACKFILL_DATA_KIND_UNSPECIFIED,
     };
   },
 
@@ -805,6 +887,9 @@ export const BackfillJob: MessageFns<BackfillJob> = {
     if (message.chunksCompleted !== 0) {
       obj.chunksCompleted = Math.round(message.chunksCompleted);
     }
+    if (message.dataKind !== BackfillDataKind.BACKFILL_DATA_KIND_UNSPECIFIED) {
+      obj.dataKind = backfillDataKindToJSON(message.dataKind);
+    }
     return obj;
   },
 
@@ -829,6 +914,7 @@ export const BackfillJob: MessageFns<BackfillJob> = {
     message.timeframeEnum = object.timeframeEnum ?? Timeframe.TIMEFRAME_UNSPECIFIED;
     message.chunksTotal = object.chunksTotal ?? 0;
     message.chunksCompleted = object.chunksCompleted ?? 0;
+    message.dataKind = object.dataKind ?? BackfillDataKind.BACKFILL_DATA_KIND_UNSPECIFIED;
     return message;
   },
 };
@@ -841,6 +927,7 @@ function createBaseTriggerBackfillRequest(): TriggerBackfillRequest {
     overwrite: false,
     timeframeEnum: Timeframe.TIMEFRAME_UNSPECIFIED,
     fillMode: FillMode.FILL_MODE_UNSPECIFIED,
+    dataKind: BackfillDataKind.BACKFILL_DATA_KIND_UNSPECIFIED,
   };
 }
 
@@ -863,6 +950,9 @@ export const TriggerBackfillRequest: MessageFns<TriggerBackfillRequest> = {
     }
     if (message.fillMode !== FillMode.FILL_MODE_UNSPECIFIED) {
       writer.uint32(48).int32(fillModeToNumber(message.fillMode));
+    }
+    if (message.dataKind !== BackfillDataKind.BACKFILL_DATA_KIND_UNSPECIFIED) {
+      writer.uint32(56).int32(backfillDataKindToNumber(message.dataKind));
     }
     return writer;
   },
@@ -922,6 +1012,14 @@ export const TriggerBackfillRequest: MessageFns<TriggerBackfillRequest> = {
           message.fillMode = fillModeFromJSON(reader.int32());
           continue;
         }
+        case 7: {
+          if (tag !== 56) {
+            break;
+          }
+
+          message.dataKind = backfillDataKindFromJSON(reader.int32());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -947,6 +1045,11 @@ export const TriggerBackfillRequest: MessageFns<TriggerBackfillRequest> = {
         : isSet(object.fill_mode)
         ? fillModeFromJSON(object.fill_mode)
         : FillMode.FILL_MODE_UNSPECIFIED,
+      dataKind: isSet(object.dataKind)
+        ? backfillDataKindFromJSON(object.dataKind)
+        : isSet(object.data_kind)
+        ? backfillDataKindFromJSON(object.data_kind)
+        : BackfillDataKind.BACKFILL_DATA_KIND_UNSPECIFIED,
     };
   },
 
@@ -970,6 +1073,9 @@ export const TriggerBackfillRequest: MessageFns<TriggerBackfillRequest> = {
     if (message.fillMode !== FillMode.FILL_MODE_UNSPECIFIED) {
       obj.fillMode = fillModeToJSON(message.fillMode);
     }
+    if (message.dataKind !== BackfillDataKind.BACKFILL_DATA_KIND_UNSPECIFIED) {
+      obj.dataKind = backfillDataKindToJSON(message.dataKind);
+    }
     return obj;
   },
 
@@ -986,6 +1092,7 @@ export const TriggerBackfillRequest: MessageFns<TriggerBackfillRequest> = {
     message.overwrite = object.overwrite ?? false;
     message.timeframeEnum = object.timeframeEnum ?? Timeframe.TIMEFRAME_UNSPECIFIED;
     message.fillMode = object.fillMode ?? FillMode.FILL_MODE_UNSPECIFIED;
+    message.dataKind = object.dataKind ?? BackfillDataKind.BACKFILL_DATA_KIND_UNSPECIFIED;
     return message;
   },
 };

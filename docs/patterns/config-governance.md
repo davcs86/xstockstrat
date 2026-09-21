@@ -416,6 +416,26 @@ namespace). Read once at servicer construction, not live.
 |---|---|---|---|
 | `analysis.series.max_concurrent_components` | int | `4` | Bounds concurrent per-component `ComputeIndicator`/`ExecuteFormula` execution across simultaneous `GetIndicatorSeries` calls, so a routinely-visited Symbol page can't starve the analysis live loop. `max(1, get_int(...))` clamp. |
 
+### feature 198 — historical-fundamentals-backtest (`xstockstrat-marketdata`, `xstockstrat-analysis`)
+
+Point-in-time historical fundamentals (SEC EDGAR primary + FMP-Free ratio enrichment) for
+look-ahead-safe backtesting. **No new secret/credential row** and **no second FMP cap**: ratio
+enrichment reuses the existing `marketdata.fmp.daily_request_cap` (=250) and the feature-147
+`marketdata.fmp.api_key` secret. EDGAR is keyless — `marketdata.edgar.user_agent` is **non-secret**
+ordinary config (read via `GetString`, never `GetSecret`).
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `marketdata.fundamentals.history.enabled` | bool | `false` | Gate for the fundamentals backfill worker. |
+| `marketdata.edgar.base_url` | string | `https://data.sec.gov` | SEC EDGAR XBRL base URL. |
+| `marketdata.edgar.user_agent` | string | `xstockstrat/1.0 (ops@xstockstrat.local)` | SEC fair-use UA (non-secret). |
+| `marketdata.edgar.rate_limit_rps` | int | `10` | SEC request rate ceiling. |
+| `marketdata.fundamentals.history.backfill.max_lookback_years` | int | `10` | Default lookback when a request omits range start. |
+| `marketdata.fundamentals.history.backfill.period_types` | string | `both` | Default period types (`quarterly`\|`annual`\|`both`). |
+| `marketdata.fundamentals.history.backfill.batch_size` | int | `50` | Symbols per backfill batch. |
+| `marketdata.fundamentals.history.ratio_enrichment.enabled` | bool | `false` | Optional FMP ratio-fill gate; reuses `marketdata.fmp.daily_request_cap` (no second cap). |
+| `analysis.backtest.fundamentals.enabled` | bool | `false` | Gate for the fundamental backtest operand (`xstockstrat-analysis`, step 12). |
+
 ### feature 131 — live-strategy-opportunity-attribution (`xstockstrat-analysis`)
 
 Adds live-strategy symbol-coverage attribution to the Opportunities compute (`_compute_opportunities`):

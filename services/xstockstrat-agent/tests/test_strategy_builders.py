@@ -133,12 +133,30 @@ class TestStrategyBuilderParity:
                 "params": {"period": 3.0},
                 # feature 152 — a benchmark component; the builder must carry source_symbol.
                 "source_symbol": "VOO",
+                # feature 198 — the builder must carry fundamental_metric (else descriptor drift).
+                "fundamental_metric": "eps",
             }
         )
         set_fields = {f.name for f, _ in comp.ListFields()}
         assert set_fields | _COMPONENT_INTENTIONALLY_UNSET == set(
             analysis_pb2.StrategyComponent.DESCRIPTOR.fields_by_name
         )
+
+    def test_build_component_maps_fundamental_kind_and_metric(self):
+        """feature 198: a fundamental component maps to COMPONENT_KIND_FUNDAMENTAL and carries
+        the fundamental_metric value through to the built proto."""
+        from gen.analysis.v1 import analysis_pb2  # type: ignore
+
+        comp = client._build_component(
+            {"kind": "fundamental", "ref_name": "pe", "fundamental_metric": "pe_ratio"}
+        )
+        assert comp.kind == analysis_pb2.COMPONENT_KIND_FUNDAMENTAL
+        assert comp.fundamental_metric == "pe_ratio"
+
+    def test_build_component_rejects_unknown_kind(self):
+        """An unrecognized kind still fails fast client-side (guards a typo before the RPC)."""
+        with pytest.raises(ValueError, match="unknown component kind"):
+            client._build_component({"kind": "nonsense", "ref_name": "x"})
 
     def test_build_component_maps_source_symbol_value(self):
         """feature 152: the source_symbol value actually reaches the built proto (not just

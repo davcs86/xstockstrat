@@ -14,7 +14,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file marketdata/v1/marketdata.proto.
  */
 export const file_marketdata_v1_marketdata: GenFile = /*@__PURE__*/
-  fileDesc("Ch5tYXJrZXRkYXRhL3YxL21hcmtldGRhdGEucHJvdG8SGXhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEiiwIKA0JhchIOCgZzeW1ib2wYASABKAkSKAoEdGltZRgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASDAoEb3BlbhgDIAEoARIMCgRoaWdoGAQgASgBEgsKA2xvdxgFIAEoARINCgVjbG9zZRgGIAEoARIOCgZ2b2x1bWUYByABKAMSDAoEdndhcBgIIAEoARITCgt0cmFkZV9jb3VudBgJIAEoBRIVCgl0aW1lZnJhbWUYCiABKAlCAhgBEg4KBnNvdXJjZRgLIAEoCRI4Cg50aW1lZnJhbWVfZW51bRgMIAEoDjIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lZnJhbWUimwEKBVF1b3RlEg4KBnN5bWJvbBgBIAEoCRIoCgR0aW1lGAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIRCglhc2tfcHJpY2UYAyABKAESEAoIYXNrX3NpemUYBCABKAUSEQoJYmlkX3ByaWNlGAUgASgBEhAKCGJpZF9zaXplGAYgASgFEg4KBnNvdXJjZRgHIAEoCSInChVHZXRMYXRlc3RQcmljZVJlcXVlc3QSDgoGc3ltYm9sGAEgASgJIrIBCgtMYXRlc3RQcmljZRIOCgZzeW1ib2wYASABKAkSFwoKbGFzdF9wcmljZRgCIAEoAUgAiAEBEjMKD2xhc3RfdHJhZGVfdGltZRgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASFwoKcHJldl9jbG9zZRgEIAEoAUgBiAEBEg4KBnNvdXJjZRgFIAEoCUINCgtfbGFzdF9wcmljZUINCgtfcHJldl9jbG9zZSKsAQoRU3RyZWFtQmFyc1JlcXVlc3QSDwoHc3ltYm9scxgBIAMoCRIVCgl0aW1lZnJhbWUYAiABKAlCAhgBEhkKEWluY2x1ZGVfcHJlbWFya2V0GAMgASgIEhoKEmluY2x1ZGVfYWZ0ZXJob3VycxgEIAEoCBI4Cg50aW1lZnJhbWVfZW51bRgFIAEoDjIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lZnJhbWUiJgoTU3RyZWFtUXVvdGVzUmVxdWVzdBIPCgdzeW1ib2xzGAEgAygJItQBCg5HZXRCYXJzUmVxdWVzdBIOCgZzeW1ib2wYASABKAkSFQoJdGltZWZyYW1lGAIgASgJQgIYARIvCgVyYW5nZRgDIAEoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2USMAoEcGFnZRgEIAEoCzIiLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5QYWdlUmVxdWVzdBI4Cg50aW1lZnJhbWVfZW51bRgFIAEoDjIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lZnJhbWUicgoPR2V0QmFyc1Jlc3BvbnNlEiwKBGJhcnMYASADKAsyHi54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLkJhchIxCgRwYWdlGAIgASgLMiMueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlBhZ2VSZXNwb25zZSInChVHZXRMYXRlc3RRdW90ZVJlcXVlc3QSDgoGc3ltYm9sGAEgASgJIsQBChNCYWNrZmlsbEJhcnNSZXF1ZXN0Eg8KB3N5bWJvbHMYASADKAkSFQoJdGltZWZyYW1lGAIgASgJQgIYARIvCgVyYW5nZRgDIAEoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2USGgoSb3ZlcndyaXRlX2V4aXN0aW5nGAQgASgIEjgKDnRpbWVmcmFtZV9lbnVtGAUgASgOMiAueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRpbWVmcmFtZSJbChRCYWNrZmlsbEJhcnNSZXNwb25zZRIUCgxiYXJzX3dyaXR0ZW4YASABKAMSFgoOZmFpbGVkX3N5bWJvbHMYAiADKAkSFQoNZXhwZWN0ZWRfYmFycxgDIAEoAyKOAQoWR2V0RGF0YUNvdmVyYWdlUmVxdWVzdBIOCgZzeW1ib2wYASABKAkSMwoJdGltZWZyYW1lGAIgASgOMiAueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRpbWVmcmFtZRIvCgVyYW5nZRgDIAEoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2UidgoNQ292ZXJhZ2VSYW5nZRIpCgVzdGFydBgBIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASJwoDZW5kGAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIRCgliYXJfY291bnQYAyABKAMivgIKF0dldERhdGFDb3ZlcmFnZVJlc3BvbnNlEg4KBnN5bWJvbBgBIAEoCRIzCgl0aW1lZnJhbWUYAiABKA4yIC54c3RvY2tzdHJhdC5jb21tb24udjEuVGltZWZyYW1lEhIKCmJhcnNfdG90YWwYAyABKAMSLAoIZWFybGllc3QYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEioKBmxhdGVzdBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASQAoOY292ZXJlZF9yYW5nZXMYBiADKAsyKC54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLkNvdmVyYWdlUmFuZ2USLgoEZ2FwcxgHIAMoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2UiPwoRTGlzdEFzc2V0c1JlcXVlc3QSEwoLYXNzZXRfY2xhc3MYASABKAkSFQoNdHJhZGFibGVfb25seRgCIAEoCCJCChJMaXN0QXNzZXRzUmVzcG9uc2USLAoGYXNzZXRzGAEgAygLMhwueHN0b2Nrc3RyYXQuY29tbW9uLnYxLkFzc2V0IpMBChtEZWxldGVCYWNrZmlsbGVkRGF0YVJlcXVlc3QSDgoGc3ltYm9sGAEgASgJEi8KBXJhbmdlGAIgASgLMiAueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRpbWVSYW5nZRIzCgl0aW1lZnJhbWUYAyABKA4yIC54c3RvY2tzdHJhdC5jb21tb24udjEuVGltZWZyYW1lIjQKHERlbGV0ZUJhY2tmaWxsZWREYXRhUmVzcG9uc2USFAoMcm93c19kZWxldGVkGAEgASgDIt4DCgxGdW5kYW1lbnRhbHMSDgoGc3ltYm9sGAEgASgJEhIKCm1hcmtldF9jYXAYAiABKAESEAoIcGVfcmF0aW8YAyABKAESEAoIcGJfcmF0aW8YBCABKAESFgoOZGl2aWRlbmRfeWllbGQYBSABKAESCwoDZXBzGAYgASgBEgwKBGJldGEYByABKAESCwoDcm9lGAggASgBEhYKDmRlYnRfdG9fZXF1aXR5GAkgASgBEg0KBXByaWNlGAogASgBEhEKCXllYXJfaGlnaBgLIAEoARIQCgh5ZWFyX2xvdxgMIAEoARJQCg1leHRyYV9tZXRyaWNzGA0gAygLMjkueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5GdW5kYW1lbnRhbHMuRXh0cmFNZXRyaWNzRW50cnkSKQoFYXNfb2YYDiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhAKCGN1cnJlbmN5GA8gASgJEg4KBnNvdXJjZRgQIAEoCRINCgVzdGFsZRgRIAEoCBIXCg9taXNzaW5nX21ldHJpY3MYEiADKAkaMwoRRXh0cmFNZXRyaWNzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgBOgI4ASIoChZHZXRGdW5kYW1lbnRhbHNSZXF1ZXN0Eg4KBnN5bWJvbBgBIAEoCSJYChdHZXRGdW5kYW1lbnRhbHNSZXNwb25zZRI9CgxmdW5kYW1lbnRhbHMYASABKAsyJy54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLkZ1bmRhbWVudGFscyIuChtHZXRGdW5kYW1lbnRhbHNNdWx0aVJlcXVlc3QSDwoHc3ltYm9scxgBIAMoCSJdChxHZXRGdW5kYW1lbnRhbHNNdWx0aVJlc3BvbnNlEj0KDGZ1bmRhbWVudGFscxgBIAMoCzInLnhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEuRnVuZGFtZW50YWxzIikKFkdldExhdGVzdFF1b3Rlc1JlcXVlc3QSDwoHc3ltYm9scxgBIAMoCSJLChdHZXRMYXRlc3RRdW90ZXNSZXNwb25zZRIwCgZxdW90ZXMYASADKAsyIC54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLlF1b3RlIqoBChNCYXRjaEdldEJhcnNSZXF1ZXN0Eg8KB3N5bWJvbHMYASADKAkSEQoJdGltZWZyYW1lGAIgASgJEikKBXN0YXJ0GAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBInCgNlbmQYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhsKE21heF9iYXJzX3Blcl9zeW1ib2wYBSABKAUiSgoKU3ltYm9sQmFycxIOCgZzeW1ib2wYASABKAkSLAoEYmFycxgCIAMoCzIeLnhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEuQmFyIk4KFEJhdGNoR2V0QmFyc1Jlc3BvbnNlEjYKB3Jlc3VsdHMYASADKAsyJS54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLlN5bWJvbEJhcnMiLQoaQmF0Y2hHZXRMYXRlc3RQcmljZVJlcXVlc3QSDwoHc3ltYm9scxgBIAMoCSJWChtCYXRjaEdldExhdGVzdFByaWNlUmVzcG9uc2USNwoHcmVzdWx0cxgBIAMoCzImLnhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEuTGF0ZXN0UHJpY2Uy3wwKEU1hcmtldERhdGFTZXJ2aWNlElwKClN0cmVhbUJhcnMSLC54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLlN0cmVhbUJhcnNSZXF1ZXN0Gh4ueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5CYXIwARJiCgxTdHJlYW1RdW90ZXMSLi54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLlN0cmVhbVF1b3Rlc1JlcXVlc3QaIC54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLlF1b3RlMAESYAoHR2V0QmFycxIpLnhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEuR2V0QmFyc1JlcXVlc3QaKi54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLkdldEJhcnNSZXNwb25zZRJkCg5HZXRMYXRlc3RRdW90ZRIwLnhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEuR2V0TGF0ZXN0UXVvdGVSZXF1ZXN0GiAueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5RdW90ZRJqCg5HZXRMYXRlc3RQcmljZRIwLnhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEuR2V0TGF0ZXN0UHJpY2VSZXF1ZXN0GiYueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5MYXRlc3RQcmljZRJvCgxCYWNrZmlsbEJhcnMSLi54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLkJhY2tmaWxsQmFyc1JlcXVlc3QaLy54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLkJhY2tmaWxsQmFyc1Jlc3BvbnNlEngKD0dldERhdGFDb3ZlcmFnZRIxLnhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEuR2V0RGF0YUNvdmVyYWdlUmVxdWVzdBoyLnhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEuR2V0RGF0YUNvdmVyYWdlUmVzcG9uc2UShwEKFERlbGV0ZUJhY2tmaWxsZWREYXRhEjYueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5EZWxldGVCYWNrZmlsbGVkRGF0YVJlcXVlc3QaNy54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLkRlbGV0ZUJhY2tmaWxsZWREYXRhUmVzcG9uc2USaQoKTGlzdEFzc2V0cxIsLnhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEuTGlzdEFzc2V0c1JlcXVlc3QaLS54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLkxpc3RBc3NldHNSZXNwb25zZRJ4Cg9HZXRGdW5kYW1lbnRhbHMSMS54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLkdldEZ1bmRhbWVudGFsc1JlcXVlc3QaMi54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLkdldEZ1bmRhbWVudGFsc1Jlc3BvbnNlEocBChRHZXRGdW5kYW1lbnRhbHNNdWx0aRI2LnhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEuR2V0RnVuZGFtZW50YWxzTXVsdGlSZXF1ZXN0GjcueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5HZXRGdW5kYW1lbnRhbHNNdWx0aVJlc3BvbnNlEngKD0dldExhdGVzdFF1b3RlcxIxLnhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEuR2V0TGF0ZXN0UXVvdGVzUmVxdWVzdBoyLnhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEuR2V0TGF0ZXN0UXVvdGVzUmVzcG9uc2USbwoMQmF0Y2hHZXRCYXJzEi4ueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5CYXRjaEdldEJhcnNSZXF1ZXN0Gi8ueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5CYXRjaEdldEJhcnNSZXNwb25zZRKEAQoTQmF0Y2hHZXRMYXRlc3RQcmljZRI1LnhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEuQmF0Y2hHZXRMYXRlc3RQcmljZVJlcXVlc3QaNi54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLkJhdGNoR2V0TGF0ZXN0UHJpY2VSZXNwb25zZUJEWkJnaXRodWIuY29tL3hzdG9ja3N0cmF0L2NvbnRyYWN0cy9nZW4vZ28vbWFya2V0ZGF0YS92MTttYXJrZXRkYXRhdjFiBnByb3RvMw", [file_google_protobuf_timestamp, file_common_v1_common]);
+  fileDesc("Ch5tYXJrZXRkYXRhL3YxL21hcmtldGRhdGEucHJvdG8SGXhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEiiwIKA0JhchIOCgZzeW1ib2wYASABKAkSKAoEdGltZRgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASDAoEb3BlbhgDIAEoARIMCgRoaWdoGAQgASgBEgsKA2xvdxgFIAEoARINCgVjbG9zZRgGIAEoARIOCgZ2b2x1bWUYByABKAMSDAoEdndhcBgIIAEoARITCgt0cmFkZV9jb3VudBgJIAEoBRIVCgl0aW1lZnJhbWUYCiABKAlCAhgBEg4KBnNvdXJjZRgLIAEoCRI4Cg50aW1lZnJhbWVfZW51bRgMIAEoDjIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lZnJhbWUimwEKBVF1b3RlEg4KBnN5bWJvbBgBIAEoCRIoCgR0aW1lGAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIRCglhc2tfcHJpY2UYAyABKAESEAoIYXNrX3NpemUYBCABKAUSEQoJYmlkX3ByaWNlGAUgASgBEhAKCGJpZF9zaXplGAYgASgFEg4KBnNvdXJjZRgHIAEoCSInChVHZXRMYXRlc3RQcmljZVJlcXVlc3QSDgoGc3ltYm9sGAEgASgJIrIBCgtMYXRlc3RQcmljZRIOCgZzeW1ib2wYASABKAkSFwoKbGFzdF9wcmljZRgCIAEoAUgAiAEBEjMKD2xhc3RfdHJhZGVfdGltZRgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASFwoKcHJldl9jbG9zZRgEIAEoAUgBiAEBEg4KBnNvdXJjZRgFIAEoCUINCgtfbGFzdF9wcmljZUINCgtfcHJldl9jbG9zZSKsAQoRU3RyZWFtQmFyc1JlcXVlc3QSDwoHc3ltYm9scxgBIAMoCRIVCgl0aW1lZnJhbWUYAiABKAlCAhgBEhkKEWluY2x1ZGVfcHJlbWFya2V0GAMgASgIEhoKEmluY2x1ZGVfYWZ0ZXJob3VycxgEIAEoCBI4Cg50aW1lZnJhbWVfZW51bRgFIAEoDjIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lZnJhbWUiJgoTU3RyZWFtUXVvdGVzUmVxdWVzdBIPCgdzeW1ib2xzGAEgAygJItQBCg5HZXRCYXJzUmVxdWVzdBIOCgZzeW1ib2wYASABKAkSFQoJdGltZWZyYW1lGAIgASgJQgIYARIvCgVyYW5nZRgDIAEoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2USMAoEcGFnZRgEIAEoCzIiLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5QYWdlUmVxdWVzdBI4Cg50aW1lZnJhbWVfZW51bRgFIAEoDjIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lZnJhbWUicgoPR2V0QmFyc1Jlc3BvbnNlEiwKBGJhcnMYASADKAsyHi54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLkJhchIxCgRwYWdlGAIgASgLMiMueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlBhZ2VSZXNwb25zZSInChVHZXRMYXRlc3RRdW90ZVJlcXVlc3QSDgoGc3ltYm9sGAEgASgJIsQBChNCYWNrZmlsbEJhcnNSZXF1ZXN0Eg8KB3N5bWJvbHMYASADKAkSFQoJdGltZWZyYW1lGAIgASgJQgIYARIvCgVyYW5nZRgDIAEoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2USGgoSb3ZlcndyaXRlX2V4aXN0aW5nGAQgASgIEjgKDnRpbWVmcmFtZV9lbnVtGAUgASgOMiAueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRpbWVmcmFtZSJbChRCYWNrZmlsbEJhcnNSZXNwb25zZRIUCgxiYXJzX3dyaXR0ZW4YASABKAMSFgoOZmFpbGVkX3N5bWJvbHMYAiADKAkSFQoNZXhwZWN0ZWRfYmFycxgDIAEoAyKOAQoWR2V0RGF0YUNvdmVyYWdlUmVxdWVzdBIOCgZzeW1ib2wYASABKAkSMwoJdGltZWZyYW1lGAIgASgOMiAueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRpbWVmcmFtZRIvCgVyYW5nZRgDIAEoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2UidgoNQ292ZXJhZ2VSYW5nZRIpCgVzdGFydBgBIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASJwoDZW5kGAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIRCgliYXJfY291bnQYAyABKAMivgIKF0dldERhdGFDb3ZlcmFnZVJlc3BvbnNlEg4KBnN5bWJvbBgBIAEoCRIzCgl0aW1lZnJhbWUYAiABKA4yIC54c3RvY2tzdHJhdC5jb21tb24udjEuVGltZWZyYW1lEhIKCmJhcnNfdG90YWwYAyABKAMSLAoIZWFybGllc3QYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEioKBmxhdGVzdBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASQAoOY292ZXJlZF9yYW5nZXMYBiADKAsyKC54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLkNvdmVyYWdlUmFuZ2USLgoEZ2FwcxgHIAMoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2UiPwoRTGlzdEFzc2V0c1JlcXVlc3QSEwoLYXNzZXRfY2xhc3MYASABKAkSFQoNdHJhZGFibGVfb25seRgCIAEoCCJCChJMaXN0QXNzZXRzUmVzcG9uc2USLAoGYXNzZXRzGAEgAygLMhwueHN0b2Nrc3RyYXQuY29tbW9uLnYxLkFzc2V0IpMBChtEZWxldGVCYWNrZmlsbGVkRGF0YVJlcXVlc3QSDgoGc3ltYm9sGAEgASgJEi8KBXJhbmdlGAIgASgLMiAueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRpbWVSYW5nZRIzCgl0aW1lZnJhbWUYAyABKA4yIC54c3RvY2tzdHJhdC5jb21tb24udjEuVGltZWZyYW1lIjQKHERlbGV0ZUJhY2tmaWxsZWREYXRhUmVzcG9uc2USFAoMcm93c19kZWxldGVkGAEgASgDIt4DCgxGdW5kYW1lbnRhbHMSDgoGc3ltYm9sGAEgASgJEhIKCm1hcmtldF9jYXAYAiABKAESEAoIcGVfcmF0aW8YAyABKAESEAoIcGJfcmF0aW8YBCABKAESFgoOZGl2aWRlbmRfeWllbGQYBSABKAESCwoDZXBzGAYgASgBEgwKBGJldGEYByABKAESCwoDcm9lGAggASgBEhYKDmRlYnRfdG9fZXF1aXR5GAkgASgBEg0KBXByaWNlGAogASgBEhEKCXllYXJfaGlnaBgLIAEoARIQCgh5ZWFyX2xvdxgMIAEoARJQCg1leHRyYV9tZXRyaWNzGA0gAygLMjkueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5GdW5kYW1lbnRhbHMuRXh0cmFNZXRyaWNzRW50cnkSKQoFYXNfb2YYDiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhAKCGN1cnJlbmN5GA8gASgJEg4KBnNvdXJjZRgQIAEoCRINCgVzdGFsZRgRIAEoCBIXCg9taXNzaW5nX21ldHJpY3MYEiADKAkaMwoRRXh0cmFNZXRyaWNzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgBOgI4ASIoChZHZXRGdW5kYW1lbnRhbHNSZXF1ZXN0Eg4KBnN5bWJvbBgBIAEoCSJYChdHZXRGdW5kYW1lbnRhbHNSZXNwb25zZRI9CgxmdW5kYW1lbnRhbHMYASABKAsyJy54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLkZ1bmRhbWVudGFscyIuChtHZXRGdW5kYW1lbnRhbHNNdWx0aVJlcXVlc3QSDwoHc3ltYm9scxgBIAMoCSJdChxHZXRGdW5kYW1lbnRhbHNNdWx0aVJlc3BvbnNlEj0KDGZ1bmRhbWVudGFscxgBIAMoCzInLnhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEuRnVuZGFtZW50YWxzIoMFChxIaXN0b3JpY2FsRnVuZGFtZW50YWxzUGVyaW9kEg4KBnN5bWJvbBgBIAEoCRIVCg1maXNjYWxfcGVyaW9kGAIgASgJEhMKC3BlcmlvZF90eXBlGAMgASgJEi4KCnBlcmlvZF9lbmQYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCmZpbGVkX2RhdGUYBSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjEKDWFjY2VwdGVkX2RhdGUYBiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhIKCm1hcmtldF9jYXAYByABKAESEAoIcGVfcmF0aW8YCCABKAESEAoIcGJfcmF0aW8YCSABKAESFgoOZGl2aWRlbmRfeWllbGQYCiABKAESCwoDZXBzGAsgASgBEgwKBGJldGEYDCABKAESCwoDcm9lGA0gASgBEhYKDmRlYnRfdG9fZXF1aXR5GA4gASgBEg0KBXByaWNlGA8gASgBEhEKCXllYXJfaGlnaBgQIAEoARIQCgh5ZWFyX2xvdxgRIAEoARJgCg1leHRyYV9tZXRyaWNzGBIgAygLMkkueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5IaXN0b3JpY2FsRnVuZGFtZW50YWxzUGVyaW9kLkV4dHJhTWV0cmljc0VudHJ5EhAKCGN1cnJlbmN5GBMgASgJEg4KBnNvdXJjZRgUIAEoCRIXCg9taXNzaW5nX21ldHJpY3MYFSADKAkaMwoRRXh0cmFNZXRyaWNzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgBOgI4ASLYAQogR2V0SGlzdG9yaWNhbEZ1bmRhbWVudGFsc1JlcXVlc3QSDgoGc3ltYm9sGAEgASgJEi4KCmFzX29mX2RhdGUYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi8KC3JhbmdlX3N0YXJ0GAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBItCglyYW5nZV9lbmQYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhQKDHBlcmlvZF90eXBlcxgFIAMoCSJtCiFHZXRIaXN0b3JpY2FsRnVuZGFtZW50YWxzUmVzcG9uc2USSAoHcGVyaW9kcxgBIAMoCzI3LnhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEuSGlzdG9yaWNhbEZ1bmRhbWVudGFsc1BlcmlvZCKIAQobQmFja2ZpbGxGdW5kYW1lbnRhbHNSZXF1ZXN0Eg8KB3N5bWJvbHMYASADKAkSLwoFcmFuZ2UYAiABKAsyIC54c3RvY2tzdHJhdC5jb21tb24udjEuVGltZVJhbmdlEhQKDHBlcmlvZF90eXBlcxgDIAMoCRIRCglvdmVyd3JpdGUYBCABKAgiTwocQmFja2ZpbGxGdW5kYW1lbnRhbHNSZXNwb25zZRIXCg9wZXJpb2RzX3dyaXR0ZW4YASABKAMSFgoOZmFpbGVkX3N5bWJvbHMYAiADKAkiKQoWR2V0TGF0ZXN0UXVvdGVzUmVxdWVzdBIPCgdzeW1ib2xzGAEgAygJIksKF0dldExhdGVzdFF1b3Rlc1Jlc3BvbnNlEjAKBnF1b3RlcxgBIAMoCzIgLnhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEuUXVvdGUiqgEKE0JhdGNoR2V0QmFyc1JlcXVlc3QSDwoHc3ltYm9scxgBIAMoCRIRCgl0aW1lZnJhbWUYAiABKAkSKQoFc3RhcnQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEicKA2VuZBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASGwoTbWF4X2JhcnNfcGVyX3N5bWJvbBgFIAEoBSJKCgpTeW1ib2xCYXJzEg4KBnN5bWJvbBgBIAEoCRIsCgRiYXJzGAIgAygLMh4ueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5CYXIiTgoUQmF0Y2hHZXRCYXJzUmVzcG9uc2USNgoHcmVzdWx0cxgBIAMoCzIlLnhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEuU3ltYm9sQmFycyItChpCYXRjaEdldExhdGVzdFByaWNlUmVxdWVzdBIPCgdzeW1ib2xzGAEgAygJIlYKG0JhdGNoR2V0TGF0ZXN0UHJpY2VSZXNwb25zZRI3CgdyZXN1bHRzGAEgAygLMiYueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5MYXRlc3RQcmljZTKCDwoRTWFya2V0RGF0YVNlcnZpY2USXAoKU3RyZWFtQmFycxIsLnhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEuU3RyZWFtQmFyc1JlcXVlc3QaHi54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLkJhcjABEmIKDFN0cmVhbVF1b3RlcxIuLnhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEuU3RyZWFtUXVvdGVzUmVxdWVzdBogLnhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEuUXVvdGUwARJgCgdHZXRCYXJzEikueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5HZXRCYXJzUmVxdWVzdBoqLnhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEuR2V0QmFyc1Jlc3BvbnNlEmQKDkdldExhdGVzdFF1b3RlEjAueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5HZXRMYXRlc3RRdW90ZVJlcXVlc3QaIC54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLlF1b3RlEmoKDkdldExhdGVzdFByaWNlEjAueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5HZXRMYXRlc3RQcmljZVJlcXVlc3QaJi54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLkxhdGVzdFByaWNlEm8KDEJhY2tmaWxsQmFycxIuLnhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEuQmFja2ZpbGxCYXJzUmVxdWVzdBovLnhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEuQmFja2ZpbGxCYXJzUmVzcG9uc2USeAoPR2V0RGF0YUNvdmVyYWdlEjEueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5HZXREYXRhQ292ZXJhZ2VSZXF1ZXN0GjIueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5HZXREYXRhQ292ZXJhZ2VSZXNwb25zZRKHAQoURGVsZXRlQmFja2ZpbGxlZERhdGESNi54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLkRlbGV0ZUJhY2tmaWxsZWREYXRhUmVxdWVzdBo3LnhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEuRGVsZXRlQmFja2ZpbGxlZERhdGFSZXNwb25zZRJpCgpMaXN0QXNzZXRzEiwueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5MaXN0QXNzZXRzUmVxdWVzdBotLnhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEuTGlzdEFzc2V0c1Jlc3BvbnNlEngKD0dldEZ1bmRhbWVudGFscxIxLnhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEuR2V0RnVuZGFtZW50YWxzUmVxdWVzdBoyLnhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEuR2V0RnVuZGFtZW50YWxzUmVzcG9uc2UShwEKFEdldEZ1bmRhbWVudGFsc011bHRpEjYueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5HZXRGdW5kYW1lbnRhbHNNdWx0aVJlcXVlc3QaNy54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLkdldEZ1bmRhbWVudGFsc011bHRpUmVzcG9uc2USeAoPR2V0TGF0ZXN0UXVvdGVzEjEueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5HZXRMYXRlc3RRdW90ZXNSZXF1ZXN0GjIueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5HZXRMYXRlc3RRdW90ZXNSZXNwb25zZRJvCgxCYXRjaEdldEJhcnMSLi54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLkJhdGNoR2V0QmFyc1JlcXVlc3QaLy54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLkJhdGNoR2V0QmFyc1Jlc3BvbnNlEoQBChNCYXRjaEdldExhdGVzdFByaWNlEjUueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5CYXRjaEdldExhdGVzdFByaWNlUmVxdWVzdBo2LnhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEuQmF0Y2hHZXRMYXRlc3RQcmljZVJlc3BvbnNlEpYBChlHZXRIaXN0b3JpY2FsRnVuZGFtZW50YWxzEjsueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5HZXRIaXN0b3JpY2FsRnVuZGFtZW50YWxzUmVxdWVzdBo8LnhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEuR2V0SGlzdG9yaWNhbEZ1bmRhbWVudGFsc1Jlc3BvbnNlEocBChRCYWNrZmlsbEZ1bmRhbWVudGFscxI2LnhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEuQmFja2ZpbGxGdW5kYW1lbnRhbHNSZXF1ZXN0GjcueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5CYWNrZmlsbEZ1bmRhbWVudGFsc1Jlc3BvbnNlQkRaQmdpdGh1Yi5jb20veHN0b2Nrc3RyYXQvY29udHJhY3RzL2dlbi9nby9tYXJrZXRkYXRhL3YxO21hcmtldGRhdGF2MWIGcHJvdG8z", [file_google_protobuf_timestamp, file_common_v1_common]);
 
 /**
  * @generated from message xstockstrat.marketdata.v1.Bar
@@ -803,6 +803,263 @@ export const GetFundamentalsMultiResponseSchema: GenMessage<GetFundamentalsMulti
   messageDesc(file_marketdata_v1_marketdata, 22);
 
 /**
+ * One as-reported fiscal period for a symbol, keyed on when it became public (filed_date).
+ * Distinct from the latest-snapshot Fundamentals message: this is a repeated time series and
+ * carries the filing dates that make look-ahead-safe backtesting possible.
+ *
+ * @generated from message xstockstrat.marketdata.v1.HistoricalFundamentalsPeriod
+ */
+export type HistoricalFundamentalsPeriod = Message<"xstockstrat.marketdata.v1.HistoricalFundamentalsPeriod"> & {
+  /**
+   * @generated from field: string symbol = 1;
+   */
+  symbol: string;
+
+  /**
+   * e.g. "Q1-2020", "FY2019"
+   *
+   * @generated from field: string fiscal_period = 2;
+   */
+  fiscalPeriod: string;
+
+  /**
+   * "quarterly" | "annual"
+   *
+   * @generated from field: string period_type = 3;
+   */
+  periodType: string;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp period_end = 4;
+   */
+  periodEnd?: Timestamp | undefined;
+
+  /**
+   * SEC filing date — the point-in-time key
+   *
+   * @generated from field: google.protobuf.Timestamp filed_date = 5;
+   */
+  filedDate?: Timestamp | undefined;
+
+  /**
+   * SEC acceptance timestamp (often post-close)
+   *
+   * @generated from field: google.protobuf.Timestamp accepted_date = 6;
+   */
+  acceptedDate?: Timestamp | undefined;
+
+  /**
+   * Reused metric vocabulary (names mirror Fundamentals); pe_ratio/market_cap are PIT price-joined.
+   *
+   * @generated from field: double market_cap = 7;
+   */
+  marketCap: number;
+
+  /**
+   * @generated from field: double pe_ratio = 8;
+   */
+  peRatio: number;
+
+  /**
+   * @generated from field: double pb_ratio = 9;
+   */
+  pbRatio: number;
+
+  /**
+   * @generated from field: double dividend_yield = 10;
+   */
+  dividendYield: number;
+
+  /**
+   * @generated from field: double eps = 11;
+   */
+  eps: number;
+
+  /**
+   * @generated from field: double beta = 12;
+   */
+  beta: number;
+
+  /**
+   * @generated from field: double roe = 13;
+   */
+  roe: number;
+
+  /**
+   * @generated from field: double debt_to_equity = 14;
+   */
+  debtToEquity: number;
+
+  /**
+   * @generated from field: double price = 15;
+   */
+  price: number;
+
+  /**
+   * @generated from field: double year_high = 16;
+   */
+  yearHigh: number;
+
+  /**
+   * @generated from field: double year_low = 17;
+   */
+  yearLow: number;
+
+  /**
+   * raw XBRL overflow (keys are EDGAR tag names)
+   *
+   * @generated from field: map<string, double> extra_metrics = 18;
+   */
+  extraMetrics: { [key: string]: number };
+
+  /**
+   * @generated from field: string currency = 19;
+   */
+  currency: string;
+
+  /**
+   * "edgar" (base) or "edgar+fmp" when a ratio was FMP-enriched
+   *
+   * @generated from field: string source = 20;
+   */
+  source: string;
+
+  /**
+   * canonical names not sourceable for this period
+   *
+   * @generated from field: repeated string missing_metrics = 21;
+   */
+  missingMetrics: string[];
+};
+
+/**
+ * Describes the message xstockstrat.marketdata.v1.HistoricalFundamentalsPeriod.
+ * Use `create(HistoricalFundamentalsPeriodSchema)` to create a new message.
+ */
+export const HistoricalFundamentalsPeriodSchema: GenMessage<HistoricalFundamentalsPeriod> = /*@__PURE__*/
+  messageDesc(file_marketdata_v1_marketdata, 23);
+
+/**
+ * @generated from message xstockstrat.marketdata.v1.GetHistoricalFundamentalsRequest
+ */
+export type GetHistoricalFundamentalsRequest = Message<"xstockstrat.marketdata.v1.GetHistoricalFundamentalsRequest"> & {
+  /**
+   * @generated from field: string symbol = 1;
+   */
+  symbol: string;
+
+  /**
+   * Only periods with filed_date STRICTLY BEFORE as_of_date are returned (T+1 availability).
+   *
+   * @generated from field: google.protobuf.Timestamp as_of_date = 2;
+   */
+  asOfDate?: Timestamp | undefined;
+
+  /**
+   * filter on period_end (inclusive); unset = open
+   *
+   * @generated from field: google.protobuf.Timestamp range_start = 3;
+   */
+  rangeStart?: Timestamp | undefined;
+
+  /**
+   * filter on period_end (inclusive); unset = open
+   *
+   * @generated from field: google.protobuf.Timestamp range_end = 4;
+   */
+  rangeEnd?: Timestamp | undefined;
+
+  /**
+   * e.g. ["quarterly","annual"]; empty = both
+   *
+   * @generated from field: repeated string period_types = 5;
+   */
+  periodTypes: string[];
+};
+
+/**
+ * Describes the message xstockstrat.marketdata.v1.GetHistoricalFundamentalsRequest.
+ * Use `create(GetHistoricalFundamentalsRequestSchema)` to create a new message.
+ */
+export const GetHistoricalFundamentalsRequestSchema: GenMessage<GetHistoricalFundamentalsRequest> = /*@__PURE__*/
+  messageDesc(file_marketdata_v1_marketdata, 24);
+
+/**
+ * @generated from message xstockstrat.marketdata.v1.GetHistoricalFundamentalsResponse
+ */
+export type GetHistoricalFundamentalsResponse = Message<"xstockstrat.marketdata.v1.GetHistoricalFundamentalsResponse"> & {
+  /**
+   * @generated from field: repeated xstockstrat.marketdata.v1.HistoricalFundamentalsPeriod periods = 1;
+   */
+  periods: HistoricalFundamentalsPeriod[];
+};
+
+/**
+ * Describes the message xstockstrat.marketdata.v1.GetHistoricalFundamentalsResponse.
+ * Use `create(GetHistoricalFundamentalsResponseSchema)` to create a new message.
+ */
+export const GetHistoricalFundamentalsResponseSchema: GenMessage<GetHistoricalFundamentalsResponse> = /*@__PURE__*/
+  messageDesc(file_marketdata_v1_marketdata, 25);
+
+/**
+ * @generated from message xstockstrat.marketdata.v1.BackfillFundamentalsRequest
+ */
+export type BackfillFundamentalsRequest = Message<"xstockstrat.marketdata.v1.BackfillFundamentalsRequest"> & {
+  /**
+   * @generated from field: repeated string symbols = 1;
+   */
+  symbols: string[];
+
+  /**
+   * period_end window to backfill
+   *
+   * @generated from field: xstockstrat.common.v1.TimeRange range = 2;
+   */
+  range?: TimeRange | undefined;
+
+  /**
+   * empty = both quarterly + annual
+   *
+   * @generated from field: repeated string period_types = 3;
+   */
+  periodTypes: string[];
+
+  /**
+   * @generated from field: bool overwrite = 4;
+   */
+  overwrite: boolean;
+};
+
+/**
+ * Describes the message xstockstrat.marketdata.v1.BackfillFundamentalsRequest.
+ * Use `create(BackfillFundamentalsRequestSchema)` to create a new message.
+ */
+export const BackfillFundamentalsRequestSchema: GenMessage<BackfillFundamentalsRequest> = /*@__PURE__*/
+  messageDesc(file_marketdata_v1_marketdata, 26);
+
+/**
+ * @generated from message xstockstrat.marketdata.v1.BackfillFundamentalsResponse
+ */
+export type BackfillFundamentalsResponse = Message<"xstockstrat.marketdata.v1.BackfillFundamentalsResponse"> & {
+  /**
+   * @generated from field: int64 periods_written = 1;
+   */
+  periodsWritten: bigint;
+
+  /**
+   * @generated from field: repeated string failed_symbols = 2;
+   */
+  failedSymbols: string[];
+};
+
+/**
+ * Describes the message xstockstrat.marketdata.v1.BackfillFundamentalsResponse.
+ * Use `create(BackfillFundamentalsResponseSchema)` to create a new message.
+ */
+export const BackfillFundamentalsResponseSchema: GenMessage<BackfillFundamentalsResponse> = /*@__PURE__*/
+  messageDesc(file_marketdata_v1_marketdata, 27);
+
+/**
  * @generated from message xstockstrat.marketdata.v1.GetLatestQuotesRequest
  */
 export type GetLatestQuotesRequest = Message<"xstockstrat.marketdata.v1.GetLatestQuotesRequest"> & {
@@ -817,7 +1074,7 @@ export type GetLatestQuotesRequest = Message<"xstockstrat.marketdata.v1.GetLates
  * Use `create(GetLatestQuotesRequestSchema)` to create a new message.
  */
 export const GetLatestQuotesRequestSchema: GenMessage<GetLatestQuotesRequest> = /*@__PURE__*/
-  messageDesc(file_marketdata_v1_marketdata, 23);
+  messageDesc(file_marketdata_v1_marketdata, 28);
 
 /**
  * @generated from message xstockstrat.marketdata.v1.GetLatestQuotesResponse
@@ -834,7 +1091,7 @@ export type GetLatestQuotesResponse = Message<"xstockstrat.marketdata.v1.GetLate
  * Use `create(GetLatestQuotesResponseSchema)` to create a new message.
  */
 export const GetLatestQuotesResponseSchema: GenMessage<GetLatestQuotesResponse> = /*@__PURE__*/
-  messageDesc(file_marketdata_v1_marketdata, 24);
+  messageDesc(file_marketdata_v1_marketdata, 29);
 
 /**
  * @generated from message xstockstrat.marketdata.v1.BatchGetBarsRequest
@@ -871,7 +1128,7 @@ export type BatchGetBarsRequest = Message<"xstockstrat.marketdata.v1.BatchGetBar
  * Use `create(BatchGetBarsRequestSchema)` to create a new message.
  */
 export const BatchGetBarsRequestSchema: GenMessage<BatchGetBarsRequest> = /*@__PURE__*/
-  messageDesc(file_marketdata_v1_marketdata, 25);
+  messageDesc(file_marketdata_v1_marketdata, 30);
 
 /**
  * @generated from message xstockstrat.marketdata.v1.SymbolBars
@@ -893,7 +1150,7 @@ export type SymbolBars = Message<"xstockstrat.marketdata.v1.SymbolBars"> & {
  * Use `create(SymbolBarsSchema)` to create a new message.
  */
 export const SymbolBarsSchema: GenMessage<SymbolBars> = /*@__PURE__*/
-  messageDesc(file_marketdata_v1_marketdata, 26);
+  messageDesc(file_marketdata_v1_marketdata, 31);
 
 /**
  * @generated from message xstockstrat.marketdata.v1.BatchGetBarsResponse
@@ -910,7 +1167,7 @@ export type BatchGetBarsResponse = Message<"xstockstrat.marketdata.v1.BatchGetBa
  * Use `create(BatchGetBarsResponseSchema)` to create a new message.
  */
 export const BatchGetBarsResponseSchema: GenMessage<BatchGetBarsResponse> = /*@__PURE__*/
-  messageDesc(file_marketdata_v1_marketdata, 27);
+  messageDesc(file_marketdata_v1_marketdata, 32);
 
 /**
  * @generated from message xstockstrat.marketdata.v1.BatchGetLatestPriceRequest
@@ -927,7 +1184,7 @@ export type BatchGetLatestPriceRequest = Message<"xstockstrat.marketdata.v1.Batc
  * Use `create(BatchGetLatestPriceRequestSchema)` to create a new message.
  */
 export const BatchGetLatestPriceRequestSchema: GenMessage<BatchGetLatestPriceRequest> = /*@__PURE__*/
-  messageDesc(file_marketdata_v1_marketdata, 28);
+  messageDesc(file_marketdata_v1_marketdata, 33);
 
 /**
  * @generated from message xstockstrat.marketdata.v1.BatchGetLatestPriceResponse
@@ -944,7 +1201,7 @@ export type BatchGetLatestPriceResponse = Message<"xstockstrat.marketdata.v1.Bat
  * Use `create(BatchGetLatestPriceResponseSchema)` to create a new message.
  */
 export const BatchGetLatestPriceResponseSchema: GenMessage<BatchGetLatestPriceResponse> = /*@__PURE__*/
-  messageDesc(file_marketdata_v1_marketdata, 29);
+  messageDesc(file_marketdata_v1_marketdata, 34);
 
 /**
  * MarketDataService — sole Alpaca integration point.
@@ -1093,6 +1350,28 @@ export const MarketDataService: GenService<{
     methodKind: "unary";
     input: typeof BatchGetLatestPriceRequestSchema;
     output: typeof BatchGetLatestPriceResponseSchema;
+  },
+  /**
+   * Point-in-time historical fundamentals read (feature 198): returns only periods whose
+   * filed_date < as_of_date (T+1 availability), for look-ahead-safe backtesting.
+   *
+   * @generated from rpc xstockstrat.marketdata.v1.MarketDataService.GetHistoricalFundamentals
+   */
+  getHistoricalFundamentals: {
+    methodKind: "unary";
+    input: typeof GetHistoricalFundamentalsRequestSchema;
+    output: typeof GetHistoricalFundamentalsResponseSchema;
+  },
+  /**
+   * Worker RPC driven by ingest.TriggerBackfill(data_kind=FUNDAMENTALS) (feature 198): fetches
+   * as-reported statements from SEC EDGAR + a point-in-time price-join and persists them.
+   *
+   * @generated from rpc xstockstrat.marketdata.v1.MarketDataService.BackfillFundamentals
+   */
+  backfillFundamentals: {
+    methodKind: "unary";
+    input: typeof BackfillFundamentalsRequestSchema;
+    output: typeof BackfillFundamentalsResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_marketdata_v1_marketdata, 0);

@@ -1490,3 +1490,154 @@ func TestBatchGetLatestPrice_FallbackWhenNotMultiSymbolSource(t *testing.T) {
 		t.Errorf("GOOG: want LastPrice=175.25, got %v", googLP.LastPrice)
 	}
 }
+
+// --- feature 198: historical point-in-time fundamentals ---
+
+type fakeHistRepo struct {
+	queryRows []source.HistoricalFundamentalsPeriod
+	inserted  []source.HistoricalFundamentalsPeriod
+	closeAt   *float64
+}
+
+func (r *fakeHistRepo) InsertHistoricalFundamentals(_ context.Context, p source.HistoricalFundamentalsPeriod) error {
+	r.inserted = append(r.inserted, p)
+	return nil
+}
+
+// QueryHistoricalFundamentals returns the preset rows UNFILTERED — the service's own filterAsOf is
+// the no-look-ahead guard under test (AC-3), so the stub must not pre-filter.
+func (r *fakeHistRepo) QueryHistoricalFundamentals(_ context.Context, _ string, _, _, _ time.Time, _ []string) ([]source.HistoricalFundamentalsPeriod, error) {
+	return r.queryRows, nil
+}
+
+func (r *fakeHistRepo) CloseAt(_ context.Context, _ string, _ time.Time) (*float64, error) {
+	return r.closeAt, nil
+}
+
+type fakeHistSource struct {
+	periods []source.HistoricalFundamentalsPeriod
+	err     error
+}
+
+func (s *fakeHistSource) FetchHistorical(_ context.Context, symbol string, _, _ time.Time, _ []string) ([]source.HistoricalFundamentalsPeriod, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	out := make([]source.HistoricalFundamentalsPeriod, len(s.periods))
+	copy(out, s.periods)
+	for i := range out {
+		out[i].Symbol = symbol
+	}
+	return out, nil
+}
+
+type fakeEnricher struct{ calls int }
+
+func (e *fakeEnricher) Enrich(_ context.Context, p *source.HistoricalFundamentalsPeriod) error {
+	e.calls++
+	v := 3.5
+	p.PBRatio = &v // an FMP-only ratio EDGAR cannot supply
+	return nil
+}
+
+func hfDate(y int, m time.Month, d int) time.Time { return time.Date(y, m, d, 0, 0, 0, 0, time.UTC) }
+
+// AC-3: the as-of read hides a filing until the trading day AFTER it was filed (T+1 = filed_date < as_of).
+func TestGetHistoricalFundamentals_TPlus1_AC3(t *testing.T) {
+	filed := hfDate(2020, 1, 29)
+	row := source.HistoricalFundamentalsPeriod{
+		Symbol: "AAPL", FiscalPeriod: "Q1-2020", PeriodType: "quarterly",
+		PeriodEnd: hfDate(2019, 12, 28), FiledDate: filed, Source: "edgar",
+	}
+	svc := &MarketDataService{histRepo: &fakeHistRepo{queryRows: []source.HistoricalFundamentalsPeriod{row}}}
+
+	call := func(asOf time.Time) int {
+		resp, err := svc.GetHistoricalFundamentals(context.Background(), &marketdatav1.GetHistoricalFundamentalsRequest{
+			Symbol: "AAPL", AsOfDate: timestamppb.New(asOf),
+		})
+		if err != nil {
+			t.Fatalf("GetHistoricalFundamentals(as-of %s): %v", asOf.Format("2006-01-02"), err)
+		}
+		return len(resp.GetPeriods())
+	}
+
+	if n := call(hfDate(2020, 1, 15)); n != 0 {
+		t.Errorf("as-of 2020-01-15: got %d periods, want 0 (before filing)", n)
+	}
+	if n := call(hfDate(2020, 1, 29)); n != 0 {
+		t.Errorf("as-of 2020-01-29 (== filed_date): got %d periods, want 0 (T+1 is strict <)", n)
+	}
+	resp, err := svc.GetHistoricalFundamentals(context.Background(), &marketdatav1.GetHistoricalFundamentalsRequest{
+		Symbol: "AAPL", AsOfDate: timestamppb.New(hfDate(2020, 1, 30)),
+	})
+	if err != nil {
+		t.Fatalf("as-of 2020-01-30: %v", err)
+	}
+	if len(resp.GetPeriods()) != 1 {
+		t.Fatalf("as-of 2020-01-30: got %d periods, want 1", len(resp.GetPeriods()))
+	}
+	if got := resp.GetPeriods()[0].GetFiledDate().AsTime().Format("2006-01-02"); got != "2020-01-29" {
+		t.Errorf("returned filed_date = %s, want 2020-01-29", got)
+	}
+}
+
+// AC-5: at the FMP daily cap, ratio enrichment is skipped but the EDGAR statement row still persists
+// (source "edgar", FMP-only ratio null) — degraded, not failed.
+func TestBackfillFundamentals_CapDegrade_AC5(t *testing.T) {
+	base := source.HistoricalFundamentalsPeriod{
+		FiscalPeriod: "Q1-2020", PeriodType: "quarterly",
+		PeriodEnd: hfDate(2019, 12, 28), FiledDate: hfDate(2020, 1, 29),
+		Source: "edgar", ExtraMetrics: map[string]float64{},
+	}
+	// cap = 0 → enrichmentUnderCap() is always false (at cap from the first period).
+	atCapCfg := &fakeCfg{
+		bools: map[string]bool{
+			"marketdata.fundamentals.history.enabled":                  true,
+			"marketdata.fundamentals.history.ratio_enrichment.enabled": true,
+		},
+		ints: map[string]int64{"marketdata.fmp.daily_request_cap": 0},
+	}
+	repo := &fakeHistRepo{}
+	enr := &fakeEnricher{}
+	svc := &MarketDataService{
+		histFundamentals: &fakeHistSource{periods: []source.HistoricalFundamentalsPeriod{base}},
+		histRepo:         repo, ratioEnricher: enr, fundCfg: atCapCfg,
+	}
+	resp, err := svc.BackfillFundamentals(context.Background(), &marketdatav1.BackfillFundamentalsRequest{Symbols: []string{"AAPL"}})
+	if err != nil {
+		t.Fatalf("BackfillFundamentals: %v", err)
+	}
+	if resp.GetPeriodsWritten() != 1 {
+		t.Fatalf("periods_written = %d, want 1 (edgar row persisted despite cap)", resp.GetPeriodsWritten())
+	}
+	if enr.calls != 0 {
+		t.Errorf("enricher called %d times, want 0 (cap reached → enrichment skipped)", enr.calls)
+	}
+	if len(repo.inserted) != 1 || repo.inserted[0].Source != "edgar" {
+		t.Fatalf("inserted source = %v, want one row source=edgar", repo.inserted)
+	}
+	if repo.inserted[0].PBRatio != nil {
+		t.Errorf("pb_ratio = %v, want nil (FMP-only field, enrichment skipped)", *repo.inserted[0].PBRatio)
+	}
+
+	// Under cap → enrichment runs and tags the row edgar+fmp.
+	underCapCfg := &fakeCfg{
+		bools: atCapCfg.bools,
+		ints:  map[string]int64{"marketdata.fmp.daily_request_cap": 250},
+	}
+	repo2 := &fakeHistRepo{}
+	enr2 := &fakeEnricher{}
+	svc2 := &MarketDataService{
+		histFundamentals: &fakeHistSource{periods: []source.HistoricalFundamentalsPeriod{base}},
+		histRepo:         repo2, ratioEnricher: enr2, fundCfg: underCapCfg,
+	}
+	if _, err := svc2.BackfillFundamentals(context.Background(), &marketdatav1.BackfillFundamentalsRequest{Symbols: []string{"AAPL"}}); err != nil {
+		t.Fatalf("BackfillFundamentals (under cap): %v", err)
+	}
+	if enr2.calls != 1 {
+		t.Errorf("enricher called %d times, want 1 (under cap)", enr2.calls)
+	}
+	if len(repo2.inserted) != 1 || repo2.inserted[0].Source != "edgar+fmp" {
+		t.Errorf("inserted source = %v, want edgar+fmp", repo2.inserted)
+	}
+}

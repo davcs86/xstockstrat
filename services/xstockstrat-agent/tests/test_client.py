@@ -484,6 +484,43 @@ class TestTriggerBackfillClient:
         assert mock_stub.TriggerBackfill.call_args[0][0].fill_mode == 2
 
     @pytest.mark.asyncio
+    async def test_trigger_defaults_to_bars_data_kind(self):
+        from gen.ingest.v1 import ingest_pb2, ingest_pb2_grpc  # type: ignore
+
+        mock_stub = MagicMock()
+        mock_stub.TriggerBackfill = AsyncMock(
+            return_value=ingest_pb2.TriggerBackfillResponse(job_id="j")
+        )
+        with patch("app.client.grpc") as mock_grpc:
+            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+            with patch.object(ingest_pb2_grpc, "IngestServiceStub", return_value=mock_stub):
+                await client.trigger_backfill(symbols=["AAPL"])
+        # feature 198: default data_kind is BARS (=1); the bars path is byte-for-byte unchanged.
+        assert mock_stub.TriggerBackfill.call_args[0][0].data_kind == 1
+
+    @pytest.mark.asyncio
+    async def test_trigger_fundamentals_kind_skips_timeframe(self):
+        """feature 198: data_kind='fundamentals' sends BACKFILL_DATA_KIND_FUNDAMENTALS (=2) and no
+        timeframe (empty string + enum 0) — the 1d-only timeframe gate is bypassed."""
+        from gen.ingest.v1 import ingest_pb2, ingest_pb2_grpc  # type: ignore
+
+        mock_stub = MagicMock()
+        mock_stub.TriggerBackfill = AsyncMock(
+            return_value=ingest_pb2.TriggerBackfillResponse(job_id="j")
+        )
+        with patch("app.client.grpc") as mock_grpc:
+            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+            with patch.object(ingest_pb2_grpc, "IngestServiceStub", return_value=mock_stub):
+                # A junk timeframe would raise for bars, but is ignored for fundamentals.
+                await client.trigger_backfill(
+                    symbols=["AAPL"], timeframe="15m", data_kind="fundamentals"
+                )
+        sent = mock_stub.TriggerBackfill.call_args[0][0]
+        assert sent.data_kind == 2
+        assert sent.timeframe == ""
+        assert sent.timeframe_enum == 0
+
+    @pytest.mark.asyncio
     async def test_trigger_range_omitted_one_sided_and_both(self):
         from gen.ingest.v1 import ingest_pb2, ingest_pb2_grpc  # type: ignore
 
@@ -523,6 +560,9 @@ class TestTriggerBackfillClient:
             await client.trigger_backfill(symbols=["AAPL"], timeframe="1h")
         with pytest.raises(ValueError, match="full/gaps_only"):
             await client.trigger_backfill(symbols=["AAPL"], fill_mode="everything")
+        # feature 198: an unknown data_kind is rejected before the RPC.
+        with pytest.raises(ValueError, match="bars/fundamentals"):
+            await client.trigger_backfill(symbols=["AAPL"], data_kind="options")
         with pytest.raises(ValueError, match="start"):
             await client.trigger_backfill(
                 symbols=["AAPL"],
