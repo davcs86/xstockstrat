@@ -1527,6 +1527,26 @@ export type ListOpportunitiesRequest = Message<"xstockstrat.analysis.v1.ListOppo
      * @generated from field: double min_conviction = 2;
      */
     minConviction: number;
+    /**
+     * feature 190 — server-side filters/sort. All applied in the analysis read path.
+     *
+     * empty = all sources; matches derived _primary_source
+     *
+     * @generated from field: repeated string sources = 3;
+     */
+    sources: string[];
+    /**
+     * UNSPECIFIED(0) = any action
+     *
+     * @generated from field: xstockstrat.analysis.v1.OpportunityActionTag action_filter = 4;
+     */
+    actionFilter: OpportunityActionTag;
+    /**
+     * UNSPECIFIED(0) = legacy blended rank (not CONVICTION)
+     *
+     * @generated from field: xstockstrat.analysis.v1.OpportunitySort sort = 5;
+     */
+    sort: OpportunitySort;
 };
 /**
  * Describes the message xstockstrat.analysis.v1.ListOpportunitiesRequest.
@@ -1559,6 +1579,14 @@ export type ListOpportunitiesResponse = Message<"xstockstrat.analysis.v1.ListOpp
      * @generated from field: bool compute_failed = 4;
      */
     computeFailed: boolean;
+    /**
+     * feature 190 — the distinct derived primary sources present in the user's full valid queue
+     * (independent of the request filters), so the UI's source chips stay complete under pagination.
+     * Populated on page 0 only (the client reads page 0).
+     *
+     * @generated from field: repeated string available_sources = 5;
+     */
+    availableSources: string[];
 };
 /**
  * Describes the message xstockstrat.analysis.v1.ListOpportunitiesResponse.
@@ -2475,6 +2503,35 @@ export declare enum OpportunityActionTag {
  * Describes the enum xstockstrat.analysis.v1.OpportunityActionTag.
  */
 export declare const OpportunityActionTagSchema: GenEnum<OpportunityActionTag>;
+/**
+ * Sort order for the opportunity queue read (feature 190). Closed set → enum (C-04).
+ * UNSPECIFIED = the legacy feature-187 blended-rank default ((1-w)·conviction + w·signal_axis) —
+ * NOT an alias of CONVICTION; non-UI callers (agent list_opportunities) keep the blended order.
+ *
+ * @generated from enum xstockstrat.analysis.v1.OpportunitySort
+ */
+export declare enum OpportunitySort {
+    /**
+     * @generated from enum value: OPPORTUNITY_SORT_UNSPECIFIED = 0;
+     */
+    UNSPECIFIED = 0,
+    /**
+     * raw o.conviction ordering (the UI's explicit "Conviction")
+     *
+     * @generated from enum value: OPPORTUNITY_SORT_CONVICTION = 1;
+     */
+    CONVICTION = 1,
+    /**
+     * soonest valid_until first (NULLS last)
+     *
+     * @generated from enum value: OPPORTUNITY_SORT_EXPIRY = 2;
+     */
+    EXPIRY = 2
+}
+/**
+ * Describes the enum xstockstrat.analysis.v1.OpportunitySort.
+ */
+export declare const OpportunitySortSchema: GenEnum<OpportunitySort>;
 /**
  * Per-condition-leaf evaluation state. Closed set → enum (C-04).
  *

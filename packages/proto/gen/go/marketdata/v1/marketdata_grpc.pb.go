@@ -31,6 +31,8 @@ const (
 	MarketDataService_GetFundamentals_FullMethodName      = "/xstockstrat.marketdata.v1.MarketDataService/GetFundamentals"
 	MarketDataService_GetFundamentalsMulti_FullMethodName = "/xstockstrat.marketdata.v1.MarketDataService/GetFundamentalsMulti"
 	MarketDataService_GetLatestQuotes_FullMethodName      = "/xstockstrat.marketdata.v1.MarketDataService/GetLatestQuotes"
+	MarketDataService_BatchGetBars_FullMethodName         = "/xstockstrat.marketdata.v1.MarketDataService/BatchGetBars"
+	MarketDataService_BatchGetLatestPrice_FullMethodName  = "/xstockstrat.marketdata.v1.MarketDataService/BatchGetLatestPrice"
 )
 
 // MarketDataServiceClient is the client API for MarketDataService service.
@@ -65,6 +67,10 @@ type MarketDataServiceClient interface {
 	// Batched latest quotes — partial by design: a symbol with no quote is omitted from the
 	// response (null-not-zero), never returned as a fabricated zero-price Quote.
 	GetLatestQuotes(ctx context.Context, in *GetLatestQuotesRequest, opts ...grpc.CallOption) (*GetLatestQuotesResponse, error)
+	// Batched historical bars for multiple symbols in a single round-trip (feature 183).
+	BatchGetBars(ctx context.Context, in *BatchGetBarsRequest, opts ...grpc.CallOption) (*BatchGetBarsResponse, error)
+	// Batched latest price for multiple symbols in a single round-trip (feature 183).
+	BatchGetLatestPrice(ctx context.Context, in *BatchGetLatestPriceRequest, opts ...grpc.CallOption) (*BatchGetLatestPriceResponse, error)
 }
 
 type marketDataServiceClient struct {
@@ -213,6 +219,26 @@ func (c *marketDataServiceClient) GetLatestQuotes(ctx context.Context, in *GetLa
 	return out, nil
 }
 
+func (c *marketDataServiceClient) BatchGetBars(ctx context.Context, in *BatchGetBarsRequest, opts ...grpc.CallOption) (*BatchGetBarsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(BatchGetBarsResponse)
+	err := c.cc.Invoke(ctx, MarketDataService_BatchGetBars_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *marketDataServiceClient) BatchGetLatestPrice(ctx context.Context, in *BatchGetLatestPriceRequest, opts ...grpc.CallOption) (*BatchGetLatestPriceResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(BatchGetLatestPriceResponse)
+	err := c.cc.Invoke(ctx, MarketDataService_BatchGetLatestPrice_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // MarketDataServiceServer is the server API for MarketDataService service.
 // All implementations should embed UnimplementedMarketDataServiceServer
 // for forward compatibility.
@@ -245,6 +271,10 @@ type MarketDataServiceServer interface {
 	// Batched latest quotes — partial by design: a symbol with no quote is omitted from the
 	// response (null-not-zero), never returned as a fabricated zero-price Quote.
 	GetLatestQuotes(context.Context, *GetLatestQuotesRequest) (*GetLatestQuotesResponse, error)
+	// Batched historical bars for multiple symbols in a single round-trip (feature 183).
+	BatchGetBars(context.Context, *BatchGetBarsRequest) (*BatchGetBarsResponse, error)
+	// Batched latest price for multiple symbols in a single round-trip (feature 183).
+	BatchGetLatestPrice(context.Context, *BatchGetLatestPriceRequest) (*BatchGetLatestPriceResponse, error)
 }
 
 // UnimplementedMarketDataServiceServer should be embedded to have
@@ -289,6 +319,12 @@ func (UnimplementedMarketDataServiceServer) GetFundamentalsMulti(context.Context
 }
 func (UnimplementedMarketDataServiceServer) GetLatestQuotes(context.Context, *GetLatestQuotesRequest) (*GetLatestQuotesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetLatestQuotes not implemented")
+}
+func (UnimplementedMarketDataServiceServer) BatchGetBars(context.Context, *BatchGetBarsRequest) (*BatchGetBarsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method BatchGetBars not implemented")
+}
+func (UnimplementedMarketDataServiceServer) BatchGetLatestPrice(context.Context, *BatchGetLatestPriceRequest) (*BatchGetLatestPriceResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method BatchGetLatestPrice not implemented")
 }
 func (UnimplementedMarketDataServiceServer) testEmbeddedByValue() {}
 
@@ -512,6 +548,42 @@ func _MarketDataService_GetLatestQuotes_Handler(srv interface{}, ctx context.Con
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MarketDataService_BatchGetBars_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(BatchGetBarsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MarketDataServiceServer).BatchGetBars(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MarketDataService_BatchGetBars_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MarketDataServiceServer).BatchGetBars(ctx, req.(*BatchGetBarsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MarketDataService_BatchGetLatestPrice_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(BatchGetLatestPriceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MarketDataServiceServer).BatchGetLatestPrice(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MarketDataService_BatchGetLatestPrice_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MarketDataServiceServer).BatchGetLatestPrice(ctx, req.(*BatchGetLatestPriceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // MarketDataService_ServiceDesc is the grpc.ServiceDesc for MarketDataService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -558,6 +630,14 @@ var MarketDataService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetLatestQuotes",
 			Handler:    _MarketDataService_GetLatestQuotes_Handler,
+		},
+		{
+			MethodName: "BatchGetBars",
+			Handler:    _MarketDataService_BatchGetBars_Handler,
+		},
+		{
+			MethodName: "BatchGetLatestPrice",
+			Handler:    _MarketDataService_BatchGetLatestPrice_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

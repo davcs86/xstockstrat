@@ -8,6 +8,7 @@
 **Last Updated**: 2026-09-04
 **Committed to main**: 83743049da1ec2e2337ef49bad54c49a10721841
 **Launched date**: 2026-09-06
+**Archived**: 2026-09-09
 
 ---
 
@@ -23,6 +24,7 @@
 | 2026-09-04 | `in-progress` → `code-completed` | /sdd-execute | All 6 steps done (ingest + indicators present-aware reads, tests, docs); stacked integration PR #1 |
 
 | 2026-09-06 | `code-completed` → `launched` | CI workflow | Promoted via PR #1104; committed 83743049da1ec2e2337ef49bad54c49a10721841 |
+| 2026-09-09 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(0)/fails(0); scenarios already promoted; pruned 4 specs |
 ---
 
 ## Artifacts

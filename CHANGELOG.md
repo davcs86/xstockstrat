@@ -3,6 +3,34 @@
 All production promotions from `main-dev` to `main` are recorded here.
 Each entry corresponds to one `main-dev → main` PR merge.
 
+## 2026-09-16
+
+### Features
+- agent-postgres-mcp: Integrates the crystaldba `postgres-mcp` server into the `xstockstrat-agent` container as a co-process managed by **supervisord**, exposing its read-only database-analysis tools (EXPLAIN, health checks, index tuning, schema introspection) through the existing OAuth 2.1–protected MCP endpoint — **admin-scoped callers only**.
+- fix-trading-config-key-mismatch: The trading service never resolves live config: it subscribes only to the `trading` namespace and reads full-dotted getter strings against a snapshot keyed by the raw (namespace-relative) `key` column, so `platform.trading_state` always falls to the fail-closed `HALTED` default and every exposure-increasing order is rejected.
+- opportunities-server-side-filters: Move the Opportunities List page's four controls (min-conviction floor, source multi-select, action filter, sort) from client-side in-memory post-processing over a paginated infinite query into true server-side execution in `analysis.ListOpportunities`, and add a server-computed `available_sources` facet so the source chips stay complete and stable under pagination/filtering.
+
+### Proto Changes
+- analysis/v1/analysis.proto
+
+### Summary
+6 commits, 1 feature merges since last promotion.
+
+---
+
+## 2026-09-11
+
+### Features
+- opportunities-latency-fix: Fix the 2.9-minute ListOpportunities latency by adding batch marketdata RPCs (BatchGetBars, BatchGetLatestPrice), parallelizing sequential Phase 0 drains, aligning memo TTL with poll interval, and adding a BFF-side gRPC deadline to prevent unbounded calls that exceed the DO proxy timeout.
+
+### Proto Changes
+- marketdata/v1/marketdata.proto
+
+### Summary
+11 commits, 1 feature merges since last promotion.
+
+---
+
 ## 2026-09-09
 
 ### Features

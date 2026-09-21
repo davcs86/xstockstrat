@@ -1901,8 +1901,11 @@ func (s *TradingService) escalateSystemic(ctx context.Context, systemicCount, to
 		env = commonv1.Environment_ENVIRONMENT_PRODUCTION
 	}
 	_, err := s.configSetter.SetConfig(ctx, "trading-reconciliation-poller", &configv1.SetConfigRequest{
-		Namespace:   "platform",
-		Key:         "trading_state",
+		Namespace: "platform",
+		// Full-dotted per feature 189 (config migration 029 healed the row's key column to
+		// `platform.trading_state`); the reader GetString("platform.trading_state") and the config
+		// authz allowlist / SetConfig enum guard match this exact key.
+		Key:         "platform.trading_state",
 		Value:       &configv1.ConfigValue{Value: &configv1.ConfigValue_StringVal{StringVal: "REDUCE_ONLY"}},
 		Reason:      fmt.Sprintf("reconciliation: %d/%d accounts unreachable/unprotected this tick", systemicCount, totalAccounts),
 		Author:      "system:reconciliation-poller",

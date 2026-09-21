@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { BackfillBarsRequest, BackfillBarsResponse, Bar, DeleteBackfilledDataRequest, DeleteBackfilledDataResponse, GetBarsRequest, GetBarsResponse, GetDataCoverageRequest, GetDataCoverageResponse, GetFundamentalsMultiRequest, GetFundamentalsMultiResponse, GetFundamentalsRequest, GetFundamentalsResponse, GetLatestPriceRequest, GetLatestQuoteRequest, GetLatestQuotesRequest, GetLatestQuotesResponse, LatestPrice, ListAssetsRequest, ListAssetsResponse, Quote, StreamBarsRequest, StreamQuotesRequest } from "./marketdata_pb.js";
+import { BackfillBarsRequest, BackfillBarsResponse, Bar, BatchGetBarsRequest, BatchGetBarsResponse, BatchGetLatestPriceRequest, BatchGetLatestPriceResponse, DeleteBackfilledDataRequest, DeleteBackfilledDataResponse, GetBarsRequest, GetBarsResponse, GetDataCoverageRequest, GetDataCoverageResponse, GetFundamentalsMultiRequest, GetFundamentalsMultiResponse, GetFundamentalsRequest, GetFundamentalsResponse, GetLatestPriceRequest, GetLatestQuoteRequest, GetLatestQuotesRequest, GetLatestQuotesResponse, LatestPrice, ListAssetsRequest, ListAssetsResponse, Quote, StreamBarsRequest, StreamQuotesRequest } from "./marketdata_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -146,6 +146,28 @@ export const MarketDataService = {
       name: "GetLatestQuotes",
       I: GetLatestQuotesRequest,
       O: GetLatestQuotesResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Batched historical bars for multiple symbols in a single round-trip (feature 183).
+     *
+     * @generated from rpc xstockstrat.marketdata.v1.MarketDataService.BatchGetBars
+     */
+    batchGetBars: {
+      name: "BatchGetBars",
+      I: BatchGetBarsRequest,
+      O: BatchGetBarsResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Batched latest price for multiple symbols in a single round-trip (feature 183).
+     *
+     * @generated from rpc xstockstrat.marketdata.v1.MarketDataService.BatchGetLatestPrice
+     */
+    batchGetLatestPrice: {
+      name: "BatchGetLatestPrice",
+      I: BatchGetLatestPriceRequest,
+      O: BatchGetLatestPriceResponse,
       kind: MethodKind.Unary,
     },
   }

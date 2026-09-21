@@ -64,6 +64,12 @@ on:
         # Callers pass DEV_OTEL_EXPORTER_OTLP_HEADERS or PROD_OTEL_EXPORTER_OTLP_HEADERS from
         # GitHub Secrets. Optional — OTel auth header value, e.g. Basic <base64(instanceId:apiKey)>.
         # Stored as type: SECRET in the DO app spec; set as encrypted env var.
+      POSTGRES_MCP_AGENT_PASSWORD:
+        required: false
+        # Callers pass DEV_POSTGRES_MCP_AGENT_PASSWORD or PROD_POSTGRES_MCP_AGENT_PASSWORD from
+        # GitHub Secrets. Feature 169: password for the xstockstrat_agent Postgres role. Injected
+        # into both the agent component (so DO resolves ${POSTGRES_MCP_AGENT_PASSWORD} in the URI)
+        # and the db-migrator component (so db-migrate.sh can provision the role on PRE_DEPLOY).
 
 jobs:
   deploy:
@@ -87,6 +93,7 @@ jobs:
           VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT }}
           OTEL_EXPORTER_OTLP_ENDPOINT: ${{ secrets.OTEL_EXPORTER_OTLP_ENDPOINT }}
           OTEL_EXPORTER_OTLP_HEADERS: ${{ secrets.OTEL_EXPORTER_OTLP_HEADERS }}
+          POSTGRES_MCP_AGENT_PASSWORD: ${{ secrets.POSTGRES_MCP_AGENT_PASSWORD }}
         run: |
           sed \
             -e "s|YOUR_GITHUB_ORG|${{ github.repository_owner }}|g" \
@@ -135,6 +142,9 @@ jobs:
               otel_headers = 'Authorization=' + otel_headers
           content = content.replace('YOUR_DEV_OTEL_EXPORTER_OTLP_HEADERS', otel_headers)
           content = content.replace('YOUR_PROD_OTEL_EXPORTER_OTLP_HEADERS', otel_headers)
+          pg_mcp_password = os.environ.get('POSTGRES_MCP_AGENT_PASSWORD', '')
+          content = content.replace('YOUR_DEV_POSTGRES_MCP_AGENT_PASSWORD', pg_mcp_password)
+          content = content.replace('YOUR_PROD_POSTGRES_MCP_AGENT_PASSWORD', pg_mcp_password)
           sys.stdout.write(content)
           " > /tmp/app_spec_substituted.yaml
 

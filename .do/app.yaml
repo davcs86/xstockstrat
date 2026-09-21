@@ -300,6 +300,19 @@ services:
       - key: VAPID_PUBLIC_KEY
         scope: RUN_TIME
         value: YOUR_PROD_VAPID_PUBLIC_KEY
+      # Feature 169: postgres-mcp co-process (env vars — third-party binary reads URI at startup).
+      # POSTGRES_MCP_AGENT_PASSWORD is declared here (agent) AND in the db-migrator block so that
+      # DO App Platform resolves ${POSTGRES_MCP_AGENT_PASSWORD} within this component's scope.
+      - key: POSTGRES_MCP_AGENT_PASSWORD
+        scope: RUN_TIME
+        type: SECRET
+        value: "YOUR_PROD_POSTGRES_MCP_AGENT_PASSWORD"
+      - key: POSTGRES_MCP_DATABASE_URI
+        scope: RUN_TIME
+        value: "postgresql://xstockstrat_agent:${POSTGRES_MCP_AGENT_PASSWORD}@${xstockstrat.HOSTNAME}:25060/xstockstrat-production?sslmode=require"
+      - key: POSTGRES_MCP_PORT
+        scope: RUN_TIME
+        value: "9001"
 
   # ── Node.js services ───────────────────────────────────────────────────────
 
@@ -520,6 +533,13 @@ jobs:
       - key: SEED_USER_ID
         scope: RUN_TIME
         value: 80880990-2b79-4d85-8761-d8d9102c2efb
+      # Feature 169: password for the xstockstrat_agent Postgres role (DML-only, no DDL).
+      # db-migrate.sh provisions the role idempotently on each PRE_DEPLOY run when this is set.
+      # Substituted by deploy.yml python3 script from PROD_POSTGRES_MCP_AGENT_PASSWORD GitHub Secret.
+      - key: POSTGRES_MCP_AGENT_PASSWORD
+        scope: RUN_TIME
+        type: SECRET
+        value: "YOUR_PROD_POSTGRES_MCP_AGENT_PASSWORD"
 
 databases:
   - name: xstockstrat

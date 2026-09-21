@@ -47,7 +47,12 @@ HTTP/Connect-RPC server on `8053` (and its `/webhooks/n8n/{backfill,subscribe}` 
 
 ## Config Keys Consumed
 
-Namespace: `marketdata`
+Namespace: `marketdata`. Non-secret keys are read by their **full-dotted `marketdata.<key>` name**
+(constitution CONFIG-9) and were already stored full-dotted, so they were unaffected by the pre-189
+bug; `config` migration 029 (feature 189) left them untouched (its `NOT LIKE` guard skips already-dotted
+rows). The secret vendor-credential rows (below) stay **namespace-relative** and are resolved via the
+separate `GetSecret` RPC (`x-internal-caller: marketdata`), never `WatchConfig` — 029's `is_secret=false`
+guard leaves them bare.
 
 | Key | Type | Default | Description |
 |---|---|---|---|

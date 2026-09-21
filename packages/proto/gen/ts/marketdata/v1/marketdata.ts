@@ -269,6 +269,31 @@ export interface GetLatestQuotesResponse {
   quotes: Quote[];
 }
 
+export interface BatchGetBarsRequest {
+  symbols: string[];
+  timeframe: string;
+  start?: Date | undefined;
+  end?: Date | undefined;
+  maxBarsPerSymbol: number;
+}
+
+export interface SymbolBars {
+  symbol: string;
+  bars: Bar[];
+}
+
+export interface BatchGetBarsResponse {
+  results: SymbolBars[];
+}
+
+export interface BatchGetLatestPriceRequest {
+  symbols: string[];
+}
+
+export interface BatchGetLatestPriceResponse {
+  results: LatestPrice[];
+}
+
 function createBaseBar(): Bar {
   return {
     symbol: "",
@@ -3130,6 +3155,390 @@ export const GetLatestQuotesResponse: MessageFns<GetLatestQuotesResponse> = {
   },
 };
 
+function createBaseBatchGetBarsRequest(): BatchGetBarsRequest {
+  return { symbols: [], timeframe: "", start: undefined, end: undefined, maxBarsPerSymbol: 0 };
+}
+
+export const BatchGetBarsRequest: MessageFns<BatchGetBarsRequest> = {
+  encode(message: BatchGetBarsRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.symbols) {
+      writer.uint32(10).string(v!);
+    }
+    if (message.timeframe !== "") {
+      writer.uint32(18).string(message.timeframe);
+    }
+    if (message.start !== undefined) {
+      Timestamp.encode(toTimestamp(message.start), writer.uint32(26).fork()).join();
+    }
+    if (message.end !== undefined) {
+      Timestamp.encode(toTimestamp(message.end), writer.uint32(34).fork()).join();
+    }
+    if (message.maxBarsPerSymbol !== 0) {
+      writer.uint32(40).int32(message.maxBarsPerSymbol);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): BatchGetBarsRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseBatchGetBarsRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.symbols.push(reader.string());
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.timeframe = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.start = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.end = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 5: {
+          if (tag !== 40) {
+            break;
+          }
+
+          message.maxBarsPerSymbol = reader.int32();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): BatchGetBarsRequest {
+    return {
+      symbols: globalThis.Array.isArray(object?.symbols) ? object.symbols.map((e: any) => globalThis.String(e)) : [],
+      timeframe: isSet(object.timeframe) ? globalThis.String(object.timeframe) : "",
+      start: isSet(object.start) ? fromJsonTimestamp(object.start) : undefined,
+      end: isSet(object.end) ? fromJsonTimestamp(object.end) : undefined,
+      maxBarsPerSymbol: isSet(object.maxBarsPerSymbol)
+        ? globalThis.Number(object.maxBarsPerSymbol)
+        : isSet(object.max_bars_per_symbol)
+        ? globalThis.Number(object.max_bars_per_symbol)
+        : 0,
+    };
+  },
+
+  toJSON(message: BatchGetBarsRequest): unknown {
+    const obj: any = {};
+    if (message.symbols?.length) {
+      obj.symbols = message.symbols;
+    }
+    if (message.timeframe !== "") {
+      obj.timeframe = message.timeframe;
+    }
+    if (message.start !== undefined) {
+      obj.start = message.start.toISOString();
+    }
+    if (message.end !== undefined) {
+      obj.end = message.end.toISOString();
+    }
+    if (message.maxBarsPerSymbol !== 0) {
+      obj.maxBarsPerSymbol = Math.round(message.maxBarsPerSymbol);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<BatchGetBarsRequest>, I>>(base?: I): BatchGetBarsRequest {
+    return BatchGetBarsRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<BatchGetBarsRequest>, I>>(object: I): BatchGetBarsRequest {
+    const message = createBaseBatchGetBarsRequest();
+    message.symbols = object.symbols?.map((e) => e) || [];
+    message.timeframe = object.timeframe ?? "";
+    message.start = object.start ?? undefined;
+    message.end = object.end ?? undefined;
+    message.maxBarsPerSymbol = object.maxBarsPerSymbol ?? 0;
+    return message;
+  },
+};
+
+function createBaseSymbolBars(): SymbolBars {
+  return { symbol: "", bars: [] };
+}
+
+export const SymbolBars: MessageFns<SymbolBars> = {
+  encode(message: SymbolBars, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.symbol !== "") {
+      writer.uint32(10).string(message.symbol);
+    }
+    for (const v of message.bars) {
+      Bar.encode(v!, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SymbolBars {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSymbolBars();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.symbol = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.bars.push(Bar.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): SymbolBars {
+    return {
+      symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
+      bars: globalThis.Array.isArray(object?.bars) ? object.bars.map((e: any) => Bar.fromJSON(e)) : [],
+    };
+  },
+
+  toJSON(message: SymbolBars): unknown {
+    const obj: any = {};
+    if (message.symbol !== "") {
+      obj.symbol = message.symbol;
+    }
+    if (message.bars?.length) {
+      obj.bars = message.bars.map((e) => Bar.toJSON(e));
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<SymbolBars>, I>>(base?: I): SymbolBars {
+    return SymbolBars.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<SymbolBars>, I>>(object: I): SymbolBars {
+    const message = createBaseSymbolBars();
+    message.symbol = object.symbol ?? "";
+    message.bars = object.bars?.map((e) => Bar.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseBatchGetBarsResponse(): BatchGetBarsResponse {
+  return { results: [] };
+}
+
+export const BatchGetBarsResponse: MessageFns<BatchGetBarsResponse> = {
+  encode(message: BatchGetBarsResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.results) {
+      SymbolBars.encode(v!, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): BatchGetBarsResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseBatchGetBarsResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.results.push(SymbolBars.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): BatchGetBarsResponse {
+    return {
+      results: globalThis.Array.isArray(object?.results) ? object.results.map((e: any) => SymbolBars.fromJSON(e)) : [],
+    };
+  },
+
+  toJSON(message: BatchGetBarsResponse): unknown {
+    const obj: any = {};
+    if (message.results?.length) {
+      obj.results = message.results.map((e) => SymbolBars.toJSON(e));
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<BatchGetBarsResponse>, I>>(base?: I): BatchGetBarsResponse {
+    return BatchGetBarsResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<BatchGetBarsResponse>, I>>(object: I): BatchGetBarsResponse {
+    const message = createBaseBatchGetBarsResponse();
+    message.results = object.results?.map((e) => SymbolBars.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseBatchGetLatestPriceRequest(): BatchGetLatestPriceRequest {
+  return { symbols: [] };
+}
+
+export const BatchGetLatestPriceRequest: MessageFns<BatchGetLatestPriceRequest> = {
+  encode(message: BatchGetLatestPriceRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.symbols) {
+      writer.uint32(10).string(v!);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): BatchGetLatestPriceRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseBatchGetLatestPriceRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.symbols.push(reader.string());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): BatchGetLatestPriceRequest {
+    return {
+      symbols: globalThis.Array.isArray(object?.symbols) ? object.symbols.map((e: any) => globalThis.String(e)) : [],
+    };
+  },
+
+  toJSON(message: BatchGetLatestPriceRequest): unknown {
+    const obj: any = {};
+    if (message.symbols?.length) {
+      obj.symbols = message.symbols;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<BatchGetLatestPriceRequest>, I>>(base?: I): BatchGetLatestPriceRequest {
+    return BatchGetLatestPriceRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<BatchGetLatestPriceRequest>, I>>(object: I): BatchGetLatestPriceRequest {
+    const message = createBaseBatchGetLatestPriceRequest();
+    message.symbols = object.symbols?.map((e) => e) || [];
+    return message;
+  },
+};
+
+function createBaseBatchGetLatestPriceResponse(): BatchGetLatestPriceResponse {
+  return { results: [] };
+}
+
+export const BatchGetLatestPriceResponse: MessageFns<BatchGetLatestPriceResponse> = {
+  encode(message: BatchGetLatestPriceResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.results) {
+      LatestPrice.encode(v!, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): BatchGetLatestPriceResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseBatchGetLatestPriceResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.results.push(LatestPrice.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): BatchGetLatestPriceResponse {
+    return {
+      results: globalThis.Array.isArray(object?.results) ? object.results.map((e: any) => LatestPrice.fromJSON(e)) : [],
+    };
+  },
+
+  toJSON(message: BatchGetLatestPriceResponse): unknown {
+    const obj: any = {};
+    if (message.results?.length) {
+      obj.results = message.results.map((e) => LatestPrice.toJSON(e));
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<BatchGetLatestPriceResponse>, I>>(base?: I): BatchGetLatestPriceResponse {
+    return BatchGetLatestPriceResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<BatchGetLatestPriceResponse>, I>>(object: I): BatchGetLatestPriceResponse {
+    const message = createBaseBatchGetLatestPriceResponse();
+    message.results = object.results?.map((e) => LatestPrice.fromPartial(e)) || [];
+    return message;
+  },
+};
+
 /**
  * MarketDataService — sole Alpaca integration point.
  * Stores OHLCV and quote data in TimescaleDB hypertables.
@@ -3272,6 +3681,29 @@ export const MarketDataServiceService = {
       Buffer.from(GetLatestQuotesResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): GetLatestQuotesResponse => GetLatestQuotesResponse.decode(value),
   },
+  /** Batched historical bars for multiple symbols in a single round-trip (feature 183). */
+  batchGetBars: {
+    path: "/xstockstrat.marketdata.v1.MarketDataService/BatchGetBars" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: BatchGetBarsRequest): Buffer => Buffer.from(BatchGetBarsRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): BatchGetBarsRequest => BatchGetBarsRequest.decode(value),
+    responseSerialize: (value: BatchGetBarsResponse): Buffer =>
+      Buffer.from(BatchGetBarsResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): BatchGetBarsResponse => BatchGetBarsResponse.decode(value),
+  },
+  /** Batched latest price for multiple symbols in a single round-trip (feature 183). */
+  batchGetLatestPrice: {
+    path: "/xstockstrat.marketdata.v1.MarketDataService/BatchGetLatestPrice" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: BatchGetLatestPriceRequest): Buffer =>
+      Buffer.from(BatchGetLatestPriceRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): BatchGetLatestPriceRequest => BatchGetLatestPriceRequest.decode(value),
+    responseSerialize: (value: BatchGetLatestPriceResponse): Buffer =>
+      Buffer.from(BatchGetLatestPriceResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): BatchGetLatestPriceResponse => BatchGetLatestPriceResponse.decode(value),
+  },
 } as const;
 
 export interface MarketDataServiceServer extends UntypedServiceImplementation {
@@ -3302,6 +3734,10 @@ export interface MarketDataServiceServer extends UntypedServiceImplementation {
    * response (null-not-zero), never returned as a fabricated zero-price Quote.
    */
   getLatestQuotes: handleUnaryCall<GetLatestQuotesRequest, GetLatestQuotesResponse>;
+  /** Batched historical bars for multiple symbols in a single round-trip (feature 183). */
+  batchGetBars: handleUnaryCall<BatchGetBarsRequest, BatchGetBarsResponse>;
+  /** Batched latest price for multiple symbols in a single round-trip (feature 183). */
+  batchGetLatestPrice: handleUnaryCall<BatchGetLatestPriceRequest, BatchGetLatestPriceResponse>;
 }
 
 export interface MarketDataServiceClient extends Client {
@@ -3481,6 +3917,38 @@ export interface MarketDataServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: GetLatestQuotesResponse) => void,
+  ): ClientUnaryCall;
+  /** Batched historical bars for multiple symbols in a single round-trip (feature 183). */
+  batchGetBars(
+    request: BatchGetBarsRequest,
+    callback: (error: ServiceError | null, response: BatchGetBarsResponse) => void,
+  ): ClientUnaryCall;
+  batchGetBars(
+    request: BatchGetBarsRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: BatchGetBarsResponse) => void,
+  ): ClientUnaryCall;
+  batchGetBars(
+    request: BatchGetBarsRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: BatchGetBarsResponse) => void,
+  ): ClientUnaryCall;
+  /** Batched latest price for multiple symbols in a single round-trip (feature 183). */
+  batchGetLatestPrice(
+    request: BatchGetLatestPriceRequest,
+    callback: (error: ServiceError | null, response: BatchGetLatestPriceResponse) => void,
+  ): ClientUnaryCall;
+  batchGetLatestPrice(
+    request: BatchGetLatestPriceRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: BatchGetLatestPriceResponse) => void,
+  ): ClientUnaryCall;
+  batchGetLatestPrice(
+    request: BatchGetLatestPriceRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: BatchGetLatestPriceResponse) => void,
   ): ClientUnaryCall;
 }
 

@@ -799,17 +799,28 @@ def _opportunity_to_dict(o, analysis_pb2) -> dict[str, Any]:
     return d
 
 
-async def list_opportunities(user_id: str, min_conviction: float = 0.0) -> dict[str, Any]:
+async def list_opportunities(
+    user_id: str,
+    min_conviction: float = 0.0,
+    page_size: int = 50,
+    page_token: str = "",
+) -> dict[str, Any]:
     """List the caller's ranked Decide-queue opportunities with live-market enrichment (feature 095,
     read-only). Caller-scoped via ``x-user-id`` (no admin ``x-access-scope``) — analysis resolves
     the owner from the header, never a request body id. See ``_opportunity_to_dict`` for the
-    projection's omit-not-fabricate contract."""
+    projection's omit-not-fabricate contract.
+
+    Feature 187: ``page_size`` / ``page_token`` pass-through for manual MCP caller pagination."""
     from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc  # noqa: PLC0415
+    from gen.common.v1 import common_pb2  # noqa: PLC0415
 
     async with grpc.aio.insecure_channel(ANALYSIS_ENDPOINT) as channel:
         stub = analysis_pb2_grpc.AnalysisServiceStub(channel)
         resp = await stub.ListOpportunities(
-            analysis_pb2.ListOpportunitiesRequest(min_conviction=min_conviction),
+            analysis_pb2.ListOpportunitiesRequest(
+                min_conviction=min_conviction,
+                page=common_pb2.PageRequest(page_size=page_size, page_token=page_token),
+            ),
             metadata=_metadata(("x-user-id", user_id)),
         )
     # feature 185 (FR-4/FR-6) — carry the response-level pending signals so a cold or persistently
@@ -818,6 +829,7 @@ async def list_opportunities(user_id: str, min_conviction: float = 0.0) -> dict[
         "opportunities": [_opportunity_to_dict(o, analysis_pb2) for o in resp.opportunities],
         "computing": resp.computing,
         "compute_failed": resp.compute_failed,
+        "next_page_token": resp.page.next_page_token,
     }
 
 

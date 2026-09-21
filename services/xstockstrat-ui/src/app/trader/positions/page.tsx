@@ -117,8 +117,10 @@ export default function PositionsPage() {
     queryKey: ['platform-trading-state'],
     queryFn: async () => {
       const resp = await traderConfigClient.getConfig({ namespace: 'platform' });
-      return resp.values['trading_state']?.value.case === 'stringVal'
-        ? resp.values['trading_state'].value.value
+      // Full-dotted key per feature 189 (config migration 029 healed the stored key column); the
+      // server returns GetConfig(namespace:'platform') keyed by the stored `key` = platform.trading_state.
+      return resp.values['platform.trading_state']?.value.case === 'stringVal'
+        ? resp.values['platform.trading_state'].value.value
         : null;
     },
     refetchInterval: 30_000,

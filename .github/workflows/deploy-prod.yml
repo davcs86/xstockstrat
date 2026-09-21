@@ -56,6 +56,7 @@ jobs:
       VAPID_SUBJECT: ${{ secrets.PROD_VAPID_SUBJECT }}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${{ secrets.PROD_OTEL_EXPORTER_OTLP_ENDPOINT }}
       OTEL_EXPORTER_OTLP_HEADERS: ${{ secrets.PROD_OTEL_EXPORTER_OTLP_HEADERS }}
+      POSTGRES_MCP_AGENT_PASSWORD: ${{ secrets.PROD_POSTGRES_MCP_AGENT_PASSWORD }}
     with:
       app_spec: .do/app.yaml
       image_tag: ${{ needs.prepare.outputs.short_sha }}

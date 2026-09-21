@@ -28,7 +28,7 @@ export function SignalReadiness({
   const { data: opps } = useOpportunities();
   const isHeld = useMemo(
     () =>
-      (opps?.opportunities ?? []).some(
+      (opps?.pages.flatMap((p) => p.opportunities) ?? []).some(
         (o) =>
           o.symbol === symbol && o.strategyId === strategyId && o.provenance.includes('position'),
       ),

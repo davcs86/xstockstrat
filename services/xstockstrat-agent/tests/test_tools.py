@@ -1930,5 +1930,18 @@ async def test_list_opportunities_caller_scoped_returns_projection():
         server = _make_server()
         result = await _tool_fn(server, "list_opportunities")(_ctx(ADMIN), min_conviction=0.3)
     assert result == projected
-    # Forwarded the caller's own user id (ADMIN claims → "u-1") + the min_conviction floor.
-    assert m.call_args.args == ("u-1", 0.3)
+    # Forwarded caller's user id (ADMIN → "u-1") + min_conviction + default pagination.
+    assert m.call_args.args == ("u-1", 0.3, 50, "")
+
+
+@pytest.mark.asyncio
+async def test_list_opportunities_pagination_params():
+    """feature 187 AC-4: page_size/page_token forwarded through the tool layer."""
+    projected = {"opportunities": [], "next_page_token": "100"}
+    with patch.object(client, "list_opportunities", AsyncMock(return_value=projected)) as m:
+        server = _make_server()
+        result = await _tool_fn(server, "list_opportunities")(
+            _ctx(ADMIN), min_conviction=0.0, page_size=25, page_token="50"
+        )
+    assert result == projected
+    assert m.call_args.args == ("u-1", 0.0, 25, "50")

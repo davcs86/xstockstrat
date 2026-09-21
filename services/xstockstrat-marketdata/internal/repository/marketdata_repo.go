@@ -350,6 +350,82 @@ func (r *MarketDataRepo) GetLatestQuotesBatch(ctx context.Context, symbols []str
 	return out, nil
 }
 
+// QueryBarsBatch returns bars for multiple symbols in a single LATERAL JOIN query (feature 183).
+// Results are grouped by symbol; a symbol with no stored bars is absent from the map.
+// maxBarsPerSymbol is clamped to [1, 5000] server-side (consistent with QueryBars cap).
+func (r *MarketDataRepo) QueryBarsBatch(ctx context.Context, symbols []string, tf string, start, end time.Time, maxBarsPerSymbol int32) (map[string][]*marketdatav1.Bar, error) {
+	out := make(map[string][]*marketdatav1.Bar, len(symbols))
+	if len(symbols) == 0 {
+		return out, nil
+	}
+	if maxBarsPerSymbol <= 0 {
+		maxBarsPerSymbol = 500
+	}
+	if maxBarsPerSymbol > 5000 {
+		maxBarsPerSymbol = 5000
+	}
+	// LATERAL pushes the per-symbol LIMIT into the index scan, avoiding full materialization.
+	const q = `
+		SELECT b.time, b.symbol, b.timeframe, b.open, b.high, b.low, b.close,
+		       b.volume, b.vwap, b.trade_count, b.source
+		FROM unnest($1::text[]) AS s(sym)
+		CROSS JOIN LATERAL (
+		  SELECT time, symbol, timeframe, open, high, low, close, volume, vwap, trade_count, source
+		  FROM marketdata.ohlcv
+		  WHERE symbol = s.sym AND timeframe = $2 AND time >= $3 AND time < $4
+		  ORDER BY time ASC
+		  LIMIT $5
+		) b`
+	rows, err := r.pool.Query(ctx, q, symbols, tf, start, end, maxBarsPerSymbol)
+	if err != nil {
+		return nil, fmt.Errorf("query bars batch: %w", err)
+	}
+	defer rows.Close()
+	bars, err := scanBars(rows)
+	if err != nil {
+		return nil, err
+	}
+	for _, b := range bars {
+		out[b.Symbol] = append(out[b.Symbol], b)
+	}
+	return out, nil
+}
+
+// GetPreviousDailyCloseBatch returns the prior-session daily close for multiple symbols in one
+// query (feature 183). Uses ROW_NUMBER to pick the second-newest 1d bar per symbol. A symbol
+// with fewer than two daily bars is absent from the map (null-not-zero, AC-11).
+func (r *MarketDataRepo) GetPreviousDailyCloseBatch(ctx context.Context, symbols []string) (map[string]float64, error) {
+	out := make(map[string]float64, len(symbols))
+	if len(symbols) == 0 {
+		return out, nil
+	}
+	const q = `
+		WITH ranked AS (
+			SELECT symbol, close,
+				ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY time DESC) AS rn
+			FROM marketdata.ohlcv
+			WHERE symbol = ANY($1) AND timeframe = '1d'
+		)
+		SELECT symbol, close FROM ranked WHERE rn = 2`
+	rows, err := r.pool.Query(ctx, q, symbols)
+	if err != nil {
+		return nil, fmt.Errorf("prev daily close batch: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var sym string
+		var cl float64
+		if err := rows.Scan(&sym, &cl); err != nil {
+			return nil, fmt.Errorf("scan prev daily close batch: %w", err)
+		}
+		out[sym] = cl
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate prev daily close batch: %w", err)
+	}
+	return out, nil
+}
+
 // ── Fundamentals cache (feature 059) ─────────────────────────────────────────
 // Reuses the existing pgxpool — no second pool (DB budget stays 2).
 

@@ -61,6 +61,15 @@ def test_list_tools_returns_all_registered_tools():
         "get_user",
         "admin_get_user_metadata",
         "admin_set_user_metadata",
+        "db_list_schemas",
+        "db_list_objects",
+        "db_get_object_details",
+        "db_execute_sql",
+        "db_explain_query",
+        "db_get_top_queries",
+        "db_analyze_workload_indexes",
+        "db_analyze_query_indexes",
+        "db_analyze_db_health",
     }
 
 

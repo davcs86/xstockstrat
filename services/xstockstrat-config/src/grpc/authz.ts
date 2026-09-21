@@ -67,7 +67,10 @@ const INTERNAL_CALLER_ALLOWLIST: ReadonlyArray<InternalCallerGrant> = [
   {
     callerID: 'trading-reconciliation-poller',
     namespace: 'platform',
-    key: 'trading_state',
+    // Full-dotted per feature 189 (migration 029 healed the row's key column); must match the
+    // trading writer's SetConfig Key and the SetConfig enum guard below, or the internal-caller
+    // escalation write is denied and the kill-switch auto-escalation silently stops.
+    key: 'platform.trading_state',
     allowedTargetValues: ['REDUCE_ONLY', 'HALTED'], // never 'ACTIVE' — escalation only
   },
 ];

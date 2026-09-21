@@ -1,0 +1,19 @@
+-- Migration: 029_heal_config_keys_full_dotted.down.sql
+-- Service: xstockstrat-config
+-- Feature 189 (fix-trading-config-key-mismatch) — FORWARD-ONLY: no destructive data-level rollback.
+--
+-- A symmetric prefix-strip (SET key = substring(key from char_length(namespace)+2)) CANNOT
+-- distinguish the rows 029 healed (bare -> dotted) from rows that were ALREADY stored full-dotted
+-- before 029 (portfolio.watchlist.max_per_user @AC-13/feature-184, analysis.engine.*,
+-- marketdata.finnhub.*/fmp.*). Stripping the latter would re-introduce the CONFIG-9 key mismatch for
+-- them — re-darkening the kill switch and re-breaking those consumers. The per-row DB audit needed to
+-- author an exact enumerated inverse was unavailable at authoring time (postgres-mcp co-process down),
+-- so no key list is invented here (SDD P-03 / C-01 — never guess).
+--
+-- Rollback procedure: REDEPLOY THE PRIOR SERVICE IMAGE. The old binaries read the pre-029 bare keys
+-- from their own code and fail closed to the HALTED default (the safe direction — no unsafe order is
+-- ever permitted); the healed config data is left in place and is re-consumed correctly once the new
+-- image is redeployed. See feature 189 design.md § Open Risks.
+--
+-- Harmless no-op so `migrate down` succeeds against a non-empty file.
+SELECT 1;

@@ -62,7 +62,10 @@ async def serve():
 
     servicer = AnalysisServicer(
         config_watcher=cfg_watcher,
-        marketdata_channel=grpc.aio.insecure_channel(MARKETDATA_ENDPOINT),
+        marketdata_channel=grpc.aio.insecure_channel(
+            MARKETDATA_ENDPOINT,
+            options=[("grpc.max_receive_message_length", 8 * 1024 * 1024)],
+        ),
         indicators_channel=grpc.aio.insecure_channel(INDICATORS_ENDPOINT),
         ingest_channel=grpc.aio.insecure_channel(INGEST_ENDPOINT),
         ledger_channel=grpc.aio.insecure_channel(LEDGER_ENDPOINT),

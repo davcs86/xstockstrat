@@ -53,6 +53,24 @@ test.describe('config-ui Users section (feature 043)', () => {
     await expect(page.getByText('root@example.com')).toBeVisible();
   });
 
+  test('self-demotion guard: Admin checkbox is disabled when editing own roles', async ({ page }) => {
+    await addAdminCookie(page);
+    await page.goto(USERS_PAGE);
+    // test@example.com is the logged-in user (TEST_USER_ID) — fixture has Admin + Trader.
+    await expect(page.getByText('test@example.com')).toBeVisible({ timeout: 30000 });
+    await page.getByRole('button', { name: 'Actions for test@example.com' }).click();
+    await page.getByRole('menuitem', { name: 'Edit roles' }).click();
+    // The self-demotion notice should be visible.
+    await expect(page.getByText('You cannot remove your own admin role')).toBeVisible();
+    // The Admin checkbox should be checked and disabled.
+    const adminCheckbox = page.getByRole('checkbox', { name: /Admin.*locked/i });
+    await expect(adminCheckbox).toBeChecked();
+    await expect(adminCheckbox).toBeDisabled();
+    // Other role checkboxes remain interactive.
+    const traderCheckbox = page.getByRole('checkbox', { name: 'Trader' });
+    await expect(traderCheckbox).toBeEnabled();
+  });
+
   test('AC-8 (surface): creating a user round-trips through the BFF without error', async ({
     page,
   }) => {

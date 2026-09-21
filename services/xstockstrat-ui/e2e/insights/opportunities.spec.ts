@@ -24,18 +24,58 @@ const toJson = (o: (typeof OPPORTUNITIES)[number]) => ({
   validUntil: new Date(Number(o.validUntil.seconds) * 1000).toISOString(),
 });
 
-/** Per-page stateful mock of ListOpportunities + SetOpportunityAction (isolated, survives reload). */
+// feature 190 — Connect-JSON encodes an enum as its NAME string (or omits the 0 default); normalize.
+const MARKERS = ['watchlist', 'position', 'denied'];
+const ACTION_NAME_TO_NUM: Record<string, number> = {
+  OPPORTUNITY_ACTION_TAG_ENTER: 1,
+  OPPORTUNITY_ACTION_TAG_ADD: 2,
+  OPPORTUNITY_ACTION_TAG_REDUCE: 3,
+};
+const actionNum = (v: unknown): number =>
+  typeof v === 'number' ? v : (ACTION_NAME_TO_NUM[String(v)] ?? 0);
+const isExpirySort = (v: unknown): boolean => v === 2 || v === 'OPPORTUNITY_SORT_EXPIRY';
+const expirySec = (o: (typeof OPPORTUNITIES)[number]): number =>
+  o.validUntil?.seconds ? Number(o.validUntil.seconds) : Infinity;
+
+/** Per-page stateful mock of ListOpportunities + SetOpportunityAction (isolated, survives reload).
+ * feature 190 — applies the server-side filters/sort + emits the facet (the client no longer filters). */
 async function mockOpportunities(page: Page): Promise<void> {
   const hidden = new Set<string>();
-  await page.route('**/xstockstrat.analysis.v1.AnalysisService/ListOpportunities', (route) =>
-    route.fulfill({
+  await page.route('**/xstockstrat.analysis.v1.AnalysisService/ListOpportunities', (route) => {
+    const req = JSON.parse(route.request().postData() ?? '{}');
+    const min = Number(req.minConviction ?? 0);
+    const reqSources: string[] = req.sources ?? [];
+    const action = actionNum(req.actionFilter);
+    const expiry = isExpirySort(req.sort);
+    const visible = OPPORTUNITIES.filter((o) => !hidden.has(o.opportunityKey));
+    const rows = visible.filter(
+      (o) =>
+        // muted/unavailable exempt from the CONVICTION floor only; source/action apply to all.
+        (o.muted || o.dataUnavailable || o.conviction >= min) &&
+        (reqSources.length === 0 || reqSources.includes(o.source)) &&
+        (action === 0 || o.action === action),
+    );
+    // symbol-grouped sort mirroring the server ORDER BY (group by best member; rows contiguous).
+    const key = (sym: string) =>
+      expiry
+        ? Math.min(...rows.filter((o) => o.symbol === sym).map(expirySec))
+        : -Math.max(...rows.filter((o) => o.symbol === sym).map((o) => o.conviction));
+    const sorted = [...rows].sort(
+      (a, b) =>
+        key(a.symbol) - key(b.symbol) ||
+        a.symbol.localeCompare(b.symbol) ||
+        (expiry ? expirySec(a) - expirySec(b) : b.conviction - a.conviction),
+    );
+    // facet — distinct real sources over the non-hidden queue, marker/empty excluded, filter-independent.
+    const availableSources = [
+      ...new Set(visible.map((o) => o.source).filter((s) => s && !MARKERS.includes(s))),
+    ].sort();
+    return route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({
-        opportunities: OPPORTUNITIES.filter((o) => !hidden.has(o.opportunityKey)).map(toJson),
-      }),
-    }),
-  );
+      body: JSON.stringify({ opportunities: sorted.map(toJson), availableSources }),
+    });
+  });
   await page.route('**/xstockstrat.analysis.v1.AnalysisService/SetOpportunityAction', (route) => {
     const req = JSON.parse(route.request().postData() ?? '{}');
     // Connect-JSON encodes an enum field as its NAME string (not the number), so accept both
@@ -46,6 +86,17 @@ async function mockOpportunities(page: Page): Promise<void> {
     if (hides) hidden.add(req.opportunityKey);
     return route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
   });
+}
+
+// feature 190 — the source filter is a multi-select dropdown (was a ToggleGroup pill row).
+async function selectSource(page: Page, name: string): Promise<void> {
+  await page.getByRole('button', { name: 'source filter' }).click();
+  await page.getByRole('menuitemcheckbox', { name, exact: true }).click();
+  await page.keyboard.press('Escape'); // checkbox items keep the menu open (multi-select)
+}
+async function clearSources(page: Page): Promise<void> {
+  await page.getByRole('button', { name: 'source filter' }).click();
+  await page.getByRole('menuitem', { name: 'All sources' }).click(); // resets, closes the menu
 }
 
 test.describe('Opportunities queue', () => {
@@ -80,8 +131,8 @@ test.describe('Opportunities queue', () => {
     await expect(card(page, 'TSLA')).toBeHidden(); // 0.60 filtered
   });
 
-  test('source chip narrows the queue to one source', async ({ page }) => {
-    await page.getByRole('button', { name: 'marketwatch' }).click();
+  test('source dropdown narrows the queue to one source', async ({ page }) => {
+    await selectSource(page, 'marketwatch');
     await expect(card(page, 'MSFT')).toBeVisible();
     await expect(card(page, 'AAPL')).toBeHidden();
   });
@@ -131,15 +182,13 @@ test.describe('Opportunities queue', () => {
     await expect(card(page, 'MSFT').getByText('marketwatch')).toBeVisible();
   });
 
-  test('"All sources" exposes aria-pressed and folds into the ToggleGroup styling (FR-8)', async ({
-    page,
-  }) => {
-    const allSources = page.getByRole('button', { name: 'All sources' });
-    await expect(allSources).toHaveAttribute('aria-pressed', 'true');
-    await page.getByRole('button', { name: 'marketwatch' }).click();
-    await expect(allSources).toHaveAttribute('aria-pressed', 'false');
-    await allSources.click();
-    await expect(allSources).toHaveAttribute('aria-pressed', 'true');
+  test('the source dropdown trigger reflects the selection count (FR-8)', async ({ page }) => {
+    const trigger = page.getByRole('button', { name: 'source filter' });
+    await expect(trigger).toHaveText(/All sources/);
+    await selectSource(page, 'marketwatch');
+    await expect(trigger).toHaveText(/1 source/);
+    await clearSources(page);
+    await expect(trigger).toHaveText(/All sources/);
   });
 
   // feature 155 (FR-1, AC-3) — every listed opportunity is in the ranked queue, so its card carries
@@ -152,10 +201,11 @@ test.describe('Opportunities queue', () => {
     await expect(badge.getByRole('img', { name: 'in queue' })).toBeVisible();
   });
 
-  // feature 155 (FR-5) — the source filter reflects and applies the current selection.
-  test('selecting a source pill narrows the queue immediately (AC-11)', async ({ page }) => {
-    await page.getByRole('button', { name: 'watchlist' }).click();
-    await expect(card(page, 'CAPR')).toBeVisible(); // CAPR is the watchlist-sourced symbol
+  // feature 155/190 (FR-5) — the source filter reflects and applies the current selection.
+  // Re-pointed off 'watchlist' (a structural marker excluded from the server facet) to a real source.
+  test('selecting a source narrows the queue immediately (AC-11)', async ({ page }) => {
+    await selectSource(page, 'dividendology');
+    await expect(card(page, 'TSLA')).toBeVisible(); // TSLA is the dividendology-sourced symbol
     await expect(card(page, 'AAPL')).toBeHidden(); // unusual_whales — filtered out
   });
 
@@ -166,37 +216,76 @@ test.describe('Opportunities queue', () => {
     page,
   }) => {
     // marketwatch has exactly one row (MSFT). Select it → only MSFT remains.
-    await page.getByRole('button', { name: 'marketwatch' }).click();
+    await selectSource(page, 'marketwatch');
     await expect(card(page, 'MSFT')).toBeVisible();
     await expect(card(page, 'AAPL')).toBeHidden();
-    // Snooze MSFT → the mutation invalidates ['opportunities'] and refetches in place; MSFT is now
-    // hidden, so 'marketwatch' vanishes from the queue's sources while activeSources still holds it.
+    // Snooze MSFT → the mutation invalidates ['opportunities'] and refetches IN PLACE (no reload);
+    // MSFT is now hidden, so 'marketwatch' vanishes from the server facet while activeSources holds it.
     await page.getByTestId('snooze-MSFT').click();
-    // Without the fix this strands the queue (every remaining row is filtered by the now-orphaned
-    // 'marketwatch' selection, and no marketwatch pill renders to clear it). With the effective-source
-    // intersection the stale source is dropped and the available rows show again.
+    // The effectiveSources = activeSources ∩ availableSources intersection drops the orphaned source
+    // → the request sends [] → the server returns the remaining rows (no strand, feature 190 @AC-12).
     await expect(card(page, 'AAPL')).toBeVisible({ timeout: 8000 });
-    await expect(page.getByRole('button', { name: 'marketwatch' })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'All sources' })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
+    await expect(page.getByRole('button', { name: 'source filter' })).toHaveText(/All sources/);
+    // 'marketwatch' is no longer offered in the dropdown (dropped from the server facet).
+    await page.getByRole('button', { name: 'source filter' }).click();
+    await expect(
+      page.getByRole('menuitemcheckbox', { name: 'marketwatch', exact: true }),
+    ).toHaveCount(0);
   });
 
-  // feature 095 — live-market enrichment on the queue card.
-  test('the CAPR card shows live price, change%, a 20-point sparkline, and a condition chip', async ({
+  // feature 190 (@AC-6/@AC-7) — the action filter is applied server-side.
+  test('the action filter narrows to a single action (AC-6/AC-7)', async ({ page }) => {
+    await expect(card(page, 'AAPL')).toBeVisible(); // ENTER
+    await expect(card(page, 'TSLA')).toBeVisible(); // REDUCE
+    await page.getByLabel('action filter').click();
+    await page.getByRole('option', { name: 'Reduce' }).click();
+    await expect(card(page, 'TSLA')).toBeVisible();
+    await expect(card(page, 'AAPL')).toBeHidden(); // ENTER filtered out server-side
+  });
+
+  // feature 190 (@AC-11) — the source facet is independent of the active filters, so the chip menu
+  // stays complete even when a floor + source selection reduce the queue to nothing.
+  test('the source facet stays complete under an active floor + source filter (AC-11)', async ({
+    page,
+  }) => {
+    await page.getByLabel('Minimum conviction').fill('80');
+    await selectSource(page, 'marketwatch'); // MSFT (0.75) is below the floor → empty result
+    await page.getByRole('button', { name: 'source filter' }).click();
+    // The facet lists every real source in the queue regardless of the active floor/source filter.
+    for (const s of ['dividendology', 'marketwatch', 'unusual_whales']) {
+      await expect(page.getByRole('menuitemcheckbox', { name: s, exact: true })).toBeVisible();
+    }
+  });
+
+  // feature 190 (@AC-10) — conviction sort (the default) orders symbol groups by best conviction;
+  // the client renders the server order directly (no client re-sort, @AC-15).
+  test('conviction sort orders symbol groups by best conviction (AC-10/AC-15)', async ({
+    page,
+  }) => {
+    const texts = await page.getByTestId('opportunity-card').allInnerTexts();
+    const idx = (sym: string) => texts.findIndex((t) => t.includes(sym));
+    expect(idx('AAPL')).toBeGreaterThanOrEqual(0); // 0.90
+    expect(idx('AAPL')).toBeLessThan(idx('TSLA')); // 0.90 group precedes the 0.60 group
+  });
+
+  // feature 095/188 — live-market enrichment on the queue card.
+  test('the CAPR card shows live price, change%, previous day OHLC, and a condition chip', async ({
     page,
   }) => {
     const capr = card(page, 'CAPR');
-    // AC-1 — live price from the enriched Opportunity (both CAPR strategy rows carry it → first()).
+    // AC-1 (f095) — live price from the enriched Opportunity.
     await expect(capr.getByTestId('opp-live-price-CAPR').first()).toHaveText('$12.34');
     await expect(capr.getByTestId('opp-change-CAPR').first()).toContainText('%');
-    // AC-3 — a 20-point sparkline (one point is a gap, rendered as a muted bar, not dropped).
-    const spark = capr.getByTestId('opp-sparkline-CAPR').first();
-    await expect(spark).toBeVisible();
-    await expect(spark.locator('> span')).toHaveCount(20);
-    await expect(spark.locator('> span[data-gap]')).toHaveCount(1); // AC-4 the one warm-up gap
-    // AC-5 — the blocking-condition chip reuses an emitted ConditionEval leaf (no client recompute).
+    // AC-1 (f188) — OHLC text block with date and four price labels.
+    const ohlc = capr.getByTestId('opp-ohlc-CAPR').first();
+    await expect(ohlc).toBeVisible();
+    await expect(ohlc).toContainText('O $');
+    await expect(ohlc).toContainText('H $');
+    await expect(ohlc).toContainText('L $');
+    await expect(ohlc).toContainText('C $');
+    // No sparkline bar chart (feature 188 — replaced by OHLC text).
+    await expect(capr.locator('[aria-hidden] > span')).toHaveCount(0);
+    // AC-5 (f095) — the blocking-condition chip.
     await expect(capr.getByTestId('opp-condition-CAPR')).toBeVisible();
   });
 
@@ -296,6 +385,16 @@ test.describe('Opportunities mobile parity (feature 155)', () => {
     await expect(group.getByText('quality-dip-buy', { exact: true })).toBeVisible(); // strategy id tag
     await expect(group.getByText('watchlist', { exact: true }).first()).toBeVisible(); // source chip
     await expect(group.getByText(`exp ${expiry}`).first()).toBeVisible(); // expiry tag
+  });
+
+  // feature 188 — previous-day OHLC visible in mobile card header, underneath the symbol name.
+  test('feature 188: mobile card shows previous-day OHLC block', async ({ page }) => {
+    const ohlc = page.getByTestId('mobile-ohlc-CAPR');
+    await expect(ohlc).toBeVisible();
+    await expect(ohlc).toContainText('O $');
+    await expect(ohlc).toContainText('H $');
+    await expect(ohlc).toContainText('L $');
+    await expect(ohlc).toContainText('C $');
   });
 
   // feature 185 FR-2 — the mobile companion row also renders the explicit unavailable cue (not 0/0).

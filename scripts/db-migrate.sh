@@ -166,6 +166,44 @@ echo ""
 echo "==> All migrations complete (command: $COMMAND)."
 echo ""
 
+# ── xstockstrat_agent role provisioning (feature 169) ─────────────────────────
+# Runs on every deploy (idempotent). Gated on POSTGRES_MCP_AGENT_PASSWORD so that
+# local developer environments that have not set up the postgres-mcp co-process can
+# still run db-migrate without error. In production/staging the secret is injected
+# by DO App Platform before the PRE_DEPLOY job starts.
+#
+# Password is safely embedded by doubling every single-quote before interpolation
+# (the standard PostgreSQL string-literal escape — same as format('%L', ...)).
+# DO NOT switch to a quoted heredoc (<<'SQL') — that disables safe_pw expansion.
+if [ "${COMMAND}" = "up" ] && [ -n "${POSTGRES_MCP_AGENT_PASSWORD:-}" ]; then
+  echo "==> Provisioning xstockstrat_agent role (feature 169)..."
+  # Escape single-quotes: double each occurrence (PostgreSQL literal escaping).
+  safe_pw="${POSTGRES_MCP_AGENT_PASSWORD//\'/\'\'}"
+  psql "$DB_URL" -v ON_ERROR_STOP=1 <<SQL
+DO \$\$
+BEGIN
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'xstockstrat_agent') THEN
+    CREATE ROLE xstockstrat_agent WITH LOGIN PASSWORD '${safe_pw}';
+  ELSE
+    ALTER ROLE xstockstrat_agent WITH LOGIN PASSWORD '${safe_pw}';
+  END IF;
+END \$\$;
+GRANT CONNECT ON DATABASE xstockstrat TO xstockstrat_agent;
+GRANT USAGE ON SCHEMA public TO xstockstrat_agent;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO xstockstrat_agent;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO xstockstrat_agent;
+GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO xstockstrat_agent;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT SELECT ON SEQUENCES TO xstockstrat_agent;
+GRANT pg_read_all_stats TO xstockstrat_agent;
+SQL
+  echo "  xstockstrat_agent role provisioned."
+else
+  echo "  [skip] xstockstrat_agent role provisioning: POSTGRES_MCP_AGENT_PASSWORD not set"
+fi
+echo ""
+
 if [ "$COMMAND" = "up" ]; then
   echo "==> Verifying TimescaleDB hypertables..."
   psql "$DB_URL" -v ON_ERROR_STOP=1 -t -c "

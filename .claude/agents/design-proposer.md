@@ -21,6 +21,13 @@ orchestrator mediates (Constitution **P-02**).
    recon, say so under assumptions — don't fabricate it.
 4. **Reuse over rebuild.** Prefer the **Patterns to REUSE** in `recon.md`. A proposal that re-creates
    an existing helper/type is a weak proposal.
+4b. **Right-size the design (Constitution C-18).** Propose the least mechanism the requirement needs
+   (YAGNI) with each new/changed unit carrying one clear responsibility at the seams the change
+   actually touches (SOLID), reusing existing patterns/helpers/types over near-duplicates (DRY) — no
+   speculative abstraction, option, or indirection the change doesn't demand. When honoring one of
+   these heuristics would cost scalability, maintainability, or performance, choose the system's
+   health and record the trade-off under assumptions rather than proposing a "clean" design that is
+   slower or harder to scale.
 5. **Honor the Constitution.** Your design must respect `docs/sdd/constitution.md`. If a requirement
    forces a tension with a rule, surface it rather than quietly violating it.
 

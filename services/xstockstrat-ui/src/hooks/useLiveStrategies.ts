@@ -33,20 +33,37 @@ export function useStrategyAlerts(strategyId: string) {
   });
 }
 
+interface MeResponse {
+  userId?: string;
+  isAdmin?: boolean;
+}
+
+const ME_QUERY_KEY = ['auth-me'];
+
+function useMeQuery() {
+  return useQuery({
+    queryKey: ME_QUERY_KEY,
+    queryFn: async (): Promise<MeResponse> => {
+      const res = await fetch('/api/auth/me', { credentials: 'include' });
+      if (!res.ok) return {};
+      return (await res.json()) as MeResponse;
+    },
+    staleTime: 5 * 60_000,
+  });
+}
+
 /**
  * Client-readable admin signal. The JWT is httpOnly, so the page can't read roles directly; this
  * calls /api/auth/me, which derives `isAdmin` server-side from the session cookie. The toggle is
  * also gated server-side in the BFF (defense-in-depth).
  */
 export function useIsAdmin() {
-  return useQuery({
-    queryKey: ['auth-is-admin'],
-    queryFn: async (): Promise<boolean> => {
-      const res = await fetch('/api/auth/me', { credentials: 'include' });
-      if (!res.ok) return false;
-      const data = (await res.json()) as { isAdmin?: boolean };
-      return data.isAdmin ?? false;
-    },
-    staleTime: 5 * 60_000,
-  });
+  const { data, ...rest } = useMeQuery();
+  return { data: data?.isAdmin ?? false, ...rest };
+}
+
+/** Current session's user ID, derived server-side from the httpOnly JWT cookie. */
+export function useCurrentUserId() {
+  const { data, ...rest } = useMeQuery();
+  return { data: data?.userId ?? null, ...rest };
 }

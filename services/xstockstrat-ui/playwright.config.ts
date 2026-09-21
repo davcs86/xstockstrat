@@ -1,6 +1,8 @@
 import { defineConfig, devices } from '@playwright/test';
-import { existsSync, readdirSync, statSync } from 'node:fs';
-import path from 'node:path';
+import {
+  preinstalledBrowser,
+  resolveChromiumExecutable,
+} from './e2e/helpers/browser-resolution';
 
 const isCI = !!process.env.CI;
 
@@ -26,37 +28,12 @@ const isCI = !!process.env.CI;
  *
  * IMPORTANT: the override must be set under `use.launchOptions.executablePath`. A top-level
  * `use.executablePath` is NOT a recognized option and is silently ignored.
+ *
+ * Resolution logic (shared with global-setup.ts via e2e/helpers/browser-resolution.ts):
+ *   PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH → preinstalledBrowser('chromium') → undefined.
  */
 const browsersPath = process.env.PLAYWRIGHT_BROWSERS_PATH;
-
-// Per-browser relative path from a `<name>-<rev>` install dir to its launch binary.
-const BROWSER_BINARY: Record<'chromium' | 'firefox', string> = {
-  chromium: path.join('chrome-linux', 'chrome'),
-  firefox: path.join('firefox', 'firefox'),
-};
-
-/** Resolve a pre-installed browser binary under PLAYWRIGHT_BROWSERS_PATH, or undefined. */
-function preinstalledBrowser(name: 'chromium' | 'firefox'): string | undefined {
-  if (!browsersPath || !existsSync(browsersPath)) return undefined;
-  // Stable unversioned symlink some sandboxes expose (e.g. `<path>/chromium` → …/chrome).
-  const stable = path.join(browsersPath, name);
-  if (existsSync(stable) && !statSync(stable).isDirectory()) return stable;
-  // Otherwise pick the highest `<name>-<rev>` build that has its launch binary.
-  const revs = readdirSync(browsersPath)
-    .filter((d) => new RegExp(`^${name}-\\d+$`).test(d))
-    .sort((a, b) => Number(b.split('-')[1]) - Number(a.split('-')[1]));
-  for (const dir of revs) {
-    const bin = path.join(browsersPath, dir, BROWSER_BINARY[name]);
-    if (existsSync(bin)) return bin;
-  }
-  return undefined;
-}
-
-const overridePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
-// Explicit override always wins; otherwise auto-detect a pre-installed Chromium.
-const chromiumExecutable =
-  (overridePath && existsSync(overridePath) ? overridePath : undefined) ??
-  preinstalledBrowser('chromium');
+const chromiumExecutable = resolveChromiumExecutable();
 
 if (browsersPath && !chromiumExecutable) {
   console.warn(

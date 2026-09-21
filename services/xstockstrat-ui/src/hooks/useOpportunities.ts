@@ -1,22 +1,47 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useInfiniteQuery } from '@tanstack/react-query';
 import { analysisClient } from '@/lib/browserClients/analysisClient';
 import { useInvalidatingMutation } from '@/hooks/useInvalidatingMutation';
 import { isNotFoundError } from '@/lib/scoreDisplay';
+import { OpportunityActionTag, OpportunitySort } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import type { OpportunityAction, ReadinessRule } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 
 /**
  * Decide-surface read-only hooks (insights BFF). ListOpportunities takes the user from the
- * x-user-id header, so the request carries only the min-conviction filter.
+ * x-user-id header; feature 190 threads the min-conviction floor, source multi-select, action
+ * filter, and sort into the request so all filtering/sorting is server-side.
  */
 
-type ListOpportunitiesResult = Awaited<ReturnType<typeof analysisClient.listOpportunities>>;
 type EvaluateReadinessResult = Awaited<ReturnType<typeof analysisClient.evaluateReadiness>>;
 
-/** Ranked opportunity queue, polled every 15s. */
-export function useOpportunities(minConviction = 0) {
-  return useQuery<ListOpportunitiesResult, Error>({
-    queryKey: ['opportunities', minConviction],
-    queryFn: () => analysisClient.listOpportunities({ minConviction }),
+/**
+ * Ranked opportunity queue with infinite pagination, polled every 15s (feature 187).
+ * Returns `useInfiniteQuery` — consumers flatten via `data?.pages.flatMap(p => p.opportunities)`.
+ * Response-level signals (`computing`, `computeFailed`) and the `availableSources` facet ride on
+ * page 0 (feature 190). All four controls are folded into the query key so an in-place
+ * `refetchInterval` refetch AND a filter change both re-fetch (fails.md:1648).
+ */
+export function useOpportunities(
+  minConviction = 0,
+  sources: string[] = [],
+  actionFilter: OpportunityActionTag = OpportunityActionTag.UNSPECIFIED,
+  sort: OpportunitySort = OpportunitySort.UNSPECIFIED,
+) {
+  return useInfiniteQuery({
+    queryKey: ['opportunities', minConviction, [...sources].sort(), actionFilter, sort],
+    queryFn: ({ pageParam }) =>
+      analysisClient.listOpportunities({
+        minConviction,
+        sources,
+        actionFilter,
+        sort,
+        page: { pageSize: 50, pageToken: pageParam ?? '' },
+      }),
+    initialPageParam: '',
+    getNextPageParam: (lastPage) => {
+      // Stop paging when the queue is still computing or has failed (feature 185 AC-6/AC-7).
+      if (lastPage.computing || lastPage.computeFailed) return undefined;
+      return lastPage.page?.nextPageToken || undefined;
+    },
     refetchInterval: 15_000,
   });
 }

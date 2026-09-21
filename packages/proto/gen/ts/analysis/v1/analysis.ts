@@ -765,6 +765,66 @@ export function opportunityActionTagToNumber(object: OpportunityActionTag): numb
   }
 }
 
+/**
+ * Sort order for the opportunity queue read (feature 190). Closed set → enum (C-04).
+ * UNSPECIFIED = the legacy feature-187 blended-rank default ((1-w)·conviction + w·signal_axis) —
+ * NOT an alias of CONVICTION; non-UI callers (agent list_opportunities) keep the blended order.
+ */
+export enum OpportunitySort {
+  OPPORTUNITY_SORT_UNSPECIFIED = "OPPORTUNITY_SORT_UNSPECIFIED",
+  /** OPPORTUNITY_SORT_CONVICTION - raw o.conviction ordering (the UI's explicit "Conviction") */
+  OPPORTUNITY_SORT_CONVICTION = "OPPORTUNITY_SORT_CONVICTION",
+  /** OPPORTUNITY_SORT_EXPIRY - soonest valid_until first (NULLS last) */
+  OPPORTUNITY_SORT_EXPIRY = "OPPORTUNITY_SORT_EXPIRY",
+  UNRECOGNIZED = "UNRECOGNIZED",
+}
+
+export function opportunitySortFromJSON(object: any): OpportunitySort {
+  switch (object) {
+    case 0:
+    case "OPPORTUNITY_SORT_UNSPECIFIED":
+      return OpportunitySort.OPPORTUNITY_SORT_UNSPECIFIED;
+    case 1:
+    case "OPPORTUNITY_SORT_CONVICTION":
+      return OpportunitySort.OPPORTUNITY_SORT_CONVICTION;
+    case 2:
+    case "OPPORTUNITY_SORT_EXPIRY":
+      return OpportunitySort.OPPORTUNITY_SORT_EXPIRY;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return OpportunitySort.UNRECOGNIZED;
+  }
+}
+
+export function opportunitySortToJSON(object: OpportunitySort): string {
+  switch (object) {
+    case OpportunitySort.OPPORTUNITY_SORT_UNSPECIFIED:
+      return "OPPORTUNITY_SORT_UNSPECIFIED";
+    case OpportunitySort.OPPORTUNITY_SORT_CONVICTION:
+      return "OPPORTUNITY_SORT_CONVICTION";
+    case OpportunitySort.OPPORTUNITY_SORT_EXPIRY:
+      return "OPPORTUNITY_SORT_EXPIRY";
+    case OpportunitySort.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
+export function opportunitySortToNumber(object: OpportunitySort): number {
+  switch (object) {
+    case OpportunitySort.OPPORTUNITY_SORT_UNSPECIFIED:
+      return 0;
+    case OpportunitySort.OPPORTUNITY_SORT_CONVICTION:
+      return 1;
+    case OpportunitySort.OPPORTUNITY_SORT_EXPIRY:
+      return 2;
+    case OpportunitySort.UNRECOGNIZED:
+    default:
+      return -1;
+  }
+}
+
 /** Per-condition-leaf evaluation state. Closed set → enum (C-04). */
 export enum ConditionState {
   CONDITION_STATE_UNSPECIFIED = "CONDITION_STATE_UNSPECIFIED",
@@ -1742,6 +1802,12 @@ export interface StrategyAnalytics {
 export interface ListOpportunitiesRequest {
   page?: PageRequest | undefined;
   minConviction: number;
+  /** feature 190 — server-side filters/sort. All applied in the analysis read path. */
+  sources: string[];
+  /** UNSPECIFIED(0) = any action */
+  actionFilter: OpportunityActionTag;
+  /** UNSPECIFIED(0) = legacy blended rank (not CONVICTION) */
+  sort: OpportunitySort;
 }
 
 export interface ListOpportunitiesResponse {
@@ -1759,6 +1825,12 @@ export interface ListOpportunitiesResponse {
    * renders a terminal error instead of an infinite "computing" spinner.
    */
   computeFailed: boolean;
+  /**
+   * feature 190 — the distinct derived primary sources present in the user's full valid queue
+   * (independent of the request filters), so the UI's source chips stay complete under pagination.
+   * Populated on page 0 only (the client reads page 0).
+   */
+  availableSources: string[];
 }
 
 export interface EvaluateReadinessRequest {
@@ -8568,7 +8640,13 @@ export const StrategyAnalytics: MessageFns<StrategyAnalytics> = {
 };
 
 function createBaseListOpportunitiesRequest(): ListOpportunitiesRequest {
-  return { page: undefined, minConviction: 0 };
+  return {
+    page: undefined,
+    minConviction: 0,
+    sources: [],
+    actionFilter: OpportunityActionTag.OPPORTUNITY_ACTION_TAG_UNSPECIFIED,
+    sort: OpportunitySort.OPPORTUNITY_SORT_UNSPECIFIED,
+  };
 }
 
 export const ListOpportunitiesRequest: MessageFns<ListOpportunitiesRequest> = {
@@ -8578,6 +8656,15 @@ export const ListOpportunitiesRequest: MessageFns<ListOpportunitiesRequest> = {
     }
     if (message.minConviction !== 0) {
       writer.uint32(17).double(message.minConviction);
+    }
+    for (const v of message.sources) {
+      writer.uint32(26).string(v!);
+    }
+    if (message.actionFilter !== OpportunityActionTag.OPPORTUNITY_ACTION_TAG_UNSPECIFIED) {
+      writer.uint32(32).int32(opportunityActionTagToNumber(message.actionFilter));
+    }
+    if (message.sort !== OpportunitySort.OPPORTUNITY_SORT_UNSPECIFIED) {
+      writer.uint32(40).int32(opportunitySortToNumber(message.sort));
     }
     return writer;
   },
@@ -8605,6 +8692,30 @@ export const ListOpportunitiesRequest: MessageFns<ListOpportunitiesRequest> = {
           message.minConviction = reader.double();
           continue;
         }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.sources.push(reader.string());
+          continue;
+        }
+        case 4: {
+          if (tag !== 32) {
+            break;
+          }
+
+          message.actionFilter = opportunityActionTagFromJSON(reader.int32());
+          continue;
+        }
+        case 5: {
+          if (tag !== 40) {
+            break;
+          }
+
+          message.sort = opportunitySortFromJSON(reader.int32());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -8622,6 +8733,13 @@ export const ListOpportunitiesRequest: MessageFns<ListOpportunitiesRequest> = {
         : isSet(object.min_conviction)
         ? globalThis.Number(object.min_conviction)
         : 0,
+      sources: globalThis.Array.isArray(object?.sources) ? object.sources.map((e: any) => globalThis.String(e)) : [],
+      actionFilter: isSet(object.actionFilter)
+        ? opportunityActionTagFromJSON(object.actionFilter)
+        : isSet(object.action_filter)
+        ? opportunityActionTagFromJSON(object.action_filter)
+        : OpportunityActionTag.OPPORTUNITY_ACTION_TAG_UNSPECIFIED,
+      sort: isSet(object.sort) ? opportunitySortFromJSON(object.sort) : OpportunitySort.OPPORTUNITY_SORT_UNSPECIFIED,
     };
   },
 
@@ -8632,6 +8750,15 @@ export const ListOpportunitiesRequest: MessageFns<ListOpportunitiesRequest> = {
     }
     if (message.minConviction !== 0) {
       obj.minConviction = message.minConviction;
+    }
+    if (message.sources?.length) {
+      obj.sources = message.sources;
+    }
+    if (message.actionFilter !== OpportunityActionTag.OPPORTUNITY_ACTION_TAG_UNSPECIFIED) {
+      obj.actionFilter = opportunityActionTagToJSON(message.actionFilter);
+    }
+    if (message.sort !== OpportunitySort.OPPORTUNITY_SORT_UNSPECIFIED) {
+      obj.sort = opportunitySortToJSON(message.sort);
     }
     return obj;
   },
@@ -8645,12 +8772,15 @@ export const ListOpportunitiesRequest: MessageFns<ListOpportunitiesRequest> = {
       ? PageRequest.fromPartial(object.page)
       : undefined;
     message.minConviction = object.minConviction ?? 0;
+    message.sources = object.sources?.map((e) => e) || [];
+    message.actionFilter = object.actionFilter ?? OpportunityActionTag.OPPORTUNITY_ACTION_TAG_UNSPECIFIED;
+    message.sort = object.sort ?? OpportunitySort.OPPORTUNITY_SORT_UNSPECIFIED;
     return message;
   },
 };
 
 function createBaseListOpportunitiesResponse(): ListOpportunitiesResponse {
-  return { opportunities: [], page: undefined, computing: false, computeFailed: false };
+  return { opportunities: [], page: undefined, computing: false, computeFailed: false, availableSources: [] };
 }
 
 export const ListOpportunitiesResponse: MessageFns<ListOpportunitiesResponse> = {
@@ -8666,6 +8796,9 @@ export const ListOpportunitiesResponse: MessageFns<ListOpportunitiesResponse> = 
     }
     if (message.computeFailed !== false) {
       writer.uint32(32).bool(message.computeFailed);
+    }
+    for (const v of message.availableSources) {
+      writer.uint32(42).string(v!);
     }
     return writer;
   },
@@ -8709,6 +8842,14 @@ export const ListOpportunitiesResponse: MessageFns<ListOpportunitiesResponse> = 
           message.computeFailed = reader.bool();
           continue;
         }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.availableSources.push(reader.string());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -8730,6 +8871,11 @@ export const ListOpportunitiesResponse: MessageFns<ListOpportunitiesResponse> = 
         : isSet(object.compute_failed)
         ? globalThis.Boolean(object.compute_failed)
         : false,
+      availableSources: globalThis.Array.isArray(object?.availableSources)
+        ? object.availableSources.map((e: any) => globalThis.String(e))
+        : globalThis.Array.isArray(object?.available_sources)
+        ? object.available_sources.map((e: any) => globalThis.String(e))
+        : [],
     };
   },
 
@@ -8747,6 +8893,9 @@ export const ListOpportunitiesResponse: MessageFns<ListOpportunitiesResponse> = 
     if (message.computeFailed !== false) {
       obj.computeFailed = message.computeFailed;
     }
+    if (message.availableSources?.length) {
+      obj.availableSources = message.availableSources;
+    }
     return obj;
   },
 
@@ -8761,6 +8910,7 @@ export const ListOpportunitiesResponse: MessageFns<ListOpportunitiesResponse> = 
       : undefined;
     message.computing = object.computing ?? false;
     message.computeFailed = object.computeFailed ?? false;
+    message.availableSources = object.availableSources?.map((e) => e) || [];
     return message;
   },
 };

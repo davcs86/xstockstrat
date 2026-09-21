@@ -2224,3 +2224,53 @@ ambiguity is logged here).
 - **Mistake**: The `xstockstrat-identity` node:test suite (`src/__tests__/*.test.ts`) is run by `pnpm test`/`test:coverage` via `node --experimental-strip-types`, and each test file guards its target import in a `before()` `try/catch` that silently skips every test if the import throws. On **Node 22** (the repo `.nvmrc`) strip-only mode both rejects TypeScript **parameter properties** (`constructor(private readonly pool: Pool …)`) and does not resolve the tests' `../grpc/*.js` specifiers to `.ts` — so the whole suite reports "N pass, 0 fail" while executing **zero assertions**. CI only escapes this because it pins Node **24** (`.github/workflows/ci.yml` setup-node), where strip-types handles both. A local `pnpm test` on the pinned `.nvmrc` Node 22 is therefore a vacuous green.
 - **Evidence**: `services/xstockstrat-identity/package.json` (`test`/`test:coverage` use `--experimental-strip-types`), `.nvmrc` (`22`) vs `.github/workflows/ci.yml` (`node-version: "24"`); the `before()` skip-guard + top-of-file comment in `services/xstockstrat-identity/src/__tests__/identityServiceImpl.test.ts`. Same "green suite, zero assertions" family as 2026-07-29/074.
 - **Rule it implies**: to actually execute a Node service's node:test suite off Node 24 (e.g. a Node-22 sandbox), compile first (`tsc -p` incl. tests) and run `node --test dist/**` + `c8` — do not trust a strip-types "N pass" without confirming the target import loaded (`typeof Impl === 'function'`). A red-before-green capture that shows the *same* pass count with and without the implementation is the tell that the suite is skipping.
+
+### 2026-09-09 — 169-mcp-get-positions-tools — assumption
+- **Mistake**: Product spec AC-4 specified `PERMISSION_DENIED` for unauthorized position access, but the backend silently returns an empty list via `WHERE user_id=$1` filter — no error is raised. The AC was corrected pre-execution.
+- **Evidence**: feature 169 product-spec.md AC-4; `services/xstockstrat-portfolio/internal/repository/portfolio_repo.go` (WHERE user_id=$1).
+- **Rule it implies**: verify the backend's actual error behavior before specifying auth-failure error codes in acceptance criteria — a `WHERE user_id=$1` filter returns empty, not PERMISSION_DENIED.
+
+### 2026-09-09 — 170-watchlist-bulk-default-strategy — assumption
+- **Mistake**: Playwright `waitForRequest` regex assumed slash-delimited Connect-RPC routes (`/ServiceName/Method`) but the actual paths use dot-delimited fully-qualified names (`.xstockstrat.portfolio.v1.PortfolioService/Method`), causing the intercept to silently never match.
+- **Evidence**: feature 170 e2e tests; `services/xstockstrat-ui/e2e/` Playwright test fixtures.
+- **Rule it implies**: never assume slash-delimited service paths in Connect-RPC; match on the dot-delimited FQN or use `endsWith('/MethodName')`. Same family as fails.md:2187-2192 (feature 167).
+
+### 2026-09-09 — 171-fix-agent-trading-mode-otel-attr — assumption
+- **Mistake**: Node telemetry `buildResource` was designed with deferred `require()` inside the function body, but ledger/identity run their tests via `node --experimental-strip-types` (ESM mode) where `require` is undefined. The design did not account for the two different Node test runners (strip-types ESM vs tsc-first CJS) across the four leaf services. The `.ts` import extension required by ESM then broke the `tsc` production build (`TS5097`), caught only by feature 175's stacked build gate.
+- **Evidence**: feature 171 context.md:165 (Step 5 deviation), context.md:191-192 (tsconfig fix follow-up), Deviation Log:401-427.
+- **Rule it implies**: when writing cross-service code that touches Node services with different test runners (strip-types ESM vs tsc-first CJS), verify both the test run AND the production `tsc` build in each service — a test-only import style can break the build if `tsconfig.json` compiles test sources.
+
+### 2026-09-09 — 174-fix-config-watcher-client-id — scope-creep
+- **Mistake**: A findings entry bundled two distinct defect classes (identity copy-paste + dead `sandbox_*` helpers) in one row. When a fix addressed only one, the teardown risked wholesale-resolving the row and silently dropping the unfixed defect. Required explicit NARROW discipline: strike only the resolved clause, retain the live clause with corrected line numbers.
+- **Evidence**: feature 174 design.md:63-68; implementation-spec.md:315-322; context.md 2026-09-04 sdd-design R2.
+- **Rule it implies**: when a findings row bundles multiple defect classes and a fix resolves only a subset, NARROW (strike the resolved clause, retain the rest) — never wholesale-resolve.
+
+### 2026-09-09 — 175-fix-dead-code-cleanup-batch — assumption
+- **Mistake**: A stale context-constitution-findings entry from feature 043 incorrectly stated identity's `propagation.ts` was "live via ledgerAudit," nearly scoping the deletion to 3 services instead of all 4. Disproved: `ledgerAudit.ts` uses its own inline `PROPAGATED_HEADERS` const over gRPC Metadata, never imports the HTTP-edge module.
+- **Evidence**: feature 175 context.md; `services/xstockstrat-identity/src/grpc/ledgerAudit.ts`.
+- **Rule it implies**: treat a findings entry's "already investigated" tag as a claim to re-verify, not a fact — a stale finding can propagate a false "already addressed" signal.
+
+### 2026-09-15 — 190-opportunities-server-side-filters — assumption
+- **Mistake (caught in design, not shipped)**: pushing user-facing FILTERING (source/action) plus a derived-`_primary_source` SQL predicate into `analysis.ListOpportunities` while the ENTIRE `xstockstrat-analysis` repo SQL surface is fake/mock-verified — `tests/conftest.py` is proto-path-only, there is no testcontainers/live-PG fixture, `scripts/integration-test.sh` is dead and CI-wired to nothing, and `_FakeOppRepo` (`tests/test_analysis_servicer.py:4030`) re-implements the SQL semantics in Python. So no test executes the real `read()`/`available_sources` SQL against Postgres: a subtly-wrong `LATERAL ... WITH ORDINALITY`, `ORDER BY`, or `= ANY($sources)` guard can ship GREEN. SQL-text/bind assertions (`tests/test_opportunities_repo.py`) prove the query string was built, never that Postgres evaluates it as intended.
+- **Evidence**: feature 190 design.md § Verification strategy + Open Risk O10; `services/xstockstrat-analysis/tests/conftest.py`, `tests/test_opportunities_repo.py:19-34`, `tests/test_analysis_servicer.py:4030-4091`; `scripts/integration-test.sh:4-11`.
+- **Rule it implies**: (1) kill *marker-set drift* by construction — hoist a shared skip-list/enum to one constant and BIND it (`= ANY($n::text[])`), never re-type the literal in both SQL and Python, so the two cannot diverge by edit. (2) SQL-text assertions + a fake that mirrors intended semantics are a vacuous-green cousin of fails.md:577 for *runtime* semantics — pin the pure logic as a unit test, spy on the repo boundary for consumption (don't teach the fake the new logic), and record the residual runtime-`LATERAL`/`ORDER BY` gap explicitly. (3) The durable fix is a **shared analysis conftest real-DB fixture** benefiting every repo query — a platform follow-up, not a per-feature one-off harness (C-18: don't half-build a rotting testcontainers rig inside one feature branch). Any analysis feature that moves *filtering* (not just ranking) server-side should weigh seeding that fixture.
+### 2026-09-15 — fix-trading-config-key-mismatch (189) — design trap
+- **Mistake (caught in design R3, not shipped):** a data migration that heals a config `key` column from
+  namespace-relative to full-dotted fixes every reader keyed on the NEW (full-dotted) form but silently
+  breaks every reader still keyed on the OLD (bare) form — and those readers are not only the service that
+  owns the namespace. Feature 189's first "atomic edit set" listed the three backend writers
+  (`escalateSystemic`, config `authz.ts` allowlist, `SetConfig` enum guard) but omitted a live **frontend**
+  reader: `services/xstockstrat-ui/.../trader/positions/page.tsx:120-121` reads bare
+  `getConfig(...).values['trading_state']`, which the rename turns to `undefined` → the platform-wide
+  restriction banner goes dark. Same class as the config bare-vs-full `namespace.key` seam in
+  `fails.md:2005-2016`.
+- **Rule it implies:** when a change alters the KEY (or shape) a config value is served under, grep EVERY
+  consumer across all languages/services (Go getters, Node/TS `values['<key>']`, Python, e2e fixtures/mocks)
+  for both the old and new key string before calling the edit set "atomic" — a key-format migration is a
+  cross-service consumer-surface change (C-10/C-14), not a single-service data fix. Its tests' fixtures must
+  use the post-migration (server-shaped) key form or they pass vacuously (fails.md:1650/2005).
+- **Also (reusable pattern):** a Go WatchConfig consumer that must read keys from a namespace other than its
+  own subscribes to MULTIPLE namespaces via one `watchLoop` goroutine per namespace merged under one mutex,
+  with a per-namespace SNAPSHOT-scoped replace (delete-by-`ns.`-prefix + insert in one lock) and a
+  per-namespace readiness latch — never a single wholesale `w.snapshot = snap.Values` (a second stream would
+  clobber the first). Config supports only one namespace per `WatchConfig` request.

@@ -25,6 +25,7 @@ import { QueryStateMessages } from '@/components/shared/QueryStateMessages';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { configUiIdentityClient } from '@/lib/browserClients/configUiIdentityClient';
 import { ROLE_LABELS, ASSIGNABLE_ROLES, rolesLabel } from '@/lib/roleLabels';
+import { useCurrentUserId } from '@/hooks/useLiveStrategies';
 import { Role } from '@xstockstrat/proto/identity/v1/identity_pb';
 import type { User } from '@xstockstrat/proto/identity/v1/identity_pb';
 
@@ -33,20 +34,26 @@ const USERS_KEY = ['config-ui-users'];
 function RoleCheckboxes({
   selected,
   onToggle,
+  lockedRoles = [],
 }: {
   selected: Role[];
   onToggle: (role: Role, checked: boolean) => void;
+  /** Roles that are checked and cannot be unchecked (e.g. self-admin demotion guard). */
+  lockedRoles?: Role[];
 }) {
   return (
     <div className="flex flex-wrap gap-3">
       {ASSIGNABLE_ROLES.map((r) => {
         const id = `role-${r}`;
+        const locked = lockedRoles.includes(r);
         return (
           <label key={r} htmlFor={id} className="flex items-center gap-2 text-sm">
             <Checkbox
               id={id}
               checked={selected.includes(r)}
+              disabled={locked}
               onCheckedChange={(c) => onToggle(r, c === true)}
+              aria-label={locked ? `${ROLE_LABELS[r]} (locked)` : ROLE_LABELS[r]}
             />
             {ROLE_LABELS[r]}
           </label>
@@ -58,6 +65,7 @@ function RoleCheckboxes({
 
 export default function UsersPage() {
   const queryClient = useQueryClient();
+  const { data: currentUserId } = useCurrentUserId();
   const [actionError, setActionError] = useState<string | null>(null);
 
   const { data, isLoading, error } = useQuery({
@@ -314,10 +322,21 @@ export default function UsersPage() {
         title={rolesUser ? `Edit roles — ${rolesUser.email}` : 'Edit roles'}
       >
         <div className="space-y-4">
+          {/* Prevent self-demotion: lock admin when editing your own roles */}
+          {rolesUser?.userId === currentUserId && rolesUser.roles.includes(Role.ADMIN) && (
+            <p className="text-xs text-muted-foreground">
+              You cannot remove your own admin role.
+            </p>
+          )}
           <RoleCheckboxes
             selected={rolesDraft}
             onToggle={(r, c) =>
               setRolesDraft((prev) => (c ? [...prev, r] : prev.filter((x) => x !== r)))
+            }
+            lockedRoles={
+              rolesUser?.userId === currentUserId && rolesUser.roles.includes(Role.ADMIN)
+                ? [Role.ADMIN]
+                : []
             }
           />
           <div className="flex justify-end gap-2 pt-2">

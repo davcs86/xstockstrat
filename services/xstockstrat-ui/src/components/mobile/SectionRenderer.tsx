@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { CaretRight, Warning } from '@phosphor-icons/react';
 import { EnumBadge } from '@/lib/opportunityShared';
 import { readinessState } from '@/lib/readinessRollup';
+import { OhlcBlock } from '@/components/shared/OhlcBlock';
 import { cn } from '../ui/utils';
 import { Alert, AlertDescription } from '../ui/alert';
 import { Badge } from '../ui/badge';
@@ -67,14 +68,17 @@ function SectionItem({ section: s }: { section: Section }) {
           className="overflow-hidden rounded-md border bg-card"
         >
           <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
-            {s.href ? (
-              <Link href={s.href} className="font-mono text-sm font-semibold hover:underline">
-                {s.symbol}
-              </Link>
-            ) : (
-              <span className="font-mono text-sm font-semibold">{s.symbol}</span>
-            )}
-            <span className="text-xs text-muted-foreground">
+            <div className="flex min-w-0 flex-col gap-0.5">
+              {s.href ? (
+                <Link href={s.href} className="font-mono text-sm font-semibold hover:underline">
+                  {s.symbol}
+                </Link>
+              ) : (
+                <span className="font-mono text-sm font-semibold">{s.symbol}</span>
+              )}
+              {s.ohlcData && <OhlcBlock data={s.ohlcData} testId={`mobile-ohlc-${s.symbol}`} />}
+            </div>
+            <span className="shrink-0 text-xs text-muted-foreground">
               {s.signals.length} {s.signals.length === 1 ? 'signal' : 'signals'}
             </span>
           </div>

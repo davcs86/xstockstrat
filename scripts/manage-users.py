@@ -8,16 +8,18 @@
 #     "questionary>=2.1",
 # ]
 # ///
-"""Manage identity service users: reset passwords, create users, update roles.
+"""Manage identity service users: reset passwords, create users, update roles, delete users.
 
 Run with uv (preferred — auto-installs deps):
     uv run scripts/manage-users.py create-user admin@example.com
     uv run scripts/manage-users.py update-roles admin@example.com
     uv run scripts/manage-users.py reset-password admin@example.com
+    uv run scripts/manage-users.py delete-user old@example.com
 
-Non-interactive (CI/scripts) — bypass the role selector:
+Non-interactive (CI/scripts) — bypass the role selector / confirmation:
     uv run scripts/manage-users.py create-user admin@example.com --roles admin,trader
     uv run scripts/manage-users.py update-roles admin@example.com --roles trader
+    uv run scripts/manage-users.py delete-user old@example.com --force
 
 DATABASE_URL must be set, or POSTGRES_PASSWORD in .env will be used to
 construct a local-dev connection string.
@@ -387,6 +389,98 @@ def update_roles(
     out.print(
         Panel(
             f"Roles updated for [bold]{email}[/]: {', '.join(role_list)}",
+            border_style="green",
+        )
+    )
+
+
+@app.command("delete-user")
+def delete_user(
+    email: str = typer.Argument(help="Email of the user to delete"),
+    force: bool = typer.Option(
+        False,
+        "--force", "-f",
+        help="Skip confirmation prompt (for CI/scripts)",
+    ),
+) -> None:
+    """Permanently delete a user by email.
+
+    Deletes the user row, their refresh tokens, and any related session data.
+    This is irreversible. The last active admin cannot be deleted (mirrors the
+    identity service's server-side guard).
+    """
+    db_url = _load_db_url()
+
+    try:
+        conn = psycopg.connect(db_url)
+    except psycopg.OperationalError as exc:
+        err.print(
+            Panel(
+                f"[red bold]Database connection failed[/]\n\n{exc}",
+                title="Connection Error",
+                border_style="red",
+            )
+        )
+        raise typer.Exit(1) from exc
+
+    with conn:
+        # Look up the target user
+        row = conn.execute(
+            "SELECT user_id, roles, is_active FROM identity.users WHERE email = %s",
+            (email,),
+        ).fetchone()
+
+        if row is None:
+            err.print(
+                f"[red bold]Error:[/] No user found with email "
+                f"[bold]'{email}'[/].\n"
+                "  Use [green]list-users[/] to see existing users."
+            )
+            raise typer.Exit(1)
+
+        user_id, roles, is_active = row
+        roles = roles or []
+
+        # Last-admin guard: refuse to delete the sole active admin
+        if "admin" in roles and is_active:
+            other_admin = conn.execute(
+                "SELECT 1 FROM identity.users "
+                "WHERE user_id <> %s AND is_active = TRUE AND 'admin' = ANY(roles) "
+                "LIMIT 1",
+                (user_id,),
+            ).fetchone()
+            if other_admin is None:
+                err.print(
+                    f"[red bold]Error:[/] [bold]{email}[/] is the last active admin.\n"
+                    "  Promote another user to admin before deleting this one."
+                )
+                raise typer.Exit(1)
+
+        # Confirmation prompt (skipped with --force)
+        if not force:
+            roles_str = ", ".join(roles) if roles else "none"
+            active_str = "active" if is_active else "inactive"
+            confirmed = typer.confirm(
+                f"Permanently delete {email} ({active_str}, roles: {roles_str})?"
+            )
+            if not confirmed:
+                err.print("[dim]Aborted.[/]")
+                raise typer.Exit(0)
+
+        # Delete refresh tokens first (defense-in-depth; FK CASCADE would handle it)
+        conn.execute(
+            "DELETE FROM identity.refresh_tokens WHERE user_id = %s",
+            (user_id,),
+        )
+        conn.execute(
+            "DELETE FROM identity.users WHERE user_id = %s",
+            (user_id,),
+        )
+        conn.commit()
+
+    out.print(
+        Panel(
+            f"User [bold]{email}[/] has been permanently deleted.",
             border_style="green",
         )
     )

@@ -51,7 +51,9 @@ router.service(AnalysisService, {
   // No admin gate — owner-scoped server-side.
   setStrategyLive: forward((req, opts) => analysisClient.setStrategyLive(req, opts)),
   // Opportunity queue + readiness + analytics. All read-only; user comes from the x-user-id header.
-  listOpportunities: forward((req, opts) => analysisClient.listOpportunities(req, opts)),
+  listOpportunities: forward((req, opts) => analysisClient.listOpportunities(req, opts), {
+    timeoutMs: 30_000,
+  }),
   evaluateReadiness: forward((req, opts) => analysisClient.evaluateReadiness(req, opts)),
   // Cache-first watchlist readiness decoration (feature 181). Owner from x-user-id; body carries
   // no user_id. Read-only forward — inherits createDispatch's ConnectError passthrough (fails.md:552).

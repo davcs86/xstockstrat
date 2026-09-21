@@ -19,6 +19,33 @@ _ACTION_SNOOZE = 1
 _ACTION_DISMISS = 2
 _ACTION_TAKE = 3
 
+# feature 190 — structural provenance markers that are NOT signal sources. The single canonical
+# skip-set for BOTH the primary-source derivation (servicer._primary_source) and the source filter /
+# facet below, bound as a `text[]` param so the SQL and Python can never drift. "unavailable" is
+# deliberately absent (parity with _primary_source: an unavailable-led row surfaces "unavailable").
+_PROVENANCE_STRUCTURAL_MARKERS = ["watchlist", "position", "denied"]
+
+# feature 190 — the sort-key → ORDER BY fragment map (OpportunitySort enum ints). Selected by a
+# constant key, never interpolated from user input (same safety class as the valid_clause f-string).
+# UNSPECIFIED(0) = the legacy feature-187 blended rank (unchanged default for non-UI callers);
+# CONVICTION(1) = raw o.conviction; EXPIRY(2) = soonest valid_until first. All three keep the
+# symbol-partition group key + the o.opportunity_key ASC paging tiebreak (feature-185 @AC-8/@AC-9).
+_SORT_ORDER_BY = {
+    0: (
+        "MAX(((1 - $3) * o.conviction + $3 * o.signal_axis)) OVER (PARTITION BY o.symbol) DESC, "
+        "o.symbol ASC, ((1 - $3) * o.conviction + $3 * o.signal_axis) DESC, "
+        "o.conviction DESC, o.opportunity_key ASC"
+    ),
+    1: (
+        "MAX(o.conviction) OVER (PARTITION BY o.symbol) DESC, "
+        "o.symbol ASC, o.conviction DESC, o.opportunity_key ASC"
+    ),
+    2: (
+        "MIN(o.valid_until) OVER (PARTITION BY o.symbol) ASC NULLS LAST, "
+        "o.symbol ASC, o.opportunity_key ASC"
+    ),
+}
+
 
 def _to_dict(row) -> dict:
     """asyncpg Record → plain dict, decoding the JSONB columns (asyncpg returns them as str)."""
@@ -124,17 +151,29 @@ class OpportunitiesRepository:
         signal_rank_weight: float,
         *,
         include_expired: bool,
+        sources: list[str] | None = None,
+        action_filter: int = 0,
+        sort: int = 0,
     ) -> list[dict]:
-        """The queue read: LEFT JOIN ``opportunity_actions`` to drop DISMISS + active SNOOZE,
-        ranked by ``(1-w)·conviction + w·signal_axis`` DESC (``w`` clamped to [0,1] — OR-G).
+        """The queue read: LEFT JOIN ``opportunity_actions`` to drop DISMISS + active SNOOZE.
 
         ``include_expired=False`` filters ``valid_until > now()`` (the normal fresh read);
         ``include_expired=True`` serves stale rows (stale-while-revalidate). A TAKE disposition
         is intentionally *not* filtered — it stays visible and feeds the queue_share/taken
         reconciliation (FR-7).
+
+        feature 190 — server-side filters/sort (all default to a no-op so non-``ListOpportunities``
+        callers, e.g. ``_retry_unavailable_symbols``, are unchanged):
+        ``sources`` (empty = all; matched against the derived primary source, the
+        ``_PROVENANCE_STRUCTURAL_MARKERS``-skipping first provenance token), ``action_filter``
+        (``OpportunityActionTag`` int; 0 = any) applied to ``o.action``, and ``sort``
+        (``OpportunitySort`` int; 0 = legacy blended rank). The min-conviction floor stays the SOLE
+        floor with the muted/denied + unavailable exemption; source/action filters are NOT exempt.
         """
         w = min(max(signal_rank_weight, 0.0), 1.0)
+        srcs = sources or []
         valid_clause = "" if include_expired else "AND o.valid_until > now()"
+        order_by = _SORT_ORDER_BY.get(sort, _SORT_ORDER_BY[0])
         rows = await self._db.fetch(
             f"""
             SELECT o.opportunity_key, o.symbol, o.strategy_id, o.action, o.conviction,
@@ -143,34 +182,87 @@ class OpportunitiesRepository:
             FROM analysis.opportunities o
             LEFT JOIN analysis.opportunity_actions a
               ON a.user_id = o.user_id AND a.opportunity_key = o.opportunity_key
+            -- feature 190: derive the primary source once per row (skip structural markers, bound
+            -- as $6 = _PROVENANCE_STRUCTURAL_MARKERS). LEFT JOIN + LIMIT 1 keeps cardinality.
+            LEFT JOIN LATERAL (
+              SELECT elem FROM jsonb_array_elements_text(o.provenance) WITH ORDINALITY t(elem, ord)
+              WHERE elem <> ALL($6::text[]) ORDER BY ord LIMIT 1
+            ) ps ON true
             WHERE o.user_id = $1
+              -- feature 190 fix: $3 (signal_rank_weight) is referenced ONLY by the sort=0 blended
+              -- ORDER BY; a CONVICTION/EXPIRY sort omits it, so PREPARE can't infer its type
+              -- (asyncpg IndeterminateDatatypeError). Anchor the type here (always true for w).
+              AND $3::double precision IS NOT NULL
               {valid_clause}
               -- feature 132: a min_conviction floor must still return muted (deny-listed) rows,
               -- which carry conviction 0 by design (the mute is the signal, not a low score).
               -- feature 185: likewise return data-unavailable rows (conviction 0 by design — the
               -- unavailable sentinel is the signal); the floor must be exempted at every layer
               -- (fails.md:1547 vanish trap) or the sentinel would silently vanish at the DB read.
+              -- feature 190: this stays the SOLE floor; the source/action filters below are NOT
+              -- exempt for muted/unavailable rows (parity with the pre-190 client).
               AND (o.conviction >= $2 OR o.provenance ? 'denied' OR o.provenance ? 'unavailable')
+              -- feature 190: source filter — an empty $7 array applies NO predicate (never = ANY of
+              -- an empty array, which would return zero rows and empty the default view).
+              AND (cardinality($7::text[]) = 0 OR ps.elem = ANY($7::text[]))
+              -- feature 190: action filter on o.action (OpportunityActionTag), $8 = 0 → any action.
+              AND ($8::int = 0 OR o.action = $8::int)
               AND COALESCE(a.action, 0) <> $4
               AND NOT (
                     COALESCE(a.action, 0) = $5
                     AND a.snooze_until IS NOT NULL
                     AND a.snooze_until > now()
               )
-            -- feature 185 FR-5: opportunity_key ASC is a deterministic final tiebreak so offset
-            -- paging is stable across polls when a surgical partial UPDATE reshuffles physical row
-            -- order (all data-unavailable rows tie at conviction=0, signal_axis=0). Pure tiebreak —
-            -- it never reorders non-tied rows, so no @AC-14 ranking change.
-            ORDER BY ((1 - $3) * o.conviction + $3 * o.signal_axis) DESC, o.conviction DESC,
-                     o.opportunity_key ASC
+            -- feature 187/190: server-side symbol grouping — each symbol's rows stay contiguous,
+            -- positioned by the group's best member. The ORDER BY is selected from the constant
+            -- _SORT_ORDER_BY dict (feature 185 FR-5: opportunity_key ASC tiebreak in every branch).
+            ORDER BY {order_by}
             """,
             user_id,
             min_conviction,
             w,
             _ACTION_DISMISS,
             _ACTION_SNOOZE,
+            _PROVENANCE_STRUCTURAL_MARKERS,
+            srcs,
+            int(action_filter),
         )
         return [_to_dict(r) for r in rows]
+
+    async def available_sources(self, user_id: str, *, include_expired: bool) -> list[str]:
+        """feature 190 — the distinct derived primary sources in the user's disposition-filtered
+        queue (DISMISS + active SNOOZE dropped, same as ``read``), scoped to the same freshness as
+        the served page via ``include_expired``. Takes NO ``sources``/``action_filter``/
+        ``min_conviction`` params — that absence makes the facet independent of the request filters
+        (so a source the user selected can never disappear from the chip menu and strand the queue,
+        @AC-12). ``CROSS JOIN LATERAL`` drops empty-source rows so they never become chips.
+        """
+        valid_clause = "" if include_expired else "AND o.valid_until > now()"
+        rows = await self._db.fetch(
+            f"""
+            SELECT DISTINCT ps.elem AS source
+            FROM analysis.opportunities o
+            LEFT JOIN analysis.opportunity_actions a
+              ON a.user_id = o.user_id AND a.opportunity_key = o.opportunity_key
+            CROSS JOIN LATERAL (
+              SELECT elem FROM jsonb_array_elements_text(o.provenance) WITH ORDINALITY t(elem, ord)
+              WHERE elem <> ALL($2::text[]) ORDER BY ord LIMIT 1
+            ) ps
+            WHERE o.user_id = $1
+              {valid_clause}
+              AND COALESCE(a.action, 0) <> $3
+              AND NOT (
+                    COALESCE(a.action, 0) = $4
+                    AND a.snooze_until IS NOT NULL
+                    AND a.snooze_until > now()
+              )
+            """,
+            user_id,
+            _PROVENANCE_STRUCTURAL_MARKERS,
+            _ACTION_DISMISS,
+            _ACTION_SNOOZE,
+        )
+        return sorted(r["source"] for r in rows if r["source"])
 
     async def count_for_user(self, user_id: str) -> int:
         """Total materialized rows for a user regardless of validity — distinguishes a

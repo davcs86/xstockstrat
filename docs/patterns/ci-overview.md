@@ -19,6 +19,19 @@ CI runs on every PR targeting `main-dev` or `main` (`.github/workflows/ci.yml`).
 | `frontend-e2e-build` | Next.js production build for E2E (shared by shards) | — |
 | `frontend-e2e` (×2 shards) | Playwright E2E, chromium only, sharded across 2 runners | — |
 
+## Branch Protection — CI Gate
+
+Every CI job except `secret-scan` is **path-filtered**: when the relevant files don't change, the
+job is skipped and GitHub never reports a status for it. A branch-protection rule that requires a
+skipped check blocks the PR forever.
+
+The `CI Gate` job solves this. It `needs:` every other job, always runs (`if: always()`), and fails
+only when an upstream job truly **failed** or was **cancelled**. Skipped jobs (no relevant paths
+changed) are treated as passing.
+
+**Branch protection must require only `CI Gate`** — never the individual job names. This is the
+single required status check for PR merges on both `main-dev` and `main`.
+
 ## Local guard rails (not CI jobs)
 
 Some guard rails run **locally** (git hooks / Claude subagent), deliberately **not** as CI jobs:

@@ -58,13 +58,17 @@ export function requireAdminScope(claims: JwtClaims): void {
  *   getBars: forward((req, opts) => marketDataClient.getBars(req, opts)),
  */
 export function forward<Req, Res>(
-  call: (req: Req, opts: { headers: Headers }) => Promise<Res>,
-  options: { admin?: boolean } = {},
+  call: (req: Req, opts: { headers: Headers; timeoutMs?: number }) => Promise<Res>,
+  options: { admin?: boolean; timeoutMs?: number } = {},
 ): (req: Req, ctx: HandlerContext) => Promise<Res> {
   return async (req, ctx) => {
     const claims = await requireSession(ctx);
     if (options.admin) requireAdminScope(claims);
-    return call(req, { headers: backendHeaders(claims, ctx) });
+    const callOpts: { headers: Headers; timeoutMs?: number } = {
+      headers: backendHeaders(claims, ctx),
+    };
+    if (options.timeoutMs !== undefined) callOpts.timeoutMs = options.timeoutMs;
+    return call(req, callOpts);
   };
 }
 
