@@ -6020,6 +6020,8 @@ class TestOpportunityRowParity:
         "signal_confidence",
         # feature 185 — derived from the "unavailable" provenance marker at read.
         "data_unavailable",
+        # feature 199 — composite ranking ordinal, dedicated column, explicit-presence.
+        "composite_score",
     }
     # feature 095 — live-market fields set at read time in ListOpportunities (post-ranking), not by
     # the mapper, so they join _INTENTIONALLY_UNSET rather than _MAPPED.
