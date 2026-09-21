@@ -60,6 +60,12 @@ design.md §Consumer surfaces). No surface is deferred.
   `analysis.proto:592`; migration tip `023_opportunity_compute_state`). Soft same-file overlap with
   features 187 (`opportunities.py` read ORDER BY), 193 (`_compute_opportunities` body), 188
   (`OpportunityRow` markup) — re-confirm both numbers and the cited line anchors after any rebase.
+- **Line-anchor re-derivation (covers the impl-spec review's anchor-drift warning).** Every
+  `path:line` in the step bodies below was verified against the tree at spec time, but a few drift by
+  1–3 lines against the live checkout and *will* drift again once 187/193/188 land. All symbol names
+  are real and current; the line numbers are navigational hints only. `/sdd-execute`'s mandatory
+  per-step codebase-discovery **re-anchors every cited line before writing** — do not treat a 1–3 line
+  offset as a defect, and re-grep the symbol (not the number) at execute time.
 
 ---
 
@@ -118,6 +124,7 @@ design.md §Consumer surfaces). No surface is deferred.
 **Instructions**:
 - Run `./scripts/buf-gen.sh` from repo root.
 - Stage the full `packages/proto/gen/` diff (Go, Python, TS + compiled `gen/ts/dist/`).
+- _(The `**Files**` entry is a directory intentionally: `buf generate` rewrites the whole `gen/` tree across all three languages — there is no single-file target. Correctness is gated by the empty-diff freshness re-run in Verification, not by enumerating individual generated files; never hand-edit any file under `gen/`.)_
 
 **Verification**:
 - `./scripts/buf-gen.sh && git status --porcelain packages/proto/gen/` — the only diff is the added `composite_score` accessors; a second `./scripts/buf-gen.sh` leaves `git diff packages/proto/gen/` empty (freshness).
@@ -135,7 +142,7 @@ design.md §Consumer surfaces). No surface is deferred.
 **Reviewers**: DBA — migration NNN numbering (no gaps), up+down pair present, column additivity; `xstockstrat-analysis` (service owner) — schema ownership
 
 **Codebase Evidence**:
-- `ls services/xstockstrat-analysis/migrations/` — last file is `023_opportunity_compute_state.{up,down}.sql` → **next-free = 024** (confirmed; the root CLAUDE.md's 026/027/028 mentions are drift — recon.md:71).
+- `ls services/xstockstrat-analysis/migrations/` — last file is `023_opportunity_compute_state.{up,down}.sql` → **next-free = 024** (confirmed by listing the dir). NOTE (corrects an earlier imprecise "drift" claim in recon.md:71): the `026`/`027`/`028` migrations named in `services/xstockstrat-analysis/CLAUDE.md` are **config-service** seed migrations (`services/xstockstrat-config/migrations/026_analysis_engine_blend_keys` … `028_analysis_opportunity_keys`, verified present) that seed `analysis.*` **config keys** — a *different* `migrations/` dir from the analysis-service **schema** migrations here. They are NOT analysis-service migrations and NOT drift; `024` is the correct, uncontested next-free schema migration for this table.
 - `analysis.opportunities` DDL: `migrations/011_opportunities.up.sql` (`conviction DOUBLE PRECISION NOT NULL DEFAULT 0` :14, `signal_axis DOUBLE PRECISION NOT NULL DEFAULT 0` :16, `PK (user_id, opportunity_key)` :21).
 - Column-add + `DROP TABLE`-inverse down pattern: `023_opportunity_compute_state.{up,down}.sql`.
 

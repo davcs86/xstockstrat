@@ -109,3 +109,29 @@ UI `/insights` (opportunities queue) + `/trader` (per-symbol page) + Agent `list
 - Proto: `Opportunity` message at `packages/proto/analysis/v1/analysis.proto` (~L558).
 - UI: `src/app/insights/opportunities/page.tsx` (`SymbolGroupCard`), `src/lib/scoreDisplay.ts`
   (`scoreColor`), `src/app/trader/positions/[symbol]/page.tsx`.
+
+## Session 2026-09-21 — sdd-review impl-spec (advisory) + warnings addressed
+
+- Result: PASS WITH WARNINGS — 0 failures/blockers, 4 advisory warnings. Overlap scan CLEAN
+  (field 21 / migration 024 / 3 config keys uncontested; 187/193/188 stay soft rebase).
+- All 4 requested confirmations passed: field 21 + migration 024 next-free; paired red-green per
+  non-frontend service step (5↔6, 8↔9); cardinal guard in both loci (Step 1 proto comment +
+  Step 7 ANALYSIS-10); agent descriptor-parity is the intended RED gate, not a defect.
+- Warnings — all ADDRESSED (operator: "address the warnings"):
+  - [x] **W1 Step 2 `packages/proto/gen/` is a directory** (criteria false-positive for proto-gen)
+    → clarified in Step 2 that the directory entry is intentional (buf regenerates the whole tree;
+    correctness gated by the empty-diff freshness re-run, not file enumeration).
+  - [x] **W2 line anchors drift 1–3 lines (Steps 3/5/8/9)** → strengthened the rebase-re-derivation
+    note to explicitly mandate per-step re-anchoring of ALL cited line numbers at /sdd-execute
+    (mandatory codebase-discovery re-anchors before writing; symbols verified real; numbers are hints).
+    Not hand-corrected because discovery + the pending 187/193/188 rebases re-derive them anyway.
+  - [x] **W3 Step 11 no `--cov-fail-under`** → resolved as exempt: xstockstrat-ui has no whole-suite
+    coverage gate (B3 exempts frontend service steps; Playwright present). No edit needed.
+  - [x] **W4 analysis CLAUDE.md "references migrations 026/027/028 that don't exist"** → FALSE POSITIVE.
+    Verified 026_analysis_engine_blend_keys / 027_analysis_readiness_materializer_keys /
+    028_analysis_opportunity_keys all EXIST in services/xstockstrat-config/migrations/ (config-service
+    SEED migrations for analysis.* config keys — a different dir from analysis-service schema
+    migrations, tip 023). analysis CLAUDE.md is correct. Corrected the inaccurate "drift" note in
+    Step 3 evidence (traced to recon.md:71) to state this precisely; 024 is the correct next-free
+    analysis-service schema migration.
+- Overlap findings: none (CLEAN). Merge-order: 199→198 dependency already recorded; 198 needs no row.
