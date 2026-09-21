@@ -3775,6 +3775,14 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         half_life = self._cfg.get_float_present(
             "analysis.scoring.signal_decay_half_life_hours", 24.0
         )
+        # feature 199 — composite_score fusion params (same reads as the main compute pass).
+        composite_k = self._cfg.get_float_present("analysis.scoring.composite_shrinkage_k", 1.0)
+        composite_w_readiness = self._cfg.get_float_present(
+            "analysis.scoring.composite_weight_readiness", 1.0
+        )
+        composite_w_signal = self._cfg.get_float_present(
+            "analysis.scoring.composite_weight_signal", 1.0
+        )
         source_weights = await self._drain_source_weights(propagation_meta)
         signals_by_symbol: dict[str, list] = {}
         for sig in signals:
@@ -3785,6 +3793,28 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             for sig in signals_by_symbol.get(_normalize_symbol(sym), []):
                 axis = max(axis, _signal_decay(sig, source_weights, now_utc, half_life)[0])
             return axis
+
+        def _composite_for(sym: str, readiness: dict) -> "float | None":
+            # feature 199 — recompute the composite for a HEALED row through the SAME fusion as the
+            # main path. best_direction is anchored on RAW conviction (like _compute_opportunities),
+            # not the decayed measure, so heal and compute agree byte-for-byte.
+            contribs: list[tuple[str, float]] = []
+            best_direction = ""
+            best_raw = -1.0
+            for sig in signals_by_symbol.get(_normalize_symbol(sym), []):
+                eff = _signal_decay(sig, source_weights, now_utc, half_life)[0]
+                contribs.append((sig.direction, eff))
+                if sig.conviction > best_raw:
+                    best_raw = sig.conviction
+                    best_direction = sig.direction
+            scored: list[tuple[float, float]] = []
+            if readiness["total_conditions"] > 0:
+                scored.append((composite_w_readiness, readiness["conviction"]))
+            if contribs:
+                scored.append(
+                    (composite_w_signal, _composite_signal_subscore(contribs, best_direction))
+                )
+            return _composite_score(scored, composite_k)
 
         strat_rows: dict[str, dict | None] = {}
 
@@ -3871,6 +3901,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                         "provenance": provenance,
                         "thesis": r.get("thesis", ""),
                         "valid_until": r["valid_until"],
+                        # both axes absent → NULL, matching the main path's sym_unavailable branch.
+                        "composite_score": None,
                         "_healed": False,
                     }
                 )
@@ -3887,6 +3919,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     "provenance": provenance,
                     "thesis": r.get("thesis", ""),
                     "valid_until": None,  # filled with the fresh window post-loop
+                    "composite_score": _composite_for(sym, readiness),
                     "_healed": True,
                 }
             )
@@ -3980,6 +4013,14 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         half_life = self._cfg.get_float_present(
             "analysis.scoring.signal_decay_half_life_hours", 24.0
         )
+        # feature 199 — composite_score fusion params, read once per pass (deterministic).
+        composite_k = self._cfg.get_float_present("analysis.scoring.composite_shrinkage_k", 1.0)
+        composite_w_readiness = self._cfg.get_float_present(
+            "analysis.scoring.composite_weight_readiness", 1.0
+        )
+        composite_w_signal = self._cfg.get_float_present(
+            "analysis.scoring.composite_weight_signal", 1.0
+        )
         missing_ingested_at_count = 0
         total_signal_count = len(signals)
 
@@ -4072,6 +4113,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     "muted": False,  # on the strategy's deny list
                     "best_direction": "",
                     "_best_sig_conv": -1.0,
+                    # feature 199 — (direction, decayed_conviction) per contributing signal, for
+                    # the composite signal sub-score. Local sig_contribs is not visible in _row_for.
+                    "_composite_sig_contribs": [],
                 }
                 candidates[key] = c
             return c
@@ -4187,6 +4231,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 for sig, effective_conviction in sig_contribs:
                     _add_provenance(c, sig.source)
                     c["signal_axis"] = max(c["signal_axis"], effective_conviction)  # decayed
+                    # feature 199 — decayed contrib per direction for the composite signal sub-score
+                    c["_composite_sig_contribs"].append((sig.direction, effective_conviction))
                     if sig.conviction > c["_best_sig_conv"]:  # thesis/direction on RAW conviction
                         c["_best_sig_conv"] = sig.conviction
                         c["best_direction"] = sig.direction
@@ -4437,6 +4483,22 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 if sym_unavailable:
                     _add_provenance(c, "unavailable")
 
+                # feature 199 — composite_score over the axes PRESENT at compute, evaluated on the
+                # real readiness/signal BEFORE axis-zeroing. sym_unavailable forces both absent
+                # (empty scored → NULL), preserving "unavailable != evaluated-low". readiness is
+                # present iff it evaluated any condition; the signal axis iff any signal contributed
+                # it. A present sub-score of 0.0 still counts its weight (an active pull-down).
+                composite_scored: list[tuple[float, float]] = []
+                if not sym_unavailable:
+                    if readiness["total_conditions"] > 0:
+                        composite_scored.append((composite_w_readiness, readiness["conviction"]))
+                    if c["_composite_sig_contribs"]:
+                        s_signal = _composite_signal_subscore(
+                            c["_composite_sig_contribs"], c["best_direction"]
+                        )
+                        composite_scored.append((composite_w_signal, s_signal))
+                composite = _composite_score(composite_scored, composite_k)
+
                 return {
                     "opportunity_key": _opportunity_key(user_id, sym, strat),
                     "symbol": sym,
@@ -4447,6 +4509,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     "signal_axis": 0.0 if sym_unavailable else c["signal_axis"],
                     "provenance": c["provenance"],
                     "thesis": c["thesis"],
+                    "composite_score": composite,
                 }
 
         rows = [r for r in await asyncio.gather(*[_row_for(c) for c in selected]) if r is not None]
@@ -5142,6 +5205,47 @@ def _primary_source(provenance: list[str]) -> str:
     return ""
 
 
+def _clamp01(x: float) -> float:
+    """Clamp to [0, 1]."""
+    return 0.0 if x < 0.0 else 1.0 if x > 1.0 else x
+
+
+_COMPOSITE_OPPOSING_DIRECTION = {"buy": "sell", "sell": "buy"}
+
+
+def _composite_signal_subscore(contribs: "list[tuple[str, float]]", best_direction: str) -> float:
+    """Direction-scoped multiplicative attenuation for the composite_score signal axis (feature
+    199). ``contribs`` is ``[(direction, decayed_conviction), …]``. Anchored on ``best_direction``
+    (which the main compute picks on RAW conviction, not the decayed measure) so heal and compute
+    agree: ``agree`` = max decayed among contribs matching ``best_direction``; ``conflict`` = max
+    decayed among the opposing TRADEABLE direction (buy↔sell; ``hold``/``""`` count as neither).
+    ``s = clamp(agree)·(1 − clamp(conflict))`` — multiplicative, MAX-consistent with ``signal_axis``
+    (a sum/count fold would re-introduce an incommensurable 0.5-neutral scale). Presence is the
+    caller's job (``contribs`` non-empty)."""
+    opposing = _COMPOSITE_OPPOSING_DIRECTION.get(best_direction, "")
+    max_agree = 0.0
+    max_conflict = 0.0
+    for direction, eff in contribs:
+        if direction == best_direction:
+            max_agree = max(max_agree, eff)
+        elif opposing and direction == opposing:
+            max_conflict = max(max_conflict, eff)
+    return _clamp01(max_agree) * (1.0 - _clamp01(max_conflict))
+
+
+def _composite_score(scored: "list[tuple[float, float]]", k: float) -> "float | None":
+    """Per-opportunity composite ranking ordinal via empirical-Bayes shrinkage over the axes
+    PRESENT at compute (feature 199). ``scored`` is ``[(wᵢ, sᵢ), …]``; returns
+    ``(Σwᵢ·sᵢ + 0.5·k)/(Σwᵢ + k)``. ``Σw ≤ 0 → None`` (never a computed 0.5): the honest
+    not-yet-computed / nothing-to-fuse state. A PRESENT sub-score of 0.0 is an active pull-down (its
+    weight is counted), distinct from an ABSENT axis (weight omitted). This is a RANKING ordinal,
+    NOT a probability / sizing / alert / risk input (ANALYSIS-11; cf. ExternalSignal.conviction)."""
+    total_w = sum(w for w, _s in scored)
+    if total_w <= 0:
+        return None
+    return (sum(w * s for w, s in scored) + 0.5 * k) / (total_w + k)
+
+
 def _row_to_opportunity(row: dict) -> "analysis_pb2.Opportunity":
     """Map a materialized ``analysis.opportunities`` row (LEFT JOIN read) to an ``Opportunity``
     proto (feature 097). This is the producer↔reader↔UI contract point the OR-F descriptor-parity
@@ -5194,6 +5298,11 @@ def _row_to_opportunity(row: dict) -> "analysis_pb2.Opportunity":
     signal_confidence = readiness.get("signal_confidence")
     if signal_confidence is not None:
         opp.signal_confidence = float(signal_confidence)
+    # feature 199 — composite_score is a dedicated column (not readiness_json); explicit-presence
+    # (unset when NULL — nothing to fuse / never computed — never a fabricated 0.0).
+    composite_score = row.get("composite_score")
+    if composite_score is not None:
+        opp.composite_score = float(composite_score)
     return opp
 
 
