@@ -763,6 +763,13 @@ export interface Opportunity {
      * Distinct from an evaluated 0/N row; conviction+signal_axis are zeroed so it sinks in ranking.
      */
     dataUnavailable: boolean;
+    /**
+     * feature 199 — a single shrunk 0–1 ranking ordinal fusing readiness + directional signal
+     * (empirical-Bayes over the two axes present at compute; NULL/unset = nothing to fuse). Like
+     * conviction=3 it is NOT a probability and NEVER a cardinal sizing/alert/risk input — that is
+     * ExternalSignal.conviction (ingest.proto:110). Explicit-presence: unset = not-yet/nothing-to-fuse.
+     */
+    compositeScore?: number | undefined;
 }
 /**
  * One recent daily-bar close for the Decide-surface sparkline (feature 095). Explicit presence — an

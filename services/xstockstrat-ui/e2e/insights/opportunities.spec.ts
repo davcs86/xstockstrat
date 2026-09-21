@@ -316,6 +316,36 @@ test.describe('Opportunities queue', () => {
     await expect(page.getByTestId('opportunity-unavailable-PLTR')).toBeVisible();
   });
 
+  // feature 199 — composite_score render on the queue card.
+  test('feature 199: the composite cell renders the 0–1 ordinal in its scoreColor band (AC-8)', async ({
+    page,
+  }) => {
+    const cell = card(page, 'AAPL').getByTestId('opp-composite-AAPL').first();
+    await expect(cell).toHaveText('0.732');
+    await expect(cell).toHaveClass(/text-paper/); // 0.732 → paper band (>=0.6, <0.8)
+    const msft = card(page, 'MSFT').getByTestId('opp-composite-MSFT').first();
+    await expect(msft).toHaveText('0.512');
+    await expect(msft).toHaveClass(/text-destructive/); // 0.512 → destructive band (<0.6)
+  });
+
+  test('feature 199: server order is authoritative — the composite cell never re-sorts the queue (AC-8)', async ({
+    page,
+  }) => {
+    // AAPL precedes MSFT on the server-returned order; rendering a composite must not re-sort.
+    const texts = await page.getByTestId('opportunity-card').allInnerTexts();
+    const idx = (sym: string) => texts.findIndex((t) => t.includes(sym));
+    expect(idx('AAPL')).toBeLessThan(idx('MSFT'));
+  });
+
+  test('feature 199: a NULL/data-unavailable composite renders an em-dash, never 0.000 (AC-11)', async ({
+    page,
+  }) => {
+    // PLTR is data-unavailable (no composite) and TSLA simply has none → em-dash on both.
+    await expect(card(page, 'PLTR').getByTestId('opp-composite-PLTR').first()).toHaveText('—');
+    await expect(card(page, 'TSLA').getByTestId('opp-composite-TSLA').first()).toHaveText('—');
+    await expect(card(page, 'PLTR').getByText('0.000')).toHaveCount(0);
+  });
+
   // feature 185 FR-4 — cold "computing", terminal "compute-failed", and the legitimately-empty
   // distinctness, driven by a per-test ListOpportunities response shape (LIFO route precedence).
   const routeList = (page: Page, body: object) =>

@@ -80,8 +80,9 @@ class OpportunitiesRepository:
                 """
                 INSERT INTO analysis.opportunities
                     (user_id, opportunity_key, symbol, strategy_id, action, conviction,
-                     readiness_json, signal_axis, provenance, thesis, valid_until)
-                VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9::jsonb, $10, $11)
+                     readiness_json, signal_axis, provenance, thesis, valid_until,
+                     composite_score)
+                VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9::jsonb, $10, $11, $12)
                 """,
                 [
                     (
@@ -96,6 +97,8 @@ class OpportunitiesRepository:
                         json.dumps(r.get("provenance", [])),
                         r.get("thesis", ""),
                         r["valid_until"],
+                        # feature 199 — nullable; None passes straight through (NULL)
+                        r.get("composite_score"),
                     )
                     for r in rows
                 ],
@@ -126,6 +129,7 @@ class OpportunitiesRepository:
                        provenance = $6::jsonb,
                        thesis = $7,
                        valid_until = $8,
+                       composite_score = $9,
                        computed_at = now()
                  WHERE user_id = $1 AND opportunity_key = $2
                 """,
@@ -139,6 +143,8 @@ class OpportunitiesRepository:
                         json.dumps(r.get("provenance", [])),
                         r.get("thesis", ""),
                         r["valid_until"],
+                        # feature 199 — recomputed on heal; None for a still-unavailable row (NULL).
+                        r.get("composite_score"),
                     )
                     for r in rows
                 ],
@@ -178,7 +184,7 @@ class OpportunitiesRepository:
             f"""
             SELECT o.opportunity_key, o.symbol, o.strategy_id, o.action, o.conviction,
                    o.readiness_json, o.signal_axis, o.provenance, o.thesis, o.valid_until,
-                   o.computed_at
+                   o.computed_at, o.composite_score
             FROM analysis.opportunities o
             LEFT JOIN analysis.opportunity_actions a
               ON a.user_id = o.user_id AND a.opportunity_key = o.opportunity_key
