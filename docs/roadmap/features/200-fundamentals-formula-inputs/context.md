@@ -345,3 +345,17 @@
   - Ledger-081 caveat — [ ] re-derive indicators migration next-free NNN against the merged tree at the
     migration step (Step 3), not just the local checkout.
 - Overlap findings: none blocking.
+
+## Session 2026-09-21 — sdd-execute (SEQUENTIAL) — Steps 1+
+
+- Mode-entry: user chose "proceed; try Docker first". Branch-sync: merged `origin/main-dev` (feature
+  024 composite-score landed — analysis dir, no conflict). Docker daemon started (`dockerd`) for
+  Step 2 codegen. Re-derived indicators next-free NNN = **006** against merged tree (ledger 081).
+
+### Step 1 — proto: FundamentalMetric enum + fundamental_inputs [done]
+- Added closed `FundamentalMetric` enum (11 metrics + `_UNSPECIFIED=0`, C-04) and
+  `repeated FundamentalMetric fundamental_inputs` to `FormulaDefinition` (=14), `RegisterFormulaRequest`
+  (=10), `UpdateFormulaRequest` (=11) in `indicators.proto`. Additive/non-breaking (C-09).
+- Verify: `buf lint` exit 0; `buf breaking --against origin/main-dev` exit 0 (no findings).
+- Files modified: `packages/proto/indicators/v1/indicators.proto`. Deviations: none.
+- TDD: N/A (proto).

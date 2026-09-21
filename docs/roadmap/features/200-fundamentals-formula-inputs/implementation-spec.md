@@ -1,6 +1,6 @@
 # Implementation Spec: fundamentals-formula-inputs
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-09-21
 **Feature**: `docs/roadmap/features/200-fundamentals-formula-inputs/feature.md`
 **Total Steps**: 12
@@ -71,7 +71,7 @@ surface is deferred.
 
 ### Step 1 — proto: add `FundamentalMetric` enum + `fundamental_inputs` to indicators contract
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/indicators/v1/indicators.proto` — modify
