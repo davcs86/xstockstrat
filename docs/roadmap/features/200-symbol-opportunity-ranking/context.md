@@ -180,3 +180,20 @@ Operator: "sync feature 200 with what 199 built." Feature 199 (opportunity-compo
 Status unchanged (`spec-ready`) — this is a fact re-grounding, NOT the design resume. Next: run
 `/sdd-design symbol-opportunity-ranking` round 4 to write design.md and flip to design-approved,
 then `/sdd-spec 200`. Merge still sequences after 199 (merge-order.md unchanged).
+
+## Session 2026-09-21 — sdd-review product-spec (re-review post-sync)
+
+- Result: **PASS WITH WARNINGS** — 0 blockers, no Floor breach. Overlap: **CLEAN** (proto `symbol_score
+  = 22`, `OPPORTUNITY_SORT_SYMBOL_SCORE = 3`, migration `025`, `ANALYSIS-12`, and the new
+  `analysis.scoring.*`/`analysis.opportunity.*` keys all free and uncontested; 199's landed claims
+  consistent, no double-claim; merge-order row already present).
+- Warnings:
+  1. **[FIXED now]** Stale dependency label — product-spec called 199 `implementation-ready`; updated
+     to `code-completed` (PR #1157), and the migration note to "199 landed `024` → next-free `025`".
+  2. 4-segment config key `analysis.scoring.strategy_weight_override.<strategy_id>` (C-05) — already an
+     Open Question; converged design collapses it to the 3-segment structured
+     `analysis.scoring.strategy_weight_overrides`. Resolve in design.md.
+  3. Migration up/down pairing (C-07) not restated in the conditional persisted branch — confirm at
+     design (converged design persists + reserves `025`).
+  4. Open Questions still `- [ ]` — legitimately design-deferred; resolve when design.md is written.
+- Warnings 2–4 are carried into the `/sdd-design` round-4 run (next); status stays `spec-ready`.

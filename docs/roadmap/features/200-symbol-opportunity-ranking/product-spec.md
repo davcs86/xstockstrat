@@ -107,8 +107,8 @@ _Constitution **C-14**._
 - [ ] Possibly one new nullable column (persisted `symbol_score`) on `analysis.opportunities` **or** a
   query-time computation with no schema change — **design decides** (FR-1/FR-5). If persisted, a new
   numbered migration in `services/xstockstrat-analysis/migrations/` (`ls migrations/` and reserve the
-  next-free NNN at design time — do not guess; disk tip was `023`, and feature 199 reserves `024`, so
-  this feature must reserve the next after 199 lands or coordinate via merge-order).
+  next-free NNN at design time — do not guess; feature 199 **landed** `024_opportunity_composite_score`,
+  so the next-free analysis migration is **`025`**, re-confirmed against the merged tree).
 
 ## Feature Workflow Notes
 
@@ -119,9 +119,10 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 - [x] DBA review + service owner (schema migration) — **only if** `symbol_score` is persisted
 
 **Merge-order dependency:** depends on **feature 199 (opportunity-composite-score)** — this feature
-consumes `Opportunity.composite_score`. 199 is `implementation-ready` (both are pre-merge). 200 must not
-merge before 199, and shares the analysis opportunity path (soft rebase overlap with 199, plus in-flight
-187/193/188). Recorded as a blocking row in `docs/roadmap/features/merge-order.md`.
+consumes `Opportunity.composite_score`. 199 is now `code-completed` (PR #1157): `composite_score` LANDED
+as a queryable column (proto `= 21`, migration `024`, projected in `read()`). 200 must not merge before
+199, and shares the analysis opportunity path (soft rebase overlap with 199, plus in-flight 187/193/188).
+Recorded as a blocking row in `docs/roadmap/features/merge-order.md`.
 
 ## Acceptance Criteria
 
