@@ -459,10 +459,12 @@ and `mcp-tools.md` parity; omit-not-fabricate projection contract
 
 **Verification**:
 ```
-cd services/xstockstrat-agent && ruff check . && ruff format --check . && pytest tests/test_opportunity_projection.py -q
+cd services/xstockstrat-agent && ruff check . && ruff format --check . && pytest --cov=app --cov-fail-under=40
 ```
-New assertions pass. _(xstockstrat-agent has no CI coverage threshold in the coverage table —
-the targeted parity test + ruff is the gate.)_
+New assertions pass and total coverage ≥ 40%. _(xstockstrat-agent **is** in the `python-test`
+matrix with a 40% CI coverage gate — `.github/workflows/ci.yml:346-348,372-375`,
+`docs/patterns/ci-overview.md:16` — so the whole-suite `--cov-fail-under=40` run reproduces the
+real gate; the targeted `test_opportunity_projection.py` file is where the new assertions live.)_
 
 ---
 

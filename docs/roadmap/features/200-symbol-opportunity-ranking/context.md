@@ -336,3 +336,13 @@ C-15 analysis test step).
     `OPPORTUNITIES` (AAPL/MSFT carry compositeScore) → add `symbolScore` (C-12 + INVENTORY.md:28).
 - Note (CLAUDE.md teardown): Step 6 edits analysis CLAUDE.md and Step 4 edits its
   context-constitution.md — the context-constitution refresh is called out in Step 6 to run at execute.
+
+## Session 2026-09-21 — sdd-review impl-spec (advisory)
+
+- Result: PASS WITH WARNINGS — 0 blockers, no Floor (F-*) risk; 1 substantive C-08 warning (fixed in-session), 2 advisory notes. Overlap: all four hard classes (migration 025, proto field 22, sort enum 3, both config keys) CLEAN; only soft file-level rebase overlaps with in-flight 187/188 (anticipated; no new merge-order row).
+- Findings carried into execution:
+  - Step 8 (C-08): verification rested on a false premise — xstockstrat-agent DOES have a 40% CI coverage gate (ci.yml:346-348,372-375). Fixed the spec: Step 8 verification now runs the whole suite with `--cov-fail-under=40` (+ ruff), dropped the stale "no threshold" note. — [x] resolved
+  - Step 2 (B2): `gen/**` wildcard in **Files** — acceptable for the generated tree (repo forbids Read/Grep of gen/; enumeration impractical). No action. — [x] no change needed
+  - C-15 / @AC-5: operator override ships uncovered, deferred to the named follow-up `per-strategy-rank-weight-override`. Sign-off recorded (operator chose "defer to follow-up" this feature's design rounds; design.md § Deferred, acceptance.feature @deferred-followup). — [x] confirmed
+- Overlap findings: soft rebase overlaps only — opportunities.py, test_analysis_servicer.py, agent client.py, mcp-tools.md, insights page.tsx/spec, opportunities fixtures/INVENTORY (vs 187/188). Re-anchor line numbers at execute time; not FAIL-level.
+- PR topology note: feature 199 (PR #1157) MERGED to main-dev 2026-09-21T02:42:31Z (squash). Merge-order dependency satisfied. feature/symbol-opportunity-ranking rebased --onto origin/main-dev (dropping the now-redundant squashed 199 commits); PR #1161 retargeted claude/symbol-consolidation-scoring-7kgk9t → main-dev so its diff is docs-only.
