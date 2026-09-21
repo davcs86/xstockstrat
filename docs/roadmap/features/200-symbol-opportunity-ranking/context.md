@@ -293,3 +293,46 @@ Addressed before approval:
 Status stays `design-approved`. Ledger: round-6 confirmed no repeat of fails.md:313/1153/1155. Next:
 /sdd-spec (grade-only v1 scope; γ read-clamp + the two mandated orderings pinned at default γ in the
 C-15 analysis test step).
+
+## Session 2026-09-21 — sdd-spec
+
+- Generated implementation-spec.md with **11 steps**. Status → `implementation-ready`.
+- Consumed design.md (grade-only v1, override deferred) + recon.md; re-anchored every drifted line
+  against the merged 199 tree on this branch (soft rebase overlap 187/193/188 noted in Step Dependencies).
+- Scenario coverage (C-15): all 10 v1 `@AC-*` mapped to steps (unit AC-1/2/3/4/6/7/10 → Step 5; AC-8 →
+  Step 5 repo sort + Step 11 UI e2e; AC-9 → Step 8 agent). `@AC-5` (operator override) explicitly
+  DEFERRED to the named follow-up `per-strategy-rank-weight-override` — no v1 step.
+- Consumer surfaces (C-14): UI `/insights` (Steps 10/11, existing route — no PLATFORM_SUBNAV/C-10(a)
+  needed) + Agent `list_opportunities` (Steps 7/8/9). Both in scope.
+- Key codebase findings (grounded line evidence, current tree):
+  - `_compute_opportunities` @ `servicer.py:3989`; composite config reads @ `:4016-4022` (anchor for
+    the two new `analysis.scoring.*` `get_float_present` reads); `owned_ids` sources =
+    `_drain_watchlist_bindings` (`:4007`→`watchlist_by_symbol` `:4028`) ∪ `list_live_enabled(user_id)`
+    (`:4053`→`live_by_symbol` `:4081`), blend force-run gated on ownership (`:4060`) → complete cover,
+    no `list(user_id)` fallback. `rows` list @ `:4515`, `return rows` @ `:4527` (fold+stamp point).
+  - Pure helpers layer beside `_composite_signal_subscore` (`:5216`) / `_composite_score` (`:5236`).
+    Grade cache `self._strategies` @ `:417`, hydrated via `_row_to_score` (`:5665`) carrying continuous
+    `overall_score`∈[0,1] + `provisional`. `_row_to_opportunity` explicit-presence map @ `:5301-5305`.
+  - Heal: `_retry_unavailable_symbols(user_id, symbols:set, …)` @ `servicer.py:3744`; heal_rows applied
+    via `replace_symbols` @ `:3982` → wire `symbol_composite_terms` + `stamp_symbol_score` (new repo
+    methods) after it, folding via the SAME shared helper (parity).
+  - `opportunities.py`: `_SORT_ORDER_BY` @ `:33` (add branch 3 `MAX(o.symbol_score) OVER PARTITION BY
+    o.symbol DESC NULLS LAST, o.symbol ASC, o.opportunity_key ASC`); INSERT `:84/:101`, UPDATE
+    `:132/:147`, SELECT `:187` — add `symbol_score` to each. Default stays branch 0 (no @AC-10 change).
+  - proto: `OpportunitySort` @ `analysis.proto:546` (max 2 → `= 3` free); `Opportunity.composite_score
+    = 21` @ `:602` (guard comment `:599-602`) → `symbol_score = 22` next-free. Last migration `024` →
+    new pair `025_opportunity_symbol_score`.
+  - Config: two keys `analysis.scoring.symbol_score_decay` (0.5, read-clamp [0,0.99]) +
+    `strategy_weight_floor` (0.5), code-default `get_float_present`, declared in analysis CLAUDE.md
+    beside `composite_*` (`:296-298`) — NO config-ui seed migration (F-07 code-default only).
+  - `ANALYSIS-11` @ `services/xstockstrat-analysis/docs/context-constitution.md:27` → add `ANALYSIS-12`
+    companion for the symbol_score cardinal guard.
+  - Agent: `_opportunity_to_dict` @ `client.py:751`, composite omit-projection `:803-806`; parity test
+    `tests/test_opportunity_projection.py:50-51` (`_full_opportunity` sets every field). mcp-tools
+    `list_opportunities` @ `mcp-tools.md:858`, composite entry `:885`.
+  - UI: `SortKey` @ `page.tsx:52`, sort Select `:260-268`, sortEnum map `:100-101`, `SymbolGroupCard`
+    `:382` (header `:409-421`), typed shape map `:192`; `formatComposite` = plain `.toFixed(3)`
+    (`scoreDisplay.ts:32`) reused for the number, NOT `scoreColor` (bounded [0,<2) ordinal). Fixtures
+    `OPPORTUNITIES` (AAPL/MSFT carry compositeScore) → add `symbolScore` (C-12 + INVENTORY.md:28).
+- Note (CLAUDE.md teardown): Step 6 edits analysis CLAUDE.md and Step 4 edits its
+  context-constitution.md — the context-constitution refresh is called out in Step 6 to run at execute.
