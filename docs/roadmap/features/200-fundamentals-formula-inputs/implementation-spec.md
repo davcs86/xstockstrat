@@ -399,7 +399,7 @@ Coverage ≥ 50%; all new assertions pass; the AC-6 assertion is proven RED befo
 
 ### Step 7 — test: analysis evaluator — broadcast, PIT epochs, degradation, byte-identity
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify (or a sibling evaluator
