@@ -47,9 +47,10 @@ from the in-memory `self._strategies` cache (`servicer.py:2319`), **global, keye
 `owned_ids` is derived from rows **already drained this pass** — the union of watchlist-binding
 `strategy_id`s and `list_live_enabled(user_id)` rows (`servicer.py:~4053`) — because every attributed
 row's `strategy_id` comes from one of those. A `strategy_id ∉ owned_ids` (or unattributed `""`) → floor
-weight, never a cross-user grade. `/sdd-spec` must grep-confirm no fourth attribution path (see Open
-Risks — the fundamentals-blend force-run is the concrete candidate) and retain the explicit
-`list(user_id)` fallback if one exists.
+weight, never a cross-user grade. **Confirmed complete (round 6, grep):** every non-`""` candidate
+`strategy_id` comes only from the owner's watchlist bindings or `list_live_enabled(user_id)` — including
+the fundamentals-blend, which fires only when the user owns a live blend strategy — so there is no fourth
+attribution path and no explicit `list(user_id)` fallback is needed (see Open Risks).
 
 **Persist + sort.** Additive nullable `DOUBLE PRECISION symbol_score` column (migration `025`), added
 to `replace_for_user` INSERT (`opportunities.py:82`), `replace_symbols` UPDATE (`opportunities.py:132`),
@@ -116,13 +117,18 @@ grounded):
 
 ## Open Risks
 
-- [ ] **`owned_ids`-from-drained-set — fourth attribution path (genuinely open).** `/sdd-spec` must grep
-  the compute to confirm every attributed row's `strategy_id` comes from a watchlist binding or a
-  live-enabled row. The concrete candidate is the **fundamentals-blend force-run** (feature 168/193): it
-  can attribute a global `analysis.engine.fundamentals_blend_strategy_id` over the fundamentals universe
-  to a user who does not own that id → grade gated off → floor weight (IDOR-safe, but a legitimately
-  attributed blend row is under-weighted to floor). Confirm-or-accept at `/sdd-spec`; retain the explicit
-  `list(user_id)` fallback if any fourth path attributes a non-owned `strategy_id`.
+- [x] **`owned_ids`-from-drained-set — RESOLVED (grepped the compute, round 6).** Every non-`""` candidate
+  `strategy_id` originates from exactly two owner-scoped sources: the user's watchlist bindings
+  (`_drain_watchlist_bindings(user_id)` → `watchlist_by_symbol`) and the user's live-enabled rows
+  (`list_live_enabled(user_id)` → `live_by_symbol`, `servicer.py:4053`, explicitly owner-scoped per
+  `:4037`). The **fundamentals-blend force-run** (feature 168/193) contributes rows ONLY through that
+  `live_rows` loop and ONLY when the user owns a live blend strategy
+  (`blend_active = … any(r["strategy_id"] == blend_id for r in live_rows)`, `:4060`, `:4066-4084`) — so
+  there is **no fourth path** attributing a non-owned `strategy_id`. Signals merge into existing
+  candidates or create an unattributed `(sym, "")` row (`:4191-4195`); held falls back to `""` (`:4157`).
+  ⇒ derived `owned_ids = bindings ∪ live_rows` is a **complete cover**; the grade read is always
+  owner-owned (no IDOR); **no explicit `list(user_id)` fallback needed**. (The grade-VALUE collision
+  residual below still applies — the cache is keyed by bare `strategy_id`.)
 - [ ] **Grade-*value* collision residual (accepted).** `strategy_scores` is global, keyed by bare
   `strategy_id`; two users owning the same `strategy_id` share one cached grade (last-scorer-wins,
   accepted at feature-133 D-2). v1 promotes that value into a ranking input. Accepted: the weight is an
