@@ -135,3 +135,55 @@ UI `/insights` (opportunities queue) + `/trader` (per-symbol page) + Agent `list
     Step 3 evidence (traced to recon.md:71) to state this precisely; 024 is the correct next-free
     analysis-service schema migration.
 - Overlap findings: none (CLEAN). Merge-order: 200→199 dependency already recorded; 199 needs no row.
+
+## Session 2026-09-21 — sdd-execute (all 11 steps, sequential, per-step commits)
+
+Executed on the harness branch `claude/symbol-consolidation-scoring-7kgk9t` (draft PR #1157),
+sequential mode, one commit per step (operator directive).
+
+### Pre-execution housekeeping (committed separately)
+- **Merged `origin/main-dev`** (brought in `198-historical-fundamentals-backtest`, #1158). Resolved
+  the one conflict in `docs/roadmap/ledger/insights.md` (kept both design-insight entries).
+- **Renumber 198 → 199** (and dependent `symbol-opportunity-ranking` 199 → 200): the merged
+  historical-fundamentals feature owns 198 immutably (CLAUDE.md numbering rule). Rewrote every
+  feature-id cross-reference; re-derived proto field (`composite_score = 21`) and migration (`024`)
+  against the merged tree and confirmed both still free (the 198 change touched a different
+  `Opportunity`-sibling message + marketdata migrations, not these).
+
+### Steps
+1. proto `optional double composite_score = 21` + cardinal-guard doc-comment (buf lint/breaking pass).
+2. Regenerated Go/Python/TS stubs + `gen/ts/dist` via the `Dockerfile.codegen` container (no host buf).
+3. Migration `024` — nullable `composite_score` column (up/down).
+4. Documented 3 `analysis.scoring.composite_*` keys (k / w_readiness / w_signal, default 1.0,
+   `get_float_present`).
+5. `_composite_score` EB fusion + `_composite_signal_subscore` (direction-scoped multiplicative
+   attenuation); wired into `_row_for` (compute on real axes before zeroing; sym_unavailable → NULL)
+   + `_retry_unavailable_symbols` heal (best_direction re-anchored on RAW conviction); persisted on
+   INSERT/UPDATE + projected with explicit presence.
+6. Tests: pure-fn AC math (`test_composite_score.py`), persistence binds + projection presence
+   (`test_opportunities_repo.py`), and the analysis-side OR-F parity guard `_MAPPED` update.
+7. `ANALYSIS-11` cardinal-guard invariant (ANALYSIS-10 was taken by the merged feature-198).
+8. Agent `_opportunity_to_dict` projection (HasField-gated) + `mcp-tools.md` return-shape doc.
+9. Agent descriptor-parity covers field 21 (RED after step 2, GREEN after step 8) + @AC-9 value/omit.
+10. UI: `formatComposite` + Composite cell on the `/insights` queue + mobile SignalRow tag + the
+    `/trader` OpportunitySection stat; fixtures (AAPL 0.732 / MSFT 0.512, TSLA + PLTR drive em-dash).
+11. UI tests: vitest formatter + Playwright composite/em-dash render (insights + trader).
+
+### Deviations (also in implementation-spec.md § Deviation Log)
+- Renumber 198→199 and ANALYSIS-10→ANALYSIS-11 (both merge-induced).
+- Step 6 repo coverage is mock-bind (AsyncMock pool), matching the existing repo-test pattern, not a
+  live-DB round-trip; the pure fusion math is fully exercised in `test_composite_score.py`.
+- Also touched `test_analysis_servicer.py` `TestOpportunityRowParity._MAPPED` (analysis parity guard
+  went RED on the new proto field — analogous to the agent guard).
+- e2e SSR-warmup needs ~65s cold-compile in this sandbox (a 10s first attempt failed on warmup only,
+  not on any assertion); the retry pre-warmed 22/22 routes and all 5 feature-199 specs passed.
+
+### Teardown audit (context-forge plugin unavailable → manual reconciliation)
+The `/context-forge:context-constitution` skill is not installed in this session. Manually
+reconciled the two auto-loaded context files touched against the code:
+- `services/xstockstrat-analysis/CLAUDE.md` — the 3 new `analysis.scoring.composite_*` rows match
+  the servicer's `get_float_present` reads exactly (verified); no other content changed.
+- `services/xstockstrat-analysis/docs/context-constitution.md` — `ANALYSIS-11` cites only real
+  symbols (`_composite_score`/`_composite_signal_subscore`, `composite_score = 21`,
+  `ExternalSignal.conviction`); no stale citation.
+No drift found. (`README.md` / `docs/patterns/ui-ux-governance.md` scrubber targets untouched.)
