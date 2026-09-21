@@ -6379,6 +6379,7 @@ function createBaseOpportunity() {
         conditions: [],
         signalConfidence: undefined,
         dataUnavailable: false,
+        compositeScore: undefined,
     };
 }
 exports.Opportunity = {
@@ -6442,6 +6443,9 @@ exports.Opportunity = {
         }
         if (message.dataUnavailable !== false) {
             writer.uint32(160).bool(message.dataUnavailable);
+        }
+        if (message.compositeScore !== undefined) {
+            writer.uint32(169).double(message.compositeScore);
         }
         return writer;
     },
@@ -6592,6 +6596,13 @@ exports.Opportunity = {
                     message.dataUnavailable = reader.bool();
                     continue;
                 }
+                case 21: {
+                    if (tag !== 169) {
+                        break;
+                    }
+                    message.compositeScore = reader.double();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -6674,6 +6685,11 @@ exports.Opportunity = {
                 : isSet(object.data_unavailable)
                     ? globalThis.Boolean(object.data_unavailable)
                     : false,
+            compositeScore: isSet(object.compositeScore)
+                ? globalThis.Number(object.compositeScore)
+                : isSet(object.composite_score)
+                    ? globalThis.Number(object.composite_score)
+                    : undefined,
         };
     },
     toJSON(message) {
@@ -6738,6 +6754,9 @@ exports.Opportunity = {
         if (message.dataUnavailable !== false) {
             obj.dataUnavailable = message.dataUnavailable;
         }
+        if (message.compositeScore !== undefined) {
+            obj.compositeScore = message.compositeScore;
+        }
         return obj;
     },
     create(base) {
@@ -6765,6 +6784,7 @@ exports.Opportunity = {
         message.conditions = object.conditions?.map((e) => exports.ConditionEval.fromPartial(e)) || [];
         message.signalConfidence = object.signalConfidence ?? undefined;
         message.dataUnavailable = object.dataUnavailable ?? false;
+        message.compositeScore = object.compositeScore ?? undefined;
         return message;
     },
 };

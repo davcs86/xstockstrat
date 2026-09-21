@@ -1382,6 +1382,15 @@ export type Opportunity = Message<"xstockstrat.analysis.v1.Opportunity"> & {
      * @generated from field: bool data_unavailable = 20;
      */
     dataUnavailable: boolean;
+    /**
+     * feature 199 — a single shrunk 0–1 ranking ordinal fusing readiness + directional signal
+     * (empirical-Bayes over the two axes present at compute; NULL/unset = nothing to fuse). Like
+     * conviction=3 it is NOT a probability and NEVER a cardinal sizing/alert/risk input — that is
+     * ExternalSignal.conviction (ingest.proto:110). Explicit-presence: unset = not-yet/nothing-to-fuse.
+     *
+     * @generated from field: optional double composite_score = 21;
+     */
+    compositeScore?: number | undefined;
 };
 /**
  * Describes the message xstockstrat.analysis.v1.Opportunity.
