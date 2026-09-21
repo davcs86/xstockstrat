@@ -196,3 +196,60 @@
   ends; seed edit (not raw DB backfill) to set the seeded formula's `fundamental_inputs` (C-10(c)).
 - **Disjoint-kind decision untouched; no Floor breach; no rule CHANGED → no C-16 sign-off.** Status
   stays `design-approved`; R3 sharpened the mechanism, it did not re-open the phase gate.
+
+## Session 2026-09-21 — sdd-design Phase 1, Rounds 4 & 5 (user-requested; full mode cap reached)
+
+- User asked to run 1–2 more rounds depending on the adversary. R4 adversary attacked the post-R3
+  design → **NEEDS WORK**; R5 proposer resolved the mechanism objections and one user fork was settled.
+  Both agents verified every claim against merged `main-dev` (P-02 mediated).
+- **R4 findings (all grounded):**
+  - **Obj-1 (MAJOR, the fork):** design.md's "partial dict → producer parity" was **false**. The
+    producer (`fundsignal_loop.py:404-411`) builds `input_data` unconditionally with proto3 scalars —
+    an absent metric is passed as `0.0`, never omitted, never consulting `missing_metrics`; the seeded
+    formula scores a missing PE as a hard `0.0` (`fundamentals_value_quality.py:131`). So omit-absent
+    (design) ≠ producer on any partial row. `@AC-4` (full AAPL) / `@AC-5` (whole-row-missing INTC)
+    covered neither — the partial case was unguarded.
+  - **Obj-2 (MAJOR):** the branch was placed in `_compute_component` (`evaluator.py:334`), which has
+    only `(comp, closes)` — no `eval_dates`/filings → `@AC-2` unsatisfiable; and the snapshot-row
+    channel was unnamed (conflating it with the PIT `FundamentalPeriod` list would break
+    `_fundamental_as_of_series`).
+  - **Obj-3 (MAJOR, C-01):** "Migration: NONE" was wrong — `GetFormula` maps
+    `parameters`/`outputs`/`warmup_period` but not `fundamental_inputs` (`indicators/servicer.py:454`);
+    with no persistence the routing map is always empty → every fundamentals formula dead-routes to
+    `FormulaExecutionError`.
+  - **Obj-4 (MAJOR, C-10):** the map + `_needs_eval_dates` extension must be at all 6 evaluate surfaces;
+    the warmup prefetch exists at only 2 (backtest, live); the warmup cache must stay `{id:int}`.
+  - MINORs: two metric-name lists drift (Obj-5); C-14 badge "optional" (Obj-6, but the UI picker +
+    `fscore.composite` operand already surface — `strategyCatalog.ts:213-244`); mixed scalar+list
+    contract (Obj-7); snapshot fan-out sem/cache (Obj-8).
+  - **Confirmed HOLDING (not manufactured):** 0-warmup can't shrink a sibling (`max`-monotonic,
+    `warmup.py:138-147`); `@AC-1`'s `fscore.composite` trace resolves (`evaluator.py:247-248`); the
+    two-site gate is C-05-clean; epoch/no-look-ahead reconfirmed.
+- **R5 proposer resolutions (verified, folded into design.md):** branch → `_assemble_component_series`
+  (`:459`) with a shared `_decode_formula_output` helper; snapshot row lowered to a **1-element
+  `FundamentalPeriod`** (`date.min` sentinel) so PIT + snapshot share one `_fundamental_as_of_series`
+  channel and one code shape; **indicators migration `006`** (`fundamental_inputs JSONB DEFAULT '[]'`,
+  mirroring `003_formula_outputs`) + Register/Update writes + GetFormula mapping — **corrects Migration:
+  NONE**, adds a DBA gate (C-07); routing map folded into the 2 prefetch sites (no new RPC there) + a
+  bounded memoized `_formula_fundamentals` fan-out at the other 4 (honest new call); `_needs_eval_dates`
+  signature extended and enumerated per-site (C-10); `_FUNDAMENTAL_METRICS = set(_FUNDAMENTAL_METRIC_DATA_KEY.values())`
+  (one list); a minimal read-only C-14 badge in `ComponentEditor` (else follow-up
+  `insights-fundamentals-formula-affordance`).
+- **THE fork — Objection-1, user sign-off (AskUserQuestion):** partial-row feed. Options: **(a)** match
+  the producer (proto-zero for absent) — exact FR-5 parity, no C-16 change, least mechanism, but
+  penalizes non-reporting symbols and risks an early-window backtest-vs-live scoring skew; **(b)**
+  omit-absent (neutral-drop) — better model, but diverges from the producer → FR-5 narrowed to
+  fully-populated rows, a new `@AC-8`, and C-16-adjacent sign-off. **User chose (b).** Recorded as the
+  explicit decision; option (a) is in Rejected Alternatives.
+- **acceptance.feature edits (C-15, ids preserved):** `@AC-4` narrowed to "fully-populated rows";
+  **new `@AC-8`** (partial-row: omit absent, neutral-drop, diverges from the producer's proto-zero).
+  `product-spec.md` FR-5 narrowed; Proto/Database/Approval sections corrected (additive
+  `fundamental_inputs` field + enum; indicators migration `006` + DBA gate).
+- **Carried to /sdd-spec (unchanged + new):** `get_bool` in `make_servicer` (fails.md:1395); real `Bar`
+  on `bar.time` + mid-window transition assertion (fails.md:727/1853); `MessageToDict` scalar/NaN→
+  `FormulaExecutionError` in the shared decoder (fails.md:87); the seeded formula's `fundamental_inputs`
+  set via the idempotent seed edit (C-10(c)); indicators migration `006` `.up`/`.down` (C-07).
+- **No Floor breach; no existing durable rule CHANGED (198/152/151/150/176/168/190 all PRESERVE).** The
+  FR-5 narrowing edits *this feature's own* not-yet-promoted scenarios (allowed pre-launch, C-15) and
+  carried a user sign-off. Disjoint-kind + closed-enum decisions untouched. **Design converges at R5
+  (full mode's cap) — no R6.** Status stays `design-approved`.

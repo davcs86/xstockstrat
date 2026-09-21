@@ -27,10 +27,12 @@ Feature: fundamentals-formula-inputs
     And no GetHistoricalFundamentals PIT lookup is performed on the live path
 
   @AC-4 @FR-5
-  Scenario: One formula, identical I/O in the producer and in a strategy
+  Scenario: One formula, identical I/O in the producer and in a strategy — fully-populated rows
     Given the formula id "value_quality" registered once
+    And AAPL has ALL of the formula's declared fundamentals metrics present (no missing_metrics)
     When the fundamentals signal producer scores AAPL with it and a strategy component evaluates it for AAPL on the same as-of fundamentals
     Then both invocations pass the same fundamentals input_data keys and read the same composite output field
+    # FR-5 parity is guaranteed for fully-populated rows only; the partial-row case diverges by design (see @AC-8, R4/R5 user decision option b).
 
   @AC-5 @FR-6
   Scenario: Missing fundamentals or a formula error degrades to hold, never fabricates
@@ -53,3 +55,11 @@ Feature: fundamentals-formula-inputs
     Given a strategy with an ordinary technical custom-formula component over OHLCV closes
     When the strategy is evaluated in a backtest
     Then the component receives only bar closes as before and no fundamentals input_data is added
+
+  @AC-8 @FR-5 @FR-6
+  Scenario: On a partial fundamentals row the strategy omits absent metrics (does not penalize) and diverges from the producer
+    Given the formula id "value_quality" and a symbol whose fundamentals row is missing pe_ratio (present in missing_metrics) but has the other declared metrics
+    When a strategy component evaluates the formula for that symbol
+    Then the input_data dict OMITS pe_ratio entirely (it is not passed as 0.0) and the formula averages only the present sub-parts
+    And the resulting composite differs from the fundamentals signal producer's score for the same row, which passes pe_ratio as 0.0 and scores it a hard zero
+    # R4/R5 user decision (option b): omit-absent, neutral-drop. FR-5 parity is narrowed to fully-populated rows (@AC-4); this partial-row divergence from the producer is the accepted, signed-off behavior. A whole-row-missing symbol still holds (None), never fabricates — see @AC-5.

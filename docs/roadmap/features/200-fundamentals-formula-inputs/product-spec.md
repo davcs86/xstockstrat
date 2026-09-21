@@ -37,9 +37,14 @@ the review's C-10 integration-completeness note.)
 FR-4. The component's output reduces to a series the **same way other formula components do** (primary
 `value`, or a declared `<ref_name>.<series>` output), so rule-operand referencing is unchanged and a
 fundamentals formula composes with technical operands in one condition tree.
-FR-5. **One formula, one contract:** a fundamentals-scoring formula authored once behaves identically
-whether invoked by the existing fundamentals signal producer (062/063) or as a strategy component —
-the `input_data`/`output` shape and the fundamentals input set do not diverge between the two.
+FR-5. **One formula, one contract (fully-populated rows):** a fundamentals-scoring formula authored
+once behaves identically whether invoked by the existing fundamentals signal producer (062/063) or as
+a strategy component — the `input_data`/`output` shape and the fundamentals input set do not diverge —
+**for symbols whose declared metrics are all present**. _(Narrowed by the /sdd-design R4/R5 debate,
+user decision option b: on a **partial** row the strategy path **omits** absent metrics — neutral-drop,
+no penalty — whereas the producer passes proto-zero `0.0`, so the two diverge on partial rows. See
+`design.md` and `acceptance.feature` `@AC-4` (full-row parity) + `@AC-8` (partial-row divergence). User
+sign-off recorded in `context.md`.)_
 FR-6. **Graceful degradation, no fabrication:** a formula execution failure, or fundamentals
 unavailable for a symbol/bar, degrades that component to `None`/hold for that span (never a fabricated
 `0.0` score) and never aborts the backtest/evaluation.
@@ -93,12 +98,12 @@ fundamentals-capable, rather than adding a new surface.
 
 ## Proto Contract Changes
 
-- [x] **Likely no proto changes** — `ExecuteFormula` already carries `input_data`/`output` Structs
-  (verified: `packages/proto/indicators/v1/indicators.proto` `ExecuteFormulaRequest.input_data=3`,
-  `ExecuteFormulaResponse.output=2`).
-- OR (design decides): if a formula must *declare* it consumes fundamentals inputs and that cannot be
-  inferred from its existing `FormulaParameter`/`FormulaOutput` declarations, an **additive**
-  `FormulaDefinition` field may be added (non-breaking). Resolve in `/sdd-design`.
+- [x] **Additive proto change (design decided).** `ExecuteFormula`'s wire is unchanged
+  (`input_data`/`output` Structs already carry scalars). But a formula must **declare** it consumes
+  fundamentals inputs: `/sdd-design` chose an **additive `repeated FundamentalMetric fundamental_inputs`**
+  on `FormulaDefinition` (+ `RegisterFormulaRequest`/`UpdateFormulaRequest`), `FundamentalMetric` a
+  **new closed enum** (11 metrics + `_UNSPECIFIED=0`, C-04) — non-breaking (C-09). `buf lint`/`buf
+  breaking` + `./scripts/buf-gen.sh`; 1 indicators owner.
 
 ## Config Key Changes
 
@@ -110,15 +115,21 @@ fundamentals-capable, rather than adding a new surface.
 
 ## Database Changes
 
-- [x] No schema changes — reuses the feature-198 PIT store and the marketdata fundamentals cache.
+- [x] **One indicators migration (design decided — corrected from "none").** The analysis PIT store
+  and marketdata fundamentals cache are reused unchanged, BUT indicators must **persist**
+  `fundamental_inputs`: migration **`006_add_formula_fundamental_inputs`** (`ALTER TABLE
+  indicators.formulas ADD COLUMN fundamental_inputs JSONB NOT NULL DEFAULT '[]'`, mirroring the
+  `003_formula_outputs` JSONB precedent) — without it `GetFormula` can't return the field and the
+  eval-time routing map is always empty. Adds a **DBA** review gate (C-07). Resolved in the
+  `/sdd-design` R4/R5 debate.
 
 ## Feature Workflow Notes
 
 Branch to create: `feature/fundamentals-formula-inputs` (branch from `main-dev`)
 Approval gates required (per docs/runbooks/feature-workflow.md):
-- [x] 1 service owner approval (`xstockstrat-analysis`; `xstockstrat-indicators` if any additive proto/declaration surface)
-- [ ] 2 service owners + platform lead (breaking proto change) — N/A (additive if any)
-- [ ] DBA review + service owner (schema migration) — N/A (no schema change)
+- [x] Service owner approval: `xstockstrat-analysis` (evaluator/loader wiring) **and** `xstockstrat-indicators` (additive `fundamental_inputs` proto field + enum + persistence)
+- [ ] 2 service owners + platform lead (breaking proto change) — N/A (additive, C-09)
+- [x] **DBA review + service owner** — indicators migration `006_add_formula_fundamental_inputs` (design R4/R5; corrects the earlier "no schema change")
 
 ## Acceptance Criteria
 
