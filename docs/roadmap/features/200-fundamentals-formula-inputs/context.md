@@ -280,3 +280,47 @@
   `historical-fundamentals-backtest` (198) — consumed-seam build-order dependency (198 is
   code-completed, not yet launched).
 - **Next:** proceed to `/sdd-spec fundamentals-formula-inputs` (review clear, design approved).
+
+## Session 2026-09-21 — sdd-spec
+
+- Generated implementation-spec.md with **12 steps**. Status → `implementation-ready`.
+- Consumed `recon.md` + `design.md` as authoritative; re-grounded every cited symbol against merged
+  `main-dev` (line numbers had drifted from the design's write-time citations — spec cites the
+  verified current lines).
+- Key codebase findings (verified `path:line`):
+  - Indicators last migration on disk is `005_add_formula_soft_delete` → next free is `006`; JSONB
+    precedent is `003_formula_outputs` (`ADD COLUMN … JSONB NOT NULL DEFAULT '[]'`). `FormulaDefinition`
+    next free proto field = 14; `RegisterFormulaRequest`=10, `UpdateFormulaRequest`=11.
+  - Indicators persistence path confirmed end-to-end: repo `create`/`upsert`/`update` +`_to_dict`
+    (`formulas_repository.py`), `RegisterFormula` (`servicer.py:242-270`), `UpdateFormula`
+    (`:361-398`, `_FORMULA_MASKABLE_PATHS:24`), `GetFormula` mapping `_row_to_formula` (`:441-457`),
+    validation seam `validate_outputs` (`parameters.py:81`), seed via `seed_formulas.py` upsert. The
+    seeded fvq formula reads 6 metrics (PE/PB/DIVIDEND_YIELD/ROE/DEBT_TO_EQUITY/EPS).
+  - Analysis evaluator: `_fundamental_as_of_series` (`evaluator.py:69`, strict `filed_date<d` T+1),
+    `_needs_eval_dates` (`:60-66`, matches only source_symbol/COMPONENT_KIND_FUNDAMENTAL — must be
+    extended for the formula), the fundamentals-only branch belongs in `_assemble_component_series`
+    (after `:459-464`), and `fundamentals`/`benchmark_bars` already thread through
+    evaluate/evaluate_with_series/evaluate_conditions_traced.
+  - Analysis servicer: `_load_fundamentals` (`:1452`, gate `:1472` `get_bool
+    analysis.backtest.fundamentals.enabled`), the **6** evaluate surfaces call it at 1595/2922/3174/
+    3400/3833/3909/4376/4654, warmup prefetch exists only at backtest (`_declared_formula_warmup:1950`)
+    + live (`declared_formula_warmups`); write-time seam `_validate_definition_proto:601` →
+    `_fetch_formula_outputs:537`. `_definition_has_fundamental:5048` + `_fundamental_periods_from_response:5054`.
+  - Producer divergence (@AC-8): `fundsignal_loop._score_via_formula:399-411` passes proto-zero for
+    absent metrics unconditionally; `fundamentals_scoring.score_fundamentals` reads `output.composite`.
+  - Traps carried into the test plan: `make_servicer` stubs no `get_bool` (fails.md:1395,
+    `test_analysis_servicer.py:39-49`); real `Bar` via `_bar(sec,…)` `b.time.seconds` (fails.md:727);
+    mid-window filing-boundary assertion (fails.md:1853); `MessageToDict` rejects NaN/Inf so a
+    non-finite scalar is `FormulaExecutionError`, never fabricated (fails.md:87).
+  - UI: badge goes in `ComponentEditor.tsx` CUSTOM_FORMULA branch (`selectedFormula:66`), reusing the
+    FUNDAMENTAL-kind hint markup (`:143-146`); C-12 fixture in `e2e/fixtures/formulas.ts` + INVENTORY.
+  - strat-lab backtest `SKILL.md:91-101` documents the 198 single-metric operand — must gain a
+    fundamentals-formula section in the same PR (root CLAUDE.md manage_strategy/run_backtest rule).
+- **Open thread carried to execute (design residual, `## Step Dependencies`):** the fundamentals-formula
+  channel is PIT (`_load_fundamentals`) on backtest and snapshot (`_load_fundamentals_snapshot`) on the
+  5 non-backtest surfaces. A strategy combining a single-metric `COMPONENT_KIND_FUNDAMENTAL` operand
+  (198, always PIT) **and** a fundamentals-formula on a non-backtest surface is an unspecified
+  co-occurrence; the write-time XOR guard (Step 8) covers only source_symbol+fundamental_inputs on one
+  component. The spec keeps the two loaders on separate channels to preserve 198 byte-identically
+  (C-16 PRESERVE `@AC-3` `@feature-198`); resolve/record at execute time.
+- **Next:** `/sdd-review fundamentals-formula-inputs impl-spec`, then `/sdd-execute`.
