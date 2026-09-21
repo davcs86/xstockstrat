@@ -11,8 +11,8 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-09-20 | `idea` → `draft` | /sdd-story | Product spec generated |
-| 2026-09-20 | `draft` → `spec-ready` | /sdd-review | Product spec approved (1 advisory warning: 4-segment override key shape → design; 0 blockers). Merge-order row added: 199 depends on 198 |
-| 2026-09-20 | `spec-ready` (unchanged) | /sdd-design | Recon + 3-round debate run (SOUND, no Floor breach); **paused by operator before approval** pending feature 198 landing. recon.md written; converged design + Open Threads in context.md; design.md NOT yet written |
+| 2026-09-20 | `draft` → `spec-ready` | /sdd-review | Product spec approved (1 advisory warning: 4-segment override key shape → design; 0 blockers). Merge-order row added: 200 depends on 199 |
+| 2026-09-20 | `spec-ready` (unchanged) | /sdd-design | Recon + 3-round debate run (SOUND, no Floor breach); **paused by operator before approval** pending feature 199 landing. recon.md written; converged design + Open Threads in context.md; design.md NOT yet written |
 
 ---
 
@@ -28,9 +28,9 @@
 ## Summary
 
 A single comparable **symbol-level** score that rolls up all of a symbol's opportunities into one
-number (diminishing-returns sum of each opportunity's feature-198 `composite_score` weighted by its
+number (diminishing-returns sum of each opportunity's feature-199 `composite_score` weighted by its
 strategy's derived grade × operator override), so a trader can rank *which symbol to trade* across the
-whole queue — not just compare individual opportunities. **Layers on feature 198.**
+whole queue — not just compare individual opportunities. **Layers on feature 199.**
 
 ## Reviewers
 
@@ -49,4 +49,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-**Paused** — resume `/sdd-design symbol-opportunity-ranking` (round 4 + write design.md) **after feature 198 lands**, then `/sdd-spec`. Design debated 3 rounds (SOUND, unapproved); converged state + Open Threads recorded in `context.md`. Blocked on 198's merged shape (composite_score column, proto field, migration NNN).
+**Paused** — resume `/sdd-design symbol-opportunity-ranking` (round 4 + write design.md) **after feature 199 lands**, then `/sdd-spec`. Design debated 3 rounds (SOUND, unapproved); converged state + Open Threads recorded in `context.md`. Blocked on 199's merged shape (composite_score column, proto field, migration NNN).

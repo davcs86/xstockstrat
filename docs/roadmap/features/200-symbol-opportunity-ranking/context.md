@@ -1,8 +1,8 @@
 # Context: symbol-opportunity-ranking
 
-**Feature**: `docs/roadmap/features/199-symbol-opportunity-ranking/feature.md`
-**Product Spec**: `docs/roadmap/features/199-symbol-opportunity-ranking/product-spec.md`
-**Implementation Spec**: `docs/roadmap/features/199-symbol-opportunity-ranking/implementation-spec.md`
+**Feature**: `docs/roadmap/features/200-symbol-opportunity-ranking/feature.md`
+**Product Spec**: `docs/roadmap/features/200-symbol-opportunity-ranking/product-spec.md`
+**Implementation Spec**: `docs/roadmap/features/200-symbol-opportunity-ranking/implementation-spec.md`
 
 ---
 
@@ -12,7 +12,7 @@
 
 ### Why this feature exists (origin)
 
-Split out of feature 198 (opportunity-composite-score). During 198's design the user confirmed their
+Split out of feature 199 (opportunity-composite-score). During 199's design the user confirmed their
 real goal is **comparing which SYMBOL to trade**, with two concrete examples:
 1. A symbol with 2 opportunities at 0.80 conviction + full readiness must rank ABOVE a symbol with 1
    opportunity at 1.00 conviction. → breadth/corroboration, NOT the current MAX-over-opportunities
@@ -20,12 +20,12 @@ real goal is **comparing which SYMBOL to trade**, with two concrete examples:
 2. A symbol whose opportunity set includes `fundamental_macd_blend` must rank ABOVE a symbol with the
    same count but without it. → per-strategy weighting.
 
-198 (per-opportunity composite) is necessary but NOT sufficient for symbol comparison, so 199 is the
-symbol-level roll-up layer that consumes 198's `composite_score`.
+199 (per-opportunity composite) is necessary but NOT sufficient for symbol comparison, so 200 is the
+symbol-level roll-up layer that consumes 199's `composite_score`.
 
 ### Decided design forks (operator answered before /sdd-story)
 
-- **Vehicle**: new feature 199, layered on 198 (not expanding 198, not pivoting it).
+- **Vehicle**: new feature 200, layered on 199 (not expanding 199, not pivoting it).
 - **Strategy weighting**: feature-065 derived grade (A–F → numeric) × operator per-strategy config
   override (default override 1.0).
 - **Breadth aggregation**: diminishing-returns sum (2 moderate > 1 strong, with saturation so N weak
@@ -39,7 +39,7 @@ symbol-level roll-up layer that consumes 198's `composite_score`.
 ### Ledger traps to carry (P-05)
 
 - `fails.md:313`/`:418` — `symbol_score` is another ranking ordinal; must NEVER become a cardinal
-  sizing/alert input. Extend feature-198's cardinal-guard invariant to `symbol_score`.
+  sizing/alert input. Extend feature-199's cardinal-guard invariant to `symbol_score`.
 - Feature-190 MAX-partition sort (`opportunities.py:35`) is exactly what this replaces for symbol
   comparison; preserve the existing per-opportunity `conviction`/`expiry` sorts and the
   "client does not re-sort" guarantee (`@AC-15 @feature-190`) — a new default symbol ordering would be
@@ -49,9 +49,9 @@ symbol-level roll-up layer that consumes 198's `composite_score`.
 
 ### Dependency / merge-order
 
-Depends on **feature 198** (`Opportunity.composite_score` column + proto field). 198 is
-`design-approved`, not merged. 199 must not merge before 198; both touch the analysis opportunity path
-(soft rebase overlap with 198 and in-flight 187/193/188). Reserve migration NNN + proto field at
+Depends on **feature 199** (`Opportunity.composite_score` column + proto field). 199 is
+`design-approved`, not merged. 200 must not merge before 199; both touch the analysis opportunity path
+(soft rebase overlap with 199 and in-flight 187/193/188). Reserve migration NNN + proto field at
 /sdd-spec against the merged tree.
 
 ### Consumer surfaces (C-14)
@@ -65,16 +65,16 @@ UI `/insights` (SymbolGroupCard orderable by symbol_score) + Agent (`list_opport
 - Warnings:
   1. Config key `analysis.scoring.strategy_weight_override.<strategy_id>` uses a non-standard 4-segment (dynamic-suffix) form — no 4-segment precedent in the analysis namespace (all ~40 keys are 3-segment). Already an Open Question; resolve at design (per-strategy dynamic keys vs one structured JSON value). (C-05)
   2. Migration up/down pairing (C-07) implied not restated in the conditional persisted branch — confirm at design if symbol_score is persisted.
-- Overlap findings: no FAIL-class collision (199 has reserved no concrete field/migration/key yet). HARD merge-order dependency on 198 (consumes composite_score; buf breaking/golang-migrate can't see 198's uncommitted claims). Blocking row added to merge-order.md. Soft same-file rebase overlap on servicer.py _compute_opportunities, opportunities.py ORDER BY, insights/opportunities/page.tsx, agent list_opportunities — shared with 198/187/193/188.
-- Verified against code: feature-065 _grade A-F at servicer.py:5174-5184 (strategy grade source real); current MAX-partition sort default at opportunities.py:35 (the behavior FR-2 replaces); composite_score does not yet exist in source (198 spec-only → merge-order dep confirmed).
-- Fixed stale label: product-spec said 198 "design-approved" → now implementation-ready (both pre-merge).
+- Overlap findings: no FAIL-class collision (200 has reserved no concrete field/migration/key yet). HARD merge-order dependency on 199 (consumes composite_score; buf breaking/golang-migrate can't see 199's uncommitted claims). Blocking row added to merge-order.md. Soft same-file rebase overlap on servicer.py _compute_opportunities, opportunities.py ORDER BY, insights/opportunities/page.tsx, agent list_opportunities — shared with 199/187/193/188.
+- Verified against code: feature-065 _grade A-F at servicer.py:5174-5184 (strategy grade source real); current MAX-partition sort default at opportunities.py:35 (the behavior FR-2 replaces); composite_score does not yet exist in source (199 spec-only → merge-order dep confirmed).
+- Fixed stale label: product-spec said 199 "design-approved" → now implementation-ready (both pre-merge).
 
 ## Session 2026-09-20 — sdd-design (IN-FLIGHT, PAUSED by operator — NOT approved)
 
-- Operator stopped the debate after 3 rounds: "review the design and plan once 198 gets done."
-  Status stays **spec-ready** (no design.md written, no lifecycle flip). Rationale: 199's key
-  unknowns are post-198 facts (composite_score column shape, ANALYSIS-10, proto field/migration
-  numbers) — resume round 4 + write design.md against the MERGED 198 tree, not 198's spec text.
+- Operator stopped the debate after 3 rounds: "review the design and plan once 199 gets done."
+  Status stays **spec-ready** (no design.md written, no lifecycle flip). Rationale: 200's key
+  unknowns are post-199 facts (composite_score column shape, ANALYSIS-10, proto field/migration
+  numbers) — resume round 4 + write design.md against the MERGED 199 tree, not 199's spec text.
 - Phase 0 Recon: recon.md written (committed). Phase 1 Grilling: rounds 1-3 run, verdict SOUND /
   APPROVABLE (no Floor breach) — but NOT approved (paused before the gate).
 
@@ -94,11 +94,11 @@ UI `/insights` (SymbolGroupCard orderable by symbol_score) + Agent (`list_opport
 - **Sort**: opt-in `OPPORTUNITY_SORT_SYMBOL_SCORE = 3` (analysis.proto:541) → `_SORT_ORDER_BY[3] =
   MAX(o.symbol_score) OVER (PARTITION BY o.symbol) DESC NULLS LAST, o.symbol ASC, o.opportunity_key ASC`
   (opportunities.py:33). Default stays CONVICTION (no @AC-10 CHANGE, no sign-off).
-- **Surfaces**: per-row `Opportunity.symbol_score` field (next-free after 198's composite_score=21 →
+- **Surfaces**: per-row `Opportunity.symbol_score` field (next-free after 199's composite_score=21 →
   22, re-derive vs merged tree); UI = plain 3-decimal number (NOT scoreColor — unbounded), rendered
   only under the server-applied symbol_score sort; agent = raw float via _opportunity_to_dict + omit on
-  NULL + descriptor-parity. Migration 025 (after 198's 024, re-derive).
-- **Cardinal guard**: extend feature-198's ANALYSIS-10 invariant + a symbol_score proto doc-comment
+  NULL + descriptor-parity. Migration 025 (after 199's 024, re-derive).
+- **Cardinal guard**: extend feature-199's ANALYSIS-10 invariant + a symbol_score proto doc-comment
   ("unbounded ordinal RANKING scalar … NOT a probability/expected-return/sizing input").
 - **Heal (corrected, round 3)**: new disposition-free `OpportunitiesRepository.symbol_composite_terms
   (user_id, symbol)` (no opportunity_actions join / no valid_until / no floor) → re-fold the whole
@@ -115,12 +115,12 @@ UI `/insights` (SymbolGroupCard orderable by symbol_score) + Agent (`list_opport
   floor 0.5 > 0 contributes; unproven never outranks evidenced. (@AC-9 to be updated to unbounded
   values 1.20/0.75 when design.md is written.)
 
-## Open Threads (resolve at round 4 / against merged 198 tree)
+## Open Threads (resolve at round 4 / against merged 199 tree)
 
-- [ ] **Post-198 coupling (fails.md:378/412/422 trap)**: re-derive `symbol_composite_terms` against
-  198's LANDED shape — is composite_score a queryable column (198 design says yes) or in readiness_json?
+- [ ] **Post-199 coupling (fails.md:378/412/422 trap)**: re-derive `symbol_composite_terms` against
+  199's LANDED shape — is composite_score a queryable column (199 design says yes) or in readiness_json?
   Re-derive proto field 22, sort enum value, migration 025 from the merged tree.
-- [ ] **NULL-composite fold semantics** must match the main-compute fold exactly (198 persists NULL on
+- [ ] **NULL-composite fold semantics** must match the main-compute fold exactly (199 persists NULL on
   Σw≤0) or the heal-parity test passes on a subtle divergence.
 - [ ] **Order-insensitive fold**: `_symbol_score` must sort terms internally so heal (persisted
   universe) and compute (candidates dict) are byte-identical regardless of input row order.
@@ -131,4 +131,4 @@ UI `/insights` (SymbolGroupCard orderable by symbol_score) + Agent (`list_opport
 - [ ] **Config**: assign real 3-segment key names + decide floor=0 / decay=0 read semantics
   (get_float_present vs get_float zero-trap) + declare defaults in analysis CLAUDE.md.
 - [ ] **Round 4 focus** was requested but redirected: resume the design debate (write design.md +
-  flip to design-approved) AFTER 198 lands, then /sdd-spec 199.
+  flip to design-approved) AFTER 199 lands, then /sdd-spec 200.

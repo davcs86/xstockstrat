@@ -9,10 +9,10 @@
 ## Objective
 
 A single comparable symbol-level `symbol_score` that rolls up a symbol's opportunity rows via a
-diminishing-returns sum of `(feature-198 composite_score × strategy_weight)`, where
+diminishing-returns sum of `(feature-199 composite_score × strategy_weight)`, where
 `strategy_weight = feature-065 derived-grade weight × operator per-strategy override`, so a trader can
 rank *which symbol to trade*. Exposed as a new opt-in sort on the `/insights` queue and to the MCP
-agent. **Layers on feature 198** (consumes `composite_score`).
+agent. **Layers on feature 199** (consumes `composite_score`).
 
 ## Codebase Map
 
@@ -23,8 +23,8 @@ agent. **Layers on feature 198** (consumes `composite_score`).
   - Owner scoping: cache is **global, keyed by bare `strategy_id`** (no user column); per-user gating = intersect with owner's ids, as `ListStrategies` does — `servicer.py:2273`
   - `strategy_id` on the row: INSERT col — `opportunities.py:82`; SELECT — `opportunities.py:179`; proto `Opportunity.strategy_id = 7` — `analysis.proto:565`; `opportunity_key = user|symbol_norm|strategy_id` — `analysis.proto:568`
   - Config read: `get_float_present` — `app/config/watcher.py:132` (use site `servicer.py:3885`)
-  - Migration tip on this branch: **`023_opportunity_compute_state`** (CLAUDE.md's 024–028 are drift, absent on disk); 198 reserves `024` → 199 = **`025`** if persisted
-- **`packages/proto`**: `OpportunitySort { UNSPECIFIED=0; CONVICTION=1; EXPIRY=2; }` — `analysis.proto:541`; `ListOpportunitiesRequest.sort = 5` — `analysis.proto:642`; `Opportunity` message, next free field **21** *after* 198's `composite_score=21* — see Risks* — `analysis.proto:558-593`
+  - Migration tip on this branch: **`023_opportunity_compute_state`** (CLAUDE.md's 024–028 are drift, absent on disk); 199 reserves `024` → 200 = **`025`** if persisted
+- **`packages/proto`**: `OpportunitySort { UNSPECIFIED=0; CONVICTION=1; EXPIRY=2; }` — `analysis.proto:541`; `ListOpportunitiesRequest.sort = 5` — `analysis.proto:642`; `Opportunity` message, next free field **21** *after* 199's `composite_score=21* — see Risks* — `analysis.proto:558-593`
 - **`xstockstrat-ui`** (Next.js): queue is **server-sorted, client-grouped** (Map insertion order over pre-sorted rows) — `src/app/insights/opportunities/page.tsx:157-167`; sort `Select` (Conviction/Expiry only) — `page.tsx:258-266`; `SortKey` union (add the option here) — `page.tsx:51`; UI→enum map — `page.tsx:99-100`; request threading — `src/hooks/useOpportunities.ts:27,30`; BFF transparent forward — `src/lib/insightsBff.ts:54`; no `Record<OpportunitySort,…>` exhaustive map exists (no tsc break) — `src/lib/opportunityShared.tsx`
 - **`xstockstrat-agent`** (Python): `_opportunity_to_dict` explicit projection — `app/client.py:747-799`; `list_opportunities` does NOT set `sort` today — `client.py:802-833`; descriptor-parity guard — `tests/test_opportunity_projection.py:50`; tool wrapper — `app/tools.py:1229`
 
@@ -37,8 +37,8 @@ agent. **Layers on feature 198** (consumes `composite_score`).
 - Config → **reuse `get_float_present`** for the saturation param + grade-weight map + overrides.
 - UI → **reuse the server-order render** (no client re-sort, `@AC-15`) + `scoreColor` for display; add one `SortKey`/enum option.
 - Agent → **extend `_opportunity_to_dict`** + descriptor-parity test + `mcp-tools.md` in the same PR.
-- Per-opportunity quality input → **feature-198 `composite_score`** (not-yet-landed dependency).
-- Cardinal guard → **extend feature-198's `ANALYSIS-10` invariant** to `symbol_score`.
+- Per-opportunity quality input → **feature-199 `composite_score`** (not-yet-landed dependency).
+- Cardinal guard → **extend feature-199's `ANALYSIS-10` invariant** to `symbol_score`.
 
 ## Existing Business Rules (preserve / extend)
 
@@ -54,26 +54,26 @@ agent. **Layers on feature 198** (consumes `composite_score`).
 - **EXTEND** `@AC-10 @feature-185` (agent) — descriptor-parity guard must cover any new `symbol_score` field. **PRESERVE** `@AC-15 @feature-095` (agent) — omit-not-fabricate projection contract.
 - **EXTEND** `@AC-9 @feature-155` (UI mobile) — reorder symbol groups, keep grouping-by-symbol. **PRESERVE** `@AC-10 @feature-155` — keep per-signal strategy/source/expiry tags.
 - **PRESERVE** `@AC-5 @feature-150` / `@AC-3 @feature-149` — feature-065 grade derivation is a **read-only** input to strategy_weight; must not be altered.
-- No promoted `@AC-*` exists for feature-198 `composite_score` or the feature-190 rank blend as standalone durable rules — do not invent one; the nearest determinism guarantees are the feature-065 grade scenarios.
+- No promoted `@AC-*` exists for feature-199 `composite_score` or the feature-190 rank blend as standalone durable rules — do not invent one; the nearest determinism guarantees are the feature-065 grade scenarios.
 
 ## Dependencies
 
-- **Hard dependency: feature 198** — consumes `Opportunity.composite_score` (not yet in proto/code; 198 is `implementation-ready`). 199 must merge after 198; re-derive proto field + migration NNN from the merged tree (blocking row in merge-order.md).
-- Proto/RPC: additive `OPPORTUNITY_SORT_SYMBOL_SCORE = 3` on `OpportunitySort` (`analysis.proto:541`) + a `symbol_score` surface (per-row field on `Opportunity`, next-free after 198's 21, or a symbol-group message — design decides). Non-breaking; regen `gen/`.
-- Migration: **`025`** (after 198's `024`) if `symbol_score` is persisted; nullable column on `analysis.opportunities`.
+- **Hard dependency: feature 199** — consumes `Opportunity.composite_score` (not yet in proto/code; 199 is `implementation-ready`). 200 must merge after 199; re-derive proto field + migration NNN from the merged tree (blocking row in merge-order.md).
+- Proto/RPC: additive `OPPORTUNITY_SORT_SYMBOL_SCORE = 3` on `OpportunitySort` (`analysis.proto:541`) + a `symbol_score` surface (per-row field on `Opportunity`, next-free after 199's 21, or a symbol-group message — design decides). Non-breaking; regen `gen/`.
+- Migration: **`025`** (after 199's `024`) if `symbol_score` is persisted; nullable column on `analysis.opportunities`.
 - Config keys (new, `analysis`): saturation param (`analysis.opportunity.symbol_score_saturation` or similar), grade→weight map (`analysis.scoring.strategy_grade_weight_*`), per-strategy operator override — **override key shape is an Open Question** (4-segment dynamic key vs one structured value; no 4-segment precedent).
-- Inter-service edges: none new (grade already in-memory; composite already on the row post-198).
+- Inter-service edges: none new (grade already in-memory; composite already on the row post-199).
 
 ## Risks / Not-found
 
-- **`composite_score` not landed** (feature 198 `implementation-ready`, not executed) — the roll-up's per-row input does not yet exist in proto/code. 199 cannot execute before 198 merges (merge-order).
+- **`composite_score` not landed** (feature 199 `implementation-ready`, not executed) — the roll-up's per-row input does not yet exist in proto/code. 200 cannot execute before 199 merges (merge-order).
 - **Diminishing-returns sum is not a SQL window aggregate** — it is a rank-dependent ordered fold; Postgres `MAX/SUM OVER (PARTITION BY symbol)` cannot express it. → compute `symbol_score` **app-side** in `_compute_opportunities` and **persist** it per-row, then sort by `MAX(symbol_score) OVER (PARTITION BY symbol)`. (Read-time computation would need a new post-`read()` grouping pass that does not exist today.)
 - **Default-sort CHANGE risk (`@AC-10 @feature-190`)** — keep `symbol_score` opt-in; making it the default needs user sign-off. Surface at the gate.
-- **Cardinal guard (`fails.md:313`/`:418`)** — `symbol_score` is another ranking ordinal (composite ordinals × grade weights); must never become a cardinal sizing/alert input. Extend feature-198's `ANALYSIS-10` invariant + a proto doc-comment.
+- **Cardinal guard (`fails.md:313`/`:418`)** — `symbol_score` is another ranking ordinal (composite ordinals × grade weights); must never become a cardinal sizing/alert input. Extend feature-199's `ANALYSIS-10` invariant + a proto doc-comment.
 - **Grade scoping** — the score cache is global by bare `strategy_id`; the roll-up must gate per-user (owner-intersect) so it never weights by another user's strategy grade.
 - **Provisional/absent grade → neutral fallback weight** (FR-4/FR-7), never 0 (would zero a legitimate opportunity from an unproven strategy). Fallback value is an Open Question.
 - **Override key shape** (C-05) — 4-segment dynamic key has no precedent; design decides dynamic-key vs structured value.
-- Soft same-file rebase overlap with 198/187/193/188 on `servicer.py`, `opportunities.py`, `page.tsx`, agent `client.py`.
+- Soft same-file rebase overlap with 199/187/193/188 on `servicer.py`, `opportunities.py`, `page.tsx`, agent `client.py`.
 
 ## Recommended Scope
 

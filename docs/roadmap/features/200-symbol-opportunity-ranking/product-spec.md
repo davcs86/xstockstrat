@@ -22,7 +22,7 @@ eyeballing individual opportunities.
 ## Functional Requirements
 
 FR-1. **Symbol-level roll-up.** Produce one `symbol_score` per (user, symbol) that aggregates that
-symbol's opportunity rows. It **consumes feature-198's per-opportunity `composite_score`** as the
+symbol's opportunity rows. It **consumes feature-199's per-opportunity `composite_score`** as the
 per-opportunity quality input — this feature is the roll-up layer, not a re-computation of
 per-opportunity quality.
 
@@ -42,7 +42,7 @@ ranks strictly **above** a symbol with the same count of opportunities none of w
 `fundamental_macd_blend`, when `fundamental_macd_blend` carries a higher effective strategy weight.
 
 FR-4. **Missing/degenerate inputs degrade gracefully.** An opportunity whose `composite_score` is NULL
-(feature-198 "not computed" / data-unavailable) contributes nothing to the sum (it is not treated as 0
+(feature-199 "not computed" / data-unavailable) contributes nothing to the sum (it is not treated as 0
 quality that drags the symbol down; it is simply absent from the roll-up). A symbol with no
 score-eligible opportunities has no `symbol_score` (NULL / omitted), distinct from a computed low
 score. A strategy with only a provisional/absent grade (feature-065 evidence floor) uses a defined
@@ -55,7 +55,7 @@ is reproducible.
 
 ## Out of Scope
 
-- Changing the **per-opportunity** `composite_score` math (owned by feature 198).
+- Changing the **per-opportunity** `composite_score` math (owned by feature 199).
 - Removing or re-deriving the existing per-opportunity `conviction`/`signal_axis` axes or the
   feature-190 per-opportunity `rank` blend / `signal_rank_weight` (preserved unless explicitly changed
   with sign-off).
@@ -107,8 +107,8 @@ _Constitution **C-14**._
 - [ ] Possibly one new nullable column (persisted `symbol_score`) on `analysis.opportunities` **or** a
   query-time computation with no schema change — **design decides** (FR-1/FR-5). If persisted, a new
   numbered migration in `services/xstockstrat-analysis/migrations/` (`ls migrations/` and reserve the
-  next-free NNN at design time — do not guess; disk tip was `023`, and feature 198 reserves `024`, so
-  this feature must reserve the next after 198 lands or coordinate via merge-order).
+  next-free NNN at design time — do not guess; disk tip was `023`, and feature 199 reserves `024`, so
+  this feature must reserve the next after 199 lands or coordinate via merge-order).
 
 ## Feature Workflow Notes
 
@@ -118,9 +118,9 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 - [ ] 2 service owners + platform lead (breaking proto change) — N/A (additive only)
 - [x] DBA review + service owner (schema migration) — **only if** `symbol_score` is persisted
 
-**Merge-order dependency:** depends on **feature 198 (opportunity-composite-score)** — this feature
-consumes `Opportunity.composite_score`. 198 is `implementation-ready` (both are pre-merge). 199 must not
-merge before 198, and shares the analysis opportunity path (soft rebase overlap with 198, plus in-flight
+**Merge-order dependency:** depends on **feature 199 (opportunity-composite-score)** — this feature
+consumes `Opportunity.composite_score`. 199 is `implementation-ready` (both are pre-merge). 200 must not
+merge before 199, and shares the analysis opportunity path (soft rebase overlap with 199, plus in-flight
 187/193/188). Recorded as a blocking row in `docs/roadmap/features/merge-order.md`.
 
 ## Acceptance Criteria
@@ -132,7 +132,7 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 
 - [ ] **Known trap (ledger `fails.md:313`/`:418`).** `symbol_score` is another ranking ordinal (built
   from `composite_score` ordinals × grade weights) — it must **not** become a cardinal sizing/alert
-  input. Carry feature-198's cardinal-guard invariant forward to `symbol_score` (proto comment +
+  input. Carry feature-199's cardinal-guard invariant forward to `symbol_score` (proto comment +
   `ANALYSIS-*` invariant).
 - [ ] **Diminishing-returns function shape (FR-2).** Which saturating form — e.g. `Σ wᵢ·sᵢ·γ^(rank_i)`
   (geometric decay by descending contribution), a capped/soft-max, or `1 − Π(1 − wᵢ·sᵢ)` (noisy-OR)?

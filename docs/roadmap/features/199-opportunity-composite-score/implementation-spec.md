@@ -2,7 +2,7 @@
 
 **Status**: `pending`
 **Created**: 2026-09-20
-**Feature**: `docs/roadmap/features/198-opportunity-composite-score/feature.md`
+**Feature**: `docs/roadmap/features/199-opportunity-composite-score/feature.md`
 **Total Steps**: 11
 **Feature Branch**: `feature/opportunity-composite-score`
 
@@ -90,7 +90,7 @@ design.md §Consumer surfaces). No surface is deferred.
 **Instructions**:
 - Add, immediately after `bool data_unavailable = 20;` (`:592`) and before the closing brace of `Opportunity`:
   ```proto
-  // feature 198 — a single shrunk 0–1 ranking ordinal fusing readiness + directional signal
+  // feature 199 — a single shrunk 0–1 ranking ordinal fusing readiness + directional signal
   // (empirical-Bayes over the two axes present at compute; NULL/unset = nothing to fuse). Like
   // conviction=3 it is NOT a probability and NEVER a cardinal sizing/alert/risk input — that is
   // ExternalSignal.conviction (ingest.proto:110). Explicit-presence: unset = not-yet/nothing-to-fuse.
@@ -155,7 +155,7 @@ design.md §Consumer surfaces). No surface is deferred.
   ```sql
   -- Migration: 024_opportunity_composite_score.up.sql
   -- Service: xstockstrat-analysis
-  -- feature 198 — nullable composite ranking ordinal per opportunity row. NULLABLE with NO DEFAULT:
+  -- feature 199 — nullable composite ranking ordinal per opportunity row. NULLABLE with NO DEFAULT:
   -- NULL is the honest "not yet computed / nothing to fuse" state (@AC-10/@AC-11/@AC-12), distinct
   -- from a computed neutral 0.5. Additive to the feature-011 table; conviction/signal_axis untouched.
   ALTER TABLE analysis.opportunities ADD COLUMN IF NOT EXISTS composite_score DOUBLE PRECISION;
@@ -193,7 +193,7 @@ design.md §Consumer surfaces). No surface is deferred.
 
 **Instructions**:
 - Add three rows to the `## Config Keys Consumed` table:
-  - `analysis.scoring.composite_shrinkage_k` — float — `1.0` — Empirical-Bayes pseudo-count `k` for the per-opportunity `composite_score` fusion `(Σwᵢ·sᵢ + 0.5·k)/(Σwᵢ + k)` (feature 198). Equals one axis-weight so a single maxed axis lands at 0.750, a corroborated pair at 0.833. Read via `get_float_present` (a configured `0` disables shrinkage honestly; the `get_float` zero-trap would swallow it).
+  - `analysis.scoring.composite_shrinkage_k` — float — `1.0` — Empirical-Bayes pseudo-count `k` for the per-opportunity `composite_score` fusion `(Σwᵢ·sᵢ + 0.5·k)/(Σwᵢ + k)` (feature 199). Equals one axis-weight so a single maxed axis lands at 0.750, a corroborated pair at 0.833. Read via `get_float_present` (a configured `0` disables shrinkage honestly; the `get_float` zero-trap would swallow it).
   - `analysis.scoring.composite_weight_readiness` — float — `1.0` — Fusion weight `wᵢ` for the readiness sub-score (identity map of `conviction`). `get_float_present`; a configured `0` disables the readiness axis.
   - `analysis.scoring.composite_weight_signal` — float — `1.0` — Fusion weight `wᵢ` for the directional-signal sub-score. `get_float_present`; a configured `0` disables the signal axis.
 - Note in the row text that these are **not** seeded by a config-ui migration (design §Rejected: matches the un-seeded sibling `analysis.scoring.*` keys — code-default-only via `get_float_present`).
@@ -309,7 +309,7 @@ design.md §Consumer surfaces). No surface is deferred.
 **Covers**: `—`
 
 **Instructions**:
-- Add an `ANALYSIS-10` row: `composite_score` (feature 198) is a **shrunk ranking ordinal, NOT a cardinal probability** — never wire it into position sizing, alert cutoffs, or any risk/expected-return input. The confidence-to-size producer is `ExternalSignal.conviction` (`ingest.proto:110`), surfaced as `Opportunity.signal_confidence` (`analysis.proto:588`). Cite the fusion (`_composite_score`, `servicer.py`) and the `fails.md:313` next-occurrence rationale.
+- Add an `ANALYSIS-10` row: `composite_score` (feature 199) is a **shrunk ranking ordinal, NOT a cardinal probability** — never wire it into position sizing, alert cutoffs, or any risk/expected-return input. The confidence-to-size producer is `ExternalSignal.conviction` (`ingest.proto:110`), surfaced as `Opportunity.signal_confidence` (`analysis.proto:588`). Cite the fusion (`_composite_score`, `servicer.py`) and the `fails.md:313` next-occurrence rationale.
 - This edits a context-constitution file → the CLAUDE.md teardown audit applies (run `/context-forge:context-constitution refresh` scoped to this file before the PR, or record the manual reconciliation in the PR body).
 
 **Verification**:
@@ -337,7 +337,7 @@ design.md §Consumer surfaces). No surface is deferred.
 
 **Instructions**:
 - In `_opportunity_to_dict`, add after the `signal_confidence` block (`client.py:~797`): `if o.HasField("composite_score"): d["composite_score"] = o.composite_score` — omit-not-fabricate on unset/NULL (matches the field's explicit-presence contract; never a fabricated 0.0).
-- In `docs/runbooks/mcp-tools.md` `list_opportunities` return shape (the omit-not-fabricate bullet list, `:875-887`), add a `composite_score` bullet: the shrunk 0–1 ranking ordinal (feature 198); omitted when the row has nothing to fuse (NULL), never a fabricated `0.0`; a ranking aid, not a cardinal probability.
+- In `docs/runbooks/mcp-tools.md` `list_opportunities` return shape (the omit-not-fabricate bullet list, `:875-887`), add a `composite_score` bullet: the shrunk 0–1 ranking ordinal (feature 199); omitted when the row has nothing to fuse (NULL), never a fabricated `0.0`; a ranking aid, not a cardinal probability.
 
 **Verification**:
 - `grep -n "composite_score" services/xstockstrat-agent/app/client.py docs/runbooks/mcp-tools.md` — projected (HasField-gated) and documented.
@@ -408,7 +408,7 @@ design.md §Consumer surfaces). No surface is deferred.
 - Mobile `SignalRow` map (`page.tsx:~170`): add `compositeScore: o.compositeScore` to the mapped signal object and render it alongside the existing tags without regressing symbol grouping (design EXTEND `@AC-9/@AC-10 @feature-155`).
 - Trader `OpportunitySection` (`positions/[symbol]/page.tsx:~949`): add a "Composite" stat next to Conviction — `opportunity.compositeScore !== undefined ? formatComposite(...)` colored via `scoreColor`, else em-dash.
 - Do **not** change the queue sort or add any client-side sort by composite (design PRESERVE `@AC-15 @feature-190`; AC-8 "server order is authoritative").
-- Fixtures (C-12): add `compositeScore` to a couple of existing `OPPORTUNITIES` rows (e.g. AAPL `0.732`, MSFT `0.512`) and leave one row's `compositeScore` unset + keep the PLTR `dataUnavailable:true` row with **no** `compositeScore` (drives the em-dash assertion). Update the `INVENTORY.md:28` Opportunity-queue row text to note the added `compositeScore` (feature 198) and which rows carry/omit it.
+- Fixtures (C-12): add `compositeScore` to a couple of existing `OPPORTUNITIES` rows (e.g. AAPL `0.732`, MSFT `0.512`) and leave one row's `compositeScore` unset + keep the PLTR `dataUnavailable:true` row with **no** `compositeScore` (drives the em-dash assertion). Update the `INVENTORY.md:28` Opportunity-queue row text to note the added `compositeScore` (feature 199) and which rows carry/omit it.
 
 **Verification**:
 - Behavioral in Step 11.

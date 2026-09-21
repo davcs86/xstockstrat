@@ -4,14 +4,14 @@ Feature: symbol-opportunity-ranking
   rather than eyeballing individual opportunities.
 
   # symbol_score = diminishing-returns sum over the symbol's opportunities of
-  # (feature-198 composite_score x strategy_weight), where strategy_weight =
+  # (feature-199 composite_score x strategy_weight), where strategy_weight =
   # feature-065 derived-grade weight x operator per-strategy override.
   # The exact saturating function is a design-phase decision; these scenarios assert the
   # mandated ORDERINGS, which any compliant function must satisfy.
 
   @AC-1 @FR-1
   Scenario: The symbol score is built from the symbol's per-opportunity composite scores
-    Given symbol "AAPL" has two opportunities with feature-198 composite_score 0.70 and 0.60
+    Given symbol "AAPL" has two opportunities with feature-199 composite_score 0.70 and 0.60
     When the symbol roll-up is computed
     Then AAPL's symbol_score is a function of those composite_scores (0.70, 0.60), not of raw conviction or signal_axis directly
     And changing an opportunity's composite_score changes AAPL's symbol_score
@@ -50,7 +50,7 @@ Feature: symbol-opportunity-ranking
 
   @AC-6 @FR-4
   Scenario: A NULL composite opportunity contributes nothing, it does not drag the symbol down
-    Given symbol "AAPL" has one opportunity at composite_score 0.75 and one opportunity whose composite_score is NULL (feature-198 data-unavailable / not-yet-computed)
+    Given symbol "AAPL" has one opportunity at composite_score 0.75 and one opportunity whose composite_score is NULL (feature-199 data-unavailable / not-yet-computed)
     When the symbol_score is computed
     Then the NULL opportunity contributes 0 weight to the roll-up (it is omitted, not counted as composite 0.0)
     And AAPL's symbol_score equals what it would be from the single 0.75 opportunity alone

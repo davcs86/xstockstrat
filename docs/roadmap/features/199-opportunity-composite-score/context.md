@@ -1,8 +1,8 @@
 # Context: opportunity-composite-score
 
-**Feature**: `docs/roadmap/features/198-opportunity-composite-score/feature.md`
-**Product Spec**: `docs/roadmap/features/198-opportunity-composite-score/product-spec.md`
-**Implementation Spec**: `docs/roadmap/features/198-opportunity-composite-score/implementation-spec.md`
+**Feature**: `docs/roadmap/features/199-opportunity-composite-score/feature.md`
+**Product Spec**: `docs/roadmap/features/199-opportunity-composite-score/product-spec.md`
+**Implementation Spec**: `docs/roadmap/features/199-opportunity-composite-score/implementation-spec.md`
 
 ---
 
@@ -134,4 +134,4 @@ UI `/insights` (opportunities queue) + `/trader` (per-symbol page) + Agent `list
     migrations, tip 023). analysis CLAUDE.md is correct. Corrected the inaccurate "drift" note in
     Step 3 evidence (traced to recon.md:71) to state this precisely; 024 is the correct next-free
     analysis-service schema migration.
-- Overlap findings: none (CLEAN). Merge-order: 199→198 dependency already recorded; 198 needs no row.
+- Overlap findings: none (CLEAN). Merge-order: 200→199 dependency already recorded; 199 needs no row.
