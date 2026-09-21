@@ -26,6 +26,13 @@ export function formatSymbolYears(days: number): string {
   return `${(days / TRADING_DAYS_PER_YEAR).toFixed(1)} symbol-years`;
 }
 
+// feature 199 — render the per-opportunity composite_score as a fixed 3-decimal string. Colour is
+// reused from scoreColor (C-18 DRY — no new threshold logic); a NULL/absent score is an em-dash at
+// the call site, never 0.000. It is a ranking ordinal, not a probability.
+export function formatComposite(score: number): string {
+  return score.toFixed(3);
+}
+
 // True only for a gRPC NOT_FOUND — used by retry predicates so an unscored strategy (answered
 // NOT_FOUND) is not retried. Pure fn, unit-testable without React Query.
 export function isNotFoundError(err: unknown): boolean {

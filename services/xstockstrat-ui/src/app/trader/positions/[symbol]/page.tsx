@@ -59,7 +59,7 @@ import { StatTile } from '@/components/shared/StatTile';
 import { Eyebrow } from '@/components/shared/Eyebrow';
 import { PageBreadcrumb } from '@/components/shared/PageBreadcrumb';
 import { OrderForm } from '@/components/trader/OrderForm';
-import { isNotFoundError } from '@/lib/scoreDisplay';
+import { isNotFoundError, scoreColor, formatComposite } from '@/lib/scoreDisplay';
 import type { ColumnDef } from '@tanstack/react-table';
 import { DataTable } from '@/components/ui/data-table';
 import {
@@ -972,6 +972,28 @@ function OpportunitySection({
           <span className="text-sm text-muted-foreground">
             {opportunity.passingConditions}/{opportunity.totalConditions} conditions
           </span>
+          <div>
+            {/* feature 199 — composite ranking ordinal; scoreColor reuse, em-dash on NULL. */}
+            <Eyebrow>Composite</Eyebrow>
+            {opportunity.compositeScore !== undefined ? (
+              <span
+                className={cn(
+                  'font-mono text-2xl tabular-nums',
+                  scoreColor(opportunity.compositeScore),
+                )}
+                data-testid="opp-composite"
+              >
+                {formatComposite(opportunity.compositeScore)}
+              </span>
+            ) : (
+              <span
+                className="font-mono text-2xl tabular-nums text-muted-foreground/70"
+                data-testid="opp-composite"
+              >
+                —
+              </span>
+            )}
+          </div>
           {analytics && (
             <div className="ml-auto text-right">
               <Eyebrow>Edge (BT)</Eyebrow>

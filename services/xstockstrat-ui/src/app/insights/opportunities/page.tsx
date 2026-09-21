@@ -36,6 +36,7 @@ import {
 } from '@/lib/opportunityShared';
 import { OhlcBlock } from '@/components/shared/OhlcBlock';
 import { fmtUsd, fmtPct, pnlClass } from '@/lib/money';
+import { scoreColor, formatComposite } from '@/lib/scoreDisplay';
 import { IN_QUEUE_CUE } from '@/lib/readinessCue';
 import { readinessState } from '@/lib/readinessRollup';
 import { useOpportunities, useSetOpportunityAction } from '@/hooks/useOpportunities';
@@ -188,6 +189,7 @@ export default function OpportunitiesPage() {
       strategyId: o.strategyId || undefined,
       chips: opportunityChips(o),
       expiry: expiresLabel(o.validUntil),
+      compositeScore: o.compositeScore, // feature 199
     })),
   }));
 
@@ -519,6 +521,31 @@ function OpportunityRow({
             </>
           ) : (
             <span className="flex-1 text-xs text-muted-foreground/70">no conditions</span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="w-14 shrink-0 text-[10px] uppercase tracking-wide text-muted-foreground">
+            Composite
+          </span>
+          {/* feature 199 — the shrunk 0–1 ranking ordinal; scoreColor reuse (no new thresholds),
+              em-dash on NULL (never 0.000). Server order is authoritative — no client re-sort. */}
+          {o.compositeScore !== undefined ? (
+            <span
+              className={cn(
+                'flex-1 text-right font-mono text-xs tabular-nums',
+                scoreColor(o.compositeScore),
+              )}
+              data-testid={`opp-composite-${o.symbol}`}
+            >
+              {formatComposite(o.compositeScore)}
+            </span>
+          ) : (
+            <span
+              className="flex-1 text-right font-mono text-xs tabular-nums text-muted-foreground/70"
+              data-testid={`opp-composite-${o.symbol}`}
+            >
+              —
+            </span>
           )}
         </div>
       </div>
