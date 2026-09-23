@@ -102,7 +102,7 @@ without this convention, both look identical (fails.md 2026-07-01).
 
 Append-only log — one entry per feature that registered new keys. Newest first. Don't edit past entries; superseding a key's behavior gets a new entry, not a rewrite of the old one.
 
-### feature 200 — fundamentals-formula-inputs (`xstockstrat-analysis`)
+### feature 201 — fundamentals-formula-inputs (`xstockstrat-analysis`)
 
 **No new key.** A `COMPONENT_KIND_CUSTOM_FORMULA` component whose formula declares
 `fundamental_inputs` becomes a fundamentals-scoring operand. It reuses the feature-198 gate

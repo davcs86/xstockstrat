@@ -1,8 +1,8 @@
 # Context: fundamentals-formula-inputs
 
-**Feature**: `docs/roadmap/features/200-fundamentals-formula-inputs/feature.md`
-**Product Spec**: `docs/roadmap/features/200-fundamentals-formula-inputs/product-spec.md`
-**Implementation Spec**: `docs/roadmap/features/200-fundamentals-formula-inputs/implementation-spec.md`
+**Feature**: `docs/roadmap/features/201-fundamentals-formula-inputs/feature.md`
+**Product Spec**: `docs/roadmap/features/201-fundamentals-formula-inputs/product-spec.md`
+**Implementation Spec**: `docs/roadmap/features/201-fundamentals-formula-inputs/implementation-spec.md`
 
 ---
 
@@ -538,3 +538,20 @@
   `source_symbol` XOR. Verified `services/xstockstrat-analysis/CLAUDE.md` (fundamentals-formula
   operand section + two-site gate key description), the strat-lab skill, and the config-governance log
   all match the shipped code — no further drift.
+
+### Renumber 200 → 201 (collision resolution, 2026-09-23)
+- A same-number collision surfaced after `main-dev` advanced: a **separate** feature
+  `symbol-opportunity-ranking` also held **200** (created 2026-09-20, `implementation-ready`),
+  earlier than this feature's `/sdd-story` run (created 2026-09-21). Per `docs/runbooks/feature-workflow.md`
+  § Feature Numbering ("renumber the **later** one to the next free NNN"), this feature — the later
+  run — was renumbered to the next free number **201** (`max(existing)=200` → 201).
+- Scope per the runbook (identity is slug-keyed, so most references need no change): `git mv` the dir
+  `200-…` → `201-…`; updated the moved dir's header pointer lines (`context.md`/`implementation-spec.md`
+  `**Feature**`/`**Product Spec**`/`**Implementation Spec**` paths), the `design.md`/`recon.md` title
+  lines, the `merge-order.md` by-number cite (this feature's row only), and the
+  `config-governance.md` Per-Feature Registered Keys heading. The branch/PR key off the slug
+  (`feature/fundamentals-formula-inputs`, `claude/…`) so neither is renamed. Inline code/proto
+  provenance comments ("feature 200") are left as historical annotations keyed to the slug (runbook:
+  "usually no change") — not rewritten (which would also force a needless proto-stub regen). The
+  earlier append-only narrative in this log that mentions the number-at-the-time is likewise left as
+  the historical record.

@@ -2,7 +2,7 @@
 
 **Status**: `code-completed`
 **Created**: 2026-09-21
-**Feature**: `docs/roadmap/features/200-fundamentals-formula-inputs/feature.md`
+**Feature**: `docs/roadmap/features/201-fundamentals-formula-inputs/feature.md`
 **Total Steps**: 12
 **Feature Branch**: `feature/fundamentals-formula-inputs`
 

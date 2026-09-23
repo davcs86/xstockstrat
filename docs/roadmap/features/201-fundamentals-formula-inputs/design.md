@@ -1,4 +1,4 @@
-# Design: fundamentals-formula-inputs (feature 200)
+# Design: fundamentals-formula-inputs (feature 201)
 
 Debated, user-approved architecture (sdd-design Phase 1, **full** mode — **5 rounds**, the cap). Every
 claim cites `recon.md` `path:line`. Supersedes the initial `formula-signal-producer` mis-scope. R3–R5
