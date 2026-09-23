@@ -268,6 +268,30 @@ test.describe('Opportunities queue', () => {
     expect(idx('AAPL')).toBeLessThan(idx('TSLA')); // 0.90 group precedes the 0.60 group
   });
 
+  // feature 200 — symbol_score sort + group-header render.
+  test('feature 200: symbol-score sort orders groups by server symbol_score and renders the header value (AC-8)', async ({
+    page,
+  }) => {
+    // The symbol-score value is NOT shown under the default (conviction) sort.
+    await expect(card(page, 'AAPL').getByTestId('symbol-score-AAPL')).toHaveCount(0);
+
+    await page.getByLabel('sort').click();
+    await page.getByRole('option', { name: 'Sort · Symbol score' }).click();
+
+    // Server-returned order (symbol_score DESC NULLS LAST): AAPL (1.2) group precedes MSFT (1.0);
+    // the client renders the server order and never re-sorts locally (@AC-8/@AC-15).
+    const texts = await page.getByTestId('opportunity-card').allInnerTexts();
+    const idx = (sym: string) => texts.findIndex((t) => t.includes(sym));
+    expect(idx('AAPL')).toBeGreaterThanOrEqual(0);
+    expect(idx('AAPL')).toBeLessThan(idx('MSFT'));
+
+    // The group header shows the plain 3-decimal symbol_score only under this sort.
+    await expect(card(page, 'AAPL').getByTestId('symbol-score-AAPL')).toHaveText('1.200');
+    await expect(card(page, 'MSFT').getByTestId('symbol-score-MSFT')).toHaveText('1.000');
+    // A symbol with no symbol_score renders the em-dash (NULLS-LAST group).
+    await expect(card(page, 'TSLA').getByTestId('symbol-score-TSLA')).toHaveText('—');
+  });
+
   // feature 095/188 — live-market enrichment on the queue card.
   test('the CAPR card shows live price, change%, previous day OHLC, and a condition chip', async ({
     page,
