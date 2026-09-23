@@ -426,3 +426,67 @@
   `formula_fundamentals` arg / branch absent) → RED; after pop 6/6 green. Full analysis suite
   `pytest --cov` **810 passed**, coverage **84.07%** (≥40%); ruff check + format clean.
 - Files modified: `tests/test_fundamentals_formula_operand.py`. Deviations: none.
+
+### Step 8 — analysis servicer: routing map, snapshot loader, gate, write-time guard [done]
+- **Routing map builder** `_formula_fundamentals(definition, propagation_meta, *, cache=None)` (one
+  memoized `GetFormula` per distinct formula id → `{formula_id: [FundamentalMetric ints]}` for
+  non-empty `fundamental_inputs`) + module-level predicate
+  `_definition_wants_fundamentals_formula(definition, formula_fund_map)`.
+- **Snapshot loader** `_load_fundamentals_snapshot(definition, symbol, propagation_meta,
+  formula_fund_map, *, sem=None, cache=None)`: short-circuits `None` off the routing predicate, reads
+  the **same** `analysis.backtest.fundamentals.enabled` gate as the 198 PIT loader (one key, two
+  sites), fetches `GetFundamentalsMulti([symbol])`, lowers the row (honoring `missing_metrics`→None)
+  into a one-element `[FundamentalPeriod(filed_date=date.min, values=…)]` → the same
+  `_fundamental_as_of_series` broadcasts it as one degenerate epoch (one code shape, PIT+snapshot).
+- **All 6 evaluate surfaces wired**: backtest (`_backtest_symbol_evaluated`, PIT list via
+  `_load_fundamentals`, `formula_fundamentals_data` left None), EvaluateReadiness, readiness
+  materializer (`_kick_readiness_refresh` + daily refresh), `_retry_unavailable_symbols`,
+  `_compute_opportunities` `_row_for`, and GetIndicatorSeries (its own handler loop) — the 5
+  non-backtest surfaces feed the snapshot channel via `_load_fundamentals_snapshot`. The shared
+  `compute_readiness_row` (readiness.py, a feature-180/181 file) grew
+  `formula_fundamentals`/`formula_fundamentals_data` params threaded to `evaluate_conditions_traced`.
+- **Warmup**: the backtest warmup prefetch (`_declared_formula_warmup`/`_prefetch_formula_warmups`)
+  gained an optional `fund_map` out-param so a prefixed run folds `fundamental_inputs` into its single
+  `GetFormula` (no extra pass; preserves the feature-086 fetches-once invariant) and forces a
+  fundamentals-only formula's warmup to `0` (cache stays int); an unprefixed run builds the map with a
+  standalone `_formula_fundamentals` pass. The prefetch now also covers **all** formula components
+  (not just rule-referenced) when building the map, so an unreferenced fundamentals-formula component
+  is still routed (else it would be fed `close` → FormulaExecutionError).
+- **Write-time guard**: `_validate_definition_proto` rejects `INVALID_ARGUMENT` a `CUSTOM_FORMULA`
+  component with both `source_symbol` and a fundamentals-input formula (benchmark XOR fundamentals).
+- **Live loop**: added `_load_fundamentals_snapshot` + evaluator method
+  `declared_formula_fundamentals(definition)` (the live counterpart of `_formula_fundamentals`, since
+  the loop holds no indicators stub of its own); `_eval_pair` builds the map + snapshot and passes
+  both to `evaluate(...)`.
+- **DEVIATION (operator-approved, "Separate evaluator channel"):** Step 8's declared Files did not
+  include `app/services/evaluator.py` (a Step-6 file) or `app/services/readiness.py`, but both were
+  extended with the `formula_fundamentals_data` channel param. Rationale: on a non-backtest surface a
+  co-occurring feature-198 single-metric operand must stay **PIT** (C-16 PRESERVE `@feature-198`)
+  while the feature-200 formula must read the **snapshot**; a single `fundamentals` channel could not
+  serve both. The evaluator now selects `fdata = formula_fundamentals_data if not None else
+  fundamentals`, so backtest (both PIT) is unchanged and the non-backtest surfaces pass a distinct
+  snapshot list. This was the design fork surfaced mid-Step-8 and resolved by the user
+  ("Separate evaluator channel (recommended)").
+- **Test-double reconciliations (in this commit):** the evaluator API grew, so fixed-signature stubs
+  in `tests/test_analysis_servicer.py` (`_selective_fail`/`_maybe_raise`/`_boom` → `**_kw`),
+  `tests/test_live_loop.py` (`fake_evaluate` → `*a`), and `tests/test_opportunities_latency.py`
+  (`_stub_evaluate` → `**_kw`) were widened; `make_servicer` gained a `get_bool` stub (fails.md:1395);
+  `test_per_component_fault_isolation` gained a `GetFormula` stub (GetIndicatorSeries now fetches each
+  formula once to detect a fundamentals-only formula).
+- Files modified: `app/handlers/servicer.py`, `app/engine/live_loop.py`, `app/services/evaluator.py`,
+  `app/services/readiness.py`, `CLAUDE.md`, `tests/test_analysis_servicer.py`,
+  `tests/test_live_loop.py`, `tests/test_opportunities_latency.py`.
+
+### Step 9 — analysis servicer/live-surface tests: snapshot-not-PIT, producer parity, gate [done]
+- New `tests/test_fundamentals_formula_servicer.py` (real `StrategyEvaluator`, real `Bar` on
+  `bar.time`): AC-3 (live path feeds the `GetFundamentalsMulti` snapshot, issues **no**
+  `GetHistoricalFundamentals` PIT lookup; gate-off corollary holds with no fetch + no formula run),
+  AC-4 (a fully-populated snapshot row feeds the formula exactly the declared metrics' snake keys,
+  none omitted — full-row producer parity).
+- **TDD red→green:** with the Step 8 impl files stashed, all 3 failed against Step-7 code → RED; after
+  restore 3/3 green. Full analysis suite `pytest --cov` **813 passed**, coverage **83.54%** (≥40%);
+  `ruff check` + `ruff format --check` clean.
+- Files modified: `tests/test_fundamentals_formula_servicer.py`. Deviations: none.
+- **Session note:** the user requested a "restart since the last commit" after the mid-Step-8 design
+  fork; the tree was reset to Step 7 (`1f3b414`) and the verified-green Step 8/9 work was restored
+  from stash and re-validated (RED→GREEN re-run) before these two commits.

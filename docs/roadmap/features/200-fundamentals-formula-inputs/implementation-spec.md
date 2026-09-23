@@ -450,7 +450,7 @@ Coverage ≥ 40%; AC-1/AC-2/AC-5/AC-8 assertions RED before Step 6, green after;
 
 ### Step 8 — service: analysis servicer — routing map, snapshot loader, gate, write-time guard
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -555,7 +555,7 @@ marketdata call in this servicer (C-03).
 
 ### Step 9 — test: analysis servicer — snapshot path, producer parity, gate
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify
