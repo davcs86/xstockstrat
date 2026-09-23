@@ -471,7 +471,7 @@ real gate; the targeted `test_opportunity_projection.py` file is where the new a
 
 ### Step 9 — docs: `mcp-tools.md` `list_opportunities` symbol_score parity
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/runbooks/`
 **Files**:
 - `docs/runbooks/mcp-tools.md` — modify

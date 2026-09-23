@@ -400,3 +400,9 @@ C-15 analysis test step).
 - RED→GREEN: added `symbol_score=1.20` to `_full_opportunity` (descriptor-parity RED until Step 7 projected it) + a value/omit test (@AC-9). GREEN: agent suite 447 passed, coverage 79.32% (≥40), ruff clean. Verification runs the whole suite with `--cov-fail-under=40` (the review-corrected gate — agent IS in the python-test matrix).
 - Files modified: `services/xstockstrat-agent/tests/test_opportunity_projection.py`
 - Deviations: none
+
+### Step 9 — docs: mcp-tools.md list_opportunities symbol_score parity [done]
+- Added a `symbol_score` return-field entry beside `composite_score` in the `list_opportunities` section (bounded < 2.0 symbol roll-up ranking ordinal; symbol-uniform; omit-not-fabricate; not a cardinal input).
+- **Strat-lab coupling RESOLVED (out of scope):** grepped `plugins/strat-lab/` — it documents no `list_opportunities` / `OpportunitySort` / `symbol_score`, and the root CLAUDE.md strat-lab rule covers `run_backtest`/`manage_strategy`/`trigger_backfill`/`set_strategy_live`, not `list_opportunities`. So the new sort value needs no strat-lab skill update.
+- Files modified: `docs/runbooks/mcp-tools.md`
+- Deviations: none
