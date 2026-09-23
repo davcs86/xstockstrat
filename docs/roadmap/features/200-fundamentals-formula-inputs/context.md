@@ -490,3 +490,25 @@
 - **Session note:** the user requested a "restart since the last commit" after the mid-Step-8 design
   fork; the tree was reset to Step 7 (`1f3b414`) and the verified-green Step 8/9 work was restored
   from stash and re-validated (RED→GREEN re-run) before these two commits.
+
+### Step 10 — UI: read-only fundamentals badge in ComponentEditor [done]
+- In the `CUSTOM_FORMULA` branch, when `selectedFormula.fundamentalInputs.length > 0`, render a
+  read-only `<p class="text-[10px] text-muted-foreground">` hint below the formula picker:
+  "Fundamentals input — requires the fundamentals gate ON; use `.composite` for the headline."
+  Mirrors the existing FUNDAMENTAL-kind hint markup + tokens (C-17, no hardcoded color, no new
+  primitive, no route/write). `selectedFormula.fundamentalInputs` exists after the Step 2 regen.
+- Files modified: `src/components/insights/ComponentEditor.tsx`. Deviations: none. TDD: paired w/ Step 11.
+
+### Step 11 — UI test: badge + fundamentals-formula fixture (C-12) [done]
+- Added `FORMULA_FUNDAMENTALS` fixture (`fundamentalInputs: ['FUNDAMENTAL_METRIC_PE_RATIO',
+  'FUNDAMENTAL_METRIC_ROE']`, Connect-JSON enum-name strings) to `e2e/fixtures/formulas.ts` + `FORMULAS`
+  and an `INVENTORY.md` catalog row (C-12). New `strategy-authoring.spec.ts` test: pick the
+  fundamentals formula → the read-only hint is visible; switch to RSI → no hint (`toHaveCount(0)`,
+  the negative discriminator proving the badge is conditional on `fundamentalInputs`).
+- **TDD red→green:** GREEN verified on the badge build (new test + the existing AC-7 substring-filter
+  test both pass). RED verified properly by reverting `ComponentEditor.tsx` **and rebuilding** (a
+  source-only revert can't RED an `E2E_PREBUILT` bundle — the first attempt was inconclusive for that
+  reason): against the no-badge rebuild the badge test failed; restored → green. `pnpm build` and
+  `pnpm run lint` clean (only pre-existing react-hooks warnings, none in changed files).
+- Files modified: `e2e/fixtures/formulas.ts`, `e2e/fixtures/INVENTORY.md`,
+  `e2e/insights/strategy-authoring.spec.ts`. Deviations: none.

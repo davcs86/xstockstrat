@@ -599,7 +599,7 @@ Coverage ≥ 40%; AC-3/AC-4 assertions RED before Step 8, green after.
 
 ### Step 10 — service: UI read-only fundamentals badge in ComponentEditor
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/ComponentEditor.tsx` — modify
@@ -634,7 +634,7 @@ Coverage ≥ 40%; AC-3/AC-4 assertions RED before Step 8, green after.
 
 ### Step 11 — test: UI badge + fundamentals formula fixture (C-12)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/fixtures/formulas.ts` — modify (add a fundamentals-declaring fixture)

@@ -436,6 +436,39 @@ test.describe('Strategy authoring — UI', () => {
     await expect(page.getByText('RSI Divergence')).toBeVisible();
     await expect(page.getByText('MACD Cross')).toHaveCount(0);
   });
+
+  test('fundamentals-input formula shows the read-only hint; an ordinary formula does not (feature 200)', async ({
+    page,
+  }) => {
+    await addAdminCookie(page);
+    await stubListFormulas(page);
+    await page.goto('/insights/strategies/new');
+
+    await expect(page.getByText('Step 1 — Identity')).toBeVisible({ timeout: 10000 });
+    const next = page.getByRole('button', { name: 'Next', exact: true });
+    await page.getByPlaceholder('e.g. sma_crossover').fill('with_fundamentals');
+    await next.click(); // → display name
+    await page.getByPlaceholder('SMA Crossover').fill('With Fundamentals');
+    await next.click(); // → cooldown
+    await next.click(); // → exit cooldown
+    await next.click(); // → Step 2 Components
+
+    await page.getByRole('button', { name: 'Add component' }).click();
+    await page.getByLabel('component kind').click();
+    await page.getByRole('option', { name: 'Custom formula' }).click();
+
+    const hint = page.getByText(/Fundamentals input —/);
+
+    // Pick the fundamentals-declaring formula → the read-only hint appears.
+    await page.getByLabel('formula', { exact: true }).click();
+    await page.getByText('Value Quality').click();
+    await expect(hint).toBeVisible();
+
+    // Switch to an ordinary (RSI) formula → no hint (fundamentalInputs empty).
+    await page.getByLabel('formula', { exact: true }).click();
+    await page.getByText('RSI Divergence').click();
+    await expect(hint).toHaveCount(0);
+  });
 });
 
 /**
