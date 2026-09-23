@@ -4257,6 +4257,26 @@ class _FakeOppRepo:
             row["thesis"] = hr["thesis"]
             row["valid_until"] = hr["valid_until"]
             row["computed_at"] = datetime.now(UTC)
+            # feature 199/200 — mirror the real UPDATE's composite_score/symbol_score writes so the
+            # heal re-fold (symbol_composite_terms → stamp_symbol_score) reads the recomputed
+            # composite (symbol_score here is superseded symbol-wide by stamp right after).
+            row["composite_score"] = hr.get("composite_score")
+            row["symbol_score"] = hr.get("symbol_score")
+
+    async def symbol_composite_terms(self, user_id, symbol):
+        # feature 200 — every row of (user, symbol) as strategy_id + composite_score (no
+        # disposition/expiry filter), mirroring the real disposition-free heal read.
+        return [
+            {"strategy_id": r["strategy_id"], "composite_score": r.get("composite_score")}
+            for r in self.rows.get(user_id, [])
+            if r["symbol"] == symbol
+        ]
+
+    async def stamp_symbol_score(self, user_id, symbol, score):
+        # feature 200 — set symbol_score symbol-wide (every row of the symbol carries the value).
+        for r in self.rows.get(user_id, []):
+            if r["symbol"] == symbol:
+                r["symbol_score"] = score
 
     async def distinct_user_ids(self):
         return list(self.rows.keys())
@@ -6031,6 +6051,8 @@ class TestOpportunityRowParity:
         "data_unavailable",
         # feature 199 — composite ranking ordinal, dedicated column, explicit-presence.
         "composite_score",
+        # feature 200 — symbol roll-up ranking ordinal, dedicated column, explicit-presence.
+        "symbol_score",
     }
     # feature 095 — live-market fields set at read time in ListOpportunities (post-ranking), not by
     # the mapper, so they join _INTENTIONALLY_UNSET rather than _MAPPED.
@@ -7388,3 +7410,63 @@ class TestListOpportunitiesServerFilters190:
         assert set(by_symbol) == {"AAA", "BBB"}  # CCC (0.3, no exemption) dropped
         assert by_symbol["AAA"].muted is True
         assert by_symbol["BBB"].data_unavailable is True
+
+
+class TestSymbolScoreRollup:
+    """feature 200 — the symbol_score roll-up is stamped symbol-uniform by the compute pass and
+    re-derived byte-identically by the surgical heal (the SAME _symbol_score_for_group fold)."""
+
+    _META = [("x-user-id", "u1"), ("x-access-scope", "7"), ("x-trace-id", "t1")]
+
+    @pytest.mark.asyncio
+    async def test_compute_stamps_symbol_uniform_symbol_score(self):
+        """A compute pass stamps ONE symbol_score on EVERY row of a symbol (symbol-uniform); a
+        symbol with an evaluated (composite-present) opportunity gets a real (non-None) score."""
+        svc = _materialized_svc(
+            signals=[_sig("AAPL", "buy", 0.7, source="uw")],
+            watchlists=[_wl(bindings=[("AAPL", "sx"), ("MSFT", "sx")])],
+            strategies={"sx": _strat_row("sx", entry=_GT_100)},
+            bars={"AAPL": _FIRING_BARS, "MSFT": _FIRING_BARS},
+        )
+        rows = await svc._compute_opportunities("u1", self._META)
+        by_sym: dict[str, list[dict]] = {}
+        for r in rows:
+            by_sym.setdefault(r["symbol"], []).append(r)
+        assert by_sym  # sanity — the compute produced rows
+        for sym, sym_rows in by_sym.items():
+            scores = {r.get("symbol_score") for r in sym_rows}
+            assert len(scores) == 1, f"{sym} symbol_score not uniform: {scores}"
+        # AAPL fired (readiness + signal) → composite present → a real symbol_score.
+        assert by_sym["AAPL"][0]["symbol_score"] is not None
+
+    @pytest.mark.asyncio
+    async def test_heal_refold_matches_a_full_compute(self):
+        """@AC-10 determinism parity — after a surgical heal recovers AAPL, its re-folded
+        symbol_score equals what a full _compute_opportunities over the SAME inputs produces (both
+        go through _symbol_score_for_group with owner-gated grades)."""
+
+        def _fresh_svc():
+            return _materialized_svc(
+                signals=[_sig("AAPL", "buy", 0.7, source="uw")],
+                watchlists=[_wl(bindings=[("AAPL", "sx")])],
+                strategies={"sx": _strat_row("sx", entry=_GT_100)},
+                bars={"AAPL": _FIRING_BARS},
+            )
+
+        # Reference: a full compute over the inputs → AAPL's symbol_score.
+        ref_rows = await _fresh_svc()._compute_opportunities("u1", self._META)
+        ref_score = {r["symbol"]: r["symbol_score"] for r in ref_rows}["AAPL"]
+        assert ref_score is not None
+
+        # Heal: an unavailable served AAPL row, recovered with the same inputs.
+        svc = _fresh_svc()
+        old = datetime.now(UTC) - timedelta(seconds=400)
+        svc._opportunities_repo.rows["u1"] = [
+            _unavailable_served_row(
+                "AAPL", "sx", provenance=["watchlist", "unavailable"], computed_at=old
+            )
+        ]
+        await svc._retry_unavailable_symbols("u1", {"AAPL"}, self._META)
+        healed = svc._opportunities_repo.rows["u1"][0]
+        assert "unavailable" not in healed["provenance"]  # recovered
+        assert healed["symbol_score"] == pytest.approx(ref_score)

@@ -368,3 +368,163 @@ def test_row_to_opportunity_composite_presence():
         }
     )
     assert not absent.HasField("composite_score")
+
+
+# ── feature 200 — symbol_score persistence + sort + heal helpers + projection ────────────────
+
+
+async def test_replace_for_user_binds_symbol_score_as_new_tail():
+    """@AC-8 — the full-replace INSERT carries symbol_score as its own column/$13 bind, after
+    composite_score, without disturbing the composite/axis binds."""
+    pool, conn = _mock_pool()
+    repo = OpportunitiesRepository(pool)
+    valid = datetime(2999, 1, 1, tzinfo=UTC)
+    await repo.replace_for_user(
+        "u1",
+        [
+            {
+                "opportunity_key": "u1|AAPL|sx",
+                "symbol": "AAPL",
+                "strategy_id": "sx",
+                "action": 1,
+                "conviction": 0.80,
+                "readiness_json": {},
+                "signal_axis": 0.60,
+                "provenance": ["watchlist"],
+                "thesis": "t",
+                "valid_until": valid,
+                "composite_score": 0.732,
+                "symbol_score": 1.20,
+            },
+            {  # symbol_score omitted → None (NULL)
+                "opportunity_key": "u1|X|sx",
+                "symbol": "X",
+                "strategy_id": "sx",
+                "action": 1,
+                "conviction": 0.0,
+                "readiness_json": {},
+                "signal_axis": 0.0,
+                "provenance": ["unavailable"],
+                "thesis": "",
+                "valid_until": valid,
+                "composite_score": None,
+            },
+        ],
+    )
+    sql, params = conn.executemany.await_args.args
+    assert "symbol_score" in sql and "$13" in sql
+    assert params[0][11] == 0.732  # composite_score — unchanged position
+    assert params[0][12] == 1.20  # symbol_score — the new $13 bind
+    assert params[1][12] is None  # omitted → None
+
+
+async def test_replace_symbols_binds_symbol_score_at_10():
+    """The heal UPDATE sets symbol_score = $10 and binds it (None here — stamp_symbol_score
+    supersedes it symbol-wide right after)."""
+    pool, conn = _mock_pool()
+    repo = OpportunitiesRepository(pool)
+    valid = datetime(2999, 1, 1, tzinfo=UTC)
+    await repo.replace_symbols(
+        "u1",
+        [
+            {
+                "opportunity_key": "u1|AAPL|sx",
+                "conviction": 0.8,
+                "readiness_json": {},
+                "signal_axis": 0.5,
+                "provenance": ["watchlist"],
+                "thesis": "t",
+                "valid_until": valid,
+                "composite_score": 0.65,
+            }
+        ],
+    )
+    sql, params = conn.executemany.await_args.args
+    assert "symbol_score = $10" in sql
+    assert params[0][9] is None  # symbol_score bind (superseded by stamp)
+
+
+async def test_read_selects_symbol_score():
+    """The queue read projects symbol_score so _row_to_opportunity can carry it."""
+    pool = _fetch_pool()
+    repo = OpportunitiesRepository(pool)
+    await repo.read("u1", 0.0, 0.3, include_expired=False)
+    sql = pool.fetch.await_args.args[0]
+    assert "o.symbol_score" in sql
+
+
+async def test_read_sort_branch_3_leads_with_symbol_score():
+    """@AC-8 — sort=OPPORTUNITY_SORT_SYMBOL_SCORE(3) orders symbol groups by
+    MAX(symbol_score) OVER (PARTITION BY o.symbol) DESC NULLS LAST, keeping the symbol +
+    opportunity_key tiebreaks (grouping + stable paging)."""
+    pool = _fetch_pool()
+    repo = OpportunitiesRepository(pool)
+    await repo.read("u1", 0.0, 0.3, include_expired=False, sort=3)
+    sql = pool.fetch.await_args.args[0]
+    order_by = sql.split("ORDER BY", 1)[1]
+    assert "MAX(o.symbol_score) OVER (PARTITION BY o.symbol) DESC NULLS LAST" in order_by
+    assert "o.opportunity_key ASC" in order_by
+
+
+async def test_symbol_composite_terms_is_disposition_and_expiry_free():
+    """The heal re-fold reads every row of (user, symbol) as strategy_id + composite_score, with no
+    opportunity_actions join and no valid_until filter."""
+    pool = _fetch_pool()
+    pool.fetch = AsyncMock(return_value=[{"strategy_id": "sx", "composite_score": 0.7}])
+    repo = OpportunitiesRepository(pool)
+    terms = await repo.symbol_composite_terms("u1", "AAPL")
+    sql, *binds = pool.fetch.await_args.args
+    assert "strategy_id, composite_score" in sql
+    assert "opportunity_actions" not in sql
+    assert "valid_until" not in sql
+    assert binds == ["u1", "AAPL"]
+    assert terms == [{"strategy_id": "sx", "composite_score": 0.7}]
+
+
+async def test_stamp_symbol_score_updates_every_row_of_the_symbol():
+    """stamp_symbol_score sets symbol_score symbol-wide (WHERE user_id AND symbol — no
+    opportunity_key), so all rows of the symbol carry the identical value (or NULL)."""
+    pool = MagicMock()
+    pool.execute = AsyncMock()
+    repo = OpportunitiesRepository(pool)
+    await repo.stamp_symbol_score("u1", "AAPL", 1.20)
+    sql, *binds = pool.execute.await_args.args
+    assert "UPDATE analysis.opportunities SET symbol_score = $3" in sql
+    assert "WHERE user_id = $1 AND symbol = $2" in sql
+    assert "opportunity_key" not in sql
+    assert binds == ["u1", "AAPL", 1.20]
+
+
+def test_row_to_opportunity_symbol_score_presence():
+    """The proto projection carries symbol_score with explicit presence: set when the column has a
+    value, UNSET (never a fabricated 0.0) when NULL/absent."""
+    present = _row_to_opportunity(
+        {
+            "opportunity_key": "u1|AAPL|sx",
+            "symbol": "AAPL",
+            "strategy_id": "sx",
+            "action": 1,
+            "conviction": 0.8,
+            "readiness_json": {},
+            "provenance": [],
+            "thesis": "",
+            "symbol_score": 1.20,
+        }
+    )
+    assert present.HasField("symbol_score")
+    assert present.symbol_score == pytest.approx(1.20)
+
+    absent = _row_to_opportunity(
+        {
+            "opportunity_key": "u1|X|sx",
+            "symbol": "X",
+            "strategy_id": "sx",
+            "action": 1,
+            "conviction": 0.0,
+            "readiness_json": {},
+            "provenance": ["unavailable"],
+            "thesis": "",
+            "symbol_score": None,
+        }
+    )
+    assert not absent.HasField("symbol_score")
