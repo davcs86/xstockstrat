@@ -103,6 +103,22 @@ reads hold on every surface (backtest, live, readiness, opportunities). Like any
 is scoring-relevant (enters the definition fingerprint). Backtest and live evaluation share the same
 as-of resolver, so a live strategy fires on exactly the filings a backtest would have used.
 
+**Fundamentals-input formula operand (feature 200).** A `kind:"formula"` component whose formula
+declares `fundamental_inputs` (a set of the same metric names above) is a **fundamentals-scoring**
+operand: the formula is fed **only** those fundamentals as `input_data` (never OHLCV `close`), scored
+once per filing-boundary epoch, and its scalar output broadcast across the span — the same
+input/output contract as the fundamentals-signal producer's scoring formula, so one formula id works
+in both places. Gate a rule on the **dotted** `<ref>.composite` for the headline sub-score (a bare
+`<ref>` resolves to the formula's `value` sub-score). Data source differs by surface: a **backtest**
+feeds it point-in-time filings (as-of each bar, like the 198 operand); **live/screener/readiness/
+opportunities** feed it the **current fundamentals snapshot**. Prerequisites mirror the 198 operand:
+backfill fundamentals first, and `analysis.backtest.fundamentals.enabled` must be ON (the **same**
+key gates both operands — OFF ⇒ the formula reads hold everywhere). A symbol missing the whole
+fundamentals row holds (no fabricated 0.0); a partial row omits just the absent metric. This differs
+from the 198 operand, which reads **one** metric off the bar — here a formula consumes a **set** of
+metrics. A component cannot combine `source_symbol` with a fundamentals-input formula (rejected at
+write time — a benchmark operand reads bars, a fundamentals formula does not).
+
 **Rule encoding.** `entry_rule`/`exit_rule` accept **either** a JSON string **or** a JSON object
 (dict) — an MCP client that pre-parses JSON arguments may pass the object directly; the tool
 serializes a dict to the canonical JSON string before sending. Passing a rule both as a value and

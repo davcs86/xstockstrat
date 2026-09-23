@@ -1,6 +1,6 @@
 # Implementation Spec: fundamentals-formula-inputs
 
-**Status**: `in-progress`
+**Status**: `code-completed`
 **Created**: 2026-09-21
 **Feature**: `docs/roadmap/features/200-fundamentals-formula-inputs/feature.md`
 **Total Steps**: 12
@@ -672,7 +672,7 @@ spec imports the fixture (`from '../fixtures'`/`from './fixtures'`) and `INVENTO
 
 ### Step 12 — docs: strat-lab backtest skill, config-governance, teardown
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/` + `plugins/strat-lab/`
 **Files**:
 - `plugins/strat-lab/skills/backtest/SKILL.md` — modify

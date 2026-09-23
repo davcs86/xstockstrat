@@ -512,3 +512,29 @@
   `pnpm run lint` clean (only pre-existing react-hooks warnings, none in changed files).
 - Files modified: `e2e/fixtures/formulas.ts`, `e2e/fixtures/INVENTORY.md`,
   `e2e/insights/strategy-authoring.spec.ts`. Deviations: none.
+
+### Step 12 — docs: strat-lab backtest skill, config-governance, teardown [done]
+- `plugins/strat-lab/skills/backtest/SKILL.md`: added a "Fundamentals-input formula operand (feature
+  200)" section beside the 198 note — `kind:"formula"` with declared `fundamental_inputs` is a
+  fundamentals-scoring operand (fed only those metrics, gate a rule on `.composite`), PIT on backtest
+  / snapshot on live, same `analysis.backtest.fundamentals.enabled` prerequisite, whole-row-missing
+  holds, cannot combine with `source_symbol` (same-PR skill update mandated by root CLAUDE.md).
+- `docs/patterns/config-governance.md`: added a feature-200 Per-Feature Registered Keys entry —
+  **no new key**, `analysis.backtest.fundamentals.enabled` gains a second read site (snapshot loader).
+- Files modified: `plugins/strat-lab/skills/backtest/SKILL.md`, `docs/patterns/config-governance.md`.
+  Deviations: none.
+
+### Teardown — context audit (manual; plugin unavailable)
+- `/context-forge:context-constitution refresh` is **unavailable** in this session (no context-forge
+  constitution skill/command; only the unrelated `context-forge:context-scrubber` exists). Performed
+  the mandated manual equivalent: re-read every context file this feature touched against the current
+  code and reconciled the grounded drift found.
+- **Drift reconciled:** the analysis `docs/context-constitution.md` had two invariants that feature
+  200 made incomplete — **ANALYSIS-4** (custom-formula `len(raw)==n`) did not cover the new
+  scalar-broadcast path, and **ANALYSIS-10** ("single `_load_fundamentals` chokepoint") did not cover
+  the parallel `_load_fundamentals_snapshot`. Added **ANALYSIS-12** capturing the fundamentals-only
+  formula operand: the scalar-broadcast carve-out from ANALYSIS-4, the second gated loader parallel to
+  ANALYSIS-10, the separate `formula_fundamentals_data` channel preserving 198 PIT, and the
+  `source_symbol` XOR. Verified `services/xstockstrat-analysis/CLAUDE.md` (fundamentals-formula
+  operand section + two-site gate key description), the strat-lab skill, and the config-governance log
+  all match the shipped code — no further drift.
