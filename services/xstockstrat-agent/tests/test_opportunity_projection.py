@@ -37,6 +37,7 @@ def _full_opportunity(analysis_pb2):
         stop_price=0.5,
         signal_confidence=0.9,
         composite_score=0.512,  # feature 199
+        symbol_score=1.20,  # feature 200
     )
     o.sparkline.append(analysis_pb2.SparklinePoint(close=1.0))
     o.conditions.append(analysis_pb2.ConditionEval(ref_name="c"))
@@ -72,3 +73,17 @@ def test_composite_score_projected_with_value_and_omitted_when_unset():
     bare = analysis_pb2.Opportunity(symbol="X", opportunity_key="u1|X|s")
     projected = _opportunity_to_dict(bare, analysis_pb2)
     assert "composite_score" not in projected
+
+
+def test_symbol_score_projected_with_value_and_omitted_when_unset():
+    """@AC-9 (feature 200) — symbol_score reaches the projection with its value (so the agent can
+    compare symbols), and an opportunity with no symbol_score (NULL) omits the key entirely (never a
+    fabricated 0.0)."""
+    from gen.analysis.v1 import analysis_pb2
+
+    present = _opportunity_to_dict(_full_opportunity(analysis_pb2), analysis_pb2)
+    assert present["symbol_score"] == 1.20
+
+    bare = analysis_pb2.Opportunity(symbol="X", opportunity_key="u1|X|s")
+    projected = _opportunity_to_dict(bare, analysis_pb2)
+    assert "symbol_score" not in projected
