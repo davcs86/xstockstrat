@@ -555,3 +555,21 @@
   "usually no change") — not rewritten (which would also force a needless proto-stub regen). The
   earlier append-only narrative in this log that mentions the number-at-the-time is likewise left as
   the historical record.
+
+### CI fix — agent manage_formula descriptor-parity guard (2026-09-23)
+- CI (run #3749, and every run on this branch) failed one job: **Python test and coverage
+  (xstockstrat-agent)** — `tests/test_formula_builders.py::TestFormulaBuilderParity`
+  (`test_register_builder_covers_every_proto_field`, `test_update_builder_covers_every_proto_field`).
+  A **real** break caused by Step 1: the parity guard (feature-086 C-10/RC-1 antidote) asserts the
+  agent's `client.manage_formula` dict→proto builder covers **every** `Register`/`UpdateFormulaRequest`
+  field or lists it as intentionally-unset; the additive `fundamental_inputs` field did neither.
+- **Fix (scope-consistent):** feature 201 ships only READ-ONLY consumer surfaces for `fundamental_inputs`
+  (the UI ComponentEditor badge; the agent's `manage_strategy` is unchanged per the product-spec's
+  Consumer Surfaces) — a fundamentals formula is authored via the seeded `fundamentals_value_quality`
+  or a direct indicators `RegisterFormula`, not the agent's `manage_formula` tool. So the field was
+  added to `_REGISTER_INTENTIONALLY_UNSET` / `_UPDATE_INTENTIONALLY_UNSET` with an honest justification
+  (a deliberate deferred agent-authoring path), using the guard's own opt-out mechanism — the test
+  still enforces parity for every other field. Chose this over widening the PR with a new agent
+  authoring capability the feature never designed (and which no other surface exposes either).
+- Verified: `pytest --cov=app --cov-fail-under=40` **446 passed**, coverage 79.29%; `ruff check` +
+  `ruff format --check` clean. Files: `services/xstockstrat-agent/tests/test_formula_builders.py`.

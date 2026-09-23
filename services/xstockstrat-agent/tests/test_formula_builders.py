@@ -17,11 +17,18 @@ from app import client
 # map, retained but not validated per the indicators service — see its CLAUDE.md). Every other field
 # is sent. If a new RegisterFormulaRequest field is added, this test fails until the builder carries
 # it or it is justified here.
-_REGISTER_INTENTIONALLY_UNSET = {"input_schema"}
+# `fundamental_inputs` (feature 201): a formula's fundamentals-input declaration. Feature 201 ships
+# only READ-ONLY consumer surfaces for it (the UI ComponentEditor badge; the agent's manage_strategy
+# is unchanged) — a fundamentals formula is authored via the seeded `fundamentals_value_quality`
+# formula or a direct indicators RegisterFormula call, not through the agent's manage_formula tool.
+# An agent authoring path is a deliberate deferred follow-on, so the builder does not set it. This
+# is a scope decision, NOT the legacy rationale above — remove this entry when that path is built.
+_REGISTER_INTENTIONALLY_UNSET = {"input_schema", "fundamental_inputs"}
 # UpdateFormulaRequest: the builder sets every field, including the meta `update_mask`.
 # user_id is deprecated on the wire — the caller identity is forwarded as the x-user-id header and
 # resolved server-side, so the builder no longer sets the request-body field.
-_UPDATE_INTENTIONALLY_UNSET: set[str] = {"user_id"}
+# fundamental_inputs — deferred agent-authoring path, same feature-201 scope decision as register.
+_UPDATE_INTENTIONALLY_UNSET: set[str] = {"user_id", "fundamental_inputs"}
 
 
 def _channel_cm():
