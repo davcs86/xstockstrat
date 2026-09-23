@@ -503,7 +503,7 @@ Entry present in the `list_opportunities` section.
 
 ### Step 10 — service: UI `/insights` symbol_score sort option + group-header render
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/opportunities/page.tsx` — modify
@@ -558,7 +558,7 @@ re-sort (server order authoritative)
 
 ### Step 11 — test: UI e2e symbol_score sort + header render
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/opportunities.spec.ts` — modify
@@ -597,4 +597,19 @@ Playwright e2e is the gate.)_
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+- **Pre-execute (numbering):** feature 201 (`fundamentals-formula-inputs`, merged) consumed the
+  `ANALYSIS-12` invariant id this spec had reserved. **Disposition:** moved this feature's
+  `symbol_score` cardinal guard to the next-free `ANALYSIS-13`; forward-looking refs bumped across
+  spec/design/recon.
+- **Step 5 (test harness):** the `_FakeOppRepo` stand-in in `test_analysis_servicer.py` gained the two
+  new heal methods (`symbol_composite_terms`/`stamp_symbol_score`) and its `replace_symbols` now applies
+  `composite_score`/`symbol_score` (a latent feature-199 gap) so the heal-parity test exercises the real
+  fold. In-scope for the Step-5 test file.
+- **Step 11 (test harness, spec-Files omission):** `e2e/mock-backend.ts` gained a `sort===3` group-key
+  branch (`MAX(symbol_score) … DESC NULLS LAST`) so the mock honors the new `OpportunitySort` value.
+  Required for the e2e but not in either step's `**Files**`. **Disposition:** staged with Step 11
+  (analogous to the Step-5 stand-in extension); a spec-Files omission, not a scope expansion.
+- **Step 11 (CI-equivalent verification fallback):** the Docker e2e runner (`Dockerfile.e2e`) cannot
+  build here — `corepack prepare pnpm@9.15.9` fails to fetch through the agent proxy. **Disposition:**
+  verified host-native (`pnpm exec playwright test`, pre-provisioned Chromium) with `--timeout 120000`
+  (SSR-warmup cold-compile > default 10s). CI runs the identical Playwright spec via the Docker image.

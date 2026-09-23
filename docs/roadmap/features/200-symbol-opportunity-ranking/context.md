@@ -406,3 +406,15 @@ C-15 analysis test step).
 - **Strat-lab coupling RESOLVED (out of scope):** grepped `plugins/strat-lab/` — it documents no `list_opportunities` / `OpportunitySort` / `symbol_score`, and the root CLAUDE.md strat-lab rule covers `run_backtest`/`manage_strategy`/`trigger_backfill`/`set_strategy_live`, not `list_opportunities`. So the new sort value needs no strat-lab skill update.
 - Files modified: `docs/runbooks/mcp-tools.md`
 - Deviations: none
+
+### Step 10 — service: UI /insights symbol_score sort option + group-header render [done]
+- Extended `SortKey` + `sortEnum` (→ `OpportunitySort.SYMBOL_SCORE`) + a "Sort · Symbol score" `SelectItem`; `SymbolGroupCard` gains a `showSymbolScore` prop and renders the symbol-uniform `symbol_score` (via `formatComposite(opps[0].symbolScore)`, em-dash when unset, `data-testid=symbol-score-<symbol>`, NOT `scoreColor`) only under that sort; call site passes `showSymbolScore={sortKey==='symbolScore'}`. Server-authoritative order (no client re-sort). Fixtures: AAPL `symbolScore:1.2` / MSFT `1.0` + INVENTORY note.
+- Files modified: `services/xstockstrat-ui/src/app/insights/opportunities/page.tsx`, `e2e/fixtures/opportunities.ts`, `e2e/fixtures/INVENTORY.md`
+- Deviations: none
+
+### Step 11 — test: UI e2e symbol_score sort + header render [done]
+- TDD red→green (@AC-8). RED (host-native, page.tsx stashed): the test failed at `getByRole('option',{name:'Sort · Symbol score'})` — the option/testid don't exist pre-Step-10. GREEN (page.tsx restored): full `opportunities.spec.ts` 31 passed. New spec: selecting symbol-score sort renders groups in server order (AAPL 1.2 above MSFT 1.0, no client re-sort), the group header shows `1.200`/`1.000`, a symbol without symbolScore shows the em-dash, and the value is absent under the default sort.
+- **Deviation (test-harness, spec-Files omission):** `e2e/mock-backend.ts` gained a `sort===3` group-key branch (MAX(symbol_score) DESC NULLS LAST) so the mock honors the new sort — required for the e2e but not listed in either step's `**Files**`. Staged here (analogous to Step 5's `_FakeOppRepo` extension). See Deviation Log.
+- **Deviation (verification method):** the Docker e2e runner (`Dockerfile.e2e`) failed to build in this environment — `corepack prepare pnpm@9.15.9` cannot fetch through the agent proxy. Verified host-native (`pnpm exec playwright test`, pre-provisioned Chromium) with `--timeout 120000` (the SSR-warmup cold-compile exceeds the default 10s). CI-equivalent: CI runs the identical Playwright spec via the Docker image.
+- Files modified: `services/xstockstrat-ui/e2e/insights/opportunities.spec.ts`, `e2e/mock-backend.ts`
+- Deviations: 2 (above)
