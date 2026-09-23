@@ -148,7 +148,7 @@ Empty diff after regen (the generated tree already reflects the new field/enum v
 
 ### Step 3 — migration: add nullable `symbol_score` column to `analysis.opportunities`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/migrations/025_opportunity_symbol_score.up.sql` — create

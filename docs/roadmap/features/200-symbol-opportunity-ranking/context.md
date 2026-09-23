@@ -370,3 +370,8 @@ C-15 analysis test step).
 - Ran ./scripts/localenv-setup.sh (Docker codegen image) → regenerated Go/Python/TS stubs + compiled TS dist. Diff confined to analysis/v1 (8 files) carrying symbol_score / OPPORTUNITY_SORT_SYMBOL_SCORE — no unrelated churn (mirrors CI proto-freshness). Idempotency re-verified: a second buf-gen leaves git diff empty.
 - Files modified: `packages/proto/gen/{go,python,ts}/analysis/v1/**` (incl. gen/ts/dist)
 - Deviations: none
+
+### Step 3 — migration 025: nullable symbol_score column [done]
+- Created 025_opportunity_symbol_score.{up,down}.sql (ADD COLUMN IF NOT EXISTS symbol_score DOUBLE PRECISION ↔ DROP COLUMN IF EXISTS), mirroring 024's nullable-no-default style. No index. Verified offline (025 next-free NNN; up/down inverse). Live apply/rollback deferred to CI/deploy.
+- Files modified: `services/xstockstrat-analysis/migrations/025_opportunity_symbol_score.up.sql`, `.down.sql`
+- Deviations: none
