@@ -57,11 +57,17 @@ class FundamentalPeriod:
     values: dict
 
 
-def _needs_eval_dates(definition) -> bool:
+def _needs_eval_dates(definition, formula_fund_map: dict | None = None) -> bool:
     """True when any component needs the bar-date timeline: a ``source_symbol`` benchmark
-    (feature 152) or a ``COMPONENT_KIND_FUNDAMENTAL`` operand (feature 198)."""
+    (feature 152), a ``COMPONENT_KIND_FUNDAMENTAL`` operand (feature 198), or a fundamentals-only
+    ``CUSTOM_FORMULA`` component whose ``formula_id`` declares fundamentals inputs (feature 200 —
+    the PIT epoch series is as-of-bar-date, so it needs the timeline; without the map here the
+    branch would broadcast nothing → silent hold, design R4/R5)."""
+    fmap = formula_fund_map or {}
     return any(
-        c.source_symbol or c.kind == analysis_pb2.COMPONENT_KIND_FUNDAMENTAL
+        c.source_symbol
+        or c.kind == analysis_pb2.COMPONENT_KIND_FUNDAMENTAL
+        or (c.kind == analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA and bool(fmap.get(c.formula_id)))
         for c in definition.components
     )
 
@@ -115,23 +121,43 @@ def _finite_or_none(v) -> float | None:
     return f if math.isfinite(f) else None
 
 
+def _decode_formula_output(formula_id: str, resp) -> dict:
+    """Shared ``ExecuteFormula`` response decode (feature 200): raise ``FormulaExecutionError`` on
+    ``not resp.success`` and on the ``MessageToDict`` ``ValueError`` (NaN/Inf — never a fabricated
+    value, fails.md:87), else return the decoded ``output`` dict. Reused by the indicator-only list
+    path (which then enforces its ``len==n`` + ``"value"``-required policy) and the
+    fundamentals-only scalar-broadcast path."""
+    if not resp.success:
+        raise FormulaExecutionError(formula_id, resp.error)
+    try:
+        return MessageToDict(resp.output)
+    except ValueError as e:
+        raise FormulaExecutionError(formula_id, resp.error or str(e)) from e
+
+
 _SUPPORTED_INDICATORS = {"SMA", "EMA", "RSI", "MACD", "BB", "ATR", "VWAP", "STOCH"}
 
-# Canonical fundamental-metric vocabulary a COMPONENT_KIND_FUNDAMENTAL operand may reference
-# (feature 198) — mirrors the screener's _FUNDAMENTAL_FIELDS. Write-time allow-list.
-_FUNDAMENTAL_METRICS = {
-    "market_cap",
-    "pe_ratio",
-    "pb_ratio",
-    "dividend_yield",
-    "eps",
-    "beta",
-    "roe",
-    "debt_to_equity",
-    "price",
-    "year_high",
-    "year_low",
+# Single source of the fundamentals vocabulary (feature 200): the closed FundamentalMetric enum int
+# → its snake_case data-key (the marketdata.Fundamentals field name the sandbox reads from `data`).
+# This is the ONE enum→key lowering site (design R3); the feature-198 write-time allow-list
+# `_FUNDAMENTAL_METRICS` is DERIVED from its values so the two never drift (design R4/R5 Obj-5).
+_FUNDAMENTAL_METRIC_DATA_KEY: dict[int, str] = {
+    indicators_pb2.FUNDAMENTAL_METRIC_MARKET_CAP: "market_cap",
+    indicators_pb2.FUNDAMENTAL_METRIC_PE_RATIO: "pe_ratio",
+    indicators_pb2.FUNDAMENTAL_METRIC_PB_RATIO: "pb_ratio",
+    indicators_pb2.FUNDAMENTAL_METRIC_DIVIDEND_YIELD: "dividend_yield",
+    indicators_pb2.FUNDAMENTAL_METRIC_EPS: "eps",
+    indicators_pb2.FUNDAMENTAL_METRIC_BETA: "beta",
+    indicators_pb2.FUNDAMENTAL_METRIC_ROE: "roe",
+    indicators_pb2.FUNDAMENTAL_METRIC_DEBT_TO_EQUITY: "debt_to_equity",
+    indicators_pb2.FUNDAMENTAL_METRIC_PRICE: "price",
+    indicators_pb2.FUNDAMENTAL_METRIC_YEAR_HIGH: "year_high",
+    indicators_pb2.FUNDAMENTAL_METRIC_YEAR_LOW: "year_low",
 }
+
+# Canonical fundamental-metric vocabulary a COMPONENT_KIND_FUNDAMENTAL operand may reference
+# (feature 198) — DERIVED from the enum lowering map above (one list, one place).
+_FUNDAMENTAL_METRICS = frozenset(_FUNDAMENTAL_METRIC_DATA_KEY.values())
 
 # First entry ("value") is the primary series a bare ref_name resolves to; the rest are
 # addressable as "<ref_name>.<series>". Must mirror xstockstrat-indicators' indicators_engine.py.
@@ -190,6 +216,8 @@ class StrategyEvaluator:
         signals_map: dict[str, list] | None = None,
         benchmark_bars: dict | None = None,
         fundamentals: list | None = None,
+        formula_fundamentals: dict | None = None,
+        formula_fundamentals_data: list | None = None,
     ) -> list[BarDecision]:
         """
         Compute per-bar entry/exit decisions for the given strategy definition.
@@ -203,7 +231,13 @@ class StrategyEvaluator:
         resolves to hold (see ``_assemble_component_series``).
         """
         decisions, _ = await self.evaluate_with_series(
-            definition, bars, signals_map, benchmark_bars, fundamentals
+            definition,
+            bars,
+            signals_map,
+            benchmark_bars,
+            fundamentals,
+            formula_fundamentals,
+            formula_fundamentals_data,
         )
         return decisions
 
@@ -214,6 +248,8 @@ class StrategyEvaluator:
         signals_map: dict[str, list] | None = None,
         benchmark_bars: dict | None = None,
         fundamentals: list | None = None,
+        formula_fundamentals: dict | None = None,
+        formula_fundamentals_data: list | None = None,
     ) -> tuple[list[BarDecision], dict[str, list]]:
         """
         Like ``evaluate`` but also returns the computed ``component_series`` dict (feature 064).
@@ -235,12 +271,22 @@ class StrategyEvaluator:
         closes = [b.close for b in bars]
         # Computed lazily: the no-source path must never touch bar.time, or list-mocked bars
         # without a .time field break and byte-identity is lost. Fundamentals also need dates (198).
-        eval_dates = [_bar_date(b) for b in bars] if _needs_eval_dates(definition) else None
+        eval_dates = (
+            [_bar_date(b) for b in bars]
+            if _needs_eval_dates(definition, formula_fundamentals)
+            else None
+        )
 
         component_series = {}
         for comp in definition.components:
             series_map = await self._assemble_component_series(
-                comp, closes, eval_dates, benchmark_bars, fundamentals
+                comp,
+                closes,
+                eval_dates,
+                benchmark_bars,
+                fundamentals,
+                formula_fundamentals,
+                formula_fundamentals_data,
             )
             primary = series_map.get("value", [None] * len(closes))
             component_series[comp.ref_name] = primary
@@ -271,6 +317,8 @@ class StrategyEvaluator:
         rule: str = "entry",
         benchmark_bars: dict | None = None,
         fundamentals: list | None = None,
+        formula_fundamentals: dict | None = None,
+        formula_fundamentals_data: list | None = None,
     ) -> dict:
         """Additive sibling (feature 083). Trace the ``entry_rule`` (default) or, with
         ``rule="exit"`` (feature 097), the ``exit_rule`` condition leaves at the LAST bar —
@@ -294,14 +342,24 @@ class StrategyEvaluator:
             return _empty_readiness(symbol)
         _validate_definition(definition)
         closes = [b.close for b in bars]
-        eval_dates = [_bar_date(b) for b in bars] if _needs_eval_dates(definition) else None
+        eval_dates = (
+            [_bar_date(b) for b in bars]
+            if _needs_eval_dates(definition, formula_fundamentals)
+            else None
+        )
         component_series: dict[str, list] = {}
         if self._component_sem is None:
             # SERIAL — byte-for-byte the pre-176 behavior; the backtest (:1463) and score
             # (:2892, which already holds _component_series_sem) sites depend on this.
             for comp in definition.components:
                 series_map = await self._assemble_component_series(
-                    comp, closes, eval_dates, benchmark_bars, fundamentals
+                    comp,
+                    closes,
+                    eval_dates,
+                    benchmark_bars,
+                    fundamentals,
+                    formula_fundamentals,
+                    formula_fundamentals_data,
                 )
                 primary = series_map.get("value", [None] * len(closes))
                 component_series[comp.ref_name] = primary
@@ -313,7 +371,13 @@ class StrategyEvaluator:
             async def _assemble(comp):
                 async with self._component_sem:
                     return comp.ref_name, await self._assemble_component_series(
-                        comp, closes, eval_dates, benchmark_bars, fundamentals
+                        comp,
+                        closes,
+                        eval_dates,
+                        benchmark_bars,
+                        fundamentals,
+                        formula_fundamentals,
+                        formula_fundamentals_data,
                     )
 
             # gather preserves input order, so `assembled` is in definition.components order —
@@ -366,15 +430,9 @@ class StrategyEvaluator:
                 ),
                 metadata=self._meta,
             )
-            if not resp.success:
-                # A failed formula is a genuine error, not an all-None series.
-                raise FormulaExecutionError(comp.formula_id, resp.error)
-            # MessageToDict (not dict(resp.output), which drops a ListValue → all-None) decodes the
-            # Struct; it raises ValueError on NaN/Inf, surfaced as FORMULA_ERROR not silent degrade.
-            try:
-                output = MessageToDict(resp.output)
-            except ValueError as e:
-                raise FormulaExecutionError(comp.formula_id, resp.error or str(e)) from e
+            # Shared decode (raises FormulaExecutionError on failure / NaN / Inf — never a
+            # fabricated value). The list path below enforces its len==n + "value"-required policy.
+            output = _decode_formula_output(comp.formula_id, resp)
             series: dict[str, list[float | None]] = {}
             for key, raw in output.items():
                 # Scalar (non-list) values are dropped; scalar-broadcast is deferred.
@@ -395,6 +453,63 @@ class StrategyEvaluator:
                 )
             return series
         return {"value": [None] * n}
+
+    async def _fundamentals_formula_series(
+        self, comp, n: int, eval_dates: list, fundamentals: list | None, metric_enum_ints: list
+    ) -> dict[str, list[float | None]]:
+        """Fundamentals-only formula operand (feature 200): score the declared fundamentals once per
+        filing-boundary epoch and broadcast each scalar output across the epoch span.
+
+        - Per declared metric, the as-of scalar series via ``_fundamental_as_of_series`` (strict
+          ``filed_date < bar_date`` T+1 — structurally no look-ahead, no ``close`` is ever fed).
+        - An **epoch** is a contiguous span where the tuple of per-metric as-of values is constant
+          (derived from the as-of series, so both the None→value T+1 step and a value→None drop
+          bound an epoch): O(filings) ``ExecuteFormula`` calls, not O(bars).
+        - An all-``None`` epoch (pre-first-filing / whole row missing) **skips** the call and holds
+          ``None`` across the span (never a fabricated score — FR-6/@AC-5).
+        - Otherwise the ``input_data`` **omits** the absent (``None``) metrics — omit-absent, so a
+          non-reporting metric neutral-drops rather than scoring as ``0.0`` (feature-200 option b,
+          @AC-8) — and every finite scalar output is broadcast (value/quality/composite)."""
+        data_keys = [
+            _FUNDAMENTAL_METRIC_DATA_KEY[m]
+            for m in metric_enum_ints
+            if m in _FUNDAMENTAL_METRIC_DATA_KEY
+        ]
+        if not data_keys or not eval_dates:
+            return {"value": [None] * n}
+        per_metric = {k: _fundamental_as_of_series(k, eval_dates, fundamentals) for k in data_keys}
+        params_struct = Struct()
+        params_struct.update(dict(comp.params))
+        series: dict[str, list[float | None]] = {}
+        i = 0
+        while i < n:
+            epoch_vals = tuple(per_metric[k][i] for k in data_keys)
+            j = i + 1
+            while j < n and tuple(per_metric[k][j] for k in data_keys) == epoch_vals:
+                j += 1
+            present = {k: v for k, v in zip(data_keys, epoch_vals) if v is not None}
+            if present:
+                input_struct = Struct()
+                input_struct.update(present)
+                resp = await self._indicators.ExecuteFormula(
+                    indicators_pb2.ExecuteFormulaRequest(
+                        formula_id=comp.formula_id,
+                        input_data=input_struct,
+                        input_params=params_struct,
+                    ),
+                    metadata=self._meta,
+                )
+                output = _decode_formula_output(comp.formula_id, resp)
+                for key, raw in output.items():
+                    val = _finite_or_none(raw)
+                    lst = series.setdefault(key, [None] * n)
+                    for b in range(i, j):
+                        lst[b] = val
+            # else: all-None epoch → hold None across [i, j) (no ExecuteFormula, no fabrication)
+            i = j
+        if "value" not in series:
+            series["value"] = [None] * n
+        return series
 
     async def declared_formula_warmups(self, definition) -> dict[str, int]:
         """Build ``{formula_id: declared warmup_period}`` for a definition's custom-formula
@@ -423,6 +538,35 @@ class StrategyEvaluator:
                     cache[comp.formula_id] = 0
         return cache
 
+    async def declared_formula_fundamentals(self, definition) -> dict[str, list]:
+        """Feature 200 — build ``{formula_id: [FundamentalMetric enum int]}`` for a definition's
+        custom-formula components that declare ``fundamental_inputs``, via ``GetFormula``. The live
+        counterpart of the servicer's ``_formula_fundamentals`` (the live loop holds no indicators
+        stub of its own, so it routes through the evaluator's). An unreachable formula is treated as
+        non-fundamental (``[]``, omitted) — routes indicator-only (fed ``close``), never a silent
+        wrong score. Only non-empty entries are returned, so an empty map means no such operand."""
+        out: dict[str, list] = {}
+        seen: set[str] = set()
+        for comp in definition.components:
+            if (
+                comp.kind != analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA
+                or not comp.formula_id
+                or comp.formula_id in seen
+            ):
+                continue
+            seen.add(comp.formula_id)
+            try:
+                formula = await self._indicators.GetFormula(
+                    indicators_pb2.GetFormulaRequest(formula_id=comp.formula_id),
+                    metadata=self._meta,
+                )
+                metrics = [int(m) for m in getattr(formula, "fundamental_inputs", [])]
+            except grpc.RpcError:
+                metrics = []
+            if metrics:
+                out[comp.formula_id] = metrics
+        return out
+
     async def _assemble_component_series(
         self,
         comp,
@@ -430,6 +574,8 @@ class StrategyEvaluator:
         eval_dates: list,
         benchmark_bars: dict | None = None,
         fundamentals: list | None = None,
+        formula_fundamentals: dict | None = None,
+        formula_fundamentals_data: list | None = None,
     ) -> dict[str, list[float | None]]:
         """Compute a component's output series, honoring an optional ``source_symbol``
         benchmark operand (feature 152) and the fundamental operand (feature 198).
@@ -462,6 +608,21 @@ class StrategyEvaluator:
                     comp.fundamental_metric, eval_dates, fundamentals
                 )
             }
+
+        # Fundamentals-only CUSTOM_FORMULA operand (feature 200): fed only its declared fundamentals
+        # (never OHLCV closes), scored once per filing-boundary epoch, broadcast across the span.
+        fmap = formula_fundamentals or {}
+        if comp.kind == analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA and fmap.get(comp.formula_id):
+            # The 200-formula channel is SEPARATE from the 198-operand channel (`fundamentals`):
+            # a non-backtest surface passes the snapshot via `formula_fundamentals_data` while
+            # `fundamentals` stays PIT for the 198 operand (C-16 PRESERVE @feature-198). It defaults
+            # to `fundamentals` (backtest, where both channels are the same PIT list).
+            fdata = (
+                formula_fundamentals_data if formula_fundamentals_data is not None else fundamentals
+            )
+            return await self._fundamentals_formula_series(
+                comp, n, eval_dates, fdata, fmap[comp.formula_id]
+            )
 
         source_symbol = comp.source_symbol
         if not source_symbol:

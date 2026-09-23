@@ -25,6 +25,30 @@ export declare enum ParameterType {
 export declare function parameterTypeFromJSON(object: any): ParameterType;
 export declare function parameterTypeToJSON(object: ParameterType): string;
 export declare function parameterTypeToNumber(object: ParameterType): number;
+/**
+ * Closed set of the canonical fundamentals metrics a formula may declare as inputs (feature 200).
+ * A non-empty FormulaDefinition.fundamental_inputs marks a formula as "fundamentals-only": the
+ * analysis evaluator feeds it only these metrics (never OHLCV closes) and broadcasts its scalar
+ * output. Names mirror marketdata.Fundamentals fields; the zero sentinel is invalid on write (C-04).
+ */
+export declare enum FundamentalMetric {
+    FUNDAMENTAL_METRIC_UNSPECIFIED = "FUNDAMENTAL_METRIC_UNSPECIFIED",
+    FUNDAMENTAL_METRIC_MARKET_CAP = "FUNDAMENTAL_METRIC_MARKET_CAP",
+    FUNDAMENTAL_METRIC_PE_RATIO = "FUNDAMENTAL_METRIC_PE_RATIO",
+    FUNDAMENTAL_METRIC_PB_RATIO = "FUNDAMENTAL_METRIC_PB_RATIO",
+    FUNDAMENTAL_METRIC_DIVIDEND_YIELD = "FUNDAMENTAL_METRIC_DIVIDEND_YIELD",
+    FUNDAMENTAL_METRIC_EPS = "FUNDAMENTAL_METRIC_EPS",
+    FUNDAMENTAL_METRIC_BETA = "FUNDAMENTAL_METRIC_BETA",
+    FUNDAMENTAL_METRIC_ROE = "FUNDAMENTAL_METRIC_ROE",
+    FUNDAMENTAL_METRIC_DEBT_TO_EQUITY = "FUNDAMENTAL_METRIC_DEBT_TO_EQUITY",
+    FUNDAMENTAL_METRIC_PRICE = "FUNDAMENTAL_METRIC_PRICE",
+    FUNDAMENTAL_METRIC_YEAR_HIGH = "FUNDAMENTAL_METRIC_YEAR_HIGH",
+    FUNDAMENTAL_METRIC_YEAR_LOW = "FUNDAMENTAL_METRIC_YEAR_LOW",
+    UNRECOGNIZED = "UNRECOGNIZED"
+}
+export declare function fundamentalMetricFromJSON(object: any): FundamentalMetric;
+export declare function fundamentalMetricToJSON(object: FundamentalMetric): string;
+export declare function fundamentalMetricToNumber(object: FundamentalMetric): number;
 export interface ComputeIndicatorRequest {
     /** "SMA", "EMA", "RSI", "MACD", "BB", "ATR", "VWAP" */
     indicator: string;
@@ -162,6 +186,11 @@ export interface FormulaDefinition {
      * (GetFormula/ExecuteFormula stay deleted-agnostic), hidden from ListFormulas, and not updatable.
      */
     deleted: boolean;
+    /**
+     * Non-empty = a fundamentals-only formula fed only these metrics as ExecuteFormula input_data
+     * scalars, never OHLCV closes (feature 200); the category marker (no separate flag).
+     */
+    fundamentalInputs: FundamentalMetric[];
 }
 export interface FormulaDefinition_InputSchemaEntry {
     key: string;
@@ -193,6 +222,8 @@ export interface RegisterFormulaRequest {
     outputs: FormulaOutput[];
     /** bars of warm-up before this formula's outputs are valid (feature 064) */
     warmupPeriod: number;
+    /** non-empty = fundamentals-only formula (feature 200) */
+    fundamentalInputs: FundamentalMetric[];
 }
 export interface RegisterFormulaRequest_InputSchemaEntry {
     key: string;
@@ -241,6 +272,8 @@ export interface UpdateFormulaRequest {
      * are preserved. Reject an update whose target formula is soft-deleted (FAILED_PRECONDITION).
      */
     updateMask?: string[] | undefined;
+    /** non-empty = fundamentals-only formula (feature 200) */
+    fundamentalInputs: FundamentalMetric[];
 }
 export interface UpdateFormulaResponse {
     formula?: FormulaDefinition | undefined;

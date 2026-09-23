@@ -168,7 +168,7 @@ async def test_phase1_uses_batch_get_bars():
     from app.handlers.servicer import _empty_readiness
 
     async def _stub_evaluate(
-        definition, bars, sym, rule="entry", benchmark_bars=None, fundamentals=None
+        definition, bars, sym, rule="entry", benchmark_bars=None, fundamentals=None, **_kw
     ):
         r = _empty_readiness(sym)
         r["conviction"] = 0.5

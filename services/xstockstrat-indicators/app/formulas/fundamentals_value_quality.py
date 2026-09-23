@@ -72,6 +72,17 @@ OUTPUTS = [
     ),
 ]
 
+# The fundamentals metrics this formula reads from `data` (feature 200). A non-empty
+# fundamental_inputs marks it fundamentals-only: the analysis evaluator feeds it only these.
+FUNDAMENTAL_INPUTS = [
+    indicators_pb2.FUNDAMENTAL_METRIC_PE_RATIO,
+    indicators_pb2.FUNDAMENTAL_METRIC_PB_RATIO,
+    indicators_pb2.FUNDAMENTAL_METRIC_DIVIDEND_YIELD,
+    indicators_pb2.FUNDAMENTAL_METRIC_ROE,
+    indicators_pb2.FUNDAMENTAL_METRIC_DEBT_TO_EQUITY,
+    indicators_pb2.FUNDAMENTAL_METRIC_EPS,
+]
+
 # Mirrors the param defaults so callers resolve shipped defaults without re-deriving from proto.
 DEFAULT_PARAMS = {n: d for (n, d, _) in _DEFAULTS}
 

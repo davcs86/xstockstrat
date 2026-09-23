@@ -21,7 +21,16 @@ log = logging.getLogger(__name__)
 # Fields an UpdateFormula update_mask may name; any other path is rejected INVALID_ARGUMENT.
 # formula_id/user_id/author/created_at are not maskable.
 _FORMULA_MASKABLE_PATHS = frozenset(
-    {"name", "description", "source", "is_public", "parameters", "outputs", "warmup_period"}
+    {
+        "name",
+        "description",
+        "source",
+        "is_public",
+        "parameters",
+        "outputs",
+        "warmup_period",
+        "fundamental_inputs",
+    }
 )
 
 
@@ -232,6 +241,7 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
         try:
             params_validation.validate_definitions(request.parameters)
             params_validation.validate_outputs(request.outputs)
+            params_validation.validate_fundamental_inputs(request.fundamental_inputs)
             if request.warmup_period < 0:
                 raise ValueError("warmup_period must be >= 0")
         except ValueError as e:
@@ -253,6 +263,7 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
             parameters=list(request.parameters),
             outputs=list(request.outputs),
             warmup_period=request.warmup_period,
+            fundamental_inputs=list(request.fundamental_inputs),
         )
         self._formulas[formula_id] = formula
         if self._repo is not None:
@@ -267,6 +278,7 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
                 parameters=param_dicts,
                 outputs=output_dicts,
                 warmup_period=request.warmup_period,
+                fundamental_inputs=[int(m) for m in request.fundamental_inputs],
             )
         return indicators_pb2.RegisterFormulaResponse(formula_id=formula_id)
 
@@ -368,6 +380,11 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
             if _use_req("warmup_period")
             else (row.get("warmup_period", 0) or 0)
         )
+        eff_fundamental_inputs = (
+            [int(m) for m in request.fundamental_inputs]
+            if _use_req("fundamental_inputs")
+            else (row.get("fundamental_inputs") or [])
+        )
         # A masked update may not blank the required source; params/outputs/warmup can be cleared.
         if has_mask and "source" in mask and not eff_source:
             await context.abort(
@@ -381,6 +398,8 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
                 params_validation.validate_definitions(request.parameters)
             if _use_req("outputs"):
                 params_validation.validate_outputs(request.outputs)
+            if _use_req("fundamental_inputs"):
+                params_validation.validate_fundamental_inputs(request.fundamental_inputs)
             if _use_req("warmup_period") and eff_warmup < 0:
                 raise ValueError("warmup_period must be >= 0")
         except ValueError as e:
@@ -395,6 +414,7 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
             parameters=eff_parameters,
             outputs=eff_outputs,
             warmup_period=eff_warmup,
+            fundamental_inputs=eff_fundamental_inputs,
         )
         self._formulas.pop(request.formula_id, None)
         return indicators_pb2.UpdateFormulaResponse(formula=_row_to_formula(updated))
@@ -454,4 +474,5 @@ def _row_to_formula(row: dict) -> "indicators_pb2.FormulaDefinition":
         outputs=[ParseDict(o, indicators_pb2.FormulaOutput()) for o in (row.get("outputs") or [])],
         warmup_period=row.get("warmup_period", 0) or 0,
         deleted=row.get("deleted_at") is not None,
+        fundamental_inputs=[int(m) for m in (row.get("fundamental_inputs") or [])],
     )

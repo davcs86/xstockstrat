@@ -173,6 +173,13 @@ export function ComponentEditor({ value, onChange, onRemove }: ComponentEditorPr
             </ComboboxContent>
           </Combobox>
 
+          {selectedFormula && selectedFormula.fundamentalInputs.length > 0 && (
+            <p className="text-[10px] text-muted-foreground">
+              Fundamentals input — requires the fundamentals gate ON; use <code>.composite</code>{' '}
+              for the headline.
+            </p>
+          )}
+
           {selectedFormula && selectedFormula.parameters.length > 0 && (
             <div className="space-y-2">
               <p className="text-xs font-medium text-muted-foreground">Parameters</p>

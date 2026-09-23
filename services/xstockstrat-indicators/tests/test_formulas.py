@@ -585,8 +585,9 @@ class TestFormulaWarmupPeriod:
             input_schema={},
             warmup_period=14,
         )
-        # warmup_period is bound as the 10th positional arg to the INSERT
-        assert pool.fetchrow.await_args.args[-1] == 14
+        # warmup_period is bound as the 10th positional arg; fundamental_inputs (feature 200) is
+        # now the trailing 11th bind, so warmup is second-to-last.
+        assert pool.fetchrow.await_args.args[-2] == 14
         assert result["warmup_period"] == 14
 
     async def test_register_get_round_trips_warmup_period(self):
@@ -818,3 +819,85 @@ class TestFormulaDeletedFlag:
 
         f = _row_to_formula(_full_row(deleted_at=None))
         assert f.deleted is False
+
+
+# ---------------------------------------------------------------------------
+# fundamental_inputs (feature 200) — register/update validation + round-trip
+# ---------------------------------------------------------------------------
+
+
+class TestFundamentalInputs:
+    def _servicer(self):
+        return IndicatorsServicer(config_watcher=_cfg_stub())
+
+    async def test_register_rejects_unspecified_fundamental_input(self):
+        from gen.indicators.v1 import indicators_pb2
+
+        servicer = self._servicer()
+        req = indicators_pb2.RegisterFormulaRequest(name="f", source="x = 1", author="u")
+        req.fundamental_inputs.append(indicators_pb2.FUNDAMENTAL_METRIC_UNSPECIFIED)
+        ctx = _ctx([("x-user-id", "u")])
+        ctx.abort = AsyncMock(side_effect=Exception("aborted"))
+        with pytest.raises(Exception):
+            await servicer.RegisterFormula(req, ctx)
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.INVALID_ARGUMENT
+        assert "UNSPECIFIED" in ctx.abort.await_args.args[1]
+
+    async def test_register_stores_fundamental_inputs(self):
+        from gen.indicators.v1 import indicators_pb2
+
+        servicer = self._servicer()  # repo None → in-memory path
+        req = indicators_pb2.RegisterFormulaRequest(name="f", source="x = 1", author="u")
+        req.fundamental_inputs.extend(
+            [
+                indicators_pb2.FUNDAMENTAL_METRIC_PE_RATIO,
+                indicators_pb2.FUNDAMENTAL_METRIC_ROE,
+            ]
+        )
+        resp = await servicer.RegisterFormula(req, _ctx([("x-user-id", "u")]))
+        stored = servicer._formulas[resp.formula_id]
+        assert list(stored.fundamental_inputs) == [
+            indicators_pb2.FUNDAMENTAL_METRIC_PE_RATIO,
+            indicators_pb2.FUNDAMENTAL_METRIC_ROE,
+        ]
+
+    def test_row_to_formula_maps_fundamental_inputs(self):
+        from gen.indicators.v1 import indicators_pb2
+
+        from app.handlers.servicer import _row_to_formula
+
+        row = {
+            "formula_id": "d1ff5e6b-6d9c-589d-b95e-defd862c702b",
+            "name": "f",
+            "description": "",
+            "source": "x = 1",
+            "author": "system",
+            "is_public": True,
+            "input_schema": {},
+            "parameters": [],
+            "outputs": [],
+            "warmup_period": 0,
+            "fundamental_inputs": [
+                int(indicators_pb2.FUNDAMENTAL_METRIC_PE_RATIO),
+                int(indicators_pb2.FUNDAMENTAL_METRIC_ROE),
+            ],
+        }
+        proto = _row_to_formula(row)
+        assert list(proto.fundamental_inputs) == [
+            indicators_pb2.FUNDAMENTAL_METRIC_PE_RATIO,
+            indicators_pb2.FUNDAMENTAL_METRIC_ROE,
+        ]
+
+    def test_seeded_formula_declares_its_six_metrics(self):
+        from gen.indicators.v1 import indicators_pb2 as p
+
+        from app.formulas import fundamentals_value_quality as fvq
+
+        assert fvq.FUNDAMENTAL_INPUTS == [
+            p.FUNDAMENTAL_METRIC_PE_RATIO,
+            p.FUNDAMENTAL_METRIC_PB_RATIO,
+            p.FUNDAMENTAL_METRIC_DIVIDEND_YIELD,
+            p.FUNDAMENTAL_METRIC_ROE,
+            p.FUNDAMENTAL_METRIC_DEBT_TO_EQUITY,
+            p.FUNDAMENTAL_METRIC_EPS,
+        ]

@@ -206,3 +206,21 @@ class TestResolveAndValidate:
         params = [_param("enabled", pb.PARAMETER_TYPE_BOOL)]
         _, errors = params_validation.resolve_and_validate(params, _struct({"enabled": "yes"}))
         assert ("enabled", "expected a boolean") in errors
+
+
+class TestValidateFundamentalInputs:
+    """feature 200 — validate_fundamental_inputs (closed FundamentalMetric enum)."""
+
+    def test_empty_list_is_valid(self):
+        params_validation.validate_fundamental_inputs([])
+
+    def test_valid_metrics_pass(self):
+        params_validation.validate_fundamental_inputs(
+            [pb.FUNDAMENTAL_METRIC_PE_RATIO, pb.FUNDAMENTAL_METRIC_ROE]
+        )
+
+    def test_rejects_unspecified_sentinel(self):
+        with pytest.raises(ValueError, match="UNSPECIFIED"):
+            params_validation.validate_fundamental_inputs(
+                [pb.FUNDAMENTAL_METRIC_PE_RATIO, pb.FUNDAMENTAL_METRIC_UNSPECIFIED]
+            )
