@@ -53,6 +53,8 @@ async def compute_readiness_row(
     valid_until,
     benchmark_epoch,
     fundamentals=None,
+    formula_fundamentals=None,
+    formula_fundamentals_data=None,
 ) -> dict:
     """The shared SLOW readiness compute — a best-effort per-symbol bars fetch (gated by
     ``bars_sem``) + a traced condition evaluation, returning a staged ``analysis.readiness_cache``
@@ -82,6 +84,8 @@ async def compute_readiness_row(
             rule=rule,
             benchmark_bars=benchmark_bars,
             fundamentals=fundamentals,
+            formula_fundamentals=formula_fundamentals,
+            formula_fundamentals_data=formula_fundamentals_data,
         )
     # bar_epoch = newest served bar (evaluated symbol or benchmark) — never a slow-path reuse, so a
     # same-time.seconds intraday 1d bar update never freezes a day-one verdict (feature 177).

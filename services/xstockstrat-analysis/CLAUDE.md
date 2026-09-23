@@ -272,6 +272,46 @@ rising) that per-symbol operands cannot express.
 - **Deferred:** `screen_symbols` `source_symbol` and a UI strategy-builder editor for it are follow-ons
   (agent-authored strategies are fully functional now via `manage_strategy`).
 
+### Fundamentals-input formula operand (`fundamental_inputs`, feature 200)
+
+A `COMPONENT_KIND_CUSTOM_FORMULA` component whose formula declares
+`fundamental_inputs` (the closed `FundamentalMetric` enum, owned by xstockstrat-indicators) is fed
+**only** those fundamentals (never OHLCV `close`), scored **once per filing-boundary epoch**, and the
+scalar output broadcast across the span — the same input/output contract as the fundamentals-signal
+producer's scoring formula (feature 062), so one formula id works in both places (FR-5, full-row
+parity; the partial-row case diverges by design — see `@AC-8`). This is disjoint from the feature-198
+`COMPONENT_KIND_FUNDAMENTAL` single-metric operand: 198 reads **one** metric per component off the
+bar; 200 feeds a **set** of metrics into a formula.
+
+- **Routing.** The evaluator branch fires only when the component's `formula_id` maps to a non-empty
+  metric list in the `formula_fundamentals` map the servicer/live loop builds
+  (`_formula_fundamentals` / `evaluator.declared_formula_fundamentals`, one `GetFormula` per distinct
+  formula). An unmapped formula stays the ordinary indicator-only path (fed `close`) — byte-identical
+  to pre-200 (`@AC-7`). The routing map must be built **before** the loader/eval at every surface
+  (a site that computes `eval_dates` without it silently holds).
+- **Two data channels, kept separate.** The formula reads a **dedicated** `formula_fundamentals_data`
+  channel so a co-occurring feature-198 operand keeps its own PIT `fundamentals` channel unchanged
+  (C-16 PRESERVE `@feature-198`). On **backtest** the formula channel is the same per-symbol **PIT**
+  filing history (`_load_fundamentals`) so it is as-of-bar-date with the 198 T+1 carry-forward
+  (`formula_fundamentals_data` left `None` → defaults to the PIT list). On the **5 non-backtest**
+  surfaces (live loop, `EvaluateReadiness`, readiness materializer, `ListOpportunities`,
+  `GetIndicatorSeries`) the formula channel is the current-snapshot row from marketdata
+  `GetFundamentalsMulti`, lowered by `_load_fundamentals_snapshot` (live loop:
+  `_load_fundamentals_snapshot`) into a **one-element** `[FundamentalPeriod]` with `filed_date =
+  date.min` (strictly before every bar), so the identical `_fundamental_as_of_series` broadcasts it as
+  one degenerate epoch — one code shape for PIT and snapshot.
+- **Gate (one key, two sites).** `analysis.backtest.fundamentals.enabled` (default OFF) now gates
+  **both** the 198 PIT loader (`_load_fundamentals`) **and** the 200 snapshot loader
+  (`_load_fundamentals_snapshot`) — one config key, two enforcement sites. OFF ⇒ the formula operand
+  reads hold on every surface (no snapshot/PIT fetch, no formula execution — no fabricated 0.0).
+- **Warmup.** A fundamentals-only formula consumes no rolling `close` window, so its warmup is forced
+  to **0** in the backtest warmup cache (the cache value stays `int`); the `fundamental_inputs` read
+  folds into the existing warmup-prefetch `GetFormula` at backtest/live (no extra RPC there). The
+  other 4 surfaces pay one bounded per-pass `GetFormula` fan-out to build the map.
+- **Write-time guard.** `ManageStrategy` rejects `INVALID_ARGUMENT` a component that sets **both**
+  `source_symbol` and a fundamentals-input formula — a component is a benchmark operand XOR a
+  fundamentals-formula operand (the formula reads fundamentals, not bars).
+
 ## Config Keys Consumed
 
 Namespace: `analysis`
@@ -285,7 +325,7 @@ Namespace: `analysis`
 | `analysis.backtest.portfolio_position_weight` | float | `0.10` | Fraction of **initial** capital committed per concurrent position in portfolio sizing mode (feature 150). Read via `get_float` (zero-trap intended: a configured `0` disables the portfolio → falls back to `0.10`). A fixed fraction of *initial* capital (not live equity) keeps aggregate metrics order-independent. |
 | `analysis.backtest.portfolio_max_concurrent` | int | `9` | Max concurrently-held positions in portfolio sizing mode (feature 150). Read via `get_int` with a `max(1, …)` clamp (zero-trap intended: a configured `0` reads back as the default `9`; the clamp guards a negative). At the `0.10` weight this leaves a ≥10% cash buffer. |
 | `analysis.backtest.default_fill_model` | int | `0` | Default fill model when a `RunBacktest` request leaves `fill_model` unset (feature 151). `0` = `FILL_MODEL_UNSPECIFIED` → legacy `SAME_BAR_CLOSE`; `2` = `FILL_MODEL_NEXT_BAR_OPEN`. Read via `get_int` — the zero-trap is **intentional** here: both an absent key and a configured `0` mean legacy, so a future reader must NOT "fix" it to `get_int_present`. A request-supplied `fill_model` always overrides this. |
-| `analysis.backtest.fundamentals.enabled` | bool | `false` | Master kill-switch for the historical-fundamentals strategy operand (`COMPONENT_KIND_FUNDAMENTAL`, feature 198). Read via `get_bool` (HasField — an explicit operator value is honored) at the single per-symbol PIT-preload chokepoint (`_load_fundamentals`, shared by the servicer + the live loop), so it gates **every** consumer uniformly: backtest, live loop, `EvaluateReadiness`, the readiness materializer, `ListOpportunities`, and `GetIndicatorSeries`. Default **OFF** ⇒ a fundamental operand resolves to all-`None` (the leaf holds) on every surface. Turning it off is a true platform-wide disable — in-flight strategies with a fundamental operand immediately read hold. |
+| `analysis.backtest.fundamentals.enabled` | bool | `false` | Master kill-switch for the historical-fundamentals strategy operand (`COMPONENT_KIND_FUNDAMENTAL`, feature 198) **and** the fundamentals-input formula operand (`fundamental_inputs`, feature 200). Read via `get_bool` (HasField — an explicit operator value is honored) at **two** enforcement sites for one key: the per-symbol PIT-preload chokepoint (`_load_fundamentals`, feature 198) and the snapshot loader (`_load_fundamentals_snapshot`, feature 200) — both shared by the servicer + the live loop, so it gates **every** consumer uniformly: backtest, live loop, `EvaluateReadiness`, the readiness materializer, `ListOpportunities`, and `GetIndicatorSeries`. Default **OFF** ⇒ a fundamental operand (either kind) resolves to all-`None` (the leaf holds) on every surface. Turning it off is a true platform-wide disable — in-flight strategies with a fundamental operand immediately read hold. |
 | `analysis.scoring.sharpe_weight` | float | `0.4` | Weight of Sharpe in overall score |
 | `analysis.scoring.drawdown_weight` | float | `0.3` | Weight of max drawdown |
 | `analysis.scoring.win_rate_weight` | float | `0.3` | Weight of win rate |

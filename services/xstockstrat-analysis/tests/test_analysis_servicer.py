@@ -39,6 +39,10 @@ def make_servicer() -> AnalysisServicer:
     cfg.get_float = MagicMock(side_effect=lambda key, default=0.0: default)
     cfg.get_str = MagicMock(side_effect=lambda key, default="": default)
     cfg.get_int = MagicMock(side_effect=lambda key, default=0: default)
+    # feature 200: get_bool backs the analysis.backtest.fundamentals.enabled gate; default → the
+    # passed default (an unstubbed MagicMock returns a truthy MagicMock, silently enabling the
+    # gate — fails.md:1395).
+    cfg.get_bool = MagicMock(side_effect=lambda key, default=False: default)
     # feature 116: get_int_present (not get_int) is used for exit_cooldown_days' platform
     # default, since a configured 0 is meaningful and must not be zero-trapped.
     cfg.get_int_present = MagicMock(side_effect=lambda key, default: default)
@@ -5118,6 +5122,7 @@ class TestOpportunityDataUnavailable:
             rule="entry",
             benchmark_bars=None,
             fundamentals=None,
+            **_kw,  # feature 200 — accept + forward formula_fundamentals[_data]
         ):
             if symbol == "AAPL":
                 raise grpc.RpcError()
@@ -5130,6 +5135,7 @@ class TestOpportunityDataUnavailable:
                 rule=rule,
                 benchmark_bars=benchmark_bars,
                 fundamentals=fundamentals,
+                **_kw,
             )
 
         with patch.object(StrategyEvaluator, "evaluate_conditions_traced", _selective_fail):
@@ -5230,6 +5236,7 @@ class TestOpportunityDataUnavailable:
             rule="entry",
             benchmark_bars=None,
             fundamentals=None,
+            **_kw,  # feature 200 — accept + forward formula_fundamentals[_data]
         ):
             if symbol == "AAPL":
                 raise grpc.RpcError("indicators transport down")
@@ -5242,6 +5249,7 @@ class TestOpportunityDataUnavailable:
                 rule=rule,
                 benchmark_bars=benchmark_bars,
                 fundamentals=fundamentals,
+                **_kw,
             )
 
         with patch.object(StrategyEvaluator, "evaluate_conditions_traced", _maybe_raise):
@@ -5272,6 +5280,7 @@ class TestOpportunityDataUnavailable:
             rule="entry",
             benchmark_bars=None,
             fundamentals=None,
+            **_kw,  # feature 200 — accept formula_fundamentals[_data]
         ):
             raise FormulaExecutionError("f-bad", "boom")
 
@@ -6687,6 +6696,13 @@ class TestGetIndicatorSeries:
         )
         svc._strategies_repo = AsyncMock()
         svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=_row_for(definition))
+        # feature 200 — GetIndicatorSeries now fetches each custom formula once to detect a
+        # fundamentals-only formula (declared fundamental_inputs). This one declares none, so it
+        # keeps the indicator-only route into _compute_component (below).
+        svc._indicators = MagicMock()
+        svc._indicators.GetFormula = AsyncMock(
+            return_value=indicators_pb2.FormulaDefinition(formula_id="f-bad", name="bad")
+        )
 
         def fake_compute(comp, closes):
             if comp.ref_name == "bad":
