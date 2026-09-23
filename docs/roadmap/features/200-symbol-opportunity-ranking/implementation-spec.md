@@ -96,7 +96,7 @@ accuracy; xstockstrat-agent owner — MCP tool contract stability
 1. In the `OpportunitySort` enum (`analysis.proto:546`), add after `OPPORTUNITY_SORT_EXPIRY = 2;`:
    `OPPORTUNITY_SORT_SYMBOL_SCORE = 3;  // symbol roll-up ordering (MAX(symbol_score) OVER PARTITION BY symbol) — feature 200`
 2. In the `Opportunity` message, after `optional double composite_score = 21;` (`:602`), add
-   `optional double symbol_score = 22;` with a doc-comment mirroring `ANALYSIS-12` and the
+   `optional double symbol_score = 22;` with a doc-comment mirroring `ANALYSIS-13` and the
    `composite_score` guard, stating it is a **bounded (`< 2·max_composite`, i.e. `< 2.0`, for γ<1)
    ordinal RANKING scalar on a non-`[0,1]` scale; NOT a probability / expected-return / sizing / alert
    input**; explicit-presence: unset = no score-eligible opportunity for the symbol (design.md
@@ -194,7 +194,7 @@ apply/rollback runs in CI/deploy against the managed DB — never spin up a data
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
 - `services/xstockstrat-analysis/app/repositories/opportunities.py` — modify
-- `services/xstockstrat-analysis/docs/context-constitution.md` — modify (add `ANALYSIS-12`)
+- `services/xstockstrat-analysis/docs/context-constitution.md` — modify (add `ANALYSIS-13`)
 
 **Reviewers**: xstockstrat-analysis owner — strategy scoring determinism, no look-ahead bias,
 backtest/roll-up reproducibility
@@ -233,8 +233,9 @@ backtest/roll-up reproducibility
   `_composite_for(sym, readiness)` is at `servicer.py:3797` (shows the heal path recomputes composite
   through the SAME fusion).
 - `ANALYSIS-11` (feature-199 composite guard) confirmed at
-  `services/xstockstrat-analysis/docs/context-constitution.md:27` — `ANALYSIS-12` is the next-free
-  companion id.
+  `services/xstockstrat-analysis/docs/context-constitution.md:27`. `ANALYSIS-12` was taken by the
+  since-merged feature 201 (fundamentals-formula-inputs), so `ANALYSIS-13` is the next-free companion
+  id for this feature's `symbol_score` guard (re-anchor `:27` at execute — 201's edits shifted the file).
 
 **TDD**: `red-green required`
 
@@ -283,7 +284,7 @@ backtest/roll-up reproducibility
 7. **Proto mapping** in `_row_to_opportunity` (`servicer.py:5301-5305`): after the composite_score
    mapping add the explicit-presence map for `symbol_score`
    (`sym_sc = row.get("symbol_score"); if sym_sc is not None: opp.symbol_score = float(sym_sc)`).
-8. **`ANALYSIS-12` invariant** in `services/xstockstrat-analysis/docs/context-constitution.md` (after
+8. **`ANALYSIS-13` invariant** in `services/xstockstrat-analysis/docs/context-constitution.md` (after
    `ANALYSIS-11`): declare `Opportunity.symbol_score` a **bounded (`< 2·max_composite`, `< 2.0` for
    γ<1) ordinal RANKING scalar on a non-`[0,1]` scale — NEVER a cardinal sizing/alert/risk input**;
    cite `fails.md:313/:418` and the shared fold helper (discharges the ordinal-as-cardinal trap).

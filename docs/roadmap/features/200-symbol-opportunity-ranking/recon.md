@@ -43,7 +43,7 @@ the MCP agent. **Layers on feature 199** (consumes `composite_score`).
 - UI → **reuse the server-order render** (no client re-sort, `@AC-15`) + `scoreColor` for display; add one `SortKey`/enum option.
 - Agent → **extend `_opportunity_to_dict`** + descriptor-parity test + `mcp-tools.md` in the same PR.
 - Per-opportunity quality input → **feature-199 `composite_score`** (LANDED: proto `= 21` + column, projected in `read()`).
-- Cardinal guard → **add a companion `ANALYSIS-12`** for `symbol_score` (feature-199's composite guard landed as `ANALYSIS-11`).
+- Cardinal guard → **add a companion `ANALYSIS-13`** for `symbol_score` (feature-199's composite guard landed as `ANALYSIS-11`).
 
 ## Existing Business Rules (preserve / extend)
 
@@ -74,7 +74,7 @@ the MCP agent. **Layers on feature 199** (consumes `composite_score`).
 - **`composite_score` LANDED** (feature 199 `code-completed`) — the roll-up's per-row input now exists in proto (`= 21`), the `analysis.opportunities` column (migration `024`), and the `read()` projection. 200 still cannot MERGE before 199 (merge-order), but its dependency is no longer a not-yet-built risk. The fusion helpers 200 layers beside are `_composite_score(scored, k)` and `_composite_signal_subscore(contribs, best_direction)` (module-level, `servicer.py`); `Σw≤0 → None` (NULL persisted), so a symbol's roll-up must skip NULL-composite terms to match the main-compute fold exactly.
 - **Diminishing-returns sum is not a SQL window aggregate** — it is a rank-dependent ordered fold; Postgres `MAX/SUM OVER (PARTITION BY symbol)` cannot express it. → compute `symbol_score` **app-side** in `_compute_opportunities` and **persist** it per-row, then sort by `MAX(symbol_score) OVER (PARTITION BY symbol)`. (Read-time computation would need a new post-`read()` grouping pass that does not exist today.)
 - **Default-sort CHANGE risk (`@AC-10 @feature-190`)** — keep `symbol_score` opt-in; making it the default needs user sign-off. Surface at the gate.
-- **Cardinal guard (`fails.md:313`/`:418`)** — `symbol_score` is another ranking ordinal (composite ordinals × grade weights); must never become a cardinal sizing/alert input. Feature 199's composite guard LANDED as **`ANALYSIS-11`** (invariant tip), so 200's `symbol_score` guard is the next-free **`ANALYSIS-12`** (companion to ANALYSIS-11) + a proto doc-comment on `symbol_score`.
+- **Cardinal guard (`fails.md:313`/`:418`)** — `symbol_score` is another ranking ordinal (composite ordinals × grade weights); must never become a cardinal sizing/alert input. Feature 199's composite guard LANDED as **`ANALYSIS-11`** (invariant tip), so 200's `symbol_score` guard is the next-free **`ANALYSIS-13`** (companion to ANALYSIS-11) + a proto doc-comment on `symbol_score`.
 - **Grade scoping** — the score cache is global by bare `strategy_id`; the roll-up must gate per-user (owner-intersect) so it never weights by another user's strategy grade.
 - **Provisional/absent grade → neutral fallback weight** (FR-4/FR-7), never 0 (would zero a legitimate opportunity from an unproven strategy). Fallback value is an Open Question.
 - **Override key shape** (C-05) — 4-segment dynamic key has no precedent; design decides dynamic-key vs structured value.
