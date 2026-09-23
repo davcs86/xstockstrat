@@ -354,3 +354,14 @@ C-15 analysis test step).
 - **Feature-number collision already resolved on trunk:** the other session's fundamentals-formula-inputs renumbered 200→**201** and merged (`code-completed`). No stray 200-dir; 200=symbol-opportunity-ranking, 201=fundamentals. Nothing to renumber at the feature level.
 - **Invariant-id collision found + fixed:** feature 201 consumed **ANALYSIS-12** (its CUSTOM_FORMULA fundamentals carve-out). This feature's `symbol_score` cardinal guard therefore moves to the next-free **ANALYSIS-13**. Bumped all forward-looking refs in implementation-spec.md / design.md / recon.md from ANALYSIS-12 → ANALYSIS-13; append-only Status-History / older context rows left intact (they record the plan-at-the-time).
 - Reserved surfaces re-verified free on current main-dev: proto `Opportunity.symbol_score = 22` (max field still `composite_score = 21`), `OPPORTUNITY_SORT_SYMBOL_SCORE = 3` (max still EXPIRY=2), analysis migration `025` (latest still `024`; 201 touched INDICATORS migration 006, not analysis), config keys `analysis.scoring.symbol_score_decay`/`strategy_weight_floor` (grep-clean). servicer.py/opportunities.py/UI line anchors WILL have drifted (201 merged) — /sdd-execute re-grounds per step.
+
+## Session 2026-09-23 — sdd-execute (sequential, single integration PR)
+- Mode-entry + per-feature confirm: user chose "Proceed, sequential in one PR".
+- Re-spec gate (directive none): read-only validation via codebase-discovery — **all** feature-200-referenced symbols still present post-201 (drifted lines only; per-step Phase-1 re-anchors). No structural blockers; no re-spec. Reserved surfaces free (sort 3, field 22, migration 025, both config keys); ANALYSIS-12 confirmed taken by 201 → this feature uses ANALYSIS-13.
+- Tooling (all 11 steps): uv ✓ · ruff ✓ · python(uv 3.13) ✓ · node22 ✓ · pnpm 9.15.9 ✓ · tsc ✓ · Chromium ✓ · buf via Docker `xstockstrat-codegen` image ✓ (dockerd started; regen diff CLEAN vs committed stubs) · analysis `uv sync` ✓.
+- Open coupling to check at Step 9: codebase-discovery flagged that a new `OpportunitySort` value may need `strat-lab` plugin `backtest` skill parity — but the root CLAUDE.md strat-lab rule names run_backtest/manage_strategy/trigger_backfill/set_strategy_live, NOT list_opportunities, so likely out of scope; verify the skill doesn't document the sort enum before deciding.
+
+### Step 1 — proto: add symbol_score field + OPPORTUNITY_SORT_SYMBOL_SCORE [done]
+- Added additive `OPPORTUNITY_SORT_SYMBOL_SCORE = 3` to the `OpportunitySort` enum and `optional double symbol_score = 22` to `Opportunity` (bounded ordinal ranking cardinal-guard doc-comment citing ANALYSIS-13). buf lint + buf breaking (vs main-dev) both pass in the codegen container.
+- Files modified: `packages/proto/analysis/v1/analysis.proto`
+- Deviations: none

@@ -70,7 +70,7 @@ Dependencies.
 
 ### Step 1 — proto: add `symbol_score` field + `OPPORTUNITY_SORT_SYMBOL_SCORE` enum value
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/analysis/v1/analysis.proto` — modify
