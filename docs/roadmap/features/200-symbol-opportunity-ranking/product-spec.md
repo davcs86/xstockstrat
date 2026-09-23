@@ -34,12 +34,14 @@ symbol's opportunities (that is the current sort's behavior this feature exists 
 comparison). **Mandatory ordering:** a symbol with 2 opportunities at conviction 0.80 + full readiness
 ranks strictly **above** a symbol with 1 opportunity at conviction 1.00.
 
-FR-3. **Strategy weighting = derived grade × operator override.** Each opportunity's contribution is
-weighted by its strategy's derived quality grade (feature-065 `StrategyScore` A–F, mapped to a numeric
-weight), multiplied by an explicit **operator per-strategy config override** (default override = 1.0).
+FR-3. **Strategy weighting = derived grade.** Each opportunity's contribution is weighted by its
+strategy's derived quality grade (feature-065 `StrategyScore`, mapped via `floor + (1−floor)·overall_score`).
 **Mandatory ordering:** a symbol whose opportunity set includes the `fundamental_macd_blend` strategy
 ranks strictly **above** a symbol with the same count of opportunities none of which is
-`fundamental_macd_blend`, when `fundamental_macd_blend` carries a higher effective strategy weight.
+`fundamental_macd_blend`, when `fundamental_macd_blend` carries a higher derived grade.
+_(Deferred to a follow-up feature per the round-5 design pressure test: the **per-strategy operator
+override** — a knob defaulting to a no-op 1.0 whose entity-persistence carries a grade-fingerprint-wipe +
+replace-wipe + bounds hazard. v1 ships grade-only; see `design.md` § Deferred.)_
 
 FR-4. **Missing/degenerate inputs degrade gracefully.** An opportunity whose `composite_score` is NULL
 (feature-199 "not computed" / data-unavailable) contributes nothing to the sum (it is not treated as 0
@@ -71,7 +73,7 @@ Exact service names from CLAUDE.md Service Registry:
 - `xstockstrat-ui` — `/insights` queue ordering by symbol roll-up.
 - `xstockstrat-agent` — expose `symbol_score` for symbol comparison via `list_opportunities` (or a
   symbol-level projection).
-- `xstockstrat-config` — new config keys (saturation parameter, per-strategy overrides, grade→weight map).
+- `xstockstrat-config` — two new `analysis.scoring.*` float keys (`symbol_score_decay`, `strategy_weight_floor`); no per-strategy override key (deferred).
 
 ## Consumer Surface(s)
 
@@ -93,22 +95,22 @@ _Constitution **C-14**._
 
 ## Config Key Changes
 
-- [ ] New keys under `analysis` (finalized at design; follow the `analysis.scoring.shrinkage_days`
-  precedent, `get_float_present`):
-  - `analysis.opportunity.symbol_score_saturation` (or similar) — the diminishing-returns saturation
-    parameter (FR-2).
-  - `analysis.scoring.strategy_grade_weight_*` — the A–F→numeric weight map (FR-3).
-  - `analysis.scoring.strategy_weight_override.<strategy_id>` (or a structured override key) — the
-    operator per-strategy override (FR-3). **Naming/shape is an Open Question** (per-strategy dynamic
-    keys vs a single structured value).
+_Resolved at design (design.md):_ two 3-segment `analysis.scoring.*` keys, both `get_float_present`
+(the `analysis.scoring.composite_*` precedent):
+- `analysis.scoring.symbol_score_decay` — geometric rank-decay `γ` (default `0.5`) for the fold (FR-2).
+- `analysis.scoring.strategy_weight_floor` — the grade-weight affine floor (default `0.5`) (FR-3).
+
+The per-strategy **operator override is deferred to a follow-up feature** (round-5 design decision) — it
+is neither a config key nor an entity field in v1. v1's grade→weight mapping is the affine
+`floor + (1−floor)·overall_score` (no override term, no separate A–F weight-map config).
 
 ## Database Changes
 
 - [ ] Possibly one new nullable column (persisted `symbol_score`) on `analysis.opportunities` **or** a
   query-time computation with no schema change — **design decides** (FR-1/FR-5). If persisted, a new
   numbered migration in `services/xstockstrat-analysis/migrations/` (`ls migrations/` and reserve the
-  next-free NNN at design time — do not guess; disk tip was `023`, and feature 199 reserves `024`, so
-  this feature must reserve the next after 199 lands or coordinate via merge-order).
+  next-free NNN at design time — do not guess; feature 199 **landed** `024_opportunity_composite_score`,
+  so the next-free analysis migration is **`025`**, re-confirmed against the merged tree).
 
 ## Feature Workflow Notes
 
@@ -119,9 +121,10 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 - [x] DBA review + service owner (schema migration) — **only if** `symbol_score` is persisted
 
 **Merge-order dependency:** depends on **feature 199 (opportunity-composite-score)** — this feature
-consumes `Opportunity.composite_score`. 199 is `implementation-ready` (both are pre-merge). 200 must not
-merge before 199, and shares the analysis opportunity path (soft rebase overlap with 199, plus in-flight
-187/193/188). Recorded as a blocking row in `docs/roadmap/features/merge-order.md`.
+consumes `Opportunity.composite_score`. 199 is now `code-completed` (PR #1157): `composite_score` LANDED
+as a queryable column (proto `= 21`, migration `024`, projected in `read()`). 200 must not merge before
+199, and shares the analysis opportunity path (soft rebase overlap with 199, plus in-flight 187/193/188).
+Recorded as a blocking row in `docs/roadmap/features/merge-order.md`.
 
 ## Acceptance Criteria
 
@@ -141,8 +144,9 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 - [ ] **Grade→weight map + provisional fallback (FR-3).** The A–F→numeric mapping, and the neutral
   weight for a strategy whose grade is provisional/absent (feature-065 evidence floor). Must not be 0
   (that would zero out a legitimate opportunity from an unproven strategy).
-- [ ] **Operator override key shape (FR-3 / C-05).** Per-strategy dynamic config keys
-  (`...override.<strategy_id>`) vs one structured JSON value — governance + config-ui implications.
+- [x] **Operator override key shape (FR-3 / C-05).** RESOLVED at design: the per-strategy override is
+  **deferred to a follow-up feature** (round-5 pressure test) — neither a config key nor an entity field
+  in v1. See `design.md` § Deferred.
 - [ ] **Persist vs compute-on-read (FR-1/FR-5).** Persisted `symbol_score` column (enables server-side
   ORDER BY + a leaderboard, needs a migration + heal/refresh parity) vs query-time roll-up (no schema,
   but the sort must then be expressible server-side to preserve the "client does not re-sort"

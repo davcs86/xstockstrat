@@ -90,7 +90,7 @@ UI `/insights` (SymbolGroupCard orderable by symbol_score) + Agent (`list_opport
   ∩ owned ids (servicer.py:2260,2273). **Provisional/absent/unattributed → floor (0.5) = proven
   grade-F** (operator decision; drops the separate provisional_weight key; unproven can never outrank
   an evidenced strategy). Overrides = one structured JSON value `analysis.scoring.strategy_weight_overrides`
-  (malformed → ignored, never crash).
+  (malformed → ignored, never crash). **SUPERSEDED at round-4 design (2026-09-21): the override moved onto the strategy entity (`StrategyDefinition.rank_weight_override`), not a config blob — see design.md.**
 - **Sort**: opt-in `OPPORTUNITY_SORT_SYMBOL_SCORE = 3` (analysis.proto:541) → `_SORT_ORDER_BY[3] =
   MAX(o.symbol_score) OVER (PARTITION BY o.symbol) DESC NULLS LAST, o.symbol ASC, o.opportunity_key ASC`
   (opportunities.py:33). Default stays CONVICTION (no @AC-10 CHANGE, no sign-off).
@@ -98,7 +98,8 @@ UI `/insights` (SymbolGroupCard orderable by symbol_score) + Agent (`list_opport
   22, re-derive vs merged tree); UI = plain 3-decimal number (NOT scoreColor — unbounded), rendered
   only under the server-applied symbol_score sort; agent = raw float via _opportunity_to_dict + omit on
   NULL + descriptor-parity. Migration 025 (after 199's 024, re-derive).
-- **Cardinal guard**: extend feature-199's ANALYSIS-10 invariant + a symbol_score proto doc-comment
+- **Cardinal guard**: feature-199's composite guard landed as **ANALYSIS-11**, so 200 adds a companion
+  **ANALYSIS-12** for symbol_score + a symbol_score proto doc-comment
   ("unbounded ordinal RANKING scalar … NOT a probability/expected-return/sizing input").
 - **Heal (corrected, round 3)**: new disposition-free `OpportunitiesRepository.symbol_composite_terms
   (user_id, symbol)` (no opportunity_actions join / no valid_until / no floor) → re-fold the whole
@@ -115,13 +116,37 @@ UI `/insights` (SymbolGroupCard orderable by symbol_score) + Agent (`list_opport
   floor 0.5 > 0 contributes; unproven never outranks evidenced. (@AC-9 to be updated to unbounded
   values 1.20/0.75 when design.md is written.)
 
-## Open Threads (resolve at round 4 / against merged 199 tree)
+## Post-199 sync (2026-09-21) — facts re-grounded against what feature 199 BUILT
 
-- [ ] **Post-199 coupling (fails.md:378/412/422 trap)**: re-derive `symbol_composite_terms` against
-  199's LANDED shape — is composite_score a queryable column (199 design says yes) or in readiness_json?
-  Re-derive proto field 22, sort enum value, migration 025 from the merged tree.
-- [ ] **NULL-composite fold semantics** must match the main-compute fold exactly (199 persists NULL on
-  Σw≤0) or the heal-parity test passes on a subtle divergence.
+Feature 199 (opportunity-composite-score) is `code-completed` (PR #1157). Re-grounded against the
+landed code on this branch — these were the "resolve against the merged tree" unknowns:
+
+- **composite_score is a real, queryable column.** `analysis.opportunities.composite_score`
+  `DOUBLE PRECISION` NULL (migration `024`); `read()` SELECTs `o.composite_score`;
+  `_row_to_opportunity` maps it (explicit presence). NOT in `readiness_json`. → 200's roll-up reads
+  it straight off the row / `read()` — no JSONB extraction, no re-fold from readiness.
+- **Reserved surface numbers (re-derived, confirmed free):** proto `Opportunity.symbol_score = 22`
+  (after landed `composite_score = 21`); `OPPORTUNITY_SORT_SYMBOL_SCORE = 3` (OpportunitySort max = 2);
+  analysis migration `025` (after landed `024`); invariant `ANALYSIS-12` (after landed `ANALYSIS-11`).
+- **NULL-composite fold contract (nail it in the heal-parity test):** the main compute persists
+  `composite_score = NULL` exactly when `Σw ≤ 0` (`_composite_score([...], k) is None`). 200's fold
+  must **skip** a NULL-composite term (never coerce it to 0), so heal (persisted universe) and compute
+  (candidates dict) agree. The composite fold anchors `best_direction` on RAW conviction; 200's
+  strategy-weight layer is orthogonal to that and does not touch it.
+- **Reusable fusion helpers 200 layers beside** (module-level in `servicer.py`):
+  `_composite_score(scored, k)`, `_composite_signal_subscore(contribs, best_direction)`. 200's
+  `_symbol_score` is a NEW helper (geometric rank-decay fold), not an extension of these.
+
+**Still open for /sdd-design round 4** (design decisions, NOT facts about 199): the order-insensitive
+fold internal sort, the concurrency mitigation (FOR-UPDATE-txn / advisory lock), the floor=0.5
+collapse rationale, and the config-key names/read-semantics — see the checklist below.
+
+## Open Threads (resolve at round 4)
+
+- [x] **Post-199 coupling** — RESOLVED by the sync above: composite_score is a queryable column;
+  proto field 22 / sort value 3 / migration 025 / ANALYSIS-12 re-derived and free.
+- [x] **NULL-composite fold semantics** — RESOLVED: 199 persists NULL on `Σw ≤ 0`; 200's fold skips
+  NULL terms (contract captured above for the heal-parity test).
 - [ ] **Order-insensitive fold**: `_symbol_score` must sort terms internally so heal (persisted
   universe) and compute (candidates dict) are byte-identical regardless of input row order.
 - [ ] **Concurrency residual** (adversary ruled acceptable/self-healing, NOT must-fix): decide at
@@ -130,5 +155,195 @@ UI `/insights` (SymbolGroupCard orderable by symbol_score) + Agent (`list_opport
   design.md Rejected Alternatives (operator decision).
 - [ ] **Config**: assign real 3-segment key names + decide floor=0 / decay=0 read semantics
   (get_float_present vs get_float zero-trap) + declare defaults in analysis CLAUDE.md.
-- [ ] **Round 4 focus** was requested but redirected: resume the design debate (write design.md +
-  flip to design-approved) AFTER 199 lands, then /sdd-spec 200.
+- [ ] **Round 4 focus**: the post-199 facts are now known (sync above), so `/sdd-design
+  symbol-opportunity-ranking` round 4 can run against the built 199 code on this branch — write
+  design.md + flip to design-approved, then `/sdd-spec 200`. (Merge still sequences after 199 via
+  merge-order.md; the design no longer waits on 199's shape being unknown.)
+
+## Session 2026-09-21 — sync with what feature 199 built
+
+Operator: "sync feature 200 with what 199 built." Feature 199 (opportunity-composite-score) is now
+`code-completed` (PR #1157). Re-grounded 200's dependency facts against the landed 199 code (all on
+`claude/symbol-consolidation-scoring-7kgk9t`):
+
+- recon.md: corrected the migration tip (`024` composite LANDED, not `023`; killed the stale
+  "024–028 drift" note — those are config-service seed migrations), the proto next-free field
+  (`symbol_score = 22` after landed `composite_score = 21`), the sort value (`= 3`, OpportunitySort
+  max 2), the dependency block (199 BUILT, composite_score is a queryable column), the Risks
+  "composite_score not landed" → LANDED, and the cardinal-guard id (`ANALYSIS-11` landed → 200 =
+  `ANALYSIS-12`).
+- context.md: added the "Post-199 sync" fact block; marked the Post-199-coupling and NULL-fold Open
+  Threads RESOLVED (composite is a real column read via `read()`; NULL on `Σw ≤ 0` → 200 skips NULL
+  terms); updated the cardinal-guard line to ANALYSIS-11→ANALYSIS-12; re-pointed the round-4 thread
+  (design can now run against the built code).
+
+Status unchanged (`spec-ready`) — this is a fact re-grounding, NOT the design resume. Next: run
+`/sdd-design symbol-opportunity-ranking` round 4 to write design.md and flip to design-approved,
+then `/sdd-spec 200`. Merge still sequences after 199 (merge-order.md unchanged).
+
+## Session 2026-09-21 — sdd-review product-spec (re-review post-sync)
+
+- Result: **PASS WITH WARNINGS** — 0 blockers, no Floor breach. Overlap: **CLEAN** (proto `symbol_score
+  = 22`, `OPPORTUNITY_SORT_SYMBOL_SCORE = 3`, migration `025`, `ANALYSIS-12`, and the new
+  `analysis.scoring.*`/`analysis.opportunity.*` keys all free and uncontested; 199's landed claims
+  consistent, no double-claim; merge-order row already present).
+- Warnings:
+  1. **[FIXED now]** Stale dependency label — product-spec called 199 `implementation-ready`; updated
+     to `code-completed` (PR #1157), and the migration note to "199 landed `024` → next-free `025`".
+  2. 4-segment config key `analysis.scoring.strategy_weight_override.<strategy_id>` (C-05) — already an
+     Open Question; converged design collapses it to the 3-segment structured
+     `analysis.scoring.strategy_weight_overrides`. Resolve in design.md.
+  3. Migration up/down pairing (C-07) not restated in the conditional persisted branch — confirm at
+     design (converged design persists + reserves `025`).
+  4. Open Questions still `- [ ]` — legitimately design-deferred; resolve when design.md is written.
+- Warnings 2–4 are carried into the `/sdd-design` round-4 run (next); status stays `spec-ready`.
+
+## Session 2026-09-21 — sdd-design (round 4, APPROVED → design-approved)
+
+- Phase 0 Recon: recon.md already current (synced against merged 199 earlier this session); services:
+  analysis, packages/proto, xstockstrat-ui, xstockstrat-agent, xstockstrat-config. Key reuse: 199's
+  `composite_score` column + `read()` projection; the `self._strategies` grade cache + owner-intersect;
+  the `_SORT_ORDER_BY` branch map; `_row_to_opportunity` explicit-presence mapping.
+- Phase 1 Grilling: round 4 (full) — proposer produced the final design, adversary returned
+  SOUND-WITH-RISKS (no Floor breach). design.md written.
+- **Chosen approach**: geometric rank-decay fold `Σ γ^i·(composite × strategy_weight)` (γ=0.5), one
+  SHARED compute/heal fold helper (determinism parity by construction), owner-scoped grade derived
+  from drained bindings∪live-enabled (no extra `list(user_id)` query), unbounded scalar, persisted
+  `symbol_score = 22` (migration `025`) + opt-in `OPPORTUNITY_SORT_SYMBOL_SCORE = 3`, `ANALYSIS-12`
+  cardinal guard, plain 3-decimal UI (NOT scoreColor).
+- **Operator-decision (gate)**: the per-strategy override is moved **onto the strategy entity**
+  (`StrategyDefinition.rank_weight_override`, mirroring feature-134 `SignalSource.reliabilityWeight`) —
+  **supersedes** the earlier converged `analysis.scoring.strategy_weight_overrides` JSON-blob config
+  key, which the adversary flagged as a repeat of the deleted `source_weights` anti-pattern
+  (`fails.md:1155/1537`). This adds a proto field + strategies-table migration + `ManageStrategy` write
+  path + agent `manage_strategy` surface to 200's scope.
+- **Config now**: only two 3-segment keys — `analysis.scoring.symbol_score_decay` (0.5) and
+  `analysis.scoring.strategy_weight_floor` (0.5), both `get_float_present`.
+- Rejected: config-blob overrides; extra owner-list query (YAGNI); FOR-UPDATE heal lock (self-heals);
+  persist-pre-weighted-term (shared helper is cheaper); scoreColor on an unbounded scalar.
+- Constitution rules touched: C-05, C-07, C-09, C-10, C-14, C-15, C-16, C-18, P-05, F-04, F-06, F-07.
+  Floor breaches: none.
+- Open risks (also design.md): grade-VALUE collision residual (133 D-2, accepted); owned_ids-from-
+  drained-set assumes no 4th attribution path (grep at /sdd-spec); compute/heal shared-helper lockstep
+  (heal-parity test guards); `rank_weight_override` scope; soft rebase overlap 187/193/188.
+- Status: spec-ready → design-approved. Next: /sdd-spec symbol-opportunity-ranking.
+
+## Session 2026-09-21 — sdd-design round 5 (pressure test) → override DEFERRED
+
+Operator requested one more round. Round 5 (hard cap) aimed the adversary at the round-4
+override-on-entity decision, which had NEVER been adversarially tested (it was decided AT the round-4
+gate, after that round's adversary ran). Verdict: SOUND-WITH-RISKS, no Floor breach — but the override
+mechanism was under-grounded, with four must-fixes for a knob that defaults to a no-op 1.0:
+1. **Phantom migration / contradictory persistence** — `analysis.strategies` stores the whole
+   `StrategyDefinition` as one JSONB `definition_json` (`migrations/001`); new fields ride the blob
+   (no migration, like `denied_symbols`/`signal_eligible`) OR need a discrete column (the
+   `SignalSource.reliabilityWeight` shape). design.md conflated both.
+2. **Grade-fingerprint wipe (C-16, @AC-5 feature-150)** — a blob-riding override enters
+   `_definition_fingerprint`; tuning it would discard the strategy's feature-065 grade evidence →
+   grade→floor, the opposite of intent.
+3. **Full-replace wipe (feature-148 class)** — the UI's full-definition `ManageStrategy` update omits an
+   unset optional → resets the override to 1.0; also not in `_MASKABLE_PATHS`.
+4. **Heal/compute parity gap** — the override lives on `definition_json`, but heal's
+   `symbol_composite_terms` + the `self._strategies` grade cache don't carry it → heal would fold with
+   override=1.0 while compute used the real value.
+Plus: "config-ui-visible/bounds-checkable for free" false on a JSONB field; unbounded `symbol_score` +
+`override=1e9` dominates; and a genuinely-open owned_ids fourth path (the fundamentals-blend force-run
+attributing a non-owned global strategy_id → floor).
+
+**Gate decision: DEFER the override to a follow-up feature; v1 = grade-only** (`strategy_weight =
+affine(grade)`, override ≡ 1.0). Removes all four must-fixes + both override objections in one move;
+the grade-weighting value (FR-3, @AC-4) and breadth examples (FR-2) ship intact. The override becomes a
+named follow-up (`per-strategy-rank-weight-override`), to be built with the reliabilityWeight shape
+(column + CHECK bound + maskable write + fingerprint-exclusion) — recorded in design.md § Deferred so
+the follow-up starts grounded.
+
+Propagated the descope: design.md rewritten (grade-only, § Deferred, updated Rejected/Open-Risks/
+Constitution/Business-Rules, Rounds=5); product-spec FR-3 + config section + affected-services +
+override Open Question; `acceptance.feature` `@AC-5` annotated `@deferred-followup` (append-only, not
+renumbered). Retained open risks: owned_ids fourth-path (grep at /sdd-spec), grade-value collision
+residual, shared-helper lockstep. Status stays `design-approved`. Next: /sdd-spec (v1 scope).
+
+## Session 2026-09-21 — sdd-design round 6 (operator-requested, past 5-round cap) → grade-only VERIFIED
+
+Operator asked for one last round; noted it is past the documented 5-round cap and proceeded on
+explicit direction. Round 6 attacked the final GRADE-ONLY shape (round 5 had been consumed by the
+override). Verdict: **SOUND-WITH-RISKS, no Floor breach.** All four load-bearing claims verified against
+code: owned_ids complete-cover, `overall_score`∈[0,1], migration `025` free, heal-parity inputs.
+
+Addressed before approval:
+- **γ read-clamp [0,0.99] (robustness / @AC-3).** `analysis.scoring.symbol_score_decay` had no
+  write-time bound; at γ≥1 the geometric fold degenerates to a plain/growing sum and PENNY (6×0.30)
+  overtakes AAPL (2×0.80) — inverting the mandated @AC-3 saturation ordering. Chose a **read-side clamp
+  to [0,0.99]** in `_compute_opportunities` (cheapest robust fix; no config-service bounds-registry
+  diff, stays in-analysis, matches the "code-default only" choice for these keys) over registering a
+  SCALAR_BOUNDS_REGISTRY bound. Documented in design.md fold paragraph.
+- **"unbounded" → "bounded".** With the override deferred, `strategy_weight ≤ 1.0` ⇒ `symbol_score <
+  2·max_composite (<2.0)` for γ<1. Reworded the 4 "unbounded" spots + the `ANALYSIS-12`/proto
+  doc-comment framing to "bounded ordinal ranking scalar on a non-[0,1] scale". The NOT-scoreColor
+  decision stands (a [0,<2) ordinal still doesn't fit a [0,1] cardinal color scale).
+- **grade_lookup clarified**: returns the **continuous** cached `overall_score`+`provisional`
+  (`_row_to_score`), floor on `None` — NOT the A–F letter. Grade-A (`overall≥0.8`) vs grade-C
+  (`[0.5,0.65)`) ranges are disjoint ⇒ @AC-4 holds by construction without an override.
+- **owned_ids RESOLVED at design (not deferred)**: grepped every `_candidate(sym, strat)` site — `strat`
+  comes only from owner watchlist bindings or `list_live_enabled(user_id)`; the fundamentals-blend fires
+  only when the user owns a live blend strategy ⇒ no fourth path, no `list(user_id)` fallback needed.
+- **recon.md stale override refs fixed**: added a round-6 "design.md is authoritative" note + corrected
+  the Objective and Config-keys lines (override deferred, not on the entity).
+
+Status stays `design-approved`. Ledger: round-6 confirmed no repeat of fails.md:313/1153/1155. Next:
+/sdd-spec (grade-only v1 scope; γ read-clamp + the two mandated orderings pinned at default γ in the
+C-15 analysis test step).
+
+## Session 2026-09-21 — sdd-spec
+
+- Generated implementation-spec.md with **11 steps**. Status → `implementation-ready`.
+- Consumed design.md (grade-only v1, override deferred) + recon.md; re-anchored every drifted line
+  against the merged 199 tree on this branch (soft rebase overlap 187/193/188 noted in Step Dependencies).
+- Scenario coverage (C-15): all 10 v1 `@AC-*` mapped to steps (unit AC-1/2/3/4/6/7/10 → Step 5; AC-8 →
+  Step 5 repo sort + Step 11 UI e2e; AC-9 → Step 8 agent). `@AC-5` (operator override) explicitly
+  DEFERRED to the named follow-up `per-strategy-rank-weight-override` — no v1 step.
+- Consumer surfaces (C-14): UI `/insights` (Steps 10/11, existing route — no PLATFORM_SUBNAV/C-10(a)
+  needed) + Agent `list_opportunities` (Steps 7/8/9). Both in scope.
+- Key codebase findings (grounded line evidence, current tree):
+  - `_compute_opportunities` @ `servicer.py:3989`; composite config reads @ `:4016-4022` (anchor for
+    the two new `analysis.scoring.*` `get_float_present` reads); `owned_ids` sources =
+    `_drain_watchlist_bindings` (`:4007`→`watchlist_by_symbol` `:4028`) ∪ `list_live_enabled(user_id)`
+    (`:4053`→`live_by_symbol` `:4081`), blend force-run gated on ownership (`:4060`) → complete cover,
+    no `list(user_id)` fallback. `rows` list @ `:4515`, `return rows` @ `:4527` (fold+stamp point).
+  - Pure helpers layer beside `_composite_signal_subscore` (`:5216`) / `_composite_score` (`:5236`).
+    Grade cache `self._strategies` @ `:417`, hydrated via `_row_to_score` (`:5665`) carrying continuous
+    `overall_score`∈[0,1] + `provisional`. `_row_to_opportunity` explicit-presence map @ `:5301-5305`.
+  - Heal: `_retry_unavailable_symbols(user_id, symbols:set, …)` @ `servicer.py:3744`; heal_rows applied
+    via `replace_symbols` @ `:3982` → wire `symbol_composite_terms` + `stamp_symbol_score` (new repo
+    methods) after it, folding via the SAME shared helper (parity).
+  - `opportunities.py`: `_SORT_ORDER_BY` @ `:33` (add branch 3 `MAX(o.symbol_score) OVER PARTITION BY
+    o.symbol DESC NULLS LAST, o.symbol ASC, o.opportunity_key ASC`); INSERT `:84/:101`, UPDATE
+    `:132/:147`, SELECT `:187` — add `symbol_score` to each. Default stays branch 0 (no @AC-10 change).
+  - proto: `OpportunitySort` @ `analysis.proto:546` (max 2 → `= 3` free); `Opportunity.composite_score
+    = 21` @ `:602` (guard comment `:599-602`) → `symbol_score = 22` next-free. Last migration `024` →
+    new pair `025_opportunity_symbol_score`.
+  - Config: two keys `analysis.scoring.symbol_score_decay` (0.5, read-clamp [0,0.99]) +
+    `strategy_weight_floor` (0.5), code-default `get_float_present`, declared in analysis CLAUDE.md
+    beside `composite_*` (`:296-298`) — NO config-ui seed migration (F-07 code-default only).
+  - `ANALYSIS-11` @ `services/xstockstrat-analysis/docs/context-constitution.md:27` → add `ANALYSIS-12`
+    companion for the symbol_score cardinal guard.
+  - Agent: `_opportunity_to_dict` @ `client.py:751`, composite omit-projection `:803-806`; parity test
+    `tests/test_opportunity_projection.py:50-51` (`_full_opportunity` sets every field). mcp-tools
+    `list_opportunities` @ `mcp-tools.md:858`, composite entry `:885`.
+  - UI: `SortKey` @ `page.tsx:52`, sort Select `:260-268`, sortEnum map `:100-101`, `SymbolGroupCard`
+    `:382` (header `:409-421`), typed shape map `:192`; `formatComposite` = plain `.toFixed(3)`
+    (`scoreDisplay.ts:32`) reused for the number, NOT `scoreColor` (bounded [0,<2) ordinal). Fixtures
+    `OPPORTUNITIES` (AAPL/MSFT carry compositeScore) → add `symbolScore` (C-12 + INVENTORY.md:28).
+- Note (CLAUDE.md teardown): Step 6 edits analysis CLAUDE.md and Step 4 edits its
+  context-constitution.md — the context-constitution refresh is called out in Step 6 to run at execute.
+
+## Session 2026-09-21 — sdd-review impl-spec (advisory)
+
+- Result: PASS WITH WARNINGS — 0 blockers, no Floor (F-*) risk; 1 substantive C-08 warning (fixed in-session), 2 advisory notes. Overlap: all four hard classes (migration 025, proto field 22, sort enum 3, both config keys) CLEAN; only soft file-level rebase overlaps with in-flight 187/188 (anticipated; no new merge-order row).
+- Findings carried into execution:
+  - Step 8 (C-08): verification rested on a false premise — xstockstrat-agent DOES have a 40% CI coverage gate (ci.yml:346-348,372-375). Fixed the spec: Step 8 verification now runs the whole suite with `--cov-fail-under=40` (+ ruff), dropped the stale "no threshold" note. — [x] resolved
+  - Step 2 (B2): `gen/**` wildcard in **Files** — acceptable for the generated tree (repo forbids Read/Grep of gen/; enumeration impractical). No action. — [x] no change needed
+  - C-15 / @AC-5: operator override ships uncovered, deferred to the named follow-up `per-strategy-rank-weight-override`. Sign-off recorded (operator chose "defer to follow-up" this feature's design rounds; design.md § Deferred, acceptance.feature @deferred-followup). — [x] confirmed
+- Overlap findings: soft rebase overlaps only — opportunities.py, test_analysis_servicer.py, agent client.py, mcp-tools.md, insights page.tsx/spec, opportunities fixtures/INVENTORY (vs 187/188). Re-anchor line numbers at execute time; not FAIL-level.
+- PR topology note: feature 199 (PR #1157) MERGED to main-dev 2026-09-21T02:42:31Z (squash). Merge-order dependency satisfied. feature/symbol-opportunity-ranking rebased --onto origin/main-dev (dropping the now-redundant squashed 199 commits); PR #1161 retargeted claude/symbol-consolidation-scoring-7kgk9t → main-dev so its diff is docs-only.
+- CI-trigger note: the rebase+retarget left the new head with no `pull_request` CI run (the force-push's `synchronize` fired while the PR still pointed at the pre-retarget base, and the base-swap `edited` event does not trigger CI; the workflow has no `workflow_dispatch`, and the branch is ahead of main-dev so "Update branch" is a no-op). Identical content already passed CI at the pre-rebase head. This commit is a real `synchronize` to get the required check onto the current head — recorded here so a future session does not mistake the transient "blocked" for a failure.
