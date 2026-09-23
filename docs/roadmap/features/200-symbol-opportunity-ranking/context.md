@@ -375,3 +375,13 @@ C-15 analysis test step).
 - Created 025_opportunity_symbol_score.{up,down}.sql (ADD COLUMN IF NOT EXISTS symbol_score DOUBLE PRECISION ↔ DROP COLUMN IF EXISTS), mirroring 024's nullable-no-default style. No index. Verified offline (025 next-free NNN; up/down inverse). Live apply/rollback deferred to CI/deploy.
 - Files modified: `services/xstockstrat-analysis/migrations/025_opportunity_symbol_score.up.sql`, `.down.sql`
 - Deviations: none
+
+### Step 4 — service: analysis symbol_score roll-up (compute + persist + sort + heal + guard) [done]
+- Module helpers `_strategy_weight` / `_symbol_score` / `_symbol_score_for_group` (single shared fold) + owner-gated `_owner_grade_lookup(owned_ids)` method (anti-IDOR over the global `self._strategies` cache). Compute wiring: γ read-clamped `[0,0.99]` + floor config reads; `owned_ids = watchlist_by_symbol.values ∪ live_by_symbol.values`; after `rows` built, group by symbol, fold, stamp symbol-uniform `symbol_score` on every row. Heal wiring (`_retry_unavailable_symbols`): after `replace_symbols`, re-fold each healed symbol's whole row set via the SAME helper and `stamp_symbol_score`. `_row_to_opportunity` explicit-presence map. Repo: `_SORT_ORDER_BY[3]` (MAX symbol_score OVER PARTITION BY symbol DESC NULLS LAST), `symbol_score` threaded through replace_for_user INSERT($13)/replace_symbols UPDATE($10)/read SELECT, + new `symbol_composite_terms`/`stamp_symbol_score` methods. `ANALYSIS-13` invariant. No new gRPC/pool.
+- Files modified: `app/handlers/servicer.py`, `app/repositories/opportunities.py`, `docs/context-constitution.md`
+- Deviations: none
+
+### Step 5 — test: analysis roll-up unit + repo sort + heal-parity + compute wiring [done]
+- TDD red→green. RED: `test_symbol_score.py` import of `_strategy_weight` failed (ImportError) pre-Step-4. GREEN: full analysis suite 837 passed, coverage 83.68% (≥40), ruff clean. New pure-fold tests (AC-1/2/3-core/4/6/7/10 + the γ≥1 inversion-doc); repo tests (sort branch 3, symbol_score round-trip in replace/read, `symbol_composite_terms`/`stamp_symbol_score` SQL, proto presence); servicer `TestSymbolScoreRollup` (compute stamps symbol-uniform; heal re-fold == full compute for same inputs, @AC-10 parity). Extended `_FakeOppRepo` with the two new heal methods + made its `replace_symbols` apply composite_score/symbol_score (was a latent 199 gap); added `symbol_score` to the OR-F descriptor-parity `_MAPPED` set.
+- Files modified: `tests/test_symbol_score.py` (new), `tests/test_opportunities_repo.py`, `tests/test_analysis_servicer.py`
+- Deviations: none

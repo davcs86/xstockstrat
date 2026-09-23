@@ -189,7 +189,7 @@ apply/rollback runs in CI/deploy against the managed DB — never spin up a data
 
 ### Step 4 — service: analysis symbol_score roll-up (compute + persist + sort + heal + guard)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -297,7 +297,7 @@ backtest/roll-up reproducibility
 
 ### Step 5 — test: analysis roll-up unit + repo sort + heal-parity + compute wiring
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_symbol_score.py` — create (pure-helper + fold unit tests)
