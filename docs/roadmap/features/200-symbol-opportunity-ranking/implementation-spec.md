@@ -399,7 +399,7 @@ Both rows present with defaults `0.5`/`0.5` and the `get_float_present` / code-d
 
 ### Step 7 — service: agent `list_opportunities` projects `symbol_score`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/client.py` — modify
@@ -431,7 +431,7 @@ and `mcp-tools.md` parity; omit-not-fabricate projection contract
 
 ### Step 8 — test: agent descriptor-parity + symbol_score projection
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_opportunity_projection.py` — modify

@@ -390,3 +390,13 @@ C-15 analysis test step).
 - Added `analysis.scoring.symbol_score_decay` (float 0.5, read-clamped [0,0.99], get_float_present) and `analysis.scoring.strategy_weight_floor` (float 0.5, get_float_present) rows to the analysis config-key table beside the composite_* keys. Code-default only (no config-ui seed migration), matching the sibling precedent. Teardown (context-forge / manual reconciliation) deferred to the pre-PR audit.
 - Files modified: `services/xstockstrat-analysis/CLAUDE.md`
 - Deviations: none
+
+### Step 7 — service: agent list_opportunities projects symbol_score [done]
+- Added the omit-not-fabricate `symbol_score` projection to `_opportunity_to_dict` (HasField-gated, after composite_score). No new outbound gRPC (reuses ListOpportunities).
+- Files modified: `services/xstockstrat-agent/app/client.py`
+- Deviations: none
+
+### Step 8 — test: agent descriptor-parity + symbol_score projection [done]
+- RED→GREEN: added `symbol_score=1.20` to `_full_opportunity` (descriptor-parity RED until Step 7 projected it) + a value/omit test (@AC-9). GREEN: agent suite 447 passed, coverage 79.32% (≥40), ruff clean. Verification runs the whole suite with `--cov-fail-under=40` (the review-corrected gate — agent IS in the python-test matrix).
+- Files modified: `services/xstockstrat-agent/tests/test_opportunity_projection.py`
+- Deviations: none
