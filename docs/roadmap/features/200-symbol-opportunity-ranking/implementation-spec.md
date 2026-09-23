@@ -356,7 +356,7 @@ Confirm the new tests pass and total coverage ≥ 40%.
 
 ### Step 6 — config: declare the two `analysis.scoring.*` keys in the service CLAUDE.md
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/CLAUDE.md` — modify (config-key table)

@@ -385,3 +385,8 @@ C-15 analysis test step).
 - TDD red→green. RED: `test_symbol_score.py` import of `_strategy_weight` failed (ImportError) pre-Step-4. GREEN: full analysis suite 837 passed, coverage 83.68% (≥40), ruff clean. New pure-fold tests (AC-1/2/3-core/4/6/7/10 + the γ≥1 inversion-doc); repo tests (sort branch 3, symbol_score round-trip in replace/read, `symbol_composite_terms`/`stamp_symbol_score` SQL, proto presence); servicer `TestSymbolScoreRollup` (compute stamps symbol-uniform; heal re-fold == full compute for same inputs, @AC-10 parity). Extended `_FakeOppRepo` with the two new heal methods + made its `replace_symbols` apply composite_score/symbol_score (was a latent 199 gap); added `symbol_score` to the OR-F descriptor-parity `_MAPPED` set.
 - Files modified: `tests/test_symbol_score.py` (new), `tests/test_opportunities_repo.py`, `tests/test_analysis_servicer.py`
 - Deviations: none
+
+### Step 6 — config: declare the two analysis.scoring.* keys in the service CLAUDE.md [done]
+- Added `analysis.scoring.symbol_score_decay` (float 0.5, read-clamped [0,0.99], get_float_present) and `analysis.scoring.strategy_weight_floor` (float 0.5, get_float_present) rows to the analysis config-key table beside the composite_* keys. Code-default only (no config-ui seed migration), matching the sibling precedent. Teardown (context-forge / manual reconciliation) deferred to the pre-PR audit.
+- Files modified: `services/xstockstrat-analysis/CLAUDE.md`
+- Deviations: none
