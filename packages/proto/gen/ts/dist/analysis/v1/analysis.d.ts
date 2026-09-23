@@ -172,6 +172,8 @@ export declare enum OpportunitySort {
     OPPORTUNITY_SORT_CONVICTION = "OPPORTUNITY_SORT_CONVICTION",
     /** OPPORTUNITY_SORT_EXPIRY - soonest valid_until first (NULLS last) */
     OPPORTUNITY_SORT_EXPIRY = "OPPORTUNITY_SORT_EXPIRY",
+    /** OPPORTUNITY_SORT_SYMBOL_SCORE - symbol roll-up: MAX(symbol_score) OVER PARTITION BY symbol, DESC NULLS LAST — feature 200 */
+    OPPORTUNITY_SORT_SYMBOL_SCORE = "OPPORTUNITY_SORT_SYMBOL_SCORE",
     UNRECOGNIZED = "UNRECOGNIZED"
 }
 export declare function opportunitySortFromJSON(object: any): OpportunitySort;
@@ -770,6 +772,14 @@ export interface Opportunity {
      * ExternalSignal.conviction (ingest.proto:110). Explicit-presence: unset = not-yet/nothing-to-fuse.
      */
     compositeScore?: number | undefined;
+    /**
+     * feature 200 — symbol-level roll-up of the symbol's opportunities (Σ γ^i·(composite×strategy_weight),
+     * rank-decayed). A BOUNDED (< 2·max_composite, i.e. < 2.0 for γ<1) ordinal RANKING scalar on a
+     * non-[0,1] scale — like composite_score (ANALYSIS-13) it is NOT a probability/expected-return and
+     * NEVER a cardinal sizing/alert/risk input. Explicit-presence: unset = no score-eligible opportunity
+     * for the symbol. Symbol-uniform: every row of a symbol carries the same value.
+     */
+    symbolScore?: number | undefined;
 }
 /**
  * One recent daily-bar close for the Decide-surface sparkline (feature 095). Explicit presence — an

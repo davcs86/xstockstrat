@@ -113,7 +113,7 @@ Both pass (additive field + additive enum value are non-breaking).
 
 ### Step 2 — proto-gen: regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/**` — modify (generated)

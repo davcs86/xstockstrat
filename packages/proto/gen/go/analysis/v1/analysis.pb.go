@@ -626,9 +626,10 @@ func (OpportunityActionTag) EnumDescriptor() ([]byte, []int) {
 type OpportunitySort int32
 
 const (
-	OpportunitySort_OPPORTUNITY_SORT_UNSPECIFIED OpportunitySort = 0
-	OpportunitySort_OPPORTUNITY_SORT_CONVICTION  OpportunitySort = 1 // raw o.conviction ordering (the UI's explicit "Conviction")
-	OpportunitySort_OPPORTUNITY_SORT_EXPIRY      OpportunitySort = 2 // soonest valid_until first (NULLS last)
+	OpportunitySort_OPPORTUNITY_SORT_UNSPECIFIED  OpportunitySort = 0
+	OpportunitySort_OPPORTUNITY_SORT_CONVICTION   OpportunitySort = 1 // raw o.conviction ordering (the UI's explicit "Conviction")
+	OpportunitySort_OPPORTUNITY_SORT_EXPIRY       OpportunitySort = 2 // soonest valid_until first (NULLS last)
+	OpportunitySort_OPPORTUNITY_SORT_SYMBOL_SCORE OpportunitySort = 3 // symbol roll-up: MAX(symbol_score) OVER PARTITION BY symbol, DESC NULLS LAST — feature 200
 )
 
 // Enum value maps for OpportunitySort.
@@ -637,11 +638,13 @@ var (
 		0: "OPPORTUNITY_SORT_UNSPECIFIED",
 		1: "OPPORTUNITY_SORT_CONVICTION",
 		2: "OPPORTUNITY_SORT_EXPIRY",
+		3: "OPPORTUNITY_SORT_SYMBOL_SCORE",
 	}
 	OpportunitySort_value = map[string]int32{
-		"OPPORTUNITY_SORT_UNSPECIFIED": 0,
-		"OPPORTUNITY_SORT_CONVICTION":  1,
-		"OPPORTUNITY_SORT_EXPIRY":      2,
+		"OPPORTUNITY_SORT_UNSPECIFIED":  0,
+		"OPPORTUNITY_SORT_CONVICTION":   1,
+		"OPPORTUNITY_SORT_EXPIRY":       2,
+		"OPPORTUNITY_SORT_SYMBOL_SCORE": 3,
 	}
 )
 
@@ -3759,8 +3762,14 @@ type Opportunity struct {
 	// conviction=3 it is NOT a probability and NEVER a cardinal sizing/alert/risk input — that is
 	// ExternalSignal.conviction (ingest.proto:110). Explicit-presence: unset = not-yet/nothing-to-fuse.
 	CompositeScore *float64 `protobuf:"fixed64,21,opt,name=composite_score,json=compositeScore,proto3,oneof" json:"composite_score,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// feature 200 — symbol-level roll-up of the symbol's opportunities (Σ γ^i·(composite×strategy_weight),
+	// rank-decayed). A BOUNDED (< 2·max_composite, i.e. < 2.0 for γ<1) ordinal RANKING scalar on a
+	// non-[0,1] scale — like composite_score (ANALYSIS-13) it is NOT a probability/expected-return and
+	// NEVER a cardinal sizing/alert/risk input. Explicit-presence: unset = no score-eligible opportunity
+	// for the symbol. Symbol-uniform: every row of a symbol carries the same value.
+	SymbolScore   *float64 `protobuf:"fixed64,22,opt,name=symbol_score,json=symbolScore,proto3,oneof" json:"symbol_score,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Opportunity) Reset() {
@@ -3936,6 +3945,13 @@ func (x *Opportunity) GetDataUnavailable() bool {
 func (x *Opportunity) GetCompositeScore() float64 {
 	if x != nil && x.CompositeScore != nil {
 		return *x.CompositeScore
+	}
+	return 0
+}
+
+func (x *Opportunity) GetSymbolScore() float64 {
+	if x != nil && x.SymbolScore != nil {
+		return *x.SymbolScore
 	}
 	return 0
 }
@@ -6046,7 +6062,7 @@ const file_analysis_v1_analysis_proto_rawDesc = "" +
 	"\x0edeferred_count\x18\x05 \x01(\x05R\rdeferredCount\x12\x16\n" +
 	"\x06status\x18\x06 \x01(\tR\x06status\x12;\n" +
 	"\vfinished_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"finishedAt\"\xe9\a\n" +
+	"finishedAt\"\xa2\b\n" +
 	"\vOpportunity\x12\x16\n" +
 	"\x06symbol\x18\x01 \x01(\tR\x06symbol\x12E\n" +
 	"\x06action\x18\x02 \x01(\x0e2-.xstockstrat.analysis.v1.OpportunityActionTagR\x06action\x12\x1e\n" +
@@ -6080,13 +6096,15 @@ const file_analysis_v1_analysis_proto_rawDesc = "" +
 	"conditions\x120\n" +
 	"\x11signal_confidence\x18\x13 \x01(\x01H\x04R\x10signalConfidence\x88\x01\x01\x12)\n" +
 	"\x10data_unavailable\x18\x14 \x01(\bR\x0fdataUnavailable\x12,\n" +
-	"\x0fcomposite_score\x18\x15 \x01(\x01H\x05R\x0ecompositeScore\x88\x01\x01B\r\n" +
+	"\x0fcomposite_score\x18\x15 \x01(\x01H\x05R\x0ecompositeScore\x88\x01\x01\x12&\n" +
+	"\fsymbol_score\x18\x16 \x01(\x01H\x06R\vsymbolScore\x88\x01\x01B\r\n" +
 	"\v_live_priceB\r\n" +
 	"\v_change_pctB\x0f\n" +
 	"\r_target_priceB\r\n" +
 	"\v_stop_priceB\x14\n" +
 	"\x12_signal_confidenceB\x12\n" +
-	"\x10_composite_score\"5\n" +
+	"\x10_composite_scoreB\x0f\n" +
+	"\r_symbol_score\"5\n" +
 	"\x0eSparklinePoint\x12\x19\n" +
 	"\x05close\x18\x01 \x01(\x01H\x00R\x05close\x88\x01\x01B\b\n" +
 	"\x06_close\"\xe8\x01\n" +
@@ -6303,11 +6321,12 @@ const file_analysis_v1_analysis_proto_rawDesc = "" +
 	"\"OPPORTUNITY_ACTION_TAG_UNSPECIFIED\x10\x00\x12 \n" +
 	"\x1cOPPORTUNITY_ACTION_TAG_ENTER\x10\x01\x12\x1e\n" +
 	"\x1aOPPORTUNITY_ACTION_TAG_ADD\x10\x02\x12!\n" +
-	"\x1dOPPORTUNITY_ACTION_TAG_REDUCE\x10\x03*q\n" +
+	"\x1dOPPORTUNITY_ACTION_TAG_REDUCE\x10\x03*\x94\x01\n" +
 	"\x0fOpportunitySort\x12 \n" +
 	"\x1cOPPORTUNITY_SORT_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bOPPORTUNITY_SORT_CONVICTION\x10\x01\x12\x1b\n" +
-	"\x17OPPORTUNITY_SORT_EXPIRY\x10\x02*\x7f\n" +
+	"\x17OPPORTUNITY_SORT_EXPIRY\x10\x02\x12!\n" +
+	"\x1dOPPORTUNITY_SORT_SYMBOL_SCORE\x10\x03*\x7f\n" +
 	"\x0eConditionState\x12\x1f\n" +
 	"\x1bCONDITION_STATE_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14CONDITION_STATE_PASS\x10\x01\x12\x18\n" +

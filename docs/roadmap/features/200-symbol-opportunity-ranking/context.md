@@ -365,3 +365,8 @@ C-15 analysis test step).
 - Added additive `OPPORTUNITY_SORT_SYMBOL_SCORE = 3` to the `OpportunitySort` enum and `optional double symbol_score = 22` to `Opportunity` (bounded ordinal ranking cardinal-guard doc-comment citing ANALYSIS-13). buf lint + buf breaking (vs main-dev) both pass in the codegen container.
 - Files modified: `packages/proto/analysis/v1/analysis.proto`
 - Deviations: none
+
+### Step 2 — proto-gen: regenerate stubs [done]
+- Ran ./scripts/localenv-setup.sh (Docker codegen image) → regenerated Go/Python/TS stubs + compiled TS dist. Diff confined to analysis/v1 (8 files) carrying symbol_score / OPPORTUNITY_SORT_SYMBOL_SCORE — no unrelated churn (mirrors CI proto-freshness). Idempotency re-verified: a second buf-gen leaves git diff empty.
+- Files modified: `packages/proto/gen/{go,python,ts}/analysis/v1/**` (incl. gen/ts/dist)
+- Deviations: none
