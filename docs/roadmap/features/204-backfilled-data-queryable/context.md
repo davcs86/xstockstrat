@@ -138,3 +138,13 @@ node/pnpm. Docker daemon up but codegen stays host-native.
 - Helpers `histMockCols` (reuses the production `histFundamentalsColumns` const so a column change
   tracks) + `histMockRow`. Verify: `go test ./internal/repository/... -race` green; golangci-lint 0 issues.
 - Deviations: none.
+
+### Step 5 — service: MARKETDATA_ENDPOINT in agent deployment [done]
+- `client.py`: `MARKETDATA_ENDPOINT = os.environ.get("MARKETDATA_ENDPOINT", "xstockstrat-marketdata:50053")`.
+- `docker-compose.yml` agent block: literal `xstockstrat-marketdata:50053`.
+- `.do/app.dev.yaml` + `.do/app.yaml` agent blocks: **deviation from spec literal** — used the files'
+  own `${xstockstrat-marketdata.PRIVATE_DOMAIN}:50053` interpolation (matching every sibling endpoint
+  in those specs), not the raw `xstockstrat-marketdata:50053` string the step text showed. The spec's
+  value was a simplification; the DO convention is authoritative.
+- Verify: grep confirms the var in the agent block of all four files; ruff clean.
+- Files: `services/xstockstrat-agent/app/client.py`, `docker-compose.yml`, `.do/app.dev.yaml`, `.do/app.yaml`.

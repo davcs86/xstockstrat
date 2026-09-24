@@ -212,7 +212,7 @@ cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-dow
 
 ### Step 5 — service: Add MARKETDATA_ENDPOINT to agent deployment files
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/client.py` — modify

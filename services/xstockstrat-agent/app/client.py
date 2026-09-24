@@ -24,6 +24,7 @@ INDICATORS_ENDPOINT = os.environ.get("INDICATORS_ENDPOINT", "xstockstrat-indicat
 IDENTITY_ENDPOINT = os.environ.get("IDENTITY_ENDPOINT", "xstockstrat-identity:50058")
 PORTFOLIO_ENDPOINT = os.environ.get("PORTFOLIO_ENDPOINT", "xstockstrat-portfolio:50052")
 TRADING_ENDPOINT = os.environ.get("TRADING_ENDPOINT", "xstockstrat-trading:50051")
+MARKETDATA_ENDPOINT = os.environ.get("MARKETDATA_ENDPOINT", "xstockstrat-marketdata:50053")
 
 
 # ── Caller propagation context (PR #994) ─────────────────────────────────────
