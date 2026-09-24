@@ -347,3 +347,74 @@ C-15 analysis test step).
 - Overlap findings: soft rebase overlaps only — opportunities.py, test_analysis_servicer.py, agent client.py, mcp-tools.md, insights page.tsx/spec, opportunities fixtures/INVENTORY (vs 187/188). Re-anchor line numbers at execute time; not FAIL-level.
 - PR topology note: feature 199 (PR #1157) MERGED to main-dev 2026-09-21T02:42:31Z (squash). Merge-order dependency satisfied. feature/symbol-opportunity-ranking rebased --onto origin/main-dev (dropping the now-redundant squashed 199 commits); PR #1161 retargeted claude/symbol-consolidation-scoring-7kgk9t → main-dev so its diff is docs-only.
 - CI-trigger note: the rebase+retarget left the new head with no `pull_request` CI run (the force-push's `synchronize` fired while the PR still pointed at the pre-retarget base, and the base-swap `edited` event does not trigger CI; the workflow has no `workflow_dispatch`, and the branch is ahead of main-dev so "Update branch" is a no-op). Identical content already passed CI at the pre-rebase head. This commit is a real `synchronize` to get the required check onto the current head — recorded here so a future session does not mistake the transient "blocked" for a failure.
+
+## Session 2026-09-23 — pre-execute reconciliation (fresh branch off main-dev)
+
+- Fresh `feature/symbol-opportunity-ranking` cut off current `origin/main-dev` (HEAD 2d257f2 — the feature-201 fundamentals-formula-inputs merge, #1160). Prior spec-docs PR #1161 already merged to main-dev.
+- **Feature-number collision already resolved on trunk:** the other session's fundamentals-formula-inputs renumbered 200→**201** and merged (`code-completed`). No stray 200-dir; 200=symbol-opportunity-ranking, 201=fundamentals. Nothing to renumber at the feature level.
+- **Invariant-id collision found + fixed:** feature 201 consumed **ANALYSIS-12** (its CUSTOM_FORMULA fundamentals carve-out). This feature's `symbol_score` cardinal guard therefore moves to the next-free **ANALYSIS-13**. Bumped all forward-looking refs in implementation-spec.md / design.md / recon.md from ANALYSIS-12 → ANALYSIS-13; append-only Status-History / older context rows left intact (they record the plan-at-the-time).
+- Reserved surfaces re-verified free on current main-dev: proto `Opportunity.symbol_score = 22` (max field still `composite_score = 21`), `OPPORTUNITY_SORT_SYMBOL_SCORE = 3` (max still EXPIRY=2), analysis migration `025` (latest still `024`; 201 touched INDICATORS migration 006, not analysis), config keys `analysis.scoring.symbol_score_decay`/`strategy_weight_floor` (grep-clean). servicer.py/opportunities.py/UI line anchors WILL have drifted (201 merged) — /sdd-execute re-grounds per step.
+
+## Session 2026-09-23 — sdd-execute (sequential, single integration PR)
+- Mode-entry + per-feature confirm: user chose "Proceed, sequential in one PR".
+- Re-spec gate (directive none): read-only validation via codebase-discovery — **all** feature-200-referenced symbols still present post-201 (drifted lines only; per-step Phase-1 re-anchors). No structural blockers; no re-spec. Reserved surfaces free (sort 3, field 22, migration 025, both config keys); ANALYSIS-12 confirmed taken by 201 → this feature uses ANALYSIS-13.
+- Tooling (all 11 steps): uv ✓ · ruff ✓ · python(uv 3.13) ✓ · node22 ✓ · pnpm 9.15.9 ✓ · tsc ✓ · Chromium ✓ · buf via Docker `xstockstrat-codegen` image ✓ (dockerd started; regen diff CLEAN vs committed stubs) · analysis `uv sync` ✓.
+- Open coupling to check at Step 9: codebase-discovery flagged that a new `OpportunitySort` value may need `strat-lab` plugin `backtest` skill parity — but the root CLAUDE.md strat-lab rule names run_backtest/manage_strategy/trigger_backfill/set_strategy_live, NOT list_opportunities, so likely out of scope; verify the skill doesn't document the sort enum before deciding.
+
+### Step 1 — proto: add symbol_score field + OPPORTUNITY_SORT_SYMBOL_SCORE [done]
+- Added additive `OPPORTUNITY_SORT_SYMBOL_SCORE = 3` to the `OpportunitySort` enum and `optional double symbol_score = 22` to `Opportunity` (bounded ordinal ranking cardinal-guard doc-comment citing ANALYSIS-13). buf lint + buf breaking (vs main-dev) both pass in the codegen container.
+- Files modified: `packages/proto/analysis/v1/analysis.proto`
+- Deviations: none
+
+### Step 2 — proto-gen: regenerate stubs [done]
+- Ran ./scripts/localenv-setup.sh (Docker codegen image) → regenerated Go/Python/TS stubs + compiled TS dist. Diff confined to analysis/v1 (8 files) carrying symbol_score / OPPORTUNITY_SORT_SYMBOL_SCORE — no unrelated churn (mirrors CI proto-freshness). Idempotency re-verified: a second buf-gen leaves git diff empty.
+- Files modified: `packages/proto/gen/{go,python,ts}/analysis/v1/**` (incl. gen/ts/dist)
+- Deviations: none
+
+### Step 3 — migration 025: nullable symbol_score column [done]
+- Created 025_opportunity_symbol_score.{up,down}.sql (ADD COLUMN IF NOT EXISTS symbol_score DOUBLE PRECISION ↔ DROP COLUMN IF EXISTS), mirroring 024's nullable-no-default style. No index. Verified offline (025 next-free NNN; up/down inverse). Live apply/rollback deferred to CI/deploy.
+- Files modified: `services/xstockstrat-analysis/migrations/025_opportunity_symbol_score.up.sql`, `.down.sql`
+- Deviations: none
+
+### Step 4 — service: analysis symbol_score roll-up (compute + persist + sort + heal + guard) [done]
+- Module helpers `_strategy_weight` / `_symbol_score` / `_symbol_score_for_group` (single shared fold) + owner-gated `_owner_grade_lookup(owned_ids)` method (anti-IDOR over the global `self._strategies` cache). Compute wiring: γ read-clamped `[0,0.99]` + floor config reads; `owned_ids = watchlist_by_symbol.values ∪ live_by_symbol.values`; after `rows` built, group by symbol, fold, stamp symbol-uniform `symbol_score` on every row. Heal wiring (`_retry_unavailable_symbols`): after `replace_symbols`, re-fold each healed symbol's whole row set via the SAME helper and `stamp_symbol_score`. `_row_to_opportunity` explicit-presence map. Repo: `_SORT_ORDER_BY[3]` (MAX symbol_score OVER PARTITION BY symbol DESC NULLS LAST), `symbol_score` threaded through replace_for_user INSERT($13)/replace_symbols UPDATE($10)/read SELECT, + new `symbol_composite_terms`/`stamp_symbol_score` methods. `ANALYSIS-13` invariant. No new gRPC/pool.
+- Files modified: `app/handlers/servicer.py`, `app/repositories/opportunities.py`, `docs/context-constitution.md`
+- Deviations: none
+
+### Step 5 — test: analysis roll-up unit + repo sort + heal-parity + compute wiring [done]
+- TDD red→green. RED: `test_symbol_score.py` import of `_strategy_weight` failed (ImportError) pre-Step-4. GREEN: full analysis suite 837 passed, coverage 83.68% (≥40), ruff clean. New pure-fold tests (AC-1/2/3-core/4/6/7/10 + the γ≥1 inversion-doc); repo tests (sort branch 3, symbol_score round-trip in replace/read, `symbol_composite_terms`/`stamp_symbol_score` SQL, proto presence); servicer `TestSymbolScoreRollup` (compute stamps symbol-uniform; heal re-fold == full compute for same inputs, @AC-10 parity). Extended `_FakeOppRepo` with the two new heal methods + made its `replace_symbols` apply composite_score/symbol_score (was a latent 199 gap); added `symbol_score` to the OR-F descriptor-parity `_MAPPED` set.
+- Files modified: `tests/test_symbol_score.py` (new), `tests/test_opportunities_repo.py`, `tests/test_analysis_servicer.py`
+- Deviations: none
+
+### Step 6 — config: declare the two analysis.scoring.* keys in the service CLAUDE.md [done]
+- Added `analysis.scoring.symbol_score_decay` (float 0.5, read-clamped [0,0.99], get_float_present) and `analysis.scoring.strategy_weight_floor` (float 0.5, get_float_present) rows to the analysis config-key table beside the composite_* keys. Code-default only (no config-ui seed migration), matching the sibling precedent. Teardown (context-forge / manual reconciliation) deferred to the pre-PR audit.
+- Files modified: `services/xstockstrat-analysis/CLAUDE.md`
+- Deviations: none
+
+### Step 7 — service: agent list_opportunities projects symbol_score [done]
+- Added the omit-not-fabricate `symbol_score` projection to `_opportunity_to_dict` (HasField-gated, after composite_score). No new outbound gRPC (reuses ListOpportunities).
+- Files modified: `services/xstockstrat-agent/app/client.py`
+- Deviations: none
+
+### Step 8 — test: agent descriptor-parity + symbol_score projection [done]
+- RED→GREEN: added `symbol_score=1.20` to `_full_opportunity` (descriptor-parity RED until Step 7 projected it) + a value/omit test (@AC-9). GREEN: agent suite 447 passed, coverage 79.32% (≥40), ruff clean. Verification runs the whole suite with `--cov-fail-under=40` (the review-corrected gate — agent IS in the python-test matrix).
+- Files modified: `services/xstockstrat-agent/tests/test_opportunity_projection.py`
+- Deviations: none
+
+### Step 9 — docs: mcp-tools.md list_opportunities symbol_score parity [done]
+- Added a `symbol_score` return-field entry beside `composite_score` in the `list_opportunities` section (bounded < 2.0 symbol roll-up ranking ordinal; symbol-uniform; omit-not-fabricate; not a cardinal input).
+- **Strat-lab coupling RESOLVED (out of scope):** grepped `plugins/strat-lab/` — it documents no `list_opportunities` / `OpportunitySort` / `symbol_score`, and the root CLAUDE.md strat-lab rule covers `run_backtest`/`manage_strategy`/`trigger_backfill`/`set_strategy_live`, not `list_opportunities`. So the new sort value needs no strat-lab skill update.
+- Files modified: `docs/runbooks/mcp-tools.md`
+- Deviations: none
+
+### Step 10 — service: UI /insights symbol_score sort option + group-header render [done]
+- Extended `SortKey` + `sortEnum` (→ `OpportunitySort.SYMBOL_SCORE`) + a "Sort · Symbol score" `SelectItem`; `SymbolGroupCard` gains a `showSymbolScore` prop and renders the symbol-uniform `symbol_score` (via `formatComposite(opps[0].symbolScore)`, em-dash when unset, `data-testid=symbol-score-<symbol>`, NOT `scoreColor`) only under that sort; call site passes `showSymbolScore={sortKey==='symbolScore'}`. Server-authoritative order (no client re-sort). Fixtures: AAPL `symbolScore:1.2` / MSFT `1.0` + INVENTORY note.
+- Files modified: `services/xstockstrat-ui/src/app/insights/opportunities/page.tsx`, `e2e/fixtures/opportunities.ts`, `e2e/fixtures/INVENTORY.md`
+- Deviations: none
+
+### Step 11 — test: UI e2e symbol_score sort + header render [done]
+- TDD red→green (@AC-8). RED (host-native, page.tsx stashed): the test failed at `getByRole('option',{name:'Sort · Symbol score'})` — the option/testid don't exist pre-Step-10. GREEN (page.tsx restored): full `opportunities.spec.ts` 31 passed. New spec: selecting symbol-score sort renders groups in server order (AAPL 1.2 above MSFT 1.0, no client re-sort), the group header shows `1.200`/`1.000`, a symbol without symbolScore shows the em-dash, and the value is absent under the default sort.
+- **Deviation (test-harness, spec-Files omission):** `e2e/mock-backend.ts` gained a `sort===3` group-key branch (MAX(symbol_score) DESC NULLS LAST) so the mock honors the new sort — required for the e2e but not listed in either step's `**Files**`. Staged here (analogous to Step 5's `_FakeOppRepo` extension). See Deviation Log.
+- **Deviation (verification method):** the Docker e2e runner (`Dockerfile.e2e`) failed to build in this environment — `corepack prepare pnpm@9.15.9` cannot fetch through the agent proxy. Verified host-native (`pnpm exec playwright test`, pre-provisioned Chromium) with `--timeout 120000` (the SSR-warmup cold-compile exceeds the default 10s). CI-equivalent: CI runs the identical Playwright spec via the Docker image.
+- Files modified: `services/xstockstrat-ui/e2e/insights/opportunities.spec.ts`, `e2e/mock-backend.ts`
+- Deviations: 2 (above)

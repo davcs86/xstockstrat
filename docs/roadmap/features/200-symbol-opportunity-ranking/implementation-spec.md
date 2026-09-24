@@ -70,7 +70,7 @@ Dependencies.
 
 ### Step 1 — proto: add `symbol_score` field + `OPPORTUNITY_SORT_SYMBOL_SCORE` enum value
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/analysis/v1/analysis.proto` — modify
@@ -96,7 +96,7 @@ accuracy; xstockstrat-agent owner — MCP tool contract stability
 1. In the `OpportunitySort` enum (`analysis.proto:546`), add after `OPPORTUNITY_SORT_EXPIRY = 2;`:
    `OPPORTUNITY_SORT_SYMBOL_SCORE = 3;  // symbol roll-up ordering (MAX(symbol_score) OVER PARTITION BY symbol) — feature 200`
 2. In the `Opportunity` message, after `optional double composite_score = 21;` (`:602`), add
-   `optional double symbol_score = 22;` with a doc-comment mirroring `ANALYSIS-12` and the
+   `optional double symbol_score = 22;` with a doc-comment mirroring `ANALYSIS-13` and the
    `composite_score` guard, stating it is a **bounded (`< 2·max_composite`, i.e. `< 2.0`, for γ<1)
    ordinal RANKING scalar on a non-`[0,1]` scale; NOT a probability / expected-return / sizing / alert
    input**; explicit-presence: unset = no score-eligible opportunity for the symbol (design.md
@@ -113,7 +113,7 @@ Both pass (additive field + additive enum value are non-breaking).
 
 ### Step 2 — proto-gen: regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/**` — modify (generated)
@@ -148,7 +148,7 @@ Empty diff after regen (the generated tree already reflects the new field/enum v
 
 ### Step 3 — migration: add nullable `symbol_score` column to `analysis.opportunities`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/migrations/025_opportunity_symbol_score.up.sql` — create
@@ -189,12 +189,12 @@ apply/rollback runs in CI/deploy against the managed DB — never spin up a data
 
 ### Step 4 — service: analysis symbol_score roll-up (compute + persist + sort + heal + guard)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
 - `services/xstockstrat-analysis/app/repositories/opportunities.py` — modify
-- `services/xstockstrat-analysis/docs/context-constitution.md` — modify (add `ANALYSIS-12`)
+- `services/xstockstrat-analysis/docs/context-constitution.md` — modify (add `ANALYSIS-13`)
 
 **Reviewers**: xstockstrat-analysis owner — strategy scoring determinism, no look-ahead bias,
 backtest/roll-up reproducibility
@@ -233,8 +233,9 @@ backtest/roll-up reproducibility
   `_composite_for(sym, readiness)` is at `servicer.py:3797` (shows the heal path recomputes composite
   through the SAME fusion).
 - `ANALYSIS-11` (feature-199 composite guard) confirmed at
-  `services/xstockstrat-analysis/docs/context-constitution.md:27` — `ANALYSIS-12` is the next-free
-  companion id.
+  `services/xstockstrat-analysis/docs/context-constitution.md:27`. `ANALYSIS-12` was taken by the
+  since-merged feature 201 (fundamentals-formula-inputs), so `ANALYSIS-13` is the next-free companion
+  id for this feature's `symbol_score` guard (re-anchor `:27` at execute — 201's edits shifted the file).
 
 **TDD**: `red-green required`
 
@@ -283,7 +284,7 @@ backtest/roll-up reproducibility
 7. **Proto mapping** in `_row_to_opportunity` (`servicer.py:5301-5305`): after the composite_score
    mapping add the explicit-presence map for `symbol_score`
    (`sym_sc = row.get("symbol_score"); if sym_sc is not None: opp.symbol_score = float(sym_sc)`).
-8. **`ANALYSIS-12` invariant** in `services/xstockstrat-analysis/docs/context-constitution.md` (after
+8. **`ANALYSIS-13` invariant** in `services/xstockstrat-analysis/docs/context-constitution.md` (after
    `ANALYSIS-11`): declare `Opportunity.symbol_score` a **bounded (`< 2·max_composite`, `< 2.0` for
    γ<1) ordinal RANKING scalar on a non-`[0,1]` scale — NEVER a cardinal sizing/alert/risk input**;
    cite `fails.md:313/:418` and the shared fold helper (discharges the ordinal-as-cardinal trap).
@@ -296,7 +297,7 @@ backtest/roll-up reproducibility
 
 ### Step 5 — test: analysis roll-up unit + repo sort + heal-parity + compute wiring
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_symbol_score.py` — create (pure-helper + fold unit tests)
@@ -355,7 +356,7 @@ Confirm the new tests pass and total coverage ≥ 40%.
 
 ### Step 6 — config: declare the two `analysis.scoring.*` keys in the service CLAUDE.md
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/CLAUDE.md` — modify (config-key table)
@@ -398,7 +399,7 @@ Both rows present with defaults `0.5`/`0.5` and the `get_float_present` / code-d
 
 ### Step 7 — service: agent `list_opportunities` projects `symbol_score`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/client.py` — modify
@@ -430,7 +431,7 @@ and `mcp-tools.md` parity; omit-not-fabricate projection contract
 
 ### Step 8 — test: agent descriptor-parity + symbol_score projection
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_opportunity_projection.py` — modify
@@ -470,7 +471,7 @@ real gate; the targeted `test_opportunity_projection.py` file is where the new a
 
 ### Step 9 — docs: `mcp-tools.md` `list_opportunities` symbol_score parity
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/runbooks/`
 **Files**:
 - `docs/runbooks/mcp-tools.md` — modify
@@ -502,7 +503,7 @@ Entry present in the `list_opportunities` section.
 
 ### Step 10 — service: UI `/insights` symbol_score sort option + group-header render
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/opportunities/page.tsx` — modify
@@ -557,7 +558,7 @@ re-sort (server order authoritative)
 
 ### Step 11 — test: UI e2e symbol_score sort + header render
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/opportunities.spec.ts` — modify
@@ -596,4 +597,19 @@ Playwright e2e is the gate.)_
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+- **Pre-execute (numbering):** feature 201 (`fundamentals-formula-inputs`, merged) consumed the
+  `ANALYSIS-12` invariant id this spec had reserved. **Disposition:** moved this feature's
+  `symbol_score` cardinal guard to the next-free `ANALYSIS-13`; forward-looking refs bumped across
+  spec/design/recon.
+- **Step 5 (test harness):** the `_FakeOppRepo` stand-in in `test_analysis_servicer.py` gained the two
+  new heal methods (`symbol_composite_terms`/`stamp_symbol_score`) and its `replace_symbols` now applies
+  `composite_score`/`symbol_score` (a latent feature-199 gap) so the heal-parity test exercises the real
+  fold. In-scope for the Step-5 test file.
+- **Step 11 (test harness, spec-Files omission):** `e2e/mock-backend.ts` gained a `sort===3` group-key
+  branch (`MAX(symbol_score) … DESC NULLS LAST`) so the mock honors the new `OpportunitySort` value.
+  Required for the e2e but not in either step's `**Files**`. **Disposition:** staged with Step 11
+  (analogous to the Step-5 stand-in extension); a spec-Files omission, not a scope expansion.
+- **Step 11 (CI-equivalent verification fallback):** the Docker e2e runner (`Dockerfile.e2e`) cannot
+  build here — `corepack prepare pnpm@9.15.9` fails to fetch through the agent proxy. **Disposition:**
+  verified host-native (`pnpm exec playwright test`, pre-provisioned Chromium) with `--timeout 120000`
+  (SSR-warmup cold-compile > default 10s). CI runs the identical Playwright spec via the Docker image.

@@ -804,6 +804,10 @@ def _opportunity_to_dict(o, analysis_pb2) -> dict[str, Any]:
     # row has nothing to fuse / NULL, never a fabricated 0.0). A ranking aid, not a cardinal input.
     if o.HasField("composite_score"):
         d["composite_score"] = o.composite_score
+    # feature 200 — symbol_score: bounded symbol-level ranking ordinal; omit-not-fabricate (unset
+    # when the symbol has no score-eligible opportunity / NULL). A ranking aid, not a cardinal.
+    if o.HasField("symbol_score"):
+        d["symbol_score"] = o.symbol_score
     return d
 
 

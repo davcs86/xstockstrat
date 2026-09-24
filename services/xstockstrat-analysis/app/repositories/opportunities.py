@@ -28,7 +28,8 @@ _PROVENANCE_STRUCTURAL_MARKERS = ["watchlist", "position", "denied"]
 # feature 190 — the sort-key → ORDER BY fragment map (OpportunitySort enum ints). Selected by a
 # constant key, never interpolated from user input (same safety class as the valid_clause f-string).
 # UNSPECIFIED(0) = the legacy feature-187 blended rank (unchanged default for non-UI callers);
-# CONVICTION(1) = raw o.conviction; EXPIRY(2) = soonest valid_until first. All three keep the
+# CONVICTION(1) = raw o.conviction; EXPIRY(2) = soonest valid_until first; SYMBOL_SCORE(3) = the
+# feature-200 symbol roll-up (NULLS last). All four keep the
 # symbol-partition group key + the o.opportunity_key ASC paging tiebreak (feature-185 @AC-8/@AC-9).
 _SORT_ORDER_BY = {
     0: (
@@ -42,6 +43,10 @@ _SORT_ORDER_BY = {
     ),
     2: (
         "MIN(o.valid_until) OVER (PARTITION BY o.symbol) ASC NULLS LAST, "
+        "o.symbol ASC, o.opportunity_key ASC"
+    ),
+    3: (
+        "MAX(o.symbol_score) OVER (PARTITION BY o.symbol) DESC NULLS LAST, "
         "o.symbol ASC, o.opportunity_key ASC"
     ),
 }
@@ -81,8 +86,8 @@ class OpportunitiesRepository:
                 INSERT INTO analysis.opportunities
                     (user_id, opportunity_key, symbol, strategy_id, action, conviction,
                      readiness_json, signal_axis, provenance, thesis, valid_until,
-                     composite_score)
-                VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9::jsonb, $10, $11, $12)
+                     composite_score, symbol_score)
+                VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9::jsonb, $10, $11, $12, $13)
                 """,
                 [
                     (
@@ -99,6 +104,8 @@ class OpportunitiesRepository:
                         r["valid_until"],
                         # feature 199 — nullable; None passes straight through (NULL)
                         r.get("composite_score"),
+                        # feature 200 — symbol-uniform roll-up; None → NULL
+                        r.get("symbol_score"),
                     )
                     for r in rows
                 ],
@@ -130,6 +137,7 @@ class OpportunitiesRepository:
                        thesis = $7,
                        valid_until = $8,
                        composite_score = $9,
+                       symbol_score = $10,
                        computed_at = now()
                  WHERE user_id = $1 AND opportunity_key = $2
                 """,
@@ -145,10 +153,40 @@ class OpportunitiesRepository:
                         r["valid_until"],
                         # feature 199 — recomputed on heal; None for a still-unavailable row (NULL).
                         r.get("composite_score"),
+                        # feature 200 — the symbol-uniform roll-up is re-derived and stamped
+                        # symbol-wide by stamp_symbol_score right after this heal UPDATE, so the
+                        # per-row value here is left None (NULL) and superseded there.
+                        r.get("symbol_score"),
                     )
                     for r in rows
                 ],
             )
+
+    async def symbol_composite_terms(self, user_id: str, symbol: str) -> list[dict]:
+        """feature 200 — every materialized row for ``(user, symbol)`` as ``strategy_id`` +
+        ``composite_score``, with NO ``opportunity_actions`` join and NO ``valid_until`` filter: the
+        symbol_score fold is over the symbol's WHOLE persisted row set (dispositions and expiry are
+        irrelevant to the roll-up). Feeds the surgical heal re-fold so a healed composite re-derives
+        the symbol-uniform symbol_score."""
+        rows = await self._db.fetch(
+            "SELECT strategy_id, composite_score FROM analysis.opportunities "
+            "WHERE user_id = $1 AND symbol = $2",
+            user_id,
+            symbol,
+        )
+        return [dict(r) for r in rows]
+
+    async def stamp_symbol_score(self, user_id: str, symbol: str, score: "float | None") -> None:
+        """feature 200 — set ``symbol_score`` (symbol-uniform) on EVERY row of ``(user, symbol)``.
+        Distinct from ``replace_symbols`` (which updates specific ``opportunity_key`` rows): the
+        roll-up is a property of the symbol, so all its rows carry the identical value (or NULL)."""
+        await self._db.execute(
+            "UPDATE analysis.opportunities SET symbol_score = $3 "
+            "WHERE user_id = $1 AND symbol = $2",
+            user_id,
+            symbol,
+            score,
+        )
 
     async def read(
         self,
@@ -184,7 +222,7 @@ class OpportunitiesRepository:
             f"""
             SELECT o.opportunity_key, o.symbol, o.strategy_id, o.action, o.conviction,
                    o.readiness_json, o.signal_axis, o.provenance, o.thesis, o.valid_until,
-                   o.computed_at, o.composite_score
+                   o.computed_at, o.composite_score, o.symbol_score
             FROM analysis.opportunities o
             LEFT JOIN analysis.opportunity_actions a
               ON a.user_id = o.user_id AND a.opportunity_key = o.opportunity_key

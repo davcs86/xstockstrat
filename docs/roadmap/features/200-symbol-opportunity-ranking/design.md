@@ -82,7 +82,7 @@ apply — the recon's `scoreColor` suggestion is a bug and must not reach the im
 Agent `list_opportunities`: raw float via `_opportunity_to_dict` (`client.py:747`) with omit-on-NULL +
 descriptor-parity test + `mcp-tools.md` — same-PR (`fails.md:1151`, `@AC-10 @feature-185`).
 
-**Cardinal guard.** Companion invariant `ANALYSIS-12` + a `symbol_score` proto doc-comment
+**Cardinal guard.** Companion invariant `ANALYSIS-13` + a `symbol_score` proto doc-comment
 ("bounded (`< 2·max_composite` for γ<1) ordinal RANKING scalar on a non-`[0,1]` scale; NOT a
 probability/expected-return/sizing/alert input") — mirrors landed `ANALYSIS-11` and discharges
 `fails.md:313/:418`.

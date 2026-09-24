@@ -886,6 +886,11 @@ ranking axes and **distinct** from an evaluated 0-of-N "quiet" row). The live-ma
   (feature 199); omitted when the row has nothing to fuse (NULL / never-computed / data-unavailable),
   never a fabricated `0.0`. It is a **ranking aid, not a cardinal probability** — do not treat it as a
   sizing or alert input (that is `signal_confidence`).
+- `symbol_score` — the **symbol-level roll-up** (feature 200): a bounded (`< 2.0`) ranking ordinal that
+  folds the symbol's opportunities (geometric rank-decay over `composite_score × strategy_weight`), so
+  a caller can compare **which symbol** to trade across the queue. Symbol-uniform (every row of a
+  symbol carries the same value); omitted when the symbol has no score-eligible opportunity. A
+  **ranking aid on a non-`[0,1]` scale, NOT a cardinal** sizing/alert input.
 - `sparkline` — a list of recent daily closes; a warm-up/missing bar is JSON `null` (never `NaN`).
 - `conditions` — the traced `{ref_name, lhs_value, threshold, fn, state, distance_to_threshold}`
   leaves; an unattributed row omits the key.

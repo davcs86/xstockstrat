@@ -66,6 +66,7 @@ export const OPPORTUNITIES = [
     opportunityKey: 'u1|AAPL|strat-001',
     provenance: ['watchlist', 'unusual_whales'],
     compositeScore: 0.732, // feature 199 — text-paper band (>=0.6, <0.8)
+    symbolScore: 1.2, // feature 200 — symbol roll-up; ranks above MSFT (1.0)
   },
   {
     symbol: 'MSFT',
@@ -80,6 +81,7 @@ export const OPPORTUNITIES = [
     opportunityKey: 'u1|MSFT|strat-001',
     provenance: ['position', 'marketwatch'],
     compositeScore: 0.512, // feature 199 — text-destructive band (<0.6)
+    symbolScore: 1.0, // feature 200 — symbol roll-up; ranks below AAPL (1.2)
   },
   {
     symbol: 'TSLA',

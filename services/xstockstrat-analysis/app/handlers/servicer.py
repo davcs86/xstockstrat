@@ -4211,11 +4211,41 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 hr["valid_until"] = healed_valid_until
 
         await self._opportunities_repo.replace_symbols(user_id, heal_rows)
+        # feature 200 — the heal changed some composites, so re-fold each touched symbol's WHOLE row
+        # set and re-stamp the symbol-uniform symbol_score (byte-parity with a full compute over the
+        # same inputs). Same shared fold; owner-gated by the symbol's own persisted rows.
+        ss_gamma = min(
+            max(self._cfg.get_float_present("analysis.scoring.symbol_score_decay", 0.5), 0.0), 0.99
+        )
+        ss_floor = self._cfg.get_float_present("analysis.scoring.strategy_weight_floor", 0.5)
+        for sym in {r["symbol"] for r in targets}:
+            terms = await self._opportunities_repo.symbol_composite_terms(user_id, sym)
+            owned = {t["strategy_id"] for t in terms if t.get("strategy_id")}
+            score = _symbol_score_for_group(
+                terms, self._owner_grade_lookup(owned), ss_gamma, ss_floor
+            )
+            await self._opportunities_repo.stamp_symbol_score(user_id, sym, score)
         if readiness_stage:
             try:
                 await self._readiness_cache_repo.upsert_many(readiness_stage)
             except Exception as e:  # noqa: BLE001 — readiness-cache heal is best-effort
                 log.warning("surgical retry: readiness-cache upsert failed for %s: %s", user_id, e)
+
+    def _owner_grade_lookup(self, owned_ids: "set[str]"):
+        """feature 200 — build the ``grade_lookup(strategy_id) -> (overall_score, provisional)``
+        closure for the symbol_score fold, owner-gated: a strategy_id NOT in ``owned_ids`` (or with
+        no cached score) reads ``(None, False)`` so ``_strategy_weight`` falls to the floor. The
+        ``self._strategies`` grade cache is keyed by BARE strategy_id (global, feature 133 D-2), so
+        this gate is what stops a grade for a strategy the caller does not own from weighting their
+        roll-up (anti-IDOR, fails.md:1153)."""
+
+        def _lookup(sid: str) -> "tuple[float | None, bool]":
+            sc = self._strategies.get(sid) if sid in owned_ids else None
+            if sc is None:
+                return (None, False)
+            return (sc.overall_score, sc.provisional)
+
+        return _lookup
 
     async def _compute_opportunities(self, user_id: str, propagation_meta) -> list[dict]:
         """Build the user's opportunity Universe and return persistable row dicts (feature 097).
@@ -4251,6 +4281,15 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         )
         composite_w_signal = self._cfg.get_float_present(
             "analysis.scoring.composite_weight_signal", 1.0
+        )
+        # feature 200 — symbol_score fold params. γ read-clamped to [0, 0.99]: a configured γ≥1
+        # stops the rank-decay (γ=1) or inverts it (γ>1 up-weights the tail), breaking @AC-3; a
+        # configured 0 collapses the fold to the top term. floor = neutral grade weight (>0, @AC-7).
+        symbol_score_decay = min(
+            max(self._cfg.get_float_present("analysis.scoring.symbol_score_decay", 0.5), 0.0), 0.99
+        )
+        strategy_weight_floor = self._cfg.get_float_present(
+            "analysis.scoring.strategy_weight_floor", 0.5
         )
         missing_ingested_at_count = 0
         total_signal_count = len(signals)
@@ -4772,6 +4811,26 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         valid_until = session_end + timedelta(hours=window_hours)
         for r in rows:
             r["valid_until"] = valid_until
+        # feature 200 — roll each symbol's opportunities into one bounded symbol_score and stamp it
+        # (symbol-uniform) on EVERY row of the symbol (incl. NULL-composite / muted /
+        # data-unavailable rows). owned_ids = the strategies the user owns (watchlist ∪ live
+        # coverage), so the shared fold's grade_lookup never applies a global grade for an unowned
+        # strategy (anti-IDOR, fails.md:1153). Same helper the surgical heal re-uses (parity).
+        owned_ids: set[str] = set()
+        for _sids in watchlist_by_symbol.values():
+            owned_ids |= _sids
+        for _sids in live_by_symbol.values():
+            owned_ids |= _sids
+        grade_lookup = self._owner_grade_lookup(owned_ids)
+        rows_by_symbol: dict[str, list[dict]] = {}
+        for r in rows:
+            rows_by_symbol.setdefault(r["symbol"], []).append(r)
+        for sym_rows in rows_by_symbol.values():
+            score = _symbol_score_for_group(
+                sym_rows, grade_lookup, symbol_score_decay, strategy_weight_floor
+            )
+            for r in sym_rows:
+                r["symbol_score"] = score
         return rows
 
     async def _load_strategy_definition(self, user_id: str, strategy_id: str, cache: dict):
@@ -5521,6 +5580,44 @@ def _composite_score(scored: "list[tuple[float, float]]", k: float) -> "float | 
     return (sum(w * s for w, s in scored) + 0.5 * k) / (total_w + k)
 
 
+def _strategy_weight(overall_score: "float | None", provisional: bool, floor: float) -> float:
+    """feature 200 — affine grade weight for the symbol_score fold. Returns ``floor`` when the
+    strategy has no graded score (``overall_score is None``) OR its grade is provisional (too little
+    evidence to trust); else ``floor + (1 - floor)·clamp01(overall_score)``. Never 0 — an unproven
+    strategy's opportunity still contributes a term (FR-4/@AC-7)."""
+    if overall_score is None or provisional:
+        return floor
+    return floor + (1.0 - floor) * _clamp01(overall_score)
+
+
+def _symbol_score(terms: "list[float]", gamma: float) -> "float | None":
+    """feature 200 — geometric rank-decay fold of a symbol's per-opportunity terms
+    (``composite × strategy_weight``): ``Σ γ^i · t_(i)`` with ``terms`` sorted DESC, so the fold is
+    order-insensitive (@AC-10; heal/compute byte-parity) and diminishing (each successive term is
+    down-weighted). Empty ``terms`` → ``None`` (no score-eligible opportunity for the symbol). A
+    RANKING ordinal on a bounded non-``[0,1]`` scale (< 2·max_term for γ<1), NOT a cardinal input
+    (ANALYSIS-13). The caller read-clamps γ to ``[0, 0.99]`` (γ≥1 stops the decay / inverts)."""
+    if not terms:
+        return None
+    return sum(gamma**i * t for i, t in enumerate(sorted(terms, reverse=True)))
+
+
+def _symbol_score_for_group(
+    rows, grade_lookup, cfg_gamma: float, cfg_floor: float
+) -> "float | None":
+    """feature 200 — the SINGLE shared fold both the compute pass and the surgical heal call, so the
+    two produce a byte-identical symbol_score for the same inputs (determinism parity). A
+    NULL-composite row contributes no term (skipped, never coerced to 0 — @AC-6).
+    ``grade_lookup(strategy_id)`` returns ``(overall_score, provisional)`` and is owner-gated by the
+    caller (a strategy the caller does not own weights at the floor — anti-IDOR, fails.md:1153)."""
+    terms = [
+        r["composite_score"] * _strategy_weight(*grade_lookup(r["strategy_id"]), cfg_floor)
+        for r in rows
+        if r["composite_score"] is not None
+    ]
+    return _symbol_score(terms, cfg_gamma)
+
+
 def _row_to_opportunity(row: dict) -> "analysis_pb2.Opportunity":
     """Map a materialized ``analysis.opportunities`` row (LEFT JOIN read) to an ``Opportunity``
     proto (feature 097). This is the producer↔reader↔UI contract point the OR-F descriptor-parity
@@ -5578,6 +5675,11 @@ def _row_to_opportunity(row: dict) -> "analysis_pb2.Opportunity":
     composite_score = row.get("composite_score")
     if composite_score is not None:
         opp.composite_score = float(composite_score)
+    # feature 200 — symbol_score is a dedicated column (symbol-uniform roll-up); explicit-presence
+    # (unset when NULL — no score-eligible opportunity for the symbol — never a fabricated 0.0).
+    symbol_score = row.get("symbol_score")
+    if symbol_score is not None:
+        opp.symbol_score = float(symbol_score)
     return opp
 
 

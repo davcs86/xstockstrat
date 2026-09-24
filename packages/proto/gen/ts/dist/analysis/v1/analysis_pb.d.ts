@@ -1391,6 +1391,16 @@ export type Opportunity = Message<"xstockstrat.analysis.v1.Opportunity"> & {
      * @generated from field: optional double composite_score = 21;
      */
     compositeScore?: number | undefined;
+    /**
+     * feature 200 — symbol-level roll-up of the symbol's opportunities (Σ γ^i·(composite×strategy_weight),
+     * rank-decayed). A BOUNDED (< 2·max_composite, i.e. < 2.0 for γ<1) ordinal RANKING scalar on a
+     * non-[0,1] scale — like composite_score (ANALYSIS-13) it is NOT a probability/expected-return and
+     * NEVER a cardinal sizing/alert/risk input. Explicit-presence: unset = no score-eligible opportunity
+     * for the symbol. Symbol-uniform: every row of a symbol carries the same value.
+     *
+     * @generated from field: optional double symbol_score = 22;
+     */
+    symbolScore?: number | undefined;
 };
 /**
  * Describes the message xstockstrat.analysis.v1.Opportunity.
@@ -2549,7 +2559,13 @@ export declare enum OpportunitySort {
      *
      * @generated from enum value: OPPORTUNITY_SORT_EXPIRY = 2;
      */
-    EXPIRY = 2
+    EXPIRY = 2,
+    /**
+     * symbol roll-up: MAX(symbol_score) OVER PARTITION BY symbol, DESC NULLS LAST — feature 200
+     *
+     * @generated from enum value: OPPORTUNITY_SORT_SYMBOL_SCORE = 3;
+     */
+    SYMBOL_SCORE = 3
 }
 /**
  * Describes the enum xstockstrat.analysis.v1.OpportunitySort.
