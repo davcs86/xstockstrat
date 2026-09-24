@@ -77,12 +77,16 @@ test.describe('Data Explorer — OHLCV tab', () => {
     // AC-11: last-refreshed reflects the newest bar time in the page.
     await expect(page.getByTestId('de-bars-refreshed')).toContainText('2024-01-03');
 
-    // AC-16: CSV export triggers a download with the right filename + header row.
+    // AC-16: with a selected date range, the CSV download is named
+    // <symbol>_<timeframe>_<start>_<end>.csv and carries the OHLCV header + a bar row.
+    await page.locator('#de-start').fill('2025-01-01');
+    await page.locator('#de-end').fill('2025-01-31');
+    await expect(table).toContainText('2024-01-03'); // re-query settled
     const [download] = await Promise.all([
       page.waitForEvent('download'),
       page.getByTestId('de-bars-csv').click(),
     ]);
-    expect(download.suggestedFilename()).toBe('AAPL_1Day_bars.csv');
+    expect(download.suggestedFilename()).toBe('AAPL_1Day_2025-01-01_2025-01-31.csv');
     const csv = readFileSync(await download.path(), 'utf8');
     expect(csv.split('\n')[0]).toBe('time,open,high,low,close,volume');
     expect(csv).toContain('188.1');
@@ -111,7 +115,7 @@ test.describe('Data Explorer — OHLCV tab', () => {
 });
 
 test.describe('Data Explorer — Fundamentals tab', () => {
-  test('AC-3/AC-12/AC-17: snapshot card, last-refresh from as_of, CSV', async ({ page }) => {
+  test('AC-3/AC-12: snapshot card, last-refresh from as_of, snapshot CSV', async ({ page }) => {
     await addAuthCookie(page);
     const caps: Caps = { bars: 0, hist: 0 };
     await setupRoutes(page, caps);
@@ -128,7 +132,7 @@ test.describe('Data Explorer — Fundamentals tab', () => {
     // AC-12: last-refreshed from as_of (2024-05-01).
     await expect(page.getByTestId('de-fund-refreshed')).toContainText('2024-05-01');
 
-    // AC-17: fundamentals CSV export.
+    // Snapshot CSV export (a convenience beyond AC-17's historical export).
     const [download] = await Promise.all([
       page.waitForEvent('download'),
       page.getByTestId('de-fund-csv').click(),
@@ -138,7 +142,7 @@ test.describe('Data Explorer — Fundamentals tab', () => {
     expect(csv.split('\n')[0]).toContain('symbol,as_of');
   });
 
-  test('AC-4/AC-15/AC-20/AC-22: historical table, chart, pagination, missing metric', async ({
+  test('AC-4/AC-15/AC-17/AC-20/AC-22: historical table, chart, CSV, pagination, missing metric', async ({
     page,
   }) => {
     await addAuthCookie(page);
@@ -169,6 +173,19 @@ test.describe('Data Explorer — Fundamentals tab', () => {
     await expect(table).toContainText('FY2023');
     expect(caps.hist).toBeGreaterThan(0);
     expect(caps.hist).toBeLessThanOrEqual(50);
+
+    // AC-17: the historical fundamentals CSV is named <symbol>_fundamentals_<periodType>.csv and
+    // carries the expected columns. Selecting a period type re-queries (back to page 1).
+    await page.getByLabel('Period type').click();
+    await page.getByRole('option', { name: 'Quarterly' }).click();
+    await expect(table).toContainText('Q1-2024');
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      page.getByTestId('de-hist-csv').click(),
+    ]);
+    expect(download.suggestedFilename()).toBe('AAPL_fundamentals_quarterly.csv');
+    const csv = readFileSync(await download.path(), 'utf8');
+    expect(csv.split('\n')[0]).toContain('symbol,fiscal_period,period_type,period_end,filed_date');
   });
 });
 

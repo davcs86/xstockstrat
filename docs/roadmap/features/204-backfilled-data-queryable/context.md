@@ -278,3 +278,31 @@ node/pnpm. Docker daemon up but codegen stays host-native.
   {seconds,nanos} by the browser client.
 - Verify: `CI=1 pnpm test:e2e --grep "Data Explorer"` → 6 passed; tsc clean for all new files; lint 0.
 - Deviations: none beyond the auto-select tweak (noted).
+
+### Feature completion — code-completed + C-16 promotion + acceptance-fidelity reconciliation
+- **C-16 promotion** (via the scenario-promoter subagent, verbatim from acceptance.feature): 2 new
+  per-feature suites, every scenario tagged `@feature-204`:
+  - `services/xstockstrat-ui/acceptance/backfilled-data-queryable.feature` — 13 scenarios (AC-1,2,3,4,
+    8,10,11,12,15,16,17,20,22 — the Data Explorer page guarantees).
+  - `services/xstockstrat-agent/acceptance/backfilled-data-queryable.feature` — 9 scenarios (AC-5,6,7,
+    9,13,14,18,19,21 — the query_bars/query_fundamentals tool guarantees).
+  - No marketdata suite: every `@AC-*` `Then` asserts a UI- or agent-observable subject; the repo
+    cursor guarantee is unit-tested (Step 4), not an `@AC-*`. No DUP/OVERLAP/CONFLICT with existing
+    suites.
+- **Acceptance-fidelity reconciliation** (drift the verbatim promotion surfaced — fixed the code, not
+  the reviewed contract):
+  - AC-16: OHLCV CSV filename was `{symbol}_1Day_bars.csv`; the acceptance mandates
+    `{symbol}_{timeframe}_{start}_{end}.csv`. Fixed `page.tsx` to build the range segment from the
+    selected dates (`csvRangeTag`), and the e2e now sets a date range and asserts
+    `AAPL_1Day_2025-01-01_2025-01-31.csv`.
+  - AC-17: the acceptance's fundamentals CSV is the **historical** export
+    `{symbol}_fundamentals_{periodType}.csv` (already implemented correctly); the e2e was retargeted
+    from the snapshot CSV to the historical CSV (select Quarterly → `AAPL_fundamentals_quarterly.csv`).
+    The snapshot CSV button is retained as a convenience beyond AC-16/AC-17 (noted, not an AC).
+  - AC-11/AC-12: the "Last refreshed" display showed date-only; widened `fmtRefreshed` to
+    `YYYY-MM-DD HH:MM UTC` so the shown timestamp matches the acceptance's full-ISO expectation.
+- Verify (final): UI Data Explorer e2e 6/6 green (CI-mode host harness) after all three reconciliations.
+- Branch note: `feature/backfilled-data-queryable` is based on post-202 main-dev; 203 merged after the
+  branch point, so the integration PR merges post-203 main-dev in and resolves the expected
+  INVENTORY.md / mock-backend.ts overlaps (203 added an Alerts row + markAlertRead mock; 204 added a
+  Data Explorer row + getHistoricalFundamentals) — keep both.

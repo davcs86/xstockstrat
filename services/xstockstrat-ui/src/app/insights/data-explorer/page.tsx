@@ -68,7 +68,9 @@ function fmtDay(ts: { seconds: bigint | number; nanos?: number } | undefined): s
 }
 
 function fmtRefreshed(ms: number | undefined): string {
-  return ms === undefined ? '—' : `${new Date(ms).toISOString().slice(0, 10)} (UTC)`;
+  if (ms === undefined) return '—';
+  const iso = new Date(ms).toISOString();
+  return `${iso.slice(0, 10)} ${iso.slice(11, 16)} UTC`;
 }
 
 function fmtNum(v: number, digits = 2): string {
@@ -80,6 +82,13 @@ function fmtMetric(v: number | null): string {
   if (Math.abs(v) >= 1e6)
     return v.toLocaleString('en-US', { notation: 'compact', maximumFractionDigits: 2 });
   return fmtNum(v);
+}
+
+// OHLCV CSV filename range segment: `<start>_<end>` when a range is selected (AC-16), else `bars`.
+function csvRangeTag(start?: Date, end?: Date): string {
+  return start && end
+    ? `${start.toISOString().slice(0, 10)}_${end.toISOString().slice(0, 10)}`
+    : 'bars';
 }
 
 export default function DataExplorerPage() {
@@ -225,7 +234,9 @@ function OhlcvTab({ symbol, start, end }: { symbol: string; start?: Date; end?: 
           size="sm"
           data-testid="de-bars-csv"
           disabled={bars.length === 0}
-          onClick={() => downloadCsv(`${symbol}_1Day_bars.csv`, barsToCsv(bars))}
+          onClick={() =>
+            downloadCsv(`${symbol}_1Day_${csvRangeTag(start, end)}.csv`, barsToCsv(bars))
+          }
         >
           Download CSV
         </Button>

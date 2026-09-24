@@ -15,6 +15,7 @@
 | 2026-09-24 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, quick+extended) and approved; recon.md + design.md written |
 | 2026-09-24 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated (14 steps) |
 | 2026-09-24 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential execution started (Step 1 proto + Step 2 codegen; rebased on post-202 main-dev) |
+| 2026-09-24 | `in-progress` → `code-completed` | /sdd-execute | All 14 steps done; marketdata repo+service `go test -race` green + golangci-lint 0; agent suite 456 passed (78% cov); UI Data Explorer e2e 6/6 green; C-16 scenarios promoted (13 → ui suite, 9 → agent suite, @feature-204) |
 
 ---
 
@@ -47,4 +48,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review backfilled-data-queryable impl-spec` — advisory quality check, then `/sdd-execute backfilled-data-queryable`
+Integration PR `feature/backfilled-data-queryable` → `main-dev` (all 14 steps done; C-16 scenarios promoted). Then dev-deploy validation → promotion.
