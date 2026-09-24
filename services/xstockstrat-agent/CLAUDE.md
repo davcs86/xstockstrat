@@ -40,13 +40,13 @@ Python 3.13 (asyncio, grpc.aio, mcp SDK v2 MCPServer)
 
 ## MCP Tools
 
-The agent registers forty-nine tools (see `docs/runbooks/mcp-tools.md` for full parameter/return/error
+The agent registers fifty-one tools (see `docs/runbooks/mcp-tools.md` for full parameter/return/error
 reference). It also registers **one MCP prompt** — `list_correlation_guide` (feature 197), wired by
 `register_prompts` (`app/tools.py`) and served through the same OAuth-gated transport — plus a
 server-level `instructions` string (`create_server`, `app/main.py`) returned in the MCP `initialize`
 result; both carry the same guide for correlating the `list_accounts` / `get_positions` /
 `get_positions_by_account_id` / `list_opportunities` / `list_strategies` responses on
-`account_id` / `strategy_id` / `symbol`. A prompt is not a tool — the tool count stays forty-nine:
+`account_id` / `strategy_id` / `symbol`. A prompt is not a tool — the tool count stays fifty-one:
 
 | Tool | Purpose |
 |---|---|
@@ -99,6 +99,8 @@ result; both carry the same guide for correlating the `list_accounts` / `get_pos
 | `db_analyze_workload_indexes` | Recommend indexes based on pg_stat_statements workload via postgres-mcp. Admin-only (feature 169) |
 | `db_analyze_query_indexes` | Recommend indexes for a specific SQL query via postgres-mcp. Admin-only (feature 169) |
 | `db_analyze_db_health` | Run comprehensive database health checks via postgres-mcp. Admin-only (feature 169) |
+| `query_bars` | Query stored daily OHLCV bars for a symbol (paginated; `format` json/csv, feature 204) — daily-only per feature 143, `limit` capped 1000 (read-only) |
+| `query_fundamentals` | Query a symbol's fundamentals — `mode` snapshot (latest cached) or historical (point-in-time filings, paginated `limit` capped 50); `format` json/csv; `missing_metrics` authoritative (feature 204, read-only) |
 
 ### Management-tool authorization
 

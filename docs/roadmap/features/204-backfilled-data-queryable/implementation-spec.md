@@ -375,7 +375,7 @@ cd services/xstockstrat-agent && ruff check . && ruff format --check .
 
 ### Step 9 — docs: Update tool count and add tool reference sections
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/runbooks/`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify (docstring line 4)

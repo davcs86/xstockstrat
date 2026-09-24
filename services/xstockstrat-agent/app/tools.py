@@ -1,7 +1,7 @@
 """
 MCP tool definitions for xstockstrat-agent.
 
-Forty-nine tools:
+Fifty-one tools:
   list_signal_sources  — lists active sources from ingest, enriched with extractor_tool
   extract_email_content — extracts raw text from email attachments or gated URLs
   extract_website_content — fetches and returns raw text from a registered website source
@@ -51,11 +51,13 @@ Forty-nine tools:
   db_analyze_workload_indexes — recommend indexes based on pg_stat_statements workload (admin-only)
   db_analyze_query_indexes — recommend indexes for a specific SQL query (admin-only)
   db_analyze_db_health — run comprehensive DB health checks via postgres-mcp (admin-only)
+  query_bars          — query stored daily OHLCV bars (paginated; json/csv) (read-only, feature 204)
+  query_fundamentals  — query snapshot/historical fundamentals (paginated; json/csv) (read-only)
 
 Also registers one MCP prompt (feature 197), via register_prompts():
   list_correlation_guide — how to join list_accounts/get_positions/get_positions_by_account_id/
     list_opportunities/list_strategies on account_id/strategy_id/symbol. A prompt is not a tool;
-    the tool count stays forty-nine.
+    the tool count stays fifty-one.
 """
 
 import base64

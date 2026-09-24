@@ -207,3 +207,14 @@ node/pnpm. Docker daemon up but codegen stays host-native.
   `test_query_tools.py` alone → 10 passed; ruff check + format clean.
 - Files: `services/xstockstrat-agent/tests/test_query_tools.py`. Deviations: verification-command
   interpretation above (full-suite coverage is the real gate CI runs).
+
+### Step 9 — docs: tool-count bump + reference sections [done]
+- Bumped all 6 tool-count surfaces forty-nine → fifty-one (and copilot.ts 49 → 51):
+  tools.py:4/58, CLAUDE.md:43/49, mcp-tools.md:3/10/45, copilot.ts COPILOT_MCP_TOOL_COUNT.
+- Added `query_bars`/`query_fundamentals` to: the tools.py module docstring tool list, the agent
+  CLAUDE.md tool table, and full `### query_bars` / `### query_fundamentals` reference sections in
+  mcp-tools.md (params, json+csv return shapes, error cases) — mirroring the existing section format.
+- Verify: agent ruff check + format clean; full agent suite 456 passed (no doc-parity break);
+  UI `pnpm run lint` exit 0 (pre-existing hook warnings only); zero `forty-nine`/`= 49` remain.
+- Files: `services/xstockstrat-agent/app/tools.py`, `services/xstockstrat-agent/CLAUDE.md`,
+  `docs/runbooks/mcp-tools.md`, `services/xstockstrat-ui/src/lib/copilot.ts`.
