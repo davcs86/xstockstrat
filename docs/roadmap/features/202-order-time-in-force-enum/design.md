@@ -1,7 +1,7 @@
 # Design: order-time-in-force-enum
 
 **Created**: 2026-09-24
-**Rounds**: 5 (full; termination: approved at cap)
+**Rounds**: 6 (full; termination: SOUND at R6)
 **Approved by**: user @ 2026-09-24
 **Grounded in**: recon.md
 
@@ -60,7 +60,12 @@ trading/v1/trading.proto` CI workaround (removed after merge).
 **(d) `trading.go` handler changes**:
 - `buildBrokerRequest` (`:3367-3370`) — remove dead `if tif == "" { tif = "day" }` fallback; use
   `tifToWireString(req.TimeInForce)` for `broker.OrderRequest.TimeInForce`.
-- `PlaceOrder` — add `validateTIF(req.TimeInForce, brokerType)` before broker dispatch.
+- `PlaceOrder` — add `validateTIF(req.TimeInForce, brokerType)` before broker dispatch. **Offline
+  carve-out (R6 advisory):** the offline early-return at `:409` precedes this validation site (~`:425`).
+  An offline PlaceOrder with UNSPECIFIED would be accepted via direct gRPC. This is intentional: the
+  offline path skips all broker-interaction gates (trading-state, halt, sizing) and the TIF is metadata
+  never sent to a broker; the UI always sends a concrete value, so only a direct gRPC caller is
+  affected. If a universal schema invariant is preferred, move `validateTIF` before the offline return.
 - `ReplaceOrder` (`:1340-1374`) — nil-guard with validation: `if req.TimeInForce != nil {
   if err := validateTIF(*req.TimeInForce, brokerType); err != nil { return nil, err };
   tifWire = tifToWireString(*req.TimeInForce) } else { tifWire = "" }`.
@@ -95,7 +100,9 @@ pattern as `order_type`). Down migration is no-op.
 **(a) `orderShared.tsx`** — add `TIF_LABEL: Record<TimeInForce, string>` (exhaustive, following
 `Record<Enum, EnumRender>` pattern at `opportunityShared.tsx:28-70`, `recon.md:65`):
 UNSPECIFIED→'—', DAY→'Day', GTC→'GTC', IOC→'IOC', FOK→'FOK', OPG→'OPG', CLS→'CLS'. Order detail
-page (`:170`) renders via `TIF_LABEL[order.timeInForce]`.
+page (`page.tsx:170`) renders via `TIF_LABEL[order.timeInForce]` — the `Field` component (`:231`)
+declares `value: string`, so the enum-to-string type mismatch is compiler-enforced by `tsc` (R6
+advisory: explicit callout, already in Change-Site Inventory).
 
 **(b) `OrderForm.tsx`** — add TIF `<Select>` (reusing `Select`/`SelectItem` from `OrderFilters.tsx:
 24-42`, `recon.md:66`) defaulting to `TIME_IN_FORCE_DAY`. `TIF_OPTIONS` excludes UNSPECIFIED. The
@@ -113,6 +120,10 @@ matching protobuf-es numeric enum convention. All E2E spec assertions updated.
 (including `order_intent_test.go:39-41`) must add explicit `TimeInForce: TIME_IN_FORCE_DAY`, since
 the default enum zero-value (UNSPECIFIED) is now rejected. This is the intended consequence of the
 validation tightening.
+
+**(f) E2E mock-backend (R6 advisory)** — `e2e/mock-backend.ts:244-252` `placeOrder` handler returns
+no `timeInForce`, which defaults to `0` (UNSPECIFIED) after the enum change. New TIF-specific E2E
+scenarios must return a concrete TIF value (e.g. `timeInForce: 1` for DAY) in the mock response.
 
 ### Consumer Surface (C-14)
 
@@ -170,7 +181,7 @@ list (display). No agent tool places orders (confirmed). `strat-lab` plugin has 
 
 ## Constitution Rules Touched
 
-- `C-01` — honored by: every path:line claim verified across 5 rounds; change-site inventory
+- `C-01` — honored by: every path:line claim verified across 6 rounds; change-site inventory
   includes testdata fixtures and intent-hash sites.
 - `C-04` — honored by: `TIME_IN_FORCE_UNSPECIFIED = 0` sentinel exists; rejected at handler per
   user constraint.
@@ -180,8 +191,8 @@ list (display). No agent tool places orders (confirmed). `strat-lab` plugin has 
   detail, and order list all updated in the same PR.
 - `C-16` — honored by: all 8 PRESERVE business rules from recon.md respected; TIF threads through
   existing PlaceOrder/ReplaceOrder flows without altering them.
-- `F-04` — honored by: all citations verified against live codebase across 5 rounds.
-- `F-11` — honored by: no Floor breaches across 5 rounds.
+- `F-04` — honored by: all citations verified against live codebase across 6 rounds.
+- `F-11` — honored by: no Floor breaches across 6 rounds.
 
 ## Business Rules Touched (C-16)
 

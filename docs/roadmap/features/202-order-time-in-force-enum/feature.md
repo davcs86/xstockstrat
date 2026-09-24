@@ -12,7 +12,7 @@
 |---|---|---|---|
 | 2026-09-24 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-09-24 | `draft` → `spec-ready` | /sdd-review | Product spec approved (5 warnings, no blockers) |
-| 2026-09-24 | `spec-ready` → `design-approved` | /sdd-design | Design debated (5 rounds, full) and approved; recon.md + design.md written |
+| 2026-09-24 | `spec-ready` → `design-approved` | /sdd-design | Design debated (6 rounds, full, SOUND) and approved; recon.md + design.md written |
 | 2026-09-24 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated (9 steps) |
 
 ---
@@ -22,7 +22,7 @@
 - [Product Spec](product-spec.md) — requirements and governance
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
 - [Recon Dossier](recon.md) — grounded codebase map
-- [Design](design.md) — debated, user-approved architecture (5 rounds, full)
+- [Design](design.md) — debated, user-approved architecture (6 rounds, full, SOUND)
 - [Implementation Spec](implementation-spec.md) — 9 steps (proto → codegen → migration → Go service + tests → UI + E2E → verification + CI workaround)
 - [Context Log](context.md) — session history, decisions, deviations
 

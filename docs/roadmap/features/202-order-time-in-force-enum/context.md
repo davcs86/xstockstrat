@@ -82,3 +82,23 @@
   EditOrderDialog always sends concrete TIF (user constraint), column stays TEXT with Go-layer
   validation (no CHECK), config-driven matrix rejected (hardcoded constants)
 - Status: design-approved → implementation-ready.
+
+## Session 2026-09-24 — sdd-design R6 (uncapped grilling)
+
+- User overrode the 5-round hard cap to continue grilling until SOUND verdict (feature 203 already
+  got SOUND at R3; 202 was the only one that hit the cap without it).
+- R6 proposer confirmed all R1–R5 fixes incorporated. R6 adversary returned **SOUND** — no Floor
+  breaches, no blocking objections, 3 advisory (non-blocking) items:
+  1. **Offline carve-out** — `trading.go:409` offline early-return precedes `validateTIF` (~`:425`).
+     Documented as intentional: offline path skips all broker-interaction gates, TIF is metadata
+     never sent to a broker, UI always sends a concrete value. Design records the carve-out
+     explicitly and notes the alternative (move `validateTIF` before offline return) if a universal
+     schema invariant is preferred.
+  2. **`page.tsx:170` explicit callout** — already in Change-Site Inventory; the `Field` component
+     (`:231`) declares `value: string`, so the enum-to-string type mismatch is compiler-enforced
+     by `tsc`. Added explicit note in design.md UI section (a).
+  3. **`mock-backend.ts:244-252`** — `placeOrder` mock handler returns no `timeInForce`, defaults
+     to `0` (UNSPECIFIED) after the enum change. New TIF-specific E2E scenarios must return a
+     concrete TIF value. Added as design.md UI section (f).
+- All 3 advisory items incorporated into design.md. Rounds updated from 5 to 6 in design.md header,
+  feature.md Status History, and Constitution Rules Touched citations.
