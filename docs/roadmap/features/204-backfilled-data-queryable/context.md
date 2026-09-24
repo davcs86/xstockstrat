@@ -1,8 +1,8 @@
 # Context: backfilled-data-queryable
 
-**Feature**: `docs/roadmap/features/202-backfilled-data-queryable/feature.md`
-**Product Spec**: `docs/roadmap/features/202-backfilled-data-queryable/product-spec.md`
-**Implementation Spec**: `docs/roadmap/features/202-backfilled-data-queryable/implementation-spec.md`
+**Feature**: `docs/roadmap/features/204-backfilled-data-queryable/feature.md`
+**Product Spec**: `docs/roadmap/features/204-backfilled-data-queryable/product-spec.md`
+**Implementation Spec**: `docs/roadmap/features/204-backfilled-data-queryable/implementation-spec.md`
 
 ---
 
