@@ -229,3 +229,10 @@ but Docker Hub 429-rate-limited → codegen via host-native fallback (see Deviat
   AC-5 → services/xstockstrat-ui/acceptance/order-time-in-force-enum.feature (both @feature-202).
 **Ledger**: fails.md — host-native codegen whitespace-parity + golangci-lint go-version gotchas.
 **Next**: integration PR feature/order-time-in-force-enum → main-dev
+
+## Session 2026-09-24 (CI: feature status automation)
+
+- Promotion PR #1169 merged to main
+- Feature promoted and committed: dd622bdc2e5b922df8dcabc6f7475b8b395a8ed3
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-09-24

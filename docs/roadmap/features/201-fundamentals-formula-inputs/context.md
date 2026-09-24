@@ -573,3 +573,10 @@
   authoring capability the feature never designed (and which no other surface exposes either).
 - Verified: `pytest --cov=app --cov-fail-under=40` **446 passed**, coverage 79.29%; `ruff check` +
   `ruff format --check` clean. Files: `services/xstockstrat-agent/tests/test_formula_builders.py`.
+
+## Session 2026-09-24 (CI: feature status automation)
+
+- Promotion PR #1169 merged to main
+- Feature promoted and committed: dd622bdc2e5b922df8dcabc6f7475b8b395a8ed3
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-09-24

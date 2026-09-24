@@ -6,6 +6,8 @@
 **Severity**: SEV-3
 **Created**: 2026-09-19
 **Last Updated**: 2026-09-19
+**Committed to main**: dd622bdc2e5b922df8dcabc6f7475b8b395a8ed3
+**Launched date**: 2026-09-24
 
 ---
 
@@ -16,6 +18,7 @@
 | 2026-09-19 | `bug-reported` → `draft` | triage (manual, from-report) | UX/observability gap; Track C. |
 | 2026-09-19 | `draft` → `code-completed` | bug-fix session | Definition card added (all readers, operator-approved); RuleSummary hoisted (DRY); unit + e2e tests; lint/tsc clean. Shipped in the consolidated today's-triage PR. |
 
+| 2026-09-24 | `code-completed` → `launched` | CI workflow | Promoted via PR #1169; committed dd622bdc2e5b922df8dcabc6f7475b8b395a8ed3 |
 ---
 
 ## Artifacts
