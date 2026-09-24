@@ -138,7 +138,7 @@ grep -r "TimeInForce" packages/proto/gen/ts/trading/v1/ | head -5
 
 ### Step 3 — migration: Normalize historical TIF strings
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/migrations/010_normalize_tif.up.sql` — create

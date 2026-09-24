@@ -142,3 +142,10 @@ but Docker Hub 429-rate-limited → codegen via host-native fallback (see Deviat
   see Deviation Log). trading stubs carry no such churn → match CI regen.
 - Files modified: `packages/proto/gen/{go,python,ts}/trading/v1/**`
 - Deviations: 3 (codegen fallback, buf-breaking skip, analysis.pb.go revert) — see Deviation Log.
+
+### Step 3 — migration: Normalize historical TIF strings [done]
+- Created `010_normalize_tif.up.sql` (lowercase + alias→'gtc' + NULL/''→'day') and `010_normalize_tif.down.sql`
+  (no-op — data cleanup has no schema inverse). Column stays TEXT; Go owns validation.
+- Verification: offline (up/down parity + next NNN=010 after 009). Live apply deferred to CI/deploy.
+- Files modified: `services/xstockstrat-trading/migrations/010_normalize_tif.{up,down}.sql`
+- Deviations: none.
