@@ -1,6 +1,6 @@
 ---
 name: mcp-tools
-description: Reference documentation for the 48 MCP tools exposed by the xstockstrat-agent MCP server (signal ingestion, backtesting, strategy/formula management, config, alerts, watchlists, accounts, user admin, and admin-only database tools). Use this when a wire-connected agent needs a tool's parameters, return shape, error cases, or cross-tool usage patterns and cannot read the repo's maintainer runbook. Each tool has its own reference file so only the one in play is loaded.
+description: Reference documentation for the 51 MCP tools exposed by the xstockstrat-agent MCP server (signal ingestion, backtesting, strategy/formula management, config, alerts, watchlists, accounts, user admin, and admin-only database tools). Use this when a wire-connected agent needs a tool's parameters, return shape, error cases, or cross-tool usage patterns and cannot read the repo's maintainer runbook. Each tool has its own reference file so only the one in play is loaded.
 allowed-tools: Read
 ---
 
@@ -32,6 +32,7 @@ Do not read every reference file up front — open one tool file at a time.
 | `manage_formula` | Registers, updates, or deletes a custom formula definition in `xstockstrat-indicators`. | `reference/tools/manage_formula.md` |
 | `get_formula` | Fetches one custom formula's stored definition from `xstockstrat-indicators`. | `reference/tools/get_formula.md` |
 | `list_formulas` | Lists custom formula definitions from `xstockstrat-indicators`. | `reference/tools/list_formulas.md` |
+| `list_fundamental_metrics` | Lists the fundamental-metrics catalog for formula authoring (read-only, feature 205). | `reference/tools/list_fundamental_metrics.md` |
 | `manage_signal_source` | Registers, updates, reactivates, or deactivates a signal source in `xstockstrat-ingest`. | `reference/tools/manage_signal_source.md` |
 | `run_fundamentals_scan` | Manually triggers the fundamentals signal producer via `xstockstrat-analysis` `RunFundamentalsScan` | `reference/tools/run_fundamentals_scan.md` |
 | `trigger_backfill` | Triggers a historical backfill via `xstockstrat-ingest` `TriggerBackfill` (feature 066). | `reference/tools/trigger_backfill.md` |
@@ -54,6 +55,8 @@ Do not read every reference file up front — open one tool file at a time.
 | `list_accounts` | List the **caller's own** accounts — broker **and** offline together (read-only, feature 164). | `reference/tools/list_accounts.md` |
 | `get_positions` | List **all positions** for the calling user across all accounts — broker and offline (read-only, | `reference/tools/get_positions.md` |
 | `get_positions_by_account_id` | List positions for a **single account** owned by the calling user (read-only, feature 169). | `reference/tools/get_positions_by_account_id.md` |
+| `query_bars` | Query stored **daily OHLCV bars** for a symbol from `xstockstrat-marketdata` (read-only, feature 204). | `reference/tools/query_bars.md` |
+| `query_fundamentals` | Query a symbol's **fundamentals** from `xstockstrat-marketdata` (read-only, feature 204). | `reference/tools/query_fundamentals.md` |
 | `manage_user` | Administer users (**ADMIN only**, feature 183). | `reference/tools/manage_user.md` |
 | `list_users` | List all users (**ADMIN only**, read-only, feature 183). | `reference/tools/list_users.md` |
 | `get_user` | Read one user by id (**ADMIN only**, read-only, feature 183). | `reference/tools/get_user.md` |

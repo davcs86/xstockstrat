@@ -11,4 +11,5 @@ Lists custom formula definitions from `xstockstrat-indicators`. Soft-deleted for
 | `author_filter` | `string` | No | If non-empty, restrict to formulas authored by this user id |
 | `include_public` | `bool` | No | Also include public formulas regardless of `author_filter` (default `true`) |
 
-**Return** — `{"formulas": [<formula in camelCase>, …]}`.
+**Return** — `{"formulas": [<formula in camelCase>, …]}`. Each formula includes `fundamentalInputs`
+(FundamentalMetric enum NAME-strings) when declared.

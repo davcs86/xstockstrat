@@ -11,5 +11,6 @@ Fetches one custom formula's stored definition from `xstockstrat-indicators`.
 | `formula_id` | `string` | Yes | Formula identifier |
 
 **Return** — the formula in camelCase incl. `name`, `description`, `source`, `isPublic`,
-`parameters`, `outputs`, `warmupPeriod`, and `deleted` (true when soft-deleted). Use for safe
-read-modify-write: read, then `manage_formula(operation="update", …)` with only the changed fields.
+`parameters`, `outputs`, `warmupPeriod`, `fundamentalInputs` (FundamentalMetric enum NAME-strings),
+and `deleted` (true when soft-deleted). Use for safe read-modify-write: read, then
+`manage_formula(operation="update", …)` with only the changed fields.

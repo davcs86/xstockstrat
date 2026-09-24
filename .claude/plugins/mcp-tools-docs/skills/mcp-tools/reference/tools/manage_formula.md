@@ -16,6 +16,7 @@ Registers, updates, or deletes a custom formula definition in `xstockstrat-indic
 | `parameters` | `list` | No | Typed parameter definitions `{name, type, default, description, required, min, max}` |
 | `outputs` | `list` | No | Declared secondary output series `{name, description}`; addressable in strategy rules as `<ref>.<name>`. The implicit `value` series is always present and must not be declared. |
 | `warmup_period` | `int` | No | Bars of warm-up before the formula's outputs are valid |
+| `fundamental_inputs` | `list[str]` | No | `FundamentalMetric` enum NAME-strings (e.g. `["FUNDAMENTAL_METRIC_PE_RATIO"]`); a non-empty list marks the formula fundamentals-only. Use `list_fundamental_metrics` for the valid catalog. |
 | `formula_id` | `string` | update/delete | Formula identifier |
 
 **Ownership is derived, not asserted (feature 111).** `author` (register) and the ownership identity checked on `update`/`delete` are both the OAuth-authenticated caller's own `user_id` from their verified claims — there is no `author`/`formula_author_user_id` parameter. A caller can no longer register a formula under someone else's identity (including the reserved `"system"` sentinel), or claim someone else's ownership to update/delete a formula; the indicators backend's own PERMISSION_DENIED check (stored `author` vs. `user_id` mismatch) now always compares against the real caller.

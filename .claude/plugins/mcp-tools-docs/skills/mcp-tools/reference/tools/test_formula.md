@@ -11,7 +11,7 @@ Use before `manage_formula(operation="register", …)` to validate behavior.
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `source` | `string` | Yes | Python formula source (assign a `result` dict with a `value` key) |
-| `input_data` | `object` | No | Passed to the formula as `data` (e.g. `{"close": [1,2,3]}`) |
+| `input_data` | `object` | No | Passed to the formula as `data` (e.g. `{"close": [1,2,3]}`). A fundamentals-scoring formula reads snake_case data-keys (e.g. `{"pe_ratio": 12.5, "pb_ratio": 1.8}`) — see `list_fundamental_metrics` for the catalog. |
 | `input_params` | `object` | No | Parameter VALUES exposed as `params` |
 | `parameters` | `list` | No | Typed parameter DEFINITIONS to validate `input_params` for this run |
 | `timeout_ms` | `int` | No | `0` ⇒ configured sandbox timeout |
