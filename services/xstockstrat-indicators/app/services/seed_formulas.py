@@ -41,6 +41,7 @@ async def seed_default_formulas(db_pool) -> None:
             input_schema={},
             parameters=param_dicts,
             outputs=output_dicts,
+            fundamental_inputs=[int(m) for m in fvq.FUNDAMENTAL_INPUTS],
         )
         log.info("seeded default formula %s (%s)", fvq.NAME, fvq.FORMULA_ID)
     except Exception as e:  # noqa: BLE001 - seeding must never prevent startup

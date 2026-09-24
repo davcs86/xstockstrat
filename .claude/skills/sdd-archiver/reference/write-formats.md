@@ -61,6 +61,26 @@ Append one row to the `## Status History` table (do **not** touch `status.md`):
 `<terminal-status>` is the feature's existing lifecycle status (`launched` / `rolled-back` /
 `demoted/canceled`), quoted in backticks — it is recorded, not changed.
 
+**Reconcile the `## Artifacts` section (mandatory — prevents dead links).** Every bullet that
+Markdown-links a file this run prunes (`product-spec.md`, `recon.md`, `design.md`,
+`implementation-spec.md`) must be rewritten so it no longer links the deleted file. Keep the label,
+drop the link, and point at the synthesis:
+
+```markdown
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Recon — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+```
+
+Leave the `[Acceptance Scenarios](acceptance.feature)` and `[Context Log](context.md)` bullets as
+live links (both files are retained) — and when scenarios were promoted at Phase 4c/5.4, append the
+target suite path(s) to the acceptance bullet, e.g.
+`; promoted to services/xstockstrat-<svc>/acceptance/<slug>.feature (C-16)`. Do **not** rewrite a
+bullet whose target file is *not* being pruned. Omitting this step is what left a dead
+`](product-spec.md)` link in 86 already-archived `feature.md` files (swept later by a repo-wide
+reconciliation); catch it here so it never regenerates.
+
 ---
 
 ## 4. Prune (deletions)

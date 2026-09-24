@@ -24,10 +24,10 @@
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Recon](recon.md) — grounded codebase dossier (xstockstrat-ui)
-- [Design](design.md) — debated, approved architecture (derivable-only, UI-only)
-- [Implementation Spec](implementation-spec.md) — 6 numbered steps with codebase evidence
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Recon — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

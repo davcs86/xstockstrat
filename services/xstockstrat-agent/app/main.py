@@ -23,7 +23,21 @@ import os
 from mcp.server.mcpserver import MCPServer
 
 from app.scopes import MCP_CLAIMS_SCOPE_KEY
-from app.tools import register_tools
+from app.tools import register_prompts, register_tools
+
+# Server-level instructions are returned in the MCP `initialize` result, so every client — including
+# a fully-autonomous agent that never invokes a prompt — receives this cross-tool correlation
+# summary on connect (feature 197). A constant so the parity test can assert it against drift.
+LIST_CORRELATION_INSTRUCTIONS = (
+    "Correlate the list/read responses on three keys: account_id "
+    "(list_accounts[].id ⟷ get_positions[].account_id, the same value get_positions_by_account_id "
+    "takes), strategy_id (list_strategies[].strategy_id ⟷ list_opportunities[].strategy_id), and "
+    "symbol (get_positions[].symbol ⟷ list_opportunities[].symbol). Note the non-joins: a position "
+    "carries no strategy_id, and an opportunity or strategy carries no account_id. "
+    "This MCP server also exposes a prompt named 'list_correlation_guide' (retrieve it via the "
+    "prompts/get request, or list it with prompts/list) that holds the full join graph and a "
+    "worked example — fetch it before correlating these responses."
+)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 log = logging.getLogger(__name__)
@@ -61,8 +75,9 @@ AGENT_PUBLIC_URL = os.environ.get("AGENT_PUBLIC_URL", "http://localhost:9000")
 
 
 def create_server() -> MCPServer:
-    server = MCPServer("xstockstrat-agent")
+    server = MCPServer("xstockstrat-agent", instructions=LIST_CORRELATION_INSTRUCTIONS)
     register_tools(server)
+    register_prompts(server)
     return server
 
 

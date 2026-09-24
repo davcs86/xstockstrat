@@ -177,3 +177,11 @@ Feature: Platform-wide guarantees
     When their package.json and lockfiles are inspected
     Then @types/node resolves to a ^24 major
     And each service typechecks (tsc via its build script — not only its test runner) and builds against it
+
+  @AC-6 @FR-5 @feature-182
+  Scenario: Docs no longer claim the readiness-materializer keys have no seed migration
+    Given the analysis CLAUDE.md Config Keys table previously stated "No seed migration" for the analysis.readiness_materializer.* keys
+    When feature 182 lands
+    Then those four rows cite seed migration 027 instead of "No seed migration"
+    And the config-governance per-feature registered-keys log records the four keys under feature 182
+    And the ~5 other analysis.* / analysis.opportunity.* rows that still have no seed migration keep their "No seed migration" note unchanged

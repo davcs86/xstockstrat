@@ -30,10 +30,10 @@ watching the UI, unlike an unattended caller
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Recon](recon.md) — grounded codebase dossier
-- [Design](design.md) — debated, approved architecture
-- [Implementation Spec](implementation-spec.md) — 20 steps
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Recon — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

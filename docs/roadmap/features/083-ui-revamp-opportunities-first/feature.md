@@ -25,10 +25,10 @@
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance _(stale re backend scope — refresh + re-review before /sdd-execute; see design.md Open Risks)_
-- [Recon](recon.md) — grounded codebase dossier (UI + Phase 0b producer services)
-- [Design](design.md) — debated, approved architecture (analysis-owns-queue spine; backend→frontend ordering)
-- [Implementation Spec](implementation-spec.md) — 31 numbered steps, backend→frontend ordering
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Recon — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 - [Design Handoff](design-handoff/) — Nocturne design reference: `README.md` (token + screen grammar spec), `source-map.md` (screen → repo-module map), `xstockstrat UI.dc.html` (interactive prototype), `screenshots/01–12` (per-screen captures)
 

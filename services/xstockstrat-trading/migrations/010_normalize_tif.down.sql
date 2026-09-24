@@ -1,0 +1,2 @@
+-- No-op: the normalization is data-cleanup, not schema change.
+-- Original mixed-case/alias values are not recoverable.

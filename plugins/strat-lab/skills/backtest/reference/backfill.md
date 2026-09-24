@@ -10,7 +10,11 @@ backtest.
 1. **Check coverage.** Call `get_backfill_status` for the symbols (and the strategy's data needs).
    Treat "no coverage" / a start date later than your intended window as a gap.
 2. **Trigger if needed.** For any symbol with a gap, call `trigger_backfill`. Backfill is
-   asynchronous — it returns before data is ready.
+   asynchronous — it returns before data is ready. `data_kind` selects what to fetch: `"bars"`
+   (daily OHLCV, the default) or `"fundamentals"` (point-in-time fundamentals filings history —
+   feature 198). A strategy that uses a `fundamental` operand (see `strategy-build.md`) needs its
+   symbols backfilled with `data_kind="fundamentals"` in addition to bars; fundamentals backfill is
+   timeframe-independent (omit/ignore `timeframe`).
 3. **Wait by polling, not sleeping.** Re-check `get_backfill_status` until it reports complete. Do
    not block on a fixed sleep; poll the status and proceed when it flips to done. If a backfill
    stalls, surface it rather than backtesting on partial data.

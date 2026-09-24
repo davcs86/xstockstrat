@@ -51,6 +51,11 @@ Forty-nine tools:
   db_analyze_workload_indexes — recommend indexes based on pg_stat_statements workload (admin-only)
   db_analyze_query_indexes — recommend indexes for a specific SQL query (admin-only)
   db_analyze_db_health — run comprehensive DB health checks via postgres-mcp (admin-only)
+
+Also registers one MCP prompt (feature 197), via register_prompts():
+  list_correlation_guide — how to join list_accounts/get_positions/get_positions_by_account_id/
+    list_opportunities/list_strategies on account_id/strategy_id/symbol. A prompt is not a tool;
+    the tool count stays forty-nine.
 """
 
 import base64
@@ -58,6 +63,7 @@ import json
 import logging
 import re
 import uuid
+from pathlib import Path
 from typing import Literal
 
 import grpc
@@ -71,6 +77,12 @@ from app.scopes import MCP_CLAIMS_SCOPE_KEY, resolve_scope, roles_to_access_scop
 
 _ALERT_THRESHOLD_DEFAULT = 0.6
 _ALERT_THRESHOLD_CONFIG_KEY = "signal.alert_threshold"
+
+# The MCP prompts surface (feature 197). The list-correlation guide teaches a connected agent how to
+# join list_accounts/get_positions/list_opportunities/list_strategies; its canonical body is the
+# module-relative .md (never CWD-relative — stdio launches from an arbitrary CWD).
+_LIST_CORRELATION_PROMPT_NAME = "list_correlation_guide"
+_LIST_CORRELATION_PROMPT_PATH = Path(__file__).parent / "prompts" / "list_correlation.md"
 
 # Secure per-source extract credentials are not supported yet: a source requiring credentials
 # raises loudly instead of fetching unauthenticated (plaintext creds would bypass secret redaction).
@@ -571,7 +583,11 @@ def register_tools(server: MCPServer) -> None:
           fills at the signal bar's own close, an optimistically-biased fill. The effective model is
           echoed in the summary. Note (display-only): in next-bar mode a diagnostics row can show an
           ENTER/EXIT on a bar whose conviction reads hold — the action lands on the fill bar while
-          conviction stays that bar's own value; the grade is unaffected."""
+          conviction stays that bar's own value; the grade is unaffected.
+        Fundamental operands (feature 198): if the stored strategy uses a kind='fundamental'
+          component, its metric resolves point-in-time (as-of each bar, no look-ahead). The symbol's
+          fundamentals history must be backfilled first (trigger_backfill data_kind='fundamentals')
+          and 'analysis.backtest.fundamentals.enabled' must be ON, else the operand reads hold."""
         # Forward the caller's own user id so analysis resolves ownership from the header; wrap the
         # RPC so a PERMISSION_DENIED surfaces as a tool-level error, not a raw AioRpcError.
         user_id = _caller_user_id(ctx, "run_backtest")
@@ -670,12 +686,20 @@ def register_tools(server: MCPServer) -> None:
         operation: 'register' | 'update' | 'deactivate' | 'reactivate'.
         strategy_id: lowercase/underscore identifier (e.g. 'sma_crossover').
         display_name: human-readable name.
-        components: list of {ref_name, kind ('builtin'|'formula'), indicator, formula_id, params,
-            source_symbol}.
+        components: list of {ref_name, kind ('builtin'|'formula'|'fundamental'), indicator,
+            formula_id, params, source_symbol, fundamental_metric}.
             kind='builtin': indicator must be one of the built-in enum ATR, BB, EMA, MACD, RSI,
             SMA, STOCH, VWAP (case-insensitive). For an indicator outside this set (e.g. a
             z-score or efficiency-ratio calculation), register a custom formula first via
             manage_formula and reference it here as kind='formula', formula_id=<id>.
+            kind='fundamental' (feature 198): a point-in-time fundamentals metric operand.
+            fundamental_metric must be one of market_cap, pe_ratio, pb_ratio, dividend_yield,
+            eps, beta, roe, debt_to_equity, price, year_high, year_low. The operand resolves to
+            the latest filing available as-of each bar (strict filed_date < bar_date, T+1 — no
+            look-ahead), carried forward until the next filing; before the first filing the leaf
+            holds. Requires the symbol's fundamentals history to be backfilled first
+            (trigger_backfill data_kind='fundamentals') and the analysis
+            'analysis.backtest.fundamentals.enabled' key ON.
             source_symbol (optional, feature 152): a fixed benchmark/reference ticker (e.g.
             'VOO'). When set, the component is computed on THAT symbol's bars and its output is
             aligned onto the evaluated symbol's bar timeline — enabling cross-symbol
@@ -1071,17 +1095,23 @@ def register_tools(server: MCPServer) -> None:
         end: str | None = None,
         overwrite: bool = False,
         fill_mode: str | None = None,
+        data_kind: str = "bars",
     ) -> dict:
-        """Trigger a historical OHLCV backfill in xstockstrat-ingest (admin-scoped write).
+        """Trigger a historical backfill in xstockstrat-ingest (admin-scoped write).
         symbols: explicit ticker list, e.g. ["AAPL", "MSFT"]; max 50 per call.
-        timeframe: '1d' or '1Day' (canonicalized; default '1d'). Only daily bars are supported.
+        data_kind: 'bars' (daily OHLCV, default) or 'fundamentals' (point-in-time fundamentals
+            filings history, feature 198 — needed before backtesting a strategy that uses a
+            'fundamental' operand). 'fundamentals' is timeframe-independent (the timeframe arg is
+            ignored).
+        timeframe: '1d' or '1Day' (canonicalized; default '1d'). Only daily bars are supported;
+            ignored when data_kind='fundamentals'.
         start / end: optional ISO 8601 datetimes bounding the range; one-sided allowed; both
             omitted = the service default, a 365-day lookback ending now (range_end − 365d).
         overwrite: true re-fetches bars that already exist.
         fill_mode: 'full' | 'gaps_only'; omitted = server default FULL. 'gaps_only'
             fetches only missing ranges (cheaper on provider quota).
         Client-side guards raise ValueError BEFORE anything is queued: empty symbols, > 50
-            symbols, an unknown timeframe or fill_mode, or start after end.
+            symbols, an unknown data_kind/timeframe/fill_mode, or start after end.
         Returns {"job_id", "status"}. Ingest performs NO synchronous input validation —
         it queues unconditionally and bad input surfaces as a terminal FAILED/PARTIAL
         job; poll get_backfill_status with the returned job_id to observe the outcome."""
@@ -1094,6 +1124,7 @@ def register_tools(server: MCPServer) -> None:
                 end=end,
                 overwrite=overwrite,
                 fill_mode=fill_mode,
+                data_kind=data_kind,
                 access_scope=access_scope,
             )
         except grpc.aio.AioRpcError as e:
@@ -1201,7 +1232,11 @@ def register_tools(server: MCPServer) -> None:
         include_inactive: also include deactivated strategies (default false).
         Returns {"strategies": [<definition>, ...]} — each definition is snake_case, matching
             get_strategy (so a list → get → manage_strategy edit loop stays consistent).
-        Only the calling user's OWN strategies are returned."""
+        Only the calling user's OWN strategies are returned.
+        Correlation: a definition's `strategy_id` joins to list_opportunities[].strategy_id (the
+            opportunities this strategy produced). Strategies carry NO `account_id`, and no position
+            references a `strategy_id` — a holding cannot be joined back to a strategy directly. See
+            the `list_correlation_guide` prompt."""
         # Forward the caller's own user id — analysis filters to the caller's strategies.
         user_id = _caller_user_id(ctx, "list_strategies")
         try:
@@ -1232,7 +1267,11 @@ def register_tools(server: MCPServer) -> None:
             materializing (poll again); compute_failed=true means a persistently-failing compute
             (a terminal error, not an empty queue). Use next_page_token to page through manually;
             when it is empty, all rows have been returned. Only the calling user's OWN queue is
-            returned."""
+            returned.
+            Correlation: an opportunity's `strategy_id` joins to list_strategies[].strategy_id (the
+            strategy that produced it); its `symbol` joins to get_positions[].symbol (a matching
+            holding), and `provenance` contains "position" when a holding seeded the row.
+            Opportunities carry NO `account_id`. See the `list_correlation_guide` prompt."""
         # Caller-scoped via x-user-id (no admin scope) — analysis resolves the owner from headers.
         user_id = _caller_user_id(ctx, "list_opportunities")
         try:
@@ -1895,7 +1934,11 @@ def register_tools(server: MCPServer) -> None:
         Offline accounts (feature 157) appear alongside broker accounts, each distinguishable by its
         broker_type (BROKER_TYPE_ALPACA / BROKER_TYPE_IBKR / BROKER_TYPE_OFFLINE). Ownership is
         resolved server-side from the verified x-user-id. Credentials are not part of an account and
-        are never returned. Returns {"accounts": [...]}."""
+        are never returned. Returns {"accounts": [...]}.
+        Correlation: each account's `id` is the join key to positions — it matches `account_id` on
+            get_positions rows, and is the value get_positions_by_account_id takes as its
+            `account_id` argument. Accounts carry no `symbol` or `strategy_id`. See the
+            `list_correlation_guide` prompt for the full cross-tool join graph."""
         user_id = _caller_user_id(ctx, "list_accounts")
         try:
             return await client.list_broker_accounts(user_id)
@@ -1916,7 +1959,12 @@ def register_tools(server: MCPServer) -> None:
         limit: max positions per page; 0 = server default (100, max 500).
         page_token: opaque token from a prior call's next_page_token; "" starts at first page.
         Returns {"positions": [...], "next_page_token": <str>}. Each position uses snake_case
-            proto field names. An empty next_page_token means no more pages."""
+            proto field names. An empty next_page_token means no more pages.
+        Correlation: a position's `account_id` joins to list_accounts[].id (which account holds it);
+            its `symbol` joins to list_opportunities[].symbol (what the Decide-queue recommends for
+            the same ticker). A position carries NO `strategy_id` — you cannot link a holding to the
+            strategy that recommended it directly (only inferred via `symbol` → list_opportunities).
+            See the `list_correlation_guide` prompt."""
         user_id = _caller_user_id(ctx, "get_positions")
         try:
             return await client.list_positions(user_id, limit=limit, page_token=page_token)
@@ -1934,7 +1982,10 @@ def register_tools(server: MCPServer) -> None:
         account_id: the account to query (required, non-empty).
         limit: max positions per page; 0 = server default (100, max 500).
         page_token: opaque token from a prior call's next_page_token; "" starts at first page.
-        Returns {"positions": [...], "next_page_token": <str>}. Same shape as get_positions."""
+        Returns {"positions": [...], "next_page_token": <str>}. Same shape as get_positions.
+        Correlation: pass a list_accounts[].id here as `account_id`. Each returned position's
+            `symbol` joins to list_opportunities[].symbol; positions carry NO `strategy_id`. See the
+            `list_correlation_guide` prompt."""
         if not account_id:
             raise ValueError("account_id is required")
         user_id = _caller_user_id(ctx, "get_positions_by_account_id")
@@ -2075,6 +2126,28 @@ def register_tools(server: MCPServer) -> None:
             "analyze_db_health", {"health_type": health_type}
         )
         return [TextContent(type="text", text=str(result))]
+
+
+def register_prompts(server: MCPServer) -> None:
+    """Register the MCP prompts surface (feature 197).
+
+    Kept separate from register_tools so the prompts surface never picks up the tools/call
+    CallerPropagationMiddleware — prompts carry no per-request caller identity. prompts/list and
+    prompts/get are served by the same OAuth-gated session manager as tools/call (app/main.py).
+    """
+    body = _LIST_CORRELATION_PROMPT_PATH.read_text(encoding="utf-8")
+
+    @server.prompt(
+        name=_LIST_CORRELATION_PROMPT_NAME,
+        title="Correlate list responses",
+        description=(
+            "How to join list_accounts, get_positions, get_positions_by_account_id, "
+            "list_opportunities, and list_strategies on account_id / strategy_id / symbol "
+            "(and which joins do NOT exist)."
+        ),
+    )
+    def list_correlation_guide() -> str:
+        return body
 
 
 async def _get_source(source_slug: str) -> dict:

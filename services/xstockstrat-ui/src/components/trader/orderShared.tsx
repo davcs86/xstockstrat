@@ -1,7 +1,12 @@
 // Shared order-table building blocks used by OrderBook, OrdersTable, and the order-detail page:
 // status/type lookup tables, price formatting, and bare-content badge cells for `DataTable` (DRY).
 
-import { OrderSide, OrderStatus, IntentState } from '@xstockstrat/proto/trading/v1/trading_pb';
+import {
+  OrderSide,
+  OrderStatus,
+  IntentState,
+  TimeInForce,
+} from '@xstockstrat/proto/trading/v1/trading_pb';
 import { Badge } from '../ui/badge';
 
 export const STATUS_VARIANT: Record<
@@ -23,6 +28,17 @@ export const TYPE_LABEL: Record<string, string> = {
   STOP: 'Stop',
   STOP_LIMIT: 'Stop Limit',
   TRAILING_STOP: 'Trailing Stop',
+};
+
+// Exhaustive over TimeInForce — adding a proto enum value without a label here fails tsc (C-10).
+export const TIF_LABEL: Record<TimeInForce, string> = {
+  [TimeInForce.UNSPECIFIED]: '—',
+  [TimeInForce.DAY]: 'Day',
+  [TimeInForce.GTC]: 'GTC',
+  [TimeInForce.IOC]: 'IOC',
+  [TimeInForce.FOK]: 'FOK',
+  [TimeInForce.OPG]: 'OPG',
+  [TimeInForce.CLS]: 'CLS',
 };
 
 /** `$1234.56`, or `—` for empty/zero. */

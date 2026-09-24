@@ -19,20 +19,22 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	MarketDataService_StreamBars_FullMethodName           = "/xstockstrat.marketdata.v1.MarketDataService/StreamBars"
-	MarketDataService_StreamQuotes_FullMethodName         = "/xstockstrat.marketdata.v1.MarketDataService/StreamQuotes"
-	MarketDataService_GetBars_FullMethodName              = "/xstockstrat.marketdata.v1.MarketDataService/GetBars"
-	MarketDataService_GetLatestQuote_FullMethodName       = "/xstockstrat.marketdata.v1.MarketDataService/GetLatestQuote"
-	MarketDataService_GetLatestPrice_FullMethodName       = "/xstockstrat.marketdata.v1.MarketDataService/GetLatestPrice"
-	MarketDataService_BackfillBars_FullMethodName         = "/xstockstrat.marketdata.v1.MarketDataService/BackfillBars"
-	MarketDataService_GetDataCoverage_FullMethodName      = "/xstockstrat.marketdata.v1.MarketDataService/GetDataCoverage"
-	MarketDataService_DeleteBackfilledData_FullMethodName = "/xstockstrat.marketdata.v1.MarketDataService/DeleteBackfilledData"
-	MarketDataService_ListAssets_FullMethodName           = "/xstockstrat.marketdata.v1.MarketDataService/ListAssets"
-	MarketDataService_GetFundamentals_FullMethodName      = "/xstockstrat.marketdata.v1.MarketDataService/GetFundamentals"
-	MarketDataService_GetFundamentalsMulti_FullMethodName = "/xstockstrat.marketdata.v1.MarketDataService/GetFundamentalsMulti"
-	MarketDataService_GetLatestQuotes_FullMethodName      = "/xstockstrat.marketdata.v1.MarketDataService/GetLatestQuotes"
-	MarketDataService_BatchGetBars_FullMethodName         = "/xstockstrat.marketdata.v1.MarketDataService/BatchGetBars"
-	MarketDataService_BatchGetLatestPrice_FullMethodName  = "/xstockstrat.marketdata.v1.MarketDataService/BatchGetLatestPrice"
+	MarketDataService_StreamBars_FullMethodName                = "/xstockstrat.marketdata.v1.MarketDataService/StreamBars"
+	MarketDataService_StreamQuotes_FullMethodName              = "/xstockstrat.marketdata.v1.MarketDataService/StreamQuotes"
+	MarketDataService_GetBars_FullMethodName                   = "/xstockstrat.marketdata.v1.MarketDataService/GetBars"
+	MarketDataService_GetLatestQuote_FullMethodName            = "/xstockstrat.marketdata.v1.MarketDataService/GetLatestQuote"
+	MarketDataService_GetLatestPrice_FullMethodName            = "/xstockstrat.marketdata.v1.MarketDataService/GetLatestPrice"
+	MarketDataService_BackfillBars_FullMethodName              = "/xstockstrat.marketdata.v1.MarketDataService/BackfillBars"
+	MarketDataService_GetDataCoverage_FullMethodName           = "/xstockstrat.marketdata.v1.MarketDataService/GetDataCoverage"
+	MarketDataService_DeleteBackfilledData_FullMethodName      = "/xstockstrat.marketdata.v1.MarketDataService/DeleteBackfilledData"
+	MarketDataService_ListAssets_FullMethodName                = "/xstockstrat.marketdata.v1.MarketDataService/ListAssets"
+	MarketDataService_GetFundamentals_FullMethodName           = "/xstockstrat.marketdata.v1.MarketDataService/GetFundamentals"
+	MarketDataService_GetFundamentalsMulti_FullMethodName      = "/xstockstrat.marketdata.v1.MarketDataService/GetFundamentalsMulti"
+	MarketDataService_GetLatestQuotes_FullMethodName           = "/xstockstrat.marketdata.v1.MarketDataService/GetLatestQuotes"
+	MarketDataService_BatchGetBars_FullMethodName              = "/xstockstrat.marketdata.v1.MarketDataService/BatchGetBars"
+	MarketDataService_BatchGetLatestPrice_FullMethodName       = "/xstockstrat.marketdata.v1.MarketDataService/BatchGetLatestPrice"
+	MarketDataService_GetHistoricalFundamentals_FullMethodName = "/xstockstrat.marketdata.v1.MarketDataService/GetHistoricalFundamentals"
+	MarketDataService_BackfillFundamentals_FullMethodName      = "/xstockstrat.marketdata.v1.MarketDataService/BackfillFundamentals"
 )
 
 // MarketDataServiceClient is the client API for MarketDataService service.
@@ -71,6 +73,12 @@ type MarketDataServiceClient interface {
 	BatchGetBars(ctx context.Context, in *BatchGetBarsRequest, opts ...grpc.CallOption) (*BatchGetBarsResponse, error)
 	// Batched latest price for multiple symbols in a single round-trip (feature 183).
 	BatchGetLatestPrice(ctx context.Context, in *BatchGetLatestPriceRequest, opts ...grpc.CallOption) (*BatchGetLatestPriceResponse, error)
+	// Point-in-time historical fundamentals read (feature 198): returns only periods whose
+	// filed_date < as_of_date (T+1 availability), for look-ahead-safe backtesting.
+	GetHistoricalFundamentals(ctx context.Context, in *GetHistoricalFundamentalsRequest, opts ...grpc.CallOption) (*GetHistoricalFundamentalsResponse, error)
+	// Worker RPC driven by ingest.TriggerBackfill(data_kind=FUNDAMENTALS) (feature 198): fetches
+	// as-reported statements from SEC EDGAR + a point-in-time price-join and persists them.
+	BackfillFundamentals(ctx context.Context, in *BackfillFundamentalsRequest, opts ...grpc.CallOption) (*BackfillFundamentalsResponse, error)
 }
 
 type marketDataServiceClient struct {
@@ -239,6 +247,26 @@ func (c *marketDataServiceClient) BatchGetLatestPrice(ctx context.Context, in *B
 	return out, nil
 }
 
+func (c *marketDataServiceClient) GetHistoricalFundamentals(ctx context.Context, in *GetHistoricalFundamentalsRequest, opts ...grpc.CallOption) (*GetHistoricalFundamentalsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetHistoricalFundamentalsResponse)
+	err := c.cc.Invoke(ctx, MarketDataService_GetHistoricalFundamentals_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *marketDataServiceClient) BackfillFundamentals(ctx context.Context, in *BackfillFundamentalsRequest, opts ...grpc.CallOption) (*BackfillFundamentalsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(BackfillFundamentalsResponse)
+	err := c.cc.Invoke(ctx, MarketDataService_BackfillFundamentals_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // MarketDataServiceServer is the server API for MarketDataService service.
 // All implementations should embed UnimplementedMarketDataServiceServer
 // for forward compatibility.
@@ -275,6 +303,12 @@ type MarketDataServiceServer interface {
 	BatchGetBars(context.Context, *BatchGetBarsRequest) (*BatchGetBarsResponse, error)
 	// Batched latest price for multiple symbols in a single round-trip (feature 183).
 	BatchGetLatestPrice(context.Context, *BatchGetLatestPriceRequest) (*BatchGetLatestPriceResponse, error)
+	// Point-in-time historical fundamentals read (feature 198): returns only periods whose
+	// filed_date < as_of_date (T+1 availability), for look-ahead-safe backtesting.
+	GetHistoricalFundamentals(context.Context, *GetHistoricalFundamentalsRequest) (*GetHistoricalFundamentalsResponse, error)
+	// Worker RPC driven by ingest.TriggerBackfill(data_kind=FUNDAMENTALS) (feature 198): fetches
+	// as-reported statements from SEC EDGAR + a point-in-time price-join and persists them.
+	BackfillFundamentals(context.Context, *BackfillFundamentalsRequest) (*BackfillFundamentalsResponse, error)
 }
 
 // UnimplementedMarketDataServiceServer should be embedded to have
@@ -325,6 +359,12 @@ func (UnimplementedMarketDataServiceServer) BatchGetBars(context.Context, *Batch
 }
 func (UnimplementedMarketDataServiceServer) BatchGetLatestPrice(context.Context, *BatchGetLatestPriceRequest) (*BatchGetLatestPriceResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method BatchGetLatestPrice not implemented")
+}
+func (UnimplementedMarketDataServiceServer) GetHistoricalFundamentals(context.Context, *GetHistoricalFundamentalsRequest) (*GetHistoricalFundamentalsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetHistoricalFundamentals not implemented")
+}
+func (UnimplementedMarketDataServiceServer) BackfillFundamentals(context.Context, *BackfillFundamentalsRequest) (*BackfillFundamentalsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method BackfillFundamentals not implemented")
 }
 func (UnimplementedMarketDataServiceServer) testEmbeddedByValue() {}
 
@@ -584,6 +624,42 @@ func _MarketDataService_BatchGetLatestPrice_Handler(srv interface{}, ctx context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MarketDataService_GetHistoricalFundamentals_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetHistoricalFundamentalsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MarketDataServiceServer).GetHistoricalFundamentals(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MarketDataService_GetHistoricalFundamentals_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MarketDataServiceServer).GetHistoricalFundamentals(ctx, req.(*GetHistoricalFundamentalsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MarketDataService_BackfillFundamentals_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(BackfillFundamentalsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MarketDataServiceServer).BackfillFundamentals(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MarketDataService_BackfillFundamentals_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MarketDataServiceServer).BackfillFundamentals(ctx, req.(*BackfillFundamentalsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // MarketDataService_ServiceDesc is the grpc.ServiceDesc for MarketDataService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -638,6 +714,14 @@ var MarketDataService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "BatchGetLatestPrice",
 			Handler:    _MarketDataService_BatchGetLatestPrice_Handler,
+		},
+		{
+			MethodName: "GetHistoricalFundamentals",
+			Handler:    _MarketDataService_GetHistoricalFundamentals_Handler,
+		},
+		{
+			MethodName: "BackfillFundamentals",
+			Handler:    _MarketDataService_BackfillFundamentals_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

@@ -89,12 +89,21 @@ already gone; record the warning as an Open Thread rather than proceeding silent
 
 ## PHASE 3 — SYNTHESIZE (read-only, delegated)
 
-Per selected feature, pre-scan the Ledger for dedup with a **literal fixed-string** grep on the full
-`NNN-slug` directory name. Never use a dash-bracketed pattern (`grep "— slug —"`) — the em-dash
-byte-mismatches and silently returns empty even when entries exist:
+Per selected feature, pre-scan the Ledger for dedup with a **literal fixed-string** grep. The ledger
+keys entries **inconsistently** — some as the full `NNN-slug` dir name
+(`190-opportunities-server-side-filters`), others as the bare slug with the number in parens
+(`fix-trading-config-key-mismatch (192)`). Grep **both** number-bearing forms in one `grep -Fn -e …
+-e …`; grepping only the dir name silently misses an entry written in the parens form and re-appends
+it (the near-double-write that hit 192). Both needles carry the number, so they never false-match
+another feature whose slug is a substring (e.g. `resume-halted-account` ⊂ `ui-resume-halted-account`)
+— never grep the bare slug alone for that reason. Never use a dash-bracketed pattern (`grep "— slug —"`)
+either — the em-dash byte-mismatches and silently returns empty even when entries exist:
 
 ```bash
-grep -Fn "$(basename "$FEATURE_DIR")" docs/roadmap/ledger/insights.md docs/roadmap/ledger/fails.md
+num=$(basename "$FEATURE_DIR" | grep -oE '^[0-9]+')
+slug=$(basename "$FEATURE_DIR" | sed 's/^[0-9][0-9][0-9]-//')
+grep -Fn -e "$(basename "$FEATURE_DIR")" -e "$slug ($num)" \
+  docs/roadmap/ledger/insights.md docs/roadmap/ledger/fails.md
 ```
 
 Sanity-check the hit count before trusting an empty result. Then spawn the **`feature-synthesizer`**
@@ -193,9 +202,13 @@ Read `reference/write-formats.md` for the exact blocks. On a `claude/archive-<sl
    (append-only, newest at bottom, one lesson per entry, `path:line`-cited). Skip every `[DUP:...]`.
 2. **context.md.** Read it first (C-02), then **rewrite** it to the archived form (header +
    `## Archive Synthesis` block) using `templates/archive-synthesis.md`.
-3. **feature.md.** Add `**Archived**: <TODAY>` to the header and append one `## Status History`
-   row. **Never touch `status.md`** — an archived `launched` feature's `status.md` still reads
-   `launched`; `**Archived**` is orthogonal to lifecycle status.
+3. **feature.md.** Add `**Archived**: <TODAY>` to the header, append one `## Status History` row,
+   **and reconcile the `## Artifacts` section** — every bullet that links a file this run is about to
+   prune (`product-spec.md`/`recon.md`/`design.md`/`implementation-spec.md`) becomes a
+   pruned-pointer line (see `reference/write-formats.md` § 3). Skipping this leaves a dead Markdown
+   link to a deleted file — the exact drift 86 prior archives silently accumulated before it was
+   swept repo-wide. **Never touch `status.md`** — an archived `launched` feature's `status.md` still
+   reads `launched`; `**Archived**` is orthogonal to lifecycle status.
 4. **Promote scenarios (from the Phase-4c plan).** Append each `NEW` scenario block verbatim to its
    target suite, creating a `services/xstockstrat-<svc>/acceptance/` dir + file header when the plan
    says `CREATE`. Skip `DUP`/`OVERLAP`/`CONFLICT`. Never rewrite or delete an existing promoted
@@ -253,8 +266,9 @@ reconciliation in the PR body (root CLAUDE.md § Teardown).
   in the suites — which Phase 4c does.)
 - **Any non-standard artifact requires the human's decision at the Phase-4b extras gate** before it
   is kept, relocated, or deleted. Only an explicit `Delete it` authorizes removing it.
-- **Dedup grep is literal fixed-string** on the full `NNN-slug` (`grep -Fn`), never a dash-bracketed
-  pattern.
+- **Dedup grep is literal fixed-string on BOTH number-bearing forms** — the full `NNN-slug` dir name
+  AND the bare `slug (NNN)` parens form (`grep -Fn -e … -e …`), because the ledger uses both. Never
+  the bare slug alone (substring false-match across features) and never a dash-bracketed pattern.
 - **Ledger is append-only**, one lesson per entry, `path:line`-cited; append `[NEW]` only; never
   rewrite, reorder, or dedup-by-deletion existing entries — `docs/roadmap/ledger/CLAUDE.md`.
 - **Never write `docs/context-constitution.md` or `-findings.md`.** Runtime invariants are emitted as

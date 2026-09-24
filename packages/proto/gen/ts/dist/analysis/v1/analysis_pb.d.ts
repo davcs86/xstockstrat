@@ -751,6 +751,14 @@ export type StrategyComponent = Message<"xstockstrat.analysis.v1.StrategyCompone
      * @generated from field: string source_symbol = 6;
      */
     sourceSymbol: string;
+    /**
+     * used when kind == COMPONENT_KIND_FUNDAMENTAL (feature 198): a point-in-time metric name from
+     * the _FUNDAMENTAL_FIELDS ∪ extra_metrics vocabulary (e.g. "pe_ratio", "eps"). Resolved as-of
+     * each bar via GetHistoricalFundamentals with filed_date < bar_date (T+1, no look-ahead).
+     *
+     * @generated from field: string fundamental_metric = 7;
+     */
+    fundamentalMetric: string;
 };
 /**
  * Describes the message xstockstrat.analysis.v1.StrategyComponent.
@@ -1374,6 +1382,25 @@ export type Opportunity = Message<"xstockstrat.analysis.v1.Opportunity"> & {
      * @generated from field: bool data_unavailable = 20;
      */
     dataUnavailable: boolean;
+    /**
+     * feature 199 — a single shrunk 0–1 ranking ordinal fusing readiness + directional signal
+     * (empirical-Bayes over the two axes present at compute; NULL/unset = nothing to fuse). Like
+     * conviction=3 it is NOT a probability and NEVER a cardinal sizing/alert/risk input — that is
+     * ExternalSignal.conviction (ingest.proto:110). Explicit-presence: unset = not-yet/nothing-to-fuse.
+     *
+     * @generated from field: optional double composite_score = 21;
+     */
+    compositeScore?: number | undefined;
+    /**
+     * feature 200 — symbol-level roll-up of the symbol's opportunities (Σ γ^i·(composite×strategy_weight),
+     * rank-decayed). A BOUNDED (< 2·max_composite, i.e. < 2.0 for γ<1) ordinal RANKING scalar on a
+     * non-[0,1] scale — like composite_score (ANALYSIS-13) it is NOT a probability/expected-return and
+     * NEVER a cardinal sizing/alert/risk input. Explicit-presence: unset = no score-eligible opportunity
+     * for the symbol. Symbol-uniform: every row of a symbol carries the same value.
+     *
+     * @generated from field: optional double symbol_score = 22;
+     */
+    symbolScore?: number | undefined;
 };
 /**
  * Describes the message xstockstrat.analysis.v1.Opportunity.
@@ -2333,7 +2360,13 @@ export declare enum ComponentKind {
     /**
      * @generated from enum value: COMPONENT_KIND_CUSTOM_FORMULA = 2;
      */
-    CUSTOM_FORMULA = 2
+    CUSTOM_FORMULA = 2,
+    /**
+     * feature 198: a point-in-time fundamental metric series
+     *
+     * @generated from enum value: COMPONENT_KIND_FUNDAMENTAL = 3;
+     */
+    FUNDAMENTAL = 3
 }
 /**
  * Describes the enum xstockstrat.analysis.v1.ComponentKind.
@@ -2526,7 +2559,13 @@ export declare enum OpportunitySort {
      *
      * @generated from enum value: OPPORTUNITY_SORT_EXPIRY = 2;
      */
-    EXPIRY = 2
+    EXPIRY = 2,
+    /**
+     * symbol roll-up: MAX(symbol_score) OVER PARTITION BY symbol, DESC NULLS LAST — feature 200
+     *
+     * @generated from enum value: OPPORTUNITY_SORT_SYMBOL_SCORE = 3;
+     */
+    SYMBOL_SCORE = 3
 }
 /**
  * Describes the enum xstockstrat.analysis.v1.OpportunitySort.

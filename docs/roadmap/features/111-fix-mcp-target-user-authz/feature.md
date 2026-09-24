@@ -27,10 +27,10 @@
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — bug description, fix scope, and Consumer Surface(s)
-- [Recon](recon.md) — codebase map and target-parameter inventory
-- [Design](design.md) — chosen approach, rejected alternatives, open risks
-- [Implementation Spec](implementation-spec.md) — 7/7 steps done
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Recon — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

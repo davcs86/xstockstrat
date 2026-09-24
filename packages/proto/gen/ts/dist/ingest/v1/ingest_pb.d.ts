@@ -75,6 +75,12 @@ export type BackfillJob = Message<"xstockstrat.ingest.v1.BackfillJob"> & {
      * @generated from field: int32 chunks_completed = 14;
      */
     chunksCompleted: number;
+    /**
+     * what the job backfills; UNSPECIFIED == BARS (feature 198)
+     *
+     * @generated from field: xstockstrat.ingest.v1.BackfillDataKind data_kind = 15;
+     */
+    dataKind: BackfillDataKind;
 };
 /**
  * Describes the message xstockstrat.ingest.v1.BackfillJob.
@@ -114,6 +120,12 @@ export type TriggerBackfillRequest = Message<"xstockstrat.ingest.v1.TriggerBackf
      * @generated from field: xstockstrat.ingest.v1.FillMode fill_mode = 6;
      */
     fillMode: FillMode;
+    /**
+     * feature 198; UNSPECIFIED == BARS. FUNDAMENTALS ignores timeframe.
+     *
+     * @generated from field: xstockstrat.ingest.v1.BackfillDataKind data_kind = 7;
+     */
+    dataKind: BackfillDataKind;
 };
 /**
  * Describes the message xstockstrat.ingest.v1.TriggerBackfillRequest.
@@ -626,6 +638,37 @@ export declare enum FillMode {
  * Describes the enum xstockstrat.ingest.v1.FillMode.
  */
 export declare const FillModeSchema: GenEnum<FillMode>;
+/**
+ * BackfillDataKind selects WHAT a backfill fetches (feature 198). Distinct from the timeframe
+ * axis: FUNDAMENTALS carries no bar timeframe (the servicer branches around the 1d-only reject).
+ * UNSPECIFIED == BARS for back-compat — every existing OHLCV caller omits the field.
+ *
+ * @generated from enum xstockstrat.ingest.v1.BackfillDataKind
+ */
+export declare enum BackfillDataKind {
+    /**
+     * treated as BARS by the servicer
+     *
+     * @generated from enum value: BACKFILL_DATA_KIND_UNSPECIFIED = 0;
+     */
+    UNSPECIFIED = 0,
+    /**
+     * OHLCV bars (marketdata.BackfillBars)
+     *
+     * @generated from enum value: BACKFILL_DATA_KIND_BARS = 1;
+     */
+    BARS = 1,
+    /**
+     * point-in-time fundamentals (marketdata.BackfillFundamentals)
+     *
+     * @generated from enum value: BACKFILL_DATA_KIND_FUNDAMENTALS = 2;
+     */
+    FUNDAMENTALS = 2
+}
+/**
+ * Describes the enum xstockstrat.ingest.v1.BackfillDataKind.
+ */
+export declare const BackfillDataKindSchema: GenEnum<BackfillDataKind>;
 /**
  * Health of a registered signal source (feature 083). Closed set → enum (C-04).
  *

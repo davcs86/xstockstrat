@@ -39,6 +39,22 @@ _THREAD_LIMIT_ENV = {
     "VECLIB_MAXIMUM_THREADS": "1",
 }
 
+
+def _sandbox_env() -> dict[str, str]:
+    """Minimal environment for the sandbox child process.
+
+    The child executes untrusted user formula source, so it MUST NOT inherit this service's
+    environment — DATABASE_URL, JWT_SECRET, CONFIG_SECRETS_ENCRYPTION_KEY,
+    BROKER_ACCOUNTS_ENCRYPTION_KEY and any other secret. Even if the in-process builtins sandbox
+    is escaped, there is nothing sensitive in this env to read. PYTHONPATH is preserved so the
+    child resolves the same modules; _THREAD_LIMIT_ENV pins BLAS/OMP threads before numpy import.
+    """
+    return {
+        "PYTHONPATH": os.environ.get("PYTHONPATH", ""),
+        **_THREAD_LIMIT_ENV,
+    }
+
+
 _SAFE_BUILTINS = {
     "abs",
     "all",
@@ -190,11 +206,7 @@ def execute_formula(
             capture_output=True,
             text=True,
             timeout=timeout_ms / 1000,
-            env={
-                **os.environ,
-                "PYTHONPATH": os.environ.get("PYTHONPATH", ""),
-                **_THREAD_LIMIT_ENV,
-            },
+            env=_sandbox_env(),
         )
         elapsed_ms = int((time.monotonic() - start) * 1000)
 

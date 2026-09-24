@@ -19,6 +19,7 @@ import (
 	marketdatav1 "github.com/xstockstrat/contracts/gen/go/marketdata/v1"
 	"github.com/xstockstrat/marketdata/internal/alpaca"
 	"github.com/xstockstrat/marketdata/internal/config"
+	"github.com/xstockstrat/marketdata/internal/edgar"
 	"github.com/xstockstrat/marketdata/internal/finnhub"
 	"github.com/xstockstrat/marketdata/internal/fmp"
 	"github.com/xstockstrat/marketdata/internal/handler"
@@ -123,7 +124,16 @@ func main() {
 	fundProvider := cfgWatcher.GetString("marketdata.fundamentals.provider", "finnhub")
 	fundamentalsSrc := newFundamentalsSource(cfgWatcher, fundProvider, cfg.FMPAPIKey, cfg.FinnhubAPIKey)
 
-	svc, err := service.NewMarketDataService(reg, repo, cfgWatcher, cfg.LedgerEndpoint, cfg.NotifyEndpoint, fundamentalsSrc, fundProvider)
+	// Historical point-in-time fundamentals source (feature 198): SEC EDGAR, keyless (non-secret
+	// User-Agent), held as its own service field and NEVER routed through newFundamentalsSource /
+	// the marketdata.fundamentals.provider selector (FR-2 / T-3; preserves the feature-154 FMP cap).
+	edgarClient := edgar.NewClient(
+		cfgWatcher.GetString("marketdata.edgar.base_url", "https://data.sec.gov"),
+		cfgWatcher.GetString("marketdata.edgar.user_agent", "xstockstrat/1.0 (ops@xstockstrat.local)"),
+		int(cfgWatcher.GetInt("marketdata.edgar.rate_limit_rps", 10)),
+	)
+
+	svc, err := service.NewMarketDataService(reg, repo, cfgWatcher, cfg.LedgerEndpoint, cfg.NotifyEndpoint, fundamentalsSrc, fundProvider, edgarClient)
 	if err != nil {
 		slog.Error("service init failed", "error", err)
 		os.Exit(1)

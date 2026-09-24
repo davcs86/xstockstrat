@@ -21,7 +21,7 @@ import asyncio
 import logging
 import time
 from bisect import bisect_right
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import NamedTuple
 
 from gen.analysis.v1 import analysis_pb2
@@ -35,10 +35,17 @@ from google.protobuf.struct_pb2 import Struct
 from google.protobuf.timestamp_pb2 import Timestamp
 from opentelemetry import metrics
 
-from app.handlers.servicer import _normalize_symbol, _row_to_strategy_definition
+from app.handlers.servicer import (
+    _definition_has_fundamental,
+    _definition_wants_fundamentals_formula,
+    _fundamental_periods_from_response,
+    _normalize_symbol,
+    _row_to_strategy_definition,
+)
 from app.repositories.strategies import LIVE_ENABLED_PREDICATE_SQL
 from app.services import warmup
 from app.services.cooldown import effective_cooldown_days, is_cooldown_active
+from app.services.evaluator import _FUNDAMENTAL_METRICS, FundamentalPeriod
 
 log = logging.getLogger(__name__)
 
@@ -81,7 +88,15 @@ class ResolvedUniverse(NamedTuple):
     denied: set  # normalized denied_symbols
 
 
-def resolve_universe(definition, watchlist, held, signals) -> "ResolvedUniverse":
+def resolve_universe(
+    definition,
+    watchlist,
+    held,
+    signals,
+    *,
+    blend_id: str = "",
+    fundamentals_universe=None,
+) -> "ResolvedUniverse":
     """Owner-scoped evaluation universe for a strategy, with the deny list applied (feature 132).
 
     Supersedes the feature-089 ``strategy_symbols`` allowlist-only contract. ``watchlist`` /
@@ -94,16 +109,75 @@ def resolve_universe(definition, watchlist, held, signals) -> "ResolvedUniverse"
     - ``universe`` (entry-eligible): ``(union − denied) ∪ (held ∩ denied)`` — a held+denied symbol
       is retained so its EXIT edge still traces (entry-only deny); caller suppresses only its entry.
     - ``deny_entry``: ``held ∩ denied`` — held+denied members whose entry edge is muted.
+
+    Feature 168 (blend force-run): when ``blend_id`` is set and this strategy IS it, the pre-deny
+    coverage is the platform-wide ``fundamentals_universe`` (fundamentals-source signals ∩ symbols
+    with fundamentals data) rather than watchlist/held/signals, so the blend evaluates on the
+    fundamentals universe "and nowhere else" on **every** caller (the live loop, the opportunity
+    queue, and the boot entry-backfill) — not only the loop. ``signal_eligible`` is inert for the
+    blend by construction. A held+denied symbol is still retained (exit-only). Callers pass these
+    kwargs only when the blend is active (kill-switch on AND that strategy live) with a non-empty
+    universe; otherwise the blend contributes nothing and the caller skips it (loop-pacing parity).
     """
     denied = {_normalize_symbol(s) for s in definition.denied_symbols}
-    allowlist = {_normalize_symbol(s) for s in strategy_symbols(definition)}
-    watchlist = {_normalize_symbol(s) for s in watchlist}
     held = {_normalize_symbol(s) for s in held}
-    signals = {_normalize_symbol(s) for s in signals}
-    union = allowlist or (watchlist | held | (signals if definition.signal_eligible else set()))
     deny_entry = held & denied
+    if blend_id and definition.strategy_id == blend_id:
+        # Pre-deny coverage = the fundamentals universe; deny_entry re-adds held+denied for exits.
+        union = {_normalize_symbol(s) for s in (fundamentals_universe or ())} | deny_entry
+    else:
+        allowlist = {_normalize_symbol(s) for s in strategy_symbols(definition)}
+        watchlist = {_normalize_symbol(s) for s in watchlist}
+        signals = {_normalize_symbol(s) for s in signals}
+        union = allowlist or (watchlist | held | (signals if definition.signal_eligible else set()))
     universe = (union - denied) | deny_entry
     return ResolvedUniverse(universe=universe, deny_entry=deny_entry, union=union, denied=denied)
+
+
+async def resolve_fundamentals_universe(ingest, marketdata, cfg) -> set:
+    """feature 168 — the platform-wide fundamentals universe shared by every caller of the blend
+    force-run: symbols with an active signal from the fundamentals source AND actual fundamentals
+    data (a ``GetFundamentalsMulti`` row). Fails **closed to empty** on any error (FR-6/AC-6) —
+    never a broad watchlist/held fallback. Platform-wide background reads carry no per-request
+    x-user-id (mirrors ``_drain_signals``). Extracted from the loop so the opportunity queue and the
+    entry-backfill resolve the identical set (the single seam that keeps the three callers aligned).
+    """
+    try:
+        if ingest is None or marketdata is None:
+            return set()
+        # The fundamentals source slug is config-driven, never hardcoded.
+        slug = cfg.get_str("analysis.fundsignal.source_slug", "fundamentals")
+        # Signals set S: active signals filtered to the fundamentals source, paginated.
+        now = Timestamp()
+        now.GetCurrentTime()
+        window = common_pb2.TimeRange(start=now, end=now)
+        signal_symbols: set = set()
+        page_token = ""
+        for _ in range(_DRAIN_PAGES):
+            resp = await ingest.QuerySignals(
+                ingest_pb2.QuerySignalsRequest(
+                    source=slug,
+                    active_window=window,
+                    page=common_pb2.PageRequest(page_size=_DRAIN_PAGE_SIZE, page_token=page_token),
+                ),
+            )
+            signal_symbols.update(_normalize_symbol(s.symbol) for s in resp.signals)
+            page_token = resp.page.next_page_token
+            if not page_token:
+                break
+        # Fundamentals set F: keep only symbols marketdata has a fundamentals row for.
+        fundamentals_symbols: set = set()
+        ordered = sorted(signal_symbols)
+        for i in range(0, len(ordered), _FUNDAMENTALS_CHUNK):
+            chunk = ordered[i : i + _FUNDAMENTALS_CHUNK]
+            resp = await marketdata.GetFundamentalsMulti(
+                marketdata_pb2.GetFundamentalsMultiRequest(symbols=chunk),
+            )
+            fundamentals_symbols.update(_normalize_symbol(f.symbol) for f in resp.fundamentals)
+        return signal_symbols & fundamentals_symbols
+    except Exception as e:  # fail-closed to empty; no broad fallback
+        log.warning("fundamentals-universe resolve failed: %s", e)
+        return set()
 
 
 def _apply_transition(
@@ -294,19 +368,24 @@ class LiveEvaluationLoop:
                 watch_cache[owner] = await self._drain_watchlist(owner)
             created_at = d.get("created_at")
             if definition.strategy_id == blend_id:
-                # Blend strategy — fundamentals-only execution (FR-1, FR-4)
+                # Blend strategy — fundamentals-only execution (FR-1, FR-4).
                 if not blend_active or not fundamentals_universe:
-                    continue  # skip entirely — never resolve_universe
-                denied = {_normalize_symbol(s) for s in definition.denied_symbols}
-                deny_entry = held_cache[owner] & denied
-                universe = (fundamentals_universe - denied) | deny_entry
+                    continue  # skip entirely — never evaluate off the fundamentals universe
+                resolved = resolve_universe(
+                    definition,
+                    watch_cache[owner],
+                    held_cache[owner],
+                    signal_symbols,
+                    blend_id=blend_id,
+                    fundamentals_universe=fundamentals_universe,
+                )
             else:
                 # Every other strategy uses ordinary owner-scoped resolution.
                 resolved = resolve_universe(
                     definition, watch_cache[owner], held_cache[owner], signal_symbols
                 )
-                universe = resolved.universe
-                deny_entry = resolved.deny_entry
+            universe = resolved.universe
+            deny_entry = resolved.deny_entry
             for symbol in sorted(universe):
                 records.append(
                     (
@@ -393,50 +472,10 @@ class LiveEvaluationLoop:
         return out
 
     async def _resolve_fundamentals_universe(self) -> set:
-        """feature 168 — the fundamentals universe for the blend force-run: symbols with an active
-        signal from the fundamentals source AND actual fundamentals data (a GetFundamentalsMulti
-        row).
-        Resolved once per cycle. Fails **closed to empty** on any error (FR-6/AC-6) — never a broad
-        watchlist/held fallback. Platform-wide background reads carry no per-request x-user-id
-        (mirrors _drain_signals)."""
-        try:
-            if self._ingest is None or self._marketdata is None:
-                return set()
-            # The fundamentals source slug is config-driven, never hardcoded.
-            slug = self._cfg.get_str("analysis.fundsignal.source_slug", "fundamentals")
-            # Signals set S: active signals filtered to the fundamentals source, paginated.
-            now = Timestamp()
-            now.GetCurrentTime()
-            window = common_pb2.TimeRange(start=now, end=now)
-            signal_symbols: set = set()
-            page_token = ""
-            for _ in range(_DRAIN_PAGES):
-                resp = await self._ingest.QuerySignals(
-                    ingest_pb2.QuerySignalsRequest(
-                        source=slug,
-                        active_window=window,
-                        page=common_pb2.PageRequest(
-                            page_size=_DRAIN_PAGE_SIZE, page_token=page_token
-                        ),
-                    ),
-                )
-                signal_symbols.update(_normalize_symbol(s.symbol) for s in resp.signals)
-                page_token = resp.page.next_page_token
-                if not page_token:
-                    break
-            # Fundamentals set F: keep only symbols marketdata has a fundamentals row for.
-            fundamentals_symbols: set = set()
-            ordered = sorted(signal_symbols)
-            for i in range(0, len(ordered), _FUNDAMENTALS_CHUNK):
-                chunk = ordered[i : i + _FUNDAMENTALS_CHUNK]
-                resp = await self._marketdata.GetFundamentalsMulti(
-                    marketdata_pb2.GetFundamentalsMultiRequest(symbols=chunk),
-                )
-                fundamentals_symbols.update(_normalize_symbol(f.symbol) for f in resp.fundamentals)
-            return signal_symbols & fundamentals_symbols
-        except Exception as e:  # fail-closed to empty; no broad fallback
-            log.warning("live_loop: fundamentals-universe resolve failed: %s", e)
-            return set()
+        """feature 168 — resolve the blend force-run's fundamentals universe once per cycle. Thin
+        wrapper over the shared ``resolve_fundamentals_universe`` so the loop, the opportunity
+        queue, and the entry-backfill resolve the identical set (feature-168 single-seam)."""
+        return await resolve_fundamentals_universe(self._ingest, self._marketdata, self._cfg)
 
     async def _drain_held(self, owner: str) -> set:
         """Owner's held symbols (normalized). Synthetic ``x-user-id`` metadata scopes ownership
@@ -545,6 +584,56 @@ class LiveEvaluationLoop:
                 out[sym] = bench_bars
         return out or None
 
+    async def _load_fundamentals(self, definition, symbol):
+        """Feature 198 — preload the evaluated symbol's point-in-time fundamentals for the live
+        path, mirroring the servicer backtest preload for backtest/live parity. Returns ``None``
+        when the definition references no fundamental operand (the common case), else the full
+        filing history (the evaluator applies the per-bar ``filed_date < bar_date`` T+1 gate — the
+        sole no-look-ahead authority, so the window is deliberately unclipped). A fetch failure
+        degrades to ``[]`` (every fundamental leaf reads hold), never crashing the loop.
+
+        Honors the ``analysis.backtest.fundamentals.enabled`` kill-switch (default OFF) so the live
+        path stays in parity with the servicer chokepoint — disabled ⇒ ``None`` (operand → hold)."""
+        if not _definition_has_fundamental(definition):
+            return None
+        if not self._cfg.get_bool("analysis.backtest.fundamentals.enabled", False):
+            return None
+        try:
+            resp = await self._marketdata.GetHistoricalFundamentals(
+                marketdata_pb2.GetHistoricalFundamentalsRequest(symbol=symbol)
+            )
+        except Exception as e:  # noqa: BLE001 — a fundamentals fetch must never crash the loop
+            log.warning("live_loop: GetHistoricalFundamentals(%s) failed: %s", symbol, e)
+            return []
+        return _fundamental_periods_from_response(resp)
+
+    async def _load_fundamentals_snapshot(self, definition, symbol, formula_fund_map):
+        """Feature 200 — snapshot fundamentals for a fundamentals-only formula on the LIVE surface:
+        the current ``GetFundamentalsMulti`` row lowered into a one-element ``[FundamentalPeriod]``
+        with a ``filed_date`` sentinel strictly before every bar, so the evaluator broadcasts it as
+        one degenerate epoch (one code shape, PIT + snapshot — servicer parity). A SEPARATE
+        channel from the 198 PIT ``_load_fundamentals`` above (C-16 PRESERVE). ``None`` when a
+        definition has no fundamentals-formula operand or the kill-switch is off; degrades to ``[]``
+        (formula holds) on any fetch error — never crashes the loop."""
+        if not _definition_wants_fundamentals_formula(definition, formula_fund_map):
+            return None
+        if not self._cfg.get_bool("analysis.backtest.fundamentals.enabled", False):
+            return None
+        try:
+            resp = await self._marketdata.GetFundamentalsMulti(
+                marketdata_pb2.GetFundamentalsMultiRequest(symbols=[symbol])
+            )
+        except Exception as e:  # noqa: BLE001 — a fundamentals fetch must never crash the loop
+            log.warning("live_loop: GetFundamentalsMulti(%s) snapshot failed: %s", symbol, e)
+            return []
+        row = next((f for f in resp.fundamentals if f.symbol == symbol), None)
+        if row is None:
+            return []
+        missing = set(row.missing_metrics)
+        values = {m: (None if m in missing else getattr(row, m)) for m in _FUNDAMENTAL_METRICS}
+        # date.min < every real bar date → visible on every bar (T+1 holds trivially).
+        return [FundamentalPeriod(filed_date=date.min, values=values)]
+
     async def _eval_pair(self, definition, symbol, throttle, deny_entry=False):
         bars_resp = await self._marketdata.GetBars(
             marketdata_pb2.GetBarsRequest(
@@ -563,10 +652,16 @@ class LiveEvaluationLoop:
         # Preload benchmark (source_symbol) bars for backtest/live parity; the call shape is
         # unchanged when no component sets a source_symbol (the common case).
         benchmark_bars = await self._load_benchmark_bars(definition)
-        if benchmark_bars:
-            decisions = await self._evaluator.evaluate(definition, bars, None, benchmark_bars)
-        else:
-            decisions = await self._evaluator.evaluate(definition, bars, None)
+        # Preload point-in-time fundamentals (feature 198) for backtest/live parity — None unless a
+        # COMPONENT_KIND_FUNDAMENTAL operand is present; the evaluator applies the per-bar T+1 gate.
+        fundamentals = await self._load_fundamentals(definition, symbol)
+        # Feature 200 — fundamentals-only formula routing map + snapshot on a SEPARATE channel from
+        # the 198 PIT `fundamentals` above (C-16 PRESERVE); both None in the common case.
+        formula_fund_map = await self._evaluator.declared_formula_fundamentals(definition)
+        fund_snap = await self._load_fundamentals_snapshot(definition, symbol, formula_fund_map)
+        decisions = await self._evaluator.evaluate(
+            definition, bars, None, benchmark_bars, fundamentals, formula_fund_map, fund_snap
+        )
         if not decisions:
             return
 

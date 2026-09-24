@@ -5,13 +5,16 @@
 //   protoc               unknown
 // source: indicators/v1/indicators.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.IndicatorsServiceClient = exports.IndicatorsServiceService = exports.DeleteFormulaResponse = exports.DeleteFormulaRequest = exports.UpdateFormulaResponse = exports.UpdateFormulaRequest = exports.ListFormulasResponse = exports.ListFormulasRequest = exports.GetFormulaRequest = exports.RegisterFormulaResponse = exports.RegisterFormulaRequest_InputSchemaEntry = exports.RegisterFormulaRequest = exports.IndicatorMeta = exports.ListIndicatorsResponse = exports.ListIndicatorsRequest = exports.FormulaDefinition_InputSchemaEntry = exports.FormulaDefinition = exports.ParameterValidationError = exports.FormulaOutput = exports.FormulaParameter = exports.ExecuteFormulaResponse = exports.ExecuteFormulaRequest_EnvEntry = exports.ExecuteFormulaRequest = exports.IndicatorPoint_ExtraEntry = exports.IndicatorPoint = exports.ComputeIndicatorResponse_ParamsUsedEntry = exports.ComputeIndicatorResponse = exports.ComputeIndicatorRequest_ParamsEntry = exports.ComputeIndicatorRequest = exports.ParameterType = exports.SandboxExitReason = exports.protobufPackage = void 0;
+exports.IndicatorsServiceClient = exports.IndicatorsServiceService = exports.DeleteFormulaResponse = exports.DeleteFormulaRequest = exports.UpdateFormulaResponse = exports.UpdateFormulaRequest = exports.ListFormulasResponse = exports.ListFormulasRequest = exports.GetFormulaRequest = exports.RegisterFormulaResponse = exports.RegisterFormulaRequest_InputSchemaEntry = exports.RegisterFormulaRequest = exports.IndicatorMeta = exports.ListIndicatorsResponse = exports.ListIndicatorsRequest = exports.FormulaDefinition_InputSchemaEntry = exports.FormulaDefinition = exports.ParameterValidationError = exports.FormulaOutput = exports.FormulaParameter = exports.ExecuteFormulaResponse = exports.ExecuteFormulaRequest_EnvEntry = exports.ExecuteFormulaRequest = exports.IndicatorPoint_ExtraEntry = exports.IndicatorPoint = exports.ComputeIndicatorResponse_ParamsUsedEntry = exports.ComputeIndicatorResponse = exports.ComputeIndicatorRequest_ParamsEntry = exports.ComputeIndicatorRequest = exports.FundamentalMetric = exports.ParameterType = exports.SandboxExitReason = exports.protobufPackage = void 0;
 exports.sandboxExitReasonFromJSON = sandboxExitReasonFromJSON;
 exports.sandboxExitReasonToJSON = sandboxExitReasonToJSON;
 exports.sandboxExitReasonToNumber = sandboxExitReasonToNumber;
 exports.parameterTypeFromJSON = parameterTypeFromJSON;
 exports.parameterTypeToJSON = parameterTypeToJSON;
 exports.parameterTypeToNumber = parameterTypeToNumber;
+exports.fundamentalMetricFromJSON = fundamentalMetricFromJSON;
+exports.fundamentalMetricToJSON = fundamentalMetricToJSON;
+exports.fundamentalMetricToNumber = fundamentalMetricToNumber;
 /* eslint-disable */
 const wire_1 = require("@bufbuild/protobuf/wire");
 const grpc_js_1 = require("@grpc/grpc-js");
@@ -156,6 +159,134 @@ function parameterTypeToNumber(object) {
         case ParameterType.PARAMETER_TYPE_STRING:
             return 4;
         case ParameterType.UNRECOGNIZED:
+        default:
+            return -1;
+    }
+}
+/**
+ * Closed set of the canonical fundamentals metrics a formula may declare as inputs (feature 200).
+ * A non-empty FormulaDefinition.fundamental_inputs marks a formula as "fundamentals-only": the
+ * analysis evaluator feeds it only these metrics (never OHLCV closes) and broadcasts its scalar
+ * output. Names mirror marketdata.Fundamentals fields; the zero sentinel is invalid on write (C-04).
+ */
+var FundamentalMetric;
+(function (FundamentalMetric) {
+    FundamentalMetric["FUNDAMENTAL_METRIC_UNSPECIFIED"] = "FUNDAMENTAL_METRIC_UNSPECIFIED";
+    FundamentalMetric["FUNDAMENTAL_METRIC_MARKET_CAP"] = "FUNDAMENTAL_METRIC_MARKET_CAP";
+    FundamentalMetric["FUNDAMENTAL_METRIC_PE_RATIO"] = "FUNDAMENTAL_METRIC_PE_RATIO";
+    FundamentalMetric["FUNDAMENTAL_METRIC_PB_RATIO"] = "FUNDAMENTAL_METRIC_PB_RATIO";
+    FundamentalMetric["FUNDAMENTAL_METRIC_DIVIDEND_YIELD"] = "FUNDAMENTAL_METRIC_DIVIDEND_YIELD";
+    FundamentalMetric["FUNDAMENTAL_METRIC_EPS"] = "FUNDAMENTAL_METRIC_EPS";
+    FundamentalMetric["FUNDAMENTAL_METRIC_BETA"] = "FUNDAMENTAL_METRIC_BETA";
+    FundamentalMetric["FUNDAMENTAL_METRIC_ROE"] = "FUNDAMENTAL_METRIC_ROE";
+    FundamentalMetric["FUNDAMENTAL_METRIC_DEBT_TO_EQUITY"] = "FUNDAMENTAL_METRIC_DEBT_TO_EQUITY";
+    FundamentalMetric["FUNDAMENTAL_METRIC_PRICE"] = "FUNDAMENTAL_METRIC_PRICE";
+    FundamentalMetric["FUNDAMENTAL_METRIC_YEAR_HIGH"] = "FUNDAMENTAL_METRIC_YEAR_HIGH";
+    FundamentalMetric["FUNDAMENTAL_METRIC_YEAR_LOW"] = "FUNDAMENTAL_METRIC_YEAR_LOW";
+    FundamentalMetric["UNRECOGNIZED"] = "UNRECOGNIZED";
+})(FundamentalMetric || (exports.FundamentalMetric = FundamentalMetric = {}));
+function fundamentalMetricFromJSON(object) {
+    switch (object) {
+        case 0:
+        case "FUNDAMENTAL_METRIC_UNSPECIFIED":
+            return FundamentalMetric.FUNDAMENTAL_METRIC_UNSPECIFIED;
+        case 1:
+        case "FUNDAMENTAL_METRIC_MARKET_CAP":
+            return FundamentalMetric.FUNDAMENTAL_METRIC_MARKET_CAP;
+        case 2:
+        case "FUNDAMENTAL_METRIC_PE_RATIO":
+            return FundamentalMetric.FUNDAMENTAL_METRIC_PE_RATIO;
+        case 3:
+        case "FUNDAMENTAL_METRIC_PB_RATIO":
+            return FundamentalMetric.FUNDAMENTAL_METRIC_PB_RATIO;
+        case 4:
+        case "FUNDAMENTAL_METRIC_DIVIDEND_YIELD":
+            return FundamentalMetric.FUNDAMENTAL_METRIC_DIVIDEND_YIELD;
+        case 5:
+        case "FUNDAMENTAL_METRIC_EPS":
+            return FundamentalMetric.FUNDAMENTAL_METRIC_EPS;
+        case 6:
+        case "FUNDAMENTAL_METRIC_BETA":
+            return FundamentalMetric.FUNDAMENTAL_METRIC_BETA;
+        case 7:
+        case "FUNDAMENTAL_METRIC_ROE":
+            return FundamentalMetric.FUNDAMENTAL_METRIC_ROE;
+        case 8:
+        case "FUNDAMENTAL_METRIC_DEBT_TO_EQUITY":
+            return FundamentalMetric.FUNDAMENTAL_METRIC_DEBT_TO_EQUITY;
+        case 9:
+        case "FUNDAMENTAL_METRIC_PRICE":
+            return FundamentalMetric.FUNDAMENTAL_METRIC_PRICE;
+        case 10:
+        case "FUNDAMENTAL_METRIC_YEAR_HIGH":
+            return FundamentalMetric.FUNDAMENTAL_METRIC_YEAR_HIGH;
+        case 11:
+        case "FUNDAMENTAL_METRIC_YEAR_LOW":
+            return FundamentalMetric.FUNDAMENTAL_METRIC_YEAR_LOW;
+        case -1:
+        case "UNRECOGNIZED":
+        default:
+            return FundamentalMetric.UNRECOGNIZED;
+    }
+}
+function fundamentalMetricToJSON(object) {
+    switch (object) {
+        case FundamentalMetric.FUNDAMENTAL_METRIC_UNSPECIFIED:
+            return "FUNDAMENTAL_METRIC_UNSPECIFIED";
+        case FundamentalMetric.FUNDAMENTAL_METRIC_MARKET_CAP:
+            return "FUNDAMENTAL_METRIC_MARKET_CAP";
+        case FundamentalMetric.FUNDAMENTAL_METRIC_PE_RATIO:
+            return "FUNDAMENTAL_METRIC_PE_RATIO";
+        case FundamentalMetric.FUNDAMENTAL_METRIC_PB_RATIO:
+            return "FUNDAMENTAL_METRIC_PB_RATIO";
+        case FundamentalMetric.FUNDAMENTAL_METRIC_DIVIDEND_YIELD:
+            return "FUNDAMENTAL_METRIC_DIVIDEND_YIELD";
+        case FundamentalMetric.FUNDAMENTAL_METRIC_EPS:
+            return "FUNDAMENTAL_METRIC_EPS";
+        case FundamentalMetric.FUNDAMENTAL_METRIC_BETA:
+            return "FUNDAMENTAL_METRIC_BETA";
+        case FundamentalMetric.FUNDAMENTAL_METRIC_ROE:
+            return "FUNDAMENTAL_METRIC_ROE";
+        case FundamentalMetric.FUNDAMENTAL_METRIC_DEBT_TO_EQUITY:
+            return "FUNDAMENTAL_METRIC_DEBT_TO_EQUITY";
+        case FundamentalMetric.FUNDAMENTAL_METRIC_PRICE:
+            return "FUNDAMENTAL_METRIC_PRICE";
+        case FundamentalMetric.FUNDAMENTAL_METRIC_YEAR_HIGH:
+            return "FUNDAMENTAL_METRIC_YEAR_HIGH";
+        case FundamentalMetric.FUNDAMENTAL_METRIC_YEAR_LOW:
+            return "FUNDAMENTAL_METRIC_YEAR_LOW";
+        case FundamentalMetric.UNRECOGNIZED:
+        default:
+            return "UNRECOGNIZED";
+    }
+}
+function fundamentalMetricToNumber(object) {
+    switch (object) {
+        case FundamentalMetric.FUNDAMENTAL_METRIC_UNSPECIFIED:
+            return 0;
+        case FundamentalMetric.FUNDAMENTAL_METRIC_MARKET_CAP:
+            return 1;
+        case FundamentalMetric.FUNDAMENTAL_METRIC_PE_RATIO:
+            return 2;
+        case FundamentalMetric.FUNDAMENTAL_METRIC_PB_RATIO:
+            return 3;
+        case FundamentalMetric.FUNDAMENTAL_METRIC_DIVIDEND_YIELD:
+            return 4;
+        case FundamentalMetric.FUNDAMENTAL_METRIC_EPS:
+            return 5;
+        case FundamentalMetric.FUNDAMENTAL_METRIC_BETA:
+            return 6;
+        case FundamentalMetric.FUNDAMENTAL_METRIC_ROE:
+            return 7;
+        case FundamentalMetric.FUNDAMENTAL_METRIC_DEBT_TO_EQUITY:
+            return 8;
+        case FundamentalMetric.FUNDAMENTAL_METRIC_PRICE:
+            return 9;
+        case FundamentalMetric.FUNDAMENTAL_METRIC_YEAR_HIGH:
+            return 10;
+        case FundamentalMetric.FUNDAMENTAL_METRIC_YEAR_LOW:
+            return 11;
+        case FundamentalMetric.UNRECOGNIZED:
         default:
             return -1;
     }
@@ -1516,6 +1647,7 @@ function createBaseFormulaDefinition() {
         outputs: [],
         warmupPeriod: 0,
         deleted: false,
+        fundamentalInputs: [],
     };
 }
 exports.FormulaDefinition = {
@@ -1559,6 +1691,11 @@ exports.FormulaDefinition = {
         if (message.deleted !== false) {
             writer.uint32(104).bool(message.deleted);
         }
+        writer.uint32(114).fork();
+        for (const v of message.fundamentalInputs) {
+            writer.int32(fundamentalMetricToNumber(v));
+        }
+        writer.join();
         return writer;
     },
     decode(input, length) {
@@ -1662,6 +1799,20 @@ exports.FormulaDefinition = {
                     message.deleted = reader.bool();
                     continue;
                 }
+                case 14: {
+                    if (tag === 112) {
+                        message.fundamentalInputs.push(fundamentalMetricFromJSON(reader.int32()));
+                        continue;
+                    }
+                    if (tag === 114) {
+                        const end2 = reader.uint32() + reader.pos;
+                        while (reader.pos < end2) {
+                            message.fundamentalInputs.push(fundamentalMetricFromJSON(reader.int32()));
+                        }
+                        continue;
+                    }
+                    break;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -1719,6 +1870,11 @@ exports.FormulaDefinition = {
                     ? globalThis.Number(object.warmup_period)
                     : 0,
             deleted: isSet(object.deleted) ? globalThis.Boolean(object.deleted) : false,
+            fundamentalInputs: globalThis.Array.isArray(object?.fundamentalInputs)
+                ? object.fundamentalInputs.map((e) => fundamentalMetricFromJSON(e))
+                : globalThis.Array.isArray(object?.fundamental_inputs)
+                    ? object.fundamental_inputs.map((e) => fundamentalMetricFromJSON(e))
+                    : [],
         };
     },
     toJSON(message) {
@@ -1768,6 +1924,9 @@ exports.FormulaDefinition = {
         if (message.deleted !== false) {
             obj.deleted = message.deleted;
         }
+        if (message.fundamentalInputs?.length) {
+            obj.fundamentalInputs = message.fundamentalInputs.map((e) => fundamentalMetricToJSON(e));
+        }
         return obj;
     },
     create(base) {
@@ -1793,6 +1952,7 @@ exports.FormulaDefinition = {
         message.outputs = object.outputs?.map((e) => exports.FormulaOutput.fromPartial(e)) || [];
         message.warmupPeriod = object.warmupPeriod ?? 0;
         message.deleted = object.deleted ?? false;
+        message.fundamentalInputs = object.fundamentalInputs?.map((e) => e) || [];
         return message;
     },
 };
@@ -2073,6 +2233,7 @@ function createBaseRegisterFormulaRequest() {
         parameters: [],
         outputs: [],
         warmupPeriod: 0,
+        fundamentalInputs: [],
     };
 }
 exports.RegisterFormulaRequest = {
@@ -2104,6 +2265,11 @@ exports.RegisterFormulaRequest = {
         if (message.warmupPeriod !== 0) {
             writer.uint32(72).int32(message.warmupPeriod);
         }
+        writer.uint32(82).fork();
+        for (const v of message.fundamentalInputs) {
+            writer.int32(fundamentalMetricToNumber(v));
+        }
+        writer.join();
         return writer;
     },
     decode(input, length) {
@@ -2179,6 +2345,20 @@ exports.RegisterFormulaRequest = {
                     message.warmupPeriod = reader.int32();
                     continue;
                 }
+                case 10: {
+                    if (tag === 80) {
+                        message.fundamentalInputs.push(fundamentalMetricFromJSON(reader.int32()));
+                        continue;
+                    }
+                    if (tag === 82) {
+                        const end2 = reader.uint32() + reader.pos;
+                        while (reader.pos < end2) {
+                            message.fundamentalInputs.push(fundamentalMetricFromJSON(reader.int32()));
+                        }
+                        continue;
+                    }
+                    break;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -2220,6 +2400,11 @@ exports.RegisterFormulaRequest = {
                 : isSet(object.warmup_period)
                     ? globalThis.Number(object.warmup_period)
                     : 0,
+            fundamentalInputs: globalThis.Array.isArray(object?.fundamentalInputs)
+                ? object.fundamentalInputs.map((e) => fundamentalMetricFromJSON(e))
+                : globalThis.Array.isArray(object?.fundamental_inputs)
+                    ? object.fundamental_inputs.map((e) => fundamentalMetricFromJSON(e))
+                    : [],
         };
     },
     toJSON(message) {
@@ -2257,6 +2442,9 @@ exports.RegisterFormulaRequest = {
         if (message.warmupPeriod !== 0) {
             obj.warmupPeriod = Math.round(message.warmupPeriod);
         }
+        if (message.fundamentalInputs?.length) {
+            obj.fundamentalInputs = message.fundamentalInputs.map((e) => fundamentalMetricToJSON(e));
+        }
         return obj;
     },
     create(base) {
@@ -2278,6 +2466,7 @@ exports.RegisterFormulaRequest = {
         message.parameters = object.parameters?.map((e) => exports.FormulaParameter.fromPartial(e)) || [];
         message.outputs = object.outputs?.map((e) => exports.FormulaOutput.fromPartial(e)) || [];
         message.warmupPeriod = object.warmupPeriod ?? 0;
+        message.fundamentalInputs = object.fundamentalInputs?.map((e) => e) || [];
         return message;
     },
 };
@@ -2663,6 +2852,7 @@ function createBaseUpdateFormulaRequest() {
         outputs: [],
         warmupPeriod: 0,
         updateMask: undefined,
+        fundamentalInputs: [],
     };
 }
 exports.UpdateFormulaRequest = {
@@ -2697,6 +2887,11 @@ exports.UpdateFormulaRequest = {
         if (message.updateMask !== undefined) {
             field_mask_1.FieldMask.encode(field_mask_1.FieldMask.wrap(message.updateMask), writer.uint32(82).fork()).join();
         }
+        writer.uint32(90).fork();
+        for (const v of message.fundamentalInputs) {
+            writer.int32(fundamentalMetricToNumber(v));
+        }
+        writer.join();
         return writer;
     },
     decode(input, length) {
@@ -2776,6 +2971,20 @@ exports.UpdateFormulaRequest = {
                     message.updateMask = field_mask_1.FieldMask.unwrap(field_mask_1.FieldMask.decode(reader, reader.uint32()));
                     continue;
                 }
+                case 11: {
+                    if (tag === 88) {
+                        message.fundamentalInputs.push(fundamentalMetricFromJSON(reader.int32()));
+                        continue;
+                    }
+                    if (tag === 90) {
+                        const end2 = reader.uint32() + reader.pos;
+                        while (reader.pos < end2) {
+                            message.fundamentalInputs.push(fundamentalMetricFromJSON(reader.int32()));
+                        }
+                        continue;
+                    }
+                    break;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -2820,6 +3029,11 @@ exports.UpdateFormulaRequest = {
                 : isSet(object.update_mask)
                     ? field_mask_1.FieldMask.unwrap(field_mask_1.FieldMask.fromJSON(object.update_mask))
                     : undefined,
+            fundamentalInputs: globalThis.Array.isArray(object?.fundamentalInputs)
+                ? object.fundamentalInputs.map((e) => fundamentalMetricFromJSON(e))
+                : globalThis.Array.isArray(object?.fundamental_inputs)
+                    ? object.fundamental_inputs.map((e) => fundamentalMetricFromJSON(e))
+                    : [],
         };
     },
     toJSON(message) {
@@ -2854,6 +3068,9 @@ exports.UpdateFormulaRequest = {
         if (message.updateMask !== undefined) {
             obj.updateMask = field_mask_1.FieldMask.toJSON(field_mask_1.FieldMask.wrap(message.updateMask));
         }
+        if (message.fundamentalInputs?.length) {
+            obj.fundamentalInputs = message.fundamentalInputs.map((e) => fundamentalMetricToJSON(e));
+        }
         return obj;
     },
     create(base) {
@@ -2871,6 +3088,7 @@ exports.UpdateFormulaRequest = {
         message.outputs = object.outputs?.map((e) => exports.FormulaOutput.fromPartial(e)) || [];
         message.warmupPeriod = object.warmupPeriod ?? 0;
         message.updateMask = object.updateMask ?? undefined;
+        message.fundamentalInputs = object.fundamentalInputs?.map((e) => e) || [];
         return message;
     },
 };

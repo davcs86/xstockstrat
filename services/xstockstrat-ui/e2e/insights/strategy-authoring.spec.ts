@@ -321,6 +321,51 @@ test.describe('Strategy authoring — UI', () => {
     expect(body.updateMask).toBeUndefined(); // wizard is a full replace, not a masked update
   });
 
+  test('feature 198: wizard builds a fundamental operand (eps) and submits it (AC-8)', async ({
+    page,
+  }) => {
+    await addAdminCookie(page);
+    await stubListFormulas(page);
+    const getCaptured = await captureManageStrategy(page);
+    await page.goto('/insights/strategies/new');
+
+    await expect(page.getByText('Step 1 — Identity')).toBeVisible({ timeout: 10000 });
+    const next = page.getByRole('button', { name: 'Next', exact: true });
+    await page.getByPlaceholder('e.g. sma_crossover').fill('fund_test');
+    await next.click(); // → display name
+    await page.getByPlaceholder('SMA Crossover').fill('Fundamental Test');
+    await next.click(); // → cooldown
+    await next.click(); // → exit cooldown
+    await next.click(); // → Step 2 Components
+
+    await page.getByRole('button', { name: 'Add component' }).click();
+    await page.getByLabel('ref name').fill('pe');
+    // Switch the component kind to Fundamental, then pick the eps metric (feature 198).
+    await page.getByRole('combobox', { name: 'component kind' }).click();
+    await page.getByRole('option', { name: 'Fundamental metric' }).click();
+    await page.getByRole('combobox', { name: 'fundamental metric' }).click();
+    await page.getByRole('option', { name: /eps — EPS/ }).click();
+
+    await next.click(); // → Step 3 Rules
+    const jsonButtons = page.getByRole('tab', { name: 'JSON' });
+    await jsonButtons.nth(0).click();
+    await page.getByLabel('Entry rule JSON').fill('{"op":"and","conditions":[]}');
+    await jsonButtons.nth(1).click();
+    await page.getByLabel('Exit rule JSON').fill('{"op":"or","conditions":[]}');
+    await next.click(); // → Step 4 Review
+    await page.getByRole('button', { name: 'Create Strategy' }).click();
+
+    await expect.poll(() => getCaptured()).not.toBeNull();
+    const body = getCaptured() as {
+      definition?: {
+        components?: Array<{ kind?: string; refName?: string; fundamentalMetric?: string }>;
+      };
+    };
+    const comp = body.definition?.components?.find((c) => c.refName === 'pe');
+    expect(comp?.kind).toBe('COMPONENT_KIND_FUNDAMENTAL');
+    expect(comp?.fundamentalMetric).toBe('eps');
+  });
+
   test('server validation error shows inline with a Go to Step link (AC-13)', async ({ page }) => {
     await addAdminCookie(page);
     await stubListFormulas(page);
@@ -390,6 +435,39 @@ test.describe('Strategy authoring — UI', () => {
     await page.getByLabel('formula', { exact: true }).fill('RSI');
     await expect(page.getByText('RSI Divergence')).toBeVisible();
     await expect(page.getByText('MACD Cross')).toHaveCount(0);
+  });
+
+  test('fundamentals-input formula shows the read-only hint; an ordinary formula does not (feature 200)', async ({
+    page,
+  }) => {
+    await addAdminCookie(page);
+    await stubListFormulas(page);
+    await page.goto('/insights/strategies/new');
+
+    await expect(page.getByText('Step 1 — Identity')).toBeVisible({ timeout: 10000 });
+    const next = page.getByRole('button', { name: 'Next', exact: true });
+    await page.getByPlaceholder('e.g. sma_crossover').fill('with_fundamentals');
+    await next.click(); // → display name
+    await page.getByPlaceholder('SMA Crossover').fill('With Fundamentals');
+    await next.click(); // → cooldown
+    await next.click(); // → exit cooldown
+    await next.click(); // → Step 2 Components
+
+    await page.getByRole('button', { name: 'Add component' }).click();
+    await page.getByLabel('component kind').click();
+    await page.getByRole('option', { name: 'Custom formula' }).click();
+
+    const hint = page.getByText(/Fundamentals input —/);
+
+    // Pick the fundamentals-declaring formula → the read-only hint appears.
+    await page.getByLabel('formula', { exact: true }).click();
+    await page.getByText('Value Quality').click();
+    await expect(hint).toBeVisible();
+
+    // Switch to an ordinary (RSI) formula → no hint (fundamentalInputs empty).
+    await page.getByLabel('formula', { exact: true }).click();
+    await page.getByText('RSI Divergence').click();
+    await expect(hint).toHaveCount(0);
   });
 });
 

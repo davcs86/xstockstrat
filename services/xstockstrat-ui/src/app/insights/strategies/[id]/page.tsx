@@ -27,6 +27,7 @@ import {
   EquityCurveChart,
   PortfolioEquityCurveChart,
 } from '@/components/insights/EquityCurveChart';
+import { RuleSummary } from '@/components/insights/RuleSummary';
 import { PageBreadcrumb } from '@/components/shared/PageBreadcrumb';
 
 // Cap the backtest range to 2 calendar years (matches the analysis service cap).
@@ -380,6 +381,48 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
                       </div>
                     ))}
                   </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Read-only definition — what the strategy does (components + entry/exit rules).
+                Visible to all readers; the data is already fetched by useGetStrategy. */}
+            {definition && (
+              <Card data-testid="strategy-definition">
+                <CardHeader>
+                  <CardTitle>Definition</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3 text-sm">
+                  <div>
+                    <span className="text-muted-foreground">Components:</span>{' '}
+                    {definition.components.length}
+                    <ul className="ml-4 mt-1 list-disc text-xs text-muted-foreground">
+                      {definition.components.map((c, i) => {
+                        const params = Object.entries(c.params ?? {})
+                          .map(([k, v]) => `${k}=${v}`)
+                          .join(', ');
+                        return (
+                          <li key={i}>
+                            <span className="text-foreground">{c.refName || '(unnamed)'}</span> —{' '}
+                            {c.formulaId || c.indicator || '(none)'}
+                            {params && ` (${params})`}
+                            {c.sourceSymbol && ` on ${c.sourceSymbol}`}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                  <RuleSummary label="Entry rule" value={definition.entryRule} />
+                  <RuleSummary label="Exit rule" value={definition.exitRule} />
+                  <div className="text-xs text-muted-foreground">
+                    Re-entry cooldown: {definition.cooldownDays}d · Min hold:{' '}
+                    {definition.exitCooldownDays}d
+                  </div>
+                  {definition.deniedSymbols.length > 0 && (
+                    <div className="text-xs text-muted-foreground">
+                      Denied: {definition.deniedSymbols.join(', ')}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             )}

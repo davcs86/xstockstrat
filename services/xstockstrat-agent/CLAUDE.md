@@ -41,7 +41,12 @@ Python 3.13 (asyncio, grpc.aio, mcp SDK v2 MCPServer)
 ## MCP Tools
 
 The agent registers forty-nine tools (see `docs/runbooks/mcp-tools.md` for full parameter/return/error
-reference):
+reference). It also registers **one MCP prompt** — `list_correlation_guide` (feature 197), wired by
+`register_prompts` (`app/tools.py`) and served through the same OAuth-gated transport — plus a
+server-level `instructions` string (`create_server`, `app/main.py`) returned in the MCP `initialize`
+result; both carry the same guide for correlating the `list_accounts` / `get_positions` /
+`get_positions_by_account_id` / `list_opportunities` / `list_strategies` responses on
+`account_id` / `strategy_id` / `symbol`. A prompt is not a tool — the tool count stays forty-nine:
 
 | Tool | Purpose |
 |---|---|
@@ -60,7 +65,7 @@ reference):
 | `manage_signal_source` | Register/update/reactivate/deactivate signal sources (honest verbs — feature 088) |
 | `set_strategy_live` | Enable/disable continuous live evaluation + alerting for a strategy (feature 048) |
 | `run_fundamentals_scan` | Manually trigger the fundamentals signal producer scan (admin-scoped write, feature 156); wraps the existing `RunFundamentalsScan` RPC — `force`/`dry_run`/`symbols` |
-| `trigger_backfill` | Trigger an OHLCV history backfill via xstockstrat-ingest (admin-scoped write, feature 066) |
+| `trigger_backfill` | Trigger a history backfill via xstockstrat-ingest (admin-scoped write, feature 066); `data_kind` selects `bars` (daily OHLCV, default) or `fundamentals` (point-in-time filings history, feature 198) |
 | `get_backfill_status` | Check one backfill job or list recent jobs (read-only, feature 066) |
 | `cancel_backfill` | Cancel a queued/running backfill job (admin-scoped, feature 087) |
 | `test_formula` | Dry-run inline formula source in the sandbox, registers nothing (read-only, feature 087) |

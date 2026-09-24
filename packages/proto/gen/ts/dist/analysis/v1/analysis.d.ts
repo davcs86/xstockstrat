@@ -84,6 +84,8 @@ export declare enum ComponentKind {
     COMPONENT_KIND_UNSPECIFIED = "COMPONENT_KIND_UNSPECIFIED",
     COMPONENT_KIND_BUILTIN_INDICATOR = "COMPONENT_KIND_BUILTIN_INDICATOR",
     COMPONENT_KIND_CUSTOM_FORMULA = "COMPONENT_KIND_CUSTOM_FORMULA",
+    /** COMPONENT_KIND_FUNDAMENTAL - feature 198: a point-in-time fundamental metric series */
+    COMPONENT_KIND_FUNDAMENTAL = "COMPONENT_KIND_FUNDAMENTAL",
     UNRECOGNIZED = "UNRECOGNIZED"
 }
 export declare function componentKindFromJSON(object: any): ComponentKind;
@@ -170,6 +172,8 @@ export declare enum OpportunitySort {
     OPPORTUNITY_SORT_CONVICTION = "OPPORTUNITY_SORT_CONVICTION",
     /** OPPORTUNITY_SORT_EXPIRY - soonest valid_until first (NULLS last) */
     OPPORTUNITY_SORT_EXPIRY = "OPPORTUNITY_SORT_EXPIRY",
+    /** OPPORTUNITY_SORT_SYMBOL_SCORE - symbol roll-up: MAX(symbol_score) OVER PARTITION BY symbol, DESC NULLS LAST — feature 200 */
+    OPPORTUNITY_SORT_SYMBOL_SCORE = "OPPORTUNITY_SORT_SYMBOL_SCORE",
     UNRECOGNIZED = "UNRECOGNIZED"
 }
 export declare function opportunitySortFromJSON(object: any): OpportunitySort;
@@ -497,6 +501,12 @@ export interface StrategyComponent {
      * evaluated symbol's bar timeline; empty = computed on the evaluated symbol (unchanged).
      */
     sourceSymbol: string;
+    /**
+     * used when kind == COMPONENT_KIND_FUNDAMENTAL (feature 198): a point-in-time metric name from
+     * the _FUNDAMENTAL_FIELDS ∪ extra_metrics vocabulary (e.g. "pe_ratio", "eps"). Resolved as-of
+     * each bar via GetHistoricalFundamentals with filed_date < bar_date (T+1, no look-ahead).
+     */
+    fundamentalMetric: string;
 }
 export interface StrategyComponent_ParamsEntry {
     key: string;
@@ -755,6 +765,21 @@ export interface Opportunity {
      * Distinct from an evaluated 0/N row; conviction+signal_axis are zeroed so it sinks in ranking.
      */
     dataUnavailable: boolean;
+    /**
+     * feature 199 — a single shrunk 0–1 ranking ordinal fusing readiness + directional signal
+     * (empirical-Bayes over the two axes present at compute; NULL/unset = nothing to fuse). Like
+     * conviction=3 it is NOT a probability and NEVER a cardinal sizing/alert/risk input — that is
+     * ExternalSignal.conviction (ingest.proto:110). Explicit-presence: unset = not-yet/nothing-to-fuse.
+     */
+    compositeScore?: number | undefined;
+    /**
+     * feature 200 — symbol-level roll-up of the symbol's opportunities (Σ γ^i·(composite×strategy_weight),
+     * rank-decayed). A BOUNDED (< 2·max_composite, i.e. < 2.0 for γ<1) ordinal RANKING scalar on a
+     * non-[0,1] scale — like composite_score (ANALYSIS-13) it is NOT a probability/expected-return and
+     * NEVER a cardinal sizing/alert/risk input. Explicit-presence: unset = no score-eligible opportunity
+     * for the symbol. Symbol-uniform: every row of a symbol carries the same value.
+     */
+    symbolScore?: number | undefined;
 }
 /**
  * One recent daily-bar close for the Decide-surface sparkline (feature 095). Explicit presence — an

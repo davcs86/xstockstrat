@@ -392,6 +392,8 @@ var ComponentKind;
     ComponentKind["COMPONENT_KIND_UNSPECIFIED"] = "COMPONENT_KIND_UNSPECIFIED";
     ComponentKind["COMPONENT_KIND_BUILTIN_INDICATOR"] = "COMPONENT_KIND_BUILTIN_INDICATOR";
     ComponentKind["COMPONENT_KIND_CUSTOM_FORMULA"] = "COMPONENT_KIND_CUSTOM_FORMULA";
+    /** COMPONENT_KIND_FUNDAMENTAL - feature 198: a point-in-time fundamental metric series */
+    ComponentKind["COMPONENT_KIND_FUNDAMENTAL"] = "COMPONENT_KIND_FUNDAMENTAL";
     ComponentKind["UNRECOGNIZED"] = "UNRECOGNIZED";
 })(ComponentKind || (exports.ComponentKind = ComponentKind = {}));
 function componentKindFromJSON(object) {
@@ -405,6 +407,9 @@ function componentKindFromJSON(object) {
         case 2:
         case "COMPONENT_KIND_CUSTOM_FORMULA":
             return ComponentKind.COMPONENT_KIND_CUSTOM_FORMULA;
+        case 3:
+        case "COMPONENT_KIND_FUNDAMENTAL":
+            return ComponentKind.COMPONENT_KIND_FUNDAMENTAL;
         case -1:
         case "UNRECOGNIZED":
         default:
@@ -419,6 +424,8 @@ function componentKindToJSON(object) {
             return "COMPONENT_KIND_BUILTIN_INDICATOR";
         case ComponentKind.COMPONENT_KIND_CUSTOM_FORMULA:
             return "COMPONENT_KIND_CUSTOM_FORMULA";
+        case ComponentKind.COMPONENT_KIND_FUNDAMENTAL:
+            return "COMPONENT_KIND_FUNDAMENTAL";
         case ComponentKind.UNRECOGNIZED:
         default:
             return "UNRECOGNIZED";
@@ -432,6 +439,8 @@ function componentKindToNumber(object) {
             return 1;
         case ComponentKind.COMPONENT_KIND_CUSTOM_FORMULA:
             return 2;
+        case ComponentKind.COMPONENT_KIND_FUNDAMENTAL:
+            return 3;
         case ComponentKind.UNRECOGNIZED:
         default:
             return -1;
@@ -780,6 +789,8 @@ var OpportunitySort;
     OpportunitySort["OPPORTUNITY_SORT_CONVICTION"] = "OPPORTUNITY_SORT_CONVICTION";
     /** OPPORTUNITY_SORT_EXPIRY - soonest valid_until first (NULLS last) */
     OpportunitySort["OPPORTUNITY_SORT_EXPIRY"] = "OPPORTUNITY_SORT_EXPIRY";
+    /** OPPORTUNITY_SORT_SYMBOL_SCORE - symbol roll-up: MAX(symbol_score) OVER PARTITION BY symbol, DESC NULLS LAST — feature 200 */
+    OpportunitySort["OPPORTUNITY_SORT_SYMBOL_SCORE"] = "OPPORTUNITY_SORT_SYMBOL_SCORE";
     OpportunitySort["UNRECOGNIZED"] = "UNRECOGNIZED";
 })(OpportunitySort || (exports.OpportunitySort = OpportunitySort = {}));
 function opportunitySortFromJSON(object) {
@@ -793,6 +804,9 @@ function opportunitySortFromJSON(object) {
         case 2:
         case "OPPORTUNITY_SORT_EXPIRY":
             return OpportunitySort.OPPORTUNITY_SORT_EXPIRY;
+        case 3:
+        case "OPPORTUNITY_SORT_SYMBOL_SCORE":
+            return OpportunitySort.OPPORTUNITY_SORT_SYMBOL_SCORE;
         case -1:
         case "UNRECOGNIZED":
         default:
@@ -807,6 +821,8 @@ function opportunitySortToJSON(object) {
             return "OPPORTUNITY_SORT_CONVICTION";
         case OpportunitySort.OPPORTUNITY_SORT_EXPIRY:
             return "OPPORTUNITY_SORT_EXPIRY";
+        case OpportunitySort.OPPORTUNITY_SORT_SYMBOL_SCORE:
+            return "OPPORTUNITY_SORT_SYMBOL_SCORE";
         case OpportunitySort.UNRECOGNIZED:
         default:
             return "UNRECOGNIZED";
@@ -820,6 +836,8 @@ function opportunitySortToNumber(object) {
             return 1;
         case OpportunitySort.OPPORTUNITY_SORT_EXPIRY:
             return 2;
+        case OpportunitySort.OPPORTUNITY_SORT_SYMBOL_SCORE:
+            return 3;
         case OpportunitySort.UNRECOGNIZED:
         default:
             return -1;
@@ -4063,6 +4081,7 @@ function createBaseStrategyComponent() {
         formulaId: "",
         params: {},
         sourceSymbol: "",
+        fundamentalMetric: "",
     };
 }
 exports.StrategyComponent = {
@@ -4084,6 +4103,9 @@ exports.StrategyComponent = {
         });
         if (message.sourceSymbol !== "") {
             writer.uint32(50).string(message.sourceSymbol);
+        }
+        if (message.fundamentalMetric !== "") {
+            writer.uint32(58).string(message.fundamentalMetric);
         }
         return writer;
     },
@@ -4139,6 +4161,13 @@ exports.StrategyComponent = {
                     message.sourceSymbol = reader.string();
                     continue;
                 }
+                case 7: {
+                    if (tag !== 58) {
+                        break;
+                    }
+                    message.fundamentalMetric = reader.string();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -4172,6 +4201,11 @@ exports.StrategyComponent = {
                 : isSet(object.source_symbol)
                     ? globalThis.String(object.source_symbol)
                     : "",
+            fundamentalMetric: isSet(object.fundamentalMetric)
+                ? globalThis.String(object.fundamentalMetric)
+                : isSet(object.fundamental_metric)
+                    ? globalThis.String(object.fundamental_metric)
+                    : "",
         };
     },
     toJSON(message) {
@@ -4200,6 +4234,9 @@ exports.StrategyComponent = {
         if (message.sourceSymbol !== "") {
             obj.sourceSymbol = message.sourceSymbol;
         }
+        if (message.fundamentalMetric !== "") {
+            obj.fundamentalMetric = message.fundamentalMetric;
+        }
         return obj;
     },
     create(base) {
@@ -4218,6 +4255,7 @@ exports.StrategyComponent = {
             return acc;
         }, {});
         message.sourceSymbol = object.sourceSymbol ?? "";
+        message.fundamentalMetric = object.fundamentalMetric ?? "";
         return message;
     },
 };
@@ -6350,6 +6388,8 @@ function createBaseOpportunity() {
         conditions: [],
         signalConfidence: undefined,
         dataUnavailable: false,
+        compositeScore: undefined,
+        symbolScore: undefined,
     };
 }
 exports.Opportunity = {
@@ -6413,6 +6453,12 @@ exports.Opportunity = {
         }
         if (message.dataUnavailable !== false) {
             writer.uint32(160).bool(message.dataUnavailable);
+        }
+        if (message.compositeScore !== undefined) {
+            writer.uint32(169).double(message.compositeScore);
+        }
+        if (message.symbolScore !== undefined) {
+            writer.uint32(177).double(message.symbolScore);
         }
         return writer;
     },
@@ -6563,6 +6609,20 @@ exports.Opportunity = {
                     message.dataUnavailable = reader.bool();
                     continue;
                 }
+                case 21: {
+                    if (tag !== 169) {
+                        break;
+                    }
+                    message.compositeScore = reader.double();
+                    continue;
+                }
+                case 22: {
+                    if (tag !== 177) {
+                        break;
+                    }
+                    message.symbolScore = reader.double();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -6645,6 +6705,16 @@ exports.Opportunity = {
                 : isSet(object.data_unavailable)
                     ? globalThis.Boolean(object.data_unavailable)
                     : false,
+            compositeScore: isSet(object.compositeScore)
+                ? globalThis.Number(object.compositeScore)
+                : isSet(object.composite_score)
+                    ? globalThis.Number(object.composite_score)
+                    : undefined,
+            symbolScore: isSet(object.symbolScore)
+                ? globalThis.Number(object.symbolScore)
+                : isSet(object.symbol_score)
+                    ? globalThis.Number(object.symbol_score)
+                    : undefined,
         };
     },
     toJSON(message) {
@@ -6709,6 +6779,12 @@ exports.Opportunity = {
         if (message.dataUnavailable !== false) {
             obj.dataUnavailable = message.dataUnavailable;
         }
+        if (message.compositeScore !== undefined) {
+            obj.compositeScore = message.compositeScore;
+        }
+        if (message.symbolScore !== undefined) {
+            obj.symbolScore = message.symbolScore;
+        }
         return obj;
     },
     create(base) {
@@ -6736,6 +6812,8 @@ exports.Opportunity = {
         message.conditions = object.conditions?.map((e) => exports.ConditionEval.fromPartial(e)) || [];
         message.signalConfidence = object.signalConfidence ?? undefined;
         message.dataUnavailable = object.dataUnavailable ?? false;
+        message.compositeScore = object.compositeScore ?? undefined;
+        message.symbolScore = object.symbolScore ?? undefined;
         return message;
     },
 };

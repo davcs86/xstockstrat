@@ -24,7 +24,7 @@ const ORDERS = [
     limitPrice: 150,
     stopPrice: 0,
     filledAvgPrice: 0,
-    timeInForce: 'day',
+    timeInForce: 1,
     accountId: 'alpaca-default',
     brokerType: 1,
   },
@@ -39,7 +39,7 @@ const ORDERS = [
     limitPrice: 300,
     stopPrice: 0,
     filledAvgPrice: 299,
-    timeInForce: 'day',
+    timeInForce: 1,
     accountId: 'alpaca-default',
     brokerType: 1,
   },
@@ -54,7 +54,7 @@ const ORDERS = [
     limitPrice: 0,
     stopPrice: 0,
     filledAvgPrice: 250,
-    timeInForce: 'day',
+    timeInForce: 1,
     accountId: 'alpaca-default',
     brokerType: 1,
   },
@@ -69,7 +69,7 @@ const ORDERS = [
     limitPrice: 0,
     stopPrice: 0,
     filledAvgPrice: 0,
-    timeInForce: 'day',
+    timeInForce: 1,
     accountId: 'alpaca-default',
     brokerType: 1,
   },
@@ -149,7 +149,7 @@ test.describe('Orders management page', () => {
 
   test('create form offers all 5 order types with correct price fields', async ({ page }) => {
     const form = page.locator('form');
-    await form.getByRole('combobox').click();
+    await form.getByRole('combobox').first().click();
     await expect(page.getByRole('option', { name: 'Market', exact: true })).toBeVisible();
     await expect(page.getByRole('option', { name: 'Limit', exact: true })).toBeVisible();
     await expect(page.getByRole('option', { name: 'Stop', exact: true })).toBeVisible();
@@ -162,7 +162,7 @@ test.describe('Orders management page', () => {
     await expect(page.getByPlaceholder('Stop price')).toBeVisible();
 
     // Trailing Stop → a trail amount input appears.
-    await form.getByRole('combobox').click();
+    await form.getByRole('combobox').first().click();
     await page.getByRole('option', { name: 'Trailing Stop', exact: true }).click();
     await expect(page.getByPlaceholder('Trail amount')).toBeVisible();
   });

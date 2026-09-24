@@ -88,6 +88,37 @@ component, the backtest returns `BACKTEST_STATUS_INSUFFICIENT_DATA` naming the *
 `coverage_gaps` — `trigger_backfill` the benchmark and re-run. v1 covers a single reference symbol per
 component; true universe breadth (e.g. "% of a universe above its 200-day") is a deferred follow-on.
 
+**Point-in-time fundamental operand (feature 198).** A component with `kind:"fundamental"` and a
+`fundamental_metric` (one of `market_cap`, `pe_ratio`, `pb_ratio`, `dividend_yield`, `eps`, `beta`,
+`roe`, `debt_to_equity`, `price`, `year_high`, `year_low`) resolves that metric **point-in-time**: on
+each bar it uses the latest filing available as-of that bar — strictly `filed_date < bar_date` (T+1,
+so a filing filed on day D is first visible on D+1) — carried forward until the next filing, and
+holds before the first filing. **No look-ahead**: a backtest never sees a filing before it was filed.
+Example: buy only when trailing P/E is cheap —
+`components=[{"ref_name":"pe","kind":"fundamental","fundamental_metric":"pe_ratio"}]` with an entry
+leaf `{"fn":"<","lhs":"pe","rhs":15}`. Two prerequisites: (1) backfill the symbols' fundamentals
+history first — `trigger_backfill` with `data_kind="fundamentals"` (separate from bars); (2) the
+platform key `analysis.backtest.fundamentals.enabled` must be ON (default OFF) — while OFF the operand
+reads hold on every surface (backtest, live, readiness, opportunities). Like any component, the metric
+is scoring-relevant (enters the definition fingerprint). Backtest and live evaluation share the same
+as-of resolver, so a live strategy fires on exactly the filings a backtest would have used.
+
+**Fundamentals-input formula operand (feature 200).** A `kind:"formula"` component whose formula
+declares `fundamental_inputs` (a set of the same metric names above) is a **fundamentals-scoring**
+operand: the formula is fed **only** those fundamentals as `input_data` (never OHLCV `close`), scored
+once per filing-boundary epoch, and its scalar output broadcast across the span — the same
+input/output contract as the fundamentals-signal producer's scoring formula, so one formula id works
+in both places. Gate a rule on the **dotted** `<ref>.composite` for the headline sub-score (a bare
+`<ref>` resolves to the formula's `value` sub-score). Data source differs by surface: a **backtest**
+feeds it point-in-time filings (as-of each bar, like the 198 operand); **live/screener/readiness/
+opportunities** feed it the **current fundamentals snapshot**. Prerequisites mirror the 198 operand:
+backfill fundamentals first, and `analysis.backtest.fundamentals.enabled` must be ON (the **same**
+key gates both operands — OFF ⇒ the formula reads hold everywhere). A symbol missing the whole
+fundamentals row holds (no fabricated 0.0); a partial row omits just the absent metric. This differs
+from the 198 operand, which reads **one** metric off the bar — here a formula consumes a **set** of
+metrics. A component cannot combine `source_symbol` with a fundamentals-input formula (rejected at
+write time — a benchmark operand reads bars, a fundamentals formula does not).
+
 **Rule encoding.** `entry_rule`/`exit_rule` accept **either** a JSON string **or** a JSON object
 (dict) — an MCP client that pre-parses JSON arguments may pass the object directly; the tool
 serializes a dict to the canonical JSON string before sending. Passing a rule both as a value and

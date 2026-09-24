@@ -55,9 +55,15 @@ HTTP/Connect-RPC server on `8054` was removed.
     (`FormulaOutput`: `name`, `description`); the primary `value` series is implicit
   - `warmup_period INTEGER` (default `0`) — bars this formula needs before its outputs are valid
     (feature 064); read by `xstockstrat-analysis` for the Option-C backtest warm-up length
+  - `fundamental_inputs JSONB` (default `'[]'`) — ordered list of `FundamentalMetric` enum ints a
+    formula declares as its fundamentals inputs (feature 200). A **non-empty** value marks the formula
+    **fundamentals-only**: the analysis evaluator feeds it only these metrics (never OHLCV closes) and
+    broadcasts its scalar output. Validated at Register/Update (`validate_fundamental_inputs` rejects
+    `FUNDAMENTAL_METRIC_UNSPECIFIED`, the only invalid value for the closed enum).
 - Migrations: `migrations/001_formulas.*` (table); `migrations/002_formula_parameters.*` (adds the
   `parameters` JSONB column); `migrations/003_formula_outputs.*` (adds the `outputs` JSONB column);
-  `migrations/004_formula_warmup.*` (adds the `warmup_period` INTEGER column)
+  `migrations/004_formula_warmup.*` (adds the `warmup_period` INTEGER column);
+  `migrations/006_add_formula_fundamental_inputs.*` (adds the `fundamental_inputs` JSONB column)
 - Pool: `asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=int(os.environ.get("DB_POOL_MAX", "2")), statement_cache_size=…)` in `app/main.py`. `DB_POOL_MAX` is **not** set in the deploy specs for this service — it connects through the DigitalOcean transaction-mode pool (`:25061`), where the client-pool size is not a backend-slot budget, so `max_size` falls back to the code default (2). `statement_cache_size` is `0` when `DB_PGBOUNCER` is set (cached prepared statements are unsafe under transaction pooling — see `docs/patterns/database.md` § Connection pooling); otherwise asyncpg's default (100).
 
 ## Config Keys Consumed
@@ -83,6 +89,12 @@ implicit primary series), and a **deterministic well-known** `FORMULA_ID`
 and a band/param/source change takes effect on the next deploy. Feature 062 references the formula by
 this stable id (`analysis.fundsignal.scoring_formula_id`, 062-owned). Seeding is non-fatal — a
 failure is logged and never blocks startup.
+
+The seeded formula declares `FUNDAMENTAL_INPUTS` (`fundamentals_value_quality.py`) — the 6 metrics it
+reads (`pe_ratio`, `pb_ratio`, `dividend_yield`, `roe`, `debt_to_equity`, `eps`) — set on the row via
+the idempotent seed `upsert` (feature 200), never a raw DB backfill (C-10(c)). This marks it a
+fundamentals-only formula so `xstockstrat-analysis` feeds it fundamentals (PIT in a backtest, snapshot
+on live) rather than OHLCV closes.
 
 ## Sandbox Security Model
 

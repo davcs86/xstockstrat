@@ -261,6 +261,92 @@ export interface GetFundamentalsMultiResponse {
   fundamentals: Fundamentals[];
 }
 
+/**
+ * One as-reported fiscal period for a symbol, keyed on when it became public (filed_date).
+ * Distinct from the latest-snapshot Fundamentals message: this is a repeated time series and
+ * carries the filing dates that make look-ahead-safe backtesting possible.
+ */
+export interface HistoricalFundamentalsPeriod {
+  symbol: string;
+  /** e.g. "Q1-2020", "FY2019" */
+  fiscalPeriod: string;
+  /** "quarterly" | "annual" */
+  periodType: string;
+  periodEnd?:
+    | Date
+    | undefined;
+  /** SEC filing date — the point-in-time key */
+  filedDate?:
+    | Date
+    | undefined;
+  /** SEC acceptance timestamp (often post-close) */
+  acceptedDate?:
+    | Date
+    | undefined;
+  /** Reused metric vocabulary (names mirror Fundamentals); pe_ratio/market_cap are PIT price-joined. */
+  marketCap: number;
+  peRatio: number;
+  pbRatio: number;
+  dividendYield: number;
+  eps: number;
+  beta: number;
+  roe: number;
+  debtToEquity: number;
+  price: number;
+  yearHigh: number;
+  yearLow: number;
+  /** raw XBRL overflow (keys are EDGAR tag names) */
+  extraMetrics: { [key: string]: number };
+  currency: string;
+  /** "edgar" (base) or "edgar+fmp" when a ratio was FMP-enriched */
+  source: string;
+  /** canonical names not sourceable for this period */
+  missingMetrics: string[];
+}
+
+export interface HistoricalFundamentalsPeriod_ExtraMetricsEntry {
+  key: string;
+  value: number;
+}
+
+export interface GetHistoricalFundamentalsRequest {
+  symbol: string;
+  /** Only periods with filed_date STRICTLY BEFORE as_of_date are returned (T+1 availability). */
+  asOfDate?:
+    | Date
+    | undefined;
+  /** filter on period_end (inclusive); unset = open */
+  rangeStart?:
+    | Date
+    | undefined;
+  /** filter on period_end (inclusive); unset = open */
+  rangeEnd?:
+    | Date
+    | undefined;
+  /** e.g. ["quarterly","annual"]; empty = both */
+  periodTypes: string[];
+}
+
+export interface GetHistoricalFundamentalsResponse {
+  periods: HistoricalFundamentalsPeriod[];
+}
+
+export interface BackfillFundamentalsRequest {
+  symbols: string[];
+  /** period_end window to backfill */
+  range?:
+    | TimeRange
+    | undefined;
+  /** empty = both quarterly + annual */
+  periodTypes: string[];
+  overwrite: boolean;
+}
+
+export interface BackfillFundamentalsResponse {
+  periodsWritten: number;
+  failedSymbols: string[];
+}
+
 export interface GetLatestQuotesRequest {
   symbols: string[];
 }
@@ -3037,6 +3123,987 @@ export const GetFundamentalsMultiResponse: MessageFns<GetFundamentalsMultiRespon
   },
 };
 
+function createBaseHistoricalFundamentalsPeriod(): HistoricalFundamentalsPeriod {
+  return {
+    symbol: "",
+    fiscalPeriod: "",
+    periodType: "",
+    periodEnd: undefined,
+    filedDate: undefined,
+    acceptedDate: undefined,
+    marketCap: 0,
+    peRatio: 0,
+    pbRatio: 0,
+    dividendYield: 0,
+    eps: 0,
+    beta: 0,
+    roe: 0,
+    debtToEquity: 0,
+    price: 0,
+    yearHigh: 0,
+    yearLow: 0,
+    extraMetrics: {},
+    currency: "",
+    source: "",
+    missingMetrics: [],
+  };
+}
+
+export const HistoricalFundamentalsPeriod: MessageFns<HistoricalFundamentalsPeriod> = {
+  encode(message: HistoricalFundamentalsPeriod, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.symbol !== "") {
+      writer.uint32(10).string(message.symbol);
+    }
+    if (message.fiscalPeriod !== "") {
+      writer.uint32(18).string(message.fiscalPeriod);
+    }
+    if (message.periodType !== "") {
+      writer.uint32(26).string(message.periodType);
+    }
+    if (message.periodEnd !== undefined) {
+      Timestamp.encode(toTimestamp(message.periodEnd), writer.uint32(34).fork()).join();
+    }
+    if (message.filedDate !== undefined) {
+      Timestamp.encode(toTimestamp(message.filedDate), writer.uint32(42).fork()).join();
+    }
+    if (message.acceptedDate !== undefined) {
+      Timestamp.encode(toTimestamp(message.acceptedDate), writer.uint32(50).fork()).join();
+    }
+    if (message.marketCap !== 0) {
+      writer.uint32(57).double(message.marketCap);
+    }
+    if (message.peRatio !== 0) {
+      writer.uint32(65).double(message.peRatio);
+    }
+    if (message.pbRatio !== 0) {
+      writer.uint32(73).double(message.pbRatio);
+    }
+    if (message.dividendYield !== 0) {
+      writer.uint32(81).double(message.dividendYield);
+    }
+    if (message.eps !== 0) {
+      writer.uint32(89).double(message.eps);
+    }
+    if (message.beta !== 0) {
+      writer.uint32(97).double(message.beta);
+    }
+    if (message.roe !== 0) {
+      writer.uint32(105).double(message.roe);
+    }
+    if (message.debtToEquity !== 0) {
+      writer.uint32(113).double(message.debtToEquity);
+    }
+    if (message.price !== 0) {
+      writer.uint32(121).double(message.price);
+    }
+    if (message.yearHigh !== 0) {
+      writer.uint32(129).double(message.yearHigh);
+    }
+    if (message.yearLow !== 0) {
+      writer.uint32(137).double(message.yearLow);
+    }
+    globalThis.Object.entries(message.extraMetrics).forEach(([key, value]: [string, number]) => {
+      HistoricalFundamentalsPeriod_ExtraMetricsEntry.encode({ key: key as any, value }, writer.uint32(146).fork())
+        .join();
+    });
+    if (message.currency !== "") {
+      writer.uint32(154).string(message.currency);
+    }
+    if (message.source !== "") {
+      writer.uint32(162).string(message.source);
+    }
+    for (const v of message.missingMetrics) {
+      writer.uint32(170).string(v!);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): HistoricalFundamentalsPeriod {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseHistoricalFundamentalsPeriod();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.symbol = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.fiscalPeriod = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.periodType = reader.string();
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.periodEnd = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.filedDate = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 6: {
+          if (tag !== 50) {
+            break;
+          }
+
+          message.acceptedDate = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 7: {
+          if (tag !== 57) {
+            break;
+          }
+
+          message.marketCap = reader.double();
+          continue;
+        }
+        case 8: {
+          if (tag !== 65) {
+            break;
+          }
+
+          message.peRatio = reader.double();
+          continue;
+        }
+        case 9: {
+          if (tag !== 73) {
+            break;
+          }
+
+          message.pbRatio = reader.double();
+          continue;
+        }
+        case 10: {
+          if (tag !== 81) {
+            break;
+          }
+
+          message.dividendYield = reader.double();
+          continue;
+        }
+        case 11: {
+          if (tag !== 89) {
+            break;
+          }
+
+          message.eps = reader.double();
+          continue;
+        }
+        case 12: {
+          if (tag !== 97) {
+            break;
+          }
+
+          message.beta = reader.double();
+          continue;
+        }
+        case 13: {
+          if (tag !== 105) {
+            break;
+          }
+
+          message.roe = reader.double();
+          continue;
+        }
+        case 14: {
+          if (tag !== 113) {
+            break;
+          }
+
+          message.debtToEquity = reader.double();
+          continue;
+        }
+        case 15: {
+          if (tag !== 121) {
+            break;
+          }
+
+          message.price = reader.double();
+          continue;
+        }
+        case 16: {
+          if (tag !== 129) {
+            break;
+          }
+
+          message.yearHigh = reader.double();
+          continue;
+        }
+        case 17: {
+          if (tag !== 137) {
+            break;
+          }
+
+          message.yearLow = reader.double();
+          continue;
+        }
+        case 18: {
+          if (tag !== 146) {
+            break;
+          }
+
+          const entry18 = HistoricalFundamentalsPeriod_ExtraMetricsEntry.decode(reader, reader.uint32());
+          if (entry18.value !== undefined) {
+            message.extraMetrics[entry18.key] = entry18.value;
+          }
+          continue;
+        }
+        case 19: {
+          if (tag !== 154) {
+            break;
+          }
+
+          message.currency = reader.string();
+          continue;
+        }
+        case 20: {
+          if (tag !== 162) {
+            break;
+          }
+
+          message.source = reader.string();
+          continue;
+        }
+        case 21: {
+          if (tag !== 170) {
+            break;
+          }
+
+          message.missingMetrics.push(reader.string());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): HistoricalFundamentalsPeriod {
+    return {
+      symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
+      fiscalPeriod: isSet(object.fiscalPeriod)
+        ? globalThis.String(object.fiscalPeriod)
+        : isSet(object.fiscal_period)
+        ? globalThis.String(object.fiscal_period)
+        : "",
+      periodType: isSet(object.periodType)
+        ? globalThis.String(object.periodType)
+        : isSet(object.period_type)
+        ? globalThis.String(object.period_type)
+        : "",
+      periodEnd: isSet(object.periodEnd)
+        ? fromJsonTimestamp(object.periodEnd)
+        : isSet(object.period_end)
+        ? fromJsonTimestamp(object.period_end)
+        : undefined,
+      filedDate: isSet(object.filedDate)
+        ? fromJsonTimestamp(object.filedDate)
+        : isSet(object.filed_date)
+        ? fromJsonTimestamp(object.filed_date)
+        : undefined,
+      acceptedDate: isSet(object.acceptedDate)
+        ? fromJsonTimestamp(object.acceptedDate)
+        : isSet(object.accepted_date)
+        ? fromJsonTimestamp(object.accepted_date)
+        : undefined,
+      marketCap: isSet(object.marketCap)
+        ? globalThis.Number(object.marketCap)
+        : isSet(object.market_cap)
+        ? globalThis.Number(object.market_cap)
+        : 0,
+      peRatio: isSet(object.peRatio)
+        ? globalThis.Number(object.peRatio)
+        : isSet(object.pe_ratio)
+        ? globalThis.Number(object.pe_ratio)
+        : 0,
+      pbRatio: isSet(object.pbRatio)
+        ? globalThis.Number(object.pbRatio)
+        : isSet(object.pb_ratio)
+        ? globalThis.Number(object.pb_ratio)
+        : 0,
+      dividendYield: isSet(object.dividendYield)
+        ? globalThis.Number(object.dividendYield)
+        : isSet(object.dividend_yield)
+        ? globalThis.Number(object.dividend_yield)
+        : 0,
+      eps: isSet(object.eps) ? globalThis.Number(object.eps) : 0,
+      beta: isSet(object.beta) ? globalThis.Number(object.beta) : 0,
+      roe: isSet(object.roe) ? globalThis.Number(object.roe) : 0,
+      debtToEquity: isSet(object.debtToEquity)
+        ? globalThis.Number(object.debtToEquity)
+        : isSet(object.debt_to_equity)
+        ? globalThis.Number(object.debt_to_equity)
+        : 0,
+      price: isSet(object.price) ? globalThis.Number(object.price) : 0,
+      yearHigh: isSet(object.yearHigh)
+        ? globalThis.Number(object.yearHigh)
+        : isSet(object.year_high)
+        ? globalThis.Number(object.year_high)
+        : 0,
+      yearLow: isSet(object.yearLow)
+        ? globalThis.Number(object.yearLow)
+        : isSet(object.year_low)
+        ? globalThis.Number(object.year_low)
+        : 0,
+      extraMetrics: isObject(object.extraMetrics)
+        ? (globalThis.Object.entries(object.extraMetrics) as [string, any][]).reduce(
+          (acc: { [key: string]: number }, [key, value]: [string, any]) => {
+            acc[key] = globalThis.Number(value);
+            return acc;
+          },
+          {},
+        )
+        : isObject(object.extra_metrics)
+        ? (globalThis.Object.entries(object.extra_metrics) as [string, any][]).reduce(
+          (acc: { [key: string]: number }, [key, value]: [string, any]) => {
+            acc[key] = globalThis.Number(value);
+            return acc;
+          },
+          {},
+        )
+        : {},
+      currency: isSet(object.currency) ? globalThis.String(object.currency) : "",
+      source: isSet(object.source) ? globalThis.String(object.source) : "",
+      missingMetrics: globalThis.Array.isArray(object?.missingMetrics)
+        ? object.missingMetrics.map((e: any) => globalThis.String(e))
+        : globalThis.Array.isArray(object?.missing_metrics)
+        ? object.missing_metrics.map((e: any) => globalThis.String(e))
+        : [],
+    };
+  },
+
+  toJSON(message: HistoricalFundamentalsPeriod): unknown {
+    const obj: any = {};
+    if (message.symbol !== "") {
+      obj.symbol = message.symbol;
+    }
+    if (message.fiscalPeriod !== "") {
+      obj.fiscalPeriod = message.fiscalPeriod;
+    }
+    if (message.periodType !== "") {
+      obj.periodType = message.periodType;
+    }
+    if (message.periodEnd !== undefined) {
+      obj.periodEnd = message.periodEnd.toISOString();
+    }
+    if (message.filedDate !== undefined) {
+      obj.filedDate = message.filedDate.toISOString();
+    }
+    if (message.acceptedDate !== undefined) {
+      obj.acceptedDate = message.acceptedDate.toISOString();
+    }
+    if (message.marketCap !== 0) {
+      obj.marketCap = message.marketCap;
+    }
+    if (message.peRatio !== 0) {
+      obj.peRatio = message.peRatio;
+    }
+    if (message.pbRatio !== 0) {
+      obj.pbRatio = message.pbRatio;
+    }
+    if (message.dividendYield !== 0) {
+      obj.dividendYield = message.dividendYield;
+    }
+    if (message.eps !== 0) {
+      obj.eps = message.eps;
+    }
+    if (message.beta !== 0) {
+      obj.beta = message.beta;
+    }
+    if (message.roe !== 0) {
+      obj.roe = message.roe;
+    }
+    if (message.debtToEquity !== 0) {
+      obj.debtToEquity = message.debtToEquity;
+    }
+    if (message.price !== 0) {
+      obj.price = message.price;
+    }
+    if (message.yearHigh !== 0) {
+      obj.yearHigh = message.yearHigh;
+    }
+    if (message.yearLow !== 0) {
+      obj.yearLow = message.yearLow;
+    }
+    if (message.extraMetrics) {
+      const entries = globalThis.Object.entries(message.extraMetrics) as [string, number][];
+      if (entries.length > 0) {
+        obj.extraMetrics = {};
+        entries.forEach(([k, v]) => {
+          obj.extraMetrics[k] = v;
+        });
+      }
+    }
+    if (message.currency !== "") {
+      obj.currency = message.currency;
+    }
+    if (message.source !== "") {
+      obj.source = message.source;
+    }
+    if (message.missingMetrics?.length) {
+      obj.missingMetrics = message.missingMetrics;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<HistoricalFundamentalsPeriod>, I>>(base?: I): HistoricalFundamentalsPeriod {
+    return HistoricalFundamentalsPeriod.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<HistoricalFundamentalsPeriod>, I>>(object: I): HistoricalFundamentalsPeriod {
+    const message = createBaseHistoricalFundamentalsPeriod();
+    message.symbol = object.symbol ?? "";
+    message.fiscalPeriod = object.fiscalPeriod ?? "";
+    message.periodType = object.periodType ?? "";
+    message.periodEnd = object.periodEnd ?? undefined;
+    message.filedDate = object.filedDate ?? undefined;
+    message.acceptedDate = object.acceptedDate ?? undefined;
+    message.marketCap = object.marketCap ?? 0;
+    message.peRatio = object.peRatio ?? 0;
+    message.pbRatio = object.pbRatio ?? 0;
+    message.dividendYield = object.dividendYield ?? 0;
+    message.eps = object.eps ?? 0;
+    message.beta = object.beta ?? 0;
+    message.roe = object.roe ?? 0;
+    message.debtToEquity = object.debtToEquity ?? 0;
+    message.price = object.price ?? 0;
+    message.yearHigh = object.yearHigh ?? 0;
+    message.yearLow = object.yearLow ?? 0;
+    message.extraMetrics = (globalThis.Object.entries(object.extraMetrics ?? {}) as [string, number][]).reduce(
+      (acc: { [key: string]: number }, [key, value]: [string, number]) => {
+        if (value !== undefined) {
+          acc[key] = globalThis.Number(value);
+        }
+        return acc;
+      },
+      {},
+    );
+    message.currency = object.currency ?? "";
+    message.source = object.source ?? "";
+    message.missingMetrics = object.missingMetrics?.map((e) => e) || [];
+    return message;
+  },
+};
+
+function createBaseHistoricalFundamentalsPeriod_ExtraMetricsEntry(): HistoricalFundamentalsPeriod_ExtraMetricsEntry {
+  return { key: "", value: 0 };
+}
+
+export const HistoricalFundamentalsPeriod_ExtraMetricsEntry: MessageFns<
+  HistoricalFundamentalsPeriod_ExtraMetricsEntry
+> = {
+  encode(
+    message: HistoricalFundamentalsPeriod_ExtraMetricsEntry,
+    writer: BinaryWriter = new BinaryWriter(),
+  ): BinaryWriter {
+    if (message.key !== "") {
+      writer.uint32(10).string(message.key);
+    }
+    if (message.value !== 0) {
+      writer.uint32(17).double(message.value);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): HistoricalFundamentalsPeriod_ExtraMetricsEntry {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseHistoricalFundamentalsPeriod_ExtraMetricsEntry();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.key = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 17) {
+            break;
+          }
+
+          message.value = reader.double();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): HistoricalFundamentalsPeriod_ExtraMetricsEntry {
+    return {
+      key: isSet(object.key) ? globalThis.String(object.key) : "",
+      value: isSet(object.value) ? globalThis.Number(object.value) : 0,
+    };
+  },
+
+  toJSON(message: HistoricalFundamentalsPeriod_ExtraMetricsEntry): unknown {
+    const obj: any = {};
+    if (message.key !== "") {
+      obj.key = message.key;
+    }
+    if (message.value !== 0) {
+      obj.value = message.value;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<HistoricalFundamentalsPeriod_ExtraMetricsEntry>, I>>(
+    base?: I,
+  ): HistoricalFundamentalsPeriod_ExtraMetricsEntry {
+    return HistoricalFundamentalsPeriod_ExtraMetricsEntry.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<HistoricalFundamentalsPeriod_ExtraMetricsEntry>, I>>(
+    object: I,
+  ): HistoricalFundamentalsPeriod_ExtraMetricsEntry {
+    const message = createBaseHistoricalFundamentalsPeriod_ExtraMetricsEntry();
+    message.key = object.key ?? "";
+    message.value = object.value ?? 0;
+    return message;
+  },
+};
+
+function createBaseGetHistoricalFundamentalsRequest(): GetHistoricalFundamentalsRequest {
+  return { symbol: "", asOfDate: undefined, rangeStart: undefined, rangeEnd: undefined, periodTypes: [] };
+}
+
+export const GetHistoricalFundamentalsRequest: MessageFns<GetHistoricalFundamentalsRequest> = {
+  encode(message: GetHistoricalFundamentalsRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.symbol !== "") {
+      writer.uint32(10).string(message.symbol);
+    }
+    if (message.asOfDate !== undefined) {
+      Timestamp.encode(toTimestamp(message.asOfDate), writer.uint32(18).fork()).join();
+    }
+    if (message.rangeStart !== undefined) {
+      Timestamp.encode(toTimestamp(message.rangeStart), writer.uint32(26).fork()).join();
+    }
+    if (message.rangeEnd !== undefined) {
+      Timestamp.encode(toTimestamp(message.rangeEnd), writer.uint32(34).fork()).join();
+    }
+    for (const v of message.periodTypes) {
+      writer.uint32(42).string(v!);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetHistoricalFundamentalsRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseGetHistoricalFundamentalsRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.symbol = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.asOfDate = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.rangeStart = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.rangeEnd = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.periodTypes.push(reader.string());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): GetHistoricalFundamentalsRequest {
+    return {
+      symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
+      asOfDate: isSet(object.asOfDate)
+        ? fromJsonTimestamp(object.asOfDate)
+        : isSet(object.as_of_date)
+        ? fromJsonTimestamp(object.as_of_date)
+        : undefined,
+      rangeStart: isSet(object.rangeStart)
+        ? fromJsonTimestamp(object.rangeStart)
+        : isSet(object.range_start)
+        ? fromJsonTimestamp(object.range_start)
+        : undefined,
+      rangeEnd: isSet(object.rangeEnd)
+        ? fromJsonTimestamp(object.rangeEnd)
+        : isSet(object.range_end)
+        ? fromJsonTimestamp(object.range_end)
+        : undefined,
+      periodTypes: globalThis.Array.isArray(object?.periodTypes)
+        ? object.periodTypes.map((e: any) => globalThis.String(e))
+        : globalThis.Array.isArray(object?.period_types)
+        ? object.period_types.map((e: any) => globalThis.String(e))
+        : [],
+    };
+  },
+
+  toJSON(message: GetHistoricalFundamentalsRequest): unknown {
+    const obj: any = {};
+    if (message.symbol !== "") {
+      obj.symbol = message.symbol;
+    }
+    if (message.asOfDate !== undefined) {
+      obj.asOfDate = message.asOfDate.toISOString();
+    }
+    if (message.rangeStart !== undefined) {
+      obj.rangeStart = message.rangeStart.toISOString();
+    }
+    if (message.rangeEnd !== undefined) {
+      obj.rangeEnd = message.rangeEnd.toISOString();
+    }
+    if (message.periodTypes?.length) {
+      obj.periodTypes = message.periodTypes;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<GetHistoricalFundamentalsRequest>, I>>(
+    base?: I,
+  ): GetHistoricalFundamentalsRequest {
+    return GetHistoricalFundamentalsRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GetHistoricalFundamentalsRequest>, I>>(
+    object: I,
+  ): GetHistoricalFundamentalsRequest {
+    const message = createBaseGetHistoricalFundamentalsRequest();
+    message.symbol = object.symbol ?? "";
+    message.asOfDate = object.asOfDate ?? undefined;
+    message.rangeStart = object.rangeStart ?? undefined;
+    message.rangeEnd = object.rangeEnd ?? undefined;
+    message.periodTypes = object.periodTypes?.map((e) => e) || [];
+    return message;
+  },
+};
+
+function createBaseGetHistoricalFundamentalsResponse(): GetHistoricalFundamentalsResponse {
+  return { periods: [] };
+}
+
+export const GetHistoricalFundamentalsResponse: MessageFns<GetHistoricalFundamentalsResponse> = {
+  encode(message: GetHistoricalFundamentalsResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.periods) {
+      HistoricalFundamentalsPeriod.encode(v!, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetHistoricalFundamentalsResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseGetHistoricalFundamentalsResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.periods.push(HistoricalFundamentalsPeriod.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): GetHistoricalFundamentalsResponse {
+    return {
+      periods: globalThis.Array.isArray(object?.periods)
+        ? object.periods.map((e: any) => HistoricalFundamentalsPeriod.fromJSON(e))
+        : [],
+    };
+  },
+
+  toJSON(message: GetHistoricalFundamentalsResponse): unknown {
+    const obj: any = {};
+    if (message.periods?.length) {
+      obj.periods = message.periods.map((e) => HistoricalFundamentalsPeriod.toJSON(e));
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<GetHistoricalFundamentalsResponse>, I>>(
+    base?: I,
+  ): GetHistoricalFundamentalsResponse {
+    return GetHistoricalFundamentalsResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GetHistoricalFundamentalsResponse>, I>>(
+    object: I,
+  ): GetHistoricalFundamentalsResponse {
+    const message = createBaseGetHistoricalFundamentalsResponse();
+    message.periods = object.periods?.map((e) => HistoricalFundamentalsPeriod.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseBackfillFundamentalsRequest(): BackfillFundamentalsRequest {
+  return { symbols: [], range: undefined, periodTypes: [], overwrite: false };
+}
+
+export const BackfillFundamentalsRequest: MessageFns<BackfillFundamentalsRequest> = {
+  encode(message: BackfillFundamentalsRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.symbols) {
+      writer.uint32(10).string(v!);
+    }
+    if (message.range !== undefined) {
+      TimeRange.encode(message.range, writer.uint32(18).fork()).join();
+    }
+    for (const v of message.periodTypes) {
+      writer.uint32(26).string(v!);
+    }
+    if (message.overwrite !== false) {
+      writer.uint32(32).bool(message.overwrite);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): BackfillFundamentalsRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseBackfillFundamentalsRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.symbols.push(reader.string());
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.range = TimeRange.decode(reader, reader.uint32());
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.periodTypes.push(reader.string());
+          continue;
+        }
+        case 4: {
+          if (tag !== 32) {
+            break;
+          }
+
+          message.overwrite = reader.bool();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): BackfillFundamentalsRequest {
+    return {
+      symbols: globalThis.Array.isArray(object?.symbols) ? object.symbols.map((e: any) => globalThis.String(e)) : [],
+      range: isSet(object.range) ? TimeRange.fromJSON(object.range) : undefined,
+      periodTypes: globalThis.Array.isArray(object?.periodTypes)
+        ? object.periodTypes.map((e: any) => globalThis.String(e))
+        : globalThis.Array.isArray(object?.period_types)
+        ? object.period_types.map((e: any) => globalThis.String(e))
+        : [],
+      overwrite: isSet(object.overwrite) ? globalThis.Boolean(object.overwrite) : false,
+    };
+  },
+
+  toJSON(message: BackfillFundamentalsRequest): unknown {
+    const obj: any = {};
+    if (message.symbols?.length) {
+      obj.symbols = message.symbols;
+    }
+    if (message.range !== undefined) {
+      obj.range = TimeRange.toJSON(message.range);
+    }
+    if (message.periodTypes?.length) {
+      obj.periodTypes = message.periodTypes;
+    }
+    if (message.overwrite !== false) {
+      obj.overwrite = message.overwrite;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<BackfillFundamentalsRequest>, I>>(base?: I): BackfillFundamentalsRequest {
+    return BackfillFundamentalsRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<BackfillFundamentalsRequest>, I>>(object: I): BackfillFundamentalsRequest {
+    const message = createBaseBackfillFundamentalsRequest();
+    message.symbols = object.symbols?.map((e) => e) || [];
+    message.range = (object.range !== undefined && object.range !== null)
+      ? TimeRange.fromPartial(object.range)
+      : undefined;
+    message.periodTypes = object.periodTypes?.map((e) => e) || [];
+    message.overwrite = object.overwrite ?? false;
+    return message;
+  },
+};
+
+function createBaseBackfillFundamentalsResponse(): BackfillFundamentalsResponse {
+  return { periodsWritten: 0, failedSymbols: [] };
+}
+
+export const BackfillFundamentalsResponse: MessageFns<BackfillFundamentalsResponse> = {
+  encode(message: BackfillFundamentalsResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.periodsWritten !== 0) {
+      writer.uint32(8).int64(message.periodsWritten);
+    }
+    for (const v of message.failedSymbols) {
+      writer.uint32(18).string(v!);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): BackfillFundamentalsResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseBackfillFundamentalsResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.periodsWritten = longToNumber(reader.int64());
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.failedSymbols.push(reader.string());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): BackfillFundamentalsResponse {
+    return {
+      periodsWritten: isSet(object.periodsWritten)
+        ? globalThis.Number(object.periodsWritten)
+        : isSet(object.periods_written)
+        ? globalThis.Number(object.periods_written)
+        : 0,
+      failedSymbols: globalThis.Array.isArray(object?.failedSymbols)
+        ? object.failedSymbols.map((e: any) => globalThis.String(e))
+        : globalThis.Array.isArray(object?.failed_symbols)
+        ? object.failed_symbols.map((e: any) => globalThis.String(e))
+        : [],
+    };
+  },
+
+  toJSON(message: BackfillFundamentalsResponse): unknown {
+    const obj: any = {};
+    if (message.periodsWritten !== 0) {
+      obj.periodsWritten = Math.round(message.periodsWritten);
+    }
+    if (message.failedSymbols?.length) {
+      obj.failedSymbols = message.failedSymbols;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<BackfillFundamentalsResponse>, I>>(base?: I): BackfillFundamentalsResponse {
+    return BackfillFundamentalsResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<BackfillFundamentalsResponse>, I>>(object: I): BackfillFundamentalsResponse {
+    const message = createBaseBackfillFundamentalsResponse();
+    message.periodsWritten = object.periodsWritten ?? 0;
+    message.failedSymbols = object.failedSymbols?.map((e) => e) || [];
+    return message;
+  },
+};
+
 function createBaseGetLatestQuotesRequest(): GetLatestQuotesRequest {
   return { symbols: [] };
 }
@@ -3704,6 +4771,38 @@ export const MarketDataServiceService = {
       Buffer.from(BatchGetLatestPriceResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): BatchGetLatestPriceResponse => BatchGetLatestPriceResponse.decode(value),
   },
+  /**
+   * Point-in-time historical fundamentals read (feature 198): returns only periods whose
+   * filed_date < as_of_date (T+1 availability), for look-ahead-safe backtesting.
+   */
+  getHistoricalFundamentals: {
+    path: "/xstockstrat.marketdata.v1.MarketDataService/GetHistoricalFundamentals" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: GetHistoricalFundamentalsRequest): Buffer =>
+      Buffer.from(GetHistoricalFundamentalsRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): GetHistoricalFundamentalsRequest =>
+      GetHistoricalFundamentalsRequest.decode(value),
+    responseSerialize: (value: GetHistoricalFundamentalsResponse): Buffer =>
+      Buffer.from(GetHistoricalFundamentalsResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): GetHistoricalFundamentalsResponse =>
+      GetHistoricalFundamentalsResponse.decode(value),
+  },
+  /**
+   * Worker RPC driven by ingest.TriggerBackfill(data_kind=FUNDAMENTALS) (feature 198): fetches
+   * as-reported statements from SEC EDGAR + a point-in-time price-join and persists them.
+   */
+  backfillFundamentals: {
+    path: "/xstockstrat.marketdata.v1.MarketDataService/BackfillFundamentals" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: BackfillFundamentalsRequest): Buffer =>
+      Buffer.from(BackfillFundamentalsRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): BackfillFundamentalsRequest => BackfillFundamentalsRequest.decode(value),
+    responseSerialize: (value: BackfillFundamentalsResponse): Buffer =>
+      Buffer.from(BackfillFundamentalsResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): BackfillFundamentalsResponse => BackfillFundamentalsResponse.decode(value),
+  },
 } as const;
 
 export interface MarketDataServiceServer extends UntypedServiceImplementation {
@@ -3738,6 +4837,16 @@ export interface MarketDataServiceServer extends UntypedServiceImplementation {
   batchGetBars: handleUnaryCall<BatchGetBarsRequest, BatchGetBarsResponse>;
   /** Batched latest price for multiple symbols in a single round-trip (feature 183). */
   batchGetLatestPrice: handleUnaryCall<BatchGetLatestPriceRequest, BatchGetLatestPriceResponse>;
+  /**
+   * Point-in-time historical fundamentals read (feature 198): returns only periods whose
+   * filed_date < as_of_date (T+1 availability), for look-ahead-safe backtesting.
+   */
+  getHistoricalFundamentals: handleUnaryCall<GetHistoricalFundamentalsRequest, GetHistoricalFundamentalsResponse>;
+  /**
+   * Worker RPC driven by ingest.TriggerBackfill(data_kind=FUNDAMENTALS) (feature 198): fetches
+   * as-reported statements from SEC EDGAR + a point-in-time price-join and persists them.
+   */
+  backfillFundamentals: handleUnaryCall<BackfillFundamentalsRequest, BackfillFundamentalsResponse>;
 }
 
 export interface MarketDataServiceClient extends Client {
@@ -3949,6 +5058,44 @@ export interface MarketDataServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: BatchGetLatestPriceResponse) => void,
+  ): ClientUnaryCall;
+  /**
+   * Point-in-time historical fundamentals read (feature 198): returns only periods whose
+   * filed_date < as_of_date (T+1 availability), for look-ahead-safe backtesting.
+   */
+  getHistoricalFundamentals(
+    request: GetHistoricalFundamentalsRequest,
+    callback: (error: ServiceError | null, response: GetHistoricalFundamentalsResponse) => void,
+  ): ClientUnaryCall;
+  getHistoricalFundamentals(
+    request: GetHistoricalFundamentalsRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: GetHistoricalFundamentalsResponse) => void,
+  ): ClientUnaryCall;
+  getHistoricalFundamentals(
+    request: GetHistoricalFundamentalsRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: GetHistoricalFundamentalsResponse) => void,
+  ): ClientUnaryCall;
+  /**
+   * Worker RPC driven by ingest.TriggerBackfill(data_kind=FUNDAMENTALS) (feature 198): fetches
+   * as-reported statements from SEC EDGAR + a point-in-time price-join and persists them.
+   */
+  backfillFundamentals(
+    request: BackfillFundamentalsRequest,
+    callback: (error: ServiceError | null, response: BackfillFundamentalsResponse) => void,
+  ): ClientUnaryCall;
+  backfillFundamentals(
+    request: BackfillFundamentalsRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: BackfillFundamentalsResponse) => void,
+  ): ClientUnaryCall;
+  backfillFundamentals(
+    request: BackfillFundamentalsRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: BackfillFundamentalsResponse) => void,
   ): ClientUnaryCall;
 }
 

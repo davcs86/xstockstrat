@@ -6,8 +6,9 @@ the other boot-time tasks. Reads xstockstrat-trading's ListOrders for the entry-
 inference, and — feature 132 — resolves each strategy's firing universe via the live loop's
 own owner-scoped drains (portfolio watchlist/held + platform signals) through
 ``resolve_universe``, so an allowlist-free live strategy is backfilled over the same union the
-live loop evaluates. It never places orders / touches the trading write surface. Imported ONLY
-by main.py, never by live_loop.py (no import cycle).
+live loop evaluates. Feature 168: the fundamentals-blend force-run is anchored over the
+fundamentals universe (and nowhere else), identical to the loop. It never places orders /
+touches the trading write surface. Imported ONLY by main.py, never by live_loop.py (no cycle).
 """
 
 import asyncio
@@ -80,6 +81,16 @@ async def run_once(live_loop, db_pool, trading_stub, cfg_watcher):
         live_loop._last_entry_at[key] = entry_time
         await live_loop._write_entry_cooldown(key, entry_time)
 
+    # feature 168: the blend force-run is entry-anchored over the fundamentals universe and nowhere
+    # else — mirror the live loop so a blend pair outside that universe is never backfilled.
+    blend_id = cfg_watcher.get_str(
+        "analysis.engine.fundamentals_blend_strategy_id", "fundamentals_macd_blend"
+    )
+    blend_enabled = cfg_watcher.get_bool("analysis.engine.fundamentals_blend_enabled", True)
+    blend_active = blend_enabled and any(dict(r).get("strategy_id") == blend_id for r in rows)
+    fundamentals_universe = (
+        await live_loop._resolve_fundamentals_universe() if blend_active else set()
+    )
     # Use resolved.union, NOT .universe — deny is entry-only, so a held-denied position still
     # needs its entry anchor here (a cold-boot portfolio outage misses held pairs; self-heals).
     signal_symbols = await live_loop._drain_signals()
@@ -92,8 +103,15 @@ async def run_once(live_loop, db_pool, trading_stub, cfg_watcher):
         if owner not in held_cache:
             held_cache[owner] = await live_loop._drain_held(owner)
             watch_cache[owner] = await live_loop._drain_watchlist(owner)
+        if definition.strategy_id == blend_id and not (blend_active and fundamentals_universe):
+            continue  # blend inactive/empty → nothing to anchor (loop-skip parity)
         resolved = resolve_universe(
-            definition, watch_cache[owner], held_cache[owner], signal_symbols
+            definition,
+            watch_cache[owner],
+            held_cache[owner],
+            signal_symbols,
+            blend_id=blend_id,
+            fundamentals_universe=fundamentals_universe,
         )
         for symbol in resolved.union:
             tasks.append(_backfill_pair(owner, definition.strategy_id, symbol))

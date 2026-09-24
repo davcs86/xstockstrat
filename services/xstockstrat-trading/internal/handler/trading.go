@@ -35,7 +35,9 @@ func (h *TradingHandler) PlaceOrder(ctx context.Context, req *connect.Request[tr
 	// TradingService.PlaceOrder (trading.risk.sizing_enabled).
 	order, err := h.svc.PlaceOrder(ctx, req.Msg)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		// Preserve the service's gRPC status code (PermissionDenied on a cross-account attempt,
+		// InvalidArgument/FailedPrecondition on validation/gating) instead of flattening to Internal.
+		return nil, connect.NewError(connectCodeFromErr(err), err)
 	}
 	return connect.NewResponse(order), nil
 }
@@ -46,7 +48,9 @@ func (h *TradingHandler) CancelOrder(ctx context.Context, req *connect.Request[t
 	}
 	resp, err := h.svc.CancelOrder(ctx, req.Msg)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		// Preserve the service's gRPC status code (PermissionDenied on a cross-user cancel,
+		// FailedPrecondition on an offline order) instead of flattening to Internal.
+		return nil, connect.NewError(connectCodeFromErr(err), err)
 	}
 	return connect.NewResponse(resp), nil
 }
@@ -112,7 +116,7 @@ func (h *TradingHandler) ListOrders(ctx context.Context, req *connect.Request[tr
 
 func (h *TradingHandler) StreamOrderUpdates(ctx context.Context, req *connect.Request[tradingv1.StreamOrderUpdatesRequest], stream *connect.ServerStream[tradingv1.Order]) error {
 	subID := fmt.Sprintf("trading-%s-%p", req.Msg.UserId, stream)
-	ch := h.svc.SubscribeOrderUpdates(subID)
+	ch := h.svc.SubscribeOrderUpdates(subID, req.Msg.UserId)
 	defer h.svc.UnsubscribeOrderUpdates(subID)
 
 	for {
@@ -199,7 +203,7 @@ func (a *grpcTradingAdapter) ListOrders(ctx context.Context, req *tradingv1.List
 
 func (a *grpcTradingAdapter) StreamOrderUpdates(req *tradingv1.StreamOrderUpdatesRequest, grpcStream tradingv1.TradingService_StreamOrderUpdatesServer) error {
 	subID := fmt.Sprintf("trading-%s-%p", req.UserId, grpcStream)
-	ch := a.h.svc.SubscribeOrderUpdates(subID)
+	ch := a.h.svc.SubscribeOrderUpdates(subID, req.UserId)
 	defer a.h.svc.UnsubscribeOrderUpdates(subID)
 	for {
 		select {
@@ -244,6 +248,8 @@ func connectCodeFromErr(err error) connect.Code {
 			return connect.CodeFailedPrecondition
 		case codes.InvalidArgument:
 			return connect.CodeInvalidArgument
+		case codes.PermissionDenied:
+			return connect.CodePermissionDenied
 		}
 	}
 	return connect.CodeInternal

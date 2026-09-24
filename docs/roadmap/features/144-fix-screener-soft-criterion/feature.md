@@ -25,7 +25,7 @@
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — bug description, fix scope, and resolved acceptance criteria
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations (design decision + verification logged here in lieu of a separate `implementation-spec.md`)
 
 ---

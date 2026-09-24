@@ -17,6 +17,7 @@ import { PageBreadcrumb } from '@/components/shared/PageBreadcrumb';
 import { Button } from '@/components/ui/button';
 import {
   TYPE_LABEL,
+  TIF_LABEL,
   formatUsd as formatPrice,
   OrderSideBadge,
   OrderStatusBadge,
@@ -167,7 +168,7 @@ export default function OrderDetailPage() {
                       label="Order type"
                       value={TYPE_LABEL[OrderType[order.orderType]] ?? '—'}
                     />
-                    <Field label="Time in force" value={order.timeInForce || '—'} />
+                    <Field label="Time in force" value={TIF_LABEL[order.timeInForce] ?? '—'} />
                     <Field
                       label="Mode"
                       value={order.tradingMode === TradingMode.LIVE ? 'LIVE' : 'PAPER'}

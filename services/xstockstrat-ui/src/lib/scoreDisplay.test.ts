@@ -4,6 +4,7 @@ import {
   ratingVariant,
   scoreColor,
   formatSymbolYears,
+  formatComposite,
   isNotFoundError,
   TRADING_DAYS_PER_YEAR,
 } from './scoreDisplay';
@@ -35,6 +36,18 @@ describe('scoreColor', () => {
     expect(scoreColor(0.79)).toBe('text-paper');
     expect(scoreColor(0.6)).toBe('text-paper');
     expect(scoreColor(0.59)).toBe('text-destructive');
+  });
+});
+
+describe('formatComposite', () => {
+  it('renders the composite score as a fixed 3-decimal string', () => {
+    expect(formatComposite(0.732)).toBe('0.732');
+    expect(formatComposite(0.5)).toBe('0.500'); // always 3 decimals
+    expect(formatComposite(1)).toBe('1.000');
+    expect(formatComposite(0)).toBe('0.000');
+  });
+  it('grounds the queue colour assertion — 0.732 sits in the text-paper band', () => {
+    expect(scoreColor(0.732)).toBe('text-paper');
   });
 });
 

@@ -21,6 +21,14 @@ flatten pollers) inject `x-user-id` explicitly on the outbound call
 (`metadata.AppendToOutgoingContext`). A missing header still yields `InvalidArgument "user_id
 required"`.
 
+**Account/portfolio-scoped reads are ownership-gated (2026-09-16 security audit, H-3).**
+`ListPortfolios` with a caller-supplied `account_id` returns `PermissionDenied` unless the account is
+in the caller's owned universe (`callerOwnsAccount` — the same `ListAccountBalancesByUser ∪
+ListOfflineAccountIdsByUser` set the all-accounts branch trusts). `GetSnapshot` returns
+`PermissionDenied` unless `portfolio_id == caller` — a snapshot's `portfolio_id` **is** the owning
+`user_id` (snapshots are written as `InsertSnapshot(userID, userID, …)`), so a caller can read only
+their own. Previously both returned another user's equity/positions for any supplied id.
+
 **Cross-user watchlist enumeration & first authz gate (feature 154).** `ListAllWatchlistSymbols`
 returns the **distinct union of watchlist symbols across ALL users** (`SELECT DISTINCT symbol FROM
 portfolio.watchlist_symbols`, no user filter/join, no migration) — the fundamentals-signal producer's

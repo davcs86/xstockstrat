@@ -32,6 +32,13 @@ def _to_dict(row) -> dict:
         d["outputs"] = json.loads(outputs_raw) if outputs_raw else []
     elif outputs_raw is None:
         d["outputs"] = []
+    fundamental_inputs_raw = d.get("fundamental_inputs")
+    if isinstance(fundamental_inputs_raw, str):
+        d["fundamental_inputs"] = (
+            json.loads(fundamental_inputs_raw) if fundamental_inputs_raw else []
+        )
+    elif fundamental_inputs_raw is None:
+        d["fundamental_inputs"] = []
     return d
 
 
@@ -53,13 +60,14 @@ class FormulasRepository:
         parameters=None,
         outputs=None,
         warmup_period=0,
+        fundamental_inputs=None,
     ) -> dict:
         row = await self._db.fetchrow(
             """
             INSERT INTO indicators.formulas
                 (formula_id, name, description, source, author, is_public, input_schema,
-                 parameters, outputs, warmup_period)
-            VALUES ($1::uuid, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9::jsonb, $10)
+                 parameters, outputs, warmup_period, fundamental_inputs)
+            VALUES ($1::uuid, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9::jsonb, $10, $11::jsonb)
             RETURNING *
             """,
             formula_id,
@@ -72,6 +80,7 @@ class FormulasRepository:
             json.dumps(list(parameters) if parameters else []),
             json.dumps(list(outputs) if outputs else []),
             int(warmup_period or 0),
+            json.dumps(list(fundamental_inputs) if fundamental_inputs else []),
         )
         return _to_dict(row)
 
@@ -87,6 +96,7 @@ class FormulasRepository:
         parameters=None,
         outputs=None,
         warmup_period=0,
+        fundamental_inputs=None,
     ) -> dict:
         """Idempotent insert-or-update keyed on the formula_id PK; re-seeding the same
         well-known id on every restart is safe.
@@ -95,8 +105,8 @@ class FormulasRepository:
             """
             INSERT INTO indicators.formulas
                 (formula_id, name, description, source, author, is_public, input_schema,
-                 parameters, outputs, warmup_period)
-            VALUES ($1::uuid, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9::jsonb, $10)
+                 parameters, outputs, warmup_period, fundamental_inputs)
+            VALUES ($1::uuid, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9::jsonb, $10, $11::jsonb)
             ON CONFLICT (formula_id) DO UPDATE SET
                 name = EXCLUDED.name,
                 description = EXCLUDED.description,
@@ -107,6 +117,7 @@ class FormulasRepository:
                 parameters = EXCLUDED.parameters,
                 outputs = EXCLUDED.outputs,
                 warmup_period = EXCLUDED.warmup_period,
+                fundamental_inputs = EXCLUDED.fundamental_inputs,
                 updated_at = NOW()
             RETURNING *
             """,
@@ -120,6 +131,7 @@ class FormulasRepository:
             json.dumps(list(parameters) if parameters else []),
             json.dumps(list(outputs) if outputs else []),
             int(warmup_period or 0),
+            json.dumps(list(fundamental_inputs) if fundamental_inputs else []),
         )
         return _to_dict(row)
 
@@ -166,12 +178,14 @@ class FormulasRepository:
         parameters=None,
         outputs=None,
         warmup_period=0,
+        fundamental_inputs=None,
     ) -> dict | None:
         row = await self._db.fetchrow(
             """
             UPDATE indicators.formulas
                SET name = $2, description = $3, source = $4, is_public = $5,
                    parameters = $6::jsonb, outputs = $7::jsonb, warmup_period = $8,
+                   fundamental_inputs = $9::jsonb,
                    updated_at = NOW()
              WHERE formula_id = $1::uuid
             RETURNING *
@@ -184,6 +198,7 @@ class FormulasRepository:
             json.dumps(list(parameters) if parameters else []),
             json.dumps(list(outputs) if outputs else []),
             int(warmup_period or 0),
+            json.dumps(list(fundamental_inputs) if fundamental_inputs else []),
         )
         return _to_dict(row)
 

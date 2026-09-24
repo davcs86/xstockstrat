@@ -121,6 +121,25 @@ trigger_backfill(
 > The former ingest HTTP webhook (`/webhooks/trigger-backfill`) was removed with the backend
 > HTTP servers — the MCP tool and the gRPC/UI paths above are the supported triggers.
 
+### Fundamentals backfill (data kind, feature 198)
+
+Backfills carry a **data kind**: `bars` (daily OHLCV, the default — everything above) or
+`fundamentals` (point-in-time fundamentals **filings history**, needed before backtesting a strategy
+that uses a `fundamental` operand). A strategy operand reads the latest filing available as-of each
+bar (strict `filed_date < bar_date`, T+1 — no look-ahead), so the filings must be stored first.
+
+- **UI**: on `/insights/backfills`, choose **Fundamentals** in the create form's **Data kind**
+  selector. Fundamentals are timeframe-independent, so the form omits the timeframe for that kind.
+- **MCP tool**: `trigger_backfill(symbols=[...], data_kind="fundamentals")` — the `timeframe` arg is
+  ignored (fundamentals bypass the `1d`-only gate). Poll `get_backfill_status` as with bars.
+
+Source: SEC **EDGAR** XBRL companyfacts is the keyless base source (fiscal periods + `filed_date`);
+price-derived metrics (`market_cap`, `pe_ratio`) are joined from the symbol's stored OHLCV
+point-in-time, and **FMP-Free ratio enrichment is best-effort and cap-bounded** (it reuses the
+existing `marketdata.fmp.daily_request_cap`, so it silently degrades — never blocks — when the daily
+cap is spent). A strategy operand only resolves when `analysis.backtest.fundamentals.enabled` is ON
+(default OFF); while OFF the operand reads hold on every surface.
+
 ---
 
 ## Step 2 — Monitor Progress

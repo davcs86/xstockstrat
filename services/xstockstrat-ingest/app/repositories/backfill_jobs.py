@@ -21,6 +21,7 @@ _UPDATABLE_COLUMNS = frozenset(
         "error",
         "started_at",
         "completed_at",
+        "data_kind",
     }
 )
 
@@ -34,18 +35,24 @@ async def insert_job(
     range_start,
     range_end,
     status: int,
+    data_kind: str = "BARS",
 ) -> None:
-    """Insert a freshly-created job row (status is a BackfillStatus enum int)."""
+    """Insert a freshly-created job row (status is a BackfillStatus enum int).
+
+    data_kind is 'BARS' (default, OHLCV) or 'FUNDAMENTALS' (feature 198). Fundamentals jobs carry
+    no bar timeframe — the servicer passes an empty timeframe for them.
+    """
     await db_pool.execute(
         "INSERT INTO ingest.backfill_jobs"
-        " (job_id, symbols, timeframe, range_start, range_end, status)"
-        " VALUES ($1::uuid, $2, $3, $4, $5, $6)",
+        " (job_id, symbols, timeframe, range_start, range_end, status, data_kind)"
+        " VALUES ($1::uuid, $2, $3, $4, $5, $6, $7)",
         job_id,
         list(symbols),
         timeframe,
         range_start,
         range_end,
         status,
+        data_kind,
     )
 
 

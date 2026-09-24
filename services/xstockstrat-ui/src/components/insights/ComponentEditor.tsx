@@ -24,7 +24,12 @@ import {
   paramDefaultNumber,
   paramDefaultRaw,
 } from '@/components/insights/ParameterEditor';
-import { BUILTIN_INDICATORS, defaultParamsFor, findIndicator } from '@/lib/strategyCatalog';
+import {
+  BUILTIN_INDICATORS,
+  FUNDAMENTAL_METRICS,
+  defaultParamsFor,
+  findIndicator,
+} from '@/lib/strategyCatalog';
 
 // Editable draft mirroring StrategyComponent's field names so it assigns directly
 // to the proto init shape when the wizard submits.
@@ -34,6 +39,7 @@ export type StrategyComponentDraft = {
   indicator: string;
   formulaId: string;
   params: Record<string, number>;
+  fundamentalMetric: string;
 };
 
 export function emptyComponent(): StrategyComponentDraft {
@@ -43,6 +49,7 @@ export function emptyComponent(): StrategyComponentDraft {
     indicator: '',
     formulaId: '',
     params: {},
+    fundamentalMetric: '',
   };
 }
 
@@ -104,6 +111,7 @@ export function ComponentEditor({ value, onChange, onRemove }: ComponentEditorPr
               Builtin indicator
             </SelectItem>
             <SelectItem value={String(ComponentKind.CUSTOM_FORMULA)}>Custom formula</SelectItem>
+            <SelectItem value={String(ComponentKind.FUNDAMENTAL)}>Fundamental metric</SelectItem>
           </SelectContent>
         </Select>
         <Button type="button" size="sm" variant="ghost" onClick={onRemove}>
@@ -111,7 +119,30 @@ export function ComponentEditor({ value, onChange, onRemove }: ComponentEditorPr
         </Button>
       </div>
 
-      {value.kind === ComponentKind.CUSTOM_FORMULA ? (
+      {value.kind === ComponentKind.FUNDAMENTAL ? (
+        <div className="space-y-2">
+          <label className="block text-xs text-muted-foreground">Metric</label>
+          <Select
+            value={value.fundamentalMetric || ''}
+            onValueChange={(m) => onChange({ ...value, fundamentalMetric: m })}
+          >
+            <SelectTrigger aria-label="fundamental metric">
+              <SelectValue placeholder="Select a metric…" />
+            </SelectTrigger>
+            <SelectContent>
+              {FUNDAMENTAL_METRICS.map((m) => (
+                <SelectItem key={m.name} value={m.name}>
+                  {m.name} — {m.description}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-[10px] text-muted-foreground">
+            Point-in-time as-of each bar (no look-ahead). Requires a fundamentals backfill and the
+            analysis fundamentals gate enabled.
+          </p>
+        </div>
+      ) : value.kind === ComponentKind.CUSTOM_FORMULA ? (
         <div className="space-y-2">
           <Combobox
             items={formulas.map((f) => f.formulaId)}
@@ -141,6 +172,13 @@ export function ComponentEditor({ value, onChange, onRemove }: ComponentEditorPr
               </ComboboxList>
             </ComboboxContent>
           </Combobox>
+
+          {selectedFormula && selectedFormula.fundamentalInputs.length > 0 && (
+            <p className="text-[10px] text-muted-foreground">
+              Fundamentals input — requires the fundamentals gate ON; use <code>.composite</code>{' '}
+              for the headline.
+            </p>
+          )}
 
           {selectedFormula && selectedFormula.parameters.length > 0 && (
             <div className="space-y-2">
