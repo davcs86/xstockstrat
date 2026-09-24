@@ -136,7 +136,7 @@ git diff --stat packages/proto/gen/
 
 ### Step 3 — migration: Create notify.alert_reads table
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/migrations/003_alert_reads.up.sql` — create

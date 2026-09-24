@@ -123,3 +123,10 @@ CI-mode host harness).
   diff scoped to `notify/v1`.
 - Files modified: `packages/proto/gen/{go,python,ts}/notify/v1/**`
 - Deviations: analysis.pb.go drift revert (same as 202 Step 2; recurring).
+
+### Step 3 — migration: notify.alert_reads table [done]
+- Created `003_alert_reads.{up,down}.sql`: `alert_reads(alert_id UUID, user_id TEXT, read_at TIMESTAMPTZ
+  DEFAULT NOW(), PK(alert_id,user_id))`. No secondary index, no FK (design.md). Down drops the table.
+- Verification: offline (up CREATE ↔ down DROP; next NNN=003 after 002). Live apply deferred to CI/deploy.
+- Files modified: `services/xstockstrat-notify/migrations/003_alert_reads.{up,down}.sql`
+- Deviations: none.
