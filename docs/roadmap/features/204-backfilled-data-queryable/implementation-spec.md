@@ -250,7 +250,7 @@ Confirm the env var appears in all four files with value `xstockstrat-marketdata
 
 ### Step 6 — service: Add marketdata client methods to agent
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/client.py` — modify

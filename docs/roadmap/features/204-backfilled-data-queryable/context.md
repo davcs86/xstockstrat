@@ -148,3 +148,20 @@ node/pnpm. Docker daemon up but codegen stays host-native.
   value was a simplification; the DO convention is authoritative.
 - Verify: grep confirms the var in the agent block of all four files; ruff clean.
 - Files: `services/xstockstrat-agent/app/client.py`, `docker-compose.yml`, `.do/app.dev.yaml`, `.do/app.yaml`.
+
+### Step 6 — service: marketdata client methods on the agent [done]
+- Added three async methods to `client.py` (new "marketdata client (feature 204)" section):
+  - `get_bars(symbol, timeframe="1Day", start, end, limit, page_token)` — ephemeral channel to
+    MARKETDATA_ENDPOINT, `GetBars` with canonical `timeframe`+`timeframe_enum` (daily-only, feature
+    143) and PageRequest; returns `{bars[], next_page_token, total_count}` (each bar via MessageToDict
+    preserving snake_case field names).
+  - `get_fundamentals(symbol)` — `GetFundamentals`; returns the Fundamentals message as a dict.
+  - `get_historical_fundamentals(symbol, period_types, start, end, limit, page_token)` — sets
+    `page` (PageRequest) and optional `range_start`/`range_end`; returns `{periods[], next_page_token}`
+    from the new `pagination` (PageResponse) field.
+- All three propagate the caller trio via `_metadata()` (no body user_id — header-identity convention).
+- Refactor: hoisted the shared `_TF_ALIASES`/`_TF_TO_ENUM` (daily-only map) above the marketdata
+  section so both `get_bars` (reader) and `trigger_backfill` (writer) reference one definition instead
+  of a forward-reference; comment updated to name both consumers.
+- Verify: `python -m py_compile` OK; ruff check + format clean.
+- Files: `services/xstockstrat-agent/app/client.py`. Deviations: none (the _TF_* hoist is a DRY tidy).
