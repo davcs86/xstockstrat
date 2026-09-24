@@ -26,6 +26,8 @@ FR-5. Both UI and agent surfaces enforce pagination to prevent unbounded result 
 
 FR-6. The UI data explorer page is registered in `PLATFORM_SUBNAV` and accessible from the insights segment navigation (C-10).
 
+FR-7. Both UI and agent surfaces display a "last refresh" timestamp indicating when the queried data was last updated — for OHLCV, the most recent bar's `time` in the result set; for fundamentals snapshot, the `fetched_at` column; for historical fundamentals, the most recent `filed_date` in the result set.
+
 ## Out of Scope
 
 - Writing or modifying OHLCV/fundamentals data (backfill triggering already exists via feature 066/backfill-management-ui)

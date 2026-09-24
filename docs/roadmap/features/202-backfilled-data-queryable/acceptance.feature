@@ -70,3 +70,29 @@ Feature: backfilled-data-queryable
     Given the user is authenticated and on the insights segment
     When the user views the insights navigation sidebar
     Then a "Data Explorer" link is visible pointing to "/insights/data-explorer"
+
+  @AC-11 @FR-7 @FR-1
+  Scenario: UI displays last refresh timestamp for OHLCV query results
+    Given the user navigates to "/insights/data-explorer"
+    And OHLCV bars exist for symbol "AAPL" with timeframe "1Day", most recent bar at "2025-06-30T20:00:00Z"
+    When the user selects symbol "AAPL", timeframe "1Day", start "2025-01-01", end "2025-06-30"
+    Then the page displays a "Last refreshed" timestamp showing "2025-06-30T20:00:00Z"
+
+  @AC-12 @FR-7 @FR-2
+  Scenario: UI displays last refresh timestamp for fundamentals snapshot
+    Given the user navigates to "/insights/data-explorer"
+    And a fundamentals snapshot exists for symbol "MSFT" with fetched_at "2025-09-24T14:30:00Z"
+    When the user selects symbol "MSFT" and switches to the "Fundamentals" tab
+    Then the page displays a "Last refreshed" timestamp showing "2025-09-24T14:30:00Z"
+
+  @AC-13 @FR-7 @FR-3
+  Scenario: MCP agent query_bars includes last refresh timestamp
+    Given OHLCV bars exist for symbol "AAPL" with timeframe "1Day", most recent bar at "2025-06-30T20:00:00Z"
+    When the agent calls query_bars with symbol "AAPL", timeframe "1Day", start_date "2025-01-01", end_date "2025-06-30"
+    Then the tool response includes a last_refreshed field with value "2025-06-30T20:00:00Z"
+
+  @AC-14 @FR-7 @FR-4
+  Scenario: MCP agent query_fundamentals includes last refresh timestamp
+    Given a fundamentals snapshot exists for symbol "GOOG" with fetched_at "2025-09-24T10:00:00Z"
+    When the agent calls query_fundamentals with symbol "GOOG"
+    Then the tool response includes a last_refreshed field with value "2025-09-24T10:00:00Z"
