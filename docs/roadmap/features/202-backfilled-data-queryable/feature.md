@@ -11,6 +11,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-09-24 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-09-24 | `draft` → `spec-ready` | /sdd-review | Product spec approved (2 warnings) |
 
 ---
 
@@ -41,4 +42,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review backfilled-data-queryable product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-design backfilled-data-queryable quick` — design debate, then `/sdd-spec backfilled-data-queryable` to generate implementation spec

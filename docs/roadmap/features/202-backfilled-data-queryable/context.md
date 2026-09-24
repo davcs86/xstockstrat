@@ -27,3 +27,11 @@
 - **Added FR-8**: UI CSV export — "Download CSV" button exports the currently displayed OHLCV or fundamentals results.
 - **Added FR-9**: MCP binary CSV responses — `query_bars` and `query_fundamentals` accept `format` param (`json` | `csv`); when `csv`, return base64-encoded `text/csv` content instead of JSON text.
 - Added @AC-15 through @AC-19 acceptance scenarios for fundamentals charting, UI CSV export, and MCP binary CSV output.
+
+## Session 2026-09-24T00:03:00Z — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready.
+- Warnings:
+  - Open Questions: "Known trap (ledger)" item remains unchecked — it is an implementation-time housekeeping action (update agent tool count across 5+ doc surfaces), not an unresolved design question. Carried into design/spec.
+  - Fundamentals pagination: `GetHistoricalFundamentalsRequest` proto has no `PageRequest` field, but FR-5 requires pagination on both surfaces. Historical fundamentals volume is inherently small (quarterly/annual per symbol), so client-side pagination suffices — design phase should confirm explicitly.
+- Overlap findings: none (CLEAN). No merge-order entry needed.
