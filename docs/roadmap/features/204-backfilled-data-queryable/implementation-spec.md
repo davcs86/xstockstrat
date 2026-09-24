@@ -367,7 +367,7 @@ cd services/xstockstrat-agent && ruff check . && ruff format --check .
 
 **Verification**:
 ```bash
-cd services/xstockstrat-agent && pytest tests/test_query_tools.py -v
+cd services/xstockstrat-agent && pytest tests/test_query_tools.py -v --cov=app --cov-fail-under=40
 cd services/xstockstrat-agent && ruff check . && ruff format --check .
 ```
 
@@ -415,13 +415,16 @@ cd services/xstockstrat-agent && ruff check . && ruff format --check .
 
 **Verification**:
 ```bash
+cd services/xstockstrat-agent && ruff check . && ruff format --check .
+cd services/xstockstrat-ui && pnpm run lint
 grep -n "forty-nine\|forty-one\|COPILOT_MCP_TOOL_COUNT.*49" \
   services/xstockstrat-agent/app/tools.py \
   services/xstockstrat-agent/CLAUDE.md \
   docs/runbooks/mcp-tools.md \
   services/xstockstrat-ui/src/lib/copilot.ts
 ```
-Must return zero matches (all instances updated).
+Must return zero matches (all instances updated). Lint gates added because this step modifies
+source files (`tools.py`, `copilot.ts`).
 
 ---
 
@@ -436,7 +439,7 @@ Must return zero matches (all instances updated).
 
 **Codebase Evidence**:
 - Confirmed via: `insightsBff.ts:87-95` — MarketDataService block with `getBars: forward(...)` at line 88; `getFundamentals`, `getHistoricalFundamentals`, `listAssets` are NOT wired
-- Existing pattern: `forward()` handler at `insightsBff.ts:88` — `getBars: forward(marketDataClient, MarketDataService, 'getBars')`
+- Existing pattern: `forward()` handler at `insightsBff.ts:88` — `getBars: forward((req, opts) => marketDataClient.getBars(req, opts))`
 - Confirmed via: `traderBff.ts:74` — `listAssets` wired in trader BFF (reference pattern)
 - Confirmed via: `traderBff.ts:76` — `getFundamentals` wired in trader BFF (reference pattern)
 - Confirmed via: `src/lib/browserClients/insightsMarketDataClient.ts` — browser client exists, bound to `/insights/api`
@@ -447,10 +450,10 @@ Must return zero matches (all instances updated).
 
 **Instructions**:
 1. In `insightsBff.ts`, inside the `MarketDataService` block (after the existing `getBars: forward(...)` at line ~88), add:
-   - `getFundamentals: forward(marketDataClient, MarketDataService, 'getFundamentals'),`
-   - `getHistoricalFundamentals: forward(marketDataClient, MarketDataService, 'getHistoricalFundamentals'),`
-   - `listAssets: forward(marketDataClient, MarketDataService, 'listAssets'),`
-2. These use the existing `forward()` pattern from `bffShared.ts` — session validation, header propagation, and dispatch are handled by the shared plumbing (no new outbound gRPC calls from custom code).
+   - `getFundamentals: forward((req, opts) => marketDataClient.getFundamentals(req, opts)),`
+   - `getHistoricalFundamentals: forward((req, opts) => marketDataClient.getHistoricalFundamentals(req, opts)),`
+   - `listAssets: forward((req, opts) => marketDataClient.listAssets(req, opts)),`
+2. These use the existing `forward()` pattern from `bffShared.ts` (1-arg callback signature per `bffShared.ts:60`) — session validation, header propagation, and dispatch are handled by the shared plumbing (no new outbound gRPC calls from custom code).
 
 **Header propagation**: uses existing `forward()` from `bffShared.ts`, which already propagates `x-user-id`, `x-access-scope`, `x-trace-id` via `backendHeaders()`. No custom call path.
 

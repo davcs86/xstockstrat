@@ -97,10 +97,10 @@ cd packages/proto && buf lint && buf breaking --against '../../.git#branch=main-
 **Status**: `pending`
 **Service**: `packages/proto`
 **Files**:
-- `packages/proto/gen/go/indicators/v1/*.go` -- auto-generated
-- `packages/proto/gen/python/indicators/v1/*_pb2*.py` -- auto-generated
-- `packages/proto/gen/ts/src/indicators/v1/*.ts` -- auto-generated
-- `packages/proto/gen/ts/dist/**` -- auto-generated
+- `packages/proto/gen/go/indicators/v1/*.go` -- auto-generated (wildcards inherent to codegen output; exact filenames determined by buf-gen.sh)
+- `packages/proto/gen/python/indicators/v1/*_pb2*.py` -- auto-generated (wildcards inherent to codegen output)
+- `packages/proto/gen/ts/src/indicators/v1/*.ts` -- auto-generated (wildcards inherent to codegen output)
+- `packages/proto/gen/ts/dist/**` -- auto-generated (wildcards inherent to codegen output)
 
 **Reviewers**: Proto Reviewer -- additive RPC, enum correctness (inherited from Step 1)
 
@@ -480,7 +480,8 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm run build
 - Confirmed via: UI CLAUDE.md -- vitest unit tests live in `src/**/*.test.ts`, coverage scoped to
   `src/lib/**`
 - The `useFormulas` hook lives in `src/hooks/`, outside the current `src/lib/**` coverage scope, so
-  this is a behavioral correctness test (no threshold impact)
+  this is a behavioral correctness test (no threshold impact). The vitest coverage threshold
+  (configured in `vitest.config.ts`, scoped to `src/lib/**`) is not affected by this file.
 
 **TDD**: `red-green required`
 
@@ -594,6 +595,9 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm run build
 ```bash
 cd services/xstockstrat-ui && pnpm run lint && pnpm run test:unit && pnpm run test:coverage
 ```
+Coverage threshold is enforced by the vitest config (`vitest.config.ts` `coverage.thresholds`);
+`pnpm run test:coverage` applies it automatically. The `src/lib/fundamentalMetrics.ts` helper
+is inside the `src/lib/**` coverage scope and contributes to the threshold.
 
 ---
 

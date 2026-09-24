@@ -63,3 +63,13 @@
 - Tool count 49 → 51 update across all 6 surfaces deferred to Step 9 (docs step).
 - Composite cursor `(period_end, fiscal_period)` implementation specified in Step 3 with `filterAsOf` pushed into SQL.
 - Status: design-approved → implementation-ready.
+
+## Session 2026-09-24T00:07:00Z — sdd-review impl-spec (advisory)
+
+- Result: 2 failures, 2 warnings (advisory — did not block).
+- Unresolved items carried into execution:
+  - Step 8: test verification missing `--cov=app --cov-fail-under=40` coverage threshold (C-08/P-06) — [x] addressed — added `--cov=app --cov-fail-under=40` to pytest verification command
+  - Step 10: Instructions use wrong `forward()` calling convention — 3-arg `forward(client, Service, 'method')` vs actual 1-arg callback `forward((req, opts) => client.method(req, opts))` (C-01) — [x] addressed — replaced all forward() calls with correct 1-arg callback pattern; fixed Codebase Evidence to match
+  - Step 9: modifies source files (tools.py, copilot.ts) without lint verification in own step (advisory WARN) — [x] addressed — added ruff + pnpm lint gates to Step 9 Verification
+  - Step 11: verbose instructions — justified by page scope (advisory WARN, C-18) — [x] accepted — verbose instructions justified by multi-tab page scope; no change needed
+- Overlap findings: WARN-level file path collisions with features 196 (marketdata.proto, marketdata_repo.go), 205 (insightsBff.ts, client.py, tools.py, CLAUDE.md, mcp-tools.md), 187 (client.py, tools.py, mcp-tools.md), 188 (mock-backend.ts), 203 (INVENTORY.md, mock-backend.ts). No FAIL-level overlaps. No merge-order entry needed.

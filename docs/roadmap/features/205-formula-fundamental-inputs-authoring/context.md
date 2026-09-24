@@ -119,9 +119,9 @@
 
 - Result: 0 failures, 3 warnings (advisory — did not block).
 - Unresolved ⚠ carried into execution:
-  - Step 2: Files contain wildcards for auto-generated proto stubs (C-01) — [ ] unaddressed
-  - Step 10: No explicit coverage threshold in Verification; hook outside vitest coverage scope (C-18) — [ ] unaddressed
-  - Step 12: Coverage threshold implicit in vitest config, not stated in step Verification text (C-18) — [ ] unaddressed
+  - Step 2: Files contain wildcards for auto-generated proto stubs (C-01) — [x] addressed — added "(wildcards inherent to codegen output)" annotations to each wildcard entry
+  - Step 10: No explicit coverage threshold in Verification; hook outside vitest coverage scope (C-18) — [x] addressed — added note that `src/hooks/` is outside `src/lib/**` vitest coverage scope; test is behavioral correctness, not threshold-impacting
+  - Step 12: Coverage threshold implicit in vitest config, not stated in step Verification text (C-18) — [x] addressed — added explicit note that `pnpm run test:coverage` enforces threshold via vitest config and `src/lib/fundamentalMetrics.ts` is inside the scope
 - Overlap findings: 0 FAIL-level collisions. WARN-level file overlaps with features 187, 188, 202,
   203, 204 — all section-disjoint (different functions/service registrations/fixture blocks).
   Feature 204 (`backfilled-data-queryable`) has the densest overlap (7 shared files including

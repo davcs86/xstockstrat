@@ -197,7 +197,7 @@ ls services/xstockstrat-notify/migrations/003_alert_reads.up.sql services/xstock
 - `registerPushSubscription` resolves owner from `call.metadata.get('x-user-id')?.[0]`: `:178`
 - `serviceDefinition.ts:4-6` — re-exports `NotifyServiceService` from generated code; new RPCs auto-register
 - Constructor: `(pool, config, fanout, webPush)` at `:23-27`
-- `notifyServiceImpl.ts:2` imports `alertSeverityFromJSON` from generated code
+- `notifyServiceImpl.ts:3` imports `alertSeverityFromJSON` from generated code
 
 **TDD**: red-green required
 
@@ -221,8 +221,9 @@ ls services/xstockstrat-notify/migrations/003_alert_reads.up.sql services/xstock
      try {
        await this.pool.query(
          `INSERT INTO notify.alert_reads (alert_id, user_id, read_at)
-          SELECT unnest($1::uuid[]), $2, NOW()
-          WHERE EXISTS (SELECT 1 FROM notify.alerts WHERE alert_id = ANY($1::uuid[]))
+          SELECT u.alert_id, $2, NOW()
+          FROM unnest($1::uuid[]) AS u(alert_id)
+          JOIN notify.alerts a ON a.alert_id = u.alert_id
           ON CONFLICT DO NOTHING`,
          [alertIds, userId]
        );
@@ -233,8 +234,10 @@ ls services/xstockstrat-notify/migrations/003_alert_reads.up.sql services/xstock
    }
    ```
    Identity fallback: `metadata.get('x-user-id') || req.userId` supports both BFF (header) and
-   direct gRPC test callers (design.md decision). `WHERE EXISTS` suppresses FK-violating phantom
-   IDs (design.md R2). `ON CONFLICT DO NOTHING` preserves original `read_at` (AC-3 idempotency).
+   direct gRPC test callers (design.md decision). The `JOIN notify.alerts` clause suppresses
+   phantom IDs per-row (design.md R2 — the earlier `WHERE EXISTS` formulation was non-correlated
+   and would gate the entire batch, not per-row). `ON CONFLICT DO NOTHING` preserves original
+   `read_at` (AC-3 idempotency).
 
 2. **Rewrite `listAlerts`** (replacing `:158-171`) to:
    - Resolve user from `call.metadata?.get?.('x-user-id')?.[0]` (security tightening per design.md
@@ -334,7 +337,8 @@ cd services/xstockstrat-notify && pnpm run lint
 - `EnumBadge` + `Record<Enum, EnumRender>` pattern: `opportunityShared.tsx:28-70` (recon.md:68)
 - **Not found**: `src/lib/alertShared.ts` does not exist — must be created from scratch
 
-**TDD**: red-green required
+**TDD**: `N/A` — pure DRY extraction with no new behavior; existing E2E tests (AlertStream
+rendering) provide regression coverage. No red-green cycle needed for a move-only refactor.
 
 **Covers**: —
 

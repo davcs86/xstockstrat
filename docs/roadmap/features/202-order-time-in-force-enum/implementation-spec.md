@@ -458,6 +458,7 @@ cd services/xstockstrat-ui && pnpm run lint
 - `services/xstockstrat-ui/e2e/trader/order-parity.spec.ts` — modify
 - `services/xstockstrat-ui/e2e/trader/offline-accounts.spec.ts` — modify
 - `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md` — modify (catalog note for TIF field change)
+- `services/xstockstrat-ui/e2e/mock-backend.ts` — modify (placeOrder mock must return concrete TIF)
 
 **Reviewers**: `xstockstrat-ui` owner — trading UI correctness
 
@@ -495,6 +496,11 @@ dropdown renders with the correct default and options.
 
 **(d) `INVENTORY.md`** — add a catalog note in the `orders.ts` entry that `timeInForce` changed
 from string to numeric enum.
+
+**(e) `mock-backend.ts`** — in the `placeOrder` mock response handler (~line 244–252), add
+`timeInForce: 1` (TIME_IN_FORCE_DAY) to the returned order object. After the enum change, omitting
+this field defaults to `0` (UNSPECIFIED), which breaks TIF-specific E2E assertions (design.md R6
+advisory #3).
 
 **Verification**:
 ```bash
@@ -540,7 +546,8 @@ Document the deploy note from `design.md § (f)`:
 - Optional post-deploy cleanup: `DELETE FROM trading.order_intents WHERE state IN ('PENDING','UNKNOWN') AND created_at < <deploy-timestamp>`.
 - Deploy outside active trading hours if possible.
 
-Record this deploy note in the feature's `context.md` (Step 9 handles this).
+Record this deploy note in the feature's `context.md` (sdd-execute's normal context.md append
+handles this — Step 9 is the CI buf-breaking workaround, not the deploy note recording step).
 
 **Verification**:
 ```bash

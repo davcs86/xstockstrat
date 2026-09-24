@@ -94,8 +94,8 @@
 
 - Result: 1 failure, 3 warnings (advisory — did not block).
 - Unresolved ✗ / ⚠ carried into execution:
-  - Step 4: ✗ SQL phantom suppression gap (C-01) — `markAlertRead` SQL uses non-correlated `WHERE EXISTS` that gates the entire INSERT set, not per-row; mixed-batch `[valid_id, phantom_id]` inserts all rows if any id is valid. Fix: replace `SELECT unnest(...) WHERE EXISTS (...)` with `SELECT a.alert_id FROM unnest(...) JOIN notify.alerts a ON ...`. Low practical risk (phantom rows inert) but the spec's claim is inaccurate. — [ ] unaddressed
-  - Step 4: ⚠ Codebase Evidence line ref `:2` for alertSeverityFromJSON should be `:3` (cosmetic) — [ ] unaddressed
-  - Step 6: ⚠ TDD marked "red-green required" but step is a pure DRY extraction with no new behavior; existing E2E suffices (C-08/P-06) — [ ] unaddressed
-  - Step 7: ⚠ Instructions verbose but complete (advisory) — [ ] unaddressed
+  - Step 4: ✗ SQL phantom suppression gap (C-01) — `markAlertRead` SQL uses non-correlated `WHERE EXISTS` that gates the entire INSERT set, not per-row; mixed-batch `[valid_id, phantom_id]` inserts all rows if any id is valid. Fix: replace `SELECT unnest(...) WHERE EXISTS (...)` with `SELECT a.alert_id FROM unnest(...) JOIN notify.alerts a ON ...`. Low practical risk (phantom rows inert) but the spec's claim is inaccurate. — [x] addressed — replaced non-correlated WHERE EXISTS with per-row JOIN pattern; updated explanation text
+  - Step 4: ⚠ Codebase Evidence line ref `:2` for alertSeverityFromJSON should be `:3` (cosmetic) — [x] addressed — fixed line ref to `:3`
+  - Step 6: ⚠ TDD marked "red-green required" but step is a pure DRY extraction with no new behavior; existing E2E suffices (C-08/P-06) — [x] addressed — changed TDD to N/A with rationale (pure move-only refactor, existing E2E covers regression)
+  - Step 7: ⚠ Instructions verbose but complete (advisory) — [x] accepted — verbose instructions justified by step scope; no change needed
 - Overlap findings: CLEAN — file-level WARN on `mock-backend.ts` and `INVENTORY.md` (shared with features 187, 188, 202, 204, 205; routine merge-conflict risk, no FAIL-level collision)
