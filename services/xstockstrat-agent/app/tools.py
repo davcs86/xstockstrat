@@ -1,7 +1,7 @@
 """
 MCP tool definitions for xstockstrat-agent.
 
-Fifty-one tools:
+Fifty-two tools:
   list_signal_sources  — lists active sources from ingest, enriched with extractor_tool
   extract_email_content — extracts raw text from email attachments or gated URLs
   extract_website_content — fetches and returns raw text from a registered website source
@@ -53,11 +53,12 @@ Fifty-one tools:
   db_analyze_db_health — run comprehensive DB health checks via postgres-mcp (admin-only)
   query_bars          — query stored daily OHLCV bars (paginated; json/csv) (read-only, feature 204)
   query_fundamentals  — query snapshot/historical fundamentals (paginated; json/csv) (read-only)
+  list_fundamental_metrics — list the fundamental-metrics catalog for formula authoring (read-only)
 
 Also registers one MCP prompt (feature 197), via register_prompts():
   list_correlation_guide — how to join list_accounts/get_positions/get_positions_by_account_id/
     list_opportunities/list_strategies on account_id/strategy_id/symbol. A prompt is not a tool;
-    the tool count stays fifty-one.
+    the tool count stays fifty-two.
 """
 
 import base64
@@ -1049,6 +1050,7 @@ def register_tools(server: MCPServer) -> None:
         parameters: list[dict] | None = None,
         outputs: list[dict] | None = None,
         warmup_period: int | None = None,
+        fundamental_inputs: list[str] | None = None,
     ) -> dict:
         """Register/update/delete a custom formula in xstockstrat-indicators.
         operation: 'register' | 'update' | 'delete'.
@@ -1069,6 +1071,10 @@ def register_tools(server: MCPServer) -> None:
             series is always available and must NOT be declared here. A formula can therefore be
             genuinely multi-series (no more one-formula-per-series workaround).
         warmup_period: bars of warm-up before this formula's outputs are valid (int ≥ 0).
+        fundamental_inputs: FundamentalMetric enum NAME-strings (e.g.
+            ["FUNDAMENTAL_METRIC_PE_RATIO", "FUNDAMENTAL_METRIC_PB_RATIO"]) this formula reads. A
+            non-empty list marks the formula fundamentals-only (the analysis evaluator feeds it
+            these metrics, not OHLCV closes). Use list_fundamental_metrics for the valid catalog.
 
         UPDATE IS A PARTIAL MERGE (AIP-161): only the fields you actually pass are changed; every
             field you omit is preserved. Passing is_public=false unpublishes; omitting is_public
@@ -1112,6 +1118,7 @@ def register_tools(server: MCPServer) -> None:
             "parameters": parameters or [],
             "outputs": outputs or [],
             "warmup_period": warmup_period or 0,
+            "fundamental_inputs": fundamental_inputs or [],
         }
         if operation == "update":
             # Derive the update_mask from supplied (non-None) fields so an omitted field is
@@ -1124,6 +1131,7 @@ def register_tools(server: MCPServer) -> None:
                 "parameters": parameters,
                 "outputs": outputs,
                 "warmup_period": warmup_period,
+                "fundamental_inputs": fundamental_inputs,
             }
             mask = [field for field, val in supplied.items() if val is not None]
             if not mask:
@@ -1155,6 +1163,19 @@ def register_tools(server: MCPServer) -> None:
         Soft-deleted formulas are excluded. Returns {"formulas": [<formula in camelCase>, ...]}."""
         try:
             return {"formulas": await client.list_formulas(author_filter, include_public)}
+        except grpc.aio.AioRpcError as e:
+            raise RuntimeError(_grpc_error_message(e)) from e
+
+    @server.tool()
+    async def list_fundamental_metrics() -> dict:
+        """List the available fundamental metrics for formula declarations (feature 205).
+
+        Returns each metric's enum NAME (`metric`, for manage_formula's fundamental_inputs), its
+        snake_case `dataKey` (the key a fundamentals formula reads via data["<dataKey>"] and the key
+        test_formula's input_data uses), and a human-readable `meaning`.
+        Returns {"metrics": [{"metric", "dataKey", "meaning"}, ...]}."""
+        try:
+            return {"metrics": await client.list_fundamental_metrics()}
         except grpc.aio.AioRpcError as e:
             raise RuntimeError(_grpc_error_message(e)) from e
 
@@ -1407,7 +1428,10 @@ def register_tools(server: MCPServer) -> None:
         Use this to validate a formula's behavior before manage_formula(operation='register').
         source: plain Python; assign the result to a `result` dict with a 'value' key. `data`
             (series input, e.g. data['close']) and `params` (typed scalars) are in scope.
-        input_data: JSON object passed to the formula as `data` (e.g. {'close': [1,2,3]}).
+        input_data: JSON object passed to the formula as `data` (e.g. {'close': [1,2,3]}). A
+            fundamentals-scoring formula reads snake_case data-keys matching its FundamentalMetric
+            declarations (e.g. {'pe_ratio': 12.5, 'pb_ratio': 1.8}) — call list_fundamental_metrics
+            for the valid key catalog.
         input_params: parameter VALUES exposed as `params` (e.g. {'period': 14}).
         parameters: optional typed parameter DEFINITIONS to validate input_params for this run.
         timeout_ms: 0 = use the configured sandbox timeout.

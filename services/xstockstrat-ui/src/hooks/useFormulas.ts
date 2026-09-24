@@ -1,8 +1,24 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import type { ListFormulasRequest } from '@xstockstrat/proto/indicators/v1/indicators_pb';
+import type {
+  FundamentalMetric,
+  ListFormulasRequest,
+} from '@xstockstrat/proto/indicators/v1/indicators_pb';
 import type { FormulaParameterInit } from '@/components/insights/ParameterEditor';
 import type { FormulaOutputInit } from '@/components/insights/OutputEditor';
 import { indicatorsClient } from '@/lib/browserClients/indicatorsClient';
+
+/**
+ * The FundamentalMetric catalog (enum name / snake_case data_key / meaning) backing the formula
+ * authoring picker. The set is deployment-static, so it is cached indefinitely and shared by the
+ * FundamentalInputEditor and the FormulaWorkspace fundamentals test grid.
+ */
+export function useFundamentalMetrics() {
+  return useQuery({
+    queryKey: ['fundamental-metrics-catalog'],
+    queryFn: () => indicatorsClient.listFundamentalMetrics({}),
+    staleTime: Infinity,
+  });
+}
 
 export function useFormulas(params: Partial<ListFormulasRequest> = {}) {
   return useQuery({
@@ -38,6 +54,7 @@ export function useRegisterFormula() {
       parameters?: FormulaParameterInit[];
       outputs?: FormulaOutputInit[];
       warmupPeriod?: number;
+      fundamentalInputs?: FundamentalMetric[];
     }) =>
       indicatorsClient.registerFormula({
         name: req.name ?? '',
@@ -49,6 +66,7 @@ export function useRegisterFormula() {
         parameters: req.parameters ?? [],
         outputs: req.outputs ?? [],
         warmupPeriod: req.warmupPeriod ?? 0,
+        fundamentalInputs: req.fundamentalInputs ?? [],
       }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['indicators-formulas'] }),
   });
@@ -67,6 +85,7 @@ export function useUpdateFormula() {
       parameters?: FormulaParameterInit[];
       outputs?: FormulaOutputInit[];
       warmupPeriod?: number;
+      fundamentalInputs?: FundamentalMetric[];
     }) =>
       indicatorsClient.updateFormula({
         formulaId: req.formulaId,
@@ -78,6 +97,7 @@ export function useUpdateFormula() {
         parameters: req.parameters ?? [],
         outputs: req.outputs ?? [],
         warmupPeriod: req.warmupPeriod ?? 0,
+        fundamentalInputs: req.fundamentalInputs ?? [],
       }),
     onSuccess: (_, vars) => {
       queryClient.invalidateQueries({ queryKey: ['indicators-formulas'] });

@@ -72,6 +72,7 @@ def test_list_tools_returns_all_registered_tools():
         "db_analyze_workload_indexes",
         "db_analyze_query_indexes",
         "db_analyze_db_health",
+        "list_fundamental_metrics",
     }
 
 

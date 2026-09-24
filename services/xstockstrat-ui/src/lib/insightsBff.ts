@@ -94,6 +94,9 @@ router.service(MarketDataService, {
   listAssets: forward((req, opts) => marketDataClient.listAssets(req, opts)),
   // Live price wired on BOTH BFFs so the queue card and Signal-detail header read the same source.
   getLatestPrice: forward((req, opts) => marketDataClient.getLatestPrice(req, opts)),
+  // Read-only snapshot fundamentals for the formula fundamentals test-grid symbol-prefill (feature
+  // 205); public data via the shared forward() plumbing.
+  getFundamentalsMulti: forward((req, opts) => marketDataClient.getFundamentalsMulti(req, opts)),
   // Destructive — admin only; the marketdata server enforces it again.
   deleteBackfilledData: forwardAdmin((req, opts) =>
     marketDataClient.deleteBackfilledData(req, opts),
@@ -161,6 +164,11 @@ router.service(IndicatorsService, {
   executeFormula: forward((req, opts) => indicatorsClient.executeFormula(req, opts)),
   computeIndicator: forward((req, opts) => indicatorsClient.computeIndicator(req, opts)),
   listIndicators: forward((req, opts) => indicatorsClient.listIndicators(req, opts)),
+  // Read-only catalog of the FundamentalMetric enum (name/data_key/meaning) for the formula
+  // authoring picker — deployment-static, no admin gate.
+  listFundamentalMetrics: forward((req, opts) =>
+    indicatorsClient.listFundamentalMetrics(req, opts),
+  ),
 });
 
 // In the consolidated app there is no basePath — the full URL /insights/api/<service>/<method>

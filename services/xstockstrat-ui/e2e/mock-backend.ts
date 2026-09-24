@@ -615,6 +615,12 @@ export async function startMockBackend(): Promise<void> {
           }
           throw new ConnectError(`fmp: no fundamentals for ${req.symbol}`, Code.Unavailable);
         },
+        async getFundamentalsMulti(req) {
+          // feature 205: snapshot fundamentals for the formula fundamentals grid symbol-prefill.
+          // AAPL has data; any other requested symbol is simply absent from the response.
+          const wanted = (req.symbols ?? []).map((s: string) => s.toUpperCase());
+          return { fundamentals: wanted.includes('AAPL') ? [FUNDAMENTALS_AAPL] : [] };
+        },
         async getHistoricalFundamentals(req) {
           // feature 204 baseline handler (the data-explorer spec drives precise scenarios via
           // page.route; this serves non-intercepted navigation). AAPL only; single page.
