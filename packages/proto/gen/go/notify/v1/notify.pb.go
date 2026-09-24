@@ -92,6 +92,10 @@ type Alert struct {
 	Tags          []string               `protobuf:"bytes,10,rep,name=tags,proto3" json:"tags,omitempty"`
 	Acknowledged  bool                   `protobuf:"varint,11,opt,name=acknowledged,proto3" json:"acknowledged,omitempty"`
 	CorrelationId string                 `protobuf:"bytes,12,opt,name=correlation_id,json=correlationId,proto3" json:"correlation_id,omitempty"`
+	// Per-user read state (feature 203). Populated for the calling user on ListAlerts via a LEFT JOIN
+	// on notify.alert_reads; StreamAlerts leaves read=false (proto3 default). read_at is absent when unread.
+	Read          bool                   `protobuf:"varint,13,opt,name=read,proto3" json:"read,omitempty"`
+	ReadAt        *timestamppb.Timestamp `protobuf:"bytes,14,opt,name=read_at,json=readAt,proto3" json:"read_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -208,6 +212,20 @@ func (x *Alert) GetCorrelationId() string {
 		return x.CorrelationId
 	}
 	return ""
+}
+
+func (x *Alert) GetRead() bool {
+	if x != nil {
+		return x.Read
+	}
+	return false
+}
+
+func (x *Alert) GetReadAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ReadAt
+	}
+	return nil
 }
 
 type EmitAlertRequest struct {
@@ -540,6 +558,7 @@ type ListAlertsRequest struct {
 	Categories    []string               `protobuf:"bytes,2,rep,name=categories,proto3" json:"categories,omitempty"`
 	Limit         int32                  `protobuf:"varint,3,opt,name=limit,proto3" json:"limit,omitempty"`
 	PageToken     string                 `protobuf:"bytes,4,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	UnreadOnly    bool                   `protobuf:"varint,5,opt,name=unread_only,json=unreadOnly,proto3" json:"unread_only,omitempty"` // feature 203 — when true, return only alerts the calling user has not read
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -602,10 +621,18 @@ func (x *ListAlertsRequest) GetPageToken() string {
 	return ""
 }
 
+func (x *ListAlertsRequest) GetUnreadOnly() bool {
+	if x != nil {
+		return x.UnreadOnly
+	}
+	return false
+}
+
 type ListAlertsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Alerts        []*Alert               `protobuf:"bytes,1,rep,name=alerts,proto3" json:"alerts,omitempty"`
 	NextPageToken string                 `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	UnreadCount   int32                  `protobuf:"varint,3,opt,name=unread_count,json=unreadCount,proto3" json:"unread_count,omitempty"` // feature 203 — count of the calling user's unread alerts
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -654,6 +681,94 @@ func (x *ListAlertsResponse) GetNextPageToken() string {
 	return ""
 }
 
+func (x *ListAlertsResponse) GetUnreadCount() int32 {
+	if x != nil {
+		return x.UnreadCount
+	}
+	return 0
+}
+
+type MarkAlertReadRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Owner resolved from the propagated x-user-id header (C-03), never the body.
+	AlertIds      []string `protobuf:"bytes,1,rep,name=alert_ids,json=alertIds,proto3" json:"alert_ids,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MarkAlertReadRequest) Reset() {
+	*x = MarkAlertReadRequest{}
+	mi := &file_notify_v1_notify_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MarkAlertReadRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MarkAlertReadRequest) ProtoMessage() {}
+
+func (x *MarkAlertReadRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_notify_v1_notify_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MarkAlertReadRequest.ProtoReflect.Descriptor instead.
+func (*MarkAlertReadRequest) Descriptor() ([]byte, []int) {
+	return file_notify_v1_notify_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *MarkAlertReadRequest) GetAlertIds() []string {
+	if x != nil {
+		return x.AlertIds
+	}
+	return nil
+}
+
+type MarkAlertReadResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MarkAlertReadResponse) Reset() {
+	*x = MarkAlertReadResponse{}
+	mi := &file_notify_v1_notify_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MarkAlertReadResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MarkAlertReadResponse) ProtoMessage() {}
+
+func (x *MarkAlertReadResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_notify_v1_notify_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MarkAlertReadResponse.ProtoReflect.Descriptor instead.
+func (*MarkAlertReadResponse) Descriptor() ([]byte, []int) {
+	return file_notify_v1_notify_proto_rawDescGZIP(), []int{9}
+}
+
 // Web Push subscription registration (feature 165 — pwa-notifications).
 type RegisterPushSubscriptionRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -669,7 +784,7 @@ type RegisterPushSubscriptionRequest struct {
 
 func (x *RegisterPushSubscriptionRequest) Reset() {
 	*x = RegisterPushSubscriptionRequest{}
-	mi := &file_notify_v1_notify_proto_msgTypes[8]
+	mi := &file_notify_v1_notify_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -681,7 +796,7 @@ func (x *RegisterPushSubscriptionRequest) String() string {
 func (*RegisterPushSubscriptionRequest) ProtoMessage() {}
 
 func (x *RegisterPushSubscriptionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_notify_v1_notify_proto_msgTypes[8]
+	mi := &file_notify_v1_notify_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -694,7 +809,7 @@ func (x *RegisterPushSubscriptionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterPushSubscriptionRequest.ProtoReflect.Descriptor instead.
 func (*RegisterPushSubscriptionRequest) Descriptor() ([]byte, []int) {
-	return file_notify_v1_notify_proto_rawDescGZIP(), []int{8}
+	return file_notify_v1_notify_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *RegisterPushSubscriptionRequest) GetEndpoint() string {
@@ -734,7 +849,7 @@ type RegisterPushSubscriptionResponse struct {
 
 func (x *RegisterPushSubscriptionResponse) Reset() {
 	*x = RegisterPushSubscriptionResponse{}
-	mi := &file_notify_v1_notify_proto_msgTypes[9]
+	mi := &file_notify_v1_notify_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -746,7 +861,7 @@ func (x *RegisterPushSubscriptionResponse) String() string {
 func (*RegisterPushSubscriptionResponse) ProtoMessage() {}
 
 func (x *RegisterPushSubscriptionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_notify_v1_notify_proto_msgTypes[9]
+	mi := &file_notify_v1_notify_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -759,7 +874,7 @@ func (x *RegisterPushSubscriptionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterPushSubscriptionResponse.ProtoReflect.Descriptor instead.
 func (*RegisterPushSubscriptionResponse) Descriptor() ([]byte, []int) {
-	return file_notify_v1_notify_proto_rawDescGZIP(), []int{9}
+	return file_notify_v1_notify_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *RegisterPushSubscriptionResponse) GetSubscriptionId() string {
@@ -778,7 +893,7 @@ type UnregisterPushSubscriptionRequest struct {
 
 func (x *UnregisterPushSubscriptionRequest) Reset() {
 	*x = UnregisterPushSubscriptionRequest{}
-	mi := &file_notify_v1_notify_proto_msgTypes[10]
+	mi := &file_notify_v1_notify_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -790,7 +905,7 @@ func (x *UnregisterPushSubscriptionRequest) String() string {
 func (*UnregisterPushSubscriptionRequest) ProtoMessage() {}
 
 func (x *UnregisterPushSubscriptionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_notify_v1_notify_proto_msgTypes[10]
+	mi := &file_notify_v1_notify_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -803,7 +918,7 @@ func (x *UnregisterPushSubscriptionRequest) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use UnregisterPushSubscriptionRequest.ProtoReflect.Descriptor instead.
 func (*UnregisterPushSubscriptionRequest) Descriptor() ([]byte, []int) {
-	return file_notify_v1_notify_proto_rawDescGZIP(), []int{10}
+	return file_notify_v1_notify_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *UnregisterPushSubscriptionRequest) GetEndpoint() string {
@@ -822,7 +937,7 @@ type UnregisterPushSubscriptionResponse struct {
 
 func (x *UnregisterPushSubscriptionResponse) Reset() {
 	*x = UnregisterPushSubscriptionResponse{}
-	mi := &file_notify_v1_notify_proto_msgTypes[11]
+	mi := &file_notify_v1_notify_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -834,7 +949,7 @@ func (x *UnregisterPushSubscriptionResponse) String() string {
 func (*UnregisterPushSubscriptionResponse) ProtoMessage() {}
 
 func (x *UnregisterPushSubscriptionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_notify_v1_notify_proto_msgTypes[11]
+	mi := &file_notify_v1_notify_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -847,7 +962,7 @@ func (x *UnregisterPushSubscriptionResponse) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use UnregisterPushSubscriptionResponse.ProtoReflect.Descriptor instead.
 func (*UnregisterPushSubscriptionResponse) Descriptor() ([]byte, []int) {
-	return file_notify_v1_notify_proto_rawDescGZIP(), []int{11}
+	return file_notify_v1_notify_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *UnregisterPushSubscriptionResponse) GetDeleted() bool {
@@ -861,7 +976,7 @@ var File_notify_v1_notify_proto protoreflect.FileDescriptor
 
 const file_notify_v1_notify_proto_rawDesc = "" +
 	"\n" +
-	"\x16notify/v1/notify.proto\x12\x15xstockstrat.notify.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1cgoogle/protobuf/struct.proto\"\xc4\x03\n" +
+	"\x16notify/v1/notify.proto\x12\x15xstockstrat.notify.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1cgoogle/protobuf/struct.proto\"\x8d\x04\n" +
 	"\x05Alert\x12\x19\n" +
 	"\balert_id\x18\x01 \x01(\tR\aalertId\x12@\n" +
 	"\bseverity\x18\x02 \x01(\x0e2$.xstockstrat.notify.v1.AlertSeverityR\bseverity\x12\x1a\n" +
@@ -876,7 +991,9 @@ const file_notify_v1_notify_proto_rawDesc = "" +
 	"\x04tags\x18\n" +
 	" \x03(\tR\x04tags\x12\"\n" +
 	"\facknowledged\x18\v \x01(\bR\facknowledged\x12%\n" +
-	"\x0ecorrelation_id\x18\f \x01(\tR\rcorrelationId\"\xd5\x02\n" +
+	"\x0ecorrelation_id\x18\f \x01(\tR\rcorrelationId\x12\x12\n" +
+	"\x04read\x18\r \x01(\bR\x04read\x123\n" +
+	"\aread_at\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampR\x06readAt\"\xd5\x02\n" +
 	"\x10EmitAlertRequest\x12@\n" +
 	"\bseverity\x18\x01 \x01(\x0e2$.xstockstrat.notify.v1.AlertSeverityR\bseverity\x12\x1a\n" +
 	"\bcategory\x18\x02 \x01(\tR\bcategory\x12\x14\n" +
@@ -904,7 +1021,7 @@ const file_notify_v1_notify_proto_rawDesc = "" +
 	"\balert_id\x18\x01 \x01(\tR\aalertId\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\"4\n" +
 	"\x18AcknowledgeAlertResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess\"\x81\x01\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\"\xa2\x01\n" +
 	"\x11ListAlertsRequest\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x1e\n" +
 	"\n" +
@@ -912,10 +1029,16 @@ const file_notify_v1_notify_proto_rawDesc = "" +
 	"categories\x12\x14\n" +
 	"\x05limit\x18\x03 \x01(\x05R\x05limit\x12\x1d\n" +
 	"\n" +
-	"page_token\x18\x04 \x01(\tR\tpageToken\"r\n" +
+	"page_token\x18\x04 \x01(\tR\tpageToken\x12\x1f\n" +
+	"\vunread_only\x18\x05 \x01(\bR\n" +
+	"unreadOnly\"\x95\x01\n" +
 	"\x12ListAlertsResponse\x124\n" +
 	"\x06alerts\x18\x01 \x03(\v2\x1c.xstockstrat.notify.v1.AlertR\x06alerts\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\x88\x01\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\x12!\n" +
+	"\funread_count\x18\x03 \x01(\x05R\vunreadCount\"3\n" +
+	"\x14MarkAlertReadRequest\x12\x1b\n" +
+	"\talert_ids\x18\x01 \x03(\tR\balertIds\"\x17\n" +
+	"\x15MarkAlertReadResponse\"\x88\x01\n" +
 	"\x1fRegisterPushSubscriptionRequest\x12\x1a\n" +
 	"\bendpoint\x18\x01 \x01(\tR\bendpoint\x12\x16\n" +
 	"\x06p256dh\x18\x02 \x01(\tR\x06p256dh\x12\x12\n" +
@@ -933,13 +1056,14 @@ const file_notify_v1_notify_proto_rawDesc = "" +
 	"\x13ALERT_SEVERITY_INFO\x10\x01\x12\x1a\n" +
 	"\x16ALERT_SEVERITY_WARNING\x10\x02\x12\x18\n" +
 	"\x14ALERT_SEVERITY_ERROR\x10\x03\x12\x1b\n" +
-	"\x17ALERT_SEVERITY_CRITICAL\x10\x042\xc5\x05\n" +
+	"\x17ALERT_SEVERITY_CRITICAL\x10\x042\xb1\x06\n" +
 	"\rNotifyService\x12^\n" +
 	"\tEmitAlert\x12'.xstockstrat.notify.v1.EmitAlertRequest\x1a(.xstockstrat.notify.v1.EmitAlertResponse\x12Z\n" +
 	"\fStreamAlerts\x12*.xstockstrat.notify.v1.StreamAlertsRequest\x1a\x1c.xstockstrat.notify.v1.Alert0\x01\x12s\n" +
 	"\x10AcknowledgeAlert\x12..xstockstrat.notify.v1.AcknowledgeAlertRequest\x1a/.xstockstrat.notify.v1.AcknowledgeAlertResponse\x12a\n" +
 	"\n" +
-	"ListAlerts\x12(.xstockstrat.notify.v1.ListAlertsRequest\x1a).xstockstrat.notify.v1.ListAlertsResponse\x12\x8b\x01\n" +
+	"ListAlerts\x12(.xstockstrat.notify.v1.ListAlertsRequest\x1a).xstockstrat.notify.v1.ListAlertsResponse\x12j\n" +
+	"\rMarkAlertRead\x12+.xstockstrat.notify.v1.MarkAlertReadRequest\x1a,.xstockstrat.notify.v1.MarkAlertReadResponse\x12\x8b\x01\n" +
 	"\x18RegisterPushSubscription\x126.xstockstrat.notify.v1.RegisterPushSubscriptionRequest\x1a7.xstockstrat.notify.v1.RegisterPushSubscriptionResponse\x12\x91\x01\n" +
 	"\x1aUnregisterPushSubscription\x128.xstockstrat.notify.v1.UnregisterPushSubscriptionRequest\x1a9.xstockstrat.notify.v1.UnregisterPushSubscriptionResponseB<Z:github.com/xstockstrat/contracts/gen/go/notify/v1;notifyv1b\x06proto3"
 
@@ -956,7 +1080,7 @@ func file_notify_v1_notify_proto_rawDescGZIP() []byte {
 }
 
 var file_notify_v1_notify_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_notify_v1_notify_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_notify_v1_notify_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
 var file_notify_v1_notify_proto_goTypes = []any{
 	(AlertSeverity)(0),                         // 0: xstockstrat.notify.v1.AlertSeverity
 	(*Alert)(nil),                              // 1: xstockstrat.notify.v1.Alert
@@ -967,39 +1091,44 @@ var file_notify_v1_notify_proto_goTypes = []any{
 	(*AcknowledgeAlertResponse)(nil),           // 6: xstockstrat.notify.v1.AcknowledgeAlertResponse
 	(*ListAlertsRequest)(nil),                  // 7: xstockstrat.notify.v1.ListAlertsRequest
 	(*ListAlertsResponse)(nil),                 // 8: xstockstrat.notify.v1.ListAlertsResponse
-	(*RegisterPushSubscriptionRequest)(nil),    // 9: xstockstrat.notify.v1.RegisterPushSubscriptionRequest
-	(*RegisterPushSubscriptionResponse)(nil),   // 10: xstockstrat.notify.v1.RegisterPushSubscriptionResponse
-	(*UnregisterPushSubscriptionRequest)(nil),  // 11: xstockstrat.notify.v1.UnregisterPushSubscriptionRequest
-	(*UnregisterPushSubscriptionResponse)(nil), // 12: xstockstrat.notify.v1.UnregisterPushSubscriptionResponse
-	(*timestamppb.Timestamp)(nil),              // 13: google.protobuf.Timestamp
-	(*structpb.Struct)(nil),                    // 14: google.protobuf.Struct
+	(*MarkAlertReadRequest)(nil),               // 9: xstockstrat.notify.v1.MarkAlertReadRequest
+	(*MarkAlertReadResponse)(nil),              // 10: xstockstrat.notify.v1.MarkAlertReadResponse
+	(*RegisterPushSubscriptionRequest)(nil),    // 11: xstockstrat.notify.v1.RegisterPushSubscriptionRequest
+	(*RegisterPushSubscriptionResponse)(nil),   // 12: xstockstrat.notify.v1.RegisterPushSubscriptionResponse
+	(*UnregisterPushSubscriptionRequest)(nil),  // 13: xstockstrat.notify.v1.UnregisterPushSubscriptionRequest
+	(*UnregisterPushSubscriptionResponse)(nil), // 14: xstockstrat.notify.v1.UnregisterPushSubscriptionResponse
+	(*timestamppb.Timestamp)(nil),              // 15: google.protobuf.Timestamp
+	(*structpb.Struct)(nil),                    // 16: google.protobuf.Struct
 }
 var file_notify_v1_notify_proto_depIdxs = []int32{
 	0,  // 0: xstockstrat.notify.v1.Alert.severity:type_name -> xstockstrat.notify.v1.AlertSeverity
-	13, // 1: xstockstrat.notify.v1.Alert.created_at:type_name -> google.protobuf.Timestamp
-	14, // 2: xstockstrat.notify.v1.Alert.context:type_name -> google.protobuf.Struct
-	0,  // 3: xstockstrat.notify.v1.EmitAlertRequest.severity:type_name -> xstockstrat.notify.v1.AlertSeverity
-	14, // 4: xstockstrat.notify.v1.EmitAlertRequest.context:type_name -> google.protobuf.Struct
-	13, // 5: xstockstrat.notify.v1.EmitAlertResponse.created_at:type_name -> google.protobuf.Timestamp
-	0,  // 6: xstockstrat.notify.v1.StreamAlertsRequest.severities:type_name -> xstockstrat.notify.v1.AlertSeverity
-	1,  // 7: xstockstrat.notify.v1.ListAlertsResponse.alerts:type_name -> xstockstrat.notify.v1.Alert
-	2,  // 8: xstockstrat.notify.v1.NotifyService.EmitAlert:input_type -> xstockstrat.notify.v1.EmitAlertRequest
-	4,  // 9: xstockstrat.notify.v1.NotifyService.StreamAlerts:input_type -> xstockstrat.notify.v1.StreamAlertsRequest
-	5,  // 10: xstockstrat.notify.v1.NotifyService.AcknowledgeAlert:input_type -> xstockstrat.notify.v1.AcknowledgeAlertRequest
-	7,  // 11: xstockstrat.notify.v1.NotifyService.ListAlerts:input_type -> xstockstrat.notify.v1.ListAlertsRequest
-	9,  // 12: xstockstrat.notify.v1.NotifyService.RegisterPushSubscription:input_type -> xstockstrat.notify.v1.RegisterPushSubscriptionRequest
-	11, // 13: xstockstrat.notify.v1.NotifyService.UnregisterPushSubscription:input_type -> xstockstrat.notify.v1.UnregisterPushSubscriptionRequest
-	3,  // 14: xstockstrat.notify.v1.NotifyService.EmitAlert:output_type -> xstockstrat.notify.v1.EmitAlertResponse
-	1,  // 15: xstockstrat.notify.v1.NotifyService.StreamAlerts:output_type -> xstockstrat.notify.v1.Alert
-	6,  // 16: xstockstrat.notify.v1.NotifyService.AcknowledgeAlert:output_type -> xstockstrat.notify.v1.AcknowledgeAlertResponse
-	8,  // 17: xstockstrat.notify.v1.NotifyService.ListAlerts:output_type -> xstockstrat.notify.v1.ListAlertsResponse
-	10, // 18: xstockstrat.notify.v1.NotifyService.RegisterPushSubscription:output_type -> xstockstrat.notify.v1.RegisterPushSubscriptionResponse
-	12, // 19: xstockstrat.notify.v1.NotifyService.UnregisterPushSubscription:output_type -> xstockstrat.notify.v1.UnregisterPushSubscriptionResponse
-	14, // [14:20] is the sub-list for method output_type
-	8,  // [8:14] is the sub-list for method input_type
-	8,  // [8:8] is the sub-list for extension type_name
-	8,  // [8:8] is the sub-list for extension extendee
-	0,  // [0:8] is the sub-list for field type_name
+	15, // 1: xstockstrat.notify.v1.Alert.created_at:type_name -> google.protobuf.Timestamp
+	16, // 2: xstockstrat.notify.v1.Alert.context:type_name -> google.protobuf.Struct
+	15, // 3: xstockstrat.notify.v1.Alert.read_at:type_name -> google.protobuf.Timestamp
+	0,  // 4: xstockstrat.notify.v1.EmitAlertRequest.severity:type_name -> xstockstrat.notify.v1.AlertSeverity
+	16, // 5: xstockstrat.notify.v1.EmitAlertRequest.context:type_name -> google.protobuf.Struct
+	15, // 6: xstockstrat.notify.v1.EmitAlertResponse.created_at:type_name -> google.protobuf.Timestamp
+	0,  // 7: xstockstrat.notify.v1.StreamAlertsRequest.severities:type_name -> xstockstrat.notify.v1.AlertSeverity
+	1,  // 8: xstockstrat.notify.v1.ListAlertsResponse.alerts:type_name -> xstockstrat.notify.v1.Alert
+	2,  // 9: xstockstrat.notify.v1.NotifyService.EmitAlert:input_type -> xstockstrat.notify.v1.EmitAlertRequest
+	4,  // 10: xstockstrat.notify.v1.NotifyService.StreamAlerts:input_type -> xstockstrat.notify.v1.StreamAlertsRequest
+	5,  // 11: xstockstrat.notify.v1.NotifyService.AcknowledgeAlert:input_type -> xstockstrat.notify.v1.AcknowledgeAlertRequest
+	7,  // 12: xstockstrat.notify.v1.NotifyService.ListAlerts:input_type -> xstockstrat.notify.v1.ListAlertsRequest
+	9,  // 13: xstockstrat.notify.v1.NotifyService.MarkAlertRead:input_type -> xstockstrat.notify.v1.MarkAlertReadRequest
+	11, // 14: xstockstrat.notify.v1.NotifyService.RegisterPushSubscription:input_type -> xstockstrat.notify.v1.RegisterPushSubscriptionRequest
+	13, // 15: xstockstrat.notify.v1.NotifyService.UnregisterPushSubscription:input_type -> xstockstrat.notify.v1.UnregisterPushSubscriptionRequest
+	3,  // 16: xstockstrat.notify.v1.NotifyService.EmitAlert:output_type -> xstockstrat.notify.v1.EmitAlertResponse
+	1,  // 17: xstockstrat.notify.v1.NotifyService.StreamAlerts:output_type -> xstockstrat.notify.v1.Alert
+	6,  // 18: xstockstrat.notify.v1.NotifyService.AcknowledgeAlert:output_type -> xstockstrat.notify.v1.AcknowledgeAlertResponse
+	8,  // 19: xstockstrat.notify.v1.NotifyService.ListAlerts:output_type -> xstockstrat.notify.v1.ListAlertsResponse
+	10, // 20: xstockstrat.notify.v1.NotifyService.MarkAlertRead:output_type -> xstockstrat.notify.v1.MarkAlertReadResponse
+	12, // 21: xstockstrat.notify.v1.NotifyService.RegisterPushSubscription:output_type -> xstockstrat.notify.v1.RegisterPushSubscriptionResponse
+	14, // 22: xstockstrat.notify.v1.NotifyService.UnregisterPushSubscription:output_type -> xstockstrat.notify.v1.UnregisterPushSubscriptionResponse
+	16, // [16:23] is the sub-list for method output_type
+	9,  // [9:16] is the sub-list for method input_type
+	9,  // [9:9] is the sub-list for extension type_name
+	9,  // [9:9] is the sub-list for extension extendee
+	0,  // [0:9] is the sub-list for field type_name
 }
 
 func init() { file_notify_v1_notify_proto_init() }
@@ -1013,7 +1142,7 @@ func file_notify_v1_notify_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_notify_v1_notify_proto_rawDesc), len(file_notify_v1_notify_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   12,
+			NumMessages:   14,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

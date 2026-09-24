@@ -112,6 +112,12 @@ export interface Alert {
   tags: string[];
   acknowledged: boolean;
   correlationId: string;
+  /**
+   * Per-user read state (feature 203). Populated for the calling user on ListAlerts via a LEFT JOIN
+   * on notify.alert_reads; StreamAlerts leaves read=false (proto3 default). read_at is absent when unread.
+   */
+  read: boolean;
+  readAt?: Date | undefined;
 }
 
 export interface EmitAlertRequest {
@@ -155,11 +161,23 @@ export interface ListAlertsRequest {
   categories: string[];
   limit: number;
   pageToken: string;
+  /** feature 203 — when true, return only alerts the calling user has not read */
+  unreadOnly: boolean;
 }
 
 export interface ListAlertsResponse {
   alerts: Alert[];
   nextPageToken: string;
+  /** feature 203 — count of the calling user's unread alerts */
+  unreadCount: number;
+}
+
+export interface MarkAlertReadRequest {
+  /** Owner resolved from the propagated x-user-id header (C-03), never the body. */
+  alertIds: string[];
+}
+
+export interface MarkAlertReadResponse {
 }
 
 /** Web Push subscription registration (feature 165 — pwa-notifications). */
@@ -204,6 +222,8 @@ function createBaseAlert(): Alert {
     tags: [],
     acknowledged: false,
     correlationId: "",
+    read: false,
+    readAt: undefined,
   };
 }
 
@@ -244,6 +264,12 @@ export const Alert: MessageFns<Alert> = {
     }
     if (message.correlationId !== "") {
       writer.uint32(98).string(message.correlationId);
+    }
+    if (message.read !== false) {
+      writer.uint32(104).bool(message.read);
+    }
+    if (message.readAt !== undefined) {
+      Timestamp.encode(toTimestamp(message.readAt), writer.uint32(114).fork()).join();
     }
     return writer;
   },
@@ -351,6 +377,22 @@ export const Alert: MessageFns<Alert> = {
           message.correlationId = reader.string();
           continue;
         }
+        case 13: {
+          if (tag !== 104) {
+            break;
+          }
+
+          message.read = reader.bool();
+          continue;
+        }
+        case 14: {
+          if (tag !== 114) {
+            break;
+          }
+
+          message.readAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -398,6 +440,12 @@ export const Alert: MessageFns<Alert> = {
         : isSet(object.correlation_id)
         ? globalThis.String(object.correlation_id)
         : "",
+      read: isSet(object.read) ? globalThis.Boolean(object.read) : false,
+      readAt: isSet(object.readAt)
+        ? fromJsonTimestamp(object.readAt)
+        : isSet(object.read_at)
+        ? fromJsonTimestamp(object.read_at)
+        : undefined,
     };
   },
 
@@ -439,6 +487,12 @@ export const Alert: MessageFns<Alert> = {
     if (message.correlationId !== "") {
       obj.correlationId = message.correlationId;
     }
+    if (message.read !== false) {
+      obj.read = message.read;
+    }
+    if (message.readAt !== undefined) {
+      obj.readAt = message.readAt.toISOString();
+    }
     return obj;
   },
 
@@ -459,6 +513,8 @@ export const Alert: MessageFns<Alert> = {
     message.tags = object.tags?.map((e) => e) || [];
     message.acknowledged = object.acknowledged ?? false;
     message.correlationId = object.correlationId ?? "";
+    message.read = object.read ?? false;
+    message.readAt = object.readAt ?? undefined;
     return message;
   },
 };
@@ -1034,7 +1090,7 @@ export const AcknowledgeAlertResponse: MessageFns<AcknowledgeAlertResponse> = {
 };
 
 function createBaseListAlertsRequest(): ListAlertsRequest {
-  return { userId: "", categories: [], limit: 0, pageToken: "" };
+  return { userId: "", categories: [], limit: 0, pageToken: "", unreadOnly: false };
 }
 
 export const ListAlertsRequest: MessageFns<ListAlertsRequest> = {
@@ -1050,6 +1106,9 @@ export const ListAlertsRequest: MessageFns<ListAlertsRequest> = {
     }
     if (message.pageToken !== "") {
       writer.uint32(34).string(message.pageToken);
+    }
+    if (message.unreadOnly !== false) {
+      writer.uint32(40).bool(message.unreadOnly);
     }
     return writer;
   },
@@ -1093,6 +1152,14 @@ export const ListAlertsRequest: MessageFns<ListAlertsRequest> = {
           message.pageToken = reader.string();
           continue;
         }
+        case 5: {
+          if (tag !== 40) {
+            break;
+          }
+
+          message.unreadOnly = reader.bool();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1118,6 +1185,11 @@ export const ListAlertsRequest: MessageFns<ListAlertsRequest> = {
         : isSet(object.page_token)
         ? globalThis.String(object.page_token)
         : "",
+      unreadOnly: isSet(object.unreadOnly)
+        ? globalThis.Boolean(object.unreadOnly)
+        : isSet(object.unread_only)
+        ? globalThis.Boolean(object.unread_only)
+        : false,
     };
   },
 
@@ -1135,6 +1207,9 @@ export const ListAlertsRequest: MessageFns<ListAlertsRequest> = {
     if (message.pageToken !== "") {
       obj.pageToken = message.pageToken;
     }
+    if (message.unreadOnly !== false) {
+      obj.unreadOnly = message.unreadOnly;
+    }
     return obj;
   },
 
@@ -1147,12 +1222,13 @@ export const ListAlertsRequest: MessageFns<ListAlertsRequest> = {
     message.categories = object.categories?.map((e) => e) || [];
     message.limit = object.limit ?? 0;
     message.pageToken = object.pageToken ?? "";
+    message.unreadOnly = object.unreadOnly ?? false;
     return message;
   },
 };
 
 function createBaseListAlertsResponse(): ListAlertsResponse {
-  return { alerts: [], nextPageToken: "" };
+  return { alerts: [], nextPageToken: "", unreadCount: 0 };
 }
 
 export const ListAlertsResponse: MessageFns<ListAlertsResponse> = {
@@ -1162,6 +1238,9 @@ export const ListAlertsResponse: MessageFns<ListAlertsResponse> = {
     }
     if (message.nextPageToken !== "") {
       writer.uint32(18).string(message.nextPageToken);
+    }
+    if (message.unreadCount !== 0) {
+      writer.uint32(24).int32(message.unreadCount);
     }
     return writer;
   },
@@ -1189,6 +1268,14 @@ export const ListAlertsResponse: MessageFns<ListAlertsResponse> = {
           message.nextPageToken = reader.string();
           continue;
         }
+        case 3: {
+          if (tag !== 24) {
+            break;
+          }
+
+          message.unreadCount = reader.int32();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1206,6 +1293,11 @@ export const ListAlertsResponse: MessageFns<ListAlertsResponse> = {
         : isSet(object.next_page_token)
         ? globalThis.String(object.next_page_token)
         : "",
+      unreadCount: isSet(object.unreadCount)
+        ? globalThis.Number(object.unreadCount)
+        : isSet(object.unread_count)
+        ? globalThis.Number(object.unread_count)
+        : 0,
     };
   },
 
@@ -1217,6 +1309,9 @@ export const ListAlertsResponse: MessageFns<ListAlertsResponse> = {
     if (message.nextPageToken !== "") {
       obj.nextPageToken = message.nextPageToken;
     }
+    if (message.unreadCount !== 0) {
+      obj.unreadCount = Math.round(message.unreadCount);
+    }
     return obj;
   },
 
@@ -1227,6 +1322,114 @@ export const ListAlertsResponse: MessageFns<ListAlertsResponse> = {
     const message = createBaseListAlertsResponse();
     message.alerts = object.alerts?.map((e) => Alert.fromPartial(e)) || [];
     message.nextPageToken = object.nextPageToken ?? "";
+    message.unreadCount = object.unreadCount ?? 0;
+    return message;
+  },
+};
+
+function createBaseMarkAlertReadRequest(): MarkAlertReadRequest {
+  return { alertIds: [] };
+}
+
+export const MarkAlertReadRequest: MessageFns<MarkAlertReadRequest> = {
+  encode(message: MarkAlertReadRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.alertIds) {
+      writer.uint32(10).string(v!);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): MarkAlertReadRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseMarkAlertReadRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.alertIds.push(reader.string());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): MarkAlertReadRequest {
+    return {
+      alertIds: globalThis.Array.isArray(object?.alertIds)
+        ? object.alertIds.map((e: any) => globalThis.String(e))
+        : globalThis.Array.isArray(object?.alert_ids)
+        ? object.alert_ids.map((e: any) => globalThis.String(e))
+        : [],
+    };
+  },
+
+  toJSON(message: MarkAlertReadRequest): unknown {
+    const obj: any = {};
+    if (message.alertIds?.length) {
+      obj.alertIds = message.alertIds;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<MarkAlertReadRequest>, I>>(base?: I): MarkAlertReadRequest {
+    return MarkAlertReadRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<MarkAlertReadRequest>, I>>(object: I): MarkAlertReadRequest {
+    const message = createBaseMarkAlertReadRequest();
+    message.alertIds = object.alertIds?.map((e) => e) || [];
+    return message;
+  },
+};
+
+function createBaseMarkAlertReadResponse(): MarkAlertReadResponse {
+  return {};
+}
+
+export const MarkAlertReadResponse: MessageFns<MarkAlertReadResponse> = {
+  encode(_: MarkAlertReadResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): MarkAlertReadResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseMarkAlertReadResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(_: any): MarkAlertReadResponse {
+    return {};
+  },
+
+  toJSON(_: MarkAlertReadResponse): unknown {
+    const obj: any = {};
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<MarkAlertReadResponse>, I>>(base?: I): MarkAlertReadResponse {
+    return MarkAlertReadResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<MarkAlertReadResponse>, I>>(_: I): MarkAlertReadResponse {
+    const message = createBaseMarkAlertReadResponse();
     return message;
   },
 };
@@ -1589,6 +1792,20 @@ export const NotifyServiceService = {
     responseDeserialize: (value: Buffer): ListAlertsResponse => ListAlertsResponse.decode(value),
   },
   /**
+   * Mark one or more alerts read for the calling user (feature 203). Owner resolved from the
+   * propagated x-user-id header (C-03). Idempotent — re-marking preserves the original read_at.
+   */
+  markAlertRead: {
+    path: "/xstockstrat.notify.v1.NotifyService/MarkAlertRead" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: MarkAlertReadRequest): Buffer => Buffer.from(MarkAlertReadRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): MarkAlertReadRequest => MarkAlertReadRequest.decode(value),
+    responseSerialize: (value: MarkAlertReadResponse): Buffer =>
+      Buffer.from(MarkAlertReadResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): MarkAlertReadResponse => MarkAlertReadResponse.decode(value),
+  },
+  /**
    * Register (or upsert) a Web Push subscription for the calling user.
    * The owner is resolved from the propagated x-user-id metadata header (C-03), never the body.
    */
@@ -1633,6 +1850,11 @@ export interface NotifyServiceServer extends UntypedServiceImplementation {
   acknowledgeAlert: handleUnaryCall<AcknowledgeAlertRequest, AcknowledgeAlertResponse>;
   /** List historical alerts */
   listAlerts: handleUnaryCall<ListAlertsRequest, ListAlertsResponse>;
+  /**
+   * Mark one or more alerts read for the calling user (feature 203). Owner resolved from the
+   * propagated x-user-id header (C-03). Idempotent — re-marking preserves the original read_at.
+   */
+  markAlertRead: handleUnaryCall<MarkAlertReadRequest, MarkAlertReadResponse>;
   /**
    * Register (or upsert) a Web Push subscription for the calling user.
    * The owner is resolved from the propagated x-user-id metadata header (C-03), never the body.
@@ -1700,6 +1922,25 @@ export interface NotifyServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: ListAlertsResponse) => void,
+  ): ClientUnaryCall;
+  /**
+   * Mark one or more alerts read for the calling user (feature 203). Owner resolved from the
+   * propagated x-user-id header (C-03). Idempotent — re-marking preserves the original read_at.
+   */
+  markAlertRead(
+    request: MarkAlertReadRequest,
+    callback: (error: ServiceError | null, response: MarkAlertReadResponse) => void,
+  ): ClientUnaryCall;
+  markAlertRead(
+    request: MarkAlertReadRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: MarkAlertReadResponse) => void,
+  ): ClientUnaryCall;
+  markAlertRead(
+    request: MarkAlertReadRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: MarkAlertReadResponse) => void,
   ): ClientUnaryCall;
   /**
    * Register (or upsert) a Web Push subscription for the calling user.
