@@ -119,3 +119,22 @@ node/pnpm. Docker daemon up but codegen stays host-native.
 - Files: `internal/repository/marketdata_repo.go`, `internal/service/marketdata_service.go`,
   `internal/service/marketdata_service_test.go`.
 - Deviations: none.
+
+### Step 4 — test: QueryHistoricalFundamentals pagination [done]
+- Added to `internal/repository/marketdata_repo_test.go` (pgxmock, package-excluded from coverage):
+  - `TestQueryHistoricalFundamentals_Pagination` — pageSize+1 overfetch → trim to pageSize, nextToken
+    = LAST RETURNED row; page-2 cursor bound before LIMIT, remainder ≤ pageSize → empty token; empty
+    token = first page (AC-20/AC-21).
+  - `TestQueryHistoricalFundamentals_AsOfPushedIntoSQL` — `filed_date < $2` present BEFORE `LIMIT $3`
+    (regex + arg pin), so a short page is never a post-LIMIT-filter artifact (AC-20).
+  - `TestQueryHistoricalFundamentals_CompositeCursorSamePeriodEnd` — FY2019 & Q4-2019 share
+    period_end; page-1 ends at FY2019, page-2 cursor binds fiscal_period "FY2019" (`$3`) and returns
+    Q4-2019 — a period_end-only cursor would skip it, so this is the AC-21 red-green boundary pin.
+  - `TestParseHistCursor` — RFC3339Nano|fiscal_period round-trip, split-on-first-`|`, lenient reject
+    of ""/"no-separator"/bad-date.
+- Consistent with the file's stated pgxmock philosophy (SQL-text + arg + control-flow pin, not a
+  live-Postgres proof — same as the `::jsonb` test): ORDER BY / asOf-exclusion asserted as the SQL the
+  repo *builds*; overfetch→trim→nextToken and the composite boundary driven through returned rows.
+- Helpers `histMockCols` (reuses the production `histFundamentalsColumns` const so a column change
+  tracks) + `histMockRow`. Verify: `go test ./internal/repository/... -race` green; golangci-lint 0 issues.
+- Deviations: none.
