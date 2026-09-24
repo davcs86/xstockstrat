@@ -1,10 +1,13 @@
 package edgar
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -147,6 +150,46 @@ func TestFetchHistorical_QuarterlyAndAnnual_AC2(t *testing.T) {
 	}
 	if a != 3 {
 		t.Errorf("annual periods = %d, want 3", a)
+	}
+}
+
+// Regression (feature 198 defect): SEC's CDN serves gzip-encoded bodies. The client must
+// transparently decode them — a raw gzip body fails JSON decode with "invalid character '\x1f'"
+// (0x1f is the gzip magic). This exercises the REAL http.Transport (via httptest), because
+// transparent decompression is a Transport property the roundTripFunc mocks above bypass. Setting
+// Accept-Encoding manually disables that decompression, which is the bug this guards.
+func TestGet_TransparentlyDecodesGzip(t *testing.T) {
+	payload := map[string]any{
+		"0": map[string]any{"cik_str": 320193, "ticker": "AAPL", "title": "Apple Inc."},
+	}
+	raw, _ := json.Marshal(payload)
+	var gzbuf bytes.Buffer
+	gw := gzip.NewWriter(&gzbuf)
+	if _, err := gw.Write(raw); err != nil {
+		t.Fatalf("gzip write: %v", err)
+	}
+	if err := gw.Close(); err != nil {
+		t.Fatalf("gzip close: %v", err)
+	}
+	gzBody := gzbuf.Bytes()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		// Mirror SEC's CDN: hand back a gzip-encoded body with Content-Encoding: gzip.
+		w.Header().Set("Content-Encoding", "gzip")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(gzBody)
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL, "xstockstrat-test/1.0 (test@example.com)", 0)
+	c.tickerURL = srv.URL + "/files/company_tickers.json"
+
+	cik, err := c.resolveCIK(context.Background(), "AAPL")
+	if err != nil {
+		t.Fatalf("resolveCIK against gzip endpoint: %v", err)
+	}
+	if cik != "0000320193" {
+		t.Errorf("cik = %q, want 0000320193", cik)
 	}
 }
 
