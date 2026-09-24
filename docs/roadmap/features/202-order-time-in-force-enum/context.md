@@ -25,3 +25,24 @@
   the UI must send NAME-string enums over Connect-JSON. Carried into `## Open Questions`.
 - Depth this session: **story only** (operator chose it) — stops at `spec-ready`; `/sdd-design quick`
   not run yet.
+
+## Session 2026-09-24T00:00:00Z — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready (criteria: PASS WITH WARNINGS, no blockers; overlap: CLEAN).
+- Warnings (all advisory, to resolve at /sdd-design — none block the gate):
+  - Open Questions (criterion 9): 4 unchecked design-forks — field strategy (breaking vs additive),
+    exact variant set, per-broker support-matrix location, F-C-10 TS-consumer trap. Intended
+    product-spec→design handoff (P-03), not a completeness gap.
+  - C-2: OFFLINE `BrokerType` (common.proto:74) TIF semantics not addressed; per-broker matrix
+    names only Alpaca/IBKR.
+  - C-3: paper-vs-live equivalence / paper-safety not stated (validation is edge-side, mode-agnostic).
+  - C-4: "existing order types unaffected" not stated; scenarios cover ~one order type. Real brokers
+    couple TIF to order type (e.g. OPG/CLS validity).
+  - C-5: "fill handling unaffected" not stated; ReplaceOrder is allowed on NEW/PARTIALLY_FILLED.
+- Code-checkable claims verified: `Order.time_in_force = 12` (trading.proto:58), `PlaceOrderRequest
+  .time_in_force = 7` (:108), `ReplaceOrderRequest.time_in_force = 5` (:188) all currently string →
+  in-place conversion is wire-breaking, as the spec states. Service names match the registry.
+- Overlap: CLEAN. 196 (proto-deprecated-field-removal) shares the trading proto module but makes no
+  .proto change and touches disjoint fields (user_id/is_paper). 188/199 share /trader UI but not the
+  Place/Replace Order form. No trading proto field-number claim in flight. Re-scan at Mode B once the
+  field strategy + new field number are chosen.

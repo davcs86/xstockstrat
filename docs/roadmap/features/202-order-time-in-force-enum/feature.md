@@ -11,6 +11,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-09-24 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-09-24 | `draft` → `spec-ready` | /sdd-review | Product spec approved (5 warnings, no blockers) |
 
 ---
 
@@ -44,4 +45,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review order-time-in-force-enum product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-design order-time-in-force-enum quick` — recon + design debate (resolve the field-strategy fork and per-broker matrix)
