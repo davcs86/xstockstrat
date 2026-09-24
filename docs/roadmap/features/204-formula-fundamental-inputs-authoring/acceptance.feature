@@ -21,7 +21,7 @@ Feature: formula-fundamental-inputs-authoring
   Scenario: Declared fundamental inputs round-trip on read
     Given formula "pe_value_score" has fundamental_inputs [PE_RATIO, PB_RATIO]
     When an author calls get_formula for "pe_value_score"
-    Then the response lists fundamental_inputs = ["FUNDAMENTAL_METRIC_PE_RATIO", "FUNDAMENTAL_METRIC_PB_RATIO"]
+    Then the response carries fundamentalInputs = ["FUNDAMENTAL_METRIC_PE_RATIO", "FUNDAMENTAL_METRIC_PB_RATIO"] (camelCase key, enum NAME-strings, per MessageToDict)
     And the FormulaEditor shows both metrics as selected
 
   @AC-4 @FR-3
@@ -34,7 +34,7 @@ Feature: formula-fundamental-inputs-authoring
   @AC-5 @FR-4
   Scenario: Test a fundamentals-scoring formula with supplied values
     Given formula "pe_value_score" declares fundamental_inputs [PE_RATIO, PB_RATIO]
-    When an author calls test_formula supplying input_data {PE_RATIO: 12.5, PB_RATIO: 1.8}
+    When an author calls test_formula supplying input_data {pe_ratio: 12.5, pb_ratio: 1.8} (snake_case data-keys, the sandbox `data` vocabulary)
     Then the response returns the formula's output score computed from those values
     And no OHLCV closes are required for the run
 
@@ -43,12 +43,13 @@ Feature: formula-fundamental-inputs-authoring
     Given the /insights formula test harness for "pe_value_score"
     And the author picks symbol "AAPL"
     When the harness loads AAPL's current fundamentals snapshot
-    Then the PE_RATIO and PB_RATIO fields are prefilled from marketdata GetFundamentalsMulti
-    And the author can edit PE_RATIO to 10.0 before running the test
+    Then the pe_ratio and pb_ratio grid fields are prefilled from marketdata GetFundamentalsMulti
+    And a metric absent from the snapshot (in missing_metrics) prefills as null, never NaN
+    And the author can edit pe_ratio to 10.0 before running the test
 
   @AC-7 @FR-6
   Scenario: An authored fundamentals formula behaves identically as a strategy component
     Given formula "pe_value_score" authored via the FormulaEditor with fundamental_inputs [PE_RATIO, PB_RATIO]
     When the same formula is used as a COMPONENT_KIND_CUSTOM_FORMULA in a strategy (feature 201)
-    Then the strategy evaluator feeds it the same PE_RATIO and PB_RATIO inputs
-    And the component output matches the score test_formula returned for equal inputs
+    Then the strategy evaluator feeds it the same pe_ratio and pb_ratio snake_case data-keys
+    And the component's numeric output equals the score test_formula returned for the identical input values

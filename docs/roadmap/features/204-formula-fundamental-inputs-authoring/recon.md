@@ -85,3 +85,15 @@ Advisory step boundaries for `/sdd-spec` (not binding):
 4. UI `FormulaWorkspace`/`useFormulas` declare+view (metric picker mirroring `ParameterEditor`, `fundamentalInputs` in register/update mutations).
 5. UI test harness: fundamentals value grid + symbol-prefill via `insightsBff` `getFundamentals(Multi)` + insights marketdata client.
 6. Tests: agent (pytest round-trip), UI (vitest + Playwright reusing `FORMULA_FUNDAMENTALS`/`FUNDAMENTALS_AAPL`), covering `@AC-1..7`.
+
+---
+
+## Addendum (2026-09-24, post-design)
+
+Scope correction recorded at design approval: the affected-services set above listed
+`xstockstrat-analysis` as **not** touched. The approved design's guard **G6** adds a **test-only**
+assertion to `services/xstockstrat-analysis/tests/` (each `_FUNDAMENTAL_METRIC_DATA_KEY` value equals
+the mechanical `removeprefix('FUNDAMENTAL_METRIC_').lower()` of its enum name — the third leg of the
+data_key contract). This is a deliberate in-scope test-only addition; no analysis runtime/app code
+changes, so no analysis `@AC-*` guarantee is affected. See `design.md` § Open Risks + Constitution
+Rules Touched (C-18). Analysis does **not** get an implementation step beyond this test (step 6).

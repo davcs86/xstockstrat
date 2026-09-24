@@ -65,3 +65,29 @@
   before 201 lands. Soft rebase-only overlap with 187/197/198/199/200 in agent client.py/tools.py
   (disjoint functions) and mcp-tools.md (section-disjoint) — re-verify at Mode B.
 - Next: /sdd-design (FULL, operator's choice) — starting this session.
+
+## Session 2026-09-24T00:00:00Z — sdd-design
+
+- Phase 0 Recon: wrote recon.md (services: agent, ui, indicators, marketdata; scenario-recon).
+  Key reuse: existing `fundamental_inputs`/`FundamentalMetric` plumbing (feature 200/201, backend
+  unchanged), `ParameterEditor` list-editor, `GetFundamentalsMulti` + analysis `_FUNDAMENTAL_METRIC_DATA_KEY`.
+- Phase 1 Grilling: **3 rounds (full)**, approved.
+  - Chosen approach: additive `ListFundamentalMetrics` RPC on indicators (single source of truth) +
+    code-only threading of fundamental_inputs through agent tools + /insights builder; two-vocabulary
+    contract (declare=enum NAME-strings, test input_data=snake_case data-keys); UI-side symbol-prefill.
+  - Operator decisions: R1 gate chose the catalog RPC over static surfacing (single source of truth);
+    R3 gate approved keeping guard G6 (analysis-suite third-leg parity test) + recording the analysis touch.
+  - Rejected: static two-map catalog (drift), agent-side symbol-prefill (no marketdata client),
+    execute-time input_data validation (nothing to validate — test sends raw source), folding
+    strategyCatalog FUNDAMENTAL_METRICS (different screener vocabulary).
+  - Guards folded in: G1 cross-service data_key contract test; G2 fail-loud handler; G3 verify existing
+    insights marketdata client; G4 header propagation; G5 same-PR docs + descriptor-parity test; G6
+    analysis third-leg parity test (test-only touch — recorded scope addition).
+- Constitution rules touched: C-04, C-09, C-10, C-14, C-15, C-17, C-18, C-03, C-01/F-04, F-07, F-01. Floor breaches: none.
+- Business rules: PRESERVE @AC-4 (feature-173), @AC-5 (feature-176); @AC-1..7 net-new EXTEND. No CHANGE.
+- acceptance.feature corrected (C-15): AC-3 camelCase `fundamentalInputs`; AC-5/AC-6 snake_case
+  `input_data` data-keys + null-not-NaN; AC-7 numeric round-trip parity. Intent clarification, not a
+  rule change (scenarios are net-new, never promoted).
+- Scope note: G6 adds a **test-only** touch to xstockstrat-analysis (recon originally excluded it) —
+  recorded in recon.md Addendum + design.md; no analysis runtime change.
+- Status: spec-ready → design-approved.
