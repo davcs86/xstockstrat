@@ -67,7 +67,7 @@ dedicated implementation steps (C-14).
 
 ### Step 1 — proto: Add pagination fields to GetHistoricalFundamentals messages
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/marketdata/v1/marketdata.proto` — modify
@@ -101,7 +101,7 @@ Both must pass (additive fields are non-breaking).
 
 ### Step 2 — proto-gen: Regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/` — regenerated

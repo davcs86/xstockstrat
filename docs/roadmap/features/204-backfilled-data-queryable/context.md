@@ -73,3 +73,24 @@
   - Step 9: modifies source files (tools.py, copilot.ts) without lint verification in own step (advisory WARN) — [x] addressed — added ruff + pnpm lint gates to Step 9 Verification
   - Step 11: verbose instructions — justified by page scope (advisory WARN, C-18) — [x] accepted — verbose instructions justified by multi-tab page scope; no change needed
 - Overlap findings: WARN-level file path collisions with features 196 (marketdata.proto, marketdata_repo.go), 205 (insightsBff.ts, client.py, tools.py, CLAUDE.md, mcp-tools.md), 187 (client.py, tools.py, mcp-tools.md), 188 (mock-backend.ts), 203 (INVENTORY.md, mock-backend.ts). No FAIL-level overlaps. No merge-order entry needed.
+
+## Session 2026-09-24 — sdd-execute (sequential)
+
+Feature 3 of the 202→205 run. Branch `feature/backfilled-data-queryable` off post-202 `main-dev`
+(202's PR #1170 merged mid-run; the local `main-dev` ref was fast-forwarded so buf breaking evaluates
+only 204's additive marketdata changes). Toolchain: host-native buf (Docker Hub still 429s the codegen
+image base — retried at operator request, still limited), go1.27, golangci-lint v2.13.1@go1.27, uv/ruff,
+node/pnpm. Docker daemon up but codegen stays host-native.
+
+### Step 1 — proto: pagination on GetHistoricalFundamentals [done]
+- Additive: `GetHistoricalFundamentalsRequest.page=6` (PageRequest), `GetHistoricalFundamentalsResponse.pagination=2`
+  (PageResponse). `buf lint` clean; `buf breaking` against main-dev exit 0 (non-breaking).
+- Files: `packages/proto/marketdata/v1/marketdata.proto`
+- Deviations: none.
+
+### Step 2 — proto-gen: regenerate stubs [done]
+- Host-native `buf-gen.sh`. marketdata Go/TS/Python stubs carry `GetHistoricalFundamentalsRequest.Page`
+  (field 6) + `GetHistoricalFundamentalsResponse.Pagination` (field 2). Reverted the recurring
+  analysis.pb.go gofmt whitespace drift; diff scoped to `marketdata/v1`.
+- Files: `packages/proto/gen/{go,python,ts}/marketdata/v1/**`
+- Deviations: analysis.pb.go drift revert (recurring).
