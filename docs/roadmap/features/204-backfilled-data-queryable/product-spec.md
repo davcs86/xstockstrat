@@ -26,11 +26,11 @@ FR-5. Both UI and agent surfaces enforce pagination to prevent unbounded result 
 
 FR-6. The UI data explorer page is registered in `PLATFORM_SUBNAV` and accessible from the insights segment navigation (C-10).
 
-FR-7. Both UI and agent surfaces display a "last refresh" timestamp indicating when the queried data was last updated — for OHLCV, the most recent bar's `time` in the result set; for fundamentals snapshot, the `fetched_at` column; for historical fundamentals, the most recent `filed_date` in the result set.
+FR-7. Both UI and agent surfaces display a "last refresh" timestamp indicating when the queried data was last updated — for OHLCV, the most recent bar's `time` in the result set; for fundamentals snapshot, the `as_of` field (proto field 14); for historical fundamentals, the most recent `filed_date` in the result set.
 
 FR-8. The UI provides a "Download CSV" action that exports the currently displayed query results (OHLCV bars or fundamentals) as a CSV file.
 
-FR-9. The MCP `query_bars` and `query_fundamentals` tools accept a `format` parameter (`json` | `csv`). When `csv`, the tool returns the result as base64-encoded CSV binary content (MIME type `text/csv`) suitable for the client to save as a file, instead of the default JSON text response.
+FR-9. The MCP `query_bars` and `query_fundamentals` tools accept a `format` parameter (`json` | `csv`). When `csv`, the tool returns the result as an `EmbeddedResource` with `TextResourceContents` (MIME type `text/csv`) containing raw CSV text, instead of the default JSON text response.
 
 ## Out of Scope
 

@@ -53,17 +53,17 @@ Feature: backfilled-data-queryable
 
   @AC-8 @FR-5
   Scenario: OHLCV query enforces pagination in the UI
-    Given OHLCV bars exist for symbol "SPY" with timeframe "1Min" spanning 50000 bars
-    When the user queries symbol "SPY", timeframe "1Min" for the full range
+    Given OHLCV bars exist for symbol "SPY" with timeframe "1Day" from "2000-01-01" to "2025-12-31"
+    When the user queries symbol "SPY", timeframe "1Day" for the full range
     Then the page displays at most 500 bars per page
-    And pagination controls allow navigating to subsequent pages
+    And a "Load More" control allows fetching subsequent cursor pages
 
   @AC-9 @FR-5
   Scenario: MCP agent query_bars enforces max result limit
-    Given OHLCV bars exist for symbol "SPY" with timeframe "1Min" spanning 50000 bars
-    When the agent calls query_bars with symbol "SPY", timeframe "1Min" for the full range
+    Given OHLCV bars exist for symbol "SPY" with timeframe "1Day" from "2000-01-01" to "2025-12-31"
+    When the agent calls query_bars with symbol "SPY", timeframe "1Day" for the full range
     Then the tool returns at most 1000 bars
-    And the response includes a cursor or indication that more data is available
+    And the response includes a next_page_token for retrieving subsequent pages
 
   @AC-10 @FR-6
   Scenario: Data explorer page is registered in PLATFORM_SUBNAV
@@ -81,9 +81,9 @@ Feature: backfilled-data-queryable
   @AC-12 @FR-7 @FR-2
   Scenario: UI displays last refresh timestamp for fundamentals snapshot
     Given the user navigates to "/insights/data-explorer"
-    And a fundamentals snapshot exists for symbol "MSFT" with fetched_at "2025-09-24T14:30:00Z"
+    And a fundamentals snapshot exists for symbol "MSFT" with as_of "2025-09-24T14:30:00Z"
     When the user selects symbol "MSFT" and switches to the "Fundamentals" tab
-    Then the page displays a "Last refreshed" timestamp showing "2025-09-24T14:30:00Z"
+    Then the page displays a "Last refreshed" timestamp derived from the as_of field showing "2025-09-24T14:30:00Z"
 
   @AC-13 @FR-7 @FR-3
   Scenario: MCP agent query_bars includes last refresh timestamp
@@ -93,9 +93,9 @@ Feature: backfilled-data-queryable
 
   @AC-14 @FR-7 @FR-4
   Scenario: MCP agent query_fundamentals includes last refresh timestamp
-    Given a fundamentals snapshot exists for symbol "GOOG" with fetched_at "2025-09-24T10:00:00Z"
+    Given a fundamentals snapshot exists for symbol "GOOG" with as_of "2025-09-24T10:00:00Z"
     When the agent calls query_fundamentals with symbol "GOOG"
-    Then the tool response includes a last_refreshed field with value "2025-09-24T10:00:00Z"
+    Then the tool response includes a last_refreshed field derived from as_of with value "2025-09-24T10:00:00Z"
 
   @AC-15 @FR-2
   Scenario: Historical fundamentals rendered as time-series chart in the UI
@@ -137,15 +137,23 @@ Feature: backfilled-data-queryable
     And the response includes a next_page_token for retrieving subsequent pages
 
   @AC-18 @FR-9 @FR-3
-  Scenario: MCP query_bars with format csv returns binary CSV content
+  Scenario: MCP query_bars with format csv returns CSV content with MIME type
     Given OHLCV bars exist for symbol "AAPL" with timeframe "1Day" from "2025-01-01" to "2025-01-31"
     When the agent calls query_bars with symbol "AAPL", timeframe "1Day", start_date "2025-01-01", end_date "2025-01-31", format "csv"
-    Then the tool returns a content item with MIME type "text/csv" and base64-encoded CSV data
-    And the decoded CSV contains columns time, open, high, low, close, volume
+    Then the tool returns an EmbeddedResource with MIME type "text/csv" containing CSV text
+    And the CSV contains columns time, open, high, low, close, volume
 
   @AC-19 @FR-9 @FR-4
-  Scenario: MCP query_fundamentals with format csv returns binary CSV content
+  Scenario: MCP query_fundamentals with format csv returns CSV content with MIME type
     Given historical fundamentals exist for symbol "GOOG" with period_type "annual" for 3 periods
     When the agent calls query_fundamentals with symbol "GOOG", include_history true, period_type "annual", format "csv"
-    Then the tool returns a content item with MIME type "text/csv" and base64-encoded CSV data
-    And the decoded CSV contains columns including symbol, period_end, pe_ratio, eps, market_cap
+    Then the tool returns an EmbeddedResource with MIME type "text/csv" containing CSV text
+    And the CSV contains columns including symbol, period_end, pe_ratio, eps, market_cap
+
+  @AC-22 @FR-2
+  Scenario: Historical fundamentals with missing metrics renders gaps in chart and dashes in table
+    Given the user navigates to "/insights/data-explorer"
+    And historical fundamentals exist for symbol "AAPL" with period_type "quarterly" for 2 periods ending "2024-03-31" and "2024-06-30" where Q1 has pe_ratio in missing_metrics
+    When the user selects symbol "AAPL", switches to "Fundamentals" tab, selects period_type "quarterly", and selects chart metric "pe_ratio"
+    Then the table displays "—" for pe_ratio in the Q1 row
+    And the chart renders a gap (no data point) for Q1 pe_ratio

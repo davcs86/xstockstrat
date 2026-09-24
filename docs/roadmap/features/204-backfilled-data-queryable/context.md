@@ -45,3 +45,12 @@
 - **Service impact**: `xstockstrat-marketdata` handler + repo must implement cursor-based pagination in `QueryHistoricalFundamentals` (currently returns all matching rows unbounded at `marketdata_repo.go:583`).
 - Updated product spec: Proto Contract Changes, Affected Services, Out of Scope sections.
 - Added @AC-20, @AC-21 acceptance scenarios for historical fundamentals pagination (UI and agent).
+
+## Session 2026-09-24T00:05:00Z — sdd-design
+
+- Phase 0 Recon: wrote recon.md (services: xstockstrat-marketdata, xstockstrat-ui, xstockstrat-agent; key reuse patterns: `GetBars` cursor pagination at `marketdata_repo.go:85-122`, `useInfiniteQuery` at `useOpportunities.ts:29-46`).
+- Phase 1 Grilling: 3 rounds (quick mode + 2 user-requested extra rounds). Chosen approach: single `/insights/data-explorer` page with OHLCV/Fundamentals tabs, 2 agent tools, composite cursor pagination for `GetHistoricalFundamentals`. Rejected: `fetched_at` proto field (user chose `as_of`), base64 CSV (EmbeddedResource + TextResourceContents), `period_end`-only cursor (not unique), server-side CSV route.
+- Key decisions: (1) `as_of` field 14 for last-refresh instead of new `fetched_at` (user decision). (2) Composite cursor `(period_end, fiscal_period)` for uniqueness. (3) `filterAsOf` pushed into SQL before LIMIT. (4) Client-side CSV via `toCsv()` + Blob. (5) `useInfiniteQuery` for Load More (not custom accumulator). (6) Explicit `missing_metrics` check (not JavaScript truthiness, MARKETDATA-11).
+- Acceptance scenarios updated: @AC-8/@AC-9 (1Day timeframe), @AC-12/@AC-14 (`as_of`), @AC-18/@AC-19 (EmbeddedResource), @AC-22 added (missing_metrics). Product-spec FR-7/FR-9 wording updated.
+- Constitution rules touched: C-10, C-14, C-15, C-16, C-17, C-18, P-03. Floor breaches: none.
+- Status: spec-ready → design-approved.
