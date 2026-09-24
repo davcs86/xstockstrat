@@ -3,6 +3,29 @@
 All production promotions from `main-dev` to `main` are recorded here.
 Each entry corresponds to one `main-dev → main` PR merge.
 
+## 2026-09-24
+
+### Features
+- fix-blend-queue-fundamentals-universe: Feature 168's fundamentals-universe restriction lived in exactly one place — `live_loop._run_cycle`'s inline blend branch.
+- fix-strategy-signal-params-dead-keys: `StrategyDefinition.signal_params` carries four dead feature-097 blend keys (`signal_sources`, `signal_weight`, `technical_weight`, `min_conviction`) that no consumer of a `StrategyDefinition` reads (only `symbols`/`target`/`stop` are load-bearing).
+- fix-strategy-detail-definition-render: `/insights/strategies/[id]` fetched the strategy definition (`useGetStrategy`) but never rendered it: no components, no `entry_rule`, no `exit_rule` anywhere on the page — so a user could conclude a strategy "has no entry or exit rules" when both are stored and correct.
+- mcp-list-correlation-prompts: Teach an AI MCP client how to use and correlate data across `list_accounts`, `get_positions`, `get_positions_by_account_id`, `list_opportunities`, and `list_strategies` — via enriched tool docstrings **and** a new MCP `prompts/list` + `prompts/get` capability that serves a correlation-guide prompt documenting the `account_id`, `strategy_id`, and `symbol` join keys and the deliberate non-joins.
+- historical-fundamentals-backtest: Backfill a filing-date-aware, point-in-time historical time series of company fundamentals (income statement, balance sheet, cash flow, derived ratios — quarterly and annual) from **SEC EDGAR** (primary, as-reported statements keyed on the SEC `filed` date) enriched with **FMP Free** for derived ratios, and let backtests reference those fundamentals as they were known at each point in time — without look-ahead bias.
+- opportunity-composite-score: Persist a single 0–1 composite score per opportunity row (`user × symbol_norm × strategy_id`) that fuses its multiple evidence types (readiness, decayed signal strength, fundamentals value+quality, technical signal) via breadth-aware empirical-Bayes shrinkage — computed on the existing opportunity-refresh write path in `xstockstrat-analysis`, alongside (never replacing) the existing `conviction` and `signal_axis` axes.
+- symbol-opportunity-ranking: A single comparable **symbol-level** score that rolls up all of a symbol's opportunities into one number (geometric rank-decay sum of each opportunity's feature-199 `composite_score` weighted by its strategy's derived grade), so a trader can rank *which symbol to trade* across the whole queue — not just compare individual opportunities.
+- fundamentals-formula-inputs: Let a **custom formula used as a strategy component** (`COMPONENT_KIND_CUSTOM_FORMULA`) consume **fundamentals as inputs** — the same input/output contract as the fundamentals *scoring formula* (feature 063: fundamentals `input_data` → composite score `output`) — so a strategist can author one fundamentals-scoring formula and use it directly in a strategy's entry/exit rules.
+
+### Proto Changes
+- analysis/v1/analysis.proto
+- indicators/v1/indicators.proto
+- ingest/v1/ingest.proto
+- marketdata/v1/marketdata.proto
+
+### Summary
+24 commits, 2 feature merges since last promotion.
+
+---
+
 ## 2026-09-16
 
 ### Features
