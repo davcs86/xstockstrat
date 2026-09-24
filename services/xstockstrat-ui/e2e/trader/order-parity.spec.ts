@@ -26,7 +26,7 @@ const PARITY_ORDERS = [
     filledAvgPrice: 175.5,
     limitPrice: 0,
     stopPrice: 0,
-    timeInForce: 'day',
+    timeInForce: 1,
     accountId: 'alpaca-default',
     brokerType: 1,
   },
@@ -41,7 +41,7 @@ const PARITY_ORDERS = [
     filledAvgPrice: 299,
     limitPrice: 300,
     stopPrice: 0,
-    timeInForce: 'day',
+    timeInForce: 1,
     accountId: 'alpaca-default',
     brokerType: 1,
   },
@@ -56,7 +56,7 @@ const PARITY_ORDERS = [
     filledAvgPrice: 0,
     limitPrice: 0,
     stopPrice: 240,
-    timeInForce: 'day',
+    timeInForce: 1,
     accountId: 'alpaca-default',
     brokerType: 1,
   },
@@ -71,7 +71,7 @@ const PARITY_ORDERS = [
     filledAvgPrice: 0,
     limitPrice: 900,
     stopPrice: 880,
-    timeInForce: 'day',
+    timeInForce: 1,
     accountId: 'alpaca-default',
     brokerType: 1,
   },
@@ -86,7 +86,7 @@ const PARITY_ORDERS = [
     filledAvgPrice: 0,
     limitPrice: 0,
     stopPrice: 5,
-    timeInForce: 'day',
+    timeInForce: 1,
     accountId: 'alpaca-default',
     brokerType: 1,
   },
@@ -173,7 +173,7 @@ test.describe('FR-20 order parity', () => {
     await expect(symbolField).toHaveValue('AAPL');
     await expect(symbolField).toBeDisabled();
     // Same 5-type selector as the trader ticket — proves FR-20 map reuse.
-    await form.getByRole('combobox').click();
+    await form.getByRole('combobox').first().click();
     for (const label of ['Market', 'Limit', 'Stop', 'Stop Limit', 'Trailing Stop']) {
       await expect(page.getByRole('option', { name: label, exact: true })).toBeVisible();
     }
