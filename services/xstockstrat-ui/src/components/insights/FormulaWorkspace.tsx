@@ -47,7 +47,9 @@ import {
   type OutputDraft,
 } from '@/components/insights/OutputEditor';
 import { FundamentalInputEditor } from '@/components/insights/FundamentalInputEditor';
-import { useExecuteFormula } from '@/hooks/useFormulas';
+import { useExecuteFormula, useFundamentalMetrics } from '@/hooks/useFormulas';
+import { insightsMarketDataClient } from '@/lib/browserClients/insightsMarketDataClient';
+import { fundamentalsToInputData } from '@/lib/fundamentalMetrics';
 import {
   BLANK_TEMPLATE,
   SAMPLE_INPUT_JSON,
@@ -137,6 +139,11 @@ export function FormulaWorkspace({
   const [jsonInput, setJsonInput] = useState(SAMPLE_INPUT_JSON);
   const [jsonError, setJsonError] = useState<string | null>(null);
   const [showReference, setShowReference] = useState(true);
+  // Fundamentals test-data grid (feature 205): snake_case data-key -> numeric value | null.
+  const [gridValues, setGridValues] = useState<Record<string, number | null>>({});
+  const [symbol, setSymbol] = useState('');
+  const [loadingFundamentals, setLoadingFundamentals] = useState(false);
+  const [fundamentalsError, setFundamentalsError] = useState<string | null>(null);
 
   // Built-in system formulas and soft-deleted formulas are read-only: both hide Save/Delete and disable
   // every editor input. The Run cell stays enabled so the formula can still be inspected/executed.
@@ -144,14 +151,57 @@ export function FormulaWorkspace({
 
   const executeMut = useExecuteFormula();
 
+  // The declared metrics resolved against the FundamentalMetric catalog (name/data_key/meaning). A
+  // non-empty list switches the Run cell from the JSON textarea to a per-metric value grid.
+  const { data: metricsCatalog } = useFundamentalMetrics();
+  const catalog = metricsCatalog?.metrics ?? [];
+  const declaredMetrics = fundamentalInputs
+    .filter((m) => m !== FundamentalMetric.UNSPECIFIED)
+    .map((m) => catalog.find((c) => c.metric === m))
+    .filter((c): c is (typeof catalog)[number] => Boolean(c));
+  const hasFundamentals = declaredMetrics.length > 0;
+
+  async function loadFundamentals() {
+    const sym = symbol.trim().toUpperCase();
+    if (!sym) return;
+    setLoadingFundamentals(true);
+    setFundamentalsError(null);
+    try {
+      const resp = await insightsMarketDataClient.getFundamentalsMulti({ symbols: [sym] });
+      const row = resp.fundamentals[0];
+      if (!row) {
+        setFundamentalsError(`No fundamentals for ${sym}`);
+        return;
+      }
+      // Missing metrics resolve to null, never NaN (fails.md:86) — the author can then edit any
+      // prefilled value before running.
+      setGridValues(fundamentalsToInputData(row, declaredMetrics));
+    } catch (e) {
+      setFundamentalsError(e instanceof Error ? e.message : 'Failed to load fundamentals');
+    } finally {
+      setLoadingFundamentals(false);
+    }
+  }
+
   function handleRun() {
     let parsed: Record<string, unknown>;
-    try {
-      parsed = JSON.parse(jsonInput) as Record<string, unknown>;
+    if (hasFundamentals) {
+      // Fundamentals formulas read from the value grid, not the JSON textarea. Null (missing)
+      // entries are omitted so the sandbox `data` never carries NaN.
+      parsed = {};
+      for (const { dataKey } of declaredMetrics) {
+        const v = gridValues[dataKey];
+        if (v !== null && v !== undefined && Number.isFinite(v)) parsed[dataKey] = v;
+      }
       setJsonError(null);
-    } catch {
-      setJsonError('Input must be valid JSON');
-      return;
+    } else {
+      try {
+        parsed = JSON.parse(jsonInput) as Record<string, unknown>;
+        setJsonError(null);
+      } catch {
+        setJsonError('Input must be valid JSON');
+        return;
+      }
     }
     // Build typed parameter VALUES from the generated form; omitted/blank values
     // are left out so the engine applies the declared defaults.
@@ -387,24 +437,80 @@ export function FormulaWorkspace({
           <Card>
             <CardHeader className="flex-row items-center justify-between space-y-0">
               <CardTitle>Run</CardTitle>
-              <Button variant="ghost" size="sm" onClick={loadSampleData}>
-                <Sparkles className="mr-1.5 h-4 w-4" />
-                Load sample data
-              </Button>
+              {!hasFundamentals && (
+                <Button variant="ghost" size="sm" onClick={loadSampleData}>
+                  <Sparkles className="mr-1.5 h-4 w-4" />
+                  Load sample data
+                </Button>
+              )}
             </CardHeader>
             <CardContent className="space-y-3">
-              <div>
-                <label className="mb-1 block text-xs text-muted-foreground">
-                  Input data (JSON) — available as <code className="text-foreground">data</code>
-                </label>
-                <Textarea
-                  className="min-h-[120px] font-mono text-xs"
-                  value={jsonInput}
-                  onChange={(e) => setJsonInput(e.target.value)}
-                  spellCheck={false}
-                />
-              </div>
-              {jsonError && <p className="text-xs text-destructive">{jsonError}</p>}
+              {hasFundamentals ? (
+                <div className="space-y-2" data-testid="fundamentals-grid">
+                  <div className="flex flex-wrap items-end justify-between gap-2">
+                    <label className="block text-xs text-muted-foreground">
+                      Fundamentals test data — available as{' '}
+                      <code className="text-foreground">data</code>
+                    </label>
+                    <div className="flex items-end gap-2">
+                      <Input
+                        aria-label="prefill symbol"
+                        className="h-8 w-28"
+                        placeholder="AAPL"
+                        value={symbol}
+                        onChange={(e) => setSymbol(e.target.value)}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={loadFundamentals}
+                        disabled={loadingFundamentals || !symbol.trim()}
+                      >
+                        {loadingFundamentals ? 'Loading…' : 'Load'}
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    {declaredMetrics.map((m) => (
+                      <div key={m.dataKey}>
+                        <label className="mb-1 block text-[11px] text-muted-foreground">
+                          {m.meaning} <code className="text-foreground">{m.dataKey}</code>
+                        </label>
+                        <Input
+                          aria-label={`fundamental ${m.dataKey}`}
+                          type="number"
+                          value={gridValues[m.dataKey] ?? ''}
+                          onChange={(e) =>
+                            setGridValues((s) => ({
+                              ...s,
+                              [m.dataKey]: e.target.value === '' ? null : Number(e.target.value),
+                            }))
+                          }
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  {fundamentalsError && (
+                    <p className="text-xs text-destructive">{fundamentalsError}</p>
+                  )}
+                </div>
+              ) : (
+                <>
+                  <div>
+                    <label className="mb-1 block text-xs text-muted-foreground">
+                      Input data (JSON) — available as <code className="text-foreground">data</code>
+                    </label>
+                    <Textarea
+                      className="min-h-[120px] font-mono text-xs"
+                      value={jsonInput}
+                      onChange={(e) => setJsonInput(e.target.value)}
+                      spellCheck={false}
+                    />
+                  </div>
+                  {jsonError && <p className="text-xs text-destructive">{jsonError}</p>}
+                </>
+              )}
 
               {parameters.filter((p) => p.name.trim()).length > 0 && (
                 <div className="space-y-2">

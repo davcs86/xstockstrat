@@ -88,6 +88,9 @@ router.service(MarketDataService, {
   getBars: forward((req, opts) => marketDataClient.getBars(req, opts)),
   // Live price wired on BOTH BFFs so the queue card and Signal-detail header read the same source.
   getLatestPrice: forward((req, opts) => marketDataClient.getLatestPrice(req, opts)),
+  // Read-only snapshot fundamentals for the formula fundamentals test-grid symbol-prefill (feature
+  // 205); public data via the shared forward() plumbing.
+  getFundamentalsMulti: forward((req, opts) => marketDataClient.getFundamentalsMulti(req, opts)),
   // Destructive — admin only; the marketdata server enforces it again.
   deleteBackfilledData: forwardAdmin((req, opts) =>
     marketDataClient.deleteBackfilledData(req, opts),

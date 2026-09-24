@@ -501,7 +501,7 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm run test:unit
 
 ### Step 11 -- service: UI test harness -- fundamentals value grid + symbol-prefill (G3)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/insightsBff.ts` -- modify
@@ -569,7 +569,7 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm run build
 
 ### Step 12 -- test: UI test harness vitest
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/fundamentalMetrics.test.ts` -- create
@@ -716,3 +716,17 @@ cd services/xstockstrat-ui && pnpm test:e2e -- --grep "fundamental"
   `@tanstack/react-query` (`useMutation` captures the `mutationFn`) and the browser client, then
   invokes the captured `mutationFn` and asserts the RPC payload carries `fundamentalInputs` (and
   defaults to `[]` when omitted) — a genuine runtime assertion, not a type-only stub.
+- **Step 11 — `dataKeyToProtoField` replaces the spec's `metricNameToDataKey`.** With the numeric-
+  enum design (Step 9 deviation) the UI never handles NAME-strings at runtime, so a NAME→data-key
+  helper would be dead code. The mapping the grid actually needs is snake_case data-key →
+  protobuf-es camelCase field (`pe_ratio` → `peRatio`) to read the marketdata `Fundamentals` row;
+  that is `dataKeyToProtoField`. `fundamentalsToInputData(row, catalog)` takes the proto row (which
+  carries the authoritative `missingMetrics`) and the declared-metric subset, and is the C-16/
+  MARKETDATA-11-faithful mapping: a metric in `missingMetrics`, absent, or non-finite → `null`,
+  a legitimate `0` preserved, never `NaN` (fails.md:86).
+- **Step 11 — grid replaces the JSON textarea for fundamentals formulas.** The spec placed the grid
+  "below" the JSON input; instead, when `fundamentalInputs` is non-empty the Run cell renders the
+  value grid *in place of* the JSON textarea (and hides "Load sample data"), because a JSON area
+  `handleRun` ignores for these formulas would mislead. The JSON textarea still shows for
+  non-fundamentals formulas. Grid values are `Record<data_key, number | null>`; `handleRun` omits
+  `null` entries when building the sandbox `data`.
