@@ -76,6 +76,11 @@ class IndicatorsServiceStub(object):
                 request_serializer=indicators_dot_v1_dot_indicators__pb2.DeleteFormulaRequest.SerializeToString,
                 response_deserializer=indicators_dot_v1_dot_indicators__pb2.DeleteFormulaResponse.FromString,
                 _registered_method=True)
+        self.ListFundamentalMetrics = channel.unary_unary(
+                '/xstockstrat.indicators.v1.IndicatorsService/ListFundamentalMetrics',
+                request_serializer=indicators_dot_v1_dot_indicators__pb2.ListFundamentalMetricsRequest.SerializeToString,
+                response_deserializer=indicators_dot_v1_dot_indicators__pb2.ListFundamentalMetricsResponse.FromString,
+                _registered_method=True)
 
 
 class IndicatorsServiceServicer(object):
@@ -142,6 +147,13 @@ class IndicatorsServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def ListFundamentalMetrics(self, request, context):
+        """List the available fundamental metrics for formula declarations (feature 205)
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_IndicatorsServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -184,6 +196,11 @@ def add_IndicatorsServiceServicer_to_server(servicer, server):
                     servicer.DeleteFormula,
                     request_deserializer=indicators_dot_v1_dot_indicators__pb2.DeleteFormulaRequest.FromString,
                     response_serializer=indicators_dot_v1_dot_indicators__pb2.DeleteFormulaResponse.SerializeToString,
+            ),
+            'ListFundamentalMetrics': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListFundamentalMetrics,
+                    request_deserializer=indicators_dot_v1_dot_indicators__pb2.ListFundamentalMetricsRequest.FromString,
+                    response_serializer=indicators_dot_v1_dot_indicators__pb2.ListFundamentalMetricsResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -404,6 +421,33 @@ class IndicatorsService(object):
             '/xstockstrat.indicators.v1.IndicatorsService/DeleteFormula',
             indicators_dot_v1_dot_indicators__pb2.DeleteFormulaRequest.SerializeToString,
             indicators_dot_v1_dot_indicators__pb2.DeleteFormulaResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListFundamentalMetrics(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.indicators.v1.IndicatorsService/ListFundamentalMetrics',
+            indicators_dot_v1_dot_indicators__pb2.ListFundamentalMetricsRequest.SerializeToString,
+            indicators_dot_v1_dot_indicators__pb2.ListFundamentalMetricsResponse.FromString,
             options,
             channel_credentials,
             insecure,

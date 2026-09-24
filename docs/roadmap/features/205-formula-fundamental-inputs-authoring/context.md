@@ -127,3 +127,21 @@
   Feature 204 (`backfilled-data-queryable`) has the densest overlap (7 shared files including
   `insightsBff.ts`) but touches `MarketDataService` while 205 touches `IndicatorsService`. Merge-order
   205→201 already recorded; no new merge-order entries needed.
+
+## Session 2026-09-24 — sdd-execute (sequential)
+
+Feature 4 of the 202→205 run. Branch `feature/formula-fundamental-inputs-authoring` off current
+`main-dev` (has 202+203; 204's PR #1173 still open, so 204's tool-count/shared-file changes are NOT
+on this base — the tool-count/insightsBff/mock-backend overlaps with 204 resolve at whichever PR
+merges second). Toolchain: host-native buf 1.72.0 (`/root/go/bin/buf`; Docker Hub still 429s the
+codegen image), go1.27, uv/ruff, node/pnpm.
+
+### Step 1 — proto: ListFundamentalMetrics RPC + messages [done]
+- Additive: `rpc ListFundamentalMetrics` on IndicatorsService; `ListFundamentalMetricsRequest{}`,
+  `FundamentalMetricInfo{metric, data_key, meaning}`, `ListFundamentalMetricsResponse{repeated metrics}`.
+- `buf lint` clean; `buf breaking` vs main-dev exit 0 (additive). Files: `indicators/v1/indicators.proto`.
+
+### Step 2 — proto-gen: regenerate stubs [done]
+- Host-native `buf-gen.sh` (AGAINST_BRANCH=main-dev). indicators Go/Python/TS stubs carry the new RPC
+  + messages. Reverted the recurring analysis.pb.go gofmt whitespace drift; diff scoped to `indicators/v1`.
+- Files: `packages/proto/gen/{go,python,ts}/indicators/v1/**`.

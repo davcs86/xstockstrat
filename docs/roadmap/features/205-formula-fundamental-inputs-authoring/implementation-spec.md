@@ -48,7 +48,7 @@ Consumer-surface coverage (C-14): both named surfaces are covered -- Agent (Step
 
 ### Step 1 -- proto: Add ListFundamentalMetrics RPC and messages
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/indicators/v1/indicators.proto` -- modify
@@ -94,7 +94,7 @@ cd packages/proto && buf lint && buf breaking --against '../../.git#branch=main-
 
 ### Step 2 -- proto-gen: Regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/indicators/v1/*.go` -- auto-generated (wildcards inherent to codegen output; exact filenames determined by buf-gen.sh)

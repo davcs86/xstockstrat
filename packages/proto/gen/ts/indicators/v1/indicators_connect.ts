@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { ComputeIndicatorRequest, ComputeIndicatorResponse, DeleteFormulaRequest, DeleteFormulaResponse, ExecuteFormulaRequest, ExecuteFormulaResponse, FormulaDefinition, GetFormulaRequest, ListFormulasRequest, ListFormulasResponse, ListIndicatorsRequest, ListIndicatorsResponse, RegisterFormulaRequest, RegisterFormulaResponse, UpdateFormulaRequest, UpdateFormulaResponse } from "./indicators_pb.js";
+import { ComputeIndicatorRequest, ComputeIndicatorResponse, DeleteFormulaRequest, DeleteFormulaResponse, ExecuteFormulaRequest, ExecuteFormulaResponse, FormulaDefinition, GetFormulaRequest, ListFormulasRequest, ListFormulasResponse, ListFundamentalMetricsRequest, ListFundamentalMetricsResponse, ListIndicatorsRequest, ListIndicatorsResponse, RegisterFormulaRequest, RegisterFormulaResponse, UpdateFormulaRequest, UpdateFormulaResponse } from "./indicators_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -104,6 +104,17 @@ export const IndicatorsService = {
       name: "DeleteFormula",
       I: DeleteFormulaRequest,
       O: DeleteFormulaResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * List the available fundamental metrics for formula declarations (feature 205)
+     *
+     * @generated from rpc xstockstrat.indicators.v1.IndicatorsService.ListFundamentalMetrics
+     */
+    listFundamentalMetrics: {
+      name: "ListFundamentalMetrics",
+      I: ListFundamentalMetricsRequest,
+      O: ListFundamentalMetricsResponse,
       kind: MethodKind.Unary,
     },
   }
