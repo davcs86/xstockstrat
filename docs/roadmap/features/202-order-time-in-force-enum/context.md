@@ -102,3 +102,14 @@
      concrete TIF value. Added as design.md UI section (f).
 - All 3 advisory items incorporated into design.md. Rounds updated from 5 to 6 in design.md header,
   feature.md Status History, and Constitution Rules Touched citations.
+
+## Session 2026-09-24 — sdd-review impl-spec (advisory)
+
+- Result: 1 failure, 4 warnings (advisory — did not block).
+- Unresolved ✗ / ⚠ carried into execution:
+  - Step 7: ✗ `mock-backend.ts` not listed in Files or Instructions — design R6 advisory #3 flagged `mock-backend.ts:244-252` `placeOrder` mock returns no `timeInForce` (defaults to 0/UNSPECIFIED after enum change); AC-5 E2E scenario needs the mock to return a concrete TIF value (C-01, C-12) — [ ] unaddressed
+  - Step 2: ⚠ Files lists directories (`gen/go/trading/v1/`, etc.) instead of specific files — inherent to codegen output, acceptable (C-01) — [ ] unaddressed
+  - Step 6: ⚠ Two `TIF_LABEL` maps (shared `orderShared.tsx` keyed by proto enum, local `OrderForm.tsx` keyed by string union) — different key types, both purposeful; not true duplication (C-18) — [ ] unaddressed
+  - Step 7: ⚠ No explicit coverage threshold for E2E tests — expected for Playwright (no coverage tool); this is not a unit test step — [ ] unaddressed
+  - Step 8: ⚠ Internal reference error: "Step 9 handles this" for context.md deploy note recording, but Step 9 is the CI buf-breaking workaround — deploy note recording is handled by sdd-execute's normal context.md append — [ ] unaddressed
+- Overlap findings: CLEAN. Feature 196 (proto-deprecated-field-removal-program) shares `trading.go` at disjoint line ranges — WARN-level file-path overlap only; no migration NNN, proto field number, or config key collisions detected across all in-flight features.

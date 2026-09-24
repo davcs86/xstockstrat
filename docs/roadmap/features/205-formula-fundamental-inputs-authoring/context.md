@@ -114,3 +114,16 @@
   non-frontend test data compliance noted for Steps 4, 6, 8, 13; C-12 test-data inventory noted
   for Step 14 (reuses existing fixtures, no new fixture files).
 - Status: design-approved → implementation-ready.
+
+## Session 2026-09-24T00:00:00Z — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 3 warnings (advisory — did not block).
+- Unresolved ⚠ carried into execution:
+  - Step 2: Files contain wildcards for auto-generated proto stubs (C-01) — [ ] unaddressed
+  - Step 10: No explicit coverage threshold in Verification; hook outside vitest coverage scope (C-18) — [ ] unaddressed
+  - Step 12: Coverage threshold implicit in vitest config, not stated in step Verification text (C-18) — [ ] unaddressed
+- Overlap findings: 0 FAIL-level collisions. WARN-level file overlaps with features 187, 188, 202,
+  203, 204 — all section-disjoint (different functions/service registrations/fixture blocks).
+  Feature 204 (`backfilled-data-queryable`) has the densest overlap (7 shared files including
+  `insightsBff.ts`) but touches `MarketDataService` while 205 touches `IndicatorsService`. Merge-order
+  205→201 already recorded; no new merge-order entries needed.
