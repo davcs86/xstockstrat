@@ -11,10 +11,13 @@ mechanisms the repo uses: **subagent delegation**, **progressive disclosure**, a
 
 ---
 
-## 1. Subagent delegation (`.claude/agents/`)
+## 1. Subagent delegation (`.claude/plugins/sdd-suite/agents/`, `.claude/agents/`)
 
 Heavy, read-mostly work runs in an **isolated subagent window** and returns a condensed digest,
-so the orchestrator's window holds conclusions, not raw file dumps. The fleet:
+so the orchestrator's window holds conclusions, not raw file dumps. The SDD fleet is packaged in
+the `sdd-suite` plugin (`.claude/plugins/sdd-suite/agents/`); `dry-reviewer` is the one exception — it
+backs the repo-wide DRY guard rail (§ `docs/patterns/dry-guard-rail.md`), not just SDD, so it stays
+in `.claude/agents/` as host infrastructure (see § 4). The fleet:
 
 | Agent | Role | Returns | Called by |
 |---|---|---|---|
@@ -36,10 +39,12 @@ the role demands it). Return digests, never pasted files. Cite `path:line`. Neve
 `## Not found` instead. Put skill-specific procedure in the skill's `reference/` files and have the
 agent *read* them, so the orchestrator never loads the procedure just to pass it along.
 
-**Authoring a new agent:** one Markdown file in `.claude/agents/<name>.md` with frontmatter
-(`name`, `description`, `tools`, `model: inherit`) and a body that states the operating rules, the
-method, and an **explicit output format**. The `description` is what the orchestrator matches on —
-make it say *when* to use the agent and *what it returns*.
+**Authoring a new agent:** one Markdown file with frontmatter (`name`, `description`, `tools`,
+`model: inherit`) and a body that states the operating rules, the method, and an **explicit output
+format**. An SDD-lifecycle agent goes in `.claude/plugins/sdd-suite/agents/<name>.md`; a repo-wide agent
+(like `dry-reviewer`) goes in `.claude/agents/<name>.md`. Either way it is addressable by bare
+`subagent_type` name once its plugin is enabled. The `description` is what the orchestrator matches
+on — make it say *when* to use the agent and *what it returns*.
 
 ---
 
@@ -57,6 +62,10 @@ names at the point of use:
   reference/<topic>.md     # loaded only when that branch activates
   templates/<artifact>.md  # rendered output bodies
 ```
+
+The SDD lifecycle skills use exactly this layout but are packaged in the `sdd-suite` plugin
+(`.claude/plugins/sdd-suite/skills/<skill>/`); repo-local, non-lifecycle skills (`onboard`, `promote`,
+`proofread-claude-md`, …) stay in `.claude/skills/`. See § 4.
 
 Worked example — `/sdd-execute`: the 1.4k-word SEQUENTIAL-MODE driver lives in
 `reference/sequential-mode.md` and loads **only** when the selector is `sequential`; the deviation
@@ -138,6 +147,34 @@ deviation, an `insights.md` entry at integration). It is append-only, like the s
 the durable complement to the `dry-reviewer` agent (which detects duplication live but persists
 nothing). A recurring `fails.md` entry is a candidate to promote into a binding rule in
 `docs/sdd/constitution.md`.
+
+---
+
+## 4. Plugin packaging (marketplace + cross-marketplace dependencies)
+
+The repo is its own **plugin marketplace** (`.claude-plugin/marketplace.json` for Claude Code,
+`.cursor-plugin/marketplace.json` for Cursor). It bundles three plugins under `.claude/plugins/`:
+
+| Plugin | What it carries | Repo-specific? |
+|---|---|---|
+| `sdd-suite` | The `/sdd-*` lifecycle skills + the advisory subagent fleet (§ 1) | Yes — reads `docs/sdd`, `docs/roadmap`, the Constitution |
+| `mcp-tools-docs` | A **generated** reference skill for the agent's MCP tools (below) | Yes — describes this server's tools |
+| `strat-lab` | The `backtest` skill that tracks the xstockstrat MCP API's quirks | Yes — calls this server |
+
+Packaging skills/agents as a plugin lets one plugin **depend on another**. `sdd-suite` declares a
+cross-marketplace dependency on `context-forge` (used by the SDD teardown step) from the separate
+`davcs86-agent-plugins` marketplace. Claude Code blocks a cross-marketplace dependency unless the
+**root** marketplace allow-lists the source, so `.claude-plugin/marketplace.json` carries
+`allowCrossMarketplaceDependenciesOn: ["davcs86-agent-plugins"]`, and `.claude/settings.json`
+registers that marketplace (`extraKnownMarketplaces`) and enables the plugins (`enabledPlugins`).
+Enabling `sdd-suite` then pulls `context-forge` in automatically.
+
+**`mcp-tools-docs` — generated, not hand-written.** A wire-connected agent cannot read the
+maintainer runbook `docs/runbooks/mcp-tools.md`, so `.claude/plugins/mcp-tools-docs/scripts/generate.py`
+projects that runbook into a progressive-disclosure skill (router + one `reference/tools/<name>.md`
+per tool). The runbook stays the single source of truth; `generate.py --check` is the freshness
+gate (edit the runbook, regenerate — never hand-edit the skill), the same discipline as proto
+codegen. This is progressive disclosure (§ 2) applied to an external API surface.
 
 ---
 

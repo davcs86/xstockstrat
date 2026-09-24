@@ -1,0 +1,12 @@
+{
+  "name": "sdd-suite",
+  "displayName": "SDD Suite",
+  "version": "0.1.0",
+  "description": "xstockstrat's Spec-Driven Development toolchain: the /sdd-story → /sdd-review → /sdd-design → /sdd-spec → /sdd-execute lifecycle plus /sdd-status, /sdd-sync, /sdd-qa, /sdd-triage, /sdd-distill and /sdd-archiver, with the read-only advisory subagents they orchestrate (design-proposer/adversary, spec-reviewer, feature-overlap, codebase-discovery, service-briefing, qa-tester, scenario-recon/promoter, feature-synthesizer, context-distiller). Repo-specific — reads docs/sdd, docs/roadmap and the Constitution of the host xstockstrat repository.",
+  "author": {
+    "name": "David Castillo",
+    "email": "davcs86@gmail.com"
+  },
+  "license": "MIT",
+  "keywords": ["sdd", "spec-driven-development", "xstockstrat", "workflow", "planning", "review", "qa", "triage"]
+}
