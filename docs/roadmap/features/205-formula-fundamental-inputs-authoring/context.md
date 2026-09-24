@@ -156,3 +156,18 @@ codegen image), go1.27, uv/ruff, node/pnpm.
   imports `gen.marketdata.v1.marketdata_pb2`). 3 passed.
 - Verify: ruff clean; full suite 143 passed, coverage 81.44% (≥50).
 - Files: `app/handlers/servicer.py`, `tests/test_fundamental_metrics.py`.
+
+### Steps 5-6 — agent manage_formula declare/view + descriptor-parity test (G5) [done]
+- `tools.py manage_formula`: added `fundamental_inputs: list[str] | None` param + docstring; threaded
+  into the formula dict (`or []`) and the update `supplied` mask dict.
+- `client.py manage_formula`: added `_build_fundamental_inputs` (NAME-string → enum `.Value()`; a bad
+  name raises with the valid catalog listed — F-3/F-10 no-silent-drop) and set `fundamental_inputs=`
+  on both `RegisterFormulaRequest` and `UpdateFormulaRequest`. get_formula/list_formulas already
+  MessageToDict → `fundamentalInputs` NAME-strings surface automatically.
+- `test_formula_builders.py`: removed `fundamental_inputs` from the register+update
+  intentionally-unset sets (the descriptor-parity guard now requires the builder to set it); added it
+  to both capture dicts; new `test_register_sends_fundamental_inputs` (NAME→enum) and
+  `test_get_formula_returns_fundamental_inputs` (AC-1/AC-3 declare→get round-trip, camelCase
+  NAME-strings). 8 passed.
+- Verify: ruff clean; full agent suite 449 passed, 79.27% coverage (≥40).
+- Files: `app/tools.py`, `app/client.py`, `tests/test_formula_builders.py`.

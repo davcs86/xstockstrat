@@ -1036,6 +1036,26 @@ async def manage_formula(
     outputs = [_build_output(d) for d in formula.get("outputs", [])]
     warmup_period = int(formula.get("warmup_period") or 0)
 
+    def _build_fundamental_inputs(names: list[str]) -> list[int]:
+        """Convert FundamentalMetric enum NAME-strings to enum values (feature 205). A bad name
+        raises with the valid catalog listed, rather than silently dropping the field (F-3/F-10)."""
+        out = []
+        for name in names or []:
+            try:
+                out.append(indicators_pb2.FundamentalMetric.Value(name))
+            except ValueError as e:
+                valid = [
+                    v.name
+                    for v in indicators_pb2.FundamentalMetric.DESCRIPTOR.values
+                    if v.number != 0
+                ]
+                raise ValueError(
+                    f"unknown fundamental metric '{name}'; valid: {', '.join(valid)}"
+                ) from e
+        return out
+
+    fundamental_inputs = _build_fundamental_inputs(formula.get("fundamental_inputs", []))
+
     async with grpc.aio.insecure_channel(INDICATORS_ENDPOINT) as channel:
         stub = indicators_pb2_grpc.IndicatorsServiceStub(channel)
         if operation == "register":
@@ -1049,6 +1069,7 @@ async def manage_formula(
                     parameters=parameters,
                     outputs=outputs,
                     warmup_period=warmup_period,
+                    fundamental_inputs=fundamental_inputs,
                 ),
                 metadata=_metadata(),
             )
@@ -1065,6 +1086,7 @@ async def manage_formula(
                 parameters=parameters,
                 outputs=outputs,
                 warmup_period=warmup_period,
+                fundamental_inputs=fundamental_inputs,
             )
             # AIP-161: with update_mask only the named paths apply (others preserved);
             # absent = full replace.

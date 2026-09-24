@@ -201,7 +201,7 @@ cd services/xstockstrat-indicators && uv run ruff check app/ tests/ && uv run ru
 
 ### Step 5 -- service: Agent manage_formula declare/view (fundamental_inputs)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` -- modify
@@ -258,7 +258,7 @@ cd services/xstockstrat-agent && uv run pytest tests/test_formula_builders.py -v
 
 ### Step 6 -- test: Agent descriptor-parity test update (G5)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_formula_builders.py` -- modify

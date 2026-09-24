@@ -850,6 +850,7 @@ def register_tools(server: MCPServer) -> None:
         parameters: list[dict] | None = None,
         outputs: list[dict] | None = None,
         warmup_period: int | None = None,
+        fundamental_inputs: list[str] | None = None,
     ) -> dict:
         """Register/update/delete a custom formula in xstockstrat-indicators.
         operation: 'register' | 'update' | 'delete'.
@@ -870,6 +871,10 @@ def register_tools(server: MCPServer) -> None:
             series is always available and must NOT be declared here. A formula can therefore be
             genuinely multi-series (no more one-formula-per-series workaround).
         warmup_period: bars of warm-up before this formula's outputs are valid (int ≥ 0).
+        fundamental_inputs: FundamentalMetric enum NAME-strings (e.g.
+            ["FUNDAMENTAL_METRIC_PE_RATIO", "FUNDAMENTAL_METRIC_PB_RATIO"]) this formula reads. A
+            non-empty list marks the formula fundamentals-only (the analysis evaluator feeds it
+            these metrics, not OHLCV closes). Use list_fundamental_metrics for the valid catalog.
 
         UPDATE IS A PARTIAL MERGE (AIP-161): only the fields you actually pass are changed; every
             field you omit is preserved. Passing is_public=false unpublishes; omitting is_public
@@ -913,6 +918,7 @@ def register_tools(server: MCPServer) -> None:
             "parameters": parameters or [],
             "outputs": outputs or [],
             "warmup_period": warmup_period or 0,
+            "fundamental_inputs": fundamental_inputs or [],
         }
         if operation == "update":
             # Derive the update_mask from supplied (non-None) fields so an omitted field is
@@ -925,6 +931,7 @@ def register_tools(server: MCPServer) -> None:
                 "parameters": parameters,
                 "outputs": outputs,
                 "warmup_period": warmup_period,
+                "fundamental_inputs": fundamental_inputs,
             }
             mask = [field for field, val in supplied.items() if val is not None]
             if not mask:
