@@ -120,7 +120,10 @@ jobs:
             AGAINST="../../.git#ref=${BEFORE},subdir=packages/proto"
           fi
           echo "Checking breaking changes against ${AGAINST}"
-          buf breaking . --against "${AGAINST}"
+          # TEMPORARY: feature/order-time-in-force-enum — the intentional string→enum wire-type
+          # change on Order/PlaceOrderRequest/ReplaceOrderRequest.time_in_force is expected to trip
+          # buf breaking. Remove this --exclude-path in the integration PR that merges the feature.
+          buf breaking . --against "${AGAINST}" --exclude-path trading/v1/trading.proto
 
   proto-freshness:
     name: Proto stubs are up to date
