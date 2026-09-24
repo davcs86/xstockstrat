@@ -26,6 +26,7 @@ from gen.marketdata.v1 import marketdata_pb2
 from google.protobuf.struct_pb2 import Struct
 
 from app.engine.live_loop import LiveEvaluationLoop
+from app.handlers.servicer import AnalysisServicer
 from app.services.evaluator import StrategyEvaluator
 
 _PE = indicators_pb2.FUNDAMENTAL_METRIC_PE_RATIO
@@ -172,3 +173,90 @@ class TestFullRowParity:
         # Same keys the producer feeds (the declared metrics' data keys), all present — no omission.
         assert set(fed) == {"pe_ratio", "roe", "eps"}
         assert fed == {"pe_ratio": 12.0, "roe": 0.3, "eps": 5.0}
+
+
+def _backtest_servicer(*, gate=True):
+    """A servicer with mocked deps + the feature-201 gate ON (mirrors test_analysis_servicer's
+    make_servicer, but local so this suite owns its harness)."""
+    cfg = MagicMock()
+    cfg.get_float = MagicMock(side_effect=lambda key, default=0.0: default)
+    cfg.get_str = MagicMock(side_effect=lambda key, default="": default)
+    cfg.get_int = MagicMock(side_effect=lambda key, default=0: default)
+    cfg.get_int_present = MagicMock(side_effect=lambda key, default: default)
+    cfg.get_float_present = MagicMock(side_effect=lambda key, default: default)
+    cfg.get_bool = MagicMock(side_effect=lambda key, default=False: gate)
+    return AnalysisServicer(
+        cfg,
+        marketdata_channel=MagicMock(),
+        indicators_channel=MagicMock(),
+        ingest_channel=MagicMock(),
+        ledger_channel=MagicMock(),
+    )
+
+
+def _hist_resp(symbol="AAPL"):
+    """One PIT filing with EPS present and the market-ratio metrics marked missing (as EDGAR
+    supplies) — enough for `_fundamental_periods_from_response` to keep the period."""
+    p = marketdata_pb2.HistoricalFundamentalsPeriod(
+        symbol=symbol,
+        fiscal_period="Q1-2023",
+        period_type="quarterly",
+        eps=1.5,
+        roe=0.3,
+        missing_metrics=[
+            "pe_ratio",
+            "pb_ratio",
+            "dividend_yield",
+            "debt_to_equity",
+            "market_cap",
+            "beta",
+            "price",
+            "year_high",
+            "year_low",
+        ],
+    )
+    p.filed_date.FromDatetime(datetime(2023, 2, 1, tzinfo=UTC))
+    p.period_end.FromDatetime(datetime(2022, 12, 31, tzinfo=UTC))
+    return marketdata_pb2.GetHistoricalFundamentalsResponse(periods=[p])
+
+
+class TestBacktestPITLoaderFormulaOperand:
+    """Regression (feature 201): the BACKTEST PIT loader (`_load_fundamentals`) must feed a
+    fundamentals-FORMULA-only strategy (no COMPONENT_KIND_FUNDAMENTAL). Before the fix its guard
+    only recognized the feature-198 single-metric operand, so a formula-only strategy silently got
+    `None` → the formula was fed all-None epochs → composite None → ENTRY_NEVER_TRUE (0 trades).
+    The live path (snapshot) was correct; only the backtest PIT guard was wrong."""
+
+    @pytest.mark.asyncio
+    async def test_pit_loader_loads_for_formula_operand_with_routing_map(self):
+        svc = _backtest_servicer(gate=True)
+        svc._marketdata.GetHistoricalFundamentals = AsyncMock(return_value=_hist_resp())
+        fund_map = {"value_quality": [_PE, _ROE, _EPS]}
+        out = await svc._load_fundamentals(
+            "AAPL", _formula_only_definition(), (), formula_fund_map=fund_map
+        )
+        assert out is not None, "formula-only strategy must load PIT fundamentals on backtest"
+        assert len(out) == 1
+        svc._marketdata.GetHistoricalFundamentals.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_pit_loader_holds_when_gate_off(self):
+        svc = _backtest_servicer(gate=False)
+        svc._marketdata.GetHistoricalFundamentals = AsyncMock(return_value=_hist_resp())
+        fund_map = {"value_quality": [_PE, _ROE, _EPS]}
+        out = await svc._load_fundamentals(
+            "AAPL", _formula_only_definition(), (), formula_fund_map=fund_map
+        )
+        assert out is None
+        svc._marketdata.GetHistoricalFundamentals.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_pit_loader_holds_without_routing_map(self):
+        # No routing map (the non-backtest surfaces use the snapshot loader) → the PIT loader keeps
+        # its 198-only default and does not fetch for a formula-only strategy. Scopes the fix to the
+        # map-carrying backtest call; no regression to other callers.
+        svc = _backtest_servicer(gate=True)
+        svc._marketdata.GetHistoricalFundamentals = AsyncMock(return_value=_hist_resp())
+        out = await svc._load_fundamentals("AAPL", _formula_only_definition(), ())
+        assert out is None
+        svc._marketdata.GetHistoricalFundamentals.assert_not_awaited()
