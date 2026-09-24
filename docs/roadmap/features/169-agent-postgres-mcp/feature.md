@@ -5,6 +5,7 @@
 **Last Updated**: 2026-09-02
 **Committed to main**: c91e0c535f10c15962ea856e909ea1a2c659f29a
 **Launched date**: 2026-09-16
+**Archived**: 2026-09-16
 
 
 ---
@@ -23,15 +24,16 @@
 | 2026-09-02 | `in-progress` → `code-completed` | /sdd-execute | All 13 steps done; 365 tests pass (76.61% coverage); ruff clean; AC-8/9 confirmed |
 
 | 2026-09-16 | `code-completed` → `launched` | CI workflow | Promoted via PR #1145; committed c91e0c535f10c15962ea856e909ea1a2c659f29a |
+| 2026-09-16 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(1); promoted 4 acceptance scenarios (@feature-169); pruned 4 specs |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
-- [Recon](recon.md) — codebase dossier (Phase 0)
-- [Design](design.md) — debated architecture (Phase 1, 3 rounds)
-- [Implementation Spec](implementation-spec.md) — 13-step spec; run `/sdd-review agent-postgres-mcp impl-spec` then `/sdd-execute agent-postgres-mcp`
+- Product Spec — pruned by /sdd-archiver 2026-09-16; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15); promoted to `services/xstockstrat-agent/acceptance/agent-postgres-mcp.feature` (C-16)
+- Recon — pruned by /sdd-archiver 2026-09-16; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver 2026-09-16; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver 2026-09-16; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

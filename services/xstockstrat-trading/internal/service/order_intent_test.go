@@ -36,9 +36,9 @@ func TestComputeRequestHash_Deterministic(t *testing.T) {
 }
 
 func TestPlaceOrderRequestHash_IgnoresClientOrderId(t *testing.T) {
-	req1 := &tradingv1.PlaceOrderRequest{Symbol: "AAPL", Qty: 10, ClientOrderId: "nonce-a"}
-	req2 := &tradingv1.PlaceOrderRequest{Symbol: "AAPL", Qty: 10, ClientOrderId: "nonce-b"}
-	req3 := &tradingv1.PlaceOrderRequest{Symbol: "TSLA", Qty: 10, ClientOrderId: "nonce-a"}
+	req1 := &tradingv1.PlaceOrderRequest{Symbol: "AAPL", Qty: 10, ClientOrderId: "nonce-a", TimeInForce: tradingv1.TimeInForce_TIME_IN_FORCE_DAY}
+	req2 := &tradingv1.PlaceOrderRequest{Symbol: "AAPL", Qty: 10, ClientOrderId: "nonce-b", TimeInForce: tradingv1.TimeInForce_TIME_IN_FORCE_DAY}
+	req3 := &tradingv1.PlaceOrderRequest{Symbol: "TSLA", Qty: 10, ClientOrderId: "nonce-a", TimeInForce: tradingv1.TimeInForce_TIME_IN_FORCE_DAY}
 
 	h1, err := placeOrderRequestHash(req1)
 	if err != nil {

@@ -102,6 +102,15 @@ without this convention, both look identical (fails.md 2026-07-01).
 
 Append-only log — one entry per feature that registered new keys. Newest first. Don't edit past entries; superseding a key's behavior gets a new entry, not a rewrite of the old one.
 
+### feature 201 — fundamentals-formula-inputs (`xstockstrat-analysis`)
+
+**No new key.** A `COMPONENT_KIND_CUSTOM_FORMULA` component whose formula declares
+`fundamental_inputs` becomes a fundamentals-scoring operand. It reuses the feature-198 gate
+`analysis.backtest.fundamentals.enabled` (default OFF) — the key now has a **second read site**: the
+analysis snapshot loader (`_load_fundamentals_snapshot`) alongside the existing PIT loader
+(`_load_fundamentals`). One key, two enforcement sites; OFF disables both the 198 single-metric
+operand and the 200 formula operand on every surface.
+
 ### feature 184 — opportunity-config-operability (`xstockstrat-config` / `xstockstrat-analysis`)
 
 **Supersedes the `analysis.opportunity.*` no-seed pattern** (features 095/097/131/141/158/176/177 minted
@@ -415,6 +424,26 @@ namespace). Read once at servicer construction, not live.
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `analysis.series.max_concurrent_components` | int | `4` | Bounds concurrent per-component `ComputeIndicator`/`ExecuteFormula` execution across simultaneous `GetIndicatorSeries` calls, so a routinely-visited Symbol page can't starve the analysis live loop. `max(1, get_int(...))` clamp. |
+
+### feature 198 — historical-fundamentals-backtest (`xstockstrat-marketdata`, `xstockstrat-analysis`)
+
+Point-in-time historical fundamentals (SEC EDGAR primary + FMP-Free ratio enrichment) for
+look-ahead-safe backtesting. **No new secret/credential row** and **no second FMP cap**: ratio
+enrichment reuses the existing `marketdata.fmp.daily_request_cap` (=250) and the feature-147
+`marketdata.fmp.api_key` secret. EDGAR is keyless — `marketdata.edgar.user_agent` is **non-secret**
+ordinary config (read via `GetString`, never `GetSecret`).
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `marketdata.fundamentals.history.enabled` | bool | `false` | Gate for the fundamentals backfill worker. |
+| `marketdata.edgar.base_url` | string | `https://data.sec.gov` | SEC EDGAR XBRL base URL. |
+| `marketdata.edgar.user_agent` | string | `xstockstrat/1.0 (ops@xstockstrat.local)` | SEC fair-use UA (non-secret). |
+| `marketdata.edgar.rate_limit_rps` | int | `10` | SEC request rate ceiling. |
+| `marketdata.fundamentals.history.backfill.max_lookback_years` | int | `10` | Default lookback when a request omits range start. |
+| `marketdata.fundamentals.history.backfill.period_types` | string | `both` | Default period types (`quarterly`\|`annual`\|`both`). |
+| `marketdata.fundamentals.history.backfill.batch_size` | int | `50` | Symbols per backfill batch. |
+| `marketdata.fundamentals.history.ratio_enrichment.enabled` | bool | `false` | Optional FMP ratio-fill gate; reuses `marketdata.fmp.daily_request_cap` (no second cap). |
+| `analysis.backtest.fundamentals.enabled` | bool | `false` | Gate for the fundamental backtest operand (`xstockstrat-analysis`, step 12). |
 
 ### feature 131 — live-strategy-opportunity-attribution (`xstockstrat-analysis`)
 

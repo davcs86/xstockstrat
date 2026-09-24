@@ -25,7 +25,7 @@ _None currently open_ — ~~CLAUDE.md "Config Keys Consumed" lists only `agent.o
 | What | Why it looks dead | Evidence |
 |---|---|---|
 | `app/config/__init__.py` | empty, unused package; config access goes through `client.get_config_value` | `app/config/__init__.py` |
-| `app/prompts/signal_extraction.md` (+ `__init__.py`) | zero references (no `@server.prompt`, no file read) | `app/prompts/` (grep zero) |
+| `app/prompts/signal_extraction.md` | still unreferenced — feature 197 wired the prompts surface (`register_prompts` reads `app/prompts/list_correlation.md` via `@server.prompt`), but `signal_extraction.md` specifically has no reader | `app/prompts/` (grep for `signal_extraction` = zero; the dir is no longer prompt-machinery-free) |
 
 ## Open questions (unresolved *why* — needs a maintainer)
 

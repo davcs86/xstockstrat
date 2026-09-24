@@ -22,7 +22,20 @@ export const FORMULA_MACD = {
   isPublic: false,
 };
 
-export const FORMULAS = [FORMULA_RSI, FORMULA_MACD];
+/**
+ * A fundamentals-input formula (feature 200) — declares `fundamentalInputs`, so `ComponentEditor`
+ * renders the read-only "Fundamentals input" hint when it is picked. Connect-JSON serializes a
+ * repeated enum as its value-name strings.
+ */
+export const FORMULA_FUNDAMENTALS = {
+  formulaId: 'f-value-quality',
+  name: 'Value Quality',
+  author: TEST_USER_ID,
+  isPublic: true,
+  fundamentalInputs: ['FUNDAMENTAL_METRIC_PE_RATIO', 'FUNDAMENTAL_METRIC_ROE'],
+};
+
+export const FORMULAS = [FORMULA_RSI, FORMULA_MACD, FORMULA_FUNDAMENTALS];
 
 /**
  * A soft-deleted formula (feature 086) — GetFormula returns it with `deleted: true`. The edit page

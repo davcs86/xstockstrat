@@ -363,6 +363,13 @@ export type FormulaDefinition = Message<"xstockstrat.indicators.v1.FormulaDefini
      * @generated from field: bool deleted = 13;
      */
     deleted: boolean;
+    /**
+     * Non-empty = a fundamentals-only formula fed only these metrics as ExecuteFormula input_data
+     * scalars, never OHLCV closes (feature 200); the category marker (no separate flag).
+     *
+     * @generated from field: repeated xstockstrat.indicators.v1.FundamentalMetric fundamental_inputs = 14;
+     */
+    fundamentalInputs: FundamentalMetric[];
 };
 /**
  * Describes the message xstockstrat.indicators.v1.FormulaDefinition.
@@ -466,6 +473,12 @@ export type RegisterFormulaRequest = Message<"xstockstrat.indicators.v1.Register
      * @generated from field: int32 warmup_period = 9;
      */
     warmupPeriod: number;
+    /**
+     * non-empty = fundamentals-only formula (feature 200)
+     *
+     * @generated from field: repeated xstockstrat.indicators.v1.FundamentalMetric fundamental_inputs = 10;
+     */
+    fundamentalInputs: FundamentalMetric[];
 };
 /**
  * Describes the message xstockstrat.indicators.v1.RegisterFormulaRequest.
@@ -607,6 +620,12 @@ export type UpdateFormulaRequest = Message<"xstockstrat.indicators.v1.UpdateForm
      * @generated from field: google.protobuf.FieldMask update_mask = 10;
      */
     updateMask?: FieldMask | undefined;
+    /**
+     * non-empty = fundamentals-only formula (feature 200)
+     *
+     * @generated from field: repeated xstockstrat.indicators.v1.FundamentalMetric fundamental_inputs = 11;
+     */
+    fundamentalInputs: FundamentalMetric[];
 };
 /**
  * Describes the message xstockstrat.indicators.v1.UpdateFormulaRequest.
@@ -724,6 +743,68 @@ export declare enum ParameterType {
  * Describes the enum xstockstrat.indicators.v1.ParameterType.
  */
 export declare const ParameterTypeSchema: GenEnum<ParameterType>;
+/**
+ * Closed set of the canonical fundamentals metrics a formula may declare as inputs (feature 200).
+ * A non-empty FormulaDefinition.fundamental_inputs marks a formula as "fundamentals-only": the
+ * analysis evaluator feeds it only these metrics (never OHLCV closes) and broadcasts its scalar
+ * output. Names mirror marketdata.Fundamentals fields; the zero sentinel is invalid on write (C-04).
+ *
+ * @generated from enum xstockstrat.indicators.v1.FundamentalMetric
+ */
+export declare enum FundamentalMetric {
+    /**
+     * @generated from enum value: FUNDAMENTAL_METRIC_UNSPECIFIED = 0;
+     */
+    UNSPECIFIED = 0,
+    /**
+     * @generated from enum value: FUNDAMENTAL_METRIC_MARKET_CAP = 1;
+     */
+    MARKET_CAP = 1,
+    /**
+     * @generated from enum value: FUNDAMENTAL_METRIC_PE_RATIO = 2;
+     */
+    PE_RATIO = 2,
+    /**
+     * @generated from enum value: FUNDAMENTAL_METRIC_PB_RATIO = 3;
+     */
+    PB_RATIO = 3,
+    /**
+     * @generated from enum value: FUNDAMENTAL_METRIC_DIVIDEND_YIELD = 4;
+     */
+    DIVIDEND_YIELD = 4,
+    /**
+     * @generated from enum value: FUNDAMENTAL_METRIC_EPS = 5;
+     */
+    EPS = 5,
+    /**
+     * @generated from enum value: FUNDAMENTAL_METRIC_BETA = 6;
+     */
+    BETA = 6,
+    /**
+     * @generated from enum value: FUNDAMENTAL_METRIC_ROE = 7;
+     */
+    ROE = 7,
+    /**
+     * @generated from enum value: FUNDAMENTAL_METRIC_DEBT_TO_EQUITY = 8;
+     */
+    DEBT_TO_EQUITY = 8,
+    /**
+     * @generated from enum value: FUNDAMENTAL_METRIC_PRICE = 9;
+     */
+    PRICE = 9,
+    /**
+     * @generated from enum value: FUNDAMENTAL_METRIC_YEAR_HIGH = 10;
+     */
+    YEAR_HIGH = 10,
+    /**
+     * @generated from enum value: FUNDAMENTAL_METRIC_YEAR_LOW = 11;
+     */
+    YEAR_LOW = 11
+}
+/**
+ * Describes the enum xstockstrat.indicators.v1.FundamentalMetric.
+ */
+export declare const FundamentalMetricSchema: GenEnum<FundamentalMetric>;
 /**
  * IndicatorsService — formula engine and sandboxed Python execution.
  * Sandbox timeout and memory limits are configured via xstockstrat-config.

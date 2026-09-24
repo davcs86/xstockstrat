@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { BackfillBarsRequest, BackfillBarsResponse, Bar, BatchGetBarsRequest, BatchGetBarsResponse, BatchGetLatestPriceRequest, BatchGetLatestPriceResponse, DeleteBackfilledDataRequest, DeleteBackfilledDataResponse, GetBarsRequest, GetBarsResponse, GetDataCoverageRequest, GetDataCoverageResponse, GetFundamentalsMultiRequest, GetFundamentalsMultiResponse, GetFundamentalsRequest, GetFundamentalsResponse, GetLatestPriceRequest, GetLatestQuoteRequest, GetLatestQuotesRequest, GetLatestQuotesResponse, LatestPrice, ListAssetsRequest, ListAssetsResponse, Quote, StreamBarsRequest, StreamQuotesRequest } from "./marketdata_pb.js";
+import { BackfillBarsRequest, BackfillBarsResponse, BackfillFundamentalsRequest, BackfillFundamentalsResponse, Bar, BatchGetBarsRequest, BatchGetBarsResponse, BatchGetLatestPriceRequest, BatchGetLatestPriceResponse, DeleteBackfilledDataRequest, DeleteBackfilledDataResponse, GetBarsRequest, GetBarsResponse, GetDataCoverageRequest, GetDataCoverageResponse, GetFundamentalsMultiRequest, GetFundamentalsMultiResponse, GetFundamentalsRequest, GetFundamentalsResponse, GetHistoricalFundamentalsRequest, GetHistoricalFundamentalsResponse, GetLatestPriceRequest, GetLatestQuoteRequest, GetLatestQuotesRequest, GetLatestQuotesResponse, LatestPrice, ListAssetsRequest, ListAssetsResponse, Quote, StreamBarsRequest, StreamQuotesRequest } from "./marketdata_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -168,6 +168,30 @@ export const MarketDataService = {
       name: "BatchGetLatestPrice",
       I: BatchGetLatestPriceRequest,
       O: BatchGetLatestPriceResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Point-in-time historical fundamentals read (feature 198): returns only periods whose
+     * filed_date < as_of_date (T+1 availability), for look-ahead-safe backtesting.
+     *
+     * @generated from rpc xstockstrat.marketdata.v1.MarketDataService.GetHistoricalFundamentals
+     */
+    getHistoricalFundamentals: {
+      name: "GetHistoricalFundamentals",
+      I: GetHistoricalFundamentalsRequest,
+      O: GetHistoricalFundamentalsResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Worker RPC driven by ingest.TriggerBackfill(data_kind=FUNDAMENTALS) (feature 198): fetches
+     * as-reported statements from SEC EDGAR + a point-in-time price-join and persists them.
+     *
+     * @generated from rpc xstockstrat.marketdata.v1.MarketDataService.BackfillFundamentals
+     */
+    backfillFundamentals: {
+      name: "BackfillFundamentals",
+      I: BackfillFundamentalsRequest,
+      O: BackfillFundamentalsResponse,
       kind: MethodKind.Unary,
     },
   }

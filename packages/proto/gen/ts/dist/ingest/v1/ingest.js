@@ -5,13 +5,16 @@
 //   protoc               unknown
 // source: ingest/v1/ingest.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.IngestServiceClient = exports.IngestServiceService = exports.ManageSignalSourceResponse = exports.ManageSignalSourceRequest = exports.ListSignalSourcesResponse = exports.ListSignalSourcesRequest = exports.SignalSource = exports.QuerySignalsResponse = exports.QuerySignalsRequest = exports.IngestSignalResponse = exports.IngestSignalRequest = exports.ExternalSignal = exports.NormalizeRawDataResponse = exports.NormalizeRawDataRequest = exports.ListBackfillJobsResponse = exports.CancelBackfillRequest = exports.ListBackfillJobsRequest = exports.GetBackfillStatusRequest = exports.TriggerBackfillResponse = exports.TriggerBackfillRequest = exports.BackfillJob = exports.SignalSourceOperation = exports.SourceHealthStatus = exports.FillMode = exports.BackfillStatus = exports.protobufPackage = void 0;
+exports.IngestServiceClient = exports.IngestServiceService = exports.ManageSignalSourceResponse = exports.ManageSignalSourceRequest = exports.ListSignalSourcesResponse = exports.ListSignalSourcesRequest = exports.SignalSource = exports.QuerySignalsResponse = exports.QuerySignalsRequest = exports.IngestSignalResponse = exports.IngestSignalRequest = exports.ExternalSignal = exports.NormalizeRawDataResponse = exports.NormalizeRawDataRequest = exports.ListBackfillJobsResponse = exports.CancelBackfillRequest = exports.ListBackfillJobsRequest = exports.GetBackfillStatusRequest = exports.TriggerBackfillResponse = exports.TriggerBackfillRequest = exports.BackfillJob = exports.SignalSourceOperation = exports.SourceHealthStatus = exports.BackfillDataKind = exports.FillMode = exports.BackfillStatus = exports.protobufPackage = void 0;
 exports.backfillStatusFromJSON = backfillStatusFromJSON;
 exports.backfillStatusToJSON = backfillStatusToJSON;
 exports.backfillStatusToNumber = backfillStatusToNumber;
 exports.fillModeFromJSON = fillModeFromJSON;
 exports.fillModeToJSON = fillModeToJSON;
 exports.fillModeToNumber = fillModeToNumber;
+exports.backfillDataKindFromJSON = backfillDataKindFromJSON;
+exports.backfillDataKindToJSON = backfillDataKindToJSON;
+exports.backfillDataKindToNumber = backfillDataKindToNumber;
 exports.sourceHealthStatusFromJSON = sourceHealthStatusFromJSON;
 exports.sourceHealthStatusToJSON = sourceHealthStatusToJSON;
 exports.sourceHealthStatusToNumber = sourceHealthStatusToNumber;
@@ -159,6 +162,64 @@ function fillModeToNumber(object) {
         case FillMode.FILL_MODE_GAPS_ONLY:
             return 2;
         case FillMode.UNRECOGNIZED:
+        default:
+            return -1;
+    }
+}
+/**
+ * BackfillDataKind selects WHAT a backfill fetches (feature 198). Distinct from the timeframe
+ * axis: FUNDAMENTALS carries no bar timeframe (the servicer branches around the 1d-only reject).
+ * UNSPECIFIED == BARS for back-compat — every existing OHLCV caller omits the field.
+ */
+var BackfillDataKind;
+(function (BackfillDataKind) {
+    /** BACKFILL_DATA_KIND_UNSPECIFIED - treated as BARS by the servicer */
+    BackfillDataKind["BACKFILL_DATA_KIND_UNSPECIFIED"] = "BACKFILL_DATA_KIND_UNSPECIFIED";
+    /** BACKFILL_DATA_KIND_BARS - OHLCV bars (marketdata.BackfillBars) */
+    BackfillDataKind["BACKFILL_DATA_KIND_BARS"] = "BACKFILL_DATA_KIND_BARS";
+    /** BACKFILL_DATA_KIND_FUNDAMENTALS - point-in-time fundamentals (marketdata.BackfillFundamentals) */
+    BackfillDataKind["BACKFILL_DATA_KIND_FUNDAMENTALS"] = "BACKFILL_DATA_KIND_FUNDAMENTALS";
+    BackfillDataKind["UNRECOGNIZED"] = "UNRECOGNIZED";
+})(BackfillDataKind || (exports.BackfillDataKind = BackfillDataKind = {}));
+function backfillDataKindFromJSON(object) {
+    switch (object) {
+        case 0:
+        case "BACKFILL_DATA_KIND_UNSPECIFIED":
+            return BackfillDataKind.BACKFILL_DATA_KIND_UNSPECIFIED;
+        case 1:
+        case "BACKFILL_DATA_KIND_BARS":
+            return BackfillDataKind.BACKFILL_DATA_KIND_BARS;
+        case 2:
+        case "BACKFILL_DATA_KIND_FUNDAMENTALS":
+            return BackfillDataKind.BACKFILL_DATA_KIND_FUNDAMENTALS;
+        case -1:
+        case "UNRECOGNIZED":
+        default:
+            return BackfillDataKind.UNRECOGNIZED;
+    }
+}
+function backfillDataKindToJSON(object) {
+    switch (object) {
+        case BackfillDataKind.BACKFILL_DATA_KIND_UNSPECIFIED:
+            return "BACKFILL_DATA_KIND_UNSPECIFIED";
+        case BackfillDataKind.BACKFILL_DATA_KIND_BARS:
+            return "BACKFILL_DATA_KIND_BARS";
+        case BackfillDataKind.BACKFILL_DATA_KIND_FUNDAMENTALS:
+            return "BACKFILL_DATA_KIND_FUNDAMENTALS";
+        case BackfillDataKind.UNRECOGNIZED:
+        default:
+            return "UNRECOGNIZED";
+    }
+}
+function backfillDataKindToNumber(object) {
+    switch (object) {
+        case BackfillDataKind.BACKFILL_DATA_KIND_UNSPECIFIED:
+            return 0;
+        case BackfillDataKind.BACKFILL_DATA_KIND_BARS:
+            return 1;
+        case BackfillDataKind.BACKFILL_DATA_KIND_FUNDAMENTALS:
+            return 2;
+        case BackfillDataKind.UNRECOGNIZED:
         default:
             return -1;
     }
@@ -312,6 +373,7 @@ function createBaseBackfillJob() {
         timeframeEnum: common_1.Timeframe.TIMEFRAME_UNSPECIFIED,
         chunksTotal: 0,
         chunksCompleted: 0,
+        dataKind: BackfillDataKind.BACKFILL_DATA_KIND_UNSPECIFIED,
     };
 }
 exports.BackfillJob = {
@@ -357,6 +419,9 @@ exports.BackfillJob = {
         }
         if (message.chunksCompleted !== 0) {
             writer.uint32(112).int32(message.chunksCompleted);
+        }
+        if (message.dataKind !== BackfillDataKind.BACKFILL_DATA_KIND_UNSPECIFIED) {
+            writer.uint32(120).int32(backfillDataKindToNumber(message.dataKind));
         }
         return writer;
     },
@@ -465,6 +530,13 @@ exports.BackfillJob = {
                     message.chunksCompleted = reader.int32();
                     continue;
                 }
+                case 15: {
+                    if (tag !== 120) {
+                        break;
+                    }
+                    message.dataKind = backfillDataKindFromJSON(reader.int32());
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -525,6 +597,11 @@ exports.BackfillJob = {
                 : isSet(object.chunks_completed)
                     ? globalThis.Number(object.chunks_completed)
                     : 0,
+            dataKind: isSet(object.dataKind)
+                ? backfillDataKindFromJSON(object.dataKind)
+                : isSet(object.data_kind)
+                    ? backfillDataKindFromJSON(object.data_kind)
+                    : BackfillDataKind.BACKFILL_DATA_KIND_UNSPECIFIED,
         };
     },
     toJSON(message) {
@@ -571,6 +648,9 @@ exports.BackfillJob = {
         if (message.chunksCompleted !== 0) {
             obj.chunksCompleted = Math.round(message.chunksCompleted);
         }
+        if (message.dataKind !== BackfillDataKind.BACKFILL_DATA_KIND_UNSPECIFIED) {
+            obj.dataKind = backfillDataKindToJSON(message.dataKind);
+        }
         return obj;
     },
     create(base) {
@@ -594,6 +674,7 @@ exports.BackfillJob = {
         message.timeframeEnum = object.timeframeEnum ?? common_1.Timeframe.TIMEFRAME_UNSPECIFIED;
         message.chunksTotal = object.chunksTotal ?? 0;
         message.chunksCompleted = object.chunksCompleted ?? 0;
+        message.dataKind = object.dataKind ?? BackfillDataKind.BACKFILL_DATA_KIND_UNSPECIFIED;
         return message;
     },
 };
@@ -605,6 +686,7 @@ function createBaseTriggerBackfillRequest() {
         overwrite: false,
         timeframeEnum: common_1.Timeframe.TIMEFRAME_UNSPECIFIED,
         fillMode: FillMode.FILL_MODE_UNSPECIFIED,
+        dataKind: BackfillDataKind.BACKFILL_DATA_KIND_UNSPECIFIED,
     };
 }
 exports.TriggerBackfillRequest = {
@@ -626,6 +708,9 @@ exports.TriggerBackfillRequest = {
         }
         if (message.fillMode !== FillMode.FILL_MODE_UNSPECIFIED) {
             writer.uint32(48).int32(fillModeToNumber(message.fillMode));
+        }
+        if (message.dataKind !== BackfillDataKind.BACKFILL_DATA_KIND_UNSPECIFIED) {
+            writer.uint32(56).int32(backfillDataKindToNumber(message.dataKind));
         }
         return writer;
     },
@@ -678,6 +763,13 @@ exports.TriggerBackfillRequest = {
                     message.fillMode = fillModeFromJSON(reader.int32());
                     continue;
                 }
+                case 7: {
+                    if (tag !== 56) {
+                        break;
+                    }
+                    message.dataKind = backfillDataKindFromJSON(reader.int32());
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -702,6 +794,11 @@ exports.TriggerBackfillRequest = {
                 : isSet(object.fill_mode)
                     ? fillModeFromJSON(object.fill_mode)
                     : FillMode.FILL_MODE_UNSPECIFIED,
+            dataKind: isSet(object.dataKind)
+                ? backfillDataKindFromJSON(object.dataKind)
+                : isSet(object.data_kind)
+                    ? backfillDataKindFromJSON(object.data_kind)
+                    : BackfillDataKind.BACKFILL_DATA_KIND_UNSPECIFIED,
         };
     },
     toJSON(message) {
@@ -724,6 +821,9 @@ exports.TriggerBackfillRequest = {
         if (message.fillMode !== FillMode.FILL_MODE_UNSPECIFIED) {
             obj.fillMode = fillModeToJSON(message.fillMode);
         }
+        if (message.dataKind !== BackfillDataKind.BACKFILL_DATA_KIND_UNSPECIFIED) {
+            obj.dataKind = backfillDataKindToJSON(message.dataKind);
+        }
         return obj;
     },
     create(base) {
@@ -739,6 +839,7 @@ exports.TriggerBackfillRequest = {
         message.overwrite = object.overwrite ?? false;
         message.timeframeEnum = object.timeframeEnum ?? common_1.Timeframe.TIMEFRAME_UNSPECIFIED;
         message.fillMode = object.fillMode ?? FillMode.FILL_MODE_UNSPECIFIED;
+        message.dataKind = object.dataKind ?? BackfillDataKind.BACKFILL_DATA_KIND_UNSPECIFIED;
         return message;
     },
 };

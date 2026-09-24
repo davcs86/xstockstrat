@@ -272,6 +272,46 @@ rising) that per-symbol operands cannot express.
 - **Deferred:** `screen_symbols` `source_symbol` and a UI strategy-builder editor for it are follow-ons
   (agent-authored strategies are fully functional now via `manage_strategy`).
 
+### Fundamentals-input formula operand (`fundamental_inputs`, feature 200)
+
+A `COMPONENT_KIND_CUSTOM_FORMULA` component whose formula declares
+`fundamental_inputs` (the closed `FundamentalMetric` enum, owned by xstockstrat-indicators) is fed
+**only** those fundamentals (never OHLCV `close`), scored **once per filing-boundary epoch**, and the
+scalar output broadcast across the span — the same input/output contract as the fundamentals-signal
+producer's scoring formula (feature 062), so one formula id works in both places (FR-5, full-row
+parity; the partial-row case diverges by design — see `@AC-8`). This is disjoint from the feature-198
+`COMPONENT_KIND_FUNDAMENTAL` single-metric operand: 198 reads **one** metric per component off the
+bar; 200 feeds a **set** of metrics into a formula.
+
+- **Routing.** The evaluator branch fires only when the component's `formula_id` maps to a non-empty
+  metric list in the `formula_fundamentals` map the servicer/live loop builds
+  (`_formula_fundamentals` / `evaluator.declared_formula_fundamentals`, one `GetFormula` per distinct
+  formula). An unmapped formula stays the ordinary indicator-only path (fed `close`) — byte-identical
+  to pre-200 (`@AC-7`). The routing map must be built **before** the loader/eval at every surface
+  (a site that computes `eval_dates` without it silently holds).
+- **Two data channels, kept separate.** The formula reads a **dedicated** `formula_fundamentals_data`
+  channel so a co-occurring feature-198 operand keeps its own PIT `fundamentals` channel unchanged
+  (C-16 PRESERVE `@feature-198`). On **backtest** the formula channel is the same per-symbol **PIT**
+  filing history (`_load_fundamentals`) so it is as-of-bar-date with the 198 T+1 carry-forward
+  (`formula_fundamentals_data` left `None` → defaults to the PIT list). On the **5 non-backtest**
+  surfaces (live loop, `EvaluateReadiness`, readiness materializer, `ListOpportunities`,
+  `GetIndicatorSeries`) the formula channel is the current-snapshot row from marketdata
+  `GetFundamentalsMulti`, lowered by `_load_fundamentals_snapshot` (live loop:
+  `_load_fundamentals_snapshot`) into a **one-element** `[FundamentalPeriod]` with `filed_date =
+  date.min` (strictly before every bar), so the identical `_fundamental_as_of_series` broadcasts it as
+  one degenerate epoch — one code shape for PIT and snapshot.
+- **Gate (one key, two sites).** `analysis.backtest.fundamentals.enabled` (default OFF) now gates
+  **both** the 198 PIT loader (`_load_fundamentals`) **and** the 200 snapshot loader
+  (`_load_fundamentals_snapshot`) — one config key, two enforcement sites. OFF ⇒ the formula operand
+  reads hold on every surface (no snapshot/PIT fetch, no formula execution — no fabricated 0.0).
+- **Warmup.** A fundamentals-only formula consumes no rolling `close` window, so its warmup is forced
+  to **0** in the backtest warmup cache (the cache value stays `int`); the `fundamental_inputs` read
+  folds into the existing warmup-prefetch `GetFormula` at backtest/live (no extra RPC there). The
+  other 4 surfaces pay one bounded per-pass `GetFormula` fan-out to build the map.
+- **Write-time guard.** `ManageStrategy` rejects `INVALID_ARGUMENT` a component that sets **both**
+  `source_symbol` and a fundamentals-input formula — a component is a benchmark operand XOR a
+  fundamentals-formula operand (the formula reads fundamentals, not bars).
+
 ## Config Keys Consumed
 
 Namespace: `analysis`
@@ -285,6 +325,7 @@ Namespace: `analysis`
 | `analysis.backtest.portfolio_position_weight` | float | `0.10` | Fraction of **initial** capital committed per concurrent position in portfolio sizing mode (feature 150). Read via `get_float` (zero-trap intended: a configured `0` disables the portfolio → falls back to `0.10`). A fixed fraction of *initial* capital (not live equity) keeps aggregate metrics order-independent. |
 | `analysis.backtest.portfolio_max_concurrent` | int | `9` | Max concurrently-held positions in portfolio sizing mode (feature 150). Read via `get_int` with a `max(1, …)` clamp (zero-trap intended: a configured `0` reads back as the default `9`; the clamp guards a negative). At the `0.10` weight this leaves a ≥10% cash buffer. |
 | `analysis.backtest.default_fill_model` | int | `0` | Default fill model when a `RunBacktest` request leaves `fill_model` unset (feature 151). `0` = `FILL_MODEL_UNSPECIFIED` → legacy `SAME_BAR_CLOSE`; `2` = `FILL_MODEL_NEXT_BAR_OPEN`. Read via `get_int` — the zero-trap is **intentional** here: both an absent key and a configured `0` mean legacy, so a future reader must NOT "fix" it to `get_int_present`. A request-supplied `fill_model` always overrides this. |
+| `analysis.backtest.fundamentals.enabled` | bool | `false` | Master kill-switch for the historical-fundamentals strategy operand (`COMPONENT_KIND_FUNDAMENTAL`, feature 198) **and** the fundamentals-input formula operand (`fundamental_inputs`, feature 200). Read via `get_bool` (HasField — an explicit operator value is honored) at **two** enforcement sites for one key: the per-symbol PIT-preload chokepoint (`_load_fundamentals`, feature 198) and the snapshot loader (`_load_fundamentals_snapshot`, feature 200) — both shared by the servicer + the live loop, so it gates **every** consumer uniformly: backtest, live loop, `EvaluateReadiness`, the readiness materializer, `ListOpportunities`, and `GetIndicatorSeries`. Default **OFF** ⇒ a fundamental operand (either kind) resolves to all-`None` (the leaf holds) on every surface. Turning it off is a true platform-wide disable — in-flight strategies with a fundamental operand immediately read hold. |
 | `analysis.scoring.sharpe_weight` | float | `0.4` | Weight of Sharpe in overall score |
 | `analysis.scoring.drawdown_weight` | float | `0.3` | Weight of max drawdown |
 | `analysis.scoring.win_rate_weight` | float | `0.3` | Weight of win rate |
@@ -292,13 +333,18 @@ Namespace: `analysis`
 | `analysis.scoring.min_evidence_symbols` | int | `3` | Below this many distinct evidence symbols the derived grade is flagged `provisional`. |
 | `analysis.scoring.min_evidence_days` | int | `500` | Below this many total evidence trading-days the derived grade is flagged `provisional`. |
 | `analysis.scoring.signal_decay_half_life_hours` | float | `24.0` | Exponential half-life (hours) for age decay of a signal's contribution to the Opportunities queue's `signal_axis` (feature 022); `effective = conviction × source_weight × exp(−ln2/half_life × age_hours)`, age from `ExternalSignal.ingested_at`. **Registered as a config key with server-enforced bounds `[0, 8760]` (feature 161, migration 019 + config-service `SCALAR_BOUNDS_REGISTRY`)** — appears in config-ui with a bounds hint and is settable via `set_config`. Set to `0` to disable decay (min inclusive); the config service rejects a value outside `[0, 8760]` at `SetConfig` (negative values are no longer settable via `SetConfig`, though the reader still tolerates them defensively). Read via `get_float_present` (never `get_float` — a configured `0` is legitimate and the `get_float` zero-trap would swallow it). |
+| `analysis.scoring.composite_shrinkage_k` | float | `1.0` | Empirical-Bayes pseudo-count `k` for the per-opportunity `composite_score` fusion `(Σwᵢ·sᵢ + 0.5·k)/(Σwᵢ + k)` (feature 199). Deliberately **distinct** from `shrinkage_days` (feature-065 grade, `k` in trading-days): here `k` is dimensionless and equals one axis-weight, so a single maxed axis lands at `0.750` and a corroborated pair at `0.833` (usable `[0.167, 0.833]` band). Read via `get_float_present` — a configured `0` legitimately disables shrinkage; the `get_float` zero-trap would swallow it. Not seeded by a config-ui migration (code-default only, like the sibling `analysis.scoring.*` keys). |
+| `analysis.scoring.composite_weight_readiness` | float | `1.0` | Fusion weight `wᵢ` for the readiness sub-score (identity map of `conviction`) in the `composite_score` blend (feature 199). Read via `get_float_present` — a configured `0` disables the readiness axis (its weight is omitted, never a zero score). Code-default only (not config-ui-seeded). |
+| `analysis.scoring.composite_weight_signal` | float | `1.0` | Fusion weight `wᵢ` for the directional-signal sub-score (`clamp(max_agree)·(1−clamp(max_conflict))`) in the `composite_score` blend (feature 199). Read via `get_float_present` — a configured `0` disables the signal axis. Code-default only (not config-ui-seeded). |
+| `analysis.scoring.symbol_score_decay` | float | `0.5` | Geometric rank-decay γ for the feature-200 symbol_score fold `Σ γ^i·(composite_score × strategy_weight)` (terms sorted DESC). **Read-clamped to `[0, 0.99]`** in `_compute_opportunities` and the heal re-fold — a configured γ≥1 stops the decay / inverts the `@AC-3` saturation ordering. Read via `get_float_present` (a configured `0` legitimately collapses the fold to the top term; the `get_float` zero-trap would swallow it). Code-default only (not config-ui-seeded), like the sibling `analysis.scoring.*` keys. |
+| `analysis.scoring.strategy_weight_floor` | float | `0.5` | Affine grade-weight floor for `strategy_weight = floor + (1−floor)·clamp01(overall_score)` (feature 200); also the neutral weight for a provisional / absent / unattributed grade — never `0`, so an unproven strategy's opportunity still contributes a term (FR-4/`@AC-7`). Read via `get_float_present`. Code-default only (not config-ui-seeded). |
 | `analysis.strategy.default_cooldown_days` | int | `31` | Per-strategy default re-entry cooldown in calendar days when `StrategyDefinition.cooldown_days` is unset (feature 069); `31` sits outside the IRS 30-day-each-side wash-sale window. `get_int` zero-trap: a platform-wide value of `0` reads back as the default `31` — a per-strategy explicit-`0` (no cooldown) is unaffected because it travels via proto explicit presence, not this config read. |
 | `analysis.strategy.default_exit_cooldown_days` | int | `0` | Per-strategy default minimum holding period (calendar days) before `exit_rule` may fire a sell, when `StrategyDefinition.exit_cooldown_days` is unset (feature 116); mirrors `default_cooldown_days` but gates the exit transition. Default `0` (no minimum hold — no wash-sale-style rationale exists for a non-zero default here, unlike the 31-day re-entry default). Read via `get_int_present` (**not** `get_int`) — a configured `0` is a legitimate value and `get_int`'s zero-trap would silently collapse it. |
 | `analysis.strategy.max_concurrent_entry_backfill` | int | `4` | Semaphore bound on concurrent `ListOrders` calls during the boot-time entry-time backfill pass (feature 116, `app/engine/entry_backfill.py`) — mirrors `analysis.screener.max_concurrent_formula_evals`'s shape. |
 | `analysis.engine.eval_interval_seconds` | int | `60` | Live evaluation polling cadence in seconds |
 | `analysis.engine.max_strategies_per_cycle` | int | `50` | Max (strategy × symbol) pairs evaluated per cycle |
 | `analysis.engine.alert_throttle_seconds` | int | `300` | Min seconds between alerts per (strategy, symbol) pair |
-| `analysis.engine.fundamentals_blend_strategy_id` | string | `fundamentals_macd_blend` | Strategy id the fundamentals-universe force-run rule governs (feature 168). When that strategy is live, the live loop evaluates it over the fundamentals universe (signals from the `analysis.fundsignal.source_slug` source ∩ symbols with fundamentals data) minus its deny list, instead of its ordinary owner-scoped universe. Read via `get_str` (empty ⇒ code default). Seed migration `026_analysis_engine_blend_keys`. |
+| `analysis.engine.fundamentals_blend_strategy_id` | string | `fundamentals_macd_blend` | Strategy id the fundamentals-universe force-run rule governs (feature 168). When that strategy is live, it is evaluated/attributed over the fundamentals universe (signals from the `analysis.fundsignal.source_slug` source ∩ symbols with fundamentals data) minus its deny list, instead of its ordinary owner-scoped universe. **Feature 193 hoisted this restriction into the shared `resolve_universe` (`blend_id`/`fundamentals_universe` kwargs) so all three callers honor it uniformly — the live loop, the opportunity queue (`_compute_opportunities`), and the boot entry-backfill; `signal_eligible` is inert for the blend on every caller. Before 193 only the live loop applied it, so the queue over-attributed the blend to off-universe signal/held/watchlist symbols.** Read via `get_str` (empty ⇒ code default). Seed migration `026_analysis_engine_blend_keys`. |
 | `analysis.engine.fundamentals_blend_enabled` | bool | `true` | Kill-switch for the fundamentals-universe force-run (feature 168). Read via `get_bool` (HasField-based — an explicit operator `false` is honored), which disables the override entirely (the governed strategy then resolves its own universe like any other), independent of whether that strategy is live. Seed migration `026_analysis_engine_blend_keys`. |
 | `analysis.screener.max_universe_size` | int | `100` | Max symbols a single `ScreenSymbols` scan may cover (feature 060); over-cap requests are truncated |
 | `analysis.screener.max_duration_seconds` | int | `120` | Overall deadline for one screener scan |

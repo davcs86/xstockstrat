@@ -25,6 +25,9 @@ export interface SignalItem {
   strategyId?: string;
   chips?: string[];
   expiry?: string;
+  // feature 199 — the shrunk 0–1 composite ranking ordinal; rendered as a small labeled tag,
+  // omitted (no tag) when unset/NULL (nothing to fuse), never a fabricated 0.000.
+  compositeScore?: number;
 }
 
 export type Section =

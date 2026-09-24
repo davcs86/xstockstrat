@@ -3,6 +3,14 @@
 Complete reference for the forty-nine tools exposed by `xstockstrat-agent` via the Model Context Protocol (MCP).
 Connection setup → `services/xstockstrat-agent/claude_mcp_config.json`.
 
+The agent also exposes one MCP **prompt** — `list_correlation_guide` (feature 197), the consolidated
+guide for joining the account/position/opportunity/strategy list responses (see § Correlating list
+responses under Usage Patterns) — and a server-level `instructions` string returned in the MCP
+`initialize` result carrying the same join summary. A prompt is not a tool; the tool count stays
+forty-nine. **This runbook is a maintainer reference: a wire-connected agent cannot read it — the
+correlation guidance reaches consumer agents through the tool docstrings, the `initialize`
+instructions, and the `list_correlation_guide` prompt, which this file only mirrors for parity.**
+
 ---
 
 ## Transport Modes
@@ -431,7 +439,7 @@ see the `status` note below for when they aren't).
 |---|---|
 | Over-cap universe (> `analysis.screener.max_universe_size`) | Truncated analysis-side |
 | Unknown fundamental `metric_name` (typo, or absent from every scanned symbol) when fundamentals are available | `INVALID_ARGUMENT` |
-| Unknown component `kind` (not `builtin`/`formula`) | `ValueError` client-side, before the gRPC call |
+| Unknown component `kind` (not `builtin`/`formula`/`fundamental`) | `ValueError` client-side, before the gRPC call |
 | Analysis service unreachable | gRPC error propagated |
 
 ---
@@ -471,7 +479,7 @@ gate.
 | `operation` | `string` | Yes | `"register"`, `"update"`, `"deactivate"`, or `"reactivate"` |
 | `strategy_id` | `string` | Yes | Lowercase/underscore identifier, e.g. `"sma_crossover"` |
 | `display_name` | `string` | No | Human-readable name |
-| `components` | `object[]` | No | `{ref_name, kind ("builtin"\|"formula"), indicator, formula_id, params, source_symbol}`. `source_symbol` (optional, feature 152) — a fixed benchmark/reference ticker (e.g. `"VOO"`) the component is computed on instead of the evaluated symbol, aligned onto the evaluated symbol's timeline (cross-symbol "market-regime" gates); empty = evaluated symbol. Normalized uppercase/trim server-side; scoring-relevant (enters the definition fingerprint). |
+| `components` | `object[]` | No | `{ref_name, kind ("builtin"\|"formula"\|"fundamental"), indicator, formula_id, params, source_symbol, fundamental_metric}`. `source_symbol` (optional, feature 152) — a fixed benchmark/reference ticker (e.g. `"VOO"`) the component is computed on instead of the evaluated symbol, aligned onto the evaluated symbol's timeline (cross-symbol "market-regime" gates); empty = evaluated symbol. `fundamental_metric` (feature 198) — required when `kind="fundamental"`; one of `market_cap`, `pe_ratio`, `pb_ratio`, `dividend_yield`, `eps`, `beta`, `roe`, `debt_to_equity`, `price`, `year_high`, `year_low`. The operand resolves point-in-time (latest filing with `filed_date < bar_date`, T+1, carried forward; holds before the first filing — no look-ahead). Requires the symbols' fundamentals history backfilled (`trigger_backfill data_kind="fundamentals"`) and `analysis.backtest.fundamentals.enabled` ON. Normalized uppercase/trim server-side; scoring-relevant (enters the definition fingerprint). |
 | `entry_rule` | `string` or `object` | No | Condition tree as a JSON string **or** a JSON object (dict) — a dict is serialized to the canonical JSON string before forwarding |
 | `exit_rule` | `string` or `object` | No | Condition tree as a JSON string **or** a JSON object (dict) — a dict is serialized to the canonical JSON string before forwarding |
 | `signal_params` | `object` | No | Optional signal-weighting params |
@@ -727,7 +735,7 @@ manual trigger share the same `run_once` path, and this call never touches the d
 
 ### `trigger_backfill`
 
-Triggers a historical OHLCV backfill via `xstockstrat-ingest` `TriggerBackfill` (feature 066).
+Triggers a historical backfill via `xstockstrat-ingest` `TriggerBackfill` (feature 066).
 **Admin-scoped write** — forwards the **caller's real derived** `x-access-scope` (feature 092;
 was a hardcoded admin scope). `TriggerBackfill` is now admin-gated server-side, so a non-admin
 caller is rejected `PERMISSION_DENIED` ("admin scope required") rather than queuing a paid job.
@@ -737,7 +745,8 @@ caller is rejected `PERMISSION_DENIED` ("admin scope required") rather than queu
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `symbols` | `string[]` | Yes | Explicit ticker list, e.g. `["AAPL", "MSFT"]`; max 50 per call |
-| `timeframe` | `string` | No | `"1d"` default; `"1Day"` also accepted (canonicalized) — only daily bars are supported |
+| `data_kind` | `string` | No | `"bars"` default (daily OHLCV) \| `"fundamentals"` (point-in-time fundamentals filings history, feature 198). `"fundamentals"` is timeframe-independent — the `timeframe` arg is ignored and its 1d-only gate is skipped |
+| `timeframe` | `string` | No | `"1d"` default; `"1Day"` also accepted (canonicalized) — only daily bars are supported; ignored when `data_kind="fundamentals"` |
 | `start` / `end` | `string` (ISO 8601) | No | Optional range bounds; one-sided allowed; both omitted = service default range |
 | `overwrite` | `bool` | No | `false` default; `true` re-fetches bars that already exist |
 | `fill_mode` | `string` | No | `"full"` \| `"gaps_only"`; omitted → server default FULL (`gaps_only` fetches only missing ranges) |
@@ -752,7 +761,7 @@ caller is rejected `PERMISSION_DENIED` ("admin scope required") rather than queu
 
 | Condition | Error |
 |---|---|
-| Empty/oversized `symbols`, bad `timeframe`/`fill_mode`, `start` after `end` | tool `ValueError` **before** any RPC |
+| Empty/oversized `symbols`, bad `data_kind`/`timeframe`/`fill_mode`, `start` after `end` | tool `ValueError` **before** any RPC |
 | Bad symbols / provider failures | **No synchronous error** — ingest queues unconditionally; surfaces as a terminal `FAILED`/`PARTIAL` job via `get_backfill_status` |
 | Ingest unreachable | gRPC error propagated |
 
@@ -873,6 +882,15 @@ ranking axes and **distinct** from an evaluated 0-of-N "quiet" row). The live-ma
 - `valid_until` — the row's expiry as an ISO-8601 string; omitted when unset (feature 185 back-fill).
 - `signal_confidence` — the raw max active-signal conviction (0.0–1.0); omitted when the symbol has
   no active signal, never a fabricated `0.0` (feature 185 back-fill).
+- `composite_score` — the shrunk **0–1 ranking ordinal** fusing readiness + directional signal
+  (feature 199); omitted when the row has nothing to fuse (NULL / never-computed / data-unavailable),
+  never a fabricated `0.0`. It is a **ranking aid, not a cardinal probability** — do not treat it as a
+  sizing or alert input (that is `signal_confidence`).
+- `symbol_score` — the **symbol-level roll-up** (feature 200): a bounded (`< 2.0`) ranking ordinal that
+  folds the symbol's opportunities (geometric rank-decay over `composite_score × strategy_weight`), so
+  a caller can compare **which symbol** to trade across the queue. Symbol-uniform (every row of a
+  symbol carries the same value); omitted when the symbol has no score-eligible opportunity. A
+  **ranking aid on a non-`[0,1]` scale, NOT a cardinal** sizing/alert input.
 - `sparkline` — a list of recent daily closes; a warm-up/missing bar is JSON `null` (never `NaN`).
 - `conditions` — the traced `{ref_name, lhs_value, threshold, fn, state, distance_to_threshold}`
   leaves; an unattributed row omits the key.
@@ -1436,6 +1454,30 @@ emit_alert(severity="info", category="system",
 3. run_backtest(strategy_id="rsi_sma_combo", symbols=["NVDA"])
    → backtest_id
 ```
+
+### Correlating list responses
+
+The `list_accounts`, `get_positions`, `get_positions_by_account_id`, `list_opportunities`, and
+`list_strategies` responses correlate on three keys. Join **only** on these; the two non-joins below
+have no linking field, so do not invent them. (This is the same guidance the `list_correlation_guide`
+prompt and the server `instructions` deliver to a connected agent — mirrored here for maintainers.)
+
+| Join key | Left | Right | Meaning |
+|---|---|---|---|
+| `account_id` | `list_accounts[].id` | `get_positions[].account_id` | Which account holds a position. The same `id` is the `account_id` argument to `get_positions_by_account_id`. |
+| `strategy_id` | `list_strategies[].strategy_id` | `list_opportunities[].strategy_id` | Which stored strategy produced a ranked opportunity. |
+| `symbol` | `get_positions[].symbol` | `list_opportunities[].symbol` | What you hold vs. what the Decide-queue recommends for the same ticker. An opportunity's `provenance` also carries `"position"` when a holding seeded the row. |
+
+**Non-joins (no linking field — never fabricate them):**
+
+- A position carries **no `strategy_id`** — you cannot join `get_positions` to `list_strategies`
+  directly (only inferred via `symbol` → `list_opportunities`).
+- An opportunity and a strategy carry **no `account_id`** — `list_opportunities` and
+  `list_strategies` are user-scoped, not account-scoped.
+
+Stitch order: `list_accounts` → `get_positions` (group by `account_id`) → match `symbol` in
+`list_opportunities` → look up `strategy_id` in `list_strategies`. All five tools are user-scoped
+(caller's own data only).
 
 ---
 

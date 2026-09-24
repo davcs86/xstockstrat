@@ -45,19 +45,19 @@ test.describe('OrderForm', () => {
   test('limit price field appears when order type is Limit', async ({ page }) => {
     // The order type combobox is inside the <form> — use that scope to avoid picking
     // ChartPanel's bar-count or symbol selectors which render after the form in the DOM.
-    await page.locator('form').getByRole('combobox').click();
+    await page.locator('form').getByRole('combobox').first().click();
     await page.getByRole('option', { name: 'Limit', exact: true }).click();
     await expect(page.getByPlaceholder('Limit price')).toBeVisible();
   });
 
   test('limit price field appears when order type is Stop Limit', async ({ page }) => {
-    await page.locator('form').getByRole('combobox').click();
+    await page.locator('form').getByRole('combobox').first().click();
     await page.getByRole('option', { name: 'Stop Limit', exact: true }).click();
     await expect(page.getByPlaceholder('Limit price')).toBeVisible();
   });
 
   test('limit price field is hidden for Stop orders', async ({ page }) => {
-    await page.locator('form').getByRole('combobox').click();
+    await page.locator('form').getByRole('combobox').first().click();
     await page.getByRole('option', { name: 'Stop', exact: true }).click();
     await expect(page.getByPlaceholder('Limit price')).not.toBeVisible();
   });
@@ -78,6 +78,47 @@ test.describe('OrderForm', () => {
     // Consumer surface requirement (C-14, feature 023): the computed quantity/stop price
     // are shown at submission.
     await expect(page.getByText(/qty 5, stop 148.25/)).toBeVisible();
+  });
+
+  test('TIF select renders options and PlaceOrder sends timeInForce as a Connect-JSON NAME-string (AC-5)', async ({
+    page,
+  }) => {
+    let sentTif: unknown;
+    await page.route('**/xstockstrat.trading.v1.TradingService/PlaceOrder', async (route) => {
+      const body = route.request().postData();
+      sentTif = body ? (JSON.parse(body).timeInForce as unknown) : undefined;
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          orderId: 'mock-order-gtc-001',
+          status: 3,
+          qty: 5,
+          tradingMode: 1,
+          timeInForce: 'TIME_IN_FORCE_GTC',
+        }),
+      });
+    });
+
+    // The TIF combobox defaults to Day and offers all six concrete variants.
+    const tif = page.getByRole('combobox', { name: 'Time in force' });
+    await expect(tif).toContainText('Day');
+    await tif.click();
+    for (const opt of ['Day', 'GTC', 'IOC', 'FOK', 'OPG', 'CLS']) {
+      await expect(page.getByRole('option', { name: opt, exact: true })).toBeVisible();
+    }
+    await page.getByRole('option', { name: 'GTC', exact: true }).click();
+
+    await page.getByPlaceholder('Symbol (e.g. AAPL)').fill('aapl');
+    await page.getByPlaceholder('Quantity').fill('5');
+    await page
+      .getByRole('button', { name: /place order|buy|sell/i })
+      .last()
+      .click();
+
+    await expect(page.getByText(/mock-order-gtc-001/)).toBeVisible({ timeout: 10000 });
+    // The enum crosses the Connect-JSON wire as its NAME-string, not the numeric value.
+    expect(sentTif).toBe('TIME_IN_FORCE_GTC');
   });
 
   test('failed order submission shows error message', async ({ page }) => {

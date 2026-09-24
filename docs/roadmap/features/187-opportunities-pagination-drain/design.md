@@ -147,10 +147,10 @@ sort keys but does not alter which rows are returned or their conviction/signal_
   check propagates `compute_failed` to the caller.
 - PRESERVE `@AC-8 @feature-185` "Surgical self-heal on read" — not regressed: per-row recovery is
   per-read in the handler, independent of which page the row lands on.
-- PRESERVE `@AC-9 @feature-183` "Memo TTL >= poll interval" — not regressed: the 15s poll is
+- PRESERVE `@AC-9 @feature-191` "Memo TTL >= poll interval" — not regressed: the 15s poll is
   still a single cycle; each page fetch within one Load More is a separate RPC within the same
   memo window.
-- PRESERVE `@AC-1 @feature-183` "BFF 30s gRPC deadline" — not regressed: each paginated call
+- PRESERVE `@AC-1 @feature-191` "BFF 30s gRPC deadline" — not regressed: each paginated call
   carries its own deadline; manual trigger means no unbounded client-side wait.
 - PRESERVE `@AC-14 @feature-095` "Live quote enrichment does not alter ranking" — not regressed:
   the window function operates on the same pre-pagination score; enrichment is post-read.

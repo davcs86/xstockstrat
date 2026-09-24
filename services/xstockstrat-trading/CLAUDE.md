@@ -22,7 +22,7 @@ Go gRPC service responsible for order execution and trade lifecycle management. 
 
 **Credential health**: every registered account's API secrets are validated against the broker (Alpaca `GET /v2/account`, IBKR `GET /portfolio/accounts`) on register, on credential update (`UpdateBrokerAccountCredentials`), and periodically by a background poller. The latest `CredentialStatus` (OK / INVALID / UNKNOWN) is persisted on `trading.broker_accounts` and returned by `ListBrokerAccounts` so the UI can surface accounts whose secrets stopped working.
 
-**Automatic stop-loss/take-profit brackets** (feature 030): whenever an auto-sized (`ComputePositionSize`) `MARKET`/`LIMIT` entry fills, `maybeSubmitBracket` opens a persisted bracket (`trading.order_brackets`) protecting it — Alpaca attaches the stop/take-profit atomically at entry `SubmitOrder`; IBKR submits them as a follow-up linked pair (`SubmitBracketLegs`, `isSingleGroup`+`parentId`) after the fill is confirmed, since IBKR's Client Portal Web API has no client-settable OCA group field. A per-account **protection-window watchdog** (`StartBracketProtectionWatchdog`, piggybacking on the fill-poller tick) flattens the position and halts the account (`trading.risk.max_unprotected_seconds`) if no bracket confirms in time. The halt is **persisted** on `trading.broker_accounts` (`halted`/`halted_at`/`halt_reason`, boot-hydrated) and blocks `PlaceOrder`/`ReplaceOrder` — never `CancelOrder`, the operator's sole remaining manual de-risk tool. `trading.risk.bracket_orders_enabled` was seeded `false` in production by feature 030 (pending feature 103 or a documented manual verification), but the pre-189 config key-resolution bug meant the getter always returned its code default `true` — so production ran with brackets ON. Feature 189 (migration 029) bumped the production seed to `true` to preserve that observed behavior once config resolution was fixed (operator sign-off, `docs/roadmap/features/189-fix-trading-config-key-mismatch/context.md`); see also `docs/roadmap/features/030-stop-loss-bracket-orders/context.md` § Archive Synthesis (Rejected alternatives).
+**Automatic stop-loss/take-profit brackets** (feature 030): whenever an auto-sized (`ComputePositionSize`) `MARKET`/`LIMIT` entry fills, `maybeSubmitBracket` opens a persisted bracket (`trading.order_brackets`) protecting it — Alpaca attaches the stop/take-profit atomically at entry `SubmitOrder`; IBKR submits them as a follow-up linked pair (`SubmitBracketLegs`, `isSingleGroup`+`parentId`) after the fill is confirmed, since IBKR's Client Portal Web API has no client-settable OCA group field. A per-account **protection-window watchdog** (`StartBracketProtectionWatchdog`, piggybacking on the fill-poller tick) flattens the position and halts the account (`trading.risk.max_unprotected_seconds`) if no bracket confirms in time. The halt is **persisted** on `trading.broker_accounts` (`halted`/`halted_at`/`halt_reason`, boot-hydrated) and blocks `PlaceOrder`/`ReplaceOrder` — never `CancelOrder`, the operator's sole remaining manual de-risk tool. `trading.risk.bracket_orders_enabled` was seeded `false` in production by feature 030 (pending feature 103 or a documented manual verification), but the pre-189 config key-resolution bug meant the getter always returned its code default `true` — so production ran with brackets ON. Feature 189 (migration 029) bumped the production seed to `true` to preserve that observed behavior once config resolution was fixed (operator sign-off, `docs/roadmap/features/192-fix-trading-config-key-mismatch/context.md`); see also `docs/roadmap/features/030-stop-loss-bracket-orders/context.md` § Archive Synthesis (Rejected alternatives).
 
 **Offline (manually-tracked) accounts** (feature 157, hardened by feature 159): a `BROKER_TYPE_OFFLINE` account has no broker client — its orders are recorded, not routed. `PlaceOrder` routes to `recordOfflineOrder` (persists `NEW`, empty `broker_order_id`, no broker submit) whenever **either** the in-memory pool tag **or** the **authoritative persisted** `broker_type` (`accountRepo.GetBrokerAccount`) is OFFLINE — a divergence-safe union, so an offline account can never fall through to a broker path even if its pool entry is stale (best-effort: a DB read error falls back to the pool tag). `CancelOrder` **rejects** an offline order with `FailedPrecondition` (offline orders are un-placed via `ConfirmOrder` edits, never a broker cancel) — this is an offline-**type** guard, orthogonal to the halt gating above: `CancelOrder` remains **never halt-gated** (the operator's manual de-risk tool for *broker* accounts).
 
@@ -31,13 +31,22 @@ Go gRPC service responsible for order execution and trade lifecycle management. 
 **`x-user-id`** header (`middleware.FromContext(ctx).UserID`); their request-body `user_id` field is
 **deprecated and ignored**. For `PlaceOrder` the order **owner** is the server-resolved account owner
 (`accountEntry.userID` / the `recordOfflineOrder` `userID` param), not a client-claimed body field —
-so it is correct for the internal bracket-flatten path too, and a caller cannot place an order owned
-by someone else. `ConfirmOrder`'s ownership guard and the warn-only `checkPortfolioRisk` gate both
-read the header. When trading calls **`xstockstrat-portfolio`** (`ListPositions`/`GetPosition`) from a
+so it is correct for the internal bracket-flatten path too. **Ownership is enforced fail-closed on
+the execution/mutation RPCs** (2026-09-16 security audit, C-1/C-2/H-2): `PlaceOrder` requires the
+caller to own the resolved account (`accountEntry.userID`); `CancelOrder`/`ReplaceOrder`/`ConfirmOrder`
+require the caller to own the order (`order.UserId`); `SnapshotOfflinePositions` requires the caller
+to own the account (`rec.UserID`). Each returns `PermissionDenied` on a mismatch or a missing caller,
+so a caller cannot place, cancel, replace, confirm, or snapshot on another user's account/order. The
+internal bracket-flatten path is unaffected (it calls `submitOrder` directly, not `PlaceOrder`). The
+warn-only `checkPortfolioRisk` gate also reads the header. When trading calls **`xstockstrat-portfolio`** (`ListPositions`/`GetPosition`) from a
 background context with no inbound header (reconciliation, flatten), it injects `x-user-id` explicitly
 via `metadata.AppendToOutgoingContext`. **Exception:** `ListOrders` and `StreamOrderUpdates` keep
-their body `user_id` — there it is a **cross-user filter/subscription selector** (empty = all users),
-not the caller's own identity, so it is not deprecated.
+their body `user_id` — there it is a **cross-user filter/subscription selector** (empty = all users,
+for trusted internal callers), not the caller's own identity, so it is not deprecated.
+`StreamOrderUpdates`' live broadcast (`broadcastOrder`) now delivers each order update **only** to
+subscribers whose selector matches the order's owner (`orderSubscriber.userID`; empty = all users),
+so a scoped subscriber never receives another user's live order updates (2026-09-16 security audit,
+H-1) — the initial snapshot already applied this filter.
 
 ## Language
 

@@ -23,9 +23,9 @@
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance (revised post-design)
-- [Recon](recon.md) — grounded codebase dossier
-- [Design](design.md) — chosen approach, rejected alternatives, Floor breach and resolution
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Recon — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - **Implementation Spec — deliberately not generated.** The user-approved plan implemented directly
   as 3 atomic commits instead of routing through `/sdd-spec` → `/sdd-execute`. Its absence is a
   recorded decision, not an oversight; the step-level guarantees it would have provided were met

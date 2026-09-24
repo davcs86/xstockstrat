@@ -247,6 +247,9 @@ export async function startMockBackend(): Promise<void> {
             tradingMode: 1,
             qty: 5,
             stopPrice: 148.25,
+            // Concrete TIF (DAY) — after the TimeInForce enum change an omitted field defaults to
+            // 0/UNSPECIFIED, which breaks TIF-specific assertions.
+            timeInForce: 1,
           };
           if (clientOrderId) placeOrderIntents.set(clientOrderId, resp);
           return resp;
@@ -845,10 +848,23 @@ export async function startMockBackend(): Promise<void> {
           );
           // feature 190: symbol-grouped sort mirroring the server ORDER BY — group positioned by its
           // best member (conviction desc, or soonest expiry for EXPIRY), rows contiguous per symbol.
+          // feature 200: MAX(symbol_score) OVER PARTITION BY symbol, DESC NULLS LAST — a symbol
+          // with no score-eligible row sinks last (Infinity group key).
+          const symScore = (sym: string): number | null => {
+            const vals = rows
+              .filter((o) => o.symbol === sym)
+              .map((o) => (o as { symbolScore?: number }).symbolScore)
+              .filter((v): v is number => v != null);
+            return vals.length ? Math.max(...vals) : null;
+          };
           const groupKey = (sym: string) =>
-            sort === 2 // OPPORTUNITY_SORT_EXPIRY
-              ? Math.min(...rows.filter((o) => o.symbol === sym).map(expirySec))
-              : -Math.max(...rows.filter((o) => o.symbol === sym).map((o) => o.conviction));
+            sort === 3 // OPPORTUNITY_SORT_SYMBOL_SCORE
+              ? symScore(sym) == null
+                ? Infinity
+                : -(symScore(sym) as number)
+              : sort === 2 // OPPORTUNITY_SORT_EXPIRY
+                ? Math.min(...rows.filter((o) => o.symbol === sym).map(expirySec))
+                : -Math.max(...rows.filter((o) => o.symbol === sym).map((o) => o.conviction));
           const sorted = [...rows].sort(
             (a, b) =>
               groupKey(a.symbol) - groupKey(b.symbol) ||

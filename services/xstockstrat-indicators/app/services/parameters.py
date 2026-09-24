@@ -100,6 +100,22 @@ def validate_outputs(outputs) -> None:
         seen.add(o.name)
 
 
+def validate_fundamental_inputs(fundamental_inputs) -> None:
+    """Validate a list of FundamentalMetric enum values; raise ValueError if invalid.
+
+    Used at register/update time (feature 200). A non-empty list marks a fundamentals-only
+    formula. Because it is a closed enum, the only invalid value is the zero sentinel
+    ``FUNDAMENTAL_METRIC_UNSPECIFIED``; duplicates are harmless and the 11-member enum needs no
+    separate cap.
+    """
+    for m in fundamental_inputs:
+        if m == pb.FUNDAMENTAL_METRIC_UNSPECIFIED:
+            raise ValueError(
+                "fundamental_inputs contains FUNDAMENTAL_METRIC_UNSPECIFIED "
+                "(the zero sentinel is not a valid fundamentals metric)"
+            )
+
+
 def _coerce(p, raw):
     """Coerce ``raw`` to the parameter's declared type.
 

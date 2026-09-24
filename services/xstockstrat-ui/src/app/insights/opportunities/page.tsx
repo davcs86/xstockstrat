@@ -36,6 +36,7 @@ import {
 } from '@/lib/opportunityShared';
 import { OhlcBlock } from '@/components/shared/OhlcBlock';
 import { fmtUsd, fmtPct, pnlClass } from '@/lib/money';
+import { scoreColor, formatComposite } from '@/lib/scoreDisplay';
 import { IN_QUEUE_CUE } from '@/lib/readinessCue';
 import { readinessState } from '@/lib/readinessRollup';
 import { useOpportunities, useSetOpportunityAction } from '@/hooks/useOpportunities';
@@ -48,7 +49,7 @@ import { EmptyState } from '@/components/shared/EmptyState';
 import { TriangleAlert } from 'lucide-react';
 import { QueryStateMessages } from '@/components/shared/QueryStateMessages';
 
-type SortKey = 'conviction' | 'expiry';
+type SortKey = 'conviction' | 'expiry' | 'symbolScore';
 // Persist the min-conviction floor so it survives a reload / navigation away and back.
 const MIN_CONVICTION_KEY = 'opportunities.minConviction';
 
@@ -97,7 +98,11 @@ export default function OpportunitiesPage() {
   const actionFilterEnum: OpportunityActionTag =
     actionFilter === 'any' ? OpportunityActionTag.UNSPECIFIED : Number(actionFilter);
   const sortEnum: OpportunitySort =
-    sortKey === 'expiry' ? OpportunitySort.EXPIRY : OpportunitySort.CONVICTION;
+    sortKey === 'symbolScore'
+      ? OpportunitySort.SYMBOL_SCORE
+      : sortKey === 'expiry'
+        ? OpportunitySort.EXPIRY
+        : OpportunitySort.CONVICTION;
 
   // Effective request filter = stored selection ∩ sources still in the queue (feature 155 intent,
   // now the server `sources` param): a vanished sole-selection yields [] → server returns all rows
@@ -188,6 +193,7 @@ export default function OpportunitiesPage() {
       strategyId: o.strategyId || undefined,
       chips: opportunityChips(o),
       expiry: expiresLabel(o.validUntil),
+      compositeScore: o.compositeScore, // feature 199
     })),
   }));
 
@@ -262,6 +268,7 @@ export default function OpportunitiesPage() {
                 <SelectContent>
                   <SelectItem value="conviction">Sort · Conviction</SelectItem>
                   <SelectItem value="expiry">Sort · Soonest expiry</SelectItem>
+                  <SelectItem value="symbolScore">Sort · Symbol score</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -351,6 +358,7 @@ export default function OpportunitiesPage() {
                 onDismiss={(o) => act(o, OpportunityAction.DISMISS)}
                 onTake={(o) => act(o, OpportunityAction.TAKE)}
                 reviewHref={reviewHref}
+                showSymbolScore={sortKey === 'symbolScore'}
               />
             ))
           )}
@@ -385,6 +393,7 @@ function SymbolGroupCard({
   onDismiss,
   onTake,
   reviewHref,
+  showSymbolScore,
 }: {
   symbol: string;
   opps: Opportunity[];
@@ -393,8 +402,13 @@ function SymbolGroupCard({
   onDismiss: (o: Opportunity) => void;
   onTake: (o: Opportunity) => void;
   reviewHref: (o: Opportunity) => string;
+  showSymbolScore?: boolean;
 }) {
   const allMuted = opps.every((o) => o.muted);
+  // feature 200 — symbol_score is symbol-uniform (any row carries it); rendered as a plain
+  // 3-decimal number only under the symbol_score sort. NOT scoreColor: it is a bounded [0,<2)
+  // ordinal on a non-[0,1] scale, so scoreColor's [0,1] thresholds do not apply.
+  const symbolScore = opps[0]?.symbolScore;
   return (
     <div
       data-testid="opportunity-card"
@@ -414,9 +428,21 @@ function SymbolGroupCard({
           </Link>
           {!allMuted && <EnumBadge render={IN_QUEUE_CUE} testId="opportunity-in-queue" />}
         </div>
-        <span className="text-xs text-muted-foreground">
-          {opps.length} {opps.length === 1 ? 'signal' : 'signals'}
-        </span>
+        <div className="flex items-center gap-3">
+          {showSymbolScore && (
+            <span
+              data-testid={`symbol-score-${symbol}`}
+              className="font-mono text-sm tabular-nums text-muted-foreground"
+              aria-label={`Symbol score for ${symbol}`}
+              title="Symbol score (roll-up)"
+            >
+              {symbolScore != null ? formatComposite(symbolScore) : '—'}
+            </span>
+          )}
+          <span className="text-xs text-muted-foreground">
+            {opps.length} {opps.length === 1 ? 'signal' : 'signals'}
+          </span>
+        </div>
       </div>
       <div className="divide-y divide-border">
         {opps.map((o) => (
@@ -519,6 +545,31 @@ function OpportunityRow({
             </>
           ) : (
             <span className="flex-1 text-xs text-muted-foreground/70">no conditions</span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="w-14 shrink-0 text-[10px] uppercase tracking-wide text-muted-foreground">
+            Composite
+          </span>
+          {/* feature 199 — the shrunk 0–1 ranking ordinal; scoreColor reuse (no new thresholds),
+              em-dash on NULL (never 0.000). Server order is authoritative — no client re-sort. */}
+          {o.compositeScore !== undefined ? (
+            <span
+              className={cn(
+                'flex-1 text-right font-mono text-xs tabular-nums',
+                scoreColor(o.compositeScore),
+              )}
+              data-testid={`opp-composite-${o.symbol}`}
+            >
+              {formatComposite(o.compositeScore)}
+            </span>
+          ) : (
+            <span
+              className="flex-1 text-right font-mono text-xs tabular-nums text-muted-foreground/70"
+              data-testid={`opp-composite-${o.symbol}`}
+            >
+              —
+            </span>
           )}
         </div>
       </div>

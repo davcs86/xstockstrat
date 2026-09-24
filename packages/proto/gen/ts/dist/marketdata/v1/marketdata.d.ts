@@ -201,6 +201,74 @@ export interface GetFundamentalsMultiRequest {
 export interface GetFundamentalsMultiResponse {
     fundamentals: Fundamentals[];
 }
+/**
+ * One as-reported fiscal period for a symbol, keyed on when it became public (filed_date).
+ * Distinct from the latest-snapshot Fundamentals message: this is a repeated time series and
+ * carries the filing dates that make look-ahead-safe backtesting possible.
+ */
+export interface HistoricalFundamentalsPeriod {
+    symbol: string;
+    /** e.g. "Q1-2020", "FY2019" */
+    fiscalPeriod: string;
+    /** "quarterly" | "annual" */
+    periodType: string;
+    periodEnd?: Date | undefined;
+    /** SEC filing date — the point-in-time key */
+    filedDate?: Date | undefined;
+    /** SEC acceptance timestamp (often post-close) */
+    acceptedDate?: Date | undefined;
+    /** Reused metric vocabulary (names mirror Fundamentals); pe_ratio/market_cap are PIT price-joined. */
+    marketCap: number;
+    peRatio: number;
+    pbRatio: number;
+    dividendYield: number;
+    eps: number;
+    beta: number;
+    roe: number;
+    debtToEquity: number;
+    price: number;
+    yearHigh: number;
+    yearLow: number;
+    /** raw XBRL overflow (keys are EDGAR tag names) */
+    extraMetrics: {
+        [key: string]: number;
+    };
+    currency: string;
+    /** "edgar" (base) or "edgar+fmp" when a ratio was FMP-enriched */
+    source: string;
+    /** canonical names not sourceable for this period */
+    missingMetrics: string[];
+}
+export interface HistoricalFundamentalsPeriod_ExtraMetricsEntry {
+    key: string;
+    value: number;
+}
+export interface GetHistoricalFundamentalsRequest {
+    symbol: string;
+    /** Only periods with filed_date STRICTLY BEFORE as_of_date are returned (T+1 availability). */
+    asOfDate?: Date | undefined;
+    /** filter on period_end (inclusive); unset = open */
+    rangeStart?: Date | undefined;
+    /** filter on period_end (inclusive); unset = open */
+    rangeEnd?: Date | undefined;
+    /** e.g. ["quarterly","annual"]; empty = both */
+    periodTypes: string[];
+}
+export interface GetHistoricalFundamentalsResponse {
+    periods: HistoricalFundamentalsPeriod[];
+}
+export interface BackfillFundamentalsRequest {
+    symbols: string[];
+    /** period_end window to backfill */
+    range?: TimeRange | undefined;
+    /** empty = both quarterly + annual */
+    periodTypes: string[];
+    overwrite: boolean;
+}
+export interface BackfillFundamentalsResponse {
+    periodsWritten: number;
+    failedSymbols: string[];
+}
 export interface GetLatestQuotesRequest {
     symbols: string[];
 }
@@ -251,6 +319,12 @@ export declare const GetFundamentalsRequest: MessageFns<GetFundamentalsRequest>;
 export declare const GetFundamentalsResponse: MessageFns<GetFundamentalsResponse>;
 export declare const GetFundamentalsMultiRequest: MessageFns<GetFundamentalsMultiRequest>;
 export declare const GetFundamentalsMultiResponse: MessageFns<GetFundamentalsMultiResponse>;
+export declare const HistoricalFundamentalsPeriod: MessageFns<HistoricalFundamentalsPeriod>;
+export declare const HistoricalFundamentalsPeriod_ExtraMetricsEntry: MessageFns<HistoricalFundamentalsPeriod_ExtraMetricsEntry>;
+export declare const GetHistoricalFundamentalsRequest: MessageFns<GetHistoricalFundamentalsRequest>;
+export declare const GetHistoricalFundamentalsResponse: MessageFns<GetHistoricalFundamentalsResponse>;
+export declare const BackfillFundamentalsRequest: MessageFns<BackfillFundamentalsRequest>;
+export declare const BackfillFundamentalsResponse: MessageFns<BackfillFundamentalsResponse>;
 export declare const GetLatestQuotesRequest: MessageFns<GetLatestQuotesRequest>;
 export declare const GetLatestQuotesResponse: MessageFns<GetLatestQuotesResponse>;
 export declare const BatchGetBarsRequest: MessageFns<BatchGetBarsRequest>;
@@ -407,6 +481,32 @@ export declare const MarketDataServiceService: {
         readonly responseSerialize: (value: BatchGetLatestPriceResponse) => Buffer;
         readonly responseDeserialize: (value: Buffer) => BatchGetLatestPriceResponse;
     };
+    /**
+     * Point-in-time historical fundamentals read (feature 198): returns only periods whose
+     * filed_date < as_of_date (T+1 availability), for look-ahead-safe backtesting.
+     */
+    readonly getHistoricalFundamentals: {
+        readonly path: "/xstockstrat.marketdata.v1.MarketDataService/GetHistoricalFundamentals";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: GetHistoricalFundamentalsRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => GetHistoricalFundamentalsRequest;
+        readonly responseSerialize: (value: GetHistoricalFundamentalsResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => GetHistoricalFundamentalsResponse;
+    };
+    /**
+     * Worker RPC driven by ingest.TriggerBackfill(data_kind=FUNDAMENTALS) (feature 198): fetches
+     * as-reported statements from SEC EDGAR + a point-in-time price-join and persists them.
+     */
+    readonly backfillFundamentals: {
+        readonly path: "/xstockstrat.marketdata.v1.MarketDataService/BackfillFundamentals";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: BackfillFundamentalsRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => BackfillFundamentalsRequest;
+        readonly responseSerialize: (value: BackfillFundamentalsResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => BackfillFundamentalsResponse;
+    };
 };
 export interface MarketDataServiceServer extends UntypedServiceImplementation {
     /** Stream live bar data for symbols */
@@ -440,6 +540,16 @@ export interface MarketDataServiceServer extends UntypedServiceImplementation {
     batchGetBars: handleUnaryCall<BatchGetBarsRequest, BatchGetBarsResponse>;
     /** Batched latest price for multiple symbols in a single round-trip (feature 183). */
     batchGetLatestPrice: handleUnaryCall<BatchGetLatestPriceRequest, BatchGetLatestPriceResponse>;
+    /**
+     * Point-in-time historical fundamentals read (feature 198): returns only periods whose
+     * filed_date < as_of_date (T+1 availability), for look-ahead-safe backtesting.
+     */
+    getHistoricalFundamentals: handleUnaryCall<GetHistoricalFundamentalsRequest, GetHistoricalFundamentalsResponse>;
+    /**
+     * Worker RPC driven by ingest.TriggerBackfill(data_kind=FUNDAMENTALS) (feature 198): fetches
+     * as-reported statements from SEC EDGAR + a point-in-time price-join and persists them.
+     */
+    backfillFundamentals: handleUnaryCall<BackfillFundamentalsRequest, BackfillFundamentalsResponse>;
 }
 export interface MarketDataServiceClient extends Client {
     /** Stream live bar data for symbols */
@@ -499,6 +609,20 @@ export interface MarketDataServiceClient extends Client {
     batchGetLatestPrice(request: BatchGetLatestPriceRequest, callback: (error: ServiceError | null, response: BatchGetLatestPriceResponse) => void): ClientUnaryCall;
     batchGetLatestPrice(request: BatchGetLatestPriceRequest, metadata: Metadata, callback: (error: ServiceError | null, response: BatchGetLatestPriceResponse) => void): ClientUnaryCall;
     batchGetLatestPrice(request: BatchGetLatestPriceRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: BatchGetLatestPriceResponse) => void): ClientUnaryCall;
+    /**
+     * Point-in-time historical fundamentals read (feature 198): returns only periods whose
+     * filed_date < as_of_date (T+1 availability), for look-ahead-safe backtesting.
+     */
+    getHistoricalFundamentals(request: GetHistoricalFundamentalsRequest, callback: (error: ServiceError | null, response: GetHistoricalFundamentalsResponse) => void): ClientUnaryCall;
+    getHistoricalFundamentals(request: GetHistoricalFundamentalsRequest, metadata: Metadata, callback: (error: ServiceError | null, response: GetHistoricalFundamentalsResponse) => void): ClientUnaryCall;
+    getHistoricalFundamentals(request: GetHistoricalFundamentalsRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: GetHistoricalFundamentalsResponse) => void): ClientUnaryCall;
+    /**
+     * Worker RPC driven by ingest.TriggerBackfill(data_kind=FUNDAMENTALS) (feature 198): fetches
+     * as-reported statements from SEC EDGAR + a point-in-time price-join and persists them.
+     */
+    backfillFundamentals(request: BackfillFundamentalsRequest, callback: (error: ServiceError | null, response: BackfillFundamentalsResponse) => void): ClientUnaryCall;
+    backfillFundamentals(request: BackfillFundamentalsRequest, metadata: Metadata, callback: (error: ServiceError | null, response: BackfillFundamentalsResponse) => void): ClientUnaryCall;
+    backfillFundamentals(request: BackfillFundamentalsRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: BackfillFundamentalsResponse) => void): ClientUnaryCall;
 }
 export declare const MarketDataServiceClient: {
     new (address: string, credentials: ChannelCredentials, options?: Partial<ClientOptions>): MarketDataServiceClient;

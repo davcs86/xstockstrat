@@ -21,7 +21,7 @@ import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import asyncpg
 import grpc
@@ -58,7 +58,9 @@ from app.repositories.strategy_scores import StrategyScoresRepository
 from app.services import scoring, warmup
 from app.services.cooldown import effective_cooldown_days, is_cooldown_active
 from app.services.evaluator import (
+    _FUNDAMENTAL_METRICS,
     FormulaExecutionError,
+    FundamentalPeriod,
     StrategyEvaluator,
     _empty_readiness,
     _validate_definition,
@@ -606,6 +608,24 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # Refuse binding a strategy to a soft-deleted formula (aborts on the first).
         if await self._refuse_deleted_bindings(definition, context, propagation_meta):
             return
+        # Feature 200 — a fundamentals-only formula is fed only its declared metrics (never bars),
+        # so a `source_symbol` benchmark operand on the SAME component is contradictory: the
+        # benchmark selects whose *bars* to compute on, but the formula reads no bars. Reject it at
+        # write time (XOR) rather than silently ignoring one side.
+        formula_fund_map = await self._formula_fundamentals(definition, propagation_meta)
+        for comp in definition.components:
+            if (
+                comp.kind == analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA
+                and comp.source_symbol
+                and formula_fund_map.get(comp.formula_id)
+            ):
+                await context.abort(
+                    grpc.StatusCode.INVALID_ARGUMENT,
+                    f"component '{comp.ref_name}': a fundamentals-input formula "
+                    f"('{comp.formula_id}') cannot also set source_symbol "
+                    f"('{comp.source_symbol}') — it reads fundamentals, not bars",
+                )
+                return
         formula_outputs = await self._fetch_formula_outputs(definition, propagation_meta)
         try:
             _validate_definition(definition, formula_outputs)
@@ -747,11 +767,27 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # Deleted-formula warnings captured during that same single fetch per formula.
         formula_deleted_cache: dict[str, str] = {}
         # Resolved BEFORE the loop, so symbol 1 sizes its prefix from the same cache symbol N
-        # does (see _prefetch_formula_warmups).
-        if active_definition is not None and start_set:
-            await self._prefetch_formula_warmups(
-                active_definition, formula_warmup_cache, propagation_meta, formula_deleted_cache
-            )
+        # does (see _prefetch_formula_warmups). Feature 200 — a prefixed run folds the
+        # fundamentals-formula routing map into that SAME single fetch per formula (no extra
+        # GetFormula pass); an unprefixed run skips the (prefix-only) prefetch, so it builds the
+        # map with a standalone GetFormula pass instead. Either way the map covers every formula
+        # component (routing must work on any backtest). Backtest is PIT: the map only ROUTES the
+        # formula onto the fundamentals channel; the data is the per-symbol PIT `fundamentals` list
+        # (formula_fundamentals_data left None).
+        formula_fund_map: dict[str, list] = {}
+        if active_definition is not None:
+            if start_set:
+                await self._prefetch_formula_warmups(
+                    active_definition,
+                    formula_warmup_cache,
+                    propagation_meta,
+                    formula_deleted_cache,
+                    formula_fund_map,
+                )
+            else:
+                formula_fund_map = await self._formula_fundamentals(
+                    active_definition, propagation_meta
+                )
 
         # Benchmark (source_symbol) bars preloaded ONCE per run, shared across evaluated symbols.
         # A benchmark warmup shortfall is a run-wide coverage gap → INSUFFICIENT_DATA (AC-4).
@@ -810,6 +846,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                         warmup_prefix=start_set,
                         fill_model=effective_fill_model,  # feature 151
                         benchmark_bars=benchmark_bars,  # feature 152
+                        formula_fund_map=formula_fund_map,  # feature 200
                     )
                 else:
                     (
@@ -1447,6 +1484,141 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             out[sym] = bars
         return out
 
+    async def _load_fundamentals(
+        self, symbol, definition, propagation_meta, *, sem=None, cache=None, formula_fund_map=None
+    ):
+        """Feature 198 — preload the evaluated symbol's point-in-time fundamentals filings for a
+        backtest/live/readiness/opportunities evaluation, or ``None`` when the definition references
+        no fundamental operand (the common case — the evaluator then skips all fundamental work).
+
+        The full filing history is fetched (``as_of_date`` / ``range`` left open): the evaluator's
+        per-bar ``filed_date < bar_date`` carry-forward (``_fundamental_as_of_series``) is the sole
+        no-look-ahead authority, so clipping the RPC window would drop an older filing that must
+        still carry forward into the early part of the window. ``sem`` bounds fetch concurrency on
+        the read-path fan-out; ``cache`` (keyed by symbol) dedups a symbol's history across an
+        opportunities/readiness compute pass. A fetch failure degrades to ``[]`` (every fundamental
+        leaf reads ``None`` → hold), never aborting the evaluation.
+
+        The single chokepoint every consumer (backtest/live/readiness/opportunities) routes through,
+        so the ``analysis.backtest.fundamentals.enabled`` kill-switch (default OFF) is enforced here
+        once: disabled ⇒ ``None`` (the operand reads all-``None`` → hold on every surface)."""
+        # feature 201: the backtest evaluator defaults a fundamentals-FORMULA operand's data channel
+        # to this PIT list, so a formula-only strategy must load here too — not just a 198 operand.
+        if not (
+            _definition_has_fundamental(definition)
+            or _definition_wants_fundamentals_formula(definition, formula_fund_map or {})
+        ):
+            return None
+        if not self._cfg.get_bool("analysis.backtest.fundamentals.enabled", False):
+            return None
+        if cache is not None and symbol in cache:
+            return cache[symbol]
+        req = marketdata_pb2.GetHistoricalFundamentalsRequest(symbol=symbol)
+        try:
+            if sem is not None:
+                async with sem:
+                    resp = await self._marketdata.GetHistoricalFundamentals(
+                        req, metadata=propagation_meta
+                    )
+            else:
+                resp = await self._marketdata.GetHistoricalFundamentals(
+                    req, metadata=propagation_meta
+                )
+            out = _fundamental_periods_from_response(resp)
+        except Exception as e:  # noqa: BLE001 — fundamentals fetch is best-effort (degrade to hold)
+            log.warning("GetHistoricalFundamentals fetch failed for %s: %s", symbol, e)
+            out = []
+        # Deployable observability (fundamentals_history is usually checked via SQL): periods loaded
+        # + per-metric non-None counts, so an operator sees what PIT data actually feeds the rule.
+        present = {
+            m: sum(1 for p in out if p.values.get(m) is not None)
+            for m in sorted(_FUNDAMENTAL_METRICS)
+        }
+        log.info(
+            "PIT fundamentals loaded symbol=%s periods=%d present=%s", symbol, len(out), present
+        )
+        if cache is not None:
+            cache[symbol] = out
+        return out
+
+    async def _formula_fundamentals(self, definition, propagation_meta, *, cache=None):
+        """Feature 200 — build ``{formula_id: [FundamentalMetric enum int]}`` for the definition's
+        custom-formula components that declare fundamentals inputs, via one ``GetFormula`` per
+        distinct formula id (``cache`` dedups across a pass — mirrors ``_load_fundamentals``'s
+        cache). An empty result means the definition has no fundamentals-formula operand. An
+        unreachable ``GetFormula`` caches ``[]`` (routes as indicator-only → fed ``close`` →
+        fail-loud, never a silent wrong score)."""
+        out: dict[str, list] = {}
+        for comp in definition.components:
+            if comp.kind != analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA or not comp.formula_id:
+                continue
+            fid = comp.formula_id
+            if fid in out:
+                continue
+            if cache is not None and fid in cache:
+                metrics = cache[fid]
+            else:
+                try:
+                    formula = await self._indicators.GetFormula(
+                        indicators_pb2.GetFormulaRequest(formula_id=fid),
+                        metadata=propagation_meta,
+                    )
+                    metrics = [int(m) for m in getattr(formula, "fundamental_inputs", [])]
+                except grpc.RpcError:
+                    metrics = []
+                if cache is not None:
+                    cache[fid] = metrics
+            if metrics:
+                out[fid] = metrics
+        return out
+
+    async def _load_fundamentals_snapshot(
+        self, definition, symbol, propagation_meta, formula_fund_map, *, sem=None, cache=None
+    ):
+        """Feature 200 — snapshot fundamentals for a fundamentals-only formula on a NON-backtest
+        surface (live/screener/readiness/opportunities/GetIndicatorSeries): the current marketdata
+        ``GetFundamentalsMulti`` row lowered into a **one-element** ``[FundamentalPeriod]`` with a
+        ``filed_date`` sentinel strictly before every bar, so the evaluator's epoch broadcast
+        spreads it across all bars as one degenerate epoch (one code shape, PIT + snapshot).
+
+        Reads the **same** ``analysis.backtest.fundamentals.enabled`` gate as the PIT loader (one
+        key, two enforcement sites — design § Gate). ``None`` when the definition has no
+        fundamentals-formula operand or the gate is off. ``sem``/``cache`` bound + dedup the
+        per-symbol fetch (@AC-5 feature-176). Kept **separate** from ``_load_fundamentals`` so a
+        co-occurring feature-198 single-metric operand stays PIT (C-16 PRESERVE @feature-198)."""
+        if not _definition_wants_fundamentals_formula(definition, formula_fund_map):
+            return None
+        if not self._cfg.get_bool("analysis.backtest.fundamentals.enabled", False):
+            return None
+        if cache is not None and symbol in cache:
+            return cache[symbol]
+        req = marketdata_pb2.GetFundamentalsMultiRequest(symbols=[symbol])
+        try:
+            if sem is not None:
+                async with sem:
+                    resp = await self._marketdata.GetFundamentalsMulti(
+                        req, metadata=propagation_meta
+                    )
+            else:
+                resp = await self._marketdata.GetFundamentalsMulti(req, metadata=propagation_meta)
+            row = next((f for f in resp.fundamentals if f.symbol == symbol), None)
+            if row is None:
+                out = []
+            else:
+                missing = set(row.missing_metrics)
+                values = {
+                    m: (None if m in missing else getattr(row, m)) for m in _FUNDAMENTAL_METRICS
+                }
+                # date.min is strictly before every real bar date → visible on every bar (T+1 holds
+                # trivially), so the single snapshot row broadcasts as one epoch.
+                out = [FundamentalPeriod(filed_date=date.min, values=values)]
+        except Exception as e:  # noqa: BLE001 — snapshot fetch is best-effort (degrade to hold)
+            log.warning("GetFundamentalsMulti snapshot fetch failed for %s: %s", symbol, e)
+            out = []
+        if cache is not None:
+            cache[symbol] = out
+        return out
+
     async def _load_benchmark_bars_windowed(
         self, definition, range_msg, propagation_meta, *, cache=None, sem=None
     ):
@@ -1523,6 +1695,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         warmup_prefix: bool = False,
         fill_model=analysis_pb2.FILL_MODEL_SAME_BAR_CLOSE,
         benchmark_bars=None,
+        formula_fund_map=None,
     ):
         """Run a stored/inline StrategyDefinition for one symbol via the shared evaluator.
 
@@ -1545,10 +1718,17 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
 
         # Batch backtest path: SERIAL component assembly (component_sem=None).
         evaluator = StrategyEvaluator(self._indicators, propagation_meta, component_sem=None)
+        # Per-symbol point-in-time fundamentals (feature 198/201) — a 198 operand or a fundamentals
+        # formula (routed via formula_fund_map) loads the PIT list; else None. T+1 carry-forward.
+        fundamentals = await self._load_fundamentals(
+            symbol, definition, propagation_meta, formula_fund_map=formula_fund_map
+        )
         # Capture the computed component series for diagnostics. benchmark_bars (preloaded once
         # per run, shared across symbols) resolve source_symbol components via the evaluator.
+        # formula_fund_map (feature 200) routes fundamentals-only formulas onto the fundamentals
+        # channel; backtest is PIT, so the data itself is the PIT `fundamentals` list (no snapshot).
         decisions, component_series = await evaluator.evaluate_with_series(
-            definition, bars, None, benchmark_bars
+            definition, bars, None, benchmark_bars, fundamentals, formula_fund_map or {}
         )
 
         n = len(bars)
@@ -1900,7 +2080,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         return warmup
 
     async def _declared_formula_warmup(
-        self, formula_id, cache, propagation_meta, deleted_cache=None
+        self, formula_id, cache, propagation_meta, deleted_cache=None, fund_map=None
     ) -> int:
         """Declared `warmup_period` for one formula, memoized in `cache` for the whole run.
 
@@ -1908,6 +2088,12 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         fail a backtest, and the 0 is cached so one dead formula can't re-issue the failing
         RPC once per symbol. When `deleted_cache` is provided (feature 086), the same single
         fetch also records a soft-delete warning for the formula — no extra GetFormula.
+
+        Feature 200 — when `fund_map` is provided, the SAME single fetch also records the
+        formula's declared `fundamental_inputs` (as enum ints) under `formula_id` when non-empty,
+        so the backtest's fundamentals-formula routing map costs no extra GetFormula pass. Such a
+        formula also gets ZERO bar warmup (it is scored per filing epoch, fed only fundamentals,
+        so no rolling window / prefix is needed) regardless of any declared `warmup_period`.
         """
         if formula_id not in cache:
             try:
@@ -1915,7 +2101,13 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     indicators_pb2.GetFormulaRequest(formula_id=formula_id),
                     metadata=propagation_meta,
                 )
-                cache[formula_id] = int(getattr(formula, "warmup_period", 0) or 0)
+                fund_inputs = [int(m) for m in getattr(formula, "fundamental_inputs", [])]
+                if fund_inputs:
+                    cache[formula_id] = 0
+                    if fund_map is not None:
+                        fund_map[formula_id] = fund_inputs
+                else:
+                    cache[formula_id] = int(getattr(formula, "warmup_period", 0) or 0)
                 if deleted_cache is not None and getattr(formula, "deleted", False):
                     deleted_cache[formula_id] = _deleted_formula_warning(formula.name, formula_id)
             except grpc.RpcError:
@@ -1923,7 +2115,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         return cache[formula_id]
 
     async def _prefetch_formula_warmups(
-        self, definition, cache, propagation_meta, deleted_cache=None
+        self, definition, cache, propagation_meta, deleted_cache=None, fund_map=None
     ) -> None:
         """Fill `cache` for every referenced custom formula BEFORE the symbol loop (feature 071).
 
@@ -1933,17 +2125,43 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         from an empty cache — no prefix, short-warmed — while every later symbol got the full
         one. That makes a run's result depend on symbol order, breaking both FR-4 determinism
         and the per-symbol comparability the feature-065 evidence cells assume.
+
+        Feature 200 — when `fund_map` is provided, EVERY custom-formula component (not just
+        rule-referenced ones) is fetched so the fundamentals-formula routing map is complete: an
+        unreferenced fundamentals-formula component is still assembled per-component and would be
+        fed `close` (→ FormulaExecutionError) if it were missing from the map. The single fetch
+        per formula fills warmup + fund_map + deleted_cache together (no extra GetFormula pass).
         """
         entry_rule = json.loads(definition.entry_rule) if definition.entry_rule else None
         exit_rule = json.loads(definition.exit_rule) if definition.exit_rule else None
         refs = referenced_refs(entry_rule) | referenced_refs(exit_rule)
         ref_to_comp = {c.ref_name: c for c in definition.components}
+        # Referenced formulas size the warmup prefix; when building the fund_map, also cover every
+        # (possibly unreferenced) formula component so routing is complete. Cache dedups the fetch.
+        formula_ids: list[str] = []
+        seen: set[str] = set()
         for ref in refs:
             comp = ref_to_comp.get(ref)
-            if comp is not None and comp.kind == analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA:
-                await self._declared_formula_warmup(
-                    comp.formula_id, cache, propagation_meta, deleted_cache
-                )
+            if (
+                comp is not None
+                and comp.kind == analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA
+                and comp.formula_id not in seen
+            ):
+                seen.add(comp.formula_id)
+                formula_ids.append(comp.formula_id)
+        if fund_map is not None:
+            for comp in definition.components:
+                if (
+                    comp.kind == analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA
+                    and comp.formula_id
+                    and comp.formula_id not in seen
+                ):
+                    seen.add(comp.formula_id)
+                    formula_ids.append(comp.formula_id)
+        for fid in formula_ids:
+            await self._declared_formula_warmup(
+                fid, cache, propagation_meta, deleted_cache, fund_map
+            )
 
     async def ScoreStrategy(self, request, context):
         """Manually recompute a strategy's headline grade from its evidence cells (feature 065).
@@ -2387,6 +2605,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # Normalize benchmark source_symbol server-side (uppercase/trim, empty → unset) on every
         # write path before serialization — never client-side (bypassable) and never two sites.
         _normalize_source_symbols(definition)
+        # R1-D1: strip the dead feature-097 blend keys from the request so a REGISTER (or a
+        # signal_params-touching UPDATE) is born clean; the read path strips existing rows on serve.
+        _strip_dead_signal_params(definition)
 
         if op == analysis_pb2.STRATEGY_OPERATION_REGISTER:
             await self._validate_definition_proto(definition, context)
@@ -2482,7 +2703,11 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                         "definition_json": merged_json,
                         "display_name": merged_json.get("display_name", current["display_name"]),
                     }
-                    to_write = _row_to_strategy_definition(synthetic)
+                    # strip_dead_signal_params=False: this output is PERSISTED, so re-keying a
+                    # dirty row here (e.g. on a rename) would churn its fingerprint (R1-D1).
+                    to_write = _row_to_strategy_definition(
+                        synthetic, strip_dead_signal_params=False
+                    )
                     # Persist what was validated, not the raw merged dict: ParseDict drops
                     # unknown keys and coerces map<string,double>, so the two can differ.
                     new_json = json_format.MessageToDict(to_write, preserving_proto_field_name=True)
@@ -2824,6 +3049,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         benchmark_bars = await self._load_benchmark_bars_windowed(
             definition, range_msg, propagation_meta
         )
+        # Feature 200 — fundamentals-only formula routing map (one GetFormula pass per request); the
+        # per-symbol snapshot itself is loaded lazily in _readiness_for and memoized in _fund_snap.
+        formula_fund_map = await self._formula_fundamentals(definition, propagation_meta)
+        _fund_snap: dict = {}
 
         # FR-1 readiness cache: read the staleness window + definition fingerprint once, load the
         # request set in a single query. A fresh, fingerprint-matching, unexpired row serves FAST.
@@ -2864,6 +3093,19 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 )
             # SLOW body extracted to the shared compute path (feature 180) so the interactive
             # handler and the readiness materializer produce byte-identical rows.
+            fundamentals = await self._load_fundamentals(
+                symbol, definition, propagation_meta, sem=self._bars_fetch_sem
+            )
+            # Feature 200 — snapshot fundamentals (NON-backtest → current row broadcast) on a
+            # SEPARATE channel from the 198 PIT `fundamentals` above (C-16 PRESERVE @feature-198).
+            fund_snap = await self._load_fundamentals_snapshot(
+                definition,
+                symbol,
+                propagation_meta,
+                formula_fund_map,
+                sem=self._bars_fetch_sem,
+                cache=_fund_snap,
+            )
             staged = await compute_readiness_row(
                 symbol,
                 fetch_bars=self._fetch_bars_paged,
@@ -2880,6 +3122,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 now=now,
                 valid_until=now + timedelta(seconds=stale_after),
                 benchmark_epoch=_benchmark_epoch(),
+                fundamentals=fundamentals,
+                formula_fundamentals=formula_fund_map,
+                formula_fundamentals_data=fund_snap,
             )
             return _readiness_to_proto(staged["readiness_json"]), staged, now
 
@@ -3110,7 +3355,28 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                         for bench in benchmark_bars.values():
                             if bench:
                                 bench_epoch = max(bench_epoch, bench[-1].time.seconds)
+                    fundamentals_cache: dict[str, list] = {}  # feature 198 — per-symbol PIT dedup
+                    # feature 200 — routing map (one GetFormula pass) + per-symbol snapshot dedup.
+                    formula_fund_map = await self._formula_fundamentals(
+                        definition, propagation_meta
+                    )
+                    fund_snap_cache: dict[str, list] = {}
                     for sym in syms:
+                        fundamentals = await self._load_fundamentals(
+                            sym,
+                            definition,
+                            propagation_meta,
+                            sem=self._readiness_materializer_bars_sem,
+                            cache=fundamentals_cache,
+                        )
+                        fund_snap = await self._load_fundamentals_snapshot(
+                            definition,
+                            sym,
+                            propagation_meta,
+                            formula_fund_map,
+                            sem=self._readiness_materializer_bars_sem,
+                            cache=fund_snap_cache,
+                        )
                         staged_all.append(
                             await compute_readiness_row(
                                 sym,
@@ -3130,6 +3396,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                                     now, valid_window_hours=valid_window
                                 ),
                                 benchmark_epoch=bench_epoch,
+                                fundamentals=fundamentals,
+                                formula_fundamentals=formula_fund_map,
+                                formula_fundamentals_data=fund_snap,
                             )
                         )
                 if staged_all and self._readiness_cache_repo is not None:
@@ -3315,12 +3584,31 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         evaluator = StrategyEvaluator(self._indicators, propagation_meta, component_sem=None)
         closes = list(request.closes)
         component_series = []
+        # feature 200 — fundamentals-only formula routing map (one GetFormula pass per RPC).
+        formula_fund_map = await self._formula_fundamentals(definition, propagation_meta)
         # Sequential loop (no gather) so the singleton semaphore bounds cross-request compute.
         # Benchmark components compute on the benchmark's own bars, aligned onto request.times.
+        # Fundamental operands (feature 198) and fundamentals-only formulas (feature 200) also need
+        # the request-times date timeline for the as-of carry-forward / epoch broadcast join.
         eval_dates = (
             [t.ToDatetime(tzinfo=UTC).date() for t in request.times]
-            if any(c.source_symbol for c in definition.components)
+            if any(
+                c.source_symbol
+                or c.kind == analysis_pb2.COMPONENT_KIND_FUNDAMENTAL
+                or (
+                    c.kind == analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA
+                    and formula_fund_map.get(c.formula_id)
+                )
+                for c in definition.components
+            )
             else None
+        )
+        # feature 198 — the evaluated symbol's PIT fundamentals, fetched once per RPC (single
+        # symbol); None unless a component is a fundamental operand.
+        fundamentals = await self._load_fundamentals(request.symbol, definition, propagation_meta)
+        # feature 200 — snapshot fundamentals (NON-backtest) on the SEPARATE formula channel.
+        fund_snap = await self._load_fundamentals_snapshot(
+            definition, request.symbol, propagation_meta, formula_fund_map
         )
         for comp in definition.components:
             try:
@@ -3334,6 +3622,25 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                             closes,
                             eval_dates,
                             {comp.source_symbol: bench_bars} if bench_bars else {},
+                        )
+                    elif comp.kind == analysis_pb2.COMPONENT_KIND_FUNDAMENTAL:
+                        series_map = await evaluator._assemble_component_series(
+                            comp, closes, eval_dates, None, fundamentals
+                        )
+                    elif (
+                        comp.kind == analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA
+                        and formula_fund_map.get(comp.formula_id)
+                    ):
+                        # feature 200 — fundamentals-only formula: fed only its declared metrics
+                        # (snapshot on this surface), never the request closes.
+                        series_map = await evaluator._assemble_component_series(
+                            comp,
+                            closes,
+                            eval_dates,
+                            None,
+                            fundamentals,
+                            formula_fund_map,
+                            fund_snap,
                         )
                     else:
                         series_map = await evaluator._compute_component(comp, closes)
@@ -3695,6 +4002,14 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         half_life = self._cfg.get_float_present(
             "analysis.scoring.signal_decay_half_life_hours", 24.0
         )
+        # feature 199 — composite_score fusion params (same reads as the main compute pass).
+        composite_k = self._cfg.get_float_present("analysis.scoring.composite_shrinkage_k", 1.0)
+        composite_w_readiness = self._cfg.get_float_present(
+            "analysis.scoring.composite_weight_readiness", 1.0
+        )
+        composite_w_signal = self._cfg.get_float_present(
+            "analysis.scoring.composite_weight_signal", 1.0
+        )
         source_weights = await self._drain_source_weights(propagation_meta)
         signals_by_symbol: dict[str, list] = {}
         for sig in signals:
@@ -3705,6 +4020,28 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             for sig in signals_by_symbol.get(_normalize_symbol(sym), []):
                 axis = max(axis, _signal_decay(sig, source_weights, now_utc, half_life)[0])
             return axis
+
+        def _composite_for(sym: str, readiness: dict) -> "float | None":
+            # feature 199 — recompute the composite for a HEALED row through the SAME fusion as the
+            # main path. best_direction is anchored on RAW conviction (like _compute_opportunities),
+            # not the decayed measure, so heal and compute agree byte-for-byte.
+            contribs: list[tuple[str, float]] = []
+            best_direction = ""
+            best_raw = -1.0
+            for sig in signals_by_symbol.get(_normalize_symbol(sym), []):
+                eff = _signal_decay(sig, source_weights, now_utc, half_life)[0]
+                contribs.append((sig.direction, eff))
+                if sig.conviction > best_raw:
+                    best_raw = sig.conviction
+                    best_direction = sig.direction
+            scored: list[tuple[float, float]] = []
+            if readiness["total_conditions"] > 0:
+                scored.append((composite_w_readiness, readiness["conviction"]))
+            if contribs:
+                scored.append(
+                    (composite_w_signal, _composite_signal_subscore(contribs, best_direction))
+                )
+            return _composite_score(scored, composite_k)
 
         strat_rows: dict[str, dict | None] = {}
 
@@ -3722,6 +4059,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             return strat_rows[strategy_id]
 
         benchmark_cache: dict[str, list] = {}
+        fundamentals_cache: dict[str, list] = {}  # feature 198 — per-symbol PIT history dedup
+        # feature 200 — routing map keyed by formula_id (shared across strategies) + snapshot dedup.
+        formula_fund_cache: dict[str, list] = {}
+        fund_snap_cache: dict[str, list] = {}
         session_end_seconds = 0
         heal_rows: list[dict] = []
         readiness_stage: list[dict] = []
@@ -3749,9 +4090,34 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                         cache=benchmark_cache,
                         sem=self._readiness_materializer_bars_sem,
                     )
+                    fundamentals = await self._load_fundamentals(
+                        sym,
+                        definition,
+                        propagation_meta,
+                        sem=self._readiness_materializer_bars_sem,
+                        cache=fundamentals_cache,
+                    )
+                    formula_fund_map = await self._formula_fundamentals(
+                        definition, propagation_meta, cache=formula_fund_cache
+                    )
+                    fund_snap = await self._load_fundamentals_snapshot(
+                        definition,
+                        sym,
+                        propagation_meta,
+                        formula_fund_map,
+                        sem=self._readiness_materializer_bars_sem,
+                        cache=fund_snap_cache,
+                    )
                     try:
                         readiness = await evaluator.evaluate_conditions_traced(
-                            definition, bars, sym, rule=rule, benchmark_bars=benchmark_bars
+                            definition,
+                            bars,
+                            sym,
+                            rule=rule,
+                            benchmark_bars=benchmark_bars,
+                            fundamentals=fundamentals,
+                            formula_fundamentals=formula_fund_map,
+                            formula_fundamentals_data=fund_snap,
                         )
                     except (
                         grpc.RpcError
@@ -3778,6 +4144,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                         "provenance": provenance,
                         "thesis": r.get("thesis", ""),
                         "valid_until": r["valid_until"],
+                        # both axes absent → NULL, matching the main path's sym_unavailable branch.
+                        "composite_score": None,
                         "_healed": False,
                     }
                 )
@@ -3794,6 +4162,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     "provenance": provenance,
                     "thesis": r.get("thesis", ""),
                     "valid_until": None,  # filled with the fresh window post-loop
+                    "composite_score": _composite_for(sym, readiness),
                     "_healed": True,
                 }
             )
@@ -3812,6 +4181,14 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     for bench in benchmark_bars.values():
                         if bench:
                             benchmark_epoch = max(benchmark_epoch, bench[-1].time.seconds)
+                # feature 198 — cache hit (this symbol's PIT history was loaded above for the eval).
+                fundamentals = await self._load_fundamentals(
+                    sym,
+                    definition,
+                    propagation_meta,
+                    sem=self._readiness_materializer_bars_sem,
+                    cache=fundamentals_cache,
+                )
                 staged = await compute_readiness_row(
                     sym,
                     fetch_bars=self._fetch_bars_paged,
@@ -3828,6 +4205,11 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     now=now_utc,
                     valid_until=readiness_valid_until(now_utc, valid_window_hours=window_hours),
                     benchmark_epoch=benchmark_epoch,
+                    fundamentals=fundamentals,
+                    # feature 200 — same map/snapshot computed for the eval above (healed path only
+                    # reached when the fetch+eval succeeded, so both are in scope for this symbol).
+                    formula_fundamentals=formula_fund_map,
+                    formula_fundamentals_data=fund_snap,
                 )
                 if staged.get("bar_epoch", -1) >= 0:  # success-only
                     readiness_stage.append(staged)
@@ -3845,11 +4227,41 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 hr["valid_until"] = healed_valid_until
 
         await self._opportunities_repo.replace_symbols(user_id, heal_rows)
+        # feature 200 — the heal changed some composites, so re-fold each touched symbol's WHOLE row
+        # set and re-stamp the symbol-uniform symbol_score (byte-parity with a full compute over the
+        # same inputs). Same shared fold; owner-gated by the symbol's own persisted rows.
+        ss_gamma = min(
+            max(self._cfg.get_float_present("analysis.scoring.symbol_score_decay", 0.5), 0.0), 0.99
+        )
+        ss_floor = self._cfg.get_float_present("analysis.scoring.strategy_weight_floor", 0.5)
+        for sym in {r["symbol"] for r in targets}:
+            terms = await self._opportunities_repo.symbol_composite_terms(user_id, sym)
+            owned = {t["strategy_id"] for t in terms if t.get("strategy_id")}
+            score = _symbol_score_for_group(
+                terms, self._owner_grade_lookup(owned), ss_gamma, ss_floor
+            )
+            await self._opportunities_repo.stamp_symbol_score(user_id, sym, score)
         if readiness_stage:
             try:
                 await self._readiness_cache_repo.upsert_many(readiness_stage)
             except Exception as e:  # noqa: BLE001 — readiness-cache heal is best-effort
                 log.warning("surgical retry: readiness-cache upsert failed for %s: %s", user_id, e)
+
+    def _owner_grade_lookup(self, owned_ids: "set[str]"):
+        """feature 200 — build the ``grade_lookup(strategy_id) -> (overall_score, provisional)``
+        closure for the symbol_score fold, owner-gated: a strategy_id NOT in ``owned_ids`` (or with
+        no cached score) reads ``(None, False)`` so ``_strategy_weight`` falls to the floor. The
+        ``self._strategies`` grade cache is keyed by BARE strategy_id (global, feature 133 D-2), so
+        this gate is what stops a grade for a strategy the caller does not own from weighting their
+        roll-up (anti-IDOR, fails.md:1153)."""
+
+        def _lookup(sid: str) -> "tuple[float | None, bool]":
+            sc = self._strategies.get(sid) if sid in owned_ids else None
+            if sc is None:
+                return (None, False)
+            return (sc.overall_score, sc.provisional)
+
+        return _lookup
 
     async def _compute_opportunities(self, user_id: str, propagation_meta) -> list[dict]:
         """Build the user's opportunity Universe and return persistable row dicts (feature 097).
@@ -3878,6 +4290,23 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         half_life = self._cfg.get_float_present(
             "analysis.scoring.signal_decay_half_life_hours", 24.0
         )
+        # feature 199 — composite_score fusion params, read once per pass (deterministic).
+        composite_k = self._cfg.get_float_present("analysis.scoring.composite_shrinkage_k", 1.0)
+        composite_w_readiness = self._cfg.get_float_present(
+            "analysis.scoring.composite_weight_readiness", 1.0
+        )
+        composite_w_signal = self._cfg.get_float_present(
+            "analysis.scoring.composite_weight_signal", 1.0
+        )
+        # feature 200 — symbol_score fold params. γ read-clamped to [0, 0.99]: a configured γ≥1
+        # stops the rank-decay (γ=1) or inverts it (γ>1 up-weights the tail), breaking @AC-3; a
+        # configured 0 collapses the fold to the top term. floor = neutral grade weight (>0, @AC-7).
+        symbol_score_decay = min(
+            max(self._cfg.get_float_present("analysis.scoring.symbol_score_decay", 0.5), 0.0), 0.99
+        )
+        strategy_weight_floor = self._cfg.get_float_present(
+            "analysis.scoring.strategy_weight_floor", 0.5
+        )
         missing_ingested_at_count = 0
         total_signal_count = len(signals)
 
@@ -3899,6 +4328,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         denied_covered: list[tuple[str, str]] = []
         if self._strategies_repo is not None:
             from app.engine.live_loop import (  # noqa: PLC0415 (avoids import cycle)
+                resolve_fundamentals_universe,
                 resolve_universe,
             )
 
@@ -3906,9 +4336,33 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             # watchlist ∪ held ∪ signals-iff-eligible), already normalized.
             wl_set = set(watchlist_by_symbol)
             sig_set = set(signals_by_symbol)
-            for row in await self._strategies_repo.list_live_enabled(user_id):
+            live_rows = list(await self._strategies_repo.list_live_enabled(user_id))
+            # feature 168: the blend force-run runs on the fundamentals universe and nowhere else —
+            # the queue MUST apply the same restriction as the live loop, else it over-attributes.
+            blend_id = self._cfg.get_str(
+                "analysis.engine.fundamentals_blend_strategy_id", "fundamentals_macd_blend"
+            )
+            blend_enabled = self._cfg.get_bool("analysis.engine.fundamentals_blend_enabled", True)
+            blend_active = blend_enabled and any(r["strategy_id"] == blend_id for r in live_rows)
+            fundamentals_universe = (
+                await resolve_fundamentals_universe(self._ingest, self._marketdata, self._cfg)
+                if blend_active
+                else set()
+            )
+            for row in live_rows:
                 definition = _row_to_strategy_definition(row)
-                resolved = resolve_universe(definition, wl_set, held_norm, sig_set)
+                if definition.strategy_id == blend_id and not (
+                    blend_active and fundamentals_universe
+                ):
+                    continue  # blend inactive/empty → contributes no queue rows (loop-skip parity)
+                resolved = resolve_universe(
+                    definition,
+                    wl_set,
+                    held_norm,
+                    sig_set,
+                    blend_id=blend_id,
+                    fundamentals_universe=fundamentals_universe,
+                )
                 for sym in resolved.union:
                     live_by_symbol.setdefault(sym, set()).add(row["strategy_id"])
                 created_at_by_strategy[row["strategy_id"]] = row["created_at"]
@@ -3945,6 +4399,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     "muted": False,  # on the strategy's deny list
                     "best_direction": "",
                     "_best_sig_conv": -1.0,
+                    # feature 199 — (direction, decayed_conviction) per contributing signal, for
+                    # the composite signal sub-score. Local sig_contribs is not visible in _row_for.
+                    "_composite_sig_contribs": [],
                 }
                 candidates[key] = c
             return c
@@ -4060,6 +4517,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 for sig, effective_conviction in sig_contribs:
                     _add_provenance(c, sig.source)
                     c["signal_axis"] = max(c["signal_axis"], effective_conviction)  # decayed
+                    # feature 199 — decayed contrib per direction for the composite signal sub-score
+                    c["_composite_sig_contribs"].append((sig.direction, effective_conviction))
                     if sig.conviction > c["_best_sig_conv"]:  # thesis/direction on RAW conviction
                         c["_best_sig_conv"] = sig.conviction
                         c["best_direction"] = sig.direction
@@ -4115,6 +4574,14 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # evaluated symbols/strategies, bounded by the background _readiness_materializer_bars_sem
         # (feature 185 FR-3, same background bucket as the primary fetch).
         benchmark_bars_cache: dict[str, list] = {}
+        # feature 198 — per-symbol PIT fundamentals history deduped once per compute pass (each
+        # symbol distinct, so keyed by symbol not source_symbol); populated only for candidates
+        # whose strategy carries a fundamental operand.
+        fundamentals_cache: dict[str, list] = {}
+        # feature 200 — fundamentals-only formula routing map (keyed by formula_id, shared across
+        # candidates) + per-symbol snapshot dedup; both filled lazily in _row_for (idempotent).
+        formula_fund_cache: dict[str, list] = {}
+        fund_snap_cache: dict[str, list] = {}
         session_end_seconds = 0
         window_hours = self._cfg.get_int("analysis.opportunity.valid_window_hours", 24)
 
@@ -4240,11 +4707,39 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                             cache=benchmark_bars_cache,
                             sem=self._readiness_materializer_bars_sem,
                         )
+                        # feature 198 — per-symbol PIT fundamentals (None unless a fundamental
+                        # operand), same background sem; per-symbol cache dedups repeat candidates.
+                        fundamentals = await self._load_fundamentals(
+                            sym,
+                            definition,
+                            propagation_meta,
+                            sem=self._readiness_materializer_bars_sem,
+                            cache=fundamentals_cache,
+                        )
+                        # feature 200 — routing map + snapshot on the SEPARATE formula channel.
+                        formula_fund_map = await self._formula_fundamentals(
+                            definition, propagation_meta, cache=formula_fund_cache
+                        )
+                        fund_snap = await self._load_fundamentals_snapshot(
+                            definition,
+                            sym,
+                            propagation_meta,
+                            formula_fund_map,
+                            sem=self._readiness_materializer_bars_sem,
+                            cache=fund_snap_cache,
+                        )
                         # Held + attributed → exit-rule trace (FR-8); else entry-rule trace.
                         rule = "exit" if c["is_held"] else "entry"
                         try:
                             readiness = await evaluator.evaluate_conditions_traced(
-                                definition, bars, sym, rule=rule, benchmark_bars=benchmark_bars
+                                definition,
+                                bars,
+                                sym,
+                                rule=rule,
+                                benchmark_bars=benchmark_bars,
+                                fundamentals=fundamentals,
+                                formula_fundamentals=formula_fund_map,
+                                formula_fundamentals_data=fund_snap,
                             )
                         except grpc.RpcError as e:
                             # feature 185 — an indicators TRANSPORT outage is a data-unavailable
@@ -4292,6 +4787,22 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 if sym_unavailable:
                     _add_provenance(c, "unavailable")
 
+                # feature 199 — composite_score over the axes PRESENT at compute, evaluated on the
+                # real readiness/signal BEFORE axis-zeroing. sym_unavailable forces both absent
+                # (empty scored → NULL), preserving "unavailable != evaluated-low". readiness is
+                # present iff it evaluated any condition; the signal axis iff any signal contributed
+                # it. A present sub-score of 0.0 still counts its weight (an active pull-down).
+                composite_scored: list[tuple[float, float]] = []
+                if not sym_unavailable:
+                    if readiness["total_conditions"] > 0:
+                        composite_scored.append((composite_w_readiness, readiness["conviction"]))
+                    if c["_composite_sig_contribs"]:
+                        s_signal = _composite_signal_subscore(
+                            c["_composite_sig_contribs"], c["best_direction"]
+                        )
+                        composite_scored.append((composite_w_signal, s_signal))
+                composite = _composite_score(composite_scored, composite_k)
+
                 return {
                     "opportunity_key": _opportunity_key(user_id, sym, strat),
                     "symbol": sym,
@@ -4302,6 +4813,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     "signal_axis": 0.0 if sym_unavailable else c["signal_axis"],
                     "provenance": c["provenance"],
                     "thesis": c["thesis"],
+                    "composite_score": composite,
                 }
 
         rows = [r for r in await asyncio.gather(*[_row_for(c) for c in selected]) if r is not None]
@@ -4315,6 +4827,26 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         valid_until = session_end + timedelta(hours=window_hours)
         for r in rows:
             r["valid_until"] = valid_until
+        # feature 200 — roll each symbol's opportunities into one bounded symbol_score and stamp it
+        # (symbol-uniform) on EVERY row of the symbol (incl. NULL-composite / muted /
+        # data-unavailable rows). owned_ids = the strategies the user owns (watchlist ∪ live
+        # coverage), so the shared fold's grade_lookup never applies a global grade for an unowned
+        # strategy (anti-IDOR, fails.md:1153). Same helper the surgical heal re-uses (parity).
+        owned_ids: set[str] = set()
+        for _sids in watchlist_by_symbol.values():
+            owned_ids |= _sids
+        for _sids in live_by_symbol.values():
+            owned_ids |= _sids
+        grade_lookup = self._owner_grade_lookup(owned_ids)
+        rows_by_symbol: dict[str, list[dict]] = {}
+        for r in rows:
+            rows_by_symbol.setdefault(r["symbol"], []).append(r)
+        for sym_rows in rows_by_symbol.values():
+            score = _symbol_score_for_group(
+                sym_rows, grade_lookup, symbol_score_decay, strategy_weight_floor
+            )
+            for r in sym_rows:
+                r["symbol_score"] = score
         return rows
 
     async def _load_strategy_definition(self, user_id: str, strategy_id: str, cache: dict):
@@ -4473,6 +5005,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 for bench in benchmark_bars.values():
                     if bench:
                         benchmark_epoch = max(benchmark_epoch, bench[-1].time.seconds)
+            fundamentals_cache: dict[str, list] = {}  # feature 198 — per-symbol PIT dedup
+            # feature 200 — routing map (one GetFormula pass per strategy) + snapshot dedup.
+            formula_fund_map = await self._formula_fundamentals(definition, meta)
+            fund_snap_cache: dict[str, list] = {}
             existing = (
                 await self._readiness_cache_repo.read_many(owner, strategy_id, "entry", symbols)
                 if self._readiness_cache_repo is not None
@@ -4505,6 +5041,21 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     latest_bar_epoch=latest_bar_epoch.get(symbol, 0),
                 ):
                     continue  # skip-fresh (fails.md:118 steady state)
+                fundamentals = await self._load_fundamentals(
+                    symbol,
+                    definition,
+                    meta,
+                    sem=self._readiness_materializer_bars_sem,
+                    cache=fundamentals_cache,
+                )
+                fund_snap = await self._load_fundamentals_snapshot(
+                    definition,
+                    symbol,
+                    meta,
+                    formula_fund_map,
+                    sem=self._readiness_materializer_bars_sem,
+                    cache=fund_snap_cache,
+                )
                 staged_rows.append(
                     await compute_readiness_row(
                         symbol,
@@ -4522,6 +5073,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                         now=now,
                         valid_until=readiness_valid_until(now, valid_window_hours=valid_window),
                         benchmark_epoch=benchmark_epoch,
+                        fundamentals=fundamentals,
+                        formula_fundamentals=formula_fund_map,
+                        formula_fundamentals_data=fund_snap,
                     )
                 )
         if staged_rows and self._readiness_cache_repo is not None:
@@ -4891,6 +5445,46 @@ def _normalize_source_symbols(definition) -> None:
         comp.source_symbol = _normalize_symbol(comp.source_symbol)
 
 
+def _definition_has_fundamental(definition) -> bool:
+    """True when any component is a COMPONENT_KIND_FUNDAMENTAL operand (feature 198). Module-level
+    so both the servicer backtest path and the live loop share one definition-scan predicate."""
+    return any(c.kind == analysis_pb2.COMPONENT_KIND_FUNDAMENTAL for c in definition.components)
+
+
+def _definition_wants_fundamentals_formula(definition, formula_fund_map) -> bool:
+    """Feature 200 — True when any CUSTOM_FORMULA component's ``formula_id`` maps to a non-empty
+    fundamental-metric list in ``formula_fund_map`` (built by ``_formula_fundamentals``). Distinct
+    from ``_definition_has_fundamental`` (the feature-198 single-metric operand): a
+    fundamentals-only formula declares its inputs on the formula, not on the component."""
+    if not formula_fund_map:
+        return False
+    return any(
+        c.kind == analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA and formula_fund_map.get(c.formula_id)
+        for c in definition.components
+    )
+
+
+def _fundamental_periods_from_response(resp) -> list[FundamentalPeriod]:
+    """Map a marketdata ``GetHistoricalFundamentalsResponse`` to evaluator ``FundamentalPeriod``s
+    (feature 198), shared by the servicer backtest path and the live loop so the PIT-mapping rules
+    never drift between backtest and live (backtest/live parity).
+
+    A period with no ``filed_date`` is dropped — without a filing date its point-in-time visibility
+    is undefined, and admitting it as an epoch-0 filing would leak it into every bar (a look-ahead
+    hole). A metric listed in the proto's ``missing_metrics`` is stored as ``None`` so a genuine
+    ``0.0`` reading is never confused with 'not reported' (marketdata.proto field 21)."""
+    out: list[FundamentalPeriod] = []
+    for p in resp.periods:
+        if not (p.filed_date.seconds or p.filed_date.nanos):
+            continue
+        missing = set(p.missing_metrics)
+        values = {m: (None if m in missing else getattr(p, m)) for m in _FUNDAMENTAL_METRICS}
+        out.append(
+            FundamentalPeriod(filed_date=p.filed_date.ToDatetime(tzinfo=UTC).date(), values=values)
+        )
+    return out
+
+
 def _signal_decay(sig, source_weights: dict, now_utc: datetime, half_life: float):
     """One active signal's decayed, source-weighted contribution to the ranking ``signal_axis``
     (feature 022/134). Returns ``(effective_conviction, age_hours|None, age_known, age_clamped,
@@ -4961,6 +5555,85 @@ def _primary_source(provenance: list[str]) -> str:
     return ""
 
 
+def _clamp01(x: float) -> float:
+    """Clamp to [0, 1]."""
+    return 0.0 if x < 0.0 else 1.0 if x > 1.0 else x
+
+
+_COMPOSITE_OPPOSING_DIRECTION = {"buy": "sell", "sell": "buy"}
+
+
+def _composite_signal_subscore(contribs: "list[tuple[str, float]]", best_direction: str) -> float:
+    """Direction-scoped multiplicative attenuation for the composite_score signal axis (feature
+    199). ``contribs`` is ``[(direction, decayed_conviction), …]``. Anchored on ``best_direction``
+    (which the main compute picks on RAW conviction, not the decayed measure) so heal and compute
+    agree: ``agree`` = max decayed among contribs matching ``best_direction``; ``conflict`` = max
+    decayed among the opposing TRADEABLE direction (buy↔sell; ``hold``/``""`` count as neither).
+    ``s = clamp(agree)·(1 − clamp(conflict))`` — multiplicative, MAX-consistent with ``signal_axis``
+    (a sum/count fold would re-introduce an incommensurable 0.5-neutral scale). Presence is the
+    caller's job (``contribs`` non-empty)."""
+    opposing = _COMPOSITE_OPPOSING_DIRECTION.get(best_direction, "")
+    max_agree = 0.0
+    max_conflict = 0.0
+    for direction, eff in contribs:
+        if direction == best_direction:
+            max_agree = max(max_agree, eff)
+        elif opposing and direction == opposing:
+            max_conflict = max(max_conflict, eff)
+    return _clamp01(max_agree) * (1.0 - _clamp01(max_conflict))
+
+
+def _composite_score(scored: "list[tuple[float, float]]", k: float) -> "float | None":
+    """Per-opportunity composite ranking ordinal via empirical-Bayes shrinkage over the axes
+    PRESENT at compute (feature 199). ``scored`` is ``[(wᵢ, sᵢ), …]``; returns
+    ``(Σwᵢ·sᵢ + 0.5·k)/(Σwᵢ + k)``. ``Σw ≤ 0 → None`` (never a computed 0.5): the honest
+    not-yet-computed / nothing-to-fuse state. A PRESENT sub-score of 0.0 is an active pull-down (its
+    weight is counted), distinct from an ABSENT axis (weight omitted). This is a RANKING ordinal,
+    NOT a probability / sizing / alert / risk input (ANALYSIS-11; cf. ExternalSignal.conviction)."""
+    total_w = sum(w for w, _s in scored)
+    if total_w <= 0:
+        return None
+    return (sum(w * s for w, s in scored) + 0.5 * k) / (total_w + k)
+
+
+def _strategy_weight(overall_score: "float | None", provisional: bool, floor: float) -> float:
+    """feature 200 — affine grade weight for the symbol_score fold. Returns ``floor`` when the
+    strategy has no graded score (``overall_score is None``) OR its grade is provisional (too little
+    evidence to trust); else ``floor + (1 - floor)·clamp01(overall_score)``. Never 0 — an unproven
+    strategy's opportunity still contributes a term (FR-4/@AC-7)."""
+    if overall_score is None or provisional:
+        return floor
+    return floor + (1.0 - floor) * _clamp01(overall_score)
+
+
+def _symbol_score(terms: "list[float]", gamma: float) -> "float | None":
+    """feature 200 — geometric rank-decay fold of a symbol's per-opportunity terms
+    (``composite × strategy_weight``): ``Σ γ^i · t_(i)`` with ``terms`` sorted DESC, so the fold is
+    order-insensitive (@AC-10; heal/compute byte-parity) and diminishing (each successive term is
+    down-weighted). Empty ``terms`` → ``None`` (no score-eligible opportunity for the symbol). A
+    RANKING ordinal on a bounded non-``[0,1]`` scale (< 2·max_term for γ<1), NOT a cardinal input
+    (ANALYSIS-13). The caller read-clamps γ to ``[0, 0.99]`` (γ≥1 stops the decay / inverts)."""
+    if not terms:
+        return None
+    return sum(gamma**i * t for i, t in enumerate(sorted(terms, reverse=True)))
+
+
+def _symbol_score_for_group(
+    rows, grade_lookup, cfg_gamma: float, cfg_floor: float
+) -> "float | None":
+    """feature 200 — the SINGLE shared fold both the compute pass and the surgical heal call, so the
+    two produce a byte-identical symbol_score for the same inputs (determinism parity). A
+    NULL-composite row contributes no term (skipped, never coerced to 0 — @AC-6).
+    ``grade_lookup(strategy_id)`` returns ``(overall_score, provisional)`` and is owner-gated by the
+    caller (a strategy the caller does not own weights at the floor — anti-IDOR, fails.md:1153)."""
+    terms = [
+        r["composite_score"] * _strategy_weight(*grade_lookup(r["strategy_id"]), cfg_floor)
+        for r in rows
+        if r["composite_score"] is not None
+    ]
+    return _symbol_score(terms, cfg_gamma)
+
+
 def _row_to_opportunity(row: dict) -> "analysis_pb2.Opportunity":
     """Map a materialized ``analysis.opportunities`` row (LEFT JOIN read) to an ``Opportunity``
     proto (feature 097). This is the producer↔reader↔UI contract point the OR-F descriptor-parity
@@ -5013,6 +5686,16 @@ def _row_to_opportunity(row: dict) -> "analysis_pb2.Opportunity":
     signal_confidence = readiness.get("signal_confidence")
     if signal_confidence is not None:
         opp.signal_confidence = float(signal_confidence)
+    # feature 199 — composite_score is a dedicated column (not readiness_json); explicit-presence
+    # (unset when NULL — nothing to fuse / never computed — never a fabricated 0.0).
+    composite_score = row.get("composite_score")
+    if composite_score is not None:
+        opp.composite_score = float(composite_score)
+    # feature 200 — symbol_score is a dedicated column (symbol-uniform roll-up); explicit-presence
+    # (unset when NULL — no score-eligible opportunity for the symbol — never a fabricated 0.0).
+    symbol_score = row.get("symbol_score")
+    if symbol_score is not None:
+        opp.symbol_score = float(symbol_score)
     return opp
 
 
@@ -5390,8 +6073,33 @@ def _row_to_score(row: dict) -> "analysis_pb2.StrategyScore":
     )
 
 
-def _row_to_strategy_definition(row: dict) -> "analysis_pb2.StrategyDefinition":
-    """Convert an analysis.strategies row (definition_json JSONB) to a StrategyDefinition proto."""
+# Dead feature-097 blend keys (no StrategyDefinition consumer reads them); stripped at READ only —
+# re-keying stored definition_json would churn the fingerprint. Load-bearing: symbols/target/stop.
+_DEAD_SIGNAL_PARAM_KEYS = frozenset(
+    {"signal_sources", "signal_weight", "technical_weight", "min_conviction"}
+)
+
+
+def _strip_dead_signal_params(definition) -> None:
+    """Drop the dead feature-097 blend keys from a definition's ``signal_params`` in place, keeping
+    every load-bearing key (``symbols``/``target``/``stop``). No-op when the struct is unset."""
+    if not definition.HasField("signal_params"):
+        return
+    fields = definition.signal_params.fields
+    for key in _DEAD_SIGNAL_PARAM_KEYS:
+        if key in fields:
+            del fields[key]
+
+
+def _row_to_strategy_definition(
+    row: dict, *, strip_dead_signal_params: bool = True
+) -> "analysis_pb2.StrategyDefinition":
+    """Convert an analysis.strategies row (definition_json JSONB) to a StrategyDefinition proto.
+
+    ``strip_dead_signal_params`` (default True) drops the dead feature-097 blend keys so every
+    served payload is clean. The persist-building UPDATE-merge site passes **False** so a masked
+    update that does not touch ``signal_params`` (e.g. a rename) never re-keys an existing dirty
+    row's JSON and thereby churns its fingerprint (R1-D1 — see ``_DEAD_SIGNAL_PARAM_KEYS``)."""
     definition_json = row.get("definition_json") or {}
     definition = json_format.ParseDict(
         definition_json, analysis_pb2.StrategyDefinition(), ignore_unknown_fields=True
@@ -5405,6 +6113,8 @@ def _row_to_strategy_definition(row: dict) -> "analysis_pb2.StrategyDefinition":
     # The user_id column is authoritative — a migrated row carries its owner only on the column;
     # the live loop keys its state by this value (must match the cooldown rows).
     definition.user_id = row.get("user_id", "") or ""
+    if strip_dead_signal_params:
+        _strip_dead_signal_params(definition)
     return definition
 
 

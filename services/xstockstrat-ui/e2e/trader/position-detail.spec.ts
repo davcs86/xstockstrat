@@ -140,6 +140,25 @@ test.describe('Single Position page', () => {
     await expect(page.getByText('Why this fired')).toHaveCount(0);
   });
 
+  test('feature 199: the Opportunity card shows the composite stat, em-dash when the opportunity has none', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    // AAPL's queue opportunity carries compositeScore 0.732 → the Composite stat renders it.
+    await page.goto('/trader/positions/AAPL');
+    await expect(page.getByRole('heading', { name: 'Opportunity' })).toBeVisible({
+      timeout: 30000,
+    });
+    await expect(page.getByTestId('opp-composite').first()).toHaveText('0.732');
+
+    // TSLA is a live opportunity with NO compositeScore → the stat is an em-dash, never 0.000.
+    await page.goto('/trader/positions/TSLA');
+    await expect(page.getByRole('heading', { name: 'Opportunity' })).toBeVisible({
+      timeout: 30000,
+    });
+    await expect(page.getByTestId('opp-composite').first()).toHaveText('—');
+  });
+
   test('the Fundamentals section renders metrics for a watchlisted symbol with data (FR-7)', async ({
     page,
   }) => {

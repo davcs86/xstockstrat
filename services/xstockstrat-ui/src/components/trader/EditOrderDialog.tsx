@@ -1,12 +1,17 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { Order } from '@xstockstrat/proto/trading/v1/trading_pb';
-import { OrderStatus } from '@xstockstrat/proto/trading/v1/trading_pb';
+import {
+  OrderStatus,
+  TimeInForce as PbTimeInForce,
+} from '@xstockstrat/proto/trading/v1/trading_pb';
 import { ConnectError } from '@connectrpc/connect';
 import { useReplaceOrder } from '@/hooks/useReplaceOrder';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '../ui/sheet';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { TIF_LABEL } from './orderShared';
 import { Alert, AlertDescription } from '../ui/alert';
 
 interface EditOrderDialogProps {
@@ -22,8 +27,18 @@ export function EditOrderDialog({ order, open, onOpenChange }: EditOrderDialogPr
   const [qty, setQty] = useState('');
   const [limitPrice, setLimitPrice] = useState('');
   const [stopPrice, setStopPrice] = useState('');
-  const [timeInForce, setTimeInForce] = useState('');
+  // Always a concrete TIF (design constraint): pre-filled from the order's current value,
+  // falling back to DAY for a legacy UNSPECIFIED. The select never offers UNSPECIFIED.
+  const [timeInForce, setTimeInForce] = useState<PbTimeInForce>(PbTimeInForce.DAY);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (order) {
+      setTimeInForce(
+        order.timeInForce === PbTimeInForce.UNSPECIFIED ? PbTimeInForce.DAY : order.timeInForce,
+      );
+    }
+  }, [order]);
 
   if (!order) return null;
 
@@ -38,14 +53,14 @@ export function EditOrderDialog({ order, open, onOpenChange }: EditOrderDialogPr
         qty: qty ? parseFloat(qty) : 0,
         limitPrice: limitPrice ? parseFloat(limitPrice) : 0,
         stopPrice: stopPrice ? parseFloat(stopPrice) : 0,
-        timeInForce: timeInForce.trim(),
+        // The dialog always sends a concrete TIF (pre-filled from the order); never UNSPECIFIED.
+        timeInForce: timeInForce,
       },
       {
         onSuccess: () => {
           setQty('');
           setLimitPrice('');
           setStopPrice('');
-          setTimeInForce('');
           onOpenChange(false);
         },
         onError: (err) => {
@@ -103,12 +118,23 @@ export function EditOrderDialog({ order, open, onOpenChange }: EditOrderDialogPr
             />
           </label>
           <label className="block text-xs font-medium text-muted-foreground">
-            Time in force {order.timeInForce ? `(current: ${order.timeInForce})` : ''}
-            <Input
-              placeholder="e.g. day, gtc"
-              value={timeInForce}
-              onChange={(e) => setTimeInForce(e.target.value)}
-            />
+            Time in force {`(current: ${TIF_LABEL[order.timeInForce] ?? '—'})`}
+            <Select
+              value={String(timeInForce)}
+              onValueChange={(v) => setTimeInForce(Number(v) as PbTimeInForce)}
+            >
+              <SelectTrigger aria-label="Time in force">
+                <SelectValue>{TIF_LABEL[timeInForce]}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={String(PbTimeInForce.DAY)}>Day</SelectItem>
+                <SelectItem value={String(PbTimeInForce.GTC)}>GTC</SelectItem>
+                <SelectItem value={String(PbTimeInForce.IOC)}>IOC</SelectItem>
+                <SelectItem value={String(PbTimeInForce.FOK)}>FOK</SelectItem>
+                <SelectItem value={String(PbTimeInForce.OPG)}>OPG</SelectItem>
+                <SelectItem value={String(PbTimeInForce.CLS)}>CLS</SelectItem>
+              </SelectContent>
+            </Select>
           </label>
           {error && (
             <Alert variant="destructive">

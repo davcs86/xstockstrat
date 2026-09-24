@@ -370,6 +370,8 @@ export enum ComponentKind {
   COMPONENT_KIND_UNSPECIFIED = "COMPONENT_KIND_UNSPECIFIED",
   COMPONENT_KIND_BUILTIN_INDICATOR = "COMPONENT_KIND_BUILTIN_INDICATOR",
   COMPONENT_KIND_CUSTOM_FORMULA = "COMPONENT_KIND_CUSTOM_FORMULA",
+  /** COMPONENT_KIND_FUNDAMENTAL - feature 198: a point-in-time fundamental metric series */
+  COMPONENT_KIND_FUNDAMENTAL = "COMPONENT_KIND_FUNDAMENTAL",
   UNRECOGNIZED = "UNRECOGNIZED",
 }
 
@@ -384,6 +386,9 @@ export function componentKindFromJSON(object: any): ComponentKind {
     case 2:
     case "COMPONENT_KIND_CUSTOM_FORMULA":
       return ComponentKind.COMPONENT_KIND_CUSTOM_FORMULA;
+    case 3:
+    case "COMPONENT_KIND_FUNDAMENTAL":
+      return ComponentKind.COMPONENT_KIND_FUNDAMENTAL;
     case -1:
     case "UNRECOGNIZED":
     default:
@@ -399,6 +404,8 @@ export function componentKindToJSON(object: ComponentKind): string {
       return "COMPONENT_KIND_BUILTIN_INDICATOR";
     case ComponentKind.COMPONENT_KIND_CUSTOM_FORMULA:
       return "COMPONENT_KIND_CUSTOM_FORMULA";
+    case ComponentKind.COMPONENT_KIND_FUNDAMENTAL:
+      return "COMPONENT_KIND_FUNDAMENTAL";
     case ComponentKind.UNRECOGNIZED:
     default:
       return "UNRECOGNIZED";
@@ -413,6 +420,8 @@ export function componentKindToNumber(object: ComponentKind): number {
       return 1;
     case ComponentKind.COMPONENT_KIND_CUSTOM_FORMULA:
       return 2;
+    case ComponentKind.COMPONENT_KIND_FUNDAMENTAL:
+      return 3;
     case ComponentKind.UNRECOGNIZED:
     default:
       return -1;
@@ -776,6 +785,8 @@ export enum OpportunitySort {
   OPPORTUNITY_SORT_CONVICTION = "OPPORTUNITY_SORT_CONVICTION",
   /** OPPORTUNITY_SORT_EXPIRY - soonest valid_until first (NULLS last) */
   OPPORTUNITY_SORT_EXPIRY = "OPPORTUNITY_SORT_EXPIRY",
+  /** OPPORTUNITY_SORT_SYMBOL_SCORE - symbol roll-up: MAX(symbol_score) OVER PARTITION BY symbol, DESC NULLS LAST — feature 200 */
+  OPPORTUNITY_SORT_SYMBOL_SCORE = "OPPORTUNITY_SORT_SYMBOL_SCORE",
   UNRECOGNIZED = "UNRECOGNIZED",
 }
 
@@ -790,6 +801,9 @@ export function opportunitySortFromJSON(object: any): OpportunitySort {
     case 2:
     case "OPPORTUNITY_SORT_EXPIRY":
       return OpportunitySort.OPPORTUNITY_SORT_EXPIRY;
+    case 3:
+    case "OPPORTUNITY_SORT_SYMBOL_SCORE":
+      return OpportunitySort.OPPORTUNITY_SORT_SYMBOL_SCORE;
     case -1:
     case "UNRECOGNIZED":
     default:
@@ -805,6 +819,8 @@ export function opportunitySortToJSON(object: OpportunitySort): string {
       return "OPPORTUNITY_SORT_CONVICTION";
     case OpportunitySort.OPPORTUNITY_SORT_EXPIRY:
       return "OPPORTUNITY_SORT_EXPIRY";
+    case OpportunitySort.OPPORTUNITY_SORT_SYMBOL_SCORE:
+      return "OPPORTUNITY_SORT_SYMBOL_SCORE";
     case OpportunitySort.UNRECOGNIZED:
     default:
       return "UNRECOGNIZED";
@@ -819,6 +835,8 @@ export function opportunitySortToNumber(object: OpportunitySort): number {
       return 1;
     case OpportunitySort.OPPORTUNITY_SORT_EXPIRY:
       return 2;
+    case OpportunitySort.OPPORTUNITY_SORT_SYMBOL_SCORE:
+      return 3;
     case OpportunitySort.UNRECOGNIZED:
     default:
       return -1;
@@ -1468,6 +1486,12 @@ export interface StrategyComponent {
    * evaluated symbol's bar timeline; empty = computed on the evaluated symbol (unchanged).
    */
   sourceSymbol: string;
+  /**
+   * used when kind == COMPONENT_KIND_FUNDAMENTAL (feature 198): a point-in-time metric name from
+   * the _FUNDAMENTAL_FIELDS ∪ extra_metrics vocabulary (e.g. "pe_ratio", "eps"). Resolved as-of
+   * each bar via GetHistoricalFundamentals with filed_date < bar_date (T+1, no look-ahead).
+   */
+  fundamentalMetric: string;
 }
 
 export interface StrategyComponent_ParamsEntry {
@@ -1748,6 +1772,23 @@ export interface Opportunity {
    * Distinct from an evaluated 0/N row; conviction+signal_axis are zeroed so it sinks in ranking.
    */
   dataUnavailable: boolean;
+  /**
+   * feature 199 — a single shrunk 0–1 ranking ordinal fusing readiness + directional signal
+   * (empirical-Bayes over the two axes present at compute; NULL/unset = nothing to fuse). Like
+   * conviction=3 it is NOT a probability and NEVER a cardinal sizing/alert/risk input — that is
+   * ExternalSignal.conviction (ingest.proto:110). Explicit-presence: unset = not-yet/nothing-to-fuse.
+   */
+  compositeScore?:
+    | number
+    | undefined;
+  /**
+   * feature 200 — symbol-level roll-up of the symbol's opportunities (Σ γ^i·(composite×strategy_weight),
+   * rank-decayed). A BOUNDED (< 2·max_composite, i.e. < 2.0 for γ<1) ordinal RANKING scalar on a
+   * non-[0,1] scale — like composite_score (ANALYSIS-13) it is NOT a probability/expected-return and
+   * NEVER a cardinal sizing/alert/risk input. Explicit-presence: unset = no score-eligible opportunity
+   * for the symbol. Symbol-uniform: every row of a symbol carries the same value.
+   */
+  symbolScore?: number | undefined;
 }
 
 /**
@@ -5171,6 +5212,7 @@ function createBaseStrategyComponent(): StrategyComponent {
     formulaId: "",
     params: {},
     sourceSymbol: "",
+    fundamentalMetric: "",
   };
 }
 
@@ -5193,6 +5235,9 @@ export const StrategyComponent: MessageFns<StrategyComponent> = {
     });
     if (message.sourceSymbol !== "") {
       writer.uint32(50).string(message.sourceSymbol);
+    }
+    if (message.fundamentalMetric !== "") {
+      writer.uint32(58).string(message.fundamentalMetric);
     }
     return writer;
   },
@@ -5255,6 +5300,14 @@ export const StrategyComponent: MessageFns<StrategyComponent> = {
           message.sourceSymbol = reader.string();
           continue;
         }
+        case 7: {
+          if (tag !== 58) {
+            break;
+          }
+
+          message.fundamentalMetric = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -5292,6 +5345,11 @@ export const StrategyComponent: MessageFns<StrategyComponent> = {
         : isSet(object.source_symbol)
         ? globalThis.String(object.source_symbol)
         : "",
+      fundamentalMetric: isSet(object.fundamentalMetric)
+        ? globalThis.String(object.fundamentalMetric)
+        : isSet(object.fundamental_metric)
+        ? globalThis.String(object.fundamental_metric)
+        : "",
     };
   },
 
@@ -5321,6 +5379,9 @@ export const StrategyComponent: MessageFns<StrategyComponent> = {
     if (message.sourceSymbol !== "") {
       obj.sourceSymbol = message.sourceSymbol;
     }
+    if (message.fundamentalMetric !== "") {
+      obj.fundamentalMetric = message.fundamentalMetric;
+    }
     return obj;
   },
 
@@ -5343,6 +5404,7 @@ export const StrategyComponent: MessageFns<StrategyComponent> = {
       {},
     );
     message.sourceSymbol = object.sourceSymbol ?? "";
+    message.fundamentalMetric = object.fundamentalMetric ?? "";
     return message;
   },
 };
@@ -7697,6 +7759,8 @@ function createBaseOpportunity(): Opportunity {
     conditions: [],
     signalConfidence: undefined,
     dataUnavailable: false,
+    compositeScore: undefined,
+    symbolScore: undefined,
   };
 }
 
@@ -7761,6 +7825,12 @@ export const Opportunity: MessageFns<Opportunity> = {
     }
     if (message.dataUnavailable !== false) {
       writer.uint32(160).bool(message.dataUnavailable);
+    }
+    if (message.compositeScore !== undefined) {
+      writer.uint32(169).double(message.compositeScore);
+    }
+    if (message.symbolScore !== undefined) {
+      writer.uint32(177).double(message.symbolScore);
     }
     return writer;
   },
@@ -7932,6 +8002,22 @@ export const Opportunity: MessageFns<Opportunity> = {
           message.dataUnavailable = reader.bool();
           continue;
         }
+        case 21: {
+          if (tag !== 169) {
+            break;
+          }
+
+          message.compositeScore = reader.double();
+          continue;
+        }
+        case 22: {
+          if (tag !== 177) {
+            break;
+          }
+
+          message.symbolScore = reader.double();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -8015,6 +8101,16 @@ export const Opportunity: MessageFns<Opportunity> = {
         : isSet(object.data_unavailable)
         ? globalThis.Boolean(object.data_unavailable)
         : false,
+      compositeScore: isSet(object.compositeScore)
+        ? globalThis.Number(object.compositeScore)
+        : isSet(object.composite_score)
+        ? globalThis.Number(object.composite_score)
+        : undefined,
+      symbolScore: isSet(object.symbolScore)
+        ? globalThis.Number(object.symbolScore)
+        : isSet(object.symbol_score)
+        ? globalThis.Number(object.symbol_score)
+        : undefined,
     };
   },
 
@@ -8080,6 +8176,12 @@ export const Opportunity: MessageFns<Opportunity> = {
     if (message.dataUnavailable !== false) {
       obj.dataUnavailable = message.dataUnavailable;
     }
+    if (message.compositeScore !== undefined) {
+      obj.compositeScore = message.compositeScore;
+    }
+    if (message.symbolScore !== undefined) {
+      obj.symbolScore = message.symbolScore;
+    }
     return obj;
   },
 
@@ -8108,6 +8210,8 @@ export const Opportunity: MessageFns<Opportunity> = {
     message.conditions = object.conditions?.map((e) => ConditionEval.fromPartial(e)) || [];
     message.signalConfidence = object.signalConfidence ?? undefined;
     message.dataUnavailable = object.dataUnavailable ?? false;
+    message.compositeScore = object.compositeScore ?? undefined;
+    message.symbolScore = object.symbolScore ?? undefined;
     return message;
   },
 };

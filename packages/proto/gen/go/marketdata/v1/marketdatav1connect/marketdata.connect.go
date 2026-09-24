@@ -75,6 +75,12 @@ const (
 	// MarketDataServiceBatchGetLatestPriceProcedure is the fully-qualified name of the
 	// MarketDataService's BatchGetLatestPrice RPC.
 	MarketDataServiceBatchGetLatestPriceProcedure = "/xstockstrat.marketdata.v1.MarketDataService/BatchGetLatestPrice"
+	// MarketDataServiceGetHistoricalFundamentalsProcedure is the fully-qualified name of the
+	// MarketDataService's GetHistoricalFundamentals RPC.
+	MarketDataServiceGetHistoricalFundamentalsProcedure = "/xstockstrat.marketdata.v1.MarketDataService/GetHistoricalFundamentals"
+	// MarketDataServiceBackfillFundamentalsProcedure is the fully-qualified name of the
+	// MarketDataService's BackfillFundamentals RPC.
+	MarketDataServiceBackfillFundamentalsProcedure = "/xstockstrat.marketdata.v1.MarketDataService/BackfillFundamentals"
 )
 
 // MarketDataServiceClient is a client for the xstockstrat.marketdata.v1.MarketDataService service.
@@ -108,6 +114,12 @@ type MarketDataServiceClient interface {
 	BatchGetBars(context.Context, *connect.Request[v1.BatchGetBarsRequest]) (*connect.Response[v1.BatchGetBarsResponse], error)
 	// Batched latest price for multiple symbols in a single round-trip (feature 183).
 	BatchGetLatestPrice(context.Context, *connect.Request[v1.BatchGetLatestPriceRequest]) (*connect.Response[v1.BatchGetLatestPriceResponse], error)
+	// Point-in-time historical fundamentals read (feature 198): returns only periods whose
+	// filed_date < as_of_date (T+1 availability), for look-ahead-safe backtesting.
+	GetHistoricalFundamentals(context.Context, *connect.Request[v1.GetHistoricalFundamentalsRequest]) (*connect.Response[v1.GetHistoricalFundamentalsResponse], error)
+	// Worker RPC driven by ingest.TriggerBackfill(data_kind=FUNDAMENTALS) (feature 198): fetches
+	// as-reported statements from SEC EDGAR + a point-in-time price-join and persists them.
+	BackfillFundamentals(context.Context, *connect.Request[v1.BackfillFundamentalsRequest]) (*connect.Response[v1.BackfillFundamentalsResponse], error)
 }
 
 // NewMarketDataServiceClient constructs a client for the
@@ -206,25 +218,39 @@ func NewMarketDataServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			connect.WithSchema(marketDataServiceMethods.ByName("BatchGetLatestPrice")),
 			connect.WithClientOptions(opts...),
 		),
+		getHistoricalFundamentals: connect.NewClient[v1.GetHistoricalFundamentalsRequest, v1.GetHistoricalFundamentalsResponse](
+			httpClient,
+			baseURL+MarketDataServiceGetHistoricalFundamentalsProcedure,
+			connect.WithSchema(marketDataServiceMethods.ByName("GetHistoricalFundamentals")),
+			connect.WithClientOptions(opts...),
+		),
+		backfillFundamentals: connect.NewClient[v1.BackfillFundamentalsRequest, v1.BackfillFundamentalsResponse](
+			httpClient,
+			baseURL+MarketDataServiceBackfillFundamentalsProcedure,
+			connect.WithSchema(marketDataServiceMethods.ByName("BackfillFundamentals")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // marketDataServiceClient implements MarketDataServiceClient.
 type marketDataServiceClient struct {
-	streamBars           *connect.Client[v1.StreamBarsRequest, v1.Bar]
-	streamQuotes         *connect.Client[v1.StreamQuotesRequest, v1.Quote]
-	getBars              *connect.Client[v1.GetBarsRequest, v1.GetBarsResponse]
-	getLatestQuote       *connect.Client[v1.GetLatestQuoteRequest, v1.Quote]
-	getLatestPrice       *connect.Client[v1.GetLatestPriceRequest, v1.LatestPrice]
-	backfillBars         *connect.Client[v1.BackfillBarsRequest, v1.BackfillBarsResponse]
-	getDataCoverage      *connect.Client[v1.GetDataCoverageRequest, v1.GetDataCoverageResponse]
-	deleteBackfilledData *connect.Client[v1.DeleteBackfilledDataRequest, v1.DeleteBackfilledDataResponse]
-	listAssets           *connect.Client[v1.ListAssetsRequest, v1.ListAssetsResponse]
-	getFundamentals      *connect.Client[v1.GetFundamentalsRequest, v1.GetFundamentalsResponse]
-	getFundamentalsMulti *connect.Client[v1.GetFundamentalsMultiRequest, v1.GetFundamentalsMultiResponse]
-	getLatestQuotes      *connect.Client[v1.GetLatestQuotesRequest, v1.GetLatestQuotesResponse]
-	batchGetBars         *connect.Client[v1.BatchGetBarsRequest, v1.BatchGetBarsResponse]
-	batchGetLatestPrice  *connect.Client[v1.BatchGetLatestPriceRequest, v1.BatchGetLatestPriceResponse]
+	streamBars                *connect.Client[v1.StreamBarsRequest, v1.Bar]
+	streamQuotes              *connect.Client[v1.StreamQuotesRequest, v1.Quote]
+	getBars                   *connect.Client[v1.GetBarsRequest, v1.GetBarsResponse]
+	getLatestQuote            *connect.Client[v1.GetLatestQuoteRequest, v1.Quote]
+	getLatestPrice            *connect.Client[v1.GetLatestPriceRequest, v1.LatestPrice]
+	backfillBars              *connect.Client[v1.BackfillBarsRequest, v1.BackfillBarsResponse]
+	getDataCoverage           *connect.Client[v1.GetDataCoverageRequest, v1.GetDataCoverageResponse]
+	deleteBackfilledData      *connect.Client[v1.DeleteBackfilledDataRequest, v1.DeleteBackfilledDataResponse]
+	listAssets                *connect.Client[v1.ListAssetsRequest, v1.ListAssetsResponse]
+	getFundamentals           *connect.Client[v1.GetFundamentalsRequest, v1.GetFundamentalsResponse]
+	getFundamentalsMulti      *connect.Client[v1.GetFundamentalsMultiRequest, v1.GetFundamentalsMultiResponse]
+	getLatestQuotes           *connect.Client[v1.GetLatestQuotesRequest, v1.GetLatestQuotesResponse]
+	batchGetBars              *connect.Client[v1.BatchGetBarsRequest, v1.BatchGetBarsResponse]
+	batchGetLatestPrice       *connect.Client[v1.BatchGetLatestPriceRequest, v1.BatchGetLatestPriceResponse]
+	getHistoricalFundamentals *connect.Client[v1.GetHistoricalFundamentalsRequest, v1.GetHistoricalFundamentalsResponse]
+	backfillFundamentals      *connect.Client[v1.BackfillFundamentalsRequest, v1.BackfillFundamentalsResponse]
 }
 
 // StreamBars calls xstockstrat.marketdata.v1.MarketDataService.StreamBars.
@@ -297,6 +323,17 @@ func (c *marketDataServiceClient) BatchGetLatestPrice(ctx context.Context, req *
 	return c.batchGetLatestPrice.CallUnary(ctx, req)
 }
 
+// GetHistoricalFundamentals calls
+// xstockstrat.marketdata.v1.MarketDataService.GetHistoricalFundamentals.
+func (c *marketDataServiceClient) GetHistoricalFundamentals(ctx context.Context, req *connect.Request[v1.GetHistoricalFundamentalsRequest]) (*connect.Response[v1.GetHistoricalFundamentalsResponse], error) {
+	return c.getHistoricalFundamentals.CallUnary(ctx, req)
+}
+
+// BackfillFundamentals calls xstockstrat.marketdata.v1.MarketDataService.BackfillFundamentals.
+func (c *marketDataServiceClient) BackfillFundamentals(ctx context.Context, req *connect.Request[v1.BackfillFundamentalsRequest]) (*connect.Response[v1.BackfillFundamentalsResponse], error) {
+	return c.backfillFundamentals.CallUnary(ctx, req)
+}
+
 // MarketDataServiceHandler is an implementation of the xstockstrat.marketdata.v1.MarketDataService
 // service.
 type MarketDataServiceHandler interface {
@@ -329,6 +366,12 @@ type MarketDataServiceHandler interface {
 	BatchGetBars(context.Context, *connect.Request[v1.BatchGetBarsRequest]) (*connect.Response[v1.BatchGetBarsResponse], error)
 	// Batched latest price for multiple symbols in a single round-trip (feature 183).
 	BatchGetLatestPrice(context.Context, *connect.Request[v1.BatchGetLatestPriceRequest]) (*connect.Response[v1.BatchGetLatestPriceResponse], error)
+	// Point-in-time historical fundamentals read (feature 198): returns only periods whose
+	// filed_date < as_of_date (T+1 availability), for look-ahead-safe backtesting.
+	GetHistoricalFundamentals(context.Context, *connect.Request[v1.GetHistoricalFundamentalsRequest]) (*connect.Response[v1.GetHistoricalFundamentalsResponse], error)
+	// Worker RPC driven by ingest.TriggerBackfill(data_kind=FUNDAMENTALS) (feature 198): fetches
+	// as-reported statements from SEC EDGAR + a point-in-time price-join and persists them.
+	BackfillFundamentals(context.Context, *connect.Request[v1.BackfillFundamentalsRequest]) (*connect.Response[v1.BackfillFundamentalsResponse], error)
 }
 
 // NewMarketDataServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -422,6 +465,18 @@ func NewMarketDataServiceHandler(svc MarketDataServiceHandler, opts ...connect.H
 		connect.WithSchema(marketDataServiceMethods.ByName("BatchGetLatestPrice")),
 		connect.WithHandlerOptions(opts...),
 	)
+	marketDataServiceGetHistoricalFundamentalsHandler := connect.NewUnaryHandler(
+		MarketDataServiceGetHistoricalFundamentalsProcedure,
+		svc.GetHistoricalFundamentals,
+		connect.WithSchema(marketDataServiceMethods.ByName("GetHistoricalFundamentals")),
+		connect.WithHandlerOptions(opts...),
+	)
+	marketDataServiceBackfillFundamentalsHandler := connect.NewUnaryHandler(
+		MarketDataServiceBackfillFundamentalsProcedure,
+		svc.BackfillFundamentals,
+		connect.WithSchema(marketDataServiceMethods.ByName("BackfillFundamentals")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/xstockstrat.marketdata.v1.MarketDataService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case MarketDataServiceStreamBarsProcedure:
@@ -452,6 +507,10 @@ func NewMarketDataServiceHandler(svc MarketDataServiceHandler, opts ...connect.H
 			marketDataServiceBatchGetBarsHandler.ServeHTTP(w, r)
 		case MarketDataServiceBatchGetLatestPriceProcedure:
 			marketDataServiceBatchGetLatestPriceHandler.ServeHTTP(w, r)
+		case MarketDataServiceGetHistoricalFundamentalsProcedure:
+			marketDataServiceGetHistoricalFundamentalsHandler.ServeHTTP(w, r)
+		case MarketDataServiceBackfillFundamentalsProcedure:
+			marketDataServiceBackfillFundamentalsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -515,4 +574,12 @@ func (UnimplementedMarketDataServiceHandler) BatchGetBars(context.Context, *conn
 
 func (UnimplementedMarketDataServiceHandler) BatchGetLatestPrice(context.Context, *connect.Request[v1.BatchGetLatestPriceRequest]) (*connect.Response[v1.BatchGetLatestPriceResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.marketdata.v1.MarketDataService.BatchGetLatestPrice is not implemented"))
+}
+
+func (UnimplementedMarketDataServiceHandler) GetHistoricalFundamentals(context.Context, *connect.Request[v1.GetHistoricalFundamentalsRequest]) (*connect.Response[v1.GetHistoricalFundamentalsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.marketdata.v1.MarketDataService.GetHistoricalFundamentals is not implemented"))
+}
+
+func (UnimplementedMarketDataServiceHandler) BackfillFundamentals(context.Context, *connect.Request[v1.BackfillFundamentalsRequest]) (*connect.Response[v1.BackfillFundamentalsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.marketdata.v1.MarketDataService.BackfillFundamentals is not implemented"))
 }

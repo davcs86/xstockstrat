@@ -208,3 +208,35 @@ class TestRunOnce:
         # allowlist-bearing pair anchored; allowlist-free strategy contributed no pairs
         assert live_loop._last_entry_at[("u1", "bound", "MSFT")] == _T0
         assert not any(k[1] == "free" for k in live_loop._last_entry_at)
+
+    async def test_blend_backfill_restricted_to_fundamentals_universe(self):
+        """R2 (feature 168): the boot entry-backfill anchors the blend force-run ONLY over the
+        fundamentals universe — a held or platform-signal symbol outside it is never backfilled,
+        matching the live loop (the third resolve_universe caller the defect flagged)."""
+        live_loop = _fake_live_loop(held=["NVDA"], signals=["COIN"])
+        live_loop._resolve_fundamentals_universe = AsyncMock(return_value={"AAPL"})
+        db_pool = AsyncMock()
+        db_pool.fetch = AsyncMock(
+            return_value=[
+                _strategy_row("fundamentals_macd_blend", symbols=None, signal_eligible=True)
+            ]
+        )
+        seen: list[str] = []
+
+        async def _list_orders(req):
+            seen.append(req.symbol)
+            return SimpleNamespace(orders=[_order(trading_pb2.ORDER_SIDE_BUY, 10.0, _T0)])
+
+        trading_stub = AsyncMock()
+        trading_stub.ListOrders = AsyncMock(side_effect=_list_orders)
+        cfg = MagicMock()
+        cfg.get_int = MagicMock(side_effect=lambda key, default=0: default)
+        cfg.get_str = MagicMock(side_effect=lambda key, default="": default)
+        cfg.get_bool = MagicMock(side_effect=lambda key, default=False: default)
+
+        await run_once(live_loop, db_pool, trading_stub, cfg)
+
+        assert seen == ["AAPL"]  # only the in-universe symbol is anchored
+        assert ("u1", "fundamentals_macd_blend", "AAPL") in live_loop._last_entry_at
+        for off in ("NVDA", "COIN"):
+            assert ("u1", "fundamentals_macd_blend", off) not in live_loop._last_entry_at

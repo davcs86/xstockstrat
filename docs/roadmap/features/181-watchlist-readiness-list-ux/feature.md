@@ -5,6 +5,7 @@
 **Last Updated**: 2026-09-06
 **Committed to main**: 83743049da1ec2e2337ef49bad54c49a10721841
 **Launched date**: 2026-09-06
+**Archived**: 2026-09-16
 
 ---
 
@@ -20,15 +21,16 @@
 | 2026-09-06 | `in-progress` → `code-completed` | /sdd-execute | All 12 steps done (proto+codegen, R-E sentinel+tests, GetWatchlistReadiness handler+tests, UI hook/rewrite/BFF/e2e-mocks, Playwright AC-1..6 6/6 green, docs). Analysis pytest 708 passed @83.9%; UI lint+tsc clean; e2e green on the pre-installed Chromium (D-3). Integration PR = existing #1103. |
 
 | 2026-09-06 | `code-completed` → `launched` | CI workflow | Promoted via PR #1104; committed 83743049da1ec2e2337ef49bad54c49a10721841 |
+| 2026-09-16 | `launched` (unchanged) | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(3)/fails(1); pruned 4 specs |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
-- [Recon Dossier](recon.md) — grounded codebase map, patterns to reuse, existing business rules, risks
-- [Design](design.md) — debated + approved architecture, rejected alternatives, open risks
-- [Implementation Spec](implementation-spec.md)
+- Recon Dossier — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

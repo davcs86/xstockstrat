@@ -34,3 +34,30 @@ Feature: readiness-materializer-config-keys (config-service guarantees)
     When an admin sets the unbounded analysis.readiness_materializer.enabled key
     Then the write is accepted (no numeric bound applies to a bool)
     And WatchConfig/GetConfig read behavior is unchanged by the bounds (the materializer stays OFF at the seeded enabled=false)
+
+  @AC-1 @FR-1 @FR-3 @feature-182
+  Scenario: The seed migration registers all four materializer keys per environment
+    Given a config database with no analysis.readiness_materializer.* rows
+    When migration 027_analysis_readiness_materializer_keys.up.sql is applied
+    Then config.config_values contains global (user_id NULL) rows for keys
+      "analysis.readiness_materializer.enabled", "analysis.readiness_materializer.refresh_hour_utc",
+      "analysis.readiness_materializer.valid_window_hours", and
+      "analysis.readiness_materializer.max_concurrent_bars_fetches"
+    And each key has exactly one row for environment "staging" and one for "production"
+    And the "key" column holds the full dotted form (e.g. "analysis.readiness_materializer.enabled"), not a bare "readiness_materializer.enabled"
+
+  @AC-2 @FR-1 @FR-2 @feature-182
+  Scenario: Keys are seeded at their current code defaults with getter-matching value_type
+    Given migration 027 has been applied
+    When the seeded rows are inspected
+    Then "analysis.readiness_materializer.enabled" has value_type "bool" and value_data "false"
+    And "analysis.readiness_materializer.refresh_hour_utc" has value_type "int" and value_data "0"
+    And "analysis.readiness_materializer.valid_window_hours" has value_type "int" and value_data "24"
+    And "analysis.readiness_materializer.max_concurrent_bars_fetches" has value_type "int" and value_data "2"
+
+  @AC-4 @FR-3 @feature-182
+  Scenario: The migration is idempotent and reversible
+    Given migration 027_up has already been applied once
+    When 027_up is applied a second time
+    Then no duplicate rows are created (ON CONFLICT DO NOTHING)
+    And applying 027_down deletes exactly the four analysis.readiness_materializer.* global rows and no other analysis key
