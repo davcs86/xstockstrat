@@ -150,3 +150,25 @@ CI-mode host harness).
   Covers AC-1/AC-2/AC-3/AC-4/AC-5.
 - Files modified: `services/xstockstrat-notify/src/__tests__/notifyServiceImpl.test.ts`
 - Deviations: none.
+
+### Steps 6-10 — UI: alertShared, AlertInbox, server-count badge, e2e [done]
+- **Step 6** (`alertShared.ts` + AlertStream import): extracted `severityLabel`/`severityVariant` (DRY,
+  TDD N/A move-only).
+- **Step 7** (`AlertInbox.tsx` + notifications `page.tsx`): inbox lists alerts with severity badge,
+  module (category), body, unread dot, per-row + bulk "Mark read" (→ `markAlertRead` then refetch),
+  server `unreadCount` badge; Skeleton loading, EmptyState empty, tokens-only, accessible names (C-17).
+- **Step 8** (`AlertStream.tsx` + `traderBff.ts` markAlertRead forward): badge now shows the server-side
+  `unreadCount` (`listAlerts({limit:1})` on mount), replacing the client-side stream length. Dropped
+  design.md's optimistic increment — see Deviation Log (AC-2 determinism vs the mock's stream replay).
+- **Step 9** (`e2e/fixtures/alerts.ts` + `mock-backend.ts` + `INVENTORY.md`): centralized alert fixtures
+  with read/unread variants; listAlerts returns `ALERT_LIST_WITH_READ_STATE` + `MOCK_UNREAD_COUNT=2`;
+  added a `markAlertRead` mock handler.
+- **Step 10** (`notifications.spec.ts` + `alert-stream.spec.ts`): AC-6 inbox (badge/module/body/unread +
+  server count), AC-1 mark-read intercept, AC-2 server-count badge, and the local Clear-all behavior.
+- **TDD**: Steps 7/8/10 form one UI cycle. RED — before Step 7 there was no inbox (AC-6/AC-1 specs fail)
+  and the badge showed the stream length 3 (AC-2 spec fails). GREEN — `pnpm build` type-clean (app+e2e);
+  **13/13** alert-stream + notifications e2e specs pass (CI-mode host harness). Covers AC-1/AC-2/AC-6
+  (AC-4 UI filter not built — covered by Step 5 unit test; Deviation Log).
+- Files: `src/lib/alertShared.ts`, `src/components/trader/AlertStream.tsx`, `src/lib/traderBff.ts`,
+  `src/app/accounts/notifications/{AlertInbox.tsx,page.tsx}`, `e2e/fixtures/alerts.ts`,
+  `e2e/mock-backend.ts`, `e2e/fixtures/INVENTORY.md`, `e2e/{accounts/notifications,trader/alert-stream}.spec.ts`
