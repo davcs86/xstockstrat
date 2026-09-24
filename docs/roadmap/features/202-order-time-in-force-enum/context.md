@@ -200,3 +200,23 @@ but Docker Hub 429-rate-limited → codegen via host-native fallback (see Deviat
   `e2e/trader/{orders,order-parity,offline-accounts,order-form}.spec.ts`
 - Deviations: `order-form.spec.ts` edited though not in Files list (in-intent ripple + AC-5 host);
   CI-mode e2e run (dev harness cold-compile) — see Deviation Log.
+
+### Step 8 — docs: cross-service build verification + deploy note [done]
+- Verified the full chain green: `buf lint` (packages/proto), `go build ./...` (trading, GOWORK=off),
+  `pnpm build` (xstockstrat-ui, full app + e2e type-check).
+- **DEPLOY NOTE (order-intent hash transient breakage)**: the string→enum wire-type change on
+  `time_in_force` invalidates pre-deployment order-intent hashes (`placeOrderRequestHash` /
+  `deriveReplaceCancelIntentID` use `proto.Marshal`→SHA-256), causing transient `FailedPrecondition`
+  rejections during the deploy window (~30s, bounded by `trading.order_intent.stale_multiplier` ×
+  broker timeout). The existing intent-staleness sweeper clears them; no manual action required.
+  Optional post-deploy cleanup: `DELETE FROM trading.order_intents WHERE state IN ('PENDING','UNKNOWN')
+  AND created_at < <deploy-timestamp>`. Prefer deploying outside active trading hours.
+- Files modified: none (verification + deploy-note record).
+- Deviations: none.
+
+### Step 9 — docs: feature-branch CI workaround for buf breaking [done]
+- Added `--exclude-path trading/v1/trading.proto` to the `proto-lint` job's `buf breaking` step with a
+  `# TEMPORARY: feature/order-time-in-force-enum` removal comment. Removed in the integration PR.
+- Verification: `grep -n "exclude-path.*trading" .github/workflows/ci.yml` present.
+- Files modified: `.github/workflows/ci.yml`
+- Deviations: none.

@@ -513,7 +513,7 @@ cd services/xstockstrat-ui && pnpm test:e2e
 
 ### Step 8 — docs: Cross-service build verification and deploy note
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/runbooks/`
 **Files**:
 - (no new files — this is a verification-only step)
@@ -560,7 +560,7 @@ cd services/xstockstrat-ui && pnpm build
 
 ### Step 9 — docs: Feature-branch CI workaround for buf breaking
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `.github/workflows/ci.yml` — modify (temporary)
