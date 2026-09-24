@@ -79,7 +79,8 @@ func (c *Client) get(ctx context.Context, url string, out any) error {
 	}
 	// SEC fair-use requires a descriptive User-Agent; a missing one gets 403.
 	req.Header.Set("User-Agent", c.userAgent)
-	req.Header.Set("Accept-Encoding", "gzip, deflate")
+	// Never set Accept-Encoding here: doing so disables net/http's transparent gzip decompression,
+	// and SEC's CDN serves gzip — the raw compressed body would then fail JSON decode ('\x1f').
 	resp, err := c.hc.Do(req)
 	if err != nil {
 		return err
