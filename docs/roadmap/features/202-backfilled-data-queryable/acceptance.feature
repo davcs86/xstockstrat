@@ -96,3 +96,42 @@ Feature: backfilled-data-queryable
     Given a fundamentals snapshot exists for symbol "GOOG" with fetched_at "2025-09-24T10:00:00Z"
     When the agent calls query_fundamentals with symbol "GOOG"
     Then the tool response includes a last_refreshed field with value "2025-09-24T10:00:00Z"
+
+  @AC-15 @FR-2
+  Scenario: Historical fundamentals rendered as time-series chart in the UI
+    Given the user navigates to "/insights/data-explorer"
+    And historical fundamentals exist for symbol "AAPL" with period_type "quarterly" for 4 periods from "2024-Q1" to "2024-Q4" with pe_ratio values 28.1, 29.3, 30.5, 31.2
+    When the user selects symbol "AAPL", switches to "Fundamentals" tab, selects period_type "quarterly", and selects chart metric "pe_ratio"
+    Then the page displays a time-series line chart with 4 data points plotting pe_ratio over fiscal periods
+
+  @AC-16 @FR-8 @FR-1
+  Scenario: Export OHLCV query results as CSV from the UI
+    Given the user navigates to "/insights/data-explorer"
+    And OHLCV bars exist for symbol "AAPL" with timeframe "1Day" from "2025-01-01" to "2025-01-31"
+    When the user queries symbol "AAPL", timeframe "1Day", start "2025-01-01", end "2025-01-31"
+    And clicks "Download CSV"
+    Then the browser downloads a CSV file named "AAPL_1Day_2025-01-01_2025-01-31.csv"
+    And the CSV contains columns time, open, high, low, close, volume with one row per bar
+
+  @AC-17 @FR-8 @FR-2
+  Scenario: Export fundamentals query results as CSV from the UI
+    Given the user navigates to "/insights/data-explorer"
+    And historical fundamentals exist for symbol "MSFT" with period_type "quarterly" for 4 periods
+    When the user queries symbol "MSFT" fundamentals with period_type "quarterly"
+    And clicks "Download CSV"
+    Then the browser downloads a CSV file named "MSFT_fundamentals_quarterly.csv"
+    And the CSV contains columns including symbol, period_end, pe_ratio, eps, market_cap
+
+  @AC-18 @FR-9 @FR-3
+  Scenario: MCP query_bars with format csv returns binary CSV content
+    Given OHLCV bars exist for symbol "AAPL" with timeframe "1Day" from "2025-01-01" to "2025-01-31"
+    When the agent calls query_bars with symbol "AAPL", timeframe "1Day", start_date "2025-01-01", end_date "2025-01-31", format "csv"
+    Then the tool returns a content item with MIME type "text/csv" and base64-encoded CSV data
+    And the decoded CSV contains columns time, open, high, low, close, volume
+
+  @AC-19 @FR-9 @FR-4
+  Scenario: MCP query_fundamentals with format csv returns binary CSV content
+    Given historical fundamentals exist for symbol "GOOG" with period_type "annual" for 3 periods
+    When the agent calls query_fundamentals with symbol "GOOG", include_history true, period_type "annual", format "csv"
+    Then the tool returns a content item with MIME type "text/csv" and base64-encoded CSV data
+    And the decoded CSV contains columns including symbol, period_end, pe_ratio, eps, market_cap
