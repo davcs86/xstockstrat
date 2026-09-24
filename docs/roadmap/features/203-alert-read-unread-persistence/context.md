@@ -172,3 +172,11 @@ CI-mode host harness).
 - Files: `src/lib/alertShared.ts`, `src/components/trader/AlertStream.tsx`, `src/lib/traderBff.ts`,
   `src/app/accounts/notifications/{AlertInbox.tsx,page.tsx}`, `e2e/fixtures/alerts.ts`,
   `e2e/mock-backend.ts`, `e2e/fixtures/INVENTORY.md`, `e2e/{accounts/notifications,trader/alert-stream}.spec.ts`
+
+## Session 2026-09-24 — sdd-execute (sequential) — code-completed
+**Steps**: 1–10 (all done). notify unit 63/63 @ 90.78% lines; UI e2e 13/13 (alert-stream + notifications).
+**C-16 promotion**: AC-1..AC-5 → services/xstockstrat-notify/acceptance/alert-read-unread-persistence.feature;
+  AC-6 → services/xstockstrat-ui/acceptance/alert-read-unread-persistence.feature (both @feature-203).
+**Docker codegen**: retried at operator request — Docker Hub still 429s the golang:1.27-trixie base pull
+  (persistent per-IP anonymous limit); host-native codegen path used, target-service stubs verified clean.
+**Next**: integration PR feature/alert-read-unread-persistence → main-dev.

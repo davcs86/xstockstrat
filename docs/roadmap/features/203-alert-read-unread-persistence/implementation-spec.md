@@ -1,6 +1,6 @@
 # Implementation Spec: alert-read-unread-persistence
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-09-24
 **Feature**: `docs/roadmap/features/203-alert-read-unread-persistence/feature.md`
 **Total Steps**: 10
