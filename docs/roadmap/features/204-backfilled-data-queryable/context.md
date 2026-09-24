@@ -226,3 +226,24 @@ node/pnpm. Docker daemon up but codegen stays host-native.
   header propagation is `bffShared.ts`'s `forward` (no custom call path); public read data (no gate).
 - Verify: `pnpm run lint` exit 0; grep confirms all three in the block.
 - Files: `services/xstockstrat-ui/src/lib/insightsBff.ts`. Deviations: none.
+
+### Step 11 — service: Data Explorer page + hooks [done]
+- `src/hooks/useDataExplorer.ts`: `useAssetSymbols` (listAssets), `useBars`/`useHistoricalFundamentals`
+  (`useInfiniteQuery`, pageSize 500/50 — AC-8/AC-20), `useSnapshotFundamentals` (`useQuery`);
+  `FUNDAMENTAL_METRICS` (the 11 metrics with camelCase `key` + snake_case `name` for the missing check
+  + label); `metricValue` (returns null when `missingMetrics.includes(name)` — MARKETDATA-11, explicit
+  membership not truthiness); `barsToCsv`/`snapshotToCsv`/`historicalToCsv` (blank cell per missing
+  metric); `latestBarMillis`/`latestFiledMillis`; `downloadCsv` (Blob + `<a download>`).
+- `src/app/insights/data-explorer/page.tsx`: symbol Combobox (listAssets) + date-range inputs; Tabs
+  OHLCV / Fundamentals. OHLCV: close-over-time LineChart + paginated DataTable (time/O/H/L/C/volume),
+  Load-more, last-refreshed (max bar time), CSV. Fundamentals: Snapshot sub-view (metric grid, `Stale`
+  badge, as_of refreshed, CSV) and Historical sub-view (period-type + metric selectors, metric-over-
+  periods LineChart with `connectNulls={false}` for gaps, wide DataTable, Load-more, filed_date
+  refreshed, CSV). Missing metrics render `—` in cells and a gap in the chart. Timeframe hardcoded
+  `1Day` (feature 143 — no selector). AppShell (insights) so the Step 12 nav entry appears.
+- Test hooks for Step 13: `data-explorer-page`, `de-bars-{chart,table,loadmore,refreshed,csv}`,
+  `de-fund-{snapshot,refreshed,stale,csv}`, `de-hist-{chart,table,loadmore,refreshed,csv}`;
+  `dd[data-metric]` cells; symbol combobox `aria-label="Data Explorer symbol"`.
+- Verify: `npx tsc --noEmit` clean for both new files (2 unrelated pre-existing errors in
+  backfills.spec.ts/middleware.test.ts, transpile-only in CI); `pnpm run lint` exit 0.
+- Files: `src/hooks/useDataExplorer.ts`, `src/app/insights/data-explorer/page.tsx`. Deviations: none.

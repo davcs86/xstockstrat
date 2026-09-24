@@ -468,7 +468,7 @@ Confirm all three handlers appear in the MarketDataService block.
 
 ### Step 11 — service: Create data-explorer page with OHLCV and Fundamentals tabs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/data-explorer/page.tsx` — create
