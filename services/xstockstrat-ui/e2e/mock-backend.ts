@@ -615,6 +615,31 @@ export async function startMockBackend(): Promise<void> {
           }
           throw new ConnectError(`fmp: no fundamentals for ${req.symbol}`, Code.Unavailable);
         },
+        async getHistoricalFundamentals(req) {
+          // feature 204 baseline handler (the data-explorer spec drives precise scenarios via
+          // page.route; this serves non-intercepted navigation). AAPL only; single page.
+          if ((req.symbol ?? '').toUpperCase() !== 'AAPL') {
+            return { periods: [], pagination: { nextPageToken: '' } };
+          }
+          return {
+            periods: [
+              {
+                symbol: 'AAPL',
+                fiscalPeriod: 'Q1-2024',
+                periodType: 'quarterly',
+                periodEnd: { seconds: BigInt(1711843200), nanos: 0 }, // 2024-03-31
+                filedDate: { seconds: BigInt(1714521600), nanos: 0 }, // 2024-05-01
+                marketCap: 2.9e12,
+                pbRatio: 45.0,
+                eps: 1.52,
+                currency: 'USD',
+                source: 'edgar',
+                missingMetrics: ['pe_ratio'],
+              },
+            ],
+            pagination: { nextPageToken: '' },
+          };
+        },
         async getLatestPrice(req) {
           // feature 095: CAPR (in-queue) has a live trade + prior close; ZZZZ is an OFF-queue symbol
           // that still has a live price (drives the Signal-detail off-queue fallback, AC-13); any

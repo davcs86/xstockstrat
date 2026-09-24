@@ -1,7 +1,7 @@
 """
 MCP tool definitions for xstockstrat-agent.
 
-Forty-nine tools:
+Fifty-one tools:
   list_signal_sources  — lists active sources from ingest, enriched with extractor_tool
   extract_email_content — extracts raw text from email attachments or gated URLs
   extract_website_content — fetches and returns raw text from a registered website source
@@ -51,26 +51,31 @@ Forty-nine tools:
   db_analyze_workload_indexes — recommend indexes based on pg_stat_statements workload (admin-only)
   db_analyze_query_indexes — recommend indexes for a specific SQL query (admin-only)
   db_analyze_db_health — run comprehensive DB health checks via postgres-mcp (admin-only)
+  query_bars          — query stored daily OHLCV bars (paginated; json/csv) (read-only, feature 204)
+  query_fundamentals  — query snapshot/historical fundamentals (paginated; json/csv) (read-only)
 
 Also registers one MCP prompt (feature 197), via register_prompts():
   list_correlation_guide — how to join list_accounts/get_positions/get_positions_by_account_id/
     list_opportunities/list_strategies on account_id/strategy_id/symbol. A prompt is not a tool;
-    the tool count stays forty-nine.
+    the tool count stays fifty-one.
 """
 
 import base64
+import csv
+import io
 import json
 import logging
 import re
 import uuid
 from pathlib import Path
 from typing import Literal
+from urllib.parse import quote
 
 import grpc
 import sqlglot
 import sqlglot.errors
 from mcp.server.mcpserver import Context, MCPServer
-from mcp.types import TextContent
+from mcp.types import EmbeddedResource, TextContent, TextResourceContents
 
 from app import backtest_view, client, postgres_mcp_client
 from app.scopes import MCP_CLAIMS_SCOPE_KEY, resolve_scope, roles_to_access_scope
@@ -285,9 +290,203 @@ def _is_destructive(sql: str) -> bool:
         return bool(_DESTRUCTIVE_RE.search(_COMMENT_RE.sub(" ", sql)))
 
 
+# ── data-explorer query tools (feature 204) ──────────────────────────────────
+_QUERY_BARS_MAX_LIMIT = 1000
+_QUERY_FUNDAMENTALS_MAX_LIMIT = 50
+_BARS_CSV_COLUMNS = ["time", "open", "high", "low", "close", "volume"]
+# The 11 canonical numeric metrics shared by Fundamentals and HistoricalFundamentalsPeriod.
+_FUNDAMENTALS_METRICS = [
+    "market_cap",
+    "pe_ratio",
+    "pb_ratio",
+    "dividend_yield",
+    "eps",
+    "beta",
+    "roe",
+    "debt_to_equity",
+    "price",
+    "year_high",
+    "year_low",
+]
+
+
+def _max_key(items: list[dict], key: str) -> str | None:
+    """Max of an ISO-8601 field across rows (RFC3339 sorts chronologically); None when empty."""
+    vals = [i[key] for i in items if i.get(key)]
+    return max(vals) if vals else None
+
+
+def _csv_resource(path: str, text: str) -> EmbeddedResource:
+    """Wrap a CSV string as an MCP text/csv EmbeddedResource. `path`'s symbol segment is
+    percent-quoted by the caller so a crafted symbol can't traverse the `xstockstrat:///…` URI."""
+    return EmbeddedResource(
+        type="resource",
+        resource=TextResourceContents(
+            uri=f"xstockstrat:///data-explorer/{path}",
+            mimeType="text/csv",
+            text=text,
+        ),
+    )
+
+
+def _bars_to_csv(bars: list[dict]) -> str:
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(_BARS_CSV_COLUMNS)
+    for b in bars:
+        w.writerow([b.get(c, "") for c in _BARS_CSV_COLUMNS])
+    return buf.getvalue()
+
+
+def _snapshot_to_csv(symbol: str, data: dict) -> str:
+    # missing_metrics is authoritative (MARKETDATA-11) — a metric named there is an empty cell,
+    # never inferred from a zero/absent value.
+    missing = set(data.get("missing_metrics") or [])
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["symbol", "as_of", *_FUNDAMENTALS_METRICS])
+    row = [data.get("symbol") or symbol, data.get("as_of", "")]
+    row.extend("" if m in missing else data.get(m, "") for m in _FUNDAMENTALS_METRICS)
+    w.writerow(row)
+    return buf.getvalue()
+
+
+def _historical_to_csv(periods: list[dict]) -> str:
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(
+        [
+            "symbol",
+            "fiscal_period",
+            "period_type",
+            "period_end",
+            "filed_date",
+            *_FUNDAMENTALS_METRICS,
+        ]
+    )
+    for p in periods:
+        missing = set(p.get("missing_metrics") or [])  # per-period, authoritative (MARKETDATA-11)
+        row = [
+            p.get("symbol", ""),
+            p.get("fiscal_period", ""),
+            p.get("period_type", ""),
+            p.get("period_end", ""),
+            p.get("filed_date", ""),
+        ]
+        row.extend("" if m in missing else p.get(m, "") for m in _FUNDAMENTALS_METRICS)
+        w.writerow(row)
+    return buf.getvalue()
+
+
 def register_tools(server: MCPServer) -> None:
     # Register the propagation middleware before the tools so it wraps every tools/call.
     server.middleware.append(CallerPropagationMiddleware())
+
+    @server.tool()
+    async def query_bars(
+        symbol: str,
+        timeframe: str = "1Day",
+        start_date: str | None = None,
+        end_date: str | None = None,
+        limit: int = 500,
+        page_token: str = "",
+        format: Literal["json", "csv"] = "json",
+    ) -> dict | list:
+        """Query stored daily OHLCV bars for a symbol from xstockstrat-marketdata (feature 204).
+
+        Daily is the only requestable interval — `timeframe` defaults to and normalizes to 1Day.
+        `limit` is capped at 1000; omitting `start_date` returns the newest page, and `page_token`
+        (from a prior `next_page_token`) walks older pages. `format="csv"` returns the page as an
+        attached text/csv resource (columns time,open,high,low,close,volume); "json" (default)
+        returns the bars inline with `next_page_token` and `last_refreshed` (newest bar time).
+        """
+        limit = min(limit, _QUERY_BARS_MAX_LIMIT)
+        try:
+            result = await client.get_bars(
+                symbol, timeframe, start_date, end_date, limit, page_token
+            )
+        except grpc.aio.AioRpcError as e:
+            raise RuntimeError(_grpc_error_message(e)) from e
+        bars = result["bars"]
+        if format == "csv":
+            return [_csv_resource(f"bars/{quote(symbol, safe='')}", _bars_to_csv(bars))]
+        return {
+            "bars": bars,
+            "next_page_token": result["next_page_token"],
+            "last_refreshed": _max_key(bars, "time"),
+        }
+
+    @server.tool()
+    async def query_fundamentals(
+        symbol: str,
+        mode: Literal["snapshot", "historical"] = "snapshot",
+        period_types: list[str] | None = None,
+        range_start: str | None = None,
+        range_end: str | None = None,
+        limit: int = 50,
+        page_token: str = "",
+        format: Literal["json", "csv"] = "json",
+    ) -> dict | list:
+        """Query a symbol's fundamentals from xstockstrat-marketdata (feature 204).
+
+        `mode="snapshot"` (default) returns the latest cached metrics; `mode="historical"` returns
+        point-in-time filing periods, paginated (`limit` capped at 50, `page_token` walks pages,
+        `period_types` filters quarterly/annual). `missing_metrics` names the metrics the provider
+        did not supply — always authoritative, never inferred from a zero value (MARKETDATA-11).
+        `format="csv"` returns an attached text/csv resource (empty cells for missing metrics);
+        "json" (default) returns the data inline with `last_refreshed` and `missing_metrics` (plus
+        `next_page_token` in historical mode).
+        """
+        if mode == "snapshot":
+            try:
+                data = await client.get_fundamentals(symbol)
+            except grpc.aio.AioRpcError as e:
+                raise RuntimeError(
+                    _grpc_error_message(e, not_found="fundamentals not found")
+                ) from e
+            if format == "csv":
+                return [
+                    _csv_resource(
+                        f"fundamentals/{quote(symbol, safe='')}", _snapshot_to_csv(symbol, data)
+                    )
+                ]
+            return {
+                "fundamentals": data,
+                "last_refreshed": data.get("as_of"),
+                "missing_metrics": data.get("missing_metrics") or [],
+            }
+        if mode == "historical":
+            try:
+                result = await client.get_historical_fundamentals(
+                    symbol,
+                    period_types,
+                    range_start,
+                    range_end,
+                    min(limit, _QUERY_FUNDAMENTALS_MAX_LIMIT),
+                    page_token,
+                )
+            except grpc.aio.AioRpcError as e:
+                raise RuntimeError(
+                    _grpc_error_message(e, not_found="fundamentals not found")
+                ) from e
+            periods = result["periods"]
+            if format == "csv":
+                return [
+                    _csv_resource(
+                        f"fundamentals/{quote(symbol, safe='')}", _historical_to_csv(periods)
+                    )
+                ]
+            return {
+                "periods": periods,
+                "next_page_token": result["next_page_token"],
+                "last_refreshed": _max_key(periods, "filed_date"),
+                # Union of the per-period missing_metrics — a caller-level summary; each period also
+                # carries its own list for row-precise rendering.
+                "missing_metrics": sorted(
+                    {m for p in periods for m in (p.get("missing_metrics") or [])}
+                ),
+            }
+        raise ValueError(f"unknown mode '{mode}' (expected snapshot/historical)")
 
     @server.tool()
     async def list_signal_sources(

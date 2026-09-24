@@ -3030,7 +3030,14 @@ exports.HistoricalFundamentalsPeriod_ExtraMetricsEntry = {
     },
 };
 function createBaseGetHistoricalFundamentalsRequest() {
-    return { symbol: "", asOfDate: undefined, rangeStart: undefined, rangeEnd: undefined, periodTypes: [] };
+    return {
+        symbol: "",
+        asOfDate: undefined,
+        rangeStart: undefined,
+        rangeEnd: undefined,
+        periodTypes: [],
+        page: undefined,
+    };
 }
 exports.GetHistoricalFundamentalsRequest = {
     encode(message, writer = new wire_1.BinaryWriter()) {
@@ -3048,6 +3055,9 @@ exports.GetHistoricalFundamentalsRequest = {
         }
         for (const v of message.periodTypes) {
             writer.uint32(42).string(v);
+        }
+        if (message.page !== undefined) {
+            common_1.PageRequest.encode(message.page, writer.uint32(50).fork()).join();
         }
         return writer;
     },
@@ -3093,6 +3103,13 @@ exports.GetHistoricalFundamentalsRequest = {
                     message.periodTypes.push(reader.string());
                     continue;
                 }
+                case 6: {
+                    if (tag !== 50) {
+                        break;
+                    }
+                    message.page = common_1.PageRequest.decode(reader, reader.uint32());
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -3124,6 +3141,7 @@ exports.GetHistoricalFundamentalsRequest = {
                 : globalThis.Array.isArray(object?.period_types)
                     ? object.period_types.map((e) => globalThis.String(e))
                     : [],
+            page: isSet(object.page) ? common_1.PageRequest.fromJSON(object.page) : undefined,
         };
     },
     toJSON(message) {
@@ -3143,6 +3161,9 @@ exports.GetHistoricalFundamentalsRequest = {
         if (message.periodTypes?.length) {
             obj.periodTypes = message.periodTypes;
         }
+        if (message.page !== undefined) {
+            obj.page = common_1.PageRequest.toJSON(message.page);
+        }
         return obj;
     },
     create(base) {
@@ -3155,16 +3176,22 @@ exports.GetHistoricalFundamentalsRequest = {
         message.rangeStart = object.rangeStart ?? undefined;
         message.rangeEnd = object.rangeEnd ?? undefined;
         message.periodTypes = object.periodTypes?.map((e) => e) || [];
+        message.page = (object.page !== undefined && object.page !== null)
+            ? common_1.PageRequest.fromPartial(object.page)
+            : undefined;
         return message;
     },
 };
 function createBaseGetHistoricalFundamentalsResponse() {
-    return { periods: [] };
+    return { periods: [], pagination: undefined };
 }
 exports.GetHistoricalFundamentalsResponse = {
     encode(message, writer = new wire_1.BinaryWriter()) {
         for (const v of message.periods) {
             exports.HistoricalFundamentalsPeriod.encode(v, writer.uint32(10).fork()).join();
+        }
+        if (message.pagination !== undefined) {
+            common_1.PageResponse.encode(message.pagination, writer.uint32(18).fork()).join();
         }
         return writer;
     },
@@ -3182,6 +3209,13 @@ exports.GetHistoricalFundamentalsResponse = {
                     message.periods.push(exports.HistoricalFundamentalsPeriod.decode(reader, reader.uint32()));
                     continue;
                 }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.pagination = common_1.PageResponse.decode(reader, reader.uint32());
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -3195,12 +3229,16 @@ exports.GetHistoricalFundamentalsResponse = {
             periods: globalThis.Array.isArray(object?.periods)
                 ? object.periods.map((e) => exports.HistoricalFundamentalsPeriod.fromJSON(e))
                 : [],
+            pagination: isSet(object.pagination) ? common_1.PageResponse.fromJSON(object.pagination) : undefined,
         };
     },
     toJSON(message) {
         const obj = {};
         if (message.periods?.length) {
             obj.periods = message.periods.map((e) => exports.HistoricalFundamentalsPeriod.toJSON(e));
+        }
+        if (message.pagination !== undefined) {
+            obj.pagination = common_1.PageResponse.toJSON(message.pagination);
         }
         return obj;
     },
@@ -3210,6 +3248,9 @@ exports.GetHistoricalFundamentalsResponse = {
     fromPartial(object) {
         const message = createBaseGetHistoricalFundamentalsResponse();
         message.periods = object.periods?.map((e) => exports.HistoricalFundamentalsPeriod.fromPartial(e)) || [];
+        message.pagination = (object.pagination !== undefined && object.pagination !== null)
+            ? common_1.PageResponse.fromPartial(object.pagination)
+            : undefined;
         return message;
     },
 };

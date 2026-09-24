@@ -67,7 +67,7 @@ dedicated implementation steps (C-14).
 
 ### Step 1 — proto: Add pagination fields to GetHistoricalFundamentals messages
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/marketdata/v1/marketdata.proto` — modify
@@ -101,7 +101,7 @@ Both must pass (additive fields are non-breaking).
 
 ### Step 2 — proto-gen: Regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/` — regenerated
@@ -132,7 +132,7 @@ The diff should show changes in Go, Python, and TS stubs for the marketdata pack
 
 ### Step 3 — service: Implement cursor pagination in GetHistoricalFundamentals
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/repository/marketdata_repo.go` — modify
@@ -178,7 +178,7 @@ cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-dow
 
 ### Step 4 — test: Test marketdata GetHistoricalFundamentals pagination
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/repository/marketdata_repo_test.go` — modify (or create if not present)
@@ -212,7 +212,7 @@ cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-dow
 
 ### Step 5 — service: Add MARKETDATA_ENDPOINT to agent deployment files
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/client.py` — modify
@@ -250,7 +250,7 @@ Confirm the env var appears in all four files with value `xstockstrat-marketdata
 
 ### Step 6 — service: Add marketdata client methods to agent
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/client.py` — modify
@@ -290,7 +290,7 @@ cd services/xstockstrat-agent && ruff check . && ruff format --check .
 
 ### Step 7 — service: Add query_bars and query_fundamentals MCP tools
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify
@@ -337,7 +337,7 @@ cd services/xstockstrat-agent && ruff check . && ruff format --check .
 
 ### Step 8 — test: Test agent query_bars and query_fundamentals tools
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_query_tools.py` — create
@@ -375,7 +375,7 @@ cd services/xstockstrat-agent && ruff check . && ruff format --check .
 
 ### Step 9 — docs: Update tool count and add tool reference sections
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/runbooks/`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify (docstring line 4)
@@ -430,7 +430,7 @@ source files (`tools.py`, `copilot.ts`).
 
 ### Step 10 — service: Wire getFundamentals, getHistoricalFundamentals, and listAssets in insights BFF
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/insightsBff.ts` — modify
@@ -468,7 +468,7 @@ Confirm all three handlers appear in the MarketDataService block.
 
 ### Step 11 — service: Create data-explorer page with OHLCV and Fundamentals tabs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/data-explorer/page.tsx` — create
@@ -533,7 +533,7 @@ cd services/xstockstrat-ui && pnpm run lint
 
 ### Step 12 — service: Register Data Explorer in PLATFORM_SUBNAV and NAV_GROUPS
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/shared/PlatformHeader.tsx` — modify
@@ -566,7 +566,7 @@ Confirm "Data Explorer" appears in both files.
 
 ### Step 13 — test: E2E tests for data-explorer page
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/data-explorer.spec.ts` — create
@@ -614,7 +614,7 @@ cd services/xstockstrat-ui && pnpm run lint
 
 ### Step 14 — test: E2E test for Data Explorer nav registration
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/data-explorer.spec.ts` — modify (add nav test to existing spec)
