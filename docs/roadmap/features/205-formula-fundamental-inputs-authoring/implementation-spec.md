@@ -122,7 +122,7 @@ cd packages/proto && buf lint && buf breaking --against '../../.git#branch=main-
 
 ### Step 3 -- service: Indicators ListFundamentalMetrics handler
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/handlers/servicer.py` -- modify
@@ -163,7 +163,7 @@ cd services/xstockstrat-indicators && uv run pytest tests/ -k "list_fundamental_
 
 ### Step 4 -- test: Indicators handler tests (G1, G2)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/test_fundamental_metrics.py` -- create

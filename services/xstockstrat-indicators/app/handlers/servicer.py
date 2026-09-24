@@ -33,6 +33,23 @@ _FORMULA_MASKABLE_PATHS = frozenset(
     }
 )
 
+# feature 205 — human-readable meaning per FundamentalMetric enum value, for the authoring catalog.
+# data_key is derived mechanically from the enum name; meaning is hand-authored and MUST stay
+# complete (ListFundamentalMetrics fails loud on a missing entry — G2).
+_FUNDAMENTAL_METRIC_MEANING: dict[int, str] = {
+    indicators_pb2.FUNDAMENTAL_METRIC_MARKET_CAP: "Market cap",
+    indicators_pb2.FUNDAMENTAL_METRIC_PE_RATIO: "P/E ratio",
+    indicators_pb2.FUNDAMENTAL_METRIC_PB_RATIO: "P/B ratio",
+    indicators_pb2.FUNDAMENTAL_METRIC_DIVIDEND_YIELD: "Dividend yield",
+    indicators_pb2.FUNDAMENTAL_METRIC_EPS: "EPS",
+    indicators_pb2.FUNDAMENTAL_METRIC_BETA: "Beta",
+    indicators_pb2.FUNDAMENTAL_METRIC_ROE: "ROE",
+    indicators_pb2.FUNDAMENTAL_METRIC_DEBT_TO_EQUITY: "Debt/equity",
+    indicators_pb2.FUNDAMENTAL_METRIC_PRICE: "Price",
+    indicators_pb2.FUNDAMENTAL_METRIC_YEAR_HIGH: "52-week high",
+    indicators_pb2.FUNDAMENTAL_METRIC_YEAR_LOW: "52-week low",
+}
+
 
 class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
     def __init__(self, config_watcher: ConfigWatcher, db_pool=None):
@@ -213,6 +230,30 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
             for name, info in indicators_engine.INDICATOR_REGISTRY.items()
         ]
         return indicators_pb2.ListIndicatorsResponse(indicators=metas)
+
+    async def ListFundamentalMetrics(self, request, context):
+        """Return the fundamental-metrics catalog for formula authoring (feature 205).
+
+        Iterates the enum descriptor (single source of truth), skips UNSPECIFIED, derives the
+        snake_case data_key mechanically, and fails loud (INTERNAL) on any enum value missing a
+        registered meaning — never a silently-empty meaning (G2)."""
+        metrics = []
+        for value in indicators_pb2.FundamentalMetric.DESCRIPTOR.values:
+            if value.number == 0:  # FUNDAMENTAL_METRIC_UNSPECIFIED
+                continue
+            data_key = value.name.removeprefix("FUNDAMENTAL_METRIC_").lower()
+            meaning = _FUNDAMENTAL_METRIC_MEANING.get(value.number)
+            if not meaning:
+                await context.abort(
+                    grpc.StatusCode.INTERNAL,
+                    f"no meaning registered for FundamentalMetric {value.name}",
+                )
+            metrics.append(
+                indicators_pb2.FundamentalMetricInfo(
+                    metric=value.number, data_key=data_key, meaning=meaning
+                )
+            )
+        return indicators_pb2.ListFundamentalMetricsResponse(metrics=metrics)
 
     async def RegisterFormula(self, request, context):
         import uuid

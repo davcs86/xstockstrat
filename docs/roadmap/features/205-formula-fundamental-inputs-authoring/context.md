@@ -145,3 +145,14 @@ codegen image), go1.27, uv/ruff, node/pnpm.
 - Host-native `buf-gen.sh` (AGAINST_BRANCH=main-dev). indicators Go/Python/TS stubs carry the new RPC
   + messages. Reverted the recurring analysis.pb.go gofmt whitespace drift; diff scoped to `indicators/v1`.
 - Files: `packages/proto/gen/{go,python,ts}/indicators/v1/**`.
+
+### Steps 3-4 — indicators ListFundamentalMetrics handler + tests (G1/G2) [done]
+- `servicer.py`: `_FUNDAMENTAL_METRIC_MEANING` (11-entry enum→meaning dict) + `ListFundamentalMetrics`
+  handler — iterates the enum descriptor (single source of truth), skips UNSPECIFIED, derives
+  `data_key = name.removeprefix("FUNDAMENTAL_METRIC_").lower()`, fails loud (INTERNAL abort) on a
+  missing meaning (G2), returns `FundamentalMetricInfo(metric, data_key, meaning)`.
+- `tests/test_fundamental_metrics.py`: G2 (11 entries, all non-empty key+meaning), completeness (enum
+  set parity), G1 cross-service contract (every data_key is a real `marketdata.Fundamentals` field —
+  imports `gen.marketdata.v1.marketdata_pb2`). 3 passed.
+- Verify: ruff clean; full suite 143 passed, coverage 81.44% (≥50).
+- Files: `app/handlers/servicer.py`, `tests/test_fundamental_metrics.py`.
