@@ -113,3 +113,32 @@
   - Step 7: ⚠ No explicit coverage threshold for E2E tests — expected for Playwright (no coverage tool); this is not a unit test step — [x] accepted — Playwright E2E has no coverage tool; threshold enforcement is inherently N/A for E2E steps
   - Step 8: ⚠ Internal reference error: "Step 9 handles this" for context.md deploy note recording, but Step 9 is the CI buf-breaking workaround — deploy note recording is handled by sdd-execute's normal context.md append — [x] addressed — fixed Step 8 text to clarify sdd-execute context.md append handles it, not Step 9
 - Overlap findings: CLEAN. Feature 196 (proto-deprecated-field-removal-program) shares `trading.go` at disjoint line ranges — WARN-level file-path overlap only; no migration NNN, proto field number, or config key collisions detected across all in-flight features.
+
+## Session 2026-09-24 — sdd-execute (sequential)
+
+Running features 202→203→204→205 in sequential mode (one integration PR per feature), operator
+directive: no checkpoints unless blockers. Branch: `feature/order-time-in-force-enum` off `main-dev`.
+
+**Tooling setup (steps 1-9)**: go1.27 ✓ · golangci-lint v2.5.0 ✓ · node v22 ✓ · pnpm 9.15.9 ✓ ·
+uv ✓ · ruff ✓ · buf ⬇ 1.72.0 (host, go install) · protoc-gen-go/go-grpc/connect-go ⬇ (pinned) ·
+ts-proto/protoc-gen-es/connect-es ⬇ (npm -g, pinned) · grpcio-tools ⬇ 1.80.0 · Docker daemon up
+but Docker Hub 429-rate-limited → codegen via host-native fallback (see Deviation Log).
+
+### Step 1 — proto: Define TimeInForce enum and convert fields in place [done]
+- Added `TimeInForce` enum (7 values, `_UNSPECIFIED=0`) after `OrderStatus`; converted
+  `Order.time_in_force=12` and `PlaceOrderRequest.time_in_force=7` to `TimeInForce`,
+  `ReplaceOrderRequest.time_in_force=5` to `optional TimeInForce` (explicit presence).
+- Verification: `buf lint` clean (host buf 1.72.0). `buf breaking` intentionally flags the wire-break
+  (handled by Step 9 CI workaround + local skip).
+- Files modified: `packages/proto/trading/v1/trading.proto`
+- Deviations: none for the edit itself.
+
+### Step 2 — proto-gen: Regenerate stubs [done]
+- Ran host-native `./scripts/buf-gen.sh` (Docker Hub 429 → host toolchain fallback). Generated Go/TS/
+  Python trading stubs: `type TimeInForce int32`; `Order.TimeInForce` non-pointer (field 12),
+  `ReplaceOrderRequest.TimeInForce *TimeInForce` oneof (field 5, explicit presence); TS
+  `timeInForce: TimeInForce`. Diff scoped to `trading/v1` (go+python+ts+dist).
+- Reverted an unrelated gofmt comment-whitespace drift in `analysis.pb.go` (host toolchain parity;
+  see Deviation Log). trading stubs carry no such churn → match CI regen.
+- Files modified: `packages/proto/gen/{go,python,ts}/trading/v1/**`
+- Deviations: 3 (codegen fallback, buf-breaking skip, analysis.pb.go revert) — see Deviation Log.

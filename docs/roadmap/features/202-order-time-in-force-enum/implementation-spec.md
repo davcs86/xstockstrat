@@ -44,7 +44,7 @@ is applied in Step 1 and removed after merge.
 
 ### Step 1 — proto: Define TimeInForce enum and convert fields in place
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/trading/v1/trading.proto` — modify
@@ -595,4 +595,30 @@ grep -n "exclude-path.*trading" .github/workflows/ci.yml
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Step 2 — codegen toolchain: host-native fallback (Docker Hub rate-limited)
+- **What**: `scripts/localenv-setup.sh`'s Docker path failed — Docker Hub returned `429 Too Many
+  Requests` pulling the `golang:1.27-trixie` base image of `Dockerfile.codegen` (shared-egress
+  anonymous pull limit). Fell back to the host-native codegen toolchain per
+  `docs/runbooks/codegen-toolchain-host-setup.md`, installed pinned to `Dockerfile.codegen`:
+  buf 1.72.0, protoc-gen-go v1.36.11, protoc-gen-go-grpc v1.6.2, protoc-gen-connect-go v1.19.2,
+  ts-proto 2.11.8, protoc-gen-es 2.12.0, protoc-gen-connect-es 1.7.0, grpcio-tools 1.80.0.
+- **Disposition**: CI-equivalent fallback (sequential-mode sanctioned). Same pinned versions CI's
+  `proto-freshness` job installs (`.github/workflows/ci.yml`).
+
+### Step 2 — local `buf breaking` skipped for the intentional wire-break
+- **What**: `buf-gen.sh` runs `buf breaking` against the local `main-dev` ref, which fails on the
+  intentional string→enum wire-type change (fields 12/7/5). Ran codegen with a non-existent
+  `AGAINST_BRANCH=__skip_breaking__` so the guard's `git show-ref` fails and the breaking check is
+  skipped locally.
+- **Disposition**: Expected for this intentional wire-breaking change — the local analog of Step 9's
+  CI `--exclude-path trading/v1/trading.proto` workaround. `buf lint` still runs and passes.
+
+### Step 2 — reverted pre-existing gofmt comment-whitespace drift in `analysis.pb.go`
+- **What**: Regenerating all stubs also reformatted `packages/proto/gen/go/analysis/v1/analysis.pb.go`
+  (14 lines, comment continuation-line indentation tabs↔spaces) — the host `protoc-gen-go`/gofmt
+  renders it as tabs where the committed CI-generated stub uses spaces. Unrelated to feature 202
+  (`analysis.proto` unchanged); reverted so the working tree stays scoped to `trading/v1`.
+  `trading.pb.go` itself shows **no** such whitespace churn (verified: only the 2 new real
+  `TimeInForce` comment lines), so the committed trading stubs match what CI regenerates.
+- **Disposition**: Out-of-scope drift reverted; feature diff limited to `trading/v1` (mirrors CI's
+  stale-stub check). Latent host-vs-CI toolchain-parity gotcha — recurs for 203/204/205 codegen.
