@@ -1,6 +1,6 @@
 # Implementation Spec: order-time-in-force-enum
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-09-24
 **Feature**: `docs/roadmap/features/202-order-time-in-force-enum/feature.md`
 **Total Steps**: 9
@@ -44,7 +44,7 @@ is applied in Step 1 and removed after merge.
 
 ### Step 1 — proto: Define TimeInForce enum and convert fields in place
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/trading/v1/trading.proto` — modify
@@ -97,7 +97,7 @@ cd packages/proto && buf lint
 
 ### Step 2 — proto-gen: Regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/trading/v1/` — regenerated
@@ -138,7 +138,7 @@ grep -r "TimeInForce" packages/proto/gen/ts/trading/v1/ | head -5
 
 ### Step 3 — migration: Normalize historical TIF strings
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/migrations/010_normalize_tif.up.sql` — create
@@ -188,7 +188,7 @@ ls services/xstockstrat-trading/migrations/010_normalize_tif.up.sql \
 
 ### Step 4 — service: Add TIF validation and mapping (trading)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/tif_validation.go` — create
@@ -297,7 +297,7 @@ cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-downlo
 
 ### Step 5 — test: Trading service TIF unit tests
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/tif_validation_test.go` — create
@@ -357,7 +357,7 @@ cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-downlo
 
 ### Step 6 — service: UI TIF enum rendering and form integration
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/trader/orderShared.tsx` — modify
@@ -450,7 +450,7 @@ cd services/xstockstrat-ui && pnpm run lint
 
 ### Step 7 — test: UI E2E fixture and spec updates
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/fixtures/orders.ts` — modify
@@ -513,7 +513,7 @@ cd services/xstockstrat-ui && pnpm test:e2e
 
 ### Step 8 — docs: Cross-service build verification and deploy note
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/runbooks/`
 **Files**:
 - (no new files — this is a verification-only step)
@@ -560,7 +560,7 @@ cd services/xstockstrat-ui && pnpm build
 
 ### Step 9 — docs: Feature-branch CI workaround for buf breaking
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `.github/workflows/ci.yml` — modify (temporary)
@@ -595,4 +595,54 @@ grep -n "exclude-path.*trading" .github/workflows/ci.yml
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Step 2 — codegen toolchain: host-native fallback (Docker Hub rate-limited)
+- **What**: `scripts/localenv-setup.sh`'s Docker path failed — Docker Hub returned `429 Too Many
+  Requests` pulling the `golang:1.27-trixie` base image of `Dockerfile.codegen` (shared-egress
+  anonymous pull limit). Fell back to the host-native codegen toolchain per
+  `docs/runbooks/codegen-toolchain-host-setup.md`, installed pinned to `Dockerfile.codegen`:
+  buf 1.72.0, protoc-gen-go v1.36.11, protoc-gen-go-grpc v1.6.2, protoc-gen-connect-go v1.19.2,
+  ts-proto 2.11.8, protoc-gen-es 2.12.0, protoc-gen-connect-es 1.7.0, grpcio-tools 1.80.0.
+- **Disposition**: CI-equivalent fallback (sequential-mode sanctioned). Same pinned versions CI's
+  `proto-freshness` job installs (`.github/workflows/ci.yml`).
+
+### Step 2 — local `buf breaking` skipped for the intentional wire-break
+- **What**: `buf-gen.sh` runs `buf breaking` against the local `main-dev` ref, which fails on the
+  intentional string→enum wire-type change (fields 12/7/5). Ran codegen with a non-existent
+  `AGAINST_BRANCH=__skip_breaking__` so the guard's `git show-ref` fails and the breaking check is
+  skipped locally.
+- **Disposition**: Expected for this intentional wire-breaking change — the local analog of Step 9's
+  CI `--exclude-path trading/v1/trading.proto` workaround. `buf lint` still runs and passes.
+
+### Step 2 — reverted pre-existing gofmt comment-whitespace drift in `analysis.pb.go`
+- **What**: Regenerating all stubs also reformatted `packages/proto/gen/go/analysis/v1/analysis.pb.go`
+  (14 lines, comment continuation-line indentation tabs↔spaces) — the host `protoc-gen-go`/gofmt
+  renders it as tabs where the committed CI-generated stub uses spaces. Unrelated to feature 202
+  (`analysis.proto` unchanged); reverted so the working tree stays scoped to `trading/v1`.
+  `trading.pb.go` itself shows **no** such whitespace churn (verified: only the 2 new real
+  `TimeInForce` comment lines), so the committed trading stubs match what CI regenerates.
+- **Disposition**: Out-of-scope drift reverted; feature diff limited to `trading/v1` (mirrors CI's
+  stale-stub check). Latent host-vs-CI toolchain-parity gotcha — recurs for 203/204/205 codegen.
+
+### Step 5 — golangci-lint version bump (host tool too old for go1.27)
+- **What**: The pre-installed `golangci-lint` (v2.5.0, built with go1.25) refuses a go1.27 target.
+  Installed v2.13.1 (CLAUDE.md pin) built with the host go1.27.0 (`GOTOOLCHAIN=go1.27.0`, since a
+  `toolchain` directive otherwise pulled go1.26.8). Result: `0 issues`.
+- **Disposition**: Tooling provisioning, no code impact. CI uses `golangci-lint-action@v9`.
+
+### Step 7 — `order-form.spec.ts` edited though not in the Files list
+- **What**: The new TIF `<Select>` adds a second combobox to the order form, breaking bare
+  `getByRole('combobox')` selectors in `order-form.spec.ts` (`.first()` disambiguation applied,
+  matching the existing pattern). The AC-5 assertion was also placed here per Step 7(c)'s explicit
+  "the appropriate order-form spec (or a new test block in orders.spec.ts)" wording. This file was
+  not enumerated in Step 7 `**Files**`, but the change is squarely within Step 7's intent (E2E spec
+  updates for the TIF change).
+- **Disposition**: In-intent, spec-anticipated; staged with Step 7. Verified GREEN (29/29 trader
+  order specs pass, incl. the AC-5 NAME-string assertion).
+
+### Step 7 — UI e2e run: CI-mode host harness (dev-server cold-compile timeout)
+- **What**: The non-CI `pnpm dev` harness times out the 10s SSR warmup on cold route compile; the
+  Docker e2e runner base (`node:24-bookworm-slim`) risks the Docker Hub 429. Ran the trader order
+  specs with `CI=1` (webServer does `pnpm build && pnpm start` with `NEXT_DISABLE_STANDALONE`, 30s
+  test timeout) — the faithful analog of CI's `frontend-e2e` job. `pnpm build` (full app + e2e
+  type-check) passes; 29/29 targeted specs pass.
+- **Disposition**: CI-equivalent fallback. The full multi-segment Playwright suite runs in CI.

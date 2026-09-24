@@ -81,7 +81,7 @@ func (r *TradingRepo) UpsertOrder(ctx context.Context, o *tradingv1.Order) error
 		o.Symbol, sideStr(o.Side), typeStr(o.OrderType),
 		statusStr(o.Status), o.Qty, o.FilledQty,
 		nullableFloat(o.LimitPrice), nullableFloat(o.StopPrice), nullableFloat(o.FilledAvgPrice),
-		o.TimeInForce, o.StrategyId, o.UserId, modeStr(o.TradingMode),
+		tifStr(o.TimeInForce), o.StrategyId, o.UserId, modeStr(o.TradingMode),
 		false, createdAt, updatedAt,
 		o.AccountId, int32(o.BrokerType), nullableTime(o.FilledAt),
 	)
@@ -339,7 +339,7 @@ func scanOrder(row scanner) (*tradingv1.Order, error) {
 		Status:        parseStatus(status),
 		Qty:           qty,
 		FilledQty:     filledQty,
-		TimeInForce:   timeInForce,
+		TimeInForce:   parseTif(timeInForce),
 		StrategyId:    strategyID,
 		UserId:        userID,
 		TradingMode:   parseMode(mode),

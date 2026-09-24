@@ -32,7 +32,7 @@ const OFFLINE_ORDER_NEW = {
   qty: 10,
   filledQty: 0,
   filledAvgPrice: 0,
-  timeInForce: 'day',
+  timeInForce: 1,
   accountId: BROKER_ACCOUNT_OFFLINE.id,
   brokerOrderId: '',
   brokerType: 3, // BROKER_TYPE_OFFLINE

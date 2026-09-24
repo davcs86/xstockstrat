@@ -260,6 +260,91 @@ export function orderStatusToNumber(object: OrderStatus): number {
   }
 }
 
+export enum TimeInForce {
+  TIME_IN_FORCE_UNSPECIFIED = "TIME_IN_FORCE_UNSPECIFIED",
+  TIME_IN_FORCE_DAY = "TIME_IN_FORCE_DAY",
+  TIME_IN_FORCE_GTC = "TIME_IN_FORCE_GTC",
+  TIME_IN_FORCE_IOC = "TIME_IN_FORCE_IOC",
+  TIME_IN_FORCE_FOK = "TIME_IN_FORCE_FOK",
+  TIME_IN_FORCE_OPG = "TIME_IN_FORCE_OPG",
+  TIME_IN_FORCE_CLS = "TIME_IN_FORCE_CLS",
+  UNRECOGNIZED = "UNRECOGNIZED",
+}
+
+export function timeInForceFromJSON(object: any): TimeInForce {
+  switch (object) {
+    case 0:
+    case "TIME_IN_FORCE_UNSPECIFIED":
+      return TimeInForce.TIME_IN_FORCE_UNSPECIFIED;
+    case 1:
+    case "TIME_IN_FORCE_DAY":
+      return TimeInForce.TIME_IN_FORCE_DAY;
+    case 2:
+    case "TIME_IN_FORCE_GTC":
+      return TimeInForce.TIME_IN_FORCE_GTC;
+    case 3:
+    case "TIME_IN_FORCE_IOC":
+      return TimeInForce.TIME_IN_FORCE_IOC;
+    case 4:
+    case "TIME_IN_FORCE_FOK":
+      return TimeInForce.TIME_IN_FORCE_FOK;
+    case 5:
+    case "TIME_IN_FORCE_OPG":
+      return TimeInForce.TIME_IN_FORCE_OPG;
+    case 6:
+    case "TIME_IN_FORCE_CLS":
+      return TimeInForce.TIME_IN_FORCE_CLS;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return TimeInForce.UNRECOGNIZED;
+  }
+}
+
+export function timeInForceToJSON(object: TimeInForce): string {
+  switch (object) {
+    case TimeInForce.TIME_IN_FORCE_UNSPECIFIED:
+      return "TIME_IN_FORCE_UNSPECIFIED";
+    case TimeInForce.TIME_IN_FORCE_DAY:
+      return "TIME_IN_FORCE_DAY";
+    case TimeInForce.TIME_IN_FORCE_GTC:
+      return "TIME_IN_FORCE_GTC";
+    case TimeInForce.TIME_IN_FORCE_IOC:
+      return "TIME_IN_FORCE_IOC";
+    case TimeInForce.TIME_IN_FORCE_FOK:
+      return "TIME_IN_FORCE_FOK";
+    case TimeInForce.TIME_IN_FORCE_OPG:
+      return "TIME_IN_FORCE_OPG";
+    case TimeInForce.TIME_IN_FORCE_CLS:
+      return "TIME_IN_FORCE_CLS";
+    case TimeInForce.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
+export function timeInForceToNumber(object: TimeInForce): number {
+  switch (object) {
+    case TimeInForce.TIME_IN_FORCE_UNSPECIFIED:
+      return 0;
+    case TimeInForce.TIME_IN_FORCE_DAY:
+      return 1;
+    case TimeInForce.TIME_IN_FORCE_GTC:
+      return 2;
+    case TimeInForce.TIME_IN_FORCE_IOC:
+      return 3;
+    case TimeInForce.TIME_IN_FORCE_FOK:
+      return 4;
+    case TimeInForce.TIME_IN_FORCE_OPG:
+      return 5;
+    case TimeInForce.TIME_IN_FORCE_CLS:
+      return 6;
+    case TimeInForce.UNRECOGNIZED:
+    default:
+      return -1;
+  }
+}
+
 /**
  * CredentialStatus reflects the last known health of a broker account's stored
  * API credentials, so the UI can surface accounts whose secrets stopped working.
@@ -480,7 +565,7 @@ export interface Order {
   limitPrice: number;
   stopPrice: number;
   filledAvgPrice: number;
-  timeInForce: string;
+  timeInForce: TimeInForce;
   createdAt?: Date | undefined;
   updatedAt?: Date | undefined;
   strategyId: string;
@@ -507,7 +592,7 @@ export interface PlaceOrderRequest {
   qty: number;
   limitPrice: number;
   stopPrice: number;
-  timeInForce: string;
+  timeInForce: TimeInForce;
   strategyId: string;
   /**
    * DEPRECATED: order owner resolved from the x-user-id header; body value ignored.
@@ -619,7 +704,9 @@ export interface ReplaceOrderRequest {
   qty: number;
   limitPrice: number;
   stopPrice: number;
-  timeInForce: string;
+  timeInForce?:
+    | TimeInForce
+    | undefined;
   /**
    * DEPRECATED: caller identity resolved from the x-user-id header; body value ignored.
    *
@@ -782,7 +869,7 @@ function createBaseOrder(): Order {
     limitPrice: 0,
     stopPrice: 0,
     filledAvgPrice: 0,
-    timeInForce: "",
+    timeInForce: TimeInForce.TIME_IN_FORCE_UNSPECIFIED,
     createdAt: undefined,
     updatedAt: undefined,
     strategyId: "",
@@ -831,8 +918,8 @@ export const Order: MessageFns<Order> = {
     if (message.filledAvgPrice !== 0) {
       writer.uint32(89).double(message.filledAvgPrice);
     }
-    if (message.timeInForce !== "") {
-      writer.uint32(98).string(message.timeInForce);
+    if (message.timeInForce !== TimeInForce.TIME_IN_FORCE_UNSPECIFIED) {
+      writer.uint32(96).int32(timeInForceToNumber(message.timeInForce));
     }
     if (message.createdAt !== undefined) {
       Timestamp.encode(toTimestamp(message.createdAt), writer.uint32(106).fork()).join();
@@ -963,11 +1050,11 @@ export const Order: MessageFns<Order> = {
           continue;
         }
         case 12: {
-          if (tag !== 98) {
+          if (tag !== 96) {
             break;
           }
 
-          message.timeInForce = reader.string();
+          message.timeInForce = timeInForceFromJSON(reader.int32());
           continue;
         }
         case 13: {
@@ -1101,10 +1188,10 @@ export const Order: MessageFns<Order> = {
         ? globalThis.Number(object.filled_avg_price)
         : 0,
       timeInForce: isSet(object.timeInForce)
-        ? globalThis.String(object.timeInForce)
+        ? timeInForceFromJSON(object.timeInForce)
         : isSet(object.time_in_force)
-        ? globalThis.String(object.time_in_force)
-        : "",
+        ? timeInForceFromJSON(object.time_in_force)
+        : TimeInForce.TIME_IN_FORCE_UNSPECIFIED,
       createdAt: isSet(object.createdAt)
         ? fromJsonTimestamp(object.createdAt)
         : isSet(object.created_at)
@@ -1193,8 +1280,8 @@ export const Order: MessageFns<Order> = {
     if (message.filledAvgPrice !== 0) {
       obj.filledAvgPrice = message.filledAvgPrice;
     }
-    if (message.timeInForce !== "") {
-      obj.timeInForce = message.timeInForce;
+    if (message.timeInForce !== TimeInForce.TIME_IN_FORCE_UNSPECIFIED) {
+      obj.timeInForce = timeInForceToJSON(message.timeInForce);
     }
     if (message.createdAt !== undefined) {
       obj.createdAt = message.createdAt.toISOString();
@@ -1245,7 +1332,7 @@ export const Order: MessageFns<Order> = {
     message.limitPrice = object.limitPrice ?? 0;
     message.stopPrice = object.stopPrice ?? 0;
     message.filledAvgPrice = object.filledAvgPrice ?? 0;
-    message.timeInForce = object.timeInForce ?? "";
+    message.timeInForce = object.timeInForce ?? TimeInForce.TIME_IN_FORCE_UNSPECIFIED;
     message.createdAt = object.createdAt ?? undefined;
     message.updatedAt = object.updatedAt ?? undefined;
     message.strategyId = object.strategyId ?? "";
@@ -1268,7 +1355,7 @@ function createBasePlaceOrderRequest(): PlaceOrderRequest {
     qty: 0,
     limitPrice: 0,
     stopPrice: 0,
-    timeInForce: "",
+    timeInForce: TimeInForce.TIME_IN_FORCE_UNSPECIFIED,
     strategyId: "",
     userId: "",
     clientOrderId: "",
@@ -1301,8 +1388,8 @@ export const PlaceOrderRequest: MessageFns<PlaceOrderRequest> = {
     if (message.stopPrice !== 0) {
       writer.uint32(49).double(message.stopPrice);
     }
-    if (message.timeInForce !== "") {
-      writer.uint32(58).string(message.timeInForce);
+    if (message.timeInForce !== TimeInForce.TIME_IN_FORCE_UNSPECIFIED) {
+      writer.uint32(56).int32(timeInForceToNumber(message.timeInForce));
     }
     if (message.strategyId !== "") {
       writer.uint32(66).string(message.strategyId);
@@ -1390,11 +1477,11 @@ export const PlaceOrderRequest: MessageFns<PlaceOrderRequest> = {
           continue;
         }
         case 7: {
-          if (tag !== 58) {
+          if (tag !== 56) {
             break;
           }
 
-          message.timeInForce = reader.string();
+          message.timeInForce = timeInForceFromJSON(reader.int32());
           continue;
         }
         case 8: {
@@ -1499,10 +1586,10 @@ export const PlaceOrderRequest: MessageFns<PlaceOrderRequest> = {
         ? globalThis.Number(object.stop_price)
         : 0,
       timeInForce: isSet(object.timeInForce)
-        ? globalThis.String(object.timeInForce)
+        ? timeInForceFromJSON(object.timeInForce)
         : isSet(object.time_in_force)
-        ? globalThis.String(object.time_in_force)
-        : "",
+        ? timeInForceFromJSON(object.time_in_force)
+        : TimeInForce.TIME_IN_FORCE_UNSPECIFIED,
       strategyId: isSet(object.strategyId)
         ? globalThis.String(object.strategyId)
         : isSet(object.strategy_id)
@@ -1567,8 +1654,8 @@ export const PlaceOrderRequest: MessageFns<PlaceOrderRequest> = {
     if (message.stopPrice !== 0) {
       obj.stopPrice = message.stopPrice;
     }
-    if (message.timeInForce !== "") {
-      obj.timeInForce = message.timeInForce;
+    if (message.timeInForce !== TimeInForce.TIME_IN_FORCE_UNSPECIFIED) {
+      obj.timeInForce = timeInForceToJSON(message.timeInForce);
     }
     if (message.strategyId !== "") {
       obj.strategyId = message.strategyId;
@@ -1611,7 +1698,7 @@ export const PlaceOrderRequest: MessageFns<PlaceOrderRequest> = {
     message.qty = object.qty ?? 0;
     message.limitPrice = object.limitPrice ?? 0;
     message.stopPrice = object.stopPrice ?? 0;
-    message.timeInForce = object.timeInForce ?? "";
+    message.timeInForce = object.timeInForce ?? TimeInForce.TIME_IN_FORCE_UNSPECIFIED;
     message.strategyId = object.strategyId ?? "";
     message.userId = object.userId ?? "";
     message.clientOrderId = object.clientOrderId ?? "";
@@ -2407,7 +2494,7 @@ export const StreamOrderUpdatesRequest: MessageFns<StreamOrderUpdatesRequest> = 
 };
 
 function createBaseReplaceOrderRequest(): ReplaceOrderRequest {
-  return { orderId: "", qty: 0, limitPrice: 0, stopPrice: 0, timeInForce: "", userId: "", trail: 0 };
+  return { orderId: "", qty: 0, limitPrice: 0, stopPrice: 0, timeInForce: undefined, userId: "", trail: 0 };
 }
 
 export const ReplaceOrderRequest: MessageFns<ReplaceOrderRequest> = {
@@ -2424,8 +2511,8 @@ export const ReplaceOrderRequest: MessageFns<ReplaceOrderRequest> = {
     if (message.stopPrice !== 0) {
       writer.uint32(33).double(message.stopPrice);
     }
-    if (message.timeInForce !== "") {
-      writer.uint32(42).string(message.timeInForce);
+    if (message.timeInForce !== undefined) {
+      writer.uint32(40).int32(timeInForceToNumber(message.timeInForce));
     }
     if (message.userId !== "") {
       writer.uint32(50).string(message.userId);
@@ -2476,11 +2563,11 @@ export const ReplaceOrderRequest: MessageFns<ReplaceOrderRequest> = {
           continue;
         }
         case 5: {
-          if (tag !== 42) {
+          if (tag !== 40) {
             break;
           }
 
-          message.timeInForce = reader.string();
+          message.timeInForce = timeInForceFromJSON(reader.int32());
           continue;
         }
         case 6: {
@@ -2527,10 +2614,10 @@ export const ReplaceOrderRequest: MessageFns<ReplaceOrderRequest> = {
         ? globalThis.Number(object.stop_price)
         : 0,
       timeInForce: isSet(object.timeInForce)
-        ? globalThis.String(object.timeInForce)
+        ? timeInForceFromJSON(object.timeInForce)
         : isSet(object.time_in_force)
-        ? globalThis.String(object.time_in_force)
-        : "",
+        ? timeInForceFromJSON(object.time_in_force)
+        : undefined,
       userId: isSet(object.userId)
         ? globalThis.String(object.userId)
         : isSet(object.user_id)
@@ -2554,8 +2641,8 @@ export const ReplaceOrderRequest: MessageFns<ReplaceOrderRequest> = {
     if (message.stopPrice !== 0) {
       obj.stopPrice = message.stopPrice;
     }
-    if (message.timeInForce !== "") {
-      obj.timeInForce = message.timeInForce;
+    if (message.timeInForce !== undefined) {
+      obj.timeInForce = timeInForceToJSON(message.timeInForce);
     }
     if (message.userId !== "") {
       obj.userId = message.userId;
@@ -2575,7 +2662,7 @@ export const ReplaceOrderRequest: MessageFns<ReplaceOrderRequest> = {
     message.qty = object.qty ?? 0;
     message.limitPrice = object.limitPrice ?? 0;
     message.stopPrice = object.stopPrice ?? 0;
-    message.timeInForce = object.timeInForce ?? "";
+    message.timeInForce = object.timeInForce ?? undefined;
     message.userId = object.userId ?? "";
     message.trail = object.trail ?? 0;
     return message;

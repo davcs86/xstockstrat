@@ -3,6 +3,8 @@
 **Development Branch**: `feature/fundamentals-formula-inputs`
 **Created**: 2026-09-21
 **Last Updated**: 2026-09-21
+**Committed to main**: dd622bdc2e5b922df8dcabc6f7475b8b395a8ed3
+**Launched date**: 2026-09-24
 
 ---
 
@@ -20,6 +22,7 @@
 | 2026-09-21 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential execution started. Step 1 (proto: `FundamentalMetric` enum + `fundamental_inputs` on `FormulaDefinition`/`RegisterFormulaRequest`/`UpdateFormulaRequest`) done — `buf lint` + `buf breaking` pass (additive, non-breaking). |
 | 2026-09-21 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 12 steps (proto+enum → proto-gen → indicators migration 006 → indicators persist/validate/seed → analysis evaluator scalar-broadcast branch → analysis servicer routing map + snapshot loader + two-site gate + write-time XOR → UI badge → docs/teardown). Every step grounded in `path:line` evidence; all 8 `@AC-*` scenarios mapped to test steps (C-15). |
 
+| 2026-09-24 | `code-completed` → `launched` | CI workflow | Promoted via PR #1169; committed dd622bdc2e5b922df8dcabc6f7475b8b395a8ed3 |
 ---
 
 ## Artifacts

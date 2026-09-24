@@ -3,6 +3,8 @@
 **Development Branch**: `feature/historical-fundamentals-backtest`
 **Created**: 2026-09-20
 **Last Updated**: 2026-09-20
+**Committed to main**: dd622bdc2e5b922df8dcabc6f7475b8b395a8ed3
+**Launched date**: 2026-09-24
 
 ---
 
@@ -17,6 +19,7 @@
 | 2026-09-20 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential execution started; Step 1 (proto) done |
 | 2026-09-20 | `in-progress` → `code-completed` | /sdd-execute | All 17 steps done (proto→marketdata→ingest→analysis→agent→UI→docs); per-service suites green; teardown reconciled (context-forge plugin unavailable, manual audit performed) |
 
+| 2026-09-24 | `code-completed` → `launched` | CI workflow | Promoted via PR #1169; committed dd622bdc2e5b922df8dcabc6f7475b8b395a8ed3 |
 ---
 
 ## Artifacts

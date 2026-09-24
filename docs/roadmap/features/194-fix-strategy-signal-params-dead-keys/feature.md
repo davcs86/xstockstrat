@@ -6,6 +6,8 @@
 **Severity**: SEV-3
 **Created**: 2026-09-19
 **Last Updated**: 2026-09-19
+**Committed to main**: dd622bdc2e5b922df8dcabc6f7475b8b395a8ed3
+**Launched date**: 2026-09-24
 
 ---
 
@@ -16,6 +18,7 @@
 | 2026-09-19 | `bug-reported` → `draft` | triage (manual, from-report) | Defect 1 of the RPC-contract-hygiene report; contract-hygiene, Track C. (Defect 2 — the 33 deprecated proto fields — routed separately to feature 196 as a governance program.) |
 | 2026-09-19 | `draft` → `code-completed` | bug-fix session | Read-side strip chosen after discovering the fingerprint constraint; implemented, tested (4 tests), lint clean. Shipped in the consolidated today's-triage PR. |
 
+| 2026-09-24 | `code-completed` → `launched` | CI workflow | Promoted via PR #1169; committed dd622bdc2e5b922df8dcabc6f7475b8b395a8ed3 |
 ---
 
 ## Artifacts

@@ -415,3 +415,10 @@
 - Verification: grep -n -i "fundamental" docs/runbooks/historical-backfill.md → section present.
 - Files: docs/runbooks/historical-backfill.md, services/xstockstrat-agent/CLAUDE.md,
   services/xstockstrat-analysis/docs/context-constitution.md.
+
+## Session 2026-09-24 (CI: feature status automation)
+
+- Promotion PR #1169 merged to main
+- Feature promoted and committed: dd622bdc2e5b922df8dcabc6f7475b8b395a8ed3
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-09-24

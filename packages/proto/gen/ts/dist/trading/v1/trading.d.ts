@@ -37,6 +37,19 @@ export declare enum OrderStatus {
 export declare function orderStatusFromJSON(object: any): OrderStatus;
 export declare function orderStatusToJSON(object: OrderStatus): string;
 export declare function orderStatusToNumber(object: OrderStatus): number;
+export declare enum TimeInForce {
+    TIME_IN_FORCE_UNSPECIFIED = "TIME_IN_FORCE_UNSPECIFIED",
+    TIME_IN_FORCE_DAY = "TIME_IN_FORCE_DAY",
+    TIME_IN_FORCE_GTC = "TIME_IN_FORCE_GTC",
+    TIME_IN_FORCE_IOC = "TIME_IN_FORCE_IOC",
+    TIME_IN_FORCE_FOK = "TIME_IN_FORCE_FOK",
+    TIME_IN_FORCE_OPG = "TIME_IN_FORCE_OPG",
+    TIME_IN_FORCE_CLS = "TIME_IN_FORCE_CLS",
+    UNRECOGNIZED = "UNRECOGNIZED"
+}
+export declare function timeInForceFromJSON(object: any): TimeInForce;
+export declare function timeInForceToJSON(object: TimeInForce): string;
+export declare function timeInForceToNumber(object: TimeInForce): number;
 /**
  * CredentialStatus reflects the last known health of a broker account's stored
  * API credentials, so the UI can surface accounts whose secrets stopped working.
@@ -104,7 +117,7 @@ export interface Order {
     limitPrice: number;
     stopPrice: number;
     filledAvgPrice: number;
-    timeInForce: string;
+    timeInForce: TimeInForce;
     createdAt?: Date | undefined;
     updatedAt?: Date | undefined;
     strategyId: string;
@@ -130,7 +143,7 @@ export interface PlaceOrderRequest {
     qty: number;
     limitPrice: number;
     stopPrice: number;
-    timeInForce: string;
+    timeInForce: TimeInForce;
     strategyId: string;
     /**
      * DEPRECATED: order owner resolved from the x-user-id header; body value ignored.
@@ -230,7 +243,7 @@ export interface ReplaceOrderRequest {
     qty: number;
     limitPrice: number;
     stopPrice: number;
-    timeInForce: string;
+    timeInForce?: TimeInForce | undefined;
     /**
      * DEPRECATED: caller identity resolved from the x-user-id header; body value ignored.
      *

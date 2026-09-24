@@ -113,3 +113,126 @@
   - Step 7: ⚠ No explicit coverage threshold for E2E tests — expected for Playwright (no coverage tool); this is not a unit test step — [x] accepted — Playwright E2E has no coverage tool; threshold enforcement is inherently N/A for E2E steps
   - Step 8: ⚠ Internal reference error: "Step 9 handles this" for context.md deploy note recording, but Step 9 is the CI buf-breaking workaround — deploy note recording is handled by sdd-execute's normal context.md append — [x] addressed — fixed Step 8 text to clarify sdd-execute context.md append handles it, not Step 9
 - Overlap findings: CLEAN. Feature 196 (proto-deprecated-field-removal-program) shares `trading.go` at disjoint line ranges — WARN-level file-path overlap only; no migration NNN, proto field number, or config key collisions detected across all in-flight features.
+
+## Session 2026-09-24 — sdd-execute (sequential)
+
+Running features 202→203→204→205 in sequential mode (one integration PR per feature), operator
+directive: no checkpoints unless blockers. Branch: `feature/order-time-in-force-enum` off `main-dev`.
+
+**Tooling setup (steps 1-9)**: go1.27 ✓ · golangci-lint v2.5.0 ✓ · node v22 ✓ · pnpm 9.15.9 ✓ ·
+uv ✓ · ruff ✓ · buf ⬇ 1.72.0 (host, go install) · protoc-gen-go/go-grpc/connect-go ⬇ (pinned) ·
+ts-proto/protoc-gen-es/connect-es ⬇ (npm -g, pinned) · grpcio-tools ⬇ 1.80.0 · Docker daemon up
+but Docker Hub 429-rate-limited → codegen via host-native fallback (see Deviation Log).
+
+### Step 1 — proto: Define TimeInForce enum and convert fields in place [done]
+- Added `TimeInForce` enum (7 values, `_UNSPECIFIED=0`) after `OrderStatus`; converted
+  `Order.time_in_force=12` and `PlaceOrderRequest.time_in_force=7` to `TimeInForce`,
+  `ReplaceOrderRequest.time_in_force=5` to `optional TimeInForce` (explicit presence).
+- Verification: `buf lint` clean (host buf 1.72.0). `buf breaking` intentionally flags the wire-break
+  (handled by Step 9 CI workaround + local skip).
+- Files modified: `packages/proto/trading/v1/trading.proto`
+- Deviations: none for the edit itself.
+
+### Step 2 — proto-gen: Regenerate stubs [done]
+- Ran host-native `./scripts/buf-gen.sh` (Docker Hub 429 → host toolchain fallback). Generated Go/TS/
+  Python trading stubs: `type TimeInForce int32`; `Order.TimeInForce` non-pointer (field 12),
+  `ReplaceOrderRequest.TimeInForce *TimeInForce` oneof (field 5, explicit presence); TS
+  `timeInForce: TimeInForce`. Diff scoped to `trading/v1` (go+python+ts+dist).
+- Reverted an unrelated gofmt comment-whitespace drift in `analysis.pb.go` (host toolchain parity;
+  see Deviation Log). trading stubs carry no such churn → match CI regen.
+- Files modified: `packages/proto/gen/{go,python,ts}/trading/v1/**`
+- Deviations: 3 (codegen fallback, buf-breaking skip, analysis.pb.go revert) — see Deviation Log.
+
+### Step 3 — migration: Normalize historical TIF strings [done]
+- Created `010_normalize_tif.up.sql` (lowercase + alias→'gtc' + NULL/''→'day') and `010_normalize_tif.down.sql`
+  (no-op — data cleanup has no schema inverse). Column stays TEXT; Go owns validation.
+- Verification: offline (up/down parity + next NNN=010 after 009). Live apply deferred to CI/deploy.
+- Files modified: `services/xstockstrat-trading/migrations/010_normalize_tif.{up,down}.sql`
+- Deviations: none.
+
+### Step 4 — service: TIF validation and mapping (trading) [done]
+- Created `internal/service/tif_validation.go` (tifToWireString, allowedTIFs matrix Alpaca=6/IBKR=4/
+  OFFLINE=6, validateTIF→InvalidArgument) and `internal/repository/tif.go` (tifStr, parseTif).
+- `trading_repo.go`: UpsertOrder writes `tifStr(o.TimeInForce)`; scanOrder reads `parseTif(timeInForce)`.
+- `trading.go`: validateTIF gate in PlaceOrder after halt/trading-state gates (offline returns before it —
+  documented carve-out); buildBrokerRequest uses `tifToWireString(req.TimeInForce)` (dead ""-fallback removed);
+  ReplaceOrder nil-guards `*TimeInForce` for validate+wire and persist; flattenAndHalt uses enum DAY;
+  bracket-legs use `tifToWireString(DAY)` (broker.BracketLegsRequest stays string).
+- Verification: `go build ./...` OK, `go vet` clean, gofmt clean.
+- Files modified: `internal/service/tif_validation.go`, `internal/repository/tif.go`,
+  `internal/service/trading.go`, `internal/repository/trading_repo.go`
+- Deviations: none. **Spec-gap NON-issue confirmed**: existing PlaceOrder/ReplaceOrder service tests
+  (sizing/bracket/halt/ownership/state-gate) stay green — validateTIF sits after the gates they assert,
+  and happy-path tests use offline/mock or set TIF; no out-of-scope test edits needed.
+
+### Step 5 — test: Trading service TIF unit tests [done]
+- Added `internal/service/tif_validation_test.go` (6 tests: wire map + validate Alpaca/IBKR/OFFLINE +
+  UNSPECIFIED reject) and `internal/repository/tif_test.go` (3 tests: tifStr, parseTif known, parseTif
+  unknown→UNSPECIFIED). Updated `order_intent_test.go` hash fixtures to carry `TimeInForce: DAY`.
+- **TDD red→green**: RED — `go build` failed `trading_repo.go:342: cannot use timeInForce (string) as
+  tradingv1.TimeInForce` + undefined validateTIF/tifStr/parseTif. GREEN — all 9 new tests pass;
+  `go test ./... -race` all green; total coverage 71.6% (≥40%). Covers AC-1/AC-2/AC-3/AC-4.
+- Files modified: `internal/service/tif_validation_test.go`, `internal/repository/tif_test.go`,
+  `internal/service/order_intent_test.go`
+- Deviations: none.
+
+### Step 6 — service: UI TIF enum rendering and form integration [done]
+- `orderShared.tsx`: exhaustive `TIF_LABEL: Record<TimeInForce,string>` (C-10). `OrderForm.tsx`: TIF
+  string-union maps + `tif` state + a TIF `<Select>` (hidden in offline record mode) + `timeInForce`
+  in the placeOrder call. `EditOrderDialog.tsx`: free-text TIF Input → `<Select>`, state is now
+  `PbTimeInForce` (pre-filled from order, DAY for legacy UNSPECIFIED), always sends a concrete TIF.
+  Order detail page renders via `TIF_LABEL`.
+- Verification: `pnpm build` PASS (full app + e2e type-check), lint warnings only (pre-existing).
+- Files modified: `orderShared.tsx`, `OrderForm.tsx`, `EditOrderDialog.tsx`, `trader/orders/[id]/page.tsx`
+- Deviations: none for the src itself (order-type SelectTrigger got no aria-label; TIF got
+  `aria-label="Time in force"` for test disambiguation).
+
+### Step 7 — test: UI E2E fixture and spec updates [done]
+- `e2e/fixtures/orders.ts` + inline spec fixtures: `timeInForce` string→numeric enum (day=1, gtc=2).
+  `mock-backend.ts` placeOrder returns `timeInForce: 1`. `INVENTORY.md` catalog note. New AC-5 test in
+  `order-form.spec.ts` asserts the TIF select renders all six options and PlaceOrder sends
+  `timeInForce` as the Connect-JSON NAME-string `TIME_IN_FORCE_GTC`. Disambiguated the 6 bare
+  `getByRole('combobox')` sites (`.first()`) broken by the new TIF combobox.
+- **TDD red→green**: RED — pre-change `pnpm build` failed (mock/fixtures string vs enum) and the AC-5
+  behavior (TIF select, NAME-string wire) did not exist. GREEN — 29/29 trader order specs pass
+  (`CI=1` host harness), incl. AC-5. Covers AC-5.
+- Files modified: `e2e/fixtures/orders.ts`, `e2e/mock-backend.ts`, `e2e/fixtures/INVENTORY.md`,
+  `e2e/trader/{orders,order-parity,offline-accounts,order-form}.spec.ts`
+- Deviations: `order-form.spec.ts` edited though not in Files list (in-intent ripple + AC-5 host);
+  CI-mode e2e run (dev harness cold-compile) — see Deviation Log.
+
+### Step 8 — docs: cross-service build verification + deploy note [done]
+- Verified the full chain green: `buf lint` (packages/proto), `go build ./...` (trading, GOWORK=off),
+  `pnpm build` (xstockstrat-ui, full app + e2e type-check).
+- **DEPLOY NOTE (order-intent hash transient breakage)**: the string→enum wire-type change on
+  `time_in_force` invalidates pre-deployment order-intent hashes (`placeOrderRequestHash` /
+  `deriveReplaceCancelIntentID` use `proto.Marshal`→SHA-256), causing transient `FailedPrecondition`
+  rejections during the deploy window (~30s, bounded by `trading.order_intent.stale_multiplier` ×
+  broker timeout). The existing intent-staleness sweeper clears them; no manual action required.
+  Optional post-deploy cleanup: `DELETE FROM trading.order_intents WHERE state IN ('PENDING','UNKNOWN')
+  AND created_at < <deploy-timestamp>`. Prefer deploying outside active trading hours.
+- Files modified: none (verification + deploy-note record).
+- Deviations: none.
+
+### Step 9 — docs: feature-branch CI workaround for buf breaking [done]
+- Added `--exclude-path trading/v1/trading.proto` to the `proto-lint` job's `buf breaking` step with a
+  `# TEMPORARY: feature/order-time-in-force-enum` removal comment. Removed in the integration PR.
+- Verification: `grep -n "exclude-path.*trading" .github/workflows/ci.yml` present.
+- Files modified: `.github/workflows/ci.yml`
+- Deviations: none.
+
+## Session 2026-09-24 — sdd-execute (sequential) — code-completed
+**Steps this session**: 1–9 (all)
+**Progress**: 9 done / 9 total
+**Stopped at**: all complete
+**C-16 promotion**: AC-1..AC-4 → services/xstockstrat-trading/acceptance/order-time-in-force-enum.feature;
+  AC-5 → services/xstockstrat-ui/acceptance/order-time-in-force-enum.feature (both @feature-202).
+**Ledger**: fails.md — host-native codegen whitespace-parity + golangci-lint go-version gotchas.
+**Next**: integration PR feature/order-time-in-force-enum → main-dev
+
+## Session 2026-09-24 (CI: feature status automation)
+
+- Promotion PR #1169 merged to main
+- Feature promoted and committed: dd622bdc2e5b922df8dcabc6f7475b8b395a8ed3
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-09-24
