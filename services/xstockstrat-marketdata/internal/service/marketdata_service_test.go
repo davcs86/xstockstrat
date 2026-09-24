@@ -1497,6 +1497,10 @@ type fakeHistRepo struct {
 	queryRows []source.HistoricalFundamentalsPeriod
 	inserted  []source.HistoricalFundamentalsPeriod
 	closeAt   *float64
+	nextToken string // token the stub returns (pagination pass-through assertion)
+	// captured from the last QueryHistoricalFundamentals call (page-param pass-through assertion)
+	gotPageSize  int
+	gotPageToken string
 }
 
 func (r *fakeHistRepo) InsertHistoricalFundamentals(_ context.Context, p source.HistoricalFundamentalsPeriod) error {
@@ -1505,9 +1509,12 @@ func (r *fakeHistRepo) InsertHistoricalFundamentals(_ context.Context, p source.
 }
 
 // QueryHistoricalFundamentals returns the preset rows UNFILTERED — the service's own filterAsOf is
-// the no-look-ahead guard under test (AC-3), so the stub must not pre-filter.
-func (r *fakeHistRepo) QueryHistoricalFundamentals(_ context.Context, _ string, _, _, _ time.Time, _ []string) ([]source.HistoricalFundamentalsPeriod, error) {
-	return r.queryRows, nil
+// the no-look-ahead guard under test (AC-3), so the stub must not pre-filter. It records the page
+// args so a test can assert the handler's extraction/defaulting, and echoes a preset nextToken.
+func (r *fakeHistRepo) QueryHistoricalFundamentals(_ context.Context, _ string, _, _, _ time.Time, _ []string, pageSize int, pageToken string) ([]source.HistoricalFundamentalsPeriod, string, error) {
+	r.gotPageSize = pageSize
+	r.gotPageToken = pageToken
+	return r.queryRows, r.nextToken, nil
 }
 
 func (r *fakeHistRepo) CloseAt(_ context.Context, _ string, _ time.Time) (*float64, error) {
@@ -1578,6 +1585,41 @@ func TestGetHistoricalFundamentals_TPlus1_AC3(t *testing.T) {
 	}
 	if got := resp.GetPeriods()[0].GetFiledDate().AsTime().Format("2006-01-02"); got != "2020-01-29" {
 		t.Errorf("returned filed_date = %s, want 2020-01-29", got)
+	}
+}
+
+// Step 3 pass-through: the handler extracts page_size/page_token from req.Page (defaulting page_size
+// to 50 when Page is nil or page_size is 0) and surfaces the repo's nextToken in Pagination. Feature 204.
+func TestGetHistoricalFundamentals_PagePassThrough(t *testing.T) {
+	row := source.HistoricalFundamentalsPeriod{
+		Symbol: "AAPL", FiscalPeriod: "Q1-2020", PeriodType: "quarterly",
+		PeriodEnd: hfDate(2019, 12, 28), FiledDate: hfDate(2020, 1, 29), Source: "edgar",
+	}
+
+	// Explicit page: args forwarded verbatim, returned token surfaced in Pagination.
+	repo := &fakeHistRepo{queryRows: []source.HistoricalFundamentalsPeriod{row}, nextToken: "2019-12-28T00:00:00Z|Q1-2020"}
+	svc := &MarketDataService{histRepo: repo}
+	resp, err := svc.GetHistoricalFundamentals(context.Background(), &marketdatav1.GetHistoricalFundamentalsRequest{
+		Symbol: "AAPL", Page: &commonv1.PageRequest{PageSize: 10, PageToken: "cursor-in"},
+	})
+	if err != nil {
+		t.Fatalf("GetHistoricalFundamentals: %v", err)
+	}
+	if repo.gotPageSize != 10 || repo.gotPageToken != "cursor-in" {
+		t.Errorf("repo received pageSize=%d pageToken=%q, want 10/\"cursor-in\"", repo.gotPageSize, repo.gotPageToken)
+	}
+	if got := resp.GetPagination().GetNextPageToken(); got != "2019-12-28T00:00:00Z|Q1-2020" {
+		t.Errorf("Pagination.NextPageToken = %q, want the repo token", got)
+	}
+
+	// No Page → default page size 50, empty token.
+	repo2 := &fakeHistRepo{queryRows: []source.HistoricalFundamentalsPeriod{row}}
+	svc2 := &MarketDataService{histRepo: repo2}
+	if _, err := svc2.GetHistoricalFundamentals(context.Background(), &marketdatav1.GetHistoricalFundamentalsRequest{Symbol: "AAPL"}); err != nil {
+		t.Fatalf("GetHistoricalFundamentals (no page): %v", err)
+	}
+	if repo2.gotPageSize != 50 || repo2.gotPageToken != "" {
+		t.Errorf("default page: repo received pageSize=%d pageToken=%q, want 50/\"\"", repo2.gotPageSize, repo2.gotPageToken)
 	}
 }
 

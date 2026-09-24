@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -22,6 +23,7 @@ import (
 type execer interface {
 	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
 }
 
 // MarketDataRepo handles TimescaleDB reads and writes for OHLCV bars and quotes.
@@ -580,7 +582,10 @@ func (r *MarketDataRepo) InsertHistoricalFundamentals(ctx context.Context, p sou
 // QueryHistoricalFundamentals returns point-in-time periods for a symbol. asOf enforces T+1
 // availability (filed_date STRICTLY before asOf); rangeStart/rangeEnd filter period_end (inclusive)
 // when non-zero; periodTypes filters period_type when non-empty. Ordered by period_end ascending.
-func (r *MarketDataRepo) QueryHistoricalFundamentals(ctx context.Context, symbol string, asOf, rangeStart, rangeEnd time.Time, periodTypes []string) ([]source.HistoricalFundamentalsPeriod, error) {
+func (r *MarketDataRepo) QueryHistoricalFundamentals(ctx context.Context, symbol string, asOf, rangeStart, rangeEnd time.Time, periodTypes []string, pageSize int, pageToken string) ([]source.HistoricalFundamentalsPeriod, string, error) {
+	if pageSize <= 0 {
+		pageSize = 50
+	}
 	q := `SELECT ` + histFundamentalsColumns + ` FROM marketdata.fundamentals_history WHERE symbol = $1`
 	args := []any{symbol}
 	if !asOf.IsZero() {
@@ -599,10 +604,18 @@ func (r *MarketDataRepo) QueryHistoricalFundamentals(ctx context.Context, symbol
 		args = append(args, periodTypes)
 		q += fmt.Sprintf(" AND period_type = ANY($%d)", len(args))
 	}
-	q += " ORDER BY period_end"
-	rows, err := r.pool.Query(ctx, q, args...)
+	// Composite-cursor keyset pagination on (period_end, fiscal_period) — unique together, so an
+	// annual FY and a Q4 sharing a period_end are never skipped or duplicated at a page boundary.
+	if cursorEnd, cursorFP, ok := parseHistCursor(pageToken); ok {
+		args = append(args, cursorEnd, cursorFP)
+		q += fmt.Sprintf(" AND (period_end, fiscal_period) > ($%d, $%d)", len(args)-1, len(args))
+	}
+	// Overfetch pageSize+1 (mirrors QueryBars) to detect whether a next page exists.
+	args = append(args, pageSize+1)
+	q += fmt.Sprintf(" ORDER BY period_end, fiscal_period LIMIT $%d", len(args))
+	rows, err := r.db.Query(ctx, q, args...)
 	if err != nil {
-		return nil, fmt.Errorf("query fundamentals_history %s: %w", symbol, err)
+		return nil, "", fmt.Errorf("query fundamentals_history %s: %w", symbol, err)
 	}
 	defer rows.Close()
 	var out []source.HistoricalFundamentalsPeriod
@@ -616,7 +629,7 @@ func (r *MarketDataRepo) QueryHistoricalFundamentals(ctx context.Context, symbol
 		)
 		if scanErr := rows.Scan(&sym, &fp, &ptype, &periodEnd, &filed, &accepted, &src, &currency,
 			&marketCap, &pe, &pb, &divYield, &eps, &beta, &roe, &dte, &price, &yHigh, &yLow, &extraJSON); scanErr != nil {
-			return nil, fmt.Errorf("scan fundamentals_history %s: %w", symbol, scanErr)
+			return nil, "", fmt.Errorf("scan fundamentals_history %s: %w", symbol, scanErr)
 		}
 		extra := map[string]float64{}
 		if len(extraJSON) > 0 {
@@ -630,9 +643,32 @@ func (r *MarketDataRepo) QueryHistoricalFundamentals(ctx context.Context, symbol
 		})
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate fundamentals_history %s: %w", symbol, err)
+		return nil, "", fmt.Errorf("iterate fundamentals_history %s: %w", symbol, err)
 	}
-	return out, nil
+	// Overfetch sentinel: a (pageSize+1)th row means another page exists. The cursor is the last
+	// row we actually return; the WHERE uses a strict `>` on the same (period_end, fiscal_period)
+	// tuple, so the next page resumes exclusively after it — no duplicate, no skip.
+	nextToken := ""
+	if len(out) > pageSize {
+		last := out[pageSize-1]
+		nextToken = fmt.Sprintf("%s|%s", last.PeriodEnd.Format(time.RFC3339Nano), last.FiscalPeriod)
+		out = out[:pageSize]
+	}
+	return out, nextToken, nil
+}
+
+// parseHistCursor decodes a "<period_end RFC3339Nano>|<fiscal_period>" keyset token. ok=false for an
+// empty or malformed token, so the caller resumes from the first page rather than erroring (QueryBars parity).
+func parseHistCursor(token string) (time.Time, string, bool) {
+	sep := strings.IndexByte(token, '|')
+	if sep < 0 {
+		return time.Time{}, "", false
+	}
+	t, err := time.Parse(time.RFC3339Nano, token[:sep])
+	if err != nil {
+		return time.Time{}, "", false
+	}
+	return t, token[sep+1:], true
 }
 
 // CloseAt returns the adjusted daily close at/nearest-before `date` for the PIT price-join

@@ -132,7 +132,7 @@ The diff should show changes in Go, Python, and TS stubs for the marketdata pack
 
 ### Step 3 — service: Implement cursor pagination in GetHistoricalFundamentals
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/repository/marketdata_repo.go` — modify

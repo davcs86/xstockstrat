@@ -94,3 +94,28 @@ node/pnpm. Docker daemon up but codegen stays host-native.
   analysis.pb.go gofmt whitespace drift; diff scoped to `marketdata/v1`.
 - Files: `packages/proto/gen/{go,python,ts}/marketdata/v1/**`
 - Deviations: analysis.pb.go drift revert (recurring).
+
+### Step 3 — service: cursor pagination in GetHistoricalFundamentals [done]
+- Repo `QueryHistoricalFundamentals` now takes `(pageSize int, pageToken string)` and returns
+  `([]…, nextToken string, error)`. Composite keyset cursor on `(period_end, fiscal_period)` with a
+  STRICT `>` row-value comparison; overfetch `LIMIT pageSize+1`, nextToken = last returned row
+  `"<period_end RFC3339Nano>|<fiscal_period>"`, default pageSize 50. `parseHistCursor` is lenient
+  (malformed/empty token → resume from first page, QueryBars parity). `filed_date < asOf` stays pushed
+  into SQL before LIMIT so the service `filterAsOf` never truncates a full page.
+- Cursor-uniqueness proof (why `(period_end, fiscal_period)` is safe despite PK being
+  `(symbol, fiscal_period, period_type)`): `edgar_client.go:buildPeriod` derives `fiscal_period`
+  deterministically from `(fp, fy)` — quarterly → `"Qn-YYYY"` (period_type `quarterly`), annual →
+  `"FYYYYY"` (period_type `annual`). So per symbol `fiscal_period` uniquely determines `period_type`;
+  the same `fiscal_period` string never co-occurs with two `period_type`s, making `(period_end,
+  fiscal_period)` unique per symbol. A shared `period_end` (FY2019 & Q4-2019, both 2019-12-31) stays
+  distinguished by `fiscal_period`. No skip/dup at page boundaries.
+- Service handler extracts page from `req.Page` (default 50) and returns
+  `Pagination: &commonv1.PageResponse{NextPageToken: nextToken}`. `filterAsOf` retained as
+  defense-in-depth (design.md).
+- Test (Step 3): `TestGetHistoricalFundamentals_PagePassThrough` — asserts page-arg extraction +
+  defaulting and nextToken surfacing; `fakeHistRepo` stub widened to the new signature (captures page
+  args, echoes a preset token). Verify: service+repository packages `go test -race` green;
+  golangci-lint v2.13.1@go1.27 → 0 issues.
+- Files: `internal/repository/marketdata_repo.go`, `internal/service/marketdata_service.go`,
+  `internal/service/marketdata_service_test.go`.
+- Deviations: none.
