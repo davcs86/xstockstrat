@@ -40,13 +40,13 @@ Python 3.13 (asyncio, grpc.aio, mcp SDK v2 MCPServer)
 
 ## MCP Tools
 
-The agent registers forty-nine tools (see `docs/runbooks/mcp-tools.md` for full parameter/return/error
+The agent registers fifty tools (see `docs/runbooks/mcp-tools.md` for full parameter/return/error
 reference). It also registers **one MCP prompt** — `list_correlation_guide` (feature 197), wired by
 `register_prompts` (`app/tools.py`) and served through the same OAuth-gated transport — plus a
 server-level `instructions` string (`create_server`, `app/main.py`) returned in the MCP `initialize`
 result; both carry the same guide for correlating the `list_accounts` / `get_positions` /
 `get_positions_by_account_id` / `list_opportunities` / `list_strategies` responses on
-`account_id` / `strategy_id` / `symbol`. A prompt is not a tool — the tool count stays forty-nine:
+`account_id` / `strategy_id` / `symbol`. A prompt is not a tool — the tool count stays fifty:
 
 | Tool | Purpose |
 |---|---|
@@ -59,7 +59,7 @@ result; both carry the same guide for correlating the `list_accounts` / `get_pos
 | `screen_symbols` | Scan a symbol universe via xstockstrat-analysis and return ranked candidates (read-only) |
 | `manage_strategy` | Register/update/deactivate stored strategies (`update` is a **partial merge** — feature 070) |
 | `get_strategy` | Read a stored strategy's full definition (read-only, feature 070) |
-| `manage_formula` | Register/update/delete custom formulas |
+| `manage_formula` | Register/update/delete custom formulas; `fundamental_inputs` (FundamentalMetric enum NAME-strings) declares a fundamentals-only formula (feature 205) |
 | `get_formula` | Read one stored formula's full definition incl. `deleted` (read-only, feature 086) |
 | `list_formulas` | List formula definitions, soft-deleted excluded (read-only, feature 086) |
 | `manage_signal_source` | Register/update/reactivate/deactivate signal sources (honest verbs — feature 088) |
@@ -99,6 +99,7 @@ result; both carry the same guide for correlating the `list_accounts` / `get_pos
 | `db_analyze_workload_indexes` | Recommend indexes based on pg_stat_statements workload via postgres-mcp. Admin-only (feature 169) |
 | `db_analyze_query_indexes` | Recommend indexes for a specific SQL query via postgres-mcp. Admin-only (feature 169) |
 | `db_analyze_db_health` | Run comprehensive database health checks via postgres-mcp. Admin-only (feature 169) |
+| `list_fundamental_metrics` | List the fundamental-metrics catalog (enum name, snake_case `dataKey`, meaning) for formula declarations (read-only, feature 205) |
 
 ### Management-tool authorization
 

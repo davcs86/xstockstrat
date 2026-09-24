@@ -1,7 +1,7 @@
 """
 MCP tool definitions for xstockstrat-agent.
 
-Forty-nine tools:
+Fifty tools:
   list_signal_sources  — lists active sources from ingest, enriched with extractor_tool
   extract_email_content — extracts raw text from email attachments or gated URLs
   extract_website_content — fetches and returns raw text from a registered website source
@@ -51,11 +51,12 @@ Forty-nine tools:
   db_analyze_workload_indexes — recommend indexes based on pg_stat_statements workload (admin-only)
   db_analyze_query_indexes — recommend indexes for a specific SQL query (admin-only)
   db_analyze_db_health — run comprehensive DB health checks via postgres-mcp (admin-only)
+  list_fundamental_metrics — list the fundamental-metrics catalog for formula authoring (read-only)
 
 Also registers one MCP prompt (feature 197), via register_prompts():
   list_correlation_guide — how to join list_accounts/get_positions/get_positions_by_account_id/
     list_opportunities/list_strategies on account_id/strategy_id/symbol. A prompt is not a tool;
-    the tool count stays forty-nine.
+    the tool count stays fifty.
 """
 
 import base64
@@ -967,6 +968,19 @@ def register_tools(server: MCPServer) -> None:
             raise RuntimeError(_grpc_error_message(e)) from e
 
     @server.tool()
+    async def list_fundamental_metrics() -> dict:
+        """List the available fundamental metrics for formula declarations (feature 205).
+
+        Returns each metric's enum NAME (`metric`, for manage_formula's fundamental_inputs), its
+        snake_case `dataKey` (the key a fundamentals formula reads via data["<dataKey>"] and the key
+        test_formula's input_data uses), and a human-readable `meaning`.
+        Returns {"metrics": [{"metric", "dataKey", "meaning"}, ...]}."""
+        try:
+            return {"metrics": await client.list_fundamental_metrics()}
+        except grpc.aio.AioRpcError as e:
+            raise RuntimeError(_grpc_error_message(e)) from e
+
+    @server.tool()
     async def manage_signal_source(
         ctx: Context,
         operation: str,
@@ -1215,7 +1229,10 @@ def register_tools(server: MCPServer) -> None:
         Use this to validate a formula's behavior before manage_formula(operation='register').
         source: plain Python; assign the result to a `result` dict with a 'value' key. `data`
             (series input, e.g. data['close']) and `params` (typed scalars) are in scope.
-        input_data: JSON object passed to the formula as `data` (e.g. {'close': [1,2,3]}).
+        input_data: JSON object passed to the formula as `data` (e.g. {'close': [1,2,3]}). A
+            fundamentals-scoring formula reads snake_case data-keys matching its FundamentalMetric
+            declarations (e.g. {'pe_ratio': 12.5, 'pb_ratio': 1.8}) — call list_fundamental_metrics
+            for the valid key catalog.
         input_params: parameter VALUES exposed as `params` (e.g. {'period': 14}).
         parameters: optional typed parameter DEFINITIONS to validate input_params for this run.
         timeout_ms: 0 = use the configured sandbox timeout.

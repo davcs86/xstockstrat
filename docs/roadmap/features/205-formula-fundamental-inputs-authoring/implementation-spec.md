@@ -304,7 +304,7 @@ cd services/xstockstrat-agent && uv run ruff check app/ tests/ && uv run ruff fo
 
 ### Step 7 -- service: Agent list_fundamental_metrics tool + test_formula docstring
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` -- modify
@@ -353,7 +353,7 @@ cd services/xstockstrat-agent && uv run pytest tests/ -k "list_fundamental_metri
 
 ### Step 8 -- test: Agent catalog test + docs alignment (G4, G5)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_fundamental_metrics_tool.py` -- create

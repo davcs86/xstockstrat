@@ -171,3 +171,21 @@ codegen image), go1.27, uv/ruff, node/pnpm.
   NAME-strings). 8 passed.
 - Verify: ruff clean; full agent suite 449 passed, 79.27% coverage (≥40).
 - Files: `app/tools.py`, `app/client.py`, `tests/test_formula_builders.py`.
+
+### Steps 7-8 — agent list_fundamental_metrics tool + docs (G4/G5) [done]
+- `client.py`: `list_fundamental_metrics()` — channel to INDICATORS_ENDPOINT, `ListFundamentalMetrics`
+  RPC, `metadata=_metadata()` (G4), returns `[MessageToDict(m) …]`.
+- `tools.py`: new `@server.tool() list_fundamental_metrics` (read-only catalog); `test_formula`
+  docstring gains fundamentals snake_case `input_data` guidance + `list_fundamental_metrics` cross-ref.
+- Tool count 49 → **50** on this branch (main-dev base, pre-204): all 6 surfaces bumped
+  (tools.py:4/58 + docstring list entry, CLAUDE.md:43/49 + new table row + manage_formula row,
+  mcp-tools.md:3/10/45, copilot.ts) and `test_tools_endpoint.py` registration set gained
+  `list_fundamental_metrics`. **NOTE:** 204 (still-open PR #1173) bumps the same surfaces 49→51, so
+  whichever of 204/205 merges second resolves the count to 52.
+- `tests/test_fundamental_metrics_tool.py`: AC-4 catalog shape (11 metrics, metric/dataKey/meaning) +
+  G4 (client forwards `metadata=`, MessageToDict → NAME-string + camelCase dataKey). 2 passed.
+- `mcp-tools.md`: manage_formula `fundamental_inputs` param row, get_formula/list_formulas
+  `fundamentalInputs` return, test_formula input_data note, new `### list_fundamental_metrics` section.
+- `strat-lab/skills/backtest/SKILL.md`: fundamentals-input operand section gains a
+  `list_fundamental_metrics` cross-ref (same-PR docs, G5).
+- Verify: ruff clean; full agent suite 451 passed, 79.29% coverage (≥40); zero `forty-nine` remain.

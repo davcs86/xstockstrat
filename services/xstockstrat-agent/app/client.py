@@ -1141,6 +1141,22 @@ async def get_formula(formula_id: str) -> dict[str, Any]:
     return MessageToDict(resp)
 
 
+async def list_fundamental_metrics() -> list[dict[str, Any]]:
+    """List the fundamental-metrics catalog via gRPC ListFundamentalMetrics (feature 205).
+
+    Returns each metric as a dict with `metric` (enum NAME-string), `dataKey` (snake_case), and
+    `meaning` (MessageToDict camelCase encoding)."""
+    from gen.indicators.v1 import indicators_pb2, indicators_pb2_grpc  # noqa: PLC0415
+
+    async with grpc.aio.insecure_channel(INDICATORS_ENDPOINT) as channel:
+        stub = indicators_pb2_grpc.IndicatorsServiceStub(channel)
+        resp = await stub.ListFundamentalMetrics(
+            indicators_pb2.ListFundamentalMetricsRequest(),
+            metadata=_metadata(),
+        )
+    return [MessageToDict(m) for m in resp.metrics]
+
+
 async def manage_signal_source(
     operation: str,
     source: dict[str, Any],
