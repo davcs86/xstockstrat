@@ -1528,6 +1528,15 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         except Exception as e:  # noqa: BLE001 — fundamentals fetch is best-effort (degrade to hold)
             log.warning("GetHistoricalFundamentals fetch failed for %s: %s", symbol, e)
             out = []
+        # Deployable observability (fundamentals_history is usually checked via SQL): periods loaded
+        # + per-metric non-None counts, so an operator sees what PIT data actually feeds the rule.
+        present = {
+            m: sum(1 for p in out if p.values.get(m) is not None)
+            for m in sorted(_FUNDAMENTAL_METRICS)
+        }
+        log.info(
+            "PIT fundamentals loaded symbol=%s periods=%d present=%s", symbol, len(out), present
+        )
         if cache is not None:
             cache[symbol] = out
         return out
