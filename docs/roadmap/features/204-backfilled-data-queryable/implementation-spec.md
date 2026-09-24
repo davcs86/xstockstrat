@@ -566,7 +566,7 @@ Confirm "Data Explorer" appears in both files.
 
 ### Step 13 — test: E2E tests for data-explorer page
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/data-explorer.spec.ts` — create
@@ -614,7 +614,7 @@ cd services/xstockstrat-ui && pnpm run lint
 
 ### Step 14 — test: E2E test for Data Explorer nav registration
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/data-explorer.spec.ts` — modify (add nav test to existing spec)

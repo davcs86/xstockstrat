@@ -1,5 +1,5 @@
 'use client';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { ColumnDef } from '@tanstack/react-table';
 import { CartesianGrid, Line, LineChart, Tooltip, XAxis, YAxis } from 'recharts';
 import { AppShell } from '@/components/insights/AppShell';
@@ -90,6 +90,12 @@ export default function DataExplorerPage() {
   const end = parseDate(endStr);
 
   const { data: symbols } = useAssetSymbols();
+
+  // Auto-select the first asset once the list loads so the page opens on real data (ChartPanel
+  // precedent) rather than the empty prompt; a manual clear re-selects it, which is fine.
+  useEffect(() => {
+    if (!symbol && symbols && symbols.length > 0) setSymbol(symbols[0]);
+  }, [symbols, symbol]);
 
   return (
     <AppShell>

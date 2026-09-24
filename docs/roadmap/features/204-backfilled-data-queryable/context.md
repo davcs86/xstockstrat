@@ -255,3 +255,26 @@ node/pnpm. Docker daemon up but codegen stays host-native.
 - Verify: grep confirms both; entries match the existing item shape (tsc/lint clean via the Step 13
   e2e + build gate).
 - Files: `src/components/shared/PlatformHeader.tsx`, `src/components/shared/navGroups.tsx`.
+
+### Steps 13 & 14 — test: Data Explorer e2e + nav e2e [done]
+- `e2e/fixtures/historicalFundamentals.ts` (new): Connect-JSON **wire** fixtures (RFC3339 timestamps,
+  string int64, camelCase) for `page.route` — `DE_ASSETS_WIRE`, `DE_BARS_AAPL_PAGE1/_PAGE2`,
+  `DE_BARS_EMPTY`, `DE_SNAPSHOT_AAPL`, `DE_HIST_AAPL_PAGE1/_PAGE2` (Q1-2024 omits `pe_ratio` for
+  AC-22). INVENTORY.md catalog row added (C-12).
+- `e2e/mock-backend.ts`: added a baseline `getHistoricalFundamentals` handler on the 9091 MarketData
+  service (message-object form) so non-intercepted navigation (the nav test) works; the insights BFF
+  dials `:9091` for marketdata.
+- `e2e/insights/data-explorer.spec.ts` (new, Steps 13+14): 5 tests via `page.route` stubs (JSON
+  transport confirmed) — AC-1/8/11/16 (OHLCV table+chart, Load-More ≤500/page, last-refresh, CSV
+  download filename+header), AC-2 (empty state), AC-3/12/17 (snapshot card, as_of refresh, CSV),
+  AC-4/15/20/22 (historical table+chart, Load-More ≤50/page, `—` for the pe_ratio-missing period),
+  AC-10 (nav from the insights Section nav → `/insights/data-explorer`). The `caps` closure asserts
+  the per-page request size cap. **6 passed (incl. warmup) in the CI-mode host harness.**
+- Page tweak (testability, folded here): `data-explorer/page.tsx` auto-selects the first listed asset
+  once it loads (ChartPanel precedent) so the page opens on real data and the e2e needs no combobox
+  interaction. Small UX refinement to the Step 11 page.
+- Key gotcha honored: Connect's JSON codec renders `google.protobuf.Timestamp` as an RFC3339 string on
+  the wire (backtest-coverage.spec.ts note) — the wire fixtures use strings, parsed back to
+  {seconds,nanos} by the browser client.
+- Verify: `CI=1 pnpm test:e2e --grep "Data Explorer"` → 6 passed; tsc clean for all new files; lint 0.
+- Deviations: none beyond the auto-select tweak (noted).
