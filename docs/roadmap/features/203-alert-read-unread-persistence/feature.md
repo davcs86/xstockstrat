@@ -12,6 +12,8 @@
 |---|---|---|---|
 | 2026-09-24 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-09-24 | `draft` → `spec-ready` | /sdd-review | Product spec approved (3 warnings, no blockers) |
+| 2026-09-24 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, quick) and approved; recon.md + design.md written |
+| 2026-09-24 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated (10 steps) |
 
 ---
 
@@ -19,7 +21,9 @@
 
 - [Product Spec](product-spec.md) — requirements and governance
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec <slug>`_
+- [Recon Dossier](recon.md) — grounded codebase map
+- [Design](design.md) — debated, user-approved architecture (3 rounds, quick)
+- [Implementation Spec](implementation-spec.md) — 10 steps: proto, codegen, migration, notify handler, notify tests, UI shared extraction, inbox page, badge refactor, E2E fixtures, E2E specs
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -47,4 +51,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-design alert-read-unread-persistence quick` — recon + design debate (close broadcast-entitlement and unread-count semantics)
+`/sdd-review alert-read-unread-persistence impl-spec` — advisory quality check + overlap scan on the implementation spec

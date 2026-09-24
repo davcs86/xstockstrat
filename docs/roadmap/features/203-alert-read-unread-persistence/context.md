@@ -54,6 +54,14 @@
   - C-10 NOTE: `read`/`read_at` are on the shared `Alert` message emitted by both `ListAlerts` and
     `StreamAlerts`; only ListAlerts is described as populating them. Confirm at design that
     StreamAlerts sets `read=false` at stream time (trivially correct) rather than leaving it defaulted-ambiguous.
+## Session 2026-09-24 — sdd-design
+
+- Phase 0 Recon: wrote recon.md (services: xstockstrat-notify, xstockstrat-ui, packages/proto; key reuse patterns: AcknowledgeAlert handler pattern, forward() BFF helper, capturingPool() test mock).
+- Phase 1 Grilling: 3 rounds (quick). Chosen approach: `notify.alert_reads` join table with `MarkAlertRead` RPC, `ListAlerts` LEFT JOIN + unread_count, owner from `x-user-id` header. Rejected: read_at column on alerts table (can't model per-user broadcast state), sequential await (less forward-compatible), window function single query (unnecessary complexity at 50-row cap).
+- Key adversary catches incorporated: R1 — `|| 50` falsy trap; R2 — `?? 50` proto3 zero-default trap (corrected to `> 0 ? : 50`), `ON CONFLICT DO NOTHING` doesn't suppress FK violations (added `WHERE EXISTS`), `Promise.all` serialization at pool-max-1 (documented, not harmful); R3 — `ListAlerts` user-scoping change documented as intentional security tightening, `Promise.all` comment recommended.
+- Constitution rules touched: C-03, C-04, C-10, C-14, C-16, F-04, F-11. Floor breaches: none.
+- Status: spec-ready → design-approved.
+
 - Code-checkable claims verified: `notify.alerts` has only `acknowledged*` (no per-user read column) —
   001_notify_alerts.up.sql:17-19; `category`/`source_service` exist (:9,:12) and are on `Alert`
   (notify.proto:37,40), so "module = existing fields, no new field" holds; FR-2 owner-from-header
@@ -63,3 +71,21 @@
 - Overlap: CLEAN. No in-flight feature touches notify / notify.proto / notify migrations; next-free
   migration 003 uncontested; 165 (pwa-notifications, launched) already owns 002 + the push RPCs and
   203 correctly builds on top. UI features 187/188/199/200 touch disjoint /insights + positions regions.
+
+## Session 2026-09-24 — sdd-spec
+
+- Generated implementation-spec.md (10 steps) from the approved design.md and recon.md.
+- Step order: proto contract (1) → codegen (2) → migration (3) → notify MarkAlertRead + ListAlerts
+  handler (4) → notify unit tests (5) → UI alertShared.ts extraction (6) → AlertInbox + notifications
+  page (7) → AlertStream badge refactor + BFF markAlertRead route (8) → E2E fixtures + mock-backend
+  update (9) → E2E specs (10).
+- Scenario coverage: AC-1 (Steps 5,10), AC-2 (Steps 5,10), AC-3 (Step 5), AC-4 (Steps 5,10),
+  AC-5 (Step 5), AC-6 (Step 10). All 6 scenarios covered (C-15).
+- Consumer surface (C-14): /trader AlertStream badge (Step 8), /accounts/notifications inbox (Step 7).
+- Reviewers mapped per step from docs/runbooks/reviewer-registry.md: Proto Reviewer + notify owner
+  (Steps 1-2), DBA + notify owner (Step 3), notify owner (Steps 4-5), UI owner (Steps 6-10).
+- Key design decisions carried forward from design.md: `> 0 ? : 50` limit guard (proto3 zero trap),
+  `WHERE EXISTS` on MarkAlertRead SQL (ON CONFLICT doesn't suppress FK phantoms), `Promise.all` for
+  two-query ListAlerts (serializes at pool-max-1, commented), identity from `x-user-id` header not
+  body (security tightening), `alertShared.ts` extraction for DRY severity maps.
+- Status: design-approved → implementation-ready.
