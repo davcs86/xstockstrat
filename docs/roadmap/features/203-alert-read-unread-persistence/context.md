@@ -130,3 +130,23 @@ CI-mode host harness).
 - Verification: offline (up CREATE ↔ down DROP; next NNN=003 after 002). Live apply deferred to CI/deploy.
 - Files modified: `services/xstockstrat-notify/migrations/003_alert_reads.{up,down}.sql`
 - Deviations: none.
+
+### Step 4 — service: MarkAlertRead handler + enriched ListAlerts (notify) [done]
+- `notifyServiceImpl.ts`: added `markAlertRead` (owner from x-user-id header w/ body fallback; per-row
+  `JOIN notify.alerts` phantom suppression; `ON CONFLICT DO NOTHING` idempotency; code 3 when no caller;
+  empty alertIds → no SQL). Rewrote `listAlerts` (header identity, LEFT JOIN alert_reads,
+  `req.unreadOnly` filter, `Promise.all` main+count, `limit = req.limit > 0 ? : 50`). Extended
+  `rowToAlert` with `read`/`readAt`.
+- Verification: `pnpm run lint` 0 errors (211 pre-existing any-warnings).
+- Files modified: `services/xstockstrat-notify/src/grpc/notifyServiceImpl.ts`
+- Deviations: none (serviceDefinition.ts unchanged — RPCs auto-register from generated code, per spec).
+
+### Step 5 — test: notify MarkAlertRead + ListAlerts read-state unit tests [done]
+- Added `markAlertRead` (AC-1 insert+JOIN, AC-3 ON CONFLICT idempotent, code-3 no-caller, empty→no-SQL)
+  and `listAlerts — read state` (AC-1/AC-2/AC-5 rowToAlert read/ack independence, AC-4 unread_only SQL,
+  unread_count, limit-0→50) suites + a `seqPool` helper for the two-query Promise.all.
+- **TDD red→green**: RED — tsc failed (`markAlertRead` absent, `rowToAlert` missing `read`/`readAt`,
+  generated Alert now requires `read`). GREEN — 63/63 tests pass, coverage 90.78% lines (≥40%).
+  Covers AC-1/AC-2/AC-3/AC-4/AC-5.
+- Files modified: `services/xstockstrat-notify/src/__tests__/notifyServiceImpl.test.ts`
+- Deviations: none.

@@ -182,7 +182,7 @@ ls services/xstockstrat-notify/migrations/003_alert_reads.up.sql services/xstock
 
 ### Step 4 — service: Implement MarkAlertRead handler, enrich ListAlerts with read state
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/src/grpc/notifyServiceImpl.ts` — modify
@@ -267,7 +267,7 @@ cd services/xstockstrat-notify && pnpm run lint
 
 ### Step 5 — test: Unit tests for MarkAlertRead and enriched ListAlerts
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/src/__tests__/notifyServiceImpl.test.ts` — modify
