@@ -11,6 +11,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-09-24 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-09-24 | `draft` → `spec-ready` | /sdd-review | Product spec approved (3 warnings, no blockers) |
 
 ---
 
@@ -46,4 +47,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review alert-read-unread-persistence product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-design alert-read-unread-persistence quick` — recon + design debate (close broadcast-entitlement and unread-count semantics)
