@@ -23,6 +23,10 @@ service NotifyService {
   // List historical alerts
   rpc ListAlerts(ListAlertsRequest) returns (ListAlertsResponse);
 
+  // Mark one or more alerts read for the calling user (feature 203). Owner resolved from the
+  // propagated x-user-id header (C-03). Idempotent — re-marking preserves the original read_at.
+  rpc MarkAlertRead(MarkAlertReadRequest) returns (MarkAlertReadResponse);
+
   // Register (or upsert) a Web Push subscription for the calling user.
   // The owner is resolved from the propagated x-user-id metadata header (C-03), never the body.
   rpc RegisterPushSubscription(RegisterPushSubscriptionRequest) returns (RegisterPushSubscriptionResponse);
@@ -44,6 +48,10 @@ message Alert {
   repeated string tags = 10;
   bool acknowledged = 11;
   string correlation_id = 12;
+  // Per-user read state (feature 203). Populated for the calling user on ListAlerts via a LEFT JOIN
+  // on notify.alert_reads; StreamAlerts leaves read=false (proto3 default). read_at is absent when unread.
+  bool read = 13;
+  google.protobuf.Timestamp read_at = 14;
 }
 
 enum AlertSeverity {
@@ -92,12 +100,21 @@ message ListAlertsRequest {
   repeated string categories = 2;
   int32 limit = 3;
   string page_token = 4;
+  bool unread_only = 5;  // feature 203 — when true, return only alerts the calling user has not read
 }
 
 message ListAlertsResponse {
   repeated Alert alerts = 1;
   string next_page_token = 2;
+  int32 unread_count = 3;  // feature 203 — count of the calling user's unread alerts
 }
+
+message MarkAlertReadRequest {
+  // Owner resolved from the propagated x-user-id header (C-03), never the body.
+  repeated string alert_ids = 1;
+}
+
+message MarkAlertReadResponse {}
 
 // Web Push subscription registration (feature 165 — pwa-notifications).
 message RegisterPushSubscriptionRequest {

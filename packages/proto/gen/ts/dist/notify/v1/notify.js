@@ -5,7 +5,7 @@
 //   protoc               unknown
 // source: notify/v1/notify.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.NotifyServiceClient = exports.NotifyServiceService = exports.UnregisterPushSubscriptionResponse = exports.UnregisterPushSubscriptionRequest = exports.RegisterPushSubscriptionResponse = exports.RegisterPushSubscriptionRequest = exports.ListAlertsResponse = exports.ListAlertsRequest = exports.AcknowledgeAlertResponse = exports.AcknowledgeAlertRequest = exports.StreamAlertsRequest = exports.EmitAlertResponse = exports.EmitAlertRequest = exports.Alert = exports.AlertSeverity = exports.protobufPackage = void 0;
+exports.NotifyServiceClient = exports.NotifyServiceService = exports.UnregisterPushSubscriptionResponse = exports.UnregisterPushSubscriptionRequest = exports.RegisterPushSubscriptionResponse = exports.RegisterPushSubscriptionRequest = exports.MarkAlertReadResponse = exports.MarkAlertReadRequest = exports.ListAlertsResponse = exports.ListAlertsRequest = exports.AcknowledgeAlertResponse = exports.AcknowledgeAlertRequest = exports.StreamAlertsRequest = exports.EmitAlertResponse = exports.EmitAlertRequest = exports.Alert = exports.AlertSeverity = exports.protobufPackage = void 0;
 exports.alertSeverityFromJSON = alertSeverityFromJSON;
 exports.alertSeverityToJSON = alertSeverityToJSON;
 exports.alertSeverityToNumber = alertSeverityToNumber;
@@ -95,6 +95,8 @@ function createBaseAlert() {
         tags: [],
         acknowledged: false,
         correlationId: "",
+        read: false,
+        readAt: undefined,
     };
 }
 exports.Alert = {
@@ -134,6 +136,12 @@ exports.Alert = {
         }
         if (message.correlationId !== "") {
             writer.uint32(98).string(message.correlationId);
+        }
+        if (message.read !== false) {
+            writer.uint32(104).bool(message.read);
+        }
+        if (message.readAt !== undefined) {
+            timestamp_1.Timestamp.encode(toTimestamp(message.readAt), writer.uint32(114).fork()).join();
         }
         return writer;
     },
@@ -228,6 +236,20 @@ exports.Alert = {
                     message.correlationId = reader.string();
                     continue;
                 }
+                case 13: {
+                    if (tag !== 104) {
+                        break;
+                    }
+                    message.read = reader.bool();
+                    continue;
+                }
+                case 14: {
+                    if (tag !== 114) {
+                        break;
+                    }
+                    message.readAt = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -274,6 +296,12 @@ exports.Alert = {
                 : isSet(object.correlation_id)
                     ? globalThis.String(object.correlation_id)
                     : "",
+            read: isSet(object.read) ? globalThis.Boolean(object.read) : false,
+            readAt: isSet(object.readAt)
+                ? fromJsonTimestamp(object.readAt)
+                : isSet(object.read_at)
+                    ? fromJsonTimestamp(object.read_at)
+                    : undefined,
         };
     },
     toJSON(message) {
@@ -314,6 +342,12 @@ exports.Alert = {
         if (message.correlationId !== "") {
             obj.correlationId = message.correlationId;
         }
+        if (message.read !== false) {
+            obj.read = message.read;
+        }
+        if (message.readAt !== undefined) {
+            obj.readAt = message.readAt.toISOString();
+        }
         return obj;
     },
     create(base) {
@@ -333,6 +367,8 @@ exports.Alert = {
         message.tags = object.tags?.map((e) => e) || [];
         message.acknowledged = object.acknowledged ?? false;
         message.correlationId = object.correlationId ?? "";
+        message.read = object.read ?? false;
+        message.readAt = object.readAt ?? undefined;
         return message;
     },
 };
@@ -856,7 +892,7 @@ exports.AcknowledgeAlertResponse = {
     },
 };
 function createBaseListAlertsRequest() {
-    return { userId: "", categories: [], limit: 0, pageToken: "" };
+    return { userId: "", categories: [], limit: 0, pageToken: "", unreadOnly: false };
 }
 exports.ListAlertsRequest = {
     encode(message, writer = new wire_1.BinaryWriter()) {
@@ -871,6 +907,9 @@ exports.ListAlertsRequest = {
         }
         if (message.pageToken !== "") {
             writer.uint32(34).string(message.pageToken);
+        }
+        if (message.unreadOnly !== false) {
+            writer.uint32(40).bool(message.unreadOnly);
         }
         return writer;
     },
@@ -909,6 +948,13 @@ exports.ListAlertsRequest = {
                     message.pageToken = reader.string();
                     continue;
                 }
+                case 5: {
+                    if (tag !== 40) {
+                        break;
+                    }
+                    message.unreadOnly = reader.bool();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -933,6 +979,11 @@ exports.ListAlertsRequest = {
                 : isSet(object.page_token)
                     ? globalThis.String(object.page_token)
                     : "",
+            unreadOnly: isSet(object.unreadOnly)
+                ? globalThis.Boolean(object.unreadOnly)
+                : isSet(object.unread_only)
+                    ? globalThis.Boolean(object.unread_only)
+                    : false,
         };
     },
     toJSON(message) {
@@ -949,6 +1000,9 @@ exports.ListAlertsRequest = {
         if (message.pageToken !== "") {
             obj.pageToken = message.pageToken;
         }
+        if (message.unreadOnly !== false) {
+            obj.unreadOnly = message.unreadOnly;
+        }
         return obj;
     },
     create(base) {
@@ -960,11 +1014,12 @@ exports.ListAlertsRequest = {
         message.categories = object.categories?.map((e) => e) || [];
         message.limit = object.limit ?? 0;
         message.pageToken = object.pageToken ?? "";
+        message.unreadOnly = object.unreadOnly ?? false;
         return message;
     },
 };
 function createBaseListAlertsResponse() {
-    return { alerts: [], nextPageToken: "" };
+    return { alerts: [], nextPageToken: "", unreadCount: 0 };
 }
 exports.ListAlertsResponse = {
     encode(message, writer = new wire_1.BinaryWriter()) {
@@ -973,6 +1028,9 @@ exports.ListAlertsResponse = {
         }
         if (message.nextPageToken !== "") {
             writer.uint32(18).string(message.nextPageToken);
+        }
+        if (message.unreadCount !== 0) {
+            writer.uint32(24).int32(message.unreadCount);
         }
         return writer;
     },
@@ -997,6 +1055,13 @@ exports.ListAlertsResponse = {
                     message.nextPageToken = reader.string();
                     continue;
                 }
+                case 3: {
+                    if (tag !== 24) {
+                        break;
+                    }
+                    message.unreadCount = reader.int32();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -1013,6 +1078,11 @@ exports.ListAlertsResponse = {
                 : isSet(object.next_page_token)
                     ? globalThis.String(object.next_page_token)
                     : "",
+            unreadCount: isSet(object.unreadCount)
+                ? globalThis.Number(object.unreadCount)
+                : isSet(object.unread_count)
+                    ? globalThis.Number(object.unread_count)
+                    : 0,
         };
     },
     toJSON(message) {
@@ -1023,6 +1093,9 @@ exports.ListAlertsResponse = {
         if (message.nextPageToken !== "") {
             obj.nextPageToken = message.nextPageToken;
         }
+        if (message.unreadCount !== 0) {
+            obj.unreadCount = Math.round(message.unreadCount);
+        }
         return obj;
     },
     create(base) {
@@ -1032,6 +1105,101 @@ exports.ListAlertsResponse = {
         const message = createBaseListAlertsResponse();
         message.alerts = object.alerts?.map((e) => exports.Alert.fromPartial(e)) || [];
         message.nextPageToken = object.nextPageToken ?? "";
+        message.unreadCount = object.unreadCount ?? 0;
+        return message;
+    },
+};
+function createBaseMarkAlertReadRequest() {
+    return { alertIds: [] };
+}
+exports.MarkAlertReadRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        for (const v of message.alertIds) {
+            writer.uint32(10).string(v);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseMarkAlertReadRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.alertIds.push(reader.string());
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            alertIds: globalThis.Array.isArray(object?.alertIds)
+                ? object.alertIds.map((e) => globalThis.String(e))
+                : globalThis.Array.isArray(object?.alert_ids)
+                    ? object.alert_ids.map((e) => globalThis.String(e))
+                    : [],
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.alertIds?.length) {
+            obj.alertIds = message.alertIds;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.MarkAlertReadRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseMarkAlertReadRequest();
+        message.alertIds = object.alertIds?.map((e) => e) || [];
+        return message;
+    },
+};
+function createBaseMarkAlertReadResponse() {
+    return {};
+}
+exports.MarkAlertReadResponse = {
+    encode(_, writer = new wire_1.BinaryWriter()) {
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseMarkAlertReadResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(_) {
+        return {};
+    },
+    toJSON(_) {
+        const obj = {};
+        return obj;
+    },
+    create(base) {
+        return exports.MarkAlertReadResponse.fromPartial(base ?? {});
+    },
+    fromPartial(_) {
+        const message = createBaseMarkAlertReadResponse();
         return message;
     },
 };
@@ -1339,6 +1507,19 @@ exports.NotifyServiceService = {
         requestDeserialize: (value) => exports.ListAlertsRequest.decode(value),
         responseSerialize: (value) => Buffer.from(exports.ListAlertsResponse.encode(value).finish()),
         responseDeserialize: (value) => exports.ListAlertsResponse.decode(value),
+    },
+    /**
+     * Mark one or more alerts read for the calling user (feature 203). Owner resolved from the
+     * propagated x-user-id header (C-03). Idempotent — re-marking preserves the original read_at.
+     */
+    markAlertRead: {
+        path: "/xstockstrat.notify.v1.NotifyService/MarkAlertRead",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.MarkAlertReadRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.MarkAlertReadRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.MarkAlertReadResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.MarkAlertReadResponse.decode(value),
     },
     /**
      * Register (or upsert) a Web Push subscription for the calling user.
