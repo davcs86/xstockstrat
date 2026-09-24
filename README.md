@@ -65,7 +65,7 @@ The artifacts of this loop are checked in: every active and shipped feature has 
 
 ### What's checked in
 
-- **SDD skills** — the `sdd-suite` plugin (`plugins/sdd-suite/`): `sdd-story`, `sdd-design`, `sdd-spec`, `sdd-execute`, `sdd-review`, `sdd-status`, `sdd-sync`, `sdd-triage`, `sdd-qa`, `sdd-distill`, `sdd-archiver`, plus the advisory subagents they orchestrate. Repo-specific (they read `docs/sdd`, `docs/roadmap`, the Constitution).
+- **SDD skills** — the `sdd-suite` plugin (`.claude/plugins/sdd-suite/`): `sdd-story`, `sdd-design`, `sdd-spec`, `sdd-execute`, `sdd-review`, `sdd-status`, `sdd-sync`, `sdd-triage`, `sdd-qa`, `sdd-distill`, `sdd-archiver`, plus the advisory subagents they orchestrate. Repo-specific (they read `docs/sdd`, `docs/roadmap`, the Constitution).
 - **Plugin marketplace** — this repo is its own Claude Code + Cursor marketplace (`.claude-plugin/`, `.cursor-plugin/`) bundling `sdd-suite`, `mcp-tools-docs` (MCP tool docs generated from `docs/runbooks/mcp-tools.md`), and `strat-lab`.
 - **Setup & hygiene skills** — `.claude/skills/`: `digitalocean-setup`, `onboard`, `promote`, `proofread-claude-md`, `form4-enhanced-ingest`. First-time configuration and ongoing hygiene.
 - **Runbooks** — [`docs/runbooks/feature-workflow.md`](docs/runbooks/feature-workflow.md), [`docs/runbooks/bug-triage.md`](docs/runbooks/bug-triage.md), [`docs/runbooks/approval-flow.md`](docs/runbooks/approval-flow.md). These describe the manual paths for anything the agent can't or shouldn't do alone.

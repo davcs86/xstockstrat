@@ -12,7 +12,7 @@
     {
       "name": "mcp-tools-docs",
       "displayName": "MCP Tools Docs",
-      "source": "./plugins/mcp-tools-docs",
+      "source": "./.claude/plugins/mcp-tools-docs",
       "description": "Progressive-disclosure reference for the xstockstrat-agent MCP tools, generated from docs/runbooks/mcp-tools.md so a wire-connected agent can consume each tool's parameters, return shape, error cases, and cross-tool usage patterns as a skill.",
       "author": {
         "name": "David Castillo",
@@ -32,7 +32,7 @@
     {
       "name": "sdd-suite",
       "displayName": "SDD Suite",
-      "source": "./plugins/sdd-suite",
+      "source": "./.claude/plugins/sdd-suite",
       "description": "xstockstrat's Spec-Driven Development toolchain (the /sdd-* lifecycle skills and the advisory subagents they orchestrate).",
       "author": {
         "name": "David Castillo",
@@ -53,7 +53,7 @@
     {
       "name": "strat-lab",
       "displayName": "Strat Lab",
-      "source": "./plugins/strat-lab",
+      "source": "./.claude/plugins/strat-lab",
       "description": "A backtesting workbench for this repository's xstockstrat MCP server: ensures data coverage (backfill), runs strategy backtests, survives the >token-limit diagnostics payload by saving-and-parsing, aggregates an independent-per-symbol basket, and verifies results against a pre-change oracle before trusting them.",
       "author": {
         "name": "David Castillo",

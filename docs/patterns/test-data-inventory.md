@@ -21,7 +21,7 @@ tests assert against shapes the real proto never produces.
 |---|---|---|
 | **Fixture modules** | `services/xstockstrat-ui/e2e/fixtures/*.ts` (barrel: `index.ts`) | Canonical domain objects (accounts, portfolios, strategies, formulas, test user) in Connect-JSON camelCase proto shape — usable both as mock gRPC handler returns (`e2e/mock-backend.ts`) and as `page.route()` fulfill bodies |
 | **Catalog** | `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md` | The live index: fixture → module → proto shape source → consumers, plus reserved sentinel ids and the "not yet centralized" ledger |
-| **Steward skill** | `/sdd-qa` (`plugins/sdd-suite/skills/sdd-qa/SKILL.md`, procedure in `reference/fixtures.md`) | Designs and runs tests; adds/updates fixtures, keeps the catalog in sync, audits for inline duplicates |
+| **Steward skill** | `/sdd-qa` (`.claude/plugins/sdd-suite/skills/sdd-qa/SKILL.md`, procedure in `reference/fixtures.md`) | Designs and runs tests; adds/updates fixtures, keeps the catalog in sync, audits for inline duplicates |
 
 Canonical helper home for **auth**: `e2e/helpers/auth.ts` (`TEST_JWT_SECRET`, `signTestJwt`,
 `addAuthCookie`, `addAdminCookie`, `addCookieWithRoles`). Specs never re-implement JWT
@@ -53,13 +53,13 @@ signing or re-declare the secret.
 ## SDD integration
 
 - **Design (Phase 0 recon)** — "Patterns to REUSE" includes existing fixtures for the
-  feature's domains (`plugins/sdd-suite/skills/sdd-design/reference/recon-checklist.md`).
+  feature's domains (`.claude/plugins/sdd-suite/skills/sdd-design/reference/recon-checklist.md`).
 - **Spec (discovery)** — when `xstockstrat-ui` is an affected service, the discovery
   survey reads `INVENTORY.md` and reports which fixtures the feature's test steps reuse
-  or extend (`plugins/sdd-suite/skills/sdd-spec/reference/discovery-checklist.md` § Frontend survey).
+  or extend (`.claude/plugins/sdd-suite/skills/sdd-spec/reference/discovery-checklist.md` § Frontend survey).
 - **Spec (step constraints)** — every step that adds/modifies UI tests names the
   fixtures it reuses/extends, or justifies scenario-local literals
-  (`plugins/sdd-suite/skills/sdd-spec/reference/step-constraints.md` §B).
+  (`.claude/plugins/sdd-suite/skills/sdd-spec/reference/step-constraints.md` §B).
 - **Execute** — `reference/repo-conventions.md` loads when a step touches frontend test
   mocks; new UI test steps import from the inventory.
 - **Constitution** — Commandment **C-12** (`docs/sdd/constitution.md`) makes fixture

@@ -26,22 +26,22 @@ SRCS="$(mktemp)"
 trap 'rm -f "$REFS" "$SRCS"' EXIT
 
 # (1) Concrete paths declared in the context map. The SDD skills + subagents now live in the
-#     sdd-suite plugin, so `plugins/...` paths are validated alongside `.claude/...`.
+#     sdd-suite plugin, so `.claude/plugins/...` paths are validated alongside `.claude/...`.
 grep -oE '(\.claude|docs|scripts|plugins)/[A-Za-z0-9._/<>-]+\.(md|ya?ml|sh)' "$MAP" >>"$REFS"
 
 # (2) doc/skill references embedded in CLAUDE.md files, skill routers, and
 #     agent definitions. Agents point at skill reference/ files just as routers
 #     do, so leaving them unscanned let those pointers rot silently. The SDD suite
-#     moved into plugins/sdd-suite, so scan it too (the other plugins ship their own
+#     moved into .claude/plugins/sdd-suite, so scan it too (the other plugins ship their own
 #     validators and mcp-tools-docs is generated + freshness-gated separately).
 {
   find . -name CLAUDE.md -not -path '*/node_modules/*'
   find .claude/skills -name SKILL.md
   find .claude/skills -path '*/reference/*.md'
   find .claude/agents -name '*.md'
-  find plugins/sdd-suite -name SKILL.md
-  find plugins/sdd-suite -path '*/reference/*.md'
-  find plugins/sdd-suite -path '*/agents/*.md'
+  find .claude/plugins/sdd-suite -name SKILL.md
+  find .claude/plugins/sdd-suite -path '*/reference/*.md'
+  find .claude/plugins/sdd-suite -path '*/agents/*.md'
 } >>"$SRCS"
 
 while IFS= read -r f; do

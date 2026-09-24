@@ -11,11 +11,11 @@ mechanisms the repo uses: **subagent delegation**, **progressive disclosure**, a
 
 ---
 
-## 1. Subagent delegation (`plugins/sdd-suite/agents/`, `.claude/agents/`)
+## 1. Subagent delegation (`.claude/plugins/sdd-suite/agents/`, `.claude/agents/`)
 
 Heavy, read-mostly work runs in an **isolated subagent window** and returns a condensed digest,
 so the orchestrator's window holds conclusions, not raw file dumps. The SDD fleet is packaged in
-the `sdd-suite` plugin (`plugins/sdd-suite/agents/`); `dry-reviewer` is the one exception — it
+the `sdd-suite` plugin (`.claude/plugins/sdd-suite/agents/`); `dry-reviewer` is the one exception — it
 backs the repo-wide DRY guard rail (§ `docs/patterns/dry-guard-rail.md`), not just SDD, so it stays
 in `.claude/agents/` as host infrastructure (see § 4). The fleet:
 
@@ -41,7 +41,7 @@ agent *read* them, so the orchestrator never loads the procedure just to pass it
 
 **Authoring a new agent:** one Markdown file with frontmatter (`name`, `description`, `tools`,
 `model: inherit`) and a body that states the operating rules, the method, and an **explicit output
-format**. An SDD-lifecycle agent goes in `plugins/sdd-suite/agents/<name>.md`; a repo-wide agent
+format**. An SDD-lifecycle agent goes in `.claude/plugins/sdd-suite/agents/<name>.md`; a repo-wide agent
 (like `dry-reviewer`) goes in `.claude/agents/<name>.md`. Either way it is addressable by bare
 `subagent_type` name once its plugin is enabled. The `description` is what the orchestrator matches
 on — make it say *when* to use the agent and *what it returns*.
@@ -64,7 +64,7 @@ names at the point of use:
 ```
 
 The SDD lifecycle skills use exactly this layout but are packaged in the `sdd-suite` plugin
-(`plugins/sdd-suite/skills/<skill>/`); repo-local, non-lifecycle skills (`onboard`, `promote`,
+(`.claude/plugins/sdd-suite/skills/<skill>/`); repo-local, non-lifecycle skills (`onboard`, `promote`,
 `proofread-claude-md`, …) stay in `.claude/skills/`. See § 4.
 
 Worked example — `/sdd-execute`: the 1.4k-word SEQUENTIAL-MODE driver lives in
@@ -153,7 +153,7 @@ nothing). A recurring `fails.md` entry is a candidate to promote into a binding 
 ## 4. Plugin packaging (marketplace + cross-marketplace dependencies)
 
 The repo is its own **plugin marketplace** (`.claude-plugin/marketplace.json` for Claude Code,
-`.cursor-plugin/marketplace.json` for Cursor). It bundles three plugins under `plugins/`:
+`.cursor-plugin/marketplace.json` for Cursor). It bundles three plugins under `.claude/plugins/`:
 
 | Plugin | What it carries | Repo-specific? |
 |---|---|---|
@@ -170,7 +170,7 @@ registers that marketplace (`extraKnownMarketplaces`) and enables the plugins (`
 Enabling `sdd-suite` then pulls `context-forge` in automatically.
 
 **`mcp-tools-docs` — generated, not hand-written.** A wire-connected agent cannot read the
-maintainer runbook `docs/runbooks/mcp-tools.md`, so `plugins/mcp-tools-docs/scripts/generate.py`
+maintainer runbook `docs/runbooks/mcp-tools.md`, so `.claude/plugins/mcp-tools-docs/scripts/generate.py`
 projects that runbook into a progressive-disclosure skill (router + one `reference/tools/<name>.md`
 per tool). The runbook stays the single source of truth; `generate.py --check` is the freshness
 gate (edit the runbook, regenerate — never hand-edit the skill), the same discipline as proto
