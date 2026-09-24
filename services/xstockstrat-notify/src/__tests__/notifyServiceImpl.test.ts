@@ -684,3 +684,120 @@ describe('rowToAlert serialization (regression)', () => {
     assert.doesNotThrow(() => Alert.encode(alert).finish());
   });
 });
+
+// A pool that returns a different row-set for each successive query call (feature 203 —
+// listAlerts fires the main query and the count query via Promise.all).
+function seqPool(responses: any[][]): { calls: { sql: string; params: any[] }[]; obj: any } {
+  const calls: { sql: string; params: any[] }[] = [];
+  let i = 0;
+  return {
+    calls,
+    obj: {
+      async query(sql: string, params: any[] = []) {
+        calls.push({ sql, params });
+        const rows = responses[Math.min(i, responses.length - 1)];
+        i += 1;
+        return { rows, rowCount: rows.length };
+      },
+    },
+  };
+}
+
+describe('markAlertRead (feature 203)', () => {
+  it('AC-1 inserts a read mark for the x-user-id caller (targeted alert)', async () => {
+    const pool = capturingPool([]);
+    const impl = new NotifyServiceImpl(pool.obj as any, {} as any, noopFanout(), noopWebPush());
+    await new Promise<any>((resolve, reject) =>
+      impl.markAlertRead(metaCall('u1', { alertIds: ['a1'] }), (e: any, r: any) => (e ? reject(e) : resolve(r))),
+    );
+    assert.equal(pool.calls.length, 1);
+    const sql = pool.calls[0].sql.replace(/\s+/g, ' ');
+    assert.match(sql, /INSERT INTO notify\.alert_reads/);
+    // per-row phantom suppression: JOIN notify.alerts (not a non-correlated WHERE EXISTS)
+    assert.match(sql, /JOIN notify\.alerts/);
+    assert.deepEqual(pool.calls[0].params, [['a1'], 'u1']);
+  });
+
+  it('AC-3 is idempotent — ON CONFLICT DO NOTHING preserves the original read_at', async () => {
+    const pool = capturingPool([]);
+    const impl = new NotifyServiceImpl(pool.obj as any, {} as any, noopFanout(), noopWebPush());
+    const run = () =>
+      new Promise<any>((resolve, reject) =>
+        impl.markAlertRead(metaCall('u1', { alertIds: ['a1'] }), (e: any, r: any) => (e ? reject(e) : resolve(r))),
+      );
+    await run();
+    await run();
+    assert.equal(pool.calls.length, 2);
+    assert.match(pool.calls[0].sql.replace(/\s+/g, ' '), /ON CONFLICT DO NOTHING/);
+  });
+
+  it('rejects with code 3 when the x-user-id header is missing (no DB write)', async () => {
+    const pool = capturingPool([]);
+    const impl = new NotifyServiceImpl(pool.obj as any, {} as any, noopFanout(), noopWebPush());
+    const err = await new Promise<any>((resolve) =>
+      impl.markAlertRead(metaCall(null, { alertIds: ['a1'] }), (e: any) => resolve(e)),
+    );
+    assert.equal(err.code, 3);
+    assert.equal(pool.calls.length, 0);
+  });
+
+  it('returns an empty response for an empty alertIds array (no SQL)', async () => {
+    const pool = capturingPool([]);
+    const impl = new NotifyServiceImpl(pool.obj as any, {} as any, noopFanout(), noopWebPush());
+    const res = await new Promise<any>((resolve, reject) =>
+      impl.markAlertRead(metaCall('u1', { alertIds: [] }), (e: any, r: any) => (e ? reject(e) : resolve(r))),
+    );
+    assert.deepEqual(res, {});
+    assert.equal(pool.calls.length, 0);
+  });
+});
+
+describe('listAlerts — read state (feature 203)', () => {
+  it('AC-1 rowToAlert returns read=true and readAt for a read alert', () => {
+    const when = new Date('2026-09-24T12:00:00Z');
+    const a = rowToAlert({ alert_id: 'a1', severity: 1, created_at: new Date(), read_at: when });
+    assert.equal(a.read, true);
+    assert.ok(a.readAt instanceof Date);
+  });
+
+  it('AC-2 rowToAlert returns read=false and readAt undefined for an unread alert', () => {
+    const a = rowToAlert({ alert_id: 'a1', severity: 1, created_at: new Date(), read_at: null });
+    assert.equal(a.read, false);
+    assert.equal(a.readAt, undefined);
+  });
+
+  it('AC-5 read and acknowledged are independent', () => {
+    const a = rowToAlert({ alert_id: 'a1', severity: 1, created_at: new Date(), acknowledged: true, read_at: null });
+    assert.equal(a.acknowledged, true);
+    assert.equal(a.read, false);
+  });
+
+  it('AC-4 passes the unread_only filter to the SQL WHERE clause', async () => {
+    const pool = seqPool([[], [{ count: '0' }]]);
+    const impl = new NotifyServiceImpl(pool.obj as any, {} as any, noopFanout(), noopWebPush());
+    await new Promise<any>((resolve, reject) =>
+      impl.listAlerts(metaCall('u1', { unreadOnly: true }), (e: any, r: any) => (e ? reject(e) : resolve(r))),
+    );
+    const mainSql = pool.calls[0].sql.replace(/\s+/g, ' ');
+    assert.match(mainSql, /ar\.alert_id IS NULL/);
+  });
+
+  it('returns unread_count from the count query', async () => {
+    const pool = seqPool([[{ alert_id: 'a1', severity: 1, created_at: new Date(), read_at: null }], [{ count: '3' }]]);
+    const impl = new NotifyServiceImpl(pool.obj as any, {} as any, noopFanout(), noopWebPush());
+    const res = await new Promise<any>((resolve, reject) =>
+      impl.listAlerts(metaCall('u1', {}), (e: any, r: any) => (e ? reject(e) : resolve(r))),
+    );
+    assert.equal(res.unreadCount, 3);
+  });
+
+  it('defaults limit to 50 when 0 (proto3 zero-default)', async () => {
+    const pool = seqPool([[], [{ count: '0' }]]);
+    const impl = new NotifyServiceImpl(pool.obj as any, {} as any, noopFanout(), noopWebPush());
+    await new Promise<any>((resolve, reject) =>
+      impl.listAlerts(metaCall('u1', { limit: 0 }), (e: any, r: any) => (e ? reject(e) : resolve(r))),
+    );
+    // The main query's params include the limit; assert 50 is present (not 0).
+    assert.ok(pool.calls[0].params.includes(50), 'limit must default to 50 when req.limit is 0');
+  });
+});
