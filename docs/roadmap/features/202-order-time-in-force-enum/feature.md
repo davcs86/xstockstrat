@@ -15,6 +15,7 @@
 | 2026-09-24 | `spec-ready` → `design-approved` | /sdd-design | Design debated (6 rounds, full, SOUND) and approved; recon.md + design.md written |
 | 2026-09-24 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated (9 steps) |
 | 2026-09-24 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential execution started (Step 1 proto + Step 2 codegen) |
+| 2026-09-24 | `in-progress` → `code-completed` | /sdd-execute | All 9 steps done; trading TIF tests 71.6% cov, 29/29 UI e2e green; C-16 scenarios promoted |
 
 ---
 

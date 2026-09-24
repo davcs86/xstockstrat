@@ -220,3 +220,12 @@ but Docker Hub 429-rate-limited → codegen via host-native fallback (see Deviat
 - Verification: `grep -n "exclude-path.*trading" .github/workflows/ci.yml` present.
 - Files modified: `.github/workflows/ci.yml`
 - Deviations: none.
+
+## Session 2026-09-24 — sdd-execute (sequential) — code-completed
+**Steps this session**: 1–9 (all)
+**Progress**: 9 done / 9 total
+**Stopped at**: all complete
+**C-16 promotion**: AC-1..AC-4 → services/xstockstrat-trading/acceptance/order-time-in-force-enum.feature;
+  AC-5 → services/xstockstrat-ui/acceptance/order-time-in-force-enum.feature (both @feature-202).
+**Ledger**: fails.md — host-native codegen whitespace-parity + golangci-lint go-version gotchas.
+**Next**: integration PR feature/order-time-in-force-enum → main-dev

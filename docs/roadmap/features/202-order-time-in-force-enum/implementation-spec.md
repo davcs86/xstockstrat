@@ -1,6 +1,6 @@
 # Implementation Spec: order-time-in-force-enum
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-09-24
 **Feature**: `docs/roadmap/features/202-order-time-in-force-enum/feature.md`
 **Total Steps**: 9
