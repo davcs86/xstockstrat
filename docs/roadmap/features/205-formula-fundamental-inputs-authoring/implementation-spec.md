@@ -603,7 +603,7 @@ is inside the `src/lib/**` coverage scope and contributes to the threshold.
 
 ### Step 13 -- test: Analysis G6 third-leg parity test
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_fundamental_metric_parity.py` -- create
@@ -730,3 +730,6 @@ cd services/xstockstrat-ui && pnpm test:e2e -- --grep "fundamental"
   `handleRun` ignores for these formulas would mislead. The JSON textarea still shows for
   non-fundamentals formulas. Grid values are `Record<data_key, number | null>`; `handleRun` omits
   `null` entries when building the sandbox `data`.
+- **Step 13 — whole-suite coverage gate.** The spec's `--cov=app --cov-fail-under=40` can't be met by
+  the single new parity file alone (test-only, additive), so the full analysis suite was run to
+  exercise the real gate: 842 passed, 83.91% coverage. Matches the feature-204 Step-8 precedent.
