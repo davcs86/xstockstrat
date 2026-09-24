@@ -643,7 +643,7 @@ cd services/xstockstrat-analysis && uv run ruff check app/ tests/ && uv run ruff
 
 ### Step 14 -- test: E2E Playwright + acceptance traceability + INVENTORY.md
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/mock-backend.ts` -- modify
@@ -733,3 +733,11 @@ cd services/xstockstrat-ui && pnpm test:e2e -- --grep "fundamental"
 - **Step 13 — whole-suite coverage gate.** The spec's `--cov=app --cov-fail-under=40` can't be met by
   the single new parity file alone (test-only, additive), so the full analysis suite was run to
   exercise the real gate: 842 passed, 83.91% coverage. Matches the feature-204 Step-8 precedent.
+- **Step 14 — IndicatorsService methods are page.route-stubbed, not mock-backend handlers.** The e2e
+  mock-backend does not register `IndicatorsService` at all (the existing `formulas.spec.ts` already
+  stubs `ListFormulas`/`GetFormula` via `page.route`), so `ListFundamentalMetrics`, `RegisterFormula`,
+  and `ExecuteFormula` are page.route-stubbed in the spec, matching that established pattern —
+  spec-14.1's "add to the IndicatorsService mock" could not be followed literally. `getFundamentalsMulti`
+  *was* added to the mock-backend's `MarketDataService` block (which is registered), so AC-6 exercises
+  the real BFF forward end-to-end. The 11-entry catalog is inlined in the spec (single consumer, C-13).
+  AC-2..6 all green (6/6 incl. setup; full `formulas.spec.ts` 10/10, no regression).

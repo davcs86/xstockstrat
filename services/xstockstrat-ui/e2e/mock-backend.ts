@@ -615,6 +615,12 @@ export async function startMockBackend(): Promise<void> {
           }
           throw new ConnectError(`fmp: no fundamentals for ${req.symbol}`, Code.Unavailable);
         },
+        async getFundamentalsMulti(req) {
+          // feature 205: snapshot fundamentals for the formula fundamentals grid symbol-prefill.
+          // AAPL has data; any other requested symbol is simply absent from the response.
+          const wanted = (req.symbols ?? []).map((s: string) => s.toUpperCase());
+          return { fundamentals: wanted.includes('AAPL') ? [FUNDAMENTALS_AAPL] : [] };
+        },
         async getLatestPrice(req) {
           // feature 095: CAPR (in-queue) has a live trade + prior close; ZZZZ is an OFF-queue symbol
           // that still has a live price (drives the Signal-detail off-queue fallback, AC-13); any
