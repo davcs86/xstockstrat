@@ -175,3 +175,28 @@ but Docker Hub 429-rate-limited → codegen via host-native fallback (see Deviat
 - Files modified: `internal/service/tif_validation_test.go`, `internal/repository/tif_test.go`,
   `internal/service/order_intent_test.go`
 - Deviations: none.
+
+### Step 6 — service: UI TIF enum rendering and form integration [done]
+- `orderShared.tsx`: exhaustive `TIF_LABEL: Record<TimeInForce,string>` (C-10). `OrderForm.tsx`: TIF
+  string-union maps + `tif` state + a TIF `<Select>` (hidden in offline record mode) + `timeInForce`
+  in the placeOrder call. `EditOrderDialog.tsx`: free-text TIF Input → `<Select>`, state is now
+  `PbTimeInForce` (pre-filled from order, DAY for legacy UNSPECIFIED), always sends a concrete TIF.
+  Order detail page renders via `TIF_LABEL`.
+- Verification: `pnpm build` PASS (full app + e2e type-check), lint warnings only (pre-existing).
+- Files modified: `orderShared.tsx`, `OrderForm.tsx`, `EditOrderDialog.tsx`, `trader/orders/[id]/page.tsx`
+- Deviations: none for the src itself (order-type SelectTrigger got no aria-label; TIF got
+  `aria-label="Time in force"` for test disambiguation).
+
+### Step 7 — test: UI E2E fixture and spec updates [done]
+- `e2e/fixtures/orders.ts` + inline spec fixtures: `timeInForce` string→numeric enum (day=1, gtc=2).
+  `mock-backend.ts` placeOrder returns `timeInForce: 1`. `INVENTORY.md` catalog note. New AC-5 test in
+  `order-form.spec.ts` asserts the TIF select renders all six options and PlaceOrder sends
+  `timeInForce` as the Connect-JSON NAME-string `TIME_IN_FORCE_GTC`. Disambiguated the 6 bare
+  `getByRole('combobox')` sites (`.first()`) broken by the new TIF combobox.
+- **TDD red→green**: RED — pre-change `pnpm build` failed (mock/fixtures string vs enum) and the AC-5
+  behavior (TIF select, NAME-string wire) did not exist. GREEN — 29/29 trader order specs pass
+  (`CI=1` host harness), incl. AC-5. Covers AC-5.
+- Files modified: `e2e/fixtures/orders.ts`, `e2e/mock-backend.ts`, `e2e/fixtures/INVENTORY.md`,
+  `e2e/trader/{orders,order-parity,offline-accounts,order-form}.spec.ts`
+- Deviations: `order-form.spec.ts` edited though not in Files list (in-intent ripple + AC-5 host);
+  CI-mode e2e run (dev harness cold-compile) — see Deviation Log.

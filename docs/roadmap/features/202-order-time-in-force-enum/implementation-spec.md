@@ -357,7 +357,7 @@ cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-downlo
 
 ### Step 6 — service: UI TIF enum rendering and form integration
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/trader/orderShared.tsx` — modify
@@ -450,7 +450,7 @@ cd services/xstockstrat-ui && pnpm run lint
 
 ### Step 7 — test: UI E2E fixture and spec updates
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/fixtures/orders.ts` — modify
@@ -622,3 +622,27 @@ grep -n "exclude-path.*trading" .github/workflows/ci.yml
   `TimeInForce` comment lines), so the committed trading stubs match what CI regenerates.
 - **Disposition**: Out-of-scope drift reverted; feature diff limited to `trading/v1` (mirrors CI's
   stale-stub check). Latent host-vs-CI toolchain-parity gotcha — recurs for 203/204/205 codegen.
+
+### Step 5 — golangci-lint version bump (host tool too old for go1.27)
+- **What**: The pre-installed `golangci-lint` (v2.5.0, built with go1.25) refuses a go1.27 target.
+  Installed v2.13.1 (CLAUDE.md pin) built with the host go1.27.0 (`GOTOOLCHAIN=go1.27.0`, since a
+  `toolchain` directive otherwise pulled go1.26.8). Result: `0 issues`.
+- **Disposition**: Tooling provisioning, no code impact. CI uses `golangci-lint-action@v9`.
+
+### Step 7 — `order-form.spec.ts` edited though not in the Files list
+- **What**: The new TIF `<Select>` adds a second combobox to the order form, breaking bare
+  `getByRole('combobox')` selectors in `order-form.spec.ts` (`.first()` disambiguation applied,
+  matching the existing pattern). The AC-5 assertion was also placed here per Step 7(c)'s explicit
+  "the appropriate order-form spec (or a new test block in orders.spec.ts)" wording. This file was
+  not enumerated in Step 7 `**Files**`, but the change is squarely within Step 7's intent (E2E spec
+  updates for the TIF change).
+- **Disposition**: In-intent, spec-anticipated; staged with Step 7. Verified GREEN (29/29 trader
+  order specs pass, incl. the AC-5 NAME-string assertion).
+
+### Step 7 — UI e2e run: CI-mode host harness (dev-server cold-compile timeout)
+- **What**: The non-CI `pnpm dev` harness times out the 10s SSR warmup on cold route compile; the
+  Docker e2e runner base (`node:24-bookworm-slim`) risks the Docker Hub 429. Ran the trader order
+  specs with `CI=1` (webServer does `pnpm build && pnpm start` with `NEXT_DISABLE_STANDALONE`, 30s
+  test timeout) — the faithful analog of CI's `frontend-e2e` job. `pnpm build` (full app + e2e
+  type-check) passes; 29/29 targeted specs pass.
+- **Disposition**: CI-equivalent fallback. The full multi-segment Playwright suite runs in CI.

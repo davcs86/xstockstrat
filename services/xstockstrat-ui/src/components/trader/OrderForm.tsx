@@ -8,6 +8,7 @@ import {
   OrderSide as PbOrderSide,
   OrderType as PbOrderType,
   OrderStatus,
+  TimeInForce as PbTimeInForce,
 } from '@xstockstrat/proto/trading/v1/trading_pb';
 import { TradingMode as PbTradingMode, BrokerType } from '@xstockstrat/proto/common/v1/common_pb';
 import { ConnectError } from '@connectrpc/connect';
@@ -35,6 +36,26 @@ const ORDER_TYPE_ENUM: Record<OrderType, PbOrderType> = {
   stop: PbOrderType.STOP,
   stop_limit: PbOrderType.STOP_LIMIT,
   trailing_stop: PbOrderType.TRAILING_STOP,
+};
+
+type TifOption = 'day' | 'gtc' | 'ioc' | 'fok' | 'opg' | 'cls';
+
+const TIF_LABEL: Record<TifOption, string> = {
+  day: 'Day',
+  gtc: 'GTC',
+  ioc: 'IOC',
+  fok: 'FOK',
+  opg: 'OPG',
+  cls: 'CLS',
+};
+
+const TIF_ENUM: Record<TifOption, PbTimeInForce> = {
+  day: PbTimeInForce.DAY,
+  gtc: PbTimeInForce.GTC,
+  ioc: PbTimeInForce.IOC,
+  fok: PbTimeInForce.FOK,
+  opg: PbTimeInForce.OPG,
+  cls: PbTimeInForce.CLS,
 };
 
 interface OrderFormProps {
@@ -76,6 +97,7 @@ export function OrderForm({
   const symbolLocked = Boolean(initialSymbol);
   const [side, setSide] = useState<OrderSide>('buy');
   const [orderType, setOrderType] = useState<OrderType>('market');
+  const [tif, setTif] = useState<TifOption>('day');
   const [qty, setQty] = useState('');
   const [limitPrice, setLimitPrice] = useState('');
   const [stopPrice, setStopPrice] = useState('');
@@ -113,6 +135,7 @@ export function OrderForm({
             ? parseFloat(limitPrice)
             : 0,
         stopPrice: isRecordMode ? 0 : stopPrice ? parseFloat(stopPrice) : 0,
+        timeInForce: TIF_ENUM[tif],
         tradingMode: mode === 'live' ? PbTradingMode.LIVE : PbTradingMode.PAPER,
         accountId: selectedAccountId ?? '',
         clientOrderId,
@@ -192,6 +215,23 @@ export function OrderForm({
                 <SelectItem value="stop">Stop</SelectItem>
                 <SelectItem value="stop_limit">Stop Limit</SelectItem>
                 <SelectItem value="trailing_stop">Trailing Stop</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
+
+          {/* Time in force — hidden in offline record mode (no broker to honor it). */}
+          {!isRecordMode && (
+            <Select value={tif} onValueChange={(v) => setTif(v as TifOption)}>
+              <SelectTrigger aria-label="Time in force">
+                <SelectValue placeholder="Time in force">{TIF_LABEL[tif]}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="day">Day</SelectItem>
+                <SelectItem value="gtc">GTC</SelectItem>
+                <SelectItem value="ioc">IOC</SelectItem>
+                <SelectItem value="fok">FOK</SelectItem>
+                <SelectItem value="opg">OPG</SelectItem>
+                <SelectItem value="cls">CLS</SelectItem>
               </SelectContent>
             </Select>
           )}
