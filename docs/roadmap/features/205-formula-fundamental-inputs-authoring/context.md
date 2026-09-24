@@ -189,3 +189,50 @@ codegen image), go1.27, uv/ruff, node/pnpm.
 - `strat-lab/skills/backtest/SKILL.md`: fundamentals-input operand section gains a
   `list_fundamental_metrics` cross-ref (same-PR docs, G5).
 - Verify: ruff clean; full agent suite 451 passed, 79.29% coverage (≥40); zero `forty-nine` remain.
+
+### Steps 9-10 — UI declare/view (FundamentalInputEditor + BFF + useFormulas) [done]
+- `insightsBff.ts`: `listFundamentalMetrics` forward added to the IndicatorsService block (read-only).
+- `FundamentalInputEditor.tsx` (new): add/remove picker over the FundamentalMetric catalog
+  (`useFundamentalMetrics` hook, `staleTime: Infinity`), Select value = `String(metric)`.
+- **Design call (deviation from spec's `string[]`):** the UI carries the **numeric** `FundamentalMetric`
+  enum end-to-end (component state, hooks, `onSave`, `initialFundamentalInputs`). protobuf-es typed-client
+  init requires numeric enum values, not NAME-strings; Connect-JSON still serializes them to NAME-strings
+  on the wire, so the acceptance contract (mock receives NAME-strings) holds. No NAME↔number juggling.
+- `FormulaWorkspace.tsx`: `initialFundamentalInputs` prop + state + a "Fundamental inputs" Card after
+  Outputs; `onSave` drops UNSPECIFIED rows. `[id]/page.tsx` seeds from `formula.fundamentalInputs`.
+- Step 10 vitest: react-query mocked (node-env, no jsdom) — `useMutation` captures the mutationFn;
+  asserts both hooks forward `fundamentalInputs` and default to `[]`. UI lint+build green; test:unit 197.
+
+### Steps 11-12 — UI fundamentals value grid + symbol-prefill (G3) [done]
+- `insightsBff.ts`: `getFundamentalsMulti` forward added to the MarketDataService block (read-only).
+- `src/lib/fundamentalMetrics.ts` (new): `dataKeyToProtoField` (`pe_ratio`→`peRatio`, replaces the
+  spec's unused NAME-based `metricNameToDataKey`) + `fundamentalsToInputData(row, catalog)` — honors the
+  authoritative `missingMetrics` (MARKETDATA-11), maps missing/absent/non-finite → null, preserves a
+  legitimate 0, never NaN (fails.md:86).
+- `FormulaWorkspace.tsx`: when a formula declares fundamentals the Run cell renders a per-metric value
+  grid (in place of the JSON textarea) + a symbol Input/Load that prefills from GetFundamentalsMulti;
+  `handleRun` builds the sandbox `data` from the grid (snake_case keys, null omitted).
+- Step 12 vitest (`fundamentalMetrics.test.ts`): all 11 data-key→field conversions + full/missing/
+  non-finite/0-preserved/subset cases. Coverage 83%; UI build+lint green.
+
+### Step 13 — analysis G6 third-leg parity [done]
+- `tests/test_fundamental_metric_parity.py`: pins analysis's `_FUNDAMENTAL_METRIC_DATA_KEY` == the
+  mechanical `name.removeprefix("FUNDAMENTAL_METRIC_").lower()` == the proto enum descriptor (11 values).
+  Test-only. Full analysis suite 842 passed, 83.91% coverage.
+
+### Step 14 — e2e + INVENTORY.md [done]
+- `formulas.spec.ts` feature-205 block AC-2..6: picker lists 11 (AC-4), save sends NAME-string on the
+  wire (AC-2), open FORMULA_FUNDAMENTALS shows selected (AC-3), run sends snake_case input_data (AC-5),
+  symbol-prefill fills from GetFundamentalsMulti never-NaN (AC-6). IndicatorsService page.route-stubbed
+  (mock-backend registers no IndicatorsService — matches existing formulas.spec pattern);
+  `getFundamentalsMulti` added to the mock-backend MarketDataService so AC-6 hits the real BFF forward.
+  `formulas.spec.ts` 10/10 green, no regression. INVENTORY.md rows for FUNDAMENTALS_AAPL +
+  FORMULA_FUNDAMENTALS updated with the new consumers.
+
+### Code-completed
+- status.md → `code-completed`; @AC-1..7 promoted to durable business-rule suites (C-16).
+- **Merge collision to resolve at integration:** 204 merged to main-dev (PR #1173) bumping the MCP tool
+  count 49→51 (query_bars, query_fundamentals) and touching insightsBff/mock-backend/CLAUDE.md/
+  mcp-tools.md/INVENTORY.md; 205 bumped 49→50 (list_fundamental_metrics) from a pre-204 base. Merging
+  main-dev resolves the combined count to **52** across all 6 surfaces + `test_tools_endpoint.py`, keeping
+  all three new tools; shared BFF/mock-backend/docs blocks union both features' additions.
