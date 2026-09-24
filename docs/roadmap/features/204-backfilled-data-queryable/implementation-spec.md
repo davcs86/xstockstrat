@@ -430,7 +430,7 @@ source files (`tools.py`, `copilot.ts`).
 
 ### Step 10 — service: Wire getFundamentals, getHistoricalFundamentals, and listAssets in insights BFF
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/insightsBff.ts` — modify

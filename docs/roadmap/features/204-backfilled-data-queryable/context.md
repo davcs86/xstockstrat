@@ -218,3 +218,11 @@ node/pnpm. Docker daemon up but codegen stays host-native.
   UI `pnpm run lint` exit 0 (pre-existing hook warnings only); zero `forty-nine`/`= 49` remain.
 - Files: `services/xstockstrat-agent/app/tools.py`, `services/xstockstrat-agent/CLAUDE.md`,
   `docs/runbooks/mcp-tools.md`, `services/xstockstrat-ui/src/lib/copilot.ts`.
+
+### Step 10 — service: insights BFF marketdata reads [done]
+- Added three `forward()` handlers to the `MarketDataService` block in `insightsBff.ts`:
+  `getFundamentals`, `getHistoricalFundamentals`, `listAssets` — the Data Explorer's browser client
+  (`insightsMarketDataClient`, baseUrl `/insights/api`) reaches marketdata through them. Session/
+  header propagation is `bffShared.ts`'s `forward` (no custom call path); public read data (no gate).
+- Verify: `pnpm run lint` exit 0; grep confirms all three in the block.
+- Files: `services/xstockstrat-ui/src/lib/insightsBff.ts`. Deviations: none.
