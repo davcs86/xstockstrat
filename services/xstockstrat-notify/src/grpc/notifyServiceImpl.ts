@@ -155,16 +155,70 @@ export class NotifyServiceImpl {
     }
   }
 
+  /**
+   * MarkAlertRead — record that the calling user has read the given alerts (feature 203). Owner is
+   * the propagated x-user-id header (C-03), with a body-userId fallback for direct gRPC test callers.
+   * The JOIN notify.alerts suppresses phantom alert_ids per-row; ON CONFLICT DO NOTHING keeps the
+   * original read_at (AC-3 idempotency).
+   */
+  async markAlertRead(call: any, callback: any) {
+    const userId = call.metadata?.get?.('x-user-id')?.[0]?.toString() || call.request.userId || null;
+    if (!userId) {
+      return callback({ code: 3, message: 'x-user-id header required' });
+    }
+    const alertIds = call.request.alertIds;
+    if (!alertIds || alertIds.length === 0) {
+      return callback(null, {});
+    }
+    try {
+      await this.pool.query(
+        `INSERT INTO notify.alert_reads (alert_id, user_id, read_at)
+         SELECT u.alert_id, $2, NOW()
+         FROM unnest($1::uuid[]) AS u(alert_id)
+         JOIN notify.alerts a ON a.alert_id = u.alert_id
+         ON CONFLICT DO NOTHING`,
+        [alertIds, userId]
+      );
+      callback(null, {});
+    } catch (err: any) {
+      callback({ code: 13, message: err.message });
+    }
+  }
+
   async listAlerts(call: any, callback: any) {
     const req = call.request;
+    // Identity from the propagated x-user-id header (security tightening, design.md) — falls back to
+    // the body userId for direct gRPC test callers.
+    const userId = call.metadata?.get?.('x-user-id')?.[0]?.toString() || req.userId || null;
+    // proto3 zero-default trap: `req.limit || 50` would also replace a real 0, `?? 50` would keep 0.
+    const limit = req.limit > 0 ? req.limit : 50;
     try {
-      const result = await this.pool.query(
-        `SELECT * FROM notify.alerts
-         WHERE ($1::text IS NULL OR target_user_id = $1 OR target_user_id IS NULL)
-         ORDER BY created_at DESC LIMIT $2`,
-        [req.userId || null, req.limit || 50]
-      );
-      callback(null, { alerts: result.rows.map(rowToAlert) });
+      // Promise.all serializes at pool-max-1; auto-parallels if the pool grows.
+      const [result, countResult] = await Promise.all([
+        this.pool.query(
+          `SELECT a.*, ar.read_at
+           FROM notify.alerts a
+           LEFT JOIN notify.alert_reads ar ON ar.alert_id = a.alert_id AND ar.user_id = $1
+           WHERE ($1::text IS NULL OR a.target_user_id = $1 OR a.target_user_id IS NULL)
+             ${req.unreadOnly ? 'AND ar.alert_id IS NULL' : ''}
+           ORDER BY a.created_at DESC LIMIT $2`,
+          [userId, limit]
+        ),
+        this.pool.query(
+          `SELECT COUNT(*) AS count
+           FROM notify.alerts a
+           WHERE ($1::text IS NULL OR a.target_user_id = $1 OR a.target_user_id IS NULL)
+             AND NOT EXISTS (
+               SELECT 1 FROM notify.alert_reads ar
+               WHERE ar.alert_id = a.alert_id AND ar.user_id = $1
+             )`,
+          [userId]
+        ),
+      ]);
+      callback(null, {
+        alerts: result.rows.map(rowToAlert),
+        unreadCount: parseInt(countResult.rows[0]?.count ?? '0', 10),
+      });
     } catch (err: any) {
       callback({ code: 13, message: err.message });
     }
@@ -248,5 +302,9 @@ export function rowToAlert(row: any) {
     acknowledged: row.acknowledged,
     correlationId: row.correlation_id ?? '',
     tags: row.tags ?? [],
+    // Per-user read state (feature 203) — populated by the ListAlerts LEFT JOIN on notify.alert_reads;
+    // absent (unread) when no join row exists. StreamAlerts rows carry no read_at, so read=false there.
+    read: row.read_at != null,
+    readAt: row.read_at ? new Date(row.read_at) : undefined,
   };
 }

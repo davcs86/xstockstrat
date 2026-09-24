@@ -127,3 +127,112 @@
   Feature 204 (`backfilled-data-queryable`) has the densest overlap (7 shared files including
   `insightsBff.ts`) but touches `MarketDataService` while 205 touches `IndicatorsService`. Merge-order
   205→201 already recorded; no new merge-order entries needed.
+
+## Session 2026-09-24 — sdd-execute (sequential)
+
+Feature 4 of the 202→205 run. Branch `feature/formula-fundamental-inputs-authoring` off current
+`main-dev` (has 202+203; 204's PR #1173 still open, so 204's tool-count/shared-file changes are NOT
+on this base — the tool-count/insightsBff/mock-backend overlaps with 204 resolve at whichever PR
+merges second). Toolchain: host-native buf 1.72.0 (`/root/go/bin/buf`; Docker Hub still 429s the
+codegen image), go1.27, uv/ruff, node/pnpm.
+
+### Step 1 — proto: ListFundamentalMetrics RPC + messages [done]
+- Additive: `rpc ListFundamentalMetrics` on IndicatorsService; `ListFundamentalMetricsRequest{}`,
+  `FundamentalMetricInfo{metric, data_key, meaning}`, `ListFundamentalMetricsResponse{repeated metrics}`.
+- `buf lint` clean; `buf breaking` vs main-dev exit 0 (additive). Files: `indicators/v1/indicators.proto`.
+
+### Step 2 — proto-gen: regenerate stubs [done]
+- Host-native `buf-gen.sh` (AGAINST_BRANCH=main-dev). indicators Go/Python/TS stubs carry the new RPC
+  + messages. Reverted the recurring analysis.pb.go gofmt whitespace drift; diff scoped to `indicators/v1`.
+- Files: `packages/proto/gen/{go,python,ts}/indicators/v1/**`.
+
+### Steps 3-4 — indicators ListFundamentalMetrics handler + tests (G1/G2) [done]
+- `servicer.py`: `_FUNDAMENTAL_METRIC_MEANING` (11-entry enum→meaning dict) + `ListFundamentalMetrics`
+  handler — iterates the enum descriptor (single source of truth), skips UNSPECIFIED, derives
+  `data_key = name.removeprefix("FUNDAMENTAL_METRIC_").lower()`, fails loud (INTERNAL abort) on a
+  missing meaning (G2), returns `FundamentalMetricInfo(metric, data_key, meaning)`.
+- `tests/test_fundamental_metrics.py`: G2 (11 entries, all non-empty key+meaning), completeness (enum
+  set parity), G1 cross-service contract (every data_key is a real `marketdata.Fundamentals` field —
+  imports `gen.marketdata.v1.marketdata_pb2`). 3 passed.
+- Verify: ruff clean; full suite 143 passed, coverage 81.44% (≥50).
+- Files: `app/handlers/servicer.py`, `tests/test_fundamental_metrics.py`.
+
+### Steps 5-6 — agent manage_formula declare/view + descriptor-parity test (G5) [done]
+- `tools.py manage_formula`: added `fundamental_inputs: list[str] | None` param + docstring; threaded
+  into the formula dict (`or []`) and the update `supplied` mask dict.
+- `client.py manage_formula`: added `_build_fundamental_inputs` (NAME-string → enum `.Value()`; a bad
+  name raises with the valid catalog listed — F-3/F-10 no-silent-drop) and set `fundamental_inputs=`
+  on both `RegisterFormulaRequest` and `UpdateFormulaRequest`. get_formula/list_formulas already
+  MessageToDict → `fundamentalInputs` NAME-strings surface automatically.
+- `test_formula_builders.py`: removed `fundamental_inputs` from the register+update
+  intentionally-unset sets (the descriptor-parity guard now requires the builder to set it); added it
+  to both capture dicts; new `test_register_sends_fundamental_inputs` (NAME→enum) and
+  `test_get_formula_returns_fundamental_inputs` (AC-1/AC-3 declare→get round-trip, camelCase
+  NAME-strings). 8 passed.
+- Verify: ruff clean; full agent suite 449 passed, 79.27% coverage (≥40).
+- Files: `app/tools.py`, `app/client.py`, `tests/test_formula_builders.py`.
+
+### Steps 7-8 — agent list_fundamental_metrics tool + docs (G4/G5) [done]
+- `client.py`: `list_fundamental_metrics()` — channel to INDICATORS_ENDPOINT, `ListFundamentalMetrics`
+  RPC, `metadata=_metadata()` (G4), returns `[MessageToDict(m) …]`.
+- `tools.py`: new `@server.tool() list_fundamental_metrics` (read-only catalog); `test_formula`
+  docstring gains fundamentals snake_case `input_data` guidance + `list_fundamental_metrics` cross-ref.
+- Tool count 49 → **50** on this branch (main-dev base, pre-204): all 6 surfaces bumped
+  (tools.py:4/58 + docstring list entry, CLAUDE.md:43/49 + new table row + manage_formula row,
+  mcp-tools.md:3/10/45, copilot.ts) and `test_tools_endpoint.py` registration set gained
+  `list_fundamental_metrics`. **NOTE:** 204 (still-open PR #1173) bumps the same surfaces 49→51, so
+  whichever of 204/205 merges second resolves the count to 52.
+- `tests/test_fundamental_metrics_tool.py`: AC-4 catalog shape (11 metrics, metric/dataKey/meaning) +
+  G4 (client forwards `metadata=`, MessageToDict → NAME-string + camelCase dataKey). 2 passed.
+- `mcp-tools.md`: manage_formula `fundamental_inputs` param row, get_formula/list_formulas
+  `fundamentalInputs` return, test_formula input_data note, new `### list_fundamental_metrics` section.
+- `strat-lab/skills/backtest/SKILL.md`: fundamentals-input operand section gains a
+  `list_fundamental_metrics` cross-ref (same-PR docs, G5).
+- Verify: ruff clean; full agent suite 451 passed, 79.29% coverage (≥40); zero `forty-nine` remain.
+
+### Steps 9-10 — UI declare/view (FundamentalInputEditor + BFF + useFormulas) [done]
+- `insightsBff.ts`: `listFundamentalMetrics` forward added to the IndicatorsService block (read-only).
+- `FundamentalInputEditor.tsx` (new): add/remove picker over the FundamentalMetric catalog
+  (`useFundamentalMetrics` hook, `staleTime: Infinity`), Select value = `String(metric)`.
+- **Design call (deviation from spec's `string[]`):** the UI carries the **numeric** `FundamentalMetric`
+  enum end-to-end (component state, hooks, `onSave`, `initialFundamentalInputs`). protobuf-es typed-client
+  init requires numeric enum values, not NAME-strings; Connect-JSON still serializes them to NAME-strings
+  on the wire, so the acceptance contract (mock receives NAME-strings) holds. No NAME↔number juggling.
+- `FormulaWorkspace.tsx`: `initialFundamentalInputs` prop + state + a "Fundamental inputs" Card after
+  Outputs; `onSave` drops UNSPECIFIED rows. `[id]/page.tsx` seeds from `formula.fundamentalInputs`.
+- Step 10 vitest: react-query mocked (node-env, no jsdom) — `useMutation` captures the mutationFn;
+  asserts both hooks forward `fundamentalInputs` and default to `[]`. UI lint+build green; test:unit 197.
+
+### Steps 11-12 — UI fundamentals value grid + symbol-prefill (G3) [done]
+- `insightsBff.ts`: `getFundamentalsMulti` forward added to the MarketDataService block (read-only).
+- `src/lib/fundamentalMetrics.ts` (new): `dataKeyToProtoField` (`pe_ratio`→`peRatio`, replaces the
+  spec's unused NAME-based `metricNameToDataKey`) + `fundamentalsToInputData(row, catalog)` — honors the
+  authoritative `missingMetrics` (MARKETDATA-11), maps missing/absent/non-finite → null, preserves a
+  legitimate 0, never NaN (fails.md:86).
+- `FormulaWorkspace.tsx`: when a formula declares fundamentals the Run cell renders a per-metric value
+  grid (in place of the JSON textarea) + a symbol Input/Load that prefills from GetFundamentalsMulti;
+  `handleRun` builds the sandbox `data` from the grid (snake_case keys, null omitted).
+- Step 12 vitest (`fundamentalMetrics.test.ts`): all 11 data-key→field conversions + full/missing/
+  non-finite/0-preserved/subset cases. Coverage 83%; UI build+lint green.
+
+### Step 13 — analysis G6 third-leg parity [done]
+- `tests/test_fundamental_metric_parity.py`: pins analysis's `_FUNDAMENTAL_METRIC_DATA_KEY` == the
+  mechanical `name.removeprefix("FUNDAMENTAL_METRIC_").lower()` == the proto enum descriptor (11 values).
+  Test-only. Full analysis suite 842 passed, 83.91% coverage.
+
+### Step 14 — e2e + INVENTORY.md [done]
+- `formulas.spec.ts` feature-205 block AC-2..6: picker lists 11 (AC-4), save sends NAME-string on the
+  wire (AC-2), open FORMULA_FUNDAMENTALS shows selected (AC-3), run sends snake_case input_data (AC-5),
+  symbol-prefill fills from GetFundamentalsMulti never-NaN (AC-6). IndicatorsService page.route-stubbed
+  (mock-backend registers no IndicatorsService — matches existing formulas.spec pattern);
+  `getFundamentalsMulti` added to the mock-backend MarketDataService so AC-6 hits the real BFF forward.
+  `formulas.spec.ts` 10/10 green, no regression. INVENTORY.md rows for FUNDAMENTALS_AAPL +
+  FORMULA_FUNDAMENTALS updated with the new consumers.
+
+### Code-completed
+- status.md → `code-completed`; @AC-1..7 promoted to durable business-rule suites (C-16).
+- **Merge collision to resolve at integration:** 204 merged to main-dev (PR #1173) bumping the MCP tool
+  count 49→51 (query_bars, query_fundamentals) and touching insightsBff/mock-backend/CLAUDE.md/
+  mcp-tools.md/INVENTORY.md; 205 bumped 49→50 (list_fundamental_metrics) from a pre-204 base. Merging
+  main-dev resolves the combined count to **52** across all 6 surfaces + `test_tools_endpoint.py`, keeping
+  all three new tools; shared BFF/mock-backend/docs blocks union both features' additions.

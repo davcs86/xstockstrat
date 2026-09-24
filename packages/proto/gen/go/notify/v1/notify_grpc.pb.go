@@ -23,6 +23,7 @@ const (
 	NotifyService_StreamAlerts_FullMethodName               = "/xstockstrat.notify.v1.NotifyService/StreamAlerts"
 	NotifyService_AcknowledgeAlert_FullMethodName           = "/xstockstrat.notify.v1.NotifyService/AcknowledgeAlert"
 	NotifyService_ListAlerts_FullMethodName                 = "/xstockstrat.notify.v1.NotifyService/ListAlerts"
+	NotifyService_MarkAlertRead_FullMethodName              = "/xstockstrat.notify.v1.NotifyService/MarkAlertRead"
 	NotifyService_RegisterPushSubscription_FullMethodName   = "/xstockstrat.notify.v1.NotifyService/RegisterPushSubscription"
 	NotifyService_UnregisterPushSubscription_FullMethodName = "/xstockstrat.notify.v1.NotifyService/UnregisterPushSubscription"
 )
@@ -43,6 +44,9 @@ type NotifyServiceClient interface {
 	AcknowledgeAlert(ctx context.Context, in *AcknowledgeAlertRequest, opts ...grpc.CallOption) (*AcknowledgeAlertResponse, error)
 	// List historical alerts
 	ListAlerts(ctx context.Context, in *ListAlertsRequest, opts ...grpc.CallOption) (*ListAlertsResponse, error)
+	// Mark one or more alerts read for the calling user (feature 203). Owner resolved from the
+	// propagated x-user-id header (C-03). Idempotent — re-marking preserves the original read_at.
+	MarkAlertRead(ctx context.Context, in *MarkAlertReadRequest, opts ...grpc.CallOption) (*MarkAlertReadResponse, error)
 	// Register (or upsert) a Web Push subscription for the calling user.
 	// The owner is resolved from the propagated x-user-id metadata header (C-03), never the body.
 	RegisterPushSubscription(ctx context.Context, in *RegisterPushSubscriptionRequest, opts ...grpc.CallOption) (*RegisterPushSubscriptionResponse, error)
@@ -107,6 +111,16 @@ func (c *notifyServiceClient) ListAlerts(ctx context.Context, in *ListAlertsRequ
 	return out, nil
 }
 
+func (c *notifyServiceClient) MarkAlertRead(ctx context.Context, in *MarkAlertReadRequest, opts ...grpc.CallOption) (*MarkAlertReadResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MarkAlertReadResponse)
+	err := c.cc.Invoke(ctx, NotifyService_MarkAlertRead_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *notifyServiceClient) RegisterPushSubscription(ctx context.Context, in *RegisterPushSubscriptionRequest, opts ...grpc.CallOption) (*RegisterPushSubscriptionResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(RegisterPushSubscriptionResponse)
@@ -143,6 +157,9 @@ type NotifyServiceServer interface {
 	AcknowledgeAlert(context.Context, *AcknowledgeAlertRequest) (*AcknowledgeAlertResponse, error)
 	// List historical alerts
 	ListAlerts(context.Context, *ListAlertsRequest) (*ListAlertsResponse, error)
+	// Mark one or more alerts read for the calling user (feature 203). Owner resolved from the
+	// propagated x-user-id header (C-03). Idempotent — re-marking preserves the original read_at.
+	MarkAlertRead(context.Context, *MarkAlertReadRequest) (*MarkAlertReadResponse, error)
 	// Register (or upsert) a Web Push subscription for the calling user.
 	// The owner is resolved from the propagated x-user-id metadata header (C-03), never the body.
 	RegisterPushSubscription(context.Context, *RegisterPushSubscriptionRequest) (*RegisterPushSubscriptionResponse, error)
@@ -168,6 +185,9 @@ func (UnimplementedNotifyServiceServer) AcknowledgeAlert(context.Context, *Ackno
 }
 func (UnimplementedNotifyServiceServer) ListAlerts(context.Context, *ListAlertsRequest) (*ListAlertsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListAlerts not implemented")
+}
+func (UnimplementedNotifyServiceServer) MarkAlertRead(context.Context, *MarkAlertReadRequest) (*MarkAlertReadResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method MarkAlertRead not implemented")
 }
 func (UnimplementedNotifyServiceServer) RegisterPushSubscription(context.Context, *RegisterPushSubscriptionRequest) (*RegisterPushSubscriptionResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method RegisterPushSubscription not implemented")
@@ -260,6 +280,24 @@ func _NotifyService_ListAlerts_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _NotifyService_MarkAlertRead_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MarkAlertReadRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NotifyServiceServer).MarkAlertRead(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NotifyService_MarkAlertRead_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NotifyServiceServer).MarkAlertRead(ctx, req.(*MarkAlertReadRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _NotifyService_RegisterPushSubscription_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(RegisterPushSubscriptionRequest)
 	if err := dec(in); err != nil {
@@ -314,6 +352,10 @@ var NotifyService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListAlerts",
 			Handler:    _NotifyService_ListAlerts_Handler,
+		},
+		{
+			MethodName: "MarkAlertRead",
+			Handler:    _NotifyService_MarkAlertRead_Handler,
 		},
 		{
 			MethodName: "RegisterPushSubscription",

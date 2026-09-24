@@ -253,9 +253,13 @@ export interface GetHistoricalFundamentalsRequest {
     rangeEnd?: Date | undefined;
     /** e.g. ["quarterly","annual"]; empty = both */
     periodTypes: string[];
+    /** feature 204 — composite-cursor pagination */
+    page?: PageRequest | undefined;
 }
 export interface GetHistoricalFundamentalsResponse {
     periods: HistoricalFundamentalsPeriod[];
+    /** feature 204 */
+    pagination?: PageResponse | undefined;
 }
 export interface BackfillFundamentalsRequest {
     symbols: string[];

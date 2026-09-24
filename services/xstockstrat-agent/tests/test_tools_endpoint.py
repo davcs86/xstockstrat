@@ -21,6 +21,8 @@ def test_list_tools_returns_all_registered_tools():
     body = r.json()
     names = {t["name"] for t in body["tools"]}
     assert names == {
+        "query_bars",
+        "query_fundamentals",
         "list_signal_sources",
         "extract_email_content",
         "extract_website_content",
@@ -70,6 +72,7 @@ def test_list_tools_returns_all_registered_tools():
         "db_analyze_workload_indexes",
         "db_analyze_query_indexes",
         "db_analyze_db_health",
+        "list_fundamental_metrics",
     }
 
 

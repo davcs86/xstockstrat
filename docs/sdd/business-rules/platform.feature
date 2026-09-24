@@ -185,3 +185,24 @@ Feature: Platform-wide guarantees
     Then those four rows cite seed migration 027 instead of "No seed migration"
     And the config-governance per-feature registered-keys log records the four keys under feature 182
     And the ~5 other analysis.* / analysis.opportunity.* rows that still have no seed migration keep their "No seed migration" note unchanged
+
+  @AC-3 @FR-2 @feature-205
+  Scenario: Declared fundamental inputs round-trip on read
+    Given formula "pe_value_score" has fundamental_inputs [PE_RATIO, PB_RATIO]
+    When an author calls get_formula for "pe_value_score"
+    Then the response carries fundamentalInputs = ["FUNDAMENTAL_METRIC_PE_RATIO", "FUNDAMENTAL_METRIC_PB_RATIO"] (camelCase key, enum NAME-strings, per MessageToDict)
+    And the FormulaEditor shows both metrics as selected
+
+  @AC-4 @FR-3 @feature-205
+  Scenario: The fundamental-metric catalog is discoverable
+    Given an author who has not read the proto
+    When the author requests the available fundamental metrics via the MCP
+    Then the response includes all 11 FundamentalMetric values with a human-readable meaning for each
+    And the /insights fundamental-input picker offers the same 11 options
+
+  @AC-7 @FR-6 @feature-205
+  Scenario: An authored fundamentals formula behaves identically as a strategy component
+    Given formula "pe_value_score" authored via the FormulaEditor with fundamental_inputs [PE_RATIO, PB_RATIO]
+    When the same formula is used as a COMPONENT_KIND_CUSTOM_FORMULA in a strategy (feature 201)
+    Then the strategy evaluator feeds it the same pe_ratio and pb_ratio snake_case data-keys
+    And the component's numeric output equals the score test_formula returned for the identical input values

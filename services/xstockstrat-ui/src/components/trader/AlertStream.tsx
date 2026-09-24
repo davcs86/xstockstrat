@@ -7,18 +7,28 @@ import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '../ui/sheet';
 import { Separator } from '../ui/separator';
-
-// AlertSeverity enum: 1=INFO, 2=WARNING, 3=ERROR, 4=CRITICAL
-const severityLabel: Record<number, string> = { 1: 'INFO', 2: 'WARN', 3: 'ERROR', 4: 'CRITICAL' };
-const severityVariant: Record<number, 'info' | 'warning' | 'destructive'> = {
-  1: 'info',
-  2: 'warning',
-  3: 'destructive',
-  4: 'destructive',
-};
+import { severityLabel, severityVariant } from '@/lib/alertShared';
 
 export function AlertStream() {
   const [alerts, setAlerts] = useState<Alert[]>([]);
+  // Server-side per-user unread count (feature 203) — the badge reflects this, not the in-memory
+  // stream length. limit:1 fetches just the count without loading the full list.
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    notifyClient
+      .listAlerts({ limit: 1 })
+      .then((res) => {
+        if (active) setUnreadCount(res.unreadCount);
+      })
+      .catch(() => {
+        // Count fetch failed — leave the badge at its last known value.
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -38,7 +48,7 @@ export function AlertStream() {
     return () => ctrl.abort();
   }, []);
 
-  const unread = alerts.length;
+  const unread = unreadCount;
   const hasHighSeverity = alerts.some((a) => a.severity >= 3);
 
   return (

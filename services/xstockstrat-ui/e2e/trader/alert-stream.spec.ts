@@ -22,18 +22,26 @@ test.describe('AlertStream', () => {
     ).toBeVisible();
   });
 
-  test('badge shows 3 after stream completes', async ({ page }) => {
+  test('badge reflects the server-side unread count, not the stream length (AC-2)', async ({
+    page,
+  }) => {
     await addAuthCookie(page);
     await page.goto('/trader');
-    // Mock streams 3 bounded alerts then ends — badge shows count 3.
-    // Use exact-match regex to avoid matching numeric substrings in portfolio/order spans.
-    await expect(page.locator('span').filter({ hasText: /^3$/ })).toBeVisible({ timeout: 10000 });
+    // listAlerts returns unreadCount = MOCK_UNREAD_COUNT (2); the stream yields 3 alerts. The badge
+    // must show the per-user server count (2), never the client-side stream array length (3) —
+    // per-user read state is why a broadcast alert can be read for one user and unread for another.
+    await expect(page.locator('span[data-slot="badge"]').filter({ hasText: /^2$/ })).toBeVisible({
+      timeout: 10000,
+    });
+    await expect(
+      page.locator('span[data-slot="badge"]').filter({ hasText: /^3$/ }),
+    ).not.toBeVisible();
   });
 
   test('opening the sheet shows at least one alert title', async ({ page }) => {
     await addAuthCookie(page);
     await page.goto('/trader');
-    const badge = page.locator('span').filter({ hasText: /^3$/ });
+    const badge = page.locator('span[data-slot="badge"]').filter({ hasText: /^2$/ });
     await expect(badge).toBeVisible({ timeout: 10000 });
     // Click the bell button — it is the direct parent of the badge span.
     await badge.locator('..').click();
@@ -52,15 +60,18 @@ test.describe('AlertStream', () => {
     });
   });
 
-  test('Clear all button resets the badge', async ({ page }) => {
+  test('Clear all empties the sheet feed; the server-driven badge is unaffected', async ({
+    page,
+  }) => {
     await addAuthCookie(page);
     await page.goto('/trader');
-    const badge = page.locator('span').filter({ hasText: /^3$/ });
+    const badge = page.locator('span[data-slot="badge"]').filter({ hasText: /^2$/ });
     await expect(badge).toBeVisible({ timeout: 10000 });
     // Click the bell button — it is the direct parent of the badge span.
     await badge.locator('..').click();
+    await expect(page.getByText('Order rejected')).toBeVisible();
     await page.getByRole('button', { name: 'Clear all' }).click();
-    // Badge disappears after clearing alerts
-    await expect(page.locator('span').filter({ hasText: /^3$/ })).not.toBeVisible();
+    // The local sheet feed empties; the unread badge tracks the server, so a local clear leaves it.
+    await expect(page.getByText('No alerts')).toBeVisible();
   });
 });

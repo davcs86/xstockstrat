@@ -95,6 +95,9 @@ router.service(NotifyService, {
   unregisterPushSubscription: forward((req, opts) =>
     notifyClient.unregisterPushSubscription(req, opts),
   ),
+  // Owner resolved from the x-user-id header (forward propagates it); the browser can't mark another
+  // user's alerts read (feature 203).
+  markAlertRead: forward((req, opts) => notifyClient.markAlertRead(req, opts)),
 });
 
 router.service(AnalysisService, {

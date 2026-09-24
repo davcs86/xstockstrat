@@ -30,6 +30,12 @@ export interface Alert {
     tags: string[];
     acknowledged: boolean;
     correlationId: string;
+    /**
+     * Per-user read state (feature 203). Populated for the calling user on ListAlerts via a LEFT JOIN
+     * on notify.alert_reads; StreamAlerts leaves read=false (proto3 default). read_at is absent when unread.
+     */
+    read: boolean;
+    readAt?: Date | undefined;
 }
 export interface EmitAlertRequest {
     severity: AlertSeverity;
@@ -69,10 +75,20 @@ export interface ListAlertsRequest {
     categories: string[];
     limit: number;
     pageToken: string;
+    /** feature 203 — when true, return only alerts the calling user has not read */
+    unreadOnly: boolean;
 }
 export interface ListAlertsResponse {
     alerts: Alert[];
     nextPageToken: string;
+    /** feature 203 — count of the calling user's unread alerts */
+    unreadCount: number;
+}
+export interface MarkAlertReadRequest {
+    /** Owner resolved from the propagated x-user-id header (C-03), never the body. */
+    alertIds: string[];
+}
+export interface MarkAlertReadResponse {
 }
 /** Web Push subscription registration (feature 165 — pwa-notifications). */
 export interface RegisterPushSubscriptionRequest {
@@ -106,6 +122,8 @@ export declare const AcknowledgeAlertRequest: MessageFns<AcknowledgeAlertRequest
 export declare const AcknowledgeAlertResponse: MessageFns<AcknowledgeAlertResponse>;
 export declare const ListAlertsRequest: MessageFns<ListAlertsRequest>;
 export declare const ListAlertsResponse: MessageFns<ListAlertsResponse>;
+export declare const MarkAlertReadRequest: MessageFns<MarkAlertReadRequest>;
+export declare const MarkAlertReadResponse: MessageFns<MarkAlertReadResponse>;
 export declare const RegisterPushSubscriptionRequest: MessageFns<RegisterPushSubscriptionRequest>;
 export declare const RegisterPushSubscriptionResponse: MessageFns<RegisterPushSubscriptionResponse>;
 export declare const UnregisterPushSubscriptionRequest: MessageFns<UnregisterPushSubscriptionRequest>;
@@ -160,6 +178,19 @@ export declare const NotifyServiceService: {
         readonly responseDeserialize: (value: Buffer) => ListAlertsResponse;
     };
     /**
+     * Mark one or more alerts read for the calling user (feature 203). Owner resolved from the
+     * propagated x-user-id header (C-03). Idempotent — re-marking preserves the original read_at.
+     */
+    readonly markAlertRead: {
+        readonly path: "/xstockstrat.notify.v1.NotifyService/MarkAlertRead";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: MarkAlertReadRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => MarkAlertReadRequest;
+        readonly responseSerialize: (value: MarkAlertReadResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => MarkAlertReadResponse;
+    };
+    /**
      * Register (or upsert) a Web Push subscription for the calling user.
      * The owner is resolved from the propagated x-user-id metadata header (C-03), never the body.
      */
@@ -196,6 +227,11 @@ export interface NotifyServiceServer extends UntypedServiceImplementation {
     /** List historical alerts */
     listAlerts: handleUnaryCall<ListAlertsRequest, ListAlertsResponse>;
     /**
+     * Mark one or more alerts read for the calling user (feature 203). Owner resolved from the
+     * propagated x-user-id header (C-03). Idempotent — re-marking preserves the original read_at.
+     */
+    markAlertRead: handleUnaryCall<MarkAlertReadRequest, MarkAlertReadResponse>;
+    /**
      * Register (or upsert) a Web Push subscription for the calling user.
      * The owner is resolved from the propagated x-user-id metadata header (C-03), never the body.
      */
@@ -222,6 +258,13 @@ export interface NotifyServiceClient extends Client {
     listAlerts(request: ListAlertsRequest, callback: (error: ServiceError | null, response: ListAlertsResponse) => void): ClientUnaryCall;
     listAlerts(request: ListAlertsRequest, metadata: Metadata, callback: (error: ServiceError | null, response: ListAlertsResponse) => void): ClientUnaryCall;
     listAlerts(request: ListAlertsRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: ListAlertsResponse) => void): ClientUnaryCall;
+    /**
+     * Mark one or more alerts read for the calling user (feature 203). Owner resolved from the
+     * propagated x-user-id header (C-03). Idempotent — re-marking preserves the original read_at.
+     */
+    markAlertRead(request: MarkAlertReadRequest, callback: (error: ServiceError | null, response: MarkAlertReadResponse) => void): ClientUnaryCall;
+    markAlertRead(request: MarkAlertReadRequest, metadata: Metadata, callback: (error: ServiceError | null, response: MarkAlertReadResponse) => void): ClientUnaryCall;
+    markAlertRead(request: MarkAlertReadRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: MarkAlertReadResponse) => void): ClientUnaryCall;
     /**
      * Register (or upsert) a Web Push subscription for the calling user.
      * The owner is resolved from the propagated x-user-id metadata header (C-03), never the body.
