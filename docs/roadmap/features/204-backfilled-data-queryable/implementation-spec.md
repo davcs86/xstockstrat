@@ -533,7 +533,7 @@ cd services/xstockstrat-ui && pnpm run lint
 
 ### Step 12 — service: Register Data Explorer in PLATFORM_SUBNAV and NAV_GROUPS
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/shared/PlatformHeader.tsx` — modify

@@ -247,3 +247,11 @@ node/pnpm. Docker daemon up but codegen stays host-native.
 - Verify: `npx tsc --noEmit` clean for both new files (2 unrelated pre-existing errors in
   backfills.spec.ts/middleware.test.ts, transpile-only in CI); `pnpm run lint` exit 0.
 - Files: `src/hooks/useDataExplorer.ts`, `src/app/insights/data-explorer/page.tsx`. Deviations: none.
+
+### Step 12 — service: nav registration [done]
+- Added `{ label: 'Data Explorer', href: '/insights/data-explorer' }` to `PLATFORM_SUBNAV.insights`
+  (after Watchlists) in PlatformHeader.tsx and to the `NAV_GROUPS` Engine group (after Performance)
+  in navGroups.tsx — the shell/mobile nav both read the latter. Satisfies C-10; extends @AC-5.
+- Verify: grep confirms both; entries match the existing item shape (tsc/lint clean via the Step 13
+  e2e + build gate).
+- Files: `src/components/shared/PlatformHeader.tsx`, `src/components/shared/navGroups.tsx`.
