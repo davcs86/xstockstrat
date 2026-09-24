@@ -9,7 +9,7 @@
 
 ## Chosen Approach
 
-Ship 204 as an **additive-proto** feature: one new read-only `ListFundamentalMetrics` RPC on
+Ship 205 as an **additive-proto** feature: one new read-only `ListFundamentalMetrics` RPC on
 `xstockstrat-indicators` (the `FundamentalMetric` enum owner), plus **code-only** threading of
 feature 200/201's already-persisted `fundamental_inputs` plumbing through the two consumer surfaces
 (agent MCP tools + `/insights` formula builder). The indicators backend persistence and
@@ -95,7 +95,7 @@ deliberate in-scope addition beyond recon's original affected set).
 ## Open Risks
 
 - [ ] **Two-vocabulary leak in the UI test harness** — picker=NAME-strings, grid=snake_case, prefill=camelCase→snake_case; with no execute-time validation a leaked key silently reads `None` (green run, wrong numbers). Addressed at **step 6** (AC-7 numeric round-trip parity) + **step 5** (FUNDAMENTALS_AAPL prefill parity).
-- [ ] **`data_key` three-way contract drift on a *future* enum addition** — pinned by **G1** (step 1: derived key ↔ `marketdata.Fundamentals`) and **G6** (step 6: analysis map ↔ mechanical derivation). 204 adds no metric, so this is a future-proofing guard.
+- [ ] **`data_key` three-way contract drift on a *future* enum addition** — pinned by **G1** (step 1: derived key ↔ `marketdata.Fundamentals`) and **G6** (step 6: analysis map ↔ mechanical derivation). 205 adds no metric, so this is a future-proofing guard.
 - [ ] **Scope addition to `xstockstrat-analysis`** — G6 is a test-only touch to a service recon listed out of scope; recorded here and in the recon addendum as deliberate. Addressed at **step 6**.
 - [ ] **Zero-sentinel handling** — G1/G2 and the RPC response exclude `FUNDAMENTAL_METRIC_UNSPECIFIED`; the handler skips it. `/sdd-spec` precision note for **step 1**.
 

@@ -1,8 +1,8 @@
 # Context: formula-fundamental-inputs-authoring
 
-**Feature**: `docs/roadmap/features/204-formula-fundamental-inputs-authoring/feature.md`
-**Product Spec**: `docs/roadmap/features/204-formula-fundamental-inputs-authoring/product-spec.md`
-**Implementation Spec**: `docs/roadmap/features/204-formula-fundamental-inputs-authoring/implementation-spec.md`
+**Feature**: `docs/roadmap/features/205-formula-fundamental-inputs-authoring/feature.md`
+**Product Spec**: `docs/roadmap/features/205-formula-fundamental-inputs-authoring/product-spec.md`
+**Implementation Spec**: `docs/roadmap/features/205-formula-fundamental-inputs-authoring/implementation-spec.md`
 
 ---
 
@@ -13,7 +13,7 @@
 - **Duplicate check vs feature 201 (`fundamentals-formula-inputs`, code-completed):** distinct.
   201 wired fundamentals into the **analysis strategy evaluator** (formula-as-strategy-component,
   PIT-as-of-bar) and **explicitly excluded** a new agent tool / config-ui page beyond strategy
-  authoring; its UI touch was a single read-only ComponentEditor badge. 204 is the **formula-authoring
+  authoring; its UI touch was a single read-only ComponentEditor badge. 205 is the **formula-authoring
   exposure layer** 201 left out, built on 201's `fundamental_inputs` field + `FundamentalMetric` enum.
 - Grounding facts from recon this session:
   - 201 added `fundamental_inputs` (`repeated FundamentalMetric`) to `FormulaDefinition`,
@@ -60,8 +60,8 @@
 - Overlap: CLEAN — no resource collision. No in-flight feature edits indicators.proto (196 makes zero
   .proto edits), the agent formula tools, or the /insights formula UI. Additive `ListFundamentalMetrics`
   RPC (if design adds it) lands on an uncontested surface.
-- **Merge-order recorded:** added row `204 → 201` (hard consumed-seam dependency; 201 code-completed,
-  not yet launched) to docs/roadmap/features/merge-order.md. 204's final integration PR must not merge
+- **Merge-order recorded:** added row `205 → 201` (hard consumed-seam dependency; 201 code-completed,
+  not yet launched) to docs/roadmap/features/merge-order.md. 205's final integration PR must not merge
   before 201 lands. Soft rebase-only overlap with 187/197/198/199/200 in agent client.py/tools.py
   (disjoint functions) and mcp-tools.md (section-disjoint) — re-verify at Mode B.
 - Next: /sdd-design (FULL, operator's choice) — starting this session.

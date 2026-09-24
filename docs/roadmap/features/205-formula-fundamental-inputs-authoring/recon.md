@@ -55,8 +55,8 @@ consumer surfaces still have.
 
 - **PRESERVE** `@AC-4 @FR-2 @FR-3 @feature-173` "An empty allowed_imports denies all sandbox imports instead of reverting to the permissive default" (`services/xstockstrat-indicators/acceptance/fix-python-config-zero-trap.feature`) — the authoring "Run"/`test_formula` path flows through `ExecuteFormula`; a fundamentals-input test run must not weaken or bypass the sandbox import allow-list.
 - **PRESERVE** `@AC-5 @FR-5 @feature-176` "Concurrent formula executions are no longer serialized to one at a time" (`services/xstockstrat-indicators/acceptance/analysis-concurrency-offload.feature`) — `test_formula`/Run must keep `ExecuteFormula` off-loop concurrency (`indicators.sandbox.max_concurrent`) and the per-run `indicators.sandbox.timeout_ms` kill.
-- **EXTEND (net-new)** — no durable `@AC-*` exists for the 200/201 `fundamental_inputs`/`FundamentalMetric` plumbing (documented only in `services/xstockstrat-indicators/CLAUDE.md` § Database), nor for the agent formula tools or the `/insights` formula builder. 204's scenarios (`@AC-1..7`) are net-new authoring guarantees, not regressions.
-- **No CHANGE** to any existing guarantee. 204 is authoring-side only and does **not** modify the analysis strategy evaluator; FR-6/@AC-7 asserts parity with 201's already-built behavior without editing it (analysis was scanned for the parity claim; no analysis code change is in scope).
+- **EXTEND (net-new)** — no durable `@AC-*` exists for the 200/201 `fundamental_inputs`/`FundamentalMetric` plumbing (documented only in `services/xstockstrat-indicators/CLAUDE.md` § Database), nor for the agent formula tools or the `/insights` formula builder. 205's scenarios (`@AC-1..7`) are net-new authoring guarantees, not regressions.
+- **No CHANGE** to any existing guarantee. 205 is authoring-side only and does **not** modify the analysis strategy evaluator; FR-6/@AC-7 asserts parity with 201's already-built behavior without editing it (analysis was scanned for the parity claim; no analysis code change is in scope).
 
 ## Dependencies
 
@@ -74,7 +74,7 @@ consumer surfaces still have.
 - **Catalog exposure (design fork):** new indicators `ListFundamentalMetrics` RPC (single source of truth, enum owner) vs static surfacing (UI reuses `strategyCatalog.ts FUNDAMENTAL_METRICS`; agent returns the generated enum) — DRY-vs-YAGNI (C-18). The UI already maintains a static `FUNDAMENTAL_METRICS` list that could drift from the proto.
 - **Execute-time validation gap (not-found):** `ExecuteFormula` does not validate `input_data` keys against a formula's declared `fundamental_inputs` (`servicer.py` ExecuteFormula / `sandbox.py`). Decide whether `test_formula` needs any such check (likely YAGNI — test is exploratory).
 - **No multi-select primitive (not-found):** `src/components/ui/` has single-select `Combobox`/`Select` only; the metric picker mirrors the `RepeatableRowList`+`Select` list pattern or a checkbox group.
-- **C-14/parity (FR-6):** the "identical behavior as a strategy component" guarantee spans into 201's evaluator, which 204 does not modify — the parity is an assertion to test, not code to write here.
+- **C-14/parity (FR-6):** the "identical behavior as a strategy component" guarantee spans into 201's evaluator, which 205 does not modify — the parity is an assertion to test, not code to write here.
 
 ## Recommended Scope
 
