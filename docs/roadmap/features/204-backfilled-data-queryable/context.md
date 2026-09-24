@@ -54,3 +54,12 @@
 - Acceptance scenarios updated: @AC-8/@AC-9 (1Day timeframe), @AC-12/@AC-14 (`as_of`), @AC-18/@AC-19 (EmbeddedResource), @AC-22 added (missing_metrics). Product-spec FR-7/FR-9 wording updated.
 - Constitution rules touched: C-10, C-14, C-15, C-16, C-17, C-18, P-03. Floor breaches: none.
 - Status: spec-ready → design-approved.
+
+## Session 2026-09-24T00:06:00Z — sdd-spec
+
+- Generated `implementation-spec.md` with 14 steps across 4 execution layers: (1) proto + codegen (Steps 1–2), (2) marketdata service pagination (Steps 3–4), (3) agent wiring + tools + docs (Steps 5–9), (4) UI BFF + page + nav + E2E (Steps 10–14).
+- All 22 `@AC-*` scenarios covered: AC-1 through AC-4/AC-8/AC-11/AC-12/AC-15 through AC-17/AC-20/AC-22 in Step 13 (E2E); AC-5 through AC-7/AC-9/AC-13/AC-14/AC-18/AC-19/AC-21 in Step 8 (agent tests); AC-10 in Step 14 (nav E2E).
+- Constitution gates satisfied: C-08 (test-step pairing for all service steps), C-14 (both consumer surfaces — UI Step 11 and Agent Steps 6–7), C-15 (full scenario coverage table).
+- Tool count 49 → 51 update across all 6 surfaces deferred to Step 9 (docs step).
+- Composite cursor `(period_end, fiscal_period)` implementation specified in Step 3 with `filterAsOf` pushed into SQL.
+- Status: design-approved → implementation-ready.

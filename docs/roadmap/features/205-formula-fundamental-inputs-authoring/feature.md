@@ -13,6 +13,7 @@
 | 2026-09-24 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-09-24 | `draft` → `spec-ready` | /sdd-review | Product spec approved (warnings, no blockers); merge-order 205→201 recorded |
 | 2026-09-24 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + design.md written |
+| 2026-09-24 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated (14 steps); 7 AC scenarios traced to test steps |
 
 ---
 
@@ -22,7 +23,7 @@
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
 - [Recon Dossier](recon.md) — Phase 0 grounded codebase map (sdd-design)
 - [Design](design.md) — debated, approved architecture (sdd-design, 3 rounds)
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec <slug>`_
+- [Implementation Spec](implementation-spec.md) — 14-step plan with codebase evidence and AC traceability
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -51,4 +52,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-spec formula-fundamental-inputs-authoring` — generate the implementation spec from the approved design
+`/sdd-review formula-fundamental-inputs-authoring impl-spec` — advisory review, then `/sdd-execute formula-fundamental-inputs-authoring`

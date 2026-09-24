@@ -13,6 +13,7 @@
 | 2026-09-24 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-09-24 | `draft` → `spec-ready` | /sdd-review | Product spec approved (2 warnings) |
 | 2026-09-24 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, quick+extended) and approved; recon.md + design.md written |
+| 2026-09-24 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated (14 steps) |
 
 ---
 
@@ -22,7 +23,7 @@
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
 - [Recon Dossier](recon.md) — codebase discovery (Phase 0)
 - [Design Document](design.md) — approved architecture (Phase 1)
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec backfilled-data-queryable`_
+- [Implementation Spec](implementation-spec.md) — 14 numbered steps with codebase evidence
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -45,4 +46,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-spec backfilled-data-queryable` — generate implementation spec from the approved design
+`/sdd-review backfilled-data-queryable impl-spec` — advisory quality check, then `/sdd-execute backfilled-data-queryable`

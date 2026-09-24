@@ -91,3 +91,26 @@
 - Scope note: G6 adds a **test-only** touch to xstockstrat-analysis (recon originally excluded it) —
   recorded in recon.md Addendum + design.md; no analysis runtime change.
 - Status: spec-ready → design-approved.
+
+## Session 2026-09-24T00:00:00Z — sdd-spec
+
+- Wrote implementation-spec.md (14 steps) from the approved design.md and recon.md.
+- Codebase discovery read all referenced files to confirm drop points with path:line evidence (C-01):
+  - Proto: indicators.proto lines 14-41 (service block), 136-149 (enum), 244-246 (last message)
+  - Agent: tools.py lines 842-932 (manage_formula 3 drop points), client.py lines 1042-1077
+    (register/update builders), test_formula_builders.py lines 26/31 (intentionally-unset sets)
+  - UI: useFormulas.ts lines 28-87, FormulaWorkspace.tsx lines 62-250, insightsBff.ts lines 87-158,
+    indicatorsClient.ts, ParameterEditor.tsx/OutputEditor.tsx (pattern to mirror)
+  - Analysis: evaluator.py lines 144-155 (_FUNDAMENTAL_METRIC_DATA_KEY)
+  - Docs: mcp-tools.md lines 562-839, strat-lab SKILL.md lines 100-129
+  - Fixtures: formulas.ts FORMULA_FUNDAMENTALS, fundamentals.ts FUNDAMENTALS_AAPL
+- Step decomposition: 6 advisory boundaries from design.md expanded into 14 steps (7 service + 5
+  test + 1 proto + 1 proto-gen). No migration step (feature 201's migration 006 already persists
+  fundamental_inputs). No config key step.
+- Scenario coverage (C-15): all 7 AC scenarios (AC-1..AC-7) mapped to covering test steps. AC-7
+  covered by Step 13 (analysis G6 parity — test-only analysis touch recorded in design.md).
+- Consumer-surface coverage (C-14): both named surfaces (Agent steps 5-8, UI steps 9-12/14).
+- Cross-cutting constraints applied: header propagation (C-03) cited for Steps 5, 7, 9, 11; C-13
+  non-frontend test data compliance noted for Steps 4, 6, 8, 13; C-12 test-data inventory noted
+  for Step 14 (reuses existing fixtures, no new fixture files).
+- Status: design-approved → implementation-ready.
