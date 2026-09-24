@@ -424,6 +424,12 @@ func (s *TradingService) PlaceOrder(ctx context.Context, req *tradingv1.PlaceOrd
 		return nil, err
 	}
 
+	// Reject an unspecified or per-broker-unsupported time-in-force before it reaches a broker.
+	// Runs after the halt/trading-state gates (offline accounts already returned above).
+	if err := validateTIF(req.TimeInForce, commonv1.BrokerType(accountEntry.brokerType)); err != nil {
+		return nil, err
+	}
+
 	// Compute the request-content hash BEFORE position sizing mutates req.Qty below: the hash must
 	// reflect the caller's original request so a genuine retry always matches, even if sizing moved.
 	hashDigest, err := placeOrderRequestHash(req)
@@ -1338,13 +1344,18 @@ func (s *TradingService) ReplaceOrder(ctx context.Context, req *tradingv1.Replac
 	}
 	order.IntentState = tradingv1.IntentState_INTENT_STATE_PENDING
 
-	// Only the changed fields are sent to the broker (zero/empty = leave unchanged).
+	// Only the changed fields are sent to the broker (zero/empty/nil = leave unchanged).
 	brokerReq := broker.OrderRequest{
-		Qty:         req.Qty,
-		LimitPrice:  req.LimitPrice,
-		StopPrice:   req.StopPrice,
-		Trail:       req.Trail,
-		TimeInForce: req.TimeInForce,
+		Qty:        req.Qty,
+		LimitPrice: req.LimitPrice,
+		StopPrice:  req.StopPrice,
+		Trail:      req.Trail,
+	}
+	if req.TimeInForce != nil {
+		if err := validateTIF(*req.TimeInForce, commonv1.BrokerType(entry.brokerType)); err != nil {
+			return nil, err
+		}
+		brokerReq.TimeInForce = tifToWireString(*req.TimeInForce)
 	}
 	if _, replaceErr := entry.client.ReplaceOrder(ctx, order.BrokerOrderId, brokerReq); replaceErr != nil {
 		var netErr net.Error
@@ -1369,8 +1380,8 @@ func (s *TradingService) ReplaceOrder(ctx context.Context, req *tradingv1.Replac
 	if req.StopPrice != 0 {
 		order.StopPrice = req.StopPrice
 	}
-	if req.TimeInForce != "" {
-		order.TimeInForce = req.TimeInForce
+	if req.TimeInForce != nil {
+		order.TimeInForce = *req.TimeInForce
 	}
 	order.UpdatedAt = timestamppb.New(time.Now())
 	order.IntentState = tradingv1.IntentState_INTENT_STATE_COMPLETED
@@ -2591,7 +2602,7 @@ func (s *TradingService) flattenAndHalt(ctx context.Context, bracket *repository
 	flattenOrderID := uuid.New().String()
 	flattenReq := &tradingv1.PlaceOrderRequest{
 		Symbol: order.Symbol, Side: flattenSide, OrderType: tradingv1.OrderType_ORDER_TYPE_MARKET,
-		Qty: qty, TimeInForce: "day", AccountId: bracket.AccountID, ClientOrderId: clientOrderID,
+		Qty: qty, TimeInForce: tradingv1.TimeInForce_TIME_IN_FORCE_DAY, AccountId: bracket.AccountID, ClientOrderId: clientOrderID,
 		TradingMode: order.TradingMode,
 	}
 	mode := s.resolveTradingMode(order.TradingMode)
@@ -3179,7 +3190,7 @@ func (s *TradingService) createBracket(ctx context.Context, order *tradingv1.Ord
 	case commonv1.BrokerType_BROKER_TYPE_IBKR:
 		resp, err := accountEntry.client.SubmitBracketLegs(ctx, order.BrokerOrderId, order.ClientOrderId, broker.BracketLegsRequest{
 			Symbol: order.Symbol, Side: oppositeSide(order.Side), Qty: order.FilledQty,
-			StopPrice: stopPrice, TakeProfitPrice: takeProfitPrice, TimeInForce: "day",
+			StopPrice: stopPrice, TakeProfitPrice: takeProfitPrice, TimeInForce: tifToWireString(tradingv1.TimeInForce_TIME_IN_FORCE_DAY),
 		})
 		if err != nil {
 			if uerr := s.bracketRepo.UpdateBracketStatus(ctx, rec.ID, bracketStatusFailed, "", "", err.Error()); uerr != nil {
@@ -3221,7 +3232,7 @@ func (s *TradingService) resizeBracket(ctx context.Context, order *tradingv1.Ord
 
 	resp, err := accountEntry.client.SubmitBracketLegs(ctx, order.BrokerOrderId, order.ClientOrderId, broker.BracketLegsRequest{
 		Symbol: order.Symbol, Side: oppositeSide(order.Side), Qty: order.FilledQty,
-		StopPrice: stopPrice, TakeProfitPrice: takeProfitPrice, TimeInForce: "day",
+		StopPrice: stopPrice, TakeProfitPrice: takeProfitPrice, TimeInForce: tifToWireString(tradingv1.TimeInForce_TIME_IN_FORCE_DAY),
 	})
 	if err != nil {
 		if uerr := s.bracketRepo.UpdateBracketStatus(ctx, existing.ID, bracketStatusFailed, "", "", err.Error()); uerr != nil {
@@ -3364,17 +3375,12 @@ func (s *TradingService) buildBrokerRequest(req *tradingv1.PlaceOrderRequest) br
 		tradingv1.OrderType_ORDER_TYPE_TRAILING_STOP: "trailing_stop",
 	}
 
-	tif := req.TimeInForce
-	if tif == "" {
-		tif = "day"
-	}
-
 	return broker.OrderRequest{
 		Symbol:       req.Symbol,
 		Qty:          req.Qty,
 		Side:         sideMap[req.Side],
 		OrderType:    typeMap[req.OrderType],
-		TimeInForce:  tif,
+		TimeInForce:  tifToWireString(req.TimeInForce),
 		LimitPrice:   req.LimitPrice,
 		StopPrice:    req.StopPrice,
 		TrailPrice:   req.TrailPrice,

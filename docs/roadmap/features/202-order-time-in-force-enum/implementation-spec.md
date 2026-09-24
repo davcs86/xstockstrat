@@ -188,7 +188,7 @@ ls services/xstockstrat-trading/migrations/010_normalize_tif.up.sql \
 
 ### Step 4 — service: Add TIF validation and mapping (trading)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/tif_validation.go` — create
@@ -297,7 +297,7 @@ cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-downlo
 
 ### Step 5 — test: Trading service TIF unit tests
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/tif_validation_test.go` — create

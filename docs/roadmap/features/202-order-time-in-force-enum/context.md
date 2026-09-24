@@ -149,3 +149,29 @@ but Docker Hub 429-rate-limited → codegen via host-native fallback (see Deviat
 - Verification: offline (up/down parity + next NNN=010 after 009). Live apply deferred to CI/deploy.
 - Files modified: `services/xstockstrat-trading/migrations/010_normalize_tif.{up,down}.sql`
 - Deviations: none.
+
+### Step 4 — service: TIF validation and mapping (trading) [done]
+- Created `internal/service/tif_validation.go` (tifToWireString, allowedTIFs matrix Alpaca=6/IBKR=4/
+  OFFLINE=6, validateTIF→InvalidArgument) and `internal/repository/tif.go` (tifStr, parseTif).
+- `trading_repo.go`: UpsertOrder writes `tifStr(o.TimeInForce)`; scanOrder reads `parseTif(timeInForce)`.
+- `trading.go`: validateTIF gate in PlaceOrder after halt/trading-state gates (offline returns before it —
+  documented carve-out); buildBrokerRequest uses `tifToWireString(req.TimeInForce)` (dead ""-fallback removed);
+  ReplaceOrder nil-guards `*TimeInForce` for validate+wire and persist; flattenAndHalt uses enum DAY;
+  bracket-legs use `tifToWireString(DAY)` (broker.BracketLegsRequest stays string).
+- Verification: `go build ./...` OK, `go vet` clean, gofmt clean.
+- Files modified: `internal/service/tif_validation.go`, `internal/repository/tif.go`,
+  `internal/service/trading.go`, `internal/repository/trading_repo.go`
+- Deviations: none. **Spec-gap NON-issue confirmed**: existing PlaceOrder/ReplaceOrder service tests
+  (sizing/bracket/halt/ownership/state-gate) stay green — validateTIF sits after the gates they assert,
+  and happy-path tests use offline/mock or set TIF; no out-of-scope test edits needed.
+
+### Step 5 — test: Trading service TIF unit tests [done]
+- Added `internal/service/tif_validation_test.go` (6 tests: wire map + validate Alpaca/IBKR/OFFLINE +
+  UNSPECIFIED reject) and `internal/repository/tif_test.go` (3 tests: tifStr, parseTif known, parseTif
+  unknown→UNSPECIFIED). Updated `order_intent_test.go` hash fixtures to carry `TimeInForce: DAY`.
+- **TDD red→green**: RED — `go build` failed `trading_repo.go:342: cannot use timeInForce (string) as
+  tradingv1.TimeInForce` + undefined validateTIF/tifStr/parseTif. GREEN — all 9 new tests pass;
+  `go test ./... -race` all green; total coverage 71.6% (≥40%). Covers AC-1/AC-2/AC-3/AC-4.
+- Files modified: `internal/service/tif_validation_test.go`, `internal/repository/tif_test.go`,
+  `internal/service/order_intent_test.go`
+- Deviations: none.
