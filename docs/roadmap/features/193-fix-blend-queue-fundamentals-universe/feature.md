@@ -6,6 +6,8 @@
 **Severity**: SEV-3
 **Created**: 2026-09-19
 **Last Updated**: 2026-09-19
+**Committed to main**: dd622bdc2e5b922df8dcabc6f7475b8b395a8ed3
+**Launched date**: 2026-09-24
 
 ---
 
@@ -16,6 +18,7 @@
 | 2026-09-19 | `bug-reported` → `draft` | triage (manual, from-report) | One of three defects reported today; routed to Track C (SEV-3, code change, dev/shipped). |
 | 2026-09-19 | `draft` → `code-completed` | bug-fix session | Approach A (hoist) chosen with operator sign-off; implemented, tested (5 tests), lint clean. Shipped in the consolidated today's-triage PR (single branch, no per-step PRs — task git model). |
 
+| 2026-09-24 | `code-completed` → `launched` | CI workflow | Promoted via PR #1169; committed dd622bdc2e5b922df8dcabc6f7475b8b395a8ed3 |
 ---
 
 ## Artifacts

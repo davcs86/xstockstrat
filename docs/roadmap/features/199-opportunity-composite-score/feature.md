@@ -3,6 +3,8 @@
 **Development Branch**: `feature/opportunity-composite-score`
 **Created**: 2026-09-20
 **Last Updated**: 2026-09-20
+**Committed to main**: dd622bdc2e5b922df8dcabc6f7475b8b395a8ed3
+**Launched date**: 2026-09-24
 
 ---
 
@@ -16,6 +18,7 @@
 | 2026-09-20 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 11 steps; proto field 21 + migration 024 re-confirmed against tree |
 | 2026-09-21 | `implementation-ready` → `in-progress` → `code-completed` | /sdd-execute | All 11 steps executed sequentially, one commit each, on `claude/symbol-consolidation-scoring-7kgk9t` (draft PR #1157). Renumbered 198→199 (198 taken by merged historical-fundamentals #1158); ANALYSIS-10→ANALYSIS-11. All layer tests green (analysis 803, agent 446, UI vitest 193 + 5 feature-199 Playwright); lint/format/tsc clean (no new errors) |
 
+| 2026-09-24 | `code-completed` → `launched` | CI workflow | Promoted via PR #1169; committed dd622bdc2e5b922df8dcabc6f7475b8b395a8ed3 |
 ---
 
 ## Artifacts

@@ -3,6 +3,8 @@
 **Development Branch**: `feature/order-time-in-force-enum`
 **Created**: 2026-09-24
 **Last Updated**: 2026-09-24
+**Committed to main**: dd622bdc2e5b922df8dcabc6f7475b8b395a8ed3
+**Launched date**: 2026-09-24
 
 ---
 
@@ -17,6 +19,7 @@
 | 2026-09-24 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential execution started (Step 1 proto + Step 2 codegen) |
 | 2026-09-24 | `in-progress` → `code-completed` | /sdd-execute | All 9 steps done; trading TIF tests 71.6% cov, 29/29 UI e2e green; C-16 scenarios promoted |
 
+| 2026-09-24 | `code-completed` → `launched` | CI workflow | Promoted via PR #1169; committed dd622bdc2e5b922df8dcabc6f7475b8b395a8ed3 |
 ---
 
 ## Artifacts

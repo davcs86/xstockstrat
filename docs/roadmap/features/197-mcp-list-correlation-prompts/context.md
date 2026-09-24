@@ -105,3 +105,10 @@
   "fetch the 'list_correlation_guide' prompt"). Parity test unchanged/green (imports the constant;
   still asserts all three keys + both non-joins). No doc drift — runbook/CLAUDE.md already describe
   the instructions + prompt surfaces.
+
+## Session 2026-09-24 (CI: feature status automation)
+
+- Promotion PR #1169 merged to main
+- Feature promoted and committed: dd622bdc2e5b922df8dcabc6f7475b8b395a8ed3
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-09-24

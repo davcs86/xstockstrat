@@ -3,6 +3,8 @@
 **Development Branch**: `feature/symbol-opportunity-ranking`
 **Created**: 2026-09-20
 **Last Updated**: 2026-09-21
+**Committed to main**: dd622bdc2e5b922df8dcabc6f7475b8b395a8ed3
+**Launched date**: 2026-09-24
 
 ---
 
@@ -22,6 +24,7 @@
 | 2026-09-23 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential execution on a fresh `feature/symbol-opportunity-ranking` off current `main-dev` (201 merged). Pre-execute reconciliation: feature 201 (fundamentals-formula-inputs) took `ANALYSIS-12`, so this feature's `symbol_score` guard moved to `ANALYSIS-13`; reserved surfaces (proto `symbol_score = 22` / sort `3` / migration `025` / both config keys) re-verified free; spec symbols validated present post-201. **Step 1 done** — proto additive `OPPORTUNITY_SORT_SYMBOL_SCORE = 3` + `Opportunity.symbol_score = 22` (buf lint + breaking pass) |
 | 2026-09-23 | `in-progress` → `code-completed` | /sdd-execute | All 11 steps landed (one commit per step). proto+gen (1–2), migration `025` (3), analysis roll-up shared-fold + owner gate + compute/heal + `ANALYSIS-13` (4) with tests (5, analysis suite 837 passed / 83.7%), two config keys (6), agent projection (7) + parity (8, agent suite 447 / 79.3%), mcp-tools doc (9), UI `/insights` symbol-score sort + group-header render (10) + e2e (11, RED→GREEN, opportunities spec 31 passed host-native). Deviations: `ANALYSIS-12→13` (201 took 12), Step-5/11 test-harness extensions, host-native e2e (Docker runner corepack-egress-blocked). Next: integration PR → `main-dev` |
 
+| 2026-09-24 | `code-completed` → `launched` | CI workflow | Promoted via PR #1169; committed dd622bdc2e5b922df8dcabc6f7475b8b395a8ed3 |
 ---
 
 ## Artifacts

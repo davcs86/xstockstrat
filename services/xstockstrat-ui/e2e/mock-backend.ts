@@ -23,6 +23,7 @@ import { LedgerService } from '@xstockstrat/proto/ledger/v1/ledger_pb';
 import { MarketDataService } from '@xstockstrat/proto/marketdata/v1/marketdata_pb';
 import { Timeframe } from '@xstockstrat/proto/common/v1/common_pb';
 import { NotifyService, type Alert } from '@xstockstrat/proto/notify/v1/notify_pb';
+import { ALERT_STREAM_ALL, ALERT_LIST_WITH_READ_STATE, MOCK_UNREAD_COUNT } from './fixtures/alerts';
 import { PortfolioService } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
 import { TradingService } from '@xstockstrat/proto/trading/v1/trading_pb';
 import { signTestJwt } from './helpers/auth';
@@ -493,67 +494,19 @@ export async function startMockBackend(): Promise<void> {
 
       router.service(NotifyService, {
         async *streamAlerts(): AsyncGenerator<Alert> {
-          const alerts: Alert[] = [
-            {
-              alertId: 'alert-stream-001',
-              severity: 2,
-              category: 'RISK',
-              title: 'Position limit approaching',
-              body: 'AAPL position is at 80% of max allowed.',
-              sourceService: 'trading',
-            } as Alert,
-            {
-              alertId: 'alert-stream-002',
-              severity: 4,
-              category: 'SYSTEM',
-              title: 'Order rejected',
-              body: 'Insufficient buying power for TSLA order.',
-              sourceService: 'trading',
-            } as Alert,
-            {
-              alertId: 'alert-stream-003',
-              severity: 1,
-              category: 'TRADE',
-              title: 'Order filled',
-              body: 'AAPL market order for 10 shares filled at $189.80.',
-              sourceService: 'trading',
-            } as Alert,
-          ];
-          for (const alert of alerts) {
-            yield alert;
+          for (const alert of ALERT_STREAM_ALL) {
+            yield alert as Alert;
           }
           // Stream ends cleanly — no hang in tests.
         },
         async listAlerts() {
-          return {
-            alerts: [
-              {
-                alertId: 'alert-001',
-                severity: 2,
-                category: 'RISK',
-                title: 'Position limit approaching',
-                body: 'AAPL position is at 80% of max allowed.',
-                sourceService: 'trading',
-              },
-              {
-                alertId: 'alert-002',
-                severity: 4,
-                category: 'SYSTEM',
-                title: 'Order rejected',
-                body: 'Insufficient buying power for TSLA order.',
-                sourceService: 'trading',
-              },
-              {
-                alertId: 'alert-strat-001',
-                severity: 1,
-                category: 'strategy',
-                title: 'Entry trigger: Live Test Strategy',
-                body: 'AAPL entry triggered (conviction 0.82)',
-                sourceService: 'xstockstrat-analysis',
-                tags: ['strategy_id:strat-live-001'],
-              },
-            ],
-          };
+          // feature 203 — per-user read state + server-side unread count.
+          return { alerts: ALERT_LIST_WITH_READ_STATE, unreadCount: MOCK_UNREAD_COUNT };
+        },
+        // feature 203 — accept the mark-read call; the mock does not persist state (the E2E specs use
+        // page.route() for stateful assertions).
+        async markAlertRead() {
+          return {};
         },
         // Feature 165: echo the caller resolved from the propagated x-user-id header back as the
         // subscription id, so the e2e can assert the notify service derives the owner from the

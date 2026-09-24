@@ -418,3 +418,10 @@ C-15 analysis test step).
 - **Deviation (verification method):** the Docker e2e runner (`Dockerfile.e2e`) failed to build in this environment — `corepack prepare pnpm@9.15.9` cannot fetch through the agent proxy. Verified host-native (`pnpm exec playwright test`, pre-provisioned Chromium) with `--timeout 120000` (the SSR-warmup cold-compile exceeds the default 10s). CI-equivalent: CI runs the identical Playwright spec via the Docker image.
 - Files modified: `services/xstockstrat-ui/e2e/insights/opportunities.spec.ts`, `e2e/mock-backend.ts`
 - Deviations: 2 (above)
+
+## Session 2026-09-24 (CI: feature status automation)
+
+- Promotion PR #1169 merged to main
+- Feature promoted and committed: dd622bdc2e5b922df8dcabc6f7475b8b395a8ed3
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-09-24
