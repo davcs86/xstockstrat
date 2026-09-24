@@ -337,7 +337,7 @@ cd services/xstockstrat-agent && ruff check . && ruff format --check .
 
 ### Step 8 — test: Test agent query_bars and query_fundamentals tools
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_query_tools.py` — create

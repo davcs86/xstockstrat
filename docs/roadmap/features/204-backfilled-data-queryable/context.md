@@ -188,3 +188,22 @@ node/pnpm. Docker daemon up but codegen stays host-native.
   14 passed.
 - Files: `services/xstockstrat-agent/app/tools.py`, `services/xstockstrat-agent/tests/test_tools_endpoint.py`.
 - Deviations: none (the registration-test update is a required companion to adding the tools).
+
+### Step 8 — test: agent query tool tests [done]
+- New `tests/test_query_tools.py` (10 tests) — patches `client.get_bars`/`get_fundamentals`/
+  `get_historical_fundamentals` (AsyncMock) and drives each tool's raw `.fn` (no ctx):
+  - query_bars: bar fields present (AC-5), limit capped 1000 via `await_args.args[4]` (AC-9),
+    last_refreshed = max bar time (AC-13), empty → null last_refreshed, CSV → one text/csv
+    EmbeddedResource with the header row + quoted URI (AC-18).
+  - query_fundamentals: snapshot last_refreshed = as_of + missing_metrics passthrough (AC-6/AC-14),
+    historical periods + next_page_token + max filed_date + missing_metrics union + limit capped 50
+    (AC-7/AC-21), CSV blanks the missing-metric cell and keeps a supplied one (AC-19), unknown mode
+    → ValueError.
+- Pydantic read-back nuance: `TextResourceContents` is constructed with the `mimeType` alias but read
+  as `.mime_type` (snake_case field name) — asserted accordingly.
+- **Verification deviation:** the spec's Step-8 command runs only `tests/test_query_tools.py` under
+  `--cov=app --cov-fail-under=40`, which cannot reach 40% from one file. Ran the CI-equivalent full
+  suite instead: `uv run pytest --cov=app --cov-fail-under=40` → **456 passed, 78.09% coverage**;
+  `test_query_tools.py` alone → 10 passed; ruff check + format clean.
+- Files: `services/xstockstrat-agent/tests/test_query_tools.py`. Deviations: verification-command
+  interpretation above (full-suite coverage is the real gate CI runs).
