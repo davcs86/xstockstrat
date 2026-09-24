@@ -22,7 +22,7 @@ launched feature promotes a scenario into it, not ahead of demand.
    (`/sdd-story`), reviewed (`/sdd-review`, **C-15**), and traced to test steps (`/sdd-spec`).
 2. **Canonical** — on launch/integration the scenarios are **promoted** (deduped) into the affected
    services' suites. Promotion is planned by the read-only **`scenario-promoter`** subagent
-   (`.claude/agents/scenario-promoter.md`) — it maps each `@AC-*` to its owning suite (per-service or
+   (`plugins/sdd-suite/agents/scenario-promoter.md`) — it maps each `@AC-*` to its owning suite (per-service or
    cross-cutting `platform.feature`), dedups, and returns ready-to-write blocks with `@feature-<NNN>`
    provenance tags; the invoking skill writes them (single-writer). Three invocation points, in order
    of precedence: `/sdd-execute` at integration (primary), the `/promote` backstop (P7.5), and
@@ -42,7 +42,7 @@ launched feature promotes a scenario into it, not ahead of demand.
 ## What an agent needs to know
 
 - **Recon reads, never guesses.** `/sdd-design` Phase 0 spawns the read-only **`scenario-recon`**
-  subagent (`.claude/agents/scenario-recon.md`, the read-side mirror of `scenario-promoter`) to load
+  subagent (`plugins/sdd-suite/agents/scenario-recon.md`, the read-side mirror of `scenario-promoter`) to load
   the affected services' suites (+ this `platform.feature`), filter to the `@AC-*` guarantees the
   feature could touch, and classify each PRESERVE / EXTEND / CHANGE; the orchestrator folds that
   digest into `recon.md` → `## Existing Business Rules`, and the design-adversary blocks a design that

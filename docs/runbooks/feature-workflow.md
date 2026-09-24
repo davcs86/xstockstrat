@@ -67,7 +67,7 @@ commit per step directly on `feature/<slug>`** (no step sub-branches, no step PR
 checkpoints** (consumer-surface boundaries and a cap of 5 steps) to report progress and let the
 operator steer, and opens a **single integration PR** to `main-dev` at the end. The per-step-PR flow
 above applies to the default modes (`next` / a step number / `all`). See
-`.claude/skills/sdd-execute/reference/sequential-mode.md`.
+`plugins/sdd-suite/skills/sdd-execute/reference/sequential-mode.md`.
 
 **Keeping main-dev spec files current:** Run `/sdd-sync [slug]` at any time to open a docs-only PR that copies the latest `feature.md`, `product-spec.md`, `implementation-spec.md`, and `context.md` from the feature branch into `main-dev`. This is optional but useful for visibility — it lets IDEs and GitHub browsing reflect current SDD progress without waiting for the final integration PR.
 
