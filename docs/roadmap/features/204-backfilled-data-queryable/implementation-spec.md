@@ -290,7 +290,7 @@ cd services/xstockstrat-agent && ruff check . && ruff format --check .
 
 ### Step 7 — service: Add query_bars and query_fundamentals MCP tools
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify

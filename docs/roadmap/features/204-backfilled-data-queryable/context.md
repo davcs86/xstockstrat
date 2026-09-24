@@ -165,3 +165,26 @@ node/pnpm. Docker daemon up but codegen stays host-native.
   of a forward-reference; comment updated to name both consumers.
 - Verify: `python -m py_compile` OK; ruff check + format clean.
 - Files: `services/xstockstrat-agent/app/client.py`. Deviations: none (the _TF_* hoist is a DRY tidy).
+
+### Step 7 — service: query_bars + query_fundamentals MCP tools [done]
+- Added two `@server.tool()`s in `tools.py`:
+  - `query_bars(symbol, timeframe="1Day", start_date, end_date, limit=500, page_token, format)` —
+    caps limit at 1000, calls `client.get_bars`, wraps AioRpcError via `_grpc_error_message`. JSON →
+    `{bars, next_page_token, last_refreshed}` (last_refreshed = newest bar `time`); CSV → one
+    `EmbeddedResource(text/csv)` (time,open,high,low,close,volume).
+  - `query_fundamentals(symbol, mode="snapshot"|"historical", period_types, range_start, range_end,
+    limit=50, page_token, format)` — snapshot: `get_fundamentals`, last_refreshed=`as_of`; historical:
+    `get_historical_fundamentals` (limit capped 50), last_refreshed=max `filed_date`, `next_page_token`.
+    `missing_metrics` is passed through from the proto field (authoritative — MARKETDATA-11), never
+    inferred from truthiness; CSV blanks exactly those cells (per-period in historical).
+- Module helpers: `_max_key`, `_csv_resource` (percent-quotes the symbol into the
+  `xstockstrat:///data-explorer/…` URI, mirroring backtest_view's traversal guard), `_bars_to_csv`,
+  `_snapshot_to_csv`, `_historical_to_csv`; consts `_QUERY_BARS_MAX_LIMIT`,
+  `_QUERY_FUNDAMENTALS_MAX_LIMIT`, `_FUNDAMENTALS_METRICS` (the 11 shared numeric metrics).
+- Companion edit (necessary, like the Step 3 stub): `tests/test_tools_endpoint.py`'s exact 49-name
+  registration set gained `query_bars`/`query_fundamentals` (now 51) so the registration assertion
+  stays green before the Step 9 count bump. Behavior tests are Step 8.
+- Verify: ruff check + format clean; `test_tools_endpoint.py` + `test_list_correlation_parity.py`
+  14 passed.
+- Files: `services/xstockstrat-agent/app/tools.py`, `services/xstockstrat-agent/tests/test_tools_endpoint.py`.
+- Deviations: none (the registration-test update is a required companion to adding the tools).
