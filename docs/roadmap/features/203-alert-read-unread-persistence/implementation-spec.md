@@ -46,7 +46,7 @@ badge refactor (Step 8), E2E mock + fixtures (Step 9), E2E specs (Step 10).
 
 ### Step 1 — proto: Add MarkAlertRead RPC, read fields on Alert, unread filter/count on ListAlerts
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/notify/v1/notify.proto` — modify
@@ -109,7 +109,7 @@ cd packages/proto && buf lint && buf breaking --against ".git#branch=main-dev"
 
 ### Step 2 — proto-gen: Regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/` — modify (generated output; Go, Python, TypeScript stubs)

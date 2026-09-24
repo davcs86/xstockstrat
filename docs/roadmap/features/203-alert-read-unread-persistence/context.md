@@ -99,3 +99,27 @@
   - Step 6: ⚠ TDD marked "red-green required" but step is a pure DRY extraction with no new behavior; existing E2E suffices (C-08/P-06) — [x] addressed — changed TDD to N/A with rationale (pure move-only refactor, existing E2E covers regression)
   - Step 7: ⚠ Instructions verbose but complete (advisory) — [x] accepted — verbose instructions justified by step scope; no change needed
 - Overlap findings: CLEAN — file-level WARN on `mock-backend.ts` and `INVENTORY.md` (shared with features 187, 188, 202, 204, 205; routine merge-conflict risk, no FAIL-level collision)
+
+## Session 2026-09-24 — sdd-execute (sequential)
+
+Feature 2 of the 202→205 sequential run (one integration PR per feature; no checkpoints unless
+blockers). Branch `feature/alert-read-unread-persistence` off `main-dev`. Toolchain persisted from the
+202 session (host-native buf 1.72.0 + pinned plugins, go1.27, golangci-lint v2.13.1@go1.27, node/pnpm).
+Docker daemon not running this session — not needed (additive proto → host-native codegen; e2e via
+CI-mode host harness).
+
+### Step 1 — proto: read fields + unread filter/count + MarkAlertRead RPC [done]
+- Additive to `notify.proto`: `Alert.read=13`/`read_at=14`, `ListAlertsRequest.unread_only=5`,
+  `ListAlertsResponse.unread_count=3`, `MarkAlertReadRequest{alert_ids}`/`MarkAlertReadResponse{}`,
+  `rpc MarkAlertRead`. Owner resolved from `x-user-id` (C-03).
+- Verification: `buf lint` clean; `buf breaking --against main-dev` exit 0 (non-breaking, additive).
+- Files modified: `packages/proto/notify/v1/notify.proto`
+- Deviations: none.
+
+### Step 2 — proto-gen: regenerate stubs [done]
+- Host-native `./scripts/buf-gen.sh`. notify Go/TS/Python stubs carry `Alert.Read`/`ReadAt`,
+  `ListAlertsRequest.UnreadOnly`, `ListAlertsResponse.UnreadCount`, and the `MarkAlertRead` RPC.
+  Reverted the recurring host-vs-CI gofmt whitespace drift in `analysis.pb.go` (fails.md 2026-09-24);
+  diff scoped to `notify/v1`.
+- Files modified: `packages/proto/gen/{go,python,ts}/notify/v1/**`
+- Deviations: analysis.pb.go drift revert (same as 202 Step 2; recurring).
