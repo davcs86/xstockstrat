@@ -404,7 +404,7 @@ cd services/xstockstrat-agent && uv run ruff check app/ tests/ && uv run ruff fo
 
 ### Step 9 -- service: UI declare/view -- FundamentalInputEditor + BFF + useFormulas + FormulaWorkspace
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/FundamentalInputEditor.tsx` -- create
@@ -469,7 +469,7 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm run build
 
 ### Step 10 -- test: UI declare/view vitest
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/hooks/useFormulas.test.ts` -- modify (if exists) or create
@@ -696,4 +696,23 @@ cd services/xstockstrat-ui && pnpm test:e2e -- --grep "fundamental"
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+- **Step 9 — numeric `FundamentalMetric[]` end-to-end, not `string[]`.** The spec proposed
+  `fundamentalInputs?: string[]` (NAME-strings) on the hooks and picker. protobuf-es represents the
+  repeated-enum field as the numeric `FundamentalMetric` type in the typed browser client's
+  `MessageInitShape`; a `string[]` neither type-checks nor `create()`s. So the UI carries the numeric
+  enum in component state, hooks, and the `onSave` shape, and reads `formula.fundamentalInputs`
+  (already numeric) straight into `initialFundamentalInputs` — no NAME↔number conversion, no
+  brittle enum-name juggling. Connect-JSON still serializes each value to its NAME-string on the
+  wire, so the C-16 acceptance ("the mock receives NAME-strings") holds unchanged. The picker options
+  come straight from the `listFundamentalMetrics` catalog (`{metric, dataKey, meaning}`), Select
+  values are `String(metric)`.
+- **Step 9 — no reorder controls.** `OutputEditor` supports move-up/down; fundamental inputs are an
+  unordered set (order carries no meaning), so the editor omits reorder and renders add/remove only.
+- **Step 9 — shared catalog hook.** The `listFundamentalMetrics` browser query lives in a single
+  `useFundamentalMetrics()` hook (`useFormulas.ts`, `staleTime: Infinity`) shared by the
+  FundamentalInputEditor (Step 9) and the FormulaWorkspace fundamentals grid (Step 11).
+- **Step 10 — react-query mocked, not rendered.** The UI vitest layer is node-env only (no
+  jsdom/testing-library — CLAUDE.md § Testing), so hooks can't be rendered. The test mocks
+  `@tanstack/react-query` (`useMutation` captures the `mutationFn`) and the browser client, then
+  invokes the captured `mutationFn` and asserts the RPC payload carries `fundamentalInputs` (and
+  defaults to `[]` when omitted) — a genuine runtime assertion, not a type-only stub.

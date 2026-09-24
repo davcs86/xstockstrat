@@ -155,6 +155,11 @@ router.service(IndicatorsService, {
   executeFormula: forward((req, opts) => indicatorsClient.executeFormula(req, opts)),
   computeIndicator: forward((req, opts) => indicatorsClient.computeIndicator(req, opts)),
   listIndicators: forward((req, opts) => indicatorsClient.listIndicators(req, opts)),
+  // Read-only catalog of the FundamentalMetric enum (name/data_key/meaning) for the formula
+  // authoring picker — deployment-static, no admin gate.
+  listFundamentalMetrics: forward((req, opts) =>
+    indicatorsClient.listFundamentalMetrics(req, opts),
+  ),
 });
 
 // In the consolidated app there is no basePath — the full URL /insights/api/<service>/<method>

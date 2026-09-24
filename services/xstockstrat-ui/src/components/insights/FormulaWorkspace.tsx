@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { BookOpen, Play, Sparkles } from 'lucide-react';
 import {
+  FundamentalMetric,
   ParameterType,
   type FormulaParameter,
   type FormulaOutput,
@@ -45,6 +46,7 @@ import {
   type FormulaOutputInit,
   type OutputDraft,
 } from '@/components/insights/OutputEditor';
+import { FundamentalInputEditor } from '@/components/insights/FundamentalInputEditor';
 import { useExecuteFormula } from '@/hooks/useFormulas';
 import {
   BLANK_TEMPLATE,
@@ -68,6 +70,7 @@ export interface FormulaWorkspaceProps {
   initialParameters?: FormulaParameter[];
   initialOutputs?: FormulaOutput[];
   initialWarmupPeriod?: number;
+  initialFundamentalInputs?: FundamentalMetric[];
   author?: string;
   saving: boolean;
   saveError: string | null;
@@ -79,6 +82,7 @@ export interface FormulaWorkspaceProps {
     parameters: FormulaParameterInit[];
     outputs: FormulaOutputInit[];
     warmupPeriod: number;
+    fundamentalInputs: FundamentalMetric[];
   }) => void;
   onCancel: () => void;
   onDelete?: () => void;
@@ -105,6 +109,7 @@ export function FormulaWorkspace({
   initialParameters,
   initialOutputs,
   initialWarmupPeriod = 0,
+  initialFundamentalInputs,
   author,
   deleted = false,
   saving,
@@ -124,6 +129,9 @@ export function FormulaWorkspace({
   );
   const [outputs, setOutputs] = useState<OutputDraft[]>(() =>
     (initialOutputs ?? []).map(outputDraftFromProto),
+  );
+  const [fundamentalInputs, setFundamentalInputs] = useState<FundamentalMetric[]>(
+    initialFundamentalInputs ?? [],
   );
   const [paramValues, setParamValues] = useState<Record<string, string>>({});
   const [jsonInput, setJsonInput] = useState(SAMPLE_INPUT_JSON);
@@ -247,6 +255,9 @@ export function FormulaWorkspace({
                   parameters: parameters.filter((p) => p.name.trim()).map(toParameterInit),
                   outputs: outputs.filter((o) => o.name.trim()).map(toOutputInit),
                   warmupPeriod: Math.max(0, Math.floor(Number(warmupPeriod) || 0)),
+                  fundamentalInputs: fundamentalInputs.filter(
+                    (m) => m !== FundamentalMetric.UNSPECIFIED,
+                  ),
                 })
               }
               disabled={saving || !name.trim()}
@@ -334,6 +345,19 @@ export function FormulaWorkspace({
               </CardHeader>
               <CardContent>
                 <OutputEditor value={outputs} onChange={setOutputs} />
+              </CardContent>
+            </Card>
+
+            {/* Fundamental inputs cell */}
+            <Card>
+              <CardHeader className="flex-row items-center justify-between space-y-0">
+                <CardTitle>Fundamental inputs</CardTitle>
+                <span className="text-[11px] text-muted-foreground">
+                  metrics read via <code className="text-foreground">data</code>
+                </span>
+              </CardHeader>
+              <CardContent>
+                <FundamentalInputEditor value={fundamentalInputs} onChange={setFundamentalInputs} />
               </CardContent>
             </Card>
           </fieldset>
