@@ -122,6 +122,20 @@ Feature: backfilled-data-queryable
     Then the browser downloads a CSV file named "MSFT_fundamentals_quarterly.csv"
     And the CSV contains columns including symbol, period_end, pe_ratio, eps, market_cap
 
+  @AC-20 @FR-5
+  Scenario: Historical fundamentals query enforces pagination in the UI
+    Given historical fundamentals exist for symbol "SPY" with period_type "quarterly" spanning 80 periods
+    When the user queries symbol "SPY" fundamentals with period_type "quarterly" for the full range
+    Then the page displays at most 50 periods per page
+    And pagination controls allow navigating to subsequent pages
+
+  @AC-21 @FR-5
+  Scenario: MCP agent query_fundamentals enforces pagination on historical data
+    Given historical fundamentals exist for symbol "SPY" with period_type "quarterly" spanning 80 periods
+    When the agent calls query_fundamentals with symbol "SPY", include_history true, period_type "quarterly"
+    Then the tool returns at most 50 periods
+    And the response includes a next_page_token for retrieving subsequent pages
+
   @AC-18 @FR-9 @FR-3
   Scenario: MCP query_bars with format csv returns binary CSV content
     Given OHLCV bars exist for symbol "AAPL" with timeframe "1Day" from "2025-01-01" to "2025-01-31"

@@ -38,14 +38,14 @@ FR-9. The MCP `query_bars` and `query_fundamentals` tools accept a `format` para
 - Adding new data sources or providers
 - Real-time streaming of bars/quotes (live feed already served by `StreamBars`/`StreamQuotes`)
 - Cross-symbol comparison views or correlation analysis
-- New proto RPCs — the existing `GetBars`, `BatchGetBars`, `GetFundamentals`, `GetFundamentalsMulti`, `GetHistoricalFundamentals` RPCs provide the required query capabilities
+- New proto RPCs — the existing RPCs provide the required query capabilities; only additive field additions to existing messages
 
 ## Affected Services
 
 Exact service names from CLAUDE.md Service Registry:
 - `xstockstrat-ui` — new data-explorer page under `/insights/data-explorer`, BFF routes to proxy `GetBars` and `GetHistoricalFundamentals` RPCs
 - `xstockstrat-agent` — two new MCP tools: `query_bars`, `query_fundamentals`
-- `xstockstrat-marketdata` — no code changes expected; existing RPCs (`GetBars`, `GetFundamentals`, `GetHistoricalFundamentals`) already provide the backend query surface
+- `xstockstrat-marketdata` — add pagination support to `GetHistoricalFundamentals` handler (proto field addition + repo query cursor); existing `GetBars`/`GetFundamentals` RPCs need no changes
 
 ## Consumer Surface(s)
 
@@ -57,12 +57,14 @@ _Constitution **C-14**._ The end-user-reachable surface(s) this capability is co
 
 ## Proto Contract Changes
 
-- [x] No proto changes required
+- [ ] No proto changes required
+- [x] Additive field additions to existing messages (non-breaking):
+  - `GetHistoricalFundamentalsRequest`: add `common.v1.PageRequest page = 6` — enables cursor-based pagination for historical fundamentals queries (currently unbounded)
+  - `GetHistoricalFundamentalsResponse`: add `common.v1.PageResponse pagination = 2` — returns `next_page_token` and `total_count`
 
-The existing RPCs are sufficient:
-- `GetBars` / `BatchGetBars` — OHLCV query with symbol, timeframe, start/end, pagination
-- `GetFundamentals` / `GetFundamentalsMulti` — current fundamentals snapshot
-- `GetHistoricalFundamentals` — PIT historical fundamentals with date range and period-type filter
+These are additive (new field numbers on existing messages), so `buf breaking` passes. The existing RPCs need no signature changes:
+- `GetBars` / `BatchGetBars` — already have `PageRequest` pagination
+- `GetFundamentals` / `GetFundamentalsMulti` — snapshot lookups, no pagination needed
 
 ## Config Key Changes
 

@@ -35,3 +35,13 @@
   - Open Questions: "Known trap (ledger)" item remains unchecked — it is an implementation-time housekeeping action (update agent tool count across 5+ doc surfaces), not an unresolved design question. Carried into design/spec.
   - Fundamentals pagination: `GetHistoricalFundamentalsRequest` proto has no `PageRequest` field, but FR-5 requires pagination on both surfaces. Historical fundamentals volume is inherently small (quarterly/annual per symbol), so client-side pagination suffices — design phase should confirm explicitly.
 - Overlap findings: none (CLEAN). No merge-order entry needed.
+
+## Session 2026-09-24T00:04:00Z — user decision (proto pagination)
+
+- **User decision**: Add proto-level pagination to `GetHistoricalFundamentals` rather than relying on client-side pagination. Resolves the sdd-review fundamentals pagination warning.
+- **Proto changes** (additive, non-breaking):
+  - `GetHistoricalFundamentalsRequest`: add `common.v1.PageRequest page = 6` (next free field number after existing fields 1–5)
+  - `GetHistoricalFundamentalsResponse`: add `common.v1.PageResponse pagination = 2` (next free field number after existing field 1)
+- **Service impact**: `xstockstrat-marketdata` handler + repo must implement cursor-based pagination in `QueryHistoricalFundamentals` (currently returns all matching rows unbounded at `marketdata_repo.go:583`).
+- Updated product spec: Proto Contract Changes, Affected Services, Out of Scope sections.
+- Added @AC-20, @AC-21 acceptance scenarios for historical fundamentals pagination (UI and agent).
