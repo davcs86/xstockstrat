@@ -55,9 +55,9 @@ export type Order = Message<"xstockstrat.trading.v1.Order"> & {
      */
     filledAvgPrice: number;
     /**
-     * @generated from field: string time_in_force = 12;
+     * @generated from field: xstockstrat.trading.v1.TimeInForce time_in_force = 12;
      */
-    timeInForce: string;
+    timeInForce: TimeInForce;
     /**
      * @generated from field: google.protobuf.Timestamp created_at = 13;
      */
@@ -141,9 +141,9 @@ export type PlaceOrderRequest = Message<"xstockstrat.trading.v1.PlaceOrderReques
      */
     stopPrice: number;
     /**
-     * @generated from field: string time_in_force = 7;
+     * @generated from field: xstockstrat.trading.v1.TimeInForce time_in_force = 7;
      */
-    timeInForce: string;
+    timeInForce: TimeInForce;
     /**
      * @generated from field: string strategy_id = 8;
      */
@@ -411,9 +411,9 @@ export type ReplaceOrderRequest = Message<"xstockstrat.trading.v1.ReplaceOrderRe
      */
     stopPrice: number;
     /**
-     * @generated from field: string time_in_force = 5;
+     * @generated from field: optional xstockstrat.trading.v1.TimeInForce time_in_force = 5;
      */
-    timeInForce: string;
+    timeInForce?: TimeInForce | undefined;
     /**
      * DEPRECATED: caller identity resolved from the x-user-id header; body value ignored.
      *
@@ -907,6 +907,43 @@ export declare enum OrderStatus {
  * Describes the enum xstockstrat.trading.v1.OrderStatus.
  */
 export declare const OrderStatusSchema: GenEnum<OrderStatus>;
+/**
+ * @generated from enum xstockstrat.trading.v1.TimeInForce
+ */
+export declare enum TimeInForce {
+    /**
+     * @generated from enum value: TIME_IN_FORCE_UNSPECIFIED = 0;
+     */
+    UNSPECIFIED = 0,
+    /**
+     * @generated from enum value: TIME_IN_FORCE_DAY = 1;
+     */
+    DAY = 1,
+    /**
+     * @generated from enum value: TIME_IN_FORCE_GTC = 2;
+     */
+    GTC = 2,
+    /**
+     * @generated from enum value: TIME_IN_FORCE_IOC = 3;
+     */
+    IOC = 3,
+    /**
+     * @generated from enum value: TIME_IN_FORCE_FOK = 4;
+     */
+    FOK = 4,
+    /**
+     * @generated from enum value: TIME_IN_FORCE_OPG = 5;
+     */
+    OPG = 5,
+    /**
+     * @generated from enum value: TIME_IN_FORCE_CLS = 6;
+     */
+    CLS = 6
+}
+/**
+ * Describes the enum xstockstrat.trading.v1.TimeInForce.
+ */
+export declare const TimeInForceSchema: GenEnum<TimeInForce>;
 /**
  * CredentialStatus reflects the last known health of a broker account's stored
  * API credentials, so the UI can surface accounts whose secrets stopped working.

@@ -247,6 +247,9 @@ export async function startMockBackend(): Promise<void> {
             tradingMode: 1,
             qty: 5,
             stopPrice: 148.25,
+            // Concrete TIF (DAY) — after the TimeInForce enum change an omitted field defaults to
+            // 0/UNSPECIFIED, which breaks TIF-specific assertions.
+            timeInForce: 1,
           };
           if (clientOrderId) placeOrderIntents.set(clientOrderId, resp);
           return resp;
