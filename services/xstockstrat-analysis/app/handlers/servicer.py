@@ -1485,7 +1485,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         return out
 
     async def _load_fundamentals(
-        self, symbol, definition, propagation_meta, *, sem=None, cache=None
+        self, symbol, definition, propagation_meta, *, sem=None, cache=None, formula_fund_map=None
     ):
         """Feature 198 — preload the evaluated symbol's point-in-time fundamentals filings for a
         backtest/live/readiness/opportunities evaluation, or ``None`` when the definition references
@@ -1502,7 +1502,12 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         The single chokepoint every consumer (backtest/live/readiness/opportunities) routes through,
         so the ``analysis.backtest.fundamentals.enabled`` kill-switch (default OFF) is enforced here
         once: disabled ⇒ ``None`` (the operand reads all-``None`` → hold on every surface)."""
-        if not _definition_has_fundamental(definition):
+        # feature 201: the backtest evaluator defaults a fundamentals-FORMULA operand's data channel
+        # to this PIT list, so a formula-only strategy must load here too — not just a 198 operand.
+        if not (
+            _definition_has_fundamental(definition)
+            or _definition_wants_fundamentals_formula(definition, formula_fund_map or {})
+        ):
             return None
         if not self._cfg.get_bool("analysis.backtest.fundamentals.enabled", False):
             return None
@@ -1523,6 +1528,15 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         except Exception as e:  # noqa: BLE001 — fundamentals fetch is best-effort (degrade to hold)
             log.warning("GetHistoricalFundamentals fetch failed for %s: %s", symbol, e)
             out = []
+        # Deployable observability (fundamentals_history is usually checked via SQL): periods loaded
+        # + per-metric non-None counts, so an operator sees what PIT data actually feeds the rule.
+        present = {
+            m: sum(1 for p in out if p.values.get(m) is not None)
+            for m in sorted(_FUNDAMENTAL_METRICS)
+        }
+        log.info(
+            "PIT fundamentals loaded symbol=%s periods=%d present=%s", symbol, len(out), present
+        )
         if cache is not None:
             cache[symbol] = out
         return out
@@ -1704,9 +1718,11 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
 
         # Batch backtest path: SERIAL component assembly (component_sem=None).
         evaluator = StrategyEvaluator(self._indicators, propagation_meta, component_sem=None)
-        # Per-symbol point-in-time fundamentals (feature 198) — None unless the definition carries a
-        # COMPONENT_KIND_FUNDAMENTAL operand; the evaluator applies the per-bar T+1 carry-forward.
-        fundamentals = await self._load_fundamentals(symbol, definition, propagation_meta)
+        # Per-symbol point-in-time fundamentals (feature 198/201) — a 198 operand or a fundamentals
+        # formula (routed via formula_fund_map) loads the PIT list; else None. T+1 carry-forward.
+        fundamentals = await self._load_fundamentals(
+            symbol, definition, propagation_meta, formula_fund_map=formula_fund_map
+        )
         # Capture the computed component series for diagnostics. benchmark_bars (preloaded once
         # per run, shared across symbols) resolve source_symbol components via the evaluator.
         # formula_fund_map (feature 200) routes fundamentals-only formulas onto the fundamentals

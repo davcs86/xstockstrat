@@ -1,0 +1,56 @@
+# Context: backfilled-data-queryable
+
+**Feature**: `docs/roadmap/features/204-backfilled-data-queryable/feature.md`
+**Product Spec**: `docs/roadmap/features/204-backfilled-data-queryable/product-spec.md`
+**Implementation Spec**: `docs/roadmap/features/204-backfilled-data-queryable/implementation-spec.md`
+
+---
+
+## Session 2026-09-24T00:00:00Z — sdd-story
+
+- Created feature.md (status: draft), product-spec.md, acceptance.feature, context.md from user story.
+- **Key recon finding**: The backend query surface is already complete — `GetBars`, `BatchGetBars`, `GetFundamentals`, `GetFundamentalsMulti`, `GetHistoricalFundamentals` RPCs exist on `xstockstrat-marketdata` (proto lines 20-62). No new proto RPCs or DB schema changes needed.
+- **Consumer surface gap**: No UI page or MCP agent tool currently exposes direct data querying. The insights segment has backfill management, screener, and performance pages but no data explorer. The agent has 49 tools, none for querying bars or fundamentals directly.
+- **Ledger traps noted**: (1) Agent tool count asserted in 5+ doc surfaces — all must be updated (insights.md screener-agent-tool + trigger-backfill-mcp-tool). (2) Timeframe enum handling has been a recurring bug source (fails.md 080-fix-backfill-timeframe-enum). (3) TanStack Query useQuery dep arrays must key on `dataUpdatedAt`/`errorUpdatedAt`, not `data`/`error` (fails.md feature 154 insights-subnav-enhancement).
+
+## Session 2026-09-24T00:01:00Z — sdd-story (amendment)
+
+- Added FR-7: last refresh timestamp display on both UI and agent surfaces.
+- Data sources for the timestamp: OHLCV → most recent bar's `time` in the result set; fundamentals snapshot → `fetched_at` column (already exists on `marketdata.fundamentals`); historical fundamentals → most recent `filed_date`.
+- Added @AC-11 through @AC-14 acceptance scenarios covering last refresh timestamp in UI and agent tool responses.
+
+## Session 2026-09-24T00:02:00Z — sdd-story (user decisions)
+
+- **Pagination defaults accepted**: 500 bars/page UI, 1000 max agent tool. Open question closed.
+- **Chart library confirmed**: Reuse Recharts (already in insights segment). Open question closed.
+- **Fundamentals charting moved in-scope**: FR-2 updated to include time-series chart for historical fundamentals metrics (P/E, EPS, market cap over fiscal periods). Removed from Out of Scope.
+- **Added FR-8**: UI CSV export — "Download CSV" button exports the currently displayed OHLCV or fundamentals results.
+- **Added FR-9**: MCP binary CSV responses — `query_bars` and `query_fundamentals` accept `format` param (`json` | `csv`); when `csv`, return base64-encoded `text/csv` content instead of JSON text.
+- Added @AC-15 through @AC-19 acceptance scenarios for fundamentals charting, UI CSV export, and MCP binary CSV output.
+
+## Session 2026-09-24T00:03:00Z — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready.
+- Warnings:
+  - Open Questions: "Known trap (ledger)" item remains unchecked — it is an implementation-time housekeeping action (update agent tool count across 5+ doc surfaces), not an unresolved design question. Carried into design/spec.
+  - Fundamentals pagination: `GetHistoricalFundamentalsRequest` proto has no `PageRequest` field, but FR-5 requires pagination on both surfaces. Historical fundamentals volume is inherently small (quarterly/annual per symbol), so client-side pagination suffices — design phase should confirm explicitly.
+- Overlap findings: none (CLEAN). No merge-order entry needed.
+
+## Session 2026-09-24T00:04:00Z — user decision (proto pagination)
+
+- **User decision**: Add proto-level pagination to `GetHistoricalFundamentals` rather than relying on client-side pagination. Resolves the sdd-review fundamentals pagination warning.
+- **Proto changes** (additive, non-breaking):
+  - `GetHistoricalFundamentalsRequest`: add `common.v1.PageRequest page = 6` (next free field number after existing fields 1–5)
+  - `GetHistoricalFundamentalsResponse`: add `common.v1.PageResponse pagination = 2` (next free field number after existing field 1)
+- **Service impact**: `xstockstrat-marketdata` handler + repo must implement cursor-based pagination in `QueryHistoricalFundamentals` (currently returns all matching rows unbounded at `marketdata_repo.go:583`).
+- Updated product spec: Proto Contract Changes, Affected Services, Out of Scope sections.
+- Added @AC-20, @AC-21 acceptance scenarios for historical fundamentals pagination (UI and agent).
+
+## Session 2026-09-24T00:05:00Z — sdd-design
+
+- Phase 0 Recon: wrote recon.md (services: xstockstrat-marketdata, xstockstrat-ui, xstockstrat-agent; key reuse patterns: `GetBars` cursor pagination at `marketdata_repo.go:85-122`, `useInfiniteQuery` at `useOpportunities.ts:29-46`).
+- Phase 1 Grilling: 3 rounds (quick mode + 2 user-requested extra rounds). Chosen approach: single `/insights/data-explorer` page with OHLCV/Fundamentals tabs, 2 agent tools, composite cursor pagination for `GetHistoricalFundamentals`. Rejected: `fetched_at` proto field (user chose `as_of`), base64 CSV (EmbeddedResource + TextResourceContents), `period_end`-only cursor (not unique), server-side CSV route.
+- Key decisions: (1) `as_of` field 14 for last-refresh instead of new `fetched_at` (user decision). (2) Composite cursor `(period_end, fiscal_period)` for uniqueness. (3) `filterAsOf` pushed into SQL before LIMIT. (4) Client-side CSV via `toCsv()` + Blob. (5) `useInfiniteQuery` for Load More (not custom accumulator). (6) Explicit `missing_metrics` check (not JavaScript truthiness, MARKETDATA-11).
+- Acceptance scenarios updated: @AC-8/@AC-9 (1Day timeframe), @AC-12/@AC-14 (`as_of`), @AC-18/@AC-19 (EmbeddedResource), @AC-22 added (missing_metrics). Product-spec FR-7/FR-9 wording updated.
+- Constitution rules touched: C-10, C-14, C-15, C-16, C-17, C-18, P-03. Floor breaches: none.
+- Status: spec-ready → design-approved.

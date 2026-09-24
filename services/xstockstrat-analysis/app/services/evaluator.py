@@ -481,14 +481,18 @@ class StrategyEvaluator:
         params_struct = Struct()
         params_struct.update(dict(comp.params))
         series: dict[str, list[float | None]] = {}
+        epochs = 0
+        executed = 0
         i = 0
         while i < n:
             epoch_vals = tuple(per_metric[k][i] for k in data_keys)
             j = i + 1
             while j < n and tuple(per_metric[k][j] for k in data_keys) == epoch_vals:
                 j += 1
+            epochs += 1
             present = {k: v for k, v in zip(data_keys, epoch_vals) if v is not None}
             if present:
+                executed += 1
                 input_struct = Struct()
                 input_struct.update(present)
                 resp = await self._indicators.ExecuteFormula(
@@ -509,6 +513,19 @@ class StrategyEvaluator:
             i = j
         if "value" not in series:
             series["value"] = [None] * n
+        # Deployable observability: did the fundamentals formula execute and produce a composite?
+        # (epochs total vs executed; an all-None epoch is skipped → held None → no trades).
+        comp_vals = [v for v in series.get("composite", []) if v is not None]
+        log.info(
+            "fundamentals formula=%s ref=%s bars=%d epochs=%d executed=%d composite_non_none=%d%s",
+            comp.formula_id,
+            comp.ref_name,
+            n,
+            epochs,
+            executed,
+            len(comp_vals),
+            f" range=[{min(comp_vals):.4f},{max(comp_vals):.4f}]" if comp_vals else "",
+        )
         return series
 
     async def declared_formula_warmups(self, definition) -> dict[str, int]:
