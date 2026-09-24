@@ -1,13 +1,13 @@
 # MCP Tools Reference — xstockstrat-agent
 
-Complete reference for the fifty tools exposed by `xstockstrat-agent` via the Model Context Protocol (MCP).
+Complete reference for the fifty-two tools exposed by `xstockstrat-agent` via the Model Context Protocol (MCP).
 Connection setup → `services/xstockstrat-agent/claude_mcp_config.json`.
 
 The agent also exposes one MCP **prompt** — `list_correlation_guide` (feature 197), the consolidated
 guide for joining the account/position/opportunity/strategy list responses (see § Correlating list
 responses under Usage Patterns) — and a server-level `instructions` string returned in the MCP
 `initialize` result carrying the same join summary. A prompt is not a tool; the tool count stays
-fifty. **This runbook is a maintainer reference: a wire-connected agent cannot read it — the
+fifty-two. **This runbook is a maintainer reference: a wire-connected agent cannot read it — the
 correlation guidance reaches consumer agents through the tool docstrings, the `initialize`
 instructions, and the `list_correlation_guide` prompt, which this file only mirrors for parity.**
 
@@ -42,7 +42,7 @@ directly on port 9000.
 
 **Direct (local):** `http://localhost:9000`
 
-**Tool catalog (UI display).** `GET /api/tools` returns the same fifty tools' `name`,
+**Tool catalog (UI display).** `GET /api/tools` returns the same fifty-two tools' `name`,
 `description`, and `inputSchema` as JSON — **unauthenticated**, since it only describes
 capabilities (the same data documented below), never user data or credentials. It powers the
 `xstockstrat-ui` `/accounts/mcp-tools` page (via the `/accounts/api/mcp-tools` BFF route) so users
@@ -1336,6 +1336,63 @@ the backend returns an empty list (no data leakage).
 Returns `{"positions": [...], "next_page_token": "<str>"}` — same shape as `get_positions`.
 
 **Errors:** `ValueError` → `account_id` is empty; `RuntimeError` → no verified caller claims.
+
+---
+
+### `query_bars`
+
+Query stored **daily OHLCV bars** for a symbol from `xstockstrat-marketdata` (read-only, feature 204).
+Daily is the only requestable interval (feature 143) — `timeframe` defaults to and normalizes to
+`1Day`. Omitting `start_date` returns the newest page.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `symbol` | string | _(required)_ | Ticker to query |
+| `timeframe` | string | `"1Day"` | Normalized to `1d`; any other value is rejected |
+| `start_date` | string \| null | `null` | ISO-8601 range start; omit for the newest page |
+| `end_date` | string \| null | `null` | ISO-8601 range end |
+| `limit` | int | `500` | Bars per page; capped at **1000** |
+| `page_token` | string | `""` | Opaque token from a prior call's `next_page_token` |
+| `format` | `"json"` \| `"csv"` | `"json"` | Output shape (see below) |
+
+**Returns (`format="json"`):** `{"bars": [...], "next_page_token": "<str>", "last_refreshed": "<iso|null>"}`
+— each bar uses snake_case proto field names (`time`/`open`/`high`/`low`/`close`/`volume`/…); zero
+values may be absent (proto3). `last_refreshed` is the newest `bar.time` in the page (null when empty).
+
+**Returns (`format="csv"`):** a one-element list with an `EmbeddedResource` (`mimeType: text/csv`, URI
+`xstockstrat:///data-explorer/bars/<symbol>`) whose text has the header `time,open,high,low,close,volume`.
+
+**Errors:** `RuntimeError` → gRPC failure (mapped message) or no verified caller claims;
+`ValueError` → unknown `timeframe`.
+
+---
+
+### `query_fundamentals`
+
+Query a symbol's **fundamentals** from `xstockstrat-marketdata` (read-only, feature 204). `missing_metrics`
+(per snapshot / per period) names the canonical metrics the provider did not supply — **authoritative**,
+never inferred from a zero value (MARKETDATA-11).
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `symbol` | string | _(required)_ | Ticker to query |
+| `mode` | `"snapshot"` \| `"historical"` | `"snapshot"` | Latest cached snapshot, or point-in-time filings |
+| `period_types` | list[string] \| null | `null` | historical only — `["quarterly","annual"]`; empty = both |
+| `range_start` | string \| null | `null` | historical only — ISO-8601 `period_end ≥` filter |
+| `range_end` | string \| null | `null` | historical only — ISO-8601 `period_end ≤` filter |
+| `limit` | int | `50` | historical only — periods per page; capped at **50** |
+| `page_token` | string | `""` | historical only — token from a prior `next_page_token` |
+| `format` | `"json"` \| `"csv"` | `"json"` | Output shape (see below) |
+
+**Returns (`mode="snapshot"`, json):** `{"fundamentals": {...}, "last_refreshed": "<as_of|null>", "missing_metrics": [...]}`.
+
+**Returns (`mode="historical"`, json):** `{"periods": [...], "next_page_token": "<str>", "last_refreshed": "<max filed_date|null>", "missing_metrics": [...]}`
+— `missing_metrics` is the union across the returned periods; each period also carries its own list.
+
+**Returns (`format="csv"`):** a one-element list with an `EmbeddedResource` (`mimeType: text/csv`, URI
+`xstockstrat:///data-explorer/fundamentals/<symbol>`); cells for metrics in `missing_metrics` are blank.
+
+**Errors:** `RuntimeError` → gRPC failure or no verified caller claims; `ValueError` → unknown `mode`.
 
 ---
 

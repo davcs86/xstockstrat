@@ -807,6 +807,12 @@ export type GetHistoricalFundamentalsRequest = Message<"xstockstrat.marketdata.v
      * @generated from field: repeated string period_types = 5;
      */
     periodTypes: string[];
+    /**
+     * feature 204 — composite-cursor pagination
+     *
+     * @generated from field: xstockstrat.common.v1.PageRequest page = 6;
+     */
+    page?: PageRequest | undefined;
 };
 /**
  * Describes the message xstockstrat.marketdata.v1.GetHistoricalFundamentalsRequest.
@@ -821,6 +827,12 @@ export type GetHistoricalFundamentalsResponse = Message<"xstockstrat.marketdata.
      * @generated from field: repeated xstockstrat.marketdata.v1.HistoricalFundamentalsPeriod periods = 1;
      */
     periods: HistoricalFundamentalsPeriod[];
+    /**
+     * feature 204
+     *
+     * @generated from field: xstockstrat.common.v1.PageResponse pagination = 2;
+     */
+    pagination?: PageResponse | undefined;
 };
 /**
  * Describes the message xstockstrat.marketdata.v1.GetHistoricalFundamentalsResponse.

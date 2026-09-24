@@ -325,10 +325,14 @@ export interface GetHistoricalFundamentalsRequest {
     | undefined;
   /** e.g. ["quarterly","annual"]; empty = both */
   periodTypes: string[];
+  /** feature 204 — composite-cursor pagination */
+  page?: PageRequest | undefined;
 }
 
 export interface GetHistoricalFundamentalsResponse {
   periods: HistoricalFundamentalsPeriod[];
+  /** feature 204 */
+  pagination?: PageResponse | undefined;
 }
 
 export interface BackfillFundamentalsRequest {
@@ -3697,7 +3701,14 @@ export const HistoricalFundamentalsPeriod_ExtraMetricsEntry: MessageFns<
 };
 
 function createBaseGetHistoricalFundamentalsRequest(): GetHistoricalFundamentalsRequest {
-  return { symbol: "", asOfDate: undefined, rangeStart: undefined, rangeEnd: undefined, periodTypes: [] };
+  return {
+    symbol: "",
+    asOfDate: undefined,
+    rangeStart: undefined,
+    rangeEnd: undefined,
+    periodTypes: [],
+    page: undefined,
+  };
 }
 
 export const GetHistoricalFundamentalsRequest: MessageFns<GetHistoricalFundamentalsRequest> = {
@@ -3716,6 +3727,9 @@ export const GetHistoricalFundamentalsRequest: MessageFns<GetHistoricalFundament
     }
     for (const v of message.periodTypes) {
       writer.uint32(42).string(v!);
+    }
+    if (message.page !== undefined) {
+      PageRequest.encode(message.page, writer.uint32(50).fork()).join();
     }
     return writer;
   },
@@ -3767,6 +3781,14 @@ export const GetHistoricalFundamentalsRequest: MessageFns<GetHistoricalFundament
           message.periodTypes.push(reader.string());
           continue;
         }
+        case 6: {
+          if (tag !== 50) {
+            break;
+          }
+
+          message.page = PageRequest.decode(reader, reader.uint32());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -3799,6 +3821,7 @@ export const GetHistoricalFundamentalsRequest: MessageFns<GetHistoricalFundament
         : globalThis.Array.isArray(object?.period_types)
         ? object.period_types.map((e: any) => globalThis.String(e))
         : [],
+      page: isSet(object.page) ? PageRequest.fromJSON(object.page) : undefined,
     };
   },
 
@@ -3819,6 +3842,9 @@ export const GetHistoricalFundamentalsRequest: MessageFns<GetHistoricalFundament
     if (message.periodTypes?.length) {
       obj.periodTypes = message.periodTypes;
     }
+    if (message.page !== undefined) {
+      obj.page = PageRequest.toJSON(message.page);
+    }
     return obj;
   },
 
@@ -3836,18 +3862,24 @@ export const GetHistoricalFundamentalsRequest: MessageFns<GetHistoricalFundament
     message.rangeStart = object.rangeStart ?? undefined;
     message.rangeEnd = object.rangeEnd ?? undefined;
     message.periodTypes = object.periodTypes?.map((e) => e) || [];
+    message.page = (object.page !== undefined && object.page !== null)
+      ? PageRequest.fromPartial(object.page)
+      : undefined;
     return message;
   },
 };
 
 function createBaseGetHistoricalFundamentalsResponse(): GetHistoricalFundamentalsResponse {
-  return { periods: [] };
+  return { periods: [], pagination: undefined };
 }
 
 export const GetHistoricalFundamentalsResponse: MessageFns<GetHistoricalFundamentalsResponse> = {
   encode(message: GetHistoricalFundamentalsResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     for (const v of message.periods) {
       HistoricalFundamentalsPeriod.encode(v!, writer.uint32(10).fork()).join();
+    }
+    if (message.pagination !== undefined) {
+      PageResponse.encode(message.pagination, writer.uint32(18).fork()).join();
     }
     return writer;
   },
@@ -3867,6 +3899,14 @@ export const GetHistoricalFundamentalsResponse: MessageFns<GetHistoricalFundamen
           message.periods.push(HistoricalFundamentalsPeriod.decode(reader, reader.uint32()));
           continue;
         }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.pagination = PageResponse.decode(reader, reader.uint32());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -3881,6 +3921,7 @@ export const GetHistoricalFundamentalsResponse: MessageFns<GetHistoricalFundamen
       periods: globalThis.Array.isArray(object?.periods)
         ? object.periods.map((e: any) => HistoricalFundamentalsPeriod.fromJSON(e))
         : [],
+      pagination: isSet(object.pagination) ? PageResponse.fromJSON(object.pagination) : undefined,
     };
   },
 
@@ -3888,6 +3929,9 @@ export const GetHistoricalFundamentalsResponse: MessageFns<GetHistoricalFundamen
     const obj: any = {};
     if (message.periods?.length) {
       obj.periods = message.periods.map((e) => HistoricalFundamentalsPeriod.toJSON(e));
+    }
+    if (message.pagination !== undefined) {
+      obj.pagination = PageResponse.toJSON(message.pagination);
     }
     return obj;
   },
@@ -3902,6 +3946,9 @@ export const GetHistoricalFundamentalsResponse: MessageFns<GetHistoricalFundamen
   ): GetHistoricalFundamentalsResponse {
     const message = createBaseGetHistoricalFundamentalsResponse();
     message.periods = object.periods?.map((e) => HistoricalFundamentalsPeriod.fromPartial(e)) || [];
+    message.pagination = (object.pagination !== undefined && object.pagination !== null)
+      ? PageResponse.fromPartial(object.pagination)
+      : undefined;
     return message;
   },
 };

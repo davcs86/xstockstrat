@@ -24,6 +24,7 @@ INDICATORS_ENDPOINT = os.environ.get("INDICATORS_ENDPOINT", "xstockstrat-indicat
 IDENTITY_ENDPOINT = os.environ.get("IDENTITY_ENDPOINT", "xstockstrat-identity:50058")
 PORTFOLIO_ENDPOINT = os.environ.get("PORTFOLIO_ENDPOINT", "xstockstrat-portfolio:50052")
 TRADING_ENDPOINT = os.environ.get("TRADING_ENDPOINT", "xstockstrat-trading:50051")
+MARKETDATA_ENDPOINT = os.environ.get("MARKETDATA_ENDPOINT", "xstockstrat-marketdata:50053")
 
 
 # ── Caller propagation context (PR #994) ─────────────────────────────────────
@@ -1643,12 +1644,110 @@ async def get_config_value(
     return str(getattr(cv, which)) if which else None
 
 
-# ── backfill client (feature 066) ────────────────────────────────────────────
+# ── marketdata client (feature 204) ──────────────────────────────────────────
 
-# Mirrors ingest's accepted timeframes (xstockstrat-ingest servicer _TF_ALIASES) — daily only.
-# Keep in lockstep with ingest; the backend rejects anything else.
+# Canonical daily-only timeframe map (feature 143), shared by the marketdata `get_bars` reader below
+# and the ingest `trigger_backfill` writer further down; mirrors ingest's servicer `_TF_ALIASES` —
+# keep in lockstep, the backends reject anything else.
 _TF_ALIASES = {"1d": "1d", "1Day": "1d"}
 _TF_TO_ENUM = {"1d": 4}  # common.v1.Timeframe values
+
+
+async def get_bars(
+    symbol: str,
+    timeframe: str = "1Day",
+    start: str | None = None,
+    end: str | None = None,
+    limit: int = 500,
+    page_token: str = "",
+) -> dict[str, Any]:
+    """Query stored daily OHLCV bars via marketdata GetBars (paginated).
+
+    Returns ``{"bars": [...], "next_page_token": str, "total_count": int}``. ``timeframe`` is
+    normalized to the canonical ``1d`` (feature 143 — daily is the only requestable interval); an
+    unknown value raises ValueError rather than letting the backend reject it opaquely.
+    """
+    from gen.common.v1 import common_pb2  # noqa: PLC0415
+    from gen.marketdata.v1 import marketdata_pb2, marketdata_pb2_grpc  # noqa: PLC0415
+
+    if timeframe not in _TF_ALIASES:
+        raise ValueError(f"unknown timeframe '{timeframe}' (expected 1d/1Day)")
+    canonical = _TF_ALIASES[timeframe]
+    start_ts = _iso_to_timestamp(start) if start else None
+    end_ts = _iso_to_timestamp(end) if end else None
+    rng = (
+        common_pb2.TimeRange(start=start_ts, end=end_ts)
+        if (start_ts is not None or end_ts is not None)
+        else None
+    )
+    req = marketdata_pb2.GetBarsRequest(
+        symbol=symbol,
+        timeframe=canonical,
+        timeframe_enum=_TF_TO_ENUM[canonical],
+        range=rng,
+        page=common_pb2.PageRequest(page_size=limit, page_token=page_token),
+    )
+    async with grpc.aio.insecure_channel(MARKETDATA_ENDPOINT) as channel:
+        stub = marketdata_pb2_grpc.MarketDataServiceStub(channel)
+        resp = await stub.GetBars(req, metadata=_metadata())
+    return {
+        "bars": [MessageToDict(b, preserving_proto_field_name=True) for b in resp.bars],
+        "next_page_token": resp.page.next_page_token,
+        "total_count": resp.page.total_count,
+    }
+
+
+async def get_fundamentals(symbol: str) -> dict[str, Any]:
+    """Fetch the latest fundamentals snapshot via marketdata GetFundamentals (cached read)."""
+    from gen.marketdata.v1 import marketdata_pb2, marketdata_pb2_grpc  # noqa: PLC0415
+
+    async with grpc.aio.insecure_channel(MARKETDATA_ENDPOINT) as channel:
+        stub = marketdata_pb2_grpc.MarketDataServiceStub(channel)
+        resp = await stub.GetFundamentals(
+            marketdata_pb2.GetFundamentalsRequest(symbol=symbol),
+            metadata=_metadata(),
+        )
+    return MessageToDict(resp.fundamentals, preserving_proto_field_name=True)
+
+
+async def get_historical_fundamentals(
+    symbol: str,
+    period_types: list[str] | None = None,
+    start: str | None = None,
+    end: str | None = None,
+    limit: int = 50,
+    page_token: str = "",
+) -> dict[str, Any]:
+    """Query point-in-time fundamentals periods via marketdata GetHistoricalFundamentals (paged).
+
+    ``start``/``end`` filter ``period_end`` (inclusive); ``period_types`` filters (empty = both).
+    The next cursor comes from the new ``pagination`` (PageResponse) field (feature 204).
+    """
+    from gen.common.v1 import common_pb2  # noqa: PLC0415
+    from gen.marketdata.v1 import marketdata_pb2, marketdata_pb2_grpc  # noqa: PLC0415
+
+    req = marketdata_pb2.GetHistoricalFundamentalsRequest(
+        symbol=symbol,
+        period_types=list(period_types or []),
+        page=common_pb2.PageRequest(page_size=limit, page_token=page_token),
+    )
+    if start:
+        req.range_start.CopyFrom(_iso_to_timestamp(start))
+    if end:
+        req.range_end.CopyFrom(_iso_to_timestamp(end))
+    async with grpc.aio.insecure_channel(MARKETDATA_ENDPOINT) as channel:
+        stub = marketdata_pb2_grpc.MarketDataServiceStub(channel)
+        resp = await stub.GetHistoricalFundamentals(req, metadata=_metadata())
+    return {
+        "periods": [MessageToDict(p, preserving_proto_field_name=True) for p in resp.periods],
+        "next_page_token": resp.pagination.next_page_token,
+    }
+
+
+# ── backfill client (feature 066) ────────────────────────────────────────────
+
+# _TF_ALIASES / _TF_TO_ENUM (daily-only timeframe map) are defined above in the marketdata section —
+# shared with `get_bars`.
 _FILL_MODE_MAP = {"full": 1, "gaps_only": 2}  # ingest.v1.FillMode; None → UNSPECIFIED (server FULL)
 # ingest.v1.BackfillDataKind (feature 198): bars = daily OHLCV; fundamentals = PIT filings history.
 _DATA_KIND_MAP = {"bars": 1, "fundamentals": 2}

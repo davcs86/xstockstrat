@@ -86,6 +86,12 @@ router.service(IngestService, {
 
 router.service(MarketDataService, {
   getBars: forward((req, opts) => marketDataClient.getBars(req, opts)),
+  // Read-only marketdata reads for the Data Explorer (feature 204); ownership-agnostic public data.
+  getFundamentals: forward((req, opts) => marketDataClient.getFundamentals(req, opts)),
+  getHistoricalFundamentals: forward((req, opts) =>
+    marketDataClient.getHistoricalFundamentals(req, opts),
+  ),
+  listAssets: forward((req, opts) => marketDataClient.listAssets(req, opts)),
   // Live price wired on BOTH BFFs so the queue card and Signal-detail header read the same source.
   getLatestPrice: forward((req, opts) => marketDataClient.getLatestPrice(req, opts)),
   // Read-only snapshot fundamentals for the formula fundamentals test-grid symbol-prefill (feature

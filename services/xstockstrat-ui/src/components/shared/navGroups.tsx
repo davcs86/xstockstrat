@@ -60,6 +60,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: 'P&L Patterns', href: '/insights/pnl-patterns' },
       { label: 'Attribution', href: '/insights/attribution' },
       { label: 'Performance', href: '/insights/performance' },
+      { label: 'Data Explorer', href: '/insights/data-explorer' },
       { label: 'Signal sources', href: '/config-ui/sources' },
       { label: 'Backfills', href: '/insights/backfills', adminOnly: true },
     ],
