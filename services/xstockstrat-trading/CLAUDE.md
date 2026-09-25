@@ -229,7 +229,21 @@ account changes no trading behavior.
 already-halted account to `trading.reconciliation.halted_poll_interval_ms` (default 5 min) instead
 of the ordinary `interval_ms` cadence (`shouldPollHaltedAccount`) — still eventually observing the
 account (e.g. a manual broker-dashboard order), just not at full rate for one that already can't
-trade. Only a **rare, systemic** finding — `trading.reconciliation.systemic_threshold_pct`
+trade. The **position-side** quantity check is **DB-grounded** the same way (feature 206). A broker position
+that disagrees with `xstockstrat-portfolio`'s `ListPositions` projection is not immediately a foreign
+position: the projection can legitimately lag (fill→`order.filled`→portfolio fold) or be transiently
+zeroed by an empty `account.positions.synced`. Before halting, `reconcileTick` calls
+`reconcilePositionLookup.NetFilledQtyBySymbol` (one grouped DB round-trip per tick, scoped to the
+diverging symbols) — the platform's own net filled qty per symbol from `trading.orders`, **deduped
+`DISTINCT ON (order_id)`** so a multi-row order isn't double-counted. If the platform's own fills
+already sum to the broker qty (`qtyApproxEqual`, abs ε 1e-6), the broker position is fully explained
+and the candidate clears — **no halt**; only a broker qty the platform's orders can't account for (a
+genuine dashboard order) halts. A lookup error is **fail-safe** (position check skipped for the tick,
+never a false halt), mirroring the order side. Residual (not closed, documented in feature 206
+`design.md`): a stalled `pollFills` leaving `trading.orders.filled_qty` stale, and corporate actions
+(splits) that change broker qty with no order — both can still trip the position-side halt.
+
+Only a **rare, systemic** finding — `trading.reconciliation.systemic_threshold_pct`
 or more of registered accounts erroring/unreachable in one tick — escalates platform-wide to
 `platform.trading_state=REDUCE_ONLY` via `xstockstrat-config`'s internal-caller authz channel
 (`x-internal-caller`, distinct from the human-role `x-access-scope` header; see

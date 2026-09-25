@@ -169,6 +169,14 @@ cross-marketplace dependency on `context-forge` (used by the SDD teardown step) 
 registers that marketplace (`extraKnownMarketplaces`) and enables the plugins (`enabledPlugins`).
 Enabling `sdd-suite` then pulls `context-forge` in automatically.
 
+The `davcs86-xstockstrat` marketplace source in `.claude/settings.json` pins
+`sparsePaths: [".claude-plugin", ".claude/plugins"]` so registering it fetches only the marketplace
+file and the plugin dirs (~3 MB) instead of the whole ~36 MB monorepo. Without it, the
+Claude-Code-on-the-web environment's one-shot bootstrap clone of this repo's *own* marketplace is
+prone to being skipped, which leaves the enabled xstockstrat plugins (`sdd-suite`, `mcp-tools-docs`)
+unregistered so `/sdd-*` never load. Keep the two paths in sync with where `marketplace.json` and
+the plugin dirs actually live.
+
 **`mcp-tools-docs` — generated, not hand-written.** A wire-connected agent cannot read the
 maintainer runbook `docs/runbooks/mcp-tools.md`, so `.claude/plugins/mcp-tools-docs/scripts/generate.py`
 projects that runbook into a progressive-disclosure skill (router + one `reference/tools/<name>.md`

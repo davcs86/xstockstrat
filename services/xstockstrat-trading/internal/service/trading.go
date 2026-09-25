@@ -60,6 +60,14 @@ type brokerOrderIDLookup interface {
 	KnownBrokerOrderIDs(ctx context.Context, accountID string, brokerOrderIDs []string) (map[string]bool, error)
 }
 
+// positionQtyLookup is the seam reconcileTick uses to DB-ground its position-side quantity check
+// against trading.orders — the platform's own net filled qty per symbol. *repository.TradingRepo
+// satisfies it in production; tests inject a fake. Kept separate from brokerOrderIDLookup (ISP): the
+// order-side existence check and the position-side net-qty check are distinct concerns.
+type positionQtyLookup interface {
+	NetFilledQtyBySymbol(ctx context.Context, accountID string, symbols []string) (map[string]float64, error)
+}
+
 // brokerPoolEntry holds a broker client and its type tag for a registered account.
 type brokerPoolEntry struct {
 	client     broker.Broker
@@ -110,6 +118,9 @@ type TradingService struct {
 	// reconcileOrderLookup is the narrow seam reconcileTick uses to DB-ground its
 	// unknown_broker_order classification against trading.orders. Tests inject a fake.
 	reconcileOrderLookup brokerOrderIDLookup
+	// reconcilePositionLookup is the narrow seam reconcileTick uses to DB-ground its position-side
+	// quantity_discrepancy check against trading.orders. Tests inject a fake.
+	reconcilePositionLookup positionQtyLookup
 	// orderIntentRepo is the insert-or-return-existing order-intent dedup store.
 	orderIntentRepo repository.OrderIntentRepository
 	// bracketRepo persists the per-order bracket (stop-loss/take-profit) state machine.
@@ -183,31 +194,32 @@ func NewTradingService(
 		return nil, fmt.Errorf("dial marketdata: %w", err)
 	}
 	return &TradingService{
-		cfg:                  cfg,
-		cfgW:                 cfgW,
-		configSetter:         cfgW,
-		brokers:              make(map[string]brokerPoolEntry),
-		accountRepo:          accountRepo,
-		encKey:               encKey,
-		ledger:               ledgerv1.NewLedgerServiceClient(ledgerConn),
-		notify:               notifyv1.NewNotifyServiceClient(notifyConn),
-		portfolio:            portfoliov1.NewPortfolioServiceClient(portfolioConn),
-		marketdata:           marketdatav1.NewMarketDataServiceClient(marketdataConn),
-		repo:                 repo,
-		baselineStore:        repo,
-		reconcileOrderLookup: repo,
-		orderIntentRepo:      orderIntentRepo,
-		bracketRepo:          bracketRepo,
-		orders:               make(map[string]*tradingv1.Order),
-		subs:                 make(map[string]orderSubscriber),
-		credStatus:           make(map[string]int32),
-		credSkipLoggedAt:     make(map[string]time.Time),
-		halted:               make(map[string]bool),
-		haltReasons:          make(map[string]string),
-		haltedLastPolled:     make(map[string]time.Time),
-		flattenInFlight:      make(map[string]bool),
-		reconcileCandidates:  make(map[string]int),
-		confirmLocks:         make(map[string]*sync.Mutex),
+		cfg:                     cfg,
+		cfgW:                    cfgW,
+		configSetter:            cfgW,
+		brokers:                 make(map[string]brokerPoolEntry),
+		accountRepo:             accountRepo,
+		encKey:                  encKey,
+		ledger:                  ledgerv1.NewLedgerServiceClient(ledgerConn),
+		notify:                  notifyv1.NewNotifyServiceClient(notifyConn),
+		portfolio:               portfoliov1.NewPortfolioServiceClient(portfolioConn),
+		marketdata:              marketdatav1.NewMarketDataServiceClient(marketdataConn),
+		repo:                    repo,
+		baselineStore:           repo,
+		reconcileOrderLookup:    repo,
+		reconcilePositionLookup: repo,
+		orderIntentRepo:         orderIntentRepo,
+		bracketRepo:             bracketRepo,
+		orders:                  make(map[string]*tradingv1.Order),
+		subs:                    make(map[string]orderSubscriber),
+		credStatus:              make(map[string]int32),
+		credSkipLoggedAt:        make(map[string]time.Time),
+		halted:                  make(map[string]bool),
+		haltReasons:             make(map[string]string),
+		haltedLastPolled:        make(map[string]time.Time),
+		flattenInFlight:         make(map[string]bool),
+		reconcileCandidates:     make(map[string]int),
+		confirmLocks:            make(map[string]*sync.Mutex),
 	}, nil
 }
 
@@ -1678,6 +1690,13 @@ const (
 	mismatchClassMissingBrokerOrder  = "missing_broker_order"
 )
 
+// qtyApproxEqual reports whether two share quantities are equal within a small absolute epsilon.
+// Whole and typical fractional share counts are exact in float64; the epsilon only absorbs summation
+// drift (~1e-9) from NetFilledQtyBySymbol, well below any broker's minimum fractional increment.
+func qtyApproxEqual(a, b float64) bool {
+	return math.Abs(a-b) < 1e-6
+}
+
 // isTerminalOrderStatus mirrors pollFills' terminal-status set.
 func isTerminalOrderStatus(status tradingv1.OrderStatus) bool {
 	switch status {
@@ -1917,15 +1936,45 @@ func (s *TradingService) reconcileTick(ctx context.Context, graceTicks int, syst
 		for _, p := range platformPositions.Positions {
 			platformBySymbol[p.Symbol] = p.Qty
 		}
+		// DB-ground the position side against trading.orders before halting (mirrors the order side's
+		// KnownBrokerOrderIDs grounding). A broker position that disagrees with portfolio's projection
+		// is not a foreign position if the platform's OWN net filled orders for that symbol already sum
+		// to the broker qty — the projection is merely lagging (fill→ledger→portfolio) or was
+		// transiently zeroed by an empty position-sync. Only a broker qty the platform's orders can't
+		// account for is a genuine foreign position and halts. Lookup is scoped to the diverging symbols.
+		var divergingSymbols []string
 		for _, bp := range brokerPositions {
-			key := accountID + ":pos:" + bp.Symbol
-			platformQty := platformBySymbol[bp.Symbol]
-			if platformQty != bp.Quantity {
+			if platformBySymbol[bp.Symbol] != bp.Quantity {
+				divergingSymbols = append(divergingSymbols, bp.Symbol)
+			}
+		}
+		platformNetBySymbol := make(map[string]float64, len(divergingSymbols))
+		skipPositionCheck := false
+		if len(divergingSymbols) > 0 {
+			netQty, netErr := s.reconcilePositionLookup.NetFilledQtyBySymbol(ctx, accountID, divergingSymbols)
+			if netErr != nil {
+				// Fail-safe: a DB lookup error skips this account's position-side check for the tick
+				// (candidates untouched) — never a false halt; re-evaluated next tick. Mirrors the
+				// order-side lookup-error path above. Intent resolution below still runs.
+				slog.Warn("reconcileTick: net-filled-qty DB lookup failed; skipping position check this tick",
+					"account_id", accountID, "error", netErr)
+				skipPositionCheck = true
+			} else {
+				platformNetBySymbol = netQty
+			}
+		}
+		if !skipPositionCheck {
+			for _, bp := range brokerPositions {
+				key := accountID + ":pos:" + bp.Symbol
+				platformQty := platformBySymbol[bp.Symbol]
+				// Matches portfolio's projection, or is fully explained by the platform's own fills.
+				if platformQty == bp.Quantity || qtyApproxEqual(platformNetBySymbol[bp.Symbol], bp.Quantity) {
+					s.clearReconciliationCandidate(key)
+					continue
+				}
 				if s.recordReconciliationCandidate(key, graceTicks) {
 					s.emitReconciliationFinding(ctx, accountID, mismatchClassQuantityDiscrepancy, bp.Symbol, platformQty, bp.Quantity)
 				}
-			} else {
-				s.clearReconciliationCandidate(key)
 			}
 		}
 

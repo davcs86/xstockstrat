@@ -11,7 +11,8 @@
     "davcs86-xstockstrat": {
       "source": {
         "source": "github",
-        "repo": "davcs86/xstockstrat"
+        "repo": "davcs86/xstockstrat",
+        "sparsePaths": [".claude-plugin", ".claude/plugins"]
       },
       "autoUpdate": true
     }

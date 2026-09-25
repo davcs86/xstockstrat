@@ -51,6 +51,32 @@ func TestPositionSyncPayload_RealizedPnlDisjointness(t *testing.T) {
 	}
 }
 
+// TestShouldReconcileSyncDeletions (feature 206) proves the empty-broker-snapshot delete guard: a
+// broker sync (realizedPnl==nil) with no positions must NOT purge (a transient empty broker read
+// would otherwise wipe an order-fill-derived position and trigger a reconciliation false halt), while
+// an offline recompute (realizedPnl!=nil, even $0) and any non-empty snapshot still reconcile.
+func TestShouldReconcileSyncDeletions(t *testing.T) {
+	zero := 0.0
+	pnl := 97.5
+	cases := []struct {
+		name          string
+		positionCount int
+		realizedPnl   *float64
+		want          bool
+	}{
+		{"empty broker snapshot — do NOT purge (@AC-4)", 0, nil, false},
+		{"offline full-close with realized_pnl — purge (@AC-5)", 0, &pnl, true},
+		{"offline full-close with $0 realized_pnl — purge", 0, &zero, true},
+		{"non-empty broker snapshot — purge (no regression)", 2, nil, true},
+		{"non-empty offline recompute — purge", 2, &pnl, true},
+	}
+	for _, c := range cases {
+		if got := shouldReconcileSyncDeletions(c.positionCount, c.realizedPnl); got != c.want {
+			t.Errorf("%s: shouldReconcileSyncDeletions(%d, %v) = %v, want %v", c.name, c.positionCount, c.realizedPnl, got, c.want)
+		}
+	}
+}
+
 // TestOfflineIDsToAppend (feature 159, @AC-3/@AC-4) proves the combined-view union+dedup that adds
 // offline accounts (which have no account_balances row) into ListPortfolios: an offline id already
 // present in the balances set is not re-added, and repeats within the offline set collapse — so no
