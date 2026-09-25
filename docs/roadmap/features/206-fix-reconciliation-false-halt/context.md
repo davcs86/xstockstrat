@@ -76,3 +76,10 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   invariant described the position-side comparison, so none needed changing; the line-36 async-emit
   gotcha is unaffected (the new lookup uses the poller ctx, consistent with it).
 - Status: in-progress → code-completed. Next: PR `claude/flow-investigation-4blorq` → `main-dev`.
+
+## Session 2026-09-25 (CI: feature status automation)
+
+- Promotion PR #1181 merged to main
+- Feature promoted and committed: eee580622c92a27a5e6dc22e6919075924b01b84
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-09-25

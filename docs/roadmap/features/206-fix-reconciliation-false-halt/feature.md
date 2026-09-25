@@ -6,6 +6,8 @@
 **Severity**: SEV-2
 **Created**: 2026-09-25
 **Last Updated**: 2026-09-25
+**Committed to main**: eee580622c92a27a5e6dc22e6919075924b01b84
+**Launched date**: 2026-09-25
 
 ---
 
@@ -17,6 +19,7 @@
 | 2026-09-25 | `draft` → `design-approved` | sdd-design quick (manual) | recon.md + design.md; one adversarial round (design-buddy:adversary, NEEDS WORK → resolved, incl. HIGH DISTINCT-ON dedup fix) |
 | 2026-09-25 | `design-approved` → `in-progress` → `code-completed` | sdd-spec + execute (manual) | implementation-spec.md; both services build/vet/test green (GOWORK=off); context reconciled (PORTFOLIO-10 + both CLAUDE.md) |
 
+| 2026-09-25 | `code-completed` → `launched` | CI workflow | Promoted via PR #1181; committed eee580622c92a27a5e6dc22e6919075924b01b84 |
 ---
 
 ## Artifacts
