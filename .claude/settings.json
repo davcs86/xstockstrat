@@ -7,20 +7,11 @@
         "repo": "davcs86/agent-plugins"
       },
       "autoUpdate": true
-    },
-    "davcs86-xstockstrat": {
-      "source": {
-        "source": "github",
-        "repo": "davcs86/xstockstrat"
-      },
-      "autoUpdate": true
     }
   },
   "enabledPlugins": {
     "context-forge@davcs86-agent-plugins": true,
-    "design-buddy@davcs86-agent-plugins": true,
-    "mcp-tools-docs@davcs86-xstockstrat": true,
-    "sdd-suite@davcs86-xstockstrat": true
+    "design-buddy@davcs86-agent-plugins": true
   },
   "hooks": {
     "PostToolUse": [
