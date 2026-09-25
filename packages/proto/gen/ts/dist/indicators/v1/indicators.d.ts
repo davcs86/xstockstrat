@@ -290,6 +290,19 @@ export interface DeleteFormulaRequest {
 export interface DeleteFormulaResponse {
     success: boolean;
 }
+/** feature 205 — the fundamental-metrics catalog for formula authoring (declare + test). */
+export interface ListFundamentalMetricsRequest {
+}
+export interface FundamentalMetricInfo {
+    metric: FundamentalMetric;
+    /** snake_case key the sandbox `data[...]` global exposes (e.g. "pe_ratio") */
+    dataKey: string;
+    /** human-readable meaning */
+    meaning: string;
+}
+export interface ListFundamentalMetricsResponse {
+    metrics: FundamentalMetricInfo[];
+}
 export declare const ComputeIndicatorRequest: MessageFns<ComputeIndicatorRequest>;
 export declare const ComputeIndicatorRequest_ParamsEntry: MessageFns<ComputeIndicatorRequest_ParamsEntry>;
 export declare const ComputeIndicatorResponse: MessageFns<ComputeIndicatorResponse>;
@@ -317,6 +330,9 @@ export declare const UpdateFormulaRequest: MessageFns<UpdateFormulaRequest>;
 export declare const UpdateFormulaResponse: MessageFns<UpdateFormulaResponse>;
 export declare const DeleteFormulaRequest: MessageFns<DeleteFormulaRequest>;
 export declare const DeleteFormulaResponse: MessageFns<DeleteFormulaResponse>;
+export declare const ListFundamentalMetricsRequest: MessageFns<ListFundamentalMetricsRequest>;
+export declare const FundamentalMetricInfo: MessageFns<FundamentalMetricInfo>;
+export declare const ListFundamentalMetricsResponse: MessageFns<ListFundamentalMetricsResponse>;
 /**
  * IndicatorsService — formula engine and sandboxed Python execution.
  * Sandbox timeout and memory limits are configured via xstockstrat-config.
@@ -412,6 +428,16 @@ export declare const IndicatorsServiceService: {
         readonly responseSerialize: (value: DeleteFormulaResponse) => Buffer;
         readonly responseDeserialize: (value: Buffer) => DeleteFormulaResponse;
     };
+    /** List the available fundamental metrics for formula declarations (feature 205) */
+    readonly listFundamentalMetrics: {
+        readonly path: "/xstockstrat.indicators.v1.IndicatorsService/ListFundamentalMetrics";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: ListFundamentalMetricsRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => ListFundamentalMetricsRequest;
+        readonly responseSerialize: (value: ListFundamentalMetricsResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => ListFundamentalMetricsResponse;
+    };
 };
 export interface IndicatorsServiceServer extends UntypedServiceImplementation {
     /** Compute a built-in indicator (e.g. SMA, EMA, RSI, MACD, BB) */
@@ -439,6 +465,8 @@ export interface IndicatorsServiceServer extends UntypedServiceImplementation {
      * Returns PERMISSION_DENIED if user_id does not match author
      */
     deleteFormula: handleUnaryCall<DeleteFormulaRequest, DeleteFormulaResponse>;
+    /** List the available fundamental metrics for formula declarations (feature 205) */
+    listFundamentalMetrics: handleUnaryCall<ListFundamentalMetricsRequest, ListFundamentalMetricsResponse>;
 }
 export interface IndicatorsServiceClient extends Client {
     /** Compute a built-in indicator (e.g. SMA, EMA, RSI, MACD, BB) */
@@ -482,6 +510,10 @@ export interface IndicatorsServiceClient extends Client {
     deleteFormula(request: DeleteFormulaRequest, callback: (error: ServiceError | null, response: DeleteFormulaResponse) => void): ClientUnaryCall;
     deleteFormula(request: DeleteFormulaRequest, metadata: Metadata, callback: (error: ServiceError | null, response: DeleteFormulaResponse) => void): ClientUnaryCall;
     deleteFormula(request: DeleteFormulaRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: DeleteFormulaResponse) => void): ClientUnaryCall;
+    /** List the available fundamental metrics for formula declarations (feature 205) */
+    listFundamentalMetrics(request: ListFundamentalMetricsRequest, callback: (error: ServiceError | null, response: ListFundamentalMetricsResponse) => void): ClientUnaryCall;
+    listFundamentalMetrics(request: ListFundamentalMetricsRequest, metadata: Metadata, callback: (error: ServiceError | null, response: ListFundamentalMetricsResponse) => void): ClientUnaryCall;
+    listFundamentalMetrics(request: ListFundamentalMetricsRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: ListFundamentalMetricsResponse) => void): ClientUnaryCall;
 }
 export declare const IndicatorsServiceClient: {
     new (address: string, credentials: ChannelCredentials, options?: Partial<ClientOptions>): IndicatorsServiceClient;

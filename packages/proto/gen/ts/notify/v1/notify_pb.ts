@@ -12,7 +12,7 @@ import type { JsonObject, Message } from "@bufbuild/protobuf";
  * Describes the file notify/v1/notify.proto.
  */
 export const file_notify_v1_notify: GenFile = /*@__PURE__*/
-  fileDesc("ChZub3RpZnkvdjEvbm90aWZ5LnByb3RvEhV4c3RvY2tzdHJhdC5ub3RpZnkudjEixgIKBUFsZXJ0EhAKCGFsZXJ0X2lkGAEgASgJEjYKCHNldmVyaXR5GAIgASgOMiQueHN0b2Nrc3RyYXQubm90aWZ5LnYxLkFsZXJ0U2V2ZXJpdHkSEAoIY2F0ZWdvcnkYAyABKAkSDQoFdGl0bGUYBCABKAkSDAoEYm9keRgFIAEoCRIWCg5zb3VyY2Vfc2VydmljZRgGIAEoCRIWCg50YXJnZXRfdXNlcl9pZBgHIAEoCRIuCgpjcmVhdGVkX2F0GAggASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIoCgdjb250ZXh0GAkgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBIMCgR0YWdzGAogAygJEhQKDGFja25vd2xlZGdlZBgLIAEoCBIWCg5jb3JyZWxhdGlvbl9pZBgMIAEoCSL5AQoQRW1pdEFsZXJ0UmVxdWVzdBI2CghzZXZlcml0eRgBIAEoDjIkLnhzdG9ja3N0cmF0Lm5vdGlmeS52MS5BbGVydFNldmVyaXR5EhAKCGNhdGVnb3J5GAIgASgJEg0KBXRpdGxlGAMgASgJEgwKBGJvZHkYBCABKAkSFgoOc291cmNlX3NlcnZpY2UYBSABKAkSFgoOdGFyZ2V0X3VzZXJfaWQYBiABKAkSKAoHY29udGV4dBgHIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSDAoEdGFncxgIIAMoCRIWCg5jb3JyZWxhdGlvbl9pZBgJIAEoCSJVChFFbWl0QWxlcnRSZXNwb25zZRIQCghhbGVydF9pZBgBIAEoCRIuCgpjcmVhdGVkX2F0GAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCKSAQoTU3RyZWFtQWxlcnRzUmVxdWVzdBIPCgd1c2VyX2lkGAEgASgJEhIKCmNhdGVnb3JpZXMYAiADKAkSOAoKc2V2ZXJpdGllcxgDIAMoDjIkLnhzdG9ja3N0cmF0Lm5vdGlmeS52MS5BbGVydFNldmVyaXR5EhwKFGluY2x1ZGVfYWNrbm93bGVkZ2VkGAQgASgIIjwKF0Fja25vd2xlZGdlQWxlcnRSZXF1ZXN0EhAKCGFsZXJ0X2lkGAEgASgJEg8KB3VzZXJfaWQYAiABKAkiKwoYQWNrbm93bGVkZ2VBbGVydFJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgiWwoRTGlzdEFsZXJ0c1JlcXVlc3QSDwoHdXNlcl9pZBgBIAEoCRISCgpjYXRlZ29yaWVzGAIgAygJEg0KBWxpbWl0GAMgASgFEhIKCnBhZ2VfdG9rZW4YBCABKAkiWwoSTGlzdEFsZXJ0c1Jlc3BvbnNlEiwKBmFsZXJ0cxgBIAMoCzIcLnhzdG9ja3N0cmF0Lm5vdGlmeS52MS5BbGVydBIXCg9uZXh0X3BhZ2VfdG9rZW4YAiABKAkiZQofUmVnaXN0ZXJQdXNoU3Vic2NyaXB0aW9uUmVxdWVzdBIQCghlbmRwb2ludBgBIAEoCRIOCgZwMjU2ZGgYAiABKAkSDAoEYXV0aBgDIAEoCRISCgp1c2VyX2FnZW50GAQgASgJIjsKIFJlZ2lzdGVyUHVzaFN1YnNjcmlwdGlvblJlc3BvbnNlEhcKD3N1YnNjcmlwdGlvbl9pZBgBIAEoCSI1CiFVbnJlZ2lzdGVyUHVzaFN1YnNjcmlwdGlvblJlcXVlc3QSEAoIZW5kcG9pbnQYASABKAkiNQoiVW5yZWdpc3RlclB1c2hTdWJzY3JpcHRpb25SZXNwb25zZRIPCgdkZWxldGVkGAEgASgIKpsBCg1BbGVydFNldmVyaXR5Eh4KGkFMRVJUX1NFVkVSSVRZX1VOU1BFQ0lGSUVEEAASFwoTQUxFUlRfU0VWRVJJVFlfSU5GTxABEhoKFkFMRVJUX1NFVkVSSVRZX1dBUk5JTkcQAhIYChRBTEVSVF9TRVZFUklUWV9FUlJPUhADEhsKF0FMRVJUX1NFVkVSSVRZX0NSSVRJQ0FMEAQyxQUKDU5vdGlmeVNlcnZpY2USXgoJRW1pdEFsZXJ0EicueHN0b2Nrc3RyYXQubm90aWZ5LnYxLkVtaXRBbGVydFJlcXVlc3QaKC54c3RvY2tzdHJhdC5ub3RpZnkudjEuRW1pdEFsZXJ0UmVzcG9uc2USWgoMU3RyZWFtQWxlcnRzEioueHN0b2Nrc3RyYXQubm90aWZ5LnYxLlN0cmVhbUFsZXJ0c1JlcXVlc3QaHC54c3RvY2tzdHJhdC5ub3RpZnkudjEuQWxlcnQwARJzChBBY2tub3dsZWRnZUFsZXJ0Ei4ueHN0b2Nrc3RyYXQubm90aWZ5LnYxLkFja25vd2xlZGdlQWxlcnRSZXF1ZXN0Gi8ueHN0b2Nrc3RyYXQubm90aWZ5LnYxLkFja25vd2xlZGdlQWxlcnRSZXNwb25zZRJhCgpMaXN0QWxlcnRzEigueHN0b2Nrc3RyYXQubm90aWZ5LnYxLkxpc3RBbGVydHNSZXF1ZXN0GikueHN0b2Nrc3RyYXQubm90aWZ5LnYxLkxpc3RBbGVydHNSZXNwb25zZRKLAQoYUmVnaXN0ZXJQdXNoU3Vic2NyaXB0aW9uEjYueHN0b2Nrc3RyYXQubm90aWZ5LnYxLlJlZ2lzdGVyUHVzaFN1YnNjcmlwdGlvblJlcXVlc3QaNy54c3RvY2tzdHJhdC5ub3RpZnkudjEuUmVnaXN0ZXJQdXNoU3Vic2NyaXB0aW9uUmVzcG9uc2USkQEKGlVucmVnaXN0ZXJQdXNoU3Vic2NyaXB0aW9uEjgueHN0b2Nrc3RyYXQubm90aWZ5LnYxLlVucmVnaXN0ZXJQdXNoU3Vic2NyaXB0aW9uUmVxdWVzdBo5LnhzdG9ja3N0cmF0Lm5vdGlmeS52MS5VbnJlZ2lzdGVyUHVzaFN1YnNjcmlwdGlvblJlc3BvbnNlQjxaOmdpdGh1Yi5jb20veHN0b2Nrc3RyYXQvY29udHJhY3RzL2dlbi9nby9ub3RpZnkvdjE7bm90aWZ5djFiBnByb3RvMw", [file_google_protobuf_timestamp, file_google_protobuf_struct]);
+  fileDesc("ChZub3RpZnkvdjEvbm90aWZ5LnByb3RvEhV4c3RvY2tzdHJhdC5ub3RpZnkudjEigQMKBUFsZXJ0EhAKCGFsZXJ0X2lkGAEgASgJEjYKCHNldmVyaXR5GAIgASgOMiQueHN0b2Nrc3RyYXQubm90aWZ5LnYxLkFsZXJ0U2V2ZXJpdHkSEAoIY2F0ZWdvcnkYAyABKAkSDQoFdGl0bGUYBCABKAkSDAoEYm9keRgFIAEoCRIWCg5zb3VyY2Vfc2VydmljZRgGIAEoCRIWCg50YXJnZXRfdXNlcl9pZBgHIAEoCRIuCgpjcmVhdGVkX2F0GAggASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIoCgdjb250ZXh0GAkgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBIMCgR0YWdzGAogAygJEhQKDGFja25vd2xlZGdlZBgLIAEoCBIWCg5jb3JyZWxhdGlvbl9pZBgMIAEoCRIMCgRyZWFkGA0gASgIEisKB3JlYWRfYXQYDiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIvkBChBFbWl0QWxlcnRSZXF1ZXN0EjYKCHNldmVyaXR5GAEgASgOMiQueHN0b2Nrc3RyYXQubm90aWZ5LnYxLkFsZXJ0U2V2ZXJpdHkSEAoIY2F0ZWdvcnkYAiABKAkSDQoFdGl0bGUYAyABKAkSDAoEYm9keRgEIAEoCRIWCg5zb3VyY2Vfc2VydmljZRgFIAEoCRIWCg50YXJnZXRfdXNlcl9pZBgGIAEoCRIoCgdjb250ZXh0GAcgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBIMCgR0YWdzGAggAygJEhYKDmNvcnJlbGF0aW9uX2lkGAkgASgJIlUKEUVtaXRBbGVydFJlc3BvbnNlEhAKCGFsZXJ0X2lkGAEgASgJEi4KCmNyZWF0ZWRfYXQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIpIBChNTdHJlYW1BbGVydHNSZXF1ZXN0Eg8KB3VzZXJfaWQYASABKAkSEgoKY2F0ZWdvcmllcxgCIAMoCRI4CgpzZXZlcml0aWVzGAMgAygOMiQueHN0b2Nrc3RyYXQubm90aWZ5LnYxLkFsZXJ0U2V2ZXJpdHkSHAoUaW5jbHVkZV9hY2tub3dsZWRnZWQYBCABKAgiPAoXQWNrbm93bGVkZ2VBbGVydFJlcXVlc3QSEAoIYWxlcnRfaWQYASABKAkSDwoHdXNlcl9pZBgCIAEoCSIrChhBY2tub3dsZWRnZUFsZXJ0UmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCCJwChFMaXN0QWxlcnRzUmVxdWVzdBIPCgd1c2VyX2lkGAEgASgJEhIKCmNhdGVnb3JpZXMYAiADKAkSDQoFbGltaXQYAyABKAUSEgoKcGFnZV90b2tlbhgEIAEoCRITCgt1bnJlYWRfb25seRgFIAEoCCJxChJMaXN0QWxlcnRzUmVzcG9uc2USLAoGYWxlcnRzGAEgAygLMhwueHN0b2Nrc3RyYXQubm90aWZ5LnYxLkFsZXJ0EhcKD25leHRfcGFnZV90b2tlbhgCIAEoCRIUCgx1bnJlYWRfY291bnQYAyABKAUiKQoUTWFya0FsZXJ0UmVhZFJlcXVlc3QSEQoJYWxlcnRfaWRzGAEgAygJIhcKFU1hcmtBbGVydFJlYWRSZXNwb25zZSJlCh9SZWdpc3RlclB1c2hTdWJzY3JpcHRpb25SZXF1ZXN0EhAKCGVuZHBvaW50GAEgASgJEg4KBnAyNTZkaBgCIAEoCRIMCgRhdXRoGAMgASgJEhIKCnVzZXJfYWdlbnQYBCABKAkiOwogUmVnaXN0ZXJQdXNoU3Vic2NyaXB0aW9uUmVzcG9uc2USFwoPc3Vic2NyaXB0aW9uX2lkGAEgASgJIjUKIVVucmVnaXN0ZXJQdXNoU3Vic2NyaXB0aW9uUmVxdWVzdBIQCghlbmRwb2ludBgBIAEoCSI1CiJVbnJlZ2lzdGVyUHVzaFN1YnNjcmlwdGlvblJlc3BvbnNlEg8KB2RlbGV0ZWQYASABKAgqmwEKDUFsZXJ0U2V2ZXJpdHkSHgoaQUxFUlRfU0VWRVJJVFlfVU5TUEVDSUZJRUQQABIXChNBTEVSVF9TRVZFUklUWV9JTkZPEAESGgoWQUxFUlRfU0VWRVJJVFlfV0FSTklORxACEhgKFEFMRVJUX1NFVkVSSVRZX0VSUk9SEAMSGwoXQUxFUlRfU0VWRVJJVFlfQ1JJVElDQUwQBDKxBgoNTm90aWZ5U2VydmljZRJeCglFbWl0QWxlcnQSJy54c3RvY2tzdHJhdC5ub3RpZnkudjEuRW1pdEFsZXJ0UmVxdWVzdBooLnhzdG9ja3N0cmF0Lm5vdGlmeS52MS5FbWl0QWxlcnRSZXNwb25zZRJaCgxTdHJlYW1BbGVydHMSKi54c3RvY2tzdHJhdC5ub3RpZnkudjEuU3RyZWFtQWxlcnRzUmVxdWVzdBocLnhzdG9ja3N0cmF0Lm5vdGlmeS52MS5BbGVydDABEnMKEEFja25vd2xlZGdlQWxlcnQSLi54c3RvY2tzdHJhdC5ub3RpZnkudjEuQWNrbm93bGVkZ2VBbGVydFJlcXVlc3QaLy54c3RvY2tzdHJhdC5ub3RpZnkudjEuQWNrbm93bGVkZ2VBbGVydFJlc3BvbnNlEmEKCkxpc3RBbGVydHMSKC54c3RvY2tzdHJhdC5ub3RpZnkudjEuTGlzdEFsZXJ0c1JlcXVlc3QaKS54c3RvY2tzdHJhdC5ub3RpZnkudjEuTGlzdEFsZXJ0c1Jlc3BvbnNlEmoKDU1hcmtBbGVydFJlYWQSKy54c3RvY2tzdHJhdC5ub3RpZnkudjEuTWFya0FsZXJ0UmVhZFJlcXVlc3QaLC54c3RvY2tzdHJhdC5ub3RpZnkudjEuTWFya0FsZXJ0UmVhZFJlc3BvbnNlEosBChhSZWdpc3RlclB1c2hTdWJzY3JpcHRpb24SNi54c3RvY2tzdHJhdC5ub3RpZnkudjEuUmVnaXN0ZXJQdXNoU3Vic2NyaXB0aW9uUmVxdWVzdBo3LnhzdG9ja3N0cmF0Lm5vdGlmeS52MS5SZWdpc3RlclB1c2hTdWJzY3JpcHRpb25SZXNwb25zZRKRAQoaVW5yZWdpc3RlclB1c2hTdWJzY3JpcHRpb24SOC54c3RvY2tzdHJhdC5ub3RpZnkudjEuVW5yZWdpc3RlclB1c2hTdWJzY3JpcHRpb25SZXF1ZXN0GjkueHN0b2Nrc3RyYXQubm90aWZ5LnYxLlVucmVnaXN0ZXJQdXNoU3Vic2NyaXB0aW9uUmVzcG9uc2VCPFo6Z2l0aHViLmNvbS94c3RvY2tzdHJhdC9jb250cmFjdHMvZ2VuL2dvL25vdGlmeS92MTtub3RpZnl2MWIGcHJvdG8z", [file_google_protobuf_timestamp, file_google_protobuf_struct]);
 
 /**
  * @generated from message xstockstrat.notify.v1.Alert
@@ -83,6 +83,19 @@ export type Alert = Message<"xstockstrat.notify.v1.Alert"> & {
    * @generated from field: string correlation_id = 12;
    */
   correlationId: string;
+
+  /**
+   * Per-user read state (feature 203). Populated for the calling user on ListAlerts via a LEFT JOIN
+   * on notify.alert_reads; StreamAlerts leaves read=false (proto3 default). read_at is absent when unread.
+   *
+   * @generated from field: bool read = 13;
+   */
+  read: boolean;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp read_at = 14;
+   */
+  readAt?: Timestamp | undefined;
 };
 
 /**
@@ -271,6 +284,13 @@ export type ListAlertsRequest = Message<"xstockstrat.notify.v1.ListAlertsRequest
    * @generated from field: string page_token = 4;
    */
   pageToken: string;
+
+  /**
+   * feature 203 — when true, return only alerts the calling user has not read
+   *
+   * @generated from field: bool unread_only = 5;
+   */
+  unreadOnly: boolean;
 };
 
 /**
@@ -293,6 +313,13 @@ export type ListAlertsResponse = Message<"xstockstrat.notify.v1.ListAlertsRespon
    * @generated from field: string next_page_token = 2;
    */
   nextPageToken: string;
+
+  /**
+   * feature 203 — count of the calling user's unread alerts
+   *
+   * @generated from field: int32 unread_count = 3;
+   */
+  unreadCount: number;
 };
 
 /**
@@ -301,6 +328,38 @@ export type ListAlertsResponse = Message<"xstockstrat.notify.v1.ListAlertsRespon
  */
 export const ListAlertsResponseSchema: GenMessage<ListAlertsResponse> = /*@__PURE__*/
   messageDesc(file_notify_v1_notify, 7);
+
+/**
+ * @generated from message xstockstrat.notify.v1.MarkAlertReadRequest
+ */
+export type MarkAlertReadRequest = Message<"xstockstrat.notify.v1.MarkAlertReadRequest"> & {
+  /**
+   * Owner resolved from the propagated x-user-id header (C-03), never the body.
+   *
+   * @generated from field: repeated string alert_ids = 1;
+   */
+  alertIds: string[];
+};
+
+/**
+ * Describes the message xstockstrat.notify.v1.MarkAlertReadRequest.
+ * Use `create(MarkAlertReadRequestSchema)` to create a new message.
+ */
+export const MarkAlertReadRequestSchema: GenMessage<MarkAlertReadRequest> = /*@__PURE__*/
+  messageDesc(file_notify_v1_notify, 8);
+
+/**
+ * @generated from message xstockstrat.notify.v1.MarkAlertReadResponse
+ */
+export type MarkAlertReadResponse = Message<"xstockstrat.notify.v1.MarkAlertReadResponse"> & {
+};
+
+/**
+ * Describes the message xstockstrat.notify.v1.MarkAlertReadResponse.
+ * Use `create(MarkAlertReadResponseSchema)` to create a new message.
+ */
+export const MarkAlertReadResponseSchema: GenMessage<MarkAlertReadResponse> = /*@__PURE__*/
+  messageDesc(file_notify_v1_notify, 9);
 
 /**
  * Web Push subscription registration (feature 165 — pwa-notifications).
@@ -345,7 +404,7 @@ export type RegisterPushSubscriptionRequest = Message<"xstockstrat.notify.v1.Reg
  * Use `create(RegisterPushSubscriptionRequestSchema)` to create a new message.
  */
 export const RegisterPushSubscriptionRequestSchema: GenMessage<RegisterPushSubscriptionRequest> = /*@__PURE__*/
-  messageDesc(file_notify_v1_notify, 8);
+  messageDesc(file_notify_v1_notify, 10);
 
 /**
  * @generated from message xstockstrat.notify.v1.RegisterPushSubscriptionResponse
@@ -362,7 +421,7 @@ export type RegisterPushSubscriptionResponse = Message<"xstockstrat.notify.v1.Re
  * Use `create(RegisterPushSubscriptionResponseSchema)` to create a new message.
  */
 export const RegisterPushSubscriptionResponseSchema: GenMessage<RegisterPushSubscriptionResponse> = /*@__PURE__*/
-  messageDesc(file_notify_v1_notify, 9);
+  messageDesc(file_notify_v1_notify, 11);
 
 /**
  * @generated from message xstockstrat.notify.v1.UnregisterPushSubscriptionRequest
@@ -381,7 +440,7 @@ export type UnregisterPushSubscriptionRequest = Message<"xstockstrat.notify.v1.U
  * Use `create(UnregisterPushSubscriptionRequestSchema)` to create a new message.
  */
 export const UnregisterPushSubscriptionRequestSchema: GenMessage<UnregisterPushSubscriptionRequest> = /*@__PURE__*/
-  messageDesc(file_notify_v1_notify, 10);
+  messageDesc(file_notify_v1_notify, 12);
 
 /**
  * @generated from message xstockstrat.notify.v1.UnregisterPushSubscriptionResponse
@@ -398,7 +457,7 @@ export type UnregisterPushSubscriptionResponse = Message<"xstockstrat.notify.v1.
  * Use `create(UnregisterPushSubscriptionResponseSchema)` to create a new message.
  */
 export const UnregisterPushSubscriptionResponseSchema: GenMessage<UnregisterPushSubscriptionResponse> = /*@__PURE__*/
-  messageDesc(file_notify_v1_notify, 11);
+  messageDesc(file_notify_v1_notify, 13);
 
 /**
  * @generated from enum xstockstrat.notify.v1.AlertSeverity
@@ -483,6 +542,17 @@ export const NotifyService: GenService<{
     methodKind: "unary";
     input: typeof ListAlertsRequestSchema;
     output: typeof ListAlertsResponseSchema;
+  },
+  /**
+   * Mark one or more alerts read for the calling user (feature 203). Owner resolved from the
+   * propagated x-user-id header (C-03). Idempotent — re-marking preserves the original read_at.
+   *
+   * @generated from rpc xstockstrat.notify.v1.NotifyService.MarkAlertRead
+   */
+  markAlertRead: {
+    methodKind: "unary";
+    input: typeof MarkAlertReadRequestSchema;
+    output: typeof MarkAlertReadResponseSchema;
   },
   /**
    * Register (or upsert) a Web Push subscription for the calling user.

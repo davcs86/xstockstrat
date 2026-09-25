@@ -48,7 +48,7 @@ Consumer-surface coverage (C-14): both named surfaces are covered -- Agent (Step
 
 ### Step 1 -- proto: Add ListFundamentalMetrics RPC and messages
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/indicators/v1/indicators.proto` -- modify
@@ -94,7 +94,7 @@ cd packages/proto && buf lint && buf breaking --against '../../.git#branch=main-
 
 ### Step 2 -- proto-gen: Regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/indicators/v1/*.go` -- auto-generated (wildcards inherent to codegen output; exact filenames determined by buf-gen.sh)
@@ -122,7 +122,7 @@ cd packages/proto && buf lint && buf breaking --against '../../.git#branch=main-
 
 ### Step 3 -- service: Indicators ListFundamentalMetrics handler
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/handlers/servicer.py` -- modify
@@ -163,7 +163,7 @@ cd services/xstockstrat-indicators && uv run pytest tests/ -k "list_fundamental_
 
 ### Step 4 -- test: Indicators handler tests (G1, G2)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/test_fundamental_metrics.py` -- create
@@ -201,7 +201,7 @@ cd services/xstockstrat-indicators && uv run ruff check app/ tests/ && uv run ru
 
 ### Step 5 -- service: Agent manage_formula declare/view (fundamental_inputs)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` -- modify
@@ -258,7 +258,7 @@ cd services/xstockstrat-agent && uv run pytest tests/test_formula_builders.py -v
 
 ### Step 6 -- test: Agent descriptor-parity test update (G5)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_formula_builders.py` -- modify
@@ -304,7 +304,7 @@ cd services/xstockstrat-agent && uv run ruff check app/ tests/ && uv run ruff fo
 
 ### Step 7 -- service: Agent list_fundamental_metrics tool + test_formula docstring
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` -- modify
@@ -353,7 +353,7 @@ cd services/xstockstrat-agent && uv run pytest tests/ -k "list_fundamental_metri
 
 ### Step 8 -- test: Agent catalog test + docs alignment (G4, G5)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_fundamental_metrics_tool.py` -- create
@@ -404,7 +404,7 @@ cd services/xstockstrat-agent && uv run ruff check app/ tests/ && uv run ruff fo
 
 ### Step 9 -- service: UI declare/view -- FundamentalInputEditor + BFF + useFormulas + FormulaWorkspace
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/FundamentalInputEditor.tsx` -- create
@@ -469,7 +469,7 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm run build
 
 ### Step 10 -- test: UI declare/view vitest
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/hooks/useFormulas.test.ts` -- modify (if exists) or create
@@ -501,7 +501,7 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm run test:unit
 
 ### Step 11 -- service: UI test harness -- fundamentals value grid + symbol-prefill (G3)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/insightsBff.ts` -- modify
@@ -569,7 +569,7 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm run build
 
 ### Step 12 -- test: UI test harness vitest
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/fundamentalMetrics.test.ts` -- create
@@ -603,7 +603,7 @@ is inside the `src/lib/**` coverage scope and contributes to the threshold.
 
 ### Step 13 -- test: Analysis G6 third-leg parity test
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_fundamental_metric_parity.py` -- create
@@ -643,7 +643,7 @@ cd services/xstockstrat-analysis && uv run ruff check app/ tests/ && uv run ruff
 
 ### Step 14 -- test: E2E Playwright + acceptance traceability + INVENTORY.md
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/mock-backend.ts` -- modify
@@ -696,4 +696,48 @@ cd services/xstockstrat-ui && pnpm test:e2e -- --grep "fundamental"
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+- **Step 9 — numeric `FundamentalMetric[]` end-to-end, not `string[]`.** The spec proposed
+  `fundamentalInputs?: string[]` (NAME-strings) on the hooks and picker. protobuf-es represents the
+  repeated-enum field as the numeric `FundamentalMetric` type in the typed browser client's
+  `MessageInitShape`; a `string[]` neither type-checks nor `create()`s. So the UI carries the numeric
+  enum in component state, hooks, and the `onSave` shape, and reads `formula.fundamentalInputs`
+  (already numeric) straight into `initialFundamentalInputs` — no NAME↔number conversion, no
+  brittle enum-name juggling. Connect-JSON still serializes each value to its NAME-string on the
+  wire, so the C-16 acceptance ("the mock receives NAME-strings") holds unchanged. The picker options
+  come straight from the `listFundamentalMetrics` catalog (`{metric, dataKey, meaning}`), Select
+  values are `String(metric)`.
+- **Step 9 — no reorder controls.** `OutputEditor` supports move-up/down; fundamental inputs are an
+  unordered set (order carries no meaning), so the editor omits reorder and renders add/remove only.
+- **Step 9 — shared catalog hook.** The `listFundamentalMetrics` browser query lives in a single
+  `useFundamentalMetrics()` hook (`useFormulas.ts`, `staleTime: Infinity`) shared by the
+  FundamentalInputEditor (Step 9) and the FormulaWorkspace fundamentals grid (Step 11).
+- **Step 10 — react-query mocked, not rendered.** The UI vitest layer is node-env only (no
+  jsdom/testing-library — CLAUDE.md § Testing), so hooks can't be rendered. The test mocks
+  `@tanstack/react-query` (`useMutation` captures the `mutationFn`) and the browser client, then
+  invokes the captured `mutationFn` and asserts the RPC payload carries `fundamentalInputs` (and
+  defaults to `[]` when omitted) — a genuine runtime assertion, not a type-only stub.
+- **Step 11 — `dataKeyToProtoField` replaces the spec's `metricNameToDataKey`.** With the numeric-
+  enum design (Step 9 deviation) the UI never handles NAME-strings at runtime, so a NAME→data-key
+  helper would be dead code. The mapping the grid actually needs is snake_case data-key →
+  protobuf-es camelCase field (`pe_ratio` → `peRatio`) to read the marketdata `Fundamentals` row;
+  that is `dataKeyToProtoField`. `fundamentalsToInputData(row, catalog)` takes the proto row (which
+  carries the authoritative `missingMetrics`) and the declared-metric subset, and is the C-16/
+  MARKETDATA-11-faithful mapping: a metric in `missingMetrics`, absent, or non-finite → `null`,
+  a legitimate `0` preserved, never `NaN` (fails.md:86).
+- **Step 11 — grid replaces the JSON textarea for fundamentals formulas.** The spec placed the grid
+  "below" the JSON input; instead, when `fundamentalInputs` is non-empty the Run cell renders the
+  value grid *in place of* the JSON textarea (and hides "Load sample data"), because a JSON area
+  `handleRun` ignores for these formulas would mislead. The JSON textarea still shows for
+  non-fundamentals formulas. Grid values are `Record<data_key, number | null>`; `handleRun` omits
+  `null` entries when building the sandbox `data`.
+- **Step 13 — whole-suite coverage gate.** The spec's `--cov=app --cov-fail-under=40` can't be met by
+  the single new parity file alone (test-only, additive), so the full analysis suite was run to
+  exercise the real gate: 842 passed, 83.91% coverage. Matches the feature-204 Step-8 precedent.
+- **Step 14 — IndicatorsService methods are page.route-stubbed, not mock-backend handlers.** The e2e
+  mock-backend does not register `IndicatorsService` at all (the existing `formulas.spec.ts` already
+  stubs `ListFormulas`/`GetFormula` via `page.route`), so `ListFundamentalMetrics`, `RegisterFormula`,
+  and `ExecuteFormula` are page.route-stubbed in the spec, matching that established pattern —
+  spec-14.1's "add to the IndicatorsService mock" could not be followed literally. `getFundamentalsMulti`
+  *was* added to the mock-backend's `MarketDataService` block (which is registered), so AC-6 exercises
+  the real BFF forward end-to-end. The 11-entry catalog is inlined in the spec (single consumer, C-13).
+  AC-2..6 all green (6/6 incl. setup; full `formulas.spec.ts` 10/10, no regression).

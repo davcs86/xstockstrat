@@ -6,6 +6,23 @@ Each entry corresponds to one `main-dev → main` PR merge.
 ## 2026-09-24
 
 ### Features
+- alert-read-unread-persistence: Turn `xstockstrat-notify` alerts into a durable per-user notification inbox by adding a per-user **read/unread** state (distinct from the existing `acknowledged` ack), so each user tracks which alerts they have seen — including their own read state on broadcast alerts.
+- backfilled-data-queryable: Expose the platform's existing backfilled OHLCV bars and fundamentals data through a dedicated UI data-explorer page in the insights segment and new MCP agent tools, so users can query and analyze historical market data independently without having to run strategies or backtests.
+- formula-fundamental-inputs-authoring: Expose the fundamentals-formula capability (feature 201's `fundamental_inputs` / `FundamentalMetric`) to formula **authoring** on both the MCP and the UI: let an author declare a formula's fundamental inputs, see the declared inputs on read, discover the available fundamental-metric catalog, and test a fundamentals-scoring formula with real (symbol-prefilled, editable) fundamentals values — via the agent formula tools and the `/insights` FormulaEditor.
+
+### Proto Changes
+- indicators/v1/indicators.proto
+- marketdata/v1/marketdata.proto
+- notify/v1/notify.proto
+
+### Summary
+4 commits, 0 feature merges since last promotion.
+
+---
+
+## 2026-09-24
+
+### Features
 - fix-blend-queue-fundamentals-universe: Feature 168's fundamentals-universe restriction lived in exactly one place — `live_loop._run_cycle`'s inline blend branch.
 - fix-strategy-signal-params-dead-keys: `StrategyDefinition.signal_params` carries four dead feature-097 blend keys (`signal_sources`, `signal_weight`, `technical_weight`, `min_conviction`) that no consumer of a `StrategyDefinition` reads (only `symbols`/`target`/`stop` are load-bearing).
 - fix-strategy-detail-definition-render: `/insights/strategies/[id]` fetched the strategy definition (`useGetStrategy`) but never rendered it: no components, no `entry_rule`, no `exit_rule` anywhere on the page — so a user could conclude a strategy "has no entry or exit rules" when both are stored and correct.

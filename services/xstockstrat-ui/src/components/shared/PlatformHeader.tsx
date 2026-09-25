@@ -79,6 +79,7 @@ export const PLATFORM_SUBNAV: Record<PlatformSegment, SubNavItem[]> = {
     { label: 'P&L Patterns', href: '/insights/pnl-patterns' },
     { label: 'Screener', href: '/insights/screener' },
     { label: 'Watchlists', href: '/insights/watchlists' },
+    { label: 'Data Explorer', href: '/insights/data-explorer' },
   ],
   config: [
     { label: 'Namespaces', href: '/config-ui', match: 'exact' },

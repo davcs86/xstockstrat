@@ -15,20 +15,14 @@ from app import client
 
 # RegisterFormulaRequest: the agent intentionally does not author `input_schema` (a legacy advisory
 # map, retained but not validated per the indicators service — see its CLAUDE.md). Every other field
-# is sent. If a new RegisterFormulaRequest field is added, this test fails until the builder carries
-# it or it is justified here.
-# `fundamental_inputs` (feature 201): a formula's fundamentals-input declaration. Feature 201 ships
-# only READ-ONLY consumer surfaces for it (the UI ComponentEditor badge; the agent's manage_strategy
-# is unchanged) — a fundamentals formula is authored via the seeded `fundamentals_value_quality`
-# formula or a direct indicators RegisterFormula call, not through the agent's manage_formula tool.
-# An agent authoring path is a deliberate deferred follow-on, so the builder does not set it. This
-# is a scope decision, NOT the legacy rationale above — remove this entry when that path is built.
-_REGISTER_INTENTIONALLY_UNSET = {"input_schema", "fundamental_inputs"}
-# UpdateFormulaRequest: the builder sets every field, including the meta `update_mask`.
-# user_id is deprecated on the wire — the caller identity is forwarded as the x-user-id header and
-# resolved server-side, so the builder no longer sets the request-body field.
-# fundamental_inputs — deferred agent-authoring path, same feature-201 scope decision as register.
-_UPDATE_INTENTIONALLY_UNSET: set[str] = {"user_id", "fundamental_inputs"}
+# is sent, including `fundamental_inputs` (feature 205 built the agent authoring path). If a new
+# RegisterFormulaRequest field is added, this test fails until the builder carries it or it is
+# justified here.
+_REGISTER_INTENTIONALLY_UNSET = {"input_schema"}
+# UpdateFormulaRequest: the builder sets every field, including the meta `update_mask` and
+# `fundamental_inputs` (feature 205). user_id is deprecated on the wire — the caller identity is
+# forwarded as the x-user-id header and resolved server-side, so the builder no longer sets it.
+_UPDATE_INTENTIONALLY_UNSET: set[str] = {"user_id"}
 
 
 def _channel_cm():
@@ -59,6 +53,7 @@ async def _capture_register_request():
                     "parameters": [{"name": "p", "type": "int"}],
                     "outputs": [{"name": "o", "description": "series"}],
                     "warmup_period": 5,
+                    "fundamental_inputs": ["FUNDAMENTAL_METRIC_PE_RATIO"],
                 },
             )
     return mock_stub.RegisterFormula.call_args[0][0]
@@ -88,6 +83,7 @@ async def _capture_update_request():
                     "parameters": [{"name": "p", "type": "int"}],
                     "outputs": [{"name": "o", "description": "series"}],
                     "warmup_period": 5,
+                    "fundamental_inputs": ["FUNDAMENTAL_METRIC_PE_RATIO"],
                     "update_mask": ["name", "description", "source"],
                 },
             )
@@ -122,6 +118,39 @@ class TestFormulaBuilderBehavior:
         req = await _capture_register_request()
         assert req.warmup_period == 5
         assert [o.name for o in req.outputs] == ["o"]
+
+    @pytest.mark.asyncio
+    async def test_register_sends_fundamental_inputs(self):
+        # feature 205: NAME-strings are converted to enum values on the register request.
+        from gen.indicators.v1 import indicators_pb2  # type: ignore
+
+        req = await _capture_register_request()
+        assert list(req.fundamental_inputs) == [indicators_pb2.FUNDAMENTAL_METRIC_PE_RATIO]
+
+    @pytest.mark.asyncio
+    async def test_get_formula_returns_fundamental_inputs(self):
+        # feature 205 AC-1/AC-3: a declared→get_formula round-trip surfaces fundamentalInputs as
+        # camelCase NAME-strings (MessageToDict enum encoding).
+        from gen.indicators.v1 import indicators_pb2, indicators_pb2_grpc  # type: ignore
+
+        mock_stub = MagicMock()
+        mock_stub.GetFormula = AsyncMock(
+            return_value=indicators_pb2.FormulaDefinition(
+                formula_id="f-1",
+                fundamental_inputs=[
+                    indicators_pb2.FUNDAMENTAL_METRIC_PE_RATIO,
+                    indicators_pb2.FUNDAMENTAL_METRIC_PB_RATIO,
+                ],
+            )
+        )
+        with patch("app.client.grpc") as mock_grpc:
+            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+            with patch.object(indicators_pb2_grpc, "IndicatorsServiceStub", return_value=mock_stub):
+                result = await client.get_formula("f-1")
+        assert result["fundamentalInputs"] == [
+            "FUNDAMENTAL_METRIC_PE_RATIO",
+            "FUNDAMENTAL_METRIC_PB_RATIO",
+        ]
 
     @pytest.mark.asyncio
     async def test_update_sets_field_mask(self):

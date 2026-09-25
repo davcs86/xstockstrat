@@ -108,7 +108,7 @@ type fundamentalsRepo interface {
 // (feature 198), behind an interface so the RPC logic is unit-testable with stubs.
 type histFundamentalsRepo interface {
 	InsertHistoricalFundamentals(ctx context.Context, p source.HistoricalFundamentalsPeriod) error
-	QueryHistoricalFundamentals(ctx context.Context, symbol string, asOf, rangeStart, rangeEnd time.Time, periodTypes []string) ([]source.HistoricalFundamentalsPeriod, error)
+	QueryHistoricalFundamentals(ctx context.Context, symbol string, asOf, rangeStart, rangeEnd time.Time, periodTypes []string, pageSize int, pageToken string) ([]source.HistoricalFundamentalsPeriod, string, error)
 	CloseAt(ctx context.Context, symbol string, date time.Time) (*float64, error)
 }
 
@@ -1523,7 +1523,17 @@ func (s *MarketDataService) GetHistoricalFundamentals(ctx context.Context, req *
 	if req.GetRangeEnd() != nil {
 		rangeEnd = req.GetRangeEnd().AsTime()
 	}
-	periods, err := s.histRepo.QueryHistoricalFundamentals(ctx, req.GetSymbol(), asOf, rangeStart, rangeEnd, req.GetPeriodTypes())
+	// Default page size 50 (design.md); the repo pushes filed_date < as_of into SQL BEFORE the LIMIT
+	// so filterAsOf below never truncates a full page down to a short one.
+	pageSize := 50
+	pageToken := ""
+	if req.Page != nil {
+		if req.Page.PageSize > 0 {
+			pageSize = int(req.Page.PageSize)
+		}
+		pageToken = req.Page.PageToken
+	}
+	periods, nextToken, err := s.histRepo.QueryHistoricalFundamentals(ctx, req.GetSymbol(), asOf, rangeStart, rangeEnd, req.GetPeriodTypes(), pageSize, pageToken)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -1535,7 +1545,10 @@ func (s *MarketDataService) GetHistoricalFundamentals(ctx context.Context, req *
 	for i := range periods {
 		out = append(out, toProtoHistoricalPeriod(&periods[i]))
 	}
-	return &marketdatav1.GetHistoricalFundamentalsResponse{Periods: out}, nil
+	return &marketdatav1.GetHistoricalFundamentalsResponse{
+		Periods:    out,
+		Pagination: &commonv1.PageResponse{NextPageToken: nextToken},
+	}, nil
 }
 
 // BackfillFundamentals is the worker driven by ingest.TriggerBackfill(data_kind=FUNDAMENTALS): per

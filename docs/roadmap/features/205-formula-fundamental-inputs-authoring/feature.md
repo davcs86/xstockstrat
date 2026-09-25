@@ -14,6 +14,7 @@
 | 2026-09-24 | `draft` → `spec-ready` | /sdd-review | Product spec approved (warnings, no blockers); merge-order 205→201 recorded |
 | 2026-09-24 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + design.md written |
 | 2026-09-24 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated (14 steps); 7 AC scenarios traced to test steps |
+| 2026-09-24 | `implementation-ready` → `code-completed` | /sdd-execute | All 14 steps done; proto `ListFundamentalMetrics` RPC + indicators handler, agent `manage_formula fundamental_inputs`/`list_fundamental_metrics`, UI FundamentalInputEditor + fundamentals grid/prefill, analysis G6 parity, e2e AC-2..6. @AC-1..7 promoted to durable suites (C-16) |
 
 ---
 
@@ -52,4 +53,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review formula-fundamental-inputs-authoring impl-spec` — advisory review, then `/sdd-execute formula-fundamental-inputs-authoring`
+Integration PR into `main-dev` (merge order: after 201/204 — see `docs/roadmap/features/merge-order.md`). All 14 steps executed and verified; @AC-1..7 promoted (C-16).

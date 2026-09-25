@@ -87,13 +87,13 @@ This file covers always-needed platform conventions. For larger reference sectio
 | First-time DigitalOcean setup | `docs/setup/digitalocean.md` |
 | OTel / Grafana Cloud wiring | `docs/setup/grafana-cloud.md` |
 | Feature workflow (branch, PR, promote) | `docs/runbooks/feature-workflow.md` |
-| Using or troubleshooting the agent MCP tools | `docs/runbooks/mcp-tools.md` |
-| Adding/refactoring a skill, subagent, or `CLAUDE.md`; how the AI tooling curates context (subagent delegation, progressive disclosure, structured `context.md` memory) | `docs/patterns/context-engineering.md` |
+| Using or troubleshooting the agent MCP tools (a wire-connected agent consumes these as the generated `mcp-tools-docs` plugin skill — `.claude/plugins/mcp-tools-docs/`) | `docs/runbooks/mcp-tools.md` |
+| Adding/refactoring a skill, subagent, or `CLAUDE.md`; how the AI tooling curates context (subagent delegation, progressive disclosure, structured `context.md` memory); how the repo's plugin marketplace + cross-marketplace dependencies are wired | `docs/patterns/context-engineering.md` |
 | SDD binding rules — Constitution constraint IDs (`C-*`/`P-*`/`F-*`) cited by review/design/execute | `docs/sdd/constitution.md` |
 | Acceptance scenarios & business rules (Gherkin `@AC-*`) — per-feature `acceptance.feature`, durable per-service suites read by recon/design, C-15/C-16 | `docs/sdd/business-rules/CLAUDE.md`, `docs/sdd/constitution.md` |
 | Codebase/runtime invariants (`PLAT-*`/`<MODULE>-*`) — non-obvious patterns, cross-module contracts, and scars an agent would otherwise miss; plus the defects/doc-drift log | `docs/context-constitution.md`, `docs/context-constitution-findings.md` (per-module: `services/*/docs/`, `packages/*/docs/`) |
 | Cross-feature SDD memory — insights (patterns that worked) and fails (mistakes that recurred) | `docs/roadmap/ledger/insights.md`, `docs/roadmap/ledger/fails.md` |
-| Changing `run_backtest`, `manage_strategy`, `trigger_backfill`/`get_backfill_status` or `set_strategy_live` — this repo ships the `strat-lab` plugin (`plugins/strat-lab/`) whose `backtest` skill encodes these APIs' current quirks, and a change to them must update the skill in the **same** PR | `docs/patterns/strat-lab-plugin.md` |
+| Changing `run_backtest`, `manage_strategy`, `trigger_backfill`/`get_backfill_status` or `set_strategy_live` — this repo ships the `strat-lab` plugin (`.claude/plugins/strat-lab/`) whose `backtest` skill encodes these APIs' current quirks, and a change to them must update the skill in the **same** PR | `docs/patterns/strat-lab-plugin.md` |
 
 ---
 
@@ -392,7 +392,7 @@ permission to skip the pipeline — run `/sdd-story` and `/sdd-design quick` you
 implement.
 
 `quick` mode is the fast-track for small changes, not an exemption: Phase 0 Recon always runs in
-full and a single mandated adversarial round still happens (see `.claude/skills/sdd-design/SKILL.md`).
+full and a single mandated adversarial round still happens (see `.claude/plugins/sdd-suite/skills/sdd-design/SKILL.md`).
 It shortens the debate; it never skips Phase 0/Phase 1 or the Constitution.
 
 **Exempt:** confirmed bug fixes, which route through `docs/runbooks/bug-triage.md` (Track A/B/C) —
@@ -417,6 +417,8 @@ Run `/sdd-status` for a live, computed view across all features, or `/sdd-status
 3. Do NOT rely on conversation context from a previous session. Always re-read context.md.
 
 SDD skills: `/sdd-story` → `/sdd-review product-spec` → `/sdd-design` (recon + design debate) → `/sdd-spec` → `/sdd-review impl-spec` → `/sdd-execute` (loop) | `/sdd-status` (anytime) | `/sdd-sync` (sync spec files from feature branches to main-dev) | `/sdd-distill` (compact a long-running feature's context.md mid-lifecycle) | `/sdd-archiver` (distil + prune completed features into durable memory)
+
+These skills (and the subagents they orchestrate) ship in the **`sdd-suite` plugin** (`.claude/plugins/sdd-suite/`, enabled via `.claude/settings.json`); invoke them as `/sdd-suite:<skill>` or the bare `/sdd-<skill>` when unambiguous. See `docs/patterns/context-engineering.md` § 4.
 
 ---
 
@@ -455,8 +457,11 @@ SDD skills: `/sdd-story` → `/sdd-review product-spec` → `/sdd-design` (recon
 | DRY pre-commit hook | `.husky/pre-commit` |
 | DRY semantic reviewer subagent | `.claude/agents/dry-reviewer.md` |
 | Frontend test-data inventory (fixtures + catalog) | `services/xstockstrat-ui/e2e/fixtures/`, `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md` |
-| QA advisory subagent | `.claude/agents/qa-tester.md` |
-| QA skill (test design/run, coverage gaps, flake detection, fixture inventory, defect capture) | `.claude/skills/sdd-qa/SKILL.md` |
+| QA advisory subagent | `.claude/plugins/sdd-suite/agents/qa-tester.md` |
+| QA skill (test design/run, coverage gaps, flake detection, fixture inventory, defect capture) | `.claude/plugins/sdd-suite/skills/sdd-qa/SKILL.md` |
+| Plugin marketplace catalogs (Claude + Cursor) | `.claude-plugin/marketplace.json`, `.cursor-plugin/marketplace.json` |
+| SDD suite plugin (the `/sdd-*` skills + advisory subagents) | `.claude/plugins/sdd-suite/` |
+| MCP tools docs plugin + its runbook→skill generator | `.claude/plugins/mcp-tools-docs/`, `.claude/plugins/mcp-tools-docs/scripts/generate.py` |
 | CI workflow | `.github/workflows/ci.yml` |
 | Dev deploy workflow | `.github/workflows/deploy-dev.yml` |
 | Prod deploy workflow | `.github/workflows/deploy-prod.yml` |

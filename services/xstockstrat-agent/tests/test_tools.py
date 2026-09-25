@@ -1081,7 +1081,7 @@ class TestManageStrategyTool:
         assert mcp_tools.count("string` or `object") >= 2  # entry_rule + exit_rule rows
 
         skill = (
-            repo_root / "plugins" / "strat-lab" / "skills" / "backtest" / "SKILL.md"
+            repo_root / ".claude" / "plugins" / "strat-lab" / "skills" / "backtest" / "SKILL.md"
         ).read_text()
         assert "JSON string" in skill and "JSON object" in skill
 

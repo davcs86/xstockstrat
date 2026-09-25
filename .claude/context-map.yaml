@@ -15,19 +15,19 @@ version: 1
 # --- Subagent fleet: isolated read-only windows that return condensed digests ---
 agents:
   - name: codebase-discovery
-    path: .claude/agents/codebase-discovery.md
+    path: .claude/plugins/sdd-suite/agents/codebase-discovery.md
     returns: "path:line evidence digest for a service/step"
     used_by: [sdd-spec, sdd-execute]
   - name: spec-reviewer
-    path: .claude/agents/spec-reviewer.md
+    path: .claude/plugins/sdd-suite/agents/spec-reviewer.md
     returns: "structured pass/warn/fail verdict per criterion"
     used_by: [sdd-review]
   - name: feature-overlap
-    path: .claude/agents/feature-overlap.md
+    path: .claude/plugins/sdd-suite/agents/feature-overlap.md
     returns: "cross-feature collision report"
     used_by: [sdd-review]
   - name: service-briefing
-    path: .claude/agents/service-briefing.md
+    path: .claude/plugins/sdd-suite/agents/service-briefing.md
     returns: "compact briefing for one service"
     used_by: [sdd-spec, sdd-execute]
   - name: dry-reviewer
@@ -35,62 +35,62 @@ agents:
     returns: "semantic DRY findings (repeated constants/literals/types/helpers) with canonical homes"
     used_by: [pre-pr-review]
   - name: design-proposer
-    path: .claude/agents/design-proposer.md
+    path: .claude/plugins/sdd-suite/agents/design-proposer.md
     returns: "ONE concrete architecture with path:line evidence and explicit assumptions"
     used_by: [sdd-design]
   - name: design-adversary
-    path: .claude/agents/design-adversary.md
+    path: .claude/plugins/sdd-suite/agents/design-adversary.md
     returns: "structured objections citing C-*/P-*/F-* IDs, plus rejected-alternative trade-offs"
     used_by: [sdd-design]
   - name: qa-tester
-    path: .claude/agents/qa-tester.md
+    path: .claude/plugins/sdd-suite/agents/qa-tester.md
     returns: "test plan (layer/file/RED assertion/command) + test inventory + SEV-tagged defect digest"
     used_by: [sdd-qa, sdd-execute]
 
 # --- Skills: lean SKILL.md routers + on-demand reference/ files ---
 skills:
   - name: sdd-spec
-    router: .claude/skills/sdd-spec/SKILL.md
+    router: .claude/plugins/sdd-suite/skills/sdd-spec/SKILL.md
     reference:
-      - .claude/skills/sdd-spec/reference/discovery-checklist.md
-      - .claude/skills/sdd-spec/reference/step-constraints.md
-      - .claude/skills/sdd-spec/reference/spec-template.md
+      - .claude/plugins/sdd-suite/skills/sdd-spec/reference/discovery-checklist.md
+      - .claude/plugins/sdd-suite/skills/sdd-spec/reference/step-constraints.md
+      - .claude/plugins/sdd-suite/skills/sdd-spec/reference/spec-template.md
   - name: sdd-review
-    router: .claude/skills/sdd-review/SKILL.md
+    router: .claude/plugins/sdd-suite/skills/sdd-review/SKILL.md
     reference:
-      - .claude/skills/sdd-review/reference/product-spec-criteria.md
-      - .claude/skills/sdd-review/reference/impl-spec-criteria.md
-      - .claude/skills/sdd-review/reference/overlap-check.md
+      - .claude/plugins/sdd-suite/skills/sdd-review/reference/product-spec-criteria.md
+      - .claude/plugins/sdd-suite/skills/sdd-review/reference/impl-spec-criteria.md
+      - .claude/plugins/sdd-suite/skills/sdd-review/reference/overlap-check.md
   - name: sdd-execute
-    router: .claude/skills/sdd-execute/SKILL.md
+    router: .claude/plugins/sdd-suite/skills/sdd-execute/SKILL.md
     reference:
-      - .claude/skills/sdd-execute/reference/sequential-mode.md
-      - .claude/skills/sdd-execute/reference/deviation-handling.md
-      - .claude/skills/sdd-execute/reference/repo-conventions.md
-      - .claude/skills/sdd-execute/reference/tdd-gate.md
+      - .claude/plugins/sdd-suite/skills/sdd-execute/reference/sequential-mode.md
+      - .claude/plugins/sdd-suite/skills/sdd-execute/reference/deviation-handling.md
+      - .claude/plugins/sdd-suite/skills/sdd-execute/reference/repo-conventions.md
+      - .claude/plugins/sdd-suite/skills/sdd-execute/reference/tdd-gate.md
     templates:
-      - .claude/skills/sdd-execute/templates/step-pr-body.md
-      - .claude/skills/sdd-execute/templates/integration-pr-body.md
-      - .claude/skills/sdd-execute/templates/branch-sync.md
+      - .claude/plugins/sdd-suite/skills/sdd-execute/templates/step-pr-body.md
+      - .claude/plugins/sdd-suite/skills/sdd-execute/templates/integration-pr-body.md
+      - .claude/plugins/sdd-suite/skills/sdd-execute/templates/branch-sync.md
   - name: sdd-qa
-    router: .claude/skills/sdd-qa/SKILL.md
+    router: .claude/plugins/sdd-suite/skills/sdd-qa/SKILL.md
     reference:
       # agent-owned — read by qa-tester, never by the router
-      - .claude/skills/sdd-qa/reference/test-design.md
-      - .claude/skills/sdd-qa/reference/lang-go.md
-      - .claude/skills/sdd-qa/reference/lang-python.md
-      - .claude/skills/sdd-qa/reference/lang-node.md
-      - .claude/skills/sdd-qa/reference/lang-frontend.md
+      - .claude/plugins/sdd-suite/skills/sdd-qa/reference/test-design.md
+      - .claude/plugins/sdd-suite/skills/sdd-qa/reference/lang-go.md
+      - .claude/plugins/sdd-suite/skills/sdd-qa/reference/lang-python.md
+      - .claude/plugins/sdd-suite/skills/sdd-qa/reference/lang-node.md
+      - .claude/plugins/sdd-suite/skills/sdd-qa/reference/lang-frontend.md
       # skill-owned
-      - .claude/skills/sdd-qa/reference/fixtures.md
-      - .claude/skills/sdd-qa/reference/defect-filing.md
+      - .claude/plugins/sdd-suite/skills/sdd-qa/reference/fixtures.md
+      - .claude/plugins/sdd-suite/skills/sdd-qa/reference/defect-filing.md
   - name: sdd-triage
-    router: .claude/skills/sdd-triage/SKILL.md
+    router: .claude/plugins/sdd-suite/skills/sdd-triage/SKILL.md
     reference:
-      - .claude/skills/sdd-triage/reference/backmerge.md
-      - .claude/skills/sdd-triage/reference/track-a-hotfix.md
-      - .claude/skills/sdd-triage/reference/track-b-config.md
-      - .claude/skills/sdd-triage/reference/track-c-sdd.md
+      - .claude/plugins/sdd-suite/skills/sdd-triage/reference/backmerge.md
+      - .claude/plugins/sdd-suite/skills/sdd-triage/reference/track-a-hotfix.md
+      - .claude/plugins/sdd-suite/skills/sdd-triage/reference/track-b-config.md
+      - .claude/plugins/sdd-suite/skills/sdd-triage/reference/track-c-sdd.md
 
 # --- Structured memory ---
 memory:
@@ -124,7 +124,7 @@ routing:
   - task: "Test mocks / dummy data — canonical fixture homes, any language (C-12 frontend, C-13 all)"
     path: docs/patterns/test-data-inventory.md
   - task: "QA — design/run tests, coverage gaps, flake detection, defect capture"
-    path: .claude/skills/sdd-qa/SKILL.md
+    path: .claude/plugins/sdd-suite/skills/sdd-qa/SKILL.md
   - task: "Proto / buf changes"
     path: docs/runbooks/proto-versioning.md
   - task: "Feature workflow (branch, PR, promote)"

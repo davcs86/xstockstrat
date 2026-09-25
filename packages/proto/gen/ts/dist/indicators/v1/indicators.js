@@ -5,7 +5,7 @@
 //   protoc               unknown
 // source: indicators/v1/indicators.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.IndicatorsServiceClient = exports.IndicatorsServiceService = exports.DeleteFormulaResponse = exports.DeleteFormulaRequest = exports.UpdateFormulaResponse = exports.UpdateFormulaRequest = exports.ListFormulasResponse = exports.ListFormulasRequest = exports.GetFormulaRequest = exports.RegisterFormulaResponse = exports.RegisterFormulaRequest_InputSchemaEntry = exports.RegisterFormulaRequest = exports.IndicatorMeta = exports.ListIndicatorsResponse = exports.ListIndicatorsRequest = exports.FormulaDefinition_InputSchemaEntry = exports.FormulaDefinition = exports.ParameterValidationError = exports.FormulaOutput = exports.FormulaParameter = exports.ExecuteFormulaResponse = exports.ExecuteFormulaRequest_EnvEntry = exports.ExecuteFormulaRequest = exports.IndicatorPoint_ExtraEntry = exports.IndicatorPoint = exports.ComputeIndicatorResponse_ParamsUsedEntry = exports.ComputeIndicatorResponse = exports.ComputeIndicatorRequest_ParamsEntry = exports.ComputeIndicatorRequest = exports.FundamentalMetric = exports.ParameterType = exports.SandboxExitReason = exports.protobufPackage = void 0;
+exports.IndicatorsServiceClient = exports.IndicatorsServiceService = exports.ListFundamentalMetricsResponse = exports.FundamentalMetricInfo = exports.ListFundamentalMetricsRequest = exports.DeleteFormulaResponse = exports.DeleteFormulaRequest = exports.UpdateFormulaResponse = exports.UpdateFormulaRequest = exports.ListFormulasResponse = exports.ListFormulasRequest = exports.GetFormulaRequest = exports.RegisterFormulaResponse = exports.RegisterFormulaRequest_InputSchemaEntry = exports.RegisterFormulaRequest = exports.IndicatorMeta = exports.ListIndicatorsResponse = exports.ListIndicatorsRequest = exports.FormulaDefinition_InputSchemaEntry = exports.FormulaDefinition = exports.ParameterValidationError = exports.FormulaOutput = exports.FormulaParameter = exports.ExecuteFormulaResponse = exports.ExecuteFormulaRequest_EnvEntry = exports.ExecuteFormulaRequest = exports.IndicatorPoint_ExtraEntry = exports.IndicatorPoint = exports.ComputeIndicatorResponse_ParamsUsedEntry = exports.ComputeIndicatorResponse = exports.ComputeIndicatorRequest_ParamsEntry = exports.ComputeIndicatorRequest = exports.FundamentalMetric = exports.ParameterType = exports.SandboxExitReason = exports.protobufPackage = void 0;
 exports.sandboxExitReasonFromJSON = sandboxExitReasonFromJSON;
 exports.sandboxExitReasonToJSON = sandboxExitReasonToJSON;
 exports.sandboxExitReasonToNumber = sandboxExitReasonToNumber;
@@ -3272,6 +3272,187 @@ exports.DeleteFormulaResponse = {
         return message;
     },
 };
+function createBaseListFundamentalMetricsRequest() {
+    return {};
+}
+exports.ListFundamentalMetricsRequest = {
+    encode(_, writer = new wire_1.BinaryWriter()) {
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseListFundamentalMetricsRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(_) {
+        return {};
+    },
+    toJSON(_) {
+        const obj = {};
+        return obj;
+    },
+    create(base) {
+        return exports.ListFundamentalMetricsRequest.fromPartial(base ?? {});
+    },
+    fromPartial(_) {
+        const message = createBaseListFundamentalMetricsRequest();
+        return message;
+    },
+};
+function createBaseFundamentalMetricInfo() {
+    return { metric: FundamentalMetric.FUNDAMENTAL_METRIC_UNSPECIFIED, dataKey: "", meaning: "" };
+}
+exports.FundamentalMetricInfo = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.metric !== FundamentalMetric.FUNDAMENTAL_METRIC_UNSPECIFIED) {
+            writer.uint32(8).int32(fundamentalMetricToNumber(message.metric));
+        }
+        if (message.dataKey !== "") {
+            writer.uint32(18).string(message.dataKey);
+        }
+        if (message.meaning !== "") {
+            writer.uint32(26).string(message.meaning);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseFundamentalMetricInfo();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 8) {
+                        break;
+                    }
+                    message.metric = fundamentalMetricFromJSON(reader.int32());
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.dataKey = reader.string();
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 26) {
+                        break;
+                    }
+                    message.meaning = reader.string();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            metric: isSet(object.metric)
+                ? fundamentalMetricFromJSON(object.metric)
+                : FundamentalMetric.FUNDAMENTAL_METRIC_UNSPECIFIED,
+            dataKey: isSet(object.dataKey)
+                ? globalThis.String(object.dataKey)
+                : isSet(object.data_key)
+                    ? globalThis.String(object.data_key)
+                    : "",
+            meaning: isSet(object.meaning) ? globalThis.String(object.meaning) : "",
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.metric !== FundamentalMetric.FUNDAMENTAL_METRIC_UNSPECIFIED) {
+            obj.metric = fundamentalMetricToJSON(message.metric);
+        }
+        if (message.dataKey !== "") {
+            obj.dataKey = message.dataKey;
+        }
+        if (message.meaning !== "") {
+            obj.meaning = message.meaning;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.FundamentalMetricInfo.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseFundamentalMetricInfo();
+        message.metric = object.metric ?? FundamentalMetric.FUNDAMENTAL_METRIC_UNSPECIFIED;
+        message.dataKey = object.dataKey ?? "";
+        message.meaning = object.meaning ?? "";
+        return message;
+    },
+};
+function createBaseListFundamentalMetricsResponse() {
+    return { metrics: [] };
+}
+exports.ListFundamentalMetricsResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        for (const v of message.metrics) {
+            exports.FundamentalMetricInfo.encode(v, writer.uint32(10).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseListFundamentalMetricsResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.metrics.push(exports.FundamentalMetricInfo.decode(reader, reader.uint32()));
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            metrics: globalThis.Array.isArray(object?.metrics)
+                ? object.metrics.map((e) => exports.FundamentalMetricInfo.fromJSON(e))
+                : [],
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.metrics?.length) {
+            obj.metrics = message.metrics.map((e) => exports.FundamentalMetricInfo.toJSON(e));
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.ListFundamentalMetricsResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseListFundamentalMetricsResponse();
+        message.metrics = object.metrics?.map((e) => exports.FundamentalMetricInfo.fromPartial(e)) || [];
+        return message;
+    },
+};
 exports.IndicatorsServiceService = {
     /** Compute a built-in indicator (e.g. SMA, EMA, RSI, MACD, BB) */
     computeIndicator: {
@@ -3361,6 +3542,16 @@ exports.IndicatorsServiceService = {
         requestDeserialize: (value) => exports.DeleteFormulaRequest.decode(value),
         responseSerialize: (value) => Buffer.from(exports.DeleteFormulaResponse.encode(value).finish()),
         responseDeserialize: (value) => exports.DeleteFormulaResponse.decode(value),
+    },
+    /** List the available fundamental metrics for formula declarations (feature 205) */
+    listFundamentalMetrics: {
+        path: "/xstockstrat.indicators.v1.IndicatorsService/ListFundamentalMetrics",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.ListFundamentalMetricsRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.ListFundamentalMetricsRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.ListFundamentalMetricsResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.ListFundamentalMetricsResponse.decode(value),
     },
 };
 exports.IndicatorsServiceClient = (0, grpc_js_1.makeGenericClientConstructor)(exports.IndicatorsServiceService, "xstockstrat.indicators.v1.IndicatorsService");

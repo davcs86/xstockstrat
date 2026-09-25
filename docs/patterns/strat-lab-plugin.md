@@ -1,6 +1,6 @@
 # Strat Lab Plugin — the bundled `backtest` skill tracks this server's API
 
-This repo ships an agent plugin, `plugins/strat-lab/`, whose `backtest` skill is **a record of
+This repo ships an agent plugin, `.claude/plugins/strat-lab/`, whose `backtest` skill is **a record of
 how this server actually behaves**. It is not general backtesting advice: every countermeasure in
 it exists because a specific xstockstrat API did something a caller would not expect.
 
@@ -41,8 +41,8 @@ skill frontmatter is present and YAML-safe, every `reference/`/`templates/` path
 SKILL.md resolves, and no host-specific strings leak in):
 
 ```shell
-python3 plugins/strat-lab/scripts/validate.py --self-test
-python3 plugins/strat-lab/scripts/validate.py
+python3 .claude/plugins/strat-lab/scripts/validate.py --self-test
+python3 .claude/plugins/strat-lab/scripts/validate.py
 ```
 
 Both must pass before the plugin changes ship. Note the frontmatter check is not cosmetic: an
@@ -51,5 +51,5 @@ unquoted frontmatter value containing `: ` parses as a nested mapping, which sil
 
 The repo is its own marketplace — `.claude-plugin/marketplace.json` and
 `.cursor-plugin/marketplace.json` register the plugin for Claude Code and Cursor respectively.
-Keep the `version` in `plugins/strat-lab/.claude-plugin/plugin.json` and
+Keep the `version` in `.claude/plugins/strat-lab/.claude-plugin/plugin.json` and
 `.cursor-plugin/plugin.json` byte-identical; they are two tools' views of one release.
