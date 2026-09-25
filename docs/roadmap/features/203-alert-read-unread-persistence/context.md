@@ -180,3 +180,10 @@ CI-mode host harness).
 **Docker codegen**: retried at operator request — Docker Hub still 429s the golang:1.27-trixie base pull
   (persistent per-IP anonymous limit); host-native codegen path used, target-service stubs verified clean.
 **Next**: integration PR feature/alert-read-unread-persistence → main-dev.
+
+## Session 2026-09-25 (CI: feature status automation)
+
+- Promotion PR #1177 merged to main
+- Feature promoted and committed: 0be58cbe339fd3bf47b6b23464c3af53ae402b78
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-09-25

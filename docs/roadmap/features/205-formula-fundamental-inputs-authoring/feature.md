@@ -3,6 +3,8 @@
 **Development Branch**: `feature/formula-fundamental-inputs-authoring`
 **Created**: 2026-09-24
 **Last Updated**: 2026-09-24
+**Committed to main**: 0be58cbe339fd3bf47b6b23464c3af53ae402b78
+**Launched date**: 2026-09-25
 
 ---
 
@@ -16,6 +18,7 @@
 | 2026-09-24 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated (14 steps); 7 AC scenarios traced to test steps |
 | 2026-09-24 | `implementation-ready` → `code-completed` | /sdd-execute | All 14 steps done; proto `ListFundamentalMetrics` RPC + indicators handler, agent `manage_formula fundamental_inputs`/`list_fundamental_metrics`, UI FundamentalInputEditor + fundamentals grid/prefill, analysis G6 parity, e2e AC-2..6. @AC-1..7 promoted to durable suites (C-16) |
 
+| 2026-09-25 | `code-completed` → `launched` | CI workflow | Promoted via PR #1177; committed 0be58cbe339fd3bf47b6b23464c3af53ae402b78 |
 ---
 
 ## Artifacts

@@ -3,6 +3,8 @@
 **Development Branch**: `feature/backfilled-data-queryable`
 **Created**: 2026-09-24
 **Last Updated**: 2026-09-24
+**Committed to main**: 0be58cbe339fd3bf47b6b23464c3af53ae402b78
+**Launched date**: 2026-09-25
 
 ---
 
@@ -17,6 +19,7 @@
 | 2026-09-24 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential execution started (Step 1 proto + Step 2 codegen; rebased on post-202 main-dev) |
 | 2026-09-24 | `in-progress` → `code-completed` | /sdd-execute | All 14 steps done; marketdata repo+service `go test -race` green + golangci-lint 0; agent suite 456 passed (78% cov); UI Data Explorer e2e 6/6 green; C-16 scenarios promoted (13 → ui suite, 9 → agent suite, @feature-204) |
 
+| 2026-09-25 | `code-completed` → `launched` | CI workflow | Promoted via PR #1177; committed 0be58cbe339fd3bf47b6b23464c3af53ae402b78 |
 ---
 
 ## Artifacts

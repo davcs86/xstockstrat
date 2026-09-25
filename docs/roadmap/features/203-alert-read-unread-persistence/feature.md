@@ -3,6 +3,8 @@
 **Development Branch**: `feature/alert-read-unread-persistence`
 **Created**: 2026-09-24
 **Last Updated**: 2026-09-24
+**Committed to main**: 0be58cbe339fd3bf47b6b23464c3af53ae402b78
+**Launched date**: 2026-09-25
 
 ---
 
@@ -17,6 +19,7 @@
 | 2026-09-24 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential execution started (Step 1 proto + Step 2 codegen) |
 | 2026-09-24 | `in-progress` → `code-completed` | /sdd-execute | All 10 steps done; notify 63/63 @90.78%, UI e2e 13/13; C-16 scenarios promoted |
 
+| 2026-09-25 | `code-completed` → `launched` | CI workflow | Promoted via PR #1177; committed 0be58cbe339fd3bf47b6b23464c3af53ae402b78 |
 ---
 
 ## Artifacts

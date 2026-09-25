@@ -306,3 +306,10 @@ node/pnpm. Docker daemon up but codegen stays host-native.
   branch point, so the integration PR merges post-203 main-dev in and resolves the expected
   INVENTORY.md / mock-backend.ts overlaps (203 added an Alerts row + markAlertRead mock; 204 added a
   Data Explorer row + getHistoricalFundamentals) — keep both.
+
+## Session 2026-09-25 (CI: feature status automation)
+
+- Promotion PR #1177 merged to main
+- Feature promoted and committed: 0be58cbe339fd3bf47b6b23464c3af53ae402b78
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-09-25

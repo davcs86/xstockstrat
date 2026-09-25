@@ -236,3 +236,10 @@ codegen image), go1.27, uv/ruff, node/pnpm.
   mcp-tools.md/INVENTORY.md; 205 bumped 49→50 (list_fundamental_metrics) from a pre-204 base. Merging
   main-dev resolves the combined count to **52** across all 6 surfaces + `test_tools_endpoint.py`, keeping
   all three new tools; shared BFF/mock-backend/docs blocks union both features' additions.
+
+## Session 2026-09-25 (CI: feature status automation)
+
+- Promotion PR #1177 merged to main
+- Feature promoted and committed: 0be58cbe339fd3bf47b6b23464c3af53ae402b78
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-09-25
