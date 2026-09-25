@@ -11,7 +11,8 @@
   },
   "enabledPlugins": {
     "context-forge@davcs86-agent-plugins": true,
-    "design-buddy@davcs86-agent-plugins": true
+    "design-buddy@davcs86-agent-plugins": true,
+    "repo-surveyor@davcs86-agent-plugins": true
   },
   "hooks": {
     "SessionStart": [
