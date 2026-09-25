@@ -206,7 +206,7 @@ feature-073 caller-derived-scope pattern to the other write tools (`manage_*`,
 F-4); repeats the false conviction claim "Ingest applies source default if absent" in the
 `ingest_signal` parameter table (F-9's docs twin — the same sentence also appears in the tools.py
 docstring, F-13); several error rows still say `HTTP 400` (pre-gRPC residue).
-`.claude/plugins/strat-lab/skills/backtest/SKILL.md:37`: still teaches pre-070 full-replace
+`plugins/strat-lab/skills/backtest/SKILL.md:37`: still teaches pre-070 full-replace
 `manage_strategy update` — wrong against this repo's code. If the skill deliberately tracks the
 deployed **staging** backend, that lag should be stated in the skill; otherwise the root
 CLAUDE.md same-PR rule for these tools was missed when feature 070 landed.
