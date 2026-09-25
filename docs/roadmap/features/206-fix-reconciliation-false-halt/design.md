@@ -22,9 +22,21 @@ Mirror the order-side `KnownBrokerOrderIDs` grounding on the position side. When
 New seam (mirrors `brokerOrderIDLookup`):
 - `positionQtyLookup` interface `{ NetFilledQtyBySymbol(ctx, accountID, symbols) (map[string]float64, error) }`.
 - `TradingService.reconcilePositionLookup positionQtyLookup`, wired `= repo` in `NewTradingService`.
-- `TradingRepo.NetFilledQtyBySymbol` — `SELECT symbol, SUM(CASE WHEN side='sell' THEN -filled_qty
-  ELSE filled_qty END) FROM trading.orders WHERE account_id=$1 AND symbol=ANY($2) GROUP BY symbol`;
-  empty-input short-circuit; `dbQuerier` seam.
+- `TradingRepo.NetFilledQtyBySymbol` — **deduped to the latest row per `order_id` before summing**
+  (the PK is `(order_id, created_at)` and `UpsertOrder` mints a fresh `created_at` when `o.CreatedAt`
+  is nil, so a logical order can have >1 hypertable row — a naive `SUM` double-counts; adversary HIGH):
+  ```sql
+  SELECT symbol, SUM(CASE WHEN side='sell' THEN -filled_qty ELSE filled_qty END)
+  FROM (
+    SELECT DISTINCT ON (order_id) order_id, symbol, side, filled_qty
+    FROM trading.orders
+    WHERE account_id=$1 AND symbol=ANY($2)
+    ORDER BY order_id, created_at DESC
+  ) latest
+  GROUP BY symbol
+  ```
+  This mirrors `GetOrder`'s own latest-row-per-order semantics (`ORDER BY created_at DESC LIMIT 1`).
+  Empty-input short-circuit; `dbQuerier` seam (pgxmock-testable).
 - Only diverging symbols are looked up (one grouped round-trip per tick, scoped to the disagreements).
 
 ### Change 2 — portfolio: guard `processPositionSync` empty-snapshot delete
@@ -65,12 +77,49 @@ if len(sync.Positions) == 0 && sync.RealizedPnl == nil {
 
 ## Open risks
 
-1. **Ghost position** on a dashboard-only full close (no `order.filled`): projection lingers until a
-   non-empty sync. Accepted (stale read ≪ false halt). Not a new halt source.
-2. **Float epsilon** choice (`1e-6`): safe for share quantities incl. fractional; documented in code.
-3. The two `broker.GetPositions()` calls (`syncPositions` vs `reconcileTick`) remain independent; the
-   grounding makes reconcile robust to their disagreement rather than trying to serialize them.
+1. **Ghost position** on a dashboard-only full close (no `order.filled`): with Change 2 the projection
+   is not purged by the empty broker snapshot, so a phantom row persists **until the next non-empty
+   sync — indefinitely for an account that stays permanently flat** (adversary LOW). It pollutes
+   `ListPortfolios` equity and the `portfolio.risk.*` concentration/drawdown alerts. Accepted: a stale
+   read (SEV-3) is strictly better than deleting a real position and false-halting (SEV-2), and the
+   platform opens positions via `PlaceOrder`, so dashboard-only closes are the rare case. Not a new
+   halt source (the position-side reconcile iterates broker positions only).
+2. **Stalled `pollFills` residual** (adversary MEDIUM): the grounding reads `trading.orders.filled_qty`,
+   itself a broker projection written by `pollFills`. If `pollFills` stalls for an order (its `GetOrder`
+   erroring) while `GetPositions` succeeds, the DB net stays stale and the position-side check can still
+   diverge → halt. Normally `pollFills` (5 s) far outpaces reconcile+grace (60 s × 2); documented as a
+   residual, not closed (memory-first grounding does not help the primary case — a fully-FILLED order is
+   evicted from `s.orders`).
+3. **Corporate actions** (splits / stock dividends) change broker qty with no order (adversary MEDIUM):
+   `net-signed-filled ≠ brokerQty` → still false-halts. Pre-existing (the old check false-halts too);
+   the grounding does not claim to close this. Listed as a known residual; no code change for this SEV-2.
+4. **Net-zero foreign masking** (adversary LOW): exact-match clearing means a foreign dashboard buy N +
+   sell N (net 0) is not halted. Acceptable — net foreign exposure is zero; the "still halts on
+   genuinely foreign positions" guarantee is scoped to **net-nonzero** foreign activity.
+5. **Float epsilon** `1e-6` (adversary LOW): share quantities (whole and typical fractional) are exact
+   in float64; summation drift is ~1e-9; Alpaca's minimum fractional increment ≫ 1e-6. Absolute epsilon
+   is safe at realistic magnitudes; documented in code.
 
-## Adversarial round
+## Adversarial round — resolution
 
-See "Adversarial round — resolution" appended below.
+One round via `design-buddy:adversary` against the real code. Verdict: **NEEDS WORK** (no Floor
+breach). Resolutions:
+
+- **HIGH — naive `SUM` double-counts multiple rows per `order_id`** → **fixed in design**: the query
+  now `DISTINCT ON (order_id) … ORDER BY order_id, created_at DESC` before summing (see Change 1 SQL).
+  Confirmed reachable: PK `(order_id, created_at)` + `UpsertOrder` `time.Now()` fallback
+  (`trading_repo.go:47-50`).
+- **MEDIUM — stalled-poller residual** → **documented** (Open Risk 2); memory-first rejected (evicted
+  FILLED orders are the primary case). No code change (minimal-change default).
+- **MEDIUM — corporate actions** → **documented** (Open Risk 3), pre-existing, out of scope for SEV-2.
+- **LOW-MEDIUM — Change 2 right-sizing / ghost regression** → **waived at gate**: two-change scope was
+  user-chosen (defense-in-depth) and the defect's *Expected* explicitly requires the projection not be
+  transiently zeroed. Ghost duration corrected in Open Risk 1.
+- **LOW — net-zero foreign masking** → **documented** (Open Risk 4), accepted.
+- **LOW — epsilon justification** → **documented** (Open Risk 5), justification added.
+- **Ledger checks**: no `account.positions.*` payload change (Change 1 reads `trading.orders` directly,
+  Change 2 only guards a delete) → `fails.md:2056-2064` not re-triggered; feature-056 dual-source P&L
+  path untouched (Change 2 leaves the `realized_pnl` upsert intact). Confirmed by adversary.
+
+Interface choice (separate `positionQtyLookup`, not widening `brokerOrderIDLookup`) upheld by the
+adversary (ISP). Status advanced to `design-approved`.

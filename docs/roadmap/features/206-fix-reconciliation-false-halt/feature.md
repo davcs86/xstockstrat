@@ -14,6 +14,8 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-09-25 | `bug-reported` → `draft` | sdd-triage (manual) | Product spec pre-populated from defect report `2026-09-25-reconciliation-false-halt-defect.md` |
+| 2026-09-25 | `draft` → `design-approved` | sdd-design quick (manual) | recon.md + design.md; one adversarial round (design-buddy:adversary, NEEDS WORK → resolved, incl. HIGH DISTINCT-ON dedup fix) |
+| 2026-09-25 | `design-approved` → `in-progress` → `code-completed` | sdd-spec + execute (manual) | implementation-spec.md; both services build/vet/test green (GOWORK=off); context reconciled (PORTFOLIO-10 + both CLAUDE.md) |
 
 ---
 
@@ -38,4 +40,4 @@ transiently zero the projection on an empty broker snapshot.
 
 ## Next Action
 
-`/sdd-design fix-reconciliation-false-halt quick` — recommended design depth (see context.md).
+Design approved. Next: `/sdd-spec fix-reconciliation-false-halt` (implementation-spec.md), then implement on `claude/flow-investigation-4blorq`.

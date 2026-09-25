@@ -956,6 +956,17 @@ func (s *PortfolioService) processAccountDeregistered(ctx context.Context, event
 	}
 }
 
+// shouldReconcileSyncDeletions reports whether an account.positions.synced event should run
+// DeletePositionsNotInSync. A broker sync (realizedPnl == nil) that carries no positions is a
+// non-authoritative empty snapshot — a transient/empty broker read must NOT purge, else it deletes a
+// just-order-filled position and the reconciliation poller flags a quantity_discrepancy and halts the
+// account (feature 206 false-halt root cause). An offline recompute (realizedPnl != nil) always
+// reconciles — an empty list there is a legitimate full-close that must purge — and a non-empty broker
+// snapshot always reconciles removals normally.
+func shouldReconcileSyncDeletions(positionCount int, realizedPnl *float64) bool {
+	return positionCount > 0 || realizedPnl != nil
+}
+
 func (s *PortfolioService) processPositionSync(ctx context.Context, event *ledgerv1.LedgerEvent) {
 	if event.Payload == nil {
 		return
@@ -996,8 +1007,12 @@ func (s *PortfolioService) processPositionSync(ctx context.Context, event *ledge
 		}
 		presentSymbols = append(presentSymbols, p.Symbol)
 	}
-	if err := s.repo.DeletePositionsNotInSync(ctx, sync.AccountID, userID, presentSymbols); err != nil {
-		slog.Warn("delete positions not in sync failed", "account_id", sync.AccountID, "error", err)
+	if shouldReconcileSyncDeletions(len(sync.Positions), sync.RealizedPnl) {
+		if err := s.repo.DeletePositionsNotInSync(ctx, sync.AccountID, userID, presentSymbols); err != nil {
+			slog.Warn("delete positions not in sync failed", "account_id", sync.AccountID, "error", err)
+		}
+	} else {
+		slog.Debug("skipping delete on empty broker position snapshot", "account_id", sync.AccountID)
 	}
 
 	// Realized P&L upsert lands OUTSIDE the positions loop and AFTER DeletePositionsNotInSync so a

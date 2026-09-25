@@ -174,21 +174,22 @@ func newTestReconciliationService(brokers map[string]brokerPoolEntry, portfolio 
 // so every other reconcileTick test is unaffected either way).
 func newTestReconciliationServiceWithIntents(brokers map[string]brokerPoolEntry, portfolio portfoliov1.PortfolioServiceClient, ledger ledgerv1.LedgerServiceClient, notify notifyv1.NotifyServiceClient, accountRepo repository.AccountRepository, orderIntentRepo repository.OrderIntentRepository) *TradingService {
 	return &TradingService{
-		cfg:                  &config.Config{},
-		cfgW:                 &config.Watcher{},
-		brokers:              brokers,
-		portfolio:            portfolio,
-		ledger:               ledger,
-		notify:               notify,
-		accountRepo:          accountRepo,
-		orderIntentRepo:      orderIntentRepo,
-		reconcileOrderLookup: &fakeBrokerOrderLookup{},
-		orders:               make(map[string]*tradingv1.Order),
-		credStatus:           make(map[string]int32),
-		halted:               make(map[string]bool),
-		haltReasons:          make(map[string]string),
-		haltedLastPolled:     make(map[string]time.Time),
-		reconcileCandidates:  make(map[string]int),
+		cfg:                     &config.Config{},
+		cfgW:                    &config.Watcher{},
+		brokers:                 brokers,
+		portfolio:               portfolio,
+		ledger:                  ledger,
+		notify:                  notify,
+		accountRepo:             accountRepo,
+		orderIntentRepo:         orderIntentRepo,
+		reconcileOrderLookup:    &fakeBrokerOrderLookup{},
+		reconcilePositionLookup: &fakePositionQtyLookup{},
+		orders:                  make(map[string]*tradingv1.Order),
+		credStatus:              make(map[string]int32),
+		halted:                  make(map[string]bool),
+		haltReasons:             make(map[string]string),
+		haltedLastPolled:        make(map[string]time.Time),
+		reconcileCandidates:     make(map[string]int),
 	}
 }
 
@@ -217,6 +218,30 @@ func (f *fakeBrokerOrderLookup) KnownBrokerOrderIDs(ctx context.Context, account
 }
 
 var _ brokerOrderIDLookup = (*fakeBrokerOrderLookup)(nil)
+
+// fakePositionQtyLookup implements positionQtyLookup for reconcileTick tests. By default it reports
+// no platform fills (empty net), so a diverging broker position is treated as genuinely foreign —
+// the pre-grounding behavior every existing position-side halt test relies on. Tests exercising the
+// DB-grounding set `net` (the platform's own net filled qty per symbol) or `err` (fail-safe skip).
+type fakePositionQtyLookup struct {
+	net map[string]float64
+	err error
+}
+
+func (f *fakePositionQtyLookup) NetFilledQtyBySymbol(ctx context.Context, accountID string, symbols []string) (map[string]float64, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	out := make(map[string]float64, len(symbols))
+	for _, s := range symbols {
+		if v, ok := f.net[s]; ok {
+			out[s] = v
+		}
+	}
+	return out, nil
+}
+
+var _ positionQtyLookup = (*fakePositionQtyLookup)(nil)
 
 // noopAccountRepo satisfies repository.AccountRepository for tests that don't care about the
 // halt write itself (only whether haltAccount was invoked, observed via notify/ledger).
@@ -608,6 +633,75 @@ func TestReconcileTick_PositionQuantityDiscrepancy_CaughtViaPositionSide(t *test
 	}
 	if !found {
 		t.Fatalf("expected a position-side quantity_discrepancy finding for AAPL, got %v", ledger.eventTypes())
+	}
+}
+
+// TestReconcileTick_PositionQuantityDiscrepancy_ExplainedByPlatformOrders_NoHalt is the regression
+// test for the feature-206 false halt: the broker holds AMAT=10 from the platform's OWN filled order,
+// but the portfolio projection transiently reports 0 (fill→ledger→portfolio lag, or an empty
+// position-sync that deleted the row). The trading.orders net-filled-qty grounding shows the platform
+// itself placed fills summing to 10, so the broker position is fully explained — no finding, no halt.
+func TestReconcileTick_PositionQuantityDiscrepancy_ExplainedByPlatformOrders_NoHalt(t *testing.T) {
+	svc := newTestReconciliationService(
+		map[string]brokerPoolEntry{"acct-1": {client: &fakeReconciliationBroker{
+			listOrdersFn: func(ctx context.Context) ([]broker.BrokerOrder, error) { return nil, nil },
+			getPositionsFn: func(ctx context.Context) ([]broker.BrokerPosition, error) {
+				return []broker.BrokerPosition{{Symbol: "AMAT", Quantity: 10}}, nil
+			},
+		}, userID: "u-1"}},
+		&fakeReconciliationPortfolioClient{
+			listPositionsFn: func(ctx context.Context, req *portfoliov1.ListPositionsRequest, opts ...grpc.CallOption) (*portfoliov1.ListPositionsResponse, error) {
+				// Projection lagging/zeroed — reports flat while the broker holds 10.
+				return &portfoliov1.ListPositionsResponse{Positions: []*portfoliov1.Position{}}, nil
+			},
+		},
+		&recordingLedgerClient{}, &fakeNotifyClient{}, noopAccountRepo{},
+	)
+	// The platform's own filled orders for AMAT net to 10 — the broker position is fully explained.
+	svc.reconcilePositionLookup = &fakePositionQtyLookup{net: map[string]float64{"AMAT": 10}}
+
+	// graceTicks=0 → any genuine finding would fire immediately; run several ticks to prove it never does.
+	for i := 0; i < 3; i++ {
+		svc.reconcileTick(context.Background(), 0, 1.1)
+	}
+
+	if svc.isAccountHalted("acct-1") {
+		t.Fatal("account must NOT be halted when the platform's own fills explain the broker position (the false-halt regression)")
+	}
+	ledger := svc.ledger.(*recordingLedgerClient)
+	for _, e := range ledger.eventTypes() {
+		if e == "reconciliation.mismatch_found" {
+			t.Fatalf("no reconciliation.mismatch_found expected for a platform-explained position, got %v", ledger.eventTypes())
+		}
+	}
+}
+
+// TestReconcileTick_PositionNetLookupError_SkipsHalt proves the fail-safe: a net-filled-qty DB lookup
+// error must never cause a false position-side halt. The position check is skipped for the account
+// this tick (re-evaluated next tick), so no finding and no halt — mirroring the order-side fail-safe.
+func TestReconcileTick_PositionNetLookupError_SkipsHalt(t *testing.T) {
+	svc := newTestReconciliationService(
+		map[string]brokerPoolEntry{"acct-1": {client: &fakeReconciliationBroker{
+			listOrdersFn: func(ctx context.Context) ([]broker.BrokerOrder, error) { return nil, nil },
+			getPositionsFn: func(ctx context.Context) ([]broker.BrokerPosition, error) {
+				return []broker.BrokerPosition{{Symbol: "AMAT", Quantity: 10}}, nil
+			},
+		}, userID: "u-1"}},
+		&fakeReconciliationPortfolioClient{}, // portfolio reports flat (0) for AMAT
+		&recordingLedgerClient{}, &fakeNotifyClient{}, noopAccountRepo{},
+	)
+	svc.reconcilePositionLookup = &fakePositionQtyLookup{err: errors.New("db unavailable")}
+
+	svc.reconcileTick(context.Background(), 0, 1.1)
+
+	if svc.isAccountHalted("acct-1") {
+		t.Fatal("a net-filled-qty lookup error must not halt the account (fail-safe skip)")
+	}
+	ledger := svc.ledger.(*recordingLedgerClient)
+	for _, e := range ledger.eventTypes() {
+		if e == "reconciliation.mismatch_found" {
+			t.Fatalf("no finding expected when the net-qty lookup errors, got %v", ledger.eventTypes())
+		}
 	}
 }
 
