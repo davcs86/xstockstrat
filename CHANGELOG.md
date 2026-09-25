@@ -3,6 +3,16 @@
 All production promotions from `main-dev` to `main` are recorded here.
 Each entry corresponds to one `main-dev → main` PR merge.
 
+## 2026-09-25
+
+### Features
+- fix-reconciliation-false-halt: The broker-state reconciliation poller (`xstockstrat-trading` feature 102) auto-halts an account on a position-side `quantity_discrepancy` when `xstockstrat-portfolio.ListPositions` reads 0 for a symbol the broker actually holds from the platform's own filled order — a false halt.
+
+### Summary
+2 commits, 0 feature merges since last promotion.
+
+---
+
 ## 2026-09-24
 
 ### Features
