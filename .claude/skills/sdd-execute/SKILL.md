@@ -1,0 +1,499 @@
+---
+name: sdd-execute
+description: Phase 3 of SDD — execute implementation steps with mandatory codebase discovery, explicit user confirmation before any writes, a red-before-green TDD gate, and (in the default modes) a branch + PR per step. Usage — /sdd-execute <feature-slug> [step-number|next|all|sequential]. `sequential` runs a feature (or an ordered multi-feature sequence with per-feature re-spec) end-to-end as one commit per step on the feature branch — no per-step PRs — pausing at smart operator checkpoints (consumer-surface boundaries and a step cap) with one up-front confirmation per feature, and opens a single integration PR at the end. Use this whenever the user asks to implement, build, code, or land a feature that already has an implementation spec, to do the next step, to resume or continue a feature from an earlier session, to open the final integration PR, or to unblock a blocked step. Re-reads context.md at every session start so prior decisions carry forward.
+argument-hint: <feature-slug | "feat-a (re-spec if needed) > feat-b ..."> [step-number|next|all|sequential]
+allowed-tools: Read Write Edit Task Bash(ls *) Bash(find *) Bash(grep *) Bash(mkdir *) Bash(go *) Bash(go install *) Bash(golangci-lint *) Bash(python *) Bash(python3 *) Bash(uv *) Bash(pip *) Bash(ruff *) Bash(pnpm *) Bash(npx *) Bash(npm *) Bash(corepack *) Bash(which *) Bash(buf *) Bash(curl *) Bash(psql *) Bash(docker *) Bash(git diff *) Bash(git status *) Bash(git fetch *) Bash(git pull *) Bash(git show *) Bash(git ls-remote *) Bash(git checkout *) Bash(git branch *) Bash(git merge *) Bash(git rebase *) Bash(git push *) Bash(git add *) Bash(git commit *) Bash(gh pr *)
+effort: high
+---
+
+You are executing implementation steps for an xstockstrat feature. You follow strict rules: discover before writing, confirm before writes (per step in the default modes; **once up-front per feature** in `sequential` mode — see `reference/sequential-mode.md`), and document everything in context.md so that any future session can resume without relying on conversation history.
+
+**Progressive disclosure**: this file is the always-loaded core (boot, the 3-phase per-step
+execution, commit/PR, and the HARD CONSTRAINTS safety rails). The `reference/` files load only
+when their path activates — do not read them up front:
+- `reference/tooling-setup.md` — read **once per session** at TOOLING SETUP (after STEP SELECTOR,
+  before the first step) — **mandatory**, every mode.
+- `reference/sequential-mode.md` — read **only** when `$ARGUMENTS[1] == sequential`.
+- `reference/deviation-handling.md` — read when a deviation or in-scope-unresolvable gap arises.
+- `reference/repo-conventions.md` — read when a step touches proto / migrations / config keys / lint / header propagation / frontend test mocks.
+- `reference/tdd-gate.md` — read in Phase 3 when the step is **code-bearing** (`service`/`test`), to run red-before-green.
+
+## Arguments
+
+- `$ARGUMENTS[0]` — feature slug (required). In `sequential` mode this may instead be an **ordered
+  feature sequence**: features separated by `>` or `→`, each optionally followed by an inline re-spec
+  directive in parentheses, e.g. `"003 (re-spec if needed) > 019 > 016 (re-spec Steps 5-6 first)"`.
+- `$ARGUMENTS[1]` — step selector: a number (e.g. `3`), `next` (default), `all`, or `sequential`.
+
+**Mode gating:** every behavior in `reference/sequential-mode.md` and every "sequential-mode" carve-out
+applies **only** when `$ARGUMENTS[1] == sequential`. When the selector is a number, `next`, or `all`,
+this skill behaves exactly as before (per-step Phase-2 confirmation + per-step STOP).
+
+---
+
+## BOOT SEQUENCE — Run every session, before any step
+
+**Step B0.** Resolve the feature directory:
+```bash
+find docs/roadmap/features -maxdepth 1 -type d -name "*-$ARGUMENTS[0]"
+```
+If no directory is found: stop — "No feature directory found for slug `$ARGUMENTS[0]`. Run /sdd-story first."
+Capture the result as `FEATURE_DIR` (e.g. `docs/roadmap/features/001-add-ikbr-account-support`).
+Use `$FEATURE_DIR` for all file reads and writes in this skill.
+
+**Step B1.** Check that `$FEATURE_DIR/implementation-spec.md` exists:
+```bash
+ls $FEATURE_DIR/implementation-spec.md 2>/dev/null
+```
+If the file is not found: stop — "No implementation spec found. Run /sdd-spec $ARGUMENTS[0] first."
+Do not read the file contents yet — authoritative content will be loaded in B3.
+
+**Step B2.** Read `$FEATURE_DIR/feature.md` and `$FEATURE_DIR/status.md` (the latter's content is
+the current lifecycle status — a plain string).
+Check lifecycle status. If status is `launched`, `rolled-back`, or `demoted/canceled`:
+warn the user — "Feature is marked `<status>`. Proceed anyway? (yes / no)"
+
+**Step B3.** Fetch the feature's integration branch from origin and load authoritative artifacts.
+
+Parse `**Development Branch**` from the already-read `feature.md` — this is `<dev-branch>` (e.g. `feature/<slug>`).
+If the field is absent, fall back to `feature/$ARGUMENTS[0]` and note the fallback.
+
+```bash
+git fetch origin <dev-branch>
+git ls-remote --heads origin <dev-branch>
+```
+
+If the `ls-remote` command returns output (branch exists on origin):
+- Run the following to load the authoritative versions of the three spec files:
+  ```bash
+  git show origin/<dev-branch>:$FEATURE_DIR/implementation-spec.md
+  git show origin/<dev-branch>:$FEATURE_DIR/feature.md
+  git show origin/<dev-branch>:$FEATURE_DIR/status.md
+  git show origin/<dev-branch>:$FEATURE_DIR/context.md
+  ```
+- If the `git show` for `context.md` returns an error (file not yet on this branch), fall back to the local working tree: Read `$FEATURE_DIR/context.md`. If the local file also does not exist, treat context.md as empty and note: "No prior session history found (context.md not yet on remote)."
+- Note to user: "Loaded authoritative spec from `origin/<dev-branch>`."
+
+If the `ls-remote` command returns no output (branch not yet created on origin):
+- Fall back to reading from `origin/main-dev`:
+  ```bash
+  git fetch origin main-dev
+  git show origin/main-dev:$FEATURE_DIR/implementation-spec.md
+  git show origin/main-dev:$FEATURE_DIR/feature.md
+  git show origin/main-dev:$FEATURE_DIR/status.md
+  git show origin/main-dev:$FEATURE_DIR/context.md
+  ```
+- If the `git show` for `context.md` returns an error (file not yet on main-dev), fall back to the local working tree: Read `$FEATURE_DIR/context.md`. If the local file also does not exist, treat context.md as empty and note: "No prior session history found (context.md not yet pushed)."
+- These are now the authoritative spec files for the session.
+- Note to user: "`origin/<dev-branch>` not found — loaded spec from `origin/main-dev` (feature branch not yet pushed)."
+
+**Step B4.** Run `git status`.
+`<dev-branch>` was already determined in B3.
+Evaluate the current branch:
+- On `<dev-branch>` or `main-dev` → OK. BRANCH SYNC will handle checkout before each step.
+- On `feature-steps/<slug>-step-<N>` matching this feature → note that step N was previously started; BRANCH SYNC will handle.
+- On any other branch → stop: "Current branch is `<branch>`, which is unrelated to feature `<slug>`. Check out `<dev-branch>` or `main-dev` before proceeding."
+
+**Step B5.** Announce context to user:
+```
+Resuming: <slug> (lifecycle: <status>)
+Prior sessions: <list ## Session headings from context.md>
+Open review warnings: <count of `[ ] unaddressed` items from any "sdd-review impl-spec (advisory)" context.md note, or "none">
+Consumer surface(s) (C-14): <surfaces the pending steps touch — a step with **Service** `xstockstrat-ui` → UI, `xstockstrat-agent` → Agent; "none/internal" if no step touches either>
+Target: Step N — <title>
+```
+Carry the open review warnings forward — they must appear in every checkpoint report and the
+session-end accountability block until the step that clears each one lands (then flip its checkbox
+to `[x]` in the context.md note).
+
+---
+
+## STEP SELECTOR
+
+Parse `$ARGUMENTS[1]`:
+- `sequential` → **do not** resolve a single step here. Read `reference/sequential-mode.md` and hand
+  control to it; that driver parses the feature sequence and runs the per-feature loop.
+- absent or `next` → find the first step where `**Status**: \`pending\``
+- a number N → target only Step N
+- `all` → process all `pending` steps in order, applying confirmation to each.
+  (Note: the per-step STOP in STEP COMMIT + PR currently halts after the first step, so `all` does not
+  run multiple steps in one session — use `sequential` for an unattended multi-step run.)
+
+If no `pending` steps are found (all steps are `done`, `skipped`, or `blocked`):
+→ go to **ALL-DONE PATH** below instead of stopping.
+
+---
+
+## TOOLING SETUP — Mandatory, once per session, before the first step
+
+Once the STEP SELECTOR has resolved **which** steps will run this session, read
+**`reference/tooling-setup.md`** and execute it **before** BRANCH SYNC / Phase 1 of the first step.
+It installs **only** the toolchain those selected steps need (nothing speculative), pinned to the
+root `CLAUDE.md` § Language Versions & Tooling table, and turns a missing/broken tool into an
+**up-front blocker** instead of a mid-step failure or a silently skipped verification.
+
+- **Default modes** (`next` / number / `all`): run it here, after the STEP SELECTOR, scoped to the
+  target step (+ its paired `test` step's tools).
+- **Sequential mode**: it runs inside the driver — after the §5.4 up-front confirm, before the §5.5
+  step loop — scoped to that feature's pending steps.
+
+Never begin a step whose `**Verification**` needs a tool this phase has not confirmed present (or for
+which a fallback was not decided here). **Never install a database** as part of setup — migration
+steps are verified offline (see Phase 3 / HARD CONSTRAINTS).
+
+---
+
+## SEQUENTIAL MODE
+
+When `$ARGUMENTS[1] == sequential`, read **`reference/sequential-mode.md`** and follow it end to end.
+It is a self-contained driver (feature-sequence parsing, mode-entry confirmation, per-feature re-spec
+gate, stacked step loop, integration PR + CI watch, blocker handling) plus the sequential-mode
+carve-outs to HARD CONSTRAINTS and the CI-equivalent verification fallbacks. Do not load it for any
+other selector.
+
+---
+
+## ALL-DONE PATH — runs when no pending steps remain
+
+When invoked and all steps are already complete (lifecycle `code-completed`):
+
+1. **Merge-order gate** — same check as STEP COMMIT + PR step 4:
+   a. Read `docs/roadmap/features/merge-order.md`.
+   b. If `<slug>` appears in the **Feature** column and **Resolved** ≠ `Yes`:
+      > "merge-order.md requires `<blocking-feature>` to merge first.
+      > Reason: <reason>
+      > Create the integration PR anyway? (yes / no)"
+      - `no` → stop without creating PR.
+      - `yes` → proceed.
+   c. No entry (or Resolved = Yes) → proceed without warning.
+
+2. **Ensure the feature branch is current:**
+   ```bash
+   git checkout <dev-branch>
+   git pull origin <dev-branch>
+   ```
+
+2.5. **Promote acceptance scenarios into the durable business-rule suites (Constitution C-16).**
+   The feature is about to land, so its behaviors become platform guarantees other features must not
+   regress. This is the v1 **assisted-but-manual** promotion:
+   - Read `$FEATURE_DIR/acceptance.feature`. For each service in the product spec's **Affected
+     Services**, append the scenarios that describe *that service's* behavior to
+     `services/xstockstrat-<svc>/acceptance/<slug>.feature` (create the `acceptance/` dir and file if
+     absent). A scenario whose guarantee spans services goes to `docs/sdd/business-rules/platform.feature`.
+   - **Preserve provenance**: add a `@feature-<NNN>` tag (the source feature number) to each promoted
+     scenario's tag line, keeping its `@AC-*`/`@FR-*` tags.
+   - **Dedup**: if an equivalent scenario already exists in the target suite (same behavior), skip it
+     rather than duplicating; note the skip.
+   - **Confirm before writing** (P-04): show the operator the promotion plan (which scenarios → which
+     suite files) and get a yes before staging. Stage the suite files into this same integration PR.
+   - If the feature is a pure refactor with no new guarantee, state "no scenarios to promote" and skip.
+   `/promote` is the backstop: if a feature reaches prod with un-promoted scenarios, it flags them.
+
+3. **Build the integration PR body** by rendering `.claude/skills/sdd-execute/templates/integration-pr-body.md`
+   (title; per-step one-liners from implementation-spec.md; new migrations; new env vars; deviation
+   summary from the Deviation Log; test-plan checklist).
+
+4. **Create the integration PR** using `mcp__github__create_pull_request` (not `gh pr create`):
+   - `base`: `main-dev`
+   - `head`: `<dev-branch>`
+   - title and body as built above
+
+5. **Print and stop:**
+   ```
+   Integration PR created: <url>
+   Merge when CI passes and reviewers approve.
+   ```
+
+---
+
+## BRANCH SYNC — Run before Phase 1 of every step
+
+Read `.claude/skills/sdd-execute/templates/branch-sync.md` and execute the procedure,
+substituting `<dev-branch>` and `<slug>` from `feature.md` and `<N>` from the current step number.
+`<base-branch>` defaults to `<dev-branch>`.
+
+**Sequential mode does not create per-step branches.** It runs the branch-sync *setup* (fetch,
+create-or-checkout `<dev-branch>`, merge `main-dev`) **once per feature** and then commits every
+step directly to `<dev-branch>` — skip step 6 of `branch-sync.md` (the `feature-steps/<slug>-step-<N>`
+sub-branch). See `reference/sequential-mode.md` §5.5.
+
+---
+
+## PER-STEP EXECUTION — 3 mandatory phases
+
+### PHASE 1: Discovery (read-only — no writes under any circumstances)
+
+Re-verify that the codebase matches what the spec documented at spec-generation time.
+
+**Delegation (recommended when the step lists several files or greps):** hand the step's `**Files**`
+and `**Codebase Evidence**` commands to a **`codebase-discovery`** subagent via the Task tool. It reads
+and re-runs them in its own window and returns a confirmed/blocked digest (`path:line` for each symbol,
+plus a `## Not found` section). This keeps the verification reads out of this window — you read the
+target files fresh in Phase 3 only if you proceed to edit. For a single-file step you may verify inline
+instead. Either way, apply the exact block/confirm logic below to the result.
+
+1. Read every file listed in the step's `**Files**` section (or take them from the discovery digest).
+2. Re-run every grep/ls command listed in the step's `**Codebase Evidence**` section. Confirm each symbol exists at the stated location.
+3. If a file does not exist or a symbol is not found at the expected location (the digest reports it under `## Not found`):
+   - Do **not** guess a substitute
+   - Do **not** proceed with the step
+   - Update the step's `**Status**` to `blocked` in implementation-spec.md
+   - Append to context.md (see format below): record what was expected vs. what was found
+   - Tell the user: "Step N blocked — `<symbol>` not found at `<path>:<line>`. See context.md."
+   - Stop.
+4. If all evidence checks out, summarize to the user:
+   ```
+   Discovery confirmed for Step N — <title>:
+   - `<symbol1>` at `<file>:<line>` ✓
+   - last migration: `<NNN_name.up.sql>` ✓
+   - (etc.)
+   ```
+
+### PHASE 2: Change plan + user confirmation (no writes yet)
+
+Present the exact planned changes. Do not write anything until the user explicitly approves.
+
+Format:
+```
+Ready to execute Step N — <title>.
+
+Planned changes:
+
+1. MODIFY <exact/path/to/file>
+   - <what will change, with a 3–5 line code sketch showing the key logic>
+
+2. CREATE <exact/path/to/file>
+   - <content description or snippet>
+
+3. (etc.)
+
+Proceed? (yes / no / adjust: <instruction>)
+```
+
+**STOP HERE. Wait for the user's reply before writing anything.**
+
+- `no` → mark step `blocked` (user declined), append to context.md, stop.
+- `adjust: <instruction>` → incorporate the instruction, re-present the revised plan, wait again.
+- `yes` → proceed to Phase 3.
+
+### PHASE 3: Execution
+
+**TDD gate (code-bearing steps).** If this step's category is `service` or `test`, read
+`reference/tdd-gate.md` and follow red-before-green: confirm the paired test **fails** first (capture
+red), then implement, then confirm it **passes** (capture green). Record both in the PR body and
+`context.md` — never by editing the immutable step body (**F-09**). Non-code-bearing steps
+(`docs`/`config`/`proto`/`proto-gen`/`migration`) skip the gate and record `TDD: N/A`.
+
+1. Read each target file fully before editing (never overwrite blindly).
+2. Apply **only** the changes described in the confirmed plan — no cleanup, no refactoring, no extra improvements.
+3. Run the step's `**Verification**` command. Report the exact output. (For a code-bearing step this is the green run of the TDD gate.)
+   - **Never start a database (or any long-running service container) to verify a step.** A
+     `migration` step is verified **offline**: confirm `NNN_*.up.sql` and `NNN_*.down.sql` both
+     exist with the correct next `NNN` and that the `.down.sql` reverses the `.up.sql` by
+     inspection. The real apply-and-rollback runs in CI / at deploy against the managed database —
+     not here. If a step's `**Verification**` names `docker run postgres`, a `migrate` apply, or
+     `psql` against a spun-up instance, **substitute the offline check** and record the substitution
+     as a `## Deviation Log` entry (`**Disposition**: offline migration check — live apply deferred
+     to CI`). Do not sit waiting on a container to become ready.
+4. If verification **passes**:
+   - Update **only** the step's `**Status**` field in implementation-spec.md: `**Status**: \`pending\`` → `**Status**: \`done\``
+   - **Do NOT modify any other part of the step** — `**Instructions**`, `**Codebase Evidence**`, `**Verification**`, `**Files**`, and `**Reviewers**` are immutable records of the original plan. Deviations go in the `## Deviation Log` only.
+   - If this is the **first step completed** in the feature: overwrite `status.md` with
+     `in-progress` and append a `feature.md` status history row.
+   - If **all steps are now done**: overwrite `status.md` with `code-completed` and append a
+     `feature.md` status history row.
+     Then, if the feature surfaced a **reusable pattern** worth carrying to future features (a clean
+     abstraction, an ordering that paid off, a perf win), append a one-line entry to
+     `docs/roadmap/ledger/insights.md` using its schema. Skip if nothing generalizes — do not invent a
+     lesson.
+5. If verification **fails**:
+   - Diagnose the failure.
+   - If the fix is clear and stays within the step's scope: apply it, re-run verification, report.
+   - If the fix requires deviating from the spec: follow `reference/deviation-handling.md` (document the deviation and ask the user to confirm before continuing).
+
+### STEP COMMIT + PR — runs immediately after Phase 3 verification passes
+
+Read `.claude/skills/sdd-execute/templates/step-pr-body.md` for the PR body template.
+Substitute all `<placeholders>` before use.
+
+1. Stage exactly the files listed in the step's `**Files**` section plus the three spec/context files:
+   ```bash
+   git add <file1> <file2> ...
+   git add $FEATURE_DIR/implementation-spec.md
+   git add $FEATURE_DIR/feature.md
+   git add $FEATURE_DIR/status.md
+   git add $FEATURE_DIR/context.md
+   ```
+2. Commit:
+   ```bash
+   git commit -m "feat(<slug>): step <N> — <title>"
+   ```
+3. Push:
+   ```bash
+   git push -u origin feature-steps/<slug>-step-<N>
+   ```
+4. **Merge-order gate (final integration PR only)**
+
+   If this is the **last step** (all steps are now `done`) and the next PR would target
+   `<dev-branch>` (the feature integration branch → `main-dev`), run this gate first:
+
+   a. Read `docs/roadmap/features/merge-order.md`.
+   b. Check if `<slug>` appears in the **Feature** column of the Blocking Dependencies table.
+   c. If a blocking entry exists and the **Resolved** column is not `Yes`:
+      > "merge-order.md requires `<blocking-feature>` to merge first.
+      > Reason: <reason from merge-order.md>
+      > Create the final integration PR anyway? (yes / no)"
+      - If `no`: stop. Do not create the PR.
+      - If `yes`: proceed.
+   d. If no entry for `<slug>` (or Resolved = Yes): proceed without warning.
+
+   This gate only applies to the integration PR (feature branch → `main-dev`).
+   Per-step PRs (step branch → feature branch) are not subject to this gate.
+
+5. Create PR (use the filled-in body from the template):
+   ```bash
+   gh pr create \
+     --base <dev-branch> \
+     --head feature-steps/<slug>-step-<N> \
+     --title "feat(<slug>): Step <N> — <title>" \
+     --body "$(cat .claude/skills/sdd-execute/templates/step-pr-body.md)"
+   ```
+   Pass the rendered body with all placeholders substituted.
+   If `gh` is unavailable, use `mcp__github__create_pull_request` with the same `base`/`head`/`title`/
+   `body`. **Sequential mode** always uses `mcp__github__create_pull_request` and sets
+   `base` = the prior step branch (or `<dev-branch>` for the first executed step) — see
+   `reference/sequential-mode.md` §5.6.
+6. Print the PR URL returned by `gh pr create`.
+7. **STOP.** Tell the user:
+   ```
+   Step <N> complete. PR created: <url>
+   Merge the PR into <dev-branch>, then run: /sdd-execute <slug> next
+   ```
+   Do not proceed to the next step in the same session.
+   **Sequential-mode override:** this whole STEP COMMIT + PR section (per-step sub-branch + step PR +
+   STOP) is **replaced** in sequential mode by the commit-and-checkpoint procedure in
+   `reference/sequential-mode.md` §5.6 — one commit per step directly on `<dev-branch>`, **no per-step
+   PR**, a report at each smart checkpoint (surface boundary / step cap), and a single integration PR
+   at the end. Do not open a per-step PR in sequential mode.
+
+---
+
+## DEVIATION HANDLING
+
+When actual implementation differs from what the spec said, or when Phase 2/Phase 3 surfaces an
+in-scope-unresolvable gap, follow **`reference/deviation-handling.md`** — the `## Deviation Log` entry
+format and the mandatory A/B/C "no vague deferrals" gap protocol (with its sequential-mode
+`AskUserQuestion` override). Never write "deferred" without a specific target step or explicit user
+sign-off.
+
+**Ledger write (cross-feature memory).** If a deviation reveals a mistake that has recurred — or that
+future features in these services would likely hit (a wrong assumption, a duplication, a migration/
+config/header misstep, scope creep) — append a one-line entry to `docs/roadmap/ledger/fails.md` using
+its schema. This is the durable arm of Constitution **P-03** (a recurring ambiguity is logged, not
+silently worked around). A one-off, spec-specific deviation stays in the `## Deviation Log` only; the
+ledger is for lessons that generalize.
+
+---
+
+## CONTEXT.MD — Per-step entry format
+
+Append after each step completes (or is blocked/skipped):
+
+```markdown
+### Step N — <title> [done|skipped|blocked]
+- <1–2 sentences describing what was done or why it was blocked>
+- Files modified: `path/to/file`, `path/to/other`
+- Deviations: none | <brief description — full detail in Deviation Log>
+```
+
+If the feature uses the structured-header memory schema (`docs/patterns/context-engineering.md`), also
+update the `## Files Modified` and `## Open Threads` header blocks — not just the session log.
+
+---
+
+## SESSION-END SUMMARY
+
+In **sequential mode**, write this summary per feature (after its integration PR opens) and once more
+for the whole run; the "Next" line becomes the next feature in the sequence, or "sequence complete" at
+the end. Otherwise:
+
+After the last step in the requested range (or on any stop):
+
+1. Count statuses: done=N, pending=N, blocked=N, skipped=N of total M
+2. Update `implementation-spec.md` header `**Status**`:
+   - Any steps still pending/blocked → `in-progress`
+   - All steps done → `complete`
+3. Append to context.md:
+   ```markdown
+   ## Session <ISO timestamp> — sdd-execute
+   **Steps this session**: [list step numbers]
+   **Progress**: N done / M total
+   **Stopped at**: Step X (<reason, or "all complete">)
+   **Next**: /sdd-execute <slug> next
+   ```
+4. Print to user, including the **mandatory accountability block** (P-03 — nothing gets buried in
+   the diff):
+   ```
+   Session complete. N/M steps done. Feature lifecycle: <status>.
+   Context log: $FEATURE_DIR/context.md
+
+   Accountability:
+   - Out-of-scope changes: none | <list each + how it was dispositioned (blocker/deviation)>
+   - Open questions / items: none | <unresolved ## Open Items + Open Threads without a target step>
+   - Unaddressed review warnings: none | <items still `[ ] unaddressed` from the sdd-review impl-spec context.md note>
+
+   Next: /sdd-execute <slug> next
+   ```
+   If any of the three lines is non-empty, do **not** soften it — the point of the block is that the
+   operator sees these before deciding to continue. "Out-of-scope changes" should read `none`: a
+   real one means a HARD CONSTRAINT was bent and it must say so explicitly.
+
+---
+
+## HARD CONSTRAINTS — Never violate
+
+These rails are the per-step enforcement arm of `docs/sdd/constitution.md`. The Floor items (`F-*`)
+below are **non-overridable** — no "proceed anyway" or sequential-mode carve-out bypasses them.
+
+- **Never mark a code-bearing (`service`/`test`) step `done` without a recorded failing-then-passing
+  test** (red before green — Constitution **P-06**/**C-08**; see `reference/tdd-gate.md`). The red and
+  green outputs go in the PR body + `context.md`, never by editing the step body. Non-code-bearing
+  steps record `TDD: N/A`.
+- **Never write or edit any file before Phase 2 user confirmation.**
+- **Never begin a step before TOOLING SETUP has confirmed its verification tools** (or decided a
+  fallback) — `reference/tooling-setup.md`, run once per session after the STEP SELECTOR. Install
+  **only** what the selected steps need; a tool failure found mid-step (that stops the run or silently
+  skips a verification) is the exact failure this phase prevents. Setup never installs or starts a
+  database.
+- **Never guess a file path or symbol name.** If not found in Phase 1 discovery, block the step.
+- **Never commit before Phase 3 verification passes.** All commits happen in STEP COMMIT + PR, after verification.
+- **Never target `main-dev` or `main` in a step PR.** Always target the `**Development Branch**` from `feature.md`.
+- **Never stage files outside the step's `**Files**` section plus `implementation-spec.md`, `feature.md`, `status.md`, and `context.md`** (and, when a ledger write is due, `docs/roadmap/ledger/insights.md` or `fails.md`) — Constitution **F-08**.
+- **Never edit a `.up.sql` migration that has been committed to `main-dev`.** Add a new numbered migration instead.
+- **Never start a database or other long-running service container to verify a step.** Migration
+  reversibility is proven **offline** (up/down parity + correct `NNN`); the live apply is CI's job.
+  Substitute the offline check for any `docker run postgres` / `migrate` / `psql`-against-a-live-DB
+  verification and log the substitution as a deviation. Applies in **every** mode (Floor-adjacent —
+  no carve-out). This is the rail that stops the "hang waiting on a DB to come up" failure.
+- **Never make an out-of-scope change silently, and never let one go unannounced.** Changes outside
+  the current step's `**Files**`/scope are forbidden (see the next bullet). If a step *cannot* be
+  completed without one, do not just make it — **escalate** it via the gap protocol
+  (`reference/deviation-handling.md`; a **blocker** in sequential mode) and get a decision. Any
+  out-of-scope change that did happen, any still-open question, and any unaddressed
+  `/sdd-review impl-spec` warning MUST be listed in the next checkpoint report and the session-end
+  summary. An unannounced deviation is a **P-03** violation — the operator finding out from the diff
+  is exactly the failure this rule prevents.
+- **Never make changes outside the current step's scope** — no opportunistic cleanup, no refactoring, no extra files. (Exception: making the code the step *itself* introduced pass the step's lint/format Verification — e.g. `ruff format`, gofmt, or fixing a `golangci-lint`/`pnpm run lint` finding on the step's own changed lines — is in scope, not cleanup. Do not reformat or lint-fix code the step did not touch.)
+- **`implementation-spec.md` step bodies are immutable during execution.** The only permitted change to a step entry is flipping `**Status**` from `pending` to `done` (or `blocked`/`skipped`). The `**Instructions**`, `**Codebase Evidence**`, `**Verification**`, `**Files**`, and `**Reviewers**` fields must never be edited — they are the permanent record of the original plan. All divergence from that plan belongs exclusively in the `## Deviation Log` section.
+
+**Sequential-mode carve-outs** to these constraints (mode-entry + per-feature confirmation satisfying
+the Phase-2 gate, the re-spec exception, stacked step PRs, auto-applied verification fallbacks) apply
+**only** when `$ARGUMENTS[1] == sequential` and are documented in `reference/sequential-mode.md`. All
+other HARD CONSTRAINTS remain in force in every mode.
+
+---
+
+## REPO CONVENTIONS
+
+Proto/migration/config-key/lint/header-propagation conventions from `docs/runbooks/feature-workflow.md`
+live in **`reference/repo-conventions.md`**. Load it when a step touches any of those areas.

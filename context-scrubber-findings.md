@@ -118,4 +118,4 @@ All are well over the ~2,000-char soft budget — expected for a mature monorepo
 
 ## Silent skills
 
-None flagged in this pass (skill audit not run — the skills live under `.claude/skills/` and `.claude/plugins/`; deferred, no silent-skill claim made).
+None flagged in this pass (skill audit not run — the skills live under `.claude/skills/` and `plugins/`; deferred, no silent-skill claim made).
