@@ -236,3 +236,16 @@ until its first-ever USD distribution in 2024, so older PIT periods legitimately
   entry's path updated 207→211. No CHANGELOG/merge-order citations existed. Branch name unchanged
   (`claude/fundamentals-strategy-fscore-j3oshc`); a NEW PR replaces the merged #1186.
 - Lifecycle status unchanged: `implementation-ready`. Resume with `/sdd-execute edgar-fundamentals-enrichment sequential`.
+
+---
+
+## Session 2026-09-26 — sdd-review impl-spec (advisory)
+
+- Result: 2 failures (same `feature-207` mislabel, Steps 15 & 16) + 4 warnings/notes. No Floor breach. Overlap: one soft, disjoint-region file overlap with feature 196 on `internal/repository/marketdata_repo.go` — rebase-only, MOOT on the single branch. Migrations `marketdata/006`, `config/030` next-free; 5 config keys unclaimed; no proto field change.
+- Items carried into execution:
+  - Steps 13/15/16: [x] `@feature-207`/"feature 207" → **211** FIXED (lines 601, 633). Grep confirmed no other `207` occurrences (the `:173-207` at line 358 is a range, not a feature number; Step 13 correctly cites feature 204). This corruption of C-16 business-rule traceability is resolved.
+  - Step 8: [x] added explicit "broker symmetry N/A — marketdata is Alpaca-only for market data; corporate-actions has no IBKR lane" note (B2b).
+  - Steps 7/11: [x] no explicit Go coverage threshold — `internal/service`/`cmd` are CI-coverage-excluded; the 40% gate is asserted at Steps 5 & 9 over `internal/edgar`/`internal/alpaca`. Justified, no action.
+  - Step 12: config seed (030) sequenced after its reader (Step 10) — default-safe reads (`GetBool(...,default)`), so no build/test inversion; optional reorder only. No action.
+  - Open Risk 1 (@AC-2): [ ] XBRL debt-tag **wording correction** to the existing `@AC-2` block (not a renumber) requires **operator sign-off recorded here** at the start of `/sdd-execute` Step 5. PENDING.
+  - Open Risk 2 (@AC-5): [ ] Alpaca corporate-actions **entitlement** is the first action of Step 8 (direct `GET /v1/corporate-actions` probe). If unentitled → STOP, escalate, descope FR-4/@AC-5 with sign-off; FR-1/2/3/5/6/8 proceed. PENDING (not verifiable pre-execution — no Alpaca creds this session).

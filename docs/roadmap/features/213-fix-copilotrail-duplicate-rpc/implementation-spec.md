@@ -90,6 +90,15 @@ deviation from the product-spec's stated scope must be signed off by the user at
   `WatchlistDetail.tsx:72` (`useOpportunities()`), `SignalReadiness.tsx:28` (`useOpportunities()`),
   `trader/positions/[symbol]/page.tsx:176` (`useOpportunities(0)`) — all converge onto `CONVICTION`
   automatically.
+- **Order-independence of the three non-CopilotRail ambient consumers (W1, C-10/C-14 ripple).** The
+  default-sort change shifts `WatchlistDetail`, `SignalReadiness`, and the trader symbol page from
+  `UNSPECIFIED` (blended-rank) to `CONVICTION` ordering. Each consumes the queue by **symbol lookup,
+  not ranked position**, so the change is display-safe: `WatchlistDetail.tsx:72` flattens
+  `oppData.pages` and matches per-symbol; `SignalReadiness.tsx:28` reads the set for a specific
+  symbol's readiness; `trader/positions/[symbol]/page.tsx:176` enriches a single symbol's header from
+  the matching `Opportunity`. None renders the queue in ranked order. Verify each at Step 2 execution
+  time alongside the Open-Risk set-equality check below (fold these three surfaces into that check —
+  confirm the returned opportunity *set* is unchanged and no consumer indexes by position).
 - Stale comment to update — `CopilotRail.tsx:36`:
   `// Share the ['opportunities', 0] cache with the Opportunities page (page-1 only, no Load More).`
 - `CopilotRail`'s hook runs above its `if (!showCopilot) return null` guard (hook at `:37`, guard at

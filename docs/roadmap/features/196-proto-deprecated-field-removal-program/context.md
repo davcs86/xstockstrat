@@ -132,3 +132,14 @@ feature in the today's-triage session.
     packages) — [x] accepted (disclosed in-spec; acceptable, no change).
 - No unresolved items carried into execution. Note: execution itself remains blocked on the FR-3
   external-consumer gate (Step 1) — unchanged by this review.
+
+---
+
+## Session 2026-09-26 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 5 advisory warnings (C-01/C-15) + 1 prominent NOTE. No Floor breach. Overlap: one soft, disjoint-region file overlap with feature 211 on `internal/repository/marketdata_repo.go` (196 = `scanBars` read edge; 211 = dividend upsert + cache invalidation) — rebase-only, and MOOT here since both land sequentially on the single branch `claude/pending-roadmap-features-9z01mn`.
+- **NOTE — premise reconciliation (surface to user).** The approved design (`design.md`) is **response-edge omission, NOT proto field removal + `reserved`**. Reviewer verified: `.proto` files untouched (`marketdata.proto:76`, `ingest.proto:75` deprecated fields still defined), zero `reserved` statements repo-wide, `buf breaking` asserts NO break. Therefore this is **not a breaking proto change** and the "2 owners + platform lead" breaking-proto gate is **NOT triggered** by the design as specced. The `feature.md` **Type** header ("breaking-change program — governance-gated") is stale relative to the approved non-breaking design. Left `feature.md` Type unchanged pending user decision on whether to re-label; the impl-spec/design are internally consistent (non-breaking).
+- Items carried into execution:
+  - Step 1: [x] `backfills/page.tsx:138`→`:151` corrected; added concrete `path:line` for the analysis `timeframe_enum` reader (`servicer.py:1151`, `live_loop.py:575,642`, `screener.py:224`) and the agent bar/backfill tools (`client.py:1686,:1811`) — the governance-crux gate is now mechanically verifiable.
+  - Steps 2/4/6: [ ] systematic line-number drift (all cited symbols RESOLVE; lines stale ~2–15). `/sdd-execute`'s mandatory codebase discovery re-grounds every citation at execute time — the spec line numbers are advisory anchors, not load-bearing. No F-04 breach.
+  - C-15: [x] `@AC-1`/`@AC-4` uncovered-by-design carve-out CONFIRMED legitimate — `acceptance.feature:12,19` carry `@out-of-scope @rejected-removal`.

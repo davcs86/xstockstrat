@@ -160,7 +160,7 @@ the pre-Step-1 tree, where the import does not resolve).
   fundamental-metric picker usage `page.tsx:376-390` (`Select`/`SelectTrigger`/`SelectContent`/
   `SelectItem`/`SelectValue` with `value` + `onValueChange`).
 - Criteria-builder section (insert selector immediately above): the `Criteria` header row at
-  `page.tsx:301-306`, the `criteria.map(...)` builder starting `page.tsx:332`.
+  `page.tsx:301-306`, the `criteria.map(...)` builder starting `page.tsx:333`.
 - Controlled-value pattern for reset-to-placeholder (design.md § Rejected Alternatives — uncontrolled
   Radix Select won't reset): use `useState<string>('')`, analogous to the page's existing
   `useState` controls (`page.tsx:72,82-89`).

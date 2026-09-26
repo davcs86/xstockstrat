@@ -88,10 +88,16 @@ Proto/Platform sign-off the omission steps rely on.)
 - BSR publishing is live, so external consumers are presumed: `buf push` on every deploy — `recon.md:76-78`
   cites `deploy-prod.yml:28-31` (published) / `deploy-dev.yml:28-32` (draft); runbook
   `proto-versioning.md:95-100`.
-- The named in-repo/consumer surfaces to re-confirm read `timeframe_enum`, not the string:
-  - analysis GetBars reader and the `xstockstrat-ui` backfills page — the `timeframeEnum` bind is
-    `services/xstockstrat-ui/src/app/insights/backfills/page.tsx:138` (`timeframeEnum: Timeframe.TIMEFRAME_1DAY`).
-  - agent MCP tools that surface backfill/bar timeframe.
+- The named in-repo/consumer surfaces to re-confirm read `timeframe_enum`, not the string (concrete bind sites):
+  - **analysis** GetBars callers bind `timeframe_enum=common_pb2.Timeframe.TIMEFRAME_1DAY`, not the string:
+    `services/xstockstrat-analysis/app/handlers/servicer.py:1151`, `app/engine/live_loop.py:575,642`,
+    `app/services/screener.py:224` (documented in `app/docs/warmup.md:54`).
+  - **`xstockstrat-ui` backfills page** — the `timeframeEnum` bind is
+    `services/xstockstrat-ui/src/app/insights/backfills/page.tsx:151`
+    (`...(isFundamentals ? {} : { timeframeEnum: Timeframe.TIMEFRAME_1DAY })`).
+  - **agent MCP bar/backfill tools** bind `timeframe_enum`, not the string:
+    `services/xstockstrat-agent/app/client.py:1686` (bars) and `:1811`
+    (`timeframe_enum=0 if is_fundamentals else _TF_TO_ENUM[canonical]`).
 - The exact silent-break class this gate exists to prevent: `fails.md:168` (empty timeframe silently
   defaults to `"1d"`) and `fails.md:667` (TS reading a proto field by wrong casing → `undefined`, no error).
 

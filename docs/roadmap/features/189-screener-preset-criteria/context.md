@@ -47,3 +47,13 @@
 - Defensive shallow copy `preset.criteria.map(c => ({...c}))` at the call site instead of a factory function — simpler, same mutation safety.
 - All 5 rows use fully-qualified enum values (`Comparator.LT`, `ScreenKind.FUNDAMENTAL`) — not string shorthands.
 - `kind: ScreenKind.FUNDAMENTAL` explicit on every row in the data table — never rely on implicit defaults.
+
+---
+
+## Session 2026-09-26 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 3 advisory warnings (advisory — did not block). Overlap: CLEAN (no proto/config/migration surface; 4 UI files disjoint from all in-flight features).
+- Items carried into execution:
+  - Step 3: [x] off-by-one line cite `page.tsx:332`→`:333` — FIXED in spec.
+  - Steps 1–3: [ ] already landed on this branch via PR #1139 (`173bab6`), matching the spec byte-for-byte. At `/sdd-execute`, flip Steps 1–3 to done and record the pre-landed state in the `## Deviation Log` (F-09 keeps step bodies immutable) — do NOT run the P-06 red-before-green loop against merged code. Run the genuine RED→GREEN only for Step 4 (the e2e preset scenario — the sole missing work; `grep preset e2e/insights/screener.spec.ts` → 0 matches).
+  - Step 4: [x] no numeric coverage threshold — correct for `xstockstrat-ui` (Playwright e2e is the gate; the 40% vitest floor is `src/lib/**`-only). No action; documented correctly in the spec.

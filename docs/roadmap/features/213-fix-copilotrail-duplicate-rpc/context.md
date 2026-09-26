@@ -71,3 +71,13 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   the consolidated 189/213 impl-spec review (context.md:39, C-14/P-04).
 - Reviewers snapshot written to feature.md: xstockstrat-ui owner for both the `service` and `test`
   steps.
+
+---
+
+## Session 2026-09-26 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 2 warnings (+2 notes). No Floor breach. Overlap: CLEAN (UI-only; `useOpportunities.ts`/`CopilotRail.tsx`/`opportunities.spec.ts` disjoint from all in-flight features; only reads `OpportunitySort`, re-numbers nothing).
+- Items carried into execution:
+  - Step 1 W1 (C-10/C-14 ripple): [x] added a Codebase-Evidence note that the three non-CopilotRail ambient consumers (`WatchlistDetail:72`, `SignalReadiness:28`, `trader/positions/[symbol]:176`) consume the queue by symbol lookup, not ranked position → the `UNSPECIFIED`→`CONVICTION` shift is display-safe; folded into the Step-2 set-equality verification.
+  - Step 1 W2 (P-04/C-14/**F-10**): [ ] **scope-widening sign-off REQUIRED before any Step-1 write.** The design widens beyond the product-spec's "single-file, don't touch `useOpportunities`" boundary. F-10 forbids writing Step-1 code until the user's explicit sign-off is recorded here in `context.md`. PENDING at the consolidated 189/213 review gate.
+  - Step 2: [x] no numeric coverage threshold — correct for `xstockstrat-ui` (e2e is the gate); documented. No action.
