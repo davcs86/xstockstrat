@@ -88,6 +88,48 @@ async function mockOpportunities(page: Page): Promise<void> {
   });
 }
 
+/** feature 187 — conviction-grouped unique-symbol order (mirrors the server ORDER BY and the default
+ * mock's sort: groups ordered by descending best conviction, ties alphabetical). The paginating mock
+ * and its page-boundary assertions both derive from this, so they stay in lock-step even if the
+ * fixture changes. */
+function convictionGroupedSymbols(): string[] {
+  const symbols = [...new Set(OPPORTUNITIES.map((o) => o.symbol))];
+  const best = (sym: string) =>
+    Math.max(...OPPORTUNITIES.filter((o) => o.symbol === sym).map((o) => o.conviction));
+  return symbols.sort((a, b) => best(b) - best(a) || a.localeCompare(b));
+}
+
+/** feature 187 — a paginating ListOpportunities mock. The hook hard-codes `page.pageSize: 50`, so a
+ * page boundary can never arrive from the request size; this per-test override imposes its own
+ * boundary of `groupsPerPage` symbol groups, keyed off the `page.pageToken` offset, and emits
+ * `page.nextPageToken` until the final page. Deliberately NOT a change to the shared `mock-backend.ts`
+ * handler — that handler must stay single-page (it feeds the copilot/mobile-overflow specs). */
+async function mockOpportunitiesPaged(page: Page, groupsPerPage: number): Promise<void> {
+  const order = convictionGroupedSymbols();
+  const availableSources = [
+    ...new Set(OPPORTUNITIES.map((o) => o.source).filter((s) => s && !MARKERS.includes(s))),
+  ].sort();
+  await page.route('**/xstockstrat.analysis.v1.AnalysisService/ListOpportunities', (route) => {
+    const req = JSON.parse(route.request().postData() ?? '{}');
+    const offset = Number(req.page?.pageToken || 0);
+    const pageSyms = order.slice(offset, offset + groupsPerPage);
+    const rows = OPPORTUNITIES.filter((o) => pageSyms.includes(o.symbol)).sort(
+      (a, b) => order.indexOf(a.symbol) - order.indexOf(b.symbol) || b.conviction - a.conviction,
+    );
+    const nextOffset = offset + groupsPerPage;
+    const nextPageToken = nextOffset < order.length ? String(nextOffset) : '';
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        opportunities: rows.map(toJson),
+        availableSources,
+        page: { nextPageToken },
+      }),
+    });
+  });
+}
+
 // feature 190 — the source filter is a multi-select dropdown (was a ToggleGroup pill row).
 async function selectSource(page: Page, name: string): Promise<void> {
   await page.getByRole('button', { name: 'source filter' }).click();
@@ -368,6 +410,77 @@ test.describe('Opportunities queue', () => {
     await expect(card(page, 'PLTR').getByTestId('opp-composite-PLTR').first()).toHaveText('—');
     await expect(card(page, 'TSLA').getByTestId('opp-composite-TSLA').first()).toHaveText('—');
     await expect(card(page, 'PLTR').getByText('0.000')).toHaveCount(0);
+  });
+
+  // feature 187 (@AC-5) — a queue that fits in one page shows every row and NO Load More control.
+  // The default mock returns no page.nextPageToken, so hasNextPage is false. Characterization guard
+  // on the shipped hasNextPage gate (page.tsx:367) — no spurious button on a single-page queue.
+  test('feature 187: a single-page queue shows no Load More control (AC-5)', async ({ page }) => {
+    await expect(card(page, 'AAPL')).toBeVisible();
+    await expect(page.getByTestId('load-more-opportunities')).toHaveCount(0);
+  });
+
+  // feature 187 (@AC-8) — the headline stat grid (Actionable now / Expiring < 90m / Exit-trim flags /
+  // Fresh entries / Deployable) was removed with the pagination conversion (its tiles counted only
+  // loaded pages). Regression guard against the grid ever returning.
+  test('feature 187: the headline stat grid is gone (AC-8)', async ({ page }) => {
+    await expect(card(page, 'AAPL')).toBeVisible();
+    await expect(
+      page.getByText(
+        /Actionable now|Expiring < 90m|Exit \/ [Tt]rim flags|Fresh entries|Deployable/,
+      ),
+    ).toHaveCount(0);
+  });
+
+  // feature 187 (@AC-2) — Load More progressively retrieves the next page (manual, no auto-drain).
+  // A per-test paginating mock splits the conviction-grouped queue into exactly two pages; page-2
+  // symbols stay hidden until Load More is clicked.
+  test('feature 187: Load More appends the next page (AC-2)', async ({ page }) => {
+    const order = convictionGroupedSymbols();
+    const gpp = Math.ceil(order.length / 2); // exactly two pages
+    const page1First = order[0];
+    const page2First = order[gpp];
+    await mockOpportunitiesPaged(page, gpp);
+    await page.reload();
+
+    // Page 1 only: a page-1 symbol renders, a page-2 symbol does not, and Load More is offered.
+    await expect(card(page, page1First)).toBeVisible({ timeout: 8000 });
+    await expect(card(page, page2First)).toHaveCount(0);
+    const loadMore = page.getByTestId('load-more-opportunities');
+    await expect(loadMore).toBeVisible();
+
+    // Load More appends page 2 in place: the page-2 symbol appears, page-1 rows are retained, and
+    // the button disappears on the final page (empty nextPageToken).
+    await loadMore.click();
+    await expect(card(page, page2First)).toBeVisible({ timeout: 8000 });
+    await expect(card(page, page1First)).toBeVisible(); // page 1 not reset
+    await expect(page.getByTestId('load-more-opportunities')).toHaveCount(0);
+  });
+
+  // feature 187 (@AC-3) — the 15s poll refetches ALL loaded pages, so a background refetch after
+  // Load More must not drop page 2. Driven with page.clock (never lower refetchInterval — product
+  // code). Regression guard on useOpportunities' refetchInterval:15_000 over the infinite query.
+  test('feature 187: the 15s poll keeps all loaded pages (AC-3)', async ({ page }) => {
+    const order = convictionGroupedSymbols();
+    const gpp = Math.ceil(order.length / 2);
+    const page2First = order[gpp];
+    await page.clock.install();
+    await mockOpportunitiesPaged(page, gpp);
+    await page.reload();
+
+    await expect(card(page, order[0])).toBeVisible({ timeout: 8000 });
+    await page.getByTestId('load-more-opportunities').click();
+    await expect(card(page, page2First)).toBeVisible({ timeout: 8000 });
+
+    // Advance past the 15s interval — v5 infinite refetch re-fetches page 1 AND page 2.
+    const refetch = page.waitForResponse(
+      '**/xstockstrat.analysis.v1.AnalysisService/ListOpportunities',
+    );
+    await page.clock.fastForward('00:16');
+    await refetch;
+
+    // Page 2 survives the refetch — the loaded pages are not dropped back to page 1.
+    await expect(card(page, page2First)).toBeVisible();
   });
 
   // feature 185 FR-4 — cold "computing", terminal "compute-failed", and the legitimately-empty
