@@ -81,3 +81,10 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - Step 1 W1 (C-10/C-14 ripple): [x] added a Codebase-Evidence note that the three non-CopilotRail ambient consumers (`WatchlistDetail:72`, `SignalReadiness:28`, `trader/positions/[symbol]:176`) consume the queue by symbol lookup, not ranked position → the `UNSPECIFIED`→`CONVICTION` shift is display-safe; folded into the Step-2 set-equality verification.
   - Step 1 W2 (P-04/C-14/**F-10**): [ ] **scope-widening sign-off REQUIRED before any Step-1 write.** The design widens beyond the product-spec's "single-file, don't touch `useOpportunities`" boundary. F-10 forbids writing Step-1 code until the user's explicit sign-off is recorded here in `context.md`. PENDING at the consolidated 189/213 review gate.
   - Step 2: [x] no numeric coverage threshold — correct for `xstockstrat-ui` (e2e is the gate); documented. No action.
+
+---
+
+## Session 2026-09-26 — scope-widening sign-off (F-10, P-04)
+
+- **User explicitly approved the robust fix** at the consolidated 189/213 review gate: change the shared `useOpportunities` `sort` parameter default (`UNSPECIFIED`→`CONVICTION`), widening beyond the product-spec's "single-file, don't touch the hook" boundary. This is the recorded sign-off F-10 requires before any Step-1 write. The rejected alternative (pin only CopilotRail) relocates the duplicate RPC to `/insights/watchlists` and `/trader/positions/[symbol]` and was declined.
+- Step-1 code writes are now unblocked.
