@@ -184,7 +184,7 @@ services:
     internal_ports:
       - 50055
     instance_count: 1
-    instance_size_slug: basic-xs
+    instance_size_slug: basic-xxs
     envs:
       - key: GRPC_PORT
         value: "50055"
@@ -219,7 +219,7 @@ services:
     internal_ports:
       - 50056
     instance_count: 1
-    instance_size_slug: basic-xs
+    instance_size_slug: basic-xxs
     envs:
       - key: GRPC_PORT
         value: "50056"
@@ -442,8 +442,8 @@ services:
     internal_ports:
       - 50060
     instance_count: 1
-    # basic-xs: WatchConfig streaming is long-lived but low-throughput; 30d telemetry shows <5% memory
-    instance_size_slug: basic-xs
+    # basic-xxs: WatchConfig streaming is long-lived but low-throughput; 30d telemetry shows <5% memory and <2% CPU
+    instance_size_slug: basic-xxs
     envs:
       - key: GRPC_PORT
         value: "50060"
@@ -473,7 +473,7 @@ services:
       tag: "YOUR_IMAGE_TAG"
     http_port: 3000
     instance_count: 1
-    instance_size_slug: basic-xs
+    instance_size_slug: basic-xxs
     envs:
       - key: TRADING_ENDPOINT
         value: ${xstockstrat-trading.PRIVATE_DOMAIN}:50051
