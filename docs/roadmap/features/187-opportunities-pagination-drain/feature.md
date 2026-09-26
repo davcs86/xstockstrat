@@ -17,6 +17,7 @@
 | 2026-09-11 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated — 10 steps across 3 services |
 | 2026-09-11 | `implementation-ready` → `launched` | /sdd-execute (#1134) | Functional steps 1,2,3,5,6,9 (server SQL grouping, UI useInfiniteQuery+Load More+CopilotRail+stat-grid removal, agent page_token/page_size, docs) merged to main-dev via #1134, promoted to main via #1137. **Status not advanced at the time** — reconciled 2026-09-26. |
 | 2026-09-26 | `in-progress` → `launched` | drift reconciliation | Bookkeeping catch-up: functional code shipped & live since 2026-09-11 but status.md stayed `in-progress`. Test steps **4, 7, 8, 10** were never completed and remain outstanding post-launch test debt (see Next Action). |
+| 2026-09-26 | `launched` (test debt back-filled) | /sdd-qa | Steps 4/7/8/10 completed: added @AC-2/3/5/8 characterization guards to `opportunities.spec.ts` (35/35 green). @AC-7 NOT covered — genuinely violated on the shipped tree (duplicate ListOpportunities RPC); filed SEV-3 defect `docs/reports/2026-09-26-copilotrail-duplicate-listopportunities-rpc-defect.md`, guard deferred until the fix lands. |
 
 ---
 
@@ -52,8 +53,9 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-Feature is `launched` (live since 2026-09-11). **Outstanding test debt** — steps 4, 7, 8, 10 were
-never completed: Opportunities-page Load More / stat-grid-removal E2E, pagination fixture extension,
-cross-service opportunities E2E, and cross-service lint + full-suite validation. Track as a
-follow-up test-hardening task (e.g. `/sdd-qa design opportunities-pagination-drain`); the shipped
-functional behavior is unaffected.
+Feature is `launched` (live since 2026-09-11); the test debt (steps 4/7/8/10) was back-filled on
+2026-09-26 — `opportunities.spec.ts` now guards @AC-2/3/5/8 (35/35 green). **One follow-up remains:**
+@AC-7 (CopilotRail shares the page-1 cache / no separate RPC) is genuinely violated on the shipped
+tree — see the SEV-3 defect `docs/reports/2026-09-26-copilotrail-duplicate-listopportunities-rpc-defect.md`.
+Route it via `/sdd-triage --from-report <that file>`; once the one-line CopilotRail sort-alignment fix
+lands, add the strict single-RPC @AC-7 guard.

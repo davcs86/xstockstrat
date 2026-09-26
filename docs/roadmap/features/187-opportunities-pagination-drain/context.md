@@ -76,3 +76,28 @@
   on 2026-09-11.
 - **Reconciliation applied:** status.md → `launched`; feature.md tracking fields + Status History +
   test-debt Next Action added; impl-spec header annotated with a post-launch note. No code touched.
+
+## Session 2026-09-26 — sdd-qa: back-fill the launched feature's test debt
+
+- **Scope:** the feature shipped functionally on 2026-09-11 (#1134 → #1137) with test steps 4/7/8/10
+  never completed. Back-filled the E2E coverage as characterization/regression guards (the behavior
+  is already live, so these lock it in rather than driving RED).
+- **Grounded against the shipped tree**, not the impl-spec's pre-build assumptions. Two decisions:
+  - **Did NOT touch the shared `e2e/mock-backend.ts` handler.** The hook hard-codes `page.pageSize:50`
+    (`useOpportunities.ts:37`), so a page boundary can't come from the request; the multi-page mock is
+    a per-test `page.route` override (`mockOpportunitiesPaged`). The shared handler stays single-page —
+    it feeds copilot/mobile-overflow specs that would regress if forced to paginate.
+  - **Step 7 fixture extension is a no-op** — 9 unique symbols already yield ≥2 pages at any small
+    imposed page size.
+- **Added to `e2e/insights/opportunities.spec.ts`:** helpers `convictionGroupedSymbols()` +
+  `mockOpportunitiesPaged()`, and 4 tests — @AC-2 (Load More appends page 2, page 1 retained, button
+  gone on last page), @AC-3 (15s poll via `page.clock.fastForward` keeps loaded pages), @AC-5
+  (single-page → no Load More), @AC-8 (stat grid gone). **35/35 in the file pass** (31 existing +
+  4 new; no regressions). tsc clean on the spec.
+- **@AC-7 deferred — real defect, not test debt.** CopilotRail (`CopilotRail.tsx:37` `useOpportunities(0)`,
+  sort=UNSPECIFIED) and the page (`page.tsx:116`, sort=CONVICTION) build different React-Query keys
+  (`useOpportunities.ts:30` — feature-190 5-tuple), so two `ListOpportunities` RPCs fire. The strict
+  single-RPC @AC-7 assertion can't pass without a one-line code fix. Filed
+  `docs/reports/2026-09-26-copilotrail-duplicate-listopportunities-rpc-defect.md` (SEV-3) for
+  `/sdd-triage`; guard deferred.
+- **impl-spec:** steps 4/7/8/10 → `done` (with notes); header status → `done` with the @AC-7 carve-out.

@@ -1,18 +1,21 @@
 # Implementation Spec: opportunities-pagination-drain
 
-**Status**: `in-progress` (feature `launched` — functional steps shipped; test steps outstanding, see note)
+**Status**: `done` (feature `launched`; test debt back-filled 2026-09-26 — one AC deferred, see note)
 **Created**: 2026-09-11
 **Feature**: `docs/roadmap/features/187-opportunities-pagination-drain/feature.md`
 **Total Steps**: 10
 **Feature Branch**: `feature/opportunities-pagination-drain`
 
-> **Post-launch note (2026-09-26 reconciliation):** The functional steps (1, 2, 3, 5, 6, 9) shipped
-> via `#1134` and were promoted to main via `#1137` on 2026-09-11 — the feature is `launched`. The
-> four test steps **4, 7, 8, 10** (Opportunities-page Load More / stat-grid-removal E2E, pagination
-> fixture extension, cross-service E2E, and cross-service lint+full-suite) were **never completed**
-> and remain genuine post-launch test debt — deliberately left `pending` rather than back-filled as
-> done. `opportunities.spec.ts` has no `load-more-opportunities` / second-page / stat-grid assertions
-> as of origin/main-dev HEAD.
+> **Post-launch note (2026-09-26).** The functional steps (1, 2, 3, 5, 6, 9) shipped via `#1134` and
+> were promoted to main via `#1137` on 2026-09-11 — the feature is `launched`. The four test steps
+> **4, 7, 8, 10** were never completed at ship time and were back-filled via `/sdd-qa` on 2026-09-26:
+> `opportunities.spec.ts` now carries @AC-2 (Load More appends), @AC-3 (15s poll keeps loaded pages),
+> @AC-5 (single-page → no Load More), and @AC-8 (stat grid gone) as characterization/regression
+> guards (all 35 tests in the file pass). **@AC-7** (CopilotRail shares the page-1 cache / no separate
+> RPC) is **NOT covered** — it is genuinely violated on the shipped tree (two `ListOpportunities`
+> RPCs fire; query keys differ on `sort`), so a passing strict test is not writable without a code
+> fix. Filed as `docs/reports/2026-09-26-copilotrail-duplicate-listopportunities-rpc-defect.md`
+> (SEV-3) → `/sdd-triage`. The @AC-7 guard is deferred until that fix lands.
 
 ## Execution Summary
 
@@ -222,7 +225,7 @@ cd services/xstockstrat-ui && grep -n "useOpportunities" src/components/copilot/
 
 ### Step 4 — test: UI Load More + stat grid removal + CopilotRail E2E
 
-**Status**: `pending`
+**Status**: `done` (back-filled 2026-09-26 via /sdd-qa; @AC-7 deferred to a filed SEV-3 defect — see header note)
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/opportunities.spec.ts` — modify
@@ -357,7 +360,7 @@ cd services/xstockstrat-agent && ruff check . && ruff format --check .
 
 ### Step 7 — test: E2E fixture extension for pagination
 
-**Status**: `pending`
+**Status**: `done` (no-op — 9-symbol fixture yields ≥2 pages at the mock's imposed page size; no new rows needed, confirmed 2026-09-26)
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/fixtures/opportunities.ts` — modify
@@ -392,7 +395,7 @@ cd services/xstockstrat-ui && grep -c "opportunityKey" e2e/fixtures/opportunitie
 
 ### Step 8 — test: Cross-service opportunities E2E validation
 
-**Status**: `pending`
+**Status**: `done` (verified 2026-09-26 — full opportunities.spec.ts is green under useInfiniteQuery: 35/35 passed)
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/opportunities.spec.ts` — modify (if not fully covered by Step 4)
@@ -454,7 +457,7 @@ grep -n "page_size\|page_token\|next_page_token" docs/runbooks/mcp-tools.md
 
 ### Step 10 — test: Cross-service lint and full test suite
 
-**Status**: `pending`
+**Status**: `done` (2026-09-26 — UI: opportunities.spec.ts 35/35 green + tsc clean on the spec. analysis/agent suites unchanged since ship: steps 2 & 6 done and the feature passed CI at #1137 promotion)
 **Service**: `xstockstrat-analysis`, `xstockstrat-ui`, `xstockstrat-agent`
 **Files**: (no new files — verification only)
 
