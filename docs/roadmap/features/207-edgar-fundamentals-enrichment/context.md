@@ -189,3 +189,35 @@
   - Step 10: reads five config keys seeded later by Step 12 — mitigated by explicit in-code defaults (edgar.enabled=true, snapshot_source=vendor) + zero-value-watcher tests; B3 deploy-ordering note (migrate → rolling restart → live-flip → disable vendors last) — [ ] unaddressed
 - Overlap findings: CLEAN (marketdata 006 / config 030 next-free; the five new keys unique; finnhub/fmp .enabled flips are UPDATEs to existing rows; no in-flight feature co-edits any touched file).
 - Note (C-14): agent `query_fundamentals` is a documented no-op passthrough (currency/source/metrics already returned; no proto field added) — verified, not a stale-surface gap.
+
+## Session 2026-09-26 — Alpaca corporate-actions docs research (Step 8 open-thread update)
+
+Resolved most of the Step-8 open thread from Alpaca's official API docs (docs.alpaca.markets),
+without a live call:
+- **Endpoint confirmed**: `GET /v1/corporate-actions` on `https://data.alpaca.markets` — the SAME
+  market-data host `internal/alpaca/client.go` already authenticates to for bars/quotes, so the
+  existing `GetSecret` `marketdata.alpaca.api_key`/`api_secret` credentials apply (feature-147 path
+  intact).
+- **Cash-dividend record fields** map cleanly to the migration-006 `dividend_actions` columns:
+  `symbol`, `rate` (per-share → `cash_amount`), `ex_date`, `record_date`, `payable_date` (→ `pay_date`),
+  `currency` (ISO 4217), plus `special`/`foreign` flags and `sub_type` (interest/return_of_capital).
+- **Pagination/range**: `start`, `end` (YYYY-MM-DD), `limit` ≤ 1000, `page_token` — covers the T12M
+  window and the `backfill_lookback_years` range.
+- **Currency**: explicit `currency` field + `foreign` boolean ("empty ⇒ USD") — directly implements the
+  option-b guard: US-ADR dividend is USD (or empty=USD) so `dividend_yield = USD div / USD price` is
+  consistent; a record whose `currency` ≠ trading currency → `dividend_yield` missing (never FX-fabricated).
+- **Entitlement**: the plans page gates the free/Basic tier only on real-time SIP quotes/bars
+  (IEX-only, 15-min-delayed historical **pricing**); it does NOT tier corporate-actions/reference data.
+  Corporate actions is reference data, not SIP pricing → very likely available on the current plan.
+
+**Updated Step-8 posture:** FR-4/@AC-5 is planned as **IN SCOPE** (build, not descope). The endpoint,
+fields, pagination, and currency semantics are docs-confirmed; the only residual is a single live
+direct-API call at the start of Step 8 to confirm a 200 (not 403) for the exact configured key/plan
+(narrow check, not a full-stack grpcurl smoke — fails.md 2026-08-13). The descope-with-sign-off path
+is retained ONLY as the fallback if that one call returns 403. Real-world note: BABA paid no dividend
+until its first-ever USD distribution in 2024, so older PIT periods legitimately compute
+`dividend_yield = 0` (feed responded, no payments) and recent ones carry a real USD figure — the
+0-vs-missing distinction Step 8 must honor.
+
+- The corresponding "Step 8: Alpaca corporate-actions entitlement unverified" item above is now
+  **docs-confirmed; live 403-check only** (not yet [x] — the one live call lands at execute).
