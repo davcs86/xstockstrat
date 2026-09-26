@@ -90,7 +90,7 @@ services:
     internal_ports:
       - 50052
     instance_count: 1
-    instance_size_slug: basic-xxs
+    instance_size_slug: basic-xs
     envs:
       - key: GRPC_PORT
         value: "50052"
@@ -153,7 +153,7 @@ services:
     internal_ports:
       - 50054
     instance_count: 1
-    instance_size_slug: basic-xs
+    instance_size_slug: basic-s
     envs:
       - key: GRPC_PORT
         value: "50054"
@@ -324,7 +324,7 @@ services:
     internal_ports:
       - 50057
     instance_count: 1
-    instance_size_slug: basic-xxs
+    instance_size_slug: basic-xs
     envs:
       - key: GRPC_PORT
         value: "50057"
@@ -442,8 +442,8 @@ services:
     internal_ports:
       - 50060
     instance_count: 1
-    # basic-s: extra headroom for WatchConfig streaming RPC (above 60s idle timeout)
-    instance_size_slug: basic-s
+    # basic-xs: WatchConfig streaming is long-lived but low-throughput; 30d telemetry shows <5% memory
+    instance_size_slug: basic-xs
     envs:
       - key: GRPC_PORT
         value: "50060"
