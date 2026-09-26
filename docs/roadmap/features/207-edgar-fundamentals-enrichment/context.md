@@ -122,3 +122,58 @@
 - [ ] Cross-currency consumer audit — fundsignal scorer, screener (feature-060), market-cap/revenue filters.
 
 - Next: `/sdd-spec edgar-fundamentals-enrichment`.
+
+## Session 2026-09-26 — sdd-spec
+
+- Generated implementation-spec.md with **16 steps**. Status → `implementation-ready`.
+- Consumed recon.md + design.md as authoritative inputs; recon's path:line citations re-verified
+  against the current tree (all accurate — e.g. `fundamentalsEnabled():1381`, `priceJoin:1630`,
+  `resolveFundamentals:1347`, repo `src==""→"fmp":494-497`; note marketdata CLAUDE.md's stale
+  `:1143` for fundamentalsEnabled was NOT used — live code is `:1381`).
+- **Design Open Risk 1 RESOLVED at spec time via a direct SEC companyfacts fetch** (BABA CIK
+  0001577552, AXP 0000004962, AAPL 0000320193; `data.sec.gov/api/xbrl/companyfacts`, 2026-09-26) —
+  the narrow direct check the design mandated (never a `grpcurl` smoke, fails.md 2026-08-13). Findings:
+  - **All three filers — including the BABA ADR — report under `us-gaap`, NOT IFRS.** The design's
+    `ifrs-full:*` allow-list is **unnecessary for the acceptance filers**; the spec omits it (C-18/YAGNI).
+    **Design-correction requiring awareness** (recorded here per P-03): design point 2's IFRS branch is
+    dropped; a future non-us-gaap filer is a separate feature.
+  - **Grounded us-gaap debt tag set** (corrects the design's guess): `LongTermDebtNoncurrent`,
+    `LongTermDebtCurrent`, `LongTermDebt` (combined fallback), `DebtCurrent`, `ShortTermBorrowings`,
+    `CommercialPaper`, `ConvertibleDebtNoncurrent`. Summation = `(Noncurrent+Current) else LongTermDebt`
+    `+ ShortTermBorrowings + DebtCurrent + CommercialPaper + ConvertibleDebtNoncurrent` (no double-count).
+    Verified: AAPL D/E≈1.34, AXP≈1.73 (<de_bad=2.0, @AC-3 ✓), BABA FY2026≈0.05.
+  - **BABA's only recent financial-debt tag is `ConvertibleDebtNoncurrent`** (USD 8,098M; DebtCurrent/
+    ShortTermBorrowings stopped after FY2018/FY2019) — the design's list would have MISSED it. Now included.
+  - **BABA dual-reports StockholdersEquity in CNY (1,060,886M) AND USD (153,796M)** → option-b P/B works
+    (@AC-4 ✓); the unit-keyed aggregator stashes `stockholders_equity_usd` for the price-join.
+- **@AC-2 wording needs operator sign-off correction (C-15/P-03):** its illustrative figures are stale
+  (real BABA FY2026 financial debt ≈8,098M USD / D/E≈0.05, Liabilities USD 113,555M not 714,121M); the
+  load-bearing "financial-debt D/E ≪ de_bad=2.0, not ~4.6" holds. Recorded in the spec's
+  § Acceptance-wording corrections; to be applied at /sdd-execute Step 5 as a wording edit (no renumber).
+- **Design Open Risk 2 (Alpaca corporate-actions entitlement) NOT verifiable here** (no Alpaca creds in
+  session) — narrowed to the FIRST action of Step 8 (a direct `GET data.alpaca.markets/v1/corporate-actions`
+  in isolation); if unentitled, FR-4/@AC-5 descoped with sign-off (never a silent @AC-5 pass). Symmetric-
+  missing dividend preserves @AC-9.
+- **FR-6 real finding:** `FUNDAMENTAL_METRICS` (`useDataExplorer.ts:39`) **already** contains pb_ratio/
+  dividend_yield/debt_to_equity (feature 204) — so FR-6's UI work is currency+source provenance rendering
+  + CSV columns + a USD-basis hint, NOT re-adding the metrics. Spec'd accordingly (Step 13).
+- **C-14 surfaces:** UI reached by Steps 13/14; Agent `query_fundamentals` is passthrough (no proto field
+  added → agent descriptor-parity projection test can't break, fails.md 134) — no step, restated as a
+  decision in Execution Summary. No `strat-lab` plugin update owed (its skill's tools unchanged).
+- **Migrations confirmed next-free:** marketdata `006` (tip `005_fundamentals_history`); config `030`
+  (tip `029_heal_config_keys_full_dotted`; the pre-existing `024` gap is NOT backfilled).
+- **Proto: no change** — Fundamentals (pb_ratio=4, dividend_yield=5, debt_to_equity=9, currency=15,
+  source=16) + HistoricalFundamentalsPeriod (…currency=19, source=20, missing_metrics=21) all exist.
+- **No new env var/port** — Alpaca creds via GetSecret; EDGAR keyless — so no docker-compose/.do edits.
+- Config seed shape grounded on migration `028` (post-147: columns + `ON CONFLICT (namespace,key,
+  environment,COALESCE(user_id,'')) DO NOTHING`, full-dotted keys, staging+production rows).
+
+### Open Threads (carried to /sdd-review impl-spec → /sdd-execute)
+- [ ] @AC-2 wording correction — apply at execute Step 5 with operator sign-off (figures stale, direction holds).
+- [ ] Alpaca corporate-actions entitlement — verify first thing in Step 8; descope FR-4/@AC-5 with sign-off if unentitled.
+- [ ] `dividends.enabled` seeded `false` (conservative) — design fork resolved; flip on at rollout after entitlement confirmed.
+- [ ] `source` column reliability for source-aware cache self-heal — verify at Step 10; one-time purge is the recorded fallback.
+- [ ] Active-universe enumeration for the rollout coverage gate — name the concrete query at rollout (narrow direct check).
+- [ ] Snapshot `as_of`/"Last refreshed" semantics (@AC-12 @feature-204) — confirm at execute for the EDGAR snapshot (filing date + live-price timestamp mix).
+
+- Next: `/sdd-review edgar-fundamentals-enrichment impl-spec`.
