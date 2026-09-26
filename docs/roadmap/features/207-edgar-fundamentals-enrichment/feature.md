@@ -12,6 +12,7 @@
 |---|---|---|---|
 | 2026-09-25 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-09-25 | `draft` → `spec-ready` | /sdd-review | Product spec approved (0 warnings); overlap CLEAN |
+| 2026-09-26 | `spec-ready` → `design-approved` | /sdd-design | Design debated (4 rounds, full) and approved; recon.md + design.md written |
 
 ---
 
@@ -19,6 +20,8 @@
 
 - [Product Spec](product-spec.md) — requirements and governance
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
+- [Recon Dossier](recon.md) — grounded codebase map (Phase 0)
+- [Design](design.md) — debated architecture, rejected alternatives, open risks (Phase 1)
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec <slug>`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -49,4 +52,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-design edgar-fundamentals-enrichment` — recon + grilling debate (resolve the design forks) before /sdd-spec
+`/sdd-spec edgar-fundamentals-enrichment` — generate the numbered implementation spec from the approved design

@@ -82,3 +82,43 @@
 - Warnings: none (after fix).
 - Overlap findings: CLEAN. Key trunk fact — feature 198 (launched) owns `marketdata.fundamentals.provider`,
   so 207 EXTENDS that selector (add `edgar`) rather than declaring a new key; next marketdata migration is `006`.
+
+## Session 2026-09-26 — sdd-design
+
+- Phase 0 Recon: wrote recon.md (services: marketdata/ui/config/indicators/analysis + proto/agent surface).
+  Key reuse patterns: existing `priceJoin` for P/B, the `ratioEnricher` seam, the write-through
+  `marketdata.fundamentals` cache chokepoint, `GetHistoricalFundamentals`+`filterAsOf` as the snapshot read,
+  the `GetSecret` credential path, the single `FUNDAMENTAL_METRICS` UI registry. Confirmed analysis +
+  indicators need NO code change (pure passthrough; tunable formula params).
+- Phase 1 Grilling: 4 rounds (full). Chosen approach: EDGAR-canonical for both snapshot + PIT via a
+  live-read `marketdata.fundamentals.snapshot_source` axis dispatched on BOTH fundamentals RPCs, EDGAR
+  snapshot = latest filing + live price-join write-through the existing cache with source-aware
+  invalidation; unit-aware aggregator + currency capture; financial-debt D/E; option-b P/B & P/E
+  (USD-unit fact preferred, else missing); Alpaca corporate-actions PIT dividend feed; a real
+  `marketdata.edgar.enabled` kill switch; migrate→backfill→verify-coverage→live-flip→disable-vendors-last
+  rollout. Rejected: overloading `provider` with edgar; PIT-only (Y) split (fails @AC-9 on ROE convention);
+  P/B option (a) sole / option (c) FX feed; keyless gate; uncached snapshot; boot-bound cutover.
+- **Operator decisions (AskUserQuestion, 2026-09-25/26):** (1) dedicated `snapshot_source` axis (NOT overload
+  `provider`); (2) P/B/P/E option-b (prefer USD-unit fact, else missing). Both recorded in design.md.
+- **CHANGE sign-offs (C-16):** (a) repointing the snapshot lane at EDGAR alters the feature-198 "provider
+  never takes edgar / EDGAR is a separate PIT lane" doc contract — signed off @ 2026-09-26; new marketdata
+  acceptance coverage authored to close the blind spot. (b) "stop hardcoding USD" currency-semantics change
+  — signed off @ 2026-09-26; absolute fields must never be cross-currency aggregated by consumers.
+- **Scope crux (round 4):** full EDGAR-canonical is REQUIRED, not optional — a PIT-only fix leaves the ROE
+  convention split (EDGAR ending-equity ~52% vs vendor TTM ~7% for BABA), which alone re-opens the @AC-9
+  composite divergence. This is why the vendor snapshot must be repointed, not just the PIT ingester fixed.
+- Constitution rules touched: C-04,C-05,C-07,C-08,C-10(b),C-13,C-14,C-15,C-17,C-18; F-01,F-04,F-06,F-07.
+  Floor breaches: none across 4 rounds.
+- Status: spec-ready → design-approved.
+
+### Open Threads (carried from design.md Open Risks → target /sdd-spec)
+- [ ] XBRL tag/USD-fact coverage — direct SEC companyfacts fetch (BABA/AXP/plain US) FIRST; corrects
+  @AC-2/3/4/9 wording with sign-off if facts absent.
+- [ ] Alpaca corporate-actions entitlement — direct-API check; gates FR-4/@AC-5 only; descope with sign-off
+  if unentitled (never a silent @AC-5 pass).
+- [ ] `source` column reliability for cache self-heal — verify schema + UpsertFundamentals; fallback = one-time purge.
+- [ ] Active-universe enumeration for the coverage gate — name the concrete query (narrow direct check).
+- [ ] Snapshot `as_of` semantics (@AC-12) — confirm "Last refreshed" contract.
+- [ ] Cross-currency consumer audit — fundsignal scorer, screener (feature-060), market-cap/revenue filters.
+
+- Next: `/sdd-spec edgar-fundamentals-enrichment`.
