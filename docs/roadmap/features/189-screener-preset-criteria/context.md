@@ -20,6 +20,27 @@
 - Constitution rules touched: C-08, C-10, C-14, C-15, C-16, F-04, P-01. Floor breaches: none.
 - Status: draft → design-approved.
 
+## Session 2026-09-26T00:00:00Z — sdd-spec
+
+- Generated implementation-spec.md with 4 steps (service→test pairs). Status → implementation-ready.
+- Scenario coverage (C-15): AC-1/2/3/4 → Step 4 (e2e), AC-5 → Step 2 (vitest unit). Consumer surface
+  C-14 (`/insights` Screener page) landed by Step 3; no new nav (control on an already-registered page).
+- Key codebase findings:
+  - `_BUILTIN_BANDS` bad-endpoint thresholds confirmed at `fundsignal_loop.py:35-40`
+    (pe 35 / pb 5 / roe 0.05 / d2e 2.0); EPS binary gate `> 0` at `fundsignal_loop.py:395-396`.
+  - Sole integration point is `setCriteria` from `useCriteriaList` (`screenCriteria.ts:56-62`);
+    reuse `CriterionRow` (`screenCriteria.ts:17-25`) — no new type. All 5 metrics are in
+    `FUNDAMENTAL_METRICS` (`strategyCatalog.ts:137-149`), so the feature-117 validator-superset trap
+    does not apply.
+  - shadcn `Select` already imported/used on `page.tsx` (import `10-16`, metric picker `376-390`);
+    controlled `useState<string>('')` reset needed (uncontrolled Radix won't reset placeholder).
+  - Screener e2e (`e2e/insights/screener.spec.ts`, 551 lines) has no `preset` coverage yet →
+    Step 4 adds it; auth via `e2e/helpers/auth.ts`, fixtures `e2e/fixtures/screenResults.ts`.
+  - Note: the feature's target files (`screenPresets.ts`, `screenPresets.test.ts`, `page.tsx` selector)
+    already exist in the working tree on branch `claude/pending-roadmap-features-9z01mn` — the spec was
+    written grounded in those real files (implementation predated the missing spec). /sdd-execute
+    should reconcile against the existing implementation rather than re-create from an empty tree.
+
 ## Decisions
 
 - Controlled Select with `useState<string>("")` — Radix uncontrolled Select won't reset to placeholder after selection, blocking re-selection of the same preset.

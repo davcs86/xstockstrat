@@ -12,6 +12,7 @@
 |---|---|---|---|
 | 2026-09-12 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-09-12 | `draft` → `design-approved` | /sdd-design | Design debated (2 rounds, quick) and approved; recon.md + design.md written |
+| 2026-09-26 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 4 steps |
 
 ---
 
@@ -21,7 +22,7 @@
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
 - [Recon Dossier](recon.md) — grounded codebase discovery for design phase
 - [Design](design.md) — debated, user-approved architecture
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec <slug>`_
+- [Implementation Spec](implementation-spec.md) — numbered steps with codebase evidence
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -32,9 +33,8 @@ Add a preset selector to the Screener page that lets the trader load a predefine
 
 ## Reviewers
 
-_(Auto-populated from docs/runbooks/reviewer-registry.md based on affected services and
-change types. Override as needed for this feature. Snapshot finalized at /sdd-spec time —
-re-run /sdd-spec if the registry changes.)_
+_(Snapshot finalized at /sdd-spec time from docs/runbooks/reviewer-registry.md — the distinct
+`**Reviewers**` values across all implementation-spec steps. Re-run /sdd-spec if the registry changes.)_
 
 | Role | Review Focus |
 |---|---|
@@ -42,4 +42,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-spec screener-preset-criteria` — generate implementation spec from the approved design
+`/sdd-review screener-preset-criteria impl-spec` — validate implementation spec, then `/sdd-execute screener-preset-criteria`
