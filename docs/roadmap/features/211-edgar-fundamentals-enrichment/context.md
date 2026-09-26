@@ -249,3 +249,18 @@ until its first-ever USD distribution in 2024, so older PIT periods legitimately
   - Step 12: config seed (030) sequenced after its reader (Step 10) — default-safe reads (`GetBool(...,default)`), so no build/test inversion; optional reorder only. No action.
   - Open Risk 1 (@AC-2): [ ] XBRL debt-tag **wording correction** to the existing `@AC-2` block (not a renumber) requires **operator sign-off recorded here** at the start of `/sdd-execute` Step 5. PENDING.
   - Open Risk 2 (@AC-5): [ ] Alpaca corporate-actions **entitlement** is the first action of Step 8 (direct `GET /v1/corporate-actions` probe). If unentitled → STOP, escalate, descope FR-4/@AC-5 with sign-off; FR-1/2/3/5/6/8 proceed. PENDING (not verifiable pre-execution — no Alpaca creds this session).
+
+---
+
+## Session 2026-09-26 — sdd-execute (sequential; single-branch adaptation) — START
+
+Executing on `claude/pending-roadmap-features-9z01mn`; integration via shared PR #1191. Toolchain: Go 1.27.0 ✓, uv 0.8.17 ✓, UI deps present. Migration NNNs validated next-free (marketdata 006, config 030).
+
+### Operator decisions carried into this run
+- **@AC-5 / Alpaca dividend feed (Step 8 blocker resolution):** the live entitlement probe cannot run here (no Alpaca creds; `GetSecret` needs a running config service + DB; no egress to `data.alpaca.markets`). **User decision:** *write* Steps 8–9 code with **graceful fallback** for when Alpaca returns no/absent dividend data, plus an **auditable log line** so operators can see when the feed was unavailable; unit tests use **fake dividend sources** (no live call). The live @AC-5 entitlement claim remains **unverified in this env** — flagged for a creds-bearing environment to confirm. `dividend_yield` degrades to nil→"—" when the feed is absent/disabled/unentitled (symmetric-missing preserves @AC-9).
+- **@AC-2 (Step 5):** the corrected XBRL debt-tag figures need operator sign-off — will pause at Step 5 (blocker).
+
+### Step 1 — migration: dividend_actions store [done]
+- Created `migrations/006_dividend_actions.{up,down}.sql` — plain table `marketdata.dividend_actions` (symbol, ex_date PK; pay_date, cash_amount, currency, source, fetched_at). Verified offline: up CREATE ↔ down DROP; NNN=006 next-free. No DB started (offline migration rule).
+- Files: `services/xstockstrat-marketdata/migrations/006_dividend_actions.up.sql`, `.down.sql`
+- Deviations: none.

@@ -103,7 +103,7 @@ is far below `de_bad=2.0`, not the total-liabilities ratio) but its **illustrati
 
 ### Step 1 — migration: dividend/corporate-actions store (`marketdata.dividend_actions`)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/migrations/006_dividend_actions.up.sql` — create
