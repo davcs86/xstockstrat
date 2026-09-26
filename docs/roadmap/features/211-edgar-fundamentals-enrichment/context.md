@@ -264,3 +264,12 @@ Executing on `claude/pending-roadmap-features-9z01mn`; integration via shared PR
 - Created `migrations/006_dividend_actions.{up,down}.sql` — plain table `marketdata.dividend_actions` (symbol, ex_date PK; pay_date, cash_amount, currency, source, fetched_at). Verified offline: up CREATE ↔ down DROP; NNN=006 next-free. No DB started (offline migration rule).
 - Files: `services/xstockstrat-marketdata/migrations/006_dividend_actions.up.sql`, `.down.sql`
 - Deviations: none.
+
+### Step 2 — service: currency capture + unit-aware EDGAR aggregator [done]
+- Reshaped `periodAgg.vals` to `map[metric]map[unit]float64` (unit-keyed, first-seen-per-(metric,unit)); captured the XBRL unit key at the `entry.Units` loop; added `voteCurrency` (most monetary facts, per-share/shares excluded, lexical tiebreak → CNY), `valIn`/`valAny` helpers. `buildPeriod` now sets `Currency` from the vote, reads absolute facts in native currency, and stashes `stockholders_equity_usd` for Step 6.
+- Files: `services/xstockstrat-marketdata/internal/edgar/edgar_client.go`
+
+### Step 3 — test: currency-capture unit tests (@AC-1) [done]
+- Added 3 tests: dual-currency CNY row (@AC-1, + native/USD-equity extras), USD-only regression, re-backfill determinism. `go test ./internal/edgar/...` green (all existing edgar tests still pass — aggregator refactor caused no regression). Lint via `go vet` + `gofmt` (golangci-lint fallback — see Deviation Log).
+- Files: `services/xstockstrat-marketdata/internal/edgar/edgar_client_test.go`
+- Deviations: golangci-lint→go vet/gofmt CI-equivalent fallback (Deviation Log). Red-before-green: the CNY-currency assertion is definitionally red against the pre-Step-2 hardcoded `Currency: "USD"` (old path returned "USD" unconditionally).

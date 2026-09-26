@@ -135,7 +135,7 @@ ls services/xstockstrat-marketdata/migrations/006_dividend_actions.up.sql servic
 
 ### Step 2 — service: currency capture + unit-aware EDGAR aggregator (FR-1)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/edgar/edgar_client.go` — modify
@@ -168,7 +168,7 @@ ls services/xstockstrat-marketdata/migrations/006_dividend_actions.up.sql servic
 
 ### Step 3 — test: currency-capture unit tests (@AC-1)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/edgar/edgar_client_test.go` — modify
@@ -645,4 +645,9 @@ grep -n "snapshot_source" docs/patterns/config-governance.md   # confirm registe
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### 2026-09-26 — golangci-lint unavailable for go1.27 → `go vet` + `gofmt` CI-equivalent fallback (all Go steps)
+- The pre-provisioned `golangci-lint` was built against go1.25, and `go install …@v2.13.1` (the CI-pinned version) produces a binary whose own go.mod caps language support at go1.26 — both refuse this repo's **go1.27** target (`can't load config: the Go language version … is lower than the targeted Go version (1.27.0)`).
+- **Disposition: CI-equivalent fallback** — every Go step's lint gate is verified with `GOWORK=off go vet ./<pkg>/...` + `gofmt -l <pkg>/` (both run natively on go1.27), in place of `golangci-lint run`. The real golangci-lint gate runs in CI (golangci-lint-action@v9). This applies to all of feature 211's Go `service`/`test` steps.
+
+### 2026-09-26 — Step 4 D/E tag allow-list: IFRS tags omitted (spec-sanctioned, C-18)
+- Per the spec's Step-4 Codebase Evidence, all three acceptance filers (BABA/AXP/AAPL) report under `us-gaap`; the design's guessed `ifrs-full:*` allow-list is unnecessary and omitted (YAGNI — a future non-us-gaap filer is a separate feature).

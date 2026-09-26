@@ -224,3 +224,112 @@ func TestFetchHistorical_RejectsYTDDuration(t *testing.T) {
 		t.Errorf("YTD 6-month duration must be rejected, got %d periods", len(periods))
 	}
 }
+
+// --- feature 211: currency capture from the XBRL unit key (@AC-1) ---
+
+// instantFact211 builds an instant (balance-sheet) FY datum — no "start", so classifyPeriodType
+// treats it as annual.
+func instantFact211(fy int, end, filed string, val float64) map[string]any {
+	return map[string]any{"end": end, "val": val, "accn": "x", "fy": fy, "fp": "FY", "form": "10-K", "filed": filed}
+}
+
+func newTestClientCF211(cf map[string]any) *Client {
+	c := NewClient("https://data.sec.gov", "xstockstrat-test/1.0 (test@example.com)", 0)
+	c.tickerURL = "https://www.sec.gov/files/company_tickers.json"
+	c.hc = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		if strings.Contains(r.URL.Path, "company_tickers.json") {
+			return jsonResp(map[string]any{"0": map[string]any{"cik_str": 320193, "ticker": "AAPL", "title": "Apple Inc."}}), nil
+		}
+		if strings.Contains(r.URL.Path, "companyfacts") {
+			return jsonResp(cf), nil
+		}
+		return &http.Response{StatusCode: 404, Body: io.NopCloser(strings.NewReader("not found")), Header: make(http.Header)}, nil
+	})}
+	return c
+}
+
+// dualCurrencyCF is a CNY-native filer that also publishes a USD convenience translation for its
+// monetary facts; EPS is per-share (USD/shares). Equal CNY/USD monetary-fact counts → lexical
+// tiebreak → CNY.
+func dualCurrencyCF() map[string]any {
+	return map[string]any{
+		"cik": 320193, "entityName": "Alibaba",
+		"facts": map[string]any{"us-gaap": map[string]any{
+			"StockholdersEquity": map[string]any{"units": map[string]any{
+				"CNY": []map[string]any{instantFact211(2024, "2024-03-31", "2024-05-01", 1060886e6)},
+				"USD": []map[string]any{instantFact211(2024, "2024-03-31", "2024-05-01", 153796e6)},
+			}},
+			"Liabilities": map[string]any{"units": map[string]any{
+				"CNY": []map[string]any{instantFact211(2024, "2024-03-31", "2024-05-01", 783300e6)},
+				"USD": []map[string]any{instantFact211(2024, "2024-03-31", "2024-05-01", 113555e6)},
+			}},
+			"EarningsPerShareDiluted": map[string]any{"units": map[string]any{
+				"USD/shares": []map[string]any{{"start": "2023-04-01", "end": "2024-03-31", "val": 5.0, "accn": "x", "fy": 2024, "fp": "FY", "form": "10-K", "filed": "2024-05-01"}},
+			}},
+		}},
+	}
+}
+
+func TestFetchHistorical_CurrencyFromUnitKey_AC1_feature211(t *testing.T) {
+	c := newTestClientCF211(dualCurrencyCF())
+	periods, err := c.FetchHistorical(context.Background(), "AAPL", time.Time{}, time.Time{}, []string{"annual"})
+	if err != nil {
+		t.Fatalf("FetchHistorical: %v", err)
+	}
+	if len(periods) != 1 {
+		t.Fatalf("want 1 period, got %d", len(periods))
+	}
+	p := periods[0]
+	if p.Currency != "CNY" {
+		t.Errorf("currency = %q, want CNY (dual-report native, lexical tiebreak)", p.Currency)
+	}
+	if got := p.ExtraMetrics["stockholders_equity"]; got != 1060886e6 {
+		t.Errorf("native equity = %v, want CNY 1060886e6", got)
+	}
+	if got := p.ExtraMetrics["stockholders_equity_usd"]; got != 153796e6 {
+		t.Errorf("stockholders_equity_usd = %v, want 153796e6 (retained for P/B)", got)
+	}
+}
+
+func TestFetchHistorical_CurrencyUSDOnly_feature211(t *testing.T) {
+	cf := map[string]any{
+		"cik": 320193, "entityName": "Apple",
+		"facts": map[string]any{"us-gaap": map[string]any{
+			"StockholdersEquity": map[string]any{"units": map[string]any{"USD": []map[string]any{instantFact211(2024, "2024-09-28", "2024-11-01", 56950e6)}}},
+			"Liabilities":        map[string]any{"units": map[string]any{"USD": []map[string]any{instantFact211(2024, "2024-09-28", "2024-11-01", 308030e6)}}},
+		}},
+	}
+	c := newTestClientCF211(cf)
+	periods, err := c.FetchHistorical(context.Background(), "AAPL", time.Time{}, time.Time{}, []string{"annual"})
+	if err != nil {
+		t.Fatalf("FetchHistorical: %v", err)
+	}
+	if len(periods) != 1 {
+		t.Fatalf("want 1 period, got %d", len(periods))
+	}
+	if periods[0].Currency != "USD" {
+		t.Errorf("currency = %q, want USD (single-currency filer unchanged)", periods[0].Currency)
+	}
+}
+
+func TestFetchHistorical_CurrencyDeterministic_feature211(t *testing.T) {
+	c := newTestClientCF211(dualCurrencyCF())
+	var first string
+	for i := 0; i < 5; i++ {
+		periods, err := c.FetchHistorical(context.Background(), "AAPL", time.Time{}, time.Time{}, []string{"annual"})
+		if err != nil {
+			t.Fatalf("run %d: %v", i, err)
+		}
+		if len(periods) != 1 {
+			t.Fatalf("run %d: want 1 period, got %d", i, len(periods))
+		}
+		if i == 0 {
+			first = periods[0].Currency
+		} else if periods[0].Currency != first {
+			t.Errorf("run %d currency = %q, want stable %q", i, periods[0].Currency, first)
+		}
+	}
+	if first != "CNY" {
+		t.Errorf("stable currency = %q, want CNY", first)
+	}
+}
