@@ -1,8 +1,8 @@
 # Context: edgar-fundamentals-enrichment
 
-**Feature**: `docs/roadmap/features/207-edgar-fundamentals-enrichment/feature.md`
-**Product Spec**: `docs/roadmap/features/207-edgar-fundamentals-enrichment/product-spec.md`
-**Implementation Spec**: `docs/roadmap/features/207-edgar-fundamentals-enrichment/implementation-spec.md`
+**Feature**: `docs/roadmap/features/211-edgar-fundamentals-enrichment/feature.md`
+**Product Spec**: `docs/roadmap/features/211-edgar-fundamentals-enrichment/product-spec.md`
+**Implementation Spec**: `docs/roadmap/features/211-edgar-fundamentals-enrichment/implementation-spec.md`
 
 ---
 
@@ -221,3 +221,18 @@ until its first-ever USD distribution in 2024, so older PIT periods legitimately
 
 - The corresponding "Step 8: Alpaca corporate-actions entitlement unverified" item above is now
   **docs-confirmed; live 403-check only** (not yet [x] — the one live call lands at execute).
+
+## Session 2026-09-26 — numbering-collision renumber (207 → 211)
+
+- **Collision**: PR #1186 (this feature, `feat(207): EDGAR fundamentals enrichment`, main-dev commit
+  5472f45) and PR #1185 (Phase D security backlog features 207–210, main-dev commit 6176909) BOTH
+  merged to main-dev on `207` — main-dev ended up with two `207-` dirs.
+- **Resolution** (feature-workflow § Feature Numbering; operator-approved 2026-09-26): this feature
+  renumbers to the next free number **211**; the security block keeps its contiguous 207–210. Chosen
+  because moving a single dir is lower-disruption than renumbering the 4-feature security batch.
+- **Mechanics**: branch restarted from origin/main-dev (PR #1186 already merged → fresh change per the
+  branch rules), `git mv 207-edgar-fundamentals-enrichment → 211-edgar-fundamentals-enrichment`,
+  self-referential paths updated in context.md + implementation-spec.md, and the ledger insights.md
+  entry's path updated 207→211. No CHANGELOG/merge-order citations existed. Branch name unchanged
+  (`claude/fundamentals-strategy-fscore-j3oshc`); a NEW PR replaces the merged #1186.
+- Lifecycle status unchanged: `implementation-ready`. Resume with `/sdd-execute edgar-fundamentals-enrichment sequential`.
