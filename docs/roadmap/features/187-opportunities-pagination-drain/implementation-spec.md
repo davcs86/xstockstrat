@@ -1,12 +1,18 @@
 # Implementation Spec: opportunities-pagination-drain
 
-**Status**: `in-progress`
+**Status**: `in-progress` (feature `launched` — functional steps shipped; test steps outstanding, see note)
 **Created**: 2026-09-11
 **Feature**: `docs/roadmap/features/187-opportunities-pagination-drain/feature.md`
 **Total Steps**: 10
 **Feature Branch**: `feature/opportunities-pagination-drain`
 
----
+> **Post-launch note (2026-09-26 reconciliation):** The functional steps (1, 2, 3, 5, 6, 9) shipped
+> via `#1134` and were promoted to main via `#1137` on 2026-09-11 — the feature is `launched`. The
+> four test steps **4, 7, 8, 10** (Opportunities-page Load More / stat-grid-removal E2E, pagination
+> fixture extension, cross-service E2E, and cross-service lint+full-suite) were **never completed**
+> and remain genuine post-launch test debt — deliberately left `pending` rather than back-filled as
+> done. `opportunities.spec.ts` has no `load-more-opportunities` / second-page / stat-grid assertions
+> as of origin/main-dev HEAD.
 
 ## Execution Summary
 

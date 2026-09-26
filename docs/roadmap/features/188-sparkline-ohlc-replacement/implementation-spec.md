@@ -1,6 +1,6 @@
 # Implementation Spec: sparkline-ohlc-replacement
 
-**Status**: `pending`
+**Status**: `done`
 **Created**: 2026-09-11
 **Feature**: `docs/roadmap/features/188-sparkline-ohlc-replacement/feature.md`
 **Total Steps**: 8
@@ -42,7 +42,7 @@ addressed by Steps 5 and 6 respectively (C-14).
 
 ### Step 1 — service: Add fmtShortDate, OhlcData, and selectOhlcBar to protoTime.ts
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/protoTime.ts` — modify
@@ -107,7 +107,7 @@ Confirm zero type errors from the new exports.
 
 ### Step 2 — test: Unit tests for fmtShortDate and selectOhlcBar
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/protoTime.test.ts` — modify
@@ -153,7 +153,7 @@ Confirm vitest passes with ≥40% coverage on exercised `src/lib/**` files. Conf
 
 ### Step 3 — service: Refactor useSparklines to useOhlcBars
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/hooks/useSparklines.ts` — delete
@@ -201,7 +201,7 @@ expected import errors from `page.tsx` files referencing the old hook, no errors
 
 ### Step 4 — service: Create OhlcBlock component
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/shared/OhlcBlock.tsx` — create
@@ -256,7 +256,7 @@ imports are expected until Steps 5–6.)
 
 ### Step 5 — service: Replace sparkline on Opportunities page
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/opportunities/page.tsx` — modify
@@ -318,7 +318,7 @@ have errors from the old imports.
 
 ### Step 6 — service: Replace sparkline on symbol detail page
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/trader/positions/[symbol]/page.tsx` — modify
@@ -362,7 +362,7 @@ shared `Sparkline` component — Step 7 can safely delete it.
 
 ### Step 7 — service: Delete shared Sparkline.tsx
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/shared/Sparkline.tsx` — delete
@@ -399,7 +399,7 @@ Confirm zero type errors and zero orphan imports.
 
 ### Step 8 — test: Update E2E tests and mock-backend
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/opportunities.spec.ts` — modify

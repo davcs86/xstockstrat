@@ -53,3 +53,26 @@
 - `useInfiniteQuery` is the first use in the codebase — flagged in design.md open risks, no blocking concern.
 - No proto changes, no migration, no new config keys, no new env vars.
 - Status advanced: `design-approved` → `implementation-ready`.
+
+## Session 2026-09-26 — status drift reconciliation
+
+- **Discovered drift:** status.md read `in-progress` with no `sdd-execute` session logged, despite the
+  functional implementation having shipped on 2026-09-11 via `#1134` (ancestor of both
+  `origin/main-dev` and `origin/main`). CI's post-promotion status auto-update never ran.
+- **Ground-truth verification (origin/main-dev HEAD):**
+  - Step 1 (server SQL symbol grouping) — present in `services/xstockstrat-analysis/app/repositories/opportunities.py`.
+  - Step 3 (UI `useInfiniteQuery` + Load More + CopilotRail hook + stat-grid removal) — present:
+    `opportunities/page.tsx:115` (`fetchNextPage/hasNextPage/isFetchingNextPage`), `:371` Load More
+    button (`data-testid="load-more-opportunities"`), headline stat-grid tiles removed.
+  - Step 5 (agent pass-through) — `services/xstockstrat-agent/app/tools.py:1501` passes
+    `page_size`/`page_token` to `list_opportunities`.
+  - Step 9 (docs) — mcp-tools.md updated.
+- **Genuine test debt (left `pending`, NOT back-filled):** steps 4, 7, 8, 10. `opportunities.spec.ts`
+  has zero `load-more-opportunities` / second-page / stat-grid-removal assertions; the only
+  pagination Load More E2E on main-dev targets the **data-explorer** page (`de-bars-loadmore` /
+  `de-hist-loadmore`), a different feature. Marking these done would fabricate coverage that does
+  not exist.
+- **Promotion trail:** merged to main-dev `0d1b186f` (#1134), promoted to main via `aab3fa8d` (#1137)
+  on 2026-09-11.
+- **Reconciliation applied:** status.md → `launched`; feature.md tracking fields + Status History +
+  test-debt Next Action added; impl-spec header annotated with a post-launch note. No code touched.
