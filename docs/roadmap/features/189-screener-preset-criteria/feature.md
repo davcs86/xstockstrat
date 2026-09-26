@@ -13,6 +13,7 @@
 | 2026-09-12 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-09-12 | `draft` → `design-approved` | /sdd-design | Design debated (2 rounds, quick) and approved; recon.md + design.md written |
 | 2026-09-26 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 4 steps |
+| 2026-09-26 | `implementation-ready` → `code-completed` | /sdd-execute (sequential) | Steps 1–3 pre-landed via PR #1139 (flipped to done); Step 4 e2e preset scenario authored + verified green (3 tests, CI-mode). All 4 steps done. |
 
 ---
 
@@ -42,4 +43,4 @@ _(Snapshot finalized at /sdd-spec time from docs/runbooks/reviewer-registry.md �
 
 ## Next Action
 
-`/sdd-review screener-preset-criteria impl-spec` — validate implementation spec, then `/sdd-execute screener-preset-criteria`
+Code-complete. Ships in the shared integration PR #1191 (`claude/pending-roadmap-features-9z01mn` → `main-dev`) for the pending-roadmap-features sequence.

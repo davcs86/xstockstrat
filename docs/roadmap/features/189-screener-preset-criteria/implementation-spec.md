@@ -1,6 +1,6 @@
 # Implementation Spec: screener-preset-criteria
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-09-26
 **Feature**: `docs/roadmap/features/189-screener-preset-criteria/feature.md`
 **Total Steps**: 4
@@ -42,7 +42,7 @@ existing, already-nav-registered Screener page — `recon.md` → `PlatformHeade
 
 ### Step 1 — service: Create the `screenPresets.ts` preset-data module
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/screenPresets.ts` — create
@@ -97,7 +97,7 @@ the pre-Step-1 tree, where the import does not resolve).
 
 ### Step 2 — test: Unit-test `SCREEN_PRESETS` shape and catalog validity
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/screenPresets.test.ts` — create
@@ -144,7 +144,7 @@ the pre-Step-1 tree, where the import does not resolve).
 
 ### Step 3 — service: Add the preset `Select` control to the Screener page
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/screener/page.tsx` — modify
@@ -199,7 +199,7 @@ load, which fail against the pre-Step-3 page).
 
 ### Step 4 — test: E2E preset-loading scenario on the Screener page
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/screener.spec.ts` — modify
@@ -251,4 +251,8 @@ element, criteria builder never reaches 5 preset rows), passing after Step 3 (P-
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### 2026-09-26 — Steps 1–3 pre-landed (PR #1139); Step 4 back-filled
+- **What**: Steps 1–3 (`src/lib/screenPresets.ts`, `screenPresets.test.ts`, and the Screener-page preset `Select`) were already merged to `main-dev` via PR #1139 (`173bab6`) before this execution session. Phase-1 discovery confirmed the landed files match the spec's Codebase Evidence and Instructions byte-for-byte.
+- **Disposition**: flipped Steps 1–3 to `done` from the pre-landed state rather than re-running the P-06 red-before-green loop against already-merged code (impossible to produce a genuine RED without reverting shipped code). Recorded per the `/sdd-review impl-spec` advisory disposition in `context.md`.
+- **Step 4** (the sole genuinely-missing work): the e2e preset scenario was authored and run **green** (3 tests passed, CI-mode build) against the already-landed implementation — a back-fill test for behavior that shipped without e2e coverage. Red-before-green is inapplicable to a back-fill; the assertions (5 rows, exact per-metric thresholds, eps hard-filter) pass only because #1139's preset data is correct.
+- **Verification note (CI-equivalent fallback)**: the Docker e2e runner was unavailable (no Docker daemon); ran the single spec host-native in **CI mode** (`CI=1`, which builds + widens the 10s→30s test timeout so the SSR-warmup step doesn't time out on cold `next dev`). `**Disposition**: CI-equivalent fallback.`
