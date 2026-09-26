@@ -51,3 +51,18 @@
 - [ ] Bar ordering assumption (ascending) — verify at implementation time against actual getBars response. Target: Step 3 (useOhlcBars).
 - [ ] Skip-today UTC edge case — unit test with vitest. Target: Step 2.
 - [ ] SparklinePoint proto orphaning — Opportunity.sparkline field 17 still in analysis.proto. Separate proto cleanup PR.
+
+## Session 2026-09-26 — status drift reconciliation
+
+- **Discovered drift:** status.md read `implementation-ready` (impl-spec 0/8 done) despite the full
+  implementation having shipped on 2026-09-11 via `#1136` (an ancestor of both `origin/main-dev` and
+  `origin/main`). CI's post-promotion status auto-update never ran for this feature.
+- **Ground-truth verification (origin/main-dev HEAD):** confirmed all 8 steps' artifacts present:
+  `src/components/shared/OhlcBlock.tsx`, `src/hooks/useOhlcBars.ts`, `selectOhlcBar` + `fmtShortDate`
+  in `src/lib/protoTime.ts`; `src/components/shared/Sparkline.tsx` deleted (terminal step); mobile
+  OHLC parity (AC-6/FR-6) and E2E OHLC assertions (`opp-ohlc-*`, `mobile-ohlc-*`) landed.
+- **Promotion trail:** merged to main-dev `36fff5de` (#1136), promoted to main via `aab3fa8d` (#1137)
+  on 2026-09-11.
+- **Reconciliation applied:** status.md → `launched`; impl-spec all 8 steps + header → `done`;
+  feature.md tracking fields (`Committed to main`, `Launched date`) and Status History rows added.
+  No code touched — docs-only correction of a missed CI bookkeeping step.

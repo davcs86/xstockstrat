@@ -2,7 +2,9 @@
 
 **Development Branch**: `feature/opportunities-pagination-drain`
 **Created**: 2026-09-11
-**Last Updated**: 2026-09-11
+**Last Updated**: 2026-09-26
+**Committed to main**: `aab3fa8d` (promotion PR #1137)
+**Launched date**: 2026-09-11
 
 ---
 
@@ -13,6 +15,9 @@
 | 2026-09-11 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-09-11 | `draft` → `design-approved` | /sdd-design quick | Design approved — 3 user steers: page_size stays 50, server-side symbol grouping, manual Load More (no auto-drain) |
 | 2026-09-11 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated — 10 steps across 3 services |
+| 2026-09-11 | `implementation-ready` → `launched` | /sdd-execute (#1134) | Functional steps 1,2,3,5,6,9 (server SQL grouping, UI useInfiniteQuery+Load More+CopilotRail+stat-grid removal, agent page_token/page_size, docs) merged to main-dev via #1134, promoted to main via #1137. **Status not advanced at the time** — reconciled 2026-09-26. |
+| 2026-09-26 | `in-progress` → `launched` | drift reconciliation | Bookkeeping catch-up: functional code shipped & live since 2026-09-11 but status.md stayed `in-progress`. Test steps **4, 7, 8, 10** were never completed and remain outstanding post-launch test debt (see Next Action). |
+| 2026-09-26 | `launched` (test debt back-filled) | /sdd-qa | Steps 4/7/8/10 completed: added @AC-2/3/5/8 characterization guards to `opportunities.spec.ts` (35/35 green). @AC-7 NOT covered — genuinely violated on the shipped tree (duplicate ListOpportunities RPC); filed SEV-3 defect `docs/reports/2026-09-26-copilotrail-duplicate-listopportunities-rpc-defect.md`, guard deferred until the fix lands. |
 
 ---
 
@@ -48,4 +53,9 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review opportunities-pagination-drain impl-spec` — then `/sdd-execute opportunities-pagination-drain`
+Feature is `launched` (live since 2026-09-11); the test debt (steps 4/7/8/10) was back-filled on
+2026-09-26 — `opportunities.spec.ts` now guards @AC-2/3/5/8 (35/35 green). **One follow-up remains:**
+@AC-7 (CopilotRail shares the page-1 cache / no separate RPC) is genuinely violated on the shipped
+tree — see the SEV-3 defect `docs/reports/2026-09-26-copilotrail-duplicate-listopportunities-rpc-defect.md`.
+Route it via `/sdd-triage --from-report <that file>`; once the one-line CopilotRail sort-alignment fix
+lands, add the strict single-RPC @AC-7 guard.
