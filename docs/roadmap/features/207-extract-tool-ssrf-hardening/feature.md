@@ -32,7 +32,8 @@ gRPC/admin surfaces on the private network. Add fail-closed egress validation (d
 address ranges, pin the validated address against DNS-rebinding, scheme allowlist, bounded
 redirects/size/timeouts) so the untrusted-content ingress cannot pivot to internal targets. Closes
 the agent SSRF finding (`docs/reports/2026-09-16-trading-system-security-audit.md`, M-list backlog;
-recommended in DT-2 §150) — the prompt-injection ingress repeatedly deferred by feature 193.
+recommended in DT-2 §150) — the prompt-injection ingress left out of the agent DB-tooling remediation
+(feature 211 `remove-agent-postgres-mcp`, which superseded demoted feature 193).
 
 ## Reviewers
 

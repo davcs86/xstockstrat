@@ -23,6 +23,7 @@
   (UI BFF + agent), and the deployment topology (docker-compose + `.do/app*.yaml` + cert material).
   Expect a full (not `quick`) `/sdd-design` and a phased, no-flag-day rollout (see product-spec §
   Open Questions: permissive interim mode).
-- **Standalone**: no dependency on features 193/207/208/209. Feature 193's Out-of-Scope explicitly
-  lists "inter-service mTLS (DT-3)" as a separate design ticket.
+- **Standalone**: no dependency on features 207/208/209/211. The agent DB-tooling remediation (feature
+  211 `remove-agent-postgres-mcp`, which superseded demoted feature 193) explicitly scoped
+  "inter-service mTLS (DT-3)" out as a separate design ticket.
 - Created for pickup by another session per operator direction (Phase D security backlog).

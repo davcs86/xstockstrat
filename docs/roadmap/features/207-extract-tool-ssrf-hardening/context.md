@@ -13,9 +13,11 @@
   (`docs/reports/2026-09-16-trading-system-security-audit.md`). The agent SSRF is the "M-list"
   backlog item and is explicitly called out in the DT-2 remediation (§150): "fix the agent SSRF —
   `extract_*` follow redirects to caller-supplied URLs with no allowlist, reaching [internal]." It is
-  the prompt-injection **ingress** that feature 193 (`sysadmin-db-write-role`) repeatedly noted as
-  out-of-scope; 193 closes the DB-write egress, this closes the fetch ingress. The two are
-  independent — no ordering dependency between them.
+  the prompt-injection **ingress** left out of scope by the agent DB-tooling remediation. That
+  remediation is now feature 211 (`remove-agent-postgres-mcp`), which removes the `db_*` SQL egress;
+  this feature closes the fetch ingress. The two are independent — no ordering dependency. (Historical:
+  the DB remediation was originally feature 193, `sysadmin-db-write-role`, demoted 2026-09-26 in favor
+  of removal.)
 - **Not a dup of `093-fix-mcp-extract-credentials`**: 093 (launched) concerned credentials handling
   on the extract path; this feature concerns SSRF egress validation of the fetch target. Distinct
   scope — confirmed before allocating the number.

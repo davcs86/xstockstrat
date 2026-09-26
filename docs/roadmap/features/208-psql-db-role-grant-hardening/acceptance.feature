@@ -1,46 +1,40 @@
-Feature: psql-db-role-grant-hardening (least-privilege grants for the DB-tooling role)
-  As a platform operator, I want the xstockstrat_agent DB role restricted at the Postgres grant level
-  to only the relations it legitimately needs, so that an authenticated DB-tool session or a credential
-  leak cannot corrupt integrity-critical data or erase its own audit record.
+Feature: psql-db-role-grant-hardening (orphaned-role teardown + integrity-critical write audit)
+  As a platform operator, I want the orphaned xstockstrat_agent DB role removed once its consumer is
+  gone, and every remaining DB role unable to write the ledger, identity secrets, or config ciphertext
+  beyond its legitimate need, so that no dormant privileged identity lingers and no role can corrupt
+  integrity-critical data.
 
-  @AC-1 @FR-2
-  Scenario: The role cannot write to the append-only event ledger
-    Given a session connected as the xstockstrat_agent DB role
-    When it runs "INSERT INTO ledger.events (...) VALUES (...)" and separately "DELETE FROM ledger.events"
-    Then both statements are rejected by Postgres at the grant level (insufficient privilege)
-    And the event store is unchanged
+  @AC-1 @FR-1
+  Scenario: The orphaned xstockstrat_agent role is torn down
+    Given feature 211 has removed the agent's use of the xstockstrat_agent DB role
+    When the teardown migration is applied
+    Then the xstockstrat_agent role no longer exists (or holds zero privileges and is NOLOGIN, documented as such)
+    And attempting to connect/authenticate as xstockstrat_agent fails
 
   @AC-2 @FR-2
-  Scenario: The role cannot write identity credential / api-key tables
-    Given a session connected as the xstockstrat_agent DB role
-    When it attempts "UPDATE identity.api_keys SET ..." or "INSERT INTO identity.credentials (...)"
-    Then the statement is rejected by Postgres at the grant level
-    And no credential or api-key row is created or modified
+  Scenario: No remaining role can write the append-only event ledger beyond intent
+    Given the roles that remain after teardown
+    When each non-owner role attempts "INSERT INTO ledger.events (...)" and "DELETE FROM ledger.events"
+    Then Postgres rejects the write at the grant level for every role not legitimately required to write it
+    And the event store is unchanged
 
   @AC-3 @FR-2
-  Scenario: The role cannot read the config secret ciphertext column
-    Given a config secret row with is_secret=true whose value_encrypted holds AES-256-GCM ciphertext
-    When the xstockstrat_agent DB role runs "SELECT value_encrypted FROM config.config_entries WHERE ..."
-    Then Postgres rejects the read of the value_encrypted column at the grant level
-    And the ciphertext is not returned
+  Scenario: No remaining role can write identity secrets or read config ciphertext beyond intent
+    Given the roles that remain after teardown
+    When a non-owner role attempts "UPDATE identity.api_keys ..." and "SELECT value_encrypted FROM config.config_entries ..."
+    Then the write to identity secret tables is rejected at the grant level for non-owner roles
+    And the read of the value_encrypted ciphertext column is rejected for every role but the intended owner
 
-  @AC-4 @FR-3
-  Scenario: The role cannot tamper with its own audit sink
-    Given the psql-MCP durable audit sink (feature 193) contains an audit row for a prior statement
-    When the xstockstrat_agent DB role attempts to UPDATE or DELETE that audit row
-    Then Postgres rejects the modify/delete at the grant level
-    And the audit record remains intact
+  @AC-4 @FR-4
+  Scenario: Every live service role retains the DB access it needs
+    Given the connection-pool inventory in the root CLAUDE.md
+    When each still-active service connects and runs its normal workload after the teardown
+    Then no live service loses required read/write access
+    And only the orphaned xstockstrat_agent role was removed
 
-  @AC-5 @FR-1 @FR-4
-  Scenario: The role retains exactly the legitimate DML it needs and no DDL
-    Given the narrowed grant set is applied
-    When the xstockstrat_agent DB role runs a legitimate analytics-schema statement it is meant to run (e.g. an INSERT into an allowed analytics table)
-    Then that statement succeeds
-    And a "CREATE TABLE public.evil (id int)" by the same role is rejected at the grant level
-
-  @AC-6 @FR-5
-  Scenario: The grant matrix is idempotent and introspectable
-    Given the grants/revokes migration (or db-migrate.sh role block)
+  @AC-5 @FR-3
+  Scenario: The teardown and audit are idempotent and introspectable
+    Given the teardown / grant-tightening migration
     When it is applied twice in succession
     Then the second application completes without error (idempotent)
-    And an introspection query over information_schema.role_table_grants / pg_catalog reports the effective privilege set equals the intended least-privilege matrix
+    And an introspection query over pg_catalog / information_schema.role_table_grants reports that xstockstrat_agent is absent (or zero-privilege + NOLOGIN) and the integrity-critical write matrix for remaining roles matches the intended least-privilege set

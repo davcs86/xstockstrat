@@ -18,8 +18,9 @@
   (PYTHONPATH + BLAS/OMP pins only), severing `DATABASE_URL`/master-key inheritance
   (`tests/test_sandbox.py::TestSandboxEnvIsolation`). C-3/DT-1 extends containment to the network and
   filesystem dimensions and adds resource caps — the escape itself was left outstanding by C-4.
-- **Standalone**: no dependency on features 193/207/208. Feature 193's Out-of-Scope explicitly lists
-  "full sandbox OS-isolation (C-3 / DT-1)" as a separate design ticket.
+- **Standalone**: no dependency on features 207/208/211. The agent DB-tooling remediation (feature 211
+  `remove-agent-postgres-mcp`, which superseded demoted feature 193) explicitly scoped "full sandbox
+  OS-isolation (C-3 / DT-1)" out as a separate design ticket.
 - Key design fork (product-spec § Open Questions): hardened `subprocess`+`setrlimit`+namespace/
   capability-drop in-image vs a jailer (nsjail / bubblewrap / gVisor). Deployment feasibility under DO
   App Platform / docker-compose (added capabilities, seccomp) must be confirmed with the platform lead.
