@@ -116,7 +116,7 @@ export default function DataExplorerPage() {
           </p>
         </div>
 
-        <div className="flex flex-wrap items-end gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
           <div className="space-y-1">
             <Label htmlFor="de-symbol">Symbol</Label>
             <Combobox
@@ -130,7 +130,7 @@ export default function DataExplorerPage() {
                 placeholder="Symbol"
                 aria-label="Data Explorer symbol"
                 showTrigger={false}
-                className="w-40"
+                className="w-full sm:w-40"
               />
               <ComboboxContent>
                 <ComboboxEmpty>No matching symbols</ComboboxEmpty>
@@ -151,7 +151,7 @@ export default function DataExplorerPage() {
               type="date"
               value={startStr}
               onChange={(e) => setStartStr(e.target.value)}
-              className="w-40"
+              className="w-full sm:w-40"
             />
           </div>
           <div className="space-y-1">
@@ -161,7 +161,7 @@ export default function DataExplorerPage() {
               type="date"
               value={endStr}
               onChange={(e) => setEndStr(e.target.value)}
-              className="w-40"
+              className="w-full sm:w-40"
             />
           </div>
         </div>
@@ -219,7 +219,7 @@ function OhlcvTab({ symbol, start, end }: { symbol: string; start?: Date; end?: 
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between gap-2">
+      <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <CardTitle className="text-sm">
           Daily bars
           <span
@@ -234,6 +234,7 @@ function OhlcvTab({ symbol, start, end }: { symbol: string; start?: Date; end?: 
           size="sm"
           data-testid="de-bars-csv"
           disabled={bars.length === 0}
+          className="self-start"
           onClick={() =>
             downloadCsv(`${symbol}_1Day_${csvRangeTag(start, end)}.csv`, barsToCsv(bars))
           }
@@ -287,13 +288,15 @@ function OhlcvTab({ symbol, start, end }: { symbol: string; start?: Date; end?: 
                 </LineChart>
               </ChartContainer>
             </div>
-            <DataTable
-              columns={columns}
-              data={bars}
-              enablePagination
-              pageSize={25}
-              tableTestId="de-bars-table"
-            />
+            <div className="overflow-x-auto">
+              <DataTable
+                columns={columns}
+                data={bars}
+                enablePagination
+                pageSize={25}
+                tableTestId="de-bars-table"
+              />
+            </div>
           </>
         )}
         {query.hasNextPage && (
@@ -338,7 +341,7 @@ function SnapshotView({ symbol }: { symbol: string }) {
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between gap-2">
+      <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <CardTitle className="text-sm">
           Snapshot
           <span
@@ -358,6 +361,7 @@ function SnapshotView({ symbol }: { symbol: string }) {
           size="sm"
           data-testid="de-fund-csv"
           disabled={!fundamentals}
+          className="self-start"
           onClick={() =>
             fundamentals &&
             downloadCsv(`${symbol}_fundamentals_snapshot.csv`, snapshotToCsv(fundamentals))
@@ -445,7 +449,7 @@ function HistoricalView({ symbol, start, end }: { symbol: string; start?: Date; 
             Last refreshed: {fmtRefreshed(refreshed)}
           </span>
         </CardTitle>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Select value={periodType} onValueChange={(v) => setPeriodType(v as typeof periodType)}>
             <SelectTrigger className="w-32" aria-label="Period type">
               <SelectValue />
