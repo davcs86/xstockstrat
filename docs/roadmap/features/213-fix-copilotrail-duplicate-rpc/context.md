@@ -79,7 +79,7 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Result: 0 failures, 2 warnings (+2 notes). No Floor breach. Overlap: CLEAN (UI-only; `useOpportunities.ts`/`CopilotRail.tsx`/`opportunities.spec.ts` disjoint from all in-flight features; only reads `OpportunitySort`, re-numbers nothing).
 - Items carried into execution:
   - Step 1 W1 (C-10/C-14 ripple): [x] added a Codebase-Evidence note that the three non-CopilotRail ambient consumers (`WatchlistDetail:72`, `SignalReadiness:28`, `trader/positions/[symbol]:176`) consume the queue by symbol lookup, not ranked position → the `UNSPECIFIED`→`CONVICTION` shift is display-safe; folded into the Step-2 set-equality verification.
-  - Step 1 W2 (P-04/C-14/**F-10**): [ ] **scope-widening sign-off REQUIRED before any Step-1 write.** The design widens beyond the product-spec's "single-file, don't touch `useOpportunities`" boundary. F-10 forbids writing Step-1 code until the user's explicit sign-off is recorded here in `context.md`. PENDING at the consolidated 189/213 review gate.
+  - Step 1 W2 (P-04/C-14/**F-10**): [x] **scope-widening sign-off REQUIRED before any Step-1 write.** The design widens beyond the product-spec's "single-file, don't touch `useOpportunities`" boundary. F-10 forbids writing Step-1 code until the user's explicit sign-off is recorded here in `context.md`. PENDING at the consolidated 189/213 review gate.
   - Step 2: [x] no numeric coverage threshold — correct for `xstockstrat-ui` (e2e is the gate); documented. No action.
 
 ---
@@ -88,3 +88,29 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 
 - **User explicitly approved the robust fix** at the consolidated 189/213 review gate: change the shared `useOpportunities` `sort` parameter default (`UNSPECIFIED`→`CONVICTION`), widening beyond the product-spec's "single-file, don't touch the hook" boundary. This is the recorded sign-off F-10 requires before any Step-1 write. The rejected alternative (pin only CopilotRail) relocates the duplicate RPC to `/insights/watchlists` and `/trader/positions/[symbol]` and was declined.
 - Step-1 code writes are now unblocked.
+
+---
+
+## Session 2026-09-26 — sdd-execute (sequential; single-branch adaptation)
+
+Executed on `claude/pending-roadmap-features-9z01mn`; integration via shared PR #1191. UI tooling already present (189 install).
+
+### Step 1 — service: align the shared opportunity-sort default [done]
+- Changed `useOpportunities` `sort` param default `OpportunitySort.UNSPECIFIED`→`OpportunitySort.CONVICTION` (`src/hooks/useOpportunities.ts:27`); refreshed the stale CopilotRail cache comment (`src/components/copilot/CopilotRail.tsx:36`). All five callers now converge on the page's default page-1 key.
+- Files modified: `src/hooks/useOpportunities.ts`, `src/components/copilot/CopilotRail.tsx`
+- Deviations: scope-widened to the shared hook (signed off, F-10, prior session note).
+
+### Step 2 — test: @AC-1 single page-1 RPC regression [done]
+- Added the `Opportunities — single page-1 ListOpportunities RPC (feature 213 @AC-1)` describe to `e2e/insights/opportunities.spec.ts` (counting shim `route.fallback()`s to `mockOpportunities`). Red→green captured: pre-fix 2 RPCs (`UNSPECIFIED`+`CONVICTION`), post-fix 1. Full suite 36/36 green.
+- Files modified: `e2e/insights/opportunities.spec.ts`
+- Deviations: CI-equivalent e2e verification (Docker unavailable) — see Deviation Log.
+
+- Review-warning dispositions (from the sdd-review impl-spec note above):
+  - Step 1 W1 (ambient-consumer order-independence): [x] noted in spec Step 1 evidence + empirically confirmed (36/36 green, incl. sort tests).
+  - Step 1 W2 (F-10 scope-widening sign-off before write): [x] user signed off; recorded in the prior context session before any Step-1 edit.
+
+## Session 2026-09-26 — sdd-execute (213 complete)
+**Steps this session**: 1, 2
+**Progress**: 2 done / 2 total
+**Stopped at**: all complete (code-completed)
+**Next**: feature 211 (next in sequence)

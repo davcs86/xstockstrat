@@ -1,6 +1,6 @@
 # Implementation Spec: fix-copilotrail-duplicate-rpc
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-09-26
 **Feature**: `docs/roadmap/features/213-fix-copilotrail-duplicate-rpc/feature.md`
 **Total Steps**: 2
@@ -59,7 +59,7 @@ deviation from the product-spec's stated scope must be signed off by the user at
 
 ### Step 1 — service: align the shared opportunity-sort default so all page-1 consumers share one cache entry
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/hooks/useOpportunities.ts` — modify
@@ -138,7 +138,7 @@ RPCs) and passes post-change (one).
 
 ### Step 2 — test: @AC-1 regression — a single page-1 ListOpportunities RPC with CopilotRail mounted
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/opportunities.spec.ts` — modify
@@ -205,4 +205,7 @@ pre-Step-1 tree (page fires `CONVICTION`, CopilotRail fires `UNSPECIFIED` → tw
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### 2026-09-26 — Open Risk resolved (set/order unchanged); CI-equivalent e2e verification
+- **Open Risk (from design.md) RESOLVED**: the concern that `sort=UNSPECIFIED`→`CONVICTION` might change the returned opportunity *set* is cleared empirically — the **full `opportunities.spec.ts` suite (36 tests) passes** unchanged after the default flip, including the conviction-sort (`:304`), symbol-score-sort (`:314`), and server-order-authoritative (`:397`) tests. The mock sorts both `UNSPECIFIED` and `CONVICTION` by conviction grouping (`isExpirySort` false for both), so the set and order are identical; the three ambient consumers (Step 1 W1) consume by symbol lookup, not ranked position. No narrowing of the fix was needed.
+- **Red→green captured (P-06)**: pre-fix the regression observed **2** RPCs (`["OPPORTUNITY_SORT_UNSPECIFIED", "OPPORTUNITY_SORT_CONVICTION"]`); post-fix **1**. Full suite green (36 passed).
+- **Verification (CI-equivalent fallback)**: Docker e2e runner unavailable (no daemon); ran host-native in **CI mode** (`CI=1` — production build + widened test timeouts so the SSR-warmup step doesn't time out on cold `next dev`). `**Disposition**: CI-equivalent fallback.`
