@@ -2,7 +2,7 @@
 
 **Status**: `pending`
 **Created**: 2026-09-26
-**Feature**: `docs/roadmap/features/207-edgar-fundamentals-enrichment/feature.md`
+**Feature**: `docs/roadmap/features/211-edgar-fundamentals-enrichment/feature.md`
 **Total Steps**: 16
 **Feature Branch**: `feature/edgar-fundamentals-enrichment`
 
