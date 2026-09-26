@@ -273,3 +273,15 @@ Executing on `claude/pending-roadmap-features-9z01mn`; integration via shared PR
 - Added 3 tests: dual-currency CNY row (@AC-1, + native/USD-equity extras), USD-only regression, re-backfill determinism. `go test ./internal/edgar/...` green (all existing edgar tests still pass — aggregator refactor caused no regression). Lint via `go vet` + `gofmt` (golangci-lint fallback — see Deviation Log).
 - Files: `services/xstockstrat-marketdata/internal/edgar/edgar_client_test.go`
 - Deviations: golangci-lint→go vet/gofmt CI-equivalent fallback (Deviation Log). Red-before-green: the CNY-currency assertion is definitionally red against the pre-Step-2 hardcoded `Currency: "USD"` (old path returned "USD" unconditionally).
+
+### @AC-2 acceptance-wording sign-off (Step 5 gate)
+- **User signed off** on correcting @AC-2 to the **real FY2026 figures** (option "Real FY2026 numbers"). Edited the existing @AC-2 block (not a renumber, C-15): StockholdersEquity 153,796M USD / 1,060,886M CNY; total Liabilities 113,555M USD; financial debt = ConvertibleDebtNoncurrent ~8,098M USD → financial-debt D/E ~0.05 (vs the ~0.74 total-liabilities ratio); well below de_bad=2.0. Short/long-term borrowings ceased after FY2018/FY2019. @AC-3 (AXP) and @AC-4 (BABA dual-report) unchanged (validated as written).
+
+### Step 4 — service: financial-debt D/E tag allow-list + summation (FR-2) [done]
+- Extended `instantTags` with 7 us-gaap debt concepts (LongTermDebtNoncurrent/Current/LongTermDebt/DebtCurrent/ShortTermBorrowings/CommercialPaper/ConvertibleDebtNoncurrent); IFRS omitted (all filers us-gaap — Deviation Log). `buildPeriod` computes `total_debt` no-double-count (LTD noncurrent+current when either present, else aggregate LongTermDebt; + short-term/current/CP/convertible), replaces `liabilities/equity` D/E with `total_debt/equity` (native currency), stores `total_debt` in ExtraMetrics; leaves DebtToEquity nil when no debt tag present.
+- Files: `services/xstockstrat-marketdata/internal/edgar/edgar_client.go`
+
+### Step 5 — test: financial-debt D/E unit tests (@AC-2, @AC-3) [done]
+- @AC-2 wording corrected to real FY2026 figures (signed off, above). Added tests: BABA financial-debt D/E ~0.053 (@AC-2), AXP ~1.73 < de_bad 2.0 non-zero (@AC-3), AAPL no-double-count total_debt=98,657M (~1.34), no-debt-tag→nil. `go test ./internal/edgar/...` green; vet + gofmt clean.
+- Files: `services/xstockstrat-marketdata/internal/edgar/edgar_client_test.go`, `docs/roadmap/features/211-edgar-fundamentals-enrichment/acceptance.feature`
+- Deviations: golangci-lint→go vet/gofmt fallback (Deviation Log).

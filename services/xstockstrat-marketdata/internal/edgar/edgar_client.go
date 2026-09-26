@@ -167,6 +167,15 @@ var (
 		"Assets":                             "assets",
 		"CommonStockSharesOutstanding":       "shares",
 		"EntityCommonStockSharesOutstanding": "shares",
+		// Financial-debt line items (feature 211, FR-2) — us-gaap only; summed no-double-count in
+		// buildPeriod. All three acceptance filers report us-gaap (no IFRS tags — C-18).
+		"LongTermDebtNoncurrent":    "long_term_debt_noncurrent",
+		"LongTermDebtCurrent":       "long_term_debt_current",
+		"LongTermDebt":              "long_term_debt",
+		"DebtCurrent":               "debt_current",
+		"ShortTermBorrowings":       "short_term_borrowings",
+		"CommercialPaper":           "commercial_paper",
+		"ConvertibleDebtNoncurrent": "convertible_debt_noncurrent",
 	}
 )
 
@@ -396,9 +405,34 @@ func buildPeriod(symbol string, a *periodAgg) source.HistoricalFundamentalsPerio
 			p.ROE = &roe
 		}
 	}
-	if liab, ok := valIn(a, "liabilities", rowCurrency); ok {
-		if eq, ok2 := valIn(a, "stockholders_equity", rowCurrency); ok2 && eq != 0 {
-			de := liab / eq
+	// Financial-debt D/E (feature 211, FR-2): total_debt / equity, native currency, no double-count.
+	// LongTermDebtNoncurrent+Current when either is present (AAPL), else the aggregate LongTermDebt
+	// (AXP); plus short-term/current/commercial-paper/convertible. Nil (→ missing) when no debt tag
+	// is present — never a fabricated 0 (@AC-22 @feature-204).
+	addOpt := func(key string) (float64, bool) { return valIn(a, key, rowCurrency) }
+	sum := func(v float64, ok bool) float64 {
+		if ok {
+			return v
+		}
+		return 0
+	}
+	ltdNC, okNC := addOpt("long_term_debt_noncurrent")
+	ltdC, okC := addOpt("long_term_debt_current")
+	ltd, ltdOK := 0.0, false
+	if okNC || okC {
+		ltd, ltdOK = ltdNC+ltdC, true
+	} else if v, ok := addOpt("long_term_debt"); ok {
+		ltd, ltdOK = v, true
+	}
+	stb, okStb := addOpt("short_term_borrowings")
+	dc, okDc := addOpt("debt_current")
+	cp, okCp := addOpt("commercial_paper")
+	cd, okCd := addOpt("convertible_debt_noncurrent")
+	if ltdOK || okStb || okDc || okCp || okCd {
+		totalDebt := ltd + sum(stb, okStb) + sum(dc, okDc) + sum(cp, okCp) + sum(cd, okCd)
+		p.ExtraMetrics["total_debt"] = totalDebt
+		if eq, ok := valIn(a, "stockholders_equity", rowCurrency); ok && eq != 0 {
+			de := totalDebt / eq
 			p.DebtToEquity = &de
 		}
 	}

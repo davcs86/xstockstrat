@@ -201,7 +201,7 @@ cd services/xstockstrat-marketdata && GOWORK=off COVERPKGS=$(go list ./... | gre
 
 ### Step 4 — service: financial-debt D/E tag allow-list + summation (FR-2)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/edgar/edgar_client.go` — modify
@@ -237,7 +237,7 @@ cd services/xstockstrat-marketdata && GOWORK=off COVERPKGS=$(go list ./... | gre
 
 ### Step 5 — test: financial-debt D/E unit tests (@AC-2, @AC-3)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/edgar/edgar_client_test.go` — modify

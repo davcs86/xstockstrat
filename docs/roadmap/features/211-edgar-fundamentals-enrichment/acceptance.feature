@@ -11,10 +11,12 @@ Feature: edgar-fundamentals-enrichment
     And the reporting currency is no longer unconditionally "USD"
 
   @AC-2 @FR-2
+  # Figures corrected to the actual FY2026 filing (end 2026-03-31) via a direct SEC companyfacts
+  # fetch, 2026-09-26; operator sign-off recorded in context.md (feature 211 execution).
   Scenario: Debt-to-equity uses the financial-debt convention, not total liabilities
-    Given BABA's FY2026 filing reports total Liabilities of 714,121M, StockholdersEquity of 153,796M, and financial debt (long-term + short-term borrowings) of roughly 45,000M
+    Given BABA's FY2026 filing reports StockholdersEquity of 153,796M USD (1,060,886M CNY), total Liabilities of 113,555M USD, and financial debt (ConvertibleDebtNoncurrent, its short/long-term borrowings having ceased after FY2018/FY2019) of ~8,098M USD
     When the EDGAR ingester computes debt_to_equity for BABA FY2026
-    Then debt_to_equity is total_debt / equity in the financial-debt convention (on the order of 0.3, not 4.64)
+    Then debt_to_equity is total_debt / equity in the financial-debt convention (~0.05), not the total-liabilities ratio (~0.74)
     And debt_to_equity is well below the seeded formula band de_bad = 2.0
 
   @AC-3 @FR-2
