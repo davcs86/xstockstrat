@@ -281,10 +281,12 @@ message GetHistoricalFundamentalsRequest {
   google.protobuf.Timestamp range_start = 3;  // filter on period_end (inclusive); unset = open
   google.protobuf.Timestamp range_end = 4;    // filter on period_end (inclusive); unset = open
   repeated string period_types = 5;           // e.g. ["quarterly","annual"]; empty = both
+  xstockstrat.common.v1.PageRequest page = 6;  // feature 204 — composite-cursor pagination
 }
 
 message GetHistoricalFundamentalsResponse {
   repeated HistoricalFundamentalsPeriod periods = 1;
+  xstockstrat.common.v1.PageResponse pagination = 2;  // feature 204
 }
 
 message BackfillFundamentalsRequest {

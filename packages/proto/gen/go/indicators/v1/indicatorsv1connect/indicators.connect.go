@@ -57,6 +57,9 @@ const (
 	// IndicatorsServiceDeleteFormulaProcedure is the fully-qualified name of the IndicatorsService's
 	// DeleteFormula RPC.
 	IndicatorsServiceDeleteFormulaProcedure = "/xstockstrat.indicators.v1.IndicatorsService/DeleteFormula"
+	// IndicatorsServiceListFundamentalMetricsProcedure is the fully-qualified name of the
+	// IndicatorsService's ListFundamentalMetrics RPC.
+	IndicatorsServiceListFundamentalMetricsProcedure = "/xstockstrat.indicators.v1.IndicatorsService/ListFundamentalMetrics"
 )
 
 // IndicatorsServiceClient is a client for the xstockstrat.indicators.v1.IndicatorsService service.
@@ -80,6 +83,8 @@ type IndicatorsServiceClient interface {
 	// Delete a formula by ID
 	// Returns PERMISSION_DENIED if user_id does not match author
 	DeleteFormula(context.Context, *connect.Request[v1.DeleteFormulaRequest]) (*connect.Response[v1.DeleteFormulaResponse], error)
+	// List the available fundamental metrics for formula declarations (feature 205)
+	ListFundamentalMetrics(context.Context, *connect.Request[v1.ListFundamentalMetricsRequest]) (*connect.Response[v1.ListFundamentalMetricsResponse], error)
 }
 
 // NewIndicatorsServiceClient constructs a client for the
@@ -142,19 +147,26 @@ func NewIndicatorsServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			connect.WithSchema(indicatorsServiceMethods.ByName("DeleteFormula")),
 			connect.WithClientOptions(opts...),
 		),
+		listFundamentalMetrics: connect.NewClient[v1.ListFundamentalMetricsRequest, v1.ListFundamentalMetricsResponse](
+			httpClient,
+			baseURL+IndicatorsServiceListFundamentalMetricsProcedure,
+			connect.WithSchema(indicatorsServiceMethods.ByName("ListFundamentalMetrics")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // indicatorsServiceClient implements IndicatorsServiceClient.
 type indicatorsServiceClient struct {
-	computeIndicator *connect.Client[v1.ComputeIndicatorRequest, v1.ComputeIndicatorResponse]
-	executeFormula   *connect.Client[v1.ExecuteFormulaRequest, v1.ExecuteFormulaResponse]
-	listIndicators   *connect.Client[v1.ListIndicatorsRequest, v1.ListIndicatorsResponse]
-	registerFormula  *connect.Client[v1.RegisterFormulaRequest, v1.RegisterFormulaResponse]
-	getFormula       *connect.Client[v1.GetFormulaRequest, v1.FormulaDefinition]
-	listFormulas     *connect.Client[v1.ListFormulasRequest, v1.ListFormulasResponse]
-	updateFormula    *connect.Client[v1.UpdateFormulaRequest, v1.UpdateFormulaResponse]
-	deleteFormula    *connect.Client[v1.DeleteFormulaRequest, v1.DeleteFormulaResponse]
+	computeIndicator       *connect.Client[v1.ComputeIndicatorRequest, v1.ComputeIndicatorResponse]
+	executeFormula         *connect.Client[v1.ExecuteFormulaRequest, v1.ExecuteFormulaResponse]
+	listIndicators         *connect.Client[v1.ListIndicatorsRequest, v1.ListIndicatorsResponse]
+	registerFormula        *connect.Client[v1.RegisterFormulaRequest, v1.RegisterFormulaResponse]
+	getFormula             *connect.Client[v1.GetFormulaRequest, v1.FormulaDefinition]
+	listFormulas           *connect.Client[v1.ListFormulasRequest, v1.ListFormulasResponse]
+	updateFormula          *connect.Client[v1.UpdateFormulaRequest, v1.UpdateFormulaResponse]
+	deleteFormula          *connect.Client[v1.DeleteFormulaRequest, v1.DeleteFormulaResponse]
+	listFundamentalMetrics *connect.Client[v1.ListFundamentalMetricsRequest, v1.ListFundamentalMetricsResponse]
 }
 
 // ComputeIndicator calls xstockstrat.indicators.v1.IndicatorsService.ComputeIndicator.
@@ -197,6 +209,11 @@ func (c *indicatorsServiceClient) DeleteFormula(ctx context.Context, req *connec
 	return c.deleteFormula.CallUnary(ctx, req)
 }
 
+// ListFundamentalMetrics calls xstockstrat.indicators.v1.IndicatorsService.ListFundamentalMetrics.
+func (c *indicatorsServiceClient) ListFundamentalMetrics(ctx context.Context, req *connect.Request[v1.ListFundamentalMetricsRequest]) (*connect.Response[v1.ListFundamentalMetricsResponse], error) {
+	return c.listFundamentalMetrics.CallUnary(ctx, req)
+}
+
 // IndicatorsServiceHandler is an implementation of the xstockstrat.indicators.v1.IndicatorsService
 // service.
 type IndicatorsServiceHandler interface {
@@ -219,6 +236,8 @@ type IndicatorsServiceHandler interface {
 	// Delete a formula by ID
 	// Returns PERMISSION_DENIED if user_id does not match author
 	DeleteFormula(context.Context, *connect.Request[v1.DeleteFormulaRequest]) (*connect.Response[v1.DeleteFormulaResponse], error)
+	// List the available fundamental metrics for formula declarations (feature 205)
+	ListFundamentalMetrics(context.Context, *connect.Request[v1.ListFundamentalMetricsRequest]) (*connect.Response[v1.ListFundamentalMetricsResponse], error)
 }
 
 // NewIndicatorsServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -276,6 +295,12 @@ func NewIndicatorsServiceHandler(svc IndicatorsServiceHandler, opts ...connect.H
 		connect.WithSchema(indicatorsServiceMethods.ByName("DeleteFormula")),
 		connect.WithHandlerOptions(opts...),
 	)
+	indicatorsServiceListFundamentalMetricsHandler := connect.NewUnaryHandler(
+		IndicatorsServiceListFundamentalMetricsProcedure,
+		svc.ListFundamentalMetrics,
+		connect.WithSchema(indicatorsServiceMethods.ByName("ListFundamentalMetrics")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/xstockstrat.indicators.v1.IndicatorsService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case IndicatorsServiceComputeIndicatorProcedure:
@@ -294,6 +319,8 @@ func NewIndicatorsServiceHandler(svc IndicatorsServiceHandler, opts ...connect.H
 			indicatorsServiceUpdateFormulaHandler.ServeHTTP(w, r)
 		case IndicatorsServiceDeleteFormulaProcedure:
 			indicatorsServiceDeleteFormulaHandler.ServeHTTP(w, r)
+		case IndicatorsServiceListFundamentalMetricsProcedure:
+			indicatorsServiceListFundamentalMetricsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -333,4 +360,8 @@ func (UnimplementedIndicatorsServiceHandler) UpdateFormula(context.Context, *con
 
 func (UnimplementedIndicatorsServiceHandler) DeleteFormula(context.Context, *connect.Request[v1.DeleteFormulaRequest]) (*connect.Response[v1.DeleteFormulaResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.indicators.v1.IndicatorsService.DeleteFormula is not implemented"))
+}
+
+func (UnimplementedIndicatorsServiceHandler) ListFundamentalMetrics(context.Context, *connect.Request[v1.ListFundamentalMetricsRequest]) (*connect.Response[v1.ListFundamentalMetricsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.indicators.v1.IndicatorsService.ListFundamentalMetrics is not implemented"))
 }

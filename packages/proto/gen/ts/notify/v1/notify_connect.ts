@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { AcknowledgeAlertRequest, AcknowledgeAlertResponse, Alert, EmitAlertRequest, EmitAlertResponse, ListAlertsRequest, ListAlertsResponse, RegisterPushSubscriptionRequest, RegisterPushSubscriptionResponse, StreamAlertsRequest, UnregisterPushSubscriptionRequest, UnregisterPushSubscriptionResponse } from "./notify_pb.js";
+import { AcknowledgeAlertRequest, AcknowledgeAlertResponse, Alert, EmitAlertRequest, EmitAlertResponse, ListAlertsRequest, ListAlertsResponse, MarkAlertReadRequest, MarkAlertReadResponse, RegisterPushSubscriptionRequest, RegisterPushSubscriptionResponse, StreamAlertsRequest, UnregisterPushSubscriptionRequest, UnregisterPushSubscriptionResponse } from "./notify_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -58,6 +58,18 @@ export const NotifyService = {
       name: "ListAlerts",
       I: ListAlertsRequest,
       O: ListAlertsResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Mark one or more alerts read for the calling user (feature 203). Owner resolved from the
+     * propagated x-user-id header (C-03). Idempotent — re-marking preserves the original read_at.
+     *
+     * @generated from rpc xstockstrat.notify.v1.NotifyService.MarkAlertRead
+     */
+    markAlertRead: {
+      name: "MarkAlertRead",
+      I: MarkAlertReadRequest,
+      O: MarkAlertReadResponse,
       kind: MethodKind.Unary,
     },
     /**

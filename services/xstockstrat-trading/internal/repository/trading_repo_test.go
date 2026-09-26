@@ -150,6 +150,60 @@ func TestKnownBrokerOrderIDs_EmptyInputShortCircuits(t *testing.T) {
 	}
 }
 
+// TestNetFilledQtyBySymbol_SumsSignedAndDedups proves the feature-206 position-side grounding query:
+// BUY adds, SELL subtracts, deduped to the latest row per order_id (DISTINCT ON) so a multi-row
+// order is never double-counted, scoped by account_id + symbol = ANY($2).
+func TestNetFilledQtyBySymbol_SumsSignedAndDedups(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatalf("pgxmock.NewPool: %v", err)
+	}
+	defer mock.Close()
+
+	repo := &TradingRepo{db: mock}
+	rows := pgxmock.NewRows([]string{"symbol", "net"}).AddRow("AMAT", 10.0).AddRow("MSFT", -5.0)
+
+	mock.ExpectQuery(`(?s)SELECT symbol, SUM\(CASE WHEN side = 'sell' THEN -filled_qty ELSE filled_qty END\).*DISTINCT ON \(order_id\).*FROM trading\.orders.*WHERE account_id = \$1.*symbol = ANY\(\$2\).*ORDER BY order_id, created_at DESC.*GROUP BY symbol`).
+		WithArgs("acct-1", []string{"AMAT", "MSFT"}).
+		WillReturnRows(rows)
+
+	net, err := repo.NetFilledQtyBySymbol(context.Background(), "acct-1", []string{"AMAT", "MSFT"})
+	if err != nil {
+		t.Fatalf("NetFilledQtyBySymbol: %v", err)
+	}
+	if net["AMAT"] != 10.0 {
+		t.Errorf("AMAT net = %v, want 10", net["AMAT"])
+	}
+	if net["MSFT"] != -5.0 {
+		t.Errorf("MSFT net = %v, want -5 (net short)", net["MSFT"])
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet expectations: %v", err)
+	}
+}
+
+// TestNetFilledQtyBySymbol_EmptyInputShortCircuits proves no query is issued when no symbols diverge —
+// the common case (projection agrees with the broker) must not touch the DB.
+func TestNetFilledQtyBySymbol_EmptyInputShortCircuits(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatalf("pgxmock.NewPool: %v", err)
+	}
+	defer mock.Close()
+
+	repo := &TradingRepo{db: mock}
+	net, err := repo.NetFilledQtyBySymbol(context.Background(), "acct-1", nil)
+	if err != nil {
+		t.Fatalf("NetFilledQtyBySymbol: %v", err)
+	}
+	if len(net) != 0 {
+		t.Errorf("net = %v, want empty", net)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet expectations (a query was issued for empty input): %v", err)
+	}
+}
+
 // TestListSubmittedOrders_ExercisesIntentLateralJoin covers the third and final caller of
 // intentLateralJoinSQL — no filter args, but the same LATERAL-join ambiguity risk.
 func TestListSubmittedOrders_ExercisesIntentLateralJoin(t *testing.T) {

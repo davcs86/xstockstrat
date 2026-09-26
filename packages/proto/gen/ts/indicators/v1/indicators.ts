@@ -560,6 +560,22 @@ export interface DeleteFormulaResponse {
   success: boolean;
 }
 
+/** feature 205 — the fundamental-metrics catalog for formula authoring (declare + test). */
+export interface ListFundamentalMetricsRequest {
+}
+
+export interface FundamentalMetricInfo {
+  metric: FundamentalMetric;
+  /** snake_case key the sandbox `data[...]` global exposes (e.g. "pe_ratio") */
+  dataKey: string;
+  /** human-readable meaning */
+  meaning: string;
+}
+
+export interface ListFundamentalMetricsResponse {
+  metrics: FundamentalMetricInfo[];
+}
+
 function createBaseComputeIndicatorRequest(): ComputeIndicatorRequest {
   return { indicator: "", values: [], params: {}, range: undefined, symbol: "", timeframe: "" };
 }
@@ -3882,6 +3898,211 @@ export const DeleteFormulaResponse: MessageFns<DeleteFormulaResponse> = {
   },
 };
 
+function createBaseListFundamentalMetricsRequest(): ListFundamentalMetricsRequest {
+  return {};
+}
+
+export const ListFundamentalMetricsRequest: MessageFns<ListFundamentalMetricsRequest> = {
+  encode(_: ListFundamentalMetricsRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListFundamentalMetricsRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseListFundamentalMetricsRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(_: any): ListFundamentalMetricsRequest {
+    return {};
+  },
+
+  toJSON(_: ListFundamentalMetricsRequest): unknown {
+    const obj: any = {};
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ListFundamentalMetricsRequest>, I>>(base?: I): ListFundamentalMetricsRequest {
+    return ListFundamentalMetricsRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ListFundamentalMetricsRequest>, I>>(_: I): ListFundamentalMetricsRequest {
+    const message = createBaseListFundamentalMetricsRequest();
+    return message;
+  },
+};
+
+function createBaseFundamentalMetricInfo(): FundamentalMetricInfo {
+  return { metric: FundamentalMetric.FUNDAMENTAL_METRIC_UNSPECIFIED, dataKey: "", meaning: "" };
+}
+
+export const FundamentalMetricInfo: MessageFns<FundamentalMetricInfo> = {
+  encode(message: FundamentalMetricInfo, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.metric !== FundamentalMetric.FUNDAMENTAL_METRIC_UNSPECIFIED) {
+      writer.uint32(8).int32(fundamentalMetricToNumber(message.metric));
+    }
+    if (message.dataKey !== "") {
+      writer.uint32(18).string(message.dataKey);
+    }
+    if (message.meaning !== "") {
+      writer.uint32(26).string(message.meaning);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): FundamentalMetricInfo {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseFundamentalMetricInfo();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.metric = fundamentalMetricFromJSON(reader.int32());
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.dataKey = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.meaning = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): FundamentalMetricInfo {
+    return {
+      metric: isSet(object.metric)
+        ? fundamentalMetricFromJSON(object.metric)
+        : FundamentalMetric.FUNDAMENTAL_METRIC_UNSPECIFIED,
+      dataKey: isSet(object.dataKey)
+        ? globalThis.String(object.dataKey)
+        : isSet(object.data_key)
+        ? globalThis.String(object.data_key)
+        : "",
+      meaning: isSet(object.meaning) ? globalThis.String(object.meaning) : "",
+    };
+  },
+
+  toJSON(message: FundamentalMetricInfo): unknown {
+    const obj: any = {};
+    if (message.metric !== FundamentalMetric.FUNDAMENTAL_METRIC_UNSPECIFIED) {
+      obj.metric = fundamentalMetricToJSON(message.metric);
+    }
+    if (message.dataKey !== "") {
+      obj.dataKey = message.dataKey;
+    }
+    if (message.meaning !== "") {
+      obj.meaning = message.meaning;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<FundamentalMetricInfo>, I>>(base?: I): FundamentalMetricInfo {
+    return FundamentalMetricInfo.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<FundamentalMetricInfo>, I>>(object: I): FundamentalMetricInfo {
+    const message = createBaseFundamentalMetricInfo();
+    message.metric = object.metric ?? FundamentalMetric.FUNDAMENTAL_METRIC_UNSPECIFIED;
+    message.dataKey = object.dataKey ?? "";
+    message.meaning = object.meaning ?? "";
+    return message;
+  },
+};
+
+function createBaseListFundamentalMetricsResponse(): ListFundamentalMetricsResponse {
+  return { metrics: [] };
+}
+
+export const ListFundamentalMetricsResponse: MessageFns<ListFundamentalMetricsResponse> = {
+  encode(message: ListFundamentalMetricsResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.metrics) {
+      FundamentalMetricInfo.encode(v!, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListFundamentalMetricsResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseListFundamentalMetricsResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.metrics.push(FundamentalMetricInfo.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ListFundamentalMetricsResponse {
+    return {
+      metrics: globalThis.Array.isArray(object?.metrics)
+        ? object.metrics.map((e: any) => FundamentalMetricInfo.fromJSON(e))
+        : [],
+    };
+  },
+
+  toJSON(message: ListFundamentalMetricsResponse): unknown {
+    const obj: any = {};
+    if (message.metrics?.length) {
+      obj.metrics = message.metrics.map((e) => FundamentalMetricInfo.toJSON(e));
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ListFundamentalMetricsResponse>, I>>(base?: I): ListFundamentalMetricsResponse {
+    return ListFundamentalMetricsResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ListFundamentalMetricsResponse>, I>>(
+    object: I,
+  ): ListFundamentalMetricsResponse {
+    const message = createBaseListFundamentalMetricsResponse();
+    message.metrics = object.metrics?.map((e) => FundamentalMetricInfo.fromPartial(e)) || [];
+    return message;
+  },
+};
+
 /**
  * IndicatorsService — formula engine and sandboxed Python execution.
  * Sandbox timeout and memory limits are configured via xstockstrat-config.
@@ -3988,6 +4209,19 @@ export const IndicatorsServiceService = {
       Buffer.from(DeleteFormulaResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): DeleteFormulaResponse => DeleteFormulaResponse.decode(value),
   },
+  /** List the available fundamental metrics for formula declarations (feature 205) */
+  listFundamentalMetrics: {
+    path: "/xstockstrat.indicators.v1.IndicatorsService/ListFundamentalMetrics" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ListFundamentalMetricsRequest): Buffer =>
+      Buffer.from(ListFundamentalMetricsRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ListFundamentalMetricsRequest => ListFundamentalMetricsRequest.decode(value),
+    responseSerialize: (value: ListFundamentalMetricsResponse): Buffer =>
+      Buffer.from(ListFundamentalMetricsResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ListFundamentalMetricsResponse =>
+      ListFundamentalMetricsResponse.decode(value),
+  },
 } as const;
 
 export interface IndicatorsServiceServer extends UntypedServiceImplementation {
@@ -4016,6 +4250,8 @@ export interface IndicatorsServiceServer extends UntypedServiceImplementation {
    * Returns PERMISSION_DENIED if user_id does not match author
    */
   deleteFormula: handleUnaryCall<DeleteFormulaRequest, DeleteFormulaResponse>;
+  /** List the available fundamental metrics for formula declarations (feature 205) */
+  listFundamentalMetrics: handleUnaryCall<ListFundamentalMetricsRequest, ListFundamentalMetricsResponse>;
 }
 
 export interface IndicatorsServiceClient extends Client {
@@ -4155,6 +4391,22 @@ export interface IndicatorsServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: DeleteFormulaResponse) => void,
+  ): ClientUnaryCall;
+  /** List the available fundamental metrics for formula declarations (feature 205) */
+  listFundamentalMetrics(
+    request: ListFundamentalMetricsRequest,
+    callback: (error: ServiceError | null, response: ListFundamentalMetricsResponse) => void,
+  ): ClientUnaryCall;
+  listFundamentalMetrics(
+    request: ListFundamentalMetricsRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ListFundamentalMetricsResponse) => void,
+  ): ClientUnaryCall;
+  listFundamentalMetrics(
+    request: ListFundamentalMetricsRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ListFundamentalMetricsResponse) => void,
   ): ClientUnaryCall;
 }
 

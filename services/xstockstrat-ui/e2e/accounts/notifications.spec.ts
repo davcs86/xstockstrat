@@ -88,3 +88,46 @@ test.describe('push notifications page', () => {
     await expect(page.getByRole('switch', { name: 'Enable push notifications' })).toBeVisible();
   });
 });
+
+test.describe('alert inbox (feature 203)', () => {
+  const MARK_READ = '/trader/api/xstockstrat.notify.v1.NotifyService/MarkAlertRead';
+
+  test('@AC-6 renders alerts with severity badge, module (category), body, and an unread indicator', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await page.goto('/accounts/notifications');
+    await expect(page.getByTestId('alert-inbox-list')).toBeVisible({ timeout: 10000 });
+    // Module (category) and body are surfaced for every alert (AC-6: level/module/body/unread).
+    await expect(page.getByTestId('alert-module').first()).toBeVisible();
+    await expect(page.getByTestId('alert-body').first()).toBeVisible();
+    // A severity badge is rendered (level).
+    await expect(page.locator('span[data-slot="badge"]').first()).toBeVisible();
+    // An unread alert shows the unread dot indicator.
+    await expect(page.getByLabel('Unread', { exact: true }).first()).toBeVisible();
+  });
+
+  test('@AC-6 displays the server-side unread count', async ({ page }) => {
+    await addAuthCookie(page);
+    await page.goto('/accounts/notifications');
+    // MOCK_UNREAD_COUNT = 2 (two of the three mock alerts are unread).
+    await expect(page.getByLabel('Unread count')).toHaveText('2 unread');
+  });
+
+  test('@AC-1 Mark read calls MarkAlertRead with the alert id', async ({ page }) => {
+    await addAuthCookie(page);
+    let markReadIds: string[] | undefined;
+    await page.route('**' + MARK_READ, async (route) => {
+      markReadIds = route.request().postDataJSON()?.alertIds;
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+    });
+    await page.goto('/accounts/notifications');
+    await expect(page.getByTestId('alert-inbox-list')).toBeVisible({ timeout: 10000 });
+    // Per-alert "Mark read" renders only on unread rows; click the first.
+    await page
+      .getByRole('button', { name: /^Mark notification .* read$/ })
+      .first()
+      .click();
+    await expect.poll(() => markReadIds?.length ?? 0).toBeGreaterThan(0);
+  });
+});

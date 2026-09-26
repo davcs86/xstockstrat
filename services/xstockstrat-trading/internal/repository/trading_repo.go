@@ -142,6 +142,45 @@ func (r *TradingRepo) KnownBrokerOrderIDs(ctx context.Context, accountID string,
 	return known, rows.Err()
 }
 
+// NetFilledQtyBySymbol returns the platform's own net filled quantity per symbol for an account,
+// summed from trading.orders (BUY +filled_qty, SELL -filled_qty). Deduped to the latest row per
+// order_id — the hypertable PK is (order_id, created_at) and UpsertOrder mints a fresh created_at on
+// a nil CreatedAt, so one logical order may hold >1 row and a naive SUM would double-count. Empty
+// input returns empty, no query.
+func (r *TradingRepo) NetFilledQtyBySymbol(ctx context.Context, accountID string, symbols []string) (map[string]float64, error) {
+	net := make(map[string]float64, len(symbols))
+	if len(symbols) == 0 {
+		return net, nil
+	}
+	rows, err := r.db.Query(ctx, `
+		SELECT symbol, SUM(CASE WHEN side = 'sell' THEN -filled_qty ELSE filled_qty END)
+		FROM (
+			SELECT DISTINCT ON (order_id) order_id, symbol, side, filled_qty
+			FROM trading.orders
+			WHERE account_id = $1
+			  AND symbol = ANY($2)
+			ORDER BY order_id, created_at DESC
+		) latest
+		GROUP BY symbol
+	`, accountID, symbols)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var (
+			symbol string
+			qty    float64
+		)
+		if err := rows.Scan(&symbol, &qty); err != nil {
+			return nil, err
+		}
+		net[symbol] = qty
+	}
+	return net, rows.Err()
+}
+
 // ListOrders returns orders filtered by optional userID, status, tradingMode, and strategyID.
 func (r *TradingRepo) ListOrders(
 	ctx context.Context,

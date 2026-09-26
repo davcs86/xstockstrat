@@ -99,3 +99,91 @@
   - Step 6: ⚠ TDD marked "red-green required" but step is a pure DRY extraction with no new behavior; existing E2E suffices (C-08/P-06) — [x] addressed — changed TDD to N/A with rationale (pure move-only refactor, existing E2E covers regression)
   - Step 7: ⚠ Instructions verbose but complete (advisory) — [x] accepted — verbose instructions justified by step scope; no change needed
 - Overlap findings: CLEAN — file-level WARN on `mock-backend.ts` and `INVENTORY.md` (shared with features 187, 188, 202, 204, 205; routine merge-conflict risk, no FAIL-level collision)
+
+## Session 2026-09-24 — sdd-execute (sequential)
+
+Feature 2 of the 202→205 sequential run (one integration PR per feature; no checkpoints unless
+blockers). Branch `feature/alert-read-unread-persistence` off `main-dev`. Toolchain persisted from the
+202 session (host-native buf 1.72.0 + pinned plugins, go1.27, golangci-lint v2.13.1@go1.27, node/pnpm).
+Docker daemon not running this session — not needed (additive proto → host-native codegen; e2e via
+CI-mode host harness).
+
+### Step 1 — proto: read fields + unread filter/count + MarkAlertRead RPC [done]
+- Additive to `notify.proto`: `Alert.read=13`/`read_at=14`, `ListAlertsRequest.unread_only=5`,
+  `ListAlertsResponse.unread_count=3`, `MarkAlertReadRequest{alert_ids}`/`MarkAlertReadResponse{}`,
+  `rpc MarkAlertRead`. Owner resolved from `x-user-id` (C-03).
+- Verification: `buf lint` clean; `buf breaking --against main-dev` exit 0 (non-breaking, additive).
+- Files modified: `packages/proto/notify/v1/notify.proto`
+- Deviations: none.
+
+### Step 2 — proto-gen: regenerate stubs [done]
+- Host-native `./scripts/buf-gen.sh`. notify Go/TS/Python stubs carry `Alert.Read`/`ReadAt`,
+  `ListAlertsRequest.UnreadOnly`, `ListAlertsResponse.UnreadCount`, and the `MarkAlertRead` RPC.
+  Reverted the recurring host-vs-CI gofmt whitespace drift in `analysis.pb.go` (fails.md 2026-09-24);
+  diff scoped to `notify/v1`.
+- Files modified: `packages/proto/gen/{go,python,ts}/notify/v1/**`
+- Deviations: analysis.pb.go drift revert (same as 202 Step 2; recurring).
+
+### Step 3 — migration: notify.alert_reads table [done]
+- Created `003_alert_reads.{up,down}.sql`: `alert_reads(alert_id UUID, user_id TEXT, read_at TIMESTAMPTZ
+  DEFAULT NOW(), PK(alert_id,user_id))`. No secondary index, no FK (design.md). Down drops the table.
+- Verification: offline (up CREATE ↔ down DROP; next NNN=003 after 002). Live apply deferred to CI/deploy.
+- Files modified: `services/xstockstrat-notify/migrations/003_alert_reads.{up,down}.sql`
+- Deviations: none.
+
+### Step 4 — service: MarkAlertRead handler + enriched ListAlerts (notify) [done]
+- `notifyServiceImpl.ts`: added `markAlertRead` (owner from x-user-id header w/ body fallback; per-row
+  `JOIN notify.alerts` phantom suppression; `ON CONFLICT DO NOTHING` idempotency; code 3 when no caller;
+  empty alertIds → no SQL). Rewrote `listAlerts` (header identity, LEFT JOIN alert_reads,
+  `req.unreadOnly` filter, `Promise.all` main+count, `limit = req.limit > 0 ? : 50`). Extended
+  `rowToAlert` with `read`/`readAt`.
+- Verification: `pnpm run lint` 0 errors (211 pre-existing any-warnings).
+- Files modified: `services/xstockstrat-notify/src/grpc/notifyServiceImpl.ts`
+- Deviations: none (serviceDefinition.ts unchanged — RPCs auto-register from generated code, per spec).
+
+### Step 5 — test: notify MarkAlertRead + ListAlerts read-state unit tests [done]
+- Added `markAlertRead` (AC-1 insert+JOIN, AC-3 ON CONFLICT idempotent, code-3 no-caller, empty→no-SQL)
+  and `listAlerts — read state` (AC-1/AC-2/AC-5 rowToAlert read/ack independence, AC-4 unread_only SQL,
+  unread_count, limit-0→50) suites + a `seqPool` helper for the two-query Promise.all.
+- **TDD red→green**: RED — tsc failed (`markAlertRead` absent, `rowToAlert` missing `read`/`readAt`,
+  generated Alert now requires `read`). GREEN — 63/63 tests pass, coverage 90.78% lines (≥40%).
+  Covers AC-1/AC-2/AC-3/AC-4/AC-5.
+- Files modified: `services/xstockstrat-notify/src/__tests__/notifyServiceImpl.test.ts`
+- Deviations: none.
+
+### Steps 6-10 — UI: alertShared, AlertInbox, server-count badge, e2e [done]
+- **Step 6** (`alertShared.ts` + AlertStream import): extracted `severityLabel`/`severityVariant` (DRY,
+  TDD N/A move-only).
+- **Step 7** (`AlertInbox.tsx` + notifications `page.tsx`): inbox lists alerts with severity badge,
+  module (category), body, unread dot, per-row + bulk "Mark read" (→ `markAlertRead` then refetch),
+  server `unreadCount` badge; Skeleton loading, EmptyState empty, tokens-only, accessible names (C-17).
+- **Step 8** (`AlertStream.tsx` + `traderBff.ts` markAlertRead forward): badge now shows the server-side
+  `unreadCount` (`listAlerts({limit:1})` on mount), replacing the client-side stream length. Dropped
+  design.md's optimistic increment — see Deviation Log (AC-2 determinism vs the mock's stream replay).
+- **Step 9** (`e2e/fixtures/alerts.ts` + `mock-backend.ts` + `INVENTORY.md`): centralized alert fixtures
+  with read/unread variants; listAlerts returns `ALERT_LIST_WITH_READ_STATE` + `MOCK_UNREAD_COUNT=2`;
+  added a `markAlertRead` mock handler.
+- **Step 10** (`notifications.spec.ts` + `alert-stream.spec.ts`): AC-6 inbox (badge/module/body/unread +
+  server count), AC-1 mark-read intercept, AC-2 server-count badge, and the local Clear-all behavior.
+- **TDD**: Steps 7/8/10 form one UI cycle. RED — before Step 7 there was no inbox (AC-6/AC-1 specs fail)
+  and the badge showed the stream length 3 (AC-2 spec fails). GREEN — `pnpm build` type-clean (app+e2e);
+  **13/13** alert-stream + notifications e2e specs pass (CI-mode host harness). Covers AC-1/AC-2/AC-6
+  (AC-4 UI filter not built — covered by Step 5 unit test; Deviation Log).
+- Files: `src/lib/alertShared.ts`, `src/components/trader/AlertStream.tsx`, `src/lib/traderBff.ts`,
+  `src/app/accounts/notifications/{AlertInbox.tsx,page.tsx}`, `e2e/fixtures/alerts.ts`,
+  `e2e/mock-backend.ts`, `e2e/fixtures/INVENTORY.md`, `e2e/{accounts/notifications,trader/alert-stream}.spec.ts`
+
+## Session 2026-09-24 — sdd-execute (sequential) — code-completed
+**Steps**: 1–10 (all done). notify unit 63/63 @ 90.78% lines; UI e2e 13/13 (alert-stream + notifications).
+**C-16 promotion**: AC-1..AC-5 → services/xstockstrat-notify/acceptance/alert-read-unread-persistence.feature;
+  AC-6 → services/xstockstrat-ui/acceptance/alert-read-unread-persistence.feature (both @feature-203).
+**Docker codegen**: retried at operator request — Docker Hub still 429s the golang:1.27-trixie base pull
+  (persistent per-IP anonymous limit); host-native codegen path used, target-service stubs verified clean.
+**Next**: integration PR feature/alert-read-unread-persistence → main-dev.
+
+## Session 2026-09-25 (CI: feature status automation)
+
+- Promotion PR #1177 merged to main
+- Feature promoted and committed: 0be58cbe339fd3bf47b6b23464c3af53ae402b78
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-09-25

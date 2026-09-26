@@ -63,6 +63,17 @@ export type Alert = Message<"xstockstrat.notify.v1.Alert"> & {
      * @generated from field: string correlation_id = 12;
      */
     correlationId: string;
+    /**
+     * Per-user read state (feature 203). Populated for the calling user on ListAlerts via a LEFT JOIN
+     * on notify.alert_reads; StreamAlerts leaves read=false (proto3 default). read_at is absent when unread.
+     *
+     * @generated from field: bool read = 13;
+     */
+    read: boolean;
+    /**
+     * @generated from field: google.protobuf.Timestamp read_at = 14;
+     */
+    readAt?: Timestamp | undefined;
 };
 /**
  * Describes the message xstockstrat.notify.v1.Alert.
@@ -217,6 +228,12 @@ export type ListAlertsRequest = Message<"xstockstrat.notify.v1.ListAlertsRequest
      * @generated from field: string page_token = 4;
      */
     pageToken: string;
+    /**
+     * feature 203 — when true, return only alerts the calling user has not read
+     *
+     * @generated from field: bool unread_only = 5;
+     */
+    unreadOnly: boolean;
 };
 /**
  * Describes the message xstockstrat.notify.v1.ListAlertsRequest.
@@ -235,12 +252,43 @@ export type ListAlertsResponse = Message<"xstockstrat.notify.v1.ListAlertsRespon
      * @generated from field: string next_page_token = 2;
      */
     nextPageToken: string;
+    /**
+     * feature 203 — count of the calling user's unread alerts
+     *
+     * @generated from field: int32 unread_count = 3;
+     */
+    unreadCount: number;
 };
 /**
  * Describes the message xstockstrat.notify.v1.ListAlertsResponse.
  * Use `create(ListAlertsResponseSchema)` to create a new message.
  */
 export declare const ListAlertsResponseSchema: GenMessage<ListAlertsResponse>;
+/**
+ * @generated from message xstockstrat.notify.v1.MarkAlertReadRequest
+ */
+export type MarkAlertReadRequest = Message<"xstockstrat.notify.v1.MarkAlertReadRequest"> & {
+    /**
+     * Owner resolved from the propagated x-user-id header (C-03), never the body.
+     *
+     * @generated from field: repeated string alert_ids = 1;
+     */
+    alertIds: string[];
+};
+/**
+ * Describes the message xstockstrat.notify.v1.MarkAlertReadRequest.
+ * Use `create(MarkAlertReadRequestSchema)` to create a new message.
+ */
+export declare const MarkAlertReadRequestSchema: GenMessage<MarkAlertReadRequest>;
+/**
+ * @generated from message xstockstrat.notify.v1.MarkAlertReadResponse
+ */
+export type MarkAlertReadResponse = Message<"xstockstrat.notify.v1.MarkAlertReadResponse"> & {};
+/**
+ * Describes the message xstockstrat.notify.v1.MarkAlertReadResponse.
+ * Use `create(MarkAlertReadResponseSchema)` to create a new message.
+ */
+export declare const MarkAlertReadResponseSchema: GenMessage<MarkAlertReadResponse>;
 /**
  * Web Push subscription registration (feature 165 — pwa-notifications).
  *
@@ -400,6 +448,17 @@ export declare const NotifyService: GenService<{
         methodKind: "unary";
         input: typeof ListAlertsRequestSchema;
         output: typeof ListAlertsResponseSchema;
+    };
+    /**
+     * Mark one or more alerts read for the calling user (feature 203). Owner resolved from the
+     * propagated x-user-id header (C-03). Idempotent — re-marking preserves the original read_at.
+     *
+     * @generated from rpc xstockstrat.notify.v1.NotifyService.MarkAlertRead
+     */
+    markAlertRead: {
+        methodKind: "unary";
+        input: typeof MarkAlertReadRequestSchema;
+        output: typeof MarkAlertReadResponseSchema;
     };
     /**
      * Register (or upsert) a Web Push subscription for the calling user.

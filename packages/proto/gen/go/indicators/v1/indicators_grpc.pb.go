@@ -19,14 +19,15 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	IndicatorsService_ComputeIndicator_FullMethodName = "/xstockstrat.indicators.v1.IndicatorsService/ComputeIndicator"
-	IndicatorsService_ExecuteFormula_FullMethodName   = "/xstockstrat.indicators.v1.IndicatorsService/ExecuteFormula"
-	IndicatorsService_ListIndicators_FullMethodName   = "/xstockstrat.indicators.v1.IndicatorsService/ListIndicators"
-	IndicatorsService_RegisterFormula_FullMethodName  = "/xstockstrat.indicators.v1.IndicatorsService/RegisterFormula"
-	IndicatorsService_GetFormula_FullMethodName       = "/xstockstrat.indicators.v1.IndicatorsService/GetFormula"
-	IndicatorsService_ListFormulas_FullMethodName     = "/xstockstrat.indicators.v1.IndicatorsService/ListFormulas"
-	IndicatorsService_UpdateFormula_FullMethodName    = "/xstockstrat.indicators.v1.IndicatorsService/UpdateFormula"
-	IndicatorsService_DeleteFormula_FullMethodName    = "/xstockstrat.indicators.v1.IndicatorsService/DeleteFormula"
+	IndicatorsService_ComputeIndicator_FullMethodName       = "/xstockstrat.indicators.v1.IndicatorsService/ComputeIndicator"
+	IndicatorsService_ExecuteFormula_FullMethodName         = "/xstockstrat.indicators.v1.IndicatorsService/ExecuteFormula"
+	IndicatorsService_ListIndicators_FullMethodName         = "/xstockstrat.indicators.v1.IndicatorsService/ListIndicators"
+	IndicatorsService_RegisterFormula_FullMethodName        = "/xstockstrat.indicators.v1.IndicatorsService/RegisterFormula"
+	IndicatorsService_GetFormula_FullMethodName             = "/xstockstrat.indicators.v1.IndicatorsService/GetFormula"
+	IndicatorsService_ListFormulas_FullMethodName           = "/xstockstrat.indicators.v1.IndicatorsService/ListFormulas"
+	IndicatorsService_UpdateFormula_FullMethodName          = "/xstockstrat.indicators.v1.IndicatorsService/UpdateFormula"
+	IndicatorsService_DeleteFormula_FullMethodName          = "/xstockstrat.indicators.v1.IndicatorsService/DeleteFormula"
+	IndicatorsService_ListFundamentalMetrics_FullMethodName = "/xstockstrat.indicators.v1.IndicatorsService/ListFundamentalMetrics"
 )
 
 // IndicatorsServiceClient is the client API for IndicatorsService service.
@@ -55,6 +56,8 @@ type IndicatorsServiceClient interface {
 	// Delete a formula by ID
 	// Returns PERMISSION_DENIED if user_id does not match author
 	DeleteFormula(ctx context.Context, in *DeleteFormulaRequest, opts ...grpc.CallOption) (*DeleteFormulaResponse, error)
+	// List the available fundamental metrics for formula declarations (feature 205)
+	ListFundamentalMetrics(ctx context.Context, in *ListFundamentalMetricsRequest, opts ...grpc.CallOption) (*ListFundamentalMetricsResponse, error)
 }
 
 type indicatorsServiceClient struct {
@@ -145,6 +148,16 @@ func (c *indicatorsServiceClient) DeleteFormula(ctx context.Context, in *DeleteF
 	return out, nil
 }
 
+func (c *indicatorsServiceClient) ListFundamentalMetrics(ctx context.Context, in *ListFundamentalMetricsRequest, opts ...grpc.CallOption) (*ListFundamentalMetricsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListFundamentalMetricsResponse)
+	err := c.cc.Invoke(ctx, IndicatorsService_ListFundamentalMetrics_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // IndicatorsServiceServer is the server API for IndicatorsService service.
 // All implementations should embed UnimplementedIndicatorsServiceServer
 // for forward compatibility.
@@ -171,6 +184,8 @@ type IndicatorsServiceServer interface {
 	// Delete a formula by ID
 	// Returns PERMISSION_DENIED if user_id does not match author
 	DeleteFormula(context.Context, *DeleteFormulaRequest) (*DeleteFormulaResponse, error)
+	// List the available fundamental metrics for formula declarations (feature 205)
+	ListFundamentalMetrics(context.Context, *ListFundamentalMetricsRequest) (*ListFundamentalMetricsResponse, error)
 }
 
 // UnimplementedIndicatorsServiceServer should be embedded to have
@@ -203,6 +218,9 @@ func (UnimplementedIndicatorsServiceServer) UpdateFormula(context.Context, *Upda
 }
 func (UnimplementedIndicatorsServiceServer) DeleteFormula(context.Context, *DeleteFormulaRequest) (*DeleteFormulaResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeleteFormula not implemented")
+}
+func (UnimplementedIndicatorsServiceServer) ListFundamentalMetrics(context.Context, *ListFundamentalMetricsRequest) (*ListFundamentalMetricsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListFundamentalMetrics not implemented")
 }
 func (UnimplementedIndicatorsServiceServer) testEmbeddedByValue() {}
 
@@ -368,6 +386,24 @@ func _IndicatorsService_DeleteFormula_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _IndicatorsService_ListFundamentalMetrics_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListFundamentalMetricsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(IndicatorsServiceServer).ListFundamentalMetrics(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: IndicatorsService_ListFundamentalMetrics_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(IndicatorsServiceServer).ListFundamentalMetrics(ctx, req.(*ListFundamentalMetricsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // IndicatorsService_ServiceDesc is the grpc.ServiceDesc for IndicatorsService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -406,6 +442,10 @@ var IndicatorsService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeleteFormula",
 			Handler:    _IndicatorsService_DeleteFormula_Handler,
+		},
+		{
+			MethodName: "ListFundamentalMetrics",
+			Handler:    _IndicatorsService_ListFundamentalMetrics_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -1,13 +1,13 @@
 # MCP Tools Reference — xstockstrat-agent
 
-Complete reference for the forty-nine tools exposed by `xstockstrat-agent` via the Model Context Protocol (MCP).
+Complete reference for the fifty-two tools exposed by `xstockstrat-agent` via the Model Context Protocol (MCP).
 Connection setup → `services/xstockstrat-agent/claude_mcp_config.json`.
 
 The agent also exposes one MCP **prompt** — `list_correlation_guide` (feature 197), the consolidated
 guide for joining the account/position/opportunity/strategy list responses (see § Correlating list
 responses under Usage Patterns) — and a server-level `instructions` string returned in the MCP
 `initialize` result carrying the same join summary. A prompt is not a tool; the tool count stays
-forty-nine. **This runbook is a maintainer reference: a wire-connected agent cannot read it — the
+fifty-two. **This runbook is a maintainer reference: a wire-connected agent cannot read it — the
 correlation guidance reaches consumer agents through the tool docstrings, the `initialize`
 instructions, and the `list_correlation_guide` prompt, which this file only mirrors for parity.**
 
@@ -42,7 +42,7 @@ directly on port 9000.
 
 **Direct (local):** `http://localhost:9000`
 
-**Tool catalog (UI display).** `GET /api/tools` returns the same forty-nine tools' `name`,
+**Tool catalog (UI display).** `GET /api/tools` returns the same fifty-two tools' `name`,
 `description`, and `inputSchema` as JSON — **unauthenticated**, since it only describes
 capabilities (the same data documented below), never user data or credentials. It powers the
 `xstockstrat-ui` `/accounts/mcp-tools` page (via the `/accounts/api/mcp-tools` BFF route) so users
@@ -575,6 +575,7 @@ Registers, updates, or deletes a custom formula definition in `xstockstrat-indic
 | `parameters` | `list` | No | Typed parameter definitions `{name, type, default, description, required, min, max}` |
 | `outputs` | `list` | No | Declared secondary output series `{name, description}`; addressable in strategy rules as `<ref>.<name>`. The implicit `value` series is always present and must not be declared. |
 | `warmup_period` | `int` | No | Bars of warm-up before the formula's outputs are valid |
+| `fundamental_inputs` | `list[str]` | No | `FundamentalMetric` enum NAME-strings (e.g. `["FUNDAMENTAL_METRIC_PE_RATIO"]`); a non-empty list marks the formula fundamentals-only. Use `list_fundamental_metrics` for the valid catalog. |
 | `formula_id` | `string` | update/delete | Formula identifier |
 
 **Ownership is derived, not asserted (feature 111).** `author` (register) and the ownership identity checked on `update`/`delete` are both the OAuth-authenticated caller's own `user_id` from their verified claims — there is no `author`/`formula_author_user_id` parameter. A caller can no longer register a formula under someone else's identity (including the reserved `"system"` sentinel), or claim someone else's ownership to update/delete a formula; the indicators backend's own PERMISSION_DENIED check (stored `author` vs. `user_id` mismatch) now always compares against the real caller.
@@ -622,8 +623,9 @@ Fetches one custom formula's stored definition from `xstockstrat-indicators`.
 | `formula_id` | `string` | Yes | Formula identifier |
 
 **Return** — the formula in camelCase incl. `name`, `description`, `source`, `isPublic`,
-`parameters`, `outputs`, `warmupPeriod`, and `deleted` (true when soft-deleted). Use for safe
-read-modify-write: read, then `manage_formula(operation="update", …)` with only the changed fields.
+`parameters`, `outputs`, `warmupPeriod`, `fundamentalInputs` (FundamentalMetric enum NAME-strings),
+and `deleted` (true when soft-deleted). Use for safe read-modify-write: read, then
+`manage_formula(operation="update", …)` with only the changed fields.
 
 ---
 
@@ -638,7 +640,23 @@ Lists custom formula definitions from `xstockstrat-indicators`. Soft-deleted for
 | `author_filter` | `string` | No | If non-empty, restrict to formulas authored by this user id |
 | `include_public` | `bool` | No | Also include public formulas regardless of `author_filter` (default `true`) |
 
-**Return** — `{"formulas": [<formula in camelCase>, …]}`.
+**Return** — `{"formulas": [<formula in camelCase>, …]}`. Each formula includes `fundamentalInputs`
+(FundamentalMetric enum NAME-strings) when declared.
+
+---
+
+### `list_fundamental_metrics`
+
+Lists the fundamental-metrics catalog for formula authoring (read-only, feature 205). The single
+source of truth for the valid `manage_formula` `fundamental_inputs` values and the snake_case
+`test_formula` `input_data` keys.
+
+**Parameters** — none.
+
+**Return** — `{"metrics": [{ "metric", "dataKey", "meaning" }, …]}`, one entry per non-UNSPECIFIED
+`FundamentalMetric`: `metric` is the enum NAME-string (for `fundamental_inputs`), `dataKey` is the
+snake_case key a fundamentals formula reads via `data["<dataKey>"]` and that `test_formula`'s
+`input_data` uses, and `meaning` is a human-readable label.
 
 ---
 
@@ -829,7 +847,7 @@ Use before `manage_formula(operation="register", …)` to validate behavior.
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `source` | `string` | Yes | Python formula source (assign a `result` dict with a `value` key) |
-| `input_data` | `object` | No | Passed to the formula as `data` (e.g. `{"close": [1,2,3]}`) |
+| `input_data` | `object` | No | Passed to the formula as `data` (e.g. `{"close": [1,2,3]}`). A fundamentals-scoring formula reads snake_case data-keys (e.g. `{"pe_ratio": 12.5, "pb_ratio": 1.8}`) — see `list_fundamental_metrics` for the catalog. |
 | `input_params` | `object` | No | Parameter VALUES exposed as `params` |
 | `parameters` | `list` | No | Typed parameter DEFINITIONS to validate `input_params` for this run |
 | `timeout_ms` | `int` | No | `0` ⇒ configured sandbox timeout |
@@ -1318,6 +1336,63 @@ the backend returns an empty list (no data leakage).
 Returns `{"positions": [...], "next_page_token": "<str>"}` — same shape as `get_positions`.
 
 **Errors:** `ValueError` → `account_id` is empty; `RuntimeError` → no verified caller claims.
+
+---
+
+### `query_bars`
+
+Query stored **daily OHLCV bars** for a symbol from `xstockstrat-marketdata` (read-only, feature 204).
+Daily is the only requestable interval (feature 143) — `timeframe` defaults to and normalizes to
+`1Day`. Omitting `start_date` returns the newest page.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `symbol` | string | _(required)_ | Ticker to query |
+| `timeframe` | string | `"1Day"` | Normalized to `1d`; any other value is rejected |
+| `start_date` | string \| null | `null` | ISO-8601 range start; omit for the newest page |
+| `end_date` | string \| null | `null` | ISO-8601 range end |
+| `limit` | int | `500` | Bars per page; capped at **1000** |
+| `page_token` | string | `""` | Opaque token from a prior call's `next_page_token` |
+| `format` | `"json"` \| `"csv"` | `"json"` | Output shape (see below) |
+
+**Returns (`format="json"`):** `{"bars": [...], "next_page_token": "<str>", "last_refreshed": "<iso|null>"}`
+— each bar uses snake_case proto field names (`time`/`open`/`high`/`low`/`close`/`volume`/…); zero
+values may be absent (proto3). `last_refreshed` is the newest `bar.time` in the page (null when empty).
+
+**Returns (`format="csv"`):** a one-element list with an `EmbeddedResource` (`mimeType: text/csv`, URI
+`xstockstrat:///data-explorer/bars/<symbol>`) whose text has the header `time,open,high,low,close,volume`.
+
+**Errors:** `RuntimeError` → gRPC failure (mapped message) or no verified caller claims;
+`ValueError` → unknown `timeframe`.
+
+---
+
+### `query_fundamentals`
+
+Query a symbol's **fundamentals** from `xstockstrat-marketdata` (read-only, feature 204). `missing_metrics`
+(per snapshot / per period) names the canonical metrics the provider did not supply — **authoritative**,
+never inferred from a zero value (MARKETDATA-11).
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `symbol` | string | _(required)_ | Ticker to query |
+| `mode` | `"snapshot"` \| `"historical"` | `"snapshot"` | Latest cached snapshot, or point-in-time filings |
+| `period_types` | list[string] \| null | `null` | historical only — `["quarterly","annual"]`; empty = both |
+| `range_start` | string \| null | `null` | historical only — ISO-8601 `period_end ≥` filter |
+| `range_end` | string \| null | `null` | historical only — ISO-8601 `period_end ≤` filter |
+| `limit` | int | `50` | historical only — periods per page; capped at **50** |
+| `page_token` | string | `""` | historical only — token from a prior `next_page_token` |
+| `format` | `"json"` \| `"csv"` | `"json"` | Output shape (see below) |
+
+**Returns (`mode="snapshot"`, json):** `{"fundamentals": {...}, "last_refreshed": "<as_of|null>", "missing_metrics": [...]}`.
+
+**Returns (`mode="historical"`, json):** `{"periods": [...], "next_page_token": "<str>", "last_refreshed": "<max filed_date|null>", "missing_metrics": [...]}`
+— `missing_metrics` is the union across the returned periods; each period also carries its own list.
+
+**Returns (`format="csv"`):** a one-element list with an `EmbeddedResource` (`mimeType: text/csv`, URI
+`xstockstrat:///data-explorer/fundamentals/<symbol>`); cells for metrics in `missing_metrics` are blank.
+
+**Errors:** `RuntimeError` → gRPC failure or no verified caller claims; `ValueError` → unknown `mode`.
 
 ---
 

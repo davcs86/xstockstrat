@@ -3,6 +3,40 @@
 All production promotions from `main-dev` to `main` are recorded here.
 Each entry corresponds to one `main-dev → main` PR merge.
 
+## 2026-09-25
+
+### Summary
+1 commits, 0 feature merges since last promotion.
+
+---
+
+## 2026-09-25
+
+### Features
+- fix-reconciliation-false-halt: The broker-state reconciliation poller (`xstockstrat-trading` feature 102) auto-halts an account on a position-side `quantity_discrepancy` when `xstockstrat-portfolio.ListPositions` reads 0 for a symbol the broker actually holds from the platform's own filled order — a false halt.
+
+### Summary
+2 commits, 0 feature merges since last promotion.
+
+---
+
+## 2026-09-24
+
+### Features
+- alert-read-unread-persistence: Turn `xstockstrat-notify` alerts into a durable per-user notification inbox by adding a per-user **read/unread** state (distinct from the existing `acknowledged` ack), so each user tracks which alerts they have seen — including their own read state on broadcast alerts.
+- backfilled-data-queryable: Expose the platform's existing backfilled OHLCV bars and fundamentals data through a dedicated UI data-explorer page in the insights segment and new MCP agent tools, so users can query and analyze historical market data independently without having to run strategies or backtests.
+- formula-fundamental-inputs-authoring: Expose the fundamentals-formula capability (feature 201's `fundamental_inputs` / `FundamentalMetric`) to formula **authoring** on both the MCP and the UI: let an author declare a formula's fundamental inputs, see the declared inputs on read, discover the available fundamental-metric catalog, and test a fundamentals-scoring formula with real (symbol-prefilled, editable) fundamentals values — via the agent formula tools and the `/insights` FormulaEditor.
+
+### Proto Changes
+- indicators/v1/indicators.proto
+- marketdata/v1/marketdata.proto
+- notify/v1/notify.proto
+
+### Summary
+4 commits, 0 feature merges since last promotion.
+
+---
+
 ## 2026-09-24
 
 ### Features

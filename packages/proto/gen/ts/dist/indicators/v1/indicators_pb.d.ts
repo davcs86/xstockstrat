@@ -682,6 +682,57 @@ export type DeleteFormulaResponse = Message<"xstockstrat.indicators.v1.DeleteFor
  */
 export declare const DeleteFormulaResponseSchema: GenMessage<DeleteFormulaResponse>;
 /**
+ * feature 205 — the fundamental-metrics catalog for formula authoring (declare + test).
+ *
+ * @generated from message xstockstrat.indicators.v1.ListFundamentalMetricsRequest
+ */
+export type ListFundamentalMetricsRequest = Message<"xstockstrat.indicators.v1.ListFundamentalMetricsRequest"> & {};
+/**
+ * Describes the message xstockstrat.indicators.v1.ListFundamentalMetricsRequest.
+ * Use `create(ListFundamentalMetricsRequestSchema)` to create a new message.
+ */
+export declare const ListFundamentalMetricsRequestSchema: GenMessage<ListFundamentalMetricsRequest>;
+/**
+ * @generated from message xstockstrat.indicators.v1.FundamentalMetricInfo
+ */
+export type FundamentalMetricInfo = Message<"xstockstrat.indicators.v1.FundamentalMetricInfo"> & {
+    /**
+     * @generated from field: xstockstrat.indicators.v1.FundamentalMetric metric = 1;
+     */
+    metric: FundamentalMetric;
+    /**
+     * snake_case key the sandbox `data[...]` global exposes (e.g. "pe_ratio")
+     *
+     * @generated from field: string data_key = 2;
+     */
+    dataKey: string;
+    /**
+     * human-readable meaning
+     *
+     * @generated from field: string meaning = 3;
+     */
+    meaning: string;
+};
+/**
+ * Describes the message xstockstrat.indicators.v1.FundamentalMetricInfo.
+ * Use `create(FundamentalMetricInfoSchema)` to create a new message.
+ */
+export declare const FundamentalMetricInfoSchema: GenMessage<FundamentalMetricInfo>;
+/**
+ * @generated from message xstockstrat.indicators.v1.ListFundamentalMetricsResponse
+ */
+export type ListFundamentalMetricsResponse = Message<"xstockstrat.indicators.v1.ListFundamentalMetricsResponse"> & {
+    /**
+     * @generated from field: repeated xstockstrat.indicators.v1.FundamentalMetricInfo metrics = 1;
+     */
+    metrics: FundamentalMetricInfo[];
+};
+/**
+ * Describes the message xstockstrat.indicators.v1.ListFundamentalMetricsResponse.
+ * Use `create(ListFundamentalMetricsResponseSchema)` to create a new message.
+ */
+export declare const ListFundamentalMetricsResponseSchema: GenMessage<ListFundamentalMetricsResponse>;
+/**
  * @generated from enum xstockstrat.indicators.v1.SandboxExitReason
  */
 export declare enum SandboxExitReason {
@@ -894,5 +945,15 @@ export declare const IndicatorsService: GenService<{
         methodKind: "unary";
         input: typeof DeleteFormulaRequestSchema;
         output: typeof DeleteFormulaResponseSchema;
+    };
+    /**
+     * List the available fundamental metrics for formula declarations (feature 205)
+     *
+     * @generated from rpc xstockstrat.indicators.v1.IndicatorsService.ListFundamentalMetrics
+     */
+    listFundamentalMetrics: {
+        methodKind: "unary";
+        input: typeof ListFundamentalMetricsRequestSchema;
+        output: typeof ListFundamentalMetricsResponseSchema;
     };
 }>;

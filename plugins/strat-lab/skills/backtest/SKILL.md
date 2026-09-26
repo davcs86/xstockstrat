@@ -117,7 +117,9 @@ key gates both operands — OFF ⇒ the formula reads hold everywhere). A symbol
 fundamentals row holds (no fabricated 0.0); a partial row omits just the absent metric. This differs
 from the 198 operand, which reads **one** metric off the bar — here a formula consumes a **set** of
 metrics. A component cannot combine `source_symbol` with a fundamentals-input formula (rejected at
-write time — a benchmark operand reads bars, a fundamentals formula does not).
+write time — a benchmark operand reads bars, a fundamentals formula does not). Discover the valid
+metric names (and their snake_case `input_data` data-keys) via the `list_fundamental_metrics` MCP
+tool, and declare them with `manage_formula`'s `fundamental_inputs` (feature 205).
 
 **Rule encoding.** `entry_rule`/`exit_rule` accept **either** a JSON string **or** a JSON object
 (dict) — an MCP client that pre-parses JSON arguments may pass the object directly; the tool
