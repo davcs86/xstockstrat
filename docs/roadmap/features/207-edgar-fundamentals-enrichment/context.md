@@ -177,3 +177,15 @@
 - [ ] Snapshot `as_of`/"Last refreshed" semantics (@AC-12 @feature-204) — confirm at execute for the EDGAR snapshot (filing date + live-price timestamp mix).
 
 - Next: `/sdd-review edgar-fundamentals-enrichment impl-spec`.
+
+## Session 2026-09-26 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 5 warnings (advisory — did not block). No Floor breaches; all cited path:line verified; every service step paired red-before-green (C-08/P-06); all 9 @AC-* covered (C-15); migrations next-free (marketdata 006, config 030).
+- Unresolved ⚠ / notes carried into execution:
+  - Step 5: `@AC-2` illustrative figures are stale — record operator sign-off for the wording edit (BABA FY2026 financial debt ≈ 8,098M USD / D/E ≈ 0.05; Liabilities USD 113,555M), no renumber, before the step lands (C-15/P-03) — [ ] unaddressed
+  - Step 8: Alpaca corporate-actions entitlement unverified this session — the entitlement check is the FIRST action of Step 8; if unentitled, descope FR-4/@AC-5 with operator sign-off (never a silent @AC-5 pass) (P-03) — [ ] unaddressed
+  - Step 8: add a one-line "IBKR N/A: market-data corporate actions are Alpaca-only" broker-symmetry note (B2b) — [ ] unaddressed
+  - Steps 7 / 11 / 15: no coverage-threshold assertion — justified (internal/service + cmd are CI-excluded coverage packages; Step 15 is Gherkin durable-suite authoring; backing asserts live in Steps 3/5/9). C-08 discipline note only — [ ] unaddressed
+  - Step 10: reads five config keys seeded later by Step 12 — mitigated by explicit in-code defaults (edgar.enabled=true, snapshot_source=vendor) + zero-value-watcher tests; B3 deploy-ordering note (migrate → rolling restart → live-flip → disable vendors last) — [ ] unaddressed
+- Overlap findings: CLEAN (marketdata 006 / config 030 next-free; the five new keys unique; finnhub/fmp .enabled flips are UPDATEs to existing rows; no in-flight feature co-edits any touched file).
+- Note (C-14): agent `query_fundamentals` is a documented no-op passthrough (currency/source/metrics already returned; no proto field added) — verified, not a stale-surface gap.
