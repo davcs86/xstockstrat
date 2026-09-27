@@ -77,6 +77,9 @@ type MarketDataService struct {
 	// source above; EDGAR is held here and is never in the provider selector (FR-2 / T-3).
 	histFundamentals source.HistoricalFundamentalsSource
 	histRepo         histFundamentalsRepo
+	// dividendSrc is the optional cash-dividend corporate-actions feed (feature 211, FR-4); nil-safe
+	// (nil / disabled / an unentitled feed all leave dividend_yield missing, never a fabricated 0).
+	dividendSrc source.DividendSource
 	// ratioEnricher is the optional FMP ratio-fill pass; nil in v1 (no point-in-time FMP ratio
 	// source exists — ratios-ttm is a current snapshot, look-ahead), the cap seam still guards it.
 	ratioEnricher ratioEnricher
@@ -109,7 +112,10 @@ type fundamentalsRepo interface {
 type histFundamentalsRepo interface {
 	InsertHistoricalFundamentals(ctx context.Context, p source.HistoricalFundamentalsPeriod) error
 	QueryHistoricalFundamentals(ctx context.Context, symbol string, asOf, rangeStart, rangeEnd time.Time, periodTypes []string, pageSize int, pageToken string) ([]source.HistoricalFundamentalsPeriod, string, error)
+	LatestHistoricalFundamental(ctx context.Context, symbol string, asOf time.Time) (*source.HistoricalFundamentalsPeriod, error)
 	CloseAt(ctx context.Context, symbol string, date time.Time) (*float64, error)
+	UpsertDividends(ctx context.Context, divs []source.CashDividend) error
+	SumDividendsInWindow(ctx context.Context, symbol string, asOf, windowStart time.Time) (float64, bool, error)
 }
 
 // ratioEnricher optionally fills a ratio EDGAR + the price-join cannot supply. v1 wires nil.
@@ -128,6 +134,7 @@ func NewMarketDataService(
 	fundamentals source.FundamentalsSource,
 	provider string,
 	histFundamentals source.HistoricalFundamentalsSource,
+	dividendSrc source.DividendSource,
 ) (*MarketDataService, error) {
 	ledgerConn, err := grpc.NewClient(ledgerEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
 	if err != nil {
@@ -153,6 +160,7 @@ func NewMarketDataService(
 		fundRepo:         repo,
 		histFundamentals: histFundamentals,
 		histRepo:         repo,
+		dividendSrc:      dividendSrc,
 	}, nil
 }
 
@@ -1264,10 +1272,15 @@ func (s *MarketDataService) emitAlert(ctx context.Context, msg string) {
 // Read-through cache → quota guard → fetch → 80% WARNING; the active provider is the single
 // fundamentals chokepoint, gated by marketdata.<fundProvider>.enabled.
 
-// GetFundamentals returns cached-or-fetched fundamentals for one symbol.
+// GetFundamentals returns cached-or-fetched fundamentals for one symbol. The serving source is the
+// live-read marketdata.fundamentals.snapshot_source axis (feature 211): "edgar" derives the snapshot
+// from the latest as-reported filing + a live price; "vendor" is the unchanged FMP/Finnhub path.
 func (s *MarketDataService) GetFundamentals(ctx context.Context, symbol string) (*marketdatav1.Fundamentals, error) {
 	if symbol == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("symbol required"))
+	}
+	if s.snapshotSource() == snapshotSourceEdgar {
+		return s.getEdgarSnapshot(ctx, symbol)
 	}
 	if err := s.fundamentalsEnabled(); err != nil {
 		return nil, err
@@ -1282,6 +1295,25 @@ func (s *MarketDataService) GetFundamentals(ctx context.Context, symbol string) 
 // GetFundamentalsMulti returns fundamentals for several symbols, batching the
 // needs-fetch set through one provider quote call where the provider supports it (FR-5).
 func (s *MarketDataService) GetFundamentalsMulti(ctx context.Context, symbols []string) ([]*marketdatav1.Fundamentals, error) {
+	// EDGAR-canonical dispatch (feature 211): per-symbol via the same builder GetFundamentals uses, so
+	// the two RPCs return the identical snapshot for a symbol (C-10(b) parity). A global gate
+	// (edgar/vendor disabled) surfaces as an error on the first symbol, matching the single-symbol RPC.
+	if s.snapshotSource() == snapshotSourceEdgar {
+		out := make([]*marketdatav1.Fundamentals, 0, len(symbols))
+		for _, sym := range symbols {
+			if sym == "" {
+				continue
+			}
+			f, err := s.getEdgarSnapshot(ctx, sym)
+			if err != nil {
+				return nil, err
+			}
+			if f != nil {
+				out = append(out, f)
+			}
+		}
+		return out, nil
+	}
 	if err := s.fundamentalsEnabled(); err != nil {
 		return nil, err
 	}
@@ -1383,6 +1415,136 @@ func (s *MarketDataService) fundamentalsEnabled() error {
 		return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("%s fundamentals source disabled", s.fundProvider))
 	}
 	return nil
+}
+
+// snapshot_source axis values (feature 211). "vendor" is the safe default and the current production
+// behavior; only an exact "edgar" switches to the EDGAR-canonical builder.
+const (
+	snapshotSourceEdgar  = "edgar"
+	snapshotSourceVendor = "vendor"
+)
+
+// snapshotSource resolves the live-read marketdata.fundamentals.snapshot_source axis. It recognizes
+// only "edgar"/"vendor"; any other value logs a WARN (loud, per F-07) and fails safe to "vendor"
+// rather than failing the RPC — a live config typo must never take fundamentals serving down.
+func (s *MarketDataService) snapshotSource() string {
+	v := s.fundCfg.GetString("marketdata.fundamentals.snapshot_source", snapshotSourceVendor)
+	switch v {
+	case snapshotSourceEdgar:
+		return snapshotSourceEdgar
+	case snapshotSourceVendor:
+		return snapshotSourceVendor
+	default:
+		slog.Warn("unrecognized marketdata.fundamentals.snapshot_source — falling back to vendor", "value", v)
+		return snapshotSourceVendor
+	}
+}
+
+// cacheAxis maps a stored fundamentals row's Source to its serving axis so a snapshot_source cutover
+// self-heals a stale cache row in one read (source-aware invalidation, NOT string inequality):
+// edgar / edgar+fmp ⇒ "edgar"; every vendor value ⇒ "vendor" (feature 211, design point 5).
+func cacheAxis(src string) string {
+	switch src {
+	case "edgar", "edgar+fmp":
+		return snapshotSourceEdgar
+	default:
+		return snapshotSourceVendor
+	}
+}
+
+// hasCoreMetrics reports whether an as-reported period carries at least one balance-sheet/valuation
+// metric — the producibility test for an EDGAR snapshot. A period with none (a CIK match that yielded
+// no usable facts) routes to the vendor fallback (@AC-7).
+func hasCoreMetrics(p *source.HistoricalFundamentalsPeriod) bool {
+	return p.MarketCap != nil || p.PERatio != nil || p.PBRatio != nil ||
+		p.EPS != nil || p.ROE != nil || p.DebtToEquity != nil
+}
+
+// getEdgarSnapshot serves the EDGAR-canonical latest-filing snapshot for one symbol: the newest
+// as-of period (one indexed read) with the same financial-debt D/E + currency-consistent P/B
+// convention as the historical lane (@AC-6), overlaid with a live price. Write-through cached under
+// marketdata.edgar.cache_ttl_hours; a symbol with no producible EDGAR period falls back to the
+// enabled vendor (@AC-7). The kill switch is marketdata.edgar.enabled (explicit true default — the
+// feature-100 GetBool zero-value trap: a missing key must not read as "disabled").
+func (s *MarketDataService) getEdgarSnapshot(ctx context.Context, symbol string) (*marketdatav1.Fundamentals, error) {
+	if !s.fundCfg.GetBool("marketdata.edgar.enabled", true) {
+		slog.WarnContext(ctx, "edgar fundamentals source disabled (marketdata.edgar.enabled=false) — refusing snapshot", "symbol", symbol)
+		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("edgar fundamentals source disabled"))
+	}
+	// Source-aware cache hit: serve a fresh cached row only when it was itself edgar-derived, so a
+	// post-cutover vendor row is re-derived (self-heals) rather than served under the edgar axis.
+	ttl := time.Duration(s.fundCfg.GetInt("marketdata.edgar.cache_ttl_hours", 24)) * time.Hour
+	if cached, fetchedAt, found, err := s.fundRepo.GetFundamentals(ctx, symbol); err == nil &&
+		found && time.Since(fetchedAt) <= ttl && cacheAxis(cached.Source) == snapshotSourceEdgar {
+		return s.toProtoFundamentals(cached, false), nil
+	}
+	latest, err := s.histRepo.LatestHistoricalFundamental(ctx, symbol, time.Now())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	if latest == nil || !hasCoreMetrics(latest) {
+		// Non-SEC-filer / backfill-gap fallback (@AC-7): WARN before delegating so a missing backfill is
+		// never silently masked as a non-filer, then route to the vendor only while it is enabled.
+		reason := "no_core_metrics"
+		if latest == nil {
+			reason = "zero_history"
+		}
+		slog.WarnContext(ctx, "edgar snapshot not producible — falling back to vendor", "symbol", symbol, "reason", reason)
+		if err := s.fundamentalsEnabled(); err != nil {
+			return nil, connect.NewError(connect.CodeFailedPrecondition,
+				fmt.Errorf("no edgar snapshot for %s and vendor fallback disabled", symbol))
+		}
+		return s.resolveFundamentals(ctx, symbol)
+	}
+	snap := edgarSnapshotFromPeriod(latest, s.livePrice(ctx, symbol))
+	if upErr := s.fundRepo.UpsertFundamentals(ctx, snap); upErr != nil {
+		slog.WarnContext(ctx, "edgar snapshot cache upsert failed", "symbol", symbol, "error", upErr)
+	}
+	return s.toProtoFundamentals(snap, false), nil
+}
+
+// livePrice returns the current mid quote for a symbol via the batched, singleflight-coalesced
+// GetLatestQuotes path, or nil when no usable quote is available (leaves Price missing, never 0).
+func (s *MarketDataService) livePrice(ctx context.Context, symbol string) *float64 {
+	quotes, err := s.GetLatestQuotes(ctx, []string{symbol})
+	if err != nil || len(quotes) == 0 {
+		return nil
+	}
+	mid := (quotes[0].AskPrice + quotes[0].BidPrice) / 2
+	if mid <= 0 {
+		return nil
+	}
+	return &mid
+}
+
+// edgarSnapshotFromPeriod projects the latest as-reported period into a snapshot Fundamentals: the
+// balance-sheet ratios (D/E, P/B) and currency are the stored period's — computed with the feature-211
+// financial-debt + currency-consistent conventions, so PIT and snapshot agree for the same filing
+// (@AC-6/@AC-9) — while Price is the live quote when available (else the filed-date close). Source is
+// set to "edgar" explicitly so the repo's empty-source →"fmp" default never fires.
+func edgarSnapshotFromPeriod(p *source.HistoricalFundamentalsPeriod, live *float64) *source.Fundamentals {
+	price := p.Price
+	if live != nil {
+		price = live
+	}
+	return &source.Fundamentals{
+		Symbol:        p.Symbol,
+		MarketCap:     p.MarketCap,
+		PERatio:       p.PERatio,
+		PBRatio:       p.PBRatio,
+		DividendYield: p.DividendYield,
+		EPS:           p.EPS,
+		Beta:          p.Beta,
+		ROE:           p.ROE,
+		DebtToEquity:  p.DebtToEquity,
+		Price:         price,
+		YearHigh:      p.YearHigh,
+		YearLow:       p.YearLow,
+		ExtraMetrics:  p.ExtraMetrics,
+		AsOf:          p.FiledDate,
+		Currency:      p.Currency,
+		Source:        snapshotSourceEdgar,
+	}
 }
 
 // fundamentalsQuota returns the active provider's current count, cap, and window (seconds) for the
@@ -1604,11 +1766,43 @@ func (s *MarketDataService) backfillOneSymbol(ctx context.Context, symbol string
 	}
 	// Sort chronologically so the TTM-EPS rolling sum sees prior quarters first.
 	sort.Slice(periods, func(i, j int) bool { return periods[i].PeriodEnd.Before(periods[j].PeriodEnd) })
+	// Fetch this symbol's cash dividends once (feature 211, FR-4). A nil/disabled source or an
+	// unavailable/unentitled feed leaves dividend_yield missing (never a fabricated 0) and is logged
+	// for audit — the per-period yield below runs only when this fetch succeeded.
+	dividendsFetched := false
+	if s.dividendSrc != nil && s.fundCfg.GetBool("marketdata.dividends.enabled", false) {
+		lookbackYears := int(s.fundCfg.GetInt("marketdata.dividends.backfill_lookback_years", 2))
+		if lookbackYears <= 0 {
+			lookbackYears = 2
+		}
+		divs, derr := s.dividendSrc.GetCashDividends(ctx, symbol, time.Now().AddDate(-lookbackYears, 0, 0), time.Now())
+		if derr != nil {
+			slog.WarnContext(ctx, "dividend feed unavailable — dividend_yield left missing (audit)", "symbol", symbol, "error", derr)
+		} else if uerr := s.histRepo.UpsertDividends(ctx, divs); uerr != nil {
+			slog.WarnContext(ctx, "dividend upsert failed — dividend_yield left missing (audit)", "symbol", symbol, "error", uerr)
+		} else {
+			dividendsFetched = true
+			if len(divs) == 0 {
+				slog.InfoContext(ctx, "dividend feed returned no payments (non-payer or none in range)", "symbol", symbol)
+			}
+		}
+	}
 	var quarterlyEPS []float64 // trailing quarterly EPS for the TTM rollup
 	var written int64
 	for i := range periods {
 		p := &periods[i]
 		s.priceJoin(ctx, p, &quarterlyEPS)
+		// PIT T12M dividend yield (feature 211, FR-4/FR-7): Σ dividends with ex_date in
+		// [filed-365d, filed] ÷ price-at-filing — only when the feed fetch succeeded and priceJoin
+		// set a price. ex_date > filed_date is excluded by the window (no look-ahead).
+		if dividendsFetched && p.Price != nil && *p.Price > 0 {
+			if sum, _, serr := s.histRepo.SumDividendsInWindow(ctx, symbol, p.FiledDate, p.FiledDate.AddDate(-1, 0, 0)); serr != nil {
+				slog.WarnContext(ctx, "dividend window sum failed — yield left missing (audit)", "symbol", symbol, "period", p.FiscalPeriod, "error", serr)
+			} else {
+				y := sum / *p.Price
+				p.DividendYield = &y
+			}
+		}
 		if enrichEnabled && s.ratioEnricher != nil && s.enrichmentUnderCap() {
 			if err := s.ratioEnricher.Enrich(ctx, p); err != nil {
 				slog.WarnContext(ctx, "fundamentals ratio enrichment failed (edgar row kept)", "symbol", symbol, "period", p.FiscalPeriod, "error", err)
@@ -1661,9 +1855,26 @@ func (s *MarketDataService) priceJoin(ctx context.Context, p *source.HistoricalF
 		mc := price * (*p.SharesOutstanding)
 		p.MarketCap = &mc
 	}
-	if ttmEPS != nil && *ttmEPS > 0 {
+	// P/E currency rule (feature 211, FR-3): the close is USD, so ttm-EPS must be USD too. Native EPS
+	// is USD only for a USD-currency filer; for a non-USD filer we hold no USD EPS fact, so leave P/E
+	// nil (→ missing_metrics) rather than divide across currencies (@AC-22 — no fabrication).
+	if ttmEPS != nil && *ttmEPS > 0 && p.Currency == "USD" {
 		pe := price / *ttmEPS
 		p.PERatio = &pe
+	}
+	// P/B currency-consistent (feature 211, FR-3/@AC-4): USD market_cap / USD equity. Prefer the
+	// USD-unit equity stashed at ingest (a dual-reporting filer, e.g. BABA); else native equity when
+	// the row currency is already USD; else nil (no FX conversion).
+	if p.MarketCap != nil {
+		if eqUSD, ok := p.ExtraMetrics["stockholders_equity_usd"]; ok && eqUSD > 0 {
+			pb := *p.MarketCap / eqUSD
+			p.PBRatio = &pb
+		} else if p.Currency == "USD" {
+			if eq, ok := p.ExtraMetrics["stockholders_equity"]; ok && eq > 0 {
+				pb := *p.MarketCap / eq
+				p.PBRatio = &pb
+			}
+		}
 	}
 }
 

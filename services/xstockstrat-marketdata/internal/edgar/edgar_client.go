@@ -167,6 +167,15 @@ var (
 		"Assets":                             "assets",
 		"CommonStockSharesOutstanding":       "shares",
 		"EntityCommonStockSharesOutstanding": "shares",
+		// Financial-debt line items (feature 211, FR-2) — us-gaap only; summed no-double-count in
+		// buildPeriod. All three acceptance filers report us-gaap (no IFRS tags — C-18).
+		"LongTermDebtNoncurrent":    "long_term_debt_noncurrent",
+		"LongTermDebtCurrent":       "long_term_debt_current",
+		"LongTermDebt":              "long_term_debt",
+		"DebtCurrent":               "debt_current",
+		"ShortTermBorrowings":       "short_term_borrowings",
+		"CommercialPaper":           "commercial_paper",
+		"ConvertibleDebtNoncurrent": "convertible_debt_noncurrent",
 	}
 )
 
@@ -183,7 +192,56 @@ type periodAgg struct {
 	periodType string
 	periodEnd  time.Time
 	filed      time.Time
-	vals       map[string]float64
+	vals       map[string]map[string]float64 // metric → XBRL unit code (USD/CNY/USD-per-shares) → first-seen value
+}
+
+// valIn returns the metric's value under a specific unit code.
+func valIn(a *periodAgg, metric, unit string) (float64, bool) {
+	if m, ok := a.vals[metric]; ok {
+		if v, ok2 := m[unit]; ok2 {
+			return v, true
+		}
+	}
+	return 0, false
+}
+
+// valAny returns the metric's value under its lexically-smallest unit (deterministic) — used for
+// per-share (eps) and share-count facts, which are not row-currency denominated.
+func valAny(a *periodAgg, metric string) (float64, bool) {
+	m, ok := a.vals[metric]
+	if !ok || len(m) == 0 {
+		return 0, false
+	}
+	best, first := "", true
+	for u := range m {
+		if first || u < best {
+			best, first = u, false
+		}
+	}
+	return m[best], true
+}
+
+// voteCurrency picks the row currency: the unit covering the most monetary facts, excluding
+// compound per-share units and the "shares" count, with a lexical tiebreak so a dual-reporting
+// CNY/USD filer resolves to CNY ("CNY" < "USD" — @AC-1). "USD" is the fallback for a period with
+// no monetary fact at all.
+func voteCurrency(a *periodAgg) string {
+	unitCount := map[string]int{}
+	for _, units := range a.vals {
+		for u := range units {
+			if strings.Contains(u, "/") || u == "shares" {
+				continue
+			}
+			unitCount[u]++
+		}
+	}
+	best, row := 0, "USD"
+	for u, n := range unitCount {
+		if n > best || (n == best && u < row) {
+			best, row = n, u
+		}
+	}
+	return row
 }
 
 func parseDate(s string) (time.Time, bool) {
@@ -219,7 +277,7 @@ func (c *Client) FetchHistorical(ctx context.Context, symbol string, from, to ti
 			if !isFlow && !isInstant {
 				continue
 			}
-			for _, unit := range entry.Units {
+			for unitKey, unit := range entry.Units {
 				for _, d := range unit {
 					if d.FP == "" || d.FY == 0 {
 						continue
@@ -245,7 +303,7 @@ func (c *Client) FetchHistorical(ctx context.Context, symbol string, from, to ti
 					key := periodKey(d.FY, d.FP)
 					agg := aggs[key]
 					if agg == nil {
-						agg = &periodAgg{fy: d.FY, fp: d.FP, periodType: ptype, periodEnd: end, filed: filed, vals: map[string]float64{}}
+						agg = &periodAgg{fy: d.FY, fp: d.FP, periodType: ptype, periodEnd: end, filed: filed, vals: map[string]map[string]float64{}}
 						aggs[key] = agg
 					}
 					// Keep the earliest filing (original as-reported) — @AC-1 idempotency.
@@ -259,8 +317,13 @@ func (c *Client) FetchHistorical(ctx context.Context, symbol string, from, to ti
 					if isInstant {
 						name = instKey
 					}
-					if _, seen := agg.vals[name]; !seen {
-						agg.vals[name] = d.Val
+					// First-seen per (metric, unit): the XBRL unit key is load-bearing for the row
+					// currency (feature 211) — a re-backfill re-derives the same currency deterministically.
+					if agg.vals[name] == nil {
+						agg.vals[name] = map[string]float64{}
+					}
+					if _, seen := agg.vals[name][unitKey]; !seen {
+						agg.vals[name][unitKey] = d.Val
 					}
 				}
 			}
@@ -320,8 +383,12 @@ func buildPeriod(symbol string, a *periodAgg) source.HistoricalFundamentalsPerio
 	if a.fp == "FY" {
 		p.FiscalPeriod = fmt.Sprintf("FY%d", a.fy)
 	}
+	// Row currency: the unit covering the most monetary facts (per-share/shares excluded), lexical
+	// tiebreak — @AC-1. Absolute facts below are read in this native currency only (single-currency).
+	rowCurrency := voteCurrency(a)
+	p.Currency = rowCurrency
 	setPtr := func(dst **float64, key string) {
-		if v, ok := a.vals[key]; ok {
+		if v, ok := valAny(a, key); ok { // eps/shares are not row-currency denominated
 			vv := v
 			*dst = &vv
 		}
@@ -332,23 +399,52 @@ func buildPeriod(symbol string, a *periodAgg) source.HistoricalFundamentalsPerio
 	}
 	setPtr(&p.SharesOutstanding, "shares")
 	// Derived ratios (statement-native, PIT-safe): roe = net_income/equity, d/e = liabilities/equity.
-	if ni, ok := a.vals["net_income"]; ok {
-		if eq, ok2 := a.vals["stockholders_equity"]; ok2 && eq != 0 {
+	if ni, ok := valIn(a, "net_income", rowCurrency); ok {
+		if eq, ok2 := valIn(a, "stockholders_equity", rowCurrency); ok2 && eq != 0 {
 			roe := ni / eq
 			p.ROE = &roe
 		}
 	}
-	if liab, ok := a.vals["liabilities"]; ok {
-		if eq, ok2 := a.vals["stockholders_equity"]; ok2 && eq != 0 {
-			de := liab / eq
+	// Financial-debt D/E (feature 211, FR-2): total_debt / equity, native currency, no double-count.
+	// LongTermDebtNoncurrent+Current when either is present (AAPL), else the aggregate LongTermDebt
+	// (AXP); plus short-term/current/commercial-paper/convertible. Nil (→ missing) when no debt tag
+	// is present — never a fabricated 0 (@AC-22 @feature-204).
+	addOpt := func(key string) (float64, bool) { return valIn(a, key, rowCurrency) }
+	sum := func(v float64, ok bool) float64 {
+		if ok {
+			return v
+		}
+		return 0
+	}
+	ltdNC, okNC := addOpt("long_term_debt_noncurrent")
+	ltdC, okC := addOpt("long_term_debt_current")
+	ltd, ltdOK := 0.0, false
+	if okNC || okC {
+		ltd, ltdOK = ltdNC+ltdC, true
+	} else if v, ok := addOpt("long_term_debt"); ok {
+		ltd, ltdOK = v, true
+	}
+	stb, okStb := addOpt("short_term_borrowings")
+	dc, okDc := addOpt("debt_current")
+	cp, okCp := addOpt("commercial_paper")
+	cd, okCd := addOpt("convertible_debt_noncurrent")
+	if ltdOK || okStb || okDc || okCp || okCd {
+		totalDebt := ltd + sum(stb, okStb) + sum(dc, okDc) + sum(cp, okCp) + sum(cd, okCd)
+		p.ExtraMetrics["total_debt"] = totalDebt
+		if eq, ok := valIn(a, "stockholders_equity", rowCurrency); ok && eq != 0 {
+			de := totalDebt / eq
 			p.DebtToEquity = &de
 		}
 	}
-	// Statement line items that have no canonical metric field spill into extra_metrics.
+	// Statement line items that have no canonical metric field spill into extra_metrics (native currency).
 	for _, k := range []string{"revenue", "net_income", "assets", "liabilities", "stockholders_equity"} {
-		if v, ok := a.vals[k]; ok {
+		if v, ok := valIn(a, k, rowCurrency); ok {
 			p.ExtraMetrics[k] = v
 		}
+	}
+	// USD-unit equity retained for the currency-consistent P/B step (feature 211, Step 6).
+	if v, ok := valIn(a, "stockholders_equity", "USD"); ok {
+		p.ExtraMetrics["stockholders_equity_usd"] = v
 	}
 	return p
 }

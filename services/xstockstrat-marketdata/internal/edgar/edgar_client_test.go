@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/xstockstrat/marketdata/internal/source"
 )
 
 // roundTripFunc lets a test stand in for the SEC HTTP endpoints without any network.
@@ -222,5 +224,198 @@ func TestFetchHistorical_RejectsYTDDuration(t *testing.T) {
 	}
 	if len(periods) != 0 {
 		t.Errorf("YTD 6-month duration must be rejected, got %d periods", len(periods))
+	}
+}
+
+// --- feature 211: currency capture from the XBRL unit key (@AC-1) ---
+
+// instantFact211 builds an instant (balance-sheet) FY datum — no "start", so classifyPeriodType
+// treats it as annual.
+func instantFact211(fy int, end, filed string, val float64) map[string]any {
+	return map[string]any{"end": end, "val": val, "accn": "x", "fy": fy, "fp": "FY", "form": "10-K", "filed": filed}
+}
+
+func newTestClientCF211(cf map[string]any) *Client {
+	c := NewClient("https://data.sec.gov", "xstockstrat-test/1.0 (test@example.com)", 0)
+	c.tickerURL = "https://www.sec.gov/files/company_tickers.json"
+	c.hc = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		if strings.Contains(r.URL.Path, "company_tickers.json") {
+			return jsonResp(map[string]any{"0": map[string]any{"cik_str": 320193, "ticker": "AAPL", "title": "Apple Inc."}}), nil
+		}
+		if strings.Contains(r.URL.Path, "companyfacts") {
+			return jsonResp(cf), nil
+		}
+		return &http.Response{StatusCode: 404, Body: io.NopCloser(strings.NewReader("not found")), Header: make(http.Header)}, nil
+	})}
+	return c
+}
+
+// dualCurrencyCF is a CNY-native filer that also publishes a USD convenience translation for its
+// monetary facts; EPS is per-share (USD/shares). Equal CNY/USD monetary-fact counts → lexical
+// tiebreak → CNY.
+func dualCurrencyCF() map[string]any {
+	return map[string]any{
+		"cik": 320193, "entityName": "Alibaba",
+		"facts": map[string]any{"us-gaap": map[string]any{
+			"StockholdersEquity": map[string]any{"units": map[string]any{
+				"CNY": []map[string]any{instantFact211(2024, "2024-03-31", "2024-05-01", 1060886e6)},
+				"USD": []map[string]any{instantFact211(2024, "2024-03-31", "2024-05-01", 153796e6)},
+			}},
+			"Liabilities": map[string]any{"units": map[string]any{
+				"CNY": []map[string]any{instantFact211(2024, "2024-03-31", "2024-05-01", 783300e6)},
+				"USD": []map[string]any{instantFact211(2024, "2024-03-31", "2024-05-01", 113555e6)},
+			}},
+			"EarningsPerShareDiluted": map[string]any{"units": map[string]any{
+				"USD/shares": []map[string]any{{"start": "2023-04-01", "end": "2024-03-31", "val": 5.0, "accn": "x", "fy": 2024, "fp": "FY", "form": "10-K", "filed": "2024-05-01"}},
+			}},
+		}},
+	}
+}
+
+func TestFetchHistorical_CurrencyFromUnitKey_AC1_feature211(t *testing.T) {
+	c := newTestClientCF211(dualCurrencyCF())
+	periods, err := c.FetchHistorical(context.Background(), "AAPL", time.Time{}, time.Time{}, []string{"annual"})
+	if err != nil {
+		t.Fatalf("FetchHistorical: %v", err)
+	}
+	if len(periods) != 1 {
+		t.Fatalf("want 1 period, got %d", len(periods))
+	}
+	p := periods[0]
+	if p.Currency != "CNY" {
+		t.Errorf("currency = %q, want CNY (dual-report native, lexical tiebreak)", p.Currency)
+	}
+	if got := p.ExtraMetrics["stockholders_equity"]; got != 1060886e6 {
+		t.Errorf("native equity = %v, want CNY 1060886e6", got)
+	}
+	if got := p.ExtraMetrics["stockholders_equity_usd"]; got != 153796e6 {
+		t.Errorf("stockholders_equity_usd = %v, want 153796e6 (retained for P/B)", got)
+	}
+}
+
+func TestFetchHistorical_CurrencyUSDOnly_feature211(t *testing.T) {
+	cf := map[string]any{
+		"cik": 320193, "entityName": "Apple",
+		"facts": map[string]any{"us-gaap": map[string]any{
+			"StockholdersEquity": map[string]any{"units": map[string]any{"USD": []map[string]any{instantFact211(2024, "2024-09-28", "2024-11-01", 56950e6)}}},
+			"Liabilities":        map[string]any{"units": map[string]any{"USD": []map[string]any{instantFact211(2024, "2024-09-28", "2024-11-01", 308030e6)}}},
+		}},
+	}
+	c := newTestClientCF211(cf)
+	periods, err := c.FetchHistorical(context.Background(), "AAPL", time.Time{}, time.Time{}, []string{"annual"})
+	if err != nil {
+		t.Fatalf("FetchHistorical: %v", err)
+	}
+	if len(periods) != 1 {
+		t.Fatalf("want 1 period, got %d", len(periods))
+	}
+	if periods[0].Currency != "USD" {
+		t.Errorf("currency = %q, want USD (single-currency filer unchanged)", periods[0].Currency)
+	}
+}
+
+func TestFetchHistorical_CurrencyDeterministic_feature211(t *testing.T) {
+	c := newTestClientCF211(dualCurrencyCF())
+	var first string
+	for i := 0; i < 5; i++ {
+		periods, err := c.FetchHistorical(context.Background(), "AAPL", time.Time{}, time.Time{}, []string{"annual"})
+		if err != nil {
+			t.Fatalf("run %d: %v", i, err)
+		}
+		if len(periods) != 1 {
+			t.Fatalf("run %d: want 1 period, got %d", i, len(periods))
+		}
+		if i == 0 {
+			first = periods[0].Currency
+		} else if periods[0].Currency != first {
+			t.Errorf("run %d currency = %q, want stable %q", i, periods[0].Currency, first)
+		}
+	}
+	if first != "CNY" {
+		t.Errorf("stable currency = %q, want CNY", first)
+	}
+}
+
+// --- feature 211: financial-debt D/E (@AC-2, @AC-3) ---
+
+// debtCF211 builds a USD-only FY filer with equity + arbitrary debt line items. The D/E ratio is
+// currency-invariant, so USD fixtures suffice here (currency capture is covered by the @AC-1 tests).
+func debtCF211(equity float64, debts map[string]float64) map[string]any {
+	facts := map[string]any{
+		"StockholdersEquity": map[string]any{"units": map[string]any{"USD": []map[string]any{instantFact211(2025, "2025-09-30", "2025-11-01", equity)}}},
+	}
+	for tag, v := range debts {
+		facts[tag] = map[string]any{"units": map[string]any{"USD": []map[string]any{instantFact211(2025, "2025-09-30", "2025-11-01", v)}}}
+	}
+	return map[string]any{"cik": 320193, "entityName": "T", "facts": map[string]any{"us-gaap": facts}}
+}
+
+func onlyPeriodDE(t *testing.T, cf map[string]any) source.HistoricalFundamentalsPeriod {
+	t.Helper()
+	c := newTestClientCF211(cf)
+	periods, err := c.FetchHistorical(context.Background(), "AAPL", time.Time{}, time.Time{}, []string{"annual"})
+	if err != nil {
+		t.Fatalf("FetchHistorical: %v", err)
+	}
+	if len(periods) != 1 {
+		t.Fatalf("want 1 period, got %d", len(periods))
+	}
+	return periods[0]
+}
+
+// @AC-2: BABA — financial-debt D/E (ConvertibleDebtNoncurrent 8,098M / equity 153,796M ≈ 0.053),
+// NOT the total-liabilities ratio.
+func TestDebtToEquity_FinancialDebtConvention_AC2_feature211(t *testing.T) {
+	p := onlyPeriodDE(t, debtCF211(153796e6, map[string]float64{"ConvertibleDebtNoncurrent": 8098e6}))
+	if p.DebtToEquity == nil {
+		t.Fatalf("debt_to_equity nil, want ~0.053")
+	}
+	if de := *p.DebtToEquity; de < 0.045 || de > 0.06 {
+		t.Errorf("debt_to_equity = %v, want ~0.053 (financial-debt convention)", de)
+	}
+	if td := p.ExtraMetrics["total_debt"]; td != 8098e6 {
+		t.Errorf("total_debt = %v, want 8098e6", td)
+	}
+}
+
+// @AC-3: AXP (financial-sector) — LongTermDebt 56,387M + ShortTermBorrowings 1,371M over equity
+// 33,474M ≈ 1.73, below de_bad=2.0 → non-zero D/E sub-score (no longer permanently zeroed).
+func TestDebtToEquity_FinancialSectorNonZero_AC3_feature211(t *testing.T) {
+	p := onlyPeriodDE(t, debtCF211(33474e6, map[string]float64{"LongTermDebt": 56387e6, "ShortTermBorrowings": 1371e6}))
+	if p.DebtToEquity == nil {
+		t.Fatalf("debt_to_equity nil, want ~1.73")
+	}
+	de := *p.DebtToEquity
+	if de < 1.70 || de > 1.75 {
+		t.Errorf("debt_to_equity = %v, want ~1.73", de)
+	}
+	if de >= 2.0 {
+		t.Errorf("debt_to_equity = %v, want < de_bad 2.0 (non-zero sub-score)", de)
+	}
+}
+
+// AAPL — LongTermDebtNoncurrent+Current summed (no double-count vs aggregate LongTermDebt) + CommercialPaper.
+func TestDebtToEquity_NoDoubleCount_feature211(t *testing.T) {
+	p := onlyPeriodDE(t, debtCF211(73733e6, map[string]float64{
+		"LongTermDebtNoncurrent": 78328e6,
+		"LongTermDebtCurrent":    12350e6,
+		"CommercialPaper":        7979e6,
+	}))
+	if td := p.ExtraMetrics["total_debt"]; td != 98657e6 {
+		t.Errorf("total_debt = %v, want 98657e6 (78328+12350+7979, no aggregate double-count)", td)
+	}
+	if p.DebtToEquity == nil || *p.DebtToEquity < 1.33 || *p.DebtToEquity > 1.35 {
+		t.Errorf("debt_to_equity = %v, want ~1.34", p.DebtToEquity)
+	}
+}
+
+// No debt tag present → DebtToEquity nil (→ missing_metrics), never a fabricated 0 (@AC-22 @feature-204).
+func TestDebtToEquity_NilWhenNoDebtTag_feature211(t *testing.T) {
+	p := onlyPeriodDE(t, debtCF211(50000e6, map[string]float64{}))
+	if p.DebtToEquity != nil {
+		t.Errorf("debt_to_equity = %v, want nil (no debt tag present)", *p.DebtToEquity)
+	}
+	if _, ok := p.ExtraMetrics["total_debt"]; ok {
+		t.Errorf("total_debt present, want absent when no debt tag")
 	}
 }

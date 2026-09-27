@@ -337,6 +337,64 @@ test.describe('Screener', () => {
   });
 });
 
+test.describe('Screener — criteria presets (feature 189)', () => {
+  test('loads the Fundamentals Signal preset: lists it, populates the 5 rows, and replaces prior criteria (@AC-1/@AC-2/@AC-4)', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await page.goto('/insights/screener');
+
+    // @AC-4 precondition: the page seeds exactly one default criterion row.
+    await expect(page.getByTestId('criterion-row')).toHaveCount(1);
+
+    // @AC-1: the preset selector lists the Fundamentals Signal preset with its description.
+    await page.getByTestId('preset-selector').click();
+    await expect(page.getByRole('option', { name: /Fundamentals Signal/ })).toBeVisible();
+    await page.getByTestId('preset-fundamentals-signal').click();
+
+    // @AC-4: loading replaces all prior criteria with exactly the preset's 5 rows.
+    const rows = page.getByTestId('criterion-row');
+    await expect(rows).toHaveCount(5);
+
+    // @AC-2: each row carries the expected metric / comparator / threshold. The row summary
+    // renders "<metric> <glyph> <threshold>", so one assertion pins metric + op + threshold.
+    await expect(rows.nth(0)).toContainText('pe_ratio < 35');
+    await expect(rows.nth(0).getByLabel('threshold')).toHaveValue('35');
+    await expect(rows.nth(1)).toContainText('pb_ratio < 5');
+    await expect(rows.nth(2)).toContainText('roe > 0.05');
+    await expect(rows.nth(3)).toContainText('debt_to_equity < 2');
+    await expect(rows.nth(4)).toContainText('eps > 0');
+    // @AC-2: the eps row is a hard filter (the others rank).
+    await expect(rows.nth(4).getByLabel('hard filter')).toHaveAttribute('data-state', 'on');
+    await expect(rows.nth(0).getByLabel('rank only')).toHaveAttribute('data-state', 'on');
+  });
+
+  test('preset rows stay fully editable after loading — edit a threshold, remove a row, add a row (@AC-3)', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await page.goto('/insights/screener');
+    await page.getByTestId('preset-selector').click();
+    await page.getByTestId('preset-fundamentals-signal').click();
+    const rows = page.getByTestId('criterion-row');
+    await expect(rows).toHaveCount(5);
+
+    // Edit: change the pe_ratio threshold 35 -> 25.
+    const peThreshold = rows.nth(0).getByLabel('threshold');
+    await peThreshold.fill('25');
+    await expect(peThreshold).toHaveValue('25');
+    await expect(rows.nth(0)).toContainText('pe_ratio < 25');
+
+    // Remove: drop the eps row (5 -> 4).
+    await rows.nth(4).getByLabel('remove criterion').click();
+    await expect(page.getByTestId('criterion-row')).toHaveCount(4);
+
+    // Add: append a fresh criterion (4 -> 5).
+    await page.getByRole('button', { name: /Add criterion/ }).click();
+    await expect(page.getByTestId('criterion-row')).toHaveCount(5);
+  });
+});
+
 test.describe('Screener — background data-readiness polling (feature 118)', () => {
   // Every response after the first (i.e. every poll attempt — including the immediate one that
   // fires the instant polling is enabled, which page.clock does NOT gate; page.clock virtualizes

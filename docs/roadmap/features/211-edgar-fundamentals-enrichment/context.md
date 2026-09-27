@@ -236,3 +236,158 @@ until its first-ever USD distribution in 2024, so older PIT periods legitimately
   entry's path updated 207→211. No CHANGELOG/merge-order citations existed. Branch name unchanged
   (`claude/fundamentals-strategy-fscore-j3oshc`); a NEW PR replaces the merged #1186.
 - Lifecycle status unchanged: `implementation-ready`. Resume with `/sdd-execute edgar-fundamentals-enrichment sequential`.
+
+---
+
+## Session 2026-09-26 — sdd-review impl-spec (advisory)
+
+- Result: 2 failures (same `feature-207` mislabel, Steps 15 & 16) + 4 warnings/notes. No Floor breach. Overlap: one soft, disjoint-region file overlap with feature 196 on `internal/repository/marketdata_repo.go` — rebase-only, MOOT on the single branch. Migrations `marketdata/006`, `config/030` next-free; 5 config keys unclaimed; no proto field change.
+- Items carried into execution:
+  - Steps 13/15/16: [x] `@feature-207`/"feature 207" → **211** FIXED (lines 601, 633). Grep confirmed no other `207` occurrences (the `:173-207` at line 358 is a range, not a feature number; Step 13 correctly cites feature 204). This corruption of C-16 business-rule traceability is resolved.
+  - Step 8: [x] added explicit "broker symmetry N/A — marketdata is Alpaca-only for market data; corporate-actions has no IBKR lane" note (B2b).
+  - Steps 7/11: [x] no explicit Go coverage threshold — `internal/service`/`cmd` are CI-coverage-excluded; the 40% gate is asserted at Steps 5 & 9 over `internal/edgar`/`internal/alpaca`. Justified, no action.
+  - Step 12: config seed (030) sequenced after its reader (Step 10) — default-safe reads (`GetBool(...,default)`), so no build/test inversion; optional reorder only. No action.
+  - Open Risk 1 (@AC-2): [ ] XBRL debt-tag **wording correction** to the existing `@AC-2` block (not a renumber) requires **operator sign-off recorded here** at the start of `/sdd-execute` Step 5. PENDING.
+  - Open Risk 2 (@AC-5): [ ] Alpaca corporate-actions **entitlement** is the first action of Step 8 (direct `GET /v1/corporate-actions` probe). If unentitled → STOP, escalate, descope FR-4/@AC-5 with sign-off; FR-1/2/3/5/6/8 proceed. PENDING (not verifiable pre-execution — no Alpaca creds this session).
+
+---
+
+## Session 2026-09-26 — sdd-execute (sequential; single-branch adaptation) — START
+
+Executing on `claude/pending-roadmap-features-9z01mn`; integration via shared PR #1191. Toolchain: Go 1.27.0 ✓, uv 0.8.17 ✓, UI deps present. Migration NNNs validated next-free (marketdata 006, config 030).
+
+### Operator decisions carried into this run
+- **@AC-5 / Alpaca dividend feed (Step 8 blocker resolution):** the live entitlement probe cannot run here (no Alpaca creds; `GetSecret` needs a running config service + DB; no egress to `data.alpaca.markets`). **User decision:** *write* Steps 8–9 code with **graceful fallback** for when Alpaca returns no/absent dividend data, plus an **auditable log line** so operators can see when the feed was unavailable; unit tests use **fake dividend sources** (no live call). The live @AC-5 entitlement claim remains **unverified in this env** — flagged for a creds-bearing environment to confirm. `dividend_yield` degrades to nil→"—" when the feed is absent/disabled/unentitled (symmetric-missing preserves @AC-9).
+- **@AC-2 (Step 5):** the corrected XBRL debt-tag figures need operator sign-off — will pause at Step 5 (blocker).
+
+### Step 1 — migration: dividend_actions store [done]
+- Created `migrations/006_dividend_actions.{up,down}.sql` — plain table `marketdata.dividend_actions` (symbol, ex_date PK; pay_date, cash_amount, currency, source, fetched_at). Verified offline: up CREATE ↔ down DROP; NNN=006 next-free. No DB started (offline migration rule).
+- Files: `services/xstockstrat-marketdata/migrations/006_dividend_actions.up.sql`, `.down.sql`
+- Deviations: none.
+
+### Step 2 — service: currency capture + unit-aware EDGAR aggregator [done]
+- Reshaped `periodAgg.vals` to `map[metric]map[unit]float64` (unit-keyed, first-seen-per-(metric,unit)); captured the XBRL unit key at the `entry.Units` loop; added `voteCurrency` (most monetary facts, per-share/shares excluded, lexical tiebreak → CNY), `valIn`/`valAny` helpers. `buildPeriod` now sets `Currency` from the vote, reads absolute facts in native currency, and stashes `stockholders_equity_usd` for Step 6.
+- Files: `services/xstockstrat-marketdata/internal/edgar/edgar_client.go`
+
+### Step 3 — test: currency-capture unit tests (@AC-1) [done]
+- Added 3 tests: dual-currency CNY row (@AC-1, + native/USD-equity extras), USD-only regression, re-backfill determinism. `go test ./internal/edgar/...` green (all existing edgar tests still pass — aggregator refactor caused no regression). Lint via `go vet` + `gofmt` (golangci-lint fallback — see Deviation Log).
+- Files: `services/xstockstrat-marketdata/internal/edgar/edgar_client_test.go`
+- Deviations: golangci-lint→go vet/gofmt CI-equivalent fallback (Deviation Log). Red-before-green: the CNY-currency assertion is definitionally red against the pre-Step-2 hardcoded `Currency: "USD"` (old path returned "USD" unconditionally).
+
+### @AC-2 acceptance-wording sign-off (Step 5 gate)
+- **User signed off** on correcting @AC-2 to the **real FY2026 figures** (option "Real FY2026 numbers"). Edited the existing @AC-2 block (not a renumber, C-15): StockholdersEquity 153,796M USD / 1,060,886M CNY; total Liabilities 113,555M USD; financial debt = ConvertibleDebtNoncurrent ~8,098M USD → financial-debt D/E ~0.05 (vs the ~0.74 total-liabilities ratio); well below de_bad=2.0. Short/long-term borrowings ceased after FY2018/FY2019. @AC-3 (AXP) and @AC-4 (BABA dual-report) unchanged (validated as written).
+
+### Step 4 — service: financial-debt D/E tag allow-list + summation (FR-2) [done]
+- Extended `instantTags` with 7 us-gaap debt concepts (LongTermDebtNoncurrent/Current/LongTermDebt/DebtCurrent/ShortTermBorrowings/CommercialPaper/ConvertibleDebtNoncurrent); IFRS omitted (all filers us-gaap — Deviation Log). `buildPeriod` computes `total_debt` no-double-count (LTD noncurrent+current when either present, else aggregate LongTermDebt; + short-term/current/CP/convertible), replaces `liabilities/equity` D/E with `total_debt/equity` (native currency), stores `total_debt` in ExtraMetrics; leaves DebtToEquity nil when no debt tag present.
+- Files: `services/xstockstrat-marketdata/internal/edgar/edgar_client.go`
+
+### Step 5 — test: financial-debt D/E unit tests (@AC-2, @AC-3) [done]
+- @AC-2 wording corrected to real FY2026 figures (signed off, above). Added tests: BABA financial-debt D/E ~0.053 (@AC-2), AXP ~1.73 < de_bad 2.0 non-zero (@AC-3), AAPL no-double-count total_debt=98,657M (~1.34), no-debt-tag→nil. `go test ./internal/edgar/...` green; vet + gofmt clean.
+- Files: `services/xstockstrat-marketdata/internal/edgar/edgar_client_test.go`, `docs/roadmap/features/211-edgar-fundamentals-enrichment/acceptance.feature`
+- Deviations: golangci-lint→go vet/gofmt fallback (Deviation Log).
+
+## Session 2026-09-26 — sdd-execute (211 progress checkpoint after Step 5)
+**Steps this session**: 1, 2, 3, 4, 5 (all done, committed + pushed, edgar suite green)
+**Progress**: 5 done / 16 total
+**Committed**: 5c7b151 (step1 migration) · 005cfc1 (steps2-3 currency) · 764c828 (steps4-5 D/E)
+**Gates cleared**: @AC-2 wording sign-off (real FY2026 figures) recorded above.
+**Remaining (6–16)**: Step 6/7 currency-consistent P/B + P/E fix in `priceJoin` (marketdata_service.go:1630) + tests; Step 8/9 Alpaca dividend feed (client.go) + repo UpsertDividends/SumDividendsInWindow (marketdata_repo.go) + T12M yield, **with @AC-5 fallback+audit-log per operator decision** (no live entitlement here; fake-source tests); Step 10/11 EDGAR-canonical snapshot dispatch + FR-8 disable-safety (marketdata_service.go GetFundamentals ~1268) + tests; Step 12 config seed migration `030_marketdata_edgar_snapshot_keys` (5 keys); Step 13/14 UI data-explorer currency/source/CSV + Playwright; Step 15 marketdata acceptance suite (@feature-211, C-16); Step 16 docs (CLAUDE.md config keys + design-correction) + teardown.
+**Resume**: `/sdd-execute 211-edgar-fundamentals-enrichment sequential` (or `next`) — re-reads this context. Shared branch `claude/pending-roadmap-features-9z01mn`, integration PR #1191.
+**Next**: Step 6 (priceJoin P/B — uses `stockholders_equity_usd` stashed in Step 2 for currency-consistent market_cap/equity).
+
+### Step 6 — service: currency-consistent P/B + P/E fix (FR-3, FR-7) [done]
+- In `priceJoin` (marketdata_service.go): P/B = USD market_cap / USD equity — prefer `ExtraMetrics["stockholders_equity_usd"]` (dual-report filer), else native equity when Currency==USD, else nil (no FX). P/E now guarded to Currency==USD (USD close / USD native EPS), else nil.
+- Files: `services/xstockstrat-marketdata/internal/service/marketdata_service.go`
+- Deviation: the spec's "use USD-unit EPS when present for a non-USD filer" P/E branch is narrowed to nil-when-non-USD, because Step 2 stashed only stockholders_equity_usd (not eps_usd); this stays within Step 6's marketdata_service.go file scope and is honest (no FX). A future eps_usd stash could enable non-USD P/E. Recorded in Deviation Log.
+
+### Step 7 — test: PIT P/B unit tests, no look-ahead (@AC-4) [done]
+- Added priceJoin tests (fake histRepo): P/B from USD equity + no-look-ahead (only filed_date queried) (@AC-4), P/B nil when non-USD filer lacks USD equity, P/E USD-only currency rule. `go test ./internal/service/...` green; vet + gofmt clean.
+- Files: `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go`
+
+### Step 8 — service: Alpaca corporate-actions dividend feed + PIT T12M yield (FR-4, FR-7) [done]
+- **@AC-5 live-entitlement disposition (operator decision, P-03):** the spec's "FIRST — Alpaca entitlement direct check" cannot run in this offline env (no resolved Alpaca creds, no outbound Alpaca reach). Rather than descope FR-4/@AC-5, the **operator signed off** on: write the Step 8-9 code with a **graceful fallback** (dividend feed absent/errored/disabled → `DividendYield` left **nil** → surfaces as `missing`, never a fabricated 0) **and an auditable WARN log** so a post-deploy audit can confirm the live entitlement. FR-1/2/3/5/6/8 are unaffected. The live @AC-5 pass therefore remains **unverified in this env by design** — the deployed WARN/Info logs are the audit trail; @AC-5 is exercised here only against fake sources (Step 9).
+- Added `source.CashDividend` + `source.DividendSource` interface (`internal/source/source.go`). `alpaca.GetCashDividends` hits `{DataURL}/v1/corporate-actions?types=cash_dividend`, paginating like `GetBars`; non-200 → error (feeds the fallback). Repo: `UpsertDividends` (`ON CONFLICT (symbol, ex_date) DO UPDATE`) + `SumDividendsInWindow(symbol, asOf, windowStart) (sum, hasAnyRow, err)`. Service: new `dividendSrc DividendSource` field (nil-safe); `backfillOneSymbol` fetches dividends once (gated `marketdata.dividends.enabled`, lookback `marketdata.dividends.backfill_lookback_years` default 3), then per period `dividend_yield = SumDividendsInWindow(symbol, filed, filed-365d) / price` **only when** feed present + price>0; no ex_date>filed contributes (FR-7). `main.go` passes `alpacaClient` as the dividend source (no new env var/secret).
+- Fallback/audit logs: WARN `"dividend feed unavailable — dividend_yield left missing (audit)"` on feed error; Info `"dividend feed returned no payments"` when empty. Feed absent/disabled/errored ⇒ nil (missing); feed present + 0-in-window ⇒ 0 (0-vs-missing distinction, design point 4).
+- Files: `internal/source/source.go`, `internal/alpaca/client.go`, `internal/repository/marketdata_repo.go`, `internal/service/marketdata_service.go`, `cmd/server/main.go`
+- Deviations: @AC-5 live entitlement unverified in this env (operator-approved fallback+audit-log path, above); golangci-lint→go vet/gofmt fallback (Deviation Log).
+
+### Step 9 — test: dividend feed + T12M yield unit tests (@AC-5) [done]
+- Service tests (fake `DividendSource` + fake histRepo): @AC-5 exact scenario (dividends 2024-08-01/2025-02-01/2025-08-15, filed 2025-06-26 → window sums only the first two, 2025-08-15 excluded as post-filing FR-7; yield = sum/price ~0.01); 0-when-feed-has-rows-but-none-in-window; nil/missing when dividendSrc disabled; nil/missing when feed unavailable. Alpaca client tests: `GetCashDividends` parses corporate-actions JSON into CashDividend (ExDate/PayDate/CashAmount/Currency); 403 → error (drives fallback).
+- `GOWORK=off go test ./internal/alpaca/... ./internal/service/... ./internal/repository/... ./internal/source/...` green; `go vet ./...` clean; `gofmt -l` clean.
+- Files: `internal/alpaca/client_test.go`, `internal/service/marketdata_service_test.go`
+- Deviations: golangci-lint→go vet/gofmt fallback (Deviation Log). Red-before-green: @AC-5 yield assertion is definitionally red against the pre-Step-8 tree (no dividend_yield compute existed).
+
+### Step 10 — service: EDGAR-canonical snapshot dispatch + FR-8 disable-safety (FR-5, FR-8) [done]
+- Added a live-read `marketdata.fundamentals.snapshot_source` axis (`snapshotSource()`, default `vendor`) at the top of BOTH `GetFundamentals` and `GetFundamentalsMulti`. Under `edgar`, both dispatch the shared `getEdgarSnapshot` builder (C-10(b) parity by construction); under `vendor` the FMP/Finnhub path is byte-for-byte unchanged.
+- `getEdgarSnapshot`: kill-switch `marketdata.edgar.enabled` read with an **explicit `true`** default (feature-100 GetBool zero-value trap) → `FailedPrecondition`+WARN when false; source-aware cache hit (only serves a fresh row whose `cacheAxis(Source)=="edgar"`, so a post-cutover vendor row self-heals); newest as-of period via the new `LatestHistoricalFundamental` one-indexed read; `edgarSnapshotFromPeriod` overlays a **live** mid price (`livePrice` → `GetLatestQuotes`) on the stored period, keeping the stored D/E + P/B + currency (same conventions ⇒ @AC-6/@AC-9), sets `Source="edgar"` explicitly (guards the repo `→"fmp"` default), write-through `UpsertFundamentals` under `marketdata.edgar.cache_ttl_hours`.
+- Non-SEC/backfill-gap fallback (@AC-7): zero periods OR no core metrics → WARN (reason `zero_history`/`no_core_metrics`, so a backfill gap is never masked) then route to the vendor **only while `fundamentalsEnabled()`** (vendor still gated); vendor row keeps the vendor `Source`.
+- `main.go`: `newFundamentalsSource` default → **boot-fatal `os.Exit(1)`** on an unknown provider (explicit switch, F-07). FMP/Finnhub client code retained (out of scope to delete).
+- Files: `internal/service/marketdata_service.go`, `internal/repository/marketdata_repo.go` (LatestHistoricalFundamental), `cmd/server/main.go`.
+- Deviations (Deviation Log 2026-09-27): dedicated `LatestHistoricalFundamental` vs the spec's "via GetHistoricalFundamentals" (that method pages oldest-first → whole-history scan; the dedicated single-row read is the faithful "one indexed read/latest"); `snapshot_source` unrecognized value → fail-safe WARN+vendor, not RPC-fatal (live-read axis; boot-fatal is applied to the main.go provider switch where F-07 is safe).
+
+- **FR-8 disable-safety audit (for the PR body — every vendor-keyed read / provider-named string in `marketdata_service.go` + `main.go`, and why none fires a fallthrough when `snapshot_source=edgar` with both vendors off):**
+  - `fundamentalsEnabled()` → `marketdata.<provider>.enabled` (`false` default) — reached only on the vendor path or the @AC-7 fallback (which itself requires a vendor enabled); the edgar serving path gates on `marketdata.edgar.enabled` (**true** default) instead. No fallthrough.
+  - `fundamentalsQuota()` → `marketdata.finnhub.{rate_window_seconds,symbols_per_minute}` / `marketdata.fmp.daily_request_cap` — vendor path only; **bypassed** under edgar (EDGAR has no vendor quota).
+  - `resolveFundamentals`/`GetFundamentalsMulti` TTL → `marketdata.<provider>.cache_ttl_hours` — vendor path/fallback only; the edgar TTL is `marketdata.edgar.cache_ttl_hours`.
+  - `enrichmentUnderCap()` → `marketdata.fmp.daily_request_cap` — backfill lane (feature 198), not snapshot serving.
+  - `toProtoFundamentals` empty-Source `src = s.fundProvider`, and repo `marketdata_repo.go` empty-source `src="fmp"` — never fire for edgar rows because `edgarSnapshotFromPeriod` sets `Source="edgar"` explicitly.
+  - `main.go newFundamentalsSource` → `marketdata.finnhub.base_url` / `marketdata.fmp.{base_url,metrics}` — boot-time client construction (always built, gated at use); under edgar mode the vendor client is constructed but never called.
+  - **Confirmed active source when both vendors off:** `TestGetFundamentals_EdgarSnapshot_AC6_FR8_feature211` sets `finnhub.enabled=false`, `fmp.enabled=false`, omits `edgar.enabled` (proves true-default) → snapshot still served, `Source=="edgar"` — no fallthrough to the `false`/`"fmp"` defaults (the exact feature-129 failure).
+
+### Step 11 — test: snapshot dispatch / disable-safety / parity unit tests (@AC-6, @AC-7) [done]
+- Added `edgarSnapshotSvc` harness (fake fundRepo cache + fakeHistRepo `latest` + registry-served live quote via `fakeMultiSource` + vendor source) and 5 tests: @AC-6+FR-8 (edgar snapshot, D/E/P/B/currency = stored period, live mid price overrides stored, served with both vendors off + edgar.enabled unset proving true-default); C-10(b) single/multi parity; @AC-7 vendor fallback on zero history (Source=vendor name, vendor fetched once); kill-switch `edgar.enabled=false` → FailedPrecondition; source-aware cache self-heal (fresh vendor row re-derived to edgar in one call). Added `LatestHistoricalFundamental` to both test fakes.
+- `GOWORK=off go test ./internal/service/... ./internal/repository/... -race` green; `go vet ./...` clean; `gofmt -l` clean.
+- Files: `internal/service/marketdata_service_test.go`
+- Deviations: golangci-lint→go vet/gofmt fallback (Deviation Log). Red-before-green: the snapshot-dispatch assertions are definitionally red against the pre-Step-10 tree (no `snapshot_source` axis existed).
+
+### Step 12 — config: seed migration 030_marketdata_edgar_snapshot_keys (FR-5) [done]
+- Created `030_marketdata_edgar_snapshot_keys.{up,down}.sql` (next free NNN after 029; the 024 gap is not backfilled). Seeds 5 non-secret `marketdata.*` keys, staging+production, global (user_id NULL), `ON CONFLICT … DO NOTHING`, mirroring 028's column shape: `fundamentals.snapshot_source='vendor'` (string), `edgar.enabled='true'` (bool), `edgar.cache_ttl_hours='24'` (int), `dividends.enabled='false'` (bool), `dividends.backfill_lookback_years='2'` (int). down.sql deletes exactly those 5 by explicit `key IN (...)`, global rows only (never a LIKE — leaves feature-198 history keys and the encrypted credential rows untouched).
+- **Coherence fix:** aligned the service code default for `marketdata.dividends.backfill_lookback_years` from 3 → **2** (`marketdata_service.go`, the Step 8 site) so the seed and the code default are one source of truth and the migration is a true no-runtime-behavior change (dividends.enabled=false gates the fetch off at deploy regardless). Dividend tests still green.
+- Seeded at current code defaults ⇒ NO-runtime-behavior change on apply: snapshot_source=vendor keeps the FMP/Finnhub path (live-flip to edgar is a rollout step), dividends off (no Alpaca cost until entitlement confirmed), edgar.enabled=true matches the service true-default.
+- Verified offline (SQL only, no DB started); confirmed none of the 5 keys was already seeded by an earlier migration.
+- Files: `services/xstockstrat-config/migrations/030_marketdata_edgar_snapshot_keys.up.sql`, `…down.sql`, `services/xstockstrat-marketdata/internal/service/marketdata_service.go` (default alignment).
+
+### Step 13 — service: data-explorer currency + source provenance + CSV (FR-6) [done]
+- Confirmed the recon finding: `FUNDAMENTAL_METRICS` already carries pb_ratio/dividend_yield/debt_to_equity (feature 204) — FR-6's "add the metrics" was already satisfied, so this step added only provenance rendering + CSV columns + the USD-basis marker.
+- `useDataExplorer.ts`: `historicalToCsv`/`snapshotToCsv` now emit `currency`,`source` columns (after filed_date / as_of), EXTENDING the feature-204 CSV; missing-metric cells stay blank (@AC-22).
+- `data-explorer/page.tsx`: historical table gains `Currency`/`Source` provenance columns (`data-provenance`); snapshot grid gains a provenance line (`de-fund-currency`/`de-fund-source`); added `USD_BASIS_METRICS={market_cap,price}` + `isNonUsdRow` so those absolute fields carry a muted "USD" hint inside a non-USD (CNY) row (ratios are dimensionless — no hint). C-17: design-role tokens (`text-muted-foreground`/`text-foreground`), no color literal.
+- No BFF/browser-client change — `currency`/`source` already on the proto messages/typed client (recon).
+- `npx tsc --noEmit` shows no errors in the touched files (two pre-existing errors in unrelated test files — `e2e/insights/backfills.spec.ts` `never`-typing, `src/middleware.test.ts` mock typing — not caught by CI's `next build`/vitest gates and outside this feature); `pnpm build` clean; `pnpm run lint` only pre-existing exhaustive-deps warnings elsewhere.
+- Files: `services/xstockstrat-ui/src/hooks/useDataExplorer.ts`, `services/xstockstrat-ui/src/app/insights/data-explorer/page.tsx`
+
+### Step 14 — test: data-explorer Playwright — enriched metrics + currency + source (@AC-8) [done]
+- Extended `e2e/fixtures/historicalFundamentals.ts` with `DE_SNAPSHOT_BABA` + `DE_HIST_BABA_PAGE1` (CNY, source=edgar, populated d/e·pb·div-yield; Q3-2026 omits roe → "—"); added the INVENTORY.md catalog row (C-12).
+- `data-explorer.spec.ts`: new describe (feature 211 @AC-8) — BABA auto-selected (ListAssets returns it first), asserts snapshot provenance (CNY/edgar) + USD hint, historical FY2026 populated metrics + currency/source columns, Q3-2026 "—" for the missing roe but populated P/B (not all-dashed, @AC-22), and CSV header carries `filed_date,currency,source` + CNY/edgar values. Reuses `addAuthCookie` (no re-implemented JWT).
+- Ran host-native prebuilt (Docker unavailable — established fallback): `CI=1 E2E_PREBUILT=1 npx playwright test data-explorer --project=chromium` → **7 passed** (incl. the new @AC-8). Red-before-green: the currency/source column + provenance assertions are definitionally red against the pre-Step-13 tree (no such columns rendered).
+- Files: `services/xstockstrat-ui/e2e/fixtures/historicalFundamentals.ts`, `services/xstockstrat-ui/e2e/insights/data-explorer.spec.ts`, `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md`
+
+### Step 15 — test: marketdata acceptance suite edgar-fundamentals-enrichment.feature (@AC-9; C-16) [done]
+- Created `services/xstockstrat-marketdata/acceptance/edgar-fundamentals-enrichment.feature` — the marketdata suite's FIRST fundamentals-serving/currency guard (recon C-16 blind spot). Promoted all 9 acceptance scenarios (@AC-1..@AC-9) with the promotion-provenance header + `@feature-211` on every scenario, matching the existing suites' Gherkin/promotion style. Left the four existing `.feature` files untouched.
+- @AC-9 tightened to the concrete, non-fragile parity assertion (fails.md 2026-08-13 — no full-stack grpcurl smoke): the PIT period and the EDGAR snapshot for the same filing carry the same debt_to_equity/pb_ratio/currency (Step 11 proves the builder reads the same stored period), so the seeded formula sees identical inputs on both surfaces — closing the ~0.35-vs-0.70 split at its root cause with no indicators/analysis code change.
+- @AC-5 carries a note that the live Alpaca entitlement is verified post-deploy via the audit logs (operator decision); the unit assertion uses a fake source. @AC-8 recorded as the UI surface of the same data.
+- `grep -c "@AC-"` → 14 (9 scenario tags + 5 header-comment references), ≥ 9 as specified.
+- Files: `services/xstockstrat-marketdata/acceptance/edgar-fundamentals-enrichment.feature`
+
+### Step 16 — docs: marketdata CLAUDE.md config keys + config-governance + teardown [done]
+- `services/xstockstrat-marketdata/CLAUDE.md`: added the 5 feature-211 keys to § Config Keys Consumed (snapshot_source, edgar.enabled, edgar.cache_ttl_hours, dividends.enabled, dividends.backfill_lookback_years) at their code defaults (C-05), and a § Fundamentals Integration note that the snapshot serving source is now the live-read `snapshot_source` axis (edgar lane + fallback), so the vendor prose is no longer read as "always the snapshot source".
+- `docs/patterns/config-governance.md`: new Per-Feature Registered Keys entry (feature 211, migration 030, 5 keys, no-runtime-behavior-change).
+- **Teardown (mandatory context audit):** `/context-forge:context-constitution refresh` is **not model-invocable** in this session (the Skill tool refuses it: "reserved for explicit user invocation"; do not replicate its workflow by other means). Per CLAUDE.md § Teardown I performed the **manual equivalent** on the context files this feature touched:
+  - `services/xstockstrat-marketdata/CLAUDE.md` — re-read against the code: all 5 new config-key rows match their `GetString`/`GetBool`/`GetInt` defaults in `marketdata_service.go`/`backfillOneSymbol` (vendor default, edgar true-default, ttl 24, dividends false, lookback 2 with `<=0→2`); reconciled the § Fundamentals Integration prose drift (vendor was implied to be the sole snapshot source) with the snapshot_source note above.
+  - `docs/patterns/config-governance.md` — the feature-211 entry matches migration `030`'s seeded keys/defaults exactly; confirmed 030 does not seed the feature-198 `marketdata.edgar.{base_url,user_agent,rate_limit_rps}` rows.
+  - No other auto-loaded context file (root/other CLAUDE.md, constitution, findings) or `scrubberExtraTargets` target (README.md, docs/patterns/ui-ux-governance.md) was touched by this feature, so none needed reconciliation.
+  - **Owed to the user:** run `/context-forge:context-constitution refresh` (scoped to `services/xstockstrat-marketdata`) to complete the automated grounded-drift pass — it cannot be run from here. Recorded in the PR body.
+- Files: `services/xstockstrat-marketdata/CLAUDE.md`, `docs/patterns/config-governance.md`
+
+## Session 2026-09-27 — sdd-execute (211 Steps 6–16 complete)
+**Steps this session**: 6,7,8,9,10,11,12,13,14,15,16 (all done). **All 16 steps done** → status.md `code-completed`, impl-spec top `complete`.
+**Commits**: 764c828(4-5, prior) · <this session> steps 6-7 (prior) · f4f7906(8-9 dividends) · 4c1ebf1(10-11 snapshot dispatch) · 429e763(12 config migration) · 84a58ed(13-14 data-explorer UI) · 20a16a7(15 acceptance suite) · <this commit>(16 docs+teardown).
+**Verification**: marketdata Go — `go test ./internal/{alpaca,service,repository,source,edgar}/...` green, `go vet` clean, `gofmt` clean (golangci-lint→vet/gofmt fallback, Deviation Log). UI — `pnpm build` clean, data-explorer e2e 7 passed (chromium, host-native prebuilt). Config migration 030 verified offline.
+**Open at rollout (not code)**: live Alpaca dividend entitlement (@AC-5) confirmed via audit logs post-deploy; snapshot_source live-flip vendor→edgar per env; dividends.enabled flip. See impl-spec § Rollout note.
+**Integration PR**: #1191 (single-branch adaptation, claude/pending-roadmap-features-9z01mn → main-dev).
+**Remaining meta**: C-16 scenario promotion for all four features at launch (deferred to end, per plan); PR body FR-8 audit + teardown note.
+
+### CI fix (2026-09-27) — merge main-dev + revert provider boot-fatal to WARN+FMP-fallback
+- Merged `origin/main-dev` (docs-only advance: features 207/208/214 + ledger; the PR was `behind`, no code overlap, clean merge).
+- **Failing job "Go lint and test (xstockstrat-marketdata)":** golangci-lint passed (0 issues); the failure was the `cmd/server` test `TestNewFundamentalsSource_AlwaysNonNil` (feature-082/129 canary) — my Step-10 `os.Exit(1)` on an unknown provider killed the test process. Root cause: the Step 11 verification ran `./internal/...` only, not `./cmd/...`.
+- **Fix:** reverted `newFundamentalsSource`'s default to fall back to FMP (pre-211 behavior, satisfies the always-non-nil canary) while keeping F-07 "loud" as a `slog.Warn` for a genuinely unrecognized value. A config typo must not crash boot; safe default + WARN beats `os.Exit`. Deviation Log updated.
+- Verified: `GOWORK=off go test ./... -race -count=1` (all 13 packages incl. cmd/server) green; `go vet ./...` clean; `gofmt -l` clean.

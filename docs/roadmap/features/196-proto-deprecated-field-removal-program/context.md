@@ -132,3 +132,41 @@ feature in the today's-triage session.
     packages) — [x] accepted (disclosed in-spec; acceptable, no change).
 - No unresolved items carried into execution. Note: execution itself remains blocked on the FR-3
   external-consumer gate (Step 1) — unchanged by this review.
+
+---
+
+## Session 2026-09-26 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 5 advisory warnings (C-01/C-15) + 1 prominent NOTE. No Floor breach. Overlap: one soft, disjoint-region file overlap with feature 211 on `internal/repository/marketdata_repo.go` (196 = `scanBars` read edge; 211 = dividend upsert + cache invalidation) — rebase-only, and MOOT here since both land sequentially on the single branch `claude/pending-roadmap-features-9z01mn`.
+- **NOTE — premise reconciliation (surface to user).** The approved design (`design.md`) is **response-edge omission, NOT proto field removal + `reserved`**. Reviewer verified: `.proto` files untouched (`marketdata.proto:76`, `ingest.proto:75` deprecated fields still defined), zero `reserved` statements repo-wide, `buf breaking` asserts NO break. Therefore this is **not a breaking proto change** and the "2 owners + platform lead" breaking-proto gate is **NOT triggered** by the design as specced. The `feature.md` **Type** header ("breaking-change program — governance-gated") is stale relative to the approved non-breaking design. Left `feature.md` Type unchanged pending user decision on whether to re-label; the impl-spec/design are internally consistent (non-breaking).
+- Items carried into execution:
+  - Step 1: [x] `backfills/page.tsx:138`→`:151` corrected; added concrete `path:line` for the analysis `timeframe_enum` reader (`servicer.py:1151`, `live_loop.py:575,642`, `screener.py:224`) and the agent bar/backfill tools (`client.py:1686,:1811`) — the governance-crux gate is now mechanically verifiable.
+  - Steps 2/4/6: [ ] systematic line-number drift (all cited symbols RESOLVE; lines stale ~2–15). `/sdd-execute`'s mandatory codebase discovery re-grounds every citation at execute time — the spec line numbers are advisory anchors, not load-bearing. No F-04 breach.
+  - C-15: [x] `@AC-1`/`@AC-4` uncovered-by-design carve-out CONFIRMED legitimate — `acceptance.feature:12,19` carry `@out-of-scope @rejected-removal`.
+
+---
+
+## Session 2026-09-26 — sdd-execute (sequential): Step 1 in-repo reader audit (half a) complete; feature PARKED
+
+Per the operator decision at the sequential-run checkpoint ("do the audit half, then park"), the
+**in-repo** half of the Step 1 FR-3 consumer-confirmation gate was executed. No code changed; Steps
+2–7 remain `blocked`, and Step 1 remains `blocked` pending the **external** half (BSR-consumer
+enumeration + Proto Reviewer + Platform Lead sign-off), which cannot be discharged autonomously.
+
+### In-repo reader audit — RESULT: no internal consumer reads either gated deprecated STRING field
+
+Gated fields: `Bar.timeframe` (marketdata, string) and `BackfillJob.timeframe` (ingest, string).
+Replacement enum: `timeframe_enum`.
+
+- **analysis** (`services/xstockstrat-analysis/app`): `grep '\.timeframe\b'` minus `_enum` → **zero** bare-string reads. Callers bind the enum: `app/handlers/servicer.py:1151`, `app/engine/live_loop.py:575,642`, `app/services/screener.py:224` (all `timeframe_enum=common_pb2.Timeframe.TIMEFRAME_1DAY`). Documented at `app/docs/warmup.md:54`. ✓ safe to omit `Bar.timeframe`.
+- **agent** (`services/xstockstrat-agent/app`): the only `.timeframe` read is `client.py:742` `common_pb2.Timeframe.Name(g.timeframe)` where `g` ∈ `resp.coverage_gaps` — i.e. `CoverageGap.timeframe`, a **Timeframe ENUM** field (its int is fed to `Timeframe.Name()`), **not** the gated `Bar.timeframe`/`BackfillJob.timeframe` string. Agent SENDS `timeframe_enum` in bar/backfill requests (`client.py:1686,1811`). ✓ no deprecated-string consumer.
+- **xstockstrat-ui backfills page** (`src/app/insights/backfills/page.tsx`): all `timeframe` usages are the **enum** delete-form selector (`Timeframe.TIMEFRAME_UNSPECIFIED` option `:468`, `delTimeframe` `:187`) and the create request `timeframeEnum` (`:151`) — no read of the deprecated `BackfillJob.timeframe` string for display. ✓
+
+**Conclusion**: the internal-consumer precondition for omitting `Bar.timeframe` (@ scanBars/stream) and `BackfillJob.timeframe` (@ job_row_to_proto) is **satisfied**. A human owner need only complete the external half.
+
+### Remaining to clear Step 1 (external half — human, not autonomous)
+1. Announce the deprecation window (features 053/080/143) **closed** to BSR consumers per `docs/runbooks/proto-versioning.md`.
+2. Record **Proto Reviewer + Platform Lead** sign-off in this context.md.
+Only then may Steps 2–7 move off `blocked`. Until then 196 ships **zero code change** (the design's accepted park-equivalent outcome — `design.md:84–86`).
+
+**Sequential run**: parked 196, advanced to feature 213. No 196 files other than this context.md changed.

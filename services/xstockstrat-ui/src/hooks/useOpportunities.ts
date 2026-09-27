@@ -24,7 +24,7 @@ export function useOpportunities(
   minConviction = 0,
   sources: string[] = [],
   actionFilter: OpportunityActionTag = OpportunityActionTag.UNSPECIFIED,
-  sort: OpportunitySort = OpportunitySort.UNSPECIFIED,
+  sort: OpportunitySort = OpportunitySort.CONVICTION,
 ) {
   return useInfiniteQuery({
     queryKey: ['opportunities', minConviction, [...sources].sort(), actionFilter, sort],

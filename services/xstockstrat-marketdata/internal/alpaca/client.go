@@ -209,6 +209,72 @@ func (c *Client) GetBars(ctx context.Context, symbol, timeframe string, start, e
 	return allBars, nil
 }
 
+type alpacaCashDividend struct {
+	Symbol      string  `json:"symbol"`
+	ExDate      string  `json:"ex_date"`
+	PayableDate string  `json:"payable_date"`
+	Rate        float64 `json:"rate"`
+}
+
+type alpacaCorpActionsResponse struct {
+	CorporateActions struct {
+		CashDividends []alpacaCashDividend `json:"cash_dividends"`
+	} `json:"corporate_actions"`
+	NextPageToken string `json:"next_page_token"`
+}
+
+// GetCashDividends fetches cash-dividend corporate actions from Alpaca's v1 corporate-actions REST
+// API (feature 211, FR-4). A non-200 (e.g. an unentitled plan returns 4xx) surfaces as an error so
+// the caller degrades dividend_yield to missing — never a fabricated 0 (the 0-vs-missing rule lives
+// in the service layer, which distinguishes "feed had rows but none in-window" from "no feed").
+func (c *Client) GetCashDividends(ctx context.Context, symbol string, start, end time.Time) ([]source.CashDividend, error) {
+	baseURL := fmt.Sprintf("%s/v1/corporate-actions?types=cash_dividend&symbols=%s&start=%s&end=%s&limit=1000",
+		c.cfg.DataURL, symbol,
+		start.UTC().Format("2006-01-02"),
+		end.UTC().Format("2006-01-02"),
+	)
+	var out []source.CashDividend
+	url := baseURL
+	for {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		if err != nil {
+			return nil, fmt.Errorf("create request: %w", err)
+		}
+		resp, err := c.do(req)
+		if err != nil {
+			return nil, fmt.Errorf("get corporate-actions: %w", err)
+		}
+		body, err := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if err != nil {
+			return nil, fmt.Errorf("read response: %w", err)
+		}
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("alpaca corporate-actions %d: %s", resp.StatusCode, string(body))
+		}
+		var result alpacaCorpActionsResponse
+		if err := json.Unmarshal(body, &result); err != nil {
+			return nil, fmt.Errorf("unmarshal corporate-actions: %w", err)
+		}
+		for _, d := range result.CorporateActions.CashDividends {
+			ex, err := time.Parse("2006-01-02", d.ExDate)
+			if err != nil {
+				continue
+			}
+			cd := source.CashDividend{Symbol: symbol, ExDate: ex, CashAmount: d.Rate, Currency: "USD"}
+			if pd, perr := time.Parse("2006-01-02", d.PayableDate); perr == nil {
+				cd.PayDate = &pd
+			}
+			out = append(out, cd)
+		}
+		if result.NextPageToken == "" {
+			break
+		}
+		url = baseURL + "&page_token=" + result.NextPageToken
+	}
+	return out, nil
+}
+
 type alpacaLatestQuoteResponse struct {
 	Quote struct {
 		T  string  `json:"t"`

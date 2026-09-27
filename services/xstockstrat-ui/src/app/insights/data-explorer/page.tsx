@@ -84,6 +84,14 @@ function fmtMetric(v: number | null): string {
   return fmtNum(v);
 }
 
+// Absolute USD-denominated metrics (feature 211): marketdata reports market_cap/price in USD even for
+// a non-USD-reporting filer (e.g. a CNY row), so these carry an explicit "USD" hint in a non-USD row.
+// The ratios (P/E, P/B, D/E) are dimensionless and need no hint.
+const USD_BASIS_METRICS: ReadonlySet<string> = new Set(['market_cap', 'price']);
+function isNonUsdRow(currency: string): boolean {
+  return currency !== '' && currency !== 'USD';
+}
+
 // OHLCV CSV filename range segment: `<start>_<end>` when a range is selected (AC-16), else `bars`.
 function csvRangeTag(start?: Date, end?: Date): string {
   return start && end
@@ -381,22 +389,44 @@ function SnapshotView({ symbol }: { symbol: string }) {
           <EmptyState title="No fundamentals found for this symbol" />
         )}
         {fundamentals && (
-          <dl
-            className="grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-3"
-            data-testid="de-fund-snapshot"
-          >
-            {FUNDAMENTAL_METRICS.map((m) => (
-              <div
-                key={m.key}
-                className="flex items-center justify-between border-b border-border py-1"
-              >
-                <dt className="text-xs text-muted-foreground">{m.label}</dt>
-                <dd className="text-sm font-medium" data-metric={m.name}>
-                  {fmtMetric(metricValue(fundamentals, m))}
-                </dd>
-              </div>
-            ))}
-          </dl>
+          <>
+            <div
+              className="mb-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-muted-foreground"
+              data-testid="de-fund-provenance"
+            >
+              <span>
+                Reporting currency:{' '}
+                <span className="font-medium text-foreground" data-testid="de-fund-currency">
+                  {fundamentals.currency || '—'}
+                </span>
+              </span>
+              <span>
+                Source:{' '}
+                <span className="font-medium text-foreground" data-testid="de-fund-source">
+                  {fundamentals.source || '—'}
+                </span>
+              </span>
+            </div>
+            <dl
+              className="grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-3"
+              data-testid="de-fund-snapshot"
+            >
+              {FUNDAMENTAL_METRICS.map((m) => (
+                <div
+                  key={m.key}
+                  className="flex items-center justify-between border-b border-border py-1"
+                >
+                  <dt className="text-xs text-muted-foreground">{m.label}</dt>
+                  <dd className="text-sm font-medium" data-metric={m.name}>
+                    {fmtMetric(metricValue(fundamentals, m))}
+                    {USD_BASIS_METRICS.has(m.name) && isNonUsdRow(fundamentals.currency) && (
+                      <span className="ml-1 text-xs text-muted-foreground">USD</span>
+                    )}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </>
         )}
       </CardContent>
     </Card>
@@ -419,11 +449,33 @@ function HistoricalView({ symbol, start, end }: { symbol: string; start?: Date; 
       { accessorKey: 'periodType', header: 'Type' },
       { id: 'periodEnd', header: 'Period end', cell: ({ row }) => fmtDay(row.original.periodEnd) },
       { id: 'filedDate', header: 'Filed', cell: ({ row }) => fmtDay(row.original.filedDate) },
+      // Provenance columns (feature 211): reporting currency + producing source ("edgar" | vendor).
+      {
+        id: 'currency',
+        header: 'Currency',
+        cell: ({ row }) => <span data-provenance="currency">{row.original.currency || '—'}</span>,
+      },
+      {
+        id: 'source',
+        header: 'Source',
+        cell: ({ row }) => <span data-provenance="source">{row.original.source || '—'}</span>,
+      },
       ...FUNDAMENTAL_METRICS.map(
         (m): ColumnDef<Period> => ({
           id: m.name,
           header: m.label,
-          cell: ({ row }) => fmtMetric(metricValue(row.original, m)),
+          cell: ({ row }) => {
+            const v = fmtMetric(metricValue(row.original, m));
+            if (USD_BASIS_METRICS.has(m.name) && isNonUsdRow(row.original.currency)) {
+              return (
+                <span>
+                  {v}
+                  <span className="ml-1 text-xs text-muted-foreground">USD</span>
+                </span>
+              );
+            }
+            return v;
+          },
         }),
       ),
     ],
