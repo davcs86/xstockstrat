@@ -367,3 +367,21 @@ Executing on `claude/pending-roadmap-features-9z01mn`; integration via shared PR
 - @AC-5 carries a note that the live Alpaca entitlement is verified post-deploy via the audit logs (operator decision); the unit assertion uses a fake source. @AC-8 recorded as the UI surface of the same data.
 - `grep -c "@AC-"` → 14 (9 scenario tags + 5 header-comment references), ≥ 9 as specified.
 - Files: `services/xstockstrat-marketdata/acceptance/edgar-fundamentals-enrichment.feature`
+
+### Step 16 — docs: marketdata CLAUDE.md config keys + config-governance + teardown [done]
+- `services/xstockstrat-marketdata/CLAUDE.md`: added the 5 feature-211 keys to § Config Keys Consumed (snapshot_source, edgar.enabled, edgar.cache_ttl_hours, dividends.enabled, dividends.backfill_lookback_years) at their code defaults (C-05), and a § Fundamentals Integration note that the snapshot serving source is now the live-read `snapshot_source` axis (edgar lane + fallback), so the vendor prose is no longer read as "always the snapshot source".
+- `docs/patterns/config-governance.md`: new Per-Feature Registered Keys entry (feature 211, migration 030, 5 keys, no-runtime-behavior-change).
+- **Teardown (mandatory context audit):** `/context-forge:context-constitution refresh` is **not model-invocable** in this session (the Skill tool refuses it: "reserved for explicit user invocation"; do not replicate its workflow by other means). Per CLAUDE.md § Teardown I performed the **manual equivalent** on the context files this feature touched:
+  - `services/xstockstrat-marketdata/CLAUDE.md` — re-read against the code: all 5 new config-key rows match their `GetString`/`GetBool`/`GetInt` defaults in `marketdata_service.go`/`backfillOneSymbol` (vendor default, edgar true-default, ttl 24, dividends false, lookback 2 with `<=0→2`); reconciled the § Fundamentals Integration prose drift (vendor was implied to be the sole snapshot source) with the snapshot_source note above.
+  - `docs/patterns/config-governance.md` — the feature-211 entry matches migration `030`'s seeded keys/defaults exactly; confirmed 030 does not seed the feature-198 `marketdata.edgar.{base_url,user_agent,rate_limit_rps}` rows.
+  - No other auto-loaded context file (root/other CLAUDE.md, constitution, findings) or `scrubberExtraTargets` target (README.md, docs/patterns/ui-ux-governance.md) was touched by this feature, so none needed reconciliation.
+  - **Owed to the user:** run `/context-forge:context-constitution refresh` (scoped to `services/xstockstrat-marketdata`) to complete the automated grounded-drift pass — it cannot be run from here. Recorded in the PR body.
+- Files: `services/xstockstrat-marketdata/CLAUDE.md`, `docs/patterns/config-governance.md`
+
+## Session 2026-09-27 — sdd-execute (211 Steps 6–16 complete)
+**Steps this session**: 6,7,8,9,10,11,12,13,14,15,16 (all done). **All 16 steps done** → status.md `code-completed`, impl-spec top `complete`.
+**Commits**: 764c828(4-5, prior) · <this session> steps 6-7 (prior) · f4f7906(8-9 dividends) · 4c1ebf1(10-11 snapshot dispatch) · 429e763(12 config migration) · 84a58ed(13-14 data-explorer UI) · 20a16a7(15 acceptance suite) · <this commit>(16 docs+teardown).
+**Verification**: marketdata Go — `go test ./internal/{alpaca,service,repository,source,edgar}/...` green, `go vet` clean, `gofmt` clean (golangci-lint→vet/gofmt fallback, Deviation Log). UI — `pnpm build` clean, data-explorer e2e 7 passed (chromium, host-native prebuilt). Config migration 030 verified offline.
+**Open at rollout (not code)**: live Alpaca dividend entitlement (@AC-5) confirmed via audit logs post-deploy; snapshot_source live-flip vendor→edgar per env; dividends.enabled flip. See impl-spec § Rollout note.
+**Integration PR**: #1191 (single-branch adaptation, claude/pending-roadmap-features-9z01mn → main-dev).
+**Remaining meta**: C-16 scenario promotion for all four features at launch (deferred to end, per plan); PR body FR-8 audit + teardown note.

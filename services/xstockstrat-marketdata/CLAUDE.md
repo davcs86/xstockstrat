@@ -87,6 +87,11 @@ guard leaves them bare.
 | `marketdata.edgar.base_url` | string | `https://data.sec.gov` | SEC EDGAR XBRL base URL (`/api/xbrl/companyfacts/CIK{cik}.json`). Ticker→CIK map is fetched from `https://www.sec.gov/files/company_tickers.json` (not under this base). |
 | `marketdata.edgar.user_agent` | string | `xstockstrat/1.0 (ops@xstockstrat.local)` | SEC fair-use `User-Agent` (operator should set a real contact). **Non-secret** ordinary config — read via `GetString`, never `GetSecret`; EDGAR is keyless (F-06). |
 | `marketdata.edgar.rate_limit_rps` | int | `10` | Max outbound SEC requests/sec (SEC fair-use ceiling). `0` disables throttling. |
+| `marketdata.fundamentals.snapshot_source` | string | `vendor` | **Live-read** serving source for the latest-snapshot RPCs (`GetFundamentals`/`GetFundamentalsMulti`, feature 211): `edgar` derives the snapshot from the newest as-reported SEC filing + a live price-join (same financial-debt D/E + currency-consistent P/B convention as the historical lane); `vendor` is the unchanged FMP/Finnhub path. Read on **every** call (`snapshotSource()`) — flipping it takes effect on the next call, no restart. An unrecognized value logs a WARN and fails safe to `vendor` (a live typo must not take serving down). Distinct from `marketdata.fundamentals.provider`, which selects only the *vendor* client and is boot-frozen. |
+| `marketdata.edgar.enabled` | bool | `true` | Kill switch for the EDGAR-canonical snapshot source (feature 211), read only under `snapshot_source=edgar`. **Explicit `true` default** (the feature-100 `GetBool` zero-value trap: a missing key must not read as disabled); `false` ⇒ `FailedPrecondition` + WARN (deliberate all-off). |
+| `marketdata.edgar.cache_ttl_hours` | int | `24` | Hours an EDGAR snapshot cache row (`marketdata.fundamentals`, `source=edgar`) stays fresh before re-derivation (feature 211). A cached row whose `source` is a *vendor* value is never served under the edgar axis (source-aware self-heal), so a `snapshot_source` cutover heals stale vendor rows in one call. |
+| `marketdata.dividends.enabled` | bool | `false` | Master gate for the Alpaca cash-dividend corporate-actions feed backing the PIT T12M dividend yield (feature 211, FR-4). Read on `BackfillFundamentals`. Off/absent/unentitled/errored ⇒ `dividend_yield` left **missing** (never a fabricated 0); a feed error is WARN-logged for post-deploy audit. Reuses the resolved Alpaca creds — no new env var/secret. |
+| `marketdata.dividends.backfill_lookback_years` | int | `2` | Fetch-range bound (years back from now) for the Alpaca cash-dividend feed (feature 211). Bounds only how far back dividends are fetched; the T12M yield window itself is fixed at 365 days in code. `<= 0` falls back to 2. |
 | `marketdata.fundamentals.history.backfill.max_lookback_years` | int | `10` | Default lookback (years) when a `BackfillFundamentals` request omits a range start. |
 | `marketdata.fundamentals.history.backfill.period_types` | string | `both` | Default period types to backfill (`quarterly`\|`annual`\|`both`) when the request omits them. |
 | `marketdata.fundamentals.history.backfill.batch_size` | int | `50` | Symbols per backfill batch (reserved for chunked orchestration). |
@@ -119,6 +124,15 @@ budget is enforced in one place). There are **two** `source.FundamentalsSource` 
 `internal/service/marketdata_service.go`'s `fundProvider` doc comment for why). Both are
 deliberately **NOT** registered in the OHLCV `source.Registry` — the Alpaca/OHLCV path is untouched
 (FR-2).
+
+**Snapshot serving source is switchable (feature 211).** `GetFundamentals`/`GetFundamentalsMulti`
+dispatch on the **live-read** `marketdata.fundamentals.snapshot_source` axis (`vendor` | `edgar`,
+default `vendor`): under `edgar` the snapshot is derived from the newest as-reported SEC filing (one
+indexed `LatestHistoricalFundamental` read) + a live price-join, sharing the same read-through
+`marketdata.fundamentals` cache (rows written with `source="edgar"`, TTL `marketdata.edgar.cache_ttl_hours`,
+gated by `marketdata.edgar.enabled`), and falls back to the enabled vendor for a non-SEC filer. So the
+vendor path below is the serving source only while `snapshot_source=vendor` (or as the edgar fallback).
+`marketdata.fundamentals.provider` selects only the *vendor* client and stays boot-frozen.
 
 Both providers share the **identical** read-through DB cache (`marketdata.fundamentals` table) and
 RPC layer: cache hit within `cache_ttl_hours` → no provider call; miss/stale → quota-guarded fetch;

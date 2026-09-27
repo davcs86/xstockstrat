@@ -1,6 +1,6 @@
 # Implementation Spec: edgar-fundamentals-enrichment
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-09-26
 **Feature**: `docs/roadmap/features/211-edgar-fundamentals-enrichment/feature.md`
 **Total Steps**: 16
@@ -614,7 +614,7 @@ grep -c "@AC-" services/xstockstrat-marketdata/acceptance/edgar-fundamentals-enr
 
 ### Step 16 — docs: marketdata CLAUDE.md config keys + design-correction record
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs` / `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/CLAUDE.md` — modify (add the 5 new config keys to § Config Keys Consumed)
