@@ -56,3 +56,31 @@
 - Lesson recorded (see `fails.md` entry this date): compute the next NNN as `max` across **all origin
   branches**, not just the local working tree — an in-flight sibling on another branch can claim the
   number before your PR merges.
+
+## Session 2026-09-27 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready.
+- Criteria pass: **PASS WITH WARNINGS** (0 blockers). Every code-checkable claim verified accurate
+  (52→43 tool count, nine `db_*` tools, `postgres-mcp` dep, dead `db-migrate.sh` block @ lines 169-204,
+  pool-budget row, 13-scenario C-16 suite, FR→@AC coverage).
+- **Warnings addressed before advancing** (per operator standing rule "always address advisory-review
+  warnings before moving forward"):
+  - Open Question 1 (exact `POSTGRES_MCP_*` wiring + launch mechanism) — RESOLVED: env vars
+    `POSTGRES_MCP_PORT` / `POSTGRES_MCP_DATABASE_URI` / `POSTGRES_MCP_AGENT_PASSWORD`; co-process
+    launched by supervisord `[program:postgres-mcp]` in `services/xstockstrat-agent/supervisord.conf`
+    (entry `scripts/docker-entrypoint.sh` → `supervisord -c /app/supervisord.conf`).
+  - Open Question 2 (FR-4 runbook home) — RESOLVED: new `docs/runbooks/operator-db-access.md`.
+  - Open Question 3 (`db_*` blast radius) — RESOLVED: no external consumer (no `plugins/strat-lab/`,
+    no other skill, no UI beyond the count mirror). Scope contained to `xstockstrat-agent` + docs.
+  - **Blast-radius scan surfaced 6 under-enumerated removal sites** now folded into the spec:
+    `app/postgres_mcp_client.py` (whole-file + its `app/tools.py` import), `supervisord.conf`
+    `[program:postgres-mcp]` block, `.github/workflows/deploy.yml`/`deploy-dev.yml`/`deploy-prod.yml`
+    (`POSTGRES_MCP_AGENT_PASSWORD` secret injection — a dangling ref here would break deploys), and
+    tests `test_db_tools.py` / `test_postgres_mcp_client.py` / `test_deployment_env_vars.py`.
+  - Minor NOTE fixed: `db-migrate.sh` block is lines 169-204 (was "~169-203").
+- Overlap findings: WARN-only, all file-class soft/rebase — no FAIL (no config key / proto field /
+  migration NNN). merge-order.md already carries the 214 row. Manual reconcile with 084
+  (docker-compose.yml / .do/app*.yaml / pool-budget table) if both approach merge; second-lander rebases.
+- Next Action set to `/sdd-design ... quick` (lifecycle: spec-ready → design-approved via /sdd-design,
+  which the SDD entry point makes mandatory before /sdd-spec; the review skill's boilerplate "/sdd-spec"
+  next-action text predates the inserted design phase).

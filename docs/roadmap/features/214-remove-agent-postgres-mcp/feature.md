@@ -12,6 +12,7 @@
 |---|---|---|---|
 | 2026-09-26 | `idea` → `draft` | /sdd-story | Product spec generated. Supersedes demoted feature 212 (`sysadmin-db-write-role`, formerly 193): removes the DB-tool surface outright instead of privilege-separating a hardened proxy over the inherently-insecure postgres-mcp. Closes security-audit H-5 / DT-2 at the trust boundary by elimination. |
 | 2026-09-27 | `draft` (renumbered) | operator | **Renumbered 211 → 214.** The original number (211) collided with `211-edgar-fundamentals-enrichment`, which merged to `main-dev`/`main` while this feature's PR was in flight. Slug and content unchanged; NNN moved to the next free value. |
+| 2026-09-27 | `draft` → `spec-ready` | /sdd-review | Product spec approved (PASS, 0 blockers). Review warnings addressed before advancing: all three Open Questions resolved, and 6 under-enumerated removal sites folded into FR-2/FR-5/Affected Services (supervisord.conf `[program:postgres-mcp]`, app/postgres_mcp_client.py, 3 deploy workflows, 3 extra tests). Overlap: WARN-only (soft/rebase, no FAIL). |
 
 ---
 
@@ -55,4 +56,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review remove-agent-postgres-mcp product-spec` — AI review of product spec before running /sdd-design
+`/sdd-design remove-agent-postgres-mcp quick` — recon + design debate (spec-ready → design-approved). `quick` mode: pure removal, small change.
