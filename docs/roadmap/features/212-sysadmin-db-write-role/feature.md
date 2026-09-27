@@ -25,7 +25,7 @@
 | 2026-09-25 | `design-approved` (unchanged) | /sdd-review | Merged latest main-dev; re-validated amended+merged spec — PASS WITH WARNINGS (0 blockers, no Floor breach). Corrected tool count 49→40 ⇒ 52→43 (merge drift). Added `084 → 193` blocking merge-order row + soft 187 note. @AC-13 firmed up. Status not regressed |
 | 2026-09-26 | `demoted/canceled` (imported + renumbered) | /sdd-sync | Imported from the `feature/sysadmin-db-write-role` branch to `main-dev` and renumbered **193 → 212** (collision with launched `193-fix-blend-queue-fundamentals-universe`). Source branch deleted. Docs-only archival record; no code. |
 | 2026-09-26 | `design-approved` → `demoted/canceled` | operator | **Demoted — architecture abandoned.** Operator swerve: postgres-mcp (crystaldba **and** pgEdge families) is deemed **inherently insecure**, so the whole premise of this feature — privilege-separating the DB tooling into a standalone psql-MCP that is *itself a hardened proxy over postgres-mcp* — is rejected. Hardening a wrapper around an insecure dependency is the wrong move; **eliminate the surface instead.** Superseded by **feature 214 (`remove-agent-postgres-mcp`)**, which removes the 9 `db_*` tools + the postgres-mcp co-process outright (no replacement service, operators use out-of-band `psql`). The DB-role teardown that this feature would have needed is carried by the rescoped **feature 208 (`psql-db-role-grant-hardening`)**. Design artifacts kept on-branch as rejected-alternative memory; key lesson distilled to the Ledger. This branch is not merged to `main-dev`. |
-| 2026-09-27 | `demoted/canceled` (unchanged) | operator | Pointer correction: the successor removal feature was first numbered **211** but renumbered to **214** after `211-edgar-fundamentals-enrichment` merged to `main-dev`/`main` and took that number. The "feature 211" references in the 2026-09-26 rows above and in `context.md` were the pre-collision number — the successor is **feature 214**. No status change. |
+| 2026-09-27 | `demoted/canceled` (unchanged) | operator | Pointer correction: the successor removal feature was first numbered **211** but renumbered to **214** after `211-edgar-fundamentals-enrichment` merged to `main-dev`/`main` and took that number. The "feature 211" references in the 2026-09-26 rows above and in `context.md` were the pre-collision number — the successor is **feature 214**. Also: feature **208** (`psql-db-role-grant-hardening`), named above as the orphaned-role teardown, was **demoted as unnecessary** — the `xstockstrat_agent` role was never created (its `db-migrate.sh` provisioning is `POSTGRES_MCP_AGENT_PASSWORD`-gated and that env was never set), and 214 removes its dead provisioning block. No status change to this feature. |
 
 ---
 
@@ -45,8 +45,10 @@
 > **⚠️ DEMOTED 2026-09-26 — architecture abandoned; not merged.** postgres-mcp was judged inherently
 > insecure, so privilege-separating it behind a hardened proxy is rejected in favor of **removing** the
 > DB-tool surface entirely. **Superseded by feature 214 (`remove-agent-postgres-mcp`)** for the removal
-> and feature 208 (`psql-db-role-grant-hardening`) for the orphaned-role teardown. The text below
-> describes the abandoned approach, retained as rejected-alternative memory.
+> for the removal. (Feature 208 `psql-db-role-grant-hardening`, once planned for the orphaned-role
+> teardown, was **demoted as unnecessary** — the `xstockstrat_agent` role was never created, and 214
+> removes its dead provisioning block itself.) The text below describes the abandoned approach,
+> retained as rejected-alternative memory.
 
 **Privilege separation of the DB tooling** — extract all nine `db_*` tools and the `postgres-mcp`
 co-process out of the prompt-injectable `xstockstrat-agent` MCP into a **standalone "psql MCP"**
@@ -73,5 +75,5 @@ re-run /sdd-spec if the registry changes.)_
 ## Next Action
 
 **None — demoted.** Work continues under **feature 214 (`remove-agent-postgres-mcp`)** (the removal) and
-feature 208 (`psql-db-role-grant-hardening`, rescoped to orphaned-role teardown). Do not run `/sdd-spec`
-on this slug.
+feature 208 (`psql-db-role-grant-hardening`) — **now demoted as unnecessary** (the `xstockstrat_agent`
+role was never created; 214 removes its dead provisioning block). Do not run `/sdd-spec` on this slug.

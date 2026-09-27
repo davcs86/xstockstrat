@@ -58,8 +58,8 @@ agent's telemetry/audit path.
   egress firewall on the agent pod) — a complementary defense-in-depth control, tracked separately if
   pursued; this feature hardens the in-tool fetch path.
 - The DB-tooling removal (feature 214 `remove-agent-postgres-mcp`, which superseded demoted feature
-  212) and the orphaned-role teardown
-  (`208-psql-db-role-grant-hardening`) — sibling security follow-ons, not this feature.
+  212; feature `208-psql-db-role-grant-hardening` was demoted as unnecessary) — a sibling security
+  follow-on, not this feature.
 
 ## Affected Services
 

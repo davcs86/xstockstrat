@@ -19,12 +19,14 @@ Feature: remove-agent-postgres-mcp (eliminate the DB-over-MCP surface)
     And postgres-mcp is absent from services/xstockstrat-agent/pyproject.toml and uv.lock, and "uv lock --check" passes
 
   @AC-3 @FR-3
-  Scenario: The agent holds no direct DB connection and the pool-budget row is gone
-    Given the connection-pool budget table in the root CLAUDE.md
+  Scenario: The agent holds no direct DB connection, the pool-budget row is gone, and the dead role provisioning is deleted
+    Given the connection-pool budget table in the root CLAUDE.md and the xstockstrat_agent provisioning block in scripts/db-migrate.sh
     When the agent is deployed after removal
     Then there is no "xstockstrat-agent (postgres-mcp)" row in the budget table
     And the agent process holds no direct :25060 connection to the database
     And the direct-backend connection total is re-derived to reflect the removed connection
+    And scripts/db-migrate.sh no longer contains the xstockstrat_agent role-provisioning block or its POSTGRES_MCP_AGENT_PASSWORD gate
+    And no live-DB role drop is required because the role was never created (the password env was never set)
 
   @AC-4 @FR-5
   Scenario: Every tool-count / inventory surface agrees on the post-removal count
