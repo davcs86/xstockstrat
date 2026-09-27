@@ -70,3 +70,11 @@
   - Config reuse (C-18) — reconcile new `marketdata.fmp.rate_limit_rps` (per-second) with existing `marketdata.fmp.daily_request_cap` (per-day) at design so the FMP gateway has one coherent throttle.
 - Overlap findings: none. Confirmed next-free slots — StrategyDefinition per-sector map field = 15; marketdata SCD migration = 007. Soft shared-surface overlap with feature 215 (analysis.proto, agent manage_strategy/run_backtest, UI /insights) is rebase-only, not a resource clash.
 - Naming note: `marketdata.<source>.rate_limit_rps` pattern already used by `marketdata.backfill.*` and `marketdata.edgar.*` — the new FMP key fits the established convention.
+
+## Session 2026-09-27 — sdd-design (Phase 0 recon + Phase 1 grilling, in progress)
+
+- Phase 0 recon.md written (services: marketdata, analysis, indicators, agent, ui; C-16 business-rule digest folded in).
+- Phase 1 round 1 (quick): proposer approach + adversary NEEDS WORK (no Floor breach). Core architecture affirmed; 7 fold-in amendments (UI surface C-14, shared FMP UTC-day cap, limiter burst=1, override write-validation, profile write-through, same-PR strat-lab/UI-Record coupling, interval-not-cron key).
+- **User decision (PIT seeding): HYBRID — seed each symbol's current FMP sector at valid_from=epoch (immediate historical-backtest value) AND run forward Type-2 refresh (PIT-correct reclassifications from go-live).**
+- **C-16 SIGN-OFF (user, davcs86): the epoch-seeded pre-go-live span applies today's sector to historical bars — a deliberate, bounded, documented look-ahead for that span only. Post-go-live is strict PIT. This is an explicit, user-signed-off relaxation of the strict no-look-ahead posture for the pre-seed span; a real reclassification before go-live is invisible. Recorded per C-16 (change/relax an existing @AC guarantee requires recorded sign-off).**
+- User directed: run the debate DEEPER (beyond the single quick round) before approval. Round 2 focus: hybrid-seeding's interaction with feature-151/152 no-look-ahead @AC guarantees, the seeding mechanism (one-time job vs migration), and clean transition when the first post-seed reclassification closes an epoch-seeded open row.
