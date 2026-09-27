@@ -105,9 +105,10 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
   (a) treat **"no producible EDGAR fundamentals"** as the guard condition (directly detectable, and
   the true root cause — but it also catches un-backfilled or non-SEC-filer stocks, so it may need to
   pair with "CIK known but fund-history empty"); (b) use a vendor profile `type == "ETF"` field
-  (Finnhub `/stock/profile2`); (c) a maintained ETF symbol set / asset attribute. Recommendation to
-  debate: guard on **fundamentals-unavailability** (root cause) and *label* it "ETF/no-fundamentals",
-  rather than trying to authoritatively classify ETFs.
+  (Finnhub `/stock/profile2`); (c) a maintained ETF symbol set / asset attribute. **No approach is
+  pre-selected — `/sdd-design` decides** among (a)/(b)/(c) (or another) via its proposer/adversary
+  debate; the spec states the options without a recommendation (operator declined to pre-lock, this
+  session).
 - [ ] **Enforcement granularity:** per-symbol skip-with-reason within a mixed stock+ETF universe
   (preferred — matches the backtest diagnostics shape) vs. whole-run rejection.
 - [ ] **Live-enable point:** block at `set_strategy_live` (needs the target universe then) vs. at

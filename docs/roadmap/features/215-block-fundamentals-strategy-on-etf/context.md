@@ -22,9 +22,12 @@
   than a docs note.
 - **Key open design fork recorded in product-spec Open Questions:** Alpaca `asset_class` is
   `us_equity` for both stocks and ETFs, so "detect ETF via ListAssets assetClass" is not directly
-  implementable. Recommendation to debate in /sdd-design: guard on **fundamentals-unavailability**
-  (the directly-detectable root cause) and label it "ETF/no-fundamentals", rather than trying to
-  authoritatively classify ETFs.
+  implementable. Options: (a) guard on fundamentals-unavailability (root cause), (b) vendor
+  `type=="ETF"` profile field, (c) maintained ETF set.
+- **Operator decision on the fork:** explicitly **left to `/sdd-design`** — the operator declined to
+  pre-select an approach (briefly indicated (b), then reverted to "leave the design to decide"). The
+  product spec's Open Question therefore states the options with **no recommendation**, so the
+  proposer/adversary debate chooses unbiased.
 - Reviewer snapshot (registry): analysis (backtest determinism / no look-ahead), marketdata
   (asset-class / fundamentals-availability source of truth), ui+agent (reason surfaced truthfully).
 - Ledger trap noted (fails.md 2026-08-13, feature 129): verify the fundamental-operand detector
