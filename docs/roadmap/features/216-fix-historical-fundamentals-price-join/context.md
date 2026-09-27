@@ -163,3 +163,32 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Reviewers snapshot written to feature.md: single reviewer `xstockstrat-marketdata` (service owner)
   across all 4 steps; no DBA/Proto/Security step.
 - Next: `/sdd-review fix-historical-fundamentals-price-join impl-spec`.
+
+## Session 2026-09-27 — sdd-review impl-spec (advisory)
+
+- Result: PASS WITH WARNINGS — 0 failures, 2 advisory warnings, no Floor breach (Mode B did not change
+  lifecycle). Overlap: only soft, disjoint-region same-file overlap with feature 196 in
+  `marketdata_repo.go` (new methods vs `scanBars`) and `marketdata_repo_test.go` (new tests vs 196's
+  test edits) — rebase-only, no merge-order entry required; no config/proto/migration collision. The
+  prior Mode-A ingest `servicer.py` overlap is moot (spec is marketdata-only).
+- Warnings — both ADDRESSED in this session (user asked to address, not just record; pre-execution so
+  F-09 step-immutability does not yet apply):
+  - [x] **FiledDate design-consistency gap (C-01/P-03/C-16)** — design.md was internally contradictory:
+    its struct enumeration omitted `FiledDate` while § Chosen Approach 4 + § Business Rules (feature-198
+    `@AC-4` PRESERVE) both require keying recovery on `state.FiledDate`. The impl-spec had resolved it
+    the wrong way (Step 1 struct omitted `FiledDate`; Step 3 4d deferred it as an execute-time fork
+    proposing the re-fetch's `p.FiledDate` — the exact drift-fragile path the design rejected). FIXED:
+    added `FiledDate time.Time` to `source.HistoricalPriceState` in design.md AND impl-spec Step 1
+    (struct + the Step-1 SELECT now reads `filed_date`); rewrote Step 3 4d to firmly set
+    `p.FiledDate = state.FiledDate` before derivation (no execute-time fork). The look-ahead-proof
+    property is now consistent across design + spec.
+  - [x] **Step 2 evidence mislabel (C-01, minor)** — the `$14::jsonb` ExpectExec at
+    `marketdata_repo_test.go:129` was mis-attributed to `InsertHistoricalFundamentals`; it actually
+    pins `TestUpsertFundamentals_CastsExtraMetricsToJSONB` (`UpsertFundamentals`, `$14`).
+    `InsertHistoricalFundamentals` uses `$20::jsonb` and has no test there. FIXED: corrected the
+    Step-2 Codebase Evidence attribution.
+- Nothing left `[ ] unaddressed` to carry into /sdd-execute.
+- Notable strengths (informational): the C-16 CHANGE is structurally scoped (UpdateHistoricalPriceJoin
+  SET = exactly the 5 derived columns, WHERE = triple PK; Step 2 pins it) with the user sign-off on
+  record; the Go-coverage exclusion justification (ci.yml:236-247, marketdata threshold 40) is accurate.
+- Next: `/sdd-execute fix-historical-fundamentals-price-join`.

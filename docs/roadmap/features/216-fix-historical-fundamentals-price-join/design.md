@@ -71,7 +71,7 @@ set-null per column. Both new methods use `r.db` (matching `InsertHistoricalFund
 `marketdata_repo.go:612`).
 
 **New symbols/signatures** (confirmed non-existent today):
-- `source.HistoricalPriceState{ Found bool; Price, MarketCap, PERatio, PBRatio, DividendYield *float64; Currency string }`.
+- `source.HistoricalPriceState{ Found bool; FiledDate time.Time; Price, MarketCap, PERatio, PBRatio, DividendYield *float64; Currency string }`. `FiledDate` carries the stored earliest `filed_date` so recovery derives against it (§ Chosen Approach 4: `p.FiledDate = state.FiledDate` before derivation) — the load-bearing property that keeps look-ahead impossible and preserves feature-198 `@AC-4`.
 - `histFundamentalsRepo` (`marketdata_service.go:112-119`) gains `GetHistoricalPriceState(ctx, symbol, fiscalPeriod, periodType) (*HistoricalPriceState, error)` and `UpdateHistoricalPriceJoin(ctx, symbol, fiscalPeriod, periodType string, price, marketCap, peRatio, pbRatio, dividendYield *float64) error`.
 - `priceJoin` split into `accumulateTTM` (always) + `derivePriceMetrics` (when deriving); `priceJoin` retained as a thin wrapper so `TestPriceJoin_*` compile, then retargeted onto `derivePriceMetrics`.
 

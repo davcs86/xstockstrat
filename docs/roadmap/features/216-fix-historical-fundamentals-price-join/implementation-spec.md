@@ -114,11 +114,14 @@ step is required; this is a decision, not an omission.
 1. In `internal/source/source.go`, after the `HistoricalFundamentalsPeriod` struct (ends `:98`), add:
    ```go
    // HistoricalPriceState is the stored price-join state of one fundamentals_history row, read by the
-   // backfill recovery path (feature 216). Found=false when no row exists for the triple PK. The five
-   // price columns are *float64 (nil = column is NULL / never derived); Currency is the stored
-   // as-reported currency used to gate native pe/pb recovery (fail closed on a mismatch).
+   // backfill recovery path (feature 216). Found=false when no row exists for the triple PK. FiledDate
+   // is the stored earliest filing date; recovery derives against it (never the re-fetch's filed_date)
+   // so the point-in-time price never looks ahead (feature-198 @AC-4). The five price columns are
+   // *float64 (nil = column is NULL / never derived); Currency is the stored as-reported currency used
+   // to gate native pe/pb recovery (fail closed on a mismatch).
    type HistoricalPriceState struct {
        Found         bool
+       FiledDate     time.Time
        Price         *float64
        MarketCap     *float64
        PERatio       *float64
@@ -130,12 +133,12 @@ step is required; this is a decision, not an omission.
 2. In `internal/repository/marketdata_repo.go`, add `GetHistoricalPriceState(ctx, symbol, fiscalPeriod,
    periodType string) (*source.HistoricalPriceState, error)` near the other historical methods (after
    `InsertHistoricalFundamentals`, i.e. after `:620`). It runs one indexed triple-PK read:
-   `SELECT price, market_cap, pe_ratio, pb_ratio, dividend_yield, currency FROM
-   marketdata.fundamentals_history WHERE symbol=$1 AND fiscal_period=$2 AND period_type=$3`. Scan the
-   five price columns into `*float64` targets and currency into a `string`. On `pgx.ErrNoRows` return
-   `&source.HistoricalPriceState{Found: false}, nil` (mirror `CloseAt`'s `:761-763` no-rows handling);
-   otherwise return `Found: true` with the scanned values. Use `r.db` (matching
-   `InsertHistoricalFundamentals` at `:612`), not `r.pool`.
+   `SELECT filed_date, price, market_cap, pe_ratio, pb_ratio, dividend_yield, currency FROM
+   marketdata.fundamentals_history WHERE symbol=$1 AND fiscal_period=$2 AND period_type=$3`. Scan
+   `filed_date` into `FiledDate` (a `time.Time`), the five price columns into `*float64` targets, and
+   currency into a `string`. On `pgx.ErrNoRows` return `&source.HistoricalPriceState{Found: false}, nil`
+   (mirror `CloseAt`'s `:761-763` no-rows handling); otherwise return `Found: true` with the scanned
+   values. Use `r.db` (matching `InsertHistoricalFundamentals` at `:612`), not `r.pool`.
 3. Add `UpdateHistoricalPriceJoin(ctx, symbol, fiscalPeriod, periodType string, price, marketCap,
    peRatio, pbRatio, dividendYield *float64) error` — a trivial fixed-SET-list, triple-PK-WHERE update:
    `UPDATE marketdata.fundamentals_history SET price=$4, market_cap=$5, pe_ratio=$6, pb_ratio=$7,
@@ -163,12 +166,15 @@ step is required; this is a decision, not an omission.
 **Reviewers**: `xstockstrat-marketdata` (service owner) — OHLCV ingestion integrity, TimescaleDB hypertable partitioning, Alpaca feed idempotency
 
 **Codebase Evidence**:
-- Existing pgxmock harness: `marketdata_repo_test.go:116` (`pgxmock.NewPool()`); `ExpectExec` SQL-text
-  pin at `:129` (`` `\$14::jsonb` ``) for `InsertHistoricalFundamentals`; `WillReturnRows` row pin at
-  `:159` for a `close` read. These are SQL-text + arg + control-flow pins (pgxmock does not run
-  Postgres — `:110-116` note), which is the established bar for repo tests here.
-- The two new methods use `r.db` — the pgxmock pool is wired to `r.db` in the existing tests (same as
-  the `InsertHistoricalFundamentals` test at `:116-142`).
+- Existing pgxmock harness: `marketdata_repo_test.go:116` (`pgxmock.NewPool()`); the `ExpectExec`
+  SQL-text pin at `:129` (`` `\$14::jsonb` ``) belongs to `TestUpsertFundamentals_CastsExtraMetricsToJSONB`
+  (which pins `UpsertFundamentals`, `$14::jsonb`) — the exemplar `ExpectExec` pattern to mirror;
+  `WillReturnRows` row pin at `:159` for a `close` read. These are SQL-text + arg + control-flow pins
+  (pgxmock does not run Postgres — `:110-116` note), which is the established bar for repo tests here.
+  (`InsertHistoricalFundamentals` itself has no existing test in this file and uses `$20::jsonb`, so it
+  is not the pattern source — the new methods below are the first `fundamentals_history` write/read tests.)
+- The two new methods use `r.db` — the pgxmock pool is wired to `r.db` in the existing tests (same
+  wiring the `UpsertFundamentals` test uses at `:116-142`).
 
 **TDD**: `red-green required`
 
@@ -262,18 +268,14 @@ step is required; this is a decision, not an omission.
    - c. **New row (`!state.Found`)** — forward path: `s.derivePriceMetrics(ctx, p, ttmEPS, p.Currency)`,
      then the dividend-yield derivation (step 6), then optional enrichment (`:1806-1812` unchanged),
      then `InsertHistoricalFundamentals` (`:1813`, DO NOTHING preserved); `written++`.
-   - d. **Existing row (`state.Found`)** — recover keyed on the **stored earliest `filed_date`**: the
-     derivation must use `p.FiledDate` from the stored row's filing (the stored row is the earliest
-     filing; the re-fetch's `p` already carries the earliest `filed_date` for a same-range re-backfill,
-     but to be safe the derivation keys on the value that produced the stored row — cite design.md
-     § Chosen Approach 4: "`p.FiledDate = state.FiledDate` before derivation" — NOTE: `state` as
-     specced in Step 1 does **not** carry `FiledDate`; if the execute step finds a same-range
-     re-backfill always re-supplies the earliest `filed_date`, keying on `p.FiledDate` is sufficient
-     and the extra column is unnecessary. **Resolve this at execute:** if `filed_date` drift is
-     possible, add `FiledDate time.Time` to `HistoricalPriceState` + the Step-1 SELECT and set
-     `p.FiledDate = state.FiledDate`; otherwise document in the Deviation Log that same-range
-     re-supply makes it unnecessary. Do not guess silently — this is the one design fork left to
-     execute-time discovery per P-03.) Then:
+   - d. **Existing row (`state.Found`)** — recover keyed on the **stored earliest `filed_date`**. Set
+     `p.FiledDate = state.FiledDate` **before** any derivation (design.md § Chosen Approach 4), so
+     `derivePriceMetrics`' `CloseAt` lookup and `deriveDividendYield`'s T12M window both key on the
+     stored earliest filing, never the re-fetch's `filed_date`. This is the load-bearing property that
+     keeps look-ahead impossible and preserves feature-198 `@AC-4` even if EDGAR later relabels/amends
+     the filing — the drift-fragile "key on the incoming `filed_date`" path was explicitly rejected in
+     design.md § Rejected Alternatives. `state.FiledDate` is populated by Step 1's SELECT (the struct
+     now carries `FiledDate time.Time`). Then:
      - Gate: default (`overwrite=false`) processes only `needsFill` rows — any of the 5 stored price
        columns is nil; `overwrite=true` processes every existing row.
      - `s.derivePriceMetrics(ctx, p, ttmEPS, state.Currency)` + dividend-yield derivation (step 6).
