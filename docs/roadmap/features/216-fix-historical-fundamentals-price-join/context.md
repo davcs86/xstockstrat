@@ -192,3 +192,58 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   SET = exactly the 5 derived columns, WHERE = triple PK; Step 2 pins it) with the user sign-off on
   record; the Go-coverage exclusion justification (ci.yml:236-247, marketdata threshold 40) is accurate.
 - Next: `/sdd-execute fix-historical-fundamentals-price-join`.
+
+## Session 2026-09-27 — sdd-execute (Steps 1–4 complete)
+
+- **Branch**: `claude/fundamentals-backfill-rederived-30w0e0` reset from `origin/main-dev` (PR #1196
+  with all SDD artifacts merged).
+- **Step 1 (source + repo)** — DONE (carried from prior session):
+  - Added `source.HistoricalPriceState` struct (`internal/source/source.go`) with `Found bool`,
+    `FiledDate time.Time`, 5 `*float64` price-join columns, `Currency string`.
+  - Added `GetHistoricalPriceState` and `UpdateHistoricalPriceJoin` to `MarketDataRepo`
+    (`internal/repository/marketdata_repo.go`) using `r.db` surface (pgxmock-compatible).
+  - Added `GetHistoricalPriceState` and `UpdateHistoricalPriceJoin` to `histFundamentalsRepo`
+    interface (`internal/service/marketdata_service.go`).
+- **Step 2 (repo tests)** — DONE (carried from prior session):
+  - `TestGetHistoricalPriceState` (happy path Found=true + no-rows path Found=false) and
+    `TestUpdateHistoricalPriceJoin` added to `internal/repository/marketdata_repo_test.go`. Both pass.
+- **Step 3 (service loop restructure)** — DONE (this session):
+  - Rewrote `backfillOneSymbol` with read-classify-derive-merge loop:
+    - new-row path: `derivePriceMetrics` → `deriveDividendYield` → `InsertHistoricalFundamentals`
+      (DO NOTHING preserved for idempotency).
+    - existing-row path: `GetHistoricalPriceState` → set `p.FiledDate = state.FiledDate` (look-ahead
+      guard, feature-198 @AC-4) → gate (`needsFill || overwrite`) → `derivePriceMetrics` →
+      `deriveDividendYield` → `mergePrice` (Go merge, never value→nil) → `priceMergedChanged`
+      (write-only-if-changed, idempotent @AC-4) → `UpdateHistoricalPriceJoin`.
+  - Split `priceJoin` into: `accumulateTTM` (rolling quarterly EPS, always called) +
+    `derivePriceMetrics` (CloseAt + market_cap/pe/pb, uses `storedCurrency` for currency gating) +
+    `priceJoin` retained as thin wrapper (for TestPriceJoin_* test stability).
+  - Added `mergePrice`, `mergedPriceState`, `coalesceF64`, `priceMergedChanged` helpers.
+  - Added `deriveDividendYield` (extracted from inline loop logic) with the new coverage guard:
+    `windowStart.Before(divFetchStart)` → nil (fail-closed for old periods with incomplete fetch window).
+  - `overwrite` wired from `req.GetOverwrite()` through `BackfillFundamentals` → `backfillOneSymbol`.
+  - Currency-mismatch fail-closed: `storedCurrency == "USD"` gates native pe/pb (uses stored row's
+    currency, not re-fetched period's currency).
+  - **Deviation from prior session**: `divFetchStart` moved to outer scope so `deriveDividendYield`
+    can reference it. `lookbackYears` extracted before the dividend-enabled gate so it's available
+    for the coverage guard even when the gate short-circuits.
+- **Step 4 (service behavioral tests)** — DONE (this session):
+  - Added `fakeHistRepo216` (stateful, map-backed) with all 8 interface methods including stateful
+    `GetHistoricalPriceState` + `UpdateHistoricalPriceJoin`.
+  - 6 tests added: @AC-1 (recovery fills nil), @AC-2 (default skips full row), @AC-3 (fill-if-null),
+    @AC-4 (overwrite + stable re-run idempotency), @AC-5 (overwrite never nulls dividend_yield),
+    currency-mismatch fail-closed (open-risk test).
+  - All 6 pass.
+  - **Fix applied to pre-existing tests**: `dividendYieldSvc` helper updated to set
+    `backfill_lookback_years: 3` so the coverage guard (added this step) doesn't fire for the test
+    period (FiledDate 2025-06-26; T12M window starts 2024-06-26; with 2yr lookback and today
+    2026-09-27, the fetch would start 2024-09-27, triggering the guard). Setting to 3yr makes
+    `divFetchStart = 2023-09-27`, clearing the guard.
+- **Full test suite**: all 13 packages green. Coverage: 49.0% (≥40% floor).
+- **Deviation Log**:
+  - `FiledDate` in `HistoricalPriceState` — resolved at execute (not deferred) consistent with
+    spec warning fix: `p.FiledDate = state.FiledDate` in the existing-row branch. No look-ahead.
+  - Adjusted-close drift under `overwrite`: acknowledged, operator-visible, no code change (design open risk).
+  - EDGAR fiscal_period relabel: `Found=false` → DO-NOTHING no-ops stale row, out of scope (design open risk).
+  - Pre-211 currency residual: now fail-closed + covered by currency-mismatch test.
+- Status: `implementation-ready` → `code-completed`.
