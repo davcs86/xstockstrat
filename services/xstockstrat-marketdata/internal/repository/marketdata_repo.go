@@ -619,6 +619,42 @@ func (r *MarketDataRepo) InsertHistoricalFundamentals(ctx context.Context, p sou
 	return nil
 }
 
+// GetHistoricalPriceState reads the stored price-join state for one fundamentals_history row
+// (feature 216). Returns Found=false (never an error) when no row matches the triple PK — mirrors
+// CloseAt's no-rows fail-closed pattern. Uses r.db so tests can pin the query with pgxmock.
+func (r *MarketDataRepo) GetHistoricalPriceState(ctx context.Context, symbol, fiscalPeriod, periodType string) (*source.HistoricalPriceState, error) {
+	const q = `SELECT filed_date, price, market_cap, pe_ratio, pb_ratio, dividend_yield, currency
+		FROM marketdata.fundamentals_history
+		WHERE symbol=$1 AND fiscal_period=$2 AND period_type=$3`
+	var state source.HistoricalPriceState
+	err := r.db.QueryRow(ctx, q, symbol, fiscalPeriod, periodType).Scan(
+		&state.FiledDate, &state.Price, &state.MarketCap, &state.PERatio, &state.PBRatio, &state.DividendYield, &state.Currency,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return &source.HistoricalPriceState{Found: false}, nil
+		}
+		return nil, fmt.Errorf("get price state %s %s %s: %w", symbol, fiscalPeriod, periodType, err)
+	}
+	state.Found = true
+	return &state, nil
+}
+
+// UpdateHistoricalPriceJoin overwrites the 5 price-join columns of an existing
+// fundamentals_history row (feature 216). The fixed SET list (exactly the 5 derived columns) +
+// triple-PK WHERE is the structural guarantee that as-reported fields and filed_date are never
+// touched (design.md § Business Rules Touched — C-16 CHANGE scoped to derived columns only).
+func (r *MarketDataRepo) UpdateHistoricalPriceJoin(ctx context.Context, symbol, fiscalPeriod, periodType string, price, marketCap, peRatio, pbRatio, dividendYield *float64) error {
+	const q = `UPDATE marketdata.fundamentals_history
+		SET price=$4, market_cap=$5, pe_ratio=$6, pb_ratio=$7, dividend_yield=$8
+		WHERE symbol=$1 AND fiscal_period=$2 AND period_type=$3`
+	_, err := r.db.Exec(ctx, q, symbol, fiscalPeriod, periodType, price, marketCap, peRatio, pbRatio, dividendYield)
+	if err != nil {
+		return fmt.Errorf("update price join %s %s %s: %w", symbol, fiscalPeriod, periodType, err)
+	}
+	return nil
+}
+
 // QueryHistoricalFundamentals returns point-in-time periods for a symbol. asOf enforces T+1
 // availability (filed_date STRICTLY before asOf); rangeStart/rangeEnd filter period_end (inclusive)
 // when non-zero; periodTypes filters period_type when non-empty. Ordered by period_end ascending.
