@@ -200,16 +200,16 @@ func newFundamentalsSource(cfgWatcher *config.Watcher, provider, fmpAPIKey, finn
 		baseURL := cfgWatcher.GetString("marketdata.finnhub.base_url", "https://api.finnhub.io/api/v1")
 		slog.Info("Finnhub fundamentals client constructed", "base_url", baseURL)
 		return finnhub.NewClient(finnhub.ClientConfig{BaseURL: baseURL, APIKey: finnhubAPIKey})
-	case "fmp":
+	default: // "fmp" and any unrecognized value fall back to the pre-existing FMP client
+		// Feature 211 (F-07): an unrecognized provider is a config error, so log it LOUD — but still
+		// fall back to FMP (never crash boot). The feature-082/129 canary requires this constructor to
+		// always return a usable non-nil source; a safe default beats a boot crash on a config typo.
+		if provider != "fmp" {
+			slog.Warn("unrecognized marketdata.fundamentals.provider — falling back to fmp", "provider", provider)
+		}
 		baseURL := cfgWatcher.GetString("marketdata.fmp.base_url", "https://financialmodelingprep.com")
 		metrics := strings.Split(cfgWatcher.GetString("marketdata.fmp.metrics", "core,extended"), ",")
 		slog.Info("FMP fundamentals client constructed", "base_url", baseURL, "metrics", metrics)
 		return fmp.NewClient(fmp.ClientConfig{BaseURL: baseURL, APIKey: fmpAPIKey, Metrics: metrics})
-	default:
-		// Explicit switch (feature 211, F-07): an unrecognized provider is a config error, not a
-		// silent fall-through to FMP — fail loud at boot so the operator fixes the value.
-		slog.Error("unknown marketdata.fundamentals.provider — must be \"finnhub\" or \"fmp\"", "provider", provider)
-		os.Exit(1)
-		return nil // unreachable
 	}
 }

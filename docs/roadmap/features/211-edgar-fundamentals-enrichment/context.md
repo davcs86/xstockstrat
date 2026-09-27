@@ -385,3 +385,9 @@ Executing on `claude/pending-roadmap-features-9z01mn`; integration via shared PR
 **Open at rollout (not code)**: live Alpaca dividend entitlement (@AC-5) confirmed via audit logs post-deploy; snapshot_source live-flip vendor→edgar per env; dividends.enabled flip. See impl-spec § Rollout note.
 **Integration PR**: #1191 (single-branch adaptation, claude/pending-roadmap-features-9z01mn → main-dev).
 **Remaining meta**: C-16 scenario promotion for all four features at launch (deferred to end, per plan); PR body FR-8 audit + teardown note.
+
+### CI fix (2026-09-27) — merge main-dev + revert provider boot-fatal to WARN+FMP-fallback
+- Merged `origin/main-dev` (docs-only advance: features 207/208/214 + ledger; the PR was `behind`, no code overlap, clean merge).
+- **Failing job "Go lint and test (xstockstrat-marketdata)":** golangci-lint passed (0 issues); the failure was the `cmd/server` test `TestNewFundamentalsSource_AlwaysNonNil` (feature-082/129 canary) — my Step-10 `os.Exit(1)` on an unknown provider killed the test process. Root cause: the Step 11 verification ran `./internal/...` only, not `./cmd/...`.
+- **Fix:** reverted `newFundamentalsSource`'s default to fall back to FMP (pre-211 behavior, satisfies the always-non-nil canary) while keeping F-07 "loud" as a `slog.Warn` for a genuinely unrecognized value. A config typo must not crash boot; safe default + WARN beats `os.Exit`. Deviation Log updated.
+- Verified: `GOWORK=off go test ./... -race -count=1` (all 13 packages incl. cmd/server) green; `go vet ./...` clean; `gofmt -l` clean.
