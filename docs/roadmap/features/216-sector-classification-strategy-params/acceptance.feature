@@ -67,3 +67,36 @@ Feature: sector-classification-strategy-params
     Given the generated Sector proto enum
     When its zero value is inspected
     Then the zero value is SECTOR_UNSPECIFIED
+
+  @AC-10 @FR-10
+  Scenario: A pre-go-live bar for a seeded symbol resolves to the epoch-seeded sector, not the default
+    Given "XYZ" has one open classification row with sector "TECHNOLOGY" and valid_from 1900-01-01T00:00:00Z
+    And a strategy sets RSI oversold default 30 and override 25 for "TECHNOLOGY"
+    When the strategy is backtested over "XYZ" across 2015-01-01 to 2015-12-31
+    Then every bar is scored with an RSI oversold threshold of 25
+
+  @AC-11 @FR-10 @FR-2
+  Scenario: The first post-go-live reclassification closes the epoch-seeded row without rewriting pre-go-live history
+    Given "XYZ" has one open classification row with sector "TECHNOLOGY" and valid_from 1900-01-01T00:00:00Z
+    When the refresh job observes FMP now reports "XYZ" as "ENERGY" at 2026-10-01T00:00:00Z
+    Then the epoch-seeded row's valid_to is set to 2026-10-01T00:00:00Z
+    And a new open row is inserted with sector "ENERGY" and valid_from 2026-10-01T00:00:00Z
+    And an as-of lookup for "XYZ" at 2015-06-15 returns "TECHNOLOGY"
+    And an as-of lookup for "XYZ" at 2026-10-02 returns "ENERGY"
+
+  @AC-12 @FR-2
+  Scenario: Concurrent first-observation of a symbol yields exactly one open row seeded at the epoch
+    Given "NEWCO" has no classification row
+    When two refresh workers observe FMP reports "NEWCO" as "HEALTH_CARE" at the same instant
+    Then exactly one open classification row exists for "NEWCO"
+    And its valid_from is 1900-01-01T00:00:00Z
+    And its valid_to is NULL
+
+  @AC-13 @FR-10 @FR-8
+  Scenario: In one backtest a seeded symbol uses its epoch sector while an unseeded symbol falls back to default
+    Given a strategy sets RSI oversold default 30 and override 25 for "TECHNOLOGY"
+    And "XYZ" has one open classification row with sector "TECHNOLOGY" and valid_from 1900-01-01T00:00:00Z
+    And "NEWCO" has no classification row for any bar in the window
+    When the strategy is backtested over "XYZ" and "NEWCO" across 2015-01-01 to 2015-12-31
+    Then every "XYZ" bar is scored with an RSI oversold threshold of 25
+    And every "NEWCO" bar is scored with an RSI oversold threshold of 30

@@ -53,20 +53,32 @@ FR-7. `xstockstrat-analysis` resolves, for each evaluated bar, the symbol's sect
 timestamp** (FR-5 point-in-time lookup) and selects the matching per-sector parameter override; there
 is no use of the current-day sector for a historical bar (no look-ahead).
 
-FR-8. When a symbol's sector is unknown at a bar (unclassified symbol, crypto, new listing, FMP miss,
-or a bar predating any stored classification), scoring falls back to the default parameter bucket and
-never fails.
+FR-8. When a symbol has **no stored classification row at all** (never observed — crypto, a brand-new
+listing, a persistent FMP miss), scoring falls back to the default parameter bucket and never fails. A
+bar predating stored history for a symbol that **has** a seed row resolves to that seeded sector (FR-10),
+not the default bucket.
 
 FR-9. Sector is modeled as a closed proto enum with a `SECTOR_UNSPECIFIED = 0` sentinel (per proto
 governance: closed, deployment-time-defined value set → enum).
+
+FR-10. On a symbol's **first observation** (no open classification row), both the scheduled refresh
+job and the fundamentals profile write-through seed a single open row with `valid_from` = the epoch
+sentinel `1900-01-01T00:00:00Z`, applying the observed sector to all pre-go-live bars of that symbol.
+This is a bounded, user-signed-off relaxation of strict PIT (context.md 2026-09-27 C-16 sign-off): a
+genuine pre-go-live reclassification is invisible within the seeded span, and the relaxation is in the
+parameter-selection axis only (never a component numeric value). Post-go-live, strict Type-2 PIT
+resumes — the first observed change closes the epoch-seeded row (`valid_to = now`) and opens a new row
+(`valid_from = now`).
 
 ## Out of Scope
 
 - Industry / sub-industry granularity — **sector only** in v1 (≈11 GICS sectors).
 - Providers other than FMP (EDGAR/Fama-French, Finnhub) as a classification source.
-- Back-seeding sector history from before go-live. Type-2 history accrues **forward** from first
-  refresh; bars predating stored history resolve via the FR-8 default bucket. Historical seeding from
-  an external point-in-time source is a possible later feature.
+- Back-seeding real sector *history* from before go-live via an external point-in-time source stays
+  out of scope. The **FR-10 hybrid epoch seed is the one bounded exception**: each symbol's
+  first-observed sector is stamped at the epoch sentinel and applies to its pre-go-live bars, but
+  genuine pre-go-live reclassifications are not reconstructed. Post-go-live reclassifications accrue
+  forward as strict Type-2 PIT.
 - Migrating existing scattered FMP fundamentals calls onto the new gateway beyond what FR-1 requires
   to centralize the credential + rate limiter (opportunistic consolidation only; a full FMP-call
   audit is noted as a known trap, not a v1 deliverable).
