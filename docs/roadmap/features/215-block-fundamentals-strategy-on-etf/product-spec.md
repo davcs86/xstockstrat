@@ -68,13 +68,13 @@ Exact service names from CLAUDE.md Service Registry:
 _Constitution **C-14**._
 
 - [x] **Agent** — `xstockstrat-agent` MCP tool(s): `run_backtest` (the enumerated `no_trade_reason` / validation error must surface in its summary), and `set_strategy_live` (guardrail on live-enable). Possibly `list_opportunities` (ETFs absent for a fundamentals-gated strategy, with reason).
-- [x] **UI** — `xstockstrat-ui` `/insights`: the backtest result view and the opportunities/Decide queue must render the refusal/skip reason (not a blank/zero result), reusing the existing `no_trade_reason` render map (`opportunityShared.tsx`).
+- [x] **UI** — `xstockstrat-ui` `/insights`: the backtest result view and the opportunities/Decide queue must render the refusal/skip reason (not a blank/zero result). The backtest `no_trade_reason` is rendered in `services/xstockstrat-ui/src/components/insights/BacktestDiagnostics.tsx` (not `opportunityShared.tsx` — that file holds the `OpportunityActionTag`/`ConditionState`/`PositionRiskFlag`/`SourceHealthStatus`/`HaltSource` maps but **no `NoTradeReason` map**); design/spec confirms whether an opportunity skip-reason needs its own render path.
 - [ ] **None**
 
 ## Proto Contract Changes
 
 - [ ] No proto changes required
-- OR (likely): a new enumerated `no_trade_reason` value (e.g. `NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE`) on the backtest diagnostics message, and/or an opportunity skip-reason. **Additive enum value → non-breaking**, but must carry the `_UNSPECIFIED = 0` discipline and a UI render-map entry (adding a proto enum value without a map entry fails `tsc` in `opportunityShared.tsx`). Confirm during design.
+- OR (likely): a new enumerated `no_trade_reason` value (e.g. `NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE`) on the backtest diagnostics message, and/or an opportunity skip-reason. **Additive enum value → non-breaking** (confirmed against `packages/proto/analysis/v1/analysis.proto:189` — `NoTradeReason` currently 0–4, next-free `= 5`), but must carry the `_UNSPECIFIED = 0` discipline and a matching UI render update in `BacktestDiagnostics.tsx` (the actual `no_trade_reason` render site). Confirm during design.
 
 ## Config Key Changes
 

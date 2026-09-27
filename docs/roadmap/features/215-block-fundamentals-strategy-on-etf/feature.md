@@ -11,6 +11,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-09-27 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-09-27 | `draft` → `spec-ready` | /sdd-review | Product spec approved (PASS, 2 warnings; render-map path corrected, Open Questions deferred to design). Overlap: clean |
 
 ---
 
@@ -45,4 +46,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review block-fundamentals-strategy-on-etf product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-design block-fundamentals-strategy-on-etf` — recon + design debate (resolves the ETF-detection fork)
