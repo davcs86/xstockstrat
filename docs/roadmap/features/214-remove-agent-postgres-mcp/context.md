@@ -26,9 +26,14 @@
 - **C-16 CHANGE sign-off (P-05):** removal **changes** feature 169's 13 promoted `agent-postgres-mcp`
   business-rule scenarios. Operator's 2026-09-26 directive is the recorded sign-off; the 13 scenarios
   are removed/inverted in the same PR.
-- **Boundary with feature 208:** 214 removes the agent's *use* of the `xstockstrat_agent` role; the
-  role's grant-level drop/revoke is feature 208 (`psql-db-role-grant-hardening`, rescoped to
-  orphaned-role teardown). 214 lands **before** 208.
+- **Feature 208 demoted (2026-09-27):** originally 208 was to drop/revoke the orphaned
+  `xstockstrat_agent` role. But that role was only **conditionally** provisioned by
+  `scripts/db-migrate.sh:169-203` (feature 169), gated on `POSTGRES_MCP_AGENT_PASSWORD` — a password
+  never set in the live environments, so the `[skip]` path always ran and the role was **never
+  created**. There is no live-DB role to drop, so 208 is unnecessary and demoted. This feature (214)
+  absorbs the only real cleanup: **deleting the dead provisioning block** (and its
+  `POSTGRES_MCP_AGENT_PASSWORD` gate) from `db-migrate.sh` as part of removing all postgres-mcp wiring
+  (FR-3). No `214 → 208` ordering remains.
 - **No 084 dependency** — the demoted 212's on-demand droplet container is gone; this is a removal
   with no new service and no deployment substrate need.
 - Baseline facts to re-derive at recon/execute: `copilot.ts` `COPILOT_MCP_TOOL_COUNT` (was 52),

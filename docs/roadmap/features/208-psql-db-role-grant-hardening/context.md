@@ -48,3 +48,23 @@
 - **Numbering note:** the removal feature was briefly numbered 211 but renumbered to **214** after an
   NNN collision with `211-edgar-fundamentals-enrichment` (merged to `main-dev`/`main`); this
   dependency uses 214.
+
+## Session 2026-09-27 — DEMOTED (unnecessary: role was never created)
+
+- **Status: `draft` → `demoted/canceled`.** Operator: "208 is unnecessary if we're going to remove
+  the postgres MCP tooling and `xstockstrat_agent` user was never created."
+- **Verified against code:** `scripts/db-migrate.sh:169-203` provisions `xstockstrat_agent`
+  (feature 169) **only when `POSTGRES_MCP_AGENT_PASSWORD` is set** — otherwise it prints
+  `[skip] xstockstrat_agent role provisioning: POSTGRES_MCP_AGENT_PASSWORD not set` (line 203). That
+  password was never set in the live environments, so the role was **never created**. There is no
+  orphaned role to `DROP`/`REVOKE` — the entire rescoped premise (orphaned-role teardown) is moot.
+- **The one useful residual action moved to feature 214:** removing the dead role-provisioning block
+  from `scripts/db-migrate.sh` is part of "remove all postgres-mcp wiring" and now lives in 214's
+  scope (FR-3), not here.
+- **Dropped, not deferred:** the secondary idea (audit that no *remaining* role can write
+  integrity-critical tables — ledger/identity-secret/config-ciphertext) is not carried forward. It was
+  defense-in-depth orthogonal to the removal; if ever wanted, open a fresh standalone feature. Per the
+  operator's call, 208 is closed.
+- **Disposition:** no PR merged this feature's rescoped content to `main-dev`; the directory is kept as
+  a demoted record so the number stays reserved. The `214 → 208` merge-order row is removed (no
+  ordering constraint remains).

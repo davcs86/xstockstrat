@@ -34,9 +34,11 @@ judged inherently insecure, so the DB-over-MCP surface is eliminated rather than
 run admin SQL **out-of-band** (direct `psql`/DB client via SSH/doctl/bastion), documented in a runbook.
 A prompt-injected or compromised agent session is thereby left with **no tool, co-process, credential,
 or network path to execute any SQL** — closing security-audit finding **H-5** (DT-2) by elimination.
-**Supersedes demoted feature 212** (`sysadmin-db-write-role`, formerly 193). The orphaned
-`xstockstrat_agent` DB role's grant-level teardown is carried by feature 208
-(`psql-db-role-grant-hardening`).
+**Supersedes demoted feature 212** (`sysadmin-db-write-role`, formerly 193). This feature also removes
+the dead `xstockstrat_agent` role-provisioning block from `scripts/db-migrate.sh` (feature 169): that
+block only created the role when `POSTGRES_MCP_AGENT_PASSWORD` was set, and that password was never set
+in the live environments, so the role was **never created** — there is no DB-side role to tear down
+(feature 208, which would have done that teardown, is demoted as unnecessary).
 
 ## Reviewers
 
@@ -49,7 +51,7 @@ re-run /sdd-spec if the registry changes.)_
 | Security | The "no prompt-injectable path to SQL" invariant holds by removal (no tool, no co-process, no credential, no route); no residual postgres-mcp SSE endpoint, env, or dependency; H-5 verifiably closed |
 | `xstockstrat-agent` | Removal completeness: all nine `db_*` tools + postgres-mcp co-process + `POSTGRES_MCP_*` wiring gone; `pyproject.toml`/`uv.lock` drop `postgres-mcp`; `tests/test_tools_endpoint.py` and the `app/tools.py` docstring updated; feature 169's `acceptance/agent-postgres-mcp.feature` scenarios removed/inverted (C-16) |
 | `xstockstrat-ui` | `src/lib/copilot.ts` `COPILOT_MCP_TOOL_COUNT` mirror 52 → 43, no drift |
-| Platform lead | Deployment cleanup: `docker-compose.yml` agent block drops the postgres-mcp co-process; `.do/app*.yaml` drops any `POSTGRES_MCP_*` env; the connection-pool budget row in root CLAUDE.md is removed; coordination with feature 208's role teardown |
+| Platform lead | Deployment cleanup: `docker-compose.yml` agent block drops the postgres-mcp co-process; `.do/app*.yaml` drops any `POSTGRES_MCP_*` env; the connection-pool budget row in root CLAUDE.md is removed; the dead `xstockstrat_agent` provisioning block in `scripts/db-migrate.sh` is deleted (the role was never created — `POSTGRES_MCP_AGENT_PASSWORD`-gated `[skip]` path) |
 
 ## Next Action
 

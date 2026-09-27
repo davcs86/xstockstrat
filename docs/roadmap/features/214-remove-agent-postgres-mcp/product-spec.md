@@ -39,10 +39,14 @@ in the container, no `POSTGRES_MCP_DATABASE_URI` / `POSTGRES_MCP_PORT` (or equiv
 no code path that opens a connection to a postgres-mcp SSE endpoint, and `postgres-mcp` removed from
 `services/xstockstrat-agent/pyproject.toml` + `uv.lock` (with `uv lock --check` passing).
 
-FR-3. The agent's direct `xstockstrat_agent` DB connection MUST be removed, and the corresponding
-connection-pool budget row (`xstockstrat-agent (postgres-mcp)`) in the root `CLAUDE.md` deleted, with
-the direct-backend total re-derived. (Dropping/revoking the `xstockstrat_agent` **role** at the
-Postgres grant level is feature 208's scope — see § Feature Workflow Notes.)
+FR-3. The agent's direct `xstockstrat_agent` DB connection MUST be removed, the corresponding
+connection-pool budget row (`xstockstrat-agent (postgres-mcp)`) in the root `CLAUDE.md` deleted (with
+the direct-backend total re-derived), and the **dead `xstockstrat_agent` role-provisioning block** in
+`scripts/db-migrate.sh` (feature 169, lines ~169-203) removed along with its `POSTGRES_MCP_AGENT_PASSWORD`
+gate. That block only ever created the role when `POSTGRES_MCP_AGENT_PASSWORD` was set; in the live
+environments it never was (the `[skip]` path ran), so **no live-DB role exists to drop** — removing the
+provisioning code is the complete teardown. (Feature 208, which would have dropped an actually-created
+role, is demoted as unnecessary for exactly this reason.)
 
 FR-4. **No replacement SQL-over-MCP surface** is introduced anywhere in the platform. The sanctioned
 operator path for admin/DB SQL is out-of-band — a direct `psql`/DB client via SSH / `doctl` /
@@ -59,9 +63,10 @@ FR-6. H-5 is closed by elimination: a prompt-injected agent session instructed t
 
 ## Out of Scope
 
-- The grant-level teardown/revocation of the now-orphaned `xstockstrat_agent` DB role — **feature 208
-  (`psql-db-role-grant-hardening`)**, rescoped for exactly this. 214 removes the agent's *use* of the
-  role; 208 removes the role's *privileges* at the DB.
+- A broader "no remaining DB role can write integrity-critical tables" grant audit — not carried by
+  this feature (feature 208, which would have done it, is demoted as unnecessary). If ever wanted,
+  open a fresh standalone feature. Note there is **no `xstockstrat_agent` role drop to do**: the role
+  was never created (see FR-3), so removing its provisioning code is the whole of the DB-side cleanup.
 - Any new/replacement DB tooling, read-only or otherwise (explicitly excluded by the operator decision).
 - The extract_* SSRF (`207`), the sandbox OS-isolation (`209`), inter-service mTLS (`210`) — sibling
   security follow-ons, independent of this removal.
@@ -74,8 +79,10 @@ Exact service names from CLAUDE.md Service Registry:
   and feature 169's `acceptance/agent-postgres-mcp.feature` suite.
 - `xstockstrat-ui` — the `COPILOT_MCP_TOOL_COUNT` mirror in `src/lib/copilot.ts` (FR-5).
 - (Deployment/docs) `docker-compose.yml` (agent block), `.do/app.yaml` / `.do/app.dev.yaml` (agent
-  env, if any `POSTGRES_MCP_*` present), root `CLAUDE.md` (pool-budget row + the env-var note that
-  references postgres-mcp), `docs/runbooks/mcp-tools.md`, and a new `docs/runbooks/operator-db-access.md`.
+  env, if any `POSTGRES_MCP_*` present), `scripts/db-migrate.sh` (delete the `xstockstrat_agent`
+  role-provisioning block + its `POSTGRES_MCP_AGENT_PASSWORD` gate, ~lines 169-203), root `CLAUDE.md`
+  (pool-budget row + the env-var note that references postgres-mcp), `docs/runbooks/mcp-tools.md`, and
+  a new `docs/runbooks/operator-db-access.md`.
 
 ## Consumer Surface(s)
 
@@ -98,8 +105,11 @@ _Constitution **C-14**._
 
 ## Database Changes
 
-- [x] No schema changes in this feature. The orphaned-role drop/revoke migration is **feature 208**.
-  214 removes only the agent's *connection* to the DB (code/deploy config), not any schema or grant.
+- [x] No schema changes, and **no live-DB role change**: the `xstockstrat_agent` role was never created
+  (its `db-migrate.sh` provisioning is `POSTGRES_MCP_AGENT_PASSWORD`-gated and that env was never set),
+  so there is nothing to `DROP`/`REVOKE` on a running database. This feature deletes the dead
+  provisioning **shell block** in `scripts/db-migrate.sh` (not a numbered migration) and removes the
+  agent's DB *connection* (code/deploy config).
 
 ## Feature Workflow Notes
 
@@ -108,7 +118,8 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 - [x] 1 service owner approval (`xstockstrat-agent`) + Security review (closes H-5) + `xstockstrat-ui`
   owner (count mirror) + platform lead (deployment/container cleanup)
 - [ ] 2 service owners + platform lead (breaking proto change) — N/A
-- [ ] DBA review + service owner (schema migration) — N/A here; applies to feature 208
+- [ ] DBA review + service owner (schema migration) — N/A (no numbered migration; the `db-migrate.sh`
+  provisioning-block deletion is a shell edit reviewed under the platform-lead deployment gate)
 
 **C-16 CHANGE — sign-off required and RECORDED.** Removing the tools **changes** feature 169's
 promoted business rules (`services/xstockstrat-agent/acceptance/agent-postgres-mcp.feature`, 13
@@ -117,8 +128,8 @@ operator sign-off; that sign-off is the operator's 2026-09-26 "remove all postgr
 recorded in `context.md`. Those 13 scenarios are to be removed/inverted in the same PR.
 
 **Sequencing:** soft rebase-only overlap with `187-opportunities-pagination-drain` on `app/tools.py`
-+ `docs/runbooks/mcp-tools.md` (187 lands first, 214 rebases). 214 should land **before** feature 208
-(208 tears down the DB role that 214 orphans). No 084 dependency (the demoted 212's container is gone).
++ `docs/runbooks/mcp-tools.md` (187 lands first, 214 rebases). No downstream feature depends on this
+(feature 208 was demoted — see above), and no 084 dependency (the demoted 212's container is gone).
 
 ## Acceptance Criteria
 

@@ -353,10 +353,11 @@
     co-process from `xstockstrat-agent` outright (tool count 52→43), **no replacement service**, no
     per-operator token, no audit sink, no transparent proxy, **no 084 dependency**. Operators run
     admin SQL out-of-band (direct `psql`/DB client via SSH/doctl/bastion), documented in a runbook.
-  - **feature 208 (`psql-db-role-grant-hardening`)** — rescoped from "least-privilege grants for the
-    psql-MCP's role + protect its audit sink" to **teardown of the now-orphaned `xstockstrat_agent`
-    DB role** (postgres-mcp was its only consumer) + an audit that no remaining role can write
-    integrity-critical tables (ledger/identity/config).
+  - **feature 208 (`psql-db-role-grant-hardening`)** — was rescoped from "least-privilege grants for
+    the psql-MCP's role + protect its audit sink" to orphaned-role teardown, then **demoted as
+    unnecessary on 2026-09-27**: the `xstockstrat_agent` role was never created (its `db-migrate.sh`
+    provisioning is `POSTGRES_MCP_AGENT_PASSWORD`-gated and that env was never set), so there is no
+    role to tear down. Feature 214 removes the dead provisioning block itself.
 - **Disposition of this branch:** no PR was ever opened for `feature/sysadmin-db-write-role` (SDD flow
   stopped at `design-approved`, pre-`/sdd-spec`). The branch is **not merged to `main-dev`**; its
   design.md/recon.md are retained on-branch as rejected-alternative memory. The generalizable lesson
