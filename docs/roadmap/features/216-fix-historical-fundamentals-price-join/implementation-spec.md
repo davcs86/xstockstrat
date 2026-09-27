@@ -1,6 +1,6 @@
 # Implementation Spec: fix-historical-fundamentals-price-join
 
-**Status**: `pending`
+**Status**: `done`
 **Created**: 2026-09-27
 **Feature**: `docs/roadmap/features/216-fix-historical-fundamentals-price-join/feature.md`
 **Total Steps**: 4
@@ -78,7 +78,7 @@ step is required; this is a decision, not an omission.
 
 ### Step 1 — service: repo stored-row reader + column-scoped writer + `HistoricalPriceState` type
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/source/source.go` — modify (add `HistoricalPriceState` struct)
@@ -158,7 +158,7 @@ step is required; this is a decision, not an omission.
 
 ### Step 2 — test: pgxmock pins for the two new repo methods
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/repository/marketdata_repo_test.go` — modify
@@ -208,7 +208,7 @@ step is required; this is a decision, not an omission.
 
 ### Step 3 — service: restructure `backfillOneSymbol` recovery loop + split `priceJoin` + wire `overwrite`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service.go` — modify
@@ -315,7 +315,7 @@ step is required; this is a decision, not an omission.
 
 ### Step 4 — test: recovery / fill-if-null / overwrite / dividend-coverage / currency-mismatch
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go` — modify
