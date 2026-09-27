@@ -577,3 +577,47 @@ func TestGetLatestTrade_HTTPError(t *testing.T) {
 		t.Fatal("expected error for 404 response, got nil")
 	}
 }
+
+// feature 211: cash-dividend corporate-actions feed.
+func TestGetCashDividends_Success(t *testing.T) {
+	srv := makeTestServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"corporate_actions":{"cash_dividends":[
+			{"symbol":"AAPL","ex_date":"2024-08-12","payable_date":"2024-08-15","rate":0.25},
+			{"symbol":"AAPL","ex_date":"2025-02-10","payable_date":"2025-02-13","rate":0.26}
+		]},"next_page_token":null}`))
+	})
+	c := alpaca.NewClient(alpaca.ClientConfig{APIKey: "k", APISecret: "s", DataURL: srv.URL})
+	divs, err := c.GetCashDividends(context.Background(), "AAPL",
+		time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC), time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("GetCashDividends: %v", err)
+	}
+	if len(divs) != 2 {
+		t.Fatalf("got %d dividends, want 2", len(divs))
+	}
+	if got := divs[0].ExDate.Format("2006-01-02"); got != "2024-08-12" {
+		t.Errorf("ex_date = %s, want 2024-08-12", got)
+	}
+	if divs[0].CashAmount != 0.25 {
+		t.Errorf("cash_amount = %v, want 0.25", divs[0].CashAmount)
+	}
+	if divs[0].Currency != "USD" {
+		t.Errorf("currency = %q, want USD", divs[0].Currency)
+	}
+	if divs[0].PayDate == nil || divs[0].PayDate.Format("2006-01-02") != "2024-08-15" {
+		t.Errorf("pay_date = %v, want 2024-08-15", divs[0].PayDate)
+	}
+}
+
+// An unentitled plan / server error surfaces as an error so the caller degrades yield to missing.
+func TestGetCashDividends_HTTPError(t *testing.T) {
+	srv := makeTestServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`{"message":"forbidden"}`))
+	})
+	c := alpaca.NewClient(alpaca.ClientConfig{APIKey: "k", APISecret: "s", DataURL: srv.URL})
+	if _, err := c.GetCashDividends(context.Background(), "AAPL",
+		time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC), time.Now()); err == nil {
+		t.Fatal("expected error on 403 (unentitled), got nil")
+	}
+}

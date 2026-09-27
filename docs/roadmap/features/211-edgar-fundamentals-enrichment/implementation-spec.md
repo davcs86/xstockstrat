@@ -1,6 +1,6 @@
 # Implementation Spec: edgar-fundamentals-enrichment
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-09-26
 **Feature**: `docs/roadmap/features/211-edgar-fundamentals-enrichment/feature.md`
 **Total Steps**: 16
@@ -103,7 +103,7 @@ is far below `de_bad=2.0`, not the total-liabilities ratio) but its **illustrati
 
 ### Step 1 — migration: dividend/corporate-actions store (`marketdata.dividend_actions`)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/migrations/006_dividend_actions.up.sql` — create
@@ -135,7 +135,7 @@ ls services/xstockstrat-marketdata/migrations/006_dividend_actions.up.sql servic
 
 ### Step 2 — service: currency capture + unit-aware EDGAR aggregator (FR-1)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/edgar/edgar_client.go` — modify
@@ -168,7 +168,7 @@ ls services/xstockstrat-marketdata/migrations/006_dividend_actions.up.sql servic
 
 ### Step 3 — test: currency-capture unit tests (@AC-1)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/edgar/edgar_client_test.go` — modify
@@ -201,7 +201,7 @@ cd services/xstockstrat-marketdata && GOWORK=off COVERPKGS=$(go list ./... | gre
 
 ### Step 4 — service: financial-debt D/E tag allow-list + summation (FR-2)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/edgar/edgar_client.go` — modify
@@ -237,7 +237,7 @@ cd services/xstockstrat-marketdata && GOWORK=off COVERPKGS=$(go list ./... | gre
 
 ### Step 5 — test: financial-debt D/E unit tests (@AC-2, @AC-3)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/edgar/edgar_client_test.go` — modify
@@ -269,7 +269,7 @@ cd services/xstockstrat-marketdata && GOWORK=off COVERPKGS=$(go list ./... | gre
 
 ### Step 6 — service: currency-consistent P/B (and P/E fix) at the filing boundary (FR-3, FR-7)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service.go` — modify
@@ -301,7 +301,7 @@ cd services/xstockstrat-marketdata && GOWORK=off COVERPKGS=$(go list ./... | gre
 
 ### Step 7 — test: PIT P/B unit tests, real Bar fixtures, no look-ahead (@AC-4)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go` — modify
@@ -332,7 +332,7 @@ Note: new logic in `internal/service/` — an **excluded** package for CI covera
 
 ### Step 8 — service: Alpaca corporate-actions dividend feed + PIT T12M yield (FR-4, FR-7)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/alpaca/client.go` — modify
@@ -348,6 +348,7 @@ Note: new logic in `internal/service/` — an **excluded** package for CI covera
 - The Alpaca client is registered in the source registry (`main.go:120` `reg.Register("alpaca", alpacaClient)`) but **not** passed to `NewMarketDataService` (`main.go:136`). Precedent for adding a client param: feature 198 added `edgarClient` as the last `NewMarketDataService` arg (`main.go:130-136`). Mirror that — add a `dividendSrc` param (a small `DividendSource` interface, SOLID seam like the existing `ratioEnricher` interface at `marketdata_service.go:116`).
 - Backfill entrypoint: `backfillOneSymbol` at `marketdata_service.go:1600` iterates chronologically sorted periods (`:1606`) and calls `priceJoin` per period (`:1611`). The yield compute hangs here (per-symbol dividend fetch once, then per-period T12M sum).
 - `UpsertFundamentals` idempotent-upsert pattern (`internal/repository/marketdata_repo.go:483`, `ON CONFLICT … DO UPDATE`) is the model for `UpsertDividends`; the `extraJSONText` string-bind note (`:491-493`) is the PgBouncer `QueryExecModeExec` gotcha to respect for any jsonb — not needed here (no jsonb column).
+- **Broker symmetry N/A (B2b):** `xstockstrat-marketdata` is the sole integration point for Alpaca's *market-data* APIs (service `CLAUDE.md`); corporate-actions is market data, not a broker/order concern, so there is **no IBKR lane** to mirror here. This step adds no order-placement / `BrokerType` / `OrderStatus` surface — broker-symmetry checks do not bind.
 
 **TDD**: `red-green required`
 
@@ -367,7 +368,7 @@ Note: new logic in `internal/service/` — an **excluded** package for CI covera
 
 ### Step 9 — test: dividend feed + T12M yield unit tests (@AC-5)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/alpaca/client_test.go` — modify
@@ -399,7 +400,7 @@ cd services/xstockstrat-marketdata && GOWORK=off COVERPKGS=$(go list ./... | gre
 
 ### Step 10 — service: EDGAR-canonical snapshot dispatch + FR-8 disable-safety (FR-5, FR-8)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service.go` — modify
@@ -440,7 +441,7 @@ cd services/xstockstrat-marketdata && GOWORK=off COVERPKGS=$(go list ./... | gre
 
 ### Step 11 — test: snapshot dispatch / disable-safety / parity unit tests (@AC-6, @AC-7)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go` — modify
@@ -472,7 +473,7 @@ Note: `internal/service/` + `cmd/` are **excluded** CI-coverage packages (templa
 
 ### Step 12 — config: seed migration for the EDGAR-snapshot + dividend keys (FR-5)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/migrations/030_marketdata_edgar_snapshot_keys.up.sql` — create
@@ -514,7 +515,7 @@ grep -c "marketdata\." services/xstockstrat-config/migrations/030_marketdata_edg
 
 ### Step 13 — service: data-explorer currency + source provenance + CSV (FR-6)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/hooks/useDataExplorer.ts` — modify
@@ -549,7 +550,7 @@ cd services/xstockstrat-ui && pnpm run test:coverage   # vitest logic layer (src
 
 ### Step 14 — test: data-explorer Playwright — enriched metrics + currency + source (@AC-8)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/data-explorer.spec.ts` — modify
@@ -582,7 +583,7 @@ grep -n "helpers/auth\|from '../fixtures'\|from './fixtures'\|historicalFundamen
 
 ### Step 15 — test: new marketdata acceptance coverage — currency/PIT/no-look-ahead/parity (@AC-9; C-16)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/acceptance/edgar-fundamentals-enrichment.feature` — create
@@ -598,7 +599,7 @@ grep -n "helpers/auth\|from '../fixtures'\|from './fixtures'\|historicalFundamen
 **Covers**: `AC-9` (and durably records @AC-1..@AC-7 as the marketdata suite's first fundamentals-serving guards)
 
 **Instructions**:
-- Author `edgar-fundamentals-enrichment.feature` mirroring the `acceptance.feature` scenarios, tagged `@AC-N @feature-207`, in the marketdata suite's Gherkin style (match the existing `.feature` files' Given/When/Then shape). Include: currency capture (@AC-1), financial-debt D/E (@AC-2/@AC-3), PIT P/B no-look-ahead (@AC-4), T12M dividend (@AC-5, marked contingent if FR-4 was descoped at Step 8), EDGAR-canonical snapshot + disable-safety (@AC-6), non-SEC fallback (@AC-7), and the **@AC-9 same-convention parity** scenario (PIT and snapshot for one filing produce the same D/E/P/B/currency ⇒ the formula composite lands in the same band on both surfaces).
+- Author `edgar-fundamentals-enrichment.feature` mirroring the `acceptance.feature` scenarios, tagged `@AC-N @feature-211`, in the marketdata suite's Gherkin style (match the existing `.feature` files' Given/When/Then shape). Include: currency capture (@AC-1), financial-debt D/E (@AC-2/@AC-3), PIT P/B no-look-ahead (@AC-4), T12M dividend (@AC-5, marked contingent if FR-4 was descoped at Step 8), EDGAR-canonical snapshot + disable-safety (@AC-6), non-SEC fallback (@AC-7), and the **@AC-9 same-convention parity** scenario (PIT and snapshot for one filing produce the same D/E/P/B/currency ⇒ the formula composite lands in the same band on both surfaces).
 - This closes the C-16 blind spot (no promoted marketdata fundamentals-serving suite existed — recon:77). PRESERVE, don't touch, the four existing `.feature` files.
 - No indicators/analysis code change (design § Chosen Approach) — @AC-9's formula behavior is validated by the shared inputs, not by editing the seeded formula (product spec § Out of Scope: band retune is a separate change only if validation proves one is needed).
 
@@ -613,7 +614,7 @@ grep -c "@AC-" services/xstockstrat-marketdata/acceptance/edgar-fundamentals-enr
 
 ### Step 16 — docs: marketdata CLAUDE.md config keys + design-correction record
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs` / `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/CLAUDE.md` — modify (add the 5 new config keys to § Config Keys Consumed)
@@ -630,7 +631,7 @@ grep -c "@AC-" services/xstockstrat-marketdata/acceptance/edgar-fundamentals-enr
 **Covers**: —
 
 **Instructions**:
-- Add rows for `marketdata.fundamentals.snapshot_source`, `marketdata.edgar.enabled`, `marketdata.edgar.cache_ttl_hours`, `marketdata.dividends.enabled`, `marketdata.dividends.backfill_lookback_years` to the marketdata CLAUDE.md config-keys table (type, default, description matching Step 12's seed). Update the `marketdata.fundamentals.provider` note: it now selects the **vendor** snapshot lane only when `snapshot_source=vendor` (feature 207 added the `snapshot_source` axis — the feature-198 "EDGAR is a separate PIT lane, never a `provider` value" note still holds; EDGAR reaches the snapshot via `snapshot_source`, not `provider`).
+- Add rows for `marketdata.fundamentals.snapshot_source`, `marketdata.edgar.enabled`, `marketdata.edgar.cache_ttl_hours`, `marketdata.dividends.enabled`, `marketdata.dividends.backfill_lookback_years` to the marketdata CLAUDE.md config-keys table (type, default, description matching Step 12's seed). Update the `marketdata.fundamentals.provider` note: it now selects the **vendor** snapshot lane only when `snapshot_source=vendor` (feature 211 added the `snapshot_source` axis — the feature-198 "EDGAR is a separate PIT lane, never a `provider` value" note still holds; EDGAR reaches the snapshot via `snapshot_source`, not `provider`).
 - Add the 5 keys to the Per-Feature Registered Keys log in `docs/patterns/config-governance.md`.
 - **Teardown (root CLAUDE.md § Teardown):** this step changes context files describing config behavior — run `/context-forge:context-constitution refresh` scoped to the marketdata CLAUDE.md + config-governance edits before pushing, and fix grounded drift; if the plugin is unavailable, do the manual reconciliation and record both facts in the PR body.
 
@@ -644,4 +645,21 @@ grep -n "snapshot_source" docs/patterns/config-governance.md   # confirm registe
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### 2026-09-26 — golangci-lint unavailable for go1.27 → `go vet` + `gofmt` CI-equivalent fallback (all Go steps)
+- The pre-provisioned `golangci-lint` was built against go1.25, and `go install …@v2.13.1` (the CI-pinned version) produces a binary whose own go.mod caps language support at go1.26 — both refuse this repo's **go1.27** target (`can't load config: the Go language version … is lower than the targeted Go version (1.27.0)`).
+- **Disposition: CI-equivalent fallback** — every Go step's lint gate is verified with `GOWORK=off go vet ./<pkg>/...` + `gofmt -l <pkg>/` (both run natively on go1.27), in place of `golangci-lint run`. The real golangci-lint gate runs in CI (golangci-lint-action@v9). This applies to all of feature 211's Go `service`/`test` steps.
+
+### 2026-09-27 — Step 6 P/E for non-USD filers narrowed to nil (in-file scope)
+- The spec's Step-6 P/E rule has a "use the USD-unit EPS when present" branch for a non-USD filer. Step 2 stashed only `stockholders_equity_usd`, not an `eps_usd`, so within Step 6's stated file scope (`marketdata_service.go` only) the P/E is set only when `Currency == "USD"`, else nil (missing) — honest, no cross-currency divide, preserves @AC-22. P/B is unaffected (uses the stashed USD equity). A follow-up could stash `eps_usd` in the edgar aggregator to enable non-USD P/E.
+
+### 2026-09-26 — Step 4 D/E tag allow-list: IFRS tags omitted (spec-sanctioned, C-18)
+- Per the spec's Step-4 Codebase Evidence, all three acceptance filers (BABA/AXP/AAPL) report under `us-gaap`; the design's guessed `ifrs-full:*` allow-list is unnecessary and omitted (YAGNI — a future non-us-gaap filer is a separate feature).
+
+### 2026-09-27 — Step 10 latest-filing read: dedicated `LatestHistoricalFundamental` repo method (not `GetHistoricalFundamentals`)
+- The spec's Step-10 evidence phrases the snapshot read as "the existing `GetHistoricalFundamentals` + `filterAsOf`". That method pages **oldest-first** (`ORDER BY period_end, fiscal_period ASC`), so the newest filing sits on the last page — reaching it would scan the whole history, the exact N-scan the same instruction warns against ("one indexed read/symbol; F-06; avoids the feature-141 N-scan OOM").
+- **Disposition:** added `MarketDataRepo.LatestHistoricalFundamental(symbol, asOf)` — a single `ORDER BY period_end DESC, fiscal_period DESC LIMIT 1 WHERE filed_date < asOf` read (the T+1 no-look-ahead guard pushed into SQL, mirroring `filterAsOf`). This is the faithful realization of "latest filing as-of now, one indexed read"; it stays within Step 10's listed `marketdata_repo.go` file scope and is more robust than a bounded-lookback reuse of `GetHistoricalFundamentals` (which would miss a slow filer).
+
+### 2026-09-27 — Step 10 `snapshot_source` unrecognized value: fail-safe WARN, not RPC-fatal
+- The spec says an unknown `snapshot_source` "fails loud (F-07)" and pairs it with the main.go boot-fatal provider switch. But `snapshot_source` is a **live-read** axis on a serving RPC (main.go never reads it), so a hard RPC failure on a config typo would take fundamentals serving down platform-wide — the opposite of fault-tolerant.
+- **Disposition:** `snapshotSource()` recognizes only `edgar`/`vendor`; any other value logs a WARN (the "loud" signal) and fails **safe** to `vendor` (current production behavior).
+- **Follow-up correction (same day, CI-driven):** the spec's paired instruction to make `newFundamentalsSource`'s unknown-`provider` default **boot-fatal (`os.Exit`)** was initially implemented, but it broke the pre-existing feature-082/129 regression canary `TestNewFundamentalsSource_AlwaysNonNil` (which asserts the constructor is *always* non-nil for any provider, incl. `"unrecognized-falls-back-to-fmp"`) and `os.Exit` is untestable besides. Reverted to the pre-211 behavior — unknown provider **falls back to FMP** — but kept F-07 "loud" as a `slog.Warn`. A config typo must not crash marketdata boot; the safe FMP default + WARN honors both the canary and F-07's intent. (Caught by CI: `go test ./cmd/...` was not run locally — the Step 11 verification block scoped to `./internal/...`.)

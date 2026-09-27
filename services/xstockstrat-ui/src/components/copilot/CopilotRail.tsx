@@ -33,7 +33,8 @@ interface ThreadMessage {
  */
 export function CopilotRail() {
   const { showCopilot, setShowCopilot } = useChrome();
-  // Share the ['opportunities', 0] cache with the Opportunities page (page-1 only, no Load More).
+  // Shares the page's default page-1 cache key ['opportunities', 0, [], UNSPECIFIED, CONVICTION]
+  // (the hook's sort default is CONVICTION) — one ListOpportunities read, no second sort. Page-1 only.
   const { data: oppData } = useOpportunities(0);
   const queue = React.useMemo<QueueLike[] | null>(() => {
     if (!oppData) return null;

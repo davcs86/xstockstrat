@@ -102,6 +102,31 @@ without this convention, both look identical (fails.md 2026-07-01).
 
 Append-only log — one entry per feature that registered new keys. Newest first. Don't edit past entries; superseding a key's behavior gets a new entry, not a rewrite of the old one.
 
+### feature 211 — edgar-fundamentals-enrichment (`xstockstrat-marketdata` / `xstockstrat-config`)
+
+Registers **5** non-secret `marketdata.*` keys via **seed migration `030_marketdata_edgar_snapshot_keys`**
+(global rows, both environments, `ON CONFLICT … DO NOTHING`), each seeded at its **current code
+default** so applying 030 is a **no-runtime-behavior change**:
+
+- `marketdata.fundamentals.snapshot_source` (string, `vendor`) — **live-read** serving-source axis for
+  the latest-snapshot RPCs: `edgar` derives the snapshot from the newest as-reported SEC filing + a
+  live price-join; `vendor` is the unchanged FMP/Finnhub path. Unrecognized ⇒ WARN + fail-safe to
+  `vendor`. Distinct from the boot-frozen `marketdata.fundamentals.provider` (which selects only the
+  vendor client). Live-flip to `edgar` is a rollout step, not the migration.
+- `marketdata.edgar.enabled` (bool, `true`) — EDGAR snapshot kill switch, read under
+  `snapshot_source=edgar`. **Explicit `true` default** (feature-100 `GetBool` zero-value trap).
+- `marketdata.edgar.cache_ttl_hours` (int, `24`) — EDGAR snapshot cache freshness; source-aware
+  invalidation self-heals a stale vendor row on the first edgar read.
+- `marketdata.dividends.enabled` (bool, `false`) — Alpaca cash-dividend feed gate for the PIT T12M
+  yield. Off/unentitled ⇒ `dividend_yield` missing (never a fabricated 0), WARN-logged for audit.
+  Seeded off; flipped on at rollout once the Alpaca entitlement is confirmed.
+- `marketdata.dividends.backfill_lookback_years` (int, `2`) — dividend fetch-range bound; the T12M
+  window itself is fixed at 365 days in code.
+
+Defaults are declared in `services/xstockstrat-marketdata/CLAUDE.md` § Config Keys Consumed (C-05).
+The pre-existing `marketdata.edgar.{base_url,user_agent,rate_limit_rps}` (feature 198) are unrelated
+EDGAR client knobs, not seeded here.
+
 ### feature 201 — fundamentals-formula-inputs (`xstockstrat-analysis`)
 
 **No new key.** A `COMPONENT_KIND_CUSTOM_FORMULA` component whose formula declares

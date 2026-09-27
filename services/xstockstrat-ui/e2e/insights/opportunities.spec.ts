@@ -569,3 +569,38 @@ test.describe('Opportunities mobile parity (feature 155)', () => {
     await expect(page.getByTestId('opportunity-unavailable-mobile-PLTR')).toBeVisible();
   });
 });
+
+// feature 213 — CopilotRail must share the Opportunities page-1 query cache instead of issuing a
+// second ListOpportunities RPC with a different sort. This block sets up its own counting mock
+// BEFORE navigating (the shared beforeEach above navigates), so it observes the initial fan-out.
+test.describe('Opportunities — single page-1 ListOpportunities RPC (feature 213 @AC-1)', () => {
+  test('CopilotRail shares the page-1 cache: exactly one ListOpportunities RPC on load', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    // Working data mock (registered first).
+    await mockOpportunities(page);
+    // Counting shim registered last → runs first (Playwright LIFO); records each request's sort,
+    // then falls back to the data mock so the page still renders. CopilotRail's useOpportunities
+    // runs on every route (its hook is above the `showCopilot` guard) and is mounted globally in
+    // PlatformHeader, so a page-1 sort mismatch surfaces here as a second RPC.
+    const sorts: string[] = [];
+    await page.route('**/xstockstrat.analysis.v1.AnalysisService/ListOpportunities', (route) => {
+      const req = JSON.parse(route.request().postData() ?? '{}');
+      // sort=UNSPECIFIED (0) is omitted from Connect-JSON, so an absent field means the pre-fix
+      // CopilotRail default; a present CONVICTION means the page's key.
+      sorts.push(String(req.sort ?? 'OPPORTUNITY_SORT_UNSPECIFIED'));
+      return route.fallback();
+    });
+    await page.goto('/insights/opportunities');
+    await expect(page.getByTestId('opportunity-card').filter({ hasText: 'AAPL' })).toBeVisible({
+      timeout: 8000,
+    });
+    // Both the page hook and CopilotRail's hook mount together; let any second-key fetch fire. The
+    // 15s refetch poll is far off, so this count is the initial page-1 fan-out.
+    await page.waitForTimeout(1500);
+    // Post-fix: exactly one page-1 read (both consumers share the CONVICTION-sorted key). Pre-fix:
+    // two (page CONVICTION + CopilotRail UNSPECIFIED).
+    expect(sorts).toHaveLength(1);
+  });
+});

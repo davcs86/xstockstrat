@@ -57,8 +57,9 @@ agent's telemetry/audit path.
 - The broader agent-egress network policy at the container/infra layer (e.g. a NetworkPolicy or
   egress firewall on the agent pod) — a complementary defense-in-depth control, tracked separately if
   pursued; this feature hardens the in-tool fetch path.
-- The DB-tooling privilege separation (feature 193) and the DB-role grant narrowing
-  (`208-psql-db-role-grant-hardening`) — sibling security follow-ons, not this feature.
+- The DB-tooling removal (feature 214 `remove-agent-postgres-mcp`, which superseded demoted feature
+  212; feature `208-psql-db-role-grant-hardening` was demoted as unnecessary) — a sibling security
+  follow-on, not this feature.
 
 ## Affected Services
 

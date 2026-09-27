@@ -1501,6 +1501,8 @@ type fakeHistRepo struct {
 	// captured from the last QueryHistoricalFundamentals call (page-param pass-through assertion)
 	gotPageSize  int
 	gotPageToken string
+	dividends    []source.CashDividend                // in-memory dividend store (feature 211)
+	latest       *source.HistoricalFundamentalsPeriod // returned by LatestHistoricalFundamental (feature 211 snapshot dispatch)
 }
 
 func (r *fakeHistRepo) InsertHistoricalFundamentals(_ context.Context, p source.HistoricalFundamentalsPeriod) error {
@@ -1519,6 +1521,32 @@ func (r *fakeHistRepo) QueryHistoricalFundamentals(_ context.Context, _ string, 
 
 func (r *fakeHistRepo) CloseAt(_ context.Context, _ string, _ time.Time) (*float64, error) {
 	return r.closeAt, nil
+}
+
+func (r *fakeHistRepo) UpsertDividends(_ context.Context, divs []source.CashDividend) error {
+	r.dividends = append(r.dividends, divs...)
+	return nil
+}
+
+// SumDividendsInWindow replicates the repo SQL semantics (ex_date <= asOf AND ex_date >= windowStart)
+// so the service's no-look-ahead + window logic is exercised without a DB.
+func (r *fakeHistRepo) SumDividendsInWindow(_ context.Context, symbol string, asOf, windowStart time.Time) (float64, bool, error) {
+	var sum float64
+	var any bool
+	for _, d := range r.dividends {
+		if d.Symbol != symbol {
+			continue
+		}
+		any = true
+		if !d.ExDate.After(asOf) && !d.ExDate.Before(windowStart) {
+			sum += d.CashAmount
+		}
+	}
+	return sum, any, nil
+}
+
+func (r *fakeHistRepo) LatestHistoricalFundamental(_ context.Context, _ string, _ time.Time) (*source.HistoricalFundamentalsPeriod, error) {
+	return r.latest, nil
 }
 
 type fakeHistSource struct {
@@ -1681,5 +1709,346 @@ func TestBackfillFundamentals_CapDegrade_AC5(t *testing.T) {
 	}
 	if len(repo2.inserted) != 1 || repo2.inserted[0].Source != "edgar+fmp" {
 		t.Errorf("inserted source = %v, want edgar+fmp", repo2.inserted)
+	}
+}
+
+// --- feature 211: currency-consistent PIT P/B + P/E, no look-ahead (@AC-4) ---
+
+type fakeHistRepo211 struct {
+	closeVal   *float64
+	queriedFor []time.Time
+}
+
+func (r *fakeHistRepo211) InsertHistoricalFundamentals(_ context.Context, _ source.HistoricalFundamentalsPeriod) error {
+	return nil
+}
+func (r *fakeHistRepo211) QueryHistoricalFundamentals(_ context.Context, _ string, _, _, _ time.Time, _ []string, _ int, _ string) ([]source.HistoricalFundamentalsPeriod, string, error) {
+	return nil, "", nil
+}
+func (r *fakeHistRepo211) CloseAt(_ context.Context, _ string, date time.Time) (*float64, error) {
+	r.queriedFor = append(r.queriedFor, date)
+	return r.closeVal, nil
+}
+func (r *fakeHistRepo211) UpsertDividends(_ context.Context, _ []source.CashDividend) error {
+	return nil
+}
+func (r *fakeHistRepo211) SumDividendsInWindow(_ context.Context, _ string, _, _ time.Time) (float64, bool, error) {
+	return 0, false, nil
+}
+func (r *fakeHistRepo211) LatestHistoricalFundamental(_ context.Context, _ string, _ time.Time) (*source.HistoricalFundamentalsPeriod, error) {
+	return nil, nil
+}
+
+type fakeDividendSrc struct {
+	divs []source.CashDividend
+	err  error
+}
+
+func (s *fakeDividendSrc) GetCashDividends(_ context.Context, _ string, _, _ time.Time) ([]source.CashDividend, error) {
+	return s.divs, s.err
+}
+
+func TestPriceJoin_PBRatioUSDEquity_NoLookAhead_AC4_feature211(t *testing.T) {
+	repo := &fakeHistRepo211{closeVal: f64p(80.0)}
+	svc := &MarketDataService{histRepo: repo}
+	filed := time.Date(2025, 6, 26, 0, 0, 0, 0, time.UTC)
+	p := &source.HistoricalFundamentalsPeriod{
+		Symbol: "BABA", PeriodType: "annual", Currency: "CNY", FiledDate: filed,
+		SharesOutstanding: f64p(2_400_000_000),
+		ExtraMetrics:      map[string]float64{"stockholders_equity": 1_060_886e6, "stockholders_equity_usd": 153_796e6},
+	}
+	var q []float64
+	svc.priceJoin(context.Background(), p, &q)
+	if p.PBRatio == nil {
+		t.Fatalf("pb_ratio nil, want set from USD equity")
+	}
+	wantPB := (80.0 * 2_400_000_000) / 153_796e6 // USD market_cap / USD equity
+	if got := *p.PBRatio; got < wantPB*0.999 || got > wantPB*1.001 {
+		t.Errorf("pb_ratio = %v, want ~%v (single-currency USD)", got, wantPB)
+	}
+	if len(repo.queriedFor) != 1 || !repo.queriedFor[0].Equal(filed) {
+		t.Errorf("CloseAt queried %v, want only filed_date %v (no look-ahead)", repo.queriedFor, filed)
+	}
+}
+
+func TestPriceJoin_PBNilWhenNoUSDEquity_feature211(t *testing.T) {
+	repo := &fakeHistRepo211{closeVal: f64p(80.0)}
+	svc := &MarketDataService{histRepo: repo}
+	p := &source.HistoricalFundamentalsPeriod{
+		Symbol: "BABA", PeriodType: "annual", Currency: "CNY", FiledDate: time.Now(),
+		SharesOutstanding: f64p(2_400_000_000),
+		ExtraMetrics:      map[string]float64{"stockholders_equity": 1_060_886e6}, // native CNY only, no USD fact
+	}
+	var q []float64
+	svc.priceJoin(context.Background(), p, &q)
+	if p.PBRatio != nil {
+		t.Errorf("pb_ratio = %v, want nil (non-USD filer, no USD equity → no FX)", *p.PBRatio)
+	}
+}
+
+func TestPriceJoin_PECurrencyRule_feature211(t *testing.T) {
+	// USD filer: USD close / USD native EPS → P/E set.
+	repoU := &fakeHistRepo211{closeVal: f64p(100.0)}
+	svcU := &MarketDataService{histRepo: repoU}
+	pu := &source.HistoricalFundamentalsPeriod{Symbol: "AAPL", PeriodType: "annual", Currency: "USD", FiledDate: time.Now(), EPS: f64p(5.0), ExtraMetrics: map[string]float64{}}
+	var qu []float64
+	svcU.priceJoin(context.Background(), pu, &qu)
+	if pu.PERatio == nil || *pu.PERatio < 19.99 || *pu.PERatio > 20.01 {
+		t.Errorf("USD P/E = %v, want ~20 (100/5)", pu.PERatio)
+	}
+	// Non-USD filer: no USD EPS fact → P/E nil (no cross-currency divide).
+	repoC := &fakeHistRepo211{closeVal: f64p(100.0)}
+	svcC := &MarketDataService{histRepo: repoC}
+	pc := &source.HistoricalFundamentalsPeriod{Symbol: "BABA", PeriodType: "annual", Currency: "CNY", FiledDate: time.Now(), EPS: f64p(5.0), ExtraMetrics: map[string]float64{}}
+	var qc []float64
+	svcC.priceJoin(context.Background(), pc, &qc)
+	if pc.PERatio != nil {
+		t.Errorf("non-USD P/E = %v, want nil (no USD eps)", *pc.PERatio)
+	}
+}
+
+// --- feature 211: PIT T12M dividend yield (@AC-5) + 0-vs-missing + feed-fallback ---
+
+func dividendYieldSvc(divSrc *fakeDividendSrc, dividendsEnabled bool) (*MarketDataService, *fakeHistRepo) {
+	period := source.HistoricalFundamentalsPeriod{
+		FiscalPeriod: "FY2024", PeriodType: "annual",
+		PeriodEnd: hfDate(2025, 3, 31), FiledDate: hfDate(2025, 6, 26),
+		SharesOutstanding: f64p(1_000_000), Source: "edgar", ExtraMetrics: map[string]float64{},
+	}
+	repo := &fakeHistRepo{closeAt: f64p(100.0)} // price-at-filing = 100
+	cfg := &fakeCfg{bools: map[string]bool{
+		"marketdata.fundamentals.history.enabled": true,
+		"marketdata.dividends.enabled":            dividendsEnabled,
+	}}
+	svc := &MarketDataService{
+		histFundamentals: &fakeHistSource{periods: []source.HistoricalFundamentalsPeriod{period}},
+		histRepo:         repo, dividendSrc: divSrc, fundCfg: cfg,
+	}
+	return svc, repo
+}
+
+// @AC-5: T12M yield sums only dividends with ex_date in [filed-365d, filed]; a post-filing payment
+// is excluded (no look-ahead, FR-7).
+func TestBackfillFundamentals_DividendYieldT12M_AC5_feature211(t *testing.T) {
+	div := &fakeDividendSrc{divs: []source.CashDividend{
+		{Symbol: "AAPL", ExDate: hfDate(2024, 8, 1), CashAmount: 0.5, Currency: "USD"},
+		{Symbol: "AAPL", ExDate: hfDate(2025, 2, 1), CashAmount: 0.5, Currency: "USD"},
+		{Symbol: "AAPL", ExDate: hfDate(2025, 8, 15), CashAmount: 0.5, Currency: "USD"}, // post-filing → excluded
+	}}
+	svc, repo := dividendYieldSvc(div, true)
+	if _, err := svc.BackfillFundamentals(context.Background(), &marketdatav1.BackfillFundamentalsRequest{Symbols: []string{"AAPL"}}); err != nil {
+		t.Fatalf("BackfillFundamentals: %v", err)
+	}
+	if len(repo.inserted) != 1 {
+		t.Fatalf("inserted %d rows, want 1", len(repo.inserted))
+	}
+	got := repo.inserted[0].DividendYield
+	if got == nil {
+		t.Fatalf("dividend_yield nil, want 0.01")
+	}
+	if *got < 0.0099 || *got > 0.0101 {
+		t.Errorf("dividend_yield = %v, want 0.01 ((0.5+0.5)/100; 2025-08-15 post-filing excluded)", *got)
+	}
+}
+
+// A payer whose only dividend is out-of-window → yield 0 (feed had rows), never missing.
+func TestBackfillFundamentals_DividendYieldZeroWhenNoneInWindow_feature211(t *testing.T) {
+	div := &fakeDividendSrc{divs: []source.CashDividend{
+		{Symbol: "AAPL", ExDate: hfDate(2025, 8, 15), CashAmount: 0.5, Currency: "USD"}, // only post-filing
+	}}
+	svc, repo := dividendYieldSvc(div, true)
+	if _, err := svc.BackfillFundamentals(context.Background(), &marketdatav1.BackfillFundamentalsRequest{Symbols: []string{"AAPL"}}); err != nil {
+		t.Fatalf("BackfillFundamentals: %v", err)
+	}
+	got := repo.inserted[0].DividendYield
+	if got == nil || *got != 0 {
+		t.Errorf("dividend_yield = %v, want 0 (feed had rows, none in window)", got)
+	}
+}
+
+// Feed unavailable/unentitled (error) → yield missing (nil), never a fabricated 0 (fallback + audit).
+func TestBackfillFundamentals_DividendYieldMissingWhenFeedUnavailable_feature211(t *testing.T) {
+	div := &fakeDividendSrc{err: fmt.Errorf("alpaca corporate-actions 403: unentitled")}
+	svc, repo := dividendYieldSvc(div, true)
+	if _, err := svc.BackfillFundamentals(context.Background(), &marketdatav1.BackfillFundamentalsRequest{Symbols: []string{"AAPL"}}); err != nil {
+		t.Fatalf("BackfillFundamentals: %v", err)
+	}
+	if repo.inserted[0].DividendYield != nil {
+		t.Errorf("dividend_yield = %v, want nil (feed unavailable → missing, no fabricated 0)", *repo.inserted[0].DividendYield)
+	}
+}
+
+// Dividends disabled → yield missing (nil), no feed call consequence.
+func TestBackfillFundamentals_DividendYieldMissingWhenDisabled_feature211(t *testing.T) {
+	div := &fakeDividendSrc{divs: []source.CashDividend{{Symbol: "AAPL", ExDate: hfDate(2025, 2, 1), CashAmount: 0.5}}}
+	svc, repo := dividendYieldSvc(div, false) // dividends.enabled = false
+	if _, err := svc.BackfillFundamentals(context.Background(), &marketdatav1.BackfillFundamentalsRequest{Symbols: []string{"AAPL"}}); err != nil {
+		t.Fatalf("BackfillFundamentals: %v", err)
+	}
+	if repo.inserted[0].DividendYield != nil {
+		t.Errorf("dividend_yield = %v, want nil (disabled)", *repo.inserted[0].DividendYield)
+	}
+}
+
+// ── feature 211: EDGAR-canonical snapshot dispatch + disable-safety + parity (@AC-6, @AC-7) ──────
+
+// edgarSnapshotSvc wires a service for the snapshot_source=edgar path: a fake fundamentals cache
+// (fundRepo), a fake historical store returning `latest` (histRepo), a registry serving `quote` for
+// the live-price join, and the vendor source for the @AC-7 fallback. cfg is supplied per test so the
+// zero-value getters exercise the real defaults (edgar.enabled true-by-default trap, FR-8).
+func edgarSnapshotSvc(latest *source.HistoricalFundamentalsPeriod, quote *marketdatav1.Quote, cfg *fakeCfg, vendorSrc source.FundamentalsSource, vendorProvider string) (*MarketDataService, *fakeFundRepo) {
+	fundRepo := newFakeFundRepo()
+	q := map[string]*marketdatav1.Quote{}
+	if quote != nil {
+		q[quote.Symbol] = quote
+	}
+	reg := source.NewRegistry()
+	reg.Register("alpaca", &fakeMultiSource{quotes: q})
+	svc := &MarketDataService{
+		registry:     reg,
+		warmSymbols:  map[string]struct{}{},
+		fundRepo:     fundRepo,
+		histRepo:     &fakeHistRepo{latest: latest},
+		fundCfg:      cfg,
+		fundamentals: vendorSrc,
+		fundProvider: vendorProvider,
+		notify:       &fakeNotify{},
+	}
+	return svc, fundRepo
+}
+
+func babaEdgarPeriod() *source.HistoricalFundamentalsPeriod {
+	return &source.HistoricalFundamentalsPeriod{
+		Symbol: "BABA", FiscalPeriod: "FY2026", PeriodType: "annual",
+		PeriodEnd: hfDate(2026, 3, 31), FiledDate: hfDate(2026, 7, 1),
+		DebtToEquity: f64p(0.053), PBRatio: f64p(2.1), MarketCap: f64p(200e9),
+		Price: f64p(70), Currency: "USD", Source: "edgar",
+		ExtraMetrics: map[string]float64{"total_debt": 8098e6, "stockholders_equity_usd": 153796e6},
+	}
+}
+
+// @AC-6 + FR-8: with snapshot_source=edgar and BOTH vendors off, the snapshot is derived from the
+// latest EDGAR period (same financial-debt D/E + P/B + currency as the stored period) overlaid with a
+// LIVE price, Source=="edgar", and fundamentals are STILL served (no fallthrough to disabled/empty).
+// edgar.enabled is deliberately unset here to prove the explicit true default (zero-value trap).
+func TestGetFundamentals_EdgarSnapshot_AC6_FR8_feature211(t *testing.T) {
+	cfg := &fakeCfg{
+		strings: map[string]string{"marketdata.fundamentals.snapshot_source": "edgar"},
+		bools:   map[string]bool{"marketdata.finnhub.enabled": false, "marketdata.fmp.enabled": false},
+		ints:    map[string]int64{"marketdata.edgar.cache_ttl_hours": 24},
+	}
+	svc, _ := edgarSnapshotSvc(babaEdgarPeriod(), &marketdatav1.Quote{Symbol: "BABA", AskPrice: 101, BidPrice: 99}, cfg, nil, "finnhub")
+
+	f, err := svc.GetFundamentals(context.Background(), "BABA")
+	if err != nil {
+		t.Fatalf("GetFundamentals(edgar): %v", err)
+	}
+	if f == nil {
+		t.Fatal("edgar snapshot nil with both vendors off — FR-8 fallthrough regression")
+	}
+	if f.Source != "edgar" {
+		t.Errorf("Source = %q, want \"edgar\"", f.Source)
+	}
+	if f.DebtToEquity < 0.0529 || f.DebtToEquity > 0.0531 {
+		t.Errorf("debt_to_equity = %v, want ~0.053 (same financial-debt convention as stored period, @AC-6)", f.DebtToEquity)
+	}
+	if f.PbRatio < 2.099 || f.PbRatio > 2.101 {
+		t.Errorf("pb_ratio = %v, want ~2.1 (stored, currency-consistent)", f.PbRatio)
+	}
+	if f.Currency != "USD" {
+		t.Errorf("currency = %q, want USD", f.Currency)
+	}
+	if f.Price < 99.99 || f.Price > 100.01 {
+		t.Errorf("price = %v, want ~100 (LIVE mid, not the stored 70)", f.Price)
+	}
+}
+
+// C-10(b) parity: GetFundamentals and GetFundamentalsMulti return the identical snapshot for a symbol
+// under snapshot_source=edgar (both dispatch the same builder).
+func TestGetFundamentals_EdgarParity_C10b_feature211(t *testing.T) {
+	cfg := &fakeCfg{
+		strings: map[string]string{"marketdata.fundamentals.snapshot_source": "edgar"},
+		bools:   map[string]bool{"marketdata.edgar.enabled": true},
+	}
+	svc, _ := edgarSnapshotSvc(babaEdgarPeriod(), &marketdatav1.Quote{Symbol: "BABA", AskPrice: 101, BidPrice: 99}, cfg, nil, "finnhub")
+
+	single, err := svc.GetFundamentals(context.Background(), "BABA")
+	if err != nil {
+		t.Fatalf("single: %v", err)
+	}
+	multi, err := svc.GetFundamentalsMulti(context.Background(), []string{"BABA"})
+	if err != nil {
+		t.Fatalf("multi: %v", err)
+	}
+	if len(multi) != 1 {
+		t.Fatalf("multi returned %d, want 1", len(multi))
+	}
+	m := multi[0]
+	if m.Source != single.Source || m.DebtToEquity != single.DebtToEquity || m.PbRatio != single.PbRatio || m.Price != single.Price || m.Currency != single.Currency {
+		t.Errorf("parity break: single=%+v multi=%+v", single, m)
+	}
+}
+
+// @AC-7: a symbol with ZERO stored EDGAR periods under snapshot_source=edgar, with a vendor enabled,
+// falls back to the vendor and the row is marked with the VENDOR name (not "edgar").
+func TestGetFundamentals_EdgarFallbackToVendor_AC7_feature211(t *testing.T) {
+	cfg := enabledCfg("finnhub") // seeds finnhub.enabled + quota/cache keys
+	cfg.strings = map[string]string{"marketdata.fundamentals.snapshot_source": "edgar"}
+	cfg.bools["marketdata.edgar.enabled"] = true
+	cfg.bools["marketdata.fmp.enabled"] = false
+	vendor := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(50)}} // Source empty → toProto uses provider name
+	svc, _ := edgarSnapshotSvc(nil, nil, cfg, vendor, "finnhub")
+
+	f, err := svc.GetFundamentals(context.Background(), "NOSEC")
+	if err != nil {
+		t.Fatalf("GetFundamentals(fallback): %v", err)
+	}
+	if f == nil || f.Source != "finnhub" {
+		t.Fatalf("Source = %v, want \"finnhub\" (vendor fallback, not edgar)", f)
+	}
+	if vendor.calls != 1 {
+		t.Errorf("vendor fetch calls = %d, want 1 (fallback took the vendor)", vendor.calls)
+	}
+}
+
+// Kill switch: edgar.enabled=false under snapshot_source=edgar → FailedPrecondition (deliberate all-off).
+func TestGetFundamentals_EdgarKillSwitch_feature211(t *testing.T) {
+	cfg := &fakeCfg{
+		strings: map[string]string{"marketdata.fundamentals.snapshot_source": "edgar"},
+		bools:   map[string]bool{"marketdata.edgar.enabled": false},
+	}
+	svc, _ := edgarSnapshotSvc(babaEdgarPeriod(), nil, cfg, nil, "finnhub")
+
+	_, err := svc.GetFundamentals(context.Background(), "BABA")
+	if err == nil {
+		t.Fatal("edgar.enabled=false must return an error")
+	}
+	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Errorf("code = %v, want FailedPrecondition", connect.CodeOf(err))
+	}
+}
+
+// Source-aware cache self-heal: a fresh-but-VENDOR-sourced cache row is NOT served under edgar mode —
+// the snapshot is re-derived from the EDGAR period (Source flips to edgar), so a cutover heals in one call.
+func TestGetFundamentals_EdgarCacheSelfHeal_feature211(t *testing.T) {
+	cfg := &fakeCfg{
+		strings: map[string]string{"marketdata.fundamentals.snapshot_source": "edgar"},
+		bools:   map[string]bool{"marketdata.edgar.enabled": true},
+		ints:    map[string]int64{"marketdata.edgar.cache_ttl_hours": 24},
+	}
+	svc, fundRepo := edgarSnapshotSvc(babaEdgarPeriod(), &marketdatav1.Quote{Symbol: "BABA", AskPrice: 101, BidPrice: 99}, cfg, nil, "finnhub")
+	// Pre-seed a FRESH vendor row — under string-inequality invalidation this would be served stale.
+	fundRepo.rows["BABA"] = &source.Fundamentals{Symbol: "BABA", Source: "finnhub", DebtToEquity: f64p(9.9)}
+	fundRepo.fetchedAt["BABA"] = time.Now()
+
+	f, err := svc.GetFundamentals(context.Background(), "BABA")
+	if err != nil {
+		t.Fatalf("GetFundamentals: %v", err)
+	}
+	if f.Source != "edgar" || f.DebtToEquity < 0.0529 || f.DebtToEquity > 0.0531 {
+		t.Errorf("got Source=%q d/e=%v, want edgar-derived ~0.053 (stale vendor row must not be served)", f.Source, f.DebtToEquity)
+	}
+	if got := fundRepo.rows["BABA"].Source; got != "edgar" {
+		t.Errorf("cache row Source = %q after self-heal, want edgar", got)
 	}
 }

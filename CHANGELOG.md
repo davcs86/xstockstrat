@@ -3,6 +3,18 @@
 All production promotions from `main-dev` to `main` are recorded here.
 Each entry corresponds to one `main-dev → main` PR merge.
 
+## 2026-09-27
+
+### Features
+- screener-preset-criteria: Add a preset selector to the Screener page that lets the trader load a predefined multi-criterion configuration with one click instead of manually composing each row.
+- edgar-fundamentals-enrichment: Make EDGAR the single, PIT-faithful source of fundamentals for both backtest and live/snapshot evaluation — fixing the hardcoded-currency bug, computing financial-debt D/E and market-derived P/B from the filing itself, adding a point-in-time dividend feed, and disabling the FMP/Finnhub fundamentals providers by config — so a symbol's backtest score and live score stop diverging.
+- fix-copilotrail-duplicate-rpc: On `/insights/opportunities` two `ListOpportunities` RPCs fire because `CopilotRail`'s `useOpportunities(0)` defaults `sort=UNSPECIFIED` while the page uses `sort=CONVICTION`, so their React-Query keys differ and the intended page-1 cache share never happens.
+
+### Summary
+3 commits, 0 feature merges since last promotion.
+
+---
+
 ## 2026-09-26
 
 ### Summary

@@ -13,7 +13,9 @@
 > The source branch was deleted after import. **Caveat:** the historical narrative below refers to this
 > feature as "193" (its design-time number) and cross-references other features by the numbers in effect
 > on the branch (e.g. `084 → 193`, `@feature-193`, "feature 211 = remove-agent-postgres-mcp"); those are
-> preserved as-written and may not match current `main-dev` numbering. The canonical number is now **212**.
+> preserved as-written and may not match current `main-dev` numbering. The canonical number is now **212**,
+> and the successor removal feature (called "211" in branch-era notes) is now **214**
+> (`211-edgar-fundamentals-enrichment` took 211).
 
 ---
 
@@ -346,14 +348,16 @@
   Hardening a wrapper around a dependency now judged inherently insecure is the wrong posture —
   **the surface is eliminated instead.**
 - **Superseded by:**
-  - **feature 211 (`remove-agent-postgres-mcp`)** — removes the 9 `db_*` tools + the postgres-mcp
+  - **feature 214 (`remove-agent-postgres-mcp`)** (created as 211; renumbered 211→214 on 2026-09-27
+    after `211-edgar-fundamentals-enrichment` took 211) — removes the 9 `db_*` tools + the postgres-mcp
     co-process from `xstockstrat-agent` outright (tool count 52→43), **no replacement service**, no
     per-operator token, no audit sink, no transparent proxy, **no 084 dependency**. Operators run
     admin SQL out-of-band (direct `psql`/DB client via SSH/doctl/bastion), documented in a runbook.
-  - **feature 208 (`psql-db-role-grant-hardening`)** — rescoped from "least-privilege grants for the
-    psql-MCP's role + protect its audit sink" to **teardown of the now-orphaned `xstockstrat_agent`
-    DB role** (postgres-mcp was its only consumer) + an audit that no remaining role can write
-    integrity-critical tables (ledger/identity/config).
+  - **feature 208 (`psql-db-role-grant-hardening`)** — was rescoped from "least-privilege grants for
+    the psql-MCP's role + protect its audit sink" to orphaned-role teardown, then **demoted as
+    unnecessary on 2026-09-27**: the `xstockstrat_agent` role was never created (its `db-migrate.sh`
+    provisioning is `POSTGRES_MCP_AGENT_PASSWORD`-gated and that env was never set), so there is no
+    role to tear down. Feature 214 removes the dead provisioning block itself.
 - **Disposition of this branch:** no PR was ever opened for `feature/sysadmin-db-write-role` (SDD flow
   stopped at `design-approved`, pre-`/sdd-spec`). The branch is **not merged to `main-dev`**; its
   design.md/recon.md are retained on-branch as rejected-alternative memory. The generalizable lesson
