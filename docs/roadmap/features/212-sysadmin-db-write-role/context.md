@@ -13,7 +13,9 @@
 > The source branch was deleted after import. **Caveat:** the historical narrative below refers to this
 > feature as "193" (its design-time number) and cross-references other features by the numbers in effect
 > on the branch (e.g. `084 → 193`, `@feature-193`, "feature 211 = remove-agent-postgres-mcp"); those are
-> preserved as-written and may not match current `main-dev` numbering. The canonical number is now **212**.
+> preserved as-written and may not match current `main-dev` numbering. The canonical number is now **212**,
+> and the successor removal feature (called "211" in branch-era notes) is now **214**
+> (`211-edgar-fundamentals-enrichment` took 211).
 
 ---
 
@@ -346,7 +348,8 @@
   Hardening a wrapper around a dependency now judged inherently insecure is the wrong posture —
   **the surface is eliminated instead.**
 - **Superseded by:**
-  - **feature 211 (`remove-agent-postgres-mcp`)** — removes the 9 `db_*` tools + the postgres-mcp
+  - **feature 214 (`remove-agent-postgres-mcp`)** (created as 211; renumbered 211→214 on 2026-09-27
+    after `211-edgar-fundamentals-enrichment` took 211) — removes the 9 `db_*` tools + the postgres-mcp
     co-process from `xstockstrat-agent` outright (tool count 52→43), **no replacement service**, no
     per-operator token, no audit sink, no transparent proxy, **no 084 dependency**. Operators run
     admin SQL out-of-band (direct `psql`/DB client via SSH/doctl/bastion), documented in a runbook.
