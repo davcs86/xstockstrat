@@ -148,25 +148,41 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 - [x] **UI + Agent surfaces — RESOLVED (user).** Both consumer surfaces are in scope: agent
   `manage_strategy` (+ `run_backtest`) and the `xstockstrat-ui` strategy editor + `/insights` results.
   Recon still confirms which UI segment hosts the strategy editor.
-- [ ] **Strategy storage owner — FOLLOW RECON (user).** Which service owns strategy-definition
+- [x] **Strategy storage owner — DEFERRED TO RECON (user).** Which service owns strategy-definition
   persistence (for FR-6 storage) is determined in recon before the migration is specced (likely
-  `xstockstrat-analysis`).
-- [ ] **Known trap — look-ahead RED test (ledger `fails.md:1852-1868`, backtest-portfolio-sizing).**
-  A look-ahead test built on ragged start/end calendars passes green while a real mid-series
-  look-ahead bug ships. The FR-7 as-of-join RED test must inject a **mid-series sector reclassification**
-  and assert the pre-change bars use the pre-change sector — not merely test endpoints.
-- [ ] **Known trap — producer/shared-consumer coupling (ledger `fails.md:81-82`, 309-310, 1151).**
-  Adding the `Sector` enum and the strategy per-sector map hard-couples to shared consumers in the
-  **same PR**: the UI's exhaustive `Record<Enum,…>` maps and the agent's descriptor-parity projection
-  test (`test_*_view.py` / `test_*_projection.py`). Enumerate these in the C-14 consumer scan at
+  `xstockstrat-analysis`). If recon finds a **new** UI page/route is required for the editor, C-10(a)
+  nav registration (`PLATFORM_SUBNAV` + reachability test) is added at that point.
+
+## Design Guidance / Known Traps
+
+Carried into `/sdd-design` and `/sdd-spec`; these are advisories, not open decisions.
+
+- **Config reuse — one FMP throttle model (C-18).** `marketdata.fmp.rate_limit_rps` is new but
+  `marketdata.fmp.daily_request_cap` (=250) already exists; the naming pattern
+  `marketdata.<source>.rate_limit_rps` is already used by `marketdata.backfill.*` and
+  `marketdata.edgar.*`. Design must reconcile the per-second limiter with the per-day cap so the
+  gateway has one coherent throttle, not two independently-tuned ones.
+- **Migration mechanics (C-07).** The `symbol_classification` migration is next-free **`007`** in
+  `services/xstockstrat-marketdata/migrations/` (tip `006_dividend_actions`); ship the
+  `007_*.up.sql` + `.down.sql` pair. Resolve the strategy per-sector param storage shape (new JSON
+  column vs child table) at design; re-derive its migration NNN in the owning service's dir at
+  `/sdd-spec`.
+- **Look-ahead RED test (ledger `fails.md:1852-1868`).** A look-ahead test on ragged start/end
+  calendars passes green while a real mid-series look-ahead ships. The FR-7 as-of-join RED test
+  (AC-7) must inject a **mid-series sector reclassification** and assert pre-change bars use the
+  pre-change sector — not merely test endpoints.
+- **Producer/shared-consumer coupling (ledger `fails.md:81-82,309-310,1151`).** The `Sector` enum
+  and the strategy per-sector map hard-couple to shared consumers in the **same PR**: the UI's
+  exhaustive `Record<Enum,…>` maps and the agent's descriptor-parity projection test
+  (`test_*_view.py` / `test_*_projection.py`). Enumerate these in the C-14 consumer scan at
   `/sdd-spec`, not just the UI page.
-- [ ] **Known trap — scattered FMP wiring (ledger `fails.md:1038-1043,1097,1123`).** FMP provider
-  name, config keys, and error text are scattered across `marketdata_service.go`/`main.go` and tests;
-  a `grep -rn` for all FMP sites is required before centralizing, or the gateway ends up as a parallel
-  path rather than the single one FR-1 demands.
-- [ ] **Known trap — FMP credential (ledger `fails.md:1566-1568`; features 076/147).** The FMP key is
-  an encrypted config secret resolved via the `GetSecret` RPC at startup — the centralized gateway
-  must resolve it that way and never re-introduce `FMP_API_KEY` as an env var.
-- [ ] **Known trap — proto `Bar.time` not `Bar.timestamp` (ledger `fails.md:726-728`).** The analysis
-  as-of join keys on the bar timestamp; use the real field `bar.time` and real `Bar` proto fixtures
-  (not `MagicMock`, which hides the wrong field name).
+- **Scattered FMP wiring (ledger `fails.md:1038-1043,1097,1123`).** FMP provider name, config keys,
+  and error text are scattered across `marketdata_service.go`/`main.go` and tests; `grep -rn` all
+  FMP sites before centralizing, or the gateway becomes a parallel path rather than the single one
+  FR-1 demands.
+- **FMP credential (ledger `fails.md:1566-1568`; features 076/147).** The FMP key is an encrypted
+  config secret resolved via the `GetSecret` RPC at startup — the centralized gateway must resolve
+  it that way and never re-introduce `FMP_API_KEY` as an env var.
+- **Proto `Bar.time` not `Bar.timestamp` (ledger `fails.md:726-728`).** The analysis as-of join keys
+  on the bar timestamp; use the real field `bar.time` and real `Bar` proto fixtures (not
+  `MagicMock`, which hides the wrong field name).

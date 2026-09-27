@@ -11,6 +11,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-09-27 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-09-27 | `draft` → `spec-ready` | /sdd-review | Product spec approved (3 warnings, all deferred to design/spec) |
 
 ---
 
@@ -48,4 +49,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review sector-classification-strategy-params product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-design sector-classification-strategy-params quick` — recon + adversarial design round (mandatory before code, per C-11)

@@ -59,3 +59,14 @@
 - One feature vs. split into classification-store + per-sector-params (B depends on A's FR-5).
 - UI strategy-editor authoring surface existence (C-14).
 - Strategy-storage owning service (for FR-6 migration).
+
+## Session 2026-09-27 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready.
+- Verdict: PASS WITH WARNINGS (spec-reviewer) + overlap CLEAN (feature-overlap). No blockers, no Floor breaches.
+- Warnings (all deferred to design/spec, none blocking):
+  - Migration mechanics detail (C-07) — firmed at /sdd-spec; SCD migration is next-free `007` in marketdata/migrations.
+  - Open-Questions checkbox structure — resolved: known-traps moved under a non-checkbox "Design Guidance / Known Traps" heading; storage-owner marked deferred-to-recon.
+  - Config reuse (C-18) — reconcile new `marketdata.fmp.rate_limit_rps` (per-second) with existing `marketdata.fmp.daily_request_cap` (per-day) at design so the FMP gateway has one coherent throttle.
+- Overlap findings: none. Confirmed next-free slots — StrategyDefinition per-sector map field = 15; marketdata SCD migration = 007. Soft shared-surface overlap with feature 215 (analysis.proto, agent manage_strategy/run_backtest, UI /insights) is rebase-only, not a resource clash.
+- Naming note: `marketdata.<source>.rate_limit_rps` pattern already used by `marketdata.backfill.*` and `marketdata.edgar.*` — the new FMP key fits the established convention.
