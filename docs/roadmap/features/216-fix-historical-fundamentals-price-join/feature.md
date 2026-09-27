@@ -16,6 +16,7 @@
 | 2026-09-27 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from defect report `docs/reports/2026-09-27-fundamentals-backfill-not-rederived-defect.md` |
 | 2026-09-27 | `draft` → `spec-ready` | /sdd-review | Product spec approved (1 advisory warning; criterion-9 blocker fixed, C-16 + two-lane warnings folded into Design constraints) |
 | 2026-09-27 | `spec-ready` → `design-approved` | /sdd-design | Design debated (5 rounds, full/deep) and approved; recon.md + design.md written. User signed off on the C-16 CHANGE (overwrite=true may overwrite the 5 derived price columns) |
+| 2026-09-27 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 4 steps (marketdata-only: repo reader/writer + source type, service recovery loop, two paired tests) |
 
 ---
 
@@ -25,8 +26,21 @@
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-1`…`@AC-5`, C-15)
 - [Recon Dossier](recon.md) — grounded codebase map, patterns to reuse, existing business rules, risks
 - [Design](design.md) — chosen approach, rejected alternatives, open risks, C-16 classification (5-round debate)
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-historical-fundamentals-price-join`_
+- [Implementation Spec](implementation-spec.md) — 4 steps, marketdata-only write-path recovery
 - [Context Log](context.md) — session history, decisions, deviations
+
+---
+
+## Reviewers
+
+Canonical snapshot from `/sdd-spec` (source: `docs/runbooks/reviewer-registry.md`). Deduplicated
+across all 4 steps.
+
+| Reviewer | Scope | Focus |
+|---|---|---|
+| `xstockstrat-marketdata` (service owner) | All `service` + `test` steps (1–4) | OHLCV ingestion integrity, TimescaleDB hypertable partitioning, Alpaca feed idempotency |
+
+No DBA (no migration), Proto Reviewer (no `.proto` change), or Security (no secret/auth change) step.
 
 ---
 
@@ -39,4 +53,4 @@ price-join is a one-shot at insert time — so a re-backfill (even `overwrite=tr
 
 ## Next Action
 
-`/sdd-spec fix-historical-fundamentals-price-join` — generate the implementation spec from the approved design
+`/sdd-review fix-historical-fundamentals-price-join impl-spec` — validate the implementation spec, then `/sdd-execute fix-historical-fundamentals-price-join`

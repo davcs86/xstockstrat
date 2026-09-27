@@ -121,3 +121,45 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   non-blocking (scenario-promoter at a later pass).
 - Status: spec-ready → design-approved.
 - Next: `/sdd-spec fix-historical-fundamentals-price-join`.
+
+## Session 2026-09-27 — sdd-spec
+
+- Generated implementation-spec.md with 4 steps (marketdata-only). Status → implementation-ready.
+- Structure: Step 1 [service] repo `GetHistoricalPriceState` + `UpdateHistoricalPriceJoin` +
+  `source.HistoricalPriceState` struct; Step 2 [test] pgxmock pins for both; Step 3 [service]
+  restructure `backfillOneSymbol` recovery loop + split `priceJoin` into `accumulateTTM` (always) +
+  `derivePriceMetrics` + wire `overwrite` + coverage guard + currency-mismatch; Step 4 [test]
+  covers @AC-1…@AC-5 + currency-mismatch open-risk. All 5 scenarios covered by Step 4.
+- Key codebase findings (grounded this session):
+  - `HistoricalPriceState` confirmed non-existent today (grep, no match); mirror the 5 `*float64`
+    price fields + `Currency` on `source.HistoricalFundamentalsPeriod` (`internal/source/source.go:75-98`,
+    Currency `:96`).
+  - `InsertHistoricalFundamentals` uses `r.db.Exec` (`marketdata_repo.go:612`); `ON CONFLICT ... DO
+    NOTHING` at `:610` (kept for new rows). `CloseAt` uses `r.pool.QueryRow` (`:757`) and returns
+    `nil,nil` on `pgx.ErrNoRows` (`:761-763`) — the no-rows fail-closed pattern to mirror. Design's
+    "new methods use r.db" followed (matches the write method, not CloseAt's r.pool).
+  - `InsertBars` column-scoped upsert shape at `marketdata_repo.go:63` (reuse reference; new writer is
+    a plain triple-PK UPDATE, not an upsert, since the row is known to exist).
+  - `BackfillFundamentalsRequest.overwrite = 4` confirmed at `packages/proto/marketdata/v1/marketdata.proto:296`
+    → `req.GetOverwrite()`; unread in marketdata today (`marketdata_service.go:1719-1758`).
+  - Price columns (market_cap/pe_ratio/pb_ratio/dividend_yield/price) already in
+    `005_fundamentals_history.up.sql:16-24`; PK `(symbol,fiscal_period,period_type)` `:28`; last
+    migration is 006 → **no migration needed** (F-01 honored).
+  - `histFundamentalsRepo` interface at `marketdata_service.go:112-119` gains the two methods; the
+    fakes (`fakeHistRepo211` `test:1717-1740`, value-based today) must become stateful.
+  - `SumDividendsInWindow(ctx,symbol,asOf,windowStart)` `marketdata_repo.go:548`; middle bool is
+    "has any row" (COUNT, no date filter) — NOT a coverage signal, keep discarding; the window-vs-fetch
+    coverage guard is the explicit `windowStart.Before(divFetchStart)` check (`divFetchStart` at
+    `marketdata_service.go:1778`).
+  - Both packages touched (`repository/`, `service/`) are in the Go coverage-excluded set — test steps
+    run `go test ./...` for pass/fail and the coverage command only to confirm the total ≥40% floor.
+- One design fork deferred to execute-time discovery (P-03, flagged in Step 3 Instructions 4d): whether
+  `HistoricalPriceState` needs a `FiledDate` column for recovery to key on the stored earliest
+  filed_date, or whether same-range re-supply of the earliest filed_date makes it unnecessary. Resolve
+  at execute, record in Deviation Log — do not guess silently.
+- Open risks from design.md carried into `## Step Dependencies` for the Deviation Log: adjusted-close
+  drift under overwrite (operator-visible, no code), EDGAR fiscal_period relabel (out of scope),
+  pre-211 currency residual (now fail-closed, tested).
+- Reviewers snapshot written to feature.md: single reviewer `xstockstrat-marketdata` (service owner)
+  across all 4 steps; no DBA/Proto/Security step.
+- Next: `/sdd-review fix-historical-fundamentals-price-join impl-spec`.
