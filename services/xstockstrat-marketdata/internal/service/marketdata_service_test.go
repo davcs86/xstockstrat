@@ -1501,6 +1501,7 @@ type fakeHistRepo struct {
 	// captured from the last QueryHistoricalFundamentals call (page-param pass-through assertion)
 	gotPageSize  int
 	gotPageToken string
+	dividends    []source.CashDividend // in-memory dividend store (feature 211)
 }
 
 func (r *fakeHistRepo) InsertHistoricalFundamentals(_ context.Context, p source.HistoricalFundamentalsPeriod) error {
@@ -1519,6 +1520,28 @@ func (r *fakeHistRepo) QueryHistoricalFundamentals(_ context.Context, _ string, 
 
 func (r *fakeHistRepo) CloseAt(_ context.Context, _ string, _ time.Time) (*float64, error) {
 	return r.closeAt, nil
+}
+
+func (r *fakeHistRepo) UpsertDividends(_ context.Context, divs []source.CashDividend) error {
+	r.dividends = append(r.dividends, divs...)
+	return nil
+}
+
+// SumDividendsInWindow replicates the repo SQL semantics (ex_date <= asOf AND ex_date >= windowStart)
+// so the service's no-look-ahead + window logic is exercised without a DB.
+func (r *fakeHistRepo) SumDividendsInWindow(_ context.Context, symbol string, asOf, windowStart time.Time) (float64, bool, error) {
+	var sum float64
+	var any bool
+	for _, d := range r.dividends {
+		if d.Symbol != symbol {
+			continue
+		}
+		any = true
+		if !d.ExDate.After(asOf) && !d.ExDate.Before(windowStart) {
+			sum += d.CashAmount
+		}
+	}
+	return sum, any, nil
 }
 
 type fakeHistSource struct {
@@ -1701,6 +1724,21 @@ func (r *fakeHistRepo211) CloseAt(_ context.Context, _ string, date time.Time) (
 	r.queriedFor = append(r.queriedFor, date)
 	return r.closeVal, nil
 }
+func (r *fakeHistRepo211) UpsertDividends(_ context.Context, _ []source.CashDividend) error {
+	return nil
+}
+func (r *fakeHistRepo211) SumDividendsInWindow(_ context.Context, _ string, _, _ time.Time) (float64, bool, error) {
+	return 0, false, nil
+}
+
+type fakeDividendSrc struct {
+	divs []source.CashDividend
+	err  error
+}
+
+func (s *fakeDividendSrc) GetCashDividends(_ context.Context, _ string, _, _ time.Time) ([]source.CashDividend, error) {
+	return s.divs, s.err
+}
 
 func TestPriceJoin_PBRatioUSDEquity_NoLookAhead_AC4_feature211(t *testing.T) {
 	repo := &fakeHistRepo211{closeVal: f64p(80.0)}
@@ -1758,5 +1796,88 @@ func TestPriceJoin_PECurrencyRule_feature211(t *testing.T) {
 	svcC.priceJoin(context.Background(), pc, &qc)
 	if pc.PERatio != nil {
 		t.Errorf("non-USD P/E = %v, want nil (no USD eps)", *pc.PERatio)
+	}
+}
+
+// --- feature 211: PIT T12M dividend yield (@AC-5) + 0-vs-missing + feed-fallback ---
+
+func dividendYieldSvc(divSrc *fakeDividendSrc, dividendsEnabled bool) (*MarketDataService, *fakeHistRepo) {
+	period := source.HistoricalFundamentalsPeriod{
+		FiscalPeriod: "FY2024", PeriodType: "annual",
+		PeriodEnd: hfDate(2025, 3, 31), FiledDate: hfDate(2025, 6, 26),
+		SharesOutstanding: f64p(1_000_000), Source: "edgar", ExtraMetrics: map[string]float64{},
+	}
+	repo := &fakeHistRepo{closeAt: f64p(100.0)} // price-at-filing = 100
+	cfg := &fakeCfg{bools: map[string]bool{
+		"marketdata.fundamentals.history.enabled": true,
+		"marketdata.dividends.enabled":            dividendsEnabled,
+	}}
+	svc := &MarketDataService{
+		histFundamentals: &fakeHistSource{periods: []source.HistoricalFundamentalsPeriod{period}},
+		histRepo:         repo, dividendSrc: divSrc, fundCfg: cfg,
+	}
+	return svc, repo
+}
+
+// @AC-5: T12M yield sums only dividends with ex_date in [filed-365d, filed]; a post-filing payment
+// is excluded (no look-ahead, FR-7).
+func TestBackfillFundamentals_DividendYieldT12M_AC5_feature211(t *testing.T) {
+	div := &fakeDividendSrc{divs: []source.CashDividend{
+		{Symbol: "AAPL", ExDate: hfDate(2024, 8, 1), CashAmount: 0.5, Currency: "USD"},
+		{Symbol: "AAPL", ExDate: hfDate(2025, 2, 1), CashAmount: 0.5, Currency: "USD"},
+		{Symbol: "AAPL", ExDate: hfDate(2025, 8, 15), CashAmount: 0.5, Currency: "USD"}, // post-filing → excluded
+	}}
+	svc, repo := dividendYieldSvc(div, true)
+	if _, err := svc.BackfillFundamentals(context.Background(), &marketdatav1.BackfillFundamentalsRequest{Symbols: []string{"AAPL"}}); err != nil {
+		t.Fatalf("BackfillFundamentals: %v", err)
+	}
+	if len(repo.inserted) != 1 {
+		t.Fatalf("inserted %d rows, want 1", len(repo.inserted))
+	}
+	got := repo.inserted[0].DividendYield
+	if got == nil {
+		t.Fatalf("dividend_yield nil, want 0.01")
+	}
+	if *got < 0.0099 || *got > 0.0101 {
+		t.Errorf("dividend_yield = %v, want 0.01 ((0.5+0.5)/100; 2025-08-15 post-filing excluded)", *got)
+	}
+}
+
+// A payer whose only dividend is out-of-window → yield 0 (feed had rows), never missing.
+func TestBackfillFundamentals_DividendYieldZeroWhenNoneInWindow_feature211(t *testing.T) {
+	div := &fakeDividendSrc{divs: []source.CashDividend{
+		{Symbol: "AAPL", ExDate: hfDate(2025, 8, 15), CashAmount: 0.5, Currency: "USD"}, // only post-filing
+	}}
+	svc, repo := dividendYieldSvc(div, true)
+	if _, err := svc.BackfillFundamentals(context.Background(), &marketdatav1.BackfillFundamentalsRequest{Symbols: []string{"AAPL"}}); err != nil {
+		t.Fatalf("BackfillFundamentals: %v", err)
+	}
+	got := repo.inserted[0].DividendYield
+	if got == nil || *got != 0 {
+		t.Errorf("dividend_yield = %v, want 0 (feed had rows, none in window)", got)
+	}
+}
+
+// Feed unavailable/unentitled (error) → yield missing (nil), never a fabricated 0 (fallback + audit).
+func TestBackfillFundamentals_DividendYieldMissingWhenFeedUnavailable_feature211(t *testing.T) {
+	div := &fakeDividendSrc{err: fmt.Errorf("alpaca corporate-actions 403: unentitled")}
+	svc, repo := dividendYieldSvc(div, true)
+	if _, err := svc.BackfillFundamentals(context.Background(), &marketdatav1.BackfillFundamentalsRequest{Symbols: []string{"AAPL"}}); err != nil {
+		t.Fatalf("BackfillFundamentals: %v", err)
+	}
+	if repo.inserted[0].DividendYield != nil {
+		t.Errorf("dividend_yield = %v, want nil (feed unavailable → missing, no fabricated 0)", *repo.inserted[0].DividendYield)
+	}
+}
+
+// Dividends disabled → yield missing (nil), no feed call consequence.
+func TestBackfillFundamentals_DividendYieldMissingWhenDisabled_feature211(t *testing.T) {
+	div := &fakeDividendSrc{divs: []source.CashDividend{{Symbol: "AAPL", ExDate: hfDate(2025, 2, 1), CashAmount: 0.5}}}
+	svc, repo := dividendYieldSvc(div, false) // dividends.enabled = false
+	if _, err := svc.BackfillFundamentals(context.Background(), &marketdatav1.BackfillFundamentalsRequest{Symbols: []string{"AAPL"}}); err != nil {
+		t.Fatalf("BackfillFundamentals: %v", err)
+	}
+	if repo.inserted[0].DividendYield != nil {
+		t.Errorf("dividend_yield = %v, want nil (disabled)", *repo.inserted[0].DividendYield)
 	}
 }

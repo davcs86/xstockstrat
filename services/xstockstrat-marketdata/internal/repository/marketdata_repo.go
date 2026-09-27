@@ -520,6 +520,46 @@ func (r *MarketDataRepo) UpsertFundamentals(ctx context.Context, f *source.Funda
 	return nil
 }
 
+// UpsertDividends idempotently stores cash dividends keyed on (symbol, ex_date) (feature 211).
+func (r *MarketDataRepo) UpsertDividends(ctx context.Context, divs []source.CashDividend) error {
+	const q = `
+		INSERT INTO marketdata.dividend_actions
+		  (symbol, ex_date, pay_date, cash_amount, currency, source, fetched_at)
+		VALUES ($1,$2,$3,$4,$5,$6, now())
+		ON CONFLICT (symbol, ex_date) DO UPDATE SET
+		  pay_date=EXCLUDED.pay_date, cash_amount=EXCLUDED.cash_amount,
+		  currency=EXCLUDED.currency, source=EXCLUDED.source, fetched_at=now()`
+	for _, d := range divs {
+		currency := d.Currency
+		if currency == "" {
+			currency = "USD"
+		}
+		if _, err := r.db.Exec(ctx, q, d.Symbol, d.ExDate, d.PayDate, d.CashAmount, currency, "alpaca"); err != nil {
+			return fmt.Errorf("upsert dividend %s %s: %w", d.Symbol, d.ExDate.Format("2006-01-02"), err)
+		}
+	}
+	return nil
+}
+
+// SumDividendsInWindow returns (Σ cash_amount for ex_date in [windowStart, asOf], hasAnyRow). The
+// bool — whether the symbol has ANY stored dividend row at all — lets the caller emit 0 for a
+// genuine no-in-window payer while leaving yield missing for a symbol with no feed data at all,
+// so a no-payments payer is never conflated with an absent/unentitled feed (feature 211, FR-4).
+func (r *MarketDataRepo) SumDividendsInWindow(ctx context.Context, symbol string, asOf, windowStart time.Time) (float64, bool, error) {
+	const q = `
+		SELECT
+		  COALESCE(SUM(cash_amount) FILTER (WHERE ex_date <= $2 AND ex_date >= $3), 0),
+		  COUNT(*)
+		FROM marketdata.dividend_actions
+		WHERE symbol = $1`
+	var sum float64
+	var total int64
+	if err := r.db.QueryRow(ctx, q, symbol, asOf, windowStart).Scan(&sum, &total); err != nil {
+		return 0, false, fmt.Errorf("sum dividends %s: %w", symbol, err)
+	}
+	return sum, total > 0, nil
+}
+
 // CountFundamentalsFetchedToday counts rows fetched within the current UTC day — the
 // FR-4 daily quota window. The idx_fundamentals_fetched_at index backs this scan.
 func (r *MarketDataRepo) CountFundamentalsFetchedToday(ctx context.Context) (int, error) {

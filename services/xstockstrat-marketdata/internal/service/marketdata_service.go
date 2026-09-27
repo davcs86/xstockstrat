@@ -77,6 +77,9 @@ type MarketDataService struct {
 	// source above; EDGAR is held here and is never in the provider selector (FR-2 / T-3).
 	histFundamentals source.HistoricalFundamentalsSource
 	histRepo         histFundamentalsRepo
+	// dividendSrc is the optional cash-dividend corporate-actions feed (feature 211, FR-4); nil-safe
+	// (nil / disabled / an unentitled feed all leave dividend_yield missing, never a fabricated 0).
+	dividendSrc source.DividendSource
 	// ratioEnricher is the optional FMP ratio-fill pass; nil in v1 (no point-in-time FMP ratio
 	// source exists — ratios-ttm is a current snapshot, look-ahead), the cap seam still guards it.
 	ratioEnricher ratioEnricher
@@ -110,6 +113,8 @@ type histFundamentalsRepo interface {
 	InsertHistoricalFundamentals(ctx context.Context, p source.HistoricalFundamentalsPeriod) error
 	QueryHistoricalFundamentals(ctx context.Context, symbol string, asOf, rangeStart, rangeEnd time.Time, periodTypes []string, pageSize int, pageToken string) ([]source.HistoricalFundamentalsPeriod, string, error)
 	CloseAt(ctx context.Context, symbol string, date time.Time) (*float64, error)
+	UpsertDividends(ctx context.Context, divs []source.CashDividend) error
+	SumDividendsInWindow(ctx context.Context, symbol string, asOf, windowStart time.Time) (float64, bool, error)
 }
 
 // ratioEnricher optionally fills a ratio EDGAR + the price-join cannot supply. v1 wires nil.
@@ -128,6 +133,7 @@ func NewMarketDataService(
 	fundamentals source.FundamentalsSource,
 	provider string,
 	histFundamentals source.HistoricalFundamentalsSource,
+	dividendSrc source.DividendSource,
 ) (*MarketDataService, error) {
 	ledgerConn, err := grpc.NewClient(ledgerEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
 	if err != nil {
@@ -153,6 +159,7 @@ func NewMarketDataService(
 		fundRepo:         repo,
 		histFundamentals: histFundamentals,
 		histRepo:         repo,
+		dividendSrc:      dividendSrc,
 	}, nil
 }
 
@@ -1604,11 +1611,43 @@ func (s *MarketDataService) backfillOneSymbol(ctx context.Context, symbol string
 	}
 	// Sort chronologically so the TTM-EPS rolling sum sees prior quarters first.
 	sort.Slice(periods, func(i, j int) bool { return periods[i].PeriodEnd.Before(periods[j].PeriodEnd) })
+	// Fetch this symbol's cash dividends once (feature 211, FR-4). A nil/disabled source or an
+	// unavailable/unentitled feed leaves dividend_yield missing (never a fabricated 0) and is logged
+	// for audit — the per-period yield below runs only when this fetch succeeded.
+	dividendsFetched := false
+	if s.dividendSrc != nil && s.fundCfg.GetBool("marketdata.dividends.enabled", false) {
+		lookbackYears := int(s.fundCfg.GetInt("marketdata.dividends.backfill_lookback_years", 3))
+		if lookbackYears <= 0 {
+			lookbackYears = 3
+		}
+		divs, derr := s.dividendSrc.GetCashDividends(ctx, symbol, time.Now().AddDate(-lookbackYears, 0, 0), time.Now())
+		if derr != nil {
+			slog.WarnContext(ctx, "dividend feed unavailable — dividend_yield left missing (audit)", "symbol", symbol, "error", derr)
+		} else if uerr := s.histRepo.UpsertDividends(ctx, divs); uerr != nil {
+			slog.WarnContext(ctx, "dividend upsert failed — dividend_yield left missing (audit)", "symbol", symbol, "error", uerr)
+		} else {
+			dividendsFetched = true
+			if len(divs) == 0 {
+				slog.InfoContext(ctx, "dividend feed returned no payments (non-payer or none in range)", "symbol", symbol)
+			}
+		}
+	}
 	var quarterlyEPS []float64 // trailing quarterly EPS for the TTM rollup
 	var written int64
 	for i := range periods {
 		p := &periods[i]
 		s.priceJoin(ctx, p, &quarterlyEPS)
+		// PIT T12M dividend yield (feature 211, FR-4/FR-7): Σ dividends with ex_date in
+		// [filed-365d, filed] ÷ price-at-filing — only when the feed fetch succeeded and priceJoin
+		// set a price. ex_date > filed_date is excluded by the window (no look-ahead).
+		if dividendsFetched && p.Price != nil && *p.Price > 0 {
+			if sum, _, serr := s.histRepo.SumDividendsInWindow(ctx, symbol, p.FiledDate, p.FiledDate.AddDate(-1, 0, 0)); serr != nil {
+				slog.WarnContext(ctx, "dividend window sum failed — yield left missing (audit)", "symbol", symbol, "period", p.FiscalPeriod, "error", serr)
+			} else {
+				y := sum / *p.Price
+				p.DividendYield = &y
+			}
+		}
 		if enrichEnabled && s.ratioEnricher != nil && s.enrichmentUnderCap() {
 			if err := s.ratioEnricher.Enrich(ctx, p); err != nil {
 				slog.WarnContext(ctx, "fundamentals ratio enrichment failed (edgar row kept)", "symbol", symbol, "period", p.FiscalPeriod, "error", err)

@@ -104,6 +104,22 @@ type HistoricalFundamentalsSource interface {
 	FetchHistorical(ctx context.Context, symbol string, from, to time.Time, periodTypes []string) ([]HistoricalFundamentalsPeriod, error)
 }
 
+// CashDividend is one cash-dividend payment for a symbol (feature 211). Amounts are the per-share
+// cash distribution in the payment currency (USD for a US-listed ADR).
+type CashDividend struct {
+	Symbol     string
+	ExDate     time.Time
+	PayDate    *time.Time
+	CashAmount float64
+	Currency   string
+}
+
+// DividendSource fetches cash-dividend corporate actions for a symbol over a date range (feature
+// 211, FR-4). Held as its own optional service field (nil-safe), never in the OHLCV Registry.
+type DividendSource interface {
+	GetCashDividends(ctx context.Context, symbol string, start, end time.Time) ([]CashDividend, error)
+}
+
 // Registry maps named source slugs to DataSourceClient implementations.
 // The default source is "alpaca"; pass an empty string to Get to use it.
 type Registry struct {

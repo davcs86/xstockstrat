@@ -332,7 +332,7 @@ Note: new logic in `internal/service/` — an **excluded** package for CI covera
 
 ### Step 8 — service: Alpaca corporate-actions dividend feed + PIT T12M yield (FR-4, FR-7)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/alpaca/client.go` — modify
@@ -368,7 +368,7 @@ Note: new logic in `internal/service/` — an **excluded** package for CI covera
 
 ### Step 9 — test: dividend feed + T12M yield unit tests (@AC-5)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/alpaca/client_test.go` — modify

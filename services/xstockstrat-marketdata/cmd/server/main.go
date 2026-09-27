@@ -133,7 +133,9 @@ func main() {
 		int(cfgWatcher.GetInt("marketdata.edgar.rate_limit_rps", 10)),
 	)
 
-	svc, err := service.NewMarketDataService(reg, repo, cfgWatcher, cfg.LedgerEndpoint, cfg.NotifyEndpoint, fundamentalsSrc, fundProvider, edgarClient)
+	// The Alpaca client also serves cash-dividend corporate actions (feature 211, FR-4) — reuses
+	// the resolved Alpaca creds; no new env var/secret. Nil-safe in the service if the feed errors.
+	svc, err := service.NewMarketDataService(reg, repo, cfgWatcher, cfg.LedgerEndpoint, cfg.NotifyEndpoint, fundamentalsSrc, fundProvider, edgarClient, alpacaClient)
 	if err != nil {
 		slog.Error("service init failed", "error", err)
 		os.Exit(1)
