@@ -8,7 +8,9 @@ import {
   DE_BARS_EMPTY,
   DE_HIST_AAPL_PAGE1,
   DE_HIST_AAPL_PAGE2,
+  DE_HIST_BABA_PAGE1,
   DE_SNAPSHOT_AAPL,
+  DE_SNAPSHOT_BABA,
 } from '../fixtures/historicalFundamentals';
 
 /**
@@ -186,6 +188,65 @@ test.describe('Data Explorer — Fundamentals tab', () => {
     expect(download.suggestedFilename()).toBe('AAPL_fundamentals_quarterly.csv');
     const csv = readFileSync(await download.path(), 'utf8');
     expect(csv.split('\n')[0]).toContain('symbol,fiscal_period,period_type,period_end,filed_date');
+  });
+});
+
+test.describe('Data Explorer — enriched metrics + currency + source (feature 211 @AC-8)', () => {
+  // A CNY-reporting EDGAR filer: the page auto-selects the first listed asset, so ListAssets returns
+  // BABA first and the snapshot/historical routes serve the enriched CNY/edgar fixtures.
+  async function setupBaba(page: Page) {
+    await page.route(MarketDataPath('ListAssets'), (route) =>
+      fulfillJson(route, {
+        assets: [{ symbol: 'BABA', exchange: 'NYSE', assetClass: 'us_equity' }],
+      }),
+    );
+    await page.route(MarketDataPath('GetFundamentals'), (route) =>
+      fulfillJson(route, DE_SNAPSHOT_BABA),
+    );
+    await page.route(MarketDataPath('GetHistoricalFundamentals'), (route) =>
+      fulfillJson(route, DE_HIST_BABA_PAGE1),
+    );
+  }
+
+  test('@AC-8: historical D/E, P/B, div-yield populated; currency + source per period; CSV carries them', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await setupBaba(page);
+    await page.goto('/insights/data-explorer');
+    await openFundamentals(page);
+
+    // Snapshot provenance: reporting currency + source render.
+    await expect(page.getByTestId('de-fund-currency')).toHaveText('CNY', { timeout: 20000 });
+    await expect(page.getByTestId('de-fund-source')).toHaveText('edgar');
+    // Absolute USD fields carry the "USD" hint in a non-USD (CNY) row.
+    await expect(page.getByTestId('de-fund-snapshot')).toContainText('USD');
+
+    await page.getByRole('tab', { name: 'Historical' }).click();
+    const table = page.getByTestId('de-hist-table');
+    await expect(table).toBeVisible({ timeout: 20000 });
+
+    // FY2026 carries the enriched metrics (not "—") + its provenance.
+    const fy = table.locator('tr', { hasText: 'FY2026' });
+    await expect(fy).toContainText('CNY'); // reporting currency column (@AC-8)
+    await expect(fy).toContainText('edgar'); // source column (@AC-8)
+    await expect(fy).toContainText('2.1'); // pb_ratio populated
+    await expect(fy).toContainText('0.05'); // debt_to_equity populated (financial-debt convention)
+
+    // AC-22 preserved: Q3-2026 omits roe → "—", but its populated P/B still renders (not all-dashed).
+    const q3 = table.locator('tr', { hasText: 'Q3-2026' });
+    await expect(q3).toContainText('—');
+    await expect(q3).toContainText('2.05');
+
+    // CSV export includes the currency + source columns and the CNY/edgar values (@AC-8, EXTENDS AC-17).
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      page.getByTestId('de-hist-csv').click(),
+    ]);
+    const csv = readFileSync(await download.path(), 'utf8');
+    expect(csv.split('\n')[0]).toContain('filed_date,currency,source');
+    expect(csv).toContain('CNY');
+    expect(csv).toContain('edgar');
   });
 });
 

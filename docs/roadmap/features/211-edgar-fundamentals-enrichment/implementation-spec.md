@@ -515,7 +515,7 @@ grep -c "marketdata\." services/xstockstrat-config/migrations/030_marketdata_edg
 
 ### Step 13 — service: data-explorer currency + source provenance + CSV (FR-6)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/hooks/useDataExplorer.ts` — modify
@@ -550,7 +550,7 @@ cd services/xstockstrat-ui && pnpm run test:coverage   # vitest logic layer (src
 
 ### Step 14 — test: data-explorer Playwright — enriched metrics + currency + source (@AC-8)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/data-explorer.spec.ts` — modify

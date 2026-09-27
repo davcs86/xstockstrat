@@ -156,10 +156,20 @@ export function barsToCsv(bars: Bar[]): string {
 }
 
 export function snapshotToCsv(f: Fundamentals): string {
-  const header = ['symbol', 'as_of', ...FUNDAMENTAL_METRICS.map((m) => m.name)].join(',');
+  // currency/source are provenance columns (feature 211): the reporting currency of the absolute
+  // fields and which source produced the row ("edgar" | vendor). EXTENDS the feature-204 CSV.
+  const header = [
+    'symbol',
+    'as_of',
+    'currency',
+    'source',
+    ...FUNDAMENTAL_METRICS.map((m) => m.name),
+  ].join(',');
   const row = [
     f.symbol,
     isoDate(f.asOf),
+    f.currency,
+    f.source,
     ...FUNDAMENTAL_METRICS.map((m) => metricValue(f, m) ?? ''),
   ].join(',');
   return [header, row].join('\n');
@@ -172,6 +182,8 @@ export function historicalToCsv(periods: Period[]): string {
     'period_type',
     'period_end',
     'filed_date',
+    'currency',
+    'source',
     ...FUNDAMENTAL_METRICS.map((m) => m.name),
   ].join(',');
   const lines = periods.map((p) => {
@@ -181,6 +193,8 @@ export function historicalToCsv(periods: Period[]): string {
       p.periodType,
       isoDate(p.periodEnd),
       isoDate(p.filedDate),
+      p.currency,
+      p.source,
       // Blank cell for a missing metric (MARKETDATA-11), else the value.
       ...FUNDAMENTAL_METRICS.map((m) => metricValue(p, m) ?? ''),
     ];

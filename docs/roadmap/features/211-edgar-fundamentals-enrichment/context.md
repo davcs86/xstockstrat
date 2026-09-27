@@ -346,3 +346,17 @@ Executing on `claude/pending-roadmap-features-9z01mn`; integration via shared PR
 - Seeded at current code defaults ⇒ NO-runtime-behavior change on apply: snapshot_source=vendor keeps the FMP/Finnhub path (live-flip to edgar is a rollout step), dividends off (no Alpaca cost until entitlement confirmed), edgar.enabled=true matches the service true-default.
 - Verified offline (SQL only, no DB started); confirmed none of the 5 keys was already seeded by an earlier migration.
 - Files: `services/xstockstrat-config/migrations/030_marketdata_edgar_snapshot_keys.up.sql`, `…down.sql`, `services/xstockstrat-marketdata/internal/service/marketdata_service.go` (default alignment).
+
+### Step 13 — service: data-explorer currency + source provenance + CSV (FR-6) [done]
+- Confirmed the recon finding: `FUNDAMENTAL_METRICS` already carries pb_ratio/dividend_yield/debt_to_equity (feature 204) — FR-6's "add the metrics" was already satisfied, so this step added only provenance rendering + CSV columns + the USD-basis marker.
+- `useDataExplorer.ts`: `historicalToCsv`/`snapshotToCsv` now emit `currency`,`source` columns (after filed_date / as_of), EXTENDING the feature-204 CSV; missing-metric cells stay blank (@AC-22).
+- `data-explorer/page.tsx`: historical table gains `Currency`/`Source` provenance columns (`data-provenance`); snapshot grid gains a provenance line (`de-fund-currency`/`de-fund-source`); added `USD_BASIS_METRICS={market_cap,price}` + `isNonUsdRow` so those absolute fields carry a muted "USD" hint inside a non-USD (CNY) row (ratios are dimensionless — no hint). C-17: design-role tokens (`text-muted-foreground`/`text-foreground`), no color literal.
+- No BFF/browser-client change — `currency`/`source` already on the proto messages/typed client (recon).
+- `npx tsc --noEmit` shows no errors in the touched files (two pre-existing errors in unrelated test files — `e2e/insights/backfills.spec.ts` `never`-typing, `src/middleware.test.ts` mock typing — not caught by CI's `next build`/vitest gates and outside this feature); `pnpm build` clean; `pnpm run lint` only pre-existing exhaustive-deps warnings elsewhere.
+- Files: `services/xstockstrat-ui/src/hooks/useDataExplorer.ts`, `services/xstockstrat-ui/src/app/insights/data-explorer/page.tsx`
+
+### Step 14 — test: data-explorer Playwright — enriched metrics + currency + source (@AC-8) [done]
+- Extended `e2e/fixtures/historicalFundamentals.ts` with `DE_SNAPSHOT_BABA` + `DE_HIST_BABA_PAGE1` (CNY, source=edgar, populated d/e·pb·div-yield; Q3-2026 omits roe → "—"); added the INVENTORY.md catalog row (C-12).
+- `data-explorer.spec.ts`: new describe (feature 211 @AC-8) — BABA auto-selected (ListAssets returns it first), asserts snapshot provenance (CNY/edgar) + USD hint, historical FY2026 populated metrics + currency/source columns, Q3-2026 "—" for the missing roe but populated P/B (not all-dashed, @AC-22), and CSV header carries `filed_date,currency,source` + CNY/edgar values. Reuses `addAuthCookie` (no re-implemented JWT).
+- Ran host-native prebuilt (Docker unavailable — established fallback): `CI=1 E2E_PREBUILT=1 npx playwright test data-explorer --project=chromium` → **7 passed** (incl. the new @AC-8). Red-before-green: the currency/source column + provenance assertions are definitionally red against the pre-Step-13 tree (no such columns rendered).
+- Files: `services/xstockstrat-ui/e2e/fixtures/historicalFundamentals.ts`, `services/xstockstrat-ui/e2e/insights/data-explorer.spec.ts`, `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md`

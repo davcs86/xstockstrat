@@ -134,6 +134,76 @@ export const DE_HIST_AAPL_PAGE1 = {
   pagination: { nextPageToken: 'de-hist-p2' },
 };
 
+// BABA enriched fixtures (feature 211): a non-USD (CNY) filer with EDGAR-sourced rows carrying the
+// financial-debt D/E, currency-consistent P/B and T12M dividend yield. Q3-2026 omits `roe` → renders
+// `—` (AC-22 preserved). Absolute USD fields (market_cap/price) carry a "USD" hint in the CNY rows.
+export const DE_SNAPSHOT_BABA = {
+  fundamentals: {
+    symbol: 'BABA',
+    marketCap: 2.0e11,
+    peRatio: 0, // omitted (non-USD, no USD EPS) — see missingMetrics
+    pbRatio: 2.1,
+    dividendYield: 0.012,
+    eps: 0,
+    beta: 0.7,
+    roe: 0.11,
+    debtToEquity: 0.053,
+    price: 100.0,
+    yearHigh: 118.0,
+    yearLow: 66.6,
+    asOf: '2026-07-01T00:00:00Z',
+    currency: 'CNY',
+    source: 'edgar',
+    stale: false,
+    missingMetrics: ['pe_ratio', 'eps'],
+  },
+};
+
+export const DE_HIST_BABA_PAGE1 = {
+  periods: [
+    {
+      symbol: 'BABA',
+      fiscalPeriod: 'Q3-2026',
+      periodType: 'quarterly',
+      periodEnd: '2025-12-31T00:00:00Z',
+      filedDate: '2026-02-20T00:00:00Z',
+      marketCap: 1.95e11,
+      pbRatio: 2.05,
+      dividendYield: 0.011,
+      eps: 0,
+      beta: 0.71,
+      debtToEquity: 0.052,
+      price: 96.0,
+      yearHigh: 117.0,
+      yearLow: 66.6,
+      currency: 'CNY',
+      source: 'edgar',
+      missingMetrics: ['pe_ratio', 'eps', 'roe'], // AC-22 — roe renders `—`
+    },
+    {
+      symbol: 'BABA',
+      fiscalPeriod: 'FY2026',
+      periodType: 'annual',
+      periodEnd: '2026-03-31T00:00:00Z',
+      filedDate: '2026-07-01T00:00:00Z',
+      marketCap: 2.0e11,
+      pbRatio: 2.1,
+      dividendYield: 0.012,
+      eps: 0,
+      beta: 0.7,
+      roe: 0.11,
+      debtToEquity: 0.053,
+      price: 100.0,
+      yearHigh: 118.0,
+      yearLow: 66.6,
+      currency: 'CNY',
+      source: 'edgar',
+      missingMetrics: ['pe_ratio', 'eps'],
+    },
+  ],
+  pagination: { nextPageToken: '' },
+};
+
 export const DE_HIST_AAPL_PAGE2 = {
   periods: [
     {
