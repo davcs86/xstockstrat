@@ -89,3 +89,47 @@
 - **Open risks carried to /sdd-spec** (in design.md): single shared `fmp.Client` instance (+ counter test), `maybeAlertQuota` reads BudgetSnapshot fresh, boot-seed row-vs-call drift (accepted floor), single-replica budget invariant (instance_count:1), 2xx-count precision, `Sector` enum→UI Record maps + agent parity same PR.
 - C-16: promote AC-4 + a budget-refund scenario into a new `services/xstockstrat-marketdata/acceptance/sector-classification.feature` in the impl PR.
 - Status: spec-ready → design-approved. Next: /sdd-spec.
+
+## Session 2026-09-27 — sdd-spec
+
+- Generated implementation-spec.md with 18 steps. Status → implementation-ready.
+- Consumed recon.md + design.md as authoritative inputs; reused recon's Codebase Map as grounded
+  path:line evidence and verified the load-bearing seams directly (FMP `getJSON` chokepoint, proto
+  field numbers, analysis compute seam, agent client mapping).
+- Step order: proto (Sector enum in common/v1 + marketdata classification RPCs + StrategyDefinition
+  field 15) → proto-gen → Group A marketdata (migration 007 → single-throttle FMP gateway →
+  ClassificationRepo + refresh/seed job → RPC wiring → config keys) → Group B analysis (batched
+  GetSectorHistory + compute-K-variants + ManageStrategy validation + seed-span warning) → consumer
+  surfaces (agent manage_strategy + strat-lab skill; UI /insights authoring + Sector Record fan-out)
+  → C-16 acceptance promotion → teardown audit.
+- Key codebase findings:
+  - marketdata next migration = **007** (tip `006_dividend_actions`); `symbol_classification` is a
+    **plain table** (design.md:14) — no hypertable, neutralizes the feature-153 SQLSTATE 53200 regression.
+  - FMP single chokepoint = `internal/fmp/fmp_client.go:118` `getJSON` (`c.http.Do` at :128, non-200 at
+    :137); reuse the Alpaca `golang.org/x/time/rate` limiter (`alpaca/client.go:70-72,86-88`). Two
+    per-path day-counters to retire onto one shared budget: `fundamentalsQuota` (`marketdata_service.go:1550-1562`,
+    DB count via `CountFundamentalsFetchedToday` `marketdata_repo.go:565`) + `enrichmentUnderCap`
+    (`:1881-1885`). Fetch sites mapping the cap error: `:1342,1364,1389,1407`.
+  - `Sector` enum belongs in `common/v1/common.proto` (shared cross-import; joins TradingMode/
+    Environment/BrokerType/Timeframe). Enum-name text = the SCD `sector` column; **acceptance.feature
+    uses `TECHNOLOGY` (not `INFORMATION_TECHNOLOGY`)** — chose `SECTOR_TECHNOLOGY` and flagged the
+    naming fork to the proto reviewer (C-11, do-not-silently-guess).
+  - `StrategyDefinition` next field = **15** (`signal_eligible=14`, analysis.proto:367); `BacktestResult.warnings=16`
+    (analysis.proto:138) reused for the seed-span marker → **no new proto field**, no agent
+    descriptor-parity break. Per-sector overrides ride `analysis.strategies.definition_json` JSONB
+    (`strategies.py:41-54`) → **no analysis migration**.
+  - analysis compute seam = `evaluator.py:398` `_compute_component(comp, closes)` (`dict(comp.params)`)
+    behind `_assemble_component_series:587` (single unit, takes pre-fetched closes → compute-K-variants
+    with no extra GetBars, no chunk-lock re-exposure). New `GetSectorHistory` call mirrors
+    `_fetch_bars_paged` header propagation (`servicer.py:1155`, `metadata=propagation_meta`). Key on
+    `bar.time` (marketdata.proto:67), never `bar.timestamp` (fails.md:726).
+  - agent `manage_strategy` client mapping precedent = `client.py:879-899` (denied_symbols :892 /
+    signal_params Struct :895-899); merge-mask `tools.py:994`; descriptor-parity guard
+    `test_backtest_view.py:189`. Same-PR strat-lab skill update required (`plugins/strat-lab/skills/backtest/SKILL.md`).
+  - UI strategy editor already in `/insights` (StrategyWizard.tsx:104, ComponentEditor.tsx:41
+    `params: Record<string,number>`) → **no new page/route → no PLATFORM_SUBNAV / C-10(a) nav test**.
+    Exhaustive `Record<Enum,…>` maps to extend same-PR: BacktestDiagnostics.tsx:17,25,31,40 +
+    formulaReference.ts:177 (fails.md:81-82,1151).
+  - No new env vars/ports (config keys only) → no docker-compose / .do/app*.yaml changes.
+- Reviewers snapshot finalized: dropped `xstockstrat-indicators` owner (design rides the existing
+  flat-param channel as a drop-in; no indicators code step), added `packages/proto` + `xstockstrat-ui` owners.
