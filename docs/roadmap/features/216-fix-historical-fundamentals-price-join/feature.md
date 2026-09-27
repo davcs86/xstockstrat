@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-09-27 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from defect report `docs/reports/2026-09-27-fundamentals-backfill-not-rederived-defect.md` |
+| 2026-09-27 | `draft` → `spec-ready` | /sdd-review | Product spec approved (1 advisory warning; criterion-9 blocker fixed, C-16 + two-lane warnings folded into Design constraints) |
 
 ---
 

@@ -34,3 +34,33 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   (058, 064, 065, 097, 111, 140, 149, 153 ×2; 169 ×3), so `count` (221) is unreliable and would have
   mis-allocated 222.
 - Development branch: feature/fix-historical-fundamentals-price-join.
+
+## Session 2026-09-27 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready.
+- Criteria pass (spec-reviewer): initially FAILED on criterion 9 — the three `## Fix Scope`
+  checkboxes were left in raw template state. Fixed by resolving all three to `[x]` ("none":
+  SQL/orchestration change, price columns already in the fundamentals_history INSERT
+  `marketdata_repo.go:604-608`, `overwrite` is a TriggerBackfill request param not a config key, no
+  `.proto` edits), mirroring peer feature 213. Re-verified → PASS.
+- All four cited evidence lines confirmed exact by the reviewer (`marketdata_repo.go:610`/`:593`,
+  `marketdata_service.go:1794`/`:1762`); affected-service claims grounded against the registry.
+- Warnings (folded into product-spec `### Design constraints`, binding on /sdd-design):
+  1. **C-16** — the `ON CONFLICT ... DO NOTHING` at `marketdata_repo.go:610` is deliberate (`:593-595`):
+     it preserves feature-198 `@AC-1`/`@AC-2` (as-reported filing, earliest `filed_date`;
+     `docs/roadmap/features/198-historical-fundamentals-backtest/acceptance.feature:11,18`). The fix
+     must re-derive ONLY price-join metrics and must NOT clobber as-reported fields or earliest
+     `filed_date` — a blanket whole-row `DO UPDATE` would regress feature 198. Column-scoped upsert OR
+     read-time projection both satisfy this.
+  2. **Two price-join lanes** — historical (`backfillOneSymbol`, the buggy one) vs live EDGAR-snapshot
+     (re-derives every call, unaffected). Fix must keep derivation-convention parity across both.
+  3. Acceptance scenarios omit `@FR-<n>` tags — informational only (no FR-N in a bug spec; matches
+     peers 194/213/153/156). No action.
+- Overlap findings (feature-overlap): NO FAIL-level collisions. No config keys / proto fields /
+  migrations introduced. Only soft, disjoint-region same-file edits with `196-proto-deprecated-field-
+  removal-program` in `marketdata_repo.go` (`:596-610` vs `:144`) and `ingest servicer.py`
+  (`_run_backfill`/`_execute_fundamentals_backfill` vs `job_row_to_proto`) — rebase-only, no
+  merge-order entry required. Low-risk theme-only share with 215 (ETF/fundamentals, enforcement in
+  analysis, not this path).
+- Next: `/sdd-design fix-historical-fundamentals-price-join` (full/deep) — recon + multi-round
+  adversarial debate, honoring the two Design constraints above.
