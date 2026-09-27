@@ -339,3 +339,10 @@ Executing on `claude/pending-roadmap-features-9z01mn`; integration via shared PR
 - `GOWORK=off go test ./internal/service/... ./internal/repository/... -race` green; `go vet ./...` clean; `gofmt -l` clean.
 - Files: `internal/service/marketdata_service_test.go`
 - Deviations: golangci-lint→go vet/gofmt fallback (Deviation Log). Red-before-green: the snapshot-dispatch assertions are definitionally red against the pre-Step-10 tree (no `snapshot_source` axis existed).
+
+### Step 12 — config: seed migration 030_marketdata_edgar_snapshot_keys (FR-5) [done]
+- Created `030_marketdata_edgar_snapshot_keys.{up,down}.sql` (next free NNN after 029; the 024 gap is not backfilled). Seeds 5 non-secret `marketdata.*` keys, staging+production, global (user_id NULL), `ON CONFLICT … DO NOTHING`, mirroring 028's column shape: `fundamentals.snapshot_source='vendor'` (string), `edgar.enabled='true'` (bool), `edgar.cache_ttl_hours='24'` (int), `dividends.enabled='false'` (bool), `dividends.backfill_lookback_years='2'` (int). down.sql deletes exactly those 5 by explicit `key IN (...)`, global rows only (never a LIKE — leaves feature-198 history keys and the encrypted credential rows untouched).
+- **Coherence fix:** aligned the service code default for `marketdata.dividends.backfill_lookback_years` from 3 → **2** (`marketdata_service.go`, the Step 8 site) so the seed and the code default are one source of truth and the migration is a true no-runtime-behavior change (dividends.enabled=false gates the fetch off at deploy regardless). Dividend tests still green.
+- Seeded at current code defaults ⇒ NO-runtime-behavior change on apply: snapshot_source=vendor keeps the FMP/Finnhub path (live-flip to edgar is a rollout step), dividends off (no Alpaca cost until entitlement confirmed), edgar.enabled=true matches the service true-default.
+- Verified offline (SQL only, no DB started); confirmed none of the 5 keys was already seeded by an earlier migration.
+- Files: `services/xstockstrat-config/migrations/030_marketdata_edgar_snapshot_keys.up.sql`, `…down.sql`, `services/xstockstrat-marketdata/internal/service/marketdata_service.go` (default alignment).

@@ -473,7 +473,7 @@ Note: `internal/service/` + `cmd/` are **excluded** CI-coverage packages (templa
 
 ### Step 12 — config: seed migration for the EDGAR-snapshot + dividend keys (FR-5)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/migrations/030_marketdata_edgar_snapshot_keys.up.sql` — create

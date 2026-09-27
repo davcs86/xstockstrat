@@ -1771,9 +1771,9 @@ func (s *MarketDataService) backfillOneSymbol(ctx context.Context, symbol string
 	// for audit — the per-period yield below runs only when this fetch succeeded.
 	dividendsFetched := false
 	if s.dividendSrc != nil && s.fundCfg.GetBool("marketdata.dividends.enabled", false) {
-		lookbackYears := int(s.fundCfg.GetInt("marketdata.dividends.backfill_lookback_years", 3))
+		lookbackYears := int(s.fundCfg.GetInt("marketdata.dividends.backfill_lookback_years", 2))
 		if lookbackYears <= 0 {
-			lookbackYears = 3
+			lookbackYears = 2
 		}
 		divs, derr := s.dividendSrc.GetCashDividends(ctx, symbol, time.Now().AddDate(-lookbackYears, 0, 0), time.Now())
 		if derr != nil {
