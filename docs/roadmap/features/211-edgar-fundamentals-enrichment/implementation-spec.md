@@ -583,7 +583,7 @@ grep -n "helpers/auth\|from '../fixtures'\|from './fixtures'\|historicalFundamen
 
 ### Step 15 — test: new marketdata acceptance coverage — currency/PIT/no-look-ahead/parity (@AC-9; C-16)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/acceptance/edgar-fundamentals-enrichment.feature` — create
