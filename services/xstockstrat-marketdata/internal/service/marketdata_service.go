@@ -1776,10 +1776,9 @@ func (s *MarketDataService) backfillOneSymbol(ctx context.Context, symbol string
 	// unavailable/unentitled feed leaves dividend_yield missing (never a fabricated 0) and is logged
 	// for audit — the per-period yield below runs only when this fetch succeeded.
 	dividendsFetched := false
-	lookbackYears := 2
 	var divFetchStart time.Time
 	if s.dividendSrc != nil && s.fundCfg.GetBool("marketdata.dividends.enabled", false) {
-		lookbackYears = int(s.fundCfg.GetInt("marketdata.dividends.backfill_lookback_years", 2))
+		lookbackYears := int(s.fundCfg.GetInt("marketdata.dividends.backfill_lookback_years", 2))
 		if lookbackYears <= 0 {
 			lookbackYears = 2
 		}
