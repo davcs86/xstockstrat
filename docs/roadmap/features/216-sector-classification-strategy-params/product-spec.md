@@ -92,11 +92,10 @@ _Constitution **C-14**._
 - [x] **Agent** — `xstockstrat-agent` MCP tools: `manage_strategy` (author/read per-sector parameter
   overrides on a strategy) and `run_backtest` (results reflect the as-of-bar sector resolution). New
   argument on `manage_strategy`; changed response mapping guarded by the descriptor-parity test.
-- [x] **UI** — `xstockstrat-ui` `/insights` (backtest results already surface here) and, if a strategy
-  editor exists there, `/trader` or `/insights` strategy-editing controls for per-sector overrides.
-  **Exact UI authoring surface to be confirmed in recon** (see Open Questions) — if there is no UI
-  strategy editor today, the authoring surface is the agent `manage_strategy` tool alone and the UI
-  scope narrows to displaying sector-resolved backtest output.
+- [x] **UI** — `xstockstrat-ui`: strategy-editing controls for authoring per-sector overrides, and
+  `/insights` for displaying sector-resolved backtest output. Both the authoring control and the
+  results display are **in scope** (confirmed by user). Recon confirms which segment hosts the
+  strategy editor today and whether the control is new or extends an existing editor.
 - [ ] **None**
 
 ## Proto Contract Changes
@@ -143,14 +142,15 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 
 ## Open Questions
 
-- [ ] **Scope split.** This spans a classification store (Group A) and per-sector params (Group B).
-  Recommend design/spec sequence them as two mergeable increments (A lands first; B depends on FR-5).
-  Keep as one feature directory, or split into two `NNN`? (User asked for "one feature"; flagging the
-  tradeoff per sdd-story guidance.)
-- [ ] **UI authoring surface (C-14).** Does a strategy editor exist in `xstockstrat-ui` today, or is
-  `manage_strategy` (agent) the only authoring path in v1? Determines the UI scope above.
-- [ ] **Strategy storage owner.** Which service owns strategy-definition persistence (for FR-6
-  storage)? Confirm in recon before the migration is specced.
+- [x] **Scope split — RESOLVED (user).** Kept as **one long feature**. Group A (classification store)
+  and Group B (per-sector params) ship together; internally Group B depends on Group A's FR-5 as-of
+  RPC, so `/sdd-spec` still orders A-before-B within the single implementation spec.
+- [x] **UI + Agent surfaces — RESOLVED (user).** Both consumer surfaces are in scope: agent
+  `manage_strategy` (+ `run_backtest`) and the `xstockstrat-ui` strategy editor + `/insights` results.
+  Recon still confirms which UI segment hosts the strategy editor.
+- [ ] **Strategy storage owner — FOLLOW RECON (user).** Which service owns strategy-definition
+  persistence (for FR-6 storage) is determined in recon before the migration is specced (likely
+  `xstockstrat-analysis`).
 - [ ] **Known trap — look-ahead RED test (ledger `fails.md:1852-1868`, backtest-portfolio-sizing).**
   A look-ahead test built on ragged start/end calendars passes green while a real mid-series
   look-ahead bug ships. The FR-7 as-of-join RED test must inject a **mid-series sector reclassification**
