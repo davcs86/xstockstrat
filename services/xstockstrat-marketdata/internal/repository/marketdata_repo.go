@@ -697,6 +697,45 @@ func (r *MarketDataRepo) QueryHistoricalFundamentals(ctx context.Context, symbol
 	return out, nextToken, nil
 }
 
+// LatestHistoricalFundamental returns the single most-recent as-of period for a symbol (filed_date <
+// asOf when asOf is non-zero, newest period_end first), or (nil, nil) when none exists. One indexed
+// read for the EDGAR-canonical snapshot dispatch (feature 211, FR-5) — QueryHistoricalFundamentals
+// pages oldest-first, so reaching the newest filing through it would scan the whole history.
+func (r *MarketDataRepo) LatestHistoricalFundamental(ctx context.Context, symbol string, asOf time.Time) (*source.HistoricalFundamentalsPeriod, error) {
+	q := `SELECT ` + histFundamentalsColumns + ` FROM marketdata.fundamentals_history WHERE symbol = $1`
+	args := []any{symbol}
+	if !asOf.IsZero() {
+		args = append(args, asOf)
+		q += fmt.Sprintf(" AND filed_date < $%d", len(args))
+	}
+	q += " ORDER BY period_end DESC, fiscal_period DESC LIMIT 1"
+	var (
+		sym, fp, ptype, currency, src                                        string
+		periodEnd, filed                                                     time.Time
+		accepted                                                             *time.Time
+		extraJSON                                                            []byte
+		marketCap, pe, pb, divYield, eps, beta, roe, dte, price, yHigh, yLow *float64
+	)
+	err := r.db.QueryRow(ctx, q, args...).Scan(&sym, &fp, &ptype, &periodEnd, &filed, &accepted, &src, &currency,
+		&marketCap, &pe, &pb, &divYield, &eps, &beta, &roe, &dte, &price, &yHigh, &yLow, &extraJSON)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("latest fundamentals_history %s: %w", symbol, err)
+	}
+	extra := map[string]float64{}
+	if len(extraJSON) > 0 {
+		_ = json.Unmarshal(extraJSON, &extra)
+	}
+	return &source.HistoricalFundamentalsPeriod{
+		Symbol: sym, FiscalPeriod: fp, PeriodType: ptype, PeriodEnd: periodEnd, FiledDate: filed,
+		AcceptedDate: accepted, MarketCap: marketCap, PERatio: pe, PBRatio: pb, DividendYield: divYield,
+		EPS: eps, Beta: beta, ROE: roe, DebtToEquity: dte, Price: price, YearHigh: yHigh, YearLow: yLow,
+		ExtraMetrics: extra, Currency: currency, Source: src,
+	}, nil
+}
+
 // parseHistCursor decodes a "<period_end RFC3339Nano>|<fiscal_period>" keyset token. ok=false for an
 // empty or malformed token, so the caller resumes from the first page rather than erroring (QueryBars parity).
 func parseHistCursor(token string) (time.Time, string, bool) {

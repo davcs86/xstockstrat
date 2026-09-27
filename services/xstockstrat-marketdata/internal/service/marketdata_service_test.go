@@ -1501,7 +1501,8 @@ type fakeHistRepo struct {
 	// captured from the last QueryHistoricalFundamentals call (page-param pass-through assertion)
 	gotPageSize  int
 	gotPageToken string
-	dividends    []source.CashDividend // in-memory dividend store (feature 211)
+	dividends    []source.CashDividend                // in-memory dividend store (feature 211)
+	latest       *source.HistoricalFundamentalsPeriod // returned by LatestHistoricalFundamental (feature 211 snapshot dispatch)
 }
 
 func (r *fakeHistRepo) InsertHistoricalFundamentals(_ context.Context, p source.HistoricalFundamentalsPeriod) error {
@@ -1542,6 +1543,10 @@ func (r *fakeHistRepo) SumDividendsInWindow(_ context.Context, symbol string, as
 		}
 	}
 	return sum, any, nil
+}
+
+func (r *fakeHistRepo) LatestHistoricalFundamental(_ context.Context, _ string, _ time.Time) (*source.HistoricalFundamentalsPeriod, error) {
+	return r.latest, nil
 }
 
 type fakeHistSource struct {
@@ -1730,6 +1735,9 @@ func (r *fakeHistRepo211) UpsertDividends(_ context.Context, _ []source.CashDivi
 func (r *fakeHistRepo211) SumDividendsInWindow(_ context.Context, _ string, _, _ time.Time) (float64, bool, error) {
 	return 0, false, nil
 }
+func (r *fakeHistRepo211) LatestHistoricalFundamental(_ context.Context, _ string, _ time.Time) (*source.HistoricalFundamentalsPeriod, error) {
+	return nil, nil
+}
 
 type fakeDividendSrc struct {
 	divs []source.CashDividend
@@ -1879,5 +1887,168 @@ func TestBackfillFundamentals_DividendYieldMissingWhenDisabled_feature211(t *tes
 	}
 	if repo.inserted[0].DividendYield != nil {
 		t.Errorf("dividend_yield = %v, want nil (disabled)", *repo.inserted[0].DividendYield)
+	}
+}
+
+// ── feature 211: EDGAR-canonical snapshot dispatch + disable-safety + parity (@AC-6, @AC-7) ──────
+
+// edgarSnapshotSvc wires a service for the snapshot_source=edgar path: a fake fundamentals cache
+// (fundRepo), a fake historical store returning `latest` (histRepo), a registry serving `quote` for
+// the live-price join, and the vendor source for the @AC-7 fallback. cfg is supplied per test so the
+// zero-value getters exercise the real defaults (edgar.enabled true-by-default trap, FR-8).
+func edgarSnapshotSvc(latest *source.HistoricalFundamentalsPeriod, quote *marketdatav1.Quote, cfg *fakeCfg, vendorSrc source.FundamentalsSource, vendorProvider string) (*MarketDataService, *fakeFundRepo) {
+	fundRepo := newFakeFundRepo()
+	q := map[string]*marketdatav1.Quote{}
+	if quote != nil {
+		q[quote.Symbol] = quote
+	}
+	reg := source.NewRegistry()
+	reg.Register("alpaca", &fakeMultiSource{quotes: q})
+	svc := &MarketDataService{
+		registry:     reg,
+		warmSymbols:  map[string]struct{}{},
+		fundRepo:     fundRepo,
+		histRepo:     &fakeHistRepo{latest: latest},
+		fundCfg:      cfg,
+		fundamentals: vendorSrc,
+		fundProvider: vendorProvider,
+		notify:       &fakeNotify{},
+	}
+	return svc, fundRepo
+}
+
+func babaEdgarPeriod() *source.HistoricalFundamentalsPeriod {
+	return &source.HistoricalFundamentalsPeriod{
+		Symbol: "BABA", FiscalPeriod: "FY2026", PeriodType: "annual",
+		PeriodEnd: hfDate(2026, 3, 31), FiledDate: hfDate(2026, 7, 1),
+		DebtToEquity: f64p(0.053), PBRatio: f64p(2.1), MarketCap: f64p(200e9),
+		Price: f64p(70), Currency: "USD", Source: "edgar",
+		ExtraMetrics: map[string]float64{"total_debt": 8098e6, "stockholders_equity_usd": 153796e6},
+	}
+}
+
+// @AC-6 + FR-8: with snapshot_source=edgar and BOTH vendors off, the snapshot is derived from the
+// latest EDGAR period (same financial-debt D/E + P/B + currency as the stored period) overlaid with a
+// LIVE price, Source=="edgar", and fundamentals are STILL served (no fallthrough to disabled/empty).
+// edgar.enabled is deliberately unset here to prove the explicit true default (zero-value trap).
+func TestGetFundamentals_EdgarSnapshot_AC6_FR8_feature211(t *testing.T) {
+	cfg := &fakeCfg{
+		strings: map[string]string{"marketdata.fundamentals.snapshot_source": "edgar"},
+		bools:   map[string]bool{"marketdata.finnhub.enabled": false, "marketdata.fmp.enabled": false},
+		ints:    map[string]int64{"marketdata.edgar.cache_ttl_hours": 24},
+	}
+	svc, _ := edgarSnapshotSvc(babaEdgarPeriod(), &marketdatav1.Quote{Symbol: "BABA", AskPrice: 101, BidPrice: 99}, cfg, nil, "finnhub")
+
+	f, err := svc.GetFundamentals(context.Background(), "BABA")
+	if err != nil {
+		t.Fatalf("GetFundamentals(edgar): %v", err)
+	}
+	if f == nil {
+		t.Fatal("edgar snapshot nil with both vendors off — FR-8 fallthrough regression")
+	}
+	if f.Source != "edgar" {
+		t.Errorf("Source = %q, want \"edgar\"", f.Source)
+	}
+	if f.DebtToEquity < 0.0529 || f.DebtToEquity > 0.0531 {
+		t.Errorf("debt_to_equity = %v, want ~0.053 (same financial-debt convention as stored period, @AC-6)", f.DebtToEquity)
+	}
+	if f.PbRatio < 2.099 || f.PbRatio > 2.101 {
+		t.Errorf("pb_ratio = %v, want ~2.1 (stored, currency-consistent)", f.PbRatio)
+	}
+	if f.Currency != "USD" {
+		t.Errorf("currency = %q, want USD", f.Currency)
+	}
+	if f.Price < 99.99 || f.Price > 100.01 {
+		t.Errorf("price = %v, want ~100 (LIVE mid, not the stored 70)", f.Price)
+	}
+}
+
+// C-10(b) parity: GetFundamentals and GetFundamentalsMulti return the identical snapshot for a symbol
+// under snapshot_source=edgar (both dispatch the same builder).
+func TestGetFundamentals_EdgarParity_C10b_feature211(t *testing.T) {
+	cfg := &fakeCfg{
+		strings: map[string]string{"marketdata.fundamentals.snapshot_source": "edgar"},
+		bools:   map[string]bool{"marketdata.edgar.enabled": true},
+	}
+	svc, _ := edgarSnapshotSvc(babaEdgarPeriod(), &marketdatav1.Quote{Symbol: "BABA", AskPrice: 101, BidPrice: 99}, cfg, nil, "finnhub")
+
+	single, err := svc.GetFundamentals(context.Background(), "BABA")
+	if err != nil {
+		t.Fatalf("single: %v", err)
+	}
+	multi, err := svc.GetFundamentalsMulti(context.Background(), []string{"BABA"})
+	if err != nil {
+		t.Fatalf("multi: %v", err)
+	}
+	if len(multi) != 1 {
+		t.Fatalf("multi returned %d, want 1", len(multi))
+	}
+	m := multi[0]
+	if m.Source != single.Source || m.DebtToEquity != single.DebtToEquity || m.PbRatio != single.PbRatio || m.Price != single.Price || m.Currency != single.Currency {
+		t.Errorf("parity break: single=%+v multi=%+v", single, m)
+	}
+}
+
+// @AC-7: a symbol with ZERO stored EDGAR periods under snapshot_source=edgar, with a vendor enabled,
+// falls back to the vendor and the row is marked with the VENDOR name (not "edgar").
+func TestGetFundamentals_EdgarFallbackToVendor_AC7_feature211(t *testing.T) {
+	cfg := enabledCfg("finnhub") // seeds finnhub.enabled + quota/cache keys
+	cfg.strings = map[string]string{"marketdata.fundamentals.snapshot_source": "edgar"}
+	cfg.bools["marketdata.edgar.enabled"] = true
+	cfg.bools["marketdata.fmp.enabled"] = false
+	vendor := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(50)}} // Source empty → toProto uses provider name
+	svc, _ := edgarSnapshotSvc(nil, nil, cfg, vendor, "finnhub")
+
+	f, err := svc.GetFundamentals(context.Background(), "NOSEC")
+	if err != nil {
+		t.Fatalf("GetFundamentals(fallback): %v", err)
+	}
+	if f == nil || f.Source != "finnhub" {
+		t.Fatalf("Source = %v, want \"finnhub\" (vendor fallback, not edgar)", f)
+	}
+	if vendor.calls != 1 {
+		t.Errorf("vendor fetch calls = %d, want 1 (fallback took the vendor)", vendor.calls)
+	}
+}
+
+// Kill switch: edgar.enabled=false under snapshot_source=edgar → FailedPrecondition (deliberate all-off).
+func TestGetFundamentals_EdgarKillSwitch_feature211(t *testing.T) {
+	cfg := &fakeCfg{
+		strings: map[string]string{"marketdata.fundamentals.snapshot_source": "edgar"},
+		bools:   map[string]bool{"marketdata.edgar.enabled": false},
+	}
+	svc, _ := edgarSnapshotSvc(babaEdgarPeriod(), nil, cfg, nil, "finnhub")
+
+	_, err := svc.GetFundamentals(context.Background(), "BABA")
+	if err == nil {
+		t.Fatal("edgar.enabled=false must return an error")
+	}
+	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Errorf("code = %v, want FailedPrecondition", connect.CodeOf(err))
+	}
+}
+
+// Source-aware cache self-heal: a fresh-but-VENDOR-sourced cache row is NOT served under edgar mode —
+// the snapshot is re-derived from the EDGAR period (Source flips to edgar), so a cutover heals in one call.
+func TestGetFundamentals_EdgarCacheSelfHeal_feature211(t *testing.T) {
+	cfg := &fakeCfg{
+		strings: map[string]string{"marketdata.fundamentals.snapshot_source": "edgar"},
+		bools:   map[string]bool{"marketdata.edgar.enabled": true},
+		ints:    map[string]int64{"marketdata.edgar.cache_ttl_hours": 24},
+	}
+	svc, fundRepo := edgarSnapshotSvc(babaEdgarPeriod(), &marketdatav1.Quote{Symbol: "BABA", AskPrice: 101, BidPrice: 99}, cfg, nil, "finnhub")
+	// Pre-seed a FRESH vendor row — under string-inequality invalidation this would be served stale.
+	fundRepo.rows["BABA"] = &source.Fundamentals{Symbol: "BABA", Source: "finnhub", DebtToEquity: f64p(9.9)}
+	fundRepo.fetchedAt["BABA"] = time.Now()
+
+	f, err := svc.GetFundamentals(context.Background(), "BABA")
+	if err != nil {
+		t.Fatalf("GetFundamentals: %v", err)
+	}
+	if f.Source != "edgar" || f.DebtToEquity < 0.0529 || f.DebtToEquity > 0.0531 {
+		t.Errorf("got Source=%q d/e=%v, want edgar-derived ~0.053 (stale vendor row must not be served)", f.Source, f.DebtToEquity)
+	}
+	if got := fundRepo.rows["BABA"].Source; got != "edgar" {
+		t.Errorf("cache row Source = %q after self-heal, want edgar", got)
 	}
 }

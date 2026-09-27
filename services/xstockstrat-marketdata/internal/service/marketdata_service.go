@@ -112,6 +112,7 @@ type fundamentalsRepo interface {
 type histFundamentalsRepo interface {
 	InsertHistoricalFundamentals(ctx context.Context, p source.HistoricalFundamentalsPeriod) error
 	QueryHistoricalFundamentals(ctx context.Context, symbol string, asOf, rangeStart, rangeEnd time.Time, periodTypes []string, pageSize int, pageToken string) ([]source.HistoricalFundamentalsPeriod, string, error)
+	LatestHistoricalFundamental(ctx context.Context, symbol string, asOf time.Time) (*source.HistoricalFundamentalsPeriod, error)
 	CloseAt(ctx context.Context, symbol string, date time.Time) (*float64, error)
 	UpsertDividends(ctx context.Context, divs []source.CashDividend) error
 	SumDividendsInWindow(ctx context.Context, symbol string, asOf, windowStart time.Time) (float64, bool, error)
@@ -1271,10 +1272,15 @@ func (s *MarketDataService) emitAlert(ctx context.Context, msg string) {
 // Read-through cache → quota guard → fetch → 80% WARNING; the active provider is the single
 // fundamentals chokepoint, gated by marketdata.<fundProvider>.enabled.
 
-// GetFundamentals returns cached-or-fetched fundamentals for one symbol.
+// GetFundamentals returns cached-or-fetched fundamentals for one symbol. The serving source is the
+// live-read marketdata.fundamentals.snapshot_source axis (feature 211): "edgar" derives the snapshot
+// from the latest as-reported filing + a live price; "vendor" is the unchanged FMP/Finnhub path.
 func (s *MarketDataService) GetFundamentals(ctx context.Context, symbol string) (*marketdatav1.Fundamentals, error) {
 	if symbol == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("symbol required"))
+	}
+	if s.snapshotSource() == snapshotSourceEdgar {
+		return s.getEdgarSnapshot(ctx, symbol)
 	}
 	if err := s.fundamentalsEnabled(); err != nil {
 		return nil, err
@@ -1289,6 +1295,25 @@ func (s *MarketDataService) GetFundamentals(ctx context.Context, symbol string) 
 // GetFundamentalsMulti returns fundamentals for several symbols, batching the
 // needs-fetch set through one provider quote call where the provider supports it (FR-5).
 func (s *MarketDataService) GetFundamentalsMulti(ctx context.Context, symbols []string) ([]*marketdatav1.Fundamentals, error) {
+	// EDGAR-canonical dispatch (feature 211): per-symbol via the same builder GetFundamentals uses, so
+	// the two RPCs return the identical snapshot for a symbol (C-10(b) parity). A global gate
+	// (edgar/vendor disabled) surfaces as an error on the first symbol, matching the single-symbol RPC.
+	if s.snapshotSource() == snapshotSourceEdgar {
+		out := make([]*marketdatav1.Fundamentals, 0, len(symbols))
+		for _, sym := range symbols {
+			if sym == "" {
+				continue
+			}
+			f, err := s.getEdgarSnapshot(ctx, sym)
+			if err != nil {
+				return nil, err
+			}
+			if f != nil {
+				out = append(out, f)
+			}
+		}
+		return out, nil
+	}
 	if err := s.fundamentalsEnabled(); err != nil {
 		return nil, err
 	}
@@ -1390,6 +1415,136 @@ func (s *MarketDataService) fundamentalsEnabled() error {
 		return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("%s fundamentals source disabled", s.fundProvider))
 	}
 	return nil
+}
+
+// snapshot_source axis values (feature 211). "vendor" is the safe default and the current production
+// behavior; only an exact "edgar" switches to the EDGAR-canonical builder.
+const (
+	snapshotSourceEdgar  = "edgar"
+	snapshotSourceVendor = "vendor"
+)
+
+// snapshotSource resolves the live-read marketdata.fundamentals.snapshot_source axis. It recognizes
+// only "edgar"/"vendor"; any other value logs a WARN (loud, per F-07) and fails safe to "vendor"
+// rather than failing the RPC — a live config typo must never take fundamentals serving down.
+func (s *MarketDataService) snapshotSource() string {
+	v := s.fundCfg.GetString("marketdata.fundamentals.snapshot_source", snapshotSourceVendor)
+	switch v {
+	case snapshotSourceEdgar:
+		return snapshotSourceEdgar
+	case snapshotSourceVendor:
+		return snapshotSourceVendor
+	default:
+		slog.Warn("unrecognized marketdata.fundamentals.snapshot_source — falling back to vendor", "value", v)
+		return snapshotSourceVendor
+	}
+}
+
+// cacheAxis maps a stored fundamentals row's Source to its serving axis so a snapshot_source cutover
+// self-heals a stale cache row in one read (source-aware invalidation, NOT string inequality):
+// edgar / edgar+fmp ⇒ "edgar"; every vendor value ⇒ "vendor" (feature 211, design point 5).
+func cacheAxis(src string) string {
+	switch src {
+	case "edgar", "edgar+fmp":
+		return snapshotSourceEdgar
+	default:
+		return snapshotSourceVendor
+	}
+}
+
+// hasCoreMetrics reports whether an as-reported period carries at least one balance-sheet/valuation
+// metric — the producibility test for an EDGAR snapshot. A period with none (a CIK match that yielded
+// no usable facts) routes to the vendor fallback (@AC-7).
+func hasCoreMetrics(p *source.HistoricalFundamentalsPeriod) bool {
+	return p.MarketCap != nil || p.PERatio != nil || p.PBRatio != nil ||
+		p.EPS != nil || p.ROE != nil || p.DebtToEquity != nil
+}
+
+// getEdgarSnapshot serves the EDGAR-canonical latest-filing snapshot for one symbol: the newest
+// as-of period (one indexed read) with the same financial-debt D/E + currency-consistent P/B
+// convention as the historical lane (@AC-6), overlaid with a live price. Write-through cached under
+// marketdata.edgar.cache_ttl_hours; a symbol with no producible EDGAR period falls back to the
+// enabled vendor (@AC-7). The kill switch is marketdata.edgar.enabled (explicit true default — the
+// feature-100 GetBool zero-value trap: a missing key must not read as "disabled").
+func (s *MarketDataService) getEdgarSnapshot(ctx context.Context, symbol string) (*marketdatav1.Fundamentals, error) {
+	if !s.fundCfg.GetBool("marketdata.edgar.enabled", true) {
+		slog.WarnContext(ctx, "edgar fundamentals source disabled (marketdata.edgar.enabled=false) — refusing snapshot", "symbol", symbol)
+		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("edgar fundamentals source disabled"))
+	}
+	// Source-aware cache hit: serve a fresh cached row only when it was itself edgar-derived, so a
+	// post-cutover vendor row is re-derived (self-heals) rather than served under the edgar axis.
+	ttl := time.Duration(s.fundCfg.GetInt("marketdata.edgar.cache_ttl_hours", 24)) * time.Hour
+	if cached, fetchedAt, found, err := s.fundRepo.GetFundamentals(ctx, symbol); err == nil &&
+		found && time.Since(fetchedAt) <= ttl && cacheAxis(cached.Source) == snapshotSourceEdgar {
+		return s.toProtoFundamentals(cached, false), nil
+	}
+	latest, err := s.histRepo.LatestHistoricalFundamental(ctx, symbol, time.Now())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	if latest == nil || !hasCoreMetrics(latest) {
+		// Non-SEC-filer / backfill-gap fallback (@AC-7): WARN before delegating so a missing backfill is
+		// never silently masked as a non-filer, then route to the vendor only while it is enabled.
+		reason := "no_core_metrics"
+		if latest == nil {
+			reason = "zero_history"
+		}
+		slog.WarnContext(ctx, "edgar snapshot not producible — falling back to vendor", "symbol", symbol, "reason", reason)
+		if err := s.fundamentalsEnabled(); err != nil {
+			return nil, connect.NewError(connect.CodeFailedPrecondition,
+				fmt.Errorf("no edgar snapshot for %s and vendor fallback disabled", symbol))
+		}
+		return s.resolveFundamentals(ctx, symbol)
+	}
+	snap := edgarSnapshotFromPeriod(latest, s.livePrice(ctx, symbol))
+	if upErr := s.fundRepo.UpsertFundamentals(ctx, snap); upErr != nil {
+		slog.WarnContext(ctx, "edgar snapshot cache upsert failed", "symbol", symbol, "error", upErr)
+	}
+	return s.toProtoFundamentals(snap, false), nil
+}
+
+// livePrice returns the current mid quote for a symbol via the batched, singleflight-coalesced
+// GetLatestQuotes path, or nil when no usable quote is available (leaves Price missing, never 0).
+func (s *MarketDataService) livePrice(ctx context.Context, symbol string) *float64 {
+	quotes, err := s.GetLatestQuotes(ctx, []string{symbol})
+	if err != nil || len(quotes) == 0 {
+		return nil
+	}
+	mid := (quotes[0].AskPrice + quotes[0].BidPrice) / 2
+	if mid <= 0 {
+		return nil
+	}
+	return &mid
+}
+
+// edgarSnapshotFromPeriod projects the latest as-reported period into a snapshot Fundamentals: the
+// balance-sheet ratios (D/E, P/B) and currency are the stored period's — computed with the feature-211
+// financial-debt + currency-consistent conventions, so PIT and snapshot agree for the same filing
+// (@AC-6/@AC-9) — while Price is the live quote when available (else the filed-date close). Source is
+// set to "edgar" explicitly so the repo's empty-source →"fmp" default never fires.
+func edgarSnapshotFromPeriod(p *source.HistoricalFundamentalsPeriod, live *float64) *source.Fundamentals {
+	price := p.Price
+	if live != nil {
+		price = live
+	}
+	return &source.Fundamentals{
+		Symbol:        p.Symbol,
+		MarketCap:     p.MarketCap,
+		PERatio:       p.PERatio,
+		PBRatio:       p.PBRatio,
+		DividendYield: p.DividendYield,
+		EPS:           p.EPS,
+		Beta:          p.Beta,
+		ROE:           p.ROE,
+		DebtToEquity:  p.DebtToEquity,
+		Price:         price,
+		YearHigh:      p.YearHigh,
+		YearLow:       p.YearLow,
+		ExtraMetrics:  p.ExtraMetrics,
+		AsOf:          p.FiledDate,
+		Currency:      p.Currency,
+		Source:        snapshotSourceEdgar,
+	}
 }
 
 // fundamentalsQuota returns the active provider's current count, cap, and window (seconds) for the

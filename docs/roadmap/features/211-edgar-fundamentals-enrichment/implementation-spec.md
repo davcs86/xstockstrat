@@ -400,7 +400,7 @@ cd services/xstockstrat-marketdata && GOWORK=off COVERPKGS=$(go list ./... | gre
 
 ### Step 10 — service: EDGAR-canonical snapshot dispatch + FR-8 disable-safety (FR-5, FR-8)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service.go` — modify
@@ -441,7 +441,7 @@ cd services/xstockstrat-marketdata && GOWORK=off COVERPKGS=$(go list ./... | gre
 
 ### Step 11 — test: snapshot dispatch / disable-safety / parity unit tests (@AC-6, @AC-7)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go` — modify
@@ -654,3 +654,11 @@ grep -n "snapshot_source" docs/patterns/config-governance.md   # confirm registe
 
 ### 2026-09-26 — Step 4 D/E tag allow-list: IFRS tags omitted (spec-sanctioned, C-18)
 - Per the spec's Step-4 Codebase Evidence, all three acceptance filers (BABA/AXP/AAPL) report under `us-gaap`; the design's guessed `ifrs-full:*` allow-list is unnecessary and omitted (YAGNI — a future non-us-gaap filer is a separate feature).
+
+### 2026-09-27 — Step 10 latest-filing read: dedicated `LatestHistoricalFundamental` repo method (not `GetHistoricalFundamentals`)
+- The spec's Step-10 evidence phrases the snapshot read as "the existing `GetHistoricalFundamentals` + `filterAsOf`". That method pages **oldest-first** (`ORDER BY period_end, fiscal_period ASC`), so the newest filing sits on the last page — reaching it would scan the whole history, the exact N-scan the same instruction warns against ("one indexed read/symbol; F-06; avoids the feature-141 N-scan OOM").
+- **Disposition:** added `MarketDataRepo.LatestHistoricalFundamental(symbol, asOf)` — a single `ORDER BY period_end DESC, fiscal_period DESC LIMIT 1 WHERE filed_date < asOf` read (the T+1 no-look-ahead guard pushed into SQL, mirroring `filterAsOf`). This is the faithful realization of "latest filing as-of now, one indexed read"; it stays within Step 10's listed `marketdata_repo.go` file scope and is more robust than a bounded-lookback reuse of `GetHistoricalFundamentals` (which would miss a slow filer).
+
+### 2026-09-27 — Step 10 `snapshot_source` unrecognized value: fail-safe WARN, not RPC-fatal
+- The spec says an unknown `snapshot_source` "fails loud (F-07)" and pairs it with the main.go boot-fatal provider switch. But `snapshot_source` is a **live-read** axis on a serving RPC (main.go never reads it), so a hard RPC failure on a config typo would take fundamentals serving down platform-wide — the opposite of fault-tolerant.
+- **Disposition:** `snapshotSource()` recognizes only `edgar`/`vendor`; any other value logs a WARN (the "loud" signal) and fails **safe** to `vendor` (current production behavior). The boot-fatal `os.Exit` is applied where the spec's F-07 intent is safe — `newFundamentalsSource`'s unknown-`provider` default in main.go.
