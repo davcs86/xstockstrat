@@ -391,3 +391,10 @@ Executing on `claude/pending-roadmap-features-9z01mn`; integration via shared PR
 - **Failing job "Go lint and test (xstockstrat-marketdata)":** golangci-lint passed (0 issues); the failure was the `cmd/server` test `TestNewFundamentalsSource_AlwaysNonNil` (feature-082/129 canary) — my Step-10 `os.Exit(1)` on an unknown provider killed the test process. Root cause: the Step 11 verification ran `./internal/...` only, not `./cmd/...`.
 - **Fix:** reverted `newFundamentalsSource`'s default to fall back to FMP (pre-211 behavior, satisfies the always-non-nil canary) while keeping F-07 "loud" as a `slog.Warn` for a genuinely unrecognized value. A config typo must not crash boot; safe default + WARN beats `os.Exit`. Deviation Log updated.
 - Verified: `GOWORK=off go test ./... -race -count=1` (all 13 packages incl. cmd/server) green; `go vet ./...` clean; `gofmt -l` clean.
+
+## Session 2026-09-27 (CI: feature status automation)
+
+- Promotion PR #1194 merged to main
+- Feature promoted and committed: 5fd9faf88fa1a93f41adced9eebff0ad0852634c
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-09-27

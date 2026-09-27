@@ -3,6 +3,8 @@
 **Development Branch**: `feature/screener-preset-criteria`
 **Created**: 2026-09-12
 **Last Updated**: 2026-09-12
+**Committed to main**: 5fd9faf88fa1a93f41adced9eebff0ad0852634c
+**Launched date**: 2026-09-27
 
 ---
 
@@ -15,6 +17,7 @@
 | 2026-09-26 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 4 steps |
 | 2026-09-26 | `implementation-ready` → `code-completed` | /sdd-execute (sequential) | Steps 1–3 pre-landed via PR #1139 (flipped to done); Step 4 e2e preset scenario authored + verified green (3 tests, CI-mode). All 4 steps done. |
 
+| 2026-09-27 | `code-completed` → `launched` | CI workflow | Promoted via PR #1194; committed 5fd9faf88fa1a93f41adced9eebff0ad0852634c |
 ---
 
 ## Artifacts

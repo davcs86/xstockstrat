@@ -3,6 +3,8 @@
 **Development Branch**: `feature/edgar-fundamentals-enrichment`
 **Created**: 2026-09-25
 **Last Updated**: 2026-09-26
+**Committed to main**: 5fd9faf88fa1a93f41adced9eebff0ad0852634c
+**Launched date**: 2026-09-27
 
 ---
 
@@ -16,6 +18,7 @@
 | 2026-09-26 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 16 steps; direct SEC companyfacts fetch grounded the D/E tag set + corrected the design's IFRS assumption |
 | 2026-09-26 | `implementation-ready` (renumbered) | operator | Numbering collision: PR #1186 (this feature) and PR #1185 (security backlog 207–210) both merged to main-dev on `207`. Per feature-workflow § Feature Numbering, this feature renumbered **207 → 211** (next free); security block keeps 207–210. Dir `git mv`'d, self-refs + ledger updated. New PR opened (prior #1186 already merged). |
 
+| 2026-09-27 | `code-completed` → `launched` | CI workflow | Promoted via PR #1194; committed 5fd9faf88fa1a93f41adced9eebff0ad0852634c |
 ---
 
 ## Artifacts

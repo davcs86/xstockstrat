@@ -6,6 +6,8 @@
 **Severity**: SEV-3
 **Created**: 2026-09-26
 **Last Updated**: 2026-09-26
+**Committed to main**: 5fd9faf88fa1a93f41adced9eebff0ad0852634c
+**Launched date**: 2026-09-27
 
 ---
 
@@ -18,6 +20,7 @@
 | 2026-09-26 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 2 steps (Step 1 service: align hook `sort` default; Step 2 test: `@AC-1` single-RPC regression). Scope-widening from product-spec's "single-file" fix to the shared hook flagged for user sign-off at the consolidated 189/213 impl-spec review. |
 | 2026-09-26 | `implementation-ready` → `code-completed` | /sdd-execute (sequential) | Scope-widening signed off (F-10). Step 1 (hook `sort` default `UNSPECIFIED`→`CONVICTION` + CopilotRail comment) + Step 2 (single-RPC e2e regression) done. Red→green: 2→1 RPC; full `opportunities.spec.ts` 36/36 green (Open Risk resolved — set/order unchanged). |
 
+| 2026-09-27 | `code-completed` → `launched` | CI workflow | Promoted via PR #1194; committed 5fd9faf88fa1a93f41adced9eebff0ad0852634c |
 ---
 
 ## Reviewers

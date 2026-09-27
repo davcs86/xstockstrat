@@ -90,3 +90,10 @@ Branch adaptation: executed on `claude/pending-roadmap-features-9z01mn` (not `fe
 **Progress**: 4 done / 4 total
 **Stopped at**: all complete (code-completed)
 **Next**: feature 196 (next in sequence)
+
+## Session 2026-09-27 (CI: feature status automation)
+
+- Promotion PR #1194 merged to main
+- Feature promoted and committed: 5fd9faf88fa1a93f41adced9eebff0ad0852634c
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-09-27
