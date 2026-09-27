@@ -63,13 +63,33 @@ Evidence:
 
 ## Fix Scope
 
-- [ ] No proto changes anticipated
-- [ ] No database migrations anticipated
-- [ ] No config key changes anticipated
+- [x] No proto changes anticipated
+- [x] No database migrations anticipated
+- [x] No config key changes anticipated
 
-(Update after investigation — remove or replace each item as needed. The `overwrite` semantics for the
-fundamentals path, and whether re-derivation is a write-time upsert or a read-time projection, are
-open design questions for `/sdd-design`.)
+The fix is a SQL-write / backfill-orchestration change: the price-derived columns (`price`,
+`market_cap`, `pe_ratio`, `pb_ratio`, `dividend_yield`) already exist in the
+`marketdata.fundamentals_history` INSERT (`marketdata_repo.go:604-608`), so no schema migration is
+needed; `overwrite` is a `TriggerBackfill` **request parameter**, not a `<service>.<category>.<key>`
+config key; and no `.proto` contract changes. The remaining *design* forks — write-time column-scoped
+upsert vs. read-time projection, and whether/how `overwrite` is plumbed to the fundamentals path vs.
+reordering backfill orchestration (bars-before-fundamentals) — are deferred to `/sdd-design`, not the
+governance scope above.
+
+### Design constraints (must be honored by `/sdd-design` and the fix)
+
+- **C-16 — preserve feature-198 idempotency (`@AC-1`/`@AC-2`).** The `ON CONFLICT (symbol,
+  fiscal_period, period_type) DO NOTHING` clause at `marketdata_repo.go:610` is **deliberate**
+  (`:593-595`): it keeps the as-reported filing (earliest `filed_date`) so a same-range re-backfill
+  never duplicates and a later 10-K comparative never overwrites — enforcing feature-198
+  `docs/roadmap/features/198-historical-fundamentals-backtest/acceptance.feature:11,18`. Any fix must
+  re-derive **only** the price-join metrics and must NOT clobber as-reported fields or the earliest
+  `filed_date`. A column-scoped upsert or a read-time projection both satisfy this; a blanket
+  `DO UPDATE SET ...` (whole-row) would regress feature 198.
+- **Derivation-convention parity across the two price-join lanes.** Two lanes compute the price-join:
+  the historical lane (`backfillOneSymbol`, the buggy one) and the live EDGAR-snapshot lane (which
+  re-derives every call and does not have this bug). The fix must keep the derivation convention
+  consistent across both; `/sdd-design` should confirm parity.
 
 ## Acceptance Criteria
 
