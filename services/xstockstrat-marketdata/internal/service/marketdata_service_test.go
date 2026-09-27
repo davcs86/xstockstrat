@@ -1683,3 +1683,80 @@ func TestBackfillFundamentals_CapDegrade_AC5(t *testing.T) {
 		t.Errorf("inserted source = %v, want edgar+fmp", repo2.inserted)
 	}
 }
+
+// --- feature 211: currency-consistent PIT P/B + P/E, no look-ahead (@AC-4) ---
+
+type fakeHistRepo211 struct {
+	closeVal   *float64
+	queriedFor []time.Time
+}
+
+func (r *fakeHistRepo211) InsertHistoricalFundamentals(_ context.Context, _ source.HistoricalFundamentalsPeriod) error {
+	return nil
+}
+func (r *fakeHistRepo211) QueryHistoricalFundamentals(_ context.Context, _ string, _, _, _ time.Time, _ []string, _ int, _ string) ([]source.HistoricalFundamentalsPeriod, string, error) {
+	return nil, "", nil
+}
+func (r *fakeHistRepo211) CloseAt(_ context.Context, _ string, date time.Time) (*float64, error) {
+	r.queriedFor = append(r.queriedFor, date)
+	return r.closeVal, nil
+}
+
+func TestPriceJoin_PBRatioUSDEquity_NoLookAhead_AC4_feature211(t *testing.T) {
+	repo := &fakeHistRepo211{closeVal: f64p(80.0)}
+	svc := &MarketDataService{histRepo: repo}
+	filed := time.Date(2025, 6, 26, 0, 0, 0, 0, time.UTC)
+	p := &source.HistoricalFundamentalsPeriod{
+		Symbol: "BABA", PeriodType: "annual", Currency: "CNY", FiledDate: filed,
+		SharesOutstanding: f64p(2_400_000_000),
+		ExtraMetrics:      map[string]float64{"stockholders_equity": 1_060_886e6, "stockholders_equity_usd": 153_796e6},
+	}
+	var q []float64
+	svc.priceJoin(context.Background(), p, &q)
+	if p.PBRatio == nil {
+		t.Fatalf("pb_ratio nil, want set from USD equity")
+	}
+	wantPB := (80.0 * 2_400_000_000) / 153_796e6 // USD market_cap / USD equity
+	if got := *p.PBRatio; got < wantPB*0.999 || got > wantPB*1.001 {
+		t.Errorf("pb_ratio = %v, want ~%v (single-currency USD)", got, wantPB)
+	}
+	if len(repo.queriedFor) != 1 || !repo.queriedFor[0].Equal(filed) {
+		t.Errorf("CloseAt queried %v, want only filed_date %v (no look-ahead)", repo.queriedFor, filed)
+	}
+}
+
+func TestPriceJoin_PBNilWhenNoUSDEquity_feature211(t *testing.T) {
+	repo := &fakeHistRepo211{closeVal: f64p(80.0)}
+	svc := &MarketDataService{histRepo: repo}
+	p := &source.HistoricalFundamentalsPeriod{
+		Symbol: "BABA", PeriodType: "annual", Currency: "CNY", FiledDate: time.Now(),
+		SharesOutstanding: f64p(2_400_000_000),
+		ExtraMetrics:      map[string]float64{"stockholders_equity": 1_060_886e6}, // native CNY only, no USD fact
+	}
+	var q []float64
+	svc.priceJoin(context.Background(), p, &q)
+	if p.PBRatio != nil {
+		t.Errorf("pb_ratio = %v, want nil (non-USD filer, no USD equity → no FX)", *p.PBRatio)
+	}
+}
+
+func TestPriceJoin_PECurrencyRule_feature211(t *testing.T) {
+	// USD filer: USD close / USD native EPS → P/E set.
+	repoU := &fakeHistRepo211{closeVal: f64p(100.0)}
+	svcU := &MarketDataService{histRepo: repoU}
+	pu := &source.HistoricalFundamentalsPeriod{Symbol: "AAPL", PeriodType: "annual", Currency: "USD", FiledDate: time.Now(), EPS: f64p(5.0), ExtraMetrics: map[string]float64{}}
+	var qu []float64
+	svcU.priceJoin(context.Background(), pu, &qu)
+	if pu.PERatio == nil || *pu.PERatio < 19.99 || *pu.PERatio > 20.01 {
+		t.Errorf("USD P/E = %v, want ~20 (100/5)", pu.PERatio)
+	}
+	// Non-USD filer: no USD EPS fact → P/E nil (no cross-currency divide).
+	repoC := &fakeHistRepo211{closeVal: f64p(100.0)}
+	svcC := &MarketDataService{histRepo: repoC}
+	pc := &source.HistoricalFundamentalsPeriod{Symbol: "BABA", PeriodType: "annual", Currency: "CNY", FiledDate: time.Now(), EPS: f64p(5.0), ExtraMetrics: map[string]float64{}}
+	var qc []float64
+	svcC.priceJoin(context.Background(), pc, &qc)
+	if pc.PERatio != nil {
+		t.Errorf("non-USD P/E = %v, want nil (no USD eps)", *pc.PERatio)
+	}
+}

@@ -269,7 +269,7 @@ cd services/xstockstrat-marketdata && GOWORK=off COVERPKGS=$(go list ./... | gre
 
 ### Step 6 — service: currency-consistent P/B (and P/E fix) at the filing boundary (FR-3, FR-7)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service.go` — modify
@@ -301,7 +301,7 @@ cd services/xstockstrat-marketdata && GOWORK=off COVERPKGS=$(go list ./... | gre
 
 ### Step 7 — test: PIT P/B unit tests, real Bar fixtures, no look-ahead (@AC-4)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go` — modify
@@ -648,6 +648,9 @@ grep -n "snapshot_source" docs/patterns/config-governance.md   # confirm registe
 ### 2026-09-26 — golangci-lint unavailable for go1.27 → `go vet` + `gofmt` CI-equivalent fallback (all Go steps)
 - The pre-provisioned `golangci-lint` was built against go1.25, and `go install …@v2.13.1` (the CI-pinned version) produces a binary whose own go.mod caps language support at go1.26 — both refuse this repo's **go1.27** target (`can't load config: the Go language version … is lower than the targeted Go version (1.27.0)`).
 - **Disposition: CI-equivalent fallback** — every Go step's lint gate is verified with `GOWORK=off go vet ./<pkg>/...` + `gofmt -l <pkg>/` (both run natively on go1.27), in place of `golangci-lint run`. The real golangci-lint gate runs in CI (golangci-lint-action@v9). This applies to all of feature 211's Go `service`/`test` steps.
+
+### 2026-09-27 — Step 6 P/E for non-USD filers narrowed to nil (in-file scope)
+- The spec's Step-6 P/E rule has a "use the USD-unit EPS when present" branch for a non-USD filer. Step 2 stashed only `stockholders_equity_usd`, not an `eps_usd`, so within Step 6's stated file scope (`marketdata_service.go` only) the P/E is set only when `Currency == "USD"`, else nil (missing) — honest, no cross-currency divide, preserves @AC-22. P/B is unaffected (uses the stashed USD equity). A follow-up could stash `eps_usd` in the edgar aggregator to enable non-USD P/E.
 
 ### 2026-09-26 — Step 4 D/E tag allow-list: IFRS tags omitted (spec-sanctioned, C-18)
 - Per the spec's Step-4 Codebase Evidence, all three acceptance filers (BABA/AXP/AAPL) report under `us-gaap`; the design's guessed `ifrs-full:*` allow-list is unnecessary and omitted (YAGNI — a future non-us-gaap filer is a separate feature).

@@ -1661,9 +1661,26 @@ func (s *MarketDataService) priceJoin(ctx context.Context, p *source.HistoricalF
 		mc := price * (*p.SharesOutstanding)
 		p.MarketCap = &mc
 	}
-	if ttmEPS != nil && *ttmEPS > 0 {
+	// P/E currency rule (feature 211, FR-3): the close is USD, so ttm-EPS must be USD too. Native EPS
+	// is USD only for a USD-currency filer; for a non-USD filer we hold no USD EPS fact, so leave P/E
+	// nil (→ missing_metrics) rather than divide across currencies (@AC-22 — no fabrication).
+	if ttmEPS != nil && *ttmEPS > 0 && p.Currency == "USD" {
 		pe := price / *ttmEPS
 		p.PERatio = &pe
+	}
+	// P/B currency-consistent (feature 211, FR-3/@AC-4): USD market_cap / USD equity. Prefer the
+	// USD-unit equity stashed at ingest (a dual-reporting filer, e.g. BABA); else native equity when
+	// the row currency is already USD; else nil (no FX conversion).
+	if p.MarketCap != nil {
+		if eqUSD, ok := p.ExtraMetrics["stockholders_equity_usd"]; ok && eqUSD > 0 {
+			pb := *p.MarketCap / eqUSD
+			p.PBRatio = &pb
+		} else if p.Currency == "USD" {
+			if eq, ok := p.ExtraMetrics["stockholders_equity"]; ok && eq > 0 {
+				pb := *p.MarketCap / eq
+				p.PBRatio = &pb
+			}
+		}
 	}
 }
 

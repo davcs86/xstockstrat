@@ -285,3 +285,21 @@ Executing on `claude/pending-roadmap-features-9z01mn`; integration via shared PR
 - @AC-2 wording corrected to real FY2026 figures (signed off, above). Added tests: BABA financial-debt D/E ~0.053 (@AC-2), AXP ~1.73 < de_bad 2.0 non-zero (@AC-3), AAPL no-double-count total_debt=98,657M (~1.34), no-debt-tag→nil. `go test ./internal/edgar/...` green; vet + gofmt clean.
 - Files: `services/xstockstrat-marketdata/internal/edgar/edgar_client_test.go`, `docs/roadmap/features/211-edgar-fundamentals-enrichment/acceptance.feature`
 - Deviations: golangci-lint→go vet/gofmt fallback (Deviation Log).
+
+## Session 2026-09-26 — sdd-execute (211 progress checkpoint after Step 5)
+**Steps this session**: 1, 2, 3, 4, 5 (all done, committed + pushed, edgar suite green)
+**Progress**: 5 done / 16 total
+**Committed**: 5c7b151 (step1 migration) · 005cfc1 (steps2-3 currency) · 764c828 (steps4-5 D/E)
+**Gates cleared**: @AC-2 wording sign-off (real FY2026 figures) recorded above.
+**Remaining (6–16)**: Step 6/7 currency-consistent P/B + P/E fix in `priceJoin` (marketdata_service.go:1630) + tests; Step 8/9 Alpaca dividend feed (client.go) + repo UpsertDividends/SumDividendsInWindow (marketdata_repo.go) + T12M yield, **with @AC-5 fallback+audit-log per operator decision** (no live entitlement here; fake-source tests); Step 10/11 EDGAR-canonical snapshot dispatch + FR-8 disable-safety (marketdata_service.go GetFundamentals ~1268) + tests; Step 12 config seed migration `030_marketdata_edgar_snapshot_keys` (5 keys); Step 13/14 UI data-explorer currency/source/CSV + Playwright; Step 15 marketdata acceptance suite (@feature-211, C-16); Step 16 docs (CLAUDE.md config keys + design-correction) + teardown.
+**Resume**: `/sdd-execute 211-edgar-fundamentals-enrichment sequential` (or `next`) — re-reads this context. Shared branch `claude/pending-roadmap-features-9z01mn`, integration PR #1191.
+**Next**: Step 6 (priceJoin P/B — uses `stockholders_equity_usd` stashed in Step 2 for currency-consistent market_cap/equity).
+
+### Step 6 — service: currency-consistent P/B + P/E fix (FR-3, FR-7) [done]
+- In `priceJoin` (marketdata_service.go): P/B = USD market_cap / USD equity — prefer `ExtraMetrics["stockholders_equity_usd"]` (dual-report filer), else native equity when Currency==USD, else nil (no FX). P/E now guarded to Currency==USD (USD close / USD native EPS), else nil.
+- Files: `services/xstockstrat-marketdata/internal/service/marketdata_service.go`
+- Deviation: the spec's "use USD-unit EPS when present for a non-USD filer" P/E branch is narrowed to nil-when-non-USD, because Step 2 stashed only stockholders_equity_usd (not eps_usd); this stays within Step 6's marketdata_service.go file scope and is honest (no FX). A future eps_usd stash could enable non-USD P/E. Recorded in Deviation Log.
+
+### Step 7 — test: PIT P/B unit tests, no look-ahead (@AC-4) [done]
+- Added priceJoin tests (fake histRepo): P/B from USD equity + no-look-ahead (only filed_date queried) (@AC-4), P/B nil when non-USD filer lacks USD equity, P/E USD-only currency rule. `go test ./internal/service/...` green; vet + gofmt clean.
+- Files: `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go`
