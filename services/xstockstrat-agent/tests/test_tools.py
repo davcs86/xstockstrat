@@ -2,9 +2,12 @@
 
 import base64
 import json
+import logging
+import socket
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpcore
 import httpx
 import pytest
 import respx
@@ -239,7 +242,10 @@ async def test_extract_email_content_text_attachment():
 @pytest.mark.asyncio
 async def test_extract_website_content_fetches_url():
     """extract_website_content fetches the URL from config_json.url."""
-    with patch.object(client, "list_signal_sources", AsyncMock(return_value=_SOURCES)):
+    with (
+        patch.object(client, "list_signal_sources", AsyncMock(return_value=_SOURCES)),
+        patch.object(client, "get_config_value", AsyncMock(return_value=None)),
+    ):
         with respx.mock(base_url="https://example.com") as site_mock:
             site_mock.get("/").mock(return_value=httpx.Response(200, text="NVDA: strong buy"))
             server = _make_server()
@@ -265,7 +271,10 @@ async def test_extract_website_content_sends_request_headers():
             "has_credentials": False,
         },
     ]
-    with patch.object(client, "list_signal_sources", AsyncMock(return_value=sources_with_headers)):
+    with (
+        patch.object(client, "list_signal_sources", AsyncMock(return_value=sources_with_headers)),
+        patch.object(client, "get_config_value", AsyncMock(return_value=None)),
+    ):
         with respx.mock(base_url="https://example.com") as site_mock:
             route = site_mock.get("/").mock(
                 return_value=httpx.Response(200, text="<entry>8-K</entry>")
@@ -1945,3 +1954,190 @@ async def test_list_opportunities_pagination_params():
         )
     assert result == projected
     assert m.call_args.args == ("u-1", 0.0, 25, "50")
+
+
+# ── SSRF egress hardening (feature 207) — extract_* fetch path ────────────────
+#
+# respx patches AsyncHTTPTransport.handle_async_request, so it intercepts the pinned client ABOVE
+# the connection-layer pin — happy-path + app-layer redirect-loop assertions use respx; the actual
+# IP-pin block tests skip respx and monkeypatch the resolver + held inner backend instead.
+
+
+def _website_source(slug: str, url: str, *, has_credentials: bool = False) -> list[dict]:
+    return [
+        {
+            "slug": slug,
+            "display_name": slug.upper(),
+            "source_type": "mediated_simple_website",
+            "config_json": {"url": url},
+            "has_credentials": has_credentials,
+            "reliability_weight": 1.0,
+        }
+    ]
+
+
+def _patch_resolver(monkeypatch, ip: str, port: int) -> None:
+    """Force getaddrinfo (as app.egress sees it) to one address — deterministic, no network."""
+    monkeypatch.setattr(
+        socket,
+        "getaddrinfo",
+        lambda *a, **k: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (ip, port))],
+    )
+
+
+def _patch_inner_connect(monkeypatch) -> AsyncMock:
+    """Replace the held AnyIOBackend.connect_tcp so no real socket opens; assert not-called."""
+    inner = AsyncMock()
+    monkeypatch.setattr(httpcore.AnyIOBackend, "connect_tcp", inner)
+    return inner
+
+
+@pytest.mark.asyncio
+async def test_extract_website_blocks_cloud_metadata(monkeypatch, caplog):
+    """AC-1: a fetch to the cloud-metadata address is blocked before any socket opens."""
+    _patch_resolver(monkeypatch, "169.254.169.254", 80)
+    inner = _patch_inner_connect(monkeypatch)
+    sources = _website_source("meta", "http://169.254.169.254/latest/meta-data/iam/")
+    with (
+        patch.object(client, "list_signal_sources", AsyncMock(return_value=sources)),
+        patch.object(client, "get_config_value", AsyncMock(return_value=None)),
+    ):
+        server = _make_server()
+        with caplog.at_level(logging.WARNING):
+            with pytest.raises(RuntimeError):
+                await _tool_fn(server, "extract_website_content")(source_slug="meta")
+    inner.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "url,ip,port",
+    [
+        ("http://10.0.0.5:50060/", "10.0.0.5", 50060),
+        ("http://127.0.0.1:50051/", "127.0.0.1", 50051),
+    ],
+)
+async def test_extract_website_blocks_rfc1918_and_loopback(monkeypatch, url, ip, port):
+    """AC-2: RFC1918 and loopback targets are refused before any socket is opened."""
+    _patch_resolver(monkeypatch, ip, port)
+    inner = _patch_inner_connect(monkeypatch)
+    sources = _website_source("internal", url)
+    with (
+        patch.object(client, "list_signal_sources", AsyncMock(return_value=sources)),
+        patch.object(client, "get_config_value", AsyncMock(return_value=None)),
+    ):
+        server = _make_server()
+        with pytest.raises(RuntimeError):
+            await _tool_fn(server, "extract_website_content")(source_slug="internal")
+    inner.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_extract_email_blocks_internal_url(monkeypatch):
+    """AC-2: the email extract path (urls=[...]) is hardened by the same _fetch_url gate."""
+    _patch_resolver(monkeypatch, "10.0.0.5", 50060)
+    inner = _patch_inner_connect(monkeypatch)
+    with (
+        patch.object(client, "list_signal_sources", AsyncMock(return_value=_SOURCES)),
+        patch.object(client, "get_config_value", AsyncMock(return_value=None)),
+    ):
+        server = _make_server()
+        with pytest.raises(RuntimeError):
+            await _tool_fn(server, "extract_email_content")(
+                source_slug="s1", urls=["http://10.0.0.5:50060/"]
+            )
+    inner.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_extract_website_blocks_redirect_to_internal():
+    """AC-5: a 302 to an internal literal-IP host is re-validated and not followed."""
+    sources = _website_source("pub", "https://public.example.com/r")
+    with (
+        patch.object(client, "list_signal_sources", AsyncMock(return_value=sources)),
+        patch.object(client, "get_config_value", AsyncMock(return_value=None)),
+    ):
+        with respx.mock(assert_all_called=False) as m:
+            first = m.get("https://public.example.com/r").mock(
+                return_value=httpx.Response(302, headers={"location": "http://169.254.169.254/"})
+            )
+            meta = m.get("http://169.254.169.254/").mock(
+                return_value=httpx.Response(200, text="SECRET-METADATA")
+            )
+            server = _make_server()
+            with pytest.raises(RuntimeError):
+                await _tool_fn(server, "extract_website_content")(source_slug="pub")
+    assert first.called
+    assert not meta.called  # redirect to the metadata host was not followed
+
+
+@pytest.mark.asyncio
+async def test_blocked_fetch_does_not_leak_and_is_recorded(monkeypatch, caplog):
+    """AC-7: the caller-facing error and the audit record carry no host/IP/port detail."""
+    _patch_resolver(monkeypatch, "10.0.0.5", 50060)
+    _patch_inner_connect(monkeypatch)
+    sources = _website_source("int", "http://10.0.0.5:50060/admin")
+    with (
+        patch.object(client, "list_signal_sources", AsyncMock(return_value=sources)),
+        patch.object(client, "get_config_value", AsyncMock(return_value=None)),
+    ):
+        server = _make_server()
+        with caplog.at_level(logging.WARNING, logger="app.tools"):
+            with pytest.raises(RuntimeError) as exc:
+                await _tool_fn(server, "extract_website_content")(source_slug="int")
+    for leak in ("10.0.0.5", "50060", "admin"):
+        assert leak not in str(exc.value)
+    records = [r.getMessage() for r in caplog.records if "egress blocked" in r.getMessage()]
+    assert records, "FR-6 audit record was not emitted"
+    for rec in records:
+        for leak in ("10.0.0.5", "50060", "admin"):
+            assert leak not in rec
+
+
+@pytest.mark.asyncio
+async def test_extract_website_enforces_config_max_bytes():
+    """AC-8: a lowered agent.extract.max_bytes from config aborts an over-size public response."""
+    sources = _website_source("big", "https://public.example.com/big")
+
+    async def cfg(key, *, namespace, environment, user_id=""):
+        return {"extract.max_bytes": "10"}.get(key)
+
+    with (
+        patch.object(client, "list_signal_sources", AsyncMock(return_value=sources)),
+        patch.object(client, "get_config_value", cfg),
+    ):
+        with respx.mock(assert_all_called=False) as m:
+            m.get("https://public.example.com/big").mock(
+                return_value=httpx.Response(200, text="X" * 5000)
+            )
+            server = _make_server()
+            with pytest.raises(RuntimeError):
+                await _tool_fn(server, "extract_website_content")(source_slug="big")
+
+
+@pytest.mark.asyncio
+async def test_extract_website_enforces_config_max_redirects():
+    """AC-8: a lowered agent.extract.max_redirects=0 refuses even one (same-origin) redirect."""
+    sources = _website_source("red", "https://public.example.com/r")
+
+    async def cfg(key, *, namespace, environment, user_id=""):
+        return {"extract.max_redirects": "0"}.get(key)
+
+    with (
+        patch.object(client, "list_signal_sources", AsyncMock(return_value=sources)),
+        patch.object(client, "get_config_value", cfg),
+    ):
+        with respx.mock(assert_all_called=False) as m:
+            first = m.get("https://public.example.com/r").mock(
+                return_value=httpx.Response(
+                    302, headers={"location": "https://public.example.com/final"}
+                )
+            )
+            final = m.get("https://public.example.com/final").mock(
+                return_value=httpx.Response(200, text="OK")
+            )
+            server = _make_server()
+            with pytest.raises(RuntimeError):
+                await _tool_fn(server, "extract_website_content")(source_slug="red")
+    assert first.called
+    assert not final.called  # redirect budget of 0 refused the hop

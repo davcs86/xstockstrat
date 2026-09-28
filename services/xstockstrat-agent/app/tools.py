@@ -55,18 +55,19 @@ Also registers one MCP prompt (feature 197), via register_prompts():
 import base64
 import csv
 import io
+import ipaddress
 import json
 import logging
 import uuid
 from pathlib import Path
 from typing import Literal
-from urllib.parse import quote
+from urllib.parse import quote, urljoin, urlparse
 
 import grpc
 from mcp.server.mcpserver import Context, MCPServer
 from mcp.types import EmbeddedResource, TextContent, TextResourceContents
 
-from app import backtest_view, client
+from app import backtest_view, client, egress
 from app.scopes import MCP_CLAIMS_SCOPE_KEY, resolve_scope, roles_to_access_scope
 
 _ALERT_THRESHOLD_DEFAULT = 0.6
@@ -2223,19 +2224,101 @@ def _extract_from_bytes(data: bytes, password: str | None = None) -> str:
             raise ValueError(f"Cannot extract text from attachment: {e}") from e
 
 
+def _same_origin(a: str, b: str) -> bool:
+    """Same-origin for credential-strip purposes, mirroring httpx (`_client.py:552-569`).
+
+    Same host + scheme + effective port, OR an HTTP→HTTPS upgrade on the same host (httpx keeps
+    credentials across that upgrade). Anything else is cross-origin: drop Authorization/Cookie.
+    """
+    pa, pb = urlparse(a), urlparse(b)
+    if pa.hostname != pb.hostname:
+        return False
+
+    def _port(p: object) -> int:
+        return p.port or (443 if p.scheme == "https" else 80)  # type: ignore[attr-defined]
+
+    if pa.scheme == pb.scheme and _port(pa) == _port(pb):
+        return True
+    return pa.scheme == "http" and pb.scheme == "https"
+
+
+async def _extract_policy(key: str, default: float, cast: type) -> float:
+    """Read one `agent.extract.*` policy scalar from config (F-07), falling back to `default` only
+    on a read failure or an absent/unparseable value. No key/value is logged (FR-6)."""
+    try:
+        raw = await client.get_config_value(key, namespace="agent", environment=resolve_scope(""))
+    except Exception:
+        log.warning("extract policy read failed; using safe default")
+        return default
+    if raw is None:
+        return default
+    try:
+        return cast(raw)
+    except (TypeError, ValueError):
+        return default
+
+
 async def _fetch_url(
     url: str, password: str | None = None, headers: dict[str, str] | None = None
 ) -> str:
-    """Fetch URL content. For authenticated sources, passes password as Bearer token.
-    headers: optional extra request headers; Authorization from password wins.
-    Returns raw text."""
-    import httpx  # noqa: PLC0415
+    """Fetch URL content through the SSRF-hardened egress path (feature 207).
+
+    Deny-by-range IP validation + DNS-rebind pin (via `egress.build_pinned_client`), an http/https
+    scheme gate (pre-request and per redirect hop), a manual bounded redirect loop that strips
+    cross-origin credentials, and a streamed byte cap. Limits are config-sourced (agent.extract.*).
+    For authenticated sources, `password` becomes a Bearer token; Authorization from password wins.
+    Returns raw text. On any egress refusal, raises a generic error with no internal target detail.
+    """
+    max_redirects = int(await _extract_policy("extract.max_redirects", 5, int))
+    max_bytes = int(await _extract_policy("extract.max_bytes", 5_000_000, int))
+    connect_timeout = await _extract_policy("extract.connect_timeout_seconds", 10.0, float)
+    read_timeout = await _extract_policy("extract.read_timeout_seconds", 30.0, float)
 
     headers = {str(k): str(v) for k, v in (headers or {}).items()}
     if password:
         headers["Authorization"] = f"Bearer {password}"
 
-    async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as c:
-        r = await c.get(url, headers=headers)
-        r.raise_for_status()
-        return r.text
+    try:
+        egress.assert_allowed_scheme(urlparse(url).scheme)  # FR-3 pre-request
+        http = egress.build_pinned_client(
+            connect_timeout=connect_timeout, read_timeout=read_timeout
+        )
+        async with http:
+            current_url = url
+            redirects_left = max_redirects
+            while True:
+                async with http.stream("GET", current_url, headers=headers) as r:
+                    if r.status_code // 100 == 3 and "location" in r.headers:
+                        if redirects_left <= 0:
+                            raise egress.EgressBlocked("too many redirects")
+                        redirects_left -= 1
+                        next_url = urljoin(current_url, r.headers["location"])
+                        egress.assert_allowed_scheme(urlparse(next_url).scheme)  # per-hop FR-3
+                        # @AC-5: reject a non-public redirect target before following. A literal-IP
+                        # host is checked here; a hostname is validated by the connect pin (Step 3).
+                        _next_host = urlparse(next_url).hostname or ""
+                        try:
+                            ipaddress.ip_address(_next_host)
+                        except ValueError:
+                            pass
+                        else:
+                            egress.assert_public_ip(_next_host)
+                        # A cross-origin hop drops password-derived credentials (mirrors httpx).
+                        if not _same_origin(current_url, next_url):
+                            for h in ("Authorization", "Cookie", "cookie", "Host", "host"):
+                                headers.pop(h, None)
+                        current_url = next_url
+                        continue
+                    r.raise_for_status()
+                    total = 0
+                    chunks: list[bytes] = []
+                    async for chunk in r.aiter_bytes():
+                        total += len(chunk)
+                        if total > max_bytes:
+                            raise egress.EgressBlocked("response too large")
+                        chunks.append(chunk)
+                    return b"".join(chunks).decode(r.charset_encoding or "utf-8", errors="replace")
+    except egress.EgressBlocked as e:
+        # FR-6: static reason code only (never url/host/IP/port), generic caller-facing error.
+        log.warning("extract egress blocked (reason=%s)", e.args[0] if e.args else "blocked")
+        raise RuntimeError("content fetch refused by egress policy") from None

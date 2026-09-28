@@ -192,6 +192,10 @@ its docstring for the read signature and oneof-stringify behavior.
 | `agent.oauth.registration_enabled` | bool | `true` | Allow RFC 7591 DCR at `/oauth/register` (disabled ⇒ 403) |
 | `agent.oauth.allowed_redirect_uris` | string | `""` | Comma-separated exact redirect URIs; empty = require `https://` at registration only |
 | `agent.signal.alert_threshold` | float | `0.6` | Conviction threshold above which `ingest_signal` auto-emits an alert (feature 093 — was env-blind, so effectively always the default; now env-scoped, best-effort) |
+| `agent.extract.max_redirects` | int | `5` | Max redirect hops the `extract_*` fetch path follows; each hop's scheme + resolved address is re-validated (SSRF hardening, feature 207) |
+| `agent.extract.max_bytes` | int | `5000000` | Max response body bytes read before the `extract_*` fetch aborts (feature 207) |
+| `agent.extract.connect_timeout_seconds` | float | `10.0` | Connect timeout for the `extract_*` fetch (feature 207) |
+| `agent.extract.read_timeout_seconds` | float | `30.0` | Read timeout for the `extract_*` fetch (feature 207) |
 
 ## Environment Variables
 

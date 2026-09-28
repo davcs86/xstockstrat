@@ -102,6 +102,21 @@ without this convention, both look identical (fails.md 2026-07-01).
 
 Append-only log — one entry per feature that registered new keys. Newest first. Don't edit past entries; superseding a key's behavior gets a new entry, not a rewrite of the old one.
 
+### feature 207 — extract-tool-ssrf-hardening (`xstockstrat-agent`)
+
+Adds **4** non-secret `agent.extract.*` keys, **consumed-with-default** (no seed migration — read
+best-effort via `client.get_config_value` with a code fallback, mirroring the feature-049 `agent.oauth.*`
+and feature-093 `agent.signal.*` pattern). They parameterize the SSRF-hardened `extract_*` fetch path
+(`app/tools.py` `_fetch_url`); the deny-by-range IP policy itself is **stdlib-derived, not a config key**
+(design decision — no CIDR key). Defaults declared in `services/xstockstrat-agent/CLAUDE.md` § Config
+Keys Consumed (C-05); the authoritative value comes from config when present (F-07 / @AC-8):
+
+- `agent.extract.max_redirects` (int, `5`) — max redirect hops the fetch follows; each hop's scheme +
+  resolved address is re-validated.
+- `agent.extract.max_bytes` (int, `5000000`) — max response body bytes read before the fetch aborts.
+- `agent.extract.connect_timeout_seconds` (float, `10.0`) — connect timeout.
+- `agent.extract.read_timeout_seconds` (float, `30.0`) — read timeout.
+
 ### feature 211 — edgar-fundamentals-enrichment (`xstockstrat-marketdata` / `xstockstrat-config`)
 
 Registers **5** non-secret `marketdata.*` keys via **seed migration `030_marketdata_edgar_snapshot_keys`**
