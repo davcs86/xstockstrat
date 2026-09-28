@@ -141,3 +141,22 @@
 - [ ] Promotion of @feature-214 absence-scenarios into services/xstockstrat-agent/acceptance/ MUST land in the integration PR (C-16) — target: **Step 11**.
 - [ ] Re-derive 43 tool count + direct-backend budget total (9→8) against main-dev at execute-time — target: **Steps 1/2 (count), Steps 8/9 (budget)**.
 - [ ] External repo secrets DEV_/PROD_POSTGRES_MCP_AGENT_PASSWORD need operator out-of-band removal (harmless if left) — noted in **Step 7** instructions + **Step 12** runbook.
+
+## Session 2026-09-28 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 4 warnings (advisory — did not block). No Floor breach. Criteria PASS WITH
+  WARNINGS; overlap WARN-only (file-path soft/rebase, no migration/proto/config FAIL; merge-order 214
+  row already accurate).
+- **All 4 warnings RESOLVED in the spec before execution** (operator standing rule: address advisory
+  warnings before moving forward):
+  - [x] Steps 4, 6 (test-only) omitted an explicit `--cov-fail-under` gate → added the service-wide
+    `pytest --cov=app --cov-fail-under=40` gate to each.
+  - [x] Step 8 (test) covered Step 9 (budget service edit) but was numbered before it (numeric-order
+    execution would assert total==8 while CLAUDE.md still said 9) → **swapped Steps 8↔9** so both
+    service edits (7 deploy, 8 budget) precede the covering test (9). Updated Step Dependencies,
+    Scenario Coverage (AC-3/AC-4/AC-6), Step 7 "proven by", and the new Step 9 coverage gate.
+  - [x] Trivial line-count notes (test_dep_smoke "21 lines") — immaterial; execute-time re-confirm greps already handle exact boundaries.
+- Overlap findings: WARN-only — soft/rebase overlaps with 084 (compose/app-specs/deploy workflows,
+  no impl-spec yet) and 217 (tools.py/mcp-tools.md/agent CLAUDE.md, disjoint regions). Second-lander
+  rebases; merge-order.md needs no change.
+- Nothing carried into execution as `[ ] unaddressed`.

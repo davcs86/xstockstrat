@@ -35,10 +35,10 @@ legitimately survives in the removal record, the new runbook, and git history.
 |---|---|
 | AC-1 (no `db_` tool advertised; count 43) | Step 2 (name-set test), Step 11 (promoted `@feature-214` scenario) |
 | AC-2 (no co-process / wiring / SSE path) | Step 4 (dep-smoke), Step 6 (supervisord conf), Step 11 |
-| AC-3 (no direct DB conn; budget row + total; dead `db-migrate.sh` block) | Step 8 (budget asserts) covers Step 9 |
-| AC-4 (all inventory surfaces agree on 43) | Step 2 (executable name-set guard), Step 8 (budget), Step 10 (prose mirrors) |
+| AC-3 (no direct DB conn; budget row + total; dead `db-migrate.sh` block) | Step 8 (budget/`db-migrate.sh` edit), Step 9 (budget asserts) |
+| AC-4 (all inventory surfaces agree on 43) | Step 2 (executable name-set guard), Step 9 (budget), Step 10 (prose mirrors) |
 | AC-5 (out-of-band runbook; no SQL-MCP anywhere) | Step 12 (runbook), Step 2 (absence guard) |
-| AC-6 (prompt-injected agent has no SQL path) | Step 2 (no tool) + Step 6 (no co-process) + Step 8 (no credential) + Step 11 (promoted `@AC-6`) |
+| AC-6 (prompt-injected agent has no SQL path) | Step 2 (no tool) + Step 6 (no co-process) + Step 7 (no credential in env) + Step 11 (promoted `@AC-6`) |
 | AC-7 (169 suite deleted; 214 guarantees promoted) | Step 11 |
 
 ### Consumer-surface coverage (C-14)
@@ -59,9 +59,10 @@ proven by **Step 2** (name-set no longer advertises them). **UI** is touched onl
   leave; GREEN after Step 4 deletes them.
 - Step 6 [test] covers Step 5 [service] (supervisord) — RED: `test_supervisord_conf.py`'s four
   `postgres-mcp` asserts fail once the block is gone; GREEN after Step 6 inverts to assert its absence.
-- Step 8 [test] covers Step 7 [service] (deploy wiring) **and** Step 9 [service] (budget) — RED: the
+- Step 9 [test] covers Step 7 [service] (deploy wiring) **and** Step 8 [service] (budget) — RED: the
   six `POSTGRES_MCP_*` presence asserts + `test_claude_md_has_agent_role_in_budget` +
-  `test_claude_md_direct_total_is_nine` fail once Steps 7/9 land; GREEN after Step 8 drops/inverts them.
+  `test_claude_md_direct_total_is_nine` fail once Steps 7/8 land; GREEN after Step 9 drops/inverts them.
+  Natural numeric order (Steps 7, 8 [service] → Step 9 [test]) matches the dependency — no out-of-order execution required.
 - Step 3 (deps) must follow Step 1 (`sqlglot`/`httpx2` are only orphaned once `_is_destructive` and
   `postgres_mcp_client.py` are gone).
 - Step 11 (C-16 delete-and-promote) SHOULD run after Steps 1/5/7 so the promoted `@feature-214`
@@ -234,6 +235,7 @@ proven by **Step 2** (name-set no longer advertises them). **UI** is touched onl
   `test_supervisor_importable` runs (`grep -c "def test_" tests/test_dep_smoke.py` → 1).
 - `grep -n "sqlglot\|httpx2\|postgres-mcp" services/xstockstrat-agent/tests/test_dep_smoke.py` → no output.
 - Lint: `cd services/xstockstrat-agent && ruff check tests/test_dep_smoke.py`
+- Service-wide coverage gate holds after the removal: `cd services/xstockstrat-agent && pytest --cov=app --cov-fail-under=40` → passes (agent CI threshold 40%).
 
 ---
 
@@ -306,6 +308,7 @@ GREEN after Step 5 — sequence Step 5 before Step 6.
 - `grep -n "has_section(\"program:postgres-mcp\")" services/xstockstrat-agent/tests/test_supervisord_conf.py`
   → only the inverted `not ...` assertion.
 - Lint: `cd services/xstockstrat-agent && ruff check tests/test_supervisord_conf.py`
+- Service-wide coverage gate holds: `cd services/xstockstrat-agent && pytest --cov=app --cov-fail-under=40` → passes (agent CI threshold 40%).
 
 ---
 
@@ -340,7 +343,7 @@ GREEN after Step 5 — sequence Step 5 before Step 6.
   (`YOUR_DEV_/YOUR_PROD_POSTGRES_MCP_AGENT_PASSWORD`). The input is `required: false` and callers pass by
   name, so caller-first removal has no broken intermediate (design.md, adversary round 1).
 
-**TDD**: `red-green required` (verified by Step 8's static-file assertions + grep)
+**TDD**: `red-green required` (verified by Step 9's static-file assertions + grep)
 
 **Covers**: —
 
@@ -362,11 +365,54 @@ GREEN after Step 5 — sequence Step 5 before Step 6.
 **Verification**:
 - `grep -rn "POSTGRES_MCP" docker-compose.yml .do/app.yaml .do/app.dev.yaml .github/workflows/deploy.yml .github/workflows/deploy-dev.yml .github/workflows/deploy-prod.yml` → **no output**.
 - `python3 -c "import yaml; yaml.safe_load(open('.do/app.yaml')); yaml.safe_load(open('.do/app.dev.yaml'))"` → parses cleanly (no dangling keys).
-- Proven by Step 8 (`test_deployment_env_vars.py`).
+- Proven by Step 9 (`test_deployment_env_vars.py`).
 
 ---
 
-### Step 8 — test: Drop the `POSTGRES_MCP_*` presence asserts and invert the budget asserts
+### Step 8 — service: Delete the dead `xstockstrat_agent` role-provisioning block and the pool-budget row
+
+**Status**: `pending`
+**Service**: `xstockstrat-agent` (DB tooling + root governance)
+**Files**:
+- `scripts/db-migrate.sh` — modify
+- `CLAUDE.md` (root) — modify
+
+**Reviewers**: Platform Lead — connection-budget + service-registry consistency (shell-block deletion reviewed under the platform-lead deployment gate, per product spec); Security — dead DB-role provisioning removed
+
+**Codebase Evidence**:
+- `scripts/db-migrate.sh` — the `xstockstrat_agent role provisioning (feature 169)` block spans the
+  comment header `:169` through the closing `fi` + trailing `echo ""` (~:169-205): gate
+  `if [ "${COMMAND}" = "up" ] && [ -n "${POSTGRES_MCP_AGENT_PASSWORD:-}" ]; then` `:178`,
+  `CREATE ROLE xstockstrat_agent` `:186`, grants `:191-199`, `[skip]` else-branch `:203`. Dead:
+  the password env was never set in live envs, so the `[skip]` path always ran → **no live-DB role exists to drop** (F-01 N/A — shell block, not an applied `.up.sql`).
+- Root `CLAUDE.md`: budget row `| xstockstrat-agent (postgres-mcp) | Python | direct \`:25060\` | 1 | ...(feature 169) |` `:238`;
+  `| **Direct backend total** | | | **9** | ... |` `:239`.
+- `test_deployment_env_vars.py:59-64` pins the direct total (`9` → `8`) and `:51-56` the agent role row.
+
+**TDD**: `N/A (infra script + governance doc — budget change covered by the paired test Step 9; the db-migrate.sh block deletion is a shell edit verified by grep)`
+
+**Covers**: —
+
+**Instructions**:
+1. In `scripts/db-migrate.sh`, delete the whole `xstockstrat_agent` provisioning block: the
+   `# ── xstockstrat_agent role provisioning (feature 169) ──` comment header (`:169`) and its preceding
+   blank-line/`echo ""` separator down through the closing `fi` and its trailing `echo ""` (~:205).
+   Re-confirm exact boundaries at execute-time (`grep -n "xstockstrat_agent role provisioning\|\[skip\] xstockstrat_agent" scripts/db-migrate.sh`).
+2. In root `CLAUDE.md`, delete the `xstockstrat-agent (postgres-mcp)` budget row (`:238`) and change the
+   **Direct backend total** from `9` to `8` (`:239`), after re-deriving the total against `main-dev`.
+   Also scan the surrounding pool-budget prose for any "9 direct" / "~14" effective-usage figure that
+   references the removed slot and re-derive it consistently (the "~9 direct + ≤5 pool = ~14" line
+   becomes "~8 direct + ≤5 pool = ~13").
+
+**Verification**:
+- `grep -n "xstockstrat_agent\|POSTGRES_MCP_AGENT_PASSWORD" scripts/db-migrate.sh` → no output.
+- `bash -n scripts/db-migrate.sh` → parses (no syntax error from an unbalanced `if/fi`).
+- `grep -n "xstockstrat-agent (postgres-mcp)" CLAUDE.md` → no output; the `Direct backend total` row shows `8`.
+- Proven by Step 9 budget asserts.
+
+---
+
+### Step 9 — test: Drop the `POSTGRES_MCP_*` presence asserts and invert the budget asserts
 
 **Status**: `pending`
 **Service**: `xstockstrat-agent`
@@ -394,56 +440,16 @@ GREEN after Step 5 — sequence Step 5 before Step 6.
 3. Rename/retarget `test_claude_md_direct_total_is_nine` → assert the direct-backend total is **8**
    (re-derive against `main-dev` at execute-time). Update the docstrings (AC-4/AC-10/AC-11 → AC-3/AC-4).
 
-**TDD note**: both inverted asserts are RED against the pre-Steps-7/9 tree and GREEN after — sequence
-Steps 7 and 9 before Step 8.
+**TDD note**: this test covers **both** Step 7 (deploy wiring) and Step 8 (budget). Both inverted
+asserts are RED against the pre-Steps-7/8 tree and GREEN after — the natural numeric order (Steps 7
+and 8 [service] before Step 9 [test]) now matches the dependency, so no out-of-order execution is
+required.
 
 **Verification**:
 - `cd services/xstockstrat-agent && pytest tests/test_deployment_env_vars.py -q` → passes.
 - `grep -n "POSTGRES_MCP" services/xstockstrat-agent/tests/test_deployment_env_vars.py` → no output.
 - Lint: `cd services/xstockstrat-agent && ruff check tests/test_deployment_env_vars.py`
-
----
-
-### Step 9 — service: Delete the dead `xstockstrat_agent` role-provisioning block and the pool-budget row
-
-**Status**: `pending`
-**Service**: `xstockstrat-agent` (DB tooling + root governance)
-**Files**:
-- `scripts/db-migrate.sh` — modify
-- `CLAUDE.md` (root) — modify
-
-**Reviewers**: Platform Lead — connection-budget + service-registry consistency (shell-block deletion reviewed under the platform-lead deployment gate, per product spec); Security — dead DB-role provisioning removed
-
-**Codebase Evidence**:
-- `scripts/db-migrate.sh` — the `xstockstrat_agent role provisioning (feature 169)` block spans the
-  comment header `:169` through the closing `fi` + trailing `echo ""` (~:169-205): gate
-  `if [ "${COMMAND}" = "up" ] && [ -n "${POSTGRES_MCP_AGENT_PASSWORD:-}" ]; then` `:178`,
-  `CREATE ROLE xstockstrat_agent` `:186`, grants `:191-199`, `[skip]` else-branch `:203`. Dead:
-  the password env was never set in live envs, so the `[skip]` path always ran → **no live-DB role exists to drop** (F-01 N/A — shell block, not an applied `.up.sql`).
-- Root `CLAUDE.md`: budget row `| xstockstrat-agent (postgres-mcp) | Python | direct \`:25060\` | 1 | ...(feature 169) |` `:238`;
-  `| **Direct backend total** | | | **9** | ... |` `:239`.
-- `test_deployment_env_vars.py:59-64` pins the direct total (`9` → `8`) and `:51-56` the agent role row.
-
-**TDD**: `N/A (infra script + governance doc — budget change covered by Step 8; the db-migrate.sh block deletion is a shell edit verified by grep)`
-
-**Covers**: —
-
-**Instructions**:
-1. In `scripts/db-migrate.sh`, delete the whole `xstockstrat_agent` provisioning block: the
-   `# ── xstockstrat_agent role provisioning (feature 169) ──` comment header (`:169`) and its preceding
-   blank-line/`echo ""` separator down through the closing `fi` and its trailing `echo ""` (~:205).
-   Re-confirm exact boundaries at execute-time (`grep -n "xstockstrat_agent role provisioning\|\[skip\] xstockstrat_agent" scripts/db-migrate.sh`).
-2. In root `CLAUDE.md`, delete the `xstockstrat-agent (postgres-mcp)` budget row (`:238`) and change the
-   **Direct backend total** from `9` to `8` (`:239`), after re-deriving the total against `main-dev`.
-   Also scan the surrounding pool-budget prose for any "9 direct" / "~14" effective-usage figure that
-   references the removed slot and re-derive it consistently (the "~9 direct + ≤5 pool = ~14" line
-   becomes "~8 direct + ≤5 pool = ~13").
-
-**Verification**:
-- `grep -n "xstockstrat_agent\|POSTGRES_MCP_AGENT_PASSWORD" scripts/db-migrate.sh` → no output.
-- `bash -n scripts/db-migrate.sh` → parses (no syntax error from an unbalanced `if/fi`).
-- `grep -n "xstockstrat-agent (postgres-mcp)" CLAUDE.md` → no output; the `Direct backend total` row shows `8`.
-- Proven by Step 8 budget asserts.
+- Service-wide coverage gate holds: `cd services/xstockstrat-agent && pytest --cov=app --cov-fail-under=40` → passes (agent CI threshold 40%).
 
 ---
 
