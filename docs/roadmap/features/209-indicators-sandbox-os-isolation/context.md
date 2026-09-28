@@ -149,3 +149,21 @@
 - TDD: N/A (dependency/build). Verification: uv lock --check ok; pyseccomp in pyproject+uv.lock;
   libseccomp2 in Dockerfile; 0 USER lines; ruff clean. Image build deferred to CI/deploy (Docker not
   used locally). Deviations: none.
+
+### Step 2 — Rewrite sandbox.py child launch + wrapper for OS isolation [done]
+- sandbox.py: _sandbox_env += PYTHONDONTWRITEBYTECODE/HOME/TMPDIR=/nonexistent (write elimination).
+  _SANDBOX_WRAPPER rewritten: eager-import allowed modules (pre-filter) → setuid(65534) if root →
+  prctl(NO_NEW_PRIVS) → expanded rlimits (keep RLIMIT_DATA, add CPU=ceil(timeout/1000)+2,
+  NPROC=max_concurrent*16, FSIZE=0, NOFILE=64; NO RLIMIT_AS) → pyseccomp allowlist (defaction
+  ERRNO(EPERM), native-arch, module-level _SECCOMP_ALLOW) → exec(source). Parent: Popen([py,"-"],
+  stdin) + communicate (stdin delivery, no tempfile) + start_new_session; _killpg helper on timeout
+  AND in finally (load-bearing anti-orphan). execute_formula gained max_concurrent param; servicer
+  passes self._cfg.sandbox_max_concurrent() (F-07). Denial→existing runtime_error (no proto).
+- Files modified: `app/services/sandbox.py`, `app/handlers/servicer.py`
+- TDD: red-green paired with Step 3. Informal behavioral proof (live smoke, as root): benign numpy →
+  success value 2.5 (FR-4 parity); socket() → runtime_error (network contained); `import os` (not
+  allowed) → import_blocked (@AC-4 intact). Verification: ruff clean; structural greps present; no
+  setrlimit(RLIMIT_AS) (3 grep hits are explanatory prose only — INDICATORS-2 holds).
+- Deviations: none material. Note (accepted, design §3 / Open Q4 latency deferred): eager-import of ALL
+  allowed modules per run adds import latency even for a formula that uses only a subset — the spec
+  directs this (shrinks the post-import seccomp surface); acceptable tradeoff.

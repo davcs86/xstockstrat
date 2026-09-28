@@ -117,7 +117,7 @@ proof per the Dockerfile Update Workflow; if Docker is unavailable in the execut
 
 ### Step 2 — service: Rewrite `sandbox.py` child launch + wrapper for OS isolation
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/services/sandbox.py` — modify

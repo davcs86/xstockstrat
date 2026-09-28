@@ -176,6 +176,7 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
                 timeout_ms=timeout_ms,
                 memory_bytes=memory_bytes,
                 params=resolved_params,
+                max_concurrent=self._cfg.sandbox_max_concurrent(),
             )
 
         exit_reason_map = {
