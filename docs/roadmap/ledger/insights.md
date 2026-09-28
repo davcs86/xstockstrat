@@ -3401,3 +3401,26 @@ reusing.
 ### 2026-09-28 — extract-tool-ssrf-hardening — design
 - **Pattern**: For SSRF egress control in Python + httpx, DNS-rebind-safe pinning has exactly one correct seam — a custom `httpcore.AsyncNetworkBackend.connect_tcp` (resolve off-thread → reject-if-ANY-resolved-non-public → connect the pinned validated IP) wired into `httpcore.AsyncConnectionPool(network_backend=...)`; httpx's public `AsyncHTTPTransport` exposes no pin hook. Gate IPs on **`not ipaddress.is_global`** (not `is_private`, which is fail-open for CGNAT 100.64/10 and misses ipv4-mapped) with explicit loopback/link-local/metadata as defense-in-depth. `start_tls(server_hostname=...)` is separate from `connect_tcp`, so pinning the TCP IP preserves SNI.
 - **Trap (ledger sibling of fails.md:637)**: before hand-rolling redirect handling, check what the HTTP library did for you. httpx's built-in redirect engine strips `Authorization`/`Cookie` on cross-origin hops and does NOT re-check scheme; a manual redirect loop that drops the engine must *re-implement the credential strip* (or it regresses to a credential-exfil vector) while adding the per-hop scheme check the engine lacked. And never call blocking `socket.getaddrinfo` inside an async backend (event-loop stall / DoS) — use `anyio.to_thread.run_sync`. Prefer subclassing the tested transport + a fail-closed identity assertion over a from-scratch `handle_async_request` bridge (which silently drops request-extension timeout/SNI and stream-close semantics).
+
+### 2026-09-28 — extract-tool-ssrf-hardening — design
+- **Pattern**: SSRF-safe outbound HTTP in Python = pin the *connection* below httpx. Subclass
+  `httpx.AsyncHTTPTransport` and swap `self._pool._network_backend` for a custom
+  `httpcore.AsyncNetworkBackend` whose `connect_tcp` resolves off-loop (`anyio.to_thread.run_sync`),
+  validates **every** resolved A/AAAA with `not ipaddress.is_global` (+ IPv4-mapped unwrap; closes the
+  CGNAT 100.64/10 hole `is_private` misses), rejects-if-any on mixed answers, and connects the pinned IP
+  literal — killing the DNS-rebind TOCTOU. Keep `follow_redirects=False` and own a manual redirect loop
+  (per-hop scheme + literal-IP re-validation, cross-origin credential strip, streamed byte-cap).
+- **Evidence**: `services/xstockstrat-agent/app/egress.py`, `app/tools.py` `_fetch_url`; PR #1200 (207).
+- **Rule it implies**: any new caller-supplied-URL fetch path must route through `egress.build_pinned_client`
+  + the bounded redirect loop, never a bare `httpx.AsyncClient(follow_redirects=True)`.
+
+### 2026-09-28 — extract-tool-ssrf-hardening — reuse
+- **Pattern**: `respx` patches `AsyncHTTPTransport.handle_async_request`, so it intercepts a custom
+  pinning transport **above** the connection-layer pin — it cannot exercise the IP block. Split the test
+  strategy: respx for happy-path + app-layer redirect/limit assertions; monkeypatch `socket.getaddrinfo`
+  + the held `AnyIOBackend.connect_tcp` (AsyncMock, assert-not-called) for the actual IP-pin blocks. Probe
+  the wrapping first — `EgressBlocked` from `connect_tcp` propagates unwrapped (not mapped to `ConnectError`),
+  which both the `except` and the FR-6 no-leak guarantee depend on.
+- **Evidence**: `services/xstockstrat-agent/tests/test_tools.py` (SSRF section), `tests/test_egress.py`.
+- **Rule it implies**: when a security control lives below the mock library's patch point, assert it with a
+  resolver/backend monkeypatch, and verify the block exception is not silently re-wrapped by the transport.

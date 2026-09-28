@@ -1,6 +1,6 @@
 # Implementation Spec: extract-tool-ssrf-hardening
 
-**Status**: `in-progress`
+**Status**: `code-completed`
 **Created**: 2026-09-28
 **Feature**: `docs/roadmap/features/207-extract-tool-ssrf-hardening/feature.md`
 **Total Steps**: 7
@@ -383,7 +383,7 @@ then confirm the public surface exists: `grep -n "class EgressBlocked\|def asser
 
 ### Step 7 — config: Declare `agent.extract.*` keys in the service CLAUDE.md
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/CLAUDE.md` — modify (§ Config Keys Consumed table)

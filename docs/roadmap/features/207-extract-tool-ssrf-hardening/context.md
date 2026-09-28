@@ -193,3 +193,33 @@
   149 passed (test_tools + test_egress + test_tools_endpoint incl. the 43-tool C-16 guard); full suite
   `--cov=app --cov-fail-under=40` → 474 passed, egress.py 94%, tools.py 80%, total 79.60%.
 - Deviations: none beyond Step-5 DEV-3/DEV-4.
+
+### Step 7 — Declare agent.extract.* keys in service CLAUDE.md [done]
+- Added 4 rows to `services/xstockstrat-agent/CLAUDE.md` § Config Keys Consumed: agent.extract.max_redirects
+  (int, 5), max_bytes (int, 5000000), connect_timeout_seconds (float, 10.0), read_timeout_seconds (float,
+  30.0) — identical to the Step 5 fallback defaults (C-05 / @AC-8 no-drift).
+- Files modified: `services/xstockstrat-agent/CLAUDE.md`
+- TDD: N/A (docs/config declaration; behaviorally enforced by @AC-8 in Step 6).
+- Deviations: none.
+
+### Teardown (root CLAUDE.md § Teardown) — manual (context-forge plugin unavailable)
+- `/context-forge:context-constitution refresh` NOT run — the context-forge plugin/skill is not present in
+  this repo checkout (no `.claude/skills/*context*`, no plugin dir). Performed the mandated manual
+  equivalent: re-read every context file touched + reconciled behavior drift:
+  1. `services/xstockstrat-agent/CLAUDE.md` — 4 new config-key rows verified against Step 5 reads (match).
+     Extract tool contract (params/return/count 43) unchanged — no other drift.
+  2. `docs/patterns/config-governance.md` — added the newest **Per-Feature Registered Keys** entry for
+     feature 207 (4 consumed-with-default agent.extract.* keys; precedent: feature 049 agent.oauth.*). The
+     append-only log would otherwise drift (missing 207). Impl-spec Step 7 under-specified this (named only
+     the service CLAUDE.md) — recorded here as a teardown-mandated out-of-scope reconciliation.
+  3. `docs/runbooks/mcp-tools.md` — added a non-enumerating egress-refusal error row to BOTH extract tools'
+     error tables (RuntimeError "content fetch refused by egress policy"); satisfies the Step 5 reviewer's
+     "mcp-tools.md parity" note. Tool contract (name/params/return) unchanged.
+- No CLAUDE.md/constitution described `_fetch_url` internals, so no constitution/findings edits needed.
+
+## Session 2026-09-28 — code-complete summary
+- All 7 steps done; status.md → code-completed. Full agent suite: 474 passed, egress.py 94%, tools.py 80%,
+  total 79.60% (CI gate 40%). Deviations DEV-1 (AnyIOBackend held backend), DEV-2 (pool-backend swap),
+  DEV-3 (dropped unused httpx import), DEV-4 (@AC-5 app-layer literal-IP redirect re-validation) — all in
+  impl-spec Deviation Log with rationale. Zero open sdd-review impl-spec warnings ([ ] unaddressed): none
+  were carried in. Next: C-16 promotion + integration PR #1200 finalize.

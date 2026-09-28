@@ -171,6 +171,7 @@ All attachments and URLs are concatenated with double newlines.
 | `source_slug` not found or inactive | `ValueError: Unknown or inactive source slug: '<slug>'` |
 | Source requires credentials (`has_credentials=true`) | `RuntimeError: secure per-source credential resolution is not supported yet …` (feature 093 — secure resolution is a deferred follow-up) |
 | PDF is password-protected (an encrypted PDF on a `has_credentials=false` source) | `ValueError` from the PDF parser |
+| A `urls` entry targets a non-public address (RFC1918/loopback/link-local/metadata/CGNAT/…), a DNS-rebinding host, a non-http(s) scheme, or a redirect to any of those, or the response exceeds the configured size/redirect limits | `RuntimeError: content fetch refused by egress policy` (SSRF hardening, feature 207 — deliberately generic; no internal host/IP/port is leaked back to the model) |
 
 ---
 
@@ -199,6 +200,7 @@ Fetches and returns raw text from a registered website source. The URL is read f
 | `source_slug` not found or inactive | `ValueError: Unknown or inactive source slug: '<slug>'` |
 | Source has no `url` in `config_json` | `ValueError: Source '<slug>' has no url in config_json` |
 | Source requires credentials (`has_credentials=true`) | `RuntimeError: secure per-source credential resolution is not supported yet …` (feature 093) |
+| The `config_json.url` (or a redirect from it) targets a non-public address, a DNS-rebinding host, or a non-http(s) scheme, or the response exceeds the configured size/redirect limits | `RuntimeError: content fetch refused by egress policy` (SSRF hardening, feature 207 — deliberately generic; no internal host/IP/port is leaked back to the model) |
 
 ---
 
