@@ -317,7 +317,7 @@ grep -rn "skipif\|geteuid" tests/test_sandbox_isolation.py   # root-gated distin
 **Status**: `pending`
 **Service**: `docs/` + `services/xstockstrat-indicators/`
 **Files**:
-- `services/xstockstrat-indicators/CLAUDE.md` — modify (§ Sandbox Security Model)
+- `services/xstockstrat-indicators/CLAUDE.md` — modify (§ Sandbox Security Model + § Docker Build Pattern)
 - `services/xstockstrat-indicators/docs/context-constitution.md` — modify (add the new sandbox invariants)
 - `docs/runbooks/indicator-builder.md` — modify (Forbidden/limits section)
 
@@ -349,7 +349,13 @@ grep -rn "skipif\|geteuid" tests/test_sandbox_isolation.py   # root-gated distin
    denial is described as **OS-enforced** (seccomp + rlimits + distinct UID), not merely
    import-whitelist, and note formulas cannot write files (scratch aside) or open sockets even on a
    language-guard escape. Keep the config tunables table accurate (no new keys added).
-4. **Teardown (root `CLAUDE.md` § Teardown):** run `/context-forge:context-constitution refresh`
+4a. Update `services/xstockstrat-indicators/CLAUDE.md` § Docker Build Pattern to note the added
+   runtime/build system packages (`libseccomp2` runtime; `libseccomp-dev`+`gcc` build, purged after
+   `uv sync`) that Step 1 introduces, so the Dockerfile chain and its doc stay in sync (root
+   `CLAUDE.md` § Dockerfile Update Workflow). Note the single-stage `uv` *pattern* is unchanged — this
+   is a service-specific package note, not a `docs/patterns/docker-build.md` change. (Resolves the
+   impl-spec review advisory warning #1.)
+5. **Teardown (root `CLAUDE.md` § Teardown):** run `/context-forge:context-constitution refresh`
    scoped to the indicators files touched, and fix any grounded drift it reports. If the context-forge
    plugin is unavailable in the session, perform the equivalent by hand (re-read each touched context
    file against the current code, reconcile drift) and record in the PR body **both** that the plugin

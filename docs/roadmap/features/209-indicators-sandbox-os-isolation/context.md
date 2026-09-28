@@ -110,3 +110,24 @@
   as secret-exfiltration containment (env-strip + distinct-UID /proc/environ EACCES + no secrets on
   disk + write-elimination), NOT a blanket read jail (flag-filtered openat was Rejected #7). Recorded
   in the spec's Scenario Coverage note so impl-spec review sees the interpretation.
+
+## Session 2026-09-28 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 3 warnings (advisory — did not block). Criteria PASS WITH WARNINGS; every cited
+  symbol/path/line verified against the branch; plan matches design.md; C-08/P-06/C-15/C-16/F-07 all
+  satisfied; no Floor risk. Overlap scan CLEAN (no config/proto/migration/file collision; 201/205 are
+  the only other servicer.py touchers and both are launched/trunk).
+- Warnings carried into execution:
+  - Step 1/4: Dockerfile adds libseccomp packages but no step updated the service CLAUDE.md § Docker
+    Build Pattern (root Dockerfile Update Workflow) — [x] resolved: folded into Step 4 (new instruction
+    4a + Files entry) pre-execution.
+  - Step 3: 9-instruction step is dense but complete — [x] acknowledged, no action (each instruction
+    discrete/traceable; no split required).
+  - Minor line-ref drift (test_sandbox.py TestSandboxExecution :9 vs :10; omit block :39-46 vs :40-46)
+    — [x] immaterial, both resolve to the same construct; execute-time discovery re-verifies live lines.
+- Overlap findings: none. Heads-up (not a blocker): if 210 (mTLS) later specs edits to the indicators
+  Dockerfile, whichever of 209/210 merges second is a soft rebase — re-run the Mode B scan then.
+- @AC-2 interpretation (from /sdd-spec, P-03): realized as secret-exfil containment (env-strip +
+  distinct-UID /proc/environ EACCES + no on-disk secrets + write-elimination), NOT a blanket file-read
+  jail (flag-filtered openat was Rejected #7). World-readable non-secret files stay readable by design.
+  Carried into execution as the accepted AC-2 semantics.
