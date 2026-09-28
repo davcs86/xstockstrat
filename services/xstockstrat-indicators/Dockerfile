@@ -2,8 +2,16 @@ FROM python:3.13-slim
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 WORKDIR /app
+# libseccomp: libseccomp2 (runtime, kept) + libseccomp-dev/gcc (build the pyseccomp binding, purged).
+# The formula sandbox loads a seccomp-BPF filter in each child (feature 207/209 — SSRF/RCE containment).
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libseccomp2 libseccomp-dev gcc \
+    && rm -rf /var/lib/apt/lists/*
 COPY services/xstockstrat-indicators/pyproject.toml services/xstockstrat-indicators/uv.lock ./
-RUN uv sync --frozen --no-dev
+RUN uv sync --frozen --no-dev \
+    && apt-get purge -y libseccomp-dev gcc \
+    && apt-get autoremove -y \
+    && apt-get clean
 
 COPY packages/proto/gen/python /proto/gen/python
 RUN uv pip install -e /proto/gen/python

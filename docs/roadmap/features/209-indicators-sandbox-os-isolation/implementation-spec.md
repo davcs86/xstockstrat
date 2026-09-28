@@ -66,7 +66,7 @@ UI/Agent step is required — this is a decision, not an omission.
 
 ### Step 1 — service: Add `pyseccomp` dependency, lockfile, and Dockerfile `libseccomp` packages
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/pyproject.toml` — modify (add `pyseccomp` to `[project].dependencies`)

@@ -131,3 +131,21 @@
   distinct-UID /proc/environ EACCES + no on-disk secrets + write-elimination), NOT a blanket file-read
   jail (flag-filtered openat was Rejected #7). World-readable non-secret files stay readable by design.
   Carried into execution as the accepted AC-2 semantics.
+
+## Session 2026-09-28 — sdd-execute (sequential)
+
+- Tooling setup: EXECUTE SANDBOX IS ROOT (uid 0) + libseccomp.so.2 present + pyseccomp 0.1.2 installable —
+  the full seccomp + setuid(65534) + rlimit stack is verifiable LOCALLY (real green), not deferred to CI
+  (better than the spec's fails.md:369 worst case). Probe confirmed: fork→setuid(65534)+seccomp
+  ERRNO(EPERM) allowlist load → socket() blocked EPERM in nobody child.
+- Standing authorization "all the way to code + PRs" + resolved design forks = sequential-mode entry
+  confirm satisfied; running Phases 1+3 automatically, pausing only at genuine blockers/checkpoints.
+
+### Step 1 — Add pyseccomp dep + Dockerfile libseccomp packages [done]
+- pyproject.toml: added `pyseccomp>=0.1.2`; `uv lock` regenerated (uv.lock in sync, `uv lock --check` ok).
+  Dockerfile: apt install libseccomp2(runtime)+libseccomp-dev+gcc(build, purged after uv sync); no USER
+  line (root parent needed for child setuid). `.do/*` untouched (Dockerfile referenced by path).
+- Files modified: `pyproject.toml`, `uv.lock`, `Dockerfile`
+- TDD: N/A (dependency/build). Verification: uv lock --check ok; pyseccomp in pyproject+uv.lock;
+  libseccomp2 in Dockerfile; 0 USER lines; ruff clean. Image build deferred to CI/deploy (Docker not
+  used locally). Deviations: none.
