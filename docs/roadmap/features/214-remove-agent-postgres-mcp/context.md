@@ -217,3 +217,22 @@
 - Files modified: `tests/test_supervisord_conf.py`
 - TDD: RED captured after Step 5; GREEN after this step.
 - Deviations: none
+
+### Step 7 — Strip all POSTGRES_MCP_* deploy wiring (caller-first) [done]
+- deploy-dev.yml/deploy-prod.yml caller pass-throughs removed first; then deploy.yml input decl +
+  env injection + 3 substitution lines; then both components of .do/app.yaml + .do/app.dev.yaml +
+  docker-compose.yml. All 6 files: POSTGRES_MCP absent; all YAML parses; OTEL/other secrets intact.
+- Files modified: `.github/workflows/deploy.yml`, `deploy-dev.yml`, `deploy-prod.yml`, `docker-compose.yml`, `.do/app.yaml`, `.do/app.dev.yaml`
+- TDD: verified by Step 9. Deviations: none. Note: external repo secrets DEV_/PROD_POSTGRES_MCP_AGENT_PASSWORD need operator out-of-band deletion (harmless).
+
+### Step 8 — Delete dead xstockstrat_agent provisioning block + pool-budget row [done]
+- Removed the db-migrate.sh provisioning block (bash -n OK, no residual refs); deleted the
+  `xstockstrat-agent (postgres-mcp)` budget row + re-derived Direct total 9→8 and effective usage ~14→~13.
+- Files modified: `scripts/db-migrate.sh`, `CLAUDE.md` (root)
+- TDD: N/A (shell/doc) — budget covered by Step 9. Deviations: none.
+
+### Step 9 — Invert deployment-env + budget asserts [done]
+- Rewrote test_deployment_env_vars.py: assert no POSTGRES_MCP in the 3 deploy files, no
+  postgres-mcp budget row / xstockstrat_agent role, Direct total = 8. GREEN (3 passed), ruff clean.
+- Files modified: `tests/test_deployment_env_vars.py`
+- TDD: RED = 8 old asserts failed after Steps 7/8; GREEN after inversion. Deviations: none.

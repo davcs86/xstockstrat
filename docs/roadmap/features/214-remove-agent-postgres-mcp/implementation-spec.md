@@ -314,7 +314,7 @@ GREEN after Step 5 — sequence Step 5 before Step 6.
 
 ### Step 7 — service: Strip all `POSTGRES_MCP_*` deploy wiring (compose, app specs, workflows)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent` (deployment config)
 **Files**:
 - `docker-compose.yml` — modify
@@ -371,7 +371,7 @@ GREEN after Step 5 — sequence Step 5 before Step 6.
 
 ### Step 8 — service: Delete the dead `xstockstrat_agent` role-provisioning block and the pool-budget row
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent` (DB tooling + root governance)
 **Files**:
 - `scripts/db-migrate.sh` — modify
@@ -414,7 +414,7 @@ GREEN after Step 5 — sequence Step 5 before Step 6.
 
 ### Step 9 — test: Drop the `POSTGRES_MCP_*` presence asserts and invert the budget asserts
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_deployment_env_vars.py` — modify
