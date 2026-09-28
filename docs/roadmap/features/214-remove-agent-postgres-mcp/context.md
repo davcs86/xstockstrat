@@ -250,3 +250,28 @@
   absence guarantees + provenance header. Only db_ reference across all durable suites is this absence suite.
 - Files modified: `acceptance/remove-agent-postgres-mcp.feature` (del `acceptance/agent-postgres-mcp.feature`)
 - Resolves Open Thread: @feature-214 promotion landed. TDD: red-green (durable suite asserts absence). Deviations: none.
+
+### Step 12 — Out-of-band operator DB-access runbook (FR-4) [done]
+- Created docs/runbooks/operator-db-access.md (macOS/Homebrew-first; direct psql via doctl/SSH/bastion;
+  explicit "no SQL-over-MCP surface" statement; GitHub-secret cleanup note). Added docs/runbooks/CLAUDE.md index row.
+- Files modified: `docs/runbooks/operator-db-access.md` (new), `docs/runbooks/CLAUDE.md`
+- TDD: N/A (docs). Deviations: none.
+
+## Session 2026-09-28 — sdd-execute (sequential) — COMPLETE
+**Steps this session**: 1–12 (all)
+**Progress**: 12 done / 12 total
+**Stopped at**: all complete → code-completed
+**Next**: finalize integration PR #1199 + CI watch
+
+## Session 2026-09-28 — teardown (manual context-constitution reconciliation)
+- `context-forge:context-constitution` skill unavailable → performed the teardown **manually**:
+  re-grepped every touched context/pattern doc against the code.
+  - root CLAUDE.md, agent CLAUDE.md, mcp-tools.md, docs/runbooks/CLAUDE.md: clean (no stale
+    postgres-mcp/db_/52; forty-three consistent across the 3 count surfaces).
+  - **Found + fixed drift**: docs/patterns/database.md § "Application-Level Postgres Roles" still
+    documented the removed xstockstrat_agent role + POSTGRES_MCP_DATABASE_URI deploy secret → whole
+    section removed (DEV-2). database.md now clean.
+  - Repo-wide POSTGRES_MCP residue: only absence-asserting tests/feature, the operator runbook cleanup
+    note, and historical feature-169/208/212 records (correct to leave).
+- H-5 closure verified: no db_ tool defs / postgres_mcp_client / sqlglot import in agent app; no
+  POSTGRES_MCP wiring in any deploy file; no SQL-over-MCP surface anywhere.

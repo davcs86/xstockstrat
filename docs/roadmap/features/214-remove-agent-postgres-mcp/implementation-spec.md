@@ -1,6 +1,6 @@
 # Implementation Spec: remove-agent-postgres-mcp
 
-**Status**: `in-progress`
+**Status**: `complete`
 **Created**: 2026-09-28
 **Feature**: `docs/roadmap/features/214-remove-agent-postgres-mcp/feature.md`
 **Total Steps**: 12
@@ -545,7 +545,7 @@ xstockstrat-ui (COPILOT count mirror) and xstockstrat-agent (docstring/runbook p
 
 ### Step 12 — docs: Add the out-of-band operator DB-access runbook (FR-4)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs`
 **Files**:
 - `docs/runbooks/operator-db-access.md` — create
@@ -596,3 +596,18 @@ xstockstrat-ui (COPILOT count mirror) and xstockstrat-agent (docstring/runbook p
   hygiene (we don't import it directly; `mcp` provides it), and `test_httpx2_importable` was deleted with
   the other postgres-era smoke tests since `httpx2` is no longer our declared/direct dep. Only the
   design's rationale was wrong; `uv lock --check` passes. Ledger `fails.md` entry corrected accordingly.
+
+### DEV-2 (teardown) — obsolete `xstockstrat_agent` role section removed from `docs/patterns/database.md`
+- **Trigger**: the post-execution teardown context-drift scan (root CLAUDE.md rule) found
+  `docs/patterns/database.md` § "Application-Level Postgres Roles" → `### xstockstrat_agent` still
+  documenting the removed DML role + its `POSTGRES_MCP_DATABASE_URI` deploy secret and the FR-11 gate.
+- **Not in any step's `**Files**`** — the spec's docs steps named root/agent CLAUDE.md + mcp-tools.md,
+  not database.md. Surfaced only by the teardown grep.
+- **Disposition**: removed the whole `## Application-Level Postgres Roles` section (xstockstrat_agent was
+  its only role, and it was never created). database.md is now clean of postgres-mcp/xstockstrat_agent.
+  Recorded here as a teardown-mandated out-of-scope reconciliation (root CLAUDE.md teardown clause takes
+  precedence over step-scope for grounded doc drift).
+- **Teardown note**: the `context-forge:context-constitution` skill is not available in this session, so
+  the teardown was done **manually** — re-grepping every touched context/pattern doc (root CLAUDE.md,
+  agent CLAUDE.md, mcp-tools.md, runbook index, database.md) against the code; all reconciled, no
+  residual stale references.

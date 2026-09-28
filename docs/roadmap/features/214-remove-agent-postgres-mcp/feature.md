@@ -16,6 +16,7 @@
 | 2026-09-28 | `spec-ready` → `design-approved` | /sdd-design | Design debated (1 round, quick) and approved; recon.md + design.md written. Adversary caught a 3rd orphaned dep (`httpx2`) + 2 more dep-smoke assertions, all folded in; C-16 delete-and-promote chosen (@AC-7 reworded); no Floor breach. |
 | 2026-09-28 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 12 steps. Every edit site confirmed against `main-dev` (52-tool baseline, direct-total 9, all `POSTGRES_MCP_*` deploy sites, db-migrate.sh block, 6 test files, C-16 suite). |
 | 2026-09-28 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential execution started. Impl-spec review's 4 advisory warnings resolved pre-execution. Step 1 landed (db_* tools + orphans removed). |
+| 2026-09-28 | `in-progress` → `code-completed` | /sdd-execute | All 12 steps landed (sequential). db_* tools + postgres-mcp co-process + deps + deploy wiring + dead role block removed; count 52→43; direct budget 9→8; C-16 delete-and-promote; operator-db-access runbook added. |
 
 ---
 
