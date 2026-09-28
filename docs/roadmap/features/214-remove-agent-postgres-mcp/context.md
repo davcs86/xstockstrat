@@ -84,3 +84,28 @@
 - Next Action set to `/sdd-design ... quick` (lifecycle: spec-ready → design-approved via /sdd-design,
   which the SDD entry point makes mandatory before /sdd-spec; the review skill's boilerplate "/sdd-spec"
   next-action text predates the inserted design phase).
+
+## Session 2026-09-28 — sdd-design (quick)
+
+- Phase 0 Recon: wrote recon.md (services: xstockstrat-agent, xstockstrat-ui + deploy/docs). Key reuse:
+  existing full name-set equality assert in test_tools_endpoint.py as the sole count guard; removal
+  verification gates on symbols ceasing to exist, not substring greps (ledger fails.md:139).
+- Phase 1 Grilling: 1 round (quick). Chosen approach: complete subtractive removal, consumer-first,
+  one integration PR (sequential), delete-and-promote for C-16. Rejected: invert-13-scenarios in place
+  (C-18 DRY); leave sqlglot/httpx2 (dead deps); per-step PRs (change is one cohesive removal).
+- **Adversary caught, all folded in before approval** (per operator "address advisory warnings first"):
+  (1) `httpx2` is a THIRD orphaned dep (pyproject.toml:17) — added to the 3-dep drop; (2) test_dep_smoke.py
+  has 3 postgres-era assertions (sqlglot/httpx2 import tests must be DELETED, not inverted); (3) tool-count
+  vs connection-budget are two axes; (4) @AC-7 provenance clause was inconsistent with full deletion —
+  reworded acceptance.feature for delete-and-promote. Deploy atomicity risk disproven (named pass-through,
+  required:false input, no-op-safe .replace()) → safer caller-first ordering adopted.
+- Constitution rules touched: C-10, C-11, C-13, C-14, C-16, C-18, P-06, F-01(N/A), F-07. Floor breaches: none.
+- C-16: all 13 agent-postgres-mcp.feature scenarios CHANGE (operator sign-off 2026-09-26); suite deleted,
+  @feature-214 absence guarantees promoted as an explicit verified step.
+- Status: spec-ready → design-approved.
+
+## Open Threads
+
+- [ ] Promotion of @feature-214 absence-scenarios into services/xstockstrat-agent/acceptance/ MUST land in the integration PR (C-16) — target: C-16 step.
+- [ ] Re-derive 43 tool count + direct-backend budget total against main-dev at execute-time — target: first agent-code step + budget step.
+- [ ] External repo secrets DEV_/PROD_POSTGRES_MCP_AGENT_PASSWORD need operator out-of-band removal (harmless if left) — note in PR/runbook.

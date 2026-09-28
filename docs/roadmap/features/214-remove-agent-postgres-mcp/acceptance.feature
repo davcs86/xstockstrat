@@ -52,8 +52,9 @@ Feature: remove-agent-postgres-mcp (eliminate the DB-over-MCP surface)
     And no SQL reaches the database through the agent under any input
 
   @AC-7 @FR-1
-  Scenario: Feature 169's agent-postgres-mcp business rules are removed, not left asserting a deleted surface
+  Scenario: Feature 169's agent-postgres-mcp business rules are removed and the removal's guarantees are promoted, not left asserting a deleted surface
     Given feature 169's promoted suite services/xstockstrat-agent/acceptance/agent-postgres-mcp.feature (13 scenarios)
     When the removal lands (C-16 CHANGE, operator sign-off recorded in context.md)
-    Then no business-rule scenario in any durable suite still asserts that an agent db_ tool or postgres-mcp co-process exists
-    And the removed/inverted scenarios reference this feature as provenance
+    Then the feature 169 agent-postgres-mcp.feature suite is deleted (the capability no longer exists)
+    And no business-rule scenario in any durable suite still asserts that an agent db_ tool or postgres-mcp co-process exists
+    And this feature's own removal guarantees (@AC-1 no db_ tool advertised, @AC-2 no co-process/wiring, @AC-6 no prompt-injected SQL path) are promoted into services/xstockstrat-agent/acceptance/ tagged @feature-214, carrying the provenance of the removal

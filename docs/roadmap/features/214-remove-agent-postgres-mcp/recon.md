@@ -100,8 +100,24 @@ scenario and no `xstockstrat-ui` durable rule is touched (the UI count is covere
   (`shutil.which("postgres-mcp")`) also assert postgres-mcp — beyond the four in the spec. Full test surface
   = 6 files: delete `test_db_tools.py` + `test_postgres_mcp_client.py`; edit `test_tools_endpoint.py`,
   `test_deployment_env_vars.py`, `test_supervisord_conf.py`, `test_dep_smoke.py`.
-- **Orphaned dependency (scope decision → resolved in design):** removing `db_execute_sql` orphans
-  `_is_destructive` + `sqlglot`. Clean removal drops both (no dead deps); requires `uv lock` regen (root CLAUDE.md gate).
+- **Orphaned dependencies (scope decision → resolved in design):** removing `db_execute_sql` orphans
+  `_is_destructive` + `sqlglot` (`pyproject.toml:19`); removing `postgres_mcp_client.py` orphans
+  **`httpx2`** (`pyproject.toml:17`, used only by `postgres_mcp_client.py:18,44` + its test — `tools.py`
+  uses `httpx` at a different line, which STAYS). Clean removal drops **all three** (`postgres-mcp`,
+  `sqlglot`, `httpx2`); requires `uv lock` regen + `uv lock --check` (root CLAUDE.md gate). [Added round 1 adversary — httpx2 missed by initial discovery.]
+- **`test_dep_smoke.py` has THREE postgres-era assertions**, not one: `test_sqlglot_importable:10-11`
+  and `test_httpx2_importable:14-15` must be **deleted** (they fail at collection once the deps leave —
+  cannot be inverted), `test_postgres_mcp_binary_on_path:18-21` deleted/inverted; `test_supervisor_importable:6-7`
+  STAYS. [Added round 1 adversary.]
+- **Two update axes, kept separate (C-10):** tool-count (`@AC-4`/`@AC-9`: copilot.ts, tools.py docstring,
+  agent CLAUDE.md rows+count, mcp-tools.md, test_tools_endpoint name-set) vs connection-budget
+  (`@AC-3`/`@AC-10`: root CLAUDE.md pool row + direct total, test_deployment_env_vars.py). Verify **all**
+  "fifty-two" occurrences in agent CLAUDE.md (prose carries it more than the `:43,:49` sites cited above).
+- **Negative confirmations (deploy trace complete, fails.md:1095):** `scripts/do-inject-prod-secrets.py`,
+  `.github/workflows/prod-up.yml`, `docs/setup/digitalocean.md`, `docs/*/infra-cost-reduction.md` carry
+  **no** postgres-mcp reference (verified round 1). Incidental cleanup: `.do/app.yaml`'s
+  `YOUR_PROD_POSTGRES_MCP_AGENT_PASSWORD` placeholder was never wired into `do-inject-prod-secrets.py`
+  (a latent feature-169 gap) — 214's removal cleans it up.
 - **`xstockstrat_agent` role provisioning** `scripts/db-migrate.sh:169-204` (CREATE ROLE `:186`, grants `:191-199`,
   `POSTGRES_MCP_AGENT_PASSWORD` gate `:178`): dead block — the role was never created (password never set → `[skip]`
   path). Delete the provisioning shell block; no live-DB `DROP ROLE` needed (feature 208 demoted for this reason).
