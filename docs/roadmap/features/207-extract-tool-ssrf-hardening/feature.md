@@ -12,6 +12,7 @@
 |---|---|---|---|
 | 2026-09-25 | `idea` → `draft` | /sdd-story | Product spec generated (closes security-audit agent SSRF — M-list backlog, called out in DT-2 §150; prompt-injection egress ingress) |
 | 2026-09-28 | `draft` → `spec-ready` | /sdd-review | Product spec approved. C-15 blocker fixed before advancing: FR-5 had no covering scenario → added `@AC-8 @FR-5` (config-sourced egress policy). OQ2 resolved (both extract tools share `_fetch_url` at tools.py:2226). OQ1 (config keys + allowlist-in-v1?) and FR-6 audit mechanism flagged as /sdd-design forks. Overlap: WARN-only (soft tools.py rebase vs 214, now moot — 214 merged). |
+| 2026-09-28 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written. 3-layer SSRF hardening (not-is_global validator → subclassed httpx transport w/ pinned httpcore backend → manual per-hop redirect loop w/ cross-origin credential-strip + streamed byte-cap). Adversary caught CGNAT fail-open, total-bypass silent-revert, unenforced per-hop scheme, credential-leak on hand-rolled redirects, blocking getaddrinfo — all folded. Operator deferred the domain allowlist (deny-by-range core). No Floor breach. |
 
 ---
 
@@ -19,6 +20,8 @@
 
 - [Product Spec](product-spec.md) — requirements and governance
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
+- [Recon Dossier](recon.md) — grounded codebase map + httpx/httpcore pinning mechanism (Phase 0)
+- [Design](design.md) — chosen 3-layer approach, rejected alternatives, Constitution/C-16 rules (Phase 1)
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec extract-tool-ssrf-hardening`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -49,4 +52,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-design extract-tool-ssrf-hardening` — recon + design debate (spec-ready → design-approved). Design forks to resolve: config-key set + domain-allowlist-in-v1?, FR-6 audit mechanism (span vs log).
+`/sdd-spec extract-tool-ssrf-hardening` — generate the implementation spec from the approved design.

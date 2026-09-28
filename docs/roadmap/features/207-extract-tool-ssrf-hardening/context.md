@@ -42,3 +42,28 @@
   - AC-3 `Then` de-implementation-flavored per the advisory NOTE.
 - Overlap: WARN-only — soft `app/tools.py` rebase vs 214 (disjoint db_* block); now moot (214 merged to
   main-dev fc86bb5). `agent.extract.*` keys unique repo-wide; no migration/proto/config FAIL; no merge-order entry.
+
+## Session 2026-09-28 — sdd-design (full, 2 rounds)
+
+- Phase 0 Recon: recon.md (service: xstockstrat-agent). Reuse: single shared `_fetch_url` chokepoint;
+  `get_config_value(namespace="agent")`; module `log` for FR-6; respx happy-path + direct validator units.
+- Phase 1 Grilling: 2 rounds. Chosen: 3-layer SSRF hardening — pure `not-is_global` validator (app/egress.py)
+  → subclassed httpx.AsyncHTTPTransport owning a pinned-connect httpcore backend (reject-if-any, async
+  getaddrinfo, identity fail-closed assert) → hardened `_fetch_url` (manual per-hop redirect loop: scheme +
+  IP + cross-origin credential-strip; streamed byte-cap). Config: 4 scalar agent.extract.* keys; deny-ranges
+  stdlib-derived. FR-6: log.warning. Domain allowlist DEFERRED (operator decision 2026-09-28).
+- Round 1 adversary (all folded): CGNAT is_private fail-open → not-is_global; self._pool silent-revert =
+  TOTAL bypass → identity assert; per-hop scheme unenforced (httpx 0.28.1 grounded); pick-one → reject-if-any;
+  python-version mapped-address semantics → explicit unit tests + interpreter pin.
+- Round 2 adversary (all folded): manual redirect loop must replicate httpx cross-origin Authorization-strip
+  (credential-exfil regression) → per-hop strip; blocking getaddrinfo → anyio.to_thread; byte-cap needs
+  c.stream()+aclose not c.get(); FROM-SCRATCH transport REVERSED → subclass AsyncHTTPTransport (inherit tested
+  bridge) + identity assert.
+- Constitution: C-05/F-07 (config knobs vs stdlib invariants), C-10, C-14, C-16, C-18, P-06, F-04. Floor: none.
+- Status: spec-ready → design-approved.
+
+## Open Threads
+
+- [ ] Accepted C-14 residual: content exfil to arbitrary PUBLIC hosts via caller URLs (allowlist deferred; credential-leak vector closed by cross-origin strip). Target: recorded; file follow-up feature only if an operator wants positive gating.
+- [ ] httpx/httpcore internal coupling (self._pool + connect_tcp) — identity fail-closed assert + rebind CI test. Target: transport step.
+- [ ] Reconcile Python 3.12 (recon/venv) vs 3.13 (CLAUDE.md); verify is_global mapped-address semantics on the deployed image interpreter. Target: /sdd-spec + validator test step.
