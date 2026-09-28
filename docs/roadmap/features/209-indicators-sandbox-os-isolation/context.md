@@ -81,3 +81,32 @@
   re-check the 50% gate.
 - Impl-spec watch (from overlap scan): pin NEW indicators.sandbox.* names IF any are added (design
   adds NONE — all rlimits derived); potential indicators-Dockerfile co-edit with 210 (mTLS cert wiring).
+
+## Session 2026-09-28 — sdd-spec
+
+- Generated implementation-spec.md with 4 steps. Status → implementation-ready.
+- Step map: (1) `service` — add `pyseccomp` dep + `uv lock` + Dockerfile `libseccomp2`/build-deps, no
+  `USER` (child setuid needs root parent); (2) `service` — rewrite `sandbox.py` (distinct-UID 65534
+  child + stdin `Popen(start_new_session=True)` + post-import seccomp allowlist ERRNO(EPERM) +
+  expanded rlimits [keep RLIMIT_DATA, no RLIMIT_AS; add CPU/NPROC=max_concurrent×16/FSIZE=0/NOFILE=64]
+  + HOME/TMPDIR=nonexistent/PYTHONDONTWRITEBYTECODE + killpg-on-timeout/exit) + `servicer.py` passes
+  `max_concurrent=self._cfg.sandbox_max_concurrent()`; (3) `test` — new `test_sandbox_isolation.py`
+  covering AC-1..AC-6 + remove `sandbox.py` from coverage `omit` (R5) + keep pre-existing suite green;
+  (4) `docs` — reconcile service CLAUDE.md / context-constitution / indicator-builder + teardown.
+- Key codebase findings (all line numbers verified on `feature/indicators-sandbox-os-isolation`):
+  - `execute_formula` `sandbox.py:175-182`; child launch `:198-210`; `_SANDBOX_WRAPPER` `:116-172`;
+    the single `RLIMIT_DATA` site `:127-128`; parent classification `:224-263`. No new exit_reason —
+    seccomp/setuid/rlimit denial → existing default `runtime_error` (design §6).
+  - `_sandbox_env()` `:43-55` gets the write-elimination env additions; servicer sandbox call
+    `servicer.py:170-179`, `sandbox_max_concurrent()` already read at `:61`, exit_reason map `:181-187`.
+  - Coverage `omit` (incl. `app/services/sandbox.py`) `pyproject.toml:39-46` — removed in Step 3.
+  - No new env var / port / config leaf → docker-compose + `.do/app*.yaml` untouched; Dockerfile
+    referenced by path (root CLAUDE.md § Dockerfile Update Workflow). No proto/migration.
+  - CI: `python-lint` `uv lock --check` (ci.yml:323); `python-test` `pytest --cov=app
+    --cov-fail-under=50` (ci.yml:373-378) runs on the host runner (non-root) → setuid path is
+    `skipif(geteuid()!=0)`-recorded (never silent, fails.md:133); full setuid+seccomp+rlimit stack
+    validation deferred to CI/deploy inside the runtime image (O-3/fails.md:369).
+- P-03 surfaced (not papered): AC-2 "reads outside scratch denied" is realized by the approved design
+  as secret-exfiltration containment (env-strip + distinct-UID /proc/environ EACCES + no secrets on
+  disk + write-elimination), NOT a blanket read jail (flag-filtered openat was Rejected #7). Recorded
+  in the spec's Scenario Coverage note so impl-spec review sees the interpretation.

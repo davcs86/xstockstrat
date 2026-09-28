@@ -13,6 +13,7 @@
 | 2026-09-25 | `idea` → `draft` | /sdd-story | Product spec generated (closes security-audit C-3 / DT-1 — OS-level isolation for the escapable formula sandbox) |
 | 2026-09-28 | `draft` → `spec-ready` | /sdd-review | Product spec approved (PASS WITH WARNINGS, 2 advisory). AC-6 phrasing NOTE fixed pre-advance (observable Then, no `sandbox.py` reference). The 4 Open Questions (isolation mechanism, DO/compose runtime compat, tunable-vs-fixed config split, latency budget) are correctly-deferred /sdd-design inputs, not spec defects. Overlap scan CLEAN — watch at impl-spec: pin NEW `indicators.sandbox.*` leaf names (existing timeout_ms/max_concurrent/allowed_imports are trunk), and potential indicators-Dockerfile co-edit with 210 (mTLS). |
 | 2026-09-28 | `spec-ready` → `design-approved` | /sdd-design | Design debated (4 rounds, full) + approved; recon.md + design.md written. Chosen: unprivileged in-container OS isolation — distinct-UID (nobody 65534) child + in-wrapper post-import seccomp allowlist (ERRNO(EPERM), native-arch) + expanded rlimits (NPROC=max_concurrent×16, FSIZE=0, no RLIMIT_AS) + PYTHONDONTWRITEBYTECODE/HOME/TMPDIR write-elimination + start_new_session/killpg; denial→runtime_error (no proto, operator decision), stays on DO App Platform (operator decision). Allow-set **empirically finalized via strace** of real numpy 2.4.3/pandas 3.0.1 (caught `mbind` on large arrays; added statx/getdents64 for runtime-glibc). Adversary caught: same-UID secret-read (→distinct UID), preexec_fn multithreaded-fork deadlock (→in-wrapper lockdown), denylist io_uring/32-bit bypass (→allowlist fails-closed), forked-orphan NPROC leak (→killpg load-bearing), openat file-creation (→HOME/TMPDIR=nonexistent). No Floor breach. |
+| 2026-09-28 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 4 steps (pyseccomp dep + libseccomp Dockerfile; sandbox.py rewrite [distinct-UID + post-import seccomp allowlist + expanded rlimits + killpg/stdin] with servicer max_concurrent wiring; OS-isolation test module + coverage-omit removal covering AC-1..AC-6; docs reconcile + context-constitution teardown). No proto/config/migration changes. |
 
 ---
 
@@ -22,7 +23,7 @@
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
 - [Recon Dossier](recon.md) — grounded codebase map + DO App Platform runtime constraint (Phase 0)
 - [Design](design.md) — chosen approach (distinct-UID + post-import seccomp allowlist), rejected alternatives, open risks (Phase 1)
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec indicators-sandbox-os-isolation`_
+- [Implementation Spec](implementation-spec.md) — 4-step plan (deps/Dockerfile → sandbox.py rewrite → OS-isolation tests → docs/teardown)
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -52,4 +53,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-spec indicators-sandbox-os-isolation` — generate the implementation spec from the approved design
+`/sdd-review indicators-sandbox-os-isolation impl-spec` — validate the implementation spec, then `/sdd-execute indicators-sandbox-os-isolation`
