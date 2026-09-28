@@ -173,7 +173,7 @@ proven by **Step 2** (name-set no longer advertises them). **UI** is touched onl
 
 ### Step 3 — service: Drop `postgres-mcp`, `sqlglot`, `httpx2` from `pyproject.toml` and relock
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/pyproject.toml` — modify
@@ -205,7 +205,7 @@ proven by **Step 2** (name-set no longer advertises them). **UI** is touched onl
 
 ### Step 4 — test: Delete the `sqlglot` / `httpx2` / `postgres-mcp` binary smoke assertions
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_dep_smoke.py` — modify
@@ -584,4 +584,15 @@ xstockstrat-ui (COPILOT count mirror) and xstockstrat-agent (docstring/runbook p
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### DEV-1 (Steps 3–4) — `httpx2` is transitive via `mcp`, not a sole-use orphan
+- **Expected (design/recon/adversary)**: `httpx2` (pyproject `:17`) was a direct dep used *only* by
+  `app/postgres_mcp_client.py`; removing it would uninstall it and make `test_httpx2_importable` fail
+  at collection (delete-not-invert).
+- **Actual**: `uv tree --invert` shows `httpx2 v2.12.0 → mcp v2.0.0 → xstockstrat-agent` — `httpx2` is a
+  **transitive dependency of the `mcp` SDK** (`mcp>=2.0.0`). It stays installed and in `uv.lock` after
+  removal, and `test_httpx2_importable` kept **passing**. No agent code imports `httpx2` directly
+  (grep of `app/` clean, `postgres_mcp_client.py` deleted).
+- **Disposition**: action unchanged and correct — removing the *redundant direct declaration* is proper
+  hygiene (we don't import it directly; `mcp` provides it), and `test_httpx2_importable` was deleted with
+  the other postgres-era smoke tests since `httpx2` is no longer our declared/direct dep. Only the
+  design's rationale was wrong; `uv lock --check` passes. Ledger `fails.md` entry corrected accordingly.

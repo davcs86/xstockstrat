@@ -187,3 +187,20 @@
 - TDD: RED captured (ImportError at collection) after Step 1; GREEN after this step.
 - Deviations: the two test-file deletions were committed under Step 1 (staged via `git rm` before the
   Step 1 commit) — granularity-only; squash-merge collapses it. No behavior impact.
+
+### Step 3 — Drop postgres-mcp/sqlglot/httpx2 from pyproject + relock [done]
+- Removed the three direct deps from pyproject.toml; `uv lock` pruned postgres-mcp's transitive deps
+  (typer, tzdata, urllib3, yarl). `uv lock --check` passes; `httpx` (distinct) retained.
+- Files modified: `pyproject.toml`, `uv.lock`
+- Deviations: **httpx2 is transitive via `mcp`, not a sole-use orphan** (see Step 4 + Deviation Log).
+  Removing the direct declaration is still correct (no agent code imports httpx2 directly), but it stays
+  installed via `mcp>=2.0.0` and remains in uv.lock — it does NOT uninstall as the design assumed.
+
+### Step 4 — Delete sqlglot/httpx2/postgres-mcp-binary smoke asserts [done]
+- Rewrote test_dep_smoke.py to keep only `test_supervisor_importable`; removed the 3 postgres-era
+  tests + the now-unused `import shutil`. GREEN (1 passed), ruff clean.
+- Files modified: `tests/test_dep_smoke.py`
+- TDD: RED = test_sqlglot_importable (ModuleNotFoundError) + test_postgres_mcp_binary_on_path
+  (AssertionError) after Step 3; captured. test_httpx2_importable did NOT go red (httpx2 transitive via
+  mcp) — deleted anyway since httpx2 is no longer our declared/direct dep. See Deviation Log.
+- Deviations: httpx2 transitive-dep correction (Deviation Log + ledger corrected).
