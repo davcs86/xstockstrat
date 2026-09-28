@@ -12,6 +12,11 @@
 |---|---|---|---|
 | 2026-09-26 | `idea` → `draft` | /sdd-story | Product spec generated. Supersedes demoted feature 212 (`sysadmin-db-write-role`, formerly 193): removes the DB-tool surface outright instead of privilege-separating a hardened proxy over the inherently-insecure postgres-mcp. Closes security-audit H-5 / DT-2 at the trust boundary by elimination. |
 | 2026-09-27 | `draft` (renumbered) | operator | **Renumbered 211 → 214.** The original number (211) collided with `211-edgar-fundamentals-enrichment`, which merged to `main-dev`/`main` while this feature's PR was in flight. Slug and content unchanged; NNN moved to the next free value. |
+| 2026-09-27 | `draft` → `spec-ready` | /sdd-review | Product spec approved (PASS, 0 blockers). Review warnings addressed before advancing: all three Open Questions resolved, and 6 under-enumerated removal sites folded into FR-2/FR-5/Affected Services (supervisord.conf `[program:postgres-mcp]`, app/postgres_mcp_client.py, 3 deploy workflows, 3 extra tests). Overlap: WARN-only (soft/rebase, no FAIL). |
+| 2026-09-28 | `spec-ready` → `design-approved` | /sdd-design | Design debated (1 round, quick) and approved; recon.md + design.md written. Adversary caught a 3rd orphaned dep (`httpx2`) + 2 more dep-smoke assertions, all folded in; C-16 delete-and-promote chosen (@AC-7 reworded); no Floor breach. |
+| 2026-09-28 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 12 steps. Every edit site confirmed against `main-dev` (52-tool baseline, direct-total 9, all `POSTGRES_MCP_*` deploy sites, db-migrate.sh block, 6 test files, C-16 suite). |
+| 2026-09-28 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential execution started. Impl-spec review's 4 advisory warnings resolved pre-execution. Step 1 landed (db_* tools + orphans removed). |
+| 2026-09-28 | `in-progress` → `code-completed` | /sdd-execute | All 12 steps landed (sequential). db_* tools + postgres-mcp co-process + deps + deploy wiring + dead role block removed; count 52→43; direct budget 9→8; C-16 delete-and-promote; operator-db-access runbook added. |
 
 ---
 
@@ -19,7 +24,9 @@
 
 - [Product Spec](product-spec.md) — requirements and governance
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec remove-agent-postgres-mcp`_
+- [Recon Dossier](recon.md) — grounded codebase map + removal surface (Phase 0)
+- [Design](design.md) — chosen approach, rejected alternatives, Constitution/C-16 rules touched (Phase 1)
+- [Implementation Spec](implementation-spec.md) — 12 numbered steps with codebase evidence (Phase 2)
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -55,4 +62,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review remove-agent-postgres-mcp product-spec` — AI review of product spec before running /sdd-design
+`/sdd-review remove-agent-postgres-mcp impl-spec` — validate the implementation spec, then `/sdd-execute remove-agent-postgres-mcp`.

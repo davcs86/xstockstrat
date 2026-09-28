@@ -40,13 +40,13 @@ Python 3.13 (asyncio, grpc.aio, mcp SDK v2 MCPServer)
 
 ## MCP Tools
 
-The agent registers fifty-two tools (see `docs/runbooks/mcp-tools.md` for full parameter/return/error
+The agent registers forty-three tools (see `docs/runbooks/mcp-tools.md` for full parameter/return/error
 reference). It also registers **one MCP prompt** — `list_correlation_guide` (feature 197), wired by
 `register_prompts` (`app/tools.py`) and served through the same OAuth-gated transport — plus a
 server-level `instructions` string (`create_server`, `app/main.py`) returned in the MCP `initialize`
 result; both carry the same guide for correlating the `list_accounts` / `get_positions` /
 `get_positions_by_account_id` / `list_opportunities` / `list_strategies` responses on
-`account_id` / `strategy_id` / `symbol`. A prompt is not a tool — the tool count stays fifty-two:
+`account_id` / `strategy_id` / `symbol`. A prompt is not a tool — the tool count stays forty-three:
 
 | Tool | Purpose |
 |---|---|
@@ -90,15 +90,6 @@ result; both carry the same guide for correlating the `list_accounts` / `get_pos
 | `get_user` | **Admin**: read one user by id (read-only, admin-gated, feature 183) |
 | `admin_get_user_metadata` | **Admin**: read ANY user's profile metadata by `user_id` (read-only, feature 183) — distinct from the self-only `get_user_metadata` |
 | `admin_set_user_metadata` | **Admin**: partial-update ANY user's profile metadata by `user_id` (feature 183) — distinct from the self-only `set_user_metadata` |
-| `db_list_schemas` | List all database schemas via postgres-mcp co-process. Admin-only (feature 169) |
-| `db_list_objects` | List objects (tables, views, etc.) in a schema via postgres-mcp. Admin-only (feature 169) |
-| `db_get_object_details` | Get DDL and statistics for a named DB object via postgres-mcp. Admin-only (feature 169) |
-| `db_execute_sql` | Execute SQL via xstockstrat_agent DML role with FR-11 destructive-op gate; destructive statements (UPDATE/DELETE/DROP/TRUNCATE) require `confirm=true`. Admin-only (feature 169) |
-| `db_explain_query` | Get EXPLAIN output for a SQL query via postgres-mcp. Admin-only (feature 169) |
-| `db_get_top_queries` | Get top queries by total execution time from pg_stat_statements. Admin-only (feature 169) |
-| `db_analyze_workload_indexes` | Recommend indexes based on pg_stat_statements workload via postgres-mcp. Admin-only (feature 169) |
-| `db_analyze_query_indexes` | Recommend indexes for a specific SQL query via postgres-mcp. Admin-only (feature 169) |
-| `db_analyze_db_health` | Run comprehensive database health checks via postgres-mcp. Admin-only (feature 169) |
 | `query_bars` | Query stored daily OHLCV bars for a symbol (paginated; `format` json/csv, feature 204) — daily-only per feature 143, `limit` capped 1000 (read-only) |
 | `query_fundamentals` | Query a symbol's fundamentals — `mode` snapshot (latest cached) or historical (point-in-time filings, paginated `limit` capped 50); `format` json/csv; `missing_metrics` authoritative (feature 204, read-only) |
 | `list_fundamental_metrics` | List the fundamental-metrics catalog (enum name, snake_case `dataKey`, meaning) for formula declarations (read-only, feature 205) |
