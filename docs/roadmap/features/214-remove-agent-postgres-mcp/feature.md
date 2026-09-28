@@ -15,6 +15,7 @@
 | 2026-09-27 | `draft` → `spec-ready` | /sdd-review | Product spec approved (PASS, 0 blockers). Review warnings addressed before advancing: all three Open Questions resolved, and 6 under-enumerated removal sites folded into FR-2/FR-5/Affected Services (supervisord.conf `[program:postgres-mcp]`, app/postgres_mcp_client.py, 3 deploy workflows, 3 extra tests). Overlap: WARN-only (soft/rebase, no FAIL). |
 | 2026-09-28 | `spec-ready` → `design-approved` | /sdd-design | Design debated (1 round, quick) and approved; recon.md + design.md written. Adversary caught a 3rd orphaned dep (`httpx2`) + 2 more dep-smoke assertions, all folded in; C-16 delete-and-promote chosen (@AC-7 reworded); no Floor breach. |
 | 2026-09-28 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 12 steps. Every edit site confirmed against `main-dev` (52-tool baseline, direct-total 9, all `POSTGRES_MCP_*` deploy sites, db-migrate.sh block, 6 test files, C-16 suite). |
+| 2026-09-28 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential execution started. Impl-spec review's 4 advisory warnings resolved pre-execution. Step 1 landed (db_* tools + orphans removed). |
 
 ---
 

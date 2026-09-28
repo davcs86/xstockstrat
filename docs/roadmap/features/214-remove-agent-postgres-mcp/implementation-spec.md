@@ -1,6 +1,6 @@
 # Implementation Spec: remove-agent-postgres-mcp
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-09-28
 **Feature**: `docs/roadmap/features/214-remove-agent-postgres-mcp/feature.md`
 **Total Steps**: 12
@@ -75,7 +75,7 @@ proven by **Step 2** (name-set no longer advertises them). **UI** is touched onl
 
 ### Step 1 — service: Remove the nine `db_*` tools and their orphans from `app/tools.py`; delete `postgres_mcp_client.py`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify

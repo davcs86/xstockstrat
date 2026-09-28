@@ -160,3 +160,22 @@
   no impl-spec yet) and 217 (tools.py/mcp-tools.md/agent CLAUDE.md, disjoint regions). Second-lander
   rebases; merge-order.md needs no change.
 - Nothing carried into execution as `[ ] unaddressed`.
+
+## Session 2026-09-28 — sdd-execute (sequential)
+
+- Re-spec gate: merged main-dev (0 behind — already up to date); validated all 12 steps' evidence
+  against the live codebase — zero drift, no re-spec needed, directive "none".
+- Tooling setup (steps 1-12): python3.11+uv0.8.17 ✓ · ruff0.15.8 ✓ · agent .venv provisioned via
+  `uv sync --extra dev` (pytest9.0.3, 460 tests collected) ⬇ · node22.22 ✓ · pnpm9.15.9 ✓ · UI deps
+  installed ⬇ · bash5.2 ✓. No database started (offline migration/verification rule).
+- Executing under the operator's standing "all the way to code + PRs" authorization (covers the
+  sequential mode-entry + up-front confirm); informational checkpoints at surface boundaries; genuine
+  blockers via AskUserQuestion.
+
+### Step 1 — Remove nine db_* tools + orphans; delete postgres_mcp_client.py [done]
+- Removed the 9 db_* tool defs, `_is_destructive` + constants, `sqlglot` imports, and the
+  `postgres_mcp_client` import from `app/tools.py` (2422→2244 lines); deleted `app/postgres_mcp_client.py`;
+  docstring count 52→43. ruff auto-fixed the now-unused `re`-adjacent import + reformatted.
+- Files modified: `app/tools.py` (del `app/postgres_mcp_client.py`)
+- TDD: RED = test_db_tools/test_postgres_mcp_client ImportError at collection after removal; verified.
+- Deviations: none
