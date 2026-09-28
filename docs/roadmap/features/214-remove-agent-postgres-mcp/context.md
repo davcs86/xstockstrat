@@ -104,8 +104,40 @@
   @feature-214 absence guarantees promoted as an explicit verified step.
 - Status: spec-ready → design-approved.
 
+## Session 2026-09-28 — sdd-spec
+
+- Generated implementation-spec.md with **12 steps**. Status → implementation-ready. All edit sites
+  re-confirmed against the working tree (recon.md line numbers held; a few refined below).
+- Key codebase findings (confirmed via grep/read this session):
+  - **Tool-count baseline still 52**: `copilot.ts:21` (`COPILOT_MCP_TOOL_COUNT = 52`, lineage comment
+    `:18-19`), `tools.py:4` ("Fifty-two tools"), name-set equality in `test_tools_endpoint.py:23` with
+    db names `:66-74` (no separate count assert — dropping the 9 names auto-derives 43).
+  - **`db_*` block** `tools.py:2226`(section comment)`-2351`(end of `db_analyze_db_health`, before
+    `def register_prompts`); orphans `_is_destructive:265` + consts `:259-262`, `sqlglot` imports `:76-77`,
+    `postgres_mcp_client` in import `:81`. Retain `_caller_access_scope:141`.
+  - **Three orphaned deps** in `pyproject.toml`: `httpx2:17`, `postgres-mcp:18`, `sqlglot:19` — keep
+    `httpx:7` (distinct pkg, used by tools.py). `httpx2` used only by `postgres_mcp_client.py:18`.
+  - **6 test files**: whole-file delete `test_db_tools.py` + `test_postgres_mcp_client.py`; edit
+    `test_tools_endpoint.py` (name-set), `test_dep_smoke.py` (delete sqlglot/httpx2/binary tests; keep
+    supervisor; drop now-unused `import shutil`), `test_supervisord_conf.py` (invert 4 postgres-mcp
+    tests → 1 absence assert), `test_deployment_env_vars.py` (drop 6 POSTGRES_MCP presence asserts;
+    invert budget: agent role absent, direct total 9→8).
+  - **`deploy.yml` correction**: the `POSTGRES_MCP_AGENT_PASSWORD` secrets **input decl is at :67-72**
+    (`required: false`), not :14 (:14 is the `secrets:` block header). Env injection :96, Python
+    substitution :145-147. Callers: `deploy-dev.yml:60`, `deploy-prod.yml:59`.
+  - **db-migrate.sh block** `:169`(header)`-~205`(closing `fi`+`echo`), gate `:178`, `CREATE ROLE :186`,
+    grants `:191-199`, `[skip]` else `:203`. Root CLAUDE.md budget row `:238`, direct total `:239` (9→8).
+  - **mcp-tools.md**: "fifty-two" `:3,:10,:45`; `## Database Tools (Admin-only)` section `:1570`→EOF
+    (`:1708`, no `## ` follows `### db_analyze_db_health:1698` — whole block removed).
+  - **C-16**: `acceptance/agent-postgres-mcp.feature` present (delete); promote a new
+    `acceptance/remove-agent-postgres-mcp.feature` (@feature-214, @AC-1/@AC-2/@AC-6).
+- **Removal-verification discipline applied** (ledger fails.md:139, feature 079): every step's
+  `**Verification**` gates on names/symbols ceasing to exist (name-set equality, deleted file, failed
+  import, `bash -n`), never a substring `! grep postgres` — "postgres" legitimately survives in the new
+  runbook, the removal record, and git history.
+
 ## Open Threads
 
-- [ ] Promotion of @feature-214 absence-scenarios into services/xstockstrat-agent/acceptance/ MUST land in the integration PR (C-16) — target: C-16 step.
-- [ ] Re-derive 43 tool count + direct-backend budget total against main-dev at execute-time — target: first agent-code step + budget step.
-- [ ] External repo secrets DEV_/PROD_POSTGRES_MCP_AGENT_PASSWORD need operator out-of-band removal (harmless if left) — note in PR/runbook.
+- [ ] Promotion of @feature-214 absence-scenarios into services/xstockstrat-agent/acceptance/ MUST land in the integration PR (C-16) — target: **Step 11**.
+- [ ] Re-derive 43 tool count + direct-backend budget total (9→8) against main-dev at execute-time — target: **Steps 1/2 (count), Steps 8/9 (budget)**.
+- [ ] External repo secrets DEV_/PROD_POSTGRES_MCP_AGENT_PASSWORD need operator out-of-band removal (harmless if left) — noted in **Step 7** instructions + **Step 12** runbook.
