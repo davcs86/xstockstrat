@@ -243,3 +243,10 @@
   section removed (1708→1569 lines). UI lint exit 0 (only pre-existing warnings in unrelated pages).
 - Files modified: `services/xstockstrat-ui/src/lib/copilot.ts`, `services/xstockstrat-agent/CLAUDE.md`, `docs/runbooks/mcp-tools.md`
 - TDD: N/A (docs/mirror; executable guard is Step 2 name-set). Deviations: none.
+
+### Step 11 — C-16 delete-and-promote the acceptance suite [done]
+- Deleted feature 169's agent-postgres-mcp.feature (13 scenarios, capability gone; operator sign-off
+  2026-09-26); created acceptance/remove-agent-postgres-mcp.feature with @feature-214 @AC-1/@AC-2/@AC-6
+  absence guarantees + provenance header. Only db_ reference across all durable suites is this absence suite.
+- Files modified: `acceptance/remove-agent-postgres-mcp.feature` (del `acceptance/agent-postgres-mcp.feature`)
+- Resolves Open Thread: @feature-214 promotion landed. TDD: red-green (durable suite asserts absence). Deviations: none.

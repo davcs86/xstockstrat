@@ -500,7 +500,7 @@ xstockstrat-ui (COPILOT count mirror) and xstockstrat-agent (docstring/runbook p
 
 ### Step 11 — test: C-16 delete-and-promote — remove feature 169's suite, promote the `@feature-214` absence guarantees
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent` (durable business-rule suite)
 **Files**:
 - `services/xstockstrat-agent/acceptance/agent-postgres-mcp.feature` — delete
