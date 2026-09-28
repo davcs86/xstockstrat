@@ -25,3 +25,195 @@
   capability-drop in-image vs a jailer (nsjail / bubblewrap / gVisor). Deployment feasibility under DO
   App Platform / docker-compose (added capabilities, seccomp) must be confirmed with the platform lead.
 - Created for pickup by another session per operator direction (Phase D security backlog).
+
+## Session 2026-09-28 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready. Verdict: PASS WITH WARNINGS (no blockers).
+- Warnings (advisory):
+  - AC-6 phrasing NOTE — `Then` named "inline literals in sandbox.py" (implementation-ward). FIXED before
+    advancing: rephrased to an observable Then (operator-tunable limits read from config/env at startup;
+    changing a config value changes the enforced limit next evaluation).
+  - Open Questions ×4 unchecked (isolation mechanism FR-1; DO App Platform / docker-compose runtime
+    compatibility; tunable-vs-fixed config split FR-5; per-evaluation latency budget). Correctly-deferred
+    /sdd-design inputs, NOT product-spec defects — carried into design as the debate agenda.
+- Overlap findings: CLEAN (no config-key/proto/migration/file collision). Watch at impl-spec:
+  (1) pin NEW `indicators.sandbox.*` leaf names — `timeout_ms`/`max_concurrent`/`allowed_imports` are trunk
+  reality from launched features (003/058/173/176/205), must not be redefined;
+  (2) potential indicators-Dockerfile co-edit with 210 (mTLS cert wiring) — re-check Mode B once both pin
+  their Dockerfile/base-image mechanism.
+- Pre-grounded (this session, for the design fork): `.do/app.yaml` indicators block has NO privileged/
+  cap_add/security_context/seccomp fields → DO App Platform managed runtime does not grant elevated
+  container privileges; current sandbox.py already = subprocess + resource.setrlimit(RLIMIT_DATA) +
+  SIGKILL timeout + minimal _sandbox_env(). Feeds the isolation-mechanism fork put to the operator.
+
+## Session 2026-09-28 — sdd-design
+
+- Phase 0 Recon: wrote recon.md (service: xstockstrat-indicators; key reuse: subprocess child +
+  _sandbox_env + RLIMIT_DATA site + ConfigWatcher accessors + exit_reason map). Grounded the DO App
+  Platform unprivileged-only runtime constraint + current sandbox mechanism.
+- Phase 1 Grilling: 4 rounds (full). Chosen approach: unprivileged in-container OS isolation —
+  distinct-UID (nobody 65534) child + in-wrapper POST-import seccomp allowlist (defaction=ERRNO(EPERM),
+  native arch only) + expanded rlimits (keep RLIMIT_DATA, no RLIMIT_AS; add CPU, NPROC=max_concurrent×16,
+  FSIZE=0, NOFILE=64) + _sandbox_env write-elimination (PYTHONDONTWRITEBYTECODE=1, HOME/TMPDIR=nonexistent)
+  + start_new_session/killpg (load-bearing) + stdin source delivery. Denial→existing runtime_error (no
+  proto). Stays on DO App Platform. Rejected: jailer/off-App-Platform, same-UID seccomp, denylist,
+  preexec_fn, per-slot UIDs, KILL-default, flag-filtered openat, new config leaves.
+- **Empirical validation**: ran `strace -f` on the real indicators venv (numpy 2.4.3/pandas 3.0.1). The
+  post-import compute allow-set was FINALIZED from ground truth — caught `mbind` (NUMA) on 800×800 arrays
+  that a 200×200 trace missed (→ golden must use large arrays, Open Risk O-1), and confirmed
+  PYTHONDONTWRITEBYTECODE + HOME/TMPDIR=nonexistent eliminate ALL compute-time writes (zero
+  mkdir/rename/openat-O_WRONLY). Added statx/getdents64 defensively for the runtime python:3.13-slim glibc.
+- Constitution rules touched: C-16 (@AC-4/5/7 PRESERVE), F-07/C-05 (rlimits derive from WatchConfig
+  tunables; no new leaf), C-08/P-06 (RED-demonstrating deny-test + coverage-omit removal), C-18, C-14.
+  Floor breaches: none across 4 rounds.
+- Status: spec-ready → design-approved.
+
+### Open Threads (carry to /sdd-spec)
+- O-1: allowlist FR-4 fragility → the frozen golden must be operation-level AND large-array (numpy
+  linalg/fft, pandas groupby/rolling, RNG) to catch syscalls like mbind; a numpy bump adding a compute
+  syscall on an unexercised path → prod EPERM→runtime_error. Target: the test step.
+- O-2: single-UID cross-child NPROC starvation (shared uid-65534 ceiling) → @AC-5 test asserts a
+  fork-bomb child doesn't permanently break later executions (killpg reclaim); per-slot-UID is the
+  on-file escape hatch.
+- O-3: verification env ≠ runtime image → statx/getdents64 added defensively; the real setuid+seccomp
+  syscall validation MUST run inside the runtime container in CI/deploy (fails.md:369); the deny-test
+  must demonstrate RED and never silent-skip (fails.md:133); remove sandbox.py from coverage omit and
+  re-check the 50% gate.
+- Impl-spec watch (from overlap scan): pin NEW indicators.sandbox.* names IF any are added (design
+  adds NONE — all rlimits derived); potential indicators-Dockerfile co-edit with 210 (mTLS cert wiring).
+
+## Session 2026-09-28 — sdd-spec
+
+- Generated implementation-spec.md with 4 steps. Status → implementation-ready.
+- Step map: (1) `service` — add `pyseccomp` dep + `uv lock` + Dockerfile `libseccomp2`/build-deps, no
+  `USER` (child setuid needs root parent); (2) `service` — rewrite `sandbox.py` (distinct-UID 65534
+  child + stdin `Popen(start_new_session=True)` + post-import seccomp allowlist ERRNO(EPERM) +
+  expanded rlimits [keep RLIMIT_DATA, no RLIMIT_AS; add CPU/NPROC=max_concurrent×16/FSIZE=0/NOFILE=64]
+  + HOME/TMPDIR=nonexistent/PYTHONDONTWRITEBYTECODE + killpg-on-timeout/exit) + `servicer.py` passes
+  `max_concurrent=self._cfg.sandbox_max_concurrent()`; (3) `test` — new `test_sandbox_isolation.py`
+  covering AC-1..AC-6 + remove `sandbox.py` from coverage `omit` (R5) + keep pre-existing suite green;
+  (4) `docs` — reconcile service CLAUDE.md / context-constitution / indicator-builder + teardown.
+- Key codebase findings (all line numbers verified on `feature/indicators-sandbox-os-isolation`):
+  - `execute_formula` `sandbox.py:175-182`; child launch `:198-210`; `_SANDBOX_WRAPPER` `:116-172`;
+    the single `RLIMIT_DATA` site `:127-128`; parent classification `:224-263`. No new exit_reason —
+    seccomp/setuid/rlimit denial → existing default `runtime_error` (design §6).
+  - `_sandbox_env()` `:43-55` gets the write-elimination env additions; servicer sandbox call
+    `servicer.py:170-179`, `sandbox_max_concurrent()` already read at `:61`, exit_reason map `:181-187`.
+  - Coverage `omit` (incl. `app/services/sandbox.py`) `pyproject.toml:39-46` — removed in Step 3.
+  - No new env var / port / config leaf → docker-compose + `.do/app*.yaml` untouched; Dockerfile
+    referenced by path (root CLAUDE.md § Dockerfile Update Workflow). No proto/migration.
+  - CI: `python-lint` `uv lock --check` (ci.yml:323); `python-test` `pytest --cov=app
+    --cov-fail-under=50` (ci.yml:373-378) runs on the host runner (non-root) → setuid path is
+    `skipif(geteuid()!=0)`-recorded (never silent, fails.md:133); full setuid+seccomp+rlimit stack
+    validation deferred to CI/deploy inside the runtime image (O-3/fails.md:369).
+- P-03 surfaced (not papered): AC-2 "reads outside scratch denied" is realized by the approved design
+  as secret-exfiltration containment (env-strip + distinct-UID /proc/environ EACCES + no secrets on
+  disk + write-elimination), NOT a blanket read jail (flag-filtered openat was Rejected #7). Recorded
+  in the spec's Scenario Coverage note so impl-spec review sees the interpretation.
+
+## Session 2026-09-28 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 3 warnings (advisory — did not block). Criteria PASS WITH WARNINGS; every cited
+  symbol/path/line verified against the branch; plan matches design.md; C-08/P-06/C-15/C-16/F-07 all
+  satisfied; no Floor risk. Overlap scan CLEAN (no config/proto/migration/file collision; 201/205 are
+  the only other servicer.py touchers and both are launched/trunk).
+- Warnings carried into execution:
+  - Step 1/4: Dockerfile adds libseccomp packages but no step updated the service CLAUDE.md § Docker
+    Build Pattern (root Dockerfile Update Workflow) — [x] resolved: folded into Step 4 (new instruction
+    4a + Files entry) pre-execution.
+  - Step 3: 9-instruction step is dense but complete — [x] acknowledged, no action (each instruction
+    discrete/traceable; no split required).
+  - Minor line-ref drift (test_sandbox.py TestSandboxExecution :9 vs :10; omit block :39-46 vs :40-46)
+    — [x] immaterial, both resolve to the same construct; execute-time discovery re-verifies live lines.
+- Overlap findings: none. Heads-up (not a blocker): if 210 (mTLS) later specs edits to the indicators
+  Dockerfile, whichever of 209/210 merges second is a soft rebase — re-run the Mode B scan then.
+- @AC-2 interpretation (from /sdd-spec, P-03): realized as secret-exfil containment (env-strip +
+  distinct-UID /proc/environ EACCES + no on-disk secrets + write-elimination), NOT a blanket file-read
+  jail (flag-filtered openat was Rejected #7). World-readable non-secret files stay readable by design.
+  Carried into execution as the accepted AC-2 semantics.
+
+## Session 2026-09-28 — sdd-execute (sequential)
+
+- Tooling setup: EXECUTE SANDBOX IS ROOT (uid 0) + libseccomp.so.2 present + pyseccomp 0.1.2 installable —
+  the full seccomp + setuid(65534) + rlimit stack is verifiable LOCALLY (real green), not deferred to CI
+  (better than the spec's fails.md:369 worst case). Probe confirmed: fork→setuid(65534)+seccomp
+  ERRNO(EPERM) allowlist load → socket() blocked EPERM in nobody child.
+- Standing authorization "all the way to code + PRs" + resolved design forks = sequential-mode entry
+  confirm satisfied; running Phases 1+3 automatically, pausing only at genuine blockers/checkpoints.
+
+### Step 1 — Add pyseccomp dep + Dockerfile libseccomp packages [done]
+- pyproject.toml: added `pyseccomp>=0.1.2`; `uv lock` regenerated (uv.lock in sync, `uv lock --check` ok).
+  Dockerfile: apt install libseccomp2(runtime)+libseccomp-dev+gcc(build, purged after uv sync); no USER
+  line (root parent needed for child setuid). `.do/*` untouched (Dockerfile referenced by path).
+- Files modified: `pyproject.toml`, `uv.lock`, `Dockerfile`
+- TDD: N/A (dependency/build). Verification: uv lock --check ok; pyseccomp in pyproject+uv.lock;
+  libseccomp2 in Dockerfile; 0 USER lines; ruff clean. Image build deferred to CI/deploy (Docker not
+  used locally). Deviations: none.
+
+### Step 2 — Rewrite sandbox.py child launch + wrapper for OS isolation [done]
+- sandbox.py: _sandbox_env += PYTHONDONTWRITEBYTECODE/HOME/TMPDIR=/nonexistent (write elimination).
+  _SANDBOX_WRAPPER rewritten: eager-import allowed modules (pre-filter) → setuid(65534) if root →
+  prctl(NO_NEW_PRIVS) → expanded rlimits (keep RLIMIT_DATA, add CPU=ceil(timeout/1000)+2,
+  NPROC=max_concurrent*16, FSIZE=0, NOFILE=64; NO RLIMIT_AS) → pyseccomp allowlist (defaction
+  ERRNO(EPERM), native-arch, module-level _SECCOMP_ALLOW) → exec(source). Parent: Popen([py,"-"],
+  stdin) + communicate (stdin delivery, no tempfile) + start_new_session; _killpg helper on timeout
+  AND in finally (load-bearing anti-orphan). execute_formula gained max_concurrent param; servicer
+  passes self._cfg.sandbox_max_concurrent() (F-07). Denial→existing runtime_error (no proto).
+- Files modified: `app/services/sandbox.py`, `app/handlers/servicer.py`
+- TDD: red-green paired with Step 3. Informal behavioral proof (live smoke, as root): benign numpy →
+  success value 2.5 (FR-4 parity); socket() → runtime_error (network contained); `import os` (not
+  allowed) → import_blocked (@AC-4 intact). Verification: ruff clean; structural greps present; no
+  setrlimit(RLIMIT_AS) (3 grep hits are explanatory prose only — INDICATORS-2 holds).
+- Deviations: none material. Note (accepted, design §3 / Open Q4 latency deferred): eager-import of ALL
+  allowed modules per run adds import latency even for a formula that uses only a subset — the spec
+  directs this (shrinks the post-import seccomp surface); acceptable tradeoff.
+
+### Step 3 — OS-isolation test module + coverage-omit removal [done]
+- Created tests/test_sandbox_isolation.py: 19 tests across @AC-1..6 exercising the REAL child —
+  network-egress block (socket EPERM), env secret-strip + write-elim vars, formula-environ no-secrets,
+  file-write blocked (RLIMIT_FSIZE), root-gated distinct-UID (child euid==65534 + cross-UID
+  /proc/<ppid>/environ EACCES), timeout+memory determinism + recovery, 6 frozen numeric goldens
+  (incl. 800x800 linalg hitting mbind), fork-bomb cap + recovery, config-derived RLIMIT_CPU/NPROC in
+  the generated wrapper (Popen monkeypatch capture), no-new-config-leaf assertion, and the structural
+  _SECCOMP_ALLOW guard (permits compute, excludes network/exec/io_uring/ptrace). Removed
+  app/services/sandbox.py from pyproject `[tool.coverage.run] omit`.
+- Files modified: `tests/test_sandbox_isolation.py` (new), `pyproject.toml`
+- TDD: RED = collection ImportError (_SECCOMP_ALLOW absent) against pre-Step-2 sandbox (captured);
+  GREEN = 19 isolation pass; full suite 162 passed, sandbox.py 97% cov, TOTAL 84% (gate 50%);
+  pre-existing suite (test_sandbox/concurrency/config_watcher) 24 passed (FR-4/C-16 preserved).
+- Test-run note: MUST run via the service venv (`uv run --extra dev pytest` / `.venv/bin/python -m
+  pytest`) — a bare `uv run pytest` resolved a global uv-tool pytest (py3.11) whose sys.executable
+  child lacks numpy/pyseccomp, spuriously failing every subprocess test. Recorded so CI/others avoid it.
+- Root-gated distinct-UID tests RAN here (execute sandbox is root); the full setuid+seccomp stack under
+  the python:3.13-slim image is the deferred CI/deploy check (O-3), noted in the module docstring.
+- Deviations: none.
+
+### Step 4 — Reconcile sandbox docs + teardown [done]
+- services/xstockstrat-indicators/CLAUDE.md: rewrote § Sandbox Security Model for the OS-isolation
+  layers (distinct-UID, post-import seccomp allowlist, expanded rlimits, write-elim env, killpg); added
+  the § Docker Build Pattern libseccomp note (impl-spec review warning #1).
+- context-constitution.md: added INDICATORS-6 (distinct-UID + no USER), -7 (post-import allowlist
+  fails-closed), -8 (NO_NEW_PRIVS), -9 (killpg load-bearing); re-grounded INDICATORS-1/-2/-4 anchors
+  to the rewritten sandbox.py; fixed the sandbox-overview pointer to a section ref.
+- docs/runbooks/indicator-builder.md: Sandbox Constraints now note OS-enforced denial (seccomp + rlimits
+  + distinct UID) + added the max_concurrent row.
+- Files modified: `services/xstockstrat-indicators/CLAUDE.md`,
+  `services/xstockstrat-indicators/docs/context-constitution.md`, `docs/runbooks/indicator-builder.md`
+- TDD: N/A (docs). Verification greps pass.
+
+### Teardown (root CLAUDE.md § Teardown) — manual (context-constitution plugin unavailable)
+- `/context-forge:context-constitution refresh` NOT available (only `context-forge:context-scrubber` is
+  present, a different bloat-audit tool; no context-constitution skill/plugin dir). Performed the
+  mandated MANUAL equivalent: re-read every touched context file against the rewritten sandbox.py and
+  reconciled drift — CLAUDE.md (§ Sandbox Security Model + Docker Build Pattern rewritten to match code);
+  context-constitution.md (INDICATORS anchors re-grounded to the current file: _THREAD_LIMIT_ENV:44-52,
+  RLIMIT_DATA:258, builtins:226; new INDICATORS-6..9 for the 209 invariants; pointer de-lined);
+  indicator-builder.md (OS-enforced denial). To be recorded in the PR body (plugin unavailable + manual
+  reconciliation) per fails.md:670.
+
+## Session 2026-09-28 — sdd-execute (sequential) code-complete
+**Steps this session**: 1, 2, 3, 4
+**Progress**: 4 done / 4 total → status.md code-completed
+**Verification**: full agent... indicators suite 162 passed, sandbox.py 97% cov, TOTAL 84% (gate 50%);
+ruff clean; live smoke (as root) proved network/exec/secret/fork containment + numeric parity.
+**Next**: C-16 promotion + integration PR (feature-end checkpoint).

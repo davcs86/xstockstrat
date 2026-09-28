@@ -2389,3 +2389,14 @@ ambiguity is logged here).
 - **Mistake**: A removal feature's dep cleanup classified `httpx2` as a **sole-use orphan** of the deleted `app/postgres_mcp_client.py` (design-adversary's claim, folded into recon + the ledger) and predicted it would uninstall and make `test_httpx2_importable` fail at collection. At execute-time `uv tree --invert` showed `httpx2 → mcp → xstockstrat-agent`: `httpx2` is a **transitive dependency of the `mcp` SDK**, so it stayed installed and in `uv.lock`, and the smoke test kept passing. Removing the *redundant direct declaration* from `pyproject.toml` was still correct (no agent code imports it directly), but the "orphan that uninstalls" rationale — and the delete-because-it-fails plan for its test — were wrong. A grep of direct imports is **not** proof a dep will be removed.
 - **Evidence**: `services/xstockstrat-agent/uv.lock` (`httpx2` retained, required by `mcp`); `uv tree --invert --package httpx2`; `docs/roadmap/features/214-remove-agent-postgres-mcp/implementation-spec.md` § Deviation Log DEV-1.
 - **Rule it implies**: Before classifying a dependency as a removable orphan, run the package manager's **reverse-dependency query** (`uv tree --invert` / `uv pip show <dep>` Required-by / `pnpm why`), not just a source-import grep. A dep with another consumer (esp. a transitive one via a core SDK) will **not** uninstall when you drop its direct declaration — so its `test_<dep>_importable` smoke test will keep passing and must be removed on the "we no longer own this declaration" rationale, not "it fails at collection." Removing a redundant *direct* declaration of a still-transitively-required dep is safe and good hygiene; predicting its uninstall is the error.
+
+### 2026-09-28 — indicators-sandbox-os-isolation — test-infra (subprocess sys.executable)
+- **Mistake**: `uv run pytest` resolved a **global uv-tool** pytest (python3.11) instead of the service
+  venv, so a sandbox test whose child subprocess uses `sys.executable` ran under an interpreter lacking
+  numpy/pyseccomp → every subprocess-spawning test failed with `ModuleNotFoundError` (a false red that
+  looks like a code bug).
+- **Evidence**: `services/xstockstrat-indicators/tests/test_sandbox_isolation.py`; fix = `uv sync
+  --extra dev` then `uv run --extra dev pytest` (or `.venv/bin/python -m pytest`).
+- **Rule it implies**: for any test that spawns `sys.executable` (sandbox/subprocess tests), run the
+  suite through the **service venv** interpreter, never a global tool pytest — the child inherits the
+  parent's interpreter and its site-packages.
