@@ -94,3 +94,18 @@
 - [ ] Accepted C-14 residual: content exfil to arbitrary PUBLIC hosts via caller URLs (allowlist deferred; credential-leak vector closed by cross-origin strip). Target: recorded; file follow-up feature only if an operator wants positive gating.
 - [x] httpx/httpcore internal coupling (self._pool + connect_tcp) — identity fail-closed assert + rebind CI test. Targeted to spec Steps 3 (assertion) + 4 (rebind/identity test).
 - [x] Reconcile Python 3.12 (recon/venv) vs 3.13 (CLAUDE.md) — deployed image is 3.13 (`Dockerfile:1`); explicit deny-list DiD + interpreter-independent unit cases cover the drift (spec Steps 1+2).
+
+## Session 2026-09-28 — sdd-review impl-spec (advisory)
+
+- Result: 1 failure, 3 warnings/notes (advisory — did not block). No Floor breach. Criteria PASS WITH
+  WARNINGS; every cited symbol/path/version confirmed against the tree; C-08/C-15/P-06 complete.
+- **Warnings addressed before execution** (operator standing rule):
+  - [x] Step 4 (test) omitted `--cov-fail-under` → added the service-wide `pytest --cov=app --cov-fail-under=40`
+    gate to its Verification (matching Steps 2/6).
+  - [x] Step 5 NOTE: `urllib.parse` (urlparse/urljoin) + `resolve_scope` imports not enumerated → added to Step 5 Instruction 1.
+  - [~] Step 3 fail-closed identity assertion reads httpx-private `self._pool._network_backend` — intentional,
+    commented, and tracked as design Open Risk #2 (re-verify on any httpx/httpcore bump). No change (accepted approach).
+- Overlap: WARN-only — soft `app/tools.py` import-block rebase vs 217 (implementation-ready; disjoint
+  functions). `agent.extract.*` keys unique repo-wide. 214 already merged (trunk). No migration/proto/config
+  FAIL; no merge-order entry required.
+- Nothing carried into execution as `[ ] unaddressed`.

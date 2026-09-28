@@ -248,7 +248,7 @@ then confirm the public surface exists: `grep -n "class EgressBlocked\|def asser
    pass-through wrapper `MagicMock` and assert called) — guards the blocking-getaddrinfo regression.
 
 **Verification**:
-`cd services/xstockstrat-agent && uv run ruff check . && uv run ruff format --check . && uv run pytest tests/test_egress.py -q` — all pass.
+`cd services/xstockstrat-agent && uv run ruff check . && uv run ruff format --check . && uv run pytest tests/test_egress.py -q` — all pass; then the service-wide coverage gate `uv run pytest --cov=app --cov-fail-under=40` holds (agent CI threshold 40%).
 
 ---
 
@@ -282,7 +282,8 @@ then confirm the public surface exists: `grep -n "class EgressBlocked\|def asser
 **Covers**: `—`
 
 **Instructions**:
-1. Add `from app import egress` (and reuse the existing lazy `import httpx` at `:2232`). Read the four
+1. Add `from app import egress`, `from app.scopes import resolve_scope`, and `from urllib.parse import
+   urlparse, urljoin` (and reuse the existing lazy `import httpx` at `:2232`). Read the four
    policy scalars via the `oauth_server.py:82-85` pattern, each in a try/except with a safe fallback default
    and namespace/env `namespace="agent", environment=resolve_scope("")`:
    - `agent.extract.max_redirects` → int, default `5`
