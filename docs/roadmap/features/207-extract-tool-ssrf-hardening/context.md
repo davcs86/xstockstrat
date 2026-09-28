@@ -109,3 +109,25 @@
   functions). `agent.extract.*` keys unique repo-wide. 214 already merged (trunk). No migration/proto/config
   FAIL; no merge-order entry required.
 - Nothing carried into execution as `[ ] unaddressed`.
+
+## Session 2026-09-28 — sdd-execute (sequential)
+
+- Re-spec gate: merged main-dev (already up to date — 207 branched post-214); validated all 7 steps'
+  evidence, zero drift, no re-spec. Tooling: agent .venv present (httpx 0.28.1/httpcore 1.0.9/anyio/respx
+  import OK, pytest 9.0.3). No DB started.
+- Executing under operator standing "all the way to code + PRs" authorization; all 7 steps are agent-surface
+  (checkpoints at step cap only).
+
+### Step 1 — Pure egress validator app/egress.py [done]
+- Created app/egress.py: EgressBlocked (opaque, no address echoed), assert_allowed_scheme (http/https),
+  assert_public_ip (ipv4-mapped unwrap → primary `not is_global` gate → DiD is_loopback/link_local/
+  unspecified/reserved/private/multicast + literal metadata; fail-closed parse).
+- Files modified: `app/egress.py` (new)
+- TDD: paired with Step 2. Deviations: none.
+
+### Step 2 — Validator unit tests [done]
+- Created tests/test_egress.py: 15 deny IPs (incl. ::ffff:169.254.169.254, ::ffff:127.0.0.1, NAT64
+  64:ff9b::7f00:1, CGNAT 100.64.0.1), 3 allow IPs, malformed, scheme allow/deny, FR-6 no-leak. 30 passed.
+- Files modified: `tests/test_egress.py` (new)
+- TDD: RED = ImportError with egress.py moved aside (captured); GREEN = 30 passed; full suite 461 passed, 79.80% cov.
+- Deviations: none.

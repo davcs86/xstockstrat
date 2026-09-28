@@ -1,6 +1,6 @@
 # Implementation Spec: extract-tool-ssrf-hardening
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-09-28
 **Feature**: `docs/roadmap/features/207-extract-tool-ssrf-hardening/feature.md`
 **Total Steps**: 7
@@ -74,7 +74,7 @@ unchanged. Their MCP contract (name / params / return shape) does not change, so
 
 ### Step 1 — service: Pure egress validator module (`app/egress.py`)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/egress.py` — create
@@ -120,7 +120,7 @@ then confirm the public surface exists: `grep -n "class EgressBlocked\|def asser
 
 ### Step 2 — test: Validator unit tests (deny ranges, scheme, mapped/CGNAT)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_egress.py` — create
