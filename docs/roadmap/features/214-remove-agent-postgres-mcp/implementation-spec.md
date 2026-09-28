@@ -455,7 +455,7 @@ required.
 
 ### Step 10 — docs: Reconcile the tool-count mirrors (copilot.ts, agent CLAUDE.md, mcp-tools.md)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs` / `xstockstrat-ui` count mirror
 **Files**:
 - `services/xstockstrat-ui/src/lib/copilot.ts` — modify

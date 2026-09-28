@@ -236,3 +236,10 @@
   postgres-mcp budget row / xstockstrat_agent role, Direct total = 8. GREEN (3 passed), ruff clean.
 - Files modified: `tests/test_deployment_env_vars.py`
 - TDD: RED = 8 old asserts failed after Steps 7/8; GREEN after inversion. Deviations: none.
+
+### Step 10 — Reconcile tool-count mirrors (copilot.ts, agent CLAUDE.md, mcp-tools.md) [done]
+- copilot.ts COPILOT_MCP_TOOL_COUNT 52→43 + lineage comment (→ 43 feature 214); agent CLAUDE.md
+  count words 52→43 + 9 db_ catalog rows deleted; mcp-tools.md counts 52→43 + `## Database Tools`
+  section removed (1708→1569 lines). UI lint exit 0 (only pre-existing warnings in unrelated pages).
+- Files modified: `services/xstockstrat-ui/src/lib/copilot.ts`, `services/xstockstrat-agent/CLAUDE.md`, `docs/runbooks/mcp-tools.md`
+- TDD: N/A (docs/mirror; executable guard is Step 2 name-set). Deviations: none.
