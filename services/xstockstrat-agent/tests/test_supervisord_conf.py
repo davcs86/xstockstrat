@@ -1,13 +1,10 @@
 """
-Structural validation of supervisord.conf (AC-1, AC-2, AC-3).
+Structural validation of supervisord.conf.
 Static-file assertions — no database or runtime required.
 
-AC-1: postgres-mcp co-process is declared in supervisord.conf.
-AC-2: app-main (uvicorn agent) is declared in supervisord.conf.
-AC-3: postgres-mcp does not bind to 0.0.0.0 (127.0.0.1 is the correct default).
-
-Full runtime verification (both processes actually start) requires docker-compose
-integration and is validated at deploy time, not in this unit test.
+app-main (uvicorn agent) is the sole declared program. The postgres-mcp
+co-process was removed with feature 214 (@AC-2): supervisord must NOT declare
+any program:postgres-mcp section.
 """
 
 import configparser
@@ -36,34 +33,16 @@ def test_supervisord_nodaemon():
 
 
 def test_app_main_declared():
-    """AC-2: agent (uvicorn) process block exists."""
-    assert _load().has_section("program:app-main"), "program:app-main section missing (AC-2)"
+    """The agent (uvicorn) process block exists."""
+    assert _load().has_section("program:app-main"), "program:app-main section missing"
 
 
 def test_app_main_autorestart():
     assert _load().get("program:app-main", "autorestart") == "true"
 
 
-def test_postgres_mcp_declared():
-    """AC-1: postgres-mcp co-process block exists."""
-    assert _load().has_section("program:postgres-mcp"), (
-        "program:postgres-mcp section missing (AC-1)"
+def test_no_postgres_mcp_section():
+    """@AC-2 @feature-214: the postgres-mcp co-process is removed — no such program block."""
+    assert not _load().has_section("program:postgres-mcp"), (
+        "program:postgres-mcp must not be declared — the co-process was removed (feature 214)"
     )
-
-
-def test_postgres_mcp_autorestart():
-    assert _load().get("program:postgres-mcp", "autorestart") == "true"
-
-
-def test_postgres_mcp_no_external_bind():
-    """AC-3: postgres-mcp must NOT explicitly bind to 0.0.0.0."""
-    command = _load().get("program:postgres-mcp", "command")
-    assert "0.0.0.0" not in command, (
-        "postgres-mcp command must not contain 0.0.0.0; 127.0.0.1 is the correct default (AC-3)"
-    )
-
-
-def test_postgres_mcp_unrestricted():
-    """FR-2: postgres-mcp must run in --unrestricted mode (write access required)."""
-    command = _load().get("program:postgres-mcp", "command")
-    assert "--unrestricted" in command, "postgres-mcp must use --unrestricted mode (FR-2)"

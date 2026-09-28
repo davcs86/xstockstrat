@@ -241,7 +241,7 @@ proven by **Step 2** (name-set no longer advertises them). **UI** is touched onl
 
 ### Step 5 — service: Delete the `[program:postgres-mcp]` co-process block from `supervisord.conf`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/supervisord.conf` — modify
@@ -273,7 +273,7 @@ proven by **Step 2** (name-set no longer advertises them). **UI** is touched onl
 
 ### Step 6 — test: Invert `test_supervisord_conf.py` to assert the co-process block is absent
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_supervisord_conf.py` — modify

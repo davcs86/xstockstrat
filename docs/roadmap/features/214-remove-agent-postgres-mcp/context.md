@@ -204,3 +204,16 @@
   (AssertionError) after Step 3; captured. test_httpx2_importable did NOT go red (httpx2 transitive via
   mcp) — deleted anyway since httpx2 is no longer our declared/direct dep. See Deviation Log.
 - Deviations: httpx2 transitive-dep correction (Deviation Log + ledger corrected).
+
+### Step 5 — Delete [program:postgres-mcp] block from supervisord.conf [done]
+- Removed the co-process program block (lines 13-21); [program:app-main] retained. File ends clean at 12 lines.
+- Files modified: `supervisord.conf`
+- TDD: RED = 4 postgres-mcp tests fail (NoSectionError) after removal; captured.
+- Deviations: none
+
+### Step 6 — Invert test_supervisord_conf.py to assert the block is absent [done]
+- Deleted the 3 postgres-mcp attribute tests; inverted test_postgres_mcp_declared → test_no_postgres_mcp_section
+  (@AC-2 @feature-214); updated docstring. GREEN (5 passed), ruff clean.
+- Files modified: `tests/test_supervisord_conf.py`
+- TDD: RED captured after Step 5; GREEN after this step.
+- Deviations: none
