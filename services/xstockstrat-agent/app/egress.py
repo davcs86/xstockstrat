@@ -8,6 +8,12 @@ blocked fetch cannot enumerate internal targets back to the model (FR-6).
 from __future__ import annotations
 
 import ipaddress
+import socket
+import typing
+
+import anyio
+import httpcore
+import httpx
 
 _ALLOWED_SCHEMES = frozenset({"http", "https"})
 # Cloud-provider metadata endpoint — already covered by link-local / not-is_global,
@@ -63,3 +69,86 @@ def assert_public_ip(ip_str: str) -> None:
         or ip == _METADATA_V4
     ):
         raise EgressBlocked("non-public address")
+
+
+class PinnedValidatingBackend(httpcore.AsyncNetworkBackend):
+    """httpcore network backend that resolves + validates every candidate address and connects only
+    to a pinned, validated public IP — closing the DNS-rebinding TOCTOU window (FR-2).
+
+    ``connect_tcp`` fires on every connection, including each redirect hop, so per-hop IP validation
+    is automatic. TLS SNI is unaffected: httpcore applies ``start_tls(server_hostname=...)`` on the
+    stream separately, using the original request hostname, so pinning the TCP IP does not weaken
+    certificate verification. The real connect is delegated to a held ``AnyIOBackend`` — the
+    concrete backend ``AutoBackend`` picks under asyncio, and (unlike ``AutoBackend``) a public
+    httpcore symbol.
+    """
+
+    def __init__(self) -> None:
+        self._auto = httpcore.AnyIOBackend()
+
+    async def connect_tcp(
+        self,
+        host: str,
+        port: int,
+        timeout: float | None = None,
+        local_address: str | None = None,
+        socket_options: typing.Iterable[typing.Any] | None = None,
+    ) -> httpcore.AsyncNetworkStream:
+        # Resolve off the event loop — a blocking getaddrinfo here would stall the whole MCP loop.
+        infos = await anyio.to_thread.run_sync(
+            lambda: socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+        )
+        ips = [info[4][0] for info in infos]
+        if not ips:
+            raise EgressBlocked("unresolvable host")
+        # Reject-if-any: a mixed public/private answer is itself the rebind signal — never filter.
+        for ip in ips:
+            assert_public_ip(ip)
+        # Connect to the pinned validated IP literal, never the (re-resolvable) hostname.
+        return await self._auto.connect_tcp(
+            host=ips[0],
+            port=port,
+            timeout=timeout,
+            local_address=local_address,
+            socket_options=socket_options,
+        )
+
+    async def connect_unix_socket(
+        self,
+        path: str,
+        timeout: float | None = None,
+        socket_options: typing.Iterable[typing.Any] | None = None,
+    ) -> httpcore.AsyncNetworkStream:
+        # No unix-socket egress from the extract fetch path.
+        raise EgressBlocked("unix socket egress not permitted")
+
+
+class PinningTransport(httpx.AsyncHTTPTransport):
+    """httpx transport whose httpcore pool uses the SSRF-validating pinning backend.
+
+    Swaps the network backend on the pool httpx already configured (preserving its ssl_context /
+    http2 / connection limits) and fails closed if the pin is ever silently absent.
+    """
+
+    def __init__(self, *args: typing.Any, **kwargs: typing.Any) -> None:
+        super().__init__(*args, **kwargs)
+        self._pinned_backend = PinnedValidatingBackend()
+        # Swap the backend on httpx's already-built pool; it is read at connection-creation time and
+        # no connection exists yet, so this takes effect for every request.
+        self._pool._network_backend = self._pinned_backend
+        # Fail closed (not `assert`, which -O strips): refuse to start if the pin is not installed.
+        if self._pool._network_backend is not self._pinned_backend:
+            raise EgressBlocked("egress pin not installed")
+
+
+def build_pinned_client(*, connect_timeout: float, read_timeout: float) -> httpx.AsyncClient:
+    """An ``httpx.AsyncClient`` that pins every connection to a validated public IP.
+
+    ``follow_redirects`` is False by design — the caller owns a bounded redirect loop that
+    re-validates scheme per hop and strips cross-origin credentials (FR-3/FR-4).
+    """
+    return httpx.AsyncClient(
+        transport=PinningTransport(),
+        timeout=httpx.Timeout(read_timeout, connect=connect_timeout),
+        follow_redirects=False,
+    )

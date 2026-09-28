@@ -131,3 +131,32 @@
 - Files modified: `tests/test_egress.py` (new)
 - TDD: RED = ImportError with egress.py moved aside (captured); GREEN = 30 passed; full suite 461 passed, 79.80% cov.
 - Deviations: none.
+
+### Step 3 — DNS-rebind-safe pinning transport app/egress.py [done]
+- Appended to app/egress.py: `PinnedValidatingBackend(httpcore.AsyncNetworkBackend)` — resolves off the
+  event loop via `anyio.to_thread.run_sync(getaddrinfo)`, validates EVERY resolved A/AAAA with
+  `assert_public_ip` (reject-if-any on mixed answers), then connects to the pinned validated IP literal via
+  a held `self._auto = httpcore.AnyIOBackend()`; `connect_unix_socket` raises EgressBlocked.
+  `PinningTransport(httpx.AsyncHTTPTransport)` swaps `self._pool._network_backend` onto the pin + fail-closed
+  identity assertion. `build_pinned_client(connect_timeout, read_timeout)` → AsyncClient with
+  follow_redirects=False (Step 5 owns the bounded redirect loop).
+- Files modified: `app/egress.py`
+- TDD: red-green paired with Step 4.
+- Deviations: **DEV-1** — held inner backend is `httpcore.AnyIOBackend`, not `AutoBackend` (`AutoBackend`
+  is not a public httpcore export; `AnyIOBackend` is what it selects under asyncio). **DEV-2** — pin
+  installed by swapping `self._pool._network_backend` on httpx's already-built pool rather than rebuilding
+  the pool (realizes the spec's stated "only swap in network_backend" goal, preserves ssl/http2/limits).
+  Both recorded in impl-spec Deviation Log.
+
+### Step 4 — Transport pinning + rebind + identity-assert tests [done]
+- Extended tests/test_egress.py with 5 async tests (asyncio_mode=auto; `@pytest.mark.asyncio` per spec):
+  rebind block (public name → internal A record → EgressBlocked, inner `_auto.connect_tcp` never called),
+  reject-if-any mixed public+private, pinned-IP connect (asserts inner called with host=<validated IP
+  literal>, not hostname), construction-time pin identity assertion (+ fresh unpinned pool discriminates),
+  resolver-off-loop (anyio.to_thread.run_sync spy asserted invoked). Monkeypatch resolver/`_auto` directly —
+  respx bypasses custom transports (reserved for Step 6 happy path).
+- Files modified: `tests/test_egress.py`
+- TDD: RED = ImportError on PinnedValidatingBackend with egress.py stashed to HEAD (captured); GREEN =
+  35 passed (30 validators + 5 transport); full suite `--cov=app --cov-fail-under=40` → 466 passed,
+  egress.py 92%, total 79.87%.
+- Deviations: none beyond the Step-3 DEV-1/DEV-2 that shaped the `_auto` patch seam (tests match spec seam).

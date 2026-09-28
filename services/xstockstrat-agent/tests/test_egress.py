@@ -1,12 +1,34 @@
-"""Unit tests for the SSRF egress validators (feature 207).
+"""Unit tests for the SSRF egress validators + pinning transport (feature 207).
 
-Pure functions — no network, no async. Deny/allow ranges, scheme allowlist, IPv4-mapped/NAT64/CGNAT
-edge cases (asserted regardless of interpreter version), and the FR-6 no-leak guarantee.
+Pure validators: deny/allow ranges, scheme allowlist, IPv4-mapped/NAT64/CGNAT edge cases (asserted
+regardless of interpreter version), and the FR-6 no-leak guarantee. Transport: DNS-rebind
+fail-closed, reject-if-any mixed resolution, pinned-IP connect, construction-time pin identity
+assertion, and the resolver-off-loop regression guard (AC-3). respx bypasses a custom transport, so
+these monkeypatch the resolver / held inner backend directly rather than using respx (respx stays
+for the Step 6 happy path).
 """
 
+import socket
+from unittest.mock import AsyncMock
+
+import anyio
+import httpcore
 import pytest
 
-from app.egress import EgressBlocked, assert_allowed_scheme, assert_public_ip
+import app.egress as egress_mod
+from app.egress import (
+    EgressBlocked,
+    PinnedValidatingBackend,
+    PinningTransport,
+    assert_allowed_scheme,
+    assert_public_ip,
+)
+
+
+def _addrinfo(*ips, port=443):
+    """Build getaddrinfo-shaped 5-tuples (family, type, proto, canonname, sockaddr) for ``ips``."""
+    return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (ip, port)) for ip in ips]
+
 
 # Non-public / internal addresses that MUST be rejected.
 DENY_IPS = [
@@ -67,3 +89,78 @@ def test_egress_blocked_does_not_leak_address():
     with pytest.raises(EgressBlocked) as exc:
         assert_public_ip("10.0.0.5")
     assert "10.0.0.5" not in str(exc.value)
+
+
+# --- Pinning transport: DNS-rebind, reject-if-any, pinned-IP, identity, off-loop (AC-3) ---
+
+
+@pytest.mark.asyncio
+async def test_rebind_public_name_internal_record_is_blocked(monkeypatch):
+    """AC-3: a public hostname that resolves to an internal A record is refused, and the real
+    connect never fires — no packet reaches 10.1.2.3."""
+    monkeypatch.setattr(socket, "getaddrinfo", lambda *a, **k: _addrinfo("10.1.2.3"))
+    backend = PinnedValidatingBackend()
+    inner = AsyncMock()
+    backend._auto.connect_tcp = inner  # patch the held inner backend's connect
+    with pytest.raises(EgressBlocked):
+        await backend.connect_tcp("evil.example.com", 443)
+    inner.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_reject_if_any_mixed_resolution_is_blocked(monkeypatch):
+    """A resolution mixing one public + one private answer is the rebind signal: reject wholesale,
+    never filter to the good one, and never connect."""
+    monkeypatch.setattr(
+        socket, "getaddrinfo", lambda *a, **k: _addrinfo("93.184.216.34", "10.0.0.9")
+    )
+    backend = PinnedValidatingBackend()
+    inner = AsyncMock()
+    backend._auto.connect_tcp = inner
+    with pytest.raises(EgressBlocked):
+        await backend.connect_tcp("mixed.example.com", 443)
+    inner.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_connect_targets_pinned_validated_ip_literal(monkeypatch):
+    """AC-3 (second clause): the connection targets the validated IP literal, not the re-resolvable
+    hostname — the pin closes the TOCTOU window between validation and connect."""
+    monkeypatch.setattr(socket, "getaddrinfo", lambda *a, **k: _addrinfo("93.184.216.34"))
+    backend = PinnedValidatingBackend()
+    inner = AsyncMock(return_value=object())
+    backend._auto.connect_tcp = inner
+    await backend.connect_tcp("good.example.com", 443)
+    inner.assert_awaited_once()
+    assert inner.await_args.kwargs["host"] == "93.184.216.34"
+    assert inner.await_args.kwargs["port"] == 443
+
+
+def test_transport_construction_asserts_pin_identity():
+    """The pin is asserted on held-instance identity at construction, so a pin-absent pool cannot
+    slip through: a fresh unpinned pool's backend is NOT the validating backend."""
+    t = PinningTransport()
+    assert t._pool._network_backend is t._pinned_backend
+    assert isinstance(t._pinned_backend, PinnedValidatingBackend)
+    # A fresh, unpinned pool would fail the same identity check — proving it discriminates.
+    unpinned = httpcore.AsyncConnectionPool()
+    assert unpinned._network_backend is not t._pinned_backend
+
+
+@pytest.mark.asyncio
+async def test_resolver_runs_off_the_event_loop(monkeypatch):
+    """Regression guard (design round-2 DoS finding): the blocking getaddrinfo is dispatched via
+    anyio.to_thread.run_sync, never called inline on the event loop."""
+    monkeypatch.setattr(socket, "getaddrinfo", lambda *a, **k: _addrinfo("93.184.216.34"))
+    real_run_sync = anyio.to_thread.run_sync
+    seen = []
+
+    async def spy(func, *args, **kwargs):
+        seen.append(func)
+        return await real_run_sync(func, *args, **kwargs)
+
+    monkeypatch.setattr(egress_mod.anyio.to_thread, "run_sync", spy)
+    backend = PinnedValidatingBackend()
+    backend._auto.connect_tcp = AsyncMock(return_value=object())
+    await backend.connect_tcp("good.example.com", 443)
+    assert seen, "resolver was not dispatched through anyio.to_thread.run_sync"

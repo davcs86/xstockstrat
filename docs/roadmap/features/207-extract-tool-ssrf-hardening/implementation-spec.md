@@ -159,7 +159,7 @@ then confirm the public surface exists: `grep -n "class EgressBlocked\|def asser
 
 ### Step 3 — service: DNS-rebind-safe pinning transport (`app/egress.py`)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/egress.py` — modify
@@ -210,7 +210,7 @@ then confirm the public surface exists: `grep -n "class EgressBlocked\|def asser
 
 ### Step 4 — test: Transport pinning + rebind + identity-assert unit tests
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_egress.py` — modify
@@ -422,4 +422,32 @@ then confirm the public surface exists: `grep -n "class EgressBlocked\|def asser
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### DEV-1 (Step 3) — held inner backend is `httpcore.AnyIOBackend`, not `AutoBackend`
+
+**Spec text**: Step 3 Instruction 2 delegates the real connect to a held `httpcore.AutoBackend()`
+instance (`self._auto`). Step 4 Instruction 2 patches `self._auto.connect_tcp`.
+**Reality**: `httpcore.AutoBackend` is **not** a top-level public export (`hasattr(httpcore,
+"AutoBackend")` is `False`, verified in the installed httpcore 1.0.9); it is reachable only via the
+private `httpcore._backends.auto`. `httpcore.AnyIOBackend` **is** public and is the concrete backend
+`AutoBackend` selects under asyncio (which this agent runs — grpc.aio + async MCP).
+**Disposition**: `PinnedValidatingBackend` subclasses `httpcore.AsyncNetworkBackend` (the spec's
+literal base) and holds `self._auto = httpcore.AnyIOBackend()`, delegating the pinned-IP connect to
+it. Structurally identical to the spec's held-instance design; only the backend class differs, and it
+avoids a private-symbol import (**F-04** / import-stability). The `self._auto` seam the Step 4 tests
+patch is preserved exactly, so all Step 4 assertions hold verbatim.
+
+### DEV-2 (Step 3) — pin installed by swapping `self._pool._network_backend`, not rebuilding the pool
+
+**Spec text**: Step 3 Instruction 3 offers "assign `self._pool = httpcore.AsyncConnectionPool(
+network_backend=backend, ...)` — carry over the pool config … reuse the constructed `self._pool`'s
+existing kwargs where practical; **the goal is only to swap in `network_backend`**."
+**Reality**: `httpx.AsyncHTTPTransport.__init__` builds a fully-configured `AsyncConnectionPool`
+(ssl_context, http2, limits, proxy, retries) whose kwargs are not all re-readable to faithfully
+reconstruct. httpcore reads `_network_backend` lazily at connection-creation time, and no connection
+exists at `__init__`.
+**Disposition**: after `super().__init__(...)`, assign `self._pool._network_backend =
+self._pinned_backend` on httpx's already-built pool. This realizes the spec's stated goal ("only swap
+in `network_backend`") while preserving every pool config the base transport set — strictly safer than
+a hand-rebuilt pool that could silently drop TLS/http2/limits. The construction-time fail-closed
+identity assertion (`self._pool._network_backend is self._pinned_backend`) is unchanged and still
+raises `EgressBlocked` if the pin is ever absent.
