@@ -167,3 +167,23 @@
 - Deviations: none material. Note (accepted, design §3 / Open Q4 latency deferred): eager-import of ALL
   allowed modules per run adds import latency even for a formula that uses only a subset — the spec
   directs this (shrinks the post-import seccomp surface); acceptable tradeoff.
+
+### Step 3 — OS-isolation test module + coverage-omit removal [done]
+- Created tests/test_sandbox_isolation.py: 19 tests across @AC-1..6 exercising the REAL child —
+  network-egress block (socket EPERM), env secret-strip + write-elim vars, formula-environ no-secrets,
+  file-write blocked (RLIMIT_FSIZE), root-gated distinct-UID (child euid==65534 + cross-UID
+  /proc/<ppid>/environ EACCES), timeout+memory determinism + recovery, 6 frozen numeric goldens
+  (incl. 800x800 linalg hitting mbind), fork-bomb cap + recovery, config-derived RLIMIT_CPU/NPROC in
+  the generated wrapper (Popen monkeypatch capture), no-new-config-leaf assertion, and the structural
+  _SECCOMP_ALLOW guard (permits compute, excludes network/exec/io_uring/ptrace). Removed
+  app/services/sandbox.py from pyproject `[tool.coverage.run] omit`.
+- Files modified: `tests/test_sandbox_isolation.py` (new), `pyproject.toml`
+- TDD: RED = collection ImportError (_SECCOMP_ALLOW absent) against pre-Step-2 sandbox (captured);
+  GREEN = 19 isolation pass; full suite 162 passed, sandbox.py 97% cov, TOTAL 84% (gate 50%);
+  pre-existing suite (test_sandbox/concurrency/config_watcher) 24 passed (FR-4/C-16 preserved).
+- Test-run note: MUST run via the service venv (`uv run --extra dev pytest` / `.venv/bin/python -m
+  pytest`) — a bare `uv run pytest` resolved a global uv-tool pytest (py3.11) whose sys.executable
+  child lacks numpy/pyseccomp, spuriously failing every subprocess test. Recorded so CI/others avoid it.
+- Root-gated distinct-UID tests RAN here (execute sandbox is root); the full setuid+seccomp stack under
+  the python:3.13-slim image is the deferred CI/deploy check (O-3), noted in the module docstring.
+- Deviations: none.

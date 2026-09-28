@@ -219,7 +219,7 @@ structural greps above.
 
 ### Step 3 — test: OS-isolation test module, coverage-omit removal, regression proof
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/test_sandbox_isolation.py` — create
