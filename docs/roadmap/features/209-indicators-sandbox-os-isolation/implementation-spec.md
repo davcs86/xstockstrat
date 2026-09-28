@@ -1,6 +1,6 @@
 # Implementation Spec: indicators-sandbox-os-isolation
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-09-28
 **Feature**: `docs/roadmap/features/209-indicators-sandbox-os-isolation/feature.md`
 **Total Steps**: 4
@@ -314,7 +314,7 @@ grep -rn "skipif\|geteuid" tests/test_sandbox_isolation.py   # root-gated distin
 
 ### Step 4 — docs: Reconcile sandbox docs + context-constitution teardown
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/` + `services/xstockstrat-indicators/`
 **Files**:
 - `services/xstockstrat-indicators/CLAUDE.md` — modify (§ Sandbox Security Model + § Docker Build Pattern)

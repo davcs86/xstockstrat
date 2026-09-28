@@ -187,3 +187,33 @@
 - Root-gated distinct-UID tests RAN here (execute sandbox is root); the full setuid+seccomp stack under
   the python:3.13-slim image is the deferred CI/deploy check (O-3), noted in the module docstring.
 - Deviations: none.
+
+### Step 4 — Reconcile sandbox docs + teardown [done]
+- services/xstockstrat-indicators/CLAUDE.md: rewrote § Sandbox Security Model for the OS-isolation
+  layers (distinct-UID, post-import seccomp allowlist, expanded rlimits, write-elim env, killpg); added
+  the § Docker Build Pattern libseccomp note (impl-spec review warning #1).
+- context-constitution.md: added INDICATORS-6 (distinct-UID + no USER), -7 (post-import allowlist
+  fails-closed), -8 (NO_NEW_PRIVS), -9 (killpg load-bearing); re-grounded INDICATORS-1/-2/-4 anchors
+  to the rewritten sandbox.py; fixed the sandbox-overview pointer to a section ref.
+- docs/runbooks/indicator-builder.md: Sandbox Constraints now note OS-enforced denial (seccomp + rlimits
+  + distinct UID) + added the max_concurrent row.
+- Files modified: `services/xstockstrat-indicators/CLAUDE.md`,
+  `services/xstockstrat-indicators/docs/context-constitution.md`, `docs/runbooks/indicator-builder.md`
+- TDD: N/A (docs). Verification greps pass.
+
+### Teardown (root CLAUDE.md § Teardown) — manual (context-constitution plugin unavailable)
+- `/context-forge:context-constitution refresh` NOT available (only `context-forge:context-scrubber` is
+  present, a different bloat-audit tool; no context-constitution skill/plugin dir). Performed the
+  mandated MANUAL equivalent: re-read every touched context file against the rewritten sandbox.py and
+  reconciled drift — CLAUDE.md (§ Sandbox Security Model + Docker Build Pattern rewritten to match code);
+  context-constitution.md (INDICATORS anchors re-grounded to the current file: _THREAD_LIMIT_ENV:44-52,
+  RLIMIT_DATA:258, builtins:226; new INDICATORS-6..9 for the 209 invariants; pointer de-lined);
+  indicator-builder.md (OS-enforced denial). To be recorded in the PR body (plugin unavailable + manual
+  reconciliation) per fails.md:670.
+
+## Session 2026-09-28 — sdd-execute (sequential) code-complete
+**Steps this session**: 1, 2, 3, 4
+**Progress**: 4 done / 4 total → status.md code-completed
+**Verification**: full agent... indicators suite 162 passed, sandbox.py 97% cov, TOTAL 84% (gate 50%);
+ruff clean; live smoke (as root) proved network/exec/secret/fork containment + numeric parity.
+**Next**: C-16 promotion + integration PR (feature-end checkpoint).

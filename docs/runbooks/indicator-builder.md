@@ -154,8 +154,17 @@ All values are sourced from `xstockstrat-config` namespace `indicators`:
 | Execution timeout | `indicators.sandbox.timeout_ms` | `5000` ms |
 | Memory cap | `indicators.sandbox.memory_bytes` | `128 MiB` |
 | Allowed imports | `indicators.sandbox.allowed_imports` | `numpy,pandas,math,statistics` |
+| Max concurrent evals | `indicators.sandbox.max_concurrent` | `4` |
 
-**Forbidden**: `os`, `sys`, `subprocess`, `socket`, `urllib`, `requests`, `open`, `exec`, `eval`, `__import__` (overrides), filesystem access, network access.
+**Forbidden**: `os`, `sys`, `subprocess`, `socket`, `urllib`, `requests`, `open`, `exec`, `eval`, `__import__` (overrides), filesystem writes, network access.
+
+Denial is **OS-enforced**, not merely an import allow-list (feature 209): the formula child runs as a
+distinct unprivileged UID (nobody) under a seccomp-BPF allowlist and hardened rlimits. Even a formula
+that escapes the language guard **cannot** open a socket, `execve` a binary, write a file (beyond the
+size-zero cap), read another process's memory, or read the service's secrets — those syscalls return
+`EPERM` and the run fails with a `runtime_error`. A fork bomb is bounded by `RLIMIT_NPROC` and an
+infinite loop by the wall-clock timeout (+ a `RLIMIT_CPU` backstop). The concurrency bound, timeouts,
+and memory cap all come from the `indicators.sandbox.*` config above — no hardcoded limits.
 
 ---
 
