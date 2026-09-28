@@ -24,3 +24,21 @@
 - Created for pickup by another session per operator direction (Phase D security backlog).
 - Open forks recorded in product-spec.md § Open Questions (config surface + whether a domain
   allowlist ships in v1 + the email-tool remote-fetch path). Resolve in `/sdd-design`.
+
+## Session 2026-09-28 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready.
+- Criteria pass: initially **FAIL** on one C-15 blocker — FR-5 (egress policy sourced from config) had
+  no covering `@AC-*` scenario. **Fixed before advancing** (operator standing rule): added
+  `@AC-8 @FR-5` (config-sourced egress policy; operator lowers a limit → subsequent fetches enforce it;
+  no hardcoded CIDR/limit). Re-verified criterion 8: FR-1→AC-1/2, FR-2→AC-3, FR-3→AC-4, FR-4→AC-5/6,
+  FR-5→AC-8, FR-6→AC-7 — all covered, AC IDs unique.
+- Warnings addressed:
+  - OQ2 RESOLVED (code): both extract tools share one `_fetch_url` (`app/tools.py:2226`; callers `:544`,
+    `:510`) — currently no scheme/address/size validation. Hardening the single helper covers both (C-10).
+  - OQ1 (config key set + domain-allowlist-in-v1?) and FR-6 audit mechanism (span vs structured log) →
+    genuine design forks, routed to /sdd-design (their named venue); will surface to operator at design gate.
+  - OQ3 (no hardcoded egress literals, C-05/F-07) → standing execution-time guard, asserted by @AC-8.
+  - AC-3 `Then` de-implementation-flavored per the advisory NOTE.
+- Overlap: WARN-only — soft `app/tools.py` rebase vs 214 (disjoint db_* block); now moot (214 merged to
+  main-dev fc86bb5). `agent.extract.*` keys unique repo-wide; no migration/proto/config FAIL; no merge-order entry.

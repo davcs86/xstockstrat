@@ -11,6 +11,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-09-25 | `idea` → `draft` | /sdd-story | Product spec generated (closes security-audit agent SSRF — M-list backlog, called out in DT-2 §150; prompt-injection egress ingress) |
+| 2026-09-28 | `draft` → `spec-ready` | /sdd-review | Product spec approved. C-15 blocker fixed before advancing: FR-5 had no covering scenario → added `@AC-8 @FR-5` (config-sourced egress policy). OQ2 resolved (both extract tools share `_fetch_url` at tools.py:2226). OQ1 (config keys + allowlist-in-v1?) and FR-6 audit mechanism flagged as /sdd-design forks. Overlap: WARN-only (soft tools.py rebase vs 214, now moot — 214 merged). |
 
 ---
 
@@ -48,4 +49,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review extract-tool-ssrf-hardening product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-design extract-tool-ssrf-hardening` — recon + design debate (spec-ready → design-approved). Design forks to resolve: config-key set + domain-allowlist-in-v1?, FR-6 audit mechanism (span vs log).
