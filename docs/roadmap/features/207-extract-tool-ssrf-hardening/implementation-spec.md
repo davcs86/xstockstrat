@@ -254,7 +254,7 @@ then confirm the public surface exists: `grep -n "class EgressBlocked\|def asser
 
 ### Step 5 — service: Harden `_fetch_url` (redirect loop, byte-cap, config, FR-6 record)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify (`_fetch_url` at `:2226-2241`)
@@ -327,7 +327,7 @@ then confirm the public surface exists: `grep -n "class EgressBlocked\|def asser
 
 ### Step 6 — test: `_fetch_url` + extract-tool behavior (block / happy path / no-leak / config)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_tools.py` — modify (extract sections at `:195-327`)
@@ -451,3 +451,29 @@ in `network_backend`") while preserving every pool config the base transport set
 a hand-rebuilt pool that could silently drop TLS/http2/limits. The construction-time fail-closed
 identity assertion (`self._pool._network_backend is self._pinned_backend`) is unchanged and still
 raises `EgressBlocked` if the pin is ever absent.
+
+### DEV-3 (Step 5) — the lazy `import httpx` in `_fetch_url` is removed, not reused
+
+**Spec text**: Step 5 Instruction 1 says "(and reuse the existing lazy `import httpx` at `:2232`)".
+**Reality**: the hardened `_fetch_url` builds its client via `egress.build_pinned_client` and joins
+redirect URLs with `urllib.parse.urljoin`, so the `httpx` module name is no longer referenced in the
+function body. Keeping the lazy import would be dead code and fail `ruff` F401.
+**Disposition**: dropped the lazy `import httpx` from `_fetch_url`. `httpx` is still imported where the
+factory lives (`app/egress.py`); the function's behavior and return type are unchanged.
+
+### DEV-4 (Step 5) — app-layer re-validation of a literal-IP redirect target (satisfies @AC-5)
+
+**Spec text**: Step 5 Instruction 4 does only a per-hop `assert_allowed_scheme` and states "no per-hop
+IP check is duplicated in the loop" (relying on the connect-layer pin).
+**Reality**: the authoritative acceptance scenario **@AC-5** (`acceptance.feature`, C-15 — outranks the
+impl-spec paraphrase) requires that on a redirect "the redirect target is **re-validated, rejected as
+non-public**, and the redirect is not followed." Its example target is the literal IP
+`http://169.254.169.254/`, whose scheme (`http`) passes the scheme gate; the connect-layer pin would
+still block it in production, but that is not hermetically testable (respx bypasses the pin) and @AC-5
+frames the re-validation as an explicit pre-follow step.
+**Disposition**: in the redirect loop, after the scheme check, when the resolved next-hop host is a
+**literal IP** (`ipaddress.ip_address(host)` parses), call `egress.assert_public_ip(host)` before
+following — defense in depth. A **hostname** redirect target is still resolved+validated rebind-safe by
+the connect-layer pin (no app-layer resolution duplicated). This is additive and strictly safer; it does
+not change the pin's role for hostname targets. Covered by
+`tests/test_tools.py::test_extract_website_blocks_redirect_to_internal`.

@@ -160,3 +160,36 @@
   35 passed (30 validators + 5 transport); full suite `--cov=app --cov-fail-under=40` → 466 passed,
   egress.py 92%, total 79.87%.
 - Deviations: none beyond the Step-3 DEV-1/DEV-2 that shaped the `_auto` patch seam (tests match spec seam).
+
+### Step 5 — Harden _fetch_url (redirect loop, byte-cap, config, FR-6) app/tools.py [done]
+- Rewrote `_fetch_url` to fetch through the SSRF-hardened path: config-sourced limits via new
+  `_extract_policy` helper (agent.extract.max_redirects/max_bytes/connect_timeout_seconds/
+  read_timeout_seconds; try/except → default only on read-failure/absent/unparseable, F-07), pre-request
+  `assert_allowed_scheme`, `egress.build_pinned_client` (follow_redirects=False), manual bounded redirect
+  loop (per-hop scheme check + literal-IP target re-validation + cross-origin credential strip via new
+  `_same_origin`), streamed byte-cap via `aiter_bytes` (abort past max_bytes), and an FR-6 catch that
+  logs a static reason (no url/host/IP/port) and re-raises a generic RuntimeError.
+- Callers (`extract_email_content:510`, `extract_website_content:544`) and the `{raw_text}` return shape
+  unchanged (C-14/C-16). Tool count stays 43.
+- Files modified: `app/tools.py`
+- Verified end-to-end via probe: internal-IP fetch → RuntimeError "content fetch refused by egress
+  policy", no IP/port leak, FR-6 log fired (EgressBlocked propagates unwrapped through httpcore/httpx —
+  NOT wrapped in ConnectError, so no address leak and the except catches it).
+- Deviations: **DEV-3** removed the now-unused lazy `import httpx` (F401). **DEV-4** added app-layer
+  literal-IP re-validation of the redirect target to satisfy @AC-5 (C-15 outranks the impl-spec Step 5
+  paraphrase which said no per-hop IP check; hostname targets still covered rebind-safe by the pin). Both
+  in impl-spec Deviation Log.
+
+### Step 6 — _fetch_url + extract-tool behavior tests test_tools.py [done]
+- Added 8 SSRF behavior tests + helpers (_website_source/_patch_resolver/_patch_inner_connect): AC-1
+  metadata block, AC-2 RFC1918+loopback (parametrized) + email-path block, AC-5 redirect-to-internal
+  (respx, redirect not followed), AC-7 no-leak + FR-6 record (caplog), AC-8 config max_bytes lowered +
+  max_redirects=0. Block tests skip respx and monkeypatch resolver + held AnyIOBackend.connect_tcp
+  (asserted not-called); happy/redirect/config tests use respx (patches above the pin). Updated the two
+  existing happy-path tests (fetches_url, sends_request_headers) to patch get_config_value → None
+  (AC-6 unchanged behavior; keeps them hermetic).
+- Files modified: `tests/test_tools.py`
+- TDD: RED = 8 tests fail against pre-Step-5 _fetch_url (stashed tools.py to HEAD, captured); GREEN =
+  149 passed (test_tools + test_egress + test_tools_endpoint incl. the 43-tool C-16 guard); full suite
+  `--cov=app --cov-fail-under=40` → 474 passed, egress.py 94%, tools.py 80%, total 79.60%.
+- Deviations: none beyond Step-5 DEV-3/DEV-4.
