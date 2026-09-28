@@ -131,7 +131,7 @@ proven by **Step 2** (name-set no longer advertises them). **UI** is touched onl
 
 ### Step 2 — test: Drop the nine `db_` names from the tool name-set; delete the two db-only test files
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_tools_endpoint.py` — modify

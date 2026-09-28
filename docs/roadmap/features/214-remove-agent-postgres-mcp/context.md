@@ -179,3 +179,11 @@
 - Files modified: `app/tools.py` (del `app/postgres_mcp_client.py`)
 - TDD: RED = test_db_tools/test_postgres_mcp_client ImportError at collection after removal; verified.
 - Deviations: none
+
+### Step 2 — Drop 9 db_ names from name-set; delete 2 db-only test files [done]
+- Removed the 9 db_ entries from test_tools_endpoint.py name-set; deleted test_db_tools.py +
+  test_postgres_mcp_client.py. Name-set test GREEN (5 passed); full agent suite 442 passed, cov 79.56%.
+- Files modified: `tests/test_tools_endpoint.py` (del `tests/test_db_tools.py`, `tests/test_postgres_mcp_client.py`)
+- TDD: RED captured (ImportError at collection) after Step 1; GREEN after this step.
+- Deviations: the two test-file deletions were committed under Step 1 (staged via `git rm` before the
+  Step 1 commit) — granularity-only; squash-merge collapses it. No behavior impact.
