@@ -45,3 +45,39 @@
   cap_add/security_context/seccomp fields → DO App Platform managed runtime does not grant elevated
   container privileges; current sandbox.py already = subprocess + resource.setrlimit(RLIMIT_DATA) +
   SIGKILL timeout + minimal _sandbox_env(). Feeds the isolation-mechanism fork put to the operator.
+
+## Session 2026-09-28 — sdd-design
+
+- Phase 0 Recon: wrote recon.md (service: xstockstrat-indicators; key reuse: subprocess child +
+  _sandbox_env + RLIMIT_DATA site + ConfigWatcher accessors + exit_reason map). Grounded the DO App
+  Platform unprivileged-only runtime constraint + current sandbox mechanism.
+- Phase 1 Grilling: 4 rounds (full). Chosen approach: unprivileged in-container OS isolation —
+  distinct-UID (nobody 65534) child + in-wrapper POST-import seccomp allowlist (defaction=ERRNO(EPERM),
+  native arch only) + expanded rlimits (keep RLIMIT_DATA, no RLIMIT_AS; add CPU, NPROC=max_concurrent×16,
+  FSIZE=0, NOFILE=64) + _sandbox_env write-elimination (PYTHONDONTWRITEBYTECODE=1, HOME/TMPDIR=nonexistent)
+  + start_new_session/killpg (load-bearing) + stdin source delivery. Denial→existing runtime_error (no
+  proto). Stays on DO App Platform. Rejected: jailer/off-App-Platform, same-UID seccomp, denylist,
+  preexec_fn, per-slot UIDs, KILL-default, flag-filtered openat, new config leaves.
+- **Empirical validation**: ran `strace -f` on the real indicators venv (numpy 2.4.3/pandas 3.0.1). The
+  post-import compute allow-set was FINALIZED from ground truth — caught `mbind` (NUMA) on 800×800 arrays
+  that a 200×200 trace missed (→ golden must use large arrays, Open Risk O-1), and confirmed
+  PYTHONDONTWRITEBYTECODE + HOME/TMPDIR=nonexistent eliminate ALL compute-time writes (zero
+  mkdir/rename/openat-O_WRONLY). Added statx/getdents64 defensively for the runtime python:3.13-slim glibc.
+- Constitution rules touched: C-16 (@AC-4/5/7 PRESERVE), F-07/C-05 (rlimits derive from WatchConfig
+  tunables; no new leaf), C-08/P-06 (RED-demonstrating deny-test + coverage-omit removal), C-18, C-14.
+  Floor breaches: none across 4 rounds.
+- Status: spec-ready → design-approved.
+
+### Open Threads (carry to /sdd-spec)
+- O-1: allowlist FR-4 fragility → the frozen golden must be operation-level AND large-array (numpy
+  linalg/fft, pandas groupby/rolling, RNG) to catch syscalls like mbind; a numpy bump adding a compute
+  syscall on an unexercised path → prod EPERM→runtime_error. Target: the test step.
+- O-2: single-UID cross-child NPROC starvation (shared uid-65534 ceiling) → @AC-5 test asserts a
+  fork-bomb child doesn't permanently break later executions (killpg reclaim); per-slot-UID is the
+  on-file escape hatch.
+- O-3: verification env ≠ runtime image → statx/getdents64 added defensively; the real setuid+seccomp
+  syscall validation MUST run inside the runtime container in CI/deploy (fails.md:369); the deny-test
+  must demonstrate RED and never silent-skip (fails.md:133); remove sandbox.py from coverage omit and
+  re-check the 50% gate.
+- Impl-spec watch (from overlap scan): pin NEW indicators.sandbox.* names IF any are added (design
+  adds NONE — all rlimits derived); potential indicators-Dockerfile co-edit with 210 (mTLS cert wiring).

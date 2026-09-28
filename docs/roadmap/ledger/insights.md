@@ -3424,3 +3424,27 @@ reusing.
 - **Evidence**: `services/xstockstrat-agent/tests/test_tools.py` (SSRF section), `tests/test_egress.py`.
 - **Rule it implies**: when a security control lives below the mock library's patch point, assert it with a
   resolver/backend monkeypatch, and verify the block exception is not silently re-wrapped by the transport.
+
+### 2026-09-28 — indicators-sandbox-os-isolation — design
+- **Pattern**: For a Python sandbox seccomp filter, load the allowlist INSIDE the child wrapper AFTER
+  importing the trusted heavy libs (numpy/pandas) and right BEFORE `exec(untrusted)` — never via
+  `preexec_fn` (unsafe in a multithreaded parent: fork+libc/GIL → deadlock) and never before `execve`
+  (forces a huge, FR-4-fragile allowlist). Post-import timing shrinks the allow-set to compute-only and
+  lets an `ERRNO(EPERM)`-default allowlist fail CLOSED (compat x86/x32 arches + io_uring + unknown
+  syscalls all EPERM automatically), beating a denylist that fails open on a forgotten bypass.
+- **Evidence**: `docs/roadmap/features/209-indicators-sandbox-os-isolation/design.md` §§ Chosen Approach
+  3, Rejected 3/4; `services/xstockstrat-indicators/app/services/sandbox.py:34-40,116-172,204-210`.
+- **Rule it implies**: distinct-UID child (root parent → setuid nobody) is the load-bearing control for
+  "escape reaches no secrets" on a managed PaaS without CAP_SYS_ADMIN — seccomp alone on a shared UID
+  cannot block cross-process memory/`/proc/environ` reads.
+
+### 2026-09-28 — indicators-sandbox-os-isolation — design
+- **Pattern**: FINALIZE a seccomp allow-set from a real `strace` of the actual dependency versions, not
+  by reasoning — and trace REALISTICALLY-sized workloads. A 200×200 numpy matmul missed `mbind` (NUMA
+  memory policy) that an 800×800 matmul hit; shipping the 200×200 set would have EPERM'd large-array
+  formulas in prod. Set `PYTHONDONTWRITEBYTECODE=1` + `HOME`/`TMPDIR`=nonexistent in the child env to
+  eliminate compute-time `.pyc`/cache writes wholesale (empirically zero mkdir/rename/openat-O_WRONLY).
+- **Evidence**: 209 design.md § Chosen Approach 3-4; strace of numpy 2.4.3/pandas 3.0.1 (session log).
+- **Rule it implies**: an allowlist derived on the design host must add defensive read-path members
+  (`statx`, `getdents64`) for the runtime image's glibc, and the syscall validation must run inside the
+  runtime container (fails.md:369), because trace-host ABI ≠ deploy-image ABI.
