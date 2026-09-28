@@ -42,5 +42,5 @@ Feature: indicators-sandbox-os-isolation (OS-level containment of untrusted form
   Scenario: Isolation limits are configured, not hardcoded magic numbers
     Given the sandbox isolation limits that are designated operator tunables
     When the service starts
-    Then those limits are sourced from config/env (not inline literals in sandbox.py)
+    Then those operator-tunable limits are read from config/env at startup, and changing a config value changes the enforced limit on the next evaluation
     And a fixed build-time constant of the jail is documented as such rather than presented as a tunable

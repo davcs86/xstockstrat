@@ -11,6 +11,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-09-25 | `idea` → `draft` | /sdd-story | Product spec generated (closes security-audit C-3 / DT-1 — OS-level isolation for the escapable formula sandbox) |
+| 2026-09-28 | `draft` → `spec-ready` | /sdd-review | Product spec approved (PASS WITH WARNINGS, 2 advisory). AC-6 phrasing NOTE fixed pre-advance (observable Then, no `sandbox.py` reference). The 4 Open Questions (isolation mechanism, DO/compose runtime compat, tunable-vs-fixed config split, latency budget) are correctly-deferred /sdd-design inputs, not spec defects. Overlap scan CLEAN — watch at impl-spec: pin NEW `indicators.sandbox.*` leaf names (existing timeout_ms/max_concurrent/allowed_imports are trunk), and potential indicators-Dockerfile co-edit with 210 (mTLS). |
 
 ---
 
@@ -48,4 +49,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review indicators-sandbox-os-isolation product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-design indicators-sandbox-os-isolation` — recon + adversarial design debate (resolves the 4 Open Questions, esp. the isolation-mechanism fork)

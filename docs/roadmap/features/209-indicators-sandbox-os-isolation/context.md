@@ -25,3 +25,23 @@
   capability-drop in-image vs a jailer (nsjail / bubblewrap / gVisor). Deployment feasibility under DO
   App Platform / docker-compose (added capabilities, seccomp) must be confirmed with the platform lead.
 - Created for pickup by another session per operator direction (Phase D security backlog).
+
+## Session 2026-09-28 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready. Verdict: PASS WITH WARNINGS (no blockers).
+- Warnings (advisory):
+  - AC-6 phrasing NOTE — `Then` named "inline literals in sandbox.py" (implementation-ward). FIXED before
+    advancing: rephrased to an observable Then (operator-tunable limits read from config/env at startup;
+    changing a config value changes the enforced limit next evaluation).
+  - Open Questions ×4 unchecked (isolation mechanism FR-1; DO App Platform / docker-compose runtime
+    compatibility; tunable-vs-fixed config split FR-5; per-evaluation latency budget). Correctly-deferred
+    /sdd-design inputs, NOT product-spec defects — carried into design as the debate agenda.
+- Overlap findings: CLEAN (no config-key/proto/migration/file collision). Watch at impl-spec:
+  (1) pin NEW `indicators.sandbox.*` leaf names — `timeout_ms`/`max_concurrent`/`allowed_imports` are trunk
+  reality from launched features (003/058/173/176/205), must not be redefined;
+  (2) potential indicators-Dockerfile co-edit with 210 (mTLS cert wiring) — re-check Mode B once both pin
+  their Dockerfile/base-image mechanism.
+- Pre-grounded (this session, for the design fork): `.do/app.yaml` indicators block has NO privileged/
+  cap_add/security_context/seccomp fields → DO App Platform managed runtime does not grant elevated
+  container privileges; current sandbox.py already = subprocess + resource.setrlimit(RLIMIT_DATA) +
+  SIGKILL timeout + minimal _sandbox_env(). Feeds the isolation-mechanism fork put to the operator.
