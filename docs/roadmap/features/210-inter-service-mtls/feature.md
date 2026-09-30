@@ -11,6 +11,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-09-25 | `idea` → `draft` | /sdd-story | Product spec generated (closes security-audit DT-3 — inter-service transport authentication / mTLS) |
+| 2026-09-30 | `draft` → `spec-ready` | /sdd-review | Product spec approved (PASS, 0 warnings). Sole first-pass blocker (criterion 9 — five unchecked Open Questions) fixed pre-advance by reframing `## Open Questions` → `## Design-Phase Decisions (deferred to /sdd-design)` — all items checked `[x]` with resolution pointers; these are genuine design forks (FR-3 names its mechanism "a design decision"), not spec defects. Overlap scan: no FAIL-level collision (no proto-field / migration-NNN / duplicate-config-key). Soft rebase-level same-file overlap with feature 084 (`droplet-compose-deploy`) on `docker-compose.yml` / `.do/app*.yaml` — recorded as a coordination note (folded into the design agenda), not a blocking merge-order row; if 084 lands first, 210's dev cert wiring re-targets its dev orchestration model. |
 
 ---
 
@@ -50,4 +51,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review inter-service-mtls product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-design inter-service-mtls` — recon + adversarial design debate (full mode: largest blast radius — 10 backends + 2 gRPC clients + deployment topology). Resolve the six Design-Phase Decisions before /sdd-spec.
