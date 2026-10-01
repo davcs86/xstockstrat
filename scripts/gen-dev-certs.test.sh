@@ -7,7 +7,10 @@ set -uo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CERTS_DIR="${REPO_ROOT}/certs"
 GEN="${REPO_ROOT}/scripts/gen-dev-certs.sh"
-fail() { echo "ASSERT FAIL: $*" >&2; exit 1; }
+fail() {
+  echo "ASSERT FAIL: $*" >&2
+  exit 1
+}
 
 [ -x "$GEN" ] || [ -f "$GEN" ] || fail "scripts/gen-dev-certs.sh missing"
 bash "$GEN" >/dev/null 2>&1 || fail "gen-dev-certs.sh exited non-zero"
@@ -15,7 +18,9 @@ bash "$GEN" >/dev/null 2>&1 || fail "gen-dev-certs.sh exited non-zero"
 # Representative identities: one backend, one pure client.
 for svc in xstockstrat-trading xstockstrat-ui; do
   d="${CERTS_DIR}/${svc}"
-  [ -f "${d}/cert.pem" ] && [ -f "${d}/key.pem" ] && [ -f "${d}/ca.pem" ] || fail "${svc}: missing cert/key/ca pem"
+  if ! { [ -f "${d}/cert.pem" ] && [ -f "${d}/key.pem" ] && [ -f "${d}/ca.pem" ]; }; then
+    fail "${svc}: missing cert/key/ca pem"
+  fi
   # (a) leaf chains to the CA
   openssl verify -CAfile "${d}/ca.pem" "${d}/cert.pem" >/dev/null 2>&1 || fail "${svc}: cert does not verify against ca.pem"
   # (b) SAN equals the service name exactly (not a FQDN)

@@ -48,8 +48,8 @@ async def test_emit_alert_sends_grpc_call():
     channel_cm.__aenter__ = AsyncMock(return_value=MagicMock())
     channel_cm.__aexit__ = AsyncMock(return_value=False)
 
-    with patch("app.client.grpc") as mock_grpc:
-        mock_grpc.aio.insecure_channel.return_value = channel_cm
+    with patch("app.client.mtls") as mock_grpc:
+        mock_grpc.secure_channel.return_value = channel_cm
 
         from gen.notify.v1 import notify_pb2_grpc  # type: ignore
 
@@ -82,8 +82,8 @@ class TestManageStrategyClient:
         resp = analysis_pb2.StrategyDefinition(strategy_id="x", display_name="X")
         mock_stub = MagicMock()
         mock_stub.ManageStrategy = AsyncMock(return_value=resp)
-        with patch("app.client.grpc") as mock_grpc:
-            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        with patch("app.client.mtls") as mock_grpc:
+            mock_grpc.secure_channel.return_value = _channel_cm()
             with patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=mock_stub):
                 result = await client.manage_strategy(
                     user_id="u-owner",
@@ -97,7 +97,7 @@ class TestManageStrategyClient:
                     },
                     access_scope=15,
                 )
-        assert mock_grpc.aio.insecure_channel.call_args[0][0] == client.ANALYSIS_ENDPOINT
+        assert mock_grpc.secure_channel.call_args[0][0] == client.ANALYSIS_ENDPOINT
         meta = mock_stub.ManageStrategy.call_args.kwargs["metadata"]
         assert not any(k == "x-mcp-secret" for k, _ in meta)
         # feature 092: forwards the caller's derived scope (was a hardcoded 7).
@@ -117,8 +117,8 @@ class TestManageStrategyClient:
             resp = analysis_pb2.StrategyDefinition(strategy_id="x")
             mock_stub = MagicMock()
             mock_stub.ManageStrategy = AsyncMock(return_value=resp)
-            with patch("app.client.grpc") as mock_grpc:
-                mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+            with patch("app.client.mtls") as mock_grpc:
+                mock_grpc.secure_channel.return_value = _channel_cm()
                 with patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=mock_stub):
                     await client.manage_strategy(
                         user_id="u-1", operation="register", definition=defn
@@ -146,8 +146,8 @@ class TestManageStrategyClient:
             resp = analysis_pb2.StrategyDefinition(strategy_id="x")
             mock_stub = MagicMock()
             mock_stub.ManageStrategy = AsyncMock(return_value=resp)
-            with patch("app.client.grpc") as mock_grpc:
-                mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+            with patch("app.client.mtls") as mock_grpc:
+                mock_grpc.secure_channel.return_value = _channel_cm()
                 with patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=mock_stub):
                     await client.manage_strategy(
                         user_id="u-1", operation="register", definition=defn
@@ -178,8 +178,8 @@ class TestManageStrategyClient:
         resp = analysis_pb2.StrategyDefinition(strategy_id="s1", display_name="S1", active=True)
         mock_stub = MagicMock()
         mock_stub.ManageStrategy = AsyncMock(return_value=resp)
-        with patch("app.client.grpc") as mock_grpc:
-            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        with patch("app.client.mtls") as mock_grpc:
+            mock_grpc.secure_channel.return_value = _channel_cm()
             with patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=mock_stub):
                 await client.manage_strategy(
                     user_id="u-1",
@@ -198,14 +198,14 @@ class TestManageFormulaClient:
         resp = indicators_pb2.RegisterFormulaResponse(formula_id="f-9")
         mock_stub = MagicMock()
         mock_stub.RegisterFormula = AsyncMock(return_value=resp)
-        with patch("app.client.grpc") as mock_grpc:
-            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        with patch("app.client.mtls") as mock_grpc:
+            mock_grpc.secure_channel.return_value = _channel_cm()
             with patch.object(indicators_pb2_grpc, "IndicatorsServiceStub", return_value=mock_stub):
                 result = await client.manage_formula(
                     operation="register",
                     formula={"name": "rsi2", "source": "x=1"},
                 )
-        assert mock_grpc.aio.insecure_channel.call_args[0][0] == client.INDICATORS_ENDPOINT
+        assert mock_grpc.secure_channel.call_args[0][0] == client.INDICATORS_ENDPOINT
         assert result == {"formula_id": "f-9"}
 
 
@@ -239,8 +239,8 @@ class TestScreenSymbolsClient:
         )
         mock_stub = MagicMock()
         mock_stub.ScreenSymbols = AsyncMock(return_value=resp)
-        with patch("app.client.grpc") as mock_grpc:
-            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        with patch("app.client.mtls") as mock_grpc:
+            mock_grpc.secure_channel.return_value = _channel_cm()
             with patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=mock_stub):
                 result = await client.screen_symbols(
                     symbols=["NVDA"],
@@ -268,7 +268,7 @@ class TestScreenSymbolsClient:
                     ],
                 )
         # Channel opened against the (test-patched) analysis endpoint symbol.
-        assert mock_grpc.aio.insecure_channel.call_args[0][0] == client.ANALYSIS_ENDPOINT
+        assert mock_grpc.secure_channel.call_args[0][0] == client.ANALYSIS_ENDPOINT
         # Read-only: carries no security metadata (no shared secret, no admin x-access-scope).
         meta = mock_stub.ScreenSymbols.call_args.kwargs["metadata"]
         assert not any(k == "x-mcp-secret" for k, _ in meta)
@@ -311,8 +311,8 @@ class TestScreenSymbolsClient:
         resp = indicators_pb2.RegisterFormulaResponse(formula_id="f-10")
         mock_stub = MagicMock()
         mock_stub.RegisterFormula = AsyncMock(return_value=resp)
-        with patch("app.client.grpc") as mock_grpc:
-            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        with patch("app.client.mtls") as mock_grpc:
+            mock_grpc.secure_channel.return_value = _channel_cm()
             with patch.object(indicators_pb2_grpc, "IndicatorsServiceStub", return_value=mock_stub):
                 await client.manage_formula(
                     operation="register",
@@ -352,15 +352,15 @@ class TestManageSignalSourceClient:
         )
         mock_stub = MagicMock()
         mock_stub.ManageSignalSource = AsyncMock(return_value=resp)
-        with patch("app.client.grpc") as mock_grpc:
-            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        with patch("app.client.mtls") as mock_grpc:
+            mock_grpc.secure_channel.return_value = _channel_cm()
             with patch.object(ingest_pb2_grpc, "IngestServiceStub", return_value=mock_stub):
                 result = await client.manage_signal_source(
                     operation="register",
                     source={"slug": "uw", "display_name": "UW"},
                     credentials_ref="secret",
                 )
-        assert mock_grpc.aio.insecure_channel.call_args[0][0] == client.INGEST_ENDPOINT
+        assert mock_grpc.secure_channel.call_args[0][0] == client.INGEST_ENDPOINT
         assert "credentials_ref" not in result  # FR-12
         assert result["slug"] == "uw"
 
@@ -375,8 +375,8 @@ class TestIngestSignalClient:
         resp = ingest_pb2.IngestSignalResponse(signal_id=7, deduplicated=True)
         mock_stub = MagicMock()
         mock_stub.IngestSignal = AsyncMock(return_value=resp)
-        with patch("app.client.grpc") as mock_grpc:
-            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        with patch("app.client.mtls") as mock_grpc:
+            mock_grpc.secure_channel.return_value = _channel_cm()
             with patch.object(ingest_pb2_grpc, "IngestServiceStub", return_value=mock_stub):
                 result = await client.ingest_signal(
                     source="unusual_whales",
@@ -399,13 +399,13 @@ class TestSetStrategyLiveClient:
         )
         mock_stub = MagicMock()
         mock_stub.SetStrategyLive = AsyncMock(return_value=resp)
-        with patch("app.client.grpc") as mock_grpc:
-            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        with patch("app.client.mtls") as mock_grpc:
+            mock_grpc.secure_channel.return_value = _channel_cm()
             with patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=mock_stub):
                 result = await client.set_strategy_live(
                     user_id="u-owner", strategy_id="s1", live_enabled=True, access_scope=15
                 )
-        assert mock_grpc.aio.insecure_channel.call_args[0][0] == client.ANALYSIS_ENDPOINT
+        assert mock_grpc.secure_channel.call_args[0][0] == client.ANALYSIS_ENDPOINT
         meta = mock_stub.SetStrategyLive.call_args.kwargs["metadata"]
         assert ("x-access-scope", "15") in meta  # feature 092: caller-derived scope
         # feature 133: forwards the caller's own user id so analysis resolves ownership.
@@ -421,8 +421,8 @@ class TestTriggerBackfillClient:
     def _run(self, mock_stub, **kwargs):
         from gen.ingest.v1 import ingest_pb2_grpc  # type: ignore
 
-        with patch("app.client.grpc") as mock_grpc:
-            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        with patch("app.client.mtls") as mock_grpc:
+            mock_grpc.secure_channel.return_value = _channel_cm()
             with patch.object(ingest_pb2_grpc, "IngestServiceStub", return_value=mock_stub):
                 return mock_grpc, client.trigger_backfill(**kwargs)
 
@@ -435,13 +435,13 @@ class TestTriggerBackfillClient:
         )
         mock_stub = MagicMock()
         mock_stub.TriggerBackfill = AsyncMock(return_value=resp)
-        with patch("app.client.grpc") as mock_grpc:
-            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        with patch("app.client.mtls") as mock_grpc:
+            mock_grpc.secure_channel.return_value = _channel_cm()
             with patch.object(ingest_pb2_grpc, "IngestServiceStub", return_value=mock_stub):
                 result = await client.trigger_backfill(
                     symbols=["AAPL"], timeframe="1d", access_scope=15
                 )
-        assert mock_grpc.aio.insecure_channel.call_args[0][0] == client.INGEST_ENDPOINT
+        assert mock_grpc.secure_channel.call_args[0][0] == client.INGEST_ENDPOINT
         meta = mock_stub.TriggerBackfill.call_args.kwargs["metadata"]
         assert not any(k == "x-mcp-secret" for k, _ in meta)
         assert ("x-access-scope", "15") in meta  # feature 092: caller-derived scope
@@ -455,8 +455,8 @@ class TestTriggerBackfillClient:
         mock_stub.TriggerBackfill = AsyncMock(
             return_value=ingest_pb2.TriggerBackfillResponse(job_id="j")
         )
-        with patch("app.client.grpc") as mock_grpc:
-            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        with patch("app.client.mtls") as mock_grpc:
+            mock_grpc.secure_channel.return_value = _channel_cm()
             with patch.object(ingest_pb2_grpc, "IngestServiceStub", return_value=mock_stub):
                 await client.trigger_backfill(
                     symbols=["AAPL", "MSFT"], timeframe="1Day", overwrite=True
@@ -477,8 +477,8 @@ class TestTriggerBackfillClient:
         mock_stub.TriggerBackfill = AsyncMock(
             return_value=ingest_pb2.TriggerBackfillResponse(job_id="j")
         )
-        with patch("app.client.grpc") as mock_grpc:
-            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        with patch("app.client.mtls") as mock_grpc:
+            mock_grpc.secure_channel.return_value = _channel_cm()
             with patch.object(ingest_pb2_grpc, "IngestServiceStub", return_value=mock_stub):
                 await client.trigger_backfill(symbols=["AAPL"], fill_mode="gaps_only")
         assert mock_stub.TriggerBackfill.call_args[0][0].fill_mode == 2
@@ -491,8 +491,8 @@ class TestTriggerBackfillClient:
         mock_stub.TriggerBackfill = AsyncMock(
             return_value=ingest_pb2.TriggerBackfillResponse(job_id="j")
         )
-        with patch("app.client.grpc") as mock_grpc:
-            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        with patch("app.client.mtls") as mock_grpc:
+            mock_grpc.secure_channel.return_value = _channel_cm()
             with patch.object(ingest_pb2_grpc, "IngestServiceStub", return_value=mock_stub):
                 await client.trigger_backfill(symbols=["AAPL"])
         # feature 198: default data_kind is BARS (=1); the bars path is byte-for-byte unchanged.
@@ -508,8 +508,8 @@ class TestTriggerBackfillClient:
         mock_stub.TriggerBackfill = AsyncMock(
             return_value=ingest_pb2.TriggerBackfillResponse(job_id="j")
         )
-        with patch("app.client.grpc") as mock_grpc:
-            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        with patch("app.client.mtls") as mock_grpc:
+            mock_grpc.secure_channel.return_value = _channel_cm()
             with patch.object(ingest_pb2_grpc, "IngestServiceStub", return_value=mock_stub):
                 # A junk timeframe would raise for bars, but is ignored for fundamentals.
                 await client.trigger_backfill(
@@ -528,8 +528,8 @@ class TestTriggerBackfillClient:
         mock_stub.TriggerBackfill = AsyncMock(
             return_value=ingest_pb2.TriggerBackfillResponse(job_id="j")
         )
-        with patch("app.client.grpc") as mock_grpc:
-            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        with patch("app.client.mtls") as mock_grpc:
+            mock_grpc.secure_channel.return_value = _channel_cm()
             with patch.object(ingest_pb2_grpc, "IngestServiceStub", return_value=mock_stub):
                 await client.trigger_backfill(symbols=["AAPL"])
                 no_range = mock_stub.TriggerBackfill.call_args[0][0]
@@ -586,8 +586,8 @@ class TestGetBackfillStatusClient:
         mock_stub = MagicMock()
         mock_stub.GetBackfillStatus = AsyncMock(return_value=job)
         mock_stub.ListBackfillJobs = AsyncMock()
-        with patch("app.client.grpc") as mock_grpc:
-            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        with patch("app.client.mtls") as mock_grpc:
+            mock_grpc.secure_channel.return_value = _channel_cm()
             with patch.object(ingest_pb2_grpc, "IngestServiceStub", return_value=mock_stub):
                 result = await client.get_backfill_status(job_id="j-1")
         assert mock_stub.GetBackfillStatus.called
@@ -610,8 +610,8 @@ class TestGetBackfillStatusClient:
         err = AioRpcError(grpc.StatusCode.NOT_FOUND, Metadata(), Metadata(), details="nope")
         mock_stub = MagicMock()
         mock_stub.GetBackfillStatus = AsyncMock(side_effect=err)
-        with patch("app.client.grpc") as mock_grpc:
-            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        with patch("app.client.mtls") as mock_grpc:
+            mock_grpc.secure_channel.return_value = _channel_cm()
             with patch.object(ingest_pb2_grpc, "IngestServiceStub", return_value=mock_stub):
                 with pytest.raises(AioRpcError):
                     await client.get_backfill_status(job_id="missing")
@@ -627,8 +627,8 @@ class TestGetBackfillStatusClient:
         )
         mock_stub = MagicMock()
         mock_stub.ListBackfillJobs = AsyncMock(return_value=resp)
-        with patch("app.client.grpc") as mock_grpc:
-            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        with patch("app.client.mtls") as mock_grpc:
+            mock_grpc.secure_channel.return_value = _channel_cm()
             with patch.object(ingest_pb2_grpc, "IngestServiceStub", return_value=mock_stub):
                 result = await client.get_backfill_status(
                     status_filter="completed", symbol="AAPL", limit=5, page_token="10"
@@ -647,8 +647,8 @@ class TestGetBackfillStatusClient:
 
         mock_stub = MagicMock()
         mock_stub.ListBackfillJobs = AsyncMock(return_value=ingest_pb2.ListBackfillJobsResponse())
-        with patch("app.client.grpc") as mock_grpc:
-            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        with patch("app.client.mtls") as mock_grpc:
+            mock_grpc.secure_channel.return_value = _channel_cm()
             with patch.object(ingest_pb2_grpc, "IngestServiceStub", return_value=mock_stub):
                 await client.get_backfill_status(status_filter="unspecified")
         assert mock_stub.ListBackfillJobs.call_args[0][0].status_filter == 0
@@ -667,8 +667,8 @@ class TestManageStrategyUpdateMask:
         mock_stub.ManageStrategy = AsyncMock(
             return_value=analysis_pb2.StrategyDefinition(strategy_id="x")
         )
-        with patch("app.client.grpc") as mock_grpc:
-            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        with patch("app.client.mtls") as mock_grpc:
+            mock_grpc.secure_channel.return_value = _channel_cm()
             with patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=mock_stub):
                 await client.manage_strategy(
                     user_id="u-1",
@@ -700,8 +700,8 @@ class TestManageStrategyUpdateMask:
         mock_stub.ManageStrategy = AsyncMock(
             return_value=analysis_pb2.StrategyDefinition(strategy_id="x")
         )
-        with patch("app.client.grpc") as mock_grpc:
-            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        with patch("app.client.mtls") as mock_grpc:
+            mock_grpc.secure_channel.return_value = _channel_cm()
             with patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=mock_stub):
                 await client.manage_strategy(
                     user_id="u-1",
@@ -728,8 +728,8 @@ class TestManageStrategyUpdateMask:
                 strategy_id="x", denied_symbols=["TSLA"], signal_eligible=True
             )
         )
-        with patch("app.client.grpc") as mock_grpc:
-            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        with patch("app.client.mtls") as mock_grpc:
+            mock_grpc.secure_channel.return_value = _channel_cm()
             with patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=mock_stub):
                 result = await client.manage_strategy(
                     user_id="u-1",
@@ -763,8 +763,8 @@ class TestManageStrategyUpdateMask:
                 strategy_id="x", denied_symbols=["TSLA", "NVDA"], signal_eligible=True
             )
         )
-        with patch("app.client.grpc") as mock_grpc:
-            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        with patch("app.client.mtls") as mock_grpc:
+            mock_grpc.secure_channel.return_value = _channel_cm()
             with patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=mock_stub):
                 result = await client.get_strategy(user_id="u-1", strategy_id="x")
 
@@ -781,8 +781,8 @@ class TestManageStrategyUpdateMask:
         mock_stub.ManageStrategy = AsyncMock(
             return_value=analysis_pb2.StrategyDefinition(strategy_id="x")
         )
-        with patch("app.client.grpc") as mock_grpc:
-            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        with patch("app.client.mtls") as mock_grpc:
+            mock_grpc.secure_channel.return_value = _channel_cm()
             with patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=mock_stub):
                 await client.manage_strategy(
                     user_id="u-1",
@@ -818,8 +818,8 @@ class TestGetConfigValueClient:
         resp = self._resp({"signal.alert_threshold": config_pb2.ConfigValue(float_val=0.7)})
         mock_stub = MagicMock()
         mock_stub.GetConfig = AsyncMock(return_value=resp)
-        with patch("app.client.grpc") as mock_grpc:
-            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        with patch("app.client.mtls") as mock_grpc:
+            mock_grpc.secure_channel.return_value = _channel_cm()
             with patch.object(config_pb2_grpc, "ConfigServiceStub", return_value=mock_stub):
                 out = await client.get_config_value(
                     "signal.alert_threshold", namespace="agent", environment="production"
@@ -834,8 +834,8 @@ class TestGetConfigValueClient:
         resp = self._resp({"k": config_pb2.ConfigValue(string_val="v")})
         mock_stub = MagicMock()
         mock_stub.GetConfig = AsyncMock(return_value=resp)
-        with patch("app.client.grpc") as mock_grpc:
-            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        with patch("app.client.mtls") as mock_grpc:
+            mock_grpc.secure_channel.return_value = _channel_cm()
             with patch.object(config_pb2_grpc, "ConfigServiceStub", return_value=mock_stub):
                 out = await client.get_config_value(
                     "k", namespace="marketdata", environment="production", user_id="u-9"
@@ -856,8 +856,8 @@ class TestGetConfigValueClient:
         resp = self._resp({})
         mock_stub = MagicMock()
         mock_stub.GetConfig = AsyncMock(return_value=resp)
-        with patch("app.client.grpc") as mock_grpc:
-            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        with patch("app.client.mtls") as mock_grpc:
+            mock_grpc.secure_channel.return_value = _channel_cm()
             with patch.object(config_pb2_grpc, "ConfigServiceStub", return_value=mock_stub):
                 out = await client.get_config_value("missing", namespace="agent", environment="dev")
         assert out is None
@@ -871,8 +871,8 @@ class TestGetConfigValueClient:
         err = _grpc.aio.AioRpcError(_grpc.StatusCode.UNAVAILABLE, None, None, details="config down")
         mock_stub = MagicMock()
         mock_stub.GetConfig = AsyncMock(side_effect=err)
-        with patch("app.client.grpc") as mock_grpc:
-            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        with patch("app.client.mtls") as mock_grpc:
+            mock_grpc.secure_channel.return_value = _channel_cm()
             mock_grpc.aio.AioRpcError = _grpc.aio.AioRpcError
             with patch.object(config_pb2_grpc, "ConfigServiceStub", return_value=mock_stub):
                 with pytest.raises(_grpc.aio.AioRpcError):
@@ -891,8 +891,8 @@ class TestAdditiveClientFns:
         resp.output.update({"value": 1.5})
         mock_stub = MagicMock()
         mock_stub.ExecuteFormula = AsyncMock(return_value=resp)
-        with patch("app.client.grpc") as mock_grpc:
-            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        with patch("app.client.mtls") as mock_grpc:
+            mock_grpc.secure_channel.return_value = _channel_cm()
             with patch.object(indicators_pb2_grpc, "IndicatorsServiceStub", return_value=mock_stub):
                 result = await client.execute_formula(
                     formula_source="result = {'value': 1.5}",
@@ -913,8 +913,8 @@ class TestAdditiveClientFns:
         resp.output.update({"value": float("nan"), "ok": 2.0})
         mock_stub = MagicMock()
         mock_stub.ExecuteFormula = AsyncMock(return_value=resp)
-        with patch("app.client.grpc") as mock_grpc:
-            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        with patch("app.client.mtls") as mock_grpc:
+            mock_grpc.secure_channel.return_value = _channel_cm()
             with patch.object(indicators_pb2_grpc, "IndicatorsServiceStub", return_value=mock_stub):
                 result = await client.execute_formula(formula_source="x")
         assert result["output"]["value"] is None  # NaN scrubbed
@@ -927,8 +927,8 @@ class TestAdditiveClientFns:
         resp = ingest_pb2.BackfillJob(job_id="j-1")
         mock_stub = MagicMock()
         mock_stub.CancelBackfill = AsyncMock(return_value=resp)
-        with patch("app.client.grpc") as mock_grpc:
-            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        with patch("app.client.mtls") as mock_grpc:
+            mock_grpc.secure_channel.return_value = _channel_cm()
             with patch.object(ingest_pb2_grpc, "IngestServiceStub", return_value=mock_stub):
                 result = await client.cancel_backfill("j-1", access_scope=15)
         assert result["job"]["job_id"] == "j-1"
@@ -945,8 +945,8 @@ class TestAdditiveClientFns:
         )
         mock_stub = MagicMock()
         mock_stub.ListStrategyDefinitions = AsyncMock(return_value=resp)
-        with patch("app.client.grpc") as mock_grpc:
-            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        with patch("app.client.mtls") as mock_grpc:
+            mock_grpc.secure_channel.return_value = _channel_cm()
             with patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=mock_stub):
                 result = await client.list_strategy_definitions(user_id="u-owner")
         assert result[0]["strategy_id"] == "s1"  # snake_case, not strategyId
@@ -972,8 +972,8 @@ class TestAdditiveClientFns:
         resp = ingest_pb2.ListSignalSourcesResponse(sources=[src])
         mock_stub = MagicMock()
         mock_stub.ListSignalSources = AsyncMock(return_value=resp)
-        with patch("app.client.grpc") as mock_grpc:
-            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        with patch("app.client.mtls") as mock_grpc:
+            mock_grpc.secure_channel.return_value = _channel_cm()
             with patch.object(ingest_pb2_grpc, "IngestServiceStub", return_value=mock_stub):
                 result = await client.list_signal_sources()
         row = result[0]
@@ -988,8 +988,8 @@ class TestAdditiveClientFns:
 
         mock_stub = MagicMock()
         mock_stub.EmitAlert = AsyncMock(return_value=notify_pb2.EmitAlertResponse(alert_id="a1"))
-        with patch("app.client.grpc") as mock_grpc:
-            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        with patch("app.client.mtls") as mock_grpc:
+            mock_grpc.secure_channel.return_value = _channel_cm()
             with patch.object(notify_pb2_grpc, "NotifyServiceStub", return_value=mock_stub):
                 await client.emit_alert(
                     severity="warning",
@@ -1016,8 +1016,8 @@ class TestRunBacktestSizingMode:
         resp = analysis_pb2.BacktestResult(backtest_id="bt-1")
         mock_stub = MagicMock()
         mock_stub.RunBacktest = AsyncMock(return_value=resp)
-        with patch("app.client.grpc") as mock_grpc:
-            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        with patch("app.client.mtls") as mock_grpc:
+            mock_grpc.secure_channel.return_value = _channel_cm()
             with patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=mock_stub):
                 await client.run_backtest(
                     user_id="u1", strategy_id="s1", symbols=["AAPL"], **kwargs
@@ -1090,13 +1090,13 @@ class TestRunFundamentalsScanClient:
         )
         mock_stub = MagicMock()
         mock_stub.RunFundamentalsScan = AsyncMock(return_value=resp)
-        with patch("app.client.grpc") as mock_grpc:
-            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        with patch("app.client.mtls") as mock_grpc:
+            mock_grpc.secure_channel.return_value = _channel_cm()
             with patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=mock_stub):
                 result = await client.run_fundamentals_scan(
                     force=True, dry_run=False, symbols=["AAPL"], access_scope=15
                 )
-        assert mock_grpc.aio.insecure_channel.call_args[0][0] == client.ANALYSIS_ENDPOINT
+        assert mock_grpc.secure_channel.call_args[0][0] == client.ANALYSIS_ENDPOINT
         req = mock_stub.RunFundamentalsScan.call_args[0][0]
         assert req.force is True
         assert req.dry_run is False
@@ -1163,12 +1163,12 @@ class TestListOpportunitiesClient:
 
         mock_stub = MagicMock()
         mock_stub.ListOpportunities = AsyncMock(return_value=resp)
-        with patch("app.client.grpc") as mock_grpc:
-            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        with patch("app.client.mtls") as mock_grpc:
+            mock_grpc.secure_channel.return_value = _channel_cm()
             with patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=mock_stub):
                 result = await client.list_opportunities(user_id="u1", min_conviction=0.0)
 
-        assert mock_grpc.aio.insecure_channel.call_args[0][0] == client.ANALYSIS_ENDPOINT
+        assert mock_grpc.secure_channel.call_args[0][0] == client.ANALYSIS_ENDPOINT
         opps = result["opportunities"]
         o0, o1 = opps[0], opps[1]
 
@@ -1217,8 +1217,8 @@ class TestListOpportunitiesClient:
         )
         mock_stub = MagicMock()
         mock_stub.ListOpportunities = AsyncMock(return_value=resp)
-        with patch("app.client.grpc") as mock_grpc:
-            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        with patch("app.client.mtls") as mock_grpc:
+            mock_grpc.secure_channel.return_value = _channel_cm()
             with patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=mock_stub):
                 result = await client.list_opportunities(user_id="u1", min_conviction=0.0)
 
@@ -1244,8 +1244,8 @@ class TestListOpportunitiesClient:
         )
         mock_stub = MagicMock()
         mock_stub.ListOpportunities = AsyncMock(return_value=resp1)
-        with patch("app.client.grpc") as mock_grpc:
-            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        with patch("app.client.mtls") as mock_grpc:
+            mock_grpc.secure_channel.return_value = _channel_cm()
             with patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=mock_stub):
                 result1 = await client.list_opportunities(
                     user_id="u1", min_conviction=0.0, page_size=50, page_token=""
@@ -1265,8 +1265,8 @@ class TestListOpportunitiesClient:
         )
         mock_stub2 = MagicMock()
         mock_stub2.ListOpportunities = AsyncMock(return_value=resp2)
-        with patch("app.client.grpc") as mock_grpc:
-            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        with patch("app.client.mtls") as mock_grpc:
+            mock_grpc.secure_channel.return_value = _channel_cm()
             with patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=mock_stub2):
                 result2 = await client.list_opportunities(
                     user_id="u1", min_conviction=0.0, page_size=50, page_token="50"
@@ -1285,7 +1285,7 @@ def _identity_stub_cm(mock_stub):
     """Patch grpc + IdentityServiceStub; returns the patch context managers to enter."""
     from gen.identity.v1 import identity_pb2_grpc  # type: ignore
 
-    grpc_patch = patch("app.client.grpc")
+    grpc_patch = patch("app.client.mtls")
     stub_patch = patch.object(identity_pb2_grpc, "IdentityServiceStub", return_value=mock_stub)
     return grpc_patch, stub_patch
 
@@ -1316,7 +1316,7 @@ async def test_admin_get_user_metadata_projection_parity():
 
     grpc_patch, stub_patch = _identity_stub_cm(mock_stub)
     with grpc_patch as mock_grpc, stub_patch:
-        mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        mock_grpc.secure_channel.return_value = _channel_cm()
         result = await client.admin_get_user_metadata("target-1")
 
     assert set(result.keys()) == {
@@ -1347,7 +1347,7 @@ async def test_admin_update_user_metadata_sends_only_provided_fields():
 
     grpc_patch, stub_patch = _identity_stub_cm(mock_stub)
     with grpc_patch as mock_grpc, stub_patch:
-        mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        mock_grpc.secure_channel.return_value = _channel_cm()
         await client.admin_update_user_metadata("target-1", display_name="Jane Quant")
 
     req = mock_stub.AdminUpdateUserMetadata.call_args.args[0]
@@ -1370,7 +1370,7 @@ async def test_create_user_maps_role_strings_to_enums_and_hides_password(caplog)
 
     grpc_patch, stub_patch = _identity_stub_cm(mock_stub)
     with caplog.at_level("DEBUG"), grpc_patch as mock_grpc, stub_patch:
-        mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        mock_grpc.secure_channel.return_value = _channel_cm()
         result = await client.create_user("q@example.com", "Str0ng-P4ss!", ["trader", "admin"])
 
     req = mock_stub.CreateUser.call_args.args[0]
@@ -1396,7 +1396,7 @@ async def test_reset_password_never_echoes_or_logs_plaintext(caplog):
 
     grpc_patch, stub_patch = _identity_stub_cm(mock_stub)
     with caplog.at_level("DEBUG"), grpc_patch as mock_grpc, stub_patch:
-        mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        mock_grpc.secure_channel.return_value = _channel_cm()
         result = await client.reset_password("target-1", "N3w-P4ssw0rd!")
 
     assert result == {"success": True, "userId": "target-1"}
@@ -1420,7 +1420,7 @@ async def test_admin_helpers_forward_derived_scope_and_caller_not_target():
     try:
         grpc_patch, stub_patch = _identity_stub_cm(mock_stub)
         with grpc_patch as mock_grpc, stub_patch:
-            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+            mock_grpc.secure_channel.return_value = _channel_cm()
             await client.admin_get_user_metadata("target-9")
     finally:
         client.reset_caller(token)
@@ -1445,7 +1445,7 @@ async def test_list_users_projects_password_free_views():
 
     grpc_patch, stub_patch = _identity_stub_cm(mock_stub)
     with grpc_patch as mock_grpc, stub_patch:
-        mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        mock_grpc.secure_channel.return_value = _channel_cm()
         result = await client.list_users()
 
     assert result == [

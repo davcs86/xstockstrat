@@ -2,7 +2,6 @@
  * Shared ConfigWatcher for all Node.js services — subscribes to the config WatchConfig
  * gRPC stream; callers await waitForSnapshot() before accepting traffic.
  */
-import * as grpc from '@grpc/grpc-js';
 import * as mtls from '../mtls';
 import { EventEmitter } from 'events';
 import { ConfigServiceClient, ConfigSnapshot, ConfigValue } from '@xstockstrat/proto/config/v1/config';

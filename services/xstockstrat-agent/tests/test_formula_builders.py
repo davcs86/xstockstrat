@@ -39,8 +39,8 @@ async def _capture_register_request():
     mock_stub.RegisterFormula = AsyncMock(
         return_value=indicators_pb2.RegisterFormulaResponse(formula_id="f")
     )
-    with patch("app.client.grpc") as mock_grpc:
-        mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+    with patch("app.client.mtls") as mock_grpc:
+        mock_grpc.secure_channel.return_value = _channel_cm()
         with patch.object(indicators_pb2_grpc, "IndicatorsServiceStub", return_value=mock_stub):
             await client.manage_formula(
                 operation="register",
@@ -68,8 +68,8 @@ async def _capture_update_request():
             formula=indicators_pb2.FormulaDefinition(formula_id="f")
         )
     )
-    with patch("app.client.grpc") as mock_grpc:
-        mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+    with patch("app.client.mtls") as mock_grpc:
+        mock_grpc.secure_channel.return_value = _channel_cm()
         with patch.object(indicators_pb2_grpc, "IndicatorsServiceStub", return_value=mock_stub):
             await client.manage_formula(
                 operation="update",
@@ -143,8 +143,8 @@ class TestFormulaBuilderBehavior:
                 ],
             )
         )
-        with patch("app.client.grpc") as mock_grpc:
-            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        with patch("app.client.mtls") as mock_grpc:
+            mock_grpc.secure_channel.return_value = _channel_cm()
             with patch.object(indicators_pb2_grpc, "IndicatorsServiceStub", return_value=mock_stub):
                 result = await client.get_formula("f-1")
         assert result["fundamentalInputs"] == [
@@ -168,8 +168,8 @@ class TestFormulaBuilderBehavior:
                 formula=indicators_pb2.FormulaDefinition(formula_id="f")
             )
         )
-        with patch("app.client.grpc") as mock_grpc:
-            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        with patch("app.client.mtls") as mock_grpc:
+            mock_grpc.secure_channel.return_value = _channel_cm()
             with patch.object(indicators_pb2_grpc, "IndicatorsServiceStub", return_value=mock_stub):
                 await client.manage_formula(
                     operation="update",
@@ -186,8 +186,8 @@ class TestFormulaBuilderBehavior:
         mock_stub.GetFormula = AsyncMock(
             return_value=indicators_pb2.FormulaDefinition(formula_id="f-1", deleted=True)
         )
-        with patch("app.client.grpc") as mock_grpc:
-            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        with patch("app.client.mtls") as mock_grpc:
+            mock_grpc.secure_channel.return_value = _channel_cm()
             with patch.object(indicators_pb2_grpc, "IndicatorsServiceStub", return_value=mock_stub):
                 result = await client.get_formula("f-1")
         assert result["deleted"] is True

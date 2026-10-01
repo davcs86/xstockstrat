@@ -67,8 +67,8 @@ async def test_client_propagates_metadata():
             ]
         )
     )
-    with patch("app.client.grpc") as mock_grpc:
-        mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+    with patch("app.client.mtls") as mock_grpc:
+        mock_grpc.secure_channel.return_value = _channel_cm()
         with patch.object(indicators_pb2_grpc, "IndicatorsServiceStub", return_value=mock_stub):
             result = await client.list_fundamental_metrics()
     assert result == [

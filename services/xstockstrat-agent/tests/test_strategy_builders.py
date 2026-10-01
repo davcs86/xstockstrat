@@ -47,8 +47,8 @@ async def _capture_manage_strategy_request():
     mock_stub.ManageStrategy = AsyncMock(
         return_value=analysis_pb2.StrategyDefinition(strategy_id="s")
     )
-    with patch("app.client.grpc") as mock_grpc:
-        mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+    with patch("app.client.mtls") as mock_grpc:
+        mock_grpc.secure_channel.return_value = _channel_cm()
         with patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=mock_stub):
             await client.manage_strategy(
                 user_id="u-1",
@@ -85,8 +85,8 @@ async def _capture_screen_symbols_request():
 
     mock_stub = MagicMock()
     mock_stub.ScreenSymbols = AsyncMock(return_value=analysis_pb2.ScreenSymbolsResponse())
-    with patch("app.client.grpc") as mock_grpc:
-        mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+    with patch("app.client.mtls") as mock_grpc:
+        mock_grpc.secure_channel.return_value = _channel_cm()
         with patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=mock_stub):
             await client.screen_symbols(
                 symbols=["AAPL"],

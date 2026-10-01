@@ -121,7 +121,7 @@ func dialAndCheck(t *testing.T, lis *bufconn.Listener, opt grpc.DialOption, ctx 
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	_, err = healthpb.NewHealthClient(conn).Check(ctx, &healthpb.HealthCheckRequest{})
 	return err
 }

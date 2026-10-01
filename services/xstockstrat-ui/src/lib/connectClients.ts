@@ -1,5 +1,5 @@
 import { checkServerIdentity, type PeerCertificate } from 'node:tls';
-import { Code, createClient } from '@connectrpc/connect';
+import { Code, createClient, type Transport } from '@connectrpc/connect';
 import { createGrpcTransport } from '@connectrpc/connect-node';
 import { AnalysisService } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import { ConfigService } from '@xstockstrat/proto/config/v1/config_pb';
@@ -41,18 +41,36 @@ function loadMtls(): { ca: Buffer; cert: Buffer; key: Buffer } {
 // targetService (the destination registry service name) — NOT the dialed host, which differs from the
 // SAN on DO App Platform (PRIVATE_DOMAIN FQDN). The chain is still verified against the CA; only the
 // identity check is overridden to the env-independent service-name pin.
-function makeTransport(endpoint: string, targetService: string) {
-  const { ca, cert, key } = loadMtls();
-  return createGrpcTransport({
-    baseUrl: `https://${endpoint}`,
-    nodeOptions: {
-      ca,
-      cert,
-      key,
-      checkServerIdentity: (_host: string, peer: PeerCertificate) =>
-        checkServerIdentity(targetService, peer),
+//
+// LAZY: the real transport (and loadMtls) is built on the FIRST RPC, not at module load — `next build`
+// imports this module during page-data collection where MTLS_* is absent, and an eager fail-closed
+// load would abort the build. Fail-closed still holds at runtime: the first dial throws if env is unset.
+function makeTransport(endpoint: string, targetService: string): Transport {
+  let real: Transport | undefined;
+  const get = (): Transport => {
+    if (!real) {
+      const { ca, cert, key } = loadMtls();
+      real = createGrpcTransport({
+        baseUrl: `https://${endpoint}`,
+        nodeOptions: {
+          ca,
+          cert,
+          key,
+          checkServerIdentity: (_host: string, peer: PeerCertificate) =>
+            checkServerIdentity(targetService, peer),
+        },
+      });
+    }
+    return real;
+  };
+  return {
+    unary(method, signal, timeoutMs, header, input, contextValues) {
+      return get().unary(method, signal, timeoutMs, header, input, contextValues);
     },
-  });
+    stream(method, signal, timeoutMs, header, input, contextValues) {
+      return get().stream(method, signal, timeoutMs, header, input, contextValues);
+    },
+  };
 }
 
 // ── Exported clients ───────────────────────────────────────────────────────

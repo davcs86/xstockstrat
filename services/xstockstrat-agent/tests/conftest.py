@@ -58,6 +58,12 @@ def set_env(monkeypatch):
     monkeypatch.setenv("MCP_TRANSPORT", "stdio")
     monkeypatch.setenv("IDENTITY_ENDPOINT", "identity-test:50058")
     monkeypatch.setenv("CONFIG_ENDPOINT", "config-test:50060")
+    # Feature 210: mtls.secure_channel is fail-closed — it raises unless MTLS_* are set. Dummy PEM
+    # bytes satisfy grpc.ssl_channel_credentials at construction; channels are lazy, so mocked-stub
+    # tests never handshake. (test_mtls.py's fail-closed test delenv's these in its own body.)
+    monkeypatch.setenv("MTLS_CERT", "dev-cert")
+    monkeypatch.setenv("MTLS_KEY", "dev-key")
+    monkeypatch.setenv("MTLS_CA_CERT", "dev-ca")
     # Also patch module-level vars — they are read at import time so setenv alone has no effect on
     # tests that import the module before fixtures run.
     from app import client, oauth_server

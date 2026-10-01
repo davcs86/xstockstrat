@@ -27,10 +27,37 @@ def _run(*args):
 def _leaf(tmp: Path, name: str, ca: Path, cakey: Path) -> tuple[str, str]:
     ext = tmp / f"{name}.ext"
     ext.write_text(f"subjectAltName=DNS:{name}\nextendedKeyUsage=serverAuth,clientAuth\n")
-    _run("openssl", "req", "-newkey", "rsa:2048", "-nodes", "-keyout", str(tmp / f"{name}-key.pem"),
-         "-out", str(tmp / f"{name}.csr"), "-subj", f"/CN={name}")
-    _run("openssl", "x509", "-req", "-in", str(tmp / f"{name}.csr"), "-CA", str(ca), "-CAkey", str(cakey),
-         "-CAcreateserial", "-out", str(tmp / f"{name}.pem"), "-days", "1", "-extfile", str(ext))
+    _run(
+        "openssl",
+        "req",
+        "-newkey",
+        "rsa:2048",
+        "-nodes",
+        "-keyout",
+        str(tmp / f"{name}-key.pem"),
+        "-out",
+        str(tmp / f"{name}.csr"),
+        "-subj",
+        f"/CN={name}",
+    )
+    _run(
+        "openssl",
+        "x509",
+        "-req",
+        "-in",
+        str(tmp / f"{name}.csr"),
+        "-CA",
+        str(ca),
+        "-CAkey",
+        str(cakey),
+        "-CAcreateserial",
+        "-out",
+        str(tmp / f"{name}.pem"),
+        "-days",
+        "1",
+        "-extfile",
+        str(ext),
+    )
     return (tmp / f"{name}.pem").read_text(), (tmp / f"{name}-key.pem").read_text()
 
 
@@ -38,19 +65,51 @@ def _leaf(tmp: Path, name: str, ca: Path, cakey: Path) -> tuple[str, str]:
 def pki(tmp_path_factory):
     tmp = tmp_path_factory.mktemp("mtls")
     ca, cakey = tmp / "ca.pem", tmp / "ca-key.pem"
-    _run("openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", str(cakey),
-         "-out", str(ca), "-days", "1", "-subj", "/CN=test-ca")
+    _run(
+        "openssl",
+        "req",
+        "-x509",
+        "-newkey",
+        "rsa:2048",
+        "-nodes",
+        "-keyout",
+        str(cakey),
+        "-out",
+        str(ca),
+        "-days",
+        "1",
+        "-subj",
+        "/CN=test-ca",
+    )
     server_cert, server_key = _leaf(tmp, SVC, ca, cakey)
     client_cert, client_key = _leaf(tmp, "xstockstrat-client", ca, cakey)
     # a leaf from a DIFFERENT CA (wrong-CA negative half)
     fca, fcakey = tmp / "fca.pem", tmp / "fca-key.pem"
-    _run("openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", str(fcakey),
-         "-out", str(fca), "-days", "1", "-subj", "/CN=foreign-ca")
+    _run(
+        "openssl",
+        "req",
+        "-x509",
+        "-newkey",
+        "rsa:2048",
+        "-nodes",
+        "-keyout",
+        str(fcakey),
+        "-out",
+        str(fca),
+        "-days",
+        "1",
+        "-subj",
+        "/CN=foreign-ca",
+    )
     foreign_cert, foreign_key = _leaf(tmp, "xstockstrat-client", fca, fcakey)
     return {
-        "ca": ca.read_text(), "server_cert": server_cert, "server_key": server_key,
-        "client_cert": client_cert, "client_key": client_key,
-        "foreign_cert": foreign_cert, "foreign_key": foreign_key,
+        "ca": ca.read_text(),
+        "server_cert": server_cert,
+        "server_key": server_key,
+        "client_cert": client_cert,
+        "client_key": client_key,
+        "foreign_cert": foreign_cert,
+        "foreign_key": foreign_key,
     }
 
 
@@ -89,13 +148,16 @@ async def _call(port, creds, target, monkeypatch, pki, client_cert, client_key, 
             f"127.0.0.1:{port}", mtls.channel_credentials(), options=mtls.target_override(target)
         )
     try:
-        call = channel.unary_unary(_METHOD, request_serializer=lambda b: b, response_deserializer=lambda b: b)
+        call = channel.unary_unary(
+            _METHOD, request_serializer=lambda b: b, response_deserializer=lambda b: b
+        )
         return await call(b"ping", metadata=md, timeout=3)
     finally:
         await channel.close()
 
 
 # --- @AC-4: fail-closed boot ---
+
 
 def test_fail_closed_when_env_absent(monkeypatch):
     monkeypatch.delenv("MTLS_CERT", raising=False)
@@ -109,11 +171,20 @@ def test_fail_closed_when_env_absent(monkeypatch):
 
 # --- @AC-2 mutual accept + @AC-5 trio propagation ---
 
+
 async def test_mutual_handshake_and_propagation(pki, monkeypatch):
     server, port, captured = await _serve(pki, monkeypatch)
     try:
-        resp = await _call(port, "secure", SVC, monkeypatch, pki, pki["client_cert"], pki["client_key"],
-                           md=(("x-user-id", "u-1"), ("x-access-scope", "7"), ("x-trace-id", "t-1")))
+        resp = await _call(
+            port,
+            "secure",
+            SVC,
+            monkeypatch,
+            pki,
+            pki["client_cert"],
+            pki["client_key"],
+            md=(("x-user-id", "u-1"), ("x-access-scope", "7"), ("x-trace-id", "t-1")),
+        )
         assert resp == b"ok"  # @AC-2
         md = captured["md"]  # @AC-5
         assert md.get("x-user-id") == "u-1"
@@ -125,33 +196,47 @@ async def test_mutual_handshake_and_propagation(pki, monkeypatch):
 
 # --- @AC-1: plaintext client refused ---
 
+
 async def test_plaintext_client_refused(pki, monkeypatch):
     server, port, _ = await _serve(pki, monkeypatch)
     try:
         with pytest.raises(grpc.aio.AioRpcError):
-            await _call(port, "insecure", SVC, monkeypatch, pki, pki["client_cert"], pki["client_key"])
+            await _call(
+                port, "insecure", SVC, monkeypatch, pki, pki["client_cert"], pki["client_key"]
+            )
     finally:
         await server.stop(grace=None)
 
 
 # --- negative matrix (a): wrong-CA client cert rejected ---
 
+
 async def test_wrong_ca_rejected(pki, monkeypatch):
     server, port, _ = await _serve(pki, monkeypatch)
     try:
         with pytest.raises(grpc.aio.AioRpcError):
-            await _call(port, "secure", SVC, monkeypatch, pki, pki["foreign_cert"], pki["foreign_key"])
+            await _call(
+                port, "secure", SVC, monkeypatch, pki, pki["foreign_cert"], pki["foreign_key"]
+            )
     finally:
         await server.stop(grace=None)
 
 
 # --- negative matrix (b): valid-CA cert but WRONG pinned SAN rejected ---
 
+
 async def test_wrong_san_rejected(pki, monkeypatch):
     server, port, _ = await _serve(pki, monkeypatch)
     try:
         with pytest.raises(grpc.aio.AioRpcError):
-            await _call(port, "secure", "xstockstrat-wrong", monkeypatch, pki,
-                       pki["client_cert"], pki["client_key"])
+            await _call(
+                port,
+                "secure",
+                "xstockstrat-wrong",
+                monkeypatch,
+                pki,
+                pki["client_cert"],
+                pki["client_key"],
+            )
     finally:
         await server.stop(grace=None)

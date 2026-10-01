@@ -1369,7 +1369,7 @@ async def test_run_backtest_projects_full_result_with_diagnostics():
     stub = MagicMock()
     stub.RunBacktest = AsyncMock(return_value=result)
     with (
-        patch.object(client.grpc.aio, "insecure_channel", return_value=_Chan()),
+        patch.object(client.mtls, "secure_channel", return_value=_Chan()),
         patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=stub),
     ):
         out = await client.run_backtest(
@@ -1412,7 +1412,7 @@ async def test_run_backtest_sends_strategy_id_ref_for_registered_definition():
         return_value=analysis_pb2.BacktestResult(backtest_id="bt-1", strategy_id="sma")
     )
     with (
-        patch.object(client.grpc.aio, "insecure_channel", return_value=_Chan()),
+        patch.object(client.mtls, "secure_channel", return_value=_Chan()),
         patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=stub),
     ):
         await client.run_backtest(
@@ -1451,7 +1451,7 @@ class TestRunBacktestRangeOnTheWire:
             return_value=analysis_pb2.BacktestResult(backtest_id="bt-1", strategy_id="sma")
         )
         return stub, (
-            patch.object(client.grpc.aio, "insecure_channel", return_value=_Chan()),
+            patch.object(client.mtls, "secure_channel", return_value=_Chan()),
             patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=stub),
         )
 

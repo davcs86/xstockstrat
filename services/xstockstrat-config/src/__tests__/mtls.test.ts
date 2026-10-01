@@ -11,6 +11,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as grpc from '@grpc/grpc-js';
 import * as mtls from '../mtls';
+// DRY guard rail: this service bans inline 'x-user-id'/'x-access-scope' header literals.
+import { HEADER_USER_ID, HEADER_ACCESS_SCOPE } from '../grpc/authz';
 
 const SVC = 'xstockstrat-test';
 const METHOD = '/test.Echo/Call';
@@ -118,13 +120,13 @@ describe('inter-service mTLS', () => {
 
   it('@AC-2 + @AC-5: mutual handshake succeeds and the trio propagates', async () => {
     const md = new grpc.Metadata();
-    md.set('x-user-id', 'u-1');
-    md.set('x-access-scope', '7');
+    md.set(HEADER_USER_ID, 'u-1');
+    md.set(HEADER_ACCESS_SCOPE, '7');
     md.set('x-trace-id', 't-1');
     const resp = await call(mtls.clientCredentials(), mtls.targetOverride(SVC), md);
     assert.equal(resp.toString(), 'ok');
-    assert.equal(capturedMd?.get('x-user-id')[0], 'u-1');
-    assert.equal(capturedMd?.get('x-access-scope')[0], '7');
+    assert.equal(capturedMd?.get(HEADER_USER_ID)[0], 'u-1');
+    assert.equal(capturedMd?.get(HEADER_ACCESS_SCOPE)[0], '7');
     assert.equal(capturedMd?.get('x-trace-id')[0], 't-1');
   });
 

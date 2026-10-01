@@ -25,7 +25,7 @@ def _channel_cm():
 def _patch_trading_stub(mock_stub):
     from gen.trading.v1 import trading_pb2_grpc  # type: ignore
 
-    grpc_patch = patch("app.client.grpc")
+    grpc_patch = patch("app.client.mtls")
     stub_patch = patch.object(trading_pb2_grpc, "TradingServiceStub", return_value=mock_stub)
     return grpc_patch, stub_patch
 
@@ -56,13 +56,13 @@ async def test_register_broker_account_binds_alpaca_and_hides_credentials():
     )
     grpc_patch, stub_patch = _patch_trading_stub(mock_stub)
     with grpc_patch as mock_grpc:
-        mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        mock_grpc.secure_channel.return_value = _channel_cm()
         with stub_patch:
             out = await client.register_broker_account(
                 "user-42", "My Alpaca", "alpaca", _ALPACA_CREDS
             )
 
-    assert mock_grpc.aio.insecure_channel.call_args[0][0] == client.TRADING_ENDPOINT
+    assert mock_grpc.secure_channel.call_args[0][0] == client.TRADING_ENDPOINT
     sent = mock_stub.RegisterBrokerAccount.call_args.args[0]
     assert sent.broker_type == 1  # BROKER_TYPE_ALPACA
     assert sent.credentials_json == _ALPACA_CREDS  # forwarded verbatim
@@ -87,7 +87,7 @@ async def test_register_broker_account_binds_ibkr():
     )
     grpc_patch, stub_patch = _patch_trading_stub(mock_stub)
     with grpc_patch as mock_grpc:
-        mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        mock_grpc.secure_channel.return_value = _channel_cm()
         with stub_patch:
             out = await client.register_broker_account(
                 "user-42", "My IBKR", "IBKR", '{"consumer_key":"ck"}'
@@ -105,7 +105,7 @@ async def test_register_broker_account_rejects_offline_and_unknown_without_rpc()
     mock_stub.RegisterBrokerAccount = AsyncMock()
     grpc_patch, stub_patch = _patch_trading_stub(mock_stub)
     with grpc_patch as mock_grpc:
-        mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        mock_grpc.secure_channel.return_value = _channel_cm()
         with stub_patch:
             with pytest.raises(ValueError, match="unsupported broker_type"):
                 await client.register_broker_account("user-42", "x", "offline", "")
@@ -127,7 +127,7 @@ async def test_update_broker_account_credentials_forwards_and_hides():
     )
     grpc_patch, stub_patch = _patch_trading_stub(mock_stub)
     with grpc_patch as mock_grpc:
-        mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        mock_grpc.secure_channel.return_value = _channel_cm()
         with stub_patch:
             out = await client.update_broker_account_credentials(
                 "user-42", "acct-7", '{"api_key":"AKnew","api_secret":"SECnew"}'
@@ -153,7 +153,7 @@ async def test_deregister_broker_account_synthesizes_confirmation():
     )
     grpc_patch, stub_patch = _patch_trading_stub(mock_stub)
     with grpc_patch as mock_grpc:
-        mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        mock_grpc.secure_channel.return_value = _channel_cm()
         with stub_patch:
             out = await client.deregister_broker_account("user-42", "acct-7")
 
@@ -180,7 +180,7 @@ async def test_list_broker_accounts_returns_broker_and_offline_together():
     )
     grpc_patch, stub_patch = _patch_trading_stub(mock_stub)
     with grpc_patch as mock_grpc:
-        mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        mock_grpc.secure_channel.return_value = _channel_cm()
         with stub_patch:
             out = await client.list_broker_accounts("user-42")
 
@@ -207,12 +207,12 @@ async def test_resume_broker_account_calls_rpc_and_returns_account():
     )
     grpc_patch, stub_patch = _patch_trading_stub(mock_stub)
     with grpc_patch as mock_grpc:
-        mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        mock_grpc.secure_channel.return_value = _channel_cm()
         with stub_patch:
             out = await client.resume_broker_account("admin-1", "acct-7", "false alarm")
 
     # Verify the correct endpoint was used.
-    assert mock_grpc.aio.insecure_channel.call_args[0][0] == client.TRADING_ENDPOINT
+    assert mock_grpc.secure_channel.call_args[0][0] == client.TRADING_ENDPOINT
     # Verify RPC request fields.
     sent = mock_stub.ResumeAccount.call_args.args[0]
     assert sent.account_id == "acct-7"
@@ -239,7 +239,7 @@ async def test_resume_broker_account_default_reason():
     )
     grpc_patch, stub_patch = _patch_trading_stub(mock_stub)
     with grpc_patch as mock_grpc:
-        mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        mock_grpc.secure_channel.return_value = _channel_cm()
         with stub_patch:
             await client.resume_broker_account("admin-1", "acct-7")
 

@@ -37,10 +37,12 @@ ensure_ca() {
 
 # mint_leaf <service> <cert-out> <key-out>
 mint_leaf() {
-  svc="$1"; cert_out="$2"; key_out="$3"
+  svc="$1"
+  cert_out="$2"
+  key_out="$3"
   ext_file="$(mktemp)"
   csr_file="$(mktemp)"
-  cat > "$ext_file" <<EXT
+  cat >"$ext_file" <<EXT
 subjectAltName = DNS:${svc}
 extendedKeyUsage = serverAuth, clientAuth
 basicConstraints = CA:FALSE
@@ -59,7 +61,10 @@ ensure_ca
 
 if [ "${1:-}" = "--rotate" ]; then
   svc="${2:-}"
-  [ -n "$svc" ] || { echo "usage: gen-dev-certs.sh --rotate <service>" >&2; exit 2; }
+  [ -n "$svc" ] || {
+    echo "usage: gen-dev-certs.sh --rotate <service>" >&2
+    exit 2
+  }
   svc_dir="${CERTS_DIR}/${svc}"
   mkdir -p "$svc_dir"
   mint_leaf "$svc" "${svc_dir}/cert.rotated.pem" "${svc_dir}/key.rotated.pem"

@@ -11,26 +11,33 @@
 #   docker compose up -d              # compose interpolates ${<SVC>_MTLS_*} from the exported env
 #
 # bash 3.2 compatible (macOS default). Must be sourced, not executed (exports die with a subshell).
+if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
+  echo "mtls-dev-env: source this script, do not execute it: source scripts/mtls-dev-env.sh" >&2
+  exit 1
+fi
+
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CERTS_DIR="${REPO_ROOT}/certs"
 
 if [ ! -f "${CERTS_DIR}/_ca/ca.pem" ]; then
   echo "mtls-dev-env: ${CERTS_DIR}/_ca/ca.pem not found — run scripts/gen-dev-certs.sh first" >&2
-  return 1 2>/dev/null || exit 1
+  return 1
 fi
 
-export MTLS_CA_CERT="$(cat "${CERTS_DIR}/_ca/ca.pem")"
+MTLS_CA_CERT="$(cat "${CERTS_DIR}/_ca/ca.pem")"
+export MTLS_CA_CERT
 
 # service registry suffix -> compose shell-var prefix (matches docker-compose.yml)
 for pair in \
   "config:CONFIG" "ledger:LEDGER" "identity:IDENTITY" "notify:NOTIFY" \
   "marketdata:MARKETDATA" "indicators:INDICATORS" "ingest:INGEST" "analysis:ANALYSIS" \
   "portfolio:PORTFOLIO" "trading:TRADING" "ui:UI" "agent:AGENT"; do
-  svc="${pair%%:*}"; pfx="${pair##*:}"
+  svc="${pair%%:*}"
+  pfx="${pair##*:}"
   svc_dir="${CERTS_DIR}/xstockstrat-${svc}"
   if [ ! -f "${svc_dir}/cert.pem" ]; then
     echo "mtls-dev-env: ${svc_dir}/cert.pem missing — re-run scripts/gen-dev-certs.sh" >&2
-    return 1 2>/dev/null || exit 1
+    return 1
   fi
   export "${pfx}_MTLS_CERT=$(cat "${svc_dir}/cert.pem")"
   export "${pfx}_MTLS_KEY=$(cat "${svc_dir}/key.pem")"
