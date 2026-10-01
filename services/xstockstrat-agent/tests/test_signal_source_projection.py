@@ -44,8 +44,8 @@ async def test_projection_covers_every_signal_source_field():
     resp = ingest_pb2.ListSignalSourcesResponse(sources=[src])
     mock_stub = MagicMock()
     mock_stub.ListSignalSources = AsyncMock(return_value=resp)
-    with patch("app.client.grpc") as mock_grpc:
-        mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+    with patch("app.client.mtls") as mock_grpc:
+        mock_grpc.secure_channel.return_value = _channel_cm()
         with patch.object(ingest_pb2_grpc, "IngestServiceStub", return_value=mock_stub):
             result = await client.list_signal_sources()
 

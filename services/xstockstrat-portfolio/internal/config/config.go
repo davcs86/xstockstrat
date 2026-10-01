@@ -10,10 +10,10 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 
 	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
 	configv1 "github.com/xstockstrat/contracts/gen/go/config/v1"
+	"github.com/xstockstrat/portfolio/internal/mtls"
 )
 
 // Config holds all environment-sourced configuration for xstockstrat-portfolio.
@@ -60,7 +60,11 @@ type Watcher struct {
 // applicationEnv/tradingMode set this deployment's WatchConfig scope (else the server serves the
 // zero-value dev/all default rows).
 func NewWatcher(endpoint, namespace, applicationEnv, tradingMode string) (*Watcher, error) {
-	conn, err := grpc.NewClient(endpoint, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	creds, err := mtls.ClientConfig("xstockstrat-config")
+	if err != nil {
+		return nil, fmt.Errorf("mtls config: %w", err)
+	}
+	conn, err := grpc.NewClient(endpoint, grpc.WithTransportCredentials(creds))
 	if err != nil {
 		return nil, fmt.Errorf("dial config service %s: %w", endpoint, err)
 	}

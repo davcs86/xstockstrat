@@ -16,7 +16,6 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/metadata"
 	grpcstatus "google.golang.org/grpc/status"
@@ -35,6 +34,7 @@ import (
 	"github.com/xstockstrat/trading/internal/broker"
 	"github.com/xstockstrat/trading/internal/config"
 	"github.com/xstockstrat/trading/internal/middleware"
+	"github.com/xstockstrat/trading/internal/mtls"
 	"github.com/xstockstrat/trading/internal/repository"
 )
 
@@ -177,19 +177,35 @@ func NewTradingService(
 	bracketRepo repository.BracketRepository,
 	encKey string,
 ) (*TradingService, error) {
-	ledgerConn, err := grpc.NewClient(cfg.LedgerEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()), clientKeepAlive, grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
+	ledgerCreds, err := mtls.ClientConfig("xstockstrat-ledger")
+	if err != nil {
+		return nil, fmt.Errorf("mtls ledger: %w", err)
+	}
+	ledgerConn, err := grpc.NewClient(cfg.LedgerEndpoint, grpc.WithTransportCredentials(ledgerCreds), clientKeepAlive, grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
 	if err != nil {
 		return nil, fmt.Errorf("dial ledger: %w", err)
 	}
-	notifyConn, err := grpc.NewClient(cfg.NotifyEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()), clientKeepAlive, grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
+	notifyCreds, err := mtls.ClientConfig("xstockstrat-notify")
+	if err != nil {
+		return nil, fmt.Errorf("mtls notify: %w", err)
+	}
+	notifyConn, err := grpc.NewClient(cfg.NotifyEndpoint, grpc.WithTransportCredentials(notifyCreds), clientKeepAlive, grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
 	if err != nil {
 		return nil, fmt.Errorf("dial notify: %w", err)
 	}
-	portfolioConn, err := grpc.NewClient(cfg.PortfolioEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()), clientKeepAlive, grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
+	portfolioCreds, err := mtls.ClientConfig("xstockstrat-portfolio")
+	if err != nil {
+		return nil, fmt.Errorf("mtls portfolio: %w", err)
+	}
+	portfolioConn, err := grpc.NewClient(cfg.PortfolioEndpoint, grpc.WithTransportCredentials(portfolioCreds), clientKeepAlive, grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
 	if err != nil {
 		return nil, fmt.Errorf("dial portfolio: %w", err)
 	}
-	marketdataConn, err := grpc.NewClient(cfg.MarketDataEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()), clientKeepAlive, grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
+	marketdataCreds, err := mtls.ClientConfig("xstockstrat-marketdata")
+	if err != nil {
+		return nil, fmt.Errorf("mtls marketdata: %w", err)
+	}
+	marketdataConn, err := grpc.NewClient(cfg.MarketDataEndpoint, grpc.WithTransportCredentials(marketdataCreds), clientKeepAlive, grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
 	if err != nil {
 		return nil, fmt.Errorf("dial marketdata: %w", err)
 	}

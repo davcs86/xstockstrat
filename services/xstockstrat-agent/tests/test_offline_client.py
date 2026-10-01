@@ -22,7 +22,7 @@ def _channel_cm():
 def _patch_trading_stub(mock_stub):
     from gen.trading.v1 import trading_pb2_grpc  # type: ignore
 
-    grpc_patch = patch("app.client.grpc")
+    grpc_patch = patch("app.client.mtls")
     stub_patch = patch.object(trading_pb2_grpc, "TradingServiceStub", return_value=mock_stub)
     return grpc_patch, stub_patch
 
@@ -46,13 +46,13 @@ async def test_confirm_offline_order_forwards_user_and_returns_derived_status():
 
     grpc_patch, stub_patch = _patch_trading_stub(mock_stub)
     with grpc_patch as mock_grpc:
-        mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        mock_grpc.secure_channel.return_value = _channel_cm()
         with stub_patch:
             out = await client.confirm_offline_order(
                 "user-42", "ord-1", filled_qty=10, filled_avg_price=190.25
             )
 
-    assert mock_grpc.aio.insecure_channel.call_args[0][0] == client.TRADING_ENDPOINT
+    assert mock_grpc.secure_channel.call_args[0][0] == client.TRADING_ENDPOINT
     sent = mock_stub.ConfirmOrder.call_args.args[0]
     # The request carries the fill fields...
     assert sent.order_id == "ord-1"
@@ -80,7 +80,7 @@ async def test_register_offline_account_binds_offline_broker_type():
     )
     grpc_patch, stub_patch = _patch_trading_stub(mock_stub)
     with grpc_patch as mock_grpc:
-        mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        mock_grpc.secure_channel.return_value = _channel_cm()
         with stub_patch:
             out = await client.register_offline_account("user-42", "Manual Book")
 
@@ -102,7 +102,7 @@ async def test_record_offline_order_signs_side_and_forwards_user():
     )
     grpc_patch, stub_patch = _patch_trading_stub(mock_stub)
     with grpc_patch as mock_grpc:
-        mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        mock_grpc.secure_channel.return_value = _channel_cm()
         with stub_patch:
             out = await client.record_offline_order(
                 "user-42", "off-1", "AAPL", "sell", "market", 5, "nonce-1"
@@ -127,7 +127,7 @@ async def test_record_offline_order_rejects_bad_side():
 def _patch_portfolio_stub(mock_stub):
     from gen.portfolio.v1 import portfolio_pb2_grpc  # type: ignore
 
-    grpc_patch = patch("app.client.grpc")
+    grpc_patch = patch("app.client.mtls")
     stub_patch = patch.object(portfolio_pb2_grpc, "PortfolioServiceStub", return_value=mock_stub)
     return grpc_patch, stub_patch
 
@@ -146,7 +146,7 @@ async def test_list_account_positions_forwards_user_id_via_header():
     )
     grpc_patch, stub_patch = _patch_portfolio_stub(mock_stub)
     with grpc_patch as mock_grpc:
-        mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        mock_grpc.secure_channel.return_value = _channel_cm()
         with stub_patch:
             out = await client.list_positions("user-42", "off-1")
 
@@ -170,7 +170,7 @@ async def test_list_account_orders_forwards_user_id_in_request_body():
     mock_stub.ListOrders = AsyncMock(return_value=trading_pb2.ListOrdersResponse(orders=[]))
     grpc_patch, stub_patch = _patch_trading_stub(mock_stub)
     with grpc_patch as mock_grpc:
-        mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        mock_grpc.secure_channel.return_value = _channel_cm()
         with stub_patch:
             out = await client.list_account_orders("user-42", "off-1")
 
@@ -202,7 +202,7 @@ async def test_snapshot_offline_positions_forwards_baseline_and_user():
 
     grpc_patch, stub_patch = _patch_trading_stub(mock_stub)
     with grpc_patch as mock_grpc:
-        mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        mock_grpc.secure_channel.return_value = _channel_cm()
         with stub_patch:
             out = await client.snapshot_offline_positions(
                 "user-42",
@@ -214,7 +214,7 @@ async def test_snapshot_offline_positions_forwards_baseline_and_user():
             )
 
     # Verify the gRPC call target.
-    assert mock_grpc.aio.insecure_channel.call_args[0][0] == client.TRADING_ENDPOINT
+    assert mock_grpc.secure_channel.call_args[0][0] == client.TRADING_ENDPOINT
 
     sent = mock_stub.SnapshotOfflinePositions.call_args.args[0]
     assert sent.account_id == "off-1"
@@ -248,7 +248,7 @@ async def test_snapshot_offline_positions_no_as_of():
 
     grpc_patch, stub_patch = _patch_trading_stub(mock_stub)
     with grpc_patch as mock_grpc:
-        mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        mock_grpc.secure_channel.return_value = _channel_cm()
         with stub_patch:
             out = await client.snapshot_offline_positions(
                 "user-42",
@@ -301,7 +301,7 @@ async def test_list_positions_provenance_passthrough():
 
     grpc_patch, stub_patch = _patch_portfolio_stub(mock_stub)
     with grpc_patch as mock_grpc:
-        mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        mock_grpc.secure_channel.return_value = _channel_cm()
         with stub_patch:
             out = await client.list_positions("user-42", "off-1")
 
@@ -329,7 +329,7 @@ async def test_list_positions_pagination_passthrough():
     )
     grpc_patch, stub_patch = _patch_portfolio_stub(mock_stub)
     with grpc_patch as mock_grpc:
-        mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        mock_grpc.secure_channel.return_value = _channel_cm()
         with stub_patch:
             out = await client.list_positions(
                 "user-42", account_id="off-1", limit=10, page_token="tok-1"
@@ -353,7 +353,7 @@ async def test_list_positions_all_accounts():
     )
     grpc_patch, stub_patch = _patch_portfolio_stub(mock_stub)
     with grpc_patch as mock_grpc:
-        mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        mock_grpc.secure_channel.return_value = _channel_cm()
         with stub_patch:
             out = await client.list_positions("user-42")
 

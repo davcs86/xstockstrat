@@ -51,6 +51,19 @@ services:
     instance_count: 1
     instance_size_slug: basic-xs
     envs:
+      # Feature 210: inter-service mutual TLS. CA + leaf are public; the private key is a
+      # SECRET. Fail-closed — the service refuses to boot if any is empty. Set real PROD
+      # cert material from the prod platform CA (see docs/runbooks/inter-service-mtls-rollout.md).
+      - key: MTLS_CA_CERT
+        scope: RUN_TIME
+        value: YOUR_PROD_MTLS_CA_CERT
+      - key: MTLS_CERT
+        scope: RUN_TIME
+        value: YOUR_PROD_MTLS_CERT_TRADING
+      - key: MTLS_KEY
+        scope: RUN_TIME
+        value: YOUR_PROD_MTLS_KEY_TRADING
+        type: SECRET
       - key: GRPC_PORT
         value: "50051"
       - key: CONFIG_ENDPOINT
@@ -92,6 +105,19 @@ services:
     instance_count: 1
     instance_size_slug: basic-xs
     envs:
+      # Feature 210: inter-service mutual TLS. CA + leaf are public; the private key is a
+      # SECRET. Fail-closed — the service refuses to boot if any is empty. Set real PROD
+      # cert material from the prod platform CA (see docs/runbooks/inter-service-mtls-rollout.md).
+      - key: MTLS_CA_CERT
+        scope: RUN_TIME
+        value: YOUR_PROD_MTLS_CA_CERT
+      - key: MTLS_CERT
+        scope: RUN_TIME
+        value: YOUR_PROD_MTLS_CERT_PORTFOLIO
+      - key: MTLS_KEY
+        scope: RUN_TIME
+        value: YOUR_PROD_MTLS_KEY_PORTFOLIO
+        type: SECRET
       - key: GRPC_PORT
         value: "50052"
       - key: CONFIG_ENDPOINT
@@ -121,6 +147,19 @@ services:
     instance_count: 1
     instance_size_slug: basic-xs
     envs:
+      # Feature 210: inter-service mutual TLS. CA + leaf are public; the private key is a
+      # SECRET. Fail-closed — the service refuses to boot if any is empty. Set real PROD
+      # cert material from the prod platform CA (see docs/runbooks/inter-service-mtls-rollout.md).
+      - key: MTLS_CA_CERT
+        scope: RUN_TIME
+        value: YOUR_PROD_MTLS_CA_CERT
+      - key: MTLS_CERT
+        scope: RUN_TIME
+        value: YOUR_PROD_MTLS_CERT_MARKETDATA
+      - key: MTLS_KEY
+        scope: RUN_TIME
+        value: YOUR_PROD_MTLS_KEY_MARKETDATA
+        type: SECRET
       - key: GRPC_PORT
         value: "50053"
       - key: CONFIG_ENDPOINT
@@ -155,6 +194,19 @@ services:
     instance_count: 1
     instance_size_slug: basic-s
     envs:
+      # Feature 210: inter-service mutual TLS. CA + leaf are public; the private key is a
+      # SECRET. Fail-closed — the service refuses to boot if any is empty. Set real PROD
+      # cert material from the prod platform CA (see docs/runbooks/inter-service-mtls-rollout.md).
+      - key: MTLS_CA_CERT
+        scope: RUN_TIME
+        value: YOUR_PROD_MTLS_CA_CERT
+      - key: MTLS_CERT
+        scope: RUN_TIME
+        value: YOUR_PROD_MTLS_CERT_INDICATORS
+      - key: MTLS_KEY
+        scope: RUN_TIME
+        value: YOUR_PROD_MTLS_KEY_INDICATORS
+        type: SECRET
       - key: GRPC_PORT
         value: "50054"
       - key: CONFIG_ENDPOINT
@@ -186,6 +238,19 @@ services:
     instance_count: 1
     instance_size_slug: basic-xxs
     envs:
+      # Feature 210: inter-service mutual TLS. CA + leaf are public; the private key is a
+      # SECRET. Fail-closed — the service refuses to boot if any is empty. Set real PROD
+      # cert material from the prod platform CA (see docs/runbooks/inter-service-mtls-rollout.md).
+      - key: MTLS_CA_CERT
+        scope: RUN_TIME
+        value: YOUR_PROD_MTLS_CA_CERT
+      - key: MTLS_CERT
+        scope: RUN_TIME
+        value: YOUR_PROD_MTLS_CERT_INGEST
+      - key: MTLS_KEY
+        scope: RUN_TIME
+        value: YOUR_PROD_MTLS_KEY_INGEST
+        type: SECRET
       - key: GRPC_PORT
         value: "50055"
       - key: CONFIG_ENDPOINT
@@ -221,6 +286,19 @@ services:
     instance_count: 1
     instance_size_slug: basic-xxs
     envs:
+      # Feature 210: inter-service mutual TLS. CA + leaf are public; the private key is a
+      # SECRET. Fail-closed — the service refuses to boot if any is empty. Set real PROD
+      # cert material from the prod platform CA (see docs/runbooks/inter-service-mtls-rollout.md).
+      - key: MTLS_CA_CERT
+        scope: RUN_TIME
+        value: YOUR_PROD_MTLS_CA_CERT
+      - key: MTLS_CERT
+        scope: RUN_TIME
+        value: YOUR_PROD_MTLS_CERT_ANALYSIS
+      - key: MTLS_KEY
+        scope: RUN_TIME
+        value: YOUR_PROD_MTLS_KEY_ANALYSIS
+        type: SECRET
       - key: GRPC_PORT
         value: "50056"
       - key: CONFIG_ENDPOINT
@@ -261,6 +339,19 @@ services:
     instance_count: 1
     instance_size_slug: basic-xs
     envs:
+      # Feature 210: inter-service mutual TLS. CA + leaf are public; the private key is a
+      # SECRET. Fail-closed — the service refuses to boot if any is empty. Set real PROD
+      # cert material from the prod platform CA (see docs/runbooks/inter-service-mtls-rollout.md).
+      - key: MTLS_CA_CERT
+        scope: RUN_TIME
+        value: YOUR_PROD_MTLS_CA_CERT
+      - key: MTLS_CERT
+        scope: RUN_TIME
+        value: YOUR_PROD_MTLS_CERT_AGENT
+      - key: MTLS_KEY
+        scope: RUN_TIME
+        value: YOUR_PROD_MTLS_KEY_AGENT
+        type: SECRET
       - key: INGEST_ENDPOINT
         value: ${xstockstrat-ingest.PRIVATE_DOMAIN}:50055
       - key: NOTIFY_ENDPOINT
@@ -316,6 +407,19 @@ services:
     instance_count: 1
     instance_size_slug: basic-xs
     envs:
+      # Feature 210: inter-service mutual TLS. CA + leaf are public; the private key is a
+      # SECRET. Fail-closed — the service refuses to boot if any is empty. Set real PROD
+      # cert material from the prod platform CA (see docs/runbooks/inter-service-mtls-rollout.md).
+      - key: MTLS_CA_CERT
+        scope: RUN_TIME
+        value: YOUR_PROD_MTLS_CA_CERT
+      - key: MTLS_CERT
+        scope: RUN_TIME
+        value: YOUR_PROD_MTLS_CERT_LEDGER
+      - key: MTLS_KEY
+        scope: RUN_TIME
+        value: YOUR_PROD_MTLS_KEY_LEDGER
+        type: SECRET
       - key: GRPC_PORT
         value: "50057"
       - key: CONFIG_ENDPOINT
@@ -348,6 +452,19 @@ services:
     instance_count: 1
     instance_size_slug: basic-xs
     envs:
+      # Feature 210: inter-service mutual TLS. CA + leaf are public; the private key is a
+      # SECRET. Fail-closed — the service refuses to boot if any is empty. Set real PROD
+      # cert material from the prod platform CA (see docs/runbooks/inter-service-mtls-rollout.md).
+      - key: MTLS_CA_CERT
+        scope: RUN_TIME
+        value: YOUR_PROD_MTLS_CA_CERT
+      - key: MTLS_CERT
+        scope: RUN_TIME
+        value: YOUR_PROD_MTLS_CERT_IDENTITY
+      - key: MTLS_KEY
+        scope: RUN_TIME
+        value: YOUR_PROD_MTLS_KEY_IDENTITY
+        type: SECRET
       - key: GRPC_PORT
         value: "50058"
       - key: CONFIG_ENDPOINT
@@ -384,6 +501,19 @@ services:
     instance_count: 1
     instance_size_slug: basic-xs
     envs:
+      # Feature 210: inter-service mutual TLS. CA + leaf are public; the private key is a
+      # SECRET. Fail-closed — the service refuses to boot if any is empty. Set real PROD
+      # cert material from the prod platform CA (see docs/runbooks/inter-service-mtls-rollout.md).
+      - key: MTLS_CA_CERT
+        scope: RUN_TIME
+        value: YOUR_PROD_MTLS_CA_CERT
+      - key: MTLS_CERT
+        scope: RUN_TIME
+        value: YOUR_PROD_MTLS_CERT_NOTIFY
+      - key: MTLS_KEY
+        scope: RUN_TIME
+        value: YOUR_PROD_MTLS_KEY_NOTIFY
+        type: SECRET
       - key: GRPC_PORT
         value: "50059"
       - key: CONFIG_ENDPOINT
@@ -435,6 +565,19 @@ services:
     # basic-xxs: WatchConfig streaming is long-lived but low-throughput; 30d telemetry shows <5% memory and <2% CPU
     instance_size_slug: basic-xxs
     envs:
+      # Feature 210: inter-service mutual TLS. CA + leaf are public; the private key is a
+      # SECRET. Fail-closed — the service refuses to boot if any is empty. Set real PROD
+      # cert material from the prod platform CA (see docs/runbooks/inter-service-mtls-rollout.md).
+      - key: MTLS_CA_CERT
+        scope: RUN_TIME
+        value: YOUR_PROD_MTLS_CA_CERT
+      - key: MTLS_CERT
+        scope: RUN_TIME
+        value: YOUR_PROD_MTLS_CERT_CONFIG
+      - key: MTLS_KEY
+        scope: RUN_TIME
+        value: YOUR_PROD_MTLS_KEY_CONFIG
+        type: SECRET
       - key: GRPC_PORT
         value: "50060"
       - key: DATABASE_URL
@@ -465,6 +608,19 @@ services:
     instance_count: 1
     instance_size_slug: basic-xxs
     envs:
+      # Feature 210: inter-service mutual TLS. CA + leaf are public; the private key is a
+      # SECRET. Fail-closed — the service refuses to boot if any is empty. Set real PROD
+      # cert material from the prod platform CA (see docs/runbooks/inter-service-mtls-rollout.md).
+      - key: MTLS_CA_CERT
+        scope: RUN_TIME
+        value: YOUR_PROD_MTLS_CA_CERT
+      - key: MTLS_CERT
+        scope: RUN_TIME
+        value: YOUR_PROD_MTLS_CERT_UI
+      - key: MTLS_KEY
+        scope: RUN_TIME
+        value: YOUR_PROD_MTLS_KEY_UI
+        type: SECRET
       - key: TRADING_ENDPOINT
         value: ${xstockstrat-trading.PRIVATE_DOMAIN}:50051
       - key: PORTFOLIO_ENDPOINT

@@ -12,6 +12,8 @@ import os
 import grpc
 from gen.identity.v1 import identity_pb2, identity_pb2_grpc
 
+from app import mtls
+
 log = logging.getLogger(__name__)
 
 IDENTITY_ENDPOINT = os.environ.get("IDENTITY_ENDPOINT", "xstockstrat-identity:50058")
@@ -32,7 +34,7 @@ async def validate_bearer_jwt(token: str) -> bool:
     if not token:
         return False
     try:
-        async with grpc.aio.insecure_channel(IDENTITY_ENDPOINT) as channel:
+        async with mtls.secure_channel(IDENTITY_ENDPOINT, "xstockstrat-identity") as channel:
             stub = identity_pb2_grpc.IdentityServiceStub(channel)
             claims = await stub.ValidateToken(
                 identity_pb2.ValidateTokenRequest(token=token), metadata=_metadata()
@@ -64,7 +66,7 @@ async def validate_bearer_claims(token: str) -> dict | None:
     if not token:
         return None
     try:
-        async with grpc.aio.insecure_channel(IDENTITY_ENDPOINT) as channel:
+        async with mtls.secure_channel(IDENTITY_ENDPOINT, "xstockstrat-identity") as channel:
             stub = identity_pb2_grpc.IdentityServiceStub(channel)
             claims = await stub.ValidateToken(
                 identity_pb2.ValidateTokenRequest(token=token), metadata=_metadata()

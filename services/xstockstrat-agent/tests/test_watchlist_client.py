@@ -23,7 +23,7 @@ def _patch_stub(mock_stub):
     """Patch grpc + PortfolioServiceStub → mock_stub; returns the grpc patcher context tuple."""
     from gen.portfolio.v1 import portfolio_pb2_grpc  # type: ignore
 
-    grpc_patch = patch("app.client.grpc")
+    grpc_patch = patch("app.client.mtls")
     stub_patch = patch.object(portfolio_pb2_grpc, "PortfolioServiceStub", return_value=mock_stub)
     return grpc_patch, stub_patch
 
@@ -45,11 +45,11 @@ async def test_list_watchlists_paginates_and_forwards_user():
 
     grpc_patch, stub_patch = _patch_stub(mock_stub)
     with grpc_patch as mock_grpc:
-        mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        mock_grpc.secure_channel.return_value = _channel_cm()
         with stub_patch:
             out = await client.list_watchlists("user-42", limit=1, page_token="tok-1")
 
-    assert mock_grpc.aio.insecure_channel.call_args[0][0] == client.PORTFOLIO_ENDPOINT
+    assert mock_grpc.secure_channel.call_args[0][0] == client.PORTFOLIO_ENDPOINT
     sent = mock_stub.ListWatchlists.call_args.args[0]
     assert sent.page.page_size == 1
     assert sent.page.page_token == "tok-1"
@@ -82,7 +82,7 @@ async def test_get_watchlist_returns_bindings():
     )
     grpc_patch, stub_patch = _patch_stub(mock_stub)
     with grpc_patch as mock_grpc:
-        mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        mock_grpc.secure_channel.return_value = _channel_cm()
         with stub_patch:
             out = await client.get_watchlist("user-42", "wl-momentum")
 
@@ -108,7 +108,7 @@ async def test_create_stamps_manual_source_and_no_body_user_id():
     )
     grpc_patch, stub_patch = _patch_stub(mock_stub)
     with grpc_patch as mock_grpc:
-        mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        mock_grpc.secure_channel.return_value = _channel_cm()
         with stub_patch:
             await client.create_watchlist("user-42", name="Breakouts", symbols=["TSLA", "AMD"])
 
@@ -149,7 +149,7 @@ async def test_update_name_only_preserves_existing_bindings():
     )
     grpc_patch, stub_patch = _patch_stub(mock_stub)
     with grpc_patch as mock_grpc:
-        mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        mock_grpc.secure_channel.return_value = _channel_cm()
         with stub_patch:
             await client.update_watchlist("user-42", "wl-momentum", name="Momentum 2.0")
 
@@ -177,7 +177,7 @@ async def test_update_with_symbols_replaces_the_set():
     )
     grpc_patch, stub_patch = _patch_stub(mock_stub)
     with grpc_patch as mock_grpc:
-        mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        mock_grpc.secure_channel.return_value = _channel_cm()
         with stub_patch:
             await client.update_watchlist("user-42", "wl-momentum", symbols=["MSFT", "GOOG"])
 
@@ -202,7 +202,7 @@ async def test_add_symbols_stamps_manual_and_merges_bindings():
     )
     grpc_patch, stub_patch = _patch_stub(mock_stub)
     with grpc_patch as mock_grpc:
-        mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        mock_grpc.secure_channel.return_value = _channel_cm()
         with stub_patch:
             await client.add_watchlist_symbols(
                 "user-42",
@@ -241,7 +241,7 @@ async def test_ensure_signal_watchlist_dedups_user_id_under_bound_caller():
     token = client.set_caller("user-42", 1, "trace-1")
     try:
         with grpc_patch as mock_grpc:
-            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+            mock_grpc.secure_channel.return_value = _channel_cm()
             with stub_patch:
                 await client.ensure_signal_watchlist("user-42")
                 await client.add_watchlist_symbol("user-42", "wl-sig", "AAPL")
@@ -266,7 +266,7 @@ async def test_remove_symbols_sends_symbol_list():
     )
     grpc_patch, stub_patch = _patch_stub(mock_stub)
     with grpc_patch as mock_grpc:
-        mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        mock_grpc.secure_channel.return_value = _channel_cm()
         with stub_patch:
             await client.remove_watchlist_symbols("user-42", "wl-momentum", ["AAPL"])
 
@@ -290,7 +290,7 @@ async def test_create_forwards_default_strategy_id():
     )
     grpc_patch, stub_patch = _patch_stub(mock_stub)
     with grpc_patch as mock_grpc:
-        mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        mock_grpc.secure_channel.return_value = _channel_cm()
         with stub_patch:
             out = await client.create_watchlist(
                 "user-42", name="Breakouts", symbols=["AAPL"], default_strategy_id="swing"
@@ -313,7 +313,7 @@ async def test_update_with_default_is_masked_scalar_write_no_rmw():
     )
     grpc_patch, stub_patch = _patch_stub(mock_stub)
     with grpc_patch as mock_grpc:
-        mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        mock_grpc.secure_channel.return_value = _channel_cm()
         with stub_patch:
             await client.update_watchlist("user-42", "wl-1", default_strategy_id="swing")
 
@@ -334,7 +334,7 @@ async def test_update_with_default_and_name_masks_both():
     )
     grpc_patch, stub_patch = _patch_stub(mock_stub)
     with grpc_patch as mock_grpc:
-        mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        mock_grpc.secure_channel.return_value = _channel_cm()
         with stub_patch:
             await client.update_watchlist(
                 "user-42", "wl-1", name="New", default_strategy_id="swing"
@@ -372,7 +372,7 @@ async def test_update_watchlist_bindings_assigns_then_rereads():
     )
     grpc_patch, stub_patch = _patch_stub(mock_stub)
     with grpc_patch as mock_grpc:
-        mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        mock_grpc.secure_channel.return_value = _channel_cm()
         with stub_patch:
             out = await client.update_watchlist_bindings(
                 "user-42", "wl-1", symbols=["AAPL", "MSFT"], strategy_id="swing"

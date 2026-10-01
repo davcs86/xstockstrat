@@ -16,6 +16,7 @@ from gen.analysis.v1 import analysis_pb2_grpc
 from gen.analysis.v1.analysis_pb2 import DESCRIPTOR as ANALYSIS_DESCRIPTOR
 from grpc_reflection.v1alpha import reflection
 
+from app import mtls
 from app.config.watcher import ConfigWatcher
 from app.handlers.servicer import AnalysisServicer
 from app.telemetry import init_telemetry
@@ -62,17 +63,43 @@ async def serve():
 
     servicer = AnalysisServicer(
         config_watcher=cfg_watcher,
-        marketdata_channel=grpc.aio.insecure_channel(
+        marketdata_channel=grpc.aio.secure_channel(
             MARKETDATA_ENDPOINT,
-            options=[("grpc.max_receive_message_length", 8 * 1024 * 1024)],
+            mtls.channel_credentials(),
+            options=[("grpc.max_receive_message_length", 8 * 1024 * 1024)]
+            + mtls.target_override("xstockstrat-marketdata"),
         ),
-        indicators_channel=grpc.aio.insecure_channel(INDICATORS_ENDPOINT),
-        ingest_channel=grpc.aio.insecure_channel(INGEST_ENDPOINT),
-        ledger_channel=grpc.aio.insecure_channel(LEDGER_ENDPOINT),
+        indicators_channel=grpc.aio.secure_channel(
+            INDICATORS_ENDPOINT,
+            mtls.channel_credentials(),
+            options=mtls.target_override("xstockstrat-indicators"),
+        ),
+        ingest_channel=grpc.aio.secure_channel(
+            INGEST_ENDPOINT,
+            mtls.channel_credentials(),
+            options=mtls.target_override("xstockstrat-ingest"),
+        ),
+        ledger_channel=grpc.aio.secure_channel(
+            LEDGER_ENDPOINT,
+            mtls.channel_credentials(),
+            options=mtls.target_override("xstockstrat-ledger"),
+        ),
         db_pool=db_pool,
-        notify_channel=grpc.aio.insecure_channel(NOTIFY_ENDPOINT),
-        portfolio_channel=grpc.aio.insecure_channel(PORTFOLIO_ENDPOINT),
-        trading_channel=grpc.aio.insecure_channel(TRADING_ENDPOINT),
+        notify_channel=grpc.aio.secure_channel(
+            NOTIFY_ENDPOINT,
+            mtls.channel_credentials(),
+            options=mtls.target_override("xstockstrat-notify"),
+        ),
+        portfolio_channel=grpc.aio.secure_channel(
+            PORTFOLIO_ENDPOINT,
+            mtls.channel_credentials(),
+            options=mtls.target_override("xstockstrat-portfolio"),
+        ),
+        trading_channel=grpc.aio.secure_channel(
+            TRADING_ENDPOINT,
+            mtls.channel_credentials(),
+            options=mtls.target_override("xstockstrat-trading"),
+        ),
     )
 
     # ── gRPC server ────────────────────────────────────────────────────────
@@ -85,7 +112,7 @@ async def serve():
     )
     reflection.enable_server_reflection(service_names, grpc_server)
 
-    grpc_server.add_insecure_port(f"[::]:{GRPC_PORT}")
+    grpc_server.add_secure_port(f"[::]:{GRPC_PORT}", mtls.server_credentials())
     log.info("analysis gRPC service starting on port %s", GRPC_PORT)
     await grpc_server.start()
 

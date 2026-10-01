@@ -13,7 +13,6 @@ import (
 	"connectrpc.com/connect"
 	"golang.org/x/sync/singleflight"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -23,6 +22,7 @@ import (
 	notifyv1 "github.com/xstockstrat/contracts/gen/go/notify/v1"
 	"github.com/xstockstrat/marketdata/internal/config"
 	"github.com/xstockstrat/marketdata/internal/middleware"
+	"github.com/xstockstrat/marketdata/internal/mtls"
 	"github.com/xstockstrat/marketdata/internal/repository"
 	"github.com/xstockstrat/marketdata/internal/source"
 	"github.com/xstockstrat/marketdata/internal/timeframe"
@@ -139,11 +139,19 @@ func NewMarketDataService(
 	histFundamentals source.HistoricalFundamentalsSource,
 	dividendSrc source.DividendSource,
 ) (*MarketDataService, error) {
-	ledgerConn, err := grpc.NewClient(ledgerEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
+	ledgerCreds, err := mtls.ClientConfig("xstockstrat-ledger")
+	if err != nil {
+		return nil, fmt.Errorf("mtls ledger: %w", err)
+	}
+	ledgerConn, err := grpc.NewClient(ledgerEndpoint, grpc.WithTransportCredentials(ledgerCreds), grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
 	if err != nil {
 		return nil, fmt.Errorf("dial ledger: %w", err)
 	}
-	notifyConn, err := grpc.NewClient(notifyEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
+	notifyCreds, err := mtls.ClientConfig("xstockstrat-notify")
+	if err != nil {
+		return nil, fmt.Errorf("mtls notify: %w", err)
+	}
+	notifyConn, err := grpc.NewClient(notifyEndpoint, grpc.WithTransportCredentials(notifyCreds), grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
 	if err != nil {
 		return nil, fmt.Errorf("dial notify: %w", err)
 	}

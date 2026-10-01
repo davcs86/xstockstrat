@@ -17,7 +17,13 @@ Feature: inter-service-mtls (mutual TLS + verified service identity between back
     Then the handshake succeeds, both certs verify against the platform CA, and the RPC proceeds
     And the propagated x-user-id / x-access-scope / x-trace-id are honored on that authenticated channel
 
-  @AC-3 @FR-2
+  @AC-3 @FR-2 @descoped
+  # DESCOPED at /sdd-design (4-round debate, operator sign-off in context.md 2026-10-01). Per-RPC
+  # identity-scoped authorization bound to the verified peer cert SAN was descoped: it would be a
+  # C-16 CHANGE to features 147/154 (x-internal-caller gates). This feature ships native chain+SAN
+  # mutual-handshake verification (see @AC-2) but leaves those app-layer gates header-only. The
+  # per-RPC impersonation defense is a documented follow-up. ID retained (C-15 append-only — never
+  # renumbered); NO covering test step — exempt from the C-15 coverage check by this descope note.
   Scenario: A service cannot impersonate a different service's identity
     Given a caller presenting a valid platform-issued cert whose service identity is "xstockstrat-notify"
     When it calls an RPC that a policy restricts to a different named peer identity
@@ -25,11 +31,16 @@ Feature: inter-service-mtls (mutual TLS + verified service identity between back
     And identity-scoped authorization is evaluated against the verified identity, not a forgeable header
 
   @AC-4 @FR-4
-  Scenario: Local development runs under a documented relaxed/dev-cert mode, never reachable in prod
-    Given docker-compose using the documented dev-cert (or relaxed) mode
+  # Rewritten at /sdd-design for Model B (flag-day, no toggle): dev and prod run IDENTICAL full
+  # mutual mTLS — the only difference is which CA/certs load. There is no plaintext listener and no
+  # verification-disabling flag in any environment; "fail-closed" is cert-material presence, not a mode.
+  Scenario: mTLS is enforced identically in every environment; verification cannot be disabled
+    Given docker-compose using dev certs from scripts/gen-dev-certs.sh (dev self-signed CA)
     When the stack is brought up locally
-    Then inter-service gRPC works end to end for development
-    And the production configuration defaults to enforce, with the relaxed mode not selectable in the prod app spec
+    Then inter-service gRPC works end to end over full mutual TLS for development
+    And a service started without its MTLS_CERT/MTLS_KEY/MTLS_CA_CERT material fails to start (fail-closed)
+    And no env var or flag exists in any configuration that disables peer verification or accepts plaintext
+    And the production app spec loads production-CA certificates
 
   @AC-5 @FR-5
   Scenario: Header-propagation semantics are unchanged beneath mTLS

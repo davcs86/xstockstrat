@@ -370,6 +370,14 @@ jobs:
       - name: install dependencies (locked)
         run: uv sync --frozen --extra dev
 
+      # The indicators formula sandbox (feature 209) loads a seccomp-BPF filter via pyseccomp,
+      # which dlopens libseccomp.so.2. The Docker image installs libseccomp2; this job runs on the
+      # bare runner, where it is not guaranteed present, so install it to keep the sandbox tests
+      # enforcing the real filter (not skipping it) — environment parity with prod.
+      - name: install libseccomp (indicators sandbox)
+        if: matrix.service == 'xstockstrat-indicators'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libseccomp2
+
       - name: pytest with coverage
         run: |
           uv run --no-sync pytest --cov=${{ matrix.cov_source }} \

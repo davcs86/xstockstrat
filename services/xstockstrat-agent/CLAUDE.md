@@ -199,6 +199,8 @@ its docstring for the read signature and oneof-stringify behavior.
 
 ## Environment Variables
 
+> **Inter-service mTLS (feature 210):** the agent also requires `MTLS_CERT` / `MTLS_KEY` / `MTLS_CA_CERT` — boot-time PEM strings (its own leaf, private key, and the platform CA). It is a gRPC **client**, so every outbound backend dial (`app/mtls.py` `secure_channel`) presents the leaf and pins the server authority to the target service name; **fail-closed** — the agent refuses to dial if any is absent. `MTLS_KEY` is a `SECRET` in `.do/app*.yaml`. Contract → `docs/patterns/inter-service-mtls.md`; rollout → `docs/runbooks/inter-service-mtls-rollout.md`.
+
 ```text
 MCP_TRANSPORT=http   # `sse` still accepted as a deprecated alias
 MCP_HTTP_PORT=9000   # `MCP_SSE_PORT` still accepted as a deprecated fallback

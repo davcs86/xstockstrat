@@ -206,3 +206,45 @@ Feature: Platform-wide guarantees
     When the same formula is used as a COMPONENT_KIND_CUSTOM_FORMULA in a strategy (feature 201)
     Then the strategy evaluator feeds it the same pe_ratio and pb_ratio snake_case data-keys
     And the component's numeric output equals the score test_formula returned for the identical input values
+
+  # ─── Inter-service mutual TLS (feature 210) ───────────────────────────────
+  # Platform-wide transport guarantee: every inter-service gRPC hop is mutually authenticated and
+  # fail-closed. @AC-3 (per-RPC identity-scoped authz) was @descoped at design — no guarantee shipped,
+  # not promoted. Provenance: @feature-210.
+
+  @AC-1 @FR-1 @feature-210
+  Scenario: A plaintext gRPC caller is refused in production configuration
+    Given a backend gRPC server (e.g. xstockstrat-trading on :50051) configured for production mTLS enforcement
+    When a client attempts a plaintext h2c connection presenting no client certificate
+    Then the connection is refused at the TLS layer before any RPC is dispatched
+    And no header trio (x-user-id / x-access-scope / x-trace-id) from that caller is honored
+
+  @AC-2 @FR-1 @FR-2 @feature-210
+  Scenario: A mutually-authenticated peer with a valid platform-issued identity is accepted
+    Given xstockstrat-ui presenting a client certificate issued by the platform CA for its own service identity
+    When it opens a gRPC channel to xstockstrat-trading, which verifies the client cert and presents its own server cert
+    Then the handshake succeeds, both certs verify against the platform CA, and the RPC proceeds
+    And the propagated x-user-id / x-access-scope / x-trace-id are honored on that authenticated channel
+
+  @AC-4 @FR-4 @feature-210
+  Scenario: mTLS is enforced identically in every environment; verification cannot be disabled
+    Given docker-compose using dev certs from scripts/gen-dev-certs.sh (dev self-signed CA)
+    When the stack is brought up locally
+    Then inter-service gRPC works end to end over full mutual TLS for development
+    And a service started without its MTLS_CERT/MTLS_KEY/MTLS_CA_CERT material fails to start (fail-closed)
+    And no env var or flag exists in any configuration that disables peer verification or accepts plaintext
+    And the production app spec loads production-CA certificates
+
+  @AC-5 @FR-5 @feature-210
+  Scenario: Header-propagation semantics are unchanged beneath mTLS
+    Given an authenticated mTLS channel from xstockstrat-ui through xstockstrat-trading to xstockstrat-portfolio
+    When a request carries x-user-id / x-access-scope / x-trace-id
+    Then the trio is propagated across the hop exactly as before mTLS (Go interceptor / Python per-method / Node AsyncLocalStorage)
+    And downstream ownership/scope checks observe the same values as before this feature
+
+  @AC-6 @FR-6 @FR-3 @feature-210
+  Scenario: A long-lived streaming RPC survives a certificate rotation
+    Given an active WatchConfig (or StreamEvents) stream over mTLS
+    When the platform rotates the relevant service certificate before its expiry
+    Then existing streams continue or transparently re-establish without dropping data
+    And new connections use the rotated certificate with no service downtime

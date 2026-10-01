@@ -240,6 +240,14 @@ data = json.loads({input_json!r})
 # Load validated parameter values (separate namespace from `data`)
 params = json.loads({params_json!r})
 
+# Pre-cache a usable temp dir BEFORE the RLIMIT_FSIZE=0 lockdown. numpy/pandas call
+# tempfile.gettempdir() lazily during compute; it probes candidate dirs by WRITING a byte, which
+# RLIMIT_FSIZE=0 then makes raise FileNotFoundError ("No usable temporary directory"). Caching it
+# here (writes still allowed) makes later gettempdir() calls return the cached path with no write;
+# RLIMIT_FSIZE=0 still blocks every real write, so the no-writable-FS guarantee is unchanged.
+import tempfile as _tempfile
+_tempfile.gettempdir()
+
 # ── OS-isolation lockdown (feature 209): everything below runs BEFORE the untrusted exec ────────
 # Drop to a distinct unprivileged UID when the parent is root (prod); no-op when already
 # unprivileged (dev/CI). Cross-UID isolation is what blocks a parent-memory/secret read.

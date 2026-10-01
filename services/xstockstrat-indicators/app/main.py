@@ -19,6 +19,7 @@ from gen.indicators.v1 import indicators_pb2_grpc
 from gen.indicators.v1.indicators_pb2 import DESCRIPTOR as INDICATORS_DESCRIPTOR
 from grpc_reflection.v1alpha import reflection
 
+from app import mtls
 from app.config.watcher import ConfigWatcher
 from app.handlers.servicer import IndicatorsServicer
 from app.services.seed_formulas import seed_default_formulas
@@ -71,7 +72,7 @@ async def serve():
     )
     reflection.enable_server_reflection(service_names, grpc_server)
 
-    grpc_server.add_insecure_port(f"[::]:{GRPC_PORT}")
+    grpc_server.add_secure_port(f"[::]:{GRPC_PORT}", mtls.server_credentials())
     log.info("indicators gRPC service starting on port %s", GRPC_PORT)
     await grpc_server.start()
 
