@@ -4,6 +4,7 @@
  * every error and never rolls back the mutation; payload is a safe-field allow-list, never the request.
  */
 import * as grpc from '@grpc/grpc-js';
+import * as mtls from '../mtls';
 import { LedgerServiceClient } from '@xstockstrat/proto/ledger/v1/ledger';
 import { getLogger } from '../services/logger';
 import { first } from './authz';
@@ -31,7 +32,7 @@ export const NOOP_LEDGER_AUDIT: LedgerAudit = {
 export function createLedgerAudit(
   endpoint: string = process.env.LEDGER_ENDPOINT ?? 'xstockstrat-ledger:50057',
 ): LedgerAudit {
-  const client = new LedgerServiceClient(endpoint, grpc.credentials.createInsecure());
+  const client = new LedgerServiceClient(endpoint, mtls.clientCredentials(), mtls.targetOverride('xstockstrat-ledger'));
   return {
     async append(eventType, targetUserId, callMetadata, safePayload) {
       try {

@@ -20,6 +20,7 @@ from gen.ingest.v1 import ingest_pb2_grpc
 from gen.ingest.v1.ingest_pb2 import DESCRIPTOR as INGEST_DESCRIPTOR
 from grpc_reflection.v1alpha import reflection
 
+from app import mtls
 from app.config.watcher import ConfigWatcher
 from app.handlers.servicer import IngestServicer
 from app.telemetry import init_telemetry
@@ -76,9 +77,21 @@ async def serve():
     )
     log.info("reconciled %d interrupted backfill job(s)", reconciled)
 
-    marketdata_channel = grpc.aio.insecure_channel(MARKETDATA_ENDPOINT)
-    ledger_channel = grpc.aio.insecure_channel(LEDGER_ENDPOINT)
-    notify_channel = grpc.aio.insecure_channel(NOTIFY_ENDPOINT)
+    marketdata_channel = grpc.aio.secure_channel(
+        MARKETDATA_ENDPOINT,
+        mtls.channel_credentials(),
+        options=mtls.target_override("xstockstrat-marketdata"),
+    )
+    ledger_channel = grpc.aio.secure_channel(
+        LEDGER_ENDPOINT,
+        mtls.channel_credentials(),
+        options=mtls.target_override("xstockstrat-ledger"),
+    )
+    notify_channel = grpc.aio.secure_channel(
+        NOTIFY_ENDPOINT,
+        mtls.channel_credentials(),
+        options=mtls.target_override("xstockstrat-notify"),
+    )
 
     servicer = IngestServicer(
         config_watcher=cfg_watcher,
@@ -97,7 +110,7 @@ async def serve():
     )
     reflection.enable_server_reflection(service_names, grpc_server)
 
-    grpc_server.add_insecure_port(f"[::]:{GRPC_PORT}")
+    grpc_server.add_secure_port(f"[::]:{GRPC_PORT}", mtls.server_credentials())
     log.info("ingest gRPC service starting on port %s", GRPC_PORT)
     await grpc_server.start()
 

@@ -29,10 +29,17 @@ FR-1. Every inter-service gRPC connection MUST use mutual TLS: the server presen
 client verifies against the platform CA, **and** the client presents a certificate the server
 verifies against the platform CA. Plaintext/`insecure` gRPC MUST be refused in production.
 
-FR-2. The peer's **service identity** (encoded in the certificate — e.g. SPIFFE ID or a per-service
-CN/SAN) MUST be verified, so one service cannot impersonate another even with a valid-but-different
-platform-issued cert. The header-trust boundary is re-anchored to this authenticated identity: the
-propagated `x-*` trio is honored only on a mutually-authenticated channel.
+FR-2. _(Narrowed at /sdd-design, 4-round debate, operator sign-off recorded in `context.md`
+2026-10-01 — see `design.md` and the `@AC-3 @descoped` note below.)_ The peer MUST present a
+**platform-CA-issued service leaf** (SAN = registry service name), verified by **native chain + SAN
+matching** against the platform CA — mutual-handshake authentication, with the client's verification
+identity pinned to the target service name (env-independent across compose and DO `PRIVATE_DOMAIN`
+dial hosts). The header-trust boundary is re-anchored to this mutually-authenticated channel: the
+propagated `x-*` trio is honored only on a channel where both peers presented valid platform leaves.
+**Out of scope (deferred follow-up):** binding specific RPC authorizations to the peer's cert SAN
+(per-RPC identity ACL) — the existing `x-internal-caller`/access-scope gates (features 147/154) stay
+byte-identical, so a compromised service holding any platform leaf can still forge `x-internal-caller`.
+That per-RPC impersonation defense was explicitly descoped from this feature (originally `@AC-3`).
 
 FR-3. A certificate issuance and **rotation** mechanism MUST be defined — a platform CA plus
 per-service leaf certs, rotatable without service downtime (expiry/rollover handled). The concrete
@@ -114,17 +121,33 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance truth (Constitution
 **C-15**). Each `FR-N` above is covered by ≥1 tagged scenario there.
 
-## Open Questions
+## Design-Phase Decisions (deferred to `/sdd-design`)
 
-- [ ] Mechanism (FR-3): statically mounted per-service certs + a rotation job, SPIRE/SPIFFE, or a
-  cloud-managed CA on the DO App Platform? Trade operational complexity vs identity strength and
-  rotation ergonomics.
-- [ ] Rollout ordering (FR-1): mTLS must be turned on without a flag-day outage across ~12 processes.
-  Is there a "permissive" interim mode (accept both plaintext and mTLS) to sequence the cutover, and
-  how is it guaranteed off in production (FR-4)?
-- [ ] Config surface (Config Key Changes): the exact cert-path / CA-bundle / enforce-toggle env or
-  config keys, kept distinct from the `<SERVICE>_ENDPOINT` connection vars.
-- [ ] Does the DO App Platform inter-component networking permit presenting/verifying custom client
-  certs on gRPC, or does it terminate/re-originate TLS in a way that constrains the mechanism?
-- [ ] Long-lived streaming RPCs across cert rotation (FR-6): re-handshake behavior and max stream
-  lifetime.
+These are not open product-spec defects — each is a genuine architecture fork explicitly owned by
+the design phase (FR-3 itself names its mechanism "a design decision"). They are recorded here,
+checked as **deferred to `/sdd-design`**, so the design debate has a concrete agenda and no decision
+is silently pre-empted at the product-spec gate (P-03). Each must be resolved in `design.md` before
+`/sdd-spec`.
+
+- [x] **Mechanism (FR-3)** — deferred to `/sdd-design`: statically mounted per-service certs + a
+  rotation job, SPIRE/SPIFFE, or a cloud-managed CA on the DO App Platform? Trade operational
+  complexity vs identity strength and rotation ergonomics.
+- [x] **Rollout ordering (FR-1)** — deferred to `/sdd-design`: mTLS must be turned on without a
+  flag-day outage across ~12 processes. Is there a "permissive" interim mode (accept both plaintext
+  and mTLS) to sequence the cutover, and how is it guaranteed off in production (FR-4)?
+- [x] **Config surface (Config Key Changes)** — deferred to `/sdd-design`/`/sdd-spec`: the exact
+  cert-path / CA-bundle / enforce-toggle env or config keys, kept distinct from the
+  `<SERVICE>_ENDPOINT` connection vars. Note the F-07 bootstrapping tension — an mTLS enforce-toggle
+  served over `WatchConfig` would read config over the very channel mTLS secures; the design must
+  resolve where the enforce flag and cert material are sourced (env/mounted vs config stream).
+- [x] **DO App Platform TLS constraint** — deferred to `/sdd-design`: does DO App Platform
+  inter-component networking permit presenting/verifying custom client certs on gRPC, or does it
+  terminate/re-originate TLS in a way that constrains the mechanism? (Recon must confirm before the
+  mechanism is chosen.)
+- [x] **Streaming across rotation (FR-6)** — deferred to `/sdd-design`: long-lived streaming RPCs
+  across cert rotation — re-handshake behavior and max stream lifetime.
+- [x] **Deployment-file coordination with feature 084** — deferred to `/sdd-design`/`/sdd-spec`:
+  `084-droplet-compose-deploy` also edits `docker-compose.yml` / `.do/app*.yaml` and may migrate dev
+  off DO App Platform to a droplet + Caddy model. If 084 lands first, 210's dev-side cert wiring must
+  target that model instead of the App Platform dev spec. Coordination note, not a hard blocking
+  merge-order dependency (no proto-field / migration-NNN / duplicate-config-key collision).

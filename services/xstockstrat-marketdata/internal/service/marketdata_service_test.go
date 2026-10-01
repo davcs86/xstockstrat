@@ -1549,6 +1549,14 @@ func (r *fakeHistRepo) LatestHistoricalFundamental(_ context.Context, _ string, 
 	return r.latest, nil
 }
 
+func (r *fakeHistRepo) GetHistoricalPriceState(_ context.Context, _, _, _ string) (*source.HistoricalPriceState, error) {
+	return &source.HistoricalPriceState{Found: false}, nil
+}
+
+func (r *fakeHistRepo) UpdateHistoricalPriceJoin(_ context.Context, _, _, _ string, _, _, _, _, _ *float64) error {
+	return nil
+}
+
 type fakeHistSource struct {
 	periods []source.HistoricalFundamentalsPeriod
 	err     error
@@ -1739,6 +1747,14 @@ func (r *fakeHistRepo211) LatestHistoricalFundamental(_ context.Context, _ strin
 	return nil, nil
 }
 
+func (r *fakeHistRepo211) GetHistoricalPriceState(_ context.Context, _, _, _ string) (*source.HistoricalPriceState, error) {
+	return &source.HistoricalPriceState{Found: false}, nil
+}
+
+func (r *fakeHistRepo211) UpdateHistoricalPriceJoin(_ context.Context, _, _, _ string, _, _, _, _, _ *float64) error {
+	return nil
+}
+
 type fakeDividendSrc struct {
 	divs []source.CashDividend
 	err  error
@@ -1816,10 +1832,15 @@ func dividendYieldSvc(divSrc *fakeDividendSrc, dividendsEnabled bool) (*MarketDa
 		SharesOutstanding: f64p(1_000_000), Source: "edgar", ExtraMetrics: map[string]float64{},
 	}
 	repo := &fakeHistRepo{closeAt: f64p(100.0)} // price-at-filing = 100
-	cfg := &fakeCfg{bools: map[string]bool{
-		"marketdata.fundamentals.history.enabled": true,
-		"marketdata.dividends.enabled":            dividendsEnabled,
-	}}
+	cfg := &fakeCfg{
+		bools: map[string]bool{
+			"marketdata.fundamentals.history.enabled": true,
+			"marketdata.dividends.enabled":            dividendsEnabled,
+		},
+		// 3yr lookback so divFetchStart (≈2023-09) precedes the T12M window start (2024-06-26)
+		// — ensures the coverage guard does not fire for this test period.
+		ints: map[string]int64{"marketdata.dividends.backfill_lookback_years": 3},
+	}
 	svc := &MarketDataService{
 		histFundamentals: &fakeHistSource{periods: []source.HistoricalFundamentalsPeriod{period}},
 		histRepo:         repo, dividendSrc: divSrc, fundCfg: cfg,
@@ -2050,5 +2071,286 @@ func TestGetFundamentals_EdgarCacheSelfHeal_feature211(t *testing.T) {
 	}
 	if got := fundRepo.rows["BABA"].Source; got != "edgar" {
 		t.Errorf("cache row Source = %q after self-heal, want edgar", got)
+	}
+}
+
+// ── feature 216: backfill recovery — @AC-1..@AC-5 + currency-mismatch open-risk ─────────────────
+
+// fakeHistRepo216 is a stateful fake for the feature-216 recovery tests. It stores inserted and
+// updated rows in a map keyed on "symbol|fiscal_period|period_type", and serves GetHistoricalPriceState
+// from whatever state is already in the store. UpdateHistoricalPriceJoin records the merged values.
+type fakeHistRepo216 struct {
+	closeAt   *float64
+	store     map[string]*source.HistoricalPriceState // keyed "sym|fp|pt"
+	updates   []string                                // log of "sym|fp|pt" entries that were updated
+	inserted  []source.HistoricalFundamentalsPeriod
+	dividends []source.CashDividend
+}
+
+func newFakeHistRepo216(closeAt *float64) *fakeHistRepo216 {
+	return &fakeHistRepo216{
+		closeAt: closeAt,
+		store:   map[string]*source.HistoricalPriceState{},
+	}
+}
+
+func stateKey(sym, fp, pt string) string { return sym + "|" + fp + "|" + pt }
+
+func (r *fakeHistRepo216) InsertHistoricalFundamentals(_ context.Context, p source.HistoricalFundamentalsPeriod) error {
+	r.inserted = append(r.inserted, p)
+	return nil
+}
+func (r *fakeHistRepo216) QueryHistoricalFundamentals(_ context.Context, _ string, _, _, _ time.Time, _ []string, _ int, _ string) ([]source.HistoricalFundamentalsPeriod, string, error) {
+	return nil, "", nil
+}
+func (r *fakeHistRepo216) CloseAt(_ context.Context, _ string, _ time.Time) (*float64, error) {
+	return r.closeAt, nil
+}
+func (r *fakeHistRepo216) UpsertDividends(_ context.Context, divs []source.CashDividend) error {
+	r.dividends = append(r.dividends, divs...)
+	return nil
+}
+func (r *fakeHistRepo216) SumDividendsInWindow(_ context.Context, symbol string, asOf, windowStart time.Time) (float64, bool, error) {
+	var sum float64
+	var any bool
+	for _, d := range r.dividends {
+		if d.Symbol != symbol {
+			continue
+		}
+		any = true
+		if !d.ExDate.After(asOf) && !d.ExDate.Before(windowStart) {
+			sum += d.CashAmount
+		}
+	}
+	return sum, any, nil
+}
+func (r *fakeHistRepo216) LatestHistoricalFundamental(_ context.Context, _ string, _ time.Time) (*source.HistoricalFundamentalsPeriod, error) {
+	return nil, nil
+}
+func (r *fakeHistRepo216) GetHistoricalPriceState(_ context.Context, sym, fp, pt string) (*source.HistoricalPriceState, error) {
+	if s, ok := r.store[stateKey(sym, fp, pt)]; ok {
+		return s, nil
+	}
+	return &source.HistoricalPriceState{Found: false}, nil
+}
+func (r *fakeHistRepo216) UpdateHistoricalPriceJoin(_ context.Context, sym, fp, pt string, price, marketCap, peRatio, pbRatio, dividendYield *float64) error {
+	k := stateKey(sym, fp, pt)
+	r.updates = append(r.updates, k)
+	// Reflect the update back into the store so a subsequent GetHistoricalPriceState is coherent.
+	r.store[k] = &source.HistoricalPriceState{
+		Found:         true,
+		Price:         price,
+		MarketCap:     marketCap,
+		PERatio:       peRatio,
+		PBRatio:       pbRatio,
+		DividendYield: dividendYield,
+	}
+	return nil
+}
+
+func backfill216Cfg(enabled bool) *fakeCfg {
+	return &fakeCfg{
+		bools: map[string]bool{"marketdata.fundamentals.history.enabled": enabled},
+		// 3yr lookback so the coverage guard never fires for recent test periods.
+		ints: map[string]int64{"marketdata.dividends.backfill_lookback_years": 3},
+	}
+}
+
+func onePeriod216(fp, periodType, currency string, filed time.Time, eps *float64) source.HistoricalFundamentalsPeriod {
+	return source.HistoricalFundamentalsPeriod{
+		FiscalPeriod: fp, PeriodType: periodType, Currency: currency,
+		PeriodEnd: filed.AddDate(0, -3, 0), FiledDate: filed,
+		EPS: eps, SharesOutstanding: f64p(1_000_000),
+		Source: "edgar", ExtraMetrics: map[string]float64{},
+	}
+}
+
+// @AC-1: an existing row whose price-join columns are all NULL is recovered by default backfill.
+func TestBackfillFundamentals_AC1_RecoveryFillsNilColumns_feature216(t *testing.T) {
+	filed := hfDate(2024, 3, 31)
+	repo := newFakeHistRepo216(f64p(150.0))
+	// Pre-seed an existing row with all 5 price columns NULL.
+	repo.store[stateKey("AAPL", "FY2023", "annual")] = &source.HistoricalPriceState{
+		Found: true, FiledDate: filed, Currency: "USD",
+	}
+	svc := &MarketDataService{
+		histFundamentals: &fakeHistSource{periods: []source.HistoricalFundamentalsPeriod{onePeriod216("FY2023", "annual", "USD", filed, f64p(6.0))}},
+		histRepo:         repo,
+		fundCfg:          backfill216Cfg(true),
+	}
+	resp, err := svc.BackfillFundamentals(context.Background(), &marketdatav1.BackfillFundamentalsRequest{Symbols: []string{"AAPL"}})
+	if err != nil {
+		t.Fatalf("BackfillFundamentals: %v", err)
+	}
+	if resp.GetPeriodsWritten() != 1 {
+		t.Errorf("periods_written = %d, want 1 (one existing row recovered)", resp.GetPeriodsWritten())
+	}
+	if len(repo.updates) != 1 {
+		t.Fatalf("UpdateHistoricalPriceJoin called %d times, want 1", len(repo.updates))
+	}
+	updated := repo.store[stateKey("AAPL", "FY2023", "annual")]
+	if updated.Price == nil || *updated.Price != 150.0 {
+		t.Errorf("price = %v, want 150.0", updated.Price)
+	}
+	if updated.MarketCap == nil || *updated.MarketCap != 150_000_000.0 {
+		t.Errorf("market_cap = %v, want 150_000_000", updated.MarketCap)
+	}
+}
+
+// @AC-2: rows with all 5 price columns already set are skipped by a default (overwrite=false) run.
+func TestBackfillFundamentals_AC2_DefaultSkipsFullyDerivedRow_feature216(t *testing.T) {
+	filed := hfDate(2024, 3, 31)
+	repo := newFakeHistRepo216(f64p(200.0)) // a different close — should NOT be used
+	price := 150.0
+	mc := 150_000_000.0
+	pe := 25.0
+	pb := 3.0
+	dy := 0.01
+	repo.store[stateKey("AAPL", "FY2023", "annual")] = &source.HistoricalPriceState{
+		Found: true, FiledDate: filed, Currency: "USD",
+		Price: &price, MarketCap: &mc, PERatio: &pe, PBRatio: &pb, DividendYield: &dy,
+	}
+	svc := &MarketDataService{
+		histFundamentals: &fakeHistSource{periods: []source.HistoricalFundamentalsPeriod{onePeriod216("FY2023", "annual", "USD", filed, f64p(6.0))}},
+		histRepo:         repo,
+		fundCfg:          backfill216Cfg(true),
+	}
+	resp, err := svc.BackfillFundamentals(context.Background(), &marketdatav1.BackfillFundamentalsRequest{Symbols: []string{"AAPL"}})
+	if err != nil {
+		t.Fatalf("BackfillFundamentals: %v", err)
+	}
+	if resp.GetPeriodsWritten() != 0 {
+		t.Errorf("periods_written = %d, want 0 (fully-derived row skipped)", resp.GetPeriodsWritten())
+	}
+	if len(repo.updates) != 0 {
+		t.Errorf("UpdateHistoricalPriceJoin called %d times, want 0", len(repo.updates))
+	}
+}
+
+// @AC-3: default fill-if-null path fills only nil columns, leaving non-nil columns untouched.
+func TestBackfillFundamentals_AC3_DefaultFillIfNull_feature216(t *testing.T) {
+	filed := hfDate(2024, 3, 31)
+	repo := newFakeHistRepo216(f64p(160.0))
+	existingPrice := 150.0
+	// Row has price set but market_cap, pe, pb, dividend_yield all NULL.
+	repo.store[stateKey("AAPL", "FY2023", "annual")] = &source.HistoricalPriceState{
+		Found: true, FiledDate: filed, Currency: "USD",
+		Price: &existingPrice, // already set; fill-if-null keeps it
+	}
+	svc := &MarketDataService{
+		histFundamentals: &fakeHistSource{periods: []source.HistoricalFundamentalsPeriod{onePeriod216("FY2023", "annual", "USD", filed, f64p(6.0))}},
+		histRepo:         repo,
+		fundCfg:          backfill216Cfg(true),
+	}
+	if _, err := svc.BackfillFundamentals(context.Background(), &marketdatav1.BackfillFundamentalsRequest{Symbols: []string{"AAPL"}}); err != nil {
+		t.Fatalf("BackfillFundamentals: %v", err)
+	}
+	updated := repo.store[stateKey("AAPL", "FY2023", "annual")]
+	// fill-if-null: stored price (150) must win over derived (160)
+	if updated.Price == nil || *updated.Price != 150.0 {
+		t.Errorf("price = %v, want 150.0 (stored wins in fill-if-null)", updated.Price)
+	}
+	// nil columns should now be populated
+	if updated.MarketCap == nil {
+		t.Errorf("market_cap should be populated by fill-if-null, got nil")
+	}
+}
+
+// @AC-4: overwrite=true re-derives and updates existing rows; a stable re-run is idempotent.
+func TestBackfillFundamentals_AC4_OverwriteRefreshAndIdempotency_feature216(t *testing.T) {
+	filed := hfDate(2024, 3, 31)
+	repo := newFakeHistRepo216(f64p(160.0))
+	oldPrice := 150.0
+	oldMC := 150_000_000.0
+	repo.store[stateKey("AAPL", "FY2023", "annual")] = &source.HistoricalPriceState{
+		Found: true, FiledDate: filed, Currency: "USD",
+		Price: &oldPrice, MarketCap: &oldMC,
+	}
+	svc := &MarketDataService{
+		histFundamentals: &fakeHistSource{periods: []source.HistoricalFundamentalsPeriod{onePeriod216("FY2023", "annual", "USD", filed, f64p(6.0))}},
+		histRepo:         repo,
+		fundCfg:          backfill216Cfg(true),
+	}
+	// First run with overwrite=true — should update.
+	if _, err := svc.BackfillFundamentals(context.Background(), &marketdatav1.BackfillFundamentalsRequest{
+		Symbols: []string{"AAPL"}, Overwrite: true,
+	}); err != nil {
+		t.Fatalf("BackfillFundamentals (overwrite): %v", err)
+	}
+	if len(repo.updates) != 1 {
+		t.Errorf("overwrite run: UpdateHistoricalPriceJoin called %d times, want 1", len(repo.updates))
+	}
+	updated := repo.store[stateKey("AAPL", "FY2023", "annual")]
+	if updated.Price == nil || *updated.Price != 160.0 {
+		t.Errorf("overwrite: price = %v, want 160.0 (derived wins)", updated.Price)
+	}
+
+	// Second run with overwrite=true on stable data — should be idempotent (no re-update needed since
+	// values haven't changed).
+	repo.updates = nil
+	if _, err := svc.BackfillFundamentals(context.Background(), &marketdatav1.BackfillFundamentalsRequest{
+		Symbols: []string{"AAPL"}, Overwrite: true,
+	}); err != nil {
+		t.Fatalf("BackfillFundamentals (stable re-run): %v", err)
+	}
+	if len(repo.updates) != 0 {
+		t.Errorf("stable re-run: UpdateHistoricalPriceJoin called %d times, want 0 (idempotent)", len(repo.updates))
+	}
+}
+
+// @AC-5: overwrite=true never nulls a pre-existing non-nil dividend_yield when derive produces nil.
+func TestBackfillFundamentals_AC5_OverwriteNeverNullsDividendYield_feature216(t *testing.T) {
+	filed := hfDate(2024, 3, 31)
+	repo := newFakeHistRepo216(f64p(150.0))
+	existingDY := 0.015
+	repo.store[stateKey("AAPL", "FY2023", "annual")] = &source.HistoricalPriceState{
+		Found: true, FiledDate: filed, Currency: "USD",
+		DividendYield: &existingDY,
+	}
+	// dividendSrc is nil → dividendsFetched=false → deriveDividendYield is a no-op → p.DividendYield=nil
+	svc := &MarketDataService{
+		histFundamentals: &fakeHistSource{periods: []source.HistoricalFundamentalsPeriod{onePeriod216("FY2023", "annual", "USD", filed, nil)}},
+		histRepo:         repo,
+		fundCfg:          backfill216Cfg(true),
+	}
+	if _, err := svc.BackfillFundamentals(context.Background(), &marketdatav1.BackfillFundamentalsRequest{
+		Symbols: []string{"AAPL"}, Overwrite: true,
+	}); err != nil {
+		t.Fatalf("BackfillFundamentals: %v", err)
+	}
+	updated := repo.store[stateKey("AAPL", "FY2023", "annual")]
+	if updated == nil || updated.DividendYield == nil || *updated.DividendYield != existingDY {
+		t.Errorf("overwrite: dividend_yield = %v, want %v (value→nil must be suppressed)", updated.DividendYield, existingDY)
+	}
+}
+
+// Open risk (feature 216 design.md): currency mismatch between stored row (CNY) and re-fetch (CNY)
+// leaves pe_ratio and pb_ratio nil — fail-closed, not fabricated.
+func TestBackfillFundamentals_CurrencyMismatchPEPBFailClosed_feature216(t *testing.T) {
+	filed := hfDate(2024, 3, 31)
+	repo := newFakeHistRepo216(f64p(80.0))
+	repo.store[stateKey("BABA", "FY2023", "annual")] = &source.HistoricalPriceState{
+		Found: true, FiledDate: filed, Currency: "CNY", // non-USD stored currency
+	}
+	svc := &MarketDataService{
+		histFundamentals: &fakeHistSource{periods: []source.HistoricalFundamentalsPeriod{onePeriod216("FY2023", "annual", "CNY", filed, f64p(10.0))}},
+		histRepo:         repo,
+		fundCfg:          backfill216Cfg(true),
+	}
+	if _, err := svc.BackfillFundamentals(context.Background(), &marketdatav1.BackfillFundamentalsRequest{
+		Symbols: []string{"BABA"}, Overwrite: true,
+	}); err != nil {
+		t.Fatalf("BackfillFundamentals: %v", err)
+	}
+	updated := repo.store[stateKey("BABA", "FY2023", "annual")]
+	if updated != nil && updated.PERatio != nil {
+		t.Errorf("pe_ratio = %v for non-USD row, want nil (currency-mismatch fail-closed)", *updated.PERatio)
+	}
+	if updated != nil && updated.PBRatio != nil {
+		t.Errorf("pb_ratio = %v for non-USD row, want nil (currency-mismatch fail-closed)", *updated.PBRatio)
+	}
+	// Price should still be derived (currency check applies only to pe/pb).
+	if updated == nil || updated.Price == nil {
+		t.Errorf("price should be derived regardless of currency, got nil")
 	}
 }

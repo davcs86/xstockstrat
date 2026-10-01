@@ -280,10 +280,10 @@ class TestSetConfigRequestParity:
         stub = MagicMock()
         stub.SetConfig = AsyncMock(side_effect=_capture)
         with (
-            patch("app.client.grpc") as mock_grpc,
+            patch("app.client.mtls") as mock_grpc,
             patch.object(config_pb2_grpc, "ConfigServiceStub", return_value=stub),
         ):
-            mock_grpc.aio.insecure_channel.return_value = cm
+            mock_grpc.secure_channel.return_value = cm
             # A distinct non-default value for every SetConfigRequest field the builder sets so
             # each appears in ListFields(): environment='production' maps to a non-zero enum,
             # user_id is a per-user scope. trading_mode is deprecated (feature 147) and

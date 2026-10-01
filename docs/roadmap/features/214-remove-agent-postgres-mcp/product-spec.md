@@ -35,14 +35,18 @@ FR-1. All nine `db_*` tools MUST be removed from `xstockstrat-agent`. After remo
 baseline minus 9; re-derive against `main-dev` at execute-time).
 
 FR-2. The `postgres-mcp` co-process and all its wiring MUST be removed from the agent: no co-process
-in the container, no `POSTGRES_MCP_DATABASE_URI` / `POSTGRES_MCP_PORT` (or equivalent) configuration,
-no code path that opens a connection to a postgres-mcp SSE endpoint, and `postgres-mcp` removed from
+in the container (delete the `[program:postgres-mcp]` block from
+`services/xstockstrat-agent/supervisord.conf`), no `POSTGRES_MCP_DATABASE_URI` / `POSTGRES_MCP_PORT` /
+`POSTGRES_MCP_AGENT_PASSWORD` (or equivalent) configuration anywhere — including the CI/CD secret
+injection in `.github/workflows/deploy.yml`, `deploy-dev.yml`, and `deploy-prod.yml` — no code path
+that opens a connection to a postgres-mcp SSE endpoint (delete `services/xstockstrat-agent/app/postgres_mcp_client.py`
+and its import in `app/tools.py`), and `postgres-mcp` removed from
 `services/xstockstrat-agent/pyproject.toml` + `uv.lock` (with `uv lock --check` passing).
 
 FR-3. The agent's direct `xstockstrat_agent` DB connection MUST be removed, the corresponding
 connection-pool budget row (`xstockstrat-agent (postgres-mcp)`) in the root `CLAUDE.md` deleted (with
 the direct-backend total re-derived), and the **dead `xstockstrat_agent` role-provisioning block** in
-`scripts/db-migrate.sh` (feature 169, lines ~169-203) removed along with its `POSTGRES_MCP_AGENT_PASSWORD`
+`scripts/db-migrate.sh` (feature 169, lines ~169-204) removed along with its `POSTGRES_MCP_AGENT_PASSWORD`
 gate. That block only ever created the role when `POSTGRES_MCP_AGENT_PASSWORD` was set; in the live
 environments it never was (the `[skip]` path ran), so **no live-DB role exists to drop** — removing the
 provisioning code is the complete teardown. (Feature 208, which would have dropped an actually-created
@@ -55,7 +59,11 @@ bastion — documented in a runbook (e.g. `docs/runbooks/operator-db-access.md`)
 FR-5. Every tool-count / inventory surface MUST agree on the post-removal count and omit the nine
 tools: `services/xstockstrat-ui/src/lib/copilot.ts` `COPILOT_MCP_TOOL_COUNT` = 43, the agent's
 `tests/test_tools_endpoint.py` expected-name set, the `app/tools.py` module docstring,
-`services/xstockstrat-agent/CLAUDE.md`, and `docs/runbooks/mcp-tools.md`.
+`services/xstockstrat-agent/CLAUDE.md`, and `docs/runbooks/mcp-tools.md`. The now-dead test files that
+exercise the removed surface MUST be deleted or updated so the suite passes with no reference to the
+tools/env: `services/xstockstrat-agent/tests/test_db_tools.py` and `tests/test_postgres_mcp_client.py`
+(whole-file deletions — they test only the removed tools/client), and
+`tests/test_deployment_env_vars.py` (drop the `POSTGRES_MCP_*` env assertions).
 
 FR-6. H-5 is closed by elimination: a prompt-injected agent session instructed to run SQL finds no
 `db_*` tool to call, no co-process, no DB credential in its environment, and no reachable SQL endpoint
@@ -74,15 +82,19 @@ FR-6. H-5 is closed by elimination: a prompt-injected agent session instructed t
 ## Affected Services
 
 Exact service names from CLAUDE.md Service Registry:
-- `xstockstrat-agent` — owns the nine `db_*` tools (`app/tools.py`), the postgres-mcp co-process +
-  its supervisord/entrypoint/Dockerfile wiring, `pyproject.toml`/`uv.lock`, `tests/test_tools_endpoint.py`,
-  and feature 169's `acceptance/agent-postgres-mcp.feature` suite.
+- `xstockstrat-agent` — owns the nine `db_*` tools (`app/tools.py`), the per-call SSE client
+  (`app/postgres_mcp_client.py`, whole-file deletion + its `app/tools.py` import), the postgres-mcp
+  co-process launched by the `[program:postgres-mcp]` block in `supervisord.conf` (+ any
+  entrypoint/Dockerfile wiring), `pyproject.toml`/`uv.lock`, and the tests
+  `tests/test_tools_endpoint.py`, `tests/test_db_tools.py`, `tests/test_postgres_mcp_client.py`,
+  `tests/test_deployment_env_vars.py`, plus feature 169's `acceptance/agent-postgres-mcp.feature` suite.
 - `xstockstrat-ui` — the `COPILOT_MCP_TOOL_COUNT` mirror in `src/lib/copilot.ts` (FR-5).
 - (Deployment/docs) `docker-compose.yml` (agent block), `.do/app.yaml` / `.do/app.dev.yaml` (agent
-  env, if any `POSTGRES_MCP_*` present), `scripts/db-migrate.sh` (delete the `xstockstrat_agent`
-  role-provisioning block + its `POSTGRES_MCP_AGENT_PASSWORD` gate, ~lines 169-203), root `CLAUDE.md`
-  (pool-budget row + the env-var note that references postgres-mcp), `docs/runbooks/mcp-tools.md`, and
-  a new `docs/runbooks/operator-db-access.md`.
+  `POSTGRES_MCP_*` env), the CI/CD deploy workflows `.github/workflows/deploy.yml`, `deploy-dev.yml`,
+  `deploy-prod.yml` (drop the `POSTGRES_MCP_AGENT_PASSWORD` secret injection), `scripts/db-migrate.sh`
+  (delete the `xstockstrat_agent` role-provisioning block + its `POSTGRES_MCP_AGENT_PASSWORD` gate,
+  ~lines 169-204), root `CLAUDE.md` (pool-budget row + the env-var note that references postgres-mcp),
+  `docs/runbooks/mcp-tools.md`, and a new `docs/runbooks/operator-db-access.md`.
 
 ## Consumer Surface(s)
 
@@ -138,9 +150,23 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 
 ## Open Questions
 
-- [ ] Confirm the exact `POSTGRES_MCP_*` env/wiring names and the supervisord/entrypoint mechanism in
-  the current agent container at `/sdd-design` recon (grounded against `services/xstockstrat-agent/`).
-- [ ] Runbook home for FR-4: new `docs/runbooks/operator-db-access.md` vs a section in an existing
-  runbook — decide at `/sdd-design`. Must be macOS/Homebrew-first per root CLAUDE.md bash-doc rule.
-- [ ] Does anything besides the agent import or reference the `db_*` tools (e.g. the `strat-lab`
-  plugin, other skills)? Recon must confirm the blast radius before removal.
+_All three resolved during the product-spec review gate (2026-09-27), grounded against the codebase;
+`/sdd-design` recon will re-verify the exact edit sites._
+
+- [x] **Exact `POSTGRES_MCP_*` env/wiring + launch mechanism — RESOLVED.** Three env vars in use:
+  `POSTGRES_MCP_PORT`, `POSTGRES_MCP_DATABASE_URI`, `POSTGRES_MCP_AGENT_PASSWORD`. The co-process is
+  launched by **supervisord** via the `[program:postgres-mcp]` block in
+  `services/xstockstrat-agent/supervisord.conf` (referenced in `app/postgres_mcp_client.py`), not a
+  bespoke `subprocess`/`Popen`. The container entry is `scripts/docker-entrypoint.sh` →
+  `supervisord -c /app/supervisord.conf` (agent `Dockerfile`). All surfaces now enumerated in FR-2 /
+  Affected Services.
+- [x] **Runbook home for FR-4 — RESOLVED:** a new `docs/runbooks/operator-db-access.md` (not a section
+  in an existing runbook — the out-of-band admin-SQL procedure is a distinct operator concern).
+  macOS/Homebrew-first per the root CLAUDE.md bash-doc rule.
+- [x] **`db_*` blast radius — RESOLVED (scope contained):** no external consumer references the nine
+  `db_*` tools — nothing in `plugins/strat-lab/`, no other skill, and no `xstockstrat-ui` code beyond
+  the documented `COPILOT_MCP_TOOL_COUNT` mirror. All references live inside `xstockstrat-agent`
+  (`app/tools.py`, `app/postgres_mcp_client.py`, `CLAUDE.md`, the four tests, the acceptance suite) and
+  `docs/runbooks/mcp-tools.md`. Scope does **not** grow beyond the service; the review did surface six
+  under-enumerated removal sites (supervisord.conf, postgres_mcp_client.py, three deploy workflows,
+  three extra tests) now folded into FR-2 / FR-5 / Affected Services.

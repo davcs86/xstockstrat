@@ -1,7 +1,7 @@
 """
 MCP tool definitions for xstockstrat-agent.
 
-Fifty-two tools:
+Forty-three tools:
   list_signal_sources  — lists active sources from ingest, enriched with extractor_tool
   extract_email_content — extracts raw text from email attachments or gated URLs
   extract_website_content — fetches and returns raw text from a registered website source
@@ -42,15 +42,6 @@ Fifty-two tools:
   get_user             — admin: reads one user by id (read-only, admin-gated)
   admin_get_user_metadata — admin: reads ANY user's profile metadata by user_id (read-only)
   admin_set_user_metadata — admin: partial-updates ANY user's profile metadata by user_id
-  db_list_schemas     — list database schemas via postgres-mcp (admin-only)
-  db_list_objects     — list objects in a schema via postgres-mcp (admin-only)
-  db_get_object_details — get DDL/stats for a named DB object via postgres-mcp (admin-only)
-  db_execute_sql      — execute SQL via postgres-mcp with FR-11 destructive-op gate (admin-only)
-  db_explain_query    — explain a query's execution plan via postgres-mcp (admin-only)
-  db_get_top_queries  — get top queries by total_time from pg_stat_statements (admin-only)
-  db_analyze_workload_indexes — recommend indexes based on pg_stat_statements workload (admin-only)
-  db_analyze_query_indexes — recommend indexes for a specific SQL query (admin-only)
-  db_analyze_db_health — run comprehensive DB health checks via postgres-mcp (admin-only)
   query_bars          — query stored daily OHLCV bars (paginated; json/csv) (read-only, feature 204)
   query_fundamentals  — query snapshot/historical fundamentals (paginated; json/csv) (read-only)
   list_fundamental_metrics — list the fundamental-metrics catalog for formula authoring (read-only)
@@ -58,27 +49,25 @@ Fifty-two tools:
 Also registers one MCP prompt (feature 197), via register_prompts():
   list_correlation_guide — how to join list_accounts/get_positions/get_positions_by_account_id/
     list_opportunities/list_strategies on account_id/strategy_id/symbol. A prompt is not a tool;
-    the tool count stays fifty-two.
+    the tool count stays forty-three.
 """
 
 import base64
 import csv
 import io
+import ipaddress
 import json
 import logging
-import re
 import uuid
 from pathlib import Path
 from typing import Literal
-from urllib.parse import quote
+from urllib.parse import quote, urljoin, urlparse
 
 import grpc
-import sqlglot
-import sqlglot.errors
 from mcp.server.mcpserver import Context, MCPServer
 from mcp.types import EmbeddedResource, TextContent, TextResourceContents
 
-from app import backtest_view, client, postgres_mcp_client
+from app import backtest_view, client, egress
 from app.scopes import MCP_CLAIMS_SCOPE_KEY, resolve_scope, roles_to_access_scope
 
 _ALERT_THRESHOLD_DEFAULT = 0.6
@@ -249,46 +238,6 @@ _EXTRACTOR_TOOL_MAP: dict[str, str | None] = {
     "mediated_authenticated_website": "extract_website_content",
     # All other types (mediated_simple_email and all non-mediated) → null
 }
-
-
-# ---------------------------------------------------------------------------
-# FR-11 approval gate — fail-closed three-tier SQL destructiveness check.
-# _DESTRUCTIVE_KEYS values verified via sqlglot v25.34.1 (context.md, Step 8):
-#   UPDATE → 'update', DELETE → 'delete', DROP → 'drop', TRUNCATE TABLE → 'truncatetable'
-# ---------------------------------------------------------------------------
-_DESTRUCTIVE_KEYS = frozenset({"update", "delete", "drop", "truncatetable"})
-
-_COMMENT_RE = re.compile(r"/\*.*?\*/|--[^\n]*", re.DOTALL)
-_DESTRUCTIVE_RE = re.compile(r"\b(?:UPDATE|DELETE|DROP|TRUNCATE)\b", re.IGNORECASE)
-
-
-def _is_destructive(sql: str) -> bool:
-    """Return True if sql contains a destructive statement (UPDATE, DELETE, DROP, TRUNCATE).
-
-    Three-tier fail-closed (design.md §FR-11):
-    1. sqlglot AST parse: match .key values against _DESTRUCTIVE_KEYS
-    2. Command-node safe-default: unrecognized SQL (VACUUM, REINDEX, etc.) → True
-    3. Regex fallback on sqlglot.ParseError (strips comments first)
-    """
-    try:
-        exprs = sqlglot.parse(sql)
-        if any(e.key in _DESTRUCTIVE_KEYS for e in exprs if e is not None):
-            return True
-        if any(e.key == "command" for e in exprs if e is not None):
-            log.warning("sqlglot Command node in FR-11 gate; safe-defaulting destructive=True")
-            return True
-        return False
-    except MemoryError:
-        raise
-    except sqlglot.errors.ParseError:
-        log.warning("sqlglot ParseError in FR-11 gate; falling to regex fallback")
-        return bool(_DESTRUCTIVE_RE.search(_COMMENT_RE.sub(" ", sql)))
-    except Exception as exc:
-        log.warning(
-            "sqlglot unexpected error in FR-11 gate (%s); falling to regex fallback",
-            type(exc).__name__,
-        )
-        return bool(_DESTRUCTIVE_RE.search(_COMMENT_RE.sub(" ", sql)))
 
 
 # ── data-explorer query tools (feature 204) ──────────────────────────────────
@@ -2222,134 +2171,6 @@ def register_tools(server: MCPServer) -> None:
         except grpc.aio.AioRpcError as e:
             raise RuntimeError(_grpc_error_message(e)) from e
 
-    # -----------------------------------------------------------------------
-    # db_* tools — postgres-mcp co-process, admin-scoped, feature 169
-    # -----------------------------------------------------------------------
-
-    @server.tool()
-    async def db_list_schemas(ctx: Context) -> list[TextContent]:
-        """List all schemas in the TimescaleDB database. Admin-only (bit 0x04).
-        Returns a text summary of schemas available to the xstockstrat_agent role."""
-        tool = "db_list_schemas"
-        access_scope = _caller_access_scope(ctx, tool)
-        if not (access_scope & 0x04):
-            raise RuntimeError(f"PERMISSION_DENIED: {tool} requires admin scope (bit 0x04)")
-        result = await postgres_mcp_client.call_tool("list_schemas", {})
-        return [TextContent(type="text", text=str(result))]
-
-    @server.tool()
-    async def db_list_objects(ctx: Context, schema: str = "public") -> list[TextContent]:
-        """List tables, views, and other objects within a schema. Admin-only (bit 0x04).
-        schema: target schema name (default 'public')."""
-        tool = "db_list_objects"
-        access_scope = _caller_access_scope(ctx, tool)
-        if not (access_scope & 0x04):
-            raise RuntimeError(f"PERMISSION_DENIED: {tool} requires admin scope (bit 0x04)")
-        result = await postgres_mcp_client.call_tool("list_objects", {"schema": schema})
-        return [TextContent(type="text", text=str(result))]
-
-    @server.tool()
-    async def db_get_object_details(
-        ctx: Context, schema: str = "public", name: str = ""
-    ) -> list[TextContent]:
-        """Get detailed DDL and statistics for a specific table or view. Admin-only (bit 0x04).
-        schema: target schema (default 'public'); name: table/view name."""
-        tool = "db_get_object_details"
-        access_scope = _caller_access_scope(ctx, tool)
-        if not (access_scope & 0x04):
-            raise RuntimeError(f"PERMISSION_DENIED: {tool} requires admin scope (bit 0x04)")
-        result = await postgres_mcp_client.call_tool(
-            "get_object_details", {"schema": schema, "name": name}
-        )
-        return [TextContent(type="text", text=str(result))]
-
-    @server.tool()
-    async def db_execute_sql(
-        ctx: Context, sql: str = "", confirm: bool = False
-    ) -> list[TextContent]:
-        """Execute SQL via the xstockstrat_agent DML role. Admin-only (bit 0x04).
-
-        Destructive statements (UPDATE / DELETE / DROP / TRUNCATE) return a dry-run preview
-        and are NOT forwarded unless confirm=True is passed (FR-11 approval gate).
-        SELECT and INSERT execute immediately without confirmation.
-        sql: the SQL statement to execute.
-        confirm: set True to execute a destructive statement (default False — dry run)."""
-        tool = "db_execute_sql"
-        access_scope = _caller_access_scope(ctx, tool)
-        if not (access_scope & 0x04):
-            raise RuntimeError(f"PERMISSION_DENIED: {tool} requires admin scope (bit 0x04)")
-
-        if _is_destructive(sql) and not confirm:
-            return [
-                TextContent(
-                    type="text",
-                    text=(
-                        "DRY RUN — destructive SQL detected. "
-                        "Re-call with confirm=True to execute:\n\n" + sql
-                    ),
-                )
-            ]
-
-        result = await postgres_mcp_client.call_tool("execute_sql", {"sql": sql})
-        return [TextContent(type="text", text=str(result))]
-
-    @server.tool()
-    async def db_explain_query(ctx: Context, sql: str = "") -> list[TextContent]:
-        """Return the EXPLAIN ANALYZE plan for a SQL query. Admin-only (bit 0x04).
-        sql: the query to explain."""
-        tool = "db_explain_query"
-        access_scope = _caller_access_scope(ctx, tool)
-        if not (access_scope & 0x04):
-            raise RuntimeError(f"PERMISSION_DENIED: {tool} requires admin scope (bit 0x04)")
-        result = await postgres_mcp_client.call_tool("explain_query", {"sql": sql})
-        return [TextContent(type="text", text=str(result))]
-
-    @server.tool()
-    async def db_get_top_queries(ctx: Context, limit: int = 10) -> list[TextContent]:
-        """Return the top slow queries from pg_stat_statements. Admin-only (bit 0x04).
-        limit: number of queries to return (default 10)."""
-        tool = "db_get_top_queries"
-        access_scope = _caller_access_scope(ctx, tool)
-        if not (access_scope & 0x04):
-            raise RuntimeError(f"PERMISSION_DENIED: {tool} requires admin scope (bit 0x04)")
-        result = await postgres_mcp_client.call_tool("get_top_queries", {"limit": limit})
-        return [TextContent(type="text", text=str(result))]
-
-    @server.tool()
-    async def db_analyze_workload_indexes(ctx: Context) -> list[TextContent]:
-        """Recommend indexes based on pg_stat_statements workload. Admin-only (bit 0x04)."""
-        tool = "db_analyze_workload_indexes"
-        access_scope = _caller_access_scope(ctx, tool)
-        if not (access_scope & 0x04):
-            raise RuntimeError(f"PERMISSION_DENIED: {tool} requires admin scope (bit 0x04)")
-        result = await postgres_mcp_client.call_tool("analyze_workload_indexes", {})
-        return [TextContent(type="text", text=str(result))]
-
-    @server.tool()
-    async def db_analyze_query_indexes(ctx: Context, sql: str = "") -> list[TextContent]:
-        """Recommend indexes for a specific SQL query. Admin-only (bit 0x04).
-        sql: the query to analyze."""
-        tool = "db_analyze_query_indexes"
-        access_scope = _caller_access_scope(ctx, tool)
-        if not (access_scope & 0x04):
-            raise RuntimeError(f"PERMISSION_DENIED: {tool} requires admin scope (bit 0x04)")
-        result = await postgres_mcp_client.call_tool("analyze_query_indexes", {"sql": sql})
-        return [TextContent(type="text", text=str(result))]
-
-    @server.tool()
-    async def db_analyze_db_health(ctx: Context, health_type: str = "all") -> list[TextContent]:
-        """Run a comprehensive database health analysis. Admin-only (bit 0x04).
-        health_type: 'all' (default) | 'index' | 'connection' | 'vacuum' | 'sequence' |
-            'replication' | 'buffer' | 'constraint'."""
-        tool = "db_analyze_db_health"
-        access_scope = _caller_access_scope(ctx, tool)
-        if not (access_scope & 0x04):
-            raise RuntimeError(f"PERMISSION_DENIED: {tool} requires admin scope (bit 0x04)")
-        result = await postgres_mcp_client.call_tool(
-            "analyze_db_health", {"health_type": health_type}
-        )
-        return [TextContent(type="text", text=str(result))]
-
 
 def register_prompts(server: MCPServer) -> None:
     """Register the MCP prompts surface (feature 197).
@@ -2403,19 +2224,101 @@ def _extract_from_bytes(data: bytes, password: str | None = None) -> str:
             raise ValueError(f"Cannot extract text from attachment: {e}") from e
 
 
+def _same_origin(a: str, b: str) -> bool:
+    """Same-origin for credential-strip purposes, mirroring httpx (`_client.py:552-569`).
+
+    Same host + scheme + effective port, OR an HTTP→HTTPS upgrade on the same host (httpx keeps
+    credentials across that upgrade). Anything else is cross-origin: drop Authorization/Cookie.
+    """
+    pa, pb = urlparse(a), urlparse(b)
+    if pa.hostname != pb.hostname:
+        return False
+
+    def _port(p: object) -> int:
+        return p.port or (443 if p.scheme == "https" else 80)  # type: ignore[attr-defined]
+
+    if pa.scheme == pb.scheme and _port(pa) == _port(pb):
+        return True
+    return pa.scheme == "http" and pb.scheme == "https"
+
+
+async def _extract_policy(key: str, default: float, cast: type) -> float:
+    """Read one `agent.extract.*` policy scalar from config (F-07), falling back to `default` only
+    on a read failure or an absent/unparseable value. No key/value is logged (FR-6)."""
+    try:
+        raw = await client.get_config_value(key, namespace="agent", environment=resolve_scope(""))
+    except Exception:
+        log.warning("extract policy read failed; using safe default")
+        return default
+    if raw is None:
+        return default
+    try:
+        return cast(raw)
+    except (TypeError, ValueError):
+        return default
+
+
 async def _fetch_url(
     url: str, password: str | None = None, headers: dict[str, str] | None = None
 ) -> str:
-    """Fetch URL content. For authenticated sources, passes password as Bearer token.
-    headers: optional extra request headers; Authorization from password wins.
-    Returns raw text."""
-    import httpx  # noqa: PLC0415
+    """Fetch URL content through the SSRF-hardened egress path (feature 207).
+
+    Deny-by-range IP validation + DNS-rebind pin (via `egress.build_pinned_client`), an http/https
+    scheme gate (pre-request and per redirect hop), a manual bounded redirect loop that strips
+    cross-origin credentials, and a streamed byte cap. Limits are config-sourced (agent.extract.*).
+    For authenticated sources, `password` becomes a Bearer token; Authorization from password wins.
+    Returns raw text. On any egress refusal, raises a generic error with no internal target detail.
+    """
+    max_redirects = int(await _extract_policy("extract.max_redirects", 5, int))
+    max_bytes = int(await _extract_policy("extract.max_bytes", 5_000_000, int))
+    connect_timeout = await _extract_policy("extract.connect_timeout_seconds", 10.0, float)
+    read_timeout = await _extract_policy("extract.read_timeout_seconds", 30.0, float)
 
     headers = {str(k): str(v) for k, v in (headers or {}).items()}
     if password:
         headers["Authorization"] = f"Bearer {password}"
 
-    async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as c:
-        r = await c.get(url, headers=headers)
-        r.raise_for_status()
-        return r.text
+    try:
+        egress.assert_allowed_scheme(urlparse(url).scheme)  # FR-3 pre-request
+        http = egress.build_pinned_client(
+            connect_timeout=connect_timeout, read_timeout=read_timeout
+        )
+        async with http:
+            current_url = url
+            redirects_left = max_redirects
+            while True:
+                async with http.stream("GET", current_url, headers=headers) as r:
+                    if r.status_code // 100 == 3 and "location" in r.headers:
+                        if redirects_left <= 0:
+                            raise egress.EgressBlocked("too many redirects")
+                        redirects_left -= 1
+                        next_url = urljoin(current_url, r.headers["location"])
+                        egress.assert_allowed_scheme(urlparse(next_url).scheme)  # per-hop FR-3
+                        # @AC-5: reject a non-public redirect target before following. A literal-IP
+                        # host is checked here; a hostname is validated by the connect pin (Step 3).
+                        _next_host = urlparse(next_url).hostname or ""
+                        try:
+                            ipaddress.ip_address(_next_host)
+                        except ValueError:
+                            pass
+                        else:
+                            egress.assert_public_ip(_next_host)
+                        # A cross-origin hop drops password-derived credentials (mirrors httpx).
+                        if not _same_origin(current_url, next_url):
+                            for h in ("Authorization", "Cookie", "cookie", "Host", "host"):
+                                headers.pop(h, None)
+                        current_url = next_url
+                        continue
+                    r.raise_for_status()
+                    total = 0
+                    chunks: list[bytes] = []
+                    async for chunk in r.aiter_bytes():
+                        total += len(chunk)
+                        if total > max_bytes:
+                            raise egress.EgressBlocked("response too large")
+                        chunks.append(chunk)
+                    return b"".join(chunks).decode(r.charset_encoding or "utf-8", errors="replace")
+    except egress.EgressBlocked as e:
+        # FR-6: static reason code only (never url/host/IP/port), generic caller-facing error.
+        log.warning("extract egress blocked (reason=%s)", e.args[0] if e.args else "blocked")
+        raise RuntimeError("content fetch refused by egress policy") from None

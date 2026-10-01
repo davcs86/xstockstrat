@@ -367,3 +367,96 @@ func TestParseHistCursor(t *testing.T) {
 		}
 	}
 }
+
+// --- feature 216: GetHistoricalPriceState + UpdateHistoricalPriceJoin pgxmock pins ---
+
+// TestGetHistoricalPriceState pins the triple-PK SELECT projection (filed_date + 5 price columns +
+// currency) and the no-rows fail-closed path. pgxmock does not run Postgres, so these are
+// SQL-text + arg + control-flow pins that guard against the two critical regressions: removing a
+// scanned column, and not treating ErrNoRows as Found=false.
+func TestGetHistoricalPriceState(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatalf("pgxmock.NewPool: %v", err)
+	}
+	defer mock.Close()
+	repo := &MarketDataRepo{db: mock}
+
+	filed := time.Date(2024, 6, 30, 0, 0, 0, 0, time.UTC)
+	price := 150.25
+	marketCap := 2_500_000.0
+	peRatio := 30.05
+	pbRatio := 5.12
+	divYield := 0.015
+
+	// Happy path: row present → Found=true, all fields scanned.
+	mock.ExpectQuery(`WHERE symbol=\$1 AND fiscal_period=\$2 AND period_type=\$3`).
+		WithArgs("AAPL", "FY2023", "annual").
+		WillReturnRows(pgxmock.NewRows([]string{"filed_date", "price", "market_cap", "pe_ratio", "pb_ratio", "dividend_yield", "currency"}).
+			AddRow(filed, &price, &marketCap, &peRatio, &pbRatio, &divYield, "USD"))
+
+	state, err := repo.GetHistoricalPriceState(context.Background(), "AAPL", "FY2023", "annual")
+	if err != nil {
+		t.Fatalf("GetHistoricalPriceState: %v", err)
+	}
+	if !state.Found {
+		t.Fatal("Found=false, want true")
+	}
+	if state.Price == nil || *state.Price != price {
+		t.Errorf("Price=%v, want %v", state.Price, price)
+	}
+	if state.Currency != "USD" {
+		t.Errorf("Currency=%q, want USD", state.Currency)
+	}
+	if !state.FiledDate.Equal(filed) {
+		t.Errorf("FiledDate=%v, want %v", state.FiledDate, filed)
+	}
+
+	// No-rows path: ErrNoRows → Found=false, err=nil (fail-closed).
+	mock.ExpectQuery(`WHERE symbol=\$1 AND fiscal_period=\$2 AND period_type=\$3`).
+		WithArgs("TSLA", "Q1-2023", "quarterly").
+		WillReturnError(pgx.ErrNoRows)
+
+	state2, err2 := repo.GetHistoricalPriceState(context.Background(), "TSLA", "Q1-2023", "quarterly")
+	if err2 != nil {
+		t.Fatalf("GetHistoricalPriceState no-rows: want nil err, got %v", err2)
+	}
+	if state2.Found {
+		t.Fatal("Found=true on no-rows, want false")
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("pgxmock expectations unmet: %v", err)
+	}
+}
+
+// TestUpdateHistoricalPriceJoin pins the UPDATE statement text and confirms the SET list covers
+// exactly the 5 price-join columns (price, market_cap, pe_ratio, pb_ratio, dividend_yield) and
+// the WHERE clause is the triple PK — ensuring no as-reported column or filed_date appears in SET
+// (the structural C-16 CHANGE boundary from design.md § Business Rules Touched).
+func TestUpdateHistoricalPriceJoin(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatalf("pgxmock.NewPool: %v", err)
+	}
+	defer mock.Close()
+	repo := &MarketDataRepo{db: mock}
+
+	price := 155.0
+	marketCap := 2_600_000.0
+	peRatio := 31.0
+	pbRatio := 5.2
+	divYield := 0.016
+
+	mock.ExpectExec(`SET price=\$4, market_cap=\$5, pe_ratio=\$6, pb_ratio=\$7, dividend_yield=\$8 WHERE symbol=\$1 AND fiscal_period=\$2 AND period_type=\$3`).
+		WithArgs("AAPL", "FY2023", "annual", &price, &marketCap, &peRatio, &pbRatio, &divYield).
+		WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+
+	err = repo.UpdateHistoricalPriceJoin(context.Background(), "AAPL", "FY2023", "annual", &price, &marketCap, &peRatio, &pbRatio, &divYield)
+	if err != nil {
+		t.Fatalf("UpdateHistoricalPriceJoin: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("pgxmock expectations unmet (SET list or WHERE missing expected columns): %v", err)
+	}
+}

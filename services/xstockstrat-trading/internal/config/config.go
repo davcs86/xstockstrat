@@ -11,11 +11,11 @@ import (
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 
 	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
 	configv1 "github.com/xstockstrat/contracts/gen/go/config/v1"
+	"github.com/xstockstrat/trading/internal/mtls"
 )
 
 // Config holds all runtime config for the trading service.
@@ -78,7 +78,11 @@ type Watcher struct {
 // NewWatcher dials the config service and starts one background watch loop per namespace.
 // applicationEnv/tradingMode scope every WatchConfig request to this deployment's own config rows.
 func NewWatcher(endpoint, applicationEnv, tradingMode string, namespaces ...string) (*Watcher, error) {
-	conn, err := grpc.NewClient(endpoint, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	creds, err := mtls.ClientConfig("xstockstrat-config")
+	if err != nil {
+		return nil, fmt.Errorf("mtls config: %w", err)
+	}
+	conn, err := grpc.NewClient(endpoint, grpc.WithTransportCredentials(creds))
 	if err != nil {
 		return nil, fmt.Errorf("dial config service: %w", err)
 	}

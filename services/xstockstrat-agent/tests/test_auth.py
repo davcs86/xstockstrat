@@ -22,7 +22,7 @@ async def test_validate_bearer_jwt_correct_aud_accepted():
     mock_stub.ValidateToken = AsyncMock(
         return_value=identity_pb2.TokenClaims(user_id="u1", aud=AGENT_PUBLIC_URL)
     )
-    with patch("app.auth.grpc.aio.insecure_channel") as mock_channel:
+    with patch("app.auth.mtls.secure_channel") as mock_channel:
         mock_channel.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
         mock_channel.return_value.__aexit__ = AsyncMock(return_value=False)
         with patch("app.auth.identity_pb2_grpc.IdentityServiceStub", return_value=mock_stub):
@@ -37,7 +37,7 @@ async def test_validate_bearer_jwt_wrong_aud_rejected():
     mock_stub.ValidateToken = AsyncMock(
         return_value=identity_pb2.TokenClaims(user_id="u1", aud="https://other.example/agent")
     )
-    with patch("app.auth.grpc.aio.insecure_channel") as mock_channel:
+    with patch("app.auth.mtls.secure_channel") as mock_channel:
         mock_channel.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
         mock_channel.return_value.__aexit__ = AsyncMock(return_value=False)
         with patch("app.auth.identity_pb2_grpc.IdentityServiceStub", return_value=mock_stub):

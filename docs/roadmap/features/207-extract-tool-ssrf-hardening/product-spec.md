@@ -108,10 +108,24 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 
 ## Open Questions
 
-- [ ] Config surface (FR-5): which `agent.extract.*` key(s), and does an operator **domain allowlist**
-  ship now or is deny-by-range sufficient for v1?
-- [ ] Does `extract_email_content` fetch remote resources (inlined image/link URLs, remote content
-  references) on a path distinct from `extract_website_content`, and does that path share the same
-  hardened fetch helper? (Design must confirm both tools route through one validated egress point.)
-- [ ] Known trap (ledger): egress policy values must be config/env-driven, never hardcoded literals
-  (C-05) — surface any hardcoded CIDR/limit in review.
+- [x] **OQ2 — shared hardened fetch point — RESOLVED (code-confirmed at review):** both tools route
+  through **one** helper `_fetch_url(...)` (`services/xstockstrat-agent/app/tools.py:2226`) —
+  `extract_website_content` calls it at `:544`, `extract_email_content` fetches its `urls` list through
+  the same `_fetch_url` at `:510`. It currently uses `httpx.AsyncClient(timeout=30.0,
+  follow_redirects=True)` with **no scheme check, no address validation, no size cap** (`:2238-2241`).
+  Hardening the single `_fetch_url` covers both tools (C-10 complete). No existing SSRF/egress helper
+  exists in the agent (greenfield — grep-confirmed), so this is new, not a refactor.
+- [ ] **OQ1 — config surface (FR-5) — DESIGN FORK (venue: /sdd-design):** the key shape is
+  `agent.extract.*` (conforms to C-05; `agent` is the agent's real config namespace, no `agent.extract.*`
+  registered today). Two decisions for design: (a) the exact key set (deny-ranges / max-redirects /
+  max-size / connect+read timeouts — one composite key vs several), and (b) **does an operator domain
+  allowlist ship in v1, or is deny-by-range sufficient?** Deny-by-range is the fail-closed core (FR-1);
+  an allowlist is additive. Surfaced to the operator at the design gate.
+- [ ] **FR-6 audit mechanism — DESIGN DECISION (venue: /sdd-design):** `app/telemetry.py` exists but is
+  tracing-only (no dedicated audit log). Design must specify whether a blocked fetch is recorded as a
+  span attribute/event or a structured log line.
+- [ ] **OQ3 — hardcoded-literal guard (standing, execution-time):** egress policy values (CIDRs, limits)
+  must be config/env-driven, never hardcoded literals (**C-05 / F-07**). Enforced at /sdd-execute review
+  and asserted by `@AC-8`.
+
+_FR-5 is now covered by `@AC-8` (added at the product-spec review gate to close the C-15 blocker)._

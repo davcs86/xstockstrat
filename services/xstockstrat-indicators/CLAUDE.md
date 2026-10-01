@@ -27,6 +27,8 @@ Python 3.13 (asyncio, grpc.aio)
 
 Python pattern — see `docs/patterns/docker-build.md` for single-stage `uv` builds, `--frozen --no-dev` flags, and proto namespace package setup.
 
+The image installs `libseccomp2` (runtime, kept) plus `libseccomp-dev`+`gcc` (build-only, purged after `uv sync`) so the `pyseccomp` binding compiles and loads — the formula sandbox loads a seccomp-BPF filter in each child (feature 209). No `USER` directive: the container runs as **root** so the sandbox child can `setuid` down to nobody. The single-stage `uv` pattern is otherwise unchanged.
+
 ## Ports
 
 | Protocol | Port | Purpose |
@@ -98,17 +100,32 @@ on live) rather than OHLCV closes.
 
 ## Sandbox Security Model
 
-- **Subprocess isolation**: formula runs in a fresh Python subprocess
-- **Memory cap**: enforced via `resource.setrlimit(RLIMIT_DATA)` in the child (heap +
-  anonymous mmap; `RLIMIT_AS` would reject numpy/pandas over their large virtual-memory
-  reservations before any real memory is used)
-- **BLAS/OMP threads pinned to 1**: numeric libs spawn one buffer-reserving thread per core
-  on import, which overflows the cap (`OpenBLAS error: Memory allocation still failed after
-  10 retries`); the subprocess env pins `OPENBLAS/OMP/MKL/NUMEXPR/VECLIB` thread counts to 1
-- **Timeout**: enforced via `subprocess.run(timeout=...)` + SIGKILL
-- **Import whitelist**: only `allowed_imports` config keys may be `import`ed
-- **Builtin filter**: dangerous builtins (`open`, `exec`, `eval`, `__import__` override, etc.) removed
-- **No network/filesystem**: `socket`, `urllib`, `requests`, `os.system` not in whitelist
+OS-level containment (feature 209): even a `().__class__.__base__.__subclasses__()` language-guard
+escape reaches no network, no secrets, and no writable FS. The lockdown runs **in the child wrapper,
+after** the numeric-lib import and **before** the untrusted `exec` (never `preexec_fn` — unsafe in
+this multithreaded service), in this order: eager-import allowed modules → `setuid(65534)` (when the
+parent is root) → `PR_SET_NO_NEW_PRIVS` → expanded rlimits → seccomp `.load()` → `exec(source)`.
+
+- **Subprocess isolation + secret-free env**: formula runs in a fresh subprocess whose env
+  (`_sandbox_env`) strips every service secret and adds `PYTHONDONTWRITEBYTECODE=1` +
+  `HOME`/`TMPDIR=/nonexistent` (no `.pyc`/cache writes).
+- **Distinct UID** (load-bearing): the child drops to `nobody` (65534) so a same-UID
+  `process_vm_readv` / `/proc/<parent>/environ` read of the parent's in-memory secrets is
+  blocked cross-UID. Requires the container to run as **root** — do **not** add a `USER` line.
+- **seccomp-BPF allowlist** (`pyseccomp`, `ERRNO(EPERM)` default, native arch only): only the
+  compute+teardown syscalls are allowed; the whole network family, `execve`/`execveat`,
+  `io_uring_*`, `ptrace`, `process_vm_*`, `pidfd_*`, and write-creating FS ops are absent → `EPERM`.
+  Fails **closed** on compat ABIs and unknown syscalls. `_SECCOMP_ALLOW` is the audited set;
+  `NO_NEW_PRIVS` must stay set (pyseccomp sets it on load — never disable).
+- **Expanded rlimits**: `RLIMIT_DATA` (memory; `RLIMIT_AS` would reject numpy's virtual reservations
+  — INDICATORS-2), `RLIMIT_CPU` = `ceil(timeout_ms/1000)+2`, `RLIMIT_NPROC` = `max_concurrent*16`
+  (fork-bomb bound, derived from config — F-07), `RLIMIT_FSIZE=0`, `RLIMIT_NOFILE=64`.
+- **BLAS/OMP threads pinned to 1** (`_THREAD_LIMIT_ENV`): numeric libs otherwise spawn one
+  buffer-reserving thread per core and overflow the cap.
+- **Deterministic termination**: `Popen(start_new_session=True)` + `killpg(SIGKILL)` on timeout **and
+  every exit** — a `fork()+sleep(∞)` grandchild cannot survive to hold an NPROC slot.
+- **Import whitelist + builtin filter** (unchanged): only `allowed_imports` may be imported; `open`/
+  `exec`/`eval`/`__import__`-override removed via a fresh `__builtins__` (INDICATORS-4).
 
 ## Typed Formula Parameters
 
@@ -147,6 +164,8 @@ reference a formula series as `<ref_name>.<series>` and lets the sandbox enforce
   `formula_source` runs have no stored definition, so no output enforcement applies.
 
 ## Environment Variables
+
+> **Inter-service mTLS (feature 210):** this service also requires `MTLS_CERT` / `MTLS_KEY` / `MTLS_CA_CERT` — boot-time PEM strings (its own leaf, private key, and the platform CA). The gRPC server binds mutual TLS and every outbound gRPC dial presents the leaf; **fail-closed** — the service refuses to start if any is absent. `MTLS_KEY` is a `SECRET` in `.do/app*.yaml`. Contract → `docs/patterns/inter-service-mtls.md`; rollout → `docs/runbooks/inter-service-mtls-rollout.md`.
 
 ```text
 GRPC_PORT=50054

@@ -3,6 +3,20 @@
 All production promotions from `main-dev` to `main` are recorded here.
 Each entry corresponds to one `main-dev → main` PR merge.
 
+## 2026-10-01
+
+### Features
+- extract-tool-ssrf-hardening: Harden the `xstockstrat-agent` MCP `extract_website_content` / `extract_email_content` tools against server-side request forgery: they currently fetch caller-supplied URLs and follow redirects with no egress policy, so a prompt-injected agent session can reach cloud metadata, loopback, and internal gRPC/admin surfaces on the private network.
+- indicators-sandbox-os-isolation: Replace the indicators formula sandbox's in-process builtins/import **blocklist** (escapable via the `().__class__.__base__.__subclasses__()` reflection chain — no AST allowlist) with **OS-level isolation**: evaluate untrusted formula code in a locked-down child (no network namespace, no filesystem write beyond scratch, dropped Linux capabilities, RLIMIT CPU/memory/wall-clock caps) so a sandbox escape yields no code execution against the service's credentials, network, or peers.
+- inter-service-mtls: All inter-service gRPC is plaintext h2c (Go `insecure.NewCredentials`, and the Python/Node equivalents) with no transport authentication, so the platform's trust in the propagated `x-user-id` / `x-access-scope` / `x-trace-id` headers rests on **network privacy alone** — any workload that reaches a backend port can forge them.
+- remove-agent-postgres-mcp: Remove **all** postgres-mcp from the platform: delete the nine `db_*` tools and the `postgres-mcp` co-process from `xstockstrat-agent`, drop its `xstockstrat_agent` DB connection and connection-pool budget row, and remove the `postgres-mcp` dependency — **with no replacement SQL-over-MCP surface**.
+- fix-historical-fundamentals-price-join: Backfilling a symbol's point-in-time fundamentals before its daily OHLCV bars exist leaves every price-derived metric (`price`, `market_cap`, `pe_ratio`, `pb_ratio`, `dividend_yield`) permanently `missing`, because the historical-fundamentals write is insert-only (`ON CONFLICT DO NOTHING`) and the price-join is a one-shot at insert time — so a re-backfill (even `overwrite=true`) never re-derives it.
+
+### Summary
+8 commits, 0 feature merges since last promotion.
+
+---
+
 ## 2026-09-27
 
 ### Features

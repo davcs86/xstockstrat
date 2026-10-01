@@ -15,7 +15,6 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
@@ -30,6 +29,7 @@ import (
 	"github.com/xstockstrat/contracts/pnl"
 	"github.com/xstockstrat/portfolio/internal/config"
 	"github.com/xstockstrat/portfolio/internal/middleware"
+	"github.com/xstockstrat/portfolio/internal/mtls"
 	"github.com/xstockstrat/portfolio/internal/repository"
 )
 
@@ -106,15 +106,27 @@ func NewPortfolioService(cfg *config.Config, cfgWatcher *config.Watcher) (*Portf
 		return nil, fmt.Errorf("portfolio repo: %w", err)
 	}
 
-	ledgerConn, err := grpc.NewClient(cfg.LedgerEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()), clientKeepAlive, grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
+	ledgerCreds, err := mtls.ClientConfig("xstockstrat-ledger")
+	if err != nil {
+		return nil, fmt.Errorf("mtls ledger: %w", err)
+	}
+	ledgerConn, err := grpc.NewClient(cfg.LedgerEndpoint, grpc.WithTransportCredentials(ledgerCreds), clientKeepAlive, grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
 	if err != nil {
 		return nil, fmt.Errorf("dial ledger: %w", err)
 	}
-	mdConn, err := grpc.NewClient(cfg.MarketDataEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()), clientKeepAlive, grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
+	mdCreds, err := mtls.ClientConfig("xstockstrat-marketdata")
+	if err != nil {
+		return nil, fmt.Errorf("mtls marketdata: %w", err)
+	}
+	mdConn, err := grpc.NewClient(cfg.MarketDataEndpoint, grpc.WithTransportCredentials(mdCreds), clientKeepAlive, grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
 	if err != nil {
 		return nil, fmt.Errorf("dial marketdata: %w", err)
 	}
-	notifyConn, err := grpc.NewClient(cfg.NotifyEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()), clientKeepAlive, grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
+	notifyCreds, err := mtls.ClientConfig("xstockstrat-notify")
+	if err != nil {
+		return nil, fmt.Errorf("mtls notify: %w", err)
+	}
+	notifyConn, err := grpc.NewClient(cfg.NotifyEndpoint, grpc.WithTransportCredentials(notifyCreds), clientKeepAlive, grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
 	if err != nil {
 		return nil, fmt.Errorf("dial notify: %w", err)
 	}

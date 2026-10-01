@@ -50,8 +50,8 @@ async def _capture_request(**kw):
             source=ingest_pb2.SignalSource(slug="uw")
         )
     )
-    with patch("app.client.grpc") as mock_grpc:
-        mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+    with patch("app.client.mtls") as mock_grpc:
+        mock_grpc.secure_channel.return_value = _channel_cm()
         with patch.object(ingest_pb2_grpc, "IngestServiceStub", return_value=mock_stub):
             await client.manage_signal_source(**kw)
     return mock_stub.ManageSignalSource.call_args[0][0]

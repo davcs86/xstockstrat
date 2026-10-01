@@ -13,7 +13,6 @@ import (
 	"connectrpc.com/connect"
 	"golang.org/x/sync/singleflight"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -23,6 +22,7 @@ import (
 	notifyv1 "github.com/xstockstrat/contracts/gen/go/notify/v1"
 	"github.com/xstockstrat/marketdata/internal/config"
 	"github.com/xstockstrat/marketdata/internal/middleware"
+	"github.com/xstockstrat/marketdata/internal/mtls"
 	"github.com/xstockstrat/marketdata/internal/repository"
 	"github.com/xstockstrat/marketdata/internal/source"
 	"github.com/xstockstrat/marketdata/internal/timeframe"
@@ -116,6 +116,9 @@ type histFundamentalsRepo interface {
 	CloseAt(ctx context.Context, symbol string, date time.Time) (*float64, error)
 	UpsertDividends(ctx context.Context, divs []source.CashDividend) error
 	SumDividendsInWindow(ctx context.Context, symbol string, asOf, windowStart time.Time) (float64, bool, error)
+	// feature 216: price-join recovery methods.
+	GetHistoricalPriceState(ctx context.Context, symbol, fiscalPeriod, periodType string) (*source.HistoricalPriceState, error)
+	UpdateHistoricalPriceJoin(ctx context.Context, symbol, fiscalPeriod, periodType string, price, marketCap, peRatio, pbRatio, dividendYield *float64) error
 }
 
 // ratioEnricher optionally fills a ratio EDGAR + the price-join cannot supply. v1 wires nil.
@@ -136,11 +139,19 @@ func NewMarketDataService(
 	histFundamentals source.HistoricalFundamentalsSource,
 	dividendSrc source.DividendSource,
 ) (*MarketDataService, error) {
-	ledgerConn, err := grpc.NewClient(ledgerEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
+	ledgerCreds, err := mtls.ClientConfig("xstockstrat-ledger")
+	if err != nil {
+		return nil, fmt.Errorf("mtls ledger: %w", err)
+	}
+	ledgerConn, err := grpc.NewClient(ledgerEndpoint, grpc.WithTransportCredentials(ledgerCreds), grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
 	if err != nil {
 		return nil, fmt.Errorf("dial ledger: %w", err)
 	}
-	notifyConn, err := grpc.NewClient(notifyEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
+	notifyCreds, err := mtls.ClientConfig("xstockstrat-notify")
+	if err != nil {
+		return nil, fmt.Errorf("mtls notify: %w", err)
+	}
+	notifyConn, err := grpc.NewClient(notifyEndpoint, grpc.WithTransportCredentials(notifyCreds), grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
 	if err != nil {
 		return nil, fmt.Errorf("dial notify: %w", err)
 	}
@@ -1744,10 +1755,11 @@ func (s *MarketDataService) BackfillFundamentals(ctx context.Context, req *marke
 	}
 	enrichEnabled := s.fundCfg.GetBool("marketdata.fundamentals.history.ratio_enrichment.enabled", false)
 
+	overwrite := req.GetOverwrite()
 	var written int64
 	var failed []string
 	for _, sym := range req.GetSymbols() {
-		n, err := s.backfillOneSymbol(ctx, sym, from, to, periodTypes, enrichEnabled)
+		n, err := s.backfillOneSymbol(ctx, sym, from, to, periodTypes, enrichEnabled, overwrite)
 		if err != nil {
 			slog.WarnContext(ctx, "fundamentals backfill: symbol failed (skipped)", "symbol", sym, "error", err)
 			failed = append(failed, sym)
@@ -1759,7 +1771,9 @@ func (s *MarketDataService) BackfillFundamentals(ctx context.Context, req *marke
 }
 
 // backfillOneSymbol fetches, price-joins, optionally enriches, and persists one symbol's periods.
-func (s *MarketDataService) backfillOneSymbol(ctx context.Context, symbol string, from, to time.Time, periodTypes []string, enrichEnabled bool) (int64, error) {
+// overwrite=true forces re-derivation of the 5 price-join columns on existing rows (feature 216
+// C-16 CHANGE, user-signed-off); overwrite=false fills only nil columns (feature-198 @AC-2 preserving).
+func (s *MarketDataService) backfillOneSymbol(ctx context.Context, symbol string, from, to time.Time, periodTypes []string, enrichEnabled, overwrite bool) (int64, error) {
 	periods, err := s.histFundamentals.FetchHistorical(ctx, symbol, from, to, periodTypes)
 	if err != nil {
 		return 0, err
@@ -1770,12 +1784,14 @@ func (s *MarketDataService) backfillOneSymbol(ctx context.Context, symbol string
 	// unavailable/unentitled feed leaves dividend_yield missing (never a fabricated 0) and is logged
 	// for audit — the per-period yield below runs only when this fetch succeeded.
 	dividendsFetched := false
+	var divFetchStart time.Time
 	if s.dividendSrc != nil && s.fundCfg.GetBool("marketdata.dividends.enabled", false) {
 		lookbackYears := int(s.fundCfg.GetInt("marketdata.dividends.backfill_lookback_years", 2))
 		if lookbackYears <= 0 {
 			lookbackYears = 2
 		}
-		divs, derr := s.dividendSrc.GetCashDividends(ctx, symbol, time.Now().AddDate(-lookbackYears, 0, 0), time.Now())
+		divFetchStart = time.Now().AddDate(-lookbackYears, 0, 0)
+		divs, derr := s.dividendSrc.GetCashDividends(ctx, symbol, divFetchStart, time.Now())
 		if derr != nil {
 			slog.WarnContext(ctx, "dividend feed unavailable — dividend_yield left missing (audit)", "symbol", symbol, "error", derr)
 		} else if uerr := s.histRepo.UpsertDividends(ctx, divs); uerr != nil {
@@ -1791,41 +1807,144 @@ func (s *MarketDataService) backfillOneSymbol(ctx context.Context, symbol string
 	var written int64
 	for i := range periods {
 		p := &periods[i]
-		s.priceJoin(ctx, p, &quarterlyEPS)
-		// PIT T12M dividend yield (feature 211, FR-4/FR-7): Σ dividends with ex_date in
-		// [filed-365d, filed] ÷ price-at-filing — only when the feed fetch succeeded and priceJoin
-		// set a price. ex_date > filed_date is excluded by the window (no look-ahead).
-		if dividendsFetched && p.Price != nil && *p.Price > 0 {
-			if sum, _, serr := s.histRepo.SumDividendsInWindow(ctx, symbol, p.FiledDate, p.FiledDate.AddDate(-1, 0, 0)); serr != nil {
-				slog.WarnContext(ctx, "dividend window sum failed — yield left missing (audit)", "symbol", symbol, "period", p.FiscalPeriod, "error", serr)
-			} else {
-				y := sum / *p.Price
-				p.DividendYield = &y
+		ttmEPS := s.accumulateTTM(p, &quarterlyEPS)
+
+		// Read the stored row (feature 216 recovery path).
+		state, serr := s.histRepo.GetHistoricalPriceState(ctx, symbol, p.FiscalPeriod, p.PeriodType)
+		if serr != nil {
+			slog.WarnContext(ctx, "fundamentals backfill: price-state read failed (skipped)", "symbol", symbol, "period", p.FiscalPeriod, "error", serr)
+			continue
+		}
+
+		if !state.Found {
+			// New row — forward path: derive then insert (DO NOTHING preserved for idempotency).
+			s.derivePriceMetrics(ctx, p, ttmEPS, p.Currency)
+			s.deriveDividendYield(ctx, symbol, p, dividendsFetched, divFetchStart)
+			if enrichEnabled && s.ratioEnricher != nil && s.enrichmentUnderCap() {
+				if err := s.ratioEnricher.Enrich(ctx, p); err != nil {
+					slog.WarnContext(ctx, "fundamentals ratio enrichment failed (edgar row kept)", "symbol", symbol, "period", p.FiscalPeriod, "error", err)
+				} else {
+					p.Source = "edgar+fmp"
+				}
 			}
-		}
-		if enrichEnabled && s.ratioEnricher != nil && s.enrichmentUnderCap() {
-			if err := s.ratioEnricher.Enrich(ctx, p); err != nil {
-				slog.WarnContext(ctx, "fundamentals ratio enrichment failed (edgar row kept)", "symbol", symbol, "period", p.FiscalPeriod, "error", err)
-			} else {
-				p.Source = "edgar+fmp"
+			if err := s.histRepo.InsertHistoricalFundamentals(ctx, *p); err != nil {
+				return written, err
 			}
+			written++
+			continue
 		}
-		if err := s.histRepo.InsertHistoricalFundamentals(ctx, *p); err != nil {
-			return written, err
+
+		// Existing row — recovery path keyed on the STORED earliest filed_date (feature 216 §4d).
+		// Setting p.FiledDate here before derivation keeps CloseAt and the T12M dividend window
+		// anchored to the original filing — the structural guard against look-ahead.
+		p.FiledDate = state.FiledDate
+
+		// Gate: default processes only needsFill rows; overwrite=true processes every existing row.
+		needsFill := state.Price == nil || state.MarketCap == nil || state.PERatio == nil || state.PBRatio == nil || state.DividendYield == nil
+		if !overwrite && !needsFill {
+			continue
 		}
-		written++
+
+		s.derivePriceMetrics(ctx, p, ttmEPS, state.Currency)
+		s.deriveDividendYield(ctx, symbol, p, dividendsFetched, divFetchStart)
+
+		// Unified per-column merge (monotonic: nil→value or value→value′, NEVER value→nil).
+		merged := mergePrice(state, p, overwrite)
+
+		// Write-only-if-changed — idempotent stable re-run (@AC-4).
+		if priceMergedChanged(state, merged) {
+			if err := s.histRepo.UpdateHistoricalPriceJoin(ctx, symbol, p.FiscalPeriod, p.PeriodType,
+				merged.price, merged.marketCap, merged.peRatio, merged.pbRatio, merged.dividendYield); err != nil {
+				return written, err
+			}
+			written++
+		}
 	}
 	return written, nil
 }
 
-// priceJoin computes the PIT price-derived metrics from the adjusted close AT filed_date (already
-// public), never a current snapshot: market_cap = close × shares, pe_ratio = close / ttm_eps. A
-// missing OHLCV bar leaves the metrics nil (fail-closed), never a fabricated 0.
-func (s *MarketDataService) priceJoin(ctx context.Context, p *source.HistoricalFundamentalsPeriod, quarterlyEPS *[]float64) {
-	var ttmEPS *float64
+// mergedPriceState holds the result of one per-column merge pass.
+type mergedPriceState struct {
+	price, marketCap, peRatio, pbRatio, dividendYield *float64
+}
+
+// coalesceF64 returns left when non-nil, else right.
+func coalesceF64(left, right *float64) *float64 {
+	if left != nil {
+		return left
+	}
+	return right
+}
+
+// mergePrice applies the unified per-column merge over all 5 price-join columns.
+// default: existing ?? derived (fill nil columns only).
+// overwrite: derived ?? existing (take a non-nil fresh value; never value→nil).
+func mergePrice(state *source.HistoricalPriceState, p *source.HistoricalFundamentalsPeriod, overwrite bool) mergedPriceState {
+	if overwrite {
+		return mergedPriceState{
+			price:         coalesceF64(p.Price, state.Price),
+			marketCap:     coalesceF64(p.MarketCap, state.MarketCap),
+			peRatio:       coalesceF64(p.PERatio, state.PERatio),
+			pbRatio:       coalesceF64(p.PBRatio, state.PBRatio),
+			dividendYield: coalesceF64(p.DividendYield, state.DividendYield),
+		}
+	}
+	return mergedPriceState{
+		price:         coalesceF64(state.Price, p.Price),
+		marketCap:     coalesceF64(state.MarketCap, p.MarketCap),
+		peRatio:       coalesceF64(state.PERatio, p.PERatio),
+		pbRatio:       coalesceF64(state.PBRatio, p.PBRatio),
+		dividendYield: coalesceF64(state.DividendYield, p.DividendYield),
+	}
+}
+
+// priceMergedChanged reports whether any merged column differs from the stored value.
+func priceMergedChanged(state *source.HistoricalPriceState, m mergedPriceState) bool {
+	f64changed := func(stored, merged *float64) bool {
+		if stored == nil && merged == nil {
+			return false
+		}
+		if stored == nil || merged == nil {
+			return true
+		}
+		return *stored != *merged
+	}
+	return f64changed(state.Price, m.price) ||
+		f64changed(state.MarketCap, m.marketCap) ||
+		f64changed(state.PERatio, m.peRatio) ||
+		f64changed(state.PBRatio, m.pbRatio) ||
+		f64changed(state.DividendYield, m.dividendYield)
+}
+
+// deriveDividendYield computes the PIT T12M dividend yield for p and sets p.DividendYield.
+// Coverage guard: when the T12M window predates divFetchStart, leaves yield nil (never fabricated 0).
+// The SumDividendsInWindow middle bool is "has any row" (no date filter) — not a coverage signal;
+// it is discarded; the explicit windowStart.Before(divFetchStart) check governs coverage.
+func (s *MarketDataService) deriveDividendYield(ctx context.Context, symbol string, p *source.HistoricalFundamentalsPeriod, dividendsFetched bool, divFetchStart time.Time) {
+	if !dividendsFetched || p.Price == nil || *p.Price <= 0 {
+		return
+	}
+	windowStart := p.FiledDate.AddDate(-1, 0, 0)
+	if windowStart.Before(divFetchStart) {
+		// T12M window predates the fetch range — yield left nil (fail-closed, @AC-5 guard).
+		return
+	}
+	sum, _, serr := s.histRepo.SumDividendsInWindow(ctx, symbol, p.FiledDate, windowStart)
+	if serr != nil {
+		slog.WarnContext(ctx, "dividend window sum failed — yield left missing (audit)", "symbol", symbol, "period", p.FiscalPeriod, "error", serr)
+		return
+	}
+	y := sum / *p.Price
+	p.DividendYield = &y
+}
+
+// accumulateTTM updates the rolling quarterly EPS window and returns the current TTM EPS when 4
+// quarters are available; returns nil otherwise. Always called (both new-row and existing-row
+// paths) so the rolling window stays aligned across the full chronological pass (feature 216).
+func (s *MarketDataService) accumulateTTM(p *source.HistoricalFundamentalsPeriod, quarterlyEPS *[]float64) *float64 {
 	switch p.PeriodType {
 	case "annual":
-		ttmEPS = p.EPS
+		return p.EPS
 	case "quarterly":
 		if p.EPS != nil {
 			*quarterlyEPS = append(*quarterlyEPS, *p.EPS)
@@ -1837,10 +1956,18 @@ func (s *MarketDataService) priceJoin(ctx context.Context, p *source.HistoricalF
 				for _, e := range *quarterlyEPS {
 					sum += e
 				}
-				ttmEPS = &sum
+				return &sum
 			}
 		}
 	}
+	return nil
+}
+
+// derivePriceMetrics sets p.Price, p.MarketCap, p.PERatio, and p.PBRatio from the adjusted close
+// at p.FiledDate. storedCurrency gates the native P/E and P/B derivation so a currency mismatch
+// between the stored row and the re-fetched period never produces a cross-currency ratio. A missing
+// OHLCV bar leaves all four metrics nil (fail-closed, never fabricated 0).
+func (s *MarketDataService) derivePriceMetrics(ctx context.Context, p *source.HistoricalFundamentalsPeriod, ttmEPS *float64, storedCurrency string) {
 	close, err := s.histRepo.CloseAt(ctx, p.Symbol, p.FiledDate)
 	if err != nil {
 		slog.WarnContext(ctx, "fundamentals price-join: close lookup failed", "symbol", p.Symbol, "period", p.FiscalPeriod, "error", err)
@@ -1855,27 +1982,32 @@ func (s *MarketDataService) priceJoin(ctx context.Context, p *source.HistoricalF
 		mc := price * (*p.SharesOutstanding)
 		p.MarketCap = &mc
 	}
-	// P/E currency rule (feature 211, FR-3): the close is USD, so ttm-EPS must be USD too. Native EPS
-	// is USD only for a USD-currency filer; for a non-USD filer we hold no USD EPS fact, so leave P/E
-	// nil (→ missing_metrics) rather than divide across currencies (@AC-22 — no fabrication).
-	if ttmEPS != nil && *ttmEPS > 0 && p.Currency == "USD" {
+	// P/E currency rule: close is USD; native EPS is USD only for storedCurrency=="USD".
+	// Use storedCurrency (the row's as-reported currency) not p.Currency (the re-fetch's value)
+	// so a currency mismatch between stored and re-fetched rows never fabricates a cross-currency ratio.
+	if ttmEPS != nil && *ttmEPS > 0 && storedCurrency == "USD" {
 		pe := price / *ttmEPS
 		p.PERatio = &pe
 	}
-	// P/B currency-consistent (feature 211, FR-3/@AC-4): USD market_cap / USD equity. Prefer the
-	// USD-unit equity stashed at ingest (a dual-reporting filer, e.g. BABA); else native equity when
-	// the row currency is already USD; else nil (no FX conversion).
+	// P/B currency-consistent: USD market_cap / USD equity (feature 211, FR-3/@AC-4).
 	if p.MarketCap != nil {
 		if eqUSD, ok := p.ExtraMetrics["stockholders_equity_usd"]; ok && eqUSD > 0 {
 			pb := *p.MarketCap / eqUSD
 			p.PBRatio = &pb
-		} else if p.Currency == "USD" {
+		} else if storedCurrency == "USD" {
 			if eq, ok := p.ExtraMetrics["stockholders_equity"]; ok && eq > 0 {
 				pb := *p.MarketCap / eq
 				p.PBRatio = &pb
 			}
 		}
 	}
+}
+
+// priceJoin is the thin wrapper used by the existing forward path (new-row insert). It accumulates
+// the TTM EPS window and derives price metrics in one call, preserving TestPriceJoin_* test coverage.
+func (s *MarketDataService) priceJoin(ctx context.Context, p *source.HistoricalFundamentalsPeriod, quarterlyEPS *[]float64) {
+	ttmEPS := s.accumulateTTM(p, quarterlyEPS)
+	s.derivePriceMetrics(ctx, p, ttmEPS, p.Currency)
 }
 
 // enrichmentUnderCap gates the FMP ratio-enrichment pass against the shared FMP daily cap using a

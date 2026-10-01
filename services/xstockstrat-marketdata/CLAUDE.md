@@ -167,6 +167,8 @@ key.
 
 ## Environment Variables
 
+> **Inter-service mTLS (feature 210):** this service also requires `MTLS_CERT` / `MTLS_KEY` / `MTLS_CA_CERT` — boot-time PEM strings (its own leaf, private key, and the platform CA). The gRPC server binds mutual TLS and every outbound gRPC dial presents the leaf; **fail-closed** — the service refuses to start if any is absent. `MTLS_KEY` is a `SECRET` in `.do/app*.yaml`. Contract → `docs/patterns/inter-service-mtls.md`; rollout → `docs/runbooks/inter-service-mtls-rollout.md`.
+
 Source: hardcoded in docker-compose `environment:` unless noted. `APPLICATION_ENV` and `NODE_ENV` come from `.env.local` (committed). `DATABASE_URL` is constructed by docker-compose from `POSTGRES_PASSWORD` in `.env`. **Alpaca / FMP / Finnhub API credentials are no longer env vars (feature 147)** — they are encrypted config secrets (`marketdata.alpaca.api_key`, `marketdata.alpaca.api_secret`, `marketdata.fmp.api_key`, `marketdata.finnhub.api_key`) resolved via `GetSecret` at startup. `ALPACA_API_KEY` / `ALPACA_API_SECRET` / `FMP_API_KEY` / `FINNHUB_API_KEY` were removed.
 
 ```text

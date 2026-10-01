@@ -3379,3 +3379,76 @@ reusing.
 - **Pattern**: When a remediation's whole design is a *hardened wrapper around a dependency that is itself the risk*, the wrapper is the wrong answer — eliminate the surface. Feature 193 (imported/demoted as 212) spent a full design debate architecting a standalone, per-operator-token, audited psql-MCP whose core was still a proxy over `postgres-mcp` (an arbitrary-SQL server). Once `postgres-mcp` was judged inherently insecure, every gram of that scaffolding (isolated droplet container, on-demand `docker start/stop`, transparent low-level proxy, audit sink, an 084 hard-dep) became effort spent hardening the thing you distrust. The removal that superseded it (feature 214) is strictly *less* code and closes H-5 more completely: no tool, no co-process, no credential, no route. The legitimate operator need (run admin SQL) already had a sanctioned out-of-band answer (direct `psql` as a DB owner via SSH/doctl) — a platform MCP surface for it was never load-bearing.
 - **Rule it implies**: before designing a privilege-separation / sandbox / proxy layer around a risky dependency or capability, ask "is this capability load-bearing enough to justify carrying the attack surface at all?" — if an out-of-band or existing path already serves the real need, **delete the surface** rather than wrap it (attack-surface minimization + YAGNI beat defense-in-depth scaffolding). A design whose safety rests entirely on perfectly hardening a component you've labeled untrustworthy is a smell: re-ask whether the component should exist in the product at all. (Nuance still true from the 193/212 arc: for a surface you *do* keep, privilege separation across a trust boundary beats an in-surface, model-satisfiable gate — but "keep it and separate" must lose to "remove it" when nothing needs it.)
 - **Evidence**: `docs/roadmap/features/214-remove-agent-postgres-mcp/` (removal, supersedes 212); `docs/roadmap/features/212-sysadmin-db-write-role/` (demoted 2026-09-26, formerly 193); `docs/reports/2026-09-16-trading-system-security-audit.md` H-5/DT-2.
+
+### 2026-09-27 — 217-sector-classification-strategy-params — design
+- **Pattern**: For a per-bar parameter axis that is **piecewise-constant with rare breakpoints** (e.g. a symbol's sector over a backtest window), do NOT resolve/recompute per bar. Snapshot the validity intervals once (one batched history RPC per symbol per run), compute the component series **once per distinct resolved-param dict over the full window**, then stitch `out[i] = variant[axis[i]][i]`. Full-window compute per variant keeps indicator warmup correct at a boundary (segmenting the closes does not), the K variants collapse to K=1 (byte-identical) when nothing overrides, and there is no per-bar RPC to reopen a DB lock-budget regression (feature-153). Reuses the existing per-component compute seam + its concurrency sems, so no new guard/key.
+- **Evidence**: `docs/roadmap/features/217-sector-classification-strategy-params/design.md` § Group B; `services/xstockstrat-analysis/app/services/evaluator.py:398,587`.
+
+### 2026-09-27 — 217-sector-classification-strategy-params — design
+- **Trap (design-caught)**: A SCD `valid_from` **epoch sentinel of `1970-01-01T00:00:00Z` collides with the protobuf/unix-0 wire-default** of an unset `google.protobuf.Timestamp` on any as-of read RPC — an omitted `as_of` then silently resolves as "as-of epoch" and matches the seed row (silent wrong result). Use a negative-unix sentinel (`1900-01-01T00:00:00Z`), which is provably distinct from an unset field, or reject a zero `as_of` with `InvalidArgument`. Prefer the sentinel choice (zero handler code).
+- **Trap (design-caught)**: A per-vendor daily API budget enforced by **cloning** an in-memory day-counter per call path yields N×cap true spend (each counter gates the same ceiling independently). Enforce ONE shared counter at the client's single request chokepoint (reserve-before-dispatch, commit-on-2xx, refund-otherwise so an outage doesn't burn the budget), boot-seeded from the durable store so a restart can't re-grant a fresh cap. Same "parallel path vs single gateway" family as `fails.md:1038-1043`.
+- **Evidence**: `docs/roadmap/features/217-sector-classification-strategy-params/design.md` § Group A (FMP gateway; epoch sentinel); rounds 2-4 design debate.
+
+### 2026-09-27 — fix-historical-fundamentals-price-join — design
+- **Pattern**: To make a per-row DERIVED value recoverable when its input (here: daily bars) can arrive AFTER the row is written, four moves compound: (1) key the re-derivation on the row's OWN stored identity (the stored earliest `filed_date`), never the incoming re-fetch's — recovery then can't be defeated by upstream label/date drift and point-in-time look-ahead becomes structurally impossible; (2) make the write a column-scoped merge (SET only the derived columns, WHERE the natural PK) so an insert-only `ON CONFLICT DO NOTHING` guard that protects as-reported/idempotency invariants stays intact for new rows while existing rows recover in place; (3) do the clobber-vs-fill decision in Go (`existing ?? derived` default, `derived ?? existing` under an operator `overwrite`) feeding a DUMB `UPDATE ... SET`, NOT an SQL `COALESCE` upsert — the merge is then unit-testable in a stateful fake instead of asserted as an un-executed SQL string (retires the fails.md:722/757/727-729 untestable-conflict-SQL family), and it is the only shape that can both keep-existing and set-null per column; (4) keep every mode MONOTONIC (nil→value or value→value′, never value→nil) so a later no-input re-run never wipes good data.
+- **Evidence**: `docs/roadmap/features/216-fix-historical-fundamentals-price-join/design.md` § Chosen Approach (unified merge table, Go-merge + dumb SQL); `services/xstockstrat-marketdata/internal/repository/marketdata_repo.go:610` (the DO NOTHING kept for new rows), `:63` (InsertBars upsert shape reused); `internal/service/marketdata_service.go:1824,1844,1849-1851` (one-shot price-join fail-closed).
+- **Rule it implies**: A "coverage" proxy that is WALL-CLOCK-relative (a fetch window `[now−N, now]`) silently corrupts derived metrics for old rows — on the write path it fabricates a `0` (empty fetch ÷ price), and under a force-refresh it would WIPE a value that was legitimately covered when first written but is "uncovered" now merely because `now` advanced. Gate the derived write on an EXPLICIT window-coverage check and FAIL CLOSED (leave nil, never fabricate, never value→nil); and when force-recompute crosses a currency/unit boundary, fail closed on mismatch rather than dividing across inconsistent units. Corollary for the gate: an acceptance test whose signed-off capability is "overwrite refreshes an already-populated value (value→value′)" must isolate that transition — a nil→value scenario is also satisfied by the default fill path and does not exercise the override (C-15/C-08).
+
+### 2026-09-28 — remove-agent-postgres-mcp — design
+- **Pattern**: A capability *removal* feature runs cleanly as a **subtractive, symbol-disappearance-verified** SDD feature: gate every step on names/symbols ceasing to exist (name-set equality assert, deleted module import-error, `has_section` inverted, `grep -c == 0`) rather than substring-absence of a word that legitimately survives in docs/runbooks/history. Pair each `service` removal with its `test` step as red→green: RED = the presence-assert failing after the production edit; GREEN = deleting (import-at-collection tests) or inverting (structural asserts) it. For C-16, when the capability is gone, **delete-and-promote** beats invert-in-place: delete the old durable suite and promote the new feature's own absence guarantees (tagged `@feature-NNN`) as an explicit verified step.
+- **Why it worked**: feature 214 removed 9 MCP tools + a co-process + 3 deps + deploy wiring across 12 steps with the agent suite staying green throughout (442 passed) and no substring-grep false-positives.
+
+### 2026-09-28 — extract-tool-ssrf-hardening — design
+- **Pattern**: For SSRF egress control in Python + httpx, DNS-rebind-safe pinning has exactly one correct seam — a custom `httpcore.AsyncNetworkBackend.connect_tcp` (resolve off-thread → reject-if-ANY-resolved-non-public → connect the pinned validated IP) wired into `httpcore.AsyncConnectionPool(network_backend=...)`; httpx's public `AsyncHTTPTransport` exposes no pin hook. Gate IPs on **`not ipaddress.is_global`** (not `is_private`, which is fail-open for CGNAT 100.64/10 and misses ipv4-mapped) with explicit loopback/link-local/metadata as defense-in-depth. `start_tls(server_hostname=...)` is separate from `connect_tcp`, so pinning the TCP IP preserves SNI.
+- **Trap (ledger sibling of fails.md:637)**: before hand-rolling redirect handling, check what the HTTP library did for you. httpx's built-in redirect engine strips `Authorization`/`Cookie` on cross-origin hops and does NOT re-check scheme; a manual redirect loop that drops the engine must *re-implement the credential strip* (or it regresses to a credential-exfil vector) while adding the per-hop scheme check the engine lacked. And never call blocking `socket.getaddrinfo` inside an async backend (event-loop stall / DoS) — use `anyio.to_thread.run_sync`. Prefer subclassing the tested transport + a fail-closed identity assertion over a from-scratch `handle_async_request` bridge (which silently drops request-extension timeout/SNI and stream-close semantics).
+
+### 2026-09-28 — extract-tool-ssrf-hardening — design
+- **Pattern**: SSRF-safe outbound HTTP in Python = pin the *connection* below httpx. Subclass
+  `httpx.AsyncHTTPTransport` and swap `self._pool._network_backend` for a custom
+  `httpcore.AsyncNetworkBackend` whose `connect_tcp` resolves off-loop (`anyio.to_thread.run_sync`),
+  validates **every** resolved A/AAAA with `not ipaddress.is_global` (+ IPv4-mapped unwrap; closes the
+  CGNAT 100.64/10 hole `is_private` misses), rejects-if-any on mixed answers, and connects the pinned IP
+  literal — killing the DNS-rebind TOCTOU. Keep `follow_redirects=False` and own a manual redirect loop
+  (per-hop scheme + literal-IP re-validation, cross-origin credential strip, streamed byte-cap).
+- **Evidence**: `services/xstockstrat-agent/app/egress.py`, `app/tools.py` `_fetch_url`; PR #1200 (207).
+- **Rule it implies**: any new caller-supplied-URL fetch path must route through `egress.build_pinned_client`
+  + the bounded redirect loop, never a bare `httpx.AsyncClient(follow_redirects=True)`.
+
+### 2026-09-28 — extract-tool-ssrf-hardening — reuse
+- **Pattern**: `respx` patches `AsyncHTTPTransport.handle_async_request`, so it intercepts a custom
+  pinning transport **above** the connection-layer pin — it cannot exercise the IP block. Split the test
+  strategy: respx for happy-path + app-layer redirect/limit assertions; monkeypatch `socket.getaddrinfo`
+  + the held `AnyIOBackend.connect_tcp` (AsyncMock, assert-not-called) for the actual IP-pin blocks. Probe
+  the wrapping first — `EgressBlocked` from `connect_tcp` propagates unwrapped (not mapped to `ConnectError`),
+  which both the `except` and the FR-6 no-leak guarantee depend on.
+- **Evidence**: `services/xstockstrat-agent/tests/test_tools.py` (SSRF section), `tests/test_egress.py`.
+- **Rule it implies**: when a security control lives below the mock library's patch point, assert it with a
+  resolver/backend monkeypatch, and verify the block exception is not silently re-wrapped by the transport.
+
+### 2026-09-28 — indicators-sandbox-os-isolation — design
+- **Pattern**: For a Python sandbox seccomp filter, load the allowlist INSIDE the child wrapper AFTER
+  importing the trusted heavy libs (numpy/pandas) and right BEFORE `exec(untrusted)` — never via
+  `preexec_fn` (unsafe in a multithreaded parent: fork+libc/GIL → deadlock) and never before `execve`
+  (forces a huge, FR-4-fragile allowlist). Post-import timing shrinks the allow-set to compute-only and
+  lets an `ERRNO(EPERM)`-default allowlist fail CLOSED (compat x86/x32 arches + io_uring + unknown
+  syscalls all EPERM automatically), beating a denylist that fails open on a forgotten bypass.
+- **Evidence**: `docs/roadmap/features/209-indicators-sandbox-os-isolation/design.md` §§ Chosen Approach
+  3, Rejected 3/4; `services/xstockstrat-indicators/app/services/sandbox.py:34-40,116-172,204-210`.
+- **Rule it implies**: distinct-UID child (root parent → setuid nobody) is the load-bearing control for
+  "escape reaches no secrets" on a managed PaaS without CAP_SYS_ADMIN — seccomp alone on a shared UID
+  cannot block cross-process memory/`/proc/environ` reads.
+
+### 2026-09-28 — indicators-sandbox-os-isolation — design
+- **Pattern**: FINALIZE a seccomp allow-set from a real `strace` of the actual dependency versions, not
+  by reasoning — and trace REALISTICALLY-sized workloads. A 200×200 numpy matmul missed `mbind` (NUMA
+  memory policy) that an 800×800 matmul hit; shipping the 200×200 set would have EPERM'd large-array
+  formulas in prod. Set `PYTHONDONTWRITEBYTECODE=1` + `HOME`/`TMPDIR`=nonexistent in the child env to
+  eliminate compute-time `.pyc`/cache writes wholesale (empirically zero mkdir/rename/openat-O_WRONLY).
+- **Evidence**: 209 design.md § Chosen Approach 3-4; strace of numpy 2.4.3/pandas 3.0.1 (session log).
+- **Rule it implies**: an allowlist derived on the design host must add defensive read-path members
+  (`statx`, `getdents64`) for the runtime image's glibc, and the syscall validation must run inside the
+  runtime container (fails.md:369), because trace-host ABI ≠ deploy-image ABI.
+
+### 2026-10-01 — inter-service-mtls — design
+- **Pattern**: The DO-App-Platform-compatible inter-service mTLS shape is: one self-signed platform CA → one per-service leaf (SAN = service name, both serverAuth+clientAuth EKUs) → delivered as boot-time env **PEM strings** (`MTLS_CERT`/`MTLS_KEY`/`MTLS_CA_CERT`, keys `type: SECRET`), NEVER over WatchConfig (config can't secure its own inbound channel). DO has no file-mount and no daemonset/socket, so env-PEM is the only mechanism that works on prod AND keeps compose parity — SPIRE/cloud-CA are ruled out, not by preference but by DO's injection model. Verification identity is pinned to the service name on every client (env-independent), and the whole thing needs zero new dependencies (grpcio/grpc-js/Go-stdlib ship TLS). Fail-closed = cert-material presence (absent ⇒ won't start); no permissive/toggle mode avoids an unguardable prod permissive window.
+- **Rule it implies**: For a platform-wide transport-credentials change on DO App Platform, default to env-PEM + a self-signed platform CA + service-name authority pinning + a flag-day (no accept-both mode) cutover; reconcile cert material as `type: SECRET` across `docker-compose.yml` + `.do/app*.yaml` using the `DATABASE_CA_CERT` string-env precedent. Verify handshakes in-process (no CI mesh exists), and always include a valid-CA/wrong-SAN negative test.

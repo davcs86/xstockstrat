@@ -97,6 +97,23 @@ type HistoricalFundamentalsPeriod struct {
 	Source            string
 }
 
+// HistoricalPriceState is the stored price-join state of one fundamentals_history row, read by the
+// backfill recovery path (feature 216). Found=false when no row exists for the triple PK. FiledDate
+// is the stored earliest filing date; recovery derives against it (never the re-fetch's filed_date)
+// so the point-in-time price never looks ahead (feature-198 @AC-4). The five price columns are
+// *float64 (nil = column is NULL / never derived); Currency is the stored as-reported currency used
+// to gate native pe/pb recovery (fail closed on a mismatch).
+type HistoricalPriceState struct {
+	Found         bool
+	FiledDate     time.Time
+	Price         *float64
+	MarketCap     *float64
+	PERatio       *float64
+	PBRatio       *float64
+	DividendYield *float64
+	Currency      string
+}
+
 // HistoricalFundamentalsSource fetches a point-in-time historical fundamentals time series for a
 // symbol from an as-reported source (SEC EDGAR). Separate from the snapshot FundamentalsSource and
 // never registered in the provider selector — held as its own service field (feature 198, FR-2).

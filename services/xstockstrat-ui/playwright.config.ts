@@ -1,10 +1,13 @@
 import { defineConfig, devices } from '@playwright/test';
-import {
-  preinstalledBrowser,
-  resolveChromiumExecutable,
-} from './e2e/helpers/browser-resolution';
+import { preinstalledBrowser, resolveChromiumExecutable } from './e2e/helpers/browser-resolution';
+import { devCerts } from './e2e/helpers/devCerts';
 
 const isCI = !!process.env.CI;
+
+// mTLS material for the BFF→mock dials (feature 210). Minted once here (config eval, main process) so
+// the same CA is shared with the in-process mock backend (started by global-setup). The BFF presents
+// the xstockstrat-ui client leaf; the mock requires it.
+const MTLS = devCerts();
 
 /**
  * Browser resolution for environments that pre-bake browsers and block downloads.
@@ -168,6 +171,10 @@ export default defineConfig({
         'BKLWr-hikNpV10z1DNEcFIk9SczQbZrmMlnYCMTtR47eOFAhsffLDIwrl6yQdJC1ojtfk4ySNkElou7-V68dkKk',
       // Build a regular (non-standalone) bundle so `next start` can serve it.
       NEXT_DISABLE_STANDALONE: '1',
+      // Feature 210 — the BFF dials every backend over mutual TLS; present the UI client leaf + CA.
+      MTLS_CERT: MTLS.uiCert,
+      MTLS_KEY: MTLS.uiKey,
+      MTLS_CA_CERT: MTLS.ca,
     },
   },
 });

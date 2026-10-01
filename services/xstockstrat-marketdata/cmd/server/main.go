@@ -24,6 +24,7 @@ import (
 	"github.com/xstockstrat/marketdata/internal/fmp"
 	"github.com/xstockstrat/marketdata/internal/handler"
 	"github.com/xstockstrat/marketdata/internal/middleware"
+	"github.com/xstockstrat/marketdata/internal/mtls"
 	"github.com/xstockstrat/marketdata/internal/repository"
 	"github.com/xstockstrat/marketdata/internal/service"
 	"github.com/xstockstrat/marketdata/internal/source"
@@ -152,7 +153,13 @@ func main() {
 		os.Exit(1)
 	}
 
+	serverCreds, err := mtls.ServerConfig()
+	if err != nil {
+		slog.Error("mtls server credentials", "error", err)
+		os.Exit(1)
+	}
 	grpcServer := grpc.NewServer(
+		grpc.Creds(serverCreds),
 		grpc.ChainUnaryInterceptor(middleware.UnaryServerInterceptor),
 		grpc.StatsHandler(otelgrpc.NewServerHandler()),
 		grpc.KeepaliveParams(keepalive.ServerParameters{

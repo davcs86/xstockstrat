@@ -199,6 +199,7 @@ All inter-service connection env vars follow these patterns. **Never invent new 
 - When a new service introduces connection env vars, check `docker-compose.yml` first — the var may already exist in another service's block and only needs to be added to the new service's block with the same value.
 - `N8N_WEBHOOK_SECRET` (removed by feature 011, `remove-n8n-references`) and `MCP_AGENT_SECRET` (removed by feature 147) are gone — do not reference either. The MCP agent now HMAC-signs its stateless OAuth `txn` blob with `JWT_SECRET` (`app/oauth_server.py`), newly injected into the agent env; there is no separate agent shared secret.
 - The vendor-credential env vars `ALPACA_API_KEY`, `ALPACA_API_SECRET`, `FMP_API_KEY`, and `FINNHUB_API_KEY` were removed by feature 147 — these four credentials are now encrypted config rows (`marketdata.alpaca.api_key`, `marketdata.alpaca.api_secret`, `marketdata.fmp.api_key`, `marketdata.finnhub.api_key`) resolved by `xstockstrat-marketdata` via the `GetSecret` RPC at startup. Do not reintroduce them as env vars.
+- **Inter-service mTLS cert material (`MTLS_CERT`, `MTLS_KEY`, `MTLS_CA_CERT`) is a separate, boot-time env class — NOT a connection var** (feature 210). These three hold **PEM strings** (the service's own leaf, its private key, the platform CA bundle), read from env before the gRPC server binds, and take **no** `_ENDPOINT`/`_URL` suffix (they are not `host:port`). Fail-closed: a service refuses to start if any is absent. `MTLS_KEY` is `type: SECRET` in `.do/app*.yaml`; cert + CA are public. Not a `WatchConfig` key (bootstrap circularity — config secures its own channel with this material). Full contract → `docs/patterns/inter-service-mtls.md`; rollout/rotation/rollback → `docs/runbooks/inter-service-mtls-rollout.md`.
 
 ---
 
@@ -235,11 +236,10 @@ locks — theirs is the real backend-slot budget. Full rationale, the direct-vs-
 | xstockstrat-config | Node | direct `:25060` | 2 | |
 | xstockstrat-notify | Node | direct `:25060` | 1 | Light DB use (alert history only) |
 | xstockstrat-ui | Next.js | direct `:25060` | 1 | config-ui audit route only |
-| xstockstrat-agent (postgres-mcp) | Python | direct `:25060` | 1 | postgres-mcp co-process connects as xstockstrat_agent; direct because third-party binary; 1 connection (feature 169) |
-| **Direct backend total** | | | **9** | Real cluster connections held by the direct services (per environment) |
+| **Direct backend total** | | | **8** | Real cluster connections held by the direct services (per environment) |
 | **Pooled (PgBouncer)** | | | **pool `size` (5)** | The six services above multiplex onto ≤ the pool size, regardless of their client-pool maxes |
 
-Effective backend usage per environment ≈ **9 direct + ≤5 pool = ~14**, leaving headroom under the
+Effective backend usage per environment ≈ **8 direct + ≤5 pool = ~13**, leaving headroom under the
 ~22-slot cluster even with both environments live. The six pooled rows no longer count 1:1 against the
 budget — that was the point of the PgBouncer split.
 

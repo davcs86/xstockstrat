@@ -531,6 +531,15 @@ wheels = [
 ]
 
 [[package]]
+name = "pyseccomp"
+version = "0.1.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/08/e2/f761ad7bd34745af8c8aa6d76a71a240eef45ee4635e2022dcc1b133b4d8/pyseccomp-0.1.2.tar.gz", hash = "sha256:0d54efacf71bda4bdfd21233f5444b730cbecf593d602f796e6412a8682258bd", size = 4943, upload-time = "2021-01-02T22:48:01.278Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/cd/5a/2c454fe11c9bf0d8d77a8d89d05e9f2f4203b39c000d0e38a060c273ab7f/pyseccomp-0.1.2-py3-none-any.whl", hash = "sha256:19177748e1202603ca4b2c41d728916402c018c4fee49dca1e3568ea218b7c23", size = 5667, upload-time = "2021-01-02T22:48:00.578Z" },
+]
+
+[[package]]
 name = "pytest"
 version = "9.0.3"
 source = { registry = "https://pypi.org/simple" }
@@ -700,6 +709,7 @@ dependencies = [
     { name = "opentelemetry-sdk" },
     { name = "pandas" },
     { name = "protobuf" },
+    { name = "pyseccomp" },
 ]
 
 [package.optional-dependencies]
@@ -721,6 +731,7 @@ requires-dist = [
     { name = "opentelemetry-sdk", specifier = ">=1.25.0" },
     { name = "pandas", specifier = ">=2.2.0" },
     { name = "protobuf", specifier = ">=5.26.0" },
+    { name = "pyseccomp", specifier = ">=0.1.2" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=5.0.0" },

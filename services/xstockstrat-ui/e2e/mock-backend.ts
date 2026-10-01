@@ -12,6 +12,7 @@
  * IdentityService mock is identical across all three source services.
  */
 import * as http2 from 'node:http2';
+import { devCerts } from './helpers/devCerts';
 import { ConnectError, Code } from '@connectrpc/connect';
 import { connectNodeAdapter } from '@connectrpc/connect-node';
 import { timestampFromDate } from '@bufbuild/protobuf/wkt';
@@ -109,20 +110,30 @@ function assertStrategyOwner(
   }
 }
 
-let traderServer: http2.Http2Server | null = null;
-let insightsServer: http2.Http2Server | null = null;
-let configUiServer: http2.Http2Server | null = null;
+// The BFF dials these mocks over mutual TLS (connectClients.ts), so each mock is a secure h2 server
+// presenting the multi-SAN mock leaf and REQUIRING a CA-signed client cert — exercising the real
+// handshake + authority-pin path end to end, and refusing any plaintext client (@AC-4).
+type MockServer = http2.Http2Server | http2.Http2SecureServer;
+
+export function tlsOptions(): http2.SecureServerOptions {
+  const { ca, mockCert, mockKey } = devCerts();
+  return { ca, cert: mockCert, key: mockKey, requestCert: true, rejectUnauthorized: true };
+}
+
+let traderServer: MockServer | null = null;
+let insightsServer: MockServer | null = null;
+let configUiServer: MockServer | null = null;
 
 const activeSessions = new Set<http2.Http2Session>();
 
-function trackSessions(srv: http2.Http2Server): void {
+function trackSessions(srv: MockServer): void {
   srv.on('session', (session) => {
     activeSessions.add(session);
     session.on('close', () => activeSessions.delete(session));
   });
 }
 
-function stopServer(srv: http2.Http2Server | null): Promise<void> {
+function stopServer(srv: MockServer | null): Promise<void> {
   return new Promise((resolve, reject) => {
     if (!srv) return resolve();
     // Destroy persistent h2 sessions (Next.js BFF keeps them alive)
@@ -665,7 +676,7 @@ export async function startMockBackend(): Promise<void> {
   });
 
   await new Promise<void>((resolve, reject) => {
-    traderServer = http2.createServer(traderHandler);
+    traderServer = http2.createSecureServer(tlsOptions(), traderHandler);
     trackSessions(traderServer);
     traderServer.on('error', reject);
     traderServer.listen(TRADER_MOCK_PORT, '127.0.0.1', () => resolve());
@@ -1260,7 +1271,7 @@ export async function startMockBackend(): Promise<void> {
   });
 
   await new Promise<void>((resolve, reject) => {
-    insightsServer = http2.createServer(insightsHandler);
+    insightsServer = http2.createSecureServer(tlsOptions(), insightsHandler);
     trackSessions(insightsServer);
     insightsServer.on('error', reject);
     insightsServer.listen(INSIGHTS_MOCK_PORT, '127.0.0.1', () => resolve());
@@ -1381,7 +1392,7 @@ export async function startMockBackend(): Promise<void> {
   });
 
   await new Promise<void>((resolve, reject) => {
-    configUiServer = http2.createServer(configUiHandler);
+    configUiServer = http2.createSecureServer(tlsOptions(), configUiHandler);
     trackSessions(configUiServer);
     configUiServer.on('error', reject);
     configUiServer.listen(CONFIG_UI_MOCK_PORT, '127.0.0.1', () => resolve());

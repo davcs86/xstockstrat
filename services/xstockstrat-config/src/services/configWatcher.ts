@@ -2,7 +2,7 @@
  * Shared ConfigWatcher for all Node.js services — subscribes to xstockstrat-config WatchConfig
  * gRPC stream; callers await waitForSnapshot() before accepting traffic.
  */
-import * as grpc from '@grpc/grpc-js';
+import * as mtls from '../mtls';
 import { EventEmitter } from 'events';
 import { ConfigServiceClient, ConfigSnapshot, ConfigValue } from '@xstockstrat/proto/config/v1/config';
 import { Environment, TradingMode } from '@xstockstrat/proto/common/v1/common';
@@ -24,7 +24,7 @@ export class ConfigWatcher extends EventEmitter {
     private readonly namespace: string,
   ) {
     super();
-    this.stub = new ConfigServiceClient(endpoint, grpc.credentials.createInsecure());
+    this.stub = new ConfigServiceClient(endpoint, mtls.clientCredentials(), mtls.targetOverride('xstockstrat-config'));
     this.snapshotPromise = new Promise((resolve) => {
       this.resolveSnapshot = resolve;
     });
