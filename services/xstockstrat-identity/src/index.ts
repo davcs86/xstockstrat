@@ -2,6 +2,7 @@ import { initTelemetry } from './telemetry';
 initTelemetry();
 
 import * as grpc from '@grpc/grpc-js';
+import * as mtls from './mtls';
 import { IdentityServiceService } from '@xstockstrat/proto/identity/v1/identity';
 import { Pool } from 'pg';
 import { ConfigWatcher } from './services/configWatcher';
@@ -53,7 +54,7 @@ async function main() {
 
   grpcServer.bindAsync(
     `0.0.0.0:${grpcPort}`,
-    grpc.ServerCredentials.createInsecure(),
+    mtls.serverCredentials(),
     (err, port) => {
       if (err) { log.error('Bind failed', { error: err.message }); process.exit(1); }
       grpcServer.start();

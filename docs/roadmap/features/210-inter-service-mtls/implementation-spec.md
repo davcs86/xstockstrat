@@ -281,7 +281,7 @@ cd services/xstockstrat-analysis && pytest --cov=app --cov-fail-under=40
 
 ### Step 7 — service: Node backends — mutual TLS on server binds + config-watcher + identity→ledger audit client
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`, `xstockstrat-ledger`, `xstockstrat-identity`, `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-config/src/index.ts` — modify (server bind)
@@ -325,7 +325,7 @@ grep -rn "createInsecure" services/xstockstrat-{config,ledger,identity,notify}/s
 
 ### Step 8 — test: Node in-process handshake + negative matrix + propagation + streaming-across-rotation (@AC-6)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`, `xstockstrat-ledger`, `xstockstrat-identity`, `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/mtls.test.ts` — create
@@ -548,6 +548,8 @@ grep -n "MTLS_CERT\|MTLS_KEY\|MTLS_CA_CERT" CLAUDE.md   # env convention note pr
 ---
 
 ## Deviation Log
+
+- **Step 8 — Node full `pnpm run test:coverage` suite deferred to CI (CI-equivalent fallback).** The services full suites need a live TimescaleDB (never start a DB — HARD CONSTRAINT; fails.md:369). Ran the new `src/__tests__/mtls.test.ts` per service via its own runner (config/notify compiled `node --test dist`; ledger/identity `node --experimental-strip-types --test src`): config 5, notify 5, ledger 6, identity 5 — all green. CI (Node 24) runs the full coverage suite. **Disposition**: CI-equivalent fallback. Note: the strip-types runners require explicit `.ts` relative-import extensions (fails.md:2224 is about vacuous-green, not applicable here since config/notify compile first and the strip-types imports resolve correctly).
 
 - **Step 6 — Python full `pytest --cov` suite deferred to CI (CI-equivalent fallback).** The services pytest suites need a live TimescaleDB (never start a DB — HARD CONSTRAINT; fails.md:369). Ran the new `tests/test_mtls.py` in each service venv (`.venv/bin/python -m pytest`, per the venv-interpreter trap in fails.md): 5/5 green x3 (indicators/ingest/analysis). No `pyproject.toml` was touched, so no `uv lock` is needed. CI runs `pytest --cov=app --cov-fail-under` against the managed DB. **Disposition**: CI-equivalent fallback.
 

@@ -196,3 +196,15 @@
 - Files: indicators/ingest/analysis ×tests/test_mtls.py.
 - Verification: 5/5 green ×3 (via each service's `.venv/bin/python -m pytest`). Full `pytest --cov` suite deferred to CI (needs a DB — Deviation Log).
 - Covers: @AC-1, @AC-2, @AC-4, @AC-5.
+
+### Step 7 — service: Node backends mutual TLS [done]
+- Added `src/mtls.ts` to config/ledger/identity/notify (`serverCredentials` = ServerCredentials.createSsl(ca,[{private_key,cert_chain}],true); `clientCredentials` = credentials.createSsl(ca,key,cert); `targetOverride` = {'grpc.ssl_target_name_override': target}). Swapped all 4 `bindAsync` server creds to mtls.serverCredentials(); swapped the 3 wired config-watchers + config's dead copy + identity→ledger ledgerAudit.ts client creds to mtls.clientCredentials()+targetOverride. Streaming handlers + ledgerAudit PROPAGATED_HEADERS untouched.
+- Files: config/ledger/identity/notify ×{src/index.ts, src/mtls.ts}; ledger/identity/notify/config src/services/configWatcher.ts; identity src/grpc/ledgerAudit.ts.
+- Verification: tsc --noEmit clean ×4; eslint pass ×4 (only pre-existing no-explicit-any warnings, not in mtls.ts); zero createInsecure in non-test runtime code.
+
+### Step 8 — test: Node in-process handshake + negative matrix + propagation + rotation (@AC-6) [done]
+- `src/__tests__/mtls.test.ts` ×4 (openssl-minted CA+leaves, in-process grpc-js handshake over a generic echo method): @AC-4 fail-closed, @AC-2 mutual handshake, @AC-5 trio propagation, @AC-1 plaintext refused, negative matrix (wrong-CA + wrong-SAN). ledger adds @AC-6: a rotated leaf off the same CA is accepted (reconnect-with-rotated-cert).
+- **Per-service test-runner split (recorded):** config+notify run `tsc && node --test dist/*.js` (compiled → extensionless `../mtls` import); ledger+identity run `node --experimental-strip-types --test src/*.ts` (raw .ts → explicit `../mtls.ts` import, matching the existing `../telemetry.ts` convention). Using the wrong extension for a service's runner is ERR_MODULE_NOT_FOUND under strip-types.
+- Files: config/ledger/identity/notify ×src/__tests__/mtls.test.ts.
+- Verification: config 5/5, notify 5/5, ledger 6/6 (+rotation), identity 5/5 — all green (locally on Node 22; the compiled runners + explicit-.ts strip-types imports both work on Node 22). Full `pnpm run test:coverage` deferred to CI (needs DB — Deviation Log).
+- Covers: @AC-1, @AC-2, @AC-4, @AC-5, @AC-6.

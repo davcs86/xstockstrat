@@ -2,6 +2,7 @@ import { initTelemetry } from './telemetry';
 initTelemetry();
 
 import * as grpc from '@grpc/grpc-js';
+import * as mtls from './mtls';
 import { Pool } from 'pg';
 import { ConfigWatcher } from './services/configWatcher';
 import { NotifyServiceImpl } from './grpc/notifyServiceImpl';
@@ -51,7 +52,7 @@ async function main() {
 
   grpcServer.bindAsync(
     `0.0.0.0:${grpcPort}`,
-    grpc.ServerCredentials.createInsecure(),
+    mtls.serverCredentials(),
     (err, port) => {
       if (err) { log.error('Bind failed', { error: err.message }); process.exit(1); }
       grpcServer.start();
