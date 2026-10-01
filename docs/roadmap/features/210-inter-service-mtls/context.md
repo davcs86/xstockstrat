@@ -109,3 +109,42 @@
 - Negative-test matrix MUST include valid-CA/wrong-SAN rejection (the test that catches the R4 bug class).
 
 - Status: spec-ready → design-approved.
+
+## Session 2026-10-01 — sdd-spec
+
+- Generated implementation-spec.md with **14 steps**. Status → implementation-ready.
+- Structure (Model B): Step 1 cert foundation (`scripts/gen-dev-certs.sh` self-signed CA + 12 leaves,
+  both EKUs, SAN=service name) + connect-node client-cert spike resolved here; Steps 3/5/7 per-language
+  server-bind + client-dial swaps (Go / Python / Node), each with a paired in-process handshake test
+  (4/6/8); Steps 9–12 UI BFF + agent clients; Step 13 deployment env wiring + repo-wide no-plaintext
+  structural assert; Step 14 rolling-cutover runbook + Teardown.
+- **Discovery beyond recon (the one real divergence):** recon.md:50 said the agent has "2 channel
+  sites". Ground truth is **69 inline `grpc.aio.insecure_channel(...)` sites — 67 in `app/client.py`
+  (170…2355) + 2 in `app/auth.py:35,67`** — every tool method opens its own per-call channel, no shared
+  helper today. Step 11's factory refactor sweeps all 69. Recon's other path:line citations all verified
+  accurate (Go trading/portfolio/marketdata, Python ingest/analysis/indicators, Node config/ledger/
+  identity/notify, UI `makeTransport`, DO `PRIVATE_DOMAIN` dials, `DATABASE_CA_CERT` precedent).
+- Key codebase findings (grep-confirmed):
+  - Go server binds add `grpc.Creds` at `trading/cmd/server/main.go:127`, `portfolio:78`,
+    `marketdata:155`; dials swap `insecure.NewCredentials()` at `trading/internal/service/trading.go:180,184,188,192`,
+    `portfolio_service.go:109,113,117`, `marketdata_service.go:142,146` + the 3 config-watchers.
+  - Python: `add_insecure_port` → `add_secure_port` at `indicators/app/main.py:74`, `ingest:100`,
+    `analysis:88`; `insecure_channel` → `secure_channel(..., ssl_target_name_override)` at ingest 3 /
+    analysis 7 dials + 3 config-watchers. **Do NOT touch** the asyncpg DB-TLS `_ssl_ctx` at
+    `ingest/app/main.py:49-58` (Postgres, not gRPC).
+  - Node: `ServerCredentials.createInsecure()` → `createSsl(...true)` at `config/src/index.ts:52-54`,
+    `ledger:59-61`, `identity:54-56`, `notify:52-54`; clients at the 3 `configWatcher.ts:27` + identity
+    `ledgerAudit.ts:34`. config is server-only (no self-dial).
+  - UI single choke point `connectClients.ts:26-28` `makeTransport`; e2e mock `mock-backend.ts`
+    `http2.createServer` ×3 (`:668/1263/1384`) → `createSecureServer`.
+  - Deployment: `MTLS_*` absent from all 3 files; reuse compose `x-common-env:&common-env`
+    (`docker-compose.yml:15`) for the shared CA; `DATABASE_CA_CERT` env-string precedent
+    (`.do/app.dev.yaml:327-329`); `type: SECRET` precedent (`.do/app.yaml:38,82,…`) for `MTLS_KEY`.
+  - No `scripts/gen-dev-certs.sh` exists; `openssl` already in `scripts/setup-env.sh:113-114`.
+- AC coverage (C-15): @AC-1/2/4/5 across Go/Python/Node test steps (4/6/8), @AC-6 (rotation) in the Node
+  ledger/config test (Step 8), @AC-4 UI slice in Step 10 + repo-wide structural in Step 13. @AC-3 is
+  `@descoped` — no covering step, exempt per the sign-off note. All non-descoped scenarios covered.
+- Ledger reuse applied: no-CI-mesh → in-process/structural handshake tests (fails.md:369); grpcio
+  already TLS-capable, `uv lock` only if `pyproject.toml` touched (fails.md:389); feature-084 deploy-file
+  rebase flagged in Steps 13–14 (fails.md:364); Teardown-not-discharged-by-a-note enforced in Step 14
+  (fails.md:670).
