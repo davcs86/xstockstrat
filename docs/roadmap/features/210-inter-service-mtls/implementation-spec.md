@@ -476,7 +476,7 @@ grep -rn "insecure_channel" services/xstockstrat-agent/app/   # expect ZERO hits
 
 ### Step 13 — service: Wire cert env into all deployment files + repo-wide no-plaintext structural assert
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: deployment (`docker-compose.yml`, `.do/app.dev.yaml`, `.do/app.yaml`)
 **Files**:
 - `docker-compose.yml` — modify (add `MTLS_*` to the per-service env; a dev-cert bind-mount or env injection)
@@ -548,6 +548,8 @@ grep -n "MTLS_CERT\|MTLS_KEY\|MTLS_CA_CERT" CLAUDE.md   # env convention note pr
 ---
 
 ## Deviation Log
+
+- **Step 13 — added `scripts/mtls-dev-env.sh` (not in the step Files list).** Instruction 1 requires the compose cert material be "sourced from the gen-dev-certs.sh output (env PEM string …)". Docker Compose cannot interpolate a multiline PEM from its `.env` file, so the robust, prod-parity mechanism (code reads MTLS_* as PEM strings in both dev and prod) is shell-env interpolation fed by a sourced exporter. The helper reads `./certs/` and exports the per-service `<SVC>_MTLS_CERT`/`<SVC>_MTLS_KEY` plus the shared `MTLS_CA_CERT`. **Disposition**: in-scope per Instruction 1's "sourced from" requirement; surfaced here rather than silently expanding the stage-set (F-08).
 
 - **Step 11 — factory loads MTLS_* at CALL, not at import.** The spec text said "load … at import"; app/mtls.py loads inside `_load()` at each factory call, byte-for-byte mirroring the three backend `app/mtls.py` modules. Same fail-closed guarantee (the first `secure_channel`/`channel_credentials` raises when env is absent) and the module stays importable under pytest without a global MTLS_* env, which Step 12's absent-env test requires. **Disposition**: intentional consistency choice; fail-closed semantics preserved.
 - **Step 12 — full `pytest --cov=app --cov-fail-under=40` deferred to CI (CI-equivalent fallback).** Ran `pytest tests/test_mtls.py` directly (4 passed) rather than the whole agent suite + coverage gate. CI (Node/Python matrix) runs the full `python-test` job. **Disposition**: CI-equivalent fallback.

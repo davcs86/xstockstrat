@@ -16,6 +16,10 @@ x-common-env: &common-env
   APPLICATION_ENV: development
   TRADING_MODE: paper
   OTEL_ENABLED: ${OTEL_ENABLED:-false}
+  # Feature 210: inter-service mutual TLS. Shared platform CA (public) rides common-env;
+  # each service's own leaf+key (MTLS_CERT/MTLS_KEY) are per-service below. Fail-closed: a service
+  # refuses to boot if any is empty. Populate for local dev via: source scripts/mtls-dev-env.sh
+  MTLS_CA_CERT: ${MTLS_CA_CERT:-}
 
 # &db-url       Constructed from POSTGRES_PASSWORD (set in .env) and the bridged-network
 #               hostname. Merged into environment: for all services that use the DB.
@@ -117,6 +121,8 @@ services:
     env_file: [".env.local"]
     environment:
       <<: [*common-env, *db-url]
+      MTLS_CERT: ${CONFIG_MTLS_CERT:-}
+      MTLS_KEY: ${CONFIG_MTLS_KEY:-}
       GRPC_PORT: "50060"
       SERVICE_NAME: config
       DB_POOL_MAX: "2"
@@ -148,6 +154,8 @@ services:
     env_file: [".env.local"]
     environment:
       <<: [*common-env, *db-url]
+      MTLS_CERT: ${LEDGER_MTLS_CERT:-}
+      MTLS_KEY: ${LEDGER_MTLS_KEY:-}
       GRPC_PORT: "50057"
       CONFIG_ENDPOINT: xstockstrat-config:50060
       WAIT_FOR: "xstockstrat-config:50060"
@@ -180,6 +188,8 @@ services:
     env_file: [".env.local"]
     environment:
       <<: [*common-env, *db-url]
+      MTLS_CERT: ${IDENTITY_MTLS_CERT:-}
+      MTLS_KEY: ${IDENTITY_MTLS_KEY:-}
       GRPC_PORT: "50058"
       CONFIG_ENDPOINT: xstockstrat-config:50060
       LEDGER_ENDPOINT: xstockstrat-ledger:50057
@@ -214,6 +224,8 @@ services:
     env_file: [".env.local"]
     environment:
       <<: [*common-env, *db-url]
+      MTLS_CERT: ${NOTIFY_MTLS_CERT:-}
+      MTLS_KEY: ${NOTIFY_MTLS_KEY:-}
       GRPC_PORT: "50059"
       CONFIG_ENDPOINT: xstockstrat-config:50060
       LEDGER_ENDPOINT: xstockstrat-ledger:50057
@@ -255,6 +267,8 @@ services:
     env_file: [".env.local"]
     environment:
       <<: [*common-env, *db-url]
+      MTLS_CERT: ${MARKETDATA_MTLS_CERT:-}
+      MTLS_KEY: ${MARKETDATA_MTLS_KEY:-}
       GRPC_PORT: "50053"
       CONFIG_ENDPOINT: xstockstrat-config:50060
       LEDGER_ENDPOINT: xstockstrat-ledger:50057
@@ -290,6 +304,8 @@ services:
     env_file: [".env.local"]
     environment:
       <<: [*common-env, *db-url]
+      MTLS_CERT: ${INDICATORS_MTLS_CERT:-}
+      MTLS_KEY: ${INDICATORS_MTLS_KEY:-}
       GRPC_PORT: "50054"
       CONFIG_ENDPOINT: xstockstrat-config:50060
       LEDGER_ENDPOINT: xstockstrat-ledger:50057
@@ -324,6 +340,8 @@ services:
     env_file: [".env.local"]
     environment:
       <<: [*common-env, *db-url]
+      MTLS_CERT: ${INGEST_MTLS_CERT:-}
+      MTLS_KEY: ${INGEST_MTLS_KEY:-}
       GRPC_PORT: "50055"
       CONFIG_ENDPOINT: xstockstrat-config:50060
       MARKETDATA_ENDPOINT: xstockstrat-marketdata:50053
@@ -360,6 +378,8 @@ services:
     env_file: [".env.local"]
     environment:
       <<: [*common-env, *db-url]
+      MTLS_CERT: ${ANALYSIS_MTLS_CERT:-}
+      MTLS_KEY: ${ANALYSIS_MTLS_KEY:-}
       GRPC_PORT: "50056"
       CONFIG_ENDPOINT: xstockstrat-config:50060
       MARKETDATA_ENDPOINT: xstockstrat-marketdata:50053
@@ -401,6 +421,8 @@ services:
     env_file: [".env.local"]
     environment:
       <<: [*common-env, *db-url]
+      MTLS_CERT: ${PORTFOLIO_MTLS_CERT:-}
+      MTLS_KEY: ${PORTFOLIO_MTLS_KEY:-}
       GRPC_PORT: "50052"
       CONFIG_ENDPOINT: xstockstrat-config:50060
       LEDGER_ENDPOINT: xstockstrat-ledger:50057
@@ -432,6 +454,8 @@ services:
     env_file: [".env.local"]
     environment:
       <<: [*common-env, *db-url]
+      MTLS_CERT: ${TRADING_MTLS_CERT:-}
+      MTLS_KEY: ${TRADING_MTLS_KEY:-}
       GRPC_PORT: "50051"
       CONFIG_ENDPOINT: xstockstrat-config:50060
       LEDGER_ENDPOINT: xstockstrat-ledger:50057
@@ -472,6 +496,8 @@ services:
     env_file: [".env.local", ".env.fe.local"]
     environment:
       <<: [*common-env, *db-url]
+      MTLS_CERT: ${UI_MTLS_CERT:-}
+      MTLS_KEY: ${UI_MTLS_KEY:-}
       # gRPC endpoints (host:port, no protocol) — server-side only
       TRADING_ENDPOINT: xstockstrat-trading:50051
       PORTFOLIO_ENDPOINT: xstockstrat-portfolio:50052
@@ -527,6 +553,8 @@ services:
     env_file: [".env.local"]
     environment:
       <<: *common-env
+      MTLS_CERT: ${AGENT_MTLS_CERT:-}
+      MTLS_KEY: ${AGENT_MTLS_KEY:-}
       INGEST_ENDPOINT: xstockstrat-ingest:50055
       NOTIFY_ENDPOINT: xstockstrat-notify:50059
       ANALYSIS_ENDPOINT: xstockstrat-analysis:50056
