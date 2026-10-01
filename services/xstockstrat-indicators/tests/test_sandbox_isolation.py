@@ -313,3 +313,13 @@ class TestSeccompAllowlistShape:
             "pidfd_getfd",
         ):
             assert denied not in allow, f"{denied} must NEVER be in the allowlist (containment)"
+
+
+class TestSeccompImportOrder:
+    def test_pyseccomp_imported_before_nproc_cap(self):
+        """pyseccomp resolves libseccomp by forking ldconfig; under RLIMIT_NPROC that fork fails."""
+        from app.services.sandbox import _SANDBOX_WRAPPER
+
+        assert _SANDBOX_WRAPPER.index("import pyseccomp") < _SANDBOX_WRAPPER.index(
+            "setrlimit(resource.RLIMIT_NPROC"
+        )

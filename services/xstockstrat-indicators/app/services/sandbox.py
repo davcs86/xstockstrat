@@ -259,6 +259,9 @@ if os.geteuid() == 0:
 # NO_NEW_PRIVS: required for an unprivileged seccomp load; never disable (pyseccomp also sets it).
 ctypes.CDLL(None, use_errno=True).prctl(38, 1, 0, 0, 0)  # PR_SET_NO_NEW_PRIVS
 
+# Import before RLIMIT_NPROC: pyseccomp's find_library forks ldconfig, which fails under the cap.
+import pyseccomp as _seccomp
+
 # Expanded rlimits. RLIMIT_DATA (heap + anon mmap) not RLIMIT_AS — numpy/pandas reserve huge virtual
 # space on import that RLIMIT_AS would reject before any real use (INDICATORS-2). CPU/NPROC derive
 # from config (timeout_ms/max_concurrent); FSIZE=0/NOFILE=64 are jail constants.
@@ -271,7 +274,6 @@ resource.setrlimit(resource.RLIMIT_NOFILE, (64, 64))
 
 # seccomp-BPF allowlist: ERRNO(EPERM) default; native arch only (compat x86/x32 NOT added → they
 # fail closed to EPERM). The network/exec/io_uring/ptrace/process_vm/pidfd families are absent.
-import pyseccomp as _seccomp
 _flt = _seccomp.SyscallFilter(defaction=_seccomp.ERRNO(errno.EPERM))
 for _sc in {seccomp_allow!r}:
     try:
