@@ -3,6 +3,8 @@
 **Development Branch**: `feature/extract-tool-ssrf-hardening`
 **Created**: 2026-09-25
 **Last Updated**: 2026-09-25
+**Committed to main**: 27f3f276b39fa79d07b4de6c023582f72539aac3
+**Launched date**: 2026-10-01
 
 ---
 
@@ -17,6 +19,7 @@
 | 2026-09-28 | `implementation-ready` → `in-progress` | /sdd-execute | Steps 1-2 landed (egress validators + tests) |
 | 2026-09-28 | `in-progress` → `code-completed` | /sdd-execute | All 7 steps done — 3-layer SSRF hardening (deny-by-range `not is_global` validator + IPv4-mapped unwrap; DNS-rebind-safe pinning httpx transport; hardened `_fetch_url` manual redirect loop with per-hop scheme + literal-IP target re-validation, cross-origin credential strip, streamed byte-cap, config-sourced `agent.extract.*` limits, FR-6 non-enumerating error). 474 tests pass, egress.py 94%. Deviations DEV-1..DEV-4 logged. Teardown done manually (context-forge plugin unavailable): reconciled service CLAUDE.md, config-governance keys log, mcp-tools.md error tables. |
 
+| 2026-10-01 | `code-completed` → `launched` | CI workflow | Promoted via PR #1205; committed 27f3f276b39fa79d07b4de6c023582f72539aac3 |
 ---
 
 ## Artifacts

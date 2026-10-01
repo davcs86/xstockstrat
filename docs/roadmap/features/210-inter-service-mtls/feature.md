@@ -3,6 +3,8 @@
 **Development Branch**: `feature/inter-service-mtls`
 **Created**: 2026-09-25
 **Last Updated**: 2026-09-25
+**Committed to main**: 27f3f276b39fa79d07b4de6c023582f72539aac3
+**Launched date**: 2026-10-01
 
 ---
 
@@ -16,6 +18,7 @@
 | 2026-10-01 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 14 steps (Model B: cert foundation → per-language mutual-TLS wiring Go/Python/Node → UI BFF + agent clients → deployment env → rolling-cutover runbook + Teardown). Every step cites grep-confirmed `path:line` evidence. Discovery beyond recon: the agent has **69 inline `insecure_channel` sites** (67 in `client.py` + 2 in `auth.py`), not the 2 recon summarized — its factory refactor sweeps all 69. AC coverage: @AC-1/2/4/5 across the Go/Python/Node test steps, @AC-6 (rotation) in the Node ledger/config test, @AC-3 `@descoped` (no covering step, exempt). |
 | 2026-10-01 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential execution started. Steps 1-2 landed: `scripts/gen-dev-certs.sh` (self-signed dev CA + 12 per-service leaves, SAN=service name, both EKUs, `--rotate` for @AC-6) + structural cert test + `docs/patterns/inter-service-mtls.md` env contract. connect-node client-cert spike RESOLVED (nodeOptions pass-through; no grpc-js fallback). |
 
+| 2026-10-01 | `code-completed` → `launched` | CI workflow | Promoted via PR #1205; committed 27f3f276b39fa79d07b4de6c023582f72539aac3 |
 ---
 
 ## Artifacts

@@ -254,3 +254,10 @@
   - **Fixed 3 grounded-drift sites**: (1) root `docs/context-constitution.md` **PLAT-N3** "Internal gRPC is plaintext" → rewritten to "Internal gRPC is mutual TLS" (kept the still-true keepalive/GOAWAY/benign-reconnect norm, re-cited to the mtls modules); (2) `services/xstockstrat-agent/docs/context-constitution.md` **AGENT-1** `insecure_channel` → `mtls.secure_channel` (connect-per-call shape unchanged); (3) its pointer row likewise.
   - **Deliberately left unchanged**: `docs/reports/2026-09-16-trading-system-security-audit.md` — a DATED point-in-time report (the audit that motivated feature 210); dated reports are immutable historical snapshots, not drift.
   - No per-service backend constitution asserted plaintext transport (they document propagation/keepalive, not credentials), so no further edits. This reconciliation is recorded in the integration PR body per fails.md:670.
+
+## Session 2026-10-01 (CI: feature status automation)
+
+- Promotion PR #1205 merged to main
+- Feature promoted and committed: 27f3f276b39fa79d07b4de6c023582f72539aac3
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-10-01

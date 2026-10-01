@@ -275,3 +275,10 @@
     note, and historical feature-169/208/212 records (correct to leave).
 - H-5 closure verified: no db_ tool defs / postgres_mcp_client / sqlglot import in agent app; no
   POSTGRES_MCP wiring in any deploy file; no SQL-over-MCP surface anywhere.
+
+## Session 2026-10-01 (CI: feature status automation)
+
+- Promotion PR #1205 merged to main
+- Feature promoted and committed: 27f3f276b39fa79d07b4de6c023582f72539aac3
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-10-01

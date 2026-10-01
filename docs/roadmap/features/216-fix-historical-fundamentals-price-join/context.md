@@ -247,3 +247,10 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - EDGAR fiscal_period relabel: `Found=false` → DO-NOTHING no-ops stale row, out of scope (design open risk).
   - Pre-211 currency residual: now fail-closed + covered by currency-mismatch test.
 - Status: `implementation-ready` → `code-completed`.
+
+## Session 2026-10-01 (CI: feature status automation)
+
+- Promotion PR #1205 merged to main
+- Feature promoted and committed: 27f3f276b39fa79d07b4de6c023582f72539aac3
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-10-01

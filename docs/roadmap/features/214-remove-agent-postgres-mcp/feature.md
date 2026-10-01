@@ -3,6 +3,8 @@
 **Development Branch**: `feature/remove-agent-postgres-mcp`
 **Created**: 2026-09-26
 **Last Updated**: 2026-09-27
+**Committed to main**: 27f3f276b39fa79d07b4de6c023582f72539aac3
+**Launched date**: 2026-10-01
 
 ---
 
@@ -18,6 +20,7 @@
 | 2026-09-28 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential execution started. Impl-spec review's 4 advisory warnings resolved pre-execution. Step 1 landed (db_* tools + orphans removed). |
 | 2026-09-28 | `in-progress` → `code-completed` | /sdd-execute | All 12 steps landed (sequential). db_* tools + postgres-mcp co-process + deps + deploy wiring + dead role block removed; count 52→43; direct budget 9→8; C-16 delete-and-promote; operator-db-access runbook added. |
 
+| 2026-10-01 | `code-completed` → `launched` | CI workflow | Promoted via PR #1205; committed 27f3f276b39fa79d07b4de6c023582f72539aac3 |
 ---
 
 ## Artifacts

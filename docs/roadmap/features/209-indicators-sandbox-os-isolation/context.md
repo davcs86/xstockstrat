@@ -217,3 +217,10 @@
 **Verification**: full agent... indicators suite 162 passed, sandbox.py 97% cov, TOTAL 84% (gate 50%);
 ruff clean; live smoke (as root) proved network/exec/secret/fork containment + numeric parity.
 **Next**: C-16 promotion + integration PR (feature-end checkpoint).
+
+## Session 2026-10-01 (CI: feature status automation)
+
+- Promotion PR #1205 merged to main
+- Feature promoted and committed: 27f3f276b39fa79d07b4de6c023582f72539aac3
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-10-01

@@ -3,6 +3,8 @@
 **Development Branch**: `feature/indicators-sandbox-os-isolation`
 **Created**: 2026-09-25
 **Last Updated**: 2026-09-25
+**Committed to main**: 27f3f276b39fa79d07b4de6c023582f72539aac3
+**Launched date**: 2026-10-01
 
 ---
 
@@ -17,6 +19,7 @@
 | 2026-09-28 | `implementation-ready` → `in-progress` | /sdd-execute | Steps 1-2 landed (pyseccomp dep + libseccomp Dockerfile; sandbox.py OS-isolation rewrite + servicer max_concurrent wiring). Execute sandbox is root + libseccomp present → full seccomp+setuid stack verified LOCALLY (not deferred): live smoke shows benign numpy→success (FR-4 parity), socket→contained, disallowed import→import_blocked. |
 | 2026-09-28 | `in-progress` → `code-completed` | /sdd-execute | All 4 steps done. Step 3: 19 isolation tests (@AC-1..6) + full suite 162 passed, sandbox.py 97% coverage (omit removed), pre-existing suite green (FR-4/C-16). Step 4 docs reconciled (CLAUDE.md Sandbox Security Model + Docker Build Pattern; context-constitution INDICATORS-6..9 + re-grounded anchors; indicator-builder runbook). Teardown: context-constitution plugin unavailable → manual reconciliation performed + recorded. Next: C-16 promotion + integration PR. |
 
+| 2026-10-01 | `code-completed` → `launched` | CI workflow | Promoted via PR #1205; committed 27f3f276b39fa79d07b4de6c023582f72539aac3 |
 ---
 
 ## Artifacts

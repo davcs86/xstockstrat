@@ -6,6 +6,8 @@
 **Severity**: SEV-3
 **Created**: 2026-09-27
 **Last Updated**: 2026-09-27
+**Committed to main**: 27f3f276b39fa79d07b4de6c023582f72539aac3
+**Launched date**: 2026-10-01
 
 ---
 
@@ -18,6 +20,7 @@
 | 2026-09-27 | `spec-ready` → `design-approved` | /sdd-design | Design debated (5 rounds, full/deep) and approved; recon.md + design.md written. User signed off on the C-16 CHANGE (overwrite=true may overwrite the 5 derived price columns) |
 | 2026-09-27 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 4 steps (marketdata-only: repo reader/writer + source type, service recovery loop, two paired tests) |
 
+| 2026-10-01 | `code-completed` → `launched` | CI workflow | Promoted via PR #1205; committed 27f3f276b39fa79d07b4de6c023582f72539aac3 |
 ---
 
 ## Artifacts

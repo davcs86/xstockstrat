@@ -223,3 +223,10 @@
   DEV-3 (dropped unused httpx import), DEV-4 (@AC-5 app-layer literal-IP redirect re-validation) — all in
   impl-spec Deviation Log with rationale. Zero open sdd-review impl-spec warnings ([ ] unaddressed): none
   were carried in. Next: C-16 promotion + integration PR #1200 finalize.
+
+## Session 2026-10-01 (CI: feature status automation)
+
+- Promotion PR #1205 merged to main
+- Feature promoted and committed: 27f3f276b39fa79d07b4de6c023582f72539aac3
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-10-01
