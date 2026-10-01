@@ -29,10 +29,17 @@ FR-1. Every inter-service gRPC connection MUST use mutual TLS: the server presen
 client verifies against the platform CA, **and** the client presents a certificate the server
 verifies against the platform CA. Plaintext/`insecure` gRPC MUST be refused in production.
 
-FR-2. The peer's **service identity** (encoded in the certificate — e.g. SPIFFE ID or a per-service
-CN/SAN) MUST be verified, so one service cannot impersonate another even with a valid-but-different
-platform-issued cert. The header-trust boundary is re-anchored to this authenticated identity: the
-propagated `x-*` trio is honored only on a mutually-authenticated channel.
+FR-2. _(Narrowed at /sdd-design, 4-round debate, operator sign-off recorded in `context.md`
+2026-10-01 — see `design.md` and the `@AC-3 @descoped` note below.)_ The peer MUST present a
+**platform-CA-issued service leaf** (SAN = registry service name), verified by **native chain + SAN
+matching** against the platform CA — mutual-handshake authentication, with the client's verification
+identity pinned to the target service name (env-independent across compose and DO `PRIVATE_DOMAIN`
+dial hosts). The header-trust boundary is re-anchored to this mutually-authenticated channel: the
+propagated `x-*` trio is honored only on a channel where both peers presented valid platform leaves.
+**Out of scope (deferred follow-up):** binding specific RPC authorizations to the peer's cert SAN
+(per-RPC identity ACL) — the existing `x-internal-caller`/access-scope gates (features 147/154) stay
+byte-identical, so a compromised service holding any platform leaf can still forge `x-internal-caller`.
+That per-RPC impersonation defense was explicitly descoped from this feature (originally `@AC-3`).
 
 FR-3. A certificate issuance and **rotation** mechanism MUST be defined — a platform CA plus
 per-service leaf certs, rotatable without service downtime (expiry/rollover handled). The concrete

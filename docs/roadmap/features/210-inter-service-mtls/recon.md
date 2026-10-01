@@ -76,7 +76,7 @@ The transport change must not regress any of these (all defaulted PRESERVE):
 - **PRESERVE** `@AC-3 @FR-2/3 @feature-166` ingest resolves bearer via GetSecret with `x-internal-caller` (`services/xstockstrat-ingest/acceptance/mcp-client-signal-source.feature`).
 - **PRESERVE** `@AC-2/@AC-1 @regression @feature-174` WatchConfig `client_id` prefix `ingest-`/`analysis-` (`services/xstockstrat-{ingest,analysis}/acceptance/fix-config-watcher-client-id.feature`) — app-layer client_id must NOT be conflated with/replaced by transport cert identity.
 - **PRESERVE** `@AC-1/@AC-7 @feature-021` ledger ExportEvents NDJSON stream in sequence order, 1M rows without buffering (`docs/sdd/business-rules/platform.feature`); `@AC-11 @feature-021` export returns only the authed user's events (`services/xstockstrat-ledger/acceptance/ledger-event-export.feature`) — streaming + backpressure survive mTLS.
-- **PRESERVE** `@AC-4 @FR-3 @feature-165` emitted alert delivered to StreamAlerts subscribers (`services/xstockstrat-notify/acceptance/pwa-notifications.feature`).
+- **PRESERVE** `@AC-5/@AC-6 @feature-165` emitted alert delivered to StreamAlerts subscribers (`services/xstockstrat-notify/acceptance/pwa-notifications.feature`) — the StreamAlerts in-process delivery guarantee (NOT `@AC-4`, which is Web Push to stored endpoints; corrected at design R4).
 - **PRESERVE** `@AC-2 @FR-3 @feature-042` analysis pnl_pattern_consumer rides ledger StreamEvents (`services/xstockstrat-analysis/acceptance/order-snapshots-pnl-patterns.feature`).
 - **PRESERVE (cross-cutting)** `@AC-8 @feature-147` MCP_AGENT_SECRET absent from codebase/deploy (`platform.feature`) — the mTLS design must NOT reintroduce a shared inter-service secret, including as a relaxed-dev fallback.
 

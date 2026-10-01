@@ -12,13 +12,16 @@
 |---|---|---|---|
 | 2026-09-25 | `idea` → `draft` | /sdd-story | Product spec generated (closes security-audit DT-3 — inter-service transport authentication / mTLS) |
 | 2026-09-30 | `draft` → `spec-ready` | /sdd-review | Product spec approved (PASS, 0 warnings). Sole first-pass blocker (criterion 9 — five unchecked Open Questions) fixed pre-advance by reframing `## Open Questions` → `## Design-Phase Decisions (deferred to /sdd-design)` — all items checked `[x]` with resolution pointers; these are genuine design forks (FR-3 names its mechanism "a design decision"), not spec defects. Overlap scan: no FAIL-level collision (no proto-field / migration-NNN / duplicate-config-key). Soft rebase-level same-file overlap with feature 084 (`droplet-compose-deploy`) on `docker-compose.yml` / `.do/app*.yaml` — recorded as a coordination note (folded into the design agenda), not a blocking merge-order row; if 084 lands first, 210's dev cert wiring re-targets its dev orchestration model. |
+| 2026-10-01 | `spec-ready` → `design-approved` | /sdd-design | Design debated (4 rounds, full) + approved; recon.md + design.md written. Chosen: **Model B** — flag-day per-service mutual TLS, no permissive/toggle mode; static per-service leaf from one self-signed platform CA, env-PEM boot-time (`MTLS_CERT`/`MTLS_KEY`/`MTLS_CA_CERT`, never WatchConfig — config-bootstrap circularity, F-07 honored); fail-closed on absent material; native chain+SAN verification with the client authority **pinned to the service name uniformly** (env-independent — DO dials `PRIVATE_DOMAIN` ≠ SAN, verified against `.do/app*.yaml:56-67`); single leaf both-EKU; header-only gates preserved (features 147/154 byte-identical — **@AC-3 descoped / FR-2 narrowed, operator sign-off**, no C-16 cross-feature change); leaf→root rolling cutover with the trading↔ledger wave gated on a **mandatory flat-book + HALTED** precondition (bounded ledger-emit transition-event loss accepted by operator sign-off, same-class-as-restart, blast radius feature-042). DO re-origination resolved (internal_ports = L4 raw TCP, no TLS termination). Adversary caught across rounds: the `x-internal-caller` forgery hole (→ narrow-scope operator decision), the Go `InsecureSkipVerify` fail-open footgun (→ `ServerName` native verify), and the **DO `PRIVATE_DOMAIN`≠SAN show-stopper** (→ uniform authority pinning). No Floor breach. Open risks → `design.md` §Open Risks. |
 
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
+- [Product Spec](product-spec.md) — requirements and governance (FR-2 narrowed at design)
+- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15; `@AC-3 @descoped`, `@AC-4` rewritten for Model B)
+- [Recon Dossier](recon.md) — grounded codebase map across all 10 backends + UI/agent clients + deployment; DO env-only + config-bootstrap constraints (Phase 0)
+- [Design](design.md) — Model B chosen approach, 6 rejected alternatives, open risks, C-16 preserve/narrow record (Phase 1, 4 rounds)
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec inter-service-mtls`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -43,7 +46,7 @@ re-run /sdd-spec if the registry changes.)_
 
 | Role | Review Focus |
 |---|---|
-| Security | Mutual authentication is enforced (server AND client cert verified against the platform CA), peer service identity is verified so one service cannot impersonate another, plaintext gRPC is refused in production, and the header-trust model is re-anchored to authenticated identity; CA/key material handling and rotation are sound |
+| Security | Mutual authentication is enforced (server AND client cert verified against the platform CA via native chain+SAN matching, authority pinned to the service name), plaintext gRPC is refused in every environment (fail-closed on absent cert material), and the header-trust model is re-anchored to the mutually-authenticated channel; CA/key material handling and rotation are sound. **Scope note (design-approved, operator sign-off):** per-RPC identity ACL bound to the peer cert SAN is descoped (`@AC-3 @descoped`) — the app-layer `x-internal-caller`/access-scope gates (features 147/154) stay header-only, so a compromised service holding any platform leaf can still forge `x-internal-caller` (documented follow-up) |
 | Platform lead | Cross-cutting rollout across all gRPC servers/clients (10 backends + agent + UI clients), cert issuance/rotation mechanism and deployment topology (DO App Platform + docker-compose), no-downtime migration path, local-dev ergonomics |
 | `xstockstrat-trading` / `xstockstrat-portfolio` / `xstockstrat-marketdata` | Go gRPC server+client credentials swap from `insecure` to mTLS; interceptor/header-propagation semantics unchanged beneath the new transport |
 | `xstockstrat-indicators` / `xstockstrat-ingest` / `xstockstrat-analysis` | Python gRPC (aio) server+channel credentials swap; per-request propagation unchanged |
@@ -51,4 +54,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-design inter-service-mtls` — recon + adversarial design debate (full mode: largest blast radius — 10 backends + 2 gRPC clients + deployment topology). Resolve the six Design-Phase Decisions before /sdd-spec.
+`/sdd-spec inter-service-mtls` — generate the implementation spec from the approved Model B design (recon.md + design.md). Then `/sdd-review inter-service-mtls impl-spec` before `/sdd-execute`.

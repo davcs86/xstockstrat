@@ -2400,3 +2400,8 @@ ambiguity is logged here).
 - **Rule it implies**: for any test that spawns `sys.executable` (sandbox/subprocess tests), run the
   suite through the **service venv** interpreter, never a global tool pytest — the child inherits the
   parent's interpreter and its site-packages.
+
+### 2026-10-01 — inter-service-mtls — assumption
+- **Mistake**: A design round assumed inter-service clients dial the bare service name (`xstockstrat-<svc>:<port>`), so a TLS leaf with `SAN=xstockstrat-<svc>` would verify natively with no authority override. In DigitalOcean App Platform the deploy specs actually dial `${xstockstrat-<svc>.PRIVATE_DOMAIN}:<port>` (`.do/app.yaml:56-67`, `.do/app.dev.yaml:56-67`) — a DO-generated FQDN ≠ the SAN. Native SAN/hostname matching would therefore fail fail-closed on every non-Go dial in DO on mTLS cutover (a platform-wide outage), while compose (bare name) and in-process tests (loopback) would pass — hiding the bug until deploy.
+- **Evidence**: feature 210 design.md §Chosen Approach (uniform authority pinning), context.md 2026-10-01 R4 catch; `.do/app.yaml:56-67`; `.do/app.dev.yaml:56-67`.
+- **Rule it implies**: For any inter-service TLS/mTLS identity check, pin the client's verification identity (Go `tls.Config.ServerName`, Python/Node `grpc.ssl_target_name_override`, connect-node authority) to the **canonical service name**, never rely on dial-host==SAN — the dial host differs by environment (compose bare name vs DO `PRIVATE_DOMAIN` FQDN). And the handshake negative-test matrix must assert a valid-CA/**wrong-SAN** cert is rejected, not only a wrong-CA cert — that is the only test that proves the SAN is actually checked and would catch this class in-process.

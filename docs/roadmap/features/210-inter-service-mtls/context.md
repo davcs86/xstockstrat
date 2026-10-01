@@ -49,3 +49,63 @@
   over the very channel mTLS secures — design must source the enforce flag + cert material outside
   the config stream (env/mounted).
 - Branch `feature/inter-service-mtls` created from `main-dev` for this and subsequent phases.
+
+## Session 2026-10-01 — sdd-design (Phase 0 recon + Phase 1 debate, 4 rounds full)
+
+- Phase 0 Recon: wrote recon.md from 7 discovery passes (Go/Python/Node backends, UI BFF, agent,
+  deployment, scenario-recon C-16). Key reuse patterns: env-PEM string cert delivery (DATABASE_CA_CERT
+  precedent), compose `x-common-env` anchor, boot-time env read (not WatchConfig), single UI
+  `makeTransport` choke point, grpcio/grpc-js/Go-stdlib built-in TLS (no new dep).
+- Phase 1 Grilling: 4 rounds (full). **Chosen: Model B** — flag-day per-service mutual TLS, no
+  permissive/toggle mode; static per-service leaf from one self-signed platform CA; env-PEM boot-time
+  (`MTLS_CERT`/`MTLS_KEY`/`MTLS_CA_CERT`); fail-closed; native chain+SAN verify with client authority
+  **pinned to the service name uniformly** (env-independent); single leaf both-EKU; restart-only
+  rotation (reconnect/replay); leaf→root cutover, trading↔ledger adjacent under a mandatory
+  flat-book+HALTED precondition; rollback = flag-day-with-transient-window via code+env asymmetry
+  (never strip cert env). Rejected: SPIRE/cloud-CA (DO no-mount), per-RPC SAN authz (C-16 CHANGE),
+  Model A permissive window (FR-4/@AC-4 collision), Go InsecureSkipVerify (fail-open footgun),
+  dial-host==SAN (DO PRIVATE_DOMAIN≠SAN), multi-SAN-of-FQDN, shared mTLS lib.
+- Constitution rules touched: C-03/C-05/C-08/C-14/C-15/C-16/C-18, F-07 (honored — env not WatchConfig),
+  F-02/F-03/F-04. **No Floor breach.**
+
+### DECISIONS & OPERATOR SIGN-OFFS (this session, via AskUserQuestion)
+
+1. **C-16 identity-gate fork → "Keep header-only, narrow scope"** (operator sign-off, 2026-10-01).
+   Features 147/154 `x-internal-caller` gates stay byte-identical (no C-16 cross-feature CHANGE).
+   THIS feature's `@AC-3` is **descoped** (per-RPC identity ACL not built) and **FR-2 narrowed** to
+   native chain+SAN mutual-handshake verification. Accepted residual: a compromised service holding any
+   platform leaf can still forge `x-internal-caller` (documented follow-up). Reconciled in
+   product-spec.md (FR-2), acceptance.feature (`@AC-3 @descoped`, no covering test; `@AC-4` rewritten
+   for Model B), feature.md Security reviewer row.
+2. **Rollout → "No permissive; release-ordered" then → Model B flag-day, no toggle** (operator, across
+   gates). No plaintext path in any environment; dev runs full mTLS with gen-dev-certs.
+3. **DO re-origination → confirmed internal_ports = L4 raw TCP, no TLS termination** (WebSearch +
+   DO docs). Mechanism works on App Platform prod; does NOT depend on feature 084's droplet.
+4. **Bounded ledger-emit transition-event loss during cutover → operator sign-off** (2026-10-01).
+   `emitLedgerEvent` (trading.go:3482) is fire-and-forget/no-retry; HALTED does not stop `pollFills`
+   emitting on open-order fills → a **mandatory flat-book precondition** gates the trading↔ledger wave.
+   Residual is same-class-as-restart (042 pnl consumer already tolerates restart gaps). Enforced in the
+   Step-7 deploy runbook; asserted fail-soft/one-shot in Step 6.
+
+### Round-by-round adversary catches (durable)
+
+- R1: EXTEND fails this feature's own `@AC-3` — the `x-internal-caller` gates authorize on the forgeable
+  header; handshake-only peer auth leaves the DT-3 impersonation hole open. → operator narrowed scope.
+- R3: Go `InsecureSkipVerify:true` disables ALL validation (not just hostname) → silent fail-open on a
+  security feature. → `tls.Config.ServerName` native chain+SAN verify instead.
+- R4: **DO deploy specs dial `${xstockstrat-<svc>.PRIVATE_DOMAIN}:<port>` ≠ leaf SAN** (verified
+  `.do/app.yaml:56-67`, `.do/app.dev.yaml:56-67`). Dropping the client authority override would fail
+  native SAN matching across every non-Go dial in DO → platform-wide outage on cutover. → **uniform
+  service-name authority pinning** in all languages (Go ServerName / Python+Node
+  `ssl_target_name_override` / UI connect-node authority). Load-bearing correction.
+
+### Open Risks carried to /sdd-spec + /sdd-execute (see design.md §Open Risks)
+
+- Bounded ledger-emit loss (signed-off) — Step-7 flat-book gate + Step-6 fail-soft/one-shot assert.
+- connect-node `createGrpcTransport` client-cert pass-through — spike in Step 1, grpc-js stub fallback.
+- DO health-gated-promotion + rollback-to-previous-deployment semantics — verify at execute.
+- Feature 084 deploy-file rebase — execute-time coordination (external-edge Caddy is orthogonal).
+- `@AC-6` "no service downtime" satisfied as reconnect-without-data-loss, not zero restart.
+- Negative-test matrix MUST include valid-CA/wrong-SAN rejection (the test that catches the R4 bug class).
+
+- Status: spec-ready → design-approved.
