@@ -1,6 +1,6 @@
 # Implementation Spec: inter-service-mtls
 
-**Status**: `pending`
+**Status**: `code-completed`
 **Created**: 2026-10-01
 **Feature**: `docs/roadmap/features/210-inter-service-mtls/feature.md`
 **Total Steps**: 14
