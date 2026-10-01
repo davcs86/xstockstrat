@@ -96,6 +96,14 @@ ok "  packages/proto/gen/go/"
 ok "  packages/proto/gen/python/"
 ok "  packages/proto/gen/ts/"
 
+# ── Generate dev mTLS material ───────────────────────────────────────────────
+# Inter-service gRPC is mutual-TLS (feature 210); every service needs a dev leaf + the dev CA
+# before `docker compose up`, or it fails closed on boot. See docs/patterns/inter-service-mtls.md.
+section "Generating dev mTLS certificates"
+info "Running scripts/gen-dev-certs.sh (self-signed dev CA + one leaf per service → ./certs/)"
+"$REPO_ROOT/scripts/gen-dev-certs.sh"
+ok "Dev mTLS material written to ./certs/ (git-ignored)"
+
 echo ""
 echo -e "${BOLD}Done. You can now run:${NC}"
 echo "  ./scripts/bootstrap.sh"

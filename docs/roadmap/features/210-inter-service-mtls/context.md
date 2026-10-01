@@ -157,3 +157,18 @@
   - Steps 3/5/7/14: brace-shorthand helper paths (`<trading|portfolio|marketdata>` etc.) and "each affected service's CLAUDE.md" are enumerable, not literal single paths — [x] acknowledged (clear/enumerable; each brace = 3 concrete files resolved by per-step discovery).
   - Step 12 (agent factory test): no `**Covers**` field / no coverage threshold — [x] justified (agent absent from the coverage-threshold table; all @ACs covered by Steps 4/6/8/10/13; Step 12 is a supplementary sweep-guard).
 - Overlap findings: zero FAIL-class (no proto-field / migration-NNN / config-key clash — 210 adds none). Rebase-class file overlaps only: 214 (code-completed, disjoint agent POSTGRES_MCP removal), 084 (spec-ready, wholesale deploy-file restructure — **re-verify at execute per spec Steps 13-14 / fails.md:364**; 084 furthest from landing so 210 likely lands first), 217 (implementation-ready, disjoint regions in marketdata main.go/service + agent client.py). No merge-order.md row required.
+
+## Session 2026-10-01 — sdd-execute (sequential) — Steps 1-2
+
+### Step 1 — service: Platform CA + dev-cert generator + connect-node spike [done]
+- Created `scripts/gen-dev-certs.sh` (self-signed dev CA + 12 per-service leaves, SAN=service name, serverAuth+clientAuth EKUs, `--rotate <svc>` mode for @AC-6), `docs/patterns/inter-service-mtls.md` (env contract + authority-pinning convention + spike result), wired the generator into `scripts/localenv-setup.sh`, git-ignored `certs/`.
+- **connect-node spike RESOLVED**: `createGrpcTransport` nodeOptions = `http2.SecureClientSessionOptions` → client cert passes through natively; grpc-js fallback not needed (Deviation Log).
+- Files modified: `scripts/gen-dev-certs.sh`, `scripts/localenv-setup.sh`, `docs/patterns/inter-service-mtls.md`, `.gitignore`
+- Deviations: `.gitignore` instruction-mandated but off the Files list (Deviation Log, F-08 transparency).
+- TDD: AC-foundation red (`gen-dev-certs.sh missing`, exit 1) → green (Step 2 test passes; cert chains, SAN=name, both EKUs, 12 dirs).
+
+### Step 2 — test: Cert-gen chain + SAN + EKU structural assertions [done]
+- Created `scripts/gen-dev-certs.test.sh`: chain-to-CA, SAN=bare service name (not FQDN), both EKUs, and the wrong-CA negative half (foreign-CA leaf rejected) — the foundation for the Steps 4/6/8 negative matrices.
+- Files modified: `scripts/gen-dev-certs.test.sh`
+- Deviations: none.
+- TDD: red (generator absent) → green (`all assertions passed`, exit 0).

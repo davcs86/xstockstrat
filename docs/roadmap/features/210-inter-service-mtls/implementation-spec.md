@@ -59,7 +59,7 @@ agent MCP tool step. This was a recorded decision, not an omission.
 
 ### Step 1 — service: Platform CA + dev-cert generator + connect-node client-cert spike
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/` (platform infra) + `docs/`
 **Files**:
 - `scripts/gen-dev-certs.sh` — create
@@ -99,7 +99,7 @@ Confirm all 12 service dirs are produced and each leaf verifies against the CA, 
 
 ### Step 2 — test: Cert-gen chain + SAN + EKU structural assertions
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/`
 **Files**:
 - `scripts/gen-dev-certs.test.sh` — create (or a `bats`/plain-bash assertion harness), OR fold into Step 1's verification if no test runner for shell exists in-repo
@@ -549,4 +549,12 @@ grep -n "MTLS_CERT\|MTLS_KEY\|MTLS_CA_CERT" CLAUDE.md   # env convention note pr
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+- **Step 1 — Files-list omission (F-08 transparency).** Step 1 Instruction #3 mandates adding `certs/`
+  to `.gitignore`, but `.gitignore` was not in the step's `**Files**` list. Staged it with Step 1 as
+  instruction-mandated (not opportunistic cleanup). **Disposition**: in-scope per the step's own
+  Instructions; surfaced here rather than silently bending F-08's stage-set.
+- **Step 1 — connect-node spike resolved (Open Risk closed).** `@connectrpc/connect-node@^2.1.0`
+  `createGrpcTransport` accepts `nodeOptions?: http2.SecureClientSessionOptions` (carries
+  `ca`/`cert`/`key`/`checkServerIdentity`) — confirmed at
+  `node_modules/@connectrpc/connect-node/dist/cjs/node-transport-options.d.ts:30`. Client-cert
+  pass-through works natively; the `@grpc/grpc-js` stub fallback is NOT needed. Step 9 consumes this.
