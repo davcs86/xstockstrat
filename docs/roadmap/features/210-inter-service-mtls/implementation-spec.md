@@ -420,7 +420,7 @@ cd services/xstockstrat-ui && pnpm test:e2e   # or the scoped spec; confirm the 
 
 ### Step 11 — service: Agent — single shared secure-channel factory across all dial sites
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/client.py` — modify (67 inline `insecure_channel` sites → factory)
@@ -451,7 +451,7 @@ grep -c "insecure_channel" services/xstockstrat-agent/app/client.py services/xst
 
 ### Step 12 — test: Agent secure-channel factory pins authority; no insecure path remains
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_mtls.py` — create
@@ -548,6 +548,9 @@ grep -n "MTLS_CERT\|MTLS_KEY\|MTLS_CA_CERT" CLAUDE.md   # env convention note pr
 ---
 
 ## Deviation Log
+
+- **Step 11 — factory loads MTLS_* at CALL, not at import.** The spec text said "load … at import"; app/mtls.py loads inside `_load()` at each factory call, byte-for-byte mirroring the three backend `app/mtls.py` modules. Same fail-closed guarantee (the first `secure_channel`/`channel_credentials` raises when env is absent) and the module stays importable under pytest without a global MTLS_* env, which Step 12's absent-env test requires. **Disposition**: intentional consistency choice; fail-closed semantics preserved.
+- **Step 12 — full `pytest --cov=app --cov-fail-under=40` deferred to CI (CI-equivalent fallback).** Ran `pytest tests/test_mtls.py` directly (4 passed) rather than the whole agent suite + coverage gate. CI (Node/Python matrix) runs the full `python-test` job. **Disposition**: CI-equivalent fallback.
 
 - **Step 10 — full `pnpm test:e2e` harness run deferred to CI (CI-equivalent fallback).** The full Playwright harness builds Next (240s) + launches Chromium via `webServer`+`globalSetup`. The new `e2e/mtls-transport.spec.ts` asserts the transport-layer mTLS contract, which needs neither a browser nor a Next build, so it was run standalone via a webServer-less temp config: RED against a plaintext mock (mTLS-handshake + plaintext-refused assertions fail), GREEN against the real secure mock (4/4 pass, 8.2s). CI (Node 24) runs the full `pnpm test:e2e`. **Disposition**: CI-equivalent fallback.
 

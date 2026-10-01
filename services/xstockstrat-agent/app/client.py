@@ -14,6 +14,8 @@ import grpc
 from google.protobuf.json_format import MessageToDict, ParseDict
 from google.protobuf.timestamp_pb2 import Timestamp
 
+from app import mtls
+
 log = logging.getLogger(__name__)
 
 INGEST_ENDPOINT = os.environ.get("INGEST_ENDPOINT", "xstockstrat-ingest:50055")
@@ -167,7 +169,7 @@ async def list_signal_sources(include_inactive: bool = False) -> list[dict[str, 
     """List signal sources via gRPC ListSignalSources."""
     from gen.ingest.v1 import ingest_pb2, ingest_pb2_grpc  # noqa: PLC0415
 
-    async with grpc.aio.insecure_channel(INGEST_ENDPOINT) as channel:
+    async with mtls.secure_channel(INGEST_ENDPOINT, "xstockstrat-ingest") as channel:
         stub = ingest_pb2_grpc.IngestServiceStub(channel)
         resp = await stub.ListSignalSources(
             ingest_pb2.ListSignalSourcesRequest(include_inactive=include_inactive),
@@ -233,7 +235,7 @@ async def ingest_signal(
     if tags is not None:
         signal.tags.extend(tags)
 
-    async with grpc.aio.insecure_channel(INGEST_ENDPOINT) as channel:
+    async with mtls.secure_channel(INGEST_ENDPOINT, "xstockstrat-ingest") as channel:
         stub = ingest_pb2_grpc.IngestServiceStub(channel)
         resp = await stub.IngestSignal(
             ingest_pb2.IngestSignalRequest(signal=signal),
@@ -273,7 +275,7 @@ async def emit_alert(
     if tags:
         req.tags.extend(tags)
 
-    async with grpc.aio.insecure_channel(NOTIFY_ENDPOINT) as channel:
+    async with mtls.secure_channel(NOTIFY_ENDPOINT, "xstockstrat-notify") as channel:
         stub = notify_pb2_grpc.NotifyServiceStub(channel)
         resp = await stub.EmitAlert(req, metadata=_metadata())
     return {"alert_id": resp.alert_id}
@@ -287,7 +289,7 @@ async def ensure_signal_watchlist(user_id: str) -> str:
     """
     from gen.portfolio.v1 import portfolio_pb2, portfolio_pb2_grpc  # noqa: PLC0415
 
-    async with grpc.aio.insecure_channel(PORTFOLIO_ENDPOINT) as channel:
+    async with mtls.secure_channel(PORTFOLIO_ENDPOINT, "xstockstrat-portfolio") as channel:
         stub = portfolio_pb2_grpc.PortfolioServiceStub(channel)
         resp = await stub.EnsureSignalWatchlist(
             portfolio_pb2.EnsureSignalWatchlistRequest(),
@@ -305,7 +307,7 @@ async def add_watchlist_symbol(user_id: str, watchlist_id: str, symbol: str) -> 
         strategy_id="",
         source=portfolio_pb2.WATCHLIST_ENTRY_SOURCE_SIGNAL,
     )
-    async with grpc.aio.insecure_channel(PORTFOLIO_ENDPOINT) as channel:
+    async with mtls.secure_channel(PORTFOLIO_ENDPOINT, "xstockstrat-portfolio") as channel:
         stub = portfolio_pb2_grpc.PortfolioServiceStub(channel)
         await stub.AddWatchlistSymbols(
             portfolio_pb2.AddWatchlistSymbolsRequest(watchlist_id=watchlist_id, bindings=[binding]),
@@ -355,7 +357,7 @@ async def list_watchlists(user_id: str, limit: int = 0, page_token: str = "") ->
     req = portfolio_pb2.ListWatchlistsRequest(
         page=common_pb2.PageRequest(page_size=limit, page_token=page_token)
     )
-    async with grpc.aio.insecure_channel(PORTFOLIO_ENDPOINT) as channel:
+    async with mtls.secure_channel(PORTFOLIO_ENDPOINT, "xstockstrat-portfolio") as channel:
         stub = portfolio_pb2_grpc.PortfolioServiceStub(channel)
         resp = await stub.ListWatchlists(req, metadata=_metadata(("x-user-id", user_id)))
     return {
@@ -368,7 +370,7 @@ async def get_watchlist(user_id: str, watchlist_id: str) -> dict[str, Any]:
     """Fetch one of the caller's watchlists (incl. bindings) via gRPC GetWatchlist."""
     from gen.portfolio.v1 import portfolio_pb2, portfolio_pb2_grpc  # noqa: PLC0415
 
-    async with grpc.aio.insecure_channel(PORTFOLIO_ENDPOINT) as channel:
+    async with mtls.secure_channel(PORTFOLIO_ENDPOINT, "xstockstrat-portfolio") as channel:
         stub = portfolio_pb2_grpc.PortfolioServiceStub(channel)
         resp = await stub.GetWatchlist(
             portfolio_pb2.GetWatchlistRequest(watchlist_id=watchlist_id),
@@ -400,7 +402,7 @@ async def create_watchlist(
             symbols, bindings, portfolio_pb2.WATCHLIST_ENTRY_SOURCE_MANUAL
         ),
     )
-    async with grpc.aio.insecure_channel(PORTFOLIO_ENDPOINT) as channel:
+    async with mtls.secure_channel(PORTFOLIO_ENDPOINT, "xstockstrat-portfolio") as channel:
         stub = portfolio_pb2_grpc.PortfolioServiceStub(channel)
         resp = await stub.CreateWatchlist(req, metadata=_metadata(("x-user-id", user_id)))
     return {"watchlist": _watchlist_to_dict(resp.watchlist)}
@@ -455,7 +457,7 @@ async def update_watchlist(
             default_strategy_id=default_strategy_id,
             update_mask=field_mask_pb2.FieldMask(paths=paths),
         )
-        async with grpc.aio.insecure_channel(PORTFOLIO_ENDPOINT) as channel:
+        async with mtls.secure_channel(PORTFOLIO_ENDPOINT, "xstockstrat-portfolio") as channel:
             stub = portfolio_pb2_grpc.PortfolioServiceStub(channel)
             resp = await stub.UpdateWatchlist(req, metadata=meta)
         return {"watchlist": _watchlist_to_dict(resp.watchlist)}
@@ -465,7 +467,7 @@ async def update_watchlist(
         replace = _watchlist_bindings_pb(
             symbols, bindings, portfolio_pb2.WATCHLIST_ENTRY_SOURCE_MANUAL
         )
-    async with grpc.aio.insecure_channel(PORTFOLIO_ENDPOINT) as channel:
+    async with mtls.secure_channel(PORTFOLIO_ENDPOINT, "xstockstrat-portfolio") as channel:
         stub = portfolio_pb2_grpc.PortfolioServiceStub(channel)
         current = await stub.GetWatchlist(
             portfolio_pb2.GetWatchlistRequest(watchlist_id=watchlist_id), metadata=meta
@@ -488,7 +490,7 @@ async def delete_watchlist(user_id: str, watchlist_id: str) -> dict[str, Any]:
     """
     from gen.portfolio.v1 import portfolio_pb2, portfolio_pb2_grpc  # noqa: PLC0415
 
-    async with grpc.aio.insecure_channel(PORTFOLIO_ENDPOINT) as channel:
+    async with mtls.secure_channel(PORTFOLIO_ENDPOINT, "xstockstrat-portfolio") as channel:
         stub = portfolio_pb2_grpc.PortfolioServiceStub(channel)
         await stub.DeleteWatchlist(
             portfolio_pb2.DeleteWatchlistRequest(watchlist_id=watchlist_id),
@@ -512,7 +514,7 @@ async def add_watchlist_symbols(
             symbols, bindings, portfolio_pb2.WATCHLIST_ENTRY_SOURCE_MANUAL
         ),
     )
-    async with grpc.aio.insecure_channel(PORTFOLIO_ENDPOINT) as channel:
+    async with mtls.secure_channel(PORTFOLIO_ENDPOINT, "xstockstrat-portfolio") as channel:
         stub = portfolio_pb2_grpc.PortfolioServiceStub(channel)
         resp = await stub.AddWatchlistSymbols(req, metadata=_metadata(("x-user-id", user_id)))
     return {"watchlist": _watchlist_to_dict(resp.watchlist)}
@@ -525,7 +527,7 @@ async def remove_watchlist_symbols(
     from gen.portfolio.v1 import portfolio_pb2, portfolio_pb2_grpc  # noqa: PLC0415
 
     req = portfolio_pb2.RemoveWatchlistSymbolsRequest(watchlist_id=watchlist_id, symbols=symbols)
-    async with grpc.aio.insecure_channel(PORTFOLIO_ENDPOINT) as channel:
+    async with mtls.secure_channel(PORTFOLIO_ENDPOINT, "xstockstrat-portfolio") as channel:
         stub = portfolio_pb2_grpc.PortfolioServiceStub(channel)
         resp = await stub.RemoveWatchlistSymbols(req, metadata=_metadata(("x-user-id", user_id)))
     return {"watchlist": _watchlist_to_dict(resp.watchlist)}
@@ -545,7 +547,7 @@ async def update_watchlist_bindings(
     req = portfolio_pb2.UpdateWatchlistBindingsRequest(
         watchlist_id=watchlist_id, symbols=symbols, strategy_id=strategy_id
     )
-    async with grpc.aio.insecure_channel(PORTFOLIO_ENDPOINT) as channel:
+    async with mtls.secure_channel(PORTFOLIO_ENDPOINT, "xstockstrat-portfolio") as channel:
         stub = portfolio_pb2_grpc.PortfolioServiceStub(channel)
         await stub.UpdateWatchlistBindings(req, metadata=meta)
         current = await stub.GetWatchlist(
@@ -625,7 +627,7 @@ async def run_backtest(
     elif fill_model is not None and fill_model.lower() in ("same_bar_close", "legacy"):
         req.fill_model = analysis_pb2.FILL_MODEL_SAME_BAR_CLOSE
 
-    async with grpc.aio.insecure_channel(ANALYSIS_ENDPOINT) as channel:
+    async with mtls.secure_channel(ANALYSIS_ENDPOINT, "xstockstrat-analysis") as channel:
         stub = analysis_pb2_grpc.AnalysisServiceStub(channel)
         resp = await stub.RunBacktest(req, metadata=_metadata(("x-user-id", user_id)))
     # preserving_proto_field_name keeps snake_case keys; always_print_fields_with_no_presence keeps
@@ -711,7 +713,7 @@ async def screen_symbols(
         )
         for c in (criteria or [])
     ]
-    async with grpc.aio.insecure_channel(ANALYSIS_ENDPOINT) as channel:
+    async with mtls.secure_channel(ANALYSIS_ENDPOINT, "xstockstrat-analysis") as channel:
         stub = analysis_pb2_grpc.AnalysisServiceStub(channel)
         resp = await stub.ScreenSymbols(
             analysis_pb2.ScreenSymbolsRequest(
@@ -827,7 +829,7 @@ async def list_opportunities(
     from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc  # noqa: PLC0415
     from gen.common.v1 import common_pb2  # noqa: PLC0415
 
-    async with grpc.aio.insecure_channel(ANALYSIS_ENDPOINT) as channel:
+    async with mtls.secure_channel(ANALYSIS_ENDPOINT, "xstockstrat-analysis") as channel:
         stub = analysis_pb2_grpc.AnalysisServiceStub(channel)
         resp = await stub.ListOpportunities(
             analysis_pb2.ListOpportunitiesRequest(
@@ -904,7 +906,7 @@ async def manage_strategy(
 
     # Forward the caller's real derived scope; analysis checks the admin bit, rejecting a non-admin.
     meta = _metadata(("x-user-id", user_id), ("x-access-scope", str(access_scope)))
-    async with grpc.aio.insecure_channel(ANALYSIS_ENDPOINT) as channel:
+    async with mtls.secure_channel(ANALYSIS_ENDPOINT, "xstockstrat-analysis") as channel:
         stub = analysis_pb2_grpc.AnalysisServiceStub(channel)
         resp = await stub.ManageStrategy(req, metadata=meta)
     return MessageToDict(resp)
@@ -924,7 +926,7 @@ async def get_strategy(user_id: str, strategy_id: str) -> dict[str, Any]:
     """
     from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc  # noqa: PLC0415
 
-    async with grpc.aio.insecure_channel(ANALYSIS_ENDPOINT) as channel:
+    async with mtls.secure_channel(ANALYSIS_ENDPOINT, "xstockstrat-analysis") as channel:
         stub = analysis_pb2_grpc.AnalysisServiceStub(channel)
         resp = await stub.GetStrategy(
             analysis_pb2.GetStrategyRequest(strategy_id=strategy_id),
@@ -941,7 +943,7 @@ async def list_strategy_definitions(
     """List stored strategy definitions via gRPC ListStrategyDefinitions."""
     from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc  # noqa: PLC0415
 
-    async with grpc.aio.insecure_channel(ANALYSIS_ENDPOINT) as channel:
+    async with mtls.secure_channel(ANALYSIS_ENDPOINT, "xstockstrat-analysis") as channel:
         stub = analysis_pb2_grpc.AnalysisServiceStub(channel)
         resp = await stub.ListStrategyDefinitions(
             analysis_pb2.ListStrategyDefinitionsRequest(include_inactive=include_inactive),
@@ -979,7 +981,7 @@ async def execute_formula(
         for d in parameters:
             req.parameters.append(_build_formula_parameter(d))
 
-    async with grpc.aio.insecure_channel(INDICATORS_ENDPOINT) as channel:
+    async with mtls.secure_channel(INDICATORS_ENDPOINT, "xstockstrat-indicators") as channel:
         stub = indicators_pb2_grpc.IndicatorsServiceStub(channel)
         resp = await stub.ExecuteFormula(req, metadata=_metadata())
     _scrub_struct_nonfinite(resp.output)
@@ -1000,7 +1002,7 @@ async def cancel_backfill(job_id: str, access_scope: int = 0) -> dict[str, Any]:
     """
     from gen.ingest.v1 import ingest_pb2, ingest_pb2_grpc  # noqa: PLC0415
 
-    async with grpc.aio.insecure_channel(INGEST_ENDPOINT) as channel:
+    async with mtls.secure_channel(INGEST_ENDPOINT, "xstockstrat-ingest") as channel:
         stub = ingest_pb2_grpc.IngestServiceStub(channel)
         resp = await stub.CancelBackfill(
             ingest_pb2.CancelBackfillRequest(job_id=job_id),
@@ -1057,7 +1059,7 @@ async def manage_formula(
 
     fundamental_inputs = _build_fundamental_inputs(formula.get("fundamental_inputs", []))
 
-    async with grpc.aio.insecure_channel(INDICATORS_ENDPOINT) as channel:
+    async with mtls.secure_channel(INDICATORS_ENDPOINT, "xstockstrat-indicators") as channel:
         stub = indicators_pb2_grpc.IndicatorsServiceStub(channel)
         if operation == "register":
             resp = await stub.RegisterFormula(
@@ -1114,7 +1116,7 @@ async def list_formulas(
     """List custom formula definitions via gRPC ListFormulas."""
     from gen.indicators.v1 import indicators_pb2, indicators_pb2_grpc  # noqa: PLC0415
 
-    async with grpc.aio.insecure_channel(INDICATORS_ENDPOINT) as channel:
+    async with mtls.secure_channel(INDICATORS_ENDPOINT, "xstockstrat-indicators") as channel:
         stub = indicators_pb2_grpc.IndicatorsServiceStub(channel)
         resp = await stub.ListFormulas(
             indicators_pb2.ListFormulasRequest(
@@ -1133,7 +1135,7 @@ async def get_formula(formula_id: str) -> dict[str, Any]:
     """
     from gen.indicators.v1 import indicators_pb2, indicators_pb2_grpc  # noqa: PLC0415
 
-    async with grpc.aio.insecure_channel(INDICATORS_ENDPOINT) as channel:
+    async with mtls.secure_channel(INDICATORS_ENDPOINT, "xstockstrat-indicators") as channel:
         stub = indicators_pb2_grpc.IndicatorsServiceStub(channel)
         resp = await stub.GetFormula(
             indicators_pb2.GetFormulaRequest(formula_id=formula_id),
@@ -1149,7 +1151,7 @@ async def list_fundamental_metrics() -> list[dict[str, Any]]:
     `meaning` (MessageToDict camelCase encoding)."""
     from gen.indicators.v1 import indicators_pb2, indicators_pb2_grpc  # noqa: PLC0415
 
-    async with grpc.aio.insecure_channel(INDICATORS_ENDPOINT) as channel:
+    async with mtls.secure_channel(INDICATORS_ENDPOINT, "xstockstrat-indicators") as channel:
         stub = indicators_pb2_grpc.IndicatorsServiceStub(channel)
         resp = await stub.ListFundamentalMetrics(
             indicators_pb2.ListFundamentalMetricsRequest(),
@@ -1212,7 +1214,7 @@ async def manage_signal_source(
     # Forward the caller's real derived scope; ingest checks x-access-scope & 0x04, rejecting
     # a non-admin.
     meta = _metadata(("x-access-scope", str(access_scope)))
-    async with grpc.aio.insecure_channel(INGEST_ENDPOINT) as channel:
+    async with mtls.secure_channel(INGEST_ENDPOINT, "xstockstrat-ingest") as channel:
         stub = ingest_pb2_grpc.IngestServiceStub(channel)
         resp = await stub.ManageSignalSource(req, metadata=meta)
 
@@ -1237,7 +1239,7 @@ async def register_oauth_client(redirect_uris: list[str], client_name: str) -> d
     """RFC 7591 DCR — register a public OAuth client via identity RegisterOAuthClient."""
     from gen.identity.v1 import identity_pb2, identity_pb2_grpc  # noqa: PLC0415
 
-    async with grpc.aio.insecure_channel(IDENTITY_ENDPOINT) as channel:
+    async with mtls.secure_channel(IDENTITY_ENDPOINT, "xstockstrat-identity") as channel:
         stub = identity_pb2_grpc.IdentityServiceStub(channel)
         resp = await stub.RegisterOAuthClient(
             identity_pb2.RegisterOAuthClientRequest(
@@ -1252,7 +1254,7 @@ async def get_oauth_client(client_id: str) -> dict[str, Any]:
     """Fetch a registered OAuth client (for exact-redirect validation at /oauth/authorize)."""
     from gen.identity.v1 import identity_pb2, identity_pb2_grpc  # noqa: PLC0415
 
-    async with grpc.aio.insecure_channel(IDENTITY_ENDPOINT) as channel:
+    async with mtls.secure_channel(IDENTITY_ENDPOINT, "xstockstrat-identity") as channel:
         stub = identity_pb2_grpc.IdentityServiceStub(channel)
         resp = await stub.GetOAuthClient(
             identity_pb2.GetOAuthClientRequest(client_id=client_id), metadata=_metadata()
@@ -1266,7 +1268,7 @@ async def issue_auth_code(
     """Mint a single-use authorization code via identity IssueAuthCode."""
     from gen.identity.v1 import identity_pb2, identity_pb2_grpc  # noqa: PLC0415
 
-    async with grpc.aio.insecure_channel(IDENTITY_ENDPOINT) as channel:
+    async with mtls.secure_channel(IDENTITY_ENDPOINT, "xstockstrat-identity") as channel:
         stub = identity_pb2_grpc.IdentityServiceStub(channel)
         resp = await stub.IssueAuthCode(
             identity_pb2.IssueAuthCodeRequest(
@@ -1289,7 +1291,7 @@ async def validate_token(token: str) -> dict[str, Any]:
     """
     from gen.identity.v1 import identity_pb2, identity_pb2_grpc  # noqa: PLC0415
 
-    async with grpc.aio.insecure_channel(IDENTITY_ENDPOINT) as channel:
+    async with mtls.secure_channel(IDENTITY_ENDPOINT, "xstockstrat-identity") as channel:
         stub = identity_pb2_grpc.IdentityServiceStub(channel)
         claims = await stub.ValidateToken(
             identity_pb2.ValidateTokenRequest(token=token), metadata=_metadata()
@@ -1308,7 +1310,7 @@ async def exchange_auth_code(
     """Exchange an authorization code for tokens via identity ExchangeAuthCode (PKCE verified)."""
     from gen.identity.v1 import identity_pb2, identity_pb2_grpc  # noqa: PLC0415
 
-    async with grpc.aio.insecure_channel(IDENTITY_ENDPOINT) as channel:
+    async with mtls.secure_channel(IDENTITY_ENDPOINT, "xstockstrat-identity") as channel:
         stub = identity_pb2_grpc.IdentityServiceStub(channel)
         resp = await stub.ExchangeAuthCode(
             identity_pb2.ExchangeAuthCodeRequest(
@@ -1332,7 +1334,7 @@ async def refresh_oauth_token(refresh_token: str, resource: str) -> dict[str, An
     """Rotate + refresh OAuth tokens via identity RefreshOAuthToken."""
     from gen.identity.v1 import identity_pb2, identity_pb2_grpc  # noqa: PLC0415
 
-    async with grpc.aio.insecure_channel(IDENTITY_ENDPOINT) as channel:
+    async with mtls.secure_channel(IDENTITY_ENDPOINT, "xstockstrat-identity") as channel:
         stub = identity_pb2_grpc.IdentityServiceStub(channel)
         resp = await stub.RefreshOAuthToken(
             identity_pb2.RefreshOAuthTokenRequest(refresh_token=refresh_token, resource=resource),
@@ -1350,7 +1352,7 @@ async def get_user_metadata(user_id: str) -> dict:
     """Fetch the calling user's own profile metadata from identity."""
     from gen.identity.v1 import identity_pb2, identity_pb2_grpc  # noqa: PLC0415
 
-    async with grpc.aio.insecure_channel(IDENTITY_ENDPOINT) as channel:
+    async with mtls.secure_channel(IDENTITY_ENDPOINT, "xstockstrat-identity") as channel:
         stub = identity_pb2_grpc.IdentityServiceStub(channel)
         resp = await stub.GetUserMetadata(
             identity_pb2.GetUserMetadataRequest(),
@@ -1389,7 +1391,7 @@ async def update_user_metadata(
         s.update(metadata)
         req.metadata.CopyFrom(s)
 
-    async with grpc.aio.insecure_channel(IDENTITY_ENDPOINT) as channel:
+    async with mtls.secure_channel(IDENTITY_ENDPOINT, "xstockstrat-identity") as channel:
         stub = identity_pb2_grpc.IdentityServiceStub(channel)
         resp = await stub.UpdateUserMetadata(
             req,
@@ -1447,7 +1449,7 @@ async def create_user(email: str, password: str, roles: list[str]) -> dict:
     req = identity_pb2.CreateUserRequest(
         email=email, password=password, roles=[ROLE_STRING_TO_ENUM[r] for r in roles]
     )
-    async with grpc.aio.insecure_channel(IDENTITY_ENDPOINT) as channel:
+    async with mtls.secure_channel(IDENTITY_ENDPOINT, "xstockstrat-identity") as channel:
         stub = identity_pb2_grpc.IdentityServiceStub(channel)
         resp = await stub.CreateUser(req, metadata=_metadata())
     return _project_user(resp.user)
@@ -1457,7 +1459,7 @@ async def list_users() -> list[dict]:
     """Admin: list all users (password-free views)."""
     from gen.identity.v1 import identity_pb2, identity_pb2_grpc  # noqa: PLC0415
 
-    async with grpc.aio.insecure_channel(IDENTITY_ENDPOINT) as channel:
+    async with mtls.secure_channel(IDENTITY_ENDPOINT, "xstockstrat-identity") as channel:
         stub = identity_pb2_grpc.IdentityServiceStub(channel)
         resp = await stub.ListUsers(identity_pb2.ListUsersRequest(), metadata=_metadata())
     return [_project_user(u) for u in resp.users]
@@ -1467,7 +1469,7 @@ async def get_user(user_id: str) -> dict:
     """Admin: read one user by id."""
     from gen.identity.v1 import identity_pb2, identity_pb2_grpc  # noqa: PLC0415
 
-    async with grpc.aio.insecure_channel(IDENTITY_ENDPOINT) as channel:
+    async with mtls.secure_channel(IDENTITY_ENDPOINT, "xstockstrat-identity") as channel:
         stub = identity_pb2_grpc.IdentityServiceStub(channel)
         resp = await stub.GetUser(
             identity_pb2.GetUserRequest(user_id=user_id), metadata=_metadata()
@@ -1482,7 +1484,7 @@ async def set_user_roles(user_id: str, roles: list[str]) -> dict:
     req = identity_pb2.SetUserRolesRequest(
         user_id=user_id, roles=[ROLE_STRING_TO_ENUM[r] for r in roles]
     )
-    async with grpc.aio.insecure_channel(IDENTITY_ENDPOINT) as channel:
+    async with mtls.secure_channel(IDENTITY_ENDPOINT, "xstockstrat-identity") as channel:
         stub = identity_pb2_grpc.IdentityServiceStub(channel)
         resp = await stub.SetUserRoles(req, metadata=_metadata())
     return _project_user(resp.user)
@@ -1493,7 +1495,7 @@ async def set_user_active(user_id: str, active: bool) -> dict:
     from gen.identity.v1 import identity_pb2, identity_pb2_grpc  # noqa: PLC0415
 
     req = identity_pb2.SetUserActiveRequest(user_id=user_id, active=active)
-    async with grpc.aio.insecure_channel(IDENTITY_ENDPOINT) as channel:
+    async with mtls.secure_channel(IDENTITY_ENDPOINT, "xstockstrat-identity") as channel:
         stub = identity_pb2_grpc.IdentityServiceStub(channel)
         resp = await stub.SetUserActive(req, metadata=_metadata())
     return _project_user(resp.user)
@@ -1504,7 +1506,7 @@ async def reset_password(user_id: str, new_password: str) -> dict:
     from gen.identity.v1 import identity_pb2, identity_pb2_grpc  # noqa: PLC0415
 
     req = identity_pb2.UpdatePasswordRequest(user_id=user_id, new_password=new_password)
-    async with grpc.aio.insecure_channel(IDENTITY_ENDPOINT) as channel:
+    async with mtls.secure_channel(IDENTITY_ENDPOINT, "xstockstrat-identity") as channel:
         stub = identity_pb2_grpc.IdentityServiceStub(channel)
         await stub.UpdatePassword(req, metadata=_metadata())
     return {"success": True, "userId": user_id}
@@ -1514,7 +1516,7 @@ async def admin_get_user_metadata(user_id: str) -> dict:
     """Admin: read ANY user's profile metadata (target by request-body user_id)."""
     from gen.identity.v1 import identity_pb2, identity_pb2_grpc  # noqa: PLC0415
 
-    async with grpc.aio.insecure_channel(IDENTITY_ENDPOINT) as channel:
+    async with mtls.secure_channel(IDENTITY_ENDPOINT, "xstockstrat-identity") as channel:
         stub = identity_pb2_grpc.IdentityServiceStub(channel)
         resp = await stub.AdminGetUserMetadata(
             identity_pb2.AdminGetUserMetadataRequest(user_id=user_id), metadata=_metadata()
@@ -1541,7 +1543,7 @@ async def admin_update_user_metadata(
         s = Struct()
         s.update(metadata)
         req.metadata.CopyFrom(s)
-    async with grpc.aio.insecure_channel(IDENTITY_ENDPOINT) as channel:
+    async with mtls.secure_channel(IDENTITY_ENDPOINT, "xstockstrat-identity") as channel:
         stub = identity_pb2_grpc.IdentityServiceStub(channel)
         resp = await stub.AdminUpdateUserMetadata(req, metadata=_metadata())
     return _project_user_metadata(resp.user_metadata)
@@ -1558,7 +1560,7 @@ async def set_strategy_live(
     from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc  # noqa: PLC0415
 
     meta = _metadata(("x-user-id", user_id), ("x-access-scope", str(access_scope)))
-    async with grpc.aio.insecure_channel(ANALYSIS_ENDPOINT) as channel:
+    async with mtls.secure_channel(ANALYSIS_ENDPOINT, "xstockstrat-analysis") as channel:
         stub = analysis_pb2_grpc.AnalysisServiceStub(channel)
         resp = await stub.SetStrategyLive(
             analysis_pb2.SetStrategyLiveRequest(strategy_id=strategy_id, live_enabled=live_enabled),
@@ -1588,7 +1590,7 @@ async def run_fundamentals_scan(
     from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc  # noqa: PLC0415
 
     meta = _metadata(("x-access-scope", str(access_scope)))
-    async with grpc.aio.insecure_channel(ANALYSIS_ENDPOINT) as channel:
+    async with mtls.secure_channel(ANALYSIS_ENDPOINT, "xstockstrat-analysis") as channel:
         stub = analysis_pb2_grpc.AnalysisServiceStub(channel)
         resp = await stub.RunFundamentalsScan(
             analysis_pb2.RunFundamentalsScanRequest(
@@ -1627,7 +1629,7 @@ async def get_config_value(
 
     env = _config_env(environment)
     try:
-        async with grpc.aio.insecure_channel(CONFIG_ENDPOINT) as channel:
+        async with mtls.secure_channel(CONFIG_ENDPOINT, "xstockstrat-config") as channel:
             stub = config_pb2_grpc.ConfigServiceStub(channel)
             snapshot = await stub.GetConfig(
                 config_pb2.GetConfigRequest(namespace=namespace, environment=env, user_id=user_id),
@@ -1687,7 +1689,7 @@ async def get_bars(
         range=rng,
         page=common_pb2.PageRequest(page_size=limit, page_token=page_token),
     )
-    async with grpc.aio.insecure_channel(MARKETDATA_ENDPOINT) as channel:
+    async with mtls.secure_channel(MARKETDATA_ENDPOINT, "xstockstrat-marketdata") as channel:
         stub = marketdata_pb2_grpc.MarketDataServiceStub(channel)
         resp = await stub.GetBars(req, metadata=_metadata())
     return {
@@ -1701,7 +1703,7 @@ async def get_fundamentals(symbol: str) -> dict[str, Any]:
     """Fetch the latest fundamentals snapshot via marketdata GetFundamentals (cached read)."""
     from gen.marketdata.v1 import marketdata_pb2, marketdata_pb2_grpc  # noqa: PLC0415
 
-    async with grpc.aio.insecure_channel(MARKETDATA_ENDPOINT) as channel:
+    async with mtls.secure_channel(MARKETDATA_ENDPOINT, "xstockstrat-marketdata") as channel:
         stub = marketdata_pb2_grpc.MarketDataServiceStub(channel)
         resp = await stub.GetFundamentals(
             marketdata_pb2.GetFundamentalsRequest(symbol=symbol),
@@ -1735,7 +1737,7 @@ async def get_historical_fundamentals(
         req.range_start.CopyFrom(_iso_to_timestamp(start))
     if end:
         req.range_end.CopyFrom(_iso_to_timestamp(end))
-    async with grpc.aio.insecure_channel(MARKETDATA_ENDPOINT) as channel:
+    async with mtls.secure_channel(MARKETDATA_ENDPOINT, "xstockstrat-marketdata") as channel:
         stub = marketdata_pb2_grpc.MarketDataServiceStub(channel)
         resp = await stub.GetHistoricalFundamentals(req, metadata=_metadata())
     return {
@@ -1825,7 +1827,7 @@ async def trigger_backfill(
     # Forward the caller's real derived scope; ingest's gate (x-access-scope & 0x04) rejects
     # a non-admin.
     meta = _metadata(("x-access-scope", str(access_scope)))
-    async with grpc.aio.insecure_channel(INGEST_ENDPOINT) as channel:
+    async with mtls.secure_channel(INGEST_ENDPOINT, "xstockstrat-ingest") as channel:
         stub = ingest_pb2_grpc.IngestServiceStub(channel)
         resp = await stub.TriggerBackfill(req, metadata=meta)
     return {"job_id": resp.job_id, "status": ingest_pb2.BackfillStatus.Name(resp.status)}
@@ -1849,7 +1851,7 @@ async def get_backfill_status(
     from gen.ingest.v1 import ingest_pb2, ingest_pb2_grpc  # noqa: PLC0415
 
     if job_id:
-        async with grpc.aio.insecure_channel(INGEST_ENDPOINT) as channel:
+        async with mtls.secure_channel(INGEST_ENDPOINT, "xstockstrat-ingest") as channel:
             stub = ingest_pb2_grpc.IngestServiceStub(channel)
             resp = await stub.GetBackfillStatus(
                 ingest_pb2.GetBackfillStatusRequest(job_id=job_id), metadata=_metadata()
@@ -1879,7 +1881,7 @@ async def get_backfill_status(
         symbol=symbol,
         page=common_pb2.PageRequest(page_size=limit, page_token=page_token),
     )
-    async with grpc.aio.insecure_channel(INGEST_ENDPOINT) as channel:
+    async with mtls.secure_channel(INGEST_ENDPOINT, "xstockstrat-ingest") as channel:
         stub = ingest_pb2_grpc.IngestServiceStub(channel)
         resp = await stub.ListBackfillJobs(req, metadata=_metadata())
     return {
@@ -1919,7 +1921,7 @@ async def get_config(namespace: str, environment: str, user_id: str = "") -> dic
     from gen.config.v1 import config_pb2, config_pb2_grpc  # noqa: PLC0415
 
     env = _config_env(environment)
-    async with grpc.aio.insecure_channel(CONFIG_ENDPOINT) as channel:
+    async with mtls.secure_channel(CONFIG_ENDPOINT, "xstockstrat-config") as channel:
         stub = config_pb2_grpc.ConfigServiceStub(channel)
         resp = await stub.GetConfig(
             config_pb2.GetConfigRequest(namespace=namespace, environment=env, user_id=user_id),
@@ -1949,7 +1951,7 @@ async def list_config_keys(namespace: str, environment: str, user_id: str = "") 
     from gen.config.v1 import config_pb2, config_pb2_grpc  # noqa: PLC0415
 
     env = _config_env(environment)
-    async with grpc.aio.insecure_channel(CONFIG_ENDPOINT) as channel:
+    async with mtls.secure_channel(CONFIG_ENDPOINT, "xstockstrat-config") as channel:
         stub = config_pb2_grpc.ConfigServiceStub(channel)
         resp = await stub.ListKeys(
             config_pb2.ListKeysRequest(namespace=namespace, environment=env, user_id=user_id),
@@ -2012,7 +2014,7 @@ async def set_config(
     # NEW key (create_key) at rest accordingly.
     cv.is_secret = is_secret
 
-    async with grpc.aio.insecure_channel(CONFIG_ENDPOINT) as channel:
+    async with mtls.secure_channel(CONFIG_ENDPOINT, "xstockstrat-config") as channel:
         stub = config_pb2_grpc.ConfigServiceStub(channel)
         resp = await stub.SetConfig(
             config_pb2.SetConfigRequest(
@@ -2070,7 +2072,7 @@ async def register_offline_account(user_id: str, display_name: str) -> dict[str,
     """
     from gen.trading.v1 import trading_pb2, trading_pb2_grpc  # noqa: PLC0415
 
-    async with grpc.aio.insecure_channel(TRADING_ENDPOINT) as channel:
+    async with mtls.secure_channel(TRADING_ENDPOINT, "xstockstrat-trading") as channel:
         stub = trading_pb2_grpc.TradingServiceStub(channel)
         resp = await stub.RegisterBrokerAccount(
             trading_pb2.RegisterBrokerAccountRequest(
@@ -2106,7 +2108,7 @@ async def record_offline_order(
     if type_val is None:
         raise ValueError(f"invalid order_type {order_type!r}")
 
-    async with grpc.aio.insecure_channel(TRADING_ENDPOINT) as channel:
+    async with mtls.secure_channel(TRADING_ENDPOINT, "xstockstrat-trading") as channel:
         stub = trading_pb2_grpc.TradingServiceStub(channel)
         resp = await stub.PlaceOrder(
             trading_pb2.PlaceOrderRequest(
@@ -2146,7 +2148,7 @@ async def confirm_offline_order(
         ts.FromDatetime(datetime.fromisoformat(filled_at_iso))
         req.filled_at.CopyFrom(ts)
 
-    async with grpc.aio.insecure_channel(TRADING_ENDPOINT) as channel:
+    async with mtls.secure_channel(TRADING_ENDPOINT, "xstockstrat-trading") as channel:
         stub = trading_pb2_grpc.TradingServiceStub(channel)
         resp = await stub.ConfirmOrder(req, metadata=_metadata(("x-user-id", user_id)))
     return {"order": _order_to_dict(resp)}
@@ -2196,7 +2198,7 @@ async def snapshot_offline_positions(
         ts.FromDatetime(datetime.fromisoformat(as_of_iso).astimezone(UTC))
         req.as_of.CopyFrom(ts)
 
-    async with grpc.aio.insecure_channel(TRADING_ENDPOINT) as channel:
+    async with mtls.secure_channel(TRADING_ENDPOINT, "xstockstrat-trading") as channel:
         stub = trading_pb2_grpc.TradingServiceStub(channel)
         resp = await stub.SnapshotOfflinePositions(req, metadata=_metadata(("x-user-id", user_id)))
     return MessageToDict(resp, preserving_proto_field_name=True)
@@ -2206,7 +2208,7 @@ async def get_order(user_id: str, order_id: str) -> dict[str, Any]:
     """Read one order via TradingService.GetOrder (read-only)."""
     from gen.trading.v1 import trading_pb2, trading_pb2_grpc  # noqa: PLC0415
 
-    async with grpc.aio.insecure_channel(TRADING_ENDPOINT) as channel:
+    async with mtls.secure_channel(TRADING_ENDPOINT, "xstockstrat-trading") as channel:
         stub = trading_pb2_grpc.TradingServiceStub(channel)
         resp = await stub.GetOrder(
             trading_pb2.GetOrderRequest(order_id=order_id),
@@ -2219,7 +2221,7 @@ async def list_account_orders(user_id: str, account_id: str) -> dict[str, Any]:
     """List an account's orders via TradingService.ListOrders (read-only, for reconciliation)."""
     from gen.trading.v1 import trading_pb2, trading_pb2_grpc  # noqa: PLC0415
 
-    async with grpc.aio.insecure_channel(TRADING_ENDPOINT) as channel:
+    async with mtls.secure_channel(TRADING_ENDPOINT, "xstockstrat-trading") as channel:
         stub = trading_pb2_grpc.TradingServiceStub(channel)
         resp = await stub.ListOrders(
             trading_pb2.ListOrdersRequest(user_id=user_id, account_id=account_id),
@@ -2244,7 +2246,7 @@ async def list_positions(
         account_id=account_id,
         page=common_pb2.PageRequest(page_size=limit, page_token=page_token),
     )
-    async with grpc.aio.insecure_channel(PORTFOLIO_ENDPOINT) as channel:
+    async with mtls.secure_channel(PORTFOLIO_ENDPOINT, "xstockstrat-portfolio") as channel:
         stub = portfolio_pb2_grpc.PortfolioServiceStub(channel)
         resp = await stub.ListPositions(req, metadata=_metadata(("x-user-id", user_id)))
     return {
@@ -2273,7 +2275,7 @@ async def register_broker_account(
     if bt is None:
         raise ValueError(f"unsupported broker_type '{broker_type}' (expected 'alpaca' or 'ibkr')")
 
-    async with grpc.aio.insecure_channel(TRADING_ENDPOINT) as channel:
+    async with mtls.secure_channel(TRADING_ENDPOINT, "xstockstrat-trading") as channel:
         stub = trading_pb2_grpc.TradingServiceStub(channel)
         resp = await stub.RegisterBrokerAccount(
             trading_pb2.RegisterBrokerAccountRequest(
@@ -2297,7 +2299,7 @@ async def update_broker_account_credentials(
     """
     from gen.trading.v1 import trading_pb2, trading_pb2_grpc  # noqa: PLC0415
 
-    async with grpc.aio.insecure_channel(TRADING_ENDPOINT) as channel:
+    async with mtls.secure_channel(TRADING_ENDPOINT, "xstockstrat-trading") as channel:
         stub = trading_pb2_grpc.TradingServiceStub(channel)
         resp = await stub.UpdateBrokerAccountCredentials(
             trading_pb2.UpdateBrokerAccountCredentialsRequest(
@@ -2317,7 +2319,7 @@ async def deregister_broker_account(user_id: str, account_id: str) -> dict[str, 
     """
     from gen.trading.v1 import trading_pb2, trading_pb2_grpc  # noqa: PLC0415
 
-    async with grpc.aio.insecure_channel(TRADING_ENDPOINT) as channel:
+    async with mtls.secure_channel(TRADING_ENDPOINT, "xstockstrat-trading") as channel:
         stub = trading_pb2_grpc.TradingServiceStub(channel)
         await stub.DeregisterBrokerAccount(
             trading_pb2.DeregisterBrokerAccountRequest(account_id=account_id),
@@ -2334,7 +2336,7 @@ async def resume_broker_account(user_id: str, account_id: str, reason: str = "")
     """
     from gen.trading.v1 import trading_pb2, trading_pb2_grpc  # noqa: PLC0415
 
-    async with grpc.aio.insecure_channel(TRADING_ENDPOINT) as channel:
+    async with mtls.secure_channel(TRADING_ENDPOINT, "xstockstrat-trading") as channel:
         stub = trading_pb2_grpc.TradingServiceStub(channel)
         resp = await stub.ResumeAccount(
             trading_pb2.ResumeAccountRequest(account_id=account_id, reason=reason),
@@ -2352,7 +2354,7 @@ async def list_broker_accounts(user_id: str) -> dict[str, Any]:
     """
     from gen.trading.v1 import trading_pb2, trading_pb2_grpc  # noqa: PLC0415
 
-    async with grpc.aio.insecure_channel(TRADING_ENDPOINT) as channel:
+    async with mtls.secure_channel(TRADING_ENDPOINT, "xstockstrat-trading") as channel:
         stub = trading_pb2_grpc.TradingServiceStub(channel)
         resp = await stub.ListBrokerAccounts(
             trading_pb2.ListBrokerAccountsRequest(),

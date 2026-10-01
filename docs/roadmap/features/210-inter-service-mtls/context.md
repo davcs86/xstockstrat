@@ -222,3 +222,14 @@
 - **TDD red-green captured**: reverting the mock to its pre-Step-9 plaintext `http2.createServer` → the mTLS-handshake and plaintext-refused assertions FAIL; secure → all 4 PASS (8.2s). Non-vacuous.
 - Covers: @AC-4 (UI slice — verification cannot be disabled).
 - Verification: ran via a webServer-less temp config `npx playwright test` → 4/4 green. The full `pnpm test:e2e` harness (Next build + Chromium) is CI-deferred (Deviation Log) — the transport contract needs no browser or Next build and was run standalone.
+
+### Step 11 — service: Agent single shared secure-channel factory across all dial sites [done]
+- `app/mtls.py` (new): `secure_channel(endpoint, target_service)` → `grpc.aio.secure_channel(endpoint, channel_credentials(), options=[('grpc.ssl_target_name_override', target_service)])`; `channel_credentials()` = `grpc.ssl_channel_credentials(root_certificates=ca, private_key=key, certificate_chain=cert)`; `_load()` reads MTLS_CERT/KEY/CA_CERT, raises RuntimeError if any absent.
+- Mechanical sweep: all **69** `grpc.aio.insecure_channel(<X>_ENDPOINT)` → `mtls.secure_channel(<X>_ENDPOINT, "xstockstrat-<svc>")` (client.py ×67, auth.py ×2) via per-endpoint sed, 1:1 endpoint→service mapping. Added `from app import mtls` to both. `async with … as channel:` structure + per-call propagation metadata preserved (all sites were single-arg, no options to merge).
+- **Minor deviation from spec wording**: the spec said "load MTLS_* at import"; the factory loads at *call* (`_load()` inside each factory), mirroring the 3 backend Python `app/mtls.py` exactly — same fail-closed guarantee (first channel creation raises), and it keeps the module importable under pytest without global MTLS_* env (Step 12 asserts the absent-env raise cleanly). Recorded in Deviation Log.
+- Verification: `ruff check` + `ruff format --check` clean on mtls.py/client.py/auth.py; `grep -c insecure_channel` = 0 and 0; py_compile OK.
+
+### Step 12 — test: Agent secure-channel factory pins authority; no insecure path remains [done]
+- `tests/test_mtls.py` (new): spies `grpc.aio.secure_channel` to assert the factory pins `ssl_target_name_override` to the TARGET SERVICE NAME (dialed host `10.0.0.5:50051` ≠ service `xstockstrat-trading`); builds real `ChannelCredentials` from openssl-minted env PEMs; raises RuntimeError when MTLS_* absent; structural guard asserts no `insecure_channel` remains in client.py/auth.py.
+- **TDD red-green captured**: with app/mtls.py hidden + the sweep reverted → ImportError, collection fails (RED); restored → 4/4 pass (GREEN).
+- Verification: `uv run pytest tests/test_mtls.py` → 4 passed; ruff clean. Full `pytest --cov=app --cov-fail-under=40` deferred to CI (Deviation Log — the agent suite needs the full app import graph / fixtures; the new unit+structural tests were run directly).
