@@ -172,3 +172,15 @@
 - Files modified: `scripts/gen-dev-certs.test.sh`
 - Deviations: none.
 - TDD: red (generator absent) → green (`all assertions passed`, exit 0).
+
+### Step 3 — service: Go backends mutual TLS [done]
+- Added `internal/mtls/mtls.go` to trading/portfolio/marketdata (`ServerConfig` = RequireAndVerifyClientCert+ClientCAs; `ClientConfig(target)` = RootCAs+leaf+ServerName pinned to the target service name; loads MTLS_CERT/KEY/CA_CERT from env, fail-closed; no InsecureSkipVerify). Swapped all server binds (`grpc.Creds`) + every client dial (config-watcher + service dials) from `insecure.NewCredentials()` to the mtls creds; removed the `credentials/insecure` imports.
+- Files: trading/portfolio/marketdata ×{cmd/server/main.go, internal/config/config.go, internal/service/*.go, internal/mtls/mtls.go}.
+- Verification: all 3 build clean (`go build ./...`), zero `insecure.NewCredentials`/`InsecureSkipVerify` in runtime code, gofmt+vet clean. golangci-lint deferred to CI (Deviation Log — local v2.5.0 is go1.25, repo targets go1.27).
+- TDD: structural red (pre-Step-3 there is no `mtls` package and the servers used `insecure`, which accepts any/no client cert → the @AC-1/negative-matrix assertions fail-open and the tests don't compile) → green (Step 4).
+
+### Step 4 — test: Go in-process handshake + negative matrix + propagation + ledger-emit fail-soft [done]
+- `internal/mtls/mtls_test.go` (×3, in-process bufconn handshake, certs minted in-test): @AC-4 fail-closed boot, @AC-2 mutual handshake, @AC-5 trio propagation over the authenticated channel, @AC-1 plaintext refused, negative matrix (wrong-CA rejected + valid-CA/**wrong-SAN** rejected — the R4 bug-class guard). `internal/service/ledger_emit_mtls_test.go` (trading): emitLedgerEvent fail-soft (no crash/wedge on a failing ledger) + one-shot (exactly 1 AppendEvent, no retry).
+- Files: trading/portfolio/marketdata ×internal/mtls/mtls_test.go; trading/internal/service/ledger_emit_mtls_test.go.
+- Verification: 5/5 mtls tests green ×3 services + ledger-emit test green; mtls package coverage ServerConfig/ClientConfig 100%, load 83.3%. Full `go test ./...` coverage mesh needs a DB (repository tests) — CI-equivalent fallback (Deviation Log).
+- Covers: @AC-1, @AC-2, @AC-4, @AC-5.

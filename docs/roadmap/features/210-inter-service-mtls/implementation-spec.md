@@ -125,7 +125,7 @@ bash scripts/gen-dev-certs.test.sh   # exits non-zero on any failed assertion
 
 ### Step 3 — service: Go backends — mutual TLS on server binds + all client dials
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`, `xstockstrat-portfolio`, `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-trading/cmd/server/main.go` — modify (add `grpc.Creds` to `grpc.NewServer`)
@@ -172,7 +172,7 @@ grep -rn "insecure.NewCredentials\|InsecureSkipVerify" services/xstockstrat-{tra
 
 ### Step 4 — test: Go in-process mutual-TLS handshake + negative matrix + propagation + ledger-emit fail-soft
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`, `xstockstrat-portfolio`, `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-trading/internal/mtls/mtls_test.go` — create
@@ -548,6 +548,9 @@ grep -n "MTLS_CERT\|MTLS_KEY\|MTLS_CA_CERT" CLAUDE.md   # env convention note pr
 ---
 
 ## Deviation Log
+
+- **Step 3/4 — golangci-lint deferred to CI (CI-equivalent fallback).** Local golangci-lint v2.5.0 is built with go1.25 and refuses a go1.27-targeted module ("Go language version used to build golangci-lint is lower than the targeted Go version"). Verified instead with `go build` + `gofmt -l` + `go vet` (all clean). CI runs golangci-lint v2.13.1 (go1.27-compatible). **Disposition**: CI-equivalent fallback.
+- **Step 4 — full `go test ./...` coverage mesh deferred to CI (CI-equivalent fallback).** The services' repository/integration tests require a live TimescaleDB, which the execute sandbox has none of (never start a DB — HARD CONSTRAINT; fails.md:369). Verified the Step's new logic in-process: the `internal/mtls` package tests pass with ServerConfig/ClientConfig at 100%% coverage, plus the ledger-emit fail-soft test. CI runs the full suite against the managed DB. **Disposition**: CI-equivalent fallback (structural/in-process per fails.md:369).
 
 - **Step 1 — Files-list omission (F-08 transparency).** Step 1 Instruction #3 mandates adding `certs/`
   to `.gitignore`, but `.gitignore` was not in the step's `**Files**` list. Staged it with Step 1 as
