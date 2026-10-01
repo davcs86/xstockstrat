@@ -148,3 +148,12 @@
   already TLS-capable, `uv lock` only if `pyproject.toml` touched (fails.md:389); feature-084 deploy-file
   rebase flagged in Steps 13–14 (fails.md:364); Teardown-not-discharged-by-a-note enforced in Step 14
   (fails.md:670).
+
+## Session 2026-10-01 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, ~3 advisory warnings (advisory — did not block). No Floor (F-*) risk; F-07, F-02, F-03 all cleared. Criteria PASS WITH WARNINGS; every spot-checked path:line citation resolves (incl. 69-site agent count 67+2, negative-test matrix with BOTH wrong-CA and valid-CA/wrong-SAN in Steps 4/6/8, @AC-3 @descoped).
+- Unresolved ✗ / ⚠ carried into execution:
+  - Steps 1/3/5/7/9/11: introduce/consume `MTLS_CERT`/`MTLS_KEY`/`MTLS_CA_CERT` while only Step 13 lists all three deploy files — [x] addressed-by-design (wire-once-at-Step-13, recorded in spec `## Step Dependencies`; raising per-step would be noise).
+  - Steps 3/5/7/14: brace-shorthand helper paths (`<trading|portfolio|marketdata>` etc.) and "each affected service's CLAUDE.md" are enumerable, not literal single paths — [x] acknowledged (clear/enumerable; each brace = 3 concrete files resolved by per-step discovery).
+  - Step 12 (agent factory test): no `**Covers**` field / no coverage threshold — [x] justified (agent absent from the coverage-threshold table; all @ACs covered by Steps 4/6/8/10/13; Step 12 is a supplementary sweep-guard).
+- Overlap findings: zero FAIL-class (no proto-field / migration-NNN / config-key clash — 210 adds none). Rebase-class file overlaps only: 214 (code-completed, disjoint agent POSTGRES_MCP removal), 084 (spec-ready, wholesale deploy-file restructure — **re-verify at execute per spec Steps 13-14 / fails.md:364**; 084 furthest from landing so 210 likely lands first), 217 (implementation-ready, disjoint regions in marketdata main.go/service + agent client.py). No merge-order.md row required.
