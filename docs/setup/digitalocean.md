@@ -356,6 +356,23 @@ channel (no `.enabled`-style guard, same as the fundamentals credentials above).
   components. Web Push stays disabled until all three are set; the same public key must be set on both
   services (the deploy substitution handles this automatically).
 
+### Inter-service mTLS cert bundles (feature 210)
+Set on: **every** component (all 12 services require `MTLS_CERT`/`MTLS_KEY`/`MTLS_CA_CERT`, fail-closed)
+
+Backends run **mutual TLS** on every inter-service gRPC hop. Rather than ~25 per-service secrets per
+environment, the deploy uses **one base64 bundle secret per environment** (the CA + all 12 leaf
+cert/key pairs). Generate and install them with the provisioning script — this is **required**, or the
+deploy pushes placeholder values and every service crash-loops on boot (fail-closed):
+
+```bash
+scripts/mtls-provision.sh set-secret dev    # mints ./certs (dev CA) → sets DEV_MTLS_BUNDLE
+scripts/mtls-provision.sh set-secret prod   # mints ./certs-prod (prod CA) → sets PROD_MTLS_BUNDLE
+```
+
+They substitute into the `YOUR_{DEV,PROD}_MTLS_{CA_CERT,CERT_<SVC>,KEY_<SVC>}` placeholders in
+`.do/app*.yaml` (each `MTLS_KEY` stays `type: SECRET`). Full contract + rotation →
+`docs/runbooks/inter-service-mtls-rollout.md` § 0.1.
+
 ### JWT secret
 Set on: `xstockstrat-identity`
 

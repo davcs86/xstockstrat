@@ -64,6 +64,14 @@ on:
         # Callers pass DEV_OTEL_EXPORTER_OTLP_HEADERS or PROD_OTEL_EXPORTER_OTLP_HEADERS from
         # GitHub Secrets. Optional — OTel auth header value, e.g. Basic <base64(instanceId:apiKey)>.
         # Stored as type: SECRET in the DO app spec; set as encrypted env var.
+      MTLS_BUNDLE:
+        required: false
+        # Feature 210 inter-service mTLS. Callers pass DEV_MTLS_BUNDLE or PROD_MTLS_BUNDLE from GitHub
+        # Secrets: a base64(JSON) bundle of the platform CA + the 12 per-service leaf cert/key pairs,
+        # produced by scripts/mtls-provision.sh. The substitution step decodes it to fill every
+        # per-service MTLS_* placeholder. Declared optional here, but FAIL-CLOSED at substitution time:
+        # if the spec carries MTLS_* placeholders and this is empty, the deploy aborts (never pushes a
+        # placeholder, which would crash-loop every service on boot).
 
 jobs:
   deploy:
@@ -87,6 +95,7 @@ jobs:
           VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT }}
           OTEL_EXPORTER_OTLP_ENDPOINT: ${{ secrets.OTEL_EXPORTER_OTLP_ENDPOINT }}
           OTEL_EXPORTER_OTLP_HEADERS: ${{ secrets.OTEL_EXPORTER_OTLP_HEADERS }}
+          MTLS_BUNDLE: ${{ secrets.MTLS_BUNDLE }}
         run: |
           sed \
             -e "s|YOUR_GITHUB_ORG|${{ github.repository_owner }}|g" \
@@ -135,6 +144,36 @@ jobs:
               otel_headers = 'Authorization=' + otel_headers
           content = content.replace('YOUR_DEV_OTEL_EXPORTER_OTLP_HEADERS', otel_headers)
           content = content.replace('YOUR_PROD_OTEL_EXPORTER_OTLP_HEADERS', otel_headers)
+          # Feature 210 inter-service mTLS: one base64(JSON) bundle fills the CA + every per-service
+          # leaf placeholder. Fail-closed — if the spec carries MTLS_* placeholders but the bundle is
+          # empty, abort before pushing (a placeholder value would crash-loop every service on boot).
+          import base64, json, re
+          if re.search(r'YOUR_(?:DEV|PROD)_MTLS_', content):
+              bundle_b64 = os.environ.get('MTLS_BUNDLE', '')
+              if not bundle_b64:
+                  sys.stderr.write('ERROR: app spec has MTLS_* placeholders but MTLS_BUNDLE is empty '
+                                   '(fail-closed). Provision it: scripts/mtls-provision.sh set-secret <dev|prod>.\n')
+                  sys.exit(1)
+              bundle = json.loads(base64.b64decode(bundle_b64))
+              def yaml_pem(pem):
+                  # PEM is multi-line; the placeholders are bare single-token YAML values, so replace
+                  # each with a double-quoted scalar carrying escaped newlines (YAML un-escapes to real
+                  # PEM). chr() avoids literal quote/backslash inside this shell-double-quoted python -c.
+                  q, bs = chr(34), chr(92)
+                  body = pem.replace(bs, bs + bs).replace(q, bs + q).replace(chr(10), bs + 'n')
+                  return q + body + q
+              ca_q = yaml_pem(bundle['ca'])
+              content = content.replace('YOUR_DEV_MTLS_CA_CERT', ca_q).replace('YOUR_PROD_MTLS_CA_CERT', ca_q)
+              for svc, mat in bundle['leaves'].items():
+                  sfx = svc.replace('xstockstrat-', '').upper()
+                  cert_q, key_q = yaml_pem(mat['cert']), yaml_pem(mat['key'])
+                  for e in ('DEV', 'PROD'):
+                      content = content.replace('YOUR_%s_MTLS_CERT_%s' % (e, sfx), cert_q)
+                      content = content.replace('YOUR_%s_MTLS_KEY_%s' % (e, sfx), key_q)
+              leftover = sorted(set(re.findall(r'YOUR_(?:DEV|PROD)_MTLS_[A-Z_]+', content)))
+              if leftover:
+                  sys.stderr.write('ERROR: unfilled MTLS placeholders remain (bundle missing leaves): %s\n' % leftover)
+                  sys.exit(1)
           sys.stdout.write(content)
           " > /tmp/app_spec_substituted.yaml
 

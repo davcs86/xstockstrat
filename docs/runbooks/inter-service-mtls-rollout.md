@@ -24,8 +24,34 @@ bind, clients raise on first dial). This is the entire enforcement — there is 
 
 Local dev: `scripts/gen-dev-certs.sh` mints a dev CA + one leaf per service under git-ignored
 `./certs/`; `source scripts/mtls-dev-env.sh` exports them as the env vars `docker-compose.yml`
-interpolates. Prod/staging: the three vars are set per component in `.do/app.yaml` / `.do/app.dev.yaml`
-from the production platform CA (`MTLS_KEY` as a DO `SECRET`).
+interpolates.
+
+### 0.1 Deploy-secret provisioning (CI/CD) — one bundle per environment
+
+`.do/app.dev.yaml` / `.do/app.yaml` carry **placeholders** (`YOUR_{DEV,PROD}_MTLS_CA_CERT`,
+`…_MTLS_CERT_<SVC>`, `…_MTLS_KEY_<SVC>`) for all 12 components. `.github/workflows/deploy.yml`
+fills them at deploy time from **one GitHub secret per environment** — a base64(JSON) bundle of the
+platform CA + the 12 per-service leaf cert/key pairs:
+
+| Secret | Used by | Produced by |
+|---|---|---|
+| `DEV_MTLS_BUNDLE` | `deploy-dev.yml` → `.do/app.dev.yaml` | `scripts/mtls-provision.sh bundle dev` |
+| `PROD_MTLS_BUNDLE` | `deploy-prod.yml` → `.do/app.yaml` | `scripts/mtls-provision.sh bundle prod` |
+
+```bash
+scripts/mtls-provision.sh set-secret dev    # mints ./certs (dev CA) + sets DEV_MTLS_BUNDLE via gh
+scripts/mtls-provision.sh set-secret prod   # mints ./certs-prod (prod CA) + sets PROD_MTLS_BUNDLE
+# …or emit to stdout and paste into GitHub → Settings → Secrets:
+scripts/mtls-provision.sh bundle dev
+```
+
+The substitution is **fail-closed**: if a spec has `MTLS_*` placeholders but its bundle secret is
+empty, the deploy **aborts before `doctl apps update`** rather than pushing a placeholder (a literal
+placeholder is invalid PEM → every service crash-loops on boot → DO auto-rollback). This was the
+feature-210 rollout gap: the service code + spec placeholders shipped, but no bundle secret or
+substitution existed, so the first `main-dev` deploy pushed placeholders and auto-rolled-back.
+`MTLS_KEY` stays `type: SECRET` in the specs, so DO encrypts each key at rest after substitution.
+Dev and prod use **separate CAs** (`./certs` vs `./certs-prod`, both git-ignored); rotate per §2.
 
 ---
 

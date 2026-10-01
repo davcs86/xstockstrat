@@ -602,6 +602,15 @@ gh secret set DEV_BROKER_ACCOUNTS_ENCRYPTION_KEY  --body "$DEV_BROKER_ACCOUNTS_E
 gh secret set PROD_BROKER_ACCOUNTS_ENCRYPTION_KEY --body "$PROD_BROKER_ACCOUNTS_ENCRYPTION_KEY"
 ```
 
+Inter-service mTLS bundles (feature 210) — **required** for every component, or the deploy pushes
+placeholder certs and all services crash-loop on boot (fail-closed). The script mints the CA + 12
+leaves and sets the bundle secret:
+
+```bash
+scripts/mtls-provision.sh set-secret dev    # sets DEV_MTLS_BUNDLE  (mints ./certs, dev CA)
+scripts/mtls-provision.sh set-secret prod   # sets PROD_MTLS_BUNDLE (mints ./certs-prod, prod CA)
+```
+
 If `GH_PAT_SCAN` was provided:
 
 ```bash

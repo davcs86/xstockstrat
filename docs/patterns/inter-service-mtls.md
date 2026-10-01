@@ -77,4 +77,8 @@ source scripts/mtls-dev-env.sh    # export the PEMs into this shell
 docker compose up -d              # compose interpolates ${<SVC>_MTLS_*} from the env
 ```
 
-Rollout, rotation, and rollback procedure → `docs/runbooks/inter-service-mtls-rollout.md`.
+For the DO deploy (dev/prod), `scripts/mtls-provision.sh` mints the CA + 12 leaves and emits a
+base64(JSON) bundle stored as one GitHub secret per env (`DEV_MTLS_BUNDLE` / `PROD_MTLS_BUNDLE`);
+`.github/workflows/deploy.yml` decodes it to fill the per-service `MTLS_*` placeholders in
+`.do/app*.yaml` (fail-closed — a missing bundle aborts the deploy). Rollout, rotation, rollback, and
+the deploy-secret provisioning steps → `docs/runbooks/inter-service-mtls-rollout.md`.
