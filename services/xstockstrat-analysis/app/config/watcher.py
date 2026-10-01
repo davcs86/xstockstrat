@@ -11,6 +11,8 @@ import grpc
 from gen.common.v1 import common_pb2
 from gen.config.v1 import config_pb2, config_pb2_grpc
 
+from app import mtls
+
 log = logging.getLogger(__name__)
 
 
@@ -47,7 +49,9 @@ class ConfigWatcher:
         self._trading_mode = resolve_trading_mode(os.environ.get("TRADING_MODE", "paper"))
         self._snapshot: config_pb2.ConfigSnapshot | None = None
         self._snapshot_event = asyncio.Event()
-        self._channel = grpc.aio.insecure_channel(endpoint)
+        self._channel = grpc.aio.secure_channel(
+            endpoint, mtls.channel_credentials(), options=mtls.target_override("xstockstrat-config")
+        )
         self._stub = config_pb2_grpc.ConfigServiceStub(self._channel)
         asyncio.get_event_loop().create_task(self._watch())
 

@@ -209,7 +209,7 @@ New `internal/mtls/` logic is in a measured package (not in the `cmd/`/`service/
 
 ### Step 5 — service: Python backends — mutual TLS on server + all channel dials + config-watchers
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`, `xstockstrat-ingest`, `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-indicators/app/main.py` — modify (server creds; indicators is server-only)
@@ -251,7 +251,7 @@ grep -rn "insecure_channel\|add_insecure_port" services/xstockstrat-{indicators,
 
 ### Step 6 — test: Python in-process handshake + negative matrix + propagation
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`, `xstockstrat-ingest`, `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-indicators/tests/test_mtls.py` — create
@@ -548,6 +548,8 @@ grep -n "MTLS_CERT\|MTLS_KEY\|MTLS_CA_CERT" CLAUDE.md   # env convention note pr
 ---
 
 ## Deviation Log
+
+- **Step 6 — Python full `pytest --cov` suite deferred to CI (CI-equivalent fallback).** The services pytest suites need a live TimescaleDB (never start a DB — HARD CONSTRAINT; fails.md:369). Ran the new `tests/test_mtls.py` in each service venv (`.venv/bin/python -m pytest`, per the venv-interpreter trap in fails.md): 5/5 green x3 (indicators/ingest/analysis). No `pyproject.toml` was touched, so no `uv lock` is needed. CI runs `pytest --cov=app --cov-fail-under` against the managed DB. **Disposition**: CI-equivalent fallback.
 
 - **Step 3/4 — golangci-lint deferred to CI (CI-equivalent fallback).** Local golangci-lint v2.5.0 is built with go1.25 and refuses a go1.27-targeted module ("Go language version used to build golangci-lint is lower than the targeted Go version"). Verified instead with `go build` + `gofmt -l` + `go vet` (all clean). CI runs golangci-lint v2.13.1 (go1.27-compatible). **Disposition**: CI-equivalent fallback.
 - **Step 4 — full `go test ./...` coverage mesh deferred to CI (CI-equivalent fallback).** The services' repository/integration tests require a live TimescaleDB, which the execute sandbox has none of (never start a DB — HARD CONSTRAINT; fails.md:369). Verified the Step's new logic in-process: the `internal/mtls` package tests pass with ServerConfig/ClientConfig at 100%% coverage, plus the ledger-emit fail-soft test. CI runs the full suite against the managed DB. **Disposition**: CI-equivalent fallback (structural/in-process per fails.md:369).

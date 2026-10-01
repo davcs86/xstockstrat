@@ -184,3 +184,15 @@
 - Files: trading/portfolio/marketdata ×internal/mtls/mtls_test.go; trading/internal/service/ledger_emit_mtls_test.go.
 - Verification: 5/5 mtls tests green ×3 services + ledger-emit test green; mtls package coverage ServerConfig/ClientConfig 100%, load 83.3%. Full `go test ./...` coverage mesh needs a DB (repository tests) — CI-equivalent fallback (Deviation Log).
 - Covers: @AC-1, @AC-2, @AC-4, @AC-5.
+
+### Step 5 — service: Python backends mutual TLS [done]
+- Added `app/mtls.py` to indicators/ingest/analysis (`server_credentials` = ssl_server_credentials require_client_auth=True; `channel_credentials` = ssl_channel_credentials; `target_override` = ssl_target_name_override pinned to the target service name). Swapped `add_insecure_port`→`add_secure_port` (3 servers), every `insecure_channel`→`secure_channel`+creds+override (ingest 3 dials, analysis 7 dials, all 3 config-watchers). Per-method propagation untouched (FR-5). Left the ingest asyncpg DB-TLS `_ssl_ctx` block alone (Postgres, not gRPC).
+- Files: indicators/ingest/analysis ×{app/main.py, app/config/watcher.py, app/mtls.py}.
+- Verification: ruff check+format clean ×3; zero insecure_channel/add_insecure_port in source. No pyproject change → no uv.lock change.
+- TDD: structural red (no app.mtls + insecure transport pre-Step-5) → green (Step 6).
+
+### Step 6 — test: Python in-process handshake + negative matrix + propagation [done]
+- `tests/test_mtls.py` ×3 (openssl-minted CA+leaves in a fixture, in-process grpc.aio handshake over a generic echo method): @AC-4 fail-closed, @AC-2 mutual handshake, @AC-5 trio propagation, @AC-1 plaintext refused, negative matrix (wrong-CA + wrong-SAN rejected).
+- Files: indicators/ingest/analysis ×tests/test_mtls.py.
+- Verification: 5/5 green ×3 (via each service's `.venv/bin/python -m pytest`). Full `pytest --cov` suite deferred to CI (needs a DB — Deviation Log).
+- Covers: @AC-1, @AC-2, @AC-4, @AC-5.
