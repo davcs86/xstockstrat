@@ -241,3 +241,16 @@
 - **Repo-wide @AC-4 no-plaintext sweep (GREEN)**: zero `insecure.NewCredentials`/`InsecureSkipVerify` in Go; zero `insecure_channel`/`add_insecure_port` in Python source (the one grep hit was stale git-ignored `__pycache__` bytecode + the mtls.py docstring, not a call); zero `createInsecure` in Node non-test `src/`.
 - **TDD red-green (structural)**: before this step the three deploy files had zero MTLS_* (0/0/0); after, 26 / 72 / 72. No-plaintext sweep green.
 - Covers: @AC-4 (cross-cutting — no plaintext/verification-disabling path anywhere).
+
+### Step 14 — docs: rollout runbook + env convention + per-service CLAUDE.md + Teardown [done]
+- `docs/runbooks/inter-service-mtls-rollout.md` (new): cert-material contract recap, leaf→root dependency-ordered flag-day cutover, the **trading↔ledger flat-book + HALTED precondition** (how to verify a flat book + why — the fire-and-forget emitLedgerEvent transition-event loss, operator sign-off), DO health-gated-promotion assumption + manual fallback, restart-only leaf rotation, two-cert CA-bundle overlap rotation, @AC-6 reconnect-not-zero-restart, and image-revert rollback with the never-strip-env footgun.
+- `docs/patterns/inter-service-mtls.md`: finalized — dropped the non-existent `httpVersion` connect-node option (matches shipped Step 9 code), documented the `scripts/mtls-dev-env.sh` source-then-up dev flow.
+- Root `CLAUDE.md`: added the Environment Variable Naming bullet — MTLS_CERT/KEY/CA_CERT are a boot-time cert-material class, NOT a `<SERVICE>_ENDPOINT` connection var (no suffix), fail-closed, MTLS_KEY is SECRET.
+- 12 service `CLAUDE.md` (all backends + ui + agent): added a standard mTLS boot-env note (server-flavored for the 11 backends/ui, client-flavored for the agent).
+
+### Teardown — context reconciliation (context-constitution refresh)
+- The `/context-forge:context-constitution refresh` skill IS installed, but it is a multi-gate interactive skill (AskUserQuestion gates + repo-wide subagent scans) incompatible with this session's standing "no more checkpoints" unattended directive. Per the root CLAUDE.md Teardown rule, discharged the **equivalent real reconciliation by hand** (not a bare note):
+  - Swept every context file (`docs/context-constitution*.md`, `services/*/docs/context-constitution*.md`, service `CLAUDE.md`, header-propagation/docker-build pattern docs) for claims feature 210 falsifies.
+  - **Fixed 3 grounded-drift sites**: (1) root `docs/context-constitution.md` **PLAT-N3** "Internal gRPC is plaintext" → rewritten to "Internal gRPC is mutual TLS" (kept the still-true keepalive/GOAWAY/benign-reconnect norm, re-cited to the mtls modules); (2) `services/xstockstrat-agent/docs/context-constitution.md` **AGENT-1** `insecure_channel` → `mtls.secure_channel` (connect-per-call shape unchanged); (3) its pointer row likewise.
+  - **Deliberately left unchanged**: `docs/reports/2026-09-16-trading-system-security-audit.md` — a DATED point-in-time report (the audit that motivated feature 210); dated reports are immutable historical snapshots, not drift.
+  - No per-service backend constitution asserted plaintext transport (they document propagation/keepalive, not credentials), so no further edits. This reconciliation is recorded in the integration PR body per fails.md:670.

@@ -45,8 +45,9 @@ Per language (all run native chain+SAN verification — never Go `InsecureSkipVe
   `grpc.ssl_server_credentials([(KEY,CERT)], root_certificates=CA, require_client_auth=True)`.
 - **Node** — client `credentials.createSsl(CA, KEY, CERT)` + `grpc.ssl_target_name_override`;
   server `ServerCredentials.createSsl(CA, [{private_key, cert_chain}], true)`.
-- **UI BFF (connect-node)** — `createGrpcTransport({ baseUrl: 'https://<endpoint>', httpVersion: '2',
-  nodeOptions: { ca, cert, key, checkServerIdentity } })`.
+- **UI BFF (connect-node)** — `createGrpcTransport({ baseUrl: 'https://<endpoint>',
+  nodeOptions: { ca, cert, key, checkServerIdentity } })` (gRPC transport is inherently HTTP/2 — there
+  is no `httpVersion` option; `checkServerIdentity` pins to `'xstockstrat-<target>'`).
 
 ## connect-node client-cert spike (resolved, Step 1)
 
@@ -62,8 +63,18 @@ needed. (Had it not: the known-good fallback was a native `@grpc/grpc-js` stub b
 
 `scripts/gen-dev-certs.sh` (invoked by `scripts/localenv-setup.sh`) generates one self-signed dev
 platform CA + one leaf per service under a git-ignored `./certs/<svc>/` tree
-(`cert.pem`/`key.pem`/`ca.pem`). `docker-compose.yml` loads these into `MTLS_CERT`/`MTLS_KEY` per
-service and the CA into the shared `x-common-env` anchor. `scripts/gen-dev-certs.sh --rotate <svc>`
-mints a rotated leaf off the same CA (`cert.rotated.pem`), used by the cert-rotation test (@AC-6).
+(`cert.pem`/`key.pem`/`ca.pem`). `docker-compose.yml` interpolates these as PEM **strings** per
+service (`${<SVC>_MTLS_CERT}`/`${<SVC>_MTLS_KEY}`) plus the shared CA on the `x-common-env` anchor
+(`${MTLS_CA_CERT}`) — the same PEM-as-string delivery prod uses, so the code path is identical.
+Because Compose's `.env` parser cannot carry a multiline PEM, **`source scripts/mtls-dev-env.sh`**
+first to export those vars from `./certs/` into the shell, then `docker compose up`.
+`scripts/gen-dev-certs.sh --rotate <svc>` mints a rotated leaf off the same CA (`cert.rotated.pem`),
+used by the cert-rotation test (@AC-6).
+
+```bash
+scripts/gen-dev-certs.sh          # once — mints ./certs/ (CA + per-service leaves)
+source scripts/mtls-dev-env.sh    # export the PEMs into this shell
+docker compose up -d              # compose interpolates ${<SVC>_MTLS_*} from the env
+```
 
 Rollout, rotation, and rollback procedure → `docs/runbooks/inter-service-mtls-rollout.md`.

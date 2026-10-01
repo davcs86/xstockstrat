@@ -106,6 +106,8 @@ All config changes must comply with the governance rules in the root `CLAUDE.md`
 
 ## Environment Variables
 
+> **Inter-service mTLS (feature 210):** this service also requires `MTLS_CERT` / `MTLS_KEY` / `MTLS_CA_CERT` — boot-time PEM strings (its own leaf, private key, and the platform CA). The gRPC server binds mutual TLS and every outbound gRPC dial presents the leaf; **fail-closed** — the service refuses to start if any is absent. `MTLS_KEY` is a `SECRET` in `.do/app*.yaml`. Contract → `docs/patterns/inter-service-mtls.md`; rollout → `docs/runbooks/inter-service-mtls-rollout.md`.
+
 ```text
 GRPC_PORT=50060
 APPLICATION_ENV=development  # development | production — default environment scope for this instance

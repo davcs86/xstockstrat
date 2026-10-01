@@ -514,7 +514,7 @@ grep -rn "createInsecure" services/xstockstrat-{config,ledger,identity,notify}/s
 
 ### Step 14 — docs: Rolling-cutover deploy runbook, rotation/rollback, env convention + Teardown reconciliation
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`
 **Files**:
 - `docs/runbooks/inter-service-mtls-rollout.md` — create (leaf→root cutover, flat-book precondition, rotation, rollback)
