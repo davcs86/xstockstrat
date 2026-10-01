@@ -49,9 +49,9 @@ func TestMain(m *testing.M) {
 	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: leafDER})
 	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: leafKeyDER})
 
-	os.Setenv("MTLS_CERT", string(certPEM))
-	os.Setenv("MTLS_KEY", string(keyPEM))
-	os.Setenv("MTLS_CA_CERT", string(caPEM))
+	_ = os.Setenv("MTLS_CERT", string(certPEM))
+	_ = os.Setenv("MTLS_KEY", string(keyPEM))
+	_ = os.Setenv("MTLS_CA_CERT", string(caPEM))
 
 	os.Exit(m.Run())
 }
