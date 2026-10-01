@@ -24,8 +24,47 @@ bind, clients raise on first dial). This is the entire enforcement — there is 
 
 Local dev: `scripts/gen-dev-certs.sh` mints a dev CA + one leaf per service under git-ignored
 `./certs/`; `source scripts/mtls-dev-env.sh` exports them as the env vars `docker-compose.yml`
-interpolates. Prod/staging: the three vars are set per component in `.do/app.yaml` / `.do/app.dev.yaml`
-from the production platform CA (`MTLS_KEY` as a DO `SECRET`).
+interpolates.
+
+### 0.1 Deploy-secret provisioning (CI/CD) — one CA per environment, leaves minted in-workflow
+
+`.do/app.dev.yaml` / `.do/app.yaml` carry **placeholders** (`YOUR_{DEV,PROD}_MTLS_CA_CERT`,
+`…_MTLS_CERT_<SVC>`, `…_MTLS_KEY_<SVC>`) for all 12 components. The deploy stores **only the CA**
+(cert + key) as **one GitHub secret per environment** — a `base64(JSON {ca_cert, ca_key})` — and
+`.github/workflows/deploy.yml` mints the 12 per-service leaves off it **on every deploy**:
+
+| Secret | Used by | Produced by |
+|---|---|---|
+| `DEV_MTLS_CA` | `deploy-dev.yml` → `.do/app.dev.yaml` | `scripts/mtls-provision.sh ca dev` |
+| `PROD_MTLS_CA` | `deploy-prod.yml` → `.do/app.yaml` | `scripts/mtls-provision.sh ca prod` |
+
+```bash
+scripts/mtls-provision.sh set-secret dev    # mints ./certs (dev CA) + sets DEV_MTLS_CA via gh
+scripts/mtls-provision.sh set-secret prod   # mints ./certs-prod (prod CA) + sets PROD_MTLS_CA
+# …or emit to stdout and paste into GitHub → Settings → Secrets:
+scripts/mtls-provision.sh ca dev
+```
+
+**Deploy flow** (`deploy.yml`): a *Mint mTLS leaves* step writes the CA from the secret to a temp dir
+and runs `scripts/gen-dev-certs.sh` against it (its `ensure_ca` reuses an existing CA, so the CA is
+**byte-stable across deploys** — no rolling-deploy handshake mismatch); the substitution step then
+fills the CA + every per-service `MTLS_*` placeholder from the freshly-minted leaves.
+
+- **Leaves auto-rotate every deploy** off the stable CA — the per-service §2.1 leaf rotation is now
+  automatic; you only act for CA rotation (§2.2).
+- **Fail-closed**: if a spec has `MTLS_*` placeholders but no CA secret, the deploy **aborts before
+  `doctl apps update`** rather than pushing a placeholder (invalid PEM → every service crash-loops →
+  DO auto-rollback). This was the original feature-210 rollout gap: service code + spec placeholders
+  shipped, but no secret or substitution existed, so the first `main-dev` deploy pushed placeholders
+  and auto-rolled-back.
+- `MTLS_KEY` stays `type: SECRET` in the specs, so DO encrypts each key at rest after substitution.
+- **Trade-off (accepted):** the **CA signing key lives in CI** (the secret + the runner's temp dir
+  during the mint step). This is the operator's chosen convenience/security balance — same secret
+  class as `JWT_SECRET` / DB creds already in CI — in exchange for zero per-deploy manual steps and
+  automatic leaf rotation. The alternative (store the 12 leaves, keep the CA key off CI) is a larger,
+  per-rotation manual secret; keep that in mind if the threat model tightens.
+- Dev and prod use **separate CAs** (`./certs` vs `./certs-prod`, both git-ignored). The dev CA also
+  backs local docker-compose (via `mtls-dev-env.sh`), so local and the dev deploy share one trust root.
 
 ---
 
@@ -88,19 +127,30 @@ No language hot-reloads a live listener's TLS credentials, so **rotation is rede
 
 All leaves chain the **same CA**, so a rotated leaf stays trusted by every peer with no lockstep.
 
-1. Mint a new leaf for the service off the current CA (dev: `scripts/gen-dev-certs.sh --rotate <svc>`;
-   prod: issue from the production CA).
-2. Update that service's `MTLS_CERT`/`MTLS_KEY` (DO component env / compose shell env) and redeploy
-   **only that service**.
+**On DO this is automatic.** `deploy.yml` mints fresh leaves off the CA secret on **every** deploy
+(§0.1), so any redeploy already rotates the leaves — there is no per-leaf secret to update. The manual
+steps below apply only to the **local compose** path (where leaves live in `./certs/`):
+
+1. Mint a new leaf for the service off the current CA (`scripts/gen-dev-certs.sh --rotate <svc>`).
+2. Re-`source scripts/mtls-dev-env.sh` and restart that service.
 3. Its long-lived inbound streams survive via the existing client reconnect/replay (see §2.3).
 
 ### 2.2 CA rotation (two-cert bundle overlap)
 
-1. Ship a **two-cert `MTLS_CA_CERT` bundle** (old CA + new CA concatenated) to **every** component and
-   redeploy. Now every peer trusts leaves from either CA.
-2. Re-issue every leaf off the **new** CA and roll them out (per §2.1), service by service.
-3. Once all leaves are on the new CA, drop the **old** cert from `MTLS_CA_CERT` (single new cert) and
-   redeploy. Never drop the old CA before every leaf has moved.
+On DO this is driven entirely through the env's `*_MTLS_CA` secret (its `ca_cert` is both the trust
+bundle `MTLS_CA_CERT` **and** the issuer `gen-dev-certs.sh` signs leaves with via `ca_key`). Because
+every leaf is re-minted on each deploy (§0.1), rotation is **three secret updates + redeploys** — no
+service-by-service leaf roll:
+
+1. **Trust both, still sign old** — set `ca_cert` = `old-cert ++ new-cert` (old **first**, so it stays
+   the issuer for `ca_key` = **old** key). Redeploy: every peer now trusts both CAs; leaves still old.
+2. **Sign new, still trust both** — set `ca_cert` = `new-cert ++ old-cert` (new **first**), `ca_key` =
+   **new** key. Redeploy: leaves re-minted off the new CA; both still trusted, so no mismatch.
+3. **Drop old trust** — set `ca_cert` = `new-cert` only, `ca_key` = new key. Redeploy. Never reach
+   step 3 before step 2 is healthy everywhere.
+
+(The first cert in `ca_cert` must be the one `ca_key` matches — openssl issues from it. For local
+compose, the legacy per-leaf flow in §2.1 still applies.)
 
 ### 2.3 Why streams survive a restart (@AC-6)
 

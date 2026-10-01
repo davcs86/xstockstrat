@@ -356,6 +356,24 @@ channel (no `.enabled`-style guard, same as the fundamentals credentials above).
   components. Web Push stays disabled until all three are set; the same public key must be set on both
   services (the deploy substitution handles this automatically).
 
+### Inter-service mTLS CA (feature 210)
+Set on: **every** component (all 12 services require `MTLS_CERT`/`MTLS_KEY`/`MTLS_CA_CERT`, fail-closed)
+
+Backends run **mutual TLS** on every inter-service gRPC hop. The deploy stores **only the CA**
+(cert + key) as **one secret per environment**; `.github/workflows/deploy.yml` mints the 12 per-service
+leaves off it on every deploy. Generate and install the CA with the provisioning script — this is
+**required**, or the deploy aborts fail-closed (a placeholder would crash-loop every service):
+
+```bash
+scripts/mtls-provision.sh set-secret dev    # mints ./certs (dev CA) → sets DEV_MTLS_CA
+scripts/mtls-provision.sh set-secret prod   # mints ./certs-prod (prod CA) → sets PROD_MTLS_CA
+```
+
+The CA (byte-stable across deploys) backs the `YOUR_{DEV,PROD}_MTLS_{CA_CERT,CERT_<SVC>,KEY_<SVC>}`
+placeholders in `.do/app*.yaml` (each `MTLS_KEY` stays `type: SECRET`). This keeps the CA **signing
+key in CI** in exchange for zero manual steps and auto-rotating leaves — see the trade-off and CA
+rotation in `docs/runbooks/inter-service-mtls-rollout.md` § 0.1 / § 2.2.
+
 ### JWT secret
 Set on: `xstockstrat-identity`
 

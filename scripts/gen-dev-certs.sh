@@ -16,7 +16,11 @@
 set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CERTS_DIR="${REPO_ROOT}/certs"
+# CERTS_DIR / CA_CN / CA_O are env-overridable so scripts/mtls-provision.sh can reuse this generator
+# for a separate prod CA tree; the bare `gen-dev-certs.sh` defaults are unchanged (local dev CA).
+CERTS_DIR="${CERTS_DIR:-${REPO_ROOT}/certs}"
+CA_CN="${CA_CN:-xstockstrat-dev-platform-ca}"
+CA_O="${CA_O:-xstockstrat-dev}"
 CA_DIR="${CERTS_DIR}/_ca"
 DAYS_CA=3650
 DAYS_LEAF=825
@@ -31,7 +35,7 @@ ensure_ca() {
   if [ ! -f "${CA_DIR}/ca.pem" ]; then
     openssl req -x509 -newkey rsa:2048 -nodes \
       -keyout "${CA_DIR}/ca-key.pem" -out "${CA_DIR}/ca.pem" \
-      -days "$DAYS_CA" -subj "/CN=xstockstrat-dev-platform-ca/O=xstockstrat-dev" >/dev/null 2>&1
+      -days "$DAYS_CA" -subj "/CN=${CA_CN}/O=${CA_O}" >/dev/null 2>&1
   fi
 }
 
@@ -50,7 +54,7 @@ keyUsage = digitalSignature, keyEncipherment
 EXT
   openssl req -newkey rsa:2048 -nodes \
     -keyout "$key_out" -out "$csr_file" \
-    -subj "/CN=${svc}/O=xstockstrat-dev" >/dev/null 2>&1
+    -subj "/CN=${svc}/O=${CA_O}" >/dev/null 2>&1
   openssl x509 -req -in "$csr_file" \
     -CA "${CA_DIR}/ca.pem" -CAkey "${CA_DIR}/ca-key.pem" -CAcreateserial \
     -out "$cert_out" -days "$DAYS_LEAF" -extfile "$ext_file" >/dev/null 2>&1
