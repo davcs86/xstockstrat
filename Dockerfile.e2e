@@ -98,6 +98,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libx11-xcb1 \
     fonts-liberation \
     fonts-noto-color-emoji \
+    # openssl CLI — e2e/helpers/devCerts.ts mints the mutual-TLS dev certs at
+    # playwright.config load (feature 210); node:24-bookworm-slim ships libssl but not the CLI.
+    openssl \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy the full workspace (deps + built .next + e2e tests + Chromium)
