@@ -1,3 +1,4 @@
+import { checkServerIdentity, type PeerCertificate } from 'node:tls';
 import { Code, createClient } from '@connectrpc/connect';
 import { createGrpcTransport } from '@connectrpc/connect-node';
 import { AnalysisService } from '@xstockstrat/proto/analysis/v1/analysis_pb';
@@ -23,21 +24,78 @@ const INGEST_ENDPOINT = process.env.INGEST_ENDPOINT ?? 'xstockstrat-ingest:50055
 const INDICATORS_ENDPOINT = process.env.INDICATORS_ENDPOINT ?? 'xstockstrat-indicators:50054';
 const LEDGER_ENDPOINT = process.env.LEDGER_ENDPOINT ?? 'xstockstrat-ledger:50057';
 
-function makeTransport(endpoint: string) {
-  return createGrpcTransport({ baseUrl: `http://${endpoint}` });
+// Mutual-TLS material from boot-time env PEM (MTLS_CERT/MTLS_KEY/MTLS_CA_CERT), never WatchConfig.
+// Absent material throws at first dial (fail-closed — the BFF presents no client cert otherwise).
+// See docs/patterns/inter-service-mtls.md.
+function loadMtls(): { ca: Buffer; cert: Buffer; key: Buffer } {
+  const cert = process.env.MTLS_CERT ?? '';
+  const key = process.env.MTLS_KEY ?? '';
+  const ca = process.env.MTLS_CA_CERT ?? '';
+  if (!cert || !key || !ca) {
+    throw new Error('mtls: MTLS_CERT, MTLS_KEY and MTLS_CA_CERT must all be set (fail-closed)');
+  }
+  return { ca: Buffer.from(ca), cert: Buffer.from(cert), key: Buffer.from(key) };
+}
+
+// makeTransport presents the xstockstrat-ui client leaf and pins the verified server authority to
+// targetService (the destination registry service name) — NOT the dialed host, which differs from the
+// SAN on DO App Platform (PRIVATE_DOMAIN FQDN). The chain is still verified against the CA; only the
+// identity check is overridden to the env-independent service-name pin.
+function makeTransport(endpoint: string, targetService: string) {
+  const { ca, cert, key } = loadMtls();
+  return createGrpcTransport({
+    baseUrl: `https://${endpoint}`,
+    nodeOptions: {
+      ca,
+      cert,
+      key,
+      checkServerIdentity: (_host: string, peer: PeerCertificate) =>
+        checkServerIdentity(targetService, peer),
+    },
+  });
 }
 
 // ── Exported clients ───────────────────────────────────────────────────────
-export const tradingClient = createClient(TradingService, makeTransport(TRADING_ENDPOINT));
-export const portfolioClient = createClient(PortfolioService, makeTransport(PORTFOLIO_ENDPOINT));
-export const marketDataClient = createClient(MarketDataService, makeTransport(MARKETDATA_ENDPOINT));
-export const notifyClient = createClient(NotifyService, makeTransport(NOTIFY_ENDPOINT));
-export const identityClient = createClient(IdentityService, makeTransport(IDENTITY_ENDPOINT));
-export const analysisClient = createClient(AnalysisService, makeTransport(ANALYSIS_ENDPOINT));
-export const configClient = createClient(ConfigService, makeTransport(CONFIG_ENDPOINT));
-export const ingestClient = createClient(IngestService, makeTransport(INGEST_ENDPOINT));
-export const indicatorsClient = createClient(IndicatorsService, makeTransport(INDICATORS_ENDPOINT));
-export const ledgerClient = createClient(LedgerService, makeTransport(LEDGER_ENDPOINT));
+export const tradingClient = createClient(
+  TradingService,
+  makeTransport(TRADING_ENDPOINT, 'xstockstrat-trading'),
+);
+export const portfolioClient = createClient(
+  PortfolioService,
+  makeTransport(PORTFOLIO_ENDPOINT, 'xstockstrat-portfolio'),
+);
+export const marketDataClient = createClient(
+  MarketDataService,
+  makeTransport(MARKETDATA_ENDPOINT, 'xstockstrat-marketdata'),
+);
+export const notifyClient = createClient(
+  NotifyService,
+  makeTransport(NOTIFY_ENDPOINT, 'xstockstrat-notify'),
+);
+export const identityClient = createClient(
+  IdentityService,
+  makeTransport(IDENTITY_ENDPOINT, 'xstockstrat-identity'),
+);
+export const analysisClient = createClient(
+  AnalysisService,
+  makeTransport(ANALYSIS_ENDPOINT, 'xstockstrat-analysis'),
+);
+export const configClient = createClient(
+  ConfigService,
+  makeTransport(CONFIG_ENDPOINT, 'xstockstrat-config'),
+);
+export const ingestClient = createClient(
+  IngestService,
+  makeTransport(INGEST_ENDPOINT, 'xstockstrat-ingest'),
+);
+export const indicatorsClient = createClient(
+  IndicatorsService,
+  makeTransport(INDICATORS_ENDPOINT, 'xstockstrat-indicators'),
+);
+export const ledgerClient = createClient(
+  LedgerService,
+  makeTransport(LEDGER_ENDPOINT, 'xstockstrat-ledger'),
+);
 
 // ── Connect-Code → HTTP status helper ──────────────────────────────────────
 export function connectCodeToHttp(code: Code): number {

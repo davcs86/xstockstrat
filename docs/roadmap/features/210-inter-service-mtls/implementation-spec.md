@@ -360,7 +360,7 @@ cd services/xstockstrat-notify && pnpm run test:coverage
 
 ### Step 9 — service: UI BFF — client certs through the single makeTransport choke point + e2e mock to TLS
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/connectClients.ts` — modify (the single `makeTransport` factory)
@@ -393,7 +393,7 @@ grep -n "http://" services/xstockstrat-ui/src/lib/connectClients.ts        # exp
 
 ### Step 10 — test: UI BFF presents a client cert; mock-backend TLS handshake (e2e/structural)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/mtls-transport.spec.ts` — create (or extend an existing e2e spec)
@@ -548,6 +548,8 @@ grep -n "MTLS_CERT\|MTLS_KEY\|MTLS_CA_CERT" CLAUDE.md   # env convention note pr
 ---
 
 ## Deviation Log
+
+- **Step 10 — full `pnpm test:e2e` harness run deferred to CI (CI-equivalent fallback).** The full Playwright harness builds Next (240s) + launches Chromium via `webServer`+`globalSetup`. The new `e2e/mtls-transport.spec.ts` asserts the transport-layer mTLS contract, which needs neither a browser nor a Next build, so it was run standalone via a webServer-less temp config: RED against a plaintext mock (mTLS-handshake + plaintext-refused assertions fail), GREEN against the real secure mock (4/4 pass, 8.2s). CI (Node 24) runs the full `pnpm test:e2e`. **Disposition**: CI-equivalent fallback.
 
 - **Step 8 — Node full `pnpm run test:coverage` suite deferred to CI (CI-equivalent fallback).** The services full suites need a live TimescaleDB (never start a DB — HARD CONSTRAINT; fails.md:369). Ran the new `src/__tests__/mtls.test.ts` per service via its own runner (config/notify compiled `node --test dist`; ledger/identity `node --experimental-strip-types --test src`): config 5, notify 5, ledger 6, identity 5 — all green. CI (Node 24) runs the full coverage suite. **Disposition**: CI-equivalent fallback. Note: the strip-types runners require explicit `.ts` relative-import extensions (fails.md:2224 is about vacuous-green, not applicable here since config/notify compile first and the strip-types imports resolve correctly).
 

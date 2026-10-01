@@ -208,3 +208,17 @@
 - Files: config/ledger/identity/notify ×src/__tests__/mtls.test.ts.
 - Verification: config 5/5, notify 5/5, ledger 6/6 (+rotation), identity 5/5 — all green (locally on Node 22; the compiled runners + explicit-.ts strip-types imports both work on Node 22). Full `pnpm run test:coverage` deferred to CI (needs DB — Deviation Log).
 - Covers: @AC-1, @AC-2, @AC-4, @AC-5, @AC-6.
+
+### Step 9 — service: UI BFF mutual TLS through makeTransport + e2e mock to TLS [done]
+- `connectClients.ts`: `makeTransport(endpoint, targetService)` now builds `createGrpcTransport({ baseUrl: 'https://'+endpoint, nodeOptions: { ca, cert, key, checkServerIdentity → checkServerIdentity(targetService, peer) } })`. `loadMtls()` reads MTLS_CERT/KEY/CA_CERT env, fail-closed. All 10 `createClient` sites pass their destination service name (env-independent authority pin — DO PRIVATE_DOMAIN ≠ SAN). Dropped `httpVersion` (not a GrpcTransportOptions key; gRPC is inherently h2).
+- `e2e/mock-backend.ts`: the 3 `http2.createServer` → `http2.createSecureServer(tlsOptions(), …)`; `tlsOptions()` (exported) = { ca, cert: mockCert, key: mockKey, requestCert: true, rejectUnauthorized: true } from `devCerts()`. Server-var union widened to `Http2Server | Http2SecureServer`.
+- `e2e/helpers/devCerts.ts` (new): per-run openssl-minted CA + UI client leaf + a **multi-SAN mock server leaf** (SANs = all 10 backend service names). Memoized so playwright.config.ts (BFF client env) and the in-process mock share one CA. No committed private keys.
+- `playwright.config.ts`: `webServer.env` gains MTLS_CERT/KEY/CA_CERT = UI leaf + CA from `devCerts()`.
+- **Design fork resolved**: one mock port fronts ≤6 services, so a single-SAN leaf can't satisfy a per-service authority pin. The mock presents a superset-SAN leaf; the SAME production `checkServerIdentity(target)` pin passes in both prod (own single-SAN leaf) and e2e (superset) — the real verification path is exercised, not bypassed.
+- Verification: `pnpm run lint` clean (only pre-existing react-hooks warnings, none in changed files); `grep createSecureServer` = 3; `grep http://` in connectClients = 0; `tsc --noEmit` clean on all changed files (3 pre-existing errors in untouched test files remain).
+
+### Step 10 — test: UI BFF mTLS handshake contract + plaintext/no-cert/wrong-pin refused (@AC-4) [done]
+- `e2e/mtls-transport.spec.ts` (new): stands up `http2.createSecureServer(tlsOptions())` (the real mock TLS config) and, with the same `devCerts()` material + the same nodeOptions shape makeTransport builds, asserts: mTLS client pinned to a served SAN handshakes (200); a plaintext client is refused; a client with no client cert is refused (mutual auth required); pinning to an unserved name is rejected (the pin is real).
+- **TDD red-green captured**: reverting the mock to its pre-Step-9 plaintext `http2.createServer` → the mTLS-handshake and plaintext-refused assertions FAIL; secure → all 4 PASS (8.2s). Non-vacuous.
+- Covers: @AC-4 (UI slice — verification cannot be disabled).
+- Verification: ran via a webServer-less temp config `npx playwright test` → 4/4 green. The full `pnpm test:e2e` harness (Next build + Chromium) is CI-deferred (Deviation Log) — the transport contract needs no browser or Next build and was run standalone.
