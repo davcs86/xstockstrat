@@ -62,6 +62,32 @@
   honored. Floor breaches: none.
 - Status: spec-ready → design-approved.
 
+## Session 2026-10-02 — sdd-spec
+
+- Generated implementation-spec.md with 13 steps. Status: design-approved → implementation-ready.
+- Order:
+  - proto → proto-gen;
+  - config `listKeys` + node:test (AC-6/7/13);
+  - e2e fixtures;
+  - three UI service→test pairs: header/Select (AC-1/2/3), breadcrumb + nav aliases (AC-14), and
+    the editor refactor (focus AC-10/11; rows AC-4/5/8/9/12);
+  - a docs reconciliation step.
+- Key codebase findings:
+  - `listKeys` SELECT is at `configServiceImpl.ts:517-521` and mapping at `:524-551`. No migration
+    (last is `030`).
+  - `buf breaking` baseline: `feature/config-ui-usability` does not exist (harness branch
+    `ccr-8a11e328-8tlo4j`). Step 1 names `origin/main-dev` (CI's PR baseline) as the substitute, to
+    be logged as a deviation.
+  - `PlatformHeader.isItemActive` (`:97-100`) is the only nav matcher for Settings. `BottomTabBar`
+    renders only `NAV_GROUPS.slice(0, 4)`, so `aliases` need no mobile change.
+  - The context doc `services/xstockstrat-config/docs/context-constitution.md` CONFIG-2/CONFIG-7
+    cites `configServiceImpl.ts` lines that are already off and will shift further. Step 13
+    reconciles them, adds the new specs to `ui-ux-governance.md:216`, and does the teardown.
+  - There is no in-repo precedent for `toJson(XSchema, create(XSchema, …))` in e2e. Step 5 blocks
+    (F-04) if the `*Schema` exports are missing, rather than hand-writing JSON.
+  - `env-mode-switcher.spec.ts:37` uses `getByText('production', {exact:true})`. Re-run it in
+    Step 7 now that the landing page renders the editor's env badge.
+
 ## Open Threads
 
 - [ ] Guard against inline cell arrows reintroducing the remount: module-scope comment + AC-11
