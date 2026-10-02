@@ -1,6 +1,6 @@
 # Implementation Spec: config-ui-usability
 
-**Status**: `in-progress`
+**Status**: `complete`
 **Created**: 2026-10-02
 **Feature**: `docs/roadmap/features/219-config-ui-usability/feature.md`
 **Total Steps**: 13
@@ -917,7 +917,7 @@ feature's full UI regression gate.
 
 ### Step 13 — docs: reconcile context docs touched by this feature
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs`
 **Files**:
 - `services/xstockstrat-config/docs/context-constitution.md` — modify
@@ -1001,3 +1001,13 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Actual**: as planned (`next build` + `next start`, chromium from `/opt/pw-browsers`). Non-CI
   `pnpm dev` mode times out in `warmup.setup.ts` because of the 10s local test timeout.
 - **Disposition**: none needed; noted for the next session.
+
+### Step 13 — teardown drift outside `**Files**`
+- **Planned**: reconcile `services/xstockstrat-config/docs/context-constitution.md` and
+  `docs/patterns/ui-ux-governance.md`.
+- **Actual**: the manual teardown sweep also found a stale line cite in
+  `services/xstockstrat-ui/docs/context-constitution.md` (`#901` gotcha cited
+  `NamespaceEditor.tsx:216` for `currentValue`; it now lives at `:135` display / `:308` prefill).
+  Fixed in place. The `context-forge:context-constitution` refresh skill is unavailable this
+  session, so the audit was performed by hand.
+- **Disposition**: in-scope drift caused by Step 10; one-line cite fix (F-08 record).

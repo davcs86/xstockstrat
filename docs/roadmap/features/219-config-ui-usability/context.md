@@ -200,3 +200,21 @@
 - `api-smoke.spec.ts` comments at `:48`/`:82` updated to "under the key" (comment-only; no assertion change).
 - Files modified: `services/xstockstrat-ui/e2e/config-ui/namespace-editor-rows.spec.ts`, `services/xstockstrat-ui/e2e/config-ui/api-smoke.spec.ts`
 - Deviations: none. (Note: `xstockstrat-config` `format:check` already fails on main-dev across many files; not touched, out of scope.)
+
+### Step 13 — docs: reconcile context docs touched by this feature [done]
+- `services/xstockstrat-config/docs/context-constitution.md`: CONFIG-2 (`buildConfigValue` `560-574`, redact `563-566`), CONFIG-7 (`517-521` plus the feature-219 `updated_at` clause and the new test file), and the stale `buildConfigValue` cites at `:31`/`:48` were updated. `docs/patterns/ui-ux-governance.md:216` now lists `edit-focus` and `namespace-editor-rows`.
+- Teardown: the `context-forge:context-constitution` refresh skill is **unavailable** this session (only `context-scrubber` is installed), so I reconciled by hand.
+  - Grepped root/service/package CLAUDE.md, `services/*/docs`, `packages/*/docs`, `docs/patterns`, `docs/runbooks` and `README.md` for the changed behavior: the card grid, `← namespaces`, `KNOWN_NAMESPACES`, `ConfigKeyMeta`, breadcrumb semantics, `isItemActive`/`match`, `NamespaceEditor`, and the Description column.
+  - Drift found and fixed: the UI constitution `#901` cite (`NamespaceEditor.tsx:216` → `:135`/`:308`). The fix is logged in the Deviation Log.
+  - Verified still accurate:
+    - PROTO-5 (`current_value = 9` cite unchanged);
+    - the UI findings row "non-admin Edit/Save affordance" (still true; `useIsAdmin` is still unused);
+    - the UI CLAUDE.md `PageBreadcrumb` signature.
+- Files modified: `services/xstockstrat-config/docs/context-constitution.md`, `docs/patterns/ui-ux-governance.md`, `services/xstockstrat-ui/docs/context-constitution.md` (Deviation Log)
+- TDD: N/A (docs)
+
+## Session 2026-10-02 — sdd-execute
+**Steps this session**: 1–13 (sequential)
+**Progress**: 13 done / 13 total
+**Stopped at**: all complete
+**Next**: integration PR #1207 → `main-dev` (CI watch)
