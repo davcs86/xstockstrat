@@ -8,6 +8,20 @@ following the format in `docs/runbooks/bug-triage.md#hotfix-log-format`.
 
 <!-- New entries are prepended below this line, most-recent first -->
 
+## 2026-10-02T14:01:50Z — hotfix/fix-oauth-login-unvalidated-redirect
+
+- **GitHub issue**: docs/reports/2026-10-02-oauth-login-unvalidated-redirect-defect.md (GitHub Issues disabled on this repo)
+- **Severity**: SEV-1
+- **Affected service(s)**: xstockstrat-ui
+- **Root cause**: /auth/oauth-login assigns the client-supplied agent_cb query value to window.location.href with no validation (open redirect / javascript: execution on the session origin).
+- **Fix summary**: _pending_
+- **PR**: _pending_
+- **Platform-lead approver**: _pending_
+- **Back-merge commit**: _pending_
+- **Maintenance mode applied**: no
+- **Status**: in-progress
+
+
 ## 2026-08-07T06:53:51Z — hotfix/fix-watchconfig-clients-omit
 
 - **GitHub issue**: docs/reports/2026-08-07-watchconfig-scope-omission-defect.md (GitHub Issues disabled on this repo)
