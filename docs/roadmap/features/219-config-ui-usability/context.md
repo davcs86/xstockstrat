@@ -151,3 +151,8 @@
 - New `listKeysUpdatedAt.test.ts` on the grpc-js round-trip harness. The pool emulates DISTINCT ON resolution by `$3`. It covers the SQL shape, AC-6, AC-13, AC-7 and the absent→unset case. RED 1/4 → GREEN 5/0. The full suite is 118/118 with c8 at 80.37% lines (gate 40%). Rows are inline (single consumer, C-13).
 - Files modified: `services/xstockstrat-config/src/__tests__/listKeysUpdatedAt.test.ts`
 - Deviations: none
+
+### Step 5 — test: e2e config-key fixtures [done]
+- `platform.log_level` got a static init-shape `updatedAt`. Added `listKeysStubBody`/`setConfigStubBody` (protobuf-es `toJson(create(...))`; schemas confirmed exported) and the keyed `CONFIG_KEY_STUB_ROWS`. INVENTORY updated (row extended + new row). TDD: N/A (fixture-only).
+- Files modified: `services/xstockstrat-ui/e2e/fixtures/configKeys.ts`, `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md`
+- Deviations: tsc baseline has 3 pre-existing errors in untouched files; the pass condition is "no new errors" (Deviation Log).

@@ -293,7 +293,7 @@ Pass conditions: all suites pass, including the existing `listKeysWire`/`listKey
 
 ### Step 5 — test: e2e config-key fixtures (stub-body helpers, stub rows, shared `updatedAt`)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/fixtures/configKeys.ts` — modify
@@ -981,3 +981,11 @@ coverage row lists both new specs.
 - **Disposition**: CI-equivalent fallback.
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Steps 5+ — `tsc --noEmit` baseline is not clean
+- **Planned**: `pnpm exec tsc --noEmit` passes.
+- **Actual**: `main-dev` already has 3 type errors in files this feature does not touch
+  (`e2e/insights/backfills.spec.ts` ×2, `src/middleware.test.ts` ×1). These are confirmed identical
+  with and without this feature's changes (stash comparison).
+- **Disposition**: the pass condition is "no *new* tsc errors" (the error set equals the baseline).
+  Not fixed here: out of scope (C-18 / root CLAUDE.md "touch only what the task requires").
