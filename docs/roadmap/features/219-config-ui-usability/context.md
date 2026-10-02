@@ -1,8 +1,8 @@
 # Context: config-ui-usability
 
-**Feature**: `docs/roadmap/features/218-config-ui-usability/feature.md`
-**Product Spec**: `docs/roadmap/features/218-config-ui-usability/product-spec.md`
-**Implementation Spec**: `docs/roadmap/features/218-config-ui-usability/implementation-spec.md`
+**Feature**: `docs/roadmap/features/219-config-ui-usability/feature.md`
+**Product Spec**: `docs/roadmap/features/219-config-ui-usability/product-spec.md`
+**Implementation Spec**: `docs/roadmap/features/219-config-ui-usability/implementation-spec.md`
 
 ---
 
@@ -121,3 +121,10 @@
   - [ ] Steps 5/7/9/11/12: no numeric coverage gate (Playwright/frontend). N/A by design.
 - Overlap findings: CLEAN. WARN on `e2e/fixtures/INVENTORY.md` and `packages/proto/gen/**` with
   feature 217; both need only a rebase/regenerate.
+
+## Session 2026-10-02 — sdd-execute (sequential) boot
+
+- **Renumbered 218 → 219.** Merging `origin/main-dev` brought in `218-fix-setupenv-unbootable-env`
+  (filed by another session in `0fbb3b8`). Per root CLAUDE.md § Feature Roadmap, the later
+  allocation moves to the next free number (`max+1 = 219`). Directory, path cites and
+  "feature 218" mentions were updated. `@AC-*` IDs are unchanged.

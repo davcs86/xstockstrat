@@ -2,7 +2,7 @@
 
 **Status**: `pending`
 **Created**: 2026-10-02
-**Feature**: `docs/roadmap/features/218-config-ui-usability/feature.md`
+**Feature**: `docs/roadmap/features/219-config-ui-usability/feature.md`
 **Total Steps**: 13
 **Feature Branch**: `ccr-8a11e328-8tlo4j` (the harness-assigned development branch, declared as
 this feature's Development Branch). Execution runs in `/sdd-execute sequential` mode: one commit per
@@ -353,7 +353,7 @@ secret values rendered in UI.
    - `environment` uses `Environment.STAGING` from `@xstockstrat/proto/common/v1/common_pb`.
 4. **INVENTORY.md.**
    - Update row `:37` (`CONFIG_KEY_FIXTURES`): the `platform.log_level` row carries a static
-     `updatedAt` (feature 218).
+     `updatedAt` (feature 219).
    - Add a row for `listKeysStubBody` / `setConfigStubBody` / `CONFIG_KEY_STUB_ROWS`
      (`e2e/fixtures/configKeys.ts`, `xstockstrat.config.v1.ListKeysResponse`/`SetConfigResponse`/
      `ConfigKeyMeta`), with consumers `e2e/config-ui/{namespace-nav,namespace-editor-rows,edit-focus}.spec.ts`.
@@ -949,7 +949,7 @@ feature's full UI regression gate.
 1. Re-grep `buildConfigValue` and the `DISTINCT ON` query in `src/grpc/configServiceImpl.ts`.
    Update every `configServiceImpl.ts` line cite in the file (CONFIG-2 `:19`, CONFIG-7 `:24`, and the
    `buildConfigValue` cites at `:31` and `:48`) to the post-Step-3 lines. In CONFIG-7, add one
-   clause: `updated_at` is selected from the same resolved row (feature 218).
+   clause: `updated_at` is selected from the same resolved row (feature 219).
 2. In `ui-ux-governance.md:216`, add `edit-focus` and `namespace-editor-rows` to the
    "config-ui · namespaces" e2e list.
 3. Run `/context-forge:context-constitution refresh`, scoped to the files touched by Steps 1–12,

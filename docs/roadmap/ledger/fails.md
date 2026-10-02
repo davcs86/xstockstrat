@@ -2412,7 +2412,7 @@ ambiguity is logged here).
   renders a function cell as a React component, so every keystroke produced a new component *type*:
   the `<Input>`s remounted, and `autoFocus` dragged focus back to the value field while the operator
   typed the reason. Existing e2e used `.fill()`, which writes in one shot and never exposed it.
-- **Evidence**: `docs/roadmap/features/218-config-ui-usability/design.md` § Chosen Approach 4;
+- **Evidence**: `docs/roadmap/features/219-config-ui-usability/design.md` § Chosen Approach 4;
   `services/xstockstrat-ui/src/app/config-ui/[namespace]/NamespaceEditor.tsx` (pre-218 `columns` deps).
 - **Rule it implies**: Editable DataTable cells must have a stable identity — declare columns and cell
   components at module scope and pass edit state through context. Test typing with

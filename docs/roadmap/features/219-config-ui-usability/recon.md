@@ -94,9 +94,9 @@ Make the `/config-ui` namespace editor fast to operate:
 
 - **PRESERVE** `@AC-3 @feature-147` "GetConfig and ListKeys redact secrets at the edge"
   (`services/xstockstrat-config/acceptance/config-secrets-and-scoping.feature`). Adding
-  `updated_at` must not touch the redaction branch; 218 `@AC-7` re-asserts this.
+  `updated_at` must not touch the redaction branch; 219 `@AC-7` re-asserts this.
 - **EXTEND** `@AC-11 @feature-147` "A per-user config value overrides the global value" (same
-  file). `updated_at` must come from the same `DISTINCT ON` resolved row (218 `@AC-6`/`@AC-13`).
+  file). `updated_at` must come from the same `DISTINCT ON` resolved row (219 `@AC-6`/`@AC-13`).
 - **PRESERVE** `@AC-8 @feature-161`: the `ListKeys` key set for `analysis` is unchanged
   (`services/xstockstrat-config/acceptance/surface-signal-weight-decay-config.feature`).
 - **PRESERVE** `@AC-6 @feature-161`: the decay half-life row still shows its default, its
@@ -111,7 +111,7 @@ Make the `/config-ui` namespace editor fast to operate:
 - **PRESERVE** `@AC-1`/`@AC-1b @feature-147`: the SetConfig request for secrets is unchanged by the
   edit-form refactor.
 - **EXTEND** `@AC-5 @feature-184` (`services/xstockstrat-config/acceptance/opportunity-config-operability.feature`).
-  218 `@AC-12` adds the UI-side refresh after a write.
+  219 `@AC-12` adds the UI-side refresh after a write.
 - **No CHANGE verdicts.** The grid, heading, Description column and `← namespaces` link are
   asserted only by e2e specs, not by durable `@AC-*`.
 

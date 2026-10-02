@@ -232,9 +232,9 @@
 
 - PRESERVE `@AC-3 @feature-147` "GetConfig and ListKeys redact secrets at the edge"
   (`services/xstockstrat-config/acceptance/config-secrets-and-scoping.feature`) — the redaction
-  branch is untouched; 218 AC-7 re-asserts it.
+  branch is untouched; 219 AC-7 re-asserts it.
 - EXTEND `@AC-11 @feature-147` "A per-user config value overrides the global value" — `updated_at`
-  comes from the same resolved row (218 AC-6/AC-13).
+  comes from the same resolved row (219 AC-6/AC-13).
 - PRESERVE `@AC-8 @feature-161` (config) — the `ListKeys` key set is unchanged; only one column was
   added to the select.
 - PRESERVE `@AC-6 @feature-161` (UI) — the decay-key row's default, description and bounds hint are
@@ -245,4 +245,4 @@
   client.
 - PRESERVE `@AC-1`/`@AC-1b @feature-147` — the SetConfig request shape is unchanged; `handleSave` is
   untouched.
-- EXTEND `@AC-5 @feature-184` — the UI-side refresh after a write (218 AC-12).
+- EXTEND `@AC-5 @feature-184` — the UI-side refresh after a write (219 AC-12).
