@@ -1,6 +1,6 @@
 # Feature: config-ui-usability
 
-**Development Branch**: `feature/config-ui-usability`
+**Development Branch**: `ccr-8a11e328-8tlo4j` (harness-assigned; sequential execution, integration PR #1207 → `main-dev`)
 **Created**: 2026-10-02
 **Last Updated**: 2026-10-02
 

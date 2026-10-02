@@ -95,3 +95,29 @@
 - [ ] AC-6/AC-13 are proven by SQL shape only; no DB harness (backend step).
 - [ ] Feature 217 also regenerates `packages/proto/gen`; re-run `buf-gen.sh` if it merges first
   (proto step / merge).
+
+## Session 2026-10-02 — sdd-review impl-spec (advisory)
+
+- Result: 1 failure and 15 warnings (advisory, did not block); 1 Floor risk.
+- Resolved before execution (spec bodies are still mutable pre-execution; F-09 applies from the first step flip):
+  - [x] **F-03 risk.** Step PRs would have targeted `main-dev`, not the declared branch. Resolved by
+    declaring `ccr-8a11e328-8tlo4j` as the Development Branch (feature.md and the spec header) and
+    running `/sdd-execute sequential`: no per-step PRs; PR #1207 is the single integration PR.
+  - [x] Step 2: the Files list used a wildcard. It now enumerates the tracked `gen/ts/dist/config/v1`
+    files, drops the non-emitted `.pyi`, and verifies via `git diff --stat` instead of grepping
+    generated code.
+  - [x] Step 12: item 7 RED accounting corrected to "partially RED"; its value assertion is now
+    deterministic (prefill-based); AC-8/AC-9 goto URL stated.
+  - [x] Step 13: added the stale `buildConfigValue` cites at `:31`/`:48`; out-of-Files drift goes
+    through the Deviation Log (F-08).
+- Carried into execution:
+  - [ ] Step 3: cite drift "returned object (:529-549)" is actually `:531-550`. Re-grep at execution.
+  - [ ] Step 6: touches 6 files (>5). Accepted, because module + view + routes are one coherent change.
+    Also add a vitest unit test for `configUiHref` (cheap, in `src/lib` coverage scope).
+  - [ ] Step 9: replace the "if the Section nav is collapsed" hedge with a deterministic precondition
+    at execution.
+  - [ ] Step 8: the `PLATFORM_SUBNAV.config` relabel is cosmetic (`subNav` is legacy and ignored).
+    Kept, because the design approved it.
+  - [ ] Steps 5/7/9/11/12: no numeric coverage gate (Playwright/frontend). N/A by design.
+- Overlap findings: CLEAN. WARN on `e2e/fixtures/INVENTORY.md` and `packages/proto/gen/**` with
+  feature 217; both need only a rebase/regenerate.

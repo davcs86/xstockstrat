@@ -4,8 +4,9 @@
 **Created**: 2026-10-02
 **Feature**: `docs/roadmap/features/218-config-ui-usability/feature.md`
 **Total Steps**: 13
-**Feature Branch**: `feature/config-ui-usability` (this session develops on the harness branch
-`ccr-8a11e328-8tlo4j`, PR #1207 → `main-dev` — see `context.md` Session sdd-story)
+**Feature Branch**: `ccr-8a11e328-8tlo4j` (the harness-assigned development branch, declared as
+this feature's Development Branch). Execution runs in `/sdd-execute sequential` mode: one commit per
+step on this branch, no per-step PRs, and PR #1207 → `main-dev` as the single integration PR (F-03).
 
 ---
 
@@ -132,11 +133,14 @@ Pass condition: both commands exit 0. The additive field is non-breaking.
 **Files**:
 - `packages/proto/gen/go/config/v1/config.pb.go` — modify
 - `packages/proto/gen/python/config/v1/config_pb2.py` — modify
-- `packages/proto/gen/python/config/v1/config_pb2.pyi` — modify (if emitted)
 - `packages/proto/gen/ts/config/v1/config.ts` — modify
 - `packages/proto/gen/ts/config/v1/config_pb.ts` — modify
-- `packages/proto/gen/ts/dist/config/v1/*` — modify (only if the TS package build output is
-  tracked; leave it alone if it is ignored)
+- `packages/proto/gen/ts/dist/config/v1/config.js` — modify
+- `packages/proto/gen/ts/dist/config/v1/config.d.ts` — modify
+- `packages/proto/gen/ts/dist/config/v1/config_pb.js` — modify
+- `packages/proto/gen/ts/dist/config/v1/config_pb.d.ts` — modify
+- (any other tracked `packages/proto/gen/**/config/v1/` file whose regenerated content changes,
+  e.g. `config_grpc.pb.go` — enumerate it in the commit; anything outside `config/v1` is reverted)
 
 **Reviewers**: inherited from Step 1. Proto Reviewer, `packages/proto` owner,
 `xstockstrat-config` owner, `xstockstrat-ui` owner.
@@ -169,11 +173,11 @@ Pass condition: both commands exit 0. The additive field is non-breaking.
 **Verification**:
 ```bash
 ./scripts/buf-gen.sh && git diff --stat packages/proto/gen/ | grep -v "config/v1" ; \
-  grep -c "updated_at\|updatedAt" packages/proto/gen/ts/config/v1/config_pb.ts packages/proto/gen/ts/config/v1/config.ts
+  git diff --stat packages/proto/gen/ts/config/v1/config_pb.ts packages/proto/gen/ts/config/v1/config.ts
 ```
 Pass conditions:
 - The first pipeline prints only the summary line, so no non-`config/v1` files changed.
-- Both generated TS files report a count > 0.
+- Both generated TS source files show a non-empty diff.
 - Generated files are inspected only to confirm the field landed (CLAUDE.md: never read them for
   design).
 
@@ -850,8 +854,8 @@ secret values rendered in UI.
 **TDD**: `red-green required`. RED before Step 10:
 - there is a Description column header and no element under the key;
 - there is no Updated cell or title;
-- the decay guard passes both before and after (it is a regression guard, recorded as
-  expected-pass).
+- the decay guard (item 7) is **partially RED** before Step 10: its value + bounds-hint
+  assertions pass (regression guard), its description-`p`-with-`title` assertion fails.
 
 **Covers**: `AC-4, AC-5, AC-8, AC-9, AC-12`
 
@@ -866,9 +870,9 @@ Create `namespace-editor-rows.spec.ts`. Stub specs use the `page.route` ListKeys
    - `getByRole('columnheader', { name: 'Description' })` has count 0.
 2. **AC-5.** The row `marketdata.fmp.enabled`'s key cell (`row.getByRole('cell').first()`) contains
    no `p` element.
-3. **AC-8.** In the `platform.trading_state` row, the last-updated cell's `span[title]` has
+3. **AC-8** (stub; `goto('/config-ui/platform?env=staging')`). In the `platform.trading_state` row, the last-updated cell's `span[title]` has
    `title` `'2026-09-15T08:30:00.000Z'` and text matching `/2026/`.
-4. **AC-9.** The `platform.example` row's Updated cell has text `—`.
+4. **AC-9** (same stub and URL as AC-8). The `platform.example` row's Updated cell has text `—`.
 5. **AC-12 (stateful stubs; never touch the shared mock).**
    - A closure flag `saved = false` drives the stubs:
      - ListKeys returns `platform.trading_state` with no `updatedAt` and `currentValue: 'ACTIVE'`
@@ -887,7 +891,9 @@ Create `namespace-editor-rows.spec.ts`. Stub specs use the `page.route` ListKeys
 6. **Real-BFF `updatedAt` (no stub).** On `/config-ui/platform?env=staging`, the
    `platform.log_level` row's Updated `span` has title `'2026-09-01T10:00:00.000Z'`.
 7. **C-16 guard (`@AC-6 @feature-161`)**, no stub, at `/config-ui/analysis?env=staging`:
-   - the `analysis.scoring.signal_decay_half_life_hours` row shows `24.0`, or its current value;
+   - the `analysis.scoring.signal_decay_half_life_hours` row's Value cell is non-empty and, after
+     Actions → Edit, equals the value input's prefill (read the prefill first — no literal, since the
+     shared mock may hold another spec's write);
    - it has a description `p` with that `title`;
    - after Actions → Edit, `Must be a number in [0, 8760].` is visible.
 8. **`api-smoke.spec.ts`.** Change the `:48` comment to
@@ -924,6 +930,8 @@ feature's full UI regression gate.
   - `:19` (CONFIG-2) cites `configServiceImpl.ts:565-580` / `:569-572` (`buildConfigValue`) and
     `:522-536`.
   - `:24` (CONFIG-7) cites `configServiceImpl.ts:519-524` for the `DISTINCT ON` query.
+  - `:31` cites `buildConfigValue` as `565-580` and `:48` cites it as `569-572`; both are already stale
+    (it sits at `559-573` today) and shift again after Step 3.
   - Step 3's added mapping line shifts `buildConfigValue`, and the query is at `:517-521` today.
 - **`docs/patterns/ui-ux-governance.md`.**
   - The coverage audit row at `:216` lists the "config-ui · namespaces" specs (`namespace-nav`,
@@ -939,7 +947,8 @@ feature's full UI regression gate.
 
 **Instructions**:
 1. Re-grep `buildConfigValue` and the `DISTINCT ON` query in `src/grpc/configServiceImpl.ts`.
-   Update the CONFIG-2 and CONFIG-7 line cites to the post-Step-3 lines. In CONFIG-7, add one
+   Update every `configServiceImpl.ts` line cite in the file (CONFIG-2 `:19`, CONFIG-7 `:24`, and the
+   `buildConfigValue` cites at `:31` and `:48`) to the post-Step-3 lines. In CONFIG-7, add one
    clause: `updated_at` is selected from the same resolved row (feature 218).
 2. In `ui-ux-governance.md:216`, add `edit-focus` and `namespace-editor-rows` to the
    "config-ui · namespaces" e2e list.
@@ -948,6 +957,8 @@ feature's full UI regression gate.
    - If the plugin is unavailable, re-read every context file named above against the code by
      hand.
    - Record both facts (plugin unavailable + manual reconciliation performed) in the PR body.
+   - Drift the refresh reports in a context file **not** listed in `**Files**` is fixed only after a
+     Deviation Log entry naming that file (F-08).
 
 **Verification**:
 ```bash
