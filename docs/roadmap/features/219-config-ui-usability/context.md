@@ -128,3 +128,10 @@
   (filed by another session in `0fbb3b8`). Per root CLAUDE.md § Feature Roadmap, the later
   allocation moves to the next free number (`max+1 = 219`). Directory, path cites and
   "feature 218" mentions were updated. `@AC-*` IDs are unchanged.
+
+- Tooling setup (steps 1-13): node 22 ✓ (CLAUDE.md pins 24; CI uses 24) · pnpm 9.15.9 ✓ · pnpm install ⬇ · docker ✓ (dockerd started) · buf ⬇ 1.72.0 via npx · codegen image building (step 2) · Playwright chromium ✓ (/opt/pw-browsers)
+
+### Step 1 — proto: add `ConfigKeyMeta.updated_at = 10` [done]
+- Added `google.protobuf.Timestamp updated_at = 10` with a constraint comment. `buf lint` and `buf breaking` (vs origin/main-dev) pass. TDD: N/A (proto).
+- Files modified: `packages/proto/config/v1/config.proto`
+- Deviations: the breaking baseline is `origin/main-dev` (Deviation Log).

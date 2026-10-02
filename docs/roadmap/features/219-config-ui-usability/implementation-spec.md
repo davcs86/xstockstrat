@@ -1,6 +1,6 @@
 # Implementation Spec: config-ui-usability
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-10-02
 **Feature**: `docs/roadmap/features/219-config-ui-usability/feature.md`
 **Total Steps**: 13
@@ -80,7 +80,7 @@ decision, not an omission.
 
 ### Step 1 — proto: add `ConfigKeyMeta.updated_at = 10`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/config/v1/config.proto` — modify
@@ -972,5 +972,12 @@ coverage row lists both new specs.
 ---
 
 ## Deviation Log
+
+### Step 1 — buf breaking baseline
+- **Planned**: `buf breaking` against `feature/config-ui-usability`.
+- **Actual**: against `origin/main-dev` (CI's PR baseline). The declared Development Branch is the
+  harness branch, which already contains this change, so it is not a meaningful baseline.
+  `buf` 1.72.0 (pinned) was run via `npx @bufbuild/buf@1.72.0` while the codegen image was building.
+- **Disposition**: CI-equivalent fallback.
 
 _Populated by /sdd-execute as implementation proceeds._
