@@ -1,5 +1,6 @@
 import React from 'react';
 import { Target, MagnifyingGlass, Gauge, BookOpen, GearSix } from '@phosphor-icons/react';
+import { KNOWN_NAMESPACES } from '@/lib/configNamespaces';
 
 // Single source of truth for the nav model (desktop PlatformHeader + mobile BottomTabBar). Its own
 // module so BottomTabBar needn't import PlatformHeader — that cycle causes a prerender TDZ crash.
@@ -10,6 +11,8 @@ export interface SubNavItem {
   href: string;
   /** 'exact' matches the pathname exactly; 'prefix' matches by startsWith. Default 'prefix'. */
   match?: 'exact' | 'prefix';
+  /** Extra exact pathnames that also mark this item active. */
+  aliases?: string[];
 }
 
 export interface NavItem extends SubNavItem {
@@ -86,7 +89,12 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: 'Trader home', href: '/trader', match: 'exact' },
       { label: 'Insights home', href: '/insights', match: 'exact' },
       { label: 'Accounts', href: '/trader/accounts' },
-      { label: 'Config', href: '/config-ui', match: 'exact' },
+      {
+        label: 'Config',
+        href: '/config-ui',
+        match: 'exact',
+        aliases: KNOWN_NAMESPACES.map((ns) => `/config-ui/${ns}`),
+      },
       { label: 'Users', href: '/config-ui/users', adminOnly: true },
       { label: 'Audit log', href: '/config-ui/audit' },
       { label: 'Fundamentals Scan', href: '/config-ui/fundamentals-scan' },

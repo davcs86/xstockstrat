@@ -1,3 +1,12 @@
+import { create, toJson, type MessageInitShape } from '@bufbuild/protobuf';
+import { timestampFromDate } from '@bufbuild/protobuf/wkt';
+import { Environment } from '@xstockstrat/proto/common/v1/common_pb';
+import {
+  ConfigKeyMetaSchema,
+  ListKeysResponseSchema,
+  SetConfigResponseSchema,
+} from '@xstockstrat/proto/config/v1/config_pb';
+
 /**
  * Canonical SetConfig payload factory for BFF smoke tests (api-smoke.spec.ts).
  *
@@ -50,6 +59,8 @@ export const CONFIG_KEY_FIXTURES = [
     consumingService: 'all',
     environment: 1,
     tradingMode: 0,
+    // feature 219: static (never mutated) so the real-BFF last-updated assertion is race-free.
+    updatedAt: timestampFromDate(new Date('2026-09-01T10:00:00Z')),
   },
   {
     key: 'platform.maintenance_mode',
@@ -133,3 +144,72 @@ export const CONFIG_KEY_FIXTURES = [
     tradingMode: 0,
   },
 ];
+
+type ConfigKeyMetaInit = MessageInitShape<typeof ConfigKeyMetaSchema>;
+
+/**
+ * Connect-JSON response bodies for `page.route` stubs of the config-ui BFF (feature 219). Bodies
+ * are generated via protobuf-es `toJson(create(...))` — never hand-written — so enums and
+ * Timestamps (RFC3339) are wire-correct.
+ *
+ * Registered in e2e/fixtures/INVENTORY.md — update it when this file changes.
+ */
+export function listKeysStubBody(keys: ConfigKeyMetaInit[]): string {
+  return JSON.stringify(toJson(ListKeysResponseSchema, create(ListKeysResponseSchema, { keys })));
+}
+
+export function setConfigStubBody(): string {
+  return JSON.stringify(
+    toJson(SetConfigResponseSchema, create(SetConfigResponseSchema, { version: '1' })),
+  );
+}
+
+/**
+ * Scenario rows served by `page.route` ListKeys stubs (feature 219), keyed by key name so specs
+ * can pick only the rows a scenario needs. Init shape (protobuf-es message-init).
+ *
+ * Registered in e2e/fixtures/INVENTORY.md — update it when this file changes.
+ */
+export const CONFIG_KEY_STUB_ROWS = {
+  tradingMaxPositionPct: {
+    key: 'trading.risk.max_position_pct',
+    description: 'Maximum single-position weight as a fraction of account equity',
+    defaultValue: '0.10',
+    currentValue: '0.10',
+    consumingService: 'xstockstrat-trading',
+    environment: Environment.STAGING,
+  },
+  fmpMetrics: {
+    key: 'marketdata.fmp.metrics',
+    description: 'Comma-separated metric tiers to fetch (core, extended)',
+    defaultValue: 'core,extended',
+    currentValue: 'core,extended',
+    consumingService: 'xstockstrat-marketdata',
+    environment: Environment.STAGING,
+  },
+  fmpEnabled: {
+    key: 'marketdata.fmp.enabled',
+    description: '',
+    defaultValue: 'false',
+    currentValue: 'false',
+    consumingService: 'xstockstrat-marketdata',
+    environment: Environment.STAGING,
+  },
+  tradingState: {
+    key: 'platform.trading_state',
+    description: 'Platform-wide trading state',
+    defaultValue: 'ACTIVE',
+    currentValue: 'ACTIVE',
+    consumingService: 'xstockstrat-trading',
+    environment: Environment.STAGING,
+    updatedAt: timestampFromDate(new Date('2026-09-15T08:30:00Z')),
+  },
+  example: {
+    key: 'platform.example',
+    description: 'Example key with no recorded update time',
+    defaultValue: 'x',
+    currentValue: 'x',
+    consumingService: 'all',
+    environment: Environment.STAGING,
+  },
+} satisfies Record<string, ConfigKeyMetaInit>;

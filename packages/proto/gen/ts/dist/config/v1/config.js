@@ -1561,6 +1561,7 @@ function createBaseConfigKeyMeta() {
         tradingMode: common_1.TradingMode.TRADING_MODE_UNSPECIFIED,
         validation: undefined,
         currentValue: "",
+        updatedAt: undefined,
     };
 }
 exports.ConfigKeyMeta = {
@@ -1591,6 +1592,9 @@ exports.ConfigKeyMeta = {
         }
         if (message.currentValue !== "") {
             writer.uint32(74).string(message.currentValue);
+        }
+        if (message.updatedAt !== undefined) {
+            timestamp_1.Timestamp.encode(toTimestamp(message.updatedAt), writer.uint32(82).fork()).join();
         }
         return writer;
     },
@@ -1664,6 +1668,13 @@ exports.ConfigKeyMeta = {
                     message.currentValue = reader.string();
                     continue;
                 }
+                case 10: {
+                    if (tag !== 82) {
+                        break;
+                    }
+                    message.updatedAt = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -1705,6 +1716,11 @@ exports.ConfigKeyMeta = {
                 : isSet(object.current_value)
                     ? globalThis.String(object.current_value)
                     : "",
+            updatedAt: isSet(object.updatedAt)
+                ? fromJsonTimestamp(object.updatedAt)
+                : isSet(object.updated_at)
+                    ? fromJsonTimestamp(object.updated_at)
+                    : undefined,
         };
     },
     toJSON(message) {
@@ -1736,6 +1752,9 @@ exports.ConfigKeyMeta = {
         if (message.currentValue !== "") {
             obj.currentValue = message.currentValue;
         }
+        if (message.updatedAt !== undefined) {
+            obj.updatedAt = message.updatedAt.toISOString();
+        }
         return obj;
     },
     create(base) {
@@ -1754,6 +1773,7 @@ exports.ConfigKeyMeta = {
             ? exports.ValidationRule.fromPartial(object.validation)
             : undefined;
         message.currentValue = object.currentValue ?? "";
+        message.updatedAt = object.updatedAt ?? undefined;
         return message;
     },
 };
