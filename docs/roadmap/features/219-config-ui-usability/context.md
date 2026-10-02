@@ -146,3 +146,8 @@
 - TDD: RED is Step 4's suite run against the pre-Step-3 tree (`# pass 1 # fail 4`: SQL shape, AC-6, AC-13, AC-7 failed; the absent-column case passed). GREEN after this step: `# pass 5 # fail 0`.
 - Files modified: `services/xstockstrat-config/src/grpc/configServiceImpl.ts`
 - Deviations: none. Review warning "Step 3 cite drift (:529-549 vs :531-550)": re-grepped and edited at the actual line. [x]
+
+### Step 4 — test: `ListKeys` `updatedAt` over a real gRPC connection [done]
+- New `listKeysUpdatedAt.test.ts` on the grpc-js round-trip harness. The pool emulates DISTINCT ON resolution by `$3`. It covers the SQL shape, AC-6, AC-13, AC-7 and the absent→unset case. RED 1/4 → GREEN 5/0. The full suite is 118/118 with c8 at 80.37% lines (gate 40%). Rows are inline (single consumer, C-13).
+- Files modified: `services/xstockstrat-config/src/__tests__/listKeysUpdatedAt.test.ts`
+- Deviations: none

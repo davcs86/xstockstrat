@@ -231,7 +231,7 @@ line. Behavior is proven by Step 4.
 
 ### Step 4 — test: `ListKeys` `updatedAt` over a real gRPC connection
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/listKeysUpdatedAt.test.ts` — create
