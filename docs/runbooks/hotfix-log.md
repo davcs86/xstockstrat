@@ -8,6 +8,20 @@ following the format in `docs/runbooks/bug-triage.md#hotfix-log-format`.
 
 <!-- New entries are prepended below this line, most-recent first -->
 
+## 2026-10-02T14:01:50Z — hotfix/fix-flatten-rejection-skips-halt
+
+- **GitHub issue**: docs/reports/2026-10-02-flatten-rejection-skips-halt-defect.md (GitHub Issues disabled on this repo)
+- **Severity**: SEV-1
+- **Affected service(s)**: xstockstrat-trading
+- **Root cause**: flattenAndHalt reuses one client_order_id across retries; a broker-REJECTED intent is replayed by submitOrder as a stored response with nil error, so the loop reports success and never halts. Agreed fix: status-aware retry.
+- **Fix summary**: _pending_
+- **PR**: _pending_
+- **Platform-lead approver**: _pending_
+- **Back-merge commit**: _pending_
+- **Maintenance mode applied**: no
+- **Status**: in-progress
+
+
 ## 2026-08-07T06:53:51Z — hotfix/fix-watchconfig-clients-omit
 
 - **GitHub issue**: docs/reports/2026-08-07-watchconfig-scope-omission-defect.md (GitHub Issues disabled on this repo)
