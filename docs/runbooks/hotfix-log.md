@@ -8,6 +8,20 @@ following the format in `docs/runbooks/bug-triage.md#hotfix-log-format`.
 
 <!-- New entries are prepended below this line, most-recent first -->
 
+## 2026-10-02T14:01:51Z — hotfix/fix-opportunity-actions-unimplemented
+
+- **GitHub issue**: docs/reports/2026-10-02-opportunity-actions-unimplemented-defect.md (GitHub Issues disabled on this repo)
+- **Severity**: SEV-2
+- **Affected service(s)**: xstockstrat-ui
+- **Root cause**: insightsBff never registers AnalysisService.setOpportunityAction, so Snooze/Dismiss return Unimplemented; the e2e browser-level page.route mock masks it.
+- **Fix summary**: _pending_
+- **PR**: _pending_
+- **Platform-lead approver**: _pending_
+- **Back-merge commit**: _pending_
+- **Maintenance mode applied**: no
+- **Status**: in-progress
+
+
 ## 2026-08-07T06:53:51Z — hotfix/fix-watchconfig-clients-omit
 
 - **GitHub issue**: docs/reports/2026-08-07-watchconfig-scope-omission-defect.md (GitHub Issues disabled on this repo)
