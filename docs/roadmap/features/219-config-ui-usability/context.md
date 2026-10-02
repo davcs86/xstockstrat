@@ -135,3 +135,8 @@
 - Added `google.protobuf.Timestamp updated_at = 10` with a constraint comment. `buf lint` and `buf breaking` (vs origin/main-dev) pass. TDD: N/A (proto).
 - Files modified: `packages/proto/config/v1/config.proto`
 - Deviations: the breaking baseline is `origin/main-dev` (Deviation Log).
+
+### Step 2 — proto-gen: regenerate stubs for `config/v1` [done]
+- Ran `./scripts/buf-gen.sh` inside the pinned `Dockerfile.codegen` image (proxy CA via a BuildKit secret). The diff is limited to the 8 listed `config/v1` files, with no drift elsewhere. TDD: N/A (proto-gen).
+- Files modified: the `gen/{go,python,ts,ts/dist}/config/v1` files listed in the step.
+- Deviations: none

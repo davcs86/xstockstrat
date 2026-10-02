@@ -128,7 +128,7 @@ Pass condition: both commands exit 0. The additive field is non-breaking.
 
 ### Step 2 — proto-gen: regenerate stubs for `config/v1`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/config/v1/config.pb.go` — modify

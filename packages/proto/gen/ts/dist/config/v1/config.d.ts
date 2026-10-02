@@ -194,6 +194,8 @@ export interface ConfigKeyMeta {
      * This is what a config-ui "Value" column must display and prefill for editing.
      */
     currentValue: string;
+    /** updated_at of the resolved row (the caller's per-user override when one exists, else global). */
+    updatedAt?: Date | undefined;
 }
 export declare const WatchConfigRequest: MessageFns<WatchConfigRequest>;
 export declare const ConfigSnapshot: MessageFns<ConfigSnapshot>;
