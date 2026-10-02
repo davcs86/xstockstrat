@@ -827,7 +827,7 @@ paths survived the refactor (`@AC-1/@AC-1b @feature-147`).
 
 ### Step 12 — test: row description, last-updated cell, refresh after save, C-16 guard
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/config-ui/namespace-editor-rows.spec.ts` — create

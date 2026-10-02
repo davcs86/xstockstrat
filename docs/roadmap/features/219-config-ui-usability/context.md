@@ -193,3 +193,10 @@
 - New `edit-focus.spec.ts` (stubbed ListKeys). AC-10: types the reason key by key and asserts the reason has focus and the value equals its prefill. AC-11: a `data-probe` node survives each keystroke. RED 2/2 failed → GREEN (inside the Step 12 gate run; reason-capture and secret-editing are green too).
 - Files modified: `services/xstockstrat-ui/e2e/config-ui/edit-focus.spec.ts`
 - Deviations: none
+
+### Step 12 — test: row description, last-updated cell, refresh after save, C-16 guard [done]
+- New `namespace-editor-rows.spec.ts`: AC-4/5/8/9 on stubs; AC-12 uses a stateful ListKeys+SetConfig stub (shared mock untouched); a real-BFF `updatedAt` round trip on `platform.log_level`; and the C-16 guard for `@AC-6 @feature-161` (prefill-based value, description title, `[0, 8760]` hint). RED 6/7 failed (AC-5 was expected-pass) → GREEN.
+- Gate: `e2e/config-ui/` + mobile-overflow + breadcrumb + nav-reachability = 106/106 passed (CI mode); vitest 206/206.
+- `api-smoke.spec.ts` comments at `:48`/`:82` updated to "under the key" (comment-only; no assertion change).
+- Files modified: `services/xstockstrat-ui/e2e/config-ui/namespace-editor-rows.spec.ts`, `services/xstockstrat-ui/e2e/config-ui/api-smoke.spec.ts`
+- Deviations: none. (Note: `xstockstrat-config` `format:check` already fails on main-dev across many files; not touched, out of scope.)
