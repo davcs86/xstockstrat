@@ -34,3 +34,38 @@
   so the refresh assertion can fail, and FR-2 covers relabelling the audit-page breadcrumb (C-10).
 - Overlap findings: none (CLEAN). Field 10 is free. Feature 217 also regenerates `packages/proto/gen`,
   so whichever merges second re-runs `./scripts/buf-gen.sh`.
+
+## Session 2026-10-02 — sdd-design
+
+- Phase 0 Recon: wrote recon.md for xstockstrat-config, xstockstrat-ui and packages/proto.
+  - Key reuse patterns: `ScopeControl` basePath + `router.push`; `protoTime.timestampToDate`;
+    the `listKeysWire` / SQL-capture test harnesses.
+- Phase 1 Grilling: 3 rounds. Quick mode mandates 1; the user asked for 2 more.
+- Chosen approach:
+  - a shared server `ConfigNamespaceView` on both routes, with `/config-ui` rendering platform
+    directly (no redirect);
+  - module-level DataTable cells reading an `EditContext` (the focus fix);
+  - `NamespaceEditor` keyed by namespace|env|user, so a draft can't save into a different scope;
+  - `ConfigKeyMeta.updated_at = 10` taken from the same `DISTINCT ON` row;
+  - nav `aliases` so namespace pages highlight Settings › Config.
+- Rejected:
+  - redirecting to `/config-ui/platform` (breaks the exact-match nav highlight and AC-1);
+  - refs/useMemo columns, a dialog editor, a mock namespace filter, shared-mock timestamp stamping;
+  - hand-written Connect-JSON fixtures.
+- User decisions:
+  - timestamp semantics = **row last modified** (no `value_changed_at` migration);
+  - breadcrumb = **plain-span branch in PageBreadcrumb**;
+  - **nav aliases fix included** (not deferred).
+- AC-2 wording amended to use the caller's own id (`test-user-001`), keeping the same ID, because
+  `resolveConfigScope` clamps foreign ids.
+- Constitution rules touched: C-09, C-10, C-12/13, C-14, C-15, C-16, C-17, C-18; F-01/04/06/07
+  honored. Floor breaches: none.
+- Status: spec-ready → design-approved.
+
+## Open Threads
+
+- [ ] Guard against inline cell arrows reintroducing the remount: module-scope comment + AC-11
+  probe test (editor refactor step).
+- [ ] AC-6/AC-13 are proven by SQL shape only; no DB harness (backend step).
+- [ ] Feature 217 also regenerates `packages/proto/gen`; re-run `buf-gen.sh` if it merges first
+  (proto step / merge).

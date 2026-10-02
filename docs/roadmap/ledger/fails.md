@@ -2405,3 +2405,16 @@ ambiguity is logged here).
 - **Mistake**: A design round assumed inter-service clients dial the bare service name (`xstockstrat-<svc>:<port>`), so a TLS leaf with `SAN=xstockstrat-<svc>` would verify natively with no authority override. In DigitalOcean App Platform the deploy specs actually dial `${xstockstrat-<svc>.PRIVATE_DOMAIN}:<port>` (`.do/app.yaml:56-67`, `.do/app.dev.yaml:56-67`) — a DO-generated FQDN ≠ the SAN. Native SAN/hostname matching would therefore fail fail-closed on every non-Go dial in DO on mTLS cutover (a platform-wide outage), while compose (bare name) and in-process tests (loopback) would pass — hiding the bug until deploy.
 - **Evidence**: feature 210 design.md §Chosen Approach (uniform authority pinning), context.md 2026-10-01 R4 catch; `.do/app.yaml:56-67`; `.do/app.dev.yaml:56-67`.
 - **Rule it implies**: For any inter-service TLS/mTLS identity check, pin the client's verification identity (Go `tls.Config.ServerName`, Python/Node `grpc.ssl_target_name_override`, connect-node authority) to the **canonical service name**, never rely on dial-host==SAN — the dial host differs by environment (compose bare name vs DO `PRIVATE_DOMAIN` FQDN). And the handshake negative-test matrix must assert a valid-CA/**wrong-SAN** cert is rejected, not only a wrong-CA cert — that is the only test that proves the SAN is actually checked and would catch this class in-process.
+
+### 2026-10-02 — config-ui-usability — assumption
+- **Mistake**: An inline DataTable editor defined its `columns` (with `cell` render functions) inside a
+  `useMemo` whose deps included the edit state and an unstable `handleSave`. TanStack `flexRender`
+  renders a function cell as a React component, so every keystroke produced a new component *type*:
+  the `<Input>`s remounted, and `autoFocus` dragged focus back to the value field while the operator
+  typed the reason. Existing e2e used `.fill()`, which writes in one shot and never exposed it.
+- **Evidence**: `docs/roadmap/features/218-config-ui-usability/design.md` § Chosen Approach 4;
+  `services/xstockstrat-ui/src/app/config-ui/[namespace]/NamespaceEditor.tsx` (pre-218 `columns` deps).
+- **Rule it implies**: Editable DataTable cells must have a stable identity — declare columns and cell
+  components at module scope and pass edit state through context. Test typing with
+  `pressSequentially` plus a DOM-node probe, not `.fill()` plus `toBeFocused` (autoFocus re-steals
+  focus on remount, so a focus check alone passes vacuously).

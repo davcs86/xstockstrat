@@ -13,9 +13,9 @@ Feature: config-ui-usability
 
   @AC-2 @FR-2
   Scenario: Selecting a namespace navigates and preserves env and user scope
-    Given the operator is on "/config-ui/platform?env=staging&user=u-123"
+    Given the operator "test-user-001" is on "/config-ui/platform?env=staging&user=test-user-001"
     When the operator selects "marketdata" in the "Namespace" combobox
-    Then the URL becomes "/config-ui/marketdata?env=staging&user=u-123"
+    Then the URL becomes "/config-ui/marketdata?env=staging&user=test-user-001"
     And the "Namespace" combobox shows "marketdata"
 
   @AC-3 @FR-2
