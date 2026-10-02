@@ -370,7 +370,7 @@ Pass conditions: the type check passes (it proves the init shape against the reg
 
 ### Step 6 — service: shared namespace module, `ConfigNamespaceView`, `NamespaceSelect` on both routes
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/configNamespaces.ts` — create
@@ -989,3 +989,15 @@ _Populated by /sdd-execute as implementation proceeds._
   with and without this feature's changes (stash comparison).
 - **Disposition**: the pass condition is "no *new* tsc errors" (the error set equals the baseline).
   Not fixed here: out of scope (C-18 / root CLAUDE.md "touch only what the task requires").
+
+### Step 6 — extra file `src/lib/configNamespaces.test.ts`
+- **Planned**: Step 6's Files list does not include a unit test.
+- **Actual**: added a 3-case vitest for `configUiHref`, which the impl-spec review asked for (a pure
+  helper inside the `src/lib` coverage scope).
+- **Disposition**: in-scope addition requested by the review; recorded here per F-08.
+
+### e2e harness — CI mode on host
+- **Planned**: the step Verification lines use `CI=1 pnpm exec playwright test …`.
+- **Actual**: as planned (`next build` + `next start`, chromium from `/opt/pw-browsers`). Non-CI
+  `pnpm dev` mode times out in `warmup.setup.ts` because of the 10s local test timeout.
+- **Disposition**: none needed; noted for the next session.

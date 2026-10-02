@@ -156,3 +156,10 @@
 - `platform.log_level` got a static init-shape `updatedAt`. Added `listKeysStubBody`/`setConfigStubBody` (protobuf-es `toJson(create(...))`; schemas confirmed exported) and the keyed `CONFIG_KEY_STUB_ROWS`. INVENTORY updated (row extended + new row). TDD: N/A (fixture-only).
 - Files modified: `services/xstockstrat-ui/e2e/fixtures/configKeys.ts`, `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md`
 - Deviations: tsc baseline has 3 pre-existing errors in untouched files; the pass condition is "no new errors" (Deviation Log).
+
+### Step 6 — service: shared namespace module, `ConfigNamespaceView`, `NamespaceSelect` [done]
+- `src/lib/configNamespaces.ts` (`KNOWN_NAMESPACES` + `configUiHref`, now used by EnvSwitcher, NamespaceSelect and ScopeControl); `ConfigNamespaceView` server component shared by both routes (EnvSwitcher moved verbatim with basePath-aware hrefs; editor keyed `ns|env|user`); `NamespaceSelect` client combobox. Landing grid removed; `/config-ui` keeps its env redirect and renders platform directly.
+- TDD: RED is Step 7's spec against the pre-Step-6 UI: 6/6 failed (no combobox; no scope control on the namespace page). GREEN after Step 6 (see Step 7).
+- Static checks: tsc shows only the 3 baseline errors; lint 0 errors; jscpd 0 clones; one `KNOWN_NAMESPACES` declaration.
+- Files modified: `src/lib/configNamespaces.ts`, `src/lib/configNamespaces.test.ts` (Deviation Log), `src/app/config-ui/{ConfigNamespaceView,NamespaceSelect,page,ScopeControl}.tsx`, `src/app/config-ui/[namespace]/page.tsx`
+- Review warning "Step 6: >5 files + configUiHref unit test": the unit test is added (3/3). The file count is accepted as one coherent change. [x]
