@@ -20,3 +20,17 @@
   `editValue`/`editReason`/`handleSave` (and `handleSave` is re-created every render). The
   tanstack `flexRender` treats each new `cell` function as a new component type, so both `Input`s
   remount on every keystroke and the value input's `autoFocus` re-fires.
+
+- Development happens on the harness-assigned branch `ccr-8a11e328-8tlo4j` (PR #1207 → `main-dev`),
+  not `feature/config-ui-usability`. This is a session constraint: the harness pushes only to that branch.
+
+## Session 2026-10-02 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready.
+- Pass 1 FAILED on criterion 9 (unchecked Open Questions, P-03). Fixed: decisions recorded, and
+  ledger traps moved to a Known Traps section. Also fixed: FR-2 now specifies the shared header and
+  the non-link breadcrumb; AC-6 is split (AC-13 added); AC-8 checks the visible text; AC-14 was added.
+- Pass 2 PASS WITH WARNINGS. Both warnings were folded in: AC-12 now has a before/after `updatedAt`
+  so the refresh assertion can fail, and FR-2 covers relabelling the audit-page breadcrumb (C-10).
+- Overlap findings: none (CLEAN). Field 10 is free. Feature 217 also regenerates `packages/proto/gen`,
+  so whichever merges second re-runs `./scripts/buf-gen.sh`.

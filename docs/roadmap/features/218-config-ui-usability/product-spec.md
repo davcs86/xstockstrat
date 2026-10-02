@@ -25,7 +25,12 @@ table), and the keys table for the selected namespace directly. There is no card
 namespace given, the default is `platform`.
 FR-2. Choosing a different namespace in the Select navigates to `/config-ui/<namespace>` and keeps
 the current `env` and `user` query params. The `/config-ui/[namespace]` route stays valid for deep
-links and shows the same Select with that namespace pre-selected.
+links. Both routes render **one shared header** (env switcher + scope control + namespace Select,
+the Select pre-set to the route's namespace) and the same editor below it. The `Namespace path`
+breadcrumb is kept as `Config › <namespace>`; its first item is plain text, no longer the
+`← namespaces` link, because the grid it pointed to no longer exists. The audit page's
+`← namespaces` breadcrumb item (`config-ui/audit/page.tsx`) is relabelled `Config`, still linking to
+`/config-ui`, so no surface keeps a label that points at the removed grid.
 FR-3. Each key row shows its `description` under the key name: muted text, clamped to 2 lines, full
 text available via the `title` tooltip, visible at every breakpoint. An empty description renders
 no element. The separate Description column is removed.
@@ -93,14 +98,23 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 See `acceptance.feature` (scenarios `@AC-*`), the single source of acceptance truth (Constitution
 **C-15**). Each `FR-N` above is covered by ≥1 tagged scenario there.
 
-## Open Questions
+## Known Traps (from the Ledger)
 
-- [ ] Known trap (ledger `fails.md` 2026-08-09 shadcn-migration): wrapping full-navigation controls
+- Known trap (ledger `fails.md` 2026-08-09 shadcn-migration): wrapping full-navigation controls
   in a role-asserting Radix primitive changes their ARIA role. The namespace Select is a real
   `combobox` that triggers `router.push`, which is fine. But `e2e/config-ui/namespace-nav.spec.ts`
   asserts the card grid and must be rewritten against the Select, not deleted.
-- [ ] Known trap (ledger `fails.md`, Connect-JSON fixtures): the e2e mock backend's `ListKeys`
+- Known trap (ledger `fails.md`, Connect-JSON fixtures): the e2e mock backend's `ListKeys`
   fixtures must encode `updatedAt` as an RFC3339 string, never epoch, and the protobuf-es browser
   type is `Timestamp {seconds: bigint, nanos}` (UI constitution).
-- [ ] What happens to rows whose `updated_at` is just the seed-migration time? Proposed: show it
-  as-is. It is the truthful row timestamp.
+- Other existing tests that assert today's layout and must be updated (not deleted):
+  `e2e/config-ui/namespace-nav.spec.ts` (card grid and "Configuration Namespaces" heading),
+  `e2e/config-ui/api-smoke.spec.ts` (comments about the "Description column"), and
+  `e2e/breadcrumb.spec.ts` (`Namespace path` breadcrumb, which stays satisfied by FR-2).
+
+## Open Questions
+
+- [x] Rows whose `updated_at` is only the seed-migration time: **Decided** to show it as-is. It is
+  the truthful row timestamp, and there is no sentinel to distinguish "never edited".
+- [x] Header on `[namespace]`: **Decided** that both routes share one header (FR-2).
+- [x] `← namespaces` breadcrumb: **Decided** to keep it as non-link `Config › <namespace>` (FR-2).

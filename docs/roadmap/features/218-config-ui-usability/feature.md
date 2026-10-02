@@ -11,6 +11,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-10-02 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-10-02 | `draft` → `spec-ready` | /sdd-review | Product spec approved (2 warnings, both folded in) |
 
 ---
 
@@ -43,4 +44,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review config-ui-usability product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-design config-ui-usability` — recon + design debate

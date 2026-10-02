@@ -39,13 +39,11 @@ Feature: config-ui-usability
     Then the row for "marketdata.fmp.enabled" contains no description element
 
   @AC-6 @FR-4
-  Scenario: ListKeys returns the resolved row's updated_at
+  Scenario: ListKeys returns the per-user row's updated_at in user scope
     Given a global row "platform.trading_state" in staging with updated_at "2026-09-01T10:00:00Z"
     And a per-user row "platform.trading_state" for user "u-123" in staging with updated_at "2026-09-15T08:30:00Z"
     When ListKeys is called with namespace "platform", environment STAGING, user_id "u-123"
     Then the "platform.trading_state" entry has updated_at "2026-09-15T08:30:00Z"
-    When ListKeys is called with namespace "platform", environment STAGING, user_id ""
-    Then the "platform.trading_state" entry has updated_at "2026-09-01T10:00:00Z"
 
   @AC-7 @FR-4
   Scenario: Secret rows still expose no value but do carry updated_at
@@ -59,6 +57,7 @@ Feature: config-ui-usability
     Given ListKeys returns key "platform.trading_state" with updatedAt "2026-09-15T08:30:00Z"
     When the operator views the "platform" namespace
     Then the row for "platform.trading_state" shows a last-updated cell with title "2026-09-15T08:30:00.000Z"
+    And that cell's visible text contains "2026"
 
   @AC-9 @FR-5
   Scenario: Row without updated_at shows a dash
@@ -83,7 +82,24 @@ Feature: config-ui-usability
 
   @AC-12 @FR-7
   Scenario: Save refreshes the row value without reload
-    Given the operator is editing "platform.trading_state" with reason "maintenance"
+    Given ListKeys returns key "platform.trading_state" with no updatedAt before the save
+    And returns updatedAt "2026-10-02T09:00:00Z" for it after the save
+    And the operator is editing "platform.trading_state" with reason "maintenance"
     When the operator sets the value to "halted" and clicks "Save"
     Then the row for "platform.trading_state" shows value "halted"
+    And the last-updated cell for "platform.trading_state" has title "2026-10-02T09:00:00.000Z"
     And the edit inputs are closed
+
+  @AC-13 @FR-4
+  Scenario: ListKeys returns the global row's updated_at in global scope
+    Given a global row "platform.trading_state" in staging with updated_at "2026-09-01T10:00:00Z"
+    And a per-user row "platform.trading_state" for user "u-123" in staging with updated_at "2026-09-15T08:30:00Z"
+    When ListKeys is called with namespace "platform", environment STAGING, user_id ""
+    Then the "platform.trading_state" entry has updated_at "2026-09-01T10:00:00Z"
+
+  @AC-14 @FR-2
+  Scenario: Namespace page keeps the env switcher, scope control and a non-link breadcrumb
+    When the operator opens "/config-ui/marketdata?env=staging"
+    Then the env switcher and scope control are visible above the table
+    And the "Namespace path" breadcrumb ends with "marketdata"
+    And the breadcrumb contains no "← namespaces" link
