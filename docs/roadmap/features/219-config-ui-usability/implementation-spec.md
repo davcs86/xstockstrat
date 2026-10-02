@@ -763,7 +763,7 @@ Description column remain. Behavior is proven by Steps 11–12.
 
 ### Step 11 — test: edit-form focus stability (keystroke-level)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/config-ui/edit-focus.spec.ts` — create

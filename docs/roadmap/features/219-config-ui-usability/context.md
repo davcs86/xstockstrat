@@ -188,3 +188,8 @@
 - Static: tsc baseline only; lint 0 errors; jscpd 0; prettier clean.
 - Files modified: `services/xstockstrat-ui/src/app/config-ui/[namespace]/NamespaceEditor.tsx`
 - Deviations: none
+
+### Step 11 — test: edit-form focus stability (keystroke-level) [done]
+- New `edit-focus.spec.ts` (stubbed ListKeys). AC-10: types the reason key by key and asserts the reason has focus and the value equals its prefill. AC-11: a `data-probe` node survives each keystroke. RED 2/2 failed → GREEN (inside the Step 12 gate run; reason-capture and secret-editing are green too).
+- Files modified: `services/xstockstrat-ui/e2e/config-ui/edit-focus.spec.ts`
+- Deviations: none
