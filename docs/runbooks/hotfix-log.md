@@ -8,6 +8,20 @@ following the format in `docs/runbooks/bug-triage.md#hotfix-log-format`.
 
 <!-- New entries are prepended below this line, most-recent first -->
 
+## 2026-10-02T14:01:50Z — hotfix/fix-alpaca-cancel-422
+
+- **GitHub issue**: docs/reports/2026-10-02-alpaca-cancel-422-defect.md (GitHub Issues disabled on this repo)
+- **Severity**: SEV-1
+- **Affected service(s)**: xstockstrat-trading
+- **Root cause**: Alpaca adapter treats HTTP 422 (already filled/canceled) on cancel as success; CancelOrder then records CANCELED unconditionally, so an already-filled order never emits order.filled.
+- **Fix summary**: _pending_
+- **PR**: _pending_
+- **Platform-lead approver**: _pending_
+- **Back-merge commit**: _pending_
+- **Maintenance mode applied**: no
+- **Status**: in-progress
+
+
 ## 2026-08-07T06:53:51Z — hotfix/fix-watchconfig-clients-omit
 
 - **GitHub issue**: docs/reports/2026-08-07-watchconfig-scope-omission-defect.md (GitHub Issues disabled on this repo)
