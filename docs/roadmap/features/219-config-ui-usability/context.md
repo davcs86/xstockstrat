@@ -169,3 +169,10 @@
 - RED: 6 failed (pre-Step-6). GREEN: 21/21 passed across namespace-nav, env-mode-switcher and breadcrumb (CI mode).
 - Files modified: `services/xstockstrat-ui/e2e/config-ui/namespace-nav.spec.ts`
 - Deviations: none
+
+### Step 8 — service: breadcrumb plain-span branch, audit crumb relabel, nav aliases [done]
+- `PageBreadcrumb`: a non-last item without href renders as a plain `<span>`; only the last item is `BreadcrumbPage`. Editor crumbs are `[Config, <ns>]`; the audit crumb is relabelled `Config`. `SubNavItem.aliases` is matched in `isItemActive`, and Settings › Config aliases every `/config-ui/<known ns>`. `PLATFORM_SUBNAV.config[0]` is relabelled `Config`.
+- TDD: RED is Step 9's appended specs against the pre-Step-8 tree (3/3 failed). GREEN in Step 9.
+- Static: tsc baseline only; lint 0 errors; jscpd 0; no `← namespaces` left in src.
+- Files modified: `src/components/shared/{PageBreadcrumb,navGroups,PlatformHeader}.tsx`, `src/app/config-ui/[namespace]/NamespaceEditor.tsx` (crumb items only), `src/app/config-ui/audit/page.tsx`
+- Review warning "Step 8 relabel cosmetic": kept, because the design approved it. [x]

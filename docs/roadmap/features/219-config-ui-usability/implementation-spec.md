@@ -538,7 +538,7 @@ green. `env-mode-switcher` proves the moved `EnvSwitcher` links keep `role=link`
 
 ### Step 8 — service: breadcrumb plain-span branch, audit crumb relabel, nav aliases for namespace pages
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/shared/PageBreadcrumb.tsx` — modify

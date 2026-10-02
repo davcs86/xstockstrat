@@ -257,13 +257,7 @@ export function NamespaceEditor({ namespace, env, user, nativeEnv }: Props) {
       <div className="flex flex-wrap items-center gap-2">
         <PageBreadcrumb
           ariaLabel="Namespace path"
-          items={[
-            {
-              label: '← namespaces',
-              href: `/config-ui?env=${env}${user ? `&user=${encodeURIComponent(user)}` : ''}`,
-            },
-            { label: namespace },
-          ]}
+          items={[{ label: 'Config' }, { label: namespace }]}
         />
         <div className="flex gap-1.5 ml-1">
           <Badge variant="secondary" className="text-xs">
