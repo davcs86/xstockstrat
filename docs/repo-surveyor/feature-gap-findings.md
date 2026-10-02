@@ -336,6 +336,17 @@
 - **NC-5** MCP `confirm_order` with `filled_qty=0` (`tools.py:1985`): check whether trading's ConfirmOrder treats it as a void, which would partially close R-06.
 - **NC-6** `services/xstockstrat-ui/src/components/trader/OrderForm.tsx:110,158`: `clientOrderId` rotates only on success. Check whether resubmitting edited fields after an error yields a hash-mismatch reject (acceptable) or replays the original order (not acceptable).
 
+## Needs-confirmation resolution  (2026-10-02 · `main-dev@cd20f79`)
+
+| ID | Verdict | Decisive evidence | Severity |
+|---|---|---|---|
+| NC-1 | **CONFIRMED.** `prod-up.yml` renders, runs `doctl apps create`, then waits. No step fills `YOUR_PROD_MTLS_*`, and `do-inject-prod-secrets.py` has no MTLS keys (grep: 0 in both). Go services exit on `tls.X509KeyPair` failure, and Node/Python fail the handshake. **A from-scratch prod recreate crash-loops.** | `.do/app.yaml:59,62`; `trading main.go:128-131` | SEV-2 |
+| NC-2 | **REFUTED.** Ingest enforces admin on every ManageSignalSource operation before dispatch, and the scope header comes from verified roles (`bffShared.ts:38-43`). The missing UI edge gate is defense-in-depth only. | ingest `servicer.py:1136-1142` | SEV-3 hygiene |
+| NC-3 | **CONFIRMED (one way).** The UI `jwtVerify` checks neither audience nor issuer, and OAuth agent bearers are signed with the same secret and carry the same claims (`user_id`, full `roles`). An agent token in the `access_token` cookie is accepted as a full UI session, so third-party clients escape their audience confinement. The reverse direction is safe: the agent requires `aud == AGENT_PUBLIC_URL` (`agent auth.py:41,70`). | `ui lib/auth.ts:26`; `identityServiceImpl.ts:317-337` | SEV-2 |
+| NC-4 | **INCONCLUSIVE.** QuerySignals is internal-only in practice (indicators and analysis), but no decision records that. Exposing it would need owner scoping (feature 132 context calls it "unbounded platform-wide"). | `ingest.proto:21`; ingest constitution INGEST-5 | SEV-3 |
+| NC-5 | **REFUTED as a gap.** `confirm_order` with `filled_qty=0` derives status NEW and drops the order from positions and P&L. It is the intended void path (CancelOrder rejects offline orders). Residual: the order stays NEW forever, and the MCP docstring does not document the void. | `trading.go:846-847`, `:875-877`, `:1163-1168` | SEV-3 (docs) |
+| NC-6 | **CONFIRMED fail-safe.** An edited resubmit with the same nonce gets `FailedPrecondition` (hash mismatch); it is never replayed. The UI rotates the nonce only `onSuccess`, so the user is locked out until a reload. | `order_intent.go:68-69`; `OrderForm.tsx:158-165` | SEV-3 (UX) |
+
 ## Cross-references  (other lenses — RS-N5)
 
 - **→ signal-map:** placements for every metric above: the BFF per-method outcome counter, the MCP tool-call counter and histogram, the submitOrder reject-reason counter, the first-tool-call event, and the per-item ingest outcome.
