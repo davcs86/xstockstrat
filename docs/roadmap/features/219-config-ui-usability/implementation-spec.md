@@ -464,7 +464,7 @@ no hard-coded `/config-ui?env=` link remains in the header. Behavior is proven b
 
 ### Step 7 — test: namespace Select, deep link, query preservation, scope remount
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/config-ui/namespace-nav.spec.ts` — modify (rewrite; not deleted)

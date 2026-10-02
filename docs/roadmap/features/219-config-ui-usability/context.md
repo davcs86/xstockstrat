@@ -163,3 +163,9 @@
 - Static checks: tsc shows only the 3 baseline errors; lint 0 errors; jscpd 0 clones; one `KNOWN_NAMESPACES` declaration.
 - Files modified: `src/lib/configNamespaces.ts`, `src/lib/configNamespaces.test.ts` (Deviation Log), `src/app/config-ui/{ConfigNamespaceView,NamespaceSelect,page,ScopeControl}.tsx`, `src/app/config-ui/[namespace]/page.tsx`
 - Review warning "Step 6: >5 files + configUiHref unit test": the unit test is added (3/3). The file count is accepted as one coherent change. [x]
+
+### Step 7 — test: namespace Select, deep link, query preservation, scope remount [done]
+- Rewrote `namespace-nav.spec.ts` (not deleted) against the combobox (exact role name), importing `KNOWN_NAMESPACES` from src. AC-3 uses a `page.route` stub built by `listKeysStubBody`. Added the scope-remount case.
+- RED: 6 failed (pre-Step-6). GREEN: 21/21 passed across namespace-nav, env-mode-switcher and breadcrumb (CI mode).
+- Files modified: `services/xstockstrat-ui/e2e/config-ui/namespace-nav.spec.ts`
+- Deviations: none
