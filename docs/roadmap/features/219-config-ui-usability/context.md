@@ -181,3 +181,10 @@
 - Appended AC-14, nav-highlight and audit-crumb cases to `namespace-nav.spec.ts`. RED 3/3 → GREEN 23/23 across namespace-nav, breadcrumb, nav-reachability and audit.
 - Files modified: `services/xstockstrat-ui/e2e/config-ui/namespace-nav.spec.ts`
 - Review warning "Step 9 nav hedge": the precondition is deterministic. Settings › Config exists in the Section nav only if the route resolves to the Settings group, so no collapse/expand branch is needed. [x]
+
+### Step 10 — service: NamespaceEditor stable cells + EditContext, description, Updated column [done]
+- Replaced the edit-state-dependent `columns` useMemo with module-level `COLUMNS` and the `KeyCell`/`ValueCell`/`UpdatedCell`/`ActionsCell` components, which read an un-memoised `EditContext`. Row type is the generated `ConfigKeyMeta` and `data` is memoised. The local `envToProto` dup was removed in favour of the hook's. The description renders under the key (clamped, title, empty→nothing); the Description column is gone. Updated column: `timestampToDate` → `toLocaleString`, title = ISO, header title "Row last modified", not sortable. `handleSave`, the secret seeding and the bounds hint are unchanged.
+- TDD: RED is the Steps 11–12 specs against the pre-Step-10 tree: 8 failed. It reproduced the reported bug exactly (the reason input held only "h" when focus jumped; the probed value input was detached after one keystroke). AC-5 was expected-pass (no description element existed). GREEN: see Step 12.
+- Static: tsc baseline only; lint 0 errors; jscpd 0; prettier clean.
+- Files modified: `services/xstockstrat-ui/src/app/config-ui/[namespace]/NamespaceEditor.tsx`
+- Deviations: none

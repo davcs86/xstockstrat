@@ -669,7 +669,7 @@ crumb is still the only `platform` link.
 
 ### Step 10 — service: `NamespaceEditor` stable cells + `EditContext` (focus fix), description under key, Updated column
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/config-ui/[namespace]/NamespaceEditor.tsx` — modify
