@@ -91,4 +91,45 @@ test.describe('Config-ui namespace selection (feature 219)', () => {
     await expect(page).toHaveURL(new RegExp(`user=${TEST_USER_ID}`));
     await expect(page.getByPlaceholder('Reason for this change')).toHaveCount(0);
   });
+
+  test('AC-14: a namespace page keeps the env/scope header and a non-link Config crumb', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await page.goto('/config-ui/marketdata?env=staging');
+
+    await expect(page.getByText('ENV:')).toBeVisible();
+    await expect(page.getByText('SCOPE:')).toBeVisible();
+    await expect(namespaceSelect(page)).toBeVisible();
+    await expect(page.locator('table')).toBeVisible();
+
+    const crumbs = page.getByLabel('Namespace path', { exact: true });
+    await expect(crumbs.locator('li').last()).toHaveText('marketdata');
+    await expect(crumbs.getByRole('link', { name: '← namespaces' })).toHaveCount(0);
+    await expect(crumbs.getByText('Config', { exact: true })).toBeVisible();
+    await expect(crumbs.getByRole('link', { name: 'Config', exact: true })).toHaveCount(0);
+  });
+
+  test('Settings › Config is the active nav item on a namespace page', async ({ page }) => {
+    await addAuthCookie(page);
+    await page.goto('/config-ui/trading?env=staging');
+
+    // Resolving to the Settings group is what puts Config in the Section nav at all.
+    await expect(
+      page
+        .getByRole('navigation', { name: 'Section' })
+        .getByRole('link', { name: 'Config', exact: true }),
+    ).toHaveAttribute('aria-current', 'page');
+  });
+
+  test('the audit page crumb reads Config and links to /config-ui', async ({ page }) => {
+    await addAuthCookie(page);
+    await page.goto('/config-ui/audit');
+
+    await expect(
+      page
+        .getByLabel('Audit log path', { exact: true })
+        .getByRole('link', { name: 'Config', exact: true }),
+    ).toHaveAttribute('href', '/config-ui');
+  });
 });

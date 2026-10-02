@@ -613,7 +613,7 @@ proven by Step 9.
 
 ### Step 9 — test: namespace-page header, non-link breadcrumb, audit crumb, nav highlight
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/config-ui/namespace-nav.spec.ts` — modify (append tests)

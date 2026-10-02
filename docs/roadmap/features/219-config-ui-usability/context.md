@@ -176,3 +176,8 @@
 - Static: tsc baseline only; lint 0 errors; jscpd 0; no `← namespaces` left in src.
 - Files modified: `src/components/shared/{PageBreadcrumb,navGroups,PlatformHeader}.tsx`, `src/app/config-ui/[namespace]/NamespaceEditor.tsx` (crumb items only), `src/app/config-ui/audit/page.tsx`
 - Review warning "Step 8 relabel cosmetic": kept, because the design approved it. [x]
+
+### Step 9 — test: header, non-link breadcrumb, audit crumb, nav highlight [done]
+- Appended AC-14, nav-highlight and audit-crumb cases to `namespace-nav.spec.ts`. RED 3/3 → GREEN 23/23 across namespace-nav, breadcrumb, nav-reachability and audit.
+- Files modified: `services/xstockstrat-ui/e2e/config-ui/namespace-nav.spec.ts`
+- Review warning "Step 9 nav hedge": the precondition is deterministic. Settings › Config exists in the Section nav only if the route resolves to the Settings group, so no collapse/expand branch is needed. [x]
