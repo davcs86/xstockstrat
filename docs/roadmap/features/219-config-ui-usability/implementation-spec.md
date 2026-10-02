@@ -185,7 +185,7 @@ Pass conditions:
 
 ### Step 3 — service: `ListKeys` selects and maps `updated_at`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/grpc/configServiceImpl.ts` — modify

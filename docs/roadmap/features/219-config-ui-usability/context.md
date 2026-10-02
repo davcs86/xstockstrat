@@ -140,3 +140,9 @@
 - Ran `./scripts/buf-gen.sh` inside the pinned `Dockerfile.codegen` image (proxy CA via a BuildKit secret). The diff is limited to the 8 listed `config/v1` files, with no drift elsewhere. TDD: N/A (proto-gen).
 - Files modified: the `gen/{go,python,ts,ts/dist}/config/v1` files listed in the step.
 - Deviations: none
+
+### Step 3 — service: `ListKeys` selects and maps `updated_at` [done]
+- Added `updated_at` to the single `DISTINCT ON (key)` SELECT (resolved row; WHERE/ORDER BY untouched) and mapped it as `updatedAt: r.updated_at ?? undefined` beside `currentValue`. The redaction branch is untouched. Lint: 0 errors.
+- TDD: RED is Step 4's suite run against the pre-Step-3 tree (`# pass 1 # fail 4`: SQL shape, AC-6, AC-13, AC-7 failed; the absent-column case passed). GREEN after this step: `# pass 5 # fail 0`.
+- Files modified: `services/xstockstrat-config/src/grpc/configServiceImpl.ts`
+- Deviations: none. Review warning "Step 3 cite drift (:529-549 vs :531-550)": re-grepped and edited at the actual line. [x]
