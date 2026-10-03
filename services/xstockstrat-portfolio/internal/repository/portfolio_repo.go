@@ -44,6 +44,11 @@ func NewPortfolioRepo(connStr string) (*PortfolioRepo, error) {
 	return &PortfolioRepo{pool: pool, db: pool}, nil
 }
 
+// NewPortfolioRepoWithDB builds a repo over a mock query surface (pgxmock); Pool() returns nil.
+func NewPortfolioRepoWithDB(db queryRower) *PortfolioRepo {
+	return &PortfolioRepo{db: db}
+}
+
 // Pool exposes the underlying pool so sibling repos (e.g. WatchlistRepo) reuse the single portfolio
 // pgxpool instead of opening a second — keeps the connection-pool budget at 2.
 func (r *PortfolioRepo) Pool() *pgxpool.Pool {
@@ -58,7 +63,7 @@ func (r *PortfolioRepo) UpsertPosition(ctx context.Context, userID, symbol strin
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
 		ON CONFLICT (user_id, symbol, trading_mode, account_id) DO UPDATE
 		SET qty=$3, avg_entry_price=$4, cost_basis=$5, realized_accum=portfolio.positions.realized_accum + $8, fees_accum=portfolio.positions.fees_accum + $9, updated_at=NOW()`
-	_, err := r.pool.Exec(ctx, q, userID, symbol, qty, avgEntry, costBasis, mode.String(), accountID, realizedDelta, feesDelta)
+	_, err := r.db.Exec(ctx, q, userID, symbol, qty, avgEntry, costBasis, mode.String(), accountID, realizedDelta, feesDelta)
 	return err
 }
 
@@ -102,7 +107,7 @@ func (r *PortfolioRepo) GetFeesAccum(ctx context.Context, userID, symbol string,
 // other-account position for the same (user, symbol, mode) survives.
 func (r *PortfolioRepo) ClosePosition(ctx context.Context, userID, symbol string, mode commonv1.TradingMode, accountID string) error {
 	const q = `DELETE FROM portfolio.positions WHERE user_id=$1 AND symbol=$2 AND trading_mode=$3 AND account_id=$4`
-	_, err := r.pool.Exec(ctx, q, userID, symbol, mode.String(), accountID)
+	_, err := r.db.Exec(ctx, q, userID, symbol, mode.String(), accountID)
 	return err
 }
 

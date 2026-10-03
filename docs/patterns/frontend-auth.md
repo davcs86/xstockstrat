@@ -19,7 +19,7 @@ This doc covers the **auth-specific** rules. For general Next.js patterns (baseP
 | `src/lib/browserClients.ts` | **Browser** | typed connect-web clients on `browserTransport` — the only client import allowed in Client Components |
 | `src/middleware.ts` | **Node.js runtime** (`config.runtime = 'nodejs'`, feature 128) | Auth gate, redirects to `/auth/login`, near-expiry refresh — calls `identity.ts` `refreshSession()` **in-process** |
 | `src/app/auth/login/page.tsx` | Browser | **Unified** login form, served at the domain root (outside every basePath). The former per-basePath `src/app/<segment>/login/page.tsx` files were removed by feature 019. |
-| `src/app/auth/oauth-login/page.tsx` | Browser | OAuth agent login form (separate from operator login); redirects the browser to the agent `redirect_uri` with `state` on success |
+| `src/app/auth/oauth-login/page.tsx` + `OAuthLoginForm.tsx` | Server page + Browser form | OAuth agent login (separate from operator login). The server page resolves `${AGENT_PUBLIC_URL}/oauth/callback` at request time; the form renders — and on success redirects there with `txn` + `state` — only when the `agent_cb` query value equals it exactly, never the client-supplied URL |
 | `src/app/api/auth/login/route.ts` | Node | **Single consolidated** `AuthenticateUser` → sets cookies (one set of `/api/auth/{login,logout,refresh}` for all basePaths) |
 | `src/app/api/auth/refresh/route.ts` | Node | `RefreshToken` (calls `identity.ts`) |
 | `src/app/api/auth/logout/route.ts` | Node | `RevokeToken` + clears cookies (calls `identity.ts`) |

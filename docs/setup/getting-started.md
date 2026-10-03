@@ -66,9 +66,10 @@ The script will prompt you for:
 | Variable | Notes |
 |---|---|
 | `POSTGRES_PASSWORD` | Suggested default: `devpassword` for local dev |
-| `ALPACA_API_KEY` | Paper trading key from alpaca.markets; script links to [setup/alpaca.md](alpaca.md) |
-| `ALPACA_API_SECRET` | Matching secret |
+| `SEED_USER_ID` | Owner assigned to pre-existing strategies at migration time; the default is safe for a fresh DB |
 | `JWT_SECRET` | Auto-generated securely or manually provided |
+| `CONFIG_SECRETS_ENCRYPTION_KEY`, `BROKER_ACCOUNTS_ENCRYPTION_KEY` | Not prompted — generated (`openssl rand -hex 32`); a valid key already in `.env` is kept |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | Optional; for OpenTelemetry / Grafana Cloud observability |
 | `OTEL_EXPORTER_OTLP_HEADERS` | Optional; for OpenTelemetry / Grafana Cloud observability |
 
 #### Manual Setup

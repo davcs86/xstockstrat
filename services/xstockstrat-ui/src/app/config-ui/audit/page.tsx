@@ -93,7 +93,7 @@ export default function AuditPage() {
     <div className="space-y-4">
       <PageBreadcrumb
         ariaLabel="Audit log path"
-        items={[{ label: '← namespaces', href: '/config-ui' }, { label: 'Audit Log' }]}
+        items={[{ label: 'Config', href: '/config-ui' }, { label: 'Audit Log' }]}
       />
 
       {loading && <p className="text-muted-foreground text-sm">Loading…</p>}

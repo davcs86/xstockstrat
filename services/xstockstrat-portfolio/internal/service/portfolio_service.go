@@ -153,9 +153,21 @@ func (s *PortfolioService) ConsumeOrderFills(ctx context.Context) {
 	s.consumeEventStream(ctx, "order fill", "order.filled", s.processOrderFill)
 }
 
+// eventHandler returns a non-nil error only for a retryable failure: the stream then reconnects
+// from the failed event instead of advancing past it.
+type eventHandler func(context.Context, *ledgerv1.LedgerEvent) error
+
+// ackAlways adapts a best-effort handler that never withholds the cursor.
+func ackAlways(h func(context.Context, *ledgerv1.LedgerEvent)) eventHandler {
+	return func(ctx context.Context, ev *ledgerv1.LedgerEvent) error {
+		h(ctx, ev)
+		return nil
+	}
+}
+
 // consumeEventStream dispatches a filtered ledger StreamEvents to handle, reconnecting on disconnect
 // and resuming from lastSeq+1 so a recycled stream neither double-counts nor drops events.
-func (s *PortfolioService) consumeEventStream(ctx context.Context, name, eventType string, handle func(context.Context, *ledgerv1.LedgerEvent)) {
+func (s *PortfolioService) consumeEventStream(ctx context.Context, name, eventType string, handle eventHandler) {
 	var lastSeq int64
 	for {
 		next, err := s.streamEventsFrom(ctx, eventType, lastSeq, handle)
@@ -176,7 +188,7 @@ func (s *PortfolioService) consumeEventStream(ctx context.Context, name, eventTy
 
 // streamEventsFrom opens one StreamEvents call and returns the highest sequence processed.
 // lastSeq == 0 replays full history; lastSeq > 0 resumes from lastSeq+1.
-func (s *PortfolioService) streamEventsFrom(ctx context.Context, eventType string, lastSeq int64, handle func(context.Context, *ledgerv1.LedgerEvent)) (int64, error) {
+func (s *PortfolioService) streamEventsFrom(ctx context.Context, eventType string, lastSeq int64, handle eventHandler) (int64, error) {
 	fromSeq := int64(0)
 	if lastSeq > 0 {
 		fromSeq = lastSeq + 1
@@ -196,7 +208,9 @@ func (s *PortfolioService) streamEventsFrom(ctx context.Context, eventType strin
 		if err != nil {
 			return lastSeq, fmt.Errorf("recv: %w", err)
 		}
-		handle(ctx, event)
+		if err := handle(ctx, event); err != nil {
+			return lastSeq, fmt.Errorf("handle event seq %d: %w", event.Sequence, err)
+		}
 		if event.Sequence > lastSeq {
 			lastSeq = event.Sequence
 		}
@@ -230,18 +244,20 @@ type orderFillPayload struct {
 	Fees float64 `json:"fees"`
 }
 
-func (s *PortfolioService) processOrderFill(ctx context.Context, event *ledgerv1.LedgerEvent) {
+// processOrderFill returns an error only for a DB failure (retried on redelivery); a malformed
+// payload is skipped, since redelivering it can never succeed.
+func (s *PortfolioService) processOrderFill(ctx context.Context, event *ledgerv1.LedgerEvent) error {
 	if event.Payload == nil {
-		return
+		return nil
 	}
 	raw, err := event.Payload.MarshalJSON()
 	if err != nil {
-		return
+		return nil
 	}
 	var fill orderFillPayload
 	if err := json.Unmarshal(raw, &fill); err != nil {
 		slog.Warn("parse order fill payload", "error", err)
-		return
+		return nil
 	}
 
 	mode := commonv1.TradingMode_TRADING_MODE_PAPER
@@ -255,7 +271,13 @@ func (s *PortfolioService) processOrderFill(ctx context.Context, event *ledgerv1
 
 	// Fetch the existing position scoped to the fill's account: without account scoping a multi-account
 	// user's fill would compute the new avg entry from the wrong account's most-recent position.
-	existing, _ := s.repo.GetPosition(ctx, fill.UserID, fill.Symbol, mode, fill.AccountId)
+	existing, err := s.repo.GetPosition(ctx, fill.UserID, fill.Symbol, mode, fill.AccountId)
+	if errors.Is(err, repository.ErrPositionNotFound) {
+		existing, err = nil, nil
+	}
+	if err != nil {
+		return fmt.Errorf("get position: %w", err)
+	}
 	var (
 		newQty      float64
 		newAvgEntry float64
@@ -295,16 +317,26 @@ func (s *PortfolioService) processOrderFill(ctx context.Context, event *ledgerv1
 		// realized_pnl stays GROSS/authoritative; net = realized_pnl - fees_total downstream.
 		var feesSealed float64
 		if existing != nil {
-			priorAccum, _ := s.repo.GetRealizedAccum(ctx, fill.UserID, fill.Symbol, mode, acctID)
+			priorAccum, err := s.repo.GetRealizedAccum(ctx, fill.UserID, fill.Symbol, mode, acctID)
+			if err != nil {
+				return fmt.Errorf("get realized accum: %w", err)
+			}
 			sealed = priorAccum + delta
-			priorFees, _ := s.repo.GetFeesAccum(ctx, fill.UserID, fill.Symbol, mode, acctID)
+			priorFees, err := s.repo.GetFeesAccum(ctx, fill.UserID, fill.Symbol, mode, acctID)
+			if err != nil {
+				return fmt.Errorf("get fees accum: %w", err)
+			}
 			feesSealed = priorFees + fill.Fees
 		}
-		_ = s.repo.ClosePosition(ctx, fill.UserID, fill.Symbol, mode, acctID)
+		if err := s.repo.ClosePosition(ctx, fill.UserID, fill.Symbol, mode, acctID); err != nil {
+			return fmt.Errorf("close position: %w", err)
+		}
 		s.emitEvent(ctx, "portfolio.position.closed", "portfolio:"+fill.UserID,
 			closedPositionPayload(fill.UserID, fill.Symbol, acctID, mode.String(), sealed, feesSealed, existing))
 	} else {
-		_ = s.repo.UpsertPosition(ctx, fill.UserID, fill.Symbol, newQty, newAvgEntry, newCost, mode, acctID, delta, fill.Fees)
+		if err := s.repo.UpsertPosition(ctx, fill.UserID, fill.Symbol, newQty, newAvgEntry, newCost, mode, acctID, delta, fill.Fees); err != nil {
+			return fmt.Errorf("upsert position: %w", err)
+		}
 		eventType := "portfolio.position.opened"
 		if existing != nil {
 			eventType = "portfolio.position.updated"
@@ -316,6 +348,7 @@ func (s *PortfolioService) processOrderFill(ctx context.Context, event *ledgerv1
 
 	s.checkRiskLimits(ctx, fill.UserID, mode)
 	s.broadcastSnapshot(ctx, fill.UserID, mode)
+	return nil
 }
 
 // closedPositionPayload builds the portfolio.position.closed emit payload. The base keys are the
@@ -924,7 +957,7 @@ type positionSyncPayload struct {
 // ConsumePositionSyncs subscribes to ledger StreamEvents filtered on "account.positions.synced"
 // and upserts positions from broker snapshots.
 func (s *PortfolioService) ConsumePositionSyncs(ctx context.Context) {
-	s.consumeEventStream(ctx, "position sync", "account.positions.synced", s.processPositionSync)
+	s.consumeEventStream(ctx, "position sync", "account.positions.synced", ackAlways(s.processPositionSync))
 }
 
 // accountDeregisteredPayload is the shape of trading's account.deregistered event.
@@ -936,7 +969,7 @@ type accountDeregisteredPayload struct {
 // ConsumeAccountDeregistrations purges an offline account's positions + realized P&L on
 // account.deregistered — no broker sync reconciles an offline account away, so the purge is event-driven.
 func (s *PortfolioService) ConsumeAccountDeregistrations(ctx context.Context) {
-	s.consumeEventStream(ctx, "account deregistration", "account.deregistered", s.processAccountDeregistered)
+	s.consumeEventStream(ctx, "account deregistration", "account.deregistered", ackAlways(s.processAccountDeregistered))
 }
 
 func (s *PortfolioService) processAccountDeregistered(ctx context.Context, event *ledgerv1.LedgerEvent) {
@@ -1050,7 +1083,7 @@ type bracketUpdatePayload struct {
 // ConsumeBracketUpdates subscribes to ledger StreamEvents filtered on "order.bracket_updated"
 // and persists the resting bracket leg order IDs onto the matching position row.
 func (s *PortfolioService) ConsumeBracketUpdates(ctx context.Context) {
-	s.consumeEventStream(ctx, "bracket update", "order.bracket_updated", s.processBracketUpdate)
+	s.consumeEventStream(ctx, "bracket update", "order.bracket_updated", ackAlways(s.processBracketUpdate))
 }
 
 func (s *PortfolioService) processBracketUpdate(ctx context.Context, event *ledgerv1.LedgerEvent) {
@@ -1098,7 +1131,7 @@ type balanceSyncPayload struct {
 // ConsumeBalanceSyncs subscribes to ledger StreamEvents filtered on "account.balance.synced"
 // and stores the latest broker balance snapshot per account.
 func (s *PortfolioService) ConsumeBalanceSyncs(ctx context.Context) {
-	s.consumeEventStream(ctx, "balance sync", "account.balance.synced", s.processBalanceSync)
+	s.consumeEventStream(ctx, "balance sync", "account.balance.synced", ackAlways(s.processBalanceSync))
 }
 
 func (s *PortfolioService) processBalanceSync(ctx context.Context, event *ledgerv1.LedgerEvent) {

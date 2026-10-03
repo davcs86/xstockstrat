@@ -12,7 +12,7 @@ interface PageBreadcrumbProps {
   /** No default — must be distinct from every other labeled region or nav link accessible name on
    *  the page, so a11y/e2e locators don't collide. */
   ariaLabel: string;
-  /** An item without `href` (or the last item) renders as the current, non-link crumb. */
+  /** A non-last item without `href` renders as plain text; the last item is the current crumb. */
   items: { label: string; href?: string }[];
 }
 
@@ -26,10 +26,12 @@ export function PageBreadcrumb({ ariaLabel, items }: PageBreadcrumbProps) {
           return (
             <Fragment key={item.label}>
               <BreadcrumbItem>
-                {!isLast && item.href ? (
+                {isLast ? (
+                  <BreadcrumbPage>{item.label}</BreadcrumbPage>
+                ) : item.href ? (
                   <BreadcrumbLink href={item.href}>{item.label}</BreadcrumbLink>
                 ) : (
-                  <BreadcrumbPage>{item.label}</BreadcrumbPage>
+                  <span className="text-muted-foreground">{item.label}</span>
                 )}
               </BreadcrumbItem>
               {!isLast && <BreadcrumbSeparator />}

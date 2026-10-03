@@ -143,6 +143,23 @@ test.describe('Extended session — "Remember me" (feature 153)', () => {
   });
 });
 
+test.describe('OAuth login — agent_cb is never followed unless it is the agent callback', () => {
+  // playwright.config.ts sets AGENT_PUBLIC_URL=http://127.0.0.1:9099.
+  for (const agentCb of ['javascript:alert(document.domain)//', 'https://attacker.example/cb']) {
+    test(`rejects agent_cb=${agentCb}`, async ({ page }) => {
+      await page.goto(`/auth/oauth-login?agent_cb=${encodeURIComponent(agentCb)}&txn=x&state=y`);
+      await expect(page.getByText('Invalid OAuth authorization request.')).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Authorize' })).toHaveCount(0);
+    });
+  }
+
+  test('renders the form for the server-resolved agent callback', async ({ page }) => {
+    const agentCb = encodeURIComponent('http://127.0.0.1:9099/oauth/callback');
+    await page.goto(`/auth/oauth-login?agent_cb=${agentCb}&txn=x&state=y`);
+    await expect(page.getByRole('button', { name: 'Authorize' })).toBeVisible();
+  });
+});
+
 test.describe('Unified auth — login pages are not edge-cacheable', () => {
   // Regression guard: the login pages must render dynamically (Cache-Control: no-store),
   // NOT be statically prerendered with `s-maxage=31536000`. When they were static, the

@@ -3,6 +3,20 @@
 All production promotions from `main-dev` to `main` are recorded here.
 Each entry corresponds to one `main-dev → main` PR merge.
 
+## 2026-10-03
+
+### Features
+- fix-setupenv-unbootable-env: `scripts/setup-env.sh` writes a `.env` that `docker compose` rejects: it never generates the two required encryption keys, and it still writes variables removed by feature 147.
+- config-ui-usability: Usability pass over the `/config-ui` namespace editor: a namespace dropdown above the keys table replaces the landing card grid, each row shows a clamped description and its last-updated timestamp (new `ConfigKeyMeta.updated_at`), and inline editing stops stealing focus back to the value input.
+
+### Proto Changes
+- config/v1/config.proto
+
+### Summary
+9 commits, 0 feature merges since last promotion.
+
+---
+
 ## 2026-10-01
 
 ### Features

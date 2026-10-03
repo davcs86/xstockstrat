@@ -1020,7 +1020,9 @@ type ConfigKeyMeta struct {
 	Validation  *ValidationRule `protobuf:"bytes,8,opt,name=validation,proto3" json:"validation,omitempty"`                                                              // optional; absent = no validation
 	// The row's live value_data — what SetConfig writes and WatchConfig/GetConfig serve.
 	// This is what a config-ui "Value" column must display and prefill for editing.
-	CurrentValue  string `protobuf:"bytes,9,opt,name=current_value,json=currentValue,proto3" json:"current_value,omitempty"`
+	CurrentValue string `protobuf:"bytes,9,opt,name=current_value,json=currentValue,proto3" json:"current_value,omitempty"`
+	// updated_at of the resolved row (the caller's per-user override when one exists, else global).
+	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1119,6 +1121,13 @@ func (x *ConfigKeyMeta) GetCurrentValue() string {
 	return ""
 }
 
+func (x *ConfigKeyMeta) GetUpdatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return nil
+}
+
 var File_config_v1_config_proto protoreflect.FileDescriptor
 
 const file_config_v1_config_proto_rawDesc = "" +
@@ -1194,7 +1203,7 @@ const file_config_v1_config_proto_rawDesc = "" +
 	"\ftrading_mode\x18\x03 \x01(\x0e2\".xstockstrat.common.v1.TradingModeB\x02\x18\x01R\vtradingMode\x12\x17\n" +
 	"\auser_id\x18\x04 \x01(\tR\x06userId\"L\n" +
 	"\x10ListKeysResponse\x128\n" +
-	"\x04keys\x18\x01 \x03(\v2$.xstockstrat.config.v1.ConfigKeyMetaR\x04keys\"\xaf\x03\n" +
+	"\x04keys\x18\x01 \x03(\v2$.xstockstrat.config.v1.ConfigKeyMetaR\x04keys\"\xea\x03\n" +
 	"\rConfigKeyMeta\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12#\n" +
@@ -1206,7 +1215,10 @@ const file_config_v1_config_proto_rawDesc = "" +
 	"\n" +
 	"validation\x18\b \x01(\v2%.xstockstrat.config.v1.ValidationRuleR\n" +
 	"validation\x12#\n" +
-	"\rcurrent_value\x18\t \x01(\tR\fcurrentValue*\x94\x01\n" +
+	"\rcurrent_value\x18\t \x01(\tR\fcurrentValue\x129\n" +
+	"\n" +
+	"updated_at\x18\n" +
+	" \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt*\x94\x01\n" +
 	"\x10ConfigUpdateType\x12\"\n" +
 	"\x1eCONFIG_UPDATE_TYPE_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bCONFIG_UPDATE_TYPE_SNAPSHOT\x10\x01\x12\x1c\n" +
@@ -1281,22 +1293,23 @@ var file_config_v1_config_proto_depIdxs = []int32{
 	15, // 19: xstockstrat.config.v1.ConfigKeyMeta.environment:type_name -> xstockstrat.common.v1.Environment
 	16, // 20: xstockstrat.config.v1.ConfigKeyMeta.trading_mode:type_name -> xstockstrat.common.v1.TradingMode
 	5,  // 21: xstockstrat.config.v1.ConfigKeyMeta.validation:type_name -> xstockstrat.config.v1.ValidationRule
-	4,  // 22: xstockstrat.config.v1.ConfigSnapshot.ValuesEntry.value:type_name -> xstockstrat.config.v1.ConfigValue
-	2,  // 23: xstockstrat.config.v1.ConfigService.WatchConfig:input_type -> xstockstrat.config.v1.WatchConfigRequest
-	6,  // 24: xstockstrat.config.v1.ConfigService.GetConfig:input_type -> xstockstrat.config.v1.GetConfigRequest
-	9,  // 25: xstockstrat.config.v1.ConfigService.SetConfig:input_type -> xstockstrat.config.v1.SetConfigRequest
-	11, // 26: xstockstrat.config.v1.ConfigService.ListKeys:input_type -> xstockstrat.config.v1.ListKeysRequest
-	7,  // 27: xstockstrat.config.v1.ConfigService.GetSecret:input_type -> xstockstrat.config.v1.GetSecretRequest
-	3,  // 28: xstockstrat.config.v1.ConfigService.WatchConfig:output_type -> xstockstrat.config.v1.ConfigSnapshot
-	3,  // 29: xstockstrat.config.v1.ConfigService.GetConfig:output_type -> xstockstrat.config.v1.ConfigSnapshot
-	10, // 30: xstockstrat.config.v1.ConfigService.SetConfig:output_type -> xstockstrat.config.v1.SetConfigResponse
-	12, // 31: xstockstrat.config.v1.ConfigService.ListKeys:output_type -> xstockstrat.config.v1.ListKeysResponse
-	8,  // 32: xstockstrat.config.v1.ConfigService.GetSecret:output_type -> xstockstrat.config.v1.GetSecretResponse
-	28, // [28:33] is the sub-list for method output_type
-	23, // [23:28] is the sub-list for method input_type
-	23, // [23:23] is the sub-list for extension type_name
-	23, // [23:23] is the sub-list for extension extendee
-	0,  // [0:23] is the sub-list for field type_name
+	17, // 22: xstockstrat.config.v1.ConfigKeyMeta.updated_at:type_name -> google.protobuf.Timestamp
+	4,  // 23: xstockstrat.config.v1.ConfigSnapshot.ValuesEntry.value:type_name -> xstockstrat.config.v1.ConfigValue
+	2,  // 24: xstockstrat.config.v1.ConfigService.WatchConfig:input_type -> xstockstrat.config.v1.WatchConfigRequest
+	6,  // 25: xstockstrat.config.v1.ConfigService.GetConfig:input_type -> xstockstrat.config.v1.GetConfigRequest
+	9,  // 26: xstockstrat.config.v1.ConfigService.SetConfig:input_type -> xstockstrat.config.v1.SetConfigRequest
+	11, // 27: xstockstrat.config.v1.ConfigService.ListKeys:input_type -> xstockstrat.config.v1.ListKeysRequest
+	7,  // 28: xstockstrat.config.v1.ConfigService.GetSecret:input_type -> xstockstrat.config.v1.GetSecretRequest
+	3,  // 29: xstockstrat.config.v1.ConfigService.WatchConfig:output_type -> xstockstrat.config.v1.ConfigSnapshot
+	3,  // 30: xstockstrat.config.v1.ConfigService.GetConfig:output_type -> xstockstrat.config.v1.ConfigSnapshot
+	10, // 31: xstockstrat.config.v1.ConfigService.SetConfig:output_type -> xstockstrat.config.v1.SetConfigResponse
+	12, // 32: xstockstrat.config.v1.ConfigService.ListKeys:output_type -> xstockstrat.config.v1.ListKeysResponse
+	8,  // 33: xstockstrat.config.v1.ConfigService.GetSecret:output_type -> xstockstrat.config.v1.GetSecretResponse
+	29, // [29:34] is the sub-list for method output_type
+	24, // [24:29] is the sub-list for method input_type
+	24, // [24:24] is the sub-list for extension type_name
+	24, // [24:24] is the sub-list for extension extendee
+	0,  // [0:24] is the sub-list for field type_name
 }
 
 func init() { file_config_v1_config_proto_init() }

@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
+import { configUiHref } from '@/lib/configNamespaces';
 
 /**
  * Per-user scope control for the Config UI. Per-user config is owner-only self-service, so this
@@ -23,9 +24,7 @@ export function ScopeControl({
   const router = useRouter();
 
   function go(nextUser: string) {
-    const params = new URLSearchParams({ env });
-    if (nextUser) params.set('user', nextUser);
-    router.push(`${basePath}?${params.toString()}`);
+    router.push(configUiHref(basePath, env, nextUser));
   }
 
   const onSelf = Boolean(selfUserId) && user === selfUserId;

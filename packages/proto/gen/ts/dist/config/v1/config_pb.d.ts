@@ -441,6 +441,12 @@ export type ConfigKeyMeta = Message<"xstockstrat.config.v1.ConfigKeyMeta"> & {
      * @generated from field: string current_value = 9;
      */
     currentValue: string;
+    /**
+     * updated_at of the resolved row (the caller's per-user override when one exists, else global).
+     *
+     * @generated from field: google.protobuf.Timestamp updated_at = 10;
+     */
+    updatedAt?: Timestamp | undefined;
 };
 /**
  * Describes the message xstockstrat.config.v1.ConfigKeyMeta.
