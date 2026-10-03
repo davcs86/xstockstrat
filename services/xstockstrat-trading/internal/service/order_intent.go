@@ -51,6 +51,13 @@ func deriveReplaceCancelIntentID(msg proto.Message) (intentID string, hashHex st
 	return intentID, hashHex, nil
 }
 
+// brokerRejectedError marks submitOrder's definitive, synchronous broker rejection (intent finalized
+// REJECTED) apart from uncertain/timeout and intent-gate failures, which must keep the same intent id.
+type brokerRejectedError struct{ err error }
+
+func (e *brokerRejectedError) Error() string { return "broker submission failed: " + e.err.Error() }
+func (e *brokerRejectedError) Unwrap() error { return e.err }
+
 // intentAction is classifyIntentLookup's decision output.
 type intentAction int
 
