@@ -692,7 +692,7 @@ func (s *TradingService) submitOrder(
 			}
 		}
 		slog.Error("broker rejected order", "order_id", orderID, "error", err)
-		return nil, fmt.Errorf("broker submission failed: %w", err)
+		return nil, &brokerRejectedError{err: err}
 	}
 
 	order.BrokerOrderId = brokerOrder.BrokerOrderID
@@ -2699,13 +2699,12 @@ func (s *TradingService) flattenAndHalt(ctx context.Context, bracket *repository
 		qty = -qty
 	}
 
-	// Minted once per protection-gap-expiry episode, reused on every retry — preserves
-	// the platform's broker-side dedup contract (design.md).
-	clientOrderID := uuid.New().String()
+	// Reused across retries after a transient/unknown failure (broker-side dedup contract); re-minted
+	// only after a definitive broker REJECTED, whose stored intent would otherwise replay as success.
 	flattenOrderID := uuid.New().String()
 	flattenReq := &tradingv1.PlaceOrderRequest{
 		Symbol: order.Symbol, Side: flattenSide, OrderType: tradingv1.OrderType_ORDER_TYPE_MARKET,
-		Qty: qty, TimeInForce: tradingv1.TimeInForce_TIME_IN_FORCE_DAY, AccountId: bracket.AccountID, ClientOrderId: clientOrderID,
+		Qty: qty, TimeInForce: tradingv1.TimeInForce_TIME_IN_FORCE_DAY, AccountId: bracket.AccountID, ClientOrderId: uuid.New().String(),
 		TradingMode: order.TradingMode,
 	}
 	mode := s.resolveTradingMode(order.TradingMode)
@@ -2727,8 +2726,17 @@ func (s *TradingService) flattenAndHalt(ctx context.Context, bracket *repository
 		if attempt > 0 {
 			time.Sleep(retryDelay)
 		}
-		_, lastErr = s.submitOrder(ctx, flattenReq, accountEntry, mode, bracket.AccountID, flattenOrderID, false,
+		placed, err := s.submitOrder(ctx, flattenReq, accountEntry, mode, bracket.AccountID, flattenOrderID, false,
 			requestHashHex, false, 0, 0)
+		lastErr = err
+		var rejected *brokerRejectedError
+		if errors.As(err, &rejected) || (err == nil && placed != nil && placed.Status == tradingv1.OrderStatus_ORDER_STATUS_REJECTED) {
+			if lastErr == nil {
+				lastErr = fmt.Errorf("flatten order %s rejected by broker", placed.OrderId)
+			}
+			flattenReq.ClientOrderId = uuid.New().String()
+			flattenOrderID = uuid.New().String()
+		}
 		if lastErr == nil {
 			if uerr := s.bracketRepo.UpdateBracketStatus(ctx, bracket.ID, bracketStatusCanceled, bracket.StopLegOrderID, bracket.TakeProfitLegOrderID, ""); uerr != nil {
 				slog.Warn("flattenAndHalt: update bracket status failed", "order_id", bracket.OrderID, "error", uerr)

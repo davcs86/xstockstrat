@@ -27,7 +27,7 @@ func notCancelableSvc(fb *fakeBroker, bracket *fakeBracketRepo) (*TradingService
 		bracket = &fakeBracketRepo{}
 	}
 	return &TradingService{
-		cfgW: &config.Watcher{}, orderIntentRepo: &fakeOrderIntentRepo{}, bracketRepo: bracket, ledger: &fakeLedgerClient{},
+		cfgW: &config.Watcher{}, repo: repository.NewTradingRepoWithDB(execOnlyDB{}), orderIntentRepo: &fakeOrderIntentRepo{}, bracketRepo: bracket, ledger: &fakeLedgerClient{}, notify: &fakeNotifyClient{},
 		brokers: map[string]brokerPoolEntry{"acct-1": {client: fb, brokerType: int32(commonv1.BrokerType_BROKER_TYPE_ALPACA)}},
 		orders:  map[string]*tradingv1.Order{"ord-1": order},
 	}, order
@@ -49,12 +49,10 @@ func TestCancelOrder_NotCancelable_BrokerFilled_AdoptsFillNotCanceled(t *testing
 		},
 	}
 	svc, order := notCancelableSvc(fb, bracket)
-	func() {
-		// s.repo is a concrete *TradingRepo this package cannot fake; its UpsertOrder panics after
-		// the status has been adopted (same harness limit as trading_bracket_test.go).
-		defer func() { _ = recover() }()
-		_, _ = svc.CancelOrder(ctxAsUser("user-1"), &tradingv1.CancelOrderRequest{OrderId: "ord-1"})
-	}()
+	resp, err := svc.CancelOrder(ctxAsUser("user-1"), &tradingv1.CancelOrderRequest{OrderId: "ord-1"})
+	if err != nil || resp.Success {
+		t.Fatalf("resp=%+v err=%v, want Success=false (the order filled, it was not canceled)", resp, err)
+	}
 
 	if order.Status != tradingv1.OrderStatus_ORDER_STATUS_FILLED {
 		t.Fatalf("status = %v, want FILLED (pre-fix: CANCELED, fill lost)", order.Status)
@@ -80,10 +78,9 @@ func TestCancelOrder_NotCancelable_BrokerCanceled_RecordsCanceled(t *testing.T) 
 		},
 	}
 	svc, order := notCancelableSvc(fb, nil)
-	func() {
-		defer func() { _ = recover() }()
-		_, _ = svc.CancelOrder(ctxAsUser("user-1"), &tradingv1.CancelOrderRequest{OrderId: "ord-1"})
-	}()
+	if resp, err := svc.CancelOrder(ctxAsUser("user-1"), &tradingv1.CancelOrderRequest{OrderId: "ord-1"}); err != nil || !resp.Success {
+		t.Fatalf("resp=%+v err=%v, want Success=true", resp, err)
+	}
 	if order.Status != tradingv1.OrderStatus_ORDER_STATUS_CANCELED {
 		t.Fatalf("status = %v, want CANCELED", order.Status)
 	}

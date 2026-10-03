@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -18,6 +19,7 @@ import (
 type dbQuerier interface {
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
 }
 
 // TradingRepo persists orders to the trading.orders hypertable.
@@ -33,6 +35,11 @@ func NewTradingRepo(connStr string) (*TradingRepo, error) {
 		return nil, fmt.Errorf("newPool: %w", err)
 	}
 	return &TradingRepo{pool: pool, db: pool}, nil
+}
+
+// NewTradingRepoWithDB builds a repo over a fake query surface for tests; Pool() returns nil.
+func NewTradingRepoWithDB(db dbQuerier) *TradingRepo {
+	return &TradingRepo{db: db}
 }
 
 // Pool exposes the underlying connection pool so sibling repositories
@@ -53,7 +60,7 @@ func (r *TradingRepo) UpsertOrder(ctx context.Context, o *tradingv1.Order) error
 		updatedAt = o.UpdatedAt.AsTime()
 	}
 
-	_, err := r.pool.Exec(ctx, `
+	_, err := r.db.Exec(ctx, `
 		INSERT INTO trading.orders (
 			order_id, client_order_id, broker_order_id, symbol, side, order_type,
 			status, qty, filled_qty, limit_price, stop_price, filled_avg_price,
