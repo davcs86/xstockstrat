@@ -54,6 +54,8 @@ router.service(AnalysisService, {
   listOpportunities: forward((req, opts) => analysisClient.listOpportunities(req, opts), {
     timeoutMs: 30_000,
   }),
+  // Snooze/Dismiss/Take disposition write. Owner from x-user-id; body carries no user_id.
+  setOpportunityAction: forward((req, opts) => analysisClient.setOpportunityAction(req, opts)),
   evaluateReadiness: forward((req, opts) => analysisClient.evaluateReadiness(req, opts)),
   // Cache-first watchlist readiness decoration (feature 181). Owner from x-user-id; body carries
   // no user_id. Read-only forward — inherits createDispatch's ConnectError passthrough (fails.md:552).

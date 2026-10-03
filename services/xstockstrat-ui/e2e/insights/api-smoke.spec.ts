@@ -21,7 +21,7 @@ async function callBff(page: Page): Promise<{ status: number; body: Record<strin
       headers: { 'content-type': 'application/json' },
       body: '{}',
     });
-    const body = await res.json() as Record<string, unknown>;
+    const body = (await res.json()) as Record<string, unknown>;
     return { status: res.status, body };
   }, ANALYSIS_BFF);
 }
@@ -58,7 +58,9 @@ test.describe('Connect BFF — AnalysisService/ListStrategies data contract', ()
     }
   });
 
-  test('overallScore is a decimal in [0, 1] — component multiplies by 100 for display', async ({ page }) => {
+  test('overallScore is a decimal in [0, 1] — component multiplies by 100 for display', async ({
+    page,
+  }) => {
     await addAuthCookie(page);
     await page.goto('/auth/login');
     const { body } = await callBff(page);
@@ -94,8 +96,8 @@ test.describe('Connect BFF — AnalysisService/ListStrategies data contract', ()
     const { body } = await callBff(page);
     const strategies = body.strategies as Array<Record<string, unknown>>;
 
-    const highScore = strategies.filter((s) =>
-      s.overallScore !== undefined && (s.overallScore as number) >= 0.8,
+    const highScore = strategies.filter(
+      (s) => s.overallScore !== undefined && (s.overallScore as number) >= 0.8,
     );
 
     // The mock backend includes one A-rated strategy at 0.87 — verify it exists
@@ -106,7 +108,9 @@ test.describe('Connect BFF — AnalysisService/ListStrategies data contract', ()
     }
   });
 
-  test('chart data can be derived: strategyId.slice(0, 8) and overallScore * 100', async ({ page }) => {
+  test('chart data can be derived: strategyId.slice(0, 8) and overallScore * 100', async ({
+    page,
+  }) => {
     await addAuthCookie(page);
     await page.goto('/auth/login');
     const { body } = await callBff(page);
@@ -120,5 +124,28 @@ test.describe('Connect BFF — AnalysisService/ListStrategies data contract', ()
       expect(score).toBeGreaterThanOrEqual(0);
       expect(score).toBeLessThanOrEqual(100);
     }
+  });
+});
+
+test.describe('Connect BFF — AnalysisService/SetOpportunityAction is registered', () => {
+  // Traverses the real BFF router (no page.route mock) — an unregistered method answers
+  // Unimplemented here, which the browser-level mocks in opportunities.spec.ts cannot catch.
+  test('dispatches to the analysis backend instead of answering Unimplemented', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await page.goto('/auth/login');
+    const status = await page.evaluate(async () => {
+      const res = await fetch(
+        '/insights/api/xstockstrat.analysis.v1.AnalysisService/SetOpportunityAction',
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ opportunityKey: 'k', action: 'OPPORTUNITY_ACTION_DISMISS' }),
+        },
+      );
+      return res.status;
+    });
+    expect(status).toBe(200);
   });
 });
