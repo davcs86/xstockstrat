@@ -220,8 +220,10 @@ func (c *Client) CancelOrder(ctx context.Context, brokerOrderID string) error {
 	}
 	defer resp.Body.Close() //nolint:errcheck
 
-	// 204 No Content is success; 422 means already filled/canceled
-	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusUnprocessableEntity {
+	if resp.StatusCode == http.StatusUnprocessableEntity {
+		return ErrOrderNotCancelable
+	}
+	if resp.StatusCode != http.StatusNoContent {
 		body, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("alpaca cancel error (status %d): %s", resp.StatusCode, string(body))
 	}

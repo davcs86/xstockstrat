@@ -3,6 +3,7 @@ package broker_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -623,5 +624,19 @@ func TestAlpacaListOrders_HTTPError(t *testing.T) {
 	}
 	if len(orders) != 0 {
 		t.Errorf("expected an empty/nil slice on error, got %d orders", len(orders))
+	}
+}
+
+// 422 ("already filled/canceled") is not a successful cancel: the caller must re-read the order.
+func TestCancelOrder_422ReturnsNotCancelable(t *testing.T) {
+	srv := makeTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+	})
+	defer srv.Close()
+
+	c := broker.NewClient(broker.ClientConfig{APIKey: "k", APISecret: "s", PaperURL: srv.URL, Paper: true})
+	err := c.CancelOrder(context.Background(), "alpaca-order-123")
+	if !errors.Is(err, broker.ErrOrderNotCancelable) {
+		t.Fatalf("err = %v, want ErrOrderNotCancelable", err)
 	}
 }

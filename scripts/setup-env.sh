@@ -109,13 +109,20 @@ prompt_value() {
   eval "${name}='${user_input}'"
 }
 
-generate_jwt_secret() {
+# generate_hex BYTES — prints 2*BYTES lowercase hex chars.
+generate_hex() {
   if command -v openssl &>/dev/null; then
-    openssl rand -hex 16
+    openssl rand -hex "$1"
   else
     # Fallback: use /dev/urandom if openssl not available
-    head -c 16 /dev/urandom | xxd -p | tr -d '\n'
+    head -c "$1" /dev/urandom | xxd -p | tr -d '\n'
   fi
+}
+
+# existing_hex_key NAME — prints NAME's value from the current .env when it is 64 hex chars.
+existing_hex_key() {
+  [ -f "$ENV_FILE" ] || return 0
+  grep -E "^$1=" "$ENV_FILE" | tail -n 1 | cut -d= -f2- | tr -d "'\"" | grep -E '^[0-9a-fA-F]{64}$' || true
 }
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -126,7 +133,7 @@ section "xstockstrat — Environment Setup"
 
 info "This script will create a .env file for local development."
 info "Three-file convention:"
-info "  • .env — NOT committed; secrets only (POSTGRES_PASSWORD, ALPACA_*, JWT_SECRET)"
+info "  • .env — NOT committed; secrets only (POSTGRES_PASSWORD, JWT_SECRET, encryption keys)"
 info "  • .env.local — committed; structural config (APPLICATION_ENV, NODE_ENV, etc.)"
 info "  • .env.fe.local — committed; frontend-only config (APP_URL)"
 info ""
@@ -147,36 +154,15 @@ prompt_value SEED_USER_ID "80880990-2b79-4d85-8761-d8d9102c2efb" \
   (feature 133, migration 013's ownership backfill). Only matters when the local DB
   already has strategies; the shown default is safe for a fresh local DB."
 
-# ── Alpaca Credentials ─────────────────────────────────────────────────────────
-section "Alpaca Markets (Paper Trading)"
-
-info "Used by xstockstrat-marketdata to stream market data and execute paper trades."
-info "Get your Alpaca API credentials:"
-info ""
-info "  1. Visit https://app.alpaca.markets"
-info "  2. Sign up or log in"
-info "  3. Navigate: Account → API Keys"
-info "  4. Copy your API Key and Secret"
-info ""
-info "For setup details, see: docs/setup/alpaca.md"
-info ""
-
-prompt_value ALPACA_API_KEY "" \
-  "Your Alpaca API Key (starts with 'PK')." \
-  true
-
-prompt_value ALPACA_API_SECRET "" \
-  "Your Alpaca API Secret (keep this safe!)." \
-  true
-
 # ── JWT Secret ─────────────────────────────────────────────────────────────────
 section "JWT Secret"
 
-info "Used by xstockstrat-identity for signing and verifying authentication tokens."
+info "Used by xstockstrat-identity for signing and verifying authentication tokens, and by"
+info "xstockstrat-agent to HMAC-sign its OAuth 2.1 txn blob."
 info ""
 
 if [ "$USE_DEFAULTS" = true ]; then
-  JWT_SECRET=$(generate_jwt_secret)
+  JWT_SECRET=$(generate_hex 16)
   info "Generated JWT_SECRET (non-interactive mode)"
 else
   echo "Would you like to:"
@@ -187,7 +173,7 @@ else
   read -r choice
 
   if [ "$choice" = "1" ]; then
-    JWT_SECRET=$(generate_jwt_secret)
+    JWT_SECRET=$(generate_hex 16)
     ok "Generated secure JWT_SECRET"
   else
     prompt_value JWT_SECRET "" \
@@ -196,41 +182,28 @@ else
   fi
 fi
 
-# ── MCP Agent Secret ───────────────────────────────────────────────────────────
-section "MCP Agent Secret (xstockstrat-agent)"
+# ── Encryption Keys ────────────────────────────────────────────────────────────
+section "Encryption Keys"
 
-info "HMAC-signs the agent's stateless OAuth 2.1 txn blob. Not sent as an outbound header to"
-info "any other service — xstockstrat-ingest, xstockstrat-notify, and xstockstrat-analysis no"
-info "longer read this variable."
+info "AES-256 master keys (64 hex chars) required by docker-compose:"
+info "  • CONFIG_SECRETS_ENCRYPTION_KEY  — xstockstrat-config secret rows (vendor credentials)"
+info "  • BROKER_ACCOUNTS_ENCRYPTION_KEY — xstockstrat-trading broker credentials"
+info "Keys already in .env are kept: a new key cannot decrypt rows written under the old one."
 info ""
 
-if [ "$USE_DEFAULTS" = true ]; then
-  MCP_AGENT_SECRET=$(generate_jwt_secret)
-  info "Generated MCP_AGENT_SECRET (non-interactive mode)"
+CONFIG_SECRETS_ENCRYPTION_KEY=$(existing_hex_key CONFIG_SECRETS_ENCRYPTION_KEY)
+if [ -n "$CONFIG_SECRETS_ENCRYPTION_KEY" ]; then
+  ok "Kept existing CONFIG_SECRETS_ENCRYPTION_KEY"
 else
-  echo "Would you like to:"
-  echo "  1) Generate a secure random secret automatically"
-  echo "  2) Provide your own"
-  echo "  3) Skip (leave empty — OAuth login will fail)"
-  echo ""
-  echo -n "  → "
-  read -r choice
-
-  case "$choice" in
-  1)
-    MCP_AGENT_SECRET=$(generate_jwt_secret)
-    ok "Generated secure MCP_AGENT_SECRET"
-    ;;
-  3)
-    MCP_AGENT_SECRET=""
-    warn "MCP_AGENT_SECRET left empty — OAuth 2.1 login will not work."
-    ;;
-  *)
-    prompt_value MCP_AGENT_SECRET "" \
-      "Your MCP agent secret (used only to sign the agent's OAuth login transactions)." \
-      true
-    ;;
-  esac
+  CONFIG_SECRETS_ENCRYPTION_KEY=$(generate_hex 32)
+  ok "Generated CONFIG_SECRETS_ENCRYPTION_KEY"
+fi
+BROKER_ACCOUNTS_ENCRYPTION_KEY=$(existing_hex_key BROKER_ACCOUNTS_ENCRYPTION_KEY)
+if [ -n "$BROKER_ACCOUNTS_ENCRYPTION_KEY" ]; then
+  ok "Kept existing BROKER_ACCOUNTS_ENCRYPTION_KEY"
+else
+  BROKER_ACCOUNTS_ENCRYPTION_KEY=$(generate_hex 32)
+  ok "Generated BROKER_ACCOUNTS_ENCRYPTION_KEY"
 fi
 
 # ── OpenTelemetry (Optional) ───────────────────────────────────────────────────
@@ -276,29 +249,26 @@ echo "SEED_USER_ID='$SEED_USER_ID'" >>"$ENV_FILE"
 
 cat >>"$ENV_FILE" <<'EOF'
 
-# ── Alpaca Credentials (xstockstrat-marketdata) ─────────────────────────
-# Paper trading API key and secret. Get from: https://app.alpaca.markets/account/api-keys
+# Vendor credentials (Alpaca, FMP, Finnhub) are not env vars: they are encrypted config rows
+# resolved by xstockstrat-marketdata via GetSecret (feature 147). Set them through config.
 EOF
-
-echo "ALPACA_API_KEY='$ALPACA_API_KEY'" >>"$ENV_FILE"
-echo "ALPACA_API_SECRET='$ALPACA_API_SECRET'" >>"$ENV_FILE"
 
 cat >>"$ENV_FILE" <<'EOF'
 
-# ── JWT (xstockstrat-identity) ─────────────────────────────────────────
-# Secret for signing and verifying authentication tokens.
+# ── JWT (xstockstrat-identity, xstockstrat-ui, xstockstrat-agent) ─────
+# Signs/verifies auth tokens; the agent also HMAC-signs its OAuth 2.1 txn blob with it.
 EOF
 
 echo "JWT_SECRET='$JWT_SECRET'" >>"$ENV_FILE"
 
 cat >>"$ENV_FILE" <<'EOF'
 
-# ── MCP Agent Secret (xstockstrat-agent) ───────────────────────────────
-# HMAC-signs the agent's stateless OAuth 2.1 txn blob. Not read by any other service.
+# ── Encryption Keys (xstockstrat-config, xstockstrat-trading) ──────────
+# AES-256, 64 hex chars (openssl rand -hex 32). Rotating one orphans rows encrypted under it.
 EOF
 
-[ -n "$MCP_AGENT_SECRET" ] && echo "MCP_AGENT_SECRET='$MCP_AGENT_SECRET'" >>"$ENV_FILE" ||
-  echo "MCP_AGENT_SECRET=''" >>"$ENV_FILE"
+echo "CONFIG_SECRETS_ENCRYPTION_KEY='$CONFIG_SECRETS_ENCRYPTION_KEY'" >>"$ENV_FILE"
+echo "BROKER_ACCOUNTS_ENCRYPTION_KEY='$BROKER_ACCOUNTS_ENCRYPTION_KEY'" >>"$ENV_FILE"
 
 cat >>"$ENV_FILE" <<'EOF'
 
@@ -340,14 +310,9 @@ section "Configuration Summary"
 
 echo ""
 echo "✓ POSTGRES_PASSWORD     (database — local dev only)"
-echo "✓ ALPACA_API_KEY        (market data feed)"
-echo "✓ ALPACA_API_SECRET     (market data feed)"
-echo "✓ JWT_SECRET            (authentication tokens)"
-if [ -n "$MCP_AGENT_SECRET" ]; then
-  echo "✓ MCP_AGENT_SECRET      (OAuth txn signing)"
-else
-  echo "- MCP_AGENT_SECRET      (empty — OAuth login will fail)"
-fi
+echo "✓ JWT_SECRET            (authentication tokens, agent OAuth txn signing)"
+echo "✓ CONFIG_SECRETS_ENCRYPTION_KEY  (config secrets at rest)"
+echo "✓ BROKER_ACCOUNTS_ENCRYPTION_KEY (broker credentials at rest)"
 if [ -n "$OTEL_EXPORTER_OTLP_ENDPOINT" ]; then
   echo "✓ OTEL_EXPORTER_OTLP_ENDPOINT (observability — optional)"
 fi

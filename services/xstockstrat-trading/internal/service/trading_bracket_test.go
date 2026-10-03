@@ -27,6 +27,7 @@ type fakeBroker struct {
 	submitOrderFn       func(ctx context.Context, req broker.OrderRequest) (*broker.BrokerOrder, error)
 	submitBracketLegsFn func(ctx context.Context, parentBrokerOrderID, parentClientOrderID string, legs broker.BracketLegsRequest) (*broker.BracketLegsResponse, error)
 	cancelOrderFn       func(ctx context.Context, brokerOrderID string) error
+	getOrderFn          func(ctx context.Context, brokerOrderID string) (*broker.BrokerOrder, error)
 
 	mu               sync.Mutex
 	cancelOrderCalls []string
@@ -54,6 +55,9 @@ func (f *fakeBroker) ReplaceOrder(ctx context.Context, brokerOrderID string, req
 }
 
 func (f *fakeBroker) GetOrder(ctx context.Context, brokerOrderID string) (*broker.BrokerOrder, error) {
+	if f.getOrderFn != nil {
+		return f.getOrderFn(ctx, brokerOrderID)
+	}
 	panic("fakeBroker.GetOrder not implemented")
 }
 
@@ -657,33 +661,15 @@ func TestLoadBrokerPool_HydratesHaltedFromDB(t *testing.T) {
 	}
 }
 
-// Deviation Log note (Step 12): TestFlattenAndHalt_SucceedsOnFirstRetry,
-// TestFlattenAndHalt_ExhaustsRetriesThenHalts, and
-// TestStartBracketProtectionWatchdog_OneSlowFlattenDoesNotBlockOthers are not
-// implemented as full round-trip tests through flattenAndHalt. design.md explicitly
-// requires flatten to reuse submitOrder ("PlaceOrder's own safety machinery"), not a
-// bare broker call — but submitOrder unconditionally calls s.repo.UpsertOrder before
-// ever reaching the broker (both on the approval path and the broker-submission
-// path), and s.repo is a concrete *repository.TradingRepo this package cannot fake
-// (the same class of gap this service's Step 3 already names: "no repository-layer
-// test exists anywhere in this service today"). A hand-rolled fake broker therefore
-// cannot observe the retry loop's call count/ClientOrderID reuse without a live DB —
-// discovered at execute time; design.md's own test-scope note assumed this was
-// unit-testable via a broker mock alone, which did not anticipate this constraint.
-// haltAccount itself (the loop's terminal action on exhausted retries) is fully
-// covered directly above (TestHaltAccount_*), and the watchdog's own dedup/dispatch
-// logic (checkBracketProtection's flattenInFlight gating) is structurally simple
-// enough to review by inspection. Real coverage for the full flatten path requires
-// feature 103 (broker-failure-simulator) or a real deploy against a live DB, per
-// design.md's own already-accepted "true broker nondeterminism" test gap.
+// flattenAndHalt round-trip coverage lives in trading_flatten_rejection_test.go
+// (repository.NewTradingRepoWithDB makes s.repo fakeable).
 
 // ── Step 14: leg cancellation + CRITICAL alert ───────────────────────────────────
 
 // TestCancelOrder_CancelsActiveBracketLegs: an ACTIVE bracket with 2 leg IDs — both
 // legs must be canceled at the broker and the bracket row transitioned to CANCELED.
-// Recovers from the expected downstream panic on s.repo.UpsertOrder (a concrete
-// *repository.TradingRepo this package cannot fake — see the Step 12 Deviation Log
-// note above) and asserts the broker calls that happen before that point.
+// Recovers from the expected downstream panic on the nil s.repo.UpsertOrder and asserts
+// the broker calls that happen before that point.
 func TestCancelOrder_CancelsActiveBracketLegs(t *testing.T) {
 	fb := &fakeBroker{}
 	brokers := &fakeBracketRepo{}
