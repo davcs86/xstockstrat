@@ -223,3 +223,10 @@
 - C-16 scenario promotion **skipped by operator decision** at the feature-end checkpoint. The `/promote` backstop flags un-promoted scenarios at release time. Planned targets, if done later: config AC-6/7/13 → `services/xstockstrat-config/acceptance/config-ui-usability.feature`; UI AC-1–5, 8–12, 14 → `services/xstockstrat-ui/acceptance/config-ui-usability.feature`.
 - Merge-order gate: no entry for this feature.
 - Integration PR: #1207 (`ccr-8a11e328-8tlo4j` → `main-dev`), body updated to the integration template.
+
+## Session 2026-10-03 (CI: feature status automation)
+
+- Promotion PR #1214 merged to main
+- Feature promoted and committed: 4c996fa75644713864b512295d830401405edd26
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-10-03

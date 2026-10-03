@@ -27,3 +27,10 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Verified: `shellcheck` + `shfmt -d -i 2` clean; AC-1 (`docker compose config` exits 0, both keys 64 hex) and AC-2 (no removed vars) pass; rerun preserves keys.
 - Doc touched: `docs/setup/getting-started.md` prompt table.
 - Files modified: `scripts/setup-env.sh`, `docs/setup/getting-started.md`.
+
+## Session 2026-10-03 (CI: feature status automation)
+
+- Promotion PR #1214 merged to main
+- Feature promoted and committed: 4c996fa75644713864b512295d830401405edd26
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-10-03
