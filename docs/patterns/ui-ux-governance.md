@@ -213,7 +213,7 @@ owning feature's SDD flow.
 | insights · screener | `insights/screener` | none | `/sdd-qa gaps` |
 | insights · pnl-patterns | `insights/pnl-patterns` | none | promote via feature 042 |
 | insights · backfills | `insights/backfills` | none | `/sdd-qa gaps` |
-| config-ui · namespaces | `namespace-nav`, `value-persists-after-save`, `reason-capture`, `env-mode-switcher`, `env-gate`, `secret-editing` | none | promote via feature 147 |
+| config-ui · namespaces | `namespace-nav`, `value-persists-after-save`, `reason-capture`, `env-mode-switcher`, `env-gate`, `secret-editing`, `edit-focus`, `namespace-editor-rows` | none | promote via feature 147 |
 | config-ui · sources | `config-ui/sources` | none | `/sdd-qa gaps` |
 | config-ui · audit | `config-ui/audit` | none | `/sdd-qa gaps` |
 | config-ui · fundamentals-scan | `config-ui/fundamentals-scan` | **partial** — `fix-fundamentals-signal-producer.feature` | extend on next touch |

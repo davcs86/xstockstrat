@@ -515,7 +515,7 @@ export class ConfigServiceImpl {
       // Global keys overlaid with the caller's per-user rows (per-user wins over global for the same key).
       const result = await this.pool.query(
         `SELECT DISTINCT ON (key)
-                key, description, default_value, value_data, is_secret, consuming_service, environment
+                key, description, default_value, value_data, is_secret, consuming_service, environment, updated_at
          FROM config.config_values
          WHERE namespace = $1 AND environment = $2 AND (user_id IS NULL OR user_id = $3)
          ORDER BY key, (user_id = $3) DESC NULLS LAST`,
@@ -534,6 +534,7 @@ export class ConfigServiceImpl {
             defaultValue: r.default_value ?? '',
             // Secret rows never expose their value at this edge — redact defensively (value_data is already the sentinel).
             currentValue: secret ? REDACTED : (r.value_data ?? ''),
+            updatedAt: r.updated_at ?? undefined,
             isSecret: secret,
             consumingService: r.consuming_service ?? '',
             environment:
