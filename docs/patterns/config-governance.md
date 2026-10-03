@@ -538,16 +538,15 @@ live via `s.cfgW.GetFloat`/`GetInt` with the default supplied in Go code.
 ### feature 030 — stop-loss-bracket-orders (`xstockstrat-trading`, `xstockstrat-config`)
 
 Automatic stop-loss/take-profit bracket orders on auto-sized entries (feature 023's `ComputePositionSize`
-stop price becomes the bracket stop leg). `bracket_orders_enabled` seeds `false` in production (not the
-product spec's literal `true` default) pending feature 103 or a documented manual paper-account
-verification — see `docs/roadmap/features/030-stop-loss-bracket-orders/design.md` § Rejected
-Alternatives. A protection-window watchdog (`StartBracketProtectionWatchdog`) flattens the position and
+stop price becomes the bracket stop leg). `bracket_orders_enabled` was seeded `false` in production
+(migration `013`), but config migration `029` (feature 189) set it to `true` to keep the bracket protection
+that production was already running under the pre-heal key resolution. **Brackets are ON in production.** A protection-window watchdog (`StartBracketProtectionWatchdog`) flattens the position and
 halts the account (persisted `broker_accounts.halted`) if a bracket is not confirmed `ACTIVE` within
 `max_unprotected_seconds` of entry fill.
 
 | Key | Type | Default (dev) | Default (production) | Description |
 |---|---|---|---|---|
-| `trading.risk.bracket_orders_enabled` | bool | `true` | `false` | Master gate for automatic stop-loss/take-profit bracket orders on auto-sized entries |
+| `trading.risk.bracket_orders_enabled` | bool | `true` | `true` (migration `029`) | Master gate for automatic stop-loss/take-profit bracket orders on auto-sized entries |
 | `trading.risk.take_profit_rr_multiple` | float | `2.0` | `2.0` | Reward-to-risk multiple for the take-profit leg; `0` disables the take-profit leg |
 | `trading.risk.max_unprotected_seconds` | int | `30` | `30` | Provisional default — max seconds an auto-sized position may remain without a confirmed bracket before automatic flatten+halt |
 
