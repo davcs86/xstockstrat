@@ -165,4 +165,6 @@ message ConfigKeyMeta {
   // The row's live value_data — what SetConfig writes and WatchConfig/GetConfig serve.
   // This is what a config-ui "Value" column must display and prefill for editing.
   string current_value = 9;
+  // updated_at of the resolved row (the caller's per-user override when one exists, else global).
+  google.protobuf.Timestamp updated_at = 10;
 }

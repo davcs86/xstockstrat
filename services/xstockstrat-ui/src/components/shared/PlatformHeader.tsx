@@ -82,7 +82,7 @@ export const PLATFORM_SUBNAV: Record<PlatformSegment, SubNavItem[]> = {
     { label: 'Data Explorer', href: '/insights/data-explorer' },
   ],
   config: [
-    { label: 'Namespaces', href: '/config-ui', match: 'exact' },
+    { label: 'Config', href: '/config-ui', match: 'exact' },
     { label: 'Audit Log', href: '/config-ui/audit' },
     { label: 'Sources', href: '/config-ui/sources' },
   ],
@@ -96,6 +96,7 @@ export const PLATFORM_SUBNAV: Record<PlatformSegment, SubNavItem[]> = {
 
 function isItemActive(pathname: string | null, item: SubNavItem): boolean {
   if (!pathname) return false;
+  if (item.aliases?.includes(pathname)) return true;
   return item.match === 'exact' ? pathname === item.href : pathname.startsWith(item.href);
 }
 
