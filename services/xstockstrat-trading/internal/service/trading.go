@@ -1195,7 +1195,7 @@ func (s *TradingService) CancelOrder(ctx context.Context, req *tradingv1.CancelO
 			if err := proto.Unmarshal(existing.LatestResponse, &stored); err != nil {
 				return nil, grpcstatus.Errorf(codes.Internal, "unmarshal stored intent response: %v", err)
 			}
-			return &tradingv1.CancelOrderResponse{Success: true, Order: &stored}, nil
+			return &tradingv1.CancelOrderResponse{Success: stored.Status == tradingv1.OrderStatus_ORDER_STATUS_CANCELED, Order: &stored}, nil
 		case intentActionRejectUnknown:
 			return nil, grpcstatus.Errorf(codes.FailedPrecondition,
 				"cancel intent for order %s outcome is unknown; verify with the broker before retrying", req.OrderId)
@@ -1222,7 +1222,11 @@ func (s *TradingService) CancelOrder(ctx context.Context, req *tradingv1.CancelO
 			finalIntentState = repository.IntentStateUnknown
 		} else {
 			resolvedEntry, haveEntry = entry, true
-			if err := entry.client.CancelOrder(ctx, order.BrokerOrderId); err != nil {
+			if err := entry.client.CancelOrder(ctx, order.BrokerOrderId); errors.Is(err, broker.ErrOrderNotCancelable) {
+				if resp, done, rErr := s.reconcileNotCancelable(ctx, order, entry, intentID); done {
+					return resp, rErr
+				}
+			} else if err != nil {
 				slog.Warn("broker cancel failed", "order_id", req.OrderId, "broker_order_id", order.BrokerOrderId, "error", err)
 				// Continue with internal cancellation — broker may have already filled/canceled.
 				finalIntentState = repository.IntentStateUnknown
@@ -1262,11 +1266,7 @@ func (s *TradingService) CancelOrder(ctx context.Context, req *tradingv1.CancelO
 	}
 
 	_ = s.repo.UpsertOrder(ctx, order)
-	if marshaled, mErr := proto.Marshal(order); mErr == nil {
-		if fErr := s.orderIntentRepo.FinalizeIntent(context.Background(), intentID, req.OrderId, finalIntentState, marshaled); fErr != nil {
-			slog.Warn("finalize cancel intent failed", "intent_id", intentID, "error", fErr)
-		}
-	}
+	s.finalizeCancelIntent(intentID, order, finalIntentState)
 
 	go s.emitLedgerEvent(context.Background(), "order.canceled", req.OrderId, order.UserId, map[string]interface{}{
 		"order_id": req.OrderId, "user_id": middleware.FromContext(ctx).UserID,
@@ -1274,6 +1274,38 @@ func (s *TradingService) CancelOrder(ctx context.Context, req *tradingv1.CancelO
 	s.broadcastOrder(order)
 
 	return &tradingv1.CancelOrderResponse{Success: true, Order: order}, nil
+}
+
+// reconcileNotCancelable resolves a broker "not cancelable" answer from the broker's own order
+// state. done=false means the broker confirms CANCELED and the normal cancel path proceeds; an
+// order is never recorded CANCELED locally unless the broker says so, or pollFills would skip it.
+func (s *TradingService) reconcileNotCancelable(ctx context.Context, order *tradingv1.Order, entry brokerPoolEntry, intentID string) (*tradingv1.CancelOrderResponse, bool, error) {
+	brokerOrder, err := entry.client.GetOrder(ctx, order.BrokerOrderId)
+	if err != nil {
+		slog.Warn("cancel: order not cancelable and broker re-read failed", "order_id", order.OrderId, "broker_order_id", order.BrokerOrderId, "error", err)
+		order.IntentState = tradingv1.IntentState_INTENT_STATE_UNKNOWN
+		s.finalizeCancelIntent(intentID, order, repository.IntentStateUnknown)
+		return nil, true, grpcstatus.Errorf(codes.Unavailable,
+			"order %s is already terminal at the broker and its status could not be read; the fill poller will reconcile it", order.OrderId)
+	}
+	if alpacaStatusToProto(brokerOrder.Status) == tradingv1.OrderStatus_ORDER_STATUS_CANCELED {
+		return nil, false, nil
+	}
+	slog.Warn("cancel: order already terminal at broker, adopting broker status", "order_id", order.OrderId, "broker_status", brokerOrder.Status)
+	s.applyBrokerOrderStatus(ctx, order, entry, brokerOrder)
+	order.IntentState = tradingv1.IntentState_INTENT_STATE_COMPLETED
+	s.finalizeCancelIntent(intentID, order, repository.IntentStateCompleted)
+	return &tradingv1.CancelOrderResponse{Success: false, Order: order}, true, nil
+}
+
+func (s *TradingService) finalizeCancelIntent(intentID string, order *tradingv1.Order, state int16) {
+	marshaled, err := proto.Marshal(order)
+	if err != nil {
+		return
+	}
+	if fErr := s.orderIntentRepo.FinalizeIntent(context.Background(), intentID, order.OrderId, state, marshaled); fErr != nil {
+		slog.Warn("finalize cancel intent failed", "intent_id", intentID, "error", fErr)
+	}
 }
 
 // ReplaceOrder modifies a working order's qty/price/TIF. Broker-agnostic: resolveAccount routes
@@ -1625,76 +1657,82 @@ func (s *TradingService) pollFills(ctx context.Context) {
 			continue
 		}
 
-		newStatus := alpacaStatusToProto(brokerOrder.Status)
-		// A transient/unrecognized broker status maps to UNSPECIFIED; don't overwrite the order's
-		// real status with it — keep polling so the order converges to its true terminal state.
-		if newStatus == tradingv1.OrderStatus_ORDER_STATUS_UNSPECIFIED {
-			continue
-		}
-		// A same-status repeat is a no-op tick — except a repeated PARTIALLY_FILLED with a larger
-		// FilledQty, which must be processed so an ACTIVE IBKR bracket resizes on every fill delta.
-		if newStatus == order.Status && order.FilledQty == brokerOrder.FilledQty {
-			continue
-		}
+		s.applyBrokerOrderStatus(ctx, order, entry, brokerOrder)
+	}
+}
 
-		order.Status = newStatus
-		order.UpdatedAt = timestamppb.New(time.Now())
-		order.FilledAvgPrice = brokerOrder.FilledAvgPrice
-		order.FilledQty = brokerOrder.FilledQty
-		// A fully-filled order always has filled qty == order qty, even if the
-		// broker omitted the figure from its response.
-		if newStatus == tradingv1.OrderStatus_ORDER_STATUS_FILLED && order.FilledQty == 0 {
-			order.FilledQty = order.Qty
-		}
+// applyBrokerOrderStatus adopts a broker-reported order state and emits its lifecycle events.
+// The single fill-emission path: pollFills and CancelOrder's not-cancelable reconcile both use it.
+func (s *TradingService) applyBrokerOrderStatus(ctx context.Context, order *tradingv1.Order, entry brokerPoolEntry, brokerOrder *broker.BrokerOrder) {
+	newStatus := alpacaStatusToProto(brokerOrder.Status)
+	// A transient/unrecognized broker status maps to UNSPECIFIED; don't overwrite the order's
+	// real status with it — keep polling so the order converges to its true terminal state.
+	if newStatus == tradingv1.OrderStatus_ORDER_STATUS_UNSPECIFIED {
+		return
+	}
+	// A same-status repeat is a no-op tick — except a repeated PARTIALLY_FILLED with a larger
+	// FilledQty, which must be processed so an ACTIVE IBKR bracket resizes on every fill delta.
+	if newStatus == order.Status && order.FilledQty == brokerOrder.FilledQty {
+		return
+	}
 
-		if err := s.repo.UpsertOrder(ctx, order); err != nil {
-			slog.Warn("fill poll: db upsert failed", "order_id", order.OrderId, "error", err)
-		}
+	order.Status = newStatus
+	order.UpdatedAt = timestamppb.New(time.Now())
+	order.FilledAvgPrice = brokerOrder.FilledAvgPrice
+	order.FilledQty = brokerOrder.FilledQty
+	// A fully-filled order always has filled qty == order qty, even if the
+	// broker omitted the figure from its response.
+	if newStatus == tradingv1.OrderStatus_ORDER_STATUS_FILLED && order.FilledQty == 0 {
+		order.FilledQty = order.Qty
+	}
 
-		s.broadcastOrder(order)
+	if err := s.repo.UpsertOrder(ctx, order); err != nil {
+		slog.Warn("fill poll: db upsert failed", "order_id", order.OrderId, "error", err)
+	}
 
-		switch newStatus {
-		case tradingv1.OrderStatus_ORDER_STATUS_FILLED:
-			go s.emitLedgerEvent(context.Background(), "order.filled", order.OrderId, order.UserId, map[string]interface{}{
-				"order_id": order.OrderId, "symbol": order.Symbol,
-				"qty": order.Qty, "fill_price": order.FilledAvgPrice,
-				"user_id": order.UserId, "trading_mode": order.TradingMode.String(),
-				"account_id": order.AccountId,
-				// Per-fill fee (0 when the broker exposes none).
-				"fees": brokerOrder.Fees,
-			})
-			go s.emitFillAlert(context.Background(), order)
-			slog.Info("order filled", "order_id", order.OrderId, "symbol", order.Symbol,
-				"qty", order.Qty, "fill_price", order.FilledAvgPrice)
-			// Fill detected asynchronously — order.StopPrice is nonzero only for an auto-sized
-			// MARKET/LIMIT entry; a no-op for every other order (see maybeSubmitBracket's guard).
-			s.maybeSubmitBracket(context.Background(), order, entry, brokerOrder, order.StopPrice, order.FilledAvgPrice,
-				s.cfgW.GetBool("trading.risk.bracket_orders_enabled", true))
+	s.broadcastOrder(order)
 
-		case tradingv1.OrderStatus_ORDER_STATUS_PARTIALLY_FILLED:
-			go s.emitLedgerEvent(context.Background(), "order.partially_filled", order.OrderId, order.UserId, map[string]interface{}{
-				"order_id": order.OrderId, "symbol": order.Symbol,
-				"filled_qty": order.FilledQty, "fill_price": order.FilledAvgPrice,
-				"user_id": order.UserId, "trading_mode": order.TradingMode.String(),
-				"account_id": order.AccountId,
-				// Per-fill fee (0 when the broker exposes none).
-				"fees": brokerOrder.Fees,
-			})
-			// First partial fill creates the bracket; a later partial fill on an
-			// already-ACTIVE IBKR bracket resizes it (maybeSubmitBracket's own dispatch).
-			s.maybeSubmitBracket(context.Background(), order, entry, brokerOrder, order.StopPrice, order.FilledAvgPrice,
-				s.cfgW.GetBool("trading.risk.bracket_orders_enabled", true))
+	switch newStatus {
+	case tradingv1.OrderStatus_ORDER_STATUS_FILLED:
+		go s.emitLedgerEvent(context.Background(), "order.filled", order.OrderId, order.UserId, map[string]interface{}{
+			"order_id": order.OrderId, "symbol": order.Symbol,
+			"qty": order.Qty, "fill_price": order.FilledAvgPrice,
+			"user_id": order.UserId, "trading_mode": order.TradingMode.String(),
+			"account_id": order.AccountId,
+			// Per-fill fee (0 when the broker exposes none).
+			"fees": brokerOrder.Fees,
+		})
+		go s.emitFillAlert(context.Background(), order)
+		slog.Info("order filled", "order_id", order.OrderId, "symbol", order.Symbol,
+			"qty", order.Qty, "fill_price", order.FilledAvgPrice)
+		// Fill detected asynchronously — order.StopPrice is nonzero only for an auto-sized
+		// MARKET/LIMIT entry; a no-op for every other order (see maybeSubmitBracket's guard).
+		s.maybeSubmitBracket(context.Background(), order, entry, brokerOrder, order.StopPrice, order.FilledAvgPrice,
+			s.cfgW.GetBool("trading.risk.bracket_orders_enabled", true))
 
-		case tradingv1.OrderStatus_ORDER_STATUS_CANCELED:
-			go s.emitLedgerEvent(context.Background(), "order.canceled", order.OrderId, order.UserId, map[string]interface{}{
-				"order_id": order.OrderId, "symbol": order.Symbol,
-			})
+	case tradingv1.OrderStatus_ORDER_STATUS_PARTIALLY_FILLED:
+		go s.emitLedgerEvent(context.Background(), "order.partially_filled", order.OrderId, order.UserId, map[string]interface{}{
+			"order_id": order.OrderId, "symbol": order.Symbol,
+			"filled_qty": order.FilledQty, "fill_price": order.FilledAvgPrice,
+			"user_id": order.UserId, "trading_mode": order.TradingMode.String(),
+			"account_id": order.AccountId,
+			// Per-fill fee (0 when the broker exposes none).
+			"fees": brokerOrder.Fees,
+		})
+		// First partial fill creates the bracket; a later partial fill on an
+		// already-ACTIVE IBKR bracket resizes it (maybeSubmitBracket's own dispatch).
+		s.maybeSubmitBracket(context.Background(), order, entry, brokerOrder, order.StopPrice, order.FilledAvgPrice,
+			s.cfgW.GetBool("trading.risk.bracket_orders_enabled", true))
 
-		case tradingv1.OrderStatus_ORDER_STATUS_REJECTED:
-			go s.emitLedgerEvent(context.Background(), "order.rejected", order.OrderId, order.UserId, map[string]interface{}{
-				"order_id": order.OrderId, "symbol": order.Symbol,
-			})
-		}
+	case tradingv1.OrderStatus_ORDER_STATUS_CANCELED:
+		go s.emitLedgerEvent(context.Background(), "order.canceled", order.OrderId, order.UserId, map[string]interface{}{
+			"order_id": order.OrderId, "symbol": order.Symbol,
+		})
+
+	case tradingv1.OrderStatus_ORDER_STATUS_REJECTED:
+		go s.emitLedgerEvent(context.Background(), "order.rejected", order.OrderId, order.UserId, map[string]interface{}{
+			"order_id": order.OrderId, "symbol": order.Symbol,
+		})
 	}
 }
 

@@ -27,6 +27,7 @@ type fakeBroker struct {
 	submitOrderFn       func(ctx context.Context, req broker.OrderRequest) (*broker.BrokerOrder, error)
 	submitBracketLegsFn func(ctx context.Context, parentBrokerOrderID, parentClientOrderID string, legs broker.BracketLegsRequest) (*broker.BracketLegsResponse, error)
 	cancelOrderFn       func(ctx context.Context, brokerOrderID string) error
+	getOrderFn          func(ctx context.Context, brokerOrderID string) (*broker.BrokerOrder, error)
 
 	mu               sync.Mutex
 	cancelOrderCalls []string
@@ -54,6 +55,9 @@ func (f *fakeBroker) ReplaceOrder(ctx context.Context, brokerOrderID string, req
 }
 
 func (f *fakeBroker) GetOrder(ctx context.Context, brokerOrderID string) (*broker.BrokerOrder, error) {
+	if f.getOrderFn != nil {
+		return f.getOrderFn(ctx, brokerOrderID)
+	}
 	panic("fakeBroker.GetOrder not implemented")
 }
 
