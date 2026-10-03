@@ -22,6 +22,20 @@ following the format in `docs/runbooks/bug-triage.md#hotfix-log-format`.
 - **Status**: in-progress
 
 
+## 2026-10-02T14:01:50Z — hotfix/fix-flatten-rejection-skips-halt
+
+- **GitHub issue**: docs/reports/2026-10-02-flatten-rejection-skips-halt-defect.md (GitHub Issues disabled on this repo)
+- **Severity**: SEV-1
+- **Affected service(s)**: xstockstrat-trading
+- **Root cause**: flattenAndHalt reuses one client_order_id across retries; a broker-REJECTED intent is replayed by submitOrder as a stored response with nil error, so the loop reports success and never halts. Agreed fix: status-aware retry.
+- **Fix summary**: _pending_
+- **PR**: _pending_
+- **Platform-lead approver**: _pending_
+- **Back-merge commit**: _pending_
+- **Maintenance mode applied**: no
+- **Status**: in-progress
+
+
 ## 2026-10-02T14:01:50Z — hotfix/fix-oauth-login-unvalidated-redirect
 
 - **GitHub issue**: docs/reports/2026-10-02-oauth-login-unvalidated-redirect-defect.md (GitHub Issues disabled on this repo)
