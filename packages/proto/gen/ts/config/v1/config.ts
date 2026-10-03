@@ -334,6 +334,8 @@ export interface ConfigKeyMeta {
    * This is what a config-ui "Value" column must display and prefill for editing.
    */
   currentValue: string;
+  /** updated_at of the resolved row (the caller's per-user override when one exists, else global). */
+  updatedAt?: Date | undefined;
 }
 
 function createBaseWatchConfigRequest(): WatchConfigRequest {
@@ -1889,6 +1891,7 @@ function createBaseConfigKeyMeta(): ConfigKeyMeta {
     tradingMode: TradingMode.TRADING_MODE_UNSPECIFIED,
     validation: undefined,
     currentValue: "",
+    updatedAt: undefined,
   };
 }
 
@@ -1920,6 +1923,9 @@ export const ConfigKeyMeta: MessageFns<ConfigKeyMeta> = {
     }
     if (message.currentValue !== "") {
       writer.uint32(74).string(message.currentValue);
+    }
+    if (message.updatedAt !== undefined) {
+      Timestamp.encode(toTimestamp(message.updatedAt), writer.uint32(82).fork()).join();
     }
     return writer;
   },
@@ -2003,6 +2009,14 @@ export const ConfigKeyMeta: MessageFns<ConfigKeyMeta> = {
           message.currentValue = reader.string();
           continue;
         }
+        case 10: {
+          if (tag !== 82) {
+            break;
+          }
+
+          message.updatedAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -2045,6 +2059,11 @@ export const ConfigKeyMeta: MessageFns<ConfigKeyMeta> = {
         : isSet(object.current_value)
         ? globalThis.String(object.current_value)
         : "",
+      updatedAt: isSet(object.updatedAt)
+        ? fromJsonTimestamp(object.updatedAt)
+        : isSet(object.updated_at)
+        ? fromJsonTimestamp(object.updated_at)
+        : undefined,
     };
   },
 
@@ -2077,6 +2096,9 @@ export const ConfigKeyMeta: MessageFns<ConfigKeyMeta> = {
     if (message.currentValue !== "") {
       obj.currentValue = message.currentValue;
     }
+    if (message.updatedAt !== undefined) {
+      obj.updatedAt = message.updatedAt.toISOString();
+    }
     return obj;
   },
 
@@ -2096,6 +2118,7 @@ export const ConfigKeyMeta: MessageFns<ConfigKeyMeta> = {
       ? ValidationRule.fromPartial(object.validation)
       : undefined;
     message.currentValue = object.currentValue ?? "";
+    message.updatedAt = object.updatedAt ?? undefined;
     return message;
   },
 };

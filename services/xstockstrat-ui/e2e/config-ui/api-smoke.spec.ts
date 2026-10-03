@@ -45,7 +45,7 @@ test.describe('GET /api/config — namespace config table data contract', () => 
    *   k.key                           → TableCell font-mono, row key prop
    *   k.currentValue                  → displayed in Value column + edit-prefill (secrets show '[secret]' and the editor starts BLANK, feature 147)
    *   k.defaultValue                  → seed metadata only (CONFIG-2); NOT read for display
-   *   k.description                   → Description column (hidden on mobile)
+   *   k.description                   → under the key (clamped, title tooltip)
    *   k.isSecret                      → masks the displayed value as '[secret]'; Edit IS allowed (admin-gated backend), the editor opens blank and stores a fresh encrypted value (feature 147)
    *   k.consumingService              → (not rendered, but part of ConfigKey interface)
    *   k.environment                   → number (not rendered in table, but part of ListKeys response)
@@ -79,7 +79,7 @@ test.describe('GET /api/config — namespace config table data contract', () => 
       expect(k).toHaveProperty('key'); // row key + displayed in Key column
       expect(k).toHaveProperty('defaultValue'); // seed metadata only (CONFIG-2)
       expect(k).toHaveProperty('currentValue'); // displayed in Value column + edit-prefill
-      expect(k).toHaveProperty('description'); // Description column
+      expect(k).toHaveProperty('description'); // rendered under the key
       // isSecret is a proto3 bool — false (zero value) is omitted from JSON;
       // absent means false, which is the correct semantic for the component
       expect(typeof k.isSecret === 'boolean' || k.isSecret === undefined).toBe(true);

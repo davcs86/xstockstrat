@@ -9,6 +9,10 @@ import (
 // rejection (HTTP 401/403); transient/network failures are returned as wrapped errors instead.
 var ErrInvalidCredentials = errors.New("broker rejected credentials")
 
+// ErrOrderNotCancelable is returned by CancelOrder when the broker refuses because the order is
+// already terminal there; the order's real outcome (possibly FILLED) must be re-read via GetOrder.
+var ErrOrderNotCancelable = errors.New("broker order not cancelable: already terminal")
+
 // BrokerOrder is the normalized order representation returned by any broker.
 type BrokerOrder struct {
 	BrokerOrderID  string
