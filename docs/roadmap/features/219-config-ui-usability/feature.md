@@ -3,6 +3,8 @@
 **Development Branch**: `ccr-8a11e328-8tlo4j` (harness-assigned; sequential execution, integration PR #1207 → `main-dev`)
 **Created**: 2026-10-02
 **Last Updated**: 2026-10-02
+**Committed to main**: 4c996fa75644713864b512295d830401405edd26
+**Launched date**: 2026-10-03
 
 ---
 
@@ -17,6 +19,7 @@
 | 2026-10-02 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 done (sequential mode) |
 | 2026-10-02 | `in-progress` → `code-completed` | /sdd-execute | All 13 steps done (sequential); integration PR #1207 |
 
+| 2026-10-03 | `code-completed` → `launched` | CI workflow | Promoted via PR #1214; committed 4c996fa75644713864b512295d830401405edd26 |
 ---
 
 ## Artifacts

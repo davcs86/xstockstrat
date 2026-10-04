@@ -6,6 +6,8 @@
 **Severity**: SEV-3
 **Created**: 2026-10-02
 **Last Updated**: 2026-10-03
+**Committed to main**: 4c996fa75644713864b512295d830401405edd26
+**Launched date**: 2026-10-03
 
 ---
 
@@ -16,6 +18,7 @@
 | 2026-10-02 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from defect report docs/reports/2026-10-02-setupenv-unbootable-env-defect.md |
 | 2026-10-03 | `draft` → `code-completed` | bug-fix session | Single-file fix in `scripts/setup-env.sh`; `/sdd-review` + `/sdd-spec` not run (deviation recorded in context.md) |
 
+| 2026-10-03 | `code-completed` → `launched` | CI workflow | Promoted via PR #1214; committed 4c996fa75644713864b512295d830401405edd26 |
 ---
 
 ## Artifacts
