@@ -31,6 +31,10 @@ Read `docs/runbooks/hotfix-log.md`. Find the entry for `hotfix/<slug>` (match by
 
 Write the file back.
 
+If that entry's `**GitHub issue**` line points at a `docs/reports/*.md` defect report, overwrite the
+report's `.status` sidecar with `resolved` / `ref: hotfix:hotfix/<slug>` and commit it with the
+hotfix-log update; skip BM-3 (there is no issue to close).
+
 ### BM-3. Close GitHub issue
 
 ```bash

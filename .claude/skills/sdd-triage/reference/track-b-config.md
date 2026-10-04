@@ -32,6 +32,9 @@ If no: print "Apply the config change, verify propagation in service logs, then 
 
 ### B-4. Close the GitHub issue
 
+For a `--from-report` triage there is no issue: instead overwrite the report's `.status` sidecar
+with `resolved` / `ref: config:<config-key>`, commit it, and skip the `gh issue close` below.
+
 ```bash
 gh issue close $ARGUMENTS[0] \
   --comment "Resolved via config-only fix. Changed \`<config-key>\` to correct value. No code deploy needed — WatchConfig propagated the change to all services."

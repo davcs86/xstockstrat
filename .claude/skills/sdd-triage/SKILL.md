@@ -53,6 +53,11 @@ cat <path>          # e.g. docs/reports/<date>-<slug>-defect.md
 
 If the file does not exist: stop — "Report not found at `<path>`."
 
+Read its status sidecar (`<path>` with `.md` → `.status`; format:
+`.claude/skills/sdd-qa/reference/defect-filing.md` § The status sidecar). If line 1 is `triaged`,
+`resolved` or `wont-fix`, stop — "Report already `<status>` (`<ref>`); not re-triaging." A missing
+sidecar means `open`.
+
 Extract the same fields the issue body would have carried — they are the report's `**Severity**`,
 `**Impact type**`, `**Environment**`, `**Affected service(s)**`, `**Config-only fix possible**`
 headers plus its `## Observed` / `## Expected` / `## Reproduction` sections
@@ -137,10 +142,18 @@ Track: <A — Hotfix | B — Config-only | C — SDD path>
 Slug: <slug>
 ```
 
+### T-5. Stamp the report sidecar (`--from-report` only)
+
+Once the track has created its target (hotfix branch, feature directory, or identified config key),
+overwrite the report's `.status` sidecar with `triaged` and the target as `ref:` —
+`hotfix:hotfix/<slug>` (A), `config:<key>` (B), `feature:<NNN-slug>` (C) — and commit it with the
+track's own files. Track B and `backmerge` later flip it to `resolved`; a Track C report needs no
+further stamp (`/sdd-archiver` derives resolution from the feature's `launched` status).
+
 ### Execute the routed track
 
-Read the reference file for the track chosen in T-3/T-4 and follow it end to end; do **not** read the
-other track files:
+Read the reference file for the track chosen in T-3/T-4 and follow it end to end (applying T-5 at
+its point of target creation); do **not** read the other track files:
 
 - **Track A (Hotfix)** → `reference/track-a-hotfix.md`
 - **Track B (Config-Only)** → `reference/track-b-config.md`
