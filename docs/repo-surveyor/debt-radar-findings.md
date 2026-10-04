@@ -397,7 +397,45 @@ Each item was settled by a read-only check. Where a scratch run was used, it ran
 | NC-11 | **CONFIRMED.** The fill and sync consumers are separate goroutines (`cmd/server/main.go:64-65`), both do absolute UPSERTs, and there is no transaction or row lock, so the last writer wins. `realized_accum` is computed from a stale cost basis and never corrected by sync. | `portfolio_repo.go:55-62`, `:313-329` | SEV-2 |
 | NC-12 | **CONFIRMED mechanism; intent unspecified.** AC-5/AC-6 do not cover re-delivery after a failure, and fanout is "best-effort" (CLAUDE.md:93). | `fanout.ts:76-77` | SEV-3 |
 
-**Net new triage candidates** (not yet filed): NC-2, NC-3, NC-5, NC-6, NC-7, NC-8, NC-11, plus the NC-4 confirmation-prompt case.
+**Net new triage candidates:** NC-2, NC-3, NC-5, NC-6, NC-7, NC-8, NC-11, plus the NC-4 confirmation-prompt case. All were filed on 2026-10-03; see the next section.
+
+## Resolution status  (2026-10-03 · `main-dev@3c382ea`)
+
+Every finding was re-checked against current code. The verdicts come from code, not from report or hotfix-log status. Cited lines have moved since `aa84f8b`; the current ones are in the defect reports.
+
+**Correction to NC-2 and NC-3:** the 2026-10-02 verdicts assumed production brackets were off, citing `config-governance.md:541`. That doc was stale. Config migration `029` (feature 189) set `trading.risk.bracket_orders_enabled = true` in production (`029_heal_config_keys_full_dotted.up.sql:38-43`), and the doc is now corrected. As a result, the flatten path is live in production, and NC-3 meets its own SEV-1 condition.
+
+### Fixed
+
+These are merged to `main-dev` in #1213 (`cc3a20c`) and are not yet on `main`, pending the 2026-10-03 promotion. Their `hotfix-log.md` entries still read `_pending_`.
+
+| ID | Fix |
+|---|---|
+| D-01 | Flatten re-mints on a broker rejection and halts when retries are exhausted (`trading.go:2733`). |
+| D-02 | `processOrderFill` returns DB errors before emitting, and the cursor is withheld (`portfolio_service.go:279`). |
+| D-03 | A 422 returns `ErrOrderNotCancelable`, and the order is re-read with the broker's status adopted (`alpaca.go:224`, `trading.go:1225`). |
+| D-26 | `oauth-login` follows only the server-resolved `AGENT_PUBLIC_URL/oauth/callback` (`oauth-login/page.tsx:15`). |
+
+### Filed, awaiting `/sdd-triage --from-report`
+
+| ID | Report | Severity |
+|---|---|---|
+| NC-2 | `docs/reports/2026-10-03-flatten-reduceonly-position-unscoped-defect.md` | SEV-1 |
+| NC-3 | `docs/reports/2026-10-03-alpaca-bracket-legs-false-halt-defect.md` | SEV-1 |
+| NC-4 (prompt) | `docs/reports/2026-10-03-ibkr-confirmation-prompt-unplaced-order-defect.md` | SEV-2 |
+| NC-5 | `docs/reports/2026-10-03-trading-order-pointer-data-race-defect.md` | SEV-2 |
+| NC-6 / D-36 | `docs/reports/2026-10-03-node-configwatcher-stream-doubling-defect.md` (grpc-js 1.14.4 `client.js:356-359` re-read from the published package) | SEV-2 |
+| NC-7 | `docs/reports/2026-10-03-indicators-sandbox-os-escape-defect.md` | SEV-2 |
+| NC-8 | `docs/reports/2026-10-03-indicators-private-formula-cross-user-read-defect.md` | SEV-2 |
+| NC-11 | `docs/reports/2026-10-03-portfolio-fill-sync-lost-update-defect.md` | SEV-2 |
+
+### Open, not yet filed
+
+These are all **not resolved** at `3c382ea`.
+
+- **D-04 to D-25 (except D-01, D-02, D-03 and D-26):** no commit since `aa84f8b` touched the cited logic. D-15 re-measured: `trading.go` 3,588 lines and `portfolio_service.go` 1,783, both grown.
+- **D-27 to D-38 (except D-36, filed with NC-6):** the same.
+- **Not routed further:** NC-1 is folded into D-17. NC-9 is already logged in the identity findings. NC-10 and NC-12 are SEV-3 latent or intent questions. The NC-4 TRAIL case fails safe.
 
 ## Cross-references  (other lenses — RS-N5)
 
