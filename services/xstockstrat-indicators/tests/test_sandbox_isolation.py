@@ -298,9 +298,13 @@ class TestSeccompAllowlistShape:
         """P-06 guard: _SECCOMP_ALLOW permits the compute surface and EXCLUDES the network/exec/
         io_uring/ptrace families. Goes RED the moment a denied syscall is added to the allow set."""
         allow = set(_SECCOMP_ALLOW)
-        for needed in ("openat", "read", "write", "mmap", "futex", "brk", "mbind", "clone"):
+        for needed in ("read", "write", "mmap", "futex", "brk", "mbind", "clone"):
             assert needed in allow, f"{needed} must stay allowed (FR-4 compute)"
         for denied in (
+            "open",
+            "openat",
+            "openat2",
+            "open_by_handle_at",
             "socket",
             "connect",
             "bind",
@@ -323,3 +327,26 @@ class TestSeccompImportOrder:
         assert _SANDBOX_WRAPPER.index("import pyseccomp") < _SANDBOX_WRAPPER.index(
             "setrlimit(resource.RLIMIT_NPROC"
         )
+
+
+# ── Filesystem read after lockdown (2026-10-03 sandbox-os-escape defect) ────────────────────────
+class TestFilesystemReadBlocked:
+    """docs/reports/2026-10-03-indicators-sandbox-os-escape-defect.md: attribute traversal from an
+    allowed module reaches the real `os`; the post-import seccomp filter must deny openat so the
+    escape still cannot open, read or list any file."""
+
+    def test_os_via_numpy_attribute_cannot_read_file(self):
+        res = _run(
+            "import numpy\n_os = numpy.lib._datasource.os\n"
+            "fd = _os.open('/etc/passwd', _os.O_RDONLY)\n"
+            "result = {'v': len(_os.read(fd, 64))}",
+            timeout_ms=8000,
+        )
+        assert res.success is False, f"file read escaped the sandbox: {res.output}"
+
+    def test_os_via_pandas_attribute_cannot_list_dir(self):
+        res = _run(
+            "import pandas\n_os = pandas.io.common.os\nresult = {'n': len(_os.listdir('/etc'))}",
+            timeout_ms=8000,
+        )
+        assert res.success is False, f"directory listing escaped the sandbox: {res.output}"
