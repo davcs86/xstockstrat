@@ -5,7 +5,7 @@
 **Launched date**: 2026-08-07
 **Archived**: 2026-08-16
 **Development Branch**: `feature/fix-config-ui-env`
-**GitHub Issue**: docs/reports/2026-08-07-config-ui-cross-environment-toggle-defect.md (GitHub Issues disabled on this repo — see `docs/CLAUDE.md`)
+**GitHub Issue**: docs/reports/2026-08-07-config-ui-cross-environment-toggle-defect.md (pruned 2026-10-05; `git show 2ce8de0a:docs/reports/2026-08-07-config-ui-cross-environment-toggle-defect.md`) (GitHub Issues disabled on this repo — see `docs/CLAUDE.md`)
 **Severity**: SEV-2
 **Created**: 2026-08-07
 **Last Updated**: 2026-08-07

@@ -1,6 +1,6 @@
 Feature: fix-backtest-annualized-return (bug fix)
   Regression guard for the backtest annualized_return under-scaling defect
-  (docs/reports/2026-08-23-backtest-annualized-return-underscaled-defect.md).
+  (docs/reports/2026-08-23-backtest-annualized-return-underscaled-defect.md, pruned 2026-10-05; git show 2ce8de0a:<path>).
 
   @AC-1 @regression
   Scenario: A one-year multi-symbol run annualizes to approximately its total return

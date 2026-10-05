@@ -2,7 +2,7 @@
 
 **Type**: bug
 **Development Branch**: `feature/fix-offline-account-ui-gaps`
-**Defect Report**: `docs/reports/2026-08-26-offline-account-ui-gaps-defect.md` (GitHub Issues disabled — report is the source)
+**Defect Report**: `docs/reports/2026-08-26-offline-account-ui-gaps-defect.md` (pruned 2026-10-05; `git show 2ce8de0a:docs/reports/2026-08-26-offline-account-ui-gaps-defect.md`) (GitHub Issues disabled — report is the source)
 **Severity**: SEV-3
 **Created**: 2026-08-26
 **Last Updated**: 2026-08-26

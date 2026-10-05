@@ -2418,3 +2418,64 @@ ambiguity is logged here).
   components at module scope and pass edit state through context. Test typing with
   `pressSequentially` plus a DOM-node probe, not `.fill()` plus `toBeFocused` (autoFocus re-steals
   focus on remount, so a focus check alone passes vacuously).
+
+### 2026-10-05 — 2026-08-07-config-ui-value-not-updating-defect — assumption
+- **Mistake**: The shared `setConfigPayload()` e2e fixture built its raw-`fetch()` JSON request body
+  with protobuf-es's in-memory oneof shape (`{ case, value }`) instead of the Connect JSON wire shape
+  (`{ stringVal: '...' }`). The server decoded an empty oneof and still answered 200, so every BFF write
+  smoke test using it wrote nothing yet passed — a silent *request-side* vacuous green, unlike the loud
+  response-side shape failures at fails.md:1317/1960. Test-only: the real UI encodes via the
+  `configClient` SDK, so production was unaffected. Found while writing a read-back regression test.
+- **Evidence**: commit `7b774471` (#901), `services/xstockstrat-ui/e2e/config-ui/api-smoke.spec.ts`;
+  report pruned 2026-10-05 (`git show 2ce8de0a:docs/reports/2026-08-07-config-ui-value-not-updating-defect.md`).
+  Related (casing, not oneof shape): insights.md:1090.
+- **Rule it implies**: A write test must prove the write with a read-back, never status alone; build
+  request bodies with the real client/SDK, or in Connect JSON wire shape — never the protobuf-es
+  in-memory oneof shape. Reinforces C-08/P-06.
+
+### 2026-10-05 — 2026-08-11-ui-middleware-self-refresh-tls-defect — assumption
+- **Mistake**: Middleware refreshed tokens with `fetch(new URL('/api/auth/refresh', req.url))` — a
+  server-side call to the app's own public `https://…ondigitalocean.app` origin. Per the report's stated
+  root cause (not independently re-verified), DO App Platform can route a container's call to its own
+  public origin over the internal plain-HTTP network instead of the TLS edge, so the ClientHello hits a
+  non-TLS responder → `ERR_SSL_WRONG_VERSION_NUMBER`. Near-expiry refreshes failed intermittently while
+  app health stayed HEALTHY, visible only in RUN logs. Feature 128 removed this self-fetch, but the hazard
+  covers any route handler/server component/middleware building a URL to itself from `req.url`.
+- **Evidence**: commit `33e3799e` (#925) loopback fix; insights.md:2798-2799 (feature 128 removal);
+  `docs/patterns/frontend-auth.md` (no self-fetch); report pruned 2026-10-05
+  (`git show 2ce8de0a:docs/reports/2026-08-11-ui-middleware-self-refresh-tls-defect.md`).
+- **Rule it implies**: Server-side code must never fetch its own public origin — call the logic
+  in-process, or loopback `http://127.0.0.1:<PORT>` if a hop is unavoidable. Candidate PLAT-*/UI-*
+  invariant for /context-constitution.
+
+### 2026-10-05 — 2026-08-08-screener-fundamental-criteria-silently-inert — assumption
+- **Mistake**: Feature 060 FR-5 "graceful degradation" skipped fundamental criteria when fundamentals
+  were unavailable; nothing specified the result for a skipped gate, so `passed` kept its default `True`
+  and status stayed OK — candidates "passed" hard filters never evaluated. The skip was spec-mandated
+  and the existing analysis tests asserted the resulting OK/passed=true, so review and CI were green on
+  the bug. Distinct from fails.md:1815 (the neutral `0.5` *score* fallback, fixed by feature 144, #976).
+- **Evidence**: commit `bef4258f` (#902) — `services/xstockstrat-analysis/app/services/screener.py`
+  fails closed to `SCREEN_RESULT_STATUS_INSUFFICIENT_DATA`, assertions replaced in `tests/test_screener.py`
+  (a single symbol missing from an otherwise-fetched batch keeps OK but fails the filter, since it is no
+  batch outage); `docs/roadmap/features/060-screener-engine/context.md:19` (FR-5 skip-on-`RpcError`);
+  report pruned 2026-10-05 (`git show 2ce8de0a:docs/reports/2026-08-08-screener-fundamental-criteria-silently-inert.md`).
+  See also fails.md:132 (a graceful skip must never be silent).
+- **Rule it implies**: A degradation requirement that drops work must specify — and surface — the
+  output for the skipped work; an unevaluated gate fails closed, never defaults to passed. Before
+  accepting a spec'd degradation as correct, read what its tests assert. Reinforces C-08/P-03.
+
+### 2026-10-05 — 2026-08-16-fundamentals-null-treated-as-zero-defect — assumption
+- **Mistake**: The 2026-08-08 fail-closed screener fix (`bef4258f`) covered the absence it could see —
+  a whole batch unavailable, a whole symbol missing — but not a present symbol with one null field.
+  Four upstream layers (Go JSON decode, the repo's `deref`, proto assembly, the Python read) had
+  already coerced that null to `0.0`, so the correct guard never fired and a zero-debt-looking value
+  passed `lte` filters. A narrower sibling surfaced 8 days later; no field-absent fixture existed
+  (the regression test was added with the fix), because the wire could not tell absent from `0.0`.
+- **Evidence**: commit `d53753fb` (#971) — `missing_metrics` on `packages/proto/marketdata/v1/marketdata.proto`,
+  `test_fundamental_hard_filter_missing_field_fails_closed_not_lte_zero` in
+  `services/xstockstrat-analysis/tests/test_screener.py`; MARKETDATA-11; report pruned 2026-10-05
+  (`git show 2ce8de0a:docs/reports/2026-08-16-fundamentals-null-treated-as-zero-defect.md`).
+  Neighbours: fails.md:2451 (unevaluated gate defaults to passed), insights.md:134 (presence per layer).
+- **Rule it implies**: Before closing a "missing data passes as real" bug, enumerate every absence
+  granularity (batch / row / field), trace each back to the provider boundary, and add a fixture per
+  level — a fail-closed guard is only as good as the upstream layers that preserve absence.

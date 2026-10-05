@@ -4,7 +4,7 @@
 **Committed to main**: 856ad5a3a2ebc431c108cc7f508deb26885545c6
 **Launched date**: 2026-08-07
 **Development Branch**: `feature/fix-mcp-target-user-authz` (implemented on harness-pinned `claude/remove-target-user-mcp-g4tfqm` — see context.md)
-**Source Report**: docs/reports/2026-08-07-mcp-target-user-authz.md
+**Source Report**: docs/reports/2026-08-07-mcp-target-user-authz.md (pruned 2026-10-05; `git show 2ce8de0a:docs/reports/2026-08-07-mcp-target-user-authz.md`)
 **Severity**: SEV-2
 **Created**: 2026-08-07
 **Last Updated**: 2026-08-07
