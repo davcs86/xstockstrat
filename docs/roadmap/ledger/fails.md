@@ -2463,3 +2463,19 @@ ambiguity is logged here).
 - **Rule it implies**: A degradation requirement that drops work must specify — and surface — the
   output for the skipped work; an unevaluated gate fails closed, never defaults to passed. Before
   accepting a spec'd degradation as correct, read what its tests assert. Reinforces C-08/P-03.
+
+### 2026-10-05 — 2026-08-16-fundamentals-null-treated-as-zero-defect — assumption
+- **Mistake**: The 2026-08-08 fail-closed screener fix (`bef4258f`) covered the absence it could see —
+  a whole batch unavailable, a whole symbol missing — but not a present symbol with one null field.
+  Four upstream layers (Go JSON decode, the repo's `deref`, proto assembly, the Python read) had
+  already coerced that null to `0.0`, so the correct guard never fired and a zero-debt-looking value
+  passed `lte` filters. A narrower sibling surfaced 8 days later; no field-absent fixture existed
+  (the regression test was added with the fix), because the wire could not tell absent from `0.0`.
+- **Evidence**: commit `d53753fb` (#971) — `missing_metrics` on `packages/proto/marketdata/v1/marketdata.proto`,
+  `test_fundamental_hard_filter_missing_field_fails_closed_not_lte_zero` in
+  `services/xstockstrat-analysis/tests/test_screener.py`; MARKETDATA-11; report pruned 2026-10-05
+  (`git show 2ce8de0a:docs/reports/2026-08-16-fundamentals-null-treated-as-zero-defect.md`).
+  Neighbours: fails.md:2451 (unevaluated gate defaults to passed), insights.md:134 (presence per layer).
+- **Rule it implies**: Before closing a "missing data passes as real" bug, enumerate every absence
+  granularity (batch / row / field), trace each back to the provider boundary, and add a fixture per
+  level — a fail-closed guard is only as good as the upstream layers that preserve absence.

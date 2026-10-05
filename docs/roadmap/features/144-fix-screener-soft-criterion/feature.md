@@ -2,7 +2,7 @@
 
 **Type**: bug
 **Development Branch**: `feature/fix-screener-soft-criterion`
-**Defect Report**: `docs/reports/2026-08-17-screener-missing-data-neutral-score-defect.md`
+**Defect Report**: `docs/reports/2026-08-17-screener-missing-data-neutral-score-defect.md` (pruned 2026-10-05; `git show 2ce8de0a:docs/reports/2026-08-17-screener-missing-data-neutral-score-defect.md`)
 **Severity**: SEV-2
 **Created**: 2026-08-17
 **Last Updated**: 2026-08-17

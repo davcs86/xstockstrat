@@ -14,7 +14,7 @@
 - Backfilling historical `annualized_return` rows — rejected as forward-only; historical rows left wrong-but-stable rather than mass-rewritten.
 
 **Scars & gotchas**:
-- The design phase was skipped (Track C bug, quick depth downgraded to skip) because the audit `_tasks/x-backtest-metrics-audit.md` already grounded the root cause — so the only surviving root-cause narrative outside code is this context.md + the retained defect report; there is no recon/design.
+- The design phase was skipped (Track C bug, quick depth downgraded to skip) because the audit `_tasks/x-backtest-metrics-audit.md` already grounded the root cause — so the only surviving root-cause narrative outside code is this context.md (+ the defect report, pruned 2026-10-05; `git show 2ce8de0a:docs/reports/2026-08-23-backtest-annualized-return-underscaled-defect.md`); there is no recon/design.
 - The legacy `252/n_days` path was **kept as the default** (new `period_years` is opt-in), so the concatenation bug still lurks for any *future* caller that passes a multi-symbol concatenated curve without also passing `period_years`. The trap was patched at one call site, not removed.
 
 **Permanent deviations**: none — no design.md existed; shipped matches the triage plan.
@@ -26,4 +26,4 @@
 **Ledger entries written**: insights.md (2), fails.md (1) — see the 2026-08-26 entries.
 **Runtime-invariant recommendations (→ /context-constitution)**: weak ANALYSIS-* (borderline, derivable) — backtest strategy GRADE is computed only from sharpe/max-drawdown/win-rate on per-symbol evidence cells (`servicer.py:3307-3333`); `annualized_return` and other aggregate-curve metrics are NOT grade inputs (this is what lets aggregate-metric fixes claim grade-neutrality).
 **Scenario promotion (C-16)**: 3 `@AC-*` → `services/xstockstrat-analysis/acceptance/fix-backtest-annualized-return.feature` (new suite).
-**Pruned artifacts**: product-spec.md — last present at 996210e4. (Defect report retained at `docs/reports/2026-08-23-backtest-annualized-return-underscaled-defect.md`; this context.md + acceptance.feature retained.)
+**Pruned artifacts**: product-spec.md — last present at 996210e4. (Defect report `docs/reports/2026-08-23-backtest-annualized-return-underscaled-defect.md` pruned 2026-10-05; `git show 2ce8de0a:docs/reports/2026-08-23-backtest-annualized-return-underscaled-defect.md`; this context.md + acceptance.feature retained.)

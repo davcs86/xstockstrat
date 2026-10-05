@@ -2,7 +2,7 @@
 
 **Type**: bug
 **Development Branch**: `claude/commit-135-opportunities-strategies-0xjnxk`
-**GitHub Issue**: n/a — GitHub Issues are disabled on `davcs86/xstockstrat`; bug captured directly via `/sdd-triage` (Track C) from `docs/reports/2026-08-16-marketdata-fundamentals-upsert-invalid-json-defect.md`
+**GitHub Issue**: n/a — GitHub Issues are disabled on `davcs86/xstockstrat`; bug captured directly via `/sdd-triage` (Track C) from `docs/reports/2026-08-16-marketdata-fundamentals-upsert-invalid-json-defect.md` (pruned 2026-10-05; `git show 2ce8de0a:docs/reports/2026-08-16-marketdata-fundamentals-upsert-invalid-json-defect.md`)
 **Severity**: SEV-3
 **Created**: 2026-08-16
 **Last Updated**: 2026-08-29

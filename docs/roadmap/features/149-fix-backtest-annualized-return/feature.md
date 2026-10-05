@@ -2,7 +2,7 @@
 
 **Type**: bug
 **Development Branch**: `claude/xstockstrat-metrics-sweep-m070rf` (harness-assigned; the nominal SDD branch would be `feature/fix-backtest-annualized-return`)
-**Defect Report**: `docs/reports/2026-08-23-backtest-annualized-return-underscaled-defect.md`
+**Defect Report**: `docs/reports/2026-08-23-backtest-annualized-return-underscaled-defect.md` (pruned 2026-10-05; `git show 2ce8de0a:docs/reports/2026-08-23-backtest-annualized-return-underscaled-defect.md`)
 **Severity**: SEV-2
 **Created**: 2026-08-23
 **Last Updated**: 2026-08-23
