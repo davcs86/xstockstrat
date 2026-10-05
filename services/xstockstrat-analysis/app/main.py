@@ -19,6 +19,7 @@ from grpc_reflection.v1alpha import reflection
 from app import mtls
 from app.config.watcher import ConfigWatcher
 from app.handlers.servicer import AnalysisServicer
+from app.internal_caller import InternalCallerInterceptor
 from app.telemetry import init_telemetry
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -73,6 +74,7 @@ async def serve():
             INDICATORS_ENDPOINT,
             mtls.channel_credentials(),
             options=mtls.target_override("xstockstrat-indicators"),
+            interceptors=[InternalCallerInterceptor()],
         ),
         ingest_channel=grpc.aio.secure_channel(
             INGEST_ENDPOINT,

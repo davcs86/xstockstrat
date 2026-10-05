@@ -18,6 +18,10 @@ from app.services.formulas_repository import FormulasRepository
 
 log = logging.getLogger(__name__)
 
+# Internal callers (x-internal-caller, trusted under mTLS) that may read/execute any non-deleted
+# formula — analysis runs strategies whose formulas the requesting user need not own.
+_INTERNAL_FORMULA_READERS = frozenset({"analysis"})
+
 # Fields an UpdateFormula update_mask may name; any other path is rejected INVALID_ARGUMENT.
 # formula_id/user_id/author/created_at are not maskable.
 _FORMULA_MASKABLE_PATHS = frozenset(
@@ -81,6 +85,18 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
         x_user_id = dict(context.invocation_metadata()).get("x-user-id", "")
         return x_user_id or request.user_id
 
+    @staticmethod
+    def _can_read_formula(context, author: str, is_public: bool) -> bool:
+        """Owner, public, SYSTEM_AUTHOR, or an allow-listed internal caller. The reader is the
+        x-user-id header only — never a request-body field."""
+        if is_public or author == SYSTEM_AUTHOR:
+            return True
+        metadata = context.invocation_metadata() or ()
+        if any(k == "x-internal-caller" and v in _INTERNAL_FORMULA_READERS for k, v in metadata):
+            return True
+        reader = dict(metadata).get("x-user-id", "")
+        return bool(reader) and reader == author
+
     async def ComputeIndicator(self, request, context):
         try:
             results = indicators_engine.compute(
@@ -119,7 +135,9 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
                 if row is not None:
                     formula = _row_to_formula(row)
                     self._formulas[request.formula_id] = formula
-            if formula is None:
+            if formula is None or not self._can_read_formula(
+                context, formula.author, formula.is_public
+            ):
                 await context.abort(
                     grpc.StatusCode.NOT_FOUND, f"formula {request.formula_id} not found"
                 )
@@ -331,7 +349,9 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
             if row is not None:
                 formula = _row_to_formula(row)
                 self._formulas[request.formula_id] = formula
-        if formula is None:
+        if formula is None or not self._can_read_formula(
+            context, formula.author, formula.is_public
+        ):
             await context.abort(
                 grpc.StatusCode.NOT_FOUND, f"formula {request.formula_id} not found"
             )
@@ -340,16 +360,25 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
 
     async def ListFormulas(self, request, context):
         if self._repo is None:
-            formulas = list(self._formulas.values())
+            formulas = [
+                f
+                for f in self._formulas.values()
+                if self._can_read_formula(context, f.author, f.is_public)
+            ]
             return indicators_pb2.ListFormulasResponse(
                 formulas=formulas,
                 total_count=len(formulas),
             )
+        # A foreign author_filter lists public rows only — it must not enumerate private formulas.
+        author_public_only = bool(request.author_filter) and not self._can_read_formula(
+            context, request.author_filter, False
+        )
         rows, total = await self._repo.list(
             author_filter=request.author_filter,
             include_public=request.include_public,
             page_size=request.page_size,
             page_offset=request.page_offset,
+            author_public_only=author_public_only,
         )
         return indicators_pb2.ListFormulasResponse(
             formulas=[_row_to_formula(r) for r in rows],

@@ -19,6 +19,14 @@ The request-body `user_id` field on `UpdateFormulaRequest`/`DeleteFormulaRequest
 identity is the header, which a client cannot spoof. The admin-scope override (`x-access-scope` ADMIN
 bit) is unchanged.
 
+**Formula reads are owner-gated too.** `GetFormula` and `ExecuteFormula` (by `formula_id`) serve a
+formula only if it is `is_public`, authored by `SYSTEM_AUTHOR`, authored by the `x-user-id` caller
+(header only, with no body fallback), or the call carries `x-internal-caller: analysis` (the
+`_INTERNAL_FORMULA_READERS` allow-list). analysis stamps that header on its whole indicators channel
+(`app/internal_caller.py`) because it runs strategy formulas on behalf of their owner. Any other
+caller gets `NOT_FOUND`, so the response does not reveal whether the id exists. `ListFormulas` with an
+`author_filter` naming another user returns only that user's public formulas.
+
 ## Language
 
 Python 3.13 (asyncio, grpc.aio)
