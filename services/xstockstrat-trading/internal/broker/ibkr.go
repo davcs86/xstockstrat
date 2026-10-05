@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -63,6 +64,38 @@ func NewIBKRClient(cfg IBKRConfig) *IBKRClient {
 // IsPaper reports whether this client is configured for paper trading.
 func (c *IBKRClient) IsPaper() bool {
 	return c.isPaper
+}
+
+// ErrIBKRConfirmationRequired: IBKR answered an order POST with a precautionary prompt instead of
+// an order reply. The order is NOT placed until /iserver/reply confirms it, which this adapter never does.
+var ErrIBKRConfirmationRequired = errors.New("ibkr order requires confirmation; not placed")
+
+// ibkrOrderReply is one element of IBKR's order-POST reply array: an order (OrderID set) or a
+// confirmation prompt (ID + Message set).
+type ibkrOrderReply struct {
+	OrderID     string   `json:"order_id"`
+	OrderStatus string   `json:"order_status"`
+	ID          string   `json:"id"`
+	Message     []string `json:"message"`
+}
+
+// parseIBKROrderReplies decodes an order-POST reply and fails on a prompt or an empty order id, so
+// a caller never records an order as submitted that IBKR did not place.
+func parseIBKROrderReplies(op string, body []byte) ([]ibkrOrderReply, error) {
+	var replies []ibkrOrderReply
+	if err := json.Unmarshal(body, &replies); err != nil || len(replies) == 0 {
+		return nil, fmt.Errorf("ibkr %s: parse response: %w", op, err)
+	}
+	for _, r := range replies {
+		if r.OrderID != "" {
+			continue
+		}
+		if r.ID != "" || len(r.Message) > 0 {
+			return nil, fmt.Errorf("ibkr %s: %w: %s", op, ErrIBKRConfirmationRequired, strings.Join(r.Message, "; "))
+		}
+		return nil, fmt.Errorf("ibkr %s: reply has no order_id: %s", op, body)
+	}
+	return replies, nil
 }
 
 // orderTypeToIBKR maps normalized order types to IBKR order type codes.
@@ -136,6 +169,13 @@ func (c *IBKRClient) SubmitOrder(ctx context.Context, req OrderRequest) (*Broker
 	if req.StopPrice != 0 {
 		body["auxPrice"] = req.StopPrice
 	}
+	if req.TrailPrice != 0 {
+		body["trailingAmt"] = req.TrailPrice
+		body["trailingType"] = "amt"
+	} else if req.TrailPercent != 0 {
+		body["trailingAmt"] = req.TrailPercent
+		body["trailingType"] = "%"
+	}
 	if req.ClientOrderID != "" {
 		// cOID is IBKR's Client Portal Web API customer-order-id field.
 		body["cOID"] = req.ClientOrderID
@@ -165,13 +205,9 @@ func (c *IBKRClient) SubmitOrder(ctx context.Context, req OrderRequest) (*Broker
 		return nil, fmt.Errorf("ibkr SubmitOrder: status %d: %s", resp.StatusCode, respBody)
 	}
 
-	// IBKR returns an array of order replies.
-	var replies []struct {
-		OrderID     string `json:"order_id"`
-		OrderStatus string `json:"order_status"`
-	}
-	if err := json.Unmarshal(respBody, &replies); err != nil || len(replies) == 0 {
-		return nil, fmt.Errorf("ibkr SubmitOrder: parse response: %w", err)
+	replies, err := parseIBKROrderReplies("SubmitOrder", respBody)
+	if err != nil {
+		return nil, err
 	}
 	return &BrokerOrder{BrokerOrderID: replies[0].OrderID, Status: replies[0].OrderStatus}, nil
 }
@@ -217,11 +253,9 @@ func (c *IBKRClient) SubmitBracketLegs(ctx context.Context, parentBrokerOrderID,
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		return nil, fmt.Errorf("ibkr SubmitBracketLegs: status %d: %s", resp.StatusCode, respBody)
 	}
-	var replies []struct {
-		OrderID string `json:"order_id"`
-	}
-	if err := json.Unmarshal(respBody, &replies); err != nil || len(replies) == 0 {
-		return nil, fmt.Errorf("ibkr SubmitBracketLegs: parse response: %w", err)
+	replies, err := parseIBKROrderReplies("SubmitBracketLegs", respBody)
+	if err != nil {
+		return nil, err
 	}
 	out := &BracketLegsResponse{StopLegOrderID: replies[0].OrderID}
 	if len(replies) > 1 {
@@ -296,13 +330,9 @@ func (c *IBKRClient) ReplaceOrder(ctx context.Context, brokerOrderID string, req
 		return nil, fmt.Errorf("ibkr ReplaceOrder: status %d: %s", resp.StatusCode, respBody)
 	}
 
-	// IBKR returns an array of order replies (same shape as SubmitOrder).
-	var replies []struct {
-		OrderID     string `json:"order_id"`
-		OrderStatus string `json:"order_status"`
-	}
-	if err := json.Unmarshal(respBody, &replies); err != nil || len(replies) == 0 {
-		return nil, fmt.Errorf("ibkr ReplaceOrder: parse response: %w", err)
+	replies, err := parseIBKROrderReplies("ReplaceOrder", respBody)
+	if err != nil {
+		return nil, err
 	}
 	return &BrokerOrder{BrokerOrderID: replies[0].OrderID, Status: replies[0].OrderStatus}, nil
 }
