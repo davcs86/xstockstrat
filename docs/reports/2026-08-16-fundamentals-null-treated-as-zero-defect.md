@@ -20,7 +20,7 @@ zero-debt company's `debt_to_equity`, or a non-dividend-payer's `dividend_yield`
 hard-filter criterion using `lte`/`lt` against a positive threshold then evaluated
 `0.0 <= threshold` and silently reported `passed=true` for a symbol whose metric was never
 actually evaluated — the opposite of the fail-closed contract the 2026-08-08 companion
-defect (`2026-08-08-screener-fundamental-criteria-silently-inert.md`) established for the
+defect (`2026-08-08-screener-fundamental-criteria-silently-inert.md` (pruned 2026-10-05; `git show 2ce8de0a:docs/reports/2026-08-08-screener-fundamental-criteria-silently-inert.md`)) established for the
 whole-batch-unavailable and whole-symbol-missing cases. This is a distinct, narrower gap
 that report did not cover: a *known* field present for the symbol but individually null.
 

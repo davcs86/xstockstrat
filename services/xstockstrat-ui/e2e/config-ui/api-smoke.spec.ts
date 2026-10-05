@@ -127,9 +127,9 @@ test.describe('GET /api/config — namespace config table data contract', () => 
     page,
   }) => {
     // Regression coverage for the config-ui "editing configs" bug (docs/reports/
-    // 2026-08-07-config-ui-value-not-updating-defect.md): ListKeys used to expose only the
-    // seed defaultValue, which a SetConfig write never touches, so a saved edit was invisible
-    // to any caller of this RPC — not just the NamespaceEditor UI.
+    // 2026-08-07-config-ui-value-not-updating-defect.md, pruned; `git show 2ce8de0a:<path>`):
+    // ListKeys used to expose only the seed defaultValue, which a SetConfig write never touches,
+    // so a saved edit was invisible to any caller of this RPC — not just the NamespaceEditor UI.
     await addAdminCookie(page);
     await page.goto('/auth/login');
     await callBff(page, SET_CONFIG_BFF, setConfigPayload());

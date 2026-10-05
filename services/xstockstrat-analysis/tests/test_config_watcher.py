@@ -2,7 +2,8 @@
 Guards the WatchConfig scope-omission fix: ConfigWatcher must resolve this deployment's own
 APPLICATION_ENV/TRADING_MODE into the proto scope it subscribes with, instead of leaving the
 request at its zero-value (dev/unspecified) — see
-docs/reports/2026-08-07-watchconfig-scope-omission-defect.md.
+docs/reports/2026-08-07-watchconfig-scope-omission-defect.md
+(pruned 2026-10-05; `git show 2ce8de0a:<path>`).
 """
 
 from gen.common.v1 import common_pb2
