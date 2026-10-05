@@ -1,6 +1,6 @@
 Feature: fix-signal-screen-crash (bug fix)
   Regression guard for the defect recorded at
-  docs/reports/2026-08-26-signal-screen-bar-timestamp-crash-defect.md:
+  docs/reports/2026-08-26-signal-screen-bar-timestamp-crash-defect.md (pruned 2026-10-05; git show 2ce8de0a:docs/reports/<file>):
   signal-weighted ScreenSymbols crashed because scoring read bar.timestamp (proto field is bar.time).
 
   @AC-1 @regression

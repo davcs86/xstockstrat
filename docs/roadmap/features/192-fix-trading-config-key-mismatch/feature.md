@@ -2,7 +2,7 @@
 
 **Type**: bug
 **Development Branch**: `claude/halted-account-94ldka` (harness-assigned; PR targets `main-dev`)
-**Defect Report**: `docs/reports/2026-09-15-trading-config-namespace-key-mismatch-defect.md` (GitHub Issues disabled — report is the audit trail)
+**Defect Report**: `docs/reports/2026-09-15-trading-config-namespace-key-mismatch-defect.md` (pruned 2026-10-05; `git show 2ce8de0a:docs/reports/2026-09-15-trading-config-namespace-key-mismatch-defect.md`) (GitHub Issues disabled — report is the audit trail)
 **Severity**: SEV-1
 **Created**: 2026-09-15
 **Renumbered**: 2026-09-16 — `189` → `192` to resolve the `189` collision with `screener-preset-criteria` (renumbered the later-created, not-yet-launched member). Slug and branch unchanged.

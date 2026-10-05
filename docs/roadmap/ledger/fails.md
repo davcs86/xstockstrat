@@ -2479,3 +2479,130 @@ ambiguity is logged here).
 - **Rule it implies**: Before closing a "missing data passes as real" bug, enumerate every absence
   granularity (batch / row / field), trace each back to the provider boundary, and add a fixture per
   level — a fail-closed guard is only as good as the upstream layers that preserve absence.
+
+### 2026-10-05 — 2026-09-03-agent-duplicate-user-id-header-defect — header
+- **Mistake**: PR #994 (feature 147) made the bound-caller middleware put `x-user-id` into
+  `_metadata()` itself. Two call sites still using the older splat idiom
+  `[*_metadata(), ("x-user-id", user_id)]` (`ensure_signal_watchlist`, `add_watchlist_symbol`) survived
+  #994 unconverted and sent the header twice. The ledger still recommends that idiom as a reuse
+  pattern at insights.md:1831 (2026-08-19, predates #994) — this entry supersedes it: use the
+  de-duplicating `_metadata(("x-user-id", user_id))` form (AGENT-4). Note the dedup form lets the
+  bound context win; a diverging explicit `x-user-id` is silently dropped, not honoured.
+- **Evidence**: commit `3d90137` (#1082); `services/xstockstrat-agent/docs/context-constitution.md`
+  AGENT-4 and findings (resolved entry); `services/xstockstrat-agent/tests/test_watchlist_client.py`
+  (regression binds a caller and counts occurrences; older tests only check membership); report
+  pruned 2026-10-05 (`git show 2ce8de0a:docs/reports/2026-09-03-agent-duplicate-user-id-header-defect.md`).
+- **Rule it implies**: When a helper starts emitting a header itself, grep for and convert every call
+  site that still appends it by hand, and append a ledger entry superseding any entry that recommends
+  the old idiom. Header tests run under a bound caller context and assert the header *count*, not
+  membership.
+
+### 2026-10-05 — 2026-08-27-insights-signal-ticket-offline-account-flake-defect — assumption
+- **Mistake**: An intermittent insights e2e failure cleared on a CI re-run, yet was a real product
+  bug: an `OrderForm` mount lacked `allowOfflineRecord={false}`, and `AccountContext`'s auto-select
+  of an offline account made the wrong ticket render on some runs. Earlier intermittent failures
+  were waved off as flake (119 context.md:20 "attributed as untouched"; 124 feature.md:21
+  "self-recovering flake"); 083 and 135 did check the baseline, but a failure that also occurs on
+  the baseline only proves it is not a *regression*, not that it is not a product bug.
+- **Evidence**: `docs/roadmap/features/162-fix-insights-offline-ticket/context.md:9-11,23-24` (root
+  cause); fix `57e40a3` (#1047); the prebuilt harness reproduced it deterministically while CI was
+  intermittent (fails.md:1806); report pruned 2026-10-05
+  (`git show 2ce8de0a:docs/reports/2026-08-27-insights-signal-ticket-offline-account-flake-defect.md`).
+- **Rule it implies**: Classify an intermittent e2e failure before dismissing or narrowing it: the
+  same content rendered twice (desktop+mobile copy) is a locator fix (`.filter({ visible: true })`);
+  wrong or missing content is a product bug — file it and reproduce on the prebuilt harness
+  (`--workers=1 --retries=0`). A green re-run never closes it.
+
+### 2026-10-05 — 2026-09-15-trading-config-namespace-key-mismatch-defect — config
+- **Mistake**: The class "the key string a lookup uses ≠ the stored `key` column, in either
+  direction → the lookup silently falls back to its code default" recurred at least four times in
+  ~3 weeks across languages: config's Node registry indexed by the bare column (feature 161,
+  fails.md:2005), ingest's Python getters reading bare keys against full-dotted storage (2026-09-03
+  mcp_client report), trading/portfolio/marketdata Go watchers reading full-dotted keys against bare
+  storage (feature 192), and the config bounds registry / analysis seed (feature 182, fails.md:2328).
+  Every fix stayed local; entries flagged "Candidate CONFIG-* invariant" (fails.md:2331, :2336) were
+  never promoted, a shared Go watcher was rejected as YAGNI (192 context.md:19), and CONFIG-9 still
+  reads "no fixed convention". Defects surface only where a default differs from its seed.
+- **Evidence**: fails.md:2005, :2328-2336, :2358-2371; `docs/roadmap/features/192-fix-trading-config-key-mismatch/context.md:11,19,24`;
+  `services/xstockstrat-config/docs/context-constitution.md` CONFIG-9; reports pruned 2026-10-05
+  (`git show 2ce8de0a:docs/reports/2026-09-15-trading-config-namespace-key-mismatch-defect.md`,
+  `git show 2ce8de0a:docs/reports/2026-09-03-mcp-client-config-keys-unprefixed-defect.md`).
+- **Rule it implies**: Once a silent-default class recurs across languages, a per-feature fix plus
+  prose is not enough — promote it to a binding rule with a mechanical guard: config readers fail
+  loudly (log + metric) when a registered key does not resolve, and/or CI checks every seeded
+  `(namespace, key)` against a consumer lookup. Proposed CONFIG-* / Constitution candidate.
+
+### 2026-10-05 — 2026-09-25-reconciliation-false-halt-defect — assumption
+- **Mistake**: The reconciliation auto-halt has repeatedly false-fired because a comparator lacked a
+  source of truth for platform-originated state. After an earlier production false halt, the order
+  side was hardened to ground against `trading.orders` (`KnownBrokerOrderIDs`); nobody audited the
+  sibling position comparator ("the unhardened twin", 206 recon.md:53), which kept trusting the
+  lagging `portfolio.ListPositions` projection → this SEV-2 false halt (feature 206). The known-ID
+  set still covers only `trading.orders`, so broker IDs later stored elsewhere (feature 189 bracket
+  leg IDs in `trading.order_brackets`) reopened the class as the open SEV-1
+  `docs/reports/2026-10-03-alpaca-bracket-legs-false-halt-defect.md` (also debt-radar NC-3).
+- **Evidence**: `services/xstockstrat-trading/CLAUDE.md:212-221,232-244`;
+  `docs/roadmap/features/206-fix-reconciliation-false-halt/context.md:21-23`; the 10-03 report;
+  report pruned 2026-10-05 (`git show 2ce8de0a:docs/reports/2026-09-25-reconciliation-false-halt-defect.md`). A finding whose
+  id is a symbol came from the position comparator; an order UUID from the order side.
+- **Rule it implies**: When fixing a false positive in an automated safety gate, enumerate every
+  comparator feeding the gate and every persisted home of platform-originated identity (tables,
+  projections, broker-side shapes such as un-nested bracket legs); ground each or record why it is
+  exempt. Any feature adding a table of broker order IDs must extend the reconciliation known-set.
+  Candidate TRADING-* invariant for /context-constitution.
+
+### 2026-10-05 — 2026-09-26-copilotrail-duplicate-listopportunities-rpc-defect — assumption
+- **Mistake**: Feature 190 widened the shared `useOpportunities` React Query key to a 5-tuple ending
+  in a defaulted `sort`. The Opportunities page passed `CONVICTION`; CopilotRail and three other
+  callers relied on the `UNSPECIFIED` default, so the cache split and a second `ListOpportunities`
+  RPC fired on every route — no type error, no UI symptom (only a now-stale "share the cache" comment).
+  Feature 187's "no separate RPC" criterion had shipped with its test step still pending, so the
+  promise was untested when 190 broke it; the 187 QA back-fill found it (2026-09-26).
+- **Evidence**: `docs/roadmap/features/187-opportunities-pagination-drain/context.md:51,70-74,97-102`;
+  `docs/roadmap/features/213-fix-copilotrail-duplicate-rpc/context.md:19-23,37-38,81,109`; fix
+  `5fd9faf8`; report pruned 2026-10-05 (`git show 2ce8de0a:docs/reports/2026-09-26-copilotrail-duplicate-listopportunities-rpc-defect.md`).
+  Related, not a dup: fails.md:2326.
+- **Rule it implies**: Adding a defaulted parameter to a shared hook's queryKey → grep every caller;
+  default-reliant callers must land on the explicit caller's key (fix the default at the hook, one
+  source) — and confirm each tolerates the new default's semantics (190 kept `UNSPECIFIED` a
+  distinct sort, 190 context.md:11). A "shares the cache / no extra RPC" criterion is unmet until an
+  RPC-count e2e assertion exists.
+
+### 2026-10-05 — 2026-09-18-opportunity-queue-ignores-fundamentals-universe-defect — duplication
+- **Mistake**: Feature 168's contract — the blend runs on the fundamentals universe "and nowhere
+  else" — was enforced in one of three consumers of `resolve_universe` (the live loop); the
+  opportunity queue and boot `entry_backfill` took the unrestricted path (fixed by feature 193).
+  Beyond the generic "fix at the shared layer" (fails.md:1885, :2284): (a) every 168 acceptance
+  scenario was loop-only, so no test covered the other consumers; (b) `signal_eligible: true` was
+  inert on the tested loop path but decisive on the untested queue, widening the leak; (c) the
+  ledgered 168 design insight (insights.md:3147, "conditional branch inside the shared `_run_cycle`
+  loop") recommended the placement that caused it — superseded here (its Evidence names
+  `servicer.py`; `_run_cycle` is in `app/engine/live_loop.py`); (d) feature 186 changed the same
+  contract (write guards) and also skipped the read-side sweep.
+- **Evidence**: `docs/roadmap/features/168-fundamentals-blend-universe/acceptance.feature` (loop-only
+  scenarios); `docs/roadmap/features/193-fix-blend-queue-fundamentals-universe/context.md:10-25`;
+  report pruned 2026-10-05 (`git show 2ce8de0a:docs/reports/2026-09-18-opportunity-queue-ignores-fundamentals-universe-defect.md`).
+- **Rule it implies**: A restriction of the form "X applies only to set S" lives in the shared
+  resolver every consumer calls, and needs a negative acceptance scenario for each consumer that
+  enumerates the set — not just the one the feature was built around.
+
+### 2026-10-05 — 2026-09-18-opportunity-queue-ignores-fundamentals-universe-defect — assumption
+- **Mistake**: The 193 "hoist" chose option A because "a future caller #4 cannot miss it", but it
+  shipped opt-in: `resolve_universe(..., blend_id: str = "", fundamentals_universe=None)` restricts
+  only when a caller passes both kwargs, and the blend-active gating is re-derived in each caller
+  (`live_loop.py`, `entry_backfill.py`, `handlers/servicer.py`). A fourth caller that omits the
+  kwargs silently gets the unrestricted path. Compounding: `signal_eligible` is inert for the blend
+  only via the identity check `strategy_id == blend_id` while the flag stays true on the row, so
+  re-pointing `analysis.engine.fundamentals_blend_strategy_id` silently returns the old blend to the
+  cross-user, unfiltered signal pool (no record of clearing the flag or accepting the risk). And the
+  queue now resolves the fundamentals universe uncached per compute — the per-request resolution
+  168 rejected as a pacing (F-06) violation (insights.md:3147) — with no recorded decision.
+- **Evidence**: `services/xstockstrat-analysis/app/engine/live_loop.py:97-98,116-125`;
+  `app/engine/entry_backfill.py:86-114`; `app/handlers/servicer.py` (~4342-4357);
+  `docs/roadmap/features/193-fix-blend-queue-fundamentals-universe/context.md:16-19`; report pruned
+  2026-10-05 (`git show 2ce8de0a:docs/reports/2026-09-18-opportunity-queue-ignores-fundamentals-universe-defect.md`).
+  Refines insights.md:3307 (gate on identity, not flags) and insights.md:1966 (fix once at the
+  shared fragment).
+- **Rule it implies**: A restriction hoisted into a shared resolver must be structural (required
+  args, or resolved inside the resolver), not opt-in kwargs with an empty default. When an identity
+  check neutralises a flag, also clear the flag in data or record the accepted risk.

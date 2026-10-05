@@ -1,6 +1,6 @@
 Feature: fix-blend-queue-fundamentals-universe (bug fix)
   Regression guard for the defect at
-  docs/reports/2026-09-18-opportunity-queue-ignores-fundamentals-universe-defect.md:
+  docs/reports/2026-09-18-opportunity-queue-ignores-fundamentals-universe-defect.md (pruned 2026-10-05; git show 2ce8de0a:docs/reports/<file>):
   the fundamentals-blend force-run (feature 168) must be attributed on the opportunity queue and the
   boot entry-backfill ONLY within the fundamentals universe — the same set the live loop evaluates —
   and never to a platform signal, held position, or watchlist symbol outside it. This binds the

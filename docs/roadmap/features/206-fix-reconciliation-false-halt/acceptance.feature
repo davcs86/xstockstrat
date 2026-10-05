@@ -1,6 +1,6 @@
 Feature: fix-reconciliation-false-halt (bug fix)
   Regression guard for the reconciliation false-halt recorded in
-  docs/reports/2026-09-25-reconciliation-false-halt-defect.md.
+  docs/reports/2026-09-25-reconciliation-false-halt-defect.md (pruned 2026-10-05; git show 2ce8de0a:docs/reports/<file>).
 
   @AC-1 @regression
   Scenario: A broker position explained by the platform's own filled orders does not halt

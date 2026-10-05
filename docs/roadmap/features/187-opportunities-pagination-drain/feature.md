@@ -56,6 +56,6 @@ re-run /sdd-spec if the registry changes.)_
 Feature is `launched` (live since 2026-09-11); the test debt (steps 4/7/8/10) was back-filled on
 2026-09-26 — `opportunities.spec.ts` now guards @AC-2/3/5/8 (35/35 green). **One follow-up remains:**
 @AC-7 (CopilotRail shares the page-1 cache / no separate RPC) is genuinely violated on the shipped
-tree — see the SEV-3 defect `docs/reports/2026-09-26-copilotrail-duplicate-listopportunities-rpc-defect.md`.
+tree — see the SEV-3 defect `docs/reports/2026-09-26-copilotrail-duplicate-listopportunities-rpc-defect.md` (pruned 2026-10-05; `git show 2ce8de0a:docs/reports/2026-09-26-copilotrail-duplicate-listopportunities-rpc-defect.md`).
 Route it via `/sdd-triage --from-report <that file>`; once the one-line CopilotRail sort-alignment fix
 lands, add the strict single-RPC @AC-7 guard.

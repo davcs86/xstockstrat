@@ -6,7 +6,7 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 
 ## Session 2026-09-26 (/sdd-triage)
 
-- Bug recorded via defect report `docs/reports/2026-09-26-copilotrail-duplicate-listopportunities-rpc-defect.md`
+- Bug recorded via defect report `docs/reports/2026-09-26-copilotrail-duplicate-listopportunities-rpc-defect.md` (pruned 2026-10-05; `git show 2ce8de0a:docs/reports/2026-09-26-copilotrail-duplicate-listopportunities-rpc-defect.md`)
   (GitHub Issues are disabled on this repo — `--from-report` path). Surfaced during the feature 187
   QA back-fill as the reason @AC-7 could not be covered.
 - Severity: SEV-3. Config-only: no. Impact type: redundant-backend-rpc.

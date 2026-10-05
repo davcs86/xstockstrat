@@ -6,7 +6,7 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 
 ## Session 2026-09-25 (sdd-triage, manual)
 
-- Bug reported via defect report `docs/reports/2026-09-25-reconciliation-false-halt-defect.md`
+- Bug reported via defect report `docs/reports/2026-09-25-reconciliation-false-halt-defect.md` (pruned 2026-10-05; `git show 2ce8de0a:docs/reports/2026-09-25-reconciliation-false-halt-defect.md`)
   (GitHub Issues disabled on this repo — `--from-report` path).
 - Severity: SEV-2. Routed to SDD path (Track C).
 - The `/sdd-*` skills are not registered as invocable in this cloud session, so Track C was executed

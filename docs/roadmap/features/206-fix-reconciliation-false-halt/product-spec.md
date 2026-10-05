@@ -1,7 +1,7 @@
 # Product Spec: fix-reconciliation-false-halt
 
 **Type**: bug
-**GitHub Issue**: n/a — defect report `docs/reports/2026-09-25-reconciliation-false-halt-defect.md`
+**GitHub Issue**: n/a — defect report `docs/reports/2026-09-25-reconciliation-false-halt-defect.md` (pruned 2026-10-05; `git show 2ce8de0a:docs/reports/2026-09-25-reconciliation-false-halt-defect.md`)
 **Severity**: SEV-2
 **Created**: 2026-09-25
 

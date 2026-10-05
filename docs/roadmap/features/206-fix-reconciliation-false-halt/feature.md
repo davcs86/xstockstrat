@@ -2,7 +2,7 @@
 
 **Type**: bug
 **Development Branch**: `claude/flow-investigation-4blorq`
-**GitHub Issue**: n/a — Issues disabled on this repo; defect recorded at `docs/reports/2026-09-25-reconciliation-false-halt-defect.md`
+**GitHub Issue**: n/a — Issues disabled on this repo; defect recorded at `docs/reports/2026-09-25-reconciliation-false-halt-defect.md` (pruned 2026-10-05; `git show 2ce8de0a:docs/reports/2026-09-25-reconciliation-false-halt-defect.md`)
 **Severity**: SEV-2
 **Created**: 2026-09-25
 **Last Updated**: 2026-09-25

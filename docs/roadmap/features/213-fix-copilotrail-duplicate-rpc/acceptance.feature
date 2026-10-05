@@ -1,6 +1,6 @@
 Feature: fix-copilotrail-duplicate-rpc (bug fix)
   Regression guard for the defect
-  docs/reports/2026-09-26-copilotrail-duplicate-listopportunities-rpc-defect.md:
+  docs/reports/2026-09-26-copilotrail-duplicate-listopportunities-rpc-defect.md (pruned 2026-10-05; git show 2ce8de0a:docs/reports/<file>):
   CopilotRail must share the Opportunities page-1 query cache instead of issuing a
   second ListOpportunities RPC (feature 187 @AC-7).
 
