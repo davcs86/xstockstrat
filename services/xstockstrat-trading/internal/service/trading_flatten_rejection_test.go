@@ -184,3 +184,27 @@ func TestFlattenAndHalt_UncertainTimeout_KeepsClientOrderID(t *testing.T) {
 		t.Fatal("exhausted retries must halt the account")
 	}
 }
+
+type scopedFlattenPortfolio struct {
+	portfoliov1.PortfolioServiceClient
+	got *portfoliov1.GetPositionRequest
+}
+
+func (p *scopedFlattenPortfolio) GetPosition(_ context.Context, req *portfoliov1.GetPositionRequest, _ ...grpc.CallOption) (*portfoliov1.Position, error) {
+	p.got = req
+	return &portfoliov1.Position{Symbol: "AAPL", Qty: 10}, nil
+}
+
+// The flatten must size from the bracket's own account position — an unscoped read returns the
+// latest row across all the user's accounts and over/under-sells on this one.
+func TestFlattenAndHalt_ScopesPositionToBracketAccount(t *testing.T) {
+	h := newFlattenHarness(func(int) (*broker.BrokerOrder, error) {
+		return &broker.BrokerOrder{BrokerOrderID: "bo-flat", Status: "accepted"}, nil
+	})
+	pf := &scopedFlattenPortfolio{}
+	h.svc.portfolio = pf
+	h.run(t)
+	if pf.got == nil || pf.got.GetAccountId() != "acct-1" {
+		t.Fatalf("flatten GetPosition must be scoped to the bracket account acct-1, got %+v", pf.got)
+	}
+}

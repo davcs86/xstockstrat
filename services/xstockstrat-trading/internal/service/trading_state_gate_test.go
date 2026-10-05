@@ -99,7 +99,7 @@ func TestCheckTradingStateForPlaceOrder_DefaultHalted_NeverCallsPortfolio(t *tes
 	}}
 	s := &TradingService{cfgW: &config.Watcher{}, portfolio: fake} // zero-Watcher -> HALTED default
 	err := s.checkTradingStateForPlaceOrder(
-		context.Background(), "u1", "AAPL", commonv1.TradingMode_TRADING_MODE_PAPER, tradingv1.OrderSide_ORDER_SIDE_BUY,
+		context.Background(), "u1", "acct-1", "AAPL", commonv1.TradingMode_TRADING_MODE_PAPER, tradingv1.OrderSide_ORDER_SIDE_BUY,
 	)
 	if err == nil {
 		t.Fatal("expected HALTED (the zero-Watcher default) to block")
@@ -158,7 +158,7 @@ func TestCheckTradingStateForPlaceOrder_FullDottedActive_PassesGate(t *testing.T
 	})
 	s := &TradingService{cfgW: cfgW}
 	err := s.checkTradingStateForPlaceOrder(
-		context.Background(), "u1", "AAPL", commonv1.TradingMode_TRADING_MODE_PAPER, tradingv1.OrderSide_ORDER_SIDE_BUY,
+		context.Background(), "u1", "acct-1", "AAPL", commonv1.TradingMode_TRADING_MODE_PAPER, tradingv1.OrderSide_ORDER_SIDE_BUY,
 	)
 	if err != nil {
 		t.Fatalf("ACTIVE platform.trading_state must not reject the order (AC-1), got: %v", err)
@@ -171,9 +171,32 @@ func TestCheckTradingStateForPlaceOrder_FullDottedHalted_BlocksGate(t *testing.T
 	})
 	s := &TradingService{cfgW: cfgW}
 	err := s.checkTradingStateForPlaceOrder(
-		context.Background(), "u1", "AAPL", commonv1.TradingMode_TRADING_MODE_PAPER, tradingv1.OrderSide_ORDER_SIDE_BUY,
+		context.Background(), "u1", "acct-1", "AAPL", commonv1.TradingMode_TRADING_MODE_PAPER, tradingv1.OrderSide_ORDER_SIDE_BUY,
 	)
 	if grpcstatus.Code(err) != codes.FailedPrecondition {
 		t.Fatalf("HALTED platform.trading_state must block with FailedPrecondition, got: %v", err)
+	}
+}
+
+// REDUCE_ONLY must judge exposure from the order's own account position, never the latest row
+// across all of the user's accounts.
+func TestCheckTradingStateForPlaceOrder_ReduceOnly_ScopesPositionToAccount(t *testing.T) {
+	var got *portfoliov1.GetPositionRequest
+	fake := &fakePortfolioClient{getPositionFn: func(_ context.Context, req *portfoliov1.GetPositionRequest) (*portfoliov1.Position, error) {
+		got = req
+		return &portfoliov1.Position{Symbol: "AAPL", Qty: 10}, nil
+	}}
+	cfgW := config.NewSnapshotWatcher(map[string]*configv1.ConfigValue{
+		"platform.trading_state": {Value: &configv1.ConfigValue_StringVal{StringVal: "REDUCE_ONLY"}},
+	})
+	s := &TradingService{cfgW: cfgW, portfolio: fake}
+	err := s.checkTradingStateForPlaceOrder(
+		context.Background(), "u1", "acct-A", "AAPL", commonv1.TradingMode_TRADING_MODE_PAPER, tradingv1.OrderSide_ORDER_SIDE_SELL,
+	)
+	if err != nil {
+		t.Fatalf("reducing sell must pass REDUCE_ONLY, got: %v", err)
+	}
+	if got == nil || got.GetAccountId() != "acct-A" {
+		t.Fatalf("GetPosition must be scoped to account acct-A, got request %+v", got)
 	}
 }

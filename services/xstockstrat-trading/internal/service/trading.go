@@ -448,7 +448,7 @@ func (s *TradingService) PlaceOrder(ctx context.Context, req *tradingv1.PlaceOrd
 
 	// platform.trading_state gate: HALTED blocks outright; REDUCE_ONLY blocks only
 	// exposure-increasing orders. Independent of platform.maintenance_mode.
-	if err := s.checkTradingStateForPlaceOrder(ctx, accountEntry.userID, req.Symbol, mode, req.Side); err != nil {
+	if err := s.checkTradingStateForPlaceOrder(ctx, accountEntry.userID, resolvedAccountID, req.Symbol, mode, req.Side); err != nil {
 		return nil, err
 	}
 
@@ -2682,7 +2682,7 @@ func (s *TradingService) flattenAndHalt(ctx context.Context, bracket *repository
 	// no inbound header, so inject the order owner explicitly.
 	posCtx = metadata.AppendToOutgoingContext(posCtx, "x-user-id", order.UserId)
 	position, err := s.portfolio.GetPosition(posCtx, &portfoliov1.GetPositionRequest{
-		Symbol: order.Symbol, TradingMode: order.TradingMode,
+		Symbol: order.Symbol, TradingMode: order.TradingMode, AccountId: &bracket.AccountID,
 	})
 	cancel()
 	if err != nil || position == nil || position.Qty == 0 {
@@ -3413,7 +3413,7 @@ func isReplaceRiskReducing(currentQty, requestedQty float64) bool {
 // checkTradingStateForPlaceOrder blocks PlaceOrder when trading_state is HALTED, or REDUCE_ONLY
 // and the order increases exposure. REDUCE_ONLY fails closed on any GetPosition error — this is
 // the enforcement point, not a warning.
-func (s *TradingService) checkTradingStateForPlaceOrder(ctx context.Context, userID, symbol string, mode commonv1.TradingMode, side tradingv1.OrderSide) error {
+func (s *TradingService) checkTradingStateForPlaceOrder(ctx context.Context, userID, accountID, symbol string, mode commonv1.TradingMode, side tradingv1.OrderSide) error {
 	switch s.currentTradingState() {
 	case tradingStateActive:
 		return nil
@@ -3424,7 +3424,7 @@ func (s *TradingService) checkTradingStateForPlaceOrder(ctx context.Context, use
 		defer cancel()
 		posCtx = metadata.AppendToOutgoingContext(posCtx, "x-user-id", userID)
 		pos, err := s.portfolio.GetPosition(posCtx, &portfoliov1.GetPositionRequest{
-			Symbol: symbol, TradingMode: mode,
+			Symbol: symbol, TradingMode: mode, AccountId: &accountID,
 		})
 		if err != nil {
 			if grpcstatus.Code(err) == codes.NotFound {
