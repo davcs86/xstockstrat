@@ -1,7 +1,7 @@
 # Product Spec: fix-historical-fundamentals-price-join
 
 **Type**: bug
-**Defect Report**: `docs/reports/2026-09-27-fundamentals-backfill-not-rederived-defect.md`
+**Defect Report**: `docs/reports/2026-09-27-fundamentals-backfill-not-rederived-defect.md` (pruned 2026-10-05; `git show 2ce8de0a:docs/reports/2026-09-27-fundamentals-backfill-not-rederived-defect.md`)
 **Severity**: SEV-3
 **Created**: 2026-09-27
 

@@ -15,8 +15,9 @@ import (
 	"github.com/xstockstrat/trading/internal/repository"
 )
 
-// Regression suite for docs/reports/2026-10-02-alpaca-cancel-422-defect.md: a broker
-// "not cancelable" answer is resolved from the broker's own order state, never assumed CANCELED.
+// Regression suite for docs/reports/2026-10-02-alpaca-cancel-422-defect.md (pruned 2026-10-05; git
+// show 2ce8de0a:<path>): a broker "not cancelable" answer is resolved from the broker's own order
+// state, never assumed CANCELED.
 
 func notCancelableSvc(fb *fakeBroker, bracket *fakeBracketRepo) (*TradingService, *tradingv1.Order) {
 	order := &tradingv1.Order{

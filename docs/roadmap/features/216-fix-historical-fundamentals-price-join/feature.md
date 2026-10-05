@@ -2,7 +2,7 @@
 
 **Type**: bug
 **Development Branch**: `feature/fix-historical-fundamentals-price-join`
-**Defect Report**: `docs/reports/2026-09-27-fundamentals-backfill-not-rederived-defect.md` (GitHub Issues disabled on this repo — recorded as a report by `/sdd-qa defect`)
+**Defect Report**: `docs/reports/2026-09-27-fundamentals-backfill-not-rederived-defect.md` (pruned 2026-10-05; `git show 2ce8de0a:docs/reports/2026-09-27-fundamentals-backfill-not-rederived-defect.md`) (GitHub Issues disabled on this repo — recorded as a report by `/sdd-qa defect`)
 **Severity**: SEV-3
 **Created**: 2026-09-27
 **Last Updated**: 2026-09-27

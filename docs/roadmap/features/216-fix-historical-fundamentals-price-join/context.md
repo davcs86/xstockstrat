@@ -6,7 +6,7 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 
 ## Session 2026-09-27 (/sdd-triage)
 
-- Bug reported via defect report `docs/reports/2026-09-27-fundamentals-backfill-not-rederived-defect.md`
+- Bug reported via defect report `docs/reports/2026-09-27-fundamentals-backfill-not-rederived-defect.md` (pruned 2026-10-05; `git show 2ce8de0a:docs/reports/2026-09-27-fundamentals-backfill-not-rederived-defect.md`)
   (GitHub Issues are disabled on this repo — recorded as a file by `/sdd-qa defect`, so there is no
   issue number/URL; report path used where the issue link would go, and the Track A/B close steps are
   skipped).

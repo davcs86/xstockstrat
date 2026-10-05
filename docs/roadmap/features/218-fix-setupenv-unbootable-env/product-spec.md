@@ -1,7 +1,7 @@
 # Product Spec: fix-setupenv-unbootable-env
 
 **Type**: bug
-**GitHub Issue**: docs/reports/2026-10-02-setupenv-unbootable-env-defect.md (GitHub Issues disabled on this repo)
+**GitHub Issue**: docs/reports/2026-10-02-setupenv-unbootable-env-defect.md (pruned 2026-10-05; `git show 2ce8de0a:docs/reports/2026-10-02-setupenv-unbootable-env-defect.md`) (GitHub Issues disabled on this repo)
 **Severity**: SEV-3
 **Created**: 2026-10-02
 

@@ -15,8 +15,9 @@ import (
 	"github.com/xstockstrat/portfolio/internal/repository"
 )
 
-// Regression suite for docs/reports/2026-10-02-portfolio-fill-db-errors-defect.md: a DB error on
-// the fill path emits no ledger event and is surfaced so the consumer does not advance past it.
+// Regression suite for docs/reports/2026-10-02-portfolio-fill-db-errors-defect.md (pruned
+// 2026-10-05; git show 2ce8de0a:<path>): a DB error on the fill path emits no ledger event and is
+// surfaced so the consumer does not advance past it.
 
 var errDBBlip = errors.New("conn reset")
 

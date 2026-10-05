@@ -2606,3 +2606,52 @@ ambiguity is logged here).
 - **Rule it implies**: A restriction hoisted into a shared resolver must be structural (required
   args, or resolved inside the resolver), not opt-in kwargs with an empty default. When an identity
   check neutralises a flag, also clear the flag in data or record the accepted risk.
+
+### 2026-10-05 — 2026-10-02-alpaca-cancel-422-defect — assumption
+- **Mistake**: Trading wrote a terminal local order status from a broker reply that did not confirm
+  it. The Alpaca adapter treated `422` on `DELETE /v2/orders/{id}` ("already filled/canceled") as
+  success, and `CancelOrder` then recorded `CANCELED` unconditionally. Terminal orders drop out of
+  `pollFills`, so the wrong status could never self-heal: the fill was lost, portfolio never booked
+  it, and reconciliation later saw an unexplained position. Same class as `done_for_day` → CANCELED
+  (trading CLAUDE.md § Order Status Reconciliation) and related to fails.md:1674 (feature 159 flagged
+  the unconditional CANCELED write in `CancelOrder`; the shipped 159 guard was the offline-type check).
+- **Evidence**: `docs/repo-surveyor/debt-radar-findings.md:42-51,416` (D-03); `services/xstockstrat-trading/CLAUDE.md:27`
+  (shipped re-read behaviour); `internal/service/trading_cancel_not_cancelable_test.go`; fix
+  `cc3a20c` (#1213); report pruned 2026-10-05 (`git show 2ce8de0a:docs/reports/2026-10-02-alpaca-cancel-422-defect.md`).
+- **Rule it implies**: Never persist a terminal order status unless the broker confirmed that exact
+  state — a terminal write switches off every self-healing poller, so a wrong one is permanent. On a
+  reply that covers several outcomes, re-read broker truth and adopt it through the same path
+  `pollFills` uses. Proposed (beyond the report): treat transient/unknown replies the same way and
+  audit adapters that map a non-2xx to success. Candidate TRADING-* invariant via /context-constitution.
+
+### 2026-10-05 — 2026-10-02-flatten-rejection-skips-halt-defect — assumption
+- **Mistake**: `flattenAndHalt`'s retry loop went through the idempotent order-intent seam and judged
+  success by `err == nil`. With the dedup key stable across retries, the seam replays a stored
+  terminal failure as `(&stored, nil)` (`order_intent.go:79-80` maps `IntentStateRejected` to
+  `intentActionReturnStored`), so a broker REJECTED on one attempt read as "flattened" on the next
+  and the protective halt was skipped. Stable keys (fails.md:2119) and replaying the stored outcome
+  are each correct; together they turn a stored failure into success for a no-error caller.
+- **Evidence**: `docs/repo-surveyor/debt-radar-findings.md:251-257,414` (D-01; :257 notes no metric
+  told "flattened" from "stored rejection"); `services/xstockstrat-trading/CLAUDE.md:25`;
+  `internal/service/trading.go` re-mint comment; `trading_flatten_rejection_test.go`; fix `cc3a20c`
+  (#1213); report pruned 2026-10-05 (`git show 2ce8de0a:docs/reports/2026-10-02-flatten-rejection-skips-halt-defect.md`).
+- **Rule it implies**: A caller retrying through an idempotent/dedup seam must check the returned
+  status, not just the error. Keep the key after transient or unknown outcomes; mint a new one only
+  after a definitive terminal failure; exhausted retries always halt. Candidate TRADING-* companion to
+  TRADING-6 via /context-constitution.
+
+### 2026-10-05 — 2026-10-02-opportunity-actions-unimplemented-defect — assumption
+- **Mistake**: `opportunities.spec.ts` mocked `SetOpportunityAction` with a browser-level `page.route`,
+  which answers before the request reaches the BFF router. The BFF never registered a `forward()`
+  for it, yet the e2e suite stayed green while Snooze/Dismiss returned Unimplemented (501) in
+  production (SEV-2). The per-page `page.route` isolation recommended at insights.md:1159 is the same
+  mechanism; neither it nor fails.md:1279 says a browser-layer mock removes the BFF from the test path.
+- **Evidence**: `services/xstockstrat-ui/e2e/insights/opportunities.spec.ts` (the mock);
+  `docs/repo-surveyor/feature-gap-findings.md:28,38`; fix `cc3a20c` (#1213) added a router-traversing
+  case to `e2e/insights/api-smoke.spec.ts`; report pruned 2026-10-05
+  (`git show 2ce8de0a:docs/reports/2026-10-02-opportunity-actions-unimplemented-defect.md`). Related: insights.md:2171 (a new RPC
+  needs a BFF `forward()`; a 501 means it is missing).
+- **Rule it implies**: Every RPC the browser calls through a BFF needs at least one test that goes
+  through the real BFF router (the api-smoke request path, or a gRPC-layer mock below it). A
+  `page.route` of that RPC tests the component only and is no evidence the route exists. Same
+  vacuous-green family as fails.md:800 and fails.md:2422.

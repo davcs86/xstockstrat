@@ -19,8 +19,9 @@ import (
 	"github.com/xstockstrat/trading/internal/repository"
 )
 
-// Regression suite for docs/reports/2026-10-02-flatten-rejection-skips-halt-defect.md: a
-// broker-REJECTED flatten is a failure, and an exhausted retry budget always halts the account.
+// Regression suite for docs/reports/2026-10-02-flatten-rejection-skips-halt-defect.md (pruned
+// 2026-10-05; git show 2ce8de0a:<path>): a broker-REJECTED flatten is a failure, and an exhausted
+// retry budget always halts the account.
 
 // execOnlyDB lets TradingRepo.UpsertOrder succeed without a database.
 type execOnlyDB struct{}

@@ -6,7 +6,7 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 
 ## Session 2026-10-02 (/sdd-triage)
 
-- Bug reported via defect report docs/reports/2026-10-02-setupenv-unbootable-env-defect.md (GitHub Issues disabled). Origin: repo-surveyor feature-gap G-02 (`docs/repo-surveyor/feature-gap-findings.md`).
+- Bug reported via defect report docs/reports/2026-10-02-setupenv-unbootable-env-defect.md (pruned 2026-10-05; `git show 2ce8de0a:docs/reports/2026-10-02-setupenv-unbootable-env-defect.md`) (GitHub Issues disabled). Origin: repo-surveyor feature-gap G-02 (`docs/repo-surveyor/feature-gap-findings.md`).
 - Severity: SEV-3. The survey proposed one level higher; it was lowered at triage under the bug-triage rubric, because this is local onboarding tooling with no trading-path dependency.
 - Routed to SDD path (Track C).
 - Created: feature.md, product-spec.md, acceptance.feature (regression scenarios @AC-1/@AC-2), context.md.
