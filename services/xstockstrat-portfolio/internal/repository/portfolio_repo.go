@@ -170,7 +170,7 @@ func (r *PortfolioRepo) ListPositions(ctx context.Context, userID string, mode c
 		WHERE %s
 		ORDER BY symbol ASC LIMIT $%d`, strings.Join(conds, " AND "), limitIdx)
 
-	rows, err := r.pool.Query(ctx, q, args...)
+	rows, err := r.db.Query(ctx, q, args...)
 	if err != nil {
 		return nil, "", fmt.Errorf("list positions: %w", err)
 	}
@@ -328,7 +328,7 @@ func (r *PortfolioRepo) UpsertPositionFromSync(ctx context.Context, userID, symb
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW(), NOW())
 		ON CONFLICT (user_id, symbol, trading_mode, account_id) DO UPDATE
 		SET qty=$3, avg_entry_price=$4, cost_basis=$5, current_price=$8, market_value=$9, unrealized_pnl=$10, unrealized_pnl_pct=$11, day_pnl=$12, day_pnl_pct=$13, source=$14, as_of=$15, updated_at=NOW()`
-	_, err := r.pool.Exec(ctx, q, userID, symbol, qty, avgCost, costBasis, tradingMode, accountID,
+	_, err := r.db.Exec(ctx, q, userID, symbol, qty, avgCost, costBasis, tradingMode, accountID,
 		val.CurrentPrice, val.MarketValue, val.UnrealizedPnl, val.UnrealizedPnlPct, val.DayPnl, val.DayPnlPct,
 		val.Source, asOf)
 	return err
@@ -350,7 +350,7 @@ func (r *PortfolioRepo) UpdatePositionBracket(ctx context.Context, userID, symbo
 func (r *PortfolioRepo) DeletePositionsNotInSync(ctx context.Context, accountID, userID string, presentSymbols []string) error {
 	if len(presentSymbols) == 0 {
 		const q = `DELETE FROM portfolio.positions WHERE account_id=$1`
-		_, err := r.pool.Exec(ctx, q, accountID)
+		_, err := r.db.Exec(ctx, q, accountID)
 		return err
 	}
 	args := make([]interface{}, 0, len(presentSymbols)+2)
@@ -362,7 +362,7 @@ func (r *PortfolioRepo) DeletePositionsNotInSync(ctx context.Context, accountID,
 	}
 	q := fmt.Sprintf(`DELETE FROM portfolio.positions WHERE account_id=$1 AND (user_id <> $2 OR symbol NOT IN (%s))`,
 		joinStrings(placeholders, ","))
-	_, err := r.pool.Exec(ctx, q, args...)
+	_, err := r.db.Exec(ctx, q, args...)
 	return err
 }
 
