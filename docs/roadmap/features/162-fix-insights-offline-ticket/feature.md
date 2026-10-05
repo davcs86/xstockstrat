@@ -2,7 +2,7 @@
 
 **Type**: bug
 **Development Branch**: `feature/fix-insights-offline-ticket`
-**Defect Report**: `docs/reports/2026-08-27-insights-signal-ticket-offline-account-flake-defect.md`
+**Defect Report**: `docs/reports/2026-08-27-insights-signal-ticket-offline-account-flake-defect.md` (pruned 2026-10-05; `git show 2ce8de0a:docs/reports/2026-08-27-insights-signal-ticket-offline-account-flake-defect.md`)
 **Severity**: SEV-3
 **Created**: 2026-08-27
 **Last Updated**: 2026-08-27

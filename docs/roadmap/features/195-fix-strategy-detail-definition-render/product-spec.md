@@ -4,7 +4,7 @@
 
 ## Source
 
-`docs/reports/2026-09-18-strategy-detail-definition-not-rendered-defect.md` — the report proves the
+`docs/reports/2026-09-18-strategy-detail-definition-not-rendered-defect.md` (pruned 2026-10-05; `git show 2ce8de0a:docs/reports/2026-09-18-strategy-detail-definition-not-rendered-defect.md`) — the report proves the
 data is already fetched (`page.tsx` `useGetStrategy`) then never read for components/entryRule/
 exitRule. That report is the authoritative analysis; this is the Track C wrapper.
 

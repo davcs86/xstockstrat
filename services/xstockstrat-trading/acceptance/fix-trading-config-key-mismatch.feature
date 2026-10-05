@@ -1,7 +1,7 @@
 # Promoted from docs/roadmap/features/192-fix-trading-config-key-mismatch/acceptance.feature at
 # archive time (Constitution C-16 backfill — promotion was operator-deferred at launch). Source-feature
 # provenance is carried on every scenario's `@feature-192` tag. Durable regression guards for the
-# defect at docs/reports/2026-09-15-trading-config-namespace-key-mismatch-defect.md: the trading
+# defect at docs/reports/2026-09-15-trading-config-namespace-key-mismatch-defect.md (pruned 2026-10-05; git show 2ce8de0a:docs/reports/<file>): the trading
 # service must resolve the LIVE platform.trading_state (and configured trading.risk.* values) from
 # config, not the fail-closed HALTED / hardcoded defaults — the getter's key string must match the key
 # under which the value is actually delivered (CONFIG-9). A rule enters only by promotion from a

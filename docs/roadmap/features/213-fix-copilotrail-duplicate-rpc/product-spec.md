@@ -1,7 +1,7 @@
 # Product Spec: fix-copilotrail-duplicate-rpc
 
 **Type**: bug
-**Defect Report**: `docs/reports/2026-09-26-copilotrail-duplicate-listopportunities-rpc-defect.md`
+**Defect Report**: `docs/reports/2026-09-26-copilotrail-duplicate-listopportunities-rpc-defect.md` (pruned 2026-10-05; `git show 2ce8de0a:docs/reports/2026-09-26-copilotrail-duplicate-listopportunities-rpc-defect.md`)
 **Severity**: SEV-3
 **Created**: 2026-09-26
 

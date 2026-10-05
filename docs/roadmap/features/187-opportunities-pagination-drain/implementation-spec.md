@@ -14,7 +14,7 @@
 > guards (all 35 tests in the file pass). **@AC-7** (CopilotRail shares the page-1 cache / no separate
 > RPC) is **NOT covered** — it is genuinely violated on the shipped tree (two `ListOpportunities`
 > RPCs fire; query keys differ on `sort`), so a passing strict test is not writable without a code
-> fix. Filed as `docs/reports/2026-09-26-copilotrail-duplicate-listopportunities-rpc-defect.md`
+> fix. Filed as `docs/reports/2026-09-26-copilotrail-duplicate-listopportunities-rpc-defect.md` (pruned 2026-10-05; `git show 2ce8de0a:docs/reports/2026-09-26-copilotrail-duplicate-listopportunities-rpc-defect.md`)
 > (SEV-3) → `/sdd-triage`. The @AC-7 guard is deferred until that fix lands.
 
 ## Execution Summary

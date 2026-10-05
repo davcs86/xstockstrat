@@ -1,6 +1,6 @@
 Feature: fix-trading-config-key-mismatch (bug fix)
   Regression guard for the defect at
-  docs/reports/2026-09-15-trading-config-namespace-key-mismatch-defect.md:
+  docs/reports/2026-09-15-trading-config-namespace-key-mismatch-defect.md (pruned 2026-10-05; git show 2ce8de0a:docs/reports/<file>):
   the trading service must resolve the LIVE platform.trading_state from config, not the
   fail-closed HALTED default.
 

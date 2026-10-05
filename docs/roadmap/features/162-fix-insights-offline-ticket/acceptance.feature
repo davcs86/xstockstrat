@@ -1,6 +1,6 @@
 Feature: fix-insights-offline-ticket (bug fix)
   Regression guard for the defect report
-  2026-08-27-insights-signal-ticket-offline-account-flake-defect.md: the insights Signal-detail
+  2026-08-27-insights-signal-ticket-offline-account-flake-defect.md (pruned 2026-10-05; git show 2ce8de0a:docs/reports/<file>): the insights Signal-detail
   order ticket must keep the broker ticket for an offline account.
 
   @AC-1 @regression

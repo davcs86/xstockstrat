@@ -2,7 +2,7 @@
 
 **Type**: bug
 **Development Branch**: `feature/fix-copilotrail-duplicate-rpc`
-**Defect Report**: `docs/reports/2026-09-26-copilotrail-duplicate-listopportunities-rpc-defect.md` (GitHub Issues disabled on this repo)
+**Defect Report**: `docs/reports/2026-09-26-copilotrail-duplicate-listopportunities-rpc-defect.md` (pruned 2026-10-05; `git show 2ce8de0a:docs/reports/2026-09-26-copilotrail-duplicate-listopportunities-rpc-defect.md`) (GitHub Issues disabled on this repo)
 **Severity**: SEV-3
 **Created**: 2026-09-26
 **Last Updated**: 2026-09-26

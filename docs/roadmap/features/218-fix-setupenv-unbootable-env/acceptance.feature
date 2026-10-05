@@ -1,5 +1,5 @@
 Feature: fix-setupenv-unbootable-env (bug fix)
-  Regression guard for docs/reports/2026-10-02-setupenv-unbootable-env-defect.md:
+  Regression guard for docs/reports/2026-10-02-setupenv-unbootable-env-defect.md (pruned 2026-10-05; git show 2ce8de0a:<path>):
   setup-env produces an .env that docker compose rejects.
 
   @AC-1 @regression
