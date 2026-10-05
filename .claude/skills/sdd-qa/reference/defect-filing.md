@@ -15,12 +15,37 @@ the endpoint. Trust the measurement.
 ## The output
 
 Write `docs/reports/<ISO-date>-<slug>-defect.md`, where `<slug>` is kebab-case derived from the
-title. Then print:
+title, **and** its status sidecar `docs/reports/<ISO-date>-<slug>-defect.status` containing the
+single line `open` (format below). Then print:
 
 ```
-Recorded: docs/reports/<file>
+Recorded: docs/reports/<file>  (status: open)
 Next: /sdd-triage --from-report docs/reports/<file>
 ```
+
+## The status sidecar
+
+Every defect report has a sibling `<report-basename>.status` — the report's lifecycle, kept out of
+the report body so the body stays a point-in-time record. Same contract as a feature's `status.md`:
+plain text, read with `head -1`, never duplicated into the report.
+
+```
+<status>
+ref: <kind>:<target>
+```
+
+| Line 1 `<status>` | Meaning | Written by | `ref:` line |
+|---|---|---|---|
+| `open` | Recorded, not yet triaged | `/sdd-qa defect` | absent |
+| `triaged` | Routed to a fix track; fix not yet shipped | `/sdd-triage` | the track target |
+| `resolved` | Fix merged | `/sdd-triage` (Track B confirm, `backmerge`); a backfill | the fix |
+| `wont-fix` | Human decided not to fix | whoever records the decision | where it was decided |
+
+`ref:` kinds: `feature:<NNN-slug>` (Track C), `hotfix:hotfix/<slug>` (Track A), `config:<key>`
+(Track B), `commit:<sha>` (fixed directly, outside any track). A `triaged` report whose
+`feature:` ref has reached `launched` counts as resolved — nothing re-stamps it; `/sdd-archiver`
+derives it. `resolved` and `wont-fix` reports are pruned by `/sdd-archiver` (lessons → Ledger, then
+`git rm` of both files; the text stays in git history).
 
 ## The template
 
@@ -96,6 +121,7 @@ Do not assume the parse works — run it:
 ```bash
 grep -oE 'SEV-[123]' docs/reports/<file> | sort -u    # must print exactly one line
 grep -n '^\*\*Severity\*\*:' docs/reports/<file>
+head -1 docs/reports/<basename>.status                 # must print: open
 ```
 
 An unexecuted gate is a claim, not a check (`docs/roadmap/ledger/fails.md`, 2026-07-29).

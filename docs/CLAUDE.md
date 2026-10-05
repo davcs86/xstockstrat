@@ -12,7 +12,7 @@ Operational runbooks, one-time setup guides, implementation roadmap, and reusabl
 | [`runbooks/`](runbooks/CLAUDE.md) | Operational procedures for day-to-day platform tasks | Adding a data source, rolling out a config change, backfilling data, building an indicator, managing proto versions |
 | [`setup/`](setup/CLAUDE.md) | One-time setup guides for external services | First-time Alpaca, DigitalOcean, Grafana Cloud, or n8n setup |
 | [`roadmap/`](roadmap/CLAUDE.md) | Implementation roadmap and per-phase deviation notes | Understanding what was built, why a decision was made, or what's left to implement |
-| `reports/` | Dated point-in-time reports — registered-asset catalogs, validation findings, and defect write-ups. GitHub Issues are disabled on this repo (`POST /issues` → `410`), so this is where a defect is recorded before `/sdd-triage --from-report` routes it | Reviewing what was registered or found on a given date; recording a new defect |
+| `reports/` | Dated point-in-time reports — registered-asset catalogs, validation findings, and defect write-ups. GitHub Issues are disabled on this repo (`POST /issues` → `410`), so this is where a defect is recorded before `/sdd-triage --from-report` routes it. Each defect report has a `<basename>.status` sidecar (`open` → `triaged` → `resolved`/`wont-fix`; format in `.claude/skills/sdd-qa/reference/defect-filing.md`); `/sdd-archiver` prunes resolved ones, so a fixed defect's write-up lives in git history | Reviewing what was registered or found on a given date; recording a new defect |
 
 ---
 

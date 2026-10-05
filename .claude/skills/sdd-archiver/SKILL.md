@@ -1,8 +1,8 @@
 ---
 name: sdd-archiver
-description: Destructively archive completed SDD features — synthesize the what/why/how that CANNOT be recovered from code or specs, land it where agents actually read it, then prune the verbose artifacts. Usage — /sdd-archiver [<feature-slug> | all]. With no args it reports every terminal-state feature (launched, rolled-back, demoted/canceled) not yet archived and processes the next one; a slug archives one; `all` batches them (cap 10/run). Per feature it delegates read-only synthesis to the feature-synthesizer subagent, runs an adversarial completeness check, then (after a consent gate) distils generalizable lessons into the Ledger (insights.md/fails.md), rewrites context.md down to an `## Archive Synthesis` block, stamps `**Archived**` on feature.md, and DELETES product-spec.md / recon.md / design.md / implementation-spec.md — all through a docs-only PR to main-dev. Use this whenever completed feature artifacts are piling up with little value, when someone wants to clean up / declutter / tidy / garbage-collect / prune / reclaim stale or finished feature directories, after a promotion flips features to launched, to capture decision rationale / rejected alternatives / build scars / gotchas before they are forgotten or pruned, to run a retro / retrospective / post-mortem on a shipped or a rolled-back / demoted / abandoned feature, to distil / harvest / memorialize the lessons learned or institutional knowledge from finished work, to answer "what did we learn from feature X", or to reduce the accumulating pile of old SDD spec files. Never deletes feature.md or status.md, never changes lifecycle status, never rewrites git history.
-argument-hint: "[<feature-slug> | all]"
-allowed-tools: Read Write Edit Task AskUserQuestion Bash(find *) Bash(grep *) Bash(ls *) Bash(date *) Bash(git fetch *) Bash(git show *) Bash(git ls-remote *) Bash(git status *) Bash(git checkout *) Bash(git branch *) Bash(git rm *) Bash(git add *) Bash(git commit *) Bash(git push *) Bash(gh pr *)
+description: Destructively archive completed SDD features — synthesize the what/why/how that CANNOT be recovered from code or specs, land it where agents actually read it, then prune the verbose artifacts. Usage — /sdd-archiver [<feature-slug> | all | reports]. With no args it reports every terminal-state feature (launched, rolled-back, demoted/canceled) not yet archived and processes the next one; a slug archives one; `all` batches them (cap 10/run). Per feature it delegates read-only synthesis to the feature-synthesizer subagent, runs an adversarial completeness check, then (after a consent gate) distils generalizable lessons into the Ledger (insights.md/fails.md), rewrites context.md down to an `## Archive Synthesis` block, stamps `**Archived**` on feature.md, and DELETES product-spec.md / recon.md / design.md / implementation-spec.md; it also prunes resolved defect reports under docs/reports/ (status sidecar resolved / wont-fix, or triaged to a now-launched fix feature) after saving any lesson worth keeping to the Ledger — all through a docs-only PR to main-dev. Use this whenever completed feature artifacts are piling up with little value, when someone wants to clean up / declutter / tidy / garbage-collect / prune / reclaim stale or finished feature directories, after a promotion flips features to launched, to capture decision rationale / rejected alternatives / build scars / gotchas before they are forgotten or pruned, to run a retro / retrospective / post-mortem on a shipped or a rolled-back / demoted / abandoned feature, to distil / harvest / memorialize the lessons learned or institutional knowledge from finished work, to answer "what did we learn from feature X", to clear out fixed bug / defect reports, or to reduce the accumulating pile of old SDD spec files. Never deletes feature.md or status.md, never changes lifecycle status, never rewrites git history.
+argument-hint: "[<feature-slug> | all | reports]"
+allowed-tools: Read Write Edit Task AskUserQuestion Bash(find *) Bash(head *) Bash(grep *) Bash(ls *) Bash(date *) Bash(git fetch *) Bash(git show *) Bash(git ls-remote *) Bash(git status *) Bash(git checkout *) Bash(git branch *) Bash(git rm *) Bash(git add *) Bash(git commit *) Bash(git push *) Bash(gh pr *)
 effort: medium
 ---
 
@@ -15,12 +15,14 @@ and an explicit human consent gate — and every deletion goes through a reviewa
 stays recoverable from git history.
 
 Progressive disclosure: this SKILL.md is the router. Read
-`reference/write-formats.md` only at Phase 5 (the exact write/delete blocks) and
-`templates/archive-synthesis.md` when rewriting a `context.md`.
+`reference/write-formats.md` only at Phase 5 (the exact write/delete blocks),
+`templates/archive-synthesis.md` when rewriting a `context.md`, and `reference/report-pruning.md`
+only when Phase 1 lists a `PRUNABLE-REPORT`.
 
 ## Arguments
 
-- `$ARGUMENTS[0]` — a feature slug, the literal `all`, or absent (report mode).
+- `$ARGUMENTS[0]` — a feature slug, the literal `all`, the literal `reports` (defect reports only),
+  or absent (report mode).
 
 ---
 
@@ -57,6 +59,11 @@ for d in $(find docs/roadmap/features -maxdepth 1 -mindepth 1 -type d | sort); d
 done
 ```
 
+Also enumerate **defect reports** — every `docs/reports/*.md` with a `.status` sidecar — and print a
+`PRUNABLE-REPORT  <status>  <ref>  <path>` row for each that passes the prunable test in
+`reference/report-pruning.md` § R-1 (a `triaged` report is prunable once its `feature:` ref is
+`launched`). Reports without a sidecar (audits, catalogs) are never candidates.
+
 Single-slug resolve: `find docs/roadmap/features -maxdepth 1 -mindepth 1 -type d -name "*-$ARGUMENTS[0]"`.
 
 For each feature you will actually process, **detect non-standard artifacts** — anything in the dir
@@ -84,6 +91,11 @@ already gone; record the warning as an Open Thread rather than proceeding silent
   archived (`<date>`).").
 - **`all`:** process the whole `UNARCHIVED` list, **capped at N=10 this run**. If more remain, say so
   and offer to re-run.
+- **`reports`:** process only the `PRUNABLE-REPORT` list (cap 10/run) via
+  `reference/report-pruning.md`; skip the feature phases.
+- In every mode, a processed feature's `PRUNABLE-REPORT` rows whose ref is `feature:<that NNN-slug>`
+  ride the same run and PR (feature first, then its report — so the report's lessons dedup against
+  the entries the feature just wrote). No-args mode also prints the `PRUNABLE-REPORT` table.
 
 ---
 
@@ -115,6 +127,9 @@ the irreplaceable scars and shipped-vs-design divergences live, none of which re
 
 Hold only the returned digest — never the raw artifacts (Constitution P-01).
 
+For each selected `PRUNABLE-REPORT`, run `reference/report-pruning.md` § R-2 (report-synthesize)
+here and § R-3 (verify) alongside Phase 3.5 — same gate, same blocking rule.
+
 ---
 
 ## PHASE 3.5 — VERIFY COMPLETENESS (the critical safeguard, before any deletion)
@@ -142,6 +157,7 @@ options:
   - "Skip this feature"
 ```
 
+List any defect reports riding this run (status, ref, `[NEW]` lesson count) in the same question.
 For `all` mode, issue one up-front batch gate summarizing every feature + its deletion counts:
 "Archive + prune all <K>" / "Review one-by-one" / "Cancel".
 
@@ -222,6 +238,8 @@ Read `reference/write-formats.md` for the exact blocks. On a `claude/archive-<sl
 
 Commit: `docs(archive): archive <slug> — synthesis to context.md + Ledger, promote scenarios, prune specs`.
 
+Then, for the run's defect reports, apply `reference/report-pruning.md` § R-5 as its own commit.
+
 ---
 
 ## PHASE 6 — PR & REPORT
@@ -253,7 +271,9 @@ reconciliation in the PR body (root CLAUDE.md § Teardown).
 - **Synthesize only irrecoverable reasoning.** Never write into memory anything grep-able from code,
   product-spec, implementation-spec, design, proto, or migrations. The rubric is the point of the skill.
 - **Deletion is a fixed allowlist** — `product-spec.md`, `recon.md`, `design.md`,
-  `implementation-spec.md`. Never `git rm` any other file or subdir on the archiver's own judgment.
+  `implementation-spec.md`, plus a prunable defect report's `<basename>.md` + `<basename>.status`
+  pair (`reference/report-pruning.md`). Never `git rm` any other file or subdir on the archiver's own
+  judgment — never a report without a sidecar, never an `open` or unlaunched-`triaged` one.
 - **`acceptance.feature` is deliberately NOT on the deletion allowlist (Constitution C-16).** Its
   `@AC-*` scenarios are promoted into the durable per-service suites at launch; the per-feature copy
   is retained as the provenance record. **Phase 4c** ensures that promotion happened (via the
