@@ -2453,7 +2453,7 @@ ambiguity is logged here).
   were unavailable; nothing specified the result for a skipped gate, so `passed` kept its default `True`
   and status stayed OK — candidates "passed" hard filters never evaluated. The skip was spec-mandated
   and the existing analysis tests asserted the resulting OK/passed=true, so review and CI were green on
-  the bug. Distinct from fails.md:1815 (the neutral `0.5` *score* fallback, fixed later in #971).
+  the bug. Distinct from fails.md:1815 (the neutral `0.5` *score* fallback, fixed by feature 144, #976).
 - **Evidence**: commit `bef4258f` (#902) — `services/xstockstrat-analysis/app/services/screener.py`
   fails closed to `SCREEN_RESULT_STATUS_INSUFFICIENT_DATA`, assertions replaced in `tests/test_screener.py`
   (a single symbol missing from an otherwise-fetched batch keeps OK but fails the filter, since it is no
