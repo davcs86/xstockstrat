@@ -10,6 +10,7 @@
  */
 import { describe, it, before } from 'node:test';
 import assert from 'node:assert/strict';
+import { EventEmitter } from 'node:events';
 
 // We import ConfigWatcher but need to prevent it from dialling a gRPC channel.
 // The constructor creates a ConfigServiceClient and calls startWatch(), both
@@ -119,7 +120,6 @@ describe('ConfigWatcher getters', () => {
 // both 'end' and 'error' for one failed server stream; that must yield exactly one reconnect.
 describe('ConfigWatcher reconnect', () => {
   function fakeStubWatcher() {
-    const { EventEmitter } = require('node:events') as typeof import('node:events');
     const calls: Array<{ stream: any; cancelled: number }> = [];
     const w = makeWatcher();
     Object.assign(w, { namespace: 'test', call: null, reconnectTimer: null, reconnectAttempt: 0, resolveSnapshot: () => {} });
