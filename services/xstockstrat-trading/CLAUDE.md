@@ -215,8 +215,9 @@ process's own orders plus `LoadInflightOrders`' NEW/PARTIALLY_FILLED hydrate, so
 the platform placed that has since reached a terminal state (FILLED/CANCELED/EXPIRED/REJECTED) is
 absent from memory yet still persisted in `trading.orders`. Before flagging any unmatched broker
 order, `reconcileTick` calls `reconcileOrderLookup.KnownBrokerOrderIDs` (one DB round-trip per tick,
-scoped to the account's unmatched IDs) — only an order the platform has **no persisted record of at
-all** is a genuine `unknown_broker_order`. Comparing against memory alone previously misclassified
+scoped to the account's unmatched IDs, matching `trading.orders` **and** the bracket leg ids in
+`trading.order_brackets` — Alpaca lists bracket legs as top-level orders) — only an order the platform
+has **no persisted record of at all** is a genuine `unknown_broker_order`. Comparing against memory alone previously misclassified
 every historical terminal order the platform itself placed as foreign, halting the account on a
 routine restart; that was an observed production false halt. A transient DB lookup error is
 **fail-safe**: the account's unknown-order check is skipped for that tick (re-evaluated next tick),
