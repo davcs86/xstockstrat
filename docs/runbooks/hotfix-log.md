@@ -17,9 +17,9 @@ following the format in `docs/runbooks/bug-triage.md#hotfix-log-format`.
 - **Fix summary**: _pending_
 - **PR**: _pending_
 - **Platform-lead approver**: _pending_
-- **Back-merge commit**: _pending_
+- **Back-merge commit**: not required — main ⊂ main-dev at d70e3592; fix cc3a20c (#1213) reached main via promotion #1214 (4c996fa7)
 - **Maintenance mode applied**: no
-- **Status**: in-progress
+- **Status**: deployed
 
 
 ## 2026-10-02T14:01:50Z — hotfix/fix-alpaca-cancel-422
@@ -31,9 +31,9 @@ following the format in `docs/runbooks/bug-triage.md#hotfix-log-format`.
 - **Fix summary**: _pending_
 - **PR**: _pending_
 - **Platform-lead approver**: _pending_
-- **Back-merge commit**: _pending_
+- **Back-merge commit**: not required — main ⊂ main-dev at d70e3592; fix cc3a20c (#1213) reached main via promotion #1214 (4c996fa7)
 - **Maintenance mode applied**: no
-- **Status**: in-progress
+- **Status**: deployed
 
 
 ## 2026-10-02T14:01:50Z — hotfix/fix-portfolio-fill-db-errors
@@ -45,9 +45,9 @@ following the format in `docs/runbooks/bug-triage.md#hotfix-log-format`.
 - **Fix summary**: _pending_
 - **PR**: _pending_
 - **Platform-lead approver**: _pending_
-- **Back-merge commit**: _pending_
+- **Back-merge commit**: not required — main ⊂ main-dev at d70e3592; fix cc3a20c (#1213) reached main via promotion #1214 (4c996fa7)
 - **Maintenance mode applied**: no
-- **Status**: in-progress
+- **Status**: deployed
 
 
 ## 2026-10-02T14:01:50Z — hotfix/fix-flatten-rejection-skips-halt
@@ -59,9 +59,9 @@ following the format in `docs/runbooks/bug-triage.md#hotfix-log-format`.
 - **Fix summary**: _pending_
 - **PR**: _pending_
 - **Platform-lead approver**: _pending_
-- **Back-merge commit**: _pending_
+- **Back-merge commit**: not required — main ⊂ main-dev at d70e3592; fix cc3a20c (#1213) reached main via promotion #1214 (4c996fa7)
 - **Maintenance mode applied**: no
-- **Status**: in-progress
+- **Status**: deployed
 
 
 ## 2026-10-02T14:01:50Z — hotfix/fix-oauth-login-unvalidated-redirect
@@ -73,9 +73,9 @@ following the format in `docs/runbooks/bug-triage.md#hotfix-log-format`.
 - **Fix summary**: _pending_
 - **PR**: _pending_
 - **Platform-lead approver**: _pending_
-- **Back-merge commit**: _pending_
+- **Back-merge commit**: not required — main ⊂ main-dev at d70e3592; fix cc3a20c (#1213) reached main via promotion #1214 (4c996fa7)
 - **Maintenance mode applied**: no
-- **Status**: in-progress
+- **Status**: deployed
 
 
 ## 2026-08-07T06:53:51Z — hotfix/fix-watchconfig-clients-omit
