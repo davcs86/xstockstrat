@@ -49,12 +49,13 @@ func TestCancelOrder_NotCancelable_BrokerFilled_AdoptsFillNotCanceled(t *testing
 			return &broker.BrokerOrder{BrokerOrderID: "brk-order-1", Status: "filled", FilledQty: 10, FilledAvgPrice: 101.5}, nil
 		},
 	}
-	svc, order := notCancelableSvc(fb, bracket)
+	svc, _ := notCancelableSvc(fb, bracket)
 	resp, err := svc.CancelOrder(ctxAsUser("user-1"), &tradingv1.CancelOrderRequest{OrderId: "ord-1"})
 	if err != nil || resp.Success {
 		t.Fatalf("resp=%+v err=%v, want Success=false (the order filled, it was not canceled)", resp, err)
 	}
 
+	order := svc.orders["ord-1"]
 	if order.Status != tradingv1.OrderStatus_ORDER_STATUS_FILLED {
 		t.Fatalf("status = %v, want FILLED (pre-fix: CANCELED, fill lost)", order.Status)
 	}
@@ -78,10 +79,11 @@ func TestCancelOrder_NotCancelable_BrokerCanceled_RecordsCanceled(t *testing.T) 
 			return &broker.BrokerOrder{BrokerOrderID: "brk-order-1", Status: "canceled"}, nil
 		},
 	}
-	svc, order := notCancelableSvc(fb, nil)
+	svc, _ := notCancelableSvc(fb, nil)
 	if resp, err := svc.CancelOrder(ctxAsUser("user-1"), &tradingv1.CancelOrderRequest{OrderId: "ord-1"}); err != nil || !resp.Success {
 		t.Fatalf("resp=%+v err=%v, want Success=true", resp, err)
 	}
+	order := svc.orders["ord-1"]
 	if order.Status != tradingv1.OrderStatus_ORDER_STATUS_CANCELED {
 		t.Fatalf("status = %v, want CANCELED", order.Status)
 	}
@@ -97,11 +99,12 @@ func TestCancelOrder_NotCancelable_ReReadFails_LeavesOrderForPoller(t *testing.T
 			return nil, errors.New("broker timeout")
 		},
 	}
-	svc, order := notCancelableSvc(fb, nil)
+	svc, _ := notCancelableSvc(fb, nil)
 	_, err := svc.CancelOrder(ctxAsUser("user-1"), &tradingv1.CancelOrderRequest{OrderId: "ord-1"})
 	if grpcstatus.Code(err) != codes.Unavailable {
 		t.Fatalf("err = %v, want Unavailable", err)
 	}
+	order := svc.orders["ord-1"]
 	if order.Status != tradingv1.OrderStatus_ORDER_STATUS_NEW {
 		t.Fatalf("status = %v, want unchanged NEW so pollFills still converges it", order.Status)
 	}

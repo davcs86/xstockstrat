@@ -325,7 +325,7 @@ class TestExecuteFormulaParameterErrors:
         req = indicators_pb2.ExecuteFormulaRequest(formula_id="f-1")
         req.input_params.update({"period": 500})  # above max → validation fails
 
-        resp = await servicer.ExecuteFormula(req, MagicMock())
+        resp = await servicer.ExecuteFormula(req, _ctx([("x-user-id", "user-1")]))
         assert resp.success is False
         assert [e.name for e in resp.parameter_errors] == ["period"]
         assert "maximum" in resp.parameter_errors[0].reason
@@ -364,7 +364,7 @@ class TestExecuteFormulaOutputEnforcement:
         # Formula emits only "value"; declares "upper" → contract violation.
         servicer._repo = self._repo_for("result = {'value': 1}", [{"name": "upper"}])
         resp = await servicer.ExecuteFormula(
-            indicators_pb2.ExecuteFormulaRequest(formula_id="f-1"), MagicMock()
+            indicators_pb2.ExecuteFormulaRequest(formula_id="f-1"), _ctx([("x-user-id", "user-1")])
         )
         assert resp.success is False
         assert "upper" in resp.error
@@ -376,7 +376,7 @@ class TestExecuteFormulaOutputEnforcement:
         servicer = IndicatorsServicer(config_watcher=self._cfg())
         servicer._repo = self._repo_for("result = {'value': 1, 'upper': 2}", [{"name": "upper"}])
         resp = await servicer.ExecuteFormula(
-            indicators_pb2.ExecuteFormulaRequest(formula_id="f-1"), MagicMock()
+            indicators_pb2.ExecuteFormulaRequest(formula_id="f-1"), _ctx([("x-user-id", "user-1")])
         )
         assert resp.success is True
         assert dict(resp.output) == {"value": 1, "upper": 2}
@@ -404,7 +404,7 @@ class TestExecuteFormulaInputData:
         )
         req.input_data.update({"close": [10.0, 20.0, 30.0], "period": 3})
 
-        resp = await servicer.ExecuteFormula(req, MagicMock())
+        resp = await servicer.ExecuteFormula(req, _ctx([("x-user-id", "user-1")]))
         assert resp.success is True, resp.error
         assert dict(resp.output) == {"value": 20.0}
 
@@ -436,7 +436,7 @@ class TestExecuteFormulaInlineParameters:
         )
         req.input_params.update({"period": 21})
 
-        resp = await servicer.ExecuteFormula(req, MagicMock())
+        resp = await servicer.ExecuteFormula(req, _ctx([("x-user-id", "user-1")]))
         assert resp.success is True, resp.error
         assert dict(resp.output) == {"value": 42}
 
@@ -453,7 +453,7 @@ class TestExecuteFormulaInlineParameters:
             parameters=[param],
         )
         # input_params omitted → declared default (14) is applied.
-        resp = await servicer.ExecuteFormula(req, MagicMock())
+        resp = await servicer.ExecuteFormula(req, _ctx([("x-user-id", "user-1")]))
         assert resp.success is True, resp.error
         assert dict(resp.output) == {"value": 14}
 
@@ -470,7 +470,7 @@ class TestExecuteFormulaInlineParameters:
         )
         req.input_params.update({"period": 500})  # above max → validation fails
 
-        resp = await servicer.ExecuteFormula(req, MagicMock())
+        resp = await servicer.ExecuteFormula(req, _ctx([("x-user-id", "user-1")]))
         assert resp.success is False
         assert [e.name for e in resp.parameter_errors] == ["period"]
 
@@ -599,7 +599,7 @@ class TestFormulaWarmupPeriod:
         )
         resp = await servicer.RegisterFormula(req, _ctx([("x-user-id", "u")]))
         got = await servicer.GetFormula(
-            indicators_pb2.GetFormulaRequest(formula_id=resp.formula_id), MagicMock()
+            indicators_pb2.GetFormulaRequest(formula_id=resp.formula_id), _ctx([("x-user-id", "u")])
         )
         assert got.warmup_period == 14
 

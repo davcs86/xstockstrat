@@ -10,6 +10,7 @@
  */
 import { describe, it, before } from 'node:test';
 import assert from 'node:assert/strict';
+import { EventEmitter } from 'node:events';
 
 // We import ConfigWatcher but need to prevent it from dialling a gRPC channel.
 // The constructor creates a ConfigServiceClient and calls startWatch(), both
@@ -112,5 +113,62 @@ describe('ConfigWatcher getters', () => {
 
     assert.ok(Math.abs(w.getFloat('trading.risk.max_position_pct', 0.1) - 0.05) < 1e-9);
     assert.ok(Math.abs(w.getFloat('missing', 0.1) - 0.1) < 1e-9);
+  });
+});
+
+// Regression for docs/reports/2026-10-03-node-configwatcher-stream-doubling-defect.md: grpc-js emits
+// both 'end' and 'error' for one failed server stream; that must yield exactly one reconnect.
+describe('ConfigWatcher reconnect', () => {
+  function fakeStubWatcher() {
+    const calls: Array<{ stream: any; cancelled: number }> = [];
+    const w = makeWatcher();
+    Object.assign(w, { namespace: 'test', call: null, reconnectTimer: null, reconnectAttempt: 0, resolveSnapshot: () => {} });
+    (w as any).stub = {
+      watchConfig: () => {
+        const stream: any = new EventEmitter();
+        const rec = { stream, cancelled: 0 };
+        stream.cancel = () => { rec.cancelled++; };
+        calls.push(rec);
+        return stream;
+      },
+    };
+    return { w, calls };
+  }
+
+  it('reconnects once per failed stream, cancelling it', (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const { w, calls } = fakeStubWatcher();
+    (w as any).startWatch();
+    calls[0].stream.emit('end');
+    calls[0].stream.emit('error', new Error('14 UNAVAILABLE'));
+    t.mock.timers.tick(60_000);
+    assert.strictEqual(calls.length, 2, 'one failure must open exactly one replacement stream');
+    assert.ok(calls[0].cancelled >= 1, 'the failed stream must be cancelled');
+  });
+
+  it('does not multiply streams across repeated failures', (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const { w, calls } = fakeStubWatcher();
+    (w as any).startWatch();
+    for (let i = 0; i < 6; i++) {
+      const s = calls[calls.length - 1].stream;
+      s.emit('end');
+      s.emit('error', new Error('14 UNAVAILABLE'));
+      t.mock.timers.tick(60_000);
+    }
+    assert.strictEqual(calls.length, 7, 'six failures → six reconnects, not 2^6');
+  });
+
+  it('backs off exponentially and resets after data', (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const { w, calls } = fakeStubWatcher();
+    (w as any).startWatch();
+    calls[0].stream.emit('error', new Error('x'));
+    t.mock.timers.tick(499);
+    assert.strictEqual(calls.length, 1, 'no reconnect before the jittered backoff floor (500ms)');
+    t.mock.timers.tick(60_000);
+    assert.strictEqual(calls.length, 2);
+    calls[1].stream.emit('data', { namespace: 'test', version: '1', values: {}, changedKeys: [] });
+    assert.strictEqual((w as any).reconnectAttempt, 0, 'a delivered snapshot resets the backoff');
   });
 });

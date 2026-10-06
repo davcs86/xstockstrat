@@ -100,3 +100,13 @@ Feature: sector-classification-strategy-params
     When the strategy is backtested over "XYZ" and "NEWCO" across 2015-01-01 to 2015-12-31
     Then every "XYZ" bar is scored with an RSI oversold threshold of 25
     And every "NEWCO" bar is scored with an RSI oversold threshold of 30
+
+  @AC-14 @FR-6 @FR-7
+  Scenario: Per-sector overrides reach a fundamentals-input custom formula's params
+    Given strategy "fundamentals_macd_blend" has a component "fscore" bound to the custom formula "Fundamentals Value+Quality Composite (v1)" (declared fundamentalInputs)
+    And the strategy declares an override for "fscore" param "de_bad" with default 2.0 and sector "FINANCIALS" = 12.0
+    And "AXP" has one open classification row with sector "FINANCIALS"
+    And an AXP point-in-time EDGAR period with debt_to_equity 8.8 is the as-of filing for a bar
+    When the strategy is backtested over "AXP" covering that bar
+    Then that bar's fscore is computed with de_bad = 12.0, not 2.0
+    And the same override applies on the live-snapshot surfaces (readiness, opportunities, live loop)
