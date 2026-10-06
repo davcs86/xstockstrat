@@ -167,3 +167,9 @@ OQ-4 to OQ-6 remain for /sdd-design.
   - `analysis.fundsignal.scoring_formula_id` = `d1ff5e6b-6d9c-589d-b95e-defd862c702b`, the seeded `SYSTEM_AUTHOR` formula. Removing the bypass is safe on staging. **Prod could not be checked from this session** (staging MCP only), so this is carried as a pre-merge operator check.
   - The staging signal sources have exactly **one** `derived` source, `fundamentals`, so the D-4 "derived ⇒ system" rule is safe on staging. There are **no `mcp_client` sources on staging**, so no legacy credential data exists there.
   - `instance_count: 1` for indicators/ingest/analysis/config in both `.do/app.yaml` and `.do/app.dev.yaml`.
+
+### Operator decisions at the round-2 gate (2026-10-06)
+
+- **Run round 3** and fold in all 13 round-2 objections. Approval was available but deferred.
+- **`audit.admin_read` goes on both streams:** one event carrying the owner's `user_id` (stream `user:<owner>`) and one carrying the admin's `user_id` (stream `user:<admin>`). Event volume therefore doubles; the design must state how many events one list call emits.
+- **Contract migrations move to a named follow-up feature.** 224 ships expand-only. A separate follow-up feature (number assigned at `/sdd-spec` or story time) runs the contract migrations. It is gated by a `merge-order.md` row plus a new CI `migration-contract-gate` that refuses a contract file until its expand file is on `origin/main`. That satisfies C-14's "named follow-up" form for deferral.
