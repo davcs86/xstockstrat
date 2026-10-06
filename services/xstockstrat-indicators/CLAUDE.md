@@ -19,6 +19,14 @@ The request-body `user_id` field on `UpdateFormulaRequest`/`DeleteFormulaRequest
 identity is the header, which a client cannot spoof. The admin-scope override (`x-access-scope` ADMIN
 bit) is unchanged.
 
+**Formula reads are owner-gated too.** `GetFormula` and `ExecuteFormula` (by `formula_id`) serve a
+formula only if it is `is_public`, authored by `SYSTEM_AUTHOR`, authored by the `x-user-id` caller
+(header only, with no body fallback), or the call carries `x-internal-caller: analysis` (the
+`_INTERNAL_FORMULA_READERS` allow-list). analysis stamps that header on its whole indicators channel
+(`app/internal_caller.py`) because it runs strategy formulas on behalf of their owner. Any other
+caller gets `NOT_FOUND`, so the response does not reveal whether the id exists. `ListFormulas` with an
+`author_filter` naming another user returns only that user's public formulas.
+
 ## Language
 
 Python 3.13 (asyncio, grpc.aio)
@@ -101,9 +109,10 @@ on live) rather than OHLCV closes.
 ## Sandbox Security Model
 
 OS-level containment (feature 209): even a `().__class__.__base__.__subclasses__()` language-guard
-escape reaches no network, no secrets, and no writable FS. The lockdown runs **in the child wrapper,
+escape reaches no network, no secrets, no writable FS, and no file reads. The lockdown runs **in the child wrapper,
 after** the numeric-lib import and **before** the untrusted `exec` (never `preexec_fn` — unsafe in
-this multithreaded service), in this order: eager-import allowed modules → `setuid(65534)` (when the
+this multithreaded service), in this order: eager-import allowed modules and resolve their lazy
+attributes (numpy's `fft`/`rec`/`ma`/… load on first access) → `setuid(65534)` (when the
 parent is root) → `PR_SET_NO_NEW_PRIVS` → expanded rlimits → seccomp `.load()` → `exec(source)`.
 
 - **Subprocess isolation + secret-free env**: formula runs in a fresh subprocess whose env
@@ -114,7 +123,11 @@ parent is root) → `PR_SET_NO_NEW_PRIVS` → expanded rlimits → seccomp `.loa
   blocked cross-UID. Requires the container to run as **root** — do **not** add a `USER` line.
 - **seccomp-BPF allowlist** (`pyseccomp`, `ERRNO(EPERM)` default, native arch only): only the
   compute+teardown syscalls are allowed; the whole network family, `execve`/`execveat`,
-  `io_uring_*`, `ptrace`, `process_vm_*`, `pidfd_*`, and write-creating FS ops are absent → `EPERM`.
+  `io_uring_*`, `ptrace`, `process_vm_*`, `pidfd_*`, every file-open syscall (`open`/`openat`/
+  `openat2`) and write-creating FS ops are absent → `EPERM`. `openat` stays out because the import
+  guard is bypassable: attribute traversal from an allowed module reaches the real `os` (e.g.
+  `numpy.lib._datasource.os`), so the OS layer has to be what denies file reads. Lazy imports after
+  the filter loads therefore fail, which is why the lazy-attribute warm-up exists.
   Fails **closed** on compat ABIs and unknown syscalls. `_SECCOMP_ALLOW` is the audited set;
   `NO_NEW_PRIVS` must stay set (pyseccomp sets it on load — never disable).
 - **Expanded rlimits**: `RLIMIT_DATA` (memory; `RLIMIT_AS` would reject numpy's virtual reservations

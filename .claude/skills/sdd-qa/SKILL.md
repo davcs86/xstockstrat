@@ -62,7 +62,7 @@ confirmation gate (**F-10**). `design` and `gaps` may still *report*; only write
 | `run [target]` | Execute the suite. Report the exact output. On failure classify: **test defect** (fix here), **product defect** (→ `defect`), or **environment** (missing toolchain/browser — say so, do not "fix" it). |
 | `gaps [service]` | Spawn `qa-tester` in `gaps` mode. With no service, sweep all twelve — print the count and confirm before fanning out. |
 | `flake <target> [--runs N]` | Re-run N times (default 5), diff the per-test pass/fail set, report anything not unanimous. |
-| `defect` | Load `reference/defect-filing.md`. Compose the report, confirm, write it, print the `/sdd-triage --from-report` handoff. |
+| `defect` | Load `reference/defect-filing.md`. Compose the report, confirm, write it plus its `open` status sidecar, print the `/sdd-triage --from-report` handoff. |
 | `audit [service]` · `add <domain>` · `update <fixture-symbol>` | Load `reference/fixtures.md` and follow it. |
 
 ### `gaps` — measure, never guess

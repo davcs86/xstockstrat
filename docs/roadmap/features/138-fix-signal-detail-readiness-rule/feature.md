@@ -2,7 +2,7 @@
 
 **Type**: bug
 **Development Branch**: `feature/fix-signal-detail-readiness-rule`
-**Defect Report**: `docs/reports/2026-08-15-signal-detail-readiness-traces-entry-rule-on-reduce.md`
+**Defect Report**: `docs/reports/2026-08-15-signal-detail-readiness-traces-entry-rule-on-reduce.md` (pruned 2026-10-05; `git show 2ce8de0a:docs/reports/2026-08-15-signal-detail-readiness-traces-entry-rule-on-reduce.md`)
 **Severity**: SEV-3
 **Created**: 2026-08-15
 **Last Updated**: 2026-08-19
@@ -25,7 +25,7 @@
 
 ## Artifacts
 
-- [Defect Report](../../../reports/2026-08-15-signal-detail-readiness-traces-entry-rule-on-reduce.md) — observed vs. expected, root cause
+- Defect Report — pruned 2026-10-05; `git show 2ce8de0a:docs/reports/2026-08-15-signal-detail-readiness-traces-entry-rule-on-reduce.md` (observed vs. expected, root cause)
 - _Product Spec — pruned on archive (2026-08-19); recoverable via git history._
 - _Implementation Spec — never generated (Track C direct bug fix)._
 - [Context Log](context.md) — session history, decisions, deviations

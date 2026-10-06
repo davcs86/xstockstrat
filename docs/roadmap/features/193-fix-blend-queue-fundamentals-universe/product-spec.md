@@ -6,7 +6,7 @@
 
 Full root-cause analysis, staging evidence (11 blend-attributed rows, 6 with no `fundamentals`
 provenance; BRK.B/RDDT `ENTER` rows), and the three-caller leak inventory are in the defect report:
-`docs/reports/2026-09-18-opportunity-queue-ignores-fundamentals-universe-defect.md`. This spec is the
+`docs/reports/2026-09-18-opportunity-queue-ignores-fundamentals-universe-defect.md` (pruned 2026-10-05; `git show 2ce8de0a:docs/reports/2026-09-18-opportunity-queue-ignores-fundamentals-universe-defect.md`). This spec is the
 Track C wrapper; the report is the authoritative analysis.
 
 ## Problem

@@ -21,7 +21,7 @@ triage/fixing, not governance. Repo-wide defects (Go 1.22 doc-lie) live in the r
 
 ## Open questions (unresolved *why* — needs a maintainer)
 
-- On process restart the first ledger connect replays `order.filled` from sequence 0 and `processOrderFill` applies **incremental** qty to the persisted row — does a restart double-count fills, or is it always corrected by the `account.positions.synced` broker snapshot? If some accounts never receive broker syncs, replay-from-0 is a latent double-count. `internal/service/portfolio_service.go:146` (`consumeEventStream`), `:180` (`streamEventsFrom`), `cmd/server/main.go` (`go svc.ConsumeOrderFills(ctx)`) — status: **open**
+- On process restart the first ledger connect replays `order.filled` from sequence 0 and `processOrderFill` applies **incremental** qty to the persisted row — does a restart double-count fills, or is it always corrected by the `account.positions.synced` broker snapshot? If some accounts never receive broker syncs, replay-from-0 is a latent double-count. `internal/service/portfolio_service.go:146` (`consumeEventStream`), `:180` (`streamEventsFrom`), `cmd/server/main.go` (`go svc.ConsumeOrderFills(ctx)`) — status: **confirmed defect**, recorded in `docs/reports/2026-10-06-portfolio-fill-fold-not-exactly-once-defect.md`. Quantity self-heals only for synced accounts, and `realized_accum`/`fees_accum` inflate permanently on every restart.
 - `emitEvent` uses a fresh `uuid.NewString()` per call as the idempotency key, so dedup protects only in-flight retries, not event reprocessing — is retry-only dedup the intended scope? `portfolio_service.go:816` (`emitEvent`), `:831` (`uuid.NewString()`) — status: **open**
 
 ---

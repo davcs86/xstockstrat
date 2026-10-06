@@ -10,77 +10,77 @@ following the format in `docs/runbooks/bug-triage.md#hotfix-log-format`.
 
 ## 2026-10-02T14:01:51Z — hotfix/fix-opportunity-actions-unimplemented
 
-- **GitHub issue**: docs/reports/2026-10-02-opportunity-actions-unimplemented-defect.md (GitHub Issues disabled on this repo)
+- **GitHub issue**: docs/reports/2026-10-02-opportunity-actions-unimplemented-defect.md (pruned 2026-10-05; `git show 2ce8de0a:docs/reports/2026-10-02-opportunity-actions-unimplemented-defect.md`) (GitHub Issues disabled on this repo)
 - **Severity**: SEV-2
 - **Affected service(s)**: xstockstrat-ui
 - **Root cause**: insightsBff never registers AnalysisService.setOpportunityAction, so Snooze/Dismiss return Unimplemented; the e2e browser-level page.route mock masks it.
 - **Fix summary**: _pending_
 - **PR**: _pending_
 - **Platform-lead approver**: _pending_
-- **Back-merge commit**: _pending_
+- **Back-merge commit**: not required — main ⊂ main-dev at d70e3592; fix cc3a20c (#1213) reached main via promotion #1214 (4c996fa7)
 - **Maintenance mode applied**: no
-- **Status**: in-progress
+- **Status**: deployed
 
 
 ## 2026-10-02T14:01:50Z — hotfix/fix-alpaca-cancel-422
 
-- **GitHub issue**: docs/reports/2026-10-02-alpaca-cancel-422-defect.md (GitHub Issues disabled on this repo)
+- **GitHub issue**: docs/reports/2026-10-02-alpaca-cancel-422-defect.md (pruned 2026-10-05; `git show 2ce8de0a:docs/reports/2026-10-02-alpaca-cancel-422-defect.md`) (GitHub Issues disabled on this repo)
 - **Severity**: SEV-1
 - **Affected service(s)**: xstockstrat-trading
 - **Root cause**: Alpaca adapter treats HTTP 422 (already filled/canceled) on cancel as success; CancelOrder then records CANCELED unconditionally, so an already-filled order never emits order.filled.
 - **Fix summary**: _pending_
 - **PR**: _pending_
 - **Platform-lead approver**: _pending_
-- **Back-merge commit**: _pending_
+- **Back-merge commit**: not required — main ⊂ main-dev at d70e3592; fix cc3a20c (#1213) reached main via promotion #1214 (4c996fa7)
 - **Maintenance mode applied**: no
-- **Status**: in-progress
+- **Status**: deployed
 
 
 ## 2026-10-02T14:01:50Z — hotfix/fix-portfolio-fill-db-errors
 
-- **GitHub issue**: docs/reports/2026-10-02-portfolio-fill-db-errors-defect.md (GitHub Issues disabled on this repo)
+- **GitHub issue**: docs/reports/2026-10-02-portfolio-fill-db-errors-defect.md (pruned 2026-10-05; `git show 2ce8de0a:docs/reports/2026-10-02-portfolio-fill-db-errors-defect.md`) (GitHub Issues disabled on this repo)
 - **Severity**: SEV-1
 - **Affected service(s)**: xstockstrat-portfolio
 - **Root cause**: processOrderFill discards GetPosition/UpsertPosition/ClosePosition errors but still emits ledger position events and advances the stream cursor, so a DB error corrupts or loses position state.
 - **Fix summary**: _pending_
 - **PR**: _pending_
 - **Platform-lead approver**: _pending_
-- **Back-merge commit**: _pending_
+- **Back-merge commit**: not required — main ⊂ main-dev at d70e3592; fix cc3a20c (#1213) reached main via promotion #1214 (4c996fa7)
 - **Maintenance mode applied**: no
-- **Status**: in-progress
+- **Status**: deployed
 
 
 ## 2026-10-02T14:01:50Z — hotfix/fix-flatten-rejection-skips-halt
 
-- **GitHub issue**: docs/reports/2026-10-02-flatten-rejection-skips-halt-defect.md (GitHub Issues disabled on this repo)
+- **GitHub issue**: docs/reports/2026-10-02-flatten-rejection-skips-halt-defect.md (pruned 2026-10-05; `git show 2ce8de0a:docs/reports/2026-10-02-flatten-rejection-skips-halt-defect.md`) (GitHub Issues disabled on this repo)
 - **Severity**: SEV-1
 - **Affected service(s)**: xstockstrat-trading
 - **Root cause**: flattenAndHalt reuses one client_order_id across retries; a broker-REJECTED intent is replayed by submitOrder as a stored response with nil error, so the loop reports success and never halts. Agreed fix: status-aware retry.
 - **Fix summary**: _pending_
 - **PR**: _pending_
 - **Platform-lead approver**: _pending_
-- **Back-merge commit**: _pending_
+- **Back-merge commit**: not required — main ⊂ main-dev at d70e3592; fix cc3a20c (#1213) reached main via promotion #1214 (4c996fa7)
 - **Maintenance mode applied**: no
-- **Status**: in-progress
+- **Status**: deployed
 
 
 ## 2026-10-02T14:01:50Z — hotfix/fix-oauth-login-unvalidated-redirect
 
-- **GitHub issue**: docs/reports/2026-10-02-oauth-login-unvalidated-redirect-defect.md (GitHub Issues disabled on this repo)
+- **GitHub issue**: docs/reports/2026-10-02-oauth-login-unvalidated-redirect-defect.md (pruned 2026-10-05; `git show 2ce8de0a:docs/reports/2026-10-02-oauth-login-unvalidated-redirect-defect.md`) (GitHub Issues disabled on this repo)
 - **Severity**: SEV-1
 - **Affected service(s)**: xstockstrat-ui
 - **Root cause**: /auth/oauth-login assigns the client-supplied agent_cb query value to window.location.href with no validation (open redirect / javascript: execution on the session origin).
 - **Fix summary**: _pending_
 - **PR**: _pending_
 - **Platform-lead approver**: _pending_
-- **Back-merge commit**: _pending_
+- **Back-merge commit**: not required — main ⊂ main-dev at d70e3592; fix cc3a20c (#1213) reached main via promotion #1214 (4c996fa7)
 - **Maintenance mode applied**: no
-- **Status**: in-progress
+- **Status**: deployed
 
 
 ## 2026-08-07T06:53:51Z — hotfix/fix-watchconfig-clients-omit
 
-- **GitHub issue**: docs/reports/2026-08-07-watchconfig-scope-omission-defect.md (GitHub Issues disabled on this repo)
+- **GitHub issue**: docs/reports/2026-08-07-watchconfig-scope-omission-defect.md (pruned 2026-10-05; `git show 2ce8de0a:docs/reports/2026-08-07-watchconfig-scope-omission-defect.md`) (GitHub Issues disabled on this repo)
 - **Severity**: SEV-1
 - **Affected service(s)**: xstockstrat-trading, xstockstrat-portfolio, xstockstrat-marketdata, xstockstrat-indicators, xstockstrat-ingest, xstockstrat-analysis, xstockstrat-config
 - **Root cause**: All six backend WatchConfig clients omit `environment`/`trading_mode` on their subscription request, so every deployment resolves to the `dev`/`all` scope regardless of its own `APPLICATION_ENV`/`TRADING_MODE` — production never reads the more-conservative `production`-tagged risk config seeded by migration 002.

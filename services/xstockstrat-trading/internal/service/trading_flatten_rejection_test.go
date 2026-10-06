@@ -19,8 +19,9 @@ import (
 	"github.com/xstockstrat/trading/internal/repository"
 )
 
-// Regression suite for docs/reports/2026-10-02-flatten-rejection-skips-halt-defect.md: a
-// broker-REJECTED flatten is a failure, and an exhausted retry budget always halts the account.
+// Regression suite for docs/reports/2026-10-02-flatten-rejection-skips-halt-defect.md (pruned
+// 2026-10-05; git show 2ce8de0a:<path>): a broker-REJECTED flatten is a failure, and an exhausted
+// retry budget always halts the account.
 
 // execOnlyDB lets TradingRepo.UpsertOrder succeed without a database.
 type execOnlyDB struct{}
@@ -181,5 +182,29 @@ func TestFlattenAndHalt_UncertainTimeout_KeepsClientOrderID(t *testing.T) {
 	}
 	if !h.svc.isAccountHalted("acct-1") {
 		t.Fatal("exhausted retries must halt the account")
+	}
+}
+
+type scopedFlattenPortfolio struct {
+	portfoliov1.PortfolioServiceClient
+	got *portfoliov1.GetPositionRequest
+}
+
+func (p *scopedFlattenPortfolio) GetPosition(_ context.Context, req *portfoliov1.GetPositionRequest, _ ...grpc.CallOption) (*portfoliov1.Position, error) {
+	p.got = req
+	return &portfoliov1.Position{Symbol: "AAPL", Qty: 10}, nil
+}
+
+// The flatten must size from the bracket's own account position — an unscoped read returns the
+// latest row across all the user's accounts and over/under-sells on this one.
+func TestFlattenAndHalt_ScopesPositionToBracketAccount(t *testing.T) {
+	h := newFlattenHarness(func(int) (*broker.BrokerOrder, error) {
+		return &broker.BrokerOrder{BrokerOrderID: "bo-flat", Status: "accepted"}, nil
+	})
+	pf := &scopedFlattenPortfolio{}
+	h.svc.portfolio = pf
+	h.run(t)
+	if pf.got == nil || pf.got.GetAccountId() != "acct-1" {
+		t.Fatalf("flatten GetPosition must be scoped to the bracket account acct-1, got %+v", pf.got)
 	}
 }

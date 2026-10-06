@@ -1,6 +1,6 @@
 Feature: fix-offline-account-ui-gaps (bug fix)
   Regression guard for the offline-account UI gaps found on staging
-  (docs/reports/2026-08-26-offline-account-ui-gaps-defect.md).
+  (docs/reports/2026-08-26-offline-account-ui-gaps-defect.md, pruned 2026-10-05; git show 2ce8de0a:<path>).
 
   @AC-1 @FR-1 @FR-2 @regression
   Scenario: an offline account cannot place a broker-routed order through the order ticket

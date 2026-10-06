@@ -1,6 +1,6 @@
 Feature: fix-strategy-detail-definition-render (bug fix)
   Regression guard for the defect at
-  docs/reports/2026-09-18-strategy-detail-definition-not-rendered-defect.md:
+  docs/reports/2026-09-18-strategy-detail-definition-not-rendered-defect.md (pruned 2026-10-05; git show 2ce8de0a:docs/reports/<file>):
   the /insights strategy-detail page must render the strategy's definition (components + entry/exit
   rules) for any reader, using data useGetStrategy already fetches.
 

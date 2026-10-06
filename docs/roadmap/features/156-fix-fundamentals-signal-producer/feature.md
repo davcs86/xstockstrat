@@ -2,7 +2,7 @@
 
 **Type**: bug
 **Development Branch**: `feature/fix-fundamentals-signal-producer`
-**Defect Report**: `docs/reports/2026-08-25-fundsignal-first-cycle-resets-on-redeploy-defect.md` (GitHub Issues disabled on this repo — report filed via `/sdd-qa defect`)
+**Defect Report**: `docs/reports/2026-08-25-fundsignal-first-cycle-resets-on-redeploy-defect.md` (pruned 2026-10-05; `git show 2ce8de0a:docs/reports/2026-08-25-fundsignal-first-cycle-resets-on-redeploy-defect.md`) (GitHub Issues disabled on this repo — report filed via `/sdd-qa defect`)
 **Severity**: SEV-2
 **Created**: 2026-08-25
 **Last Updated**: 2026-08-25

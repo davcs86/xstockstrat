@@ -1,6 +1,6 @@
 ---
 name: feature-synthesizer
-description: Read-only synthesizer for archiving a completed SDD feature. Given one feature's artifact paths, its terminal status, and the existing ledger lines for its slug, it distils ONLY the durable reasoning that cannot be recovered from code or other artifacts and returns a structured digest — never a re-narration of the specs. Runs in two modes: synthesize (produce the digest) and verify (given a prior synthesis + the files about to be deleted, list what irrecoverable reasoning is still missing). Used by /sdd-archiver to keep per-feature reading out of the orchestrator window and to gate destruction.
+description: Read-only synthesizer for archiving a completed SDD feature. Given one feature's artifact paths, its terminal status, and the existing ledger lines for its slug, it distils ONLY the durable reasoning that cannot be recovered from code or other artifacts and returns a structured digest — never a re-narration of the specs. Runs in three modes: synthesize (produce the digest), report-synthesize (Ledger candidates only, from a resolved defect report about to be pruned) and verify (given a prior synthesis + the files about to be deleted, list what irrecoverable reasoning is still missing). Used by /sdd-archiver to keep per-feature reading out of the orchestrator window and to gate destruction.
 tools: Glob, Grep, Read
 model: inherit
 ---
@@ -30,7 +30,9 @@ treat it as such.
   `implementation-spec.md`, `context.md` — some may be absent).
 - The existing Ledger lines already recorded for this slug (for dedup).
 - The explicit allowlist of files that will be deleted.
-- The **mode**: `synthesize` or `verify`.
+- The **mode**: `synthesize`, `report-synthesize`, or `verify`.
+- In `report-synthesize` mode, instead of feature artifacts: the defect report path, its sidecar
+  `ref:` line, and (for a `feature:` ref) that feature's `context.md` path.
 
 ---
 
@@ -102,9 +104,33 @@ caller passed you. Only `[NEW]` candidates will be appended; `[DUP]` proves the 
 
 ---
 
+## MODE: report-synthesize — return exactly this
+
+The report (`docs/reports/*-defect.md`) is about to be deleted. Apply the same rubric: the observed
+behavior, repro, `path:line` evidence and root cause are recoverable from the fix commit, the linked
+feature, or git history — **exclude** them. Keep only a generalizable lesson: the bug *class*, the
+signal that should have caught it earlier, why tests or review missed it. Most reports yield none;
+say so rather than inventing one. Tag a lesson the linked feature's `context.md` already carries
+`[DUP:<path:line>]`.
+
+```
+## Report lessons — <report basename> (<sidecar status>, <ref>)
+
+## Ledger candidates
+### insights.md   (same schema as synthesize mode)
+### fails.md      (same schema as synthesize mode)
+(or: "none worth saving — <one-line reason>")
+
+## Excluded (proof the filter was applied)
+- <what was dropped and where it already lives>
+```
+
+---
+
 ## MODE: verify — return exactly this
 
-You are given the prior synthesis digest and the four files about to be deleted. Re-read those files
+You are given the prior synthesis digest and the files about to be deleted (the four feature specs,
+or a defect report). Re-read those files
 and hunt for irrecoverable reasoning (per the rubric) that the synthesis did **not** capture.
 
 ```

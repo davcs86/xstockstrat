@@ -100,7 +100,7 @@ full-dotted by `config` migration 029 (feature 189).
 | `trading.risk.max_concentration_pct` | float | `0.10` | Max fraction of equity in any single auto-sized position — enforcing, unlike the warn-only `max_position_pct` above |
 | `trading.risk.sizing_enabled` | bool | `true` | Master gate for `ComputePositionSize`; `false` rejects any order submitted without an explicit `qty` |
 | `platform.maintenance_mode` | bool | `false` | Platform-wide halt (the real halt key; there is no `trading.maintenance_mode`) |
-| `platform.trading_state` | string | `ACTIVE` | Richer halt state (`ACTIVE`/`REDUCE_ONLY`/`HALTED`), independent of `platform.maintenance_mode`. `HALTED` blocks `PlaceOrder`/`ReplaceOrder`; `REDUCE_ONLY` blocks only exposure-increasing orders (verified via `PortfolioService.GetPosition` for `PlaceOrder`, a local qty comparison for `ReplaceOrder`). `CancelOrder` is deliberately ungated. Unrecognized/unset values fail closed to `HALTED`. Seeded by `config` migration 011 (feature 100); the former per-`trading_mode` seeding was collapsed to one row per environment by feature 147 (`config` migration 017 dropped the `trading_mode` column). |
+| `platform.trading_state` | string | `ACTIVE` | Richer halt state (`ACTIVE`/`REDUCE_ONLY`/`HALTED`), independent of `platform.maintenance_mode`. `HALTED` blocks `PlaceOrder`/`ReplaceOrder`; `REDUCE_ONLY` blocks only exposure-increasing orders (verified via an account-scoped `PortfolioService.GetPosition` for `PlaceOrder`, a local qty comparison for `ReplaceOrder`). `CancelOrder` is deliberately ungated. Unrecognized/unset values fail closed to `HALTED`. Seeded by `config` migration 011 (feature 100); the former per-`trading_mode` seeding was collapsed to one row per environment by feature 147 (`config` migration 017 dropped the `trading_mode` column). |
 | `trading.broker.paper` | bool | `true` | Route orders to paper API when true; live API when false. Also the source of truth for the mode new broker accounts are registered in. |
 | `trading.broker.timeout_ms` | int | `5000` | Alpaca broker HTTP call timeout. Read at account-client construction and applied as the broker HTTP client's `Timeout`. |
 | `trading.credential_health.interval_ms` | int | `300000` | Interval for the background poller that re-validates each broker account's API secrets. Read live on every cycle; set to `0` (or negative) to disable/pause the poller without a restart. |
@@ -215,8 +215,9 @@ process's own orders plus `LoadInflightOrders`' NEW/PARTIALLY_FILLED hydrate, so
 the platform placed that has since reached a terminal state (FILLED/CANCELED/EXPIRED/REJECTED) is
 absent from memory yet still persisted in `trading.orders`. Before flagging any unmatched broker
 order, `reconcileTick` calls `reconcileOrderLookup.KnownBrokerOrderIDs` (one DB round-trip per tick,
-scoped to the account's unmatched IDs) — only an order the platform has **no persisted record of at
-all** is a genuine `unknown_broker_order`. Comparing against memory alone previously misclassified
+scoped to the account's unmatched IDs, matching `trading.orders` **and** the bracket leg ids in
+`trading.order_brackets` — Alpaca lists bracket legs as top-level orders) — only an order the platform
+has **no persisted record of at all** is a genuine `unknown_broker_order`. Comparing against memory alone previously misclassified
 every historical terminal order the platform itself placed as foreign, halting the account on a
 routine restart; that was an observed production false halt. A transient DB lookup error is
 **fail-safe**: the account's unknown-order check is skipped for that tick (re-evaluated next tick),

@@ -98,6 +98,6 @@
   sort=UNSPECIFIED) and the page (`page.tsx:116`, sort=CONVICTION) build different React-Query keys
   (`useOpportunities.ts:30` — feature-190 5-tuple), so two `ListOpportunities` RPCs fire. The strict
   single-RPC @AC-7 assertion can't pass without a one-line code fix. Filed
-  `docs/reports/2026-09-26-copilotrail-duplicate-listopportunities-rpc-defect.md` (SEV-3) for
+  `docs/reports/2026-09-26-copilotrail-duplicate-listopportunities-rpc-defect.md` (pruned 2026-10-05; `git show 2ce8de0a:docs/reports/2026-09-26-copilotrail-duplicate-listopportunities-rpc-defect.md`) (SEV-3) for
   `/sdd-triage`; guard deferred.
 - **impl-spec:** steps 4/7/8/10 → `done` (with notes); header status → `done` with the @AC-7 carve-out.

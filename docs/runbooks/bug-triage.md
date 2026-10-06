@@ -199,6 +199,17 @@ without modification — it reads the `**Development Branch**` field from `featu
 
 ---
 
+## Defect Report Lifecycle
+
+A defect recorded with `/sdd-qa defect` is `docs/reports/<date>-<slug>-defect.md` plus a
+`<date>-<slug>-defect.status` sidecar: `open` → `triaged` (stamped by `/sdd-triage`, with a `ref:`
+to the hotfix branch, config key or feature dir) → `resolved` (Track B confirm, Track A `backmerge`,
+or — for Track C — implied once the fix feature is `launched`). `/sdd-archiver` prunes resolved and
+`wont-fix` reports after saving any lesson to the Ledger; the write-up stays in git history. Format:
+`.claude/skills/sdd-qa/reference/defect-filing.md` § The status sidecar.
+
+---
+
 ## Hotfix Log Format
 
 The `docs/runbooks/hotfix-log.md` file is an **append-only** incident register. Each Track A

@@ -41,7 +41,7 @@ const res = await fetch('/trader/api/auth/login', { method: 'POST', body });
 
 **Bug fixed** ([PR #417](https://github.com/davcs86/xstockstrat-orchestration/pull/417)): all three login pages used `fetch('/api/auth/login')`. Nginx returned a 404 HTML page; JSON parsing that HTML body failed, and the catch block showed "Login failed. Please check your credentials." regardless of whether the credentials were correct. Fixed by using the full basePath-prefixed path in all three `login/page.tsx` files.
 
-The same rule applies to any client-side `fetch` that targets an API route in the **same** frontend (e.g. `/trader/api/orders`, `/insights/api/analysis`). Middleware `fetch` calls (which run server-side) are unaffected — use `new URL(\`\${req.nextUrl.basePath}/api/auth/refresh\`, req.url)` there.
+The same rule applies to any client-side `fetch` that targets an API route in the **same** frontend (e.g. `/trader/api/orders`, `/insights/api/analysis`). Server-side code (middleware, route handlers, server components) must **not** `fetch` its own public origin at all — a URL built from `req.url` can be routed over DO's internal plain HTTP and fail TLS; call the logic in-process instead (middleware token refresh: see `docs/patterns/frontend-auth.md`).
 
 ---
 

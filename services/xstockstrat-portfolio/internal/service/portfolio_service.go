@@ -49,6 +49,10 @@ type PortfolioService struct {
 	mu   sync.RWMutex
 	subs map[string]chan *portfoliov1.PortfolioSnapshot
 
+	// positionsMu serializes the ledger consumers' read-compute-write of portfolio.positions rows;
+	// correct only while those consumers run single-instance (instance_count: 1).
+	positionsMu sync.Mutex
+
 	// stops holds resting-stop prices learned from ledger order events, in-memory and rebuilt on boot
 	// (HydrateStops) — deliberately no portfolio→trading edge, which would create a trading↔portfolio cycle.
 	stops *stopStore
@@ -269,6 +273,14 @@ func (s *PortfolioService) processOrderFill(ctx context.Context, event *ledgerv1
 		s.stops.set(stopKey{user: fill.UserID, symbol: fill.Symbol, mode: mode}, fill.StopPrice)
 	}
 
+	s.positionsMu.Lock()
+	locked := true
+	defer func() {
+		if locked {
+			s.positionsMu.Unlock()
+		}
+	}()
+
 	// Fetch the existing position scoped to the fill's account: without account scoping a multi-account
 	// user's fill would compute the new avg entry from the wrong account's most-recent position.
 	existing, err := s.repo.GetPosition(ctx, fill.UserID, fill.Symbol, mode, fill.AccountId)
@@ -346,6 +358,9 @@ func (s *PortfolioService) processOrderFill(ctx context.Context, event *ledgerv1
 		})
 	}
 
+	// Released before the marketdata-calling read paths so a slow quote fetch never stalls a sync.
+	locked = false
+	s.positionsMu.Unlock()
 	s.checkRiskLimits(ctx, fill.UserID, mode)
 	s.broadcastSnapshot(ctx, fill.UserID, mode)
 	return nil
@@ -992,6 +1007,9 @@ func (s *PortfolioService) processAccountDeregistered(ctx context.Context, event
 	if userID == "" {
 		userID = "default"
 	}
+	s.positionsMu.Lock()
+	defer s.positionsMu.Unlock()
+
 	// Purge all positions for the account (empty present-set deletes every row) and its realized row.
 	if err := s.repo.DeletePositionsNotInSync(ctx, payload.AccountID, userID, []string{}); err != nil {
 		slog.Warn("deregister: delete positions failed", "account_id", payload.AccountID, "error", err)
@@ -1028,6 +1046,9 @@ func (s *PortfolioService) processPositionSync(ctx context.Context, event *ledge
 	if sync.AccountID == "" {
 		return
 	}
+
+	s.positionsMu.Lock()
+	defer s.positionsMu.Unlock()
 
 	// Store synced positions under the owner's user_id so they reconcile with order-fill positions.
 	// Fall back to "default" for legacy events emitted before user_id was carried.

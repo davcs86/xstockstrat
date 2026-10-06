@@ -1,5 +1,5 @@
 Feature: fix-ohlcv-chunk-lock-oom (bug fix)
-  Regression guard for defect report 2026-08-24-ohlcv-lock-table-exhaustion-recurrence-defect.md:
+  Regression guard for defect report 2026-08-24-ohlcv-lock-table-exhaustion-recurrence-defect.md (pruned 2026-10-05; git show 2ce8de0a:docs/reports/<file>):
   TimescaleDB "out of shared memory" (SQLSTATE 53200) on 400-day ohlcv bars queries.
 
   @AC-1 @regression

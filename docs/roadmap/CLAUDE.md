@@ -23,4 +23,4 @@ Run `/sdd-status` for a summary table, or read `features/<slug>/feature.md` for 
 
 Cross-feature SDD memory lives in [`ledger/`](ledger/CLAUDE.md): `insights.md` (patterns that worked)
 and `fails.md` (mistakes that recurred). Read by `/sdd-story`, `/sdd-design`, and `/sdd-spec`; written
-by `/sdd-execute`. The cross-feature complement to each feature's `context.md`.
+by `/sdd-execute` and `/sdd-archiver`. The cross-feature complement to each feature's `context.md`.

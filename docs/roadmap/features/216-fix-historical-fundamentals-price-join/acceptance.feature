@@ -1,5 +1,5 @@
 Feature: fix-historical-fundamentals-price-join (bug fix)
-  Regression guard for defect report 2026-09-27-fundamentals-backfill-not-rederived-defect.md:
+  Regression guard for defect report 2026-09-27-fundamentals-backfill-not-rederived-defect.md (pruned 2026-10-05; git show 2ce8de0a:<path>):
   historical fundamentals price-join is never re-derived, so bars arriving after a fundamentals
   backfill leave price-derived metrics permanently missing.
 

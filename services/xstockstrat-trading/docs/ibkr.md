@@ -14,3 +14,9 @@ If an IBKR account is configured for Hedged Mode:
 **To add Hedged Mode support**: add an `IsHedged bool` field to `IBKRConfig`, propagate it to `BrokerOrder` or a separate signal, and update `GetPnL` in `xstockstrat-portfolio` to merge and sort both event types by `recorded_at` before feeding the accumulator.
 
 Alpaca is unaffected: Alpaca prohibits simultaneous long and short positions in the same security at the API level (returns `position intent mismatch` if attempted).
+
+### IBKR: order confirmation prompts are auto-confirmed (bounded)
+
+The Client Portal API can answer an order POST (`SubmitOrder`, `ReplaceOrder`, `SubmitBracketLegs`) with a precautionary prompt (`[{"id", "message"}]`) instead of an order reply. The order is not placed until `POST /iserver/reply/{id}` confirms it, and IBKR may chain one prompt per warning. `resolveIBKROrderReplies` **auto-confirms** each prompt with `{"confirmed":true}` (operator decision, 2026-10-05) and logs every confirmed message at WARN (`ibkr: auto-confirming order prompt`) for audit. After `ibkrMaxConfirmRounds` (5) it stops and returns `broker.ErrIBKRConfirmationRequired`, so the order is recorded `REJECTED`. A transport error on a reply is returned wrapped, so a timeout stays an *uncertain* outcome (the confirmation may have placed the order) and is reclaimed like any other. Any final reply element with an empty `order_id` is an error. No order is ever stored as submitted with an empty broker id.
+
+Trailing stops (`trailing_stop` → `TRAIL`) send `trailingAmt` with `trailingType` `amt` (from `trail_price`) or `%` (from `trail_percent`). `ReplaceOrder` does not map `trail` for IBKR.

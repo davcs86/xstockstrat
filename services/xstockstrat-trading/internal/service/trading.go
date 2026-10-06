@@ -368,6 +368,21 @@ func (s *TradingService) UnsubscribeOrderUpdates(id string) {
 
 // broadcastOrder fans out an order update only to subscribers whose user filter matches the
 // order's owner — a scoped subscriber (userID != "") never receives another user's order.
+// updateOrder publishes mutate applied to a clone of order's latest s.orders snapshot and returns
+// it. Values in s.orders are immutable once stored — never write through a pointer read from it.
+func (s *TradingService) updateOrder(order *tradingv1.Order, mutate func(o *tradingv1.Order)) *tradingv1.Order {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	base, ok := s.orders[order.OrderId]
+	if !ok {
+		base = order
+	}
+	next := proto.Clone(base).(*tradingv1.Order)
+	mutate(next)
+	s.orders[next.OrderId] = next
+	return next
+}
+
 func (s *TradingService) broadcastOrder(order *tradingv1.Order) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -448,7 +463,7 @@ func (s *TradingService) PlaceOrder(ctx context.Context, req *tradingv1.PlaceOrd
 
 	// platform.trading_state gate: HALTED blocks outright; REDUCE_ONLY blocks only
 	// exposure-increasing orders. Independent of platform.maintenance_mode.
-	if err := s.checkTradingStateForPlaceOrder(ctx, accountEntry.userID, req.Symbol, mode, req.Side); err != nil {
+	if err := s.checkTradingStateForPlaceOrder(ctx, accountEntry.userID, resolvedAccountID, req.Symbol, mode, req.Side); err != nil {
 		return nil, err
 	}
 
@@ -678,8 +693,10 @@ func (s *TradingService) submitOrder(
 			return order, fmt.Errorf("broker submission failed: %w", err)
 		}
 		// Definite, synchronous rejection.
-		order.Status = tradingv1.OrderStatus_ORDER_STATUS_REJECTED
-		order.UpdatedAt = timestamppb.New(time.Now())
+		order = s.updateOrder(order, func(o *tradingv1.Order) {
+			o.Status = tradingv1.OrderStatus_ORDER_STATUS_REJECTED
+			o.UpdatedAt = timestamppb.New(time.Now())
+		})
 		go s.emitLedgerEvent(context.Background(), "order.broker_rejected", orderID, order.UserId, map[string]interface{}{
 			"order_id": orderID, "error": err.Error(), "trading_mode": mode.String(),
 		})
@@ -695,21 +712,23 @@ func (s *TradingService) submitOrder(
 		return nil, &brokerRejectedError{err: err}
 	}
 
-	order.BrokerOrderId = brokerOrder.BrokerOrderID
-	// Keep NEW if the broker's submit status is transient/unrecognized (UNSPECIFIED) rather than
-	// clobbering it; the fill poller reconciles to the real status.
-	if st := alpacaStatusToProto(brokerOrder.Status); st != tradingv1.OrderStatus_ORDER_STATUS_UNSPECIFIED {
-		order.Status = st
-	}
-	order.UpdatedAt = timestamppb.New(time.Now())
-	// Carry any fill the broker reported on submit — the fill poller skips FILLED orders, so
-	// without this a fill-on-submit would leave FILLED orders at qty 0.
-	order.FilledQty = brokerOrder.FilledQty
-	order.FilledAvgPrice = brokerOrder.FilledAvgPrice
-	if order.Status == tradingv1.OrderStatus_ORDER_STATUS_FILLED && order.FilledQty == 0 {
-		order.FilledQty = order.Qty
-	}
-	order.IntentState = tradingv1.IntentState_INTENT_STATE_COMPLETED
+	order = s.updateOrder(order, func(o *tradingv1.Order) {
+		o.BrokerOrderId = brokerOrder.BrokerOrderID
+		// Keep NEW if the broker's submit status is transient/unrecognized (UNSPECIFIED) rather than
+		// clobbering it; the fill poller reconciles to the real status.
+		if st := alpacaStatusToProto(brokerOrder.Status); st != tradingv1.OrderStatus_ORDER_STATUS_UNSPECIFIED {
+			o.Status = st
+		}
+		o.UpdatedAt = timestamppb.New(time.Now())
+		// Carry any fill the broker reported on submit — the fill poller skips FILLED orders, so
+		// without this a fill-on-submit would leave FILLED orders at qty 0.
+		o.FilledQty = brokerOrder.FilledQty
+		o.FilledAvgPrice = brokerOrder.FilledAvgPrice
+		if o.Status == tradingv1.OrderStatus_ORDER_STATUS_FILLED && o.FilledQty == 0 {
+			o.FilledQty = o.Qty
+		}
+		o.IntentState = tradingv1.IntentState_INTENT_STATE_COMPLETED
+	})
 
 	// Bracket submission only once a fill is confirmed (a resting LIMIT has nothing to protect yet;
 	// the fill poller handles that later). entryProxy prefers the real average fill price when known.
@@ -1207,7 +1226,7 @@ func (s *TradingService) CancelOrder(ctx context.Context, req *tradingv1.CancelO
 				"cancel on order %s is still pending", req.OrderId)
 		}
 	}
-	order.IntentState = tradingv1.IntentState_INTENT_STATE_PENDING
+	order = s.updateOrder(order, func(o *tradingv1.Order) { o.IntentState = tradingv1.IntentState_INTENT_STATE_PENDING })
 
 	// Cancel at broker if we have a broker order ID. Fail-open: the order is marked canceled
 	// locally regardless of the broker response (a deliberate, pre-existing decision).
@@ -1257,13 +1276,15 @@ func (s *TradingService) CancelOrder(ctx context.Context, req *tradingv1.CancelO
 		}
 	}
 
-	order.Status = tradingv1.OrderStatus_ORDER_STATUS_CANCELED
-	order.UpdatedAt = timestamppb.New(time.Now())
-	if finalIntentState == repository.IntentStateUnknown {
-		order.IntentState = tradingv1.IntentState_INTENT_STATE_UNKNOWN
-	} else {
-		order.IntentState = tradingv1.IntentState_INTENT_STATE_COMPLETED
-	}
+	order = s.updateOrder(order, func(o *tradingv1.Order) {
+		o.Status = tradingv1.OrderStatus_ORDER_STATUS_CANCELED
+		o.UpdatedAt = timestamppb.New(time.Now())
+		if finalIntentState == repository.IntentStateUnknown {
+			o.IntentState = tradingv1.IntentState_INTENT_STATE_UNKNOWN
+		} else {
+			o.IntentState = tradingv1.IntentState_INTENT_STATE_COMPLETED
+		}
+	})
 
 	_ = s.repo.UpsertOrder(ctx, order)
 	s.finalizeCancelIntent(intentID, order, finalIntentState)
@@ -1283,7 +1304,7 @@ func (s *TradingService) reconcileNotCancelable(ctx context.Context, order *trad
 	brokerOrder, err := entry.client.GetOrder(ctx, order.BrokerOrderId)
 	if err != nil {
 		slog.Warn("cancel: order not cancelable and broker re-read failed", "order_id", order.OrderId, "broker_order_id", order.BrokerOrderId, "error", err)
-		order.IntentState = tradingv1.IntentState_INTENT_STATE_UNKNOWN
+		order = s.updateOrder(order, func(o *tradingv1.Order) { o.IntentState = tradingv1.IntentState_INTENT_STATE_UNKNOWN })
 		s.finalizeCancelIntent(intentID, order, repository.IntentStateUnknown)
 		return nil, true, grpcstatus.Errorf(codes.Unavailable,
 			"order %s is already terminal at the broker and its status could not be read; the fill poller will reconcile it", order.OrderId)
@@ -1292,8 +1313,8 @@ func (s *TradingService) reconcileNotCancelable(ctx context.Context, order *trad
 		return nil, false, nil
 	}
 	slog.Warn("cancel: order already terminal at broker, adopting broker status", "order_id", order.OrderId, "broker_status", brokerOrder.Status)
-	s.applyBrokerOrderStatus(ctx, order, entry, brokerOrder)
-	order.IntentState = tradingv1.IntentState_INTENT_STATE_COMPLETED
+	order = s.applyBrokerOrderStatus(ctx, order, entry, brokerOrder)
+	order = s.updateOrder(order, func(o *tradingv1.Order) { o.IntentState = tradingv1.IntentState_INTENT_STATE_COMPLETED })
 	s.finalizeCancelIntent(intentID, order, repository.IntentStateCompleted)
 	return &tradingv1.CancelOrderResponse{Success: false, Order: order}, true, nil
 }
@@ -1402,7 +1423,7 @@ func (s *TradingService) ReplaceOrder(ctx context.Context, req *tradingv1.Replac
 				"replace on order %s is still pending", req.OrderId)
 		}
 	}
-	order.IntentState = tradingv1.IntentState_INTENT_STATE_PENDING
+	order = s.updateOrder(order, func(o *tradingv1.Order) { o.IntentState = tradingv1.IntentState_INTENT_STATE_PENDING })
 
 	// Only the changed fields are sent to the broker (zero/empty/nil = leave unchanged).
 	brokerReq := broker.OrderRequest{
@@ -1431,20 +1452,22 @@ func (s *TradingService) ReplaceOrder(ctx context.Context, req *tradingv1.Replac
 		return nil, grpcstatus.Errorf(codes.Internal, "broker replace failed: %v", replaceErr)
 	}
 
-	if req.Qty != 0 {
-		order.Qty = req.Qty
-	}
-	if req.LimitPrice != 0 {
-		order.LimitPrice = req.LimitPrice
-	}
-	if req.StopPrice != 0 {
-		order.StopPrice = req.StopPrice
-	}
-	if req.TimeInForce != nil {
-		order.TimeInForce = *req.TimeInForce
-	}
-	order.UpdatedAt = timestamppb.New(time.Now())
-	order.IntentState = tradingv1.IntentState_INTENT_STATE_COMPLETED
+	order = s.updateOrder(order, func(o *tradingv1.Order) {
+		if req.Qty != 0 {
+			o.Qty = req.Qty
+		}
+		if req.LimitPrice != 0 {
+			o.LimitPrice = req.LimitPrice
+		}
+		if req.StopPrice != 0 {
+			o.StopPrice = req.StopPrice
+		}
+		if req.TimeInForce != nil {
+			o.TimeInForce = *req.TimeInForce
+		}
+		o.UpdatedAt = timestamppb.New(time.Now())
+		o.IntentState = tradingv1.IntentState_INTENT_STATE_COMPLETED
+	})
 
 	_ = s.repo.UpsertOrder(ctx, order)
 	if ownsIntent {
@@ -1468,6 +1491,7 @@ func (s *TradingService) GetOrder(ctx context.Context, req *tradingv1.GetOrderRe
 	order, ok := s.orders[req.OrderId]
 	s.mu.Unlock()
 	if ok {
+		order = proto.Clone(order).(*tradingv1.Order)
 		normalizeFilledQty(order)
 		return order, nil
 	}
@@ -1516,7 +1540,7 @@ func (s *TradingService) ListOrders(ctx context.Context, req *tradingv1.ListOrde
 					continue
 				}
 			}
-			mem = append(mem, o)
+			mem = append(mem, proto.Clone(o).(*tradingv1.Order))
 		}
 		s.mu.Unlock()
 		for _, o := range mem {
@@ -1663,28 +1687,30 @@ func (s *TradingService) pollFills(ctx context.Context) {
 
 // applyBrokerOrderStatus adopts a broker-reported order state and emits its lifecycle events.
 // The single fill-emission path: pollFills and CancelOrder's not-cancelable reconcile both use it.
-func (s *TradingService) applyBrokerOrderStatus(ctx context.Context, order *tradingv1.Order, entry brokerPoolEntry, brokerOrder *broker.BrokerOrder) {
+func (s *TradingService) applyBrokerOrderStatus(ctx context.Context, order *tradingv1.Order, entry brokerPoolEntry, brokerOrder *broker.BrokerOrder) *tradingv1.Order {
 	newStatus := alpacaStatusToProto(brokerOrder.Status)
 	// A transient/unrecognized broker status maps to UNSPECIFIED; don't overwrite the order's
 	// real status with it — keep polling so the order converges to its true terminal state.
 	if newStatus == tradingv1.OrderStatus_ORDER_STATUS_UNSPECIFIED {
-		return
+		return order
 	}
 	// A same-status repeat is a no-op tick — except a repeated PARTIALLY_FILLED with a larger
 	// FilledQty, which must be processed so an ACTIVE IBKR bracket resizes on every fill delta.
 	if newStatus == order.Status && order.FilledQty == brokerOrder.FilledQty {
-		return
+		return order
 	}
 
-	order.Status = newStatus
-	order.UpdatedAt = timestamppb.New(time.Now())
-	order.FilledAvgPrice = brokerOrder.FilledAvgPrice
-	order.FilledQty = brokerOrder.FilledQty
-	// A fully-filled order always has filled qty == order qty, even if the
-	// broker omitted the figure from its response.
-	if newStatus == tradingv1.OrderStatus_ORDER_STATUS_FILLED && order.FilledQty == 0 {
-		order.FilledQty = order.Qty
-	}
+	order = s.updateOrder(order, func(o *tradingv1.Order) {
+		o.Status = newStatus
+		o.UpdatedAt = timestamppb.New(time.Now())
+		o.FilledAvgPrice = brokerOrder.FilledAvgPrice
+		o.FilledQty = brokerOrder.FilledQty
+		// A fully-filled order always has filled qty == order qty, even if the
+		// broker omitted the figure from its response.
+		if newStatus == tradingv1.OrderStatus_ORDER_STATUS_FILLED && o.FilledQty == 0 {
+			o.FilledQty = o.Qty
+		}
+	})
 
 	if err := s.repo.UpsertOrder(ctx, order); err != nil {
 		slog.Warn("fill poll: db upsert failed", "order_id", order.OrderId, "error", err)
@@ -1734,6 +1760,7 @@ func (s *TradingService) applyBrokerOrderStatus(ctx context.Context, order *trad
 			"order_id": order.OrderId, "symbol": order.Symbol,
 		})
 	}
+	return order
 }
 
 // Mismatch classes emitted on reconciliation.mismatch_found — internal ledger-payload string tags,
@@ -2682,7 +2709,7 @@ func (s *TradingService) flattenAndHalt(ctx context.Context, bracket *repository
 	// no inbound header, so inject the order owner explicitly.
 	posCtx = metadata.AppendToOutgoingContext(posCtx, "x-user-id", order.UserId)
 	position, err := s.portfolio.GetPosition(posCtx, &portfoliov1.GetPositionRequest{
-		Symbol: order.Symbol, TradingMode: order.TradingMode,
+		Symbol: order.Symbol, TradingMode: order.TradingMode, AccountId: &bracket.AccountID,
 	})
 	cancel()
 	if err != nil || position == nil || position.Qty == 0 {
@@ -3413,7 +3440,7 @@ func isReplaceRiskReducing(currentQty, requestedQty float64) bool {
 // checkTradingStateForPlaceOrder blocks PlaceOrder when trading_state is HALTED, or REDUCE_ONLY
 // and the order increases exposure. REDUCE_ONLY fails closed on any GetPosition error — this is
 // the enforcement point, not a warning.
-func (s *TradingService) checkTradingStateForPlaceOrder(ctx context.Context, userID, symbol string, mode commonv1.TradingMode, side tradingv1.OrderSide) error {
+func (s *TradingService) checkTradingStateForPlaceOrder(ctx context.Context, userID, accountID, symbol string, mode commonv1.TradingMode, side tradingv1.OrderSide) error {
 	switch s.currentTradingState() {
 	case tradingStateActive:
 		return nil
@@ -3424,7 +3451,7 @@ func (s *TradingService) checkTradingStateForPlaceOrder(ctx context.Context, use
 		defer cancel()
 		posCtx = metadata.AppendToOutgoingContext(posCtx, "x-user-id", userID)
 		pos, err := s.portfolio.GetPosition(posCtx, &portfoliov1.GetPositionRequest{
-			Symbol: symbol, TradingMode: mode,
+			Symbol: symbol, TradingMode: mode, AccountId: &accountID,
 		})
 		if err != nil {
 			if grpcstatus.Code(err) == codes.NotFound {

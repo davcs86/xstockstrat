@@ -2,7 +2,7 @@
 
 **Type**: bug
 **Development Branch**: `feature/fix-signal-screen-crash`
-**Defect Report**: `docs/reports/2026-08-26-signal-screen-bar-timestamp-crash-defect.md` (GitHub Issues disabled on this repo)
+**Defect Report**: `docs/reports/2026-08-26-signal-screen-bar-timestamp-crash-defect.md` (pruned 2026-10-05; `git show 2ce8de0a:docs/reports/2026-08-26-signal-screen-bar-timestamp-crash-defect.md`) (GitHub Issues disabled on this repo)
 **Severity**: SEV-2
 **Created**: 2026-08-26
 **Last Updated**: 2026-08-26

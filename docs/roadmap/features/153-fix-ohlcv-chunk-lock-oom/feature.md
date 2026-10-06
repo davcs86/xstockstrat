@@ -2,7 +2,7 @@
 
 **Type**: bug
 **Development Branch**: `feature/fix-ohlcv-chunk-lock-oom`
-**Defect Report**: `docs/reports/2026-08-24-ohlcv-lock-table-exhaustion-recurrence-defect.md` (GitHub Issues disabled on this repo — report path stands in for the issue URL)
+**Defect Report**: `docs/reports/2026-08-24-ohlcv-lock-table-exhaustion-recurrence-defect.md` (pruned 2026-10-05; `git show 2ce8de0a:docs/reports/2026-08-24-ohlcv-lock-table-exhaustion-recurrence-defect.md`) (GitHub Issues disabled on this repo — report path stands in for the issue URL)
 **Severity**: SEV-2
 **Created**: 2026-08-24
 **Last Updated**: 2026-08-24

@@ -2,7 +2,7 @@
 
 ## 2026-09-19 — triage + fix (single session)
 
-**Triage.** `docs/reports/2026-09-18-strategy-detail-definition-not-rendered-defect.md`. SEV-3
+**Triage.** `docs/reports/2026-09-18-strategy-detail-definition-not-rendered-defect.md` (pruned 2026-10-05; `git show 2ce8de0a:docs/reports/2026-09-18-strategy-detail-definition-not-rendered-defect.md`). SEV-3
 UX/observability, Track C. Verified the page fetches `definition` via `useGetStrategy` and reads only
 warnings/liveEnabled/signalEligible/active — never components/entryRule/exitRule. `summarizeRule`/
 `parseRuleTree`/`ruleHasConditions` already exported from `RuleEditor.tsx`; `RuleSummary` was

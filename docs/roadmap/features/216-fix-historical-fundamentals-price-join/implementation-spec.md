@@ -384,7 +384,7 @@ yet) and pass after (GREEN). Extend the stateful `fakeHistRepo211` first.
 - Coverage floor: new logic is in the excluded `service/` package — no coverage threshold applies to
   it; confirm the total floor still holds: `cd services/xstockstrat-marketdata && GOWORK=off COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"` — confirm ≥ 40%.
 - Product-spec dev smoke (real Postgres, per acceptance criteria): reproduce the defect steps
-  (`docs/reports/2026-09-27-fundamentals-backfill-not-rederived-defect.md` reproduction) on dev —
+  (`docs/reports/2026-09-27-fundamentals-backfill-not-rederived-defect.md` (pruned 2026-10-05; `git show 2ce8de0a:docs/reports/2026-09-27-fundamentals-backfill-not-rederived-defect.md`) reproduction) on dev —
   backfill fundamentals with no bars, store bars, re-backfill `overwrite=true`, confirm
   `query_fundamentals(mode=historical)` no longer reports the 5 metrics missing.
 
