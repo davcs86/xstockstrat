@@ -2655,3 +2655,8 @@ ambiguity is logged here).
   through the real BFF router (the api-smoke request path, or a gRPC-layer mock below it). A
   `page.route` of that RPC tests the component only and is no evidence the route exists. Same
   vacuous-green family as fails.md:800 and fails.md:2422.
+
+### 2026-10-06 — private-by-default-templates — header
+- **Mistake**: The design debate threaded owner headers through a hand-made list of analysis→ingest call sites, and every round found sites the previous one had missed. Round 3 missed `entry_backfill.py:96`, round 4 missed `servicer.py:3458`, and round 5 found that the eight analysis→indicators sites had never been listed. The proposed CI guard (an AST check that each call "passes `metadata=`") would also have accepted `metadata=()`, which is exactly the headerless bug at `main.py:148`.
+- **Evidence**: `docs/roadmap/features/224-private-by-default-templates/context.md` (round 3–5 syntheses); `design.md` §3.
+- **Rule it implies**: When identity is threaded through outbound calls, enforce it with a runtime client-interceptor test that requires a non-empty `x-user-id` on every stub of every target service. Do not treat a grep list or an AST "argument present" check as proof that the call carries the header.

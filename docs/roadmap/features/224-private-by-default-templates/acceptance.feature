@@ -38,9 +38,10 @@ Feature: private-by-default-templates
 
   @AC-6 @FR-3 @FR-1
   Scenario: The fundamentals loop still runs the system scoring formula
-    Given analysis.fundsignal.scoring_formula_id is empty (built-in default)
+    Given analysis.fundsignal.scoring_formula_id is set to system formula "d1ff5e6b-6d9c-589d-b95e-defd862c702b"
     When the fundamentals signal loop scores symbol "AAPL"
     Then ExecuteFormula for system formula "d1ff5e6b-6d9c-589d-b95e-defd862c702b" succeeds
+    And indicators receives the ExecuteFormula call with x-user-id "system" and x-internal-caller "analysis-fundsignal"
 
   @AC-7 @FR-4
   Scenario: Users manage their own signal sources without admin scope
@@ -159,7 +160,7 @@ Feature: private-by-default-templates
     Given "bob" is signed in to /insights
     When "bob" opens the formulas library
     Then no "Public" checkbox, badge or filter is rendered
-    And a "Templates" entry in PLATFORM_SUBNAV lists the catalog with a "Use template" action
+    And a "Templates" entry in the rendered nav (NAV_GROUPS, mirrored in PLATFORM_SUBNAV) lists the catalog with a "Use template" action
 
   @AC-25 @FR-12
   Scenario: Agent tools expose templates and drop public arguments
@@ -227,3 +228,29 @@ Feature: private-by-default-templates
     Given "bob" already owns strategy "mean_reversion"
     When "bob" instantiates "tpl-meanrev" with strategy_id "mean_reversion"
     Then the call fails with ALREADY_EXISTS and no strategy or formula is created
+
+  @AC-35 @FR-14
+  Scenario: Two users with the same mcp_client slug use their own credentials
+    Given "alice" and "bob" each own mcp_client source "acme-mcp" with bearers "tok-a" and "tok-b"
+    When the ingest poller polls both sources
+    Then the request for "alice"'s source carries "Authorization: Bearer tok-a" and "bob"'s carries "Bearer tok-b"
+    And GetConfig, ListKeys and WatchConfig never return "tok-a" or "tok-b" in plaintext to any caller
+
+  @AC-36 @FR-4
+  Scenario: System slugs are reserved in both directions
+    Given a "system"-owned source "fundamentals" exists
+    When "bob" calls ManageSignalSource REGISTER with slug "fundamentals"
+    Then the call fails with ALREADY_EXISTS and no source owned by "bob" exists
+    Given "bob" owns source "macro-feed" and analysis.fundsignal.source_slug is reconfigured to "macro-feed"
+    When the fundamentals signal loop registers its system source
+    Then the registration fails with FAILED_PRECONDITION
+    And the cycle emits no signal and raises an ERROR notify alert naming slug "macro-feed"
+
+  @AC-37 @FR-3 @FR-6
+  Scenario: Fundamentals scan fails closed on a non-system scoring formula
+    Given "alice" owns private formula "f-alice-score"
+    And analysis.fundsignal.scoring_formula_id is set to "f-alice-score"
+    When the fundamentals signal loop scores symbol "AAPL" on the scheduled path or via RunFundamentalsScan
+    Then no IngestSignal call is made and no fundsignal_emitted row is written
+    And an ERROR is logged and a notify alert with severity ALERT_SEVERITY_ERROR is emitted
+    And the built-in scorer is not used

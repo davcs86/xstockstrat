@@ -94,3 +94,253 @@ OQ-4 to OQ-6 remain for /sdd-design.
 - Merged latest `main-dev` (which includes PR #1219, merged as `69c8554`, and #1220).
 - **#1219 dependency is now satisfied.** `_INTERNAL_FORMULA_READERS` (indicators) and `app/internal_caller.py` (analysis) exist on this branch for FR-1/FR-3 to remove. The merge-order row is marked resolved.
 - The `@AC-*` IDs and FR numbers are unchanged (the IDs are per-feature).
+
+## Session 2026-10-06 — sdd-design Phase 1, round 1 (full mode)
+
+- **Proposer:**
+  - per-service template catalogs (indicators/ingest/analysis) with shared `common.v1` `TemplateKind`/`TemplateMeta`/`TemplateOrigin`;
+  - FR-9 as an analysis-orchestrated saga (intent row, pending-hidden formula copies in indicators, commit/abort, reconcile);
+  - owner threading via a per-owner evaluator before bypass removal;
+  - ingest `system` owner via a portfolio-style `{callerID,rpc}` allow-list;
+  - D-1..D-5 resolutions;
+  - mcp credential re-keyed through a new config secret-write grant.
+- **Adversary:** NEEDS WORK, **no Floor breach**. Surviving objections:
+  1. **C-16 regression:** `resolve_fundamentals_universe` (`live_loop.py:157-163`) reads signals with no identity, so the blend universe goes dark (`@feature-168/160/190`). It needs a system-only read.
+  2. **Slug shadowing:** a user can register the slug `fundamentals`, which poisons the blend and the `{slug: weight}` maps. Reserve system slugs.
+  3. **Header precedence:** `_SYSTEM_META` duplicates or drops headers on the manual scan path. Strip the inbound user/scope, keep trace; the grant wins.
+  4. **Grant scope:** drop the unused `QuerySignals` grant; bind the `system` write grant to the mTLS peer SAN.
+  5. **Rollback safety:** the PK swap and `DROP DEFAULT` break old code on rollback, so use expand-then-contract.
+  6. **Unguarded default:** `SEED_USER_ID` DEFAULT has no unrendered-value guard; generalize the envsubst.
+  7. **Scoring formula:** verify `analysis.fundsignal.scoring_formula_id` is `SYSTEM_AUTHOR` in staging and prod before bypass removal.
+  8. **Missing FR-13 path:** the strategies admin-read path.
+  9. **Backtest grades:** an unreadable-formula hold must not feed them; mark and exclude. Evict the indicators cache on abort.
+  10. **Saga hardening:** a periodic sweep, a batched transactional copy, owner-checked commit, and a retired-template rule.
+  11. **jscpd:** record the duplication rationale.
+  12. **Config scope:** the secret-write grant is out of spec scope, needs config-team sign-off, should be narrowed, and should use an opaque credential key.
+  13. **CHANGE sign-off:** `@feature-161 @AC-4/@AC-5` needs operator sign-off; register in `NAV_GROUPS` (and `PLATFORM_SUBNAV`).
+  14. **Index:** add a `user_id` index on `newsletter_signals`.
+  15. **D-1 alternative:** leave legacy NULL-owner runs NULL and unreadable instead of assigning them to `SEED_USER_ID`.
+- **Verified:** evaluator GetFormula failures are tolerated (`evaluator.py:554,581`); the `@feature-127` auto-add is agent-side; the evaluator is stateless.
+- **Gate:** round 1 < mandated 2, so approval is not offered yet; operator decisions are requested for the next round.
+
+### Operator decisions at the round-1 gate (2026-10-06), binding for round 2+
+
+- **C-16 CHANGE signed off:** `@feature-161 @AC-4/@AC-5` (`services/xstockstrat-ui/acceptance/surface-signal-weight-decay-config.feature`) are re-homed to `/insights/signal-sources`. Their assertions stay the same and only the route changes. `/config-ui/sources` becomes the FR-13 admin read-only view. Signed off by the operator on 2026-10-06.
+- **MCP credentials go to per-user secrets in config.** This is an explicit operator override of feature 147's "secret keys (`is_secret`) are global-scope only" invariant (`config.proto:133-135`). Config secrets may now carry a `user_id`.
+  - `xstockstrat-config` joins Affected Services.
+  - The config-team approval gate applies.
+  - Scope reaches `GetSecret` (owner-scoped resolution), `WatchConfig`/`GetConfig`/`ListKeys` redaction (it must hold per user), and the `SetConfig` per-user secret write path.
+  - Feature 147's 3-guard pattern stays: encrypt at rest, redact on every edge, decrypt only through `GetSecret` for allow-listed internal callers.
+- **Legacy backtest runs whose owner is ambiguous go to `SEED_USER_ID`** (D-1). The owner is resolved when exactly one exists; otherwise the run goes to `SEED_USER_ID`, and `backtest_runs.user_id` is then `SET NOT NULL`. The operator accepts that the seed user receives the history of ambiguous runs.
+- **System sources are merged and marked read-only.**
+  - `ListSignalSources`/`QuerySignals` return the caller's own rows plus `system` rows, flagged system and immutable.
+  - System slugs are reserved: no user may register or own a slug held by `system`.
+  - FR-4 is amended accordingly.
+
+## Session 2026-10-06 — sdd-design Phase 1, round 2 (full mode)
+
+- **Proposer (round 2):**
+  - headerless ingest reads return system rows only;
+  - write-as-system grants are bound to the mTLS peer SAN;
+  - expand/contract migrations (expand: indicators 007, ingest 013, analysis 026; contract: ingest 014, analysis 027);
+  - batched transactional saga copy;
+  - hard-delete on abort;
+  - pending rows never cached;
+  - `DurableSchedule` reconcile;
+  - config per-user secrets reuse `config_values.user_id`, with exact-scope `GetSecret` and opaque UUID keys;
+  - FR-13 admin read in analysis.
+- **Adversary (round 2):** NEEDS WORK, **no Floor breach**. Surviving objections:
+  1. **Expand is over-scoped.** Only two N-1 `ON CONFLICT` targets exist: ingest dedup (`servicer.py:871`) and analysis scores (`strategy_scores.py:48`). Keeping the old PKs makes AC-8/9/35 impossible in release N. Fix: swap the `signal_sources` PK in N, and move the two upsert targets into **new owner-keyed tables**, leaving the old tables for N-1. Contract becomes a table drop. D-3 goes away, and D-2 becomes a recompute.
+  2. **Headerless system-only reads cause silent data loss.** The pnl snapshot and the live-loop drain are headerless today (`@feature-042/029/176`). Thread all analysis→ingest headers in step 2, make headerless reads fail closed, and allow a SAN-bound `analysis-system-read` grant only.
+  3. **Migrations must re-run from 001.** `db-migrate.sh` dirty-state recovery re-runs from 001, so every new up-file must be idempotent on both the expanded and contracted schema. Add a CI chain-twice test.
+  4. **Legacy credential refs can exfiltrate the seed bearer** through a user-controlled url. Add a migration-only `credential_scope=LEGACY_GLOBAL` column that no RPC can set and that is cleared on any ref write.
+  5. **Bind the config `GetSecret` ingest grant** to peer SAN `xstockstrat-ingest`. Today any mTLS client with `x-internal-caller: ingest` can decrypt secrets, and per-user secrets widen that.
+  6. **The bypass-removal runtime gate cannot be satisfied inside the pipeline** (F-03). Verify at design time instead (done, see below). Fundsignal must fail closed on a non-system formula, never fall back to the built-in scorer.
+  7. **The contract step has no lifecycle home.** Make it a named follow-up feature, and add a CI `migration-contract-gate` (`-- contract-of:` header, expand file must already be on `origin/main`, never in the same PR).
+  8. **A template can create a protected blend.** `InstantiateTemplate` must reject the *configured* blend id, both as the default and as a caller override (`@feature-186`).
+  9. **Saga commit vs reconcile race.** Use compare-and-swap intent transitions: PENDING→COMMITTED in the strategy txn; PENDING→ABORTING before an abort.
+  10. **Performance.** Fetch the system signal set once per cycle, use owner-only drains, add a `SignalScope` enum on `QuerySignalsRequest`, and index `(user_id, ingested_at DESC)`.
+  11. **Who sees `audit.admin_read`** (owner's export vs admin's) is a product decision for the operator, as is the event volume.
+  12. **Verify-now items:** done, see below.
+  13. **Nav:** `PLATFORM_SUBNAV` is legacy and inert; registering there only satisfies C-10(a)'s wording. Record the rationale.
+- **Design-time verifications (2026-10-06, staging, read-only via the staging MCP + repo):**
+  - `analysis.fundsignal.scoring_formula_id` = `d1ff5e6b-6d9c-589d-b95e-defd862c702b`, the seeded `SYSTEM_AUTHOR` formula. Removing the bypass is safe on staging. **Prod could not be checked from this session** (staging MCP only), so this is carried as a pre-merge operator check.
+  - The staging signal sources have exactly **one** `derived` source, `fundamentals`, so the D-4 "derived ⇒ system" rule is safe on staging. There are **no `mcp_client` sources on staging**, so no legacy credential data exists there.
+  - `instance_count: 1` for indicators/ingest/analysis/config in both `.do/app.yaml` and `.do/app.dev.yaml`.
+
+### Operator decisions at the round-2 gate (2026-10-06)
+
+- **Run round 3** and fold in all 13 round-2 objections. Approval was available but deferred.
+- **`audit.admin_read` goes on both streams:** one event carrying the owner's `user_id` (stream `user:<owner>`) and one carrying the admin's `user_id` (stream `user:<admin>`). Event volume therefore doubles; the design must state how many events one list call emits.
+- **Contract migrations move to a named follow-up feature.** 224 ships expand-only. A separate follow-up feature (number assigned at `/sdd-spec` or story time) runs the contract migrations. It is gated by a `merge-order.md` row plus a new CI `migration-contract-gate` that refuses a contract file until its expand file is on `origin/main`. That satisfies C-14's "named follow-up" form for deferral.
+
+## Session 2026-10-06 — sdd-design Phase 1, round 3 (full mode)
+
+- **Proposer (round 3):**
+  - Data: the `signal_sources` PK swaps in N. New owner-keyed tables `ingest.signal_dedup_claims` and `analysis.strategy_scores_v2` (filled by boot recompute). A BEFORE INSERT owner-fill trigger handles N-1 writes. `db-migrate.sh` gains a generalized `-- requires-env` header.
+  - Access: headerless reads and writes fail closed, except SAN-bound `analysis-system-read`/`analysis-system-write`. `GetSecret` is exact-scope and SAN-bound. A `credential_scope` trigger resets on edits.
+  - Process: idempotent up-files plus a `migration-rerun` CI job. A `migration-contract-gate` CI job.
+  - Identity threading moves first; it adds the previously missed `entry_backfill.py:96`.
+  - `SignalScope` enum; fundsignal fails closed; template blend guard; saga CAS; audit 1+M events per page, failing closed.
+- **Adversary (round 3):** NEEDS WORK, **no Floor breach**. Claims refuted by code read:
+  1. **"Release N reads/writes only owner-keyed tables" is false.** `backtest_run_symbols.fetch_eligible` is keyed by `strategy_id`+fingerprint with no owner (`backtest_run_symbols.py:70-76`). Template instances share a fingerprint, so grades pool across users and `@AC-21` fails. The in-memory `_strategies`/`_recompute_locks`/`hydrate_scores`/`ListStrategies` filter are bare-keyed (`servicer.py:504,2272-2278,2489,2498`). Fix: scope the evidence by owner (join `backtest_runs` or add `backtest_run_symbols.user_id`), re-key the maps to `(user_id, strategy_id)`, and seed `scores_v2` in SQL for unambiguous ids, recomputing only the ambiguous pairs with a dedicated bound.
+  2. **The N-1-on-N signals trigger leaks.** Assigning "system, else SEED" files Bob's private signals under the seed user on rollback. The N-1 `mark_source_*` calls corrupt every owner's counters. Fix: the trigger resolves the unique holder of the slug, else raises (N-1 fails closed).
+  3. **The expand file re-creates triggers on every dirty replay**, even after the contract dropped them. Create them only in the one-shot branch or behind a contract marker, and assert that in the CI rerun.
+  4. **The 013-style unrendered guard is conditional** (it raises only when `missing>0`). Files that embed the seed in a function or default need an unconditional guard. The CI rerun must render the files first.
+  5. **The `credential_scope` trigger watches `url`**, but `mcp_client` uses `config_json.mcp_endpoint` (`signal_sources.py:226`). Reset on any `config_json` or `credentials_ref` change.
+  6. **The reserved `system` identity is not enforced anywhere** (no `x-user-id: system` rejection exists). indicators `RegisterFormula` with header `system` yields a world-readable, undeletable formula. Add one rule across ingest, indicators and analysis: PERMISSION_DENIED without the SAN grant. Identity ids are UUIDs (`identity/001:7`), so there is no collision.
+  7. **The `@feature-186` REGISTER guard assumption is false.** Only DEACTIVATE and set-non-live are guarded, and the blend is user-registered rather than seeded. The template guard alone gives no parity. **Operator decision.**
+  8. **The rollout is not rollback-safe at the RPC layer.** Identity threading and fail-closed enforcement in the same prod release mean a rolling deploy or an analysis-only rollback sends headerless calls, which darkens the blend and rejects fundsignal (C-16 `@feature-160/168/190`). Fix: two-phase cutover, where ingest accepts headers in release N and enforces in a follow-up release. **Operator decision.**
+  9. **Fail-closed audit volume:** 1+M sequential appends against a ledger with `DB_POOL_MAX=1`. Emit zero events for pages with no foreign objects, and make the appends concurrent and bounded.
+  10. **Smaller items:**
+      - ManageSignalSource has no DELETE (`ingest servicer.py:70-73`), so there is no tombstone.
+      - An empty-value secret decrypts as `found:true ''`, so the poller must treat `''` as missing.
+      - The reverse slug race (a reconfigured system slug that a user already holds) must fail loudly.
+      - The hypertable should use a fast-default `ADD COLUMN`, then `UPDATE` the system slugs, then `DROP DEFAULT`; record the prod row count.
+      - Parse SAN as a comma list. `getAuthContext()` exists in grpc-js 1.14.4.
+      - Seed `signal_dedup_claims` owner via `signal_id`→`newsletter_signals.user_id`.
+      - C-18: make `LEGACY_GLOBAL` conditional on the prod `mcp_client` count, and record the removal of the `_builtin_score` fallback as deliberate.
+  - **F-01 note:** keep the hardcoded analysis-013 envsubst branch in `db-migrate.sh`. Adding a header to 013 would edit an applied migration.
+- **Verified OK:** N-1 has no `ON CONFLICT` on `signal_sources`; BEFORE ROW triggers are supported on hypertables; exact-scope `GetSecret` does not break marketdata (empty `user_id` → `IS NULL`).
+
+### Operator decisions at the round-3 gate (2026-10-06)
+
+- **Two-phase RPC cutover.**
+  - **Release N (feature 224):** ingest, indicators and analysis accept and honor the owner headers but still tolerate headerless calls with today's behavior. The analysis, agent and UI threading ships in N.
+  - **Named follow-up feature** ("224 enforce + contract"): this is the same follow-up already approved for the contract migrations. It turns on fail-closed for headerless reads and writes, drops the N-1 owner-fill triggers and old tables, and sets `backtest_runs.user_id` NOT NULL.
+- **Blend guard on REGISTER and on templates.** `ManageStrategy` REGISTER and `InstantiateTemplate` both require the ADMIN bit to create the *currently configured* `analysis.engine.fundamentals_blend_strategy_id`; everyone else gets FAILED_PRECONDITION. The operator's admin path keeps working. This closes a pre-existing `@feature-186` gap, classed as EXTEND (a new guard; no existing guarantee is weakened).
+- **Run round 4**, folding in the round-3 fixes, then decide.
+
+## Session 2026-10-06 — sdd-design Phase 1, round 4 (full mode)
+
+- **Proposer (round 4):**
+  - Release N is expand-only, with an RPC layer that tolerates headerless calls.
+  - The named follow-up "224 enforce + contract" does five things:
+    - turns on fail-closed;
+    - removes the indicators bypass;
+    - re-backfills NULL owners, then sets NOT NULL;
+    - drops the N-1 triggers and the old tables;
+    - refuses down migrations.
+  - `x-user-id: system` needs a grant bound to the peer SAN.
+  - Analysis threads the owner through; the in-memory maps are re-keyed to `(user_id, strategy_id)`; `backtest_run_symbols.user_id` is added; `strategy_scores_v2` is seeded in SQL for unambiguous ids.
+  - Ingest 013 contains:
+    - the PK swap;
+    - the N-1 owner-fill trigger (it fills the unique slug holder, otherwise it raises);
+    - `signal_dedup_claims`;
+    - a conditional `credential_scope`.
+  - Per-user config secrets.
+  - Audit emits 0 or 1+K events per page and fails closed.
+  - Tooling: the `db-migrate.sh` header scan and the `migration-rerun` and `migration-contract-gate` CI jobs.
+  - Build order for N: steps 0–13.
+- **Adversary (round 4):** NEEDS WORK, **no Floor breach**, and no item needs a design change. Amendments:
+  1. **Manual `RunFundamentalsScan`:** every fundsignal ingest and indicators call, on both the loop path and the manual path, replaces `x-user-id` with `system`, adds `x-internal-caller: analysis-fundsignal`, and keeps `x-trace-id`.
+  2. **AC-36 conflicts with the design.** A user registering a reserved slug gets `ALREADY_EXISTS`. System registering a slug a user already holds keeps `FAILED_PRECONDITION`.
+  3. **AC-6 can't be observed.** An empty `scoring_formula_id` uses the built-in scorer and never calls `ExecuteFormula`. AC-6 needs amending, plus a fail-closed scenario.
+  4. **`@feature-185`:** a `NOT_FOUND` from an unreadable formula maps to "component skipped + warning" on all six evaluator surfaces, never to the data-unavailable marker.
+  5. **Headerless `IngestSignal` in N:** resolve the unique slug holder; zero holders or more than one gives `FAILED_PRECONDITION`. Indicators Update/Delete keep the body `user_id` fallback in N.
+  6. **AC-28 branch order:** `ExecuteFormula` on a formula the caller can't read returns `PERMISSION_DENIED` for an admin and `NOT_FOUND` for a non-admin.
+  7. **Build order:** swap step 7 (the ingest poller's exact-scope `GetSecret`) with step 8 (config per-user secrets).
+  8. **Build order:** the blend-guard helper lands in step 9; step 10 calls it and tests it.
+  - **Call sites to list in the spec, each with a test, plus a CI assertion.** Every analysis→ingest call site:
+    - `live_loop.py:157`, `live_loop.py:457`
+    - `entry_backfill.py:96`
+    - `pnl_pattern_consumer.py:378`
+    - `servicer.py:5188`, `servicer.py:5212`, `servicer.py:5306`
+    - `screener.py:320`
+    - `fundsignal_loop.py:450`, `fundsignal_loop.py:479`
+  - **Doc drift (verified):** indicators has no ingest caller. The root CLAUDE.md dependency line `xstockstrat-indicators → xstockstrat-ingest` is stale. Fix it at teardown.
+
+### Operator decisions at the round-4 gate (2026-10-06)
+
+- **Run round 5**, the hard cap. After it the only options are approve, accept documented risks, or stop.
+- **AC-6 is amended** (same `@AC-6` id, text only). Its Given becomes "`scoring_formula_id` is set to system formula `d1ff…`". A new **AC-37** is added: when the configured scoring formula is not system-owned, the scan emits nothing, raises an ERROR and a notify alert, and does not fall back to the built-in scorer.
+- **Audit volume is 1 + K per page** (K = distinct foreign owners). The admin's stream gets one event carrying all the ids; each owner's stream gets one event carrying only that owner's ids. A page that holds only the admin's own objects emits no event.
+
+## Session 2026-10-06 — sdd-design Phase 1, round 5 (full mode, hard cap)
+
+- **Proposer (round 5):** the consolidated final design, with all 8 round-4 amendments verified against the code.
+  - **Amendment 5 is corrected:** a headerless `IngestSignal` with **0** slug holders stays `INVALID_ARGUMENT`, which preserves today's behavior (`ingest servicer.py:824-825` → `:792-793`). Only **more than 1** holder returns `FAILED_PRECONDITION`.
+  - **New call site:** `servicer.py:3458` (`_resolve_source_names`).
+  - **Now owner-scoped in step 3:** `GetStrategyAnalytics list_by_strategy` (`servicer.py:5292`), which was bare-keyed.
+  - **Build order:** steps 7 and 8 swapped (config per-user secrets come before the ingest poller); the blend-guard helper is in step 9 and is called by step 10.
+- **Adversary (round 5):** **APPROVE-WITH-AMENDMENTS**, no Floor breach (F-01 numbers free: indicators 007, ingest 013, analysis 026). Amendments to fold into design.md:
+  - **A. Verifying the peer SAN.**
+    - All three Python services pin grpcio 1.80.0.
+    - Step 1 adds a spike test on the real mTLS harness (`ingest tests/test_mtls.py:122-160`) that does two things:
+      - checks `peer_identity_key()=="x509_subject_alternative_name"` and requires an exact match in `peer_identities()`;
+      - fails closed when the transport is non-SSL or the context is a mock.
+    - Shared helper per service.
+    - Config `hasSecretCallerAuthority` (`authz.ts:129-142`) must also take the call object.
+  - **B. Backtest evidence (`C-16` `@feature-065`).**
+    - Problem: an all-None evaluator result in a backtest becomes a buffered zero-trade cell, which counts as evidence (`servicer.py:873-877`, `:1059-1061`).
+    - Fix: in backtest mode, an unreadable formula **raises** `FormulaExecutionError`, which goes to FORMULA_ERROR and is excluded from evidence (`:912-926`).
+    - Only the other five surfaces map NOT_FOUND to "skipped + warning".
+    - Test: no `backtest_run_symbols` row is written for the symbol.
+  - **C. N-only indicators bypass.** The `x-internal-caller: analysis` reader is bound to the `xstockstrat-analysis` SAN, so it is no longer header-only.
+  - **D. CI call-site check.**
+    - The AST "passes `metadata=`" check is replaced by a runtime interceptor test: every ingest **and** indicators stub call must carry a non-empty `x-user-id`.
+    - Indicators call sites to add:
+      - analysis `servicer.py:552,578,1562,2100`
+      - `evaluator.py:549,576`
+      - `screener.py:342`
+      - `fundamentals_scoring.py:52`
+  - **E. Status codes, recorded explicitly.**
+    - The round-4 amendment 5 reversal (0 holders → `INVALID_ARGUMENT`).
+    - A headered call on an unregistered slug changes from `INVALID_ARGUMENT` to `NOT_FOUND` (AC-10). Agent `client.py:240-244` passes errors through.
+  - **F. Fundsignal registration (`C-16`).**
+    - The `_source_registered` flag is keyed on the slug (`fundsignal_loop.py:83,444` vs `:161`).
+    - A headered `NOT_FOUND` on `IngestSignal` as `system` aborts the cycle and raises an ERROR alert.
+  - **G. One blend-id accessor (C-18 DRY)** covering all five read sites: `servicer.py:2754,2882,4343`, `live_loop.py:337`, `entry_backfill.py:87`.
+  - **H. Reserved slugs and caps (F-07).**
+    - "Reserved" means "slug already held by `system` in the DB"; there is no literal list.
+    - The audit append concurrency and boot-recompute bounds become documented invariant caps or config keys.
+  - **Risks:**
+    - Ledger `DB_POOL_MAX=1` serializes the 1+K appends, so set a per-page K ceiling.
+    - The step 2–5 window is only test-order sensitive, never deployed: AC-37 tests assert the pre-flight decision.
+    - `_formula_outputs` swallows NOT_FOUND (`servicer.py:557-558`), so AC-30's warning must precede the "unknown series" rejection.
+
+### Operator decisions at the round-5 gate (2026-10-06)
+
+- **The design is approved, with round-5 amendments A–H folded into design.md as binding text.**
+- **Bounds are fixed invariant caps, not config keys.** The audit append concurrency is 4. The per-page K ceiling equals the max page size. The boot recompute handles 50 pairs per pass. These are named constants with a stated rationale, so the config-team gate does not apply.
+
+## Session 2026-10-06 — sdd-design
+
+- **Phase 0 Recon:** wrote recon.md, covering indicators, ingest, analysis, config, agent and ui. Main reuse patterns: the portfolio `authz.go` x-internal-caller allow-list, and the feature-147 secret 3-guard model.
+- **Phase 1 Grilling:** 5 rounds, full mode.
+  - **Chosen:** release N is expand-only and header-tolerant, with all owner threading, a SAN-bound `system` identity, owner-keyed tables, per-user config secrets, the template saga, and the 1+K audit. The named follow-up "224 enforce + contract" turns on fail-closed and runs the contract.
+  - **Rejected:** a big-bang enforcement release, and keeping the old PKs (full list in design.md).
+- **Constitution rules touched:** F-01, F-03, F-06, F-07, F-11, C-07, C-10, C-11, C-14, C-15, C-16, C-18, P-02, P-03. No Floor breaches.
+- **acceptance.feature:** AC-6 Given amended, AC-36 extended to cover both directions, AC-37 added.
+- **Status:** spec-ready → design-approved.
+
+### Open Threads (from design.md Open Risks)
+
+- **Before the integration PR:** verify the prod `analysis.fundsignal.scoring_formula_id`.
+- **/sdd-spec step 6:** the prod `mcp_client` count decides whether `credential_scope` ships.
+- **Step 1:** a grpc.aio peer-SAN spike test must pass before steps 5–7.
+- **Step 5:**
+  - set the audit K ceiling against ledger `DB_POOL_MAX=1`;
+  - make the AC-30 warning fire before the "unknown series" rejection.
+- **Step 2:** AC-37 tests assert the pre-flight decision, not an indicators denial.
+- **At /sdd-spec:** create the follow-up "224 enforce + contract" and add its merge-order row.
+
+## Session 2026-10-06 — AI review of design.md (spec-reviewer + feature-overlap)
+
+- **spec-reviewer:** PASS WITH WARNINGS. No blocker and no Floor breach. All warnings are folded into design.md:
+  - `ListBacktests` is now owner-scoped (`servicer.py:2558` → `backtest_runs.py:80-84`). Without this, AC-21 fails.
+  - New §5 "Template catalog" settles OQ-4 as per-service. It also covers admin authoring, version bumps, retire, the empty catalog, update-available on every Get/List path, and AC-34.
+  - New text for FR-1 list/write behavior, the D-4 system-slug rule, removing the ManageSignalSource admin gate, and the system-source `PERMISSION_DENIED`.
+  - The `ComputeIndicator` call sites are added, and `_strategies` is corrected to `:417`.
+  - F-03 and C-07 citations are corrected. C-03, C-04, C-09, C-10(c) and C-17 are added.
+  - ANALYSIS-2/3 is relabelled as a runtime invariant (not an `@AC-*`).
+  - The 50-pair cap is recorded, and "rounds 1–5" is fixed.
+  - Step 1 now spikes the grpc-js SAN check as well as grpc.aio.
+  - Open risks now have targets.
+  - AC-24's wording now matches the `NAV_GROUPS` decision; it is mirrored in `PLATFORM_SUBNAV`.
+- **feature-overlap:** CLEAN.
+  - The only collision is 217's `StrategyDefinition` field 15, already settled (224 uses 16+).
+  - Fixes applied:
+    - `merge-order.md` row 72 said the agent tool count was 52. The trunk count is 43, which reaches 45 after 224.
+    - Proto field numbers are now given per message in build step 0.
+  - New open risk: feature 084's droplet `db-migrator` env needs `SEED_USER_ID`.
