@@ -265,7 +265,7 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 **Hard dependency:** PR #1219 (branch `ccr-5a32dbd3-cmvj83`) must merge to `main-dev` first. FR-1 and FR-3
 remove the `_INTERNAL_FORMULA_READERS` bypass and analysis `app/internal_caller.py` that #1219 adds. If
 #1219 does not land, FR-1 and FR-3 expand to adding the owner checks on `GetFormula`/`ExecuteFormula`
-from scratch. Feature 217 merges before 220 (`StrategyDefinition` field 15, plus shared
+from scratch. Feature 217 merges before 224 (`StrategyDefinition` field 15, plus shared
 `ManageStrategy`, evaluator, `StrategyWizard` and agent tool-count surfaces).
 
 ## Acceptance Criteria

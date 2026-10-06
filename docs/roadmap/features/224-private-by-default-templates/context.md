@@ -1,8 +1,8 @@
 # Context: private-by-default-templates
 
-**Feature**: `docs/roadmap/features/220-private-by-default-templates/feature.md`
-**Product Spec**: `docs/roadmap/features/220-private-by-default-templates/product-spec.md`
-**Implementation Spec**: `docs/roadmap/features/220-private-by-default-templates/implementation-spec.md`
+**Feature**: `docs/roadmap/features/224-private-by-default-templates/feature.md`
+**Product Spec**: `docs/roadmap/features/224-private-by-default-templates/product-spec.md`
+**Implementation Spec**: `docs/roadmap/features/224-private-by-default-templates/implementation-spec.md`
 
 ---
 
@@ -71,10 +71,10 @@ OQ-4 to OQ-6 remain for /sdd-design.
 
 - Pass 1: **FAIL**. C-07 had no migration strategy; P-03 had OQ-4/5/6 unchecked. 11 warnings. All were addressed (commit `181fadc`).
 - Overlap scan:
-  - Proto field collision: feature 217 owns `StrategyDefinition` field 15, so 220 takes 16+.
+  - Proto field collision: feature 217 owns `StrategyDefinition` field 15, so 224 takes 16+.
   - Hard dependency on PR #1219.
   - Migrations and config keys are clean.
-  - Merge-order rows added with operator approval: 220 waits for #1219 and for 217.
+  - Merge-order rows added with operator approval: 224 waits for #1219 and for 217.
 - Pass 2: **PASS WITH WARNINGS**. Product spec approved. Status: draft → spec-ready.
 - Warnings fixed in this session:
   - The indicators `LEDGER_ENDPOINT` is already wired; only a ledger client is new.
@@ -87,3 +87,10 @@ OQ-4 to OQ-6 remain for /sdd-design.
   - [ ] **D-3 Lossy down on the `strategy_scores` PK swap** (`005:2`). Extend the refuse-if-colliding down policy to it.
   - [ ] **D-4 Fundamentals source identification.** The slug comes from config `analysis.fundsignal.source_slug` (default `fundamentals`), which an ingest migration cannot read. Choose: the literal slug, `source_type='derived'` (ingest `006`), or a `SYSTEM_SOURCE_SLUGS` migration variable.
   - [ ] **D-5** `ingest.newsletter_signals` is a TimescaleDB hypertable. The column add, backfill and `NOT NULL` must account for compression and chunks.
+
+## Session 2026-10-06 — renumbered 220 → 224, merged main-dev
+
+- Renumbered `220-private-by-default-templates` to `224-private-by-default-templates` (`git mv` plus self-references in context.md, product-spec.md and merge-order.md). PR #1220 landed on `main-dev` claiming `220-fix-trader-position-fundamentals`, `221`, `222` and `223` while this feature was mid-pipeline on its branch. Per the Feature Numbering collision rule (root CLAUDE.md), the not-yet-executed feature renumbers to `max+1`, re-derived across `main-dev` and all remote `feature/*`/`claude/*` branches. Same procedure as 117→118 (merge-order.md).
+- Merged latest `main-dev` (which includes PR #1219, merged as `69c8554`, and #1220).
+- **#1219 dependency is now satisfied.** `_INTERNAL_FORMULA_READERS` (indicators) and `app/internal_caller.py` (analysis) exist on this branch for FR-1/FR-3 to remove. The merge-order row is marked resolved.
+- The `@AC-*` IDs and FR numbers are unchanged (the IDs are per-feature).
