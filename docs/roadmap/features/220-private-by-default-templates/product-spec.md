@@ -1,0 +1,243 @@
+# Product Spec: private-by-default-templates
+
+**Created**: 2026-10-06
+
+---
+
+## Problem Statement
+
+Visibility today is inconsistent and leaky. Formulas carry an `is_public` flag that exposes their source
+to every user. Signal sources and ingested signals have no owner at all, so one user's signal feed drives
+every user's live strategies, opportunities and attribution. analysis can run any user's private formula
+through an internal-caller bypass (the residual left by PR #1219). Users also have no supported way to
+start from curated, vetted building blocks: the only "templates" are UI-only formula starters that are
+never persisted.
+
+## User Story
+
+As a platform owner, I want every user-authored object to be private to its owner, with the concept of
+"public" removed entirely, and an admin-curated catalog of templates that users instantiate into
+independent private copies. That way no user can read, execute or be influenced by another user's
+strategies, formulas or signals, and users still get vetted starting points.
+
+## Functional Requirements
+
+FR-1. **No public concept.** `is_public` is removed from every behavior. A formula is readable,
+executable, listable, updatable and deletable only by its author. The single exception is
+`SYSTEM_AUTHOR` (`"system"`) formulas, which stay readable by all users and immutable, exactly as today
+(operator decision 3). The `is_public` / `include_public` proto fields are deprecated, never deleted,
+and their values are ignored. `ListFormulas` returns only the caller's own formulas (plus system
+formulas), whatever `author_filter` says.
+
+FR-2. **Formula author identity is the header.** `RegisterFormula` stamps `author` from `x-user-id` only.
+A body `author` that differs from the caller is rejected or ignored. This closes debt D-30, where a body
+author could register as another user or as `"system"`.
+
+FR-3. **Owner-scoped formula execution in analysis.** analysis calls indicators as the strategy owner
+(`x-user-id` = strategy owner) for evaluation, warmup, screening and backtests. The
+`x-internal-caller: analysis` formula-read bypass (`_INTERNAL_FORMULA_READERS`, analysis
+`app/internal_caller.py`) is removed. A strategy whose component references a formula its owner cannot
+read fails that component visibly: a strategy warning on write, and the component skipped at
+evaluation. It never silently runs someone else's formula. The fundamentals loop runs the system scoring
+formula, which stays readable (FR-1 exception).
+
+FR-4. **Signal sources are owned.** Every signal source has an owner (`user_id`). `ManageSignalSource`
+create/update/delete is allowed for the owner and is no longer admin-only. `ListSignalSources` returns
+only the caller's sources. Slugs are unique per owner, not globally.
+
+FR-5. **Ingested signals are owned.** Every ingested signal row carries the owner of the source it was
+ingested into. `IngestSignal` stamps the owner from the caller (`x-user-id`) and accepts only sources
+the caller owns. Dedup keys are per owner, so two users ingesting the same newsletter item each keep
+their own row. `QuerySignals` returns only the caller's signals.
+
+FR-6. **Signal consumers are owner-scoped.**
+The only exception is signals owned by the reserved `system` owner. The fundamentals signal producer
+(analysis `fundsignal_loop`) emits under a `system`-owned source, and every user's signal-eligible
+strategies, opportunities and screener may consume it. This is the same special case `SYSTEM_AUTHOR`
+formulas already get (OQ-2). `system`-owned sources and signals are immutable through user RPCs. In analysis, the live loop's `signal_eligible` path,
+`ListOpportunities` signal provenance, attribution (`GetAttribution` `source_id`) and the screener's
+`signal_sources` filter consume only the signals owned by the strategy/request owner.
+
+FR-7. **Template catalog.** Templates exist for three kinds: strategy, formula and signal source.
+- A template has a stable id, a kind, a name, a description, a payload and a monotonically increasing
+  `version`.
+- All authenticated users can list and read templates.
+- Only admins (`x-access-scope` ADMIN bit) can create, update or retire templates. An update bumps
+  `version`.
+- Retiring a template hides it from the catalog. Existing instances are unaffected.
+- The catalog starts **empty**. No migration seeds templates (operator decision 3).
+
+FR-8. **Instantiation is a snapshot copy.** Instantiating a template creates an independent private
+object owned by the caller. The instance records `origin_template_id` and `origin_template_version`.
+Later template updates never mutate instances. Reads of an instance expose its origin and whether the
+template's current version is newer (an "update available" indicator only).
+
+FR-9. **Strategy templates deep-copy their formulas.** Instantiating a strategy template:
+- copies every formula template the strategy's components reference into the caller's private formulas,
+  each recording its own origin;
+- repoints the new strategy's components at those copies;
+- runs atomically: if any copy fails, no partial strategy or orphan formulas remain visible to the user;
+- creates the strategy inactive and not live.
+
+If the template's `strategy_id` collides with one the caller already owns, the caller supplies or is
+assigned a non-colliding id.
+
+FR-10. **Strategy-id-keyed state is owner-scoped.** Tables keyed by bare `strategy_id` gain an owner
+dimension, so two users holding the same `strategy_id` (for example from one template) never read or
+overwrite each other's state: `analysis.strategy_scores`, `backtest_run_symbols`, `backtest_details`, and
+the in-memory `self._strategies` map. `GetBacktest` enforces ownership.
+
+FR-11. **Existing data migrates to private.**
+- Every formula currently `is_public=true` stays with its author and becomes private.
+- Existing signal sources, signals and dedup keys are backfilled to the `SEED_USER_ID` owner, mirroring
+  feature 133 (OQ-1). Sources the fundamentals producer writes to are backfilled to `system` instead
+  (OQ-2).
+- System objects stay special-cased exactly as today: `SYSTEM_AUTHOR` formulas, and the
+  `analysis.engine.fundamentals_blend_strategy_id` id-convention match.
+- No data is deleted.
+
+FR-13. **Admins get a read-only view, nothing more** (OQ-3). With the ADMIN bit, an admin can read
+another user's formulas, strategies, signal sources and signals for support and audit, through the
+existing read RPCs. Every admin read of a non-owned object emits an audit ledger event. Admins can no
+longer create, update, delete, execute or instantiate on behalf of another user. This removes today's
+admin override on `UpdateFormula`/`DeleteFormula`. Admin template authoring (FR-7) is unaffected. Admins
+cannot mutate `system` objects either; existing guards stay.
+
+FR-12. **Consumer surfaces reflect the model.** These are in-scope deliverables, not follow-ups:
+- the UI removes every public toggle, badge and filter, and adds the template catalog, "use template"
+  and admin template authoring;
+- the agent's MCP tools drop `is_public` / `include_public` and gain template list/instantiate tools;
+- the strat-lab `backtest` skill is updated in the same PR as any `manage_strategy` change (root
+  CLAUDE.md rule).
+
+## Out of Scope
+
+- User-published templates or any user-to-user sharing (operator decision 2: admin catalog only).
+- Linked or auto-updating instances (operator decision 2: snapshot only).
+- Templates for watchlists, screener presets, backtests or config.
+- Seeding an initial template catalog. A separate content task, if wanted.
+- Converting today's public formulas into templates (operator decision 3: "just make everything private").
+- Portfolio exactly-once / multi-instance consumption (PR #1219 discussion item 2, tracked separately).
+- Deleting deprecated proto fields (a later breaking-change cleanup after all callers migrate).
+
+## Affected Services
+
+- `xstockstrat-indicators` — formula owner-only reads, executes and lists; header-only author; deprecated
+  `is_public`; formula templates and instantiation; removal of the internal-caller read bypass.
+- `xstockstrat-analysis` — owner-scoped indicators calls (drops the interceptor); strategy templates and
+  deep-copy instantiation; owner dimension on strategy-id-keyed tables; owner-scoped signal consumption
+  in the live loop, opportunities, attribution and screener; `GetBacktest` ownership.
+- `xstockstrat-ingest` — owner on signal sources, signals and dedup keys; owner-scoped `IngestSignal`,
+  `QuerySignals`, `ListSignalSources` and `ManageSignalSource`; signal-source templates and
+  instantiation; any MCP-client/scheduled source pollers ingest as the source's owner.
+- `xstockstrat-agent` — MCP tool contract changes (formula, signal-source, strategy tools; new template
+  tools); `docs/runbooks/mcp-tools.md` parity.
+- `xstockstrat-ui` — `/insights` formulas, strategies and signal-source surfaces; `/config-ui` admin
+  template authoring; removal of public UI.
+- `packages/proto` — indicators, analysis and ingest contract changes.
+- `xstockstrat-config` — read-only consideration: `analysis.fundsignal.scoring_formula_id` and
+  `analysis.engine.fundamentals_blend_strategy_id` semantics must keep working; no new keys planned.
+
+## Consumer Surface(s)
+
+- [x] **UI** — `xstockstrat-ui`:
+  - `/insights`
+    - formulas library: drop the Public/Private filter, badge and checkbox; show the caller's own and
+      system formulas;
+    - new **Templates** catalog (formula, strategy, signal source) with a "Use template" action that
+      instantiates and navigates to the new private object, plus an "update available" indicator on
+      instances;
+    - strategy wizard: start from a template;
+    - signal sources: a per-user management page, which today is admin-only under `/config-ui`.
+  - `/config-ui`: admin template authoring (create, edit, retire).
+  - All new routes registered in `PLATFORM_SUBNAV` (C-10).
+- [x] **Agent** — `xstockstrat-agent` MCP tools:
+  - `manage_formula` and `list_formulas` (drop `is_public` / `include_public`);
+  - `get_formula` (no `isPublic`);
+  - `manage_signal_source` (per-user, not admin);
+  - `list_signal_sources` and `ingest_signal` (owner-scoped);
+  - new `list_templates` and `instantiate_template`;
+  - `manage_strategy` / strat-lab `backtest` skill (doc parity).
+- [ ] **None**
+
+## Proto Contract Changes
+
+- **indicators.proto**
+  - Deprecate (never delete): `FormulaDefinition.is_public`=8, `RegisterFormulaRequest.is_public`=4,
+    `ListFormulasRequest.include_public`=2, `UpdateFormulaRequest.is_public`=6.
+  - Deprecate `RegisterFormulaRequest.author`=6, which is ignored because the author comes from the
+    header.
+  - Add origin fields to `FormulaDefinition` (`origin_template_id`, `origin_template_version`).
+- **ingest.proto**: add `user_id` (server-stamped) to `SignalSource` and `ExternalSignal`; add origin
+  fields to `SignalSource`.
+- **analysis.proto**: add origin fields to `StrategyDefinition`.
+- **Template messages and RPCs**: `Template`, `ListTemplates`, `GetTemplate`, `ManageTemplate` (admin)
+  and `InstantiateTemplate`. Placement (a per-service RPC set on indicators, analysis and ingest, or a
+  single owning service) is a design decision for `/sdd-design`.
+- All changes are additive or deprecations, so non-breaking under `buf breaking`. Behavior changes for
+  callers that relied on public visibility are governed as **semantically breaking** (see Workflow
+  Notes).
+
+## Config Key Changes
+
+- [x] No new config keys planned. `analysis.fundsignal.scoring_formula_id` and
+  `analysis.engine.fundamentals_blend_strategy_id` keep their current semantics (system special-cases).
+
+## Database Changes
+
+- **indicators**: migration making all existing formulas effectively private. `is_public` is retained
+  but unread, or dropped in a later cleanup; drop the `is_public` partial index. Add origin columns and a
+  formula template table, unless templates live in another service (design).
+- **ingest**:
+  - add `user_id` to `signal_sources`, `newsletter_signals` and `signal_dedup_keys`;
+  - change the `signal_sources` PK/unique from `slug` to `(user_id, slug)`;
+  - change the dedup PK to `(user_id, source, symbol, direction)`;
+  - backfill existing rows to the owner chosen in Open Questions;
+  - add origin columns and a source-template table (design).
+- **analysis**:
+  - add `user_id` to `strategy_scores`, `backtest_run_symbols` and `backtest_details`, with backfills
+    from the owning strategy or run;
+  - add origin columns to `strategies`;
+  - add a strategy-template table (design).
+- Migration numbers to be reserved at design time (ledger 2026-08-06 fundamentals-signal-producer).
+
+## Feature Workflow Notes
+
+Branch to create: `feature/private-by-default-templates` (branch from `main-dev`)
+Approval gates required (per docs/runbooks/feature-workflow.md):
+- [x] 1 service owner approval (non-breaking proto or config change), for each affected service
+- [x] 2 service owners + platform lead: the proto diff is additive, but the **visibility semantics are
+  breaking** for existing consumers (public formulas disappear from other users; global signals become
+  per-user). Escalated deliberately.
+- [x] DBA review + service owner (schema migrations in indicators, ingest and analysis)
+
+## Acceptance Criteria
+
+See `acceptance.feature` (scenarios `@AC-*`), the single source of acceptance truth (Constitution
+**C-15**). Each `FR-N` above is covered by ≥1 tagged scenario there.
+
+## Open Questions
+
+- [x] **OQ-1 Backfill owner for today's global signal data:** resolved 2026-10-06. Backfill to
+  `SEED_USER_ID`, mirroring feature 133 (FR-11). Known trap (ledger 2026-08-19 strategy-user-ownership/config):
+  the env var must be wired at all three run sites with a concrete local default.
+- [x] **OQ-2 Fundamentals signal producer:** resolved 2026-10-06. It emits under a `system`-owned source
+  that is readable by all users and immutable (FR-6).
+- [x] **OQ-3 Admin reach:** resolved 2026-10-06. Admins get a read-only, audited view and no mutation of
+  other users' objects (FR-13).
+- [ ] **OQ-4 Template placement.** Templates could live in each owning service (indicators, analysis,
+  ingest) or in one catalog service with typed payloads. Cross-service atomicity of the FR-9 deep copy
+  differs by option (saga/compensation versus a single DB). Design decision for `/sdd-design`.
+- [ ] **OQ-5 Strategy-template formula references.** Inside a strategy template payload, components
+  must reference formula **templates** (by template id), not live formula ids, or deep copy has nothing
+  stable to copy. Confirm in design.
+- [ ] **OQ-6 Inbound signal channels.** For MCP-client and newsletter/email sources polled by ingest or
+  the agent, the owner must be the source's owner, never the poller identity. Inventory every ingest
+  entry point in recon.
+- **Known traps** (ledger):
+  - 2026-07-01/063: a seeded shared resource that another service depends on must be mutation-protected
+    (system formula and blend strategy keep their guards).
+  - 2026-08-14/133 strategy-user-ownership: every "already handles ownership" claim must be verified by
+    a code read; the bare `WHERE strategy_id = $1` writes are exactly the FR-10 surface.
+  - 2026-08-05/008 signal-source-registry: enum and variant changes must propagate to every sibling
+    artifact (migration CHECK, validators, extractor stubs).
