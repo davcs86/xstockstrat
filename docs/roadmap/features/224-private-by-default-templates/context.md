@@ -202,3 +202,11 @@ OQ-4 to OQ-6 remain for /sdd-design.
       - C-18: make `LEGACY_GLOBAL` conditional on the prod `mcp_client` count, and record the removal of the `_builtin_score` fallback as deliberate.
   - **F-01 note:** keep the hardcoded analysis-013 envsubst branch in `db-migrate.sh`. Adding a header to 013 would edit an applied migration.
 - **Verified OK:** N-1 has no `ON CONFLICT` on `signal_sources`; BEFORE ROW triggers are supported on hypertables; exact-scope `GetSecret` does not break marketdata (empty `user_id` → `IS NULL`).
+
+### Operator decisions at the round-3 gate (2026-10-06)
+
+- **Two-phase RPC cutover.**
+  - **Release N (feature 224):** ingest, indicators and analysis accept and honor the owner headers but still tolerate headerless calls with today's behavior. The analysis, agent and UI threading ships in N.
+  - **Named follow-up feature** ("224 enforce + contract"): this is the same follow-up already approved for the contract migrations. It turns on fail-closed for headerless reads and writes, drops the N-1 owner-fill triggers and old tables, and sets `backtest_runs.user_id` NOT NULL.
+- **Blend guard on REGISTER and on templates.** `ManageStrategy` REGISTER and `InstantiateTemplate` both require the ADMIN bit to create the *currently configured* `analysis.engine.fundamentals_blend_strategy_id`; everyone else gets FAILED_PRECONDITION. The operator's admin path keeps working. This closes a pre-existing `@feature-186` gap, classed as EXTEND (a new guard; no existing guarantee is weakened).
+- **Run round 4**, folding in the round-3 fixes, then decide.
