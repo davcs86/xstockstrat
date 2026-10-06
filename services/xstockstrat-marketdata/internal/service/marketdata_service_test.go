@@ -1660,6 +1660,11 @@ func TestGetHistoricalFundamentals_PagePassThrough(t *testing.T) {
 	}
 }
 
+// fakeBudget is a fixed shared-FMP-budget snapshot (feature 217).
+type fakeBudget struct{ used, cap int }
+
+func (b fakeBudget) BudgetSnapshot() (int, int) { return b.used, b.cap }
+
 // AC-5: at the FMP daily cap, ratio enrichment is skipped but the EDGAR statement row still persists
 // (source "edgar", FMP-only ratio null) — degraded, not failed.
 func TestBackfillFundamentals_CapDegrade_AC5(t *testing.T) {
@@ -1681,6 +1686,7 @@ func TestBackfillFundamentals_CapDegrade_AC5(t *testing.T) {
 	svc := &MarketDataService{
 		histFundamentals: &fakeHistSource{periods: []source.HistoricalFundamentalsPeriod{base}},
 		histRepo:         repo, ratioEnricher: enr, fundCfg: atCapCfg,
+		fmpBudget: fakeBudget{used: 0, cap: 0},
 	}
 	resp, err := svc.BackfillFundamentals(context.Background(), &marketdatav1.BackfillFundamentalsRequest{Symbols: []string{"AAPL"}})
 	if err != nil {
@@ -1709,6 +1715,7 @@ func TestBackfillFundamentals_CapDegrade_AC5(t *testing.T) {
 	svc2 := &MarketDataService{
 		histFundamentals: &fakeHistSource{periods: []source.HistoricalFundamentalsPeriod{base}},
 		histRepo:         repo2, ratioEnricher: enr2, fundCfg: underCapCfg,
+		fmpBudget: fakeBudget{used: 0, cap: 250},
 	}
 	if _, err := svc2.BackfillFundamentals(context.Background(), &marketdatav1.BackfillFundamentalsRequest{Symbols: []string{"AAPL"}}); err != nil {
 		t.Fatalf("BackfillFundamentals (under cap): %v", err)
