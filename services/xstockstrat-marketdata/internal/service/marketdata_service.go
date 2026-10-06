@@ -119,6 +119,9 @@ type histFundamentalsRepo interface {
 	// feature 216: price-join recovery methods.
 	GetHistoricalPriceState(ctx context.Context, symbol, fiscalPeriod, periodType string) (*source.HistoricalPriceState, error)
 	UpdateHistoricalPriceJoin(ctx context.Context, symbol, fiscalPeriod, periodType string, price, marketCap, peRatio, pbRatio, dividendYield *float64) error
+	// feature 223: derivation-version upgrade of stored rows + edgar snapshot-cache invalidation.
+	RederiveHistoricalFundamentals(ctx context.Context, p source.HistoricalFundamentalsPeriod) (bool, error)
+	DeleteEdgarSnapshot(ctx context.Context, symbol string) error
 }
 
 // ratioEnricher optionally fills a ratio EDGAR + the price-join cannot supply. v1 wires nil.
@@ -1805,6 +1808,16 @@ func (s *MarketDataService) backfillOneSymbol(ctx context.Context, symbol string
 	}
 	var quarterlyEPS []float64 // trailing quarterly EPS for the TTM rollup
 	var written int64
+	rederived := 0
+	defer func() {
+		if rederived == 0 {
+			return
+		}
+		slog.InfoContext(ctx, "fundamentals backfill: re-derived stale stored periods", "symbol", symbol, "periods", rederived)
+		if err := s.histRepo.DeleteEdgarSnapshot(ctx, symbol); err != nil {
+			slog.WarnContext(ctx, "fundamentals backfill: edgar snapshot invalidation failed (served until TTL)", "symbol", symbol, "error", err)
+		}
+	}()
 	for i := range periods {
 		p := &periods[i]
 		ttmEPS := s.accumulateTTM(p, &quarterlyEPS)
@@ -1838,6 +1851,19 @@ func (s *MarketDataService) backfillOneSymbol(ctx context.Context, symbol string
 		// Setting p.FiledDate here before derivation keeps CloseAt and the T12M dividend window
 		// anchored to the original filing — the structural guard against look-ahead.
 		p.FiledDate = state.FiledDate
+
+		// Derivation drift (feature 223): a row written by an older period builder is upgraded in
+		// place (statement-derived columns only), independent of the price-join gate below.
+		if state.DerivationVersion < p.DerivationVersion {
+			changed, rerr := s.histRepo.RederiveHistoricalFundamentals(ctx, *p)
+			if rerr != nil {
+				return written, rerr
+			}
+			if changed {
+				rederived++
+				written++
+			}
+		}
 
 		// Gate: default processes only needsFill rows; overwrite=true processes every existing row.
 		needsFill := state.Price == nil || state.MarketCap == nil || state.PERatio == nil || state.PBRatio == nil || state.DividendYield == nil

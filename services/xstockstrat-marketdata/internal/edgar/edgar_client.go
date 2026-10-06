@@ -488,16 +488,22 @@ func classifyPeriodType(d unitDatum) string {
 	}
 }
 
+// DerivationVersion MUST be bumped whenever buildPeriod / annualizeQuarterlyROE change a stored
+// column's semantics — stored rows re-derive only when their version is lower (feature 223).
+// 1 = feature 211 financial-debt D/E + feature 222 TTM quarterly ROE.
+const DerivationVersion = 1
+
 func buildPeriod(symbol string, a *periodAgg) source.HistoricalFundamentalsPeriod {
 	p := source.HistoricalFundamentalsPeriod{
-		Symbol:       symbol,
-		FiscalPeriod: fmt.Sprintf("%s-%d", a.fp, a.fy),
-		PeriodType:   a.periodType,
-		PeriodEnd:    a.periodEnd,
-		FiledDate:    a.filed,
-		ExtraMetrics: map[string]float64{},
-		Currency:     "USD",
-		Source:       "edgar",
+		DerivationVersion: DerivationVersion,
+		Symbol:            symbol,
+		FiscalPeriod:      fmt.Sprintf("%s-%d", a.fp, a.fy),
+		PeriodType:        a.periodType,
+		PeriodEnd:         a.periodEnd,
+		FiledDate:         a.filed,
+		ExtraMetrics:      map[string]float64{},
+		Currency:          "USD",
+		Source:            "edgar",
 	}
 	if a.fp == "FY" {
 		p.FiscalPeriod = fmt.Sprintf("FY%d", a.fy)

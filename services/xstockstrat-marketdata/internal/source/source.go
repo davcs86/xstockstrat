@@ -95,6 +95,9 @@ type HistoricalFundamentalsPeriod struct {
 	ExtraMetrics      map[string]float64
 	Currency          string
 	Source            string
+	// DerivationVersion stamps which period-builder semantics produced the statement-derived
+	// columns; a re-backfill upgrades rows whose stored version is lower (feature 223).
+	DerivationVersion int
 }
 
 // HistoricalPriceState is the stored price-join state of one fundamentals_history row, read by the
@@ -112,6 +115,8 @@ type HistoricalPriceState struct {
 	PBRatio       *float64
 	DividendYield *float64
 	Currency      string
+	// DerivationVersion is the stored row's derivation_version (feature 223); 0 = pre-versioning.
+	DerivationVersion int
 }
 
 // HistoricalFundamentalsSource fetches a point-in-time historical fundamentals time series for a

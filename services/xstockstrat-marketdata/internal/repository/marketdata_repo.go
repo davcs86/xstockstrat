@@ -605,14 +605,14 @@ func (r *MarketDataRepo) InsertHistoricalFundamentals(ctx context.Context, p sou
 		INSERT INTO marketdata.fundamentals_history
 		  (symbol, fiscal_period, period_type, period_end, filed_date, accepted_date, source, currency,
 		   market_cap, pe_ratio, pb_ratio, dividend_yield, eps, beta, roe, debt_to_equity, price,
-		   year_high, year_low, extra_metrics)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20::jsonb)
+		   year_high, year_low, extra_metrics, derivation_version)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20::jsonb,$21)
 		ON CONFLICT (symbol, fiscal_period, period_type) DO NOTHING`
 	// jsonb bound as string so the ::jsonb cast is a text parse (not bytea) under DB_PGBOUNCER.
 	_, err = r.db.Exec(ctx, q,
 		p.Symbol, p.FiscalPeriod, p.PeriodType, p.PeriodEnd, p.FiledDate, p.AcceptedDate, p.Source, p.Currency,
 		p.MarketCap, p.PERatio, p.PBRatio, p.DividendYield, p.EPS, p.Beta, p.ROE, p.DebtToEquity, p.Price,
-		p.YearHigh, p.YearLow, string(extraJSON))
+		p.YearHigh, p.YearLow, string(extraJSON), p.DerivationVersion)
 	if err != nil {
 		return fmt.Errorf("insert fundamentals_history %s %s: %w", p.Symbol, p.FiscalPeriod, err)
 	}
@@ -623,12 +623,13 @@ func (r *MarketDataRepo) InsertHistoricalFundamentals(ctx context.Context, p sou
 // (feature 216). Returns Found=false (never an error) when no row matches the triple PK — mirrors
 // CloseAt's no-rows fail-closed pattern. Uses r.db so tests can pin the query with pgxmock.
 func (r *MarketDataRepo) GetHistoricalPriceState(ctx context.Context, symbol, fiscalPeriod, periodType string) (*source.HistoricalPriceState, error) {
-	const q = `SELECT filed_date, price, market_cap, pe_ratio, pb_ratio, dividend_yield, currency
+	const q = `SELECT filed_date, price, market_cap, pe_ratio, pb_ratio, dividend_yield, currency, derivation_version
 		FROM marketdata.fundamentals_history
 		WHERE symbol=$1 AND fiscal_period=$2 AND period_type=$3`
 	var state source.HistoricalPriceState
+	var version int16
 	err := r.db.QueryRow(ctx, q, symbol, fiscalPeriod, periodType).Scan(
-		&state.FiledDate, &state.Price, &state.MarketCap, &state.PERatio, &state.PBRatio, &state.DividendYield, &state.Currency,
+		&state.FiledDate, &state.Price, &state.MarketCap, &state.PERatio, &state.PBRatio, &state.DividendYield, &state.Currency, &version,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -637,6 +638,7 @@ func (r *MarketDataRepo) GetHistoricalPriceState(ctx context.Context, symbol, fi
 		return nil, fmt.Errorf("get price state %s %s %s: %w", symbol, fiscalPeriod, periodType, err)
 	}
 	state.Found = true
+	state.DerivationVersion = int(version)
 	return &state, nil
 }
 
@@ -651,6 +653,37 @@ func (r *MarketDataRepo) UpdateHistoricalPriceJoin(ctx context.Context, symbol, 
 	_, err := r.db.Exec(ctx, q, symbol, fiscalPeriod, periodType, price, marketCap, peRatio, pbRatio, dividendYield)
 	if err != nil {
 		return fmt.Errorf("update price join %s %s %s: %w", symbol, fiscalPeriod, periodType, err)
+	}
+	return nil
+}
+
+// RederiveHistoricalFundamentals upgrades an existing row's statement-derived columns (eps, roe,
+// debt_to_equity, extra_metrics) to p's derivation, only when the stored version is lower — the
+// filed_date pin, currency and price-join columns are never touched. Reports whether a row changed.
+func (r *MarketDataRepo) RederiveHistoricalFundamentals(ctx context.Context, p source.HistoricalFundamentalsPeriod) (bool, error) {
+	extraJSON, err := json.Marshal(p.ExtraMetrics)
+	if err != nil {
+		return false, fmt.Errorf("marshal extra_metrics: %w", err)
+	}
+	if len(extraJSON) == 0 || string(extraJSON) == "null" {
+		extraJSON = []byte("{}")
+	}
+	// Stored keys absent from the new derivation (e.g. price-join outputs) survive the merge.
+	const q = `UPDATE marketdata.fundamentals_history
+		SET eps=$4, roe=$5, debt_to_equity=$6, extra_metrics = extra_metrics || $7::jsonb, derivation_version=$8
+		WHERE symbol=$1 AND fiscal_period=$2 AND period_type=$3 AND derivation_version < $8`
+	tag, err := r.db.Exec(ctx, q, p.Symbol, p.FiscalPeriod, p.PeriodType, p.EPS, p.ROE, p.DebtToEquity, string(extraJSON), p.DerivationVersion)
+	if err != nil {
+		return false, fmt.Errorf("rederive fundamentals_history %s %s: %w", p.Symbol, p.FiscalPeriod, err)
+	}
+	return tag.RowsAffected() > 0, nil
+}
+
+// DeleteEdgarSnapshot drops a symbol's cached snapshot_source=edgar row so the next read rebuilds it
+// from the (re-derived) newest period instead of serving the stale ratios until TTL.
+func (r *MarketDataRepo) DeleteEdgarSnapshot(ctx context.Context, symbol string) error {
+	if _, err := r.db.Exec(ctx, `DELETE FROM marketdata.fundamentals WHERE symbol=$1 AND source='edgar'`, symbol); err != nil {
+		return fmt.Errorf("delete edgar snapshot %s: %w", symbol, err)
 	}
 	return nil
 }
