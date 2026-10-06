@@ -2,7 +2,7 @@
 
 **Development Branch**: `feature/sector-classification-strategy-params`
 **Created**: 2026-09-27
-**Last Updated**: 2026-09-27
+**Last Updated**: 2026-10-06
 
 ---
 
@@ -14,6 +14,7 @@
 | 2026-09-27 | `draft` → `spec-ready` | /sdd-review | Product spec approved (3 warnings, all deferred to design/spec) |
 | 2026-09-27 | `spec-ready` → `design-approved` | /sdd-design | Design debated (4 rounds, deep) and approved; recon.md + design.md written |
 | 2026-09-27 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 18 steps |
+| 2026-10-06 | `implementation-ready` (scope extended) | operator | Added @AC-14 (overrides reach fundamentals-input formulas); impl-spec needs re-spec — see context.md |
 
 ---
 
@@ -57,4 +58,4 @@ Canonical snapshot — deduplicated from all step `**Reviewers**` values in `imp
 
 ## Next Action
 
-`/sdd-review sector-classification-strategy-params impl-spec` — validate implementation spec, then `/sdd-execute sector-classification-strategy-params`
+`/sdd-spec sector-classification-strategy-params` — re-spec to cover @AC-14 (fundamentals-formula override path), then `/sdd-review sector-classification-strategy-params impl-spec`
