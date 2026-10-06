@@ -160,7 +160,7 @@ Feature: private-by-default-templates
     Given "bob" is signed in to /insights
     When "bob" opens the formulas library
     Then no "Public" checkbox, badge or filter is rendered
-    And a "Templates" entry in PLATFORM_SUBNAV lists the catalog with a "Use template" action
+    And a "Templates" entry in the rendered nav (NAV_GROUPS, mirrored in PLATFORM_SUBNAV) lists the catalog with a "Use template" action
 
   @AC-25 @FR-12
   Scenario: Agent tools expose templates and drop public arguments

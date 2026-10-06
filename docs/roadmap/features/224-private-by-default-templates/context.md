@@ -324,3 +324,23 @@ OQ-4 to OQ-6 remain for /sdd-design.
   - make the AC-30 warning fire before the "unknown series" rejection.
 - **Step 2:** AC-37 tests assert the pre-flight decision, not an indicators denial.
 - **At /sdd-spec:** create the follow-up "224 enforce + contract" and add its merge-order row.
+
+## Session 2026-10-06 — AI review of design.md (spec-reviewer + feature-overlap)
+
+- **spec-reviewer:** PASS WITH WARNINGS. No blocker and no Floor breach. All warnings are folded into design.md:
+  - `ListBacktests` is now owner-scoped (`servicer.py:2558` → `backtest_runs.py:80-84`). Without this, AC-21 fails.
+  - New §5 "Template catalog" settles OQ-4 as per-service. It also covers admin authoring, version bumps, retire, the empty catalog, update-available on every Get/List path, and AC-34.
+  - New text for FR-1 list/write behavior, the D-4 system-slug rule, removing the ManageSignalSource admin gate, and the system-source `PERMISSION_DENIED`.
+  - The `ComputeIndicator` call sites are added, and `_strategies` is corrected to `:417`.
+  - F-03 and C-07 citations are corrected. C-03, C-04, C-09, C-10(c) and C-17 are added.
+  - ANALYSIS-2/3 is relabelled as a runtime invariant (not an `@AC-*`).
+  - The 50-pair cap is recorded, and "rounds 1–5" is fixed.
+  - Step 1 now spikes the grpc-js SAN check as well as grpc.aio.
+  - Open risks now have targets.
+  - AC-24's wording now matches the `NAV_GROUPS` decision; it is mirrored in `PLATFORM_SUBNAV`.
+- **feature-overlap:** CLEAN.
+  - The only collision is 217's `StrategyDefinition` field 15, already settled (224 uses 16+).
+  - Fixes applied:
+    - `merge-order.md` row 72 said the agent tool count was 52. The trunk count is 43, which reaches 45 after 224.
+    - Proto field numbers are now given per message in build step 0.
+  - New open risk: feature 084's droplet `db-migrator` env needs `SEED_USER_ID`.
