@@ -5,6 +5,7 @@ import {
   scoreColor,
   formatSymbolYears,
   formatComposite,
+  compositeColor,
   isNotFoundError,
   TRADING_DAYS_PER_YEAR,
 } from './scoreDisplay';
@@ -64,5 +65,25 @@ describe('isNotFoundError', () => {
     expect(isNotFoundError(new Error('generic'))).toBe(false);
     expect(isNotFoundError(undefined)).toBe(false);
     expect(isNotFoundError(null)).toBe(false);
+  });
+});
+
+describe('compositeColor (feature 221)', () => {
+  it('renders the neutral point muted, never destructive (@AC-1)', () => {
+    expect(compositeColor(0.5)).toBe('text-muted-foreground');
+  });
+  it('colours only the tails, by direction from neutral (@AC-2)', () => {
+    expect(compositeColor(0.72)).toBe('text-buy');
+    expect(compositeColor(0.3)).toBe('text-sell');
+    expect(compositeColor(0.75)).toBe('text-buy'); // one maxed axis now reads positive
+  });
+  it('keeps ±0.08 around 0.5 muted (inclusive edges)', () => {
+    expect(compositeColor(0.58)).toBe('text-muted-foreground');
+    expect(compositeColor(0.42)).toBe('text-muted-foreground');
+    expect(compositeColor(0.581)).toBe('text-buy');
+    expect(compositeColor(0.419)).toBe('text-sell');
+  });
+  it('leaves strategy-grade scoreColor unchanged (@AC-3)', () => {
+    expect(scoreColor(0.65)).toBe('text-paper');
   });
 });
