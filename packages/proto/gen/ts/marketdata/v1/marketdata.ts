@@ -24,6 +24,10 @@ import {
   Asset,
   PageRequest,
   PageResponse,
+  Sector,
+  sectorFromJSON,
+  sectorToJSON,
+  sectorToNumber,
   Timeframe,
   timeframeFromJSON,
   timeframeToJSON,
@@ -382,6 +386,55 @@ export interface BatchGetLatestPriceRequest {
 
 export interface BatchGetLatestPriceResponse {
   results: LatestPrice[];
+}
+
+export interface SymbolSector {
+  symbol: string;
+  sector: Sector;
+}
+
+export interface GetCurrentSectorRequest {
+  symbols: string[];
+}
+
+export interface GetCurrentSectorResponse {
+  /** One entry per requested symbol, in request order; unclassified → SECTOR_UNSPECIFIED. */
+  sectors: SymbolSector[];
+}
+
+export interface GetSectorAsOfRequest {
+  symbol: string;
+  asOf?: Date | undefined;
+}
+
+export interface GetSectorAsOfResponse {
+  sector: Sector;
+}
+
+export interface SectorHistoryRow {
+  symbol: string;
+  sector: Sector;
+  /** inclusive; 1900-01-01T00:00:00Z for epoch-seed rows */
+  validFrom?:
+    | Date
+    | undefined;
+  /** exclusive; unset = open (current) row */
+  validTo?:
+    | Date
+    | undefined;
+  /** "fmp" | "seed" */
+  source: string;
+}
+
+export interface GetSectorHistoryRequest {
+  symbols: string[];
+  /** rows intersecting [start, end]; unset start/end = unbounded */
+  start?: Date | undefined;
+  end?: Date | undefined;
+}
+
+export interface GetSectorHistoryResponse {
+  rows: SectorHistoryRow[];
 }
 
 function createBaseBar(): Bar {
@@ -4653,6 +4706,626 @@ export const BatchGetLatestPriceResponse: MessageFns<BatchGetLatestPriceResponse
   },
 };
 
+function createBaseSymbolSector(): SymbolSector {
+  return { symbol: "", sector: Sector.SECTOR_UNSPECIFIED };
+}
+
+export const SymbolSector: MessageFns<SymbolSector> = {
+  encode(message: SymbolSector, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.symbol !== "") {
+      writer.uint32(10).string(message.symbol);
+    }
+    if (message.sector !== Sector.SECTOR_UNSPECIFIED) {
+      writer.uint32(16).int32(sectorToNumber(message.sector));
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SymbolSector {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSymbolSector();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.symbol = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.sector = sectorFromJSON(reader.int32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): SymbolSector {
+    return {
+      symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
+      sector: isSet(object.sector) ? sectorFromJSON(object.sector) : Sector.SECTOR_UNSPECIFIED,
+    };
+  },
+
+  toJSON(message: SymbolSector): unknown {
+    const obj: any = {};
+    if (message.symbol !== "") {
+      obj.symbol = message.symbol;
+    }
+    if (message.sector !== Sector.SECTOR_UNSPECIFIED) {
+      obj.sector = sectorToJSON(message.sector);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<SymbolSector>, I>>(base?: I): SymbolSector {
+    return SymbolSector.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<SymbolSector>, I>>(object: I): SymbolSector {
+    const message = createBaseSymbolSector();
+    message.symbol = object.symbol ?? "";
+    message.sector = object.sector ?? Sector.SECTOR_UNSPECIFIED;
+    return message;
+  },
+};
+
+function createBaseGetCurrentSectorRequest(): GetCurrentSectorRequest {
+  return { symbols: [] };
+}
+
+export const GetCurrentSectorRequest: MessageFns<GetCurrentSectorRequest> = {
+  encode(message: GetCurrentSectorRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.symbols) {
+      writer.uint32(10).string(v!);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetCurrentSectorRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseGetCurrentSectorRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.symbols.push(reader.string());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): GetCurrentSectorRequest {
+    return {
+      symbols: globalThis.Array.isArray(object?.symbols) ? object.symbols.map((e: any) => globalThis.String(e)) : [],
+    };
+  },
+
+  toJSON(message: GetCurrentSectorRequest): unknown {
+    const obj: any = {};
+    if (message.symbols?.length) {
+      obj.symbols = message.symbols;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<GetCurrentSectorRequest>, I>>(base?: I): GetCurrentSectorRequest {
+    return GetCurrentSectorRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GetCurrentSectorRequest>, I>>(object: I): GetCurrentSectorRequest {
+    const message = createBaseGetCurrentSectorRequest();
+    message.symbols = object.symbols?.map((e) => e) || [];
+    return message;
+  },
+};
+
+function createBaseGetCurrentSectorResponse(): GetCurrentSectorResponse {
+  return { sectors: [] };
+}
+
+export const GetCurrentSectorResponse: MessageFns<GetCurrentSectorResponse> = {
+  encode(message: GetCurrentSectorResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.sectors) {
+      SymbolSector.encode(v!, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetCurrentSectorResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseGetCurrentSectorResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.sectors.push(SymbolSector.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): GetCurrentSectorResponse {
+    return {
+      sectors: globalThis.Array.isArray(object?.sectors)
+        ? object.sectors.map((e: any) => SymbolSector.fromJSON(e))
+        : [],
+    };
+  },
+
+  toJSON(message: GetCurrentSectorResponse): unknown {
+    const obj: any = {};
+    if (message.sectors?.length) {
+      obj.sectors = message.sectors.map((e) => SymbolSector.toJSON(e));
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<GetCurrentSectorResponse>, I>>(base?: I): GetCurrentSectorResponse {
+    return GetCurrentSectorResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GetCurrentSectorResponse>, I>>(object: I): GetCurrentSectorResponse {
+    const message = createBaseGetCurrentSectorResponse();
+    message.sectors = object.sectors?.map((e) => SymbolSector.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseGetSectorAsOfRequest(): GetSectorAsOfRequest {
+  return { symbol: "", asOf: undefined };
+}
+
+export const GetSectorAsOfRequest: MessageFns<GetSectorAsOfRequest> = {
+  encode(message: GetSectorAsOfRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.symbol !== "") {
+      writer.uint32(10).string(message.symbol);
+    }
+    if (message.asOf !== undefined) {
+      Timestamp.encode(toTimestamp(message.asOf), writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetSectorAsOfRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseGetSectorAsOfRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.symbol = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.asOf = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): GetSectorAsOfRequest {
+    return {
+      symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
+      asOf: isSet(object.asOf)
+        ? fromJsonTimestamp(object.asOf)
+        : isSet(object.as_of)
+        ? fromJsonTimestamp(object.as_of)
+        : undefined,
+    };
+  },
+
+  toJSON(message: GetSectorAsOfRequest): unknown {
+    const obj: any = {};
+    if (message.symbol !== "") {
+      obj.symbol = message.symbol;
+    }
+    if (message.asOf !== undefined) {
+      obj.asOf = message.asOf.toISOString();
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<GetSectorAsOfRequest>, I>>(base?: I): GetSectorAsOfRequest {
+    return GetSectorAsOfRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GetSectorAsOfRequest>, I>>(object: I): GetSectorAsOfRequest {
+    const message = createBaseGetSectorAsOfRequest();
+    message.symbol = object.symbol ?? "";
+    message.asOf = object.asOf ?? undefined;
+    return message;
+  },
+};
+
+function createBaseGetSectorAsOfResponse(): GetSectorAsOfResponse {
+  return { sector: Sector.SECTOR_UNSPECIFIED };
+}
+
+export const GetSectorAsOfResponse: MessageFns<GetSectorAsOfResponse> = {
+  encode(message: GetSectorAsOfResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.sector !== Sector.SECTOR_UNSPECIFIED) {
+      writer.uint32(8).int32(sectorToNumber(message.sector));
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetSectorAsOfResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseGetSectorAsOfResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.sector = sectorFromJSON(reader.int32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): GetSectorAsOfResponse {
+    return { sector: isSet(object.sector) ? sectorFromJSON(object.sector) : Sector.SECTOR_UNSPECIFIED };
+  },
+
+  toJSON(message: GetSectorAsOfResponse): unknown {
+    const obj: any = {};
+    if (message.sector !== Sector.SECTOR_UNSPECIFIED) {
+      obj.sector = sectorToJSON(message.sector);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<GetSectorAsOfResponse>, I>>(base?: I): GetSectorAsOfResponse {
+    return GetSectorAsOfResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GetSectorAsOfResponse>, I>>(object: I): GetSectorAsOfResponse {
+    const message = createBaseGetSectorAsOfResponse();
+    message.sector = object.sector ?? Sector.SECTOR_UNSPECIFIED;
+    return message;
+  },
+};
+
+function createBaseSectorHistoryRow(): SectorHistoryRow {
+  return { symbol: "", sector: Sector.SECTOR_UNSPECIFIED, validFrom: undefined, validTo: undefined, source: "" };
+}
+
+export const SectorHistoryRow: MessageFns<SectorHistoryRow> = {
+  encode(message: SectorHistoryRow, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.symbol !== "") {
+      writer.uint32(10).string(message.symbol);
+    }
+    if (message.sector !== Sector.SECTOR_UNSPECIFIED) {
+      writer.uint32(16).int32(sectorToNumber(message.sector));
+    }
+    if (message.validFrom !== undefined) {
+      Timestamp.encode(toTimestamp(message.validFrom), writer.uint32(26).fork()).join();
+    }
+    if (message.validTo !== undefined) {
+      Timestamp.encode(toTimestamp(message.validTo), writer.uint32(34).fork()).join();
+    }
+    if (message.source !== "") {
+      writer.uint32(42).string(message.source);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SectorHistoryRow {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSectorHistoryRow();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.symbol = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.sector = sectorFromJSON(reader.int32());
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.validFrom = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.validTo = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.source = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): SectorHistoryRow {
+    return {
+      symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
+      sector: isSet(object.sector) ? sectorFromJSON(object.sector) : Sector.SECTOR_UNSPECIFIED,
+      validFrom: isSet(object.validFrom)
+        ? fromJsonTimestamp(object.validFrom)
+        : isSet(object.valid_from)
+        ? fromJsonTimestamp(object.valid_from)
+        : undefined,
+      validTo: isSet(object.validTo)
+        ? fromJsonTimestamp(object.validTo)
+        : isSet(object.valid_to)
+        ? fromJsonTimestamp(object.valid_to)
+        : undefined,
+      source: isSet(object.source) ? globalThis.String(object.source) : "",
+    };
+  },
+
+  toJSON(message: SectorHistoryRow): unknown {
+    const obj: any = {};
+    if (message.symbol !== "") {
+      obj.symbol = message.symbol;
+    }
+    if (message.sector !== Sector.SECTOR_UNSPECIFIED) {
+      obj.sector = sectorToJSON(message.sector);
+    }
+    if (message.validFrom !== undefined) {
+      obj.validFrom = message.validFrom.toISOString();
+    }
+    if (message.validTo !== undefined) {
+      obj.validTo = message.validTo.toISOString();
+    }
+    if (message.source !== "") {
+      obj.source = message.source;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<SectorHistoryRow>, I>>(base?: I): SectorHistoryRow {
+    return SectorHistoryRow.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<SectorHistoryRow>, I>>(object: I): SectorHistoryRow {
+    const message = createBaseSectorHistoryRow();
+    message.symbol = object.symbol ?? "";
+    message.sector = object.sector ?? Sector.SECTOR_UNSPECIFIED;
+    message.validFrom = object.validFrom ?? undefined;
+    message.validTo = object.validTo ?? undefined;
+    message.source = object.source ?? "";
+    return message;
+  },
+};
+
+function createBaseGetSectorHistoryRequest(): GetSectorHistoryRequest {
+  return { symbols: [], start: undefined, end: undefined };
+}
+
+export const GetSectorHistoryRequest: MessageFns<GetSectorHistoryRequest> = {
+  encode(message: GetSectorHistoryRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.symbols) {
+      writer.uint32(10).string(v!);
+    }
+    if (message.start !== undefined) {
+      Timestamp.encode(toTimestamp(message.start), writer.uint32(18).fork()).join();
+    }
+    if (message.end !== undefined) {
+      Timestamp.encode(toTimestamp(message.end), writer.uint32(26).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetSectorHistoryRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseGetSectorHistoryRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.symbols.push(reader.string());
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.start = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.end = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): GetSectorHistoryRequest {
+    return {
+      symbols: globalThis.Array.isArray(object?.symbols) ? object.symbols.map((e: any) => globalThis.String(e)) : [],
+      start: isSet(object.start) ? fromJsonTimestamp(object.start) : undefined,
+      end: isSet(object.end) ? fromJsonTimestamp(object.end) : undefined,
+    };
+  },
+
+  toJSON(message: GetSectorHistoryRequest): unknown {
+    const obj: any = {};
+    if (message.symbols?.length) {
+      obj.symbols = message.symbols;
+    }
+    if (message.start !== undefined) {
+      obj.start = message.start.toISOString();
+    }
+    if (message.end !== undefined) {
+      obj.end = message.end.toISOString();
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<GetSectorHistoryRequest>, I>>(base?: I): GetSectorHistoryRequest {
+    return GetSectorHistoryRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GetSectorHistoryRequest>, I>>(object: I): GetSectorHistoryRequest {
+    const message = createBaseGetSectorHistoryRequest();
+    message.symbols = object.symbols?.map((e) => e) || [];
+    message.start = object.start ?? undefined;
+    message.end = object.end ?? undefined;
+    return message;
+  },
+};
+
+function createBaseGetSectorHistoryResponse(): GetSectorHistoryResponse {
+  return { rows: [] };
+}
+
+export const GetSectorHistoryResponse: MessageFns<GetSectorHistoryResponse> = {
+  encode(message: GetSectorHistoryResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.rows) {
+      SectorHistoryRow.encode(v!, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetSectorHistoryResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseGetSectorHistoryResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.rows.push(SectorHistoryRow.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): GetSectorHistoryResponse {
+    return {
+      rows: globalThis.Array.isArray(object?.rows) ? object.rows.map((e: any) => SectorHistoryRow.fromJSON(e)) : [],
+    };
+  },
+
+  toJSON(message: GetSectorHistoryResponse): unknown {
+    const obj: any = {};
+    if (message.rows?.length) {
+      obj.rows = message.rows.map((e) => SectorHistoryRow.toJSON(e));
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<GetSectorHistoryResponse>, I>>(base?: I): GetSectorHistoryResponse {
+    return GetSectorHistoryResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GetSectorHistoryResponse>, I>>(object: I): GetSectorHistoryResponse {
+    const message = createBaseGetSectorHistoryResponse();
+    message.rows = object.rows?.map((e) => SectorHistoryRow.fromPartial(e)) || [];
+    return message;
+  },
+};
+
 /**
  * MarketDataService — sole Alpaca integration point.
  * Stores OHLCV and quote data in TimescaleDB hypertables.
@@ -4850,6 +5523,42 @@ export const MarketDataServiceService = {
       Buffer.from(BackfillFundamentalsResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): BackfillFundamentalsResponse => BackfillFundamentalsResponse.decode(value),
   },
+  /**
+   * Sector classification reads (feature 217). Served only from the local Type-2 SCD store —
+   * never call FMP on the read path; an unclassified symbol returns SECTOR_UNSPECIFIED, not an error.
+   */
+  getCurrentSector: {
+    path: "/xstockstrat.marketdata.v1.MarketDataService/GetCurrentSector" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: GetCurrentSectorRequest): Buffer =>
+      Buffer.from(GetCurrentSectorRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): GetCurrentSectorRequest => GetCurrentSectorRequest.decode(value),
+    responseSerialize: (value: GetCurrentSectorResponse): Buffer =>
+      Buffer.from(GetCurrentSectorResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): GetCurrentSectorResponse => GetCurrentSectorResponse.decode(value),
+  },
+  getSectorAsOf: {
+    path: "/xstockstrat.marketdata.v1.MarketDataService/GetSectorAsOf" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: GetSectorAsOfRequest): Buffer => Buffer.from(GetSectorAsOfRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): GetSectorAsOfRequest => GetSectorAsOfRequest.decode(value),
+    responseSerialize: (value: GetSectorAsOfResponse): Buffer =>
+      Buffer.from(GetSectorAsOfResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): GetSectorAsOfResponse => GetSectorAsOfResponse.decode(value),
+  },
+  getSectorHistory: {
+    path: "/xstockstrat.marketdata.v1.MarketDataService/GetSectorHistory" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: GetSectorHistoryRequest): Buffer =>
+      Buffer.from(GetSectorHistoryRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): GetSectorHistoryRequest => GetSectorHistoryRequest.decode(value),
+    responseSerialize: (value: GetSectorHistoryResponse): Buffer =>
+      Buffer.from(GetSectorHistoryResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): GetSectorHistoryResponse => GetSectorHistoryResponse.decode(value),
+  },
 } as const;
 
 export interface MarketDataServiceServer extends UntypedServiceImplementation {
@@ -4894,6 +5603,13 @@ export interface MarketDataServiceServer extends UntypedServiceImplementation {
    * as-reported statements from SEC EDGAR + a point-in-time price-join and persists them.
    */
   backfillFundamentals: handleUnaryCall<BackfillFundamentalsRequest, BackfillFundamentalsResponse>;
+  /**
+   * Sector classification reads (feature 217). Served only from the local Type-2 SCD store —
+   * never call FMP on the read path; an unclassified symbol returns SECTOR_UNSPECIFIED, not an error.
+   */
+  getCurrentSector: handleUnaryCall<GetCurrentSectorRequest, GetCurrentSectorResponse>;
+  getSectorAsOf: handleUnaryCall<GetSectorAsOfRequest, GetSectorAsOfResponse>;
+  getSectorHistory: handleUnaryCall<GetSectorHistoryRequest, GetSectorHistoryResponse>;
 }
 
 export interface MarketDataServiceClient extends Client {
@@ -5143,6 +5859,55 @@ export interface MarketDataServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: BackfillFundamentalsResponse) => void,
+  ): ClientUnaryCall;
+  /**
+   * Sector classification reads (feature 217). Served only from the local Type-2 SCD store —
+   * never call FMP on the read path; an unclassified symbol returns SECTOR_UNSPECIFIED, not an error.
+   */
+  getCurrentSector(
+    request: GetCurrentSectorRequest,
+    callback: (error: ServiceError | null, response: GetCurrentSectorResponse) => void,
+  ): ClientUnaryCall;
+  getCurrentSector(
+    request: GetCurrentSectorRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: GetCurrentSectorResponse) => void,
+  ): ClientUnaryCall;
+  getCurrentSector(
+    request: GetCurrentSectorRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: GetCurrentSectorResponse) => void,
+  ): ClientUnaryCall;
+  getSectorAsOf(
+    request: GetSectorAsOfRequest,
+    callback: (error: ServiceError | null, response: GetSectorAsOfResponse) => void,
+  ): ClientUnaryCall;
+  getSectorAsOf(
+    request: GetSectorAsOfRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: GetSectorAsOfResponse) => void,
+  ): ClientUnaryCall;
+  getSectorAsOf(
+    request: GetSectorAsOfRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: GetSectorAsOfResponse) => void,
+  ): ClientUnaryCall;
+  getSectorHistory(
+    request: GetSectorHistoryRequest,
+    callback: (error: ServiceError | null, response: GetSectorHistoryResponse) => void,
+  ): ClientUnaryCall;
+  getSectorHistory(
+    request: GetSectorHistoryRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: GetSectorHistoryResponse) => void,
+  ): ClientUnaryCall;
+  getSectorHistory(
+    request: GetSectorHistoryRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: GetSectorHistoryResponse) => void,
   ): ClientUnaryCall;
 }
 

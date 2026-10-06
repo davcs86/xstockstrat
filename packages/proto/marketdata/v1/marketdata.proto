@@ -60,6 +60,12 @@ service MarketDataService {
   // Worker RPC driven by ingest.TriggerBackfill(data_kind=FUNDAMENTALS) (feature 198): fetches
   // as-reported statements from SEC EDGAR + a point-in-time price-join and persists them.
   rpc BackfillFundamentals(BackfillFundamentalsRequest) returns (BackfillFundamentalsResponse);
+
+  // Sector classification reads (feature 217). Served only from the local Type-2 SCD store —
+  // never call FMP on the read path; an unclassified symbol returns SECTOR_UNSPECIFIED, not an error.
+  rpc GetCurrentSector(GetCurrentSectorRequest) returns (GetCurrentSectorResponse);
+  rpc GetSectorAsOf(GetSectorAsOfRequest) returns (GetSectorAsOfResponse);
+  rpc GetSectorHistory(GetSectorHistoryRequest) returns (GetSectorHistoryResponse);
 }
 
 message Bar {
@@ -334,4 +340,47 @@ message BatchGetLatestPriceRequest {
 
 message BatchGetLatestPriceResponse {
   repeated LatestPrice results = 1;
+}
+
+// --- Sector classification (feature 217) ---
+
+message SymbolSector {
+  string symbol = 1;
+  xstockstrat.common.v1.Sector sector = 2;
+}
+
+message GetCurrentSectorRequest {
+  repeated string symbols = 1;
+}
+
+message GetCurrentSectorResponse {
+  // One entry per requested symbol, in request order; unclassified → SECTOR_UNSPECIFIED.
+  repeated SymbolSector sectors = 1;
+}
+
+message GetSectorAsOfRequest {
+  string symbol = 1;
+  google.protobuf.Timestamp as_of = 2;
+}
+
+message GetSectorAsOfResponse {
+  xstockstrat.common.v1.Sector sector = 1;
+}
+
+message SectorHistoryRow {
+  string symbol = 1;
+  xstockstrat.common.v1.Sector sector = 2;
+  google.protobuf.Timestamp valid_from = 3; // inclusive; 1900-01-01T00:00:00Z for epoch-seed rows
+  google.protobuf.Timestamp valid_to = 4;   // exclusive; unset = open (current) row
+  string source = 5;                        // "fmp" | "seed"
+}
+
+message GetSectorHistoryRequest {
+  repeated string symbols = 1;
+  google.protobuf.Timestamp start = 2; // rows intersecting [start, end]; unset start/end = unbounded
+  google.protobuf.Timestamp end = 3;
+}
+
+message GetSectorHistoryResponse {
+  repeated SectorHistoryRow rows = 1;
 }

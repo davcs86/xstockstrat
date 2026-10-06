@@ -5,8 +5,8 @@
 //   protoc               unknown
 // source: analysis/v1/analysis.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ScreenResult = exports.ScreenCriterion = exports.SetStrategyLiveResponse = exports.SetStrategyLiveRequest = exports.ListStrategyDefinitionsResponse = exports.ListStrategyDefinitionsRequest = exports.GetStrategyRequest = exports.ManageStrategyRequest = exports.StrategyDefinition = exports.StrategyComponent_ParamsEntry = exports.StrategyComponent = exports.GetStrategyReportRequest = exports.ListStrategiesResponse = exports.ListStrategiesRequest = exports.GetBacktestRequest = exports.ListBacktestsResponse = exports.BacktestRunSummary = exports.ListBacktestsRequest = exports.StrategyReport = exports.StrategyScore_ComponentScoresEntry = exports.StrategyScore = exports.ScoreStrategyRequest = exports.SymbolDiagnostics = exports.BarDiagnostic_IndicatorsEntry = exports.BarDiagnostic = exports.TradeRecord = exports.EquityPoint = exports.PortfolioCapitalSkip = exports.BacktestResult = exports.CoverageGap = exports.RunBacktestRequest = exports.FactorType = exports.SnapshotEventType = exports.OpportunityAction = exports.ReadinessState = exports.ReadinessRule = exports.ConditionState = exports.OpportunitySort = exports.OpportunityActionTag = exports.ScreenResultStatus = exports.ScreenKind = exports.Comparator = exports.StrategyOperation = exports.ComponentKind = exports.NoTradeReason = exports.BarAction = exports.FillModel = exports.SizingMode = exports.BacktestStatus = exports.protobufPackage = void 0;
-exports.AnalysisServiceClient = exports.AnalysisServiceService = exports.GetAttributionResponse = exports.SourceAttribution = exports.GetAttributionRequest = exports.QueryPnLPatternsResponse = exports.QueryPnLPatternsRequest = exports.PnLPatternFactor = exports.OrderSnapshot_IndicatorValuesEntry = exports.OrderSnapshot = exports.SignalEntry = exports.IndicatorValue = exports.NamedSeries = exports.ComponentSeries = exports.GetIndicatorSeriesResponse = exports.GetIndicatorSeriesRequest = exports.GetStrategyAnalyticsRequest = exports.SetOpportunityActionResponse = exports.SetOpportunityActionRequest = exports.GetWatchlistReadinessResponse = exports.GetWatchlistReadinessRequest = exports.WatchlistReadinessRow = exports.EvaluateReadinessResponse = exports.EvaluateReadinessRequest = exports.ListOpportunitiesResponse = exports.ListOpportunitiesRequest = exports.StrategyAnalytics = exports.SymbolReadiness = exports.ConditionEval = exports.SparklinePoint = exports.Opportunity = exports.FundamentalsScanSummary = exports.RunFundamentalsScanRequest = exports.ScreenSymbolsResponse = exports.ScreenSymbolsRequest = exports.ScreenResult_CriterionPassedEntry = exports.ScreenResult_CriterionRawValuesEntry = exports.ScreenResult_CriterionScoresEntry = void 0;
+exports.SetStrategyLiveResponse = exports.SetStrategyLiveRequest = exports.ListStrategyDefinitionsResponse = exports.ListStrategyDefinitionsRequest = exports.GetStrategyRequest = exports.ManageStrategyRequest = exports.SectorParamOverride = exports.SectorValue = exports.StrategyDefinition = exports.StrategyComponent_ParamsEntry = exports.StrategyComponent = exports.GetStrategyReportRequest = exports.ListStrategiesResponse = exports.ListStrategiesRequest = exports.GetBacktestRequest = exports.ListBacktestsResponse = exports.BacktestRunSummary = exports.ListBacktestsRequest = exports.StrategyReport = exports.StrategyScore_ComponentScoresEntry = exports.StrategyScore = exports.ScoreStrategyRequest = exports.SymbolDiagnostics = exports.BarDiagnostic_IndicatorsEntry = exports.BarDiagnostic = exports.TradeRecord = exports.EquityPoint = exports.PortfolioCapitalSkip = exports.BacktestResult = exports.CoverageGap = exports.RunBacktestRequest = exports.FactorType = exports.SnapshotEventType = exports.OpportunityAction = exports.ReadinessState = exports.ReadinessRule = exports.ConditionState = exports.OpportunitySort = exports.OpportunityActionTag = exports.ScreenResultStatus = exports.ScreenKind = exports.Comparator = exports.StrategyOperation = exports.ComponentKind = exports.NoTradeReason = exports.BarAction = exports.FillModel = exports.SizingMode = exports.BacktestStatus = exports.protobufPackage = void 0;
+exports.AnalysisServiceClient = exports.AnalysisServiceService = exports.GetAttributionResponse = exports.SourceAttribution = exports.GetAttributionRequest = exports.QueryPnLPatternsResponse = exports.QueryPnLPatternsRequest = exports.PnLPatternFactor = exports.OrderSnapshot_IndicatorValuesEntry = exports.OrderSnapshot = exports.SignalEntry = exports.IndicatorValue = exports.NamedSeries = exports.ComponentSeries = exports.GetIndicatorSeriesResponse = exports.GetIndicatorSeriesRequest = exports.GetStrategyAnalyticsRequest = exports.SetOpportunityActionResponse = exports.SetOpportunityActionRequest = exports.GetWatchlistReadinessResponse = exports.GetWatchlistReadinessRequest = exports.WatchlistReadinessRow = exports.EvaluateReadinessResponse = exports.EvaluateReadinessRequest = exports.ListOpportunitiesResponse = exports.ListOpportunitiesRequest = exports.StrategyAnalytics = exports.SymbolReadiness = exports.ConditionEval = exports.SparklinePoint = exports.Opportunity = exports.FundamentalsScanSummary = exports.RunFundamentalsScanRequest = exports.ScreenSymbolsResponse = exports.ScreenSymbolsRequest = exports.ScreenResult_CriterionPassedEntry = exports.ScreenResult_CriterionRawValuesEntry = exports.ScreenResult_CriterionScoresEntry = exports.ScreenResult = exports.ScreenCriterion = void 0;
 exports.backtestStatusFromJSON = backtestStatusFromJSON;
 exports.backtestStatusToJSON = backtestStatusToJSON;
 exports.backtestStatusToNumber = backtestStatusToNumber;
@@ -4343,6 +4343,7 @@ function createBaseStrategyDefinition() {
         deniedSymbols: [],
         userId: "",
         signalEligible: false,
+        sectorParamOverrides: [],
     };
 }
 exports.StrategyDefinition = {
@@ -4388,6 +4389,9 @@ exports.StrategyDefinition = {
         }
         if (message.signalEligible !== false) {
             writer.uint32(112).bool(message.signalEligible);
+        }
+        for (const v of message.sectorParamOverrides) {
+            exports.SectorParamOverride.encode(v, writer.uint32(122).fork()).join();
         }
         return writer;
     },
@@ -4496,6 +4500,13 @@ exports.StrategyDefinition = {
                     message.signalEligible = reader.bool();
                     continue;
                 }
+                case 15: {
+                    if (tag !== 122) {
+                        break;
+                    }
+                    message.sectorParamOverrides.push(exports.SectorParamOverride.decode(reader, reader.uint32()));
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -4568,6 +4579,11 @@ exports.StrategyDefinition = {
                 : isSet(object.signal_eligible)
                     ? globalThis.Boolean(object.signal_eligible)
                     : false,
+            sectorParamOverrides: globalThis.Array.isArray(object?.sectorParamOverrides)
+                ? object.sectorParamOverrides.map((e) => exports.SectorParamOverride.fromJSON(e))
+                : globalThis.Array.isArray(object?.sector_param_overrides)
+                    ? object.sector_param_overrides.map((e) => exports.SectorParamOverride.fromJSON(e))
+                    : [],
         };
     },
     toJSON(message) {
@@ -4614,6 +4630,9 @@ exports.StrategyDefinition = {
         if (message.signalEligible !== false) {
             obj.signalEligible = message.signalEligible;
         }
+        if (message.sectorParamOverrides?.length) {
+            obj.sectorParamOverrides = message.sectorParamOverrides.map((e) => exports.SectorParamOverride.toJSON(e));
+        }
         return obj;
     },
     create(base) {
@@ -4635,6 +4654,189 @@ exports.StrategyDefinition = {
         message.deniedSymbols = object.deniedSymbols?.map((e) => e) || [];
         message.userId = object.userId ?? "";
         message.signalEligible = object.signalEligible ?? false;
+        message.sectorParamOverrides = object.sectorParamOverrides?.map((e) => exports.SectorParamOverride.fromPartial(e)) || [];
+        return message;
+    },
+};
+function createBaseSectorValue() {
+    return { sector: common_1.Sector.SECTOR_UNSPECIFIED, value: 0 };
+}
+exports.SectorValue = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.sector !== common_1.Sector.SECTOR_UNSPECIFIED) {
+            writer.uint32(8).int32((0, common_1.sectorToNumber)(message.sector));
+        }
+        if (message.value !== 0) {
+            writer.uint32(17).double(message.value);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseSectorValue();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 8) {
+                        break;
+                    }
+                    message.sector = (0, common_1.sectorFromJSON)(reader.int32());
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 17) {
+                        break;
+                    }
+                    message.value = reader.double();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            sector: isSet(object.sector) ? (0, common_1.sectorFromJSON)(object.sector) : common_1.Sector.SECTOR_UNSPECIFIED,
+            value: isSet(object.value) ? globalThis.Number(object.value) : 0,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.sector !== common_1.Sector.SECTOR_UNSPECIFIED) {
+            obj.sector = (0, common_1.sectorToJSON)(message.sector);
+        }
+        if (message.value !== 0) {
+            obj.value = message.value;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.SectorValue.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseSectorValue();
+        message.sector = object.sector ?? common_1.Sector.SECTOR_UNSPECIFIED;
+        message.value = object.value ?? 0;
+        return message;
+    },
+};
+function createBaseSectorParamOverride() {
+    return { componentRef: "", paramName: "", defaultValue: 0, bySector: [] };
+}
+exports.SectorParamOverride = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.componentRef !== "") {
+            writer.uint32(10).string(message.componentRef);
+        }
+        if (message.paramName !== "") {
+            writer.uint32(18).string(message.paramName);
+        }
+        if (message.defaultValue !== 0) {
+            writer.uint32(25).double(message.defaultValue);
+        }
+        for (const v of message.bySector) {
+            exports.SectorValue.encode(v, writer.uint32(34).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseSectorParamOverride();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.componentRef = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.paramName = reader.string();
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 25) {
+                        break;
+                    }
+                    message.defaultValue = reader.double();
+                    continue;
+                }
+                case 4: {
+                    if (tag !== 34) {
+                        break;
+                    }
+                    message.bySector.push(exports.SectorValue.decode(reader, reader.uint32()));
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            componentRef: isSet(object.componentRef)
+                ? globalThis.String(object.componentRef)
+                : isSet(object.component_ref)
+                    ? globalThis.String(object.component_ref)
+                    : "",
+            paramName: isSet(object.paramName)
+                ? globalThis.String(object.paramName)
+                : isSet(object.param_name)
+                    ? globalThis.String(object.param_name)
+                    : "",
+            defaultValue: isSet(object.defaultValue)
+                ? globalThis.Number(object.defaultValue)
+                : isSet(object.default_value)
+                    ? globalThis.Number(object.default_value)
+                    : 0,
+            bySector: globalThis.Array.isArray(object?.bySector)
+                ? object.bySector.map((e) => exports.SectorValue.fromJSON(e))
+                : globalThis.Array.isArray(object?.by_sector)
+                    ? object.by_sector.map((e) => exports.SectorValue.fromJSON(e))
+                    : [],
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.componentRef !== "") {
+            obj.componentRef = message.componentRef;
+        }
+        if (message.paramName !== "") {
+            obj.paramName = message.paramName;
+        }
+        if (message.defaultValue !== 0) {
+            obj.defaultValue = message.defaultValue;
+        }
+        if (message.bySector?.length) {
+            obj.bySector = message.bySector.map((e) => exports.SectorValue.toJSON(e));
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.SectorParamOverride.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseSectorParamOverride();
+        message.componentRef = object.componentRef ?? "";
+        message.paramName = object.paramName ?? "";
+        message.defaultValue = object.defaultValue ?? 0;
+        message.bySector = object.bySector?.map((e) => exports.SectorValue.fromPartial(e)) || [];
         return message;
     },
 };

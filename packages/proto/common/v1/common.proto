@@ -90,3 +90,20 @@ enum Timeframe {
   TIMEFRAME_1MIN = 1 [deprecated = true]; // deprecated: sub-15m intervals removed from the product
   TIMEFRAME_5MIN = 2 [deprecated = true]; // deprecated: sub-15m intervals removed from the product
 }
+
+// Sector is the closed GICS-flavored sector set (feature 217). The enum-name text minus the
+// SECTOR_ prefix is the stored marketdata.symbol_classification.sector value.
+enum Sector {
+  SECTOR_UNSPECIFIED = 0;
+  SECTOR_ENERGY = 1;
+  SECTOR_MATERIALS = 2;
+  SECTOR_INDUSTRIALS = 3;
+  SECTOR_CONSUMER_DISCRETIONARY = 4;
+  SECTOR_CONSUMER_STAPLES = 5;
+  SECTOR_HEALTH_CARE = 6;
+  SECTOR_FINANCIALS = 7;
+  SECTOR_TECHNOLOGY = 8;
+  SECTOR_COMMUNICATION_SERVICES = 9;
+  SECTOR_UTILITIES = 10;
+  SECTOR_REAL_ESTATE = 11;
+}

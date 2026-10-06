@@ -5,7 +5,7 @@
 //   protoc               unknown
 // source: common/v1/common.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.TimeRange = exports.Asset = exports.Decimal = exports.Error_DetailsEntry = exports.Error = exports.PageResponse = exports.PageRequest = exports.Timeframe = exports.BrokerType = exports.Environment = exports.TradingMode = exports.protobufPackage = void 0;
+exports.TimeRange = exports.Asset = exports.Decimal = exports.Error_DetailsEntry = exports.Error = exports.PageResponse = exports.PageRequest = exports.Sector = exports.Timeframe = exports.BrokerType = exports.Environment = exports.TradingMode = exports.protobufPackage = void 0;
 exports.tradingModeFromJSON = tradingModeFromJSON;
 exports.tradingModeToJSON = tradingModeToJSON;
 exports.tradingModeToNumber = tradingModeToNumber;
@@ -18,6 +18,9 @@ exports.brokerTypeToNumber = brokerTypeToNumber;
 exports.timeframeFromJSON = timeframeFromJSON;
 exports.timeframeToJSON = timeframeToJSON;
 exports.timeframeToNumber = timeframeToNumber;
+exports.sectorFromJSON = sectorFromJSON;
+exports.sectorToJSON = sectorToJSON;
+exports.sectorToNumber = sectorToNumber;
 /* eslint-disable */
 const wire_1 = require("@bufbuild/protobuf/wire");
 const timestamp_1 = require("../../google/protobuf/timestamp");
@@ -309,6 +312,132 @@ function timeframeToNumber(object) {
         case Timeframe.TIMEFRAME_5MIN:
             return 2;
         case Timeframe.UNRECOGNIZED:
+        default:
+            return -1;
+    }
+}
+/**
+ * Sector is the closed GICS-flavored sector set (feature 217). The enum-name text minus the
+ * SECTOR_ prefix is the stored marketdata.symbol_classification.sector value.
+ */
+var Sector;
+(function (Sector) {
+    Sector["SECTOR_UNSPECIFIED"] = "SECTOR_UNSPECIFIED";
+    Sector["SECTOR_ENERGY"] = "SECTOR_ENERGY";
+    Sector["SECTOR_MATERIALS"] = "SECTOR_MATERIALS";
+    Sector["SECTOR_INDUSTRIALS"] = "SECTOR_INDUSTRIALS";
+    Sector["SECTOR_CONSUMER_DISCRETIONARY"] = "SECTOR_CONSUMER_DISCRETIONARY";
+    Sector["SECTOR_CONSUMER_STAPLES"] = "SECTOR_CONSUMER_STAPLES";
+    Sector["SECTOR_HEALTH_CARE"] = "SECTOR_HEALTH_CARE";
+    Sector["SECTOR_FINANCIALS"] = "SECTOR_FINANCIALS";
+    Sector["SECTOR_TECHNOLOGY"] = "SECTOR_TECHNOLOGY";
+    Sector["SECTOR_COMMUNICATION_SERVICES"] = "SECTOR_COMMUNICATION_SERVICES";
+    Sector["SECTOR_UTILITIES"] = "SECTOR_UTILITIES";
+    Sector["SECTOR_REAL_ESTATE"] = "SECTOR_REAL_ESTATE";
+    Sector["UNRECOGNIZED"] = "UNRECOGNIZED";
+})(Sector || (exports.Sector = Sector = {}));
+function sectorFromJSON(object) {
+    switch (object) {
+        case 0:
+        case "SECTOR_UNSPECIFIED":
+            return Sector.SECTOR_UNSPECIFIED;
+        case 1:
+        case "SECTOR_ENERGY":
+            return Sector.SECTOR_ENERGY;
+        case 2:
+        case "SECTOR_MATERIALS":
+            return Sector.SECTOR_MATERIALS;
+        case 3:
+        case "SECTOR_INDUSTRIALS":
+            return Sector.SECTOR_INDUSTRIALS;
+        case 4:
+        case "SECTOR_CONSUMER_DISCRETIONARY":
+            return Sector.SECTOR_CONSUMER_DISCRETIONARY;
+        case 5:
+        case "SECTOR_CONSUMER_STAPLES":
+            return Sector.SECTOR_CONSUMER_STAPLES;
+        case 6:
+        case "SECTOR_HEALTH_CARE":
+            return Sector.SECTOR_HEALTH_CARE;
+        case 7:
+        case "SECTOR_FINANCIALS":
+            return Sector.SECTOR_FINANCIALS;
+        case 8:
+        case "SECTOR_TECHNOLOGY":
+            return Sector.SECTOR_TECHNOLOGY;
+        case 9:
+        case "SECTOR_COMMUNICATION_SERVICES":
+            return Sector.SECTOR_COMMUNICATION_SERVICES;
+        case 10:
+        case "SECTOR_UTILITIES":
+            return Sector.SECTOR_UTILITIES;
+        case 11:
+        case "SECTOR_REAL_ESTATE":
+            return Sector.SECTOR_REAL_ESTATE;
+        case -1:
+        case "UNRECOGNIZED":
+        default:
+            return Sector.UNRECOGNIZED;
+    }
+}
+function sectorToJSON(object) {
+    switch (object) {
+        case Sector.SECTOR_UNSPECIFIED:
+            return "SECTOR_UNSPECIFIED";
+        case Sector.SECTOR_ENERGY:
+            return "SECTOR_ENERGY";
+        case Sector.SECTOR_MATERIALS:
+            return "SECTOR_MATERIALS";
+        case Sector.SECTOR_INDUSTRIALS:
+            return "SECTOR_INDUSTRIALS";
+        case Sector.SECTOR_CONSUMER_DISCRETIONARY:
+            return "SECTOR_CONSUMER_DISCRETIONARY";
+        case Sector.SECTOR_CONSUMER_STAPLES:
+            return "SECTOR_CONSUMER_STAPLES";
+        case Sector.SECTOR_HEALTH_CARE:
+            return "SECTOR_HEALTH_CARE";
+        case Sector.SECTOR_FINANCIALS:
+            return "SECTOR_FINANCIALS";
+        case Sector.SECTOR_TECHNOLOGY:
+            return "SECTOR_TECHNOLOGY";
+        case Sector.SECTOR_COMMUNICATION_SERVICES:
+            return "SECTOR_COMMUNICATION_SERVICES";
+        case Sector.SECTOR_UTILITIES:
+            return "SECTOR_UTILITIES";
+        case Sector.SECTOR_REAL_ESTATE:
+            return "SECTOR_REAL_ESTATE";
+        case Sector.UNRECOGNIZED:
+        default:
+            return "UNRECOGNIZED";
+    }
+}
+function sectorToNumber(object) {
+    switch (object) {
+        case Sector.SECTOR_UNSPECIFIED:
+            return 0;
+        case Sector.SECTOR_ENERGY:
+            return 1;
+        case Sector.SECTOR_MATERIALS:
+            return 2;
+        case Sector.SECTOR_INDUSTRIALS:
+            return 3;
+        case Sector.SECTOR_CONSUMER_DISCRETIONARY:
+            return 4;
+        case Sector.SECTOR_CONSUMER_STAPLES:
+            return 5;
+        case Sector.SECTOR_HEALTH_CARE:
+            return 6;
+        case Sector.SECTOR_FINANCIALS:
+            return 7;
+        case Sector.SECTOR_TECHNOLOGY:
+            return 8;
+        case Sector.SECTOR_COMMUNICATION_SERVICES:
+            return 9;
+        case Sector.SECTOR_UTILITIES:
+            return 10;
+        case Sector.SECTOR_REAL_ESTATE:
+            return 11;
+        case Sector.UNRECOGNIZED:
         default:
             return -1;
     }

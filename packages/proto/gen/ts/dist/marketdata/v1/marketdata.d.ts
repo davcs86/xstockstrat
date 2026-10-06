@@ -1,6 +1,6 @@
 import { BinaryReader, BinaryWriter } from "@bufbuild/protobuf/wire";
 import { type CallOptions, type ChannelCredentials, Client, type ClientOptions, type ClientReadableStream, type ClientUnaryCall, type handleServerStreamingCall, type handleUnaryCall, type Metadata, type ServiceError, type UntypedServiceImplementation } from "@grpc/grpc-js";
-import { Asset, PageRequest, PageResponse, Timeframe, TimeRange } from "../../common/v1/common";
+import { Asset, PageRequest, PageResponse, Sector, Timeframe, TimeRange } from "../../common/v1/common";
 export declare const protobufPackage = "xstockstrat.marketdata.v1";
 export interface Bar {
     symbol: string;
@@ -299,6 +299,43 @@ export interface BatchGetLatestPriceRequest {
 export interface BatchGetLatestPriceResponse {
     results: LatestPrice[];
 }
+export interface SymbolSector {
+    symbol: string;
+    sector: Sector;
+}
+export interface GetCurrentSectorRequest {
+    symbols: string[];
+}
+export interface GetCurrentSectorResponse {
+    /** One entry per requested symbol, in request order; unclassified → SECTOR_UNSPECIFIED. */
+    sectors: SymbolSector[];
+}
+export interface GetSectorAsOfRequest {
+    symbol: string;
+    asOf?: Date | undefined;
+}
+export interface GetSectorAsOfResponse {
+    sector: Sector;
+}
+export interface SectorHistoryRow {
+    symbol: string;
+    sector: Sector;
+    /** inclusive; 1900-01-01T00:00:00Z for epoch-seed rows */
+    validFrom?: Date | undefined;
+    /** exclusive; unset = open (current) row */
+    validTo?: Date | undefined;
+    /** "fmp" | "seed" */
+    source: string;
+}
+export interface GetSectorHistoryRequest {
+    symbols: string[];
+    /** rows intersecting [start, end]; unset start/end = unbounded */
+    start?: Date | undefined;
+    end?: Date | undefined;
+}
+export interface GetSectorHistoryResponse {
+    rows: SectorHistoryRow[];
+}
 export declare const Bar: MessageFns<Bar>;
 export declare const Quote: MessageFns<Quote>;
 export declare const GetLatestPriceRequest: MessageFns<GetLatestPriceRequest>;
@@ -336,6 +373,14 @@ export declare const SymbolBars: MessageFns<SymbolBars>;
 export declare const BatchGetBarsResponse: MessageFns<BatchGetBarsResponse>;
 export declare const BatchGetLatestPriceRequest: MessageFns<BatchGetLatestPriceRequest>;
 export declare const BatchGetLatestPriceResponse: MessageFns<BatchGetLatestPriceResponse>;
+export declare const SymbolSector: MessageFns<SymbolSector>;
+export declare const GetCurrentSectorRequest: MessageFns<GetCurrentSectorRequest>;
+export declare const GetCurrentSectorResponse: MessageFns<GetCurrentSectorResponse>;
+export declare const GetSectorAsOfRequest: MessageFns<GetSectorAsOfRequest>;
+export declare const GetSectorAsOfResponse: MessageFns<GetSectorAsOfResponse>;
+export declare const SectorHistoryRow: MessageFns<SectorHistoryRow>;
+export declare const GetSectorHistoryRequest: MessageFns<GetSectorHistoryRequest>;
+export declare const GetSectorHistoryResponse: MessageFns<GetSectorHistoryResponse>;
 /**
  * MarketDataService — sole Alpaca integration point.
  * Stores OHLCV and quote data in TimescaleDB hypertables.
@@ -511,6 +556,37 @@ export declare const MarketDataServiceService: {
         readonly responseSerialize: (value: BackfillFundamentalsResponse) => Buffer;
         readonly responseDeserialize: (value: Buffer) => BackfillFundamentalsResponse;
     };
+    /**
+     * Sector classification reads (feature 217). Served only from the local Type-2 SCD store —
+     * never call FMP on the read path; an unclassified symbol returns SECTOR_UNSPECIFIED, not an error.
+     */
+    readonly getCurrentSector: {
+        readonly path: "/xstockstrat.marketdata.v1.MarketDataService/GetCurrentSector";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: GetCurrentSectorRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => GetCurrentSectorRequest;
+        readonly responseSerialize: (value: GetCurrentSectorResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => GetCurrentSectorResponse;
+    };
+    readonly getSectorAsOf: {
+        readonly path: "/xstockstrat.marketdata.v1.MarketDataService/GetSectorAsOf";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: GetSectorAsOfRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => GetSectorAsOfRequest;
+        readonly responseSerialize: (value: GetSectorAsOfResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => GetSectorAsOfResponse;
+    };
+    readonly getSectorHistory: {
+        readonly path: "/xstockstrat.marketdata.v1.MarketDataService/GetSectorHistory";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: GetSectorHistoryRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => GetSectorHistoryRequest;
+        readonly responseSerialize: (value: GetSectorHistoryResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => GetSectorHistoryResponse;
+    };
 };
 export interface MarketDataServiceServer extends UntypedServiceImplementation {
     /** Stream live bar data for symbols */
@@ -554,6 +630,13 @@ export interface MarketDataServiceServer extends UntypedServiceImplementation {
      * as-reported statements from SEC EDGAR + a point-in-time price-join and persists them.
      */
     backfillFundamentals: handleUnaryCall<BackfillFundamentalsRequest, BackfillFundamentalsResponse>;
+    /**
+     * Sector classification reads (feature 217). Served only from the local Type-2 SCD store —
+     * never call FMP on the read path; an unclassified symbol returns SECTOR_UNSPECIFIED, not an error.
+     */
+    getCurrentSector: handleUnaryCall<GetCurrentSectorRequest, GetCurrentSectorResponse>;
+    getSectorAsOf: handleUnaryCall<GetSectorAsOfRequest, GetSectorAsOfResponse>;
+    getSectorHistory: handleUnaryCall<GetSectorHistoryRequest, GetSectorHistoryResponse>;
 }
 export interface MarketDataServiceClient extends Client {
     /** Stream live bar data for symbols */
@@ -627,6 +710,19 @@ export interface MarketDataServiceClient extends Client {
     backfillFundamentals(request: BackfillFundamentalsRequest, callback: (error: ServiceError | null, response: BackfillFundamentalsResponse) => void): ClientUnaryCall;
     backfillFundamentals(request: BackfillFundamentalsRequest, metadata: Metadata, callback: (error: ServiceError | null, response: BackfillFundamentalsResponse) => void): ClientUnaryCall;
     backfillFundamentals(request: BackfillFundamentalsRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: BackfillFundamentalsResponse) => void): ClientUnaryCall;
+    /**
+     * Sector classification reads (feature 217). Served only from the local Type-2 SCD store —
+     * never call FMP on the read path; an unclassified symbol returns SECTOR_UNSPECIFIED, not an error.
+     */
+    getCurrentSector(request: GetCurrentSectorRequest, callback: (error: ServiceError | null, response: GetCurrentSectorResponse) => void): ClientUnaryCall;
+    getCurrentSector(request: GetCurrentSectorRequest, metadata: Metadata, callback: (error: ServiceError | null, response: GetCurrentSectorResponse) => void): ClientUnaryCall;
+    getCurrentSector(request: GetCurrentSectorRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: GetCurrentSectorResponse) => void): ClientUnaryCall;
+    getSectorAsOf(request: GetSectorAsOfRequest, callback: (error: ServiceError | null, response: GetSectorAsOfResponse) => void): ClientUnaryCall;
+    getSectorAsOf(request: GetSectorAsOfRequest, metadata: Metadata, callback: (error: ServiceError | null, response: GetSectorAsOfResponse) => void): ClientUnaryCall;
+    getSectorAsOf(request: GetSectorAsOfRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: GetSectorAsOfResponse) => void): ClientUnaryCall;
+    getSectorHistory(request: GetSectorHistoryRequest, callback: (error: ServiceError | null, response: GetSectorHistoryResponse) => void): ClientUnaryCall;
+    getSectorHistory(request: GetSectorHistoryRequest, metadata: Metadata, callback: (error: ServiceError | null, response: GetSectorHistoryResponse) => void): ClientUnaryCall;
+    getSectorHistory(request: GetSectorHistoryRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: GetSectorHistoryResponse) => void): ClientUnaryCall;
 }
 export declare const MarketDataServiceClient: {
     new (address: string, credentials: ChannelCredentials, options?: Partial<ClientOptions>): MarketDataServiceClient;

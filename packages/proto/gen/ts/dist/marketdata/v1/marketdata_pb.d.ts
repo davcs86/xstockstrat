@@ -1,6 +1,6 @@
 import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
-import type { Asset, PageRequest, PageResponse, Timeframe, TimeRange } from "../../common/v1/common_pb";
+import type { Asset, PageRequest, PageResponse, Sector, Timeframe, TimeRange } from "../../common/v1/common_pb";
 import type { Message } from "@bufbuild/protobuf";
 /**
  * Describes the file marketdata/v1/marketdata.proto.
@@ -1006,6 +1006,160 @@ export type BatchGetLatestPriceResponse = Message<"xstockstrat.marketdata.v1.Bat
  */
 export declare const BatchGetLatestPriceResponseSchema: GenMessage<BatchGetLatestPriceResponse>;
 /**
+ * @generated from message xstockstrat.marketdata.v1.SymbolSector
+ */
+export type SymbolSector = Message<"xstockstrat.marketdata.v1.SymbolSector"> & {
+    /**
+     * @generated from field: string symbol = 1;
+     */
+    symbol: string;
+    /**
+     * @generated from field: xstockstrat.common.v1.Sector sector = 2;
+     */
+    sector: Sector;
+};
+/**
+ * Describes the message xstockstrat.marketdata.v1.SymbolSector.
+ * Use `create(SymbolSectorSchema)` to create a new message.
+ */
+export declare const SymbolSectorSchema: GenMessage<SymbolSector>;
+/**
+ * @generated from message xstockstrat.marketdata.v1.GetCurrentSectorRequest
+ */
+export type GetCurrentSectorRequest = Message<"xstockstrat.marketdata.v1.GetCurrentSectorRequest"> & {
+    /**
+     * @generated from field: repeated string symbols = 1;
+     */
+    symbols: string[];
+};
+/**
+ * Describes the message xstockstrat.marketdata.v1.GetCurrentSectorRequest.
+ * Use `create(GetCurrentSectorRequestSchema)` to create a new message.
+ */
+export declare const GetCurrentSectorRequestSchema: GenMessage<GetCurrentSectorRequest>;
+/**
+ * @generated from message xstockstrat.marketdata.v1.GetCurrentSectorResponse
+ */
+export type GetCurrentSectorResponse = Message<"xstockstrat.marketdata.v1.GetCurrentSectorResponse"> & {
+    /**
+     * One entry per requested symbol, in request order; unclassified → SECTOR_UNSPECIFIED.
+     *
+     * @generated from field: repeated xstockstrat.marketdata.v1.SymbolSector sectors = 1;
+     */
+    sectors: SymbolSector[];
+};
+/**
+ * Describes the message xstockstrat.marketdata.v1.GetCurrentSectorResponse.
+ * Use `create(GetCurrentSectorResponseSchema)` to create a new message.
+ */
+export declare const GetCurrentSectorResponseSchema: GenMessage<GetCurrentSectorResponse>;
+/**
+ * @generated from message xstockstrat.marketdata.v1.GetSectorAsOfRequest
+ */
+export type GetSectorAsOfRequest = Message<"xstockstrat.marketdata.v1.GetSectorAsOfRequest"> & {
+    /**
+     * @generated from field: string symbol = 1;
+     */
+    symbol: string;
+    /**
+     * @generated from field: google.protobuf.Timestamp as_of = 2;
+     */
+    asOf?: Timestamp | undefined;
+};
+/**
+ * Describes the message xstockstrat.marketdata.v1.GetSectorAsOfRequest.
+ * Use `create(GetSectorAsOfRequestSchema)` to create a new message.
+ */
+export declare const GetSectorAsOfRequestSchema: GenMessage<GetSectorAsOfRequest>;
+/**
+ * @generated from message xstockstrat.marketdata.v1.GetSectorAsOfResponse
+ */
+export type GetSectorAsOfResponse = Message<"xstockstrat.marketdata.v1.GetSectorAsOfResponse"> & {
+    /**
+     * @generated from field: xstockstrat.common.v1.Sector sector = 1;
+     */
+    sector: Sector;
+};
+/**
+ * Describes the message xstockstrat.marketdata.v1.GetSectorAsOfResponse.
+ * Use `create(GetSectorAsOfResponseSchema)` to create a new message.
+ */
+export declare const GetSectorAsOfResponseSchema: GenMessage<GetSectorAsOfResponse>;
+/**
+ * @generated from message xstockstrat.marketdata.v1.SectorHistoryRow
+ */
+export type SectorHistoryRow = Message<"xstockstrat.marketdata.v1.SectorHistoryRow"> & {
+    /**
+     * @generated from field: string symbol = 1;
+     */
+    symbol: string;
+    /**
+     * @generated from field: xstockstrat.common.v1.Sector sector = 2;
+     */
+    sector: Sector;
+    /**
+     * inclusive; 1900-01-01T00:00:00Z for epoch-seed rows
+     *
+     * @generated from field: google.protobuf.Timestamp valid_from = 3;
+     */
+    validFrom?: Timestamp | undefined;
+    /**
+     * exclusive; unset = open (current) row
+     *
+     * @generated from field: google.protobuf.Timestamp valid_to = 4;
+     */
+    validTo?: Timestamp | undefined;
+    /**
+     * "fmp" | "seed"
+     *
+     * @generated from field: string source = 5;
+     */
+    source: string;
+};
+/**
+ * Describes the message xstockstrat.marketdata.v1.SectorHistoryRow.
+ * Use `create(SectorHistoryRowSchema)` to create a new message.
+ */
+export declare const SectorHistoryRowSchema: GenMessage<SectorHistoryRow>;
+/**
+ * @generated from message xstockstrat.marketdata.v1.GetSectorHistoryRequest
+ */
+export type GetSectorHistoryRequest = Message<"xstockstrat.marketdata.v1.GetSectorHistoryRequest"> & {
+    /**
+     * @generated from field: repeated string symbols = 1;
+     */
+    symbols: string[];
+    /**
+     * rows intersecting [start, end]; unset start/end = unbounded
+     *
+     * @generated from field: google.protobuf.Timestamp start = 2;
+     */
+    start?: Timestamp | undefined;
+    /**
+     * @generated from field: google.protobuf.Timestamp end = 3;
+     */
+    end?: Timestamp | undefined;
+};
+/**
+ * Describes the message xstockstrat.marketdata.v1.GetSectorHistoryRequest.
+ * Use `create(GetSectorHistoryRequestSchema)` to create a new message.
+ */
+export declare const GetSectorHistoryRequestSchema: GenMessage<GetSectorHistoryRequest>;
+/**
+ * @generated from message xstockstrat.marketdata.v1.GetSectorHistoryResponse
+ */
+export type GetSectorHistoryResponse = Message<"xstockstrat.marketdata.v1.GetSectorHistoryResponse"> & {
+    /**
+     * @generated from field: repeated xstockstrat.marketdata.v1.SectorHistoryRow rows = 1;
+     */
+    rows: SectorHistoryRow[];
+};
+/**
+ * Describes the message xstockstrat.marketdata.v1.GetSectorHistoryResponse.
+ * Use `create(GetSectorHistoryResponseSchema)` to create a new message.
+ */
+export declare const GetSectorHistoryResponseSchema: GenMessage<GetSectorHistoryResponse>;
+/**
  * MarketDataService — sole Alpaca integration point.
  * Stores OHLCV and quote data in TimescaleDB hypertables.
  *
@@ -1174,5 +1328,32 @@ export declare const MarketDataService: GenService<{
         methodKind: "unary";
         input: typeof BackfillFundamentalsRequestSchema;
         output: typeof BackfillFundamentalsResponseSchema;
+    };
+    /**
+     * Sector classification reads (feature 217). Served only from the local Type-2 SCD store —
+     * never call FMP on the read path; an unclassified symbol returns SECTOR_UNSPECIFIED, not an error.
+     *
+     * @generated from rpc xstockstrat.marketdata.v1.MarketDataService.GetCurrentSector
+     */
+    getCurrentSector: {
+        methodKind: "unary";
+        input: typeof GetCurrentSectorRequestSchema;
+        output: typeof GetCurrentSectorResponseSchema;
+    };
+    /**
+     * @generated from rpc xstockstrat.marketdata.v1.MarketDataService.GetSectorAsOf
+     */
+    getSectorAsOf: {
+        methodKind: "unary";
+        input: typeof GetSectorAsOfRequestSchema;
+        output: typeof GetSectorAsOfResponseSchema;
+    };
+    /**
+     * @generated from rpc xstockstrat.marketdata.v1.MarketDataService.GetSectorHistory
+     */
+    getSectorHistory: {
+        methodKind: "unary";
+        input: typeof GetSectorHistoryRequestSchema;
+        output: typeof GetSectorHistoryResponseSchema;
     };
 }>;
