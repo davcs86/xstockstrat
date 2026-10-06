@@ -108,7 +108,7 @@ func TestKnownBrokerOrderIDs_ReturnsPersistedSubset(t *testing.T) {
 	// The account knows bo-1 but not bo-2 (bo-2 is genuinely foreign).
 	rows := pgxmock.NewRows([]string{"broker_order_id"}).AddRow("bo-1")
 
-	mock.ExpectQuery(`(?s)SELECT DISTINCT broker_order_id.*FROM trading\.orders.*WHERE account_id = \$1.*broker_order_id = ANY\(\$2\)`).
+	mock.ExpectQuery(`(?s)SELECT broker_order_id.*FROM trading\.orders.*WHERE account_id = \$1.*broker_order_id = ANY\(\$2\)`).
 		WithArgs("acct-1", []string{"bo-1", "bo-2"}).
 		WillReturnRows(rows)
 
@@ -121,6 +121,37 @@ func TestKnownBrokerOrderIDs_ReturnsPersistedSubset(t *testing.T) {
 	}
 	if known["bo-2"] {
 		t.Error("bo-2 must NOT be reported as known (genuinely foreign)")
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet expectations: %v", err)
+	}
+}
+
+// TestKnownBrokerOrderIDs_IncludesBracketLegs proves stop / take-profit leg ids persisted only in
+// trading.order_brackets count as known, so a live leg is never classified unknown_broker_order.
+func TestKnownBrokerOrderIDs_IncludesBracketLegs(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatalf("pgxmock.NewPool: %v", err)
+	}
+	defer mock.Close()
+
+	repo := &TradingRepo{db: mock}
+	rows := pgxmock.NewRows([]string{"broker_order_id"}).AddRow("leg-stop").AddRow("leg-tp")
+
+	mock.ExpectQuery(`(?s)FROM trading\.orders.*WHERE account_id = \$1.*broker_order_id = ANY\(\$2\).*UNION.*stop_leg_order_id.*FROM trading\.order_brackets.*WHERE account_id = \$1.*stop_leg_order_id = ANY\(\$2\).*take_profit_leg_order_id.*FROM trading\.order_brackets.*WHERE account_id = \$1.*take_profit_leg_order_id = ANY\(\$2\)`).
+		WithArgs("acct-1", []string{"leg-stop", "leg-tp", "foreign"}).
+		WillReturnRows(rows)
+
+	known, err := repo.KnownBrokerOrderIDs(context.Background(), "acct-1", []string{"leg-stop", "leg-tp", "foreign"})
+	if err != nil {
+		t.Fatalf("KnownBrokerOrderIDs: %v", err)
+	}
+	if !known["leg-stop"] || !known["leg-tp"] {
+		t.Errorf("bracket legs must be known, got %v", known)
+	}
+	if known["foreign"] {
+		t.Error("foreign must NOT be reported as known")
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Errorf("unmet expectations: %v", err)

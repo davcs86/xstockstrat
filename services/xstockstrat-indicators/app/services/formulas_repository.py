@@ -148,22 +148,27 @@ class FormulasRepository:
         include_public: bool,
         page_size: int,
         page_offset: int,
+        author_public_only: bool = False,
     ) -> tuple[list[dict], int]:
         # Empty author_filter matches no author, so only the include_public branch returns rows.
         # Soft-deleted formulas (deleted_at IS NOT NULL) are hidden from listing.
-        where = "WHERE deleted_at IS NULL AND (author = $1 OR ($2 AND is_public = TRUE))"
+        where = (
+            "WHERE deleted_at IS NULL AND ((author = $1 AND (NOT $3 OR is_public = TRUE))"
+            " OR ($2 AND is_public = TRUE))"
+        )
         total = await self._db.fetchval(
             f"SELECT COUNT(*) FROM indicators.formulas {where}",
             author_filter,
             include_public,
+            author_public_only,
         )
         sql = f"""
             SELECT * FROM indicators.formulas {where}
             ORDER BY created_at DESC
         """
-        params = [author_filter, include_public]
+        params = [author_filter, include_public, author_public_only]
         if page_size and page_size > 0:
-            sql += " LIMIT $3 OFFSET $4"
+            sql += " LIMIT $4 OFFSET $5"
             params.extend([page_size, page_offset or 0])
         rows = await self._db.fetch(sql, *params)
         return [_to_dict(r) for r in rows], int(total or 0)

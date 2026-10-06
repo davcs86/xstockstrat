@@ -224,3 +224,14 @@ ruff clean; live smoke (as root) proved network/exec/secret/fork containment + n
 - Feature promoted and committed: 27f3f276b39fa79d07b4de6c023582f72539aac3
 - Status updated: `code-completed` → `launched`
 - Launched date: 2026-10-01
+
+## 2026-10-05 — post-launch: world-readable file reads closed (defect fix, operator decision)
+
+The "world-readable non-secret files stay readable by design" residual above is **superseded**. The
+2026-10-03 defect `docs/reports/2026-10-03-indicators-sandbox-os-escape-defect.md` showed that module
+attribute traversal (`numpy.lib._datasource.os`) bypasses the import guard. The operator chose a
+seccomp-level deny-by-default for file opens over attribute-filtered module proxies. `openat` (and
+open/openat2/open_by_handle_at) are now absent from `_SECCOMP_ALLOW`. Allowed modules' lazy attributes
+are resolved before the filter loads (~55 ms per child), because numpy's `fft`/`rec`/… otherwise import
+lazily and fail EPERM. This is still not a flag-filtered `openat` (Rejected #7). It is a full deny.
+Verified with the sandbox corpus and every price-series formula in staging, all with byte-identical outputs.

@@ -122,17 +122,28 @@ func (r *TradingRepo) GetOrder(ctx context.Context, orderID string) (*tradingv1.
 }
 
 // KnownBrokerOrderIDs returns the subset of brokerOrderIDs this account has a persisted record of
-// in trading.orders. Empty input returns empty, no query.
+// in trading.orders or as a bracket leg in trading.order_brackets (Alpaca lists legs as top-level
+// orders). Empty input returns empty, no query.
 func (r *TradingRepo) KnownBrokerOrderIDs(ctx context.Context, accountID string, brokerOrderIDs []string) (map[string]bool, error) {
 	known := make(map[string]bool, len(brokerOrderIDs))
 	if len(brokerOrderIDs) == 0 {
 		return known, nil
 	}
 	rows, err := r.db.Query(ctx, `
-		SELECT DISTINCT broker_order_id
+		SELECT broker_order_id
 		FROM trading.orders
 		WHERE account_id = $1
 		  AND broker_order_id = ANY($2)
+		UNION
+		SELECT stop_leg_order_id
+		FROM trading.order_brackets
+		WHERE account_id = $1
+		  AND stop_leg_order_id = ANY($2)
+		UNION
+		SELECT take_profit_leg_order_id
+		FROM trading.order_brackets
+		WHERE account_id = $1
+		  AND take_profit_leg_order_id = ANY($2)
 	`, accountID, brokerOrderIDs)
 	if err != nil {
 		return nil, err

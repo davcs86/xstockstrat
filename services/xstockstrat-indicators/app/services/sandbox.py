@@ -15,7 +15,9 @@ escape yields no lateral movement):
     `process_vm_readv`/`/proc/<parent>/environ` read of the parent's secrets is blocked cross-UID.
   - seccomp-BPF allowlist (ERRNO(EPERM) default), loaded AFTER the numeric-lib import and right
     before the untrusted `exec`: the network family, execve/execveat, io_uring, ptrace,
-    process_vm_*, pidfd_*, and write-creating FS ops are absent → EPERM. Fails closed on compat
+    process_vm_*, pidfd_*, every file-open syscall (open/openat/openat2) and write-creating FS ops
+    are absent → EPERM, so module-attribute traversal to the real `os` cannot read any file. Allowed
+    modules' lazy attributes are resolved before the filter loads. Fails closed on compat
     ABIs (x86/x32 not added) and any unknown syscall.
   - Expanded rlimits: RLIMIT_DATA (memory), RLIMIT_CPU (CPU backstop), RLIMIT_NPROC (fork-bomb),
     RLIMIT_FSIZE=0 (no file writes), RLIMIT_NOFILE. RLIMIT_AS is deliberately NOT used (it rejects
@@ -54,12 +56,12 @@ _THREAD_LIMIT_ENV = {
 _SANDBOX_UID = 65534
 _SANDBOX_GID = 65534
 
-# seccomp allowlist finalized empirically (strace of numpy/pandas compute) + defensive read-path
-# members for the runtime-image glibc. Default action is ERRNO(EPERM): anything absent here —
+# seccomp allowlist finalized empirically (strace of numpy/pandas compute). openat is deliberately
+# absent: the language guard is bypassable via module attributes, so nothing may open a file.
+# Default action is ERRNO(EPERM): anything absent here —
 # the whole socket family, execve/execveat, io_uring_*, ptrace, process_vm_*, pidfd_*, and
 # write-creating FS ops — fails closed. Loaded AFTER import, so this is the compute surface only.
 _SECCOMP_ALLOW = (
-    "openat",
     "read",
     "readv",
     "write",
@@ -212,9 +214,16 @@ def _safe_import(name, *args, **kwargs):
 # then only needs the compute surface (feature 209 design §3).
 for _m in _allowed:
     try:
-        _real_import(_m)
+        _mod = _real_import(_m)
     except Exception:
-        pass
+        continue
+    # openat is denied after the filter loads, so resolve every lazily-imported attribute now
+    # (numpy's fft/rec/ma/... load on first access) — a post-filter lazy import fails EPERM.
+    for _lazy in [_n for _n in dir(_mod) if _n not in vars(_mod)]:
+        try:
+            getattr(_mod, _lazy)
+        except Exception:
+            pass
 
 # Build a restricted __builtins__ for the formula. Keep the safe-callable subset,
 # all exception/warning types (so formulas can raise/except), and dunder builtins
