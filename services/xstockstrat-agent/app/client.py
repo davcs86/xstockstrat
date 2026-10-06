@@ -639,6 +639,32 @@ async def run_backtest(
     )
 
 
+def _build_sector_overrides(overrides: list[dict[str, Any]]):
+    """Map tool-shaped overrides ({component_ref, param_name, default_value, by_sector:
+    {"FINANCIALS": 12.0}}) onto SectorParamOverride messages (feature 217). Sector keys accept the
+    bare name ("FINANCIALS") or the enum name ("SECTOR_FINANCIALS"), case-insensitive."""
+    from gen.analysis.v1 import analysis_pb2  # noqa: PLC0415
+    from gen.common.v1 import common_pb2  # noqa: PLC0415
+
+    out = []
+    for ov in overrides:
+        msg = analysis_pb2.SectorParamOverride(
+            component_ref=ov.get("component_ref", ""),
+            param_name=ov.get("param_name", ""),
+            default_value=float(ov["default_value"]),
+        )
+        for name, value in (ov.get("by_sector") or {}).items():
+            key = str(name).strip().upper()
+            if not key.startswith("SECTOR_"):
+                key = "SECTOR_" + key
+            if key not in common_pb2.Sector.keys() or key == "SECTOR_UNSPECIFIED":
+                valid = [k.removeprefix("SECTOR_") for k in common_pb2.Sector.keys()][1:]
+                raise ValueError(f"unknown sector '{name}'. Valid: {valid}")
+            msg.by_sector.add(sector=common_pb2.Sector.Value(key), value=float(value))
+        out.append(msg)
+    return out
+
+
 def _build_component(c: dict[str, Any]):
     """Map a component dict → StrategyComponent (feature 090: shared by manage_strategy and the
     screen_symbols technical-criterion component). Raises ValueError on an unknown kind."""
@@ -893,6 +919,9 @@ async def manage_strategy(
         # signal_eligible is a plain bool (None → protobuf default false).
         denied_symbols=definition.get("denied_symbols", []),
         signal_eligible=definition.get("signal_eligible"),
+        sector_param_overrides=_build_sector_overrides(
+            definition.get("sector_param_overrides") or []
+        ),
     )
     signal_params = definition.get("signal_params")
     if signal_params:

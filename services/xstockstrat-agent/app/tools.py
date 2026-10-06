@@ -829,6 +829,7 @@ def register_tools(server: MCPServer) -> None:
         exit_cooldown_days: int | None = None,
         denied_symbols: list[str] | None = None,
         signal_eligible: bool | None = None,
+        sector_param_overrides: list[dict] | None = None,
         clear_fields: list[str] | None = None,
     ) -> dict:
         """Register/update/deactivate/reactivate a stored strategy in xstockstrat-analysis.
@@ -899,6 +900,17 @@ def register_tools(server: MCPServer) -> None:
             this strategy's evaluation universe (feature 132; default false). Setting it true while
             signal_params.symbols is a non-empty allowlist is rejected INVALID_ARGUMENT (the
             allowlist is already an explicit universe override).
+        sector_param_overrides: optional per-sector component-param overrides (feature 217) — a
+            list of {component_ref, param_name, default_value, by_sector: {"<SECTOR>": value}}.
+            Overrides components[component_ref].params[param_name] by the evaluated symbol's
+            GICS-style sector: ENERGY, MATERIALS, INDUSTRIALS, CONSUMER_DISCRETIONARY,
+            CONSUMER_STAPLES, HEALTH_CARE, FINANCIALS, TECHNOLOGY, COMMUNICATION_SERVICES,
+            UTILITIES, REAL_ESTATE. default_value is mandatory and applies to unclassified symbols.
+            Backtests resolve the sector as-of each bar (no look-ahead); live readiness /
+            opportunities / the live loop use the current sector. Works for fundamentals-input
+            formulas too, e.g. {component_ref: 'fscore', param_name: 'de_bad', default_value: 2.0,
+            by_sector: {'FINANCIALS': 12.0}}. Params only — rule thresholds are not overridable.
+            Omit to leave unchanged; clear_fields=['sector_param_overrides'] to remove all.
         clear_fields: optional list of field names to ERASE, e.g. ['exit_rule']. Use this to
             blank a rule or to revert cooldown_days to the platform default — passing a field
             with no value cannot express "erase" on its own. If a field is BOTH supplied a value
@@ -950,6 +962,7 @@ def register_tools(server: MCPServer) -> None:
             "exit_cooldown_days": exit_cooldown_days,
             "denied_symbols": denied_symbols,
             "signal_eligible": signal_eligible,
+            "sector_param_overrides": sector_param_overrides,
         }
         mask = [name for name, value in supplied.items() if value is not None]
         for name in mask:
