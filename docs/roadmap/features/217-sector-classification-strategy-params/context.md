@@ -133,3 +133,23 @@
   - No new env vars/ports (config keys only) → no docker-compose / .do/app*.yaml changes.
 - Reviewers snapshot finalized: dropped `xstockstrat-indicators` owner (design rides the existing
   flat-param channel as a drop-in; no indicators code step), added `packages/proto` + `xstockstrat-ui` owners.
+
+## Session 2026-10-06 — scope extension (operator decision, AXP opportunity review)
+
+- **Decision (operator):** sector-aware fundamentals scoring (financials: card issuers/banks are
+  balance-sheet funded, so generic `de_bad`=2.0 zeroes their D/E sub-score) is delivered **through this
+  feature's per-sector param overrides**, not a separate story — avoids a second sector-override mechanism.
+- Added `@AC-14`: overrides must reach a **fundamentals-input custom formula's** params (e.g. `fscore`
+  `de_bad`/`roe_bad`), on both backtest (PIT) and live-snapshot surfaces.
+- **Spec gap to close before execute:** Step 11 threads overrides only through
+  `_assemble_component_series` → `_compute_component`; a fundamentals-input formula returns early into
+  `evaluator.py` `_fundamentals_formula_series` (`:632-642`), which builds `params_struct` from
+  `comp.params` (`:481-482`) — that branch must also receive the resolved per-sector params, and the
+  live-snapshot path (`_load_fundamentals_snapshot`) too. Also noted: `@AC-6`/`@AC-7` phrase the override
+  as an "RSI oversold threshold", which in the rule grammar is a rule `rhs` literal, not a component
+  param — re-check they test the field-15 design.
+- Related open data defects (inputs this override calibrates against): `docs/reports/2026-10-06-edgar-quarterly-roe-not-annualized-defect.md`
+  (→ 222), `docs/reports/2026-10-06-edgar-stored-de-predates-financial-debt-defect.md` (→ 223). Calibrate
+  sector `de_bad`/`roe_bad` values only after both land.
+- Next: re-run `/sdd-spec sector-classification-strategy-params` to fold `@AC-14` into the steps, then
+  `/sdd-review … impl-spec`.
