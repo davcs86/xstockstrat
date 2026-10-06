@@ -122,3 +122,17 @@ OQ-4 to OQ-6 remain for /sdd-design.
   15. **D-1 alternative:** leave legacy NULL-owner runs NULL and unreadable instead of assigning them to `SEED_USER_ID`.
 - **Verified:** evaluator GetFormula failures are tolerated (`evaluator.py:554,581`); the `@feature-127` auto-add is agent-side; the evaluator is stateless.
 - **Gate:** round 1 < mandated 2, so approval is not offered yet; operator decisions are requested for the next round.
+
+### Operator decisions at the round-1 gate (2026-10-06), binding for round 2+
+
+- **C-16 CHANGE signed off:** `@feature-161 @AC-4/@AC-5` (`services/xstockstrat-ui/acceptance/surface-signal-weight-decay-config.feature`) are re-homed to `/insights/signal-sources`. Their assertions stay the same and only the route changes. `/config-ui/sources` becomes the FR-13 admin read-only view. Signed off by the operator on 2026-10-06.
+- **MCP credentials go to per-user secrets in config.** This is an explicit operator override of feature 147's "secret keys (`is_secret`) are global-scope only" invariant (`config.proto:133-135`). Config secrets may now carry a `user_id`.
+  - `xstockstrat-config` joins Affected Services.
+  - The config-team approval gate applies.
+  - Scope reaches `GetSecret` (owner-scoped resolution), `WatchConfig`/`GetConfig`/`ListKeys` redaction (it must hold per user), and the `SetConfig` per-user secret write path.
+  - Feature 147's 3-guard pattern stays: encrypt at rest, redact on every edge, decrypt only through `GetSecret` for allow-listed internal callers.
+- **Legacy backtest runs whose owner is ambiguous go to `SEED_USER_ID`** (D-1). The owner is resolved when exactly one exists; otherwise the run goes to `SEED_USER_ID`, and `backtest_runs.user_id` is then `SET NOT NULL`. The operator accepts that the seed user receives the history of ambiguous runs.
+- **System sources are merged and marked read-only.**
+  - `ListSignalSources`/`QuerySignals` return the caller's own rows plus `system` rows, flagged system and immutable.
+  - System slugs are reserved: no user may register or own a slug held by `system`.
+  - FR-4 is amended accordingly.

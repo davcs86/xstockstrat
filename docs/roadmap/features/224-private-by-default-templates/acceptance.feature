@@ -227,3 +227,16 @@ Feature: private-by-default-templates
     Given "bob" already owns strategy "mean_reversion"
     When "bob" instantiates "tpl-meanrev" with strategy_id "mean_reversion"
     Then the call fails with ALREADY_EXISTS and no strategy or formula is created
+
+  @AC-35 @FR-14
+  Scenario: Two users with the same mcp_client slug use their own credentials
+    Given "alice" and "bob" each own mcp_client source "acme-mcp" with bearers "tok-a" and "tok-b"
+    When the ingest poller polls both sources
+    Then the request for "alice"'s source carries "Authorization: Bearer tok-a" and "bob"'s carries "Bearer tok-b"
+    And GetConfig, ListKeys and WatchConfig never return "tok-a" or "tok-b" in plaintext to any caller
+
+  @AC-36 @FR-4
+  Scenario: System slugs are reserved
+    Given a "system"-owned source "fundamentals" exists
+    When "bob" calls ManageSignalSource REGISTER with slug "fundamentals"
+    Then the call fails with ALREADY_EXISTS and no source owned by "bob" exists
