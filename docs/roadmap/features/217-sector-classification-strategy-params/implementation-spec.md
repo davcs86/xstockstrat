@@ -1,8 +1,8 @@
 # Implementation Spec: sector-classification-strategy-params
 
-**Status**: `pending`
+**Status**: `done`
 **Created**: 2026-09-27
-**Feature**: `docs/roadmap/features/216-sector-classification-strategy-params/feature.md`
+**Feature**: `docs/roadmap/features/217-sector-classification-strategy-params/feature.md`
 **Total Steps**: 18
 **Feature Branch**: `feature/sector-classification-strategy-params`
 
@@ -50,6 +50,7 @@ registration is NOT required** (decision, not omission).
 | `@AC-11` first post-go-live reclassification closes epoch-seeded row | Step 7 |
 | `@AC-12` concurrent first-observation yields exactly one open epoch row | Step 7 |
 | `@AC-13` seeded symbol uses epoch sector while unseeded falls back | Step 12 |
+| `@AC-14` overrides reach a fundamentals-input formula's params (backtest + live) | Steps 11–12 (re-spec 2026-10-06) |
 
 ## Step Dependencies
 
@@ -73,7 +74,7 @@ registration is NOT required** (decision, not omission).
 
 ### Step 1 — proto: Sector enum, marketdata classification RPCs/messages, StrategyDefinition field 15
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/common/v1/common.proto` — modify (add `Sector` enum)
@@ -121,7 +122,7 @@ Both pass (all changes additive — new enum, new RPCs/messages, new field 15; C
 
 ### Step 2 — proto-gen: regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/**` — modify (generated; never hand-edited)
@@ -153,7 +154,7 @@ Exit 0 (no diff after regeneration) — matches the `proto-freshness` gate.
 
 ### Step 3 — migration: marketdata 007 symbol_classification (SCD-2)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/migrations/007_symbol_classification.up.sql` — create
@@ -204,7 +205,7 @@ has a matching `DROP` in `.down.sql`. Do **not** spin up a database.
 
 ### Step 4 — service: centralized rate-limited FMP gateway (one throttle authority at getJSON)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/fmp/fmp_client.go` — modify (limiter + shared UTC-day budget at `getJSON`)
@@ -237,7 +238,7 @@ has a matching `DROP` in `.down.sql`. Do **not** spin up a database.
 
 ### Step 5 — test: FMP gateway rate limit + budget refund
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/fmp/fmp_client_test.go` — create or modify
@@ -270,7 +271,7 @@ Confirm ≥ 40%. New limiter/budget logic lands in `internal/fmp/` (a coverage-m
 
 ### Step 6 — service: ClassificationRepo (SCD reads) + refresh/seed job
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/repository/classification_repo.go` — create (`ClassificationRepo`: `GetCurrentSector`, `GetSectorAsOf`, `GetSectorHistory`, the three-way upsert/version writer, epoch-seed `INSERT … ON CONFLICT DO NOTHING`)
@@ -307,7 +308,7 @@ Confirm ≥ 40%. New limiter/budget logic lands in `internal/fmp/` (a coverage-m
 
 ### Step 7 — test: classification repo + refresh job (SCD versioning, seed, as-of, enum sentinel)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/repository/classification_repo_test.go` — create (pgxmock)
@@ -344,7 +345,7 @@ The repo (`repository/`) and service (`service/`) packages are CI-**excluded** f
 
 ### Step 8 — service: wire GetCurrentSector / GetSectorAsOf / GetSectorHistory RPCs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/handler/marketdata_handler.go` — modify (three new RPC handlers)
@@ -370,7 +371,7 @@ The repo (`repository/`) and service (`service/`) packages are CI-**excluded** f
 
 ### Step 9 — test: classification RPC reads (outage-tolerant, as-of at the RPC boundary)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/handler/marketdata_handler_test.go` — create or modify
@@ -398,7 +399,7 @@ cd services/xstockstrat-marketdata && GOWORK=off COVERPKGS=$(go list ./... | gre
 
 ### Step 10 — config: register the new marketdata config keys
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/CLAUDE.md` — modify (add the three keys to § Config Keys Consumed)
@@ -433,7 +434,7 @@ All three keys present in both files, following `<service>.<category>.<key>`. (T
 
 ### Step 11 — service: analysis per-sector param resolution + ManageStrategy validation + seed-span warning
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify (`_backtest_symbol_definition`: one `GetSectorHistory` per symbol; `sector_by_bar` resolution as-of `bar.time`; `ManageStrategy` validation + fingerprint fold; seed-span `warnings` append)
@@ -466,7 +467,7 @@ All three keys present in both files, following `<service>.<category>.<key>`. (T
 
 ### Step 12 — test: analysis per-sector resolution (look-ahead, fallback, seed span, parity)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/` — create/modify test module(s) for backtest sector resolution
@@ -502,7 +503,7 @@ Confirm the suite passes and coverage ≥ 40%.
 
 ### Step 13 — service: agent manage_strategy per-sector arg + run_backtest passthrough + parity surfaces
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/client.py` — modify (map the per-sector override list into `StrategyDefinition.sector_param_overrides`)
@@ -538,7 +539,7 @@ Confirm the suite passes and coverage ≥ 40%.
 
 ### Step 14 — test: agent manage_strategy field + descriptor parity
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_backtest_view.py` — modify (parity stays green)
@@ -571,7 +572,7 @@ Confirm the suite passes and coverage ≥ 40%.
 
 ### Step 15 — service: UI per-sector override authoring + Sector Record fan-out + sector-resolved backtest display
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/ComponentEditor.tsx` — modify (per-sector override authoring)
@@ -605,7 +606,7 @@ Confirm the suite passes and coverage ≥ 40%.
 
 ### Step 16 — test: UI Playwright + vitest (authoring + sector-resolved display)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/` — add/modify a Playwright spec for per-sector authoring + sector-resolved backtest display
@@ -642,7 +643,7 @@ Confirm fixture/auth imports resolve, `INVENTORY.md` updated for any added fixtu
 
 ### Step 17 — docs: promote AC-4 + budget-refund into a marketdata acceptance suite (C-16)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`
 **Files**:
 - `services/xstockstrat-marketdata/acceptance/sector-classification.feature` — create
@@ -671,7 +672,7 @@ File exists and contains the `@AC-4` + budget-refund scenarios tagged `@feature-
 
 ### Step 18 — docs: refresh touched context files (teardown audit)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`
 **Files**:
 - (audit only — reconcile any drift introduced in Steps 10/13 to `services/xstockstrat-marketdata/CLAUDE.md`, `services/xstockstrat-agent/CLAUDE.md`, `docs/patterns/config-governance.md`, `docs/runbooks/mcp-tools.md`)
@@ -696,4 +697,44 @@ The context-forge refresh reports no grounded drift for the touched files (or th
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+Re-spec gate (2026-10-06, sequential mode) — folded into execution, recorded here rather than as
+rewritten step bodies:
+
+1. **AC-14 (Steps 11–12)** — instead of threading resolved params separately into
+   `_fundamentals_formula_series`, the evaluator computes each component once per distinct
+   sector-resolved *component variant* (`StrategyEvaluator._assemble_sector_resolved`) and passes the
+   variant through the unchanged `_assemble_component_series`, so builtin, custom-formula,
+   fundamentals-formula (AC-14) and benchmark components all get overrides through one seam. Live
+   surfaces (readiness ×4 call sites, opportunities ×2, materializer, live loop) resolve the CURRENT
+   sector via `GetCurrentSector` and evaluate `sector_params.apply_sector(definition, sector)` — no
+   evaluator change on the live path. `GetIndicatorSeries` (chart) is intentionally not
+   sector-resolved (display surface, not a decision surface).
+2. **RPC shape (Step 1)** — `GetCurrentSectorRequest` / `GetSectorHistoryRequest` take
+   `repeated string symbols` (batch), so a backtest issues ONE `GetSectorHistory` per run (not per
+   symbol); `GetSectorAsOf` stays single-symbol.
+3. **Migration 007 (Step 3)** — natural PK `(symbol, valid_from)` instead of a surrogate id (no
+   surrogate idiom exists in marketdata migrations); the PK serves as-of reads, so the separate
+   as-of index was dropped. Partial-unique open-row index unchanged.
+4. **FMP client ownership (Step 4)** — the provider default is `finnhub`, so a fundamentals-only
+   FMP client would not exist for classification; `main.go` now always builds ONE `*fmp.Client`
+   (`newFMPClient`) shared by the fundamentals source (when provider=fmp), enrichment and
+   classification. Limiter carries 2% headroom so dispatch jitter never lets rps+1 calls land in one
+   vendor second (AC-1 test).
+5. **Validation (Step 11)** — `validate_overrides` lives in `_validate_definition` (both write
+   paths) and checks component existence / non-fundamental kind / duplicates / sector uniqueness /
+   finiteness; it does not require the param key to pre-exist in `params` (formula params may be
+   implicit defaults). Warm-up prefix sizes for the hungriest sector variant (`warmup.py`).
+6. **AC wording (C-15 amendment, operator-approved)** — @AC-6/7/8/10/13 reworded from an "RSI
+   oversold threshold" (a rule rhs literal) to the RSI component `period` param.
+7. **UI (Step 15)** — `formulaReference.ts` no longer exists; the exhaustive `Record<Sector,…>` map
+   is the new `src/lib/sectors.ts` `SECTOR_LABEL`. Seed-span warning needed no UI change (the
+   existing `backtest-warnings` card renders `BacktestResult.warnings`).
+9. **Migration renumbered 007 → 009** (2026-10-06, post-review) — feature 223 merged first with
+   `008_fundamentals_history_derivation_version`; golang-migrate never applies a version below the
+   current one, so `007` would have been silently skipped on any environment already at 008.
+   `007` is intentionally left unused. Step 3's body still says 007 (immutable step text).
+8. **Verification fallbacks** — Docker Hub rate-limited (`429`) the codegen image, so stubs were
+   generated host-native with the CI-pinned toolchain (empty `git diff` baseline proven first);
+   `golangci-lint` v2.13.1 built with go1.27. Playwright ran host-native (`--no-deps`); the
+   pre-existing `strategy-authoring.spec.ts` "Edit navigates" test fails identically on the base
+   tree (not this feature).

@@ -21,6 +21,10 @@ import {
 import {
   PageRequest,
   PageResponse,
+  Sector,
+  sectorFromJSON,
+  sectorToJSON,
+  sectorToNumber,
   Timeframe,
   timeframeFromJSON,
   timeframeToJSON,
@@ -1558,6 +1562,27 @@ export interface StrategyDefinition {
    * maskable.
    */
   signalEligible: boolean;
+  /**
+   * Per-sector component-param overrides (feature 217). Each entry overrides one
+   * components[ref_name].params[param_name], resolved as-of each bar from the symbol's sector;
+   * an unclassified bar/symbol uses default_value. Rides definition_json; maskable.
+   */
+  sectorParamOverrides: SectorParamOverride[];
+}
+
+export interface SectorValue {
+  sector: Sector;
+  value: number;
+}
+
+export interface SectorParamOverride {
+  /** StrategyComponent.ref_name */
+  componentRef: string;
+  /** key within StrategyComponent.params */
+  paramName: string;
+  /** mandatory default bucket */
+  defaultValue: number;
+  bySector: SectorValue[];
 }
 
 export interface ManageStrategyRequest {
@@ -5503,6 +5528,7 @@ function createBaseStrategyDefinition(): StrategyDefinition {
     deniedSymbols: [],
     userId: "",
     signalEligible: false,
+    sectorParamOverrides: [],
   };
 }
 
@@ -5549,6 +5575,9 @@ export const StrategyDefinition: MessageFns<StrategyDefinition> = {
     }
     if (message.signalEligible !== false) {
       writer.uint32(112).bool(message.signalEligible);
+    }
+    for (const v of message.sectorParamOverrides) {
+      SectorParamOverride.encode(v!, writer.uint32(122).fork()).join();
     }
     return writer;
   },
@@ -5672,6 +5701,14 @@ export const StrategyDefinition: MessageFns<StrategyDefinition> = {
           message.signalEligible = reader.bool();
           continue;
         }
+        case 15: {
+          if (tag !== 122) {
+            break;
+          }
+
+          message.sectorParamOverrides.push(SectorParamOverride.decode(reader, reader.uint32()));
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -5745,6 +5782,11 @@ export const StrategyDefinition: MessageFns<StrategyDefinition> = {
         : isSet(object.signal_eligible)
         ? globalThis.Boolean(object.signal_eligible)
         : false,
+      sectorParamOverrides: globalThis.Array.isArray(object?.sectorParamOverrides)
+        ? object.sectorParamOverrides.map((e: any) => SectorParamOverride.fromJSON(e))
+        : globalThis.Array.isArray(object?.sector_param_overrides)
+        ? object.sector_param_overrides.map((e: any) => SectorParamOverride.fromJSON(e))
+        : [],
     };
   },
 
@@ -5792,6 +5834,9 @@ export const StrategyDefinition: MessageFns<StrategyDefinition> = {
     if (message.signalEligible !== false) {
       obj.signalEligible = message.signalEligible;
     }
+    if (message.sectorParamOverrides?.length) {
+      obj.sectorParamOverrides = message.sectorParamOverrides.map((e) => SectorParamOverride.toJSON(e));
+    }
     return obj;
   },
 
@@ -5814,6 +5859,207 @@ export const StrategyDefinition: MessageFns<StrategyDefinition> = {
     message.deniedSymbols = object.deniedSymbols?.map((e) => e) || [];
     message.userId = object.userId ?? "";
     message.signalEligible = object.signalEligible ?? false;
+    message.sectorParamOverrides = object.sectorParamOverrides?.map((e) => SectorParamOverride.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseSectorValue(): SectorValue {
+  return { sector: Sector.SECTOR_UNSPECIFIED, value: 0 };
+}
+
+export const SectorValue: MessageFns<SectorValue> = {
+  encode(message: SectorValue, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.sector !== Sector.SECTOR_UNSPECIFIED) {
+      writer.uint32(8).int32(sectorToNumber(message.sector));
+    }
+    if (message.value !== 0) {
+      writer.uint32(17).double(message.value);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SectorValue {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSectorValue();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.sector = sectorFromJSON(reader.int32());
+          continue;
+        }
+        case 2: {
+          if (tag !== 17) {
+            break;
+          }
+
+          message.value = reader.double();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): SectorValue {
+    return {
+      sector: isSet(object.sector) ? sectorFromJSON(object.sector) : Sector.SECTOR_UNSPECIFIED,
+      value: isSet(object.value) ? globalThis.Number(object.value) : 0,
+    };
+  },
+
+  toJSON(message: SectorValue): unknown {
+    const obj: any = {};
+    if (message.sector !== Sector.SECTOR_UNSPECIFIED) {
+      obj.sector = sectorToJSON(message.sector);
+    }
+    if (message.value !== 0) {
+      obj.value = message.value;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<SectorValue>, I>>(base?: I): SectorValue {
+    return SectorValue.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<SectorValue>, I>>(object: I): SectorValue {
+    const message = createBaseSectorValue();
+    message.sector = object.sector ?? Sector.SECTOR_UNSPECIFIED;
+    message.value = object.value ?? 0;
+    return message;
+  },
+};
+
+function createBaseSectorParamOverride(): SectorParamOverride {
+  return { componentRef: "", paramName: "", defaultValue: 0, bySector: [] };
+}
+
+export const SectorParamOverride: MessageFns<SectorParamOverride> = {
+  encode(message: SectorParamOverride, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.componentRef !== "") {
+      writer.uint32(10).string(message.componentRef);
+    }
+    if (message.paramName !== "") {
+      writer.uint32(18).string(message.paramName);
+    }
+    if (message.defaultValue !== 0) {
+      writer.uint32(25).double(message.defaultValue);
+    }
+    for (const v of message.bySector) {
+      SectorValue.encode(v!, writer.uint32(34).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SectorParamOverride {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSectorParamOverride();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.componentRef = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.paramName = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 25) {
+            break;
+          }
+
+          message.defaultValue = reader.double();
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.bySector.push(SectorValue.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): SectorParamOverride {
+    return {
+      componentRef: isSet(object.componentRef)
+        ? globalThis.String(object.componentRef)
+        : isSet(object.component_ref)
+        ? globalThis.String(object.component_ref)
+        : "",
+      paramName: isSet(object.paramName)
+        ? globalThis.String(object.paramName)
+        : isSet(object.param_name)
+        ? globalThis.String(object.param_name)
+        : "",
+      defaultValue: isSet(object.defaultValue)
+        ? globalThis.Number(object.defaultValue)
+        : isSet(object.default_value)
+        ? globalThis.Number(object.default_value)
+        : 0,
+      bySector: globalThis.Array.isArray(object?.bySector)
+        ? object.bySector.map((e: any) => SectorValue.fromJSON(e))
+        : globalThis.Array.isArray(object?.by_sector)
+        ? object.by_sector.map((e: any) => SectorValue.fromJSON(e))
+        : [],
+    };
+  },
+
+  toJSON(message: SectorParamOverride): unknown {
+    const obj: any = {};
+    if (message.componentRef !== "") {
+      obj.componentRef = message.componentRef;
+    }
+    if (message.paramName !== "") {
+      obj.paramName = message.paramName;
+    }
+    if (message.defaultValue !== 0) {
+      obj.defaultValue = message.defaultValue;
+    }
+    if (message.bySector?.length) {
+      obj.bySector = message.bySector.map((e) => SectorValue.toJSON(e));
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<SectorParamOverride>, I>>(base?: I): SectorParamOverride {
+    return SectorParamOverride.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<SectorParamOverride>, I>>(object: I): SectorParamOverride {
+    const message = createBaseSectorParamOverride();
+    message.componentRef = object.componentRef ?? "";
+    message.paramName = object.paramName ?? "";
+    message.defaultValue = object.defaultValue ?? 0;
+    message.bySector = object.bySector?.map((e) => SectorValue.fromPartial(e)) || [];
     return message;
   },
 };

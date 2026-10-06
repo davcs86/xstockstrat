@@ -1,6 +1,6 @@
 import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import type { FieldMask, Timestamp } from "@bufbuild/protobuf/wkt";
-import type { PageRequest, PageResponse, Timeframe, TimeRange } from "../../common/v1/common_pb";
+import type { PageRequest, PageResponse, Sector, Timeframe, TimeRange } from "../../common/v1/common_pb";
 import type { JsonObject, Message } from "@bufbuild/protobuf";
 /**
  * Describes the file analysis/v1/analysis.proto.
@@ -861,12 +861,70 @@ export type StrategyDefinition = Message<"xstockstrat.analysis.v1.StrategyDefini
      * @generated from field: bool signal_eligible = 14;
      */
     signalEligible: boolean;
+    /**
+     * Per-sector component-param overrides (feature 217). Each entry overrides one
+     * components[ref_name].params[param_name], resolved as-of each bar from the symbol's sector;
+     * an unclassified bar/symbol uses default_value. Rides definition_json; maskable.
+     *
+     * @generated from field: repeated xstockstrat.analysis.v1.SectorParamOverride sector_param_overrides = 15;
+     */
+    sectorParamOverrides: SectorParamOverride[];
 };
 /**
  * Describes the message xstockstrat.analysis.v1.StrategyDefinition.
  * Use `create(StrategyDefinitionSchema)` to create a new message.
  */
 export declare const StrategyDefinitionSchema: GenMessage<StrategyDefinition>;
+/**
+ * @generated from message xstockstrat.analysis.v1.SectorValue
+ */
+export type SectorValue = Message<"xstockstrat.analysis.v1.SectorValue"> & {
+    /**
+     * @generated from field: xstockstrat.common.v1.Sector sector = 1;
+     */
+    sector: Sector;
+    /**
+     * @generated from field: double value = 2;
+     */
+    value: number;
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.SectorValue.
+ * Use `create(SectorValueSchema)` to create a new message.
+ */
+export declare const SectorValueSchema: GenMessage<SectorValue>;
+/**
+ * @generated from message xstockstrat.analysis.v1.SectorParamOverride
+ */
+export type SectorParamOverride = Message<"xstockstrat.analysis.v1.SectorParamOverride"> & {
+    /**
+     * StrategyComponent.ref_name
+     *
+     * @generated from field: string component_ref = 1;
+     */
+    componentRef: string;
+    /**
+     * key within StrategyComponent.params
+     *
+     * @generated from field: string param_name = 2;
+     */
+    paramName: string;
+    /**
+     * mandatory default bucket
+     *
+     * @generated from field: double default_value = 3;
+     */
+    defaultValue: number;
+    /**
+     * @generated from field: repeated xstockstrat.analysis.v1.SectorValue by_sector = 4;
+     */
+    bySector: SectorValue[];
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.SectorParamOverride.
+ * Use `create(SectorParamOverrideSchema)` to create a new message.
+ */
+export declare const SectorParamOverrideSchema: GenMessage<SectorParamOverride>;
 /**
  * @generated from message xstockstrat.analysis.v1.ManageStrategyRequest
  */

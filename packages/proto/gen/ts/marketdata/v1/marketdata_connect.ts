@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { BackfillBarsRequest, BackfillBarsResponse, BackfillFundamentalsRequest, BackfillFundamentalsResponse, Bar, BatchGetBarsRequest, BatchGetBarsResponse, BatchGetLatestPriceRequest, BatchGetLatestPriceResponse, DeleteBackfilledDataRequest, DeleteBackfilledDataResponse, GetBarsRequest, GetBarsResponse, GetDataCoverageRequest, GetDataCoverageResponse, GetFundamentalsMultiRequest, GetFundamentalsMultiResponse, GetFundamentalsRequest, GetFundamentalsResponse, GetHistoricalFundamentalsRequest, GetHistoricalFundamentalsResponse, GetLatestPriceRequest, GetLatestQuoteRequest, GetLatestQuotesRequest, GetLatestQuotesResponse, LatestPrice, ListAssetsRequest, ListAssetsResponse, Quote, StreamBarsRequest, StreamQuotesRequest } from "./marketdata_pb.js";
+import { BackfillBarsRequest, BackfillBarsResponse, BackfillFundamentalsRequest, BackfillFundamentalsResponse, Bar, BatchGetBarsRequest, BatchGetBarsResponse, BatchGetLatestPriceRequest, BatchGetLatestPriceResponse, DeleteBackfilledDataRequest, DeleteBackfilledDataResponse, GetBarsRequest, GetBarsResponse, GetCurrentSectorRequest, GetCurrentSectorResponse, GetDataCoverageRequest, GetDataCoverageResponse, GetFundamentalsMultiRequest, GetFundamentalsMultiResponse, GetFundamentalsRequest, GetFundamentalsResponse, GetHistoricalFundamentalsRequest, GetHistoricalFundamentalsResponse, GetLatestPriceRequest, GetLatestQuoteRequest, GetLatestQuotesRequest, GetLatestQuotesResponse, GetSectorAsOfRequest, GetSectorAsOfResponse, GetSectorHistoryRequest, GetSectorHistoryResponse, LatestPrice, ListAssetsRequest, ListAssetsResponse, Quote, StreamBarsRequest, StreamQuotesRequest } from "./marketdata_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -192,6 +192,36 @@ export const MarketDataService = {
       name: "BackfillFundamentals",
       I: BackfillFundamentalsRequest,
       O: BackfillFundamentalsResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Sector classification reads (feature 217). Served only from the local Type-2 SCD store —
+     * never call FMP on the read path; an unclassified symbol returns SECTOR_UNSPECIFIED, not an error.
+     *
+     * @generated from rpc xstockstrat.marketdata.v1.MarketDataService.GetCurrentSector
+     */
+    getCurrentSector: {
+      name: "GetCurrentSector",
+      I: GetCurrentSectorRequest,
+      O: GetCurrentSectorResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc xstockstrat.marketdata.v1.MarketDataService.GetSectorAsOf
+     */
+    getSectorAsOf: {
+      name: "GetSectorAsOf",
+      I: GetSectorAsOfRequest,
+      O: GetSectorAsOfResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc xstockstrat.marketdata.v1.MarketDataService.GetSectorHistory
+     */
+    getSectorHistory: {
+      name: "GetSectorHistory",
+      I: GetSectorHistoryRequest,
+      O: GetSectorHistoryResponse,
       kind: MethodKind.Unary,
     },
   }

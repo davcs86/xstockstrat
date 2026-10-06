@@ -1,6 +1,6 @@
 import { BinaryReader, BinaryWriter } from "@bufbuild/protobuf/wire";
 import { type CallOptions, type ChannelCredentials, Client, type ClientOptions, type ClientUnaryCall, type handleUnaryCall, type Metadata, type ServiceError, type UntypedServiceImplementation } from "@grpc/grpc-js";
-import { PageRequest, PageResponse, Timeframe, TimeRange } from "../../common/v1/common";
+import { PageRequest, PageResponse, Sector, Timeframe, TimeRange } from "../../common/v1/common";
 export declare const protobufPackage = "xstockstrat.analysis.v1";
 export declare enum BacktestStatus {
     BACKTEST_STATUS_UNSPECIFIED = "BACKTEST_STATUS_UNSPECIFIED",
@@ -569,6 +569,25 @@ export interface StrategyDefinition {
      * maskable.
      */
     signalEligible: boolean;
+    /**
+     * Per-sector component-param overrides (feature 217). Each entry overrides one
+     * components[ref_name].params[param_name], resolved as-of each bar from the symbol's sector;
+     * an unclassified bar/symbol uses default_value. Rides definition_json; maskable.
+     */
+    sectorParamOverrides: SectorParamOverride[];
+}
+export interface SectorValue {
+    sector: Sector;
+    value: number;
+}
+export interface SectorParamOverride {
+    /** StrategyComponent.ref_name */
+    componentRef: string;
+    /** key within StrategyComponent.params */
+    paramName: string;
+    /** mandatory default bucket */
+    defaultValue: number;
+    bySector: SectorValue[];
 }
 export interface ManageStrategyRequest {
     operation: StrategyOperation;
@@ -1063,6 +1082,8 @@ export declare const GetStrategyReportRequest: MessageFns<GetStrategyReportReque
 export declare const StrategyComponent: MessageFns<StrategyComponent>;
 export declare const StrategyComponent_ParamsEntry: MessageFns<StrategyComponent_ParamsEntry>;
 export declare const StrategyDefinition: MessageFns<StrategyDefinition>;
+export declare const SectorValue: MessageFns<SectorValue>;
+export declare const SectorParamOverride: MessageFns<SectorParamOverride>;
 export declare const ManageStrategyRequest: MessageFns<ManageStrategyRequest>;
 export declare const GetStrategyRequest: MessageFns<GetStrategyRequest>;
 export declare const ListStrategyDefinitionsRequest: MessageFns<ListStrategyDefinitionsRequest>;

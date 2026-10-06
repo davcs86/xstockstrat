@@ -392,8 +392,8 @@ func TestGetHistoricalPriceState(t *testing.T) {
 	// Happy path: row present → Found=true, all fields scanned.
 	mock.ExpectQuery(`WHERE symbol=\$1 AND fiscal_period=\$2 AND period_type=\$3`).
 		WithArgs("AAPL", "FY2023", "annual").
-		WillReturnRows(pgxmock.NewRows([]string{"filed_date", "price", "market_cap", "pe_ratio", "pb_ratio", "dividend_yield", "currency"}).
-			AddRow(filed, &price, &marketCap, &peRatio, &pbRatio, &divYield, "USD"))
+		WillReturnRows(pgxmock.NewRows([]string{"filed_date", "price", "market_cap", "pe_ratio", "pb_ratio", "dividend_yield", "currency", "derivation_version"}).
+			AddRow(filed, &price, &marketCap, &peRatio, &pbRatio, &divYield, "USD", int16(1)))
 
 	state, err := repo.GetHistoricalPriceState(context.Background(), "AAPL", "FY2023", "annual")
 	if err != nil {
@@ -407,6 +407,9 @@ func TestGetHistoricalPriceState(t *testing.T) {
 	}
 	if state.Currency != "USD" {
 		t.Errorf("Currency=%q, want USD", state.Currency)
+	}
+	if state.DerivationVersion != 1 {
+		t.Errorf("DerivationVersion=%d, want 1 (feature 223)", state.DerivationVersion)
 	}
 	if !state.FiledDate.Equal(filed) {
 		t.Errorf("FiledDate=%v, want %v", state.FiledDate, filed)
@@ -458,5 +461,43 @@ func TestUpdateHistoricalPriceJoin(t *testing.T) {
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("pgxmock expectations unmet (SET list or WHERE missing expected columns): %v", err)
+	}
+}
+
+// feature 223: the derivation upgrade only rewrites statement-derived columns and only when the
+// stored version is lower (the WHERE guard makes a same-version re-run a no-op); the edgar snapshot
+// invalidation is scoped to source='edgar' for one symbol.
+func TestRederiveHistoricalFundamentals_GuardedUpgrade_feature223(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatalf("pgxmock.NewPool: %v", err)
+	}
+	defer mock.Close()
+	repo := &MarketDataRepo{db: mock}
+	de, roe := 1.733, 0.353
+	p := source.HistoricalFundamentalsPeriod{
+		Symbol: "AXP", FiscalPeriod: "Q2-2026", PeriodType: "quarterly",
+		DebtToEquity: &de, ROE: &roe, DerivationVersion: 1,
+		ExtraMetrics: map[string]float64{"total_debt": 52458e6},
+	}
+	mock.ExpectExec(`SET eps=\$4, roe=\$5, debt_to_equity=\$6, extra_metrics = extra_metrics \|\| \$7::jsonb, derivation_version=\$8\s+WHERE symbol=\$1 AND fiscal_period=\$2 AND period_type=\$3 AND derivation_version < \$8`).
+		WithArgs("AXP", "Q2-2026", "quarterly", (*float64)(nil), &roe, &de, `{"total_debt":52458000000}`, 1).
+		WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+	mock.ExpectExec(`AND derivation_version < \$8`).WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).
+		WillReturnResult(pgxmock.NewResult("UPDATE", 0))
+	mock.ExpectExec(`DELETE FROM marketdata.fundamentals WHERE symbol=\$1 AND source='edgar'`).WithArgs("AXP").
+		WillReturnResult(pgxmock.NewResult("DELETE", 1))
+
+	if changed, err := repo.RederiveHistoricalFundamentals(context.Background(), p); err != nil || !changed {
+		t.Fatalf("first upgrade changed=%v err=%v, want true", changed, err)
+	}
+	if changed, err := repo.RederiveHistoricalFundamentals(context.Background(), p); err != nil || changed {
+		t.Fatalf("same-version re-run changed=%v err=%v, want false", changed, err)
+	}
+	if err := repo.DeleteEdgarSnapshot(context.Background(), "AXP"); err != nil {
+		t.Fatal(err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("pgxmock expectations unmet: %v", err)
 	}
 }

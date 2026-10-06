@@ -55,7 +55,7 @@ from app.repositories.pnl_positions import PnLPositionsRepository
 from app.repositories.readiness_cache import ReadinessCacheRepository
 from app.repositories.strategies import StrategiesRepository
 from app.repositories.strategy_scores import StrategyScoresRepository
-from app.services import scoring, warmup
+from app.services import scoring, sector_params, warmup
 from app.services.cooldown import effective_cooldown_days, is_cooldown_active
 from app.services.evaluator import (
     _FUNDAMENTAL_METRICS,
@@ -249,6 +249,10 @@ class _InsufficientData(Exception):
 
 # marketdata's GetBars defaults to a 500-bar page ordered ASC, so an unpaginated request silently
 # drops the NEWEST bars once a range exceeds that (730 days ≈ 504 bars). _fetch_bars_paged pages.
+# Current-sector reads are cached briefly per process: sectors change rarely and the live surfaces
+# would otherwise issue one GetCurrentSector per (strategy, symbol) evaluation (feature 217).
+_SECTOR_CACHE_TTL_SECONDS = 600
+
 _BAR_PAGE_SIZE = 1000
 
 # Backstop against a non-advancing cursor (32 pages × 1000 bars ≈ 128 years, unreachable under
@@ -823,6 +827,22 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 # status gate below reports INSUFFICIENT_DATA.
                 symbols_to_run = []
 
+        # Feature 217: ONE batched sector-history snapshot per run (never per bar), only when the
+        # strategy declares per-sector overrides. Failure degrades to default values + a warning.
+        sector_history: dict[str, list] = {}
+        seed_symbols: set[str] = set()
+        sector_warnings: list[str] = []
+        if (
+            active_definition is not None
+            and sector_params.has_overrides(active_definition)
+            and symbols_to_run
+        ):
+            sector_history, err = await self._load_sector_history(
+                symbols_to_run, request.range, propagation_meta
+            )
+            if err:
+                sector_warnings.append(sector_params.SECTOR_UNAVAILABLE_WARNING.format(error=err))
+
         for symbol in symbols_to_run:
             try:
                 if active_definition is not None:
@@ -847,6 +867,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                         fill_model=effective_fill_model,  # feature 151
                         benchmark_bars=benchmark_bars,  # feature 152
                         formula_fund_map=formula_fund_map,  # feature 200
+                        sector_rows=sector_history.get(symbol.upper()),  # feature 217
+                        seed_symbols=seed_symbols,
                     )
                 else:
                     (
@@ -1044,6 +1066,12 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # definition). Detected during the warm-up prefetch's GetFormula — no extra fetch here.
         if formula_deleted_cache:
             result.warnings.extend(formula_deleted_cache.values())
+        if seed_symbols:
+            sector_warnings.append(
+                sector_params.SEED_SPAN_WARNING.format(symbols=", ".join(sorted(seed_symbols)))
+            )
+        if sector_warnings:
+            result.warnings.extend(sector_warnings)
         self._backtests[backtest_id] = result
         self._backtests[request.strategy_id] = result
 
@@ -1120,6 +1148,44 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         )
 
         return result
+
+    async def _sector_definition(self, definition, symbol, propagation_meta):
+        """Live-snapshot resolution (feature 217): the definition with per-sector overrides applied
+        for ``symbol``'s CURRENT sector. No overrides → the same object, no RPC. A marketdata
+        failure resolves to the default bucket — evaluation never fails on classification."""
+        if not sector_params.has_overrides(definition):
+            return definition
+        sym = symbol.upper()
+        now = time.monotonic()
+        cache = self.__dict__.setdefault("_sector_cache", {})
+        hit = cache.get(sym)
+        if hit is not None and now - hit[1] < _SECTOR_CACHE_TTL_SECONDS:
+            return sector_params.apply_sector(definition, hit[0])
+        sector, ok = await sector_params.fetch_current_sector(
+            self._marketdata, sym, propagation_meta
+        )
+        if ok:
+            cache[sym] = (sector, now)
+        return sector_params.apply_sector(definition, sector)
+
+    async def _load_sector_history(self, symbols, range_msg, propagation_meta):
+        """One batched GetSectorHistory (feature 217) for the run's symbols, rows grouped by symbol.
+
+        Returns ``(by_symbol, error)``; on an RPC failure ``by_symbol`` is empty so every bar
+        resolves to the default bucket (never fails the backtest)."""
+        req = marketdata_pb2.GetSectorHistoryRequest(symbols=[s.upper() for s in symbols])
+        if range_msg is not None and range_msg.HasField("end"):
+            req.end.CopyFrom(range_msg.end)
+        try:
+            resp = await self._marketdata.GetSectorHistory(req, metadata=propagation_meta)
+        except grpc.RpcError as e:
+            code = e.code().name if hasattr(e, "code") and e.code() else "UNKNOWN"
+            log.warning("GetSectorHistory failed (%s); per-sector overrides use defaults", code)
+            return {}, code
+        by_symbol: dict[str, list] = {}
+        for row in resp.rows:
+            by_symbol.setdefault(row.symbol, []).append(row)
+        return by_symbol, None
 
     async def _fetch_bars_paged(self, symbol, range_msg, propagation_meta):
         """Fetch every bar in ``range_msg``, following marketdata's pagination (feature 071).
@@ -1696,6 +1762,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         fill_model=analysis_pb2.FILL_MODEL_SAME_BAR_CLOSE,
         benchmark_bars=None,
         formula_fund_map=None,
+        sector_rows=None,
+        seed_symbols=None,
     ):
         """Run a stored/inline StrategyDefinition for one symbol via the shared evaluator.
 
@@ -1727,8 +1795,20 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # per run, shared across symbols) resolve source_symbol components via the evaluator.
         # formula_fund_map (feature 200) routes fundamentals-only formulas onto the fundamentals
         # channel; backtest is PIT, so the data itself is the PIT `fundamentals` list (no snapshot).
+        # Feature 217: per-bar as-of sector from the run's one GetSectorHistory snapshot.
+        sectors = None
+        if sector_params.has_overrides(definition):
+            sectors, used_seed = sector_params.sector_by_bar(sector_rows or [], bars)
+            if used_seed and seed_symbols is not None:
+                seed_symbols.add(symbol)
         decisions, component_series = await evaluator.evaluate_with_series(
-            definition, bars, None, benchmark_bars, fundamentals, formula_fund_map or {}
+            definition,
+            bars,
+            None,
+            benchmark_bars,
+            fundamentals,
+            formula_fund_map or {},
+            sector_by_bar=sectors,
         )
 
         n = len(bars)
@@ -3111,7 +3191,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 fetch_bars=self._fetch_bars_paged,
                 bars_sem=self._bars_fetch_sem,
                 evaluator=evaluator,
-                definition=definition,
+                definition=await self._sector_definition(definition, symbol, propagation_meta),
                 range_msg=range_msg,
                 propagation_meta=propagation_meta,
                 benchmark_bars=benchmark_bars,
@@ -3383,7 +3463,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                                 fetch_bars=self._fetch_bars_paged,
                                 bars_sem=self._readiness_materializer_bars_sem,
                                 evaluator=evaluator,
-                                definition=definition,
+                                definition=await self._sector_definition(
+                                    definition, sym, propagation_meta
+                                ),
                                 range_msg=range_msg,
                                 propagation_meta=propagation_meta,
                                 benchmark_bars=benchmark_bars,
@@ -4110,7 +4192,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     )
                     try:
                         readiness = await evaluator.evaluate_conditions_traced(
-                            definition,
+                            await self._sector_definition(definition, sym, propagation_meta),
                             bars,
                             sym,
                             rule=rule,
@@ -4194,7 +4276,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     fetch_bars=self._fetch_bars_paged,
                     bars_sem=self._readiness_materializer_bars_sem,
                     evaluator=evaluator,
-                    definition=definition,
+                    definition=await self._sector_definition(definition, sym, propagation_meta),
                     range_msg=range_msg,
                     propagation_meta=propagation_meta,
                     benchmark_bars=benchmark_bars,
@@ -4732,7 +4814,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                         rule = "exit" if c["is_held"] else "entry"
                         try:
                             readiness = await evaluator.evaluate_conditions_traced(
-                                definition,
+                                await self._sector_definition(definition, sym, propagation_meta),
                                 bars,
                                 sym,
                                 rule=rule,
@@ -5062,7 +5144,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                         fetch_bars=self._fetch_bars_paged,
                         bars_sem=self._readiness_materializer_bars_sem,
                         evaluator=evaluator,
-                        definition=definition,
+                        definition=await self._sector_definition(definition, symbol, meta),
                         range_msg=range_msg,
                         propagation_meta=meta,
                         benchmark_bars=benchmark_bars,
@@ -5965,6 +6047,7 @@ _MASKABLE_PATHS = frozenset(
         "exit_cooldown_days",
         "denied_symbols",  # entry-only deny list (rides definition_json)
         "signal_eligible",  # gates the platform-wide active-signal universe term
+        "sector_param_overrides",  # feature 217 per-sector component-param overrides
     }
 )
 

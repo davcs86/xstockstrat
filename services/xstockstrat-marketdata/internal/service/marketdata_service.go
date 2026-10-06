@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sort"
@@ -21,6 +22,7 @@ import (
 	marketdatav1 "github.com/xstockstrat/contracts/gen/go/marketdata/v1"
 	notifyv1 "github.com/xstockstrat/contracts/gen/go/notify/v1"
 	"github.com/xstockstrat/marketdata/internal/config"
+	"github.com/xstockstrat/marketdata/internal/fmp"
 	"github.com/xstockstrat/marketdata/internal/middleware"
 	"github.com/xstockstrat/marketdata/internal/mtls"
 	"github.com/xstockstrat/marketdata/internal/repository"
@@ -83,9 +85,11 @@ type MarketDataService struct {
 	// ratioEnricher is the optional FMP ratio-fill pass; nil in v1 (no point-in-time FMP ratio
 	// source exists — ratios-ttm is a current snapshot, look-ahead), the cap seam still guards it.
 	ratioEnricher ratioEnricher
-	enrichMu      sync.Mutex
-	enrichDay     string // UTC day bucket for the dedicated FMP-enrichment counter
-	enrichCount   int
+	// fmpBudget is the shared FMP UTC-day budget owned by the single *fmp.Client (feature 217);
+	// nil = no FMP client wired (FMP paths treated as at-cap).
+	fmpBudget fmpBudget
+	// class is the sector-classification wiring (feature 217); zero value = disabled.
+	class classificationState
 	// quotaAlert dedupes the 80%-quota WARNING to one emit per active window (UTC day for FMP,
 	// rolling window for Finnhub — see maybeAlertQuota/fundamentalsQuota).
 	quotaAlertMu     sync.Mutex
@@ -119,6 +123,9 @@ type histFundamentalsRepo interface {
 	// feature 216: price-join recovery methods.
 	GetHistoricalPriceState(ctx context.Context, symbol, fiscalPeriod, periodType string) (*source.HistoricalPriceState, error)
 	UpdateHistoricalPriceJoin(ctx context.Context, symbol, fiscalPeriod, periodType string, price, marketCap, peRatio, pbRatio, dividendYield *float64) error
+	// feature 223: derivation-version upgrade of stored rows + edgar snapshot-cache invalidation.
+	RederiveHistoricalFundamentals(ctx context.Context, p source.HistoricalFundamentalsPeriod) (bool, error)
+	DeleteEdgarSnapshot(ctx context.Context, symbol string) error
 }
 
 // ratioEnricher optionally fills a ratio EDGAR + the price-join cannot supply. v1 wires nil.
@@ -1363,16 +1370,23 @@ func (s *MarketDataService) GetFundamentalsMulti(ctx context.Context, symbols []
 			}
 		} else {
 			fetched, err := s.fundamentals.GetFundamentalsMulti(ctx, needFetch)
-			if err != nil {
+			if errors.Is(err, fmp.ErrFMPDailyCapExceeded) {
+				for _, sym := range needFetch {
+					if f, _, found, _ := s.fundRepo.GetFundamentals(ctx, sym); found {
+						cached[strings.ToUpper(sym)] = s.toProtoFundamentals(f, true)
+					}
+				}
+			} else if err != nil {
 				return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("%s fetch: %w", s.fundProvider, err))
 			}
 			for _, f := range fetched {
 				if upErr := s.fundRepo.UpsertFundamentals(ctx, f); upErr != nil {
 					slog.Warn("GetFundamentalsMulti: cache upsert failed", "symbol", f.Symbol, "error", upErr)
 				}
+				s.seedFromProfile(ctx, f.Symbol, f.Sector)
 				cached[strings.ToUpper(f.Symbol)] = s.toProtoFundamentals(f, false)
 			}
-			s.maybeAlertQuota(ctx, count+len(fetched), cap, windowSeconds)
+			s.maybeAlertQuota(ctx, s.quotaCountAfterFetch(ctx, count+len(fetched)), cap, windowSeconds)
 		}
 	}
 
@@ -1409,13 +1423,20 @@ func (s *MarketDataService) resolveFundamentals(ctx context.Context, symbol stri
 	}
 
 	fresh, err := s.fundamentals.GetFundamentals(ctx, symbol)
+	if errors.Is(err, fmp.ErrFMPDailyCapExceeded) {
+		if found {
+			return s.toProtoFundamentals(cached, true), nil
+		}
+		return nil, connect.NewError(connect.CodeResourceExhausted, err)
+	}
 	if err != nil {
 		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("%s fetch: %w", s.fundProvider, err))
 	}
 	if upErr := s.fundRepo.UpsertFundamentals(ctx, fresh); upErr != nil {
 		slog.Warn("GetFundamentals: cache upsert failed", "symbol", symbol, "error", upErr)
 	}
-	s.maybeAlertQuota(ctx, count+1, cap, windowSeconds)
+	s.seedFromProfile(ctx, fresh.Symbol, fresh.Sector)
+	s.maybeAlertQuota(ctx, s.quotaCountAfterFetch(ctx, count+1), cap, windowSeconds)
 	return s.toProtoFundamentals(fresh, false), nil
 }
 
@@ -1569,10 +1590,24 @@ func (s *MarketDataService) fundamentalsQuota(ctx context.Context) (count, cap i
 		count, err = s.fundRepo.CountFundamentalsFetchedSince(ctx, since)
 	default: // "fmp" and any unrecognized value fall back to the existing, well-tested daily-cap shape
 		windowSeconds = 86400
+		if s.fmpBudget != nil {
+			count, cap = s.fmpBudget.BudgetSnapshot()
+			return count, cap, windowSeconds, nil
+		}
 		cap = int(s.fundCfg.GetInt("marketdata.fmp.daily_request_cap", 250))
 		count, err = s.fundRepo.CountFundamentalsFetchedToday(ctx)
 	}
 	return count, cap, windowSeconds, err
+}
+
+// quotaCountAfterFetch re-reads the FMP budget post-fetch (one fetch can spend several calls), so the
+// 80% WARNING sees real usage; other providers keep the pre-fetch count + fetched estimate.
+func (s *MarketDataService) quotaCountAfterFetch(_ context.Context, estimate int) int {
+	if s.fundProvider != "finnhub" && s.fmpBudget != nil {
+		used, _ := s.fmpBudget.BudgetSnapshot()
+		return used
+	}
+	return estimate
 }
 
 // maybeAlertQuota emits one WARNING per active window once the count crosses 80% of cap. The dedup
@@ -1805,6 +1840,16 @@ func (s *MarketDataService) backfillOneSymbol(ctx context.Context, symbol string
 	}
 	var quarterlyEPS []float64 // trailing quarterly EPS for the TTM rollup
 	var written int64
+	rederived := 0
+	defer func() {
+		if rederived == 0 {
+			return
+		}
+		slog.InfoContext(ctx, "fundamentals backfill: re-derived stale stored periods", "symbol", symbol, "periods", rederived)
+		if err := s.histRepo.DeleteEdgarSnapshot(ctx, symbol); err != nil {
+			slog.WarnContext(ctx, "fundamentals backfill: edgar snapshot invalidation failed (served until TTL)", "symbol", symbol, "error", err)
+		}
+	}()
 	for i := range periods {
 		p := &periods[i]
 		ttmEPS := s.accumulateTTM(p, &quarterlyEPS)
@@ -1838,6 +1883,19 @@ func (s *MarketDataService) backfillOneSymbol(ctx context.Context, symbol string
 		// Setting p.FiledDate here before derivation keeps CloseAt and the T12M dividend window
 		// anchored to the original filing — the structural guard against look-ahead.
 		p.FiledDate = state.FiledDate
+
+		// Derivation drift (feature 223): a row written by an older period builder is upgraded in
+		// place (statement-derived columns only), independent of the price-join gate below.
+		if state.DerivationVersion < p.DerivationVersion {
+			changed, rerr := s.histRepo.RederiveHistoricalFundamentals(ctx, *p)
+			if rerr != nil {
+				return written, rerr
+			}
+			if changed {
+				rederived++
+				written++
+			}
+		}
 
 		// Gate: default processes only needsFill rows; overwrite=true processes every existing row.
 		needsFill := state.Price == nil || state.MarketCap == nil || state.PERatio == nil || state.PBRatio == nil || state.DividendYield == nil
@@ -2010,23 +2068,14 @@ func (s *MarketDataService) priceJoin(ctx context.Context, p *source.HistoricalF
 	s.derivePriceMetrics(ctx, p, ttmEPS, p.Currency)
 }
 
-// enrichmentUnderCap gates the FMP ratio-enrichment pass against the shared FMP daily cap using a
-// dedicated in-memory UTC-day counter — NOT fundamentalsQuota() (provider-dispatched + counts the
-// snapshot table, so it cannot govern this path — design.md §2 / @AC-5).
+// enrichmentUnderCap gates the FMP ratio-enrichment pass on the shared FMP day budget (feature 217) —
+// independent of the active snapshot provider. The enricher's own FMP calls reserve their slots.
 func (s *MarketDataService) enrichmentUnderCap() bool {
-	cap := int(s.fundCfg.GetInt("marketdata.fmp.daily_request_cap", 250))
-	day := time.Now().UTC().Format("2006-01-02")
-	s.enrichMu.Lock()
-	defer s.enrichMu.Unlock()
-	if s.enrichDay != day {
-		s.enrichDay = day
-		s.enrichCount = 0
-	}
-	if s.enrichCount >= cap {
+	if s.fmpBudget == nil {
 		return false
 	}
-	s.enrichCount++
-	return true
+	used, dailyCap := s.fmpBudget.BudgetSnapshot()
+	return used < dailyCap
 }
 
 func toProtoHistoricalPeriod(p *source.HistoricalFundamentalsPeriod) *marketdatav1.HistoricalFundamentalsPeriod {

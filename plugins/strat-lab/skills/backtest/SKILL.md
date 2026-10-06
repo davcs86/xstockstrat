@@ -139,6 +139,16 @@ the two together are contradictory). Under the deny model an **empty** `signal_p
 longer blocks enabling live — the strategy fires its whole owner universe (watchlist ∪ held ∪
 signals-iff-eligible) minus the deny list.
 
+**`sector_param_overrides` (feature 217)** is a partial-merge field on `manage_strategy` that
+overrides one component param by the evaluated symbol's sector:
+`[{component_ref, param_name, default_value, by_sector: {"FINANCIALS": 12.0}}]` — e.g. a looser
+`fscore.de_bad` for balance-sheet-funded financials. `default_value` applies to any unclassified
+symbol. In `run_backtest` the sector resolves **as-of each bar** (no look-ahead); expect two
+`warnings` you must report rather than ignore: a **seed-span** warning (the symbol's first-observed
+sector was applied to pre-go-live history — a known, bounded look-ahead) and a
+**sector classification unavailable** warning (marketdata was unreachable; every bar used
+`default_value`). A run with either warning is not directly comparable to a clean run.
+
 ## Phase 1 — Ensure data coverage (backfill)
 
 A backtest silently reports fewer/short bars if the symbol's history is not backfilled. Before the

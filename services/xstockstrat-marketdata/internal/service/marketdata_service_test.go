@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"math"
 	"os"
 	"strings"
 	"sync"
@@ -1659,6 +1660,11 @@ func TestGetHistoricalFundamentals_PagePassThrough(t *testing.T) {
 	}
 }
 
+// fakeBudget is a fixed shared-FMP-budget snapshot (feature 217).
+type fakeBudget struct{ used, cap int }
+
+func (b fakeBudget) BudgetSnapshot() (int, int) { return b.used, b.cap }
+
 // AC-5: at the FMP daily cap, ratio enrichment is skipped but the EDGAR statement row still persists
 // (source "edgar", FMP-only ratio null) — degraded, not failed.
 func TestBackfillFundamentals_CapDegrade_AC5(t *testing.T) {
@@ -1680,6 +1686,7 @@ func TestBackfillFundamentals_CapDegrade_AC5(t *testing.T) {
 	svc := &MarketDataService{
 		histFundamentals: &fakeHistSource{periods: []source.HistoricalFundamentalsPeriod{base}},
 		histRepo:         repo, ratioEnricher: enr, fundCfg: atCapCfg,
+		fmpBudget: fakeBudget{used: 0, cap: 0},
 	}
 	resp, err := svc.BackfillFundamentals(context.Background(), &marketdatav1.BackfillFundamentalsRequest{Symbols: []string{"AAPL"}})
 	if err != nil {
@@ -1708,6 +1715,7 @@ func TestBackfillFundamentals_CapDegrade_AC5(t *testing.T) {
 	svc2 := &MarketDataService{
 		histFundamentals: &fakeHistSource{periods: []source.HistoricalFundamentalsPeriod{base}},
 		histRepo:         repo2, ratioEnricher: enr2, fundCfg: underCapCfg,
+		fmpBudget: fakeBudget{used: 0, cap: 250},
 	}
 	if _, err := svc2.BackfillFundamentals(context.Background(), &marketdatav1.BackfillFundamentalsRequest{Symbols: []string{"AAPL"}}); err != nil {
 		t.Fatalf("BackfillFundamentals (under cap): %v", err)
@@ -2085,6 +2093,9 @@ type fakeHistRepo216 struct {
 	updates   []string                                // log of "sym|fp|pt" entries that were updated
 	inserted  []source.HistoricalFundamentalsPeriod
 	dividends []source.CashDividend
+	// feature 223
+	rederived       []source.HistoricalFundamentalsPeriod
+	snapshotDeletes []string
 }
 
 func newFakeHistRepo216(closeAt *float64) *fakeHistRepo216 {
@@ -2352,5 +2363,106 @@ func TestBackfillFundamentals_CurrencyMismatchPEPBFailClosed_feature216(t *testi
 	// Price should still be derived (currency check applies only to pe/pb).
 	if updated == nil || updated.Price == nil {
 		t.Errorf("price should be derived regardless of currency, got nil")
+	}
+}
+
+// feature 222 @AC-2: the EDGAR snapshot projects the newest stored period's (TTM) roe verbatim.
+func TestGetFundamentals_EdgarSnapshotInheritsTTMROE_AC2_feature222(t *testing.T) {
+	cfg := &fakeCfg{
+		strings: map[string]string{"marketdata.fundamentals.snapshot_source": "edgar"},
+		ints:    map[string]int64{"marketdata.edgar.cache_ttl_hours": 24},
+	}
+	q := &source.HistoricalFundamentalsPeriod{
+		Symbol: "AXP", FiscalPeriod: "Q2-2026", PeriodType: "quarterly",
+		PeriodEnd: hfDate(2026, 6, 30), FiledDate: hfDate(2026, 7, 24),
+		ROE: f64p(10685.0 / 30264.0), Currency: "USD", Source: "edgar",
+		ExtraMetrics: map[string]float64{"stockholders_equity_usd": 30264e6},
+	}
+	svc, _ := edgarSnapshotSvc(q, &marketdatav1.Quote{Symbol: "AXP", AskPrice: 341, BidPrice: 340}, cfg, nil, "finnhub")
+	f, err := svc.GetFundamentals(context.Background(), "AXP")
+	if err != nil || f == nil {
+		t.Fatalf("GetFundamentals(edgar): %v", err)
+	}
+	if math.Abs(f.Roe-10685.0/30264.0) > 1e-9 {
+		t.Fatalf("snapshot roe = %v, want the period's TTM roe ≈0.353", f.Roe)
+	}
+}
+
+// ── feature 223: derivation-version re-derivation of stored EDGAR periods ───────────────────────
+
+func (r *fakeHistRepo) RederiveHistoricalFundamentals(_ context.Context, _ source.HistoricalFundamentalsPeriod) (bool, error) {
+	return false, nil
+}
+func (r *fakeHistRepo) DeleteEdgarSnapshot(_ context.Context, _ string) error { return nil }
+func (r *fakeHistRepo211) RederiveHistoricalFundamentals(_ context.Context, _ source.HistoricalFundamentalsPeriod) (bool, error) {
+	return false, nil
+}
+func (r *fakeHistRepo211) DeleteEdgarSnapshot(_ context.Context, _ string) error { return nil }
+
+// fakeHistRepo216's 223 surfaces: rederive upgrades the stored version (guarded like the SQL) and
+// snapshot deletions are logged.
+func (r *fakeHistRepo216) RederiveHistoricalFundamentals(_ context.Context, p source.HistoricalFundamentalsPeriod) (bool, error) {
+	st, ok := r.store[stateKey(p.Symbol, p.FiscalPeriod, p.PeriodType)]
+	if !ok || st.DerivationVersion >= p.DerivationVersion {
+		return false, nil
+	}
+	st.DerivationVersion = p.DerivationVersion
+	r.rederived = append(r.rederived, p)
+	return true, nil
+}
+func (r *fakeHistRepo216) DeleteEdgarSnapshot(_ context.Context, symbol string) error {
+	r.snapshotDeletes = append(r.snapshotDeletes, symbol)
+	return nil
+}
+
+func axpQ2Period(version int) source.HistoricalFundamentalsPeriod {
+	return source.HistoricalFundamentalsPeriod{
+		Symbol: "AXP", FiscalPeriod: "Q2-2026", PeriodType: "quarterly",
+		PeriodEnd: hfDate(2026, 6, 30), FiledDate: hfDate(2026, 7, 24), Currency: "USD", Source: "edgar",
+		DebtToEquity: f64p(52458e6 / 30264e6), ROE: f64p(10685.0 / 30264.0), DerivationVersion: version,
+		ExtraMetrics: map[string]float64{"total_debt": 52458e6},
+	}
+}
+
+// @AC-1 + @AC-2: a stored pre-211 row (version 0, total-liabilities D/E 8.8) is re-derived on the
+// next backfill to financial-debt D/E ≈1.73 (< de_bad 2.0), and the cached edgar snapshot is dropped
+// so the next GetFundamentals rebuilds from the re-derived period.
+func TestBackfillFundamentals_RederivesStaleStoredPeriods_AC1_AC2_feature223(t *testing.T) {
+	repo := newFakeHistRepo216(f64p(340))
+	stored := &source.HistoricalPriceState{
+		Found: true, FiledDate: hfDate(2026, 7, 24), Currency: "USD",
+		Price: f64p(340), MarketCap: f64p(1), PERatio: f64p(15), PBRatio: f64p(3), DividendYield: f64p(0.01),
+	}
+	repo.store[stateKey("AXP", "Q2-2026", "quarterly")] = stored
+	svc := &MarketDataService{
+		histFundamentals: &fakeHistSource{periods: []source.HistoricalFundamentalsPeriod{axpQ2Period(1)}},
+		histRepo:         repo,
+		fundCfg:          &fakeCfg{bools: map[string]bool{"marketdata.fundamentals.history.enabled": true}},
+	}
+	resp, err := svc.BackfillFundamentals(context.Background(), &marketdatav1.BackfillFundamentalsRequest{Symbols: []string{"AXP"}})
+	if err != nil {
+		t.Fatalf("BackfillFundamentals: %v", err)
+	}
+	got := repo.rederived
+	if len(got) != 1 || got[0].DebtToEquity == nil || *got[0].DebtToEquity >= 2.0 || *got[0].DebtToEquity < 1.7 {
+		t.Fatalf("rederived = %+v, want one AXP row with D/E ≈1.73", got)
+	}
+	if resp.GetPeriodsWritten() != 1 {
+		t.Errorf("periods_written = %d, want 1", resp.GetPeriodsWritten())
+	}
+	if d := repo.snapshotDeletes; len(d) != 1 || d[0] != "AXP" {
+		t.Errorf("edgar snapshot invalidations = %v, want [AXP]", d)
+	}
+	if len(repo.updates) != 0 {
+		t.Errorf("price-join untouched by a derivation upgrade, got updates %v", repo.updates)
+	}
+
+	// Drift guard: a second run at the same version re-derives nothing and invalidates nothing.
+	repo.rederived, repo.snapshotDeletes = nil, nil
+	if _, err := svc.BackfillFundamentals(context.Background(), &marketdatav1.BackfillFundamentalsRequest{Symbols: []string{"AXP"}}); err != nil {
+		t.Fatal(err)
+	}
+	if len(repo.rederived) != 0 || len(repo.snapshotDeletes) != 0 {
+		t.Fatalf("idempotent re-run re-derived %d / invalidated %v", len(repo.rederived), repo.snapshotDeletes)
 	}
 }

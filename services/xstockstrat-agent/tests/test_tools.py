@@ -1013,6 +1013,26 @@ class TestManageStrategyTool:
         assert kwargs["update_mask"] == ["cooldown_days"]
 
     @pytest.mark.asyncio
+    async def test_sector_overrides_masked_and_name_only_update_preserves_them(self):
+        """Feature 217: a supplied sector_param_overrides joins the update mask; a name-only update
+        does not mask (and so never wipes) stored overrides."""
+        server = _make_server()
+        overrides = [{"component_ref": "rsi", "param_name": "period", "default_value": 14}]
+        with patch.object(client, "manage_strategy", AsyncMock(return_value={})) as m:
+            await _tool_fn(server, "manage_strategy")(
+                ctx=_ctx(ADMIN),
+                operation="update",
+                strategy_id="s",
+                sector_param_overrides=overrides,
+            )
+            assert m.call_args.kwargs["update_mask"] == ["sector_param_overrides"]
+            assert m.call_args.kwargs["definition"]["sector_param_overrides"] == overrides
+            await _tool_fn(server, "manage_strategy")(
+                ctx=_ctx(ADMIN), operation="update", strategy_id="s", display_name="N"
+            )
+            assert m.call_args.kwargs["update_mask"] == ["display_name"]
+
+    @pytest.mark.asyncio
     async def test_both_rules_as_objects_each_serialized(self):
         """@AC-4/FR-1: both rules supplied as dicts are each serialized and round-trip."""
         entry = {"fn": "<", "lhs": "rsi", "rhs": 35}

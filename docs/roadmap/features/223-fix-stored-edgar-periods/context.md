@@ -15,3 +15,9 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Recommended design depth: quick → `/sdd-design fix-stored-edgar-periods quick` (rationale: SEV-2, root cause unverified; re-derivation strategy and drift guard are design choices)
 - Coordinate with `222-fix-edgar-quarterly-roe`: one purge + re-backfill after both fixes, not two. The deferred `fundamentals_macd_blend` exit-rule backtests (see 222 context.md) wait on this re-backfill.
 - Development branch: feature/fix-stored-edgar-periods
+
+## Session 2026-10-06 — /sdd-design quick (operator decision) + /sdd-execute sequential
+
+- Operator: derivation_version column + conditional upgrade. Root cause confirmed from code (DO NOTHING pin + 216 price-only recovery ⇒ statement columns never rewritten).
+- Migration 008 (after 217's 007 — merge-order row added); stacked on 222. Status → code-completed.
+- Next operational step: one fundamentals re-backfill after 222 + 223 deploy (runbook § Re-deriving stored periods).

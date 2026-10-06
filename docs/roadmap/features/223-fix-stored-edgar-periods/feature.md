@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-10-06 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from defect report `docs/reports/2026-10-06-edgar-stored-de-predates-financial-debt-defect.md` |
+| 2026-10-06 | `draft` → `implementation-ready` → `in-progress` → `code-completed` | /sdd-spec + /sdd-execute sequential | derivation_version + guarded in-place upgrade + edgar snapshot invalidation + golden drift guard |
 
 ---
 
@@ -21,7 +22,8 @@
 
 - [Product Spec](product-spec.md) — bug description and fix scope
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-stored-edgar-periods`_
+- [Implementation Spec](implementation-spec.md) — steps + deviation log
+- [Design](design.md) — operator decision + approach
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -34,4 +36,4 @@ existing rows were apparently never re-derived after 211 shipped.
 
 ## Next Action
 
-`/sdd-design fix-stored-edgar-periods quick` — recommended design depth (skip / quick / full) from triage; see context.md
+Merged (222 rode in with this squash; 217 renumbered to migration 009); then run the single fundamentals re-backfill (`docs/runbooks/historical-backfill.md` § Re-deriving stored periods) and calibrate 217's sector `de_bad`/`roe_bad`.

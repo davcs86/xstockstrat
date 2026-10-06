@@ -123,7 +123,16 @@ def required_prefix_bars(definition, formula_warmup_cache: dict | None = None) -
     pre-populated by the caller (the servicer owns the ``GetFormula`` RPC; this module stays
     pure and does no I/O). A formula missing from the cache contributes 0.
     """
+    from app.services import sector_params  # noqa: PLC0415 — avoid a cycle
     from app.services.evaluator import referenced_refs  # noqa: PLC0415 — avoid a cycle
+
+    if sector_params.has_overrides(definition):
+        # Size for the hungriest sector variant (feature 217) — a mid-window reclassification
+        # must never find its variant under-warmed.
+        return max(
+            required_prefix_bars(v, formula_warmup_cache)
+            for v in sector_params.variant_definitions(definition)
+        )
 
     entry_rule = json.loads(definition.entry_rule) if definition.entry_rule else None
     exit_rule = json.loads(definition.exit_rule) if definition.exit_rule else None

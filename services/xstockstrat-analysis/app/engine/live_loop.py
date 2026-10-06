@@ -43,7 +43,7 @@ from app.handlers.servicer import (
     _row_to_strategy_definition,
 )
 from app.repositories.strategies import LIVE_ENABLED_PREDICATE_SQL
-from app.services import warmup
+from app.services import sector_params, warmup
 from app.services.cooldown import effective_cooldown_days, is_cooldown_active
 from app.services.evaluator import _FUNDAMENTAL_METRICS, FundamentalPeriod
 
@@ -659,6 +659,9 @@ class LiveEvaluationLoop:
         # the 198 PIT `fundamentals` above (C-16 PRESERVE); both None in the common case.
         formula_fund_map = await self._evaluator.declared_formula_fundamentals(definition)
         fund_snap = await self._load_fundamentals_snapshot(definition, symbol, formula_fund_map)
+        if sector_params.has_overrides(definition):  # feature 217: current-sector params
+            sector, _ = await sector_params.fetch_current_sector(self._marketdata, symbol)
+            definition = sector_params.apply_sector(definition, sector)
         decisions = await self._evaluator.evaluate(
             definition, bars, None, benchmark_bars, fundamentals, formula_fund_map, fund_snap
         )

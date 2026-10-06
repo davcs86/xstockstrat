@@ -365,6 +365,23 @@ message StrategyDefinition {
   // explicit universe override; signals would be redundant/contradictory). Rides definition_json;
   // maskable.
   bool signal_eligible = 14;
+
+  // Per-sector component-param overrides (feature 217). Each entry overrides one
+  // components[ref_name].params[param_name], resolved as-of each bar from the symbol's sector;
+  // an unclassified bar/symbol uses default_value. Rides definition_json; maskable.
+  repeated SectorParamOverride sector_param_overrides = 15;
+}
+
+message SectorValue {
+  xstockstrat.common.v1.Sector sector = 1;
+  double value = 2;
+}
+
+message SectorParamOverride {
+  string component_ref = 1; // StrategyComponent.ref_name
+  string param_name = 2;    // key within StrategyComponent.params
+  double default_value = 3; // mandatory default bucket
+  repeated SectorValue by_sector = 4;
 }
 
 enum StrategyOperation {

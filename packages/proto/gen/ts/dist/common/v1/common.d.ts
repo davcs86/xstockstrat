@@ -92,6 +92,28 @@ export declare enum Timeframe {
 export declare function timeframeFromJSON(object: any): Timeframe;
 export declare function timeframeToJSON(object: Timeframe): string;
 export declare function timeframeToNumber(object: Timeframe): number;
+/**
+ * Sector is the closed GICS-flavored sector set (feature 217). The enum-name text minus the
+ * SECTOR_ prefix is the stored marketdata.symbol_classification.sector value.
+ */
+export declare enum Sector {
+    SECTOR_UNSPECIFIED = "SECTOR_UNSPECIFIED",
+    SECTOR_ENERGY = "SECTOR_ENERGY",
+    SECTOR_MATERIALS = "SECTOR_MATERIALS",
+    SECTOR_INDUSTRIALS = "SECTOR_INDUSTRIALS",
+    SECTOR_CONSUMER_DISCRETIONARY = "SECTOR_CONSUMER_DISCRETIONARY",
+    SECTOR_CONSUMER_STAPLES = "SECTOR_CONSUMER_STAPLES",
+    SECTOR_HEALTH_CARE = "SECTOR_HEALTH_CARE",
+    SECTOR_FINANCIALS = "SECTOR_FINANCIALS",
+    SECTOR_TECHNOLOGY = "SECTOR_TECHNOLOGY",
+    SECTOR_COMMUNICATION_SERVICES = "SECTOR_COMMUNICATION_SERVICES",
+    SECTOR_UTILITIES = "SECTOR_UTILITIES",
+    SECTOR_REAL_ESTATE = "SECTOR_REAL_ESTATE",
+    UNRECOGNIZED = "UNRECOGNIZED"
+}
+export declare function sectorFromJSON(object: any): Sector;
+export declare function sectorToJSON(object: Sector): string;
+export declare function sectorToNumber(object: Sector): number;
 /** Pagination */
 export interface PageRequest {
     pageSize: number;

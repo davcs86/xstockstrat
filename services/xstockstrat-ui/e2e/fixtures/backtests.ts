@@ -86,3 +86,18 @@ export function insufficientDataResult(strategyId: string, symbols: string[], ra
     ],
   };
 }
+
+// Feature 217 — the analysis seed-span marker rides BacktestResult.warnings (no new proto field).
+export const BACKTEST_SEED_SPAN_WARNING =
+  "sector-classification seed span: bars for AXP were resolved against an epoch-seeded sector (today's sector applied to pre-go-live history — a bounded, documented look-ahead)";
+
+export const BACKTEST_SEED_SPAN_RESULT = {
+  backtestId: 'bt-seed-span-1',
+  strategyId: 'strat-high-001',
+  status: 1, // BACKTEST_STATUS_OK
+  totalTrades: 0,
+  trades: [],
+  coverageGaps: [],
+  diagnostics: [],
+  warnings: [BACKTEST_SEED_SPAN_WARNING],
+};
