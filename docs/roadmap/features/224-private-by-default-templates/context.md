@@ -210,3 +210,48 @@ OQ-4 to OQ-6 remain for /sdd-design.
   - **Named follow-up feature** ("224 enforce + contract"): this is the same follow-up already approved for the contract migrations. It turns on fail-closed for headerless reads and writes, drops the N-1 owner-fill triggers and old tables, and sets `backtest_runs.user_id` NOT NULL.
 - **Blend guard on REGISTER and on templates.** `ManageStrategy` REGISTER and `InstantiateTemplate` both require the ADMIN bit to create the *currently configured* `analysis.engine.fundamentals_blend_strategy_id`; everyone else gets FAILED_PRECONDITION. The operator's admin path keeps working. This closes a pre-existing `@feature-186` gap, classed as EXTEND (a new guard; no existing guarantee is weakened).
 - **Run round 4**, folding in the round-3 fixes, then decide.
+
+## Session 2026-10-06 — sdd-design Phase 1, round 4 (full mode)
+
+- **Proposer (round 4):**
+  - Release N is expand-only, with an RPC layer that tolerates headerless calls.
+  - The named follow-up "224 enforce + contract" does five things:
+    - turns on fail-closed;
+    - removes the indicators bypass;
+    - re-backfills NULL owners, then sets NOT NULL;
+    - drops the N-1 triggers and the old tables;
+    - refuses down migrations.
+  - `x-user-id: system` needs a grant bound to the peer SAN.
+  - Analysis threads the owner through; the in-memory maps are re-keyed to `(user_id, strategy_id)`; `backtest_run_symbols.user_id` is added; `strategy_scores_v2` is seeded in SQL for unambiguous ids.
+  - Ingest 013 contains:
+    - the PK swap;
+    - the N-1 owner-fill trigger (it fills the unique slug holder, otherwise it raises);
+    - `signal_dedup_claims`;
+    - a conditional `credential_scope`.
+  - Per-user config secrets.
+  - Audit emits 0 or 1+K events per page and fails closed.
+  - Tooling: the `db-migrate.sh` header scan and the `migration-rerun` and `migration-contract-gate` CI jobs.
+  - Build order for N: steps 0–13.
+- **Adversary (round 4):** NEEDS WORK, **no Floor breach**, and no item needs a design change. Amendments:
+  1. **Manual `RunFundamentalsScan`:** every fundsignal ingest and indicators call, on both the loop path and the manual path, replaces `x-user-id` with `system`, adds `x-internal-caller: analysis-fundsignal`, and keeps `x-trace-id`.
+  2. **AC-36 conflicts with the design.** A user registering a reserved slug gets `ALREADY_EXISTS`. System registering a slug a user already holds keeps `FAILED_PRECONDITION`.
+  3. **AC-6 can't be observed.** An empty `scoring_formula_id` uses the built-in scorer and never calls `ExecuteFormula`. AC-6 needs amending, plus a fail-closed scenario.
+  4. **`@feature-185`:** a `NOT_FOUND` from an unreadable formula maps to "component skipped + warning" on all six evaluator surfaces, never to the data-unavailable marker.
+  5. **Headerless `IngestSignal` in N:** resolve the unique slug holder; zero holders or more than one gives `FAILED_PRECONDITION`. Indicators Update/Delete keep the body `user_id` fallback in N.
+  6. **AC-28 branch order:** `ExecuteFormula` on a formula the caller can't read returns `PERMISSION_DENIED` for an admin and `NOT_FOUND` for a non-admin.
+  7. **Build order:** swap step 7 (the ingest poller's exact-scope `GetSecret`) with step 8 (config per-user secrets).
+  8. **Build order:** the blend-guard helper lands in step 9; step 10 calls it and tests it.
+  - **Call sites to list in the spec, each with a test, plus a CI assertion.** Every analysis→ingest call site:
+    - `live_loop.py:157`, `live_loop.py:457`
+    - `entry_backfill.py:96`
+    - `pnl_pattern_consumer.py:378`
+    - `servicer.py:5188`, `servicer.py:5212`, `servicer.py:5306`
+    - `screener.py:320`
+    - `fundsignal_loop.py:450`, `fundsignal_loop.py:479`
+  - **Doc drift (verified):** indicators has no ingest caller. The root CLAUDE.md dependency line `xstockstrat-indicators → xstockstrat-ingest` is stale. Fix it at teardown.
+
+### Operator decisions at the round-4 gate (2026-10-06)
+
+- **Run round 5**, the hard cap. After it the only options are approve, accept documented risks, or stop.
+- **AC-6 is amended** (same `@AC-6` id, text only). Its Given becomes "`scoring_formula_id` is set to system formula `d1ff…`". A new **AC-37** is added: when the configured scoring formula is not system-owned, the scan emits nothing, raises an ERROR and a notify alert, and does not fall back to the built-in scorer.
+- **Audit volume is 1 + K per page** (K = distinct foreign owners). The admin's stream gets one event carrying all the ids; each owner's stream gets one event carrying only that owner's ids. A page that holds only the admin's own objects emits no event.
