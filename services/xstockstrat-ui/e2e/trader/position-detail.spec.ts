@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { addAuthCookie, addAdminCookie } from '../helpers/auth';
+import { FUNDAMENTALS_STALL_SYMBOL } from '../fixtures';
 
 /**
  * Single-Position page (feature 096) — the dedicated `/trader/positions/[symbol]` view built from
@@ -601,6 +602,24 @@ test.describe('Single Position page', () => {
     // radio whose label is also the strategy id).
     await expect(page.locator('p').filter({ hasText: 'strat-live-001' }).first()).toBeVisible();
     await expect(page.locator('p').filter({ hasText: 'strat-001' }).first()).toBeVisible();
+  });
+
+  test('feature 220: a stalled GetFundamentals resolves to the error state, not loading forever', async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    await addAuthCookie(page);
+    await page.goto(`/trader/positions/${FUNDAMENTALS_STALL_SYMBOL}`);
+    await expect(page.getByRole('heading', { name: 'Fundamentals' })).toBeVisible({
+      timeout: 30000,
+    });
+    // BFF deadline (15s) × at most 2 attempts (React Query retry: 1) bounds the wait.
+    await expect(
+      page.getByText(`No fundamentals data for ${FUNDAMENTALS_STALL_SYMBOL}`),
+    ).toBeVisible({
+      timeout: 60000,
+    });
+    await expect(page.getByText('Loading fundamentals…')).toHaveCount(0);
   });
 
   test('feature 145: Fundamentals renders for a non-watchlisted symbol (always-on)', async ({

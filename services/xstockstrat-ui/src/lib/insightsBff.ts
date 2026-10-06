@@ -23,6 +23,7 @@ import {
   backendHeaders,
   forward,
   forwardAdmin,
+  FUNDAMENTALS_TIMEOUT_MS,
 } from '@/lib/bffShared';
 
 const router = createBffRouter();
@@ -89,7 +90,9 @@ router.service(IngestService, {
 router.service(MarketDataService, {
   getBars: forward((req, opts) => marketDataClient.getBars(req, opts)),
   // Read-only marketdata reads for the Data Explorer (feature 204); ownership-agnostic public data.
-  getFundamentals: forward((req, opts) => marketDataClient.getFundamentals(req, opts)),
+  getFundamentals: forward((req, opts) => marketDataClient.getFundamentals(req, opts), {
+    timeoutMs: FUNDAMENTALS_TIMEOUT_MS,
+  }),
   getHistoricalFundamentals: forward((req, opts) =>
     marketDataClient.getHistoricalFundamentals(req, opts),
   ),
@@ -98,7 +101,9 @@ router.service(MarketDataService, {
   getLatestPrice: forward((req, opts) => marketDataClient.getLatestPrice(req, opts)),
   // Read-only snapshot fundamentals for the formula fundamentals test-grid symbol-prefill (feature
   // 205); public data via the shared forward() plumbing.
-  getFundamentalsMulti: forward((req, opts) => marketDataClient.getFundamentalsMulti(req, opts)),
+  getFundamentalsMulti: forward((req, opts) => marketDataClient.getFundamentalsMulti(req, opts), {
+    timeoutMs: FUNDAMENTALS_TIMEOUT_MS,
+  }),
   // Destructive — admin only; the marketdata server enforces it again.
   deleteBackfilledData: forwardAdmin((req, opts) =>
     marketDataClient.deleteBackfilledData(req, opts),
