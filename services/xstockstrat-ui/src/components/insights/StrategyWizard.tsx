@@ -20,6 +20,8 @@ import {
   emptyComponent,
   type StrategyComponentDraft,
 } from '@/components/insights/ComponentEditor';
+import { SectorOverridesEditor } from '@/components/insights/SectorOverridesEditor';
+import { liveOverrides, normalizeOverride, type SectorOverrideDraft } from '@/lib/sectors';
 import { useManageStrategy } from '@/hooks/useStrategyDefinitions';
 import { useFormulas } from '@/hooks/useFormulas';
 import { operandRefs, type FormulaOutputsMap } from '@/lib/strategyCatalog';
@@ -137,6 +139,15 @@ export function StrategyWizard({ mode, initial, onSubmitDone }: StrategyWizardPr
   );
   const [deniedInput, setDeniedInput] = useState('');
   const [signalEligible, setSignalEligible] = useState<boolean>(initial?.signalEligible ?? false);
+  const [sectorOverrides, setSectorOverrides] = useState<SectorOverrideDraft[]>(() =>
+    (initial?.sectorParamOverrides ?? []).map((o) => ({
+      componentRef: o.componentRef,
+      paramName: o.paramName,
+      defaultValue: o.defaultValue,
+      bySector: o.bySector.map((sv) => ({ sector: sv.sector, value: sv.value })),
+    })),
+  );
+  const submittedOverrides = liveOverrides(sectorOverrides, components).map(normalizeOverride);
 
   function addDenied() {
     const v = deniedInput.trim().toUpperCase();
@@ -193,6 +204,8 @@ export function StrategyWizard({ mode, initial, onSubmitDone }: StrategyWizardPr
       // The wizard is a full replace, so it always sends both (empty deny list clears any prior).
       deniedSymbols,
       signalEligible,
+      // Full replace: overrides whose component/param was removed are dropped, not sent dangling.
+      sectorParamOverrides: submittedOverrides,
     };
     mutate(
       {
@@ -418,6 +431,11 @@ export function StrategyWizard({ mode, initial, onSubmitDone }: StrategyWizardPr
               {components.length === 0 && (
                 <p className="text-xs text-muted-foreground">At least one component is required.</p>
               )}
+              <SectorOverridesEditor
+                components={components}
+                value={sectorOverrides}
+                onChange={setSectorOverrides}
+              />
             </div>
           )}
 
@@ -456,6 +474,20 @@ export function StrategyWizard({ mode, initial, onSubmitDone }: StrategyWizardPr
                   ))}
                 </ul>
               </div>
+              {submittedOverrides.length > 0 && (
+                <div data-testid="review-sector-overrides">
+                  <span className="text-muted-foreground">Per-sector overrides:</span>{' '}
+                  {submittedOverrides.length}
+                  <ul className="ml-4 list-disc text-xs text-muted-foreground">
+                    {submittedOverrides.map((o) => (
+                      <li key={`${o.componentRef}.${o.paramName}`}>
+                        {o.componentRef}.{o.paramName} — default {o.defaultValue},{' '}
+                        {o.bySector.length} sector value(s)
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               <RuleSummary label="Entry rule" value={entryRule} />
               <RuleSummary label="Exit rule" value={exitRule} />
 
