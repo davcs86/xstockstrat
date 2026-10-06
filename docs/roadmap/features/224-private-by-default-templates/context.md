@@ -298,3 +298,29 @@ OQ-4 to OQ-6 remain for /sdd-design.
     - Ledger `DB_POOL_MAX=1` serializes the 1+K appends, so set a per-page K ceiling.
     - The step 2–5 window is only test-order sensitive, never deployed: AC-37 tests assert the pre-flight decision.
     - `_formula_outputs` swallows NOT_FOUND (`servicer.py:557-558`), so AC-30's warning must precede the "unknown series" rejection.
+
+### Operator decisions at the round-5 gate (2026-10-06)
+
+- **The design is approved, with round-5 amendments A–H folded into design.md as binding text.**
+- **Bounds are fixed invariant caps, not config keys.** The audit append concurrency is 4. The per-page K ceiling equals the max page size. The boot recompute handles 50 pairs per pass. These are named constants with a stated rationale, so the config-team gate does not apply.
+
+## Session 2026-10-06 — sdd-design
+
+- **Phase 0 Recon:** wrote recon.md, covering indicators, ingest, analysis, config, agent and ui. Main reuse patterns: the portfolio `authz.go` x-internal-caller allow-list, and the feature-147 secret 3-guard model.
+- **Phase 1 Grilling:** 5 rounds, full mode.
+  - **Chosen:** release N is expand-only and header-tolerant, with all owner threading, a SAN-bound `system` identity, owner-keyed tables, per-user config secrets, the template saga, and the 1+K audit. The named follow-up "224 enforce + contract" turns on fail-closed and runs the contract.
+  - **Rejected:** a big-bang enforcement release, and keeping the old PKs (full list in design.md).
+- **Constitution rules touched:** F-01, F-03, F-06, F-07, F-11, C-07, C-10, C-11, C-14, C-15, C-16, C-18, P-02, P-03. No Floor breaches.
+- **acceptance.feature:** AC-6 Given amended, AC-36 extended to cover both directions, AC-37 added.
+- **Status:** spec-ready → design-approved.
+
+### Open Threads (from design.md Open Risks)
+
+- **Before the integration PR:** verify the prod `analysis.fundsignal.scoring_formula_id`.
+- **/sdd-spec step 6:** the prod `mcp_client` count decides whether `credential_scope` ships.
+- **Step 1:** a grpc.aio peer-SAN spike test must pass before steps 5–7.
+- **Step 5:**
+  - set the audit K ceiling against ledger `DB_POOL_MAX=1`;
+  - make the AC-30 warning fire before the "unknown series" rejection.
+- **Step 2:** AC-37 tests assert the pre-flight decision, not an indicators denial.
+- **At /sdd-spec:** create the follow-up "224 enforce + contract" and add its merge-order row.
