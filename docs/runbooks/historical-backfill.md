@@ -140,6 +140,25 @@ existing `marketdata.fmp.daily_request_cap`, so it silently degrades — never b
 cap is spent). A strategy operand only resolves when `analysis.backtest.fundamentals.enabled` is ON
 (default OFF); while OFF the operand reads hold on every surface.
 
+#### Re-deriving stored periods after a period-builder change (feature 223)
+
+Every `fundamentals_history` row carries `derivation_version` (the EDGAR builder's
+`edgar.DerivationVersion` when it was written; `0` = pre-versioning). The earliest-filing pin means a
+plain re-insert never changes a stored row, so a builder change (e.g. feature 211's financial-debt D/E,
+feature 222's TTM quarterly ROE) reaches existing rows **only** through this upgrade path:
+
+1. Deploy the marketdata build carrying the bumped `DerivationVersion`.
+2. Re-run a fundamentals backfill for the affected symbols (`trigger_backfill(symbols=[...],
+   data_kind="fundamentals")`; no `overwrite` needed). Each stored row whose version is lower has
+   its **statement-derived columns** (`eps`, `roe`, `debt_to_equity`, `extra_metrics` keys) rewritten
+   in place and its version stamped; `filed_date`, `currency` and the price-join columns are untouched.
+   The symbol's cached `snapshot_source=edgar` row is deleted so the next read rebuilds it.
+3. Verify: `SELECT derivation_version, count(*) FROM marketdata.fundamentals_history GROUP BY 1;` —
+   no rows below the current version for the backfilled symbols — and spot-check a ratio (e.g. AXP
+   Q2-2026 `debt_to_equity ≈ 1.73`, quarterly `roe` ≈ FY level).
+
+A same-version re-run is a no-op. Run it **once** after both 222 and 223 are deployed.
+
 ---
 
 ## Step 2 — Monitor Progress
