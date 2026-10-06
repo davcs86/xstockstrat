@@ -255,3 +255,46 @@ OQ-4 to OQ-6 remain for /sdd-design.
 - **Run round 5**, the hard cap. After it the only options are approve, accept documented risks, or stop.
 - **AC-6 is amended** (same `@AC-6` id, text only). Its Given becomes "`scoring_formula_id` is set to system formula `d1ff…`". A new **AC-37** is added: when the configured scoring formula is not system-owned, the scan emits nothing, raises an ERROR and a notify alert, and does not fall back to the built-in scorer.
 - **Audit volume is 1 + K per page** (K = distinct foreign owners). The admin's stream gets one event carrying all the ids; each owner's stream gets one event carrying only that owner's ids. A page that holds only the admin's own objects emits no event.
+
+## Session 2026-10-06 — sdd-design Phase 1, round 5 (full mode, hard cap)
+
+- **Proposer (round 5):** the consolidated final design, with all 8 round-4 amendments verified against the code.
+  - **Amendment 5 is corrected:** a headerless `IngestSignal` with **0** slug holders stays `INVALID_ARGUMENT`, which preserves today's behavior (`ingest servicer.py:824-825` → `:792-793`). Only **more than 1** holder returns `FAILED_PRECONDITION`.
+  - **New call site:** `servicer.py:3458` (`_resolve_source_names`).
+  - **Now owner-scoped in step 3:** `GetStrategyAnalytics list_by_strategy` (`servicer.py:5292`), which was bare-keyed.
+  - **Build order:** steps 7 and 8 swapped (config per-user secrets come before the ingest poller); the blend-guard helper is in step 9 and is called by step 10.
+- **Adversary (round 5):** **APPROVE-WITH-AMENDMENTS**, no Floor breach (F-01 numbers free: indicators 007, ingest 013, analysis 026). Amendments to fold into design.md:
+  - **A. Verifying the peer SAN.**
+    - All three Python services pin grpcio 1.80.0.
+    - Step 1 adds a spike test on the real mTLS harness (`ingest tests/test_mtls.py:122-160`) that does two things:
+      - checks `peer_identity_key()=="x509_subject_alternative_name"` and requires an exact match in `peer_identities()`;
+      - fails closed when the transport is non-SSL or the context is a mock.
+    - Shared helper per service.
+    - Config `hasSecretCallerAuthority` (`authz.ts:129-142`) must also take the call object.
+  - **B. Backtest evidence (`C-16` `@feature-065`).**
+    - Problem: an all-None evaluator result in a backtest becomes a buffered zero-trade cell, which counts as evidence (`servicer.py:873-877`, `:1059-1061`).
+    - Fix: in backtest mode, an unreadable formula **raises** `FormulaExecutionError`, which goes to FORMULA_ERROR and is excluded from evidence (`:912-926`).
+    - Only the other five surfaces map NOT_FOUND to "skipped + warning".
+    - Test: no `backtest_run_symbols` row is written for the symbol.
+  - **C. N-only indicators bypass.** The `x-internal-caller: analysis` reader is bound to the `xstockstrat-analysis` SAN, so it is no longer header-only.
+  - **D. CI call-site check.**
+    - The AST "passes `metadata=`" check is replaced by a runtime interceptor test: every ingest **and** indicators stub call must carry a non-empty `x-user-id`.
+    - Indicators call sites to add:
+      - analysis `servicer.py:552,578,1562,2100`
+      - `evaluator.py:549,576`
+      - `screener.py:342`
+      - `fundamentals_scoring.py:52`
+  - **E. Status codes, recorded explicitly.**
+    - The round-4 amendment 5 reversal (0 holders → `INVALID_ARGUMENT`).
+    - A headered call on an unregistered slug changes from `INVALID_ARGUMENT` to `NOT_FOUND` (AC-10). Agent `client.py:240-244` passes errors through.
+  - **F. Fundsignal registration (`C-16`).**
+    - The `_source_registered` flag is keyed on the slug (`fundsignal_loop.py:83,444` vs `:161`).
+    - A headered `NOT_FOUND` on `IngestSignal` as `system` aborts the cycle and raises an ERROR alert.
+  - **G. One blend-id accessor (C-18 DRY)** covering all five read sites: `servicer.py:2754,2882,4343`, `live_loop.py:337`, `entry_backfill.py:87`.
+  - **H. Reserved slugs and caps (F-07).**
+    - "Reserved" means "slug already held by `system` in the DB"; there is no literal list.
+    - The audit append concurrency and boot-recompute bounds become documented invariant caps or config keys.
+  - **Risks:**
+    - Ledger `DB_POOL_MAX=1` serializes the 1+K appends, so set a per-page K ceiling.
+    - The step 2–5 window is only test-order sensitive, never deployed: AC-37 tests assert the pre-flight decision.
+    - `_formula_outputs` swallows NOT_FOUND (`servicer.py:557-558`), so AC-30's warning must precede the "unknown series" rejection.
