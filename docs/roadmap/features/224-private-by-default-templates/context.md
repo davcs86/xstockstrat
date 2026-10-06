@@ -94,3 +94,31 @@ OQ-4 to OQ-6 remain for /sdd-design.
 - Merged latest `main-dev` (which includes PR #1219, merged as `69c8554`, and #1220).
 - **#1219 dependency is now satisfied.** `_INTERNAL_FORMULA_READERS` (indicators) and `app/internal_caller.py` (analysis) exist on this branch for FR-1/FR-3 to remove. The merge-order row is marked resolved.
 - The `@AC-*` IDs and FR numbers are unchanged (the IDs are per-feature).
+
+## Session 2026-10-06 — sdd-design Phase 1, round 1 (full mode)
+
+- **Proposer:**
+  - per-service template catalogs (indicators/ingest/analysis) with shared `common.v1` `TemplateKind`/`TemplateMeta`/`TemplateOrigin`;
+  - FR-9 as an analysis-orchestrated saga (intent row, pending-hidden formula copies in indicators, commit/abort, reconcile);
+  - owner threading via a per-owner evaluator before bypass removal;
+  - ingest `system` owner via a portfolio-style `{callerID,rpc}` allow-list;
+  - D-1..D-5 resolutions;
+  - mcp credential re-keyed through a new config secret-write grant.
+- **Adversary:** NEEDS WORK, **no Floor breach**. Surviving objections:
+  1. **C-16 regression:** `resolve_fundamentals_universe` (`live_loop.py:157-163`) reads signals with no identity, so the blend universe goes dark (`@feature-168/160/190`). It needs a system-only read.
+  2. **Slug shadowing:** a user can register the slug `fundamentals`, which poisons the blend and the `{slug: weight}` maps. Reserve system slugs.
+  3. **Header precedence:** `_SYSTEM_META` duplicates or drops headers on the manual scan path. Strip the inbound user/scope, keep trace; the grant wins.
+  4. **Grant scope:** drop the unused `QuerySignals` grant; bind the `system` write grant to the mTLS peer SAN.
+  5. **Rollback safety:** the PK swap and `DROP DEFAULT` break old code on rollback, so use expand-then-contract.
+  6. **Unguarded default:** `SEED_USER_ID` DEFAULT has no unrendered-value guard; generalize the envsubst.
+  7. **Scoring formula:** verify `analysis.fundsignal.scoring_formula_id` is `SYSTEM_AUTHOR` in staging and prod before bypass removal.
+  8. **Missing FR-13 path:** the strategies admin-read path.
+  9. **Backtest grades:** an unreadable-formula hold must not feed them; mark and exclude. Evict the indicators cache on abort.
+  10. **Saga hardening:** a periodic sweep, a batched transactional copy, owner-checked commit, and a retired-template rule.
+  11. **jscpd:** record the duplication rationale.
+  12. **Config scope:** the secret-write grant is out of spec scope, needs config-team sign-off, should be narrowed, and should use an opaque credential key.
+  13. **CHANGE sign-off:** `@feature-161 @AC-4/@AC-5` needs operator sign-off; register in `NAV_GROUPS` (and `PLATFORM_SUBNAV`).
+  14. **Index:** add a `user_id` index on `newsletter_signals`.
+  15. **D-1 alternative:** leave legacy NULL-owner runs NULL and unreadable instead of assigning them to `SEED_USER_ID`.
+- **Verified:** evaluator GetFormula failures are tolerated (`evaluator.py:554,581`); the `@feature-127` auto-add is agent-side; the evaluator is stateless.
+- **Gate:** round 1 < mandated 2, so approval is not offered yet; operator decisions are requested for the next round.
