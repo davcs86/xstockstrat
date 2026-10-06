@@ -77,8 +77,8 @@ FR-8. **Instantiation is a snapshot copy.** Instantiating a template creates an 
 object owned by the caller. The instance records `origin_template_id` and `origin_template_version`.
 Later template updates never mutate instances. Every read **and list** path that returns an
 instance exposes its origin and whether the template's current version is newer (an "update available"
-indicator only). For formulas that is `GetFormula` and `ListFormulas`; for strategies, strategy get and
-list; for signal sources, `ListSignalSources`. C-10(b) parity.
+indicator only). For formulas that is `GetFormula` and `ListFormulas`; for strategies, `GetStrategy`, `ListStrategies` and
+`ListStrategyDefinitions`; for signal sources, `ListSignalSources`. C-10(b) parity.
 
 FR-9. **Strategy templates deep-copy their formulas.** Instantiating a strategy template:
 - copies every formula template the strategy's components reference into the caller's private formulas,
@@ -106,6 +106,13 @@ FR-11. **Existing data migrates to private.**
   `analysis.engine.fundamentals_blend_strategy_id` id-convention match.
 - No data is deleted.
 
+FR-12. **Consumer surfaces reflect the model.** These are in-scope deliverables, not follow-ups:
+- the UI removes every public toggle, badge and filter, and adds the template catalog, "use template"
+  and admin template authoring;
+- the agent's MCP tools drop `is_public` / `include_public` and gain template list/instantiate tools;
+- the strat-lab `backtest` skill is updated in the same PR as any `manage_strategy` change (root
+  CLAUDE.md rule).
+
 FR-13. **Admins get a read-only view, nothing more** (OQ-3). With the ADMIN bit, an admin can read
 another user's formulas, strategies, signal sources and signals for support and audit, through the
 existing read RPCs.
@@ -120,13 +127,6 @@ existing read RPCs.
 longer create, update, delete, execute or instantiate on behalf of another user. This removes today's
 admin override on `UpdateFormula`/`DeleteFormula`. Admin template authoring (FR-7) is unaffected. Admins
 cannot mutate `system` objects either; existing guards stay.
-
-FR-12. **Consumer surfaces reflect the model.** These are in-scope deliverables, not follow-ups:
-- the UI removes every public toggle, badge and filter, and adds the template catalog, "use template"
-  and admin template authoring;
-- the agent's MCP tools drop `is_public` / `include_public` and gain template list/instantiate tools;
-- the strat-lab `backtest` skill is updated in the same PR as any `manage_strategy` change (root
-  CLAUDE.md rule).
 
 ## Out of Scope
 
@@ -153,9 +153,9 @@ FR-12. **Consumer surfaces reflect the model.** These are in-scope deliverables,
 - `xstockstrat-ui` — `/insights` formulas, strategies and signal-source surfaces; `/config-ui` admin
   template authoring; removal of public UI.
 - `xstockstrat-ledger` — receives the new `audit.admin_read` events (FR-13); no ledger code change expected.
-  indicators gains a new indicators→ledger dependency and a `LEDGER_ENDPOINT` env var in
-  `docker-compose.yml`, `.do/app.yaml` and `.do/app.dev.yaml`. analysis and ingest already have
-  `LEDGER_ENDPOINT`; verify in design.
+  indicators gains a new indicators→ledger client in code. `LEDGER_ENDPOINT` is **already wired** for
+  indicators (`docker-compose.yml:311`, `.do/app.yaml:214`, `.do/app.dev.yaml:214`), so no deploy-file
+  change is needed.
 - `packages/proto` — indicators, analysis and ingest contract changes.
 - `xstockstrat-config` — read-only consideration: `analysis.fundsignal.scoring_formula_id` and
   `analysis.engine.fundamentals_blend_strategy_id` semantics must keep working; no new keys planned.
@@ -283,16 +283,16 @@ See `acceptance.feature` (scenarios `@AC-*`), the single source of acceptance tr
 - [x] **OQ-3 Admin reach:** resolved 2026-10-06. Admins get a read-only, audited view and no mutation of
   other users' objects (FR-13).
 - [x] **OQ-4 Template placement:** **deferred to /sdd-design** (architecture decision). FR-9's atomicity
-  requirement holds whichever option is chosen; the design must show how. Original text:** Templates could live in each owning service (indicators, analysis,
+  requirement holds whichever option is chosen; the design must show how. Original text: Templates could live in each owning service (indicators, analysis,
   ingest) or in one catalog service with typed payloads. Cross-service atomicity of the FR-9 deep copy
   differs by option (saga/compensation versus a single DB). Design decision for `/sdd-design`.
 - [x] **OQ-5 Strategy-template formula references:** **resolved** by promotion into FR-9 (template-id
-  references). Original text:** Inside a strategy template payload, components
+  references). Original text: Inside a strategy template payload, components
   must reference formula **templates** (by template id), not live formula ids, or deep copy has nothing
   stable to copy. Confirm in design.
 - [x] **OQ-6 Inbound signal channels:** **deferred to /sdd-design Phase 0 recon** (an inventory task,
   not a product decision). FR-5's rule already decides it: the owner is the source's owner. Feature 010's
-  draft scheduler `ingest_signal` caller is included. Original text:** For MCP-client and newsletter/email sources polled by ingest or
+  draft scheduler `ingest_signal` caller is included. Original text: For MCP-client and newsletter/email sources polled by ingest or
   the agent, the owner must be the source's owner, never the poller identity. Inventory every ingest
   entry point in recon.
 - **Known traps** (ledger):

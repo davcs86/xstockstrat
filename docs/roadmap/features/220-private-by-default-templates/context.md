@@ -66,3 +66,24 @@ The operator accepted the recommended answers ("Go with both"):
 - **OQ-3:** admins keep a read-only, audited view of other users' objects and lose the update/delete override on formulas (new FR-13, @AC-28).
 
 OQ-4 to OQ-6 remain for /sdd-design.
+
+## Session 2026-10-06 — sdd-review product-spec
+
+- Pass 1: **FAIL**. C-07 had no migration strategy; P-03 had OQ-4/5/6 unchecked. 11 warnings. All were addressed (commit `181fadc`).
+- Overlap scan:
+  - Proto field collision: feature 217 owns `StrategyDefinition` field 15, so 220 takes 16+.
+  - Hard dependency on PR #1219.
+  - Migrations and config keys are clean.
+  - Merge-order rows added with operator approval: 220 waits for #1219 and for 217.
+- Pass 2: **PASS WITH WARNINGS**. Product spec approved. Status: draft → spec-ready.
+- Warnings fixed in this session:
+  - The indicators `LEDGER_ENDPOINT` is already wired; only a ledger client is new.
+  - AC-20 now asserts `mean_reversion_2`.
+  - FR-12 and FR-13 reordered.
+  - FR-8 names `GetStrategy`/`ListStrategies`/`ListStrategyDefinitions`.
+- **Carried to /sdd-design (must resolve, C-07, ledger 2026-08-14/133):**
+  - [ ] **D-1 NULL-owner analysis rows.** `backtest_runs.user_id` is deliberately nullable for legacy runs (`analysis/migrations/015_backtest_runs_user_id.up.sql:2-5`). Child rows in `backtest_run_symbols`/`backtest_details` would stay NULL and abort `SET NOT NULL`. Choose an owner for them, such as `SEED_USER_ID` or a `legacy` sentinel, without deleting data (FR-11).
+  - [ ] **D-2 Ambiguous `strategy_id` join.** `strategies` has a composite PK `(user_id, strategy_id)` (`013:27`), so backfilling `strategy_scores` by bare `strategy_id` can match several owners. Define a resolution: duplicate the score row per owner, or match through the latest backtest run's owner.
+  - [ ] **D-3 Lossy down on the `strategy_scores` PK swap** (`005:2`). Extend the refuse-if-colliding down policy to it.
+  - [ ] **D-4 Fundamentals source identification.** The slug comes from config `analysis.fundsignal.source_slug` (default `fundamentals`), which an ingest migration cannot read. Choose: the literal slug, `source_type='derived'` (ingest `006`), or a `SYSTEM_SOURCE_SLUGS` migration variable.
+  - [ ] **D-5** `ingest.newsletter_signals` is a TimescaleDB hypertable. The column add, backfill and `NOT NULL` must account for compression and chunks.

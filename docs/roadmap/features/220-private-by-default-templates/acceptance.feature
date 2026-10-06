@@ -131,7 +131,7 @@ Feature: private-by-default-templates
   Scenario: Strategy id collision on instantiation
     Given "bob" already owns strategy "mean_reversion" and template "tpl-meanrev" proposes strategy_id "mean_reversion"
     When "bob" instantiates "tpl-meanrev" without a strategy_id override
-    Then the new strategy has a strategy_id other than "mean_reversion" and the existing one is unchanged
+    Then the new strategy has strategy_id "mean_reversion_2" and the existing "mean_reversion" is unchanged
 
   @AC-21 @FR-10
   Scenario: Same strategy_id for two users does not share scores or backtests
