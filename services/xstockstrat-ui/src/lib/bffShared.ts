@@ -50,6 +50,10 @@ export function requireAdminScope(claims: JwtClaims): void {
   }
 }
 
+// Bounded deadline for snapshot-fundamentals reads: a stalled upstream must reject (→ the card's error
+// state), never leave the browser's query pending forever (feature 220).
+export const FUNDAMENTALS_TIMEOUT_MS = 15_000;
+
 /**
  * Build a Connect handler for the common case: verify the session, then forward the request
  * to a backend gRPC method with the propagated identity headers. Handlers that inject a

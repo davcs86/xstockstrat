@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-10-06 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from defect report `docs/reports/2026-10-06-ui-fundamentals-infinite-loading-defect.md` |
+| 2026-10-06 | `draft` → `implementation-ready` → `in-progress` → `code-completed` | /sdd-spec + /sdd-execute sequential | BFF fundamentals deadline (15s) + stalled-upstream e2e regression |
 
 ---
 
@@ -21,7 +22,7 @@
 
 - [Product Spec](product-spec.md) — bug description and fix scope
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-trader-position-fundamentals`_
+- [Implementation Spec](implementation-spec.md) — steps + deviation log
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -34,4 +35,4 @@ the card's existing error branch is never reached.
 
 ## Next Action
 
-`/sdd-spec fix-trader-position-fundamentals` — recommended design depth (skip / quick / full) from triage; see context.md
+Merge the integration PR into `main-dev`.

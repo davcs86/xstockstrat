@@ -28,3 +28,7 @@ export const FUNDAMENTALS_AAPL = {
   source: 'fmp',
   stale: false,
 };
+
+// Feature 220 — sentinel symbol whose GetFundamentals never answers (stalled upstream), so the
+// trader BFF's bounded deadline must surface the card's error branch instead of loading forever.
+export const FUNDAMENTALS_STALL_SYMBOL = 'STALL';
