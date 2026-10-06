@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"math"
 	"os"
 	"strings"
 	"sync"
@@ -2352,5 +2353,27 @@ func TestBackfillFundamentals_CurrencyMismatchPEPBFailClosed_feature216(t *testi
 	// Price should still be derived (currency check applies only to pe/pb).
 	if updated == nil || updated.Price == nil {
 		t.Errorf("price should be derived regardless of currency, got nil")
+	}
+}
+
+// feature 222 @AC-2: the EDGAR snapshot projects the newest stored period's (TTM) roe verbatim.
+func TestGetFundamentals_EdgarSnapshotInheritsTTMROE_AC2_feature222(t *testing.T) {
+	cfg := &fakeCfg{
+		strings: map[string]string{"marketdata.fundamentals.snapshot_source": "edgar"},
+		ints:    map[string]int64{"marketdata.edgar.cache_ttl_hours": 24},
+	}
+	q := &source.HistoricalFundamentalsPeriod{
+		Symbol: "AXP", FiscalPeriod: "Q2-2026", PeriodType: "quarterly",
+		PeriodEnd: hfDate(2026, 6, 30), FiledDate: hfDate(2026, 7, 24),
+		ROE: f64p(10685.0 / 30264.0), Currency: "USD", Source: "edgar",
+		ExtraMetrics: map[string]float64{"stockholders_equity_usd": 30264e6},
+	}
+	svc, _ := edgarSnapshotSvc(q, &marketdatav1.Quote{Symbol: "AXP", AskPrice: 341, BidPrice: 340}, cfg, nil, "finnhub")
+	f, err := svc.GetFundamentals(context.Background(), "AXP")
+	if err != nil || f == nil {
+		t.Fatalf("GetFundamentals(edgar): %v", err)
+	}
+	if math.Abs(f.Roe-10685.0/30264.0) > 1e-9 {
+		t.Fatalf("snapshot roe = %v, want the period's TTM roe ≈0.353", f.Roe)
 	}
 }

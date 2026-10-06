@@ -153,6 +153,13 @@ where these were `FMP_API_KEY` / `FINNHUB_API_KEY` `type: SECRET` env vars; thos
 removed. Every other knob (`enabled`, `base_url`, cache/quota settings) remains an ordinary config
 key.
 
+**EDGAR period ratio bases (features 211/222).** `debt_to_equity` = financial debt / equity
+(`total_debt` in `extra_metrics`). `roe` on an **annual** row = annual net income / year-end equity; on
+a **quarterly** row it is **trailing-twelve-month** net income / period-end equity — the last four
+quarters keyed by each fact's own period end (never the filing's fy/fp, which comparative columns
+share), Q4 derived as FY − Q1..Q3, only facts filed on/before the row's filing (PIT); with n < 4
+quarters available it is Σ × 4/n. This matches the TTM EPS behind the row's P/E.
+
 ## Alpaca Integration
 
 - REST: historical bars (single + multi-symbol), asset listing, latest quotes (single + multi-symbol) — `internal/alpaca/client.go`

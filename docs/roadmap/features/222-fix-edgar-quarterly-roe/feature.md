@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-10-06 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from defect report `docs/reports/2026-10-06-edgar-quarterly-roe-not-annualized-defect.md` |
+| 2026-10-06 | `draft` → `implementation-ready` → `in-progress` → `code-completed` | /sdd-spec + /sdd-execute sequential | quarterly ROE on a TTM basis (annualize-available fallback) |
 
 ---
 
@@ -21,7 +22,8 @@
 
 - [Product Spec](product-spec.md) — bug description and fix scope
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-edgar-quarterly-roe`_
+- [Implementation Spec](implementation-spec.md) — steps + deviation log
+- [Design](design.md) — operator decisions + approach
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -34,4 +36,4 @@ backtests — and flipping AXP-class names below the `fundamentals_macd_blend` e
 
 ## Next Action
 
-`/sdd-design fix-edgar-quarterly-roe quick` — recommended design depth (skip / quick / full) from triage; see context.md
+Merge the integration PR into `main-dev` before 223; then run the single re-backfill described in 223.
