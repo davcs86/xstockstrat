@@ -59,7 +59,7 @@ import { StatTile } from '@/components/shared/StatTile';
 import { Eyebrow } from '@/components/shared/Eyebrow';
 import { PageBreadcrumb } from '@/components/shared/PageBreadcrumb';
 import { OrderForm } from '@/components/trader/OrderForm';
-import { isNotFoundError, scoreColor, formatComposite } from '@/lib/scoreDisplay';
+import { isNotFoundError, compositeColor, formatComposite } from '@/lib/scoreDisplay';
 import type { ColumnDef } from '@tanstack/react-table';
 import { DataTable } from '@/components/ui/data-table';
 import {
@@ -973,13 +973,13 @@ function OpportunitySection({
             {opportunity.passingConditions}/{opportunity.totalConditions} conditions
           </span>
           <div>
-            {/* feature 199 — composite ranking ordinal; scoreColor reuse, em-dash on NULL. */}
+            {/* feature 199 — composite ranking ordinal; centred diverging bands (221), em-dash on NULL. */}
             <Eyebrow>Composite</Eyebrow>
             {opportunity.compositeScore !== undefined ? (
               <span
                 className={cn(
                   'font-mono text-2xl tabular-nums',
-                  scoreColor(opportunity.compositeScore),
+                  compositeColor(opportunity.compositeScore),
                 )}
                 data-testid="opp-composite"
               >

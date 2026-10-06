@@ -65,7 +65,7 @@ export const OPPORTUNITIES = [
     // feature 097 — stable server-issued key (user|symbol_norm|strategy_id) + de-dup provenance.
     opportunityKey: 'u1|AAPL|strat-001',
     provenance: ['watchlist', 'unusual_whales'],
-    compositeScore: 0.732, // feature 199 — text-paper band (>=0.6, <0.8)
+    compositeScore: 0.732, // feature 221 — positive tail (text-buy, > 0.58)
     symbolScore: 1.2, // feature 200 — symbol roll-up; ranks above MSFT (1.0)
   },
   {
@@ -80,7 +80,7 @@ export const OPPORTUNITIES = [
     validUntil: VALID_UNTIL,
     opportunityKey: 'u1|MSFT|strat-001',
     provenance: ['position', 'marketwatch'],
-    compositeScore: 0.512, // feature 199 — text-destructive band (<0.6)
+    compositeScore: 0.512, // feature 221 — neutral band (text-muted-foreground, 0.42–0.58)
     symbolScore: 1.0, // feature 200 — symbol roll-up; ranks below AAPL (1.2)
   },
   {

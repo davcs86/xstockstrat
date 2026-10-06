@@ -21,6 +21,7 @@ import {
   backendHeaders,
   forward,
   forwardAdmin,
+  FUNDAMENTALS_TIMEOUT_MS,
 } from '@/lib/bffShared';
 import { COPILOT_STREAM_PREFIX, COPILOT_EVENT_TYPE, copilotStreamKey } from '@/lib/copilot';
 
@@ -73,7 +74,9 @@ router.service(MarketDataService, {
   getBars: forward((req, opts) => marketDataClient.getBars(req, opts)),
   listAssets: forward((req, opts) => marketDataClient.listAssets(req, opts)),
   // Read-only, ungated (matches GetFundamentals' backend contract).
-  getFundamentals: forward((req, opts) => marketDataClient.getFundamentals(req, opts)),
+  getFundamentals: forward((req, opts) => marketDataClient.getFundamentals(req, opts), {
+    timeoutMs: FUNDAMENTALS_TIMEOUT_MS,
+  }),
   // Live price wired on both BFFs for cross-surface parity.
   getLatestPrice: forward((req, opts) => marketDataClient.getLatestPrice(req, opts)),
 });

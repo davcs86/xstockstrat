@@ -60,6 +60,7 @@ import {
   SIGNAL_SOURCES,
   SIGNAL_SOURCE_WEIGHTED,
   FUNDAMENTALS_AAPL,
+  FUNDAMENTALS_STALL_SYMBOL,
 } from './fixtures';
 import { USER_VIEWS, LAST_ADMIN_USER_ID } from './fixtures/users';
 import { Role } from '@xstockstrat/proto/identity/v1/identity_pb';
@@ -617,7 +618,14 @@ export async function startMockBackend(): Promise<void> {
             ],
           };
         },
-        async getFundamentals(req) {
+        async getFundamentals(req, ctx) {
+          // feature 220: a stalled upstream — never answers until the caller's deadline aborts it.
+          if ((req.symbol ?? '').toUpperCase() === FUNDAMENTALS_STALL_SYMBOL) {
+            await new Promise<void>((resolve) =>
+              ctx.signal.addEventListener('abort', () => resolve()),
+            );
+            throw new ConnectError('aborted by caller', Code.Canceled);
+          }
           // feature 125 (FR-7): AAPL has data; any other symbol has none — the real backend
           // surfaces a no-data miss as UNAVAILABLE (not NotFound), which the UI treats as the
           // explicit no-data state.

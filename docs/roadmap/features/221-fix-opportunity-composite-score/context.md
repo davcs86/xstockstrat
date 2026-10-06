@@ -16,3 +16,8 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - C-16 CHANGE: supersedes feature 199 `@AC-8`'s scoreColor clause (not yet promoted to a durable `services/xstockstrat-ui/acceptance/` suite).
 - Recommended design depth: quick → `/sdd-design fix-opportunity-composite-score quick` (rationale: SEV-3 single service, but changes a launched acceptance scenario and introduces new threshold logic — band edges warrant one adversarial round)
 - Development branch: feature/fix-opportunity-composite-score
+
+## Session 2026-10-06 — /sdd-design quick (operator decision) + /sdd-execute sequential
+
+- Operator chose ±0.08 muted band, two tails (AskUserQuestion). design.md written; status advanced through implementation to code-completed.
+- `compositeColor` (text-buy / text-muted-foreground / text-sell) replaces `scoreColor` at the 3 composite render sites; 199 @AC-8 e2e colour assertion superseded (C-16 CHANGE).
