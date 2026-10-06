@@ -1458,3 +1458,64 @@ async def test_list_users_projects_password_free_views():
         }
     ]
     assert all("password" not in u and "passwordHash" not in u for u in result)
+
+
+class TestManageStrategySectorOverrides:
+    """Feature 217 — per-sector override list maps onto StrategyDefinition field 15."""
+
+    async def _sent(self, defn: dict):
+        from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc  # type: ignore
+
+        mock_stub = MagicMock()
+        mock_stub.ManageStrategy = AsyncMock(return_value=analysis_pb2.StrategyDefinition())
+        with patch("app.client.mtls") as mock_grpc:
+            mock_grpc.secure_channel.return_value = _channel_cm()
+            with patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=mock_stub):
+                await client.manage_strategy(user_id="u-1", operation="register", definition=defn)
+        return mock_stub.ManageStrategy.call_args.args[0].definition
+
+    @pytest.mark.asyncio
+    async def test_maps_overrides_with_sector_enum(self):
+        from gen.common.v1 import common_pb2  # type: ignore
+
+        sent = await self._sent(
+            {
+                "strategy_id": "x",
+                "sector_param_overrides": [
+                    {
+                        "component_ref": "fscore",
+                        "param_name": "de_bad",
+                        "default_value": 2.0,
+                        "by_sector": {"financials": 12.0, "SECTOR_TECHNOLOGY": 1.5},
+                    }
+                ],
+            }
+        )
+        (ov,) = sent.sector_param_overrides
+        assert (ov.component_ref, ov.param_name, ov.default_value) == ("fscore", "de_bad", 2.0)
+        assert {(sv.sector, sv.value) for sv in ov.by_sector} == {
+            (common_pb2.Sector.SECTOR_FINANCIALS, 12.0),
+            (common_pb2.Sector.SECTOR_TECHNOLOGY, 1.5),
+        }
+
+    @pytest.mark.asyncio
+    async def test_unknown_sector_rejected(self):
+        with pytest.raises(ValueError, match="unknown sector"):
+            await self._sent(
+                {
+                    "strategy_id": "x",
+                    "sector_param_overrides": [
+                        {
+                            "component_ref": "c",
+                            "param_name": "p",
+                            "default_value": 1,
+                            "by_sector": {"TECH": 2},
+                        }
+                    ],
+                }
+            )
+
+    @pytest.mark.asyncio
+    async def test_absent_overrides_send_none(self):
+        sent = await self._sent({"strategy_id": "x"})
+        assert len(sent.sector_param_overrides) == 0

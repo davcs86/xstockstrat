@@ -5,7 +5,7 @@
 //   protoc               unknown
 // source: marketdata/v1/marketdata.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.MarketDataServiceClient = exports.MarketDataServiceService = exports.BatchGetLatestPriceResponse = exports.BatchGetLatestPriceRequest = exports.BatchGetBarsResponse = exports.SymbolBars = exports.BatchGetBarsRequest = exports.GetLatestQuotesResponse = exports.GetLatestQuotesRequest = exports.BackfillFundamentalsResponse = exports.BackfillFundamentalsRequest = exports.GetHistoricalFundamentalsResponse = exports.GetHistoricalFundamentalsRequest = exports.HistoricalFundamentalsPeriod_ExtraMetricsEntry = exports.HistoricalFundamentalsPeriod = exports.GetFundamentalsMultiResponse = exports.GetFundamentalsMultiRequest = exports.GetFundamentalsResponse = exports.GetFundamentalsRequest = exports.Fundamentals_ExtraMetricsEntry = exports.Fundamentals = exports.DeleteBackfilledDataResponse = exports.DeleteBackfilledDataRequest = exports.ListAssetsResponse = exports.ListAssetsRequest = exports.GetDataCoverageResponse = exports.CoverageRange = exports.GetDataCoverageRequest = exports.BackfillBarsResponse = exports.BackfillBarsRequest = exports.GetLatestQuoteRequest = exports.GetBarsResponse = exports.GetBarsRequest = exports.StreamQuotesRequest = exports.StreamBarsRequest = exports.LatestPrice = exports.GetLatestPriceRequest = exports.Quote = exports.Bar = exports.protobufPackage = void 0;
+exports.MarketDataServiceClient = exports.MarketDataServiceService = exports.GetSectorHistoryResponse = exports.GetSectorHistoryRequest = exports.SectorHistoryRow = exports.GetSectorAsOfResponse = exports.GetSectorAsOfRequest = exports.GetCurrentSectorResponse = exports.GetCurrentSectorRequest = exports.SymbolSector = exports.BatchGetLatestPriceResponse = exports.BatchGetLatestPriceRequest = exports.BatchGetBarsResponse = exports.SymbolBars = exports.BatchGetBarsRequest = exports.GetLatestQuotesResponse = exports.GetLatestQuotesRequest = exports.BackfillFundamentalsResponse = exports.BackfillFundamentalsRequest = exports.GetHistoricalFundamentalsResponse = exports.GetHistoricalFundamentalsRequest = exports.HistoricalFundamentalsPeriod_ExtraMetricsEntry = exports.HistoricalFundamentalsPeriod = exports.GetFundamentalsMultiResponse = exports.GetFundamentalsMultiRequest = exports.GetFundamentalsResponse = exports.GetFundamentalsRequest = exports.Fundamentals_ExtraMetricsEntry = exports.Fundamentals = exports.DeleteBackfilledDataResponse = exports.DeleteBackfilledDataRequest = exports.ListAssetsResponse = exports.ListAssetsRequest = exports.GetDataCoverageResponse = exports.CoverageRange = exports.GetDataCoverageRequest = exports.BackfillBarsResponse = exports.BackfillBarsRequest = exports.GetLatestQuoteRequest = exports.GetBarsResponse = exports.GetBarsRequest = exports.StreamQuotesRequest = exports.StreamBarsRequest = exports.LatestPrice = exports.GetLatestPriceRequest = exports.Quote = exports.Bar = exports.protobufPackage = void 0;
 /* eslint-disable */
 const wire_1 = require("@bufbuild/protobuf/wire");
 const grpc_js_1 = require("@grpc/grpc-js");
@@ -3882,6 +3882,562 @@ exports.BatchGetLatestPriceResponse = {
         return message;
     },
 };
+function createBaseSymbolSector() {
+    return { symbol: "", sector: common_1.Sector.SECTOR_UNSPECIFIED };
+}
+exports.SymbolSector = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.symbol !== "") {
+            writer.uint32(10).string(message.symbol);
+        }
+        if (message.sector !== common_1.Sector.SECTOR_UNSPECIFIED) {
+            writer.uint32(16).int32((0, common_1.sectorToNumber)(message.sector));
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseSymbolSector();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.symbol = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 16) {
+                        break;
+                    }
+                    message.sector = (0, common_1.sectorFromJSON)(reader.int32());
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
+            sector: isSet(object.sector) ? (0, common_1.sectorFromJSON)(object.sector) : common_1.Sector.SECTOR_UNSPECIFIED,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.symbol !== "") {
+            obj.symbol = message.symbol;
+        }
+        if (message.sector !== common_1.Sector.SECTOR_UNSPECIFIED) {
+            obj.sector = (0, common_1.sectorToJSON)(message.sector);
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.SymbolSector.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseSymbolSector();
+        message.symbol = object.symbol ?? "";
+        message.sector = object.sector ?? common_1.Sector.SECTOR_UNSPECIFIED;
+        return message;
+    },
+};
+function createBaseGetCurrentSectorRequest() {
+    return { symbols: [] };
+}
+exports.GetCurrentSectorRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        for (const v of message.symbols) {
+            writer.uint32(10).string(v);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseGetCurrentSectorRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.symbols.push(reader.string());
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            symbols: globalThis.Array.isArray(object?.symbols) ? object.symbols.map((e) => globalThis.String(e)) : [],
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.symbols?.length) {
+            obj.symbols = message.symbols;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.GetCurrentSectorRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseGetCurrentSectorRequest();
+        message.symbols = object.symbols?.map((e) => e) || [];
+        return message;
+    },
+};
+function createBaseGetCurrentSectorResponse() {
+    return { sectors: [] };
+}
+exports.GetCurrentSectorResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        for (const v of message.sectors) {
+            exports.SymbolSector.encode(v, writer.uint32(10).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseGetCurrentSectorResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.sectors.push(exports.SymbolSector.decode(reader, reader.uint32()));
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            sectors: globalThis.Array.isArray(object?.sectors)
+                ? object.sectors.map((e) => exports.SymbolSector.fromJSON(e))
+                : [],
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.sectors?.length) {
+            obj.sectors = message.sectors.map((e) => exports.SymbolSector.toJSON(e));
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.GetCurrentSectorResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseGetCurrentSectorResponse();
+        message.sectors = object.sectors?.map((e) => exports.SymbolSector.fromPartial(e)) || [];
+        return message;
+    },
+};
+function createBaseGetSectorAsOfRequest() {
+    return { symbol: "", asOf: undefined };
+}
+exports.GetSectorAsOfRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.symbol !== "") {
+            writer.uint32(10).string(message.symbol);
+        }
+        if (message.asOf !== undefined) {
+            timestamp_1.Timestamp.encode(toTimestamp(message.asOf), writer.uint32(18).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseGetSectorAsOfRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.symbol = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.asOf = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
+            asOf: isSet(object.asOf)
+                ? fromJsonTimestamp(object.asOf)
+                : isSet(object.as_of)
+                    ? fromJsonTimestamp(object.as_of)
+                    : undefined,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.symbol !== "") {
+            obj.symbol = message.symbol;
+        }
+        if (message.asOf !== undefined) {
+            obj.asOf = message.asOf.toISOString();
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.GetSectorAsOfRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseGetSectorAsOfRequest();
+        message.symbol = object.symbol ?? "";
+        message.asOf = object.asOf ?? undefined;
+        return message;
+    },
+};
+function createBaseGetSectorAsOfResponse() {
+    return { sector: common_1.Sector.SECTOR_UNSPECIFIED };
+}
+exports.GetSectorAsOfResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.sector !== common_1.Sector.SECTOR_UNSPECIFIED) {
+            writer.uint32(8).int32((0, common_1.sectorToNumber)(message.sector));
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseGetSectorAsOfResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 8) {
+                        break;
+                    }
+                    message.sector = (0, common_1.sectorFromJSON)(reader.int32());
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return { sector: isSet(object.sector) ? (0, common_1.sectorFromJSON)(object.sector) : common_1.Sector.SECTOR_UNSPECIFIED };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.sector !== common_1.Sector.SECTOR_UNSPECIFIED) {
+            obj.sector = (0, common_1.sectorToJSON)(message.sector);
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.GetSectorAsOfResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseGetSectorAsOfResponse();
+        message.sector = object.sector ?? common_1.Sector.SECTOR_UNSPECIFIED;
+        return message;
+    },
+};
+function createBaseSectorHistoryRow() {
+    return { symbol: "", sector: common_1.Sector.SECTOR_UNSPECIFIED, validFrom: undefined, validTo: undefined, source: "" };
+}
+exports.SectorHistoryRow = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.symbol !== "") {
+            writer.uint32(10).string(message.symbol);
+        }
+        if (message.sector !== common_1.Sector.SECTOR_UNSPECIFIED) {
+            writer.uint32(16).int32((0, common_1.sectorToNumber)(message.sector));
+        }
+        if (message.validFrom !== undefined) {
+            timestamp_1.Timestamp.encode(toTimestamp(message.validFrom), writer.uint32(26).fork()).join();
+        }
+        if (message.validTo !== undefined) {
+            timestamp_1.Timestamp.encode(toTimestamp(message.validTo), writer.uint32(34).fork()).join();
+        }
+        if (message.source !== "") {
+            writer.uint32(42).string(message.source);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseSectorHistoryRow();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.symbol = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 16) {
+                        break;
+                    }
+                    message.sector = (0, common_1.sectorFromJSON)(reader.int32());
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 26) {
+                        break;
+                    }
+                    message.validFrom = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
+                    continue;
+                }
+                case 4: {
+                    if (tag !== 34) {
+                        break;
+                    }
+                    message.validTo = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
+                    continue;
+                }
+                case 5: {
+                    if (tag !== 42) {
+                        break;
+                    }
+                    message.source = reader.string();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
+            sector: isSet(object.sector) ? (0, common_1.sectorFromJSON)(object.sector) : common_1.Sector.SECTOR_UNSPECIFIED,
+            validFrom: isSet(object.validFrom)
+                ? fromJsonTimestamp(object.validFrom)
+                : isSet(object.valid_from)
+                    ? fromJsonTimestamp(object.valid_from)
+                    : undefined,
+            validTo: isSet(object.validTo)
+                ? fromJsonTimestamp(object.validTo)
+                : isSet(object.valid_to)
+                    ? fromJsonTimestamp(object.valid_to)
+                    : undefined,
+            source: isSet(object.source) ? globalThis.String(object.source) : "",
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.symbol !== "") {
+            obj.symbol = message.symbol;
+        }
+        if (message.sector !== common_1.Sector.SECTOR_UNSPECIFIED) {
+            obj.sector = (0, common_1.sectorToJSON)(message.sector);
+        }
+        if (message.validFrom !== undefined) {
+            obj.validFrom = message.validFrom.toISOString();
+        }
+        if (message.validTo !== undefined) {
+            obj.validTo = message.validTo.toISOString();
+        }
+        if (message.source !== "") {
+            obj.source = message.source;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.SectorHistoryRow.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseSectorHistoryRow();
+        message.symbol = object.symbol ?? "";
+        message.sector = object.sector ?? common_1.Sector.SECTOR_UNSPECIFIED;
+        message.validFrom = object.validFrom ?? undefined;
+        message.validTo = object.validTo ?? undefined;
+        message.source = object.source ?? "";
+        return message;
+    },
+};
+function createBaseGetSectorHistoryRequest() {
+    return { symbols: [], start: undefined, end: undefined };
+}
+exports.GetSectorHistoryRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        for (const v of message.symbols) {
+            writer.uint32(10).string(v);
+        }
+        if (message.start !== undefined) {
+            timestamp_1.Timestamp.encode(toTimestamp(message.start), writer.uint32(18).fork()).join();
+        }
+        if (message.end !== undefined) {
+            timestamp_1.Timestamp.encode(toTimestamp(message.end), writer.uint32(26).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseGetSectorHistoryRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.symbols.push(reader.string());
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.start = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 26) {
+                        break;
+                    }
+                    message.end = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            symbols: globalThis.Array.isArray(object?.symbols) ? object.symbols.map((e) => globalThis.String(e)) : [],
+            start: isSet(object.start) ? fromJsonTimestamp(object.start) : undefined,
+            end: isSet(object.end) ? fromJsonTimestamp(object.end) : undefined,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.symbols?.length) {
+            obj.symbols = message.symbols;
+        }
+        if (message.start !== undefined) {
+            obj.start = message.start.toISOString();
+        }
+        if (message.end !== undefined) {
+            obj.end = message.end.toISOString();
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.GetSectorHistoryRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseGetSectorHistoryRequest();
+        message.symbols = object.symbols?.map((e) => e) || [];
+        message.start = object.start ?? undefined;
+        message.end = object.end ?? undefined;
+        return message;
+    },
+};
+function createBaseGetSectorHistoryResponse() {
+    return { rows: [] };
+}
+exports.GetSectorHistoryResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        for (const v of message.rows) {
+            exports.SectorHistoryRow.encode(v, writer.uint32(10).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseGetSectorHistoryResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.rows.push(exports.SectorHistoryRow.decode(reader, reader.uint32()));
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            rows: globalThis.Array.isArray(object?.rows) ? object.rows.map((e) => exports.SectorHistoryRow.fromJSON(e)) : [],
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.rows?.length) {
+            obj.rows = message.rows.map((e) => exports.SectorHistoryRow.toJSON(e));
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.GetSectorHistoryResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseGetSectorHistoryResponse();
+        message.rows = object.rows?.map((e) => exports.SectorHistoryRow.fromPartial(e)) || [];
+        return message;
+    },
+};
 exports.MarketDataServiceService = {
     /** Stream live bar data for symbols */
     streamBars: {
@@ -4051,6 +4607,37 @@ exports.MarketDataServiceService = {
         requestDeserialize: (value) => exports.BackfillFundamentalsRequest.decode(value),
         responseSerialize: (value) => Buffer.from(exports.BackfillFundamentalsResponse.encode(value).finish()),
         responseDeserialize: (value) => exports.BackfillFundamentalsResponse.decode(value),
+    },
+    /**
+     * Sector classification reads (feature 217). Served only from the local Type-2 SCD store —
+     * never call FMP on the read path; an unclassified symbol returns SECTOR_UNSPECIFIED, not an error.
+     */
+    getCurrentSector: {
+        path: "/xstockstrat.marketdata.v1.MarketDataService/GetCurrentSector",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.GetCurrentSectorRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.GetCurrentSectorRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.GetCurrentSectorResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.GetCurrentSectorResponse.decode(value),
+    },
+    getSectorAsOf: {
+        path: "/xstockstrat.marketdata.v1.MarketDataService/GetSectorAsOf",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.GetSectorAsOfRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.GetSectorAsOfRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.GetSectorAsOfResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.GetSectorAsOfResponse.decode(value),
+    },
+    getSectorHistory: {
+        path: "/xstockstrat.marketdata.v1.MarketDataService/GetSectorHistory",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.GetSectorHistoryRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.GetSectorHistoryRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.GetSectorHistoryResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.GetSectorHistoryResponse.decode(value),
     },
 };
 exports.MarketDataServiceClient = (0, grpc_js_1.makeGenericClientConstructor)(exports.MarketDataServiceService, "xstockstrat.marketdata.v1.MarketDataService");

@@ -75,6 +75,15 @@ async def _capture_manage_strategy_request():
                     # captures the built request, it does not validate).
                     "denied_symbols": ["TSLA"],
                     "signal_eligible": True,
+                    # feature 217
+                    "sector_param_overrides": [
+                        {
+                            "component_ref": "r",
+                            "param_name": "period",
+                            "default_value": 3.0,
+                            "by_sector": {"TECHNOLOGY": 5.0},
+                        }
+                    ],
                 },
             )
     return mock_stub.ManageStrategy.call_args[0][0]

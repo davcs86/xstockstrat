@@ -123,7 +123,15 @@ func main() {
 	// fundProvider is read once at boot and passed to BOTH the client constructor and the
 	// service — they must stay coupled. Per-RPC enablement is live (fundamentalsEnabled), not here.
 	fundProvider := cfgWatcher.GetString("marketdata.fundamentals.provider", "finnhub")
-	fundamentalsSrc := newFundamentalsSource(cfgWatcher, fundProvider, cfg.FMPAPIKey, cfg.FinnhubAPIKey)
+	fmpClient := newFMPClient(cfgWatcher, cfg.FMPAPIKey)
+	// Boot-seed the shared budget so a mid-day restart cannot re-grant a fresh full cap (row count
+	// is a conservative floor of today's FMP calls).
+	if n, err := repo.CountFundamentalsFetchedToday(ctx); err == nil {
+		fmpClient.SeedBudget(n)
+	} else {
+		slog.Warn("FMP budget boot-seed failed; starting from 0", "error", err)
+	}
+	fundamentalsSrc := newFundamentalsSource(cfgWatcher, fundProvider, fmpClient, cfg.FinnhubAPIKey)
 
 	// Historical point-in-time fundamentals source (feature 198): SEC EDGAR, keyless (non-secret
 	// User-Agent), held as its own service field and NEVER routed through newFundamentalsSource /
@@ -141,11 +149,14 @@ func main() {
 		slog.Error("service init failed", "error", err)
 		os.Exit(1)
 	}
+	svc.SetClassification(repository.NewClassificationRepo(repo), fmpClient, fmpClient)
 	hdl := handler.NewMarketDataHandler(svc)
 
 	go svc.StartWarmQuotePoller(ctx)
 
 	go svc.StartBarIngestPoller(ctx)
+
+	go svc.StartClassificationRefreshPoller(ctx)
 
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%s", cfg.GRPCPort))
 	if err != nil {
@@ -201,7 +212,7 @@ func looksLikePlaceholderCred(v string) bool {
 
 // newFundamentalsSource builds the active fundamentals client selected by
 // marketdata.fundamentals.provider (boot-only). Always constructed; .enabled gates use, not this.
-func newFundamentalsSource(cfgWatcher *config.Watcher, provider, fmpAPIKey, finnhubAPIKey string) source.FundamentalsSource {
+func newFundamentalsSource(cfgWatcher *config.Watcher, provider string, fmpClient *fmp.Client, finnhubAPIKey string) source.FundamentalsSource {
 	switch provider {
 	case "finnhub":
 		baseURL := cfgWatcher.GetString("marketdata.finnhub.base_url", "https://api.finnhub.io/api/v1")
@@ -214,9 +225,23 @@ func newFundamentalsSource(cfgWatcher *config.Watcher, provider, fmpAPIKey, finn
 		if provider != "fmp" {
 			slog.Warn("unrecognized marketdata.fundamentals.provider — falling back to fmp", "provider", provider)
 		}
-		baseURL := cfgWatcher.GetString("marketdata.fmp.base_url", "https://financialmodelingprep.com")
-		metrics := strings.Split(cfgWatcher.GetString("marketdata.fmp.metrics", "core,extended"), ",")
-		slog.Info("FMP fundamentals client constructed", "base_url", baseURL, "metrics", metrics)
-		return fmp.NewClient(fmp.ClientConfig{BaseURL: baseURL, APIKey: fmpAPIKey, Metrics: metrics})
+		return fmpClient
 	}
+}
+
+// newFMPClient builds the ONE *fmp.Client every FMP path shares (fundamentals, enrichment,
+// classification) — a second instance would split the shared day budget into N×cap.
+func newFMPClient(cfgWatcher *config.Watcher, apiKey string) *fmp.Client {
+	baseURL := cfgWatcher.GetString("marketdata.fmp.base_url", "https://financialmodelingprep.com")
+	metrics := strings.Split(cfgWatcher.GetString("marketdata.fmp.metrics", "core,extended"), ",")
+	slog.Info("FMP client constructed", "base_url", baseURL, "metrics", metrics)
+	return fmp.NewClient(fmp.ClientConfig{
+		BaseURL: baseURL,
+		APIKey:  apiKey,
+		Metrics: metrics,
+		Limits: func() (float64, int) {
+			return float64(cfgWatcher.GetInt("marketdata.fmp.rate_limit_rps", 5)),
+				int(cfgWatcher.GetInt("marketdata.fmp.daily_request_cap", 250))
+		},
+	})
 }

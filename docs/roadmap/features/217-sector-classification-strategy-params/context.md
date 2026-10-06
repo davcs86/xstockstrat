@@ -153,3 +153,22 @@
   sector `de_bad`/`roe_bad` values only after both land.
 - Next: re-run `/sdd-spec sector-classification-strategy-params` to fold `@AC-14` into the steps, then
   `/sdd-review … impl-spec`.
+
+## Session 2026-10-06 — /sdd-execute sequential (217 > 220–223)
+
+- Operator decisions (AskUserQuestion, this session): feature branch + one integration PR per
+  feature; @AC-6/7/8/10/13 reworded to a component param (C-15 amendment, no rule-rhs overrides);
+  enum name `SECTOR_TECHNOLOGY`; defaults `marketdata.fmp.rate_limit_rps=5`,
+  `marketdata.classification.refresh_interval_hours=24` (job ships gated off).
+- Executed all 18 steps; deviations (AC-14 seam, batched RPCs, natural-PK migration, single shared
+  FMP client, validation scope, codegen/e2e fallbacks) recorded in implementation-spec.md
+  § Deviation Log.
+- C-16: promoted @AC-1/@AC-2/@AC-4(+budget refund)/@AC-12 into
+  `services/xstockstrat-marketdata/acceptance/sector-classification.feature`.
+- Rollout notes: classification starts empty — enable `marketdata.classification.enabled` and the
+  refresh universe (warm set ∪ symbols read via the sector RPCs) seeds within one cycle; the FMP
+  profile write-through also seeds whenever extended fundamentals are fetched.
+- Status → code-completed.
+
+- 2026-10-06 (post-merge of 223): 223 landed `008` before 217, so 217's migration renumbered
+  `007_symbol_classification` → `009_symbol_classification` (007 unused); merge-order row marked resolved.

@@ -58,6 +58,9 @@ type Fundamentals struct {
 	AsOf          time.Time
 	Currency      string
 	Source        string
+	// Sector is the FMP profile's free-text sector; transient (not persisted) — it only feeds the
+	// classification epoch-seed write-through (feature 217).
+	Sector string
 }
 
 // FundamentalsSource fetches fundamental metrics for symbols. Separate from DataSourceClient

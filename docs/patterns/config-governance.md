@@ -102,6 +102,19 @@ without this convention, both look identical (fails.md 2026-07-01).
 
 Append-only log — one entry per feature that registered new keys. Newest first. Don't edit past entries; superseding a key's behavior gets a new entry, not a rewrite of the old one.
 
+### feature 217 — sector-classification-strategy-params (`xstockstrat-marketdata`)
+
+Adds **3** non-secret keys, consumed-with-default via the `WatchConfig` typed getters (no seed
+migration). Defaults declared in `services/xstockstrat-marketdata/CLAUDE.md` § Config Keys Consumed.
+The FMP gateway has **one** throttle authority: `rate_limit_rps` (burst = 1) shapes per-second load and
+the pre-existing `marketdata.fmp.daily_request_cap` is the single shared UTC-day budget across every FMP
+path (fundamentals snapshot, ratio enrichment, classification refresh) — no second cap.
+
+- `marketdata.fmp.rate_limit_rps` (int, `5`) — FMP token-bucket ceiling (5 rps = FMP Starter's
+  300/min); `0` = unthrottled. Read live per call.
+- `marketdata.classification.enabled` (bool, `false`) — gate for the sector-classification refresh job.
+- `marketdata.classification.refresh_interval_hours` (int, `24`) — refresh cadence; `<= 0` pauses.
+
 ### feature 207 — extract-tool-ssrf-hardening (`xstockstrat-agent`)
 
 Adds **4** non-secret `agent.extract.*` keys, **consumed-with-default** (no seed migration — read

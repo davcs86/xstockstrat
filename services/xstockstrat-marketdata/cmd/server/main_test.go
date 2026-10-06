@@ -40,7 +40,7 @@ func TestNewFundamentalsSource_AlwaysNonNil(t *testing.T) {
 	cfgWatcher := &config.Watcher{}
 	for _, provider := range []string{"fmp", "finnhub", "unrecognized-falls-back-to-fmp"} {
 		for _, apiKey := range []string{"", "real-key"} {
-			src := newFundamentalsSource(cfgWatcher, provider, apiKey, apiKey)
+			src := newFundamentalsSource(cfgWatcher, provider, newFMPClient(cfgWatcher, apiKey), apiKey)
 			if src == nil {
 				t.Fatalf("newFundamentalsSource(%q, %q) returned nil; must always be non-nil", provider, apiKey)
 			}

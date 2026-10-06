@@ -15,6 +15,7 @@
 | 2026-09-27 | `spec-ready` → `design-approved` | /sdd-design | Design debated (4 rounds, deep) and approved; recon.md + design.md written |
 | 2026-09-27 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 18 steps |
 | 2026-10-06 | `implementation-ready` (scope extended) | operator | Added @AC-14 (overrides reach fundamentals-input formulas); impl-spec needs re-spec — see context.md |
+| 2026-10-06 | `implementation-ready` → `in-progress` → `code-completed` | /sdd-execute sequential | All 18 steps executed on `feature/sector-classification-strategy-params`; re-spec folded into the Deviation Log; integration PR opened |
 
 ---
 
@@ -58,4 +59,4 @@ Canonical snapshot — deduplicated from all step `**Reviewers**` values in `imp
 
 ## Next Action
 
-`/sdd-spec sector-classification-strategy-params` — re-spec to cover @AC-14 (fundamentals-formula override path), then `/sdd-review sector-classification-strategy-params impl-spec`
+Merge the integration PR into `main-dev`; then flip `marketdata.classification.enabled=true` on staging and calibrate sector `de_bad`/`roe_bad` only after features 222/223 re-derive EDGAR periods.

@@ -5,15 +5,23 @@ package fmp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
+
+	"golang.org/x/time/rate"
 
 	"github.com/xstockstrat/marketdata/internal/source"
 )
+
+// ErrFMPDailyCapExceeded is returned before any HTTP call once the shared UTC-day budget is spent.
+// Callers map it to serve-stale / ResourceExhausted, never to Unavailable.
+var ErrFMPDailyCapExceeded = errors.New("fmp: daily request cap reached")
 
 // ClientConfig holds the FMP connection settings. The API key is never logged.
 type ClientConfig struct {
@@ -24,6 +32,11 @@ type ClientConfig struct {
 	Metrics []string
 	// HTTPClient is injectable so tests can assert call counts and stub responses.
 	HTTPClient *http.Client
+	// Limits is read on every call so the rps ceiling and daily cap stay live-tunable from config.
+	// nil = unthrottled and uncapped (tests only).
+	Limits func() (rps float64, dailyCap int)
+	// Now is injectable for UTC-day rollover tests; nil = time.Now.
+	Now func() time.Time
 }
 
 // Client talks to the FMP "stable" REST API.
@@ -32,6 +45,15 @@ type Client struct {
 	apiKey   string
 	extended bool
 	http     *http.Client
+
+	// One throttle authority for every FMP call path (fundamentals, enrichment, classification):
+	// all of them must share this single *Client instance or the budget splits into N×cap.
+	limits  func() (float64, int)
+	now     func() time.Time
+	limiter *rate.Limiter
+	mu      sync.Mutex
+	utcDay  string
+	used    int
 }
 
 // NewClient constructs an FMP client. A nil HTTPClient defaults to a 30s-timeout client.
@@ -46,12 +68,90 @@ func NewClient(cfg ClientConfig) *Client {
 			extended = true
 		}
 	}
+	now := cfg.Now
+	if now == nil {
+		now = time.Now
+	}
 	return &Client{
 		baseURL:  strings.TrimRight(cfg.BaseURL, "/"),
 		apiKey:   cfg.APIKey,
 		extended: extended,
 		http:     httpClient,
+		limits:   cfg.Limits,
+		now:      now,
+		limiter:  rate.NewLimiter(rate.Inf, 1),
 	}
+}
+
+// SeedBudget sets today's used count once at boot (e.g. from the DB) so a mid-day restart cannot
+// re-grant a fresh full cap. Never lowers an already-higher in-memory count.
+func (c *Client) SeedBudget(used int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.rollDayLocked()
+	if used > c.used {
+		c.used = used
+	}
+}
+
+// BudgetSnapshot returns today's used count and the live cap (cap <= 0 = uncapped).
+func (c *Client) BudgetSnapshot() (used, dailyCap int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.rollDayLocked()
+	_, dailyCap = c.currentLimits()
+	return c.used, dailyCap
+}
+
+func (c *Client) currentLimits() (float64, int) {
+	if c.limits == nil {
+		return 0, 0
+	}
+	return c.limits()
+}
+
+func (c *Client) rollDayLocked() {
+	day := c.now().UTC().Format("2006-01-02")
+	if c.utcDay != day {
+		c.utcDay = day
+		c.used = 0
+	}
+}
+
+// reserve claims one slot of the shared day budget before the HTTP call; returns the slot's UTC day.
+func (c *Client) reserve() (string, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.rollDayLocked()
+	_, dailyCap := c.currentLimits()
+	if c.limits != nil && c.used >= dailyCap {
+		return "", ErrFMPDailyCapExceeded
+	}
+	c.used++
+	return c.utcDay, nil
+}
+
+// refund returns a reserved slot (non-2xx / transport failure) so an outage never self-throttles.
+func (c *Client) refund(day string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.utcDay == day && c.used > 0 {
+		c.used--
+	}
+}
+
+// throttle waits on the token bucket (burst=1 → never more than rps calls in any rolling second).
+func (c *Client) throttle(ctx context.Context) error {
+	rps, _ := c.currentLimits()
+	limit := rate.Inf
+	if rps > 0 {
+		// 2% headroom: dispatch jitter must never let rps+1 calls land inside one vendor second.
+		limit = rate.Limit(rps * 0.98)
+	}
+	if c.limiter.Limit() != limit {
+		c.limiter.SetLimit(limit)
+	}
+	return c.limiter.Wait(ctx)
 }
 
 var _ source.FundamentalsSource = (*Client)(nil)
@@ -125,11 +225,27 @@ func (c *Client) getJSON(ctx context.Context, path string, params url.Values, ds
 	if err != nil {
 		return fmt.Errorf("fmp: build request: %w", err)
 	}
+	if err := c.throttle(ctx); err != nil {
+		return fmt.Errorf("fmp: rate limiter: %w", err)
+	}
+	day, err := c.reserve()
+	if err != nil {
+		return err
+	}
+	counted := false
+	defer func() {
+		if !counted {
+			c.refund(day)
+		}
+	}()
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return fmt.Errorf("fmp: %s request failed: %w", path, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode == http.StatusOK {
+		counted = true // a 2xx consumed vendor quota even if the body later fails to decode
+	}
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return fmt.Errorf("fmp: read %s body: %w", path, err)
@@ -235,14 +351,26 @@ func (r *fmpRatios) apply(f *source.Fundamentals) {
 	f.DebtToEquity = r.DebtToEquityTTM
 }
 
-// fmpProfile is the subset of /stable/profile carrying beta + currency.
+// fmpProfile is the subset of /stable/profile carrying beta + currency + sector.
 type fmpProfile struct {
 	Beta     *float64 `json:"beta"`
 	Currency string   `json:"currency"`
+	Sector   string   `json:"sector"`
+}
+
+// FetchSector returns the symbol's FMP profile sector free text ("" when FMP has none). Routed
+// through getJSON, so it shares the same limiter + day budget as every other FMP call.
+func (c *Client) FetchSector(ctx context.Context, symbol string) (string, error) {
+	p, err := c.fetchProfile(ctx, symbol)
+	if err != nil || p == nil {
+		return "", err
+	}
+	return p.Sector, nil
 }
 
 func (p *fmpProfile) apply(f *source.Fundamentals) {
 	f.Beta = p.Beta
+	f.Sector = p.Sector
 	if p.Currency != "" {
 		f.Currency = p.Currency
 	}

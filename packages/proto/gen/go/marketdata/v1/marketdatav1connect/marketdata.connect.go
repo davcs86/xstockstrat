@@ -81,6 +81,15 @@ const (
 	// MarketDataServiceBackfillFundamentalsProcedure is the fully-qualified name of the
 	// MarketDataService's BackfillFundamentals RPC.
 	MarketDataServiceBackfillFundamentalsProcedure = "/xstockstrat.marketdata.v1.MarketDataService/BackfillFundamentals"
+	// MarketDataServiceGetCurrentSectorProcedure is the fully-qualified name of the MarketDataService's
+	// GetCurrentSector RPC.
+	MarketDataServiceGetCurrentSectorProcedure = "/xstockstrat.marketdata.v1.MarketDataService/GetCurrentSector"
+	// MarketDataServiceGetSectorAsOfProcedure is the fully-qualified name of the MarketDataService's
+	// GetSectorAsOf RPC.
+	MarketDataServiceGetSectorAsOfProcedure = "/xstockstrat.marketdata.v1.MarketDataService/GetSectorAsOf"
+	// MarketDataServiceGetSectorHistoryProcedure is the fully-qualified name of the MarketDataService's
+	// GetSectorHistory RPC.
+	MarketDataServiceGetSectorHistoryProcedure = "/xstockstrat.marketdata.v1.MarketDataService/GetSectorHistory"
 )
 
 // MarketDataServiceClient is a client for the xstockstrat.marketdata.v1.MarketDataService service.
@@ -120,6 +129,11 @@ type MarketDataServiceClient interface {
 	// Worker RPC driven by ingest.TriggerBackfill(data_kind=FUNDAMENTALS) (feature 198): fetches
 	// as-reported statements from SEC EDGAR + a point-in-time price-join and persists them.
 	BackfillFundamentals(context.Context, *connect.Request[v1.BackfillFundamentalsRequest]) (*connect.Response[v1.BackfillFundamentalsResponse], error)
+	// Sector classification reads (feature 217). Served only from the local Type-2 SCD store —
+	// never call FMP on the read path; an unclassified symbol returns SECTOR_UNSPECIFIED, not an error.
+	GetCurrentSector(context.Context, *connect.Request[v1.GetCurrentSectorRequest]) (*connect.Response[v1.GetCurrentSectorResponse], error)
+	GetSectorAsOf(context.Context, *connect.Request[v1.GetSectorAsOfRequest]) (*connect.Response[v1.GetSectorAsOfResponse], error)
+	GetSectorHistory(context.Context, *connect.Request[v1.GetSectorHistoryRequest]) (*connect.Response[v1.GetSectorHistoryResponse], error)
 }
 
 // NewMarketDataServiceClient constructs a client for the
@@ -230,6 +244,24 @@ func NewMarketDataServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			connect.WithSchema(marketDataServiceMethods.ByName("BackfillFundamentals")),
 			connect.WithClientOptions(opts...),
 		),
+		getCurrentSector: connect.NewClient[v1.GetCurrentSectorRequest, v1.GetCurrentSectorResponse](
+			httpClient,
+			baseURL+MarketDataServiceGetCurrentSectorProcedure,
+			connect.WithSchema(marketDataServiceMethods.ByName("GetCurrentSector")),
+			connect.WithClientOptions(opts...),
+		),
+		getSectorAsOf: connect.NewClient[v1.GetSectorAsOfRequest, v1.GetSectorAsOfResponse](
+			httpClient,
+			baseURL+MarketDataServiceGetSectorAsOfProcedure,
+			connect.WithSchema(marketDataServiceMethods.ByName("GetSectorAsOf")),
+			connect.WithClientOptions(opts...),
+		),
+		getSectorHistory: connect.NewClient[v1.GetSectorHistoryRequest, v1.GetSectorHistoryResponse](
+			httpClient,
+			baseURL+MarketDataServiceGetSectorHistoryProcedure,
+			connect.WithSchema(marketDataServiceMethods.ByName("GetSectorHistory")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -251,6 +283,9 @@ type marketDataServiceClient struct {
 	batchGetLatestPrice       *connect.Client[v1.BatchGetLatestPriceRequest, v1.BatchGetLatestPriceResponse]
 	getHistoricalFundamentals *connect.Client[v1.GetHistoricalFundamentalsRequest, v1.GetHistoricalFundamentalsResponse]
 	backfillFundamentals      *connect.Client[v1.BackfillFundamentalsRequest, v1.BackfillFundamentalsResponse]
+	getCurrentSector          *connect.Client[v1.GetCurrentSectorRequest, v1.GetCurrentSectorResponse]
+	getSectorAsOf             *connect.Client[v1.GetSectorAsOfRequest, v1.GetSectorAsOfResponse]
+	getSectorHistory          *connect.Client[v1.GetSectorHistoryRequest, v1.GetSectorHistoryResponse]
 }
 
 // StreamBars calls xstockstrat.marketdata.v1.MarketDataService.StreamBars.
@@ -334,6 +369,21 @@ func (c *marketDataServiceClient) BackfillFundamentals(ctx context.Context, req 
 	return c.backfillFundamentals.CallUnary(ctx, req)
 }
 
+// GetCurrentSector calls xstockstrat.marketdata.v1.MarketDataService.GetCurrentSector.
+func (c *marketDataServiceClient) GetCurrentSector(ctx context.Context, req *connect.Request[v1.GetCurrentSectorRequest]) (*connect.Response[v1.GetCurrentSectorResponse], error) {
+	return c.getCurrentSector.CallUnary(ctx, req)
+}
+
+// GetSectorAsOf calls xstockstrat.marketdata.v1.MarketDataService.GetSectorAsOf.
+func (c *marketDataServiceClient) GetSectorAsOf(ctx context.Context, req *connect.Request[v1.GetSectorAsOfRequest]) (*connect.Response[v1.GetSectorAsOfResponse], error) {
+	return c.getSectorAsOf.CallUnary(ctx, req)
+}
+
+// GetSectorHistory calls xstockstrat.marketdata.v1.MarketDataService.GetSectorHistory.
+func (c *marketDataServiceClient) GetSectorHistory(ctx context.Context, req *connect.Request[v1.GetSectorHistoryRequest]) (*connect.Response[v1.GetSectorHistoryResponse], error) {
+	return c.getSectorHistory.CallUnary(ctx, req)
+}
+
 // MarketDataServiceHandler is an implementation of the xstockstrat.marketdata.v1.MarketDataService
 // service.
 type MarketDataServiceHandler interface {
@@ -372,6 +422,11 @@ type MarketDataServiceHandler interface {
 	// Worker RPC driven by ingest.TriggerBackfill(data_kind=FUNDAMENTALS) (feature 198): fetches
 	// as-reported statements from SEC EDGAR + a point-in-time price-join and persists them.
 	BackfillFundamentals(context.Context, *connect.Request[v1.BackfillFundamentalsRequest]) (*connect.Response[v1.BackfillFundamentalsResponse], error)
+	// Sector classification reads (feature 217). Served only from the local Type-2 SCD store —
+	// never call FMP on the read path; an unclassified symbol returns SECTOR_UNSPECIFIED, not an error.
+	GetCurrentSector(context.Context, *connect.Request[v1.GetCurrentSectorRequest]) (*connect.Response[v1.GetCurrentSectorResponse], error)
+	GetSectorAsOf(context.Context, *connect.Request[v1.GetSectorAsOfRequest]) (*connect.Response[v1.GetSectorAsOfResponse], error)
+	GetSectorHistory(context.Context, *connect.Request[v1.GetSectorHistoryRequest]) (*connect.Response[v1.GetSectorHistoryResponse], error)
 }
 
 // NewMarketDataServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -477,6 +532,24 @@ func NewMarketDataServiceHandler(svc MarketDataServiceHandler, opts ...connect.H
 		connect.WithSchema(marketDataServiceMethods.ByName("BackfillFundamentals")),
 		connect.WithHandlerOptions(opts...),
 	)
+	marketDataServiceGetCurrentSectorHandler := connect.NewUnaryHandler(
+		MarketDataServiceGetCurrentSectorProcedure,
+		svc.GetCurrentSector,
+		connect.WithSchema(marketDataServiceMethods.ByName("GetCurrentSector")),
+		connect.WithHandlerOptions(opts...),
+	)
+	marketDataServiceGetSectorAsOfHandler := connect.NewUnaryHandler(
+		MarketDataServiceGetSectorAsOfProcedure,
+		svc.GetSectorAsOf,
+		connect.WithSchema(marketDataServiceMethods.ByName("GetSectorAsOf")),
+		connect.WithHandlerOptions(opts...),
+	)
+	marketDataServiceGetSectorHistoryHandler := connect.NewUnaryHandler(
+		MarketDataServiceGetSectorHistoryProcedure,
+		svc.GetSectorHistory,
+		connect.WithSchema(marketDataServiceMethods.ByName("GetSectorHistory")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/xstockstrat.marketdata.v1.MarketDataService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case MarketDataServiceStreamBarsProcedure:
@@ -511,6 +584,12 @@ func NewMarketDataServiceHandler(svc MarketDataServiceHandler, opts ...connect.H
 			marketDataServiceGetHistoricalFundamentalsHandler.ServeHTTP(w, r)
 		case MarketDataServiceBackfillFundamentalsProcedure:
 			marketDataServiceBackfillFundamentalsHandler.ServeHTTP(w, r)
+		case MarketDataServiceGetCurrentSectorProcedure:
+			marketDataServiceGetCurrentSectorHandler.ServeHTTP(w, r)
+		case MarketDataServiceGetSectorAsOfProcedure:
+			marketDataServiceGetSectorAsOfHandler.ServeHTTP(w, r)
+		case MarketDataServiceGetSectorHistoryProcedure:
+			marketDataServiceGetSectorHistoryHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -582,4 +661,16 @@ func (UnimplementedMarketDataServiceHandler) GetHistoricalFundamentals(context.C
 
 func (UnimplementedMarketDataServiceHandler) BackfillFundamentals(context.Context, *connect.Request[v1.BackfillFundamentalsRequest]) (*connect.Response[v1.BackfillFundamentalsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.marketdata.v1.MarketDataService.BackfillFundamentals is not implemented"))
+}
+
+func (UnimplementedMarketDataServiceHandler) GetCurrentSector(context.Context, *connect.Request[v1.GetCurrentSectorRequest]) (*connect.Response[v1.GetCurrentSectorResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.marketdata.v1.MarketDataService.GetCurrentSector is not implemented"))
+}
+
+func (UnimplementedMarketDataServiceHandler) GetSectorAsOf(context.Context, *connect.Request[v1.GetSectorAsOfRequest]) (*connect.Response[v1.GetSectorAsOfResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.marketdata.v1.MarketDataService.GetSectorAsOf is not implemented"))
+}
+
+func (UnimplementedMarketDataServiceHandler) GetSectorHistory(context.Context, *connect.Request[v1.GetSectorHistoryRequest]) (*connect.Response[v1.GetSectorHistoryResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.marketdata.v1.MarketDataService.GetSectorHistory is not implemented"))
 }

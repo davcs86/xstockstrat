@@ -75,3 +75,11 @@ export const STRATEGY_DEF_DENY = {
 };
 
 export const STRATEGY_DEFINITIONS = [STRATEGY_DEF_LIVE, STRATEGY_DEF_INACTIVE, STRATEGY_DEF_DENY];
+
+// Feature 217 — a per-sector component-param override as the wizard submits it (Connect-JSON).
+export const SECTOR_PARAM_OVERRIDE_FSCORE = {
+  componentRef: 'rsi',
+  paramName: 'period',
+  defaultValue: 14,
+  bySector: [{ sector: 'SECTOR_FINANCIALS', value: 21 }],
+};

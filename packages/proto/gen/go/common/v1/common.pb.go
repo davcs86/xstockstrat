@@ -256,6 +256,84 @@ func (Timeframe) EnumDescriptor() ([]byte, []int) {
 	return file_common_v1_common_proto_rawDescGZIP(), []int{3}
 }
 
+// Sector is the closed GICS-flavored sector set (feature 217). The enum-name text minus the
+// SECTOR_ prefix is the stored marketdata.symbol_classification.sector value.
+type Sector int32
+
+const (
+	Sector_SECTOR_UNSPECIFIED            Sector = 0
+	Sector_SECTOR_ENERGY                 Sector = 1
+	Sector_SECTOR_MATERIALS              Sector = 2
+	Sector_SECTOR_INDUSTRIALS            Sector = 3
+	Sector_SECTOR_CONSUMER_DISCRETIONARY Sector = 4
+	Sector_SECTOR_CONSUMER_STAPLES       Sector = 5
+	Sector_SECTOR_HEALTH_CARE            Sector = 6
+	Sector_SECTOR_FINANCIALS             Sector = 7
+	Sector_SECTOR_TECHNOLOGY             Sector = 8
+	Sector_SECTOR_COMMUNICATION_SERVICES Sector = 9
+	Sector_SECTOR_UTILITIES              Sector = 10
+	Sector_SECTOR_REAL_ESTATE            Sector = 11
+)
+
+// Enum value maps for Sector.
+var (
+	Sector_name = map[int32]string{
+		0:  "SECTOR_UNSPECIFIED",
+		1:  "SECTOR_ENERGY",
+		2:  "SECTOR_MATERIALS",
+		3:  "SECTOR_INDUSTRIALS",
+		4:  "SECTOR_CONSUMER_DISCRETIONARY",
+		5:  "SECTOR_CONSUMER_STAPLES",
+		6:  "SECTOR_HEALTH_CARE",
+		7:  "SECTOR_FINANCIALS",
+		8:  "SECTOR_TECHNOLOGY",
+		9:  "SECTOR_COMMUNICATION_SERVICES",
+		10: "SECTOR_UTILITIES",
+		11: "SECTOR_REAL_ESTATE",
+	}
+	Sector_value = map[string]int32{
+		"SECTOR_UNSPECIFIED":            0,
+		"SECTOR_ENERGY":                 1,
+		"SECTOR_MATERIALS":              2,
+		"SECTOR_INDUSTRIALS":            3,
+		"SECTOR_CONSUMER_DISCRETIONARY": 4,
+		"SECTOR_CONSUMER_STAPLES":       5,
+		"SECTOR_HEALTH_CARE":            6,
+		"SECTOR_FINANCIALS":             7,
+		"SECTOR_TECHNOLOGY":             8,
+		"SECTOR_COMMUNICATION_SERVICES": 9,
+		"SECTOR_UTILITIES":              10,
+		"SECTOR_REAL_ESTATE":            11,
+	}
+)
+
+func (x Sector) Enum() *Sector {
+	p := new(Sector)
+	*p = x
+	return p
+}
+
+func (x Sector) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (Sector) Descriptor() protoreflect.EnumDescriptor {
+	return file_common_v1_common_proto_enumTypes[4].Descriptor()
+}
+
+func (Sector) Type() protoreflect.EnumType {
+	return &file_common_v1_common_proto_enumTypes[4]
+}
+
+func (x Sector) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use Sector.Descriptor instead.
+func (Sector) EnumDescriptor() ([]byte, []int) {
+	return file_common_v1_common_proto_rawDescGZIP(), []int{4}
+}
+
 // Pagination
 type PageRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -650,7 +728,21 @@ const file_common_v1_common_proto_rawDesc = "" +
 	"\x0fTIMEFRAME_1HOUR\x10\x03\x1a\x02\b\x01\x12\x12\n" +
 	"\x0eTIMEFRAME_1DAY\x10\x04\x12\x16\n" +
 	"\x0eTIMEFRAME_1MIN\x10\x01\x1a\x02\b\x01\x12\x16\n" +
-	"\x0eTIMEFRAME_5MIN\x10\x02\x1a\x02\b\x01B<Z:github.com/xstockstrat/contracts/gen/go/common/v1;commonv1b\x06proto3"
+	"\x0eTIMEFRAME_5MIN\x10\x02\x1a\x02\b\x01*\xb8\x02\n" +
+	"\x06Sector\x12\x16\n" +
+	"\x12SECTOR_UNSPECIFIED\x10\x00\x12\x11\n" +
+	"\rSECTOR_ENERGY\x10\x01\x12\x14\n" +
+	"\x10SECTOR_MATERIALS\x10\x02\x12\x16\n" +
+	"\x12SECTOR_INDUSTRIALS\x10\x03\x12!\n" +
+	"\x1dSECTOR_CONSUMER_DISCRETIONARY\x10\x04\x12\x1b\n" +
+	"\x17SECTOR_CONSUMER_STAPLES\x10\x05\x12\x16\n" +
+	"\x12SECTOR_HEALTH_CARE\x10\x06\x12\x15\n" +
+	"\x11SECTOR_FINANCIALS\x10\a\x12\x15\n" +
+	"\x11SECTOR_TECHNOLOGY\x10\b\x12!\n" +
+	"\x1dSECTOR_COMMUNICATION_SERVICES\x10\t\x12\x14\n" +
+	"\x10SECTOR_UTILITIES\x10\n" +
+	"\x12\x16\n" +
+	"\x12SECTOR_REAL_ESTATE\x10\vB<Z:github.com/xstockstrat/contracts/gen/go/common/v1;commonv1b\x06proto3"
 
 var (
 	file_common_v1_common_proto_rawDescOnce sync.Once
@@ -664,26 +756,27 @@ func file_common_v1_common_proto_rawDescGZIP() []byte {
 	return file_common_v1_common_proto_rawDescData
 }
 
-var file_common_v1_common_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
+var file_common_v1_common_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
 var file_common_v1_common_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
 var file_common_v1_common_proto_goTypes = []any{
 	(TradingMode)(0),              // 0: xstockstrat.common.v1.TradingMode
 	(Environment)(0),              // 1: xstockstrat.common.v1.Environment
 	(BrokerType)(0),               // 2: xstockstrat.common.v1.BrokerType
 	(Timeframe)(0),                // 3: xstockstrat.common.v1.Timeframe
-	(*PageRequest)(nil),           // 4: xstockstrat.common.v1.PageRequest
-	(*PageResponse)(nil),          // 5: xstockstrat.common.v1.PageResponse
-	(*Error)(nil),                 // 6: xstockstrat.common.v1.Error
-	(*Decimal)(nil),               // 7: xstockstrat.common.v1.Decimal
-	(*Asset)(nil),                 // 8: xstockstrat.common.v1.Asset
-	(*TimeRange)(nil),             // 9: xstockstrat.common.v1.TimeRange
-	nil,                           // 10: xstockstrat.common.v1.Error.DetailsEntry
-	(*timestamppb.Timestamp)(nil), // 11: google.protobuf.Timestamp
+	(Sector)(0),                   // 4: xstockstrat.common.v1.Sector
+	(*PageRequest)(nil),           // 5: xstockstrat.common.v1.PageRequest
+	(*PageResponse)(nil),          // 6: xstockstrat.common.v1.PageResponse
+	(*Error)(nil),                 // 7: xstockstrat.common.v1.Error
+	(*Decimal)(nil),               // 8: xstockstrat.common.v1.Decimal
+	(*Asset)(nil),                 // 9: xstockstrat.common.v1.Asset
+	(*TimeRange)(nil),             // 10: xstockstrat.common.v1.TimeRange
+	nil,                           // 11: xstockstrat.common.v1.Error.DetailsEntry
+	(*timestamppb.Timestamp)(nil), // 12: google.protobuf.Timestamp
 }
 var file_common_v1_common_proto_depIdxs = []int32{
-	10, // 0: xstockstrat.common.v1.Error.details:type_name -> xstockstrat.common.v1.Error.DetailsEntry
-	11, // 1: xstockstrat.common.v1.TimeRange.start:type_name -> google.protobuf.Timestamp
-	11, // 2: xstockstrat.common.v1.TimeRange.end:type_name -> google.protobuf.Timestamp
+	11, // 0: xstockstrat.common.v1.Error.details:type_name -> xstockstrat.common.v1.Error.DetailsEntry
+	12, // 1: xstockstrat.common.v1.TimeRange.start:type_name -> google.protobuf.Timestamp
+	12, // 2: xstockstrat.common.v1.TimeRange.end:type_name -> google.protobuf.Timestamp
 	3,  // [3:3] is the sub-list for method output_type
 	3,  // [3:3] is the sub-list for method input_type
 	3,  // [3:3] is the sub-list for extension type_name
@@ -701,7 +794,7 @@ func file_common_v1_common_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_common_v1_common_proto_rawDesc), len(file_common_v1_common_proto_rawDesc)),
-			NumEnums:      4,
+			NumEnums:      5,
 			NumMessages:   7,
 			NumExtensions: 0,
 			NumServices:   0,

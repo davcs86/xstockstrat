@@ -24,6 +24,8 @@ from gen.indicators.v1 import indicators_pb2
 from google.protobuf.json_format import MessageToDict
 from google.protobuf.struct_pb2 import Struct
 
+from app.services import sector_params
+
 log = logging.getLogger(__name__)
 
 # Below this in-window overlap ratio between a benchmark (source_symbol) component's dates and
@@ -218,6 +220,7 @@ class StrategyEvaluator:
         fundamentals: list | None = None,
         formula_fundamentals: dict | None = None,
         formula_fundamentals_data: list | None = None,
+        sector_by_bar: list[int] | None = None,
     ) -> list[BarDecision]:
         """
         Compute per-bar entry/exit decisions for the given strategy definition.
@@ -238,6 +241,7 @@ class StrategyEvaluator:
             fundamentals,
             formula_fundamentals,
             formula_fundamentals_data,
+            sector_by_bar,
         )
         return decisions
 
@@ -250,6 +254,7 @@ class StrategyEvaluator:
         fundamentals: list | None = None,
         formula_fundamentals: dict | None = None,
         formula_fundamentals_data: list | None = None,
+        sector_by_bar: list[int] | None = None,
     ) -> tuple[list[BarDecision], dict[str, list]]:
         """
         Like ``evaluate`` but also returns the computed ``component_series`` dict (feature 064).
@@ -277,10 +282,16 @@ class StrategyEvaluator:
             else None
         )
 
+        if sector_by_bar is None or not sector_params.has_overrides(definition):
+            # No per-bar sector resolution: overrides (if any) resolve to their defaults.
+            sector_by_bar = [sector_params.UNSPECIFIED] * len(closes)
+
         component_series = {}
         for comp in definition.components:
-            series_map = await self._assemble_component_series(
+            series_map = await self._assemble_sector_resolved(
+                definition,
                 comp,
+                sector_by_bar,
                 closes,
                 eval_dates,
                 benchmark_bars,
@@ -394,6 +405,25 @@ class StrategyEvaluator:
         leaves = list(_iter_leaves(parsed_rule)) if parsed_rule else []
         evals = [_eval_leaf_traced(leaf, component_series, last) for leaf in leaves]
         return _readiness_from_evals(symbol, evals)
+
+    async def _assemble_sector_resolved(
+        self, definition, comp, sectors: list[int], closes: list[float], *assemble_args
+    ) -> dict[str, list[float | None]]:
+        """Feature 217: compute ``comp`` once per DISTINCT per-sector param set over the full
+        window (correct warm-up at any mid-window sector boundary), then stitch bar i from the
+        variant its as-of sector resolves to. No override on ``comp`` → one compute, unchanged."""
+        variants = sector_params.component_variants(definition, comp, sectors)
+        if len(variants) == 1:
+            return await self._assemble_component_series(variants[0][0], closes, *assemble_args)
+        n = len(closes)
+        stitched: dict[str, list[float | None]] = {}
+        for variant, idxs in variants:
+            series_map = await self._assemble_component_series(variant, closes, *assemble_args)
+            for name, series in series_map.items():
+                out = stitched.setdefault(name, [None] * n)
+                for i in idxs:
+                    out[i] = series[i]
+        return stitched
 
     async def _compute_component(self, comp, closes: list[float]) -> dict[str, list[float | None]]:
         """
@@ -741,6 +771,8 @@ def _validate_definition(definition, formula_outputs: dict | None = None) -> Non
                 )
         else:
             raise ValueError(f"Unknown ComponentKind: {comp.kind}")
+
+    sector_params.validate_overrides(definition)
 
     # Negative rejected at write; unset (no HasField) and an explicit 0 (no cooldown) both pass.
     if definition.HasField("cooldown_days") and definition.cooldown_days < 0:

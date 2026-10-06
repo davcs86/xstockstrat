@@ -287,3 +287,63 @@ export declare enum Timeframe {
  * Describes the enum xstockstrat.common.v1.Timeframe.
  */
 export declare const TimeframeSchema: GenEnum<Timeframe>;
+/**
+ * Sector is the closed GICS-flavored sector set (feature 217). The enum-name text minus the
+ * SECTOR_ prefix is the stored marketdata.symbol_classification.sector value.
+ *
+ * @generated from enum xstockstrat.common.v1.Sector
+ */
+export declare enum Sector {
+    /**
+     * @generated from enum value: SECTOR_UNSPECIFIED = 0;
+     */
+    UNSPECIFIED = 0,
+    /**
+     * @generated from enum value: SECTOR_ENERGY = 1;
+     */
+    ENERGY = 1,
+    /**
+     * @generated from enum value: SECTOR_MATERIALS = 2;
+     */
+    MATERIALS = 2,
+    /**
+     * @generated from enum value: SECTOR_INDUSTRIALS = 3;
+     */
+    INDUSTRIALS = 3,
+    /**
+     * @generated from enum value: SECTOR_CONSUMER_DISCRETIONARY = 4;
+     */
+    CONSUMER_DISCRETIONARY = 4,
+    /**
+     * @generated from enum value: SECTOR_CONSUMER_STAPLES = 5;
+     */
+    CONSUMER_STAPLES = 5,
+    /**
+     * @generated from enum value: SECTOR_HEALTH_CARE = 6;
+     */
+    HEALTH_CARE = 6,
+    /**
+     * @generated from enum value: SECTOR_FINANCIALS = 7;
+     */
+    FINANCIALS = 7,
+    /**
+     * @generated from enum value: SECTOR_TECHNOLOGY = 8;
+     */
+    TECHNOLOGY = 8,
+    /**
+     * @generated from enum value: SECTOR_COMMUNICATION_SERVICES = 9;
+     */
+    COMMUNICATION_SERVICES = 9,
+    /**
+     * @generated from enum value: SECTOR_UTILITIES = 10;
+     */
+    UTILITIES = 10,
+    /**
+     * @generated from enum value: SECTOR_REAL_ESTATE = 11;
+     */
+    REAL_ESTATE = 11
+}
+/**
+ * Describes the enum xstockstrat.common.v1.Sector.
+ */
+export declare const SectorSchema: GenEnum<Sector>;
