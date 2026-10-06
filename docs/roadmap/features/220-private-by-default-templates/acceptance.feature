@@ -76,7 +76,7 @@ Feature: private-by-default-templates
     Then no signal-driven opportunity for "TSLA" is created for "bob"
 
   @AC-12 @FR-6
-  Scenario: Opportunity provenance and attribution exclude other users' signals
+  Scenario: Attribution excludes other users' signals
     Given "alice" ingested signals from source "alice-feed"
     When "bob" calls GetAttribution with source_id "alice-feed"
     Then the response contains 0 attributed signals
@@ -142,16 +142,17 @@ Feature: private-by-default-templates
 
   @AC-22 @FR-11
   Scenario: Migration preserves data and makes public formulas private
-    Given 8 formulas with is_public=true authored by "davcs86@gmail.com", "davcs86" and "system"
+    Given 8 formulas with is_public=true authored by "user-a@example.test", "user-b" and "system"
     When the migration runs
     Then all 8 formulas still exist with unchanged source and author
     And none of the non-system formulas are readable by a different user
 
   @AC-23 @FR-11
   Scenario: System special-cases are unchanged
-    Given the fundamentals_macd_blend strategy id convention and system formula guards
+    Given system formula "d1ff5e6b-6d9c-589d-b95e-defd862c702b" and "bob" owns live strategy "fundamentals_macd_blend"
     When an admin calls UpdateFormula on system formula "d1ff5e6b-6d9c-589d-b95e-defd862c702b"
     Then the call fails with PERMISSION_DENIED as before
+    And "bob" calling ManageStrategy DEACTIVATE on "fundamentals_macd_blend" is refused as before
 
   @AC-24 @FR-12
   Scenario: UI has no public controls and offers templates
@@ -188,3 +189,41 @@ Feature: private-by-default-templates
     Then the formula is returned and an audit ledger event records "admin" reading "f-zscore"
     And "admin" calling UpdateFormula or DeleteFormula on "f-zscore" fails with PERMISSION_DENIED
     And "admin" calling ExecuteFormula on "f-zscore" fails with PERMISSION_DENIED
+
+  @AC-29 @FR-6
+  Scenario: Opportunity provenance and screener signal filter exclude other users' signals
+    Given "alice" ingested a BUY signal for "AMD" from her source "alice-feed" and "bob" owns no source "alice-feed"
+    When "bob" calls ListOpportunities and ScreenSymbols with signal_sources ["alice-feed"]
+    Then no opportunity for "bob" lists provenance "alice-feed"
+    And the screen returns 0 symbols matched by signal source "alice-feed"
+
+  @AC-30 @FR-3
+  Scenario: Registering a strategy that references an unreadable formula warns at write time
+    Given "alice" owns private formula "f-zscore"
+    When "bob" calls ManageStrategy REGISTER with a component referencing formula_id "f-zscore"
+    Then the returned StrategyDefinition.warnings contains "formula f-zscore not readable by owner"
+
+  @AC-31 @FR-7
+  Scenario: Retiring a template hides it but leaves instances intact
+    Given "bob" instantiated formula template "tpl-zscore" into formula "f-bob-z"
+    When the admin retires "tpl-zscore"
+    Then ListTemplates as "bob" does not contain "tpl-zscore"
+    And GetFormula "f-bob-z" as "bob" still returns its source with origin_template_id "tpl-zscore"
+
+  @AC-32 @FR-12
+  Scenario: Agent docs and strat-lab skill stay in parity with the tool contract
+    Given the agent tool catalog includes "list_templates" and "instantiate_template"
+    When docs/runbooks/mcp-tools.md and plugins/strat-lab/skills/backtest/SKILL.md are checked
+    Then both list "list_templates" and "instantiate_template" and neither mentions "is_public" or "include_public"
+
+  @AC-33 @FR-6
+  Scenario: A user cannot write as the system owner
+    Given "mallory" sends x-user-id "system" without the analysis-fundsignal internal-caller grant
+    When "mallory" calls IngestSignal into a "system" source
+    Then the call fails with PERMISSION_DENIED and no signal row is written
+
+  @AC-34 @FR-9
+  Scenario: Caller-chosen strategy id on instantiation
+    Given "bob" already owns strategy "mean_reversion"
+    When "bob" instantiates "tpl-meanrev" with strategy_id "mean_reversion"
+    Then the call fails with ALREADY_EXISTS and no strategy or formula is created
