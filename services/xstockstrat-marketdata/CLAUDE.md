@@ -72,7 +72,7 @@ guard leaves them bare.
 | `marketdata.backfill.batch_size` | int | `1000` | Bars per Alpaca API request (`limit=`). Read at startup and clamped to Alpaca's spec maximum of 10000; pagination is handled transparently by the client. |
 | `marketdata.backfill.rate_limit_rps` | int | `200` | Max outbound Alpaca REST calls per second. Read at startup into a token-bucket limiter the client waits on before every REST call; `0` disables rate limiting. |
 | `marketdata.backfill.max_delete_days` | int | `0` | Max date-range span (days) a single scoped backfill delete may cover; `0` = no window cap. A whole-symbol delete (no range) is exempt and double-confirmed in the UI (feature 057, FR-5). |
-| `marketdata.fmp.enabled` | bool | `false` | Master gate for the FMP fundamentals source (feature 059). Off by default; establishes the `marketdata.<source>.enabled` convention. Read live on every `GetFundamentals`/`GetFundamentalsMulti` call (`fundamentalsEnabled()`, `internal/service/marketdata_service.go:1143`) — flipping it takes effect on the very next call, no service restart required (feature 082). The FMP client itself is always constructed at boot (`cmd/server/main.go`'s `newFundamentalsSource`); this flag gates *use*, not construction. |
+| `marketdata.fmp.enabled` | bool | `false` | Master gate for the FMP fundamentals source (feature 059). Off by default; establishes the `marketdata.<source>.enabled` convention. Read live on every `GetFundamentals`/`GetFundamentalsMulti` call (`fundamentalsEnabled()`, `internal/service/marketdata_service.go:1143`) — flipping it takes effect on the very next call, no service restart required (feature 082). The single shared FMP client is always constructed at boot (`cmd/server/main.go`'s `newFMPClient`, handed to `newFundamentalsSource`); this flag gates *use*, not construction. |
 | `marketdata.fmp.cache_ttl_hours` | int | `24` | Hours a cached fundamentals row stays fresh before a re-fetch is attempted. |
 | `marketdata.fmp.daily_request_cap` | int | `250` | Max FMP requests per UTC day — the **single shared budget** every FMP path spends (snapshot fundamentals, ratio enrichment, classification refresh; feature 217), enforced per outbound call inside the one `*fmp.Client` (reserve before the call, refund on non-2xx/transport failure, boot-seeded from today's fetched-row count). At cap, stale rows are served (`stale=true`) or `ResourceExhausted` is returned; an 80%-of-cap crossing emits one WARNING alert/day. |
 | `marketdata.fmp.rate_limit_rps` | int | `5` | FMP token-bucket ceiling (burst = 1; feature 217). 5 rps = FMP Starter's 300/min. `0` = unthrottled. Read live per call. |
@@ -147,9 +147,10 @@ Both providers share the **identical** read-through DB cache (`marketdata.fundam
 RPC layer: cache hit within `cache_ttl_hours` → no provider call; miss/stale → quota-guarded fetch;
 at cap → serve stale (`stale=true`) or `ResourceExhausted`; `enabled=false` → `FailedPrecondition`
 with no external call. What differs per provider is the **quota-guard shape**
-(`fundamentalsQuota()`, `marketdata_service.go`): FMP keeps its original fixed UTC-day cap
+(`fundamentalsQuota()`, `marketdata_service.go`): FMP keeps its fixed UTC-day cap
 (`marketdata.fmp.daily_request_cap`, one batchable `quote` call per scan chunk + per-symbol
-`ratios-ttm`/`profile`); Finnhub uses a rolling window (`marketdata.finnhub.symbols_per_minute` /
+`ratios-ttm`/`profile`), counted per outbound call by the shared budget on the one `*fmp.Client`
+(feature 217 — the same budget the classification refresh spends); Finnhub uses a rolling window (`marketdata.finnhub.symbols_per_minute` /
 `.rate_window_seconds`) since its real limit is per-minute, not per-day, and none of its 3
 fundamentals endpoints (`/stock/metric`, `/quote`, `/stock/profile2`) batch across symbols — every
 `GetFundamentalsMulti` call costs exactly 3 HTTP requests per symbol against Finnhub.
