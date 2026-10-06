@@ -136,3 +136,34 @@ OQ-4 to OQ-6 remain for /sdd-design.
   - `ListSignalSources`/`QuerySignals` return the caller's own rows plus `system` rows, flagged system and immutable.
   - System slugs are reserved: no user may register or own a slug held by `system`.
   - FR-4 is amended accordingly.
+
+## Session 2026-10-06 — sdd-design Phase 1, round 2 (full mode)
+
+- **Proposer (round 2):**
+  - headerless ingest reads return system rows only;
+  - write-as-system grants are bound to the mTLS peer SAN;
+  - expand/contract migrations (expand: indicators 007, ingest 013, analysis 026; contract: ingest 014, analysis 027);
+  - batched transactional saga copy;
+  - hard-delete on abort;
+  - pending rows never cached;
+  - `DurableSchedule` reconcile;
+  - config per-user secrets reuse `config_values.user_id`, with exact-scope `GetSecret` and opaque UUID keys;
+  - FR-13 admin read in analysis.
+- **Adversary (round 2):** NEEDS WORK, **no Floor breach**. Surviving objections:
+  1. **Expand is over-scoped.** Only two N-1 `ON CONFLICT` targets exist: ingest dedup (`servicer.py:871`) and analysis scores (`strategy_scores.py:48`). Keeping the old PKs makes AC-8/9/35 impossible in release N. Fix: swap the `signal_sources` PK in N, and move the two upsert targets into **new owner-keyed tables**, leaving the old tables for N-1. Contract becomes a table drop. D-3 goes away, and D-2 becomes a recompute.
+  2. **Headerless system-only reads cause silent data loss.** The pnl snapshot and the live-loop drain are headerless today (`@feature-042/029/176`). Thread all analysis→ingest headers in step 2, make headerless reads fail closed, and allow a SAN-bound `analysis-system-read` grant only.
+  3. **Migrations must re-run from 001.** `db-migrate.sh` dirty-state recovery re-runs from 001, so every new up-file must be idempotent on both the expanded and contracted schema. Add a CI chain-twice test.
+  4. **Legacy credential refs can exfiltrate the seed bearer** through a user-controlled url. Add a migration-only `credential_scope=LEGACY_GLOBAL` column that no RPC can set and that is cleared on any ref write.
+  5. **Bind the config `GetSecret` ingest grant** to peer SAN `xstockstrat-ingest`. Today any mTLS client with `x-internal-caller: ingest` can decrypt secrets, and per-user secrets widen that.
+  6. **The bypass-removal runtime gate cannot be satisfied inside the pipeline** (F-03). Verify at design time instead (done, see below). Fundsignal must fail closed on a non-system formula, never fall back to the built-in scorer.
+  7. **The contract step has no lifecycle home.** Make it a named follow-up feature, and add a CI `migration-contract-gate` (`-- contract-of:` header, expand file must already be on `origin/main`, never in the same PR).
+  8. **A template can create a protected blend.** `InstantiateTemplate` must reject the *configured* blend id, both as the default and as a caller override (`@feature-186`).
+  9. **Saga commit vs reconcile race.** Use compare-and-swap intent transitions: PENDING→COMMITTED in the strategy txn; PENDING→ABORTING before an abort.
+  10. **Performance.** Fetch the system signal set once per cycle, use owner-only drains, add a `SignalScope` enum on `QuerySignalsRequest`, and index `(user_id, ingested_at DESC)`.
+  11. **Who sees `audit.admin_read`** (owner's export vs admin's) is a product decision for the operator, as is the event volume.
+  12. **Verify-now items:** done, see below.
+  13. **Nav:** `PLATFORM_SUBNAV` is legacy and inert; registering there only satisfies C-10(a)'s wording. Record the rationale.
+- **Design-time verifications (2026-10-06, staging, read-only via the staging MCP + repo):**
+  - `analysis.fundsignal.scoring_formula_id` = `d1ff5e6b-6d9c-589d-b95e-defd862c702b`, the seeded `SYSTEM_AUTHOR` formula. Removing the bypass is safe on staging. **Prod could not be checked from this session** (staging MCP only), so this is carried as a pre-merge operator check.
+  - The staging signal sources have exactly **one** `derived` source, `fundamentals`, so the D-4 "derived ⇒ system" rule is safe on staging. There are **no `mcp_client` sources on staging**, so no legacy credential data exists there.
+  - `instance_count: 1` for indicators/ingest/analysis/config in both `.do/app.yaml` and `.do/app.dev.yaml`.
