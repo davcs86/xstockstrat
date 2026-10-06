@@ -169,3 +169,6 @@
   refresh universe (warm set ∪ symbols read via the sector RPCs) seeds within one cycle; the FMP
   profile write-through also seeds whenever extended fundamentals are fetched.
 - Status → code-completed.
+
+- 2026-10-06 (post-merge of 223): 223 landed `008` before 217, so 217's migration renumbered
+  `007_symbol_classification` → `009_symbol_classification` (007 unused); merge-order row marked resolved.

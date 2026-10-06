@@ -729,6 +729,10 @@ rewritten step bodies:
 7. **UI (Step 15)** — `formulaReference.ts` no longer exists; the exhaustive `Record<Sector,…>` map
    is the new `src/lib/sectors.ts` `SECTOR_LABEL`. Seed-span warning needed no UI change (the
    existing `backtest-warnings` card renders `BacktestResult.warnings`).
+9. **Migration renumbered 007 → 009** (2026-10-06, post-review) — feature 223 merged first with
+   `008_fundamentals_history_derivation_version`; golang-migrate never applies a version below the
+   current one, so `007` would have been silently skipped on any environment already at 008.
+   `007` is intentionally left unused. Step 3's body still says 007 (immutable step text).
 8. **Verification fallbacks** — Docker Hub rate-limited (`429`) the codegen image, so stubs were
    generated host-native with the CI-pinned toolchain (empty `git diff` baseline proven first);
    `golangci-lint` v2.13.1 built with go1.27. Playwright ran host-native (`--no-deps`); the

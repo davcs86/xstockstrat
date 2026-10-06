@@ -36,4 +36,4 @@ existing rows were apparently never re-derived after 211 shipped.
 
 ## Next Action
 
-Merge after 217 (migration 007) and 222 (stacked); then run the single fundamentals re-backfill (`docs/runbooks/historical-backfill.md` § Re-deriving stored periods) and calibrate 217's sector `de_bad`/`roe_bad`.
+Merged (222 rode in with this squash; 217 renumbered to migration 009); then run the single fundamentals re-backfill (`docs/runbooks/historical-backfill.md` § Re-deriving stored periods) and calibrate 217's sector `de_bad`/`roe_bad`.

@@ -113,7 +113,7 @@ guard leaves them bare.
   `xstockstrat-marketdata`. Retention: kept until the remediation is confirmed in production, then
   dropped via a later numbered migration — it is deliberately **not** dropped by `003`'s own
   `.up.sql`.
-- Table `marketdata.symbol_classification` (feature 217, migration `007`): **plain table** — Type-2
+- Table `marketdata.symbol_classification` (feature 217, migration `009`): **plain table** — Type-2
   SCD of each symbol's sector (`valid_from` inclusive, `valid_to` exclusive, NULL = open row; a
   partial-unique index enforces one open row per symbol). Never overwrite a version in place — a
   sector change closes the open row and opens a new one, preserving point-in-time history.
