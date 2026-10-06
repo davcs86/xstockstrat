@@ -74,7 +74,10 @@ guard leaves them bare.
 | `marketdata.backfill.max_delete_days` | int | `0` | Max date-range span (days) a single scoped backfill delete may cover; `0` = no window cap. A whole-symbol delete (no range) is exempt and double-confirmed in the UI (feature 057, FR-5). |
 | `marketdata.fmp.enabled` | bool | `false` | Master gate for the FMP fundamentals source (feature 059). Off by default; establishes the `marketdata.<source>.enabled` convention. Read live on every `GetFundamentals`/`GetFundamentalsMulti` call (`fundamentalsEnabled()`, `internal/service/marketdata_service.go:1143`) — flipping it takes effect on the very next call, no service restart required (feature 082). The FMP client itself is always constructed at boot (`cmd/server/main.go`'s `newFundamentalsSource`); this flag gates *use*, not construction. |
 | `marketdata.fmp.cache_ttl_hours` | int | `24` | Hours a cached fundamentals row stays fresh before a re-fetch is attempted. |
-| `marketdata.fmp.daily_request_cap` | int | `250` | Max FMP requests per UTC day (free Basic plan budget). At cap, stale rows are served (`stale=true`) or `ResourceExhausted` is returned; an 80%-of-cap crossing emits one WARNING alert/day. |
+| `marketdata.fmp.daily_request_cap` | int | `250` | Max FMP requests per UTC day — the **single shared budget** every FMP path spends (snapshot fundamentals, ratio enrichment, classification refresh; feature 217), enforced per outbound call inside the one `*fmp.Client` (reserve before the call, refund on non-2xx/transport failure, boot-seeded from today's fetched-row count). At cap, stale rows are served (`stale=true`) or `ResourceExhausted` is returned; an 80%-of-cap crossing emits one WARNING alert/day. |
+| `marketdata.fmp.rate_limit_rps` | int | `5` | FMP token-bucket ceiling (burst = 1; feature 217). 5 rps = FMP Starter's 300/min. `0` = unthrottled. Read live per call. |
+| `marketdata.classification.enabled` | bool | `false` | Gate for the sector-classification refresh job (feature 217). Reads (`GetCurrentSector`/`GetSectorAsOf`/`GetSectorHistory`) always serve from `marketdata.symbol_classification` and never call FMP. |
+| `marketdata.classification.refresh_interval_hours` | int | `24` | Classification refresh cadence (feature 217); `<= 0` pauses. Universe = the warm-quote set ∪ symbols read through the classification RPCs. |
 | `marketdata.fmp.base_url` | string | `https://financialmodelingprep.com` | FMP API base URL; endpoint paths (`/stable/quote`, `/stable/ratios-ttm`, `/stable/profile`) are built under it. |
 | `marketdata.fmp.metrics` | string | `core,extended` | Metric tiers to fetch. `core` (batchable quote, 1 call/scan chunk); `extended` adds per-symbol ratios-ttm + profile. |
 | `marketdata.finnhub.enabled` | bool | `false` | Master gate for the Finnhub fundamentals source (feature 129). Off by default; same live-per-call-read/no-restart-needed convention as `marketdata.fmp.enabled`. |
@@ -95,7 +98,7 @@ guard leaves them bare.
 | `marketdata.fundamentals.history.backfill.max_lookback_years` | int | `10` | Default lookback (years) when a `BackfillFundamentals` request omits a range start. |
 | `marketdata.fundamentals.history.backfill.period_types` | string | `both` | Default period types to backfill (`quarterly`\|`annual`\|`both`) when the request omits them. |
 | `marketdata.fundamentals.history.backfill.batch_size` | int | `50` | Symbols per backfill batch (reserved for chunked orchestration). |
-| `marketdata.fundamentals.history.ratio_enrichment.enabled` | bool | `false` | Gate for the optional FMP ratio-fill pass. **Reuses the existing `marketdata.fmp.daily_request_cap` (=250) via a dedicated in-memory UTC-day counter** — no second cap, no new credential (reuses the feature-147 `marketdata.fmp.api_key`). v1 wires no PIT FMP ratio source, so this is a guarded seam. |
+| `marketdata.fundamentals.history.ratio_enrichment.enabled` | bool | `false` | Gate for the optional FMP ratio-fill pass. **Gated on the shared FMP day budget (`marketdata.fmp.daily_request_cap`, feature 217)** — no second cap, no new credential (reuses the feature-147 `marketdata.fmp.api_key`). v1 wires no PIT FMP ratio source, so this is a guarded seam. |
 | `marketdata.retention.quotes_days` | int | `90` | **Documented, not yet implemented** — intended quote retention; no retention job reads this key yet |
 | `marketdata.retention.ohlcv_years` | int | `5` | **Documented, not yet implemented** — intended OHLCV retention; no retention job reads this key yet |
 
@@ -110,6 +113,12 @@ guard leaves them bare.
   `xstockstrat-marketdata`. Retention: kept until the remediation is confirmed in production, then
   dropped via a later numbered migration — it is deliberately **not** dropped by `003`'s own
   `.up.sql`.
+- Table `marketdata.symbol_classification` (feature 217, migration `007`): **plain table** — Type-2
+  SCD of each symbol's sector (`valid_from` inclusive, `valid_to` exclusive, NULL = open row; a
+  partial-unique index enforces one open row per symbol). Never overwrite a version in place — a
+  sector change closes the open row and opens a new one, preserving point-in-time history.
+  Epoch-seed rows (`source='seed'`, `valid_from = 1900-01-01`) knowingly apply the first-observed
+  sector to all pre-go-live bars (user-signed-off C-16 relaxation; analysis surfaces a backtest warning).
 - **Planned, not yet implemented:** continuous aggregate `marketdata.ohlcv_1h` (no migration creates it today)
 - Migration tool: `golang-migrate`
 
