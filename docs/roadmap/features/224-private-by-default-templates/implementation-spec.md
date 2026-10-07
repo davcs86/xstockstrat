@@ -777,7 +777,7 @@ grep -n "from .conftest\|ctx_with\|RecordingStub" tests/test_owner_header_guard.
 
 ### Step 9 — service: analysis owner dimension, `GetBacktest` ownership, strategy admin read
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/repositories/strategy_scores.py` — modify (target `strategy_scores_v2`)
@@ -2910,3 +2910,22 @@ _Populated by /sdd-execute as implementation proceeds._
 ### D-7 — Step 8: guard accepts `analysis-system-read` as well as `analysis-fundsignal`
 - **Actual**: Step 7 itself specifies the SAN-bound `analysis-system-read` grant for the live-loop system drain, so the stub-level guard permits `x-user-id: system` only with either grant. Owner calls must carry no stub-level grant.
 - **Disposition**: consistent with Step 7.
+
+### D-8 — Step 9: audit per-page owner cap = 100; boot recompute needs owner evidence; ownerless runs
+- **Audit cap**: neither analysis nor ingest has a maximum page size, so the "K ceiling = max page size" cap is the named constant 100, the platform's default list page size.
+- **Boot recompute**: `list_unscored_pairs` selects ambiguous pairs that have no v2 score **and** have owner evidence cells. Otherwise pairs that can never score would take the 50 slots on every boot and the rest would never be reached.
+- **Ownerless run**: a `RunBacktest` with no caller id is still stored ownerless, as before. The owner-filtered retention DELETE never matches it.
+- **Disposition**: within scope; fixed constants per the round-5 ruling.
+
+### D-9 — Step 9: admin `GetBacktest` of another owner's run is DENIED (operator decision)
+- **Expected**: the spec cross-references "admin foreign reads follow item 6".
+- **Actual**: FR-13's admin read view lists formulas, strategies, signal sources and signals, not backtests. Operator decision (2026-10-07, checkpoint 2): deny, matching the spec literally. `GetBacktest` on any non-owned or ownerless run returns `PERMISSION_DENIED` for everyone, admins included, and emits no audit event. A missing run is still `NOT_FOUND`.
+- **Disposition**: operator decision.
+
+### D-10 — Step 9: Verification grep quoting
+- **Actual**: the spec's `grep -n "strategy_scores_v2\|user_id = \$"` puts `\$` inside double quotes, which the shell turns into an end-of-line anchor, so the grep can never match. I ran it with single quotes; the owner predicates match at `backtest_run_symbols.py`, `backtest_details.py` and `backtest_runs.py`.
+- **Disposition**: verification-command defect; the equivalent check passed.
+
+### D-11 — Step 10: `tests/test_analysis_servicer.py` modified (not in Files)
+- **Actual**: 11 existing assertions followed the new `(user_id, strategy_id)` keys and the repo signatures (upsert argument shift, hydrate rows gain `user_id`, the `GetBacktest` fake returns `(bytes, owner)`). No assertion was weakened.
+- **Disposition**: required follow-through for in-scope signature changes.

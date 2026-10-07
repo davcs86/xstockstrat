@@ -34,6 +34,7 @@ class BacktestRunSymbolsRepository:
         "definition_fingerprint",
         "range_start",
         "range_end",
+        "user_id",
     )
 
     def __init__(self, db_pool):
@@ -52,15 +53,15 @@ class BacktestRunSymbolsRepository:
             INSERT INTO analysis.backtest_run_symbols
                 (backtest_id, strategy_id, symbol, sharpe_ratio, max_drawdown, win_rate,
                  total_return, total_trades, trading_days, definition_fingerprint,
-                 range_start, range_end)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                 range_start, range_end, user_id)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
             ON CONFLICT (backtest_id, symbol) DO NOTHING
             """,
             [tuple(c.get(col) for col in self._COLUMNS) for c in cells],
         )
 
-    async def fetch_eligible(self, strategy_id: str, fingerprint: str) -> list[dict]:
-        """One eligible cell per symbol for a (strategy, fingerprint) pair.
+    async def fetch_eligible(self, user_id: str, strategy_id: str, fingerprint: str) -> list[dict]:
+        """One eligible cell per symbol for an owner's (strategy, fingerprint) pair.
 
         Traded-first dedup (user decision): a traded cell always wins over a zero-trade cell on
         the same symbol, then most trading days, then newest — so non-participation can never
@@ -71,10 +72,11 @@ class BacktestRunSymbolsRepository:
             """
             SELECT DISTINCT ON (symbol) *
             FROM analysis.backtest_run_symbols
-            WHERE strategy_id = $1 AND definition_fingerprint = $2
+            WHERE strategy_id = $1 AND definition_fingerprint = $2 AND user_id = $3
             ORDER BY symbol, (total_trades > 0) DESC, trading_days DESC, completed_at DESC
             """,
             strategy_id,
             fingerprint,
+            user_id,
         )
         return [_to_dict(r) for r in rows]

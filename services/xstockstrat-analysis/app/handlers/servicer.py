@@ -38,6 +38,7 @@ from gen.trading.v1 import trading_pb2, trading_pb2_grpc
 from google.protobuf import json_format
 from google.protobuf.timestamp_pb2 import Timestamp
 
+from app.admin_audit import audit_admin_read
 from app.config.watcher import ConfigWatcher
 from app.engine.durable_schedule import DurableSchedule, seconds_until_hour_utc
 from app.repositories.backtest_details import BacktestDetailsRepository
@@ -286,6 +287,9 @@ _DEFAULT_WATCHLIST_READINESS_PAGE_SIZE = 25
 _MAX_DRAIN_PAGES = 50
 # Default queue page size when the request omits one.
 _DEFAULT_OPP_PAGE_SIZE = 50
+# Fixed invariant cap (operator round-5 ruling, not a config key): ambiguous (user_id, strategy_id)
+# score pairs recomputed per boot pass, bounding boot latency against the pooled DB.
+_BOOT_RECOMPUTE_MAX_PAIRS = 50
 # Reserved platform identity (feature 224); a granted internal caller's x-user-id, never a user's.
 SYSTEM_IDENTITY = "system"
 
@@ -419,8 +423,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             if portfolio_channel
             else None
         )
-        self._backtests: dict[str, analysis_pb2.BacktestResult] = {}
-        self._strategies: dict[str, analysis_pb2.StrategyScore] = {}
+        # Keyed by backtest_id AND by the owner key (user_id, strategy_id).
+        self._backtests: dict[str | tuple[str, str], analysis_pb2.BacktestResult] = {}
+        self._strategies: dict[tuple[str, str], analysis_pb2.StrategyScore] = {}
         self._strategies_repo = StrategiesRepository(db_pool) if db_pool else None
         # Process-lifetime singleton semaphore bounding cross-request GetIndicatorSeries compute so
         # a busy Symbol page can't starve the live loop. max(1, …) guards a negative config value.
@@ -506,8 +511,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # unavailable quote is never memoized (AC-11), so a stale price is never served as current.
         self._live_enrich_memo: dict[str, tuple[float, dict]] = {}
         # Per-strategy recompute serialization: asyncio.Lock is non-reentrant, so a trigger already
-        # holding it calls only _recompute_headline_locked. Single-process only, by strategy_id.
-        self._recompute_locks: dict[str, asyncio.Lock] = {}
+        # holding it calls only _recompute_headline_locked. Single-process only, by owner key.
+        self._recompute_locks: dict[tuple[str, str], asyncio.Lock] = {}
         # Set by main.py after the fundamentals signal loop is constructed; RunFundamentalsScan
         # invokes its shared run_once path.
         self._fundsignal_loop = None
@@ -543,6 +548,28 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         """
         caller = dict(context.invocation_metadata()).get("x-user-id", "")
         return "" if caller == SYSTEM_IDENTITY else caller
+
+    def _admin_owner_selector(self, context, caller_user_id: str, owner_user_id: str) -> str:
+        """FR-13: the owner whose rows a read targets — ``owner_user_id`` only for an ADMIN."""
+        if owner_user_id and caller_user_id and self._has_admin_scope(context):
+            return owner_user_id
+        return caller_user_id
+
+    async def _audit_admin_read(self, context, object_kind, ids_by_owner) -> bool:
+        """Audit an admin foreign read; on failure abort ``UNAVAILABLE`` and return False."""
+        try:
+            await audit_admin_read(
+                self._ledger,
+                self._caller_user_id(context),
+                object_kind,
+                ids_by_owner,
+                context.invocation_metadata(),
+            )
+        except Exception as e:
+            log.warning("admin-read audit failed: %s", e)
+            await context.abort(grpc.StatusCode.UNAVAILABLE, "admin read audit unavailable")
+            return False
+        return True
 
     async def _fetch_formula_outputs(self, definition, propagation_meta) -> dict:
         """Map each custom-formula component's formula_id to the set of series it exposes.
@@ -1079,7 +1106,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         if sector_warnings:
             result.warnings.extend(sector_warnings)
         self._backtests[backtest_id] = result
-        self._backtests[request.strategy_id] = result
+        self._backtests[(caller_user_id, request.strategy_id)] = result
 
         # The backtest range (fully set after defaulting) is stamped on the run-history row and
         # every evidence cell.
@@ -1098,6 +1125,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 fingerprint=run_fingerprint,
                 range_start=range_start_dt,
                 range_end=range_end_dt,
+                user_id=caller_user_id or None,
             )
 
         # Grade THIS run for the run-history row only — the headline grade is derived from the
@@ -1119,11 +1147,12 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             # Record the resolved sizing model + params (None on the legacy branch).
             position_weight=resolved_position_weight,
             max_concurrent=resolved_max_concurrent,
+            user_id=caller_user_id or None,
         )
         # Persist full result (trades + equity + diagnostics) for OK runs only. Best-effort;
         # ordered after the summary insert so the FK (detail ⇒ listed summary) can hold.
         if result.status == analysis_pb2.BACKTEST_STATUS_OK:
-            await self._persist_backtest_detail(result)
+            await self._persist_backtest_detail(result, user_id=caller_user_id or None)
 
         # Recompute the headline grade from the strategy's full evidence base. Best-effort;
         # ordered BEFORE the completion emit so a subscriber sees the post-run grade.
@@ -2281,9 +2310,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             )
             return
 
-        async with self._lock_for(request.strategy_id):
+        async with self._lock_for(caller_user_id, request.strategy_id):
             try:
-                score = await self._fetch_and_aggregate(request.strategy_id, row)
+                score = await self._fetch_and_aggregate(caller_user_id, request.strategy_id, row)
             except Exception as e:
                 log.warning("failed to read evidence cells for score: %s", e)
                 await context.abort(grpc.StatusCode.UNAVAILABLE, "evidence store unavailable")
@@ -2291,10 +2320,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             if score is None:
                 # No eligible evidence: clear any stale grade. This delete is NON-best-effort —
                 # a failure aborts UNAVAILABLE rather than leaving a stale grade behind.
-                self._strategies.pop(request.strategy_id, None)
+                self._strategies.pop((caller_user_id, request.strategy_id), None)
                 if self._scores_repo is not None:
                     try:
-                        await self._scores_repo.delete(request.strategy_id)
+                        await self._scores_repo.delete(caller_user_id, request.strategy_id)
                     except Exception as e:
                         log.warning("failed to clear stale score: %s", e)
                         await context.abort(grpc.StatusCode.UNAVAILABLE, "score store unavailable")
@@ -2303,7 +2332,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     grpc.StatusCode.NOT_FOUND, "no eligible evidence — run a backtest"
                 )
                 return
-            await self._persist_strategy_score(score)
+            await self._persist_strategy_score(caller_user_id, score)
 
         from google.protobuf.struct_pb2 import Struct
 
@@ -2330,7 +2359,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
 
         return score
 
-    async def _persist_strategy_score(self, score) -> None:
+    async def _persist_strategy_score(self, user_id: str, score) -> None:
         """Update the in-memory serving dict and best-effort durably persist a score.
 
         Reads serve from ``self._strategies``, so a swallowed write never loses the caller's
@@ -2338,12 +2367,13 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         column against a non-finite component (NaN/Infinity would make Postgres reject it).
         Shared by ScoreStrategy and RunBacktest's auto-scoring so the two never diverge.
         """
-        self._strategies[score.strategy_id] = score
+        self._strategies[(user_id, score.strategy_id)] = score
         if self._scores_repo is None:
             return
         try:
             components = {k: v for k, v in dict(score.component_scores).items() if math.isfinite(v)}
             await self._scores_repo.upsert(
+                user_id,
                 score.strategy_id,
                 score.overall_score,
                 score.rating,
@@ -2355,12 +2385,13 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         except Exception as e:
             log.warning("failed to persist strategy score: %s", e)
 
-    def _lock_for(self, strategy_id: str) -> asyncio.Lock:
-        """Return the (lazily created) per-strategy recompute lock."""
-        lock = self._recompute_locks.get(strategy_id)
+    def _lock_for(self, user_id: str, strategy_id: str) -> asyncio.Lock:
+        """Return the (lazily created) per-owned-strategy recompute lock."""
+        key = (user_id, strategy_id)
+        lock = self._recompute_locks.get(key)
         if lock is None:
             lock = asyncio.Lock()
-            self._recompute_locks[strategy_id] = lock
+            self._recompute_locks[key] = lock
         return lock
 
     def _derive_score_from_cells(self, strategy_id, strategy_row, cells):
@@ -2401,7 +2432,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             provisional=provisional,
         )
 
-    async def _fetch_and_aggregate(self, strategy_id, strategy_row):
+    async def _fetch_and_aggregate(self, user_id, strategy_id, strategy_row):
         """Read eligible cells for the strategy's CURRENT fingerprint and derive a score.
 
         Returns the derived (unpersisted) StrategyScore, or ``None`` when there is zero eligible
@@ -2409,7 +2440,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         NOT mutate in-memory or DB state — pure read + compute.
         """
         fingerprint = _definition_fingerprint(strategy_row["definition_json"])
-        cells = await self._backtest_run_symbols_repo.fetch_eligible(strategy_id, fingerprint)
+        cells = await self._backtest_run_symbols_repo.fetch_eligible(
+            user_id, strategy_id, fingerprint
+        )
         if not cells:
             return None
         return self._derive_score_from_cells(strategy_id, strategy_row, cells)
@@ -2429,26 +2462,26 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         row = await self._strategies_repo.get_by_owner_and_id(user_id, strategy_id)
         if row is None:
             return None
-        async with self._lock_for(strategy_id):
-            return await self._recompute_headline_locked(strategy_id, row)
+        async with self._lock_for(user_id, strategy_id):
+            return await self._recompute_headline_locked(user_id, strategy_id, row)
 
-    async def _recompute_headline_locked(self, strategy_id, strategy_row):
+    async def _recompute_headline_locked(self, user_id, strategy_id, strategy_row):
         """Recompute the headline grade; the caller MUST already hold the strategy's lock.
 
         Zero eligible evidence → clear any stale grade (in-memory pop + best-effort DB delete),
         return None. Otherwise derive, persist via the shared score funnel, return the score.
         asyncio.Lock is non-reentrant, so triggers already inside the lock call ONLY this variant.
         """
-        score = await self._fetch_and_aggregate(strategy_id, strategy_row)
+        score = await self._fetch_and_aggregate(user_id, strategy_id, strategy_row)
         if score is None:
-            self._strategies.pop(strategy_id, None)
+            self._strategies.pop((user_id, strategy_id), None)
             if self._scores_repo is not None:
                 try:
-                    await self._scores_repo.delete(strategy_id)
+                    await self._scores_repo.delete(user_id, strategy_id)
                 except Exception as e:
                     log.warning("failed to clear stale strategy score: %s", e)
             return None
-        await self._persist_strategy_score(score)
+        await self._persist_strategy_score(user_id, score)
         return score
 
     async def _persist_backtest_run(
@@ -2460,6 +2493,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         range_end=None,
         position_weight=None,
         max_concurrent=None,
+        user_id=None,
     ) -> None:
         """Best-effort append of a completed backtest to the durable run-history table.
 
@@ -2494,6 +2528,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 rating=score.rating if score is not None else None,
                 range_start=range_start,
                 range_end=range_end,
+                user_id=user_id,
                 sizing_mode=analysis_pb2.SizingMode.Name(result.sizing_mode),
                 position_weight=position_weight,
                 max_concurrent=max_concurrent,
@@ -2502,7 +2537,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         except Exception as e:
             log.warning("failed to persist backtest run history: %s", e)
 
-    async def _persist_backtest_detail(self, result) -> None:
+    async def _persist_backtest_detail(self, result, user_id=None) -> None:
         """Best-effort persist of an OK run's full serialized result (feature 068).
 
         Stores the exact wire bytes ``GetBacktest`` will serve back ("store what you
@@ -2523,12 +2558,13 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 completed_at=result.completed_at.ToDatetime(),
                 result_pb=result.SerializeToString(),
                 retention=retention,
+                user_id=user_id,
             )
         except Exception as e:
             log.warning("failed to persist backtest detail: %s", e)
 
     async def _persist_symbol_cells(
-        self, cells, *, backtest_id, strategy_id, fingerprint, range_start, range_end
+        self, cells, *, backtest_id, strategy_id, fingerprint, range_start, range_end, user_id=None
     ) -> None:
         """Best-effort flush of per-symbol evidence cells for an OK run (feature 065).
 
@@ -2554,6 +2590,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     "definition_fingerprint": fingerprint,
                     "range_start": range_start,
                     "range_end": range_end,
+                    "user_id": user_id,
                 }
                 for c in cells
             ]
@@ -2572,25 +2609,42 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             return
         rows = await self._scores_repo.list()
         for r in rows:
-            self._strategies[r["strategy_id"]] = _row_to_score(r)
+            self._strategies[(r["user_id"], r["strategy_id"])] = _row_to_score(r)
+
+    async def recompute_unscored_pairs(self) -> int:
+        """Boot pass: recompute ambiguous owner pairs with no v2 score, best-effort per pair.
+
+        At most ``_BOOT_RECOMPUTE_MAX_PAIRS`` per pass; the rest wait for the next boot pass.
+        """
+        if self._scores_repo is None:
+            return 0
+        pairs = await self._scores_repo.list_unscored_pairs(limit=_BOOT_RECOMPUTE_MAX_PAIRS)
+        pairs = pairs[:_BOOT_RECOMPUTE_MAX_PAIRS]
+        for user_id, strategy_id in pairs:
+            try:
+                await self._recompute_headline(user_id, strategy_id)
+            except Exception as e:
+                log.warning("boot recompute failed for %s/%s: %s", user_id, strategy_id, e)
+        return len(pairs)
 
     async def ListStrategies(self, request, context):
-        # Owner-scoped — return only the caller's own scores. The _strategies cache is keyed by
-        # bare strategy_id, so cross-check ownership against the repo.
+        # Owner-scoped — return only the caller's own scores, cross-checked against the repo.
         if self._strategies_repo is not None:
             caller_user_id = self._caller_user_id(context)
             owned, _ = await self._strategies_repo.list(caller_user_id, include_inactive=True)
-            owned_ids = {r["strategy_id"] for r in owned}
-            strategies = [v for k, v in self._strategies.items() if k in owned_ids]
+            strategies = [
+                sc
+                for sc in (self._strategies.get((caller_user_id, r["strategy_id"])) for r in owned)
+                if sc is not None
+            ]
         else:
             strategies = list(self._strategies.values())
         return analysis_pb2.ListStrategiesResponse(strategies=strategies)
 
     async def GetStrategyReport(self, request, context):
-        # Owner-scoped — uniform PERMISSION_DENIED for a non-owned/missing strategy (the in-memory
-        # score/backtest caches are keyed by bare strategy_id).
+        # Owner-scoped — uniform PERMISSION_DENIED for a non-owned/missing strategy.
+        caller_user_id = self._caller_user_id(context)
         if self._strategies_repo is not None:
-            caller_user_id = self._caller_user_id(context)
             owned = (
                 await self._strategies_repo.get_by_owner_and_id(caller_user_id, request.strategy_id)
                 if caller_user_id
@@ -2602,13 +2656,13 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     f"strategy '{request.strategy_id}' not found or not owned",
                 )
                 return
-        score = self._strategies.get(request.strategy_id)
+        score = self._strategies.get((caller_user_id, request.strategy_id))
         if score is None:
             await context.abort(
                 grpc.StatusCode.NOT_FOUND, f"strategy {request.strategy_id} not found"
             )
             return
-        result = self._backtests.get(request.strategy_id)
+        result = self._backtests.get((caller_user_id, request.strategy_id))
         return analysis_pb2.StrategyReport(
             strategy_id=request.strategy_id,
             score=score,
@@ -2626,8 +2680,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         if self._backtest_runs_repo is None:
             return analysis_pb2.ListBacktestsResponse()
         # Owner-scoped — resolve ownership before returning another user's run history.
+        caller_user_id = self._caller_user_id(context)
         if self._strategies_repo is not None:
-            caller_user_id = self._caller_user_id(context)
             owned = (
                 await self._strategies_repo.get_by_owner_and_id(caller_user_id, request.strategy_id)
                 if caller_user_id
@@ -2641,7 +2695,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 return
         limit = request.limit if request.limit > 0 else 20
         try:
-            rows = await self._backtest_runs_repo.list_by_strategy(request.strategy_id, limit=limit)
+            rows = await self._backtest_runs_repo.list_by_strategy(
+                caller_user_id, request.strategy_id, limit=limit
+            )
         except Exception as e:
             log.warning("failed to read backtest run history: %s", e)
             return analysis_pb2.ListBacktestsResponse()
@@ -2655,20 +2711,27 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         strategy_id keys, and never evicts). NOT_FOUND is the single state for legacy,
         evicted, and INSUFFICIENT runs — and for the no-DB/read-error paths, which
         degrade the same way (``ListBacktests`` empty-response precedent). No outbound
-        gRPC calls → nothing to propagate; no admin gate (read parity with
-        ``ListBacktests``).
+        gRPC calls. A run owned by someone else is PERMISSION_DENIED (``ListBacktests`` parity),
+        admins included: FR-13's audited admin read view does not cover backtests.
         """
-        row_bytes = None
+        row = None
         if self._backtest_details_repo is not None:
             try:
-                row_bytes = await self._backtest_details_repo.get(request.backtest_id)
+                row = await self._backtest_details_repo.get(request.backtest_id)
             except Exception as e:
                 log.warning("failed to read backtest detail: %s", e)
-                row_bytes = None
+                row = None
         # Abort OUTSIDE the except block: context.abort raises, and a nested abort would be
         # swallowed by the bare except.
-        if row_bytes is None:
+        if row is None:
             await context.abort(grpc.StatusCode.NOT_FOUND, "no detailed data for this run")
+            return
+        row_bytes, owner = row
+        caller_user_id = self._caller_user_id(context)
+        if not owner or owner != caller_user_id:
+            await context.abort(
+                grpc.StatusCode.PERMISSION_DENIED, "backtest not found or not owned"
+            )
             return
         result = analysis_pb2.BacktestResult()
         result.ParseFromString(row_bytes)
@@ -2828,10 +2891,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             # A definition change usually changes the fingerprint, so clear the stale in-memory
             # grade FIRST, then best-effort recompute; the UPDATE never fails on a recompute error.
             sid = definition.strategy_id
-            async with self._lock_for(sid):
-                self._strategies.pop(sid, None)
+            async with self._lock_for(caller_user_id, sid):
+                self._strategies.pop((caller_user_id, sid), None)
                 try:
-                    await self._recompute_headline_locked(sid, row)
+                    await self._recompute_headline_locked(caller_user_id, sid, row)
                 except Exception as e:
                     log.warning("failed to recompute headline after update: %s", e)
             return _row_to_strategy_definition(row)
@@ -2885,9 +2948,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # Owner-scoped read. A non-owner gets a uniform PERMISSION_DENIED, never NOT_FOUND —
         # no existence probing via response code.
         caller_user_id = self._caller_user_id(context)
+        owner = self._admin_owner_selector(context, caller_user_id, request.owner_user_id)
         row = (
-            await self._strategies_repo.get_by_owner_and_id(caller_user_id, request.strategy_id)
-            if caller_user_id
+            await self._strategies_repo.get_by_owner_and_id(owner, request.strategy_id)
+            if owner
             else None
         )
         if row is None:
@@ -2895,6 +2959,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 grpc.StatusCode.PERMISSION_DENIED,
                 f"strategy '{request.strategy_id}' not found or not owned",
             )
+            return
+        if owner != caller_user_id and not await self._audit_admin_read(
+            context, "strategy", {owner: [request.strategy_id]}
+        ):
             return
         definition = _row_to_strategy_definition(row)
         # Surface a warning if this strategy references a soft-deleted formula; it still evaluates
@@ -2915,12 +2983,21 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # Header-derived owner filter (never read ListStrategiesRequest.user_id from the wire).
         # An empty caller id lists nothing.
         caller_user_id = self._caller_user_id(context)
+        owner = self._admin_owner_selector(context, caller_user_id, request.owner_user_id)
         rows, total = await self._strategies_repo.list(
-            caller_user_id,
+            owner,
             include_inactive=request.include_inactive,
             page_size=request.page_size,
             page_offset=request.page_offset,
         )
+        if (
+            owner != caller_user_id
+            and rows
+            and not await self._audit_admin_read(
+                context, "strategy", {owner: [r["strategy_id"] for r in rows]}
+            )
+        ):
+            return
         return analysis_pb2.ListStrategyDefinitionsResponse(
             definitions=[_row_to_strategy_definition(r) for r in rows],
             total_count=total,
@@ -4328,7 +4405,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             terms = await self._opportunities_repo.symbol_composite_terms(user_id, sym)
             owned = {t["strategy_id"] for t in terms if t.get("strategy_id")}
             score = _symbol_score_for_group(
-                terms, self._owner_grade_lookup(owned), ss_gamma, ss_floor
+                terms, self._owner_grade_lookup(user_id, owned), ss_gamma, ss_floor
             )
             await self._opportunities_repo.stamp_symbol_score(user_id, sym, score)
         if readiness_stage:
@@ -4337,16 +4414,15 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             except Exception as e:  # noqa: BLE001 — readiness-cache heal is best-effort
                 log.warning("surgical retry: readiness-cache upsert failed for %s: %s", user_id, e)
 
-    def _owner_grade_lookup(self, owned_ids: "set[str]"):
+    def _owner_grade_lookup(self, user_id: str, owned_ids: "set[str]"):
         """feature 200 — build the ``grade_lookup(strategy_id) -> (overall_score, provisional)``
         closure for the symbol_score fold, owner-gated: a strategy_id NOT in ``owned_ids`` (or with
         no cached score) reads ``(None, False)`` so ``_strategy_weight`` falls to the floor. The
-        ``self._strategies`` grade cache is keyed by BARE strategy_id (global, feature 133 D-2), so
-        this gate is what stops a grade for a strategy the caller does not own from weighting their
+        grade cache is owner-keyed (feature 224), so only ``user_id``'s own grades can weight their
         roll-up (anti-IDOR, fails.md:1153)."""
 
         def _lookup(sid: str) -> "tuple[float | None, bool]":
-            sc = self._strategies.get(sid) if sid in owned_ids else None
+            sc = self._strategies.get((user_id, sid)) if sid in owned_ids else None
             if sc is None:
                 return (None, False)
             return (sc.overall_score, sc.provisional)
@@ -4927,7 +5003,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             owned_ids |= _sids
         for _sids in live_by_symbol.values():
             owned_ids |= _sids
-        grade_lookup = self._owner_grade_lookup(owned_ids)
+        grade_lookup = self._owner_grade_lookup(user_id, owned_ids)
         rows_by_symbol: dict[str, list[dict]] = {}
         for r in rows:
             rows_by_symbol.setdefault(r["symbol"], []).append(r)
@@ -5379,7 +5455,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         blended_hit_rate = 0.0
         max_drawdown = 0.0
         if self._backtest_runs_repo is not None:
-            runs = await self._backtest_runs_repo.list_by_strategy(strategy_id, limit=20)
+            runs = await self._backtest_runs_repo.list_by_strategy(user_id, strategy_id, limit=20)
             ok_runs = [r for r in runs if float(r.get("total_trades") or 0) > 0]
             if ok_runs:
                 latest = ok_runs[0]

@@ -133,6 +133,11 @@ async def serve():
             log.info("strategy scores hydrated from DB")
         except Exception as e:
             log.warning("failed to hydrate strategy scores: %s", e)
+        try:
+            n = await servicer.recompute_unscored_pairs()
+            log.info("boot recompute: %d ambiguous strategy score pairs", n)
+        except Exception as e:
+            log.warning("failed boot recompute of strategy scores: %s", e)
 
         from app.engine.live_loop import LiveEvaluationLoop
         from app.repositories.strategy_cooldowns import StrategyCooldownsRepository
