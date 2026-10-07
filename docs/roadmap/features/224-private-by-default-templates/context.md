@@ -454,3 +454,24 @@ OQ-4 to OQ-6 remain for /sdd-design.
 - A second run produced the same set, so there is no drift.
 - Files modified: `packages/proto/gen/**` (the five touched packages).
 - TDD: N/A. Deviations: none. (The script also wrote dev mTLS certs to `certs/`, which is git-ignored and not staged.)
+
+### Step 3 — service: migration tooling [done]
+- New scripts:
+  - `scripts/render-migrations.sh`: renders `-- requires-env:` headers with an allowlisted `envsubst`; files without the header are copied byte-identical.
+  - `scripts/check-migration-contract.sh`.
+  - `scripts/migration-rerun.sh`.
+- `db-migrate.sh up` renders through `render-migrations.sh` after the unchanged analysis-013 branch.
+- `scripts/Dockerfile.migrate` now COPYs the renderer (D-2, operator-approved).
+- CI:
+  - new `migrations` paths filter;
+  - new `migration-rerun` job (TimescaleDB service and the migrator image);
+  - new PR-only `migration-contract-gate` job;
+  - both jobs added to `ci-gate`.
+- TDD with Step 4: RED (both `.test.sh` scripts failed with "missing script") → GREEN (all assertions passed).
+- Verification: shellcheck and shfmt clean, the YAML parses, and the gate is PR-only.
+- Files modified:
+  - `scripts/{render-migrations,check-migration-contract,migration-rerun}.sh`
+  - `scripts/db-migrate.sh`
+  - `scripts/Dockerfile.migrate`
+  - `.github/workflows/ci.yml`
+- Deviations: D-2 and D-3. Note: `envsubst` (gettext-base) was installed on the host for local tests; the migrator image and CI runners already ship it.

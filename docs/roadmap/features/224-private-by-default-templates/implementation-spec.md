@@ -296,7 +296,7 @@ cd packages/proto && buf lint && buf breaking --against ".git#branch=feature/pri
 
 ### Step 3 — service: migration tooling (`-- requires-env` render, contract gate, rerun CI)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/` + `.github/workflows/`
 **Files**:
 - `scripts/render-migrations.sh` — create
@@ -2875,3 +2875,18 @@ grep -n "027\|008\|014" docs/roadmap/features/merge-order.md | grep "enforce-con
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### D-1 — Step 1: buf run via Docker
+- **Expected**: `buf lint` / `buf breaking` from a host `buf` binary.
+- **Actual**: buf is not on the host; ran `bufbuild/buf:1.72.0` (the pinned version) in Docker, and `breaking` against `.git#ref=HEAD,subdir=packages/proto`.
+- **Disposition**: CI-equivalent fallback.
+
+### D-2 — Step 3: `scripts/Dockerfile.migrate` copies `render-migrations.sh`
+- **Expected**: Step 3 Files did not list `scripts/Dockerfile.migrate`.
+- **Actual**: `db-migrate.sh` now calls `scripts/render-migrations.sh`. The migrator image (DO prod and dev PRE_DEPLOY jobs, and docker-compose `db-migrator`) copied only `db-migrate.sh`, so every deploy's migrator would have failed. Added one `COPY scripts/render-migrations.sh` line. Step 4's `render-migrations.test.sh` (e) asserts it, and the `migrations` CI filter now includes `scripts/Dockerfile.migrate`.
+- **Disposition**: operator-approved scope expansion (2026-10-07, blocker gate, option A).
+
+### D-3 — Step 3: `migration-rerun` replays through the dirty-recovery path
+- **Expected**: "force every service to version 0 and run `db-migrate.sh up` again".
+- **Actual**: the script marks each `<schema>_schema_migrations` row `dirty`, so `db-migrate.sh`'s own dirty branch runs `force 0` and the replay. That is the exact production recovery path, not a parallel reimplementation. The job runs inside the `Dockerfile.migrate` image (migrate + psql + envsubst) against a `timescaledb:latest-pg16` service container.
+- **Disposition**: implementation detail within scope.
