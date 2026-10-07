@@ -60,7 +60,7 @@ interface ComponentEditorProps {
 }
 
 export function ComponentEditor({ value, onChange, onRemove }: ComponentEditorProps) {
-  const { data: formulasData } = useFormulas({ includePublic: true, pageSize: 50 });
+  const { data: formulasData } = useFormulas({ pageSize: 50 });
   const formulas = formulasData?.formulas ?? [];
 
   const indicator = findIndicator(value.indicator);

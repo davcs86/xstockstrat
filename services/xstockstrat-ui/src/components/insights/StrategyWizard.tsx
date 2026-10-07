@@ -109,7 +109,7 @@ export function StrategyWizard({ mode, initial, onSubmitDone }: StrategyWizardPr
   // from outer Step 2 lands on sub-screen 4, the one that handed off to Step 2.
   const [identitySubStep, setIdentitySubStep] = useState<1 | 2 | 3 | 4>(1);
   const { mutate, isPending, error: errorObj } = useManageStrategy();
-  const { data: formulasData } = useFormulas({ includePublic: true, pageSize: 50 });
+  const { data: formulasData } = useFormulas({ pageSize: 50 });
 
   const [strategyId, setStrategyId] = useState(initial?.strategyId ?? '');
   const [displayName, setDisplayName] = useState(initial?.displayName ?? '');

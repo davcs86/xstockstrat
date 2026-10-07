@@ -154,14 +154,7 @@ router.service(ConfigService, {
 });
 
 router.service(IndicatorsService, {
-  async registerFormula(req, ctx) {
-    const claims = await requireSession(ctx);
-    // Set author from JWT claims — overrides any caller-supplied value
-    return indicatorsClient.registerFormula(
-      { ...req, author: claims.user_id },
-      { headers: backendHeaders(claims, ctx) },
-    );
-  },
+  registerFormula: forward((req, opts) => indicatorsClient.registerFormula(req, opts)),
   getFormula: forward((req, opts) => indicatorsClient.getFormula(req, opts)),
   listFormulas: forward((req, opts) => indicatorsClient.listFormulas(req, opts)),
   // Author-ownership resolves the caller from the x-user-id header (set from the verified session, not

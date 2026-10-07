@@ -893,3 +893,12 @@ OQ-4 to OQ-6 remain for /sdd-design.
 - `test_signal_source_builder.py`: covers `user_id` and `origin`.
 - **TDD:** RED was 15 failed (`43 == 45`, the template tools not registered, `is_public` still in the schema, the key regex, `KeyError: 'user_id'`, docs parity). GREEN is 496 passed, coverage 80.36%, ruff clean. `next lint` on `copilot.ts` is clean.
 - **Deviation:** D-30.
+
+### Step 36 — service: UI removes public formula controls; formula BFF follows header identity [done]
+- **Formulas list:** the visibility filter and the Public/Private column are removed. "System" and "Update available" badges are added (C-17, using existing variants).
+- **`FormulaWorkspace`:** the Public checkbox, the header badge, the `isPublic` state and its payload field are removed.
+- **Hooks:** they stop sending `includePublic`/`isPublic`/`author`. `StrategyWizard` and `ComponentEditor` list formulas through `useFormulas({pageSize:50})`.
+- **BFF:** `insightsBff.registerFormula` is now a plain `forward`, so it no longer overrides the author from claims.
+- **Verification:** vitest 224/224 pass. `tsc` shows only the 2 pre-existing `backfills.spec.ts` errors. Lint is clean, and the `isPublic|includePublic` grep in `src` is empty.
+- **TDD:** paired with Step 39 (e2e).
+- **Deviation:** D-31.

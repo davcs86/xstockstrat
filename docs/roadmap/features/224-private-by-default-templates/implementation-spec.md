@@ -2391,7 +2391,7 @@ cd services/xstockstrat-agent && uv run pytest --cov=app --cov-fail-under=40 && 
 
 ### Step 36 — service: UI removes public formula controls; formula BFF follows header identity
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/formulas/page.tsx` — modify
@@ -3069,3 +3069,8 @@ _Populated by /sdd-execute as implementation proceeds._
 - **UI `tsc --noEmit`**: 2 errors in `e2e/insights/backfills.spec.ts:135-136` (`'never'`). They reproduce on `origin/main-dev`, so they predate this feature; the file is untouched.
 - **Out of scope, noted only**: `mcp-tools.md` still calls `manage_strategy` an "Admin-scoped write", which has been stale since feature 133.
 - **Disposition**: within scope; the pre-existing items are recorded, not fixed.
+
+### D-31 — Step 36: `author` also dropped from `useRegisterFormula`; badge placement
+- **Actual**: `useRegisterFormula` no longer sends `author` either. The BFF is now a pass-through, and indicators takes the author from `x-user-id`; no caller passed it. The new "System" (`secondary`) and "Update available" (`info`) badges use existing `Badge` variants and sit beside the formula name (C-17). `SYSTEM_FORMULA_AUTHOR` is reused rather than repeating the `'system'` literal.
+- **Left for Step 39**: e2e fixtures `e2e/fixtures/formulas.ts` and `e2e/insights/formulas.spec.ts:75` still carry `isPublic` in mock data. They still type-check, because the field is deprecated, not deleted.
+- **Disposition**: within scope.
