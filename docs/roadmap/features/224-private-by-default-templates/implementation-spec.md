@@ -1634,7 +1634,7 @@ grep -n "global-scope only" src/grpc/configServiceImpl.ts   # → no matches
 
 ### Step 22 — test: config per-user secret resolution and per-user redaction
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/perUserSecrets.test.ts` — create
