@@ -15,6 +15,7 @@
 | 2026-10-06 | `spec-ready` → `design-approved` | /sdd-design | Design debated (5 rounds, full) and approved; recon.md + design.md written |
 | 2026-10-07 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 41 steps |
 | 2026-10-07 | `implementation-ready` (unchanged) | /sdd-execute | Re-spec gate: Step 22 (AC-35 write-accepted test written new), Step 34 Files (+ test_tools_endpoint.py) |
+| 2026-10-07 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 done (sequential run started) |
 
 ---
 

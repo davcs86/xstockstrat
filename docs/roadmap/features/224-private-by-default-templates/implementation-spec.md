@@ -146,7 +146,7 @@ recorded in `context.md` § Open Threads.
 
 ### Step 1 — proto: template types, ownership fields, deprecations, template RPCs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/common/v1/common.proto` — modify

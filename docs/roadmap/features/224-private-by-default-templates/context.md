@@ -430,3 +430,20 @@ OQ-4 to OQ-6 remain for /sdd-design.
   - shellcheck 0.11.0 ⬇ (shellcheck-py) and shfmt v3.14.1 ⬇
   - buf ✗ on the host; proto codegen uses the Docker `Dockerfile.codegen` image via `localenv-setup.sh`
   - Playwright chromium ✓ (`/opt/pw-browsers`)
+
+### Step 1 — proto: template types, ownership fields, deprecations, template RPCs [done]
+- **common:** adds `TemplateKind`, `TemplateOperation`, `TemplateMeta` and `TemplateOrigin`.
+- **indicators:**
+  - deprecates `is_public` (FormulaDefinition 8, Register 4, Update 6), Register `author` 6 and List `include_public` 2;
+  - adds `FormulaDefinition.origin=15`;
+  - adds four template RPCs: `ListTemplates`, `ManageTemplate`, `InstantiateTemplate` and the internal `ResolveTemplateIntent`.
+- **ingest:**
+  - adds `ExternalSignal.user_id=11`, `SignalSource.user_id=13` and `SignalSource.origin=14`;
+  - adds the `SignalScope` enum, plus `QuerySignalsRequest.scope=6` and `owner_user_id=7`, and `ListSignalSourcesRequest.owner_user_id=2`;
+  - adds three template RPCs.
+- **analysis:** adds `StrategyDefinition.origin=16`, `StrategyScore.origin=8`, `GetStrategyRequest.owner_user_id=2` and `ListStrategyDefinitionsRequest.owner_user_id=4`, plus three template RPCs.
+- **config:** adds `GetSecretRequest.user_id=4` and rewrites the `SetConfigRequest.user_id` comment.
+- **Verification:** `buf lint` and `buf breaking --against HEAD` both exit 0, run through the `bufbuild/buf:1.72.0` Docker image (the pinned version, since buf isn't on the host).
+- **TDD:** N/A (proto).
+- **Files modified:** `packages/proto/{common,indicators,ingest,analysis,config}/v1/*.proto`.
+- **Deviations:** verification ran buf through Docker instead of a host binary. This is a CI-equivalent fallback at the same pinned version.

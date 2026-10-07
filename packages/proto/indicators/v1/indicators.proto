@@ -41,6 +41,14 @@ service IndicatorsService {
 
   // List the available fundamental metrics for formula declarations (feature 205)
   rpc ListFundamentalMetrics(ListFundamentalMetricsRequest) returns (ListFundamentalMetricsResponse);
+
+  // Template catalog (feature 224). List/read: any authenticated caller. Manage: ADMIN only.
+  rpc ListTemplates(ListTemplatesRequest) returns (ListTemplatesResponse);
+  rpc ManageTemplate(ManageTemplateRequest) returns (FormulaTemplate);
+  // Copies a formula template into a private formula owned by the x-user-id caller.
+  rpc InstantiateTemplate(InstantiateTemplateRequest) returns (InstantiateTemplateResponse);
+  // Internal (SAN-bound xstockstrat-analysis): commits or aborts a strategy-template saga's copies.
+  rpc ResolveTemplateIntent(ResolveTemplateIntentRequest) returns (ResolveTemplateIntentResponse);
 }
 
 message ComputeIndicatorRequest {
@@ -159,7 +167,7 @@ message FormulaDefinition {
   string author = 5;
   google.protobuf.Timestamp created_at = 6;
   google.protobuf.Timestamp updated_at = 7;
-  bool is_public = 8;
+  bool is_public = 8 [deprecated = true]; // DEPRECATED: ignored, formulas are private to their author (feature 224); always false.
   map<string, string> input_schema = 9;  // expected input keys and types
   repeated FormulaParameter parameters = 10;
   repeated FormulaOutput outputs = 11;    // declared output series (beyond implicit "value")
@@ -170,6 +178,7 @@ message FormulaDefinition {
   // Non-empty = a fundamentals-only formula fed only these metrics as ExecuteFormula input_data
   // scalars, never OHLCV closes (feature 200); the category marker (no separate flag).
   repeated FundamentalMetric fundamental_inputs = 14;
+  xstockstrat.common.v1.TemplateOrigin origin = 15;  // set when instantiated from a template (feature 224)
 }
 
 message ListIndicatorsRequest {}
@@ -189,9 +198,9 @@ message RegisterFormulaRequest {
   string name = 1;
   string description = 2;
   string source = 3;
-  bool is_public = 4;
+  bool is_public = 4 [deprecated = true]; // DEPRECATED: ignored, formulas are private to their author (feature 224).
   map<string, string> input_schema = 5;
-  string author = 6;  // set by BFF from JWT claims; stored immutably
+  string author = 6 [deprecated = true]; // DEPRECATED: ignored; author is the x-user-id header (feature 224).
   repeated FormulaParameter parameters = 7;
   repeated FormulaOutput outputs = 8;  // declared output series (beyond implicit "value")
   int32 warmup_period = 9;             // bars of warm-up before this formula's outputs are valid (feature 064)
@@ -207,8 +216,8 @@ message GetFormulaRequest {
 }
 
 message ListFormulasRequest {
-  string author_filter = 1;  // if non-empty, return only formulas where author == author_filter
-  bool include_public = 2;   // if true, include all public formulas regardless of author_filter
+  string author_filter = 1;  // owner selector honoured only for an ADMIN caller; ignored otherwise (feature 224)
+  bool include_public = 2 [deprecated = true]; // DEPRECATED: ignored, formulas are private to their author (feature 224).
   int32 page_size = 3;       // default 0 = no limit
   int32 page_offset = 4;     // default 0
 }
@@ -224,7 +233,7 @@ message UpdateFormulaRequest {
   string name = 3;
   string description = 4;
   string source = 5;
-  bool is_public = 6;
+  bool is_public = 6 [deprecated = true]; // DEPRECATED: ignored, formulas are private to their author (feature 224).
   repeated FormulaParameter parameters = 7;
   repeated FormulaOutput outputs = 8;  // declared output series (beyond implicit "value")
   int32 warmup_period = 9;             // bars of warm-up before this formula's outputs are valid (feature 064)
@@ -259,4 +268,45 @@ message FundamentalMetricInfo {
 
 message ListFundamentalMetricsResponse {
   repeated FundamentalMetricInfo metrics = 1;
+}
+
+// feature 224 — formula template catalog.
+message FormulaTemplate {
+  xstockstrat.common.v1.TemplateMeta meta = 1;
+  // The deprecated is_public (4) and author (6) inside payload are ignored on instantiate: the
+  // instance is private and its author is the instantiating caller's x-user-id.
+  RegisterFormulaRequest payload = 2;
+}
+
+message ListTemplatesRequest {}
+
+message ListTemplatesResponse {
+  repeated FormulaTemplate templates = 1;
+}
+
+message ManageTemplateRequest {
+  xstockstrat.common.v1.TemplateOperation operation = 1;
+  FormulaTemplate template = 2;
+}
+
+message InstantiateTemplateRequest {
+  string template_id = 1;
+  // Saga-only (internal, SAN-bound xstockstrat-analysis): copy several templates as hidden
+  // pending rows under intent_id, resolved later by ResolveTemplateIntent.
+  repeated string template_ids = 2;
+  string intent_id = 3;
+}
+
+message InstantiateTemplateResponse {
+  FormulaDefinition formula = 1;
+  map<string, string> formula_ids_by_template = 2;  // saga path: template_id -> new formula_id
+}
+
+message ResolveTemplateIntentRequest {
+  string intent_id = 1;
+  bool commit = 2;  // true = make the pending copies visible; false = delete them
+}
+
+message ResolveTemplateIntentResponse {
+  int32 affected = 1;
 }
