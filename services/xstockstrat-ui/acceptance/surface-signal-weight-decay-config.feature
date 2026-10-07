@@ -2,19 +2,19 @@
 # Source: @AC-4, @AC-5, @AC-6 — config-ui scenarios
 Feature: surface-signal-weight-decay-config (config-ui)
   Acceptance scenarios for the xstockstrat-ui service promoted from feature 161.
-  Covers the config-ui Signal Sources form, inline weight editor, and the decay half-life
+  Covers the Signal Sources form and inline weight editor (re-homed to /insights/signal-sources by feature 224), and the decay half-life
   key visibility in the analysis namespace editor.
 
   @AC-4 @FR-3 @feature-161
   Scenario: the source create form sets reliability weight at registration time
-    Given an operator opens the config-ui Signal Sources create form
+    Given an operator opens the /insights/signal-sources create form
     When they fill slug "insider-buys", the required source fields, and reliability_weight 0.6 and submit
     Then the created source persists reliability_weight 0.6
     And the form displays plain-language guidance text describing the weight and its 0 to 1 range
 
   @AC-5 @FR-4 @feature-161
   Scenario: the inline weight editor shows guidance text
-    Given an operator views the config-ui Signal Sources table with source "sec-form4"
+    Given an operator views the /insights/signal-sources table with source "sec-form4"
     When they open the inline weight editor for "sec-form4"
     Then plain-language guidance text describing the weight's meaning and its 0 to 1 / default 1.0 semantics is shown
 

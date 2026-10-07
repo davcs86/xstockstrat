@@ -38,6 +38,35 @@ On DigitalOcean, the `db-migrator` PRE_DEPLOY job runs automatically on every de
 3. **Never edit an applied `.up.sql`** (committed to `main-dev`) — add a new numbered migration instead.
 4. Test locally: `./scripts/db-migrate.sh`
 
+### Migration header directives (feature 224)
+
+Both are read from the **first 5 lines** of an `.up.sql`:
+
+- **`-- requires-env: VAR[,VAR...]`** — `scripts/render-migrations.sh` (called by `db-migrate.sh up`)
+  renders the file with `envsubst` restricted to exactly those variables, so `$$` blocks and `$1`
+  placeholders survive; each named variable must be set and non-empty or the run fails naming it.
+  Files without the header are copied verbatim. A file that embeds a value (e.g. `SEED_USER_ID`)
+  should also guard unconditionally against an unrendered `${…}` (see ingest `013`, analysis `026`).
+  Any job that runs migrations (the `db-migrator` PRE_DEPLOY job included) must carry those env vars.
+- **`-- contract-of: services/<svc>/migrations/<NNN_expand>.up.sql`** — marks a contract migration.
+  `scripts/check-migration-contract.sh` refuses it unless the named expand file is already on
+  `origin/main` **and** is not added by the same change: ship the expand, deploy, then contract.
+
+**Expand-only up-files must be idempotent** on both the expanded and the contracted schema
+(`IF NOT EXISTS`, `to_regclass` guards, one-shot `DO` blocks), because `db-migrate.sh`'s dirty-state
+recovery replays from version 0.
+
+**CI jobs** (`.github/workflows/ci.yml`, on `migrations`/`ci` path changes):
+
+- `migration-rerun` — runs `scripts/migration-rerun.sh` in the `scripts/Dockerfile.migrate` image
+  against a fresh TimescaleDB: migrates to the pre-224 versions, loads fixtures, applies the rest, then
+  re-applies the feature-224 up-files (indicators `007`, ingest `013`, analysis `026`) a second time
+  and asserts the N-1 trigger count is unchanged, then runs `scripts/migration-assertions/*.sql`.
+  Older up-files are not replayed — many are not idempotent (defect report
+  `docs/reports/2026-10-07-db-migrate-dirty-recovery-replay-unsafe-defect.md`).
+- `migration-contract-gate` — PR-only; runs `scripts/check-migration-contract.sh` against the base
+  branch.
+
 ## Connection pooling (PgBouncer)
 
 Staging and production share **one** managed cluster (`xstockstrat`, plan `db-s-1vcpu-1gb`, single

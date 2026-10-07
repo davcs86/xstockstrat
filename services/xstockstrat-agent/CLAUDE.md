@@ -141,7 +141,8 @@ name-only update cannot wipe the list's stocks. New entries the curation tools a
 `direction='watchlist'` path adds.
 
 **`manage_formula` is different** — it forwards **no** admin scope (plain `_metadata()`); the
-indicators backend enforces an **author-ownership** check instead (admin is only an override there).
+indicators backend enforces an **author-ownership** check instead (no admin override since feature 224;
+`system`-authored formulas are immutable to every caller).
 It is not a hardcoded-admin forwarder and was left unchanged by feature 092.
 
 **`EmitAlert` (xstockstrat-notify) is intentionally ungated** (feature 092): it is an internal

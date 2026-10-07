@@ -2730,7 +2730,7 @@ behavior gate is `pnpm test:e2e` over these specs.
 
 ### Step 40 — docs: context teardown, conventions, and the C-16 CHANGE route update
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`, service `CLAUDE.md` files
 **Files**:
 - `CLAUDE.md` — modify
@@ -3106,3 +3106,16 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Number**: `225-private-by-default-enforce-contract`. The max NNN across `main-dev` and every remote `feature/*`/`claude/*` branch was 224.
 - **Order**: Step 41 was committed before Step 40 because Step 40's doc teardown was still in flight. The two steps touch disjoint files.
 - **merge-order.md**: a new row (225 waits for 224 to be launched) pre-reserves analysis `027`, indicators `008` and ingest `014`.
+
+### D-36 — Step 40: manual teardown reconciliation beyond the listed Files
+- **Plugin**: `/context-forge:context-constitution refresh` was not run, so item 8 was done by hand.
+- **Additional files reconciled** (each grounded drift caused by feature 224):
+  - root `docs/context-constitution.md` (PLAT-4 fundsignal `system` exception) and `docs/context-constitution-findings.md`;
+  - the per-module constitution and findings files for ingest, indicators, analysis and config;
+  - the agent `CLAUDE.md` `manage_formula` note (no admin override);
+  - the durable feature's description header (route only).
+- **Not changed** (out of scope or not a doc):
+  - `e2e/mobile-overflow.spec.ts` still checks `/config-ui/sources`;
+  - the `mcp_credential.<slug>` docstring in `services/xstockstrat-ingest/app/config/watcher.py`;
+  - pre-224 drift (`_is_admin:425` anchor, stale ingest anchors, the `database.md` run-order line).
+- **LEGACY_GLOBAL**: not shipped (ingest 013 has no `credential_scope`; D-19/D-25), so it is not documented.
