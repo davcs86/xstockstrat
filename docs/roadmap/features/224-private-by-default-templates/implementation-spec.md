@@ -130,7 +130,9 @@ recorded in `context.md` § Open Threads.
   `ResolveTemplateIntent`). Step 32 [test] covers Step 31.
 - Step 33 requires Steps 3, 6, 13 and 18: the assertions run inside Step 3's `migration-rerun` job.
 - Step 34 requires Steps 27, 29 and 31. Step 35 [test] covers Step 34.
-- Steps 36–38 require Steps 14, 19, 27, 29 and 31. Step 39 [test] covers Steps 36–38.
+- Steps 36–38 require Steps 14, 19, 27, 29 and 31. Step 38 also requires Step 37: it enables
+  `mcp_client` templates on the `/insights/templates` page that Step 37 creates (no Step 37 → 38
+  forward dependency). Step 39 [test] covers Steps 36–38.
 - Step 40 runs after all code steps (teardown).
 - Step 41 must land before the integration PR (design Open Risk: the follow-up and its merge-order
   row).
@@ -532,7 +534,10 @@ read of a table the follow-up may drop).
 5. **`strategy_scores_v2`.**
    - Columns are the same as `strategy_scores` plus `user_id TEXT NOT NULL`, with
      `PRIMARY KEY (user_id, strategy_id)`.
-   - Seed with `INSERT … SELECT s.user_id, sc.* … FROM analysis.strategy_scores sc JOIN analysis.strategies s USING (strategy_id) WHERE strategy_id IN (SELECT strategy_id FROM analysis.strategies GROUP BY strategy_id HAVING count(*) = 1) ON CONFLICT DO NOTHING`.
+   - Seed with explicit column lists on **both** sides (never `sc.*`, which breaks if either table
+     gains a column):
+     `INSERT INTO analysis.strategy_scores_v2 (user_id, strategy_id, overall_score, rating, component_scores, n_symbols, total_trading_days, provisional, created_at, updated_at) SELECT s.user_id, sc.strategy_id, sc.overall_score, sc.rating, sc.component_scores, sc.n_symbols, sc.total_trading_days, sc.provisional, sc.created_at, sc.updated_at FROM analysis.strategy_scores sc JOIN analysis.strategies s USING (strategy_id) WHERE sc.strategy_id IN (SELECT strategy_id FROM analysis.strategies GROUP BY strategy_id HAVING count(*) = 1) ON CONFLICT DO NOTHING`.
+     The column set is `005_strategy_scores.up.sql:1-8` plus `007_backtest_run_symbols.up.sql:37-40`.
    - Guard the seed with `to_regclass('analysis.strategy_scores') IS NOT NULL`.
    - Ambiguous ids are recomputed at boot (Step 9).
 6. **Strategy origin.** `ALTER TABLE analysis.strategies ADD COLUMN IF NOT EXISTS origin_template_id TEXT, ADD COLUMN IF NOT EXISTS origin_template_version INTEGER;`
@@ -667,6 +672,11 @@ no look-ahead bias.
 6. **`servicer.py`.**
    - `_caller_user_id` returns `""` when the header equals `"system"`, so an inbound `system` owns
      nothing (design "reserved `system` identity"). Leave the already-headered paths unchanged.
+   - **Deliberate, documented divergence from design §2.** Design §2 says an un-granted
+     `x-user-id: system` gets `PERMISSION_DENIED` in analysis too. Analysis has no inbound
+     `x-internal-caller` grant to check, so here it resolves to owner `""` instead: it owns nothing, so
+     reads return empty, and writes get `PERMISSION_DENIED` from the existing `if not caller_user_id`
+     guard (e.g. `ManageStrategy`, `servicer.py:2675-2677`). The same note is in `design.md` §2.
    - **Attribution filter (elaboration 7).** In `GetAttribution`, restrict
      `surviving = [s for s in trade_count if not source_filter or s == source_filter]` (`:3606-3607`)
      to slugs present in `_resolve_source_names(propagation_meta)` (`:3535-3547`), the caller-visible
@@ -741,6 +751,11 @@ grep -n "analysis-fundsignal\|x-access-scope" app/engine/fundsignal_loop.py   # 
      - one `EmitAlert` with `ALERT_SEVERITY_ERROR`;
      - status `failed`;
      - `_builtin_score` not invoked.
+   - **AC-37 (manual path):** the same non-system `scoring_formula_id`, driven through
+     `RunFundamentalsScan` (`servicer.py:3059`, which forwards the caller's trio into `run_once`) with an
+     admin caller. Assert the same outcome: zero `IngestSignal` calls, one `ALERT_SEVERITY_ERROR`
+     `EmitAlert`, a `failed` run, and the pre-flight `GetFormula` sent with `x-user-id: system` (not the
+     admin caller's id).
    - **AC-36 (analysis half):** REGISTER raises `FAILED_PRECONDITION` → no emit, and an ERROR alert
      whose body contains `macro-feed`.
 4. **Live loop.**
@@ -845,6 +860,10 @@ grep -n "from .conftest\|ctx_with\|RecordingStub" tests/test_owner_header_guard.
      by `_AUDIT_APPEND_CONCURRENCY = 4`, and a per-page K ceiling `_AUDIT_MAX_OWNERS_PER_PAGE` equal to
      the max page size. Rationale comments follow the operator round-5 ruling.
    - It raises on any append failure.
+   - Every ledger `AppendEvent` it sends forwards the inbound `x-user-id`/`x-access-scope`/`x-trace-id`
+     trio as gRPC metadata (C-03). `audit_admin_read` itself filters `trace_meta` (the inbound
+     metadata) to those three names, the same filter as `_validate_definition_proto`'s
+     `propagation_meta` (`servicer.py:605-611`).
    - `GetStrategy`/`ListStrategyDefinitions`: when `owner_user_id` is non-empty, differs from the
      caller, and the caller is admin, read that owner's rows and call `audit_admin_read`. An audit
      failure → `UNAVAILABLE`. A non-admin's `owner_user_id` is ignored.
@@ -854,6 +873,7 @@ grep -n "from .conftest\|ctx_with\|RecordingStub" tests/test_owner_header_guard.
 ```bash
 cd services/xstockstrat-analysis && ruff check . && ruff format --check .
 grep -n "strategy_scores_v2\|user_id = \$" app/repositories/strategy_scores.py app/repositories/backtest_run_symbols.py app/repositories/backtest_details.py app/repositories/backtest_runs.py
+grep -n "x-user-id\|x-access-scope\|x-trace-id" app/admin_audit.py   # trio forwarded (C-03)
 ```
 
 ---
@@ -1077,7 +1097,14 @@ plus owner-only read/execute.
   - `_row_to_formula` maps `is_public` (`:538`).
 - **Repo.** `formulas_repository.list(author_filter, include_public, …, author_public_only)` with the
   WHERE at `:155-158`; `get_by_id` (`:138-143`).
-- **Seed.** `fundamentals_value_quality.py:28` `IS_PUBLIC = True`, used at `seed_formulas.py:40`.
+- **Seed.** `fundamentals_value_quality.py:28` `IS_PUBLIC = True`, used at
+  `app/services/seed_formulas.py:40`.
+- **Per-service helper copies.** `app/peer_identity.py` and `app/admin_audit.py` are created as
+  per-service copies in indicators (here), ingest (Step 19) and analysis (`admin_audit.py`, Step 9). The
+  services are separate deployables and no shared Python package exists (`packages/` holds only
+  `otel` and `proto`). This mirrors the existing per-service `app/mtls.py` and `app/telemetry.py` copies
+  in agent, analysis, indicators and ingest. The resulting jscpd duplication is accepted (recorded in
+  `design.md` Rejected Alternatives).
   `SYSTEM_AUTHOR = "system"` (`app/formulas/__init__.py:5`).
 - **Main.** `main.py:41-63` has no ledger channel. `LEDGER_ENDPOINT` is already in
   `docker-compose.yml:311` and `.do/app.yaml`/`.do/app.dev.yaml:214`. Channel pattern: ingest
@@ -1250,9 +1277,14 @@ grep -rn "internal_caller\|InternalCallerInterceptor" app tests   # → no match
 **Covers**: AC-5
 
 **Instructions**:
-1. Assert that every recorded indicators call **except** the fundsignal `system` calls carries no
-   `x-internal-caller` header, and carries the strategy owner's `x-user-id` (AC-5:
-   `x-user-id bob`, no `x-internal-caller`).
+1. Assert that every recorded indicators call carries no `x-internal-caller` header, and carries the
+   strategy owner's `x-user-id` (AC-5: `x-user-id bob`, no `x-internal-caller`). Two caller ids are
+   exempt, and only on their own paths:
+   - `analysis-fundsignal` on the fundsignal `system` calls (Step 7);
+   - `analysis-template-saga` on the strategy-template saga calls `InstantiateTemplate` (saga form) and
+     `ResolveTemplateIntent` (Steps 27/31).
+
+   Any other `x-internal-caller` value, or either id on any other indicators call, fails the test.
 2. Assert that `app.main` imports no interceptor (`inspect.getsource` contains no `interceptors=`).
 
 **Verification**:
@@ -1328,7 +1360,7 @@ cd services/xstockstrat-analysis && uv run pytest --cov=app --cov-fail-under=40 
      `claimed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`, with `PRIMARY KEY (user_id, source, symbol, direction)`
      and a `claimed_at` index.
    - Seed it, guarded by `to_regclass('ingest.signal_dedup_keys') IS NOT NULL`:
-     `INSERT … SELECT n.user_id, k.* FROM ingest.signal_dedup_keys k JOIN ingest.newsletter_signals n ON n.id = k.signal_id ON CONFLICT DO NOTHING`.
+     `INSERT INTO ingest.signal_dedup_claims (user_id, source, symbol, direction, conviction, valid_until, signal_id, claimed_at) SELECT n.user_id, k.source, k.symbol, k.direction, k.conviction, k.valid_until, k.signal_id, k.claimed_at FROM ingest.signal_dedup_keys k JOIN ingest.newsletter_signals n ON n.id = k.signal_id ON CONFLICT DO NOTHING` (explicit column lists on both sides; source columns from `009_*.up.sql:10-17`).
    - `signal_dedup_keys` itself stays for N-1.
 5. **Origin columns.** `ALTER TABLE ingest.signal_sources ADD COLUMN IF NOT EXISTS origin_template_id TEXT, ADD COLUMN IF NOT EXISTS origin_template_version INTEGER;`
 6. **`ingest.source_templates`** has the same columns as Step 6's `strategy_templates`. **No seed
@@ -1423,7 +1455,14 @@ head -1 services/xstockstrat-ingest/migrations/013_*.up.sql   # -- requires-env:
      `user_id = $1 OR user_id = 'system'` (UNSPECIFIED), `user_id = $1` (OWN), or
      `user_id = 'system'` (SYSTEM);
    - `slug_holders(slug) -> list[str]`, used by headerless resolution;
-   - `list_all_sources` stays only for headerless N tolerance (Step 23 re-scopes the poller).
+   - `list_all_sources` stays only for headerless N tolerance and the poller (Step 23). Add `user_id`
+     to its fixed `cols` SELECT list (`signal_sources.py:44-48`), plus `credential_scope` when the
+     Step 18 gate shipped that column. Step 23's `poll_one_source` reads `src["user_id"]` and
+     `src.get("credential_scope")` from these rows, and headerless `ListSignalSources` uses them to
+     populate `SignalSource.user_id`.
+   - `get_active_source` (`signal_sources.py:34-40`) has no caller in `app/` (grep: only
+     `tests/test_signal_sources.py:10,180-207` references it). Delete it and those tests (Step 20)
+     rather than owner-keying dead code.
 5. **`IngestSignal`.**
    - Headered: resolve the source as `(owner, slug)` → absent → `NOT_FOUND` (AC-10; was
      `INVALID_ARGUMENT`, recorded deliberately per design E).
@@ -1456,7 +1495,12 @@ head -1 services/xstockstrat-ingest/migrations/013_*.up.sql   # -- requires-env:
 ```bash
 cd services/xstockstrat-ingest && ruff check . && ruff format --check .
 grep -n "signal_dedup_claims\|pg_advisory_xact_lock\|_SYSTEM_GRANTS" app/handlers/servicer.py
-grep -n "WHERE slug = \$1\"" app/repositories/signal_sources.py   # → none remain un-owner-keyed
+# Every slug predicate, including multi-line SQL ("… WHERE slug = $1" split across string literals):
+grep -rnE 'slug\s*=\s*\$[0-9]' app/repositories/ app/handlers/servicer.py
+#   → read each hit; each must also carry a `user_id = $N` predicate in the same statement
+#     (slug_holders is the one deliberate exception: it returns every holder).
+grep -rn "get_active_source" app tests   # → none (deleted)
+grep -n "x-user-id\|x-access-scope\|x-trace-id" app/admin_audit.py   # trio forwarded (C-03)
 ```
 
 ---
@@ -1466,8 +1510,8 @@ grep -n "WHERE slug = \$1\"" app/repositories/signal_sources.py   # → none rem
 **Status**: `pending`
 **Service**: `xstockstrat-ingest`
 **Files**:
-- `services/xstockstrat-ingest/tests/conftest.py` — modify (add `ctx_with(metadata, peer_sans=())`
-  beside `_ctx`)
+- `services/xstockstrat-ingest/tests/conftest.py` — modify (extend the existing `_ctx` builder; no
+  new near-duplicate helper)
 - `services/xstockstrat-ingest/tests/test_signal_ownership.py` — create
 - `services/xstockstrat-ingest/tests/test_signal_sources.py` — modify
 - `services/xstockstrat-ingest/tests/test_ingest_servicer.py` — modify
@@ -1483,7 +1527,20 @@ grep -n "WHERE slug = \$1\"" app/repositories/signal_sources.py   # → none rem
 **Covers**: AC-7, AC-8, AC-9, AC-10, AC-11, AC-12, AC-26, AC-28, AC-29, AC-33, AC-36
 
 **Instructions**:
-1. **Ingest tests:**
+1. **`conftest.py` — extend `_ctx`, do not add a sibling.** Today `_ctx(access_scope="4")` hard-codes
+   `x-user-id: u1` (`tests/conftest.py:15-31`). Extend it in place, keeping every existing call site
+   valid:
+   - `_ctx(access_scope="4", user_id="u1", peer_sans=(), internal_caller="")`;
+   - `user_id=""` omits the `x-user-id` header (the headerless-N cases);
+   - `internal_caller` adds `x-internal-caller` when non-empty (needed for the AC-33 grant cases);
+   - `peer_identity_key()` returns `"x509_subject_alternative_name"` when `peer_sans` is non-empty
+     (else `None`), and `peer_identities()` returns the encoded `peer_sans` list.
+2. **Ingest tests:**
+   - **Poller row shape:** `list_all_sources` SELECTs `user_id` (and `credential_scope` when Step 18
+     shipped it). Assert on the SQL text and on the returned dict keys. Headerless `ListSignalSources`
+     populates `SignalSource.user_id` from those rows.
+   - **Dead code:** remove the `get_active_source` tests (`tests/test_signal_sources.py:10,180-207`)
+     along with the function (Step 19).
    - **AC-7:** a non-admin bob registers `my-newsletter` → `user_id=bob`; alice's list excludes it.
    - **AC-8:** alice and bob both register `motley-fool`.
    - **AC-9:** both ingest NVDA BUY → two rows, and bob's `QuerySignals(symbol=NVDA)` → 1 (SQL owner
@@ -1506,7 +1563,8 @@ grep -n "WHERE slug = \$1\"" app/repositories/signal_sources.py   # → none rem
 **Verification**:
 ```bash
 cd services/xstockstrat-ingest && uv run pytest --cov=app --cov-fail-under=40 && ruff check . && ruff format --check .
-grep -n "from .conftest\|ctx_with\|_ctx" tests/test_signal_ownership.py
+grep -n "_ctx" tests/test_signal_ownership.py
+grep -n "def ctx_with" tests/conftest.py   # → none (the existing _ctx was extended instead)
 ```
 
 ---
@@ -1635,6 +1693,9 @@ grep -rn "__tests__/fixtures" src/__tests__/perUserSecrets.test.ts || echo "sing
 - **Secret resolution.** `resolve_secret(key)` sends `GetSecretRequest(namespace, key, environment)`
   with `x-internal-caller: ingest` (`watcher.py:146-161`).
 - **Ingest entry.** `_ingest_external_signal(signal, propagation_meta=None)` (`servicer.py:800`).
+- `list_all_sources` selects a fixed column list (`signal_sources.py:44-48`) that today lacks
+  `user_id`/`credential_scope`; Step 19 adds them, so the `src["user_id"]` /
+  `src.get("credential_scope")` reads below depend on Step 19.
 - If Step 18 shipped `credential_scope`, a `LEGACY_GLOBAL` row resolves the existing global key (FR-14
   "existing global mcp credentials keep resolving for the seed owner's migrated sources").
 
@@ -1805,11 +1866,20 @@ payload validation.
    - **User path** (`template_id` only): owner = header (must be non-empty and not `system`). The
      template must be non-retired (retired or missing → `NOT_FOUND`). Create a private formula from the
      payload with `author=owner`, `is_public=False`, `origin_template_id`/`origin_template_version`.
-   - **Saga path** (`template_ids` + `intent_id`): requires `_internal_grant(context, "analysis")`
-     (SAN-bound) and a non-empty owner header. Insert every copy in **one transaction** with
-     `pending_intent_id=intent_id`. Never cache them. Any failure rolls back everything and returns
-     the error. Return `formula_ids_by_template`.
-5. **`ResolveTemplateIntent(intent_id, commit)`.** Same grant as the saga path. `commit=True` → `UPDATE
+   - **Saga path** (`template_ids` + `intent_id`): requires
+     `_internal_grant(context, "analysis-template-saga")` (Step 14 helper: the `x-internal-caller`
+     header equals `analysis-template-saga` **and** the peer SAN is `xstockstrat-analysis`) and a
+     non-empty, non-`system` owner header. Without the grant → `PERMISSION_DENIED`.
+     - This is a **dedicated** caller id. It is **not** the N-only `analysis` formula-reader bypass id
+       (Step 14 item 3), which the follow-up "224 enforce + contract" deletes; the saga must keep
+       working after that deletion.
+     - Resolve every id in `template_ids` first. If any referenced formula template is retired or
+       missing, fail the whole call with `NOT_FOUND` (naming the id) before any INSERT: no partial
+       copy is ever written.
+     - Insert every copy in **one transaction** with `pending_intent_id=intent_id`. Never cache them.
+       Any failure rolls back everything and returns the error. Return `formula_ids_by_template`.
+5. **`ResolveTemplateIntent(intent_id, commit)`.** Same `analysis-template-saga` grant as the saga
+   path, else `PERMISSION_DENIED`. `commit=True` → `UPDATE
    … SET pending_intent_id = NULL WHERE pending_intent_id = $1 AND author = <owner>`. `commit=False` →
    hard `DELETE … WHERE pending_intent_id = $1 AND author = <owner>`. Evict any cache entries for those
    ids. Idempotent (`affected` may be 0).
@@ -1823,6 +1893,7 @@ payload validation.
 ```bash
 cd services/xstockstrat-indicators && ruff check . && ruff format --check .
 grep -n "conn.transaction()\|pending_intent_id" app/services/formulas_repository.py
+grep -n "analysis-template-saga" app/handlers/servicer.py   # saga + ResolveTemplateIntent grant
 ```
 
 ---
@@ -1854,7 +1925,9 @@ grep -n "conn.transaction()\|pending_intent_id" app/services/formulas_repository
   `update_available=false`.
 - **Saga:** pending copies are invisible to List/Get. A partial failure in a batch rolls back every
   INSERT (mock-transaction assertion, ledger 2026-08-07). `ResolveTemplateIntent` commit un-hides and
-  abort deletes. A caller without the SAN → `PERMISSION_DENIED`.
+  abort deletes. A caller without the SAN → `PERMISSION_DENIED`, and so is a caller presenting the
+  N-only `analysis` bypass id instead of `analysis-template-saga`. A batch naming one retired or
+  missing formula template → `NOT_FOUND` with zero INSERTs.
 
 **Verification**:
 ```bash
@@ -1876,6 +1949,8 @@ cd services/xstockstrat-indicators && uv run pytest --cov=app --cov-fail-under=5
 **Codebase Evidence**:
 - REGISTER validation: `_validate_source_write(source_type, config_json, credentials_ref)`
   (`servicer.py:1123-1134`) plus the reliability-weight range check (`:1176-1184`).
+- `validate_config_json(source_type, config_json)` is defined at `signal_sources.py:186`, imported into
+  the servicer at `servicer.py:35`, and called by `_validate_source_write` at `servicer.py:1129`.
 - `SignalSource` has no `credentials_ref` field: "credentials_ref is intentionally absent"
   (`ingest.proto:152-153`).
 - Step 19 REGISTER path (advisory lock, reserved slugs).
@@ -1958,8 +2033,15 @@ cd services/xstockstrat-ingest && uv run pytest --cov=app --cov-fail-under=40 &&
   (`schedule.seed()`, jitter, tick loop). The background `create_task` precedent is in `main.py:207-213`.
 - `_row_to_strategy_definition` (`servicer.py:6177`); `_row_to_score` (`:6141`).
 - Indicators saga RPCs: Step 27. Blend helper: Step 25.
-- Header propagation (C-03): indicators calls pass `[("x-user-id", owner)]` plus the inbound
-  `x-access-scope`/`x-trace-id`. The SAN identity is analysis's mTLS leaf (`main.py:73-78`).
+- Header propagation (C-03): see Instructions item 5 for the exact outbound metadata on both saga
+  paths. The SAN identity is analysis's mTLS leaf (`main.py:73-78`).
+- **Write-time validation today.** `_validate_definition_proto` (`servicer.py:605-637`) resolves each
+  component's `formula_id` with indicators `GetFormula`: `_fetch_formula_outputs` (`:541-564`, named
+  outputs), `_formula_fundamentals` (`:1610`, fundamentals inputs → the `source_symbol` XOR check at
+  `:615-632`) and `_refuse_deleted_bindings` (`:591-603`). It then calls the pure
+  `_validate_definition(definition, formula_outputs)` (`app/services/evaluator.py:734`). A formula
+  **template** id is not a formula id, so `GetFormula` would `NOT_FOUND` it and every dotted output
+  (e.g. `z.upper`) would be rejected.
 
 **TDD**: `red-green required`
 
@@ -1971,9 +2053,21 @@ cd services/xstockstrat-ingest && uv run pytest --cov=app --cov-fail-under=40 &&
    state = $from`), plus `stale(states, older_than)`.
 2. **`ListTemplates`/`ManageTemplate`.**
    - Admin-gated writes.
-   - CREATE/UPDATE validate the `StrategyDefinition` payload with `_validate_definition_proto`, using
-     the template's formula **template** ids. Each referenced formula template must exist in
-     indicators `ListTemplates`, else `INVALID_ARGUMENT`.
+   - CREATE/UPDATE validate the `StrategyDefinition` payload with a dedicated
+     `_validate_template_definition(definition, context)`. It must **not** reuse
+     `_validate_definition_proto`'s `GetFormula` resolution (evidence above):
+     1. Call indicators `ListTemplates` once and index the active `FormulaTemplate`s by
+        `meta.template_id`. A component `formula_id` with no active formula template →
+        `INVALID_ARGUMENT`.
+     2. Build `formula_outputs[template_id] = {"value"} ∪ {o.name for o in payload.outputs}` from the
+        template's `RegisterFormulaRequest` payload.
+     3. Build the fundamentals map from `payload.fundamental_inputs`, and apply the same
+        `source_symbol` XOR rejection as `_validate_definition_proto` (`:615-632`).
+     4. Call `_validate_definition(definition, formula_outputs)`, so named outputs such as `z.upper`
+        validate exactly as they do for a concrete formula.
+
+     Factor the XOR check into a shared helper used by both validators rather than copying it (C-18).
+     The ListTemplates call carries the admin caller's trio (C-03).
 3. **`InstantiateTemplate(template_id, strategy_id)`.**
    1. The owner is the header (non-empty, not `system`). The template must be active, else
       `NOT_FOUND` (a retired template starts no intent).
@@ -1983,7 +2077,8 @@ cd services/xstockstrat-ingest && uv run pytest --cov=app --cov-fail-under=40 &&
    3. `await self._require_admin_for_blend_id(context, final_id)` (Step 25) on the **final** id.
    4. Insert the intent `PENDING`.
    5. Call indicators `InstantiateTemplate(template_ids=<distinct component formula template ids>,
-      intent_id)`. On error, CAS `PENDING→ABORTING`, call `ResolveTemplateIntent(commit=False)`, CAS
+      intent_id)` with the item-5 request-path metadata. A retired or missing formula template fails
+      the whole indicators call with `NOT_FOUND` and no copies (Step 27). On error, CAS `PENDING→ABORTING`, call `ResolveTemplateIntent(commit=False)`, CAS
       `→ABORTED`, and return the error (AC-19).
    6. Repoint the components' `formula_id` to the returned copies. Set `active=False`,
       `live_enabled=False` and `user_id=owner`.
@@ -2001,8 +2096,18 @@ cd services/xstockstrat-ingest && uv run pytest --cov=app --cov-fail-under=40 &&
    - `COMMITTED` → retry the commit → `FINALIZED`.
 
    `_INTENT_STALE_SECONDS = 900` and `_INTENT_SWEEP_SECONDS = 300` are named constants with a rationale
-   comment (elaboration 6).
-5. **Origin on reads.** `_row_to_strategy_definition` maps the origin columns into
+   comment (elaboration 6; the operator extended the round-5 fixed-constant ruling to both on
+   2026-10-07).
+5. **Outbound metadata for the indicators saga calls** (`InstantiateTemplate` saga form and
+   `ResolveTemplateIntent`). The caller id is the dedicated `analysis-template-saga` (Step 27), never
+   the N-only `analysis` bypass id.
+   - **Request path** (inside `InstantiateTemplate`): the caller's trio — `x-user-id: <owner>`,
+     the inbound `x-access-scope`, the inbound `x-trace-id` — plus
+     `x-internal-caller: analysis-template-saga`.
+   - **Reconcile sweep path** (item 4; no inbound request): `x-user-id: <intent.user_id>` +
+     `x-internal-caller: analysis-template-saga` + a fresh `x-trace-id` (new UUID per sweep action).
+     No `x-access-scope` is sent.
+6. **Origin on reads.** `_row_to_strategy_definition` maps the origin columns into
    `StrategyDefinition.origin`. `GetStrategy`, `ListStrategyDefinitions` and `ListStrategies` (via
    `StrategyScore.origin`) fill `latest_version`/`update_available` with one batched template lookup
    per response.
@@ -2011,6 +2116,8 @@ cd services/xstockstrat-ingest && uv run pytest --cov=app --cov-fail-under=40 &&
 ```bash
 cd services/xstockstrat-analysis && ruff check . && ruff format --check .
 grep -n "_require_admin_for_blend_id\|cas(\|ResolveTemplateIntent" app/handlers/servicer.py
+grep -rn "analysis-template-saga" app   # request path + sweep path metadata
+grep -n "_validate_template_definition" app/handlers/servicer.py
 ```
 
 ---
@@ -2041,6 +2148,19 @@ grep -n "_require_admin_for_blend_id\|cas(\|ResolveTemplateIntent" app/handlers/
 - **Blend:** a template whose final id equals the configured blend id → `FAILED_PRECONDITION` for a
   non-admin.
 - **Sweep:** stale `PENDING` → `ABORTED`; `COMMITTED` → `FINALIZED`.
+- **Saga metadata (`RecordingStub` indicators stub):**
+  - request path: every `InstantiateTemplate` (saga form) and `ResolveTemplateIntent` call carries
+    exactly one `x-user-id` equal to the caller, the caller's `x-access-scope`/`x-trace-id`, and
+    `x-internal-caller: analysis-template-saga`;
+  - sweep path: each `ResolveTemplateIntent` call carries `x-user-id` equal to the intent's
+    `user_id` (seed two intents owned by alice and bob; assert per call), a non-empty `x-trace-id`,
+    and `x-internal-caller: analysis-template-saga`;
+  - no saga call carries `x-internal-caller: analysis`.
+- **Template validation:** an admin `ManageTemplate CREATE` whose component references a formula
+  template with declared output `upper` and a signal `z.upper` succeeds; an undeclared `z.lower` →
+  `INVALID_ARGUMENT`; a component id with no active formula template → `INVALID_ARGUMENT`; a
+  fundamentals-input formula template plus `source_symbol` → `INVALID_ARGUMENT`. No `GetFormula` call
+  is recorded.
 
 **Verification**:
 ```bash
@@ -2075,15 +2195,27 @@ cd services/xstockstrat-analysis && uv run pytest --cov=app --cov-fail-under=40 
 **Covers**: AC-15, AC-22, AC-27
 
 **Instructions**:
-1. **Restructure the rerun.** Change `migration-rerun.sh` (Step 3 file) to apply migrations **up to**
-   indicators 006, ingest 012 and analysis 025. Then load `fixtures-pre-224.sql`:
-   - 8 `is_public=true` formulas by `user-a@example.test`, `user-b` and `system`;
-   - 3 sources, including one `derived` `fundamentals`;
-   - 120 signals spread across those sources;
-   - matching `signal_dedup_keys`.
-
-   Then apply the rest and run the assertions. List `scripts/migration-rerun.sh` in this step's
-   commit; it is the Step 3 file being extended.
+1. **Restructure the rerun.** `scripts/db-migrate.sh` supports only `up | version | force`
+   (`db-migrate.sh:64-112`; the `*)` fallback at `:108-111` rejects anything else), so it has no
+   partial-version target. `migration-rerun.sh` (Step 3 file) therefore drives `migrate` directly for
+   the partial pass:
+   1. Enable the TimescaleDB extension and pre-create each schema, as `db-migrate.sh` does.
+   2. For each service, render its migrations dir into a scratch dir with
+      `scripts/render-migrations.sh <dir> <scratch>` (Step 3). For analysis, apply the existing
+      analysis-013 `envsubst '$SEED_USER_ID'` render to the scratch copy as well, exactly as the
+      `db-migrate.sh` `up` branch does (`:72-89`); the partial pass must not skip it.
+   3. Use the per-service URL with `x-migrations-table=<schema>_schema_migrations` (same rule as
+      `service_db_url`, `db-migrate.sh:34-46`). Run
+      `migrate -path <scratch> -database <url> goto 6` (indicators), `goto 12` (ingest) and
+      `goto 25` (analysis); every other service runs `migrate … up`.
+   4. Load `fixtures-pre-224.sql`:
+      - 8 `is_public=true` formulas by `user-a@example.test`, `user-b` and `system`;
+      - 3 sources, including one `derived` `fundamentals`;
+      - 120 signals spread across those sources;
+      - matching `signal_dedup_keys`.
+   5. Apply the rest with `scripts/db-migrate.sh up` (which renders the `-- requires-env` files), then
+      continue with Step 3's replay (force 0 → `up`) and run the assertions. List
+      `scripts/migration-rerun.sh` in this step's commit; it is the Step 3 file being extended.
 2. **`indicators-007.sql`:** all 8 rows exist with unchanged `source`/`author`, `is_public` is false
    everywhere, no `is_public` index, and `formula_templates` is empty (AC-15/AC-22). Each assertion is
    a `DO $$ … RAISE EXCEPTION` on failure.
@@ -2096,8 +2228,12 @@ cd services/xstockstrat-analysis && uv run pytest --cov=app --cov-fail-under=40 
 ```bash
 ls scripts/migration-assertions/*.sql
 shellcheck scripts/migration-rerun.sh && shfmt -d -i 2 scripts/migration-rerun.sh
+grep -n "goto 6\|goto 12\|goto 25\|render-migrations.sh" scripts/migration-rerun.sh
 # Real execution: CI job `migration-rerun` (Step 3).
 ```
+
+Coverage: N/A — no coverage tool for SQL or shell; the behavior gate is the CI `migration-rerun` job
+running these `DO $$ … RAISE EXCEPTION` assertions.
 
 ---
 
@@ -2112,6 +2248,8 @@ shellcheck scripts/migration-rerun.sh && shfmt -d -i 2 scripts/migration-rerun.s
 - `docs/runbooks/mcp-tools.md` — modify
 - `plugins/strat-lab/skills/backtest/SKILL.md` — modify
 - `services/xstockstrat-ui/src/lib/copilot.ts` — modify (tool-count surface)
+- `services/xstockstrat-agent/acceptance/remove-agent-postgres-mcp.feature` — modify (C-16 CHANGE of
+  `@feature-214 @AC-1` tool count)
 
 **Reviewers**: `xstockstrat-agent` owner — MCP tool contract stability and `mcp-tools.md` parity;
 tool-count statements in sync across all six inventory surfaces; no secret values in tool output.
@@ -2139,6 +2277,19 @@ tool-count statements in sync across all six inventory surfaces; no secret value
     `list_formulas` `:635-644`).
   - `tests/test_tools_endpoint.py:15-` (the name set).
   - `services/xstockstrat-ui/src/lib/copilot.ts:19-21` (`COPILOT_MCP_TOOL_COUNT = 43`).
+- **Durable suite.** `services/xstockstrat-agent/acceptance/remove-agent-postgres-mcp.feature:14`
+  `And the advertised tool count is 43` (`@AC-1 @FR-1 @feature-214`, `:9-14`).
+- **Stale per-user-secret and admin-gate text.**
+  - Agent `CLAUDE.md:76` (`set_config` row: "per-user override; secrets are global-only") and
+    `:161-162` ("Secret writes are **global-scope only** (a per-user secret write is rejected
+    `INVALID_ARGUMENT` …)").
+  - Agent `CLAUDE.md:97-109` § Management-tool authorization: "Two management **write** tools still hit
+    a backend **admin** gate — `manage_signal_source` and `trigger_backfill`" and the ingest
+    `ManageSignalSource`/`TriggerBackfill` ADMIN-bit sentence (`:104-105`).
+  - `docs/runbooks/mcp-tools.md:669-671` (`manage_signal_source` "**Admin-scoped write** … a non-admin is
+    rejected `PERMISSION_DENIED` by the ingest `ManageSignalSource` gate"), `:694` (`bearer_token` row:
+    the global `ingest.mcp_credential.<slug>` key) and `:996` (`set_config` `user_id` row: "Secret keys
+    are **global-only** — a per-user secret write is rejected `INVALID_ARGUMENT`").
 - **strat-lab skill.** `plugins/strat-lab/skills/backtest/SKILL.md:122` references `manage_formula`.
   Root `CLAUDE.md` requires a same-PR skill update for `manage_strategy`-family changes.
 
@@ -2172,7 +2323,19 @@ tool-count statements in sync across all six inventory surfaces; no secret value
      mention.
    - `test_tools_endpoint.py` name set.
    - `copilot.ts` → `COPILOT_MCP_TOOL_COUNT = 45` with a `→ 45 feature 224` comment.
-5. **`SKILL.md`.** Add `list_templates`/`instantiate_template` usage (start from a strategy template,
+   - `remove-agent-postgres-mcp.feature:14` → `And the advertised tool count is 45`. This is an
+     operator-approved C-16 CHANGE of `@feature-214 @AC-1` (signed off 2026-10-07, `context.md`;
+     `design.md` § Business Rules Touched). The `db_*` absence assertion (`:13`) is unchanged.
+5. **Stale secret/admin text.**
+   - Agent `CLAUDE.md:76` and `:161-162`: secrets may be per-user (feature 224 operator override of
+     feature 147); redaction holds on every edge.
+   - Agent `CLAUDE.md` § Management-tool authorization (`:97-109`): only `trigger_backfill` still hits
+     the ingest admin gate. `manage_signal_source` is owner-gated (any caller manages their own sources;
+     `system` sources are read-only).
+   - `mcp-tools.md:669-671`: `manage_signal_source` is an owner-scoped write. `:694`: the bearer is
+     written to an opaque per-user key `ingest.mcp_credential.<uuid>`. `:996`: per-user secret writes
+     are accepted.
+6. **`SKILL.md`.** Add `list_templates`/`instantiate_template` usage (start from a strategy template,
    then `run_backtest`). State that formulas are private to their author. Mention neither `is_public`
    nor `include_public`.
 
@@ -2181,6 +2344,9 @@ tool-count statements in sync across all six inventory surfaces; no secret value
 cd services/xstockstrat-agent && ruff check . && ruff format --check .
 grep -rn "is_public\|include_public" app docs 2>/dev/null; grep -n "is_public\|include_public" ../../docs/runbooks/mcp-tools.md ../../plugins/strat-lab/skills/backtest/SKILL.md   # → none
 grep -n "forty-five\|45" app/tools.py CLAUDE.md ../../docs/runbooks/mcp-tools.md ../xstockstrat-ui/src/lib/copilot.ts
+grep -n "tool count is 45" acceptance/remove-agent-postgres-mcp.feature
+grep -n "global-only\|global-scope only\|mcp_credential.<slug>" CLAUDE.md ../../docs/runbooks/mcp-tools.md   # → none
+grep -n "manage_signal_source\` and" CLAUDE.md   # → none (no longer listed as admin-gated)
 ```
 
 ---
@@ -2287,11 +2453,17 @@ grep -rn "isPublic\|includePublic" src --include=*.ts --include=*.tsx | grep -v 
 - `services/xstockstrat-ui/src/components/insights/StrategyWizard.tsx` — modify
 - `services/xstockstrat-ui/src/app/insights/strategies/[id]/page.tsx` — modify (update-available badge)
 - `services/xstockstrat-ui/src/lib/insightsBff.ts` — modify
-- `services/xstockstrat-ui/src/lib/configUiBff.ts` — modify
-- `services/xstockstrat-ui/src/lib/browserClients/indicatorsClient.ts` — modify (if the template RPCs
-  need the insights transport)
+- `services/xstockstrat-ui/src/lib/configUiBff.ts` — modify (register template RPCs; import
+  `indicatorsClient` from `@/lib/connectClients`)
+- `services/xstockstrat-ui/src/lib/browserClients/configUiIndicatorsClient.ts` — create (config-ui
+  browser client for the indicators template RPCs)
 - `services/xstockstrat-ui/src/components/shared/navGroups.tsx` — modify
 - `services/xstockstrat-ui/src/components/shared/PlatformHeader.tsx` — modify
+
+No `browserClients/indicatorsClient.ts` change: it is a `createClient(IndicatorsService, …)` bound to
+`/insights/api`, so the new RPCs appear on it once Step 2 regenerates the stubs. The same holds for
+`analysisClient.ts` and `insightsIngestClient.ts` (both `/insights/api`). No `connectClients.ts`
+change: the server-side `indicatorsClient` already exists (`connectClients.ts:109`).
 
 **Reviewers**: `xstockstrat-ui` owner — Connect-RPC call safety, config mutation safety.
 
@@ -2303,6 +2475,19 @@ grep -rn "isPublic\|includePublic" src --include=*.ts --include=*.tsx | grep -v 
   (`insightsBff.ts:31-178`; `bffShared.ts` `forward:64`, `forwardAdmin:80`, `requireAdminScope:47`).
   `createDispatch(router, '/insights/api')` (`:177`). The config-ui router registers only explicit
   methods (`configUiBff.ts:24-80`).
+- **Config-ui server clients.** `configUiBff.ts:7` imports `configClient, ingestClient,
+  analysisClient, identityClient` from `@/lib/connectClients`; `indicatorsClient` is exported there
+  (`connectClients.ts:109`) but not yet imported by the config-ui BFF, and no `IndicatorsService` is
+  registered on the config-ui router.
+- **Browser-client pattern.** One file per (service, segment), each
+  `createClient(<Service>, makeBrowserTransport('<segment>/api'))`:
+  - `browserClients/indicatorsClient.ts:5` → `/insights/api`;
+  - `browserClients/configUiAnalysisClient.ts:7` → `/config-ui/api` (the config-ui twin of the
+    insights `analysisClient.ts`);
+  - `browserClients/ingestClient.ts:5` → `/config-ui/api`.
+
+  The config-ui templates page therefore uses `configUiAnalysisClient`, `ingestClient` and a new
+  `configUiIndicatorsClient`.
 - **Admin detection.** `useIsAdmin` (`hooks/useLiveStrategies.ts:60`).
 - C-17 primitives: `DataTable`/`EmptyState`/`FormDialog`/`QueryStateMessages` (design §10).
 
@@ -2315,14 +2500,24 @@ grep -rn "isPublic\|includePublic" src --include=*.ts --include=*.tsx | grep -v 
    `IndicatorsService`, `IngestService` and `AnalysisService`.
 2. **Config-ui BFF.** Register `listTemplates` (`forward`) and `manageTemplate` (`forwardAdmin`) for all
    three services. Backend re-checks the ADMIN bit.
+   - Add a `router.service(IndicatorsService, { listTemplates, manageTemplate })` block, and add
+     `indicatorsClient` to the `@/lib/connectClients` import (`configUiBff.ts:7`) plus the
+     `IndicatorsService` proto import.
+   - Extend the existing `IngestService` (`:52-55`) and `AnalysisService` (`:59-61`) blocks, and
+     update the "Only the admin-scoped manual producer trigger is exposed" comment (`:57-58`).
+   - Create `browserClients/configUiIndicatorsClient.ts`, mirroring `configUiAnalysisClient.ts`:
+     `createClient(IndicatorsService, makeBrowserTransport('/config-ui/api'))`, exported as
+     `configUiIndicatorsClient`.
 3. **`useTemplates.ts`.** List per kind; an instantiate mutation that returns the new object id.
 4. **`/insights/templates`.**
    - Tabs (formula / strategy / signal source) over a `DataTable`, with `EmptyState` (the catalog
      starts empty).
    - A "Use template" button with a unique accessible name ("Use template <name>").
    - Instantiate, then `router.push` to the new formula, strategy or source.
-   - A signal-source template of type `mcp_client` prompts for a bearer via `FormDialog`, then writes
-     the per-user secret (Step 38's hook) before instantiating.
+   - A signal-source template of type `mcp_client` is **not** instantiable from this step's page
+     (its "Use template" is disabled with an explanatory tooltip). Step 38 adds the bearer prompt,
+     because the per-user secret-write hook and the insights `setConfig` handler land there. This
+     step has no forward dependency on Step 38.
 5. **`StrategyWizard.tsx`.** A "Start from template" entry lists strategy templates and instantiates
    them, with an optional strategy id.
 6. **Update-available badge** on the strategy detail page when `definition.origin?.updateAvailable`.
@@ -2336,6 +2531,8 @@ grep -rn "isPublic\|includePublic" src --include=*.ts --include=*.tsx | grep -v 
 ```bash
 cd services/xstockstrat-ui && pnpm run lint && npx tsc --noEmit && pnpm run lint:dup
 grep -n "insights/templates\|config-ui/templates" src/components/shared/navGroups.tsx src/components/shared/PlatformHeader.tsx
+grep -n "IndicatorsService\|indicatorsClient" src/lib/configUiBff.ts
+ls src/lib/browserClients/configUiIndicatorsClient.ts
 ```
 
 ---
@@ -2350,6 +2547,8 @@ grep -n "insights/templates\|config-ui/templates" src/components/shared/navGroup
 - `services/xstockstrat-ui/src/app/config-ui/sources/page.tsx` — modify (becomes the admin read-only view)
 - `services/xstockstrat-ui/src/app/config-ui/hooks/useSignalSourceMutations.ts` — modify
 - `services/xstockstrat-ui/src/app/config-ui/hooks/useSignalSources.ts` — modify
+- `services/xstockstrat-ui/src/app/insights/templates/page.tsx` — modify (enable `mcp_client` source
+  templates: bearer prompt, moved here from Step 37)
 - `services/xstockstrat-ui/src/lib/insightsBff.ts` — modify
 - `services/xstockstrat-ui/src/lib/configUiBff.ts` — modify
 - `services/xstockstrat-ui/src/components/shared/navGroups.tsx` — modify
@@ -2363,7 +2562,9 @@ grep -n "insights/templates\|config-ui/templates" src/components/shared/navGroup
 - **Existing hooks.**
   - `useSignalSourceMutations.ts:9-21` `useManageSignalSource`.
   - `useRegisterMcpClientSource` writes the **global** key `mcp_credential.${slug}` via
-    `configClient.setConfig` (`:27-50`).
+    `configClient.setConfig` with `value: { …, isSecret: true }` and `createKey: true` (`:29-54`).
+  - `SetConfigRequest.create_key = 8`; the secret flag is `ConfigValue.is_secret = 6`
+    (`config.proto:68,132`).
   - `useSignalSources.ts:5-19` lists via `ingestClient.listSignalSources({ includeInactive: true })`.
 - **Transports.** The browser `ingestClient` uses `/config-ui/api` (`browserClients/ingestClient.ts:5`);
   `insightsIngestClient.ts` exists for `/insights/api`.
@@ -2371,6 +2572,8 @@ grep -n "insights/templates\|config-ui/templates" src/components/shared/navGroup
   - Config-ui `setConfig` is admin-only (`configUiBff.ts:27-49`); config-ui ingest registers
     `listSignalSources`/`manageSignalSource` (`:52-55`).
   - Insights ingest registers only `listSignalSources`/backfills (`insightsBff.ts:73-88`).
+  - Insights `ConfigService` registers only `getConfig` (`insightsBff.ts:151-154`); the browser
+    `insightsConfigClient` is bound to `/insights/api` (`browserClients/insightsConfigClient.ts:7`).
 - **Nav.** The Engine item `{ label: 'Signal sources', href: '/config-ui/sources' }`
   (`navGroups.tsx:67`).
 - **Ledger.** insights.md 2026-08-21 config-secrets-and-scoping: clamp a per-user scope to the session
@@ -2385,8 +2588,10 @@ grep -n "insights/templates\|config-ui/templates" src/components/shared/navGroup
 1. **Insights BFF.**
    - Register `IngestService.manageSignalSource` (`forward`).
    - Register a `ConfigService.setConfig` handler that forces
-     `{ ...req, userId: claims.user_id, environment: nativeConfigEnvironment(), author: claims.user_id }`.
-     It rejects any request whose `namespace !== 'ingest'` or whose key does not start with
+     `{ ...req, userId: claims.user_id, environment: nativeConfigEnvironment(), author: claims.user_id, createKey: true, value: { ...req.value, isSecret: true } }`.
+     Forcing `isSecret: true` and `createKey: true` server-side means a client can never store the
+     bearer in plaintext under an `ingest.mcp_credential.*` key, whatever it sends.
+   - It rejects any request whose `namespace !== 'ingest'` or whose key does not start with
      `mcp_credential.` (per-user secret write only; the backend's owner-only gate re-checks).
 2. **`/insights/signal-sources`.**
    - Move the create form (with reliability-weight guidance) and the inline weight editor from
@@ -2396,13 +2601,17 @@ grep -n "insights/templates\|config-ui/templates" src/components/shared/navGroup
    - The `mcp_client` register writes the per-user secret with an opaque key
      `mcp_credential.${crypto.randomUUID()}` and then registers with `credentialsRef`.
 3. **`useSignalSourceMutations.ts`.** Retarget `useRegisterMcpClientSource` to the insights transports
-   and the opaque per-user key.
-4. **`/config-ui/sources`** becomes the FR-13 admin read-only view:
+   (`insightsConfigClient`, `insightsIngestClient`) and the opaque per-user key.
+4. **`/insights/templates` (from Step 37).** Enable "Use template" for `mcp_client` source templates:
+   prompt for the bearer via `FormDialog`, write it through the same per-user secret path as item 3
+   (opaque `mcp_credential.${crypto.randomUUID()}` key), then call ingest `instantiateTemplate` with
+   `credentialsRef`. The bearer is never rendered back.
+5. **`/config-ui/sources`** becomes the FR-13 admin read-only view:
    - a user `Select` (from `listUsers`) → `listSignalSources({ includeInactive: true, ownerUserId })`;
    - **no** create, edit, deactivate or weight controls;
    - non-admins see `CardNotice`;
    - **no** credential or bearer is ever rendered.
-5. **Nav.**
+6. **Nav.**
    - Change the Engine item to `{ label: 'Signal sources', href: '/insights/signal-sources' }`.
    - Add `{ label: 'Signal sources (admin)', href: '/config-ui/sources', adminOnly: true }` to Settings.
    - Mirror both in `PLATFORM_SUBNAV`.
@@ -2412,6 +2621,7 @@ grep -n "insights/templates\|config-ui/templates" src/components/shared/navGroup
 cd services/xstockstrat-ui && pnpm run lint && npx tsc --noEmit && pnpm run lint:dup
 grep -n "mcp_credential" src -r   # opaque randomUUID key only; no `${slug}` key
 grep -n "insights/signal-sources" src/components/shared/navGroups.tsx
+grep -n "isSecret: true\|createKey: true" src/lib/insightsBff.ts   # forced server-side
 ```
 
 ---
@@ -2434,6 +2644,8 @@ grep -n "insights/signal-sources" src/components/shared/navGroups.tsx
 - `services/xstockstrat-ui/e2e/insights/signal-sources.spec.ts` — create
 - `services/xstockstrat-ui/e2e/config-ui/sources.spec.ts` — modify
 - `services/xstockstrat-ui/e2e/insights/api-smoke.spec.ts` — modify
+- `services/xstockstrat-ui/e2e/config-ui/api-smoke.spec.ts` — modify (config-ui `ManageTemplate`
+  smoke check)
 
 **Reviewers**: `xstockstrat-ui` owner.
 
@@ -2449,6 +2661,9 @@ grep -n "insights/signal-sources" src/components/shared/navGroups.tsx
   `INDICATORS_ENDPOINT` (`playwright.config.ts:147-157`).
 - **BFF traversal precedent.** `api-smoke.spec.ts:131-150` asserts status 200 through the real BFF
   (fails.md 2026-10-05: a `page.route` mock is no evidence the route exists).
+- **Config-ui smoke suite.** `e2e/config-ui/api-smoke.spec.ts` already holds the `/config-ui/api/...`
+  router-traversing checks (`SET_CONFIG_BFF` at `:20`, admin-only denial case at `:188`), so config-ui
+  BFF checks belong there, not in the insights suite.
 - **Fixtures.** `INVENTORY.md:25` (`FORMULAS`) and `:79` (`SIGNAL_SOURCES`); C-12.
 - **CHANGE rules.** `acceptance/surface-signal-weight-decay-config.feature:8-18`.
 
@@ -2479,24 +2694,36 @@ grep -n "insights/signal-sources" src/components/shared/navGroups.tsx
      guidance text visible in both the form and the inline editor.
    - The system row is read-only.
    - The `mcp_client` register sends `setConfig` with key `mcp_credential.<uuid>` and `isSecret`.
+   - **Server-forced secret flag (Step 38 item 1):** a direct `POST` to
+     `/insights/api/xstockstrat.config.v1.ConfigService/SetConfig` with an `ingest`
+     `mcp_credential.<uuid>` key and `value.isSecret: false` (and `createKey: false`) reaches the
+     mock `setConfig` capture with `isSecret: true`, `createKey: true` and `userId` equal to the
+     session user. A non-`ingest` namespace or a key outside `mcp_credential.` is rejected.
 5. **`config-ui/sources.spec.ts`.** Admin read-only: no create, edit or deactivate controls, and the
    user selector drives `ownerUserId`.
 6. **`nav-reachability.spec.ts`.** Update `GROUPS`:
    - Engine "Signal sources" → `/insights/signal-sources`;
    - add Engine "Templates";
    - add Settings "Templates" (admin) and "Signal sources (admin)".
-7. **`api-smoke.spec.ts`.** Add router-traversing (no `page.route`) status-200 checks for:
+7. **`e2e/insights/api-smoke.spec.ts`.** Add router-traversing (no `page.route`) status-200 checks
+   for:
    - `/insights/api/xstockstrat.analysis.v1.AnalysisService/ListTemplates`;
    - `/insights/api/xstockstrat.indicators.v1.IndicatorsService/InstantiateTemplate`;
-   - `/insights/api/xstockstrat.ingest.v1.IngestService/ManageSignalSource`;
-   - `/config-ui/api/xstockstrat.analysis.v1.AnalysisService/ManageTemplate` (admin cookie).
+   - `/insights/api/xstockstrat.ingest.v1.IngestService/ManageSignalSource`.
+8. **`e2e/config-ui/api-smoke.spec.ts`.** Add the router-traversing status-200 check for
+   `/config-ui/api/xstockstrat.analysis.v1.AnalysisService/ManageTemplate` (admin cookie), plus a
+   non-admin denial case in the style of the existing `SetConfig` one (`:188`).
 
 **Verification**:
 ```bash
 cd services/xstockstrat-ui && pnpm run lint && pnpm test:e2e
 grep -n "from '../fixtures'\|from './fixtures'\|helpers/auth" e2e/insights/templates.spec.ts e2e/insights/signal-sources.spec.ts
 grep -n "templates" e2e/fixtures/INVENTORY.md
+grep -n "ManageTemplate" e2e/config-ui/api-smoke.spec.ts
 ```
+
+Coverage: N/A — Playwright e2e has no coverage tool (vitest coverage is scoped to `src/lib/**`); the
+behavior gate is `pnpm test:e2e` over these specs.
 
 ---
 
@@ -2520,6 +2747,18 @@ grep -n "templates" e2e/fixtures/INVENTORY.md
 - **Root `CLAUDE.md:328`.** The stale line `xstockstrat-indicators → xstockstrat-ingest (QuerySignals
   for signal-aware formulas)`; indicators has no ingest caller (context.md round 4, verified).
 - **Ingest `CLAUDE.md:11`.** "…for consumption by indicators and analysis" (stale).
+- **Ingest `CLAUDE.md:31-32` § Authorization.** "`TriggerBackfill` …, `CancelBackfill`, and
+  `ManageSignalSource` are **admin-gated**" — `ManageSignalSource` stops being admin-gated for headered
+  callers (Step 19); the two backfill RPCs stay admin-gated.
+- **Ingest `CLAUDE.md:99-103`.** The `mcp_client` bearer note describes a per-source **global** key
+  `ingest.mcp_credential.<slug>` written by the "config-ui two-write"; it becomes an opaque per-user key
+  `ingest.mcp_credential.<uuid>` resolved as the source owner (Steps 23, 34, 38).
+- **Analysis `CLAUDE.md:76`.** Fundsignal source registration: "This call is admin-scoped; the
+  background path injects the admin bit, the RPC path forwards the caller's scope" — replaced by the
+  SAN-bound `system` identity (Step 7). (`:77` "the admin-scoped `RunFundamentalsScan` RPC" stays true.)
+- **Analysis `CLAUDE.md:25-26`.** "(The `strategy_scores` cache stays keyed by bare `strategy_id` — a
+  derived cache cross-checked for ownership at the RPC layer, feature 133 D-2.)" — superseded by
+  `strategy_scores_v2` keyed `(user_id, strategy_id)` (Steps 6, 9).
 - **Indicators `CLAUDE.md`.**
   - § Role describes `is_public` and `_INTERNAL_FORMULA_READERS` header-only reads.
   - § Seeded Formulas calls the seeded formula "**public**".
@@ -2544,6 +2783,11 @@ grep -n "templates" e2e/fixtures/INVENTORY.md
      SAN-bound `analysis-fundsignal` grant, and system slugs are reserved (C-10(c)).
    - Document `SignalScope`, the per-owner dedup (`signal_dedup_claims`) and the N-only headerless
      tolerance.
+   - § Authorization (`:31-32`): drop `ManageSignalSource` from the admin-gated list (owner-gated for
+     headered callers; headerless N keeps the admin gate); `TriggerBackfill`/`CancelBackfill` stay.
+   - `mcp_client` bearer note (`:99-103`): opaque per-user key `ingest.mcp_credential.<uuid>`,
+     resolved via `GetSecret(user_id=<owner>)` under the SAN-bound grant; a `LEGACY_GLOBAL` row (only if
+     Step 18 shipped it) keeps the global key.
 3. **Indicators `CLAUDE.md`.**
    - Rewrite § Role: owner/system-only reads, header-only author, admin audited read-only, and the
      SAN-bound N-only analysis reader.
@@ -2551,6 +2795,12 @@ grep -n "templates" e2e/fixtures/INVENTORY.md
    - Complete the migration list (`005`, `007`) and add the ledger dependency.
 4. **Analysis `CLAUDE.md`.** Owner-keyed tables, templates and saga, the fundsignal `system` identity
    and fail-closed scoring.
+   - Rewrite `:76`: the producer registers its source as the SAN-bound `system` identity
+     (`x-internal-caller: analysis-fundsignal`), not an injected admin bit.
+   - Rewrite the feature-133 note at `:25-26`: scores are cached in `strategy_scores_v2` keyed
+     `(user_id, strategy_id)`; the bare-id `strategy_scores` table is retained only for N-1 and dropped
+     by the follow-up.
+   - Record the saga's dedicated `analysis-template-saga` caller id (Steps 27/31).
 5. **Config `CLAUDE.md` and `config-governance.md`.** Per-user secrets (feature 224 operator override
    of feature 147), exact-scope `GetSecret`, and the SAN-bound ingest grant.
 6. **`database.md`.** The `-- requires-env:` and `-- contract-of:` migration headers, plus the
@@ -2566,6 +2816,10 @@ grep -n "templates" e2e/fixtures/INVENTORY.md
 grep -n "xstockstrat-indicators → xstockstrat-ingest" CLAUDE.md                     # → none
 grep -n "global-only" docs/patterns/config-governance.md services/xstockstrat-config/CLAUDE.md   # → none
 grep -n "insights/signal-sources" services/xstockstrat-ui/acceptance/surface-signal-weight-decay-config.feature
+grep -n "global-only\|global-scope only\|injects the admin bit\|keyed by bare\|mcp_credential.<slug>" \
+  services/xstockstrat-ingest/CLAUDE.md services/xstockstrat-analysis/CLAUDE.md   # → none
+grep -n "admin-gated" services/xstockstrat-ingest/CLAUDE.md
+#   → read each hit: only TriggerBackfill/CancelBackfill may remain; no ManageSignalSource mention
 ```
 
 ---
@@ -2575,8 +2829,15 @@ grep -n "insights/signal-sources" services/xstockstrat-ui/acceptance/surface-sig
 **Status**: `pending`
 **Service**: `docs/roadmap/features/`
 **Files**:
-- `docs/roadmap/features/<NNN>-private-by-default-enforce-contract/` — create (via `/sdd-story`)
+- `docs/roadmap/features/<NNN>-private-by-default-enforce-contract/status.md` — create (via `/sdd-story`)
+- `docs/roadmap/features/<NNN>-private-by-default-enforce-contract/feature.md` — create (via `/sdd-story`)
+- `docs/roadmap/features/<NNN>-private-by-default-enforce-contract/product-spec.md` — create (via `/sdd-story`)
+- `docs/roadmap/features/<NNN>-private-by-default-enforce-contract/acceptance.feature` — create (via `/sdd-story`)
+- `docs/roadmap/features/<NNN>-private-by-default-enforce-contract/context.md` — create (via `/sdd-story`)
 - `docs/roadmap/features/merge-order.md` — modify
+
+`<NNN>` is resolved at `/sdd-story` time as `max(existing NNN) + 1` (root `CLAUDE.md` § Feature
+Roadmap numbering rule). The resolved number is recorded in this spec's Deviation Log.
 
 **Reviewers**: none
 
@@ -2592,15 +2853,20 @@ grep -n "insights/signal-sources" services/xstockstrat-ui/acceptance/surface-sig
 **Covers**: —
 
 **Instructions**:
-1. Run `/sdd-story private-by-default-enforce-contract` with the scope above. NNN = `max + 1` at run
-   time.
+1. Run `/sdd-story private-by-default-enforce-contract` with the scope above. It creates the five files
+   listed in Files. NNN = `max(existing NNN) + 1` at run time; record the resolved number in the
+   Deviation Log below.
 2. Add a `merge-order.md` row: the follow-up waits for 224 to be **launched**, and its contract
-   migrations carry `-- contract-of:` headers enforced by the Step 3 CI gate.
+   migrations carry `-- contract-of:` headers enforced by the Step 3 CI gate. The row also
+   **pre-reserves** the follow-up's contract migration numbers: analysis `027`, indicators `008`,
+   ingest `014` (the next free number after 224's `026`/`007`/`013`). Re-verify them with a
+   `git ls-tree` scan of every remote branch when the follow-up runs `/sdd-spec`.
 
 **Verification**:
 ```bash
-ls -d docs/roadmap/features/*-private-by-default-enforce-contract
+ls docs/roadmap/features/*-private-by-default-enforce-contract/{status.md,feature.md,product-spec.md,acceptance.feature,context.md}
 grep -n "private-by-default-enforce-contract" docs/roadmap/features/merge-order.md
+grep -n "027\|008\|014" docs/roadmap/features/merge-order.md | grep "enforce-contract"   # reserved numbers
 ```
 
 ---

@@ -382,3 +382,33 @@ OQ-4 to OQ-6 remain for /sdd-design.
 - **Pre-integration:** verify the prod `analysis.fundsignal.scoring_formula_id` (carried from design).
 - **Step 41** creates the follow-up "224 enforce + contract" and its merge-order row before the integration PR.
 - **`/sdd-review impl-spec`** must confirm or reject the seven elaborations above.
+
+## Session 2026-10-07 — sdd-review impl-spec (advisory)
+
+- Result: 4 failures, 19 warnings (advisory — did not block). Overlap: CLEAN.
+- Operator decisions (2026-10-07): approve tool count 43 → 45 (C-16 CHANGE of @feature-214 @AC-1); extend the round-5 fixed-constant ruling to `_INTENT_STALE_SECONDS`/`_INTENT_SWEEP_SECONDS`; merge-order row 72 marked resolved.
+- All seven spec-time decisions ACCEPTED by the reviewer (decision 2 conditional on the Step 31 grant fix; decision 7 legacy-slug attribution edge accepted for pre-feature data).
+- Findings carried into execution (all addressed in implementation-spec.md before execution started):
+  - Step 19/20/23: `list_all_sources` SELECT lacks `user_id`/`credential_scope` read by `poll_one_source`; Step 19 adds them, Step 20 tests it — [x] addressed in spec
+  - Step 27/31/17/32: saga calls to indicators lacked a grant; dedicated SAN-bound `analysis-template-saga` caller id, exact request/sweep metadata, Step 17 exemption, Step 32 assertions, retired/missing formula template → whole saga `NOT_FOUND` — [x] addressed in spec
+  - Step 37: exact Files (`configUiIndicatorsClient.ts` create, `configUiBff.ts` IndicatorsService wiring, `indicatorsClient.ts` entry removed); `mcp_client` bearer prompt moved to Step 38 — [x] addressed in spec
+  - Step 41: explicit follow-up files, NNN resolved at `/sdd-story` and logged in the Deviation Log, merge-order row pre-reserves analysis 027 / indicators 008 / ingest 014 — [x] addressed in spec
+  - Step 1: deprecated `is_public`/`author` in `FormulaTemplate.payload` ignored on instantiate; `ListStrategyDefinitionsRequest.owner_user_id` documented admin-only — [x] addressed in spec
+  - Step 2: generated-code directory in Files is the accepted convention — [x] addressed in spec
+  - Step 3: ci.yml `scripts/**` filter cite fixed to `:67-68`; `migration-contract-gate` restricted to `pull_request` — [x] addressed in spec
+  - Steps 4, 5, 33, 39: explicit coverage lines (Step 5 runs the full ingest suite at `--cov-fail-under=40`) — [x] addressed in spec
+  - Step 6: `strategy_scores_v2` seed uses explicit column lists on both sides — [x] addressed in spec
+  - Step 7: un-granted `system` in analysis resolves to owner `""`, recorded as a deliberate divergence (also in design.md §2) — [x] addressed in spec
+  - Step 8: AC-37 test case for the `RunFundamentalsScan` manual path — [x] addressed in spec
+  - Step 9: `audit_admin_read` forwards the trio on the ledger `AppendEvent`; trio grep in Steps 9 and 19 Verification — [x] addressed in spec
+  - Step 14: evidence path `app/services/seed_formulas.py`; per-service `admin_audit.py`/`peer_identity.py` rationale (also in design.md Rejected Alternatives) — [x] addressed in spec
+  - Step 19: Verification catches every `slug = $N` incl. multi-line SQL and requires an owner predicate; dead `get_active_source` deleted — [x] addressed in spec
+  - Step 20: extend the existing `_ctx` builder (`user_id`, `peer_sans`, plus `internal_caller`) instead of a near-duplicate `ctx_with` — [x] addressed in spec
+  - Step 29: cite `validate_config_json` (`signal_sources.py:186`, imported `servicer.py:35`) — [x] addressed in spec
+  - Step 31: STRATEGY template validation resolves formula-template ids against the indicators `FormulaTemplate` payload (`outputs`, `fundamental_inputs`) via `ListTemplates`, not `GetFormula` — [x] addressed in spec
+  - Step 33: partial pass renders via `render-migrations.sh` (+ analysis-013 render) and runs per-service `migrate … goto 6|12|25`; `db-migrate.sh` supports only up/version/force — [x] addressed in spec
+  - Step 34: `remove-agent-postgres-mcp.feature:14` 43 → 45; stale agent `CLAUDE.md` and `mcp-tools.md` secret/admin-gate text added — [x] addressed in spec
+  - Step 38: insights BFF `setConfig` forces `isSecret: true`/`createKey: true`; Step 39 test case — [x] addressed in spec
+  - Step 39: config-ui `ManageTemplate` smoke check moved into `e2e/config-ui/api-smoke.spec.ts` — [x] addressed in spec
+  - Step 40: stale ingest `CLAUDE.md` Authorization / global `mcp_credential.<slug>` note and analysis `CLAUDE.md` fundsignal admin-bit / bare-`strategy_id` cache note; Verification grep extended — [x] addressed in spec
+- Overlap: 196 shares ingest servicer.py (different handler) and should inventory 224's new deprecated indicators fields; 084 droplet migrator needs SEED_USER_ID; 215/032/039/040 future same-area watch.
