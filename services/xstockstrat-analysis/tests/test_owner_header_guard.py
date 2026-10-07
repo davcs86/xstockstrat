@@ -3,11 +3,11 @@ one non-empty ``x-user-id`` (a runtime check, not an AST ``metadata=`` scan, whi
 
 Each enumerated outbound path is driven with ``RecordingStub`` ingest + indicators stubs. The
 reserved ``system`` identity is accepted only alongside a stub-level ``x-internal-caller`` grant
-(``analysis-fundsignal`` / ``analysis-system-read``); an owner call carries no stub-level grant. The
-channel-level ``InternalCallerInterceptor`` (removed in Step 16) sits below the stub, so it is not
-visible here. asyncio_mode = auto.
+(``analysis-fundsignal`` / ``analysis-system-read``); an owner call carries no stub-level grant. No
+channel interceptor sits below the stub (asserted on ``app.main``). asyncio_mode = auto.
 """
 
+import inspect
 import json
 from datetime import UTC, datetime
 from types import SimpleNamespace
@@ -15,6 +15,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 from gen.analysis.v1 import analysis_pb2
 
+from app import main as app_main
 from app.engine import entry_backfill
 from app.engine.fundsignal_loop import FundamentalsSignalLoop
 from app.engine.live_loop import LiveEvaluationLoop, resolve_fundamentals_universe
@@ -28,6 +29,15 @@ from tests.test_pnl_pattern_consumer import ORDER_PAYLOAD, make_consumer, make_e
 from tests.test_readiness_opportunities_source_symbol import _real_bars
 
 _SYSTEM_GRANTS = {"analysis-fundsignal", "analysis-system-read"}
+# AC-5: the only x-internal-caller ids analysis may send indicators, each valid only on its own path
+# (the saga id only on its two RPCs); every other indicators call carries none.
+_INDICATORS_PATH_GRANTS = {
+    "fundsignal": ("analysis-fundsignal", None),
+    "template-saga": (
+        "analysis-template-saga",
+        frozenset({"InstantiateTemplate", "ResolveTemplateIntent"}),
+    ),
+}
 _BOB = [("x-user-id", "bob"), ("x-access-scope", "1"), ("x-trace-id", "t-bob")]
 _ADMIN = [("x-user-id", "admin-1"), ("x-access-scope", "4"), ("x-trace-id", "t-adm")]
 _EOF = SimpleNamespace(next_page_token="")
@@ -85,6 +95,22 @@ def _assert_owner_headers(*stubs):
             assert not grants, f"{method} carries a stub-level grant as an owner: {meta}"
 
 
+def _assert_indicators_headers(indicators, owner, path=None):
+    assert indicators.calls, "the path issued no indicators call — the guard would be vacuous"
+    grant, methods = _INDICATORS_PATH_GRANTS.get(path, (None, None))
+    for method, _req, meta in indicators.calls:
+        assert [v for k, v in meta if k == "x-user-id"] == [owner], f"{method}: {meta}"
+        grants = [v for k, v in meta if k == "x-internal-caller"]
+        if grant and (methods is None or method in methods):
+            assert grants == [grant], f"{method}: {meta}"
+        else:
+            assert not grants, f"{method} sent x-internal-caller to indicators: {meta}"
+
+
+def test_main_wires_no_channel_interceptor():  # AC-5: nothing below the stub adds a grant
+    assert "interceptors=" not in inspect.getsource(app_main)
+
+
 def _cfg(overrides=None):
     overrides = overrides or {}
     cfg = MagicMock()
@@ -134,6 +160,7 @@ async def test_live_loop_cycle_system_and_owner_drains_and_evaluator():
     await loop._run_cycle()
     assert indicators.calls, "the owner's pair was never evaluated"
     _assert_owner_headers(ingest, indicators)
+    _assert_indicators_headers(indicators, "bob")
 
 
 async def test_resolve_fundamentals_universe():
@@ -161,6 +188,7 @@ async def test_pnl_handle_order_event():
     await consumer.process_event(make_event(1, "order.filled", ORDER_PAYLOAD))
     assert indicators.of("ComputeIndicator") and ingest.of("QuerySignals")
     _assert_owner_headers(ingest, indicators)
+    _assert_indicators_headers(indicators, ORDER_PAYLOAD["user_id"])
 
 
 _FUND_VALUES = dict(pe_ratio=1, pb_ratio=1, dividend_yield=0, roe=1, debt_to_equity=1, eps=1)
@@ -209,6 +237,7 @@ async def test_fundsignal_loop_path():
     await _fundsignal_loop(ingest, indicators).run_once(override_symbols=["AAPL"])
     assert ingest.of("IngestSignal") and indicators.of("ExecuteFormula")
     _assert_owner_headers(ingest, indicators)
+    _assert_indicators_headers(indicators, "system", path="fundsignal")
 
 
 async def test_fundsignal_manual_run_fundamentals_scan():
@@ -220,6 +249,7 @@ async def test_fundsignal_manual_run_fundamentals_scan():
     )
     assert ingest.of("IngestSignal") and indicators.of("ExecuteFormula")
     _assert_owner_headers(ingest, indicators)
+    _assert_indicators_headers(indicators, "system", path="fundsignal")
 
 
 # ── request paths (inherit the caller's header) ──────────────────────────────────────────────────
@@ -275,6 +305,7 @@ async def test_screen_symbols():
     except Exception:  # noqa: BLE001 — only the recorded outbound headers matter here
         pass
     _assert_owner_headers(svc._ingest, svc._indicators)
+    _assert_indicators_headers(svc._indicators, "bob")
     calls = svc._ingest.calls + svc._indicators.calls
     assert {dict(m)["x-user-id"] for _n, _r, m in calls} == {"bob"}  # AC-29
 
@@ -292,6 +323,7 @@ async def test_readiness_materializer():
         pass
     assert svc._indicators.calls
     _assert_owner_headers(svc._indicators)
+    _assert_indicators_headers(svc._indicators, "bob")
 
 
 async def test_write_time_formula_reads():
@@ -300,6 +332,7 @@ async def test_write_time_formula_reads():
     await svc._fetch_formula_outputs(definition, list(_BOB))
     await svc._formula_status_warnings(definition, list(_BOB))
     _assert_owner_headers(svc._indicators)
+    _assert_indicators_headers(svc._indicators, "bob")
 
 
 async def test_backtest_formula_prefetch():
@@ -308,3 +341,4 @@ async def test_backtest_formula_prefetch():
     await svc._declared_formula_warmup("f-bob", {}, list(_BOB))
     await svc._formula_fundamentals(definition, list(_BOB))
     _assert_owner_headers(svc._indicators)
+    _assert_indicators_headers(svc._indicators, "bob")

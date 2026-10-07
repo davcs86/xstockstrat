@@ -1263,7 +1263,7 @@ grep -rn "internal_caller\|InternalCallerInterceptor" app tests   # → no match
 
 ### Step 17 — test: analysis sends no `x-internal-caller` to indicators
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_owner_header_guard.py` — modify

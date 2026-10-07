@@ -654,3 +654,14 @@ OQ-4 to OQ-6 remain for /sdd-design.
   - indicators `CLAUDE.md` still describes public formulas (Step 40);
   - `test_formulas.py` still has its own `_ctx` helper (out of file scope);
   - the duplication between the analysis and indicators `admin_audit.py` was not measured. It is accepted per design.md (one copy per service).
+
+### Step 16 — service: remove the analysis `InternalCallerInterceptor` [done]
+- Removed the interceptor import and `interceptors=[...]` from the indicators channel in `app/main.py`, and deleted `app/internal_caller.py` and `tests/test_internal_caller.py`.
+- Analysis now sends no `x-internal-caller: analysis` on indicators calls; it relies on the owner headers threaded in Step 7.
+- Deviation: D-17.
+
+### Step 17 — test: analysis sends no `x-internal-caller` to indicators [done]
+- `test_owner_header_guard.py` gains `_assert_indicators_headers`: one `x-user-id`, equal to the owner, on every indicators call. A grant is required only on its own path (`analysis-fundsignal` on the fundsignal path, `analysis-template-saga` on the saga path); every other path must carry no `x-internal-caller`.
+- New test: `test_main_wires_no_channel_interceptor`.
+- RED: 1 failed (`interceptors=[InternalCallerInterceptor()]` was still present in `main.py`). GREEN: 930 passed, coverage 86.47%, ruff clean.
+- Deviation: D-18 (Step 32's saga tests must use the saga path).
