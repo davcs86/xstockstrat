@@ -733,3 +733,40 @@ OQ-4 to OQ-6 remain for /sdd-design.
 - **TDD:** RED was 2 failures, both `DID NOT RAISE` on a non-admin REGISTER. The other 2 tests already passed because they cover existing behavior. GREEN is 934 passed, coverage 86.45%, ruff clean.
 - **Greps:** the key literal and its default each appear exactly once (`servicer.py:299`).
 - The existing `@feature-186` tests pass unchanged.
+
+### Step 21 — service: config per-user secrets and SAN-bound ingest `GetSecret` grant [done]
+- **`authz.ts`:**
+  - `SecretCallerGrant` gains a `peerSan` field. The ingest grant requires `peerSan: 'xstockstrat-ingest'`, matched exactly against the `DNS:` entries of the client certificate's SAN list.
+  - The grant fails closed when there is no auth context, no certificate or no SAN.
+  - `hasSecretCallerAuthority` now takes `(call, ns, key)`. The marketdata grant is unchanged.
+- **`configServiceImpl.ts`:**
+  - `GetSecret` resolves with exact scope (`COALESCE(user_id,'') = COALESCE($4,'')`). An empty `user_id` reads only the global row, so marketdata is unaffected.
+  - The global-only rejection of per-user secret writes is removed (feature-147 override, operator-approved).
+- **Deviation:** D-24.
+
+### Step 22 — test: config per-user secret resolution and per-user redaction [done]
+- **New `perUserSecrets.test.ts`** covers:
+  - AC-35: a per-user secret write is accepted.
+  - Ownership: bob cannot write alice's secret.
+  - Exact-scope `GetSecret` (tok-a / tok-b / found:false).
+  - Ingest SAN binding.
+  - No plaintext on `GetConfig`/`ListKeys`/`WatchConfig` for alice, bob or an admin.
+  - Marketdata is unaffected.
+- **`secretCallerAuthz.test.ts`:** updated for the call-object signature, plus three new SAN tests (comma list accepted; wrong, near-miss or prefix-less SAN denied; missing `getAuthContext` denied).
+- **TDD:** RED was 13 failed and 2 passed: "secret keys are global-scope only" and `md.get is not a function`. GREEN is 133/133 with 84.12% line coverage, 0 lint errors (158 warnings already existed), and `tsc` passes.
+
+### Step 23 — service: ingest `mcp_client` poller resolves the owner's secret and ingests as the owner [done]
+- `resolve_secret(key, user_id="")` now sets `GetSecretRequest.user_id`.
+- `poll_one_source` uses `owner = src["user_id"]`, resolves the secret with that exact scope, treats an empty `''` value as missing ("bearer not configured"), and ingests with `owner=owner`.
+- **Files:** `app/config/watcher.py`, `app/engine/mcp_client_loop.py`.
+- **Deviation:** D-25 (`credential_scope` omitted; no servicer change).
+
+### Step 24 — test: per-owner `mcp_client` credentials [done]
+- Three new tests in `test_mcp_client_loop.py`:
+  - AC-35: alice and bob each own `acme-mcp`; each request carries its owner's bearer, and each signal is inserted under its owner.
+  - An empty-string bearer is treated as missing.
+  - `resolve_secret` sends the exact user scope.
+- **TDD:** RED was 3 failed (`('…','') != ('…','alice')`, plus an unexpected keyword `user_id`). GREEN is 278 passed, coverage 79.65%, ruff clean.
+- **Follow-through:** the fake `resolve_secret` and the dedup spy now take `user_id` and `owner`.
+
+**Doc drift to fix in Step 40:** config `CLAUDE.md` invariants #5 and #6 (secrets global-only; no ingest SAN grant), and the ingest `CLAUDE.md` bearer-secret note.

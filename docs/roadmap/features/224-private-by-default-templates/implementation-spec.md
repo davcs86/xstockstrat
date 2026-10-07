@@ -1726,7 +1726,7 @@ grep -n "owner=" app/engine/mcp_client_loop.py
 
 ### Step 24 — test: per-owner `mcp_client` credentials
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/test_mcp_client_loop.py` — modify
