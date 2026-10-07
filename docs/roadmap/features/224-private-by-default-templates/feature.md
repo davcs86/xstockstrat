@@ -14,6 +14,7 @@
 | 2026-10-06 | `draft` → `spec-ready` | /sdd-review | Product spec approved on re-review (first pass failed C-07/P-03, fixed); 6 warnings, 3 carried to design |
 | 2026-10-06 | `spec-ready` → `design-approved` | /sdd-design | Design debated (5 rounds, full) and approved; recon.md + design.md written |
 | 2026-10-07 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 41 steps |
+| 2026-10-07 | `implementation-ready` (unchanged) | /sdd-execute | Re-spec gate: Step 22 (AC-35 write-accepted test written new), Step 34 Files (+ test_tools_endpoint.py) |
 
 ---
 

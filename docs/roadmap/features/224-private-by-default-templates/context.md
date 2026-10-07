@@ -412,3 +412,21 @@ OQ-4 to OQ-6 remain for /sdd-design.
   - Step 39: config-ui `ManageTemplate` smoke check moved into `e2e/config-ui/api-smoke.spec.ts` — [x] addressed in spec
   - Step 40: stale ingest `CLAUDE.md` Authorization / global `mcp_credential.<slug>` note and analysis `CLAUDE.md` fundsignal admin-bit / bare-`strategy_id` cache note; Verification grep extended — [x] addressed in spec
 - Overlap: 196 shares ingest servicer.py (different handler) and should inventory 224's new deprecated indicators fields; 084 droplet migrator needs SEED_USER_ID; 215/032/039/040 future same-area watch.
+
+## Session 2026-10-07 — sdd-execute sequential (re-spec gate)
+
+- **Re-spec gate:** the read-only validation checked every **Files** path and **Codebase Evidence** citation in all 41 steps. Everything resolves except two spec defects, both fixed with operator approval:
+  - **Step 22.** `secretsAndScope.test.ts` contains no global-only rejection test to invert. The step drops that file from its Files and adds instruction 5: a new AC-35 test asserting that a per-user secret write is accepted (RED today, rejected at `configServiceImpl.ts:464-466`).
+  - **Step 34.** Its Files list now includes `services/xstockstrat-agent/tests/test_tools_endpoint.py`, which instruction 4 edits.
+  - The remaining 1–8 line evidence drift is absorbed by per-step discovery.
+- **Operator decisions (2026-10-07):**
+  - Proceed with the sequential run.
+  - **Step 18 gate:** prod has **zero** `mcp_client` signal sources. Ingest 013 therefore omits `credential_scope=LEGACY_GLOBAL` and its reset trigger.
+- **Tooling setup (all 41 steps):**
+  - docker 29.6.2 ✓ (dockerd started)
+  - go 1.27 ✓
+  - uv 0.8.17 ✓; analysis, indicators and ingest venvs on py3.12, agent on py3.13 ⬇ synced
+  - node 22 ✓, pnpm 9.15.9 ✓, workspace `pnpm install` ⬇
+  - shellcheck 0.11.0 ⬇ (shellcheck-py) and shfmt v3.14.1 ⬇
+  - buf ✗ on the host; proto codegen uses the Docker `Dockerfile.codegen` image via `localenv-setup.sh`
+  - Playwright chromium ✓ (`/opt/pw-browsers`)

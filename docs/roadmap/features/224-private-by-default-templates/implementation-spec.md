@@ -1639,7 +1639,6 @@ grep -n "global-scope only" src/grpc/configServiceImpl.ts   # → no matches
 **Files**:
 - `services/xstockstrat-config/src/__tests__/perUserSecrets.test.ts` — create
 - `services/xstockstrat-config/src/__tests__/secretCallerAuthz.test.ts` — modify
-- `services/xstockstrat-config/src/__tests__/secretsAndScope.test.ts` — modify
 
 **Reviewers**:
 - `xstockstrat-config` owner.
@@ -1647,7 +1646,7 @@ grep -n "global-scope only" src/grpc/configServiceImpl.ts   # → no matches
 
 **Codebase Evidence**:
 - `secretCallerAuthz.test.ts:22-55` uses `node:test` `describe/it`.
-- `secretsAndScope.test.ts` asserts the global-only rejection (to be inverted).
+- No existing config test asserts the per-user secret rejection at `configServiceImpl.ts:464-466` (re-spec 2026-10-07: grep for `global-scope`/`per-user secret`/`not supported` across `src/__tests__` finds none), so the acceptance case is written new in `perUserSecrets.test.ts` rather than inverted.
 - Coverage: `pnpm run test:coverage` (`c8 --lines 40`, `package.json:13`).
 
 **TDD**: `red-green required`
@@ -1664,6 +1663,7 @@ grep -n "global-scope only" src/grpc/configServiceImpl.ts   # → no matches
 3. **SAN binding.** The ingest grant without the SAN (`getAuthContext` returns another SAN or
    undefined) → `PERMISSION_DENIED`. Marketdata's exact-key grant is unchanged.
 4. Bob writing alice's per-user secret → `PERMISSION_DENIED` (existing owner-only gate).
+5. **Write accepted (new; RED today).** `SetConfig(user_id=alice, is_secret=true, create_key=true)` succeeds and stores ciphertext in `value_encrypted` with `value_data = '[redacted]'` — today it is rejected by `configServiceImpl.ts:464-466`.
 
 **Verification**:
 ```bash
@@ -2248,6 +2248,7 @@ running these `DO $$ … RAISE EXCEPTION` assertions.
 - `docs/runbooks/mcp-tools.md` — modify
 - `plugins/strat-lab/skills/backtest/SKILL.md` — modify
 - `services/xstockstrat-ui/src/lib/copilot.ts` — modify (tool-count surface)
+- `services/xstockstrat-agent/tests/test_tools_endpoint.py` — modify (instruction 4's expected tool-name set; re-spec 2026-10-07)
 - `services/xstockstrat-agent/acceptance/remove-agent-postgres-mcp.feature` — modify (C-16 CHANGE of
   `@feature-214 @AC-1` tool count)
 
