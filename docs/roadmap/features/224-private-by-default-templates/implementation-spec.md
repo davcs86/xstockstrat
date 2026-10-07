@@ -2171,7 +2171,7 @@ cd services/xstockstrat-analysis && uv run pytest --cov=app --cov-fail-under=40 
 
 ### Step 33 — test: migration data assertions (run by CI `migration-rerun`)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/`
 **Files**:
 - `scripts/migration-assertions/indicators-007.sql` — create
@@ -3044,3 +3044,14 @@ _Populated by /sdd-execute as implementation proceeds._
   - The sweep processes `ABORTING`/`COMMITTED` intents of any age, and `PENDING` intents only after `_INTENT_STALE_SECONDS`. The indicators resolve call is idempotent.
 - **Constants**: `_INTENT_STALE_SECONDS = 900` and `_INTENT_SWEEP_SECONDS = 300`, as the spec records. Operator re-confirmed on 2026-10-07; an earlier gate prompt mis-stated these as 300/60.
 - **Disposition**: within scope; operator-confirmed constants.
+
+### D-29 — Step 33: replay limited to the feature-224 up-files (supersedes D-3); fresh-DB guard; defect filed
+- **Expected**: Step 3's pass 2 forces every service to version 0 and replays the whole chain.
+- **Actual**: about 14 already-applied up-files are not idempotent, for example `indicators/001_formulas.up.sql:3` and `ingest/001_newsletter_signals.up.sql:8`. The full replay would fail before any 224 assertion runs, and F-01 forbids fixing those files in place. Operator decision (2026-10-07): pass 2 renders and re-applies only indicators 007, ingest 013 and analysis 026 with `psql -1 -f`. That proves each new file is idempotent on the migrated schema; the N-1 trigger-count stability check is kept. The pre-existing defect is filed at `docs/reports/2026-10-07-db-migrate-dirty-recovery-replay-unsafe-defect.md`, status `open`, for `/sdd-triage`.
+- **Other changes**:
+  - Pass 0 refuses to run on an already-migrated DB, because `goto` would run down-files.
+  - `service_db_url` is mirrored as a 4-line function, because `db-migrate.sh` is not in Files.
+  - Assertion files receive `-v seed_user_id`.
+  - Fixture source types avoid mediated and `mcp_client` (replaying 006/007 adds narrower CHECKs).
+- **Verification**: offline only. `bash -n`, shellcheck, shfmt and render checks pass, and pglast parses all four SQL files. The live run is CI-only.
+- **Disposition**: operator decision plus a defect report.

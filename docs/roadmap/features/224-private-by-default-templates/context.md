@@ -842,3 +842,30 @@ OQ-4 to OQ-6 remain for /sdd-design.
   - Origin on reads, and repository SQL shapes.
 - **TDD:** RED was a ModuleNotFoundError, then 30 failed (missing RPCs, constants and `create_from_template`; no abort; no origin). GREEN is 964 passed, coverage 85.81%, ruff clean.
 - **Contract assumed of indicators (implemented in Step 27):** `formula_ids_by_template` covers every requested id, and resolve is idempotent.
+
+### Step 33 — test: migration data assertions (run by CI `migration-rerun`) [done]
+- **Pass 0:** checks the database is fresh, renders the migrations, runs per-service `migrate goto 6/12/25` (indicators/ingest/analysis) with `up` for the other services, then loads `fixtures-pre-224.sql`:
+  - 8 public formulas;
+  - 3 sources (newsletter, website, and `fundamentals` as derived) with 120 signals and their dedup keys;
+  - D-1 backtest runs: one strategy with a unique owner, one shared between two owners, an orphan run, and a run that already has an owner.
+- **Pass 1:** `db-migrate.sh up`.
+- **Pass 2:** re-applies only 007, 013 and 026 (D-29), then checks that the N-1 trigger count is unchanged.
+- **Assertions** (`DO $$ … RAISE EXCEPTION`):
+  - `indicators-007.sql`:
+    - AC-22: no formula is lost, `source` and `author` are unchanged, nothing is public, and the `is_public` index is gone.
+    - AC-15: `formula_templates` is empty.
+  - `ingest-013.sql`:
+    - AC-27: sources and signals belong to `SEED_USER_ID`, except the derived source and its signals, which belong to `system`.
+    - The primary key is `(user_id, slug)`.
+    - All 120 dedup claims carry their signal's owner.
+    - `source_templates` is empty.
+    - The N-1 trigger fills in the unique holder, and raises when a slug has more than one holder (run in a rolled-back transaction).
+  - `analysis-026.sql`:
+    - AC-15: `strategy_templates` is empty.
+    - D-1: a unique owner is used, otherwise the run goes to the seed user, and an existing owner is kept.
+- **Defect found:** old up-files are not idempotent, which breaks `db-migrate.sh` dirty recovery. Filed `docs/reports/2026-10-07-db-migrate-dirty-recovery-replay-unsafe-defect.md` (status `open`), to route through `/sdd-triage`.
+- **Verification:**
+  - Offline: shellcheck, shfmt, `bash -n`, all three dirs render, and pglast parses all four SQL files.
+  - Fixture desk check: every inserted column was checked against the defining migration lines.
+  - DB execution and assertion results can only be proven in CI.
+- TDD: N/A (DB assertions run in CI).
