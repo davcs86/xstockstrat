@@ -1230,7 +1230,7 @@ grep -n "ctx_with" tests/test_private_formulas.py tests/test_formula_read_authz.
 
 ### Step 16 — service: remove the analysis `InternalCallerInterceptor`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/main.py` — modify
@@ -2958,3 +2958,12 @@ _Populated by /sdd-execute as implementation proceeds._
 - **`test_fundamentals_formula.py`** (not in Files): `IS_PUBLIC is True` → `is False`, required by the seed change.
 - **`test_formula_read_authz.py`**: the `author_public_only` list tests are removed because that path no longer exists; AC-2 coverage moved to `test_private_formulas.py`.
 - **Disposition**: required by the intended behavior change; no assertion weakened beyond it.
+
+### D-17 — Step 16: verification grep still matches one unrelated test name
+- **Expected**: `grep -rn "internal_caller\|InternalCallerInterceptor" app tests` returns no matches.
+- **Actual**: one match remains, `test_internal_caller_metadata_appended_not_replaced` (`tests/test_fundsignal_loop.py`). It is a fundsignal-grant test, unrelated to the deleted interceptor, and that file is outside Steps 16/17. The module and its tests are fully removed.
+- **Disposition**: false positive on a test name; left unchanged to keep scope surgical.
+
+### D-18 — Step 17: indicators-header check not applied to `test_list_opportunities_compute_drains`
+- **Actual**: that fixture makes no indicators calls, so a non-empty indicators assertion cannot apply to it. Its existing ingest-side assertions are unchanged. No saga code exists yet, so Step 31's saga tests must call `_assert_indicators_headers(…, path="template-saga")`.
+- **Disposition**: within scope; follow-up noted for Step 32.
