@@ -1,13 +1,13 @@
 # MCP Tools Reference — xstockstrat-agent
 
-Complete reference for the forty-three tools exposed by `xstockstrat-agent` via the Model Context Protocol (MCP).
+Complete reference for the forty-five tools exposed by `xstockstrat-agent` via the Model Context Protocol (MCP).
 Connection setup → `services/xstockstrat-agent/claude_mcp_config.json`.
 
 The agent also exposes one MCP **prompt** — `list_correlation_guide` (feature 197), the consolidated
 guide for joining the account/position/opportunity/strategy list responses (see § Correlating list
 responses under Usage Patterns) — and a server-level `instructions` string returned in the MCP
 `initialize` result carrying the same join summary. A prompt is not a tool; the tool count stays
-forty-three. **This runbook is a maintainer reference: a wire-connected agent cannot read it — the
+forty-five. **This runbook is a maintainer reference: a wire-connected agent cannot read it — the
 correlation guidance reaches consumer agents through the tool docstrings, the `initialize`
 instructions, and the `list_correlation_guide` prompt, which this file only mirrors for parity.**
 
@@ -42,7 +42,7 @@ directly on port 9000.
 
 **Direct (local):** `http://localhost:9000`
 
-**Tool catalog (UI display).** `GET /api/tools` returns the same forty-three tools' `name`,
+**Tool catalog (UI display).** `GET /api/tools` returns the same forty-five tools' `name`,
 `description`, and `inputSchema` as JSON — **unauthenticated**, since it only describes
 capabilities (the same data documented below), never user data or credentials. It powers the
 `xstockstrat-ui` `/accounts/mcp-tools` page (via the `/accounts/api/mcp-tools` BFF route) so users
@@ -564,7 +564,9 @@ explicitly set.
 
 ### `manage_formula`
 
-Registers, updates, or deletes a custom formula definition in `xstockstrat-indicators`. The formula's `author`/ownership identity is always derived from the OAuth-authenticated caller's own verified claims (feature 111) — it can no longer be asserted as a parameter.
+Registers, updates, or deletes a custom formula definition in `xstockstrat-indicators`. Formulas are
+**private to their author** (feature 224) — no other user can list, read, or reference them; to start
+from a curated formula, copy a template with `instantiate_template`. The formula's `author`/ownership identity is always derived from the OAuth-authenticated caller's own verified claims (feature 111) — it can no longer be asserted as a parameter.
 
 **Parameters**
 
@@ -574,7 +576,6 @@ Registers, updates, or deletes a custom formula definition in `xstockstrat-indic
 | `name` | `string` | register | Formula name (on update, pass only to change it) |
 | `description` | `string` | No | Formula description |
 | `source` | `string` | register | Python formula source (on update, pass only to change it; cannot be blanked) |
-| `is_public` | `bool` | No | Whether the formula is public (register default `false`) |
 | `parameters` | `list` | No | Typed parameter definitions `{name, type, default, description, required, min, max}` |
 | `outputs` | `list` | No | Declared secondary output series `{name, description}`; addressable in strategy rules as `<ref>.<name>`. The implicit `value` series is always present and must not be declared. |
 | `warmup_period` | `int` | No | Bars of warm-up before the formula's outputs are valid |
@@ -584,8 +585,7 @@ Registers, updates, or deletes a custom formula definition in `xstockstrat-indic
 **Ownership is derived, not asserted (feature 111).** `author` (register) and the ownership identity checked on `update`/`delete` are both the OAuth-authenticated caller's own `user_id` from their verified claims — there is no `author`/`formula_author_user_id` parameter. A caller can no longer register a formula under someone else's identity (including the reserved `"system"` sentinel), or claim someone else's ownership to update/delete a formula; the indicators backend's own PERMISSION_DENIED check (stored `author` vs. `user_id` mismatch) now always compares against the real caller.
 
 **Update is a partial merge (AIP-161).** Only the fields you pass are changed; omitted fields are
-preserved. Pass `is_public=false` to unpublish; omit it to leave it unchanged. At least one field
-must be supplied. `source` cannot be blanked. Use `get_formula`/`list_formulas` to read a formula
+preserved. At least one field must be supplied. `source` cannot be blanked. Use `get_formula`/`list_formulas` to read a formula
 back before editing.
 
 **Delete is a soft delete.** The formula is marked `deleted` (non-destructive), hidden from
@@ -625,23 +625,23 @@ Fetches one custom formula's stored definition from `xstockstrat-indicators`.
 |---|---|---|---|
 | `formula_id` | `string` | Yes | Formula identifier |
 
-**Return** — the formula in camelCase incl. `name`, `description`, `source`, `isPublic`,
-`parameters`, `outputs`, `warmupPeriod`, `fundamentalInputs` (FundamentalMetric enum NAME-strings),
-and `deleted` (true when soft-deleted). Use for safe read-modify-write: read, then
+**Return** — the formula in camelCase incl. `name`, `description`, `source`, `parameters`,
+`outputs`, `warmupPeriod`, `fundamentalInputs` (FundamentalMetric enum NAME-strings), `origin`
+(template provenance, when instantiated from a template), and `deleted` (true when soft-deleted). Use for safe read-modify-write: read, then
 `manage_formula(operation="update", …)` with only the changed fields.
 
 ---
 
 ### `list_formulas`
 
-Lists custom formula definitions from `xstockstrat-indicators`. Soft-deleted formulas are excluded.
+Lists the caller's own custom formula definitions from `xstockstrat-indicators` (formulas are private
+to their author, feature 224). Soft-deleted formulas are excluded.
 
 **Parameters**
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `author_filter` | `string` | No | If non-empty, restrict to formulas authored by this user id |
-| `include_public` | `bool` | No | Also include public formulas regardless of `author_filter` (default `true`) |
+| `author_filter` | `string` | No | **Admin-only owner selector** — an admin may pass a user id to list that user's formulas; ignored for a non-admin caller |
 
 **Return** — `{"formulas": [<formula in camelCase>, …]}`. Each formula includes `fundamentalInputs`
 (FundamentalMetric enum NAME-strings) when declared.
@@ -663,12 +663,62 @@ snake_case key a fundamentals formula reads via `data["<dataKey>"]` and that `te
 
 ---
 
+### `list_templates`
+
+Lists the admin-curated templates of one kind (read-only, feature 224) from the owning service's
+`ListTemplates` RPC — indicators (`formula`), analysis (`strategy`), or ingest (`signal_source`).
+Formulas, strategies, and signal sources are private to their owner, so a template is the shared
+starting point: copy one with `instantiate_template`. Retired templates are excluded.
+
+**Parameters**
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `kind` | `string` | Yes | `"formula"`, `"strategy"`, or `"signal_source"` |
+
+**Return** — `{"templates": [{"meta": {templateId, kind, name, description, version, retired,
+createdAt, updatedAt}, "payload": <formula / strategy / source definition>}, …]}` (camelCase).
+
+---
+
+### `instantiate_template`
+
+Copies a template into a new **private snapshot** owned by the caller (feature 224) via the owning
+service's `InstantiateTemplate` RPC. Later template edits never change the copy; its `origin`
+reports `template_version`, `latest_version`, and `update_available`.
+
+**Parameters**
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `kind` | `string` | Yes | `"formula"`, `"strategy"`, or `"signal_source"` |
+| `template_id` | `string` | Yes | From `list_templates` |
+| `strategy_id` | `string` | No | (`strategy`) id for the copy; empty = the template's own id, suffixed `_N` on collision. Instantiating a strategy also copies the formula templates it references into the caller's private formulas and rewires its components |
+| `slug` | `string` | No | (`signal_source`) the new source's slug, unique among the caller's sources |
+| `bearer_token` | `string` | No | (`signal_source`) credential for a credential-requiring type such as `mcp_client`. Written FIRST to the caller's own encrypted per-user config secret under an opaque key (`ingest.mcp_credential.<uuid>`, `is_secret=true`), then passed as the new source's `credentials_ref`. **Never returned** |
+
+**Return** — `formula` → the formula in camelCase; `strategy` → the strategy definition in
+camelCase; `signal_source` → `{"slug", "display_name", "source_type", "extractor_module", "active",
+"has_credentials", "reliability_weight", "user_id", "origin"}` (never a credential).
+
+**Errors**
+
+| Condition | Error |
+|---|---|
+| Unknown or retired `template_id` | `template not found` (NOT_FOUND) |
+| `signal_source` slug already used by the caller | `ALREADY_EXISTS` |
+| `signal_source` without a `slug` | `INVALID_ARGUMENT` |
+| Unknown `kind` | `ValueError` client-side, before any RPC |
+
+---
+
 ### `manage_signal_source`
 
-Registers, updates, reactivates, or deactivates a signal source in `xstockstrat-ingest`.
-**Admin-scoped write** — forwards the **caller's real derived** `x-access-scope` (feature 092; was a
-hardcoded admin scope); a non-admin is rejected `PERMISSION_DENIED` by the ingest `ManageSignalSource`
-gate.
+Registers, updates, reactivates, or deactivates one of the caller's signal sources in
+`xstockstrat-ingest`. **Owner-scoped write** (feature 224) — any authenticated caller manages their
+own sources (ingest resolves the owner from the forwarded `x-user-id`; a slug is unique per owner);
+platform `system` sources are read-only to everyone, and a write to another owner's source is
+rejected `PERMISSION_DENIED`.
 
 **Honest verbs (feature 088)** — register/update are no longer a blind full-replace upsert:
 
@@ -691,7 +741,7 @@ gate.
 | `config_json` | `object` | No | Source configuration (on `update`, changed only if supplied) |
 | `extractor_module` | `string` | No | Extractor module name (on `update`, changed only if supplied) |
 | `credentials_ref` | `string` | No | Reference to stored credentials — forwarded, **never echoed**. On `update`, omit to preserve the stored ref; pass `""` to clear it |
-| `bearer_token` | `string` | No | The MCP bearer for a `mcp_client` source (feature 166). Supplied on `register`; written FIRST to an encrypted config secret (`ingest.mcp_credential.<slug>`, `is_secret=true`), then the source is registered with `credentials_ref` pointing at it. Stored encrypted at rest and **never returned** |
+| `bearer_token` | `string` | No | The MCP bearer for a `mcp_client` source (feature 166). Supplied on `register`; written FIRST to the caller's own encrypted per-user config secret under an opaque key (`ingest.mcp_credential.<uuid>`, `is_secret=true`), then the source is registered with `credentials_ref` pointing at it. Stored encrypted at rest and **never returned** |
 
 > **`mcp_client` source type (feature 166).** A server-side MCP query source. Its `config_json`
 > carries `mcp_endpoint` (the Streamable-HTTP MCP URL) and `mcp_tool` (the tool name), plus optional
@@ -705,7 +755,7 @@ gate.
 **Return**
 
 ```json
-{ "slug": "unusual_whales", "display_name": "Unusual Whales", "source_type": "newsletter", "active": true, "has_credentials": true }
+{ "slug": "unusual_whales", "display_name": "Unusual Whales", "source_type": "newsletter", "active": true, "has_credentials": true, "user_id": "u-1", "origin": null }
 ```
 
 **Errors**
@@ -717,6 +767,30 @@ gate.
 | `update` masking `active`/`slug`, or update with no fields | `invalid argument` (INVALID_ARGUMENT) |
 | `authenticated_website` / `mediated_authenticated_website` with no (merged) credential | `invalid argument` (INVALID_ARGUMENT) |
 | `credentials_ref` exposure | **Never** — `credentials_ref` is intentionally omitted from the return and never exposed to Claude (FR-12) |
+
+---
+
+### `set_strategy_live`
+
+Enables or disables continuous live alert evaluation for one of the caller's strategies (feature
+048) via analysis `SetStrategyLive`. Ownership-gated on the forwarded `x-user-id` (feature 133).
+
+**Parameters**
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `strategy_id` | `string` | Yes | Strategy to toggle |
+| `live_enabled` | `bool` | Yes | `true` to enable live evaluation + alerting, `false` to disable |
+
+**Return** — `{"strategy_id", "display_name", "live_enabled", "active"}` (a subset, not the full
+definition).
+
+**Errors**
+
+| Condition | Error |
+|---|---|
+| Enabling an inactive strategy, or one whose `signal_params` has no `symbols` (feature 089) | FAILED_PRECONDITION — disabling is always allowed |
+| Unknown strategy | `strategy not found` (NOT_FOUND) |
 
 ---
 
@@ -993,7 +1067,7 @@ Streamable HTTP transport only.**
 | `value` | string | yes | Converted according to `value_type` |
 | `author` | string | yes | Recorded in `config.config_audit` |
 | `reason` | string | yes | Recorded alongside `author` |
-| `user_id` | string | no | Per-user override. Omit to write the global value. Secret keys are **global-only** — a per-user secret write is rejected `INVALID_ARGUMENT` |
+| `user_id` | string | no | Per-user override. Omit to write the global value. Per-user secret writes are accepted (feature 224); the value stays redacted on every read edge |
 | `create_key` | bool | no | Default `false`. Set `true` **only** to deliberately register a brand-new key at this `(namespace, key, environment, user_id)` scope. Left false, a write to an unregistered scope is refused (see Errors) so a typo cannot mint an orphan key (feature 091). |
 
 The **environment is always the agent's own deployment env** (`APPLICATION_ENV`) — no `environment`
@@ -1516,9 +1590,8 @@ emit_alert(severity="info", category="system",
 ### Strategy management
 
 ```
-1. manage_formula(operation="register", name="rsi_div", source="<python source>",
-                  author="<user_id>")
-   → formula_id
+1. manage_formula(operation="register", name="rsi_div", source="<python source>")
+   → formula_id   (private to you; the author is your verified identity)
 
 2. manage_strategy(operation="register", strategy_id="rsi_sma_combo",
                   display_name="RSI + SMA",
@@ -1531,6 +1604,14 @@ emit_alert(severity="info", category="system",
 
 3. run_backtest(strategy_id="rsi_sma_combo", symbols=["NVDA"])
    → backtest_id
+```
+
+Or start from a curated template (feature 224):
+
+```
+1. list_templates(kind="strategy")                         → templates[].meta.templateId
+2. instantiate_template(kind="strategy", template_id="<id>") → your private strategyId
+3. run_backtest(strategy_id="<strategyId>", symbols=["NVDA"])
 ```
 
 ### Correlating list responses

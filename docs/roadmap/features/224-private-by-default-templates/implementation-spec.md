@@ -2239,7 +2239,7 @@ running these `DO $$ … RAISE EXCEPTION` assertions.
 
 ### Step 34 — service: agent tools (drop public args, owner-scoped sources, template tools, tool count 45, docs parity)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify
@@ -3055,3 +3055,17 @@ _Populated by /sdd-execute as implementation proceeds._
   - Fixture source types avoid mediated and `mcp_client` (replaying 006/007 adds narrower CHECKs).
 - **Verification**: offline only. `bash -n`, shellcheck, shfmt and render checks pass, and pglast parses all four SQL files. The live run is CI-only.
 - **Disposition**: operator decision plus a defect report.
+
+### D-30 — Step 34/35: extra doc fixes; follow-through test edits; pre-existing UI tsc errors
+- **Doc fixes**:
+  - `mcp-tools.md` gains a missing `### set_strategy_live` section (the runbook-parity test exposed it), plus a template usage pattern.
+  - The stale `author="<user_id>"` argument is removed from the strategy-management example.
+  - `SKILL.md` Scope lists both new tools, as `docs/patterns/strat-lab-plugin.md` requires.
+  - The deprecated `author` field stays in the register request, because the backend ignores it.
+- **Follow-through tests outside Files**:
+  - `tests/test_tools.py`: the bearer key now matches `startswith("mcp_credential.")` plus `user_id`, and `is_public` is now rejected with a `TypeError`.
+  - `tests/test_formula_builders.py`: `is_public` added to the intentionally-unset sets.
+  - `tests/test_strategy_builders.py`: `origin` added to `_STRATEGY_INTENTIONALLY_UNSET`. That test was already red after the Step 1 proto fields; it is green now.
+- **UI `tsc --noEmit`**: 2 errors in `e2e/insights/backfills.spec.ts:135-136` (`'never'`). They reproduce on `origin/main-dev`, so they predate this feature; the file is untouched.
+- **Out of scope, noted only**: `mcp-tools.md` still calls `manage_strategy` an "Admin-scoped write", which has been stale since feature 133.
+- **Disposition**: within scope; the pre-existing items are recorded, not fixed.
