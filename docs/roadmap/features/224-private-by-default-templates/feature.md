@@ -16,6 +16,7 @@
 | 2026-10-07 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 41 steps |
 | 2026-10-07 | `implementation-ready` (unchanged) | /sdd-execute | Re-spec gate: Step 22 (AC-35 write-accepted test written new), Step 34 Files (+ test_tools_endpoint.py) |
 | 2026-10-07 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 done (sequential run started) |
+| 2026-10-07 | `in-progress` → `code-completed` | /sdd-execute | All 41 steps done; integration PR to `main-dev` |
 
 ---
 
@@ -57,4 +58,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review private-by-default-templates impl-spec` — validate implementation spec, then `/sdd-execute private-by-default-templates`
+Merge the integration PR (`feature/private-by-default-templates` → `main-dev`) once CI is green; then `/promote`. Follow-up: feature 225 `private-by-default-enforce-contract` (after launch).

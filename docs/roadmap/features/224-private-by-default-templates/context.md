@@ -962,3 +962,19 @@ OQ-4 to OQ-6 remain for /sdd-design.
   - `tsc` shows only the 2 pre-existing errors; vitest 228/228.
 - Coverage: N/A (Playwright).
 - **Deviation**: D-34.
+
+### Step 40 — docs: context teardown, conventions, C-16 route update [done]
+- Updated the service and root `CLAUDE.md` files, `config-governance.md` and `database.md`.
+- The durable feature `surface-signal-weight-decay-config.feature` @AC-4/@AC-5 now names the `/insights/signal-sources` route.
+- Reconciled the context by hand, because `/context-forge:context-constitution refresh` was not run. The files touched are listed in D-36.
+- All of the spec's verification greps are clean.
+
+### Step 41 — docs: follow-up feature 225 + merge-order row [done]
+- Created `225-private-by-default-enforce-contract`.
+- Added a `merge-order.md` row: 225 waits for 224 to be launched. It pre-reserves analysis 027, indicators 008 and ingest 014.
+- D-35 records that this step was committed before Step 40.
+
+## Session 2026-10-07 — feature end
+- `main-dev` was merged in (`6cd66a42`, the archive of 20 features). One docs conflict in the indicators constitution was resolved: main-dev's refreshed line anchors were kept, plus 224's INDICATORS-5 wording.
+- Status set to `code-completed`.
+- Integration PR opened against `main-dev`.
