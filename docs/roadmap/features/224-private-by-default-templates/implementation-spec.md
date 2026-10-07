@@ -1296,7 +1296,7 @@ cd services/xstockstrat-analysis && uv run pytest --cov=app --cov-fail-under=40 
 
 ### Step 18 — migration: ingest `013_signal_ownership_templates`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/migrations/013_signal_ownership_templates.up.sql` — create
@@ -2967,3 +2967,9 @@ _Populated by /sdd-execute as implementation proceeds._
 ### D-18 — Step 17: indicators-header check not applied to `test_list_opportunities_compute_drains`
 - **Actual**: that fixture makes no indicators calls, so a non-empty indicators assertion cannot apply to it. Its existing ingest-side assertions are unchanged. No saga code exists yet, so Step 31's saga tests must call `_assert_indicators_headers(…, path="template-saga")`.
 - **Disposition**: within scope; follow-up noted for Step 32.
+
+### D-19 — Step 18: `credential_scope` omitted; N-1 rollback-window limits on `signal_sources` writes
+- **`credential_scope`**: omitted together with its CHECK, backfill and reset trigger, per the operator gate (2026-10-07: prod has zero `mcp_client` sources).
+- **Down file**: refuses to run once any slug has more than one owner, or any dedup key does. Reversing the PK swap would otherwise collide.
+- **Accepted risk**: the N-1 owner-fill trigger covers `newsletter_signals` inserts only, as the spec names. During a rollback window, an N-1 instance that **registers** a new source without `user_id` fails the NOT NULL, and an N-1 `mark_source_*` UPDATE by slug touches every owner's row with that slug. Registration is admin-only, and N-1 has no `ON CONFLICT (slug)` (round-3 verification). Both are confined to N/N-1 coexistence and disappear once N is fully rolled out.
+- **Disposition**: operator gate plus a documented, accepted risk.

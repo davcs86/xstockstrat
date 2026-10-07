@@ -665,3 +665,25 @@ OQ-4 to OQ-6 remain for /sdd-design.
 - New test: `test_main_wires_no_channel_interceptor`.
 - RED: 1 failed (`interceptors=[InternalCallerInterceptor()]` was still present in `main.py`). GREEN: 930 passed, coverage 86.47%, ruff clean.
 - Deviation: D-18 (Step 32's saga tests must use the saga path).
+
+### Step 18 — migration: ingest `013_signal_ownership_templates` [done]
+- **Header and guard:** `-- requires-env: SEED_USER_ID`, plus an unconditional guard that refuses an unset or unrendered seed.
+- **`signal_sources`** (one-shot, runs only while `user_id` is absent):
+  - adds `user_id`: `derived` sources get `system`, all others get `SEED_USER_ID` (D-4);
+  - sets NOT NULL and swaps the PK to `(user_id, slug)`;
+  - creates the `newsletter_signals_n1_owner_fill` BEFORE INSERT trigger, which fills the slug's unique holder or raises if there isn't exactly one. Because it only exists inside the one-shot block, the trigger is never re-created on a replay after the contract.
+- **`newsletter_signals`** (one-shot): fast-default `user_id`, then system sources re-tagged to `system`, then DROP DEFAULT. A NOTICE logs the row counts for the prod record.
+- **New index, tables and columns:**
+  - index `(user_id, ingested_at DESC)`;
+  - `signal_dedup_claims`, seeded from `signal_dedup_keys` with explicit columns and guarded by `to_regclass`; `signal_dedup_keys` is kept for N-1;
+  - origin columns on `signal_sources`;
+  - `source_templates`, with no seed rows.
+- **Down file:** reverses everything above, but refuses to run if any slug or dedup key now has more than one owner.
+- **Offline verification:**
+  - Numbering is correct (012 → 013).
+  - The up and down files are in parity.
+  - With the seed set, the render leaves no `${SEED_USER_ID}` and all 8 `$$` and 2 `$fn$` tags intact.
+  - Without the seed, the render exits 1 and names the variable.
+  - The only `*` in either file is inside `count(*)`.
+- TDD: N/A.
+- **Deviation:** D-19. `credential_scope` is omitted per the operator gate, and the N-1 rollback-window risk is accepted.
