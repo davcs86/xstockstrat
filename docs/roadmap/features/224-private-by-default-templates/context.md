@@ -520,3 +520,37 @@ OQ-4 to OQ-6 remain for /sdd-design.
 - TDD: N/A (migration).
 - Files: `services/xstockstrat-analysis/migrations/026_owner_dimension_templates.{up,down}.sql`.
 - Deviation: the spec named no index for `template_intents`, so it is named `idx_template_intents_state_updated`. `intent_id` has no default, so writers must supply the UUID (Step 31).
+
+### Step 7 — service: analysis identity threading and fundsignal `system` identity [done]
+- **Evaluator:** gains `for_owner`. The live loop uses a per-owner evaluator, a once-per-cycle system drain (`SignalScope.SYSTEM`, `analysis-system-read`), and an own-signal drain per owner.
+- **Owner on outbound calls:**
+  - `entry_backfill` uses the system drain plus a per-owner memo.
+  - The pnl consumer sends QuerySignals as the order owner.
+  - The fundamentals universe is read in the SYSTEM scope.
+- **Fundsignal** (both the scheduled loop and `RunFundamentalsScan`):
+  - **Identity:** sends `x-user-id: system` with `x-internal-caller: analysis-fundsignal`; the admin-bit injection is deleted.
+  - **Scoring pre-flight:** `GetFormula` must return `author == SYSTEM_AUTHOR` (AC-6/AC-37). The per-symbol built-in fallback is deleted (deliberate C-18 removal).
+  - **Registration:** keyed on the slug.
+  - **Aborts:** a register `FAILED_PRECONDITION`, or a `NOT_FOUND` on IngestSignal, aborts the cycle with an ERROR alert (`_emit_warning` gains a severity parameter).
+- **Servicer:**
+  - Adds a `SYSTEM_IDENTITY` constant.
+  - An inbound `x-user-id: system` without a grant resolves to `""`, the documented divergence from design §2.
+  - Adds the GetAttribution visible-source filter (decision 7).
+- **Files:** `app/services/evaluator.py`, `app/engine/{live_loop,entry_backfill,pnl_pattern_consumer,fundsignal_loop}.py`, `app/handlers/servicer.py`. `main.py` needed no change.
+- **Deviations:** D-4, D-5.
+
+### Step 8 — test: threading, fundsignal identity, runtime header guard [done]
+- **New `tests/test_owner_header_guard.py`:** a runtime stub-level guard requiring every ingest and indicators call to carry a non-empty `x-user-id`. `system` is allowed only with the fundsignal or system-read grant.
+- **`conftest.py`:** adds `ctx_with` and `RecordingStub`.
+- **Updated tests:**
+  - fundsignal: AC-6, AC-36, AC-37 (loop and manual paths), NOT_FOUND abort, slug-keyed registration, no built-in fallback
+  - live loop: AC-26, system-scope universe, owner header on `_eval_pair`
+  - pnl: owner header on the composer
+  - attribution: AC-12 filter, `system` caller owns nothing
+- **TDD:**
+  - RED: 21 failed, 112 passed. Examples: `QuerySignals sent x-user-id []`, `assert None == 'system'`, `'completed' == 'failed'`, and the built-in fallback mock called once.
+  - GREEN: 901 passed, coverage 85.52% (≥40). Ruff check and format are clean.
+- **Some guard tests were already green before Step 7.** ListOpportunities, GetAttribution, analytics, screener, the materializer and the backtest prefetch already sent the owner header; their tests pin that behavior against regressions.
+- **Files:** `tests/{conftest,test_owner_header_guard,test_fundsignal_loop,test_live_loop,test_pnl_pattern_consumer,test_get_attribution,test_entry_backfill}.py`.
+- **Deviations:** D-6 and D-7.
+- **Noted, not fixed (pre-existing behavior):** after an IngestSignal NOT_FOUND abort, the triggering symbol's `fundsignal_emitted` claim row remains, as it already did for any failed emit.

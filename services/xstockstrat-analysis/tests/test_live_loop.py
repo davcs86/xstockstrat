@@ -48,6 +48,8 @@ def _make_loop(cooldowns_repo=None) -> LiveEvaluationLoop:
         evaluator=AsyncMock(),
         cooldowns_repo=cooldowns_repo,
     )
+    # feature 224: the loop evaluates via a per-owner clone; the mock clones to itself.
+    loop._evaluator.for_owner = MagicMock(return_value=loop._evaluator)
     loop._marketdata.GetBars = AsyncMock(
         return_value=SimpleNamespace(bars=[_bar_at(_DEFAULT_BAR_DT)])
     )
@@ -1214,3 +1216,111 @@ class TestLiveLoopBlendUniverse:
         assert mock_resolve.call_args[0][0].strategy_id == "sma_cross"
         # Blend was skipped entirely.
         assert {sym for (sid, sym) in seen if sid == self.BLEND_ID} == set()
+
+
+class TestLiveLoopSignalScopes:
+    """feature 224 — signal eligibility reads the owner's own signals plus the `system` signals,
+    never another user's (AC-11/AC-26)."""
+
+    def _wire(self, loop, own_by_owner, system_signals):
+        from gen.ingest.v1 import ingest_pb2
+
+        loop._portfolio = AsyncMock()
+        loop._portfolio.ListPositions = AsyncMock(
+            return_value=SimpleNamespace(positions=[], page=SimpleNamespace(next_page_token=""))
+        )
+        loop._portfolio.ListWatchlists = AsyncMock(
+            return_value=SimpleNamespace(watchlists=[], page=SimpleNamespace(next_page_token=""))
+        )
+
+        async def _query_signals(req, metadata=None):
+            meta = dict(metadata or ())
+            if req.scope == ingest_pb2.SIGNAL_SCOPE_SYSTEM:
+                assert meta == {"x-user-id": "system", "x-internal-caller": "analysis-system-read"}
+                syms = system_signals
+            elif req.scope == ingest_pb2.SIGNAL_SCOPE_OWN:
+                assert "x-internal-caller" not in meta
+                syms = own_by_owner.get(meta.get("x-user-id"), [])
+            else:
+                raise AssertionError(f"unscoped QuerySignals: {req} {metadata}")
+            return SimpleNamespace(
+                signals=[SimpleNamespace(symbol=s) for s in syms],
+                page=SimpleNamespace(next_page_token=""),
+            )
+
+        loop._ingest.QuerySignals = AsyncMock(side_effect=_query_signals)
+
+    async def _seen(self, loop):
+        seen = set()
+
+        async def fake_eval(defn, symbol, throttle, deny_entry=False):
+            seen.add((defn.user_id, symbol))
+
+        loop._eval_pair = fake_eval
+        await loop._run_cycle()
+        return seen
+
+    @pytest.mark.asyncio
+    async def test_ac11_other_users_signal_not_eligible(self):
+        loop = _make_loop()
+        loop._db.fetch = AsyncMock(return_value=[_live_row("s-sig", "bob", signal_eligible=True)])
+        # alice's TSLA signal lives only in alice's own scope; the system drain has none.
+        self._wire(loop, {"alice": ["TSLA"], "bob": []}, system_signals=[])
+        assert ("bob", "TSLA") not in await self._seen(loop)
+
+    @pytest.mark.asyncio
+    async def test_ac26_system_signal_joins_owner_universe(self):
+        loop = _make_loop()
+        loop._db.fetch = AsyncMock(
+            return_value=[
+                _live_row("s-fund", "bob", signal_eligible=True),
+                _live_row("s-own", "carol", signal_eligible=True),
+            ]
+        )
+        self._wire(loop, {"bob": ["AMD"], "carol": ["NVDA"]}, system_signals=["MSFT"])
+        seen = await self._seen(loop)
+        assert seen == {("bob", "AMD"), ("bob", "MSFT"), ("carol", "NVDA"), ("carol", "MSFT")}
+        # One system drain per cycle, one own drain per owner.
+        assert loop._ingest.QuerySignals.await_count == 3
+
+    @pytest.mark.asyncio
+    async def test_fundamentals_universe_reads_system_scope(self):
+        from gen.ingest.v1 import ingest_pb2
+
+        loop = _make_loop()
+        loop._cfg.get_str = MagicMock(side_effect=lambda key, default="": default)
+        self._wire(loop, {}, system_signals=["MSFT"])
+        loop._marketdata.GetFundamentalsMulti = AsyncMock(
+            return_value=SimpleNamespace(fundamentals=[SimpleNamespace(symbol="MSFT")])
+        )
+        assert await loop._resolve_fundamentals_universe() == {"MSFT"}
+        req = loop._ingest.QuerySignals.await_args.args[0]
+        assert req.scope == ingest_pb2.SIGNAL_SCOPE_SYSTEM and req.source == "fundamentals"
+
+    @pytest.mark.asyncio
+    async def test_eval_pair_evaluates_with_owner_identity(self):
+        from app.services.evaluator import StrategyEvaluator
+        from tests.conftest import RecordingStub
+
+        loop = _make_loop()
+        indicators = RecordingStub()
+        loop._evaluator = StrategyEvaluator(indicators, ())
+        definition = analysis_pb2.StrategyDefinition(
+            strategy_id="s1",
+            user_id="bob",
+            components=[
+                analysis_pb2.StrategyComponent(
+                    ref_name="a",
+                    kind=analysis_pb2.COMPONENT_KIND_BUILTIN_INDICATOR,
+                    indicator="SMA",
+                    params={"period": 2.0},
+                )
+            ],
+            entry_rule='{"fn": ">", "lhs": "a", "rhs": 0}',
+        )
+        try:
+            await loop._eval_pair(definition, "AAPL", 300)
+        except Exception:  # noqa: BLE001 — only the outbound identity matters here
+            pass
+        assert indicators.calls
+        assert {dict(m).get("x-user-id") for _n, _r, m in indicators.calls} == {"bob"}

@@ -695,7 +695,7 @@ grep -n "analysis-fundsignal\|x-access-scope" app/engine/fundsignal_loop.py   # 
 
 ### Step 8 — test: analysis threading, fundsignal identity, runtime header guard
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/conftest.py` — modify (add shared `ctx_with(headers)` and
