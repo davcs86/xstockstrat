@@ -202,7 +202,7 @@ The UI consumes these backend services over gRPC via its segment BFFs (endpoints
 | xstockstrat-analysis | 50056 | Insights — strategies, backtests |
 | xstockstrat-indicators | 50054 | Insights — formulas |
 | xstockstrat-ingest | 50055 | Insights/Config-UI — signal sources, backfills |
-| xstockstrat-notify | 50059 | Trader — alert stream |
+| xstockstrat-notify | 50059 | Trader — alert stream; `/accounts/notifications` inbox read state (`AlertInbox`, feature 203) |
 | xstockstrat-ledger | 50057 | Insights — ledger reads |
 | xstockstrat-config | 50060 | Config-UI — config read/write |
 | TimescaleDB | — | Config-UI audit route only (see Database) |
@@ -326,6 +326,9 @@ The UI is an installable PWA that can receive OS-level Web Push notifications ev
   Push API with the VAPID **public** key, and calls `notifyClient.registerPushSubscription` /
   `unregisterPushSubscription`. Its four states (unsupported/blocked/enabled/default) route through
   `EmptyState`/`CardNotice`/`Switch` (C-17).
+- **Alert inbox** (feature 203): the same page renders `AlertInbox` (`notifyClient.listAlerts`/`markAlertRead` via the
+  `/trader/api` BFF `forward()`). The `/trader` bell badge (`AlertStream`) shows the server `unreadCount` fetched once on
+  mount — it does not refresh after mark-read or on a streamed alert — and "Mark all read" covers only the loaded page (50).
 - **BFF**: `traderBff` `registerPushSubscription`/`unregisterPushSubscription` are plain `forward()`s —
   the notify service resolves the subscription owner from the propagated `x-user-id` header
   (`backendHeaders`, applied by `forward`; the request body carries no `user_id`), matching the

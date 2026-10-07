@@ -71,7 +71,7 @@ fills the CA + every per-service `MTLS_*` placeholder from the freshly-minted le
 ## 1. Cutover — flag-day, dependency-ordered rolling deploy (leaf→root)
 
 Because enforcement is flag-day, during the deploy a **not-yet-cutover plaintext peer and an
-already-cutover mТLS peer cannot talk** — the mismatch is refused the same fail-closed way a bad cert
+already-cutover mTLS peer cannot talk** — the mismatch is refused the same fail-closed way a bad cert
 is. The window is bounded and auto-contained by DO health-gated promotion (a crash-looping new
 version is not promoted; the last-healthy version keeps serving). Minimize the window by deploying in
 **dependency order (leaf→root)**: the most-depended-upon servers first, the edges last. Derive the
@@ -113,7 +113,8 @@ restart gaps. The bounded loss is **accepted by explicit operator sign-off** (fe
 
 The cutover relies on DO **health-gated promotion**: a component whose new (mTLS) version fails its
 health check is not promoted, and the last-healthy version keeps serving. This is an **inferred**
-DO behavior (feature 210 design Open Risk). If your DO plan does **not** health-gate promotion,
+DO behavior (feature 210 design Open Risk) — per-component gating is still unverified; a whole-deployment
+auto-rollback was observed once (the first `main-dev` deploy, §0.1). If your DO plan does **not** health-gate promotion,
 treat the deploy as an all-at-once flag-day and schedule a maintenance window. The manual fallback
 for a stuck component is the prior-image redeploy in §3.
 

@@ -5,6 +5,7 @@
 **Last Updated**: 2026-09-24
 **Committed to main**: 0be58cbe339fd3bf47b6b23464c3af53ae402b78
 **Launched date**: 2026-09-25
+**Archived**: 2026-10-07
 
 ---
 
@@ -19,15 +20,16 @@
 | 2026-09-24 | `implementation-ready` → `code-completed` | /sdd-execute | All 14 steps done; proto `ListFundamentalMetrics` RPC + indicators handler, agent `manage_formula fundamental_inputs`/`list_fundamental_metrics`, UI FundamentalInputEditor + fundamentals grid/prefill, analysis G6 parity, e2e AC-2..6. @AC-1..7 promoted to durable suites (C-16) |
 
 | 2026-09-25 | `code-completed` → `launched` | CI workflow | Promoted via PR #1177; committed 0be58cbe339fd3bf47b6b23464c3af53ae402b78 |
+| 2026-10-07 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(1); pruned 4 spec(s); acceptance scenarios promoted to per-service suites (C-16) |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
-- [Recon Dossier](recon.md) — Phase 0 grounded codebase map (sdd-design)
-- [Design](design.md) — debated, approved architecture (sdd-design, 3 rounds)
-- [Implementation Spec](implementation-spec.md) — 14-step plan with codebase evidence and AC traceability
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15); promoted to services/xstockstrat-{indicators,ui,agent}/acceptance/formula-fundamental-inputs-authoring.feature and docs/sdd/business-rules/platform.feature (promoted at launch) (C-16)
+- Recon Dossier — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

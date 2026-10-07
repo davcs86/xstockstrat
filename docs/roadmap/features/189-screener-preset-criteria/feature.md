@@ -5,6 +5,7 @@
 **Last Updated**: 2026-09-12
 **Committed to main**: 5fd9faf88fa1a93f41adced9eebff0ad0852634c
 **Launched date**: 2026-09-27
+**Archived**: 2026-10-07
 
 ---
 
@@ -18,15 +19,16 @@
 | 2026-09-26 | `implementation-ready` → `code-completed` | /sdd-execute (sequential) | Steps 1–3 pre-landed via PR #1139 (flipped to done); Step 4 e2e preset scenario authored + verified green (3 tests, CI-mode). All 4 steps done. |
 
 | 2026-09-27 | `code-completed` → `launched` | CI workflow | Promoted via PR #1194; committed 5fd9faf88fa1a93f41adced9eebff0ad0852634c |
+| 2026-10-07 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(1); pruned 4 spec(s); acceptance scenarios promoted to per-service suites (C-16) |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
-- [Recon Dossier](recon.md) — grounded codebase discovery for design phase
-- [Design](design.md) — debated, user-approved architecture
-- [Implementation Spec](implementation-spec.md) — numbered steps with codebase evidence
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15); promoted to services/xstockstrat-ui/acceptance/screener-preset-criteria.feature (C-16)
+- Recon Dossier — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

@@ -5,6 +5,7 @@
 **Last Updated**: 2026-09-21
 **Committed to main**: dd622bdc2e5b922df8dcabc6f7475b8b395a8ed3
 **Launched date**: 2026-09-24
+**Archived**: 2026-10-07
 
 ---
 
@@ -25,15 +26,16 @@
 | 2026-09-23 | `in-progress` → `code-completed` | /sdd-execute | All 11 steps landed (one commit per step). proto+gen (1–2), migration `025` (3), analysis roll-up shared-fold + owner gate + compute/heal + `ANALYSIS-13` (4) with tests (5, analysis suite 837 passed / 83.7%), two config keys (6), agent projection (7) + parity (8, agent suite 447 / 79.3%), mcp-tools doc (9), UI `/insights` symbol-score sort + group-header render (10) + e2e (11, RED→GREEN, opportunities spec 31 passed host-native). Deviations: `ANALYSIS-12→13` (201 took 12), Step-5/11 test-harness extensions, host-native e2e (Docker runner corepack-egress-blocked). Next: integration PR → `main-dev` |
 
 | 2026-09-24 | `code-completed` → `launched` | CI workflow | Promoted via PR #1169; committed dd622bdc2e5b922df8dcabc6f7475b8b395a8ed3 |
+| 2026-10-07 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(3); pruned 4 spec(s); acceptance scenarios promoted to per-service suites (C-16) |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
-- [Recon Dossier](recon.md) — grounded codebase map, patterns to reuse, existing business rules (C-16)
-- [Design](design.md) — debated + approved architecture, rejected alternatives, open risks, Constitution rules
-- [Implementation Spec](implementation-spec.md) — 11 numbered steps, evidence-cited
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15); promoted to services/xstockstrat-{analysis,ui,agent}/acceptance/symbol-opportunity-ranking.feature; @AC-5 not promoted (deferred follow-up) (C-16)
+- Recon Dossier — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

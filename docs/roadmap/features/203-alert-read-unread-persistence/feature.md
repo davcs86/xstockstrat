@@ -5,6 +5,7 @@
 **Last Updated**: 2026-09-24
 **Committed to main**: 0be58cbe339fd3bf47b6b23464c3af53ae402b78
 **Launched date**: 2026-09-25
+**Archived**: 2026-10-07
 
 ---
 
@@ -20,15 +21,16 @@
 | 2026-09-24 | `in-progress` → `code-completed` | /sdd-execute | All 10 steps done; notify 63/63 @90.78%, UI e2e 13/13; C-16 scenarios promoted |
 
 | 2026-09-25 | `code-completed` → `launched` | CI workflow | Promoted via PR #1177; committed 0be58cbe339fd3bf47b6b23464c3af53ae402b78 |
+| 2026-10-07 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(3); pruned 4 spec(s); acceptance scenarios promoted to per-service suites (C-16) |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
-- [Recon Dossier](recon.md) — grounded codebase map
-- [Design](design.md) — debated, user-approved architecture (3 rounds, quick)
-- [Implementation Spec](implementation-spec.md) — 10 steps: proto, codegen, migration, notify handler, notify tests, UI shared extraction, inbox page, badge refactor, E2E fixtures, E2E specs
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15); promoted to services/xstockstrat-{notify,ui}/acceptance/alert-read-unread-persistence.feature (promoted at launch) (C-16)
+- Recon Dossier — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
