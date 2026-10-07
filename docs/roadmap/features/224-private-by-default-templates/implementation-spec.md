@@ -1066,7 +1066,7 @@ ls services/xstockstrat-indicators/migrations/007_*.up.sql services/xstockstrat-
 
 ### Step 14 — service: indicators owner-only visibility, header identity, admin read/audit, SAN-bound bypass
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/peer_identity.py` — create
