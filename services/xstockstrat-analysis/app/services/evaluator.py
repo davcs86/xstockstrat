@@ -211,6 +211,12 @@ class StrategyEvaluator:
         self._meta = propagation_meta
         self._component_sem = component_sem
 
+    def for_owner(self, owner: str) -> "StrategyEvaluator":
+        """A clone whose indicators calls carry ``owner`` as ``x-user-id`` (feature 224)."""
+        return StrategyEvaluator(
+            self._indicators, [("x-user-id", owner)] if owner else (), self._component_sem
+        )
+
     async def evaluate(
         self,
         definition,  # analysis_pb2.StrategyDefinition

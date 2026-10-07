@@ -197,7 +197,9 @@ class PnLPatternConsumer:
         event_type = ORDER_EVENTS[event.event_type]
 
         # Compose BEFORE the txn — best-effort, timeout-bounded.
-        bar, closes, indicators, signals, degraded = await self._compose(symbol, strategy_id)
+        bar, closes, indicators, signals, degraded = await self._compose(
+            symbol, strategy_id, user_id
+        )
 
         async with self._pool.acquire() as conn:
             async with conn.transaction():
@@ -354,28 +356,31 @@ class PnLPatternConsumer:
 
     # ── helpers ───────────────────────────────────────────────────────────────
 
-    async def _compose(self, symbol, strategy_id):
+    async def _compose(self, symbol, strategy_id, owner):
         """Returns (bar, closes, indicators, signals, degraded). Each gRPC group is bounded by its
         config timeout; a timeout/error degrades to an empty map/list (partial snapshot), never
         raising out of here (FR-6)."""
         ind_timeout = self._cfg.get_int("analysis.snapshot.indicator_timeout_ms", 500) / 1000.0
         sig_timeout = self._cfg.get_int("analysis.snapshot.signal_timeout_ms", 500) / 1000.0
         degraded = False
+        meta = [("x-user-id", owner)] if owner else ()
         bar, closes = None, []
         try:
-            bar, closes = await self._composer.ohlcv_and_closes(symbol)
+            bar, closes = await self._composer.ohlcv_and_closes(symbol, meta)
         except Exception as e:  # noqa: BLE001
             log.warning("snapshot ohlcv compose failed for %s: %s", symbol, e)
             degraded = True
         try:
             indicators = await asyncio.wait_for(
-                self._composer.indicators(symbol, closes, strategy_id), timeout=ind_timeout
+                self._composer.indicators(symbol, closes, strategy_id, meta), timeout=ind_timeout
             )
         except Exception as e:  # noqa: BLE001 — timeout or transport → partial (FR-6)
             log.warning("snapshot indicators degraded for %s: %s", symbol, e)
             indicators, degraded = {}, True
         try:
-            signals = await asyncio.wait_for(self._composer.signals(symbol), timeout=sig_timeout)
+            signals = await asyncio.wait_for(
+                self._composer.signals(symbol, meta), timeout=sig_timeout
+            )
         except Exception as e:  # noqa: BLE001 — timeout or transport → partial (FR-6)
             log.warning("snapshot signals degraded for %s: %s", symbol, e)
             signals, degraded = [], True

@@ -570,7 +570,7 @@ head -1 services/xstockstrat-analysis/migrations/026_*.up.sql   # -- requires-en
 
 ### Step 7 — service: analysis identity threading and fundsignal `system` identity
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/engine/live_loop.py` — modify
@@ -2890,3 +2890,23 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Expected**: "force every service to version 0 and run `db-migrate.sh up` again".
 - **Actual**: the script marks each `<schema>_schema_migrations` row `dirty`, so `db-migrate.sh`'s own dirty branch runs `force 0` and the replay. That is the exact production recovery path, not a parallel reimplementation. The job runs inside the `Dockerfile.migrate` image (migrate + psql + envsubst) against a `timescaledb:latest-pg16` service container.
 - **Disposition**: implementation detail within scope.
+
+### D-4 — Step 7: evaluator call site was `_load_benchmark_bars`, not `_replay_state`
+- **Expected**: apply `for_owner` in `_replay_state`.
+- **Actual**: `_replay_state` is pure and never calls the evaluator. The evaluator call it meant is in `_load_benchmark_bars`, so `for_owner` is applied there and in `_eval_pair`.
+- **Disposition**: spec text error; intent honored.
+
+### D-5 — Step 7: lazy own-signal drain, shared identity constants, attribution fails closed
+- **Own-signal drain**: an owner's own signals are drained only when that owner has a signal-eligible, non-blend strategy, which is the only consumer. The system drain still runs once per cycle.
+- **Shared constants**: `SYSTEM_IDENTITY = "system"` and `_FUNDSIGNAL_CALLER` are shared constants (DRY) rather than repeated literals.
+- **Attribution**: if `ListSignalSources` fails, the visible set is empty, so the response returns no attribution instead of falling back to raw slugs.
+- **Pre-flight**: runs after the `dry_run` return and before the `force` DELETE.
+- **Disposition**: within scope; the decision 7 filter fails closed.
+
+### D-6 — Step 8: `tests/test_entry_backfill.py` modified (not in Files)
+- **Actual**: Step 7 renames `_drain_signals` to `_drain_system_signals` + `_drain_owner_signals`. The existing fake loop in `test_entry_backfill.py` stubbed the old name and would fail without updating.
+- **Disposition**: required test-fixture follow-through for an in-scope rename; no behavior change asserted.
+
+### D-7 — Step 8: guard accepts `analysis-system-read` as well as `analysis-fundsignal`
+- **Actual**: Step 7 itself specifies the SAN-bound `analysis-system-read` grant for the live-loop system drain, so the stub-level guard permits `x-user-id: system` only with either grant. Owner calls must carry no stub-level grant.
+- **Disposition**: consistent with Step 7.

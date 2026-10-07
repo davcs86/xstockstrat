@@ -19,6 +19,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 import grpc
+from gen.indicators.v1 import indicators_pb2
 from gen.ingest.v1 import ingest_pb2
 from gen.marketdata.v1 import marketdata_pb2
 from gen.notify.v1 import notify_pb2
@@ -27,8 +28,17 @@ from google.protobuf.struct_pb2 import Struct
 from google.protobuf.timestamp_pb2 import Timestamp
 
 from app.engine.durable_schedule import DurableSchedule
+from app.handlers.servicer import SYSTEM_IDENTITY
 
 log = logging.getLogger(__name__)
+
+# Ingest/indicators grant for the producer's writes and scoring as the reserved `system` owner.
+_FUNDSIGNAL_CALLER = "analysis-fundsignal"
+
+
+class _SystemWriteRejected(Exception):
+    """Ingest refused a write made as `system` — the whole cycle aborts (never a partial emit)."""
+
 
 # Fundamental metric → (good_endpoint, bad_endpoint) for the built-in default score.
 # Lower-is-better when good < bad; higher-is-better when good > bad.
@@ -80,7 +90,7 @@ class FundamentalsSignalLoop:
         self._notify = notify_stub
         self._ledger = ledger_stub
         self._lock = asyncio.Lock()
-        self._source_registered = False
+        self._registered_slug: str | None = None
         # The max_symbols cap protects FMP's daily budget, so it applies ONLY when FMP is active.
         # Provider is read boot-frozen from marketdata's namespace (never diverge mid-process).
         provider = (
@@ -160,6 +170,12 @@ class FundamentalsSignalLoop:
         run_id = str(uuid.uuid4())
         source_slug = self._cfg.get_str("analysis.fundsignal.source_slug", "fundamentals")
         as_of_date = datetime.now(UTC).date()
+        # Ingest/indicators always see the producer as `system` (manual path included); only the
+        # caller's trace survives. Marketdata/portfolio keep the caller's metadata.
+        sys_meta = [(k, v) for k, v in metadata if k == "x-trace-id"] + [
+            ("x-user-id", SYSTEM_IDENTITY),
+            ("x-internal-caller", _FUNDSIGNAL_CALLER),
+        ]
 
         # Universe (dedup, then FMP-gated cap).
         max_symbols = self._cfg.get_int("analysis.fundsignal.max_symbols_per_run", default=200)
@@ -182,6 +198,14 @@ class FundamentalsSignalLoop:
                 run_id, status="completed", symbols_done=len(universe), calls_spent=0, deferred=0
             )
 
+        formula_id = self._cfg.get_str("analysis.fundsignal.scoring_formula_id", "")
+        if formula_id and not await self._scoring_formula_is_system(formula_id, sys_meta):
+            return await self._abort_cycle(
+                run_id,
+                f"fundsignal: scoring formula {formula_id} is not a system formula — "
+                "cycle aborted, nothing emitted",
+            )
+
         # Skip symbols already emitted today (no cache call) — unless force re-emits.
         if force:
             await self._db.execute(
@@ -199,48 +223,59 @@ class FundamentalsSignalLoop:
         fetched, deferred, calls_spent = await self._paced_fetch(to_process, budget, metadata)
 
         # Score → cross-sectional direction → drop below min conviction.
-        scores = await self._score(fetched, metadata)
+        scores = await self._score(fetched, sys_meta)
         buy_q = self._cfg.get_float("analysis.fundsignal.buy_quantile", default=0.80)
         sell_q = self._cfg.get_float("analysis.fundsignal.sell_quantile", default=0.20)
         min_conv = self._cfg.get_float("analysis.fundsignal.min_conviction_to_emit", default=0.0)
         directions = self._map_directions(scores, buy_q, sell_q)
 
         valid_days = self._cfg.get_int("analysis.fundsignal.valid_days", default=90)
-        await self._ensure_source_registered(source_slug, metadata)
 
         emitted = 0
-        for symbol in sorted(fetched):
-            score = scores.get(symbol, 0.0)
-            if score < min_conv:
-                continue
-            # Idempotent claim: only emit if this row is newly inserted.
-            row = await self._db.fetchrow(
-                "INSERT INTO analysis.fundsignal_emitted "
-                "(symbol, source, as_of_date, score, direction, run_id) "
-                "VALUES ($1,$2,$3,$4,$5,$6::uuid) "
-                "ON CONFLICT (symbol, source, as_of_date) DO NOTHING RETURNING symbol",
-                symbol,
-                source_slug,
-                as_of_date,
-                score,
-                directions[symbol],
-                run_id,
-            )
-            if row is None:
-                continue  # already emitted today
-            signal_id = await self._emit_signal(
-                source_slug, symbol, directions[symbol], score, valid_days, metadata
-            )
-            if signal_id is not None:
-                await self._db.execute(
-                    "UPDATE analysis.fundsignal_emitted SET signal_id=$4 "
-                    "WHERE symbol=$1 AND source=$2 AND as_of_date=$3",
+        try:
+            await self._ensure_source_registered(source_slug, sys_meta)
+            # A symbol whose formula scoring failed has no score and is skipped.
+            for symbol in sorted(scores):
+                score = scores[symbol]
+                if score < min_conv:
+                    continue
+                # Idempotent claim: only emit if this row is newly inserted.
+                row = await self._db.fetchrow(
+                    "INSERT INTO analysis.fundsignal_emitted "
+                    "(symbol, source, as_of_date, score, direction, run_id) "
+                    "VALUES ($1,$2,$3,$4,$5,$6::uuid) "
+                    "ON CONFLICT (symbol, source, as_of_date) DO NOTHING RETURNING symbol",
                     symbol,
                     source_slug,
                     as_of_date,
-                    signal_id,
+                    score,
+                    directions[symbol],
+                    run_id,
                 )
-            emitted += 1
+                if row is None:
+                    continue  # already emitted today
+                signal_id = await self._emit_signal(
+                    source_slug, symbol, directions[symbol], score, valid_days, sys_meta
+                )
+                if signal_id is not None:
+                    await self._db.execute(
+                        "UPDATE analysis.fundsignal_emitted SET signal_id=$4 "
+                        "WHERE symbol=$1 AND source=$2 AND as_of_date=$3",
+                        symbol,
+                        source_slug,
+                        as_of_date,
+                        signal_id,
+                    )
+                emitted += 1
+        except _SystemWriteRejected as e:
+            return await self._abort_cycle(
+                run_id,
+                str(e),
+                symbols_done=len(fetched),
+                calls_spent=calls_spent,
+                deferred=len(deferred),
+                signals_emitted=emitted,
+            )
 
         status = "budget_deferred" if deferred else "completed"
         if deferred:
@@ -286,7 +321,7 @@ class FundamentalsSignalLoop:
         """
         if self._portfolio is None:
             return []
-        meta = list(metadata) + [("x-internal-caller", "analysis-fundsignal")]
+        meta = list(metadata) + [("x-internal-caller", _FUNDSIGNAL_CALLER)]
         try:
             resp = await self._portfolio.ListAllWatchlistSymbols(
                 portfolio_pb2.ListAllWatchlistSymbolsRequest(), metadata=meta
@@ -396,6 +431,19 @@ class FundamentalsSignalLoop:
             parts.append(1.0 if f.eps > 0 else 0.0)
         return sum(parts) / len(parts) if parts else 0.5
 
+    async def _scoring_formula_is_system(self, formula_id, sys_meta):
+        """Pre-flight (AC-37): only a `system`-authored scoring formula may score the scan."""
+        if self._indicators is None:
+            return False
+        try:
+            formula = await self._indicators.GetFormula(
+                indicators_pb2.GetFormulaRequest(formula_id=formula_id), metadata=sys_meta
+            )
+        except Exception as e:  # noqa: BLE001 — any failure fails the cycle closed
+            log.error("fundsignal: scoring formula %s pre-flight failed: %s", formula_id, e)
+            return False
+        return formula.author == SYSTEM_IDENTITY
+
     async def _score_via_formula(self, formula_id, fundamentals_by_symbol, metadata):
         from app.services.fundamentals_scoring import score_fundamentals
 
@@ -414,9 +462,8 @@ class FundamentalsSignalLoop:
                     self._indicators, formula_id, fundamentals, metadata
                 )
                 out[sym] = float(scores.get("composite", 0.0))
-            except Exception as e:  # noqa: BLE001 - fall back to built-in on formula failure
+            except Exception as e:  # noqa: BLE001 - skip the symbol; never a built-in fallback
                 log.warning("fundsignal: formula scoring failed for %s: %s", sym, e)
-                out[sym] = self._builtin_score(f)
         return out
 
     @staticmethod
@@ -438,14 +485,10 @@ class FundamentalsSignalLoop:
         return directions
 
     async def _ensure_source_registered(self, source_slug, metadata):
-        """Idempotently register the derived signal source (FR-7). Requires the ingest
-        006_signal_source_type_derived migration (Step 13). Admin scope is needed; reuse the
-        caller's propagated metadata when admin, else inject the admin bit for the loop path."""
-        if self._source_registered:
+        """Idempotently register the derived signal source (FR-7) as `system`, once per configured
+        slug. Raises ``_SystemWriteRejected`` when a user already holds the slug (AC-36)."""
+        if self._registered_slug == source_slug:
             return
-        meta = list(metadata) if metadata else []
-        if not any(k == "x-access-scope" for k, _ in meta):
-            meta.append(("x-access-scope", "4"))  # admin bit for the background loop path
         try:
             await self._ingest.ManageSignalSource(
                 ingest_pb2.ManageSignalSourceRequest(
@@ -458,14 +501,19 @@ class FundamentalsSignalLoop:
                         active=True,
                     ),
                 ),
-                metadata=meta,
+                metadata=metadata,
             )
-            self._source_registered = True
+            self._registered_slug = source_slug
         except grpc.aio.AioRpcError as e:
             # A strict register returns ALREADY_EXISTS on restart — it IS registered, so set the
             # flag (no per-cycle spam). Any other code is a real failure; stay unregistered.
             if e.code() == grpc.StatusCode.ALREADY_EXISTS:
-                self._source_registered = True
+                self._registered_slug = source_slug
+            elif e.code() == grpc.StatusCode.FAILED_PRECONDITION:
+                raise _SystemWriteRejected(
+                    f"fundsignal: signal source slug {source_slug!r} is held by a user — "
+                    "system registration refused, cycle aborted"
+                ) from e
             else:
                 log.warning("fundsignal: source registration failed (non-fatal): %s", e)
 
@@ -491,6 +539,11 @@ class FundamentalsSignalLoop:
             )
             return resp.signal_id
         except Exception as e:  # noqa: BLE001 - one failed emit should not abort the run
+            if isinstance(e, grpc.aio.AioRpcError) and e.code() == grpc.StatusCode.NOT_FOUND:
+                raise _SystemWriteRejected(
+                    f"fundsignal: ingest has no system source {source!r} (NOT_FOUND) — "
+                    "cycle aborted"
+                ) from e
             log.warning("fundsignal: IngestSignal failed for %s: %s", symbol, e)
             return None
 
@@ -544,13 +597,27 @@ class FundamentalsSignalLoop:
         except Exception as e:  # noqa: BLE001 - ledger is best-effort
             log.warning("fundsignal: ledger emit failed: %s", e)
 
-    async def _emit_warning(self, msg):
+    async def _abort_cycle(
+        self, run_id, msg, symbols_done=0, calls_spent=0, deferred=0, signals_emitted=0
+    ):
+        log.error(msg)
+        await self._emit_warning(msg, severity=notify_pb2.AlertSeverity.ALERT_SEVERITY_ERROR)
+        return await self._finish(
+            run_id,
+            status="failed",
+            symbols_done=symbols_done,
+            calls_spent=calls_spent,
+            deferred=deferred,
+            signals_emitted=signals_emitted,
+        )
+
+    async def _emit_warning(self, msg, severity=notify_pb2.AlertSeverity.ALERT_SEVERITY_WARNING):
         try:
             ctx = Struct()
             ctx.update({"detail": msg})
             await self._notify.EmitAlert(
                 notify_pb2.EmitAlertRequest(
-                    severity=notify_pb2.AlertSeverity.ALERT_SEVERITY_WARNING,
+                    severity=severity,
                     category="system",
                     title="fundamentals signal producer",
                     body=msg,

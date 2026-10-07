@@ -286,6 +286,8 @@ _DEFAULT_WATCHLIST_READINESS_PAGE_SIZE = 25
 _MAX_DRAIN_PAGES = 50
 # Default queue page size when the request omits one.
 _DEFAULT_OPP_PAGE_SIZE = 50
+# Reserved platform identity (feature 224); a granted internal caller's x-user-id, never a user's.
+SYSTEM_IDENTITY = "system"
 
 
 class _BarFetchError(Exception):
@@ -535,8 +537,12 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         the target row against this id and answer a miss (nonexistent or other-owner) with a
         uniform ``PERMISSION_DENIED`` — so a caller can never learn from the response whether a
         ``strategy_id`` exists under someone else's ownership. An empty caller id owns nothing.
+
+        An inbound ``system`` resolves to ``""`` (owns nothing): analysis has no inbound grant to
+        check, so this deliberately diverges from the ``PERMISSION_DENIED`` of design §2.
         """
-        return dict(context.invocation_metadata()).get("x-user-id", "")
+        caller = dict(context.invocation_metadata()).get("x-user-id", "")
+        return "" if caller == SYSTEM_IDENTITY else caller
 
     async def _fetch_formula_outputs(self, definition, propagation_meta) -> dict:
         """Map each custom-formula component's formula_id to the set of series it exposes.
@@ -3604,14 +3610,16 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     return_weight[src] = return_weight.get(src, 0.0) + w
 
         source_filter = request.source_id or ""  # optional slug filter (AC-7)
-        surviving = [s for s in trade_count if not source_filter or s == source_filter]
-
         propagation_meta = [
             (k, v)
             for k, v in context.invocation_metadata()
             if k in ("x-user-id", "x-access-scope", "x-trace-id")
         ]
-        names = await self._resolve_source_names(propagation_meta) if surviving else {}
+        # Only the caller-visible (own + system) sources: a legacy snapshot may name a foreign slug.
+        names = await self._resolve_source_names(propagation_meta) if trade_count else {}
+        surviving = [
+            s for s in trade_count if s in names and (not source_filter or s == source_filter)
+        ]
 
         attributions = []
         for src in surviving:
