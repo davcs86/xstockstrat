@@ -207,7 +207,9 @@ recorded in `context.md` § Open Threads.
    - Add `xstockstrat.common.v1.TemplateOrigin origin = 15;` to `FormulaDefinition`.
    - Add the RPCs `ListTemplates`, `ManageTemplate`, `InstantiateTemplate` and `ResolveTemplateIntent`
      with these messages:
-     - `FormulaTemplate { common.v1.TemplateMeta meta = 1; RegisterFormulaRequest payload = 2; }`
+     - `FormulaTemplate { common.v1.TemplateMeta meta = 1; RegisterFormulaRequest payload = 2; }`.
+       Doc-comment `payload`: the deprecated `is_public` (4) and `author` (6) inside it are ignored on
+       instantiate (the instance is private and its author is the instantiating caller's `x-user-id`).
      - `ListTemplatesRequest {}`
      - `ListTemplatesResponse { repeated FormulaTemplate templates = 1; }`
      - `ManageTemplateRequest { common.v1.TemplateOperation operation = 1; FormulaTemplate template = 2; }`
@@ -236,7 +238,8 @@ recorded in `context.md` § Open Threads.
    - Add `xstockstrat.common.v1.TemplateOrigin origin = 16;` to `StrategyDefinition`.
    - Add `xstockstrat.common.v1.TemplateOrigin origin = 8;` to `StrategyScore`.
    - Add `string owner_user_id = 2;` (admin-only) to `GetStrategyRequest`.
-   - Add `string owner_user_id = 4;` to `ListStrategyDefinitionsRequest`.
+   - Add `string owner_user_id = 4;` (admin-only) to `ListStrategyDefinitionsRequest`, with the doc
+     comment "(admin-only) owner selector; ignored for a non-admin caller".
    - Add the RPCs `ListTemplates`, `ManageTemplate` and `InstantiateTemplate`:
      - `StrategyTemplate { common.v1.TemplateMeta meta = 1; StrategyDefinition payload = 2; }`.
        In the payload, each component's `formula_id` holds a formula **template** id (FR-9).
@@ -264,6 +267,9 @@ cd packages/proto && buf lint && buf breaking --against ".git#branch=feature/pri
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/` — modify (generated)
+
+  A generated-code directory as the Files entry is the accepted convention for a proto-gen step: the
+  exact file set is whatever `./scripts/buf-gen.sh` emits, and CI `proto-freshness` checks it.
 
 **Reviewers**: Inherited from Step 1.
 
@@ -311,7 +317,10 @@ cd packages/proto && buf lint && buf breaking --against ".git#branch=feature/pri
   - `.do/app.yaml:678` and `.do/app.dev.yaml:680`
   - `.env.example:27` and `scripts/setup-env.sh:152`
 - CI job list `.github/workflows/ci.yml`:
-  - `changes:14`, with the `scripts` filter at `:63-65`
+  - `changes:14`, with the `scripts` filter (`scripts/**`) at `:67-68`
+  - the workflow runs on both `pull_request` and `push` (`:3-5`); `github.base_ref` is empty on
+    `push`, so a base-ref job must be PR-only (precedent: `proto-lint`'s
+    `github.event_name = "pull_request"` branch at `:112`)
   - `shell-lint:594-611`, which runs `shellcheck scripts/*.sh` and `shfmt -d -i 2`
   - `ci-gate:692-731`, whose `needs:` list must include the new jobs
 - No migration CI job exists (grep `migration` in `ci.yml` → none).
@@ -352,15 +361,18 @@ cd packages/proto && buf lint && buf breaking --against ".git#branch=feature/pri
      `timescale/timescaledb:latest-pg16` service container, builds `scripts/Dockerfile.migrate` (for
      `migrate` + `psql` + `envsubst`), and runs `scripts/migration-rerun.sh` with a fixed CI
      `SEED_USER_ID`.
-   - Add a `migration-contract-gate` job: `fetch-depth: 0`, runs `scripts/check-migration-contract.sh
-     origin/${{ github.base_ref }}`.
-   - Add both jobs to `ci-gate.needs` and its echo list.
+   - Add a `migration-contract-gate` job: `if: github.event_name == 'pull_request'` (plus the
+     `migrations` filter), `fetch-depth: 0`, runs `scripts/check-migration-contract.sh
+     origin/${{ github.base_ref }}`. It never runs on `push`, where `github.base_ref` is empty.
+   - Add both jobs to `ci-gate.needs` and its echo list. `ci-gate` must treat a `skipped`
+     `migration-contract-gate` (every `push` run) as passing, the same as other path-skipped jobs.
 
 **Verification**:
 ```bash
 shellcheck scripts/render-migrations.sh scripts/check-migration-contract.sh scripts/migration-rerun.sh scripts/db-migrate.sh
 shfmt -d -i 2 scripts/render-migrations.sh scripts/check-migration-contract.sh scripts/migration-rerun.sh scripts/db-migrate.sh
 grep -n "migration-rerun\|migration-contract-gate" .github/workflows/ci.yml
+grep -n -A3 "migration-contract-gate:" .github/workflows/ci.yml | grep "pull_request"   # PR-only
 ```
 
 ---
@@ -405,6 +417,9 @@ helper and `set -uo pipefail`.
 bash scripts/render-migrations.test.sh && bash scripts/check-migration-contract.test.sh
 shellcheck scripts/render-migrations.test.sh scripts/check-migration-contract.test.sh
 ```
+
+Coverage: N/A — no coverage tool for shell; the behavior gate is `render-migrations.test.sh` and
+`check-migration-contract.test.sh` (run in the `shell-lint` job).
 
 ---
 
@@ -456,9 +471,12 @@ Steps 14/19/21; there is no in-repo implementation to drive red)
 
 **Verification**:
 ```bash
-cd services/xstockstrat-ingest && uv run pytest tests/test_peer_identity_spike.py -q && ruff check . && ruff format --check .
+cd services/xstockstrat-ingest && uv run pytest --cov=app --cov-fail-under=40 && ruff check . && ruff format --check .
 cd services/xstockstrat-config && pnpm run lint && pnpm run test:coverage
 ```
+
+Coverage: the ingest spike runs inside the full ingest suite at the service's `--cov-fail-under=40`
+threshold (the CI `python-test` value); config runs `test:coverage` (`c8 --lines 40`).
 
 ---
 
