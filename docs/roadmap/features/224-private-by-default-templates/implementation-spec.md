@@ -1825,7 +1825,7 @@ cd services/xstockstrat-analysis && uv run pytest --cov=app --cov-fail-under=40 
 
 ### Step 27 — service: indicators formula templates, saga copy, intent resolution, origin on reads
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/services/formula_templates_repository.py` — create
@@ -3013,4 +3013,23 @@ _Populated by /sdd-execute as implementation proceeds._
   - no slug on either the request or the template → `INVALID_ARGUMENT`;
   - updating a retired template → `NOT_FOUND`.
 - **Limitation**: the `ManageSignalSource`/`InstantiateTemplate` response reports origin without `latest_version`, because only `ListSignalSources` performs the batched version lookup that FR-8 requires.
+- **Disposition**: within scope.
+
+### D-27 — Step 27: unspecified status codes and helper extraction
+- **Unspecified status codes**:
+  - headerless `ListTemplates` → `UNAUTHENTICATED`;
+  - user-path instantiate with an empty or `system` owner → `PERMISSION_DENIED`;
+  - duplicate template id (including a retired one) → `ALREADY_EXISTS`;
+  - non-UUID `intent_id` → `INVALID_ARGUMENT`;
+  - a failed copy batch → `INTERNAL`, and the transaction rolls back;
+  - updating a retired or missing template → `NOT_FOUND`;
+  - retiring an already-retired template is idempotent.
+  - A repo-less instance (no DB) returns `UNAVAILABLE` on the template RPCs.
+- **Saga template reads**: the saga reads its templates with one `get` per unique id. There is no batch read method; the copies themselves are still one insert transaction.
+- **Refactoring (DRY)**:
+  - `_validate_register_payload` is extracted, so RegisterFormula and template validation share one code path.
+  - `_dt_to_ts` is hoisted to module level.
+  - `GetFormula` returns a copy, so origin filling never mutates the cached formula.
+- **Follow-through**: `tests/test_formulas.py:592` binds by position `args[10]`; it used `args[-2]` before the INSERT gained three columns.
+- **Coverage note**: `app/handlers/servicer.py` was already excluded from coverage in `pyproject.toml`. The new handler code is tested but not counted toward the 84.81% figure.
 - **Disposition**: within scope.

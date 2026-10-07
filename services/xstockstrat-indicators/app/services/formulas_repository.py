@@ -42,47 +42,85 @@ def _to_dict(row) -> dict:
     return d
 
 
+_INSERT_SQL = """
+    INSERT INTO indicators.formulas
+        (formula_id, name, description, source, author, is_public, input_schema,
+         parameters, outputs, warmup_period, fundamental_inputs,
+         origin_template_id, origin_template_version, pending_intent_id)
+    VALUES ($1::uuid, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9::jsonb, $10, $11::jsonb,
+            $12, $13, $14::uuid)
+    RETURNING *
+"""
+
+
+def _insert_args(
+    formula_id,
+    name,
+    description,
+    source,
+    author,
+    is_public,
+    input_schema,
+    parameters=None,
+    outputs=None,
+    warmup_period=0,
+    fundamental_inputs=None,
+    origin_template_id=None,
+    origin_template_version=None,
+    pending_intent_id=None,
+) -> tuple:
+    return (
+        formula_id,
+        name,
+        description or "",
+        source,
+        author,
+        is_public,
+        json.dumps(dict(input_schema) if input_schema else {}),
+        json.dumps(list(parameters) if parameters else []),
+        json.dumps(list(outputs) if outputs else []),
+        int(warmup_period or 0),
+        json.dumps(list(fundamental_inputs) if fundamental_inputs else []),
+        origin_template_id,
+        origin_template_version,
+        pending_intent_id,
+    )
+
+
 class FormulasRepository:
     """CRUD persistence for the ``indicators.formulas`` table."""
 
     def __init__(self, db_pool):
         self._db = db_pool
 
-    async def create(
-        self,
-        formula_id,
-        name,
-        description,
-        source,
-        author,
-        is_public,
-        input_schema,
-        parameters=None,
-        outputs=None,
-        warmup_period=0,
-        fundamental_inputs=None,
-    ) -> dict:
-        row = await self._db.fetchrow(
-            """
-            INSERT INTO indicators.formulas
-                (formula_id, name, description, source, author, is_public, input_schema,
-                 parameters, outputs, warmup_period, fundamental_inputs)
-            VALUES ($1::uuid, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9::jsonb, $10, $11::jsonb)
-            RETURNING *
-            """,
-            formula_id,
-            name,
-            description or "",
-            source,
-            author,
-            is_public,
-            json.dumps(dict(input_schema) if input_schema else {}),
-            json.dumps(list(parameters) if parameters else []),
-            json.dumps(list(outputs) if outputs else []),
-            int(warmup_period or 0),
-            json.dumps(list(fundamental_inputs) if fundamental_inputs else []),
-        )
+    async def create(self, **fields) -> dict:
+        row = await self._db.fetchrow(_INSERT_SQL, *_insert_args(**fields))
         return _to_dict(row)
+
+    async def create_pending_copies(self, copies: list[dict], intent_id: str) -> list[dict]:
+        """Insert every template copy hidden under ``intent_id`` in ONE transaction: any failed
+        INSERT rolls back the whole batch."""
+        async with self._db.acquire() as conn, conn.transaction():
+            rows = [
+                await conn.fetchrow(_INSERT_SQL, *_insert_args(**c, pending_intent_id=intent_id))
+                for c in copies
+            ]
+        return [_to_dict(r) for r in rows]
+
+    async def resolve_intent(self, intent_id: str, author: str, commit: bool) -> list[str]:
+        """Un-hide (commit) or hard-delete (abort) the owner's pending copies; returns their ids."""
+        if commit:
+            sql = (
+                "UPDATE indicators.formulas SET pending_intent_id = NULL "
+                "WHERE pending_intent_id = $1::uuid AND author = $2 RETURNING formula_id"
+            )
+        else:
+            sql = (
+                "DELETE FROM indicators.formulas "
+                "WHERE pending_intent_id = $1::uuid AND author = $2 RETURNING formula_id"
+            )
+        rows = await self._db.fetch(sql, intent_id, author)
+        return [str(r["formula_id"]) for r in rows]
 
     async def upsert(
         self,
