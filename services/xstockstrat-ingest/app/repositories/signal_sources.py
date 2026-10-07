@@ -51,7 +51,7 @@ def owner_scope_predicate(scope: int, idx: int) -> tuple[str, bool]:
 _LIST_COLS = (
     "user_id, slug, display_name, source_type, extractor_module, credentials_ref,"
     " active, config_json, created_at, last_seen_at, last_error, signals_fed,"
-    " reliability_weight"
+    " reliability_weight, origin_template_id, origin_template_version"
 )
 
 

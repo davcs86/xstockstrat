@@ -9,20 +9,21 @@ import logging
 import uuid
 from datetime import UTC, datetime, timedelta
 
+import asyncpg
 import grpc
 from gen.common.v1 import common_pb2
 from gen.ingest.v1 import ingest_pb2, ingest_pb2_grpc
 from gen.ledger.v1 import ledger_pb2, ledger_pb2_grpc
 from gen.marketdata.v1 import marketdata_pb2, marketdata_pb2_grpc
 from gen.notify.v1 import notify_pb2, notify_pb2_grpc
-from google.protobuf.json_format import MessageToDict
+from google.protobuf.json_format import MessageToDict, ParseDict
 from google.protobuf.struct_pb2 import Struct
 from google.protobuf.timestamp_pb2 import Timestamp
 
 from app.admin_audit import AdminAuditError, audit_admin_read
 from app.config.watcher import ConfigWatcher
 from app.peer_identity import peer_san_matches
-from app.repositories import backfill_chunks, backfill_jobs
+from app.repositories import backfill_chunks, backfill_jobs, source_templates
 from app.repositories.signal_sources import (
     SYSTEM_OWNER,
     deactivate_source,
@@ -112,6 +113,79 @@ def _cfg_to_dict(value) -> dict | None:
     if isinstance(value, dict):
         return value
     return json.loads(str(value))
+
+
+# The authorable SignalSource fields a template keeps: owner, credentials, health and origin are
+# per-instance, so a template payload can never carry a credential (@feature-166 AC-2/AC-3).
+_TEMPLATE_PAYLOAD_FIELDS = (
+    "slug",
+    "display_name",
+    "source_type",
+    "extractor_module",
+    "config_json",
+    "reliability_weight",
+)
+
+
+def _template_payload(src) -> dict:
+    full = MessageToDict(src, preserving_proto_field_name=True)
+    return {k: full[k] for k in _TEMPLATE_PAYLOAD_FIELDS if k in full}
+
+
+def _template_to_proto(row: dict) -> ingest_pb2.SourceTemplate:
+    payload = ingest_pb2.SignalSource()
+    ParseDict(_cfg_to_dict(row["payload"]) or {}, payload, ignore_unknown_fields=True)
+    meta = common_pb2.TemplateMeta(
+        template_id=row["template_id"],
+        kind=common_pb2.TEMPLATE_KIND_SIGNAL_SOURCE,
+        name=row["name"],
+        description=row["description"] or "",
+        version=row["version"],
+        retired=row["retired_at"] is not None,
+    )
+    if row.get("created_at"):
+        meta.created_at.FromDatetime(row["created_at"])
+    if row.get("updated_at"):
+        meta.updated_at.FromDatetime(row["updated_at"])
+    return ingest_pb2.SourceTemplate(meta=meta, payload=payload)
+
+
+def _source_to_proto(row: dict, latest_versions: dict[str, int]) -> ingest_pb2.SignalSource:
+    """A signal_sources row as a SignalSource; `latest_versions` resolves the origin's template."""
+    cfg = Struct()
+    cfg_dict = _cfg_to_dict(row["config_json"])
+    if cfg_dict:
+        cfg.update(cfg_dict)
+    source = ingest_pb2.SignalSource(
+        user_id=row.get("user_id") or "",
+        slug=row["slug"],
+        display_name=row["display_name"],
+        source_type=row["source_type"],
+        extractor_module=row["extractor_module"],
+        active=row["active"],
+        has_credentials=(row["credentials_ref"] is not None),
+        config_json=cfg,
+        reliability_weight=row.get("reliability_weight", 1.0),
+    )
+    template_id = row.get("origin_template_id")
+    if template_id:
+        version = row.get("origin_template_version") or 0
+        latest = latest_versions.get(template_id, 0)  # 0 = retired or missing: no update
+        source.origin.CopyFrom(
+            common_pb2.TemplateOrigin(
+                template_id=template_id,
+                template_version=version,
+                latest_version=latest,
+                update_available=latest > version,
+            )
+        )
+    return source
+
+
+def _weight_error(src) -> str | None:
+    if src.HasField("reliability_weight") and not (0.0 <= src.reliability_weight <= 1.0):
+        return "reliability_weight must be between 0.0 and 1.0"
+    return None
 
 
 # Source-health string → SourceHealthStatus enum.
@@ -1221,38 +1295,22 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             )
         else:  # headerless (release N only): today's global listing
             rows = await list_all_sources(self._db, include_inactive=request.include_inactive)
-        import json
-
-        from google.protobuf.struct_pb2 import Struct
-
+        template_ids = sorted(
+            {r["origin_template_id"] for r in rows if r.get("origin_template_id")}
+        )
+        latest = (
+            await source_templates.latest_versions(self._db, template_ids) if template_ids else {}
+        )
         now = datetime.now(UTC)
         sources = []
         for row in rows:
-            cfg = Struct()
-            if row["config_json"]:
-                cfg.update(
-                    row["config_json"]
-                    if isinstance(row["config_json"], dict)
-                    else json.loads(row["config_json"])
-                )
+            source = _source_to_proto(row, latest)
             # Health is derived on read from last_seen_at freshness + last_error.
             last_seen = row.get("last_seen_at")
             last_error = row.get("last_error")
-            health = _HEALTH_ENUM[derive_health_status(last_seen, last_error, now)]
-            source = ingest_pb2.SignalSource(
-                user_id=row.get("user_id") or "",
-                slug=row["slug"],
-                display_name=row["display_name"],
-                source_type=row["source_type"],
-                extractor_module=row["extractor_module"],
-                active=row["active"],
-                has_credentials=(row["credentials_ref"] is not None),
-                config_json=cfg,
-                health=health,
-                last_error=last_error or "",
-                signals_fed=row.get("signals_fed") or 0,
-                reliability_weight=row.get("reliability_weight", 1.0),
-            )
+            source.health = _HEALTH_ENUM[derive_health_status(last_seen, last_error, now)]
+            source.last_error = last_error or ""
+            source.signals_fed = row.get("signals_fed") or 0
             if last_seen is not None:
                 source.last_seen_at.FromDatetime(last_seen)
             sources.append(source)
@@ -1345,46 +1403,9 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
         elif op == "register":
             # MessageToDict, not dict(): dict() keeps nested Struct/ListValue protobuf objects as
             # values, which neither json.dumps nor asyncpg can encode.
-            cfg_dict = MessageToDict(src.config_json) if src.config_json else None
-            merged_cred = request.credentials_ref or None
-            async with self._db.acquire() as conn, conn.transaction():
-                # Serializes every REGISTER of one slug so the reserved-slug holder check below
-                # cannot race a concurrent register by another owner.
-                await conn.execute("SELECT pg_advisory_xact_lock(hashtext($1))", src.slug)
-                # Strict create: an existing slug is a conflict, not a silent overwrite.
-                failure = self._register_conflict(
-                    owner, src.slug, await slug_holders(conn, src.slug)
-                )
-                err = (
-                    None
-                    if failure
-                    else self._validate_source_write(src.source_type, cfg_dict, merged_cred)
-                )
-                # Reject an out-of-range explicit weight; an omitted field resolves to the 1.0
-                # default. Never pass None — the NOT NULL column would raise.
-                if not (failure or err) and src.HasField("reliability_weight"):
-                    if not (0.0 <= src.reliability_weight <= 1.0):
-                        err = "reliability_weight must be between 0.0 and 1.0"
-                if not (failure or err):
-                    row = await insert_source(
-                        conn,
-                        slug=src.slug,
-                        display_name=src.display_name,
-                        source_type=src.source_type,
-                        extractor_module=src.extractor_module,
-                        credentials_ref=merged_cred,
-                        config_json=cfg_dict,
-                        active=True,
-                        reliability_weight=(
-                            src.reliability_weight if src.HasField("reliability_weight") else 1.0
-                        ),
-                        user_id=owner,
-                    )
+            row, failure = await self._register_source(owner, src, request.credentials_ref)
             if failure:
                 await context.abort(*failure)
-                return
-            if err:
-                await context.abort(grpc.StatusCode.INVALID_ARGUMENT, err)
                 return
         else:  # update — AIP-161 partial merge onto the stored row
             stored = await get_source(self._db, target, src.slug)
@@ -1438,11 +1459,9 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                 return
             # Reject an out-of-range explicit weight, then merge: masked + present → request
             # value; else preserve the stored weight (never None on the NOT NULL column).
-            if src.HasField("reliability_weight") and not (0.0 <= src.reliability_weight <= 1.0):
-                await context.abort(
-                    grpc.StatusCode.INVALID_ARGUMENT,
-                    "reliability_weight must be between 0.0 and 1.0",
-                )
+            weight_err = _weight_error(src)
+            if weight_err:
+                await context.abort(grpc.StatusCode.INVALID_ARGUMENT, weight_err)
                 return
             merged_weight = (
                 src.reliability_weight
@@ -1464,22 +1483,138 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                 await context.abort(grpc.StatusCode.NOT_FOUND, f"source '{src.slug}' not found")
                 return
 
-        cfg_out = Struct()
-        if row["config_json"]:
-            cfg_out.update(
-                row["config_json"]
-                if isinstance(row["config_json"], dict)
-                else json.loads(str(row["config_json"]))
+        return ingest_pb2.ManageSignalSourceResponse(source=_source_to_proto(row, {}))
+
+    async def _register_source(self, owner, src, credentials_ref: str, origin=None):
+        """The REGISTER path shared with InstantiateTemplate: returns (row, None) or
+        (None, (code, message)). `origin` = (template_id, version) stamps the new row."""
+        # MessageToDict, not dict(): dict() keeps nested Struct/ListValue protobuf objects as
+        # values, which neither json.dumps nor asyncpg can encode.
+        cfg_dict = MessageToDict(src.config_json) if src.config_json else None
+        cred = credentials_ref or None
+        async with self._db.acquire() as conn, conn.transaction():
+            # Serializes every REGISTER of one slug so the reserved-slug holder check below
+            # cannot race a concurrent register by another owner.
+            await conn.execute("SELECT pg_advisory_xact_lock(hashtext($1))", src.slug)
+            # Strict create: an existing slug is a conflict, not a silent overwrite.
+            failure = self._register_conflict(owner, src.slug, await slug_holders(conn, src.slug))
+            if failure:
+                return None, failure
+            # An omitted weight resolves to the 1.0 default. Never pass None — the NOT NULL
+            # column would raise.
+            err = self._validate_source_write(src.source_type, cfg_dict, cred) or _weight_error(src)
+            if err:
+                return None, (grpc.StatusCode.INVALID_ARGUMENT, err)
+            row = await insert_source(
+                conn,
+                slug=src.slug,
+                display_name=src.display_name,
+                source_type=src.source_type,
+                extractor_module=src.extractor_module,
+                credentials_ref=cred,
+                config_json=cfg_dict,
+                active=True,
+                reliability_weight=(
+                    src.reliability_weight if src.HasField("reliability_weight") else 1.0
+                ),
+                user_id=owner,
             )
-        result = ingest_pb2.SignalSource(
-            user_id=row.get("user_id") or "",
-            slug=row["slug"],
-            display_name=row["display_name"],
-            source_type=row["source_type"],
-            extractor_module=row["extractor_module"],
-            active=row["active"],
-            has_credentials=(row["credentials_ref"] is not None),
-            config_json=cfg_out,
-            reliability_weight=row["reliability_weight"],
+            if origin is not None:
+                row = await source_templates.stamp_origin(conn, owner, src.slug, *origin)
+        return row, None
+
+    async def ListTemplates(self, request, context):
+        if self._db is None:
+            await context.abort(grpc.StatusCode.UNAVAILABLE, "database not connected")
+            return
+        ok, _ = await self._owner_or_abort(context, "ListTemplates")
+        if not ok:
+            return
+        rows = await source_templates.list_active(self._db)
+        return ingest_pb2.ListTemplatesResponse(templates=[_template_to_proto(r) for r in rows])
+
+    async def ManageTemplate(self, request, context):
+        if self._db is None:
+            await context.abort(grpc.StatusCode.UNAVAILABLE, "database not connected")
+            return
+        ok, owner = await self._owner_or_abort(context, "ManageTemplate")
+        if not ok:
+            return
+        if not self._has_admin_scope(context):
+            await context.abort(grpc.StatusCode.PERMISSION_DENIED, "admin scope required")
+            return
+        op = request.operation
+        meta = request.template.meta
+        if op == common_pb2.TEMPLATE_OPERATION_RETIRE:
+            row = await source_templates.retire(self._db, meta.template_id)
+        elif op in (common_pb2.TEMPLATE_OPERATION_CREATE, common_pb2.TEMPLATE_OPERATION_UPDATE):
+            src = request.template.payload
+            cfg_dict = MessageToDict(src.config_json) if src.config_json else None
+            err = validate_config_json(src.source_type, cfg_dict) or _weight_error(src)
+            if err:
+                await context.abort(grpc.StatusCode.INVALID_ARGUMENT, err)
+                return
+            payload = _template_payload(src)
+            if op == common_pb2.TEMPLATE_OPERATION_UPDATE:
+                row = await source_templates.update(
+                    self._db, meta.template_id, meta.name, meta.description, payload
+                )
+            else:
+                try:
+                    row = await source_templates.create(
+                        self._db,
+                        template_id=meta.template_id or str(uuid.uuid4()),
+                        name=meta.name,
+                        description=meta.description,
+                        payload=payload,
+                        created_by=owner or "",
+                    )
+                except asyncpg.UniqueViolationError:
+                    await context.abort(
+                        grpc.StatusCode.ALREADY_EXISTS,
+                        f"template '{meta.template_id}' already exists",
+                    )
+                    return
+        else:
+            await context.abort(
+                grpc.StatusCode.INVALID_ARGUMENT,
+                "unknown operation: must be create, update, or retire",
+            )
+            return
+        if row is None:
+            await context.abort(
+                grpc.StatusCode.NOT_FOUND, f"template '{meta.template_id}' not found"
+            )
+            return
+        return _template_to_proto(row)
+
+    async def InstantiateTemplate(self, request, context):
+        if self._db is None:
+            await context.abort(grpc.StatusCode.UNAVAILABLE, "database not connected")
+            return
+        ok, owner = await self._owner_or_abort(context, "InstantiateTemplate")
+        if not ok:
+            return
+        if owner is None:
+            await context.abort(
+                grpc.StatusCode.FAILED_PRECONDITION, "x-user-id required to instantiate a template"
+            )
+            return
+        tpl = await source_templates.get(self._db, request.template_id)
+        if tpl is None or tpl["retired_at"] is not None:
+            await context.abort(
+                grpc.StatusCode.NOT_FOUND, f"template '{request.template_id}' not found"
+            )
+            return
+        src = _template_to_proto(tpl).payload
+        src.slug = request.slug or src.slug
+        if not src.slug:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, "slug is required")
+            return
+        row, failure = await self._register_source(
+            owner, src, request.credentials_ref, origin=(tpl["template_id"], tpl["version"])
         )
-        return ingest_pb2.ManageSignalSourceResponse(source=result)
+        if failure:
+            await context.abort(*failure)
+            return
+        return _source_to_proto(row, {tpl["template_id"]: tpl["version"]})

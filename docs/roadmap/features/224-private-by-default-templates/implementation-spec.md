@@ -1938,7 +1938,7 @@ cd services/xstockstrat-indicators && uv run pytest --cov=app --cov-fail-under=5
 
 ### Step 29 — service: ingest source templates and origin on `ListSignalSources`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/repositories/source_templates.py` — create
@@ -3003,3 +3003,14 @@ _Populated by /sdd-execute as implementation proceeds._
 ### D-25 — Step 23: no `credential_scope` branch; servicer unchanged
 - **Actual**: the `credential_scope`/`LEGACY_GLOBAL` branch is omitted per the operator gate (prod has 0 `mcp_client` rows). Every source resolves its secret with exact scope `user_id=src["user_id"]` and never falls back to a global row. No servicer edit was needed, because D-20 already added `_ingest_external_signal(owner=…)`. Verification ran `uv run ruff` rather than bare `ruff`.
 - **Disposition**: operator gate.
+
+### D-26 — Step 29: `_LIST_COLS` follow-through; origin stamped by UPDATE in the register txn; extra status codes
+- **`_LIST_COLS`**: `app/repositories/signal_sources.py` (not in Step 29 Files) gains `origin_template_id, origin_template_version` in `_LIST_COLS`, so `ListSignalSources` can read origin.
+- **Origin stamping**: the new source is stamped by a separate `stamp_origin` UPDATE inside the same register transaction, so the existing `insert_source` SQL is unchanged. The REGISTER body is extracted into `_register_source`, which `ManageSignalSource` and `InstantiateTemplate` share (DRY).
+- **Status codes** for cases the spec does not cover:
+  - duplicate template create → `ALREADY_EXISTS`;
+  - headerless instantiate → `FAILED_PRECONDITION` (the existing register convention);
+  - no slug on either the request or the template → `INVALID_ARGUMENT`;
+  - updating a retired template → `NOT_FOUND`.
+- **Limitation**: the `ManageSignalSource`/`InstantiateTemplate` response reports origin without `latest_version`, because only `ListSignalSources` performs the batched version lookup that FR-8 requires.
+- **Disposition**: within scope.
