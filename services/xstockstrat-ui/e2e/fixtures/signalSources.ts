@@ -1,10 +1,15 @@
+import { TEST_USER_ID } from './users';
+
 /**
  * Canonical signal-source fixtures (feature 134 — C-12 centralization).
  *
  * Connect-JSON (camelCase) shape of `ingest.SignalSource`, as the mock backend echoes it. Two
- * sources with DISTINCT `reliabilityWeight` values (0.5 and 1.0) so the /config-ui inline weight-edit
- * assertion is meaningful — a fixture whose fields all equal each other tests nothing
+ * sources with DISTINCT `reliabilityWeight` values (0.5 and 1.0) so the /insights/signal-sources
+ * inline weight-edit assertion is meaningful — a fixture whose fields all equal each other tests nothing
  * (insights.md 2026-07-27).
+ *
+ * Feature 224: sources are owner-scoped. The two editable sources belong to `TEST_USER_ID`;
+ * `SIGNAL_SOURCE_SYSTEM` is platform-held (`userId: "system"`) and read-only to every user.
  *
  * Registered in e2e/fixtures/INVENTORY.md — update it when this file changes.
  */
@@ -25,6 +30,7 @@ export const SIGNAL_SOURCE_WEIGHTED = {
   signalsFed: BigInt(128),
   lastError: '',
   reliabilityWeight: 0.5, // feature 134 — a non-default weight the inline editor can change
+  userId: TEST_USER_ID,
 };
 
 export const SIGNAL_SOURCE_NEUTRAL = {
@@ -44,6 +50,25 @@ export const SIGNAL_SOURCE_NEUTRAL = {
   signalsFed: BigInt(42),
   lastError: '',
   reliabilityWeight: 1.0, // neutral (default) weight
+  userId: TEST_USER_ID,
 };
 
-export const SIGNAL_SOURCES = [SIGNAL_SOURCE_WEIGHTED, SIGNAL_SOURCE_NEUTRAL];
+/** Owner of platform-held sources (mirrors `SYSTEM_SOURCE_OWNER` in src/hooks/useOwnSignalSources.ts). */
+export const SYSTEM_SOURCE_OWNER_ID = 'system';
+
+export const SIGNAL_SOURCE_SYSTEM = {
+  slug: 'fundsignal',
+  displayName: 'Fundamentals Signal',
+  sourceType: 'simple_website',
+  active: true,
+  hasCredentials: true,
+  configJson: { url: 'https://fundamentals.example', scrape_selector: '.row' },
+  extractorModule: 'app.extractors.fundsignal',
+  health: 1,
+  signalsFed: BigInt(7),
+  lastError: '',
+  reliabilityWeight: 0.9, // distinct from both user sources
+  userId: SYSTEM_SOURCE_OWNER_ID,
+};
+
+export const SIGNAL_SOURCES = [SIGNAL_SOURCE_WEIGHTED, SIGNAL_SOURCE_NEUTRAL, SIGNAL_SOURCE_SYSTEM];

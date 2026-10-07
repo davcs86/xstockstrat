@@ -32,9 +32,10 @@ const GROUPS: { tab: string; items: { label: string; href: string }[] }[] = [
     items: [
       { label: 'Strategies', href: '/insights/strategies' },
       { label: 'Formulas', href: '/insights/formulas' },
+      { label: 'Templates', href: '/insights/templates' },
       { label: 'P&L Patterns', href: '/insights/pnl-patterns' },
       { label: 'Performance', href: '/insights/performance' },
-      { label: 'Signal sources', href: '/config-ui/sources' },
+      { label: 'Signal sources', href: '/insights/signal-sources' },
       { label: 'Backfills', href: '/insights/backfills' },
     ],
   },
@@ -52,6 +53,10 @@ const GROUPS: { tab: string; items: { label: string; href: string }[] }[] = [
       { label: 'Notifications', href: '/accounts/notifications' },
       { label: 'Accounts', href: '/trader/accounts' },
       { label: 'Config', href: '/config-ui' },
+      // feature 224: admin-only Settings entries (this spec walks with an admin cookie). The Section
+      // nav renders only the active group, so 'Templates' resolves to the Settings entry here.
+      { label: 'Templates', href: '/config-ui/templates' },
+      { label: 'Signal sources (admin)', href: '/config-ui/sources' },
       { label: 'Audit log', href: '/config-ui/audit' },
       { label: 'Authorized apps', href: '/accounts/authorized-apps' },
       { label: 'MCP tools', href: '/accounts/mcp-tools' },

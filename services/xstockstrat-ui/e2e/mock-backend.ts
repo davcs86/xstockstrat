@@ -5,7 +5,7 @@
  *   Port 9091 — trader segment: TradingService, PortfolioService, NotifyService,
  *               MarketDataService, IdentityService
  *   Port 9092 — insights segment: AnalysisService, IdentityService, TradingService,
- *               PortfolioService
+ *               PortfolioService, IndicatorsService (template RPCs only, feature 224)
  *   Port 9093 — config-ui segment: ConfigService, IdentityService, IngestService
  *
  * IDENTITY_ENDPOINT in playwright.config.ts points all segments at 9091 since the
@@ -19,7 +19,8 @@ import { timestampFromDate } from '@bufbuild/protobuf/wkt';
 import { AnalysisService, ReadinessRule } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import { ConfigService } from '@xstockstrat/proto/config/v1/config_pb';
 import { IdentityService } from '@xstockstrat/proto/identity/v1/identity_pb';
-import { IngestService } from '@xstockstrat/proto/ingest/v1/ingest_pb';
+import { IngestService, SignalSourceOperation } from '@xstockstrat/proto/ingest/v1/ingest_pb';
+import { IndicatorsService } from '@xstockstrat/proto/indicators/v1/indicators_pb';
 import { LedgerService } from '@xstockstrat/proto/ledger/v1/ledger_pb';
 import { MarketDataService } from '@xstockstrat/proto/marketdata/v1/marketdata_pb';
 import { Timeframe } from '@xstockstrat/proto/common/v1/common_pb';
@@ -28,7 +29,8 @@ import { ALERT_STREAM_ALL, ALERT_LIST_WITH_READ_STATE, MOCK_UNREAD_COUNT } from 
 import { PortfolioService } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
 import { TradingService } from '@xstockstrat/proto/trading/v1/trading_pb';
 import { signTestJwt } from './helpers/auth';
-import { HEADER_USER_ID } from '../src/lib/headers';
+import { HEADER_ACCESS_SCOPE, HEADER_USER_ID } from '../src/lib/headers';
+import { ADMIN_SCOPE } from '../src/lib/auth';
 import {
   TEST_USER_ID,
   TEST_USER_EMAIL,
@@ -58,7 +60,11 @@ import {
   orderForId,
   CONFIG_KEY_FIXTURES,
   SIGNAL_SOURCES,
-  SIGNAL_SOURCE_WEIGHTED,
+  SYSTEM_SOURCE_OWNER_ID,
+  FORMULA_TEMPLATE_ZSCORE,
+  FORMULA_TEMPLATE_INSTANCE,
+  STRATEGY_TEMPLATE_MEANREV,
+  SOURCE_TEMPLATE_NEWSLETTER,
   FUNDAMENTALS_AAPL,
   FUNDAMENTALS_STALL_SYMBOL,
 } from './fixtures';
@@ -97,6 +103,21 @@ const A_OWNED_STRATEGY_IDS = new Set<string>([
 
 function callerUserId(ctx: { requestHeader: Headers }): string {
   return ctx.requestHeader.get(HEADER_USER_ID) ?? '';
+}
+
+function callerIsAdmin(ctx: { requestHeader: Headers }): boolean {
+  return (Number(ctx.requestHeader.get(HEADER_ACCESS_SCOPE) ?? '0') & ADMIN_SCOPE) !== 0;
+}
+
+// Template RPCs (feature 224), shared shape across indicators/analysis/ingest: an unknown template id
+// is NOT_FOUND, and ManageTemplate echoes the template it was sent (the BFF admin gate runs first).
+function findTemplate<T extends { meta: { templateId: string } }>(
+  templates: T[],
+  templateId: string,
+): T {
+  const found = templates.find((t) => t.meta.templateId === templateId);
+  if (!found) throw new ConnectError(`template ${templateId} not found`, Code.NotFound);
+  return found;
 }
 
 function assertStrategyOwner(
@@ -1260,6 +1281,40 @@ export async function startMockBackend(): Promise<void> {
         async getAttribution() {
           return SOURCE_ATTRIBUTION;
         },
+        async listTemplates() {
+          return { templates: [STRATEGY_TEMPLATE_MEANREV] };
+        },
+        async instantiateTemplate(req, ctx) {
+          const tpl = findTemplate([STRATEGY_TEMPLATE_MEANREV], req.templateId);
+          return {
+            ...tpl.payload,
+            strategyId: req.strategyId || tpl.payload.strategyId,
+            userId: callerUserId(ctx),
+            origin: {
+              templateId: tpl.meta.templateId,
+              templateVersion: tpl.meta.version,
+              latestVersion: tpl.meta.version,
+            },
+          };
+        },
+        async manageTemplate(req) {
+          return req.template ?? {};
+        },
+      });
+
+      // feature 224 — template RPCs only; every other IndicatorsService method stays unimplemented
+      // (formula specs keep stubbing those via page.route).
+      router.service(IndicatorsService, {
+        async listTemplates() {
+          return { templates: [FORMULA_TEMPLATE_ZSCORE] };
+        },
+        async instantiateTemplate(req, ctx) {
+          findTemplate([FORMULA_TEMPLATE_ZSCORE], req.templateId);
+          return { formula: { ...FORMULA_TEMPLATE_INSTANCE, author: callerUserId(ctx) } };
+        },
+        async manageTemplate(req) {
+          return req.template ?? {};
+        },
       });
 
       router.service(IdentityService, identityHandlers);
@@ -1307,6 +1362,19 @@ export async function startMockBackend(): Promise<void> {
         async setConfig(req) {
           const written = req.value?.value?.case === 'stringVal' ? req.value.value.value : '';
           configValueOverrides.set(req.key, written);
+          // feature 224 — a per-user mcp_client bearer write echoes the scope/secrecy flags that
+          // reached the backend in `version`, so a spec can prove what the insights BFF forced.
+          if (req.namespace === 'ingest' && req.key.startsWith('mcp_credential.')) {
+            const captured = {
+              userId: req.userId,
+              createKey: req.createKey,
+              isSecret: req.value?.isSecret ?? false,
+            };
+            return {
+              version: JSON.stringify(captured),
+              updatedAt: { seconds: BigInt(0), nanos: 0 },
+            };
+          }
           return { version: '1', updatedAt: { seconds: BigInt(0), nanos: 0 } };
         },
         // feature 102 — trader/positions reads platform.trading_state via traderConfigClient
@@ -1345,9 +1413,19 @@ export async function startMockBackend(): Promise<void> {
       router.service(IdentityService, identityHandlers);
 
       router.service(IngestService, {
-        async listSignalSources() {
+        async listSignalSources(req, ctx) {
           // feature 134 (C-12): fixtures centralized in e2e/fixtures/signalSources.ts.
-          return { sources: SIGNAL_SOURCES };
+          // feature 224: the caller's own sources plus system sources; `ownerUserId` selects another
+          // owner's sources for an admin only (ignored otherwise, like the real servicer).
+          if (req.ownerUserId && callerIsAdmin(ctx)) {
+            return { sources: SIGNAL_SOURCES.filter((s) => s.userId === req.ownerUserId) };
+          }
+          const caller = callerUserId(ctx);
+          return {
+            sources: SIGNAL_SOURCES.filter(
+              (s) => s.userId === caller || s.userId === SYSTEM_SOURCE_OWNER_ID,
+            ),
+          };
         },
         // Feature 053: the insights backtest "backfill this range" action dials the insights
         // BFF ingestClient, which (in e2e) points at INGEST_ENDPOINT=9093. Return a deterministic
@@ -1384,16 +1462,48 @@ export async function startMockBackend(): Promise<void> {
           }
           return { jobs: [], page: { nextPageToken: '', totalCount: 0 } };
         },
-        async manageSignalSource(req) {
+        async manageSignalSource(req, ctx) {
+          // feature 224 owner semantics: a system source is read-only to everyone; a register is
+          // owned by the caller; any other verb needs a source the caller owns (else NOT_FOUND).
+          const caller = callerUserId(ctx);
+          const slug = req.source?.slug ?? '';
+          if (SIGNAL_SOURCES.some((s) => s.slug === slug && s.userId === SYSTEM_SOURCE_OWNER_ID)) {
+            throw new ConnectError('system sources are read-only', Code.PermissionDenied);
+          }
+          const isRegister =
+            req.operationEnum === SignalSourceOperation.REGISTER ||
+            (req.operationEnum === SignalSourceOperation.UNSPECIFIED &&
+              req.operation === 'register');
+          if (isRegister) {
+            if (!req.source) throw new ConnectError('source is required', Code.InvalidArgument);
+            req.source.userId = caller;
+            return { source: req.source };
+          }
+          const owned = SIGNAL_SOURCES.find((s) => s.slug === slug && s.userId === caller);
+          if (!owned) throw new ConnectError('signal source not found', Code.NotFound);
           // feature 134: echo the saved reliabilityWeight back so the inline-edit round-trip is
           // observable (the cell re-reads the mutated value after invalidation).
           return {
             source: {
-              ...SIGNAL_SOURCE_WEIGHTED,
-              reliabilityWeight:
-                req.source?.reliabilityWeight ?? SIGNAL_SOURCE_WEIGHTED.reliabilityWeight,
+              ...owned,
+              reliabilityWeight: req.source?.reliabilityWeight ?? owned.reliabilityWeight,
             },
           };
+        },
+        async listTemplates() {
+          return { templates: [SOURCE_TEMPLATE_NEWSLETTER] };
+        },
+        async instantiateTemplate(req, ctx) {
+          const tpl = findTemplate([SOURCE_TEMPLATE_NEWSLETTER], req.templateId);
+          return {
+            ...tpl.payload,
+            slug: req.slug || tpl.payload.slug,
+            userId: callerUserId(ctx),
+            hasCredentials: req.credentialsRef !== '',
+          };
+        },
+        async manageTemplate(req) {
+          return req.template ?? {};
         },
       });
     },

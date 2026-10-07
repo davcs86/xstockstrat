@@ -2629,7 +2629,7 @@ grep -n "isSecret: true\|createKey: true" src/lib/insightsBff.ts   # forced serv
 
 ### Step 39 — test: UI e2e (public UI removed, templates, signal sources, nav, BFF traversal)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/fixtures/templates.ts` — create
@@ -3093,4 +3093,11 @@ _Populated by /sdd-execute as implementation proceeds._
   - The admin read-only view drops the stat tiles and the credentials column.
   - The authenticated-website "Credentials Ref (secret.* key name)" label was moved over unchanged, though the `secret.*` prefix is retired (Step 40 candidate).
 - **Known red until Step 39**: `e2e/config-ui/sources.spec.ts` expects the old create/edit UI, and `nav-reachability.spec.ts` lists the old href.
+- **Disposition**: within scope.
+
+### D-34 — Step 39: SetConfig assertion via echo; warmup routes; durable-feature re-home deferred to Step 40
+- **SetConfig assertion**: the mock backend runs in a separate process. Its `ConfigService.setConfig` therefore echoes the `{userId, createKey, isSecret}` it actually received, as JSON in `version`, for `ingest`/`mcp_credential.*` keys. This proves what the insights BFF forced server-side. The echo is catalogued in `INVENTORY.md`.
+- **Follow-through**: `e2e/warmup.setup.ts` `ROUTES` gains `/insights/templates` and `/insights/signal-sources`.
+- **Deferred**: Step 40 item 8 owns the `surface-signal-weight-decay-config.feature` route re-home; the equivalent e2e assertions already run on `/insights/signal-sources`. `e2e/mobile-overflow.spec.ts` still checks `/config-ui/sources` and has no case for `/insights/signal-sources`; it is outside Step 39 Files.
+- **Pre-existing**: 3 unused-variable lint errors in `e2e/` lie in lines this step did not change.
 - **Disposition**: within scope.

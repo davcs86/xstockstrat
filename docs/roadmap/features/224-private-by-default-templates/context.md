@@ -942,3 +942,23 @@ OQ-4 to OQ-6 remain for /sdd-design.
   - lint has 0 errors, and the 4 old warnings on the sources page are gone;
   - 0 clones.
 - **Deviation**: D-33.
+
+### Step 39 — test: UI e2e (public UI removed, templates, signal sources, nav, BFF traversal) [done]
+- **Fixtures**: new `templates.ts`; `signalSources.ts` is now owner-scoped and includes a system source; `isPublic` dropped from formulas. All of it is catalogued in `INVENTORY.md` (C-12/C-13).
+- **Mock backend**:
+  - New minimal `IndicatorsService` on :9092.
+  - Template RPCs for analysis, ingest and indicators.
+  - Owner-aware `ListSignalSources`/`ManageSignalSource`.
+  - The `SetConfig` echo.
+- **Spec coverage**:
+  - AC-24: no public UI.
+  - The templates catalog: nav entry, "Use template" for all three kinds, and the update-available badge.
+  - `/insights/signal-sources`: own and system rows, system rows read-only, the inline weight editor, the `@feature-161` AC-4/AC-5 guidance, the `mcp_client` per-user secret, and the forced `isSecret`.
+  - `/config-ui/sources` as the admin read-only view.
+  - Nav reachability.
+- **Real-BFF traversal (`api-smoke`)**: every new browser-called RPC goes through the real router, including the non-admin `ManageTemplate` denial.
+- **Results**:
+  - Playwright: affected specs 67/67; the full suite 516/516 (chromium, prebuilt). This includes the specs that were red after Steps 36–38.
+  - `tsc` shows only the 2 pre-existing errors; vitest 228/228.
+- Coverage: N/A (Playwright).
+- **Deviation**: D-34.

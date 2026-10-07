@@ -28,6 +28,8 @@ const ROUTES = [
   '/insights/formulas',
   '/insights/formulas/new',
   '/insights/formulas/sys-001',
+  '/insights/templates',
+  '/insights/signal-sources',
   '/insights/backfills',
   '/insights/watchlists',
   '/config-ui',
