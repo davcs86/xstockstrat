@@ -617,6 +617,9 @@ jobs:
       - name: shfmt (diff check)
         run: shfmt -d -i 2 scripts/*.sh .claude/hooks/*.sh
 
+      - name: Migration tooling structural tests
+        run: bash scripts/render-migrations.test.sh && bash scripts/check-migration-contract.test.sh
+
   # Applies every migration, then replays the chain from version 0 (the db-migrate.sh dirty-state
   # recovery path) and runs scripts/migration-assertions/*.sql — every up-file must be idempotent.
   migration-rerun:

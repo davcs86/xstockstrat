@@ -475,3 +475,19 @@ OQ-4 to OQ-6 remain for /sdd-design.
   - `scripts/Dockerfile.migrate`
   - `.github/workflows/ci.yml`
 - Deviations: D-2 and D-3. Note: `envsubst` (gettext-base) was installed on the host for local tests; the migrator image and CI runners already ship it.
+
+### Step 4 — test: migration tooling structural tests [done]
+- `render-migrations.test.sh` checks five things:
+  - (a) the header without its variable set fails and names the variable;
+  - (b) the variable is rendered while `$$` blocks and `$1` stay intact;
+  - (c) files without the header are byte-identical;
+  - (d) `.down.sql` files are copied;
+  - (e) `Dockerfile.migrate` COPYs the renderer (guards D-2).
+- `check-migration-contract.test.sh` uses a throwaway repo with a fake `origin/main` and checks three cases: (a) passes, and (b) and (c) fail.
+- Both tests are wired into the `shell-lint` job.
+- AC: — (tooling).
+- RED: both failed with "script missing". GREEN: all assertions passed.
+- shellcheck and shfmt are clean on the new tests.
+- Files: `scripts/{render-migrations,check-migration-contract}.test.sh`, `.github/workflows/ci.yml`.
+- Deviations: none.
+- Note: the host's shellcheck 0.11 flags a pre-existing SC2329 in `scripts/integration-test.sh`. That is out of scope and untouched, and CI's apt shellcheck predates that check.

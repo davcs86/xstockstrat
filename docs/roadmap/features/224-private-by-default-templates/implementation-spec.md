@@ -381,7 +381,7 @@ grep -n -A3 "migration-contract-gate:" .github/workflows/ci.yml | grep "pull_req
 
 ### Step 4 — test: migration tooling structural tests
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/`
 **Files**:
 - `scripts/render-migrations.test.sh` — create
