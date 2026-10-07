@@ -5,7 +5,7 @@
 //   protoc               unknown
 // source: ingest/v1/ingest.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.IngestServiceClient = exports.IngestServiceService = exports.ManageSignalSourceResponse = exports.ManageSignalSourceRequest = exports.ListSignalSourcesResponse = exports.ListSignalSourcesRequest = exports.SignalSource = exports.QuerySignalsResponse = exports.QuerySignalsRequest = exports.IngestSignalResponse = exports.IngestSignalRequest = exports.ExternalSignal = exports.NormalizeRawDataResponse = exports.NormalizeRawDataRequest = exports.ListBackfillJobsResponse = exports.CancelBackfillRequest = exports.ListBackfillJobsRequest = exports.GetBackfillStatusRequest = exports.TriggerBackfillResponse = exports.TriggerBackfillRequest = exports.BackfillJob = exports.SignalSourceOperation = exports.SourceHealthStatus = exports.BackfillDataKind = exports.FillMode = exports.BackfillStatus = exports.protobufPackage = void 0;
+exports.IngestServiceClient = exports.IngestServiceService = exports.InstantiateTemplateRequest = exports.ManageTemplateRequest = exports.ListTemplatesResponse = exports.ListTemplatesRequest = exports.SourceTemplate = exports.ManageSignalSourceResponse = exports.ManageSignalSourceRequest = exports.ListSignalSourcesResponse = exports.ListSignalSourcesRequest = exports.SignalSource = exports.QuerySignalsResponse = exports.QuerySignalsRequest = exports.IngestSignalResponse = exports.IngestSignalRequest = exports.ExternalSignal = exports.NormalizeRawDataResponse = exports.NormalizeRawDataRequest = exports.ListBackfillJobsResponse = exports.CancelBackfillRequest = exports.ListBackfillJobsRequest = exports.GetBackfillStatusRequest = exports.TriggerBackfillResponse = exports.TriggerBackfillRequest = exports.BackfillJob = exports.SignalSourceOperation = exports.SourceHealthStatus = exports.SignalScope = exports.BackfillDataKind = exports.FillMode = exports.BackfillStatus = exports.protobufPackage = void 0;
 exports.backfillStatusFromJSON = backfillStatusFromJSON;
 exports.backfillStatusToJSON = backfillStatusToJSON;
 exports.backfillStatusToNumber = backfillStatusToNumber;
@@ -15,6 +15,9 @@ exports.fillModeToNumber = fillModeToNumber;
 exports.backfillDataKindFromJSON = backfillDataKindFromJSON;
 exports.backfillDataKindToJSON = backfillDataKindToJSON;
 exports.backfillDataKindToNumber = backfillDataKindToNumber;
+exports.signalScopeFromJSON = signalScopeFromJSON;
+exports.signalScopeToJSON = signalScopeToJSON;
+exports.signalScopeToNumber = signalScopeToNumber;
 exports.sourceHealthStatusFromJSON = sourceHealthStatusFromJSON;
 exports.sourceHealthStatusToJSON = sourceHealthStatusToJSON;
 exports.sourceHealthStatusToNumber = sourceHealthStatusToNumber;
@@ -220,6 +223,58 @@ function backfillDataKindToNumber(object) {
         case BackfillDataKind.BACKFILL_DATA_KIND_FUNDAMENTALS:
             return 2;
         case BackfillDataKind.UNRECOGNIZED:
+        default:
+            return -1;
+    }
+}
+/** Which owners' signals QuerySignals returns (feature 224). Closed set → enum (C-04). */
+var SignalScope;
+(function (SignalScope) {
+    /** SIGNAL_SCOPE_UNSPECIFIED - own + system */
+    SignalScope["SIGNAL_SCOPE_UNSPECIFIED"] = "SIGNAL_SCOPE_UNSPECIFIED";
+    SignalScope["SIGNAL_SCOPE_OWN"] = "SIGNAL_SCOPE_OWN";
+    SignalScope["SIGNAL_SCOPE_SYSTEM"] = "SIGNAL_SCOPE_SYSTEM";
+    SignalScope["UNRECOGNIZED"] = "UNRECOGNIZED";
+})(SignalScope || (exports.SignalScope = SignalScope = {}));
+function signalScopeFromJSON(object) {
+    switch (object) {
+        case 0:
+        case "SIGNAL_SCOPE_UNSPECIFIED":
+            return SignalScope.SIGNAL_SCOPE_UNSPECIFIED;
+        case 1:
+        case "SIGNAL_SCOPE_OWN":
+            return SignalScope.SIGNAL_SCOPE_OWN;
+        case 2:
+        case "SIGNAL_SCOPE_SYSTEM":
+            return SignalScope.SIGNAL_SCOPE_SYSTEM;
+        case -1:
+        case "UNRECOGNIZED":
+        default:
+            return SignalScope.UNRECOGNIZED;
+    }
+}
+function signalScopeToJSON(object) {
+    switch (object) {
+        case SignalScope.SIGNAL_SCOPE_UNSPECIFIED:
+            return "SIGNAL_SCOPE_UNSPECIFIED";
+        case SignalScope.SIGNAL_SCOPE_OWN:
+            return "SIGNAL_SCOPE_OWN";
+        case SignalScope.SIGNAL_SCOPE_SYSTEM:
+            return "SIGNAL_SCOPE_SYSTEM";
+        case SignalScope.UNRECOGNIZED:
+        default:
+            return "UNRECOGNIZED";
+    }
+}
+function signalScopeToNumber(object) {
+    switch (object) {
+        case SignalScope.SIGNAL_SCOPE_UNSPECIFIED:
+            return 0;
+        case SignalScope.SIGNAL_SCOPE_OWN:
+            return 1;
+        case SignalScope.SIGNAL_SCOPE_SYSTEM:
+            return 2;
+        case SignalScope.UNRECOGNIZED:
         default:
             return -1;
     }
@@ -1359,6 +1414,7 @@ function createBaseExternalSignal() {
         rawUrl: "",
         tags: [],
         ingestedAt: undefined,
+        userId: "",
     };
 }
 exports.ExternalSignal = {
@@ -1392,6 +1448,9 @@ exports.ExternalSignal = {
         }
         if (message.ingestedAt !== undefined) {
             timestamp_1.Timestamp.encode(toTimestamp(message.ingestedAt), writer.uint32(82).fork()).join();
+        }
+        if (message.userId !== "") {
+            writer.uint32(90).string(message.userId);
         }
         return writer;
     },
@@ -1472,6 +1531,13 @@ exports.ExternalSignal = {
                     message.ingestedAt = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
                     continue;
                 }
+                case 11: {
+                    if (tag !== 90) {
+                        break;
+                    }
+                    message.userId = reader.string();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -1508,6 +1574,11 @@ exports.ExternalSignal = {
                 : isSet(object.ingested_at)
                     ? fromJsonTimestamp(object.ingested_at)
                     : undefined,
+            userId: isSet(object.userId)
+                ? globalThis.String(object.userId)
+                : isSet(object.user_id)
+                    ? globalThis.String(object.user_id)
+                    : "",
         };
     },
     toJSON(message) {
@@ -1542,6 +1613,9 @@ exports.ExternalSignal = {
         if (message.ingestedAt !== undefined) {
             obj.ingestedAt = message.ingestedAt.toISOString();
         }
+        if (message.userId !== "") {
+            obj.userId = message.userId;
+        }
         return obj;
     },
     create(base) {
@@ -1559,6 +1633,7 @@ exports.ExternalSignal = {
         message.rawUrl = object.rawUrl ?? "";
         message.tags = object.tags?.map((e) => e) || [];
         message.ingestedAt = object.ingestedAt ?? undefined;
+        message.userId = object.userId ?? "";
         return message;
     },
 };
@@ -1688,7 +1763,15 @@ exports.IngestSignalResponse = {
     },
 };
 function createBaseQuerySignalsRequest() {
-    return { source: "", symbol: "", direction: "", activeWindow: undefined, page: undefined };
+    return {
+        source: "",
+        symbol: "",
+        direction: "",
+        activeWindow: undefined,
+        page: undefined,
+        scope: SignalScope.SIGNAL_SCOPE_UNSPECIFIED,
+        ownerUserId: "",
+    };
 }
 exports.QuerySignalsRequest = {
     encode(message, writer = new wire_1.BinaryWriter()) {
@@ -1706,6 +1789,12 @@ exports.QuerySignalsRequest = {
         }
         if (message.page !== undefined) {
             common_1.PageRequest.encode(message.page, writer.uint32(42).fork()).join();
+        }
+        if (message.scope !== SignalScope.SIGNAL_SCOPE_UNSPECIFIED) {
+            writer.uint32(48).int32(signalScopeToNumber(message.scope));
+        }
+        if (message.ownerUserId !== "") {
+            writer.uint32(58).string(message.ownerUserId);
         }
         return writer;
     },
@@ -1751,6 +1840,20 @@ exports.QuerySignalsRequest = {
                     message.page = common_1.PageRequest.decode(reader, reader.uint32());
                     continue;
                 }
+                case 6: {
+                    if (tag !== 48) {
+                        break;
+                    }
+                    message.scope = signalScopeFromJSON(reader.int32());
+                    continue;
+                }
+                case 7: {
+                    if (tag !== 58) {
+                        break;
+                    }
+                    message.ownerUserId = reader.string();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -1770,6 +1873,12 @@ exports.QuerySignalsRequest = {
                     ? common_1.TimeRange.fromJSON(object.active_window)
                     : undefined,
             page: isSet(object.page) ? common_1.PageRequest.fromJSON(object.page) : undefined,
+            scope: isSet(object.scope) ? signalScopeFromJSON(object.scope) : SignalScope.SIGNAL_SCOPE_UNSPECIFIED,
+            ownerUserId: isSet(object.ownerUserId)
+                ? globalThis.String(object.ownerUserId)
+                : isSet(object.owner_user_id)
+                    ? globalThis.String(object.owner_user_id)
+                    : "",
         };
     },
     toJSON(message) {
@@ -1789,6 +1898,12 @@ exports.QuerySignalsRequest = {
         if (message.page !== undefined) {
             obj.page = common_1.PageRequest.toJSON(message.page);
         }
+        if (message.scope !== SignalScope.SIGNAL_SCOPE_UNSPECIFIED) {
+            obj.scope = signalScopeToJSON(message.scope);
+        }
+        if (message.ownerUserId !== "") {
+            obj.ownerUserId = message.ownerUserId;
+        }
         return obj;
     },
     create(base) {
@@ -1805,6 +1920,8 @@ exports.QuerySignalsRequest = {
         message.page = (object.page !== undefined && object.page !== null)
             ? common_1.PageRequest.fromPartial(object.page)
             : undefined;
+        message.scope = object.scope ?? SignalScope.SIGNAL_SCOPE_UNSPECIFIED;
+        message.ownerUserId = object.ownerUserId ?? "";
         return message;
     },
 };
@@ -1894,6 +2011,8 @@ function createBaseSignalSource() {
         lastError: "",
         signalsFed: 0,
         reliabilityWeight: undefined,
+        userId: "",
+        origin: undefined,
     };
 }
 exports.SignalSource = {
@@ -1933,6 +2052,12 @@ exports.SignalSource = {
         }
         if (message.reliabilityWeight !== undefined) {
             writer.uint32(97).double(message.reliabilityWeight);
+        }
+        if (message.userId !== "") {
+            writer.uint32(106).string(message.userId);
+        }
+        if (message.origin !== undefined) {
+            common_1.TemplateOrigin.encode(message.origin, writer.uint32(114).fork()).join();
         }
         return writer;
     },
@@ -2027,6 +2152,20 @@ exports.SignalSource = {
                     message.reliabilityWeight = reader.double();
                     continue;
                 }
+                case 13: {
+                    if (tag !== 106) {
+                        break;
+                    }
+                    message.userId = reader.string();
+                    continue;
+                }
+                case 14: {
+                    if (tag !== 114) {
+                        break;
+                    }
+                    message.origin = common_1.TemplateOrigin.decode(reader, reader.uint32());
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -2087,6 +2226,12 @@ exports.SignalSource = {
                 : isSet(object.reliability_weight)
                     ? globalThis.Number(object.reliability_weight)
                     : undefined,
+            userId: isSet(object.userId)
+                ? globalThis.String(object.userId)
+                : isSet(object.user_id)
+                    ? globalThis.String(object.user_id)
+                    : "",
+            origin: isSet(object.origin) ? common_1.TemplateOrigin.fromJSON(object.origin) : undefined,
         };
     },
     toJSON(message) {
@@ -2127,6 +2272,12 @@ exports.SignalSource = {
         if (message.reliabilityWeight !== undefined) {
             obj.reliabilityWeight = message.reliabilityWeight;
         }
+        if (message.userId !== "") {
+            obj.userId = message.userId;
+        }
+        if (message.origin !== undefined) {
+            obj.origin = common_1.TemplateOrigin.toJSON(message.origin);
+        }
         return obj;
     },
     create(base) {
@@ -2146,16 +2297,23 @@ exports.SignalSource = {
         message.lastError = object.lastError ?? "";
         message.signalsFed = object.signalsFed ?? 0;
         message.reliabilityWeight = object.reliabilityWeight ?? undefined;
+        message.userId = object.userId ?? "";
+        message.origin = (object.origin !== undefined && object.origin !== null)
+            ? common_1.TemplateOrigin.fromPartial(object.origin)
+            : undefined;
         return message;
     },
 };
 function createBaseListSignalSourcesRequest() {
-    return { includeInactive: false };
+    return { includeInactive: false, ownerUserId: "" };
 }
 exports.ListSignalSourcesRequest = {
     encode(message, writer = new wire_1.BinaryWriter()) {
         if (message.includeInactive !== false) {
             writer.uint32(8).bool(message.includeInactive);
+        }
+        if (message.ownerUserId !== "") {
+            writer.uint32(18).string(message.ownerUserId);
         }
         return writer;
     },
@@ -2173,6 +2331,13 @@ exports.ListSignalSourcesRequest = {
                     message.includeInactive = reader.bool();
                     continue;
                 }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.ownerUserId = reader.string();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -2188,12 +2353,20 @@ exports.ListSignalSourcesRequest = {
                 : isSet(object.include_inactive)
                     ? globalThis.Boolean(object.include_inactive)
                     : false,
+            ownerUserId: isSet(object.ownerUserId)
+                ? globalThis.String(object.ownerUserId)
+                : isSet(object.owner_user_id)
+                    ? globalThis.String(object.owner_user_id)
+                    : "",
         };
     },
     toJSON(message) {
         const obj = {};
         if (message.includeInactive !== false) {
             obj.includeInactive = message.includeInactive;
+        }
+        if (message.ownerUserId !== "") {
+            obj.ownerUserId = message.ownerUserId;
         }
         return obj;
     },
@@ -2203,6 +2376,7 @@ exports.ListSignalSourcesRequest = {
     fromPartial(object) {
         const message = createBaseListSignalSourcesRequest();
         message.includeInactive = object.includeInactive ?? false;
+        message.ownerUserId = object.ownerUserId ?? "";
         return message;
     },
 };
@@ -2447,6 +2621,333 @@ exports.ManageSignalSourceResponse = {
         return message;
     },
 };
+function createBaseSourceTemplate() {
+    return { meta: undefined, payload: undefined };
+}
+exports.SourceTemplate = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.meta !== undefined) {
+            common_1.TemplateMeta.encode(message.meta, writer.uint32(10).fork()).join();
+        }
+        if (message.payload !== undefined) {
+            exports.SignalSource.encode(message.payload, writer.uint32(18).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseSourceTemplate();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.meta = common_1.TemplateMeta.decode(reader, reader.uint32());
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.payload = exports.SignalSource.decode(reader, reader.uint32());
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            meta: isSet(object.meta) ? common_1.TemplateMeta.fromJSON(object.meta) : undefined,
+            payload: isSet(object.payload) ? exports.SignalSource.fromJSON(object.payload) : undefined,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.meta !== undefined) {
+            obj.meta = common_1.TemplateMeta.toJSON(message.meta);
+        }
+        if (message.payload !== undefined) {
+            obj.payload = exports.SignalSource.toJSON(message.payload);
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.SourceTemplate.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseSourceTemplate();
+        message.meta = (object.meta !== undefined && object.meta !== null)
+            ? common_1.TemplateMeta.fromPartial(object.meta)
+            : undefined;
+        message.payload = (object.payload !== undefined && object.payload !== null)
+            ? exports.SignalSource.fromPartial(object.payload)
+            : undefined;
+        return message;
+    },
+};
+function createBaseListTemplatesRequest() {
+    return {};
+}
+exports.ListTemplatesRequest = {
+    encode(_, writer = new wire_1.BinaryWriter()) {
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseListTemplatesRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(_) {
+        return {};
+    },
+    toJSON(_) {
+        const obj = {};
+        return obj;
+    },
+    create(base) {
+        return exports.ListTemplatesRequest.fromPartial(base ?? {});
+    },
+    fromPartial(_) {
+        const message = createBaseListTemplatesRequest();
+        return message;
+    },
+};
+function createBaseListTemplatesResponse() {
+    return { templates: [] };
+}
+exports.ListTemplatesResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        for (const v of message.templates) {
+            exports.SourceTemplate.encode(v, writer.uint32(10).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseListTemplatesResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.templates.push(exports.SourceTemplate.decode(reader, reader.uint32()));
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            templates: globalThis.Array.isArray(object?.templates)
+                ? object.templates.map((e) => exports.SourceTemplate.fromJSON(e))
+                : [],
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.templates?.length) {
+            obj.templates = message.templates.map((e) => exports.SourceTemplate.toJSON(e));
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.ListTemplatesResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseListTemplatesResponse();
+        message.templates = object.templates?.map((e) => exports.SourceTemplate.fromPartial(e)) || [];
+        return message;
+    },
+};
+function createBaseManageTemplateRequest() {
+    return { operation: common_1.TemplateOperation.TEMPLATE_OPERATION_UNSPECIFIED, template: undefined };
+}
+exports.ManageTemplateRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.operation !== common_1.TemplateOperation.TEMPLATE_OPERATION_UNSPECIFIED) {
+            writer.uint32(8).int32((0, common_1.templateOperationToNumber)(message.operation));
+        }
+        if (message.template !== undefined) {
+            exports.SourceTemplate.encode(message.template, writer.uint32(18).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseManageTemplateRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 8) {
+                        break;
+                    }
+                    message.operation = (0, common_1.templateOperationFromJSON)(reader.int32());
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.template = exports.SourceTemplate.decode(reader, reader.uint32());
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            operation: isSet(object.operation)
+                ? (0, common_1.templateOperationFromJSON)(object.operation)
+                : common_1.TemplateOperation.TEMPLATE_OPERATION_UNSPECIFIED,
+            template: isSet(object.template) ? exports.SourceTemplate.fromJSON(object.template) : undefined,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.operation !== common_1.TemplateOperation.TEMPLATE_OPERATION_UNSPECIFIED) {
+            obj.operation = (0, common_1.templateOperationToJSON)(message.operation);
+        }
+        if (message.template !== undefined) {
+            obj.template = exports.SourceTemplate.toJSON(message.template);
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.ManageTemplateRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseManageTemplateRequest();
+        message.operation = object.operation ?? common_1.TemplateOperation.TEMPLATE_OPERATION_UNSPECIFIED;
+        message.template = (object.template !== undefined && object.template !== null)
+            ? exports.SourceTemplate.fromPartial(object.template)
+            : undefined;
+        return message;
+    },
+};
+function createBaseInstantiateTemplateRequest() {
+    return { templateId: "", slug: "", credentialsRef: "" };
+}
+exports.InstantiateTemplateRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.templateId !== "") {
+            writer.uint32(10).string(message.templateId);
+        }
+        if (message.slug !== "") {
+            writer.uint32(18).string(message.slug);
+        }
+        if (message.credentialsRef !== "") {
+            writer.uint32(26).string(message.credentialsRef);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseInstantiateTemplateRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.templateId = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.slug = reader.string();
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 26) {
+                        break;
+                    }
+                    message.credentialsRef = reader.string();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            templateId: isSet(object.templateId)
+                ? globalThis.String(object.templateId)
+                : isSet(object.template_id)
+                    ? globalThis.String(object.template_id)
+                    : "",
+            slug: isSet(object.slug) ? globalThis.String(object.slug) : "",
+            credentialsRef: isSet(object.credentialsRef)
+                ? globalThis.String(object.credentialsRef)
+                : isSet(object.credentials_ref)
+                    ? globalThis.String(object.credentials_ref)
+                    : "",
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.templateId !== "") {
+            obj.templateId = message.templateId;
+        }
+        if (message.slug !== "") {
+            obj.slug = message.slug;
+        }
+        if (message.credentialsRef !== "") {
+            obj.credentialsRef = message.credentialsRef;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.InstantiateTemplateRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseInstantiateTemplateRequest();
+        message.templateId = object.templateId ?? "";
+        message.slug = object.slug ?? "";
+        message.credentialsRef = object.credentialsRef ?? "";
+        return message;
+    },
+};
 exports.IngestServiceService = {
     triggerBackfill: {
         path: "/xstockstrat.ingest.v1.IngestService/TriggerBackfill",
@@ -2531,6 +3032,35 @@ exports.IngestServiceService = {
         requestDeserialize: (value) => exports.ManageSignalSourceRequest.decode(value),
         responseSerialize: (value) => Buffer.from(exports.ManageSignalSourceResponse.encode(value).finish()),
         responseDeserialize: (value) => exports.ManageSignalSourceResponse.decode(value),
+    },
+    /** Template catalog (feature 224). List/read: any authenticated caller. Manage: ADMIN only. */
+    listTemplates: {
+        path: "/xstockstrat.ingest.v1.IngestService/ListTemplates",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.ListTemplatesRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.ListTemplatesRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.ListTemplatesResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.ListTemplatesResponse.decode(value),
+    },
+    manageTemplate: {
+        path: "/xstockstrat.ingest.v1.IngestService/ManageTemplate",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.ManageTemplateRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.ManageTemplateRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.SourceTemplate.encode(value).finish()),
+        responseDeserialize: (value) => exports.SourceTemplate.decode(value),
+    },
+    /** Copies a source template into a private signal source owned by the x-user-id caller. */
+    instantiateTemplate: {
+        path: "/xstockstrat.ingest.v1.IngestService/InstantiateTemplate",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.InstantiateTemplateRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.InstantiateTemplateRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.SignalSource.encode(value).finish()),
+        responseDeserialize: (value) => exports.SignalSource.decode(value),
     },
 };
 exports.IngestServiceClient = (0, grpc_js_1.makeGenericClientConstructor)(exports.IngestServiceService, "xstockstrat.ingest.v1.IngestService");

@@ -243,6 +243,12 @@ export type GetSecretRequest = Message<"xstockstrat.config.v1.GetSecretRequest">
      * @generated from field: xstockstrat.common.v1.Environment environment = 3;
      */
     environment: Environment;
+    /**
+     * exact scope: empty = global row only (feature 224)
+     *
+     * @generated from field: string user_id = 4;
+     */
+    userId: string;
 };
 /**
  * Describes the message xstockstrat.config.v1.GetSecretRequest.
@@ -316,7 +322,8 @@ export type SetConfigRequest = Message<"xstockstrat.config.v1.SetConfigRequest">
     createKey: boolean;
     /**
      * Optional per-user scope. Empty = the global value; a non-empty user_id writes/updates that
-     * user's per-user override. Secret keys (is_secret) are global-scope only (feature 147).
+     * user's per-user override. Secret keys may be per-user (feature 224 operator override of
+     * feature 147); redaction holds on every edge.
      *
      * @generated from field: string user_id = 9;
      */

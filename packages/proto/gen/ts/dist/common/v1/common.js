@@ -5,7 +5,7 @@
 //   protoc               unknown
 // source: common/v1/common.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.TimeRange = exports.Asset = exports.Decimal = exports.Error_DetailsEntry = exports.Error = exports.PageResponse = exports.PageRequest = exports.Sector = exports.Timeframe = exports.BrokerType = exports.Environment = exports.TradingMode = exports.protobufPackage = void 0;
+exports.TemplateOrigin = exports.TemplateMeta = exports.TimeRange = exports.Asset = exports.Decimal = exports.Error_DetailsEntry = exports.Error = exports.PageResponse = exports.PageRequest = exports.TemplateOperation = exports.TemplateKind = exports.Sector = exports.Timeframe = exports.BrokerType = exports.Environment = exports.TradingMode = exports.protobufPackage = void 0;
 exports.tradingModeFromJSON = tradingModeFromJSON;
 exports.tradingModeToJSON = tradingModeToJSON;
 exports.tradingModeToNumber = tradingModeToNumber;
@@ -21,6 +21,12 @@ exports.timeframeToNumber = timeframeToNumber;
 exports.sectorFromJSON = sectorFromJSON;
 exports.sectorToJSON = sectorToJSON;
 exports.sectorToNumber = sectorToNumber;
+exports.templateKindFromJSON = templateKindFromJSON;
+exports.templateKindToJSON = templateKindToJSON;
+exports.templateKindToNumber = templateKindToNumber;
+exports.templateOperationFromJSON = templateOperationFromJSON;
+exports.templateOperationToJSON = templateOperationToJSON;
+exports.templateOperationToNumber = templateOperationToNumber;
 /* eslint-disable */
 const wire_1 = require("@bufbuild/protobuf/wire");
 const timestamp_1 = require("../../google/protobuf/timestamp");
@@ -438,6 +444,125 @@ function sectorToNumber(object) {
         case Sector.SECTOR_REAL_ESTATE:
             return 11;
         case Sector.UNRECOGNIZED:
+        default:
+            return -1;
+    }
+}
+/** Template catalog (feature 224): admin-curated templates instantiated into private snapshot copies. */
+var TemplateKind;
+(function (TemplateKind) {
+    TemplateKind["TEMPLATE_KIND_UNSPECIFIED"] = "TEMPLATE_KIND_UNSPECIFIED";
+    TemplateKind["TEMPLATE_KIND_STRATEGY"] = "TEMPLATE_KIND_STRATEGY";
+    TemplateKind["TEMPLATE_KIND_FORMULA"] = "TEMPLATE_KIND_FORMULA";
+    TemplateKind["TEMPLATE_KIND_SIGNAL_SOURCE"] = "TEMPLATE_KIND_SIGNAL_SOURCE";
+    TemplateKind["UNRECOGNIZED"] = "UNRECOGNIZED";
+})(TemplateKind || (exports.TemplateKind = TemplateKind = {}));
+function templateKindFromJSON(object) {
+    switch (object) {
+        case 0:
+        case "TEMPLATE_KIND_UNSPECIFIED":
+            return TemplateKind.TEMPLATE_KIND_UNSPECIFIED;
+        case 1:
+        case "TEMPLATE_KIND_STRATEGY":
+            return TemplateKind.TEMPLATE_KIND_STRATEGY;
+        case 2:
+        case "TEMPLATE_KIND_FORMULA":
+            return TemplateKind.TEMPLATE_KIND_FORMULA;
+        case 3:
+        case "TEMPLATE_KIND_SIGNAL_SOURCE":
+            return TemplateKind.TEMPLATE_KIND_SIGNAL_SOURCE;
+        case -1:
+        case "UNRECOGNIZED":
+        default:
+            return TemplateKind.UNRECOGNIZED;
+    }
+}
+function templateKindToJSON(object) {
+    switch (object) {
+        case TemplateKind.TEMPLATE_KIND_UNSPECIFIED:
+            return "TEMPLATE_KIND_UNSPECIFIED";
+        case TemplateKind.TEMPLATE_KIND_STRATEGY:
+            return "TEMPLATE_KIND_STRATEGY";
+        case TemplateKind.TEMPLATE_KIND_FORMULA:
+            return "TEMPLATE_KIND_FORMULA";
+        case TemplateKind.TEMPLATE_KIND_SIGNAL_SOURCE:
+            return "TEMPLATE_KIND_SIGNAL_SOURCE";
+        case TemplateKind.UNRECOGNIZED:
+        default:
+            return "UNRECOGNIZED";
+    }
+}
+function templateKindToNumber(object) {
+    switch (object) {
+        case TemplateKind.TEMPLATE_KIND_UNSPECIFIED:
+            return 0;
+        case TemplateKind.TEMPLATE_KIND_STRATEGY:
+            return 1;
+        case TemplateKind.TEMPLATE_KIND_FORMULA:
+            return 2;
+        case TemplateKind.TEMPLATE_KIND_SIGNAL_SOURCE:
+            return 3;
+        case TemplateKind.UNRECOGNIZED:
+        default:
+            return -1;
+    }
+}
+var TemplateOperation;
+(function (TemplateOperation) {
+    TemplateOperation["TEMPLATE_OPERATION_UNSPECIFIED"] = "TEMPLATE_OPERATION_UNSPECIFIED";
+    TemplateOperation["TEMPLATE_OPERATION_CREATE"] = "TEMPLATE_OPERATION_CREATE";
+    /** TEMPLATE_OPERATION_UPDATE - bumps version by 1 */
+    TemplateOperation["TEMPLATE_OPERATION_UPDATE"] = "TEMPLATE_OPERATION_UPDATE";
+    /** TEMPLATE_OPERATION_RETIRE - hides from ListTemplates; existing instances are untouched */
+    TemplateOperation["TEMPLATE_OPERATION_RETIRE"] = "TEMPLATE_OPERATION_RETIRE";
+    TemplateOperation["UNRECOGNIZED"] = "UNRECOGNIZED";
+})(TemplateOperation || (exports.TemplateOperation = TemplateOperation = {}));
+function templateOperationFromJSON(object) {
+    switch (object) {
+        case 0:
+        case "TEMPLATE_OPERATION_UNSPECIFIED":
+            return TemplateOperation.TEMPLATE_OPERATION_UNSPECIFIED;
+        case 1:
+        case "TEMPLATE_OPERATION_CREATE":
+            return TemplateOperation.TEMPLATE_OPERATION_CREATE;
+        case 2:
+        case "TEMPLATE_OPERATION_UPDATE":
+            return TemplateOperation.TEMPLATE_OPERATION_UPDATE;
+        case 3:
+        case "TEMPLATE_OPERATION_RETIRE":
+            return TemplateOperation.TEMPLATE_OPERATION_RETIRE;
+        case -1:
+        case "UNRECOGNIZED":
+        default:
+            return TemplateOperation.UNRECOGNIZED;
+    }
+}
+function templateOperationToJSON(object) {
+    switch (object) {
+        case TemplateOperation.TEMPLATE_OPERATION_UNSPECIFIED:
+            return "TEMPLATE_OPERATION_UNSPECIFIED";
+        case TemplateOperation.TEMPLATE_OPERATION_CREATE:
+            return "TEMPLATE_OPERATION_CREATE";
+        case TemplateOperation.TEMPLATE_OPERATION_UPDATE:
+            return "TEMPLATE_OPERATION_UPDATE";
+        case TemplateOperation.TEMPLATE_OPERATION_RETIRE:
+            return "TEMPLATE_OPERATION_RETIRE";
+        case TemplateOperation.UNRECOGNIZED:
+        default:
+            return "UNRECOGNIZED";
+    }
+}
+function templateOperationToNumber(object) {
+    switch (object) {
+        case TemplateOperation.TEMPLATE_OPERATION_UNSPECIFIED:
+            return 0;
+        case TemplateOperation.TEMPLATE_OPERATION_CREATE:
+            return 1;
+        case TemplateOperation.TEMPLATE_OPERATION_UPDATE:
+            return 2;
+        case TemplateOperation.TEMPLATE_OPERATION_RETIRE:
+            return 3;
+        case TemplateOperation.UNRECOGNIZED:
         default:
             return -1;
     }
@@ -999,6 +1124,299 @@ exports.TimeRange = {
         const message = createBaseTimeRange();
         message.start = object.start ?? undefined;
         message.end = object.end ?? undefined;
+        return message;
+    },
+};
+function createBaseTemplateMeta() {
+    return {
+        templateId: "",
+        kind: TemplateKind.TEMPLATE_KIND_UNSPECIFIED,
+        name: "",
+        description: "",
+        version: 0,
+        retired: false,
+        createdAt: undefined,
+        updatedAt: undefined,
+    };
+}
+exports.TemplateMeta = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.templateId !== "") {
+            writer.uint32(10).string(message.templateId);
+        }
+        if (message.kind !== TemplateKind.TEMPLATE_KIND_UNSPECIFIED) {
+            writer.uint32(16).int32(templateKindToNumber(message.kind));
+        }
+        if (message.name !== "") {
+            writer.uint32(26).string(message.name);
+        }
+        if (message.description !== "") {
+            writer.uint32(34).string(message.description);
+        }
+        if (message.version !== 0) {
+            writer.uint32(40).int32(message.version);
+        }
+        if (message.retired !== false) {
+            writer.uint32(48).bool(message.retired);
+        }
+        if (message.createdAt !== undefined) {
+            timestamp_1.Timestamp.encode(toTimestamp(message.createdAt), writer.uint32(58).fork()).join();
+        }
+        if (message.updatedAt !== undefined) {
+            timestamp_1.Timestamp.encode(toTimestamp(message.updatedAt), writer.uint32(66).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseTemplateMeta();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.templateId = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 16) {
+                        break;
+                    }
+                    message.kind = templateKindFromJSON(reader.int32());
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 26) {
+                        break;
+                    }
+                    message.name = reader.string();
+                    continue;
+                }
+                case 4: {
+                    if (tag !== 34) {
+                        break;
+                    }
+                    message.description = reader.string();
+                    continue;
+                }
+                case 5: {
+                    if (tag !== 40) {
+                        break;
+                    }
+                    message.version = reader.int32();
+                    continue;
+                }
+                case 6: {
+                    if (tag !== 48) {
+                        break;
+                    }
+                    message.retired = reader.bool();
+                    continue;
+                }
+                case 7: {
+                    if (tag !== 58) {
+                        break;
+                    }
+                    message.createdAt = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
+                    continue;
+                }
+                case 8: {
+                    if (tag !== 66) {
+                        break;
+                    }
+                    message.updatedAt = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            templateId: isSet(object.templateId)
+                ? globalThis.String(object.templateId)
+                : isSet(object.template_id)
+                    ? globalThis.String(object.template_id)
+                    : "",
+            kind: isSet(object.kind) ? templateKindFromJSON(object.kind) : TemplateKind.TEMPLATE_KIND_UNSPECIFIED,
+            name: isSet(object.name) ? globalThis.String(object.name) : "",
+            description: isSet(object.description) ? globalThis.String(object.description) : "",
+            version: isSet(object.version) ? globalThis.Number(object.version) : 0,
+            retired: isSet(object.retired) ? globalThis.Boolean(object.retired) : false,
+            createdAt: isSet(object.createdAt)
+                ? fromJsonTimestamp(object.createdAt)
+                : isSet(object.created_at)
+                    ? fromJsonTimestamp(object.created_at)
+                    : undefined,
+            updatedAt: isSet(object.updatedAt)
+                ? fromJsonTimestamp(object.updatedAt)
+                : isSet(object.updated_at)
+                    ? fromJsonTimestamp(object.updated_at)
+                    : undefined,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.templateId !== "") {
+            obj.templateId = message.templateId;
+        }
+        if (message.kind !== TemplateKind.TEMPLATE_KIND_UNSPECIFIED) {
+            obj.kind = templateKindToJSON(message.kind);
+        }
+        if (message.name !== "") {
+            obj.name = message.name;
+        }
+        if (message.description !== "") {
+            obj.description = message.description;
+        }
+        if (message.version !== 0) {
+            obj.version = Math.round(message.version);
+        }
+        if (message.retired !== false) {
+            obj.retired = message.retired;
+        }
+        if (message.createdAt !== undefined) {
+            obj.createdAt = message.createdAt.toISOString();
+        }
+        if (message.updatedAt !== undefined) {
+            obj.updatedAt = message.updatedAt.toISOString();
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.TemplateMeta.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseTemplateMeta();
+        message.templateId = object.templateId ?? "";
+        message.kind = object.kind ?? TemplateKind.TEMPLATE_KIND_UNSPECIFIED;
+        message.name = object.name ?? "";
+        message.description = object.description ?? "";
+        message.version = object.version ?? 0;
+        message.retired = object.retired ?? false;
+        message.createdAt = object.createdAt ?? undefined;
+        message.updatedAt = object.updatedAt ?? undefined;
+        return message;
+    },
+};
+function createBaseTemplateOrigin() {
+    return { templateId: "", templateVersion: 0, latestVersion: 0, updateAvailable: false };
+}
+exports.TemplateOrigin = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.templateId !== "") {
+            writer.uint32(10).string(message.templateId);
+        }
+        if (message.templateVersion !== 0) {
+            writer.uint32(16).int32(message.templateVersion);
+        }
+        if (message.latestVersion !== 0) {
+            writer.uint32(24).int32(message.latestVersion);
+        }
+        if (message.updateAvailable !== false) {
+            writer.uint32(32).bool(message.updateAvailable);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseTemplateOrigin();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.templateId = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 16) {
+                        break;
+                    }
+                    message.templateVersion = reader.int32();
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 24) {
+                        break;
+                    }
+                    message.latestVersion = reader.int32();
+                    continue;
+                }
+                case 4: {
+                    if (tag !== 32) {
+                        break;
+                    }
+                    message.updateAvailable = reader.bool();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            templateId: isSet(object.templateId)
+                ? globalThis.String(object.templateId)
+                : isSet(object.template_id)
+                    ? globalThis.String(object.template_id)
+                    : "",
+            templateVersion: isSet(object.templateVersion)
+                ? globalThis.Number(object.templateVersion)
+                : isSet(object.template_version)
+                    ? globalThis.Number(object.template_version)
+                    : 0,
+            latestVersion: isSet(object.latestVersion)
+                ? globalThis.Number(object.latestVersion)
+                : isSet(object.latest_version)
+                    ? globalThis.Number(object.latest_version)
+                    : 0,
+            updateAvailable: isSet(object.updateAvailable)
+                ? globalThis.Boolean(object.updateAvailable)
+                : isSet(object.update_available)
+                    ? globalThis.Boolean(object.update_available)
+                    : false,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.templateId !== "") {
+            obj.templateId = message.templateId;
+        }
+        if (message.templateVersion !== 0) {
+            obj.templateVersion = Math.round(message.templateVersion);
+        }
+        if (message.latestVersion !== 0) {
+            obj.latestVersion = Math.round(message.latestVersion);
+        }
+        if (message.updateAvailable !== false) {
+            obj.updateAvailable = message.updateAvailable;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.TemplateOrigin.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseTemplateOrigin();
+        message.templateId = object.templateId ?? "";
+        message.templateVersion = object.templateVersion ?? 0;
+        message.latestVersion = object.latestVersion ?? 0;
+        message.updateAvailable = object.updateAvailable ?? false;
         return message;
     },
 };

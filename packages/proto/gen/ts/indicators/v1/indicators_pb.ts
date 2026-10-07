@@ -6,7 +6,7 @@ import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobu
 import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
 import type { FieldMask, Timestamp, Value } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_field_mask, file_google_protobuf_struct, file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
-import type { TimeRange } from "../../common/v1/common_pb";
+import type { TemplateMeta, TemplateOperation, TemplateOrigin, TimeRange } from "../../common/v1/common_pb";
 import { file_common_v1_common } from "../../common/v1/common_pb";
 import type { JsonObject, Message } from "@bufbuild/protobuf";
 
@@ -14,7 +14,7 @@ import type { JsonObject, Message } from "@bufbuild/protobuf";
  * Describes the file indicators/v1/indicators.proto.
  */
 export const file_indicators_v1_indicators: GenFile = /*@__PURE__*/
-  fileDesc("Ch5pbmRpY2F0b3JzL3YxL2luZGljYXRvcnMucHJvdG8SGXhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEijwIKF0NvbXB1dGVJbmRpY2F0b3JSZXF1ZXN0EhEKCWluZGljYXRvchgBIAEoCRIOCgZ2YWx1ZXMYAiADKAESTgoGcGFyYW1zGAMgAygLMj4ueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5Db21wdXRlSW5kaWNhdG9yUmVxdWVzdC5QYXJhbXNFbnRyeRIvCgVyYW5nZRgEIAEoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2USDgoGc3ltYm9sGAUgASgJEhEKCXRpbWVmcmFtZRgGIAEoCRotCgtQYXJhbXNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAE6AjgBIvUBChhDb21wdXRlSW5kaWNhdG9yUmVzcG9uc2USOQoGcmVzdWx0GAEgAygLMikueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5JbmRpY2F0b3JQb2ludBIRCglpbmRpY2F0b3IYAiABKAkSWAoLcGFyYW1zX3VzZWQYAyADKAsyQy54c3RvY2tzdHJhdC5pbmRpY2F0b3JzLnYxLkNvbXB1dGVJbmRpY2F0b3JSZXNwb25zZS5QYXJhbXNVc2VkRW50cnkaMQoPUGFyYW1zVXNlZEVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoAToCOAEivAEKDkluZGljYXRvclBvaW50EigKBHRpbWUYASABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEg0KBXZhbHVlGAIgASgBEkMKBWV4dHJhGAMgAygLMjQueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5JbmRpY2F0b3JQb2ludC5FeHRyYUVudHJ5GiwKCkV4dHJhRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgBOgI4ASKQAwoVRXhlY3V0ZUZvcm11bGFSZXF1ZXN0EhIKCmZvcm11bGFfaWQYASABKAkSFgoOZm9ybXVsYV9zb3VyY2UYAiABKAkSKwoKaW5wdXRfZGF0YRgDIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSRgoDZW52GAQgAygLMjkueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5FeGVjdXRlRm9ybXVsYVJlcXVlc3QuRW52RW50cnkSGwoTdGltZW91dF9tc19vdmVycmlkZRgFIAEoBRIdChVtZW1vcnlfYnl0ZXNfb3ZlcnJpZGUYBiABKAMSLQoMaW5wdXRfcGFyYW1zGAcgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBI/CgpwYXJhbWV0ZXJzGAggAygLMisueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5Gb3JtdWxhUGFyYW1ldGVyGioKCEVudkVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEixAIKFkV4ZWN1dGVGb3JtdWxhUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBInCgZvdXRwdXQYAiABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0Eg4KBnN0ZG91dBgDIAEoCRIOCgZzdGRlcnIYBCABKAkSFAoMZXhlY3V0aW9uX21zGAUgASgDEhkKEW1lbW9yeV91c2VkX2J5dGVzGAYgASgDEg0KBWVycm9yGAcgASgJEkEKC2V4aXRfcmVhc29uGAggASgOMiwueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5TYW5kYm94RXhpdFJlYXNvbhJNChBwYXJhbWV0ZXJfZXJyb3JzGAkgAygLMjMueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5QYXJhbWV0ZXJWYWxpZGF0aW9uRXJyb3Ii4gEKEEZvcm11bGFQYXJhbWV0ZXISDAoEbmFtZRgBIAEoCRI2CgR0eXBlGAIgASgOMigueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5QYXJhbWV0ZXJUeXBlEi0KDWRlZmF1bHRfdmFsdWUYAyABKAsyFi5nb29nbGUucHJvdG9idWYuVmFsdWUSEwoLZGVzY3JpcHRpb24YBCABKAkSEAoIcmVxdWlyZWQYBSABKAgSEAoDbWluGAYgASgBSACIAQESEAoDbWF4GAcgASgBSAGIAQFCBgoEX21pbkIGCgRfbWF4IjIKDUZvcm11bGFPdXRwdXQSDAoEbmFtZRgBIAEoCRITCgtkZXNjcmlwdGlvbhgCIAEoCSI4ChhQYXJhbWV0ZXJWYWxpZGF0aW9uRXJyb3ISDAoEbmFtZRgBIAEoCRIOCgZyZWFzb24YAiABKAki1AQKEUZvcm11bGFEZWZpbml0aW9uEhIKCmZvcm11bGFfaWQYASABKAkSDAoEbmFtZRgCIAEoCRITCgtkZXNjcmlwdGlvbhgDIAEoCRIOCgZzb3VyY2UYBCABKAkSDgoGYXV0aG9yGAUgASgJEi4KCmNyZWF0ZWRfYXQYBiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnVwZGF0ZWRfYXQYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhEKCWlzX3B1YmxpYxgIIAEoCBJTCgxpbnB1dF9zY2hlbWEYCSADKAsyPS54c3RvY2tzdHJhdC5pbmRpY2F0b3JzLnYxLkZvcm11bGFEZWZpbml0aW9uLklucHV0U2NoZW1hRW50cnkSPwoKcGFyYW1ldGVycxgKIAMoCzIrLnhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEuRm9ybXVsYVBhcmFtZXRlchI5CgdvdXRwdXRzGAsgAygLMigueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5Gb3JtdWxhT3V0cHV0EhUKDXdhcm11cF9wZXJpb2QYDCABKAUSDwoHZGVsZXRlZBgNIAEoCBJIChJmdW5kYW1lbnRhbF9pbnB1dHMYDiADKA4yLC54c3RvY2tzdHJhdC5pbmRpY2F0b3JzLnYxLkZ1bmRhbWVudGFsTWV0cmljGjIKEElucHV0U2NoZW1hRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASIXChVMaXN0SW5kaWNhdG9yc1JlcXVlc3QiVgoWTGlzdEluZGljYXRvcnNSZXNwb25zZRI8CgppbmRpY2F0b3JzGAEgAygLMigueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5JbmRpY2F0b3JNZXRhImQKDUluZGljYXRvck1ldGESDAoEbmFtZRgBIAEoCRITCgtkZXNjcmlwdGlvbhgCIAEoCRIXCg9yZXF1aXJlZF9wYXJhbXMYAyADKAkSFwoPb3B0aW9uYWxfcGFyYW1zGAQgAygJItkDChZSZWdpc3RlckZvcm11bGFSZXF1ZXN0EgwKBG5hbWUYASABKAkSEwoLZGVzY3JpcHRpb24YAiABKAkSDgoGc291cmNlGAMgASgJEhEKCWlzX3B1YmxpYxgEIAEoCBJYCgxpbnB1dF9zY2hlbWEYBSADKAsyQi54c3RvY2tzdHJhdC5pbmRpY2F0b3JzLnYxLlJlZ2lzdGVyRm9ybXVsYVJlcXVlc3QuSW5wdXRTY2hlbWFFbnRyeRIOCgZhdXRob3IYBiABKAkSPwoKcGFyYW1ldGVycxgHIAMoCzIrLnhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEuRm9ybXVsYVBhcmFtZXRlchI5CgdvdXRwdXRzGAggAygLMigueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5Gb3JtdWxhT3V0cHV0EhUKDXdhcm11cF9wZXJpb2QYCSABKAUSSAoSZnVuZGFtZW50YWxfaW5wdXRzGAogAygOMiwueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5GdW5kYW1lbnRhbE1ldHJpYxoyChBJbnB1dFNjaGVtYUVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiLQoXUmVnaXN0ZXJGb3JtdWxhUmVzcG9uc2USEgoKZm9ybXVsYV9pZBgBIAEoCSInChFHZXRGb3JtdWxhUmVxdWVzdBISCgpmb3JtdWxhX2lkGAEgASgJImwKE0xpc3RGb3JtdWxhc1JlcXVlc3QSFQoNYXV0aG9yX2ZpbHRlchgBIAEoCRIWCg5pbmNsdWRlX3B1YmxpYxgCIAEoCBIRCglwYWdlX3NpemUYAyABKAUSEwoLcGFnZV9vZmZzZXQYBCABKAUiawoUTGlzdEZvcm11bGFzUmVzcG9uc2USPgoIZm9ybXVsYXMYASADKAsyLC54c3RvY2tzdHJhdC5pbmRpY2F0b3JzLnYxLkZvcm11bGFEZWZpbml0aW9uEhMKC3RvdGFsX2NvdW50GAIgASgFIpMDChRVcGRhdGVGb3JtdWxhUmVxdWVzdBISCgpmb3JtdWxhX2lkGAEgASgJEhMKB3VzZXJfaWQYAiABKAlCAhgBEgwKBG5hbWUYAyABKAkSEwoLZGVzY3JpcHRpb24YBCABKAkSDgoGc291cmNlGAUgASgJEhEKCWlzX3B1YmxpYxgGIAEoCBI/CgpwYXJhbWV0ZXJzGAcgAygLMisueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5Gb3JtdWxhUGFyYW1ldGVyEjkKB291dHB1dHMYCCADKAsyKC54c3RvY2tzdHJhdC5pbmRpY2F0b3JzLnYxLkZvcm11bGFPdXRwdXQSFQoNd2FybXVwX3BlcmlvZBgJIAEoBRIvCgt1cGRhdGVfbWFzaxgKIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5GaWVsZE1hc2sSSAoSZnVuZGFtZW50YWxfaW5wdXRzGAsgAygOMiwueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5GdW5kYW1lbnRhbE1ldHJpYyJWChVVcGRhdGVGb3JtdWxhUmVzcG9uc2USPQoHZm9ybXVsYRgBIAEoCzIsLnhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEuRm9ybXVsYURlZmluaXRpb24iPwoURGVsZXRlRm9ybXVsYVJlcXVlc3QSEgoKZm9ybXVsYV9pZBgBIAEoCRITCgd1c2VyX2lkGAIgASgJQgIYASIoChVEZWxldGVGb3JtdWxhUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCCIfCh1MaXN0RnVuZGFtZW50YWxNZXRyaWNzUmVxdWVzdCJ4ChVGdW5kYW1lbnRhbE1ldHJpY0luZm8SPAoGbWV0cmljGAEgASgOMiwueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5GdW5kYW1lbnRhbE1ldHJpYxIQCghkYXRhX2tleRgCIAEoCRIPCgdtZWFuaW5nGAMgASgJImMKHkxpc3RGdW5kYW1lbnRhbE1ldHJpY3NSZXNwb25zZRJBCgdtZXRyaWNzGAEgAygLMjAueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5GdW5kYW1lbnRhbE1ldHJpY0luZm8q8gEKEVNhbmRib3hFeGl0UmVhc29uEiMKH1NBTkRCT1hfRVhJVF9SRUFTT05fVU5TUEVDSUZJRUQQABIfChtTQU5EQk9YX0VYSVRfUkVBU09OX1NVQ0NFU1MQARIfChtTQU5EQk9YX0VYSVRfUkVBU09OX1RJTUVPVVQQAhInCiNTQU5EQk9YX0VYSVRfUkVBU09OX01FTU9SWV9FWENFRURFRBADEiUKIVNBTkRCT1hfRVhJVF9SRUFTT05fUlVOVElNRV9FUlJPUhAEEiYKIlNBTkRCT1hfRVhJVF9SRUFTT05fSU1QT1JUX0JMT0NLRUQQBSqVAQoNUGFyYW1ldGVyVHlwZRIeChpQQVJBTUVURVJfVFlQRV9VTlNQRUNJRklFRBAAEhYKElBBUkFNRVRFUl9UWVBFX0lOVBABEhgKFFBBUkFNRVRFUl9UWVBFX0ZMT0FUEAISFwoTUEFSQU1FVEVSX1RZUEVfQk9PTBADEhkKFVBBUkFNRVRFUl9UWVBFX1NUUklORxAEKqADChFGdW5kYW1lbnRhbE1ldHJpYxIiCh5GVU5EQU1FTlRBTF9NRVRSSUNfVU5TUEVDSUZJRUQQABIhCh1GVU5EQU1FTlRBTF9NRVRSSUNfTUFSS0VUX0NBUBABEh8KG0ZVTkRBTUVOVEFMX01FVFJJQ19QRV9SQVRJTxACEh8KG0ZVTkRBTUVOVEFMX01FVFJJQ19QQl9SQVRJTxADEiUKIUZVTkRBTUVOVEFMX01FVFJJQ19ESVZJREVORF9ZSUVMRBAEEhoKFkZVTkRBTUVOVEFMX01FVFJJQ19FUFMQBRIbChdGVU5EQU1FTlRBTF9NRVRSSUNfQkVUQRAGEhoKFkZVTkRBTUVOVEFMX01FVFJJQ19ST0UQBxIlCiFGVU5EQU1FTlRBTF9NRVRSSUNfREVCVF9UT19FUVVJVFkQCBIcChhGVU5EQU1FTlRBTF9NRVRSSUNfUFJJQ0UQCRIgChxGVU5EQU1FTlRBTF9NRVRSSUNfWUVBUl9ISUdIEAoSHwobRlVOREFNRU5UQUxfTUVUUklDX1lFQVJfTE9XEAsyywgKEUluZGljYXRvcnNTZXJ2aWNlEnsKEENvbXB1dGVJbmRpY2F0b3ISMi54c3RvY2tzdHJhdC5pbmRpY2F0b3JzLnYxLkNvbXB1dGVJbmRpY2F0b3JSZXF1ZXN0GjMueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5Db21wdXRlSW5kaWNhdG9yUmVzcG9uc2USdQoORXhlY3V0ZUZvcm11bGESMC54c3RvY2tzdHJhdC5pbmRpY2F0b3JzLnYxLkV4ZWN1dGVGb3JtdWxhUmVxdWVzdBoxLnhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEuRXhlY3V0ZUZvcm11bGFSZXNwb25zZRJ1Cg5MaXN0SW5kaWNhdG9ycxIwLnhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEuTGlzdEluZGljYXRvcnNSZXF1ZXN0GjEueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5MaXN0SW5kaWNhdG9yc1Jlc3BvbnNlEngKD1JlZ2lzdGVyRm9ybXVsYRIxLnhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEuUmVnaXN0ZXJGb3JtdWxhUmVxdWVzdBoyLnhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEuUmVnaXN0ZXJGb3JtdWxhUmVzcG9uc2USaAoKR2V0Rm9ybXVsYRIsLnhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEuR2V0Rm9ybXVsYVJlcXVlc3QaLC54c3RvY2tzdHJhdC5pbmRpY2F0b3JzLnYxLkZvcm11bGFEZWZpbml0aW9uEm8KDExpc3RGb3JtdWxhcxIuLnhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEuTGlzdEZvcm11bGFzUmVxdWVzdBovLnhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEuTGlzdEZvcm11bGFzUmVzcG9uc2UScgoNVXBkYXRlRm9ybXVsYRIvLnhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEuVXBkYXRlRm9ybXVsYVJlcXVlc3QaMC54c3RvY2tzdHJhdC5pbmRpY2F0b3JzLnYxLlVwZGF0ZUZvcm11bGFSZXNwb25zZRJyCg1EZWxldGVGb3JtdWxhEi8ueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5EZWxldGVGb3JtdWxhUmVxdWVzdBowLnhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEuRGVsZXRlRm9ybXVsYVJlc3BvbnNlEo0BChZMaXN0RnVuZGFtZW50YWxNZXRyaWNzEjgueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5MaXN0RnVuZGFtZW50YWxNZXRyaWNzUmVxdWVzdBo5LnhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEuTGlzdEZ1bmRhbWVudGFsTWV0cmljc1Jlc3BvbnNlQkRaQmdpdGh1Yi5jb20veHN0b2Nrc3RyYXQvY29udHJhY3RzL2dlbi9nby9pbmRpY2F0b3JzL3YxO2luZGljYXRvcnN2MWIGcHJvdG8z", [file_google_protobuf_timestamp, file_google_protobuf_struct, file_google_protobuf_field_mask, file_common_v1_common]);
+  fileDesc("Ch5pbmRpY2F0b3JzL3YxL2luZGljYXRvcnMucHJvdG8SGXhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEijwIKF0NvbXB1dGVJbmRpY2F0b3JSZXF1ZXN0EhEKCWluZGljYXRvchgBIAEoCRIOCgZ2YWx1ZXMYAiADKAESTgoGcGFyYW1zGAMgAygLMj4ueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5Db21wdXRlSW5kaWNhdG9yUmVxdWVzdC5QYXJhbXNFbnRyeRIvCgVyYW5nZRgEIAEoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2USDgoGc3ltYm9sGAUgASgJEhEKCXRpbWVmcmFtZRgGIAEoCRotCgtQYXJhbXNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAE6AjgBIvUBChhDb21wdXRlSW5kaWNhdG9yUmVzcG9uc2USOQoGcmVzdWx0GAEgAygLMikueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5JbmRpY2F0b3JQb2ludBIRCglpbmRpY2F0b3IYAiABKAkSWAoLcGFyYW1zX3VzZWQYAyADKAsyQy54c3RvY2tzdHJhdC5pbmRpY2F0b3JzLnYxLkNvbXB1dGVJbmRpY2F0b3JSZXNwb25zZS5QYXJhbXNVc2VkRW50cnkaMQoPUGFyYW1zVXNlZEVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoAToCOAEivAEKDkluZGljYXRvclBvaW50EigKBHRpbWUYASABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEg0KBXZhbHVlGAIgASgBEkMKBWV4dHJhGAMgAygLMjQueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5JbmRpY2F0b3JQb2ludC5FeHRyYUVudHJ5GiwKCkV4dHJhRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgBOgI4ASKQAwoVRXhlY3V0ZUZvcm11bGFSZXF1ZXN0EhIKCmZvcm11bGFfaWQYASABKAkSFgoOZm9ybXVsYV9zb3VyY2UYAiABKAkSKwoKaW5wdXRfZGF0YRgDIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSRgoDZW52GAQgAygLMjkueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5FeGVjdXRlRm9ybXVsYVJlcXVlc3QuRW52RW50cnkSGwoTdGltZW91dF9tc19vdmVycmlkZRgFIAEoBRIdChVtZW1vcnlfYnl0ZXNfb3ZlcnJpZGUYBiABKAMSLQoMaW5wdXRfcGFyYW1zGAcgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBI/CgpwYXJhbWV0ZXJzGAggAygLMisueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5Gb3JtdWxhUGFyYW1ldGVyGioKCEVudkVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEixAIKFkV4ZWN1dGVGb3JtdWxhUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBInCgZvdXRwdXQYAiABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0Eg4KBnN0ZG91dBgDIAEoCRIOCgZzdGRlcnIYBCABKAkSFAoMZXhlY3V0aW9uX21zGAUgASgDEhkKEW1lbW9yeV91c2VkX2J5dGVzGAYgASgDEg0KBWVycm9yGAcgASgJEkEKC2V4aXRfcmVhc29uGAggASgOMiwueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5TYW5kYm94RXhpdFJlYXNvbhJNChBwYXJhbWV0ZXJfZXJyb3JzGAkgAygLMjMueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5QYXJhbWV0ZXJWYWxpZGF0aW9uRXJyb3Ii4gEKEEZvcm11bGFQYXJhbWV0ZXISDAoEbmFtZRgBIAEoCRI2CgR0eXBlGAIgASgOMigueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5QYXJhbWV0ZXJUeXBlEi0KDWRlZmF1bHRfdmFsdWUYAyABKAsyFi5nb29nbGUucHJvdG9idWYuVmFsdWUSEwoLZGVzY3JpcHRpb24YBCABKAkSEAoIcmVxdWlyZWQYBSABKAgSEAoDbWluGAYgASgBSACIAQESEAoDbWF4GAcgASgBSAGIAQFCBgoEX21pbkIGCgRfbWF4IjIKDUZvcm11bGFPdXRwdXQSDAoEbmFtZRgBIAEoCRITCgtkZXNjcmlwdGlvbhgCIAEoCSI4ChhQYXJhbWV0ZXJWYWxpZGF0aW9uRXJyb3ISDAoEbmFtZRgBIAEoCRIOCgZyZWFzb24YAiABKAkijwUKEUZvcm11bGFEZWZpbml0aW9uEhIKCmZvcm11bGFfaWQYASABKAkSDAoEbmFtZRgCIAEoCRITCgtkZXNjcmlwdGlvbhgDIAEoCRIOCgZzb3VyY2UYBCABKAkSDgoGYXV0aG9yGAUgASgJEi4KCmNyZWF0ZWRfYXQYBiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnVwZGF0ZWRfYXQYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhUKCWlzX3B1YmxpYxgIIAEoCEICGAESUwoMaW5wdXRfc2NoZW1hGAkgAygLMj0ueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5Gb3JtdWxhRGVmaW5pdGlvbi5JbnB1dFNjaGVtYUVudHJ5Ej8KCnBhcmFtZXRlcnMYCiADKAsyKy54c3RvY2tzdHJhdC5pbmRpY2F0b3JzLnYxLkZvcm11bGFQYXJhbWV0ZXISOQoHb3V0cHV0cxgLIAMoCzIoLnhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEuRm9ybXVsYU91dHB1dBIVCg13YXJtdXBfcGVyaW9kGAwgASgFEg8KB2RlbGV0ZWQYDSABKAgSSAoSZnVuZGFtZW50YWxfaW5wdXRzGA4gAygOMiwueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5GdW5kYW1lbnRhbE1ldHJpYxI1CgZvcmlnaW4YDyABKAsyJS54c3RvY2tzdHJhdC5jb21tb24udjEuVGVtcGxhdGVPcmlnaW4aMgoQSW5wdXRTY2hlbWFFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIhcKFUxpc3RJbmRpY2F0b3JzUmVxdWVzdCJWChZMaXN0SW5kaWNhdG9yc1Jlc3BvbnNlEjwKCmluZGljYXRvcnMYASADKAsyKC54c3RvY2tzdHJhdC5pbmRpY2F0b3JzLnYxLkluZGljYXRvck1ldGEiZAoNSW5kaWNhdG9yTWV0YRIMCgRuYW1lGAEgASgJEhMKC2Rlc2NyaXB0aW9uGAIgASgJEhcKD3JlcXVpcmVkX3BhcmFtcxgDIAMoCRIXCg9vcHRpb25hbF9wYXJhbXMYBCADKAki4QMKFlJlZ2lzdGVyRm9ybXVsYVJlcXVlc3QSDAoEbmFtZRgBIAEoCRITCgtkZXNjcmlwdGlvbhgCIAEoCRIOCgZzb3VyY2UYAyABKAkSFQoJaXNfcHVibGljGAQgASgIQgIYARJYCgxpbnB1dF9zY2hlbWEYBSADKAsyQi54c3RvY2tzdHJhdC5pbmRpY2F0b3JzLnYxLlJlZ2lzdGVyRm9ybXVsYVJlcXVlc3QuSW5wdXRTY2hlbWFFbnRyeRISCgZhdXRob3IYBiABKAlCAhgBEj8KCnBhcmFtZXRlcnMYByADKAsyKy54c3RvY2tzdHJhdC5pbmRpY2F0b3JzLnYxLkZvcm11bGFQYXJhbWV0ZXISOQoHb3V0cHV0cxgIIAMoCzIoLnhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEuRm9ybXVsYU91dHB1dBIVCg13YXJtdXBfcGVyaW9kGAkgASgFEkgKEmZ1bmRhbWVudGFsX2lucHV0cxgKIAMoDjIsLnhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEuRnVuZGFtZW50YWxNZXRyaWMaMgoQSW5wdXRTY2hlbWFFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIi0KF1JlZ2lzdGVyRm9ybXVsYVJlc3BvbnNlEhIKCmZvcm11bGFfaWQYASABKAkiJwoRR2V0Rm9ybXVsYVJlcXVlc3QSEgoKZm9ybXVsYV9pZBgBIAEoCSJwChNMaXN0Rm9ybXVsYXNSZXF1ZXN0EhUKDWF1dGhvcl9maWx0ZXIYASABKAkSGgoOaW5jbHVkZV9wdWJsaWMYAiABKAhCAhgBEhEKCXBhZ2Vfc2l6ZRgDIAEoBRITCgtwYWdlX29mZnNldBgEIAEoBSJrChRMaXN0Rm9ybXVsYXNSZXNwb25zZRI+Cghmb3JtdWxhcxgBIAMoCzIsLnhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEuRm9ybXVsYURlZmluaXRpb24SEwoLdG90YWxfY291bnQYAiABKAUilwMKFFVwZGF0ZUZvcm11bGFSZXF1ZXN0EhIKCmZvcm11bGFfaWQYASABKAkSEwoHdXNlcl9pZBgCIAEoCUICGAESDAoEbmFtZRgDIAEoCRITCgtkZXNjcmlwdGlvbhgEIAEoCRIOCgZzb3VyY2UYBSABKAkSFQoJaXNfcHVibGljGAYgASgIQgIYARI/CgpwYXJhbWV0ZXJzGAcgAygLMisueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5Gb3JtdWxhUGFyYW1ldGVyEjkKB291dHB1dHMYCCADKAsyKC54c3RvY2tzdHJhdC5pbmRpY2F0b3JzLnYxLkZvcm11bGFPdXRwdXQSFQoNd2FybXVwX3BlcmlvZBgJIAEoBRIvCgt1cGRhdGVfbWFzaxgKIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5GaWVsZE1hc2sSSAoSZnVuZGFtZW50YWxfaW5wdXRzGAsgAygOMiwueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5GdW5kYW1lbnRhbE1ldHJpYyJWChVVcGRhdGVGb3JtdWxhUmVzcG9uc2USPQoHZm9ybXVsYRgBIAEoCzIsLnhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEuRm9ybXVsYURlZmluaXRpb24iPwoURGVsZXRlRm9ybXVsYVJlcXVlc3QSEgoKZm9ybXVsYV9pZBgBIAEoCRITCgd1c2VyX2lkGAIgASgJQgIYASIoChVEZWxldGVGb3JtdWxhUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCCIfCh1MaXN0RnVuZGFtZW50YWxNZXRyaWNzUmVxdWVzdCJ4ChVGdW5kYW1lbnRhbE1ldHJpY0luZm8SPAoGbWV0cmljGAEgASgOMiwueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5GdW5kYW1lbnRhbE1ldHJpYxIQCghkYXRhX2tleRgCIAEoCRIPCgdtZWFuaW5nGAMgASgJImMKHkxpc3RGdW5kYW1lbnRhbE1ldHJpY3NSZXNwb25zZRJBCgdtZXRyaWNzGAEgAygLMjAueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5GdW5kYW1lbnRhbE1ldHJpY0luZm8iiAEKD0Zvcm11bGFUZW1wbGF0ZRIxCgRtZXRhGAEgASgLMiMueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRlbXBsYXRlTWV0YRJCCgdwYXlsb2FkGAIgASgLMjEueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5SZWdpc3RlckZvcm11bGFSZXF1ZXN0IhYKFExpc3RUZW1wbGF0ZXNSZXF1ZXN0IlYKFUxpc3RUZW1wbGF0ZXNSZXNwb25zZRI9Cgl0ZW1wbGF0ZXMYASADKAsyKi54c3RvY2tzdHJhdC5pbmRpY2F0b3JzLnYxLkZvcm11bGFUZW1wbGF0ZSKSAQoVTWFuYWdlVGVtcGxhdGVSZXF1ZXN0EjsKCW9wZXJhdGlvbhgBIAEoDjIoLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UZW1wbGF0ZU9wZXJhdGlvbhI8Cgh0ZW1wbGF0ZRgCIAEoCzIqLnhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEuRm9ybXVsYVRlbXBsYXRlIloKGkluc3RhbnRpYXRlVGVtcGxhdGVSZXF1ZXN0EhMKC3RlbXBsYXRlX2lkGAEgASgJEhQKDHRlbXBsYXRlX2lkcxgCIAMoCRIRCglpbnRlbnRfaWQYAyABKAkijAIKG0luc3RhbnRpYXRlVGVtcGxhdGVSZXNwb25zZRI9Cgdmb3JtdWxhGAEgASgLMiwueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5Gb3JtdWxhRGVmaW5pdGlvbhJxChdmb3JtdWxhX2lkc19ieV90ZW1wbGF0ZRgCIAMoCzJQLnhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEuSW5zdGFudGlhdGVUZW1wbGF0ZVJlc3BvbnNlLkZvcm11bGFJZHNCeVRlbXBsYXRlRW50cnkaOwoZRm9ybXVsYUlkc0J5VGVtcGxhdGVFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIkEKHFJlc29sdmVUZW1wbGF0ZUludGVudFJlcXVlc3QSEQoJaW50ZW50X2lkGAEgASgJEg4KBmNvbW1pdBgCIAEoCCIxCh1SZXNvbHZlVGVtcGxhdGVJbnRlbnRSZXNwb25zZRIQCghhZmZlY3RlZBgBIAEoBSryAQoRU2FuZGJveEV4aXRSZWFzb24SIwofU0FOREJPWF9FWElUX1JFQVNPTl9VTlNQRUNJRklFRBAAEh8KG1NBTkRCT1hfRVhJVF9SRUFTT05fU1VDQ0VTUxABEh8KG1NBTkRCT1hfRVhJVF9SRUFTT05fVElNRU9VVBACEicKI1NBTkRCT1hfRVhJVF9SRUFTT05fTUVNT1JZX0VYQ0VFREVEEAMSJQohU0FOREJPWF9FWElUX1JFQVNPTl9SVU5USU1FX0VSUk9SEAQSJgoiU0FOREJPWF9FWElUX1JFQVNPTl9JTVBPUlRfQkxPQ0tFRBAFKpUBCg1QYXJhbWV0ZXJUeXBlEh4KGlBBUkFNRVRFUl9UWVBFX1VOU1BFQ0lGSUVEEAASFgoSUEFSQU1FVEVSX1RZUEVfSU5UEAESGAoUUEFSQU1FVEVSX1RZUEVfRkxPQVQQAhIXChNQQVJBTUVURVJfVFlQRV9CT09MEAMSGQoVUEFSQU1FVEVSX1RZUEVfU1RSSU5HEAQqoAMKEUZ1bmRhbWVudGFsTWV0cmljEiIKHkZVTkRBTUVOVEFMX01FVFJJQ19VTlNQRUNJRklFRBAAEiEKHUZVTkRBTUVOVEFMX01FVFJJQ19NQVJLRVRfQ0FQEAESHwobRlVOREFNRU5UQUxfTUVUUklDX1BFX1JBVElPEAISHwobRlVOREFNRU5UQUxfTUVUUklDX1BCX1JBVElPEAMSJQohRlVOREFNRU5UQUxfTUVUUklDX0RJVklERU5EX1lJRUxEEAQSGgoWRlVOREFNRU5UQUxfTUVUUklDX0VQUxAFEhsKF0ZVTkRBTUVOVEFMX01FVFJJQ19CRVRBEAYSGgoWRlVOREFNRU5UQUxfTUVUUklDX1JPRRAHEiUKIUZVTkRBTUVOVEFMX01FVFJJQ19ERUJUX1RPX0VRVUlUWRAIEhwKGEZVTkRBTUVOVEFMX01FVFJJQ19QUklDRRAJEiAKHEZVTkRBTUVOVEFMX01FVFJJQ19ZRUFSX0hJR0gQChIfChtGVU5EQU1FTlRBTF9NRVRSSUNfWUVBUl9MT1cQCzLDDAoRSW5kaWNhdG9yc1NlcnZpY2USewoQQ29tcHV0ZUluZGljYXRvchIyLnhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEuQ29tcHV0ZUluZGljYXRvclJlcXVlc3QaMy54c3RvY2tzdHJhdC5pbmRpY2F0b3JzLnYxLkNvbXB1dGVJbmRpY2F0b3JSZXNwb25zZRJ1Cg5FeGVjdXRlRm9ybXVsYRIwLnhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEuRXhlY3V0ZUZvcm11bGFSZXF1ZXN0GjEueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5FeGVjdXRlRm9ybXVsYVJlc3BvbnNlEnUKDkxpc3RJbmRpY2F0b3JzEjAueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5MaXN0SW5kaWNhdG9yc1JlcXVlc3QaMS54c3RvY2tzdHJhdC5pbmRpY2F0b3JzLnYxLkxpc3RJbmRpY2F0b3JzUmVzcG9uc2USeAoPUmVnaXN0ZXJGb3JtdWxhEjEueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5SZWdpc3RlckZvcm11bGFSZXF1ZXN0GjIueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5SZWdpc3RlckZvcm11bGFSZXNwb25zZRJoCgpHZXRGb3JtdWxhEiwueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5HZXRGb3JtdWxhUmVxdWVzdBosLnhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEuRm9ybXVsYURlZmluaXRpb24SbwoMTGlzdEZvcm11bGFzEi4ueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5MaXN0Rm9ybXVsYXNSZXF1ZXN0Gi8ueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5MaXN0Rm9ybXVsYXNSZXNwb25zZRJyCg1VcGRhdGVGb3JtdWxhEi8ueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5VcGRhdGVGb3JtdWxhUmVxdWVzdBowLnhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEuVXBkYXRlRm9ybXVsYVJlc3BvbnNlEnIKDURlbGV0ZUZvcm11bGESLy54c3RvY2tzdHJhdC5pbmRpY2F0b3JzLnYxLkRlbGV0ZUZvcm11bGFSZXF1ZXN0GjAueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5EZWxldGVGb3JtdWxhUmVzcG9uc2USjQEKFkxpc3RGdW5kYW1lbnRhbE1ldHJpY3MSOC54c3RvY2tzdHJhdC5pbmRpY2F0b3JzLnYxLkxpc3RGdW5kYW1lbnRhbE1ldHJpY3NSZXF1ZXN0GjkueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5MaXN0RnVuZGFtZW50YWxNZXRyaWNzUmVzcG9uc2UScgoNTGlzdFRlbXBsYXRlcxIvLnhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEuTGlzdFRlbXBsYXRlc1JlcXVlc3QaMC54c3RvY2tzdHJhdC5pbmRpY2F0b3JzLnYxLkxpc3RUZW1wbGF0ZXNSZXNwb25zZRJuCg5NYW5hZ2VUZW1wbGF0ZRIwLnhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEuTWFuYWdlVGVtcGxhdGVSZXF1ZXN0GioueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5Gb3JtdWxhVGVtcGxhdGUShAEKE0luc3RhbnRpYXRlVGVtcGxhdGUSNS54c3RvY2tzdHJhdC5pbmRpY2F0b3JzLnYxLkluc3RhbnRpYXRlVGVtcGxhdGVSZXF1ZXN0GjYueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5JbnN0YW50aWF0ZVRlbXBsYXRlUmVzcG9uc2USigEKFVJlc29sdmVUZW1wbGF0ZUludGVudBI3LnhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEuUmVzb2x2ZVRlbXBsYXRlSW50ZW50UmVxdWVzdBo4LnhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEuUmVzb2x2ZVRlbXBsYXRlSW50ZW50UmVzcG9uc2VCRFpCZ2l0aHViLmNvbS94c3RvY2tzdHJhdC9jb250cmFjdHMvZ2VuL2dvL2luZGljYXRvcnMvdjE7aW5kaWNhdG9yc3YxYgZwcm90bzM", [file_google_protobuf_timestamp, file_google_protobuf_struct, file_google_protobuf_field_mask, file_common_v1_common]);
 
 /**
  * @generated from message xstockstrat.indicators.v1.ComputeIndicatorRequest
@@ -394,7 +394,10 @@ export type FormulaDefinition = Message<"xstockstrat.indicators.v1.FormulaDefini
   updatedAt?: Timestamp | undefined;
 
   /**
-   * @generated from field: bool is_public = 8;
+   * DEPRECATED: ignored, formulas are private to their author (feature 224); always false.
+   *
+   * @generated from field: bool is_public = 8 [deprecated = true];
+   * @deprecated
    */
   isPublic: boolean;
 
@@ -439,6 +442,13 @@ export type FormulaDefinition = Message<"xstockstrat.indicators.v1.FormulaDefini
    * @generated from field: repeated xstockstrat.indicators.v1.FundamentalMetric fundamental_inputs = 14;
    */
   fundamentalInputs: FundamentalMetric[];
+
+  /**
+   * set when instantiated from a template (feature 224)
+   *
+   * @generated from field: xstockstrat.common.v1.TemplateOrigin origin = 15;
+   */
+  origin?: TemplateOrigin | undefined;
 };
 
 /**
@@ -530,7 +540,10 @@ export type RegisterFormulaRequest = Message<"xstockstrat.indicators.v1.Register
   source: string;
 
   /**
-   * @generated from field: bool is_public = 4;
+   * DEPRECATED: ignored, formulas are private to their author (feature 224).
+   *
+   * @generated from field: bool is_public = 4 [deprecated = true];
+   * @deprecated
    */
   isPublic: boolean;
 
@@ -540,9 +553,10 @@ export type RegisterFormulaRequest = Message<"xstockstrat.indicators.v1.Register
   inputSchema: { [key: string]: string };
 
   /**
-   * set by BFF from JWT claims; stored immutably
+   * DEPRECATED: ignored; author is the x-user-id header (feature 224).
    *
-   * @generated from field: string author = 6;
+   * @generated from field: string author = 6 [deprecated = true];
+   * @deprecated
    */
   author: string;
 
@@ -619,16 +633,17 @@ export const GetFormulaRequestSchema: GenMessage<GetFormulaRequest> = /*@__PURE_
  */
 export type ListFormulasRequest = Message<"xstockstrat.indicators.v1.ListFormulasRequest"> & {
   /**
-   * if non-empty, return only formulas where author == author_filter
+   * owner selector honoured only for an ADMIN caller; ignored otherwise (feature 224)
    *
    * @generated from field: string author_filter = 1;
    */
   authorFilter: string;
 
   /**
-   * if true, include all public formulas regardless of author_filter
+   * DEPRECATED: ignored, formulas are private to their author (feature 224).
    *
-   * @generated from field: bool include_public = 2;
+   * @generated from field: bool include_public = 2 [deprecated = true];
+   * @deprecated
    */
   includePublic: boolean;
 
@@ -709,7 +724,10 @@ export type UpdateFormulaRequest = Message<"xstockstrat.indicators.v1.UpdateForm
   source: string;
 
   /**
-   * @generated from field: bool is_public = 6;
+   * DEPRECATED: ignored, formulas are private to their author (feature 224).
+   *
+   * @generated from field: bool is_public = 6 [deprecated = true];
+   * @deprecated
    */
   isPublic: boolean;
 
@@ -877,6 +895,180 @@ export type ListFundamentalMetricsResponse = Message<"xstockstrat.indicators.v1.
  */
 export const ListFundamentalMetricsResponseSchema: GenMessage<ListFundamentalMetricsResponse> = /*@__PURE__*/
   messageDesc(file_indicators_v1_indicators, 23);
+
+/**
+ * feature 224 — formula template catalog.
+ *
+ * @generated from message xstockstrat.indicators.v1.FormulaTemplate
+ */
+export type FormulaTemplate = Message<"xstockstrat.indicators.v1.FormulaTemplate"> & {
+  /**
+   * @generated from field: xstockstrat.common.v1.TemplateMeta meta = 1;
+   */
+  meta?: TemplateMeta | undefined;
+
+  /**
+   * The deprecated is_public (4) and author (6) inside payload are ignored on instantiate: the
+   * instance is private and its author is the instantiating caller's x-user-id.
+   *
+   * @generated from field: xstockstrat.indicators.v1.RegisterFormulaRequest payload = 2;
+   */
+  payload?: RegisterFormulaRequest | undefined;
+};
+
+/**
+ * Describes the message xstockstrat.indicators.v1.FormulaTemplate.
+ * Use `create(FormulaTemplateSchema)` to create a new message.
+ */
+export const FormulaTemplateSchema: GenMessage<FormulaTemplate> = /*@__PURE__*/
+  messageDesc(file_indicators_v1_indicators, 24);
+
+/**
+ * @generated from message xstockstrat.indicators.v1.ListTemplatesRequest
+ */
+export type ListTemplatesRequest = Message<"xstockstrat.indicators.v1.ListTemplatesRequest"> & {
+};
+
+/**
+ * Describes the message xstockstrat.indicators.v1.ListTemplatesRequest.
+ * Use `create(ListTemplatesRequestSchema)` to create a new message.
+ */
+export const ListTemplatesRequestSchema: GenMessage<ListTemplatesRequest> = /*@__PURE__*/
+  messageDesc(file_indicators_v1_indicators, 25);
+
+/**
+ * @generated from message xstockstrat.indicators.v1.ListTemplatesResponse
+ */
+export type ListTemplatesResponse = Message<"xstockstrat.indicators.v1.ListTemplatesResponse"> & {
+  /**
+   * @generated from field: repeated xstockstrat.indicators.v1.FormulaTemplate templates = 1;
+   */
+  templates: FormulaTemplate[];
+};
+
+/**
+ * Describes the message xstockstrat.indicators.v1.ListTemplatesResponse.
+ * Use `create(ListTemplatesResponseSchema)` to create a new message.
+ */
+export const ListTemplatesResponseSchema: GenMessage<ListTemplatesResponse> = /*@__PURE__*/
+  messageDesc(file_indicators_v1_indicators, 26);
+
+/**
+ * @generated from message xstockstrat.indicators.v1.ManageTemplateRequest
+ */
+export type ManageTemplateRequest = Message<"xstockstrat.indicators.v1.ManageTemplateRequest"> & {
+  /**
+   * @generated from field: xstockstrat.common.v1.TemplateOperation operation = 1;
+   */
+  operation: TemplateOperation;
+
+  /**
+   * @generated from field: xstockstrat.indicators.v1.FormulaTemplate template = 2;
+   */
+  template?: FormulaTemplate | undefined;
+};
+
+/**
+ * Describes the message xstockstrat.indicators.v1.ManageTemplateRequest.
+ * Use `create(ManageTemplateRequestSchema)` to create a new message.
+ */
+export const ManageTemplateRequestSchema: GenMessage<ManageTemplateRequest> = /*@__PURE__*/
+  messageDesc(file_indicators_v1_indicators, 27);
+
+/**
+ * @generated from message xstockstrat.indicators.v1.InstantiateTemplateRequest
+ */
+export type InstantiateTemplateRequest = Message<"xstockstrat.indicators.v1.InstantiateTemplateRequest"> & {
+  /**
+   * @generated from field: string template_id = 1;
+   */
+  templateId: string;
+
+  /**
+   * Saga-only (internal, SAN-bound xstockstrat-analysis): copy several templates as hidden
+   * pending rows under intent_id, resolved later by ResolveTemplateIntent.
+   *
+   * @generated from field: repeated string template_ids = 2;
+   */
+  templateIds: string[];
+
+  /**
+   * @generated from field: string intent_id = 3;
+   */
+  intentId: string;
+};
+
+/**
+ * Describes the message xstockstrat.indicators.v1.InstantiateTemplateRequest.
+ * Use `create(InstantiateTemplateRequestSchema)` to create a new message.
+ */
+export const InstantiateTemplateRequestSchema: GenMessage<InstantiateTemplateRequest> = /*@__PURE__*/
+  messageDesc(file_indicators_v1_indicators, 28);
+
+/**
+ * @generated from message xstockstrat.indicators.v1.InstantiateTemplateResponse
+ */
+export type InstantiateTemplateResponse = Message<"xstockstrat.indicators.v1.InstantiateTemplateResponse"> & {
+  /**
+   * @generated from field: xstockstrat.indicators.v1.FormulaDefinition formula = 1;
+   */
+  formula?: FormulaDefinition | undefined;
+
+  /**
+   * saga path: template_id -> new formula_id
+   *
+   * @generated from field: map<string, string> formula_ids_by_template = 2;
+   */
+  formulaIdsByTemplate: { [key: string]: string };
+};
+
+/**
+ * Describes the message xstockstrat.indicators.v1.InstantiateTemplateResponse.
+ * Use `create(InstantiateTemplateResponseSchema)` to create a new message.
+ */
+export const InstantiateTemplateResponseSchema: GenMessage<InstantiateTemplateResponse> = /*@__PURE__*/
+  messageDesc(file_indicators_v1_indicators, 29);
+
+/**
+ * @generated from message xstockstrat.indicators.v1.ResolveTemplateIntentRequest
+ */
+export type ResolveTemplateIntentRequest = Message<"xstockstrat.indicators.v1.ResolveTemplateIntentRequest"> & {
+  /**
+   * @generated from field: string intent_id = 1;
+   */
+  intentId: string;
+
+  /**
+   * true = make the pending copies visible; false = delete them
+   *
+   * @generated from field: bool commit = 2;
+   */
+  commit: boolean;
+};
+
+/**
+ * Describes the message xstockstrat.indicators.v1.ResolveTemplateIntentRequest.
+ * Use `create(ResolveTemplateIntentRequestSchema)` to create a new message.
+ */
+export const ResolveTemplateIntentRequestSchema: GenMessage<ResolveTemplateIntentRequest> = /*@__PURE__*/
+  messageDesc(file_indicators_v1_indicators, 30);
+
+/**
+ * @generated from message xstockstrat.indicators.v1.ResolveTemplateIntentResponse
+ */
+export type ResolveTemplateIntentResponse = Message<"xstockstrat.indicators.v1.ResolveTemplateIntentResponse"> & {
+  /**
+   * @generated from field: int32 affected = 1;
+   */
+  affected: number;
+};
+
+/**
+ * Describes the message xstockstrat.indicators.v1.ResolveTemplateIntentResponse.
+ * Use `create(ResolveTemplateIntentResponseSchema)` to create a new message.
+ */
+export const ResolveTemplateIntentResponseSchema: GenMessage<ResolveTemplateIntentResponse> = /*@__PURE__*/
+  messageDesc(file_indicators_v1_indicators, 31);
 
 /**
  * @generated from enum xstockstrat.indicators.v1.SandboxExitReason
@@ -1130,6 +1322,44 @@ export const IndicatorsService: GenService<{
     methodKind: "unary";
     input: typeof ListFundamentalMetricsRequestSchema;
     output: typeof ListFundamentalMetricsResponseSchema;
+  },
+  /**
+   * Template catalog (feature 224). List/read: any authenticated caller. Manage: ADMIN only.
+   *
+   * @generated from rpc xstockstrat.indicators.v1.IndicatorsService.ListTemplates
+   */
+  listTemplates: {
+    methodKind: "unary";
+    input: typeof ListTemplatesRequestSchema;
+    output: typeof ListTemplatesResponseSchema;
+  },
+  /**
+   * @generated from rpc xstockstrat.indicators.v1.IndicatorsService.ManageTemplate
+   */
+  manageTemplate: {
+    methodKind: "unary";
+    input: typeof ManageTemplateRequestSchema;
+    output: typeof FormulaTemplateSchema;
+  },
+  /**
+   * Copies a formula template into a private formula owned by the x-user-id caller.
+   *
+   * @generated from rpc xstockstrat.indicators.v1.IndicatorsService.InstantiateTemplate
+   */
+  instantiateTemplate: {
+    methodKind: "unary";
+    input: typeof InstantiateTemplateRequestSchema;
+    output: typeof InstantiateTemplateResponseSchema;
+  },
+  /**
+   * Internal (SAN-bound xstockstrat-analysis): commits or aborts a strategy-template saga's copies.
+   *
+   * @generated from rpc xstockstrat.indicators.v1.IndicatorsService.ResolveTemplateIntent
+   */
+  resolveTemplateIntent: {
+    methodKind: "unary";
+    input: typeof ResolveTemplateIntentRequestSchema;
+    output: typeof ResolveTemplateIntentResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_indicators_v1_indicators, 0);

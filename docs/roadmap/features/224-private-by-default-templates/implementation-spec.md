@@ -265,7 +265,7 @@ cd packages/proto && buf lint && buf breaking --against ".git#branch=feature/pri
 
 ### Step 2 — proto-gen: regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/` — modify (generated)

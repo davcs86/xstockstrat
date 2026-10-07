@@ -6,7 +6,7 @@
 // source: analysis/v1/analysis.proto
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SetStrategyLiveResponse = exports.SetStrategyLiveRequest = exports.ListStrategyDefinitionsResponse = exports.ListStrategyDefinitionsRequest = exports.GetStrategyRequest = exports.ManageStrategyRequest = exports.SectorParamOverride = exports.SectorValue = exports.StrategyDefinition = exports.StrategyComponent_ParamsEntry = exports.StrategyComponent = exports.GetStrategyReportRequest = exports.ListStrategiesResponse = exports.ListStrategiesRequest = exports.GetBacktestRequest = exports.ListBacktestsResponse = exports.BacktestRunSummary = exports.ListBacktestsRequest = exports.StrategyReport = exports.StrategyScore_ComponentScoresEntry = exports.StrategyScore = exports.ScoreStrategyRequest = exports.SymbolDiagnostics = exports.BarDiagnostic_IndicatorsEntry = exports.BarDiagnostic = exports.TradeRecord = exports.EquityPoint = exports.PortfolioCapitalSkip = exports.BacktestResult = exports.CoverageGap = exports.RunBacktestRequest = exports.FactorType = exports.SnapshotEventType = exports.OpportunityAction = exports.ReadinessState = exports.ReadinessRule = exports.ConditionState = exports.OpportunitySort = exports.OpportunityActionTag = exports.ScreenResultStatus = exports.ScreenKind = exports.Comparator = exports.StrategyOperation = exports.ComponentKind = exports.NoTradeReason = exports.BarAction = exports.FillModel = exports.SizingMode = exports.BacktestStatus = exports.protobufPackage = void 0;
-exports.AnalysisServiceClient = exports.AnalysisServiceService = exports.GetAttributionResponse = exports.SourceAttribution = exports.GetAttributionRequest = exports.QueryPnLPatternsResponse = exports.QueryPnLPatternsRequest = exports.PnLPatternFactor = exports.OrderSnapshot_IndicatorValuesEntry = exports.OrderSnapshot = exports.SignalEntry = exports.IndicatorValue = exports.NamedSeries = exports.ComponentSeries = exports.GetIndicatorSeriesResponse = exports.GetIndicatorSeriesRequest = exports.GetStrategyAnalyticsRequest = exports.SetOpportunityActionResponse = exports.SetOpportunityActionRequest = exports.GetWatchlistReadinessResponse = exports.GetWatchlistReadinessRequest = exports.WatchlistReadinessRow = exports.EvaluateReadinessResponse = exports.EvaluateReadinessRequest = exports.ListOpportunitiesResponse = exports.ListOpportunitiesRequest = exports.StrategyAnalytics = exports.SymbolReadiness = exports.ConditionEval = exports.SparklinePoint = exports.Opportunity = exports.FundamentalsScanSummary = exports.RunFundamentalsScanRequest = exports.ScreenSymbolsResponse = exports.ScreenSymbolsRequest = exports.ScreenResult_CriterionPassedEntry = exports.ScreenResult_CriterionRawValuesEntry = exports.ScreenResult_CriterionScoresEntry = exports.ScreenResult = exports.ScreenCriterion = void 0;
+exports.AnalysisServiceClient = exports.AnalysisServiceService = exports.InstantiateTemplateRequest = exports.ManageTemplateRequest = exports.ListTemplatesResponse = exports.ListTemplatesRequest = exports.StrategyTemplate = exports.GetAttributionResponse = exports.SourceAttribution = exports.GetAttributionRequest = exports.QueryPnLPatternsResponse = exports.QueryPnLPatternsRequest = exports.PnLPatternFactor = exports.OrderSnapshot_IndicatorValuesEntry = exports.OrderSnapshot = exports.SignalEntry = exports.IndicatorValue = exports.NamedSeries = exports.ComponentSeries = exports.GetIndicatorSeriesResponse = exports.GetIndicatorSeriesRequest = exports.GetStrategyAnalyticsRequest = exports.SetOpportunityActionResponse = exports.SetOpportunityActionRequest = exports.GetWatchlistReadinessResponse = exports.GetWatchlistReadinessRequest = exports.WatchlistReadinessRow = exports.EvaluateReadinessResponse = exports.EvaluateReadinessRequest = exports.ListOpportunitiesResponse = exports.ListOpportunitiesRequest = exports.StrategyAnalytics = exports.SymbolReadiness = exports.ConditionEval = exports.SparklinePoint = exports.Opportunity = exports.FundamentalsScanSummary = exports.RunFundamentalsScanRequest = exports.ScreenSymbolsResponse = exports.ScreenSymbolsRequest = exports.ScreenResult_CriterionPassedEntry = exports.ScreenResult_CriterionRawValuesEntry = exports.ScreenResult_CriterionScoresEntry = exports.ScreenResult = exports.ScreenCriterion = void 0;
 exports.backtestStatusFromJSON = backtestStatusFromJSON;
 exports.backtestStatusToJSON = backtestStatusToJSON;
 exports.backtestStatusToNumber = backtestStatusToNumber;
@@ -2939,6 +2939,7 @@ function createBaseStrategyScore() {
         evidenceSymbols: 0,
         evidenceDays: 0,
         provisional: false,
+        origin: undefined,
     };
 }
 exports.StrategyScore = {
@@ -2963,6 +2964,9 @@ exports.StrategyScore = {
         }
         if (message.provisional !== false) {
             writer.uint32(56).bool(message.provisional);
+        }
+        if (message.origin !== undefined) {
+            common_1.TemplateOrigin.encode(message.origin, writer.uint32(66).fork()).join();
         }
         return writer;
     },
@@ -3025,6 +3029,13 @@ exports.StrategyScore = {
                     message.provisional = reader.bool();
                     continue;
                 }
+                case 8: {
+                    if (tag !== 66) {
+                        break;
+                    }
+                    message.origin = common_1.TemplateOrigin.decode(reader, reader.uint32());
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -3068,6 +3079,7 @@ exports.StrategyScore = {
                     ? globalThis.Number(object.evidence_days)
                     : 0,
             provisional: isSet(object.provisional) ? globalThis.Boolean(object.provisional) : false,
+            origin: isSet(object.origin) ? common_1.TemplateOrigin.fromJSON(object.origin) : undefined,
         };
     },
     toJSON(message) {
@@ -3099,6 +3111,9 @@ exports.StrategyScore = {
         if (message.provisional !== false) {
             obj.provisional = message.provisional;
         }
+        if (message.origin !== undefined) {
+            obj.origin = common_1.TemplateOrigin.toJSON(message.origin);
+        }
         return obj;
     },
     create(base) {
@@ -3118,6 +3133,9 @@ exports.StrategyScore = {
         message.evidenceSymbols = object.evidenceSymbols ?? 0;
         message.evidenceDays = object.evidenceDays ?? 0;
         message.provisional = object.provisional ?? false;
+        message.origin = (object.origin !== undefined && object.origin !== null)
+            ? common_1.TemplateOrigin.fromPartial(object.origin)
+            : undefined;
         return message;
     },
 };
@@ -4344,6 +4362,7 @@ function createBaseStrategyDefinition() {
         userId: "",
         signalEligible: false,
         sectorParamOverrides: [],
+        origin: undefined,
     };
 }
 exports.StrategyDefinition = {
@@ -4392,6 +4411,9 @@ exports.StrategyDefinition = {
         }
         for (const v of message.sectorParamOverrides) {
             exports.SectorParamOverride.encode(v, writer.uint32(122).fork()).join();
+        }
+        if (message.origin !== undefined) {
+            common_1.TemplateOrigin.encode(message.origin, writer.uint32(130).fork()).join();
         }
         return writer;
     },
@@ -4507,6 +4529,13 @@ exports.StrategyDefinition = {
                     message.sectorParamOverrides.push(exports.SectorParamOverride.decode(reader, reader.uint32()));
                     continue;
                 }
+                case 16: {
+                    if (tag !== 130) {
+                        break;
+                    }
+                    message.origin = common_1.TemplateOrigin.decode(reader, reader.uint32());
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -4584,6 +4613,7 @@ exports.StrategyDefinition = {
                 : globalThis.Array.isArray(object?.sector_param_overrides)
                     ? object.sector_param_overrides.map((e) => exports.SectorParamOverride.fromJSON(e))
                     : [],
+            origin: isSet(object.origin) ? common_1.TemplateOrigin.fromJSON(object.origin) : undefined,
         };
     },
     toJSON(message) {
@@ -4633,6 +4663,9 @@ exports.StrategyDefinition = {
         if (message.sectorParamOverrides?.length) {
             obj.sectorParamOverrides = message.sectorParamOverrides.map((e) => exports.SectorParamOverride.toJSON(e));
         }
+        if (message.origin !== undefined) {
+            obj.origin = common_1.TemplateOrigin.toJSON(message.origin);
+        }
         return obj;
     },
     create(base) {
@@ -4655,6 +4688,9 @@ exports.StrategyDefinition = {
         message.userId = object.userId ?? "";
         message.signalEligible = object.signalEligible ?? false;
         message.sectorParamOverrides = object.sectorParamOverrides?.map((e) => exports.SectorParamOverride.fromPartial(e)) || [];
+        message.origin = (object.origin !== undefined && object.origin !== null)
+            ? common_1.TemplateOrigin.fromPartial(object.origin)
+            : undefined;
         return message;
     },
 };
@@ -4932,12 +4968,15 @@ exports.ManageStrategyRequest = {
     },
 };
 function createBaseGetStrategyRequest() {
-    return { strategyId: "" };
+    return { strategyId: "", ownerUserId: "" };
 }
 exports.GetStrategyRequest = {
     encode(message, writer = new wire_1.BinaryWriter()) {
         if (message.strategyId !== "") {
             writer.uint32(10).string(message.strategyId);
+        }
+        if (message.ownerUserId !== "") {
+            writer.uint32(18).string(message.ownerUserId);
         }
         return writer;
     },
@@ -4955,6 +4994,13 @@ exports.GetStrategyRequest = {
                     message.strategyId = reader.string();
                     continue;
                 }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.ownerUserId = reader.string();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -4970,12 +5016,20 @@ exports.GetStrategyRequest = {
                 : isSet(object.strategy_id)
                     ? globalThis.String(object.strategy_id)
                     : "",
+            ownerUserId: isSet(object.ownerUserId)
+                ? globalThis.String(object.ownerUserId)
+                : isSet(object.owner_user_id)
+                    ? globalThis.String(object.owner_user_id)
+                    : "",
         };
     },
     toJSON(message) {
         const obj = {};
         if (message.strategyId !== "") {
             obj.strategyId = message.strategyId;
+        }
+        if (message.ownerUserId !== "") {
+            obj.ownerUserId = message.ownerUserId;
         }
         return obj;
     },
@@ -4985,11 +5039,12 @@ exports.GetStrategyRequest = {
     fromPartial(object) {
         const message = createBaseGetStrategyRequest();
         message.strategyId = object.strategyId ?? "";
+        message.ownerUserId = object.ownerUserId ?? "";
         return message;
     },
 };
 function createBaseListStrategyDefinitionsRequest() {
-    return { includeInactive: false, pageSize: 0, pageOffset: 0 };
+    return { includeInactive: false, pageSize: 0, pageOffset: 0, ownerUserId: "" };
 }
 exports.ListStrategyDefinitionsRequest = {
     encode(message, writer = new wire_1.BinaryWriter()) {
@@ -5001,6 +5056,9 @@ exports.ListStrategyDefinitionsRequest = {
         }
         if (message.pageOffset !== 0) {
             writer.uint32(24).int32(message.pageOffset);
+        }
+        if (message.ownerUserId !== "") {
+            writer.uint32(34).string(message.ownerUserId);
         }
         return writer;
     },
@@ -5032,6 +5090,13 @@ exports.ListStrategyDefinitionsRequest = {
                     message.pageOffset = reader.int32();
                     continue;
                 }
+                case 4: {
+                    if (tag !== 34) {
+                        break;
+                    }
+                    message.ownerUserId = reader.string();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -5057,6 +5122,11 @@ exports.ListStrategyDefinitionsRequest = {
                 : isSet(object.page_offset)
                     ? globalThis.Number(object.page_offset)
                     : 0,
+            ownerUserId: isSet(object.ownerUserId)
+                ? globalThis.String(object.ownerUserId)
+                : isSet(object.owner_user_id)
+                    ? globalThis.String(object.owner_user_id)
+                    : "",
         };
     },
     toJSON(message) {
@@ -5070,6 +5140,9 @@ exports.ListStrategyDefinitionsRequest = {
         if (message.pageOffset !== 0) {
             obj.pageOffset = Math.round(message.pageOffset);
         }
+        if (message.ownerUserId !== "") {
+            obj.ownerUserId = message.ownerUserId;
+        }
         return obj;
     },
     create(base) {
@@ -5080,6 +5153,7 @@ exports.ListStrategyDefinitionsRequest = {
         message.includeInactive = object.includeInactive ?? false;
         message.pageSize = object.pageSize ?? 0;
         message.pageOffset = object.pageOffset ?? 0;
+        message.ownerUserId = object.ownerUserId ?? "";
         return message;
     },
 };
@@ -9863,6 +9937,318 @@ exports.GetAttributionResponse = {
         return message;
     },
 };
+function createBaseStrategyTemplate() {
+    return { meta: undefined, payload: undefined };
+}
+exports.StrategyTemplate = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.meta !== undefined) {
+            common_1.TemplateMeta.encode(message.meta, writer.uint32(10).fork()).join();
+        }
+        if (message.payload !== undefined) {
+            exports.StrategyDefinition.encode(message.payload, writer.uint32(18).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseStrategyTemplate();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.meta = common_1.TemplateMeta.decode(reader, reader.uint32());
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.payload = exports.StrategyDefinition.decode(reader, reader.uint32());
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            meta: isSet(object.meta) ? common_1.TemplateMeta.fromJSON(object.meta) : undefined,
+            payload: isSet(object.payload) ? exports.StrategyDefinition.fromJSON(object.payload) : undefined,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.meta !== undefined) {
+            obj.meta = common_1.TemplateMeta.toJSON(message.meta);
+        }
+        if (message.payload !== undefined) {
+            obj.payload = exports.StrategyDefinition.toJSON(message.payload);
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.StrategyTemplate.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseStrategyTemplate();
+        message.meta = (object.meta !== undefined && object.meta !== null)
+            ? common_1.TemplateMeta.fromPartial(object.meta)
+            : undefined;
+        message.payload = (object.payload !== undefined && object.payload !== null)
+            ? exports.StrategyDefinition.fromPartial(object.payload)
+            : undefined;
+        return message;
+    },
+};
+function createBaseListTemplatesRequest() {
+    return {};
+}
+exports.ListTemplatesRequest = {
+    encode(_, writer = new wire_1.BinaryWriter()) {
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseListTemplatesRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(_) {
+        return {};
+    },
+    toJSON(_) {
+        const obj = {};
+        return obj;
+    },
+    create(base) {
+        return exports.ListTemplatesRequest.fromPartial(base ?? {});
+    },
+    fromPartial(_) {
+        const message = createBaseListTemplatesRequest();
+        return message;
+    },
+};
+function createBaseListTemplatesResponse() {
+    return { templates: [] };
+}
+exports.ListTemplatesResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        for (const v of message.templates) {
+            exports.StrategyTemplate.encode(v, writer.uint32(10).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseListTemplatesResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.templates.push(exports.StrategyTemplate.decode(reader, reader.uint32()));
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            templates: globalThis.Array.isArray(object?.templates)
+                ? object.templates.map((e) => exports.StrategyTemplate.fromJSON(e))
+                : [],
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.templates?.length) {
+            obj.templates = message.templates.map((e) => exports.StrategyTemplate.toJSON(e));
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.ListTemplatesResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseListTemplatesResponse();
+        message.templates = object.templates?.map((e) => exports.StrategyTemplate.fromPartial(e)) || [];
+        return message;
+    },
+};
+function createBaseManageTemplateRequest() {
+    return { operation: common_1.TemplateOperation.TEMPLATE_OPERATION_UNSPECIFIED, template: undefined };
+}
+exports.ManageTemplateRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.operation !== common_1.TemplateOperation.TEMPLATE_OPERATION_UNSPECIFIED) {
+            writer.uint32(8).int32((0, common_1.templateOperationToNumber)(message.operation));
+        }
+        if (message.template !== undefined) {
+            exports.StrategyTemplate.encode(message.template, writer.uint32(18).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseManageTemplateRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 8) {
+                        break;
+                    }
+                    message.operation = (0, common_1.templateOperationFromJSON)(reader.int32());
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.template = exports.StrategyTemplate.decode(reader, reader.uint32());
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            operation: isSet(object.operation)
+                ? (0, common_1.templateOperationFromJSON)(object.operation)
+                : common_1.TemplateOperation.TEMPLATE_OPERATION_UNSPECIFIED,
+            template: isSet(object.template) ? exports.StrategyTemplate.fromJSON(object.template) : undefined,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.operation !== common_1.TemplateOperation.TEMPLATE_OPERATION_UNSPECIFIED) {
+            obj.operation = (0, common_1.templateOperationToJSON)(message.operation);
+        }
+        if (message.template !== undefined) {
+            obj.template = exports.StrategyTemplate.toJSON(message.template);
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.ManageTemplateRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseManageTemplateRequest();
+        message.operation = object.operation ?? common_1.TemplateOperation.TEMPLATE_OPERATION_UNSPECIFIED;
+        message.template = (object.template !== undefined && object.template !== null)
+            ? exports.StrategyTemplate.fromPartial(object.template)
+            : undefined;
+        return message;
+    },
+};
+function createBaseInstantiateTemplateRequest() {
+    return { templateId: "", strategyId: "" };
+}
+exports.InstantiateTemplateRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.templateId !== "") {
+            writer.uint32(10).string(message.templateId);
+        }
+        if (message.strategyId !== "") {
+            writer.uint32(18).string(message.strategyId);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseInstantiateTemplateRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.templateId = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.strategyId = reader.string();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            templateId: isSet(object.templateId)
+                ? globalThis.String(object.templateId)
+                : isSet(object.template_id)
+                    ? globalThis.String(object.template_id)
+                    : "",
+            strategyId: isSet(object.strategyId)
+                ? globalThis.String(object.strategyId)
+                : isSet(object.strategy_id)
+                    ? globalThis.String(object.strategy_id)
+                    : "",
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.templateId !== "") {
+            obj.templateId = message.templateId;
+        }
+        if (message.strategyId !== "") {
+            obj.strategyId = message.strategyId;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.InstantiateTemplateRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseInstantiateTemplateRequest();
+        message.templateId = object.templateId ?? "";
+        message.strategyId = object.strategyId ?? "";
+        return message;
+    },
+};
 exports.AnalysisServiceService = {
     runBacktest: {
         path: "/xstockstrat.analysis.v1.AnalysisService/RunBacktest",
@@ -10081,6 +10467,38 @@ exports.AnalysisServiceService = {
         requestDeserialize: (value) => exports.GetWatchlistReadinessRequest.decode(value),
         responseSerialize: (value) => Buffer.from(exports.GetWatchlistReadinessResponse.encode(value).finish()),
         responseDeserialize: (value) => exports.GetWatchlistReadinessResponse.decode(value),
+    },
+    /** Template catalog (feature 224). List/read: any authenticated caller. Manage: ADMIN only. */
+    listTemplates: {
+        path: "/xstockstrat.analysis.v1.AnalysisService/ListTemplates",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.ListTemplatesRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.ListTemplatesRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.ListTemplatesResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.ListTemplatesResponse.decode(value),
+    },
+    manageTemplate: {
+        path: "/xstockstrat.analysis.v1.AnalysisService/ManageTemplate",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.ManageTemplateRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.ManageTemplateRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.StrategyTemplate.encode(value).finish()),
+        responseDeserialize: (value) => exports.StrategyTemplate.decode(value),
+    },
+    /**
+     * Deep-copies a strategy template (and its formula templates) into private copies owned by the
+     * x-user-id caller, atomically (FR-9).
+     */
+    instantiateTemplate: {
+        path: "/xstockstrat.analysis.v1.AnalysisService/InstantiateTemplate",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.InstantiateTemplateRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.InstantiateTemplateRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.StrategyDefinition.encode(value).finish()),
+        responseDeserialize: (value) => exports.StrategyDefinition.decode(value),
     },
 };
 exports.AnalysisServiceClient = (0, grpc_js_1.makeGenericClientConstructor)(exports.AnalysisServiceService, "xstockstrat.analysis.v1.AnalysisService");

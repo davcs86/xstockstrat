@@ -60,6 +60,18 @@ const (
 	// IndicatorsServiceListFundamentalMetricsProcedure is the fully-qualified name of the
 	// IndicatorsService's ListFundamentalMetrics RPC.
 	IndicatorsServiceListFundamentalMetricsProcedure = "/xstockstrat.indicators.v1.IndicatorsService/ListFundamentalMetrics"
+	// IndicatorsServiceListTemplatesProcedure is the fully-qualified name of the IndicatorsService's
+	// ListTemplates RPC.
+	IndicatorsServiceListTemplatesProcedure = "/xstockstrat.indicators.v1.IndicatorsService/ListTemplates"
+	// IndicatorsServiceManageTemplateProcedure is the fully-qualified name of the IndicatorsService's
+	// ManageTemplate RPC.
+	IndicatorsServiceManageTemplateProcedure = "/xstockstrat.indicators.v1.IndicatorsService/ManageTemplate"
+	// IndicatorsServiceInstantiateTemplateProcedure is the fully-qualified name of the
+	// IndicatorsService's InstantiateTemplate RPC.
+	IndicatorsServiceInstantiateTemplateProcedure = "/xstockstrat.indicators.v1.IndicatorsService/InstantiateTemplate"
+	// IndicatorsServiceResolveTemplateIntentProcedure is the fully-qualified name of the
+	// IndicatorsService's ResolveTemplateIntent RPC.
+	IndicatorsServiceResolveTemplateIntentProcedure = "/xstockstrat.indicators.v1.IndicatorsService/ResolveTemplateIntent"
 )
 
 // IndicatorsServiceClient is a client for the xstockstrat.indicators.v1.IndicatorsService service.
@@ -85,6 +97,13 @@ type IndicatorsServiceClient interface {
 	DeleteFormula(context.Context, *connect.Request[v1.DeleteFormulaRequest]) (*connect.Response[v1.DeleteFormulaResponse], error)
 	// List the available fundamental metrics for formula declarations (feature 205)
 	ListFundamentalMetrics(context.Context, *connect.Request[v1.ListFundamentalMetricsRequest]) (*connect.Response[v1.ListFundamentalMetricsResponse], error)
+	// Template catalog (feature 224). List/read: any authenticated caller. Manage: ADMIN only.
+	ListTemplates(context.Context, *connect.Request[v1.ListTemplatesRequest]) (*connect.Response[v1.ListTemplatesResponse], error)
+	ManageTemplate(context.Context, *connect.Request[v1.ManageTemplateRequest]) (*connect.Response[v1.FormulaTemplate], error)
+	// Copies a formula template into a private formula owned by the x-user-id caller.
+	InstantiateTemplate(context.Context, *connect.Request[v1.InstantiateTemplateRequest]) (*connect.Response[v1.InstantiateTemplateResponse], error)
+	// Internal (SAN-bound xstockstrat-analysis): commits or aborts a strategy-template saga's copies.
+	ResolveTemplateIntent(context.Context, *connect.Request[v1.ResolveTemplateIntentRequest]) (*connect.Response[v1.ResolveTemplateIntentResponse], error)
 }
 
 // NewIndicatorsServiceClient constructs a client for the
@@ -153,6 +172,30 @@ func NewIndicatorsServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			connect.WithSchema(indicatorsServiceMethods.ByName("ListFundamentalMetrics")),
 			connect.WithClientOptions(opts...),
 		),
+		listTemplates: connect.NewClient[v1.ListTemplatesRequest, v1.ListTemplatesResponse](
+			httpClient,
+			baseURL+IndicatorsServiceListTemplatesProcedure,
+			connect.WithSchema(indicatorsServiceMethods.ByName("ListTemplates")),
+			connect.WithClientOptions(opts...),
+		),
+		manageTemplate: connect.NewClient[v1.ManageTemplateRequest, v1.FormulaTemplate](
+			httpClient,
+			baseURL+IndicatorsServiceManageTemplateProcedure,
+			connect.WithSchema(indicatorsServiceMethods.ByName("ManageTemplate")),
+			connect.WithClientOptions(opts...),
+		),
+		instantiateTemplate: connect.NewClient[v1.InstantiateTemplateRequest, v1.InstantiateTemplateResponse](
+			httpClient,
+			baseURL+IndicatorsServiceInstantiateTemplateProcedure,
+			connect.WithSchema(indicatorsServiceMethods.ByName("InstantiateTemplate")),
+			connect.WithClientOptions(opts...),
+		),
+		resolveTemplateIntent: connect.NewClient[v1.ResolveTemplateIntentRequest, v1.ResolveTemplateIntentResponse](
+			httpClient,
+			baseURL+IndicatorsServiceResolveTemplateIntentProcedure,
+			connect.WithSchema(indicatorsServiceMethods.ByName("ResolveTemplateIntent")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -167,6 +210,10 @@ type indicatorsServiceClient struct {
 	updateFormula          *connect.Client[v1.UpdateFormulaRequest, v1.UpdateFormulaResponse]
 	deleteFormula          *connect.Client[v1.DeleteFormulaRequest, v1.DeleteFormulaResponse]
 	listFundamentalMetrics *connect.Client[v1.ListFundamentalMetricsRequest, v1.ListFundamentalMetricsResponse]
+	listTemplates          *connect.Client[v1.ListTemplatesRequest, v1.ListTemplatesResponse]
+	manageTemplate         *connect.Client[v1.ManageTemplateRequest, v1.FormulaTemplate]
+	instantiateTemplate    *connect.Client[v1.InstantiateTemplateRequest, v1.InstantiateTemplateResponse]
+	resolveTemplateIntent  *connect.Client[v1.ResolveTemplateIntentRequest, v1.ResolveTemplateIntentResponse]
 }
 
 // ComputeIndicator calls xstockstrat.indicators.v1.IndicatorsService.ComputeIndicator.
@@ -214,6 +261,26 @@ func (c *indicatorsServiceClient) ListFundamentalMetrics(ctx context.Context, re
 	return c.listFundamentalMetrics.CallUnary(ctx, req)
 }
 
+// ListTemplates calls xstockstrat.indicators.v1.IndicatorsService.ListTemplates.
+func (c *indicatorsServiceClient) ListTemplates(ctx context.Context, req *connect.Request[v1.ListTemplatesRequest]) (*connect.Response[v1.ListTemplatesResponse], error) {
+	return c.listTemplates.CallUnary(ctx, req)
+}
+
+// ManageTemplate calls xstockstrat.indicators.v1.IndicatorsService.ManageTemplate.
+func (c *indicatorsServiceClient) ManageTemplate(ctx context.Context, req *connect.Request[v1.ManageTemplateRequest]) (*connect.Response[v1.FormulaTemplate], error) {
+	return c.manageTemplate.CallUnary(ctx, req)
+}
+
+// InstantiateTemplate calls xstockstrat.indicators.v1.IndicatorsService.InstantiateTemplate.
+func (c *indicatorsServiceClient) InstantiateTemplate(ctx context.Context, req *connect.Request[v1.InstantiateTemplateRequest]) (*connect.Response[v1.InstantiateTemplateResponse], error) {
+	return c.instantiateTemplate.CallUnary(ctx, req)
+}
+
+// ResolveTemplateIntent calls xstockstrat.indicators.v1.IndicatorsService.ResolveTemplateIntent.
+func (c *indicatorsServiceClient) ResolveTemplateIntent(ctx context.Context, req *connect.Request[v1.ResolveTemplateIntentRequest]) (*connect.Response[v1.ResolveTemplateIntentResponse], error) {
+	return c.resolveTemplateIntent.CallUnary(ctx, req)
+}
+
 // IndicatorsServiceHandler is an implementation of the xstockstrat.indicators.v1.IndicatorsService
 // service.
 type IndicatorsServiceHandler interface {
@@ -238,6 +305,13 @@ type IndicatorsServiceHandler interface {
 	DeleteFormula(context.Context, *connect.Request[v1.DeleteFormulaRequest]) (*connect.Response[v1.DeleteFormulaResponse], error)
 	// List the available fundamental metrics for formula declarations (feature 205)
 	ListFundamentalMetrics(context.Context, *connect.Request[v1.ListFundamentalMetricsRequest]) (*connect.Response[v1.ListFundamentalMetricsResponse], error)
+	// Template catalog (feature 224). List/read: any authenticated caller. Manage: ADMIN only.
+	ListTemplates(context.Context, *connect.Request[v1.ListTemplatesRequest]) (*connect.Response[v1.ListTemplatesResponse], error)
+	ManageTemplate(context.Context, *connect.Request[v1.ManageTemplateRequest]) (*connect.Response[v1.FormulaTemplate], error)
+	// Copies a formula template into a private formula owned by the x-user-id caller.
+	InstantiateTemplate(context.Context, *connect.Request[v1.InstantiateTemplateRequest]) (*connect.Response[v1.InstantiateTemplateResponse], error)
+	// Internal (SAN-bound xstockstrat-analysis): commits or aborts a strategy-template saga's copies.
+	ResolveTemplateIntent(context.Context, *connect.Request[v1.ResolveTemplateIntentRequest]) (*connect.Response[v1.ResolveTemplateIntentResponse], error)
 }
 
 // NewIndicatorsServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -301,6 +375,30 @@ func NewIndicatorsServiceHandler(svc IndicatorsServiceHandler, opts ...connect.H
 		connect.WithSchema(indicatorsServiceMethods.ByName("ListFundamentalMetrics")),
 		connect.WithHandlerOptions(opts...),
 	)
+	indicatorsServiceListTemplatesHandler := connect.NewUnaryHandler(
+		IndicatorsServiceListTemplatesProcedure,
+		svc.ListTemplates,
+		connect.WithSchema(indicatorsServiceMethods.ByName("ListTemplates")),
+		connect.WithHandlerOptions(opts...),
+	)
+	indicatorsServiceManageTemplateHandler := connect.NewUnaryHandler(
+		IndicatorsServiceManageTemplateProcedure,
+		svc.ManageTemplate,
+		connect.WithSchema(indicatorsServiceMethods.ByName("ManageTemplate")),
+		connect.WithHandlerOptions(opts...),
+	)
+	indicatorsServiceInstantiateTemplateHandler := connect.NewUnaryHandler(
+		IndicatorsServiceInstantiateTemplateProcedure,
+		svc.InstantiateTemplate,
+		connect.WithSchema(indicatorsServiceMethods.ByName("InstantiateTemplate")),
+		connect.WithHandlerOptions(opts...),
+	)
+	indicatorsServiceResolveTemplateIntentHandler := connect.NewUnaryHandler(
+		IndicatorsServiceResolveTemplateIntentProcedure,
+		svc.ResolveTemplateIntent,
+		connect.WithSchema(indicatorsServiceMethods.ByName("ResolveTemplateIntent")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/xstockstrat.indicators.v1.IndicatorsService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case IndicatorsServiceComputeIndicatorProcedure:
@@ -321,6 +419,14 @@ func NewIndicatorsServiceHandler(svc IndicatorsServiceHandler, opts ...connect.H
 			indicatorsServiceDeleteFormulaHandler.ServeHTTP(w, r)
 		case IndicatorsServiceListFundamentalMetricsProcedure:
 			indicatorsServiceListFundamentalMetricsHandler.ServeHTTP(w, r)
+		case IndicatorsServiceListTemplatesProcedure:
+			indicatorsServiceListTemplatesHandler.ServeHTTP(w, r)
+		case IndicatorsServiceManageTemplateProcedure:
+			indicatorsServiceManageTemplateHandler.ServeHTTP(w, r)
+		case IndicatorsServiceInstantiateTemplateProcedure:
+			indicatorsServiceInstantiateTemplateHandler.ServeHTTP(w, r)
+		case IndicatorsServiceResolveTemplateIntentProcedure:
+			indicatorsServiceResolveTemplateIntentHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -364,4 +470,20 @@ func (UnimplementedIndicatorsServiceHandler) DeleteFormula(context.Context, *con
 
 func (UnimplementedIndicatorsServiceHandler) ListFundamentalMetrics(context.Context, *connect.Request[v1.ListFundamentalMetricsRequest]) (*connect.Response[v1.ListFundamentalMetricsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.indicators.v1.IndicatorsService.ListFundamentalMetrics is not implemented"))
+}
+
+func (UnimplementedIndicatorsServiceHandler) ListTemplates(context.Context, *connect.Request[v1.ListTemplatesRequest]) (*connect.Response[v1.ListTemplatesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.indicators.v1.IndicatorsService.ListTemplates is not implemented"))
+}
+
+func (UnimplementedIndicatorsServiceHandler) ManageTemplate(context.Context, *connect.Request[v1.ManageTemplateRequest]) (*connect.Response[v1.FormulaTemplate], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.indicators.v1.IndicatorsService.ManageTemplate is not implemented"))
+}
+
+func (UnimplementedIndicatorsServiceHandler) InstantiateTemplate(context.Context, *connect.Request[v1.InstantiateTemplateRequest]) (*connect.Response[v1.InstantiateTemplateResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.indicators.v1.IndicatorsService.InstantiateTemplate is not implemented"))
+}
+
+func (UnimplementedIndicatorsServiceHandler) ResolveTemplateIntent(context.Context, *connect.Request[v1.ResolveTemplateIntentRequest]) (*connect.Response[v1.ResolveTemplateIntentResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.indicators.v1.IndicatorsService.ResolveTemplateIntent is not implemented"))
 }

@@ -114,6 +114,29 @@ export declare enum Sector {
 export declare function sectorFromJSON(object: any): Sector;
 export declare function sectorToJSON(object: Sector): string;
 export declare function sectorToNumber(object: Sector): number;
+/** Template catalog (feature 224): admin-curated templates instantiated into private snapshot copies. */
+export declare enum TemplateKind {
+    TEMPLATE_KIND_UNSPECIFIED = "TEMPLATE_KIND_UNSPECIFIED",
+    TEMPLATE_KIND_STRATEGY = "TEMPLATE_KIND_STRATEGY",
+    TEMPLATE_KIND_FORMULA = "TEMPLATE_KIND_FORMULA",
+    TEMPLATE_KIND_SIGNAL_SOURCE = "TEMPLATE_KIND_SIGNAL_SOURCE",
+    UNRECOGNIZED = "UNRECOGNIZED"
+}
+export declare function templateKindFromJSON(object: any): TemplateKind;
+export declare function templateKindToJSON(object: TemplateKind): string;
+export declare function templateKindToNumber(object: TemplateKind): number;
+export declare enum TemplateOperation {
+    TEMPLATE_OPERATION_UNSPECIFIED = "TEMPLATE_OPERATION_UNSPECIFIED",
+    TEMPLATE_OPERATION_CREATE = "TEMPLATE_OPERATION_CREATE",
+    /** TEMPLATE_OPERATION_UPDATE - bumps version by 1 */
+    TEMPLATE_OPERATION_UPDATE = "TEMPLATE_OPERATION_UPDATE",
+    /** TEMPLATE_OPERATION_RETIRE - hides from ListTemplates; existing instances are untouched */
+    TEMPLATE_OPERATION_RETIRE = "TEMPLATE_OPERATION_RETIRE",
+    UNRECOGNIZED = "UNRECOGNIZED"
+}
+export declare function templateOperationFromJSON(object: any): TemplateOperation;
+export declare function templateOperationToJSON(object: TemplateOperation): string;
+export declare function templateOperationToNumber(object: TemplateOperation): number;
 /** Pagination */
 export interface PageRequest {
     pageSize: number;
@@ -156,6 +179,25 @@ export interface TimeRange {
     start?: Date | undefined;
     end?: Date | undefined;
 }
+export interface TemplateMeta {
+    templateId: string;
+    kind: TemplateKind;
+    name: string;
+    description: string;
+    version: number;
+    retired: boolean;
+    createdAt?: Date | undefined;
+    updatedAt?: Date | undefined;
+}
+/** Provenance of an instance; empty template_id = not instantiated from a template. */
+export interface TemplateOrigin {
+    templateId: string;
+    templateVersion: number;
+    /** the template's current version (0 if retired or missing) */
+    latestVersion: number;
+    /** latest_version > template_version */
+    updateAvailable: boolean;
+}
 export declare const PageRequest: MessageFns<PageRequest>;
 export declare const PageResponse: MessageFns<PageResponse>;
 export declare const Error: MessageFns<Error>;
@@ -163,6 +205,8 @@ export declare const Error_DetailsEntry: MessageFns<Error_DetailsEntry>;
 export declare const Decimal: MessageFns<Decimal>;
 export declare const Asset: MessageFns<Asset>;
 export declare const TimeRange: MessageFns<TimeRange>;
+export declare const TemplateMeta: MessageFns<TemplateMeta>;
+export declare const TemplateOrigin: MessageFns<TemplateOrigin>;
 type Builtin = Date | Function | Uint8Array | string | number | boolean | undefined;
 export type DeepPartial<T> = T extends Builtin ? T : T extends globalThis.Array<infer U> ? globalThis.Array<DeepPartial<U>> : T extends ReadonlyArray<infer U> ? ReadonlyArray<DeepPartial<U>> : T extends {} ? {
     [K in keyof T]?: DeepPartial<T[K]>;

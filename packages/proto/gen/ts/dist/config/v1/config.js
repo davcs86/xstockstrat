@@ -961,7 +961,7 @@ exports.GetConfigRequest = {
     },
 };
 function createBaseGetSecretRequest() {
-    return { namespace: "", key: "", environment: common_1.Environment.ENVIRONMENT_UNSPECIFIED };
+    return { namespace: "", key: "", environment: common_1.Environment.ENVIRONMENT_UNSPECIFIED, userId: "" };
 }
 exports.GetSecretRequest = {
     encode(message, writer = new wire_1.BinaryWriter()) {
@@ -973,6 +973,9 @@ exports.GetSecretRequest = {
         }
         if (message.environment !== common_1.Environment.ENVIRONMENT_UNSPECIFIED) {
             writer.uint32(24).int32((0, common_1.environmentToNumber)(message.environment));
+        }
+        if (message.userId !== "") {
+            writer.uint32(34).string(message.userId);
         }
         return writer;
     },
@@ -1004,6 +1007,13 @@ exports.GetSecretRequest = {
                     message.environment = (0, common_1.environmentFromJSON)(reader.int32());
                     continue;
                 }
+                case 4: {
+                    if (tag !== 34) {
+                        break;
+                    }
+                    message.userId = reader.string();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -1019,6 +1029,11 @@ exports.GetSecretRequest = {
             environment: isSet(object.environment)
                 ? (0, common_1.environmentFromJSON)(object.environment)
                 : common_1.Environment.ENVIRONMENT_UNSPECIFIED,
+            userId: isSet(object.userId)
+                ? globalThis.String(object.userId)
+                : isSet(object.user_id)
+                    ? globalThis.String(object.user_id)
+                    : "",
         };
     },
     toJSON(message) {
@@ -1032,6 +1047,9 @@ exports.GetSecretRequest = {
         if (message.environment !== common_1.Environment.ENVIRONMENT_UNSPECIFIED) {
             obj.environment = (0, common_1.environmentToJSON)(message.environment);
         }
+        if (message.userId !== "") {
+            obj.userId = message.userId;
+        }
         return obj;
     },
     create(base) {
@@ -1042,6 +1060,7 @@ exports.GetSecretRequest = {
         message.namespace = object.namespace ?? "";
         message.key = object.key ?? "";
         message.environment = object.environment ?? common_1.Environment.ENVIRONMENT_UNSPECIFIED;
+        message.userId = object.userId ?? "";
         return message;
     },
 };

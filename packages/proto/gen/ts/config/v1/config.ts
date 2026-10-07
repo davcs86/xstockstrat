@@ -251,6 +251,8 @@ export interface GetSecretRequest {
   key: string;
   /** production or staging */
   environment: Environment;
+  /** exact scope: empty = global row only (feature 224) */
+  userId: string;
 }
 
 export interface GetSecretResponse {
@@ -281,7 +283,8 @@ export interface SetConfigRequest {
   createKey: boolean;
   /**
    * Optional per-user scope. Empty = the global value; a non-empty user_id writes/updates that
-   * user's per-user override. Secret keys (is_secret) are global-scope only (feature 147).
+   * user's per-user override. Secret keys may be per-user (feature 224 operator override of
+   * feature 147); redaction holds on every edge.
    */
   userId: string;
 }
@@ -1234,7 +1237,7 @@ export const GetConfigRequest: MessageFns<GetConfigRequest> = {
 };
 
 function createBaseGetSecretRequest(): GetSecretRequest {
-  return { namespace: "", key: "", environment: Environment.ENVIRONMENT_UNSPECIFIED };
+  return { namespace: "", key: "", environment: Environment.ENVIRONMENT_UNSPECIFIED, userId: "" };
 }
 
 export const GetSecretRequest: MessageFns<GetSecretRequest> = {
@@ -1247,6 +1250,9 @@ export const GetSecretRequest: MessageFns<GetSecretRequest> = {
     }
     if (message.environment !== Environment.ENVIRONMENT_UNSPECIFIED) {
       writer.uint32(24).int32(environmentToNumber(message.environment));
+    }
+    if (message.userId !== "") {
+      writer.uint32(34).string(message.userId);
     }
     return writer;
   },
@@ -1282,6 +1288,14 @@ export const GetSecretRequest: MessageFns<GetSecretRequest> = {
           message.environment = environmentFromJSON(reader.int32());
           continue;
         }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.userId = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1298,6 +1312,11 @@ export const GetSecretRequest: MessageFns<GetSecretRequest> = {
       environment: isSet(object.environment)
         ? environmentFromJSON(object.environment)
         : Environment.ENVIRONMENT_UNSPECIFIED,
+      userId: isSet(object.userId)
+        ? globalThis.String(object.userId)
+        : isSet(object.user_id)
+        ? globalThis.String(object.user_id)
+        : "",
     };
   },
 
@@ -1312,6 +1331,9 @@ export const GetSecretRequest: MessageFns<GetSecretRequest> = {
     if (message.environment !== Environment.ENVIRONMENT_UNSPECIFIED) {
       obj.environment = environmentToJSON(message.environment);
     }
+    if (message.userId !== "") {
+      obj.userId = message.userId;
+    }
     return obj;
   },
 
@@ -1323,6 +1345,7 @@ export const GetSecretRequest: MessageFns<GetSecretRequest> = {
     message.namespace = object.namespace ?? "";
     message.key = object.key ?? "";
     message.environment = object.environment ?? Environment.ENVIRONMENT_UNSPECIFIED;
+    message.userId = object.userId ?? "";
     return message;
   },
 };

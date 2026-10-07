@@ -1,6 +1,6 @@
 import { BinaryReader, BinaryWriter } from "@bufbuild/protobuf/wire";
 import { type CallOptions, type ChannelCredentials, Client, type ClientOptions, type ClientUnaryCall, type handleUnaryCall, type Metadata, type ServiceError, type UntypedServiceImplementation } from "@grpc/grpc-js";
-import { PageRequest, PageResponse, Timeframe, TimeRange } from "../../common/v1/common";
+import { PageRequest, PageResponse, TemplateMeta, TemplateOperation, TemplateOrigin, Timeframe, TimeRange } from "../../common/v1/common";
 export declare const protobufPackage = "xstockstrat.ingest.v1";
 export declare enum BackfillStatus {
     BACKFILL_STATUS_UNSPECIFIED = "BACKFILL_STATUS_UNSPECIFIED",
@@ -46,6 +46,17 @@ export declare enum BackfillDataKind {
 export declare function backfillDataKindFromJSON(object: any): BackfillDataKind;
 export declare function backfillDataKindToJSON(object: BackfillDataKind): string;
 export declare function backfillDataKindToNumber(object: BackfillDataKind): number;
+/** Which owners' signals QuerySignals returns (feature 224). Closed set → enum (C-04). */
+export declare enum SignalScope {
+    /** SIGNAL_SCOPE_UNSPECIFIED - own + system */
+    SIGNAL_SCOPE_UNSPECIFIED = "SIGNAL_SCOPE_UNSPECIFIED",
+    SIGNAL_SCOPE_OWN = "SIGNAL_SCOPE_OWN",
+    SIGNAL_SCOPE_SYSTEM = "SIGNAL_SCOPE_SYSTEM",
+    UNRECOGNIZED = "UNRECOGNIZED"
+}
+export declare function signalScopeFromJSON(object: any): SignalScope;
+export declare function signalScopeToJSON(object: SignalScope): string;
+export declare function signalScopeToNumber(object: SignalScope): number;
 /** Health of a registered signal source (feature 083). Closed set → enum (C-04). */
 export declare enum SourceHealthStatus {
     SOURCE_HEALTH_STATUS_UNSPECIFIED = "SOURCE_HEALTH_STATUS_UNSPECIFIED",
@@ -166,6 +177,8 @@ export interface ExternalSignal {
     tags: string[];
     /** platform ingestion time (server-set, immune to source timestamp manipulation) — feature 022 */
     ingestedAt?: Date | undefined;
+    /** owner of the signal (feature 224); server-stamped, ignored on write */
+    userId: string;
 }
 export interface IngestSignalRequest {
     signal?: ExternalSignal | undefined;
@@ -189,6 +202,10 @@ export interface QuerySignalsRequest {
     /** signals valid within this range */
     activeWindow?: TimeRange | undefined;
     page?: PageRequest | undefined;
+    /** feature 224; UNSPECIFIED = the caller's own + system signals */
+    scope: SignalScope;
+    /** (admin-only) owner selector; ignored for a non-admin caller */
+    ownerUserId: string;
 }
 export interface QuerySignalsResponse {
     signals: ExternalSignal[];
@@ -222,9 +239,15 @@ export interface SignalSource {
      * distinguishable from an explicit 0.0. DB default 1.0 (neutral).
      */
     reliabilityWeight?: number | undefined;
+    /** Owner of the source (feature 224). "system" = platform-owned, read-only to every user. */
+    userId: string;
+    /** set when instantiated from a template */
+    origin?: TemplateOrigin | undefined;
 }
 export interface ListSignalSourcesRequest {
     includeInactive: boolean;
+    /** (admin-only) owner selector; ignored for a non-admin caller (feature 224) */
+    ownerUserId: string;
 }
 export interface ListSignalSourcesResponse {
     sources: SignalSource[];
@@ -252,6 +275,27 @@ export interface ManageSignalSourceRequest {
 export interface ManageSignalSourceResponse {
     source?: SignalSource | undefined;
 }
+/** feature 224 — signal-source template catalog. */
+export interface SourceTemplate {
+    meta?: TemplateMeta | undefined;
+    payload?: SignalSource | undefined;
+}
+export interface ListTemplatesRequest {
+}
+export interface ListTemplatesResponse {
+    templates: SourceTemplate[];
+}
+export interface ManageTemplateRequest {
+    operation: TemplateOperation;
+    template?: SourceTemplate | undefined;
+}
+export interface InstantiateTemplateRequest {
+    templateId: string;
+    /** the new private source's slug (unique per owner) */
+    slug: string;
+    /** the caller's own per-user credential key, if the type needs one */
+    credentialsRef: string;
+}
 export declare const BackfillJob: MessageFns<BackfillJob>;
 export declare const TriggerBackfillRequest: MessageFns<TriggerBackfillRequest>;
 export declare const TriggerBackfillResponse: MessageFns<TriggerBackfillResponse>;
@@ -271,6 +315,11 @@ export declare const ListSignalSourcesRequest: MessageFns<ListSignalSourcesReque
 export declare const ListSignalSourcesResponse: MessageFns<ListSignalSourcesResponse>;
 export declare const ManageSignalSourceRequest: MessageFns<ManageSignalSourceRequest>;
 export declare const ManageSignalSourceResponse: MessageFns<ManageSignalSourceResponse>;
+export declare const SourceTemplate: MessageFns<SourceTemplate>;
+export declare const ListTemplatesRequest: MessageFns<ListTemplatesRequest>;
+export declare const ListTemplatesResponse: MessageFns<ListTemplatesResponse>;
+export declare const ManageTemplateRequest: MessageFns<ManageTemplateRequest>;
+export declare const InstantiateTemplateRequest: MessageFns<InstantiateTemplateRequest>;
 export type IngestServiceService = typeof IngestServiceService;
 export declare const IngestServiceService: {
     readonly triggerBackfill: {
@@ -357,6 +406,35 @@ export declare const IngestServiceService: {
         readonly responseSerialize: (value: ManageSignalSourceResponse) => Buffer;
         readonly responseDeserialize: (value: Buffer) => ManageSignalSourceResponse;
     };
+    /** Template catalog (feature 224). List/read: any authenticated caller. Manage: ADMIN only. */
+    readonly listTemplates: {
+        readonly path: "/xstockstrat.ingest.v1.IngestService/ListTemplates";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: ListTemplatesRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => ListTemplatesRequest;
+        readonly responseSerialize: (value: ListTemplatesResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => ListTemplatesResponse;
+    };
+    readonly manageTemplate: {
+        readonly path: "/xstockstrat.ingest.v1.IngestService/ManageTemplate";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: ManageTemplateRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => ManageTemplateRequest;
+        readonly responseSerialize: (value: SourceTemplate) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => SourceTemplate;
+    };
+    /** Copies a source template into a private signal source owned by the x-user-id caller. */
+    readonly instantiateTemplate: {
+        readonly path: "/xstockstrat.ingest.v1.IngestService/InstantiateTemplate";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: InstantiateTemplateRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => InstantiateTemplateRequest;
+        readonly responseSerialize: (value: SignalSource) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => SignalSource;
+    };
 };
 export interface IngestServiceServer extends UntypedServiceImplementation {
     triggerBackfill: handleUnaryCall<TriggerBackfillRequest, TriggerBackfillResponse>;
@@ -371,6 +449,11 @@ export interface IngestServiceServer extends UntypedServiceImplementation {
     querySignals: handleUnaryCall<QuerySignalsRequest, QuerySignalsResponse>;
     listSignalSources: handleUnaryCall<ListSignalSourcesRequest, ListSignalSourcesResponse>;
     manageSignalSource: handleUnaryCall<ManageSignalSourceRequest, ManageSignalSourceResponse>;
+    /** Template catalog (feature 224). List/read: any authenticated caller. Manage: ADMIN only. */
+    listTemplates: handleUnaryCall<ListTemplatesRequest, ListTemplatesResponse>;
+    manageTemplate: handleUnaryCall<ManageTemplateRequest, SourceTemplate>;
+    /** Copies a source template into a private signal source owned by the x-user-id caller. */
+    instantiateTemplate: handleUnaryCall<InstantiateTemplateRequest, SignalSource>;
 }
 export interface IngestServiceClient extends Client {
     triggerBackfill(request: TriggerBackfillRequest, callback: (error: ServiceError | null, response: TriggerBackfillResponse) => void): ClientUnaryCall;
@@ -403,6 +486,17 @@ export interface IngestServiceClient extends Client {
     manageSignalSource(request: ManageSignalSourceRequest, callback: (error: ServiceError | null, response: ManageSignalSourceResponse) => void): ClientUnaryCall;
     manageSignalSource(request: ManageSignalSourceRequest, metadata: Metadata, callback: (error: ServiceError | null, response: ManageSignalSourceResponse) => void): ClientUnaryCall;
     manageSignalSource(request: ManageSignalSourceRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: ManageSignalSourceResponse) => void): ClientUnaryCall;
+    /** Template catalog (feature 224). List/read: any authenticated caller. Manage: ADMIN only. */
+    listTemplates(request: ListTemplatesRequest, callback: (error: ServiceError | null, response: ListTemplatesResponse) => void): ClientUnaryCall;
+    listTemplates(request: ListTemplatesRequest, metadata: Metadata, callback: (error: ServiceError | null, response: ListTemplatesResponse) => void): ClientUnaryCall;
+    listTemplates(request: ListTemplatesRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: ListTemplatesResponse) => void): ClientUnaryCall;
+    manageTemplate(request: ManageTemplateRequest, callback: (error: ServiceError | null, response: SourceTemplate) => void): ClientUnaryCall;
+    manageTemplate(request: ManageTemplateRequest, metadata: Metadata, callback: (error: ServiceError | null, response: SourceTemplate) => void): ClientUnaryCall;
+    manageTemplate(request: ManageTemplateRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: SourceTemplate) => void): ClientUnaryCall;
+    /** Copies a source template into a private signal source owned by the x-user-id caller. */
+    instantiateTemplate(request: InstantiateTemplateRequest, callback: (error: ServiceError | null, response: SignalSource) => void): ClientUnaryCall;
+    instantiateTemplate(request: InstantiateTemplateRequest, metadata: Metadata, callback: (error: ServiceError | null, response: SignalSource) => void): ClientUnaryCall;
+    instantiateTemplate(request: InstantiateTemplateRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: SignalSource) => void): ClientUnaryCall;
 }
 export declare const IngestServiceClient: {
     new (address: string, credentials: ChannelCredentials, options?: Partial<ClientOptions>): IngestServiceClient;

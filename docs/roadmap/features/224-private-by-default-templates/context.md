@@ -447,3 +447,10 @@ OQ-4 to OQ-6 remain for /sdd-design.
 - **TDD:** N/A (proto).
 - **Files modified:** `packages/proto/{common,indicators,ingest,analysis,config}/v1/*.proto`.
 - **Deviations:** verification ran buf through Docker instead of a host binary. This is a CI-equivalent fallback at the same pinned version.
+
+### Step 2 — proto-gen: regenerate stubs [done]
+- Regenerated the stubs with `./scripts/localenv-setup.sh`, using the version-pinned `Dockerfile.codegen` image.
+- 52 generated files changed (Go, Python, TS and TS dist), all within analysis, common, config, indicators and ingest.
+- A second run produced the same set, so there is no drift.
+- Files modified: `packages/proto/gen/**` (the five touched packages).
+- TDD: N/A. Deviations: none. (The script also wrote dev mTLS certs to `certs/`, which is git-ignored and not staged.)

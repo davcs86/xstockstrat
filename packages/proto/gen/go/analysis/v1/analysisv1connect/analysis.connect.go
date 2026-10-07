@@ -93,6 +93,15 @@ const (
 	// AnalysisServiceGetWatchlistReadinessProcedure is the fully-qualified name of the
 	// AnalysisService's GetWatchlistReadiness RPC.
 	AnalysisServiceGetWatchlistReadinessProcedure = "/xstockstrat.analysis.v1.AnalysisService/GetWatchlistReadiness"
+	// AnalysisServiceListTemplatesProcedure is the fully-qualified name of the AnalysisService's
+	// ListTemplates RPC.
+	AnalysisServiceListTemplatesProcedure = "/xstockstrat.analysis.v1.AnalysisService/ListTemplates"
+	// AnalysisServiceManageTemplateProcedure is the fully-qualified name of the AnalysisService's
+	// ManageTemplate RPC.
+	AnalysisServiceManageTemplateProcedure = "/xstockstrat.analysis.v1.AnalysisService/ManageTemplate"
+	// AnalysisServiceInstantiateTemplateProcedure is the fully-qualified name of the AnalysisService's
+	// InstantiateTemplate RPC.
+	AnalysisServiceInstantiateTemplateProcedure = "/xstockstrat.analysis.v1.AnalysisService/InstantiateTemplate"
 )
 
 // AnalysisServiceClient is a client for the xstockstrat.analysis.v1.AnalysisService service.
@@ -141,6 +150,12 @@ type AnalysisServiceClient interface {
 	// pairs (feature 181). Owner from x-user-id; RESOLVED rows carry inline SymbolReadiness,
 	// PENDING/UNKNOWN rows resolve on a subsequent poll (the server kicks a background refresh).
 	GetWatchlistReadiness(context.Context, *connect.Request[v1.GetWatchlistReadinessRequest]) (*connect.Response[v1.GetWatchlistReadinessResponse], error)
+	// Template catalog (feature 224). List/read: any authenticated caller. Manage: ADMIN only.
+	ListTemplates(context.Context, *connect.Request[v1.ListTemplatesRequest]) (*connect.Response[v1.ListTemplatesResponse], error)
+	ManageTemplate(context.Context, *connect.Request[v1.ManageTemplateRequest]) (*connect.Response[v1.StrategyTemplate], error)
+	// Deep-copies a strategy template (and its formula templates) into private copies owned by the
+	// x-user-id caller, atomically (FR-9).
+	InstantiateTemplate(context.Context, *connect.Request[v1.InstantiateTemplateRequest]) (*connect.Response[v1.StrategyDefinition], error)
 }
 
 // NewAnalysisServiceClient constructs a client for the xstockstrat.analysis.v1.AnalysisService
@@ -274,6 +289,24 @@ func NewAnalysisServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(analysisServiceMethods.ByName("GetWatchlistReadiness")),
 			connect.WithClientOptions(opts...),
 		),
+		listTemplates: connect.NewClient[v1.ListTemplatesRequest, v1.ListTemplatesResponse](
+			httpClient,
+			baseURL+AnalysisServiceListTemplatesProcedure,
+			connect.WithSchema(analysisServiceMethods.ByName("ListTemplates")),
+			connect.WithClientOptions(opts...),
+		),
+		manageTemplate: connect.NewClient[v1.ManageTemplateRequest, v1.StrategyTemplate](
+			httpClient,
+			baseURL+AnalysisServiceManageTemplateProcedure,
+			connect.WithSchema(analysisServiceMethods.ByName("ManageTemplate")),
+			connect.WithClientOptions(opts...),
+		),
+		instantiateTemplate: connect.NewClient[v1.InstantiateTemplateRequest, v1.StrategyDefinition](
+			httpClient,
+			baseURL+AnalysisServiceInstantiateTemplateProcedure,
+			connect.WithSchema(analysisServiceMethods.ByName("InstantiateTemplate")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -299,6 +332,9 @@ type analysisServiceClient struct {
 	queryPnLPatterns        *connect.Client[v1.QueryPnLPatternsRequest, v1.QueryPnLPatternsResponse]
 	getAttribution          *connect.Client[v1.GetAttributionRequest, v1.GetAttributionResponse]
 	getWatchlistReadiness   *connect.Client[v1.GetWatchlistReadinessRequest, v1.GetWatchlistReadinessResponse]
+	listTemplates           *connect.Client[v1.ListTemplatesRequest, v1.ListTemplatesResponse]
+	manageTemplate          *connect.Client[v1.ManageTemplateRequest, v1.StrategyTemplate]
+	instantiateTemplate     *connect.Client[v1.InstantiateTemplateRequest, v1.StrategyDefinition]
 }
 
 // RunBacktest calls xstockstrat.analysis.v1.AnalysisService.RunBacktest.
@@ -401,6 +437,21 @@ func (c *analysisServiceClient) GetWatchlistReadiness(ctx context.Context, req *
 	return c.getWatchlistReadiness.CallUnary(ctx, req)
 }
 
+// ListTemplates calls xstockstrat.analysis.v1.AnalysisService.ListTemplates.
+func (c *analysisServiceClient) ListTemplates(ctx context.Context, req *connect.Request[v1.ListTemplatesRequest]) (*connect.Response[v1.ListTemplatesResponse], error) {
+	return c.listTemplates.CallUnary(ctx, req)
+}
+
+// ManageTemplate calls xstockstrat.analysis.v1.AnalysisService.ManageTemplate.
+func (c *analysisServiceClient) ManageTemplate(ctx context.Context, req *connect.Request[v1.ManageTemplateRequest]) (*connect.Response[v1.StrategyTemplate], error) {
+	return c.manageTemplate.CallUnary(ctx, req)
+}
+
+// InstantiateTemplate calls xstockstrat.analysis.v1.AnalysisService.InstantiateTemplate.
+func (c *analysisServiceClient) InstantiateTemplate(ctx context.Context, req *connect.Request[v1.InstantiateTemplateRequest]) (*connect.Response[v1.StrategyDefinition], error) {
+	return c.instantiateTemplate.CallUnary(ctx, req)
+}
+
 // AnalysisServiceHandler is an implementation of the xstockstrat.analysis.v1.AnalysisService
 // service.
 type AnalysisServiceHandler interface {
@@ -448,6 +499,12 @@ type AnalysisServiceHandler interface {
 	// pairs (feature 181). Owner from x-user-id; RESOLVED rows carry inline SymbolReadiness,
 	// PENDING/UNKNOWN rows resolve on a subsequent poll (the server kicks a background refresh).
 	GetWatchlistReadiness(context.Context, *connect.Request[v1.GetWatchlistReadinessRequest]) (*connect.Response[v1.GetWatchlistReadinessResponse], error)
+	// Template catalog (feature 224). List/read: any authenticated caller. Manage: ADMIN only.
+	ListTemplates(context.Context, *connect.Request[v1.ListTemplatesRequest]) (*connect.Response[v1.ListTemplatesResponse], error)
+	ManageTemplate(context.Context, *connect.Request[v1.ManageTemplateRequest]) (*connect.Response[v1.StrategyTemplate], error)
+	// Deep-copies a strategy template (and its formula templates) into private copies owned by the
+	// x-user-id caller, atomically (FR-9).
+	InstantiateTemplate(context.Context, *connect.Request[v1.InstantiateTemplateRequest]) (*connect.Response[v1.StrategyDefinition], error)
 }
 
 // NewAnalysisServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -577,6 +634,24 @@ func NewAnalysisServiceHandler(svc AnalysisServiceHandler, opts ...connect.Handl
 		connect.WithSchema(analysisServiceMethods.ByName("GetWatchlistReadiness")),
 		connect.WithHandlerOptions(opts...),
 	)
+	analysisServiceListTemplatesHandler := connect.NewUnaryHandler(
+		AnalysisServiceListTemplatesProcedure,
+		svc.ListTemplates,
+		connect.WithSchema(analysisServiceMethods.ByName("ListTemplates")),
+		connect.WithHandlerOptions(opts...),
+	)
+	analysisServiceManageTemplateHandler := connect.NewUnaryHandler(
+		AnalysisServiceManageTemplateProcedure,
+		svc.ManageTemplate,
+		connect.WithSchema(analysisServiceMethods.ByName("ManageTemplate")),
+		connect.WithHandlerOptions(opts...),
+	)
+	analysisServiceInstantiateTemplateHandler := connect.NewUnaryHandler(
+		AnalysisServiceInstantiateTemplateProcedure,
+		svc.InstantiateTemplate,
+		connect.WithSchema(analysisServiceMethods.ByName("InstantiateTemplate")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/xstockstrat.analysis.v1.AnalysisService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AnalysisServiceRunBacktestProcedure:
@@ -619,6 +694,12 @@ func NewAnalysisServiceHandler(svc AnalysisServiceHandler, opts ...connect.Handl
 			analysisServiceGetAttributionHandler.ServeHTTP(w, r)
 		case AnalysisServiceGetWatchlistReadinessProcedure:
 			analysisServiceGetWatchlistReadinessHandler.ServeHTTP(w, r)
+		case AnalysisServiceListTemplatesProcedure:
+			analysisServiceListTemplatesHandler.ServeHTTP(w, r)
+		case AnalysisServiceManageTemplateProcedure:
+			analysisServiceManageTemplateHandler.ServeHTTP(w, r)
+		case AnalysisServiceInstantiateTemplateProcedure:
+			analysisServiceInstantiateTemplateHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -706,4 +787,16 @@ func (UnimplementedAnalysisServiceHandler) GetAttribution(context.Context, *conn
 
 func (UnimplementedAnalysisServiceHandler) GetWatchlistReadiness(context.Context, *connect.Request[v1.GetWatchlistReadinessRequest]) (*connect.Response[v1.GetWatchlistReadinessResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.analysis.v1.AnalysisService.GetWatchlistReadiness is not implemented"))
+}
+
+func (UnimplementedAnalysisServiceHandler) ListTemplates(context.Context, *connect.Request[v1.ListTemplatesRequest]) (*connect.Response[v1.ListTemplatesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.analysis.v1.AnalysisService.ListTemplates is not implemented"))
+}
+
+func (UnimplementedAnalysisServiceHandler) ManageTemplate(context.Context, *connect.Request[v1.ManageTemplateRequest]) (*connect.Response[v1.StrategyTemplate], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.analysis.v1.AnalysisService.ManageTemplate is not implemented"))
+}
+
+func (UnimplementedAnalysisServiceHandler) InstantiateTemplate(context.Context, *connect.Request[v1.InstantiateTemplateRequest]) (*connect.Response[v1.StrategyDefinition], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.analysis.v1.AnalysisService.InstantiateTemplate is not implemented"))
 }

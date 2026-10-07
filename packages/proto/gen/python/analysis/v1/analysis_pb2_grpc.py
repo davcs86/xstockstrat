@@ -134,6 +134,21 @@ class AnalysisServiceStub(object):
                 request_serializer=analysis_dot_v1_dot_analysis__pb2.GetWatchlistReadinessRequest.SerializeToString,
                 response_deserializer=analysis_dot_v1_dot_analysis__pb2.GetWatchlistReadinessResponse.FromString,
                 _registered_method=True)
+        self.ListTemplates = channel.unary_unary(
+                '/xstockstrat.analysis.v1.AnalysisService/ListTemplates',
+                request_serializer=analysis_dot_v1_dot_analysis__pb2.ListTemplatesRequest.SerializeToString,
+                response_deserializer=analysis_dot_v1_dot_analysis__pb2.ListTemplatesResponse.FromString,
+                _registered_method=True)
+        self.ManageTemplate = channel.unary_unary(
+                '/xstockstrat.analysis.v1.AnalysisService/ManageTemplate',
+                request_serializer=analysis_dot_v1_dot_analysis__pb2.ManageTemplateRequest.SerializeToString,
+                response_deserializer=analysis_dot_v1_dot_analysis__pb2.StrategyTemplate.FromString,
+                _registered_method=True)
+        self.InstantiateTemplate = channel.unary_unary(
+                '/xstockstrat.analysis.v1.AnalysisService/InstantiateTemplate',
+                request_serializer=analysis_dot_v1_dot_analysis__pb2.InstantiateTemplateRequest.SerializeToString,
+                response_deserializer=analysis_dot_v1_dot_analysis__pb2.StrategyDefinition.FromString,
+                _registered_method=True)
 
 
 class AnalysisServiceServicer(object):
@@ -283,6 +298,27 @@ class AnalysisServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def ListTemplates(self, request, context):
+        """Template catalog (feature 224). List/read: any authenticated caller. Manage: ADMIN only.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ManageTemplate(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def InstantiateTemplate(self, request, context):
+        """Deep-copies a strategy template (and its formula templates) into private copies owned by the
+        x-user-id caller, atomically (FR-9).
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_AnalysisServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -385,6 +421,21 @@ def add_AnalysisServiceServicer_to_server(servicer, server):
                     servicer.GetWatchlistReadiness,
                     request_deserializer=analysis_dot_v1_dot_analysis__pb2.GetWatchlistReadinessRequest.FromString,
                     response_serializer=analysis_dot_v1_dot_analysis__pb2.GetWatchlistReadinessResponse.SerializeToString,
+            ),
+            'ListTemplates': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListTemplates,
+                    request_deserializer=analysis_dot_v1_dot_analysis__pb2.ListTemplatesRequest.FromString,
+                    response_serializer=analysis_dot_v1_dot_analysis__pb2.ListTemplatesResponse.SerializeToString,
+            ),
+            'ManageTemplate': grpc.unary_unary_rpc_method_handler(
+                    servicer.ManageTemplate,
+                    request_deserializer=analysis_dot_v1_dot_analysis__pb2.ManageTemplateRequest.FromString,
+                    response_serializer=analysis_dot_v1_dot_analysis__pb2.StrategyTemplate.SerializeToString,
+            ),
+            'InstantiateTemplate': grpc.unary_unary_rpc_method_handler(
+                    servicer.InstantiateTemplate,
+                    request_deserializer=analysis_dot_v1_dot_analysis__pb2.InstantiateTemplateRequest.FromString,
+                    response_serializer=analysis_dot_v1_dot_analysis__pb2.StrategyDefinition.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -927,6 +978,87 @@ class AnalysisService(object):
             '/xstockstrat.analysis.v1.AnalysisService/GetWatchlistReadiness',
             analysis_dot_v1_dot_analysis__pb2.GetWatchlistReadinessRequest.SerializeToString,
             analysis_dot_v1_dot_analysis__pb2.GetWatchlistReadinessResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListTemplates(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.analysis.v1.AnalysisService/ListTemplates',
+            analysis_dot_v1_dot_analysis__pb2.ListTemplatesRequest.SerializeToString,
+            analysis_dot_v1_dot_analysis__pb2.ListTemplatesResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ManageTemplate(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.analysis.v1.AnalysisService/ManageTemplate',
+            analysis_dot_v1_dot_analysis__pb2.ManageTemplateRequest.SerializeToString,
+            analysis_dot_v1_dot_analysis__pb2.StrategyTemplate.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def InstantiateTemplate(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.analysis.v1.AnalysisService/InstantiateTemplate',
+            analysis_dot_v1_dot_analysis__pb2.InstantiateTemplateRequest.SerializeToString,
+            analysis_dot_v1_dot_analysis__pb2.StrategyDefinition.FromString,
             options,
             channel_credentials,
             insecure,

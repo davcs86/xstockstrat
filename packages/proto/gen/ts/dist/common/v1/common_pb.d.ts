@@ -146,6 +146,80 @@ export type TimeRange = Message<"xstockstrat.common.v1.TimeRange"> & {
  */
 export declare const TimeRangeSchema: GenMessage<TimeRange>;
 /**
+ * @generated from message xstockstrat.common.v1.TemplateMeta
+ */
+export type TemplateMeta = Message<"xstockstrat.common.v1.TemplateMeta"> & {
+    /**
+     * @generated from field: string template_id = 1;
+     */
+    templateId: string;
+    /**
+     * @generated from field: xstockstrat.common.v1.TemplateKind kind = 2;
+     */
+    kind: TemplateKind;
+    /**
+     * @generated from field: string name = 3;
+     */
+    name: string;
+    /**
+     * @generated from field: string description = 4;
+     */
+    description: string;
+    /**
+     * @generated from field: int32 version = 5;
+     */
+    version: number;
+    /**
+     * @generated from field: bool retired = 6;
+     */
+    retired: boolean;
+    /**
+     * @generated from field: google.protobuf.Timestamp created_at = 7;
+     */
+    createdAt?: Timestamp | undefined;
+    /**
+     * @generated from field: google.protobuf.Timestamp updated_at = 8;
+     */
+    updatedAt?: Timestamp | undefined;
+};
+/**
+ * Describes the message xstockstrat.common.v1.TemplateMeta.
+ * Use `create(TemplateMetaSchema)` to create a new message.
+ */
+export declare const TemplateMetaSchema: GenMessage<TemplateMeta>;
+/**
+ * Provenance of an instance; empty template_id = not instantiated from a template.
+ *
+ * @generated from message xstockstrat.common.v1.TemplateOrigin
+ */
+export type TemplateOrigin = Message<"xstockstrat.common.v1.TemplateOrigin"> & {
+    /**
+     * @generated from field: string template_id = 1;
+     */
+    templateId: string;
+    /**
+     * @generated from field: int32 template_version = 2;
+     */
+    templateVersion: number;
+    /**
+     * the template's current version (0 if retired or missing)
+     *
+     * @generated from field: int32 latest_version = 3;
+     */
+    latestVersion: number;
+    /**
+     * latest_version > template_version
+     *
+     * @generated from field: bool update_available = 4;
+     */
+    updateAvailable: boolean;
+};
+/**
+ * Describes the message xstockstrat.common.v1.TemplateOrigin.
+ * Use `create(TemplateOriginSchema)` to create a new message.
+ */
+export declare const TemplateOriginSchema: GenMessage<TemplateOrigin>;
+/**
  * TradingMode distinguishes paper (simulated) from live (real-money) order routing.
  * Used by both xstockstrat-trading and xstockstrat-portfolio.
  *
@@ -347,3 +421,59 @@ export declare enum Sector {
  * Describes the enum xstockstrat.common.v1.Sector.
  */
 export declare const SectorSchema: GenEnum<Sector>;
+/**
+ * Template catalog (feature 224): admin-curated templates instantiated into private snapshot copies.
+ *
+ * @generated from enum xstockstrat.common.v1.TemplateKind
+ */
+export declare enum TemplateKind {
+    /**
+     * @generated from enum value: TEMPLATE_KIND_UNSPECIFIED = 0;
+     */
+    UNSPECIFIED = 0,
+    /**
+     * @generated from enum value: TEMPLATE_KIND_STRATEGY = 1;
+     */
+    STRATEGY = 1,
+    /**
+     * @generated from enum value: TEMPLATE_KIND_FORMULA = 2;
+     */
+    FORMULA = 2,
+    /**
+     * @generated from enum value: TEMPLATE_KIND_SIGNAL_SOURCE = 3;
+     */
+    SIGNAL_SOURCE = 3
+}
+/**
+ * Describes the enum xstockstrat.common.v1.TemplateKind.
+ */
+export declare const TemplateKindSchema: GenEnum<TemplateKind>;
+/**
+ * @generated from enum xstockstrat.common.v1.TemplateOperation
+ */
+export declare enum TemplateOperation {
+    /**
+     * @generated from enum value: TEMPLATE_OPERATION_UNSPECIFIED = 0;
+     */
+    UNSPECIFIED = 0,
+    /**
+     * @generated from enum value: TEMPLATE_OPERATION_CREATE = 1;
+     */
+    CREATE = 1,
+    /**
+     * bumps version by 1
+     *
+     * @generated from enum value: TEMPLATE_OPERATION_UPDATE = 2;
+     */
+    UPDATE = 2,
+    /**
+     * hides from ListTemplates; existing instances are untouched
+     *
+     * @generated from enum value: TEMPLATE_OPERATION_RETIRE = 3;
+     */
+    RETIRE = 3
+}
+/**
+ * Describes the enum xstockstrat.common.v1.TemplateOperation.
+ */
+export declare const TemplateOperationSchema: GenEnum<TemplateOperation>;
