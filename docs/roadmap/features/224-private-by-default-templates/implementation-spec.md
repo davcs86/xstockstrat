@@ -1675,7 +1675,7 @@ grep -rn "__tests__/fixtures" src/__tests__/perUserSecrets.test.ts || echo "sing
 
 ### Step 23 — service: ingest `mcp_client` poller resolves the owner's secret and ingests as the owner
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/engine/mcp_client_loop.py` — modify
