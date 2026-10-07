@@ -590,3 +590,27 @@ OQ-4 to OQ-6 remain for /sdd-design.
 - **Files:** `tests/test_owner_dimension.py`, `tests/test_{strategy_scores,backtest_run_symbols,backtest_details,backtest_runs}_repo.py`, `tests/test_analysis_servicer.py`.
 - **Deviation:** D-11.
 - **Open (owned by Step 14):** `GetStrategy`'s deleted-formula check still calls indicators as the admin, which is the indicators admin-read work in Step 14.
+
+### Step 11 — service: evaluator unreadable-formula seam and write/read warnings [done]
+- **Evaluator:** gains `raise_unreadable`, `unreadable_formulas` and an `_execute_formula` helper, and `for_owner` carries the flag to its clone. A NOT_FOUND from indicators is handled per mode:
+  - **Backtest:** raises `FormulaExecutionError`. The symbol gets `FORMULA_ERROR` and is excluded from evidence (preserves ANALYSIS-2/3 from feature 065).
+  - **Other surfaces:** the formula id is recorded, the series comes back all-None, and the component is skipped with a warning. It never becomes the `"unavailable"` marker (preserves `@feature-185 @AC-1`).
+- **Servicer:**
+  - The backtest evaluator is built with `raise_unreadable=True`.
+  - `_formula_status_warnings(include_unreadable)`: GetStrategy, REGISTER and UPDATE carry the warning `formula <id> not readable by owner` (AC-5, AC-30).
+  - `_refuse_deleted_bindings` still refuses only deleted formulas.
+- **Files:** `app/services/evaluator.py`, `app/handlers/servicer.py`.
+- **Deviation:** D-12.
+
+### Step 12 — test: unreadable formula skipped, warned, excluded from backtest evidence [done]
+- **New `tests/test_unreadable_formula.py`** (7 tests):
+  - AC-5 on the live loop and on GetStrategy.
+  - AC-30 on REGISTER and UPDATE, plus the unknown-series rejection message order.
+  - Backtest exclusion: AAPL is not passed to `insert_many`, while MSFT is.
+  - @feature-185: no data-unavailable marker in ListOpportunities.
+- **TDD:**
+  - RED: all 7 failed for the right reason (the live-loop cycle aborted, `[]` warnings, the AAPL row was dropped with a KeyError, and provenance came back `"unavailable"`).
+  - GREEN: 931 passed, coverage 85.96%, ruff clean.
+- **Files:** `tests/test_unreadable_formula.py`; rename follow-through in `tests/test_analysis_servicer.py` and `tests/test_owner_header_guard.py`.
+- **Deviation:** D-13.
+- **Note:** REGISTER and UPDATE now make one extra `GetFormula` per referenced formula. Consolidating those fetches is possible later; not done here.

@@ -983,7 +983,7 @@ grep -n "raise_unreadable\|unreadable_formulas\|not readable by owner" app/servi
 
 ### Step 12 — test: unreadable formula skipped, warned, and excluded from backtest evidence
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_unreadable_formula.py` — create

@@ -298,7 +298,7 @@ async def test_write_time_formula_reads():
     svc = _svc()
     definition = _row_to_strategy_definition(_row())
     await svc._fetch_formula_outputs(definition, list(_BOB))
-    await svc._deleted_formula_warnings(definition, list(_BOB))
+    await svc._formula_status_warnings(definition, list(_BOB))
     _assert_owner_headers(svc._indicators)
 
 

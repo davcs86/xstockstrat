@@ -6331,7 +6331,7 @@ class TestDeletedFormulaFlag:
                 formula_id="fid", name="RSI", deleted=True
             )
         )
-        warnings = await svc._deleted_formula_warnings(_custom_formula_definition(), [])
+        warnings = await svc._formula_status_warnings(_custom_formula_definition(), [])
         assert len(warnings) == 1
         assert "fid" in warnings[0] and "RSI" in warnings[0]
 
@@ -6342,7 +6342,7 @@ class TestDeletedFormulaFlag:
         svc._indicators.GetFormula = AsyncMock(
             return_value=indicators_pb2.FormulaDefinition(formula_id="fid", deleted=False)
         )
-        warnings = await svc._deleted_formula_warnings(_custom_formula_definition(), [])
+        warnings = await svc._formula_status_warnings(_custom_formula_definition(), [])
         assert warnings == []
 
     @pytest.mark.asyncio
