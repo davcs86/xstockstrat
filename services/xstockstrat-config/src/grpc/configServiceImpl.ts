@@ -206,7 +206,7 @@ export class ConfigServiceImpl {
 
   /**
    * Effective values for a caller: the global snapshot overlaid with the caller's per-user rows.
-   * Secrets are global-only (already redacted), so an overlay never carries plaintext. '' = global.
+   * Per-user secret rows pass through buildConfigValue, so an overlay never carries plaintext. '' = global.
    */
   private async resolveOverlayValues(namespace: string, env: EnvStr, userId: string): Promise<Record<string, any>> {
     const global = this.snapshots.get(snapKey(namespace, env));
@@ -311,21 +311,23 @@ export class ConfigServiceImpl {
 
   /**
    * GetSecret — resolve a secret's decrypted plaintext, gated to allow-listed internal callers.
-   * Distinguishes an unset secret (found=false) from a decrypt failure (INTERNAL); global-scope only.
+   * Distinguishes an unset secret (found=false) from a decrypt failure (INTERNAL). Exact scope: empty
+   * user_id reads only the global row, a user_id only that user's row — never a cross-scope fallback.
    */
   async getSecret(call: any, callback: any) {
     const { namespace, key } = call.request;
-    if (!hasSecretCallerAuthority(call.metadata, namespace, key)) {
+    if (!hasSecretCallerAuthority(call, namespace, key)) {
       log.warn('GetSecret denied — caller not on the secret allow-list', { namespace, key });
       callback(SECRET_SCOPE_ERROR);
       return;
     }
     const env = resolveEnv(call.request.environment);
+    const userIdParam = requestUserId(call.request) || null;
     try {
       const result = await this.pool.query(
         `SELECT value_encrypted FROM config.config_values
-         WHERE namespace = $1 AND key = $2 AND environment = $3 AND user_id IS NULL LIMIT 1`,
-        [namespace, key, env]
+         WHERE namespace = $1 AND key = $2 AND environment = $3 AND COALESCE(user_id,'') = COALESCE($4,'') LIMIT 1`,
+        [namespace, key, env, userIdParam]
       );
       const ciphertext: Buffer | null = result.rows[0]?.value_encrypted ?? null;
       if (!ciphertext || ciphertext.length === 0) {
@@ -338,7 +340,7 @@ export class ConfigServiceImpl {
         plaintext = decryptSecret(ciphertext);
       } catch (err: any) {
         // A decrypt failure (wrong master key / corruption) must NOT masquerade as "unset".
-        log.error('GetSecret decrypt failed', { namespace, key, env });
+        log.error('GetSecret decrypt failed', { namespace, key, env, userId: userIdParam });
         callback({ code: 13 /* INTERNAL */, message: 'secret decrypt failed' });
         return;
       }
@@ -452,7 +454,7 @@ export class ConfigServiceImpl {
     }
 
     // Row-authoritative secret flag: exact-scope row wins, else the global row (so a per-user write to a
-    // secret key still hits the global-only guard below), else the request flag on a genuine create.
+    // secret key is still encrypted), else the request flag on a genuine create.
     const requestIsSecret = (value?.is_secret ?? value?.isSecret) === true;
     const isSecret =
       existing.rows.length > 0
@@ -460,12 +462,6 @@ export class ConfigServiceImpl {
         : globalRow !== null
           ? globalRow.is_secret === true
           : requestIsSecret;
-
-    // Secrets are global-scope only — reject a per-user secret write.
-    if (isSecret && userIdParam !== null) {
-      callback({ code: 3, message: 'secret keys are global-scope only; per-user secret overrides are not supported' });
-      return;
-    }
 
     const plaintext = extractValueData(value);
     let valueData: string;

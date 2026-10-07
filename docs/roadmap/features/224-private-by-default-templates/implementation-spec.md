@@ -1571,7 +1571,7 @@ grep -n "def ctx_with" tests/conftest.py   # → none (the existing _ctx was ext
 
 ### Step 21 — service: config per-user secrets and SAN-bound ingest `GetSecret` grant
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/grpc/authz.ts` — modify
@@ -2995,3 +2995,11 @@ _Populated by /sdd-execute as implementation proceeds._
 ### D-23 — Step 25: REGISTER guard runs after definition validation; local shadowing removed
 - **Actual**: the guard sits after `definition.user_id = caller_user_id` as specified, which is after `_validate_definition_proto`. An invalid definition submitted under the blend id therefore gets the validation error first. The DEACTIVATE and SetStrategyLive branches used to hold a local named `blend_strategy_id`; they now call the accessor directly, so the function name is no longer shadowed.
 - **Disposition**: within scope.
+
+### D-24 — Step 21/22: `userId` added to the GetSecret decrypt-failure log; in-memory store test instead of loopback gRPC
+- **Actual**: the existing `GetSecret decrypt failed` error log now includes `userId`, for diagnosis. It never logs plaintext. `perUserSecrets.test.ts` calls the handlers directly against an in-memory `config_values` store, because insecure loopback gRPC cannot present a peer certificate. SAN parsing against a real mTLS peer is already proven by the Step 5 spike.
+- **Disposition**: within scope.
+
+### D-25 — Step 23: no `credential_scope` branch; servicer unchanged
+- **Actual**: the `credential_scope`/`LEGACY_GLOBAL` branch is omitted per the operator gate (prod has 0 `mcp_client` rows). Every source resolves its secret with exact scope `user_id=src["user_id"]` and never falls back to a global row. No servicer edit was needed, because D-20 already added `_ingest_external_signal(owner=…)`. Verification ran `uv run ruff` rather than bare `ruff`.
+- **Disposition**: operator gate.
