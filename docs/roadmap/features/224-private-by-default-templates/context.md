@@ -344,3 +344,41 @@ OQ-4 to OQ-6 remain for /sdd-design.
     - `merge-order.md` row 72 said the agent tool count was 52. The trunk count is 43, which reaches 45 after 224.
     - Proto field numbers are now given per message in build step 0.
   - New open risk: feature 084's droplet `db-migrator` env needs `SEED_USER_ID`.
+
+## Session 2026-10-07T00:00:00Z — sdd-spec
+
+- Wrote implementation-spec.md: 41 steps, all 37 `@AC-*` scenarios mapped to a step's `**Covers**`. Status design-approved → implementation-ready.
+- **Order change from design §12:** each service's migration lands before the code that reads it. Analysis `026` (Step 6) now comes before analysis threading (Step 7), because `_persist_backtest_run` writes `backtest_runs.user_id` and backtest-details retention is scoped by owner. The design's other constraints still hold:
+  - analysis threads the owner header before indicators SAN-binds the bypass and the interceptor is removed (Steps 7–17);
+  - config per-user secrets ship before the ingest poller (Steps 21 → 23);
+  - the blend helper ships before the saga (Steps 25 → 31).
+- Key codebase findings:
+  - **Migration numbers** are free on every remote branch (git ls-tree scan, 2026-10-07): indicators `007`, ingest `013`, analysis `026`. Feature 217's `StrategyDefinition.sector_param_overrides = 15` is already on trunk, so 224 uses field 16.
+  - **Line numbers have moved since design.md** (217 merged). The spec cites the current lines:
+    - analysis→ingest calls: `live_loop.py:157,457`, `entry_backfill.py:96`, `pnl_pattern_consumer.py:109` (owner at `:188`, `_compose` at `:357`), `servicer.py:3540,5270,5294,5388`, `screener.py:320`, `fundsignal_loop.py:450,479`;
+    - analysis→indicators calls: `evaluator.py:440,455,528,579,606`, `servicer.py:556,582,1325,1335,1628,2180`, `screener.py:293,342,359`, `fundamentals_scoring.py:52`;
+    - blend-id reads: `servicer.py:2834,2962,4425`, `live_loop.py:337`, `entry_backfill.py:87`.
+  - **`SEED_USER_ID`** is already wired at all three run sites (`docker-compose.yml:103`, `.do/app*.yaml:678/680`, `.env.example:27`). The analysis-013 envsubst branch (`db-migrate.sh:72-89`) stays untouched (F-01). The new `scripts/render-migrations.sh` handles the `-- requires-env:` headers.
+  - **CI** has no migration job today. Step 3 adds `migration-rerun` (Timescale service container) and `migration-contract-gate`. The DB-backed AC-15/AC-22/AC-27 assertions run inside `migration-rerun` (Step 33).
+  - **Indicators `LEDGER_ENDPOINT`** is already in every deploy file, so Step 14 needs no deploy-file change.
+  - **e2e:** no IndicatorsService mock exists. Step 39 adds a minimal one on port 9092 and sets `INDICATORS_ENDPOINT`, so the router-traversing api-smoke checks can run (fails.md 2026-10-05).
+
+### Decisions
+
+- **Spec-level elaborations.** These are not decided in design.md; each is listed in the impl-spec Execution Summary for `/sdd-review impl-spec` to confirm or reject:
+  1. FR-13 owner-selector fields: `ListSignalSourcesRequest.owner_user_id=2`, `QuerySignalsRequest.owner_user_id=7`, `GetStrategyRequest.owner_user_id=2`, `ListStrategyDefinitionsRequest.owner_user_id=4`. `ListFormulasRequest.author_filter` is reused as the admin owner selector.
+  2. Saga visibility: an internal indicators `ResolveTemplateIntent(intent_id, commit)` un-hides or hard-deletes the pending copies. Intent states run `PENDING→COMMITTED→FINALIZED` or `PENDING→ABORTING→ABORTED`.
+  3. Three template RPCs per service, no `GetTemplate` (YAGNI).
+  4. `StrategyScore.origin = 8`, for FR-8 parity on `ListStrategies`.
+  5. A headerless `ManageSignalSource` REGISTER of a new slug gets `FAILED_PRECONDITION`, since only `analysis-fundsignal` may write as `system`.
+  6. Saga sweep constants (`_INTENT_STALE_SECONDS=900`, `_INTENT_SWEEP_SECONDS=300`) are invariant constants, not config keys.
+  7. `GetAttribution` filters to the caller-visible own + system source set, which fixes AC-12 for legacy unscoped snapshots.
+- **ManageSignalSource has no DELETE verb** (`ingest.proto:191-197`). FR-4 "delete" maps to DEACTIVATE. No new verb is added (C-18).
+
+### Open Threads
+
+- **Step 18 operator gate:** prod `mcp_client` row count. If 0, `credential_scope` is omitted; if > 0, it ships.
+- **Step 5 gate:** if the SAN spike fails, Steps 14/19/21 switch to the cert-parsing fallback (record in the Deviation Log).
+- **Pre-integration:** verify the prod `analysis.fundsignal.scoring_formula_id` (carried from design).
+- **Step 41** creates the follow-up "224 enforce + contract" and its merge-order row before the integration PR.
+- **`/sdd-review impl-spec`** must confirm or reject the seven elaborations above.
