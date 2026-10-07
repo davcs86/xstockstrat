@@ -76,6 +76,7 @@ export const PLATFORM_SUBNAV: Record<PlatformSegment, SubNavItem[]> = {
     { label: 'Opportunities', href: '/insights/opportunities' },
     { label: 'Strategies', href: '/insights/strategies' },
     { label: 'Formulas', href: '/insights/formulas' },
+    { label: 'Templates', href: '/insights/templates' },
     { label: 'P&L Patterns', href: '/insights/pnl-patterns' },
     { label: 'Screener', href: '/insights/screener' },
     { label: 'Watchlists', href: '/insights/watchlists' },
@@ -85,6 +86,7 @@ export const PLATFORM_SUBNAV: Record<PlatformSegment, SubNavItem[]> = {
     { label: 'Config', href: '/config-ui', match: 'exact' },
     { label: 'Audit Log', href: '/config-ui/audit' },
     { label: 'Sources', href: '/config-ui/sources' },
+    { label: 'Templates', href: '/config-ui/templates' },
   ],
   accounts: [
     { label: 'Profile', href: '/accounts/profile', match: 'exact' },

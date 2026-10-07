@@ -68,6 +68,9 @@ router.service(AnalysisService, {
   queryPnLPatterns: forward((req, opts) => analysisClient.queryPnLPatterns(req, opts)),
   // Per-source signal-performance attribution. Read-only; owner-scoped from the x-user-id header.
   getAttribution: forward((req, opts) => analysisClient.getAttribution(req, opts)),
+  // Template catalog: any authenticated caller lists; instantiate copies into a caller-owned strategy.
+  listTemplates: forward((req, opts) => analysisClient.listTemplates(req, opts)),
+  instantiateTemplate: forward((req, opts) => analysisClient.instantiateTemplate(req, opts)),
 });
 
 router.service(IngestService, {
@@ -85,6 +88,8 @@ router.service(IngestService, {
   },
   // Mutating — admin only; the ingest server re-checks the scope.
   cancelBackfill: forwardAdmin((req, opts) => ingestClient.cancelBackfill(req, opts)),
+  listTemplates: forward((req, opts) => ingestClient.listTemplates(req, opts)),
+  instantiateTemplate: forward((req, opts) => ingestClient.instantiateTemplate(req, opts)),
 });
 
 router.service(MarketDataService, {
@@ -169,6 +174,8 @@ router.service(IndicatorsService, {
   listFundamentalMetrics: forward((req, opts) =>
     indicatorsClient.listFundamentalMetrics(req, opts),
   ),
+  listTemplates: forward((req, opts) => indicatorsClient.listTemplates(req, opts)),
+  instantiateTemplate: forward((req, opts) => indicatorsClient.instantiateTemplate(req, opts)),
 });
 
 // In the consolidated app there is no basePath — the full URL /insights/api/<service>/<method>

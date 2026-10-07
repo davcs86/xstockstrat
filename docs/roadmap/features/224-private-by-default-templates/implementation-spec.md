@@ -2445,7 +2445,7 @@ grep -rn "isPublic\|includePublic" src --include=*.ts --include=*.tsx | grep -v 
 
 ### Step 37 — service: UI template catalog, "use template", wizard start-from-template, admin authoring, nav
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/templates/page.tsx` — create
@@ -3073,4 +3073,14 @@ _Populated by /sdd-execute as implementation proceeds._
 ### D-31 — Step 36: `author` also dropped from `useRegisterFormula`; badge placement
 - **Actual**: `useRegisterFormula` no longer sends `author` either. The BFF is now a pass-through, and indicators takes the author from `x-user-id`; no caller passed it. The new "System" (`secondary`) and "Update available" (`info`) badges use existing `Badge` variants and sit beside the formula name (C-17). `SYSTEM_FORMULA_AUTHOR` is reused rather than repeating the `'system'` literal.
 - **Left for Step 39**: e2e fixtures `e2e/fixtures/formulas.ts` and `e2e/insights/formulas.spec.ts:75` still carry `isPublic` in mock data. They still type-check, because the field is deprecated, not deleted.
+- **Disposition**: within scope.
+
+### D-32 — Step 37: signal-source instance link targets `/config-ui/sources` until Step 38; per-kind authoring fields
+- **Instance link**: `/insights/signal-sources` arrives in Step 38, so `instanceHref` for SIGNAL_SOURCE temporarily points at `/config-ui/sources`. Step 38 repoints it.
+- **Authoring form**: the admin form covers these fields per kind; anything else in the payload is preserved on edit:
+  - formula: source and warm-up period;
+  - strategy: id, display name, entry/exit rules, and a schema-checked component JSON;
+  - source: slug, name, type, extractor, weight, and config JSON.
+- **Source type**: entered as free text, because `SOURCE_TYPES` is private to `config-ui/sources/page.tsx`.
+- **Blocked bearer path**: "Use template" is disabled, with an accessible reason, for `mcp_client` source templates until Step 38 adds the bearer prompt.
 - **Disposition**: within scope.

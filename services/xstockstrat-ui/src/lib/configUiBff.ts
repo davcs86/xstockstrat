@@ -4,7 +4,14 @@ import { ConfigService } from '@xstockstrat/proto/config/v1/config_pb';
 import { IngestService } from '@xstockstrat/proto/ingest/v1/ingest_pb';
 import { AnalysisService } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import { IdentityService } from '@xstockstrat/proto/identity/v1/identity_pb';
-import { configClient, ingestClient, analysisClient, identityClient } from '@/lib/connectClients';
+import { IndicatorsService } from '@xstockstrat/proto/indicators/v1/indicators_pb';
+import {
+  configClient,
+  ingestClient,
+  analysisClient,
+  identityClient,
+  indicatorsClient,
+} from '@/lib/connectClients';
 import {
   getNativeConfigEnv,
   isNativeConfigEnvironment,
@@ -52,12 +59,22 @@ router.service(ConfigService, {
 router.service(IngestService, {
   listSignalSources: forward((req, opts) => ingestClient.listSignalSources(req, opts)),
   manageSignalSource: forward((req, opts) => ingestClient.manageSignalSource(req, opts)),
+  listTemplates: forward((req, opts) => ingestClient.listTemplates(req, opts)),
+  manageTemplate: forwardAdmin((req, opts) => ingestClient.manageTemplate(req, opts)),
 });
 
-// Only the admin-scoped manual producer trigger is exposed — connect-node leaves every other
-// AnalysisService method unimplemented, so this doesn't widen the config-ui surface.
+// Only the admin-scoped producer trigger and template authoring are exposed — connect-node leaves
+// every other AnalysisService method unimplemented, so this doesn't widen the config-ui surface.
 router.service(AnalysisService, {
   runFundamentalsScan: forwardAdmin((req, opts) => analysisClient.runFundamentalsScan(req, opts)),
+  listTemplates: forward((req, opts) => analysisClient.listTemplates(req, opts)),
+  manageTemplate: forwardAdmin((req, opts) => analysisClient.manageTemplate(req, opts)),
+});
+
+// Template authoring only (admin; the backend re-checks the ADMIN bit). Instantiation lives on /insights.
+router.service(IndicatorsService, {
+  listTemplates: forward((req, opts) => indicatorsClient.listTemplates(req, opts)),
+  manageTemplate: forwardAdmin((req, opts) => indicatorsClient.manageTemplate(req, opts)),
 });
 
 // User management — only these six IdentityService methods are registered (connect-node leaves the

@@ -219,7 +219,10 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
             ariaLabel="Strategy path"
             items={[{ label: 'Strategies', href: '/insights/strategies' }, { label: id }]}
           />
-          <h1 className="text-xl font-bold tracking-tight font-mono">{id}</h1>
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-xl font-bold tracking-tight font-mono">{id}</h1>
+            {definition?.origin?.updateAvailable && <Badge variant="info">Update available</Badge>}
+          </div>
         </div>
 
         <div className="flex flex-col lg:flex-row gap-4">

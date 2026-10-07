@@ -60,6 +60,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: 'Strategies', href: '/insights/strategies' },
       { label: 'Formulas', href: '/insights/formulas' },
+      { label: 'Templates', href: '/insights/templates' },
       { label: 'P&L Patterns', href: '/insights/pnl-patterns' },
       { label: 'Attribution', href: '/insights/attribution' },
       { label: 'Performance', href: '/insights/performance' },
@@ -96,6 +97,7 @@ export const NAV_GROUPS: NavGroup[] = [
         aliases: KNOWN_NAMESPACES.map((ns) => `/config-ui/${ns}`),
       },
       { label: 'Users', href: '/config-ui/users', adminOnly: true },
+      { label: 'Templates', href: '/config-ui/templates', adminOnly: true },
       { label: 'Audit log', href: '/config-ui/audit' },
       { label: 'Fundamentals Scan', href: '/config-ui/fundamentals-scan' },
       { label: 'Authorized apps', href: '/accounts/authorized-apps' },

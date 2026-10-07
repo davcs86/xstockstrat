@@ -905,3 +905,21 @@ OQ-4 to OQ-6 remain for /sdd-design.
 
 ### Operator note (2026-10-07): production environment does not exist yet
 - The pre-merge check of prod `analysis.fundsignal.scoring_formula_id` (design.md Open Risks) is **moot**: there is no production environment yet. Staging uses system formula `d1ff…`, so AC-37's fail-closed path does not trigger there. The same goes for the prod `mcp_client` count gate (D-19/D-25, answered "0").
+
+### Step 37 — service: UI template catalog, "use template", wizard start-from-template, admin authoring, nav [done]
+- **New pages:**
+  - `/insights/templates`: tabs for formula, strategy and signal-source templates, each with a "Use template <name>" action.
+  - `/config-ui/templates`: admin-only create, edit and retire, using `FormDialog` and `RowActionsMenu` with confirm.
+- **New code:** a `useTemplates` hook module and `configUiIndicatorsClient.ts`.
+- **Strategy wizard:** a "Start from template" card.
+- **Strategy detail:** an "Update available" badge.
+- **BFF:** real `forward()` registrations for the three template RPCs on all three services under `/insights/api`. Under `/config-ui/api`, `listTemplates` is registered with `forward` and `manageTemplate` with `forwardAdmin`.
+- **Nav:** `NAV_GROUPS` gains Engine → Templates and Settings → Templates (adminOnly). `PLATFORM_SUBNAV` mirrors both (C-10(a)).
+- **C-17 primitives:** `DataTable`, `EmptyState`, `QueryStateMessages`, `CardNotice`, `FormDialog`, `RowActionsMenu`, `Tabs`, `Tooltip`, `Badge`. Tokens only.
+- **Verification:**
+  - vitest 224/224 pass.
+  - `tsc` shows only the 2 pre-existing `backfills.spec.ts` errors.
+  - lint has 0 errors; the duplication check finds 0 clones.
+- **TDD:** paired with Step 39.
+- **Deviation:** D-32.
+- **For Step 39:** the e2e mock backend needs the template RPCs. Nav locators must be scoped to their group, because admins see two "Templates" links.
