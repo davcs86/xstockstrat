@@ -23,7 +23,8 @@ Backend pattern — see `docs/patterns/docker-build.md` for the base stage, prot
 | gRPC | `50059` | Internal service-to-service (protobuf) |
 
 This service is **gRPC-only** (`src/index.ts` runs a single `@grpc/grpc-js` server exposing
-`EmitAlert`, `AcknowledgeAlert`, `ListAlerts`, and the `StreamAlerts` server-stream). The MCP
+`EmitAlert`, `AcknowledgeAlert`, `ListAlerts`, `MarkAlertRead`, `RegisterPushSubscription`/
+`UnregisterPushSubscription`, and the `StreamAlerts` server-stream). The MCP
 agent emits alerts via `EmitAlert`; the trader UI subscribes to `StreamAlerts` over gRPC and
 bridges it to browser SSE. The former HTTP/Connect-RPC server on `8059` (its `src/connect/`
 Connect router and `src/webhooks/` handlers) was removed.
@@ -33,6 +34,10 @@ Connect router and `src/webhooks/` handlers) was removed.
 - `StreamAlerts` holds long-lived gRPC server streams per subscriber
 - Fan-out is synchronous in `EmitAlert` — alerts are delivered to matching subscribers before the RPC returns
 - Alerts are also persisted to `notify.alerts` for history and replay
+- Per-user read state lives in `notify.alert_reads (alert_id, user_id, read_at)` (feature 203), with no FK to `notify.alerts`
+  — `MarkAlertRead`'s per-row JOIN is the only orphan guard. `ListAlerts`/`MarkAlertRead` take the owner from `x-user-id`
+  (body `userId` fallback); with no identity `ListAlerts` is unscoped (every row, `read=false`) and `MarkAlertRead` does not
+  check `target_user_id`. The BFF always injects the header, so only direct gRPC callers see this.
 - Alert matching: by `user_id`, `categories[]`, `severities[]`
 
 ## Authorization — EmitAlert is an internal-service-caller contract (feature 092)
