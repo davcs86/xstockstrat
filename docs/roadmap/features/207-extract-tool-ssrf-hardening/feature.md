@@ -5,6 +5,7 @@
 **Last Updated**: 2026-09-25
 **Committed to main**: 27f3f276b39fa79d07b4de6c023582f72539aac3
 **Launched date**: 2026-10-01
+**Archived**: 2026-10-07
 
 ---
 
@@ -20,15 +21,16 @@
 | 2026-09-28 | `in-progress` → `code-completed` | /sdd-execute | All 7 steps done — 3-layer SSRF hardening (deny-by-range `not is_global` validator + IPv4-mapped unwrap; DNS-rebind-safe pinning httpx transport; hardened `_fetch_url` manual redirect loop with per-hop scheme + literal-IP target re-validation, cross-origin credential strip, streamed byte-cap, config-sourced `agent.extract.*` limits, FR-6 non-enumerating error). 474 tests pass, egress.py 94%. Deviations DEV-1..DEV-4 logged. Teardown done manually (context-forge plugin unavailable): reconciled service CLAUDE.md, config-governance keys log, mcp-tools.md error tables. |
 
 | 2026-10-01 | `code-completed` → `launched` | CI workflow | Promoted via PR #1205; committed 27f3f276b39fa79d07b4de6c023582f72539aac3 |
+| 2026-10-07 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(3); pruned 4 spec(s); acceptance scenarios promoted to per-service suites (C-16) |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
-- [Recon Dossier](recon.md) — grounded codebase map + httpx/httpcore pinning mechanism (Phase 0)
-- [Design](design.md) — chosen 3-layer approach, rejected alternatives, Constitution/C-16 rules (Phase 1)
-- [Implementation Spec](implementation-spec.md)
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15); promoted to services/xstockstrat-agent/acceptance/extract-tool-ssrf-hardening.feature (promoted at launch) (C-16)
+- Recon Dossier — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

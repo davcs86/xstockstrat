@@ -8,6 +8,7 @@
 **Last Updated**: 2026-09-25
 **Committed to main**: eee580622c92a27a5e6dc22e6919075924b01b84
 **Launched date**: 2026-09-25
+**Archived**: 2026-10-07
 
 ---
 
@@ -20,15 +21,16 @@
 | 2026-09-25 | `design-approved` → `in-progress` → `code-completed` | sdd-spec + execute (manual) | implementation-spec.md; both services build/vet/test green (GOWORK=off); context reconciled (PORTFOLIO-10 + both CLAUDE.md) |
 
 | 2026-09-25 | `code-completed` → `launched` | CI workflow | Promoted via PR #1181; committed eee580622c92a27a5e6dc22e6919075924b01b84 |
+| 2026-10-07 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(1); pruned 4 spec(s); acceptance scenarios promoted to per-service suites (C-16) |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — bug description and fix scope
-- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
-- [Recon](recon.md) — grounded codebase dossier (`/sdd-design` Phase 0)
-- [Design](design.md) — debated architecture (`/sdd-design` Phase 1)
-- [Implementation Spec](implementation-spec.md) — numbered fix steps (`/sdd-spec`)
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15); promoted to services/xstockstrat-{trading,portfolio}/acceptance/fix-reconciliation-false-halt.feature (@AC-1..4); @AC-5 not promoted (overlaps feature 157 @AC-11) — see context.md (C-16)
+- Recon — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

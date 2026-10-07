@@ -5,6 +5,7 @@
 **Last Updated**: 2026-09-24
 **Committed to main**: 0be58cbe339fd3bf47b6b23464c3af53ae402b78
 **Launched date**: 2026-09-25
+**Archived**: 2026-10-07
 
 ---
 
@@ -20,15 +21,16 @@
 | 2026-09-24 | `in-progress` → `code-completed` | /sdd-execute | All 14 steps done; marketdata repo+service `go test -race` green + golangci-lint 0; agent suite 456 passed (78% cov); UI Data Explorer e2e 6/6 green; C-16 scenarios promoted (13 → ui suite, 9 → agent suite, @feature-204) |
 
 | 2026-09-25 | `code-completed` → `launched` | CI workflow | Promoted via PR #1177; committed 0be58cbe339fd3bf47b6b23464c3af53ae402b78 |
+| 2026-10-07 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(2); pruned 4 spec(s); acceptance scenarios promoted to per-service suites (C-16) |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
-- [Recon Dossier](recon.md) — codebase discovery (Phase 0)
-- [Design Document](design.md) — approved architecture (Phase 1)
-- [Implementation Spec](implementation-spec.md) — 14 numbered steps with codebase evidence
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15); promoted to services/xstockstrat-{ui,agent}/acceptance/backfilled-data-queryable.feature (promoted at launch) (C-16)
+- Recon Dossier — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design Document — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
