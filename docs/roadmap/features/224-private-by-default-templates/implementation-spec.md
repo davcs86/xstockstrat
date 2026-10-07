@@ -484,7 +484,7 @@ threshold (the CI `python-test` value); config runs `test:coverage` (`c8 --lines
 
 ### Step 6 — migration: analysis `026_owner_dimension_templates`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/migrations/026_owner_dimension_templates.up.sql` — create

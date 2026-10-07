@@ -502,3 +502,21 @@ OQ-4 to OQ-6 remain for /sdd-design.
 - TDD: N/A (spike).
 - Files: `services/xstockstrat-ingest/tests/test_peer_identity_spike.py`, `services/xstockstrat-config/src/__tests__/peerSanSpike.test.ts`.
 - Deviations: none.
+
+### Step 6 — migration: analysis `026_owner_dimension_templates` [done]
+- **Header and guard:** `-- requires-env: SEED_USER_ID`, plus an unconditional guard that raises if the seed is unset or not rendered.
+- **D-1 backfill:** `backtest_runs.user_id` is filled with the strategy's owner when exactly one owner holds that strategy, otherwise with `SEED_USER_ID`. NOT NULL is deferred to the contract feature.
+- **Owner columns:** `user_id` is added to `backtest_run_symbols` and `backtest_details`, backfilled from `backtest_runs`, and covered by two owner-leading indexes.
+- **`strategy_scores_v2`:** keyed `(user_id, strategy_id)`. It is seeded from `strategy_scores` with explicit column lists for unambiguous ids only, guarded by `to_regclass`.
+- **New schema:** `analysis.strategies` gains origin columns. New tables `analysis.strategy_templates` (no seed rows) and `analysis.template_intents` (state CHECK, plus a `(state, updated_at)` index).
+- **No triggers.** Every statement is idempotent: `IF NOT EXISTS`, `WHERE … IS NULL`, `ON CONFLICT DO NOTHING`.
+- **Down file:** drops the new tables, columns and indexes. It deliberately keeps the `backtest_runs.user_id` backfill, which is additive and harmless to N-1.
+- **Verification (offline):**
+  - 025 → 026 numbering is correct.
+  - Up and down are parity-checked by inspection.
+  - Every referenced column was checked against migrations 006, 007, 008 and 015.
+  - `render-migrations.sh` renders both `${SEED_USER_ID}` placeholders and leaves the `$$` blocks intact. Rendering without the variable exits 1.
+  - The live apply and replay run in CI's `migration-rerun` job.
+- TDD: N/A (migration).
+- Files: `services/xstockstrat-analysis/migrations/026_owner_dimension_templates.{up,down}.sql`.
+- Deviation: the spec named no index for `template_intents`, so it is named `idx_template_intents_state_updated`. `intent_id` has no default, so writers must supply the UUID (Step 31).
