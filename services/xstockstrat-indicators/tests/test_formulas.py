@@ -587,9 +587,8 @@ class TestFormulaWarmupPeriod:
             input_schema={},
             warmup_period=14,
         )
-        # warmup_period is bound as the 10th positional arg; fundamental_inputs (feature 200) is
-        # now the trailing 11th bind, so warmup is second-to-last.
-        assert pool.fetchrow.await_args.args[-2] == 14
+        # warmup_period is bound as $10 (args[0] is the SQL).
+        assert pool.fetchrow.await_args.args[10] == 14
         assert result["warmup_period"] == 14
 
     async def test_register_get_round_trips_warmup_period(self):

@@ -1900,7 +1900,7 @@ grep -n "analysis-template-saga" app/handlers/servicer.py   # saga + ResolveTemp
 
 ### Step 28 — test: formula templates, instantiation, update-available, retire
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/test_formula_templates.py` — create

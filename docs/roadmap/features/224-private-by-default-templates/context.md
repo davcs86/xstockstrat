@@ -788,3 +788,28 @@ OQ-4 to OQ-6 remain for /sdd-design.
   - No credential ever appears in a template.
   - Repository SQL.
 - **TDD:** RED was an ImportError, then 24 failed (`NotImplementedError` from the base class). GREEN is 308 passed at 79.99% coverage, ruff clean, and 0 jscpd clones.
+
+### Step 27 — service: indicators formula templates, saga copy, intent resolution, origin on reads [done]
+- **New `formula_templates_repository.py`:** list, get, create, update (bumps the version in one statement), retire, and a batched latest-version lookup.
+- **`formulas_repository.py`:**
+  - One shared INSERT now also writes the template origin and the pending intent id.
+  - `create_pending_copies` writes all of a saga's copies in a single transaction.
+  - `resolve_intent(intent_id, author, commit)` un-hides the pending copies or deletes them.
+- **New RPCs:**
+  - `ListTemplates` and `ManageTemplate` (managing is ADMIN-only).
+  - `InstantiateTemplate`: the user path makes one private copy; the saga path copies a batch as pending-hidden rows.
+  - `ResolveTemplateIntent`.
+  - The saga path and `ResolveTemplateIntent` require the `analysis-template-saga` caller id bound to the `xstockstrat-analysis` SAN. The `analysis` read-bypass id is rejected there.
+  - If any referenced template is retired or missing, the whole saga fails `NOT_FOUND` before anything is inserted.
+- **Reads:** `GetFormula` and `ListFormulas` return `TemplateOrigin` with update-available, filled by one batched lookup.
+- **Deviation:** D-27.
+
+### Step 28 — test: formula templates, instantiation, update-available, retire [done]
+- **New `tests/test_formula_templates.py` (33 tests):** AC-13/14/15/16/17/31, plus the saga cases:
+  - pending copies are hidden and never cached; commit un-hides, abort deletes and evicts;
+  - owner scoping and idempotency;
+  - grant checks: missing or wrong SAN, the `analysis` bypass id, no header;
+  - all-or-nothing NOT_FOUND, and rollback on a mid-batch failure;
+  - the repository SQL.
+- **TDD:** RED was a ModuleNotFoundError, then 30 failed (`NotImplementedError` and a missing `resolve_intent`). GREEN is 242 passed, coverage 84.81%, ruff clean.
+- **Follow-through:** one positional bind index updated in `test_formulas.py`.
