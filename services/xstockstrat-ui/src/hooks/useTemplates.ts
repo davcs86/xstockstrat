@@ -80,7 +80,7 @@ export function useTemplates(kind: CatalogKind, segment: TemplateSegment = 'insi
   });
 }
 
-/** An mcp_client source needs a per-user bearer at instantiation, which this catalog can't collect yet. */
+/** An mcp_client source needs the caller's own bearer at instantiation (prompted, never rendered back). */
 export function needsBearer(row: CatalogTemplate): boolean {
   return (
     row.kind === TemplateKind.SIGNAL_SOURCE && row.template.payload?.sourceType === 'mcp_client'
@@ -95,7 +95,7 @@ export function instanceHref(kind: CatalogKind, id: string): string {
     case TemplateKind.STRATEGY:
       return `/insights/strategies/${encodeURIComponent(id)}`;
     case TemplateKind.SIGNAL_SOURCE:
-      return '/config-ui/sources';
+      return '/insights/signal-sources';
   }
 }
 

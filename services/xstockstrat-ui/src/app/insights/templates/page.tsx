@@ -1,5 +1,5 @@
 'use client';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ConnectError } from '@connectrpc/connect';
 import type { ColumnDef } from '@tanstack/react-table';
@@ -7,13 +7,16 @@ import { TemplateKind } from '@xstockstrat/proto/common/v1/common_pb';
 import { AppShell } from '@/components/insights/AppShell';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { DataTable } from '@/components/ui/data-table';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { PageBreadcrumb } from '@/components/shared/PageBreadcrumb';
 import { QueryStateMessages } from '@/components/shared/QueryStateMessages';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { CardNotice } from '@/components/shared/CardNotice';
+import { FormDialog } from '@/components/shared/FormDialog';
+import { useInstantiateMcpSourceTemplate } from '@/app/config-ui/hooks/useSignalSourceMutations';
 import {
   CATALOG_KINDS,
   TEMPLATE_KIND_LABEL,
@@ -25,14 +28,18 @@ import {
   type CatalogTemplate,
 } from '@/hooks/useTemplates';
 
-const BEARER_REASON =
-  'This MCP source needs your own bearer token; instantiating it from the catalog is not available yet.';
+function errorText(err: Error | null): string | null {
+  return err instanceof ConnectError ? err.rawMessage : (err?.message ?? null);
+}
 
 function TemplateCatalog({ kind }: { kind: CatalogKind }) {
   const router = useRouter();
   const { data, isLoading, error } = useTemplates(kind);
   const rows = useMemo(() => data ?? [], [data]);
   const instantiate = useInstantiateTemplate();
+  const instantiateMcp = useInstantiateMcpSourceTemplate();
+  const [bearerFor, setBearerFor] = useState<CatalogTemplate | null>(null);
+  const [bearer, setBearer] = useState('');
   const label = TEMPLATE_KIND_LABEL[kind].toLowerCase();
 
   const columns = useMemo<ColumnDef<CatalogTemplate>[]>(
@@ -70,30 +77,19 @@ function TemplateCatalog({ kind }: { kind: CatalogKind }) {
           const name = r.template.meta?.name || templateId;
           const accessibleName = `Use template ${name}`;
           if (needsBearer(r)) {
-            const reasonId = `bearer-reason-${templateId}`;
             return (
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    {/* A disabled button gets no pointer/focus events; the span carries the tooltip. */}
-                    <span tabIndex={0} className="inline-block">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled
-                        aria-label={accessibleName}
-                        aria-describedby={reasonId}
-                      >
-                        Use template
-                      </Button>
-                      <span id={reasonId} className="sr-only">
-                        {BEARER_REASON}
-                      </span>
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent>{BEARER_REASON}</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+              <Button
+                size="sm"
+                aria-label={accessibleName}
+                disabled={instantiateMcp.isPending}
+                onClick={() => {
+                  instantiateMcp.reset();
+                  setBearer('');
+                  setBearerFor(r);
+                }}
+              >
+                Use template
+              </Button>
             );
           }
           const pending = instantiate.isPending && instantiate.variables?.templateId === templateId;
@@ -115,13 +111,25 @@ function TemplateCatalog({ kind }: { kind: CatalogKind }) {
         },
       },
     ],
-    [kind, router, instantiate],
+    [kind, router, instantiate, instantiateMcp],
   );
 
-  const instantiateError =
-    instantiate.error instanceof ConnectError
-      ? instantiate.error.rawMessage
-      : (instantiate.error?.message ?? null);
+  const instantiateError = errorText(instantiate.error);
+  const bearerTemplateId = bearerFor?.template.meta?.templateId ?? '';
+
+  const submitBearer = () => {
+    if (!bearer.trim()) return;
+    instantiateMcp.mutate(
+      { templateId: bearerTemplateId, bearerToken: bearer },
+      {
+        onSuccess: (slug) => {
+          setBearer('');
+          setBearerFor(null);
+          router.push(instanceHref(kind, slug));
+        },
+      },
+    );
+  };
 
   return (
     <div className="space-y-3">
@@ -149,6 +157,49 @@ function TemplateCatalog({ kind }: { kind: CatalogKind }) {
           )}
         </CardContent>
       </Card>
+      <FormDialog
+        open={bearerFor !== null}
+        onOpenChange={(open) => {
+          if (!open) setBearerFor(null);
+        }}
+        title={`Use template ${bearerFor?.template.meta?.name || bearerTemplateId}`}
+        description="This MCP source needs your own bearer token. It is stored encrypted under your account and never shown again."
+      >
+        <form
+          className="space-y-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            submitBearer();
+          }}
+        >
+          <div className="space-y-1.5">
+            <Label htmlFor="template-bearer">Bearer token</Label>
+            <Input
+              id="template-bearer"
+              type="password"
+              autoComplete="off"
+              value={bearer}
+              onChange={(e) => setBearer(e.target.value)}
+            />
+          </div>
+          {instantiateMcp.error && (
+            <CardNotice variant="error">{errorText(instantiateMcp.error)}</CardNotice>
+          )}
+          <div className="flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={instantiateMcp.isPending}
+              onClick={() => setBearerFor(null)}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={instantiateMcp.isPending || !bearer.trim()}>
+              {instantiateMcp.isPending ? 'Creating…' : 'Create source'}
+            </Button>
+          </div>
+        </form>
+      </FormDialog>
     </div>
   );
 }

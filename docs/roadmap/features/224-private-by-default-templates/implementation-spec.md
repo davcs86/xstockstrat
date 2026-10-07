@@ -2540,7 +2540,7 @@ ls src/lib/browserClients/configUiIndicatorsClient.ts
 
 ### Step 38 — service: UI per-user signal sources page, per-user secret write, admin read-only view
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/signal-sources/page.tsx` — create
@@ -3083,4 +3083,14 @@ _Populated by /sdd-execute as implementation proceeds._
   - source: slug, name, type, extractor, weight, and config JSON.
 - **Source type**: entered as free text, because `SOURCE_TYPES` is private to `config-ui/sources/page.tsx`.
 - **Blocked bearer path**: "Use template" is disabled, with an accessible reason, for `mcp_client` source templates until Step 38 adds the bearer prompt.
+- **Disposition**: within scope.
+
+### D-33 — Step 38: `useTemplates.ts` follow-through; unit test added; e2e red until Step 39
+- **Follow-through**: `instanceHref` for signal sources is repointed to `/insights/signal-sources`, and the `needsBearer` comment is updated (`useTemplates.ts`, Step 37's file, the D-32 follow-up).
+- **New test**: `src/lib/insightsBff.test.ts` (4 tests, red then green) shows the insights `SetConfig` handler forces `userId`, `author`, `environment`, `createKey: true` and `isSecret: true`. It also rejects any key outside `ingest`/`mcp_credential.*` with `PermissionDenied`.
+- **Hook and page changes**:
+  - `useRegisterMcpClientSource` no longer takes `slug`; the secret key is a random UUID.
+  - The admin read-only view drops the stat tiles and the credentials column.
+  - The authenticated-website "Credentials Ref (secret.* key name)" label was moved over unchanged, though the `secret.*` prefix is retired (Step 40 candidate).
+- **Known red until Step 39**: `e2e/config-ui/sources.spec.ts` expects the old create/edit UI, and `nav-reachability.spec.ts` lists the old href.
 - **Disposition**: within scope.

@@ -923,3 +923,22 @@ OQ-4 to OQ-6 remain for /sdd-design.
 - **TDD:** paired with Step 39.
 - **Deviation:** D-32.
 - **For Step 39:** the e2e mock backend needs the template RPCs. Nav locators must be scoped to their group, because admins see two "Templates" links.
+
+### Step 38 — service: UI per-user signal sources page, per-user secret write, admin read-only view [done]
+- **New page `/insights/signal-sources`**: users create, edit, enable and disable their own sources, and edit the inline reliability weight. System rows are read-only.
+  - This is the C-16 CHANGE of `@feature-161 @AC-4/@AC-5`, re-homed with identical guidance text and selectors.
+- **`/config-ui/sources`** is now the FR-13 admin read-only view: an owner selector, a table, and no write controls.
+- **`mcp_client` bearer** (create form and template "Use template" dialog): the bearer is written as a per-user secret under `mcp_credential.<uuid>`. Its key becomes `credentials_ref = ingest.<key>`, and the bearer itself is never rendered back.
+- **Insights BFF** (forced server-side):
+  - `ManageSignalSource` is a plain `forward()`.
+  - `SetConfig` always sends `userId`, `author`, `environment`, `createKey` and `isSecret:true`, and accepts only `ingest`/`mcp_credential.*` keys.
+- **Nav**:
+  - Engine: "Signal sources" → `/insights/signal-sources`.
+  - Settings: "Signal sources (admin)", admin only.
+  - Both mirrored in `PLATFORM_SUBNAV`.
+- **Verification**:
+  - vitest 228/228 (4 new BFF tests, red then green);
+  - `tsc` shows only the 2 pre-existing errors;
+  - lint has 0 errors, and the 4 old warnings on the sources page are gone;
+  - 0 clones.
+- **Deviation**: D-33.

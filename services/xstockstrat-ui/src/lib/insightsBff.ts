@@ -6,6 +6,7 @@ import { PortfolioService } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
 import { TradingService } from '@xstockstrat/proto/trading/v1/trading_pb';
 import { LedgerService } from '@xstockstrat/proto/ledger/v1/ledger_pb';
 import { ConfigService } from '@xstockstrat/proto/config/v1/config_pb';
+import { ConnectError, Code } from '@connectrpc/connect';
 import {
   analysisClient,
   indicatorsClient,
@@ -25,6 +26,7 @@ import {
   forwardAdmin,
   FUNDAMENTALS_TIMEOUT_MS,
 } from '@/lib/bffShared';
+import { nativeConfigEnvironment } from '@/lib/deploymentEnv';
 
 const router = createBffRouter();
 
@@ -88,6 +90,8 @@ router.service(IngestService, {
   },
   // Mutating — admin only; the ingest server re-checks the scope.
   cancelBackfill: forwardAdmin((req, opts) => ingestClient.cancelBackfill(req, opts)),
+  // Owner-scoped server-side: owners manage their own sources; system sources are read-only.
+  manageSignalSource: forward((req, opts) => ingestClient.manageSignalSource(req, opts)),
   listTemplates: forward((req, opts) => ingestClient.listTemplates(req, opts)),
   instantiateTemplate: forward((req, opts) => ingestClient.instantiateTemplate(req, opts)),
 });
@@ -156,6 +160,29 @@ router.service(LedgerService, {
 router.service(ConfigService, {
   // Read-only — GetConfig is deliberately open on the backend (no admin gate), matching traderBff.
   getConfig: forward((req, opts) => configClient.getConfig(req, opts)),
+  // Per-user mcp_client bearer write ONLY. Scope, secrecy and creation are forced from the session so a
+  // client can never store the bearer in plaintext or in another user's scope.
+  async setConfig(req, ctx) {
+    const claims = await requireSession(ctx);
+    if (req.namespace !== 'ingest' || !req.key.startsWith('mcp_credential.')) {
+      throw new ConnectError(
+        'Only ingest mcp_credential.* per-user secrets may be written here',
+        Code.PermissionDenied,
+      );
+    }
+    if (!req.value) throw new ConnectError('value is required', Code.InvalidArgument);
+    return configClient.setConfig(
+      {
+        ...req,
+        userId: claims.user_id,
+        environment: nativeConfigEnvironment(),
+        author: claims.user_id,
+        createKey: true,
+        value: { ...req.value, isSecret: true },
+      },
+      { headers: backendHeaders(claims, ctx) },
+    );
+  },
 });
 
 router.service(IndicatorsService, {

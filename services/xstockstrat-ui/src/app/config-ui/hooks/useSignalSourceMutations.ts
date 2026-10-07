@@ -1,54 +1,70 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { ingestClient } from '@/lib/browserClients/ingestClient';
-import { configClient } from '@/lib/browserClients/configClient';
-import type { ManageSignalSourceResponse } from '@xstockstrat/proto/ingest/v1/ingest_pb';
-import { ConnectError } from '@connectrpc/connect';
+import { insightsIngestClient } from '@/lib/browserClients/insightsIngestClient';
+import { insightsConfigClient } from '@/lib/browserClients/insightsConfigClient';
+import { useInvalidatingMutation } from '@/hooks/useInvalidatingMutation';
 
-type ManageSignalSourceInput = Parameters<typeof ingestClient.manageSignalSource>[0];
+type ManageSignalSourceInput = Parameters<typeof insightsIngestClient.manageSignalSource>[0];
 
+const SOURCE_KEYS = [['signal-sources'], ['insights-signal-sources']];
+
+/** Owner-scoped source writes through the insights BFF (the backend rejects system/foreign rows). */
 export function useManageSignalSource() {
-  const queryClient = useQueryClient();
-  return useMutation<ManageSignalSourceResponse, Error, ManageSignalSourceInput>({
-    mutationFn: (req) => ingestClient.manageSignalSource(req),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['signal-sources'] });
-    },
-    onError: (err) => {
-      if (err instanceof ConnectError) return err;
-      return err;
-    },
-  });
+  return useInvalidatingMutation(
+    (req: ManageSignalSourceInput) => insightsIngestClient.manageSignalSource(req),
+    SOURCE_KEYS,
+  );
 }
 
 /**
- * Register a `mcp_client` source with a bearer token, SECRET-FIRST: write the token to the encrypted
- * config key `ingest.mcp_credential.<slug>` (`is_secret`, `create_key`), then register the source via
- * `credentials_ref`. The token is never placed in `config_json`; environment is left UNSPECIFIED (the
- * BFF fills the native scope). A failed register after the secret write leaves a harmless redacted orphan.
+ * Store a bearer as the CALLER's per-user encrypted secret under an opaque key and return the
+ * `credentials_ref` pointing at it. The insights BFF forces user scope, `is_secret` and `create_key`.
+ */
+async function writeOwnBearerSecret(bearerToken: string, reason: string): Promise<string> {
+  const key = `mcp_credential.${crypto.randomUUID()}`;
+  await insightsConfigClient.setConfig({
+    namespace: 'ingest',
+    key,
+    value: { value: { case: 'stringVal', value: bearerToken }, isSecret: true },
+    reason,
+    createKey: true,
+  });
+  return `ingest.${key}`;
+}
+
+/**
+ * Register a `mcp_client` source SECRET-FIRST: the bearer goes to a per-user secret, then the source
+ * registers with `credentials_ref` (never in `config_json`). A failed register leaves a redacted orphan.
  */
 export function useRegisterMcpClientSource() {
-  const queryClient = useQueryClient();
-  return useMutation<
-    ManageSignalSourceResponse,
-    Error,
-    { source: ManageSignalSourceInput['source']; slug: string; bearerToken: string }
-  >({
-    mutationFn: async ({ source, slug, bearerToken }) => {
-      await configClient.setConfig({
-        namespace: 'ingest',
-        key: `mcp_credential.${slug}`,
-        value: { value: { case: 'stringVal', value: bearerToken }, isSecret: true },
-        reason: `bearer for mcp_client source ${slug}`,
-        createKey: true,
-      });
-      return ingestClient.manageSignalSource({
+  return useInvalidatingMutation(
+    async ({
+      source,
+      bearerToken,
+    }: {
+      source: ManageSignalSourceInput['source'];
+      bearerToken: string;
+    }) =>
+      insightsIngestClient.manageSignalSource({
         operation: 'register',
         source,
-        credentialsRef: `ingest.mcp_credential.${slug}`,
-      });
+        credentialsRef: await writeOwnBearerSecret(
+          bearerToken,
+          `bearer for mcp_client source ${source?.slug ?? ''}`,
+        ),
+      }),
+    SOURCE_KEYS,
+  );
+}
+
+/** Instantiate a `mcp_client` source template with the caller's own bearer; resolves to the new slug. */
+export function useInstantiateMcpSourceTemplate() {
+  return useInvalidatingMutation(
+    async ({ templateId, bearerToken }: { templateId: string; bearerToken: string }) => {
+      const credentialsRef = await writeOwnBearerSecret(
+        bearerToken,
+        `bearer for mcp_client template ${templateId}`,
+      );
+      return (await insightsIngestClient.instantiateTemplate({ templateId, credentialsRef })).slug;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['signal-sources'] });
-    },
-  });
+    SOURCE_KEYS,
+  );
 }
