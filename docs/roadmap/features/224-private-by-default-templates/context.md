@@ -869,3 +869,27 @@ OQ-4 to OQ-6 remain for /sdd-design.
   - Fixture desk check: every inserted column was checked against the defining migration lines.
   - DB execution and assertion results can only be proven in CI.
 - TDD: N/A (DB assertions run in CI).
+
+### Step 34 — service: agent tools (drop public args, owner-scoped sources, template tools, tool count 45, docs parity) [done]
+- **Formula tools:** `manage_formula` and `list_formulas` no longer take `is_public` or `include_public`. `author_filter` is now documented as an admin-only owner selector, and `isPublic` is stripped from output.
+- **`manage_signal_source`:** owners manage their own sources. An `mcp_client` bearer is stored as a **per-user** secret under an opaque key `mcp_credential.<uuid4>` (written with `user_id=caller`, `is_secret`, `create_key`), and the source's `credentials_ref` points to it. Output now includes `user_id` and `origin`.
+- **New tools:**
+  - `list_templates(kind)`.
+  - `instantiate_template(kind, template_id, strategy_id, slug, bearer_token)`, routed to the owning service with the caller's headers.
+  - `ResolveTemplateIntent` is not exposed.
+- **Tool count 43 → 45 on all six surfaces:**
+  - `tools.py` (:4, :54)
+  - agent `CLAUDE.md` (:43, :49)
+  - `mcp-tools.md` (:3, :10, :45)
+  - `copilot.ts:21`
+  - the durable feature file (`@feature-214 @AC-1`, an approved C-16 CHANGE)
+  - the tools endpoint test
+- **Stale docs fixed:** "secrets global-only" and the admin gate on `manage_signal_source`.
+- **`strat-lab` SKILL.md:** updated in the same change; the plugin validator passes.
+
+### Step 35 — test: agent tool catalog and docs parity [done]
+- New `tests/test_template_tools.py` (9 tests).
+- `test_tools_endpoint.py`: the name set now includes the two new tools, with `len == 45`.
+- `test_signal_source_builder.py`: covers `user_id` and `origin`.
+- **TDD:** RED was 15 failed (`43 == 45`, the template tools not registered, `is_public` still in the schema, the key regex, `KeyError: 'user_id'`, docs parity). GREEN is 496 passed, coverage 80.36%, ruff clean. `next lint` on `copilot.ts` is clean.
+- **Deviation:** D-30.

@@ -14,15 +14,16 @@ import pytest
 from app import client
 
 # RegisterFormulaRequest: the agent intentionally does not author `input_schema` (a legacy advisory
-# map, retained but not validated per the indicators service — see its CLAUDE.md). Every other field
-# is sent, including `fundamental_inputs` (feature 205 built the agent authoring path). If a new
-# RegisterFormulaRequest field is added, this test fails until the builder carries it or it is
-# justified here.
-_REGISTER_INTENTIONALLY_UNSET = {"input_schema"}
+# map, retained but not validated per the indicators service — see its CLAUDE.md) nor the deprecated
+# `is_public` (feature 224: formulas are private to their author). Every other field is sent,
+# including `fundamental_inputs` (feature 205). If a new RegisterFormulaRequest field is added, this
+# test fails until the builder carries it or it is justified here.
+_REGISTER_INTENTIONALLY_UNSET = {"input_schema", "is_public"}
 # UpdateFormulaRequest: the builder sets every field, including the meta `update_mask` and
 # `fundamental_inputs` (feature 205). user_id is deprecated on the wire — the caller identity is
 # forwarded as the x-user-id header and resolved server-side, so the builder no longer sets it.
-_UPDATE_INTENTIONALLY_UNSET: set[str] = {"user_id"}
+# is_public is deprecated and ignored (feature 224: formulas are private to their author).
+_UPDATE_INTENTIONALLY_UNSET: set[str] = {"user_id", "is_public"}
 
 
 def _channel_cm():
@@ -48,7 +49,6 @@ async def _capture_register_request():
                     "name": "n",
                     "description": "d",
                     "source": "x=1",
-                    "is_public": True,
                     "author": "u",
                     "parameters": [{"name": "p", "type": "int"}],
                     "outputs": [{"name": "o", "description": "series"}],
@@ -79,7 +79,6 @@ async def _capture_update_request():
                     "name": "n",
                     "description": "d",
                     "source": "x=1",
-                    "is_public": True,
                     "parameters": [{"name": "p", "type": "int"}],
                     "outputs": [{"name": "o", "description": "series"}],
                     "warmup_period": 5,

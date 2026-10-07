@@ -2354,7 +2354,7 @@ grep -n "manage_signal_source\` and" CLAUDE.md   # → none (no longer listed as
 
 ### Step 35 — test: agent tool catalog and docs parity
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_tools_endpoint.py` — modify
