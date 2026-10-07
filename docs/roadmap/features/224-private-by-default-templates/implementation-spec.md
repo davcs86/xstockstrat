@@ -1755,7 +1755,7 @@ cd services/xstockstrat-ingest && uv run pytest --cov=app --cov-fail-under=40 &&
 
 ### Step 25 — service: analysis blend-guard helper, single blend-id accessor, REGISTER guard
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -2991,3 +2991,7 @@ _Populated by /sdd-execute as implementation proceeds._
   - `test_ingest_servicer.py`: REGISTER tests use a headered owner and patch `slug_holders`.
   - Same expected status codes throughout.
 - **Disposition**: required by the owner-keyed signatures; no assertion weakened.
+
+### D-23 — Step 25: REGISTER guard runs after definition validation; local shadowing removed
+- **Actual**: the guard sits after `definition.user_id = caller_user_id` as specified, which is after `_validate_definition_proto`. An invalid definition submitted under the blend id therefore gets the validation error first. The DEACTIVATE and SetStrategyLive branches used to hold a local named `blend_strategy_id`; they now call the accessor directly, so the function name is no longer shadowed.
+- **Disposition**: within scope.

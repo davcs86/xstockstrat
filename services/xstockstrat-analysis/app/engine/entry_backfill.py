@@ -18,7 +18,7 @@ from datetime import UTC
 from gen.trading.v1 import trading_pb2
 
 from app.engine.live_loop import resolve_universe
-from app.handlers.servicer import _row_to_strategy_definition
+from app.handlers.servicer import _row_to_strategy_definition, blend_strategy_id
 
 log = logging.getLogger(__name__)
 
@@ -83,9 +83,7 @@ async def run_once(live_loop, db_pool, trading_stub, cfg_watcher):
 
     # feature 168: the blend force-run is entry-anchored over the fundamentals universe and nowhere
     # else — mirror the live loop so a blend pair outside that universe is never backfilled.
-    blend_id = cfg_watcher.get_str(
-        "analysis.engine.fundamentals_blend_strategy_id", "fundamentals_macd_blend"
-    )
+    blend_id = blend_strategy_id(cfg_watcher)
     blend_enabled = cfg_watcher.get_bool("analysis.engine.fundamentals_blend_enabled", True)
     blend_active = blend_enabled and any(dict(r).get("strategy_id") == blend_id for r in rows)
     fundamentals_universe = (

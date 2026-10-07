@@ -294,6 +294,11 @@ _BOOT_RECOMPUTE_MAX_PAIRS = 50
 SYSTEM_IDENTITY = "system"
 
 
+def blend_strategy_id(cfg) -> str:
+    """The strategy id the fundamentals-blend rules govern (feature 168); the sole reader."""
+    return cfg.get_str("analysis.engine.fundamentals_blend_strategy_id", "fundamentals_macd_blend")
+
+
 class _BarFetchError(Exception):
     """Raised when bar pagination cannot complete safely (non-advancing cursor, page cap)."""
 
@@ -532,6 +537,16 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         except (TypeError, ValueError):
             access_scope = 0
         return bool(access_scope & 0x04)
+
+    async def _require_admin_for_blend_id(self, context, strategy_id: str) -> bool:
+        """Abort FAILED_PRECONDITION (→ True) when a non-admin targets the configured blend id."""
+        if strategy_id != blend_strategy_id(self._cfg) or self._has_admin_scope(context):
+            return False
+        await context.abort(
+            grpc.StatusCode.FAILED_PRECONDITION,
+            "the fundamentals blend strategy id is reserved for admins",
+        )
+        return True
 
     @staticmethod
     def _caller_user_id(context) -> str:
@@ -2778,6 +2793,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             # Owner is server-authoritative — set from the header, never the request body. Two
             # users may share a strategy_id (composite PK), so the duplicate check is owner-scoped.
             definition.user_id = caller_user_id
+            if await self._require_admin_for_blend_id(context, definition.strategy_id):
+                return
             # Strict register: an existing id (active OR deactivated) is a conflict — route the
             # caller to reactivate rather than silently overwrite or crash on the PK.
             if (
@@ -2921,11 +2938,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             updated.warnings.extend(status_warnings)
             return updated
         if op == analysis_pb2.STRATEGY_OPERATION_DEACTIVATE:
-            blend_strategy_id = self._cfg.get_str(
-                "analysis.engine.fundamentals_blend_strategy_id",
-                "fundamentals_macd_blend",
-            )
-            if definition.strategy_id == blend_strategy_id:
+            if definition.strategy_id == blend_strategy_id(self._cfg):
                 await context.abort(
                     grpc.StatusCode.FAILED_PRECONDITION,
                     "the fundamentals blend strategy cannot be deactivated; "
@@ -3063,11 +3076,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 return
 
         if not request.live_enabled:
-            blend_strategy_id = self._cfg.get_str(
-                "analysis.engine.fundamentals_blend_strategy_id",
-                "fundamentals_macd_blend",
-            )
-            if request.strategy_id == blend_strategy_id:
+            if request.strategy_id == blend_strategy_id(self._cfg):
                 await context.abort(
                     grpc.StatusCode.FAILED_PRECONDITION,
                     "the fundamentals blend strategy cannot be set non-live; "
@@ -4527,9 +4536,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             live_rows = list(await self._strategies_repo.list_live_enabled(user_id))
             # feature 168: the blend force-run runs on the fundamentals universe and nowhere else —
             # the queue MUST apply the same restriction as the live loop, else it over-attributes.
-            blend_id = self._cfg.get_str(
-                "analysis.engine.fundamentals_blend_strategy_id", "fundamentals_macd_blend"
-            )
+            blend_id = blend_strategy_id(self._cfg)
             blend_enabled = self._cfg.get_bool("analysis.engine.fundamentals_blend_enabled", True)
             blend_active = blend_enabled and any(r["strategy_id"] == blend_id for r in live_rows)
             fundamentals_universe = (

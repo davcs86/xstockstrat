@@ -42,6 +42,7 @@ from app.handlers.servicer import (
     _fundamental_periods_from_response,
     _normalize_symbol,
     _row_to_strategy_definition,
+    blend_strategy_id,
 )
 from app.repositories.strategies import LIVE_ENABLED_PREDICATE_SQL
 from app.services import sector_params, warmup
@@ -340,9 +341,7 @@ class LiveEvaluationLoop:
         throttle = self._cfg.get_int("analysis.engine.alert_throttle_seconds", default=300)
         # Fundamentals-universe force-run: blend_id names the governed strategy; blend_enabled is
         # the operator kill-switch (get_bool honors an explicit false via HasField).
-        blend_id = self._cfg.get_str(
-            "analysis.engine.fundamentals_blend_strategy_id", "fundamentals_macd_blend"
-        )
+        blend_id = blend_strategy_id(self._cfg)
         blend_enabled = self._cfg.get_bool("analysis.engine.fundamentals_blend_enabled", True)
         rows = await self._db.fetch(
             f"SELECT * FROM analysis.strategies WHERE {LIVE_ENABLED_PREDICATE_SQL} "
