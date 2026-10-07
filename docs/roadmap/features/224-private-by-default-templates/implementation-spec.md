@@ -1507,7 +1507,7 @@ grep -n "x-user-id\|x-access-scope\|x-trace-id" app/admin_audit.py   # trio forw
 
 ### Step 20 — test: ingest ownership, scopes, reserved slugs, system grants, admin read
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/conftest.py` — modify (extend the existing `_ctx` builder; no

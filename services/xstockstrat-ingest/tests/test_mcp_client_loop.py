@@ -68,6 +68,7 @@ class _FakeCfgWatcher:
 
 def _mcp_source(slug="acme-mcp", endpoint="https://mcp.acme.example/mcp", **over):
     row = {
+        "user_id": "seed-user",  # feature 224: list_all_sources selects the owner
         "slug": slug,
         "source_type": "mcp_client",
         "config_json": {"mcp_endpoint": endpoint, "mcp_tool": "get_signals"},
@@ -175,7 +176,7 @@ async def test_source_failure_records_health_and_continues(monkeypatch):
 
     errors = []
 
-    async def fake_mark_error(db, slug, error):
+    async def fake_mark_error(db, user_id, slug, error):
         errors.append((slug, error))
 
     monkeypatch.setattr(loop, "mark_source_error", AsyncMock(side_effect=fake_mark_error))

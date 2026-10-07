@@ -687,3 +687,33 @@ OQ-4 to OQ-6 remain for /sdd-design.
   - The only `*` in either file is inside `count(*)`.
 - TDD: N/A.
 - **Deviation:** D-19. `credential_scope` is omitted per the operator gate, and the N-1 rollback-window risk is accepted.
+
+### Step 19 — service: ingest owner-scoped sources/signals, `SignalScope`, reserved slugs, system grants, admin read [done]
+- **New modules:** `app/peer_identity.py` and `app/admin_audit.py`, per-service copies. The audit helper forwards only the header trio, appends with concurrency 4, and caps a page at 100 owners.
+- **Repository:** every slug query is owner-scoped except `slug_holders`. `list_sources(owner, scope)` and `list_all_sources` now return `user_id`. The dead `get_active_source` is deleted.
+- **Servicer, identity:** `system` is allowed only with a SAN-bound grant (`analysis-fundsignal` for writes, `analysis-system-read` for reads).
+- **Servicer, `IngestSignal`:**
+  - Headered call: a slug the caller doesn't hold returns `NOT_FOUND` (AC-10).
+  - Headerless call: 0 holders → `INVALID_ARGUMENT`, more than 1 → `FAILED_PRECONDITION`, exactly 1 → owner stamped.
+  - Dedup goes through the owner-keyed `signal_dedup_claims`.
+- **Servicer, reads:** `QuerySignals` and `ListSignalSources` return own + system rows with `SignalScope`. Headerless reads are tolerated, as today. The admin owner selector is audited 1+K and fails closed.
+- **Servicer, `ManageSignalSource`:**
+  - Owners manage their own sources; the admin gate applies only to headerless calls.
+  - Reserved slugs: a user taking a system-held slug gets `ALREADY_EXISTS`; system taking a user-held slug gets `FAILED_PRECONDITION`. Both checks run under an advisory lock.
+  - A non-system caller modifying a system source gets `PERMISSION_DENIED`.
+- **Files:**
+  - `app/{peer_identity,admin_audit}.py`
+  - `app/repositories/signal_sources.py`
+  - `app/handlers/servicer.py`
+  - `app/engine/mcp_client_loop.py` (D-20)
+- **Deviations:** D-20, D-21.
+
+### Step 20 — test: ingest ownership, scopes, reserved slugs, system grants, admin read [done]
+- `conftest._ctx` is extended with `user_id`, `peer_sans` and `internal_caller` (no duplicate helper).
+- New `tests/test_signal_ownership.py` (45 tests): AC-7/8/9/10/11/12/26/28/29/33/36 plus the headerless cases.
+- `test_signal_sources.py`: owner-keyed repository tests.
+- **TDD:**
+  - RED: 43 failed, 2 passed. Reasons: missing `slug_holders`, `DID NOT RAISE` on an ungranted `system`, `INVALID_ARGUMENT == NOT_FOUND`, dedup SQL still on `signal_dedup_keys`, empty `SignalSource.user_id`.
+  - GREEN: 275 passed, coverage 79.49%, ruff clean. The slug-predicate and header-trio greps match.
+- **Files:** `tests/{conftest,test_signal_ownership,test_signal_sources,test_ingest_servicer,_helpers,test_source_health,test_mcp_client_loop}.py`.
+- **Deviation:** D-22.

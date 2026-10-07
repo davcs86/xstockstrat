@@ -1179,8 +1179,9 @@ class TestIngestSignalRegistryValidation:
     async def test_aborts_when_source_not_registered(self):
         svc = make_servicer()
         svc._db = MagicMock()
-        # Registry lookup returns None → unregistered source
+        # Registry lookup returns None → unregistered source (feature 224: no slug holder)
         svc._db.fetchrow = AsyncMock(return_value=None)
+        svc._db.fetch = AsyncMock(return_value=[])
         context = MagicMock()
         context.abort = AsyncMock(side_effect=Exception("aborted"))
 
@@ -1320,11 +1321,10 @@ class TestManageSignalSource:
     @pytest.mark.asyncio
     async def test_register_succeeds_with_admin_scope(self):
         svc = make_servicer()
-        svc._db = MagicMock()
-        # Feature 088: register first SELECTs (get_source → None = not existing), then INSERTs.
-        svc._db.fetchrow = AsyncMock(
-            side_effect=[
-                None,
+        # Feature 224: register takes the slug advisory lock, reads the slug's holders (none),
+        # then INSERTs on the same transaction connection.
+        svc._db, conn = transaction_conn(
+            conn_fetchrow_side_effect=[
                 {
                     "slug": "uw",
                     "display_name": "UW",
@@ -1337,6 +1337,7 @@ class TestManageSignalSource:
                 },
             ]
         )
+        conn.fetch = AsyncMock(return_value=[])
 
         from google.protobuf.struct_pb2 import Struct
 
@@ -1354,8 +1355,11 @@ class TestManageSignalSource:
             operation="register",
         )
         context = MagicMock()
-        # x-access-scope with the ADMIN bit set (7 = 0b111)
-        context.invocation_metadata = MagicMock(return_value=[("x-access-scope", "7")])
+        # x-access-scope with the ADMIN bit set (7 = 0b111); feature 224: an owner (headered)
+        # caller — a headerless register never creates a source.
+        context.invocation_metadata = MagicMock(
+            return_value=[("x-access-scope", "7"), ("x-user-id", "u1")]
+        )
 
         resp = await svc.ManageSignalSource(req, context)
         assert resp.source.slug == "uw"
@@ -1365,6 +1369,7 @@ class TestManageSignalSource:
         svc = make_servicer()
         svc._db = MagicMock()
         svc._db.fetchrow = AsyncMock(return_value=None)
+        svc._db.fetch = AsyncMock(return_value=[])  # feature 224: headerless → no slug holder
 
         req = ingest_pb2.ManageSignalSourceRequest(
             source=ingest_pb2.SignalSource(slug="missing"),
@@ -1445,8 +1450,9 @@ _SS = "app.handlers.servicer"
 
 
 def _admin_ctx():
+    # Feature 224: an owner (headered) caller; the admin bit no longer gates owner writes.
     ctx = MagicMock()
-    ctx.invocation_metadata = MagicMock(return_value=[("x-access-scope", "7")])
+    ctx.invocation_metadata = MagicMock(return_value=[("x-access-scope", "7"), ("x-user-id", "u1")])
     ctx.abort = AsyncMock(side_effect=Exception("aborted"))
     return ctx
 
@@ -1475,7 +1481,8 @@ class TestManageSignalSourceVerbs:
             source=ingest_pb2.SignalSource(slug="uw", source_type="simple_email"),
             operation="register",
         )
-        with patch(f"{_SS}.get_source", AsyncMock(return_value=_stored())):
+        svc._db, _ = transaction_conn()
+        with patch(f"{_SS}.slug_holders", AsyncMock(return_value=["u1"])):
             ctx = _admin_ctx()
             with pytest.raises(Exception, match="aborted"):
                 await svc.ManageSignalSource(req, ctx)
@@ -1489,7 +1496,10 @@ class TestManageSignalSourceVerbs:
             source=ingest_pb2.SignalSource(slug="nope", source_type="simple_email"),
             operation="update",
         )
-        with patch(f"{_SS}.get_source", AsyncMock(return_value=None)):
+        with (
+            patch(f"{_SS}.get_source", AsyncMock(return_value=None)),
+            patch(f"{_SS}.slug_holders", AsyncMock(return_value=[])),
+        ):
             ctx = _admin_ctx()
             with pytest.raises(Exception, match="aborted"):
                 await svc.ManageSignalSource(req, ctx)
@@ -1625,8 +1635,9 @@ class TestSignalSourceReliabilityWeight:
                 slug="zerosrc", source_type="derived", reliability_weight=kw["reliability_weight"]
             )
 
+        svc._db, _ = transaction_conn()
         with (
-            patch(f"{_SS}.get_source", AsyncMock(return_value=None)),
+            patch(f"{_SS}.slug_holders", AsyncMock(return_value=[])),
             patch(f"{_SS}.insert_source", _fake_insert),
         ):
             resp = await svc.ManageSignalSource(req, _admin_ctx())
@@ -1651,8 +1662,9 @@ class TestSignalSourceReliabilityWeight:
             captured.update(kw)
             return _stored(slug="defsrc", source_type="derived", reliability_weight=1.0)
 
+        svc._db, _ = transaction_conn()
         with (
-            patch(f"{_SS}.get_source", AsyncMock(return_value=None)),
+            patch(f"{_SS}.slug_holders", AsyncMock(return_value=[])),
             patch(f"{_SS}.insert_source", _fake_insert),
         ):
             await svc.ManageSignalSource(req, _admin_ctx())
@@ -1671,7 +1683,8 @@ class TestSignalSourceReliabilityWeight:
             ),
             operation="register",
         )
-        with patch(f"{_SS}.get_source", AsyncMock(return_value=None)):
+        svc._db, _ = transaction_conn()
+        with patch(f"{_SS}.slug_holders", AsyncMock(return_value=[])):
             ctx = _admin_ctx()
             with pytest.raises(Exception, match="aborted"):
                 await svc.ManageSignalSource(req, ctx)

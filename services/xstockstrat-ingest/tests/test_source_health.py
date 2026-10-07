@@ -147,4 +147,4 @@ async def test_ingest_signal_bumps_fed_count():
     update_sql = db.execute.await_args.args[0]
     assert "signals_fed = signals_fed + 1" in update_sql
     assert "last_seen_at = NOW()" in update_sql
-    assert db.execute.await_args.args[1] == "uw"
+    assert db.execute.await_args.args[1:] == ("u1", "uw")  # feature 224: owner-keyed
