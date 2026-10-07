@@ -920,7 +920,7 @@ grep -n "ctx_with\|conftest" tests/test_owner_dimension.py
 
 ### Step 11 — service: evaluator unreadable-formula seam and write/read warnings
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/services/evaluator.py` — modify
@@ -2929,3 +2929,13 @@ _Populated by /sdd-execute as implementation proceeds._
 ### D-11 — Step 10: `tests/test_analysis_servicer.py` modified (not in Files)
 - **Actual**: 11 existing assertions followed the new `(user_id, strategy_id)` keys and the repo signatures (upsert argument shift, hydrate rows gain `user_id`, the `GetBacktest` fake returns `(bytes, owner)`). No assertion was weakened.
 - **Disposition**: required follow-through for in-scope signature changes.
+
+### D-12 — Step 11: warning logged inside the evaluator; AC-30 rejection names the unreadable formula first; UPDATE warnings cover the request's components
+- **Logging**: instruction 4 says to log at each surface and in the live loop, but `live_loop.py` is not in Step 11's Files. The warning is logged once per formula per evaluator, at the NOT_FOUND catch, so every surface, the live loop included, gets it without duplication. `unreadable_formulas` is still exposed to callers.
+- **AC-30 rejection**: a rejected write returns no definition to carry a warning, so the `INVALID_ARGUMENT` message puts the unreadable-formula warning ahead of the "unknown series" reason. The spec only said to compute the warning before the rejection.
+- **UPDATE scope**: UPDATE warnings cover only the request's components, matching `_refuse_deleted_bindings`.
+- **Disposition**: within scope.
+
+### D-13 — Step 12: helper rename follow-through in two existing tests
+- **Actual**: Step 11 renames `_deleted_formula_warnings` to `_formula_status_warnings(include_unreadable=…)`. Updated the call sites in `tests/test_analysis_servicer.py` (2) and `tests/test_owner_header_guard.py` (1). No assertion changed.
+- **Disposition**: required follow-through for the rename.

@@ -596,12 +596,14 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             formula_outputs[comp.formula_id] = allowed
         return formula_outputs
 
-    async def _deleted_formula_warnings(self, definition, propagation_meta) -> list[str]:
-        """Warnings for each custom-formula component whose formula is soft-deleted (feature 086).
+    async def _formula_status_warnings(
+        self, definition, propagation_meta, *, include_unreadable=True
+    ) -> list[str]:
+        """Warnings for each custom-formula component whose formula is soft-deleted (feature 086)
+        or, with ``include_unreadable``, not readable by the caller (feature 224 NOT_FOUND).
 
-        Each referenced formula is fetched once; a fetch failure (e.g. NOT_FOUND) is swallowed —
-        only a live ``deleted`` flag is a deletion signal. Used both to flag deletion on read
-        (backtest run + GetStrategy live status) and to refuse a new binding on write.
+        Each referenced formula is fetched once; any other fetch failure is swallowed. Used to flag
+        status on read (GetStrategy) and write (REGISTER/UPDATE), and to refuse a deleted binding.
         """
         warnings: list[str] = []
         seen: set[str] = set()
@@ -616,7 +618,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     indicators_pb2.GetFormulaRequest(formula_id=comp.formula_id),
                     metadata=propagation_meta,
                 )
-            except grpc.aio.AioRpcError:
+            except grpc.aio.AioRpcError as e:
+                if include_unreadable and e.code() == grpc.StatusCode.NOT_FOUND:
+                    warnings.append(f"formula {comp.formula_id} not readable by owner")
                 continue
             if formula.deleted:
                 warnings.append(_deleted_formula_warning(formula.name, comp.formula_id))
@@ -629,14 +633,17 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         already-deleted binding untouched is not blocked, but no new deleted binding is accepted.
         Returns True if it aborted.
         """
-        warnings = await self._deleted_formula_warnings(definition, propagation_meta)
+        warnings = await self._formula_status_warnings(
+            definition, propagation_meta, include_unreadable=False
+        )
         if warnings:
             await context.abort(grpc.StatusCode.INVALID_ARGUMENT, warnings[0])
             return True
         return False
 
-    async def _validate_definition_proto(self, definition, context) -> None:
-        """Validate a StrategyDefinition; abort INVALID_ARGUMENT on failure."""
+    async def _validate_definition_proto(self, definition, context, warnings=()) -> None:
+        """Validate a StrategyDefinition; abort INVALID_ARGUMENT on failure, naming ``warnings``
+        first (an unreadable formula's outputs read as {"value"}, so its cause must lead)."""
         propagation_meta = [
             (k, v)
             for k, v in context.invocation_metadata()
@@ -667,7 +674,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         try:
             _validate_definition(definition, formula_outputs)
         except ValueError as e:
-            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(e))
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, "; ".join([*warnings, str(e)]))
 
     async def RunBacktest(self, request, context):
         backtest_id = str(uuid.uuid4())
@@ -1820,7 +1827,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             raise _InsufficientData(symbol, len(bars), 2)
 
         # Batch backtest path: SERIAL component assembly (component_sem=None).
-        evaluator = StrategyEvaluator(self._indicators, propagation_meta, component_sem=None)
+        evaluator = StrategyEvaluator(
+            self._indicators, propagation_meta, component_sem=None, raise_unreadable=True
+        )
         # Per-symbol point-in-time fundamentals (feature 198/201) — a 198 operand or a fundamentals
         # formula (routed via formula_fund_map) loads the PIT list; else None. T+1 carry-forward.
         fundamentals = await self._load_fundamentals(
@@ -2759,7 +2768,13 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         _strip_dead_signal_params(definition)
 
         if op == analysis_pb2.STRATEGY_OPERATION_REGISTER:
-            await self._validate_definition_proto(definition, context)
+            propagation_meta = [
+                (k, v)
+                for k, v in context.invocation_metadata()
+                if k in ("x-user-id", "x-access-scope", "x-trace-id")
+            ]
+            status_warnings = await self._formula_status_warnings(definition, propagation_meta)
+            await self._validate_definition_proto(definition, context, status_warnings)
             # Owner is server-authoritative — set from the header, never the request body. Two
             # users may share a strategy_id (composite PK), so the duplicate check is owner-scoped.
             definition.user_id = caller_user_id
@@ -2794,7 +2809,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     f"strategy '{definition.strategy_id}' already exists",
                 )
                 return
-            return _row_to_strategy_definition(row)
+            registered = _row_to_strategy_definition(row)
+            registered.warnings.extend(status_warnings)
+            return registered
         if op == analysis_pb2.STRATEGY_OPERATION_UPDATE:
             # An update_mask turns UPDATE into a partial merge; an absent mask keeps the
             # full-replace path byte-for-byte, so existing clients are unaffected.
@@ -2836,6 +2853,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             # only, so an update leaving an existing (already-deleted) binding is not blocked.
             if await self._refuse_deleted_bindings(definition, context, propagation_meta):
                 return
+            status_warnings = await self._formula_status_warnings(definition, propagation_meta)
             union = analysis_pb2.StrategyDefinition()
             union.CopyFrom(_row_to_strategy_definition(pre))
             union.components.extend(definition.components)
@@ -2880,7 +2898,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     caller_user_id, definition.strategy_id, _apply
                 )
             except _MergeRejected as e:
-                await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(e))
+                await context.abort(
+                    grpc.StatusCode.INVALID_ARGUMENT, "; ".join([*status_warnings, str(e)])
+                )
                 return
             if row is None:
                 await context.abort(
@@ -2897,7 +2917,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     await self._recompute_headline_locked(caller_user_id, sid, row)
                 except Exception as e:
                     log.warning("failed to recompute headline after update: %s", e)
-            return _row_to_strategy_definition(row)
+            updated = _row_to_strategy_definition(row)
+            updated.warnings.extend(status_warnings)
+            return updated
         if op == analysis_pb2.STRATEGY_OPERATION_DEACTIVATE:
             blend_strategy_id = self._cfg.get_str(
                 "analysis.engine.fundamentals_blend_strategy_id",
@@ -2965,16 +2987,16 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         ):
             return
         definition = _row_to_strategy_definition(row)
-        # Surface a warning if this strategy references a soft-deleted formula; it still evaluates
-        # on the last-saved definition, but the deletion is flagged to whoever reads it.
+        # Surface a warning if this strategy references a soft-deleted formula (still evaluates on
+        # the last-saved definition) or one its reader cannot read (the component is skipped).
         propagation_meta = [
             (k, v)
             for k, v in context.invocation_metadata()
             if k in ("x-user-id", "x-access-scope", "x-trace-id")
         ]
-        deleted_warnings = await self._deleted_formula_warnings(definition, propagation_meta)
-        if deleted_warnings:
-            definition.warnings.extend(deleted_warnings)
+        definition.warnings.extend(
+            await self._formula_status_warnings(definition, propagation_meta)
+        )
         return definition
 
     async def ListStrategyDefinitions(self, request, context):

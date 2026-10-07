@@ -196,7 +196,9 @@ class StrategyEvaluator:
     - Returns per-bar BarDecision list; no look-ahead (bar i only uses data from bars 0..i).
     """
 
-    def __init__(self, indicators_stub, propagation_meta=(), component_sem=None):
+    def __init__(
+        self, indicators_stub, propagation_meta=(), component_sem=None, raise_unreadable=False
+    ):
         """
         indicators_stub: IndicatorsServiceStub — used to compute built-in indicators
                          and execute custom formulas bar by bar.
@@ -206,16 +208,38 @@ class StrategyEvaluator:
                        a semaphore ⇒ components are dispatched concurrently under that bound
                        (feature 176, FR-3). Reassembly is keyed by ref_name, so the concurrent
                        path is byte-identical to the serial one regardless of gather order.
+        raise_unreadable: a formula the owner cannot read (indicators NOT_FOUND) raises
+                       FormulaExecutionError (backtest) instead of skipping the component.
         """
         self._indicators = indicators_stub
         self._meta = propagation_meta
         self._component_sem = component_sem
+        self._raise_unreadable = raise_unreadable
+        self.unreadable_formulas: set[str] = set()
 
     def for_owner(self, owner: str) -> "StrategyEvaluator":
         """A clone whose indicators calls carry ``owner`` as ``x-user-id`` (feature 224)."""
         return StrategyEvaluator(
-            self._indicators, [("x-user-id", owner)] if owner else (), self._component_sem
+            self._indicators,
+            [("x-user-id", owner)] if owner else (),
+            self._component_sem,
+            self._raise_unreadable,
         )
+
+    async def _execute_formula(self, comp, request):
+        """``ExecuteFormula``, or ``None`` when the owner cannot read ``comp.formula_id`` (the
+        component is skipped). Never surfaces as the feature-185 ``"unavailable"`` RpcError."""
+        try:
+            return await self._indicators.ExecuteFormula(request, metadata=self._meta)
+        except grpc.aio.AioRpcError as e:
+            if e.code() != grpc.StatusCode.NOT_FOUND:
+                raise
+            if self._raise_unreadable:
+                raise FormulaExecutionError(comp.formula_id, "not readable by owner") from e
+            if comp.formula_id not in self.unreadable_formulas:
+                self.unreadable_formulas.add(comp.formula_id)
+                log.warning("formula %s not readable by owner", comp.formula_id)
+            return None
 
     async def evaluate(
         self,
@@ -458,14 +482,16 @@ class StrategyEvaluator:
             # Numeric params go in input_params, never input_data (which carries only the series).
             params_struct = Struct()
             params_struct.update(dict(comp.params))
-            resp = await self._indicators.ExecuteFormula(
+            resp = await self._execute_formula(
+                comp,
                 indicators_pb2.ExecuteFormulaRequest(
                     formula_id=comp.formula_id,
                     input_data=input_struct,
                     input_params=params_struct,
                 ),
-                metadata=self._meta,
             )
+            if resp is None:
+                return {"value": [None] * n}
             # Shared decode (raises FormulaExecutionError on failure / NaN / Inf — never a
             # fabricated value). The list path below enforces its len==n + "value"-required policy.
             output = _decode_formula_output(comp.formula_id, resp)
@@ -531,14 +557,16 @@ class StrategyEvaluator:
                 executed += 1
                 input_struct = Struct()
                 input_struct.update(present)
-                resp = await self._indicators.ExecuteFormula(
+                resp = await self._execute_formula(
+                    comp,
                     indicators_pb2.ExecuteFormulaRequest(
                         formula_id=comp.formula_id,
                         input_data=input_struct,
                         input_params=params_struct,
                     ),
-                    metadata=self._meta,
                 )
+                if resp is None:
+                    return {"value": [None] * n}
                 output = _decode_formula_output(comp.formula_id, resp)
                 for key, raw in output.items():
                     val = _finite_or_none(raw)
