@@ -216,6 +216,10 @@ async def serve():
         asyncio.get_event_loop().create_task(servicer.run_readiness_materializer_forever())
         log.info("readiness materializer started")
 
+        # ── Template intent reconcile sweep (feature 224) ──
+        asyncio.get_event_loop().create_task(servicer.run_template_intent_sweep_forever())
+        log.info("template intent sweep started")
+
     await grpc_server.wait_for_termination()
 
 

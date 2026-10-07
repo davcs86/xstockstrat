@@ -2011,7 +2011,7 @@ cd services/xstockstrat-ingest && uv run pytest --cov=app --cov-fail-under=40 &&
 
 ### Step 31 — service: analysis strategy templates, `InstantiateTemplate` saga, reconcile sweep, origin on reads
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/repositories/strategy_templates.py` — create
@@ -3033,3 +3033,14 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Follow-through**: `tests/test_formulas.py:592` binds by position `args[10]`; it used `args[-2]` before the INSERT gained three columns.
 - **Coverage note**: `app/handlers/servicer.py` was already excluded from coverage in `pyproject.toml`. The new handler code is tested but not counted toward the 84.81% figure.
 - **Disposition**: within scope.
+
+### D-28 — Step 31: fingerprint excludes `origin`; shared `source_symbol` check; saga edge handling
+- **`_FINGERPRINT_EXCLUDED_KEYS`**: gains `"origin"` (servicer follow-through). Without it, a masked UPDATE of an instantiated strategy would fold origin into the definition fingerprint and reset its evidence (preserves ANALYSIS-3).
+- **Shared check**: the `source_symbol`/fundamentals conflict check is extracted into `_fundamentals_source_symbol_conflict`, used by both `_validate_definition_proto` and the new `_validate_template_definition`. The error message is unchanged.
+- **Origin from columns only**: `_row_to_strategy_definition` clears any `origin` taken from a request body, so origin always comes from the columns.
+- **Saga edge handling**:
+  - A template with no formula components skips the indicators copy call.
+  - If the request path loses a CAS, it leaves cleanup to the sweep.
+  - The sweep processes `ABORTING`/`COMMITTED` intents of any age, and `PENDING` intents only after `_INTENT_STALE_SECONDS`. The indicators resolve call is idempotent.
+- **Constants**: `_INTENT_STALE_SECONDS = 900` and `_INTENT_SWEEP_SECONDS = 300`, as the spec records. Operator re-confirmed on 2026-10-07; an earlier gate prompt mis-stated these as 300/60.
+- **Disposition**: within scope; operator-confirmed constants.

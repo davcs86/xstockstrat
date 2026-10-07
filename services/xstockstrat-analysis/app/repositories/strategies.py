@@ -53,6 +53,39 @@ class StrategiesRepository:
         )
         return _to_dict(row)
 
+    async def create_from_template(
+        self,
+        user_id,
+        strategy_id,
+        display_name,
+        definition_json: dict,
+        origin_template_id: str,
+        origin_template_version: int,
+        *,
+        commit_intent,
+    ) -> dict | None:
+        """Insert an inactive, non-live template instance in the same transaction as
+        ``await commit_intent(conn)`` (the saga CAS); None, with no INSERT, when that is False."""
+        async with self._db.acquire() as conn, conn.transaction():
+            if not await commit_intent(conn):
+                return None
+            row = await conn.fetchrow(
+                """
+                INSERT INTO analysis.strategies
+                    (user_id, strategy_id, display_name, definition_json, active, live_enabled,
+                     origin_template_id, origin_template_version)
+                VALUES ($1, $2, $3, $4::jsonb, FALSE, FALSE, $5, $6)
+                RETURNING *
+                """,
+                user_id,
+                strategy_id,
+                display_name,
+                json.dumps(dict(definition_json) if definition_json else {}),
+                origin_template_id,
+                origin_template_version,
+            )
+            return _to_dict(row)
+
     async def get_by_id(self, strategy_id: str) -> dict | None:
         """Owner-agnostic lookup. Retained for callers that legitimately already hold the row's
         owner (e.g. the live loop reads whole rows that carry ``user_id``). Ownership-scoped RPCs

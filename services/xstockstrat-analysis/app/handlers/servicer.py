@@ -56,6 +56,8 @@ from app.repositories.pnl_positions import PnLPositionsRepository
 from app.repositories.readiness_cache import ReadinessCacheRepository
 from app.repositories.strategies import StrategiesRepository
 from app.repositories.strategy_scores import StrategyScoresRepository
+from app.repositories.strategy_templates import StrategyTemplatesRepository
+from app.repositories.template_intents import TemplateIntentsRepository
 from app.services import scoring, sector_params, warmup
 from app.services.cooldown import effective_cooldown_days, is_cooldown_active
 from app.services.evaluator import (
@@ -292,6 +294,13 @@ _DEFAULT_OPP_PAGE_SIZE = 50
 _BOOT_RECOMPUTE_MAX_PAIRS = 50
 # Reserved platform identity (feature 224); a granted internal caller's x-user-id, never a user's.
 SYSTEM_IDENTITY = "system"
+# Fixed invariants (operator ruling, not config keys): a PENDING intent older than this is presumed
+# orphaned by a crashed request and aborted by the sweep, which runs every _INTENT_SWEEP_SECONDS.
+_INTENT_STALE_SECONDS = 900
+_INTENT_SWEEP_SECONDS = 300
+# The SAN-bound grant indicators requires on the saga RPCs; never the N-only `analysis` bypass id.
+_TEMPLATE_SAGA_CALLER = "analysis-template-saga"
+_PROPAGATED_HEADERS = ("x-user-id", "x-access-scope", "x-trace-id")
 
 
 def blend_strategy_id(cfg) -> str:
@@ -432,6 +441,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         self._backtests: dict[str | tuple[str, str], analysis_pb2.BacktestResult] = {}
         self._strategies: dict[tuple[str, str], analysis_pb2.StrategyScore] = {}
         self._strategies_repo = StrategiesRepository(db_pool) if db_pool else None
+        self._strategy_templates_repo = StrategyTemplatesRepository(db_pool) if db_pool else None
+        self._template_intents_repo = TemplateIntentsRepository(db_pool) if db_pool else None
         # Process-lifetime singleton semaphore bounding cross-request GetIndicatorSeries compute so
         # a busy Symbol page can't starve the live loop. max(1, …) guards a negative config value.
         self._component_series_sem = asyncio.Semaphore(
@@ -672,19 +683,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # benchmark selects whose *bars* to compute on, but the formula reads no bars. Reject it at
         # write time (XOR) rather than silently ignoring one side.
         formula_fund_map = await self._formula_fundamentals(definition, propagation_meta)
-        for comp in definition.components:
-            if (
-                comp.kind == analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA
-                and comp.source_symbol
-                and formula_fund_map.get(comp.formula_id)
-            ):
-                await context.abort(
-                    grpc.StatusCode.INVALID_ARGUMENT,
-                    f"component '{comp.ref_name}': a fundamentals-input formula "
-                    f"('{comp.formula_id}') cannot also set source_symbol "
-                    f"('{comp.source_symbol}') — it reads fundamentals, not bars",
-                )
-                return
+        conflict = _fundamentals_source_symbol_conflict(definition, formula_fund_map)
+        if conflict:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, conflict)
+            return
         formula_outputs = await self._fetch_formula_outputs(definition, propagation_meta)
         try:
             _validate_definition(definition, formula_outputs)
@@ -2656,11 +2658,16 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         if self._strategies_repo is not None:
             caller_user_id = self._caller_user_id(context)
             owned, _ = await self._strategies_repo.list(caller_user_id, include_inactive=True)
-            strategies = [
-                sc
-                for sc in (self._strategies.get((caller_user_id, r["strategy_id"])) for r in owned)
-                if sc is not None
-            ]
+            strategies = []
+            for r in owned:
+                cached = self._strategies.get((caller_user_id, r["strategy_id"]))
+                if cached is None:
+                    continue
+                score = analysis_pb2.StrategyScore()
+                score.CopyFrom(cached)
+                _set_origin_from_row(score.origin, r)
+                strategies.append(score)
+            await self._fill_template_origins([s.origin for s in strategies])
         else:
             strategies = list(self._strategies.values())
         return analysis_pb2.ListStrategiesResponse(strategies=strategies)
@@ -3010,6 +3017,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         definition.warnings.extend(
             await self._formula_status_warnings(definition, propagation_meta)
         )
+        await self._fill_template_origins([definition.origin])
         return definition
 
     async def ListStrategyDefinitions(self, request, context):
@@ -3033,9 +3041,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             )
         ):
             return
+        definitions = [_row_to_strategy_definition(r) for r in rows]
+        await self._fill_template_origins([d.origin for d in definitions])
         return analysis_pb2.ListStrategyDefinitionsResponse(
-            definitions=[_row_to_strategy_definition(r) for r in rows],
-            total_count=total,
+            definitions=definitions, total_count=total
         )
 
     async def SetStrategyLive(self, request, context):
@@ -3115,6 +3124,296 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             log.warning("failed to emit live_toggled ledger event: %s", e)
 
         return analysis_pb2.SetStrategyLiveResponse(definition=_row_to_strategy_definition(row))
+
+    # ── Strategy template catalog + InstantiateTemplate saga (feature 224) ──────────────────────
+
+    async def _fill_template_origins(self, origins) -> None:
+        """Set latest_version/update_available on ``origins`` with ONE batched template lookup."""
+        ids = sorted({o.template_id for o in origins if o.template_id})
+        if not ids or self._strategy_templates_repo is None:
+            return
+        latest = await self._strategy_templates_repo.latest_versions(ids)
+        for o in origins:
+            if o.template_id:
+                o.latest_version = latest.get(o.template_id, 0)
+                o.update_available = o.latest_version > o.template_version
+
+    async def _validate_template_definition(self, definition, context) -> bool:
+        """Validate a strategy-template payload whose formula ids are formula TEMPLATE ids, against
+        indicators' active FormulaTemplate payloads (never GetFormula). True if it aborted."""
+        propagation_meta = [
+            (k, v) for k, v in context.invocation_metadata() if k in _PROPAGATED_HEADERS
+        ]
+        try:
+            resp = await self._indicators.ListTemplates(
+                indicators_pb2.ListTemplatesRequest(), metadata=propagation_meta
+            )
+        except grpc.RpcError as e:
+            log.warning("formula template catalog read failed: %s", e)
+            await context.abort(grpc.StatusCode.UNAVAILABLE, "formula template catalog unavailable")
+            return True
+        active = {t.meta.template_id: t.payload for t in resp.templates if not t.meta.retired}
+        formula_outputs: dict[str, set[str]] = {}
+        formula_fund_map: dict[str, list] = {}
+        for comp in definition.components:
+            if comp.kind != analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA or not comp.formula_id:
+                continue
+            payload = active.get(comp.formula_id)
+            if payload is None:
+                await context.abort(
+                    grpc.StatusCode.INVALID_ARGUMENT,
+                    f"component '{comp.ref_name}': no active formula template '{comp.formula_id}'",
+                )
+                return True
+            formula_outputs[comp.formula_id] = {"value"} | {o.name for o in payload.outputs}
+            formula_fund_map[comp.formula_id] = [int(m) for m in payload.fundamental_inputs]
+        conflict = _fundamentals_source_symbol_conflict(definition, formula_fund_map)
+        if conflict:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, conflict)
+            return True
+        try:
+            _validate_definition(definition, formula_outputs)
+        except ValueError as e:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(e))
+            return True
+        return False
+
+    async def ListTemplates(self, request, context):
+        if not self._caller_user_id(context):
+            await context.abort(grpc.StatusCode.PERMISSION_DENIED, "authenticated caller required")
+            return
+        if self._strategy_templates_repo is None:
+            return analysis_pb2.ListTemplatesResponse()
+        rows = await self._strategy_templates_repo.list_active()
+        return analysis_pb2.ListTemplatesResponse(
+            templates=[_row_to_strategy_template(r) for r in rows]
+        )
+
+    async def ManageTemplate(self, request, context):
+        caller_user_id = self._caller_user_id(context)
+        if not caller_user_id or not self._has_admin_scope(context):
+            await context.abort(
+                grpc.StatusCode.PERMISSION_DENIED, "admin scope required to manage templates"
+            )
+            return
+        if self._strategy_templates_repo is None:
+            await context.abort(grpc.StatusCode.UNAVAILABLE, "template store unavailable")
+            return
+        meta = request.template.meta
+        if not meta.template_id or meta.kind not in (
+            common_pb2.TEMPLATE_KIND_UNSPECIFIED,
+            common_pb2.TEMPLATE_KIND_STRATEGY,
+        ):
+            await context.abort(
+                grpc.StatusCode.INVALID_ARGUMENT,
+                "template.meta needs a template_id and the STRATEGY kind",
+            )
+            return
+        op = request.operation
+        if op == common_pb2.TEMPLATE_OPERATION_RETIRE:
+            row = await self._strategy_templates_repo.retire(meta.template_id)
+        elif op in (common_pb2.TEMPLATE_OPERATION_CREATE, common_pb2.TEMPLATE_OPERATION_UPDATE):
+            payload = analysis_pb2.StrategyDefinition()
+            payload.CopyFrom(request.template.payload)
+            if not payload.strategy_id:
+                await context.abort(
+                    grpc.StatusCode.INVALID_ARGUMENT, "template payload needs a strategy_id"
+                )
+                return
+            _normalize_source_symbols(payload)
+            _strip_dead_signal_params(payload)
+            if await self._validate_template_definition(payload, context):
+                return
+            payload_json = json_format.MessageToDict(payload, preserving_proto_field_name=True)
+            if op == common_pb2.TEMPLATE_OPERATION_CREATE:
+                try:
+                    row = await self._strategy_templates_repo.create(
+                        meta, payload_json, caller_user_id
+                    )
+                except asyncpg.UniqueViolationError:
+                    await context.abort(
+                        grpc.StatusCode.ALREADY_EXISTS,
+                        f"template '{meta.template_id}' already exists",
+                    )
+                    return
+            else:
+                row = await self._strategy_templates_repo.update(meta.template_id, payload_json)
+        else:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, "unsupported template operation")
+            return
+        if row is None:
+            await context.abort(
+                grpc.StatusCode.NOT_FOUND, f"template '{meta.template_id}' not found"
+            )
+            return
+        return _row_to_strategy_template(row)
+
+    @staticmethod
+    def _saga_request_meta(context) -> list:
+        """The caller's trio + the saga grant, for the indicators saga calls on the request path."""
+        trio = [(k, v) for k, v in context.invocation_metadata() if k in _PROPAGATED_HEADERS]
+        return [*trio, ("x-internal-caller", _TEMPLATE_SAGA_CALLER)]
+
+    @staticmethod
+    def _saga_sweep_meta(user_id: str) -> list:
+        """Sweep-path metadata: the intent's owner, the saga grant, a fresh trace id (no scope)."""
+        return [
+            ("x-user-id", user_id),
+            ("x-internal-caller", _TEMPLATE_SAGA_CALLER),
+            ("x-trace-id", uuid.uuid4().hex),
+        ]
+
+    async def _resolve_intent(self, intent_id: str, commit: bool, meta) -> bool:
+        try:
+            await self._indicators.ResolveTemplateIntent(
+                indicators_pb2.ResolveTemplateIntentRequest(intent_id=intent_id, commit=commit),
+                metadata=meta,
+            )
+        except grpc.RpcError as e:
+            log.warning("ResolveTemplateIntent(%s, commit=%s) failed: %s", intent_id, commit, e)
+            return False
+        return True
+
+    async def _abort_intent(self, intent_id: str, meta, *, claimed: bool = False) -> None:
+        """PENDING→ABORTING (skipped when ``claimed``), delete the copies, →ABORTED. A lost CAS
+        means the sweep owns the intent; a failed delete leaves ABORTING for the sweep to retry."""
+        repo = self._template_intents_repo
+        if not claimed and not await repo.cas(intent_id, "PENDING", "ABORTING"):
+            return
+        if await self._resolve_intent(intent_id, False, meta):
+            await repo.cas(intent_id, "ABORTING", "ABORTED")
+
+    async def _finalize_intent(self, intent_id: str, meta) -> None:
+        if await self._resolve_intent(intent_id, True, meta):
+            await self._template_intents_repo.cas(intent_id, "COMMITTED", "FINALIZED")
+
+    async def _free_strategy_id(self, owner: str, base: str) -> str:
+        """``base`` if the owner does not hold it, else the first free ``base_2``, ``base_3``, …"""
+        candidate, n = base, 1
+        while await self._strategies_repo.get_by_owner_and_id(owner, candidate) is not None:
+            n += 1
+            candidate = f"{base}_{n}"
+        return candidate
+
+    async def InstantiateTemplate(self, request, context):
+        owner = self._caller_user_id(context)
+        if not owner:
+            await context.abort(grpc.StatusCode.PERMISSION_DENIED, "authenticated caller required")
+            return
+        if (
+            self._strategies_repo is None
+            or self._strategy_templates_repo is None
+            or self._template_intents_repo is None
+        ):
+            await context.abort(grpc.StatusCode.UNAVAILABLE, "strategy store unavailable")
+            return
+        tpl = await self._strategy_templates_repo.get(request.template_id)
+        if tpl is None or tpl["retired_at"] is not None:
+            await context.abort(
+                grpc.StatusCode.NOT_FOUND, f"template '{request.template_id}' not found"
+            )
+            return
+        definition = json_format.ParseDict(
+            tpl["payload"] or {}, analysis_pb2.StrategyDefinition(), ignore_unknown_fields=True
+        )
+        if request.strategy_id:
+            if await self._strategies_repo.get_by_owner_and_id(owner, request.strategy_id):
+                await context.abort(
+                    grpc.StatusCode.ALREADY_EXISTS,
+                    f"strategy '{request.strategy_id}' already exists",
+                )
+                return
+            final_id = request.strategy_id
+        else:
+            final_id = await self._free_strategy_id(owner, definition.strategy_id)
+        if await self._require_admin_for_blend_id(context, final_id):
+            return
+
+        template_ids = list(
+            dict.fromkeys(
+                c.formula_id
+                for c in definition.components
+                if c.kind == analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA and c.formula_id
+            )
+        )
+        intent_id = str(uuid.uuid4())
+        meta = self._saga_request_meta(context)
+        await self._template_intents_repo.create(
+            {
+                "intent_id": intent_id,
+                "user_id": owner,
+                "template_id": tpl["template_id"],
+                "template_version": tpl["version"],
+                "strategy_id": final_id,
+            }
+        )
+        copies: dict[str, str] = {}
+        if template_ids:
+            try:
+                resp = await self._indicators.InstantiateTemplate(
+                    indicators_pb2.InstantiateTemplateRequest(
+                        template_ids=template_ids, intent_id=intent_id
+                    ),
+                    metadata=meta,
+                )
+            except grpc.RpcError as e:
+                await self._abort_intent(intent_id, meta)
+                await context.abort(e.code(), e.details())
+                return
+            copies = dict(resp.formula_ids_by_template)
+            missing = [t for t in template_ids if not copies.get(t)]
+            if missing:
+                await self._abort_intent(intent_id, meta)
+                await context.abort(
+                    grpc.StatusCode.INTERNAL, f"no formula copy returned for {missing}"
+                )
+                return
+
+        for comp in definition.components:
+            if comp.kind == analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA and comp.formula_id:
+                comp.formula_id = copies[comp.formula_id]
+        definition.strategy_id = final_id
+        definition.user_id = owner
+        definition.active = False
+        definition.live_enabled = False
+        definition.ClearField("origin")
+        del definition.warnings[:]
+        definition_json = json_format.MessageToDict(definition, preserving_proto_field_name=True)
+
+        async def _commit_intent(conn):
+            return await self._template_intents_repo.cas(
+                intent_id, "PENDING", "COMMITTED", conn=conn, user_id=owner
+            )
+
+        try:
+            row = await self._strategies_repo.create_from_template(
+                owner,
+                final_id,
+                definition.display_name,
+                definition_json,
+                tpl["template_id"],
+                tpl["version"],
+                commit_intent=_commit_intent,
+            )
+        except asyncpg.UniqueViolationError:
+            await self._abort_intent(intent_id, meta)
+            await context.abort(
+                grpc.StatusCode.ALREADY_EXISTS, f"strategy '{final_id}' already exists"
+            )
+            return
+        if row is None:
+            # The sweep aborted this intent first; it owns deleting the copies.
+            await context.abort(
+                grpc.StatusCode.ABORTED, "template instantiation was aborted; retry"
+            )
+            return
+        try:
+            await self._finalize_intent(intent_id, meta)
+        except Exception as e:  # the sweep finalizes a COMMITTED intent
+            log.warning("template intent %s finalize deferred to sweep: %s", intent_id, e)
+        created = _row_to_strategy_definition(row)
+        await self._fill_template_origins([created.origin])
+        return created
 
     async def ScreenSymbols(self, request, context):
         """Screen a symbol universe against weighted criteria (feature 060).
@@ -5337,6 +5636,46 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         while True:
             await asyncio.sleep(await self._readiness_materializer_tick(schedule))
 
+    # ── Template intent reconcile sweep (feature 224) ───────────────────────────────────────────
+
+    async def _template_intent_sweep_tick(self, schedule: "DurableSchedule") -> float:
+        """Abort stale PENDING intents, retry ABORTING aborts and COMMITTED commits; a per-intent
+        failure is swallowed (retried next pass). Returns the seconds to sleep."""
+        sleep_s = await schedule.next_sleep_seconds()
+        if sleep_s > 0:
+            return sleep_s
+        repo = self._template_intents_repo
+        try:
+            intents = [
+                *await repo.stale(("PENDING",), _INTENT_STALE_SECONDS),
+                *await repo.stale(("ABORTING", "COMMITTED"), 0),
+            ]
+        except Exception as e:
+            log.warning("template intent sweep: enumeration failed: %s", e)
+            intents = []
+        for intent in intents:
+            meta = self._saga_sweep_meta(intent["user_id"])
+            try:
+                if intent["state"] == "COMMITTED":
+                    await self._finalize_intent(intent["intent_id"], meta)
+                else:
+                    await self._abort_intent(
+                        intent["intent_id"], meta, claimed=intent["state"] == "ABORTING"
+                    )
+            except Exception as e:  # one bad intent never kills the pass
+                log.warning("template intent sweep failed for %s: %s", intent["intent_id"], e)
+        await schedule.advance(_INTENT_SWEEP_SECONDS)
+        return 0.0
+
+    async def run_template_intent_sweep_forever(self):
+        """Reconcile stranded InstantiateTemplate saga intents. Call as a ``create_task``."""
+        if self._template_intents_repo is None or self._db_pool is None:
+            return
+        schedule = DurableSchedule(self._db_pool, "template_intent_sweep", "interval")
+        await schedule.seed()
+        while True:
+            await asyncio.sleep(await self._template_intent_sweep_tick(schedule))
+
     async def SetOpportunityAction(self, request, context):
         """Persist a per-user disposition (snooze/dismiss/take) for a queued opportunity
         (feature 097). ``user_id`` comes from the propagated ``x-user-id`` header; the
@@ -5638,6 +5977,23 @@ def _normalize_source_symbols(definition) -> None:
     normalization."""
     for comp in definition.components:
         comp.source_symbol = _normalize_symbol(comp.source_symbol)
+
+
+def _fundamentals_source_symbol_conflict(definition, formula_fund_map) -> str | None:
+    """The INVALID_ARGUMENT message for a component that sets ``source_symbol`` on a
+    fundamentals-input formula (``formula_fund_map``: formula id → metrics), else None."""
+    for comp in definition.components:
+        if (
+            comp.kind == analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA
+            and comp.source_symbol
+            and formula_fund_map.get(comp.formula_id)
+        ):
+            return (
+                f"component '{comp.ref_name}': a fundamentals-input formula "
+                f"('{comp.formula_id}') cannot also set source_symbol "
+                f"('{comp.source_symbol}') — it reads fundamentals, not bars"
+            )
+    return None
 
 
 def _definition_has_fundamental(definition) -> bool:
@@ -6229,7 +6585,7 @@ def _guard_erasure(old_json: dict, new_json: dict, mask_paths: set) -> str | Non
     return None
 
 
-_FINGERPRINT_EXCLUDED_KEYS = frozenset({"display_name", "active", "live_enabled"})
+_FINGERPRINT_EXCLUDED_KEYS = frozenset({"display_name", "active", "live_enabled", "origin"})
 
 
 def _definition_fingerprint(definition_json: dict) -> str:
@@ -6249,6 +6605,25 @@ def _definition_fingerprint(definition_json: dict) -> str:
     }
     canonical = json.dumps(filtered, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _row_to_strategy_template(row: dict) -> "analysis_pb2.StrategyTemplate":
+    meta = common_pb2.TemplateMeta(
+        template_id=row["template_id"],
+        kind=common_pb2.TEMPLATE_KIND_STRATEGY,
+        name=row.get("name") or "",
+        description=row.get("description") or "",
+        version=int(row.get("version") or 0),
+        retired=row.get("retired_at") is not None,
+    )
+    if row.get("created_at") is not None:
+        meta.created_at.FromDatetime(row["created_at"])
+    if row.get("updated_at") is not None:
+        meta.updated_at.FromDatetime(row["updated_at"])
+    payload = json_format.ParseDict(
+        row.get("payload") or {}, analysis_pb2.StrategyDefinition(), ignore_unknown_fields=True
+    )
+    return analysis_pb2.StrategyTemplate(meta=meta, payload=payload)
 
 
 def _row_to_score(row: dict) -> "analysis_pb2.StrategyScore":
@@ -6309,9 +6684,19 @@ def _row_to_strategy_definition(
     # The user_id column is authoritative — a migrated row carries its owner only on the column;
     # the live loop keys its state by this value (must match the cooldown rows).
     definition.user_id = row.get("user_id", "") or ""
+    # Provenance is column-authoritative; a body-supplied origin is never served.
+    definition.ClearField("origin")
+    _set_origin_from_row(definition.origin, row)
     if strip_dead_signal_params:
         _strip_dead_signal_params(definition)
     return definition
+
+
+def _set_origin_from_row(origin, row: dict) -> None:
+    """Copy a strategies row's origin columns into ``origin`` (no-op when not an instance)."""
+    if row.get("origin_template_id"):
+        origin.template_id = row["origin_template_id"]
+        origin.template_version = int(row.get("origin_template_version") or 0)
 
 
 def _unwrap_value(v):
