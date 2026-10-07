@@ -978,3 +978,7 @@ OQ-4 to OQ-6 remain for /sdd-design.
 - `main-dev` was merged in (`6cd66a42`, the archive of 20 features). One docs conflict in the indicators constitution was resolved: main-dev's refreshed line anchors were kept, plus 224's INDICATORS-5 wording.
 - Status set to `code-completed`.
 - Integration PR opened against `main-dev`.
+- C-16 promotion, which the operator confirmed: all 37 scenarios were copied verbatim from `acceptance.feature`, each tagged `@feature-224`.
+  - Per-service `acceptance/private-by-default-templates.feature` files: indicators 11, analysis 9, ingest 6, ui 1, agent 1.
+  - 9 cross-service scenarios were appended to `docs/sdd/business-rules/platform.feature`: AC-6/15/18/19/23/26/32/35/36.
+  - AC-23 partly overlaps `@feature-186 @AC-4`; both are kept.
