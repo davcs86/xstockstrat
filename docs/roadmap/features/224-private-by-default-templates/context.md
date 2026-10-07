@@ -770,3 +770,21 @@ OQ-4 to OQ-6 remain for /sdd-design.
 - **Follow-through:** the fake `resolve_secret` and the dedup spy now take `user_id` and `owner`.
 
 **Doc drift to fix in Step 40:** config `CLAUDE.md` invariants #5 and #6 (secrets global-only; no ingest SAN grant), and the ingest `CLAUDE.md` bearer-secret note.
+
+### Step 29 — service: ingest source templates and origin on `ListSignalSources` [done]
+- **New repository** `app/repositories/source_templates.py` with `list_active`, `get`, `create`, `update`, `retire`, `latest_versions` and `stamp_origin`. `update` bumps the version and timestamp in one statement.
+- **New RPCs** `ListTemplates`, `ManageTemplate` and `InstantiateTemplate`.
+  - Managing templates (create, update, retire) requires ADMIN.
+  - Instantiating creates a private copy owned by the caller, through the shared `_register_source`. That path keeps the existing validation, the reserved-slug check and the advisory lock.
+  - Template payloads never carry credentials or owner data (`_template_payload` whitelist).
+- **`ListSignalSources`** now returns `origin`, with `update_available` computed from one batched version lookup per response.
+- **Deviation:** D-26.
+
+### Step 30 — test: source templates [done]
+- New `tests/test_source_templates.py` with 30 tests:
+  - AC-13: a non-admin cannot manage templates.
+  - Instantiation stamps the origin; system-held or already-owned slugs return `ALREADY_EXISTS`; an `mcp_client` source needs `credentials_ref`.
+  - Update-available and retired-template behavior in `ListSignalSources`.
+  - No credential ever appears in a template.
+  - Repository SQL.
+- **TDD:** RED was an ImportError, then 24 failed (`NotImplementedError` from the base class). GREEN is 308 passed at 79.99% coverage, ruff clean, and 0 jscpd clones.
