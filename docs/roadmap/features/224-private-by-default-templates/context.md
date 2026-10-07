@@ -491,3 +491,14 @@ OQ-4 to OQ-6 remain for /sdd-design.
 - Files: `scripts/{render-migrations,check-migration-contract}.test.sh`, `.github/workflows/ci.yml`.
 - Deviations: none.
 - Note: the host's shellcheck 0.11 flags a pre-existing SC2329 in `scripts/integration-test.sh`. That is out of scope and untouched, and CI's apt shellcheck predates that check.
+
+### Step 5 — test: peer-SAN spike [done] (GATE PASSED)
+- **grpc.aio** (ingest, grpcio 1.80): on the real mTLS harness, `context.peer_identity_key() == "x509_subject_alternative_name"`. `peer_identities()` includes the exact element `b"xstockstrat-analysis"` for the analysis leaf and leaves it out for a different leaf.
+- **grpc-js** (config, ^1.14.5): `call.getAuthContext().sslPeerCertificate.subjectaltname` parses as a comma-separated list with `DNS:` prefixes to exactly `["xstockstrat-ingest"]`, and a different leaf yields its own SAN.
+- **Outcome:** Steps 14, 19 and 21 use these APIs directly. The design fallback (parsing the cert from `auth_context()`) is **not needed**.
+- **Verification:**
+  - ingest: 223 passed, coverage 77.28% (≥40); `ruff check` and `ruff format --check` clean.
+  - config: 123/123 passed, c8 lines 83.67% (≥40); eslint 0 errors, and no warnings from the new file.
+- TDD: N/A (spike).
+- Files: `services/xstockstrat-ingest/tests/test_peer_identity_spike.py`, `services/xstockstrat-config/src/__tests__/peerSanSpike.test.ts`.
+- Deviations: none.

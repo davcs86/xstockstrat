@@ -427,7 +427,7 @@ Coverage: N/A — no coverage tool for shell; the behavior gate is `render-migra
 
 ### Step 5 — test: peer-SAN spike (grpc.aio `peer_identities()` and grpc-js `getAuthContext()`)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest` + `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-ingest/tests/test_peer_identity_spike.py` — create
