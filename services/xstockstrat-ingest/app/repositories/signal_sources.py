@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from datetime import datetime
 
+from gen.ingest.v1 import ingest_pb2
+
 # Source-health freshness thresholds: fed within LIVE → live; within STALE → stale;
 # older / never / errored → down.
 _HEALTH_LIVE_SECONDS = 24 * 3600
@@ -31,64 +33,102 @@ def derive_health_status(
     return "down"
 
 
-async def get_active_source(db_pool, slug: str) -> dict | None:
-    row = await db_pool.fetchrow(
-        "SELECT slug, display_name, source_type, extractor_module, credentials_ref,"
-        " active, config_json FROM ingest.signal_sources WHERE slug = $1 AND active = TRUE",
-        slug,
-    )
-    return dict(row) if row is not None else None
+SYSTEM_OWNER = "system"
+
+
+def owner_scope_predicate(scope: int, idx: int) -> tuple[str, bool]:
+    """WHERE fragment for a SignalScope; returns (sql, uses_param) — `$idx` is the owner when used.
+
+    UNSPECIFIED (and any unknown value) = own + system; OWN = own only; SYSTEM = system only.
+    """
+    if scope == ingest_pb2.SIGNAL_SCOPE_OWN:
+        return f"user_id = ${idx}", True
+    if scope == ingest_pb2.SIGNAL_SCOPE_SYSTEM:
+        return f"user_id = '{SYSTEM_OWNER}'", False
+    return f"(user_id = ${idx} OR user_id = '{SYSTEM_OWNER}')", True
+
+
+_LIST_COLS = (
+    "user_id, slug, display_name, source_type, extractor_module, credentials_ref,"
+    " active, config_json, created_at, last_seen_at, last_error, signals_fed,"
+    " reliability_weight"
+)
 
 
 async def list_all_sources(db_pool, include_inactive: bool = False) -> list[dict]:
-    cols = (
-        "slug, display_name, source_type, extractor_module, credentials_ref,"
-        " active, config_json, created_at, last_seen_at, last_error, signals_fed,"
-        " reliability_weight"
-    )
+    """Every owner's sources — only for headerless (release-N) reads and the mcp_client poller."""
     if include_inactive:
         rows = await db_pool.fetch(
-            f"SELECT {cols} FROM ingest.signal_sources ORDER BY created_at ASC"
+            f"SELECT {_LIST_COLS} FROM ingest.signal_sources ORDER BY created_at ASC"
         )
     else:
         rows = await db_pool.fetch(
-            f"SELECT {cols} FROM ingest.signal_sources WHERE active = TRUE ORDER BY created_at ASC"
+            f"SELECT {_LIST_COLS} FROM ingest.signal_sources WHERE active = TRUE"
+            " ORDER BY created_at ASC"
         )
     return [dict(row) for row in rows]
 
 
-async def mark_source_fed(db_pool, slug: str) -> None:
+async def list_sources(
+    db_pool, owner: str, scope: int, include_inactive: bool = False
+) -> list[dict]:
+    """The sources visible to `owner` under a SignalScope (own + system by default)."""
+    predicate, uses_param = owner_scope_predicate(scope, 1)
+    active = "" if include_inactive else " AND active = TRUE"
+    rows = await db_pool.fetch(
+        f"SELECT {_LIST_COLS} FROM ingest.signal_sources WHERE {predicate}{active}"
+        " ORDER BY created_at ASC",
+        *((owner,) if uses_param else ()),
+    )
+    return [dict(row) for row in rows]
+
+
+async def slug_holders(db_pool, slug: str) -> list[str]:
+    """Every owner holding `slug` (deliberately not owner-scoped: reserved-slug and headerless
+    resolution need the full holder set)."""
+    rows = await db_pool.fetch(
+        "SELECT user_id FROM ingest.signal_sources WHERE slug = $1 ORDER BY user_id", slug
+    )
+    return [row["user_id"] for row in rows]
+
+
+async def mark_source_fed(db_pool, user_id: str, slug: str) -> None:
     """Record a successful signal feed: bump last_seen_at + signals_fed, clear last_error
     (feature 083). Best-effort — callers wrap this so a bookkeeping failure never fails ingest."""
     await db_pool.execute(
         "UPDATE ingest.signal_sources"
         " SET last_seen_at = NOW(), signals_fed = signals_fed + 1, last_error = NULL"
-        " WHERE slug = $1",
+        " WHERE user_id = $1 AND slug = $2",
+        user_id,
         slug,
     )
 
 
-async def mark_source_error(db_pool, slug: str, error: str) -> None:
+async def mark_source_error(db_pool, user_id: str, slug: str, error: str) -> None:
     """Record the last error a source's ingest hit (feature 083). Best-effort."""
     await db_pool.execute(
-        "UPDATE ingest.signal_sources SET last_error = $2 WHERE slug = $1",
+        "UPDATE ingest.signal_sources SET last_error = $3 WHERE user_id = $1 AND slug = $2",
+        user_id,
         slug,
         error,
     )
 
 
-async def touch_source_last_seen(db_pool, slug: str) -> None:
+async def touch_source_last_seen(db_pool, user_id: str, slug: str) -> None:
     """Record that a source is alive (heard from it) without counting a new signal fed —
     used on a dedup hit, where mark_source_fed's signals_fed bump would be wrong (feature 111)."""
     await db_pool.execute(
-        "UPDATE ingest.signal_sources SET last_seen_at = NOW() WHERE slug = $1",
+        "UPDATE ingest.signal_sources SET last_seen_at = NOW() WHERE user_id = $1 AND slug = $2",
+        user_id,
         slug,
     )
 
 
-async def get_source(db_pool, slug: str) -> dict | None:
-    """Fetch a signal source by slug, or None (feature 088: honest register/update verbs)."""
-    row = await db_pool.fetchrow("SELECT * FROM ingest.signal_sources WHERE slug = $1", slug)
+async def get_source(db_pool, user_id: str, slug: str) -> dict | None:
+    """An owner's signal source by slug, or None (feature 088: honest register/update verbs)."""
+    row = await db_pool.fetchrow(
+        "SELECT * FROM ingest.signal_sources WHERE user_id = $1 AND slug = $2", user_id, slug
+    )
     return dict(row) if row is not None else None
 
 
@@ -103,19 +143,21 @@ async def insert_source(
     config_json: dict | None,
     active: bool = True,
     reliability_weight: float,
+    user_id: str,
 ) -> dict:
-    """Strict create (feature 088). Raises asyncpg.UniqueViolationError on an existing slug — the
-    servicer maps that to ALREADY_EXISTS. Replaces the old blind upsert on the register path.
+    """Strict create (feature 088). Raises asyncpg.UniqueViolationError on an existing
+    (user_id, slug) — the servicer checks holders first under an advisory lock.
 
-    feature 134: reliability_weight is the trailing INSERT column/param ($8), placed after `active`
-    so the existing test's config_json positional index (6) is preserved."""
+    feature 134: reliability_weight is the INSERT column/param ($8), placed after `active`
+    so the existing test's config_json positional index (6) is preserved; feature 224 appends
+    the owner ($9)."""
     # The pool has no JSONB codec, so asyncpg expects JSONB params as JSON text, not dicts.
     config_param = json.dumps(config_json) if config_json is not None else None
     row = await db_pool.fetchrow(
         "INSERT INTO ingest.signal_sources"
         " (slug, display_name, source_type, extractor_module, credentials_ref, config_json, active,"
-        " reliability_weight)"
-        " VALUES ($1, $2, $3, $4, $5, $6, $7, $8)"
+        " reliability_weight, user_id)"
+        " VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)"
         " RETURNING *",
         slug,
         display_name,
@@ -125,6 +167,7 @@ async def insert_source(
         config_param,
         active,
         reliability_weight,
+        user_id,
     )
     return dict(row)
 
@@ -132,6 +175,7 @@ async def insert_source(
 async def update_source(
     db_pool,
     *,
+    user_id: str,
     slug: str,
     display_name: str,
     source_type: str,
@@ -140,10 +184,10 @@ async def update_source(
     config_json: dict | None,
     reliability_weight: float,
 ) -> dict | None:
-    """Write the already-merged columns for an existing source (feature 088). Never touches `active`
-    (lifecycle is reactivate/deactivate only). Returns None if the slug is gone.
+    """Write the already-merged columns for an owner's existing source (feature 088). Never
+    touches `active` (lifecycle is reactivate/deactivate only). Returns None if the row is gone.
 
-    feature 134: reliability_weight is the trailing SET column/param ($7)."""
+    feature 134: reliability_weight is the SET column/param ($7); feature 224: owner is $8."""
     config_param = json.dumps(config_json) if config_json is not None else None
     row = await db_pool.fetchrow(
         "UPDATE ingest.signal_sources SET"
@@ -153,7 +197,7 @@ async def update_source(
         "   credentials_ref = $5,"
         "   config_json = $6,"
         "   reliability_weight = $7"
-        " WHERE slug = $1"
+        " WHERE slug = $1 AND user_id = $8"
         " RETURNING *",
         slug,
         display_name,
@@ -162,22 +206,27 @@ async def update_source(
         credentials_ref,
         config_param,
         reliability_weight,
+        user_id,
     )
     return dict(row) if row is not None else None
 
 
-async def reactivate_source(db_pool, slug: str) -> dict | None:
+async def reactivate_source(db_pool, user_id: str, slug: str) -> dict | None:
     """Set active = TRUE (feature 088: reactivation decoupled from update)."""
     row = await db_pool.fetchrow(
-        "UPDATE ingest.signal_sources SET active = TRUE WHERE slug = $1 RETURNING *",
+        "UPDATE ingest.signal_sources SET active = TRUE"
+        " WHERE user_id = $1 AND slug = $2 RETURNING *",
+        user_id,
         slug,
     )
     return dict(row) if row is not None else None
 
 
-async def deactivate_source(db_pool, slug: str) -> dict | None:
+async def deactivate_source(db_pool, user_id: str, slug: str) -> dict | None:
     row = await db_pool.fetchrow(
-        "UPDATE ingest.signal_sources SET active = FALSE WHERE slug = $1 RETURNING *",
+        "UPDATE ingest.signal_sources SET active = FALSE"
+        " WHERE user_id = $1 AND slug = $2 RETURNING *",
+        user_id,
         slug,
     )
     return dict(row) if row is not None else None

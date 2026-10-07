@@ -109,12 +109,12 @@ async def poll_one_source(
 
     credentials_ref = src.get("credentials_ref")
     if not credentials_ref:
-        await mark_source_error(servicer._db, slug, "bearer not configured")
+        await mark_source_error(servicer._db, src["user_id"], slug, "bearer not configured")
         return
     _namespace, key = split_credentials_ref(credentials_ref)
     bearer, found = await cfg_watcher.resolve_secret(key)
     if not found:
-        await mark_source_error(servicer._db, slug, "bearer not configured")
+        await mark_source_error(servicer._db, src["user_id"], slug, "bearer not configured")
         return
 
     result = await mcp_client.fetch(endpoint, tool, arguments, bearer, float(timeout_seconds))
@@ -144,7 +144,7 @@ async def run_one_cycle(servicer, cfg_watcher, mcp_client: McpClientProtocol) ->
         except Exception as e:
             log.warning("mcp_client loop: source %s failed: %s", slug, e)
             try:
-                await mark_source_error(servicer._db, slug, str(e))
+                await mark_source_error(servicer._db, src["user_id"], slug, str(e))
             except Exception as bookkeeping_err:
                 log.warning(
                     "mcp_client loop: failed to record error for %s: %s", slug, bookkeeping_err

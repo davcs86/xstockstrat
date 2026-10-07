@@ -1392,7 +1392,7 @@ head -1 services/xstockstrat-ingest/migrations/013_*.up.sql   # -- requires-env:
 
 ### Step 19 — service: ingest owner-scoped sources/signals, `SignalScope`, reserved slugs, system grants, admin read
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/peer_identity.py` — create
@@ -2973,3 +2973,21 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Down file**: refuses to run once any slug has more than one owner, or any dedup key does. Reversing the PK swap would otherwise collide.
 - **Accepted risk**: the N-1 owner-fill trigger covers `newsletter_signals` inserts only, as the spec names. During a rollback window, an N-1 instance that **registers** a new source without `user_id` fails the NOT NULL, and an N-1 `mark_source_*` UPDATE by slug touches every owner's row with that slug. Registration is admin-only, and N-1 has no `ON CONFLICT (slug)` (round-3 verification). Both are confined to N/N-1 coexistence and disappear once N is fully rolled out.
 - **Disposition**: operator gate plus a documented, accepted risk.
+
+### D-20 — Step 19: `mcp_client_loop.py` touched early; `_ingest_external_signal(owner=…)` added now
+- **Actual**: the owner-keyed `mark_source_error(db, user_id, slug, error)` signature would have broken the running poller. The three poller call sites now pass `src["user_id"]` (Step 23's file). `IngestSignal` needs the owner now, so `_ingest_external_signal` already takes `owner`. Step 23 only has to pass `owner=src["user_id"]` and do the exact-scope `GetSecret`.
+- **Disposition**: minimal follow-through to keep the build green; Step 23 scope reduced accordingly.
+
+### D-21 — Step 19: headered `IngestSignal` to an own **inactive** source → `NOT_FOUND`
+- **Actual**: "active" is folded into the owner-held check per the spec's reading, so this case returns `NOT_FOUND`; it was `INVALID_ARGUMENT`. No durable `@AC-*` pins the old code (grep of the ingest/agent/platform acceptance suites).
+- **Other details**: a non-admin REGISTER checks for an existing slug before validation, inside a `pg_advisory_xact_lock` transaction, so the original check order is kept. `SignalSource.user_id` is also filled on the `ManageSignalSource` response.
+- **Disposition**: within scope.
+
+### D-22 — Step 20: follow-through edits outside Files
+- **Actual**:
+  - `tests/_helpers.py`: `transaction_conn` gains a `slug_holders` keyword and an async `conn.execute`.
+  - `tests/test_source_health.py`: `args[1]=="uw"` → `args[1:]==("u1","uw")`.
+  - `tests/test_mcp_client_loop.py`: the fixture gains `user_id`, and the fake `mark_source_error` takes the owner.
+  - `test_ingest_servicer.py`: REGISTER tests use a headered owner and patch `slug_holders`.
+  - Same expected status codes throughout.
+- **Disposition**: required by the owner-keyed signatures; no assertion weakened.
