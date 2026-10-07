@@ -1795,7 +1795,7 @@ grep -rn "fundamentals_blend_strategy_id\"" app --include=*.py   # → only insi
 
 ### Step 26 — test: blend guard parity
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_blend_guard.py` — create

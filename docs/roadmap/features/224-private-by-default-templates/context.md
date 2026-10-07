@@ -717,3 +717,19 @@ OQ-4 to OQ-6 remain for /sdd-design.
   - GREEN: 275 passed, coverage 79.49%, ruff clean. The slug-predicate and header-trio greps match.
 - **Files:** `tests/{conftest,test_signal_ownership,test_signal_sources,test_ingest_servicer,_helpers,test_source_health,test_mcp_client_loop}.py`.
 - **Deviation:** D-22.
+
+### Step 25 — service: analysis blend-guard helper, single blend-id accessor, REGISTER guard [done]
+- **One accessor.** The module-level `blend_strategy_id(cfg)` is now the only place that reads the `analysis.engine.fundamentals_blend_strategy_id` key and its default literal. All five former read sites use it: the servicer's DEACTIVATE, SetStrategyLive and opportunities paths, `live_loop`, and `entry_backfill`.
+- **REGISTER guard.** `_require_admin_for_blend_id(context, strategy_id)` sits beside `_has_admin_scope`. A non-admin REGISTER of the currently configured blend id is refused with FAILED_PRECONDITION (`@feature-186` EXTEND). `InstantiateTemplate` will call the same helper in Step 31.
+- **Files:** `app/handlers/servicer.py`, `app/engine/{live_loop,entry_backfill}.py`.
+- **Deviation:** D-23.
+
+### Step 26 — test: blend guard parity [done]
+- **New `tests/test_blend_guard.py` (4 tests):**
+  - non-admin DEACTIVATE is refused (AC-23);
+  - non-admin REGISTER of the blend id is refused, and nothing is created;
+  - admin REGISTER succeeds;
+  - after the blend id is reconfigured, the guard follows the new id.
+- **TDD:** RED was 2 failures, both `DID NOT RAISE` on a non-admin REGISTER. The other 2 tests already passed because they cover existing behavior. GREEN is 934 passed, coverage 86.45%, ruff clean.
+- **Greps:** the key literal and its default each appear exactly once (`servicer.py:299`).
+- The existing `@feature-186` tests pass unchanged.
