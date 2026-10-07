@@ -554,3 +554,39 @@ OQ-4 to OQ-6 remain for /sdd-design.
 - **Files:** `tests/{conftest,test_owner_header_guard,test_fundsignal_loop,test_live_loop,test_pnl_pattern_consumer,test_get_attribution,test_entry_backfill}.py`.
 - **Deviations:** D-6 and D-7.
 - **Noted, not fixed (pre-existing behavior):** after an IngestSignal NOT_FOUND abort, the triggering symbol's `fundsignal_emitted` claim row remains, as it already did for any failed emit.
+
+### Step 9 — service: analysis owner dimension, `GetBacktest` ownership, strategy admin read [done]
+- **Repos** (all owner-scoped):
+  - `strategy_scores` reads and writes `strategy_scores_v2`, conflicting on `(user_id, strategy_id)`, and adds `list_unscored_pairs`.
+  - `backtest_run_symbols.fetch_eligible` and the `backtest_details` insert and retention.
+  - `backtest_runs.list_by_strategy(user_id, …)`.
+- **New `app/admin_audit.py`:**
+  - Emits 1 + K events: one on the admin's stream and one per foreign owner, or none if the page is all the admin's own objects.
+  - At most 4 appends run concurrently, and a page may name at most 100 foreign owners (fixed constants).
+  - Forwards only the header trio, and fails closed with `UNAVAILABLE`.
+- **Servicer:**
+  - In-memory state is keyed `(user_id, strategy_id)`. `RunBacktest` passes the owner to every persist path.
+  - `ListStrategies`, `GetStrategyReport`, `ListBacktests` and `GetStrategyAnalytics` read by owner.
+  - `GetBacktest` denies any non-owned run, admins included (D-9, operator decision).
+  - `GetStrategy` and `ListStrategyDefinitions` honor `owner_user_id` only for an ADMIN caller, and those reads are audited.
+  - `_BOOT_RECOMPUTE_MAX_PAIRS = 50`, with `recompute_unscored_pairs()` called after `hydrate_scores` in `main.py`.
+- **Files:**
+  - `app/repositories/{strategy_scores,backtest_run_symbols,backtest_details,backtest_runs}.py`
+  - `app/admin_audit.py`
+  - `app/handlers/servicer.py`
+  - `app/main.py`
+- **Deviations:** D-8, D-9, D-10.
+
+### Step 10 — test: owner-keyed analysis state and strategy admin read [done]
+- **New `tests/test_owner_dimension.py`** (22 tests). Covers:
+  - AC-21: same strategy id with two owners; ListBacktests, GetBacktest and analytics owner-scoped; admin GetBacktest denied.
+  - AC-28: the strategy part.
+  - Audit 1 + K, the zero-event case, fail-closed behavior and the header trio.
+  - The boot recompute cap.
+- Four repo test files are updated for the new SQL and signatures.
+- **TDD:**
+  - RED: 12 failed in the repo tests (for example `'analysis.strategy_scores_v2' in 'SELECT * FROM analysis.strategy_scores'`, and `fetch_eligible() takes 3 positional arguments`), and the new module failed with `ImportError: admin_audit`. D-9's flipped test was RED before the deny change.
+  - GREEN: 924 passed, coverage 85.70% (≥40), ruff check and format clean.
+- **Files:** `tests/test_owner_dimension.py`, `tests/test_{strategy_scores,backtest_run_symbols,backtest_details,backtest_runs}_repo.py`, `tests/test_analysis_servicer.py`.
+- **Deviation:** D-11.
+- **Open (owned by Step 14):** `GetStrategy`'s deleted-formula check still calls indicators as the admin, which is the indicators admin-read work in Step 14.

@@ -880,7 +880,7 @@ grep -n "x-user-id\|x-access-scope\|x-trace-id" app/admin_audit.py   # trio forw
 
 ### Step 10 — test: owner-keyed analysis state and strategy admin read
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_owner_dimension.py` — create

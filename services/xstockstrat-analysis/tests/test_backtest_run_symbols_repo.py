@@ -26,6 +26,7 @@ def _cell(symbol="AAPL", trades=2, days=10, fp="fp-1"):
         "definition_fingerprint": fp,
         "range_start": None,
         "range_end": None,
+        "user_id": "alice",
     }
 
 
@@ -51,6 +52,8 @@ async def test_insert_many_builds_executemany_sql_and_params():
     assert aapl[7] == 2  # total_trades
     assert aapl[8] == 10  # trading_days
     assert aapl[9] == "fp-1"  # definition_fingerprint
+    assert aapl[12] == "alice"  # user_id (feature 224 owner dimension)
+    assert "user_id" in sql
     assert rows[1][2] == "MSFT"
     assert rows[1][7] == 0  # zero-trade cell still inserted
 
@@ -70,7 +73,7 @@ async def test_fetch_eligible_traded_first_distinct_on_sql():
     db_pool.fetch = AsyncMock(return_value=[{"symbol": "AAPL"}, {"symbol": "MSFT"}])
     repo = BacktestRunSymbolsRepository(db_pool)
 
-    rows = await repo.fetch_eligible("s1", "fp-1")
+    rows = await repo.fetch_eligible("alice", "s1", "fp-1")
 
     sql, *params = db_pool.fetch.call_args.args
     assert "DISTINCT ON (symbol)" in sql
@@ -79,7 +82,9 @@ async def test_fetch_eligible_traded_first_distinct_on_sql():
     assert "(total_trades > 0) DESC" in sql
     assert "trading_days DESC" in sql
     assert "completed_at DESC" in sql
-    assert params == ["s1", "fp-1"]
+    # feature 224 (AC-21): eligibility is owner-scoped.
+    assert "AND user_id = $3" in sql
+    assert params == ["s1", "fp-1", "alice"]
     assert [r["symbol"] for r in rows] == ["AAPL", "MSFT"]
 
 

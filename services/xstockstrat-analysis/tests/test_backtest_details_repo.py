@@ -27,6 +27,7 @@ async def test_insert_binds_columns_and_evicts():
         completed_at=_COMPLETED_AT,
         result_pb=b"\x0a\x04bt-1",
         retention=20,
+        user_id="alice",
     )
 
     assert db_pool.execute.await_count == 2
@@ -37,6 +38,8 @@ async def test_insert_binds_columns_and_evicts():
     assert insert_args[2] == "s1"
     assert insert_args[3] == _COMPLETED_AT
     assert insert_args[4] == b"\x0a\x04bt-1"
+    assert "user_id" in insert_args[0]
+    assert insert_args[5] == "alice"
     # Eviction runs after the insert: newest-N-per-strategy survive.
     evict_args = db_pool.execute.await_args_list[1].args
     assert "DELETE FROM analysis.backtest_details" in evict_args[0]
@@ -44,17 +47,21 @@ async def test_insert_binds_columns_and_evicts():
     assert "LIMIT $2" in evict_args[0]
     assert evict_args[1] == "s1"
     assert evict_args[2] == 20
+    # feature 224 (AC-21): retention is per (owner, strategy) — never evicts another owner's rows.
+    assert evict_args[0].count("AND user_id = $3") == 2
+    assert evict_args[3] == "alice"
 
 
 @pytest.mark.asyncio
 async def test_get_returns_bytes():
     db_pool = AsyncMock()
-    db_pool.fetchrow = AsyncMock(return_value={"result_pb": b"payload"})
+    db_pool.fetchrow = AsyncMock(return_value={"result_pb": b"payload", "user_id": "alice"})
     repo = BacktestDetailsRepository(db_pool)
 
-    assert await repo.get("bt-1") == b"payload"
+    # feature 224: the owner travels with the payload so GetBacktest can check ownership.
+    assert await repo.get("bt-1") == (b"payload", "alice")
     args = db_pool.fetchrow.call_args.args
-    assert "SELECT result_pb FROM analysis.backtest_details" in args[0]
+    assert "SELECT result_pb, user_id FROM analysis.backtest_details" in args[0]
     assert args[1] == "bt-1"
 
 
