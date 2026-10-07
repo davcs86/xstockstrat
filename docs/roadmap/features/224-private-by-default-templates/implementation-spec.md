@@ -1019,7 +1019,7 @@ cd services/xstockstrat-analysis && uv run pytest --cov=app --cov-fail-under=40 
 
 ### Step 13 — migration: indicators `007_private_formulas_templates`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/migrations/007_private_formulas_templates.up.sql` — create
@@ -2939,3 +2939,22 @@ _Populated by /sdd-execute as implementation proceeds._
 ### D-13 — Step 12: helper rename follow-through in two existing tests
 - **Actual**: Step 11 renames `_deleted_formula_warnings` to `_formula_status_warnings(include_unreadable=…)`. Updated the call sites in `tests/test_analysis_servicer.py` (2) and `tests/test_owner_header_guard.py` (1). No assertion changed.
 - **Disposition**: required follow-through for the rename.
+
+### D-14 — Step 13: `pending_intent_id` column added; rollback note on N-1 `ListFormulas`
+- **Actual**: 007 also adds `pending_intent_id UUID` with a partial index. These are the pending-hidden saga rows the design requires (§6), which Step 14's `pending_intent_id IS NULL` read filter and Step 27 use.
+- **Rollback note (accepted)**: after 007 sets `is_public = FALSE`, an N-1 indicators `ListFormulas(include_public=true)` no longer returns system formulas, because its SQL keys on `is_public = TRUE`. N-1 `GetFormula`/`ExecuteFormula` still read them via `author == 'system'` (N-1 `_can_read_formula`). The N-1 seed also re-upserts the fundamentals formula's `is_public`. The impact is limited to list discovery during a rollback window.
+- **Disposition**: within scope; documented risk.
+
+### D-15 — Step 14: `list_owned` repo method; `is_public` stored false on every update
+- **Actual**: the admin owner selector needs an owner-only listing, so `FormulasRepository` gains `list_owned(author, …)` alongside `list_visible(reader, …)`, both also on the no-DB path. `is_public` is no longer an update-mask path and is stored false on every update, not only on full replaces.
+- **Disposition**: within scope.
+
+### D-16 — Step 15: follow-through edits to existing indicators tests
+- **`test_formulas.py`**:
+  - body-author-wins → body author ignored;
+  - admin-override update/delete success → `PERMISSION_DENIED` with no repo call;
+  - masked update `is_public` True → False;
+  - `repo.list(…)` → `repo.list_visible(…)`.
+- **`test_fundamentals_formula.py`** (not in Files): `IS_PUBLIC is True` → `is False`, required by the seed change.
+- **`test_formula_read_authz.py`**: the `author_public_only` list tests are removed because that path no longer exists; AC-2 coverage moved to `test_private_formulas.py`.
+- **Disposition**: required by the intended behavior change; no assertion weakened beyond it.
