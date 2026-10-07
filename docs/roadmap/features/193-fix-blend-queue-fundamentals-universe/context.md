@@ -1,54 +1,17 @@
-# Context Log: fix-blend-queue-fundamentals-universe
+# Context: fix-blend-queue-fundamentals-universe  (archived 2026-10-07)
 
-## 2026-09-19 — triage + fix (single session)
+**Feature**: ./feature.md
+**Status**: launched — archived by /sdd-archiver; verbose specs pruned (recoverable via git history).
 
-**Triage.** One of three defects reported today (`docs/reports/2026-09-18-*`). SEV-3, code change,
-shipped/dev → Track C. Confirmed every code claim in the report against `main-dev` before coding
-(blend branch at `live_loop.py` only; `servicer.py:3911` and `entry_backfill.py` both call
-`resolve_universe` with no branch).
+## Archive Synthesis — 2026-10-07 — /sdd-archiver
 
-**Design fork — Approach A vs B (operator-approved: A).** The report posed hoist (A) vs patch
-`_compute_opportunities` only (B). The defect *is* a duplicated-contract failure across three
-callers, so B re-commits to the duplication that caused it and leaves `entry_backfill` divergent. A
-was chosen with explicit operator sign-off.
-
-**Implementation (A).**
-- `resolve_universe(definition, watchlist, held, signals, *, blend_id="", fundamentals_universe=None)`:
-  when `blend_id` is set and this strategy is it, pre-deny coverage = the fundamentals universe (∪
-  `held ∩ denied` for exit retention), never watchlist/held/signals. `signal_eligible` is inert for
-  the blend by construction. Non-blend path byte-identical.
-- Extracted `resolve_fundamentals_universe(ingest, marketdata, cfg)` to a module-level function
-  (the single seam); `LiveEvaluationLoop._resolve_fundamentals_universe` now delegates.
-- `_run_cycle` routes the blend through `resolve_universe` (kept its `continue` skip when inactive/
-  empty — loop behavior preserved).
-- `_compute_opportunities` + `entry_backfill.run_once` resolve `fundamentals_universe` when the blend
-  is active and pass the kwargs; each skips the blend when inactive/empty (loop-skip parity).
-
-**Equivalence proof for the loop.** blend `universe = (union − denied) | deny_entry` where
-`union = norm(fundamentals_universe) | deny_entry` ⇒ `(fund − denied) | (held ∩ denied)` — identical
-to the prior inline computation.
-
-**Surfaced (NOT fixed here) — doc/code discrepancy on the disabled path.** The analysis CLAUDE.md
-says when the blend kill-switch is off the strategy "resolves its own universe like any other," but
-`live_loop._run_cycle` `continue`s (evaluates it nowhere) when `not blend_active`. This fix preserves
-the loop's actual behavior and makes the queue/backfill match it (skip when inactive). Reconciling
-the disabled-path intent is a separate question, left for the doc/loop owner — not silently changed.
-
-**Verified not a leak.** feature-180 readiness materializer warms only watchlist-bound pairs (user
-intent), not auto-attribution.
-
-**Tests (red-before-green reasoning).** `resolve_universe` blend-branch unit tests (3),
-`_compute_opportunities` defect reproduction (blend attributed to AAPL only, not COIN/NVDA — RED
-pre-fix because signal_eligible union included both), entry-backfill blend restriction test. All
-green; full analysis suite 773 passed; ruff clean.
-
-**Files:** `services/xstockstrat-analysis/app/engine/live_loop.py`,
-`app/handlers/servicer.py`, `app/engine/entry_backfill.py`,
-`tests/test_analysis_servicer.py`, `tests/test_entry_backfill.py`.
-
-## Session 2026-09-24 (CI: feature status automation)
-
-- Promotion PR #1169 merged to main
-- Feature promoted and committed: dd622bdc2e5b922df8dcabc6f7475b8b395a8ed3
-- Status updated: `code-completed` → `launched`
-- Launched date: 2026-09-24
+**What**: SEV-3 Track C fix in `xstockstrat-analysis`. Feature 168's rule that the fundamentals blend runs on the fundamentals universe "and nowhere else" was enforced only in `live_loop._run_cycle`; the Decide opportunity queue and the boot entry-backfill called the shared `resolve_universe` with no blend branch and attributed the blend to off-universe symbols. Advisory-surface defect only — the live loop was correct, no order or alert mis-fired. The restriction moved into the shared resolver so all three callers get it from one place.
+**Why (irrecoverable rationale)**: The operator chose Approach A (hoist into `resolve_universe`) over B (patch only `_compute_opportunities`) with explicit sign-off: the defect is a duplicated-contract failure across three callers; B would re-commit the duplication and leave `entry_backfill` divergent. The report is pruned, so that framing survives only here.
+**Rejected alternatives**: Approach B — keeps per-caller duplication and leaves `entry_backfill` wrong. Treating the feature-180 readiness materializer as a leak site — lost on verification (it warms only watchlist-bound pairs, user intent, not auto-attribution).
+**Scars & gotchas**: Why tests missed it: `signal_eligible: true` was inert on the tested loop path but decisive on the untested queue (it pulled the platform-wide cross-user signal pool); the repro test was RED pre-fix because the union included COIN and NVDA — any future blend-only test must set `signal_eligible=true` or it will not reproduce. Loop-skip parity is a hidden contract: the queue and backfill must skip the blend when inactive or its universe is empty, exactly as `_run_cycle`'s `continue`. Blend universe = fundamentals universe ∪ `held ∩ denied` (so exits work on a denied held position), proved equivalent to the loop's former inline computation. `entry_backfill.py:92` still calls the private `live_loop._resolve_fundamentals_universe()` wrapper over the module-level function (one seam).
+**Permanent deviations**: `services/xstockstrat-analysis/CLAUDE.md:371` says that with the kill-switch off the blend "resolves its own universe like any other"; shipped behavior is that the blend is evaluated nowhere (`live_loop.py:372-373`). 193 deliberately matched queue and backfill to the loop (skip when inactive/empty) and left the doc/code contradiction unresolved. The hoist shipped as opt-in kwargs (`blend_id=""`, `fundamentals_universe=None`) with active-gating re-derived per caller, not a structural guard (fails.md:2589).
+**Cross-feature signal**: 168, 186 and 193 all touch the blend contract; 168/186 each enforced it in one consumer and skipped the read-side sweep of all `resolve_universe` callers (fails.md:2571-2587; insights.md:3146). Ledger "formerly 193" at insights.md:3381 refers to `212-sysadmin-db-write-role`, not this feature.
+**Deferred follow-ons**: Reconcile the kill-switch-off intent: fix `analysis/CLAUDE.md:371` or change the loop to let the blend resolve its own universe when off. The queue resolves the fundamentals universe uncached per compute (fails.md:2597). `signal_eligible` inertness is an identity check on `analysis.engine.fundamentals_blend_strategy_id`; re-pointing that key silently re-admits the old strategy to the cross-user signal pool.
+**Runtime-invariant recommendations (→ /context-constitution)**: Candidate ANALYSIS-*: `signal_eligible` is inert for the blend on every `resolve_universe` caller by construction (identity check on the configured blend strategy id); loop-skip parity for loop, queue and entry-backfill.
+**Ledger entries written**: insights.md (0), fails.md (1) — see the 2026-10-07 entries.
+**Pruned artifacts**: product-spec.md — last present at 9a1d3bea (`git show 9a1d3bea:docs/roadmap/features/193-fix-blend-queue-fundamentals-universe/<file>`).

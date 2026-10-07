@@ -8,6 +8,7 @@
 **Last Updated**: 2026-09-19
 **Committed to main**: dd622bdc2e5b922df8dcabc6f7475b8b395a8ed3
 **Launched date**: 2026-09-24
+**Archived**: 2026-10-07
 
 ---
 
@@ -19,12 +20,13 @@
 | 2026-09-19 | `draft` → `code-completed` | bug-fix session | Read-side strip chosen after discovering the fingerprint constraint; implemented, tested (4 tests), lint clean. Shipped in the consolidated today's-triage PR. |
 
 | 2026-09-24 | `code-completed` → `launched` | CI workflow | Promoted via PR #1169; committed dd622bdc2e5b922df8dcabc6f7475b8b395a8ed3 |
+| 2026-10-07 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(0); pruned 1 spec(s); acceptance scenarios promoted to per-service suites (C-16) |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — points at the defect report (Defect 1)
-- [Acceptance Scenarios](acceptance.feature) — served-payload cleanliness + the fingerprint-stability safety property
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — served-payload cleanliness + the fingerprint-stability safety property; promoted to services/xstockstrat-analysis/acceptance/fix-strategy-signal-params-dead-keys.feature (C-16)
 - [Context Log](context.md) — the read-side vs write-side/backfill decision (fingerprint-invalidation constraint)
 
 ---

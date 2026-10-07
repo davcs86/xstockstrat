@@ -8,6 +8,7 @@
 **Last Updated**: 2026-09-19
 **Committed to main**: dd622bdc2e5b922df8dcabc6f7475b8b395a8ed3
 **Launched date**: 2026-09-24
+**Archived**: 2026-10-07
 
 ---
 
@@ -19,12 +20,13 @@
 | 2026-09-19 | `draft` → `code-completed` | bug-fix session | Approach A (hoist) chosen with operator sign-off; implemented, tested (5 tests), lint clean. Shipped in the consolidated today's-triage PR (single branch, no per-step PRs — task git model). |
 
 | 2026-09-24 | `code-completed` → `launched` | CI workflow | Promoted via PR #1169; committed dd622bdc2e5b922df8dcabc6f7475b8b395a8ed3 |
+| 2026-10-07 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(0)/fails(1); pruned 1 spec(s); acceptance scenarios promoted to per-service suites (C-16) |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — points at the defect report (the detailed root-cause analysis)
-- [Acceptance Scenarios](acceptance.feature) — the queue-surface regression scenario the report flagged as the missing C-15 coverage
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — the queue-surface regression scenario the report flagged as the missing C-15 coverage; promoted to services/xstockstrat-analysis/acceptance/fix-blend-queue-fundamentals-universe.feature (C-16)
 - [Context Log](context.md) — decisions, the Approach-A choice, and the surfaced doc/code discrepancy
 
 ---

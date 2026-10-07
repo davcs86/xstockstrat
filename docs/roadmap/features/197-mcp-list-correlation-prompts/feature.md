@@ -5,6 +5,7 @@
 **Last Updated**: 2026-09-19
 **Committed to main**: dd622bdc2e5b922df8dcabc6f7475b8b395a8ed3
 **Launched date**: 2026-09-24
+**Archived**: 2026-10-07
 
 ---
 
@@ -17,15 +18,16 @@
 | 2026-09-19 | `design-approved` → `implementation-ready` → `in-progress` → `code-completed` | /sdd-spec + implementation | implementation-spec.md written; all 7 steps landed (prompt body, register_prompts, server instructions, 5 docstrings, parity test, runbook/CLAUDE.md/module-header parity, Teardown). 441 agent tests pass, 79% cov. |
 
 | 2026-09-24 | `code-completed` → `launched` | CI workflow | Promoted via PR #1169; committed dd622bdc2e5b922df8dcabc6f7475b8b395a8ed3 |
+| 2026-10-07 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(0); pruned 4 spec(s); acceptance scenarios promoted to per-service suites (C-16) |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
-- [Recon Dossier](recon.md) — grounded codebase map + Patterns to REUSE (Phase 0)
-- [Design](design.md) — debated, user-approved architecture (Phase 1, 2 rounds quick)
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec mcp-list-correlation-prompts`_
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15); promoted to services/xstockstrat-agent/acceptance/mcp-list-correlation-prompts.feature (C-16)
+- Recon Dossier — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
