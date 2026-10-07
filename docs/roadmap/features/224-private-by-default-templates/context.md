@@ -902,3 +902,6 @@ OQ-4 to OQ-6 remain for /sdd-design.
 - **Verification:** vitest 224/224 pass. `tsc` shows only the 2 pre-existing `backfills.spec.ts` errors. Lint is clean, and the `isPublic|includePublic` grep in `src` is empty.
 - **TDD:** paired with Step 39 (e2e).
 - **Deviation:** D-31.
+
+### Operator note (2026-10-07): production environment does not exist yet
+- The pre-merge check of prod `analysis.fundsignal.scoring_formula_id` (design.md Open Risks) is **moot**: there is no production environment yet. Staging uses system formula `d1ff…`, so AC-37's fail-closed path does not trigger there. The same goes for the prod `mcp_client` count gate (D-19/D-25, answered "0").
