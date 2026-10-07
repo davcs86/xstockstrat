@@ -1,48 +1,17 @@
-# Context Log: fix-strategy-signal-params-dead-keys
+# Context: fix-strategy-signal-params-dead-keys  (archived 2026-10-07)
 
-## 2026-09-19 — triage + fix (single session)
+**Feature**: ./feature.md
+**Status**: launched — archived by /sdd-archiver; verbose specs pruned (recoverable via git history).
 
-**Triage.** Defect 1 of `docs/reports/2026-09-18-deprecated-fields-in-rpc-contracts-defect.md`.
-SEV-3 contract-hygiene, Track C. Verified `signal_params` is a `google.protobuf.Struct`
-(`analysis.proto:325`) and the four blend keys have no reader (report's inventory re-checked).
+## Archive Synthesis — 2026-10-07 — /sdd-archiver
 
-**Design fork — discovered constraint flips the recommendation.** The report's Q1 offered strip on
-write / read / both / backfill. During implementation I found `_definition_fingerprint` hashes the
-**stored** `definition_json` (only display_name/active/live_enabled excluded), and the masked-UPDATE
-path persists JSON built via `_row_to_strategy_definition` (`servicer.py` `_apply`). Therefore:
-- A backfill or an unconditional write-side strip would re-key every affected row's `definition_json`
-  → change its fingerprint → drop its accumulated evidence grade (ANALYSIS-3). Real cost for a SEV-3
-  cosmetic issue.
-- **Read-side strip** cleans every observable edge (get_strategy/ListStrategyDefinitions/config-ui/
-  agent) with ZERO fingerprint churn (fingerprint never derives from the served proto).
-
-So the recommendation shifted from the report's "strip on write + backfill" to **read-side default
-strip + churn-free request strip on write**. This is a HOW change within the approved WHAT (fix
-R1-D1); the observable outcome (clean payloads) matches intent and the alternative is strictly worse
-(grade churn). Recorded here per the "surface tradeoffs / no silent guess" rule.
-
-**Implementation.**
-- `_DEAD_SIGNAL_PARAM_KEYS` + `_strip_dead_signal_params(definition)` (in-place, keeps
-  symbols/target/stop).
-- `_row_to_strategy_definition(row, *, strip_dead_signal_params=True)` strips by default. The ONE
-  persist-building call (masked-UPDATE merge, `_apply`) passes `False` so a rename of an existing
-  dirty row does not re-key its JSON / churn its fingerprint.
-- `ManageStrategy` strips the request definition once (after `_normalize_source_symbols`) so REGISTER
-  and signal_params-touching UPDATEs are born clean.
-
-**Consumers preserved.** Only the 4 blend keys are stripped; `strategy_symbols` (symbols), the
-readiness target/stop reader, and resolve_universe (`denied_symbols`/`signal_eligible`) are untouched.
-
-**Tests.** read strips blend keys / keeps load-bearing; opt-out preserves for persist;
-rename-of-dirty-row fingerprint unchanged (the safety property); GetStrategy end-to-end response
-clean. All green; full analysis suite 773 passed; ruff clean.
-
-**Files:** `services/xstockstrat-analysis/app/handlers/servicer.py`,
-`tests/test_analysis_servicer.py`.
-
-## Session 2026-09-24 (CI: feature status automation)
-
-- Promotion PR #1169 merged to main
-- Feature promoted and committed: dd622bdc2e5b922df8dcabc6f7475b8b395a8ed3
-- Status updated: `code-completed` → `launched`
-- Launched date: 2026-09-24
+**What**: SEV-3 contract-hygiene fix (Defect 1 of the 2026-09-18 deprecated-fields report). Stops the four dead feature-097 blend keys (`signal_sources`, `signal_weight`, `technical_weight`, `min_conviction`) appearing in served `StrategyDefinition.signal_params`. Shipped as a read-edge strip; stored `definition_json` rows were deliberately left dirty and no backfill ran. Only `servicer.py` and its tests changed.
+**Why (irrecoverable rationale)**: `_definition_fingerprint` hashes the stored `definition_json` (only `display_name`, `active`, `live_enabled` excluded) and the masked-UPDATE path persists JSON built from `_row_to_strategy_definition`. A backfill or unconditional write-side strip would re-key every affected row, change its fingerprint and silently drop its accumulated evidence grade (ANALYSIS-3) — a real cost for a cosmetic SEV-3. A read-side strip cleans every observable edge (get_strategy, ListStrategyDefinitions, config-ui, agent) with zero fingerprint churn. The constraint was found during implementation, not at triage.
+**Rejected alternatives**: Backfill `UPDATE` over `analysis.strategies`, unconditional write-side strip, and the report's recommended "strip on write + backfill" — all re-key `definition_json` and wipe grades. Read-side only with no request strip was not chosen (the shipped shape strips new REGISTER / signal_params-touching UPDATE requests once after `_normalize_source_symbols`, so new rows are born clean); that framing is inference, not a recorded rejection.
+**Scars & gotchas**: The persist path and serve path share one mapper (`_row_to_strategy_definition`), which strips by default; the single persist-building caller (the masked-UPDATE merge in `_apply`) must pass `strip_dead_signal_params=False`. A future caller building persisted JSON from this mapper with the default silently re-keys rows and churns grades; guarded by the "rename-of-dirty-row fingerprint unchanged" test. Stored JSON still carries the dead keys on existing rows, so any consumer reading stored JSON directly (not the served proto) still sees them; an existing row is cleaned only by a signal_params-touching write, which changes the fingerprint legitimately. `resolve_universe`'s `denied_symbols` / `signal_eligible` signal_params keys are load-bearing and untouched.
+**Permanent deviations**: The report said strip on write plus backfill; shipped a read-side default strip plus a request-side strip and no backfill, because of the fingerprint constraint. Dirty stored rows plus a read-time strip are deliberate, not a missed backfill.
+**Cross-feature signal**: Fourth "fingerprint-bearing stored JSONB" trap in the ledger (065 design, 070 key-set shift insights.md:204-216, 152 proto3 optional insights.md:2065-2079). Any triage proposing "normalize + backfill" on analysis strategy storage must check fingerprint impact first.
+**Deferred follow-ons**: Defect 2 (33 `[deprecated=true]` proto fields) routed to feature 196, a governance-gated breaking-change program: `portfolio.proto:235` `symbols` has a live reader at `live_loop.py:493` and must not be batched as dead; each field needs a per-field reader check; the report notes "deprecated forever with a comment" may be the right end state for some fields. Report Q2 (wizard verbatim `signal_params` preservation protects `symbols`) and Q3 (an external agent prompt could read the blend keys) were never recorded as resolved.
+**Runtime-invariant recommendations (→ /context-constitution)**: Candidate ANALYSIS-3 addendum (`analysis/docs/context-constitution.md:19`): normalization through `_row_to_strategy_definition` must be opt-out on the persist-building path, because a read-edge-only cleanup must not re-key stored `definition_json` (fingerprint and evidence grade) on rename or other masked updates.
+**Ledger entries written**: insights.md (1), fails.md (0) — see the 2026-10-07 entries.
+**Pruned artifacts**: product-spec.md — last present at 9a1d3bea (`git show 9a1d3bea:docs/roadmap/features/194-fix-strategy-signal-params-dead-keys/<file>`).

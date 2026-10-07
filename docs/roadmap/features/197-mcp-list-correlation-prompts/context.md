@@ -1,114 +1,17 @@
-# Context: mcp-list-correlation-prompts
+# Context: mcp-list-correlation-prompts  (archived 2026-10-07)
 
-**Feature**: `docs/roadmap/features/197-mcp-list-correlation-prompts/feature.md`
-**Product Spec**: `docs/roadmap/features/197-mcp-list-correlation-prompts/product-spec.md`
-**Implementation Spec**: `docs/roadmap/features/197-mcp-list-correlation-prompts/implementation-spec.md`
+**Feature**: ./feature.md
+**Status**: launched — archived by /sdd-archiver; verbose specs pruned (recoverable via git history).
 
----
+## Archive Synthesis — 2026-10-07 — /sdd-archiver
 
-## Session 2026-09-19T00:00Z — sdd-story
-
-- Created feature.md (status: draft), product-spec.md, acceptance.feature, context.md from user story.
-- **Origin**: harness task "Add prompts and docstrings to the MCP about how to use and correlate
-  data between the list positions, list accounts, list opportunities, and list strategies
-  responses." User (davcs86) chose, via AskUserQuestion, to (a) **also add the MCP prompts surface**
-  (not docs-only) and (b) cover the **4 named tools + position variants**
-  (`get_positions_by_account_id`). This new client-facing agent surface therefore routes through the
-  SDD pipeline per the root CLAUDE.md Mandatory Entry Point Commandment.
-- **Grounded data model** (from `packages/proto/*` + `app/client.py` serializers,
-  `preserving_proto_field_name=True`):
-  - `account_id` join: `list_accounts[].id` (trading `BrokerAccount.id`, field 1) ⟷
-    `get_positions[].account_id` (portfolio `Position.account_id`, field 11); also the
-    `get_positions_by_account_id(account_id=…)` filter argument.
-  - `strategy_id` join: `list_strategies[].strategy_id` (analysis `StrategyDefinition.strategy_id`,
-    field 1) ⟷ `list_opportunities[].strategy_id` (analysis `Opportunity.strategy_id`, field 7).
-  - `symbol` join: `get_positions[].symbol` ⟷ `list_opportunities[].symbol`; an opportunity's
-    `provenance` array also carries `"position"` when an existing holding seeded the row.
-  - **Non-joins**: `Position` has no `strategy_id`; `Opportunity`/`StrategyDefinition` have no
-    `account_id`.
-- **Known traps captured in product-spec Open Questions** (Ledger reads):
-  - fails.md:447 (`agent-mcp-server`) — verify `MCPServer` (mcp 2.0.0) prompt-registration mechanism
-    against the installed SDK before /sdd-spec; do not assume a `@server.prompt()` decorator exists.
-  - fails.md:308-310 (RC-1 / C-10) — update every describing surface (docstrings +
-    `docs/runbooks/mcp-tools.md` + `strat-lab` skill) in the same PR and add an executable parity
-    test (mirror `tests/test_backtest_view.py`).
-  - fails.md:672-674 — Teardown context-forge unavailability is a blocking gap, not note-and-proceed.
-- Reviewer: `xstockstrat-agent` service owner (MCP contract stability + mcp-tools.md parity). No
-  proto/config/DB gates (none of those change).
-
-## Session 2026-09-19T00:30Z — sdd-design
-
-- Phase 0 Recon: wrote recon.md (service: xstockstrat-agent). Key reuse patterns: `@server.prompt()`
-  decorator symmetric with `@server.tool()`; file-backed `app/prompts/*.md` body; parity-test guard
-  style of `tests/test_backtest_view.py`. **Directly verified against the installed mcp 2.0.0 SDK**
-  (fails.md:447 discipline): `@server.prompt()` exists and wraps a `str`-returning fn into
-  `GetPromptResult`; `MCPServer(instructions=…)` plumbs to
-  `_lowlevel_server.create_initialization_options().instructions`, i.e. it IS emitted in the MCP
-  `initialize` result — so it is an auto-surfaced consumer channel, not an assumption.
-- Phase 1 Grilling: 2 rounds (quick — user requested the second after a sharp steer). Round 1
-  adversary (NEEDS WORK, no Floor breach): the parity test must use **per-tool correct key sets**,
-  not all three tokens on all five tools (else it forces fabricated joins — the anti-goal); assert
-  non-join sentences; cover the runbook copy; module-relative asset path; Teardown owed. Round-2
-  steer from user (davcs86): **the runbook is inaccessible to a wire-connected consumer agent**, so
-  it can only be a maintainer parity copy — pushed the design to a three-channel consumer model.
-- **Chosen approach**: three consumer channels ranked by auto-reliability — (1) enriched per-tool
-  docstrings [primary, auto via tools/list], (2) server `instructions` [auto on `initialize`], (3)
-  prompt `list_correlation_guide` [discoverable, explicitly requested] backed by a canonical
-  `app/prompts/list_correlation.md`; runbook + CLAUDE.md/module-header are maintainer-only parity;
-  one FR-6 parity test binds all surfaces with the correct per-tool key set.
-- **Rejected**: runbook as delivery vehicle; prompt-only/docstring-only; dropping the instructions
-  channel (offered at gate, user declined); new join RPC/materialized view; codegen single-source;
-  lazy prompt read; folding register_prompts into register_tools.
-- **Decision (C-14)**: `GET /api/tools` stays tools-only by design — prompts/instructions are
-  discoverable via their native MCP methods and enriched docstrings propagate to the catalog for
-  free; recorded here as the stated deferral reason (no separate follow-up feature needed).
-- Constitution rules touched: C-10, C-14, C-16, C-18, P-03/F-04. Floor breaches: none.
-- Status: draft → design-approved. (Note: `/sdd-review product-spec` intentionally not run — the
-  root CLAUDE.md Commandment's mandated minimum is story → design-quick → ledger.)
-
-## Session 2026-09-19T01:00Z — sdd-spec + implementation (single cohesive change)
-
-- Wrote implementation-spec.md (7 steps) from the approved design; status draft→implementation-ready→
-  in-progress→code-completed.
-- Implemented all three consumer channels + parity:
-  - `app/prompts/list_correlation.md` — canonical guide (3 joins + 2 non-joins + stitch example).
-  - `app/tools.py` `register_prompts(server)` — `@server.prompt("list_correlation_guide")` reading the
-    .md at a **module-relative** path; wired into `create_server` (`app/main.py`) after register_tools.
-  - `app/main.py` `LIST_CORRELATION_INSTRUCTIONS` passed as `MCPServer(instructions=…)` — SDK-verified
-    to appear in the `initialize` result.
-  - Enriched the 5 tool docstrings with per-tool CORRECT key sets + non-joins.
-  - `tests/test_list_correlation_parity.py` — asserts prompt/instructions/each docstring/runbook with
-    the correct per-tool key set (never the union), + a secret-leak guard.
-  - Parity/maintainer surfaces: `docs/runbooks/mcp-tools.md` (§ Correlating list responses + header
-    note that it is maintainer-only, not a consumer channel), agent `CLAUDE.md`, `tools.py` module
-    header. Tool count stays 49 (a prompt is not a tool).
-- **Teardown (fails.md:672-674)**: `/context-forge:context-constitution` is **NOT available** in this
-  session (only `context-forge:context-scrubber` is listed). Performed **manual reconciliation**:
-  updated the now-stale `services/xstockstrat-agent/docs/context-constitution-findings.md` dead-code
-  entry (the `app/prompts/` "grep zero / no @server.prompt / no file read" evidence no longer holds
-  now that `register_prompts` wires `list_correlation.md`; `signal_extraction.md` itself remains
-  orphaned). Verified AGENT-4 (CallerPropagationMiddleware in `register_tools`) stays accurate —
-  `register_prompts` is deliberately separate. Both the plugin unavailability and this manual
-  reconciliation are recorded in the PR body.
-- Validation: `ruff check` + `ruff format --check` clean; `pytest --cov=app --cov-fail-under=40` →
-  441 passed, 79.17% coverage; end-to-end SDK probe confirmed instructions in initialize +
-  `prompts/list`/`get` + tool count 49.
-
-## Session 2026-09-19T02:00Z — instructions refinement (post-staging test)
-
-- Live-tested feature 197 against the deployed staging agent: all three joins + both non-joins
-  verified against real data; server `instructions` observed verbatim in the `initialize` result;
-  the `list_correlation_guide` prompt fetched live via `prompts/get` (returns the full guide).
-- Per user request, strengthened `LIST_CORRELATION_INSTRUCTIONS` (`app/main.py`) so the
-  auto-surfaced instructions explicitly tell an autonomous agent the prompt EXISTS and how to get
-  it: names `list_correlation_guide` and points at `prompts/get` / `prompts/list` (previously just
-  "fetch the 'list_correlation_guide' prompt"). Parity test unchanged/green (imports the constant;
-  still asserts all three keys + both non-joins). No doc drift — runbook/CLAUDE.md already describe
-  the instructions + prompt surfaces.
-
-## Session 2026-09-24 (CI: feature status automation)
-
-- Promotion PR #1169 merged to main
-- Feature promoted and committed: dd622bdc2e5b922df8dcabc6f7475b8b395a8ed3
-- Status updated: `code-completed` → `launched`
-- Launched date: 2026-09-24
+**What**: Gave a wire-connected MCP consumer agent a way to learn how `list_accounts`, `get_positions`, `get_positions_by_account_id`, `list_opportunities` and `list_strategies` join, through three channels the agent actually receives: enriched per-tool docstrings, server `instructions` (in the `initialize` result), and the repo's first MCP prompt, `list_correlation_guide`. The runbook stayed a maintainer parity copy. No tool args, return shapes, proto, config or DB changed; tool count stays 49. Live-tested on staging; launched 2026-09-24 via PR #1169.
+**Why (irrecoverable rationale)**: The user's round-2 design steer: a wire-connected consumer agent cannot read `docs/runbooks/mcp-tools.md`, so the original docstrings+prompt+runbook framing left the cross-tool graph invisible to an autonomous agent. Prompts are user-initiated in most MCP clients and docstring-only forces the agent to inspect all five tools to rebuild the graph; server `instructions` is the only channel an autonomous agent gets with no extra action.
+**Rejected alternatives**: Runbook as a consumer delivery vehicle (agent cannot read repo docs). Prompt-only or docstring-only delivery. Dropping the `instructions` channel — offered at the design gate and declined by the user (one string kwarg). Per-tool prompt fan-out, a new join RPC, or a materialized join view (speculative, C-18). Codegen from a single join table (over-engineered; the parity test catches drift). A lazy file read inside the prompt function (read-at-registration lets the `prompts/get` test surface a missing asset in CI). Folding `register_prompts` into `register_tools` (would couple prompts to the tools-only `CallerPropagationMiddleware`). A parity test asserting all three keys on all five tools (forces fabricated joins into docstrings — the feature's anti-goal; round-1 adversary correction).
+**Scars & gotchas**: SDK mechanisms were verified by running the installed mcp 2.0.0, not assumed (fails.md:447): `@server.prompt()` wraps a `str` into `GetPromptResult`, `MCPServer(instructions=…)` flows into `initialize`. The prompt `.md` is read at a module-relative path (stdio launches from an arbitrary CWD) at registration, so a missing asset breaks startup of all 49 tools — guarded only by the `prompts/get` parity test (the Dockerfile also ships `app/prompts/*.md`). `app/prompts/signal_extraction.md` is still an orphan; only `list_correlation.md` is wired. `register_prompts` is deliberately NOT under `CallerPropagationMiddleware` (AGENT-4 stays accurate). The parity test pins token and pairing presence, not prose fidelity (the `list_accounts` key is `id`, not `account_id`). `GET /api/tools` is tools-only. Teardown ran manually because the context-forge plugin was unavailable (fails.md:672-674). `/sdd-review product-spec` was intentionally skipped (recorded choice).
+**Permanent deviations**: Design/impl-spec said `instructions` is a short ~4-line pointer that does not restate the field-path pairings; shipped `LIST_CORRELATION_INSTRUCTIONS` (`services/xstockstrat-agent/app/main.py:31-39`) names `list_correlation_guide`, says how to retrieve it (`prompts/get` / `prompts/list`) and restates all three pairings plus the `get_positions_by_account_id` note and both non-joins, because the live staging test showed an autonomous agent needed to be told the prompt exists. Do not shorten it back to a bare pointer, and do not read it as accidental duplication of the prompt. Otherwise as designed. strat-lab was reviewed and intentionally left unchanged (`SKILL.md:21,24` mention `list_strategies` only for ownership scoping).
+**Cross-feature signal**: First MCP prompts surface in the repo; future consumer-facing guidance should reuse this three-channel model and the `register_prompts` seam (insights.md:3337-3340). An auto-surfaced channel's wording is validated only by a live `initialize` + `prompts/get` probe against a deployed agent, not a unit test.
+**Deferred follow-ons**: None. `GET /api/tools` staying tools-only is a decided deferral (C-14).
+**Runtime-invariant recommendations (→ /context-constitution)**: Candidate AGENT-*: the agent exposes an MCP `prompts` surface (`list_correlation_guide`) and a server `instructions` string; a prompt is not a tool (count stays 49); `register_prompts` sits outside `CallerPropagationMiddleware`; the prompt asset is read at registration, so a missing `app/prompts/list_correlation.md` breaks startup, guarded by `tests/test_list_correlation_parity.py`. Partly in `services/xstockstrat-agent/docs/context-constitution-findings.md:28`.
+**Ledger entries written**: insights.md (1), fails.md (0) — see the 2026-10-07 entries.
+**Pruned artifacts**: product-spec.md, recon.md, design.md, implementation-spec.md — last present at 9a1d3bea (`git show 9a1d3bea:docs/roadmap/features/197-mcp-list-correlation-prompts/<file>`).

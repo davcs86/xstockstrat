@@ -1,70 +1,18 @@
-# Context: psql-db-role-grant-hardening
+# Context: psql-db-role-grant-hardening  (archived 2026-10-07)
 
-**Feature**: `docs/roadmap/features/208-psql-db-role-grant-hardening/feature.md`
-**Product Spec**: `docs/roadmap/features/208-psql-db-role-grant-hardening/product-spec.md`
-**Implementation Spec**: `docs/roadmap/features/208-psql-db-role-grant-hardening/implementation-spec.md`
+**Feature**: ./feature.md
+**Status**: demoted/canceled — archived by /sdd-archiver; verbose specs pruned (recoverable via git history).
 
----
+## Archive Synthesis — 2026-10-07 — /sdd-archiver
 
-## Session 2026-09-25 — sdd-story
-
-- Created feature.md (status: draft), product-spec.md, acceptance.feature, context.md from user story.
-- **Provenance**: backlog security follow-on from the 2026-09-16 security audit
-  (`docs/reports/2026-09-16-trading-system-security-audit.md`). DT-2 §149 recommends narrowing
-  `xstockstrat_agent` grants "to only the schemas the analytics tools need." Feature 193
-  (`sysadmin-db-write-role`) explicitly deferred this to a separate feature: its Out-of-Scope names
-  "any change to what the DML-only `xstockstrat_agent` DB role can do at the Postgres grant level"
-  as a defense-in-depth follow-on.
-- **Relationship to 193**: FR-1/FR-2/FR-4/FR-5 harden the **existing** role and can land
-  independently. FR-3 (make the audit sink tamper-evident against the DML role) is the grant-level
-  enforcement of 193's `@AC-11` and depends on 193 having defined that sink — sequence FR-3 with/after
-  193. Sequencing to be recorded in `merge-order.md` at `/sdd-spec`.
-- **Schema/table names in acceptance.feature are illustrative** (e.g. `ledger.events`,
-  `identity.api_keys`, `config.config_entries`) — `/sdd-design` grounds the exact relation names and
-  the precise least-privilege write set against `docs/patterns/database.md` (schema map) and the DB
-  tools' actual queries; see product-spec § Open Questions.
-- Created for pickup by another session per operator direction (Phase D security backlog).
-
-## Session 2026-09-27 — RESCOPED (193/212 abandoned, postgres-mcp removed by 214)
-
-- **Rescope, not new feature** (status stays `draft`). The 2026-09-25 session above scoped this as
-  least-privilege grants for feature 193's psql-MCP role plus protection of that MCP's durable audit
-  sink. That premise is **void**: the operator directive "remove all postgres MCP, they are inherently
-  insecure" abandoned the separation design (feature 193, imported/demoted as **212**) and replaced it
-  with feature **214** (`remove-agent-postgres-mcp`), which removes postgres-mcp outright. There is
-  **no psql-MCP and no audit sink**.
-- **New scope:** (1) tear down the now-**orphaned** `xstockstrat_agent` DB role at the database
-  (postgres-mcp was its only consumer per the root CLAUDE.md pool table) — revoke + `DROP ROLE`, or
-  zero-privilege `NOLOGIN` if a clean drop is blocked; (2) audit that no **remaining** DB role can
-  write the integrity-/secrecy-critical relations (ledger append-only, identity credential/api-key/
-  refresh-token, config `value_encrypted`) beyond legitimate need, and no non-owner can read the
-  ciphertext.
-- **Dependency:** now a **hard** dependency on **feature 214** — the role cannot be dropped while the
-  agent still connects as it, so 214 (which removes that connection) must land first. `214 → 208` to
-  be recorded in `merge-order.md`.
-- product-spec.md, feature.md, and acceptance.feature rewritten to the new scope; all psql-MCP /
-  audit-sink / per-operator-token references removed. Illustrative relation names retained pending
-  `/sdd-design` grounding.
-- **Numbering note:** the removal feature was briefly numbered 211 but renumbered to **214** after an
-  NNN collision with `211-edgar-fundamentals-enrichment` (merged to `main-dev`/`main`); this
-  dependency uses 214.
-
-## Session 2026-09-27 — DEMOTED (unnecessary: role was never created)
-
-- **Status: `draft` → `demoted/canceled`.** Operator: "208 is unnecessary if we're going to remove
-  the postgres MCP tooling and `xstockstrat_agent` user was never created."
-- **Verified against code:** `scripts/db-migrate.sh:169-203` provisions `xstockstrat_agent`
-  (feature 169) **only when `POSTGRES_MCP_AGENT_PASSWORD` is set** — otherwise it prints
-  `[skip] xstockstrat_agent role provisioning: POSTGRES_MCP_AGENT_PASSWORD not set` (line 203). That
-  password was never set in the live environments, so the role was **never created**. There is no
-  orphaned role to `DROP`/`REVOKE` — the entire rescoped premise (orphaned-role teardown) is moot.
-- **The one useful residual action moved to feature 214:** removing the dead role-provisioning block
-  from `scripts/db-migrate.sh` is part of "remove all postgres-mcp wiring" and now lives in 214's
-  scope (FR-3), not here.
-- **Dropped, not deferred:** the secondary idea (audit that no *remaining* role can write
-  integrity-critical tables — ledger/identity-secret/config-ciphertext) is not carried forward. It was
-  defense-in-depth orthogonal to the removal; if ever wanted, open a fresh standalone feature. Per the
-  operator's call, 208 is closed.
-- **Disposition:** no PR merged this feature's rescoped content to `main-dev`; the directory is kept as
-  a demoted record so the number stays reserved. The `214 → 208` merge-order row is removed (no
-  ordering constraint remains).
+**What**: Nothing shipped; no PR merged this feature's content. It began as a security-audit follow-on to feature 193 (narrow the grants of 193's DML `xstockstrat_agent` role and protect 193's audit sink), was rescoped to "drop the orphaned role after 214 removes postgres-mcp", then demoted on 2026-09-27 because the role was never created. The directory stays as a demoted record so the number stays reserved.
+**Why (irrecoverable rationale)**: Operator, 2026-09-27: "208 is unnecessary if we're going to remove the postgres MCP tooling and `xstockstrat_agent` user was never created". Role provisioning (feature 169, `scripts/db-migrate.sh`, since removed by 214) ran only when `POSTGRES_MCP_AGENT_PASSWORD` was set; that password was never set in the live environments, so the `[skip] xstockstrat_agent role provisioning` path always ran. The "never created" fact is also in `docs/runbooks/operator-db-access.md:67-68` and `212-sysadmin-db-write-role/context.md:356-360`. The one useful residual — deleting the dead provisioning block — moved to feature 214 FR-3 (`merge-order.md:70` already carries the cleaned 214 row; no 214→208 constraint remains).
+**Rejected alternatives**: Least-privilege grant narrowing of 193's psql-MCP role plus a tamper-evident audit sink (the premise was void: the operator abandoned 193 — "remove all postgres MCP, they are inherently insecure" — and 214 removed postgres-mcp outright). Orphaned-role teardown by `REVOKE` + `DROP ROLE` with a zero-privilege `NOLOGIN` fallback if owned objects block the drop (there was no role). A secondary audit that no remaining role can write the ledger, identity secrets or config `value_encrypted` — dropped, not deferred, as defense-in-depth orthogonal to the removal. Original rationale for tearing the role down: a dormant DML-capable login is "pure attack surface — a credential to leak" (moot).
+**Scars & gotchas**: The 2026-09-27 rescope declared the role "orphaned (postgres-mcp was its only consumer per the root CLAUDE.md pool table)" without reading the provisioning gate — a pool-table entry says a role would be used, not that it exists; existence was environment state, one grep away. The 214→208 dependency was recorded and then removed. 214 was previously 211 and was renumbered after a collision with `211-edgar-fundamentals-enrichment` (fails.md:2383-2386). 214 had to deploy first only because dropping the role while the agent still connected as it would have broken the running agent (moot).
+**Permanent deviations**: None — there was no design, recon or implementation-spec, and nothing shipped.
+**Cross-feature signal**: The 193/212 → 214 → 208 chain collapsed in about two days: 208 was storied on 2026-09-25 as a dependent defense-in-depth follow-on to 193, which was only design-approved with no PR; when 193 was abandoned 208 died with it, and the rescope re-anchored on a second unverified premise. A follow-on written against an unmerged, in-flux parent inherits all of the parent's premise risk. The "eliminate the surface" lesson is insights.md:3378-3381; sibling record `212-sysadmin-db-write-role/context.md:356-360`. Original 193 split: FR-1/2/4/5 could land independently, only FR-3 (the audit-sink grant) depended on 193.
+**Deferred follow-ons**: None committed; "if ever wanted, open a fresh standalone feature". The deleted product-spec held the checklist for that audit: pin real relation names (`ledger.events`, `identity.api_keys`, `config.config_entries` were illustrative only); enumerate the remaining DB roles and find any with write on the ledger, identity-secret or config-ciphertext relations beyond need; decide whether `value_encrypted` needs a column-level SELECT revoke or non-owner access is already absent; ground against `docs/patterns/database.md` and each service's queries; RLS and credential rotation were scoped out as separate/operational. The audit's DT-2 §149 residual (`docs/reports/2026-09-16-trading-system-security-audit.md`) is unaddressed. The repo-wide guarantee that no non-owner role can write integrity-critical tables is not enforced at the grant level (no `GRANT`/`REVOKE`/`CREATE ROLE` in `services/*/migrations`).
+**Failure post-mortem**: Root cause: a dependent follow-on built on a sibling's premise (193's role/audit sink assumed to exist), then, after the rescope, on a second unverified premise (the role existed as a deployed object). Early signals missed: on 2026-09-25 193 was only design-approved with no merged code (a follow-on against it was premature); on 2026-09-27 the rescope text itself named the gate (`scripts/db-migrate.sh` provisions the role per feature 169), and one read of that block or a check of deployed secrets for `POSTGRES_MCP_AGENT_PASSWORD` would have made the rescope a no-op before it was written. None of the five `@AC-*` scenarios was promoted (they describe behaviour never delivered and were never grounded against real relations).
+**Runtime-invariant recommendations (→ /context-constitution)**: None for a constitution ID. Candidate fact (already in `operator-db-access.md:67`): no DB role `xstockstrat_agent` exists in any environment; a future DB-grant audit should start from the actual `pg_roles`, not from code.
+**Ledger entries written**: insights.md (1), fails.md (1) — see the 2026-10-07 entries.
+**Pruned artifacts**: product-spec.md — last present at 9a1d3bea (`git show 9a1d3bea:docs/roadmap/features/208-psql-db-role-grant-hardening/<file>`).

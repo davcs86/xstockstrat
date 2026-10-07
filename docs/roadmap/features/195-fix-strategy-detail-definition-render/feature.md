@@ -8,6 +8,7 @@
 **Last Updated**: 2026-09-19
 **Committed to main**: dd622bdc2e5b922df8dcabc6f7475b8b395a8ed3
 **Launched date**: 2026-09-24
+**Archived**: 2026-10-07
 
 ---
 
@@ -19,12 +20,13 @@
 | 2026-09-19 | `draft` → `code-completed` | bug-fix session | Definition card added (all readers, operator-approved); RuleSummary hoisted (DRY); unit + e2e tests; lint/tsc clean. Shipped in the consolidated today's-triage PR. |
 
 | 2026-09-24 | `code-completed` → `launched` | CI workflow | Promoted via PR #1169; committed dd622bdc2e5b922df8dcabc6f7475b8b395a8ed3 |
+| 2026-10-07 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(0); pruned 1 spec(s); acceptance scenarios promoted to per-service suites (C-16) |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — points at the defect report
-- [Acceptance Scenarios](acceptance.feature) — the detail page renders the definition
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — the detail page renders the definition; promoted to services/xstockstrat-ui/acceptance/fix-strategy-detail-definition-render.feature (C-16)
 - [Context Log](context.md) — the all-readers decision + the DRY hoist factoring
 
 ---

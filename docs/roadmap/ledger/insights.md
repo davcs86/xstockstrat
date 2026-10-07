@@ -3452,3 +3452,143 @@ reusing.
 ### 2026-10-01 — inter-service-mtls — design
 - **Pattern**: The DO-App-Platform-compatible inter-service mTLS shape is: one self-signed platform CA → one per-service leaf (SAN = service name, both serverAuth+clientAuth EKUs) → delivered as boot-time env **PEM strings** (`MTLS_CERT`/`MTLS_KEY`/`MTLS_CA_CERT`, keys `type: SECRET`), NEVER over WatchConfig (config can't secure its own inbound channel). DO has no file-mount and no daemonset/socket, so env-PEM is the only mechanism that works on prod AND keeps compose parity — SPIRE/cloud-CA are ruled out, not by preference but by DO's injection model. Verification identity is pinned to the service name on every client (env-independent), and the whole thing needs zero new dependencies (grpcio/grpc-js/Go-stdlib ship TLS). Fail-closed = cert-material presence (absent ⇒ won't start); no permissive/toggle mode avoids an unguardable prod permissive window.
 - **Rule it implies**: For a platform-wide transport-credentials change on DO App Platform, default to env-PEM + a self-signed platform CA + service-name authority pinning + a flag-day (no accept-both mode) cutover; reconcile cert material as `type: SECRET` across `docker-compose.yml` + `.do/app*.yaml` using the `DATABASE_CA_CERT` string-env precedent. Verify handshakes in-process (no CI mesh exists), and always include a valid-CA/wrong-SAN negative test.
+
+### 2026-10-07 — 187-opportunities-pagination-drain — design
+- **Pattern**: When a list view becomes paginated, audit every client-side aggregate computed over the loaded rows (headline stat tiles, counts). A tile that read "50 of 50 evaluated" on page 1 while 150+ rows sat behind Load More silently misleads, so remove it or move it server-side. Prefer a manual `useInfiniteQuery` + Load More over an auto-drain loop: auto-drain stacks the per-call BFF deadline (N×30s) and needs a max-pages cap. Complements fails.md:662 and fails.md:805 (truncation-before-diagnostic), which cover the server side only.
+- **Evidence**: `git show 9a1d3bea:docs/roadmap/features/187-opportunities-pagination-drain/design.md` (§ stat-grid removal, § Rejected Alternatives); `services/xstockstrat-ui/src/hooks/useOpportunities.ts`.
+- **Rule it implies**: Adding pagination to a consumer requires a sweep of its subset-relative aggregates; default to manual paging unless a full-set consumer genuinely needs a drain. No Constitution ID proposed.
+
+### 2026-10-07 — 188-sparkline-ohlc-replacement — design
+- **Pattern**: When UI behavior must be unit-tested in the node-only vitest setup scoped to `src/lib/**`, extract the decision as a pure function with an injectable clock (`selectOhlcBar(bars, now?)`) and keep the hook and component thin. The date-boundary edge cases (a daily bar dated today in UTC is skipped; daily `Bar.time` is UTC midnight, so render with `timeZone: 'UTC'`) then get deterministic tests.
+- **Evidence**: `services/xstockstrat-ui/src/lib/protoTime.ts` (`selectOhlcBar`); `services/xstockstrat-ui/src/lib/protoTime.test.ts`.
+- **Rule it implies**: Put time-dependent selection and format logic in `src/lib` with an injectable `now`.
+
+### 2026-10-07 — 188-sparkline-ohlc-replacement — reuse
+- **Pattern**: Before asserting a field-mapping change in e2e, check the mock for degenerate data. The CAPR `getBars` mock returned bars with O=H=L=C, so OHLC assertions would have been vacuously green; the spec caught it and replaced the mock with distinct values per field.
+- **Evidence**: `git show 9a1d3bea:docs/roadmap/features/188-sparkline-ohlc-replacement/implementation-spec.md` (Step 8); `services/xstockstrat-ui/e2e/mock-backend.ts`.
+- **Rule it implies**: Fixtures must give each asserted field a distinct value. Same vacuous-green family as fails.md:2657 and insights.md:3189.
+
+### 2026-10-07 — 189-screener-preset-criteria — design
+- **Pattern**: For a one-shot "load preset" action behind a Radix `Select`, make the `Select` controlled (`value`) and reset it to `''` after applying, so the same preset can be re-selected, and apply a shallow copy of the shared constant (`.map(c => ({...c}))`) so row edits never mutate it.
+- **Evidence**: `services/xstockstrat-ui/src/app/insights/screener/page.tsx`; `services/xstockstrat-ui/src/lib/screenPresets.ts`.
+- **Rule it implies**: A one-shot-action `Select` must be controlled and reset after each use.
+
+### 2026-10-07 — 189-screener-preset-criteria — reuse
+- **Pattern**: A UI constant that mirrors backend scoring bands needs two things its comment alone did not carry: which end of each band it copies and why (the preset uses the bad endpoint, where the backend's linear interpolation returns 0, so the cut-offs are rank-only and the screener's own normalization does the scoring), and a "keep in sync with <path>" pointer. The unit test checks catalog validity but not the thresholds, so backend-band drift in `fundsignal_loop.py:35-40` is caught by nothing and TS-side drift only by the e2e.
+- **Evidence**: `services/xstockstrat-ui/src/lib/screenPresets.ts:12-13`; `services/xstockstrat-analysis/app/engine/fundsignal_loop.py:35-40`.
+- **Rule it implies**: Extends insights.md:1713 — a catalog copying backend constants records why that end of the band, plus a keep-in-sync pointer.
+
+### 2026-10-07 — 194-fix-strategy-signal-params-dead-keys — design
+- **Pattern**: To remove dead keys from a persisted JSONB that feeds a content fingerprint, strip at the read/serialize edge (and on the inbound write request so new rows are born clean); do not backfill or re-key existing rows. Make the shared row-to-proto mapper strip by default, but have the one persist-building caller opt out (`strip_dead_signal_params=False`) so a masked rename never re-keys stored bytes. A backfill or unconditional write-side strip changes the fingerprint and wipes the derived evidence grade — a real cost for a cosmetic SEV-3.
+- **Evidence**: `services/xstockstrat-analysis/app/handlers/servicer.py` (`_row_to_strategy_definition`, `_strip_dead_signal_params`); `git show 9a1d3bea:docs/roadmap/features/194-fix-strategy-signal-params-dead-keys/product-spec.md`; related: insights.md:60-74 (fingerprint-from-stored-form), :204-216 (070), :2065-2079 (152).
+- **Rule it implies**: The stored `definition_json` bytes of a fingerprinted strategy change only through a caller's explicit definition change, never through normalization or hygiene passes; check what hashes the stored form before proposing a backfill (extends ANALYSIS-3).
+
+### 2026-10-07 — 195-fix-strategy-detail-definition-render — reuse
+- **Pattern**: When a read-only page needs a helper that lives in a heavy client-only editor module (here `RuleEditor.tsx`: Combobox/Select UI), extract the pure parsers into `src/lib/` and re-export them from the editor for back-compat, and hoist the presentational summary to a shared component. This avoids both a DRY duplicate and bundling editor UI into the read-only page.
+- **Evidence**: `services/xstockstrat-ui/src/lib/ruleSummary.ts`; `services/xstockstrat-ui/src/components/insights/RuleSummary.tsx`.
+- **Rule it implies**: Share logic out of an editor through a lightweight `lib/` module, never by importing the editor module itself.
+
+### 2026-10-07 — 197-mcp-list-correlation-prompts — design
+- **Pattern**: After a live staging probe of an auto-surfaced MCP channel, a server `instructions` string that only says "fetch prompt X" was not enough: an autonomous agent needs the instructions to name the prompt and the retrieval method (`prompts/get` / `prompts/list`), and the shipped string restates all three field-path pairings because `instructions` is the only channel an agent gets with no extra action. The design's "short ~4-line pointer" was strengthened after launch. A refinement of the insights.md:3337 three-channel entry.
+- **Evidence**: `services/xstockstrat-agent/app/main.py:31-39` (`LIST_CORRELATION_INSTRUCTIONS`); `git show 9a1d3bea:docs/roadmap/features/197-mcp-list-correlation-prompts/design.md` § instructions.
+- **Rule it implies**: Validate agent-facing `instructions` wording with a live `initialize` + `prompts/get` probe against a deployed server, and make it self-sufficient (name the artifact and the retrieval method).
+
+### 2026-10-07 — 198-historical-fundamentals-backtest — design
+- **Pattern**: When a new optional data input must reach 6+ evaluator consumers (backtest, live loop, readiness SLOW, the materializer, the on-read kick, opportunities + heal, indicator series), route all of them through one preload function. Read the default-OFF gate once there (off returns `None`, so the operand holds uniformly and parity is true by construction), hoist the shared response→model mapping to module-level helpers both the servicer and the live loop import, and extend the pure evaluator with an additive `fundamentals=None` kwarg so existing stubs stay byte-identical.
+- **Evidence**: `services/xstockstrat-analysis/app/handlers/servicer.py` (`_load_fundamentals`, `_fundamental_periods_from_response`); `services/xstockstrat-analysis/docs/context-constitution.md` (ANALYSIS-10); `git show 9a1d3bea:docs/roadmap/features/198-historical-fundamentals-backtest/implementation-spec.md` Deviation Log Step 10.
+- **Rule it implies**: A per-consumer gate or fetch is a parity hazard — one chokepoint plus a pure-evaluator kwarg. Related to, not a duplicate of, insights.md:3364 (compute vs heal).
+
+### 2026-10-07 — 198-historical-fundamentals-backtest — ordering
+- **Pattern**: The RED test for an as-of / availability-lag join must probe the exact boundary bar (filed on D is invisible on bar D, visible on D+1) plus a between-filings gap and a pre-first-filing hold, and prove the boundary value is `None` rather than fabricated. T+1 was chosen because SEC filings are often accepted after the close; the strict `<` was proven by the test failing under `<=` and under a snapshot read.
+- **Evidence**: `services/xstockstrat-analysis/tests/test_fundamental_operand.py` (`test_t_plus_1_boundary_strict`, `test_entry_respects_t_plus_1`); `services/xstockstrat-analysis/app/engine/evaluator.py:93`.
+- **Rule it implies**: A "no look-ahead" test must probe the boundary bar, not just a date before the first row.
+
+### 2026-10-07 — 198-historical-fundamentals-backtest — design
+- **Pattern**: When a new backfill data kind lacks the unit the orchestrator's planner is built around (bars → density chunks), bypassing the planner with one idempotent worker call is reasonable, but it silently forfeits resume: `resume_incomplete_jobs` re-drives only jobs with incomplete rows in `backfill_chunks`, and `_execute_fundamentals_backfill` writes none, so an interrupted FUNDAMENTALS job stays RUNNING and needs a manual re-trigger — contradicting the spec's "resumably". Chunk tables stay kind-specific and `backfill_chunks.data_kind` is vestigial for FUNDAMENTALS.
+- **Evidence**: `services/xstockstrat-ingest/app/handlers/servicer.py:365-405` and `:553-577`.
+- **Rule it implies**: A new job kind needs an explicit resume and observability check, not just reuse of the bars job lifecycle.
+
+### 2026-10-07 — 199-opportunity-composite-score — design
+- **Pattern**: In a multi-axis fusion an axis contributes its weight iff its evidence exists, never by sub-score magnitude. Multiplicative attenuation can legitimately produce `s=0` from present evidence (all-hold, full conflict, fully decayed); keying on `s>0` silently turns an active pull-down into a dropped term that drifts to the neutral prior (0.433 present-contradicted vs 0.650 absent). Separately, data-unavailable forces Σw=0 and persists NULL (computed before the axis-zeroing), so NULL means "nothing to fuse" and 0.5 means "computed neutral".
+- **Evidence**: `services/xstockstrat-analysis/app/handlers/servicer.py:4872-4885` (presence predicate on non-empty `_composite_sig_contribs`); `services/xstockstrat-analysis/tests/test_composite_score.py` (AC-3 vs AC-4); `git show 9a1d3bea:docs/roadmap/features/199-opportunity-composite-score/design.md` (round 4 presence-predicate finding).
+- **Rule it implies**: Key axis presence on evidence existence, not score value; unavailable is NULL, not a low score.
+
+### 2026-10-07 — 200-symbol-opportunity-ranking — design
+- **Pattern**: When a doc or comment claims a config clamp protects a mandated ordering, verify by arithmetic at the clamp boundary. The geometric rank-decay fold `Σ γ^k·t_k` is bounded by `t_max/(1−γ)`, so "< 2·max for any γ<1" holds only for γ ≤ 0.5; with equal strategy weights the AAPL (2×0.80) vs PENNY (6×0.30) ordering inverts near γ≈0.94, and the read-clamp's ceiling of 0.99 does not prevent it. The clamp-protects-the-ordering claim sat in the design, the proto comment, ANALYSIS-13 and the spec unchecked.
+- **Evidence**: `services/xstockstrat-analysis/app/handlers/servicer.py:4383-4388,5691-5700`; `packages/proto/analysis/v1/analysis.proto:621-626`; `services/xstockstrat-analysis/tests/test_symbol_score.py:45-51` (pins only γ=0.5).
+- **Rule it implies**: A "bounded by X" comment must state the parameter range it holds for, and acceptance orderings should be pinned at the clamp edge, not only at the default (equal weights only; unequal weights shift the crossover).
+
+### 2026-10-07 — 2026-08-16-live-loop-stale-daily-ohlcv-defect — design
+- **Pattern**: When a scalar knob becomes a list (one ingest timeframe becoming `"15m,1d"`), every other knob tuned to the old single value must be re-derived per element. The configured 15-minute lookback (default 900000ms) fetches a near-empty window for `1d`, so adding `"1d"` to the list alone fixes nothing; the fix floors each timeframe's lookback at `max(configured, 2 × its own interval)`, and the default list includes only timeframes with a continuously-live consumer (`1h` stays on-demand).
+- **Evidence**: `services/xstockstrat-marketdata/internal/service/marketdata_service.go` (`resolveIngestTimeframes`, `minIngestLookback`); `TestMinIngestLookback` in `marketdata_service_test.go`; fix commit `d53753fb`.
+- **Rule it implies**: When generalizing a single-value config to a list, enumerate every co-dependent knob (window, interval, batch size) and give each a per-element derivation or floor, with a test at the element that differs most from the old default.
+
+### 2026-10-07 — fundamentals-formula-inputs — design
+- **Pattern**: When mixing a time-indexed series input (bars) with a point-in-time scalar input (filings) risks look-ahead, partition formulas into disjoint input kinds so the PIT-fed unit never receives the bar-indexed series, and compose blends at the rule level. That makes the leak unrepresentable instead of asserting it absent. The kind marker must be a declared field on the formula, not an inferred one: the rejected `input_schema` routing signal was empty on the seeded formula, unvalidated, mutable and outside the fingerprint.
+- **Evidence**: `git show 9a1d3bea:docs/roadmap/features/201-fundamentals-formula-inputs/design.md` (§ Rejected Alternatives, lines 205-231); `services/xstockstrat-analysis/app/services/evaluator.py` (`_fundamentals_formula_series`).
+- **Rule it implies**: Prefer making a leak unrepresentable over asserting it absent. Before adopting a routing marker, check it for emptiness on seeded data, mutability, validation and fingerprint membership.
+
+### 2026-10-07 — order-time-in-force-enum — design
+- **Pattern**: A wire-breaking in-place enum conversion (no dual field) is acceptable when every caller is in-repo and deploys atomically. The one real cost is request-content idempotency hashes (`proto.Marshal` → SHA-256): in-flight intents hashed under the old wire type stop matching. That is bounded by the intent-staleness window and handled with a deploy note and optional cleanup SQL, not a dual-read shim. The consumer survey must include every language, because one caller (the agent's offline-order tool) was initially missed.
+- **Evidence**: `git show 9a1d3bea:docs/roadmap/features/202-order-time-in-force-enum/design.md:83-89,153-155`; `services/xstockstrat-trading/internal/service/order_intent.go:33-40`.
+- **Rule it implies**: When changing the wire type of a hashed request proto, add a deploy note bounded by the intent-staleness window; run the consumer survey across all languages, including `xstockstrat-agent/app/client.py`.
+
+### 2026-10-07 — alert-read-unread-persistence — design
+- **Pattern**: Per-user state over a mix of broadcast and targeted rows is a `(entity_id, user_id)` marks table where absence means "not yet", read with `LEFT JOIN … AND ar.user_id = $caller`, with unread counts via `NOT EXISTS` on the same table. Writes use `INSERT … ON CONFLICT DO NOTHING`, which also keeps the original `read_at`. A column on the shared row cannot represent "read by A, unread by B".
+- **Evidence**: `services/xstockstrat-notify/src/grpc/notifyServiceImpl.ts:164-225`; `services/xstockstrat-notify/migrations/003_alert_reads.up.sql`.
+- **Rule it implies**: Per-user state on shared or broadcast records goes in a marks table keyed `(entity, user)`, never a column on the shared row.
+
+### 2026-10-07 — alert-read-unread-persistence — design
+- **Pattern**: A write-time existence gate in a bulk `INSERT … SELECT unnest($1)` must be a per-row `JOIN` on the parent table. A non-correlated `WHERE EXISTS (SELECT 1 FROM parent WHERE id = …)` gates the whole batch, so a mixed `[valid, phantom]` batch inserts everything. Caught at impl-spec review, shipped as the per-row join.
+- **Evidence**: `services/xstockstrat-notify/src/grpc/notifyServiceImpl.ts:176-179`; `git show 9a1d3bea:docs/roadmap/features/203-alert-read-unread-persistence/design.md:36-40`.
+- **Rule it implies**: Review any `WHERE EXISTS` in bulk-insert SQL for correlation to the unnested row. Related to, not a duplicate of, insights.md:482.
+
+### 2026-10-07 — backfilled-data-queryable — design
+- **Pattern**: A keyset cursor over a table whose PK does not include the sort key must be built from a tuple provably unique per partition. Here `(period_end, fiscal_period)` works because `buildPeriod` derives `fiscal_period` from `(fp, fy)` so it fixes `period_type` per symbol, even though the PK is `(symbol, fiscal_period, period_type)`. The cursor is the last row actually returned (not the over-fetched row), compared with strict `>`; filters such as `asOf` are pushed into SQL before `LIMIT` so a short page is never a post-filter artifact; a malformed token resumes from page 1.
+- **Evidence**: `services/xstockstrat-marketdata/internal/repository/marketdata_repo.go:716-766,808-820`; `git show 9a1d3bea:docs/roadmap/features/204-backfilled-data-queryable/context.md:105-111,123-140`.
+- **Rule it implies**: A keyset cursor tuple must be unique per partition; write the uniqueness argument in the PR (the PK alone does not show it) and apply every filter in SQL before `LIMIT`.
+
+### 2026-10-07 — backfilled-data-queryable — reuse
+- **Pattern**: Promoting a feature's `acceptance.feature` verbatim under C-16 acts as a fidelity audit: it surfaced three places where the shipped code or e2e was weaker than the reviewed contract (CSV filename lacked the date range, the e2e asserted the snapshot CSV instead of the historical one, the timestamp rendered date-only). Fix the code, not the contract.
+- **Evidence**: `git show 9a1d3bea:docs/roadmap/features/204-backfilled-data-queryable/context.md:292-303`.
+- **Rule it implies**: After promotion, re-read each `Then` against the e2e assertion, not only against the code.
+
+### 2026-10-07 — formula-fundamental-inputs-authoring — design
+- **Pattern**: With a protobuf-es typed browser client, carry proto enums as the numeric init type in UI state, hooks and `onSave`; Connect-JSON serializes them to NAME-strings on the wire, so assert NAME-strings only at the network boundary (e2e `page.route` or mock receipt). A spec that models UI state as `string[]` NAME-strings produces code that does not type-check and dead conversion helpers (here `metricNameToDataKey`).
+- **Evidence**: `git show 9a1d3bea:docs/roadmap/features/205-formula-fundamental-inputs-authoring/context.md:197-200`; `services/xstockstrat-ui/src/lib/fundamentalMetrics.ts:21`.
+- **Rule it implies**: When speccing UI enum fields over a typed protobuf-es client, spec the numeric type plus a wire-level NAME-string assertion; grep the generated `_pb` init type first. Extends insights.md:708.
+
+### 2026-10-07 — fix-reconciliation-false-halt — design
+- **Pattern**: Before summing over a TimescaleDB hypertable keyed `(id, ts)`, assert the one-row-per-logical-entity assumption. Writers that mint a fresh `created_at` on upsert (`UpsertOrder` when `CreatedAt` is nil) leave several rows per order, so a naive `SUM(filled_qty)` double-counts. Dedup to the latest row per id (`DISTINCT ON (order_id) … ORDER BY order_id, created_at DESC`) first, mirroring `GetOrder`. The one adversarial round caught it before any code existed. Related but distinct: insights.md:2982, 3227 (perf/indexing).
+- **Evidence**: `services/xstockstrat-trading/internal/repository/trading_repo.go:47-50,173-183`; `git show 9a1d3bea:docs/roadmap/features/206-fix-reconciliation-false-halt/design.md:28-38`.
+- **Rule it implies**: Aggregates over `(id, ts)` hypertables dedup latest-per-id first; consider a TRADING-* invariant.
+
+### 2026-10-07 — extract-tool-ssrf-hardening — design
+- **Pattern**: A class-level `monkeypatch.setattr(httpcore.AnyIOBackend, "connect_tcp", AsyncMock)` plus an end-to-end `assert_not_called` is the discriminating guard against a missing connection pin, because the unpinned default backend would invoke it. A construction-time read-back assertion on a private-attribute swap (`self._pool._network_backend = pin; assert self._pool._network_backend is pin`) cannot fail on a plain-attribute rename and so guards nothing.
+- **Evidence**: `services/xstockstrat-agent/tests/test_tools.py:2008-2069`; `services/xstockstrat-agent/app/egress.py:138-141`.
+- **Rule it implies**: A security pin behind a private-attribute swap needs an end-to-end negative test; name that test as the guard and never rely on a construction-time read-back.
+
+### 2026-10-07 — indicators-sandbox-os-isolation — ordering
+- **Pattern**: In a lock-then-exec sandbox, force every lazy, forking or write-probing library behavior before the lockdown: lazy module attributes (numpy `fft`/`rec`/`ma`), `pyseccomp`'s `find_library` fork of `ldconfig` (before `RLIMIT_NPROC`), and `tempfile.gettempdir()` write-probing (before `RLIMIT_FSIZE=0`). Eager import and these probes run as root before `setuid`, which is itself a recorded residual.
+- **Evidence**: `services/xstockstrat-indicators/app/services/sandbox.py:212-226,252-258,271`; `services/xstockstrat-indicators/tests/test_sandbox_isolation.py:323-329` (pins only the ldconfig ordering).
+- **Rule it implies**: Add a warm-up-before-lockdown phase and pin its order in tests.
+
+### 2026-10-07 — indicators-sandbox-os-isolation — design
+- **Pattern**: When a language-level guard (import/builtins blocklist) is bypassable by attribute traversal (`numpy.lib._datasource.os`), deny the capability at the syscall layer after warm-up (all file-open syscalls) instead of chasing an unbounded reachable-object graph with attribute-filtered module proxies. The operator chose the seccomp deny; the reason is not written down.
+- **Evidence**: `git show 9a1d3bea:docs/roadmap/features/209-indicators-sandbox-os-isolation/context.md:228-237`; `services/xstockstrat-indicators/app/services/sandbox.py:59-60`.
+- **Rule it implies**: Treat the import/builtins guard as non-boundary; enforce the capability at the syscall layer.
+
+### 2026-10-07 — inter-service-mtls — design
+- **Pattern**: When one test-double server fronts N services on one port, mint a superset-SAN server leaf so the real production per-service identity pin (`checkServerIdentity(target)`) runs in e2e, instead of weakening or bypassing it with a test-only flag.
+- **Evidence**: `services/xstockstrat-ui/e2e/helpers/devCerts.ts:6`; `git show 9a1d3bea:docs/roadmap/features/210-inter-service-mtls/context.md:217`.
+- **Rule it implies**: Never add a test-only verification bypass for a security check; widen the fixture instead.
+
+### 2026-10-07 — inter-service-mtls — design
+- **Pattern**: Before promising identity-bound authorization from a transport-auth feature, enumerate the app-layer gates that read forgeable headers (`x-internal-caller` in features 147/154). If wiring peer identity into them changes existing behavior, it is a C-16 CHANGE for another feature: scope down with an explicit `@descoped` scenario and recorded operator sign-off rather than shipping handshake-only auth under an identity-authz name.
+- **Evidence**: `git show 9a1d3bea:docs/roadmap/features/210-inter-service-mtls/context.md:92-93`; `services/xstockstrat-*/acceptance/` (the descoped `@AC-3`, platform.feature header lines 210-213).
+- **Rule it implies**: A descoped `@AC` keeps its ID with no covering step (C-15 append-only).
+
+### 2026-10-07 — psql-db-role-grant-hardening — ordering
+- **Pattern**: Do not story a dependent defense-in-depth follow-on until its parent feature has merged or has a stable design. 208 was created while 193 was only design-approved with no PR; 193 was then abandoned, forcing a rescope and a cancellation within two days.
+- **Evidence**: `git show 9a1d3bea:docs/roadmap/features/208-psql-db-role-grant-hardening/context.md:9-21,28-41,52-70`.
+- **Rule it implies**: A follow-on authored while its parent is unmerged and in design flux belongs as a backlog note on the parent; re-verify its premise whenever the parent changes status. Partly overlaps insights.md:822 (re-verify dormant specs after removals).

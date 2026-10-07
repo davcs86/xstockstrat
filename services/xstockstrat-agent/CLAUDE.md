@@ -219,6 +219,7 @@ IDENTITY_ENDPOINT=xstockstrat-identity:50058
 CONFIG_ENDPOINT=xstockstrat-config:50060
 PORTFOLIO_ENDPOINT=xstockstrat-portfolio:50052
 TRADING_ENDPOINT=xstockstrat-trading:50051
+MARKETDATA_ENDPOINT=xstockstrat-marketdata:50053   # query_bars / query_fundamentals (feature 204)
 UI_BASE_URL=http://localhost:3000
 AGENT_PUBLIC_URL=http://localhost:9000   # ${APP_URL}/agent in DO
 ```

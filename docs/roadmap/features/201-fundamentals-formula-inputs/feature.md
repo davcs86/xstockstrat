@@ -5,6 +5,7 @@
 **Last Updated**: 2026-09-21
 **Committed to main**: dd622bdc2e5b922df8dcabc6f7475b8b395a8ed3
 **Launched date**: 2026-09-24
+**Archived**: 2026-10-07
 
 ---
 
@@ -23,15 +24,16 @@
 | 2026-09-21 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 12 steps (proto+enum → proto-gen → indicators migration 006 → indicators persist/validate/seed → analysis evaluator scalar-broadcast branch → analysis servicer routing map + snapshot loader + two-site gate + write-time XOR → UI badge → docs/teardown). Every step grounded in `path:line` evidence; all 8 `@AC-*` scenarios mapped to test steps (C-15). |
 
 | 2026-09-24 | `code-completed` → `launched` | CI workflow | Promoted via PR #1169; committed dd622bdc2e5b922df8dcabc6f7475b8b395a8ed3 |
+| 2026-10-07 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(6); pruned 4 spec(s); acceptance scenarios promoted to per-service suites (C-16) |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
-- [Recon Dossier](recon.md) — grounded codebase map, patterns to reuse, existing business rules (C-16)
-- [Design](design.md) — debated, user-approved architecture (disjoint categories); rejected alternatives; open risks; Constitution rules touched
-- [Implementation Spec](implementation-spec.md)
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15); promoted to services/xstockstrat-{analysis,indicators}/acceptance/fundamentals-formula-inputs.feature (@AC-1/2/3/4/6/7/8); @AC-5 withheld (contradicts shipped error handling) — see context.md (C-16)
+- Recon Dossier — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

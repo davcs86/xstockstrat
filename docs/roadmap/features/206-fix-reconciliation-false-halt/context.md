@@ -1,85 +1,17 @@
-# Context Log: fix-reconciliation-false-halt
+# Context: fix-reconciliation-false-halt  (archived 2026-10-07)
 
-Append-only. Each session appends a new ## Session entry. Never delete or edit prior entries.
+**Feature**: ./feature.md
+**Status**: launched — archived by /sdd-archiver; verbose specs pruned (recoverable via git history).
 
----
+## Archive Synthesis — 2026-10-07 — /sdd-archiver
 
-## Session 2026-09-25 (sdd-triage, manual)
-
-- Bug reported via defect report `docs/reports/2026-09-25-reconciliation-false-halt-defect.md` (pruned 2026-10-05; `git show 2ce8de0a:docs/reports/2026-09-25-reconciliation-false-halt-defect.md`)
-  (GitHub Issues disabled on this repo — `--from-report` path).
-- Severity: SEV-2. Routed to SDD path (Track C).
-- The `/sdd-*` skills are not registered as invocable in this cloud session, so Track C was executed
-  manually against `.claude/plugins/sdd-suite/skills/sdd-triage/reference/track-c-sdd.md` (the
-  bug-triage runbook sanctions manual execution when the skill is unavailable).
-- Feature number: **206** = `max(existing NNN=205) + 1` per root CLAUDE.md numbering rule (the
-  track-c script's count-based formula returned 212 due to gap/duplicate prefixes — the max+1 rule is
-  authoritative).
-- Created: status.md, feature.md, product-spec.md, acceptance.feature (5 regression scenarios),
-  context.md.
-- Affected services: xstockstrat-trading, xstockstrat-portfolio.
-- Root cause hypothesis: position-side reconciliation trusts `ListPositions` as authoritative "what
-  the platform placed" with no `trading.orders` DB-grounding (unlike the hardened order side);
-  compounded by `processPositionSync` deleting order-fill rows on an empty broker snapshot.
-- Recommended design depth: **quick** — `/sdd-design fix-reconciliation-false-halt quick`. Rationale:
-  the track-c C-0 heuristic scores ≥2 services as `full`, but the design is already tightly scoped and
-  user-approved (defense-in-depth across the two services, no proto/migration/config), so a single
-  adversarial round is proportionate. No proto, no DB migration, no config key changes.
-- **Branch deviation (recorded, P-04):** the harness pins development to
-  `claude/flow-investigation-4blorq` (branched from and PR'd into `main-dev`); the SDD-canonical
-  `feature/<slug>` branch model and `/sdd-execute` per-step branches are therefore not used. The
-  code changes land directly on `claude/flow-investigation-4blorq` per explicit user direction
-  ("Track C on the assigned branch").
-- User decision (AskUserQuestion): fix scope = **defense-in-depth across both services**; process
-  track = **Track C on the assigned branch**.
-- SDD Track C artifacts committed as `ff43313` and pushed to `claude/flow-investigation-4blorq`.
-
-## Session 2026-09-25 (sdd-design quick, manual)
-
-- Wrote recon.md (grounded dossier) + design.md (defense-in-depth: trading `trading.orders`
-  grounding of the position-side check + portfolio empty-snapshot delete guard).
-- One adversarial round via the `design-buddy:adversary` agent (the debate step `/sdd-design quick`
-  runs internally). Verdict: **NEEDS WORK**, no Floor breach. Findings + resolutions:
-  - **HIGH (fixed in design)**: naive `SUM(filled_qty)` double-counts because `trading.orders` PK is
-    `(order_id, created_at)` and `UpsertOrder` mints a fresh `created_at` on nil `o.CreatedAt`
-    (`trading_repo.go:47-50`), so a logical order can have >1 row. Query changed to
-    `DISTINCT ON (order_id) … ORDER BY order_id, created_at DESC` before summing (mirrors `GetOrder`).
-  - MEDIUM (documented): stalled-`pollFills` residual; corporate-action splits (pre-existing).
-  - LOW (documented/waived): indefinite ghost on dashboard-only close (corrected in Open Risk 1);
-    net-zero foreign masking; epsilon justification. Change-2 right-sizing waived (user-approved
-    defense-in-depth + defect Expected demands the projection not be transiently zeroed).
-  - Ledger: no `account.positions.*` payload change → `fails.md:2056-2064` not re-triggered;
-    feature-056 dual-source P&L path untouched. Confirmed by adversary.
-- Interface choice upheld: separate `positionQtyLookup` seam (ISP), not widening `brokerOrderIDLookup`.
-- Status: draft → design-approved.
-
-## Session 2026-09-25 (sdd-spec + execute, manual, on claude/flow-investigation-4blorq)
-
-- Wrote implementation-spec.md (6 steps). Implemented all steps on the harness-pinned branch (no
-  `/sdd-execute` per-step branches — the `/sdd-*` skills are not invocable in this session).
-- **Step 1** `TradingRepo.NetFilledQtyBySymbol` (`trading_repo.go`) — `DISTINCT ON (order_id)` dedup +
-  signed SUM (adversary HIGH fix). **Step 2** `positionQtyLookup` seam + `reconcilePositionLookup`
-  field wired `= repo` in `NewTradingService`. **Step 3** `reconcileTick` position side DB-grounded
-  (`qtyApproxEqual`, fail-safe on lookup error). **Step 4** portfolio `shouldReconcileSyncDeletions`
-  guard in `processPositionSync` (empty broker snapshot no longer purges).
-- **Step 5 tests** (all green): trading reconcile — `ExplainedByPlatformOrders_NoHalt` (@AC-1),
-  `PositionNetLookupError_SkipsHalt` (@AC-3), existing `CaughtViaPositionSide` still halts (@AC-2);
-  trading repo pgxmock — `NetFilledQtyBySymbol_SumsSignedAndDedups` + empty-input short-circuit;
-  portfolio — `TestShouldReconcileSyncDeletions` table (@AC-4/@AC-5 + no-regression).
-- **Step 6 validate**: `GOWORK=off go build/vet/test ./...` green for both services.
-- **Context teardown (manual, plugin unavailable):** the `/context-forge:context-constitution refresh`
-  command is not registered in this cloud session (only `/context-forge:context-scrubber` is), so the
-  teardown was done by hand per the root CLAUDE.md rule: re-read every touched context file against the
-  code and reconciled the grounded drift — updated **PORTFOLIO-10** (empty-snapshot wipe now gated by
-  `shouldReconcileSyncDeletions`), `xstockstrat-trading/CLAUDE.md` (position side now DB-grounded), and
-  `xstockstrat-portfolio/CLAUDE.md` (empty-snapshot delete guard). No trading context-constitution
-  invariant described the position-side comparison, so none needed changing; the line-36 async-emit
-  gotcha is unaffected (the new lookup uses the poller ctx, consistent with it).
-- Status: in-progress → code-completed. Next: PR `claude/flow-investigation-4blorq` → `main-dev`.
-
-## Session 2026-09-25 (CI: feature status automation)
-
-- Promotion PR #1181 merged to main
-- Feature promoted and committed: eee580622c92a27a5e6dc22e6919075924b01b84
-- Status updated: `code-completed` → `launched`
-- Launched date: 2026-09-25
+**What**: SEV-2 false halt: the platform filled a paper `BUY 10 AMAT`, then the reconciliation poller compared `broker.GetPositions()` with `portfolio.ListPositions`, saw 0 in the projection and halted the account with `quantity_discrepancy (AMAT)`. The position-side comparator was the unhardened twin of the order side (hardened after an earlier production false halt). Two-part fix, shipped on the harness branch `claude/flow-investigation-4blorq` and promoted via PR #1181: trading clears a divergence when the platform's own net filled quantity in `trading.orders` explains the broker quantity (`trading.go:2020-2060`, `trading_repo.go:163-200`), and portfolio no longer lets an empty broker snapshot purge order-fill-derived rows (`portfolio_service.go:1022-1082`).
+**Why (irrecoverable rationale)**: The projection (`ListPositions`) is derived and lags fill→ledger→portfolio, so it cannot be the ground truth for "what the platform placed"; only `trading.orders` is. Two independent mechanisms could zero the projection: fold lag past the grace window, and an empty `account.positions.synced` that purges rows via `DeletePositionsNotInSync(…, [])`, which can persist up to 5 minutes. Defense-in-depth across both services was a user decision (AskUserQuestion); the "no transient zeroing" expectation made the portfolio change non-optional. The halt is a safety gate that must keep catching genuinely foreign positions, so grounding is exact-net matching, not suppression.
+**Rejected alternatives**: A trading-only or portfolio-only fix (each leaves the other mechanism live); raising `trading.reconciliation.grace_ticks` (a band-aid that does not close the 5-minute empty-snapshot window and weakens foreign-position detection; offered only as a stopgap); suppressing the position-side check (removes the control against dashboard-placed positions); a longer grace against `ListPositions` (still trusts a derived projection); widening `brokerOrderIDLookup` instead of a separate `positionQtyLookup` seam (ISP, upheld by the adversary); memory-first grounding via `s.orders` (fully-FILLED orders are evicted from it).
+**Scars & gotchas**: `trading.orders` is a hypertable with PK `(order_id, created_at)` and `UpsertOrder` mints a fresh `created_at` when nil (`trading_repo.go:47-50`), so one order can have several rows; a naive `SUM(filled_qty)` double-counts (adversary HIGH). The shipped query dedups with `DISTINCT ON (order_id) … ORDER BY order_id, created_at DESC`. A grounding-lookup error must set `skipPositionCheck` for the tick without `continue`-ing past `resolveUnknownIntents`. A new lookup field must be wired into `newTestReconciliationServiceWithIntents` or existing tests nil-deref. The sync guard keys on `RealizedPnl == nil`, not an empty list alone: an offline account's full-close recompute is `positions: []` with `realized_pnl` set (even `$0`) and must still purge; the `realized_pnl` upsert must stay OUTSIDE the guard (feature-056 dual-source P&L). Shorts use the signed net (SELL negative) with the epsilon compare on signed values. The track-c script's count-based numbering returned 212; `max(NNN)+1` gave 206. The `/sdd-*` skills and the context-forge refresh were not invocable in the cloud session; execute and teardown were done by hand.
+**Permanent deviations**: The inline `if len(sync.Positions)==0 && sync.RealizedPnl==nil` shipped as an extracted pure predicate `shouldReconcileSyncDeletions(positionCount, realizedPnl)` with a `slog.Debug` on skip (`portfolio_service.go:1029,1076-1082`) — reason inferred (unit-testable), not recorded. The spec promised a caller-level test (empty snapshot ⇒ no delete, offline empty ⇒ delete, non-empty ⇒ delete); only `TestShouldReconcileSyncDeletions` (`portfolio_offline_test.go:74`) shipped, so `@AC-4`/`@AC-5` are proven at the predicate level only — `portfolio_fill_sync_race_test.go:84` calls `processPositionSync` but with a NON-empty snapshot for the 2026-10-03 lost-update defect. `@AC-2`'s "account is halted" is asserted by no existing test (`trading_reconciliation_test.go:606-637` checks only the `mismatch_found` event for AAPL, never `isAccountHalted`, and reaches the net-0 precondition only via the default fake); `context.md` overstated it.
+**Cross-feature signal**: The generalised lesson ("enumerate every comparator feeding the gate") is fails.md:2535-2552; feature 189 (now 192) later stored broker order ids in `trading.order_brackets`, reopening the same class as the open SEV-1 bracket-legs report. LIFETIME-NET LIMITATION (irrecoverable): `NetFilledQtyBySymbol` sums every order row for `(account_id, symbol)` with no time or position window (`trading_repo.go:173-183`; no retention policy), so the net equals the broker quantity only if every reduction of the position was itself a `trading.orders` fill. Bracket-leg fills (leg ids live only in `trading.order_brackets` via `UpdateBracketStatus`, never passed to `UpsertOrder`; `order.filled` is emitted only by `applyBrokerOrderStatus`, `trading.go:1723`, fed by `pollFills` from `s.orders`), dashboard closes, paper resets and corporate actions break that — after one such event the net for that symbol stays inflated permanently and grounding degrades to the pre-206 behaviour. A partial leg fill can still halt. Brackets exist only for auto-sized entries (`needSizing && sizedStopPrice > 0`, `trading.go:676,1734-1735`; code default `bracket_orders_enabled` true, seeded false by config migration 013 and flipped true by 029). HYPOTHESIS (inference, unverified): a stop-out leaves a ghost portfolio row of size N; a later platform BUY of M folds onto it (portfolio N+M vs broker M) while the lifetime net is also N+M, so grounding does not clear it and the 2-tick (120 s) grace expires before the 5-minute broker sync — a halt is plausible, which would reclassify the ghost position from "rare SEV-3 stale read" to a halt source on re-entry.
+**Deferred follow-ons**: Known residuals, not closed: a stalled `pollFills` leaving `trading.orders.filled_qty` stale; corporate actions (splits); a net-zero foreign position (dashboard buy N + sell N) is masked (accepted); the ghost position after a dashboard-only or bracket-leg full close (design.md:79-85 reasoned "a stale read (SEV-3) beats deleting a real position and false-halting (SEV-2)" and that "dashboard-only closes are rare" — weak given default-on brackets); bracket-leg fills; the lifetime-net skew. Float epsilon `1e-6` is absolute (safe for realistic share counts). DOC FIX DONE IN THIS RUN: `services/xstockstrat-trading/CLAUDE.md:243-245` said the residuals were "documented in feature 206 `design.md`" (listing only two) and is repointed to this synthesis; `fails.md:2539` cites "206 recon.md:53" (the "unhardened twin" quote is preserved above).
+**Runtime-invariant recommendations (→ /context-constitution)**: Confirm PORTFOLIO-10 (`services/xstockstrat-portfolio/docs/context-constitution.md:29`) carries "an empty broker snapshot (`realized_pnl` nil) never purges; an offline recompute (`realized_pnl` non-nil, even `$0`) does". Candidate TRADING-*: the position-side reconcile is grounded on deduped `trading.orders` net fills, and any new persisted home of platform-originated orders or fills (bracket legs) must be added to both the order-side known-set and the position-side net (also proposed at fails.md:2552). Candidate: a delete keyed on set-membership must not run on an empty set from a non-authoritative source.
+**Ledger entries written**: insights.md (1), fails.md (1) — see the 2026-10-07 entries.
+**Pruned artifacts**: product-spec.md, recon.md, design.md, implementation-spec.md — last present at 9a1d3bea (`git show 9a1d3bea:docs/roadmap/features/206-fix-reconciliation-false-halt/<file>`).
