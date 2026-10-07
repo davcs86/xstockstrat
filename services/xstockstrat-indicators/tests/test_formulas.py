@@ -109,9 +109,7 @@ class TestFormulasRepository:
         pool.fetchval = AsyncMock(return_value=1)
         pool.fetch = AsyncMock(return_value=[row])
         repo = FormulasRepository(pool)
-        rows, _ = await repo.list(
-            author_filter="user-1", include_public=True, page_size=0, page_offset=0
-        )
+        rows, _ = await repo.list_visible("user-1", page_size=0, page_offset=0)
         assert rows[0]["outputs"] == []
 
     async def test_list_decodes_parameters(self):
@@ -120,9 +118,7 @@ class TestFormulasRepository:
         pool.fetchval = AsyncMock(return_value=1)
         pool.fetch = AsyncMock(return_value=[row])
         repo = FormulasRepository(pool)
-        rows, _ = await repo.list(
-            author_filter="user-1", include_public=True, page_size=0, page_offset=0
-        )
+        rows, _ = await repo.list_visible("user-1", page_size=0, page_offset=0)
         assert rows[0]["parameters"] == []
 
     async def test_get_by_id_returns_none_when_not_found(self):
@@ -138,9 +134,7 @@ class TestFormulasRepository:
         pool.fetchval = AsyncMock(return_value=2)
         pool.fetch = AsyncMock(return_value=[row1, row2])
         repo = FormulasRepository(pool)
-        rows, total = await repo.list(
-            author_filter="user-1", include_public=True, page_size=50, page_offset=0
-        )
+        rows, total = await repo.list_visible("user-1", page_size=50, page_offset=0)
         assert total == 2
         assert len(rows) == 2
         assert rows[1]["input_schema"] == {"k": "v"}
@@ -167,7 +161,7 @@ class TestFormulasRepository:
         pool.fetchval = AsyncMock(return_value=0)
         pool.fetch = AsyncMock(return_value=[])
         repo = FormulasRepository(pool)
-        await repo.list(author_filter="u", include_public=True, page_size=0, page_offset=0)
+        await repo.list_visible("u", page_size=0, page_offset=0)
         assert "deleted_at IS NULL" in pool.fetch.await_args.args[0]
         assert "deleted_at IS NULL" in pool.fetchval.await_args.args[0]
 
@@ -254,14 +248,14 @@ class TestRegisterFormulaAuthorGate:
             await servicer.RegisterFormula(req, ctx)
         assert ctx.abort.await_args.args[0] == grpc.StatusCode.INVALID_ARGUMENT
 
-    async def test_explicit_author_wins(self):
+    async def test_body_author_is_ignored(self):
         from gen.indicators.v1 import indicators_pb2
 
         servicer = self._servicer()
         req = indicators_pb2.RegisterFormulaRequest(name="f", source="x = 1", author="explicit")
         ctx = _ctx([("x-user-id", "user-42")])
         resp = await servicer.RegisterFormula(req, ctx)
-        assert servicer._formulas[resp.formula_id].author == "explicit"
+        assert servicer._formulas[resp.formula_id].author == "user-42"
 
     async def test_aborts_without_author_or_user_id(self):
         from gen.indicators.v1 import indicators_pb2
@@ -276,7 +270,7 @@ class TestRegisterFormulaAuthorGate:
 
 
 # ---------------------------------------------------------------------------
-# Update/Delete admin-scope override (feature 049 Part A, OQ-A)
+# Update/Delete ownership — the ADMIN scope grants no override (AC-28)
 # ---------------------------------------------------------------------------
 
 
@@ -484,13 +478,17 @@ class TestFormulaAdminOverride:
         resp = await servicer.UpdateFormula(req, _ctx([]))
         assert resp.formula.formula_id == "f"
 
-    async def test_non_owner_admin_override_updates(self):
+    async def test_non_owner_admin_update_denied(self):
         from gen.indicators.v1 import indicators_pb2
 
         servicer = _repo_servicer(author="owner")
         req = indicators_pb2.UpdateFormulaRequest(formula_id="f", user_id="someone-else", name="n")
-        resp = await servicer.UpdateFormula(req, _ctx([("x-access-scope", "7")]))
-        assert resp.formula.formula_id == "f"
+        ctx = _ctx([("x-access-scope", "7")])
+        ctx.abort = AsyncMock(side_effect=Exception("aborted"))
+        with pytest.raises(Exception):
+            await servicer.UpdateFormula(req, ctx)
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.PERMISSION_DENIED
+        servicer._repo.update.assert_not_awaited()
 
     async def test_non_owner_no_admin_denied(self):
         from gen.indicators.v1 import indicators_pb2
@@ -503,13 +501,17 @@ class TestFormulaAdminOverride:
             await servicer.UpdateFormula(req, ctx)
         assert ctx.abort.await_args.args[0] == grpc.StatusCode.PERMISSION_DENIED
 
-    async def test_delete_non_owner_admin_override(self):
+    async def test_delete_non_owner_admin_denied(self):
         from gen.indicators.v1 import indicators_pb2
 
         servicer = _repo_servicer(author="owner")
         req = indicators_pb2.DeleteFormulaRequest(formula_id="f", user_id="someone-else")
-        resp = await servicer.DeleteFormula(req, _ctx([("x-access-scope", "7")]))
-        assert resp.success is True
+        ctx = _ctx([("x-access-scope", "7")])
+        ctx.abort = AsyncMock(side_effect=Exception("aborted"))
+        with pytest.raises(Exception):
+            await servicer.DeleteFormula(req, ctx)
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.PERMISSION_DENIED
+        servicer._repo.delete.assert_not_awaited()
 
     async def test_delete_non_owner_no_admin_denied(self):
         from gen.indicators.v1 import indicators_pb2
@@ -747,7 +749,7 @@ class TestFormulaPartialUpdate:
         assert kw["description"] == "new desc"  # masked field written
         assert kw["name"] == "orig name"  # unmasked preserved
         assert kw["source"] == "x = 1"
-        assert kw["is_public"] is True
+        assert kw["is_public"] is False
         assert kw["parameters"] == [{"name": "keepme"}]
         assert kw["outputs"] == [{"name": "s2"}]
         assert kw["warmup_period"] == 7

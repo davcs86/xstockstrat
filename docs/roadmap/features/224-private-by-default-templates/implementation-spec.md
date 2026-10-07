@@ -1178,7 +1178,7 @@ grep -n "x-user-id\|x-access-scope\|x-trace-id" app/admin_audit.py   # trio forw
 
 ### Step 15 — test: indicators visibility, identity, admin read, system rules
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/conftest.py` — modify (add shared `ctx_with(metadata, peer_sans=())`)

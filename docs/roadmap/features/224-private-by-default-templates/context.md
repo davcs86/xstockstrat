@@ -614,3 +614,43 @@ OQ-4 to OQ-6 remain for /sdd-design.
 - **Files:** `tests/test_unreadable_formula.py`; rename follow-through in `tests/test_analysis_servicer.py` and `tests/test_owner_header_guard.py`.
 - **Deviation:** D-13.
 - **Note:** REGISTER and UPDATE now make one extra `GetFormula` per referenced formula. Consolidating those fetches is possible later; not done here.
+
+### Step 13 — migration: indicators `007_private_formulas_templates` [done]
+- **Visibility:** sets `is_public=FALSE`, guarded by a column-exists check, and drops the unnamed partial `is_public` index, found by looking up its definition in `pg_indexes`.
+- **New columns:** `origin_template_id`, `origin_template_version`, and `pending_intent_id` with a partial index.
+- **New table:** `formula_templates`, with no seed rows. No formula row is deleted (AC-22).
+- **Down file:** reverses the up file and recreates `formulas_is_public_idx`.
+- **Offline verification:** the number is correct (006 → 007), up and down are in parity, and the renderer copies both files unchanged (no header).
+- TDD: N/A.
+- Deviation: D-14, which includes the N-1 `ListFormulas` rollback note.
+
+### Step 14 — service: indicators owner-only visibility, header identity, admin read/audit, SAN-bound bypass [done]
+- **New modules:**
+  - `app/peer_identity.py`: an exact SAN match that fails closed.
+  - `app/admin_audit.py`: a per-service copy of the analysis helper (concurrency 4, at most 100 owners per page, forwards only the header trio).
+- **Servicer:**
+  - **Reads:** a formula is readable by its owner, by `system`, or by the analysis reader **bound to SAN `xstockstrat-analysis`**.
+  - **Identity:** the author comes from the header only. An ungranted `x-user-id: system` is denied on all six formula RPCs.
+  - **ExecuteFormula:** missing → NOT_FOUND, readable → run, ADMIN → PERMISSION_DENIED, anyone else → NOT_FOUND (AC-28).
+  - **Admin reads:** `GetFormula` and the `ListFormulas` owner selector are audited with 1+K events and fail closed (UNAVAILABLE).
+  - **Admin override removed:** `UpdateFormula`/`DeleteFormula` no longer let an admin act on another user's formula (the body `user_id` fallback stays in N).
+  - Pending rows are invisible and never cached.
+- **Repository:** `list_visible` and `list_owned`. The seed sets `IS_PUBLIC=False`. `main.py` wires the ledger channel through `LEDGER_ENDPOINT`.
+- **Files:** `app/{peer_identity,admin_audit,main}.py`, `app/handlers/servicer.py`, `app/services/formulas_repository.py`, `app/formulas/fundamentals_value_quality.py`.
+- Deviation: D-15.
+
+### Step 15 — test: indicators visibility, identity, admin read, system rules [done]
+- **`tests/conftest.py`:** adds `ctx_with(metadata, peer_sans)`.
+- **`test_formula_read_authz.py`, rewritten:** a formerly public formula is invisible to other users, and the analysis bypass is trusted only with the matching SAN.
+- **New `test_private_formulas.py`** (30 tests) covers:
+  - AC-2, AC-3, AC-4, AC-6, AC-23 and AC-28;
+  - the system rules on all six RPCs;
+  - pending rows and the cache;
+  - the admin owner selector, plus the audit header trio and fail-closed behavior.
+- **TDD:** RED was 34 failed and 175 passed, failing for the expected reasons (`DID NOT RAISE`, missing `list_visible`, `'system' == 'bob'`, and others). GREEN is 209 passed, coverage 86.01% (≥50), ruff clean.
+- **Files:** `tests/{conftest,test_formula_read_authz,test_private_formulas,test_formulas,test_fundamentals_formula}.py`.
+- Deviation: D-16.
+- **Not done here:**
+  - indicators `CLAUDE.md` still describes public formulas (Step 40);
+  - `test_formulas.py` still has its own `_ctx` helper (out of file scope);
+  - the duplication between the analysis and indicators `admin_audit.py` was not measured. It is accepted per design.md (one copy per service).
