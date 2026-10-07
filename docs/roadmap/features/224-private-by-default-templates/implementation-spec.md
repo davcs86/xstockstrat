@@ -2124,7 +2124,7 @@ grep -n "_validate_template_definition" app/handlers/servicer.py
 
 ### Step 32 — test: strategy template deep copy, atomicity, id collisions
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_strategy_templates.py` — create

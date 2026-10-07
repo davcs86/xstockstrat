@@ -813,3 +813,32 @@ OQ-4 to OQ-6 remain for /sdd-design.
   - the repository SQL.
 - **TDD:** RED was a ModuleNotFoundError, then 30 failed (`NotImplementedError` and a missing `resolve_intent`). GREEN is 242 passed, coverage 84.81%, ruff clean.
 - **Follow-through:** one positional bind index updated in `test_formulas.py`.
+
+### Step 31 — service: analysis strategy templates, `InstantiateTemplate` saga, reconcile sweep, origin on reads [done]
+- **New repositories:**
+  - `strategy_templates.py`: list, get, create, update (bumps version), retire, and a batched latest-version lookup.
+  - `template_intents.py`: create, a state-checked `cas` (optionally owner-checked, can run on a supplied connection), and a stale-intent query.
+  - `strategies.create_from_template`: runs the PENDING→COMMITTED CAS and the strategy insert in **one transaction**.
+- **Saga, request path:**
+  1. Write the intent row.
+  2. Call indicators `InstantiateTemplate(template_ids, intent_id)` to create the pending copies.
+  3. Commit transaction: CAS PENDING→COMMITTED, then insert the strategy.
+  4. `ResolveTemplateIntent(commit)`, then FINALIZED.
+  5. On failure: ABORTING → `ResolveTemplateIntent(abort)` → ABORTED.
+- **Metadata:** the request path sends the caller's header trio plus `x-internal-caller: analysis-template-saga`. The sweep sends the intent owner's `x-user-id` with the same grant and a fresh trace id.
+- **Checks:** the blend guard runs on the final `_N`-suffixed id. A caller-supplied id the caller already owns returns `ALREADY_EXISTS` before any write (AC-34).
+- **Reconcile sweep:** `DurableSchedule` job `template_intent_sweep`, using `_INTENT_STALE_SECONDS=900` and `_INTENT_SWEEP_SECONDS=300` (fixed constants, operator-confirmed).
+- **Template validation:** `_validate_template_definition` reads indicators `ListTemplates` for each template's outputs and fundamental inputs, and never calls `GetFormula`. Named outputs such as `z.upper` validate.
+- **Origin on reads:** GetStrategy, ListStrategyDefinitions and ListStrategies (`StrategyScore.origin`) each fill origin with one batched lookup per response.
+- **Deviation:** D-28.
+
+### Step 32 — test: strategy template deep copy, atomicity, id collisions [done]
+- **New `tests/test_strategy_templates.py` (30 tests):**
+  - AC-13, AC-18, AC-19, AC-20, AC-34.
+  - Blend guard on the final id; retired template; lost CAS.
+  - Sweep handling of stale PENDING, ABORTING and COMMITTED intents, including retry.
+  - Saga headers on both paths via `_assert_indicators_headers(…, path="template-saga")`, which closes the D-18 follow-up.
+  - Template validation (`z.upper` passes, `z.lower` is rejected, no `GetFormula`).
+  - Origin on reads, and repository SQL shapes.
+- **TDD:** RED was a ModuleNotFoundError, then 30 failed (missing RPCs, constants and `create_from_template`; no abort; no origin). GREEN is 964 passed, coverage 85.81%, ruff clean.
+- **Contract assumed of indicators (implemented in Step 27):** `formula_ids_by_template` covers every requested id, and resolve is idempotent.
