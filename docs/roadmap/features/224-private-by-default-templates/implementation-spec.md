@@ -2827,7 +2827,7 @@ grep -n "admin-gated" services/xstockstrat-ingest/CLAUDE.md
 
 ### Step 41 — docs: create follow-up feature "224 enforce + contract" and its merge-order row
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/roadmap/features/`
 **Files**:
 - `docs/roadmap/features/<NNN>-private-by-default-enforce-contract/status.md` — create (via `/sdd-story`)
@@ -3101,3 +3101,8 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Deferred**: Step 40 item 8 owns the `surface-signal-weight-decay-config.feature` route re-home; the equivalent e2e assertions already run on `/insights/signal-sources`. `e2e/mobile-overflow.spec.ts` still checks `/config-ui/sources` and has no case for `/insights/signal-sources`; it is outside Step 39 Files.
 - **Pre-existing**: 3 unused-variable lint errors in `e2e/` lie in lines this step did not change.
 - **Disposition**: within scope.
+
+### D-35 — Step 41: follow-up resolved to 225; committed ahead of Step 40
+- **Number**: `225-private-by-default-enforce-contract`. The max NNN across `main-dev` and every remote `feature/*`/`claude/*` branch was 224.
+- **Order**: Step 41 was committed before Step 40 because Step 40's doc teardown was still in flight. The two steps touch disjoint files.
+- **merge-order.md**: a new row (225 waits for 224 to be launched) pre-reserves analysis `027`, indicators `008` and ingest `014`.
