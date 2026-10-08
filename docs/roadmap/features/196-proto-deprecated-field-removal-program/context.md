@@ -231,3 +231,30 @@ Only then may Steps 2–7 move off `blocked`. Until then 196 ships **zero code c
 - Files modified: `services/xstockstrat-portfolio/internal/service/watchlist_service_test.go`,
   `services/xstockstrat-portfolio/internal/repository/watchlist_repo_test.go`
 - Deviations: D-6.
+
+### Step 7 — proto integrity / enum retention / request-only no-op [done]
+- `git diff origin/main-dev -- packages/proto/` empty (no `.proto`, no generated-stub change); `buf lint`
+  OK; `buf breaking --against main-dev` → no change (buf 1.72.0 installed via `go install`, D-4 style).
+- Deprecated enum members (`TIMEFRAME_1MIN/_15MIN/_1HOUR`, `ENVIRONMENT_DEV`, `VALUE_TYPE_FLOAT_MAP`)
+  still defined + `[deprecated = true]`; 38 `deprecated = true` occurrences (33 at triage + later features; none removed).
+- Request-only: trading identity is header-authoritative (`propagation.go:36` `UserID: first(md.Get("x-user-id"))`).
+- TDD: N/A (verification only).
+
+### Integration (ALL-DONE)
+- C-16 promotion: @AC-8 → `services/xstockstrat-marketdata/acceptance/proto-deprecated-field-removal-program.feature`;
+  @AC-6 → ingest suite; @AC-2/@AC-7 → portfolio suite; @AC-3/@AC-5/@AC-9 → `docs/sdd/business-rules/platform.feature`.
+  @AC-1/@AC-4 not promoted (`@out-of-scope @rejected-removal`).
+- Teardown (context drift, by hand — `/context-forge:context-constitution` is not available in this
+  session): `services/xstockstrat-marketdata/CLAUDE.md` (stream bars "carry the canonical `1m`
+  timeframe" → labelled via `timeframe_enum`, string not populated) and
+  `services/xstockstrat-marketdata/docs/context-constitution.md` MARKETDATA-1 (string written back onto
+  the **source** bar for `InsertBars`, never returned). Re-read `packages/proto/docs/context-constitution.md`
+  PROTO-2 + the `timeframe` naming note: still true (fields remain defined). Ingest/portfolio CLAUDE.md
+  do not describe the changed fields.
+- Merge-order: 196 has no row in `merge-order.md`.
+
+## Session 2026-10-08 — sdd-execute
+**Steps this session**: 1–7
+**Progress**: 7 done / 7 total
+**Stopped at**: all complete
+**Next**: merge the integration PR; then `/promote`.

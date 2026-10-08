@@ -1,6 +1,6 @@
 # Implementation Spec: proto-deprecated-field-removal-program
 
-**Status**: `in-progress`
+**Status**: `complete`
 **Created**: 2026-09-19
 **Feature**: `docs/roadmap/features/196-proto-deprecated-field-removal-program/feature.md`
 **Total Steps**: 7
@@ -331,7 +331,7 @@ guard; a `test` step is still required). Also run
 
 ### Step 7 — test: proto-integrity, enum-retention, and request-only no-op verification
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto` (+ cross-service verification)
 **Files**:
 - (verification only — no source file modified)
