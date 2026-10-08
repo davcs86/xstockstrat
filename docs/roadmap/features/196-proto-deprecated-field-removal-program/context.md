@@ -200,3 +200,16 @@ Only then may Steps 2–7 move off `blocked`. Until then 196 ships **zero code c
   non-breaking design — closes the 2026-09-26 review NOTE), `implementation-spec.md` (Step 1 → done,
   Steps 2–7 → pending), `status.md` (→ in-progress), `context.md`.
 - Deviations: none.
+
+### Steps 2–3 — marketdata `Bar.timeframe` omission + tests [done]
+- `scanBars` (shared by `QueryBars`/`QueryRecentBars`/`QueryBarsBatch`) and the stream `dispatch` no
+  longer set the deprecated string; `TimeframeEnum` unchanged. The two service paths that return
+  `barFromAlpaca` bars directly now clear it after persistence (D-1). `barFromAlpaca` and `InsertBars`
+  untouched (EXCLUDE).
+- TDD red (before the change): `TestDispatchBarCarries1MinEnum` got "1m";
+  `TestScanBars_OmitsDeprecatedTimeframeString` got "1d"; `TestBatchGetBars_ColdPathOmitsDeprecatedTimeframe`
+  got "1d"; `TestTruncateBars_OmitsDeprecatedTimeframe` got "1d" (both branches). Green after.
+- Verification: `go test ./... -race` all ok; CI-scoped coverage **70.9%** (≥40%); `golangci-lint run`
+  → 0 issues.
+- Files modified: `services/xstockstrat-marketdata/internal/{repository/marketdata_repo.go,repository/marketdata_repo_test.go,alpaca/stream.go,alpaca/stream_test.go,service/marketdata_service.go,service/marketdata_service_test.go}`
+- Deviations: D-1, D-2, D-3, D-4 (Deviation Log). Steps committed together so no commit is red.

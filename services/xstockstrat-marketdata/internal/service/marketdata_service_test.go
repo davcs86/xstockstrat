@@ -2466,3 +2466,53 @@ func TestBackfillFundamentals_RederivesStaleStoredPeriods_AC1_AC2_feature223(t *
 		t.Fatalf("idempotent re-run re-derived %d / invalidated %v", len(repo.rederived), repo.snapshotDeletes)
 	}
 }
+
+// ── feature 196: deprecated Bar.timeframe string omitted on the source-bar response paths ────────
+
+// TestBatchGetBars_ColdPathOmitsDeprecatedTimeframe — source bars (barFromAlpaca keeps the string
+// because InsertBars persists it) must not carry it once returned to the caller.
+func TestBatchGetBars_ColdPathOmitsDeprecatedTimeframe(t *testing.T) {
+	barsSrc := &fakeBatchBarsSource{bars: map[string][]*marketdatav1.Bar{
+		"AAPL": {{Symbol: "AAPL", Time: timestamppb.New(time.Unix(1000, 0)), Close: 1, Timeframe: "1d", TimeframeEnum: commonv1.Timeframe_TIMEFRAME_1DAY}}, //nolint:staticcheck // SA1019: source bars carry the deprecated string (feature 196 EXCLUDE edge)
+	}}
+	reg := source.NewRegistry()
+	reg.Register("alpaca", barsSrc)
+	svc := &MarketDataService{registry: reg, warmSymbols: map[string]struct{}{}}
+
+	resp, err := svc.BatchGetBars(context.Background(), &marketdatav1.BatchGetBarsRequest{
+		Symbols: []string{"AAPL"}, Timeframe: "1d",
+		Start: timestamppb.New(time.Unix(0, 0)), End: timestamppb.New(time.Unix(10000, 0)),
+	})
+	if err != nil {
+		t.Fatalf("BatchGetBars: %v", err)
+	}
+	if len(resp.Results) != 1 || len(resp.Results[0].Bars) != 1 {
+		t.Fatalf("expected one AAPL bar, got %v", resp.Results)
+	}
+	bar := resp.Results[0].Bars[0]
+	if bar.Timeframe != "" { //nolint:staticcheck // SA1019: asserting the deprecated string timeframe field is omitted (feature 196)
+		t.Errorf("expected deprecated Timeframe string omitted, got %q", bar.Timeframe) //nolint:staticcheck // SA1019: see above
+	}
+	if bar.TimeframeEnum != commonv1.Timeframe_TIMEFRAME_1DAY {
+		t.Errorf("expected TimeframeEnum=TIMEFRAME_1DAY, got %v", bar.TimeframeEnum)
+	}
+}
+
+// TestTruncateBars_OmitsDeprecatedTimeframe — the GetBars cache-write-failure fallback returns
+// source bars directly, so it is a response edge too.
+func TestTruncateBars_OmitsDeprecatedTimeframe(t *testing.T) {
+	live := []*marketdatav1.Bar{
+		{Symbol: "AAPL", Timeframe: "1d", TimeframeEnum: commonv1.Timeframe_TIMEFRAME_1DAY}, //nolint:staticcheck // SA1019: source bars carry the deprecated string (feature 196 EXCLUDE edge)
+		{Symbol: "AAPL", Timeframe: "1d", TimeframeEnum: commonv1.Timeframe_TIMEFRAME_1DAY}, //nolint:staticcheck // SA1019: see above
+	}
+	for _, recent := range []bool{true, false} {
+		for _, b := range truncateBars(live, 1, recent) {
+			if b.Timeframe != "" { //nolint:staticcheck // SA1019: asserting the deprecated string timeframe field is omitted (feature 196)
+				t.Errorf("recent=%v: expected deprecated Timeframe string omitted, got %q", recent, b.Timeframe) //nolint:staticcheck // SA1019: see above
+			}
+			if b.TimeframeEnum != commonv1.Timeframe_TIMEFRAME_1DAY {
+				t.Errorf("recent=%v: expected TimeframeEnum kept, got %v", recent, b.TimeframeEnum)
+			}
+		}
+	}
+}

@@ -129,7 +129,7 @@ Proto/Platform sign-off the omission steps rely on.)
 
 ### Step 2 — service: Omit deprecated `Bar.timeframe` string at the two pure response edges (marketdata)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/repository/marketdata_repo.go` — modify (`scanBars`, the DB→proto read edge)
@@ -178,7 +178,7 @@ BSR-published module (no field/type removal, deprecation-comment intact).
 
 ### Step 3 — test: marketdata Bar.timeframe omission + EXCLUDE / GetBars regression guard
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/repository/marketdata_repo_test.go` — modify | create (assert `scanBars` output)
@@ -385,3 +385,31 @@ guard; a `test` step is still required). Also run
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### D-1 (Step 2) — two more response edges for `barFromAlpaca` bars
+- **Spec said**: change `scanBars` and the stream edge only; `barFromAlpaca` is EXCLUDE.
+- **Found**: `barFromAlpaca` bars also reach callers **directly** on two service paths —
+  `BatchGetBars`' cold path (the singleflight closure returns the source `coldMap`) and the GetBars
+  cache-write-failure fallback (`truncateBars(live, …)`). Omitting only at `scanBars` would leave the
+  deprecated string populated on cold/fallback reads, so consumers would see it intermittently.
+- **Done**: `internal/service/marketdata_service.go` — `omitDeprecatedTimeframe` clears the string on
+  those bars **after** `InsertBars` has persisted them (the EXCLUDE invariant holds: the DB write still
+  reads the populated field) and inside the singleflight closure, before the map is shared.
+- **Disposition**: in-scope completion of FR-2 ("every pure response edge", C-10); operator authorized
+  autonomous execution. Tests in `internal/service/marketdata_service_test.go`.
+
+### D-2 (Step 2) — orphaned `streamBarTimeframe` const removed
+- The stream edge was the const's only reader; it is deleted (`unused` lint) and the in-package test
+  comment that named it updated.
+
+### D-3 (Step 3) — `@AC-8` round-trip proven by unit seams, not a live DB
+- `InsertBars`/`QueryBars` run on the concrete `pgxpool` and are not mockable; no DB is started (HARD
+  CONSTRAINT). `@AC-8` is covered by: `scanBars` via pgxmock rows (`TestScanBars_OmitsDeprecatedTimeframeString`),
+  the unchanged `barFromAlpaca` guards (`client_test.go` `TestGetBars_TranslatesCanonicalTimeframe`,
+  the multi-symbol assertion at `:488` — both still assert the string is kept), and the unchanged
+  `InsertBars` arg (`b.Timeframe`). **Disposition**: offline verification; live round-trip deferred to
+  the dev deploy.
+
+### D-4 (tooling) — golangci-lint rebuilt
+- The host `golangci-lint` was built with go1.25 and refuses the go1.27 module; v2.13.1 (the pinned
+  version) was rebuilt with `GOTOOLCHAIN=go1.27.0`. **Disposition**: CI-equivalent fallback.
