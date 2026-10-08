@@ -222,7 +222,7 @@ verification (a `test` step is still required). Also run
 
 ### Step 4 — service: Omit deprecated `BackfillJob.timeframe` string at `job_row_to_proto` (ingest)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/handlers/servicer.py` — modify (`job_row_to_proto`)
@@ -259,7 +259,7 @@ behavioral assertion runs in Step 5.
 
 ### Step 5 — test: ingest BackfillJob.timeframe omission
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/test_backfill_jobs.py` — modify (add a `job_row_to_proto` case asserting `timeframe` unset while `timeframe_enum` stays populated)
@@ -413,3 +413,13 @@ _Populated by /sdd-execute as implementation proceeds._
 ### D-4 (tooling) — golangci-lint rebuilt
 - The host `golangci-lint` was built with go1.25 and refuses the go1.27 module; v2.13.1 (the pinned
   version) was rebuilt with `GOTOOLCHAIN=go1.27.0`. **Disposition**: CI-equivalent fallback.
+
+### D-5 (Step 5) — `job_row_to_proto` assertions live in `test_ingest_servicer.py`
+- **Spec said**: modify `tests/test_backfill_jobs.py`.
+- **Found**: that file tests the asyncpg repository SQL only; the mapper's existing coverage is
+  `tests/test_ingest_servicer.py::TestJobRowTimeframeEnum`, which asserted the string was **echoed**
+  (now the superseded behaviour). Adding a parallel test in the repo-SQL file would duplicate it and
+  leave the old assertions red.
+- **Done**: rewrote the three `TestJobRowTimeframeEnum` cases to assert the string is omitted and the
+  (hardcoded) enum kept. `test_cancel_backfill.py` asserts only `timeframe_enum` — unchanged.
+- **Disposition**: test home corrected; same behaviour, C-13 single-consumer literals kept inline.

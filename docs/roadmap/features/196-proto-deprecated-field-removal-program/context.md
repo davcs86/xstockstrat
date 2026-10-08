@@ -213,3 +213,11 @@ Only then may Steps 2–7 move off `blocked`. Until then 196 ships **zero code c
   → 0 issues.
 - Files modified: `services/xstockstrat-marketdata/internal/{repository/marketdata_repo.go,repository/marketdata_repo_test.go,alpaca/stream.go,alpaca/stream_test.go,service/marketdata_service.go,service/marketdata_service_test.go}`
 - Deviations: D-1, D-2, D-3, D-4 (Deviation Log). Steps committed together so no commit is red.
+
+### Steps 4–5 — ingest `BackfillJob.timeframe` omission + tests [done]
+- `job_row_to_proto` drops the `timeframe=` keyword; `timeframe_enum` unchanged. Request-side string
+  handling untouched (FR-5). Covers all three read paths (Get/List/Cancel) since they share the mapper.
+- TDD red: 5/6 `TestJobRowTimeframeEnum` cases failed (got the stored string); the `""` case passed
+  trivially. Green after: `pytest --cov=app` 308 passed, **79.99%**; `ruff check` / `ruff format --check` clean.
+- Files modified: `services/xstockstrat-ingest/app/handlers/servicer.py`, `services/xstockstrat-ingest/tests/test_ingest_servicer.py`
+- Deviations: D-5 (test home).

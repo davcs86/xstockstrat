@@ -97,30 +97,31 @@ def _mk_backfill_resp(bars_written: int, failed_symbols: list[str], expected_bar
 
 
 class TestJobRowTimeframeEnum:
-    """AC-2 / AC-3 — the read path must populate BOTH representations.
+    """AC-2 / AC-3 — the read path populates timeframe_enum; feature 196 @AC-6 omits the
+    deprecated string at this response edge.
 
     Expected enums are HARDCODED. Computing them from `_STR_TO_ENUM` would assert
     the mapper against itself and could never go red (fails.md 2026-07-29/074).
     """
 
     @pytest.mark.parametrize(("stored", "want_enum"), [("15m", 5), ("1h", 3), ("1d", 4)])
-    def test_supported_timeframes_pair_string_and_enum(self, stored, want_enum):
+    def test_supported_timeframes_emit_enum_and_omit_string(self, stored, want_enum):
         row = _job_row("j", ingest_pb2.BACKFILL_STATUS_COMPLETED, timeframe=stored)
         job = job_row_to_proto(row)
-        assert job.timeframe == stored
+        assert job.timeframe == ""
         assert job.timeframe_enum == want_enum
 
-    def test_legacy_alias_row_resolves_but_string_is_untouched(self):
+    def test_legacy_alias_row_resolves_and_string_is_omitted(self):
         row = _job_row("j", ingest_pb2.BACKFILL_STATUS_COMPLETED, timeframe="1Day")
         job = job_row_to_proto(row)
-        assert job.timeframe == "1Day"  # FR-2: echoed unchanged
+        assert job.timeframe == ""
         assert job.timeframe_enum == 4
 
     @pytest.mark.parametrize("stored", ["", "10Min"])
     def test_unmappable_yields_unspecified_without_raising(self, stored):
         row = _job_row("j", ingest_pb2.BACKFILL_STATUS_COMPLETED, timeframe=stored)
         job = job_row_to_proto(row)
-        assert job.timeframe == stored
+        assert job.timeframe == ""
         assert job.timeframe_enum == 0
 
 
