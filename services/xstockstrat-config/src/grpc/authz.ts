@@ -107,6 +107,8 @@ interface SecretCallerGrant {
   keys?: ReadonlyArray<string>;
   /** Key prefixes this caller may resolve (for dynamic keys); a key is granted when it startsWith one. */
   keyPrefixes?: ReadonlyArray<string>;
+  /** When set, the mTLS peer certificate must carry this exact DNS SAN — the header alone is spoofable. */
+  peerSan?: string;
 }
 
 const SECRET_CALLER_ALLOWLIST: ReadonlyArray<SecretCallerGrant> = [
@@ -119,26 +121,45 @@ const SECRET_CALLER_ALLOWLIST: ReadonlyArray<SecretCallerGrant> = [
     callerID: 'ingest',
     namespace: 'ingest',
     keyPrefixes: ['mcp_credential.'],
+    peerSan: 'xstockstrat-ingest',
   },
 ];
 
+/** The slice of a grpc-js server call the secret gate reads: propagated metadata + the mTLS peer. */
+export interface SecretCallerCall {
+  metadata?: Metadata;
+  getAuthContext?: () => { sslPeerCertificate?: { subjectaltname?: string } } | undefined;
+}
+
+/** DNS SANs of the mTLS peer (`subjectaltname` is a comma list like "DNS:a, IP Address:…"); [] when absent. */
+function peerDnsSans(call: SecretCallerCall): string[] {
+  const raw = call.getAuthContext?.()?.sslPeerCertificate?.subjectaltname ?? '';
+  return raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.startsWith('DNS:'))
+    .map((s) => s.slice('DNS:'.length));
+}
+
 /**
  * True when the internal-caller identity is allow-listed to resolve the secret at (namespace, key).
- * Fails closed on an absent header, unlisted callerID, or a key outside the caller's grant.
+ * Fails closed on an absent header, unlisted callerID, a key outside the grant, or (for a grant with
+ * peerSan) an mTLS peer that does not present that exact DNS SAN.
  */
 export function hasSecretCallerAuthority(
-  md: Metadata | undefined,
+  call: SecretCallerCall,
   namespace: string,
   key: string,
 ): boolean {
-  const callerID = first(md, HEADER_INTERNAL_CALLER);
+  const callerID = first(call.metadata, HEADER_INTERNAL_CALLER);
   if (!callerID) return false;
   return SECRET_CALLER_ALLOWLIST.some(
     (grant) =>
       grant.callerID === callerID &&
       grant.namespace === namespace &&
       ((grant.keys?.includes(key) ?? false) ||
-        (grant.keyPrefixes?.some((prefix) => key.startsWith(prefix)) ?? false)),
+        (grant.keyPrefixes?.some((prefix) => key.startsWith(prefix)) ?? false)) &&
+      (grant.peerSan === undefined || peerDnsSans(call).includes(grant.peerSan)),
   );
 }
 

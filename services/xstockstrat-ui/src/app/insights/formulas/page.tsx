@@ -7,19 +7,11 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import type { ColumnDef } from '@tanstack/react-table';
 import { DataTable } from '@/components/ui/data-table';
 import { useFormulas } from '@/hooks/useFormulas';
+import { SYSTEM_FORMULA_AUTHOR } from '@/components/insights/FormulaWorkspace';
 import type { FormulaDefinition } from '@xstockstrat/proto/indicators/v1/indicators_pb';
-
-type Visibility = 'all' | 'public' | 'private';
 
 function formatDate(seconds: bigint | undefined): string {
   if (!seconds) return '—';
@@ -28,18 +20,15 @@ function formatDate(seconds: bigint | undefined): string {
 
 export default function FormulasPage() {
   const router = useRouter();
-  const { data, isLoading, error } = useFormulas({ includePublic: true, pageSize: 50 });
+  const { data, isLoading, error } = useFormulas({ pageSize: 50 });
 
   const [query, setQuery] = useState('');
-  const [visibility, setVisibility] = useState<Visibility>('all');
 
   const formulas = useMemo(() => data?.formulas ?? [], [data]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return formulas.filter((f: FormulaDefinition) => {
-      if (visibility === 'public' && !f.isPublic) return false;
-      if (visibility === 'private' && f.isPublic) return false;
       if (!q) return true;
       return (
         f.name.toLowerCase().includes(q) ||
@@ -47,7 +36,7 @@ export default function FormulasPage() {
         f.author.toLowerCase().includes(q)
       );
     });
-  }, [formulas, query, visibility]);
+  }, [formulas, query]);
 
   const columns = useMemo<ColumnDef<FormulaDefinition>[]>(
     () => [
@@ -60,23 +49,17 @@ export default function FormulasPage() {
           const f = row.original;
           return (
             <div className="w-[22rem] max-w-full">
-              <p className="truncate font-medium text-foreground">{f.name}</p>
+              <div className="flex items-center gap-2">
+                <p className="truncate font-medium text-foreground">{f.name}</p>
+                {f.author === SYSTEM_FORMULA_AUTHOR && <Badge variant="secondary">System</Badge>}
+                {f.origin?.updateAvailable && <Badge variant="info">Update available</Badge>}
+              </div>
               {f.description && (
                 <p className="mt-0.5 truncate text-muted-foreground">{f.description}</p>
               )}
             </div>
           );
         },
-      },
-      {
-        id: 'visibility',
-        header: 'Visibility',
-        accessorFn: (f) => (f.isPublic ? 'Public' : 'Private'),
-        cell: ({ row }) => (
-          <Badge variant={row.original.isPublic ? 'info' : 'warning'}>
-            {row.original.isPublic ? 'Public' : 'Private'}
-          </Badge>
-        ),
       },
       {
         accessorKey: 'author',
@@ -122,16 +105,6 @@ export default function FormulasPage() {
               className="pl-8"
             />
           </div>
-          <Select value={visibility} onValueChange={(v) => setVisibility(v as Visibility)}>
-            <SelectTrigger className="w-[150px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All</SelectItem>
-              <SelectItem value="public">Public only</SelectItem>
-              <SelectItem value="private">Private only</SelectItem>
-            </SelectContent>
-          </Select>
         </div>
 
         {isLoading && <p className="text-sm text-muted-foreground">Loading formulas…</p>}

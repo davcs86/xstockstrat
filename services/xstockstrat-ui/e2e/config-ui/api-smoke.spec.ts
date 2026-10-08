@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { addAuthCookie, addAdminCookie } from '../helpers/auth';
 import { setConfigPayload } from '../fixtures/configKeys';
+import { STRATEGY_TEMPLATE_MEANREV } from '../fixtures/templates';
 
 /**
  * BFF smoke tests for the Connect-RPC gateway in xstockstrat-config-ui.
@@ -18,6 +19,7 @@ import { setConfigPayload } from '../fixtures/configKeys';
 
 const CONFIG_BFF = '/config-ui/api/xstockstrat.config.v1.ConfigService/ListKeys';
 const SET_CONFIG_BFF = '/config-ui/api/xstockstrat.config.v1.ConfigService/SetConfig';
+const MANAGE_TEMPLATE_BFF = '/config-ui/api/xstockstrat.analysis.v1.AnalysisService/ManageTemplate';
 
 async function callBff(
   page: Page,
@@ -301,5 +303,31 @@ test.describe('validation field in ListKeysResponse', () => {
     expect(logLevel).toBeDefined();
     // validation absent means no validation applied (FR-5)
     expect(logLevel!.validation).toBeUndefined();
+  });
+});
+
+test.describe('ManageTemplate — admin template authoring (feature 224)', () => {
+  // Traverses the real config-ui BFF router (no page.route) to the analysis mock.
+  const updateTemplate = {
+    operation: 'TEMPLATE_OPERATION_UPDATE',
+    template: STRATEGY_TEMPLATE_MEANREV,
+  };
+
+  test('an admin ManageTemplate reaches the backend and answers 200', async ({ page }) => {
+    await addAdminCookie(page);
+    await page.goto('/auth/login');
+    const { status, body } = await callBff(page, MANAGE_TEMPLATE_BFF, updateTemplate);
+    expect(status).toBe(200);
+    expect((body.meta as { templateId: string }).templateId).toBe(
+      STRATEGY_TEMPLATE_MEANREV.meta.templateId,
+    );
+  });
+
+  test('ManageTemplate is denied for a non-admin session', async ({ page }) => {
+    await addAuthCookie(page);
+    await page.goto('/auth/login');
+    const { status, body } = await callBff(page, MANAGE_TEMPLATE_BFF, updateTemplate);
+    expect(status).not.toBe(200);
+    expect(JSON.stringify(body).toLowerCase()).toContain('permission');
   });
 });

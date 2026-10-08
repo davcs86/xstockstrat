@@ -16,9 +16,9 @@ export const COPILOT_THREAD = 'default';
  * tool-name set asserted in
  * `services/xstockstrat-agent/tests/test_tools_endpoint.py::test_list_tools_returns_all_registered_tools`
  * — update this number in the same PR that changes that set (24 → 32 → 35 → 40 → 49, feature 169;
- * → 51 feature 204; → 52 feature 205; → 43 feature 214 (db_* removed)).
+ * → 51 feature 204; → 52 feature 205; → 43 feature 214 (db_* removed); → 45 feature 224).
  */
-export const COPILOT_MCP_TOOL_COUNT = 43;
+export const COPILOT_MCP_TOOL_COUNT = 45;
 
 /**
  * Per-user append-only thread key. The BFF forces this key server-side from the verified session, so

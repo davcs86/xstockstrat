@@ -25,6 +25,12 @@ import {
   sectorFromJSON,
   sectorToJSON,
   sectorToNumber,
+  TemplateMeta,
+  TemplateOperation,
+  templateOperationFromJSON,
+  templateOperationToJSON,
+  templateOperationToNumber,
+  TemplateOrigin,
   Timeframe,
   timeframeFromJSON,
   timeframeToJSON,
@@ -1397,6 +1403,8 @@ export interface StrategyScore {
   evidenceDays: number;
   /** true when evidence is below the symbol/day floor */
   provisional: boolean;
+  /** feature 224: set when instantiated from a template */
+  origin?: TemplateOrigin | undefined;
 }
 
 export interface StrategyScore_ComponentScoresEntry {
@@ -1568,6 +1576,8 @@ export interface StrategyDefinition {
    * an unclassified bar/symbol uses default_value. Rides definition_json; maskable.
    */
   sectorParamOverrides: SectorParamOverride[];
+  /** feature 224: set when instantiated from a template */
+  origin?: TemplateOrigin | undefined;
 }
 
 export interface SectorValue {
@@ -1611,12 +1621,16 @@ export interface ManageStrategyRequest {
 
 export interface GetStrategyRequest {
   strategyId: string;
+  /** (admin-only) owner selector; ignored for a non-admin caller (feature 224) */
+  ownerUserId: string;
 }
 
 export interface ListStrategyDefinitionsRequest {
   includeInactive: boolean;
   pageSize: number;
   pageOffset: number;
+  /** (admin-only) owner selector; ignored for a non-admin caller (feature 224) */
+  ownerUserId: string;
 }
 
 export interface ListStrategyDefinitionsResponse {
@@ -2101,6 +2115,36 @@ export interface SourceAttribution {
 
 export interface GetAttributionResponse {
   attributions: SourceAttribution[];
+}
+
+/** feature 224 — strategy template catalog. */
+export interface StrategyTemplate {
+  meta?:
+    | TemplateMeta
+    | undefined;
+  /**
+   * Each component's formula_id holds a formula TEMPLATE id; instantiation deep-copies those
+   * formula templates into the caller's private formulas and rewrites the references (FR-9).
+   */
+  payload?: StrategyDefinition | undefined;
+}
+
+export interface ListTemplatesRequest {
+}
+
+export interface ListTemplatesResponse {
+  templates: StrategyTemplate[];
+}
+
+export interface ManageTemplateRequest {
+  operation: TemplateOperation;
+  template?: StrategyTemplate | undefined;
+}
+
+export interface InstantiateTemplateRequest {
+  templateId: string;
+  /** optional; empty = the template's strategy_id, suffixed _N on collision */
+  strategyId: string;
 }
 
 function createBaseRunBacktestRequest(): RunBacktestRequest {
@@ -3982,6 +4026,7 @@ function createBaseStrategyScore(): StrategyScore {
     evidenceSymbols: 0,
     evidenceDays: 0,
     provisional: false,
+    origin: undefined,
   };
 }
 
@@ -4007,6 +4052,9 @@ export const StrategyScore: MessageFns<StrategyScore> = {
     }
     if (message.provisional !== false) {
       writer.uint32(56).bool(message.provisional);
+    }
+    if (message.origin !== undefined) {
+      TemplateOrigin.encode(message.origin, writer.uint32(66).fork()).join();
     }
     return writer;
   },
@@ -4077,6 +4125,14 @@ export const StrategyScore: MessageFns<StrategyScore> = {
           message.provisional = reader.bool();
           continue;
         }
+        case 8: {
+          if (tag !== 66) {
+            break;
+          }
+
+          message.origin = TemplateOrigin.decode(reader, reader.uint32());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -4127,6 +4183,7 @@ export const StrategyScore: MessageFns<StrategyScore> = {
         ? globalThis.Number(object.evidence_days)
         : 0,
       provisional: isSet(object.provisional) ? globalThis.Boolean(object.provisional) : false,
+      origin: isSet(object.origin) ? TemplateOrigin.fromJSON(object.origin) : undefined,
     };
   },
 
@@ -4159,6 +4216,9 @@ export const StrategyScore: MessageFns<StrategyScore> = {
     if (message.provisional !== false) {
       obj.provisional = message.provisional;
     }
+    if (message.origin !== undefined) {
+      obj.origin = TemplateOrigin.toJSON(message.origin);
+    }
     return obj;
   },
 
@@ -4182,6 +4242,9 @@ export const StrategyScore: MessageFns<StrategyScore> = {
     message.evidenceSymbols = object.evidenceSymbols ?? 0;
     message.evidenceDays = object.evidenceDays ?? 0;
     message.provisional = object.provisional ?? false;
+    message.origin = (object.origin !== undefined && object.origin !== null)
+      ? TemplateOrigin.fromPartial(object.origin)
+      : undefined;
     return message;
   },
 };
@@ -5529,6 +5592,7 @@ function createBaseStrategyDefinition(): StrategyDefinition {
     userId: "",
     signalEligible: false,
     sectorParamOverrides: [],
+    origin: undefined,
   };
 }
 
@@ -5578,6 +5642,9 @@ export const StrategyDefinition: MessageFns<StrategyDefinition> = {
     }
     for (const v of message.sectorParamOverrides) {
       SectorParamOverride.encode(v!, writer.uint32(122).fork()).join();
+    }
+    if (message.origin !== undefined) {
+      TemplateOrigin.encode(message.origin, writer.uint32(130).fork()).join();
     }
     return writer;
   },
@@ -5709,6 +5776,14 @@ export const StrategyDefinition: MessageFns<StrategyDefinition> = {
           message.sectorParamOverrides.push(SectorParamOverride.decode(reader, reader.uint32()));
           continue;
         }
+        case 16: {
+          if (tag !== 130) {
+            break;
+          }
+
+          message.origin = TemplateOrigin.decode(reader, reader.uint32());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -5787,6 +5862,7 @@ export const StrategyDefinition: MessageFns<StrategyDefinition> = {
         : globalThis.Array.isArray(object?.sector_param_overrides)
         ? object.sector_param_overrides.map((e: any) => SectorParamOverride.fromJSON(e))
         : [],
+      origin: isSet(object.origin) ? TemplateOrigin.fromJSON(object.origin) : undefined,
     };
   },
 
@@ -5837,6 +5913,9 @@ export const StrategyDefinition: MessageFns<StrategyDefinition> = {
     if (message.sectorParamOverrides?.length) {
       obj.sectorParamOverrides = message.sectorParamOverrides.map((e) => SectorParamOverride.toJSON(e));
     }
+    if (message.origin !== undefined) {
+      obj.origin = TemplateOrigin.toJSON(message.origin);
+    }
     return obj;
   },
 
@@ -5860,6 +5939,9 @@ export const StrategyDefinition: MessageFns<StrategyDefinition> = {
     message.userId = object.userId ?? "";
     message.signalEligible = object.signalEligible ?? false;
     message.sectorParamOverrides = object.sectorParamOverrides?.map((e) => SectorParamOverride.fromPartial(e)) || [];
+    message.origin = (object.origin !== undefined && object.origin !== null)
+      ? TemplateOrigin.fromPartial(object.origin)
+      : undefined;
     return message;
   },
 };
@@ -6165,13 +6247,16 @@ export const ManageStrategyRequest: MessageFns<ManageStrategyRequest> = {
 };
 
 function createBaseGetStrategyRequest(): GetStrategyRequest {
-  return { strategyId: "" };
+  return { strategyId: "", ownerUserId: "" };
 }
 
 export const GetStrategyRequest: MessageFns<GetStrategyRequest> = {
   encode(message: GetStrategyRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     if (message.strategyId !== "") {
       writer.uint32(10).string(message.strategyId);
+    }
+    if (message.ownerUserId !== "") {
+      writer.uint32(18).string(message.ownerUserId);
     }
     return writer;
   },
@@ -6191,6 +6276,14 @@ export const GetStrategyRequest: MessageFns<GetStrategyRequest> = {
           message.strategyId = reader.string();
           continue;
         }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.ownerUserId = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -6207,6 +6300,11 @@ export const GetStrategyRequest: MessageFns<GetStrategyRequest> = {
         : isSet(object.strategy_id)
         ? globalThis.String(object.strategy_id)
         : "",
+      ownerUserId: isSet(object.ownerUserId)
+        ? globalThis.String(object.ownerUserId)
+        : isSet(object.owner_user_id)
+        ? globalThis.String(object.owner_user_id)
+        : "",
     };
   },
 
@@ -6214,6 +6312,9 @@ export const GetStrategyRequest: MessageFns<GetStrategyRequest> = {
     const obj: any = {};
     if (message.strategyId !== "") {
       obj.strategyId = message.strategyId;
+    }
+    if (message.ownerUserId !== "") {
+      obj.ownerUserId = message.ownerUserId;
     }
     return obj;
   },
@@ -6224,12 +6325,13 @@ export const GetStrategyRequest: MessageFns<GetStrategyRequest> = {
   fromPartial<I extends Exact<DeepPartial<GetStrategyRequest>, I>>(object: I): GetStrategyRequest {
     const message = createBaseGetStrategyRequest();
     message.strategyId = object.strategyId ?? "";
+    message.ownerUserId = object.ownerUserId ?? "";
     return message;
   },
 };
 
 function createBaseListStrategyDefinitionsRequest(): ListStrategyDefinitionsRequest {
-  return { includeInactive: false, pageSize: 0, pageOffset: 0 };
+  return { includeInactive: false, pageSize: 0, pageOffset: 0, ownerUserId: "" };
 }
 
 export const ListStrategyDefinitionsRequest: MessageFns<ListStrategyDefinitionsRequest> = {
@@ -6242,6 +6344,9 @@ export const ListStrategyDefinitionsRequest: MessageFns<ListStrategyDefinitionsR
     }
     if (message.pageOffset !== 0) {
       writer.uint32(24).int32(message.pageOffset);
+    }
+    if (message.ownerUserId !== "") {
+      writer.uint32(34).string(message.ownerUserId);
     }
     return writer;
   },
@@ -6277,6 +6382,14 @@ export const ListStrategyDefinitionsRequest: MessageFns<ListStrategyDefinitionsR
           message.pageOffset = reader.int32();
           continue;
         }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.ownerUserId = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -6303,6 +6416,11 @@ export const ListStrategyDefinitionsRequest: MessageFns<ListStrategyDefinitionsR
         : isSet(object.page_offset)
         ? globalThis.Number(object.page_offset)
         : 0,
+      ownerUserId: isSet(object.ownerUserId)
+        ? globalThis.String(object.ownerUserId)
+        : isSet(object.owner_user_id)
+        ? globalThis.String(object.owner_user_id)
+        : "",
     };
   },
 
@@ -6317,6 +6435,9 @@ export const ListStrategyDefinitionsRequest: MessageFns<ListStrategyDefinitionsR
     if (message.pageOffset !== 0) {
       obj.pageOffset = Math.round(message.pageOffset);
     }
+    if (message.ownerUserId !== "") {
+      obj.ownerUserId = message.ownerUserId;
+    }
     return obj;
   },
 
@@ -6330,6 +6451,7 @@ export const ListStrategyDefinitionsRequest: MessageFns<ListStrategyDefinitionsR
     message.includeInactive = object.includeInactive ?? false;
     message.pageSize = object.pageSize ?? 0;
     message.pageOffset = object.pageOffset ?? 0;
+    message.ownerUserId = object.ownerUserId ?? "";
     return message;
   },
 };
@@ -11592,6 +11714,355 @@ export const GetAttributionResponse: MessageFns<GetAttributionResponse> = {
   },
 };
 
+function createBaseStrategyTemplate(): StrategyTemplate {
+  return { meta: undefined, payload: undefined };
+}
+
+export const StrategyTemplate: MessageFns<StrategyTemplate> = {
+  encode(message: StrategyTemplate, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.meta !== undefined) {
+      TemplateMeta.encode(message.meta, writer.uint32(10).fork()).join();
+    }
+    if (message.payload !== undefined) {
+      StrategyDefinition.encode(message.payload, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): StrategyTemplate {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseStrategyTemplate();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.meta = TemplateMeta.decode(reader, reader.uint32());
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.payload = StrategyDefinition.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): StrategyTemplate {
+    return {
+      meta: isSet(object.meta) ? TemplateMeta.fromJSON(object.meta) : undefined,
+      payload: isSet(object.payload) ? StrategyDefinition.fromJSON(object.payload) : undefined,
+    };
+  },
+
+  toJSON(message: StrategyTemplate): unknown {
+    const obj: any = {};
+    if (message.meta !== undefined) {
+      obj.meta = TemplateMeta.toJSON(message.meta);
+    }
+    if (message.payload !== undefined) {
+      obj.payload = StrategyDefinition.toJSON(message.payload);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<StrategyTemplate>, I>>(base?: I): StrategyTemplate {
+    return StrategyTemplate.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<StrategyTemplate>, I>>(object: I): StrategyTemplate {
+    const message = createBaseStrategyTemplate();
+    message.meta = (object.meta !== undefined && object.meta !== null)
+      ? TemplateMeta.fromPartial(object.meta)
+      : undefined;
+    message.payload = (object.payload !== undefined && object.payload !== null)
+      ? StrategyDefinition.fromPartial(object.payload)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseListTemplatesRequest(): ListTemplatesRequest {
+  return {};
+}
+
+export const ListTemplatesRequest: MessageFns<ListTemplatesRequest> = {
+  encode(_: ListTemplatesRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListTemplatesRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseListTemplatesRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(_: any): ListTemplatesRequest {
+    return {};
+  },
+
+  toJSON(_: ListTemplatesRequest): unknown {
+    const obj: any = {};
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ListTemplatesRequest>, I>>(base?: I): ListTemplatesRequest {
+    return ListTemplatesRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ListTemplatesRequest>, I>>(_: I): ListTemplatesRequest {
+    const message = createBaseListTemplatesRequest();
+    return message;
+  },
+};
+
+function createBaseListTemplatesResponse(): ListTemplatesResponse {
+  return { templates: [] };
+}
+
+export const ListTemplatesResponse: MessageFns<ListTemplatesResponse> = {
+  encode(message: ListTemplatesResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.templates) {
+      StrategyTemplate.encode(v!, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListTemplatesResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseListTemplatesResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.templates.push(StrategyTemplate.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ListTemplatesResponse {
+    return {
+      templates: globalThis.Array.isArray(object?.templates)
+        ? object.templates.map((e: any) => StrategyTemplate.fromJSON(e))
+        : [],
+    };
+  },
+
+  toJSON(message: ListTemplatesResponse): unknown {
+    const obj: any = {};
+    if (message.templates?.length) {
+      obj.templates = message.templates.map((e) => StrategyTemplate.toJSON(e));
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ListTemplatesResponse>, I>>(base?: I): ListTemplatesResponse {
+    return ListTemplatesResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ListTemplatesResponse>, I>>(object: I): ListTemplatesResponse {
+    const message = createBaseListTemplatesResponse();
+    message.templates = object.templates?.map((e) => StrategyTemplate.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseManageTemplateRequest(): ManageTemplateRequest {
+  return { operation: TemplateOperation.TEMPLATE_OPERATION_UNSPECIFIED, template: undefined };
+}
+
+export const ManageTemplateRequest: MessageFns<ManageTemplateRequest> = {
+  encode(message: ManageTemplateRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.operation !== TemplateOperation.TEMPLATE_OPERATION_UNSPECIFIED) {
+      writer.uint32(8).int32(templateOperationToNumber(message.operation));
+    }
+    if (message.template !== undefined) {
+      StrategyTemplate.encode(message.template, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ManageTemplateRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseManageTemplateRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.operation = templateOperationFromJSON(reader.int32());
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.template = StrategyTemplate.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ManageTemplateRequest {
+    return {
+      operation: isSet(object.operation)
+        ? templateOperationFromJSON(object.operation)
+        : TemplateOperation.TEMPLATE_OPERATION_UNSPECIFIED,
+      template: isSet(object.template) ? StrategyTemplate.fromJSON(object.template) : undefined,
+    };
+  },
+
+  toJSON(message: ManageTemplateRequest): unknown {
+    const obj: any = {};
+    if (message.operation !== TemplateOperation.TEMPLATE_OPERATION_UNSPECIFIED) {
+      obj.operation = templateOperationToJSON(message.operation);
+    }
+    if (message.template !== undefined) {
+      obj.template = StrategyTemplate.toJSON(message.template);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ManageTemplateRequest>, I>>(base?: I): ManageTemplateRequest {
+    return ManageTemplateRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ManageTemplateRequest>, I>>(object: I): ManageTemplateRequest {
+    const message = createBaseManageTemplateRequest();
+    message.operation = object.operation ?? TemplateOperation.TEMPLATE_OPERATION_UNSPECIFIED;
+    message.template = (object.template !== undefined && object.template !== null)
+      ? StrategyTemplate.fromPartial(object.template)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseInstantiateTemplateRequest(): InstantiateTemplateRequest {
+  return { templateId: "", strategyId: "" };
+}
+
+export const InstantiateTemplateRequest: MessageFns<InstantiateTemplateRequest> = {
+  encode(message: InstantiateTemplateRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.templateId !== "") {
+      writer.uint32(10).string(message.templateId);
+    }
+    if (message.strategyId !== "") {
+      writer.uint32(18).string(message.strategyId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): InstantiateTemplateRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseInstantiateTemplateRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.templateId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.strategyId = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): InstantiateTemplateRequest {
+    return {
+      templateId: isSet(object.templateId)
+        ? globalThis.String(object.templateId)
+        : isSet(object.template_id)
+        ? globalThis.String(object.template_id)
+        : "",
+      strategyId: isSet(object.strategyId)
+        ? globalThis.String(object.strategyId)
+        : isSet(object.strategy_id)
+        ? globalThis.String(object.strategy_id)
+        : "",
+    };
+  },
+
+  toJSON(message: InstantiateTemplateRequest): unknown {
+    const obj: any = {};
+    if (message.templateId !== "") {
+      obj.templateId = message.templateId;
+    }
+    if (message.strategyId !== "") {
+      obj.strategyId = message.strategyId;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<InstantiateTemplateRequest>, I>>(base?: I): InstantiateTemplateRequest {
+    return InstantiateTemplateRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<InstantiateTemplateRequest>, I>>(object: I): InstantiateTemplateRequest {
+    const message = createBaseInstantiateTemplateRequest();
+    message.templateId = object.templateId ?? "";
+    message.strategyId = object.strategyId ?? "";
+    return message;
+  },
+};
+
 export type AnalysisServiceService = typeof AnalysisServiceService;
 export const AnalysisServiceService = {
   runBacktest: {
@@ -11840,6 +12311,41 @@ export const AnalysisServiceService = {
       Buffer.from(GetWatchlistReadinessResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): GetWatchlistReadinessResponse => GetWatchlistReadinessResponse.decode(value),
   },
+  /** Template catalog (feature 224). List/read: any authenticated caller. Manage: ADMIN only. */
+  listTemplates: {
+    path: "/xstockstrat.analysis.v1.AnalysisService/ListTemplates" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ListTemplatesRequest): Buffer => Buffer.from(ListTemplatesRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ListTemplatesRequest => ListTemplatesRequest.decode(value),
+    responseSerialize: (value: ListTemplatesResponse): Buffer =>
+      Buffer.from(ListTemplatesResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ListTemplatesResponse => ListTemplatesResponse.decode(value),
+  },
+  manageTemplate: {
+    path: "/xstockstrat.analysis.v1.AnalysisService/ManageTemplate" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ManageTemplateRequest): Buffer =>
+      Buffer.from(ManageTemplateRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ManageTemplateRequest => ManageTemplateRequest.decode(value),
+    responseSerialize: (value: StrategyTemplate): Buffer => Buffer.from(StrategyTemplate.encode(value).finish()),
+    responseDeserialize: (value: Buffer): StrategyTemplate => StrategyTemplate.decode(value),
+  },
+  /**
+   * Deep-copies a strategy template (and its formula templates) into private copies owned by the
+   * x-user-id caller, atomically (FR-9).
+   */
+  instantiateTemplate: {
+    path: "/xstockstrat.analysis.v1.AnalysisService/InstantiateTemplate" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: InstantiateTemplateRequest): Buffer =>
+      Buffer.from(InstantiateTemplateRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): InstantiateTemplateRequest => InstantiateTemplateRequest.decode(value),
+    responseSerialize: (value: StrategyDefinition): Buffer => Buffer.from(StrategyDefinition.encode(value).finish()),
+    responseDeserialize: (value: Buffer): StrategyDefinition => StrategyDefinition.decode(value),
+  },
 } as const;
 
 export interface AnalysisServiceServer extends UntypedServiceImplementation {
@@ -11901,6 +12407,14 @@ export interface AnalysisServiceServer extends UntypedServiceImplementation {
    * PENDING/UNKNOWN rows resolve on a subsequent poll (the server kicks a background refresh).
    */
   getWatchlistReadiness: handleUnaryCall<GetWatchlistReadinessRequest, GetWatchlistReadinessResponse>;
+  /** Template catalog (feature 224). List/read: any authenticated caller. Manage: ADMIN only. */
+  listTemplates: handleUnaryCall<ListTemplatesRequest, ListTemplatesResponse>;
+  manageTemplate: handleUnaryCall<ManageTemplateRequest, StrategyTemplate>;
+  /**
+   * Deep-copies a strategy template (and its formula templates) into private copies owned by the
+   * x-user-id caller, atomically (FR-9).
+   */
+  instantiateTemplate: handleUnaryCall<InstantiateTemplateRequest, StrategyDefinition>;
 }
 
 export interface AnalysisServiceClient extends Client {
@@ -12241,6 +12755,56 @@ export interface AnalysisServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: GetWatchlistReadinessResponse) => void,
+  ): ClientUnaryCall;
+  /** Template catalog (feature 224). List/read: any authenticated caller. Manage: ADMIN only. */
+  listTemplates(
+    request: ListTemplatesRequest,
+    callback: (error: ServiceError | null, response: ListTemplatesResponse) => void,
+  ): ClientUnaryCall;
+  listTemplates(
+    request: ListTemplatesRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ListTemplatesResponse) => void,
+  ): ClientUnaryCall;
+  listTemplates(
+    request: ListTemplatesRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ListTemplatesResponse) => void,
+  ): ClientUnaryCall;
+  manageTemplate(
+    request: ManageTemplateRequest,
+    callback: (error: ServiceError | null, response: StrategyTemplate) => void,
+  ): ClientUnaryCall;
+  manageTemplate(
+    request: ManageTemplateRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: StrategyTemplate) => void,
+  ): ClientUnaryCall;
+  manageTemplate(
+    request: ManageTemplateRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: StrategyTemplate) => void,
+  ): ClientUnaryCall;
+  /**
+   * Deep-copies a strategy template (and its formula templates) into private copies owned by the
+   * x-user-id caller, atomically (FR-9).
+   */
+  instantiateTemplate(
+    request: InstantiateTemplateRequest,
+    callback: (error: ServiceError | null, response: StrategyDefinition) => void,
+  ): ClientUnaryCall;
+  instantiateTemplate(
+    request: InstantiateTemplateRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: StrategyDefinition) => void,
+  ): ClientUnaryCall;
+  instantiateTemplate(
+    request: InstantiateTemplateRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: StrategyDefinition) => void,
   ): ClientUnaryCall;
 }
 

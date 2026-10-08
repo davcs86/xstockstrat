@@ -87,6 +87,10 @@ migrate_service() {
       envsubst '$SEED_USER_ID' <"$dir/013_strategies_user_id.up.sql" >"$scratch/013_strategies_user_id.up.sql"
       dir="$scratch"
     fi
+    # Generic `-- requires-env:` rendering (feature 224); files without the header are copied as-is.
+    rendered="$(mktemp -d)"
+    "$REPO_ROOT/scripts/render-migrations.sh" "$dir" "$rendered"
+    dir="$rendered"
     migrate -path "$dir" -database "$url" up
     ;;
   version)

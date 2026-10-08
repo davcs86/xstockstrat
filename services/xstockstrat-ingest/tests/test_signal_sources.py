@@ -7,11 +7,15 @@ import pytest
 
 from app.repositories.signal_sources import (
     deactivate_source,
-    get_active_source,
     get_source,
     insert_source,
     list_all_sources,
+    list_sources,
+    mark_source_error,
+    mark_source_fed,
     reactivate_source,
+    slug_holders,
+    touch_source_last_seen,
     update_source,
     validate_config_json,
 )
@@ -177,38 +181,6 @@ class TestMcpClientValidation:
 
 
 # ---------------------------------------------------------------------------
-# get_active_source
-# ---------------------------------------------------------------------------
-
-
-class TestGetActiveSource:
-    @pytest.mark.asyncio
-    async def test_returns_dict_when_row_found(self):
-        db = MagicMock()
-        db.fetchrow = AsyncMock(
-            return_value={
-                "slug": "uw",
-                "display_name": "Unusual Whales",
-                "active": True,
-                "source_type": "simple_email",
-                "extractor_module": "app.extractors.example_simple_email",
-                "credentials_ref": None,
-                "config_json": None,
-            }
-        )
-        result = await get_active_source(db, "uw")
-        assert result["slug"] == "uw"
-        db.fetchrow.assert_awaited_once()
-
-    @pytest.mark.asyncio
-    async def test_returns_none_when_not_found(self):
-        db = MagicMock()
-        db.fetchrow = AsyncMock(return_value=None)
-        result = await get_active_source(db, "missing")
-        assert result is None
-
-
-# ---------------------------------------------------------------------------
 # list_all_sources
 # ---------------------------------------------------------------------------
 
@@ -235,6 +207,16 @@ class TestListAllSources:
         assert len(result) == 1
         sql_call = db.fetch.call_args[0][0]
         assert "active = TRUE" in sql_call
+
+    @pytest.mark.asyncio
+    async def test_selects_owner_for_poller_and_headerless_list(self):
+        # Feature 224: the poller (Step 23) and headerless ListSignalSources read src["user_id"].
+        db = MagicMock()
+        db.fetch = AsyncMock(return_value=[{"slug": "uw", "user_id": "alice"}])
+        rows = await list_all_sources(db)
+        select_list = db.fetch.call_args[0][0].split("FROM")[0]
+        assert "user_id" in select_list
+        assert rows[0]["user_id"] == "alice"
 
     @pytest.mark.asyncio
     async def test_include_inactive_omits_filter(self):
@@ -281,15 +263,17 @@ class TestInsertUpdateSource:
             credentials_ref=None,
             config_json=None,
             reliability_weight=1.0,  # feature 134 — kwarg now required
+            user_id="bob",
         )
         assert result["slug"] == "uw"
         sql = db.fetchrow.call_args[0][0]
         assert "INSERT INTO" in sql and "RETURNING" in sql
         assert "ON CONFLICT" not in sql
-        # feature 134: reliability_weight is the trailing positional arg (after active), so the
-        # config_json index (6) that the next test asserts stays valid.
-        assert db.fetchrow.call_args[0][-1] == 1.0
+        # feature 134: reliability_weight follows active, so the config_json index (6) that the
+        # next test asserts stays valid; feature 224 appends the owner after it.
+        assert db.fetchrow.call_args[0][-2] == 1.0
         assert "reliability_weight" in sql
+        assert "user_id" in sql and db.fetchrow.call_args[0][-1] == "bob"
 
     @pytest.mark.asyncio
     async def test_insert_config_json_passed_as_json_text(self):
@@ -304,6 +288,7 @@ class TestInsertUpdateSource:
             credentials_ref=None,
             config_json={"url": "https://example.com", "scrape_selector": "entry"},
             reliability_weight=1.0,  # feature 134 — appended after active; index 6 stays config
+            user_id="bob",
         )
         config_arg = db.fetchrow.call_args[0][6]
         assert isinstance(config_arg, str)
@@ -315,6 +300,7 @@ class TestInsertUpdateSource:
         db.fetchrow = AsyncMock(return_value=_row(display_name="New"))
         await update_source(
             db,
+            user_id="bob",
             slug="uw",
             display_name="New",
             source_type="simple_email",
@@ -327,27 +313,31 @@ class TestInsertUpdateSource:
         assert sql.strip().startswith("UPDATE ingest.signal_sources")
         assert "active" not in sql  # lifecycle stays reactivate/deactivate only
         assert "reliability_weight" in sql  # feature 134 — written in the SET clause
-        assert db.fetchrow.call_args[0][-1] == 0.5
+        assert db.fetchrow.call_args[0][-2] == 0.5
+        assert "user_id = $8" in sql and db.fetchrow.call_args[0][-1] == "bob"  # feature 224
 
     @pytest.mark.asyncio
     async def test_get_source_returns_none_when_missing(self):
         db = MagicMock()
         db.fetchrow = AsyncMock(return_value=None)
-        assert await get_source(db, "nope") is None
+        assert await get_source(db, "bob", "nope") is None
+        sql, *args = db.fetchrow.call_args[0]
+        assert "user_id = $1 AND slug = $2" in sql and args == ["bob", "nope"]
 
     @pytest.mark.asyncio
     async def test_reactivate_sets_active_true(self):
         db = MagicMock()
         db.fetchrow = AsyncMock(return_value=_row(active=True))
-        row = await reactivate_source(db, "uw")
+        row = await reactivate_source(db, "bob", "uw")
         assert row["active"] is True
         assert "active = TRUE" in db.fetchrow.call_args[0][0]
+        assert "user_id = $1 AND slug = $2" in db.fetchrow.call_args[0][0]
 
     @pytest.mark.asyncio
     async def test_reactivate_returns_none_when_missing(self):
         db = MagicMock()
         db.fetchrow = AsyncMock(return_value=None)
-        assert await reactivate_source(db, "nope") is None
+        assert await reactivate_source(db, "bob", "nope") is None
 
 
 # ---------------------------------------------------------------------------
@@ -360,7 +350,7 @@ class TestDeactivateSource:
     async def test_returns_none_when_slug_not_found(self):
         db = MagicMock()
         db.fetchrow = AsyncMock(return_value=None)
-        result = await deactivate_source(db, "nonexistent")
+        result = await deactivate_source(db, "bob", "nonexistent")
         assert result is None
 
     @pytest.mark.asyncio
@@ -378,5 +368,60 @@ class TestDeactivateSource:
                 "created_at": None,
             }
         )
-        result = await deactivate_source(db, "uw")
+        result = await deactivate_source(db, "bob", "uw")
         assert result["active"] is False
+        assert "user_id = $1 AND slug = $2" in db.fetchrow.call_args[0][0]
+
+
+# ---------------------------------------------------------------------------
+# feature 224 — owner-keyed bookkeeping, slug holders, scoped listing
+# ---------------------------------------------------------------------------
+
+
+class TestOwnerKeyedQueries:
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "fn,extra",
+        [(mark_source_fed, ()), (touch_source_last_seen, ()), (mark_source_error, ("boom",))],
+    )
+    async def test_bookkeeping_updates_only_the_owners_row(self, fn, extra):
+        db = MagicMock()
+        db.execute = AsyncMock()
+        await fn(db, "bob", "uw", *extra)
+        sql, *args = db.execute.call_args[0]
+        assert "WHERE user_id = $1 AND slug = $2" in sql
+        assert args[:2] == ["bob", "uw"]
+
+    @pytest.mark.asyncio
+    async def test_slug_holders_returns_every_owner(self):
+        db = MagicMock()
+        db.fetch = AsyncMock(return_value=[{"user_id": "alice"}, {"user_id": "system"}])
+        assert await slug_holders(db, "motley-fool") == ["alice", "system"]
+        sql, arg = db.fetch.call_args[0]
+        assert "SELECT user_id" in sql and arg == "motley-fool"
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "scope,predicate,args",
+        [
+            (0, "(user_id = $1 OR user_id = 'system')", ["bob"]),  # SIGNAL_SCOPE_UNSPECIFIED
+            (1, "user_id = $1", ["bob"]),  # SIGNAL_SCOPE_OWN
+            (2, "user_id = 'system'", []),  # SIGNAL_SCOPE_SYSTEM
+        ],
+    )
+    async def test_list_sources_scope_predicates(self, scope, predicate, args):
+        db = MagicMock()
+        db.fetch = AsyncMock(return_value=[])
+        await list_sources(db, "bob", scope)
+        sql, *got = db.fetch.call_args[0]
+        assert predicate in sql and "active = TRUE" in sql
+        assert got == args
+        if scope == 1:
+            assert "'system'" not in sql
+
+    @pytest.mark.asyncio
+    async def test_list_sources_include_inactive(self):
+        db = MagicMock()
+        db.fetch = AsyncMock(return_value=[])
+        await list_sources(db, "bob", 0, include_inactive=True)
+        assert "active = TRUE" not in db.fetch.call_args[0][0]

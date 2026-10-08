@@ -119,6 +119,8 @@ export interface GetSecretRequest {
     key: string;
     /** production or staging */
     environment: Environment;
+    /** exact scope: empty = global row only (feature 224) */
+    userId: string;
 }
 export interface GetSecretResponse {
     /** decrypted plaintext; empty when found=false */
@@ -147,7 +149,8 @@ export interface SetConfigRequest {
     createKey: boolean;
     /**
      * Optional per-user scope. Empty = the global value; a non-empty user_id writes/updates that
-     * user's per-user override. Secret keys (is_secret) are global-scope only (feature 147).
+     * user's per-user override. Secret keys may be per-user (feature 224 operator override of
+     * feature 147); redaction holds on every edge.
      */
     userId: string;
 }

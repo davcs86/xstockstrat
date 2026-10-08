@@ -11,6 +11,7 @@ from unittest.mock import MagicMock
 from gen.analysis.v1 import analysis_pb2
 
 from app.handlers.servicer import attribute_trade
+from tests.conftest import ctx_with
 from tests.test_analysis_servicer import make_servicer
 
 # ── Fakes ────────────────────────────────────────────────────────────────────
@@ -53,11 +54,7 @@ class _FakeIngest:
 
 
 def _ctx(user_id="u-1"):
-    ctx = MagicMock()
-    ctx.invocation_metadata = MagicMock(
-        return_value=[("x-user-id", user_id), ("x-access-scope", "7"), ("x-trace-id", "t1")]
-    )
-    return ctx
+    return ctx_with([("x-user-id", user_id), ("x-access-scope", "7"), ("x-trace-id", "t1")])
 
 
 def _sig(source, value):
@@ -65,9 +62,18 @@ def _sig(source, value):
 
 
 def _wire(servicer, positions_by_user, snaps_by_position, names=None):
+    """``names`` is the caller-visible source set (slug → display_name); by default every slug the
+    snapshots reference is visible under its own slug."""
+    if names is None:
+        names = {
+            sig["source"]: sig["source"]
+            for snaps in snaps_by_position.values()
+            for snap in snaps
+            for sig in snap["signals"]
+        }
     servicer._pnl_positions_repo = _FakePositionsRepo(positions_by_user)
     servicer._order_snapshots_repo = _FakeSnapshotsRepo(snaps_by_position)
-    servicer._ingest = _FakeIngest(names or {})
+    servicer._ingest = _FakeIngest(names)
     return servicer
 
 
@@ -252,8 +258,10 @@ async def test_ac9_new_source_appears():
         f"i{i}": [{"signals": [_sig("insider8k", 0.9)], "price": 10.0, "quantity": 1.0}]
         for i in range(3)
     }
-    # ingest does not know the slug (registered after ship) → falls back to the slug itself.
-    servicer = _wire(make_servicer(), {"u-1": positions}, snaps, {"form4": "Form 4"})
+    # A visible source with no display_name (registered after ship) → falls back to the slug.
+    servicer = _wire(
+        make_servicer(), {"u-1": positions}, snaps, {"form4": "Form 4", "insider8k": ""}
+    )
 
     row = _one(await _get(servicer), "insider8k")
     assert row.trade_count == 3.0
@@ -277,3 +285,27 @@ async def test_no_repo_returns_empty():
     servicer = make_servicer()  # no db → repos None
     resp = await servicer.GetAttribution(analysis_pb2.GetAttributionRequest(), _ctx())
     assert list(resp.attributions) == []
+
+
+# ── feature 224 AC-12: attribution is limited to the caller-visible (own + system) sources ───
+
+
+async def test_ac12_foreign_source_not_attributed():
+    # A legacy snapshot row still carries alice's slug; bob's visible set does not include it.
+    positions = [{"position_id": "p0", "symbol": "AAPL", "realized_pnl": 9.0, "fees_total": 0.0}]
+    snaps = {"p0": [{"signals": [_sig("alice-feed", 0.9)], "price": 10.0, "quantity": 1.0}]}
+    servicer = _wire(make_servicer(), {"bob": positions}, snaps, {"bob-feed": "Bob"})
+
+    resp = await _get(servicer, user_id="bob", source_id="alice-feed")
+    assert list(resp.attributions) == []
+    resp = await _get(servicer, user_id="bob")
+    assert list(resp.attributions) == []
+
+
+async def test_inbound_system_identity_owns_nothing():
+    # An un-granted inbound `x-user-id: system` resolves to owner "" in analysis (design §2).
+    positions = [{"position_id": "p0", "symbol": "AAPL", "realized_pnl": 9.0, "fees_total": 0.0}]
+    snaps = {"p0": [{"signals": [_sig("fundamentals", 0.9)], "price": 10.0, "quantity": 1.0}]}
+    servicer = _wire(make_servicer(), {"system": positions}, snaps)
+
+    assert list((await _get(servicer, user_id="system")).attributions) == []

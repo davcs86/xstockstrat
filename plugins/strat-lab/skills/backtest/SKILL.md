@@ -13,7 +13,8 @@ sequentially (so it is *not* the independent basket a report usually means), and
 freshly-edited strategy can silently produce garbage. Each has a fixed, learned countermeasure below.
 
 **Scope.** This targets the xstockstrat MCP tools: `run_backtest`, `trigger_backfill` /
-`get_backfill_status`, `manage_strategy`, `set_strategy_live`. The server may be exposed under a
+`get_backfill_status`, `manage_strategy`, `set_strategy_live`, plus `list_templates` /
+`instantiate_template` to start from a curated strategy template. The server may be exposed under a
 staging or prod name (e.g. `mcp__xstockstrat_staging__*`); if the tools are not loaded, find them
 with ToolSearch first. Never assume a tool is absent without searching.
 
@@ -72,6 +73,17 @@ to the platform default.
 with `live_enabled=false` for this strategy is also rejected `FAILED_PRECONDITION`. Updates
 (`operation="update"`) and reactivation remain allowed. The protected ID is config-driven — it
 tracks whatever value the operator sets, not a hardcoded string.
+
+**Starting from a template (feature 224).** Strategies and formulas are **private to their owner** —
+a formula is visible only to its author, so a `formula_id` someone else registered is not usable in
+your strategy. To begin from a curated design, call `list_templates(kind="strategy")`, pick a
+`templateId`, then `instantiate_template(kind="strategy", template_id=..., strategy_id=...)`: it
+copies the strategy **and** the formula templates it references into your own private copies (an
+empty `strategy_id` takes the template's id, suffixed `_N` on collision) and returns the new
+definition — then `run_backtest` its `strategyId` as usual. The copy is a snapshot (its `origin`
+reports `update_available` when the template moves on); edit it with `manage_strategy update` like
+any strategy you own. `list_templates(kind="formula")` / `instantiate_template(kind="formula", ...)`
+do the same for a single formula.
 
 **Benchmark / market-regime operand (feature 152).** A component may carry an optional
 `source_symbol` (a fixed reference ticker, e.g. `"VOO"`). When set, that component is computed on the

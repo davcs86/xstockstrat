@@ -196,7 +196,7 @@ class TestRunBacktest:
 
         result = await svc.RunBacktest(req, context=_owned_ctx())
         assert result.strategy_id == "s1"
-        assert "s1" in svc._backtests
+        assert ("u1", "s1") in svc._backtests
 
     def _legacy_req(self, symbols):
         req = MagicMock()
@@ -296,8 +296,10 @@ class TestGetStrategyReport:
     @pytest.mark.asyncio
     async def test_returns_report_when_found(self):
         svc = make_servicer()
-        svc._strategies["s1"] = analysis_pb2.StrategyScore(strategy_id="s1", overall_score=0.7)
-        svc._backtests["s1"] = _make_backtest("s1")
+        svc._strategies[("u1", "s1")] = analysis_pb2.StrategyScore(
+            strategy_id="s1", overall_score=0.7
+        )
+        svc._backtests[("u1", "s1")] = _make_backtest("s1")
 
         req = MagicMock()
         req.strategy_id = "s1"
@@ -855,7 +857,7 @@ class TestRunBacktestBackwardCompat:
         result = await svc.RunBacktest(req, context=_owned_ctx())
         assert result.strategy_id == "legacy"
         assert result.backtest_id
-        assert "legacy" in svc._backtests
+        assert ("u1", "legacy") in svc._backtests
 
 
 # ---------------------------------------------------------------------------
@@ -1792,10 +1794,10 @@ class TestScorePersistence:
 
         svc._scores_repo.upsert.assert_awaited_once()
         args = svc._scores_repo.upsert.await_args.args
-        assert args[0] == "s1"
-        assert args[1] == pytest.approx(score.overall_score)
-        assert args[2] == score.rating
-        assert set(args[3].keys()) == {"sharpe", "drawdown", "win_rate"}
+        assert args[:2] == ("u1", "s1")
+        assert args[2] == pytest.approx(score.overall_score)
+        assert args[3] == score.rating
+        assert set(args[4].keys()) == {"sharpe", "drawdown", "win_rate"}
 
     @pytest.mark.asyncio
     async def test_fr7_persist_failure_does_not_lose_read(self):
@@ -1821,6 +1823,7 @@ class TestScorePersistence:
         svc._scores_repo.list = AsyncMock(
             return_value=[
                 {
+                    "user_id": "u1",
                     "strategy_id": "s1",
                     "overall_score": 0.82,
                     "rating": "A",
@@ -1831,8 +1834,8 @@ class TestScorePersistence:
 
         await svc.hydrate_scores()
 
-        assert "s1" in svc._strategies
-        got = svc._strategies["s1"]
+        assert ("u1", "s1") in svc._strategies
+        got = svc._strategies[("u1", "s1")]
         assert got.overall_score == pytest.approx(0.82)
         assert got.rating == "A"
         assert dict(got.component_scores) == pytest.approx(
@@ -2221,12 +2224,12 @@ class TestHeadlineTriggers:
         assert kwargs["n_symbols"] == 1
         assert kwargs["total_trading_days"] == 400
         assert kwargs["provisional"] is True  # 1 < 3 symbols and 400 < 500 days
-        assert svc._strategies["s1"].evidence_days == 400
+        assert svc._strategies[("u1", "s1")].evidence_days == 400
 
     @pytest.mark.asyncio
     async def test_update_clears_inmemory_even_when_delete_raises(self):
         svc = _derivation_svc([])  # zero eligible cells after the definition change
-        svc._strategies["s1"] = analysis_pb2.StrategyScore(
+        svc._strategies[("u1", "s1")] = analysis_pb2.StrategyScore(
             strategy_id="s1", overall_score=0.9, rating="A"
         )
         _stub_update_repo(svc, _updated_row())
@@ -2236,7 +2239,7 @@ class TestHeadlineTriggers:
         await svc.ManageStrategy(_update_req(), context=_owned_ctx())
 
         # Unconditional pop FIRST — the stale grade is gone even though recompute/delete failed.
-        assert "s1" not in svc._strategies
+        assert ("u1", "s1") not in svc._strategies
 
     @pytest.mark.asyncio
     async def test_update_recompute_no_deadlock(self):
@@ -2285,7 +2288,7 @@ class TestScoreStrategyRecompute:
     @pytest.mark.asyncio
     async def test_zero_eligible_clears_and_not_found(self):
         svc = _derivation_svc([])
-        svc._strategies["s1"] = analysis_pb2.StrategyScore(
+        svc._strategies[("u1", "s1")] = analysis_pb2.StrategyScore(
             strategy_id="s1", overall_score=0.9, rating="A"
         )
         req = MagicMock()
@@ -2293,7 +2296,7 @@ class TestScoreStrategyRecompute:
         ctx = _abort_ctx()
         with pytest.raises(Exception, match="aborted"):
             await svc.ScoreStrategy(req, ctx)
-        assert "s1" not in svc._strategies  # stale grade popped
+        assert ("u1", "s1") not in svc._strategies  # stale grade popped
         svc._scores_repo.delete.assert_awaited_once()  # non-best-effort delete
         assert ctx.abort.await_args.args[0] == grpc.StatusCode.NOT_FOUND
 
@@ -2301,7 +2304,7 @@ class TestScoreStrategyRecompute:
     async def test_cells_read_failure_unavailable_no_mutation(self):
         svc = _derivation_svc([])
         svc._backtest_run_symbols_repo.fetch_eligible = AsyncMock(side_effect=Exception("db down"))
-        svc._strategies["s1"] = analysis_pb2.StrategyScore(
+        svc._strategies[("u1", "s1")] = analysis_pb2.StrategyScore(
             strategy_id="s1", overall_score=0.9, rating="A"
         )
         req = MagicMock()
@@ -2310,7 +2313,7 @@ class TestScoreStrategyRecompute:
         with pytest.raises(Exception, match="aborted"):
             await svc.ScoreStrategy(req, ctx)
         assert ctx.abort.await_args.args[0] == grpc.StatusCode.UNAVAILABLE
-        assert "s1" in svc._strategies  # untouched — no prior-state mutation
+        assert ("u1", "s1") in svc._strategies  # untouched — no prior-state mutation
 
     @pytest.mark.asyncio
     async def test_success_persists_provenance_and_emits(self):
@@ -2354,6 +2357,7 @@ class TestHydrateProvenance:
         svc._scores_repo.list = AsyncMock(
             return_value=[
                 {
+                    "user_id": "u1",
                     "strategy_id": "s1",
                     "overall_score": 0.7,
                     "rating": "B",
@@ -2365,7 +2369,7 @@ class TestHydrateProvenance:
             ]
         )
         await svc.hydrate_scores()
-        got = svc._strategies["s1"]
+        got = svc._strategies[("u1", "s1")]
         assert got.evidence_symbols == 5
         assert got.evidence_days == 900
         assert got.provisional is False
@@ -2597,7 +2601,7 @@ class TestGetBacktest:
             status=analysis_pb2.BACKTEST_STATUS_OK,
         )
         svc._backtest_details_repo = AsyncMock()
-        svc._backtest_details_repo.get = AsyncMock(return_value=stored.SerializeToString())
+        svc._backtest_details_repo.get = AsyncMock(return_value=(stored.SerializeToString(), "u1"))
 
         req = MagicMock()
         req.backtest_id = "bt-1"
@@ -6327,7 +6331,7 @@ class TestDeletedFormulaFlag:
                 formula_id="fid", name="RSI", deleted=True
             )
         )
-        warnings = await svc._deleted_formula_warnings(_custom_formula_definition(), [])
+        warnings = await svc._formula_status_warnings(_custom_formula_definition(), [])
         assert len(warnings) == 1
         assert "fid" in warnings[0] and "RSI" in warnings[0]
 
@@ -6338,7 +6342,7 @@ class TestDeletedFormulaFlag:
         svc._indicators.GetFormula = AsyncMock(
             return_value=indicators_pb2.FormulaDefinition(formula_id="fid", deleted=False)
         )
-        warnings = await svc._deleted_formula_warnings(_custom_formula_definition(), [])
+        warnings = await svc._formula_status_warnings(_custom_formula_definition(), [])
         assert warnings == []
 
     @pytest.mark.asyncio

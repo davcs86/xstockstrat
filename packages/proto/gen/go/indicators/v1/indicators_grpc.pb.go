@@ -28,6 +28,10 @@ const (
 	IndicatorsService_UpdateFormula_FullMethodName          = "/xstockstrat.indicators.v1.IndicatorsService/UpdateFormula"
 	IndicatorsService_DeleteFormula_FullMethodName          = "/xstockstrat.indicators.v1.IndicatorsService/DeleteFormula"
 	IndicatorsService_ListFundamentalMetrics_FullMethodName = "/xstockstrat.indicators.v1.IndicatorsService/ListFundamentalMetrics"
+	IndicatorsService_ListTemplates_FullMethodName          = "/xstockstrat.indicators.v1.IndicatorsService/ListTemplates"
+	IndicatorsService_ManageTemplate_FullMethodName         = "/xstockstrat.indicators.v1.IndicatorsService/ManageTemplate"
+	IndicatorsService_InstantiateTemplate_FullMethodName    = "/xstockstrat.indicators.v1.IndicatorsService/InstantiateTemplate"
+	IndicatorsService_ResolveTemplateIntent_FullMethodName  = "/xstockstrat.indicators.v1.IndicatorsService/ResolveTemplateIntent"
 )
 
 // IndicatorsServiceClient is the client API for IndicatorsService service.
@@ -58,6 +62,13 @@ type IndicatorsServiceClient interface {
 	DeleteFormula(ctx context.Context, in *DeleteFormulaRequest, opts ...grpc.CallOption) (*DeleteFormulaResponse, error)
 	// List the available fundamental metrics for formula declarations (feature 205)
 	ListFundamentalMetrics(ctx context.Context, in *ListFundamentalMetricsRequest, opts ...grpc.CallOption) (*ListFundamentalMetricsResponse, error)
+	// Template catalog (feature 224). List/read: any authenticated caller. Manage: ADMIN only.
+	ListTemplates(ctx context.Context, in *ListTemplatesRequest, opts ...grpc.CallOption) (*ListTemplatesResponse, error)
+	ManageTemplate(ctx context.Context, in *ManageTemplateRequest, opts ...grpc.CallOption) (*FormulaTemplate, error)
+	// Copies a formula template into a private formula owned by the x-user-id caller.
+	InstantiateTemplate(ctx context.Context, in *InstantiateTemplateRequest, opts ...grpc.CallOption) (*InstantiateTemplateResponse, error)
+	// Internal (SAN-bound xstockstrat-analysis): commits or aborts a strategy-template saga's copies.
+	ResolveTemplateIntent(ctx context.Context, in *ResolveTemplateIntentRequest, opts ...grpc.CallOption) (*ResolveTemplateIntentResponse, error)
 }
 
 type indicatorsServiceClient struct {
@@ -158,6 +169,46 @@ func (c *indicatorsServiceClient) ListFundamentalMetrics(ctx context.Context, in
 	return out, nil
 }
 
+func (c *indicatorsServiceClient) ListTemplates(ctx context.Context, in *ListTemplatesRequest, opts ...grpc.CallOption) (*ListTemplatesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListTemplatesResponse)
+	err := c.cc.Invoke(ctx, IndicatorsService_ListTemplates_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *indicatorsServiceClient) ManageTemplate(ctx context.Context, in *ManageTemplateRequest, opts ...grpc.CallOption) (*FormulaTemplate, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(FormulaTemplate)
+	err := c.cc.Invoke(ctx, IndicatorsService_ManageTemplate_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *indicatorsServiceClient) InstantiateTemplate(ctx context.Context, in *InstantiateTemplateRequest, opts ...grpc.CallOption) (*InstantiateTemplateResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(InstantiateTemplateResponse)
+	err := c.cc.Invoke(ctx, IndicatorsService_InstantiateTemplate_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *indicatorsServiceClient) ResolveTemplateIntent(ctx context.Context, in *ResolveTemplateIntentRequest, opts ...grpc.CallOption) (*ResolveTemplateIntentResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ResolveTemplateIntentResponse)
+	err := c.cc.Invoke(ctx, IndicatorsService_ResolveTemplateIntent_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // IndicatorsServiceServer is the server API for IndicatorsService service.
 // All implementations should embed UnimplementedIndicatorsServiceServer
 // for forward compatibility.
@@ -186,6 +237,13 @@ type IndicatorsServiceServer interface {
 	DeleteFormula(context.Context, *DeleteFormulaRequest) (*DeleteFormulaResponse, error)
 	// List the available fundamental metrics for formula declarations (feature 205)
 	ListFundamentalMetrics(context.Context, *ListFundamentalMetricsRequest) (*ListFundamentalMetricsResponse, error)
+	// Template catalog (feature 224). List/read: any authenticated caller. Manage: ADMIN only.
+	ListTemplates(context.Context, *ListTemplatesRequest) (*ListTemplatesResponse, error)
+	ManageTemplate(context.Context, *ManageTemplateRequest) (*FormulaTemplate, error)
+	// Copies a formula template into a private formula owned by the x-user-id caller.
+	InstantiateTemplate(context.Context, *InstantiateTemplateRequest) (*InstantiateTemplateResponse, error)
+	// Internal (SAN-bound xstockstrat-analysis): commits or aborts a strategy-template saga's copies.
+	ResolveTemplateIntent(context.Context, *ResolveTemplateIntentRequest) (*ResolveTemplateIntentResponse, error)
 }
 
 // UnimplementedIndicatorsServiceServer should be embedded to have
@@ -221,6 +279,18 @@ func (UnimplementedIndicatorsServiceServer) DeleteFormula(context.Context, *Dele
 }
 func (UnimplementedIndicatorsServiceServer) ListFundamentalMetrics(context.Context, *ListFundamentalMetricsRequest) (*ListFundamentalMetricsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListFundamentalMetrics not implemented")
+}
+func (UnimplementedIndicatorsServiceServer) ListTemplates(context.Context, *ListTemplatesRequest) (*ListTemplatesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListTemplates not implemented")
+}
+func (UnimplementedIndicatorsServiceServer) ManageTemplate(context.Context, *ManageTemplateRequest) (*FormulaTemplate, error) {
+	return nil, status.Error(codes.Unimplemented, "method ManageTemplate not implemented")
+}
+func (UnimplementedIndicatorsServiceServer) InstantiateTemplate(context.Context, *InstantiateTemplateRequest) (*InstantiateTemplateResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method InstantiateTemplate not implemented")
+}
+func (UnimplementedIndicatorsServiceServer) ResolveTemplateIntent(context.Context, *ResolveTemplateIntentRequest) (*ResolveTemplateIntentResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ResolveTemplateIntent not implemented")
 }
 func (UnimplementedIndicatorsServiceServer) testEmbeddedByValue() {}
 
@@ -404,6 +474,78 @@ func _IndicatorsService_ListFundamentalMetrics_Handler(srv interface{}, ctx cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _IndicatorsService_ListTemplates_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListTemplatesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(IndicatorsServiceServer).ListTemplates(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: IndicatorsService_ListTemplates_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(IndicatorsServiceServer).ListTemplates(ctx, req.(*ListTemplatesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _IndicatorsService_ManageTemplate_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ManageTemplateRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(IndicatorsServiceServer).ManageTemplate(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: IndicatorsService_ManageTemplate_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(IndicatorsServiceServer).ManageTemplate(ctx, req.(*ManageTemplateRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _IndicatorsService_InstantiateTemplate_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(InstantiateTemplateRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(IndicatorsServiceServer).InstantiateTemplate(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: IndicatorsService_InstantiateTemplate_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(IndicatorsServiceServer).InstantiateTemplate(ctx, req.(*InstantiateTemplateRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _IndicatorsService_ResolveTemplateIntent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ResolveTemplateIntentRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(IndicatorsServiceServer).ResolveTemplateIntent(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: IndicatorsService_ResolveTemplateIntent_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(IndicatorsServiceServer).ResolveTemplateIntent(ctx, req.(*ResolveTemplateIntentRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // IndicatorsService_ServiceDesc is the grpc.ServiceDesc for IndicatorsService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -446,6 +588,22 @@ var IndicatorsService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListFundamentalMetrics",
 			Handler:    _IndicatorsService_ListFundamentalMetrics_Handler,
+		},
+		{
+			MethodName: "ListTemplates",
+			Handler:    _IndicatorsService_ListTemplates_Handler,
+		},
+		{
+			MethodName: "ManageTemplate",
+			Handler:    _IndicatorsService_ManageTemplate_Handler,
+		},
+		{
+			MethodName: "InstantiateTemplate",
+			Handler:    _IndicatorsService_InstantiateTemplate_Handler,
+		},
+		{
+			MethodName: "ResolveTemplateIntent",
+			Handler:    _IndicatorsService_ResolveTemplateIntent_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

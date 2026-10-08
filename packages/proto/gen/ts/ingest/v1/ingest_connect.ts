@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { BackfillJob, CancelBackfillRequest, GetBackfillStatusRequest, IngestSignalRequest, IngestSignalResponse, ListBackfillJobsRequest, ListBackfillJobsResponse, ListSignalSourcesRequest, ListSignalSourcesResponse, ManageSignalSourceRequest, ManageSignalSourceResponse, NormalizeRawDataRequest, NormalizeRawDataResponse, QuerySignalsRequest, QuerySignalsResponse, TriggerBackfillRequest, TriggerBackfillResponse } from "./ingest_pb.js";
+import { BackfillJob, CancelBackfillRequest, GetBackfillStatusRequest, IngestSignalRequest, IngestSignalResponse, InstantiateTemplateRequest, ListBackfillJobsRequest, ListBackfillJobsResponse, ListSignalSourcesRequest, ListSignalSourcesResponse, ListTemplatesRequest, ListTemplatesResponse, ManageSignalSourceRequest, ManageSignalSourceResponse, ManageTemplateRequest, NormalizeRawDataRequest, NormalizeRawDataResponse, QuerySignalsRequest, QuerySignalsResponse, SignalSource, SourceTemplate, TriggerBackfillRequest, TriggerBackfillResponse } from "./ingest_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -97,6 +97,37 @@ export const IngestService = {
       name: "ManageSignalSource",
       I: ManageSignalSourceRequest,
       O: ManageSignalSourceResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Template catalog (feature 224). List/read: any authenticated caller. Manage: ADMIN only.
+     *
+     * @generated from rpc xstockstrat.ingest.v1.IngestService.ListTemplates
+     */
+    listTemplates: {
+      name: "ListTemplates",
+      I: ListTemplatesRequest,
+      O: ListTemplatesResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc xstockstrat.ingest.v1.IngestService.ManageTemplate
+     */
+    manageTemplate: {
+      name: "ManageTemplate",
+      I: ManageTemplateRequest,
+      O: SourceTemplate,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Copies a source template into a private signal source owned by the x-user-id caller.
+     *
+     * @generated from rpc xstockstrat.ingest.v1.IngestService.InstantiateTemplate
+     */
+    instantiateTemplate: {
+      name: "InstantiateTemplate",
+      I: InstantiateTemplateRequest,
+      O: SignalSource,
       kind: MethodKind.Unary,
     },
   }

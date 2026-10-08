@@ -9,6 +9,7 @@ RUN curl -fsSL \
     | tar xz -C /usr/local/bin migrate
 
 COPY scripts/db-migrate.sh /repo/scripts/db-migrate.sh
+COPY scripts/render-migrations.sh /repo/scripts/render-migrations.sh
 COPY services /repo/services
 WORKDIR /repo
 

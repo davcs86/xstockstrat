@@ -27,15 +27,17 @@ async def test_upsert_uses_on_conflict_and_serializes_component_scores():
     repo = StrategyScoresRepository(db_pool)
 
     components = {"sharpe": 0.9, "drawdown": 0.7, "win_rate": 0.6}
-    result = await repo.upsert("strat-1", 0.82, "A", components)
+    result = await repo.upsert("alice", "strat-1", 0.82, "A", components)
 
-    # SQL is an upsert on the primary key.
+    # SQL is an upsert on the owner-keyed primary key (feature 224, strategy_scores_v2).
     sql = db_pool.fetchrow.call_args.args[0]
-    assert "ON CONFLICT (strategy_id) DO UPDATE" in sql
+    assert "analysis.strategy_scores_v2" in sql
+    assert "ON CONFLICT (user_id, strategy_id) DO UPDATE" in sql
+    assert db_pool.fetchrow.call_args.args[1:3] == ("alice", "strat-1")
 
     # The component-scores map is serialized to a JSON string for the ::jsonb bind,
     # not passed through as a dict.
-    jsonb_arg = db_pool.fetchrow.call_args.args[4]
+    jsonb_arg = db_pool.fetchrow.call_args.args[5]
     assert jsonb_arg == json.dumps(components)
 
     # The returned row has its JSONB decoded back to a dict.
@@ -54,8 +56,8 @@ async def test_upsert_empty_component_scores_serializes_to_empty_object():
         }
     )
     repo = StrategyScoresRepository(db_pool)
-    await repo.upsert("s2", 0.1, "F", {})
-    assert db_pool.fetchrow.call_args.args[4] == json.dumps({})
+    await repo.upsert("alice", "s2", 0.1, "F", {})
+    assert db_pool.fetchrow.call_args.args[5] == json.dumps({})
 
 
 def test_to_dict_decodes_jsonb_string():
@@ -104,6 +106,7 @@ async def test_list_decodes_every_row():
     )
     repo = StrategyScoresRepository(db_pool)
     rows = await repo.list()
+    assert "analysis.strategy_scores_v2" in db_pool.fetch.call_args.args[0]
     assert len(rows) == 2
     assert rows[0]["component_scores"] == {"sharpe": 0.9}
     assert rows[1]["component_scores"] == {}
@@ -121,7 +124,11 @@ async def test_get_by_id_decodes_row():
         }
     )
     repo = StrategyScoresRepository(db_pool)
-    row = await repo.get_by_id("s1")
+    row = await repo.get_by_id("alice", "s1")
+    sql, *params = db_pool.fetchrow.call_args.args
+    assert "analysis.strategy_scores_v2" in sql
+    assert "user_id = $1 AND strategy_id = $2" in sql
+    assert params == ["alice", "s1"]
     assert row["strategy_id"] == "s1"
     assert row["component_scores"] == {"sharpe": 0.9}
 
@@ -143,6 +150,7 @@ async def test_upsert_binds_provenance_columns():
     )
     repo = StrategyScoresRepository(db_pool)
     await repo.upsert(
+        "alice",
         "s1",
         0.7,
         "B",
@@ -156,10 +164,10 @@ async def test_upsert_binds_provenance_columns():
     assert "total_trading_days" in sql
     assert "provisional" in sql
     args = db_pool.fetchrow.call_args.args
-    # Positional binds after the JSONB component_scores ($4): n_symbols, days, provisional.
-    assert args[5] == 4
-    assert args[6] == 900
-    assert args[7] is True
+    # Positional binds after the JSONB component_scores ($5): n_symbols, days, provisional.
+    assert args[6] == 4
+    assert args[7] == 900
+    assert args[8] is True
 
 
 @pytest.mark.asyncio
@@ -168,8 +176,26 @@ async def test_delete_issues_delete_sql():
     db_pool = AsyncMock()
     db_pool.execute = AsyncMock(return_value=None)
     repo = StrategyScoresRepository(db_pool)
-    await repo.delete("s1")
-    sql, sid = db_pool.execute.call_args.args
-    assert "DELETE FROM analysis.strategy_scores" in sql
-    assert "WHERE strategy_id = $1" in sql
-    assert sid == "s1"
+    await repo.delete("alice", "s1")
+    sql, uid, sid = db_pool.execute.call_args.args
+    assert "DELETE FROM analysis.strategy_scores_v2" in sql
+    assert "WHERE user_id = $1 AND strategy_id = $2" in sql
+    assert (uid, sid) == ("alice", "s1")
+
+
+@pytest.mark.asyncio
+async def test_list_unscored_pairs_selects_ambiguous_owner_pairs_without_v2_row():
+    """feature 224: boot recompute reads (user_id, strategy_id) pairs of ambiguous ids with no
+    strategy_scores_v2 row, bounded by the caller's per-pass LIMIT."""
+    db_pool = AsyncMock()
+    db_pool.fetch = AsyncMock(return_value=[{"user_id": "alice", "strategy_id": "mr"}])
+    repo = StrategyScoresRepository(db_pool)
+    pairs = await repo.list_unscored_pairs(limit=50)
+    sql, *params = db_pool.fetch.call_args.args
+    assert "analysis.strategies" in sql
+    assert "analysis.strategy_scores_v2" in sql
+    assert "NOT EXISTS" in sql
+    assert "HAVING count(*) > 1" in sql
+    assert "LIMIT $1" in sql
+    assert params == [50]
+    assert pairs == [("alice", "mr")]

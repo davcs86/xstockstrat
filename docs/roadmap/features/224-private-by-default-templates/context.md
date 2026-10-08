@@ -344,3 +344,641 @@ OQ-4 to OQ-6 remain for /sdd-design.
     - `merge-order.md` row 72 said the agent tool count was 52. The trunk count is 43, which reaches 45 after 224.
     - Proto field numbers are now given per message in build step 0.
   - New open risk: feature 084's droplet `db-migrator` env needs `SEED_USER_ID`.
+
+## Session 2026-10-07T00:00:00Z — sdd-spec
+
+- Wrote implementation-spec.md: 41 steps, all 37 `@AC-*` scenarios mapped to a step's `**Covers**`. Status design-approved → implementation-ready.
+- **Order change from design §12:** each service's migration lands before the code that reads it. Analysis `026` (Step 6) now comes before analysis threading (Step 7), because `_persist_backtest_run` writes `backtest_runs.user_id` and backtest-details retention is scoped by owner. The design's other constraints still hold:
+  - analysis threads the owner header before indicators SAN-binds the bypass and the interceptor is removed (Steps 7–17);
+  - config per-user secrets ship before the ingest poller (Steps 21 → 23);
+  - the blend helper ships before the saga (Steps 25 → 31).
+- Key codebase findings:
+  - **Migration numbers** are free on every remote branch (git ls-tree scan, 2026-10-07): indicators `007`, ingest `013`, analysis `026`. Feature 217's `StrategyDefinition.sector_param_overrides = 15` is already on trunk, so 224 uses field 16.
+  - **Line numbers have moved since design.md** (217 merged). The spec cites the current lines:
+    - analysis→ingest calls: `live_loop.py:157,457`, `entry_backfill.py:96`, `pnl_pattern_consumer.py:109` (owner at `:188`, `_compose` at `:357`), `servicer.py:3540,5270,5294,5388`, `screener.py:320`, `fundsignal_loop.py:450,479`;
+    - analysis→indicators calls: `evaluator.py:440,455,528,579,606`, `servicer.py:556,582,1325,1335,1628,2180`, `screener.py:293,342,359`, `fundamentals_scoring.py:52`;
+    - blend-id reads: `servicer.py:2834,2962,4425`, `live_loop.py:337`, `entry_backfill.py:87`.
+  - **`SEED_USER_ID`** is already wired at all three run sites (`docker-compose.yml:103`, `.do/app*.yaml:678/680`, `.env.example:27`). The analysis-013 envsubst branch (`db-migrate.sh:72-89`) stays untouched (F-01). The new `scripts/render-migrations.sh` handles the `-- requires-env:` headers.
+  - **CI** has no migration job today. Step 3 adds `migration-rerun` (Timescale service container) and `migration-contract-gate`. The DB-backed AC-15/AC-22/AC-27 assertions run inside `migration-rerun` (Step 33).
+  - **Indicators `LEDGER_ENDPOINT`** is already in every deploy file, so Step 14 needs no deploy-file change.
+  - **e2e:** no IndicatorsService mock exists. Step 39 adds a minimal one on port 9092 and sets `INDICATORS_ENDPOINT`, so the router-traversing api-smoke checks can run (fails.md 2026-10-05).
+
+### Decisions
+
+- **Spec-level elaborations.** These are not decided in design.md; each is listed in the impl-spec Execution Summary for `/sdd-review impl-spec` to confirm or reject:
+  1. FR-13 owner-selector fields: `ListSignalSourcesRequest.owner_user_id=2`, `QuerySignalsRequest.owner_user_id=7`, `GetStrategyRequest.owner_user_id=2`, `ListStrategyDefinitionsRequest.owner_user_id=4`. `ListFormulasRequest.author_filter` is reused as the admin owner selector.
+  2. Saga visibility: an internal indicators `ResolveTemplateIntent(intent_id, commit)` un-hides or hard-deletes the pending copies. Intent states run `PENDING→COMMITTED→FINALIZED` or `PENDING→ABORTING→ABORTED`.
+  3. Three template RPCs per service, no `GetTemplate` (YAGNI).
+  4. `StrategyScore.origin = 8`, for FR-8 parity on `ListStrategies`.
+  5. A headerless `ManageSignalSource` REGISTER of a new slug gets `FAILED_PRECONDITION`, since only `analysis-fundsignal` may write as `system`.
+  6. Saga sweep constants (`_INTENT_STALE_SECONDS=900`, `_INTENT_SWEEP_SECONDS=300`) are invariant constants, not config keys.
+  7. `GetAttribution` filters to the caller-visible own + system source set, which fixes AC-12 for legacy unscoped snapshots.
+- **ManageSignalSource has no DELETE verb** (`ingest.proto:191-197`). FR-4 "delete" maps to DEACTIVATE. No new verb is added (C-18).
+
+### Open Threads
+
+- **Step 18 operator gate:** prod `mcp_client` row count. If 0, `credential_scope` is omitted; if > 0, it ships.
+- **Step 5 gate:** if the SAN spike fails, Steps 14/19/21 switch to the cert-parsing fallback (record in the Deviation Log).
+- **Pre-integration:** verify the prod `analysis.fundsignal.scoring_formula_id` (carried from design).
+- **Step 41** creates the follow-up "224 enforce + contract" and its merge-order row before the integration PR.
+- **`/sdd-review impl-spec`** must confirm or reject the seven elaborations above.
+
+## Session 2026-10-07 — sdd-review impl-spec (advisory)
+
+- Result: 4 failures, 19 warnings (advisory — did not block). Overlap: CLEAN.
+- Operator decisions (2026-10-07): approve tool count 43 → 45 (C-16 CHANGE of @feature-214 @AC-1); extend the round-5 fixed-constant ruling to `_INTENT_STALE_SECONDS`/`_INTENT_SWEEP_SECONDS`; merge-order row 72 marked resolved.
+- All seven spec-time decisions ACCEPTED by the reviewer (decision 2 conditional on the Step 31 grant fix; decision 7 legacy-slug attribution edge accepted for pre-feature data).
+- Findings carried into execution (all addressed in implementation-spec.md before execution started):
+  - Step 19/20/23: `list_all_sources` SELECT lacks `user_id`/`credential_scope` read by `poll_one_source`; Step 19 adds them, Step 20 tests it — [x] addressed in spec
+  - Step 27/31/17/32: saga calls to indicators lacked a grant; dedicated SAN-bound `analysis-template-saga` caller id, exact request/sweep metadata, Step 17 exemption, Step 32 assertions, retired/missing formula template → whole saga `NOT_FOUND` — [x] addressed in spec
+  - Step 37: exact Files (`configUiIndicatorsClient.ts` create, `configUiBff.ts` IndicatorsService wiring, `indicatorsClient.ts` entry removed); `mcp_client` bearer prompt moved to Step 38 — [x] addressed in spec
+  - Step 41: explicit follow-up files, NNN resolved at `/sdd-story` and logged in the Deviation Log, merge-order row pre-reserves analysis 027 / indicators 008 / ingest 014 — [x] addressed in spec
+  - Step 1: deprecated `is_public`/`author` in `FormulaTemplate.payload` ignored on instantiate; `ListStrategyDefinitionsRequest.owner_user_id` documented admin-only — [x] addressed in spec
+  - Step 2: generated-code directory in Files is the accepted convention — [x] addressed in spec
+  - Step 3: ci.yml `scripts/**` filter cite fixed to `:67-68`; `migration-contract-gate` restricted to `pull_request` — [x] addressed in spec
+  - Steps 4, 5, 33, 39: explicit coverage lines (Step 5 runs the full ingest suite at `--cov-fail-under=40`) — [x] addressed in spec
+  - Step 6: `strategy_scores_v2` seed uses explicit column lists on both sides — [x] addressed in spec
+  - Step 7: un-granted `system` in analysis resolves to owner `""`, recorded as a deliberate divergence (also in design.md §2) — [x] addressed in spec
+  - Step 8: AC-37 test case for the `RunFundamentalsScan` manual path — [x] addressed in spec
+  - Step 9: `audit_admin_read` forwards the trio on the ledger `AppendEvent`; trio grep in Steps 9 and 19 Verification — [x] addressed in spec
+  - Step 14: evidence path `app/services/seed_formulas.py`; per-service `admin_audit.py`/`peer_identity.py` rationale (also in design.md Rejected Alternatives) — [x] addressed in spec
+  - Step 19: Verification catches every `slug = $N` incl. multi-line SQL and requires an owner predicate; dead `get_active_source` deleted — [x] addressed in spec
+  - Step 20: extend the existing `_ctx` builder (`user_id`, `peer_sans`, plus `internal_caller`) instead of a near-duplicate `ctx_with` — [x] addressed in spec
+  - Step 29: cite `validate_config_json` (`signal_sources.py:186`, imported `servicer.py:35`) — [x] addressed in spec
+  - Step 31: STRATEGY template validation resolves formula-template ids against the indicators `FormulaTemplate` payload (`outputs`, `fundamental_inputs`) via `ListTemplates`, not `GetFormula` — [x] addressed in spec
+  - Step 33: partial pass renders via `render-migrations.sh` (+ analysis-013 render) and runs per-service `migrate … goto 6|12|25`; `db-migrate.sh` supports only up/version/force — [x] addressed in spec
+  - Step 34: `remove-agent-postgres-mcp.feature:14` 43 → 45; stale agent `CLAUDE.md` and `mcp-tools.md` secret/admin-gate text added — [x] addressed in spec
+  - Step 38: insights BFF `setConfig` forces `isSecret: true`/`createKey: true`; Step 39 test case — [x] addressed in spec
+  - Step 39: config-ui `ManageTemplate` smoke check moved into `e2e/config-ui/api-smoke.spec.ts` — [x] addressed in spec
+  - Step 40: stale ingest `CLAUDE.md` Authorization / global `mcp_credential.<slug>` note and analysis `CLAUDE.md` fundsignal admin-bit / bare-`strategy_id` cache note; Verification grep extended — [x] addressed in spec
+- Overlap: 196 shares ingest servicer.py (different handler) and should inventory 224's new deprecated indicators fields; 084 droplet migrator needs SEED_USER_ID; 215/032/039/040 future same-area watch.
+
+## Session 2026-10-07 — sdd-execute sequential (re-spec gate)
+
+- **Re-spec gate:** the read-only validation checked every **Files** path and **Codebase Evidence** citation in all 41 steps. Everything resolves except two spec defects, both fixed with operator approval:
+  - **Step 22.** `secretsAndScope.test.ts` contains no global-only rejection test to invert. The step drops that file from its Files and adds instruction 5: a new AC-35 test asserting that a per-user secret write is accepted (RED today, rejected at `configServiceImpl.ts:464-466`).
+  - **Step 34.** Its Files list now includes `services/xstockstrat-agent/tests/test_tools_endpoint.py`, which instruction 4 edits.
+  - The remaining 1–8 line evidence drift is absorbed by per-step discovery.
+- **Operator decisions (2026-10-07):**
+  - Proceed with the sequential run.
+  - **Step 18 gate:** prod has **zero** `mcp_client` signal sources. Ingest 013 therefore omits `credential_scope=LEGACY_GLOBAL` and its reset trigger.
+- **Tooling setup (all 41 steps):**
+  - docker 29.6.2 ✓ (dockerd started)
+  - go 1.27 ✓
+  - uv 0.8.17 ✓; analysis, indicators and ingest venvs on py3.12, agent on py3.13 ⬇ synced
+  - node 22 ✓, pnpm 9.15.9 ✓, workspace `pnpm install` ⬇
+  - shellcheck 0.11.0 ⬇ (shellcheck-py) and shfmt v3.14.1 ⬇
+  - buf ✗ on the host; proto codegen uses the Docker `Dockerfile.codegen` image via `localenv-setup.sh`
+  - Playwright chromium ✓ (`/opt/pw-browsers`)
+
+### Step 1 — proto: template types, ownership fields, deprecations, template RPCs [done]
+- **common:** adds `TemplateKind`, `TemplateOperation`, `TemplateMeta` and `TemplateOrigin`.
+- **indicators:**
+  - deprecates `is_public` (FormulaDefinition 8, Register 4, Update 6), Register `author` 6 and List `include_public` 2;
+  - adds `FormulaDefinition.origin=15`;
+  - adds four template RPCs: `ListTemplates`, `ManageTemplate`, `InstantiateTemplate` and the internal `ResolveTemplateIntent`.
+- **ingest:**
+  - adds `ExternalSignal.user_id=11`, `SignalSource.user_id=13` and `SignalSource.origin=14`;
+  - adds the `SignalScope` enum, plus `QuerySignalsRequest.scope=6` and `owner_user_id=7`, and `ListSignalSourcesRequest.owner_user_id=2`;
+  - adds three template RPCs.
+- **analysis:** adds `StrategyDefinition.origin=16`, `StrategyScore.origin=8`, `GetStrategyRequest.owner_user_id=2` and `ListStrategyDefinitionsRequest.owner_user_id=4`, plus three template RPCs.
+- **config:** adds `GetSecretRequest.user_id=4` and rewrites the `SetConfigRequest.user_id` comment.
+- **Verification:** `buf lint` and `buf breaking --against HEAD` both exit 0, run through the `bufbuild/buf:1.72.0` Docker image (the pinned version, since buf isn't on the host).
+- **TDD:** N/A (proto).
+- **Files modified:** `packages/proto/{common,indicators,ingest,analysis,config}/v1/*.proto`.
+- **Deviations:** verification ran buf through Docker instead of a host binary. This is a CI-equivalent fallback at the same pinned version.
+
+### Step 2 — proto-gen: regenerate stubs [done]
+- Regenerated the stubs with `./scripts/localenv-setup.sh`, using the version-pinned `Dockerfile.codegen` image.
+- 52 generated files changed (Go, Python, TS and TS dist), all within analysis, common, config, indicators and ingest.
+- A second run produced the same set, so there is no drift.
+- Files modified: `packages/proto/gen/**` (the five touched packages).
+- TDD: N/A. Deviations: none. (The script also wrote dev mTLS certs to `certs/`, which is git-ignored and not staged.)
+
+### Step 3 — service: migration tooling [done]
+- New scripts:
+  - `scripts/render-migrations.sh`: renders `-- requires-env:` headers with an allowlisted `envsubst`; files without the header are copied byte-identical.
+  - `scripts/check-migration-contract.sh`.
+  - `scripts/migration-rerun.sh`.
+- `db-migrate.sh up` renders through `render-migrations.sh` after the unchanged analysis-013 branch.
+- `scripts/Dockerfile.migrate` now COPYs the renderer (D-2, operator-approved).
+- CI:
+  - new `migrations` paths filter;
+  - new `migration-rerun` job (TimescaleDB service and the migrator image);
+  - new PR-only `migration-contract-gate` job;
+  - both jobs added to `ci-gate`.
+- TDD with Step 4: RED (both `.test.sh` scripts failed with "missing script") → GREEN (all assertions passed).
+- Verification: shellcheck and shfmt clean, the YAML parses, and the gate is PR-only.
+- Files modified:
+  - `scripts/{render-migrations,check-migration-contract,migration-rerun}.sh`
+  - `scripts/db-migrate.sh`
+  - `scripts/Dockerfile.migrate`
+  - `.github/workflows/ci.yml`
+- Deviations: D-2 and D-3. Note: `envsubst` (gettext-base) was installed on the host for local tests; the migrator image and CI runners already ship it.
+
+### Step 4 — test: migration tooling structural tests [done]
+- `render-migrations.test.sh` checks five things:
+  - (a) the header without its variable set fails and names the variable;
+  - (b) the variable is rendered while `$$` blocks and `$1` stay intact;
+  - (c) files without the header are byte-identical;
+  - (d) `.down.sql` files are copied;
+  - (e) `Dockerfile.migrate` COPYs the renderer (guards D-2).
+- `check-migration-contract.test.sh` uses a throwaway repo with a fake `origin/main` and checks three cases: (a) passes, and (b) and (c) fail.
+- Both tests are wired into the `shell-lint` job.
+- AC: — (tooling).
+- RED: both failed with "script missing". GREEN: all assertions passed.
+- shellcheck and shfmt are clean on the new tests.
+- Files: `scripts/{render-migrations,check-migration-contract}.test.sh`, `.github/workflows/ci.yml`.
+- Deviations: none.
+- Note: the host's shellcheck 0.11 flags a pre-existing SC2329 in `scripts/integration-test.sh`. That is out of scope and untouched, and CI's apt shellcheck predates that check.
+
+### Step 5 — test: peer-SAN spike [done] (GATE PASSED)
+- **grpc.aio** (ingest, grpcio 1.80): on the real mTLS harness, `context.peer_identity_key() == "x509_subject_alternative_name"`. `peer_identities()` includes the exact element `b"xstockstrat-analysis"` for the analysis leaf and leaves it out for a different leaf.
+- **grpc-js** (config, ^1.14.5): `call.getAuthContext().sslPeerCertificate.subjectaltname` parses as a comma-separated list with `DNS:` prefixes to exactly `["xstockstrat-ingest"]`, and a different leaf yields its own SAN.
+- **Outcome:** Steps 14, 19 and 21 use these APIs directly. The design fallback (parsing the cert from `auth_context()`) is **not needed**.
+- **Verification:**
+  - ingest: 223 passed, coverage 77.28% (≥40); `ruff check` and `ruff format --check` clean.
+  - config: 123/123 passed, c8 lines 83.67% (≥40); eslint 0 errors, and no warnings from the new file.
+- TDD: N/A (spike).
+- Files: `services/xstockstrat-ingest/tests/test_peer_identity_spike.py`, `services/xstockstrat-config/src/__tests__/peerSanSpike.test.ts`.
+- Deviations: none.
+
+### Step 6 — migration: analysis `026_owner_dimension_templates` [done]
+- **Header and guard:** `-- requires-env: SEED_USER_ID`, plus an unconditional guard that raises if the seed is unset or not rendered.
+- **D-1 backfill:** `backtest_runs.user_id` is filled with the strategy's owner when exactly one owner holds that strategy, otherwise with `SEED_USER_ID`. NOT NULL is deferred to the contract feature.
+- **Owner columns:** `user_id` is added to `backtest_run_symbols` and `backtest_details`, backfilled from `backtest_runs`, and covered by two owner-leading indexes.
+- **`strategy_scores_v2`:** keyed `(user_id, strategy_id)`. It is seeded from `strategy_scores` with explicit column lists for unambiguous ids only, guarded by `to_regclass`.
+- **New schema:** `analysis.strategies` gains origin columns. New tables `analysis.strategy_templates` (no seed rows) and `analysis.template_intents` (state CHECK, plus a `(state, updated_at)` index).
+- **No triggers.** Every statement is idempotent: `IF NOT EXISTS`, `WHERE … IS NULL`, `ON CONFLICT DO NOTHING`.
+- **Down file:** drops the new tables, columns and indexes. It deliberately keeps the `backtest_runs.user_id` backfill, which is additive and harmless to N-1.
+- **Verification (offline):**
+  - 025 → 026 numbering is correct.
+  - Up and down are parity-checked by inspection.
+  - Every referenced column was checked against migrations 006, 007, 008 and 015.
+  - `render-migrations.sh` renders both `${SEED_USER_ID}` placeholders and leaves the `$$` blocks intact. Rendering without the variable exits 1.
+  - The live apply and replay run in CI's `migration-rerun` job.
+- TDD: N/A (migration).
+- Files: `services/xstockstrat-analysis/migrations/026_owner_dimension_templates.{up,down}.sql`.
+- Deviation: the spec named no index for `template_intents`, so it is named `idx_template_intents_state_updated`. `intent_id` has no default, so writers must supply the UUID (Step 31).
+
+### Step 7 — service: analysis identity threading and fundsignal `system` identity [done]
+- **Evaluator:** gains `for_owner`. The live loop uses a per-owner evaluator, a once-per-cycle system drain (`SignalScope.SYSTEM`, `analysis-system-read`), and an own-signal drain per owner.
+- **Owner on outbound calls:**
+  - `entry_backfill` uses the system drain plus a per-owner memo.
+  - The pnl consumer sends QuerySignals as the order owner.
+  - The fundamentals universe is read in the SYSTEM scope.
+- **Fundsignal** (both the scheduled loop and `RunFundamentalsScan`):
+  - **Identity:** sends `x-user-id: system` with `x-internal-caller: analysis-fundsignal`; the admin-bit injection is deleted.
+  - **Scoring pre-flight:** `GetFormula` must return `author == SYSTEM_AUTHOR` (AC-6/AC-37). The per-symbol built-in fallback is deleted (deliberate C-18 removal).
+  - **Registration:** keyed on the slug.
+  - **Aborts:** a register `FAILED_PRECONDITION`, or a `NOT_FOUND` on IngestSignal, aborts the cycle with an ERROR alert (`_emit_warning` gains a severity parameter).
+- **Servicer:**
+  - Adds a `SYSTEM_IDENTITY` constant.
+  - An inbound `x-user-id: system` without a grant resolves to `""`, the documented divergence from design §2.
+  - Adds the GetAttribution visible-source filter (decision 7).
+- **Files:** `app/services/evaluator.py`, `app/engine/{live_loop,entry_backfill,pnl_pattern_consumer,fundsignal_loop}.py`, `app/handlers/servicer.py`. `main.py` needed no change.
+- **Deviations:** D-4, D-5.
+
+### Step 8 — test: threading, fundsignal identity, runtime header guard [done]
+- **New `tests/test_owner_header_guard.py`:** a runtime stub-level guard requiring every ingest and indicators call to carry a non-empty `x-user-id`. `system` is allowed only with the fundsignal or system-read grant.
+- **`conftest.py`:** adds `ctx_with` and `RecordingStub`.
+- **Updated tests:**
+  - fundsignal: AC-6, AC-36, AC-37 (loop and manual paths), NOT_FOUND abort, slug-keyed registration, no built-in fallback
+  - live loop: AC-26, system-scope universe, owner header on `_eval_pair`
+  - pnl: owner header on the composer
+  - attribution: AC-12 filter, `system` caller owns nothing
+- **TDD:**
+  - RED: 21 failed, 112 passed. Examples: `QuerySignals sent x-user-id []`, `assert None == 'system'`, `'completed' == 'failed'`, and the built-in fallback mock called once.
+  - GREEN: 901 passed, coverage 85.52% (≥40). Ruff check and format are clean.
+- **Some guard tests were already green before Step 7.** ListOpportunities, GetAttribution, analytics, screener, the materializer and the backtest prefetch already sent the owner header; their tests pin that behavior against regressions.
+- **Files:** `tests/{conftest,test_owner_header_guard,test_fundsignal_loop,test_live_loop,test_pnl_pattern_consumer,test_get_attribution,test_entry_backfill}.py`.
+- **Deviations:** D-6 and D-7.
+- **Noted, not fixed (pre-existing behavior):** after an IngestSignal NOT_FOUND abort, the triggering symbol's `fundsignal_emitted` claim row remains, as it already did for any failed emit.
+
+### Step 9 — service: analysis owner dimension, `GetBacktest` ownership, strategy admin read [done]
+- **Repos** (all owner-scoped):
+  - `strategy_scores` reads and writes `strategy_scores_v2`, conflicting on `(user_id, strategy_id)`, and adds `list_unscored_pairs`.
+  - `backtest_run_symbols.fetch_eligible` and the `backtest_details` insert and retention.
+  - `backtest_runs.list_by_strategy(user_id, …)`.
+- **New `app/admin_audit.py`:**
+  - Emits 1 + K events: one on the admin's stream and one per foreign owner, or none if the page is all the admin's own objects.
+  - At most 4 appends run concurrently, and a page may name at most 100 foreign owners (fixed constants).
+  - Forwards only the header trio, and fails closed with `UNAVAILABLE`.
+- **Servicer:**
+  - In-memory state is keyed `(user_id, strategy_id)`. `RunBacktest` passes the owner to every persist path.
+  - `ListStrategies`, `GetStrategyReport`, `ListBacktests` and `GetStrategyAnalytics` read by owner.
+  - `GetBacktest` denies any non-owned run, admins included (D-9, operator decision).
+  - `GetStrategy` and `ListStrategyDefinitions` honor `owner_user_id` only for an ADMIN caller, and those reads are audited.
+  - `_BOOT_RECOMPUTE_MAX_PAIRS = 50`, with `recompute_unscored_pairs()` called after `hydrate_scores` in `main.py`.
+- **Files:**
+  - `app/repositories/{strategy_scores,backtest_run_symbols,backtest_details,backtest_runs}.py`
+  - `app/admin_audit.py`
+  - `app/handlers/servicer.py`
+  - `app/main.py`
+- **Deviations:** D-8, D-9, D-10.
+
+### Step 10 — test: owner-keyed analysis state and strategy admin read [done]
+- **New `tests/test_owner_dimension.py`** (22 tests). Covers:
+  - AC-21: same strategy id with two owners; ListBacktests, GetBacktest and analytics owner-scoped; admin GetBacktest denied.
+  - AC-28: the strategy part.
+  - Audit 1 + K, the zero-event case, fail-closed behavior and the header trio.
+  - The boot recompute cap.
+- Four repo test files are updated for the new SQL and signatures.
+- **TDD:**
+  - RED: 12 failed in the repo tests (for example `'analysis.strategy_scores_v2' in 'SELECT * FROM analysis.strategy_scores'`, and `fetch_eligible() takes 3 positional arguments`), and the new module failed with `ImportError: admin_audit`. D-9's flipped test was RED before the deny change.
+  - GREEN: 924 passed, coverage 85.70% (≥40), ruff check and format clean.
+- **Files:** `tests/test_owner_dimension.py`, `tests/test_{strategy_scores,backtest_run_symbols,backtest_details,backtest_runs}_repo.py`, `tests/test_analysis_servicer.py`.
+- **Deviation:** D-11.
+- **Open (owned by Step 14):** `GetStrategy`'s deleted-formula check still calls indicators as the admin, which is the indicators admin-read work in Step 14.
+
+### Step 11 — service: evaluator unreadable-formula seam and write/read warnings [done]
+- **Evaluator:** gains `raise_unreadable`, `unreadable_formulas` and an `_execute_formula` helper, and `for_owner` carries the flag to its clone. A NOT_FOUND from indicators is handled per mode:
+  - **Backtest:** raises `FormulaExecutionError`. The symbol gets `FORMULA_ERROR` and is excluded from evidence (preserves ANALYSIS-2/3 from feature 065).
+  - **Other surfaces:** the formula id is recorded, the series comes back all-None, and the component is skipped with a warning. It never becomes the `"unavailable"` marker (preserves `@feature-185 @AC-1`).
+- **Servicer:**
+  - The backtest evaluator is built with `raise_unreadable=True`.
+  - `_formula_status_warnings(include_unreadable)`: GetStrategy, REGISTER and UPDATE carry the warning `formula <id> not readable by owner` (AC-5, AC-30).
+  - `_refuse_deleted_bindings` still refuses only deleted formulas.
+- **Files:** `app/services/evaluator.py`, `app/handlers/servicer.py`.
+- **Deviation:** D-12.
+
+### Step 12 — test: unreadable formula skipped, warned, excluded from backtest evidence [done]
+- **New `tests/test_unreadable_formula.py`** (7 tests):
+  - AC-5 on the live loop and on GetStrategy.
+  - AC-30 on REGISTER and UPDATE, plus the unknown-series rejection message order.
+  - Backtest exclusion: AAPL is not passed to `insert_many`, while MSFT is.
+  - @feature-185: no data-unavailable marker in ListOpportunities.
+- **TDD:**
+  - RED: all 7 failed for the right reason (the live-loop cycle aborted, `[]` warnings, the AAPL row was dropped with a KeyError, and provenance came back `"unavailable"`).
+  - GREEN: 931 passed, coverage 85.96%, ruff clean.
+- **Files:** `tests/test_unreadable_formula.py`; rename follow-through in `tests/test_analysis_servicer.py` and `tests/test_owner_header_guard.py`.
+- **Deviation:** D-13.
+- **Note:** REGISTER and UPDATE now make one extra `GetFormula` per referenced formula. Consolidating those fetches is possible later; not done here.
+
+### Step 13 — migration: indicators `007_private_formulas_templates` [done]
+- **Visibility:** sets `is_public=FALSE`, guarded by a column-exists check, and drops the unnamed partial `is_public` index, found by looking up its definition in `pg_indexes`.
+- **New columns:** `origin_template_id`, `origin_template_version`, and `pending_intent_id` with a partial index.
+- **New table:** `formula_templates`, with no seed rows. No formula row is deleted (AC-22).
+- **Down file:** reverses the up file and recreates `formulas_is_public_idx`.
+- **Offline verification:** the number is correct (006 → 007), up and down are in parity, and the renderer copies both files unchanged (no header).
+- TDD: N/A.
+- Deviation: D-14, which includes the N-1 `ListFormulas` rollback note.
+
+### Step 14 — service: indicators owner-only visibility, header identity, admin read/audit, SAN-bound bypass [done]
+- **New modules:**
+  - `app/peer_identity.py`: an exact SAN match that fails closed.
+  - `app/admin_audit.py`: a per-service copy of the analysis helper (concurrency 4, at most 100 owners per page, forwards only the header trio).
+- **Servicer:**
+  - **Reads:** a formula is readable by its owner, by `system`, or by the analysis reader **bound to SAN `xstockstrat-analysis`**.
+  - **Identity:** the author comes from the header only. An ungranted `x-user-id: system` is denied on all six formula RPCs.
+  - **ExecuteFormula:** missing → NOT_FOUND, readable → run, ADMIN → PERMISSION_DENIED, anyone else → NOT_FOUND (AC-28).
+  - **Admin reads:** `GetFormula` and the `ListFormulas` owner selector are audited with 1+K events and fail closed (UNAVAILABLE).
+  - **Admin override removed:** `UpdateFormula`/`DeleteFormula` no longer let an admin act on another user's formula (the body `user_id` fallback stays in N).
+  - Pending rows are invisible and never cached.
+- **Repository:** `list_visible` and `list_owned`. The seed sets `IS_PUBLIC=False`. `main.py` wires the ledger channel through `LEDGER_ENDPOINT`.
+- **Files:** `app/{peer_identity,admin_audit,main}.py`, `app/handlers/servicer.py`, `app/services/formulas_repository.py`, `app/formulas/fundamentals_value_quality.py`.
+- Deviation: D-15.
+
+### Step 15 — test: indicators visibility, identity, admin read, system rules [done]
+- **`tests/conftest.py`:** adds `ctx_with(metadata, peer_sans)`.
+- **`test_formula_read_authz.py`, rewritten:** a formerly public formula is invisible to other users, and the analysis bypass is trusted only with the matching SAN.
+- **New `test_private_formulas.py`** (30 tests) covers:
+  - AC-2, AC-3, AC-4, AC-6, AC-23 and AC-28;
+  - the system rules on all six RPCs;
+  - pending rows and the cache;
+  - the admin owner selector, plus the audit header trio and fail-closed behavior.
+- **TDD:** RED was 34 failed and 175 passed, failing for the expected reasons (`DID NOT RAISE`, missing `list_visible`, `'system' == 'bob'`, and others). GREEN is 209 passed, coverage 86.01% (≥50), ruff clean.
+- **Files:** `tests/{conftest,test_formula_read_authz,test_private_formulas,test_formulas,test_fundamentals_formula}.py`.
+- Deviation: D-16.
+- **Not done here:**
+  - indicators `CLAUDE.md` still describes public formulas (Step 40);
+  - `test_formulas.py` still has its own `_ctx` helper (out of file scope);
+  - the duplication between the analysis and indicators `admin_audit.py` was not measured. It is accepted per design.md (one copy per service).
+
+### Step 16 — service: remove the analysis `InternalCallerInterceptor` [done]
+- Removed the interceptor import and `interceptors=[...]` from the indicators channel in `app/main.py`, and deleted `app/internal_caller.py` and `tests/test_internal_caller.py`.
+- Analysis now sends no `x-internal-caller: analysis` on indicators calls; it relies on the owner headers threaded in Step 7.
+- Deviation: D-17.
+
+### Step 17 — test: analysis sends no `x-internal-caller` to indicators [done]
+- `test_owner_header_guard.py` gains `_assert_indicators_headers`: one `x-user-id`, equal to the owner, on every indicators call. A grant is required only on its own path (`analysis-fundsignal` on the fundsignal path, `analysis-template-saga` on the saga path); every other path must carry no `x-internal-caller`.
+- New test: `test_main_wires_no_channel_interceptor`.
+- RED: 1 failed (`interceptors=[InternalCallerInterceptor()]` was still present in `main.py`). GREEN: 930 passed, coverage 86.47%, ruff clean.
+- Deviation: D-18 (Step 32's saga tests must use the saga path).
+
+### Step 18 — migration: ingest `013_signal_ownership_templates` [done]
+- **Header and guard:** `-- requires-env: SEED_USER_ID`, plus an unconditional guard that refuses an unset or unrendered seed.
+- **`signal_sources`** (one-shot, runs only while `user_id` is absent):
+  - adds `user_id`: `derived` sources get `system`, all others get `SEED_USER_ID` (D-4);
+  - sets NOT NULL and swaps the PK to `(user_id, slug)`;
+  - creates the `newsletter_signals_n1_owner_fill` BEFORE INSERT trigger, which fills the slug's unique holder or raises if there isn't exactly one. Because it only exists inside the one-shot block, the trigger is never re-created on a replay after the contract.
+- **`newsletter_signals`** (one-shot): fast-default `user_id`, then system sources re-tagged to `system`, then DROP DEFAULT. A NOTICE logs the row counts for the prod record.
+- **New index, tables and columns:**
+  - index `(user_id, ingested_at DESC)`;
+  - `signal_dedup_claims`, seeded from `signal_dedup_keys` with explicit columns and guarded by `to_regclass`; `signal_dedup_keys` is kept for N-1;
+  - origin columns on `signal_sources`;
+  - `source_templates`, with no seed rows.
+- **Down file:** reverses everything above, but refuses to run if any slug or dedup key now has more than one owner.
+- **Offline verification:**
+  - Numbering is correct (012 → 013).
+  - The up and down files are in parity.
+  - With the seed set, the render leaves no `${SEED_USER_ID}` and all 8 `$$` and 2 `$fn$` tags intact.
+  - Without the seed, the render exits 1 and names the variable.
+  - The only `*` in either file is inside `count(*)`.
+- TDD: N/A.
+- **Deviation:** D-19. `credential_scope` is omitted per the operator gate, and the N-1 rollback-window risk is accepted.
+
+### Step 19 — service: ingest owner-scoped sources/signals, `SignalScope`, reserved slugs, system grants, admin read [done]
+- **New modules:** `app/peer_identity.py` and `app/admin_audit.py`, per-service copies. The audit helper forwards only the header trio, appends with concurrency 4, and caps a page at 100 owners.
+- **Repository:** every slug query is owner-scoped except `slug_holders`. `list_sources(owner, scope)` and `list_all_sources` now return `user_id`. The dead `get_active_source` is deleted.
+- **Servicer, identity:** `system` is allowed only with a SAN-bound grant (`analysis-fundsignal` for writes, `analysis-system-read` for reads).
+- **Servicer, `IngestSignal`:**
+  - Headered call: a slug the caller doesn't hold returns `NOT_FOUND` (AC-10).
+  - Headerless call: 0 holders → `INVALID_ARGUMENT`, more than 1 → `FAILED_PRECONDITION`, exactly 1 → owner stamped.
+  - Dedup goes through the owner-keyed `signal_dedup_claims`.
+- **Servicer, reads:** `QuerySignals` and `ListSignalSources` return own + system rows with `SignalScope`. Headerless reads are tolerated, as today. The admin owner selector is audited 1+K and fails closed.
+- **Servicer, `ManageSignalSource`:**
+  - Owners manage their own sources; the admin gate applies only to headerless calls.
+  - Reserved slugs: a user taking a system-held slug gets `ALREADY_EXISTS`; system taking a user-held slug gets `FAILED_PRECONDITION`. Both checks run under an advisory lock.
+  - A non-system caller modifying a system source gets `PERMISSION_DENIED`.
+- **Files:**
+  - `app/{peer_identity,admin_audit}.py`
+  - `app/repositories/signal_sources.py`
+  - `app/handlers/servicer.py`
+  - `app/engine/mcp_client_loop.py` (D-20)
+- **Deviations:** D-20, D-21.
+
+### Step 20 — test: ingest ownership, scopes, reserved slugs, system grants, admin read [done]
+- `conftest._ctx` is extended with `user_id`, `peer_sans` and `internal_caller` (no duplicate helper).
+- New `tests/test_signal_ownership.py` (45 tests): AC-7/8/9/10/11/12/26/28/29/33/36 plus the headerless cases.
+- `test_signal_sources.py`: owner-keyed repository tests.
+- **TDD:**
+  - RED: 43 failed, 2 passed. Reasons: missing `slug_holders`, `DID NOT RAISE` on an ungranted `system`, `INVALID_ARGUMENT == NOT_FOUND`, dedup SQL still on `signal_dedup_keys`, empty `SignalSource.user_id`.
+  - GREEN: 275 passed, coverage 79.49%, ruff clean. The slug-predicate and header-trio greps match.
+- **Files:** `tests/{conftest,test_signal_ownership,test_signal_sources,test_ingest_servicer,_helpers,test_source_health,test_mcp_client_loop}.py`.
+- **Deviation:** D-22.
+
+### Step 25 — service: analysis blend-guard helper, single blend-id accessor, REGISTER guard [done]
+- **One accessor.** The module-level `blend_strategy_id(cfg)` is now the only place that reads the `analysis.engine.fundamentals_blend_strategy_id` key and its default literal. All five former read sites use it: the servicer's DEACTIVATE, SetStrategyLive and opportunities paths, `live_loop`, and `entry_backfill`.
+- **REGISTER guard.** `_require_admin_for_blend_id(context, strategy_id)` sits beside `_has_admin_scope`. A non-admin REGISTER of the currently configured blend id is refused with FAILED_PRECONDITION (`@feature-186` EXTEND). `InstantiateTemplate` will call the same helper in Step 31.
+- **Files:** `app/handlers/servicer.py`, `app/engine/{live_loop,entry_backfill}.py`.
+- **Deviation:** D-23.
+
+### Step 26 — test: blend guard parity [done]
+- **New `tests/test_blend_guard.py` (4 tests):**
+  - non-admin DEACTIVATE is refused (AC-23);
+  - non-admin REGISTER of the blend id is refused, and nothing is created;
+  - admin REGISTER succeeds;
+  - after the blend id is reconfigured, the guard follows the new id.
+- **TDD:** RED was 2 failures, both `DID NOT RAISE` on a non-admin REGISTER. The other 2 tests already passed because they cover existing behavior. GREEN is 934 passed, coverage 86.45%, ruff clean.
+- **Greps:** the key literal and its default each appear exactly once (`servicer.py:299`).
+- The existing `@feature-186` tests pass unchanged.
+
+### Step 21 — service: config per-user secrets and SAN-bound ingest `GetSecret` grant [done]
+- **`authz.ts`:**
+  - `SecretCallerGrant` gains a `peerSan` field. The ingest grant requires `peerSan: 'xstockstrat-ingest'`, matched exactly against the `DNS:` entries of the client certificate's SAN list.
+  - The grant fails closed when there is no auth context, no certificate or no SAN.
+  - `hasSecretCallerAuthority` now takes `(call, ns, key)`. The marketdata grant is unchanged.
+- **`configServiceImpl.ts`:**
+  - `GetSecret` resolves with exact scope (`COALESCE(user_id,'') = COALESCE($4,'')`). An empty `user_id` reads only the global row, so marketdata is unaffected.
+  - The global-only rejection of per-user secret writes is removed (feature-147 override, operator-approved).
+- **Deviation:** D-24.
+
+### Step 22 — test: config per-user secret resolution and per-user redaction [done]
+- **New `perUserSecrets.test.ts`** covers:
+  - AC-35: a per-user secret write is accepted.
+  - Ownership: bob cannot write alice's secret.
+  - Exact-scope `GetSecret` (tok-a / tok-b / found:false).
+  - Ingest SAN binding.
+  - No plaintext on `GetConfig`/`ListKeys`/`WatchConfig` for alice, bob or an admin.
+  - Marketdata is unaffected.
+- **`secretCallerAuthz.test.ts`:** updated for the call-object signature, plus three new SAN tests (comma list accepted; wrong, near-miss or prefix-less SAN denied; missing `getAuthContext` denied).
+- **TDD:** RED was 13 failed and 2 passed: "secret keys are global-scope only" and `md.get is not a function`. GREEN is 133/133 with 84.12% line coverage, 0 lint errors (158 warnings already existed), and `tsc` passes.
+
+### Step 23 — service: ingest `mcp_client` poller resolves the owner's secret and ingests as the owner [done]
+- `resolve_secret(key, user_id="")` now sets `GetSecretRequest.user_id`.
+- `poll_one_source` uses `owner = src["user_id"]`, resolves the secret with that exact scope, treats an empty `''` value as missing ("bearer not configured"), and ingests with `owner=owner`.
+- **Files:** `app/config/watcher.py`, `app/engine/mcp_client_loop.py`.
+- **Deviation:** D-25 (`credential_scope` omitted; no servicer change).
+
+### Step 24 — test: per-owner `mcp_client` credentials [done]
+- Three new tests in `test_mcp_client_loop.py`:
+  - AC-35: alice and bob each own `acme-mcp`; each request carries its owner's bearer, and each signal is inserted under its owner.
+  - An empty-string bearer is treated as missing.
+  - `resolve_secret` sends the exact user scope.
+- **TDD:** RED was 3 failed (`('…','') != ('…','alice')`, plus an unexpected keyword `user_id`). GREEN is 278 passed, coverage 79.65%, ruff clean.
+- **Follow-through:** the fake `resolve_secret` and the dedup spy now take `user_id` and `owner`.
+
+**Doc drift to fix in Step 40:** config `CLAUDE.md` invariants #5 and #6 (secrets global-only; no ingest SAN grant), and the ingest `CLAUDE.md` bearer-secret note.
+
+### Step 29 — service: ingest source templates and origin on `ListSignalSources` [done]
+- **New repository** `app/repositories/source_templates.py` with `list_active`, `get`, `create`, `update`, `retire`, `latest_versions` and `stamp_origin`. `update` bumps the version and timestamp in one statement.
+- **New RPCs** `ListTemplates`, `ManageTemplate` and `InstantiateTemplate`.
+  - Managing templates (create, update, retire) requires ADMIN.
+  - Instantiating creates a private copy owned by the caller, through the shared `_register_source`. That path keeps the existing validation, the reserved-slug check and the advisory lock.
+  - Template payloads never carry credentials or owner data (`_template_payload` whitelist).
+- **`ListSignalSources`** now returns `origin`, with `update_available` computed from one batched version lookup per response.
+- **Deviation:** D-26.
+
+### Step 30 — test: source templates [done]
+- New `tests/test_source_templates.py` with 30 tests:
+  - AC-13: a non-admin cannot manage templates.
+  - Instantiation stamps the origin; system-held or already-owned slugs return `ALREADY_EXISTS`; an `mcp_client` source needs `credentials_ref`.
+  - Update-available and retired-template behavior in `ListSignalSources`.
+  - No credential ever appears in a template.
+  - Repository SQL.
+- **TDD:** RED was an ImportError, then 24 failed (`NotImplementedError` from the base class). GREEN is 308 passed at 79.99% coverage, ruff clean, and 0 jscpd clones.
+
+### Step 27 — service: indicators formula templates, saga copy, intent resolution, origin on reads [done]
+- **New `formula_templates_repository.py`:** list, get, create, update (bumps the version in one statement), retire, and a batched latest-version lookup.
+- **`formulas_repository.py`:**
+  - One shared INSERT now also writes the template origin and the pending intent id.
+  - `create_pending_copies` writes all of a saga's copies in a single transaction.
+  - `resolve_intent(intent_id, author, commit)` un-hides the pending copies or deletes them.
+- **New RPCs:**
+  - `ListTemplates` and `ManageTemplate` (managing is ADMIN-only).
+  - `InstantiateTemplate`: the user path makes one private copy; the saga path copies a batch as pending-hidden rows.
+  - `ResolveTemplateIntent`.
+  - The saga path and `ResolveTemplateIntent` require the `analysis-template-saga` caller id bound to the `xstockstrat-analysis` SAN. The `analysis` read-bypass id is rejected there.
+  - If any referenced template is retired or missing, the whole saga fails `NOT_FOUND` before anything is inserted.
+- **Reads:** `GetFormula` and `ListFormulas` return `TemplateOrigin` with update-available, filled by one batched lookup.
+- **Deviation:** D-27.
+
+### Step 28 — test: formula templates, instantiation, update-available, retire [done]
+- **New `tests/test_formula_templates.py` (33 tests):** AC-13/14/15/16/17/31, plus the saga cases:
+  - pending copies are hidden and never cached; commit un-hides, abort deletes and evicts;
+  - owner scoping and idempotency;
+  - grant checks: missing or wrong SAN, the `analysis` bypass id, no header;
+  - all-or-nothing NOT_FOUND, and rollback on a mid-batch failure;
+  - the repository SQL.
+- **TDD:** RED was a ModuleNotFoundError, then 30 failed (`NotImplementedError` and a missing `resolve_intent`). GREEN is 242 passed, coverage 84.81%, ruff clean.
+- **Follow-through:** one positional bind index updated in `test_formulas.py`.
+
+### Step 31 — service: analysis strategy templates, `InstantiateTemplate` saga, reconcile sweep, origin on reads [done]
+- **New repositories:**
+  - `strategy_templates.py`: list, get, create, update (bumps version), retire, and a batched latest-version lookup.
+  - `template_intents.py`: create, a state-checked `cas` (optionally owner-checked, can run on a supplied connection), and a stale-intent query.
+  - `strategies.create_from_template`: runs the PENDING→COMMITTED CAS and the strategy insert in **one transaction**.
+- **Saga, request path:**
+  1. Write the intent row.
+  2. Call indicators `InstantiateTemplate(template_ids, intent_id)` to create the pending copies.
+  3. Commit transaction: CAS PENDING→COMMITTED, then insert the strategy.
+  4. `ResolveTemplateIntent(commit)`, then FINALIZED.
+  5. On failure: ABORTING → `ResolveTemplateIntent(abort)` → ABORTED.
+- **Metadata:** the request path sends the caller's header trio plus `x-internal-caller: analysis-template-saga`. The sweep sends the intent owner's `x-user-id` with the same grant and a fresh trace id.
+- **Checks:** the blend guard runs on the final `_N`-suffixed id. A caller-supplied id the caller already owns returns `ALREADY_EXISTS` before any write (AC-34).
+- **Reconcile sweep:** `DurableSchedule` job `template_intent_sweep`, using `_INTENT_STALE_SECONDS=900` and `_INTENT_SWEEP_SECONDS=300` (fixed constants, operator-confirmed).
+- **Template validation:** `_validate_template_definition` reads indicators `ListTemplates` for each template's outputs and fundamental inputs, and never calls `GetFormula`. Named outputs such as `z.upper` validate.
+- **Origin on reads:** GetStrategy, ListStrategyDefinitions and ListStrategies (`StrategyScore.origin`) each fill origin with one batched lookup per response.
+- **Deviation:** D-28.
+
+### Step 32 — test: strategy template deep copy, atomicity, id collisions [done]
+- **New `tests/test_strategy_templates.py` (30 tests):**
+  - AC-13, AC-18, AC-19, AC-20, AC-34.
+  - Blend guard on the final id; retired template; lost CAS.
+  - Sweep handling of stale PENDING, ABORTING and COMMITTED intents, including retry.
+  - Saga headers on both paths via `_assert_indicators_headers(…, path="template-saga")`, which closes the D-18 follow-up.
+  - Template validation (`z.upper` passes, `z.lower` is rejected, no `GetFormula`).
+  - Origin on reads, and repository SQL shapes.
+- **TDD:** RED was a ModuleNotFoundError, then 30 failed (missing RPCs, constants and `create_from_template`; no abort; no origin). GREEN is 964 passed, coverage 85.81%, ruff clean.
+- **Contract assumed of indicators (implemented in Step 27):** `formula_ids_by_template` covers every requested id, and resolve is idempotent.
+
+### Step 33 — test: migration data assertions (run by CI `migration-rerun`) [done]
+- **Pass 0:** checks the database is fresh, renders the migrations, runs per-service `migrate goto 6/12/25` (indicators/ingest/analysis) with `up` for the other services, then loads `fixtures-pre-224.sql`:
+  - 8 public formulas;
+  - 3 sources (newsletter, website, and `fundamentals` as derived) with 120 signals and their dedup keys;
+  - D-1 backtest runs: one strategy with a unique owner, one shared between two owners, an orphan run, and a run that already has an owner.
+- **Pass 1:** `db-migrate.sh up`.
+- **Pass 2:** re-applies only 007, 013 and 026 (D-29), then checks that the N-1 trigger count is unchanged.
+- **Assertions** (`DO $$ … RAISE EXCEPTION`):
+  - `indicators-007.sql`:
+    - AC-22: no formula is lost, `source` and `author` are unchanged, nothing is public, and the `is_public` index is gone.
+    - AC-15: `formula_templates` is empty.
+  - `ingest-013.sql`:
+    - AC-27: sources and signals belong to `SEED_USER_ID`, except the derived source and its signals, which belong to `system`.
+    - The primary key is `(user_id, slug)`.
+    - All 120 dedup claims carry their signal's owner.
+    - `source_templates` is empty.
+    - The N-1 trigger fills in the unique holder, and raises when a slug has more than one holder (run in a rolled-back transaction).
+  - `analysis-026.sql`:
+    - AC-15: `strategy_templates` is empty.
+    - D-1: a unique owner is used, otherwise the run goes to the seed user, and an existing owner is kept.
+- **Defect found:** old up-files are not idempotent, which breaks `db-migrate.sh` dirty recovery. Filed `docs/reports/2026-10-07-db-migrate-dirty-recovery-replay-unsafe-defect.md` (status `open`), to route through `/sdd-triage`.
+- **Verification:**
+  - Offline: shellcheck, shfmt, `bash -n`, all three dirs render, and pglast parses all four SQL files.
+  - Fixture desk check: every inserted column was checked against the defining migration lines.
+  - DB execution and assertion results can only be proven in CI.
+- TDD: N/A (DB assertions run in CI).
+
+### Step 34 — service: agent tools (drop public args, owner-scoped sources, template tools, tool count 45, docs parity) [done]
+- **Formula tools:** `manage_formula` and `list_formulas` no longer take `is_public` or `include_public`. `author_filter` is now documented as an admin-only owner selector, and `isPublic` is stripped from output.
+- **`manage_signal_source`:** owners manage their own sources. An `mcp_client` bearer is stored as a **per-user** secret under an opaque key `mcp_credential.<uuid4>` (written with `user_id=caller`, `is_secret`, `create_key`), and the source's `credentials_ref` points to it. Output now includes `user_id` and `origin`.
+- **New tools:**
+  - `list_templates(kind)`.
+  - `instantiate_template(kind, template_id, strategy_id, slug, bearer_token)`, routed to the owning service with the caller's headers.
+  - `ResolveTemplateIntent` is not exposed.
+- **Tool count 43 → 45 on all six surfaces:**
+  - `tools.py` (:4, :54)
+  - agent `CLAUDE.md` (:43, :49)
+  - `mcp-tools.md` (:3, :10, :45)
+  - `copilot.ts:21`
+  - the durable feature file (`@feature-214 @AC-1`, an approved C-16 CHANGE)
+  - the tools endpoint test
+- **Stale docs fixed:** "secrets global-only" and the admin gate on `manage_signal_source`.
+- **`strat-lab` SKILL.md:** updated in the same change; the plugin validator passes.
+
+### Step 35 — test: agent tool catalog and docs parity [done]
+- New `tests/test_template_tools.py` (9 tests).
+- `test_tools_endpoint.py`: the name set now includes the two new tools, with `len == 45`.
+- `test_signal_source_builder.py`: covers `user_id` and `origin`.
+- **TDD:** RED was 15 failed (`43 == 45`, the template tools not registered, `is_public` still in the schema, the key regex, `KeyError: 'user_id'`, docs parity). GREEN is 496 passed, coverage 80.36%, ruff clean. `next lint` on `copilot.ts` is clean.
+- **Deviation:** D-30.
+
+### Step 36 — service: UI removes public formula controls; formula BFF follows header identity [done]
+- **Formulas list:** the visibility filter and the Public/Private column are removed. "System" and "Update available" badges are added (C-17, using existing variants).
+- **`FormulaWorkspace`:** the Public checkbox, the header badge, the `isPublic` state and its payload field are removed.
+- **Hooks:** they stop sending `includePublic`/`isPublic`/`author`. `StrategyWizard` and `ComponentEditor` list formulas through `useFormulas({pageSize:50})`.
+- **BFF:** `insightsBff.registerFormula` is now a plain `forward`, so it no longer overrides the author from claims.
+- **Verification:** vitest 224/224 pass. `tsc` shows only the 2 pre-existing `backfills.spec.ts` errors. Lint is clean, and the `isPublic|includePublic` grep in `src` is empty.
+- **TDD:** paired with Step 39 (e2e).
+- **Deviation:** D-31.
+
+### Operator note (2026-10-07): production environment does not exist yet
+- The pre-merge check of prod `analysis.fundsignal.scoring_formula_id` (design.md Open Risks) is **moot**: there is no production environment yet. Staging uses system formula `d1ff…`, so AC-37's fail-closed path does not trigger there. The same goes for the prod `mcp_client` count gate (D-19/D-25, answered "0").
+
+### Step 37 — service: UI template catalog, "use template", wizard start-from-template, admin authoring, nav [done]
+- **New pages:**
+  - `/insights/templates`: tabs for formula, strategy and signal-source templates, each with a "Use template <name>" action.
+  - `/config-ui/templates`: admin-only create, edit and retire, using `FormDialog` and `RowActionsMenu` with confirm.
+- **New code:** a `useTemplates` hook module and `configUiIndicatorsClient.ts`.
+- **Strategy wizard:** a "Start from template" card.
+- **Strategy detail:** an "Update available" badge.
+- **BFF:** real `forward()` registrations for the three template RPCs on all three services under `/insights/api`. Under `/config-ui/api`, `listTemplates` is registered with `forward` and `manageTemplate` with `forwardAdmin`.
+- **Nav:** `NAV_GROUPS` gains Engine → Templates and Settings → Templates (adminOnly). `PLATFORM_SUBNAV` mirrors both (C-10(a)).
+- **C-17 primitives:** `DataTable`, `EmptyState`, `QueryStateMessages`, `CardNotice`, `FormDialog`, `RowActionsMenu`, `Tabs`, `Tooltip`, `Badge`. Tokens only.
+- **Verification:**
+  - vitest 224/224 pass.
+  - `tsc` shows only the 2 pre-existing `backfills.spec.ts` errors.
+  - lint has 0 errors; the duplication check finds 0 clones.
+- **TDD:** paired with Step 39.
+- **Deviation:** D-32.
+- **For Step 39:** the e2e mock backend needs the template RPCs. Nav locators must be scoped to their group, because admins see two "Templates" links.
+
+### Step 38 — service: UI per-user signal sources page, per-user secret write, admin read-only view [done]
+- **New page `/insights/signal-sources`**: users create, edit, enable and disable their own sources, and edit the inline reliability weight. System rows are read-only.
+  - This is the C-16 CHANGE of `@feature-161 @AC-4/@AC-5`, re-homed with identical guidance text and selectors.
+- **`/config-ui/sources`** is now the FR-13 admin read-only view: an owner selector, a table, and no write controls.
+- **`mcp_client` bearer** (create form and template "Use template" dialog): the bearer is written as a per-user secret under `mcp_credential.<uuid>`. Its key becomes `credentials_ref = ingest.<key>`, and the bearer itself is never rendered back.
+- **Insights BFF** (forced server-side):
+  - `ManageSignalSource` is a plain `forward()`.
+  - `SetConfig` always sends `userId`, `author`, `environment`, `createKey` and `isSecret:true`, and accepts only `ingest`/`mcp_credential.*` keys.
+- **Nav**:
+  - Engine: "Signal sources" → `/insights/signal-sources`.
+  - Settings: "Signal sources (admin)", admin only.
+  - Both mirrored in `PLATFORM_SUBNAV`.
+- **Verification**:
+  - vitest 228/228 (4 new BFF tests, red then green);
+  - `tsc` shows only the 2 pre-existing errors;
+  - lint has 0 errors, and the 4 old warnings on the sources page are gone;
+  - 0 clones.
+- **Deviation**: D-33.
+
+### Step 39 — test: UI e2e (public UI removed, templates, signal sources, nav, BFF traversal) [done]
+- **Fixtures**: new `templates.ts`; `signalSources.ts` is now owner-scoped and includes a system source; `isPublic` dropped from formulas. All of it is catalogued in `INVENTORY.md` (C-12/C-13).
+- **Mock backend**:
+  - New minimal `IndicatorsService` on :9092.
+  - Template RPCs for analysis, ingest and indicators.
+  - Owner-aware `ListSignalSources`/`ManageSignalSource`.
+  - The `SetConfig` echo.
+- **Spec coverage**:
+  - AC-24: no public UI.
+  - The templates catalog: nav entry, "Use template" for all three kinds, and the update-available badge.
+  - `/insights/signal-sources`: own and system rows, system rows read-only, the inline weight editor, the `@feature-161` AC-4/AC-5 guidance, the `mcp_client` per-user secret, and the forced `isSecret`.
+  - `/config-ui/sources` as the admin read-only view.
+  - Nav reachability.
+- **Real-BFF traversal (`api-smoke`)**: every new browser-called RPC goes through the real router, including the non-admin `ManageTemplate` denial.
+- **Results**:
+  - Playwright: affected specs 67/67; the full suite 516/516 (chromium, prebuilt). This includes the specs that were red after Steps 36–38.
+  - `tsc` shows only the 2 pre-existing errors; vitest 228/228.
+- Coverage: N/A (Playwright).
+- **Deviation**: D-34.
+
+### Step 40 — docs: context teardown, conventions, C-16 route update [done]
+- Updated the service and root `CLAUDE.md` files, `config-governance.md` and `database.md`.
+- The durable feature `surface-signal-weight-decay-config.feature` @AC-4/@AC-5 now names the `/insights/signal-sources` route.
+- Reconciled the context by hand, because `/context-forge:context-constitution refresh` was not run. The files touched are listed in D-36.
+- All of the spec's verification greps are clean.
+
+### Step 41 — docs: follow-up feature 225 + merge-order row [done]
+- Created `225-private-by-default-enforce-contract`.
+- Added a `merge-order.md` row: 225 waits for 224 to be launched. It pre-reserves analysis 027, indicators 008 and ingest 014.
+- D-35 records that this step was committed before Step 40.
+
+## Session 2026-10-07 — feature end
+- `main-dev` was merged in (`6cd66a42`, the archive of 20 features). One docs conflict in the indicators constitution was resolved: main-dev's refreshed line anchors were kept, plus 224's INDICATORS-5 wording.
+- Status set to `code-completed`.
+- Integration PR opened against `main-dev`.
+- C-16 promotion, which the operator confirmed: all 37 scenarios were copied verbatim from `acceptance.feature`, each tagged `@feature-224`.
+  - Per-service `acceptance/private-by-default-templates.feature` files: indicators 11, analysis 9, ingest 6, ui 1, agent 1.
+  - 9 cross-service scenarios were appended to `docs/sdd/business-rules/platform.feature`: AC-6/15/18/19/23/26/32/35/36.
+  - AC-23 partly overlaps `@feature-186 @AC-4`; both are kept.

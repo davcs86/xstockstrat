@@ -11,7 +11,7 @@ Feature: agent has no DB-over-MCP surface (postgres-mcp removed)
     Given the running xstockstrat-agent MCP server (Streamable HTTP on :9000)
     When an authenticated admin lists the agent's tools (tools/list)
     Then the response contains none of db_execute_sql, db_list_schemas, db_list_objects, db_get_object_details, db_explain_query, db_get_top_queries, db_analyze_workload_indexes, db_analyze_query_indexes, db_analyze_db_health
-    And the advertised tool count is 43
+    And the advertised tool count is 45
 
   @AC-2 @FR-2 @feature-214
   Scenario: The agent container no longer runs or connects to postgres-mcp

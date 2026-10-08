@@ -188,6 +188,56 @@ func (BackfillDataKind) EnumDescriptor() ([]byte, []int) {
 	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{2}
 }
 
+// Which owners' signals QuerySignals returns (feature 224). Closed set → enum (C-04).
+type SignalScope int32
+
+const (
+	SignalScope_SIGNAL_SCOPE_UNSPECIFIED SignalScope = 0 // own + system
+	SignalScope_SIGNAL_SCOPE_OWN         SignalScope = 1
+	SignalScope_SIGNAL_SCOPE_SYSTEM      SignalScope = 2
+)
+
+// Enum value maps for SignalScope.
+var (
+	SignalScope_name = map[int32]string{
+		0: "SIGNAL_SCOPE_UNSPECIFIED",
+		1: "SIGNAL_SCOPE_OWN",
+		2: "SIGNAL_SCOPE_SYSTEM",
+	}
+	SignalScope_value = map[string]int32{
+		"SIGNAL_SCOPE_UNSPECIFIED": 0,
+		"SIGNAL_SCOPE_OWN":         1,
+		"SIGNAL_SCOPE_SYSTEM":      2,
+	}
+)
+
+func (x SignalScope) Enum() *SignalScope {
+	p := new(SignalScope)
+	*p = x
+	return p
+}
+
+func (x SignalScope) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (SignalScope) Descriptor() protoreflect.EnumDescriptor {
+	return file_ingest_v1_ingest_proto_enumTypes[3].Descriptor()
+}
+
+func (SignalScope) Type() protoreflect.EnumType {
+	return &file_ingest_v1_ingest_proto_enumTypes[3]
+}
+
+func (x SignalScope) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use SignalScope.Descriptor instead.
+func (SignalScope) EnumDescriptor() ([]byte, []int) {
+	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{3}
+}
+
 // Health of a registered signal source (feature 083). Closed set → enum (C-04).
 type SourceHealthStatus int32
 
@@ -225,11 +275,11 @@ func (x SourceHealthStatus) String() string {
 }
 
 func (SourceHealthStatus) Descriptor() protoreflect.EnumDescriptor {
-	return file_ingest_v1_ingest_proto_enumTypes[3].Descriptor()
+	return file_ingest_v1_ingest_proto_enumTypes[4].Descriptor()
 }
 
 func (SourceHealthStatus) Type() protoreflect.EnumType {
-	return &file_ingest_v1_ingest_proto_enumTypes[3]
+	return &file_ingest_v1_ingest_proto_enumTypes[4]
 }
 
 func (x SourceHealthStatus) Number() protoreflect.EnumNumber {
@@ -238,7 +288,7 @@ func (x SourceHealthStatus) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use SourceHealthStatus.Descriptor instead.
 func (SourceHealthStatus) EnumDescriptor() ([]byte, []int) {
-	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{3}
+	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{4}
 }
 
 // Closed verb set for ManageSignalSource (feature 088). Closed set → enum (C-04).
@@ -281,11 +331,11 @@ func (x SignalSourceOperation) String() string {
 }
 
 func (SignalSourceOperation) Descriptor() protoreflect.EnumDescriptor {
-	return file_ingest_v1_ingest_proto_enumTypes[4].Descriptor()
+	return file_ingest_v1_ingest_proto_enumTypes[5].Descriptor()
 }
 
 func (SignalSourceOperation) Type() protoreflect.EnumType {
-	return &file_ingest_v1_ingest_proto_enumTypes[4]
+	return &file_ingest_v1_ingest_proto_enumTypes[5]
 }
 
 func (x SignalSourceOperation) Number() protoreflect.EnumNumber {
@@ -294,7 +344,7 @@ func (x SignalSourceOperation) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use SignalSourceOperation.Descriptor instead.
 func (SignalSourceOperation) EnumDescriptor() ([]byte, []int) {
-	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{4}
+	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{5}
 }
 
 type BackfillJob struct {
@@ -930,6 +980,7 @@ type ExternalSignal struct {
 	RawUrl        string                 `protobuf:"bytes,8,opt,name=raw_url,json=rawUrl,proto3" json:"raw_url,omitempty"`
 	Tags          []string               `protobuf:"bytes,9,rep,name=tags,proto3" json:"tags,omitempty"`
 	IngestedAt    *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=ingested_at,json=ingestedAt,proto3" json:"ingested_at,omitempty"` // platform ingestion time (server-set, immune to source timestamp manipulation) — feature 022
+	UserId        string                 `protobuf:"bytes,11,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`             // owner of the signal (feature 224); server-stamped, ignored on write
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1032,6 +1083,13 @@ func (x *ExternalSignal) GetIngestedAt() *timestamppb.Timestamp {
 		return x.IngestedAt
 	}
 	return nil
+}
+
+func (x *ExternalSignal) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
 }
 
 type IngestSignalRequest struct {
@@ -1140,6 +1198,8 @@ type QuerySignalsRequest struct {
 	Direction     string                 `protobuf:"bytes,3,opt,name=direction,proto3" json:"direction,omitempty"`                           // optional filter
 	ActiveWindow  *v1.TimeRange          `protobuf:"bytes,4,opt,name=active_window,json=activeWindow,proto3" json:"active_window,omitempty"` // signals valid within this range
 	Page          *v1.PageRequest        `protobuf:"bytes,5,opt,name=page,proto3" json:"page,omitempty"`
+	Scope         SignalScope            `protobuf:"varint,6,opt,name=scope,proto3,enum=xstockstrat.ingest.v1.SignalScope" json:"scope,omitempty"` // feature 224; UNSPECIFIED = the caller's own + system signals
+	OwnerUserId   string                 `protobuf:"bytes,7,opt,name=owner_user_id,json=ownerUserId,proto3" json:"owner_user_id,omitempty"`        // (admin-only) owner selector; ignored for a non-admin caller
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1207,6 +1267,20 @@ func (x *QuerySignalsRequest) GetPage() *v1.PageRequest {
 		return x.Page
 	}
 	return nil
+}
+
+func (x *QuerySignalsRequest) GetScope() SignalScope {
+	if x != nil {
+		return x.Scope
+	}
+	return SignalScope_SIGNAL_SCOPE_UNSPECIFIED
+}
+
+func (x *QuerySignalsRequest) GetOwnerUserId() string {
+	if x != nil {
+		return x.OwnerUserId
+	}
+	return ""
 }
 
 type QuerySignalsResponse struct {
@@ -1282,8 +1356,11 @@ type SignalSource struct {
 	// conviction (feature 134). optional (explicit presence) so an omitted create-form field is
 	// distinguishable from an explicit 0.0. DB default 1.0 (neutral).
 	ReliabilityWeight *float64 `protobuf:"fixed64,12,opt,name=reliability_weight,json=reliabilityWeight,proto3,oneof" json:"reliability_weight,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// Owner of the source (feature 224). "system" = platform-owned, read-only to every user.
+	UserId        string             `protobuf:"bytes,13,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	Origin        *v1.TemplateOrigin `protobuf:"bytes,14,opt,name=origin,proto3" json:"origin,omitempty"` // set when instantiated from a template
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SignalSource) Reset() {
@@ -1400,9 +1477,24 @@ func (x *SignalSource) GetReliabilityWeight() float64 {
 	return 0
 }
 
+func (x *SignalSource) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *SignalSource) GetOrigin() *v1.TemplateOrigin {
+	if x != nil {
+		return x.Origin
+	}
+	return nil
+}
+
 type ListSignalSourcesRequest struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	IncludeInactive bool                   `protobuf:"varint,1,opt,name=include_inactive,json=includeInactive,proto3" json:"include_inactive,omitempty"`
+	OwnerUserId     string                 `protobuf:"bytes,2,opt,name=owner_user_id,json=ownerUserId,proto3" json:"owner_user_id,omitempty"` // (admin-only) owner selector; ignored for a non-admin caller (feature 224)
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -1442,6 +1534,13 @@ func (x *ListSignalSourcesRequest) GetIncludeInactive() bool {
 		return x.IncludeInactive
 	}
 	return false
+}
+
+func (x *ListSignalSourcesRequest) GetOwnerUserId() string {
+	if x != nil {
+		return x.OwnerUserId
+	}
+	return ""
 }
 
 type ListSignalSourcesResponse struct {
@@ -1616,6 +1715,251 @@ func (x *ManageSignalSourceResponse) GetSource() *SignalSource {
 	return nil
 }
 
+// feature 224 — signal-source template catalog.
+type SourceTemplate struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Meta          *v1.TemplateMeta       `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	Payload       *SignalSource          `protobuf:"bytes,2,opt,name=payload,proto3" json:"payload,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SourceTemplate) Reset() {
+	*x = SourceTemplate{}
+	mi := &file_ingest_v1_ingest_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SourceTemplate) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SourceTemplate) ProtoMessage() {}
+
+func (x *SourceTemplate) ProtoReflect() protoreflect.Message {
+	mi := &file_ingest_v1_ingest_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SourceTemplate.ProtoReflect.Descriptor instead.
+func (*SourceTemplate) Descriptor() ([]byte, []int) {
+	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *SourceTemplate) GetMeta() *v1.TemplateMeta {
+	if x != nil {
+		return x.Meta
+	}
+	return nil
+}
+
+func (x *SourceTemplate) GetPayload() *SignalSource {
+	if x != nil {
+		return x.Payload
+	}
+	return nil
+}
+
+type ListTemplatesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListTemplatesRequest) Reset() {
+	*x = ListTemplatesRequest{}
+	mi := &file_ingest_v1_ingest_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListTemplatesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListTemplatesRequest) ProtoMessage() {}
+
+func (x *ListTemplatesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_ingest_v1_ingest_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListTemplatesRequest.ProtoReflect.Descriptor instead.
+func (*ListTemplatesRequest) Descriptor() ([]byte, []int) {
+	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{20}
+}
+
+type ListTemplatesResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Templates     []*SourceTemplate      `protobuf:"bytes,1,rep,name=templates,proto3" json:"templates,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListTemplatesResponse) Reset() {
+	*x = ListTemplatesResponse{}
+	mi := &file_ingest_v1_ingest_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListTemplatesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListTemplatesResponse) ProtoMessage() {}
+
+func (x *ListTemplatesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_ingest_v1_ingest_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListTemplatesResponse.ProtoReflect.Descriptor instead.
+func (*ListTemplatesResponse) Descriptor() ([]byte, []int) {
+	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *ListTemplatesResponse) GetTemplates() []*SourceTemplate {
+	if x != nil {
+		return x.Templates
+	}
+	return nil
+}
+
+type ManageTemplateRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Operation     v1.TemplateOperation   `protobuf:"varint,1,opt,name=operation,proto3,enum=xstockstrat.common.v1.TemplateOperation" json:"operation,omitempty"`
+	Template      *SourceTemplate        `protobuf:"bytes,2,opt,name=template,proto3" json:"template,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ManageTemplateRequest) Reset() {
+	*x = ManageTemplateRequest{}
+	mi := &file_ingest_v1_ingest_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ManageTemplateRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ManageTemplateRequest) ProtoMessage() {}
+
+func (x *ManageTemplateRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_ingest_v1_ingest_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ManageTemplateRequest.ProtoReflect.Descriptor instead.
+func (*ManageTemplateRequest) Descriptor() ([]byte, []int) {
+	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *ManageTemplateRequest) GetOperation() v1.TemplateOperation {
+	if x != nil {
+		return x.Operation
+	}
+	return v1.TemplateOperation(0)
+}
+
+func (x *ManageTemplateRequest) GetTemplate() *SourceTemplate {
+	if x != nil {
+		return x.Template
+	}
+	return nil
+}
+
+type InstantiateTemplateRequest struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	TemplateId     string                 `protobuf:"bytes,1,opt,name=template_id,json=templateId,proto3" json:"template_id,omitempty"`
+	Slug           string                 `protobuf:"bytes,2,opt,name=slug,proto3" json:"slug,omitempty"`                                           // the new private source's slug (unique per owner)
+	CredentialsRef string                 `protobuf:"bytes,3,opt,name=credentials_ref,json=credentialsRef,proto3" json:"credentials_ref,omitempty"` // the caller's own per-user credential key, if the type needs one
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *InstantiateTemplateRequest) Reset() {
+	*x = InstantiateTemplateRequest{}
+	mi := &file_ingest_v1_ingest_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *InstantiateTemplateRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*InstantiateTemplateRequest) ProtoMessage() {}
+
+func (x *InstantiateTemplateRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_ingest_v1_ingest_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use InstantiateTemplateRequest.ProtoReflect.Descriptor instead.
+func (*InstantiateTemplateRequest) Descriptor() ([]byte, []int) {
+	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *InstantiateTemplateRequest) GetTemplateId() string {
+	if x != nil {
+		return x.TemplateId
+	}
+	return ""
+}
+
+func (x *InstantiateTemplateRequest) GetSlug() string {
+	if x != nil {
+		return x.Slug
+	}
+	return ""
+}
+
+func (x *InstantiateTemplateRequest) GetCredentialsRef() string {
+	if x != nil {
+		return x.CredentialsRef
+	}
+	return ""
+}
+
 var File_ingest_v1_ingest_proto protoreflect.FileDescriptor
 
 const file_ingest_v1_ingest_proto_rawDesc = "" +
@@ -1668,7 +2012,7 @@ const file_ingest_v1_ingest_proto_rawDesc = "" +
 	"\x06format\x18\x03 \x01(\tR\x06format\"[\n" +
 	"\x18NormalizeRawDataResponse\x12'\n" +
 	"\x0frows_normalized\x18\x01 \x01(\x03R\x0erowsNormalized\x12\x16\n" +
-	"\x06errors\x18\x02 \x03(\tR\x06errors\"\xfc\x02\n" +
+	"\x06errors\x18\x02 \x03(\tR\x06errors\"\x95\x03\n" +
 	"\x0eExternalSignal\x12\x16\n" +
 	"\x06source\x18\x01 \x01(\tR\x06source\x12\x16\n" +
 	"\x06symbol\x18\x02 \x01(\tR\x06symbol\x12\x1c\n" +
@@ -1685,21 +2029,24 @@ const file_ingest_v1_ingest_proto_rawDesc = "" +
 	"\x04tags\x18\t \x03(\tR\x04tags\x12;\n" +
 	"\vingested_at\x18\n" +
 	" \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"ingestedAt\"T\n" +
+	"ingestedAt\x12\x17\n" +
+	"\auser_id\x18\v \x01(\tR\x06userId\"T\n" +
 	"\x13IngestSignalRequest\x12=\n" +
 	"\x06signal\x18\x01 \x01(\v2%.xstockstrat.ingest.v1.ExternalSignalR\x06signal\"W\n" +
 	"\x14IngestSignalResponse\x12\x1b\n" +
 	"\tsignal_id\x18\x01 \x01(\x03R\bsignalId\x12\"\n" +
-	"\fdeduplicated\x18\x02 \x01(\bR\fdeduplicated\"\xe2\x01\n" +
+	"\fdeduplicated\x18\x02 \x01(\bR\fdeduplicated\"\xc0\x02\n" +
 	"\x13QuerySignalsRequest\x12\x16\n" +
 	"\x06source\x18\x01 \x01(\tR\x06source\x12\x16\n" +
 	"\x06symbol\x18\x02 \x01(\tR\x06symbol\x12\x1c\n" +
 	"\tdirection\x18\x03 \x01(\tR\tdirection\x12E\n" +
 	"\ractive_window\x18\x04 \x01(\v2 .xstockstrat.common.v1.TimeRangeR\factiveWindow\x126\n" +
-	"\x04page\x18\x05 \x01(\v2\".xstockstrat.common.v1.PageRequestR\x04page\"\x90\x01\n" +
+	"\x04page\x18\x05 \x01(\v2\".xstockstrat.common.v1.PageRequestR\x04page\x128\n" +
+	"\x05scope\x18\x06 \x01(\x0e2\".xstockstrat.ingest.v1.SignalScopeR\x05scope\x12\"\n" +
+	"\rowner_user_id\x18\a \x01(\tR\vownerUserId\"\x90\x01\n" +
 	"\x14QuerySignalsResponse\x12?\n" +
 	"\asignals\x18\x01 \x03(\v2%.xstockstrat.ingest.v1.ExternalSignalR\asignals\x127\n" +
-	"\x04page\x18\x02 \x01(\v2#.xstockstrat.common.v1.PageResponseR\x04page\"\x98\x04\n" +
+	"\x04page\x18\x02 \x01(\v2#.xstockstrat.common.v1.PageResponseR\x04page\"\xf0\x04\n" +
 	"\fSignalSource\x12\x12\n" +
 	"\x04slug\x18\x01 \x01(\tR\x04slug\x12!\n" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12\x1f\n" +
@@ -1718,10 +2065,13 @@ const file_ingest_v1_ingest_proto_rawDesc = "" +
 	" \x01(\tR\tlastError\x12\x1f\n" +
 	"\vsignals_fed\x18\v \x01(\x03R\n" +
 	"signalsFed\x122\n" +
-	"\x12reliability_weight\x18\f \x01(\x01H\x00R\x11reliabilityWeight\x88\x01\x01B\x15\n" +
-	"\x13_reliability_weight\"E\n" +
+	"\x12reliability_weight\x18\f \x01(\x01H\x00R\x11reliabilityWeight\x88\x01\x01\x12\x17\n" +
+	"\auser_id\x18\r \x01(\tR\x06userId\x12=\n" +
+	"\x06origin\x18\x0e \x01(\v2%.xstockstrat.common.v1.TemplateOriginR\x06originB\x15\n" +
+	"\x13_reliability_weight\"i\n" +
 	"\x18ListSignalSourcesRequest\x12)\n" +
-	"\x10include_inactive\x18\x01 \x01(\bR\x0fincludeInactive\"Z\n" +
+	"\x10include_inactive\x18\x01 \x01(\bR\x0fincludeInactive\x12\"\n" +
+	"\rowner_user_id\x18\x02 \x01(\tR\vownerUserId\"Z\n" +
 	"\x19ListSignalSourcesResponse\x12=\n" +
 	"\asources\x18\x01 \x03(\v2#.xstockstrat.ingest.v1.SignalSourceR\asources\"\xb5\x02\n" +
 	"\x19ManageSignalSourceRequest\x12;\n" +
@@ -1732,7 +2082,21 @@ const file_ingest_v1_ingest_proto_rawDesc = "" +
 	"updateMask\x12S\n" +
 	"\x0eoperation_enum\x18\x05 \x01(\x0e2,.xstockstrat.ingest.v1.SignalSourceOperationR\roperationEnum\"Y\n" +
 	"\x1aManageSignalSourceResponse\x12;\n" +
-	"\x06source\x18\x01 \x01(\v2#.xstockstrat.ingest.v1.SignalSourceR\x06source*\xe0\x01\n" +
+	"\x06source\x18\x01 \x01(\v2#.xstockstrat.ingest.v1.SignalSourceR\x06source\"\x88\x01\n" +
+	"\x0eSourceTemplate\x127\n" +
+	"\x04meta\x18\x01 \x01(\v2#.xstockstrat.common.v1.TemplateMetaR\x04meta\x12=\n" +
+	"\apayload\x18\x02 \x01(\v2#.xstockstrat.ingest.v1.SignalSourceR\apayload\"\x16\n" +
+	"\x14ListTemplatesRequest\"\\\n" +
+	"\x15ListTemplatesResponse\x12C\n" +
+	"\ttemplates\x18\x01 \x03(\v2%.xstockstrat.ingest.v1.SourceTemplateR\ttemplates\"\xa2\x01\n" +
+	"\x15ManageTemplateRequest\x12F\n" +
+	"\toperation\x18\x01 \x01(\x0e2(.xstockstrat.common.v1.TemplateOperationR\toperation\x12A\n" +
+	"\btemplate\x18\x02 \x01(\v2%.xstockstrat.ingest.v1.SourceTemplateR\btemplate\"z\n" +
+	"\x1aInstantiateTemplateRequest\x12\x1f\n" +
+	"\vtemplate_id\x18\x01 \x01(\tR\n" +
+	"templateId\x12\x12\n" +
+	"\x04slug\x18\x02 \x01(\tR\x04slug\x12'\n" +
+	"\x0fcredentials_ref\x18\x03 \x01(\tR\x0ecredentialsRef*\xe0\x01\n" +
 	"\x0eBackfillStatus\x12\x1f\n" +
 	"\x1bBACKFILL_STATUS_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16BACKFILL_STATUS_QUEUED\x10\x01\x12\x1b\n" +
@@ -1748,7 +2112,11 @@ const file_ingest_v1_ingest_proto_rawDesc = "" +
 	"\x10BackfillDataKind\x12\"\n" +
 	"\x1eBACKFILL_DATA_KIND_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17BACKFILL_DATA_KIND_BARS\x10\x01\x12#\n" +
-	"\x1fBACKFILL_DATA_KIND_FUNDAMENTALS\x10\x02*\x98\x01\n" +
+	"\x1fBACKFILL_DATA_KIND_FUNDAMENTALS\x10\x02*Z\n" +
+	"\vSignalScope\x12\x1c\n" +
+	"\x18SIGNAL_SCOPE_UNSPECIFIED\x10\x00\x12\x14\n" +
+	"\x10SIGNAL_SCOPE_OWN\x10\x01\x12\x17\n" +
+	"\x13SIGNAL_SCOPE_SYSTEM\x10\x02*\x98\x01\n" +
 	"\x12SourceHealthStatus\x12$\n" +
 	" SOURCE_HEALTH_STATUS_UNSPECIFIED\x10\x00\x12\x1d\n" +
 	"\x19SOURCE_HEALTH_STATUS_LIVE\x10\x01\x12\x1e\n" +
@@ -1759,7 +2127,8 @@ const file_ingest_v1_ingest_proto_rawDesc = "" +
 	" SIGNAL_SOURCE_OPERATION_REGISTER\x10\x01\x12\"\n" +
 	"\x1eSIGNAL_SOURCE_OPERATION_UPDATE\x10\x02\x12&\n" +
 	"\"SIGNAL_SOURCE_OPERATION_REACTIVATE\x10\x03\x12&\n" +
-	"\"SIGNAL_SOURCE_OPERATION_DEACTIVATE\x10\x042\xfe\a\n" +
+	"\"SIGNAL_SOURCE_OPERATION_DEACTIVATE\x10\x042\xc0\n" +
+	"\n" +
 	"\rIngestService\x12p\n" +
 	"\x0fTriggerBackfill\x12-.xstockstrat.ingest.v1.TriggerBackfillRequest\x1a..xstockstrat.ingest.v1.TriggerBackfillResponse\x12h\n" +
 	"\x11GetBackfillStatus\x12/.xstockstrat.ingest.v1.GetBackfillStatusRequest\x1a\".xstockstrat.ingest.v1.BackfillJob\x12s\n" +
@@ -1769,7 +2138,10 @@ const file_ingest_v1_ingest_proto_rawDesc = "" +
 	"\fIngestSignal\x12*.xstockstrat.ingest.v1.IngestSignalRequest\x1a+.xstockstrat.ingest.v1.IngestSignalResponse\x12g\n" +
 	"\fQuerySignals\x12*.xstockstrat.ingest.v1.QuerySignalsRequest\x1a+.xstockstrat.ingest.v1.QuerySignalsResponse\x12v\n" +
 	"\x11ListSignalSources\x12/.xstockstrat.ingest.v1.ListSignalSourcesRequest\x1a0.xstockstrat.ingest.v1.ListSignalSourcesResponse\x12y\n" +
-	"\x12ManageSignalSource\x120.xstockstrat.ingest.v1.ManageSignalSourceRequest\x1a1.xstockstrat.ingest.v1.ManageSignalSourceResponseB<Z:github.com/xstockstrat/contracts/gen/go/ingest/v1;ingestv1b\x06proto3"
+	"\x12ManageSignalSource\x120.xstockstrat.ingest.v1.ManageSignalSourceRequest\x1a1.xstockstrat.ingest.v1.ManageSignalSourceResponse\x12j\n" +
+	"\rListTemplates\x12+.xstockstrat.ingest.v1.ListTemplatesRequest\x1a,.xstockstrat.ingest.v1.ListTemplatesResponse\x12e\n" +
+	"\x0eManageTemplate\x12,.xstockstrat.ingest.v1.ManageTemplateRequest\x1a%.xstockstrat.ingest.v1.SourceTemplate\x12m\n" +
+	"\x13InstantiateTemplate\x121.xstockstrat.ingest.v1.InstantiateTemplateRequest\x1a#.xstockstrat.ingest.v1.SignalSourceB<Z:github.com/xstockstrat/contracts/gen/go/ingest/v1;ingestv1b\x06proto3"
 
 var (
 	file_ingest_v1_ingest_proto_rawDescOnce sync.Once
@@ -1783,96 +2155,118 @@ func file_ingest_v1_ingest_proto_rawDescGZIP() []byte {
 	return file_ingest_v1_ingest_proto_rawDescData
 }
 
-var file_ingest_v1_ingest_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
-var file_ingest_v1_ingest_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
+var file_ingest_v1_ingest_proto_enumTypes = make([]protoimpl.EnumInfo, 6)
+var file_ingest_v1_ingest_proto_msgTypes = make([]protoimpl.MessageInfo, 24)
 var file_ingest_v1_ingest_proto_goTypes = []any{
 	(BackfillStatus)(0),                // 0: xstockstrat.ingest.v1.BackfillStatus
 	(FillMode)(0),                      // 1: xstockstrat.ingest.v1.FillMode
 	(BackfillDataKind)(0),              // 2: xstockstrat.ingest.v1.BackfillDataKind
-	(SourceHealthStatus)(0),            // 3: xstockstrat.ingest.v1.SourceHealthStatus
-	(SignalSourceOperation)(0),         // 4: xstockstrat.ingest.v1.SignalSourceOperation
-	(*BackfillJob)(nil),                // 5: xstockstrat.ingest.v1.BackfillJob
-	(*TriggerBackfillRequest)(nil),     // 6: xstockstrat.ingest.v1.TriggerBackfillRequest
-	(*TriggerBackfillResponse)(nil),    // 7: xstockstrat.ingest.v1.TriggerBackfillResponse
-	(*GetBackfillStatusRequest)(nil),   // 8: xstockstrat.ingest.v1.GetBackfillStatusRequest
-	(*ListBackfillJobsRequest)(nil),    // 9: xstockstrat.ingest.v1.ListBackfillJobsRequest
-	(*CancelBackfillRequest)(nil),      // 10: xstockstrat.ingest.v1.CancelBackfillRequest
-	(*ListBackfillJobsResponse)(nil),   // 11: xstockstrat.ingest.v1.ListBackfillJobsResponse
-	(*NormalizeRawDataRequest)(nil),    // 12: xstockstrat.ingest.v1.NormalizeRawDataRequest
-	(*NormalizeRawDataResponse)(nil),   // 13: xstockstrat.ingest.v1.NormalizeRawDataResponse
-	(*ExternalSignal)(nil),             // 14: xstockstrat.ingest.v1.ExternalSignal
-	(*IngestSignalRequest)(nil),        // 15: xstockstrat.ingest.v1.IngestSignalRequest
-	(*IngestSignalResponse)(nil),       // 16: xstockstrat.ingest.v1.IngestSignalResponse
-	(*QuerySignalsRequest)(nil),        // 17: xstockstrat.ingest.v1.QuerySignalsRequest
-	(*QuerySignalsResponse)(nil),       // 18: xstockstrat.ingest.v1.QuerySignalsResponse
-	(*SignalSource)(nil),               // 19: xstockstrat.ingest.v1.SignalSource
-	(*ListSignalSourcesRequest)(nil),   // 20: xstockstrat.ingest.v1.ListSignalSourcesRequest
-	(*ListSignalSourcesResponse)(nil),  // 21: xstockstrat.ingest.v1.ListSignalSourcesResponse
-	(*ManageSignalSourceRequest)(nil),  // 22: xstockstrat.ingest.v1.ManageSignalSourceRequest
-	(*ManageSignalSourceResponse)(nil), // 23: xstockstrat.ingest.v1.ManageSignalSourceResponse
-	(*v1.TimeRange)(nil),               // 24: xstockstrat.common.v1.TimeRange
-	(*timestamppb.Timestamp)(nil),      // 25: google.protobuf.Timestamp
-	(v1.Timeframe)(0),                  // 26: xstockstrat.common.v1.Timeframe
-	(*v1.PageRequest)(nil),             // 27: xstockstrat.common.v1.PageRequest
-	(*v1.PageResponse)(nil),            // 28: xstockstrat.common.v1.PageResponse
-	(*structpb.Struct)(nil),            // 29: google.protobuf.Struct
-	(*fieldmaskpb.FieldMask)(nil),      // 30: google.protobuf.FieldMask
+	(SignalScope)(0),                   // 3: xstockstrat.ingest.v1.SignalScope
+	(SourceHealthStatus)(0),            // 4: xstockstrat.ingest.v1.SourceHealthStatus
+	(SignalSourceOperation)(0),         // 5: xstockstrat.ingest.v1.SignalSourceOperation
+	(*BackfillJob)(nil),                // 6: xstockstrat.ingest.v1.BackfillJob
+	(*TriggerBackfillRequest)(nil),     // 7: xstockstrat.ingest.v1.TriggerBackfillRequest
+	(*TriggerBackfillResponse)(nil),    // 8: xstockstrat.ingest.v1.TriggerBackfillResponse
+	(*GetBackfillStatusRequest)(nil),   // 9: xstockstrat.ingest.v1.GetBackfillStatusRequest
+	(*ListBackfillJobsRequest)(nil),    // 10: xstockstrat.ingest.v1.ListBackfillJobsRequest
+	(*CancelBackfillRequest)(nil),      // 11: xstockstrat.ingest.v1.CancelBackfillRequest
+	(*ListBackfillJobsResponse)(nil),   // 12: xstockstrat.ingest.v1.ListBackfillJobsResponse
+	(*NormalizeRawDataRequest)(nil),    // 13: xstockstrat.ingest.v1.NormalizeRawDataRequest
+	(*NormalizeRawDataResponse)(nil),   // 14: xstockstrat.ingest.v1.NormalizeRawDataResponse
+	(*ExternalSignal)(nil),             // 15: xstockstrat.ingest.v1.ExternalSignal
+	(*IngestSignalRequest)(nil),        // 16: xstockstrat.ingest.v1.IngestSignalRequest
+	(*IngestSignalResponse)(nil),       // 17: xstockstrat.ingest.v1.IngestSignalResponse
+	(*QuerySignalsRequest)(nil),        // 18: xstockstrat.ingest.v1.QuerySignalsRequest
+	(*QuerySignalsResponse)(nil),       // 19: xstockstrat.ingest.v1.QuerySignalsResponse
+	(*SignalSource)(nil),               // 20: xstockstrat.ingest.v1.SignalSource
+	(*ListSignalSourcesRequest)(nil),   // 21: xstockstrat.ingest.v1.ListSignalSourcesRequest
+	(*ListSignalSourcesResponse)(nil),  // 22: xstockstrat.ingest.v1.ListSignalSourcesResponse
+	(*ManageSignalSourceRequest)(nil),  // 23: xstockstrat.ingest.v1.ManageSignalSourceRequest
+	(*ManageSignalSourceResponse)(nil), // 24: xstockstrat.ingest.v1.ManageSignalSourceResponse
+	(*SourceTemplate)(nil),             // 25: xstockstrat.ingest.v1.SourceTemplate
+	(*ListTemplatesRequest)(nil),       // 26: xstockstrat.ingest.v1.ListTemplatesRequest
+	(*ListTemplatesResponse)(nil),      // 27: xstockstrat.ingest.v1.ListTemplatesResponse
+	(*ManageTemplateRequest)(nil),      // 28: xstockstrat.ingest.v1.ManageTemplateRequest
+	(*InstantiateTemplateRequest)(nil), // 29: xstockstrat.ingest.v1.InstantiateTemplateRequest
+	(*v1.TimeRange)(nil),               // 30: xstockstrat.common.v1.TimeRange
+	(*timestamppb.Timestamp)(nil),      // 31: google.protobuf.Timestamp
+	(v1.Timeframe)(0),                  // 32: xstockstrat.common.v1.Timeframe
+	(*v1.PageRequest)(nil),             // 33: xstockstrat.common.v1.PageRequest
+	(*v1.PageResponse)(nil),            // 34: xstockstrat.common.v1.PageResponse
+	(*structpb.Struct)(nil),            // 35: google.protobuf.Struct
+	(*v1.TemplateOrigin)(nil),          // 36: xstockstrat.common.v1.TemplateOrigin
+	(*fieldmaskpb.FieldMask)(nil),      // 37: google.protobuf.FieldMask
+	(*v1.TemplateMeta)(nil),            // 38: xstockstrat.common.v1.TemplateMeta
+	(v1.TemplateOperation)(0),          // 39: xstockstrat.common.v1.TemplateOperation
 }
 var file_ingest_v1_ingest_proto_depIdxs = []int32{
-	24, // 0: xstockstrat.ingest.v1.BackfillJob.range:type_name -> xstockstrat.common.v1.TimeRange
+	30, // 0: xstockstrat.ingest.v1.BackfillJob.range:type_name -> xstockstrat.common.v1.TimeRange
 	0,  // 1: xstockstrat.ingest.v1.BackfillJob.status:type_name -> xstockstrat.ingest.v1.BackfillStatus
-	25, // 2: xstockstrat.ingest.v1.BackfillJob.started_at:type_name -> google.protobuf.Timestamp
-	25, // 3: xstockstrat.ingest.v1.BackfillJob.completed_at:type_name -> google.protobuf.Timestamp
-	26, // 4: xstockstrat.ingest.v1.BackfillJob.timeframe_enum:type_name -> xstockstrat.common.v1.Timeframe
+	31, // 2: xstockstrat.ingest.v1.BackfillJob.started_at:type_name -> google.protobuf.Timestamp
+	31, // 3: xstockstrat.ingest.v1.BackfillJob.completed_at:type_name -> google.protobuf.Timestamp
+	32, // 4: xstockstrat.ingest.v1.BackfillJob.timeframe_enum:type_name -> xstockstrat.common.v1.Timeframe
 	2,  // 5: xstockstrat.ingest.v1.BackfillJob.data_kind:type_name -> xstockstrat.ingest.v1.BackfillDataKind
-	24, // 6: xstockstrat.ingest.v1.TriggerBackfillRequest.range:type_name -> xstockstrat.common.v1.TimeRange
-	26, // 7: xstockstrat.ingest.v1.TriggerBackfillRequest.timeframe_enum:type_name -> xstockstrat.common.v1.Timeframe
+	30, // 6: xstockstrat.ingest.v1.TriggerBackfillRequest.range:type_name -> xstockstrat.common.v1.TimeRange
+	32, // 7: xstockstrat.ingest.v1.TriggerBackfillRequest.timeframe_enum:type_name -> xstockstrat.common.v1.Timeframe
 	1,  // 8: xstockstrat.ingest.v1.TriggerBackfillRequest.fill_mode:type_name -> xstockstrat.ingest.v1.FillMode
 	2,  // 9: xstockstrat.ingest.v1.TriggerBackfillRequest.data_kind:type_name -> xstockstrat.ingest.v1.BackfillDataKind
 	0,  // 10: xstockstrat.ingest.v1.TriggerBackfillResponse.status:type_name -> xstockstrat.ingest.v1.BackfillStatus
 	0,  // 11: xstockstrat.ingest.v1.ListBackfillJobsRequest.status_filter:type_name -> xstockstrat.ingest.v1.BackfillStatus
-	27, // 12: xstockstrat.ingest.v1.ListBackfillJobsRequest.page:type_name -> xstockstrat.common.v1.PageRequest
-	5,  // 13: xstockstrat.ingest.v1.ListBackfillJobsResponse.jobs:type_name -> xstockstrat.ingest.v1.BackfillJob
-	28, // 14: xstockstrat.ingest.v1.ListBackfillJobsResponse.page:type_name -> xstockstrat.common.v1.PageResponse
-	25, // 15: xstockstrat.ingest.v1.ExternalSignal.valid_from:type_name -> google.protobuf.Timestamp
-	25, // 16: xstockstrat.ingest.v1.ExternalSignal.valid_until:type_name -> google.protobuf.Timestamp
-	25, // 17: xstockstrat.ingest.v1.ExternalSignal.ingested_at:type_name -> google.protobuf.Timestamp
-	14, // 18: xstockstrat.ingest.v1.IngestSignalRequest.signal:type_name -> xstockstrat.ingest.v1.ExternalSignal
-	24, // 19: xstockstrat.ingest.v1.QuerySignalsRequest.active_window:type_name -> xstockstrat.common.v1.TimeRange
-	27, // 20: xstockstrat.ingest.v1.QuerySignalsRequest.page:type_name -> xstockstrat.common.v1.PageRequest
-	14, // 21: xstockstrat.ingest.v1.QuerySignalsResponse.signals:type_name -> xstockstrat.ingest.v1.ExternalSignal
-	28, // 22: xstockstrat.ingest.v1.QuerySignalsResponse.page:type_name -> xstockstrat.common.v1.PageResponse
-	29, // 23: xstockstrat.ingest.v1.SignalSource.config_json:type_name -> google.protobuf.Struct
-	3,  // 24: xstockstrat.ingest.v1.SignalSource.health:type_name -> xstockstrat.ingest.v1.SourceHealthStatus
-	25, // 25: xstockstrat.ingest.v1.SignalSource.last_seen_at:type_name -> google.protobuf.Timestamp
-	19, // 26: xstockstrat.ingest.v1.ListSignalSourcesResponse.sources:type_name -> xstockstrat.ingest.v1.SignalSource
-	19, // 27: xstockstrat.ingest.v1.ManageSignalSourceRequest.source:type_name -> xstockstrat.ingest.v1.SignalSource
-	30, // 28: xstockstrat.ingest.v1.ManageSignalSourceRequest.update_mask:type_name -> google.protobuf.FieldMask
-	4,  // 29: xstockstrat.ingest.v1.ManageSignalSourceRequest.operation_enum:type_name -> xstockstrat.ingest.v1.SignalSourceOperation
-	19, // 30: xstockstrat.ingest.v1.ManageSignalSourceResponse.source:type_name -> xstockstrat.ingest.v1.SignalSource
-	6,  // 31: xstockstrat.ingest.v1.IngestService.TriggerBackfill:input_type -> xstockstrat.ingest.v1.TriggerBackfillRequest
-	8,  // 32: xstockstrat.ingest.v1.IngestService.GetBackfillStatus:input_type -> xstockstrat.ingest.v1.GetBackfillStatusRequest
-	9,  // 33: xstockstrat.ingest.v1.IngestService.ListBackfillJobs:input_type -> xstockstrat.ingest.v1.ListBackfillJobsRequest
-	10, // 34: xstockstrat.ingest.v1.IngestService.CancelBackfill:input_type -> xstockstrat.ingest.v1.CancelBackfillRequest
-	12, // 35: xstockstrat.ingest.v1.IngestService.NormalizeRawData:input_type -> xstockstrat.ingest.v1.NormalizeRawDataRequest
-	15, // 36: xstockstrat.ingest.v1.IngestService.IngestSignal:input_type -> xstockstrat.ingest.v1.IngestSignalRequest
-	17, // 37: xstockstrat.ingest.v1.IngestService.QuerySignals:input_type -> xstockstrat.ingest.v1.QuerySignalsRequest
-	20, // 38: xstockstrat.ingest.v1.IngestService.ListSignalSources:input_type -> xstockstrat.ingest.v1.ListSignalSourcesRequest
-	22, // 39: xstockstrat.ingest.v1.IngestService.ManageSignalSource:input_type -> xstockstrat.ingest.v1.ManageSignalSourceRequest
-	7,  // 40: xstockstrat.ingest.v1.IngestService.TriggerBackfill:output_type -> xstockstrat.ingest.v1.TriggerBackfillResponse
-	5,  // 41: xstockstrat.ingest.v1.IngestService.GetBackfillStatus:output_type -> xstockstrat.ingest.v1.BackfillJob
-	11, // 42: xstockstrat.ingest.v1.IngestService.ListBackfillJobs:output_type -> xstockstrat.ingest.v1.ListBackfillJobsResponse
-	5,  // 43: xstockstrat.ingest.v1.IngestService.CancelBackfill:output_type -> xstockstrat.ingest.v1.BackfillJob
-	13, // 44: xstockstrat.ingest.v1.IngestService.NormalizeRawData:output_type -> xstockstrat.ingest.v1.NormalizeRawDataResponse
-	16, // 45: xstockstrat.ingest.v1.IngestService.IngestSignal:output_type -> xstockstrat.ingest.v1.IngestSignalResponse
-	18, // 46: xstockstrat.ingest.v1.IngestService.QuerySignals:output_type -> xstockstrat.ingest.v1.QuerySignalsResponse
-	21, // 47: xstockstrat.ingest.v1.IngestService.ListSignalSources:output_type -> xstockstrat.ingest.v1.ListSignalSourcesResponse
-	23, // 48: xstockstrat.ingest.v1.IngestService.ManageSignalSource:output_type -> xstockstrat.ingest.v1.ManageSignalSourceResponse
-	40, // [40:49] is the sub-list for method output_type
-	31, // [31:40] is the sub-list for method input_type
-	31, // [31:31] is the sub-list for extension type_name
-	31, // [31:31] is the sub-list for extension extendee
-	0,  // [0:31] is the sub-list for field type_name
+	33, // 12: xstockstrat.ingest.v1.ListBackfillJobsRequest.page:type_name -> xstockstrat.common.v1.PageRequest
+	6,  // 13: xstockstrat.ingest.v1.ListBackfillJobsResponse.jobs:type_name -> xstockstrat.ingest.v1.BackfillJob
+	34, // 14: xstockstrat.ingest.v1.ListBackfillJobsResponse.page:type_name -> xstockstrat.common.v1.PageResponse
+	31, // 15: xstockstrat.ingest.v1.ExternalSignal.valid_from:type_name -> google.protobuf.Timestamp
+	31, // 16: xstockstrat.ingest.v1.ExternalSignal.valid_until:type_name -> google.protobuf.Timestamp
+	31, // 17: xstockstrat.ingest.v1.ExternalSignal.ingested_at:type_name -> google.protobuf.Timestamp
+	15, // 18: xstockstrat.ingest.v1.IngestSignalRequest.signal:type_name -> xstockstrat.ingest.v1.ExternalSignal
+	30, // 19: xstockstrat.ingest.v1.QuerySignalsRequest.active_window:type_name -> xstockstrat.common.v1.TimeRange
+	33, // 20: xstockstrat.ingest.v1.QuerySignalsRequest.page:type_name -> xstockstrat.common.v1.PageRequest
+	3,  // 21: xstockstrat.ingest.v1.QuerySignalsRequest.scope:type_name -> xstockstrat.ingest.v1.SignalScope
+	15, // 22: xstockstrat.ingest.v1.QuerySignalsResponse.signals:type_name -> xstockstrat.ingest.v1.ExternalSignal
+	34, // 23: xstockstrat.ingest.v1.QuerySignalsResponse.page:type_name -> xstockstrat.common.v1.PageResponse
+	35, // 24: xstockstrat.ingest.v1.SignalSource.config_json:type_name -> google.protobuf.Struct
+	4,  // 25: xstockstrat.ingest.v1.SignalSource.health:type_name -> xstockstrat.ingest.v1.SourceHealthStatus
+	31, // 26: xstockstrat.ingest.v1.SignalSource.last_seen_at:type_name -> google.protobuf.Timestamp
+	36, // 27: xstockstrat.ingest.v1.SignalSource.origin:type_name -> xstockstrat.common.v1.TemplateOrigin
+	20, // 28: xstockstrat.ingest.v1.ListSignalSourcesResponse.sources:type_name -> xstockstrat.ingest.v1.SignalSource
+	20, // 29: xstockstrat.ingest.v1.ManageSignalSourceRequest.source:type_name -> xstockstrat.ingest.v1.SignalSource
+	37, // 30: xstockstrat.ingest.v1.ManageSignalSourceRequest.update_mask:type_name -> google.protobuf.FieldMask
+	5,  // 31: xstockstrat.ingest.v1.ManageSignalSourceRequest.operation_enum:type_name -> xstockstrat.ingest.v1.SignalSourceOperation
+	20, // 32: xstockstrat.ingest.v1.ManageSignalSourceResponse.source:type_name -> xstockstrat.ingest.v1.SignalSource
+	38, // 33: xstockstrat.ingest.v1.SourceTemplate.meta:type_name -> xstockstrat.common.v1.TemplateMeta
+	20, // 34: xstockstrat.ingest.v1.SourceTemplate.payload:type_name -> xstockstrat.ingest.v1.SignalSource
+	25, // 35: xstockstrat.ingest.v1.ListTemplatesResponse.templates:type_name -> xstockstrat.ingest.v1.SourceTemplate
+	39, // 36: xstockstrat.ingest.v1.ManageTemplateRequest.operation:type_name -> xstockstrat.common.v1.TemplateOperation
+	25, // 37: xstockstrat.ingest.v1.ManageTemplateRequest.template:type_name -> xstockstrat.ingest.v1.SourceTemplate
+	7,  // 38: xstockstrat.ingest.v1.IngestService.TriggerBackfill:input_type -> xstockstrat.ingest.v1.TriggerBackfillRequest
+	9,  // 39: xstockstrat.ingest.v1.IngestService.GetBackfillStatus:input_type -> xstockstrat.ingest.v1.GetBackfillStatusRequest
+	10, // 40: xstockstrat.ingest.v1.IngestService.ListBackfillJobs:input_type -> xstockstrat.ingest.v1.ListBackfillJobsRequest
+	11, // 41: xstockstrat.ingest.v1.IngestService.CancelBackfill:input_type -> xstockstrat.ingest.v1.CancelBackfillRequest
+	13, // 42: xstockstrat.ingest.v1.IngestService.NormalizeRawData:input_type -> xstockstrat.ingest.v1.NormalizeRawDataRequest
+	16, // 43: xstockstrat.ingest.v1.IngestService.IngestSignal:input_type -> xstockstrat.ingest.v1.IngestSignalRequest
+	18, // 44: xstockstrat.ingest.v1.IngestService.QuerySignals:input_type -> xstockstrat.ingest.v1.QuerySignalsRequest
+	21, // 45: xstockstrat.ingest.v1.IngestService.ListSignalSources:input_type -> xstockstrat.ingest.v1.ListSignalSourcesRequest
+	23, // 46: xstockstrat.ingest.v1.IngestService.ManageSignalSource:input_type -> xstockstrat.ingest.v1.ManageSignalSourceRequest
+	26, // 47: xstockstrat.ingest.v1.IngestService.ListTemplates:input_type -> xstockstrat.ingest.v1.ListTemplatesRequest
+	28, // 48: xstockstrat.ingest.v1.IngestService.ManageTemplate:input_type -> xstockstrat.ingest.v1.ManageTemplateRequest
+	29, // 49: xstockstrat.ingest.v1.IngestService.InstantiateTemplate:input_type -> xstockstrat.ingest.v1.InstantiateTemplateRequest
+	8,  // 50: xstockstrat.ingest.v1.IngestService.TriggerBackfill:output_type -> xstockstrat.ingest.v1.TriggerBackfillResponse
+	6,  // 51: xstockstrat.ingest.v1.IngestService.GetBackfillStatus:output_type -> xstockstrat.ingest.v1.BackfillJob
+	12, // 52: xstockstrat.ingest.v1.IngestService.ListBackfillJobs:output_type -> xstockstrat.ingest.v1.ListBackfillJobsResponse
+	6,  // 53: xstockstrat.ingest.v1.IngestService.CancelBackfill:output_type -> xstockstrat.ingest.v1.BackfillJob
+	14, // 54: xstockstrat.ingest.v1.IngestService.NormalizeRawData:output_type -> xstockstrat.ingest.v1.NormalizeRawDataResponse
+	17, // 55: xstockstrat.ingest.v1.IngestService.IngestSignal:output_type -> xstockstrat.ingest.v1.IngestSignalResponse
+	19, // 56: xstockstrat.ingest.v1.IngestService.QuerySignals:output_type -> xstockstrat.ingest.v1.QuerySignalsResponse
+	22, // 57: xstockstrat.ingest.v1.IngestService.ListSignalSources:output_type -> xstockstrat.ingest.v1.ListSignalSourcesResponse
+	24, // 58: xstockstrat.ingest.v1.IngestService.ManageSignalSource:output_type -> xstockstrat.ingest.v1.ManageSignalSourceResponse
+	27, // 59: xstockstrat.ingest.v1.IngestService.ListTemplates:output_type -> xstockstrat.ingest.v1.ListTemplatesResponse
+	25, // 60: xstockstrat.ingest.v1.IngestService.ManageTemplate:output_type -> xstockstrat.ingest.v1.SourceTemplate
+	20, // 61: xstockstrat.ingest.v1.IngestService.InstantiateTemplate:output_type -> xstockstrat.ingest.v1.SignalSource
+	50, // [50:62] is the sub-list for method output_type
+	38, // [38:50] is the sub-list for method input_type
+	38, // [38:38] is the sub-list for extension type_name
+	38, // [38:38] is the sub-list for extension extendee
+	0,  // [0:38] is the sub-list for field type_name
 }
 
 func init() { file_ingest_v1_ingest_proto_init() }
@@ -1886,8 +2280,8 @@ func file_ingest_v1_ingest_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_ingest_v1_ingest_proto_rawDesc), len(file_ingest_v1_ingest_proto_rawDesc)),
-			NumEnums:      5,
-			NumMessages:   19,
+			NumEnums:      6,
+			NumMessages:   24,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

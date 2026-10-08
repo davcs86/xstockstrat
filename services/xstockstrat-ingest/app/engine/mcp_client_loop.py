@@ -100,6 +100,7 @@ async def poll_one_source(
     an unexpected failure so the caller records source health; a missing bearer is a soft-degrade
     (marks the source and returns without raising)."""
     slug = src["slug"]
+    owner = src["user_id"]
     cfg = _cfg_to_dict(src.get("config_json")) or {}
     endpoint = cfg.get("mcp_endpoint")
     tool = cfg.get("mcp_tool")
@@ -109,19 +110,19 @@ async def poll_one_source(
 
     credentials_ref = src.get("credentials_ref")
     if not credentials_ref:
-        await mark_source_error(servicer._db, slug, "bearer not configured")
+        await mark_source_error(servicer._db, owner, slug, "bearer not configured")
         return
     _namespace, key = split_credentials_ref(credentials_ref)
-    bearer, found = await cfg_watcher.resolve_secret(key)
-    if not found:
-        await mark_source_error(servicer._db, slug, "bearer not configured")
+    bearer, found = await cfg_watcher.resolve_secret(key, user_id=owner)
+    if not (found and bearer):
+        await mark_source_error(servicer._db, owner, slug, "bearer not configured")
         return
 
     result = await mcp_client.fetch(endpoint, tool, arguments, bearer, float(timeout_seconds))
     items = _extract_result_items(result)
     parsed = await extractor.extract(McpClientInput(result_items=items))
     for item in parsed:
-        await servicer._ingest_external_signal(_build_external_signal(slug, item))
+        await servicer._ingest_external_signal(_build_external_signal(slug, item), owner=owner)
 
 
 async def run_one_cycle(servicer, cfg_watcher, mcp_client: McpClientProtocol) -> None:
@@ -144,7 +145,7 @@ async def run_one_cycle(servicer, cfg_watcher, mcp_client: McpClientProtocol) ->
         except Exception as e:
             log.warning("mcp_client loop: source %s failed: %s", slug, e)
             try:
-                await mark_source_error(servicer._db, slug, str(e))
+                await mark_source_error(servicer._db, src["user_id"], slug, str(e))
             except Exception as bookkeeping_err:
                 log.warning(
                     "mcp_client loop: failed to record error for %s: %s", slug, bookkeeping_err

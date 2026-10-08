@@ -25,7 +25,7 @@ FORMULA_ID = str(
 
 NAME = "Fundamentals Value+Quality Composite (v1)"
 AUTHOR = SYSTEM_AUTHOR
-IS_PUBLIC = True
+IS_PUBLIC = False
 DESCRIPTION = (
     "Per-symbol value+quality composite over fundamental metrics. Value sub-score blends "
     "P/E, P/B and a triangular dividend-yield band; quality sub-score blends ROE, D/E and "

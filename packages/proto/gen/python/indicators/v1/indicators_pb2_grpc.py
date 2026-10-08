@@ -81,6 +81,26 @@ class IndicatorsServiceStub(object):
                 request_serializer=indicators_dot_v1_dot_indicators__pb2.ListFundamentalMetricsRequest.SerializeToString,
                 response_deserializer=indicators_dot_v1_dot_indicators__pb2.ListFundamentalMetricsResponse.FromString,
                 _registered_method=True)
+        self.ListTemplates = channel.unary_unary(
+                '/xstockstrat.indicators.v1.IndicatorsService/ListTemplates',
+                request_serializer=indicators_dot_v1_dot_indicators__pb2.ListTemplatesRequest.SerializeToString,
+                response_deserializer=indicators_dot_v1_dot_indicators__pb2.ListTemplatesResponse.FromString,
+                _registered_method=True)
+        self.ManageTemplate = channel.unary_unary(
+                '/xstockstrat.indicators.v1.IndicatorsService/ManageTemplate',
+                request_serializer=indicators_dot_v1_dot_indicators__pb2.ManageTemplateRequest.SerializeToString,
+                response_deserializer=indicators_dot_v1_dot_indicators__pb2.FormulaTemplate.FromString,
+                _registered_method=True)
+        self.InstantiateTemplate = channel.unary_unary(
+                '/xstockstrat.indicators.v1.IndicatorsService/InstantiateTemplate',
+                request_serializer=indicators_dot_v1_dot_indicators__pb2.InstantiateTemplateRequest.SerializeToString,
+                response_deserializer=indicators_dot_v1_dot_indicators__pb2.InstantiateTemplateResponse.FromString,
+                _registered_method=True)
+        self.ResolveTemplateIntent = channel.unary_unary(
+                '/xstockstrat.indicators.v1.IndicatorsService/ResolveTemplateIntent',
+                request_serializer=indicators_dot_v1_dot_indicators__pb2.ResolveTemplateIntentRequest.SerializeToString,
+                response_deserializer=indicators_dot_v1_dot_indicators__pb2.ResolveTemplateIntentResponse.FromString,
+                _registered_method=True)
 
 
 class IndicatorsServiceServicer(object):
@@ -154,6 +174,33 @@ class IndicatorsServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def ListTemplates(self, request, context):
+        """Template catalog (feature 224). List/read: any authenticated caller. Manage: ADMIN only.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ManageTemplate(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def InstantiateTemplate(self, request, context):
+        """Copies a formula template into a private formula owned by the x-user-id caller.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ResolveTemplateIntent(self, request, context):
+        """Internal (SAN-bound xstockstrat-analysis): commits or aborts a strategy-template saga's copies.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_IndicatorsServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -201,6 +248,26 @@ def add_IndicatorsServiceServicer_to_server(servicer, server):
                     servicer.ListFundamentalMetrics,
                     request_deserializer=indicators_dot_v1_dot_indicators__pb2.ListFundamentalMetricsRequest.FromString,
                     response_serializer=indicators_dot_v1_dot_indicators__pb2.ListFundamentalMetricsResponse.SerializeToString,
+            ),
+            'ListTemplates': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListTemplates,
+                    request_deserializer=indicators_dot_v1_dot_indicators__pb2.ListTemplatesRequest.FromString,
+                    response_serializer=indicators_dot_v1_dot_indicators__pb2.ListTemplatesResponse.SerializeToString,
+            ),
+            'ManageTemplate': grpc.unary_unary_rpc_method_handler(
+                    servicer.ManageTemplate,
+                    request_deserializer=indicators_dot_v1_dot_indicators__pb2.ManageTemplateRequest.FromString,
+                    response_serializer=indicators_dot_v1_dot_indicators__pb2.FormulaTemplate.SerializeToString,
+            ),
+            'InstantiateTemplate': grpc.unary_unary_rpc_method_handler(
+                    servicer.InstantiateTemplate,
+                    request_deserializer=indicators_dot_v1_dot_indicators__pb2.InstantiateTemplateRequest.FromString,
+                    response_serializer=indicators_dot_v1_dot_indicators__pb2.InstantiateTemplateResponse.SerializeToString,
+            ),
+            'ResolveTemplateIntent': grpc.unary_unary_rpc_method_handler(
+                    servicer.ResolveTemplateIntent,
+                    request_deserializer=indicators_dot_v1_dot_indicators__pb2.ResolveTemplateIntentRequest.FromString,
+                    response_serializer=indicators_dot_v1_dot_indicators__pb2.ResolveTemplateIntentResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -448,6 +515,114 @@ class IndicatorsService(object):
             '/xstockstrat.indicators.v1.IndicatorsService/ListFundamentalMetrics',
             indicators_dot_v1_dot_indicators__pb2.ListFundamentalMetricsRequest.SerializeToString,
             indicators_dot_v1_dot_indicators__pb2.ListFundamentalMetricsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListTemplates(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.indicators.v1.IndicatorsService/ListTemplates',
+            indicators_dot_v1_dot_indicators__pb2.ListTemplatesRequest.SerializeToString,
+            indicators_dot_v1_dot_indicators__pb2.ListTemplatesResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ManageTemplate(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.indicators.v1.IndicatorsService/ManageTemplate',
+            indicators_dot_v1_dot_indicators__pb2.ManageTemplateRequest.SerializeToString,
+            indicators_dot_v1_dot_indicators__pb2.FormulaTemplate.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def InstantiateTemplate(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.indicators.v1.IndicatorsService/InstantiateTemplate',
+            indicators_dot_v1_dot_indicators__pb2.InstantiateTemplateRequest.SerializeToString,
+            indicators_dot_v1_dot_indicators__pb2.InstantiateTemplateResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ResolveTemplateIntent(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.indicators.v1.IndicatorsService/ResolveTemplateIntent',
+            indicators_dot_v1_dot_indicators__pb2.ResolveTemplateIntentRequest.SerializeToString,
+            indicators_dot_v1_dot_indicators__pb2.ResolveTemplateIntentResponse.FromString,
             options,
             channel_credentials,
             insecure,

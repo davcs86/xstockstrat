@@ -1,10 +1,11 @@
 """
-StrategyScoresRepository — asyncpg-backed persistence for analysis.strategy_scores.
+StrategyScoresRepository — asyncpg-backed persistence for analysis.strategy_scores_v2.
 
 Mirrors the DB-query style of app/repositories/strategies.py (fetchrow / fetch,
-``json.dumps(...)::jsonb`` binding). One latest score per strategy: writes are an upsert
-on the ``strategy_id`` primary key (feature 064 — persist-strategy-scores). The DB is a
-durability backup for the servicer's in-memory score dict; reads happen at boot (hydrate).
+``json.dumps(...)::jsonb`` binding). One latest score per owned strategy: writes are an upsert
+on the ``(user_id, strategy_id)`` primary key (feature 224 — two users may each own the same
+strategy_id). The DB is a durability backup for the servicer's in-memory score dict; reads
+happen at boot (hydrate).
 """
 
 import json
@@ -24,13 +25,14 @@ def _to_dict(row) -> dict | None:
 
 
 class StrategyScoresRepository:
-    """Upsert/read persistence for the ``analysis.strategy_scores`` table."""
+    """Upsert/read persistence for the ``analysis.strategy_scores_v2`` table."""
 
     def __init__(self, db_pool):
         self._db = db_pool
 
     async def upsert(
         self,
+        user_id: str,
         strategy_id: str,
         overall_score: float,
         rating: str,
@@ -41,11 +43,11 @@ class StrategyScoresRepository:
     ) -> dict:
         row = await self._db.fetchrow(
             """
-            INSERT INTO analysis.strategy_scores
-                (strategy_id, overall_score, rating, component_scores,
+            INSERT INTO analysis.strategy_scores_v2
+                (user_id, strategy_id, overall_score, rating, component_scores,
                  n_symbols, total_trading_days, provisional)
-            VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7)
-            ON CONFLICT (strategy_id) DO UPDATE SET
+            VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8)
+            ON CONFLICT (user_id, strategy_id) DO UPDATE SET
                 overall_score      = EXCLUDED.overall_score,
                 rating             = EXCLUDED.rating,
                 component_scores   = EXCLUDED.component_scores,
@@ -55,6 +57,7 @@ class StrategyScoresRepository:
                 updated_at         = NOW()
             RETURNING *
             """,
+            user_id,
             strategy_id,
             overall_score,
             rating,
@@ -65,24 +68,56 @@ class StrategyScoresRepository:
         )
         return _to_dict(row)
 
-    async def delete(self, strategy_id: str) -> None:
+    async def delete(self, user_id: str, strategy_id: str) -> None:
         """Remove a strategy's materialized score (feature 065 — clear a stale grade).
 
         Used when a recompute finds zero eligible evidence (e.g. after a definition change),
         so a broad old grade never lingers past the change that invalidated its evidence base.
         """
         await self._db.execute(
-            "DELETE FROM analysis.strategy_scores WHERE strategy_id = $1",
+            "DELETE FROM analysis.strategy_scores_v2 WHERE user_id = $1 AND strategy_id = $2",
+            user_id,
             strategy_id,
         )
 
-    async def get_by_id(self, strategy_id: str) -> dict | None:
+    async def get_by_id(self, user_id: str, strategy_id: str) -> dict | None:
         row = await self._db.fetchrow(
-            "SELECT * FROM analysis.strategy_scores WHERE strategy_id = $1",
+            "SELECT * FROM analysis.strategy_scores_v2 WHERE user_id = $1 AND strategy_id = $2",
+            user_id,
             strategy_id,
         )
         return _to_dict(row)
 
     async def list(self) -> list[dict]:
-        rows = await self._db.fetch("SELECT * FROM analysis.strategy_scores")
+        rows = await self._db.fetch("SELECT * FROM analysis.strategy_scores_v2")
         return [_to_dict(r) for r in rows]
+
+    async def list_unscored_pairs(self, limit: int) -> "list[tuple[str, str]]":
+        """Owner pairs of strategy_ids held by more than one owner that have no v2 score yet.
+
+        Migration 026 seeds v2 only for unambiguous ids; these pairs are recomputed from their own
+        evidence at boot. Only pairs with owner evidence cells are returned, so a pair that can
+        never score does not hold a slot of the per-pass ``limit`` forever.
+        """
+        rows = await self._db.fetch(
+            """
+            SELECT s.user_id, s.strategy_id
+            FROM analysis.strategies s
+            WHERE s.strategy_id IN (
+                    SELECT strategy_id FROM analysis.strategies
+                    GROUP BY strategy_id HAVING count(*) > 1
+                  )
+              AND NOT EXISTS (
+                    SELECT 1 FROM analysis.strategy_scores_v2 v
+                    WHERE v.user_id = s.user_id AND v.strategy_id = s.strategy_id
+                  )
+              AND EXISTS (
+                    SELECT 1 FROM analysis.backtest_run_symbols b
+                    WHERE b.user_id = s.user_id AND b.strategy_id = s.strategy_id
+                  )
+            ORDER BY s.strategy_id, s.user_id
+            LIMIT $1
+            """,
+            limit,
+        )
+        return [(r["user_id"], r["strategy_id"]) for r in rows]

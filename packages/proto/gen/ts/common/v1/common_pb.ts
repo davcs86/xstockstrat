@@ -12,7 +12,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file common/v1/common.proto.
  */
 export const file_common_v1_common: GenFile = /*@__PURE__*/
-  fileDesc("ChZjb21tb24vdjEvY29tbW9uLnByb3RvEhV4c3RvY2tzdHJhdC5jb21tb24udjEiNAoLUGFnZVJlcXVlc3QSEQoJcGFnZV9zaXplGAEgASgFEhIKCnBhZ2VfdG9rZW4YAiABKAkiPAoMUGFnZVJlc3BvbnNlEhcKD25leHRfcGFnZV90b2tlbhgBIAEoCRITCgt0b3RhbF9jb3VudBgCIAEoBSKSAQoFRXJyb3ISDAoEY29kZRgBIAEoCRIPCgdtZXNzYWdlGAIgASgJEjoKB2RldGFpbHMYAyADKAsyKS54c3RvY2tzdHJhdC5jb21tb24udjEuRXJyb3IuRGV0YWlsc0VudHJ5Gi4KDERldGFpbHNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIjkKB0RlY2ltYWwSDQoFdW5pdHMYASABKAMSDQoFbmFub3MYAiABKAUSEAoIY3VycmVuY3kYAyABKAkiPgoFQXNzZXQSDgoGc3ltYm9sGAEgASgJEhAKCGV4Y2hhbmdlGAIgASgJEhMKC2Fzc2V0X2NsYXNzGAMgASgJIl8KCVRpbWVSYW5nZRIpCgVzdGFydBgBIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASJwoDZW5kGAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCpaCgtUcmFkaW5nTW9kZRIcChhUUkFESU5HX01PREVfVU5TUEVDSUZJRUQQABIWChJUUkFESU5HX01PREVfUEFQRVIQARIVChFUUkFESU5HX01PREVfTElWRRACKngKC0Vudmlyb25tZW50EhsKF0VOVklST05NRU5UX1VOU1BFQ0lGSUVEEAASFwoPRU5WSVJPTk1FTlRfREVWEAEaAggBEhoKFkVOVklST05NRU5UX1BST0RVQ1RJT04QAhIXChNFTlZJUk9OTUVOVF9TVEFHSU5HEAMqcAoKQnJva2VyVHlwZRIbChdCUk9LRVJfVFlQRV9VTlNQRUNJRklFRBAAEhYKEkJST0tFUl9UWVBFX0FMUEFDQRABEhQKEEJST0tFUl9UWVBFX0lCS1IQAhIXChNCUk9LRVJfVFlQRV9PRkZMSU5FEAMqnAEKCVRpbWVmcmFtZRIZChVUSU1FRlJBTUVfVU5TUEVDSUZJRUQQABIXCg9USU1FRlJBTUVfMTVNSU4QBRoCCAESFwoPVElNRUZSQU1FXzFIT1VSEAMaAggBEhIKDlRJTUVGUkFNRV8xREFZEAQSFgoOVElNRUZSQU1FXzFNSU4QARoCCAESFgoOVElNRUZSQU1FXzVNSU4QAhoCCAEquAIKBlNlY3RvchIWChJTRUNUT1JfVU5TUEVDSUZJRUQQABIRCg1TRUNUT1JfRU5FUkdZEAESFAoQU0VDVE9SX01BVEVSSUFMUxACEhYKElNFQ1RPUl9JTkRVU1RSSUFMUxADEiEKHVNFQ1RPUl9DT05TVU1FUl9ESVNDUkVUSU9OQVJZEAQSGwoXU0VDVE9SX0NPTlNVTUVSX1NUQVBMRVMQBRIWChJTRUNUT1JfSEVBTFRIX0NBUkUQBhIVChFTRUNUT1JfRklOQU5DSUFMUxAHEhUKEVNFQ1RPUl9URUNITk9MT0dZEAgSIQodU0VDVE9SX0NPTU1VTklDQVRJT05fU0VSVklDRVMQCRIUChBTRUNUT1JfVVRJTElUSUVTEAoSFgoSU0VDVE9SX1JFQUxfRVNUQVRFEAtCPFo6Z2l0aHViLmNvbS94c3RvY2tzdHJhdC9jb250cmFjdHMvZ2VuL2dvL2NvbW1vbi92MTtjb21tb252MWIGcHJvdG8z", [file_google_protobuf_timestamp]);
+  fileDesc("ChZjb21tb24vdjEvY29tbW9uLnByb3RvEhV4c3RvY2tzdHJhdC5jb21tb24udjEiNAoLUGFnZVJlcXVlc3QSEQoJcGFnZV9zaXplGAEgASgFEhIKCnBhZ2VfdG9rZW4YAiABKAkiPAoMUGFnZVJlc3BvbnNlEhcKD25leHRfcGFnZV90b2tlbhgBIAEoCRITCgt0b3RhbF9jb3VudBgCIAEoBSKSAQoFRXJyb3ISDAoEY29kZRgBIAEoCRIPCgdtZXNzYWdlGAIgASgJEjoKB2RldGFpbHMYAyADKAsyKS54c3RvY2tzdHJhdC5jb21tb24udjEuRXJyb3IuRGV0YWlsc0VudHJ5Gi4KDERldGFpbHNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIjkKB0RlY2ltYWwSDQoFdW5pdHMYASABKAMSDQoFbmFub3MYAiABKAUSEAoIY3VycmVuY3kYAyABKAkiPgoFQXNzZXQSDgoGc3ltYm9sGAEgASgJEhAKCGV4Y2hhbmdlGAIgASgJEhMKC2Fzc2V0X2NsYXNzGAMgASgJIl8KCVRpbWVSYW5nZRIpCgVzdGFydBgBIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASJwoDZW5kGAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCL7AQoMVGVtcGxhdGVNZXRhEhMKC3RlbXBsYXRlX2lkGAEgASgJEjEKBGtpbmQYAiABKA4yIy54c3RvY2tzdHJhdC5jb21tb24udjEuVGVtcGxhdGVLaW5kEgwKBG5hbWUYAyABKAkSEwoLZGVzY3JpcHRpb24YBCABKAkSDwoHdmVyc2lvbhgFIAEoBRIPCgdyZXRpcmVkGAYgASgIEi4KCmNyZWF0ZWRfYXQYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnVwZGF0ZWRfYXQYCCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wInEKDlRlbXBsYXRlT3JpZ2luEhMKC3RlbXBsYXRlX2lkGAEgASgJEhgKEHRlbXBsYXRlX3ZlcnNpb24YAiABKAUSFgoObGF0ZXN0X3ZlcnNpb24YAyABKAUSGAoQdXBkYXRlX2F2YWlsYWJsZRgEIAEoCCpaCgtUcmFkaW5nTW9kZRIcChhUUkFESU5HX01PREVfVU5TUEVDSUZJRUQQABIWChJUUkFESU5HX01PREVfUEFQRVIQARIVChFUUkFESU5HX01PREVfTElWRRACKngKC0Vudmlyb25tZW50EhsKF0VOVklST05NRU5UX1VOU1BFQ0lGSUVEEAASFwoPRU5WSVJPTk1FTlRfREVWEAEaAggBEhoKFkVOVklST05NRU5UX1BST0RVQ1RJT04QAhIXChNFTlZJUk9OTUVOVF9TVEFHSU5HEAMqcAoKQnJva2VyVHlwZRIbChdCUk9LRVJfVFlQRV9VTlNQRUNJRklFRBAAEhYKEkJST0tFUl9UWVBFX0FMUEFDQRABEhQKEEJST0tFUl9UWVBFX0lCS1IQAhIXChNCUk9LRVJfVFlQRV9PRkZMSU5FEAMqnAEKCVRpbWVmcmFtZRIZChVUSU1FRlJBTUVfVU5TUEVDSUZJRUQQABIXCg9USU1FRlJBTUVfMTVNSU4QBRoCCAESFwoPVElNRUZSQU1FXzFIT1VSEAMaAggBEhIKDlRJTUVGUkFNRV8xREFZEAQSFgoOVElNRUZSQU1FXzFNSU4QARoCCAESFgoOVElNRUZSQU1FXzVNSU4QAhoCCAEquAIKBlNlY3RvchIWChJTRUNUT1JfVU5TUEVDSUZJRUQQABIRCg1TRUNUT1JfRU5FUkdZEAESFAoQU0VDVE9SX01BVEVSSUFMUxACEhYKElNFQ1RPUl9JTkRVU1RSSUFMUxADEiEKHVNFQ1RPUl9DT05TVU1FUl9ESVNDUkVUSU9OQVJZEAQSGwoXU0VDVE9SX0NPTlNVTUVSX1NUQVBMRVMQBRIWChJTRUNUT1JfSEVBTFRIX0NBUkUQBhIVChFTRUNUT1JfRklOQU5DSUFMUxAHEhUKEVNFQ1RPUl9URUNITk9MT0dZEAgSIQodU0VDVE9SX0NPTU1VTklDQVRJT05fU0VSVklDRVMQCRIUChBTRUNUT1JfVVRJTElUSUVTEAoSFgoSU0VDVE9SX1JFQUxfRVNUQVRFEAsqhQEKDFRlbXBsYXRlS2luZBIdChlURU1QTEFURV9LSU5EX1VOU1BFQ0lGSUVEEAASGgoWVEVNUExBVEVfS0lORF9TVFJBVEVHWRABEhkKFVRFTVBMQVRFX0tJTkRfRk9STVVMQRACEh8KG1RFTVBMQVRFX0tJTkRfU0lHTkFMX1NPVVJDRRADKpQBChFUZW1wbGF0ZU9wZXJhdGlvbhIiCh5URU1QTEFURV9PUEVSQVRJT05fVU5TUEVDSUZJRUQQABIdChlURU1QTEFURV9PUEVSQVRJT05fQ1JFQVRFEAESHQoZVEVNUExBVEVfT1BFUkFUSU9OX1VQREFURRACEh0KGVRFTVBMQVRFX09QRVJBVElPTl9SRVRJUkUQA0I8WjpnaXRodWIuY29tL3hzdG9ja3N0cmF0L2NvbnRyYWN0cy9nZW4vZ28vY29tbW9uL3YxO2NvbW1vbnYxYgZwcm90bzM", [file_google_protobuf_timestamp]);
 
 /**
  * Pagination
@@ -178,6 +178,96 @@ export type TimeRange = Message<"xstockstrat.common.v1.TimeRange"> & {
  */
 export const TimeRangeSchema: GenMessage<TimeRange> = /*@__PURE__*/
   messageDesc(file_common_v1_common, 5);
+
+/**
+ * @generated from message xstockstrat.common.v1.TemplateMeta
+ */
+export type TemplateMeta = Message<"xstockstrat.common.v1.TemplateMeta"> & {
+  /**
+   * @generated from field: string template_id = 1;
+   */
+  templateId: string;
+
+  /**
+   * @generated from field: xstockstrat.common.v1.TemplateKind kind = 2;
+   */
+  kind: TemplateKind;
+
+  /**
+   * @generated from field: string name = 3;
+   */
+  name: string;
+
+  /**
+   * @generated from field: string description = 4;
+   */
+  description: string;
+
+  /**
+   * @generated from field: int32 version = 5;
+   */
+  version: number;
+
+  /**
+   * @generated from field: bool retired = 6;
+   */
+  retired: boolean;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp created_at = 7;
+   */
+  createdAt?: Timestamp | undefined;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp updated_at = 8;
+   */
+  updatedAt?: Timestamp | undefined;
+};
+
+/**
+ * Describes the message xstockstrat.common.v1.TemplateMeta.
+ * Use `create(TemplateMetaSchema)` to create a new message.
+ */
+export const TemplateMetaSchema: GenMessage<TemplateMeta> = /*@__PURE__*/
+  messageDesc(file_common_v1_common, 6);
+
+/**
+ * Provenance of an instance; empty template_id = not instantiated from a template.
+ *
+ * @generated from message xstockstrat.common.v1.TemplateOrigin
+ */
+export type TemplateOrigin = Message<"xstockstrat.common.v1.TemplateOrigin"> & {
+  /**
+   * @generated from field: string template_id = 1;
+   */
+  templateId: string;
+
+  /**
+   * @generated from field: int32 template_version = 2;
+   */
+  templateVersion: number;
+
+  /**
+   * the template's current version (0 if retired or missing)
+   *
+   * @generated from field: int32 latest_version = 3;
+   */
+  latestVersion: number;
+
+  /**
+   * latest_version > template_version
+   *
+   * @generated from field: bool update_available = 4;
+   */
+  updateAvailable: boolean;
+};
+
+/**
+ * Describes the message xstockstrat.common.v1.TemplateOrigin.
+ * Use `create(TemplateOriginSchema)` to create a new message.
+ */
+export const TemplateOriginSchema: GenMessage<TemplateOrigin> = /*@__PURE__*/
+  messageDesc(file_common_v1_common, 7);
 
 /**
  * TradingMode distinguishes paper (simulated) from live (real-money) order routing.
@@ -419,4 +509,72 @@ export enum Sector {
  */
 export const SectorSchema: GenEnum<Sector> = /*@__PURE__*/
   enumDesc(file_common_v1_common, 4);
+
+/**
+ * Template catalog (feature 224): admin-curated templates instantiated into private snapshot copies.
+ *
+ * @generated from enum xstockstrat.common.v1.TemplateKind
+ */
+export enum TemplateKind {
+  /**
+   * @generated from enum value: TEMPLATE_KIND_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: TEMPLATE_KIND_STRATEGY = 1;
+   */
+  STRATEGY = 1,
+
+  /**
+   * @generated from enum value: TEMPLATE_KIND_FORMULA = 2;
+   */
+  FORMULA = 2,
+
+  /**
+   * @generated from enum value: TEMPLATE_KIND_SIGNAL_SOURCE = 3;
+   */
+  SIGNAL_SOURCE = 3,
+}
+
+/**
+ * Describes the enum xstockstrat.common.v1.TemplateKind.
+ */
+export const TemplateKindSchema: GenEnum<TemplateKind> = /*@__PURE__*/
+  enumDesc(file_common_v1_common, 5);
+
+/**
+ * @generated from enum xstockstrat.common.v1.TemplateOperation
+ */
+export enum TemplateOperation {
+  /**
+   * @generated from enum value: TEMPLATE_OPERATION_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: TEMPLATE_OPERATION_CREATE = 1;
+   */
+  CREATE = 1,
+
+  /**
+   * bumps version by 1
+   *
+   * @generated from enum value: TEMPLATE_OPERATION_UPDATE = 2;
+   */
+  UPDATE = 2,
+
+  /**
+   * hides from ListTemplates; existing instances are untouched
+   *
+   * @generated from enum value: TEMPLATE_OPERATION_RETIRE = 3;
+   */
+  RETIRE = 3,
+}
+
+/**
+ * Describes the enum xstockstrat.common.v1.TemplateOperation.
+ */
+export const TemplateOperationSchema: GenEnum<TemplateOperation> = /*@__PURE__*/
+  enumDesc(file_common_v1_common, 6);
 

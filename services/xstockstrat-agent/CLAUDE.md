@@ -40,13 +40,13 @@ Python 3.13 (asyncio, grpc.aio, mcp SDK v2 MCPServer)
 
 ## MCP Tools
 
-The agent registers forty-three tools (see `docs/runbooks/mcp-tools.md` for full parameter/return/error
+The agent registers forty-five tools (see `docs/runbooks/mcp-tools.md` for full parameter/return/error
 reference). It also registers **one MCP prompt** — `list_correlation_guide` (feature 197), wired by
 `register_prompts` (`app/tools.py`) and served through the same OAuth-gated transport — plus a
 server-level `instructions` string (`create_server`, `app/main.py`) returned in the MCP `initialize`
 result; both carry the same guide for correlating the `list_accounts` / `get_positions` /
 `get_positions_by_account_id` / `list_opportunities` / `list_strategies` responses on
-`account_id` / `strategy_id` / `symbol`. A prompt is not a tool — the tool count stays forty-three:
+`account_id` / `strategy_id` / `symbol`. A prompt is not a tool — the tool count stays forty-five:
 
 | Tool | Purpose |
 |---|---|
@@ -61,8 +61,8 @@ result; both carry the same guide for correlating the `list_accounts` / `get_pos
 | `get_strategy` | Read a stored strategy's full definition (read-only, feature 070) |
 | `manage_formula` | Register/update/delete custom formulas; `fundamental_inputs` (FundamentalMetric enum NAME-strings) declares a fundamentals-only formula (feature 205) |
 | `get_formula` | Read one stored formula's full definition incl. `deleted` (read-only, feature 086) |
-| `list_formulas` | List formula definitions, soft-deleted excluded (read-only, feature 086) |
-| `manage_signal_source` | Register/update/reactivate/deactivate signal sources (honest verbs — feature 088) |
+| `list_formulas` | List the caller's own formula definitions, soft-deleted excluded (read-only, feature 086); formulas are private to their author, `author_filter` is an admin-only owner selector (feature 224) |
+| `manage_signal_source` | Register/update/reactivate/deactivate the caller's own signal sources (honest verbs — feature 088; owner-gated, feature 224) |
 | `set_strategy_live` | Enable/disable continuous live evaluation + alerting for a strategy (feature 048) |
 | `run_fundamentals_scan` | Manually trigger the fundamentals signal producer scan (admin-scoped write, feature 156); wraps the existing `RunFundamentalsScan` RPC — `force`/`dry_run`/`symbols` |
 | `trigger_backfill` | Trigger a history backfill via xstockstrat-ingest (admin-scoped write, feature 066); `data_kind` selects `bars` (daily OHLCV, default) or `fundamentals` (point-in-time filings history, feature 198) |
@@ -73,7 +73,7 @@ result; both carry the same guide for correlating the `list_accounts` / `get_pos
 | `list_opportunities` | List the caller's ranked Decide-queue opportunities with live-market enrichment (read-only, feature 095) |
 | `get_config` | Read a namespace's current config values, secret values redacted (read-only, feature 073); scoped by an optional per-user `user_id` — the **environment is always this agent deployment's own** (`APPLICATION_ENV`, no caller override, PR #994) |
 | `list_config_keys` | List a namespace's registered config keys, metadata only (read-only, feature 073); environment is the agent's own deployment env (no caller override, PR #994) |
-| `set_config` | Write one config value **including secrets** (admin-scoped write, feature 073; secret values are encrypted at rest by the config service, PR #994); takes an optional `user_id` (per-user override; secrets are global-only) — no `trading_mode`, and no caller-facing `environment` (always the deployment env, PR #994); a write to an unregistered `(namespace,key,environment,user_id)` scope is refused `NOT_FOUND` unless `create_key=true` (feature 091) |
+| `set_config` | Write one config value **including secrets** (admin-scoped write, feature 073; secret values are encrypted at rest by the config service, PR #994); takes an optional `user_id` (per-user override, secrets included — feature 224) — no `trading_mode`, and no caller-facing `environment` (always the deployment env, PR #994); a write to an unregistered `(namespace,key,environment,user_id)` scope is refused `NOT_FOUND` unless `create_key=true` (feature 091) |
 | `get_user_metadata` | Fetch the calling user's own profile metadata (read-only, feature 130) |
 | `set_user_metadata` | Partial-update the calling user's own profile metadata (feature 130) |
 | `list_watchlists` | List the caller's own watchlists from portfolio, paginated (read-only, feature 148) |
@@ -93,17 +93,20 @@ result; both carry the same guide for correlating the `list_accounts` / `get_pos
 | `query_bars` | Query stored daily OHLCV bars for a symbol (paginated; `format` json/csv, feature 204) — daily-only per feature 143, `limit` capped 1000 (read-only) |
 | `query_fundamentals` | Query a symbol's fundamentals — `mode` snapshot (latest cached) or historical (point-in-time filings, paginated `limit` capped 50); `format` json/csv; `missing_metrics` authoritative (feature 204, read-only) |
 | `list_fundamental_metrics` | List the fundamental-metrics catalog (enum name, snake_case `dataKey`, meaning) for formula declarations (read-only, feature 205) |
+| `list_templates` | List the admin-curated `formula` / `strategy` / `signal_source` templates from the owning service's `ListTemplates` (read-only, feature 224) |
+| `instantiate_template` | Copy a template into a private snapshot owned by the caller (feature 224); a `signal_source` bearer is written secret-first to the caller's per-user config secret |
 
 ### Management-tool authorization
 
-Two management **write** tools still hit a backend **admin** gate — `manage_signal_source` and
-`trigger_backfill` — and forward the **real calling user's** derived `x-access-scope` on their
-backend gRPC calls (feature 092; `set_config` has done this since feature 073). The scope is derived
-from the caller's identity roles by `app/scopes.py` `roles_to_access_scope` (a port of the UI's
-`rolesToAccessScope`) via the shared `app/tools.py` `_caller_access_scope(ctx, tool)` helper, so a
-**non-admin operator is rejected `PERMISSION_DENIED`** by the backend gate (ingest
-`ManageSignalSource`/`TriggerBackfill` — both check the ADMIN bit `0x04`) rather than silently
-succeeding under a hardcoded admin override. The claims come from `app/main.py` `_authorized`, which
+One management **write** tool still hits a backend **admin** gate — `trigger_backfill` — and
+forwards the **real calling user's** derived `x-access-scope` on its backend gRPC calls (feature 092;
+`set_config` has done this since feature 073). The scope is derived from the caller's identity roles
+by `app/scopes.py` `roles_to_access_scope` (a port of the UI's `rolesToAccessScope`) via the shared
+`app/tools.py` `_caller_access_scope(ctx, tool)` helper, so a **non-admin operator is rejected
+`PERMISSION_DENIED`** by the backend gate (ingest `TriggerBackfill` checks the ADMIN bit `0x04`)
+rather than silently succeeding under a hardcoded admin override. `manage_signal_source` is
+**owner-gated** since feature 224: any caller manages their own sources (ingest resolves the owner
+from `x-user-id`), and platform `system` sources are read-only to everyone. The claims come from `app/main.py` `_authorized`, which
 publishes them on the request's ASGI scope under `MCP_CLAIMS_SCOPE_KEY`; each tool reads them via its
 injected `ctx: Context`. The old hardcoded `_admin_metadata()` (`x-access-scope=7`) tuple was
 **removed** by feature 092.
@@ -138,7 +141,8 @@ name-only update cannot wipe the list's stocks. New entries the curation tools a
 `direction='watchlist'` path adds.
 
 **`manage_formula` is different** — it forwards **no** admin scope (plain `_metadata()`); the
-indicators backend enforces an **author-ownership** check instead (admin is only an override there).
+indicators backend enforces an **author-ownership** check instead (no admin override since feature 224;
+`system`-authored formulas are immutable to every caller).
 It is not a hardcoded-admin forwarder and was left unchanged by feature 092.
 
 **`EmitAlert` (xstockstrat-notify) is intentionally ungated** (feature 092): it is an internal
@@ -158,9 +162,11 @@ carrying an `Authorization` header, so only the absence of verified claims disti
 value is encrypted at rest by `xstockstrat-config` (AES-256-GCM, `is_secret` **row-authoritative on
 write**), so an admin may rotate a secret through the MCP just like any other key — the plaintext is
 never echoed back or broadcast, `get_config` still redacts it, and only `xstockstrat-marketdata`-style
-internal callers can decrypt it via the config service's `GetSecret` RPC. Secret writes are
-**global-scope only** (a per-user secret write is rejected `INVALID_ARGUMENT` by the backend), and the
-backend **admin gate** is what authorizes the write. The `secret.*` name prefix is retired — `is_secret`
+internal callers can decrypt it via the config service's `GetSecret` RPC. Secrets may be **per-user**
+(feature 224 operator override of feature 147, which allowed global secrets only): `manage_signal_source` /
+`instantiate_template` write a source bearer as the caller's own secret (`user_id`=caller) under an
+opaque `ingest.mcp_credential.<uuid>` key, and redaction holds on every read/broadcast edge. The
+backend gate is what authorizes the write. The `secret.*` name prefix is retired — `is_secret`
 is the sole signal.
 
 **Key-creation gate (feature 091).** `set_config` forwards a `create_key` flag

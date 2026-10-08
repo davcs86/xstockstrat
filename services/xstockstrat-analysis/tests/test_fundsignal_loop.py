@@ -214,9 +214,9 @@ class TestSourceRegistrationTolerance:
         loop._ingest.ManageSignalSource = AsyncMock(
             side_effect=self._err(grpc.StatusCode.ALREADY_EXISTS)
         )
-        loop._source_registered = False
+        loop._registered_slug = None
         await loop._ensure_source_registered("fundamentals", [])
-        assert loop._source_registered is True  # treated as registered, no per-cycle retry spam
+        assert loop._registered_slug == "fundamentals"  # treated as registered, no retry spam
 
     @pytest.mark.asyncio
     async def test_other_error_is_non_fatal_but_not_registered(self):
@@ -226,16 +226,16 @@ class TestSourceRegistrationTolerance:
         loop._ingest.ManageSignalSource = AsyncMock(
             side_effect=self._err(grpc.StatusCode.UNAVAILABLE)
         )
-        loop._source_registered = False
+        loop._registered_slug = None
         await loop._ensure_source_registered("fundamentals", [])  # non-fatal, does not raise
-        assert loop._source_registered is False  # a real failure must not masquerade as registered
+        assert loop._registered_slug is None  # a real failure must not masquerade as registered
 
     @pytest.mark.asyncio
     async def test_sends_register_enum(self):
         from gen.ingest.v1 import ingest_pb2
 
         loop = _make_loop()
-        loop._source_registered = False
+        loop._registered_slug = None
         await loop._ensure_source_registered("fundamentals", [])
         req = loop._ingest.ManageSignalSource.call_args[0][0]
         assert req.operation_enum == ingest_pb2.SIGNAL_SOURCE_OPERATION_REGISTER
@@ -515,3 +515,221 @@ class TestScheduler:
         with pytest.raises(_StopLoop):
             await loop.run_forever()
         assert captured["v"] == (0, 0)
+
+
+# ── Feature 224 — reserved `system` identity, scoring fail-closed (AC-6/AC-36/AC-37) ────────────
+
+_SYSTEM_FORMULA = "d1ff5e6b-6d9c-589d-b95e-defd862c702b"
+_ADMIN_META = [("x-user-id", "admin-1"), ("x-access-scope", "4"), ("x-trace-id", "t-adm")]
+
+
+def _rpc_error(code):
+    import grpc
+
+    return grpc.aio.AioRpcError(code, grpc.aio.Metadata(), grpc.aio.Metadata(), "x")
+
+
+def _identity_loop(overrides=None, author="system", ingest_responses=None):
+    from tests.conftest import RecordingStub
+
+    loop = _make_loop(overrides)
+    loop._ingest = RecordingStub(
+        {"IngestSignal": SimpleNamespace(signal_id="sig-1"), **(ingest_responses or {})}
+    )
+    get_formula = author if isinstance(author, BaseException) else SimpleNamespace(author=author)
+    loop._indicators = RecordingStub(
+        {
+            "GetFormula": get_formula,
+            "ExecuteFormula": SimpleNamespace(success=True, output={"composite": 0.7}),
+        }
+    )
+    return loop
+
+
+def _emitted_inserts(loop):
+    return [
+        c for c in loop._db.fetchrow.await_args_list if "fundsignal_emitted" in (c.args or ("",))[0]
+    ]
+
+
+def _alert_severities(loop):
+    return [c.args[0].severity for c in loop._notify.EmitAlert.await_args_list]
+
+
+def _assert_system_identity(meta, trace=None):
+    d = dict(meta)
+    assert d.get("x-user-id") == "system"
+    assert d.get("x-internal-caller") == "analysis-fundsignal"
+    assert "x-access-scope" not in d
+    assert sum(1 for k, _ in meta if k == "x-user-id") == 1
+    if trace is not None:
+        assert d.get("x-trace-id") == trace
+
+
+def _scan_via_rpc(loop, symbols=("AAPL",)):
+    from gen.analysis.v1 import analysis_pb2
+
+    from tests.conftest import ctx_with
+    from tests.test_analysis_servicer import make_servicer
+
+    svc = make_servicer()
+    svc._fundsignal_loop = loop
+    return svc.RunFundamentalsScan(
+        analysis_pb2.RunFundamentalsScanRequest(symbols=list(symbols)), ctx_with(_ADMIN_META)
+    )
+
+
+class TestSystemIdentity:
+    _CFG = {"analysis.fundsignal.scoring_formula_id": _SYSTEM_FORMULA}
+
+    @pytest.mark.asyncio
+    async def test_ac6_loop_path_sends_system_identity(self):
+        loop = _identity_loop(self._CFG)
+        await loop.run_once(override_symbols=["AAPL"])
+        for method in ("IngestSignal", "ManageSignalSource"):
+            assert loop._ingest.of(method), method
+            for _m, _r, meta in loop._ingest.of(method):
+                _assert_system_identity(meta)
+        (_m, req, meta), *_ = loop._indicators.of("ExecuteFormula")
+        assert req.formula_id == _SYSTEM_FORMULA
+        _assert_system_identity(meta)
+
+    @pytest.mark.asyncio
+    async def test_ac6_manual_path_replaces_caller_identity_and_keeps_trace(self):
+        loop = _identity_loop(self._CFG)
+        await _scan_via_rpc(loop)
+        calls = (
+            loop._ingest.of("IngestSignal")
+            + loop._ingest.of("ManageSignalSource")
+            + loop._indicators.of("ExecuteFormula")
+            + loop._indicators.of("GetFormula")
+        )
+        assert len(calls) == 4
+        for _m, _r, meta in calls:
+            _assert_system_identity(meta, trace="t-adm")
+
+    @pytest.mark.asyncio
+    async def test_marketdata_keeps_caller_metadata(self):
+        loop = _identity_loop(self._CFG)
+        await loop.run_once(override_symbols=["AAPL"], metadata=_ADMIN_META)
+        meta = loop._marketdata.GetFundamentalsMulti.await_args.kwargs["metadata"]
+        assert list(meta) == _ADMIN_META
+
+    @pytest.mark.asyncio
+    async def test_registration_keyed_on_slug(self):
+        loop = _identity_loop()
+        await loop.run_once(override_symbols=["AAPL"])
+        await loop.run_once(override_symbols=["AAPL"])
+        assert len(loop._ingest.of("ManageSignalSource")) == 1  # same slug → registered once
+        loop._cfg.get_str.side_effect = lambda key, default="": (
+            "macro" if key == "analysis.fundsignal.source_slug" else default
+        )
+        await loop.run_once(override_symbols=["AAPL"])
+        regs = loop._ingest.of("ManageSignalSource")
+        assert [r.source.slug for _m, r, _meta in regs] == ["fundamentals", "macro"]
+
+
+class TestScoringFailClosed:
+    _CFG = {"analysis.fundsignal.scoring_formula_id": "f-alice-score"}
+
+    async def _assert_failed_closed(self, loop, summary, builtin):
+        assert summary.status == "failed"
+        assert loop._ingest.of("IngestSignal") == []
+        assert _emitted_inserts(loop) == []
+        from gen.notify.v1 import notify_pb2
+
+        assert _alert_severities(loop) == [notify_pb2.AlertSeverity.ALERT_SEVERITY_ERROR]
+        builtin.assert_not_called()
+        loop._marketdata.GetFundamentalsMulti.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_ac37_non_system_formula_loop_path(self, monkeypatch):
+        loop = _identity_loop(self._CFG, author="alice")
+        builtin = MagicMock(return_value=0.5)
+        monkeypatch.setattr(loop, "_builtin_score", builtin)
+        summary = await loop.run_once(override_symbols=["AAPL"])
+        await self._assert_failed_closed(loop, summary, builtin)
+        (_m, req, meta), *_ = loop._indicators.of("GetFormula")
+        assert req.formula_id == "f-alice-score"
+        _assert_system_identity(meta)
+
+    @pytest.mark.asyncio
+    async def test_ac37_non_system_formula_manual_path(self, monkeypatch):
+        loop = _identity_loop(self._CFG, author="alice")
+        builtin = MagicMock(return_value=0.5)
+        monkeypatch.setattr(loop, "_builtin_score", builtin)
+        summary = await _scan_via_rpc(loop)
+        await self._assert_failed_closed(loop, summary, builtin)
+        (_m, _req, meta), *_ = loop._indicators.of("GetFormula")
+        _assert_system_identity(meta, trace="t-adm")  # system, not the admin caller's id
+
+    @pytest.mark.asyncio
+    async def test_ac37_unreadable_formula_fails_closed(self, monkeypatch):
+        import grpc
+
+        loop = _identity_loop(self._CFG, author=_rpc_error(grpc.StatusCode.NOT_FOUND))
+        builtin = MagicMock(return_value=0.5)
+        monkeypatch.setattr(loop, "_builtin_score", builtin)
+        summary = await loop.run_once(override_symbols=["AAPL"])
+        await self._assert_failed_closed(loop, summary, builtin)
+
+    @pytest.mark.asyncio
+    async def test_formula_failure_skips_symbol_without_builtin_fallback(self, monkeypatch):
+        import grpc
+
+        loop = _identity_loop({"analysis.fundsignal.scoring_formula_id": _SYSTEM_FORMULA})
+        loop._indicators._responses["ExecuteFormula"] = _rpc_error(grpc.StatusCode.INTERNAL)
+        builtin = MagicMock(return_value=0.5)
+        monkeypatch.setattr(loop, "_builtin_score", builtin)
+        summary = await loop.run_once(override_symbols=["AAPL"])
+        builtin.assert_not_called()
+        assert loop._ingest.of("IngestSignal") == []
+        assert summary.signals_emitted == 0
+
+    @pytest.mark.asyncio
+    async def test_empty_formula_id_keeps_builtin_scorer(self):
+        loop = _identity_loop()
+        await loop.run_once(override_symbols=["AAPL"])
+        assert loop._indicators.calls == []
+        assert len(loop._ingest.of("IngestSignal")) == 1
+
+
+class TestSystemWriteRejected:
+    @pytest.mark.asyncio
+    async def test_ac36_register_failed_precondition_aborts_cycle(self):
+        import grpc
+        from gen.notify.v1 import notify_pb2
+
+        loop = _identity_loop(
+            {"analysis.fundsignal.source_slug": "macro-feed"},
+            ingest_responses={
+                "ManageSignalSource": _rpc_error(grpc.StatusCode.FAILED_PRECONDITION)
+            },
+        )
+        summary = await loop.run_once(override_symbols=["AAPL", "MSFT"])
+        assert summary.status == "failed"
+        assert loop._ingest.of("IngestSignal") == []
+        assert _emitted_inserts(loop) == []
+        alerts = loop._notify.EmitAlert.await_args_list
+        assert [a.args[0].severity for a in alerts] == [
+            notify_pb2.AlertSeverity.ALERT_SEVERITY_ERROR
+        ]
+        assert "macro-feed" in alerts[0].args[0].body
+        assert loop._registered_slug is None
+
+    @pytest.mark.asyncio
+    async def test_ingest_not_found_as_system_aborts_cycle(self):
+        import grpc
+        from gen.notify.v1 import notify_pb2
+
+        loop = _identity_loop(
+            ingest_responses={"IngestSignal": _rpc_error(grpc.StatusCode.NOT_FOUND)}
+        )
+        summary = await loop.run_once(override_symbols=["AAPL", "MSFT"])
+        assert summary.status == "failed"
+        assert len(loop._ingest.of("IngestSignal")) == 1  # aborted after the first rejection
+        alerts = loop._notify.EmitAlert.await_args_list
+        assert [a.args[0].severity for a in alerts] == [
+            notify_pb2.AlertSeverity.ALERT_SEVERITY_ERROR
+        ]
+        assert "fundamentals" in alerts[0].args[0].body

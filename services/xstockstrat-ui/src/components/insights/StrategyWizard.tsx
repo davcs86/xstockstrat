@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
+import { Label } from '@/components/ui/label';
 import {
   Questionnaire,
   QuestionnaireItem,
@@ -25,6 +26,11 @@ import { liveOverrides, normalizeOverride, type SectorOverrideDraft } from '@/li
 import { useManageStrategy } from '@/hooks/useStrategyDefinitions';
 import { useFormulas } from '@/hooks/useFormulas';
 import { operandRefs, type FormulaOutputsMap } from '@/lib/strategyCatalog';
+import { TemplateKind } from '@xstockstrat/proto/common/v1/common_pb';
+import { useInstantiateTemplate, useTemplates } from '@/hooks/useTemplates';
+import { QueryStateMessages } from '@/components/shared/QueryStateMessages';
+import { EmptyState } from '@/components/shared/EmptyState';
+import { CardNotice } from '@/components/shared/CardNotice';
 
 // The wizard exposes no signal-weight controls (score is technical-only); any existing signal_params
 // (the live-loop symbol universe) is preserved untouched on save.
@@ -97,6 +103,93 @@ function IdentityNav({
   );
 }
 
+/** Create-mode shortcut: copy a strategy template (and its formulas) into a private strategy. */
+function StartFromTemplate({ onDone }: { onDone?: (id: string) => void }) {
+  const { data, isLoading, error } = useTemplates(TemplateKind.STRATEGY);
+  const templates = data ?? [];
+  const instantiate = useInstantiateTemplate();
+  const [strategyId, setStrategyId] = useState('');
+  const idValid = strategyId === '' || STRATEGY_ID_RE.test(strategyId);
+  const instantiateError =
+    instantiate.error instanceof ConnectError
+      ? instantiate.error.rawMessage
+      : (instantiate.error?.message ?? null);
+
+  return (
+    <Card data-testid="start-from-template">
+      <CardHeader>
+        <CardTitle>Start from template</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <QueryStateMessages
+          isLoading={isLoading}
+          error={error}
+          loadingText="Loading strategy templates…"
+          errorText="Strategy templates unavailable"
+        />
+        {!isLoading && !error && templates.length === 0 && (
+          <EmptyState
+            title="No strategy templates yet"
+            description="Build the strategy from scratch with the steps below."
+          />
+        )}
+        {templates.length > 0 && (
+          <>
+            <div className="space-y-1.5">
+              <Label htmlFor="template-strategy-id">Strategy ID (optional)</Label>
+              <Input
+                id="template-strategy-id"
+                value={strategyId}
+                placeholder="Defaults to the template's strategy ID"
+                onChange={(e) => setStrategyId(e.target.value.trim())}
+              />
+              {!idValid && (
+                <p className="text-xs text-destructive">
+                  Use lowercase letters, digits, and underscores only.
+                </p>
+              )}
+            </div>
+            <ul className="space-y-2">
+              {templates.map(({ template }) => {
+                const templateId = template.meta?.templateId ?? '';
+                const name = template.meta?.name || templateId;
+                return (
+                  <li key={templateId} className="flex items-center justify-between gap-3">
+                    <div className="min-w-0 text-sm">
+                      <p className="truncate font-medium">{name}</p>
+                      {template.meta?.description && (
+                        <p className="truncate text-xs text-muted-foreground">
+                          {template.meta.description}
+                        </p>
+                      )}
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      aria-label={`Use template ${name}`}
+                      disabled={!idValid || instantiate.isPending}
+                      onClick={() =>
+                        instantiate.mutate(
+                          { kind: TemplateKind.STRATEGY, templateId, strategyId },
+                          { onSuccess: (id) => onDone?.(id) },
+                        )
+                      }
+                    >
+                      Use template
+                    </Button>
+                  </li>
+                );
+              })}
+            </ul>
+          </>
+        )}
+        {instantiateError && <CardNotice variant="error">{instantiateError}</CardNotice>}
+      </CardContent>
+    </Card>
+  );
+}
+
 interface StrategyWizardProps {
   mode: 'create' | 'edit';
   initial?: StrategyDefinition;
@@ -109,7 +202,7 @@ export function StrategyWizard({ mode, initial, onSubmitDone }: StrategyWizardPr
   // from outer Step 2 lands on sub-screen 4, the one that handed off to Step 2.
   const [identitySubStep, setIdentitySubStep] = useState<1 | 2 | 3 | 4>(1);
   const { mutate, isPending, error: errorObj } = useManageStrategy();
-  const { data: formulasData } = useFormulas({ includePublic: true, pageSize: 50 });
+  const { data: formulasData } = useFormulas({ pageSize: 50 });
 
   const [strategyId, setStrategyId] = useState(initial?.strategyId ?? '');
   const [displayName, setDisplayName] = useState(initial?.displayName ?? '');
@@ -218,6 +311,7 @@ export function StrategyWizard({ mode, initial, onSubmitDone }: StrategyWizardPr
 
   return (
     <div className="max-w-2xl space-y-4">
+      {mode === 'create' && step === 1 && <StartFromTemplate onDone={onSubmitDone} />}
       {/* Progress Root registers no Items on purpose: with total=0 its aria-value* are omitted, so the
           children override (driven by the outer step/STEPS state) is the only rendered content. */}
       <Questionnaire onSubmit={(e) => e.preventDefault()}>

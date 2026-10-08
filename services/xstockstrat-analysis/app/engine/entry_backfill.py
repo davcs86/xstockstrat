@@ -4,7 +4,7 @@ Closes the >365-day-position gap bar-replay cannot reach (live_loop.py's own rep
 sees the fetched 365-day bar window). Runs ONCE at boot, concurrently with (not blocking)
 the other boot-time tasks. Reads xstockstrat-trading's ListOrders for the entry-time
 inference, and — feature 132 — resolves each strategy's firing universe via the live loop's
-own owner-scoped drains (portfolio watchlist/held + platform signals) through
+own owner-scoped drains (portfolio watchlist/held + own/`system` signals) through
 ``resolve_universe``, so an allowlist-free live strategy is backfilled over the same union the
 live loop evaluates. Feature 168: the fundamentals-blend force-run is anchored over the
 fundamentals universe (and nowhere else), identical to the loop. It never places orders /
@@ -18,7 +18,7 @@ from datetime import UTC
 from gen.trading.v1 import trading_pb2
 
 from app.engine.live_loop import resolve_universe
-from app.handlers.servicer import _row_to_strategy_definition
+from app.handlers.servicer import _row_to_strategy_definition, blend_strategy_id
 
 log = logging.getLogger(__name__)
 
@@ -83,9 +83,7 @@ async def run_once(live_loop, db_pool, trading_stub, cfg_watcher):
 
     # feature 168: the blend force-run is entry-anchored over the fundamentals universe and nowhere
     # else — mirror the live loop so a blend pair outside that universe is never backfilled.
-    blend_id = cfg_watcher.get_str(
-        "analysis.engine.fundamentals_blend_strategy_id", "fundamentals_macd_blend"
-    )
+    blend_id = blend_strategy_id(cfg_watcher)
     blend_enabled = cfg_watcher.get_bool("analysis.engine.fundamentals_blend_enabled", True)
     blend_active = blend_enabled and any(dict(r).get("strategy_id") == blend_id for r in rows)
     fundamentals_universe = (
@@ -93,7 +91,8 @@ async def run_once(live_loop, db_pool, trading_stub, cfg_watcher):
     )
     # Use resolved.union, NOT .universe — deny is entry-only, so a held-denied position still
     # needs its entry anchor here (a cold-boot portfolio outage misses held pairs; self-heals).
-    signal_symbols = await live_loop._drain_signals()
+    system_signals = await live_loop._drain_system_signals()
+    own_cache: dict[str, set] = {}
     held_cache: dict[str, set] = {}
     watch_cache: dict[str, set] = {}
     tasks = []
@@ -103,6 +102,11 @@ async def run_once(live_loop, db_pool, trading_stub, cfg_watcher):
         if owner not in held_cache:
             held_cache[owner] = await live_loop._drain_held(owner)
             watch_cache[owner] = await live_loop._drain_watchlist(owner)
+        signal_symbols = system_signals
+        if definition.signal_eligible and definition.strategy_id != blend_id:
+            if owner not in own_cache:
+                own_cache[owner] = await live_loop._drain_owner_signals(owner)
+            signal_symbols = own_cache[owner] | system_signals
         if definition.strategy_id == blend_id and not (blend_active and fundamentals_universe):
             continue  # blend inactive/empty → nothing to anchor (loop-skip parity)
         resolved = resolve_universe(

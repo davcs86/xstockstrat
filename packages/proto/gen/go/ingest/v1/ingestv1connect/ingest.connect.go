@@ -60,6 +60,15 @@ const (
 	// IngestServiceManageSignalSourceProcedure is the fully-qualified name of the IngestService's
 	// ManageSignalSource RPC.
 	IngestServiceManageSignalSourceProcedure = "/xstockstrat.ingest.v1.IngestService/ManageSignalSource"
+	// IngestServiceListTemplatesProcedure is the fully-qualified name of the IngestService's
+	// ListTemplates RPC.
+	IngestServiceListTemplatesProcedure = "/xstockstrat.ingest.v1.IngestService/ListTemplates"
+	// IngestServiceManageTemplateProcedure is the fully-qualified name of the IngestService's
+	// ManageTemplate RPC.
+	IngestServiceManageTemplateProcedure = "/xstockstrat.ingest.v1.IngestService/ManageTemplate"
+	// IngestServiceInstantiateTemplateProcedure is the fully-qualified name of the IngestService's
+	// InstantiateTemplate RPC.
+	IngestServiceInstantiateTemplateProcedure = "/xstockstrat.ingest.v1.IngestService/InstantiateTemplate"
 )
 
 // IngestServiceClient is a client for the xstockstrat.ingest.v1.IngestService service.
@@ -76,6 +85,11 @@ type IngestServiceClient interface {
 	QuerySignals(context.Context, *connect.Request[v1.QuerySignalsRequest]) (*connect.Response[v1.QuerySignalsResponse], error)
 	ListSignalSources(context.Context, *connect.Request[v1.ListSignalSourcesRequest]) (*connect.Response[v1.ListSignalSourcesResponse], error)
 	ManageSignalSource(context.Context, *connect.Request[v1.ManageSignalSourceRequest]) (*connect.Response[v1.ManageSignalSourceResponse], error)
+	// Template catalog (feature 224). List/read: any authenticated caller. Manage: ADMIN only.
+	ListTemplates(context.Context, *connect.Request[v1.ListTemplatesRequest]) (*connect.Response[v1.ListTemplatesResponse], error)
+	ManageTemplate(context.Context, *connect.Request[v1.ManageTemplateRequest]) (*connect.Response[v1.SourceTemplate], error)
+	// Copies a source template into a private signal source owned by the x-user-id caller.
+	InstantiateTemplate(context.Context, *connect.Request[v1.InstantiateTemplateRequest]) (*connect.Response[v1.SignalSource], error)
 }
 
 // NewIngestServiceClient constructs a client for the xstockstrat.ingest.v1.IngestService service.
@@ -143,20 +157,41 @@ func NewIngestServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(ingestServiceMethods.ByName("ManageSignalSource")),
 			connect.WithClientOptions(opts...),
 		),
+		listTemplates: connect.NewClient[v1.ListTemplatesRequest, v1.ListTemplatesResponse](
+			httpClient,
+			baseURL+IngestServiceListTemplatesProcedure,
+			connect.WithSchema(ingestServiceMethods.ByName("ListTemplates")),
+			connect.WithClientOptions(opts...),
+		),
+		manageTemplate: connect.NewClient[v1.ManageTemplateRequest, v1.SourceTemplate](
+			httpClient,
+			baseURL+IngestServiceManageTemplateProcedure,
+			connect.WithSchema(ingestServiceMethods.ByName("ManageTemplate")),
+			connect.WithClientOptions(opts...),
+		),
+		instantiateTemplate: connect.NewClient[v1.InstantiateTemplateRequest, v1.SignalSource](
+			httpClient,
+			baseURL+IngestServiceInstantiateTemplateProcedure,
+			connect.WithSchema(ingestServiceMethods.ByName("InstantiateTemplate")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // ingestServiceClient implements IngestServiceClient.
 type ingestServiceClient struct {
-	triggerBackfill    *connect.Client[v1.TriggerBackfillRequest, v1.TriggerBackfillResponse]
-	getBackfillStatus  *connect.Client[v1.GetBackfillStatusRequest, v1.BackfillJob]
-	listBackfillJobs   *connect.Client[v1.ListBackfillJobsRequest, v1.ListBackfillJobsResponse]
-	cancelBackfill     *connect.Client[v1.CancelBackfillRequest, v1.BackfillJob]
-	normalizeRawData   *connect.Client[v1.NormalizeRawDataRequest, v1.NormalizeRawDataResponse]
-	ingestSignal       *connect.Client[v1.IngestSignalRequest, v1.IngestSignalResponse]
-	querySignals       *connect.Client[v1.QuerySignalsRequest, v1.QuerySignalsResponse]
-	listSignalSources  *connect.Client[v1.ListSignalSourcesRequest, v1.ListSignalSourcesResponse]
-	manageSignalSource *connect.Client[v1.ManageSignalSourceRequest, v1.ManageSignalSourceResponse]
+	triggerBackfill     *connect.Client[v1.TriggerBackfillRequest, v1.TriggerBackfillResponse]
+	getBackfillStatus   *connect.Client[v1.GetBackfillStatusRequest, v1.BackfillJob]
+	listBackfillJobs    *connect.Client[v1.ListBackfillJobsRequest, v1.ListBackfillJobsResponse]
+	cancelBackfill      *connect.Client[v1.CancelBackfillRequest, v1.BackfillJob]
+	normalizeRawData    *connect.Client[v1.NormalizeRawDataRequest, v1.NormalizeRawDataResponse]
+	ingestSignal        *connect.Client[v1.IngestSignalRequest, v1.IngestSignalResponse]
+	querySignals        *connect.Client[v1.QuerySignalsRequest, v1.QuerySignalsResponse]
+	listSignalSources   *connect.Client[v1.ListSignalSourcesRequest, v1.ListSignalSourcesResponse]
+	manageSignalSource  *connect.Client[v1.ManageSignalSourceRequest, v1.ManageSignalSourceResponse]
+	listTemplates       *connect.Client[v1.ListTemplatesRequest, v1.ListTemplatesResponse]
+	manageTemplate      *connect.Client[v1.ManageTemplateRequest, v1.SourceTemplate]
+	instantiateTemplate *connect.Client[v1.InstantiateTemplateRequest, v1.SignalSource]
 }
 
 // TriggerBackfill calls xstockstrat.ingest.v1.IngestService.TriggerBackfill.
@@ -204,6 +239,21 @@ func (c *ingestServiceClient) ManageSignalSource(ctx context.Context, req *conne
 	return c.manageSignalSource.CallUnary(ctx, req)
 }
 
+// ListTemplates calls xstockstrat.ingest.v1.IngestService.ListTemplates.
+func (c *ingestServiceClient) ListTemplates(ctx context.Context, req *connect.Request[v1.ListTemplatesRequest]) (*connect.Response[v1.ListTemplatesResponse], error) {
+	return c.listTemplates.CallUnary(ctx, req)
+}
+
+// ManageTemplate calls xstockstrat.ingest.v1.IngestService.ManageTemplate.
+func (c *ingestServiceClient) ManageTemplate(ctx context.Context, req *connect.Request[v1.ManageTemplateRequest]) (*connect.Response[v1.SourceTemplate], error) {
+	return c.manageTemplate.CallUnary(ctx, req)
+}
+
+// InstantiateTemplate calls xstockstrat.ingest.v1.IngestService.InstantiateTemplate.
+func (c *ingestServiceClient) InstantiateTemplate(ctx context.Context, req *connect.Request[v1.InstantiateTemplateRequest]) (*connect.Response[v1.SignalSource], error) {
+	return c.instantiateTemplate.CallUnary(ctx, req)
+}
+
 // IngestServiceHandler is an implementation of the xstockstrat.ingest.v1.IngestService service.
 type IngestServiceHandler interface {
 	TriggerBackfill(context.Context, *connect.Request[v1.TriggerBackfillRequest]) (*connect.Response[v1.TriggerBackfillResponse], error)
@@ -218,6 +268,11 @@ type IngestServiceHandler interface {
 	QuerySignals(context.Context, *connect.Request[v1.QuerySignalsRequest]) (*connect.Response[v1.QuerySignalsResponse], error)
 	ListSignalSources(context.Context, *connect.Request[v1.ListSignalSourcesRequest]) (*connect.Response[v1.ListSignalSourcesResponse], error)
 	ManageSignalSource(context.Context, *connect.Request[v1.ManageSignalSourceRequest]) (*connect.Response[v1.ManageSignalSourceResponse], error)
+	// Template catalog (feature 224). List/read: any authenticated caller. Manage: ADMIN only.
+	ListTemplates(context.Context, *connect.Request[v1.ListTemplatesRequest]) (*connect.Response[v1.ListTemplatesResponse], error)
+	ManageTemplate(context.Context, *connect.Request[v1.ManageTemplateRequest]) (*connect.Response[v1.SourceTemplate], error)
+	// Copies a source template into a private signal source owned by the x-user-id caller.
+	InstantiateTemplate(context.Context, *connect.Request[v1.InstantiateTemplateRequest]) (*connect.Response[v1.SignalSource], error)
 }
 
 // NewIngestServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -281,6 +336,24 @@ func NewIngestServiceHandler(svc IngestServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(ingestServiceMethods.ByName("ManageSignalSource")),
 		connect.WithHandlerOptions(opts...),
 	)
+	ingestServiceListTemplatesHandler := connect.NewUnaryHandler(
+		IngestServiceListTemplatesProcedure,
+		svc.ListTemplates,
+		connect.WithSchema(ingestServiceMethods.ByName("ListTemplates")),
+		connect.WithHandlerOptions(opts...),
+	)
+	ingestServiceManageTemplateHandler := connect.NewUnaryHandler(
+		IngestServiceManageTemplateProcedure,
+		svc.ManageTemplate,
+		connect.WithSchema(ingestServiceMethods.ByName("ManageTemplate")),
+		connect.WithHandlerOptions(opts...),
+	)
+	ingestServiceInstantiateTemplateHandler := connect.NewUnaryHandler(
+		IngestServiceInstantiateTemplateProcedure,
+		svc.InstantiateTemplate,
+		connect.WithSchema(ingestServiceMethods.ByName("InstantiateTemplate")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/xstockstrat.ingest.v1.IngestService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case IngestServiceTriggerBackfillProcedure:
@@ -301,6 +374,12 @@ func NewIngestServiceHandler(svc IngestServiceHandler, opts ...connect.HandlerOp
 			ingestServiceListSignalSourcesHandler.ServeHTTP(w, r)
 		case IngestServiceManageSignalSourceProcedure:
 			ingestServiceManageSignalSourceHandler.ServeHTTP(w, r)
+		case IngestServiceListTemplatesProcedure:
+			ingestServiceListTemplatesHandler.ServeHTTP(w, r)
+		case IngestServiceManageTemplateProcedure:
+			ingestServiceManageTemplateHandler.ServeHTTP(w, r)
+		case IngestServiceInstantiateTemplateProcedure:
+			ingestServiceInstantiateTemplateHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -344,4 +423,16 @@ func (UnimplementedIngestServiceHandler) ListSignalSources(context.Context, *con
 
 func (UnimplementedIngestServiceHandler) ManageSignalSource(context.Context, *connect.Request[v1.ManageSignalSourceRequest]) (*connect.Response[v1.ManageSignalSourceResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.ingest.v1.IngestService.ManageSignalSource is not implemented"))
+}
+
+func (UnimplementedIngestServiceHandler) ListTemplates(context.Context, *connect.Request[v1.ListTemplatesRequest]) (*connect.Response[v1.ListTemplatesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.ingest.v1.IngestService.ListTemplates is not implemented"))
+}
+
+func (UnimplementedIngestServiceHandler) ManageTemplate(context.Context, *connect.Request[v1.ManageTemplateRequest]) (*connect.Response[v1.SourceTemplate], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.ingest.v1.IngestService.ManageTemplate is not implemented"))
+}
+
+func (UnimplementedIngestServiceHandler) InstantiateTemplate(context.Context, *connect.Request[v1.InstantiateTemplateRequest]) (*connect.Response[v1.SignalSource], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.ingest.v1.IngestService.InstantiateTemplate is not implemented"))
 }

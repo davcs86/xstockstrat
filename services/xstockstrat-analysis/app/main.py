@@ -19,7 +19,6 @@ from grpc_reflection.v1alpha import reflection
 from app import mtls
 from app.config.watcher import ConfigWatcher
 from app.handlers.servicer import AnalysisServicer
-from app.internal_caller import InternalCallerInterceptor
 from app.telemetry import init_telemetry
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -74,7 +73,6 @@ async def serve():
             INDICATORS_ENDPOINT,
             mtls.channel_credentials(),
             options=mtls.target_override("xstockstrat-indicators"),
-            interceptors=[InternalCallerInterceptor()],
         ),
         ingest_channel=grpc.aio.secure_channel(
             INGEST_ENDPOINT,
@@ -133,6 +131,11 @@ async def serve():
             log.info("strategy scores hydrated from DB")
         except Exception as e:
             log.warning("failed to hydrate strategy scores: %s", e)
+        try:
+            n = await servicer.recompute_unscored_pairs()
+            log.info("boot recompute: %d ambiguous strategy score pairs", n)
+        except Exception as e:
+            log.warning("failed boot recompute of strategy scores: %s", e)
 
         from app.engine.live_loop import LiveEvaluationLoop
         from app.repositories.strategy_cooldowns import StrategyCooldownsRepository
@@ -212,6 +215,10 @@ async def serve():
         # create_task is safe (mirrors the other loops); pre-warms watchlist readiness rows.
         asyncio.get_event_loop().create_task(servicer.run_readiness_materializer_forever())
         log.info("readiness materializer started")
+
+        # ── Template intent reconcile sweep (feature 224) ──
+        asyncio.get_event_loop().create_task(servicer.run_template_intent_sweep_forever())
+        log.info("template intent sweep started")
 
     await grpc_server.wait_for_termination()
 

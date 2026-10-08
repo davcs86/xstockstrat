@@ -12,7 +12,6 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
-import { Checkbox } from '@/components/ui/checkbox';
 import {
   Select,
   SelectContent,
@@ -68,7 +67,6 @@ export interface FormulaWorkspaceProps {
   initialName?: string;
   initialDescription?: string;
   initialSource?: string;
-  initialIsPublic?: boolean;
   initialParameters?: FormulaParameter[];
   initialOutputs?: FormulaOutput[];
   initialWarmupPeriod?: number;
@@ -80,7 +78,6 @@ export interface FormulaWorkspaceProps {
     name: string;
     description: string;
     source: string;
-    isPublic: boolean;
     parameters: FormulaParameterInit[];
     outputs: FormulaOutputInit[];
     warmupPeriod: number;
@@ -107,7 +104,6 @@ export function FormulaWorkspace({
   initialName = '',
   initialDescription = '',
   initialSource,
-  initialIsPublic = false,
   initialParameters,
   initialOutputs,
   initialWarmupPeriod = 0,
@@ -124,7 +120,6 @@ export function FormulaWorkspace({
   const [name, setName] = useState(initialName);
   const [description, setDescription] = useState(initialDescription);
   const [source, setSource] = useState(initialSource ?? BLANK_TEMPLATE.source);
-  const [isPublic, setIsPublic] = useState(initialIsPublic);
   const [warmupPeriod, setWarmupPeriod] = useState(String(initialWarmupPeriod));
   const [parameters, setParameters] = useState<ParameterDraft[]>(() =>
     (initialParameters ?? []).map(draftFromProto),
@@ -253,7 +248,6 @@ export function FormulaWorkspace({
             {mode === 'create' ? 'New formula' : name || 'Formula'}
           </h1>
           {author && <span className="text-xs text-muted-foreground">by {author}</span>}
-          <Badge variant={isPublic ? 'info' : 'warning'}>{isPublic ? 'Public' : 'Private'}</Badge>
           {deleted && (
             <Badge variant="warning" data-testid="formula-deleted-badge">
               Deleted
@@ -301,7 +295,6 @@ export function FormulaWorkspace({
                   name: name.trim(),
                   description,
                   source,
-                  isPublic,
                   parameters: parameters.filter((p) => p.name.trim()).map(toParameterInit),
                   outputs: outputs.filter((o) => o.name.trim()).map(toOutputInit),
                   warmupPeriod: Math.max(0, Math.floor(Number(warmupPeriod) || 0)),
@@ -362,13 +355,6 @@ export function FormulaWorkspace({
                     in backtest diagnostics.
                   </p>
                 </div>
-                <label className="flex items-center gap-2 text-sm">
-                  <Checkbox
-                    checked={isPublic}
-                    onCheckedChange={(checked) => setIsPublic(checked === true)}
-                  />
-                  Public (visible to all users)
-                </label>
               </CardContent>
             </Card>
 

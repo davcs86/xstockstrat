@@ -23,6 +23,8 @@ _INTENTIONALLY_UNSET = {"operation"}
 #   last_seen_at    — stamped by the backend on ingest
 #   last_error      — recorded by the backend on a failed op
 #   signals_fed     — a backend counter
+#   user_id         — the owner, resolved server-side from the x-user-id header (feature 224)
+#   origin          — template provenance, stamped only by InstantiateTemplate (feature 224)
 # Any OTHER new SignalSource field must be carried by the builder or added here with a reason —
 # this is the parity gap that let feature-134 reliability_weight ship dropped on the write path.
 _INTENTIONALLY_UNSET_SOURCE = {
@@ -31,6 +33,8 @@ _INTENTIONALLY_UNSET_SOURCE = {
     "last_seen_at",
     "last_error",
     "signals_fed",
+    "user_id",
+    "origin",
 }
 
 
@@ -41,20 +45,24 @@ def _channel_cm():
     return cm
 
 
-async def _capture_request(**kw):
+async def _call(resp_source=None, **kw):
     from gen.ingest.v1 import ingest_pb2, ingest_pb2_grpc  # type: ignore
 
     mock_stub = MagicMock()
     mock_stub.ManageSignalSource = AsyncMock(
         return_value=ingest_pb2.ManageSignalSourceResponse(
-            source=ingest_pb2.SignalSource(slug="uw")
+            source=resp_source or ingest_pb2.SignalSource(slug="uw")
         )
     )
     with patch("app.client.mtls") as mock_grpc:
         mock_grpc.secure_channel.return_value = _channel_cm()
         with patch.object(ingest_pb2_grpc, "IngestServiceStub", return_value=mock_stub):
-            await client.manage_signal_source(**kw)
-    return mock_stub.ManageSignalSource.call_args[0][0]
+            result = await client.manage_signal_source(**kw)
+    return mock_stub.ManageSignalSource.call_args[0][0], result
+
+
+async def _capture_request(**kw):
+    return (await _call(**kw))[0]
 
 
 class TestManageSignalSourceBuilderParity:
@@ -142,3 +150,24 @@ class TestManageSignalSourceVerbs:
         )
         assert req.credentials_ref == ""
         assert "credentials_ref" in list(req.update_mask.paths)
+
+
+class TestManageSignalSourceProjection:
+    @pytest.mark.asyncio
+    async def test_result_surfaces_owner_and_origin_but_never_credentials(self):
+        # feature 224 (@feature-161 @AC-9 parity): the owner and template provenance are surfaced.
+        from gen.common.v1 import common_pb2  # type: ignore
+        from gen.ingest.v1 import ingest_pb2  # type: ignore
+
+        src = ingest_pb2.SignalSource(
+            slug="uw",
+            user_id="u-2",
+            has_credentials=True,
+            origin=common_pb2.TemplateOrigin(template_id="t-1", template_version=2),
+        )
+        _, result = await _call(
+            resp_source=src, operation="register", source={"slug": "uw"}, credentials_ref="ingest.k"
+        )
+        assert result["user_id"] == "u-2"
+        assert result["origin"]["template_id"] == "t-1"
+        assert "credentials_ref" not in result

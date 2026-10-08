@@ -51,6 +51,9 @@ trigger/old-table drops). Every operator decision in `context.md` (rounds 1–5 
   of a foreign formula returns it and audits.
 - **Reserved `system` identity:** `x-user-id: system` without a SAN-bound grant → `PERMISSION_DENIED` in
   ingest, indicators and analysis (identity ids are UUIDs, so no collision).
+  *Deliberate divergence (impl-spec Step 7, 2026-10-07):* in analysis an un-granted `x-user-id: system`
+  resolves to owner `""` instead (owns nothing → reads empty, writes `PERMISSION_DENIED` via the
+  existing empty-caller servicer guard).
 - **Peer-SAN verification (A):** one shared helper per Python service using grpc.aio
   `context.peer_identity_key() == "x509_subject_alternative_name"` and an **exact** match against
   `context.peer_identities()`; fail closed on non-SSL transport or a non-iterable (mock) result. Step 1
@@ -228,6 +231,10 @@ file must already be on `origin/main`, never in the same PR); the runtime header
 - **Literal reserved-slug list in ingest** — rejected: ingest can't read `analysis.fundsignal.source_slug`;
   DB-held `system` ownership is the reservation.
 - **Config keys for audit/recompute bounds** — rejected by operator: fixed invariant caps.
+- **Shared Python package for the audit/peer-SAN helpers** — rejected: no shared Python lib exists
+  (`packages/` holds only `otel` and `proto`) and the services are separate deployables; per-service
+  `admin_audit.py`/`peer_identity.py` copies mirror the existing per-service `mtls.py`/`telemetry.py`,
+  and the jscpd duplication is accepted (impl-spec Step 14).
 - **Per-object audit events** — rejected by operator: 1 + K per page.
 
 ## Open Risks
@@ -290,6 +297,8 @@ file must already be on `origin/main`, never in the same PR); the runtime header
 
 - CHANGE `@AC-4` / `@AC-5` `@feature-161` (`services/xstockstrat-ui/acceptance/surface-signal-weight-decay-config.feature`)
   — re-homed to `/insights/signal-sources`; signed off by user @ 2026-10-06 (context.md, round-1 gate).
+- CHANGE `@AC-1` `@feature-214` "advertised tool count" (`services/xstockstrat-agent/acceptance/remove-agent-postgres-mcp.feature`)
+  — 43 → 45 (`list_templates`, `instantiate_template`); signed off by user @ 2026-10-07 (context.md).
 - EXTEND `@feature-186 @AC-4/@AC-6/@AC-8` — new admin-only guard on REGISTER and `InstantiateTemplate` of the
   configured blend id (round-3 gate).
 - EXTEND `@feature-166 @AC-1/@AC-4`, `@feature-161 @AC-9`, `@feature-029 @AC-7/@AC-9`, `@feature-176 @AC-6` —

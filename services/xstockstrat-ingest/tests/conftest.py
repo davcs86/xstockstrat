@@ -12,21 +12,32 @@ import types
 from unittest.mock import AsyncMock, MagicMock
 
 
-def _ctx(access_scope: str = "4"):
+def _ctx(
+    access_scope: str = "4",
+    user_id: str = "u1",
+    peer_sans: tuple[str, ...] = (),
+    internal_caller: str = "",
+):
     """A fake gRPC context: invocation_metadata carries the access scope; abort raises.
 
     Centralized here (feature 092, C-13) once a second suite (TriggerBackfill authz in
     test_ingest_servicer.py) needed the same builder that test_cancel_backfill.py had inline.
-    `"4"` = ADMIN bit set (0x04); `"0"` = no admin bit.
+    `"4"` = ADMIN bit set (0x04); `"0"` = no admin bit. Feature 224: `user_id=""` omits the
+    `x-user-id` header (headerless N caller); `internal_caller` adds `x-internal-caller`;
+    `peer_sans` is the verified mTLS peer SAN list (empty = no TLS peer identity).
     """
+    metadata = [("x-access-scope", access_scope)]
+    if user_id:
+        metadata.append(("x-user-id", user_id))
+    metadata.append(("x-trace-id", "t1"))
+    if internal_caller:
+        metadata.append(("x-internal-caller", internal_caller))
     ctx = MagicMock()
-    ctx.invocation_metadata = MagicMock(
-        return_value=[
-            ("x-access-scope", access_scope),
-            ("x-user-id", "u1"),
-            ("x-trace-id", "t1"),
-        ]
+    ctx.invocation_metadata = MagicMock(return_value=metadata)
+    ctx.peer_identity_key = MagicMock(
+        return_value="x509_subject_alternative_name" if peer_sans else None
     )
+    ctx.peer_identities = MagicMock(return_value=[s.encode() for s in peer_sans])
     ctx.abort = AsyncMock(side_effect=Exception("aborted"))
     return ctx
 
