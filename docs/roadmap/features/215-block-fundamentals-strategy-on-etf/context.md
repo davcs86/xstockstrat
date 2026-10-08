@@ -41,3 +41,22 @@
   2. **Fixed:** the spec cited `opportunityShared.tsx` as the `no_trade_reason` render-map home; that map does not exist there — the reason renders in `services/xstockstrat-ui/src/components/insights/BacktestDiagnostics.tsx`. Corrected the Consumer-Surface UI bullet and the proto note; also pinned the additive enum value at `analysis.proto:189` (`NoTradeReason` 0–4, next-free `= 5`).
 - Overlap findings: CLEAN — no config-key / proto-number / migration collision. At most one additive `NoTradeReason` enum value (`= 5`, uncontested); soft/rebase-only shared-file overlap on `analysis.proto` (084/032 add RPC+message, not enum members) and `xstockstrat-agent/app/tools.py` (214 rewrites tool-count surfaces; 215 adds no tool). Re-run overlap at impl-spec (Mode B) to reconfirm next-free enum + exact-line agent/analysis overlaps if 196/214 still in-flight.
 - Per operator instruction this session: **stop at spec-ready** (do not proceed to /sdd-design).
+
+## Session 2026-10-08 — sdd-design (quick) — operator decisions (recorded as they happen, P-05)
+
+- **Detection fork (product-spec Open Question 1) — operator decision, two AskUserQuestion rounds:**
+  1. First answer: "(b) vendor type==ETF" (Finnhub `/stock/profile2` type field).
+  2. Recon then showed (b) is **not implementable as written**: Finnhub `profile2` carries no type/ETF
+     field (the client parses only `currency`, `internal/finnhub/finnhub_client.go:239-241`), and no
+     ETF flag exists anywhere in the platform (FMP `/stable/profile` returns `isEtf` but `fmpProfile`
+     decodes only beta/currency/sector, `internal/fmp/fmp_client.go:354-359`; Alpaca `class` is
+     `us_equity` for ETFs). Re-asked with that evidence → **"Hybrid: unavailable + FMP isEtf"**:
+     **enforce** on "no producible fundamentals for this symbol" (catches ETFs, non-SEC filers and
+     un-backfilled symbols; works with classification off), and parse FMP `isEtf` into marketdata only
+     to **label** the reason (ETF vs no-filings).
+  - Staging facts behind the choice (`get_config marketdata`, 2026-10-08): `marketdata.fmp.enabled=true`,
+    `marketdata.fmp.metrics=core,extended`, `marketdata.fundamentals.provider=finnhub`,
+    `marketdata.fundamentals.snapshot_source=edgar`; `marketdata.classification.enabled` is **unset**
+    (default false), so the classification refresh does not run in staging today.
+- Execution mode: fully autonomous (operator, 2026-10-08) — gates are reported, not waited on,
+  except genuine forks like the one above.
