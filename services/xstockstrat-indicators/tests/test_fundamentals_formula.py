@@ -141,7 +141,7 @@ def test_definitions_and_outputs_validate():
     params_validation.validate_definitions(PARAMETERS)
     params_validation.validate_outputs(OUTPUTS)
     assert "value" not in [o.name for o in OUTPUTS]
-    assert FORMULA_ID and AUTHOR == "system" and IS_PUBLIC is True
+    assert FORMULA_ID and AUTHOR == "system" and IS_PUBLIC is False
 
 
 # ── Seeding upsert idempotency (DB-less) ──────────────────────────────────────

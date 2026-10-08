@@ -152,6 +152,9 @@ export default defineConfig({
       IDENTITY_ENDPOINT: '127.0.0.1:9091',
       // insights segment: AnalysisService is mocked on port 9092
       ANALYSIS_ENDPOINT: '127.0.0.1:9092',
+      // feature 224: IndicatorsService template RPCs are mocked on 9092 too (other methods answer
+      // Unimplemented; formula specs stub them via page.route).
+      INDICATORS_ENDPOINT: '127.0.0.1:9092',
       // config-ui segment: ConfigService + IngestService are mocked on port 9093
       CONFIG_ENDPOINT: '127.0.0.1:9093',
       INGEST_ENDPOINT: '127.0.0.1:9093',

@@ -1,6 +1,6 @@
 import { BinaryReader, BinaryWriter } from "@bufbuild/protobuf/wire";
 import { type CallOptions, type ChannelCredentials, Client, type ClientOptions, type ClientUnaryCall, type handleUnaryCall, type Metadata, type ServiceError, type UntypedServiceImplementation } from "@grpc/grpc-js";
-import { TimeRange } from "../../common/v1/common";
+import { TemplateMeta, TemplateOperation, TemplateOrigin, TimeRange } from "../../common/v1/common";
 export declare const protobufPackage = "xstockstrat.indicators.v1";
 export declare enum SandboxExitReason {
     SANDBOX_EXIT_REASON_UNSPECIFIED = "SANDBOX_EXIT_REASON_UNSPECIFIED",
@@ -171,6 +171,11 @@ export interface FormulaDefinition {
     author: string;
     createdAt?: Date | undefined;
     updatedAt?: Date | undefined;
+    /**
+     * DEPRECATED: ignored, formulas are private to their author (feature 224); always false.
+     *
+     * @deprecated
+     */
     isPublic: boolean;
     /** expected input keys and types */
     inputSchema: {
@@ -191,6 +196,8 @@ export interface FormulaDefinition {
      * scalars, never OHLCV closes (feature 200); the category marker (no separate flag).
      */
     fundamentalInputs: FundamentalMetric[];
+    /** set when instantiated from a template (feature 224) */
+    origin?: TemplateOrigin | undefined;
 }
 export interface FormulaDefinition_InputSchemaEntry {
     key: string;
@@ -211,11 +218,20 @@ export interface RegisterFormulaRequest {
     name: string;
     description: string;
     source: string;
+    /**
+     * DEPRECATED: ignored, formulas are private to their author (feature 224).
+     *
+     * @deprecated
+     */
     isPublic: boolean;
     inputSchema: {
         [key: string]: string;
     };
-    /** set by BFF from JWT claims; stored immutably */
+    /**
+     * DEPRECATED: ignored; author is the x-user-id header (feature 224).
+     *
+     * @deprecated
+     */
     author: string;
     parameters: FormulaParameter[];
     /** declared output series (beyond implicit "value") */
@@ -236,9 +252,13 @@ export interface GetFormulaRequest {
     formulaId: string;
 }
 export interface ListFormulasRequest {
-    /** if non-empty, return only formulas where author == author_filter */
+    /** owner selector honoured only for an ADMIN caller; ignored otherwise (feature 224) */
     authorFilter: string;
-    /** if true, include all public formulas regardless of author_filter */
+    /**
+     * DEPRECATED: ignored, formulas are private to their author (feature 224).
+     *
+     * @deprecated
+     */
     includePublic: boolean;
     /** default 0 = no limit */
     pageSize: number;
@@ -260,6 +280,11 @@ export interface UpdateFormulaRequest {
     name: string;
     description: string;
     source: string;
+    /**
+     * DEPRECATED: ignored, formulas are private to their author (feature 224).
+     *
+     * @deprecated
+     */
     isPublic: boolean;
     parameters: FormulaParameter[];
     /** declared output series (beyond implicit "value") */
@@ -303,6 +328,52 @@ export interface FundamentalMetricInfo {
 export interface ListFundamentalMetricsResponse {
     metrics: FundamentalMetricInfo[];
 }
+/** feature 224 — formula template catalog. */
+export interface FormulaTemplate {
+    meta?: TemplateMeta | undefined;
+    /**
+     * The deprecated is_public (4) and author (6) inside payload are ignored on instantiate: the
+     * instance is private and its author is the instantiating caller's x-user-id.
+     */
+    payload?: RegisterFormulaRequest | undefined;
+}
+export interface ListTemplatesRequest {
+}
+export interface ListTemplatesResponse {
+    templates: FormulaTemplate[];
+}
+export interface ManageTemplateRequest {
+    operation: TemplateOperation;
+    template?: FormulaTemplate | undefined;
+}
+export interface InstantiateTemplateRequest {
+    templateId: string;
+    /**
+     * Saga-only (internal, SAN-bound xstockstrat-analysis): copy several templates as hidden
+     * pending rows under intent_id, resolved later by ResolveTemplateIntent.
+     */
+    templateIds: string[];
+    intentId: string;
+}
+export interface InstantiateTemplateResponse {
+    formula?: FormulaDefinition | undefined;
+    /** saga path: template_id -> new formula_id */
+    formulaIdsByTemplate: {
+        [key: string]: string;
+    };
+}
+export interface InstantiateTemplateResponse_FormulaIdsByTemplateEntry {
+    key: string;
+    value: string;
+}
+export interface ResolveTemplateIntentRequest {
+    intentId: string;
+    /** true = make the pending copies visible; false = delete them */
+    commit: boolean;
+}
+export interface ResolveTemplateIntentResponse {
+    affected: number;
+}
 export declare const ComputeIndicatorRequest: MessageFns<ComputeIndicatorRequest>;
 export declare const ComputeIndicatorRequest_ParamsEntry: MessageFns<ComputeIndicatorRequest_ParamsEntry>;
 export declare const ComputeIndicatorResponse: MessageFns<ComputeIndicatorResponse>;
@@ -333,6 +404,15 @@ export declare const DeleteFormulaResponse: MessageFns<DeleteFormulaResponse>;
 export declare const ListFundamentalMetricsRequest: MessageFns<ListFundamentalMetricsRequest>;
 export declare const FundamentalMetricInfo: MessageFns<FundamentalMetricInfo>;
 export declare const ListFundamentalMetricsResponse: MessageFns<ListFundamentalMetricsResponse>;
+export declare const FormulaTemplate: MessageFns<FormulaTemplate>;
+export declare const ListTemplatesRequest: MessageFns<ListTemplatesRequest>;
+export declare const ListTemplatesResponse: MessageFns<ListTemplatesResponse>;
+export declare const ManageTemplateRequest: MessageFns<ManageTemplateRequest>;
+export declare const InstantiateTemplateRequest: MessageFns<InstantiateTemplateRequest>;
+export declare const InstantiateTemplateResponse: MessageFns<InstantiateTemplateResponse>;
+export declare const InstantiateTemplateResponse_FormulaIdsByTemplateEntry: MessageFns<InstantiateTemplateResponse_FormulaIdsByTemplateEntry>;
+export declare const ResolveTemplateIntentRequest: MessageFns<ResolveTemplateIntentRequest>;
+export declare const ResolveTemplateIntentResponse: MessageFns<ResolveTemplateIntentResponse>;
 /**
  * IndicatorsService — formula engine and sandboxed Python execution.
  * Sandbox timeout and memory limits are configured via xstockstrat-config.
@@ -438,6 +518,45 @@ export declare const IndicatorsServiceService: {
         readonly responseSerialize: (value: ListFundamentalMetricsResponse) => Buffer;
         readonly responseDeserialize: (value: Buffer) => ListFundamentalMetricsResponse;
     };
+    /** Template catalog (feature 224). List/read: any authenticated caller. Manage: ADMIN only. */
+    readonly listTemplates: {
+        readonly path: "/xstockstrat.indicators.v1.IndicatorsService/ListTemplates";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: ListTemplatesRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => ListTemplatesRequest;
+        readonly responseSerialize: (value: ListTemplatesResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => ListTemplatesResponse;
+    };
+    readonly manageTemplate: {
+        readonly path: "/xstockstrat.indicators.v1.IndicatorsService/ManageTemplate";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: ManageTemplateRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => ManageTemplateRequest;
+        readonly responseSerialize: (value: FormulaTemplate) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => FormulaTemplate;
+    };
+    /** Copies a formula template into a private formula owned by the x-user-id caller. */
+    readonly instantiateTemplate: {
+        readonly path: "/xstockstrat.indicators.v1.IndicatorsService/InstantiateTemplate";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: InstantiateTemplateRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => InstantiateTemplateRequest;
+        readonly responseSerialize: (value: InstantiateTemplateResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => InstantiateTemplateResponse;
+    };
+    /** Internal (SAN-bound xstockstrat-analysis): commits or aborts a strategy-template saga's copies. */
+    readonly resolveTemplateIntent: {
+        readonly path: "/xstockstrat.indicators.v1.IndicatorsService/ResolveTemplateIntent";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: ResolveTemplateIntentRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => ResolveTemplateIntentRequest;
+        readonly responseSerialize: (value: ResolveTemplateIntentResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => ResolveTemplateIntentResponse;
+    };
 };
 export interface IndicatorsServiceServer extends UntypedServiceImplementation {
     /** Compute a built-in indicator (e.g. SMA, EMA, RSI, MACD, BB) */
@@ -467,6 +586,13 @@ export interface IndicatorsServiceServer extends UntypedServiceImplementation {
     deleteFormula: handleUnaryCall<DeleteFormulaRequest, DeleteFormulaResponse>;
     /** List the available fundamental metrics for formula declarations (feature 205) */
     listFundamentalMetrics: handleUnaryCall<ListFundamentalMetricsRequest, ListFundamentalMetricsResponse>;
+    /** Template catalog (feature 224). List/read: any authenticated caller. Manage: ADMIN only. */
+    listTemplates: handleUnaryCall<ListTemplatesRequest, ListTemplatesResponse>;
+    manageTemplate: handleUnaryCall<ManageTemplateRequest, FormulaTemplate>;
+    /** Copies a formula template into a private formula owned by the x-user-id caller. */
+    instantiateTemplate: handleUnaryCall<InstantiateTemplateRequest, InstantiateTemplateResponse>;
+    /** Internal (SAN-bound xstockstrat-analysis): commits or aborts a strategy-template saga's copies. */
+    resolveTemplateIntent: handleUnaryCall<ResolveTemplateIntentRequest, ResolveTemplateIntentResponse>;
 }
 export interface IndicatorsServiceClient extends Client {
     /** Compute a built-in indicator (e.g. SMA, EMA, RSI, MACD, BB) */
@@ -514,6 +640,21 @@ export interface IndicatorsServiceClient extends Client {
     listFundamentalMetrics(request: ListFundamentalMetricsRequest, callback: (error: ServiceError | null, response: ListFundamentalMetricsResponse) => void): ClientUnaryCall;
     listFundamentalMetrics(request: ListFundamentalMetricsRequest, metadata: Metadata, callback: (error: ServiceError | null, response: ListFundamentalMetricsResponse) => void): ClientUnaryCall;
     listFundamentalMetrics(request: ListFundamentalMetricsRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: ListFundamentalMetricsResponse) => void): ClientUnaryCall;
+    /** Template catalog (feature 224). List/read: any authenticated caller. Manage: ADMIN only. */
+    listTemplates(request: ListTemplatesRequest, callback: (error: ServiceError | null, response: ListTemplatesResponse) => void): ClientUnaryCall;
+    listTemplates(request: ListTemplatesRequest, metadata: Metadata, callback: (error: ServiceError | null, response: ListTemplatesResponse) => void): ClientUnaryCall;
+    listTemplates(request: ListTemplatesRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: ListTemplatesResponse) => void): ClientUnaryCall;
+    manageTemplate(request: ManageTemplateRequest, callback: (error: ServiceError | null, response: FormulaTemplate) => void): ClientUnaryCall;
+    manageTemplate(request: ManageTemplateRequest, metadata: Metadata, callback: (error: ServiceError | null, response: FormulaTemplate) => void): ClientUnaryCall;
+    manageTemplate(request: ManageTemplateRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: FormulaTemplate) => void): ClientUnaryCall;
+    /** Copies a formula template into a private formula owned by the x-user-id caller. */
+    instantiateTemplate(request: InstantiateTemplateRequest, callback: (error: ServiceError | null, response: InstantiateTemplateResponse) => void): ClientUnaryCall;
+    instantiateTemplate(request: InstantiateTemplateRequest, metadata: Metadata, callback: (error: ServiceError | null, response: InstantiateTemplateResponse) => void): ClientUnaryCall;
+    instantiateTemplate(request: InstantiateTemplateRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: InstantiateTemplateResponse) => void): ClientUnaryCall;
+    /** Internal (SAN-bound xstockstrat-analysis): commits or aborts a strategy-template saga's copies. */
+    resolveTemplateIntent(request: ResolveTemplateIntentRequest, callback: (error: ServiceError | null, response: ResolveTemplateIntentResponse) => void): ClientUnaryCall;
+    resolveTemplateIntent(request: ResolveTemplateIntentRequest, metadata: Metadata, callback: (error: ServiceError | null, response: ResolveTemplateIntentResponse) => void): ClientUnaryCall;
+    resolveTemplateIntent(request: ResolveTemplateIntentRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: ResolveTemplateIntentResponse) => void): ClientUnaryCall;
 }
 export declare const IndicatorsServiceClient: {
     new (address: string, credentials: ChannelCredentials, options?: Partial<ClientOptions>): IndicatorsServiceClient;

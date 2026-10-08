@@ -248,3 +248,74 @@ Feature: Platform-wide guarantees
     When the platform rotates the relevant service certificate before its expiry
     Then existing streams continue or transparently re-establish without dropping data
     And new connections use the rotated certificate with no service downtime
+
+  # ─── Private-by-default objects & template catalog (feature 224) ──────────
+  # Cross-service guarantees: the SAN-bound system identity contract (analysis → indicators/ingest),
+  # the strategy-template saga (analysis + indicators), reserved system slugs, the empty catalog, and
+  # per-owner MCP bearer resolution (ingest + config). Single-service rules live in each service's
+  # acceptance/private-by-default-templates.feature. Provenance: @feature-224.
+
+  @AC-6 @FR-3 @FR-1 @feature-224
+  Scenario: The fundamentals loop still runs the system scoring formula
+    Given analysis.fundsignal.scoring_formula_id is set to system formula "d1ff5e6b-6d9c-589d-b95e-defd862c702b"
+    When the fundamentals signal loop scores symbol "AAPL"
+    Then ExecuteFormula for system formula "d1ff5e6b-6d9c-589d-b95e-defd862c702b" succeeds
+    And indicators receives the ExecuteFormula call with x-user-id "system" and x-internal-caller "analysis-fundsignal"
+
+  @AC-15 @FR-7 @feature-224
+  Scenario: Catalog starts empty after migration
+    Given a database migrated from the pre-feature schema with 8 public formulas
+    When "bob" calls ListTemplates
+    Then the response contains 0 templates
+
+  @AC-18 @FR-9 @feature-224
+  Scenario: Strategy template instantiation deep-copies referenced formulas
+    Given strategy template "tpl-meanrev" whose two components reference formula templates "tpl-zscore" and "tpl-er"
+    When "bob" instantiates "tpl-meanrev"
+    Then "bob" owns a new inactive, non-live strategy and 2 new private formulas copied from "tpl-zscore" and "tpl-er"
+    And each strategy component's formula_id points to "bob"'s copies
+
+  @AC-19 @FR-9 @feature-224
+  Scenario: A failed deep copy leaves nothing behind
+    Given strategy template "tpl-meanrev" whose second formula copy fails
+    When "bob" instantiates "tpl-meanrev"
+    Then the call fails
+    And "bob" owns 0 new strategies and 0 new formulas visible via ListFormulas
+
+  @AC-23 @FR-11 @feature-224
+  Scenario: System special-cases are unchanged
+    Given system formula "d1ff5e6b-6d9c-589d-b95e-defd862c702b" and "bob" owns live strategy "fundamentals_macd_blend"
+    When an admin calls UpdateFormula on system formula "d1ff5e6b-6d9c-589d-b95e-defd862c702b"
+    Then the call fails with PERMISSION_DENIED as before
+    And "bob" calling ManageStrategy DEACTIVATE on "fundamentals_macd_blend" is refused as before
+
+  @AC-26 @FR-6 @feature-224
+  Scenario: System-owned fundamentals signals are visible to every user
+    Given the fundamentals producer emitted a BUY signal for "MSFT" under a source owned by "system"
+    And "bob" owns signal_eligible strategy "s-fund"
+    When the live loop evaluates "s-fund" for "MSFT"
+    Then the "system" signal for "MSFT" is consumed for "bob"
+    And "bob" calling ManageSignalSource UPDATE on that system source fails with PERMISSION_DENIED
+
+  @AC-32 @FR-12 @feature-224
+  Scenario: Agent docs and strat-lab skill stay in parity with the tool contract
+    Given the agent tool catalog includes "list_templates" and "instantiate_template"
+    When docs/runbooks/mcp-tools.md and plugins/strat-lab/skills/backtest/SKILL.md are checked
+    Then both list "list_templates" and "instantiate_template" and neither mentions "is_public" or "include_public"
+
+  @AC-35 @FR-14 @feature-224
+  Scenario: Two users with the same mcp_client slug use their own credentials
+    Given "alice" and "bob" each own mcp_client source "acme-mcp" with bearers "tok-a" and "tok-b"
+    When the ingest poller polls both sources
+    Then the request for "alice"'s source carries "Authorization: Bearer tok-a" and "bob"'s carries "Bearer tok-b"
+    And GetConfig, ListKeys and WatchConfig never return "tok-a" or "tok-b" in plaintext to any caller
+
+  @AC-36 @FR-4 @feature-224
+  Scenario: System slugs are reserved in both directions
+    Given a "system"-owned source "fundamentals" exists
+    When "bob" calls ManageSignalSource REGISTER with slug "fundamentals"
+    Then the call fails with ALREADY_EXISTS and no source owned by "bob" exists
+    Given "bob" owns source "macro-feed" and analysis.fundsignal.source_slug is reconfigured to "macro-feed"
+    When the fundamentals signal loop registers its system source
+    Then the registration fails with FAILED_PRECONDITION
+    And the cycle emits no signal and raises an ERROR notify alert naming slug "macro-feed"

@@ -5,6 +5,7 @@
 **Last Updated**: 2026-09-25
 **Committed to main**: 27f3f276b39fa79d07b4de6c023582f72539aac3
 **Launched date**: 2026-10-01
+**Archived**: 2026-10-07
 
 ---
 
@@ -20,15 +21,16 @@
 | 2026-09-28 | `in-progress` → `code-completed` | /sdd-execute | All 4 steps done. Step 3: 19 isolation tests (@AC-1..6) + full suite 162 passed, sandbox.py 97% coverage (omit removed), pre-existing suite green (FR-4/C-16). Step 4 docs reconciled (CLAUDE.md Sandbox Security Model + Docker Build Pattern; context-constitution INDICATORS-6..9 + re-grounded anchors; indicator-builder runbook). Teardown: context-constitution plugin unavailable → manual reconciliation performed + recorded. Next: C-16 promotion + integration PR. |
 
 | 2026-10-01 | `code-completed` → `launched` | CI workflow | Promoted via PR #1205; committed 27f3f276b39fa79d07b4de6c023582f72539aac3 |
+| 2026-10-07 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(2); pruned 4 spec(s); acceptance scenarios promoted to per-service suites (C-16) |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
-- [Recon Dossier](recon.md) — grounded codebase map + DO App Platform runtime constraint (Phase 0)
-- [Design](design.md) — chosen approach (distinct-UID + post-import seccomp allowlist), rejected alternatives, open risks (Phase 1)
-- [Implementation Spec](implementation-spec.md) — 4-step plan (deps/Dockerfile → sandbox.py rewrite → OS-isolation tests → docs/teardown)
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15); promoted to services/xstockstrat-indicators/acceptance/indicators-sandbox-os-isolation.feature (promoted at launch) (C-16)
+- Recon Dossier — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

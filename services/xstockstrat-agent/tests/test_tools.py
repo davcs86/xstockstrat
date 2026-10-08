@@ -169,14 +169,15 @@ async def test_manage_signal_source_mcp_client_secret_first_two_write():
     set_config_mock.assert_awaited_once()
     sc_kwargs = set_config_mock.await_args.kwargs
     assert sc_kwargs["namespace"] == "ingest"
-    assert sc_kwargs["key"] == "mcp_credential.acme-mcp"
+    assert sc_kwargs["key"].startswith("mcp_credential.")  # opaque per-user key (feature 224)
+    assert sc_kwargs["user_id"] == "u-1"
     assert sc_kwargs["value"] == "sk-live-abc123"
     assert sc_kwargs["is_secret"] is True
     assert sc_kwargs["create_key"] is True
 
     # Then the source is registered with the credentials_ref pointing at the secret.
     manage_mock.assert_awaited_once()
-    assert manage_mock.await_args.kwargs["credentials_ref"] == "ingest.mcp_credential.acme-mcp"
+    assert manage_mock.await_args.kwargs["credentials_ref"] == f"ingest.{sc_kwargs['key']}"
 
     # The return never echoes the token or the credentials_ref (FR-12 / AC-2).
     assert "credentials_ref" not in result
@@ -1013,6 +1014,26 @@ class TestManageStrategyTool:
         assert kwargs["update_mask"] == ["cooldown_days"]
 
     @pytest.mark.asyncio
+    async def test_sector_overrides_masked_and_name_only_update_preserves_them(self):
+        """Feature 217: a supplied sector_param_overrides joins the update mask; a name-only update
+        does not mask (and so never wipes) stored overrides."""
+        server = _make_server()
+        overrides = [{"component_ref": "rsi", "param_name": "period", "default_value": 14}]
+        with patch.object(client, "manage_strategy", AsyncMock(return_value={})) as m:
+            await _tool_fn(server, "manage_strategy")(
+                ctx=_ctx(ADMIN),
+                operation="update",
+                strategy_id="s",
+                sector_param_overrides=overrides,
+            )
+            assert m.call_args.kwargs["update_mask"] == ["sector_param_overrides"]
+            assert m.call_args.kwargs["definition"]["sector_param_overrides"] == overrides
+            await _tool_fn(server, "manage_strategy")(
+                ctx=_ctx(ADMIN), operation="update", strategy_id="s", display_name="N"
+            )
+            assert m.call_args.kwargs["update_mask"] == ["display_name"]
+
+    @pytest.mark.asyncio
     async def test_both_rules_as_objects_each_serialized(self):
         """@AC-4/FR-1: both rules supplied as dicts are each serialized and round-trip."""
         entry = {"fn": "<", "lhs": "rsi", "rhs": 35}
@@ -1801,19 +1822,13 @@ class TestFormulaPartialUpdateTool:
         assert formula["update_mask"] == ["description"]
 
     @pytest.mark.asyncio
-    async def test_update_is_public_false_is_masked(self):
-        # is_public=False is a real value (unpublish), distinct from omitting it.
+    async def test_is_public_is_no_longer_accepted(self):
+        # feature 224: formulas are private to their author — the public toggle is gone.
         server = _make_server()
-        with patch.object(
-            client, "manage_formula", AsyncMock(return_value={"formulaId": "f-1"})
-        ) as m:
+        with pytest.raises(TypeError):
             await _tool_fn(server, "manage_formula")(
-                ctx=_ctx(ADMIN),
-                operation="update",
-                formula_id="f-1",
-                is_public=False,
+                ctx=_ctx(ADMIN), operation="update", formula_id="f-1", is_public=False
             )
-        assert m.call_args.kwargs["formula"]["update_mask"] == ["is_public"]
 
     @pytest.mark.asyncio
     async def test_update_omitted_field_not_in_mask(self):

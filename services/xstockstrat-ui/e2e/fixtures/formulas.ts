@@ -12,14 +12,12 @@ export const FORMULA_RSI = {
   formulaId: 'f-rsi',
   name: 'RSI Divergence',
   author: TEST_USER_ID,
-  isPublic: true,
 };
 
 export const FORMULA_MACD = {
   formulaId: 'f-macd',
   name: 'MACD Cross',
   author: TEST_USER_ID,
-  isPublic: false,
 };
 
 /**
@@ -31,7 +29,6 @@ export const FORMULA_FUNDAMENTALS = {
   formulaId: 'f-value-quality',
   name: 'Value Quality',
   author: TEST_USER_ID,
-  isPublic: true,
   fundamentalInputs: ['FUNDAMENTAL_METRIC_PE_RATIO', 'FUNDAMENTAL_METRIC_ROE'],
 };
 
@@ -48,7 +45,6 @@ export const FORMULA_DELETED = {
   description: 'A formula that has been soft-deleted',
   source: 'result = {"value": 1.0}',
   author: TEST_USER_ID,
-  isPublic: false,
   parameters: [],
   outputs: [],
   warmupPeriod: 0,

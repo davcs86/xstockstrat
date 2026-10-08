@@ -347,3 +347,35 @@ async def test_self_emission_skipped():
     )
     assert len(snaps.rows) == 0, "analysis.* events are never self-consumed"
     assert pool.cursor == 1, "cursor still advances past a skipped event"
+
+
+# ── feature 224: the snapshot composer reads as the order's owner ──────────
+
+
+class _MetaRecordingComposer(FakeComposer):
+    def __init__(self):
+        super().__init__()
+        self.metas = {}
+
+    async def ohlcv_and_closes(self, symbol, meta=()):
+        self.metas["ohlcv"] = list(meta)
+        return await super().ohlcv_and_closes(symbol, meta)
+
+    async def indicators(self, symbol, closes, strategy_id, meta=()):
+        self.metas["indicators"] = list(meta)
+        return await super().indicators(symbol, closes, strategy_id, meta)
+
+    async def signals(self, symbol, meta=()):
+        self.metas["signals"] = list(meta)
+        return await super().signals(symbol, meta)
+
+
+async def test_compose_threads_order_owner_header():
+    composer = _MetaRecordingComposer()
+    consumer, *_ = make_consumer(composer=composer)
+    await consumer.process_event(make_event(1, "order.filled", ORDER_PAYLOAD))
+    assert composer.metas == {
+        "ohlcv": [("x-user-id", "u-1")],
+        "indicators": [("x-user-id", "u-1")],
+        "signals": [("x-user-id", "u-1")],
+    }

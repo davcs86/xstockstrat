@@ -35,6 +35,9 @@ const (
 	MarketDataService_BatchGetLatestPrice_FullMethodName       = "/xstockstrat.marketdata.v1.MarketDataService/BatchGetLatestPrice"
 	MarketDataService_GetHistoricalFundamentals_FullMethodName = "/xstockstrat.marketdata.v1.MarketDataService/GetHistoricalFundamentals"
 	MarketDataService_BackfillFundamentals_FullMethodName      = "/xstockstrat.marketdata.v1.MarketDataService/BackfillFundamentals"
+	MarketDataService_GetCurrentSector_FullMethodName          = "/xstockstrat.marketdata.v1.MarketDataService/GetCurrentSector"
+	MarketDataService_GetSectorAsOf_FullMethodName             = "/xstockstrat.marketdata.v1.MarketDataService/GetSectorAsOf"
+	MarketDataService_GetSectorHistory_FullMethodName          = "/xstockstrat.marketdata.v1.MarketDataService/GetSectorHistory"
 )
 
 // MarketDataServiceClient is the client API for MarketDataService service.
@@ -79,6 +82,11 @@ type MarketDataServiceClient interface {
 	// Worker RPC driven by ingest.TriggerBackfill(data_kind=FUNDAMENTALS) (feature 198): fetches
 	// as-reported statements from SEC EDGAR + a point-in-time price-join and persists them.
 	BackfillFundamentals(ctx context.Context, in *BackfillFundamentalsRequest, opts ...grpc.CallOption) (*BackfillFundamentalsResponse, error)
+	// Sector classification reads (feature 217). Served only from the local Type-2 SCD store —
+	// never call FMP on the read path; an unclassified symbol returns SECTOR_UNSPECIFIED, not an error.
+	GetCurrentSector(ctx context.Context, in *GetCurrentSectorRequest, opts ...grpc.CallOption) (*GetCurrentSectorResponse, error)
+	GetSectorAsOf(ctx context.Context, in *GetSectorAsOfRequest, opts ...grpc.CallOption) (*GetSectorAsOfResponse, error)
+	GetSectorHistory(ctx context.Context, in *GetSectorHistoryRequest, opts ...grpc.CallOption) (*GetSectorHistoryResponse, error)
 }
 
 type marketDataServiceClient struct {
@@ -267,6 +275,36 @@ func (c *marketDataServiceClient) BackfillFundamentals(ctx context.Context, in *
 	return out, nil
 }
 
+func (c *marketDataServiceClient) GetCurrentSector(ctx context.Context, in *GetCurrentSectorRequest, opts ...grpc.CallOption) (*GetCurrentSectorResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetCurrentSectorResponse)
+	err := c.cc.Invoke(ctx, MarketDataService_GetCurrentSector_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *marketDataServiceClient) GetSectorAsOf(ctx context.Context, in *GetSectorAsOfRequest, opts ...grpc.CallOption) (*GetSectorAsOfResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetSectorAsOfResponse)
+	err := c.cc.Invoke(ctx, MarketDataService_GetSectorAsOf_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *marketDataServiceClient) GetSectorHistory(ctx context.Context, in *GetSectorHistoryRequest, opts ...grpc.CallOption) (*GetSectorHistoryResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetSectorHistoryResponse)
+	err := c.cc.Invoke(ctx, MarketDataService_GetSectorHistory_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // MarketDataServiceServer is the server API for MarketDataService service.
 // All implementations should embed UnimplementedMarketDataServiceServer
 // for forward compatibility.
@@ -309,6 +347,11 @@ type MarketDataServiceServer interface {
 	// Worker RPC driven by ingest.TriggerBackfill(data_kind=FUNDAMENTALS) (feature 198): fetches
 	// as-reported statements from SEC EDGAR + a point-in-time price-join and persists them.
 	BackfillFundamentals(context.Context, *BackfillFundamentalsRequest) (*BackfillFundamentalsResponse, error)
+	// Sector classification reads (feature 217). Served only from the local Type-2 SCD store —
+	// never call FMP on the read path; an unclassified symbol returns SECTOR_UNSPECIFIED, not an error.
+	GetCurrentSector(context.Context, *GetCurrentSectorRequest) (*GetCurrentSectorResponse, error)
+	GetSectorAsOf(context.Context, *GetSectorAsOfRequest) (*GetSectorAsOfResponse, error)
+	GetSectorHistory(context.Context, *GetSectorHistoryRequest) (*GetSectorHistoryResponse, error)
 }
 
 // UnimplementedMarketDataServiceServer should be embedded to have
@@ -365,6 +408,15 @@ func (UnimplementedMarketDataServiceServer) GetHistoricalFundamentals(context.Co
 }
 func (UnimplementedMarketDataServiceServer) BackfillFundamentals(context.Context, *BackfillFundamentalsRequest) (*BackfillFundamentalsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method BackfillFundamentals not implemented")
+}
+func (UnimplementedMarketDataServiceServer) GetCurrentSector(context.Context, *GetCurrentSectorRequest) (*GetCurrentSectorResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetCurrentSector not implemented")
+}
+func (UnimplementedMarketDataServiceServer) GetSectorAsOf(context.Context, *GetSectorAsOfRequest) (*GetSectorAsOfResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetSectorAsOf not implemented")
+}
+func (UnimplementedMarketDataServiceServer) GetSectorHistory(context.Context, *GetSectorHistoryRequest) (*GetSectorHistoryResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetSectorHistory not implemented")
 }
 func (UnimplementedMarketDataServiceServer) testEmbeddedByValue() {}
 
@@ -660,6 +712,60 @@ func _MarketDataService_BackfillFundamentals_Handler(srv interface{}, ctx contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MarketDataService_GetCurrentSector_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetCurrentSectorRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MarketDataServiceServer).GetCurrentSector(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MarketDataService_GetCurrentSector_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MarketDataServiceServer).GetCurrentSector(ctx, req.(*GetCurrentSectorRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MarketDataService_GetSectorAsOf_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetSectorAsOfRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MarketDataServiceServer).GetSectorAsOf(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MarketDataService_GetSectorAsOf_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MarketDataServiceServer).GetSectorAsOf(ctx, req.(*GetSectorAsOfRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MarketDataService_GetSectorHistory_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetSectorHistoryRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MarketDataServiceServer).GetSectorHistory(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MarketDataService_GetSectorHistory_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MarketDataServiceServer).GetSectorHistory(ctx, req.(*GetSectorHistoryRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // MarketDataService_ServiceDesc is the grpc.ServiceDesc for MarketDataService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -722,6 +828,18 @@ var MarketDataService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "BackfillFundamentals",
 			Handler:    _MarketDataService_BackfillFundamentals_Handler,
+		},
+		{
+			MethodName: "GetCurrentSector",
+			Handler:    _MarketDataService_GetCurrentSector_Handler,
+		},
+		{
+			MethodName: "GetSectorAsOf",
+			Handler:    _MarketDataService_GetSectorAsOf_Handler,
+		},
+		{
+			MethodName: "GetSectorHistory",
+			Handler:    _MarketDataService_GetSectorHistory_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

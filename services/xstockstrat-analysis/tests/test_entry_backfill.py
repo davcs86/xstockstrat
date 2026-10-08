@@ -54,7 +54,8 @@ def _fake_live_loop(held=(), watchlist=(), signals=()):
         _last_state={},
         _last_entry_at={},
         _write_entry_cooldown=AsyncMock(),
-        _drain_signals=AsyncMock(return_value=set(signals)),
+        _drain_system_signals=AsyncMock(return_value=set(signals)),
+        _drain_owner_signals=AsyncMock(return_value=set()),
         _drain_held=AsyncMock(return_value=set(held)),
         _drain_watchlist=AsyncMock(return_value=set(watchlist)),
     )

@@ -383,15 +383,17 @@ test.describe('Opportunities queue', () => {
   });
 
   // feature 199 — composite_score render on the queue card.
-  test('feature 199: the composite cell renders the 0–1 ordinal in its scoreColor band (AC-8)', async ({
+  // feature 221 supersedes 199 @AC-8's scoreColor clause (C-16 CHANGE): centred diverging bands.
+  test('feature 221: the composite renders muted near neutral and coloured on the tails (AC-1/AC-2)', async ({
     page,
   }) => {
     const cell = card(page, 'AAPL').getByTestId('opp-composite-AAPL').first();
     await expect(cell).toHaveText('0.732');
-    await expect(cell).toHaveClass(/text-paper/); // 0.732 → paper band (>=0.6, <0.8)
+    await expect(cell).toHaveClass(/text-buy/); // 0.732 > 0.58 → positive tail
     const msft = card(page, 'MSFT').getByTestId('opp-composite-MSFT').first();
     await expect(msft).toHaveText('0.512');
-    await expect(msft).toHaveClass(/text-destructive/); // 0.512 → destructive band (<0.6)
+    await expect(msft).toHaveClass(/text-muted-foreground/); // within ±0.08 of 0.5 → neutral
+    await expect(msft).not.toHaveClass(/text-destructive/);
   });
 
   test('feature 199: server order is authoritative — the composite cell never re-sorts the queue (AC-8)', async ({

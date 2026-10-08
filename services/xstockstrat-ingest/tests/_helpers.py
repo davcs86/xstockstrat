@@ -20,7 +20,9 @@ duplicates — see feature 080 `design.md` § Rejected Alternatives.
 from unittest.mock import AsyncMock, MagicMock
 
 
-def transaction_conn(*, db_fetchrow_side_effect=None, conn_fetchrow_side_effect=None):
+def transaction_conn(
+    *, db_fetchrow_side_effect=None, conn_fetchrow_side_effect=None, slug_holders=("seed-user",)
+):
     """Build a mock `db` whose `.acquire()` yields a `conn` mock shaped for
     `IngestServicer.IngestSignal`'s transaction (`async with self._db.acquire() as conn,
     conn.transaction():`), plus the pool-level `db.fetchrow`/`db.execute` used outside the
@@ -28,11 +30,16 @@ def transaction_conn(*, db_fetchrow_side_effect=None, conn_fetchrow_side_effect=
     lookup on a dedup hit, and the `mark_source_fed`/`mark_source_error`/
     `touch_source_last_seen` bookkeeping calls.
 
+    Feature 224: `db.fetch` answers the headerless slug-holder lookup (`slug_holders` — one
+    holder by default, as every pre-224 slug had); `conn.execute` absorbs the REGISTER
+    advisory lock.
+
     Returns `(db, conn)` — assign `svc._db = db` and drive `conn.fetchrow`'s call args/count
     via the returned `conn` for assertions.
     """
     conn = MagicMock()
     conn.fetchrow = AsyncMock(side_effect=conn_fetchrow_side_effect or [])
+    conn.execute = AsyncMock(return_value=None)
 
     tx_cm = MagicMock()
     tx_cm.__aenter__ = AsyncMock(return_value=None)
@@ -46,6 +53,7 @@ def transaction_conn(*, db_fetchrow_side_effect=None, conn_fetchrow_side_effect=
     db = MagicMock()
     db.acquire = MagicMock(return_value=acquire_cm)
     db.fetchrow = AsyncMock(side_effect=db_fetchrow_side_effect or [])
+    db.fetch = AsyncMock(return_value=[{"user_id": h} for h in slug_holders])
     db.execute = AsyncMock(return_value=None)
     return db, conn
 

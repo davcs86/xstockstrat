@@ -6,7 +6,7 @@ import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobu
 import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
 import type { FieldMask, Timestamp } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_field_mask, file_google_protobuf_struct, file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
-import type { PageRequest, PageResponse, Timeframe, TimeRange } from "../../common/v1/common_pb";
+import type { PageRequest, PageResponse, TemplateMeta, TemplateOperation, TemplateOrigin, Timeframe, TimeRange } from "../../common/v1/common_pb";
 import { file_common_v1_common } from "../../common/v1/common_pb";
 import type { JsonObject, Message } from "@bufbuild/protobuf";
 
@@ -14,7 +14,7 @@ import type { JsonObject, Message } from "@bufbuild/protobuf";
  * Describes the file ingest/v1/ingest.proto.
  */
 export const file_ingest_v1_ingest: GenFile = /*@__PURE__*/
-  fileDesc("ChZpbmdlc3QvdjEvaW5nZXN0LnByb3RvEhV4c3RvY2tzdHJhdC5pbmdlc3QudjEiiAQKC0JhY2tmaWxsSm9iEg4KBmpvYl9pZBgBIAEoCRIPCgdzeW1ib2xzGAIgAygJEhUKCXRpbWVmcmFtZRgDIAEoCUICGAESLwoFcmFuZ2UYBCABKAsyIC54c3RvY2tzdHJhdC5jb21tb24udjEuVGltZVJhbmdlEjUKBnN0YXR1cxgFIAEoDjIlLnhzdG9ja3N0cmF0LmluZ2VzdC52MS5CYWNrZmlsbFN0YXR1cxIWCg5iYXJzX3Byb2Nlc3NlZBgGIAEoAxISCgpiYXJzX3RvdGFsGAcgASgDEi4KCnN0YXJ0ZWRfYXQYCCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjAKDGNvbXBsZXRlZF9hdBgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASDQoFZXJyb3IYCiABKAkSFgoOZmFpbGVkX3N5bWJvbHMYCyADKAkSOAoOdGltZWZyYW1lX2VudW0YDCABKA4yIC54c3RvY2tzdHJhdC5jb21tb24udjEuVGltZWZyYW1lEhQKDGNodW5rc190b3RhbBgNIAEoBRIYChBjaHVua3NfY29tcGxldGVkGA4gASgFEjoKCWRhdGFfa2luZBgPIAEoDjInLnhzdG9ja3N0cmF0LmluZ2VzdC52MS5CYWNrZmlsbERhdGFLaW5kIq4CChZUcmlnZ2VyQmFja2ZpbGxSZXF1ZXN0Eg8KB3N5bWJvbHMYASADKAkSFQoJdGltZWZyYW1lGAIgASgJQgIYARIvCgVyYW5nZRgDIAEoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2USEQoJb3ZlcndyaXRlGAQgASgIEjgKDnRpbWVmcmFtZV9lbnVtGAUgASgOMiAueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRpbWVmcmFtZRIyCglmaWxsX21vZGUYBiABKA4yHy54c3RvY2tzdHJhdC5pbmdlc3QudjEuRmlsbE1vZGUSOgoJZGF0YV9raW5kGAcgASgOMicueHN0b2Nrc3RyYXQuaW5nZXN0LnYxLkJhY2tmaWxsRGF0YUtpbmQiYAoXVHJpZ2dlckJhY2tmaWxsUmVzcG9uc2USDgoGam9iX2lkGAEgASgJEjUKBnN0YXR1cxgCIAEoDjIlLnhzdG9ja3N0cmF0LmluZ2VzdC52MS5CYWNrZmlsbFN0YXR1cyIqChhHZXRCYWNrZmlsbFN0YXR1c1JlcXVlc3QSDgoGam9iX2lkGAEgASgJIpkBChdMaXN0QmFja2ZpbGxKb2JzUmVxdWVzdBI8Cg1zdGF0dXNfZmlsdGVyGAEgASgOMiUueHN0b2Nrc3RyYXQuaW5nZXN0LnYxLkJhY2tmaWxsU3RhdHVzEjAKBHBhZ2UYAiABKAsyIi54c3RvY2tzdHJhdC5jb21tb24udjEuUGFnZVJlcXVlc3QSDgoGc3ltYm9sGAMgASgJIicKFUNhbmNlbEJhY2tmaWxsUmVxdWVzdBIOCgZqb2JfaWQYASABKAkifwoYTGlzdEJhY2tmaWxsSm9ic1Jlc3BvbnNlEjAKBGpvYnMYASADKAsyIi54c3RvY2tzdHJhdC5pbmdlc3QudjEuQmFja2ZpbGxKb2ISMQoEcGFnZRgCIAEoCzIjLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5QYWdlUmVzcG9uc2UiSwoXTm9ybWFsaXplUmF3RGF0YVJlcXVlc3QSDgoGc291cmNlGAEgASgJEhAKCHJhd19kYXRhGAIgASgMEg4KBmZvcm1hdBgDIAEoCSJDChhOb3JtYWxpemVSYXdEYXRhUmVzcG9uc2USFwoPcm93c19ub3JtYWxpemVkGAEgASgDEg4KBmVycm9ycxgCIAMoCSKaAgoORXh0ZXJuYWxTaWduYWwSDgoGc291cmNlGAEgASgJEg4KBnN5bWJvbBgCIAEoCRIRCglkaXJlY3Rpb24YAyABKAkSEgoKY29udmljdGlvbhgEIAEoARIuCgp2YWxpZF9mcm9tGAUgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIvCgt2YWxpZF91bnRpbBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEAoIaGVhZGxpbmUYByABKAkSDwoHcmF3X3VybBgIIAEoCRIMCgR0YWdzGAkgAygJEi8KC2luZ2VzdGVkX2F0GAogASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCJMChNJbmdlc3RTaWduYWxSZXF1ZXN0EjUKBnNpZ25hbBgBIAEoCzIlLnhzdG9ja3N0cmF0LmluZ2VzdC52MS5FeHRlcm5hbFNpZ25hbCI/ChRJbmdlc3RTaWduYWxSZXNwb25zZRIRCglzaWduYWxfaWQYASABKAMSFAoMZGVkdXBsaWNhdGVkGAIgASgIIrMBChNRdWVyeVNpZ25hbHNSZXF1ZXN0Eg4KBnNvdXJjZRgBIAEoCRIOCgZzeW1ib2wYAiABKAkSEQoJZGlyZWN0aW9uGAMgASgJEjcKDWFjdGl2ZV93aW5kb3cYBCABKAsyIC54c3RvY2tzdHJhdC5jb21tb24udjEuVGltZVJhbmdlEjAKBHBhZ2UYBSABKAsyIi54c3RvY2tzdHJhdC5jb21tb24udjEuUGFnZVJlcXVlc3QigQEKFFF1ZXJ5U2lnbmFsc1Jlc3BvbnNlEjYKB3NpZ25hbHMYASADKAsyJS54c3RvY2tzdHJhdC5pbmdlc3QudjEuRXh0ZXJuYWxTaWduYWwSMQoEcGFnZRgCIAEoCzIjLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5QYWdlUmVzcG9uc2UihgMKDFNpZ25hbFNvdXJjZRIMCgRzbHVnGAEgASgJEhQKDGRpc3BsYXlfbmFtZRgCIAEoCRITCgtzb3VyY2VfdHlwZRgDIAEoCRIYChBleHRyYWN0b3JfbW9kdWxlGAQgASgJEg4KBmFjdGl2ZRgFIAEoCBIXCg9oYXNfY3JlZGVudGlhbHMYBiABKAgSLAoLY29uZmlnX2pzb24YByABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0EjkKBmhlYWx0aBgIIAEoDjIpLnhzdG9ja3N0cmF0LmluZ2VzdC52MS5Tb3VyY2VIZWFsdGhTdGF0dXMSMAoMbGFzdF9zZWVuX2F0GAkgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBISCgpsYXN0X2Vycm9yGAogASgJEhMKC3NpZ25hbHNfZmVkGAsgASgDEh8KEnJlbGlhYmlsaXR5X3dlaWdodBgMIAEoAUgAiAEBQhUKE19yZWxpYWJpbGl0eV93ZWlnaHQiNAoYTGlzdFNpZ25hbFNvdXJjZXNSZXF1ZXN0EhgKEGluY2x1ZGVfaW5hY3RpdmUYASABKAgiUQoZTGlzdFNpZ25hbFNvdXJjZXNSZXNwb25zZRI0Cgdzb3VyY2VzGAEgAygLMiMueHN0b2Nrc3RyYXQuaW5nZXN0LnYxLlNpZ25hbFNvdXJjZSL3AQoZTWFuYWdlU2lnbmFsU291cmNlUmVxdWVzdBIzCgZzb3VyY2UYASABKAsyIy54c3RvY2tzdHJhdC5pbmdlc3QudjEuU2lnbmFsU291cmNlEhcKD2NyZWRlbnRpYWxzX3JlZhgCIAEoCRIVCglvcGVyYXRpb24YAyABKAlCAhgBEi8KC3VwZGF0ZV9tYXNrGAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLkZpZWxkTWFzaxJECg5vcGVyYXRpb25fZW51bRgFIAEoDjIsLnhzdG9ja3N0cmF0LmluZ2VzdC52MS5TaWduYWxTb3VyY2VPcGVyYXRpb24iUQoaTWFuYWdlU2lnbmFsU291cmNlUmVzcG9uc2USMwoGc291cmNlGAEgASgLMiMueHN0b2Nrc3RyYXQuaW5nZXN0LnYxLlNpZ25hbFNvdXJjZSrgAQoOQmFja2ZpbGxTdGF0dXMSHwobQkFDS0ZJTExfU1RBVFVTX1VOU1BFQ0lGSUVEEAASGgoWQkFDS0ZJTExfU1RBVFVTX1FVRVVFRBABEhsKF0JBQ0tGSUxMX1NUQVRVU19SVU5OSU5HEAISHQoZQkFDS0ZJTExfU1RBVFVTX0NPTVBMRVRFRBADEhoKFkJBQ0tGSUxMX1NUQVRVU19GQUlMRUQQBBIbChdCQUNLRklMTF9TVEFUVVNfUEFSVElBTBAFEhwKGEJBQ0tGSUxMX1NUQVRVU19DQU5DRUxFRBAGKlIKCEZpbGxNb2RlEhkKFUZJTExfTU9ERV9VTlNQRUNJRklFRBAAEhIKDkZJTExfTU9ERV9GVUxMEAESFwoTRklMTF9NT0RFX0dBUFNfT05MWRACKngKEEJhY2tmaWxsRGF0YUtpbmQSIgoeQkFDS0ZJTExfREFUQV9LSU5EX1VOU1BFQ0lGSUVEEAASGwoXQkFDS0ZJTExfREFUQV9LSU5EX0JBUlMQARIjCh9CQUNLRklMTF9EQVRBX0tJTkRfRlVOREFNRU5UQUxTEAIqmAEKElNvdXJjZUhlYWx0aFN0YXR1cxIkCiBTT1VSQ0VfSEVBTFRIX1NUQVRVU19VTlNQRUNJRklFRBAAEh0KGVNPVVJDRV9IRUFMVEhfU1RBVFVTX0xJVkUQARIeChpTT1VSQ0VfSEVBTFRIX1NUQVRVU19TVEFMRRACEh0KGVNPVVJDRV9IRUFMVEhfU1RBVFVTX0RPV04QAyraAQoVU2lnbmFsU291cmNlT3BlcmF0aW9uEicKI1NJR05BTF9TT1VSQ0VfT1BFUkFUSU9OX1VOU1BFQ0lGSUVEEAASJAogU0lHTkFMX1NPVVJDRV9PUEVSQVRJT05fUkVHSVNURVIQARIiCh5TSUdOQUxfU09VUkNFX09QRVJBVElPTl9VUERBVEUQAhImCiJTSUdOQUxfU09VUkNFX09QRVJBVElPTl9SRUFDVElWQVRFEAMSJgoiU0lHTkFMX1NPVVJDRV9PUEVSQVRJT05fREVBQ1RJVkFURRAEMv4HCg1Jbmdlc3RTZXJ2aWNlEnAKD1RyaWdnZXJCYWNrZmlsbBItLnhzdG9ja3N0cmF0LmluZ2VzdC52MS5UcmlnZ2VyQmFja2ZpbGxSZXF1ZXN0Gi4ueHN0b2Nrc3RyYXQuaW5nZXN0LnYxLlRyaWdnZXJCYWNrZmlsbFJlc3BvbnNlEmgKEUdldEJhY2tmaWxsU3RhdHVzEi8ueHN0b2Nrc3RyYXQuaW5nZXN0LnYxLkdldEJhY2tmaWxsU3RhdHVzUmVxdWVzdBoiLnhzdG9ja3N0cmF0LmluZ2VzdC52MS5CYWNrZmlsbEpvYhJzChBMaXN0QmFja2ZpbGxKb2JzEi4ueHN0b2Nrc3RyYXQuaW5nZXN0LnYxLkxpc3RCYWNrZmlsbEpvYnNSZXF1ZXN0Gi8ueHN0b2Nrc3RyYXQuaW5nZXN0LnYxLkxpc3RCYWNrZmlsbEpvYnNSZXNwb25zZRJiCg5DYW5jZWxCYWNrZmlsbBIsLnhzdG9ja3N0cmF0LmluZ2VzdC52MS5DYW5jZWxCYWNrZmlsbFJlcXVlc3QaIi54c3RvY2tzdHJhdC5pbmdlc3QudjEuQmFja2ZpbGxKb2IScwoQTm9ybWFsaXplUmF3RGF0YRIuLnhzdG9ja3N0cmF0LmluZ2VzdC52MS5Ob3JtYWxpemVSYXdEYXRhUmVxdWVzdBovLnhzdG9ja3N0cmF0LmluZ2VzdC52MS5Ob3JtYWxpemVSYXdEYXRhUmVzcG9uc2USZwoMSW5nZXN0U2lnbmFsEioueHN0b2Nrc3RyYXQuaW5nZXN0LnYxLkluZ2VzdFNpZ25hbFJlcXVlc3QaKy54c3RvY2tzdHJhdC5pbmdlc3QudjEuSW5nZXN0U2lnbmFsUmVzcG9uc2USZwoMUXVlcnlTaWduYWxzEioueHN0b2Nrc3RyYXQuaW5nZXN0LnYxLlF1ZXJ5U2lnbmFsc1JlcXVlc3QaKy54c3RvY2tzdHJhdC5pbmdlc3QudjEuUXVlcnlTaWduYWxzUmVzcG9uc2USdgoRTGlzdFNpZ25hbFNvdXJjZXMSLy54c3RvY2tzdHJhdC5pbmdlc3QudjEuTGlzdFNpZ25hbFNvdXJjZXNSZXF1ZXN0GjAueHN0b2Nrc3RyYXQuaW5nZXN0LnYxLkxpc3RTaWduYWxTb3VyY2VzUmVzcG9uc2USeQoSTWFuYWdlU2lnbmFsU291cmNlEjAueHN0b2Nrc3RyYXQuaW5nZXN0LnYxLk1hbmFnZVNpZ25hbFNvdXJjZVJlcXVlc3QaMS54c3RvY2tzdHJhdC5pbmdlc3QudjEuTWFuYWdlU2lnbmFsU291cmNlUmVzcG9uc2VCPFo6Z2l0aHViLmNvbS94c3RvY2tzdHJhdC9jb250cmFjdHMvZ2VuL2dvL2luZ2VzdC92MTtpbmdlc3R2MWIGcHJvdG8z", [file_google_protobuf_timestamp, file_common_v1_common, file_google_protobuf_struct, file_google_protobuf_field_mask]);
+  fileDesc("ChZpbmdlc3QvdjEvaW5nZXN0LnByb3RvEhV4c3RvY2tzdHJhdC5pbmdlc3QudjEiiAQKC0JhY2tmaWxsSm9iEg4KBmpvYl9pZBgBIAEoCRIPCgdzeW1ib2xzGAIgAygJEhUKCXRpbWVmcmFtZRgDIAEoCUICGAESLwoFcmFuZ2UYBCABKAsyIC54c3RvY2tzdHJhdC5jb21tb24udjEuVGltZVJhbmdlEjUKBnN0YXR1cxgFIAEoDjIlLnhzdG9ja3N0cmF0LmluZ2VzdC52MS5CYWNrZmlsbFN0YXR1cxIWCg5iYXJzX3Byb2Nlc3NlZBgGIAEoAxISCgpiYXJzX3RvdGFsGAcgASgDEi4KCnN0YXJ0ZWRfYXQYCCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjAKDGNvbXBsZXRlZF9hdBgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASDQoFZXJyb3IYCiABKAkSFgoOZmFpbGVkX3N5bWJvbHMYCyADKAkSOAoOdGltZWZyYW1lX2VudW0YDCABKA4yIC54c3RvY2tzdHJhdC5jb21tb24udjEuVGltZWZyYW1lEhQKDGNodW5rc190b3RhbBgNIAEoBRIYChBjaHVua3NfY29tcGxldGVkGA4gASgFEjoKCWRhdGFfa2luZBgPIAEoDjInLnhzdG9ja3N0cmF0LmluZ2VzdC52MS5CYWNrZmlsbERhdGFLaW5kIq4CChZUcmlnZ2VyQmFja2ZpbGxSZXF1ZXN0Eg8KB3N5bWJvbHMYASADKAkSFQoJdGltZWZyYW1lGAIgASgJQgIYARIvCgVyYW5nZRgDIAEoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2USEQoJb3ZlcndyaXRlGAQgASgIEjgKDnRpbWVmcmFtZV9lbnVtGAUgASgOMiAueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRpbWVmcmFtZRIyCglmaWxsX21vZGUYBiABKA4yHy54c3RvY2tzdHJhdC5pbmdlc3QudjEuRmlsbE1vZGUSOgoJZGF0YV9raW5kGAcgASgOMicueHN0b2Nrc3RyYXQuaW5nZXN0LnYxLkJhY2tmaWxsRGF0YUtpbmQiYAoXVHJpZ2dlckJhY2tmaWxsUmVzcG9uc2USDgoGam9iX2lkGAEgASgJEjUKBnN0YXR1cxgCIAEoDjIlLnhzdG9ja3N0cmF0LmluZ2VzdC52MS5CYWNrZmlsbFN0YXR1cyIqChhHZXRCYWNrZmlsbFN0YXR1c1JlcXVlc3QSDgoGam9iX2lkGAEgASgJIpkBChdMaXN0QmFja2ZpbGxKb2JzUmVxdWVzdBI8Cg1zdGF0dXNfZmlsdGVyGAEgASgOMiUueHN0b2Nrc3RyYXQuaW5nZXN0LnYxLkJhY2tmaWxsU3RhdHVzEjAKBHBhZ2UYAiABKAsyIi54c3RvY2tzdHJhdC5jb21tb24udjEuUGFnZVJlcXVlc3QSDgoGc3ltYm9sGAMgASgJIicKFUNhbmNlbEJhY2tmaWxsUmVxdWVzdBIOCgZqb2JfaWQYASABKAkifwoYTGlzdEJhY2tmaWxsSm9ic1Jlc3BvbnNlEjAKBGpvYnMYASADKAsyIi54c3RvY2tzdHJhdC5pbmdlc3QudjEuQmFja2ZpbGxKb2ISMQoEcGFnZRgCIAEoCzIjLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5QYWdlUmVzcG9uc2UiSwoXTm9ybWFsaXplUmF3RGF0YVJlcXVlc3QSDgoGc291cmNlGAEgASgJEhAKCHJhd19kYXRhGAIgASgMEg4KBmZvcm1hdBgDIAEoCSJDChhOb3JtYWxpemVSYXdEYXRhUmVzcG9uc2USFwoPcm93c19ub3JtYWxpemVkGAEgASgDEg4KBmVycm9ycxgCIAMoCSKrAgoORXh0ZXJuYWxTaWduYWwSDgoGc291cmNlGAEgASgJEg4KBnN5bWJvbBgCIAEoCRIRCglkaXJlY3Rpb24YAyABKAkSEgoKY29udmljdGlvbhgEIAEoARIuCgp2YWxpZF9mcm9tGAUgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIvCgt2YWxpZF91bnRpbBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEAoIaGVhZGxpbmUYByABKAkSDwoHcmF3X3VybBgIIAEoCRIMCgR0YWdzGAkgAygJEi8KC2luZ2VzdGVkX2F0GAogASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIPCgd1c2VyX2lkGAsgASgJIkwKE0luZ2VzdFNpZ25hbFJlcXVlc3QSNQoGc2lnbmFsGAEgASgLMiUueHN0b2Nrc3RyYXQuaW5nZXN0LnYxLkV4dGVybmFsU2lnbmFsIj8KFEluZ2VzdFNpZ25hbFJlc3BvbnNlEhEKCXNpZ25hbF9pZBgBIAEoAxIUCgxkZWR1cGxpY2F0ZWQYAiABKAgi/QEKE1F1ZXJ5U2lnbmFsc1JlcXVlc3QSDgoGc291cmNlGAEgASgJEg4KBnN5bWJvbBgCIAEoCRIRCglkaXJlY3Rpb24YAyABKAkSNwoNYWN0aXZlX3dpbmRvdxgEIAEoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2USMAoEcGFnZRgFIAEoCzIiLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5QYWdlUmVxdWVzdBIxCgVzY29wZRgGIAEoDjIiLnhzdG9ja3N0cmF0LmluZ2VzdC52MS5TaWduYWxTY29wZRIVCg1vd25lcl91c2VyX2lkGAcgASgJIoEBChRRdWVyeVNpZ25hbHNSZXNwb25zZRI2CgdzaWduYWxzGAEgAygLMiUueHN0b2Nrc3RyYXQuaW5nZXN0LnYxLkV4dGVybmFsU2lnbmFsEjEKBHBhZ2UYAiABKAsyIy54c3RvY2tzdHJhdC5jb21tb24udjEuUGFnZVJlc3BvbnNlIs4DCgxTaWduYWxTb3VyY2USDAoEc2x1ZxgBIAEoCRIUCgxkaXNwbGF5X25hbWUYAiABKAkSEwoLc291cmNlX3R5cGUYAyABKAkSGAoQZXh0cmFjdG9yX21vZHVsZRgEIAEoCRIOCgZhY3RpdmUYBSABKAgSFwoPaGFzX2NyZWRlbnRpYWxzGAYgASgIEiwKC2NvbmZpZ19qc29uGAcgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBI5CgZoZWFsdGgYCCABKA4yKS54c3RvY2tzdHJhdC5pbmdlc3QudjEuU291cmNlSGVhbHRoU3RhdHVzEjAKDGxhc3Rfc2Vlbl9hdBgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEgoKbGFzdF9lcnJvchgKIAEoCRITCgtzaWduYWxzX2ZlZBgLIAEoAxIfChJyZWxpYWJpbGl0eV93ZWlnaHQYDCABKAFIAIgBARIPCgd1c2VyX2lkGA0gASgJEjUKBm9yaWdpbhgOIAEoCzIlLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UZW1wbGF0ZU9yaWdpbkIVChNfcmVsaWFiaWxpdHlfd2VpZ2h0IksKGExpc3RTaWduYWxTb3VyY2VzUmVxdWVzdBIYChBpbmNsdWRlX2luYWN0aXZlGAEgASgIEhUKDW93bmVyX3VzZXJfaWQYAiABKAkiUQoZTGlzdFNpZ25hbFNvdXJjZXNSZXNwb25zZRI0Cgdzb3VyY2VzGAEgAygLMiMueHN0b2Nrc3RyYXQuaW5nZXN0LnYxLlNpZ25hbFNvdXJjZSL3AQoZTWFuYWdlU2lnbmFsU291cmNlUmVxdWVzdBIzCgZzb3VyY2UYASABKAsyIy54c3RvY2tzdHJhdC5pbmdlc3QudjEuU2lnbmFsU291cmNlEhcKD2NyZWRlbnRpYWxzX3JlZhgCIAEoCRIVCglvcGVyYXRpb24YAyABKAlCAhgBEi8KC3VwZGF0ZV9tYXNrGAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLkZpZWxkTWFzaxJECg5vcGVyYXRpb25fZW51bRgFIAEoDjIsLnhzdG9ja3N0cmF0LmluZ2VzdC52MS5TaWduYWxTb3VyY2VPcGVyYXRpb24iUQoaTWFuYWdlU2lnbmFsU291cmNlUmVzcG9uc2USMwoGc291cmNlGAEgASgLMiMueHN0b2Nrc3RyYXQuaW5nZXN0LnYxLlNpZ25hbFNvdXJjZSJ5Cg5Tb3VyY2VUZW1wbGF0ZRIxCgRtZXRhGAEgASgLMiMueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRlbXBsYXRlTWV0YRI0CgdwYXlsb2FkGAIgASgLMiMueHN0b2Nrc3RyYXQuaW5nZXN0LnYxLlNpZ25hbFNvdXJjZSIWChRMaXN0VGVtcGxhdGVzUmVxdWVzdCJRChVMaXN0VGVtcGxhdGVzUmVzcG9uc2USOAoJdGVtcGxhdGVzGAEgAygLMiUueHN0b2Nrc3RyYXQuaW5nZXN0LnYxLlNvdXJjZVRlbXBsYXRlIo0BChVNYW5hZ2VUZW1wbGF0ZVJlcXVlc3QSOwoJb3BlcmF0aW9uGAEgASgOMigueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRlbXBsYXRlT3BlcmF0aW9uEjcKCHRlbXBsYXRlGAIgASgLMiUueHN0b2Nrc3RyYXQuaW5nZXN0LnYxLlNvdXJjZVRlbXBsYXRlIlgKGkluc3RhbnRpYXRlVGVtcGxhdGVSZXF1ZXN0EhMKC3RlbXBsYXRlX2lkGAEgASgJEgwKBHNsdWcYAiABKAkSFwoPY3JlZGVudGlhbHNfcmVmGAMgASgJKuABCg5CYWNrZmlsbFN0YXR1cxIfChtCQUNLRklMTF9TVEFUVVNfVU5TUEVDSUZJRUQQABIaChZCQUNLRklMTF9TVEFUVVNfUVVFVUVEEAESGwoXQkFDS0ZJTExfU1RBVFVTX1JVTk5JTkcQAhIdChlCQUNLRklMTF9TVEFUVVNfQ09NUExFVEVEEAMSGgoWQkFDS0ZJTExfU1RBVFVTX0ZBSUxFRBAEEhsKF0JBQ0tGSUxMX1NUQVRVU19QQVJUSUFMEAUSHAoYQkFDS0ZJTExfU1RBVFVTX0NBTkNFTEVEEAYqUgoIRmlsbE1vZGUSGQoVRklMTF9NT0RFX1VOU1BFQ0lGSUVEEAASEgoORklMTF9NT0RFX0ZVTEwQARIXChNGSUxMX01PREVfR0FQU19PTkxZEAIqeAoQQmFja2ZpbGxEYXRhS2luZBIiCh5CQUNLRklMTF9EQVRBX0tJTkRfVU5TUEVDSUZJRUQQABIbChdCQUNLRklMTF9EQVRBX0tJTkRfQkFSUxABEiMKH0JBQ0tGSUxMX0RBVEFfS0lORF9GVU5EQU1FTlRBTFMQAipaCgtTaWduYWxTY29wZRIcChhTSUdOQUxfU0NPUEVfVU5TUEVDSUZJRUQQABIUChBTSUdOQUxfU0NPUEVfT1dOEAESFwoTU0lHTkFMX1NDT1BFX1NZU1RFTRACKpgBChJTb3VyY2VIZWFsdGhTdGF0dXMSJAogU09VUkNFX0hFQUxUSF9TVEFUVVNfVU5TUEVDSUZJRUQQABIdChlTT1VSQ0VfSEVBTFRIX1NUQVRVU19MSVZFEAESHgoaU09VUkNFX0hFQUxUSF9TVEFUVVNfU1RBTEUQAhIdChlTT1VSQ0VfSEVBTFRIX1NUQVRVU19ET1dOEAMq2gEKFVNpZ25hbFNvdXJjZU9wZXJhdGlvbhInCiNTSUdOQUxfU09VUkNFX09QRVJBVElPTl9VTlNQRUNJRklFRBAAEiQKIFNJR05BTF9TT1VSQ0VfT1BFUkFUSU9OX1JFR0lTVEVSEAESIgoeU0lHTkFMX1NPVVJDRV9PUEVSQVRJT05fVVBEQVRFEAISJgoiU0lHTkFMX1NPVVJDRV9PUEVSQVRJT05fUkVBQ1RJVkFURRADEiYKIlNJR05BTF9TT1VSQ0VfT1BFUkFUSU9OX0RFQUNUSVZBVEUQBDLACgoNSW5nZXN0U2VydmljZRJwCg9UcmlnZ2VyQmFja2ZpbGwSLS54c3RvY2tzdHJhdC5pbmdlc3QudjEuVHJpZ2dlckJhY2tmaWxsUmVxdWVzdBouLnhzdG9ja3N0cmF0LmluZ2VzdC52MS5UcmlnZ2VyQmFja2ZpbGxSZXNwb25zZRJoChFHZXRCYWNrZmlsbFN0YXR1cxIvLnhzdG9ja3N0cmF0LmluZ2VzdC52MS5HZXRCYWNrZmlsbFN0YXR1c1JlcXVlc3QaIi54c3RvY2tzdHJhdC5pbmdlc3QudjEuQmFja2ZpbGxKb2IScwoQTGlzdEJhY2tmaWxsSm9icxIuLnhzdG9ja3N0cmF0LmluZ2VzdC52MS5MaXN0QmFja2ZpbGxKb2JzUmVxdWVzdBovLnhzdG9ja3N0cmF0LmluZ2VzdC52MS5MaXN0QmFja2ZpbGxKb2JzUmVzcG9uc2USYgoOQ2FuY2VsQmFja2ZpbGwSLC54c3RvY2tzdHJhdC5pbmdlc3QudjEuQ2FuY2VsQmFja2ZpbGxSZXF1ZXN0GiIueHN0b2Nrc3RyYXQuaW5nZXN0LnYxLkJhY2tmaWxsSm9iEnMKEE5vcm1hbGl6ZVJhd0RhdGESLi54c3RvY2tzdHJhdC5pbmdlc3QudjEuTm9ybWFsaXplUmF3RGF0YVJlcXVlc3QaLy54c3RvY2tzdHJhdC5pbmdlc3QudjEuTm9ybWFsaXplUmF3RGF0YVJlc3BvbnNlEmcKDEluZ2VzdFNpZ25hbBIqLnhzdG9ja3N0cmF0LmluZ2VzdC52MS5Jbmdlc3RTaWduYWxSZXF1ZXN0GisueHN0b2Nrc3RyYXQuaW5nZXN0LnYxLkluZ2VzdFNpZ25hbFJlc3BvbnNlEmcKDFF1ZXJ5U2lnbmFscxIqLnhzdG9ja3N0cmF0LmluZ2VzdC52MS5RdWVyeVNpZ25hbHNSZXF1ZXN0GisueHN0b2Nrc3RyYXQuaW5nZXN0LnYxLlF1ZXJ5U2lnbmFsc1Jlc3BvbnNlEnYKEUxpc3RTaWduYWxTb3VyY2VzEi8ueHN0b2Nrc3RyYXQuaW5nZXN0LnYxLkxpc3RTaWduYWxTb3VyY2VzUmVxdWVzdBowLnhzdG9ja3N0cmF0LmluZ2VzdC52MS5MaXN0U2lnbmFsU291cmNlc1Jlc3BvbnNlEnkKEk1hbmFnZVNpZ25hbFNvdXJjZRIwLnhzdG9ja3N0cmF0LmluZ2VzdC52MS5NYW5hZ2VTaWduYWxTb3VyY2VSZXF1ZXN0GjEueHN0b2Nrc3RyYXQuaW5nZXN0LnYxLk1hbmFnZVNpZ25hbFNvdXJjZVJlc3BvbnNlEmoKDUxpc3RUZW1wbGF0ZXMSKy54c3RvY2tzdHJhdC5pbmdlc3QudjEuTGlzdFRlbXBsYXRlc1JlcXVlc3QaLC54c3RvY2tzdHJhdC5pbmdlc3QudjEuTGlzdFRlbXBsYXRlc1Jlc3BvbnNlEmUKDk1hbmFnZVRlbXBsYXRlEiwueHN0b2Nrc3RyYXQuaW5nZXN0LnYxLk1hbmFnZVRlbXBsYXRlUmVxdWVzdBolLnhzdG9ja3N0cmF0LmluZ2VzdC52MS5Tb3VyY2VUZW1wbGF0ZRJtChNJbnN0YW50aWF0ZVRlbXBsYXRlEjEueHN0b2Nrc3RyYXQuaW5nZXN0LnYxLkluc3RhbnRpYXRlVGVtcGxhdGVSZXF1ZXN0GiMueHN0b2Nrc3RyYXQuaW5nZXN0LnYxLlNpZ25hbFNvdXJjZUI8WjpnaXRodWIuY29tL3hzdG9ja3N0cmF0L2NvbnRyYWN0cy9nZW4vZ28vaW5nZXN0L3YxO2luZ2VzdHYxYgZwcm90bzM", [file_google_protobuf_timestamp, file_common_v1_common, file_google_protobuf_struct, file_google_protobuf_field_mask]);
 
 /**
  * @generated from message xstockstrat.ingest.v1.BackfillJob
@@ -393,6 +393,13 @@ export type ExternalSignal = Message<"xstockstrat.ingest.v1.ExternalSignal"> & {
    * @generated from field: google.protobuf.Timestamp ingested_at = 10;
    */
   ingestedAt?: Timestamp | undefined;
+
+  /**
+   * owner of the signal (feature 224); server-stamped, ignored on write
+   *
+   * @generated from field: string user_id = 11;
+   */
+  userId: string;
 };
 
 /**
@@ -481,6 +488,20 @@ export type QuerySignalsRequest = Message<"xstockstrat.ingest.v1.QuerySignalsReq
    * @generated from field: xstockstrat.common.v1.PageRequest page = 5;
    */
   page?: PageRequest | undefined;
+
+  /**
+   * feature 224; UNSPECIFIED = the caller's own + system signals
+   *
+   * @generated from field: xstockstrat.ingest.v1.SignalScope scope = 6;
+   */
+  scope: SignalScope;
+
+  /**
+   * (admin-only) owner selector; ignored for a non-admin caller
+   *
+   * @generated from field: string owner_user_id = 7;
+   */
+  ownerUserId: string;
 };
 
 /**
@@ -585,6 +606,20 @@ export type SignalSource = Message<"xstockstrat.ingest.v1.SignalSource"> & {
    * @generated from field: optional double reliability_weight = 12;
    */
   reliabilityWeight?: number | undefined;
+
+  /**
+   * Owner of the source (feature 224). "system" = platform-owned, read-only to every user.
+   *
+   * @generated from field: string user_id = 13;
+   */
+  userId: string;
+
+  /**
+   * set when instantiated from a template
+   *
+   * @generated from field: xstockstrat.common.v1.TemplateOrigin origin = 14;
+   */
+  origin?: TemplateOrigin | undefined;
 };
 
 /**
@@ -602,6 +637,13 @@ export type ListSignalSourcesRequest = Message<"xstockstrat.ingest.v1.ListSignal
    * @generated from field: bool include_inactive = 1;
    */
   includeInactive: boolean;
+
+  /**
+   * (admin-only) owner selector; ignored for a non-admin caller (feature 224)
+   *
+   * @generated from field: string owner_user_id = 2;
+   */
+  ownerUserId: string;
 };
 
 /**
@@ -693,6 +735,113 @@ export type ManageSignalSourceResponse = Message<"xstockstrat.ingest.v1.ManageSi
  */
 export const ManageSignalSourceResponseSchema: GenMessage<ManageSignalSourceResponse> = /*@__PURE__*/
   messageDesc(file_ingest_v1_ingest, 18);
+
+/**
+ * feature 224 — signal-source template catalog.
+ *
+ * @generated from message xstockstrat.ingest.v1.SourceTemplate
+ */
+export type SourceTemplate = Message<"xstockstrat.ingest.v1.SourceTemplate"> & {
+  /**
+   * @generated from field: xstockstrat.common.v1.TemplateMeta meta = 1;
+   */
+  meta?: TemplateMeta | undefined;
+
+  /**
+   * @generated from field: xstockstrat.ingest.v1.SignalSource payload = 2;
+   */
+  payload?: SignalSource | undefined;
+};
+
+/**
+ * Describes the message xstockstrat.ingest.v1.SourceTemplate.
+ * Use `create(SourceTemplateSchema)` to create a new message.
+ */
+export const SourceTemplateSchema: GenMessage<SourceTemplate> = /*@__PURE__*/
+  messageDesc(file_ingest_v1_ingest, 19);
+
+/**
+ * @generated from message xstockstrat.ingest.v1.ListTemplatesRequest
+ */
+export type ListTemplatesRequest = Message<"xstockstrat.ingest.v1.ListTemplatesRequest"> & {
+};
+
+/**
+ * Describes the message xstockstrat.ingest.v1.ListTemplatesRequest.
+ * Use `create(ListTemplatesRequestSchema)` to create a new message.
+ */
+export const ListTemplatesRequestSchema: GenMessage<ListTemplatesRequest> = /*@__PURE__*/
+  messageDesc(file_ingest_v1_ingest, 20);
+
+/**
+ * @generated from message xstockstrat.ingest.v1.ListTemplatesResponse
+ */
+export type ListTemplatesResponse = Message<"xstockstrat.ingest.v1.ListTemplatesResponse"> & {
+  /**
+   * @generated from field: repeated xstockstrat.ingest.v1.SourceTemplate templates = 1;
+   */
+  templates: SourceTemplate[];
+};
+
+/**
+ * Describes the message xstockstrat.ingest.v1.ListTemplatesResponse.
+ * Use `create(ListTemplatesResponseSchema)` to create a new message.
+ */
+export const ListTemplatesResponseSchema: GenMessage<ListTemplatesResponse> = /*@__PURE__*/
+  messageDesc(file_ingest_v1_ingest, 21);
+
+/**
+ * @generated from message xstockstrat.ingest.v1.ManageTemplateRequest
+ */
+export type ManageTemplateRequest = Message<"xstockstrat.ingest.v1.ManageTemplateRequest"> & {
+  /**
+   * @generated from field: xstockstrat.common.v1.TemplateOperation operation = 1;
+   */
+  operation: TemplateOperation;
+
+  /**
+   * @generated from field: xstockstrat.ingest.v1.SourceTemplate template = 2;
+   */
+  template?: SourceTemplate | undefined;
+};
+
+/**
+ * Describes the message xstockstrat.ingest.v1.ManageTemplateRequest.
+ * Use `create(ManageTemplateRequestSchema)` to create a new message.
+ */
+export const ManageTemplateRequestSchema: GenMessage<ManageTemplateRequest> = /*@__PURE__*/
+  messageDesc(file_ingest_v1_ingest, 22);
+
+/**
+ * @generated from message xstockstrat.ingest.v1.InstantiateTemplateRequest
+ */
+export type InstantiateTemplateRequest = Message<"xstockstrat.ingest.v1.InstantiateTemplateRequest"> & {
+  /**
+   * @generated from field: string template_id = 1;
+   */
+  templateId: string;
+
+  /**
+   * the new private source's slug (unique per owner)
+   *
+   * @generated from field: string slug = 2;
+   */
+  slug: string;
+
+  /**
+   * the caller's own per-user credential key, if the type needs one
+   *
+   * @generated from field: string credentials_ref = 3;
+   */
+  credentialsRef: string;
+};
+
+/**
+ * Describes the message xstockstrat.ingest.v1.InstantiateTemplateRequest.
+ * Use `create(InstantiateTemplateRequestSchema)` to create a new message.
+ */
+export const InstantiateTemplateRequestSchema: GenMessage<InstantiateTemplateRequest> = /*@__PURE__*/
+  messageDesc(file_ingest_v1_ingest, 23);
 
 /**
  * @generated from enum xstockstrat.ingest.v1.BackfillStatus
@@ -813,6 +962,36 @@ export const BackfillDataKindSchema: GenEnum<BackfillDataKind> = /*@__PURE__*/
   enumDesc(file_ingest_v1_ingest, 2);
 
 /**
+ * Which owners' signals QuerySignals returns (feature 224). Closed set → enum (C-04).
+ *
+ * @generated from enum xstockstrat.ingest.v1.SignalScope
+ */
+export enum SignalScope {
+  /**
+   * own + system
+   *
+   * @generated from enum value: SIGNAL_SCOPE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: SIGNAL_SCOPE_OWN = 1;
+   */
+  OWN = 1,
+
+  /**
+   * @generated from enum value: SIGNAL_SCOPE_SYSTEM = 2;
+   */
+  SYSTEM = 2,
+}
+
+/**
+ * Describes the enum xstockstrat.ingest.v1.SignalScope.
+ */
+export const SignalScopeSchema: GenEnum<SignalScope> = /*@__PURE__*/
+  enumDesc(file_ingest_v1_ingest, 3);
+
+/**
  * Health of a registered signal source (feature 083). Closed set → enum (C-04).
  *
  * @generated from enum xstockstrat.ingest.v1.SourceHealthStatus
@@ -849,7 +1028,7 @@ export enum SourceHealthStatus {
  * Describes the enum xstockstrat.ingest.v1.SourceHealthStatus.
  */
 export const SourceHealthStatusSchema: GenEnum<SourceHealthStatus> = /*@__PURE__*/
-  enumDesc(file_ingest_v1_ingest, 3);
+  enumDesc(file_ingest_v1_ingest, 4);
 
 /**
  * Closed verb set for ManageSignalSource (feature 088). Closed set → enum (C-04).
@@ -895,7 +1074,7 @@ export enum SignalSourceOperation {
  * Describes the enum xstockstrat.ingest.v1.SignalSourceOperation.
  */
 export const SignalSourceOperationSchema: GenEnum<SignalSourceOperation> = /*@__PURE__*/
-  enumDesc(file_ingest_v1_ingest, 4);
+  enumDesc(file_ingest_v1_ingest, 5);
 
 /**
  * @generated from service xstockstrat.ingest.v1.IngestService
@@ -978,6 +1157,34 @@ export const IngestService: GenService<{
     methodKind: "unary";
     input: typeof ManageSignalSourceRequestSchema;
     output: typeof ManageSignalSourceResponseSchema;
+  },
+  /**
+   * Template catalog (feature 224). List/read: any authenticated caller. Manage: ADMIN only.
+   *
+   * @generated from rpc xstockstrat.ingest.v1.IngestService.ListTemplates
+   */
+  listTemplates: {
+    methodKind: "unary";
+    input: typeof ListTemplatesRequestSchema;
+    output: typeof ListTemplatesResponseSchema;
+  },
+  /**
+   * @generated from rpc xstockstrat.ingest.v1.IngestService.ManageTemplate
+   */
+  manageTemplate: {
+    methodKind: "unary";
+    input: typeof ManageTemplateRequestSchema;
+    output: typeof SourceTemplateSchema;
+  },
+  /**
+   * Copies a source template into a private signal source owned by the x-user-id caller.
+   *
+   * @generated from rpc xstockstrat.ingest.v1.IngestService.InstantiateTemplate
+   */
+  instantiateTemplate: {
+    methodKind: "unary";
+    input: typeof InstantiateTemplateRequestSchema;
+    output: typeof SignalSourceSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_ingest_v1_ingest, 0);

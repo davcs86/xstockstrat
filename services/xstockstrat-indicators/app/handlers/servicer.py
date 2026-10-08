@@ -4,23 +4,34 @@ IndicatorsServicer — gRPC servicer implementation.
 
 import asyncio
 import logging
+import uuid
 
 import grpc
+from gen.common.v1 import common_pb2
 from gen.indicators.v1 import indicators_pb2, indicators_pb2_grpc
+from gen.ledger.v1 import ledger_pb2_grpc
 from google.protobuf.json_format import MessageToDict, ParseDict
 from google.protobuf.struct_pb2 import Struct
 
+from app.admin_audit import audit_admin_read
 from app.config.watcher import ConfigWatcher
 from app.formulas import SYSTEM_AUTHOR
+from app.peer_identity import peer_san_matches
 from app.services import indicators_engine, sandbox
 from app.services import parameters as params_validation
+from app.services.formula_templates_repository import FormulaTemplatesRepository
 from app.services.formulas_repository import FormulasRepository
 
 log = logging.getLogger(__name__)
 
-# Internal callers (x-internal-caller, trusted under mTLS) that may read/execute any non-deleted
-# formula — analysis runs strategies whose formulas the requesting user need not own.
+# Internal callers that may read/execute any non-deleted formula, honored only from the peer with
+# mTLS SAN _ANALYSIS_SAN. Release-N bypass for N-1 analysis; "224 enforce" removes it.
 _INTERNAL_FORMULA_READERS = frozenset({"analysis"})
+# The only grant under which a caller may act as the reserved `system` identity.
+_SYSTEM_IDENTITY_GRANT = "analysis-fundsignal"
+# Dedicated saga grant; must outlive the removal of the N-only "analysis" reader bypass.
+_TEMPLATE_SAGA_GRANT = "analysis-template-saga"
+_ANALYSIS_SAN = "xstockstrat-analysis"
 
 # Fields an UpdateFormula update_mask may name; any other path is rejected INVALID_ARGUMENT.
 # formula_id/user_id/author/created_at are not maskable.
@@ -29,7 +40,6 @@ _FORMULA_MASKABLE_PATHS = frozenset(
         "name",
         "description",
         "source",
-        "is_public",
         "parameters",
         "outputs",
         "warmup_period",
@@ -56,20 +66,26 @@ _FUNDAMENTAL_METRIC_MEANING: dict[int, str] = {
 
 
 class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
-    def __init__(self, config_watcher: ConfigWatcher, db_pool=None):
+    def __init__(self, config_watcher: ConfigWatcher, db_pool=None, ledger_channel=None):
         self._cfg = config_watcher
+        self._ledger = (
+            ledger_pb2_grpc.LedgerServiceStub(ledger_channel)
+            if ledger_channel is not None
+            else None
+        )
         self._formulas: dict[str, indicators_pb2.FormulaDefinition] = {}
         self._repo: FormulasRepository | None = (
             FormulasRepository(db_pool) if db_pool is not None else None
+        )
+        self._templates_repo: FormulaTemplatesRepository | None = (
+            FormulaTemplatesRepository(db_pool) if db_pool is not None else None
         )
         self._sandbox_sem = asyncio.Semaphore(max(1, config_watcher.sandbox_max_concurrent()))
 
     @staticmethod
     def _has_admin_scope(context) -> bool:
-        """Role check on the propagated x-access-scope ADMIN bit (0x04).
-
-        An admin-scope override on top of the primary author-ownership model for Update/Delete.
-        """
+        """Role check on the propagated x-access-scope ADMIN bit (0x04). It grants an audited
+        read of a foreign formula only — never execute, update or delete."""
         metadata = dict(context.invocation_metadata())
         try:
             access_scope = int(metadata.get("x-access-scope", "0"))
@@ -86,16 +102,92 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
         return x_user_id or request.user_id
 
     @staticmethod
-    def _can_read_formula(context, author: str, is_public: bool) -> bool:
-        """Owner, public, SYSTEM_AUTHOR, or an allow-listed internal caller. The reader is the
-        x-user-id header only — never a request-body field."""
-        if is_public or author == SYSTEM_AUTHOR:
-            return True
+    def _reader(context) -> str:
+        """The caller identity for reads and registration: the x-user-id header only."""
+        return dict(context.invocation_metadata() or ()).get("x-user-id", "")
+
+    @staticmethod
+    def _internal_grant(context, caller_id: str) -> bool:
+        """x-internal-caller names ``caller_id`` AND the mTLS peer is analysis (header alone is
+        spoofable by any platform peer)."""
         metadata = context.invocation_metadata() or ()
-        if any(k == "x-internal-caller" and v in _INTERNAL_FORMULA_READERS for k, v in metadata):
+        return any(
+            k == "x-internal-caller" and v == caller_id for k, v in metadata
+        ) and peer_san_matches(context, _ANALYSIS_SAN)
+
+    async def _reject_ungranted_system(self, context) -> bool:
+        """Abort PERMISSION_DENIED when the caller claims `system` without the SAN-bound grant."""
+        if self._reader(context) == SYSTEM_AUTHOR and not self._internal_grant(
+            context, _SYSTEM_IDENTITY_GRANT
+        ):
+            await context.abort(
+                grpc.StatusCode.PERMISSION_DENIED, "the system identity requires an internal grant"
+            )
             return True
-        reader = dict(metadata).get("x-user-id", "")
-        return bool(reader) and reader == author
+        return False
+
+    def _can_read_formula(self, context, author: str) -> bool:
+        """Owner, SYSTEM_AUTHOR, or the SAN-bound internal analysis reader."""
+        if author == SYSTEM_AUTHOR:
+            return True
+        reader = self._reader(context)
+        if reader and reader == author:
+            return True
+        return any(self._internal_grant(context, c) for c in _INTERNAL_FORMULA_READERS)
+
+    async def _load_formula(self, formula_id: str):
+        """The cached or stored formula, or None when missing or pending-hidden. Never fills the
+        cache: callers cache only after authz succeeds."""
+        formula = self._formulas.get(formula_id)
+        if formula is None and self._repo is not None:
+            row = await self._repo.get_by_id(formula_id)
+            if row is not None and row.get("pending_intent_id") is None:
+                formula = _row_to_formula(row)
+        return formula
+
+    async def _fill_origins(self, formulas) -> None:
+        """Set origin.latest_version/update_available in place with ONE batched template lookup;
+        a retired or missing template reports latest_version 0 and no update."""
+        ids = {f.origin.template_id for f in formulas if f.origin.template_id}
+        if not ids or self._templates_repo is None:
+            return
+        latest = await self._templates_repo.latest_versions(sorted(ids))
+        for f in formulas:
+            if f.origin.template_id:
+                f.origin.latest_version = latest.get(f.origin.template_id, 0)
+                f.origin.update_available = f.origin.latest_version > f.origin.template_version
+
+    async def _template_owner(self, context) -> str | None:
+        """The instantiating owner (x-user-id, non-empty, not `system`), else abort."""
+        owner = self._reader(context)
+        if not owner or owner == SYSTEM_AUTHOR:
+            await context.abort(
+                grpc.StatusCode.PERMISSION_DENIED, "a non-system user identity is required"
+            )
+            return None
+        return owner
+
+    async def _require_templates_db(self, context) -> bool:
+        if self._templates_repo is None or self._repo is None:
+            await context.abort(grpc.StatusCode.UNAVAILABLE, "DB not available")
+            return False
+        return True
+
+    async def _audit_admin_read(self, context, ids_by_owner) -> bool:
+        """Audit an admin foreign read; on failure abort UNAVAILABLE and return False."""
+        try:
+            await audit_admin_read(
+                self._ledger,
+                self._reader(context),
+                "formula",
+                ids_by_owner,
+                context.invocation_metadata() or (),
+            )
+        except Exception as e:
+            log.warning("admin-read audit failed: %s", e)
+            await context.abort(grpc.StatusCode.UNAVAILABLE, "admin read audit unavailable")
+            return False
+        return True
 
     async def ComputeIndicator(self, request, context):
         try:
@@ -127,21 +219,29 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
         )
 
     async def ExecuteFormula(self, request, context):
+        if await self._reject_ungranted_system(context):
+            return
         formula = None
         if request.formula_id:
-            formula = self._formulas.get(request.formula_id)
-            if formula is None and self._repo is not None:
-                row = await self._repo.get_by_id(request.formula_id)
-                if row is not None:
-                    formula = _row_to_formula(row)
-                    self._formulas[request.formula_id] = formula
-            if formula is None or not self._can_read_formula(
-                context, formula.author, formula.is_public
-            ):
+            formula = await self._load_formula(request.formula_id)
+            if formula is None:
                 await context.abort(
                     grpc.StatusCode.NOT_FOUND, f"formula {request.formula_id} not found"
                 )
                 return
+            if not self._can_read_formula(context, formula.author):
+                # AC-28: an admin may read a foreign formula but never run it.
+                if self._has_admin_scope(context):
+                    await context.abort(
+                        grpc.StatusCode.PERMISSION_DENIED,
+                        "admins cannot execute another user's formula",
+                    )
+                    return
+                await context.abort(
+                    grpc.StatusCode.NOT_FOUND, f"formula {request.formula_id} not found"
+                )
+                return
+            self._formulas[request.formula_id] = formula
             source = formula.source
         elif request.formula_source:
             source = request.formula_source
@@ -275,35 +375,25 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
         return indicators_pb2.ListFundamentalMetricsResponse(metrics=metrics)
 
     async def RegisterFormula(self, request, context):
-        import uuid
-
+        if await self._reject_ungranted_system(context):
+            return
         from google.protobuf.timestamp_pb2 import Timestamp
 
         formula_id = str(uuid.uuid4())
         now = Timestamp()
         now.GetCurrentTime()
 
-        # Require an authenticated author: explicit request.author wins, else the propagated
-        # x-user-id; no silent default.
-        if request.author:
-            author = request.author
-        else:
-            metadata = dict(context.invocation_metadata())
-            x_user_id = metadata.get("x-user-id", "")
-            if not x_user_id:
-                await context.abort(
-                    grpc.StatusCode.INVALID_ARGUMENT,
-                    "authenticated user required to register a formula",
-                )
-                return
-            author = x_user_id
+        # The author is the x-user-id header only; the deprecated body author is ignored.
+        author = self._reader(context)
+        if not author:
+            await context.abort(
+                grpc.StatusCode.INVALID_ARGUMENT,
+                "authenticated user required to register a formula",
+            )
+            return
 
         try:
-            params_validation.validate_definitions(request.parameters)
-            params_validation.validate_outputs(request.outputs)
-            params_validation.validate_fundamental_inputs(request.fundamental_inputs)
-            if request.warmup_period < 0:
-                raise ValueError("warmup_period must be >= 0")
+            _validate_register_payload(request)
         except ValueError as e:
             await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(e))
             return
@@ -316,7 +406,6 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
             description=request.description,
             source=request.source,
             author=author,
-            is_public=request.is_public,
             created_at=now,
             updated_at=now,
             input_schema=dict(request.input_schema),
@@ -333,7 +422,7 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
                 description=request.description,
                 source=request.source,
                 author=author,
-                is_public=request.is_public,
+                is_public=False,
                 input_schema=dict(request.input_schema),
                 parameters=param_dicts,
                 outputs=output_dicts,
@@ -343,49 +432,56 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
         return indicators_pb2.RegisterFormulaResponse(formula_id=formula_id)
 
     async def GetFormula(self, request, context):
-        formula = self._formulas.get(request.formula_id)
-        if formula is None and self._repo is not None:
-            row = await self._repo.get_by_id(request.formula_id)
-            if row is not None:
-                formula = _row_to_formula(row)
-                self._formulas[request.formula_id] = formula
-        if formula is None or not self._can_read_formula(
-            context, formula.author, formula.is_public
-        ):
+        if await self._reject_ungranted_system(context):
+            return
+        formula = await self._load_formula(request.formula_id)
+        readable = formula is not None and self._can_read_formula(context, formula.author)
+        if not readable and (formula is None or not self._has_admin_scope(context)):
             await context.abort(
                 grpc.StatusCode.NOT_FOUND, f"formula {request.formula_id} not found"
             )
             return
-        return formula
+        if not readable and not await self._audit_admin_read(
+            context, {formula.author: [request.formula_id]}
+        ):
+            return
+        self._formulas[request.formula_id] = formula
+        out = indicators_pb2.FormulaDefinition()
+        out.CopyFrom(formula)
+        await self._fill_origins([out])
+        return out
 
     async def ListFormulas(self, request, context):
+        """Own + system formulas. author_filter/include_public are ignored, except that an ADMIN
+        may name another owner in author_filter to list (and audit) that owner's formulas."""
+        if await self._reject_ungranted_system(context):
+            return
+        reader = self._reader(context)
+        owner = request.author_filter
+        admin_selector = bool(owner) and owner != reader and self._has_admin_scope(context)
         if self._repo is None:
             formulas = [
                 f
                 for f in self._formulas.values()
-                if self._can_read_formula(context, f.author, f.is_public)
+                if (f.author == owner if admin_selector else f.author in (reader, SYSTEM_AUTHOR))
             ]
-            return indicators_pb2.ListFormulasResponse(
-                formulas=formulas,
-                total_count=len(formulas),
+            total = len(formulas)
+        else:
+            list_rows = self._repo.list_owned if admin_selector else self._repo.list_visible
+            rows, total = await list_rows(
+                owner if admin_selector else reader, request.page_size, request.page_offset
             )
-        # A foreign author_filter lists public rows only — it must not enumerate private formulas.
-        author_public_only = bool(request.author_filter) and not self._can_read_formula(
-            context, request.author_filter, False
-        )
-        rows, total = await self._repo.list(
-            author_filter=request.author_filter,
-            include_public=request.include_public,
-            page_size=request.page_size,
-            page_offset=request.page_offset,
-            author_public_only=author_public_only,
-        )
-        return indicators_pb2.ListFormulasResponse(
-            formulas=[_row_to_formula(r) for r in rows],
-            total_count=total,
-        )
+            formulas = [_row_to_formula(r) for r in rows]
+            await self._fill_origins(formulas)
+        if admin_selector and not await self._audit_admin_read(
+            context, {owner: [f.formula_id for f in formulas]}
+        ):
+            return
+        return indicators_pb2.ListFormulasResponse(formulas=formulas, total_count=total)
 
     async def UpdateFormula(self, request, context):
+        if await self._reject_ungranted_system(context):
+            return
         if self._repo is None:
             await context.abort(grpc.StatusCode.UNAVAILABLE, "DB not available")
             return
@@ -401,8 +497,7 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
                 "system formulas are read-only and cannot be modified",
             )
             return
-        caller_user_id = self._caller_user_id(context, request)
-        if row["author"] != caller_user_id and not self._has_admin_scope(context):
+        if row["author"] != self._caller_user_id(context, request):
             await context.abort(
                 grpc.StatusCode.PERMISSION_DENIED, "user_id does not match formula author"
             )
@@ -435,7 +530,6 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
             request.description if _use_req("description") else (row["description"] or "")
         )
         eff_source = request.source if _use_req("source") else row["source"]
-        eff_is_public = request.is_public if _use_req("is_public") else row["is_public"]
         eff_parameters = (
             [MessageToDict(p) for p in request.parameters]
             if _use_req("parameters")
@@ -481,7 +575,7 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
             name=eff_name,
             description=eff_description,
             source=eff_source,
-            is_public=eff_is_public,
+            is_public=False,
             parameters=eff_parameters,
             outputs=eff_outputs,
             warmup_period=eff_warmup,
@@ -491,6 +585,8 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
         return indicators_pb2.UpdateFormulaResponse(formula=_row_to_formula(updated))
 
     async def DeleteFormula(self, request, context):
+        if await self._reject_ungranted_system(context):
+            return
         if self._repo is None:
             await context.abort(grpc.StatusCode.UNAVAILABLE, "DB not available")
             return
@@ -506,8 +602,7 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
                 "system formulas are read-only and cannot be deleted",
             )
             return
-        caller_user_id = self._caller_user_id(context, request)
-        if row["author"] != caller_user_id and not self._has_admin_scope(context):
+        if row["author"] != self._caller_user_id(context, request):
             await context.abort(
                 grpc.StatusCode.PERMISSION_DENIED, "user_id does not match formula author"
             )
@@ -516,28 +611,206 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
         self._formulas.pop(request.formula_id, None)
         return indicators_pb2.DeleteFormulaResponse(success=success)
 
+    async def ListTemplates(self, request, context):
+        """Active (non-retired) formula templates, for any authenticated caller."""
+        if await self._reject_ungranted_system(context):
+            return
+        if not self._reader(context):
+            await context.abort(grpc.StatusCode.UNAUTHENTICATED, "authenticated user required")
+            return
+        if not await self._require_templates_db(context):
+            return
+        rows = await self._templates_repo.list_active()
+        return indicators_pb2.ListTemplatesResponse(templates=[_row_to_template(r) for r in rows])
 
-def _row_to_formula(row: dict) -> "indicators_pb2.FormulaDefinition":
-    """Convert a DB row dict from indicators.formulas to FormulaDefinition proto."""
+    async def ManageTemplate(self, request, context):
+        """ADMIN-only create / update (version + 1) / retire. Retire never touches instances."""
+        if await self._reject_ungranted_system(context):
+            return
+        if not self._has_admin_scope(context):
+            await context.abort(
+                grpc.StatusCode.PERMISSION_DENIED, "managing templates requires the ADMIN scope"
+            )
+            return
+        if not await self._require_templates_db(context):
+            return
+        op = request.operation
+        meta = request.template.meta
+        if not meta.template_id:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, "template_id required")
+            return
+        if op in (common_pb2.TEMPLATE_OPERATION_CREATE, common_pb2.TEMPLATE_OPERATION_UPDATE):
+            try:
+                _validate_register_payload(request.template.payload)
+            except ValueError as e:
+                await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(e))
+                return
+            payload = MessageToDict(request.template.payload)
+        if op == common_pb2.TEMPLATE_OPERATION_CREATE:
+            if await self._templates_repo.get(meta.template_id) is not None:
+                await context.abort(
+                    grpc.StatusCode.ALREADY_EXISTS, f"template {meta.template_id} already exists"
+                )
+                return
+            row = await self._templates_repo.create(meta, payload, self._reader(context))
+        elif op == common_pb2.TEMPLATE_OPERATION_UPDATE:
+            row = await self._templates_repo.update(meta.template_id, payload)
+        elif op == common_pb2.TEMPLATE_OPERATION_RETIRE:
+            row = await self._templates_repo.retire(meta.template_id)
+        else:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, "template operation required")
+            return
+        if row is None:
+            await context.abort(grpc.StatusCode.NOT_FOUND, f"template {meta.template_id} not found")
+            return
+        return _row_to_template(row)
+
+    async def InstantiateTemplate(self, request, context):
+        """User path (template_id): a private snapshot copy owned by the caller. Saga path
+        (template_ids + intent_id): pending-hidden copies, analysis-template-saga grant only."""
+        saga = bool(request.template_ids) or bool(request.intent_id)
+        if saga and not self._internal_grant(context, _TEMPLATE_SAGA_GRANT):
+            await context.abort(
+                grpc.StatusCode.PERMISSION_DENIED, "the template saga requires an internal grant"
+            )
+            return
+        owner = await self._template_owner(context)
+        if owner is None or not await self._require_templates_db(context):
+            return
+        if saga:
+            return await self._instantiate_saga(request, context, owner)
+
+        row = await self._templates_repo.get(request.template_id)
+        if row is None or row.get("retired_at") is not None:
+            await context.abort(
+                grpc.StatusCode.NOT_FOUND, f"template {request.template_id} not found"
+            )
+            return
+        created = await self._repo.create(**_template_copy(row, owner))
+        formula = _row_to_formula(created)
+        formula.origin.latest_version = formula.origin.template_version
+        self._formulas[formula.formula_id] = formula
+        return indicators_pb2.InstantiateTemplateResponse(formula=formula)
+
+    async def _instantiate_saga(self, request, context, owner):
+        try:
+            uuid.UUID(request.intent_id)
+        except ValueError:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, "intent_id must be a UUID")
+            return
+        template_ids = list(dict.fromkeys(request.template_ids))
+        if not template_ids:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, "template_ids required")
+            return
+        # Resolve every template before any INSERT: one bad id fails the whole saga.
+        rows = []
+        for template_id in template_ids:
+            row = await self._templates_repo.get(template_id)
+            if row is None or row.get("retired_at") is not None:
+                await context.abort(grpc.StatusCode.NOT_FOUND, f"template {template_id} not found")
+                return
+            rows.append(row)
+        copies = [_template_copy(r, owner) for r in rows]
+        try:
+            await self._repo.create_pending_copies(copies, request.intent_id)
+        except Exception as e:
+            log.warning("template saga copy failed intent=%s: %s", request.intent_id, e)
+            await context.abort(grpc.StatusCode.INTERNAL, f"template copy failed: {e}")
+            return
+        return indicators_pb2.InstantiateTemplateResponse(
+            formula_ids_by_template={
+                r["template_id"]: c["formula_id"] for r, c in zip(rows, copies, strict=True)
+            }
+        )
+
+    async def ResolveTemplateIntent(self, request, context):
+        """Commit (un-hide) or abort (hard-delete) the owner's pending copies; idempotent."""
+        if not self._internal_grant(context, _TEMPLATE_SAGA_GRANT):
+            await context.abort(
+                grpc.StatusCode.PERMISSION_DENIED, "resolving a template intent requires a grant"
+            )
+            return
+        owner = await self._template_owner(context)
+        if owner is None or not await self._require_templates_db(context):
+            return
+        try:
+            uuid.UUID(request.intent_id)
+        except ValueError:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, "intent_id must be a UUID")
+            return
+        ids = await self._repo.resolve_intent(request.intent_id, owner, request.commit)
+        for formula_id in ids:
+            self._formulas.pop(formula_id, None)
+        return indicators_pb2.ResolveTemplateIntentResponse(affected=len(ids))
+
+
+def _validate_register_payload(payload) -> None:
+    """The RegisterFormula payload checks, shared by template authoring; raises ValueError."""
+    params_validation.validate_definitions(payload.parameters)
+    params_validation.validate_outputs(payload.outputs)
+    params_validation.validate_fundamental_inputs(payload.fundamental_inputs)
+    if payload.warmup_period < 0:
+        raise ValueError("warmup_period must be >= 0")
+
+
+def _template_copy(row: dict, owner: str) -> dict:
+    """FormulasRepository.create fields for a snapshot of a template row; the payload's
+    deprecated is_public/author are ignored (the copy is private to ``owner``)."""
+    payload = ParseDict(row["payload"], indicators_pb2.RegisterFormulaRequest())
+    return {
+        "formula_id": str(uuid.uuid4()),
+        "name": payload.name,
+        "description": payload.description,
+        "source": payload.source,
+        "author": owner,
+        "is_public": False,
+        "input_schema": dict(payload.input_schema),
+        "parameters": [MessageToDict(p) for p in payload.parameters],
+        "outputs": [MessageToDict(o) for o in payload.outputs],
+        "warmup_period": payload.warmup_period,
+        "fundamental_inputs": [int(m) for m in payload.fundamental_inputs],
+        "origin_template_id": row["template_id"],
+        "origin_template_version": row["version"],
+    }
+
+
+def _row_to_template(row: dict) -> "indicators_pb2.FormulaTemplate":
+    return indicators_pb2.FormulaTemplate(
+        meta=common_pb2.TemplateMeta(
+            template_id=row["template_id"],
+            kind=common_pb2.TEMPLATE_KIND_FORMULA,
+            name=row["name"],
+            description=row["description"] or "",
+            version=row["version"],
+            retired=row.get("retired_at") is not None,
+            created_at=_dt_to_ts(row.get("created_at")),
+            updated_at=_dt_to_ts(row.get("updated_at")),
+        ),
+        payload=ParseDict(row["payload"], indicators_pb2.RegisterFormulaRequest()),
+    )
+
+
+def _dt_to_ts(dt):
     import datetime
 
     from google.protobuf.timestamp_pb2 import Timestamp
 
-    def dt_to_ts(dt) -> Timestamp:
-        ts = Timestamp()
-        if dt is not None:
-            ts.FromDatetime(dt if dt.tzinfo else dt.replace(tzinfo=datetime.UTC))
-        return ts
+    ts = Timestamp()
+    if dt is not None:
+        ts.FromDatetime(dt if dt.tzinfo else dt.replace(tzinfo=datetime.UTC))
+    return ts
 
-    return indicators_pb2.FormulaDefinition(
+
+def _row_to_formula(row: dict) -> "indicators_pb2.FormulaDefinition":
+    """Convert a DB row dict from indicators.formulas to FormulaDefinition proto."""
+    formula = indicators_pb2.FormulaDefinition(
         formula_id=str(row["formula_id"]),
         name=row["name"],
         description=row["description"] or "",
         source=row["source"],
         author=row["author"],
-        is_public=row["is_public"],
-        created_at=dt_to_ts(row.get("created_at")),
-        updated_at=dt_to_ts(row.get("updated_at")),
+        created_at=_dt_to_ts(row.get("created_at")),
+        updated_at=_dt_to_ts(row.get("updated_at")),
         input_schema=dict(row["input_schema"]) if row.get("input_schema") else {},
         parameters=[
             ParseDict(p, indicators_pb2.FormulaParameter()) for p in (row.get("parameters") or [])
@@ -547,3 +820,7 @@ def _row_to_formula(row: dict) -> "indicators_pb2.FormulaDefinition":
         deleted=row.get("deleted_at") is not None,
         fundamental_inputs=[int(m) for m in (row.get("fundamental_inputs") or [])],
     )
+    if row.get("origin_template_id"):
+        formula.origin.template_id = row["origin_template_id"]
+        formula.origin.template_version = row.get("origin_template_version") or 0
+    return formula

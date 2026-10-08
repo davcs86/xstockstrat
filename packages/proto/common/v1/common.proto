@@ -90,3 +90,54 @@ enum Timeframe {
   TIMEFRAME_1MIN = 1 [deprecated = true]; // deprecated: sub-15m intervals removed from the product
   TIMEFRAME_5MIN = 2 [deprecated = true]; // deprecated: sub-15m intervals removed from the product
 }
+
+// Sector is the closed GICS-flavored sector set (feature 217). The enum-name text minus the
+// SECTOR_ prefix is the stored marketdata.symbol_classification.sector value.
+enum Sector {
+  SECTOR_UNSPECIFIED = 0;
+  SECTOR_ENERGY = 1;
+  SECTOR_MATERIALS = 2;
+  SECTOR_INDUSTRIALS = 3;
+  SECTOR_CONSUMER_DISCRETIONARY = 4;
+  SECTOR_CONSUMER_STAPLES = 5;
+  SECTOR_HEALTH_CARE = 6;
+  SECTOR_FINANCIALS = 7;
+  SECTOR_TECHNOLOGY = 8;
+  SECTOR_COMMUNICATION_SERVICES = 9;
+  SECTOR_UTILITIES = 10;
+  SECTOR_REAL_ESTATE = 11;
+}
+
+// Template catalog (feature 224): admin-curated templates instantiated into private snapshot copies.
+enum TemplateKind {
+  TEMPLATE_KIND_UNSPECIFIED = 0;
+  TEMPLATE_KIND_STRATEGY = 1;
+  TEMPLATE_KIND_FORMULA = 2;
+  TEMPLATE_KIND_SIGNAL_SOURCE = 3;
+}
+
+enum TemplateOperation {
+  TEMPLATE_OPERATION_UNSPECIFIED = 0;
+  TEMPLATE_OPERATION_CREATE = 1;
+  TEMPLATE_OPERATION_UPDATE = 2;  // bumps version by 1
+  TEMPLATE_OPERATION_RETIRE = 3;  // hides from ListTemplates; existing instances are untouched
+}
+
+message TemplateMeta {
+  string template_id = 1;
+  TemplateKind kind = 2;
+  string name = 3;
+  string description = 4;
+  int32 version = 5;
+  bool retired = 6;
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp updated_at = 8;
+}
+
+// Provenance of an instance; empty template_id = not instantiated from a template.
+message TemplateOrigin {
+  string template_id = 1;
+  int32 template_version = 2;
+  int32 latest_version = 3;     // the template's current version (0 if retired or missing)
+  bool update_available = 4;    // latest_version > template_version
+}

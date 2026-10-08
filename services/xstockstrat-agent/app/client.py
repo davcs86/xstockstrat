@@ -192,6 +192,8 @@ async def list_signal_sources(include_inactive: bool = False) -> list[dict[str, 
             "signals_fed": src.signals_fed,
             # reliability weight — ranking multiplier in [0, 1].
             "reliability_weight": src.reliability_weight,
+            "user_id": src.user_id,
+            "origin": _origin_to_dict(src),
         }
         for src in resp.sources
     ]
@@ -639,6 +641,32 @@ async def run_backtest(
     )
 
 
+def _build_sector_overrides(overrides: list[dict[str, Any]]):
+    """Map tool-shaped overrides ({component_ref, param_name, default_value, by_sector:
+    {"FINANCIALS": 12.0}}) onto SectorParamOverride messages (feature 217). Sector keys accept the
+    bare name ("FINANCIALS") or the enum name ("SECTOR_FINANCIALS"), case-insensitive."""
+    from gen.analysis.v1 import analysis_pb2  # noqa: PLC0415
+    from gen.common.v1 import common_pb2  # noqa: PLC0415
+
+    out = []
+    for ov in overrides:
+        msg = analysis_pb2.SectorParamOverride(
+            component_ref=ov.get("component_ref", ""),
+            param_name=ov.get("param_name", ""),
+            default_value=float(ov["default_value"]),
+        )
+        for name, value in (ov.get("by_sector") or {}).items():
+            key = str(name).strip().upper()
+            if not key.startswith("SECTOR_"):
+                key = "SECTOR_" + key
+            if key not in common_pb2.Sector.keys() or key == "SECTOR_UNSPECIFIED":
+                valid = [k.removeprefix("SECTOR_") for k in common_pb2.Sector.keys()][1:]
+                raise ValueError(f"unknown sector '{name}'. Valid: {valid}")
+            msg.by_sector.add(sector=common_pb2.Sector.Value(key), value=float(value))
+        out.append(msg)
+    return out
+
+
 def _build_component(c: dict[str, Any]):
     """Map a component dict → StrategyComponent (feature 090: shared by manage_strategy and the
     screen_symbols technical-criterion component). Raises ValueError on an unknown kind."""
@@ -893,6 +921,9 @@ async def manage_strategy(
         # signal_eligible is a plain bool (None → protobuf default false).
         denied_symbols=definition.get("denied_symbols", []),
         signal_eligible=definition.get("signal_eligible"),
+        sector_param_overrides=_build_sector_overrides(
+            definition.get("sector_param_overrides") or []
+        ),
     )
     signal_params = definition.get("signal_params")
     if signal_params:
@@ -1067,7 +1098,6 @@ async def manage_formula(
                     name=formula["name"],
                     description=formula.get("description", ""),
                     source=formula["source"],
-                    is_public=formula.get("is_public", False),
                     author=formula.get("author", ""),
                     parameters=parameters,
                     outputs=outputs,
@@ -1085,7 +1115,6 @@ async def manage_formula(
                 name=formula.get("name", ""),
                 description=formula.get("description", ""),
                 source=formula.get("source", ""),
-                is_public=formula.get("is_public", False),
                 parameters=parameters,
                 outputs=outputs,
                 warmup_period=warmup_period,
@@ -1099,7 +1128,7 @@ async def manage_formula(
             resp = await stub.UpdateFormula(
                 req, metadata=_metadata(("x-user-id", formula["user_id"]))
             )
-            return MessageToDict(resp.formula)
+            return _formula_to_dict(resp.formula)
         resp = await stub.DeleteFormula(
             indicators_pb2.DeleteFormulaRequest(
                 formula_id=formula["formula_id"],
@@ -1109,22 +1138,26 @@ async def manage_formula(
         return {"success": resp.success}
 
 
-async def list_formulas(
-    author_filter: str = "",
-    include_public: bool = True,
-) -> list[dict[str, Any]]:
-    """List custom formula definitions via gRPC ListFormulas."""
+async def list_formulas(author_filter: str = "") -> list[dict[str, Any]]:
+    """List the caller's custom formula definitions via gRPC ListFormulas.
+
+    ``author_filter`` is an admin-only owner selector (indicators ignores it for a non-admin)."""
     from gen.indicators.v1 import indicators_pb2, indicators_pb2_grpc  # noqa: PLC0415
 
     async with mtls.secure_channel(INDICATORS_ENDPOINT, "xstockstrat-indicators") as channel:
         stub = indicators_pb2_grpc.IndicatorsServiceStub(channel)
         resp = await stub.ListFormulas(
-            indicators_pb2.ListFormulasRequest(
-                author_filter=author_filter, include_public=include_public
-            ),
+            indicators_pb2.ListFormulasRequest(author_filter=author_filter),
             metadata=_metadata(),
         )
-    return [MessageToDict(f) for f in resp.formulas]
+    return [_formula_to_dict(f) for f in resp.formulas]
+
+
+def _formula_to_dict(formula) -> dict[str, Any]:
+    """camelCase formula projection without the deprecated, always-false ``isPublic``."""
+    d = MessageToDict(formula)
+    d.pop("isPublic", None)
+    return d
 
 
 async def get_formula(formula_id: str) -> dict[str, Any]:
@@ -1141,7 +1174,7 @@ async def get_formula(formula_id: str) -> dict[str, Any]:
             indicators_pb2.GetFormulaRequest(formula_id=formula_id),
             metadata=_metadata(),
         )
-    return MessageToDict(resp)
+    return _formula_to_dict(resp)
 
 
 async def list_fundamental_metrics() -> list[dict[str, Any]]:
@@ -1167,7 +1200,7 @@ async def manage_signal_source(
     update_mask: list[str] | None = None,
     access_scope: int = 0,
 ) -> dict[str, Any]:
-    """Register/update/reactivate/deactivate a signal source via gRPC ManageSignalSource (admin).
+    """Register/update/reactivate/deactivate the caller's signal source via ManageSignalSource.
 
     Feature 088: honest verbs. `operation` maps to the SignalSourceOperation enum; on `update`,
     `update_mask` selects the fields to merge (omitted fields are preserved server-side).
@@ -1211,23 +1244,102 @@ async def manage_signal_source(
     if update_mask:
         req.update_mask.CopyFrom(field_mask_pb2.FieldMask(paths=list(update_mask)))
 
-    # Forward the caller's real derived scope; ingest checks x-access-scope & 0x04, rejecting
-    # a non-admin.
     meta = _metadata(("x-access-scope", str(access_scope)))
     async with mtls.secure_channel(INGEST_ENDPOINT, "xstockstrat-ingest") as channel:
         stub = ingest_pb2_grpc.IngestServiceStub(channel)
         resp = await stub.ManageSignalSource(req, metadata=meta)
+    return _managed_source_to_dict(resp.source)
 
-    # Never echo credentials_ref back to the caller.
+
+def _origin_to_dict(msg) -> dict[str, Any] | None:
+    """Template provenance of an instance (feature 224); None when not instantiated."""
+    if not msg.HasField("origin"):
+        return None
+    return MessageToDict(
+        msg.origin, preserving_proto_field_name=True, always_print_fields_with_no_presence=True
+    )
+
+
+def _managed_source_to_dict(src) -> dict[str, Any]:
+    # credentials_ref / bearer are never echoed (FR-12) — SignalSource carries only has_credentials.
     return {
-        "slug": resp.source.slug,
-        "display_name": resp.source.display_name,
-        "source_type": resp.source.source_type,
-        "extractor_module": resp.source.extractor_module,
-        "active": resp.source.active,
-        "has_credentials": resp.source.has_credentials,
-        "reliability_weight": resp.source.reliability_weight,
+        "slug": src.slug,
+        "display_name": src.display_name,
+        "source_type": src.source_type,
+        "extractor_module": src.extractor_module,
+        "active": src.active,
+        "has_credentials": src.has_credentials,
+        "reliability_weight": src.reliability_weight,
+        "user_id": src.user_id,
+        "origin": _origin_to_dict(src),
     }
+
+
+# ── Template catalog (feature 224) ────────────────────────────────────────────
+TEMPLATE_KINDS = ("formula", "strategy", "signal_source")
+
+
+def _template_target(kind: str):
+    """(pb2 module, stub class, endpoint, authority) of the service that owns ``kind`` templates."""
+    if kind == "formula":
+        from gen.indicators.v1 import indicators_pb2, indicators_pb2_grpc  # noqa: PLC0415
+
+        return (
+            indicators_pb2,
+            indicators_pb2_grpc.IndicatorsServiceStub,
+            INDICATORS_ENDPOINT,
+            "xstockstrat-indicators",
+        )
+    if kind == "strategy":
+        from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc  # noqa: PLC0415
+
+        return (
+            analysis_pb2,
+            analysis_pb2_grpc.AnalysisServiceStub,
+            ANALYSIS_ENDPOINT,
+            "xstockstrat-analysis",
+        )
+    if kind == "signal_source":
+        from gen.ingest.v1 import ingest_pb2, ingest_pb2_grpc  # noqa: PLC0415
+
+        return ingest_pb2, ingest_pb2_grpc.IngestServiceStub, INGEST_ENDPOINT, "xstockstrat-ingest"
+    raise ValueError(f"unknown template kind '{kind}' (expected {', '.join(TEMPLATE_KINDS)})")
+
+
+async def list_templates(kind: str) -> list[dict[str, Any]]:
+    """List the live (non-retired) templates of ``kind`` via the owning service's ListTemplates."""
+    pb2, stub_cls, endpoint, authority = _template_target(kind)
+    async with mtls.secure_channel(endpoint, authority) as channel:
+        resp = await stub_cls(channel).ListTemplates(
+            pb2.ListTemplatesRequest(), metadata=_metadata()
+        )
+    return [MessageToDict(t) for t in resp.templates]
+
+
+async def instantiate_template(
+    kind: str,
+    template_id: str,
+    strategy_id: str = "",
+    slug: str = "",
+    credentials_ref: str = "",
+) -> dict[str, Any]:
+    """Copy a template into a private instance owned by the caller (the forwarded x-user-id)."""
+    pb2, stub_cls, endpoint, authority = _template_target(kind)
+    if kind == "strategy":
+        req = pb2.InstantiateTemplateRequest(template_id=template_id, strategy_id=strategy_id)
+    elif kind == "signal_source":
+        req = pb2.InstantiateTemplateRequest(
+            template_id=template_id, slug=slug, credentials_ref=credentials_ref
+        )
+    else:
+        req = pb2.InstantiateTemplateRequest(template_id=template_id)
+    async with mtls.secure_channel(endpoint, authority) as channel:
+        resp = await stub_cls(channel).InstantiateTemplate(req, metadata=_metadata())
+    if kind == "formula":
+        return _formula_to_dict(resp.formula)
+    if kind == "signal_source":
+        return _managed_source_to_dict(resp)
+    return MessageToDict(resp)
 
 
 # ── OAuth 2.1 backend gRPC helpers (feature 049 Part B) ──────────────────────
@@ -1991,7 +2103,8 @@ async def set_config(
 
     ``is_secret`` (feature 166) is honored only when CREATING a key (``create_key=true``); on an
     existing key the stored row's ``is_secret`` is authoritative and the request flag is ignored by
-    the backend. Used to mint the per-source MCP bearer secret ``ingest.mcp_credential.<slug>``.
+    the backend. Used to mint the caller's per-user MCP bearer secret
+    ``ingest.mcp_credential.<uuid>``.
 
     Feature 073 introduced caller-derived scope here; feature 092 generalized it to every management
     tool (the hardcoded-admin ``_admin_metadata()`` was removed), so this is no longer an exception.

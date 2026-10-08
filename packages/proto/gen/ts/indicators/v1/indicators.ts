@@ -18,7 +18,15 @@ import {
   type ServiceError,
   type UntypedServiceImplementation,
 } from "@grpc/grpc-js";
-import { TimeRange } from "../../common/v1/common";
+import {
+  TemplateMeta,
+  TemplateOperation,
+  templateOperationFromJSON,
+  templateOperationToJSON,
+  templateOperationToNumber,
+  TemplateOrigin,
+  TimeRange,
+} from "../../common/v1/common";
 import { FieldMask } from "../../google/protobuf/field_mask";
 import { Struct, Value } from "../../google/protobuf/struct";
 import { Timestamp } from "../../google/protobuf/timestamp";
@@ -427,7 +435,14 @@ export interface FormulaDefinition {
   source: string;
   author: string;
   createdAt?: Date | undefined;
-  updatedAt?: Date | undefined;
+  updatedAt?:
+    | Date
+    | undefined;
+  /**
+   * DEPRECATED: ignored, formulas are private to their author (feature 224); always false.
+   *
+   * @deprecated
+   */
   isPublic: boolean;
   /** expected input keys and types */
   inputSchema: { [key: string]: string };
@@ -446,6 +461,8 @@ export interface FormulaDefinition {
    * scalars, never OHLCV closes (feature 200); the category marker (no separate flag).
    */
   fundamentalInputs: FundamentalMetric[];
+  /** set when instantiated from a template (feature 224) */
+  origin?: TemplateOrigin | undefined;
 }
 
 export interface FormulaDefinition_InputSchemaEntry {
@@ -471,9 +488,18 @@ export interface RegisterFormulaRequest {
   name: string;
   description: string;
   source: string;
+  /**
+   * DEPRECATED: ignored, formulas are private to their author (feature 224).
+   *
+   * @deprecated
+   */
   isPublic: boolean;
   inputSchema: { [key: string]: string };
-  /** set by BFF from JWT claims; stored immutably */
+  /**
+   * DEPRECATED: ignored; author is the x-user-id header (feature 224).
+   *
+   * @deprecated
+   */
   author: string;
   parameters: FormulaParameter[];
   /** declared output series (beyond implicit "value") */
@@ -498,9 +524,13 @@ export interface GetFormulaRequest {
 }
 
 export interface ListFormulasRequest {
-  /** if non-empty, return only formulas where author == author_filter */
+  /** owner selector honoured only for an ADMIN caller; ignored otherwise (feature 224) */
   authorFilter: string;
-  /** if true, include all public formulas regardless of author_filter */
+  /**
+   * DEPRECATED: ignored, formulas are private to their author (feature 224).
+   *
+   * @deprecated
+   */
   includePublic: boolean;
   /** default 0 = no limit */
   pageSize: number;
@@ -524,6 +554,11 @@ export interface UpdateFormulaRequest {
   name: string;
   description: string;
   source: string;
+  /**
+   * DEPRECATED: ignored, formulas are private to their author (feature 224).
+   *
+   * @deprecated
+   */
   isPublic: boolean;
   parameters: FormulaParameter[];
   /** declared output series (beyond implicit "value") */
@@ -574,6 +609,63 @@ export interface FundamentalMetricInfo {
 
 export interface ListFundamentalMetricsResponse {
   metrics: FundamentalMetricInfo[];
+}
+
+/** feature 224 — formula template catalog. */
+export interface FormulaTemplate {
+  meta?:
+    | TemplateMeta
+    | undefined;
+  /**
+   * The deprecated is_public (4) and author (6) inside payload are ignored on instantiate: the
+   * instance is private and its author is the instantiating caller's x-user-id.
+   */
+  payload?: RegisterFormulaRequest | undefined;
+}
+
+export interface ListTemplatesRequest {
+}
+
+export interface ListTemplatesResponse {
+  templates: FormulaTemplate[];
+}
+
+export interface ManageTemplateRequest {
+  operation: TemplateOperation;
+  template?: FormulaTemplate | undefined;
+}
+
+export interface InstantiateTemplateRequest {
+  templateId: string;
+  /**
+   * Saga-only (internal, SAN-bound xstockstrat-analysis): copy several templates as hidden
+   * pending rows under intent_id, resolved later by ResolveTemplateIntent.
+   */
+  templateIds: string[];
+  intentId: string;
+}
+
+export interface InstantiateTemplateResponse {
+  formula?:
+    | FormulaDefinition
+    | undefined;
+  /** saga path: template_id -> new formula_id */
+  formulaIdsByTemplate: { [key: string]: string };
+}
+
+export interface InstantiateTemplateResponse_FormulaIdsByTemplateEntry {
+  key: string;
+  value: string;
+}
+
+export interface ResolveTemplateIntentRequest {
+  intentId: string;
+  /** true = make the pending copies visible; false = delete them */
+  commit: boolean;
+}
+
+export interface ResolveTemplateIntentResponse {
+  affected: number;
 }
 
 function createBaseComputeIndicatorRequest(): ComputeIndicatorRequest {
@@ -2093,6 +2185,7 @@ function createBaseFormulaDefinition(): FormulaDefinition {
     warmupPeriod: 0,
     deleted: false,
     fundamentalInputs: [],
+    origin: undefined,
   };
 }
 
@@ -2142,6 +2235,9 @@ export const FormulaDefinition: MessageFns<FormulaDefinition> = {
       writer.int32(fundamentalMetricToNumber(v));
     }
     writer.join();
+    if (message.origin !== undefined) {
+      TemplateOrigin.encode(message.origin, writer.uint32(122).fork()).join();
+    }
     return writer;
   },
 
@@ -2277,6 +2373,14 @@ export const FormulaDefinition: MessageFns<FormulaDefinition> = {
 
           break;
         }
+        case 15: {
+          if (tag !== 122) {
+            break;
+          }
+
+          message.origin = TemplateOrigin.decode(reader, reader.uint32());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -2346,6 +2450,7 @@ export const FormulaDefinition: MessageFns<FormulaDefinition> = {
         : globalThis.Array.isArray(object?.fundamental_inputs)
         ? object.fundamental_inputs.map((e: any) => fundamentalMetricFromJSON(e))
         : [],
+      origin: isSet(object.origin) ? TemplateOrigin.fromJSON(object.origin) : undefined,
     };
   },
 
@@ -2399,6 +2504,9 @@ export const FormulaDefinition: MessageFns<FormulaDefinition> = {
     if (message.fundamentalInputs?.length) {
       obj.fundamentalInputs = message.fundamentalInputs.map((e) => fundamentalMetricToJSON(e));
     }
+    if (message.origin !== undefined) {
+      obj.origin = TemplateOrigin.toJSON(message.origin);
+    }
     return obj;
   },
 
@@ -2429,6 +2537,9 @@ export const FormulaDefinition: MessageFns<FormulaDefinition> = {
     message.warmupPeriod = object.warmupPeriod ?? 0;
     message.deleted = object.deleted ?? false;
     message.fundamentalInputs = object.fundamentalInputs?.map((e) => e) || [];
+    message.origin = (object.origin !== undefined && object.origin !== null)
+      ? TemplateOrigin.fromPartial(object.origin)
+      : undefined;
     return message;
   },
 };
@@ -4103,6 +4214,710 @@ export const ListFundamentalMetricsResponse: MessageFns<ListFundamentalMetricsRe
   },
 };
 
+function createBaseFormulaTemplate(): FormulaTemplate {
+  return { meta: undefined, payload: undefined };
+}
+
+export const FormulaTemplate: MessageFns<FormulaTemplate> = {
+  encode(message: FormulaTemplate, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.meta !== undefined) {
+      TemplateMeta.encode(message.meta, writer.uint32(10).fork()).join();
+    }
+    if (message.payload !== undefined) {
+      RegisterFormulaRequest.encode(message.payload, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): FormulaTemplate {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseFormulaTemplate();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.meta = TemplateMeta.decode(reader, reader.uint32());
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.payload = RegisterFormulaRequest.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): FormulaTemplate {
+    return {
+      meta: isSet(object.meta) ? TemplateMeta.fromJSON(object.meta) : undefined,
+      payload: isSet(object.payload) ? RegisterFormulaRequest.fromJSON(object.payload) : undefined,
+    };
+  },
+
+  toJSON(message: FormulaTemplate): unknown {
+    const obj: any = {};
+    if (message.meta !== undefined) {
+      obj.meta = TemplateMeta.toJSON(message.meta);
+    }
+    if (message.payload !== undefined) {
+      obj.payload = RegisterFormulaRequest.toJSON(message.payload);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<FormulaTemplate>, I>>(base?: I): FormulaTemplate {
+    return FormulaTemplate.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<FormulaTemplate>, I>>(object: I): FormulaTemplate {
+    const message = createBaseFormulaTemplate();
+    message.meta = (object.meta !== undefined && object.meta !== null)
+      ? TemplateMeta.fromPartial(object.meta)
+      : undefined;
+    message.payload = (object.payload !== undefined && object.payload !== null)
+      ? RegisterFormulaRequest.fromPartial(object.payload)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseListTemplatesRequest(): ListTemplatesRequest {
+  return {};
+}
+
+export const ListTemplatesRequest: MessageFns<ListTemplatesRequest> = {
+  encode(_: ListTemplatesRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListTemplatesRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseListTemplatesRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(_: any): ListTemplatesRequest {
+    return {};
+  },
+
+  toJSON(_: ListTemplatesRequest): unknown {
+    const obj: any = {};
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ListTemplatesRequest>, I>>(base?: I): ListTemplatesRequest {
+    return ListTemplatesRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ListTemplatesRequest>, I>>(_: I): ListTemplatesRequest {
+    const message = createBaseListTemplatesRequest();
+    return message;
+  },
+};
+
+function createBaseListTemplatesResponse(): ListTemplatesResponse {
+  return { templates: [] };
+}
+
+export const ListTemplatesResponse: MessageFns<ListTemplatesResponse> = {
+  encode(message: ListTemplatesResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.templates) {
+      FormulaTemplate.encode(v!, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListTemplatesResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseListTemplatesResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.templates.push(FormulaTemplate.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ListTemplatesResponse {
+    return {
+      templates: globalThis.Array.isArray(object?.templates)
+        ? object.templates.map((e: any) => FormulaTemplate.fromJSON(e))
+        : [],
+    };
+  },
+
+  toJSON(message: ListTemplatesResponse): unknown {
+    const obj: any = {};
+    if (message.templates?.length) {
+      obj.templates = message.templates.map((e) => FormulaTemplate.toJSON(e));
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ListTemplatesResponse>, I>>(base?: I): ListTemplatesResponse {
+    return ListTemplatesResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ListTemplatesResponse>, I>>(object: I): ListTemplatesResponse {
+    const message = createBaseListTemplatesResponse();
+    message.templates = object.templates?.map((e) => FormulaTemplate.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseManageTemplateRequest(): ManageTemplateRequest {
+  return { operation: TemplateOperation.TEMPLATE_OPERATION_UNSPECIFIED, template: undefined };
+}
+
+export const ManageTemplateRequest: MessageFns<ManageTemplateRequest> = {
+  encode(message: ManageTemplateRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.operation !== TemplateOperation.TEMPLATE_OPERATION_UNSPECIFIED) {
+      writer.uint32(8).int32(templateOperationToNumber(message.operation));
+    }
+    if (message.template !== undefined) {
+      FormulaTemplate.encode(message.template, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ManageTemplateRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseManageTemplateRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.operation = templateOperationFromJSON(reader.int32());
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.template = FormulaTemplate.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ManageTemplateRequest {
+    return {
+      operation: isSet(object.operation)
+        ? templateOperationFromJSON(object.operation)
+        : TemplateOperation.TEMPLATE_OPERATION_UNSPECIFIED,
+      template: isSet(object.template) ? FormulaTemplate.fromJSON(object.template) : undefined,
+    };
+  },
+
+  toJSON(message: ManageTemplateRequest): unknown {
+    const obj: any = {};
+    if (message.operation !== TemplateOperation.TEMPLATE_OPERATION_UNSPECIFIED) {
+      obj.operation = templateOperationToJSON(message.operation);
+    }
+    if (message.template !== undefined) {
+      obj.template = FormulaTemplate.toJSON(message.template);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ManageTemplateRequest>, I>>(base?: I): ManageTemplateRequest {
+    return ManageTemplateRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ManageTemplateRequest>, I>>(object: I): ManageTemplateRequest {
+    const message = createBaseManageTemplateRequest();
+    message.operation = object.operation ?? TemplateOperation.TEMPLATE_OPERATION_UNSPECIFIED;
+    message.template = (object.template !== undefined && object.template !== null)
+      ? FormulaTemplate.fromPartial(object.template)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseInstantiateTemplateRequest(): InstantiateTemplateRequest {
+  return { templateId: "", templateIds: [], intentId: "" };
+}
+
+export const InstantiateTemplateRequest: MessageFns<InstantiateTemplateRequest> = {
+  encode(message: InstantiateTemplateRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.templateId !== "") {
+      writer.uint32(10).string(message.templateId);
+    }
+    for (const v of message.templateIds) {
+      writer.uint32(18).string(v!);
+    }
+    if (message.intentId !== "") {
+      writer.uint32(26).string(message.intentId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): InstantiateTemplateRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseInstantiateTemplateRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.templateId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.templateIds.push(reader.string());
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.intentId = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): InstantiateTemplateRequest {
+    return {
+      templateId: isSet(object.templateId)
+        ? globalThis.String(object.templateId)
+        : isSet(object.template_id)
+        ? globalThis.String(object.template_id)
+        : "",
+      templateIds: globalThis.Array.isArray(object?.templateIds)
+        ? object.templateIds.map((e: any) => globalThis.String(e))
+        : globalThis.Array.isArray(object?.template_ids)
+        ? object.template_ids.map((e: any) => globalThis.String(e))
+        : [],
+      intentId: isSet(object.intentId)
+        ? globalThis.String(object.intentId)
+        : isSet(object.intent_id)
+        ? globalThis.String(object.intent_id)
+        : "",
+    };
+  },
+
+  toJSON(message: InstantiateTemplateRequest): unknown {
+    const obj: any = {};
+    if (message.templateId !== "") {
+      obj.templateId = message.templateId;
+    }
+    if (message.templateIds?.length) {
+      obj.templateIds = message.templateIds;
+    }
+    if (message.intentId !== "") {
+      obj.intentId = message.intentId;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<InstantiateTemplateRequest>, I>>(base?: I): InstantiateTemplateRequest {
+    return InstantiateTemplateRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<InstantiateTemplateRequest>, I>>(object: I): InstantiateTemplateRequest {
+    const message = createBaseInstantiateTemplateRequest();
+    message.templateId = object.templateId ?? "";
+    message.templateIds = object.templateIds?.map((e) => e) || [];
+    message.intentId = object.intentId ?? "";
+    return message;
+  },
+};
+
+function createBaseInstantiateTemplateResponse(): InstantiateTemplateResponse {
+  return { formula: undefined, formulaIdsByTemplate: {} };
+}
+
+export const InstantiateTemplateResponse: MessageFns<InstantiateTemplateResponse> = {
+  encode(message: InstantiateTemplateResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.formula !== undefined) {
+      FormulaDefinition.encode(message.formula, writer.uint32(10).fork()).join();
+    }
+    globalThis.Object.entries(message.formulaIdsByTemplate).forEach(([key, value]: [string, string]) => {
+      InstantiateTemplateResponse_FormulaIdsByTemplateEntry.encode({ key: key as any, value }, writer.uint32(18).fork())
+        .join();
+    });
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): InstantiateTemplateResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseInstantiateTemplateResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.formula = FormulaDefinition.decode(reader, reader.uint32());
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          const entry2 = InstantiateTemplateResponse_FormulaIdsByTemplateEntry.decode(reader, reader.uint32());
+          if (entry2.value !== undefined) {
+            message.formulaIdsByTemplate[entry2.key] = entry2.value;
+          }
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): InstantiateTemplateResponse {
+    return {
+      formula: isSet(object.formula) ? FormulaDefinition.fromJSON(object.formula) : undefined,
+      formulaIdsByTemplate: isObject(object.formulaIdsByTemplate)
+        ? (globalThis.Object.entries(object.formulaIdsByTemplate) as [string, any][]).reduce(
+          (acc: { [key: string]: string }, [key, value]: [string, any]) => {
+            acc[key] = globalThis.String(value);
+            return acc;
+          },
+          {},
+        )
+        : isObject(object.formula_ids_by_template)
+        ? (globalThis.Object.entries(object.formula_ids_by_template) as [string, any][]).reduce(
+          (acc: { [key: string]: string }, [key, value]: [string, any]) => {
+            acc[key] = globalThis.String(value);
+            return acc;
+          },
+          {},
+        )
+        : {},
+    };
+  },
+
+  toJSON(message: InstantiateTemplateResponse): unknown {
+    const obj: any = {};
+    if (message.formula !== undefined) {
+      obj.formula = FormulaDefinition.toJSON(message.formula);
+    }
+    if (message.formulaIdsByTemplate) {
+      const entries = globalThis.Object.entries(message.formulaIdsByTemplate) as [string, string][];
+      if (entries.length > 0) {
+        obj.formulaIdsByTemplate = {};
+        entries.forEach(([k, v]) => {
+          obj.formulaIdsByTemplate[k] = v;
+        });
+      }
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<InstantiateTemplateResponse>, I>>(base?: I): InstantiateTemplateResponse {
+    return InstantiateTemplateResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<InstantiateTemplateResponse>, I>>(object: I): InstantiateTemplateResponse {
+    const message = createBaseInstantiateTemplateResponse();
+    message.formula = (object.formula !== undefined && object.formula !== null)
+      ? FormulaDefinition.fromPartial(object.formula)
+      : undefined;
+    message.formulaIdsByTemplate = (globalThis.Object.entries(object.formulaIdsByTemplate ?? {}) as [string, string][])
+      .reduce((acc: { [key: string]: string }, [key, value]: [string, string]) => {
+        if (value !== undefined) {
+          acc[key] = globalThis.String(value);
+        }
+        return acc;
+      }, {});
+    return message;
+  },
+};
+
+function createBaseInstantiateTemplateResponse_FormulaIdsByTemplateEntry(): InstantiateTemplateResponse_FormulaIdsByTemplateEntry {
+  return { key: "", value: "" };
+}
+
+export const InstantiateTemplateResponse_FormulaIdsByTemplateEntry: MessageFns<
+  InstantiateTemplateResponse_FormulaIdsByTemplateEntry
+> = {
+  encode(
+    message: InstantiateTemplateResponse_FormulaIdsByTemplateEntry,
+    writer: BinaryWriter = new BinaryWriter(),
+  ): BinaryWriter {
+    if (message.key !== "") {
+      writer.uint32(10).string(message.key);
+    }
+    if (message.value !== "") {
+      writer.uint32(18).string(message.value);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): InstantiateTemplateResponse_FormulaIdsByTemplateEntry {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseInstantiateTemplateResponse_FormulaIdsByTemplateEntry();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.key = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.value = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): InstantiateTemplateResponse_FormulaIdsByTemplateEntry {
+    return {
+      key: isSet(object.key) ? globalThis.String(object.key) : "",
+      value: isSet(object.value) ? globalThis.String(object.value) : "",
+    };
+  },
+
+  toJSON(message: InstantiateTemplateResponse_FormulaIdsByTemplateEntry): unknown {
+    const obj: any = {};
+    if (message.key !== "") {
+      obj.key = message.key;
+    }
+    if (message.value !== "") {
+      obj.value = message.value;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<InstantiateTemplateResponse_FormulaIdsByTemplateEntry>, I>>(
+    base?: I,
+  ): InstantiateTemplateResponse_FormulaIdsByTemplateEntry {
+    return InstantiateTemplateResponse_FormulaIdsByTemplateEntry.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<InstantiateTemplateResponse_FormulaIdsByTemplateEntry>, I>>(
+    object: I,
+  ): InstantiateTemplateResponse_FormulaIdsByTemplateEntry {
+    const message = createBaseInstantiateTemplateResponse_FormulaIdsByTemplateEntry();
+    message.key = object.key ?? "";
+    message.value = object.value ?? "";
+    return message;
+  },
+};
+
+function createBaseResolveTemplateIntentRequest(): ResolveTemplateIntentRequest {
+  return { intentId: "", commit: false };
+}
+
+export const ResolveTemplateIntentRequest: MessageFns<ResolveTemplateIntentRequest> = {
+  encode(message: ResolveTemplateIntentRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.intentId !== "") {
+      writer.uint32(10).string(message.intentId);
+    }
+    if (message.commit !== false) {
+      writer.uint32(16).bool(message.commit);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ResolveTemplateIntentRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseResolveTemplateIntentRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.intentId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.commit = reader.bool();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ResolveTemplateIntentRequest {
+    return {
+      intentId: isSet(object.intentId)
+        ? globalThis.String(object.intentId)
+        : isSet(object.intent_id)
+        ? globalThis.String(object.intent_id)
+        : "",
+      commit: isSet(object.commit) ? globalThis.Boolean(object.commit) : false,
+    };
+  },
+
+  toJSON(message: ResolveTemplateIntentRequest): unknown {
+    const obj: any = {};
+    if (message.intentId !== "") {
+      obj.intentId = message.intentId;
+    }
+    if (message.commit !== false) {
+      obj.commit = message.commit;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ResolveTemplateIntentRequest>, I>>(base?: I): ResolveTemplateIntentRequest {
+    return ResolveTemplateIntentRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ResolveTemplateIntentRequest>, I>>(object: I): ResolveTemplateIntentRequest {
+    const message = createBaseResolveTemplateIntentRequest();
+    message.intentId = object.intentId ?? "";
+    message.commit = object.commit ?? false;
+    return message;
+  },
+};
+
+function createBaseResolveTemplateIntentResponse(): ResolveTemplateIntentResponse {
+  return { affected: 0 };
+}
+
+export const ResolveTemplateIntentResponse: MessageFns<ResolveTemplateIntentResponse> = {
+  encode(message: ResolveTemplateIntentResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.affected !== 0) {
+      writer.uint32(8).int32(message.affected);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ResolveTemplateIntentResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseResolveTemplateIntentResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.affected = reader.int32();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ResolveTemplateIntentResponse {
+    return { affected: isSet(object.affected) ? globalThis.Number(object.affected) : 0 };
+  },
+
+  toJSON(message: ResolveTemplateIntentResponse): unknown {
+    const obj: any = {};
+    if (message.affected !== 0) {
+      obj.affected = Math.round(message.affected);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ResolveTemplateIntentResponse>, I>>(base?: I): ResolveTemplateIntentResponse {
+    return ResolveTemplateIntentResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ResolveTemplateIntentResponse>, I>>(
+    object: I,
+  ): ResolveTemplateIntentResponse {
+    const message = createBaseResolveTemplateIntentResponse();
+    message.affected = object.affected ?? 0;
+    return message;
+  },
+};
+
 /**
  * IndicatorsService — formula engine and sandboxed Python execution.
  * Sandbox timeout and memory limits are configured via xstockstrat-config.
@@ -4222,6 +5037,51 @@ export const IndicatorsServiceService = {
     responseDeserialize: (value: Buffer): ListFundamentalMetricsResponse =>
       ListFundamentalMetricsResponse.decode(value),
   },
+  /** Template catalog (feature 224). List/read: any authenticated caller. Manage: ADMIN only. */
+  listTemplates: {
+    path: "/xstockstrat.indicators.v1.IndicatorsService/ListTemplates" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ListTemplatesRequest): Buffer => Buffer.from(ListTemplatesRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ListTemplatesRequest => ListTemplatesRequest.decode(value),
+    responseSerialize: (value: ListTemplatesResponse): Buffer =>
+      Buffer.from(ListTemplatesResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ListTemplatesResponse => ListTemplatesResponse.decode(value),
+  },
+  manageTemplate: {
+    path: "/xstockstrat.indicators.v1.IndicatorsService/ManageTemplate" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ManageTemplateRequest): Buffer =>
+      Buffer.from(ManageTemplateRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ManageTemplateRequest => ManageTemplateRequest.decode(value),
+    responseSerialize: (value: FormulaTemplate): Buffer => Buffer.from(FormulaTemplate.encode(value).finish()),
+    responseDeserialize: (value: Buffer): FormulaTemplate => FormulaTemplate.decode(value),
+  },
+  /** Copies a formula template into a private formula owned by the x-user-id caller. */
+  instantiateTemplate: {
+    path: "/xstockstrat.indicators.v1.IndicatorsService/InstantiateTemplate" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: InstantiateTemplateRequest): Buffer =>
+      Buffer.from(InstantiateTemplateRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): InstantiateTemplateRequest => InstantiateTemplateRequest.decode(value),
+    responseSerialize: (value: InstantiateTemplateResponse): Buffer =>
+      Buffer.from(InstantiateTemplateResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): InstantiateTemplateResponse => InstantiateTemplateResponse.decode(value),
+  },
+  /** Internal (SAN-bound xstockstrat-analysis): commits or aborts a strategy-template saga's copies. */
+  resolveTemplateIntent: {
+    path: "/xstockstrat.indicators.v1.IndicatorsService/ResolveTemplateIntent" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ResolveTemplateIntentRequest): Buffer =>
+      Buffer.from(ResolveTemplateIntentRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ResolveTemplateIntentRequest => ResolveTemplateIntentRequest.decode(value),
+    responseSerialize: (value: ResolveTemplateIntentResponse): Buffer =>
+      Buffer.from(ResolveTemplateIntentResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ResolveTemplateIntentResponse => ResolveTemplateIntentResponse.decode(value),
+  },
 } as const;
 
 export interface IndicatorsServiceServer extends UntypedServiceImplementation {
@@ -4252,6 +5112,13 @@ export interface IndicatorsServiceServer extends UntypedServiceImplementation {
   deleteFormula: handleUnaryCall<DeleteFormulaRequest, DeleteFormulaResponse>;
   /** List the available fundamental metrics for formula declarations (feature 205) */
   listFundamentalMetrics: handleUnaryCall<ListFundamentalMetricsRequest, ListFundamentalMetricsResponse>;
+  /** Template catalog (feature 224). List/read: any authenticated caller. Manage: ADMIN only. */
+  listTemplates: handleUnaryCall<ListTemplatesRequest, ListTemplatesResponse>;
+  manageTemplate: handleUnaryCall<ManageTemplateRequest, FormulaTemplate>;
+  /** Copies a formula template into a private formula owned by the x-user-id caller. */
+  instantiateTemplate: handleUnaryCall<InstantiateTemplateRequest, InstantiateTemplateResponse>;
+  /** Internal (SAN-bound xstockstrat-analysis): commits or aborts a strategy-template saga's copies. */
+  resolveTemplateIntent: handleUnaryCall<ResolveTemplateIntentRequest, ResolveTemplateIntentResponse>;
 }
 
 export interface IndicatorsServiceClient extends Client {
@@ -4407,6 +5274,69 @@ export interface IndicatorsServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: ListFundamentalMetricsResponse) => void,
+  ): ClientUnaryCall;
+  /** Template catalog (feature 224). List/read: any authenticated caller. Manage: ADMIN only. */
+  listTemplates(
+    request: ListTemplatesRequest,
+    callback: (error: ServiceError | null, response: ListTemplatesResponse) => void,
+  ): ClientUnaryCall;
+  listTemplates(
+    request: ListTemplatesRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ListTemplatesResponse) => void,
+  ): ClientUnaryCall;
+  listTemplates(
+    request: ListTemplatesRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ListTemplatesResponse) => void,
+  ): ClientUnaryCall;
+  manageTemplate(
+    request: ManageTemplateRequest,
+    callback: (error: ServiceError | null, response: FormulaTemplate) => void,
+  ): ClientUnaryCall;
+  manageTemplate(
+    request: ManageTemplateRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: FormulaTemplate) => void,
+  ): ClientUnaryCall;
+  manageTemplate(
+    request: ManageTemplateRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: FormulaTemplate) => void,
+  ): ClientUnaryCall;
+  /** Copies a formula template into a private formula owned by the x-user-id caller. */
+  instantiateTemplate(
+    request: InstantiateTemplateRequest,
+    callback: (error: ServiceError | null, response: InstantiateTemplateResponse) => void,
+  ): ClientUnaryCall;
+  instantiateTemplate(
+    request: InstantiateTemplateRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: InstantiateTemplateResponse) => void,
+  ): ClientUnaryCall;
+  instantiateTemplate(
+    request: InstantiateTemplateRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: InstantiateTemplateResponse) => void,
+  ): ClientUnaryCall;
+  /** Internal (SAN-bound xstockstrat-analysis): commits or aborts a strategy-template saga's copies. */
+  resolveTemplateIntent(
+    request: ResolveTemplateIntentRequest,
+    callback: (error: ServiceError | null, response: ResolveTemplateIntentResponse) => void,
+  ): ClientUnaryCall;
+  resolveTemplateIntent(
+    request: ResolveTemplateIntentRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ResolveTemplateIntentResponse) => void,
+  ): ClientUnaryCall;
+  resolveTemplateIntent(
+    request: ResolveTemplateIntentRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ResolveTemplateIntentResponse) => void,
   ): ClientUnaryCall;
 }
 

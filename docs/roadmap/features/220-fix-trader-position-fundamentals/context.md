@@ -14,3 +14,8 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Root cause hypothesis: no deadline at any hop (trader BFF `getFundamentals` forwarded without `timeoutMs`; browser transport sets none), so a hung upstream never settles `isLoading`
 - Recommended design depth: skip → `/sdd-spec fix-trader-position-fundamentals` (rationale: SEV-3, single service, no proto/migration/config, clear root cause)
 - Development branch: feature/fix-trader-position-fundamentals
+
+## Session 2026-10-06 — /sdd-spec (skip design) + /sdd-execute sequential
+
+- Root cause confirmed: trader BFF `getFundamentals` forwarded without `timeoutMs`. Fix: shared `FUNDAMENTALS_TIMEOUT_MS` (15s) in `bffShared.ts`, applied to trader + insights fundamentals forwards.
+- RED proven on pre-fix tree via the `STALL` sentinel e2e; GREEN after fix. Status → code-completed.

@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { BacktestResult, EvaluateReadinessRequest, EvaluateReadinessResponse, FundamentalsScanSummary, GetAttributionRequest, GetAttributionResponse, GetBacktestRequest, GetIndicatorSeriesRequest, GetIndicatorSeriesResponse, GetStrategyAnalyticsRequest, GetStrategyReportRequest, GetStrategyRequest, GetWatchlistReadinessRequest, GetWatchlistReadinessResponse, ListBacktestsRequest, ListBacktestsResponse, ListOpportunitiesRequest, ListOpportunitiesResponse, ListStrategiesRequest, ListStrategiesResponse, ListStrategyDefinitionsRequest, ListStrategyDefinitionsResponse, ManageStrategyRequest, QueryPnLPatternsRequest, QueryPnLPatternsResponse, RunBacktestRequest, RunFundamentalsScanRequest, ScoreStrategyRequest, ScreenSymbolsRequest, ScreenSymbolsResponse, SetOpportunityActionRequest, SetOpportunityActionResponse, SetStrategyLiveRequest, SetStrategyLiveResponse, StrategyAnalytics, StrategyDefinition, StrategyReport, StrategyScore } from "./analysis_pb.js";
+import { BacktestResult, EvaluateReadinessRequest, EvaluateReadinessResponse, FundamentalsScanSummary, GetAttributionRequest, GetAttributionResponse, GetBacktestRequest, GetIndicatorSeriesRequest, GetIndicatorSeriesResponse, GetStrategyAnalyticsRequest, GetStrategyReportRequest, GetStrategyRequest, GetWatchlistReadinessRequest, GetWatchlistReadinessResponse, InstantiateTemplateRequest, ListBacktestsRequest, ListBacktestsResponse, ListOpportunitiesRequest, ListOpportunitiesResponse, ListStrategiesRequest, ListStrategiesResponse, ListStrategyDefinitionsRequest, ListStrategyDefinitionsResponse, ListTemplatesRequest, ListTemplatesResponse, ManageStrategyRequest, ManageTemplateRequest, QueryPnLPatternsRequest, QueryPnLPatternsResponse, RunBacktestRequest, RunFundamentalsScanRequest, ScoreStrategyRequest, ScreenSymbolsRequest, ScreenSymbolsResponse, SetOpportunityActionRequest, SetOpportunityActionResponse, SetStrategyLiveRequest, SetStrategyLiveResponse, StrategyAnalytics, StrategyDefinition, StrategyReport, StrategyScore, StrategyTemplate } from "./analysis_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -226,6 +226,38 @@ export const AnalysisService = {
       name: "GetWatchlistReadiness",
       I: GetWatchlistReadinessRequest,
       O: GetWatchlistReadinessResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Template catalog (feature 224). List/read: any authenticated caller. Manage: ADMIN only.
+     *
+     * @generated from rpc xstockstrat.analysis.v1.AnalysisService.ListTemplates
+     */
+    listTemplates: {
+      name: "ListTemplates",
+      I: ListTemplatesRequest,
+      O: ListTemplatesResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc xstockstrat.analysis.v1.AnalysisService.ManageTemplate
+     */
+    manageTemplate: {
+      name: "ManageTemplate",
+      I: ManageTemplateRequest,
+      O: StrategyTemplate,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Deep-copies a strategy template (and its formula templates) into private copies owned by the
+     * x-user-id caller, atomically (FR-9).
+     *
+     * @generated from rpc xstockstrat.analysis.v1.AnalysisService.InstantiateTemplate
+     */
+    instantiateTemplate: {
+      name: "InstantiateTemplate",
+      I: InstantiateTemplateRequest,
+      O: StrategyDefinition,
       kind: MethodKind.Unary,
     },
   }

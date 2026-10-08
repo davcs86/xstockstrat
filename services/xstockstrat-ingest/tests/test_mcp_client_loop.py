@@ -13,6 +13,7 @@ from app.engine import mcp_client_loop as loop
 from app.repositories.signal_sources import derive_health_status
 from tests._helpers import transaction_conn
 from tests.test_ingest_servicer import make_servicer
+from tests.test_mcp_client import _FakeSecretStub, _watcher_with
 
 
 class _FakeResult:
@@ -61,13 +62,14 @@ class _FakeCfgWatcher:
     def get_int(self, key, default=0):
         return self._ints.get(key, default)
 
-    async def resolve_secret(self, key):
+    async def resolve_secret(self, key, user_id=""):
         self.resolve_calls.append(key)
         return self._bearer
 
 
 def _mcp_source(slug="acme-mcp", endpoint="https://mcp.acme.example/mcp", **over):
     row = {
+        "user_id": "seed-user",  # feature 224: list_all_sources selects the owner
         "slug": slug,
         "source_type": "mcp_client",
         "config_json": {"mcp_endpoint": endpoint, "mcp_tool": "get_signals"},
@@ -147,8 +149,8 @@ async def test_second_identical_cycle_deduplicates(monkeypatch):
     results = []
     orig = svc._ingest_external_signal
 
-    async def spy(signal, propagation_meta=None):
-        r = await orig(signal, propagation_meta)
+    async def spy(signal, propagation_meta=None, owner=None):
+        r = await orig(signal, propagation_meta, owner=owner)
         results.append(r)
         return r
 
@@ -175,7 +177,7 @@ async def test_source_failure_records_health_and_continues(monkeypatch):
 
     errors = []
 
-    async def fake_mark_error(db, slug, error):
+    async def fake_mark_error(db, user_id, slug, error):
         errors.append((slug, error))
 
     monkeypatch.setattr(loop, "mark_source_error", AsyncMock(side_effect=fake_mark_error))
@@ -195,3 +197,78 @@ async def test_source_failure_records_health_and_continues(monkeypatch):
 
     # A source whose last op errored derives to degraded health (down).
     assert derive_health_status(None, "HTTP 401 Unauthorized", datetime.now(UTC)) == "down"
+
+
+class _PerOwnerCfgWatcher(_FakeCfgWatcher):
+    """GetSecret fake with exact (key, user_id) scope — an unscoped lookup finds nothing."""
+
+    def __init__(self, secrets):
+        super().__init__()
+        self._secrets = secrets
+        self.scoped_calls = []
+
+    async def resolve_secret(self, key, user_id=""):
+        self.scoped_calls.append((key, user_id))
+        return self._secrets.get((key, user_id), ("", False))
+
+
+async def test_per_owner_bearers_and_ingest_as_owner(monkeypatch):
+    # feature 224 AC-35: alice and bob each own `acme-mcp`; each poll carries its owner's bearer,
+    # GetSecret is owner-scoped, and each signal is filed under its owner (never slug-resolved).
+    sources = [_mcp_source(user_id="alice"), _mcp_source(user_id="bob")]
+    monkeypatch.setattr(loop, "list_all_sources", AsyncMock(return_value=sources))
+    db, conn = transaction_conn(
+        db_fetchrow_side_effect=[{"slug": "acme-mcp"}, {"slug": "acme-mcp"}],
+        conn_fetchrow_side_effect=[{"id": 1}, {"signal_id": 1}, {"id": 2}, {"signal_id": 2}],
+        slug_holders=("alice", "bob"),
+    )
+    svc = make_servicer(db=db)
+    svc._db = db
+    key = "mcp_credential.acme-mcp"
+    cfg = _PerOwnerCfgWatcher({(key, "alice"): ("tok-a", True), (key, "bob"): ("tok-b", True)})
+    item = {"symbol": "AAPL", "direction": "buy", "conviction": 0.7}
+    mcp = _FakeMcpClient(result=_FakeResult([item]))
+
+    await loop.run_one_cycle(svc, cfg, mcp)
+
+    assert cfg.scoped_calls == [(key, "alice"), (key, "bob")]
+    assert [c["bearer"] for c in mcp.calls] == ["tok-a", "tok-b"]
+    inserts = [
+        c
+        for c in conn.fetchrow.await_args_list
+        if "INSERT INTO ingest.newsletter_signals" in c.args[0]
+    ]
+    assert [c.args[-1] for c in inserts] == ["alice", "bob"]
+
+
+async def test_empty_string_bearer_treated_as_missing(monkeypatch):
+    # feature 224 AC-35: GetSecret found:true with '' plaintext is NOT a usable bearer.
+    monkeypatch.setattr(
+        loop, "list_all_sources", AsyncMock(return_value=[_mcp_source(user_id="alice")])
+    )
+    mark_error = AsyncMock()
+    monkeypatch.setattr(loop, "mark_source_error", mark_error)
+    servicer = MagicMock()
+    servicer._db = MagicMock()
+    servicer._ingest_external_signal = AsyncMock()
+    key = "mcp_credential.acme-mcp"
+    cfg = _PerOwnerCfgWatcher({(key, "alice"): ("", True), (key, ""): ("", True)})
+    mcp = _FakeMcpClient(result=_FakeResult([]))
+
+    await loop.run_one_cycle(servicer, cfg, mcp)
+
+    assert cfg.scoped_calls == [(key, "alice")]
+    assert mcp.calls == []
+    mark_error.assert_awaited_once_with(servicer._db, "alice", "acme-mcp", "bearer not configured")
+    servicer._ingest_external_signal.assert_not_awaited()
+
+
+async def test_resolve_secret_sends_exact_user_scope():
+    # feature 224: the owner's user_id reaches GetSecretRequest.user_id (exact scope).
+    stub = _FakeSecretStub("tok-a", True)
+    w = _watcher_with(stub)
+
+    assert await w.resolve_secret("mcp_credential.acme-mcp", user_id="alice") == ("tok-a", True)
+    assert stub.last_request.user_id == "alice"
+    await w.resolve_secret("mcp_credential.acme-mcp")
+    assert stub.last_request.user_id == ""

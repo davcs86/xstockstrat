@@ -22,6 +22,12 @@ service IngestService {
   rpc QuerySignals(QuerySignalsRequest) returns (QuerySignalsResponse);
   rpc ListSignalSources(ListSignalSourcesRequest) returns (ListSignalSourcesResponse);
   rpc ManageSignalSource(ManageSignalSourceRequest) returns (ManageSignalSourceResponse);
+
+  // Template catalog (feature 224). List/read: any authenticated caller. Manage: ADMIN only.
+  rpc ListTemplates(ListTemplatesRequest) returns (ListTemplatesResponse);
+  rpc ManageTemplate(ManageTemplateRequest) returns (SourceTemplate);
+  // Copies a source template into a private signal source owned by the x-user-id caller.
+  rpc InstantiateTemplate(InstantiateTemplateRequest) returns (SignalSource);
 }
 
 message BackfillJob {
@@ -125,6 +131,7 @@ message ExternalSignal {
   string raw_url    = 8;
   repeated string tags = 9;
   google.protobuf.Timestamp ingested_at = 10;  // platform ingestion time (server-set, immune to source timestamp manipulation) — feature 022
+  string user_id = 11;  // owner of the signal (feature 224); server-stamped, ignored on write
 }
 
 message IngestSignalRequest  { ExternalSignal signal = 1; }
@@ -142,6 +149,15 @@ message QuerySignalsRequest {
   string direction = 3;  // optional filter
   xstockstrat.common.v1.TimeRange active_window = 4;  // signals valid within this range
   xstockstrat.common.v1.PageRequest page = 5;
+  SignalScope scope = 6;       // feature 224; UNSPECIFIED = the caller's own + system signals
+  string owner_user_id = 7;    // (admin-only) owner selector; ignored for a non-admin caller
+}
+
+// Which owners' signals QuerySignals returns (feature 224). Closed set → enum (C-04).
+enum SignalScope {
+  SIGNAL_SCOPE_UNSPECIFIED = 0;  // own + system
+  SIGNAL_SCOPE_OWN = 1;
+  SIGNAL_SCOPE_SYSTEM = 2;
 }
 
 message QuerySignalsResponse {
@@ -169,6 +185,9 @@ message SignalSource {
   // conviction (feature 134). optional (explicit presence) so an omitted create-form field is
   // distinguishable from an explicit 0.0. DB default 1.0 (neutral).
   optional double reliability_weight = 12;
+  // Owner of the source (feature 224). "system" = platform-owned, read-only to every user.
+  string user_id = 13;
+  xstockstrat.common.v1.TemplateOrigin origin = 14;  // set when instantiated from a template
 }
 
 // Health of a registered signal source (feature 083). Closed set → enum (C-04).
@@ -181,6 +200,7 @@ enum SourceHealthStatus {
 
 message ListSignalSourcesRequest {
   bool include_inactive = 1;
+  string owner_user_id = 2;  // (admin-only) owner selector; ignored for a non-admin caller (feature 224)
 }
 
 message ListSignalSourcesResponse {
@@ -212,4 +232,27 @@ message ManageSignalSourceRequest {
 
 message ManageSignalSourceResponse {
   SignalSource source = 1;
+}
+
+// feature 224 — signal-source template catalog.
+message SourceTemplate {
+  xstockstrat.common.v1.TemplateMeta meta = 1;
+  SignalSource payload = 2;
+}
+
+message ListTemplatesRequest {}
+
+message ListTemplatesResponse {
+  repeated SourceTemplate templates = 1;
+}
+
+message ManageTemplateRequest {
+  xstockstrat.common.v1.TemplateOperation operation = 1;
+  SourceTemplate template = 2;
+}
+
+message InstantiateTemplateRequest {
+  string template_id = 1;
+  string slug = 2;             // the new private source's slug (unique per owner)
+  string credentials_ref = 3;  // the caller's own per-user credential key, if the type needs one
 }

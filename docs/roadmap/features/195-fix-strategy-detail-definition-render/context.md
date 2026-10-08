@@ -1,47 +1,17 @@
-# Context Log: fix-strategy-detail-definition-render
+# Context: fix-strategy-detail-definition-render  (archived 2026-10-07)
 
-## 2026-09-19 — triage + fix (single session)
+**Feature**: ./feature.md
+**Status**: launched — archived by /sdd-archiver; verbose specs pruned (recoverable via git history).
 
-**Triage.** `docs/reports/2026-09-18-strategy-detail-definition-not-rendered-defect.md` (pruned 2026-10-05; `git show 2ce8de0a:docs/reports/2026-09-18-strategy-detail-definition-not-rendered-defect.md`). SEV-3
-UX/observability, Track C. Verified the page fetches `definition` via `useGetStrategy` and reads only
-warnings/liveEnabled/signalEligible/active — never components/entryRule/exitRule. `summarizeRule`/
-`parseRuleTree`/`ruleHasConditions` already exported from `RuleEditor.tsx`; `RuleSummary` was
-module-local in `StrategyWizard.tsx`.
+## Archive Synthesis — 2026-10-07 — /sdd-archiver
 
-**Design decision — visibility (operator-approved: all readers).** The definition is read-only info
-the owner already has via the RPC; the page already admin-gates only its write controls. All-readers
-is the report's expected default and was confirmed.
-
-**DRY factoring.** Rather than copy `RuleSummary` (a jscpd/dry-reviewer finding), and to keep the
-read-only page from bundling the full editor's client-only UI (Combobox/Select/etc.):
-- Extracted the pure parsers to `src/lib/ruleSummary.ts` (depends only on lightweight
-  `strategyCatalog`). `RuleEditor.tsx` imports + re-exports them for back-compat (only external
-  importer was StrategyWizard's `summarizeRule`).
-- New `components/insights/RuleSummary.tsx` (presentational) used by both the wizard Review step and
-  the detail page.
-
-**Implementation.** Definition card added before the Run Backtest card (left column), tokens only
-(C-17), `data-testid="strategy-definition"`. Renders components (refName — indicator/formula
-(params) on sourceSymbol), entry/exit rules via `RuleSummary`, cooldowns, and deny list (when set).
-
-**Tests.**
-- vitest `src/lib/ruleSummary.test.ts` (11 cases — parse/summarize/hasConditions, coverage-scoped
-  `src/lib/**`).
-- e2e `strategy-analytics.spec.ts` — definition card renders (sma_fast / SMA / Entry rule / Exit
-  rule). Ran CI-style (prod build): 3/3 passed. NOTE: `next dev` (local) flaked with ECONNRESET on
-  cold compile (the pre-existing analytics test's hard-coded 5s timeout); the prod-build run CI uses
-  is green — not a code fault.
-- `next lint` clean for touched files (only pre-existing warnings elsewhere); `tsc --noEmit` clean
-  for touched files (one pre-existing, unrelated `middleware.test.ts` mock-typing error not mine).
-
-**Files:** `services/xstockstrat-ui/src/app/insights/strategies/[id]/page.tsx`,
-`src/lib/ruleSummary.ts`, `src/lib/ruleSummary.test.ts`,
-`src/components/insights/RuleSummary.tsx`, `src/components/insights/RuleEditor.tsx`,
-`src/components/insights/StrategyWizard.tsx`, `e2e/insights/strategy-analytics.spec.ts`.
-
-## Session 2026-09-24 (CI: feature status automation)
-
-- Promotion PR #1169 merged to main
-- Feature promoted and committed: dd622bdc2e5b922df8dcabc6f7475b8b395a8ed3
-- Status updated: `code-completed` → `launched`
-- Launched date: 2026-09-24
+**What**: Track C, SEV-3 UX/observability fix. `/insights/strategies/[id]` already fetched the strategy `definition` via `useGetStrategy` but never rendered components or entry/exit rules, so a user concluded `fundamentals_macd_blend` "has no entry or exit rules" when both were stored and correct. Fix: a read-only Definition card in the left column before the Run Backtest card — no new RPC, hook or network call (product-spec). Launched 2026-09-24 via PR #1169; no trading-correctness impact.
+**Why (irrecoverable rationale)**: Visibility is all readers, by explicit operator approval: the definition is read-only information the owner already has via the RPC, and the page already admin-gates only its write controls; the report's expected default was "all readers" and the operator confirmed it. An ungated card could look like a missed gate. The parser/summary logic was extracted to `src/lib/ruleSummary.ts` instead of importing from `RuleEditor.tsx` to keep the read-only page's bundle free of the editor's client-only UI (Combobox/Select); the lib header does not say why.
+**Rejected alternatives**: Copy `RuleSummary` into the detail page (jscpd/`dry-reviewer` finding). Import `summarizeRule`/`parseRuleTree` straight from `RuleEditor.tsx` (pulls editor UI into the read-only page). Admin-only visibility — not adopted; no further reason recorded.
+**Scars & gotchas**: Local `next dev` flaked with ECONNRESET on cold compile in e2e because the pre-existing analytics test has a hard-coded 5s timeout; verify e2e CI-style against a prod build (3/3 passed). `tsc --noEmit` reports one pre-existing unrelated `middleware.test.ts` mock-typing error.
+**Permanent deviations**: None (no design.md/recon.md). `RuleEditor.tsx` re-exports the extracted parsers for back-compat; the only external importer was `StrategyWizard`'s `summarizeRule`.
+**Cross-feature signal**: A presentational summary built local to the strategy wizard's review step was later needed by a read-only surface and hoisted to `components/insights/RuleSummary.tsx`.
+**Deferred follow-ons**: None filed. The hard-coded 5s analytics e2e timeout is a latent flake source on `next dev`.
+**Runtime-invariant recommendations (→ /context-constitution)**: None (the all-readers rule is already in `@AC-2`, promoted to the ui suite).
+**Ledger entries written**: insights.md (1), fails.md (0) — see the 2026-10-07 entries.
+**Pruned artifacts**: product-spec.md — last present at 9a1d3bea (`git show 9a1d3bea:docs/roadmap/features/195-fix-strategy-detail-definition-render/<file>`).

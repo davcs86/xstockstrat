@@ -1,7 +1,7 @@
 """
 MCP tool definitions for xstockstrat-agent.
 
-Forty-three tools:
+Forty-five tools:
   list_signal_sources  — lists active sources from ingest, enriched with extractor_tool
   extract_email_content — extracts raw text from email attachments or gated URLs
   extract_website_content — fetches and returns raw text from a registered website source
@@ -14,7 +14,7 @@ Forty-three tools:
   manage_formula      — registers/updates(partial merge)/soft-deletes custom formulas in indicators
   get_formula         — reads one stored formula's full definition incl. `deleted` (read-only)
   list_formulas       — lists formula definitions, soft-deleted excluded (read-only)
-  manage_signal_source — registers/updates/reactivates/deactivates signal sources in ingest
+  manage_signal_source — registers/updates/reactivates/deactivates the caller's own signal sources
   set_strategy_live   — enables/disables live alert evaluation for a strategy
   run_fundamentals_scan — manually triggers the fundamentals signal producer (admin-scoped)
   trigger_backfill    — triggers an OHLCV history backfill via gRPC TriggerBackfill (admin-scoped)
@@ -45,11 +45,13 @@ Forty-three tools:
   query_bars          — query stored daily OHLCV bars (paginated; json/csv) (read-only, feature 204)
   query_fundamentals  — query snapshot/historical fundamentals (paginated; json/csv) (read-only)
   list_fundamental_metrics — list the fundamental-metrics catalog for formula authoring (read-only)
+  list_templates      — lists the admin-curated formula/strategy/signal-source templates (read-only)
+  instantiate_template — copies a template into a private instance owned by the caller
 
 Also registers one MCP prompt (feature 197), via register_prompts():
   list_correlation_guide — how to join list_accounts/get_positions/get_positions_by_account_id/
     list_opportunities/list_strategies on account_id/strategy_id/symbol. A prompt is not a tool;
-    the tool count stays forty-three.
+    the tool count stays forty-five.
 """
 
 import base64
@@ -326,6 +328,28 @@ def _historical_to_csv(periods: list[dict]) -> str:
         row.extend("" if m in missing else p.get(m, "") for m in _FUNDAMENTALS_METRICS)
         w.writerow(row)
     return buf.getvalue()
+
+
+async def _write_source_bearer(ctx: Context, tool: str, slug: str, bearer_token: str) -> str:
+    """Write a source bearer as the caller's own encrypted secret; return the credentials_ref.
+
+    Secret-first: a failed source write afterwards only orphans a redacted secret. The key is opaque
+    (never the slug), so it cannot collide across owners or leak the source name."""
+    secret_key = f"mcp_credential.{uuid.uuid4()}"
+    await client.set_config(
+        namespace="ingest",
+        key=secret_key,
+        value_type="string",
+        value=bearer_token,
+        environment=resolve_scope(""),
+        author=tool,
+        reason=f"bearer for signal source {slug}",
+        access_scope=_caller_access_scope(ctx, tool),
+        create_key=True,
+        user_id=_caller_user_id(ctx, tool),
+        is_secret=True,
+    )
+    return f"ingest.{secret_key}"
 
 
 def register_tools(server: MCPServer) -> None:
@@ -829,6 +853,7 @@ def register_tools(server: MCPServer) -> None:
         exit_cooldown_days: int | None = None,
         denied_symbols: list[str] | None = None,
         signal_eligible: bool | None = None,
+        sector_param_overrides: list[dict] | None = None,
         clear_fields: list[str] | None = None,
     ) -> dict:
         """Register/update/deactivate/reactivate a stored strategy in xstockstrat-analysis.
@@ -899,6 +924,17 @@ def register_tools(server: MCPServer) -> None:
             this strategy's evaluation universe (feature 132; default false). Setting it true while
             signal_params.symbols is a non-empty allowlist is rejected INVALID_ARGUMENT (the
             allowlist is already an explicit universe override).
+        sector_param_overrides: optional per-sector component-param overrides (feature 217) — a
+            list of {component_ref, param_name, default_value, by_sector: {"<SECTOR>": value}}.
+            Overrides components[component_ref].params[param_name] by the evaluated symbol's
+            GICS-style sector: ENERGY, MATERIALS, INDUSTRIALS, CONSUMER_DISCRETIONARY,
+            CONSUMER_STAPLES, HEALTH_CARE, FINANCIALS, TECHNOLOGY, COMMUNICATION_SERVICES,
+            UTILITIES, REAL_ESTATE. default_value is mandatory and applies to unclassified symbols.
+            Backtests resolve the sector as-of each bar (no look-ahead); live readiness /
+            opportunities / the live loop use the current sector. Works for fundamentals-input
+            formulas too, e.g. {component_ref: 'fscore', param_name: 'de_bad', default_value: 2.0,
+            by_sector: {'FINANCIALS': 12.0}}. Params only — rule thresholds are not overridable.
+            Omit to leave unchanged; clear_fields=['sector_param_overrides'] to remove all.
         clear_fields: optional list of field names to ERASE, e.g. ['exit_rule']. Use this to
             blank a rule or to revert cooldown_days to the platform default — passing a field
             with no value cannot express "erase" on its own. If a field is BOTH supplied a value
@@ -950,6 +986,7 @@ def register_tools(server: MCPServer) -> None:
             "exit_cooldown_days": exit_cooldown_days,
             "denied_symbols": denied_symbols,
             "signal_eligible": signal_eligible,
+            "sector_param_overrides": sector_param_overrides,
         }
         mask = [name for name, value in supplied.items() if value is not None]
         for name in mask:
@@ -994,7 +1031,6 @@ def register_tools(server: MCPServer) -> None:
         name: str | None = None,
         description: str | None = None,
         source: str | None = None,
-        is_public: bool | None = None,
         formula_id: str = "",
         parameters: list[dict] | None = None,
         outputs: list[dict] | None = None,
@@ -1003,9 +1039,10 @@ def register_tools(server: MCPServer) -> None:
     ) -> dict:
         """Register/update/delete a custom formula in xstockstrat-indicators.
         operation: 'register' | 'update' | 'delete'.
-        name/description/source/is_public: for register and update. On UPDATE these are
+        name/description/source: for register and update. On UPDATE these are
             presence-detected — pass a field only if you want to change it (see UPDATE below).
         formula_id: required for update/delete.
+        Formulas are PRIVATE to their author — no other user can read or reference them.
         Ownership is always derived from the OAuth-authenticated caller's own verified identity —
             there is no author/formula_author_user_id parameter. On register, the caller becomes
             the formula's author. On update/delete, the caller's own identity is checked against
@@ -1026,9 +1063,8 @@ def register_tools(server: MCPServer) -> None:
             these metrics, not OHLCV closes). Use list_fundamental_metrics for the valid catalog.
 
         UPDATE IS A PARTIAL MERGE (AIP-161): only the fields you actually pass are changed; every
-            field you omit is preserved. Passing is_public=false unpublishes; omitting is_public
-            leaves it as-is. `source` cannot be blanked. Use get_formula/list_formulas to read a
-            formula back before editing. (At least one field must be supplied to update.)
+            field you omit is preserved. `source` cannot be blanked. Use get_formula/list_formulas
+            to read a formula back before editing. (At least one field must be supplied to update.)
         DELETE IS A SOFT DELETE: the formula is marked deleted (non-destructive), hidden from
             list_formulas, and can no longer be updated, but strategies that already reference it
             keep evaluating on its last-saved definition — and both their backtests
@@ -1063,7 +1099,6 @@ def register_tools(server: MCPServer) -> None:
             "name": name or "",
             "description": description or "",
             "source": source or "",
-            "is_public": bool(is_public),
             "parameters": parameters or [],
             "outputs": outputs or [],
             "warmup_period": warmup_period or 0,
@@ -1076,7 +1111,6 @@ def register_tools(server: MCPServer) -> None:
                 "name": name,
                 "description": description,
                 "source": source,
-                "is_public": is_public,
                 "parameters": parameters,
                 "outputs": outputs,
                 "warmup_period": warmup_period,
@@ -1095,8 +1129,9 @@ def register_tools(server: MCPServer) -> None:
     async def get_formula(formula_id: str) -> dict:
         """Fetch one custom formula's stored definition from xstockstrat-indicators.
         formula_id: required.
-        Returns the formula in camelCase incl. name, description, source, isPublic, parameters,
-            outputs, warmupPeriod, and `deleted` (true when soft-deleted). Use this for safe
+        Returns the formula in camelCase incl. name, description, source, parameters, outputs,
+            warmupPeriod, `origin` (when instantiated from a template), and `deleted` (true when
+            soft-deleted). Use this for safe
             read-modify-write: read the formula, change the fields you want, then call
             manage_formula(operation='update', ...) with only those fields."""
         try:
@@ -1105,13 +1140,14 @@ def register_tools(server: MCPServer) -> None:
             raise RuntimeError(_grpc_error_message(e, not_found="formula not found")) from e
 
     @server.tool()
-    async def list_formulas(author_filter: str = "", include_public: bool = True) -> dict:
-        """List custom formula definitions from xstockstrat-indicators.
-        author_filter: if non-empty, restrict to formulas authored by this user id.
-        include_public: also include public formulas regardless of author_filter (default true).
+    async def list_formulas(author_filter: str = "") -> dict:
+        """List your own custom formula definitions from xstockstrat-indicators.
+        Formulas are private to their author: a caller sees only the formulas they own.
+        author_filter: admin-only owner selector — an admin may pass a user id to list that user's
+            formulas; it is ignored for a non-admin caller.
         Soft-deleted formulas are excluded. Returns {"formulas": [<formula in camelCase>, ...]}."""
         try:
-            return {"formulas": await client.list_formulas(author_filter, include_public)}
+            return {"formulas": await client.list_formulas(author_filter)}
         except grpc.aio.AioRpcError as e:
             raise RuntimeError(_grpc_error_message(e)) from e
 
@@ -1129,6 +1165,60 @@ def register_tools(server: MCPServer) -> None:
             raise RuntimeError(_grpc_error_message(e)) from e
 
     @server.tool()
+    async def list_templates(kind: Literal["formula", "strategy", "signal_source"]) -> dict:
+        """List the admin-curated templates of one kind (read-only, feature 224).
+        Templates are starting points: formulas, strategies and signal sources are private to
+            their owner, so to use a curated one you copy it with instantiate_template.
+        kind: 'formula' | 'strategy' | 'signal_source'.
+        Returns {"templates": [{"meta": {templateId, kind, name, description, version, ...},
+            "payload": <the formula/strategy/source definition>}, ...]} (camelCase); retired
+            templates are excluded."""
+        try:
+            return {"templates": await client.list_templates(kind)}
+        except grpc.aio.AioRpcError as e:
+            raise RuntimeError(_grpc_error_message(e)) from e
+
+    @server.tool()
+    async def instantiate_template(
+        ctx: Context,
+        kind: Literal["formula", "strategy", "signal_source"],
+        template_id: str,
+        strategy_id: str = "",
+        slug: str = "",
+        bearer_token: str = "",
+    ) -> dict:
+        """Copy a template into a new PRIVATE instance owned by you (feature 224).
+        The copy is a snapshot: later template edits never change it (its `origin` reports
+            template_version / latest_version / update_available).
+        kind: 'formula' | 'strategy' | 'signal_source' (see list_templates for template_id).
+        strategy_id: (strategy) optional id for the copy; empty = the template's own id, suffixed
+            _N on collision. Instantiating a strategy also copies the formula templates it uses
+            into your private formulas and rewires its components to them — run_backtest it next.
+        slug: (signal_source) the new source's slug, unique among your sources.
+        bearer_token: (signal_source) the credential for a credential-requiring type such as
+            `mcp_client`; written FIRST to an encrypted per-user config secret under an opaque key
+            and referenced by the source. Stored encrypted at rest and NEVER returned.
+        Returns the new instance: formula → the formula in camelCase; strategy → the strategy
+            definition in camelCase; signal_source → {"slug", "display_name", "source_type",
+            "extractor_module", "active", "has_credentials", "reliability_weight", "user_id",
+            "origin"} (never a credential)."""
+        credentials_ref = ""
+        if kind == "signal_source" and bearer_token:
+            credentials_ref = await _write_source_bearer(
+                ctx, "instantiate_template", slug, bearer_token
+            )
+        try:
+            return await client.instantiate_template(
+                kind,
+                template_id,
+                strategy_id=strategy_id,
+                slug=slug,
+                credentials_ref=credentials_ref,
+            )
+        except grpc.aio.AioRpcError as e:
+            raise RuntimeError(_grpc_error_message(e, not_found="template not found")) from e
+
+    @server.tool()
     async def manage_signal_source(
         ctx: Context,
         operation: str,
@@ -1141,7 +1231,9 @@ def register_tools(server: MCPServer) -> None:
         reliability_weight: float | None = None,
         bearer_token: str | None = None,
     ) -> dict:
-        """Register/update/reactivate/deactivate a signal source in xstockstrat-ingest.
+        """Register/update/reactivate/deactivate one of YOUR signal sources in xstockstrat-ingest.
+        Sources are owned by the caller: any authenticated user manages their own sources, a slug
+            is unique per owner, and platform `system` sources are read-only to everyone.
         operation: 'register' | 'update' | 'reactivate' | 'deactivate'. These are HONEST,
             distinct verbs (feature 088):
             - register: strict create — an existing slug returns ALREADY_EXISTS (no overwrite).
@@ -1160,16 +1252,17 @@ def register_tools(server: MCPServer) -> None:
             (feature 134). On update it is applied ONLY when supplied — omit it to preserve the
             stored weight (an omitted value must never reset it to 0).
         bearer_token: the MCP bearer token for a `mcp_client` source (feature 166). Supplied on
-            register of a `mcp_client` source; it is written FIRST to an encrypted config secret
-            (`ingest.mcp_credential.<slug>`, is_secret=true) and then the source is registered with
-            `credentials_ref` pointing at it. It is stored encrypted at rest and NEVER returned.
+            register of a `mcp_client` source; it is written FIRST to an encrypted per-user config
+            secret under an opaque key (`ingest.mcp_credential.<uuid>`, is_secret=true) and then
+            the source is registered with `credentials_ref` pointing at it. It is stored encrypted
+            at rest and NEVER returned.
         `mcp_client` source_type (feature 166): a server-side MCP query source. Its `config_json`
             carries `mcp_endpoint` (the Streamable-HTTP MCP URL) and `mcp_tool` (the tool name),
             plus optional `mcp_arguments`. bearer_token is mandatory (register is rejected without
             it).
         Returns {"slug", "display_name", "source_type", "extractor_module", "active",
-            "has_credentials", "reliability_weight"} — credentials_ref and bearer_token are never
-            included."""
+            "has_credentials", "reliability_weight", "user_id", "origin"} — credentials_ref and
+            bearer_token are never included."""
         source: dict = {"slug": slug}
         if display_name is not None:
             source["display_name"] = display_name
@@ -1197,24 +1290,10 @@ def register_tools(server: MCPServer) -> None:
             if not update_mask:
                 raise RuntimeError("update requires at least one field to change")
         access_scope = _caller_access_scope(ctx, "manage_signal_source")
-        # Secret-first: write the bearer to an encrypted config secret, THEN register the source
-        # pointing at it. The token is never in config_json or echoed; a failed register only
-        # orphans a harmless redacted secret.
         if operation == "register" and source_type == "mcp_client" and bearer_token:
-            secret_key = f"mcp_credential.{slug}"
-            await client.set_config(
-                namespace="ingest",
-                key=secret_key,
-                value_type="string",
-                value=bearer_token,
-                environment=_resolve_scope(""),
-                author="manage_signal_source",
-                reason=f"bearer for mcp_client source {slug}",
-                access_scope=access_scope,
-                create_key=True,
-                is_secret=True,
+            credentials_ref = await _write_source_bearer(
+                ctx, "manage_signal_source", slug, bearer_token
             )
-            credentials_ref = f"ingest.{secret_key}"
         try:
             return await client.manage_signal_source(
                 operation=operation,

@@ -12,9 +12,9 @@ only reads market data / signals / portfolio (watchlist + held positions) and wr
 
 Symbols (feature 132): each live strategy's evaluation universe is resolved by
 ``resolve_universe`` from the owner's watchlist + held positions + (iff ``signal_eligible``)
-the platform-wide active signals, minus the strategy's ``denied_symbols`` deny list. A held +
-denied symbol is retained for exit only (entry-only deny). The pre-132 ``signal_params.symbols``
-list remains an explicit universe override when set.
+the owner's own + `system` active signals, minus the strategy's ``denied_symbols`` deny list.
+A held + denied symbol is retained for exit only (entry-only deny). The pre-132
+``signal_params.symbols`` list remains an explicit universe override when set.
 """
 
 import asyncio
@@ -36,14 +36,16 @@ from google.protobuf.timestamp_pb2 import Timestamp
 from opentelemetry import metrics
 
 from app.handlers.servicer import (
+    SYSTEM_IDENTITY,
     _definition_has_fundamental,
     _definition_wants_fundamentals_formula,
     _fundamental_periods_from_response,
     _normalize_symbol,
     _row_to_strategy_definition,
+    blend_strategy_id,
 )
 from app.repositories.strategies import LIVE_ENABLED_PREDICATE_SQL
-from app.services import warmup
+from app.services import sector_params, warmup
 from app.services.cooldown import effective_cooldown_days, is_cooldown_active
 from app.services.evaluator import _FUNDAMENTAL_METRICS, FundamentalPeriod
 
@@ -58,6 +60,9 @@ _FUNDAMENTALS_CHUNK = 50
 # Sentinel _eval_pair returns when GetBars came back empty, so _run_cycle can distinguish a
 # genuine data gap (worth a WARN) from an evaluated-but-no-decision pair.
 _EVAL_NO_BARS = "no_bars"
+
+# Platform-wide read of `system`-owned signals; ingest binds the grant to analysis's SAN.
+_SYSTEM_READ_META = (("x-user-id", SYSTEM_IDENTITY), ("x-internal-caller", "analysis-system-read"))
 
 # Live (strategy, symbol) pairs deferred past max_strategies_per_cycle in a cycle.
 _TRUNCATION_COUNTER = metrics.get_meter(__name__).create_counter(
@@ -138,9 +143,10 @@ async def resolve_fundamentals_universe(ingest, marketdata, cfg) -> set:
     """feature 168 — the platform-wide fundamentals universe shared by every caller of the blend
     force-run: symbols with an active signal from the fundamentals source AND actual fundamentals
     data (a ``GetFundamentalsMulti`` row). Fails **closed to empty** on any error (FR-6/AC-6) —
-    never a broad watchlist/held fallback. Platform-wide background reads carry no per-request
-    x-user-id (mirrors ``_drain_signals``). Extracted from the loop so the opportunity queue and the
-    entry-backfill resolve the identical set (the single seam that keeps the three callers aligned).
+    never a broad watchlist/held fallback. The producer's signals are `system`-owned, so this reads
+    the SYSTEM scope as the granted `system` identity (feature 224). Extracted from the loop so the
+    opportunity queue and the entry-backfill resolve the identical set (the single seam that keeps
+    the three callers aligned).
     """
     try:
         if ingest is None or marketdata is None:
@@ -159,7 +165,9 @@ async def resolve_fundamentals_universe(ingest, marketdata, cfg) -> set:
                     source=slug,
                     active_window=window,
                     page=common_pb2.PageRequest(page_size=_DRAIN_PAGE_SIZE, page_token=page_token),
+                    scope=ingest_pb2.SIGNAL_SCOPE_SYSTEM,
                 ),
+                metadata=_SYSTEM_READ_META,
             )
             signal_symbols.update(_normalize_symbol(s.symbol) for s in resp.signals)
             page_token = resp.page.next_page_token
@@ -323,19 +331,17 @@ class LiveEvaluationLoop:
         """One evaluation pass (feature 132 — fair-share rotation over owner-scoped universes).
 
         Each live strategy's evaluation universe is resolved by ``resolve_universe`` from the
-        owner's watchlist + held positions + (iff ``signal_eligible``) the platform-wide active
-        signals, minus the strategy's deny list. All (strategy, symbol) pairs across every live
-        strategy are flattened, globally ordered by ``(created_at, strategy_id, symbol)``, and a
-        rotating cursor evaluates at most ``max_strategies_per_cycle`` of them per cycle — so a
+        owner's watchlist + held positions + (iff ``signal_eligible``) the owner's own + `system`
+        active signals, minus the strategy's deny list. All (strategy, symbol) pairs across every
+        live strategy are flattened, globally ordered by ``(created_at, strategy_id, symbol)``, and
+        a rotating cursor evaluates at most ``max_strategies_per_cycle`` of them per cycle — so a
         large fleet is covered fairly across cycles instead of the first N always winning.
         """
         max_pairs = self._cfg.get_int("analysis.engine.max_strategies_per_cycle", default=50)
         throttle = self._cfg.get_int("analysis.engine.alert_throttle_seconds", default=300)
         # Fundamentals-universe force-run: blend_id names the governed strategy; blend_enabled is
         # the operator kill-switch (get_bool honors an explicit false via HasField).
-        blend_id = self._cfg.get_str(
-            "analysis.engine.fundamentals_blend_strategy_id", "fundamentals_macd_blend"
-        )
+        blend_id = blend_strategy_id(self._cfg)
         blend_enabled = self._cfg.get_bool("analysis.engine.fundamentals_blend_enabled", True)
         rows = await self._db.fetch(
             f"SELECT * FROM analysis.strategies WHERE {LIVE_ENABLED_PREDICATE_SQL} "
@@ -345,8 +351,10 @@ class LiveEvaluationLoop:
         blend_active = blend_enabled and any(
             dict(row).get("strategy_id") == blend_id for row in rows
         )
-        # Platform-wide active signals once per cycle (joined per-strategy iff signal_eligible).
-        signal_symbols = await self._drain_signals()
+        # `system` signals once per cycle; each owner's own signals once per owner, drained only
+        # for a signal_eligible strategy (the only consumer). Joined per-strategy iff eligible.
+        system_signals = await self._drain_system_signals()
+        own_cache: dict[str, set] = {}
         # Resolve the fundamentals universe exactly ONCE, only when the blend strategy is live —
         # when not blend_active, no QuerySignals/GetFundamentalsMulti call is issued (pacing).
         fundamentals_universe = (
@@ -367,6 +375,11 @@ class LiveEvaluationLoop:
                 held_cache[owner] = await self._drain_held(owner)
                 watch_cache[owner] = await self._drain_watchlist(owner)
             created_at = d.get("created_at")
+            signal_symbols = system_signals
+            if definition.signal_eligible and definition.strategy_id != blend_id:
+                if owner not in own_cache:
+                    own_cache[owner] = await self._drain_owner_signals(owner)
+                signal_symbols = own_cache[owner] | system_signals
             if definition.strategy_id == blend_id:
                 # Blend strategy — fundamentals-only execution (FR-1, FR-4).
                 if not blend_active or not fundamentals_universe:
@@ -442,9 +455,17 @@ class LiveEvaluationLoop:
                 dataless[:10],
             )
 
-    async def _drain_signals(self) -> set:
-        """Platform-wide active-signal symbols (normalized), once per cycle. Best-effort — an
-        ingest failure yields an empty set so signal-eligible strategies simply see no signals."""
+    async def _drain_system_signals(self) -> set:
+        """Active `system`-owned signal symbols (normalized), once per cycle."""
+        return await self._drain_signals_with(_SYSTEM_READ_META, ingest_pb2.SIGNAL_SCOPE_SYSTEM)
+
+    async def _drain_owner_signals(self, owner: str) -> set:
+        """Active signal symbols (normalized) the owner ingested themselves."""
+        return await self._drain_signals_with([("x-user-id", owner)], ingest_pb2.SIGNAL_SCOPE_OWN)
+
+    async def _drain_signals_with(self, meta, scope) -> set:
+        """Active-signal symbols (normalized) for one identity/scope. Best-effort — an ingest
+        failure yields an empty set so signal-eligible strategies simply see no signals."""
         if self._ingest is None:
             return set()
         now = Timestamp()
@@ -460,7 +481,9 @@ class LiveEvaluationLoop:
                         page=common_pb2.PageRequest(
                             page_size=_DRAIN_PAGE_SIZE, page_token=page_token
                         ),
+                        scope=scope,
                     ),
+                    metadata=meta,
                 )
             except Exception as e:  # best-effort — no grpc import in the loop
                 log.warning("live_loop: QuerySignals failed: %s", e)
@@ -556,13 +579,14 @@ class LiveEvaluationLoop:
         source_symbols = sorted({c.source_symbol for c in definition.components if c.source_symbol})
         if not source_symbols:
             return None
+        evaluator = self._evaluator.for_owner(definition.user_id)
         out: dict = {}
         for sym in source_symbols:
             sliced = analysis_pb2.StrategyDefinition()
             sliced.CopyFrom(definition)
             del sliced.components[:]
             sliced.components.extend(c for c in definition.components if c.source_symbol == sym)
-            formula_cache = await self._evaluator.declared_formula_warmups(sliced)
+            formula_cache = await evaluator.declared_formula_warmups(sliced)
             required_prefix = warmup.required_prefix_bars(sliced, formula_cache)
             extra_days = warmup.prefix_calendar_days(required_prefix) if required_prefix else 0
             rng = self._recent_range()
@@ -657,9 +681,13 @@ class LiveEvaluationLoop:
         fundamentals = await self._load_fundamentals(definition, symbol)
         # Feature 200 — fundamentals-only formula routing map + snapshot on a SEPARATE channel from
         # the 198 PIT `fundamentals` above (C-16 PRESERVE); both None in the common case.
-        formula_fund_map = await self._evaluator.declared_formula_fundamentals(definition)
+        evaluator = self._evaluator.for_owner(definition.user_id)
+        formula_fund_map = await evaluator.declared_formula_fundamentals(definition)
         fund_snap = await self._load_fundamentals_snapshot(definition, symbol, formula_fund_map)
-        decisions = await self._evaluator.evaluate(
+        if sector_params.has_overrides(definition):  # feature 217: current-sector params
+            sector, _ = await sector_params.fetch_current_sector(self._marketdata, symbol)
+            definition = sector_params.apply_sector(definition, sector)
+        decisions = await evaluator.evaluate(
             definition, bars, None, benchmark_bars, fundamentals, formula_fund_map, fund_snap
         )
         if not decisions:

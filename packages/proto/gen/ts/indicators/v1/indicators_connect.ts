@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { ComputeIndicatorRequest, ComputeIndicatorResponse, DeleteFormulaRequest, DeleteFormulaResponse, ExecuteFormulaRequest, ExecuteFormulaResponse, FormulaDefinition, GetFormulaRequest, ListFormulasRequest, ListFormulasResponse, ListFundamentalMetricsRequest, ListFundamentalMetricsResponse, ListIndicatorsRequest, ListIndicatorsResponse, RegisterFormulaRequest, RegisterFormulaResponse, UpdateFormulaRequest, UpdateFormulaResponse } from "./indicators_pb.js";
+import { ComputeIndicatorRequest, ComputeIndicatorResponse, DeleteFormulaRequest, DeleteFormulaResponse, ExecuteFormulaRequest, ExecuteFormulaResponse, FormulaDefinition, FormulaTemplate, GetFormulaRequest, InstantiateTemplateRequest, InstantiateTemplateResponse, ListFormulasRequest, ListFormulasResponse, ListFundamentalMetricsRequest, ListFundamentalMetricsResponse, ListIndicatorsRequest, ListIndicatorsResponse, ListTemplatesRequest, ListTemplatesResponse, ManageTemplateRequest, RegisterFormulaRequest, RegisterFormulaResponse, ResolveTemplateIntentRequest, ResolveTemplateIntentResponse, UpdateFormulaRequest, UpdateFormulaResponse } from "./indicators_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -115,6 +115,48 @@ export const IndicatorsService = {
       name: "ListFundamentalMetrics",
       I: ListFundamentalMetricsRequest,
       O: ListFundamentalMetricsResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Template catalog (feature 224). List/read: any authenticated caller. Manage: ADMIN only.
+     *
+     * @generated from rpc xstockstrat.indicators.v1.IndicatorsService.ListTemplates
+     */
+    listTemplates: {
+      name: "ListTemplates",
+      I: ListTemplatesRequest,
+      O: ListTemplatesResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc xstockstrat.indicators.v1.IndicatorsService.ManageTemplate
+     */
+    manageTemplate: {
+      name: "ManageTemplate",
+      I: ManageTemplateRequest,
+      O: FormulaTemplate,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Copies a formula template into a private formula owned by the x-user-id caller.
+     *
+     * @generated from rpc xstockstrat.indicators.v1.IndicatorsService.InstantiateTemplate
+     */
+    instantiateTemplate: {
+      name: "InstantiateTemplate",
+      I: InstantiateTemplateRequest,
+      O: InstantiateTemplateResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Internal (SAN-bound xstockstrat-analysis): commits or aborts a strategy-template saga's copies.
+     *
+     * @generated from rpc xstockstrat.indicators.v1.IndicatorsService.ResolveTemplateIntent
+     */
+    resolveTemplateIntent: {
+      name: "ResolveTemplateIntent",
+      I: ResolveTemplateIntentRequest,
+      O: ResolveTemplateIntentResponse,
       kind: MethodKind.Unary,
     },
   }

@@ -1,103 +1,17 @@
-# Context: opportunities-pagination-drain
+# Context: opportunities-pagination-drain  (archived 2026-10-07)
 
-**Feature**: `docs/roadmap/features/187-opportunities-pagination-drain/feature.md`
-**Product Spec**: `docs/roadmap/features/187-opportunities-pagination-drain/product-spec.md`
-**Implementation Spec**: `docs/roadmap/features/187-opportunities-pagination-drain/implementation-spec.md`
+**Feature**: ./feature.md
+**Status**: launched — archived by /sdd-archiver; verbose specs pruned (recoverable via git history).
 
----
+## Archive Synthesis — 2026-10-07 — /sdd-archiver
 
-## Session 2026-09-11T00:00:00Z — sdd-story
-
-- Created feature.md (status: draft), product-spec.md, acceptance.feature, context.md from user story.
-- Root cause traced: `_DEFAULT_OPP_PAGE_SIZE = 50` at servicer.py:279, Python slices `rows[0:50]`.
-  Neither UI `useOpportunities` hook nor agent `client.py:list_opportunities` consumes
-  `next_page_token`. ~190 materialized rows exist but only top-50 surfaced.
-- Verified via staging: exactly 50 opportunities returned, 27 unique symbols.
-- DB query has no LIMIT — pagination is purely transport-layer Python slicing.
-- Known trap (fails.md:662, 805) reviewed — not applicable since no subset-relative diagnostics
-  are computed post-pagination.
-
-## Session 2026-09-11T00:10:00Z — sdd-design quick
-
-- Ran `/sdd-design opportunities-pagination-drain quick` (Phase 0 recon + Phase 1 grilling, 2 rounds).
-- **User steer 1 (prior session):** "Server-side grouping and sorting, symbol alphabetical for ties.
-  Increase page size to 50 symbols." — `_DEFAULT_OPP_PAGE_SIZE` stays at 50 (overrides FR-1's
-  original proposal of 25). Server-side SQL symbol grouping added via window function.
-- **User steer 2 (prior session):** "You missed annotating the server-side grouping by symbol (mimic
-  the UI/Web grouping)" — server ORDER BY must replicate `page.tsx:197-205`'s `symbolGroups` Map
-  pattern so page boundaries respect symbol clusters.
-- **User steer 3:** "Little steer in the consumers, do not auto-drain, leave the user to trigger
-  manually" — UI uses `useInfiniteQuery` + "Load More" button (manual trigger) instead of auto-drain
-  loop; agent tool exposes `page_token`/`page_size` params for manual MCP caller pagination instead
-  of auto-drain.
-- Design approved by user at round 2. Written `design.md` with 5 parts:
-  A. Server page_size stays at 50
-  B. Server SQL ORDER BY with window function for symbol grouping
-  C. UI `useInfiniteQuery` + "Load More" button
-  D. CopilotRail conversion to `useOpportunities(0)` hook
-  E. Agent pagination pass-through (`page_size`/`page_token` params)
-- **User steer 4:** "Would this change make the headline obsolete … include removal in scope" —
-  the headline stat grid (Actionable now / Expiring < 90m / Exit / Trim flags / Fresh entries /
-  Deployable) becomes misleading with pagination (tiles 1-4 count only loaded pages). Added FR-8
-  for removal; updated design.md part F, acceptance.feature @AC-8.
-- Status advanced: `draft` → `design-approved`.
-
-## Session 2026-09-11T00:20:00Z — sdd-spec
-
-- Generated `implementation-spec.md` with 10 steps across 3 services (analysis, ui, agent).
-- Design part A (page_size stays at 50) requires no code change — `_DEFAULT_OPP_PAGE_SIZE = 50` is already at target.
-- Step ordering: server SQL ORDER BY (1-2) → UI useInfiniteQuery + Load More + CopilotRail + stat grid removal (3-4) → agent pass-through (5-6) → fixture extension (7) → cross-service E2E (8) → docs (9) → final verify (10).
-- All 8 acceptance scenarios (`@AC-1` through `@AC-8`) mapped to covering test steps.
-- Consumer surfaces (C-14): UI covered by Steps 3-4, Agent covered by Steps 5-6.
-- Reviewer snapshot finalized: analysis, ui, agent service owners.
-- `useInfiniteQuery` is the first use in the codebase — flagged in design.md open risks, no blocking concern.
-- No proto changes, no migration, no new config keys, no new env vars.
-- Status advanced: `design-approved` → `implementation-ready`.
-
-## Session 2026-09-26 — status drift reconciliation
-
-- **Discovered drift:** status.md read `in-progress` with no `sdd-execute` session logged, despite the
-  functional implementation having shipped on 2026-09-11 via `#1134` (ancestor of both
-  `origin/main-dev` and `origin/main`). CI's post-promotion status auto-update never ran.
-- **Ground-truth verification (origin/main-dev HEAD):**
-  - Step 1 (server SQL symbol grouping) — present in `services/xstockstrat-analysis/app/repositories/opportunities.py`.
-  - Step 3 (UI `useInfiniteQuery` + Load More + CopilotRail hook + stat-grid removal) — present:
-    `opportunities/page.tsx:115` (`fetchNextPage/hasNextPage/isFetchingNextPage`), `:371` Load More
-    button (`data-testid="load-more-opportunities"`), headline stat-grid tiles removed.
-  - Step 5 (agent pass-through) — `services/xstockstrat-agent/app/tools.py:1501` passes
-    `page_size`/`page_token` to `list_opportunities`.
-  - Step 9 (docs) — mcp-tools.md updated.
-- **Genuine test debt (left `pending`, NOT back-filled):** steps 4, 7, 8, 10. `opportunities.spec.ts`
-  has zero `load-more-opportunities` / second-page / stat-grid-removal assertions; the only
-  pagination Load More E2E on main-dev targets the **data-explorer** page (`de-bars-loadmore` /
-  `de-hist-loadmore`), a different feature. Marking these done would fabricate coverage that does
-  not exist.
-- **Promotion trail:** merged to main-dev `0d1b186f` (#1134), promoted to main via `aab3fa8d` (#1137)
-  on 2026-09-11.
-- **Reconciliation applied:** status.md → `launched`; feature.md tracking fields + Status History +
-  test-debt Next Action added; impl-spec header annotated with a post-launch note. No code touched.
-
-## Session 2026-09-26 — sdd-qa: back-fill the launched feature's test debt
-
-- **Scope:** the feature shipped functionally on 2026-09-11 (#1134 → #1137) with test steps 4/7/8/10
-  never completed. Back-filled the E2E coverage as characterization/regression guards (the behavior
-  is already live, so these lock it in rather than driving RED).
-- **Grounded against the shipped tree**, not the impl-spec's pre-build assumptions. Two decisions:
-  - **Did NOT touch the shared `e2e/mock-backend.ts` handler.** The hook hard-codes `page.pageSize:50`
-    (`useOpportunities.ts:37`), so a page boundary can't come from the request; the multi-page mock is
-    a per-test `page.route` override (`mockOpportunitiesPaged`). The shared handler stays single-page —
-    it feeds copilot/mobile-overflow specs that would regress if forced to paginate.
-  - **Step 7 fixture extension is a no-op** — 9 unique symbols already yield ≥2 pages at any small
-    imposed page size.
-- **Added to `e2e/insights/opportunities.spec.ts`:** helpers `convictionGroupedSymbols()` +
-  `mockOpportunitiesPaged()`, and 4 tests — @AC-2 (Load More appends page 2, page 1 retained, button
-  gone on last page), @AC-3 (15s poll via `page.clock.fastForward` keeps loaded pages), @AC-5
-  (single-page → no Load More), @AC-8 (stat grid gone). **35/35 in the file pass** (31 existing +
-  4 new; no regressions). tsc clean on the spec.
-- **@AC-7 deferred — real defect, not test debt.** CopilotRail (`CopilotRail.tsx:37` `useOpportunities(0)`,
-  sort=UNSPECIFIED) and the page (`page.tsx:116`, sort=CONVICTION) build different React-Query keys
-  (`useOpportunities.ts:30` — feature-190 5-tuple), so two `ListOpportunities` RPCs fire. The strict
-  single-RPC @AC-7 assertion can't pass without a one-line code fix. Filed
-  `docs/reports/2026-09-26-copilotrail-duplicate-listopportunities-rpc-defect.md` (pruned 2026-10-05; `git show 2ce8de0a:docs/reports/2026-09-26-copilotrail-duplicate-listopportunities-rpc-defect.md`) (SEV-3) for
-  `/sdd-triage`; guard deferred.
-- **impl-spec:** steps 4/7/8/10 → `done` (with notes); header status → `done` with the @AC-7 carve-out.
+**What**: The opportunity queue was capped at the first 50 rows because `ListOpportunities` slices rows in Python at transport time; the DB read has no LIMIT, and neither the UI hook nor the agent tool followed `next_page_token`. Shipped (#1134, promoted #1137, 2026-09-11): server-side symbol-contiguous ordering, a UI `useInfiniteQuery` with a manual Load More button, agent `page_size`/`page_token` pass-through, and removal of the headline stat grid. Page size stayed 50; nothing auto-drains.
+**Why (irrecoverable rationale)**: Four user steers (2026-09-11) drove every consumer-side decision: page size stays 50; server-side grouping mimicking the UI `symbolGroups` Map (`page.tsx:197-205`) with a symbol-alphabetical tiebreak; do not auto-drain (manual trigger only); remove the headline tiles, because under pagination they count only loaded pages ("50 of 50 evaluated" with 150+ rows behind Load More). Page size 50 also keeps the default chunk identical for existing single-page consumers. Staging evidence: exactly 50 rows covered only 27 unique symbols out of ~190 materialized rows (~2 rows per symbol). Lookup consumers `SignalReadiness`, `WatchlistDetail` and `positions/[symbol]` call `useOpportunities(0)` only to test "is this symbol in the queue"; they were deliberately left on page 1, so a curated symbol ranked past row 50 still reads "not in queue" there (the original symptom, left unfixed on those surfaces).
+**Rejected alternatives**: Auto-drain loop in the hook/agent client — lost on the "manual trigger" steer; recon priced it at N×30s BFF deadline stacking (8×30s for 200 rows at page size 25) plus a ~20-page cap. Reduce `_DEFAULT_OPP_PAGE_SIZE` to 25 — overridden by the user. Client-side-only symbol grouping — a mid-symbol page split would render a partial `SymbolGroupCard` until Load More. Keeping the "Deployable" tile alone — pagination-independent but did not justify the card.
+**Scars & gotchas**: Status drift: functional code was live 2026-09-11 but `status.md` stayed `in-progress` ~15 days (the CI post-promotion update never ran) with test steps 4/7/8/10 left `pending`; marking them done without ground truth would have fabricated coverage, so /sdd-qa back-filled them on 2026-09-26. A grep for "load-more" misleads (the only Load More e2e assertions were on the data-explorer page). `useOpportunities.ts:37` hard-codes `pageSize: 50`, so a test cannot induce a page boundary through the request; multi-page behavior needs a per-test `page.route` override (`mockOpportunitiesPaged`), and the shared `e2e/mock-backend.ts` handler must stay single-page (copilot and mobile-overflow specs). Step 7 was a no-op (9 unique fixture symbols). `@AC-7` could not be asserted strictly: CopilotRail `useOpportunities(0)` (sort UNSPECIFIED) vs the page (sort CONVICTION) gave different feature-190 5-tuple query keys and two RPCs; fixed by feature 213 (`5fd9faf8`, ledgered at fails.md:2554-2569). The 15s `refetchInterval` refetching all loaded pages was the design risk (first `useInfiniteQuery` in the codebase), verified post-launch with `page.clock.fastForward` (`@AC-3`).
+**Permanent deviations**: Step 4 mock: shipped a per-test `page.route` override instead of modifying the shared `ListOpportunities` handler. Shared cache key: design said CopilotRail shares `['opportunities', minConviction]`; feature 190 widened the key to include `sort`, splitting the cache (fixed by 213). Page boundaries: design, FR-6 and `@AC-6` claim "no symbol is split across the page boundary", but the shipped slice is a plain row offset (`servicer.py:3873-3881`), so a symbol can straddle row 50; the Step 2 test (`page_size=4` over 2-row groups) aligns and cannot detect it; the UI tolerates it because the `symbolGroups` Map re-merges trailing rows on Load More. `@AC-6` was therefore NOT promoted to the durable suite.
+**Cross-feature signal**: Feature 190 widening the shared hook key silently broke 187's untested "no separate RPC" promise (fails.md:2554-2569). Feature 200 generalised the single ORDER BY into `_SORT_ORDER_BY`; all variants keep the symbol-partition key plus the `opportunity_key` tiebreak (the 187 grouping design survived as an invariant). The truncation-before-diagnostic trap (fails.md:662, 805) was checked at design and ruled out: pagination is pure transport slicing after ranking.
+**Deferred follow-ons**: OPEN THREAD — `@AC-6` withheld from promotion: make paging group-aware at `servicer.py:3879` (paginate on the group key), or amend and re-review the retained `acceptance.feature` to drop/reword the last Then; the original scenario text stays in the retained `acceptance.feature`. `@AC-7` strict single-RPC e2e guard — check whether feature 213 added it. Lookup consumers are page-1 only; revisit if a "symbol in watchlist but not in queue" complaint arises.
+**Runtime-invariant recommendations (→ /context-constitution)**: Candidate ANALYSIS-*: `ListOpportunities` `page_token` is an integer row offset over fully fetched, ordered rows; every `_SORT_ORDER_BY` variant must end in `opportunity_key ASC` for paging stability; symbol groups are contiguous but not boundary-aligned across pages.
+**Ledger entries written**: insights.md (1), fails.md (1) — see the 2026-10-07 entries.
+**Pruned artifacts**: product-spec.md, recon.md, design.md, implementation-spec.md — last present at 9a1d3bea (`git show 9a1d3bea:docs/roadmap/features/187-opportunities-pagination-drain/<file>`).

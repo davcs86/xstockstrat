@@ -33,6 +33,7 @@ log = logging.getLogger(__name__)
 
 GRPC_PORT = os.environ.get("GRPC_PORT", "50054")
 CONFIG_ENDPOINT = os.environ.get("CONFIG_ENDPOINT", "xstockstrat-config:50060")
+LEDGER_ENDPOINT = os.environ.get("LEDGER_ENDPOINT", "xstockstrat-ledger:50057")
 DATABASE_URL = os.environ.get(
     "DATABASE_URL", "postgres://xstockstrat:devpassword@localhost:5432/xstockstrat"
 )
@@ -60,7 +61,14 @@ async def serve():
     # Seed built-in formulas — idempotent, non-fatal — before serving.
     await seed_default_formulas(db_pool)
 
-    servicer = IndicatorsServicer(config_watcher=config_watcher, db_pool=db_pool)
+    ledger_channel = grpc.aio.secure_channel(
+        LEDGER_ENDPOINT,
+        mtls.channel_credentials(),
+        options=mtls.target_override("xstockstrat-ledger"),
+    )
+    servicer = IndicatorsServicer(
+        config_watcher=config_watcher, db_pool=db_pool, ledger_channel=ledger_channel
+    )
 
     # ── gRPC server (internal, port 50054) ────────────────────────────────
     grpc_server = grpc.aio.server()

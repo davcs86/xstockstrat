@@ -1,6 +1,6 @@
 import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import type { FieldMask, Timestamp } from "@bufbuild/protobuf/wkt";
-import type { PageRequest, PageResponse, Timeframe, TimeRange } from "../../common/v1/common_pb";
+import type { PageRequest, PageResponse, Sector, TemplateMeta, TemplateOperation, TemplateOrigin, Timeframe, TimeRange } from "../../common/v1/common_pb";
 import type { JsonObject, Message } from "@bufbuild/protobuf";
 /**
  * Describes the file analysis/v1/analysis.proto.
@@ -488,6 +488,12 @@ export type StrategyScore = Message<"xstockstrat.analysis.v1.StrategyScore"> & {
      * @generated from field: bool provisional = 7;
      */
     provisional: boolean;
+    /**
+     * feature 224: set when instantiated from a template
+     *
+     * @generated from field: xstockstrat.common.v1.TemplateOrigin origin = 8;
+     */
+    origin?: TemplateOrigin | undefined;
 };
 /**
  * Describes the message xstockstrat.analysis.v1.StrategyScore.
@@ -861,12 +867,76 @@ export type StrategyDefinition = Message<"xstockstrat.analysis.v1.StrategyDefini
      * @generated from field: bool signal_eligible = 14;
      */
     signalEligible: boolean;
+    /**
+     * Per-sector component-param overrides (feature 217). Each entry overrides one
+     * components[ref_name].params[param_name], resolved as-of each bar from the symbol's sector;
+     * an unclassified bar/symbol uses default_value. Rides definition_json; maskable.
+     *
+     * @generated from field: repeated xstockstrat.analysis.v1.SectorParamOverride sector_param_overrides = 15;
+     */
+    sectorParamOverrides: SectorParamOverride[];
+    /**
+     * feature 224: set when instantiated from a template
+     *
+     * @generated from field: xstockstrat.common.v1.TemplateOrigin origin = 16;
+     */
+    origin?: TemplateOrigin | undefined;
 };
 /**
  * Describes the message xstockstrat.analysis.v1.StrategyDefinition.
  * Use `create(StrategyDefinitionSchema)` to create a new message.
  */
 export declare const StrategyDefinitionSchema: GenMessage<StrategyDefinition>;
+/**
+ * @generated from message xstockstrat.analysis.v1.SectorValue
+ */
+export type SectorValue = Message<"xstockstrat.analysis.v1.SectorValue"> & {
+    /**
+     * @generated from field: xstockstrat.common.v1.Sector sector = 1;
+     */
+    sector: Sector;
+    /**
+     * @generated from field: double value = 2;
+     */
+    value: number;
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.SectorValue.
+ * Use `create(SectorValueSchema)` to create a new message.
+ */
+export declare const SectorValueSchema: GenMessage<SectorValue>;
+/**
+ * @generated from message xstockstrat.analysis.v1.SectorParamOverride
+ */
+export type SectorParamOverride = Message<"xstockstrat.analysis.v1.SectorParamOverride"> & {
+    /**
+     * StrategyComponent.ref_name
+     *
+     * @generated from field: string component_ref = 1;
+     */
+    componentRef: string;
+    /**
+     * key within StrategyComponent.params
+     *
+     * @generated from field: string param_name = 2;
+     */
+    paramName: string;
+    /**
+     * mandatory default bucket
+     *
+     * @generated from field: double default_value = 3;
+     */
+    defaultValue: number;
+    /**
+     * @generated from field: repeated xstockstrat.analysis.v1.SectorValue by_sector = 4;
+     */
+    bySector: SectorValue[];
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.SectorParamOverride.
+ * Use `create(SectorParamOverrideSchema)` to create a new message.
+ */
+export declare const SectorParamOverrideSchema: GenMessage<SectorParamOverride>;
 /**
  * @generated from message xstockstrat.analysis.v1.ManageStrategyRequest
  */
@@ -912,6 +982,12 @@ export type GetStrategyRequest = Message<"xstockstrat.analysis.v1.GetStrategyReq
      * @generated from field: string strategy_id = 1;
      */
     strategyId: string;
+    /**
+     * (admin-only) owner selector; ignored for a non-admin caller (feature 224)
+     *
+     * @generated from field: string owner_user_id = 2;
+     */
+    ownerUserId: string;
 };
 /**
  * Describes the message xstockstrat.analysis.v1.GetStrategyRequest.
@@ -934,6 +1010,12 @@ export type ListStrategyDefinitionsRequest = Message<"xstockstrat.analysis.v1.Li
      * @generated from field: int32 page_offset = 3;
      */
     pageOffset: number;
+    /**
+     * (admin-only) owner selector; ignored for a non-admin caller (feature 224)
+     *
+     * @generated from field: string owner_user_id = 4;
+     */
+    ownerUserId: string;
 };
 /**
  * Describes the message xstockstrat.analysis.v1.ListStrategyDefinitionsRequest.
@@ -2177,6 +2259,90 @@ export type GetAttributionResponse = Message<"xstockstrat.analysis.v1.GetAttribu
  */
 export declare const GetAttributionResponseSchema: GenMessage<GetAttributionResponse>;
 /**
+ * feature 224 — strategy template catalog.
+ *
+ * @generated from message xstockstrat.analysis.v1.StrategyTemplate
+ */
+export type StrategyTemplate = Message<"xstockstrat.analysis.v1.StrategyTemplate"> & {
+    /**
+     * @generated from field: xstockstrat.common.v1.TemplateMeta meta = 1;
+     */
+    meta?: TemplateMeta | undefined;
+    /**
+     * Each component's formula_id holds a formula TEMPLATE id; instantiation deep-copies those
+     * formula templates into the caller's private formulas and rewrites the references (FR-9).
+     *
+     * @generated from field: xstockstrat.analysis.v1.StrategyDefinition payload = 2;
+     */
+    payload?: StrategyDefinition | undefined;
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.StrategyTemplate.
+ * Use `create(StrategyTemplateSchema)` to create a new message.
+ */
+export declare const StrategyTemplateSchema: GenMessage<StrategyTemplate>;
+/**
+ * @generated from message xstockstrat.analysis.v1.ListTemplatesRequest
+ */
+export type ListTemplatesRequest = Message<"xstockstrat.analysis.v1.ListTemplatesRequest"> & {};
+/**
+ * Describes the message xstockstrat.analysis.v1.ListTemplatesRequest.
+ * Use `create(ListTemplatesRequestSchema)` to create a new message.
+ */
+export declare const ListTemplatesRequestSchema: GenMessage<ListTemplatesRequest>;
+/**
+ * @generated from message xstockstrat.analysis.v1.ListTemplatesResponse
+ */
+export type ListTemplatesResponse = Message<"xstockstrat.analysis.v1.ListTemplatesResponse"> & {
+    /**
+     * @generated from field: repeated xstockstrat.analysis.v1.StrategyTemplate templates = 1;
+     */
+    templates: StrategyTemplate[];
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.ListTemplatesResponse.
+ * Use `create(ListTemplatesResponseSchema)` to create a new message.
+ */
+export declare const ListTemplatesResponseSchema: GenMessage<ListTemplatesResponse>;
+/**
+ * @generated from message xstockstrat.analysis.v1.ManageTemplateRequest
+ */
+export type ManageTemplateRequest = Message<"xstockstrat.analysis.v1.ManageTemplateRequest"> & {
+    /**
+     * @generated from field: xstockstrat.common.v1.TemplateOperation operation = 1;
+     */
+    operation: TemplateOperation;
+    /**
+     * @generated from field: xstockstrat.analysis.v1.StrategyTemplate template = 2;
+     */
+    template?: StrategyTemplate | undefined;
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.ManageTemplateRequest.
+ * Use `create(ManageTemplateRequestSchema)` to create a new message.
+ */
+export declare const ManageTemplateRequestSchema: GenMessage<ManageTemplateRequest>;
+/**
+ * @generated from message xstockstrat.analysis.v1.InstantiateTemplateRequest
+ */
+export type InstantiateTemplateRequest = Message<"xstockstrat.analysis.v1.InstantiateTemplateRequest"> & {
+    /**
+     * @generated from field: string template_id = 1;
+     */
+    templateId: string;
+    /**
+     * optional; empty = the template's strategy_id, suffixed _N on collision
+     *
+     * @generated from field: string strategy_id = 2;
+     */
+    strategyId: string;
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.InstantiateTemplateRequest.
+ * Use `create(InstantiateTemplateRequestSchema)` to create a new message.
+ */
+export declare const InstantiateTemplateRequestSchema: GenMessage<InstantiateTemplateRequest>;
+/**
  * @generated from enum xstockstrat.analysis.v1.BacktestStatus
  */
 export declare enum BacktestStatus {
@@ -2952,5 +3118,34 @@ export declare const AnalysisService: GenService<{
         methodKind: "unary";
         input: typeof GetWatchlistReadinessRequestSchema;
         output: typeof GetWatchlistReadinessResponseSchema;
+    };
+    /**
+     * Template catalog (feature 224). List/read: any authenticated caller. Manage: ADMIN only.
+     *
+     * @generated from rpc xstockstrat.analysis.v1.AnalysisService.ListTemplates
+     */
+    listTemplates: {
+        methodKind: "unary";
+        input: typeof ListTemplatesRequestSchema;
+        output: typeof ListTemplatesResponseSchema;
+    };
+    /**
+     * @generated from rpc xstockstrat.analysis.v1.AnalysisService.ManageTemplate
+     */
+    manageTemplate: {
+        methodKind: "unary";
+        input: typeof ManageTemplateRequestSchema;
+        output: typeof StrategyTemplateSchema;
+    };
+    /**
+     * Deep-copies a strategy template (and its formula templates) into private copies owned by the
+     * x-user-id caller, atomically (FR-9).
+     *
+     * @generated from rpc xstockstrat.analysis.v1.AnalysisService.InstantiateTemplate
+     */
+    instantiateTemplate: {
+        methodKind: "unary";
+        input: typeof InstantiateTemplateRequestSchema;
+        output: typeof StrategyDefinitionSchema;
     };
 }>;

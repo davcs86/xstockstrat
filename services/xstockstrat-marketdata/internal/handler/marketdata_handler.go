@@ -147,6 +147,33 @@ func (h *MarketDataHandler) BackfillFundamentals(ctx context.Context, req *conne
 	return connect.NewResponse(resp), nil
 }
 
+// GetCurrentSector serves sector classification from the local SCD store only (feature 217).
+func (h *MarketDataHandler) GetCurrentSector(ctx context.Context, req *connect.Request[marketdatav1.GetCurrentSectorRequest]) (*connect.Response[marketdatav1.GetCurrentSectorResponse], error) {
+	resp, err := h.svc.GetCurrentSector(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(resp), nil
+}
+
+// GetSectorAsOf serves sector classification from the local SCD store only (feature 217).
+func (h *MarketDataHandler) GetSectorAsOf(ctx context.Context, req *connect.Request[marketdatav1.GetSectorAsOfRequest]) (*connect.Response[marketdatav1.GetSectorAsOfResponse], error) {
+	resp, err := h.svc.GetSectorAsOf(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(resp), nil
+}
+
+// GetSectorHistory serves sector classification from the local SCD store only (feature 217).
+func (h *MarketDataHandler) GetSectorHistory(ctx context.Context, req *connect.Request[marketdatav1.GetSectorHistoryRequest]) (*connect.Response[marketdatav1.GetSectorHistoryResponse], error) {
+	resp, err := h.svc.GetSectorHistory(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(resp), nil
+}
+
 // GetDataCoverage reports stored OHLCV coverage for a symbol+timeframe.
 func (h *MarketDataHandler) GetDataCoverage(ctx context.Context, req *connect.Request[marketdatav1.GetDataCoverageRequest]) (*connect.Response[marketdatav1.GetDataCoverageResponse], error) {
 	if req.Msg.Symbol == "" {
@@ -307,6 +334,30 @@ func (a *grpcMarketDataAdapter) GetHistoricalFundamentals(ctx context.Context, r
 
 func (a *grpcMarketDataAdapter) BackfillFundamentals(ctx context.Context, req *marketdatav1.BackfillFundamentalsRequest) (*marketdatav1.BackfillFundamentalsResponse, error) {
 	resp, err := a.h.BackfillFundamentals(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, toGRPCError(err)
+	}
+	return resp.Msg, nil
+}
+
+func (a *grpcMarketDataAdapter) GetCurrentSector(ctx context.Context, req *marketdatav1.GetCurrentSectorRequest) (*marketdatav1.GetCurrentSectorResponse, error) {
+	resp, err := a.h.GetCurrentSector(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, toGRPCError(err)
+	}
+	return resp.Msg, nil
+}
+
+func (a *grpcMarketDataAdapter) GetSectorAsOf(ctx context.Context, req *marketdatav1.GetSectorAsOfRequest) (*marketdatav1.GetSectorAsOfResponse, error) {
+	resp, err := a.h.GetSectorAsOf(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, toGRPCError(err)
+	}
+	return resp.Msg, nil
+}
+
+func (a *grpcMarketDataAdapter) GetSectorHistory(ctx context.Context, req *marketdatav1.GetSectorHistoryRequest) (*marketdatav1.GetSectorHistoryResponse, error) {
+	resp, err := a.h.GetSectorHistory(ctx, connect.NewRequest(req))
 	if err != nil {
 		return nil, toGRPCError(err)
 	}

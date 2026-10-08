@@ -3,6 +3,25 @@
 All production promotions from `main-dev` to `main` are recorded here.
 Each entry corresponds to one `main-dev → main` PR merge.
 
+## 2026-10-07
+
+### Features
+- sector-classification-strategy-params: Introduce a point-in-time (Type-2 SCD) GICS-sector classification store in `xstockstrat-marketdata`, sourced from a centralized rate-limited FMP gateway, and let a strategy carry per-sector formula parameter overrides that `xstockstrat-analysis` resolves as-of each evaluated bar during scoring and backtesting.
+- fix-trader-position-fundamentals: The trader position page's Fundamentals card stays on "Loading fundamentals…" forever when `GetFundamentals` stalls, because neither the trader BFF nor the browser transport sets a deadline; the card's existing error branch is never reached.
+- fix-opportunity-composite-score: The opportunity composite score is coloured with the strategy-grade `scoreColor` thresholds, so its neutral point (0.500) renders red and its reachable range almost never renders green; replace it with centred diverging bands calibrated to the composite's own scale.
+- fix-edgar-quarterly-roe: EDGAR quarterly periods carry a single-quarter ROE (≈¼ of the annual figure) while P/E on the same row is TTM, depressing every quarterly-derived fundamentals score — live and in point-in-time backtests — and flipping AXP-class names below the `fundamentals_macd_blend` entry gate.
+- fix-stored-edgar-periods: Stored EDGAR historical periods (and the snapshot projected from them) still carry the pre-feature-211 total-liabilities D/E (AXP ≈ 8.8) instead of the launched financial-debt D/E (AXP ≈ 1.73, 211 `@AC-3`); existing rows were apparently never re-derived after 211 shipped.
+
+### Proto Changes
+- analysis/v1/analysis.proto
+- common/v1/common.proto
+- marketdata/v1/marketdata.proto
+
+### Summary
+32 commits, 7 feature merges since last promotion.
+
+---
+
 ## 2026-10-06
 
 ### Summary

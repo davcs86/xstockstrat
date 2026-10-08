@@ -49,6 +49,42 @@ test.describe('Formula management UI', () => {
     await expect(page).toHaveURL(/\/insights\/formulas\/f-rsi/);
   });
 
+  test('AC-24: the formulas list renders no Public visibility column, badge or filter', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await page.route(
+      '**/xstockstrat.indicators.v1.IndicatorsService/ListFormulas',
+      async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ formulas: FORMULAS, totalCount: FORMULAS.length }),
+        });
+      },
+    );
+    await page.goto('/insights/formulas');
+    await expect(page.getByText('RSI Divergence')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('columnheader', { name: 'Visibility' })).toHaveCount(0);
+    await expect(page.getByText('Public', { exact: true })).toHaveCount(0);
+    await expect(page.getByText('Private', { exact: true })).toHaveCount(0);
+    await expect(page.getByText('Public only')).toHaveCount(0);
+  });
+
+  test('AC-24: the formula editor renders no Public checkbox or visibility badge', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await page.goto('/insights/formulas/new');
+    await expect(page.getByRole('button', { name: 'Create formula' })).toBeVisible({
+      timeout: 10000,
+    });
+    await expect(page.getByRole('checkbox', { name: /public/i })).toHaveCount(0);
+    await expect(page.getByText(/visible to all users/i)).toHaveCount(0);
+    await expect(page.getByText('Public', { exact: true })).toHaveCount(0);
+    await expect(page.getByText('Private', { exact: true })).toHaveCount(0);
+  });
+
   test('new formula page renders the create form', async ({ page }) => {
     await addAuthCookie(page);
     await page.goto('/insights/formulas/new');
@@ -72,7 +108,6 @@ test.describe('Formula management UI', () => {
           description: 'Built-in scoring formula',
           source: 'result = {"value": 1.0}',
           author: 'system',
-          isPublic: true,
           parameters: [],
           outputs: [],
         }),

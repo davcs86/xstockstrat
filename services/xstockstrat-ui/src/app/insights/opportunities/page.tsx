@@ -36,7 +36,7 @@ import {
 } from '@/lib/opportunityShared';
 import { OhlcBlock } from '@/components/shared/OhlcBlock';
 import { fmtUsd, fmtPct, pnlClass } from '@/lib/money';
-import { scoreColor, formatComposite } from '@/lib/scoreDisplay';
+import { compositeColor, formatComposite } from '@/lib/scoreDisplay';
 import { IN_QUEUE_CUE } from '@/lib/readinessCue';
 import { readinessState } from '@/lib/readinessRollup';
 import { useOpportunities, useSetOpportunityAction } from '@/hooks/useOpportunities';
@@ -551,13 +551,13 @@ function OpportunityRow({
           <span className="w-14 shrink-0 text-[10px] uppercase tracking-wide text-muted-foreground">
             Composite
           </span>
-          {/* feature 199 — the shrunk 0–1 ranking ordinal; scoreColor reuse (no new thresholds),
+          {/* feature 199 — the shrunk 0–1 ranking ordinal; centred diverging bands (feature 221),
               em-dash on NULL (never 0.000). Server order is authoritative — no client re-sort. */}
           {o.compositeScore !== undefined ? (
             <span
               className={cn(
                 'flex-1 text-right font-mono text-xs tabular-nums',
-                scoreColor(o.compositeScore),
+                compositeColor(o.compositeScore),
               )}
               data-testid={`opp-composite-${o.symbol}`}
             >

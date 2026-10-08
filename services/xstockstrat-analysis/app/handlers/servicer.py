@@ -38,6 +38,7 @@ from gen.trading.v1 import trading_pb2, trading_pb2_grpc
 from google.protobuf import json_format
 from google.protobuf.timestamp_pb2 import Timestamp
 
+from app.admin_audit import audit_admin_read
 from app.config.watcher import ConfigWatcher
 from app.engine.durable_schedule import DurableSchedule, seconds_until_hour_utc
 from app.repositories.backtest_details import BacktestDetailsRepository
@@ -55,7 +56,9 @@ from app.repositories.pnl_positions import PnLPositionsRepository
 from app.repositories.readiness_cache import ReadinessCacheRepository
 from app.repositories.strategies import StrategiesRepository
 from app.repositories.strategy_scores import StrategyScoresRepository
-from app.services import scoring, warmup
+from app.repositories.strategy_templates import StrategyTemplatesRepository
+from app.repositories.template_intents import TemplateIntentsRepository
+from app.services import scoring, sector_params, warmup
 from app.services.cooldown import effective_cooldown_days, is_cooldown_active
 from app.services.evaluator import (
     _FUNDAMENTAL_METRICS,
@@ -249,6 +252,10 @@ class _InsufficientData(Exception):
 
 # marketdata's GetBars defaults to a 500-bar page ordered ASC, so an unpaginated request silently
 # drops the NEWEST bars once a range exceeds that (730 days ≈ 504 bars). _fetch_bars_paged pages.
+# Current-sector reads are cached briefly per process: sectors change rarely and the live surfaces
+# would otherwise issue one GetCurrentSector per (strategy, symbol) evaluation (feature 217).
+_SECTOR_CACHE_TTL_SECONDS = 600
+
 _BAR_PAGE_SIZE = 1000
 
 # Backstop against a non-advancing cursor (32 pages × 1000 bars ≈ 128 years, unreachable under
@@ -282,6 +289,23 @@ _DEFAULT_WATCHLIST_READINESS_PAGE_SIZE = 25
 _MAX_DRAIN_PAGES = 50
 # Default queue page size when the request omits one.
 _DEFAULT_OPP_PAGE_SIZE = 50
+# Fixed invariant cap (operator round-5 ruling, not a config key): ambiguous (user_id, strategy_id)
+# score pairs recomputed per boot pass, bounding boot latency against the pooled DB.
+_BOOT_RECOMPUTE_MAX_PAIRS = 50
+# Reserved platform identity (feature 224); a granted internal caller's x-user-id, never a user's.
+SYSTEM_IDENTITY = "system"
+# Fixed invariants (operator ruling, not config keys): a PENDING intent older than this is presumed
+# orphaned by a crashed request and aborted by the sweep, which runs every _INTENT_SWEEP_SECONDS.
+_INTENT_STALE_SECONDS = 900
+_INTENT_SWEEP_SECONDS = 300
+# The SAN-bound grant indicators requires on the saga RPCs; never the N-only `analysis` bypass id.
+_TEMPLATE_SAGA_CALLER = "analysis-template-saga"
+_PROPAGATED_HEADERS = ("x-user-id", "x-access-scope", "x-trace-id")
+
+
+def blend_strategy_id(cfg) -> str:
+    """The strategy id the fundamentals-blend rules govern (feature 168); the sole reader."""
+    return cfg.get_str("analysis.engine.fundamentals_blend_strategy_id", "fundamentals_macd_blend")
 
 
 class _BarFetchError(Exception):
@@ -413,9 +437,12 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             if portfolio_channel
             else None
         )
-        self._backtests: dict[str, analysis_pb2.BacktestResult] = {}
-        self._strategies: dict[str, analysis_pb2.StrategyScore] = {}
+        # Keyed by backtest_id AND by the owner key (user_id, strategy_id).
+        self._backtests: dict[str | tuple[str, str], analysis_pb2.BacktestResult] = {}
+        self._strategies: dict[tuple[str, str], analysis_pb2.StrategyScore] = {}
         self._strategies_repo = StrategiesRepository(db_pool) if db_pool else None
+        self._strategy_templates_repo = StrategyTemplatesRepository(db_pool) if db_pool else None
+        self._template_intents_repo = TemplateIntentsRepository(db_pool) if db_pool else None
         # Process-lifetime singleton semaphore bounding cross-request GetIndicatorSeries compute so
         # a busy Symbol page can't starve the live loop. max(1, …) guards a negative config value.
         self._component_series_sem = asyncio.Semaphore(
@@ -500,8 +527,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # unavailable quote is never memoized (AC-11), so a stale price is never served as current.
         self._live_enrich_memo: dict[str, tuple[float, dict]] = {}
         # Per-strategy recompute serialization: asyncio.Lock is non-reentrant, so a trigger already
-        # holding it calls only _recompute_headline_locked. Single-process only, by strategy_id.
-        self._recompute_locks: dict[str, asyncio.Lock] = {}
+        # holding it calls only _recompute_headline_locked. Single-process only, by owner key.
+        self._recompute_locks: dict[tuple[str, str], asyncio.Lock] = {}
         # Set by main.py after the fundamentals signal loop is constructed; RunFundamentalsScan
         # invokes its shared run_once path.
         self._fundsignal_loop = None
@@ -522,6 +549,16 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             access_scope = 0
         return bool(access_scope & 0x04)
 
+    async def _require_admin_for_blend_id(self, context, strategy_id: str) -> bool:
+        """Abort FAILED_PRECONDITION (→ True) when a non-admin targets the configured blend id."""
+        if strategy_id != blend_strategy_id(self._cfg) or self._has_admin_scope(context):
+            return False
+        await context.abort(
+            grpc.StatusCode.FAILED_PRECONDITION,
+            "the fundamentals blend strategy id is reserved for admins",
+        )
+        return True
+
     @staticmethod
     def _caller_user_id(context) -> str:
         """The owning user resolved from the propagated ``x-user-id`` header (feature 133).
@@ -531,8 +568,34 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         the target row against this id and answer a miss (nonexistent or other-owner) with a
         uniform ``PERMISSION_DENIED`` — so a caller can never learn from the response whether a
         ``strategy_id`` exists under someone else's ownership. An empty caller id owns nothing.
+
+        An inbound ``system`` resolves to ``""`` (owns nothing): analysis has no inbound grant to
+        check, so this deliberately diverges from the ``PERMISSION_DENIED`` of design §2.
         """
-        return dict(context.invocation_metadata()).get("x-user-id", "")
+        caller = dict(context.invocation_metadata()).get("x-user-id", "")
+        return "" if caller == SYSTEM_IDENTITY else caller
+
+    def _admin_owner_selector(self, context, caller_user_id: str, owner_user_id: str) -> str:
+        """FR-13: the owner whose rows a read targets — ``owner_user_id`` only for an ADMIN."""
+        if owner_user_id and caller_user_id and self._has_admin_scope(context):
+            return owner_user_id
+        return caller_user_id
+
+    async def _audit_admin_read(self, context, object_kind, ids_by_owner) -> bool:
+        """Audit an admin foreign read; on failure abort ``UNAVAILABLE`` and return False."""
+        try:
+            await audit_admin_read(
+                self._ledger,
+                self._caller_user_id(context),
+                object_kind,
+                ids_by_owner,
+                context.invocation_metadata(),
+            )
+        except Exception as e:
+            log.warning("admin-read audit failed: %s", e)
+            await context.abort(grpc.StatusCode.UNAVAILABLE, "admin read audit unavailable")
+            return False
+        return True
 
     async def _fetch_formula_outputs(self, definition, propagation_meta) -> dict:
         """Map each custom-formula component's formula_id to the set of series it exposes.
@@ -559,12 +622,14 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             formula_outputs[comp.formula_id] = allowed
         return formula_outputs
 
-    async def _deleted_formula_warnings(self, definition, propagation_meta) -> list[str]:
-        """Warnings for each custom-formula component whose formula is soft-deleted (feature 086).
+    async def _formula_status_warnings(
+        self, definition, propagation_meta, *, include_unreadable=True
+    ) -> list[str]:
+        """Warnings for each custom-formula component whose formula is soft-deleted (feature 086)
+        or, with ``include_unreadable``, not readable by the caller (feature 224 NOT_FOUND).
 
-        Each referenced formula is fetched once; a fetch failure (e.g. NOT_FOUND) is swallowed —
-        only a live ``deleted`` flag is a deletion signal. Used both to flag deletion on read
-        (backtest run + GetStrategy live status) and to refuse a new binding on write.
+        Each referenced formula is fetched once; any other fetch failure is swallowed. Used to flag
+        status on read (GetStrategy) and write (REGISTER/UPDATE), and to refuse a deleted binding.
         """
         warnings: list[str] = []
         seen: set[str] = set()
@@ -579,7 +644,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     indicators_pb2.GetFormulaRequest(formula_id=comp.formula_id),
                     metadata=propagation_meta,
                 )
-            except grpc.aio.AioRpcError:
+            except grpc.aio.AioRpcError as e:
+                if include_unreadable and e.code() == grpc.StatusCode.NOT_FOUND:
+                    warnings.append(f"formula {comp.formula_id} not readable by owner")
                 continue
             if formula.deleted:
                 warnings.append(_deleted_formula_warning(formula.name, comp.formula_id))
@@ -592,14 +659,17 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         already-deleted binding untouched is not blocked, but no new deleted binding is accepted.
         Returns True if it aborted.
         """
-        warnings = await self._deleted_formula_warnings(definition, propagation_meta)
+        warnings = await self._formula_status_warnings(
+            definition, propagation_meta, include_unreadable=False
+        )
         if warnings:
             await context.abort(grpc.StatusCode.INVALID_ARGUMENT, warnings[0])
             return True
         return False
 
-    async def _validate_definition_proto(self, definition, context) -> None:
-        """Validate a StrategyDefinition; abort INVALID_ARGUMENT on failure."""
+    async def _validate_definition_proto(self, definition, context, warnings=()) -> None:
+        """Validate a StrategyDefinition; abort INVALID_ARGUMENT on failure, naming ``warnings``
+        first (an unreadable formula's outputs read as {"value"}, so its cause must lead)."""
         propagation_meta = [
             (k, v)
             for k, v in context.invocation_metadata()
@@ -613,24 +683,15 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # benchmark selects whose *bars* to compute on, but the formula reads no bars. Reject it at
         # write time (XOR) rather than silently ignoring one side.
         formula_fund_map = await self._formula_fundamentals(definition, propagation_meta)
-        for comp in definition.components:
-            if (
-                comp.kind == analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA
-                and comp.source_symbol
-                and formula_fund_map.get(comp.formula_id)
-            ):
-                await context.abort(
-                    grpc.StatusCode.INVALID_ARGUMENT,
-                    f"component '{comp.ref_name}': a fundamentals-input formula "
-                    f"('{comp.formula_id}') cannot also set source_symbol "
-                    f"('{comp.source_symbol}') — it reads fundamentals, not bars",
-                )
-                return
+        conflict = _fundamentals_source_symbol_conflict(definition, formula_fund_map)
+        if conflict:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, conflict)
+            return
         formula_outputs = await self._fetch_formula_outputs(definition, propagation_meta)
         try:
             _validate_definition(definition, formula_outputs)
         except ValueError as e:
-            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(e))
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, "; ".join([*warnings, str(e)]))
 
     async def RunBacktest(self, request, context):
         backtest_id = str(uuid.uuid4())
@@ -823,6 +884,22 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 # status gate below reports INSUFFICIENT_DATA.
                 symbols_to_run = []
 
+        # Feature 217: ONE batched sector-history snapshot per run (never per bar), only when the
+        # strategy declares per-sector overrides. Failure degrades to default values + a warning.
+        sector_history: dict[str, list] = {}
+        seed_symbols: set[str] = set()
+        sector_warnings: list[str] = []
+        if (
+            active_definition is not None
+            and sector_params.has_overrides(active_definition)
+            and symbols_to_run
+        ):
+            sector_history, err = await self._load_sector_history(
+                symbols_to_run, request.range, propagation_meta
+            )
+            if err:
+                sector_warnings.append(sector_params.SECTOR_UNAVAILABLE_WARNING.format(error=err))
+
         for symbol in symbols_to_run:
             try:
                 if active_definition is not None:
@@ -847,6 +924,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                         fill_model=effective_fill_model,  # feature 151
                         benchmark_bars=benchmark_bars,  # feature 152
                         formula_fund_map=formula_fund_map,  # feature 200
+                        sector_rows=sector_history.get(symbol.upper()),  # feature 217
+                        seed_symbols=seed_symbols,
                     )
                 else:
                     (
@@ -1044,8 +1123,14 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # definition). Detected during the warm-up prefetch's GetFormula — no extra fetch here.
         if formula_deleted_cache:
             result.warnings.extend(formula_deleted_cache.values())
+        if seed_symbols:
+            sector_warnings.append(
+                sector_params.SEED_SPAN_WARNING.format(symbols=", ".join(sorted(seed_symbols)))
+            )
+        if sector_warnings:
+            result.warnings.extend(sector_warnings)
         self._backtests[backtest_id] = result
-        self._backtests[request.strategy_id] = result
+        self._backtests[(caller_user_id, request.strategy_id)] = result
 
         # The backtest range (fully set after defaulting) is stamped on the run-history row and
         # every evidence cell.
@@ -1064,6 +1149,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 fingerprint=run_fingerprint,
                 range_start=range_start_dt,
                 range_end=range_end_dt,
+                user_id=caller_user_id or None,
             )
 
         # Grade THIS run for the run-history row only — the headline grade is derived from the
@@ -1085,11 +1171,12 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             # Record the resolved sizing model + params (None on the legacy branch).
             position_weight=resolved_position_weight,
             max_concurrent=resolved_max_concurrent,
+            user_id=caller_user_id or None,
         )
         # Persist full result (trades + equity + diagnostics) for OK runs only. Best-effort;
         # ordered after the summary insert so the FK (detail ⇒ listed summary) can hold.
         if result.status == analysis_pb2.BACKTEST_STATUS_OK:
-            await self._persist_backtest_detail(result)
+            await self._persist_backtest_detail(result, user_id=caller_user_id or None)
 
         # Recompute the headline grade from the strategy's full evidence base. Best-effort;
         # ordered BEFORE the completion emit so a subscriber sees the post-run grade.
@@ -1120,6 +1207,44 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         )
 
         return result
+
+    async def _sector_definition(self, definition, symbol, propagation_meta):
+        """Live-snapshot resolution (feature 217): the definition with per-sector overrides applied
+        for ``symbol``'s CURRENT sector. No overrides → the same object, no RPC. A marketdata
+        failure resolves to the default bucket — evaluation never fails on classification."""
+        if not sector_params.has_overrides(definition):
+            return definition
+        sym = symbol.upper()
+        now = time.monotonic()
+        cache = self.__dict__.setdefault("_sector_cache", {})
+        hit = cache.get(sym)
+        if hit is not None and now - hit[1] < _SECTOR_CACHE_TTL_SECONDS:
+            return sector_params.apply_sector(definition, hit[0])
+        sector, ok = await sector_params.fetch_current_sector(
+            self._marketdata, sym, propagation_meta
+        )
+        if ok:
+            cache[sym] = (sector, now)
+        return sector_params.apply_sector(definition, sector)
+
+    async def _load_sector_history(self, symbols, range_msg, propagation_meta):
+        """One batched GetSectorHistory (feature 217) for the run's symbols, rows grouped by symbol.
+
+        Returns ``(by_symbol, error)``; on an RPC failure ``by_symbol`` is empty so every bar
+        resolves to the default bucket (never fails the backtest)."""
+        req = marketdata_pb2.GetSectorHistoryRequest(symbols=[s.upper() for s in symbols])
+        if range_msg is not None and range_msg.HasField("end"):
+            req.end.CopyFrom(range_msg.end)
+        try:
+            resp = await self._marketdata.GetSectorHistory(req, metadata=propagation_meta)
+        except grpc.RpcError as e:
+            code = e.code().name if hasattr(e, "code") and e.code() else "UNKNOWN"
+            log.warning("GetSectorHistory failed (%s); per-sector overrides use defaults", code)
+            return {}, code
+        by_symbol: dict[str, list] = {}
+        for row in resp.rows:
+            by_symbol.setdefault(row.symbol, []).append(row)
+        return by_symbol, None
 
     async def _fetch_bars_paged(self, symbol, range_msg, propagation_meta):
         """Fetch every bar in ``range_msg``, following marketdata's pagination (feature 071).
@@ -1696,6 +1821,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         fill_model=analysis_pb2.FILL_MODEL_SAME_BAR_CLOSE,
         benchmark_bars=None,
         formula_fund_map=None,
+        sector_rows=None,
+        seed_symbols=None,
     ):
         """Run a stored/inline StrategyDefinition for one symbol via the shared evaluator.
 
@@ -1717,7 +1844,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             raise _InsufficientData(symbol, len(bars), 2)
 
         # Batch backtest path: SERIAL component assembly (component_sem=None).
-        evaluator = StrategyEvaluator(self._indicators, propagation_meta, component_sem=None)
+        evaluator = StrategyEvaluator(
+            self._indicators, propagation_meta, component_sem=None, raise_unreadable=True
+        )
         # Per-symbol point-in-time fundamentals (feature 198/201) — a 198 operand or a fundamentals
         # formula (routed via formula_fund_map) loads the PIT list; else None. T+1 carry-forward.
         fundamentals = await self._load_fundamentals(
@@ -1727,8 +1856,20 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # per run, shared across symbols) resolve source_symbol components via the evaluator.
         # formula_fund_map (feature 200) routes fundamentals-only formulas onto the fundamentals
         # channel; backtest is PIT, so the data itself is the PIT `fundamentals` list (no snapshot).
+        # Feature 217: per-bar as-of sector from the run's one GetSectorHistory snapshot.
+        sectors = None
+        if sector_params.has_overrides(definition):
+            sectors, used_seed = sector_params.sector_by_bar(sector_rows or [], bars)
+            if used_seed and seed_symbols is not None:
+                seed_symbols.add(symbol)
         decisions, component_series = await evaluator.evaluate_with_series(
-            definition, bars, None, benchmark_bars, fundamentals, formula_fund_map or {}
+            definition,
+            bars,
+            None,
+            benchmark_bars,
+            fundamentals,
+            formula_fund_map or {},
+            sector_by_bar=sectors,
         )
 
         n = len(bars)
@@ -2195,9 +2336,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             )
             return
 
-        async with self._lock_for(request.strategy_id):
+        async with self._lock_for(caller_user_id, request.strategy_id):
             try:
-                score = await self._fetch_and_aggregate(request.strategy_id, row)
+                score = await self._fetch_and_aggregate(caller_user_id, request.strategy_id, row)
             except Exception as e:
                 log.warning("failed to read evidence cells for score: %s", e)
                 await context.abort(grpc.StatusCode.UNAVAILABLE, "evidence store unavailable")
@@ -2205,10 +2346,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             if score is None:
                 # No eligible evidence: clear any stale grade. This delete is NON-best-effort —
                 # a failure aborts UNAVAILABLE rather than leaving a stale grade behind.
-                self._strategies.pop(request.strategy_id, None)
+                self._strategies.pop((caller_user_id, request.strategy_id), None)
                 if self._scores_repo is not None:
                     try:
-                        await self._scores_repo.delete(request.strategy_id)
+                        await self._scores_repo.delete(caller_user_id, request.strategy_id)
                     except Exception as e:
                         log.warning("failed to clear stale score: %s", e)
                         await context.abort(grpc.StatusCode.UNAVAILABLE, "score store unavailable")
@@ -2217,7 +2358,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     grpc.StatusCode.NOT_FOUND, "no eligible evidence — run a backtest"
                 )
                 return
-            await self._persist_strategy_score(score)
+            await self._persist_strategy_score(caller_user_id, score)
 
         from google.protobuf.struct_pb2 import Struct
 
@@ -2244,7 +2385,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
 
         return score
 
-    async def _persist_strategy_score(self, score) -> None:
+    async def _persist_strategy_score(self, user_id: str, score) -> None:
         """Update the in-memory serving dict and best-effort durably persist a score.
 
         Reads serve from ``self._strategies``, so a swallowed write never loses the caller's
@@ -2252,12 +2393,13 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         column against a non-finite component (NaN/Infinity would make Postgres reject it).
         Shared by ScoreStrategy and RunBacktest's auto-scoring so the two never diverge.
         """
-        self._strategies[score.strategy_id] = score
+        self._strategies[(user_id, score.strategy_id)] = score
         if self._scores_repo is None:
             return
         try:
             components = {k: v for k, v in dict(score.component_scores).items() if math.isfinite(v)}
             await self._scores_repo.upsert(
+                user_id,
                 score.strategy_id,
                 score.overall_score,
                 score.rating,
@@ -2269,12 +2411,13 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         except Exception as e:
             log.warning("failed to persist strategy score: %s", e)
 
-    def _lock_for(self, strategy_id: str) -> asyncio.Lock:
-        """Return the (lazily created) per-strategy recompute lock."""
-        lock = self._recompute_locks.get(strategy_id)
+    def _lock_for(self, user_id: str, strategy_id: str) -> asyncio.Lock:
+        """Return the (lazily created) per-owned-strategy recompute lock."""
+        key = (user_id, strategy_id)
+        lock = self._recompute_locks.get(key)
         if lock is None:
             lock = asyncio.Lock()
-            self._recompute_locks[strategy_id] = lock
+            self._recompute_locks[key] = lock
         return lock
 
     def _derive_score_from_cells(self, strategy_id, strategy_row, cells):
@@ -2315,7 +2458,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             provisional=provisional,
         )
 
-    async def _fetch_and_aggregate(self, strategy_id, strategy_row):
+    async def _fetch_and_aggregate(self, user_id, strategy_id, strategy_row):
         """Read eligible cells for the strategy's CURRENT fingerprint and derive a score.
 
         Returns the derived (unpersisted) StrategyScore, or ``None`` when there is zero eligible
@@ -2323,7 +2466,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         NOT mutate in-memory or DB state — pure read + compute.
         """
         fingerprint = _definition_fingerprint(strategy_row["definition_json"])
-        cells = await self._backtest_run_symbols_repo.fetch_eligible(strategy_id, fingerprint)
+        cells = await self._backtest_run_symbols_repo.fetch_eligible(
+            user_id, strategy_id, fingerprint
+        )
         if not cells:
             return None
         return self._derive_score_from_cells(strategy_id, strategy_row, cells)
@@ -2343,26 +2488,26 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         row = await self._strategies_repo.get_by_owner_and_id(user_id, strategy_id)
         if row is None:
             return None
-        async with self._lock_for(strategy_id):
-            return await self._recompute_headline_locked(strategy_id, row)
+        async with self._lock_for(user_id, strategy_id):
+            return await self._recompute_headline_locked(user_id, strategy_id, row)
 
-    async def _recompute_headline_locked(self, strategy_id, strategy_row):
+    async def _recompute_headline_locked(self, user_id, strategy_id, strategy_row):
         """Recompute the headline grade; the caller MUST already hold the strategy's lock.
 
         Zero eligible evidence → clear any stale grade (in-memory pop + best-effort DB delete),
         return None. Otherwise derive, persist via the shared score funnel, return the score.
         asyncio.Lock is non-reentrant, so triggers already inside the lock call ONLY this variant.
         """
-        score = await self._fetch_and_aggregate(strategy_id, strategy_row)
+        score = await self._fetch_and_aggregate(user_id, strategy_id, strategy_row)
         if score is None:
-            self._strategies.pop(strategy_id, None)
+            self._strategies.pop((user_id, strategy_id), None)
             if self._scores_repo is not None:
                 try:
-                    await self._scores_repo.delete(strategy_id)
+                    await self._scores_repo.delete(user_id, strategy_id)
                 except Exception as e:
                     log.warning("failed to clear stale strategy score: %s", e)
             return None
-        await self._persist_strategy_score(score)
+        await self._persist_strategy_score(user_id, score)
         return score
 
     async def _persist_backtest_run(
@@ -2374,6 +2519,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         range_end=None,
         position_weight=None,
         max_concurrent=None,
+        user_id=None,
     ) -> None:
         """Best-effort append of a completed backtest to the durable run-history table.
 
@@ -2408,6 +2554,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 rating=score.rating if score is not None else None,
                 range_start=range_start,
                 range_end=range_end,
+                user_id=user_id,
                 sizing_mode=analysis_pb2.SizingMode.Name(result.sizing_mode),
                 position_weight=position_weight,
                 max_concurrent=max_concurrent,
@@ -2416,7 +2563,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         except Exception as e:
             log.warning("failed to persist backtest run history: %s", e)
 
-    async def _persist_backtest_detail(self, result) -> None:
+    async def _persist_backtest_detail(self, result, user_id=None) -> None:
         """Best-effort persist of an OK run's full serialized result (feature 068).
 
         Stores the exact wire bytes ``GetBacktest`` will serve back ("store what you
@@ -2437,12 +2584,13 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 completed_at=result.completed_at.ToDatetime(),
                 result_pb=result.SerializeToString(),
                 retention=retention,
+                user_id=user_id,
             )
         except Exception as e:
             log.warning("failed to persist backtest detail: %s", e)
 
     async def _persist_symbol_cells(
-        self, cells, *, backtest_id, strategy_id, fingerprint, range_start, range_end
+        self, cells, *, backtest_id, strategy_id, fingerprint, range_start, range_end, user_id=None
     ) -> None:
         """Best-effort flush of per-symbol evidence cells for an OK run (feature 065).
 
@@ -2468,6 +2616,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     "definition_fingerprint": fingerprint,
                     "range_start": range_start,
                     "range_end": range_end,
+                    "user_id": user_id,
                 }
                 for c in cells
             ]
@@ -2486,25 +2635,47 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             return
         rows = await self._scores_repo.list()
         for r in rows:
-            self._strategies[r["strategy_id"]] = _row_to_score(r)
+            self._strategies[(r["user_id"], r["strategy_id"])] = _row_to_score(r)
+
+    async def recompute_unscored_pairs(self) -> int:
+        """Boot pass: recompute ambiguous owner pairs with no v2 score, best-effort per pair.
+
+        At most ``_BOOT_RECOMPUTE_MAX_PAIRS`` per pass; the rest wait for the next boot pass.
+        """
+        if self._scores_repo is None:
+            return 0
+        pairs = await self._scores_repo.list_unscored_pairs(limit=_BOOT_RECOMPUTE_MAX_PAIRS)
+        pairs = pairs[:_BOOT_RECOMPUTE_MAX_PAIRS]
+        for user_id, strategy_id in pairs:
+            try:
+                await self._recompute_headline(user_id, strategy_id)
+            except Exception as e:
+                log.warning("boot recompute failed for %s/%s: %s", user_id, strategy_id, e)
+        return len(pairs)
 
     async def ListStrategies(self, request, context):
-        # Owner-scoped — return only the caller's own scores. The _strategies cache is keyed by
-        # bare strategy_id, so cross-check ownership against the repo.
+        # Owner-scoped — return only the caller's own scores, cross-checked against the repo.
         if self._strategies_repo is not None:
             caller_user_id = self._caller_user_id(context)
             owned, _ = await self._strategies_repo.list(caller_user_id, include_inactive=True)
-            owned_ids = {r["strategy_id"] for r in owned}
-            strategies = [v for k, v in self._strategies.items() if k in owned_ids]
+            strategies = []
+            for r in owned:
+                cached = self._strategies.get((caller_user_id, r["strategy_id"]))
+                if cached is None:
+                    continue
+                score = analysis_pb2.StrategyScore()
+                score.CopyFrom(cached)
+                _set_origin_from_row(score.origin, r)
+                strategies.append(score)
+            await self._fill_template_origins([s.origin for s in strategies])
         else:
             strategies = list(self._strategies.values())
         return analysis_pb2.ListStrategiesResponse(strategies=strategies)
 
     async def GetStrategyReport(self, request, context):
-        # Owner-scoped — uniform PERMISSION_DENIED for a non-owned/missing strategy (the in-memory
-        # score/backtest caches are keyed by bare strategy_id).
+        # Owner-scoped — uniform PERMISSION_DENIED for a non-owned/missing strategy.
+        caller_user_id = self._caller_user_id(context)
         if self._strategies_repo is not None:
-            caller_user_id = self._caller_user_id(context)
             owned = (
                 await self._strategies_repo.get_by_owner_and_id(caller_user_id, request.strategy_id)
                 if caller_user_id
@@ -2516,13 +2687,13 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     f"strategy '{request.strategy_id}' not found or not owned",
                 )
                 return
-        score = self._strategies.get(request.strategy_id)
+        score = self._strategies.get((caller_user_id, request.strategy_id))
         if score is None:
             await context.abort(
                 grpc.StatusCode.NOT_FOUND, f"strategy {request.strategy_id} not found"
             )
             return
-        result = self._backtests.get(request.strategy_id)
+        result = self._backtests.get((caller_user_id, request.strategy_id))
         return analysis_pb2.StrategyReport(
             strategy_id=request.strategy_id,
             score=score,
@@ -2540,8 +2711,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         if self._backtest_runs_repo is None:
             return analysis_pb2.ListBacktestsResponse()
         # Owner-scoped — resolve ownership before returning another user's run history.
+        caller_user_id = self._caller_user_id(context)
         if self._strategies_repo is not None:
-            caller_user_id = self._caller_user_id(context)
             owned = (
                 await self._strategies_repo.get_by_owner_and_id(caller_user_id, request.strategy_id)
                 if caller_user_id
@@ -2555,7 +2726,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 return
         limit = request.limit if request.limit > 0 else 20
         try:
-            rows = await self._backtest_runs_repo.list_by_strategy(request.strategy_id, limit=limit)
+            rows = await self._backtest_runs_repo.list_by_strategy(
+                caller_user_id, request.strategy_id, limit=limit
+            )
         except Exception as e:
             log.warning("failed to read backtest run history: %s", e)
             return analysis_pb2.ListBacktestsResponse()
@@ -2569,20 +2742,27 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         strategy_id keys, and never evicts). NOT_FOUND is the single state for legacy,
         evicted, and INSUFFICIENT runs — and for the no-DB/read-error paths, which
         degrade the same way (``ListBacktests`` empty-response precedent). No outbound
-        gRPC calls → nothing to propagate; no admin gate (read parity with
-        ``ListBacktests``).
+        gRPC calls. A run owned by someone else is PERMISSION_DENIED (``ListBacktests`` parity),
+        admins included: FR-13's audited admin read view does not cover backtests.
         """
-        row_bytes = None
+        row = None
         if self._backtest_details_repo is not None:
             try:
-                row_bytes = await self._backtest_details_repo.get(request.backtest_id)
+                row = await self._backtest_details_repo.get(request.backtest_id)
             except Exception as e:
                 log.warning("failed to read backtest detail: %s", e)
-                row_bytes = None
+                row = None
         # Abort OUTSIDE the except block: context.abort raises, and a nested abort would be
         # swallowed by the bare except.
-        if row_bytes is None:
+        if row is None:
             await context.abort(grpc.StatusCode.NOT_FOUND, "no detailed data for this run")
+            return
+        row_bytes, owner = row
+        caller_user_id = self._caller_user_id(context)
+        if not owner or owner != caller_user_id:
+            await context.abort(
+                grpc.StatusCode.PERMISSION_DENIED, "backtest not found or not owned"
+            )
             return
         result = analysis_pb2.BacktestResult()
         result.ParseFromString(row_bytes)
@@ -2610,10 +2790,18 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         _strip_dead_signal_params(definition)
 
         if op == analysis_pb2.STRATEGY_OPERATION_REGISTER:
-            await self._validate_definition_proto(definition, context)
+            propagation_meta = [
+                (k, v)
+                for k, v in context.invocation_metadata()
+                if k in ("x-user-id", "x-access-scope", "x-trace-id")
+            ]
+            status_warnings = await self._formula_status_warnings(definition, propagation_meta)
+            await self._validate_definition_proto(definition, context, status_warnings)
             # Owner is server-authoritative — set from the header, never the request body. Two
             # users may share a strategy_id (composite PK), so the duplicate check is owner-scoped.
             definition.user_id = caller_user_id
+            if await self._require_admin_for_blend_id(context, definition.strategy_id):
+                return
             # Strict register: an existing id (active OR deactivated) is a conflict — route the
             # caller to reactivate rather than silently overwrite or crash on the PK.
             if (
@@ -2645,7 +2833,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     f"strategy '{definition.strategy_id}' already exists",
                 )
                 return
-            return _row_to_strategy_definition(row)
+            registered = _row_to_strategy_definition(row)
+            registered.warnings.extend(status_warnings)
+            return registered
         if op == analysis_pb2.STRATEGY_OPERATION_UPDATE:
             # An update_mask turns UPDATE into a partial merge; an absent mask keeps the
             # full-replace path byte-for-byte, so existing clients are unaffected.
@@ -2687,6 +2877,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             # only, so an update leaving an existing (already-deleted) binding is not blocked.
             if await self._refuse_deleted_bindings(definition, context, propagation_meta):
                 return
+            status_warnings = await self._formula_status_warnings(definition, propagation_meta)
             union = analysis_pb2.StrategyDefinition()
             union.CopyFrom(_row_to_strategy_definition(pre))
             union.components.extend(definition.components)
@@ -2731,7 +2922,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     caller_user_id, definition.strategy_id, _apply
                 )
             except _MergeRejected as e:
-                await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(e))
+                await context.abort(
+                    grpc.StatusCode.INVALID_ARGUMENT, "; ".join([*status_warnings, str(e)])
+                )
                 return
             if row is None:
                 await context.abort(
@@ -2742,19 +2935,17 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             # A definition change usually changes the fingerprint, so clear the stale in-memory
             # grade FIRST, then best-effort recompute; the UPDATE never fails on a recompute error.
             sid = definition.strategy_id
-            async with self._lock_for(sid):
-                self._strategies.pop(sid, None)
+            async with self._lock_for(caller_user_id, sid):
+                self._strategies.pop((caller_user_id, sid), None)
                 try:
-                    await self._recompute_headline_locked(sid, row)
+                    await self._recompute_headline_locked(caller_user_id, sid, row)
                 except Exception as e:
                     log.warning("failed to recompute headline after update: %s", e)
-            return _row_to_strategy_definition(row)
+            updated = _row_to_strategy_definition(row)
+            updated.warnings.extend(status_warnings)
+            return updated
         if op == analysis_pb2.STRATEGY_OPERATION_DEACTIVATE:
-            blend_strategy_id = self._cfg.get_str(
-                "analysis.engine.fundamentals_blend_strategy_id",
-                "fundamentals_macd_blend",
-            )
-            if definition.strategy_id == blend_strategy_id:
+            if definition.strategy_id == blend_strategy_id(self._cfg):
                 await context.abort(
                     grpc.StatusCode.FAILED_PRECONDITION,
                     "the fundamentals blend strategy cannot be deactivated; "
@@ -2799,9 +2990,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # Owner-scoped read. A non-owner gets a uniform PERMISSION_DENIED, never NOT_FOUND —
         # no existence probing via response code.
         caller_user_id = self._caller_user_id(context)
+        owner = self._admin_owner_selector(context, caller_user_id, request.owner_user_id)
         row = (
-            await self._strategies_repo.get_by_owner_and_id(caller_user_id, request.strategy_id)
-            if caller_user_id
+            await self._strategies_repo.get_by_owner_and_id(owner, request.strategy_id)
+            if owner
             else None
         )
         if row is None:
@@ -2810,17 +3002,22 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 f"strategy '{request.strategy_id}' not found or not owned",
             )
             return
+        if owner != caller_user_id and not await self._audit_admin_read(
+            context, "strategy", {owner: [request.strategy_id]}
+        ):
+            return
         definition = _row_to_strategy_definition(row)
-        # Surface a warning if this strategy references a soft-deleted formula; it still evaluates
-        # on the last-saved definition, but the deletion is flagged to whoever reads it.
+        # Surface a warning if this strategy references a soft-deleted formula (still evaluates on
+        # the last-saved definition) or one its reader cannot read (the component is skipped).
         propagation_meta = [
             (k, v)
             for k, v in context.invocation_metadata()
             if k in ("x-user-id", "x-access-scope", "x-trace-id")
         ]
-        deleted_warnings = await self._deleted_formula_warnings(definition, propagation_meta)
-        if deleted_warnings:
-            definition.warnings.extend(deleted_warnings)
+        definition.warnings.extend(
+            await self._formula_status_warnings(definition, propagation_meta)
+        )
+        await self._fill_template_origins([definition.origin])
         return definition
 
     async def ListStrategyDefinitions(self, request, context):
@@ -2829,15 +3026,25 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # Header-derived owner filter (never read ListStrategiesRequest.user_id from the wire).
         # An empty caller id lists nothing.
         caller_user_id = self._caller_user_id(context)
+        owner = self._admin_owner_selector(context, caller_user_id, request.owner_user_id)
         rows, total = await self._strategies_repo.list(
-            caller_user_id,
+            owner,
             include_inactive=request.include_inactive,
             page_size=request.page_size,
             page_offset=request.page_offset,
         )
+        if (
+            owner != caller_user_id
+            and rows
+            and not await self._audit_admin_read(
+                context, "strategy", {owner: [r["strategy_id"] for r in rows]}
+            )
+        ):
+            return
+        definitions = [_row_to_strategy_definition(r) for r in rows]
+        await self._fill_template_origins([d.origin for d in definitions])
         return analysis_pb2.ListStrategyDefinitionsResponse(
-            definitions=[_row_to_strategy_definition(r) for r in rows],
-            total_count=total,
+            definitions=definitions, total_count=total
         )
 
     async def SetStrategyLive(self, request, context):
@@ -2878,11 +3085,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 return
 
         if not request.live_enabled:
-            blend_strategy_id = self._cfg.get_str(
-                "analysis.engine.fundamentals_blend_strategy_id",
-                "fundamentals_macd_blend",
-            )
-            if request.strategy_id == blend_strategy_id:
+            if request.strategy_id == blend_strategy_id(self._cfg):
                 await context.abort(
                     grpc.StatusCode.FAILED_PRECONDITION,
                     "the fundamentals blend strategy cannot be set non-live; "
@@ -2921,6 +3124,296 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             log.warning("failed to emit live_toggled ledger event: %s", e)
 
         return analysis_pb2.SetStrategyLiveResponse(definition=_row_to_strategy_definition(row))
+
+    # ── Strategy template catalog + InstantiateTemplate saga (feature 224) ──────────────────────
+
+    async def _fill_template_origins(self, origins) -> None:
+        """Set latest_version/update_available on ``origins`` with ONE batched template lookup."""
+        ids = sorted({o.template_id for o in origins if o.template_id})
+        if not ids or self._strategy_templates_repo is None:
+            return
+        latest = await self._strategy_templates_repo.latest_versions(ids)
+        for o in origins:
+            if o.template_id:
+                o.latest_version = latest.get(o.template_id, 0)
+                o.update_available = o.latest_version > o.template_version
+
+    async def _validate_template_definition(self, definition, context) -> bool:
+        """Validate a strategy-template payload whose formula ids are formula TEMPLATE ids, against
+        indicators' active FormulaTemplate payloads (never GetFormula). True if it aborted."""
+        propagation_meta = [
+            (k, v) for k, v in context.invocation_metadata() if k in _PROPAGATED_HEADERS
+        ]
+        try:
+            resp = await self._indicators.ListTemplates(
+                indicators_pb2.ListTemplatesRequest(), metadata=propagation_meta
+            )
+        except grpc.RpcError as e:
+            log.warning("formula template catalog read failed: %s", e)
+            await context.abort(grpc.StatusCode.UNAVAILABLE, "formula template catalog unavailable")
+            return True
+        active = {t.meta.template_id: t.payload for t in resp.templates if not t.meta.retired}
+        formula_outputs: dict[str, set[str]] = {}
+        formula_fund_map: dict[str, list] = {}
+        for comp in definition.components:
+            if comp.kind != analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA or not comp.formula_id:
+                continue
+            payload = active.get(comp.formula_id)
+            if payload is None:
+                await context.abort(
+                    grpc.StatusCode.INVALID_ARGUMENT,
+                    f"component '{comp.ref_name}': no active formula template '{comp.formula_id}'",
+                )
+                return True
+            formula_outputs[comp.formula_id] = {"value"} | {o.name for o in payload.outputs}
+            formula_fund_map[comp.formula_id] = [int(m) for m in payload.fundamental_inputs]
+        conflict = _fundamentals_source_symbol_conflict(definition, formula_fund_map)
+        if conflict:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, conflict)
+            return True
+        try:
+            _validate_definition(definition, formula_outputs)
+        except ValueError as e:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(e))
+            return True
+        return False
+
+    async def ListTemplates(self, request, context):
+        if not self._caller_user_id(context):
+            await context.abort(grpc.StatusCode.PERMISSION_DENIED, "authenticated caller required")
+            return
+        if self._strategy_templates_repo is None:
+            return analysis_pb2.ListTemplatesResponse()
+        rows = await self._strategy_templates_repo.list_active()
+        return analysis_pb2.ListTemplatesResponse(
+            templates=[_row_to_strategy_template(r) for r in rows]
+        )
+
+    async def ManageTemplate(self, request, context):
+        caller_user_id = self._caller_user_id(context)
+        if not caller_user_id or not self._has_admin_scope(context):
+            await context.abort(
+                grpc.StatusCode.PERMISSION_DENIED, "admin scope required to manage templates"
+            )
+            return
+        if self._strategy_templates_repo is None:
+            await context.abort(grpc.StatusCode.UNAVAILABLE, "template store unavailable")
+            return
+        meta = request.template.meta
+        if not meta.template_id or meta.kind not in (
+            common_pb2.TEMPLATE_KIND_UNSPECIFIED,
+            common_pb2.TEMPLATE_KIND_STRATEGY,
+        ):
+            await context.abort(
+                grpc.StatusCode.INVALID_ARGUMENT,
+                "template.meta needs a template_id and the STRATEGY kind",
+            )
+            return
+        op = request.operation
+        if op == common_pb2.TEMPLATE_OPERATION_RETIRE:
+            row = await self._strategy_templates_repo.retire(meta.template_id)
+        elif op in (common_pb2.TEMPLATE_OPERATION_CREATE, common_pb2.TEMPLATE_OPERATION_UPDATE):
+            payload = analysis_pb2.StrategyDefinition()
+            payload.CopyFrom(request.template.payload)
+            if not payload.strategy_id:
+                await context.abort(
+                    grpc.StatusCode.INVALID_ARGUMENT, "template payload needs a strategy_id"
+                )
+                return
+            _normalize_source_symbols(payload)
+            _strip_dead_signal_params(payload)
+            if await self._validate_template_definition(payload, context):
+                return
+            payload_json = json_format.MessageToDict(payload, preserving_proto_field_name=True)
+            if op == common_pb2.TEMPLATE_OPERATION_CREATE:
+                try:
+                    row = await self._strategy_templates_repo.create(
+                        meta, payload_json, caller_user_id
+                    )
+                except asyncpg.UniqueViolationError:
+                    await context.abort(
+                        grpc.StatusCode.ALREADY_EXISTS,
+                        f"template '{meta.template_id}' already exists",
+                    )
+                    return
+            else:
+                row = await self._strategy_templates_repo.update(meta.template_id, payload_json)
+        else:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, "unsupported template operation")
+            return
+        if row is None:
+            await context.abort(
+                grpc.StatusCode.NOT_FOUND, f"template '{meta.template_id}' not found"
+            )
+            return
+        return _row_to_strategy_template(row)
+
+    @staticmethod
+    def _saga_request_meta(context) -> list:
+        """The caller's trio + the saga grant, for the indicators saga calls on the request path."""
+        trio = [(k, v) for k, v in context.invocation_metadata() if k in _PROPAGATED_HEADERS]
+        return [*trio, ("x-internal-caller", _TEMPLATE_SAGA_CALLER)]
+
+    @staticmethod
+    def _saga_sweep_meta(user_id: str) -> list:
+        """Sweep-path metadata: the intent's owner, the saga grant, a fresh trace id (no scope)."""
+        return [
+            ("x-user-id", user_id),
+            ("x-internal-caller", _TEMPLATE_SAGA_CALLER),
+            ("x-trace-id", uuid.uuid4().hex),
+        ]
+
+    async def _resolve_intent(self, intent_id: str, commit: bool, meta) -> bool:
+        try:
+            await self._indicators.ResolveTemplateIntent(
+                indicators_pb2.ResolveTemplateIntentRequest(intent_id=intent_id, commit=commit),
+                metadata=meta,
+            )
+        except grpc.RpcError as e:
+            log.warning("ResolveTemplateIntent(%s, commit=%s) failed: %s", intent_id, commit, e)
+            return False
+        return True
+
+    async def _abort_intent(self, intent_id: str, meta, *, claimed: bool = False) -> None:
+        """PENDING→ABORTING (skipped when ``claimed``), delete the copies, →ABORTED. A lost CAS
+        means the sweep owns the intent; a failed delete leaves ABORTING for the sweep to retry."""
+        repo = self._template_intents_repo
+        if not claimed and not await repo.cas(intent_id, "PENDING", "ABORTING"):
+            return
+        if await self._resolve_intent(intent_id, False, meta):
+            await repo.cas(intent_id, "ABORTING", "ABORTED")
+
+    async def _finalize_intent(self, intent_id: str, meta) -> None:
+        if await self._resolve_intent(intent_id, True, meta):
+            await self._template_intents_repo.cas(intent_id, "COMMITTED", "FINALIZED")
+
+    async def _free_strategy_id(self, owner: str, base: str) -> str:
+        """``base`` if the owner does not hold it, else the first free ``base_2``, ``base_3``, …"""
+        candidate, n = base, 1
+        while await self._strategies_repo.get_by_owner_and_id(owner, candidate) is not None:
+            n += 1
+            candidate = f"{base}_{n}"
+        return candidate
+
+    async def InstantiateTemplate(self, request, context):
+        owner = self._caller_user_id(context)
+        if not owner:
+            await context.abort(grpc.StatusCode.PERMISSION_DENIED, "authenticated caller required")
+            return
+        if (
+            self._strategies_repo is None
+            or self._strategy_templates_repo is None
+            or self._template_intents_repo is None
+        ):
+            await context.abort(grpc.StatusCode.UNAVAILABLE, "strategy store unavailable")
+            return
+        tpl = await self._strategy_templates_repo.get(request.template_id)
+        if tpl is None or tpl["retired_at"] is not None:
+            await context.abort(
+                grpc.StatusCode.NOT_FOUND, f"template '{request.template_id}' not found"
+            )
+            return
+        definition = json_format.ParseDict(
+            tpl["payload"] or {}, analysis_pb2.StrategyDefinition(), ignore_unknown_fields=True
+        )
+        if request.strategy_id:
+            if await self._strategies_repo.get_by_owner_and_id(owner, request.strategy_id):
+                await context.abort(
+                    grpc.StatusCode.ALREADY_EXISTS,
+                    f"strategy '{request.strategy_id}' already exists",
+                )
+                return
+            final_id = request.strategy_id
+        else:
+            final_id = await self._free_strategy_id(owner, definition.strategy_id)
+        if await self._require_admin_for_blend_id(context, final_id):
+            return
+
+        template_ids = list(
+            dict.fromkeys(
+                c.formula_id
+                for c in definition.components
+                if c.kind == analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA and c.formula_id
+            )
+        )
+        intent_id = str(uuid.uuid4())
+        meta = self._saga_request_meta(context)
+        await self._template_intents_repo.create(
+            {
+                "intent_id": intent_id,
+                "user_id": owner,
+                "template_id": tpl["template_id"],
+                "template_version": tpl["version"],
+                "strategy_id": final_id,
+            }
+        )
+        copies: dict[str, str] = {}
+        if template_ids:
+            try:
+                resp = await self._indicators.InstantiateTemplate(
+                    indicators_pb2.InstantiateTemplateRequest(
+                        template_ids=template_ids, intent_id=intent_id
+                    ),
+                    metadata=meta,
+                )
+            except grpc.RpcError as e:
+                await self._abort_intent(intent_id, meta)
+                await context.abort(e.code(), e.details())
+                return
+            copies = dict(resp.formula_ids_by_template)
+            missing = [t for t in template_ids if not copies.get(t)]
+            if missing:
+                await self._abort_intent(intent_id, meta)
+                await context.abort(
+                    grpc.StatusCode.INTERNAL, f"no formula copy returned for {missing}"
+                )
+                return
+
+        for comp in definition.components:
+            if comp.kind == analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA and comp.formula_id:
+                comp.formula_id = copies[comp.formula_id]
+        definition.strategy_id = final_id
+        definition.user_id = owner
+        definition.active = False
+        definition.live_enabled = False
+        definition.ClearField("origin")
+        del definition.warnings[:]
+        definition_json = json_format.MessageToDict(definition, preserving_proto_field_name=True)
+
+        async def _commit_intent(conn):
+            return await self._template_intents_repo.cas(
+                intent_id, "PENDING", "COMMITTED", conn=conn, user_id=owner
+            )
+
+        try:
+            row = await self._strategies_repo.create_from_template(
+                owner,
+                final_id,
+                definition.display_name,
+                definition_json,
+                tpl["template_id"],
+                tpl["version"],
+                commit_intent=_commit_intent,
+            )
+        except asyncpg.UniqueViolationError:
+            await self._abort_intent(intent_id, meta)
+            await context.abort(
+                grpc.StatusCode.ALREADY_EXISTS, f"strategy '{final_id}' already exists"
+            )
+            return
+        if row is None:
+            # The sweep aborted this intent first; it owns deleting the copies.
+            await context.abort(
+                grpc.StatusCode.ABORTED, "template instantiation was aborted; retry"
+            )
+            return
+        try:
+            await self._finalize_intent(intent_id, meta)
+        except Exception as e:  # the sweep finalizes a COMMITTED intent
+            log.warning("template intent %s finalize deferred to sweep: %s", intent_id, e)
+        created = _row_to_strategy_definition(row)
+        await self._fill_template_origins([created.origin])
+        return created
 
     async def ScreenSymbols(self, request, context):
         """Screen a symbol universe against weighted criteria (feature 060).
@@ -3111,7 +3604,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 fetch_bars=self._fetch_bars_paged,
                 bars_sem=self._bars_fetch_sem,
                 evaluator=evaluator,
-                definition=definition,
+                definition=await self._sector_definition(definition, symbol, propagation_meta),
                 range_msg=range_msg,
                 propagation_meta=propagation_meta,
                 benchmark_bars=benchmark_bars,
@@ -3383,7 +3876,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                                 fetch_bars=self._fetch_bars_paged,
                                 bars_sem=self._readiness_materializer_bars_sem,
                                 evaluator=evaluator,
-                                definition=definition,
+                                definition=await self._sector_definition(
+                                    definition, sym, propagation_meta
+                                ),
                                 range_msg=range_msg,
                                 propagation_meta=propagation_meta,
                                 benchmark_bars=benchmark_bars,
@@ -3522,14 +4017,16 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     return_weight[src] = return_weight.get(src, 0.0) + w
 
         source_filter = request.source_id or ""  # optional slug filter (AC-7)
-        surviving = [s for s in trade_count if not source_filter or s == source_filter]
-
         propagation_meta = [
             (k, v)
             for k, v in context.invocation_metadata()
             if k in ("x-user-id", "x-access-scope", "x-trace-id")
         ]
-        names = await self._resolve_source_names(propagation_meta) if surviving else {}
+        # Only the caller-visible (own + system) sources: a legacy snapshot may name a foreign slug.
+        names = await self._resolve_source_names(propagation_meta) if trade_count else {}
+        surviving = [
+            s for s in trade_count if s in names and (not source_filter or s == source_filter)
+        ]
 
         attributions = []
         for src in surviving:
@@ -4110,7 +4607,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     )
                     try:
                         readiness = await evaluator.evaluate_conditions_traced(
-                            definition,
+                            await self._sector_definition(definition, sym, propagation_meta),
                             bars,
                             sym,
                             rule=rule,
@@ -4194,7 +4691,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     fetch_bars=self._fetch_bars_paged,
                     bars_sem=self._readiness_materializer_bars_sem,
                     evaluator=evaluator,
-                    definition=definition,
+                    definition=await self._sector_definition(definition, sym, propagation_meta),
                     range_msg=range_msg,
                     propagation_meta=propagation_meta,
                     benchmark_bars=benchmark_bars,
@@ -4238,7 +4735,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             terms = await self._opportunities_repo.symbol_composite_terms(user_id, sym)
             owned = {t["strategy_id"] for t in terms if t.get("strategy_id")}
             score = _symbol_score_for_group(
-                terms, self._owner_grade_lookup(owned), ss_gamma, ss_floor
+                terms, self._owner_grade_lookup(user_id, owned), ss_gamma, ss_floor
             )
             await self._opportunities_repo.stamp_symbol_score(user_id, sym, score)
         if readiness_stage:
@@ -4247,16 +4744,15 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             except Exception as e:  # noqa: BLE001 — readiness-cache heal is best-effort
                 log.warning("surgical retry: readiness-cache upsert failed for %s: %s", user_id, e)
 
-    def _owner_grade_lookup(self, owned_ids: "set[str]"):
+    def _owner_grade_lookup(self, user_id: str, owned_ids: "set[str]"):
         """feature 200 — build the ``grade_lookup(strategy_id) -> (overall_score, provisional)``
         closure for the symbol_score fold, owner-gated: a strategy_id NOT in ``owned_ids`` (or with
         no cached score) reads ``(None, False)`` so ``_strategy_weight`` falls to the floor. The
-        ``self._strategies`` grade cache is keyed by BARE strategy_id (global, feature 133 D-2), so
-        this gate is what stops a grade for a strategy the caller does not own from weighting their
+        grade cache is owner-keyed (feature 224), so only ``user_id``'s own grades can weight their
         roll-up (anti-IDOR, fails.md:1153)."""
 
         def _lookup(sid: str) -> "tuple[float | None, bool]":
-            sc = self._strategies.get(sid) if sid in owned_ids else None
+            sc = self._strategies.get((user_id, sid)) if sid in owned_ids else None
             if sc is None:
                 return (None, False)
             return (sc.overall_score, sc.provisional)
@@ -4339,9 +4835,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             live_rows = list(await self._strategies_repo.list_live_enabled(user_id))
             # feature 168: the blend force-run runs on the fundamentals universe and nowhere else —
             # the queue MUST apply the same restriction as the live loop, else it over-attributes.
-            blend_id = self._cfg.get_str(
-                "analysis.engine.fundamentals_blend_strategy_id", "fundamentals_macd_blend"
-            )
+            blend_id = blend_strategy_id(self._cfg)
             blend_enabled = self._cfg.get_bool("analysis.engine.fundamentals_blend_enabled", True)
             blend_active = blend_enabled and any(r["strategy_id"] == blend_id for r in live_rows)
             fundamentals_universe = (
@@ -4732,7 +5226,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                         rule = "exit" if c["is_held"] else "entry"
                         try:
                             readiness = await evaluator.evaluate_conditions_traced(
-                                definition,
+                                await self._sector_definition(definition, sym, propagation_meta),
                                 bars,
                                 sym,
                                 rule=rule,
@@ -4837,7 +5331,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             owned_ids |= _sids
         for _sids in live_by_symbol.values():
             owned_ids |= _sids
-        grade_lookup = self._owner_grade_lookup(owned_ids)
+        grade_lookup = self._owner_grade_lookup(user_id, owned_ids)
         rows_by_symbol: dict[str, list[dict]] = {}
         for r in rows:
             rows_by_symbol.setdefault(r["symbol"], []).append(r)
@@ -5062,7 +5556,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                         fetch_bars=self._fetch_bars_paged,
                         bars_sem=self._readiness_materializer_bars_sem,
                         evaluator=evaluator,
-                        definition=definition,
+                        definition=await self._sector_definition(definition, symbol, meta),
                         range_msg=range_msg,
                         propagation_meta=meta,
                         benchmark_bars=benchmark_bars,
@@ -5141,6 +5635,46 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         await asyncio.sleep(random.uniform(0, max(0, jitter)))
         while True:
             await asyncio.sleep(await self._readiness_materializer_tick(schedule))
+
+    # ── Template intent reconcile sweep (feature 224) ───────────────────────────────────────────
+
+    async def _template_intent_sweep_tick(self, schedule: "DurableSchedule") -> float:
+        """Abort stale PENDING intents, retry ABORTING aborts and COMMITTED commits; a per-intent
+        failure is swallowed (retried next pass). Returns the seconds to sleep."""
+        sleep_s = await schedule.next_sleep_seconds()
+        if sleep_s > 0:
+            return sleep_s
+        repo = self._template_intents_repo
+        try:
+            intents = [
+                *await repo.stale(("PENDING",), _INTENT_STALE_SECONDS),
+                *await repo.stale(("ABORTING", "COMMITTED"), 0),
+            ]
+        except Exception as e:
+            log.warning("template intent sweep: enumeration failed: %s", e)
+            intents = []
+        for intent in intents:
+            meta = self._saga_sweep_meta(intent["user_id"])
+            try:
+                if intent["state"] == "COMMITTED":
+                    await self._finalize_intent(intent["intent_id"], meta)
+                else:
+                    await self._abort_intent(
+                        intent["intent_id"], meta, claimed=intent["state"] == "ABORTING"
+                    )
+            except Exception as e:  # one bad intent never kills the pass
+                log.warning("template intent sweep failed for %s: %s", intent["intent_id"], e)
+        await schedule.advance(_INTENT_SWEEP_SECONDS)
+        return 0.0
+
+    async def run_template_intent_sweep_forever(self):
+        """Reconcile stranded InstantiateTemplate saga intents. Call as a ``create_task``."""
+        if self._template_intents_repo is None or self._db_pool is None:
+            return
+        schedule = DurableSchedule(self._db_pool, "template_intent_sweep", "interval")
+        await schedule.seed()
+        while True:
+            await asyncio.sleep(await self._template_intent_sweep_tick(schedule))
 
     async def SetOpportunityAction(self, request, context):
         """Persist a per-user disposition (snooze/dismiss/take) for a queued opportunity
@@ -5289,7 +5823,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         blended_hit_rate = 0.0
         max_drawdown = 0.0
         if self._backtest_runs_repo is not None:
-            runs = await self._backtest_runs_repo.list_by_strategy(strategy_id, limit=20)
+            runs = await self._backtest_runs_repo.list_by_strategy(user_id, strategy_id, limit=20)
             ok_runs = [r for r in runs if float(r.get("total_trades") or 0) > 0]
             if ok_runs:
                 latest = ok_runs[0]
@@ -5443,6 +5977,23 @@ def _normalize_source_symbols(definition) -> None:
     normalization."""
     for comp in definition.components:
         comp.source_symbol = _normalize_symbol(comp.source_symbol)
+
+
+def _fundamentals_source_symbol_conflict(definition, formula_fund_map) -> str | None:
+    """The INVALID_ARGUMENT message for a component that sets ``source_symbol`` on a
+    fundamentals-input formula (``formula_fund_map``: formula id → metrics), else None."""
+    for comp in definition.components:
+        if (
+            comp.kind == analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA
+            and comp.source_symbol
+            and formula_fund_map.get(comp.formula_id)
+        ):
+            return (
+                f"component '{comp.ref_name}': a fundamentals-input formula "
+                f"('{comp.formula_id}') cannot also set source_symbol "
+                f"('{comp.source_symbol}') — it reads fundamentals, not bars"
+            )
+    return None
 
 
 def _definition_has_fundamental(definition) -> bool:
@@ -5965,6 +6516,7 @@ _MASKABLE_PATHS = frozenset(
         "exit_cooldown_days",
         "denied_symbols",  # entry-only deny list (rides definition_json)
         "signal_eligible",  # gates the platform-wide active-signal universe term
+        "sector_param_overrides",  # feature 217 per-sector component-param overrides
     }
 )
 
@@ -6033,7 +6585,7 @@ def _guard_erasure(old_json: dict, new_json: dict, mask_paths: set) -> str | Non
     return None
 
 
-_FINGERPRINT_EXCLUDED_KEYS = frozenset({"display_name", "active", "live_enabled"})
+_FINGERPRINT_EXCLUDED_KEYS = frozenset({"display_name", "active", "live_enabled", "origin"})
 
 
 def _definition_fingerprint(definition_json: dict) -> str:
@@ -6053,6 +6605,25 @@ def _definition_fingerprint(definition_json: dict) -> str:
     }
     canonical = json.dumps(filtered, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _row_to_strategy_template(row: dict) -> "analysis_pb2.StrategyTemplate":
+    meta = common_pb2.TemplateMeta(
+        template_id=row["template_id"],
+        kind=common_pb2.TEMPLATE_KIND_STRATEGY,
+        name=row.get("name") or "",
+        description=row.get("description") or "",
+        version=int(row.get("version") or 0),
+        retired=row.get("retired_at") is not None,
+    )
+    if row.get("created_at") is not None:
+        meta.created_at.FromDatetime(row["created_at"])
+    if row.get("updated_at") is not None:
+        meta.updated_at.FromDatetime(row["updated_at"])
+    payload = json_format.ParseDict(
+        row.get("payload") or {}, analysis_pb2.StrategyDefinition(), ignore_unknown_fields=True
+    )
+    return analysis_pb2.StrategyTemplate(meta=meta, payload=payload)
 
 
 def _row_to_score(row: dict) -> "analysis_pb2.StrategyScore":
@@ -6113,9 +6684,19 @@ def _row_to_strategy_definition(
     # The user_id column is authoritative — a migrated row carries its owner only on the column;
     # the live loop keys its state by this value (must match the cooldown rows).
     definition.user_id = row.get("user_id", "") or ""
+    # Provenance is column-authoritative; a body-supplied origin is never served.
+    definition.ClearField("origin")
+    _set_origin_from_row(definition.origin, row)
     if strip_dead_signal_params:
         _strip_dead_signal_params(definition)
     return definition
+
+
+def _set_origin_from_row(origin, row: dict) -> None:
+    """Copy a strategies row's origin columns into ``origin`` (no-op when not an instance)."""
+    if row.get("origin_template_id"):
+        origin.template_id = row["origin_template_id"]
+        origin.template_version = int(row.get("origin_template_version") or 0)
 
 
 def _unwrap_value(v):

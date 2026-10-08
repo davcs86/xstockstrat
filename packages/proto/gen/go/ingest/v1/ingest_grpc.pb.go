@@ -19,15 +19,18 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	IngestService_TriggerBackfill_FullMethodName    = "/xstockstrat.ingest.v1.IngestService/TriggerBackfill"
-	IngestService_GetBackfillStatus_FullMethodName  = "/xstockstrat.ingest.v1.IngestService/GetBackfillStatus"
-	IngestService_ListBackfillJobs_FullMethodName   = "/xstockstrat.ingest.v1.IngestService/ListBackfillJobs"
-	IngestService_CancelBackfill_FullMethodName     = "/xstockstrat.ingest.v1.IngestService/CancelBackfill"
-	IngestService_NormalizeRawData_FullMethodName   = "/xstockstrat.ingest.v1.IngestService/NormalizeRawData"
-	IngestService_IngestSignal_FullMethodName       = "/xstockstrat.ingest.v1.IngestService/IngestSignal"
-	IngestService_QuerySignals_FullMethodName       = "/xstockstrat.ingest.v1.IngestService/QuerySignals"
-	IngestService_ListSignalSources_FullMethodName  = "/xstockstrat.ingest.v1.IngestService/ListSignalSources"
-	IngestService_ManageSignalSource_FullMethodName = "/xstockstrat.ingest.v1.IngestService/ManageSignalSource"
+	IngestService_TriggerBackfill_FullMethodName     = "/xstockstrat.ingest.v1.IngestService/TriggerBackfill"
+	IngestService_GetBackfillStatus_FullMethodName   = "/xstockstrat.ingest.v1.IngestService/GetBackfillStatus"
+	IngestService_ListBackfillJobs_FullMethodName    = "/xstockstrat.ingest.v1.IngestService/ListBackfillJobs"
+	IngestService_CancelBackfill_FullMethodName      = "/xstockstrat.ingest.v1.IngestService/CancelBackfill"
+	IngestService_NormalizeRawData_FullMethodName    = "/xstockstrat.ingest.v1.IngestService/NormalizeRawData"
+	IngestService_IngestSignal_FullMethodName        = "/xstockstrat.ingest.v1.IngestService/IngestSignal"
+	IngestService_QuerySignals_FullMethodName        = "/xstockstrat.ingest.v1.IngestService/QuerySignals"
+	IngestService_ListSignalSources_FullMethodName   = "/xstockstrat.ingest.v1.IngestService/ListSignalSources"
+	IngestService_ManageSignalSource_FullMethodName  = "/xstockstrat.ingest.v1.IngestService/ManageSignalSource"
+	IngestService_ListTemplates_FullMethodName       = "/xstockstrat.ingest.v1.IngestService/ListTemplates"
+	IngestService_ManageTemplate_FullMethodName      = "/xstockstrat.ingest.v1.IngestService/ManageTemplate"
+	IngestService_InstantiateTemplate_FullMethodName = "/xstockstrat.ingest.v1.IngestService/InstantiateTemplate"
 )
 
 // IngestServiceClient is the client API for IngestService service.
@@ -46,6 +49,11 @@ type IngestServiceClient interface {
 	QuerySignals(ctx context.Context, in *QuerySignalsRequest, opts ...grpc.CallOption) (*QuerySignalsResponse, error)
 	ListSignalSources(ctx context.Context, in *ListSignalSourcesRequest, opts ...grpc.CallOption) (*ListSignalSourcesResponse, error)
 	ManageSignalSource(ctx context.Context, in *ManageSignalSourceRequest, opts ...grpc.CallOption) (*ManageSignalSourceResponse, error)
+	// Template catalog (feature 224). List/read: any authenticated caller. Manage: ADMIN only.
+	ListTemplates(ctx context.Context, in *ListTemplatesRequest, opts ...grpc.CallOption) (*ListTemplatesResponse, error)
+	ManageTemplate(ctx context.Context, in *ManageTemplateRequest, opts ...grpc.CallOption) (*SourceTemplate, error)
+	// Copies a source template into a private signal source owned by the x-user-id caller.
+	InstantiateTemplate(ctx context.Context, in *InstantiateTemplateRequest, opts ...grpc.CallOption) (*SignalSource, error)
 }
 
 type ingestServiceClient struct {
@@ -146,6 +154,36 @@ func (c *ingestServiceClient) ManageSignalSource(ctx context.Context, in *Manage
 	return out, nil
 }
 
+func (c *ingestServiceClient) ListTemplates(ctx context.Context, in *ListTemplatesRequest, opts ...grpc.CallOption) (*ListTemplatesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListTemplatesResponse)
+	err := c.cc.Invoke(ctx, IngestService_ListTemplates_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *ingestServiceClient) ManageTemplate(ctx context.Context, in *ManageTemplateRequest, opts ...grpc.CallOption) (*SourceTemplate, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SourceTemplate)
+	err := c.cc.Invoke(ctx, IngestService_ManageTemplate_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *ingestServiceClient) InstantiateTemplate(ctx context.Context, in *InstantiateTemplateRequest, opts ...grpc.CallOption) (*SignalSource, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SignalSource)
+	err := c.cc.Invoke(ctx, IngestService_InstantiateTemplate_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // IngestServiceServer is the server API for IngestService service.
 // All implementations should embed UnimplementedIngestServiceServer
 // for forward compatibility.
@@ -162,6 +200,11 @@ type IngestServiceServer interface {
 	QuerySignals(context.Context, *QuerySignalsRequest) (*QuerySignalsResponse, error)
 	ListSignalSources(context.Context, *ListSignalSourcesRequest) (*ListSignalSourcesResponse, error)
 	ManageSignalSource(context.Context, *ManageSignalSourceRequest) (*ManageSignalSourceResponse, error)
+	// Template catalog (feature 224). List/read: any authenticated caller. Manage: ADMIN only.
+	ListTemplates(context.Context, *ListTemplatesRequest) (*ListTemplatesResponse, error)
+	ManageTemplate(context.Context, *ManageTemplateRequest) (*SourceTemplate, error)
+	// Copies a source template into a private signal source owned by the x-user-id caller.
+	InstantiateTemplate(context.Context, *InstantiateTemplateRequest) (*SignalSource, error)
 }
 
 // UnimplementedIngestServiceServer should be embedded to have
@@ -197,6 +240,15 @@ func (UnimplementedIngestServiceServer) ListSignalSources(context.Context, *List
 }
 func (UnimplementedIngestServiceServer) ManageSignalSource(context.Context, *ManageSignalSourceRequest) (*ManageSignalSourceResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ManageSignalSource not implemented")
+}
+func (UnimplementedIngestServiceServer) ListTemplates(context.Context, *ListTemplatesRequest) (*ListTemplatesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListTemplates not implemented")
+}
+func (UnimplementedIngestServiceServer) ManageTemplate(context.Context, *ManageTemplateRequest) (*SourceTemplate, error) {
+	return nil, status.Error(codes.Unimplemented, "method ManageTemplate not implemented")
+}
+func (UnimplementedIngestServiceServer) InstantiateTemplate(context.Context, *InstantiateTemplateRequest) (*SignalSource, error) {
+	return nil, status.Error(codes.Unimplemented, "method InstantiateTemplate not implemented")
 }
 func (UnimplementedIngestServiceServer) testEmbeddedByValue() {}
 
@@ -380,6 +432,60 @@ func _IngestService_ManageSignalSource_Handler(srv interface{}, ctx context.Cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _IngestService_ListTemplates_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListTemplatesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(IngestServiceServer).ListTemplates(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: IngestService_ListTemplates_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(IngestServiceServer).ListTemplates(ctx, req.(*ListTemplatesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _IngestService_ManageTemplate_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ManageTemplateRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(IngestServiceServer).ManageTemplate(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: IngestService_ManageTemplate_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(IngestServiceServer).ManageTemplate(ctx, req.(*ManageTemplateRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _IngestService_InstantiateTemplate_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(InstantiateTemplateRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(IngestServiceServer).InstantiateTemplate(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: IngestService_InstantiateTemplate_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(IngestServiceServer).InstantiateTemplate(ctx, req.(*InstantiateTemplateRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // IngestService_ServiceDesc is the grpc.ServiceDesc for IngestService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -422,6 +528,18 @@ var IngestService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ManageSignalSource",
 			Handler:    _IngestService_ManageSignalSource_Handler,
+		},
+		{
+			MethodName: "ListTemplates",
+			Handler:    _IngestService_ListTemplates_Handler,
+		},
+		{
+			MethodName: "ManageTemplate",
+			Handler:    _IngestService_ManageTemplate_Handler,
+		},
+		{
+			MethodName: "InstantiateTemplate",
+			Handler:    _IngestService_InstantiateTemplate_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

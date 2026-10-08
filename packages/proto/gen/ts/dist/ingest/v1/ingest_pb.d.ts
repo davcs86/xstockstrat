@@ -1,6 +1,6 @@
 import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import type { FieldMask, Timestamp } from "@bufbuild/protobuf/wkt";
-import type { PageRequest, PageResponse, Timeframe, TimeRange } from "../../common/v1/common_pb";
+import type { PageRequest, PageResponse, TemplateMeta, TemplateOperation, TemplateOrigin, Timeframe, TimeRange } from "../../common/v1/common_pb";
 import type { JsonObject, Message } from "@bufbuild/protobuf";
 /**
  * Describes the file ingest/v1/ingest.proto.
@@ -320,6 +320,12 @@ export type ExternalSignal = Message<"xstockstrat.ingest.v1.ExternalSignal"> & {
      * @generated from field: google.protobuf.Timestamp ingested_at = 10;
      */
     ingestedAt?: Timestamp | undefined;
+    /**
+     * owner of the signal (feature 224); server-stamped, ignored on write
+     *
+     * @generated from field: string user_id = 11;
+     */
+    userId: string;
 };
 /**
  * Describes the message xstockstrat.ingest.v1.ExternalSignal.
@@ -394,6 +400,18 @@ export type QuerySignalsRequest = Message<"xstockstrat.ingest.v1.QuerySignalsReq
      * @generated from field: xstockstrat.common.v1.PageRequest page = 5;
      */
     page?: PageRequest | undefined;
+    /**
+     * feature 224; UNSPECIFIED = the caller's own + system signals
+     *
+     * @generated from field: xstockstrat.ingest.v1.SignalScope scope = 6;
+     */
+    scope: SignalScope;
+    /**
+     * (admin-only) owner selector; ignored for a non-admin caller
+     *
+     * @generated from field: string owner_user_id = 7;
+     */
+    ownerUserId: string;
 };
 /**
  * Describes the message xstockstrat.ingest.v1.QuerySignalsRequest.
@@ -480,6 +498,18 @@ export type SignalSource = Message<"xstockstrat.ingest.v1.SignalSource"> & {
      * @generated from field: optional double reliability_weight = 12;
      */
     reliabilityWeight?: number | undefined;
+    /**
+     * Owner of the source (feature 224). "system" = platform-owned, read-only to every user.
+     *
+     * @generated from field: string user_id = 13;
+     */
+    userId: string;
+    /**
+     * set when instantiated from a template
+     *
+     * @generated from field: xstockstrat.common.v1.TemplateOrigin origin = 14;
+     */
+    origin?: TemplateOrigin | undefined;
 };
 /**
  * Describes the message xstockstrat.ingest.v1.SignalSource.
@@ -494,6 +524,12 @@ export type ListSignalSourcesRequest = Message<"xstockstrat.ingest.v1.ListSignal
      * @generated from field: bool include_inactive = 1;
      */
     includeInactive: boolean;
+    /**
+     * (admin-only) owner selector; ignored for a non-admin caller (feature 224)
+     *
+     * @generated from field: string owner_user_id = 2;
+     */
+    ownerUserId: string;
 };
 /**
  * Describes the message xstockstrat.ingest.v1.ListSignalSourcesRequest.
@@ -570,6 +606,93 @@ export type ManageSignalSourceResponse = Message<"xstockstrat.ingest.v1.ManageSi
  * Use `create(ManageSignalSourceResponseSchema)` to create a new message.
  */
 export declare const ManageSignalSourceResponseSchema: GenMessage<ManageSignalSourceResponse>;
+/**
+ * feature 224 — signal-source template catalog.
+ *
+ * @generated from message xstockstrat.ingest.v1.SourceTemplate
+ */
+export type SourceTemplate = Message<"xstockstrat.ingest.v1.SourceTemplate"> & {
+    /**
+     * @generated from field: xstockstrat.common.v1.TemplateMeta meta = 1;
+     */
+    meta?: TemplateMeta | undefined;
+    /**
+     * @generated from field: xstockstrat.ingest.v1.SignalSource payload = 2;
+     */
+    payload?: SignalSource | undefined;
+};
+/**
+ * Describes the message xstockstrat.ingest.v1.SourceTemplate.
+ * Use `create(SourceTemplateSchema)` to create a new message.
+ */
+export declare const SourceTemplateSchema: GenMessage<SourceTemplate>;
+/**
+ * @generated from message xstockstrat.ingest.v1.ListTemplatesRequest
+ */
+export type ListTemplatesRequest = Message<"xstockstrat.ingest.v1.ListTemplatesRequest"> & {};
+/**
+ * Describes the message xstockstrat.ingest.v1.ListTemplatesRequest.
+ * Use `create(ListTemplatesRequestSchema)` to create a new message.
+ */
+export declare const ListTemplatesRequestSchema: GenMessage<ListTemplatesRequest>;
+/**
+ * @generated from message xstockstrat.ingest.v1.ListTemplatesResponse
+ */
+export type ListTemplatesResponse = Message<"xstockstrat.ingest.v1.ListTemplatesResponse"> & {
+    /**
+     * @generated from field: repeated xstockstrat.ingest.v1.SourceTemplate templates = 1;
+     */
+    templates: SourceTemplate[];
+};
+/**
+ * Describes the message xstockstrat.ingest.v1.ListTemplatesResponse.
+ * Use `create(ListTemplatesResponseSchema)` to create a new message.
+ */
+export declare const ListTemplatesResponseSchema: GenMessage<ListTemplatesResponse>;
+/**
+ * @generated from message xstockstrat.ingest.v1.ManageTemplateRequest
+ */
+export type ManageTemplateRequest = Message<"xstockstrat.ingest.v1.ManageTemplateRequest"> & {
+    /**
+     * @generated from field: xstockstrat.common.v1.TemplateOperation operation = 1;
+     */
+    operation: TemplateOperation;
+    /**
+     * @generated from field: xstockstrat.ingest.v1.SourceTemplate template = 2;
+     */
+    template?: SourceTemplate | undefined;
+};
+/**
+ * Describes the message xstockstrat.ingest.v1.ManageTemplateRequest.
+ * Use `create(ManageTemplateRequestSchema)` to create a new message.
+ */
+export declare const ManageTemplateRequestSchema: GenMessage<ManageTemplateRequest>;
+/**
+ * @generated from message xstockstrat.ingest.v1.InstantiateTemplateRequest
+ */
+export type InstantiateTemplateRequest = Message<"xstockstrat.ingest.v1.InstantiateTemplateRequest"> & {
+    /**
+     * @generated from field: string template_id = 1;
+     */
+    templateId: string;
+    /**
+     * the new private source's slug (unique per owner)
+     *
+     * @generated from field: string slug = 2;
+     */
+    slug: string;
+    /**
+     * the caller's own per-user credential key, if the type needs one
+     *
+     * @generated from field: string credentials_ref = 3;
+     */
+    credentialsRef: string;
+};
+/**
+ * Describes the message xstockstrat.ingest.v1.InstantiateTemplateRequest.
+ * Use `create(InstantiateTemplateRequestSchema)` to create a new message.
+ */
+export declare const InstantiateTemplateRequestSchema: GenMessage<InstantiateTemplateRequest>;
 /**
  * @generated from enum xstockstrat.ingest.v1.BackfillStatus
  */
@@ -669,6 +792,31 @@ export declare enum BackfillDataKind {
  * Describes the enum xstockstrat.ingest.v1.BackfillDataKind.
  */
 export declare const BackfillDataKindSchema: GenEnum<BackfillDataKind>;
+/**
+ * Which owners' signals QuerySignals returns (feature 224). Closed set → enum (C-04).
+ *
+ * @generated from enum xstockstrat.ingest.v1.SignalScope
+ */
+export declare enum SignalScope {
+    /**
+     * own + system
+     *
+     * @generated from enum value: SIGNAL_SCOPE_UNSPECIFIED = 0;
+     */
+    UNSPECIFIED = 0,
+    /**
+     * @generated from enum value: SIGNAL_SCOPE_OWN = 1;
+     */
+    OWN = 1,
+    /**
+     * @generated from enum value: SIGNAL_SCOPE_SYSTEM = 2;
+     */
+    SYSTEM = 2
+}
+/**
+ * Describes the enum xstockstrat.ingest.v1.SignalScope.
+ */
+export declare const SignalScopeSchema: GenEnum<SignalScope>;
 /**
  * Health of a registered signal source (feature 083). Closed set → enum (C-04).
  *
@@ -822,5 +970,33 @@ export declare const IngestService: GenService<{
         methodKind: "unary";
         input: typeof ManageSignalSourceRequestSchema;
         output: typeof ManageSignalSourceResponseSchema;
+    };
+    /**
+     * Template catalog (feature 224). List/read: any authenticated caller. Manage: ADMIN only.
+     *
+     * @generated from rpc xstockstrat.ingest.v1.IngestService.ListTemplates
+     */
+    listTemplates: {
+        methodKind: "unary";
+        input: typeof ListTemplatesRequestSchema;
+        output: typeof ListTemplatesResponseSchema;
+    };
+    /**
+     * @generated from rpc xstockstrat.ingest.v1.IngestService.ManageTemplate
+     */
+    manageTemplate: {
+        methodKind: "unary";
+        input: typeof ManageTemplateRequestSchema;
+        output: typeof SourceTemplateSchema;
+    };
+    /**
+     * Copies a source template into a private signal source owned by the x-user-id caller.
+     *
+     * @generated from rpc xstockstrat.ingest.v1.IngestService.InstantiateTemplate
+     */
+    instantiateTemplate: {
+        methodKind: "unary";
+        input: typeof InstantiateTemplateRequestSchema;
+        output: typeof SignalSourceSchema;
     };
 }>;

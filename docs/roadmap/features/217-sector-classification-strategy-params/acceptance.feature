@@ -39,27 +39,30 @@ Feature: sector-classification-strategy-params
     When the as-of classification is requested for "XYZ" at 2018-06-15
     Then the returned sector is "TECHNOLOGY"
 
+  # C-15 amendment (2026-10-06, operator-approved): @AC-6/7/8/10/13 originally phrased the override
+  # as an "RSI oversold threshold" — a rule rhs literal. Overrides are component PARAMS only
+  # (field 15 design), so these scenarios now use the RSI component's "period" param.
   @AC-6 @FR-6 @FR-7
   Scenario: A backtest applies the per-sector override valid as-of each bar
-    Given a strategy sets RSI oversold default 30 and override 25 for "TECHNOLOGY"
+    Given a strategy sets the RSI component param "period" default 14 and override 10 for "TECHNOLOGY"
     And "XYZ" was "TECHNOLOGY" for every bar in the backtest window
     When the strategy is backtested over "XYZ"
-    Then every bar is scored with an RSI oversold threshold of 25
+    Then every bar is scored with RSI period 10
 
   @AC-7 @FR-7
   Scenario: A mid-series reclassification does not leak the later sector backward (no look-ahead)
-    Given a strategy sets RSI oversold override 25 for "TECHNOLOGY" and 20 for "COMMUNICATION_SERVICES"
+    Given a strategy sets the RSI component param "period" override 10 for "TECHNOLOGY" and 7 for "COMMUNICATION_SERVICES"
     And "XYZ" was "TECHNOLOGY" through 2018-09-30 then "COMMUNICATION_SERVICES" from 2018-10-01
     When the strategy is backtested over "XYZ" across 2018-08-01 to 2018-11-30
-    Then bars on or before 2018-09-30 are scored with threshold 25
-    And bars from 2018-10-01 onward are scored with threshold 20
+    Then bars on or before 2018-09-30 are scored with RSI period 10
+    And bars from 2018-10-01 onward are scored with RSI period 7
 
   @AC-8 @FR-8
   Scenario: An unclassified symbol falls back to the default bucket without failing
-    Given a strategy sets RSI oversold default 30 and override 25 for "TECHNOLOGY"
+    Given a strategy sets the RSI component param "period" default 14 and override 10 for "TECHNOLOGY"
     And symbol "NEWCO" has no classification row for any bar in the window
     When the strategy is backtested over "NEWCO"
-    Then every bar is scored with an RSI oversold threshold of 30
+    Then every bar is scored with RSI period 14
     And the backtest completes without error
 
   @AC-9 @FR-9
@@ -71,9 +74,9 @@ Feature: sector-classification-strategy-params
   @AC-10 @FR-10
   Scenario: A pre-go-live bar for a seeded symbol resolves to the epoch-seeded sector, not the default
     Given "XYZ" has one open classification row with sector "TECHNOLOGY" and valid_from 1900-01-01T00:00:00Z
-    And a strategy sets RSI oversold default 30 and override 25 for "TECHNOLOGY"
+    And a strategy sets the RSI component param "period" default 14 and override 10 for "TECHNOLOGY"
     When the strategy is backtested over "XYZ" across 2015-01-01 to 2015-12-31
-    Then every bar is scored with an RSI oversold threshold of 25
+    Then every bar is scored with RSI period 10
 
   @AC-11 @FR-10 @FR-2
   Scenario: The first post-go-live reclassification closes the epoch-seeded row without rewriting pre-go-live history
@@ -94,12 +97,12 @@ Feature: sector-classification-strategy-params
 
   @AC-13 @FR-10 @FR-8
   Scenario: In one backtest a seeded symbol uses its epoch sector while an unseeded symbol falls back to default
-    Given a strategy sets RSI oversold default 30 and override 25 for "TECHNOLOGY"
+    Given a strategy sets the RSI component param "period" default 14 and override 10 for "TECHNOLOGY"
     And "XYZ" has one open classification row with sector "TECHNOLOGY" and valid_from 1900-01-01T00:00:00Z
     And "NEWCO" has no classification row for any bar in the window
     When the strategy is backtested over "XYZ" and "NEWCO" across 2015-01-01 to 2015-12-31
-    Then every "XYZ" bar is scored with an RSI oversold threshold of 25
-    And every "NEWCO" bar is scored with an RSI oversold threshold of 30
+    Then every "XYZ" bar is scored with RSI period 10
+    And every "NEWCO" bar is scored with RSI period 14
 
   @AC-14 @FR-6 @FR-7
   Scenario: Per-sector overrides reach a fundamentals-input custom formula's params

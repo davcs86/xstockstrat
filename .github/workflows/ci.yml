@@ -67,6 +67,13 @@ jobs:
             scripts:
               - 'scripts/**'
               - '.claude/hooks/**'
+            migrations:
+              - 'services/*/migrations/**'
+              - 'scripts/db-migrate.sh'
+              - 'scripts/render-migrations.sh'
+              - 'scripts/migration-rerun.sh'
+              - 'scripts/migration-assertions/**'
+              - 'scripts/Dockerfile.migrate'
             claude-md:
               - '**/CLAUDE.md'
               - '.markdownlint.yaml'
@@ -610,6 +617,66 @@ jobs:
       - name: shfmt (diff check)
         run: shfmt -d -i 2 scripts/*.sh .claude/hooks/*.sh
 
+      - name: Migration tooling structural tests
+        run: bash scripts/render-migrations.test.sh && bash scripts/check-migration-contract.test.sh
+
+  # Applies every migration, then replays the chain from version 0 (the db-migrate.sh dirty-state
+  # recovery path) and runs scripts/migration-assertions/*.sql — every up-file must be idempotent.
+  migration-rerun:
+    name: Migration rerun (idempotent replay)
+    needs: changes
+    if: >-
+      contains(fromJson(needs.changes.outputs.matched), 'migrations') ||
+      contains(fromJson(needs.changes.outputs.matched), 'ci')
+    runs-on: ubuntu-latest
+    services:
+      timescaledb:
+        image: timescale/timescaledb:latest-pg16
+        env:
+          POSTGRES_USER: xstockstrat
+          POSTGRES_PASSWORD: ci-only
+          POSTGRES_DB: xstockstrat
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U xstockstrat"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build migrator image (migrate + psql + envsubst)
+        run: docker build -f scripts/Dockerfile.migrate -t xstockstrat-migrate-ci .
+
+      - name: Apply, replay and assert
+        run: |
+          docker run --rm --network host \
+            -e DATABASE_URL="postgres://xstockstrat:ci-only@localhost:5432/xstockstrat?sslmode=disable" \
+            -e SEED_USER_ID="00000000-0000-4000-8000-0000000000c1" \
+            -v "$PWD:/repo" -w /repo --entrypoint bash \
+            xstockstrat-migrate-ci scripts/migration-rerun.sh
+
+  # A `-- contract-of:` migration may only contract an expand file that is already on origin/main.
+  # PR-only: github.base_ref is empty on push events.
+  migration-contract-gate:
+    name: Migration contract gate
+    needs: changes
+    if: >-
+      github.event_name == 'pull_request' && (
+      contains(fromJson(needs.changes.outputs.matched), 'migrations') ||
+      contains(fromJson(needs.changes.outputs.matched), 'ci'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Check contract migrations against origin/main
+        run: |
+          git fetch --no-tags origin main "${{ github.base_ref }}"
+          scripts/check-migration-contract.sh "origin/${{ github.base_ref }}"
+
   markdown-lint:
     name: CLAUDE.md lint (markdownlint)
     needs: changes
@@ -703,6 +770,8 @@ jobs:
       - frontend-e2e
       - dockerfile-lint
       - shell-lint
+      - migration-rerun
+      - migration-contract-gate
       - markdown-lint
       - context-map
       - secret-scan
@@ -720,6 +789,8 @@ jobs:
           echo "frontend-e2e:    ${{ needs.frontend-e2e.result }}"
           echo "dockerfile-lint: ${{ needs.dockerfile-lint.result }}"
           echo "shell-lint:      ${{ needs.shell-lint.result }}"
+          echo "migration-rerun: ${{ needs.migration-rerun.result }}"
+          echo "migration-contract-gate: ${{ needs.migration-contract-gate.result }}"
           echo "markdown-lint:   ${{ needs.markdown-lint.result }}"
           echo "context-map:     ${{ needs.context-map.result }}"
           echo "secret-scan:     ${{ needs.secret-scan.result }}"

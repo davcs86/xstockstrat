@@ -240,9 +240,12 @@ diverging symbols) — the platform's own net filled qty per symbol from `tradin
 already sum to the broker qty (`qtyApproxEqual`, abs ε 1e-6), the broker position is fully explained
 and the candidate clears — **no halt**; only a broker qty the platform's orders can't account for (a
 genuine dashboard order) halts. A lookup error is **fail-safe** (position check skipped for the tick,
-never a false halt), mirroring the order side. Residual (not closed, documented in feature 206
-`design.md`): a stalled `pollFills` leaving `trading.orders.filled_qty` stale, and corporate actions
-(splits) that change broker qty with no order — both can still trip the position-side halt.
+never a false halt), mirroring the order side. Residuals (not closed; full list in feature 206
+`context.md` § Archive Synthesis): a stalled `pollFills` leaving `trading.orders.filled_qty` stale;
+corporate actions (splits) that change broker qty with no order; Alpaca bracket-leg fills, which never
+reach `trading.orders` (leg ids live only in `trading.order_brackets`); and the net being an unbounded
+lifetime sum, so any untracked position-reducing fill skews it for that symbol from then on — each can
+still trip the position-side halt. A net-zero foreign position is masked by design.
 
 Only a **rare, systemic** finding — `trading.reconciliation.systemic_threshold_pct`
 or more of registered accounts erroring/unreachable in one tick — escalates platform-wide to

@@ -1,18 +1,21 @@
 import { test, expect, type Page } from '@playwright/test';
 import { addAuthCookie, addAdminCookie, BASE_URL } from '../helpers/auth';
-import { SIGNAL_SOURCE_WEIGHTED } from '../fixtures';
+import {
+  SIGNAL_SOURCE_WEIGHTED,
+  TEST_USER_ID,
+  USER_VIEW_PRIMARY,
+  USER_VIEW_TRADER,
+} from '../fixtures';
 
 /**
- * E2E tests for the signal sources BFF and Sources page.
+ * E2E tests for the config-ui signal-sources BFF and the admin read-only Sources view.
  *
  * Connect-RPC BFF paths (called via page.evaluate to avoid undici quirks):
  *   POST /config-ui/api/xstockstrat.ingest.v1.IngestService/ListSignalSources
  *   POST /config-ui/api/xstockstrat.ingest.v1.IngestService/ManageSignalSource
  *
- * UI tests navigate to /config-ui/sources to verify the page renders the
- * data fetched from the BFF via the browser-side ingestClient.
- *
- * Auth cookie is injected so middleware allows requests through.
+ * Feature 224 (FR-13): /config-ui/sources is an admin-only READ-ONLY view of one selected owner's
+ * sources — users manage their own under /insights/signal-sources (signal-sources.spec.ts).
  */
 
 const LIST_SOURCES_BFF = '/config-ui/api/xstockstrat.ingest.v1.IngestService/ListSignalSources';
@@ -130,333 +133,56 @@ test.describe('POST /api/sources — ManageSignalSource data contract', () => {
   });
 });
 
-test.describe('/sources page — UI contract', () => {
-  /**
-   * SourcesPage renders a table of all sources fetched from ListSignalSources via BFF.
-   * The credentials_ref field must never appear as a visible value anywhere on the page.
-   */
-
-  test('page loads and renders the Signal Sources heading', async ({ page }) => {
+test.describe('/config-ui/sources — admin read-only view (feature 224)', () => {
+  test('a non-admin sees the admin-only notice, not the table', async ({ page }) => {
     await addAuthCookie(page);
     await page.goto(SOURCES_PAGE);
-    // Target the page heading specifically — the feature-083 Engine sub-nav also has a
-    // "Signal sources" link, so a bare getByText would be ambiguous.
-    await expect(page.getByRole('heading', { name: 'Signal Sources' })).toBeVisible({
-      timeout: 8000,
-    });
+    await expect(page.getByText('Admin only')).toBeVisible({ timeout: 15000 });
+    await expect(page.getByRole('combobox', { name: 'Owner' })).toHaveCount(0);
   });
 
-  test('table shows the mock source slug', async ({ page }) => {
-    await addAuthCookie(page);
-    await page.goto(SOURCES_PAGE);
-    await expect(page.getByText('example_simple_email')).toBeVisible({ timeout: 8000 });
-  });
-
-  test('renders source health + fed count (feature 083)', async ({ page }) => {
-    await addAuthCookie(page);
-    await page.goto(SOURCES_PAGE);
-    await expect(page.getByText('example_simple_email')).toBeVisible({ timeout: 8000 });
-    // health LIVE → "Live" badge; signals_fed 128 (in the Fed column cell — the stat row also
-    // sums fed counts, so scope to the table cell). feature 134 added a second LIVE source, so
-    // scope the Live badge to the first (both are LIVE); the 128 fed cell is still unique.
-    await expect(page.getByText('Live', { exact: true }).first()).toBeVisible();
-    await expect(page.getByRole('cell', { name: '128', exact: true })).toBeVisible();
-  });
-
-  test('renders the health stat row (feature 083)', async ({ page }) => {
-    await addAuthCookie(page);
-    await page.goto(SOURCES_PAGE);
-    await expect(page.getByText('Sources live')).toBeVisible({ timeout: 8000 });
-    await expect(page.getByText('Needs attention')).toBeVisible();
-    await expect(page.getByText('Signals fed')).toBeVisible();
-    await expect(
-      page.getByText('Inputs the strategies evaluate against', { exact: false }),
-    ).toBeVisible();
-  });
-
-  test('page does not render credentials_ref as a visible text value', async ({ page }) => {
-    await addAuthCookie(page);
-    await page.goto(SOURCES_PAGE);
-    await page.waitForLoadState('networkidle');
-    const content = await page.textContent('body');
-    expect(content).not.toMatch(/credentials_ref/);
-  });
-});
-
-test.describe('Feature 088 — honest signal-source verbs (form → mask)', () => {
-  test('editing a source without a new secret sends a mask that omits credentials_ref', async ({
-    page,
-  }) => {
-    await addAuthCookie(page);
-    await page.goto(SOURCES_PAGE);
-    await expect(page.getByRole('heading', { name: 'Signal Sources' })).toBeVisible({
-      timeout: 15000,
-    });
-    // Actions are consolidated behind a per-row kebab menu (FR-2).
-    await page.getByRole('button', { name: 'Actions' }).first().click();
-    await page.getByRole('menuitem', { name: 'Edit' }).click();
-    // Change the display name only; do NOT type a credential.
-    const nameInput = page.getByPlaceholder('Display name');
-    await nameInput.fill('Renamed Source');
-
-    const reqPromise = page.waitForRequest(
-      (r) => r.url().includes('/ManageSignalSource') && r.method() === 'POST',
-    );
-    await page.getByRole('button', { name: 'Save' }).click();
-    const body = (await reqPromise).postData() ?? '';
-    // update verb + a mask that carries display_name but never the secret.
-    expect(body).toContain('update');
-    expect(body.toLowerCase()).not.toContain('credentialsref');
-    expect(body.toLowerCase()).not.toContain('credentials_ref');
-    expect(body.toLowerCase()).toContain('displayname');
-  });
-
-  test('enabling an inactive source uses the reactivate verb', async ({ page }) => {
-    await addAuthCookie(page);
-    await page.route(`**${LIST_SOURCES_BFF}`, async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          sources: [
-            {
-              slug: 'example_simple_email',
-              displayName: 'Example Simple Email',
-              sourceType: 'simple_email',
-              active: false,
-              hasCredentials: true,
-              configJson: { sender_patterns: ['x@y.com'], subject_patterns: ['S:'] },
-              extractorModule: 'app.extractors.example_simple_email',
-              health: 3,
-              signalsFed: '0',
-              lastError: '',
-            },
-          ],
-        }),
-      });
-    });
-    await page.goto(SOURCES_PAGE);
-    const reqPromise = page.waitForRequest(
-      (r) => r.url().includes('/ManageSignalSource') && r.method() === 'POST',
-    );
-    await page.getByRole('button', { name: 'Actions' }).first().click();
-    await page.getByRole('menuitem', { name: 'Enable' }).click();
-    const body = (await reqPromise).postData() ?? '';
-    expect(body).toContain('reactivate');
-  });
-});
-
-test.describe('Feature 134 — inline reliability-weight edit', () => {
-  test('the weight cell edits inline and Save sends a masked reliability_weight update', async ({
-    page,
-  }) => {
-    await addAuthCookie(page);
-    await page.goto(SOURCES_PAGE);
-    await expect(page.getByRole('heading', { name: 'Signal Sources' })).toBeVisible({
-      timeout: 15000,
-    });
-
-    const slug = SIGNAL_SOURCE_WEIGHTED.slug;
-    // The cell renders the source's reliabilityWeight (0.5), not the removed config-blob map.
-    const weightCell = page.getByTestId(`weight-${slug}`);
-    await expect(weightCell).toHaveText(String(SIGNAL_SOURCE_WEIGHTED.reliabilityWeight));
-
-    // Click to edit → the inline number input appears; change the value.
-    await weightCell.click();
-    const input = page.getByLabel(`Weight for ${slug}`);
-    await expect(input).toBeVisible();
-    await input.fill('0.8');
-
-    const reqPromise = page.waitForRequest(
-      (r) => r.url().includes('/ManageSignalSource') && r.method() === 'POST',
-    );
-    await page.getByRole('button', { name: 'Save' }).click();
-    const body = (await reqPromise).postData() ?? '';
-    // update verb + a FieldMask + the new value. Note: proto3-JSON serializes the FieldMask path
-    // `reliability_weight` in its canonical camelCase form (`"updateMask":"reliabilityWeight"`);
-    // the Python server converts it back to the snake_case proto field name. Assert the wire form.
-    expect(body).toContain('update');
-    expect(body).toContain('updateMask');
-    expect(body).toContain('reliabilityWeight');
-    expect(body).toContain('0.8');
-
-    // The inline editor closes on success (the read-only cell button returns).
-    await expect(page.getByTestId(`weight-${slug}`)).toBeVisible();
-  });
-
-  test('a weight outside [0,1] is rejected client-side (no ManageSignalSource call)', async ({
-    page,
-  }) => {
-    await addAuthCookie(page);
-    await page.goto(SOURCES_PAGE);
-    await expect(page.getByRole('heading', { name: 'Signal Sources' })).toBeVisible({
-      timeout: 15000,
-    });
-    const slug = SIGNAL_SOURCE_WEIGHTED.slug;
-    await page.getByTestId(`weight-${slug}`).click();
-    const input = page.getByLabel(`Weight for ${slug}`);
-    await input.fill('1.5');
-
-    let sawManage = false;
-    page.on('request', (r) => {
-      if (r.url().includes('/ManageSignalSource') && r.method() === 'POST') sawManage = true;
-    });
-    await page.getByRole('button', { name: 'Save' }).click();
-    await expect(page.getByText('Weight must be a number in [0, 1]')).toBeVisible();
-    expect(sawManage).toBe(false);
-  });
-});
-
-test.describe('Feature 161 — reliability_weight on the create form + guidance', () => {
-  test('the create form sets reliability_weight at registration and shows guidance (AC-4)', async ({
-    page,
-  }) => {
-    await addAuthCookie(page);
-    await page.goto(SOURCES_PAGE);
-    await expect(page.getByRole('heading', { name: 'Signal Sources' })).toBeVisible({
-      timeout: 15000,
-    });
-    await page.getByRole('button', { name: 'Register New Source' }).click();
-
-    // FR-3: the form's reliability-weight field carries plain-language guidance describing the
-    // weight and its 0–1 range (distinct wording from the inline editor's guidance).
-    await expect(page.getByText(/Higher weights rank this source/)).toBeVisible();
-
-    await page.getByPlaceholder('e.g. unusual_whales').fill('insider-buys');
-    await page.getByPlaceholder('Display name').fill('Insider Buys');
-    await page.getByLabel('Reliability weight').fill('0.6');
-
-    const reqPromise = page.waitForRequest(
-      (r) => r.url().includes('/ManageSignalSource') && r.method() === 'POST',
-    );
-    await page.getByRole('button', { name: 'Register', exact: true }).click();
-    const body = (await reqPromise).postData() ?? '';
-    // register verb + the weight carried on the source (camelCase over proto3-JSON).
-    expect(body).toContain('register');
-    expect(body).toContain('reliabilityWeight');
-    expect(body).toContain('0.6');
-  });
-
-  test('the inline weight editor shows guidance text (AC-5)', async ({ page }) => {
-    await addAuthCookie(page);
-    await page.goto(SOURCES_PAGE);
-    await expect(page.getByRole('heading', { name: 'Signal Sources' })).toBeVisible({
-      timeout: 15000,
-    });
-    const slug = SIGNAL_SOURCE_WEIGHTED.slug;
-    await page.getByTestId(`weight-${slug}`).click();
-    // FR-4: the inline editor explains the weight's meaning and its [0,1] / default-1.0 semantics.
-    await expect(page.getByText(/Higher = this source/)).toBeVisible();
-  });
-});
-
-test.describe('Feature 166 — mcp_client registration (secret-first two-write)', () => {
-  const SET_CONFIG = '**/xstockstrat.config.v1.ConfigService/SetConfig';
-  const MANAGE = '**/xstockstrat.ingest.v1.IngestService/ManageSignalSource';
-  const LIST = '**/xstockstrat.ingest.v1.IngestService/ListSignalSources';
-  const TOKEN = 'sk-live-abc123';
-
-  test('registers an mcp_client source: bearer secret written FIRST, then credentials_ref; token never shown (AC-1/AC-2)', async ({
+  test('the owner selector drives ownerUserId and lists that owner’s sources read-only', async ({
     page,
   }) => {
     await addAdminCookie(page);
-
-    const calls: string[] = [];
-    let setConfigBody: Record<string, unknown> | null = null;
-    let manageBody: Record<string, unknown> | null = null;
-
-    // A source list that starts empty, then shows the registered mcp_client source (no token) on
-    // the post-register refetch — so the assertion "the list shows acme-mcp as mcp_client" holds.
-    let listed: Array<Record<string, unknown>> = [];
-    await page.route(LIST, (route) =>
-      route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ sources: listed }),
-      }),
-    );
-    await page.route(SET_CONFIG, (route) => {
-      calls.push('setConfig');
-      setConfigBody = route.request().postDataJSON();
-      return route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ version: '1', updatedAt: new Date(0).toISOString() }),
-      });
-    });
-    await page.route(MANAGE, (route) => {
-      calls.push('manage');
-      manageBody = route.request().postDataJSON();
-      // After a successful register the source appears in the list (has_credentials, no token).
-      listed = [
-        {
-          slug: 'acme-mcp',
-          displayName: 'Acme MCP',
-          sourceType: 'mcp_client',
-          active: true,
-          hasCredentials: true,
-          configJson: { mcp_endpoint: 'https://mcp.acme.example/mcp', mcp_tool: 'get_signals' },
-          extractorModule: '',
-          health: 4,
-          signalsFed: '0',
-          lastError: '',
-          reliabilityWeight: 1,
-        },
-      ];
-      return route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ source: listed[0] }),
-      });
-    });
-
     await page.goto(SOURCES_PAGE);
-    await expect(page.getByRole('heading', { name: 'Signal Sources' })).toBeVisible({
+    await expect(page.getByRole('heading', { name: 'Signal Sources (admin)' })).toBeVisible({
       timeout: 15000,
     });
-    await page.getByRole('button', { name: 'Register New Source' }).click();
 
-    await page.getByPlaceholder('e.g. unusual_whales').fill('acme-mcp');
-    await page.getByPlaceholder('Display name').fill('Acme MCP');
+    const listReq = page.waitForRequest(
+      (r) => r.url().endsWith(LIST_SOURCES_BFF) && r.method() === 'POST',
+    );
+    await page.getByRole('combobox', { name: 'Owner' }).click();
+    await page.getByRole('option', { name: USER_VIEW_PRIMARY.email }).click();
+    expect((await listReq).postDataJSON()).toMatchObject({ ownerUserId: TEST_USER_ID });
+    await expect(page.getByRole('cell', { name: SIGNAL_SOURCE_WEIGHTED.slug })).toBeVisible();
 
-    // Choose the mcp_client source type (Radix Select).
-    await page.getByRole('combobox').click();
-    await page.getByRole('option', { name: 'mcp_client' }).click();
+    // FR-13: no create / edit / deactivate / inline-weight control.
+    await expect(page.getByRole('button', { name: 'Register New Source' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /^Actions/ })).toHaveCount(0);
+    await expect(page.locator('[data-testid^="weight-"]')).toHaveCount(0);
+    await expect(page.getByRole('menuitem')).toHaveCount(0);
+  });
 
-    await page.getByLabel('MCP endpoint').fill('https://mcp.acme.example/mcp');
-    await page.getByLabel('MCP tool name').fill('get_signals');
-    await page.getByLabel('Bearer token').fill(TOKEN);
+  test('selecting an owner without sources shows the empty state', async ({ page }) => {
+    await addAdminCookie(page);
+    await page.goto(SOURCES_PAGE);
+    const listReq = page.waitForRequest(
+      (r) => r.url().endsWith(LIST_SOURCES_BFF) && r.method() === 'POST',
+    );
+    await page.getByRole('combobox', { name: 'Owner' }).click({ timeout: 15000 });
+    await page.getByRole('option', { name: USER_VIEW_TRADER.email }).click();
+    expect((await listReq).postDataJSON()).toMatchObject({ ownerUserId: USER_VIEW_TRADER.userId });
+    await expect(page.getByText('This user has no signal sources')).toBeVisible();
+  });
 
-    await page.getByRole('button', { name: 'Register', exact: true }).click();
-
-    // Secret-first: SetConfig ran before ManageSignalSource.
-    await expect.poll(() => calls.join(',')).toBe('setConfig,manage');
-
-    // The bearer was written as an encrypted config secret keyed by the source slug.
-    const sc = setConfigBody as unknown as {
-      key: string;
-      createKey: boolean;
-      value: { stringVal: string; isSecret: boolean };
-    };
-    expect(sc.key).toBe('mcp_credential.acme-mcp');
-    expect(sc.createKey).toBe(true);
-    expect(sc.value.isSecret).toBe(true);
-    expect(sc.value.stringVal).toBe(TOKEN);
-
-    // The source was then registered pointing at the secret via credentials_ref.
-    const mg = manageBody as unknown as {
-      operation: string;
-      credentialsRef: string;
-      source: { sourceType: string };
-    };
-    expect(mg.operation).toBe('register');
-    expect(mg.credentialsRef).toBe('ingest.mcp_credential.acme-mcp');
-    expect(mg.source.sourceType).toBe('mcp_client');
-
-    // The register succeeded → the form closed (the write-only bearer input is gone), and the bearer
-    // token is NEVER rendered anywhere on the page (AC-2 — the token input is write-only, the token
-    // rides an encrypted secret, and no read edge echoes it).
-    await expect(page.getByLabel('Bearer token')).toHaveCount(0);
-    expect(await page.textContent('body')).not.toContain(TOKEN);
+  test('page does not render credentials_ref as a visible text value', async ({ page }) => {
+    await addAdminCookie(page);
+    await page.goto(SOURCES_PAGE);
+    await page.getByRole('combobox', { name: 'Owner' }).click({ timeout: 15000 });
+    await page.getByRole('option', { name: USER_VIEW_PRIMARY.email }).click();
+    await expect(page.getByRole('cell', { name: SIGNAL_SOURCE_WEIGHTED.slug })).toBeVisible();
+    expect(await page.textContent('body')).not.toMatch(/credentials_ref/);
   });
 });

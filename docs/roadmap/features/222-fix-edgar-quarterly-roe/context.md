@@ -16,3 +16,9 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - `@AC-1` net-income figures for the three earlier quarters are illustrative placeholders — replace with the real AXP XBRL facts during `/sdd-spec` (the Q2-2026 2,885M and equity 30,264M are real staging values).
 - **Downstream dependency (operator decision, #2 of the AXP review):** the `fundamentals_macd_blend` exit-rule backtest comparison (control vs AND-gate+VTS stop vs hysteresis+VTS stop) is **deferred until this fix and `223-fix-stored-edgar-periods` land and AXP-class periods are re-backfilled** — `analysis.backtest.fundamentals.enabled=true` on staging, so today's PIT fscore (and the strategy's +0.38 backtest edge) is computed on biased ROE and stale D/E. Candidate exit rule for the hysteresis arm: `OR(AND(macd crosses_below macd.signal, fscore.composite < 0.5), fscore.composite < 0.35, vts crosses_below 0)` with `vts` = Volatility Trailing Stop Direction formula `7f595658-2a7f-4ddb-a83a-5fc3d625472d` {period 22, multiplier 3.0}. No live strategy edit until results are approved.
 - Development branch: feature/fix-edgar-quarterly-roe
+
+## Session 2026-10-06 — /sdd-design quick (operator decisions) + /sdd-execute sequential
+
+- Operator: fallback = annualize available quarters (Σ × 4/n); stored-row re-derivation via 223's derivation_version column.
+- Implemented TTM keyed on each fact's own period (avoids the 10-Q comparative-column fy/fp trap), Q4 = FY − Q1..Q3, PIT cutoff = the row's filing date. Status → code-completed.
+- The deferred fundamentals_macd_blend exit-rule backtests still wait on 223 + the re-backfill.

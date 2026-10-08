@@ -45,6 +45,10 @@ formula, which stays readable (FR-1 exception).
 FR-4. **Signal sources are owned.** Every signal source has an owner (`user_id`). `ManageSignalSource`
 create/update/delete is allowed for the owner and is no longer admin-only. `ListSignalSources` returns
 only the caller's sources. Slugs are unique per owner, not globally.
+`ListSignalSources` and `QuerySignals` also return `system`-owned sources and signals, flagged read-only
+(FR-6 exception). **System slugs are reserved:** no user may register a slug that a `system` source
+holds. The mcp_client bearer credential for a user's source is stored as a per-user config secret
+(FR-14).
 
 FR-5. **Ingested signals are owned.** Every ingested signal row carries the owner of the source it was
 ingested into. `IngestSignal` stamps the owner from the caller (`x-user-id`) and accepts only sources
@@ -128,6 +132,14 @@ longer create, update, delete, execute or instantiate on behalf of another user.
 admin override on `UpdateFormula`/`DeleteFormula`. Admin template authoring (FR-7) is unaffected. Admins
 cannot mutate `system` objects either; existing guards stay.
 
+FR-14. **Per-user secrets** (operator decision 2026-10-06; overrides feature 147's global-only rule).
+Config secrets may be scoped to a `user_id`:
+- An mcp_client source's bearer is written as the owner's secret.
+- `GetSecret` resolves it for the allow-listed ingest caller on behalf of the source owner.
+- No read or broadcast edge (`WatchConfig`/`GetConfig`/`ListKeys`/config-ui/agent) ever returns
+  plaintext, to any user including the owner.
+- Existing global mcp credentials keep resolving for the seed owner's migrated sources.
+
 ## Out of Scope
 
 - User-published templates or any user-to-user sharing (operator decision 2: admin catalog only).
@@ -157,8 +169,12 @@ cannot mutate `system` objects either; existing guards stay.
   indicators (`docker-compose.yml:311`, `.do/app.yaml:214`, `.do/app.dev.yaml:214`), so no deploy-file
   change is needed.
 - `packages/proto` — indicators, analysis and ingest contract changes.
-- `xstockstrat-config` — read-only consideration: `analysis.fundsignal.scoring_formula_id` and
-  `analysis.engine.fundamentals_blend_strategy_id` semantics must keep working; no new keys planned.
+- `xstockstrat-config` — **in scope (operator decision 2026-10-06).** Per-user secrets: `is_secret` rows may
+  carry a `user_id`, which overrides feature 147's global-only secret invariant. This covers `SetConfig`
+  per-user secret writes, owner-scoped `GetSecret` resolution for the ingest mcp poller, and redaction
+  that holds per user on `WatchConfig`/`GetConfig`/`ListKeys`. `analysis.fundsignal.scoring_formula_id`
+  and `analysis.engine.fundamentals_blend_strategy_id` keep their current meaning. The config-team
+  approval gate applies.
 
 ## Consumer Surface(s)
 

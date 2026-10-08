@@ -60,7 +60,6 @@ export default function FormulaDetailPage({ params }: { params: Promise<{ id: st
           initialName={formula.name}
           initialDescription={formula.description}
           initialSource={formula.source}
-          initialIsPublic={formula.isPublic}
           initialParameters={formula.parameters}
           initialOutputs={formula.outputs}
           initialWarmupPeriod={formula.warmupPeriod}

@@ -1,7 +1,7 @@
 # xstockstrat-analysis — CLAUDE.md
 
 <!-- context-forge:constitution-pointer:start -->
-> **Constitution:** non-obvious local invariants (tail-align indicator results, empirical-Bayes evidence-weighted scoring, definition-json fingerprint eligibility, custom-formula `len==n` requirement) live in [`docs/context-constitution.md`](docs/context-constitution.md); defects (⚠ self-granted admin scope) in [`docs/context-constitution-findings.md`](docs/context-constitution-findings.md). Inherits the root [`PLAT-*` constitution](../../docs/context-constitution.md).
+> **Constitution:** non-obvious local invariants (tail-align indicator results, empirical-Bayes evidence-weighted scoring, definition-json fingerprint eligibility, custom-formula `len==n` requirement) live in [`docs/context-constitution.md`](docs/context-constitution.md); defects (gross-vs-net P&L basis) in [`docs/context-constitution-findings.md`](docs/context-constitution-findings.md). Inherits the root [`PLAT-*` constitution](../../docs/context-constitution.md).
 <!-- context-forge:constitution-pointer:end -->
 
 ## Role
@@ -22,10 +22,47 @@ the request body** (`servicer._caller_user_id`); every owner-scoped RPC — `Get
 NOT_FOUND vs PERMISSION_DENIED distinction — anti-IDOR). `ManageStrategy`/`SetStrategyLive` are
 **ownership-gated, not admin-gated** — the former server-side admin gate was removed; any
 authenticated caller acts on their **own** strategies. `ListStrategies`/`ListStrategyDefinitions`
-filter to the caller's own rows. (The `strategy_scores` cache stays keyed by bare `strategy_id` — a
-derived cache cross-checked for ownership at the RPC layer, feature 133 D-2.) The live loop keys its
+filter to the caller's own rows. Since feature 224 the derived-score cache is owner-keyed too:
+`analysis.strategy_scores_v2` (`PRIMARY KEY (user_id, strategy_id)`, migration `026`), as are the
+in-memory `_strategies`/recompute-lock maps; the old bare-id `strategy_scores` table is retained only
+for N-1 and dropped by the follow-up "224 enforce + contract". The live loop keys its
 per-`(user_id, strategy_id, symbol)` state on the owner; the owner-scoped firing **universe** union is
 deferred to feature 132's `resolve_universe` (this feature is identity-only).
+
+### Owner-keyed evidence, identity threading & templates (feature 224)
+
+- **Migration `026_owner_dimension_templates`** (`-- requires-env: SEED_USER_ID`): backfills
+  `backtest_runs.user_id` (a legacy run gets its strategy's owner when exactly one owner holds that
+  `strategy_id`, else `SEED_USER_ID`; NOT NULL is deferred to the follow-up), adds `user_id` to
+  `backtest_run_symbols`/`backtest_details`, creates `strategy_scores_v2` (SQL-seeded only for
+  unambiguous ids; ambiguous `(user_id, strategy_id)` pairs are recomputed at boot, at most
+  `_BOOT_RECOMPUTE_MAX_PAIRS` = 50 per pass), `strategy_templates`, `template_intents`, and the
+  strategy `origin_template_*` columns.
+- **Evidence and run history are owner-scoped** (eligibility, `ListBacktests`,
+  `GetStrategyAnalytics`). `GetBacktest` of a run the caller does not own (or an ownerless run) →
+  `PERMISSION_DENIED` for every caller, admins included. ADMIN foreign reads of strategies emit
+  `audit.admin_read` and fail closed `UNAVAILABLE` if the ledger append fails.
+- **Identity threading.** Every analysis → ingest / indicators call carries a non-empty owner
+  `x-user-id`, or the SAN-bound `system` identity (fundsignal: `analysis-fundsignal`; the live loop's
+  system-signal drain: `analysis-system-read`). The former whole-channel `x-internal-caller: analysis`
+  interceptor is gone. An inbound `x-user-id: system` resolves to owner `""` (owns nothing).
+- **Unreadable formula.** An indicators `NOT_FOUND` for a strategy's formula is recorded in the
+  evaluator's `unreadable_formulas`; a backtest raises `FormulaExecutionError` (`FORMULA_ERROR`,
+  excluded from evidence), the other surfaces skip the component with a warning.
+- **Blend-id guard.** `_require_admin_for_blend_id` refuses a non-admin REGISTER or
+  `InstantiateTemplate` of the configured blend id (`FAILED_PRECONDITION`, checked on the final id);
+  `blend_strategy_id(cfg)` is the sole reader of `analysis.engine.fundamentals_blend_strategy_id`.
+- **Strategy templates + saga.** `ListTemplates` / `ManageTemplate` (ADMIN only) /
+  `InstantiateTemplate` over `analysis.strategy_templates`; a caller-chosen `strategy_id` the caller
+  already owns → `ALREADY_EXISTS` before anything is written. A template with formula components runs a
+  saga: a `template_intents` row (`PENDING`) → indicators `InstantiateTemplate` copies the formula
+  templates as hidden pending rows → CAS `PENDING→COMMITTED` inside the strategy transaction → indicators
+  `ResolveTemplateIntent` un-hides them; on failure `ABORTING` and the copies are hard-deleted. Saga
+  calls to indicators carry `x-internal-caller: analysis-template-saga` (`_TEMPLATE_SAGA_CALLER` — a
+  dedicated grant that outlives the release-N `analysis` reader bypass). A `DurableSchedule` sweep
+  (`run_template_intent_sweep_forever`, every `_INTENT_SWEEP_SECONDS` = 300) resolves `ABORTING`/
+  `COMMITTED` intents and `PENDING` ones older than `_INTENT_STALE_SECONDS` = 900 (fixed invariants,
+  not config keys).
 
 ### Strategy Score Persistence (feature 064)
 
@@ -36,15 +73,16 @@ deferred to feature 132's `resolve_universe` (this feature is identity-only).
 > clearing a stale grade). `ScoreStrategy` is repurposed as the manual recompute-from-cells refresh.
 
 `ScoreStrategy` persists the latest `StrategyScore` per strategy to the `analysis.strategy_scores`
-table (migration `005`, upsert on the `strategy_id` primary key) in addition to the in-memory
+table (migration `005`, upsert on the `strategy_id` primary key; since feature 224 the
+`analysis.strategy_scores_v2` table, upsert on `(user_id, strategy_id)`) in addition to the in-memory
 `self._strategies` dict. The write is **best-effort** (FR-7): it mirrors the ledger-emit `try/except →
 log.warning`, so a DB failure never fails scoring. Reads stay in-memory — `ListStrategies` /
 `GetStrategyReport` still serve `self._strategies`; at boot `main.py` calls `servicer.hydrate_scores()`
 (best-effort) to load persisted rows back into memory, so scores **survive a service restart**. Reuses
 the existing asyncpg pool — no new pool (budget stays 2).
 
-A `math.isfinite` guard drops non-finite component values before the JSONB write. The `strategy_scores`
-table has no retention or pagination yet (deactivated and ad-hoc-`strategy_id` scores persist and hydrate).
+A `math.isfinite` guard drops non-finite component values before the JSONB write. The score
+table (`strategy_scores_v2` since feature 224) has no retention or pagination yet (deactivated and ad-hoc-`strategy_id` scores persist and hydrate).
 
 ### Backtest Auto-Scoring & Run History
 
@@ -73,7 +111,8 @@ A second asyncio background loop (`app/engine/fundsignal_loop.py`) runs a daily 
 - **Cache-only FMP discipline**: the producer imports no FMP client; all fundamentals come through marketdata's 24h cache. Chunked fetches are bounded by `analysis.fundsignal.daily_call_budget`; when the budget is exhausted the run is marked `budget_deferred`, a notify warning is emitted, and remaining symbols resume on the next cycle.
 - **Idempotency**: ingest's `IngestSignal` does **not** dedup, so analysis owns the guard in `analysis.fundsignal_emitted` (PK `(symbol, source, as_of_date)`). A same-day re-run emits nothing new and spends zero cache calls; `force=true` re-emits by clearing the day's rows first.
 - **Run state**: `analysis.fundsignal_runs` tracks per-cycle status and budget accounting.
-- **Source registration**: the producer idempotently registers its source via ingest `ManageSignalSource` as `source_type='derived'` (a generic bucket for internally-produced, non-extraction signals — added by ingest migration `006_signal_source_type_derived`), `extractor_module='app.extractors.noop'`. This call is admin-scoped; the background path injects the admin bit, the RPC path forwards the caller's scope.
+- **Source registration**: the producer idempotently registers its source via ingest `ManageSignalSource` as `source_type='derived'` (a generic bucket for internally-produced, non-extraction signals — added by ingest migration `006_signal_source_type_derived`), `extractor_module='app.extractors.noop'`. **Since feature 224** it does so — and scores and emits — as the reserved **`system` identity**: at the top of `run_once`, on both the loop and the `RunFundamentalsScan` path, `sys_meta` = the trace id + `x-user-id: system` + `x-internal-caller: analysis-fundsignal` (`SYSTEM_IDENTITY`, `_FUNDSIGNAL_CALLER`), which ingest and indicators honour only from the `xstockstrat-analysis` mTLS peer SAN. No admin bit is injected; marketdata and portfolio calls keep the caller's metadata.
+- **Fail-closed scoring (feature 224)**: a non-empty `analysis.fundsignal.scoring_formula_id` is pre-flighted via `GetFormula` and must be a `system`-authored formula (`_scoring_formula_is_system`); otherwise the cycle is aborted (`_abort_cycle`: run `failed`, nothing emitted, `ERROR`-severity notify alert). A symbol whose formula scoring fails is skipped — there is no per-symbol fallback to the built-in scorer; an empty id still uses the built-in scorer.
 - **Manual trigger**: the admin-scoped `RunFundamentalsScan` RPC invokes the same `run_once` code path (`force`, `dry_run`, explicit `symbols` override) so the scheduled loop and manual trigger never diverge.
 
 ### Shared durable scheduler (feature 158)
@@ -160,7 +199,7 @@ triggers backtests via the `RunBacktest` gRPC RPC.
 |---|---|---|
 | xstockstrat-config | gRPC WatchConfig | Live config at startup |
 | xstockstrat-marketdata | gRPC read | Historical OHLCV data for backtesting |
-| xstockstrat-indicators | gRPC read | SMA/EMA/indicator computation |
+| xstockstrat-indicators | gRPC read/write | SMA/EMA/indicator computation; formula reads as the strategy owner; strategy-template saga copies (`InstantiateTemplate`/`ResolveTemplateIntent`, feature 224) |
 | xstockstrat-ingest | gRPC read/write | QuerySignals for signal-weighted backtesting; `IngestSignal`/`ManageSignalSource` for the fundamentals signal producer (feature 062) |
 | xstockstrat-portfolio | gRPC read | Watchlist universe for the fundamentals signal producer (feature 062); held positions for the `ListOpportunities` queue + `ScreenResult.held` cross-ref (feature 083) |
 | xstockstrat-trading | gRPC read | `ListOrders(strategy_id)` for the `GetStrategyAnalytics` "taken" count (feature 083 — new non-cyclic analysis→trading edge; `TRADING_ENDPOINT`); `ListOrders(strategy_id, symbol)` boot-time-only for the exit-cooldown entry-time backfill (feature 116, `app/engine/entry_backfill.py`) — reuses the same edge/stub, no new channel |
@@ -311,6 +350,29 @@ bar; 200 feeds a **set** of metrics into a formula.
 - **Write-time guard.** `ManageStrategy` rejects `INVALID_ARGUMENT` a component that sets **both**
   `source_symbol` and a fundamentals-input formula — a component is a benchmark operand XOR a
   fundamentals-formula operand (the formula reads fundamentals, not bars).
+
+### Per-sector component-param overrides (`sector_param_overrides`, feature 217)
+
+`StrategyDefinition.sector_param_overrides` (field 15, rides `definition_json`, maskable) overrides
+`components[component_ref].params[param_name]` by the evaluated symbol's sector
+(`app/services/sector_params.py`). It is a **param** override only — rule `rhs` thresholds are not
+sector-addressable.
+
+- **Backtest (PIT)**: one batched `marketdata.GetSectorHistory` per run (header trio propagated);
+  each bar resolves its sector as-of `bar.time` (`valid_from` inclusive, `valid_to` exclusive).
+  A component is computed once per **distinct** resolved param set over the full window and
+  stitched per bar (`StrategyEvaluator._assemble_sector_resolved`) — correct warm-up across a
+  mid-window reclassification; no overrides → one compute, byte-identical. Warm-up prefix sizes for
+  the hungriest sector variant (`warmup.required_prefix_bars`).
+- **Live surfaces** (readiness, opportunities, materializer, live loop): the current sector via
+  `GetCurrentSector` (10-min per-process cache in the servicer) → `apply_sector`. Strategies
+  without overrides issue no sector RPC.
+- **Fail-safe**: unclassified bar/symbol or a marketdata failure → `default_value` (never a
+  carry-forward). Backtest `warnings` carry a sector-unavailable notice and the **seed-span**
+  notice when a bar resolved against an epoch-seed row (the signed-off pre-go-live look-ahead).
+- Write validation (`_validate_definition`): component must exist and not be a fundamental operand;
+  no duplicate `(component_ref, param_name)`; `by_sector` sectors unique and not UNSPECIFIED; finite.
+  A changed override changes the definition fingerprint (clears the derived grade).
 
 ## Config Keys Consumed
 

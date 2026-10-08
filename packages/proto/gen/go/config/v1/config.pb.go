@@ -617,6 +617,7 @@ type GetSecretRequest struct {
 	Namespace     string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	Key           string                 `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
 	Environment   v1.Environment         `protobuf:"varint,3,opt,name=environment,proto3,enum=xstockstrat.common.v1.Environment" json:"environment,omitempty"` // production or staging
+	UserId        string                 `protobuf:"bytes,4,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`                                     // exact scope: empty = global row only (feature 224)
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -670,6 +671,13 @@ func (x *GetSecretRequest) GetEnvironment() v1.Environment {
 		return x.Environment
 	}
 	return v1.Environment(0)
+}
+
+func (x *GetSecretRequest) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
 }
 
 type GetSecretResponse struct {
@@ -739,7 +747,8 @@ type SetConfigRequest struct {
 	// unregistered scope is refused with NOT_FOUND, so a typo cannot mint an orphan key.
 	CreateKey bool `protobuf:"varint,8,opt,name=create_key,json=createKey,proto3" json:"create_key,omitempty"`
 	// Optional per-user scope. Empty = the global value; a non-empty user_id writes/updates that
-	// user's per-user override. Secret keys (is_secret) are global-scope only (feature 147).
+	// user's per-user override. Secret keys may be per-user (feature 224 operator override of
+	// feature 147); redaction holds on every edge.
 	UserId        string `protobuf:"bytes,9,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1174,11 +1183,12 @@ const file_config_v1_config_proto_rawDesc = "" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12D\n" +
 	"\venvironment\x18\x02 \x01(\x0e2\".xstockstrat.common.v1.EnvironmentR\venvironment\x12I\n" +
 	"\ftrading_mode\x18\x03 \x01(\x0e2\".xstockstrat.common.v1.TradingModeB\x02\x18\x01R\vtradingMode\x12\x17\n" +
-	"\auser_id\x18\x04 \x01(\tR\x06userId\"\x88\x01\n" +
+	"\auser_id\x18\x04 \x01(\tR\x06userId\"\xa1\x01\n" +
 	"\x10GetSecretRequest\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x10\n" +
 	"\x03key\x18\x02 \x01(\tR\x03key\x12D\n" +
-	"\venvironment\x18\x03 \x01(\x0e2\".xstockstrat.common.v1.EnvironmentR\venvironment\"?\n" +
+	"\venvironment\x18\x03 \x01(\x0e2\".xstockstrat.common.v1.EnvironmentR\venvironment\x12\x17\n" +
+	"\auser_id\x18\x04 \x01(\tR\x06userId\"?\n" +
 	"\x11GetSecretResponse\x12\x14\n" +
 	"\x05value\x18\x01 \x01(\tR\x05value\x12\x14\n" +
 	"\x05found\x18\x02 \x01(\bR\x05found\"\xf5\x02\n" +

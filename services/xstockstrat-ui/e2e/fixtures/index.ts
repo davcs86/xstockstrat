@@ -26,3 +26,4 @@ export * from './fundamentals';
 export * from './orders';
 export * from './configKeys';
 export * from './signalSources';
+export * from './templates';

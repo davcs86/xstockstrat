@@ -2,7 +2,7 @@
 
 **Development Branch**: `feature/private-by-default-templates`
 **Created**: 2026-10-06
-**Last Updated**: 2026-10-06
+**Last Updated**: 2026-10-07
 
 ---
 
@@ -12,6 +12,11 @@
 |---|---|---|---|
 | 2026-10-06 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-10-06 | `draft` → `spec-ready` | /sdd-review | Product spec approved on re-review (first pass failed C-07/P-03, fixed); 6 warnings, 3 carried to design |
+| 2026-10-06 | `spec-ready` → `design-approved` | /sdd-design | Design debated (5 rounds, full) and approved; recon.md + design.md written |
+| 2026-10-07 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 41 steps |
+| 2026-10-07 | `implementation-ready` (unchanged) | /sdd-execute | Re-spec gate: Step 22 (AC-35 write-accepted test written new), Step 34 Files (+ test_tools_endpoint.py) |
+| 2026-10-07 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 done (sequential run started) |
+| 2026-10-07 | `in-progress` → `code-completed` | /sdd-execute | All 41 steps done; integration PR to `main-dev` |
 
 ---
 
@@ -19,7 +24,9 @@
 
 - [Product Spec](product-spec.md) — requirements and governance
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec private-by-default-templates`_
+- [Recon](recon.md) — grounded codebase dossier (Phase 0)
+- [Design](design.md) — debated, approved architecture (Phase 1)
+- [Implementation Spec](implementation-spec.md)
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -38,15 +45,17 @@ re-run /sdd-spec if the registry changes.)_
 
 | Role | Review Focus |
 |---|---|
-| Proto Reviewer (`packages/proto`) | Field number uniqueness, backward compatibility (deprecate `is_public`/`include_public`, never delete), naming conventions |
-| DBA | Owner-column backfills on `ingest.*` and `analysis.strategy_scores`/backtest tables, new template tables, index/PK changes |
-| `xstockstrat-indicators` owner | Formula sandboxing, no side-effects from formula execution — plus owner-only read/execute and template instantiation |
-| `xstockstrat-analysis` owner | Backtest reproducibility, strategy scoring determinism — plus owner-scoped formula execution (bypass removal) and strategy-template deep copy |
-| `xstockstrat-ingest` owner | Signal normalization correctness, idempotent ingestion (now per-owner dedup), newsletter source schema stability |
-| `xstockstrat-agent` owner | MCP tool contract stability and `docs/runbooks/mcp-tools.md` parity; tool-count statements across all six inventory surfaces |
-| `xstockstrat-ui` owner | Analytics display accuracy, Connect-RPC call safety, removal of public toggles, template catalog UX |
-| `xstockstrat-config` owner | Any new config keys (none planned) |
+| Proto Reviewer (`packages/proto`) | Field number uniqueness per message, no breaking change without deprecation comment, `buf lint`/`buf breaking` pass (Step 1) |
+| DBA | Migration NNN numbering, up+down pair, hypertable partitioning, index correctness, run-order with `scripts/db-migrate.sh` (Steps 3, 4, 6, 13, 18, 33) |
+| Platform Lead | Cross-service migration tooling and CI jobs (Steps 3, 4) |
+| Security | SAN-bound internal-caller identity; per-user secrets encrypted, redacted on every edge, decryptable only via `GetSecret` (Steps 1, 5, 21, 22) |
+| `xstockstrat-indicators` owner | Formula sandboxing, no side-effects from formula execution; owner-only read/execute; templates (Steps 1, 13–15, 27, 28, 33) |
+| `xstockstrat-analysis` owner | Backtest reproducibility, strategy scoring determinism, no look-ahead bias; owner threading, owner-keyed state, template saga (Steps 1, 6–12, 16, 17, 25, 26, 31–33) |
+| `xstockstrat-ingest` owner | Signal normalization correctness, idempotent ingestion (per-owner dedup), newsletter source schema stability (Steps 1, 5, 18–20, 23, 24, 29, 30, 33) |
+| `xstockstrat-config` owner | Global/per-user scoping, secret encryption + redaction, WatchConfig stream stability (Steps 1, 5, 21, 22) |
+| `xstockstrat-agent` owner | MCP tool contract stability and `docs/runbooks/mcp-tools.md` parity; tool-count statements across all six inventory surfaces (Steps 34, 35) |
+| `xstockstrat-ui` owner | Analytics display accuracy, Connect-RPC call safety, config mutation safety, no secret values rendered (Steps 36–39) |
 
 ## Next Action
 
-`/sdd-design private-by-default-templates` — recon + design debate (full mode; cross-service, migration-heavy)
+Merge the integration PR (`feature/private-by-default-templates` → `main-dev`) once CI is green; then `/promote`. Follow-up: feature 225 `private-by-default-enforce-contract` (after launch).

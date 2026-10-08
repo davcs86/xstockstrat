@@ -39,6 +39,9 @@ const (
 	AnalysisService_QueryPnLPatterns_FullMethodName        = "/xstockstrat.analysis.v1.AnalysisService/QueryPnLPatterns"
 	AnalysisService_GetAttribution_FullMethodName          = "/xstockstrat.analysis.v1.AnalysisService/GetAttribution"
 	AnalysisService_GetWatchlistReadiness_FullMethodName   = "/xstockstrat.analysis.v1.AnalysisService/GetWatchlistReadiness"
+	AnalysisService_ListTemplates_FullMethodName           = "/xstockstrat.analysis.v1.AnalysisService/ListTemplates"
+	AnalysisService_ManageTemplate_FullMethodName          = "/xstockstrat.analysis.v1.AnalysisService/ManageTemplate"
+	AnalysisService_InstantiateTemplate_FullMethodName     = "/xstockstrat.analysis.v1.AnalysisService/InstantiateTemplate"
 )
 
 // AnalysisServiceClient is the client API for AnalysisService service.
@@ -89,6 +92,12 @@ type AnalysisServiceClient interface {
 	// pairs (feature 181). Owner from x-user-id; RESOLVED rows carry inline SymbolReadiness,
 	// PENDING/UNKNOWN rows resolve on a subsequent poll (the server kicks a background refresh).
 	GetWatchlistReadiness(ctx context.Context, in *GetWatchlistReadinessRequest, opts ...grpc.CallOption) (*GetWatchlistReadinessResponse, error)
+	// Template catalog (feature 224). List/read: any authenticated caller. Manage: ADMIN only.
+	ListTemplates(ctx context.Context, in *ListTemplatesRequest, opts ...grpc.CallOption) (*ListTemplatesResponse, error)
+	ManageTemplate(ctx context.Context, in *ManageTemplateRequest, opts ...grpc.CallOption) (*StrategyTemplate, error)
+	// Deep-copies a strategy template (and its formula templates) into private copies owned by the
+	// x-user-id caller, atomically (FR-9).
+	InstantiateTemplate(ctx context.Context, in *InstantiateTemplateRequest, opts ...grpc.CallOption) (*StrategyDefinition, error)
 }
 
 type analysisServiceClient struct {
@@ -299,6 +308,36 @@ func (c *analysisServiceClient) GetWatchlistReadiness(ctx context.Context, in *G
 	return out, nil
 }
 
+func (c *analysisServiceClient) ListTemplates(ctx context.Context, in *ListTemplatesRequest, opts ...grpc.CallOption) (*ListTemplatesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListTemplatesResponse)
+	err := c.cc.Invoke(ctx, AnalysisService_ListTemplates_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *analysisServiceClient) ManageTemplate(ctx context.Context, in *ManageTemplateRequest, opts ...grpc.CallOption) (*StrategyTemplate, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(StrategyTemplate)
+	err := c.cc.Invoke(ctx, AnalysisService_ManageTemplate_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *analysisServiceClient) InstantiateTemplate(ctx context.Context, in *InstantiateTemplateRequest, opts ...grpc.CallOption) (*StrategyDefinition, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(StrategyDefinition)
+	err := c.cc.Invoke(ctx, AnalysisService_InstantiateTemplate_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AnalysisServiceServer is the server API for AnalysisService service.
 // All implementations should embed UnimplementedAnalysisServiceServer
 // for forward compatibility.
@@ -347,6 +386,12 @@ type AnalysisServiceServer interface {
 	// pairs (feature 181). Owner from x-user-id; RESOLVED rows carry inline SymbolReadiness,
 	// PENDING/UNKNOWN rows resolve on a subsequent poll (the server kicks a background refresh).
 	GetWatchlistReadiness(context.Context, *GetWatchlistReadinessRequest) (*GetWatchlistReadinessResponse, error)
+	// Template catalog (feature 224). List/read: any authenticated caller. Manage: ADMIN only.
+	ListTemplates(context.Context, *ListTemplatesRequest) (*ListTemplatesResponse, error)
+	ManageTemplate(context.Context, *ManageTemplateRequest) (*StrategyTemplate, error)
+	// Deep-copies a strategy template (and its formula templates) into private copies owned by the
+	// x-user-id caller, atomically (FR-9).
+	InstantiateTemplate(context.Context, *InstantiateTemplateRequest) (*StrategyDefinition, error)
 }
 
 // UnimplementedAnalysisServiceServer should be embedded to have
@@ -415,6 +460,15 @@ func (UnimplementedAnalysisServiceServer) GetAttribution(context.Context, *GetAt
 }
 func (UnimplementedAnalysisServiceServer) GetWatchlistReadiness(context.Context, *GetWatchlistReadinessRequest) (*GetWatchlistReadinessResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetWatchlistReadiness not implemented")
+}
+func (UnimplementedAnalysisServiceServer) ListTemplates(context.Context, *ListTemplatesRequest) (*ListTemplatesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListTemplates not implemented")
+}
+func (UnimplementedAnalysisServiceServer) ManageTemplate(context.Context, *ManageTemplateRequest) (*StrategyTemplate, error) {
+	return nil, status.Error(codes.Unimplemented, "method ManageTemplate not implemented")
+}
+func (UnimplementedAnalysisServiceServer) InstantiateTemplate(context.Context, *InstantiateTemplateRequest) (*StrategyDefinition, error) {
+	return nil, status.Error(codes.Unimplemented, "method InstantiateTemplate not implemented")
 }
 func (UnimplementedAnalysisServiceServer) testEmbeddedByValue() {}
 
@@ -796,6 +850,60 @@ func _AnalysisService_GetWatchlistReadiness_Handler(srv interface{}, ctx context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AnalysisService_ListTemplates_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListTemplatesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AnalysisServiceServer).ListTemplates(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AnalysisService_ListTemplates_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AnalysisServiceServer).ListTemplates(ctx, req.(*ListTemplatesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AnalysisService_ManageTemplate_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ManageTemplateRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AnalysisServiceServer).ManageTemplate(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AnalysisService_ManageTemplate_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AnalysisServiceServer).ManageTemplate(ctx, req.(*ManageTemplateRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AnalysisService_InstantiateTemplate_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(InstantiateTemplateRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AnalysisServiceServer).InstantiateTemplate(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AnalysisService_InstantiateTemplate_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AnalysisServiceServer).InstantiateTemplate(ctx, req.(*InstantiateTemplateRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AnalysisService_ServiceDesc is the grpc.ServiceDesc for AnalysisService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -882,6 +990,18 @@ var AnalysisService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetWatchlistReadiness",
 			Handler:    _AnalysisService_GetWatchlistReadiness_Handler,
+		},
+		{
+			MethodName: "ListTemplates",
+			Handler:    _AnalysisService_ListTemplates_Handler,
+		},
+		{
+			MethodName: "ManageTemplate",
+			Handler:    _AnalysisService_ManageTemplate_Handler,
+		},
+		{
+			MethodName: "InstantiateTemplate",
+			Handler:    _AnalysisService_InstantiateTemplate_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

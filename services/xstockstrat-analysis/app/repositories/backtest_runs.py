@@ -77,14 +77,15 @@ class BacktestRunsRepository:
         )
         return _to_dict(row)
 
-    async def list_by_strategy(self, strategy_id: str, limit: int = 20) -> list[dict]:
+    async def list_by_strategy(self, user_id: str, strategy_id: str, limit: int = 20) -> list[dict]:
         rows = await self._db.fetch(
             """
             SELECT * FROM analysis.backtest_runs
-            WHERE strategy_id = $1
+            WHERE user_id = $1 AND strategy_id = $2
             ORDER BY completed_at DESC
-            LIMIT $2
+            LIMIT $3
             """,
+            user_id,
             strategy_id,
             limit,
         )

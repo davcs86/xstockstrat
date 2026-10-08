@@ -6,6 +6,7 @@ import { PortfolioService } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
 import { TradingService } from '@xstockstrat/proto/trading/v1/trading_pb';
 import { LedgerService } from '@xstockstrat/proto/ledger/v1/ledger_pb';
 import { ConfigService } from '@xstockstrat/proto/config/v1/config_pb';
+import { ConnectError, Code } from '@connectrpc/connect';
 import {
   analysisClient,
   indicatorsClient,
@@ -23,7 +24,9 @@ import {
   backendHeaders,
   forward,
   forwardAdmin,
+  FUNDAMENTALS_TIMEOUT_MS,
 } from '@/lib/bffShared';
+import { nativeConfigEnvironment } from '@/lib/deploymentEnv';
 
 const router = createBffRouter();
 
@@ -67,6 +70,9 @@ router.service(AnalysisService, {
   queryPnLPatterns: forward((req, opts) => analysisClient.queryPnLPatterns(req, opts)),
   // Per-source signal-performance attribution. Read-only; owner-scoped from the x-user-id header.
   getAttribution: forward((req, opts) => analysisClient.getAttribution(req, opts)),
+  // Template catalog: any authenticated caller lists; instantiate copies into a caller-owned strategy.
+  listTemplates: forward((req, opts) => analysisClient.listTemplates(req, opts)),
+  instantiateTemplate: forward((req, opts) => analysisClient.instantiateTemplate(req, opts)),
 });
 
 router.service(IngestService, {
@@ -84,12 +90,18 @@ router.service(IngestService, {
   },
   // Mutating — admin only; the ingest server re-checks the scope.
   cancelBackfill: forwardAdmin((req, opts) => ingestClient.cancelBackfill(req, opts)),
+  // Owner-scoped server-side: owners manage their own sources; system sources are read-only.
+  manageSignalSource: forward((req, opts) => ingestClient.manageSignalSource(req, opts)),
+  listTemplates: forward((req, opts) => ingestClient.listTemplates(req, opts)),
+  instantiateTemplate: forward((req, opts) => ingestClient.instantiateTemplate(req, opts)),
 });
 
 router.service(MarketDataService, {
   getBars: forward((req, opts) => marketDataClient.getBars(req, opts)),
   // Read-only marketdata reads for the Data Explorer (feature 204); ownership-agnostic public data.
-  getFundamentals: forward((req, opts) => marketDataClient.getFundamentals(req, opts)),
+  getFundamentals: forward((req, opts) => marketDataClient.getFundamentals(req, opts), {
+    timeoutMs: FUNDAMENTALS_TIMEOUT_MS,
+  }),
   getHistoricalFundamentals: forward((req, opts) =>
     marketDataClient.getHistoricalFundamentals(req, opts),
   ),
@@ -98,7 +110,9 @@ router.service(MarketDataService, {
   getLatestPrice: forward((req, opts) => marketDataClient.getLatestPrice(req, opts)),
   // Read-only snapshot fundamentals for the formula fundamentals test-grid symbol-prefill (feature
   // 205); public data via the shared forward() plumbing.
-  getFundamentalsMulti: forward((req, opts) => marketDataClient.getFundamentalsMulti(req, opts)),
+  getFundamentalsMulti: forward((req, opts) => marketDataClient.getFundamentalsMulti(req, opts), {
+    timeoutMs: FUNDAMENTALS_TIMEOUT_MS,
+  }),
   // Destructive — admin only; the marketdata server enforces it again.
   deleteBackfilledData: forwardAdmin((req, opts) =>
     marketDataClient.deleteBackfilledData(req, opts),
@@ -146,17 +160,33 @@ router.service(LedgerService, {
 router.service(ConfigService, {
   // Read-only — GetConfig is deliberately open on the backend (no admin gate), matching traderBff.
   getConfig: forward((req, opts) => configClient.getConfig(req, opts)),
-});
-
-router.service(IndicatorsService, {
-  async registerFormula(req, ctx) {
+  // Per-user mcp_client bearer write ONLY. Scope, secrecy and creation are forced from the session so a
+  // client can never store the bearer in plaintext or in another user's scope.
+  async setConfig(req, ctx) {
     const claims = await requireSession(ctx);
-    // Set author from JWT claims — overrides any caller-supplied value
-    return indicatorsClient.registerFormula(
-      { ...req, author: claims.user_id },
+    if (req.namespace !== 'ingest' || !req.key.startsWith('mcp_credential.')) {
+      throw new ConnectError(
+        'Only ingest mcp_credential.* per-user secrets may be written here',
+        Code.PermissionDenied,
+      );
+    }
+    if (!req.value) throw new ConnectError('value is required', Code.InvalidArgument);
+    return configClient.setConfig(
+      {
+        ...req,
+        userId: claims.user_id,
+        environment: nativeConfigEnvironment(),
+        author: claims.user_id,
+        createKey: true,
+        value: { ...req.value, isSecret: true },
+      },
       { headers: backendHeaders(claims, ctx) },
     );
   },
+});
+
+router.service(IndicatorsService, {
+  registerFormula: forward((req, opts) => indicatorsClient.registerFormula(req, opts)),
   getFormula: forward((req, opts) => indicatorsClient.getFormula(req, opts)),
   listFormulas: forward((req, opts) => indicatorsClient.listFormulas(req, opts)),
   // Author-ownership resolves the caller from the x-user-id header (set from the verified session, not
@@ -171,6 +201,8 @@ router.service(IndicatorsService, {
   listFundamentalMetrics: forward((req, opts) =>
     indicatorsClient.listFundamentalMetrics(req, opts),
   ),
+  listTemplates: forward((req, opts) => indicatorsClient.listTemplates(req, opts)),
+  instantiateTemplate: forward((req, opts) => indicatorsClient.instantiateTemplate(req, opts)),
 });
 
 // In the consolidated app there is no basePath — the full URL /insights/api/<service>/<method>

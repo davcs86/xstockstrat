@@ -1,5 +1,11 @@
 import { test, expect, type Page } from '@playwright/test';
 import { addAuthCookie } from '../helpers/auth';
+import {
+  FORMULA_TEMPLATE_INSTANCE,
+  FORMULA_TEMPLATE_ZSCORE,
+  SIGNAL_SOURCE_WEIGHTED,
+  STRATEGY_TEMPLATE_MEANREV,
+} from '../fixtures';
 
 /**
  * BFF smoke tests for the Connect-RPC gateway in xstockstrat-insights.
@@ -145,6 +151,68 @@ test.describe('Connect BFF — AnalysisService/SetOpportunityAction is registere
         },
       );
       return res.status;
+    });
+    expect(status).toBe(200);
+  });
+});
+
+test.describe('Connect BFF — feature 224 template + owned-source RPCs are registered', () => {
+  // Router-traversing (no page.route): each call reaches the mock backend through the real BFF, so
+  // an unregistered method (Unimplemented) or a missing INDICATORS_ENDPOINT wiring fails here.
+  async function post(page: Page, path: string, body: Record<string, unknown>) {
+    return page.evaluate(
+      async ({ path, body }) => {
+        const res = await fetch(`/insights/api/${path}`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        return { status: res.status, body: (await res.json()) as Record<string, unknown> };
+      },
+      { path, body },
+    );
+  }
+
+  test('AnalysisService/ListTemplates answers 200 with the strategy catalog', async ({ page }) => {
+    await addAuthCookie(page);
+    await page.goto('/auth/login');
+    const { status, body } = await post(
+      page,
+      'xstockstrat.analysis.v1.AnalysisService/ListTemplates',
+      {},
+    );
+    expect(status).toBe(200);
+    const templates = body.templates as Array<{ meta: { templateId: string } }>;
+    expect(templates.map((t) => t.meta.templateId)).toEqual([
+      STRATEGY_TEMPLATE_MEANREV.meta.templateId,
+    ]);
+  });
+
+  test('IndicatorsService/InstantiateTemplate answers 200 with the private copy', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await page.goto('/auth/login');
+    const { status, body } = await post(
+      page,
+      'xstockstrat.indicators.v1.IndicatorsService/InstantiateTemplate',
+      { templateId: FORMULA_TEMPLATE_ZSCORE.meta.templateId },
+    );
+    expect(status).toBe(200);
+    expect((body.formula as { formulaId: string }).formulaId).toBe(
+      FORMULA_TEMPLATE_INSTANCE.formulaId,
+    );
+  });
+
+  test('IngestService/ManageSignalSource answers 200 for a source the caller owns', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await page.goto('/auth/login');
+    const { status } = await post(page, 'xstockstrat.ingest.v1.IngestService/ManageSignalSource', {
+      source: { slug: SIGNAL_SOURCE_WEIGHTED.slug, reliabilityWeight: 0.7 },
+      operation: 'update',
+      updateMask: 'reliabilityWeight',
     });
     expect(status).toBe(200);
   });

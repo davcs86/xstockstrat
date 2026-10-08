@@ -5,7 +5,7 @@
 //   protoc               unknown
 // source: indicators/v1/indicators.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.IndicatorsServiceClient = exports.IndicatorsServiceService = exports.ListFundamentalMetricsResponse = exports.FundamentalMetricInfo = exports.ListFundamentalMetricsRequest = exports.DeleteFormulaResponse = exports.DeleteFormulaRequest = exports.UpdateFormulaResponse = exports.UpdateFormulaRequest = exports.ListFormulasResponse = exports.ListFormulasRequest = exports.GetFormulaRequest = exports.RegisterFormulaResponse = exports.RegisterFormulaRequest_InputSchemaEntry = exports.RegisterFormulaRequest = exports.IndicatorMeta = exports.ListIndicatorsResponse = exports.ListIndicatorsRequest = exports.FormulaDefinition_InputSchemaEntry = exports.FormulaDefinition = exports.ParameterValidationError = exports.FormulaOutput = exports.FormulaParameter = exports.ExecuteFormulaResponse = exports.ExecuteFormulaRequest_EnvEntry = exports.ExecuteFormulaRequest = exports.IndicatorPoint_ExtraEntry = exports.IndicatorPoint = exports.ComputeIndicatorResponse_ParamsUsedEntry = exports.ComputeIndicatorResponse = exports.ComputeIndicatorRequest_ParamsEntry = exports.ComputeIndicatorRequest = exports.FundamentalMetric = exports.ParameterType = exports.SandboxExitReason = exports.protobufPackage = void 0;
+exports.IndicatorsServiceClient = exports.IndicatorsServiceService = exports.ResolveTemplateIntentResponse = exports.ResolveTemplateIntentRequest = exports.InstantiateTemplateResponse_FormulaIdsByTemplateEntry = exports.InstantiateTemplateResponse = exports.InstantiateTemplateRequest = exports.ManageTemplateRequest = exports.ListTemplatesResponse = exports.ListTemplatesRequest = exports.FormulaTemplate = exports.ListFundamentalMetricsResponse = exports.FundamentalMetricInfo = exports.ListFundamentalMetricsRequest = exports.DeleteFormulaResponse = exports.DeleteFormulaRequest = exports.UpdateFormulaResponse = exports.UpdateFormulaRequest = exports.ListFormulasResponse = exports.ListFormulasRequest = exports.GetFormulaRequest = exports.RegisterFormulaResponse = exports.RegisterFormulaRequest_InputSchemaEntry = exports.RegisterFormulaRequest = exports.IndicatorMeta = exports.ListIndicatorsResponse = exports.ListIndicatorsRequest = exports.FormulaDefinition_InputSchemaEntry = exports.FormulaDefinition = exports.ParameterValidationError = exports.FormulaOutput = exports.FormulaParameter = exports.ExecuteFormulaResponse = exports.ExecuteFormulaRequest_EnvEntry = exports.ExecuteFormulaRequest = exports.IndicatorPoint_ExtraEntry = exports.IndicatorPoint = exports.ComputeIndicatorResponse_ParamsUsedEntry = exports.ComputeIndicatorResponse = exports.ComputeIndicatorRequest_ParamsEntry = exports.ComputeIndicatorRequest = exports.FundamentalMetric = exports.ParameterType = exports.SandboxExitReason = exports.protobufPackage = void 0;
 exports.sandboxExitReasonFromJSON = sandboxExitReasonFromJSON;
 exports.sandboxExitReasonToJSON = sandboxExitReasonToJSON;
 exports.sandboxExitReasonToNumber = sandboxExitReasonToNumber;
@@ -1648,6 +1648,7 @@ function createBaseFormulaDefinition() {
         warmupPeriod: 0,
         deleted: false,
         fundamentalInputs: [],
+        origin: undefined,
     };
 }
 exports.FormulaDefinition = {
@@ -1696,6 +1697,9 @@ exports.FormulaDefinition = {
             writer.int32(fundamentalMetricToNumber(v));
         }
         writer.join();
+        if (message.origin !== undefined) {
+            common_1.TemplateOrigin.encode(message.origin, writer.uint32(122).fork()).join();
+        }
         return writer;
     },
     decode(input, length) {
@@ -1813,6 +1817,13 @@ exports.FormulaDefinition = {
                     }
                     break;
                 }
+                case 15: {
+                    if (tag !== 122) {
+                        break;
+                    }
+                    message.origin = common_1.TemplateOrigin.decode(reader, reader.uint32());
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -1875,6 +1886,7 @@ exports.FormulaDefinition = {
                 : globalThis.Array.isArray(object?.fundamental_inputs)
                     ? object.fundamental_inputs.map((e) => fundamentalMetricFromJSON(e))
                     : [],
+            origin: isSet(object.origin) ? common_1.TemplateOrigin.fromJSON(object.origin) : undefined,
         };
     },
     toJSON(message) {
@@ -1927,6 +1939,9 @@ exports.FormulaDefinition = {
         if (message.fundamentalInputs?.length) {
             obj.fundamentalInputs = message.fundamentalInputs.map((e) => fundamentalMetricToJSON(e));
         }
+        if (message.origin !== undefined) {
+            obj.origin = common_1.TemplateOrigin.toJSON(message.origin);
+        }
         return obj;
     },
     create(base) {
@@ -1953,6 +1968,9 @@ exports.FormulaDefinition = {
         message.warmupPeriod = object.warmupPeriod ?? 0;
         message.deleted = object.deleted ?? false;
         message.fundamentalInputs = object.fundamentalInputs?.map((e) => e) || [];
+        message.origin = (object.origin !== undefined && object.origin !== null)
+            ? common_1.TemplateOrigin.fromPartial(object.origin)
+            : undefined;
         return message;
     },
 };
@@ -3453,6 +3471,624 @@ exports.ListFundamentalMetricsResponse = {
         return message;
     },
 };
+function createBaseFormulaTemplate() {
+    return { meta: undefined, payload: undefined };
+}
+exports.FormulaTemplate = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.meta !== undefined) {
+            common_1.TemplateMeta.encode(message.meta, writer.uint32(10).fork()).join();
+        }
+        if (message.payload !== undefined) {
+            exports.RegisterFormulaRequest.encode(message.payload, writer.uint32(18).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseFormulaTemplate();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.meta = common_1.TemplateMeta.decode(reader, reader.uint32());
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.payload = exports.RegisterFormulaRequest.decode(reader, reader.uint32());
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            meta: isSet(object.meta) ? common_1.TemplateMeta.fromJSON(object.meta) : undefined,
+            payload: isSet(object.payload) ? exports.RegisterFormulaRequest.fromJSON(object.payload) : undefined,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.meta !== undefined) {
+            obj.meta = common_1.TemplateMeta.toJSON(message.meta);
+        }
+        if (message.payload !== undefined) {
+            obj.payload = exports.RegisterFormulaRequest.toJSON(message.payload);
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.FormulaTemplate.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseFormulaTemplate();
+        message.meta = (object.meta !== undefined && object.meta !== null)
+            ? common_1.TemplateMeta.fromPartial(object.meta)
+            : undefined;
+        message.payload = (object.payload !== undefined && object.payload !== null)
+            ? exports.RegisterFormulaRequest.fromPartial(object.payload)
+            : undefined;
+        return message;
+    },
+};
+function createBaseListTemplatesRequest() {
+    return {};
+}
+exports.ListTemplatesRequest = {
+    encode(_, writer = new wire_1.BinaryWriter()) {
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseListTemplatesRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(_) {
+        return {};
+    },
+    toJSON(_) {
+        const obj = {};
+        return obj;
+    },
+    create(base) {
+        return exports.ListTemplatesRequest.fromPartial(base ?? {});
+    },
+    fromPartial(_) {
+        const message = createBaseListTemplatesRequest();
+        return message;
+    },
+};
+function createBaseListTemplatesResponse() {
+    return { templates: [] };
+}
+exports.ListTemplatesResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        for (const v of message.templates) {
+            exports.FormulaTemplate.encode(v, writer.uint32(10).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseListTemplatesResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.templates.push(exports.FormulaTemplate.decode(reader, reader.uint32()));
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            templates: globalThis.Array.isArray(object?.templates)
+                ? object.templates.map((e) => exports.FormulaTemplate.fromJSON(e))
+                : [],
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.templates?.length) {
+            obj.templates = message.templates.map((e) => exports.FormulaTemplate.toJSON(e));
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.ListTemplatesResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseListTemplatesResponse();
+        message.templates = object.templates?.map((e) => exports.FormulaTemplate.fromPartial(e)) || [];
+        return message;
+    },
+};
+function createBaseManageTemplateRequest() {
+    return { operation: common_1.TemplateOperation.TEMPLATE_OPERATION_UNSPECIFIED, template: undefined };
+}
+exports.ManageTemplateRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.operation !== common_1.TemplateOperation.TEMPLATE_OPERATION_UNSPECIFIED) {
+            writer.uint32(8).int32((0, common_1.templateOperationToNumber)(message.operation));
+        }
+        if (message.template !== undefined) {
+            exports.FormulaTemplate.encode(message.template, writer.uint32(18).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseManageTemplateRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 8) {
+                        break;
+                    }
+                    message.operation = (0, common_1.templateOperationFromJSON)(reader.int32());
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.template = exports.FormulaTemplate.decode(reader, reader.uint32());
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            operation: isSet(object.operation)
+                ? (0, common_1.templateOperationFromJSON)(object.operation)
+                : common_1.TemplateOperation.TEMPLATE_OPERATION_UNSPECIFIED,
+            template: isSet(object.template) ? exports.FormulaTemplate.fromJSON(object.template) : undefined,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.operation !== common_1.TemplateOperation.TEMPLATE_OPERATION_UNSPECIFIED) {
+            obj.operation = (0, common_1.templateOperationToJSON)(message.operation);
+        }
+        if (message.template !== undefined) {
+            obj.template = exports.FormulaTemplate.toJSON(message.template);
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.ManageTemplateRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseManageTemplateRequest();
+        message.operation = object.operation ?? common_1.TemplateOperation.TEMPLATE_OPERATION_UNSPECIFIED;
+        message.template = (object.template !== undefined && object.template !== null)
+            ? exports.FormulaTemplate.fromPartial(object.template)
+            : undefined;
+        return message;
+    },
+};
+function createBaseInstantiateTemplateRequest() {
+    return { templateId: "", templateIds: [], intentId: "" };
+}
+exports.InstantiateTemplateRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.templateId !== "") {
+            writer.uint32(10).string(message.templateId);
+        }
+        for (const v of message.templateIds) {
+            writer.uint32(18).string(v);
+        }
+        if (message.intentId !== "") {
+            writer.uint32(26).string(message.intentId);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseInstantiateTemplateRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.templateId = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.templateIds.push(reader.string());
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 26) {
+                        break;
+                    }
+                    message.intentId = reader.string();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            templateId: isSet(object.templateId)
+                ? globalThis.String(object.templateId)
+                : isSet(object.template_id)
+                    ? globalThis.String(object.template_id)
+                    : "",
+            templateIds: globalThis.Array.isArray(object?.templateIds)
+                ? object.templateIds.map((e) => globalThis.String(e))
+                : globalThis.Array.isArray(object?.template_ids)
+                    ? object.template_ids.map((e) => globalThis.String(e))
+                    : [],
+            intentId: isSet(object.intentId)
+                ? globalThis.String(object.intentId)
+                : isSet(object.intent_id)
+                    ? globalThis.String(object.intent_id)
+                    : "",
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.templateId !== "") {
+            obj.templateId = message.templateId;
+        }
+        if (message.templateIds?.length) {
+            obj.templateIds = message.templateIds;
+        }
+        if (message.intentId !== "") {
+            obj.intentId = message.intentId;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.InstantiateTemplateRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseInstantiateTemplateRequest();
+        message.templateId = object.templateId ?? "";
+        message.templateIds = object.templateIds?.map((e) => e) || [];
+        message.intentId = object.intentId ?? "";
+        return message;
+    },
+};
+function createBaseInstantiateTemplateResponse() {
+    return { formula: undefined, formulaIdsByTemplate: {} };
+}
+exports.InstantiateTemplateResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.formula !== undefined) {
+            exports.FormulaDefinition.encode(message.formula, writer.uint32(10).fork()).join();
+        }
+        globalThis.Object.entries(message.formulaIdsByTemplate).forEach(([key, value]) => {
+            exports.InstantiateTemplateResponse_FormulaIdsByTemplateEntry.encode({ key: key, value }, writer.uint32(18).fork())
+                .join();
+        });
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseInstantiateTemplateResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.formula = exports.FormulaDefinition.decode(reader, reader.uint32());
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    const entry2 = exports.InstantiateTemplateResponse_FormulaIdsByTemplateEntry.decode(reader, reader.uint32());
+                    if (entry2.value !== undefined) {
+                        message.formulaIdsByTemplate[entry2.key] = entry2.value;
+                    }
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            formula: isSet(object.formula) ? exports.FormulaDefinition.fromJSON(object.formula) : undefined,
+            formulaIdsByTemplate: isObject(object.formulaIdsByTemplate)
+                ? globalThis.Object.entries(object.formulaIdsByTemplate).reduce((acc, [key, value]) => {
+                    acc[key] = globalThis.String(value);
+                    return acc;
+                }, {})
+                : isObject(object.formula_ids_by_template)
+                    ? globalThis.Object.entries(object.formula_ids_by_template).reduce((acc, [key, value]) => {
+                        acc[key] = globalThis.String(value);
+                        return acc;
+                    }, {})
+                    : {},
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.formula !== undefined) {
+            obj.formula = exports.FormulaDefinition.toJSON(message.formula);
+        }
+        if (message.formulaIdsByTemplate) {
+            const entries = globalThis.Object.entries(message.formulaIdsByTemplate);
+            if (entries.length > 0) {
+                obj.formulaIdsByTemplate = {};
+                entries.forEach(([k, v]) => {
+                    obj.formulaIdsByTemplate[k] = v;
+                });
+            }
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.InstantiateTemplateResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseInstantiateTemplateResponse();
+        message.formula = (object.formula !== undefined && object.formula !== null)
+            ? exports.FormulaDefinition.fromPartial(object.formula)
+            : undefined;
+        message.formulaIdsByTemplate = globalThis.Object.entries(object.formulaIdsByTemplate ?? {})
+            .reduce((acc, [key, value]) => {
+            if (value !== undefined) {
+                acc[key] = globalThis.String(value);
+            }
+            return acc;
+        }, {});
+        return message;
+    },
+};
+function createBaseInstantiateTemplateResponse_FormulaIdsByTemplateEntry() {
+    return { key: "", value: "" };
+}
+exports.InstantiateTemplateResponse_FormulaIdsByTemplateEntry = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.key !== "") {
+            writer.uint32(10).string(message.key);
+        }
+        if (message.value !== "") {
+            writer.uint32(18).string(message.value);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseInstantiateTemplateResponse_FormulaIdsByTemplateEntry();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.key = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.value = reader.string();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            key: isSet(object.key) ? globalThis.String(object.key) : "",
+            value: isSet(object.value) ? globalThis.String(object.value) : "",
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.key !== "") {
+            obj.key = message.key;
+        }
+        if (message.value !== "") {
+            obj.value = message.value;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.InstantiateTemplateResponse_FormulaIdsByTemplateEntry.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseInstantiateTemplateResponse_FormulaIdsByTemplateEntry();
+        message.key = object.key ?? "";
+        message.value = object.value ?? "";
+        return message;
+    },
+};
+function createBaseResolveTemplateIntentRequest() {
+    return { intentId: "", commit: false };
+}
+exports.ResolveTemplateIntentRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.intentId !== "") {
+            writer.uint32(10).string(message.intentId);
+        }
+        if (message.commit !== false) {
+            writer.uint32(16).bool(message.commit);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseResolveTemplateIntentRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.intentId = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 16) {
+                        break;
+                    }
+                    message.commit = reader.bool();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            intentId: isSet(object.intentId)
+                ? globalThis.String(object.intentId)
+                : isSet(object.intent_id)
+                    ? globalThis.String(object.intent_id)
+                    : "",
+            commit: isSet(object.commit) ? globalThis.Boolean(object.commit) : false,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.intentId !== "") {
+            obj.intentId = message.intentId;
+        }
+        if (message.commit !== false) {
+            obj.commit = message.commit;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.ResolveTemplateIntentRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseResolveTemplateIntentRequest();
+        message.intentId = object.intentId ?? "";
+        message.commit = object.commit ?? false;
+        return message;
+    },
+};
+function createBaseResolveTemplateIntentResponse() {
+    return { affected: 0 };
+}
+exports.ResolveTemplateIntentResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.affected !== 0) {
+            writer.uint32(8).int32(message.affected);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseResolveTemplateIntentResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 8) {
+                        break;
+                    }
+                    message.affected = reader.int32();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return { affected: isSet(object.affected) ? globalThis.Number(object.affected) : 0 };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.affected !== 0) {
+            obj.affected = Math.round(message.affected);
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.ResolveTemplateIntentResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseResolveTemplateIntentResponse();
+        message.affected = object.affected ?? 0;
+        return message;
+    },
+};
 exports.IndicatorsServiceService = {
     /** Compute a built-in indicator (e.g. SMA, EMA, RSI, MACD, BB) */
     computeIndicator: {
@@ -3552,6 +4188,45 @@ exports.IndicatorsServiceService = {
         requestDeserialize: (value) => exports.ListFundamentalMetricsRequest.decode(value),
         responseSerialize: (value) => Buffer.from(exports.ListFundamentalMetricsResponse.encode(value).finish()),
         responseDeserialize: (value) => exports.ListFundamentalMetricsResponse.decode(value),
+    },
+    /** Template catalog (feature 224). List/read: any authenticated caller. Manage: ADMIN only. */
+    listTemplates: {
+        path: "/xstockstrat.indicators.v1.IndicatorsService/ListTemplates",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.ListTemplatesRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.ListTemplatesRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.ListTemplatesResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.ListTemplatesResponse.decode(value),
+    },
+    manageTemplate: {
+        path: "/xstockstrat.indicators.v1.IndicatorsService/ManageTemplate",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.ManageTemplateRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.ManageTemplateRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.FormulaTemplate.encode(value).finish()),
+        responseDeserialize: (value) => exports.FormulaTemplate.decode(value),
+    },
+    /** Copies a formula template into a private formula owned by the x-user-id caller. */
+    instantiateTemplate: {
+        path: "/xstockstrat.indicators.v1.IndicatorsService/InstantiateTemplate",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.InstantiateTemplateRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.InstantiateTemplateRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.InstantiateTemplateResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.InstantiateTemplateResponse.decode(value),
+    },
+    /** Internal (SAN-bound xstockstrat-analysis): commits or aborts a strategy-template saga's copies. */
+    resolveTemplateIntent: {
+        path: "/xstockstrat.indicators.v1.IndicatorsService/ResolveTemplateIntent",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.ResolveTemplateIntentRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.ResolveTemplateIntentRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.ResolveTemplateIntentResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.ResolveTemplateIntentResponse.decode(value),
     },
 };
 exports.IndicatorsServiceClient = (0, grpc_js_1.makeGenericClientConstructor)(exports.IndicatorsServiceService, "xstockstrat.indicators.v1.IndicatorsService");

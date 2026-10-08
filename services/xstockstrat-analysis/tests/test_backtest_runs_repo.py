@@ -135,13 +135,14 @@ async def test_list_by_strategy_orders_and_limits():
     db_pool.fetch = AsyncMock(return_value=[{"backtest_id": "bt-2"}, {"backtest_id": "bt-1"}])
     repo = BacktestRunsRepository(db_pool)
 
-    rows = await repo.list_by_strategy("s1", limit=5)
+    rows = await repo.list_by_strategy("alice", "s1", limit=5)
 
     sql = db_pool.fetch.call_args.args[0]
-    assert "WHERE strategy_id = $1" in sql
+    # feature 224 (AC-21): two users may each own the same strategy_id — owner-scoped history.
+    assert "WHERE user_id = $1 AND strategy_id = $2" in sql
     assert "ORDER BY completed_at DESC" in sql
-    assert db_pool.fetch.call_args.args[1] == "s1"
-    assert db_pool.fetch.call_args.args[2] == 5
+    assert "LIMIT $3" in sql
+    assert db_pool.fetch.call_args.args[1:] == ("alice", "s1", 5)
     assert [r["backtest_id"] for r in rows] == ["bt-2", "bt-1"]
 
 

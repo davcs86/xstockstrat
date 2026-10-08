@@ -3,6 +3,7 @@
 **Development Branch**: `feature/psql-db-role-grant-hardening`
 **Created**: 2026-09-25
 **Last Updated**: 2026-09-27
+**Archived**: 2026-10-07
 
 ---
 
@@ -13,14 +14,15 @@
 | 2026-09-25 | `idea` → `draft` | /sdd-story | Product spec generated (closes security-audit DT-2 §149 grant-narrowing — then the defense-in-depth follow-on to H-5/feature 193) |
 | 2026-09-27 | `draft` (rescoped) | operator | **Rescoped.** Feature 193 (now imported/demoted as **212**) was abandoned and postgres-mcp is being removed outright (feature **214** `remove-agent-postgres-mcp`), which orphans the `xstockstrat_agent` DB role (postgres-mcp was its only consumer). Original scope (least-privilege grants for the psql-MCP's role + protect its audit sink) is void — there is no psql-MCP and no audit sink. New scope: **tear down the orphaned `xstockstrat_agent` role at the DB** + audit that no *remaining* role can write integrity-critical tables. Now **hard-depends on feature 214**. |
 | 2026-09-27 | `draft` → `demoted/canceled` | operator | **Demoted — unnecessary.** There is no orphaned role to tear down: the `xstockstrat_agent` role is only *conditionally* provisioned by `scripts/db-migrate.sh` (feature 169) when `POSTGRES_MCP_AGENT_PASSWORD` is set, and that password was never set in the live environments — so the role was **never created** (the `[skip]` path always ran). Feature 214 already removes the dead provisioning block from `db-migrate.sh` as part of removing all postgres-mcp wiring, leaving nothing for this feature to do. No PR merged this feature's content; the directory is retained as a demoted record only. |
+| 2026-10-07 | `demoted/canceled` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(1); pruned 1 spec(s); no scenarios promoted (feature canceled) |
 
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec psql-db-role-grant-hardening`_
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15); none promoted — feature canceled before shipping (C-16)
+- Implementation Spec — never generated (feature canceled before design)
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

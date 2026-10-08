@@ -24,6 +24,8 @@ from gen.indicators.v1 import indicators_pb2
 from google.protobuf.json_format import MessageToDict
 from google.protobuf.struct_pb2 import Struct
 
+from app.services import sector_params
+
 log = logging.getLogger(__name__)
 
 # Below this in-window overlap ratio between a benchmark (source_symbol) component's dates and
@@ -194,7 +196,9 @@ class StrategyEvaluator:
     - Returns per-bar BarDecision list; no look-ahead (bar i only uses data from bars 0..i).
     """
 
-    def __init__(self, indicators_stub, propagation_meta=(), component_sem=None):
+    def __init__(
+        self, indicators_stub, propagation_meta=(), component_sem=None, raise_unreadable=False
+    ):
         """
         indicators_stub: IndicatorsServiceStub — used to compute built-in indicators
                          and execute custom formulas bar by bar.
@@ -204,10 +208,38 @@ class StrategyEvaluator:
                        a semaphore ⇒ components are dispatched concurrently under that bound
                        (feature 176, FR-3). Reassembly is keyed by ref_name, so the concurrent
                        path is byte-identical to the serial one regardless of gather order.
+        raise_unreadable: a formula the owner cannot read (indicators NOT_FOUND) raises
+                       FormulaExecutionError (backtest) instead of skipping the component.
         """
         self._indicators = indicators_stub
         self._meta = propagation_meta
         self._component_sem = component_sem
+        self._raise_unreadable = raise_unreadable
+        self.unreadable_formulas: set[str] = set()
+
+    def for_owner(self, owner: str) -> "StrategyEvaluator":
+        """A clone whose indicators calls carry ``owner`` as ``x-user-id`` (feature 224)."""
+        return StrategyEvaluator(
+            self._indicators,
+            [("x-user-id", owner)] if owner else (),
+            self._component_sem,
+            self._raise_unreadable,
+        )
+
+    async def _execute_formula(self, comp, request):
+        """``ExecuteFormula``, or ``None`` when the owner cannot read ``comp.formula_id`` (the
+        component is skipped). Never surfaces as the feature-185 ``"unavailable"`` RpcError."""
+        try:
+            return await self._indicators.ExecuteFormula(request, metadata=self._meta)
+        except grpc.aio.AioRpcError as e:
+            if e.code() != grpc.StatusCode.NOT_FOUND:
+                raise
+            if self._raise_unreadable:
+                raise FormulaExecutionError(comp.formula_id, "not readable by owner") from e
+            if comp.formula_id not in self.unreadable_formulas:
+                self.unreadable_formulas.add(comp.formula_id)
+                log.warning("formula %s not readable by owner", comp.formula_id)
+            return None
 
     async def evaluate(
         self,
@@ -218,6 +250,7 @@ class StrategyEvaluator:
         fundamentals: list | None = None,
         formula_fundamentals: dict | None = None,
         formula_fundamentals_data: list | None = None,
+        sector_by_bar: list[int] | None = None,
     ) -> list[BarDecision]:
         """
         Compute per-bar entry/exit decisions for the given strategy definition.
@@ -238,6 +271,7 @@ class StrategyEvaluator:
             fundamentals,
             formula_fundamentals,
             formula_fundamentals_data,
+            sector_by_bar,
         )
         return decisions
 
@@ -250,6 +284,7 @@ class StrategyEvaluator:
         fundamentals: list | None = None,
         formula_fundamentals: dict | None = None,
         formula_fundamentals_data: list | None = None,
+        sector_by_bar: list[int] | None = None,
     ) -> tuple[list[BarDecision], dict[str, list]]:
         """
         Like ``evaluate`` but also returns the computed ``component_series`` dict (feature 064).
@@ -277,10 +312,16 @@ class StrategyEvaluator:
             else None
         )
 
+        if sector_by_bar is None or not sector_params.has_overrides(definition):
+            # No per-bar sector resolution: overrides (if any) resolve to their defaults.
+            sector_by_bar = [sector_params.UNSPECIFIED] * len(closes)
+
         component_series = {}
         for comp in definition.components:
-            series_map = await self._assemble_component_series(
+            series_map = await self._assemble_sector_resolved(
+                definition,
                 comp,
+                sector_by_bar,
                 closes,
                 eval_dates,
                 benchmark_bars,
@@ -395,6 +436,25 @@ class StrategyEvaluator:
         evals = [_eval_leaf_traced(leaf, component_series, last) for leaf in leaves]
         return _readiness_from_evals(symbol, evals)
 
+    async def _assemble_sector_resolved(
+        self, definition, comp, sectors: list[int], closes: list[float], *assemble_args
+    ) -> dict[str, list[float | None]]:
+        """Feature 217: compute ``comp`` once per DISTINCT per-sector param set over the full
+        window (correct warm-up at any mid-window sector boundary), then stitch bar i from the
+        variant its as-of sector resolves to. No override on ``comp`` → one compute, unchanged."""
+        variants = sector_params.component_variants(definition, comp, sectors)
+        if len(variants) == 1:
+            return await self._assemble_component_series(variants[0][0], closes, *assemble_args)
+        n = len(closes)
+        stitched: dict[str, list[float | None]] = {}
+        for variant, idxs in variants:
+            series_map = await self._assemble_component_series(variant, closes, *assemble_args)
+            for name, series in series_map.items():
+                out = stitched.setdefault(name, [None] * n)
+                for i in idxs:
+                    out[i] = series[i]
+        return stitched
+
     async def _compute_component(self, comp, closes: list[float]) -> dict[str, list[float | None]]:
         """
         Compute a single component's output series over all bars.
@@ -422,14 +482,16 @@ class StrategyEvaluator:
             # Numeric params go in input_params, never input_data (which carries only the series).
             params_struct = Struct()
             params_struct.update(dict(comp.params))
-            resp = await self._indicators.ExecuteFormula(
+            resp = await self._execute_formula(
+                comp,
                 indicators_pb2.ExecuteFormulaRequest(
                     formula_id=comp.formula_id,
                     input_data=input_struct,
                     input_params=params_struct,
                 ),
-                metadata=self._meta,
             )
+            if resp is None:
+                return {"value": [None] * n}
             # Shared decode (raises FormulaExecutionError on failure / NaN / Inf — never a
             # fabricated value). The list path below enforces its len==n + "value"-required policy.
             output = _decode_formula_output(comp.formula_id, resp)
@@ -495,14 +557,16 @@ class StrategyEvaluator:
                 executed += 1
                 input_struct = Struct()
                 input_struct.update(present)
-                resp = await self._indicators.ExecuteFormula(
+                resp = await self._execute_formula(
+                    comp,
                     indicators_pb2.ExecuteFormulaRequest(
                         formula_id=comp.formula_id,
                         input_data=input_struct,
                         input_params=params_struct,
                     ),
-                    metadata=self._meta,
                 )
+                if resp is None:
+                    return {"value": [None] * n}
                 output = _decode_formula_output(comp.formula_id, resp)
                 for key, raw in output.items():
                     val = _finite_or_none(raw)
@@ -741,6 +805,8 @@ def _validate_definition(definition, formula_outputs: dict | None = None) -> Non
                 )
         else:
             raise ValueError(f"Unknown ComponentKind: {comp.kind}")
+
+    sector_params.validate_overrides(definition)
 
     # Negative rejected at write; unset (no HasField) and an explicit 0 (no cooldown) both pass.
     if definition.HasField("cooldown_days") and definition.cooldown_days < 0:

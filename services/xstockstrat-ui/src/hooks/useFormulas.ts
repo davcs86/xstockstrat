@@ -26,7 +26,6 @@ export function useFormulas(params: Partial<ListFormulasRequest> = {}) {
     queryFn: () =>
       indicatorsClient.listFormulas({
         authorFilter: params.authorFilter ?? '',
-        includePublic: params.includePublic ?? true,
         pageSize: params.pageSize ?? 50,
         pageOffset: params.pageOffset ?? 0,
       }),
@@ -48,9 +47,7 @@ export function useRegisterFormula() {
       name?: string;
       description?: string;
       source?: string;
-      isPublic?: boolean;
       inputSchema?: Record<string, string>;
-      author?: string;
       parameters?: FormulaParameterInit[];
       outputs?: FormulaOutputInit[];
       warmupPeriod?: number;
@@ -60,9 +57,7 @@ export function useRegisterFormula() {
         name: req.name ?? '',
         description: req.description ?? '',
         source: req.source ?? '',
-        isPublic: req.isPublic ?? false,
         inputSchema: req.inputSchema ?? {},
-        author: req.author ?? '',
         parameters: req.parameters ?? [],
         outputs: req.outputs ?? [],
         warmupPeriod: req.warmupPeriod ?? 0,
@@ -81,7 +76,6 @@ export function useUpdateFormula() {
       name?: string;
       description?: string;
       source?: string;
-      isPublic?: boolean;
       parameters?: FormulaParameterInit[];
       outputs?: FormulaOutputInit[];
       warmupPeriod?: number;
@@ -93,7 +87,6 @@ export function useUpdateFormula() {
         name: req.name ?? '',
         description: req.description ?? '',
         source: req.source ?? '',
-        isPublic: req.isPublic ?? false,
         parameters: req.parameters ?? [],
         outputs: req.outputs ?? [],
         warmupPeriod: req.warmupPeriod ?? 0,

@@ -23,9 +23,10 @@ from app import client
 # `live_enabled` are column-authoritative (overlaid at read time) and `warnings` is populated by
 # GetStrategy only. `user_id` (feature 133) is ownership-authoritative: it is resolved server-side
 # from the propagated `x-user-id` header, never the request body, so the builder deliberately never
-# authors it. Every other field is sent. A new StrategyDefinition field fails this test until the
+# authors it. `origin` (feature 224) is template provenance stamped only by InstantiateTemplate.
+# Every other field is sent. A new StrategyDefinition field fails this test until the
 # builder carries it or it is justified here.
-_STRATEGY_INTENTIONALLY_UNSET = {"active", "live_enabled", "warnings", "user_id"}
+_STRATEGY_INTENTIONALLY_UNSET = {"active", "live_enabled", "warnings", "user_id", "origin"}
 # ScreenSymbolsRequest: `evaluation_window` (historical as-of) is deferred (OQ-060-e) — latest bar
 # is the default — so the builder does not author it. Every other field is sent.
 _SCREEN_INTENTIONALLY_UNSET = {"evaluation_window"}
@@ -75,6 +76,15 @@ async def _capture_manage_strategy_request():
                     # captures the built request, it does not validate).
                     "denied_symbols": ["TSLA"],
                     "signal_eligible": True,
+                    # feature 217
+                    "sector_param_overrides": [
+                        {
+                            "component_ref": "r",
+                            "param_name": "period",
+                            "default_value": 3.0,
+                            "by_sector": {"TECHNOLOGY": 5.0},
+                        }
+                    ],
                 },
             )
     return mock_stub.ManageStrategy.call_args[0][0]

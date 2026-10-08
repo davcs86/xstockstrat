@@ -9,27 +9,34 @@ import logging
 import uuid
 from datetime import UTC, datetime, timedelta
 
+import asyncpg
 import grpc
 from gen.common.v1 import common_pb2
 from gen.ingest.v1 import ingest_pb2, ingest_pb2_grpc
 from gen.ledger.v1 import ledger_pb2, ledger_pb2_grpc
 from gen.marketdata.v1 import marketdata_pb2, marketdata_pb2_grpc
 from gen.notify.v1 import notify_pb2, notify_pb2_grpc
-from google.protobuf.json_format import MessageToDict
+from google.protobuf.json_format import MessageToDict, ParseDict
 from google.protobuf.struct_pb2 import Struct
 from google.protobuf.timestamp_pb2 import Timestamp
 
+from app.admin_audit import AdminAuditError, audit_admin_read
 from app.config.watcher import ConfigWatcher
-from app.repositories import backfill_chunks, backfill_jobs
+from app.peer_identity import peer_san_matches
+from app.repositories import backfill_chunks, backfill_jobs, source_templates
 from app.repositories.signal_sources import (
+    SYSTEM_OWNER,
     deactivate_source,
     derive_health_status,
     get_source,
     insert_source,
     list_all_sources,
+    list_sources,
     mark_source_error,
     mark_source_fed,
+    owner_scope_predicate,
     reactivate_source,
+    slug_holders,
     touch_source_last_seen,
     update_source,
     validate_config_json,
@@ -64,6 +71,27 @@ class _SignalIngestError(Exception):
     """feature 166 — a persistence/dedup failure. Maps to INTERNAL at the RPC boundary."""
 
 
+class _SignalSourceNotFound(Exception):
+    """feature 224 — a headered caller holds no active source with that slug (NOT_FOUND, AC-10)."""
+
+
+class _SignalSourceAmbiguous(Exception):
+    """feature 224 — a headerless call names a slug held by several owners (FAILED_PRECONDITION)."""
+
+
+class _SystemIdentityDenied(Exception):
+    """feature 224 — `x-user-id: system` without a SAN-bound grant for the RPC (AC-33)."""
+
+
+# `x-user-id: system` is honoured only with one of these `x-internal-caller` grants covering the
+# RPC AND a verified mTLS peer SAN of _SYSTEM_GRANT_SAN — the header alone is forgeable.
+_SYSTEM_GRANTS = {
+    "analysis-fundsignal": frozenset({"ManageSignalSource", "IngestSignal"}),
+    "analysis-system-read": frozenset({"QuerySignals", "ListSignalSources"}),
+}
+_SYSTEM_GRANT_SAN = "xstockstrat-analysis"
+
+
 def _resolve_ss_operation(request) -> str | None:
     """Feature 088: prefer operation_enum; fall back to the deprecated string. Unknown → None."""
     enum_to_str = {
@@ -85,6 +113,79 @@ def _cfg_to_dict(value) -> dict | None:
     if isinstance(value, dict):
         return value
     return json.loads(str(value))
+
+
+# The authorable SignalSource fields a template keeps: owner, credentials, health and origin are
+# per-instance, so a template payload can never carry a credential (@feature-166 AC-2/AC-3).
+_TEMPLATE_PAYLOAD_FIELDS = (
+    "slug",
+    "display_name",
+    "source_type",
+    "extractor_module",
+    "config_json",
+    "reliability_weight",
+)
+
+
+def _template_payload(src) -> dict:
+    full = MessageToDict(src, preserving_proto_field_name=True)
+    return {k: full[k] for k in _TEMPLATE_PAYLOAD_FIELDS if k in full}
+
+
+def _template_to_proto(row: dict) -> ingest_pb2.SourceTemplate:
+    payload = ingest_pb2.SignalSource()
+    ParseDict(_cfg_to_dict(row["payload"]) or {}, payload, ignore_unknown_fields=True)
+    meta = common_pb2.TemplateMeta(
+        template_id=row["template_id"],
+        kind=common_pb2.TEMPLATE_KIND_SIGNAL_SOURCE,
+        name=row["name"],
+        description=row["description"] or "",
+        version=row["version"],
+        retired=row["retired_at"] is not None,
+    )
+    if row.get("created_at"):
+        meta.created_at.FromDatetime(row["created_at"])
+    if row.get("updated_at"):
+        meta.updated_at.FromDatetime(row["updated_at"])
+    return ingest_pb2.SourceTemplate(meta=meta, payload=payload)
+
+
+def _source_to_proto(row: dict, latest_versions: dict[str, int]) -> ingest_pb2.SignalSource:
+    """A signal_sources row as a SignalSource; `latest_versions` resolves the origin's template."""
+    cfg = Struct()
+    cfg_dict = _cfg_to_dict(row["config_json"])
+    if cfg_dict:
+        cfg.update(cfg_dict)
+    source = ingest_pb2.SignalSource(
+        user_id=row.get("user_id") or "",
+        slug=row["slug"],
+        display_name=row["display_name"],
+        source_type=row["source_type"],
+        extractor_module=row["extractor_module"],
+        active=row["active"],
+        has_credentials=(row["credentials_ref"] is not None),
+        config_json=cfg,
+        reliability_weight=row.get("reliability_weight", 1.0),
+    )
+    template_id = row.get("origin_template_id")
+    if template_id:
+        version = row.get("origin_template_version") or 0
+        latest = latest_versions.get(template_id, 0)  # 0 = retired or missing: no update
+        source.origin.CopyFrom(
+            common_pb2.TemplateOrigin(
+                template_id=template_id,
+                template_version=version,
+                latest_version=latest,
+                update_available=latest > version,
+            )
+        )
+    return source
+
+
+def _weight_error(src) -> str | None:
+    if src.HasField("reliability_weight") and not (0.0 <= src.reliability_weight <= 1.0):
+        return "reliability_weight must be between 0.0 and 1.0"
+    return None
 
 
 # Source-health string → SourceHealthStatus enum.
@@ -224,6 +325,45 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             for k, v in context.invocation_metadata()
             if k in ("x-user-id", "x-access-scope", "x-trace-id")
         ]
+
+    @staticmethod
+    def _resolve_owner(context, rpc: str) -> str | None:
+        """The caller's owner id: `x-user-id`, or None when headerless (release-N tolerance).
+
+        Raises _SystemIdentityDenied for `system` without a SAN-bound grant covering `rpc`.
+        """
+        metadata = {k: v for k, v in context.invocation_metadata()}
+        user_id = metadata.get("x-user-id") or None
+        if user_id != SYSTEM_OWNER:
+            return user_id
+        caller = metadata.get("x-internal-caller", "")
+        if rpc in _SYSTEM_GRANTS.get(caller, ()) and peer_san_matches(context, _SYSTEM_GRANT_SAN):
+            return SYSTEM_OWNER
+        raise _SystemIdentityDenied(f"x-user-id '{SYSTEM_OWNER}' is not granted {rpc}")
+
+    async def _owner_or_abort(self, context, rpc: str) -> tuple[bool, str | None]:
+        try:
+            return True, self._resolve_owner(context, rpc)
+        except _SystemIdentityDenied as e:
+            await context.abort(grpc.StatusCode.PERMISSION_DENIED, str(e))
+            return False, None
+
+    def _admin_foreign_owner(self, context, owner: str | None, requested: str) -> str | None:
+        """FR-13: the `owner_user_id` selector, honoured only for a headered ADMIN reading another
+        owner; anyone else's selector is ignored."""
+        if owner is None or not requested or requested == owner:
+            return None
+        return requested if self._has_admin_scope(context) else None
+
+    async def _audit_or_abort(self, context, admin_id, object_kind, ids_by_owner) -> bool:
+        try:
+            await audit_admin_read(
+                self._ledger, admin_id, object_kind, ids_by_owner, context.invocation_metadata()
+            )
+            return True
+        except AdminAuditError as e:
+            await context.abort(grpc.StatusCode.UNAVAILABLE, str(e))
+            return False
 
     async def TriggerBackfill(self, request, context):
         if self._db is None:
@@ -785,23 +925,37 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
         if self._db is None:
             await context.abort(grpc.StatusCode.UNAVAILABLE, "database not connected")
             return
+        ok, owner = await self._owner_or_abort(context, "IngestSignal")
+        if not ok:
+            return
         try:
             signal_id, deduplicated = await self._ingest_external_signal(
-                request.signal, propagation_meta
+                request.signal, propagation_meta, owner=owner
             )
         except _SignalValidationError as e:
             await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(e))
+            return
+        except _SignalSourceNotFound as e:
+            await context.abort(grpc.StatusCode.NOT_FOUND, str(e))
+            return
+        except _SignalSourceAmbiguous as e:
+            await context.abort(grpc.StatusCode.FAILED_PRECONDITION, str(e))
             return
         except _SignalIngestError as e:
             await context.abort(grpc.StatusCode.INTERNAL, str(e))
             return
         return ingest_pb2.IngestSignalResponse(signal_id=signal_id, deduplicated=deduplicated)
 
-    async def _ingest_external_signal(self, signal, propagation_meta=None) -> tuple[int, bool]:
+    async def _ingest_external_signal(
+        self, signal, propagation_meta=None, owner: str | None = None
+    ) -> tuple[int, bool]:
         """feature 166 — the validate + persist + dedup + health + ledger core of IngestSignal,
         raising _SignalValidationError / _SignalIngestError instead of aborting a gRPC context so
         both the RPC and the scheduled mcp_client loop drive one ingest path. Returns
-        (signal_id, deduplicated)."""
+        (signal_id, deduplicated).
+
+        feature 224: the signal is filed under `owner`; None (headerless, release N only)
+        resolves the slug's unique holder."""
         propagation_meta = propagation_meta or []
 
         if not signal.source or not signal.symbol or not signal.direction:
@@ -816,15 +970,30 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
         if not (0.0 <= signal.conviction <= 1.0):
             raise _SignalValidationError("conviction must be between 0.0 and 1.0")
 
-        # Source slug must be registered and active.
+        # Source slug must be registered and active — for the owner. A headered miss is NOT_FOUND
+        # (a foreign slug is indistinguishable from a missing one); headerless keeps
+        # INVALID_ARGUMENT for zero holders.
+        missing = _SignalSourceNotFound(f"source '{signal.source}' not found")
+        if owner is None:
+            holders = await slug_holders(self._db, signal.source)
+            if len(holders) > 1:
+                raise _SignalSourceAmbiguous(
+                    f"source slug '{signal.source}' has several owners; x-user-id required"
+                )
+            missing = _SignalValidationError(
+                f"source slug '{signal.source}' is not a registered active source"
+            )
+            if not holders:
+                raise missing
+            owner = holders[0]
         source_row = await self._db.fetchrow(
-            "SELECT slug FROM ingest.signal_sources WHERE slug = $1 AND active = TRUE",
+            "SELECT slug FROM ingest.signal_sources"
+            " WHERE user_id = $1 AND slug = $2 AND active = TRUE",
+            owner,
             signal.source,
         )
         if source_row is None:
-            raise _SignalValidationError(
-                f"source slug '{signal.source}' is not a registered active source"
-            )
+            raise missing
 
         valid_from = signal.valid_from.ToDatetime(tzinfo=UTC)
         valid_until = None
@@ -847,8 +1016,8 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                     """
                     INSERT INTO ingest.newsletter_signals
                         (source, symbol, direction, conviction,
-                         valid_from, valid_until, headline, raw_url, tags)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                         valid_from, valid_until, headline, raw_url, tags, user_id)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                     RETURNING id
                     """,
                     signal.source,
@@ -860,27 +1029,30 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                     signal.headline or None,
                     signal.raw_url or None,
                     list(signal.tags) if signal.tags else [],
+                    owner,
                 )
                 candidate_id = row["id"]
 
                 claim = await conn.fetchrow(
                     """
-                    INSERT INTO ingest.signal_dedup_keys
-                        (source, symbol, direction, signal_id, conviction, valid_until, claimed_at)
-                    VALUES ($1, $2, $3, $4, $5, $6, NOW())
-                    ON CONFLICT (source, symbol, direction) DO UPDATE
+                    INSERT INTO ingest.signal_dedup_claims
+                        (user_id, source, symbol, direction, signal_id, conviction, valid_until,
+                         claimed_at)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+                    ON CONFLICT (user_id, source, symbol, direction) DO UPDATE
                         SET signal_id = EXCLUDED.signal_id,
                             conviction = EXCLUDED.conviction,
                             valid_until = EXCLUDED.valid_until,
                             claimed_at = EXCLUDED.claimed_at
-                        WHERE ingest.signal_dedup_keys.claimed_at
-                                  < NOW() - make_interval(hours => $7::int)
-                           OR ingest.signal_dedup_keys.conviction
+                        WHERE ingest.signal_dedup_claims.claimed_at
+                                  < NOW() - make_interval(hours => $8::int)
+                           OR ingest.signal_dedup_claims.conviction
                                   IS DISTINCT FROM EXCLUDED.conviction
-                           OR ingest.signal_dedup_keys.valid_until
+                           OR ingest.signal_dedup_claims.valid_until
                                   IS DISTINCT FROM EXCLUDED.valid_until
                     RETURNING signal_id
                     """,
+                    owner,
                     signal.source,
                     symbol_upper,
                     signal.direction,
@@ -897,20 +1069,21 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
         except _DuplicateSignal:
             deduplicated = True
             existing = await self._db.fetchrow(
-                "SELECT signal_id FROM ingest.signal_dedup_keys "
-                "WHERE source=$1 AND symbol=$2 AND direction=$3",
+                "SELECT signal_id FROM ingest.signal_dedup_claims "
+                "WHERE user_id = $1 AND source = $2 AND symbol = $3 AND direction = $4",
+                owner,
                 signal.source,
                 symbol_upper,
                 signal.direction,
             )
             if existing is None:
-                # Unreachable in normal operation — nothing deletes signal_dedup_keys rows.
+                # Unreachable in normal operation — nothing deletes signal_dedup_claims rows.
                 raise _SignalIngestError("dedup claim lost")
             signal_id = existing["signal_id"]
         except Exception as e:
             log.error("failed to insert signal: %s", e)
             try:  # record the source's last error (best-effort)
-                await mark_source_error(self._db, signal.source, str(e))
+                await mark_source_error(self._db, owner, signal.source, str(e))
             except Exception as bookkeeping_err:
                 log.warning(
                     "failed to record source error for %s: %s", signal.source, bookkeeping_err
@@ -921,7 +1094,7 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             # Record a successful feed (best-effort). Gated to the non-duplicate path — a
             # dedup hit performed no new ingest.
             try:
-                await mark_source_fed(self._db, signal.source)
+                await mark_source_fed(self._db, owner, signal.source)
             except Exception as e:
                 log.warning("failed to record source feed for %s: %s", signal.source, e)
 
@@ -939,6 +1112,7 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             payload.update(
                 {
                     "signal_id": signal_id,
+                    "user_id": owner,
                     "source": signal.source,
                     "symbol": signal.symbol,
                     "direction": signal.direction,
@@ -960,7 +1134,7 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             # A dedup hit still means the source is alive: bump last_seen_at but NOT
             # signals_fed, so a source resending a still-current signal doesn't read as STALE.
             try:
-                await touch_source_last_seen(self._db, signal.source)
+                await touch_source_last_seen(self._db, owner, signal.source)
             except Exception as e:
                 log.warning("failed to touch last_seen for %s: %s", signal.source, e)
             log.info(
@@ -974,14 +1148,30 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
         return signal_id, deduplicated
 
     async def QuerySignals(self, request, context):
-        """Query active signals filtered by source/symbol/direction and time window."""
+        """Query active signals filtered by owner scope, source/symbol/direction and time window."""
         if self._db is None:
             await context.abort(grpc.StatusCode.UNAVAILABLE, "database not connected")
             return
+        ok, owner = await self._owner_or_abort(context, "QuerySignals")
+        if not ok:
+            return
+        foreign = self._admin_foreign_owner(context, owner, request.owner_user_id)
 
         conditions = []
         params = []
         idx = 1
+
+        # Headerless (release N only) stays unscoped; headered reads are owner-scoped.
+        if foreign is not None:
+            conditions.append(f"user_id = ${idx}")
+            params.append(foreign)
+            idx += 1
+        elif owner is not None:
+            predicate, uses_param = owner_scope_predicate(request.scope, idx)
+            conditions.append(predicate)
+            if uses_param:
+                params.append(owner)
+                idx += 1
 
         if request.source:
             conditions.append(f"source = ${idx}")
@@ -1031,8 +1221,8 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
         try:
             rows = await self._db.fetch(
                 f"""
-                SELECT source, symbol, direction, conviction, valid_from, valid_until,
-                       headline, raw_url, tags, ingested_at
+                SELECT id, user_id, source, symbol, direction, conviction, valid_from,
+                       valid_until, headline, raw_url, tags, ingested_at
                 FROM ingest.newsletter_signals
                 {where_clause}
                 ORDER BY ingested_at DESC
@@ -1046,10 +1236,15 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             log.error("failed to query signals: %s", e)
             await context.abort(grpc.StatusCode.INTERNAL, f"database error: {e}")
             return
+        if foreign is not None and not await self._audit_or_abort(
+            context, owner, "signal", {foreign: [str(row["id"]) for row in rows]}
+        ):
+            return
 
         signals = []
         for row in rows:
             sig = ingest_pb2.ExternalSignal(
+                user_id=row.get("user_id") or "",
                 source=row["source"],
                 symbol=row["symbol"],
                 direction=row["direction"],
@@ -1082,38 +1277,40 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
         if self._db is None:
             await context.abort(grpc.StatusCode.UNAVAILABLE, "database not connected")
             return
-        rows = await list_all_sources(self._db, include_inactive=request.include_inactive)
-        import json
-
-        from google.protobuf.struct_pb2 import Struct
-
+        ok, owner = await self._owner_or_abort(context, "ListSignalSources")
+        if not ok:
+            return
+        foreign = self._admin_foreign_owner(context, owner, request.owner_user_id)
+        if foreign is not None:
+            rows = await list_sources(
+                self._db, foreign, ingest_pb2.SIGNAL_SCOPE_OWN, request.include_inactive
+            )
+            if not await self._audit_or_abort(
+                context, owner, "signal_source", {foreign: [row["slug"] for row in rows]}
+            ):
+                return
+        elif owner is not None:
+            rows = await list_sources(
+                self._db, owner, ingest_pb2.SIGNAL_SCOPE_UNSPECIFIED, request.include_inactive
+            )
+        else:  # headerless (release N only): today's global listing
+            rows = await list_all_sources(self._db, include_inactive=request.include_inactive)
+        template_ids = sorted(
+            {r["origin_template_id"] for r in rows if r.get("origin_template_id")}
+        )
+        latest = (
+            await source_templates.latest_versions(self._db, template_ids) if template_ids else {}
+        )
         now = datetime.now(UTC)
         sources = []
         for row in rows:
-            cfg = Struct()
-            if row["config_json"]:
-                cfg.update(
-                    row["config_json"]
-                    if isinstance(row["config_json"], dict)
-                    else json.loads(row["config_json"])
-                )
+            source = _source_to_proto(row, latest)
             # Health is derived on read from last_seen_at freshness + last_error.
             last_seen = row.get("last_seen_at")
             last_error = row.get("last_error")
-            health = _HEALTH_ENUM[derive_health_status(last_seen, last_error, now)]
-            source = ingest_pb2.SignalSource(
-                slug=row["slug"],
-                display_name=row["display_name"],
-                source_type=row["source_type"],
-                extractor_module=row["extractor_module"],
-                active=row["active"],
-                has_credentials=(row["credentials_ref"] is not None),
-                config_json=cfg,
-                health=health,
-                last_error=last_error or "",
-                signals_fed=row.get("signals_fed") or 0,
-                reliability_weight=row.get("reliability_weight", 1.0),
-            )
+            source.health = _HEALTH_ENUM[derive_health_status(last_seen, last_error, now)]
+            source.last_error = last_error or ""
+            source.signals_fed = row.get("signals_fed") or 0
             if last_seen is not None:
                 source.last_seen_at.FromDatetime(last_seen)
             sources.append(source)
@@ -1133,11 +1330,43 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             return f"{source_type} source requires credentials_ref"
         return None
 
+    @staticmethod
+    def _register_conflict(owner: str | None, slug: str, holders: list[str]):
+        """(code, message) refusing a REGISTER of `slug` given its current holders, else None.
+
+        A slug held by `system` is reserved (AC-36); headerless N never creates (elaboration 5).
+        """
+        exists = (grpc.StatusCode.ALREADY_EXISTS, f"source '{slug}' already exists")
+        if owner is None:
+            if holders:
+                return exists
+            return grpc.StatusCode.FAILED_PRECONDITION, "x-user-id required to register a source"
+        if owner != SYSTEM_OWNER and SYSTEM_OWNER in holders:
+            return exists
+        if owner == SYSTEM_OWNER and any(h != SYSTEM_OWNER for h in holders):
+            return grpc.StatusCode.FAILED_PRECONDITION, f"slug '{slug}' is already held by a user"
+        return exists if owner in holders else None
+
+    async def _abort_missing_source(self, context, owner: str | None, slug: str) -> None:
+        """No row for (owner, slug): a system-held slug is read-only to every non-system caller
+        (AC-26); anything else is NOT_FOUND (a foreign user's slug is indistinguishable)."""
+        if owner not in (None, SYSTEM_OWNER) and SYSTEM_OWNER in await slug_holders(self._db, slug):
+            await context.abort(
+                grpc.StatusCode.PERMISSION_DENIED, f"system source '{slug}' is read-only"
+            )
+            return
+        await context.abort(grpc.StatusCode.NOT_FOUND, f"source '{slug}' not found")
+
     async def ManageSignalSource(self, request, context):
         if self._db is None:
             await context.abort(grpc.StatusCode.UNAVAILABLE, "database not connected")
             return
-        if not self._has_admin_scope(context):
+        ok, owner = await self._owner_or_abort(context, "ManageSignalSource")
+        if not ok:
+            return
+        # Owners manage their own sources; only the headerless (release N) path keeps the admin
+        # gate. No caller — admin included — reaches another owner's source.
+        if owner is None and not self._has_admin_scope(context):
             await context.abort(grpc.StatusCode.PERMISSION_DENIED, "admin scope required")
             return
         op = _resolve_ss_operation(request)
@@ -1148,55 +1377,40 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                 "unknown operation: must be register, update, reactivate, or deactivate",
             )
             return
-        if op == "reactivate":
-            row = await reactivate_source(self._db, src.slug)
-            if row is None:
+        target = owner
+        if owner is None and op != "register":
+            holders = await slug_holders(self._db, src.slug)
+            if not holders:
                 await context.abort(grpc.StatusCode.NOT_FOUND, f"source '{src.slug}' not found")
+                return
+            if len(holders) > 1:
+                await context.abort(
+                    grpc.StatusCode.FAILED_PRECONDITION,
+                    f"source slug '{src.slug}' has several owners; x-user-id required",
+                )
+                return
+            target = holders[0]
+        if op == "reactivate":
+            row = await reactivate_source(self._db, target, src.slug)
+            if row is None:
+                await self._abort_missing_source(context, owner, src.slug)
                 return
         elif op == "deactivate":
-            row = await deactivate_source(self._db, src.slug)
+            row = await deactivate_source(self._db, target, src.slug)
             if row is None:
-                await context.abort(grpc.StatusCode.NOT_FOUND, f"source '{src.slug}' not found")
+                await self._abort_missing_source(context, owner, src.slug)
                 return
         elif op == "register":
-            # Strict create: an existing slug is a conflict, not a silent overwrite.
-            if await get_source(self._db, src.slug) is not None:
-                await context.abort(
-                    grpc.StatusCode.ALREADY_EXISTS, f"source '{src.slug}' already exists"
-                )
-                return
             # MessageToDict, not dict(): dict() keeps nested Struct/ListValue protobuf objects as
             # values, which neither json.dumps nor asyncpg can encode.
-            cfg_dict = MessageToDict(src.config_json) if src.config_json else None
-            merged_cred = request.credentials_ref or None
-            err = self._validate_source_write(src.source_type, cfg_dict, merged_cred)
-            if err:
-                await context.abort(grpc.StatusCode.INVALID_ARGUMENT, err)
+            row, failure = await self._register_source(owner, src, request.credentials_ref)
+            if failure:
+                await context.abort(*failure)
                 return
-            # Reject an out-of-range explicit weight; an omitted field resolves to the 1.0 default.
-            # Never pass None — the NOT NULL column would raise NotNullViolationError.
-            if src.HasField("reliability_weight") and not (0.0 <= src.reliability_weight <= 1.0):
-                await context.abort(
-                    grpc.StatusCode.INVALID_ARGUMENT,
-                    "reliability_weight must be between 0.0 and 1.0",
-                )
-                return
-            weight = src.reliability_weight if src.HasField("reliability_weight") else 1.0
-            row = await insert_source(
-                self._db,
-                slug=src.slug,
-                display_name=src.display_name,
-                source_type=src.source_type,
-                extractor_module=src.extractor_module,
-                credentials_ref=merged_cred,
-                config_json=cfg_dict,
-                active=True,
-                reliability_weight=weight,
-            )
         else:  # update — AIP-161 partial merge onto the stored row
-            stored = await get_source(self._db, src.slug)
+            stored = await get_source(self._db, target, src.slug)
             if stored is None:
-                await context.abort(grpc.StatusCode.NOT_FOUND, f"source '{src.slug}' not found")
+                await self._abort_missing_source(context, owner, src.slug)
                 return
             has_mask = request.HasField("update_mask")
             mask = set(request.update_mask.paths) if has_mask else None
@@ -1245,11 +1459,9 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                 return
             # Reject an out-of-range explicit weight, then merge: masked + present → request
             # value; else preserve the stored weight (never None on the NOT NULL column).
-            if src.HasField("reliability_weight") and not (0.0 <= src.reliability_weight <= 1.0):
-                await context.abort(
-                    grpc.StatusCode.INVALID_ARGUMENT,
-                    "reliability_weight must be between 0.0 and 1.0",
-                )
+            weight_err = _weight_error(src)
+            if weight_err:
+                await context.abort(grpc.StatusCode.INVALID_ARGUMENT, weight_err)
                 return
             merged_weight = (
                 src.reliability_weight
@@ -1258,6 +1470,7 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             )
             row = await update_source(
                 self._db,
+                user_id=target,
                 slug=src.slug,
                 display_name=merged_display,
                 source_type=merged_type,
@@ -1270,21 +1483,138 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                 await context.abort(grpc.StatusCode.NOT_FOUND, f"source '{src.slug}' not found")
                 return
 
-        cfg_out = Struct()
-        if row["config_json"]:
-            cfg_out.update(
-                row["config_json"]
-                if isinstance(row["config_json"], dict)
-                else json.loads(str(row["config_json"]))
+        return ingest_pb2.ManageSignalSourceResponse(source=_source_to_proto(row, {}))
+
+    async def _register_source(self, owner, src, credentials_ref: str, origin=None):
+        """The REGISTER path shared with InstantiateTemplate: returns (row, None) or
+        (None, (code, message)). `origin` = (template_id, version) stamps the new row."""
+        # MessageToDict, not dict(): dict() keeps nested Struct/ListValue protobuf objects as
+        # values, which neither json.dumps nor asyncpg can encode.
+        cfg_dict = MessageToDict(src.config_json) if src.config_json else None
+        cred = credentials_ref or None
+        async with self._db.acquire() as conn, conn.transaction():
+            # Serializes every REGISTER of one slug so the reserved-slug holder check below
+            # cannot race a concurrent register by another owner.
+            await conn.execute("SELECT pg_advisory_xact_lock(hashtext($1))", src.slug)
+            # Strict create: an existing slug is a conflict, not a silent overwrite.
+            failure = self._register_conflict(owner, src.slug, await slug_holders(conn, src.slug))
+            if failure:
+                return None, failure
+            # An omitted weight resolves to the 1.0 default. Never pass None — the NOT NULL
+            # column would raise.
+            err = self._validate_source_write(src.source_type, cfg_dict, cred) or _weight_error(src)
+            if err:
+                return None, (grpc.StatusCode.INVALID_ARGUMENT, err)
+            row = await insert_source(
+                conn,
+                slug=src.slug,
+                display_name=src.display_name,
+                source_type=src.source_type,
+                extractor_module=src.extractor_module,
+                credentials_ref=cred,
+                config_json=cfg_dict,
+                active=True,
+                reliability_weight=(
+                    src.reliability_weight if src.HasField("reliability_weight") else 1.0
+                ),
+                user_id=owner,
             )
-        result = ingest_pb2.SignalSource(
-            slug=row["slug"],
-            display_name=row["display_name"],
-            source_type=row["source_type"],
-            extractor_module=row["extractor_module"],
-            active=row["active"],
-            has_credentials=(row["credentials_ref"] is not None),
-            config_json=cfg_out,
-            reliability_weight=row["reliability_weight"],
+            if origin is not None:
+                row = await source_templates.stamp_origin(conn, owner, src.slug, *origin)
+        return row, None
+
+    async def ListTemplates(self, request, context):
+        if self._db is None:
+            await context.abort(grpc.StatusCode.UNAVAILABLE, "database not connected")
+            return
+        ok, _ = await self._owner_or_abort(context, "ListTemplates")
+        if not ok:
+            return
+        rows = await source_templates.list_active(self._db)
+        return ingest_pb2.ListTemplatesResponse(templates=[_template_to_proto(r) for r in rows])
+
+    async def ManageTemplate(self, request, context):
+        if self._db is None:
+            await context.abort(grpc.StatusCode.UNAVAILABLE, "database not connected")
+            return
+        ok, owner = await self._owner_or_abort(context, "ManageTemplate")
+        if not ok:
+            return
+        if not self._has_admin_scope(context):
+            await context.abort(grpc.StatusCode.PERMISSION_DENIED, "admin scope required")
+            return
+        op = request.operation
+        meta = request.template.meta
+        if op == common_pb2.TEMPLATE_OPERATION_RETIRE:
+            row = await source_templates.retire(self._db, meta.template_id)
+        elif op in (common_pb2.TEMPLATE_OPERATION_CREATE, common_pb2.TEMPLATE_OPERATION_UPDATE):
+            src = request.template.payload
+            cfg_dict = MessageToDict(src.config_json) if src.config_json else None
+            err = validate_config_json(src.source_type, cfg_dict) or _weight_error(src)
+            if err:
+                await context.abort(grpc.StatusCode.INVALID_ARGUMENT, err)
+                return
+            payload = _template_payload(src)
+            if op == common_pb2.TEMPLATE_OPERATION_UPDATE:
+                row = await source_templates.update(
+                    self._db, meta.template_id, meta.name, meta.description, payload
+                )
+            else:
+                try:
+                    row = await source_templates.create(
+                        self._db,
+                        template_id=meta.template_id or str(uuid.uuid4()),
+                        name=meta.name,
+                        description=meta.description,
+                        payload=payload,
+                        created_by=owner or "",
+                    )
+                except asyncpg.UniqueViolationError:
+                    await context.abort(
+                        grpc.StatusCode.ALREADY_EXISTS,
+                        f"template '{meta.template_id}' already exists",
+                    )
+                    return
+        else:
+            await context.abort(
+                grpc.StatusCode.INVALID_ARGUMENT,
+                "unknown operation: must be create, update, or retire",
+            )
+            return
+        if row is None:
+            await context.abort(
+                grpc.StatusCode.NOT_FOUND, f"template '{meta.template_id}' not found"
+            )
+            return
+        return _template_to_proto(row)
+
+    async def InstantiateTemplate(self, request, context):
+        if self._db is None:
+            await context.abort(grpc.StatusCode.UNAVAILABLE, "database not connected")
+            return
+        ok, owner = await self._owner_or_abort(context, "InstantiateTemplate")
+        if not ok:
+            return
+        if owner is None:
+            await context.abort(
+                grpc.StatusCode.FAILED_PRECONDITION, "x-user-id required to instantiate a template"
+            )
+            return
+        tpl = await source_templates.get(self._db, request.template_id)
+        if tpl is None or tpl["retired_at"] is not None:
+            await context.abort(
+                grpc.StatusCode.NOT_FOUND, f"template '{request.template_id}' not found"
+            )
+            return
+        src = _template_to_proto(tpl).payload
+        src.slug = request.slug or src.slug
+        if not src.slug:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, "slug is required")
+            return
+        row, failure = await self._register_source(
+            owner, src, request.credentials_ref, origin=(tpl["template_id"], tpl["version"])
         )
-        return ingest_pb2.ManageSignalSourceResponse(source=result)
+        if failure:
+            await context.abort(*failure)
+            return
+        return _source_to_proto(row, {tpl["template_id"]: tpl["version"]})

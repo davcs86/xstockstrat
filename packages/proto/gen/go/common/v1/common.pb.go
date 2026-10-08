@@ -256,6 +256,189 @@ func (Timeframe) EnumDescriptor() ([]byte, []int) {
 	return file_common_v1_common_proto_rawDescGZIP(), []int{3}
 }
 
+// Sector is the closed GICS-flavored sector set (feature 217). The enum-name text minus the
+// SECTOR_ prefix is the stored marketdata.symbol_classification.sector value.
+type Sector int32
+
+const (
+	Sector_SECTOR_UNSPECIFIED            Sector = 0
+	Sector_SECTOR_ENERGY                 Sector = 1
+	Sector_SECTOR_MATERIALS              Sector = 2
+	Sector_SECTOR_INDUSTRIALS            Sector = 3
+	Sector_SECTOR_CONSUMER_DISCRETIONARY Sector = 4
+	Sector_SECTOR_CONSUMER_STAPLES       Sector = 5
+	Sector_SECTOR_HEALTH_CARE            Sector = 6
+	Sector_SECTOR_FINANCIALS             Sector = 7
+	Sector_SECTOR_TECHNOLOGY             Sector = 8
+	Sector_SECTOR_COMMUNICATION_SERVICES Sector = 9
+	Sector_SECTOR_UTILITIES              Sector = 10
+	Sector_SECTOR_REAL_ESTATE            Sector = 11
+)
+
+// Enum value maps for Sector.
+var (
+	Sector_name = map[int32]string{
+		0:  "SECTOR_UNSPECIFIED",
+		1:  "SECTOR_ENERGY",
+		2:  "SECTOR_MATERIALS",
+		3:  "SECTOR_INDUSTRIALS",
+		4:  "SECTOR_CONSUMER_DISCRETIONARY",
+		5:  "SECTOR_CONSUMER_STAPLES",
+		6:  "SECTOR_HEALTH_CARE",
+		7:  "SECTOR_FINANCIALS",
+		8:  "SECTOR_TECHNOLOGY",
+		9:  "SECTOR_COMMUNICATION_SERVICES",
+		10: "SECTOR_UTILITIES",
+		11: "SECTOR_REAL_ESTATE",
+	}
+	Sector_value = map[string]int32{
+		"SECTOR_UNSPECIFIED":            0,
+		"SECTOR_ENERGY":                 1,
+		"SECTOR_MATERIALS":              2,
+		"SECTOR_INDUSTRIALS":            3,
+		"SECTOR_CONSUMER_DISCRETIONARY": 4,
+		"SECTOR_CONSUMER_STAPLES":       5,
+		"SECTOR_HEALTH_CARE":            6,
+		"SECTOR_FINANCIALS":             7,
+		"SECTOR_TECHNOLOGY":             8,
+		"SECTOR_COMMUNICATION_SERVICES": 9,
+		"SECTOR_UTILITIES":              10,
+		"SECTOR_REAL_ESTATE":            11,
+	}
+)
+
+func (x Sector) Enum() *Sector {
+	p := new(Sector)
+	*p = x
+	return p
+}
+
+func (x Sector) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (Sector) Descriptor() protoreflect.EnumDescriptor {
+	return file_common_v1_common_proto_enumTypes[4].Descriptor()
+}
+
+func (Sector) Type() protoreflect.EnumType {
+	return &file_common_v1_common_proto_enumTypes[4]
+}
+
+func (x Sector) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use Sector.Descriptor instead.
+func (Sector) EnumDescriptor() ([]byte, []int) {
+	return file_common_v1_common_proto_rawDescGZIP(), []int{4}
+}
+
+// Template catalog (feature 224): admin-curated templates instantiated into private snapshot copies.
+type TemplateKind int32
+
+const (
+	TemplateKind_TEMPLATE_KIND_UNSPECIFIED   TemplateKind = 0
+	TemplateKind_TEMPLATE_KIND_STRATEGY      TemplateKind = 1
+	TemplateKind_TEMPLATE_KIND_FORMULA       TemplateKind = 2
+	TemplateKind_TEMPLATE_KIND_SIGNAL_SOURCE TemplateKind = 3
+)
+
+// Enum value maps for TemplateKind.
+var (
+	TemplateKind_name = map[int32]string{
+		0: "TEMPLATE_KIND_UNSPECIFIED",
+		1: "TEMPLATE_KIND_STRATEGY",
+		2: "TEMPLATE_KIND_FORMULA",
+		3: "TEMPLATE_KIND_SIGNAL_SOURCE",
+	}
+	TemplateKind_value = map[string]int32{
+		"TEMPLATE_KIND_UNSPECIFIED":   0,
+		"TEMPLATE_KIND_STRATEGY":      1,
+		"TEMPLATE_KIND_FORMULA":       2,
+		"TEMPLATE_KIND_SIGNAL_SOURCE": 3,
+	}
+)
+
+func (x TemplateKind) Enum() *TemplateKind {
+	p := new(TemplateKind)
+	*p = x
+	return p
+}
+
+func (x TemplateKind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (TemplateKind) Descriptor() protoreflect.EnumDescriptor {
+	return file_common_v1_common_proto_enumTypes[5].Descriptor()
+}
+
+func (TemplateKind) Type() protoreflect.EnumType {
+	return &file_common_v1_common_proto_enumTypes[5]
+}
+
+func (x TemplateKind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use TemplateKind.Descriptor instead.
+func (TemplateKind) EnumDescriptor() ([]byte, []int) {
+	return file_common_v1_common_proto_rawDescGZIP(), []int{5}
+}
+
+type TemplateOperation int32
+
+const (
+	TemplateOperation_TEMPLATE_OPERATION_UNSPECIFIED TemplateOperation = 0
+	TemplateOperation_TEMPLATE_OPERATION_CREATE      TemplateOperation = 1
+	TemplateOperation_TEMPLATE_OPERATION_UPDATE      TemplateOperation = 2 // bumps version by 1
+	TemplateOperation_TEMPLATE_OPERATION_RETIRE      TemplateOperation = 3 // hides from ListTemplates; existing instances are untouched
+)
+
+// Enum value maps for TemplateOperation.
+var (
+	TemplateOperation_name = map[int32]string{
+		0: "TEMPLATE_OPERATION_UNSPECIFIED",
+		1: "TEMPLATE_OPERATION_CREATE",
+		2: "TEMPLATE_OPERATION_UPDATE",
+		3: "TEMPLATE_OPERATION_RETIRE",
+	}
+	TemplateOperation_value = map[string]int32{
+		"TEMPLATE_OPERATION_UNSPECIFIED": 0,
+		"TEMPLATE_OPERATION_CREATE":      1,
+		"TEMPLATE_OPERATION_UPDATE":      2,
+		"TEMPLATE_OPERATION_RETIRE":      3,
+	}
+)
+
+func (x TemplateOperation) Enum() *TemplateOperation {
+	p := new(TemplateOperation)
+	*p = x
+	return p
+}
+
+func (x TemplateOperation) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (TemplateOperation) Descriptor() protoreflect.EnumDescriptor {
+	return file_common_v1_common_proto_enumTypes[6].Descriptor()
+}
+
+func (TemplateOperation) Type() protoreflect.EnumType {
+	return &file_common_v1_common_proto_enumTypes[6]
+}
+
+func (x TemplateOperation) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use TemplateOperation.Descriptor instead.
+func (TemplateOperation) EnumDescriptor() ([]byte, []int) {
+	return file_common_v1_common_proto_rawDescGZIP(), []int{6}
+}
+
 // Pagination
 type PageRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -597,6 +780,175 @@ func (x *TimeRange) GetEnd() *timestamppb.Timestamp {
 	return nil
 }
 
+type TemplateMeta struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TemplateId    string                 `protobuf:"bytes,1,opt,name=template_id,json=templateId,proto3" json:"template_id,omitempty"`
+	Kind          TemplateKind           `protobuf:"varint,2,opt,name=kind,proto3,enum=xstockstrat.common.v1.TemplateKind" json:"kind,omitempty"`
+	Name          string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	Description   string                 `protobuf:"bytes,4,opt,name=description,proto3" json:"description,omitempty"`
+	Version       int32                  `protobuf:"varint,5,opt,name=version,proto3" json:"version,omitempty"`
+	Retired       bool                   `protobuf:"varint,6,opt,name=retired,proto3" json:"retired,omitempty"`
+	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TemplateMeta) Reset() {
+	*x = TemplateMeta{}
+	mi := &file_common_v1_common_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TemplateMeta) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TemplateMeta) ProtoMessage() {}
+
+func (x *TemplateMeta) ProtoReflect() protoreflect.Message {
+	mi := &file_common_v1_common_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TemplateMeta.ProtoReflect.Descriptor instead.
+func (*TemplateMeta) Descriptor() ([]byte, []int) {
+	return file_common_v1_common_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *TemplateMeta) GetTemplateId() string {
+	if x != nil {
+		return x.TemplateId
+	}
+	return ""
+}
+
+func (x *TemplateMeta) GetKind() TemplateKind {
+	if x != nil {
+		return x.Kind
+	}
+	return TemplateKind_TEMPLATE_KIND_UNSPECIFIED
+}
+
+func (x *TemplateMeta) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *TemplateMeta) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *TemplateMeta) GetVersion() int32 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
+}
+
+func (x *TemplateMeta) GetRetired() bool {
+	if x != nil {
+		return x.Retired
+	}
+	return false
+}
+
+func (x *TemplateMeta) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
+func (x *TemplateMeta) GetUpdatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return nil
+}
+
+// Provenance of an instance; empty template_id = not instantiated from a template.
+type TemplateOrigin struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	TemplateId      string                 `protobuf:"bytes,1,opt,name=template_id,json=templateId,proto3" json:"template_id,omitempty"`
+	TemplateVersion int32                  `protobuf:"varint,2,opt,name=template_version,json=templateVersion,proto3" json:"template_version,omitempty"`
+	LatestVersion   int32                  `protobuf:"varint,3,opt,name=latest_version,json=latestVersion,proto3" json:"latest_version,omitempty"`       // the template's current version (0 if retired or missing)
+	UpdateAvailable bool                   `protobuf:"varint,4,opt,name=update_available,json=updateAvailable,proto3" json:"update_available,omitempty"` // latest_version > template_version
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *TemplateOrigin) Reset() {
+	*x = TemplateOrigin{}
+	mi := &file_common_v1_common_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TemplateOrigin) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TemplateOrigin) ProtoMessage() {}
+
+func (x *TemplateOrigin) ProtoReflect() protoreflect.Message {
+	mi := &file_common_v1_common_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TemplateOrigin.ProtoReflect.Descriptor instead.
+func (*TemplateOrigin) Descriptor() ([]byte, []int) {
+	return file_common_v1_common_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *TemplateOrigin) GetTemplateId() string {
+	if x != nil {
+		return x.TemplateId
+	}
+	return ""
+}
+
+func (x *TemplateOrigin) GetTemplateVersion() int32 {
+	if x != nil {
+		return x.TemplateVersion
+	}
+	return 0
+}
+
+func (x *TemplateOrigin) GetLatestVersion() int32 {
+	if x != nil {
+		return x.LatestVersion
+	}
+	return 0
+}
+
+func (x *TemplateOrigin) GetUpdateAvailable() bool {
+	if x != nil {
+		return x.UpdateAvailable
+	}
+	return false
+}
+
 var File_common_v1_common_proto protoreflect.FileDescriptor
 
 const file_common_v1_common_proto_rawDesc = "" +
@@ -628,7 +980,25 @@ const file_common_v1_common_proto_rawDesc = "" +
 	"assetClass\"k\n" +
 	"\tTimeRange\x120\n" +
 	"\x05start\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x05start\x12,\n" +
-	"\x03end\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x03end*Z\n" +
+	"\x03end\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x03end\"\xc8\x02\n" +
+	"\fTemplateMeta\x12\x1f\n" +
+	"\vtemplate_id\x18\x01 \x01(\tR\n" +
+	"templateId\x127\n" +
+	"\x04kind\x18\x02 \x01(\x0e2#.xstockstrat.common.v1.TemplateKindR\x04kind\x12\x12\n" +
+	"\x04name\x18\x03 \x01(\tR\x04name\x12 \n" +
+	"\vdescription\x18\x04 \x01(\tR\vdescription\x12\x18\n" +
+	"\aversion\x18\x05 \x01(\x05R\aversion\x12\x18\n" +
+	"\aretired\x18\x06 \x01(\bR\aretired\x129\n" +
+	"\n" +
+	"created_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
+	"\n" +
+	"updated_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\xae\x01\n" +
+	"\x0eTemplateOrigin\x12\x1f\n" +
+	"\vtemplate_id\x18\x01 \x01(\tR\n" +
+	"templateId\x12)\n" +
+	"\x10template_version\x18\x02 \x01(\x05R\x0ftemplateVersion\x12%\n" +
+	"\x0elatest_version\x18\x03 \x01(\x05R\rlatestVersion\x12)\n" +
+	"\x10update_available\x18\x04 \x01(\bR\x0fupdateAvailable*Z\n" +
 	"\vTradingMode\x12\x1c\n" +
 	"\x18TRADING_MODE_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12TRADING_MODE_PAPER\x10\x01\x12\x15\n" +
@@ -650,7 +1020,31 @@ const file_common_v1_common_proto_rawDesc = "" +
 	"\x0fTIMEFRAME_1HOUR\x10\x03\x1a\x02\b\x01\x12\x12\n" +
 	"\x0eTIMEFRAME_1DAY\x10\x04\x12\x16\n" +
 	"\x0eTIMEFRAME_1MIN\x10\x01\x1a\x02\b\x01\x12\x16\n" +
-	"\x0eTIMEFRAME_5MIN\x10\x02\x1a\x02\b\x01B<Z:github.com/xstockstrat/contracts/gen/go/common/v1;commonv1b\x06proto3"
+	"\x0eTIMEFRAME_5MIN\x10\x02\x1a\x02\b\x01*\xb8\x02\n" +
+	"\x06Sector\x12\x16\n" +
+	"\x12SECTOR_UNSPECIFIED\x10\x00\x12\x11\n" +
+	"\rSECTOR_ENERGY\x10\x01\x12\x14\n" +
+	"\x10SECTOR_MATERIALS\x10\x02\x12\x16\n" +
+	"\x12SECTOR_INDUSTRIALS\x10\x03\x12!\n" +
+	"\x1dSECTOR_CONSUMER_DISCRETIONARY\x10\x04\x12\x1b\n" +
+	"\x17SECTOR_CONSUMER_STAPLES\x10\x05\x12\x16\n" +
+	"\x12SECTOR_HEALTH_CARE\x10\x06\x12\x15\n" +
+	"\x11SECTOR_FINANCIALS\x10\a\x12\x15\n" +
+	"\x11SECTOR_TECHNOLOGY\x10\b\x12!\n" +
+	"\x1dSECTOR_COMMUNICATION_SERVICES\x10\t\x12\x14\n" +
+	"\x10SECTOR_UTILITIES\x10\n" +
+	"\x12\x16\n" +
+	"\x12SECTOR_REAL_ESTATE\x10\v*\x85\x01\n" +
+	"\fTemplateKind\x12\x1d\n" +
+	"\x19TEMPLATE_KIND_UNSPECIFIED\x10\x00\x12\x1a\n" +
+	"\x16TEMPLATE_KIND_STRATEGY\x10\x01\x12\x19\n" +
+	"\x15TEMPLATE_KIND_FORMULA\x10\x02\x12\x1f\n" +
+	"\x1bTEMPLATE_KIND_SIGNAL_SOURCE\x10\x03*\x94\x01\n" +
+	"\x11TemplateOperation\x12\"\n" +
+	"\x1eTEMPLATE_OPERATION_UNSPECIFIED\x10\x00\x12\x1d\n" +
+	"\x19TEMPLATE_OPERATION_CREATE\x10\x01\x12\x1d\n" +
+	"\x19TEMPLATE_OPERATION_UPDATE\x10\x02\x12\x1d\n" +
+	"\x19TEMPLATE_OPERATION_RETIRE\x10\x03B<Z:github.com/xstockstrat/contracts/gen/go/common/v1;commonv1b\x06proto3"
 
 var (
 	file_common_v1_common_proto_rawDescOnce sync.Once
@@ -664,31 +1058,39 @@ func file_common_v1_common_proto_rawDescGZIP() []byte {
 	return file_common_v1_common_proto_rawDescData
 }
 
-var file_common_v1_common_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_common_v1_common_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_common_v1_common_proto_enumTypes = make([]protoimpl.EnumInfo, 7)
+var file_common_v1_common_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
 var file_common_v1_common_proto_goTypes = []any{
 	(TradingMode)(0),              // 0: xstockstrat.common.v1.TradingMode
 	(Environment)(0),              // 1: xstockstrat.common.v1.Environment
 	(BrokerType)(0),               // 2: xstockstrat.common.v1.BrokerType
 	(Timeframe)(0),                // 3: xstockstrat.common.v1.Timeframe
-	(*PageRequest)(nil),           // 4: xstockstrat.common.v1.PageRequest
-	(*PageResponse)(nil),          // 5: xstockstrat.common.v1.PageResponse
-	(*Error)(nil),                 // 6: xstockstrat.common.v1.Error
-	(*Decimal)(nil),               // 7: xstockstrat.common.v1.Decimal
-	(*Asset)(nil),                 // 8: xstockstrat.common.v1.Asset
-	(*TimeRange)(nil),             // 9: xstockstrat.common.v1.TimeRange
-	nil,                           // 10: xstockstrat.common.v1.Error.DetailsEntry
-	(*timestamppb.Timestamp)(nil), // 11: google.protobuf.Timestamp
+	(Sector)(0),                   // 4: xstockstrat.common.v1.Sector
+	(TemplateKind)(0),             // 5: xstockstrat.common.v1.TemplateKind
+	(TemplateOperation)(0),        // 6: xstockstrat.common.v1.TemplateOperation
+	(*PageRequest)(nil),           // 7: xstockstrat.common.v1.PageRequest
+	(*PageResponse)(nil),          // 8: xstockstrat.common.v1.PageResponse
+	(*Error)(nil),                 // 9: xstockstrat.common.v1.Error
+	(*Decimal)(nil),               // 10: xstockstrat.common.v1.Decimal
+	(*Asset)(nil),                 // 11: xstockstrat.common.v1.Asset
+	(*TimeRange)(nil),             // 12: xstockstrat.common.v1.TimeRange
+	(*TemplateMeta)(nil),          // 13: xstockstrat.common.v1.TemplateMeta
+	(*TemplateOrigin)(nil),        // 14: xstockstrat.common.v1.TemplateOrigin
+	nil,                           // 15: xstockstrat.common.v1.Error.DetailsEntry
+	(*timestamppb.Timestamp)(nil), // 16: google.protobuf.Timestamp
 }
 var file_common_v1_common_proto_depIdxs = []int32{
-	10, // 0: xstockstrat.common.v1.Error.details:type_name -> xstockstrat.common.v1.Error.DetailsEntry
-	11, // 1: xstockstrat.common.v1.TimeRange.start:type_name -> google.protobuf.Timestamp
-	11, // 2: xstockstrat.common.v1.TimeRange.end:type_name -> google.protobuf.Timestamp
-	3,  // [3:3] is the sub-list for method output_type
-	3,  // [3:3] is the sub-list for method input_type
-	3,  // [3:3] is the sub-list for extension type_name
-	3,  // [3:3] is the sub-list for extension extendee
-	0,  // [0:3] is the sub-list for field type_name
+	15, // 0: xstockstrat.common.v1.Error.details:type_name -> xstockstrat.common.v1.Error.DetailsEntry
+	16, // 1: xstockstrat.common.v1.TimeRange.start:type_name -> google.protobuf.Timestamp
+	16, // 2: xstockstrat.common.v1.TimeRange.end:type_name -> google.protobuf.Timestamp
+	5,  // 3: xstockstrat.common.v1.TemplateMeta.kind:type_name -> xstockstrat.common.v1.TemplateKind
+	16, // 4: xstockstrat.common.v1.TemplateMeta.created_at:type_name -> google.protobuf.Timestamp
+	16, // 5: xstockstrat.common.v1.TemplateMeta.updated_at:type_name -> google.protobuf.Timestamp
+	6,  // [6:6] is the sub-list for method output_type
+	6,  // [6:6] is the sub-list for method input_type
+	6,  // [6:6] is the sub-list for extension type_name
+	6,  // [6:6] is the sub-list for extension extendee
+	0,  // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_common_v1_common_proto_init() }
@@ -701,8 +1103,8 @@ func file_common_v1_common_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_common_v1_common_proto_rawDesc), len(file_common_v1_common_proto_rawDesc)),
-			NumEnums:      4,
-			NumMessages:   7,
+			NumEnums:      7,
+			NumMessages:   9,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

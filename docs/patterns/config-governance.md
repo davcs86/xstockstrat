@@ -7,7 +7,7 @@ All runtime configuration is served by **xstockstrat-config** via `WatchConfig` 
 1. **No hardcoded config values** in service source code. All env-specific values must be registered in the config service.
 2. **Config key naming**: `<service-short-name>.<category>.<key>` — e.g., `indicators.sandbox.timeout_ms`
 3. **All services subscribe to xstockstrat-config at startup** before accepting traffic, passing `environment` (and, where a per-user value is needed, an optional `user_id`) in the WatchConfig request. The `trading_mode` field is deprecated (feature 147) and ignored by the server.
-4. **Config values are scoped** by two dimensions (feature 147): `environment` (`production`/`staging`) × `global`/per-user (`user_id`, NULL = global). A per-user value overrides the global value on both `GetConfig` and `WatchConfig`. Paper/live is **derived** from environment (production = live, staging = paper) — the former `trading_mode` (`paper`/`live`/`all`) axis was removed. The deprecated `ENVIRONMENT_DEV` maps to the `staging` scope. **Write authorization is scope-aware (PR #994):** a **global** write requires the ADMIN bit (or an authorized internal caller); a **per-user** write is **self-service** — only the owner (propagated `x-user-id` == target `user_id`) may write their own row, and an admin earns **no** override for another user's per-user row (admins reach globals + their own rows only). Secrets stay global-only.
+4. **Config values are scoped** by two dimensions (feature 147): `environment` (`production`/`staging`) × `global`/per-user (`user_id`, NULL = global). A per-user value overrides the global value on both `GetConfig` and `WatchConfig`. Paper/live is **derived** from environment (production = live, staging = paper) — the former `trading_mode` (`paper`/`live`/`all`) axis was removed. The deprecated `ENVIRONMENT_DEV` maps to the `staging` scope. **Write authorization is scope-aware (PR #994):** a **global** write requires the ADMIN bit (or an authorized internal caller); a **per-user** write is **self-service** — only the owner (propagated `x-user-id` == target `user_id`) may write their own row, and an admin earns **no** override for another user's per-user row (admins reach globals + their own rows only). Secrets may be **per-user** too (feature 224 — an operator override of feature 147, which allowed global secrets only): an owner writes their own `is_secret` row under the same self-service gate.
 5. **Config changes flow**: agent or webhook caller → config webhook handler → config service → WatchConfig stream → all subscribers.
 6. **Secrets ARE stored in config now, encrypted at rest (feature 147 — reversing feature 076's
    ban, with explicit operator sign-off recorded in the feature's `context.md`).** Feature 076
@@ -21,7 +21,11 @@ All runtime configuration is served by **xstockstrat-config** via `WatchConfig` 
    edge** — `WatchConfig`/`GetConfig`/`ListKeys` and the config-ui/agent tools never expose it.
    Plaintext is returned only by the authenticated **`GetSecret`** RPC, which decrypts server-side
    and hands the value to an **allow-listed internal service caller** (the `x-internal-caller`
-   metadata channel, mirroring feature 102). `is_secret` is **row-authoritative on write** (read
+   metadata channel, mirroring feature 102). A grant may additionally require the caller's mTLS peer
+   certificate to carry an exact DNS SAN (`peerSan`; the `ingest` grant requires
+   `xstockstrat-ingest`, feature 224). `GetSecret` resolves the **exact** scope named by
+   `GetSecretRequest.user_id` (empty = the global row only; a `user_id` = only that user's row — never
+   a cross-scope fallback, feature 224). `is_secret` is **row-authoritative on write** (read
    from the stored row, never trusted from the request), so an admin update can never land
    plaintext. The `secret.*` **name prefix is retired** — secret-ness is the `is_secret` flag alone,
    not a name convention. The non-secret *knobs* around a credential (`<source>.enabled`,
@@ -101,6 +105,28 @@ without this convention, both look identical (fails.md 2026-07-01).
 ## Per-Feature Registered Keys
 
 Append-only log — one entry per feature that registered new keys. Newest first. Don't edit past entries; superseding a key's behavior gets a new entry, not a rewrite of the old one.
+
+### feature 224 — private-by-default-templates (`xstockstrat-config` / `xstockstrat-ingest`)
+
+**Registers no new keys.** Changes the feature-166 secret key family: an `mcp_client` source's bearer
+is now a **per-user** secret row at an opaque key `ingest.mcp_credential.<uuid>` (`is_secret=true`,
+`user_id` = the source owner; never the slug, so it cannot collide across owners or leak the source
+name), written secret-first by the owner via `SetConfig(is_secret=true, create_key=true,
+user_id=<owner>)`. Ingest resolves it with `GetSecret(user_id=<source owner>)` — exact scope — under
+the `ingest` grant, now also bound to the mTLS peer SAN `xstockstrat-ingest`.
+
+### feature 217 — sector-classification-strategy-params (`xstockstrat-marketdata`)
+
+Adds **3** non-secret keys, consumed-with-default via the `WatchConfig` typed getters (no seed
+migration). Defaults declared in `services/xstockstrat-marketdata/CLAUDE.md` § Config Keys Consumed.
+The FMP gateway has **one** throttle authority: `rate_limit_rps` (burst = 1) shapes per-second load and
+the pre-existing `marketdata.fmp.daily_request_cap` is the single shared UTC-day budget across every FMP
+path (fundamentals snapshot, ratio enrichment, classification refresh) — no second cap.
+
+- `marketdata.fmp.rate_limit_rps` (int, `5`) — FMP token-bucket ceiling (5 rps = FMP Starter's
+  300/min); `0` = unthrottled. Read live per call.
+- `marketdata.classification.enabled` (bool, `false`) — gate for the sector-classification refresh job.
+- `marketdata.classification.refresh_interval_hours` (int, `24`) — refresh cadence; `<= 0` pauses.
 
 ### feature 207 — extract-tool-ssrf-hardening (`xstockstrat-agent`)
 
@@ -295,7 +321,8 @@ settable 0; the `SCALAR_BOUNDS_REGISTRY` hardening was declined in favor of the 
 **Also introduces a dynamic secret key family** `ingest.mcp_credential.<slug>` (`is_secret=true`, one
 per registered `mcp_client` source) — **not seeded**; written at registration via
 `SetConfig(is_secret=true, create_key=true)` and resolvable only by ingest via `GetSecret` under the
-new `SECRET_CALLER_ALLOWLIST` `keyPrefixes: ['mcp_credential.']` grant (`authz.ts`).
+new `SECRET_CALLER_ALLOWLIST` `keyPrefixes: ['mcp_credential.']` grant (`authz.ts`). Superseded by
+feature 224 (below): the key is now an opaque per-user `ingest.mcp_credential.<uuid>`.
 
 ### feature 031 — strategy-performance-dashboard (`xstockstrat-ui`)
 

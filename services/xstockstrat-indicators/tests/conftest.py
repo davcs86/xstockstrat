@@ -9,6 +9,24 @@ service root, mirroring the Dockerfile's `ln -s /proto/gen/python /app/gen`.
 import pathlib
 import sys
 import types
+from unittest.mock import AsyncMock, MagicMock
+
+import grpc
+
+
+def ctx_with(metadata, peer_sans=()):
+    """A grpc.aio servicer context replaying ``metadata``; ``peer_sans`` are the mTLS peer's SAN
+    entries (empty = no verified peer identity). ``abort`` raises."""
+    ctx = MagicMock()
+    ctx.invocation_metadata = MagicMock(return_value=list(metadata))
+    ctx.peer_identity_key = MagicMock(
+        return_value="x509_subject_alternative_name" if peer_sans else None
+    )
+    ctx.peer_identities = MagicMock(
+        return_value=[s.encode() for s in peer_sans] if peer_sans else None
+    )
+    ctx.abort = AsyncMock(side_effect=grpc.RpcError("aborted"))
+    return ctx
 
 
 def _setup_gen_path() -> None:

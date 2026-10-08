@@ -1,68 +1,17 @@
-# Context: sparkline-ohlc-replacement
+# Context: sparkline-ohlc-replacement  (archived 2026-10-07)
 
-**Feature**: `docs/roadmap/features/188-sparkline-ohlc-replacement/feature.md`
-**Product Spec**: `docs/roadmap/features/188-sparkline-ohlc-replacement/product-spec.md`
-**Implementation Spec**: `docs/roadmap/features/188-sparkline-ohlc-replacement/implementation-spec.md`
+**Feature**: ./feature.md
+**Status**: launched — archived by /sdd-archiver; verbose specs pruned (recoverable via git history).
 
----
+## Archive Synthesis — 2026-10-07 — /sdd-archiver
 
-## Session 2026-09-11T00:00:00Z — sdd-story
-
-- Created feature.md (status: draft), product-spec.md, acceptance.feature, context.md from user story.
-- Scope: UI-only change — replace sparkline bar chart with OHLC text on two pages. No proto, no backend, no config, no migration.
-- Data already available: `useSparklines` fetches `getBars(TIMEFRAME_1DAY, pageSize: 20)` — the `Bar` response carries `open`, `high`, `low`, `close`, `time`. Currently only `close` is mapped to `SparklinePoint`; the hook return type needs to expose the full bar.
-- Known trap surfaced from ledger: `fails.md:1463` (oklch canvas rejection) — not applicable here since we're moving FROM a visual component TO plain text, but noted as context.
-- `FormulaRunResult.tsx` also imports `Sparkline` — component must be retained; only the two opportunity-page call sites are removed.
-  - **Corrected by recon (Phase 0)**: FormulaRunResult.tsx defines a LOCAL `Sparkline` function using recharts `LineChart` at line 14. It does NOT import the shared `Sparkline.tsx`. The shared component CAN be deleted.
-
-## Session 2026-09-11 — sdd-design
-
-- Phase 0 Recon: wrote recon.md (services: xstockstrat-ui; key reuse patterns: fmtUsd, useQueries batch, progressive-enhancement guard).
-- Phase 1 Grilling: 2 rounds (quick). Chosen approach: refactor useSparklines→useOhlcBars in-place (pageSize:2, skip-today guard, UTC dates), new OhlcBlock component, delete shared Sparkline.tsx. Rejected: keep pageSize:20, Intl.DateTimeFormat cached instance, fmtShortDate in money.ts, OhlcData type in component file.
-- Constitution rules touched: C-14, C-15, C-16, C-17, P-03, F-04. Floor breaches: none.
-- **C-16 sign-off**: user approved superseding @AC-3 (sparkline rendering) and @AC-4 (warm-up gap) from feature 095's `opportunity-live-market-enrichment.feature`. New guarantees: OHLC text block replaces sparkline; OHLC absent when bars unavailable (FR-4).
-- AC-5 rewritten to reflect factual finding: shared Sparkline.tsx deleted (FormulaRunResult uses local function).
-- Status: draft → design-approved.
-
-## Decisions
-
-- **pageSize: 2** (down from 20) — OHLC needs only 1–2 bars; YAGNI.
-- **UTC everywhere** — skip-today guard and fmtShortDate both use UTC to match UTC-midnight bar timestamps.
-- **OhlcData type in hook file** — avoids inverted dependency from component → hook.
-- **fmtShortDate in protoTime.ts** — coheres with timestampToDate/timestampToMillis.
-- **Enrichment guard-condition** — `sparklinePoints && sparklinePoints.length > 0` → `ohlcData !== undefined`.
-- **Keep CAPR_SPARKLINE fixture** — populates Opportunity.sparkline proto field (different data path from getBars hook).
-
-## Session 2026-09-11 — sdd-spec
-
-- Phase 2: wrote implementation-spec.md (8 steps, all `xstockstrat-ui`).
-- Step structure: pure utilities first (protoTime.ts), vitest unit tests, hook refactor, new component, two page swaps, Sparkline deletion, E2E updates.
-- Key spec decisions:
-  - `selectOhlcBar` extracted as a pure function in `protoTime.ts` (within vitest `src/lib/**` coverage scope) with an injectable `now` parameter for deterministic testing.
-  - `OhlcData` type defined in `protoTime.ts`, re-exported from `useOhlcBars.ts` — avoids inverted dependency while keeping the hook as the consumer-facing import path.
-  - Mock-backend CAPR getBars reduced from 20 bars to 2, with distinct OHLC values (the old mock had identical O/H/L/C = close, which would make OHLC assertions vacuous).
-  - `CAPR_SPARKLINE` fixture in `e2e/fixtures/opportunities.ts` retained — it populates the proto `Opportunity.sparkline` field 17, a different data path from getBars.
-  - TestIds renamed: `opp-sparkline-*` → `opp-ohlc-*`, `detail-sparkline` → `detail-ohlc`.
-- Reviewers: `xstockstrat-ui` service owner (all 8 steps).
-- Status: design-approved → implementation-ready.
-
-## Open Threads
-
-- [ ] Bar ordering assumption (ascending) — verify at implementation time against actual getBars response. Target: Step 3 (useOhlcBars).
-- [ ] Skip-today UTC edge case — unit test with vitest. Target: Step 2.
-- [ ] SparklinePoint proto orphaning — Opportunity.sparkline field 17 still in analysis.proto. Separate proto cleanup PR.
-
-## Session 2026-09-26 — status drift reconciliation
-
-- **Discovered drift:** status.md read `implementation-ready` (impl-spec 0/8 done) despite the full
-  implementation having shipped on 2026-09-11 via `#1136` (an ancestor of both `origin/main-dev` and
-  `origin/main`). CI's post-promotion status auto-update never ran for this feature.
-- **Ground-truth verification (origin/main-dev HEAD):** confirmed all 8 steps' artifacts present:
-  `src/components/shared/OhlcBlock.tsx`, `src/hooks/useOhlcBars.ts`, `selectOhlcBar` + `fmtShortDate`
-  in `src/lib/protoTime.ts`; `src/components/shared/Sparkline.tsx` deleted (terminal step); mobile
-  OHLC parity (AC-6/FR-6) and E2E OHLC assertions (`opp-ohlc-*`, `mobile-ohlc-*`) landed.
-- **Promotion trail:** merged to main-dev `36fff5de` (#1136), promoted to main via `aab3fa8d` (#1137)
-  on 2026-09-11.
-- **Reconciliation applied:** status.md → `launched`; impl-spec all 8 steps + header → `done`;
-  feature.md tracking fields (`Committed to main`, `Launched date`) and Status History rows added.
-  No code touched — docs-only correction of a missed CI bookkeeping step.
+**What**: UI-only (`xstockstrat-ui`; no proto/config/migration). Replaced the 20-bar close sparkline on `/insights/opportunities` and `/trader/positions/[symbol]` with a text block showing the previous completed daily bar's date and O/H/L/C (`OhlcBlock`, fed by `useOhlcBars`, which replaced `useSparklines`); the shared `Sparkline.tsx` was deleted. The same block was added to the mobile `signalGroup` card (FR-6/AC-6), which design never covered. Shipped 2026-09-11 via #1136, promoted via #1137; status was only reconciled to `launched` on 2026-09-26.
+**Why (irrecoverable rationale)**: The operator wanted absolute price context at a glance (a relative close trend gave no absolute reference). No new data path: `getBars` already returned the full `Bar`, only `close` had been kept. The user explicitly signed off superseding two durable feature-095 business rules (C-16): `@AC-3` (sparkline from 20 bars) and `@AC-4` (warm-up gap renders null); the replacement guarantee is "OHLC absent when bars unavailable". The enrichment-row guard moved from `sparklinePoints && sparklinePoints.length > 0` to `ohlcData !== undefined` to prevent a silent enrichment-row regression for symbols with OHLC but no live price (`opportunities/page.tsx:578`). Truncation classes on `OhlcBlock` serve `@AC-9 @feature-155` mobile grouped cards.
+**Rejected alternatives**: Keep `pageSize: 20` (18 of 20 bars unused; YAGNI). Cached `Intl.DateTimeFormat` (negligible gain for ~10-50 symbols). `fmtShortDate` in `money.ts` (date formatting belongs beside `timestampToDate` in `protoTime.ts`). `OhlcData` defined in the component file (makes the component the type authority). A new `src/lib/date.ts` and a new hook name `useLastDailyBar` floated in recon, never adopted. Accepted risk: the UTC+12 far-ahead-timezone Saturday edge (mitigation: UTC on both sides of the "today" compare).
+**Scars & gotchas**: Daily `Bar.time` is UTC midnight (`marketdata_repo.go:142`); without `timeZone: 'UTC'` browsers in negative-offset zones render the date one day early, and the "today" skip must compare UTC dates on both sides or a partial intraday bar leaks in. The old CAPR `getBars` mock returned O=H=L=C bars, so OHLC assertions would have passed vacuously; it was replaced with 2 bars of distinct OHLC. Recon wrongly claimed `FormulaRunResult` imports the shared Sparkline (it defines its own local recharts one), so product-spec FR-5/AC-5 had a false premise until recon corrected it. No build-time execute log exists (all 8 steps shipped in one PR), so no recorded build scars.
+**Permanent deviations**: Design said `OhlcData` is exported from the hook file; shipped it in `src/lib/protoTime.ts` (re-exported from `useOhlcBars.ts:5`) so the pure `selectOhlcBar` and `fmtShortDate` sit under vitest's `src/lib/**` scope — `OhlcBlock.tsx:1` still imports the type via the hook re-export. Design said skip-today falls back to the second-to-last bar; shipped `selectOhlcBar(bars, now?)` scanning newest-to-oldest, skipping any bar dated today (UTC) or with no `time` (reason for the generalised loop not written down). Mobile OHLC on `signalGroup` (FR-6/AC-6) shipped with no spec step and no deviation entry (recon said mobile needed no change). `CAPR_SPARKLINE` kept (it populates `Opportunity.sparkline` proto field 17, a different data path).
+**Cross-feature signal**: Feature 095 (`opportunity-live-market-enrichment`) assumed the sparkline and warm-up-gap guarantees; 188 superseded them but the durable suite was never updated (fails.md entry written). Status-drift recurrence matches fails.md:1772-1778 (feature 140) as a same-symptom match; 188's own cause is unrecorded.
+**Deferred follow-ons**: OPEN THREAD — C-16 supersession: `services/xstockstrat-ui/acceptance/opportunity-live-market-enrichment.feature` `@AC-3` (lines 24-28) and `@AC-4` (lines 30-34) still assert the removed sparkline behavior. Per the archiver's never-rewrite rule, 188 `@AC-1/3/4` were withheld from `sparkline-ohlc-replacement.feature` so no contradiction lands in main-dev; to finish: replace 095 `@AC-3/@AC-4` with a tag-free tombstone ("RETIRED by feature 188 … see sparkline-ohlc-replacement.feature"), drop "a sparkline," from the 095 Feature narrative (lines 7-10), refresh 188's retained `acceptance.feature` (AC-1 "20 daily bars" → "getBars (1Day, pageSize 2)"; AC-3 `useSparklines` → `useOhlcBars` fetching 2 bars, "completed bar"), then promote `@AC-1/3/4`. No scenario covers the skip-today/UTC behavior (vitest only). Proto cleanup: `Opportunity.sparkline` field 17 and `SparklinePoint` are orphaned in the UI and need their own deprecation-cycle PR. `analysis/acceptance/opportunities-latency-fix.feature:24` still labels a BatchGetBars call "(sparkline)" — revisit with that proto cleanup.
+**Runtime-invariant recommendations (→ /context-constitution)**: Candidate UI-local: daily `Bar.time` is UTC midnight (`marketdata_repo.go:142`); browser formatting and "is today" comparisons of daily bar dates must use UTC.
+**Ledger entries written**: insights.md (2), fails.md (2) — see the 2026-10-07 entries.
+**Pruned artifacts**: product-spec.md, recon.md, design.md, implementation-spec.md — last present at 9a1d3bea (`git show 9a1d3bea:docs/roadmap/features/188-sparkline-ohlc-replacement/<file>`).

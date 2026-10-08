@@ -1,7 +1,7 @@
 # xstockstrat-indicators — CLAUDE.md
 
 <!-- context-forge:constitution-pointer:start -->
-> **Constitution:** non-obvious sandbox invariants (thread-pinning before numpy import, `RLIMIT_DATA` not `RLIMIT_AS`, `MessageToDict` not `dict()`, copy-into-fresh-builtins) live in [`docs/context-constitution.md`](docs/context-constitution.md); defects (fictional ledger/notify deps, ⚠ sandbox env inheritance) in [`docs/context-constitution-findings.md`](docs/context-constitution-findings.md). Inherits the root [`PLAT-*` constitution](../../docs/context-constitution.md).
+> **Constitution:** non-obvious sandbox invariants (thread-pinning before numpy import, `RLIMIT_DATA` not `RLIMIT_AS`, `MessageToDict` not `dict()`, copy-into-fresh-builtins) live in [`docs/context-constitution.md`](docs/context-constitution.md); defects (⚠ sandbox env inheritance) in [`docs/context-constitution-findings.md`](docs/context-constitution-findings.md). Inherits the root [`PLAT-*` constitution](../../docs/context-constitution.md).
 <!-- context-forge:constitution-pointer:end -->
 
 ## Role
@@ -11,21 +11,30 @@ Python gRPC service providing two capabilities:
 1. **Built-in indicator engine** — vectorized computation of SMA, EMA, RSI, MACD, BB, ATR, VWAP, STOCH
 2. **Sandboxed Python formula execution** — user-defined formulas run in subprocess isolation with configurable timeout and memory cap
 
-**Formula author identity comes from the `x-user-id` header.** `RegisterFormula` stamps the author
-from the propagated `x-user-id` header, and `UpdateFormula`/`DeleteFormula` resolve the caller from
-that same header for the author-ownership check (`_caller_user_id` — header, falling back to the
-deprecated request-body `user_id` only when no header is present, keeping the change non-breaking).
-The request-body `user_id` field on `UpdateFormulaRequest`/`DeleteFormulaRequest` is **deprecated**;
-identity is the header, which a client cannot spoof. The admin-scope override (`x-access-scope` ADMIN
-bit) is unchanged.
+**Formulas are private to their author (feature 224) — there is no public concept.** `is_public`
+and `ListFormulas`' `include_public` are deprecated and ignored; every write stores `is_public=false`.
 
-**Formula reads are owner-gated too.** `GetFormula` and `ExecuteFormula` (by `formula_id`) serve a
-formula only if it is `is_public`, authored by `SYSTEM_AUTHOR`, authored by the `x-user-id` caller
-(header only, with no body fallback), or the call carries `x-internal-caller: analysis` (the
-`_INTERNAL_FORMULA_READERS` allow-list). analysis stamps that header on its whole indicators channel
-(`app/internal_caller.py`) because it runs strategy formulas on behalf of their owner. Any other
-caller gets `NOT_FOUND`, so the response does not reveal whether the id exists. `ListFormulas` with an
-`author_filter` naming another user returns only that user's public formulas.
+- **Author = the `x-user-id` header only.** `RegisterFormula` stamps it (the body `author` is ignored;
+  no header → `INVALID_ARGUMENT`). `UpdateFormula`/`DeleteFormula` check ownership via
+  `_caller_user_id` (header, falling back to the deprecated body `user_id` only when no header is
+  present — release N only). There is **no** admin override for writes, and a `SYSTEM_AUTHOR`
+  formula is read-only to every caller (`PERMISSION_DENIED`).
+- **Reads (`_can_read_formula`).** `GetFormula`/`ExecuteFormula` serve a formula only to its author or
+  when it is authored by `SYSTEM_AUTHOR` (`"system"`); otherwise `NOT_FOUND`, so the response does not
+  reveal whether the id exists. `ListFormulas` returns own + system formulas.
+- **Admin is audited read-only.** An ADMIN may `GetFormula` a foreign formula, or name another owner
+  in `ListFormulas`' `author_filter`; each such read appends `audit.admin_read` to ledger
+  (`app/admin_audit.py`) and fails closed `UNAVAILABLE` if the append fails. An ADMIN
+  `ExecuteFormula` of a foreign formula → `PERMISSION_DENIED`.
+- **Internal grants are SAN-bound.** An `x-internal-caller` grant counts only when the mTLS peer SAN
+  is `xstockstrat-analysis` (`_internal_grant`, `peer_san_matches`). `x-user-id: system` needs the
+  `analysis-fundsignal` grant, else `PERMISSION_DENIED`. `_INTERNAL_FORMULA_READERS` (`analysis`)
+  is a **release-N-only** bypass that lets N-1 analysis read any formula; the follow-up
+  "224 enforce + contract" removes it.
+- **Templates.** `ListTemplates` / `ManageTemplate` (ADMIN only) / `InstantiateTemplate` over
+  `indicators.formula_templates`. The strategy-template saga's batch copy and `ResolveTemplateIntent`
+  require the dedicated `analysis-template-saga` grant; its copies stay hidden
+  (`pending_intent_id` set) until the intent commits, and are hard-deleted on abort.
 
 ## Language
 
@@ -52,6 +61,7 @@ HTTP/Connect-RPC server on `8054` was removed.
 | Dependency | Type | Reason |
 |---|---|---|
 | xstockstrat-config | gRPC WatchConfig | **Sandbox limits sourced from config** |
+| xstockstrat-ledger | gRPC write | `audit.admin_read` events for ADMIN foreign formula reads (feature 224) |
 | TimescaleDB | asyncpg pool | Persist formula definitions to `indicators.formulas` |
 
 ## Database
@@ -73,7 +83,11 @@ HTTP/Connect-RPC server on `8054` was removed.
 - Migrations: `migrations/001_formulas.*` (table); `migrations/002_formula_parameters.*` (adds the
   `parameters` JSONB column); `migrations/003_formula_outputs.*` (adds the `outputs` JSONB column);
   `migrations/004_formula_warmup.*` (adds the `warmup_period` INTEGER column);
-  `migrations/006_add_formula_fundamental_inputs.*` (adds the `fundamental_inputs` JSONB column)
+  `migrations/005_add_formula_soft_delete.*` (adds `deleted_at`; `DeleteFormula` soft-deletes);
+  `migrations/006_add_formula_fundamental_inputs.*` (adds the `fundamental_inputs` JSONB column);
+  `migrations/007_private_formulas_templates.*` (feature 224: sets every `is_public` false and drops
+  its partial index; adds `origin_template_id`/`origin_template_version`/`pending_intent_id` and the
+  `indicators.formula_templates` table)
 - Pool: `asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=int(os.environ.get("DB_POOL_MAX", "2")), statement_cache_size=…)` in `app/main.py`. `DB_POOL_MAX` is **not** set in the deploy specs for this service — it connects through the DigitalOcean transaction-mode pool (`:25061`), where the client-pool size is not a backend-slot budget, so `max_size` falls back to the code default (2). `statement_cache_size` is `0` when `DB_PGBOUNCER` is set (cached prepared statements are unsafe under transaction pooling — see `docs/patterns/database.md` § Connection pooling); otherwise asyncpg's default (100).
 
 ## Config Keys Consumed
@@ -89,7 +103,7 @@ Namespace: `indicators`
 
 ## Seeded Formulas
 
-A built-in **public** "Value+Quality Composite" fundamentals formula (feature 063) is seeded at
+A built-in **system** (`author = SYSTEM_AUTHOR`, readable by every caller, editable by none) "Value+Quality Composite" fundamentals formula (feature 063) is seeded at
 startup by `app/services/seed_formulas.py` (called from `app/main.py` after the DB pool is created,
 before serving). The definition lives in `app/formulas/fundamentals_value_quality.py` — source,
 typed `params` (band endpoints + weights), declared outputs (`quality`, `composite`; `value` is the
@@ -183,6 +197,7 @@ reference a formula series as `<ref_name>.<series>` and lets the sandbox enforce
 ```text
 GRPC_PORT=50054
 CONFIG_ENDPOINT=xstockstrat-config:50060
+LEDGER_ENDPOINT=xstockstrat-ledger:50057
 DATABASE_URL=postgres://xstockstrat:devpassword@timescaledb:5432/xstockstrat?sslmode=disable
 APPLICATION_ENV=development         # development | production
 TRADING_MODE=paper                     # paper | live

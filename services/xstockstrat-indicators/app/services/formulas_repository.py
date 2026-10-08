@@ -42,47 +42,85 @@ def _to_dict(row) -> dict:
     return d
 
 
+_INSERT_SQL = """
+    INSERT INTO indicators.formulas
+        (formula_id, name, description, source, author, is_public, input_schema,
+         parameters, outputs, warmup_period, fundamental_inputs,
+         origin_template_id, origin_template_version, pending_intent_id)
+    VALUES ($1::uuid, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9::jsonb, $10, $11::jsonb,
+            $12, $13, $14::uuid)
+    RETURNING *
+"""
+
+
+def _insert_args(
+    formula_id,
+    name,
+    description,
+    source,
+    author,
+    is_public,
+    input_schema,
+    parameters=None,
+    outputs=None,
+    warmup_period=0,
+    fundamental_inputs=None,
+    origin_template_id=None,
+    origin_template_version=None,
+    pending_intent_id=None,
+) -> tuple:
+    return (
+        formula_id,
+        name,
+        description or "",
+        source,
+        author,
+        is_public,
+        json.dumps(dict(input_schema) if input_schema else {}),
+        json.dumps(list(parameters) if parameters else []),
+        json.dumps(list(outputs) if outputs else []),
+        int(warmup_period or 0),
+        json.dumps(list(fundamental_inputs) if fundamental_inputs else []),
+        origin_template_id,
+        origin_template_version,
+        pending_intent_id,
+    )
+
+
 class FormulasRepository:
     """CRUD persistence for the ``indicators.formulas`` table."""
 
     def __init__(self, db_pool):
         self._db = db_pool
 
-    async def create(
-        self,
-        formula_id,
-        name,
-        description,
-        source,
-        author,
-        is_public,
-        input_schema,
-        parameters=None,
-        outputs=None,
-        warmup_period=0,
-        fundamental_inputs=None,
-    ) -> dict:
-        row = await self._db.fetchrow(
-            """
-            INSERT INTO indicators.formulas
-                (formula_id, name, description, source, author, is_public, input_schema,
-                 parameters, outputs, warmup_period, fundamental_inputs)
-            VALUES ($1::uuid, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9::jsonb, $10, $11::jsonb)
-            RETURNING *
-            """,
-            formula_id,
-            name,
-            description or "",
-            source,
-            author,
-            is_public,
-            json.dumps(dict(input_schema) if input_schema else {}),
-            json.dumps(list(parameters) if parameters else []),
-            json.dumps(list(outputs) if outputs else []),
-            int(warmup_period or 0),
-            json.dumps(list(fundamental_inputs) if fundamental_inputs else []),
-        )
+    async def create(self, **fields) -> dict:
+        row = await self._db.fetchrow(_INSERT_SQL, *_insert_args(**fields))
         return _to_dict(row)
+
+    async def create_pending_copies(self, copies: list[dict], intent_id: str) -> list[dict]:
+        """Insert every template copy hidden under ``intent_id`` in ONE transaction: any failed
+        INSERT rolls back the whole batch."""
+        async with self._db.acquire() as conn, conn.transaction():
+            rows = [
+                await conn.fetchrow(_INSERT_SQL, *_insert_args(**c, pending_intent_id=intent_id))
+                for c in copies
+            ]
+        return [_to_dict(r) for r in rows]
+
+    async def resolve_intent(self, intent_id: str, author: str, commit: bool) -> list[str]:
+        """Un-hide (commit) or hard-delete (abort) the owner's pending copies; returns their ids."""
+        if commit:
+            sql = (
+                "UPDATE indicators.formulas SET pending_intent_id = NULL "
+                "WHERE pending_intent_id = $1::uuid AND author = $2 RETURNING formula_id"
+            )
+        else:
+            sql = (
+                "DELETE FROM indicators.formulas "
+                "WHERE pending_intent_id = $1::uuid AND author = $2 RETURNING formula_id"
+            )
+        rows = await self._db.fetch(sql, intent_id, author)
+        return [str(r["formula_id"]) for r in rows]
 
     async def upsert(
         self,
@@ -142,33 +180,32 @@ class FormulasRepository:
         )
         return _to_dict(row)
 
-    async def list(
-        self,
-        author_filter: str,
-        include_public: bool,
-        page_size: int,
-        page_offset: int,
-        author_public_only: bool = False,
+    async def list_visible(
+        self, reader: str, page_size: int, page_offset: int
     ) -> tuple[list[dict], int]:
-        # Empty author_filter matches no author, so only the include_public branch returns rows.
-        # Soft-deleted formulas (deleted_at IS NOT NULL) are hidden from listing.
-        where = (
-            "WHERE deleted_at IS NULL AND ((author = $1 AND (NOT $3 OR is_public = TRUE))"
-            " OR ($2 AND is_public = TRUE))"
-        )
-        total = await self._db.fetchval(
-            f"SELECT COUNT(*) FROM indicators.formulas {where}",
-            author_filter,
-            include_public,
-            author_public_only,
-        )
+        """The reader's own live formulas plus the system ones."""
+        predicate = "(author = $1 OR author = 'system')"
+        return await self._list(predicate, reader, page_size, page_offset)
+
+    async def list_owned(
+        self, author: str, page_size: int, page_offset: int
+    ) -> tuple[list[dict], int]:
+        """One author's live formulas only (the admin owner selector)."""
+        return await self._list("author = $1", author, page_size, page_offset)
+
+    async def _list(
+        self, owner_predicate: str, owner: str, page_size: int, page_offset: int
+    ) -> tuple[list[dict], int]:
+        # Soft-deleted and pending-intent (uncommitted template copy) rows are never listed.
+        where = f"WHERE deleted_at IS NULL AND pending_intent_id IS NULL AND {owner_predicate}"
+        total = await self._db.fetchval(f"SELECT COUNT(*) FROM indicators.formulas {where}", owner)
         sql = f"""
             SELECT * FROM indicators.formulas {where}
             ORDER BY created_at DESC
         """
-        params = [author_filter, include_public, author_public_only]
+        params = [owner]
         if page_size and page_size > 0:
-            sql += " LIMIT $4 OFFSET $5"
+            sql += " LIMIT $2 OFFSET $3"
             params.extend([page_size, page_offset or 0])
         rows = await self._db.fetch(sql, *params)
         return [_to_dict(r) for r in rows], int(total or 0)

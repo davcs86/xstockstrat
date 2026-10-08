@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -269,6 +270,7 @@ func (c *Client) FetchHistorical(ctx context.Context, symbol string, from, to ti
 
 	wantQuarterly, wantAnnual := periodTypeWanted(periodTypes)
 	aggs := map[string]*periodAgg{}
+	var niFacts []niFact // every NetIncomeLoss flow fact, for the quarterly TTM ROE (feature 222)
 
 	for _, tags := range cf.Facts { // us-gaap, dei, ...
 		for tag, entry := range tags {
@@ -279,6 +281,11 @@ func (c *Client) FetchHistorical(ctx context.Context, symbol string, from, to ti
 			}
 			for unitKey, unit := range entry.Units {
 				for _, d := range unit {
+					if flowKey == "net_income" && isFlow {
+						if f, ok := toNIFact(d, unitKey); ok {
+							niFacts = append(niFacts, f)
+						}
+					}
 					if d.FP == "" || d.FY == 0 {
 						continue
 					}
@@ -338,9 +345,121 @@ func (c *Client) FetchHistorical(ctx context.Context, symbol string, from, to ti
 		if !to.IsZero() && a.periodEnd.After(to) {
 			continue
 		}
-		out = append(out, buildPeriod(symbol, a))
+		p := buildPeriod(symbol, a)
+		annualizeQuarterlyROE(&p, a, niFacts)
+		out = append(out, p)
 	}
 	return out, nil
+}
+
+// niFact is one NetIncomeLoss flow fact keyed by its own period (not the filing's fy/fp, which a
+// comparative column shares with the current one).
+type niFact struct {
+	start, end, filed time.Time
+	unit              string
+	val               float64
+}
+
+func toNIFact(d unitDatum, unit string) (niFact, bool) {
+	start, ok1 := parseDate(d.Start)
+	end, ok2 := parseDate(d.End)
+	filed, ok3 := parseDate(d.Filed)
+	if !ok1 || !ok2 || !ok3 {
+		return niFact{}, false
+	}
+	return niFact{start: start, end: end, filed: filed, unit: unit, val: d.Val}, true
+}
+
+func spanDays(f niFact) int { return int(f.end.Sub(f.start).Hours()/24) + 1 }
+
+// ttmWindowDays bounds the four quarter-ends a TTM sums: ends within (periodEnd − 350d, periodEnd].
+const ttmWindowDays = 350
+
+// trailingNetIncome sums the quarterly net income for up to four quarters ending at periodEnd, using
+// only facts filed on/before cutoff (PIT) in the given unit; each quarter keeps its earliest filing.
+// A missing standalone Q4 is derived as FY − the three in-year quarters. Returns (sum, quarters).
+func trailingNetIncome(facts []niFact, unit string, periodEnd, cutoff time.Time) (float64, int) {
+	type q struct {
+		val   float64
+		filed time.Time
+	}
+	quarters := map[time.Time]q{}
+	var annuals []niFact
+	for _, f := range facts {
+		if f.unit != unit || f.filed.After(cutoff) {
+			continue
+		}
+		days := spanDays(f)
+		switch {
+		case days >= quarterMinDays && days <= quarterMaxDays:
+			if cur, ok := quarters[f.end]; !ok || f.filed.Before(cur.filed) {
+				quarters[f.end] = q{f.val, f.filed}
+			}
+		case days >= annualMinDays && days <= annualMaxDays:
+			annuals = append(annuals, f)
+		}
+	}
+	// Earliest-filed annual per fiscal-year end, then derive the missing Q4s.
+	fy := map[time.Time]niFact{}
+	for _, a := range annuals {
+		if cur, ok := fy[a.end]; !ok || a.filed.Before(cur.filed) {
+			fy[a.end] = a
+		}
+	}
+	for end, a := range fy {
+		if _, ok := quarters[end]; ok {
+			continue
+		}
+		sum, n := 0.0, 0
+		for qEnd, qv := range quarters {
+			if qEnd.After(a.start) && qEnd.Before(end) {
+				sum += qv.val
+				n++
+			}
+		}
+		if n == 3 {
+			quarters[end] = q{a.val - sum, a.filed}
+		}
+	}
+	windowStart := periodEnd.AddDate(0, 0, -ttmWindowDays)
+	var ends []time.Time
+	for end := range quarters {
+		if end.After(windowStart) && !end.After(periodEnd) {
+			ends = append(ends, end)
+		}
+	}
+	sort.Slice(ends, func(i, j int) bool { return ends[i].After(ends[j]) })
+	if len(ends) > 4 {
+		ends = ends[:4]
+	}
+	total := 0.0
+	for _, e := range ends {
+		total += quarters[e].val
+	}
+	return total, len(ends)
+}
+
+// annualizeQuarterlyROE puts a quarterly period's ROE on a trailing-twelve-month basis (feature 222),
+// commensurable with annual rows and the TTM P/E on the same row: TTM net income / period-end equity;
+// with n<4 quarters available, Σ × 4/n. Annual periods keep net_income / equity.
+func annualizeQuarterlyROE(p *source.HistoricalFundamentalsPeriod, a *periodAgg, facts []niFact) {
+	if a.periodType != "quarterly" {
+		return
+	}
+	eq, ok := valIn(a, "stockholders_equity", p.Currency)
+	if !ok || eq == 0 {
+		return
+	}
+	sum, n := trailingNetIncome(facts, p.Currency, a.periodEnd, a.filed)
+	if n == 0 {
+		ni, ok := valIn(a, "net_income", p.Currency)
+		if !ok {
+			return
+		}
+		sum, n = ni, 1
+	}
+	roe := sum * 4 / float64(n) / eq
+	p.ROE = &roe
 }
 
 // classifyPeriodType returns "quarterly"/"annual"/"" for a data point. Instant facts (no Start)
@@ -369,16 +488,22 @@ func classifyPeriodType(d unitDatum) string {
 	}
 }
 
+// DerivationVersion MUST be bumped whenever buildPeriod / annualizeQuarterlyROE change a stored
+// column's semantics — stored rows re-derive only when their version is lower (feature 223).
+// 1 = feature 211 financial-debt D/E + feature 222 TTM quarterly ROE.
+const DerivationVersion = 1
+
 func buildPeriod(symbol string, a *periodAgg) source.HistoricalFundamentalsPeriod {
 	p := source.HistoricalFundamentalsPeriod{
-		Symbol:       symbol,
-		FiscalPeriod: fmt.Sprintf("%s-%d", a.fp, a.fy),
-		PeriodType:   a.periodType,
-		PeriodEnd:    a.periodEnd,
-		FiledDate:    a.filed,
-		ExtraMetrics: map[string]float64{},
-		Currency:     "USD",
-		Source:       "edgar",
+		DerivationVersion: DerivationVersion,
+		Symbol:            symbol,
+		FiscalPeriod:      fmt.Sprintf("%s-%d", a.fp, a.fy),
+		PeriodType:        a.periodType,
+		PeriodEnd:         a.periodEnd,
+		FiledDate:         a.filed,
+		ExtraMetrics:      map[string]float64{},
+		Currency:          "USD",
+		Source:            "edgar",
 	}
 	if a.fp == "FY" {
 		p.FiscalPeriod = fmt.Sprintf("FY%d", a.fy)
@@ -398,7 +523,8 @@ func buildPeriod(symbol string, a *periodAgg) source.HistoricalFundamentalsPerio
 		setPtr(&p.EPS, "eps_basic")
 	}
 	setPtr(&p.SharesOutstanding, "shares")
-	// Derived ratios (statement-native, PIT-safe): roe = net_income/equity, d/e = liabilities/equity.
+	// Derived ratios (statement-native, PIT-safe): roe = net_income/equity (quarterly rows are then
+	// re-based to TTM by annualizeQuarterlyROE), d/e = financial debt/equity.
 	if ni, ok := valIn(a, "net_income", rowCurrency); ok {
 		if eq, ok2 := valIn(a, "stockholders_equity", rowCurrency); ok2 && eq != 0 {
 			roe := ni / eq

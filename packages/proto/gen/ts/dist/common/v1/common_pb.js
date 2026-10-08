@@ -3,13 +3,13 @@
 // @generated from file common/v1/common.proto (package xstockstrat.common.v1, syntax proto3)
 /* eslint-disable */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.TimeframeSchema = exports.Timeframe = exports.BrokerTypeSchema = exports.BrokerType = exports.EnvironmentSchema = exports.Environment = exports.TradingModeSchema = exports.TradingMode = exports.TimeRangeSchema = exports.AssetSchema = exports.DecimalSchema = exports.ErrorSchema = exports.PageResponseSchema = exports.PageRequestSchema = exports.file_common_v1_common = void 0;
+exports.TemplateOperationSchema = exports.TemplateOperation = exports.TemplateKindSchema = exports.TemplateKind = exports.SectorSchema = exports.Sector = exports.TimeframeSchema = exports.Timeframe = exports.BrokerTypeSchema = exports.BrokerType = exports.EnvironmentSchema = exports.Environment = exports.TradingModeSchema = exports.TradingMode = exports.TemplateOriginSchema = exports.TemplateMetaSchema = exports.TimeRangeSchema = exports.AssetSchema = exports.DecimalSchema = exports.ErrorSchema = exports.PageResponseSchema = exports.PageRequestSchema = exports.file_common_v1_common = void 0;
 const codegenv2_1 = require("@bufbuild/protobuf/codegenv2");
 const wkt_1 = require("@bufbuild/protobuf/wkt");
 /**
  * Describes the file common/v1/common.proto.
  */
-exports.file_common_v1_common = (0, codegenv2_1.fileDesc)("ChZjb21tb24vdjEvY29tbW9uLnByb3RvEhV4c3RvY2tzdHJhdC5jb21tb24udjEiNAoLUGFnZVJlcXVlc3QSEQoJcGFnZV9zaXplGAEgASgFEhIKCnBhZ2VfdG9rZW4YAiABKAkiPAoMUGFnZVJlc3BvbnNlEhcKD25leHRfcGFnZV90b2tlbhgBIAEoCRITCgt0b3RhbF9jb3VudBgCIAEoBSKSAQoFRXJyb3ISDAoEY29kZRgBIAEoCRIPCgdtZXNzYWdlGAIgASgJEjoKB2RldGFpbHMYAyADKAsyKS54c3RvY2tzdHJhdC5jb21tb24udjEuRXJyb3IuRGV0YWlsc0VudHJ5Gi4KDERldGFpbHNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIjkKB0RlY2ltYWwSDQoFdW5pdHMYASABKAMSDQoFbmFub3MYAiABKAUSEAoIY3VycmVuY3kYAyABKAkiPgoFQXNzZXQSDgoGc3ltYm9sGAEgASgJEhAKCGV4Y2hhbmdlGAIgASgJEhMKC2Fzc2V0X2NsYXNzGAMgASgJIl8KCVRpbWVSYW5nZRIpCgVzdGFydBgBIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASJwoDZW5kGAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCpaCgtUcmFkaW5nTW9kZRIcChhUUkFESU5HX01PREVfVU5TUEVDSUZJRUQQABIWChJUUkFESU5HX01PREVfUEFQRVIQARIVChFUUkFESU5HX01PREVfTElWRRACKngKC0Vudmlyb25tZW50EhsKF0VOVklST05NRU5UX1VOU1BFQ0lGSUVEEAASFwoPRU5WSVJPTk1FTlRfREVWEAEaAggBEhoKFkVOVklST05NRU5UX1BST0RVQ1RJT04QAhIXChNFTlZJUk9OTUVOVF9TVEFHSU5HEAMqcAoKQnJva2VyVHlwZRIbChdCUk9LRVJfVFlQRV9VTlNQRUNJRklFRBAAEhYKEkJST0tFUl9UWVBFX0FMUEFDQRABEhQKEEJST0tFUl9UWVBFX0lCS1IQAhIXChNCUk9LRVJfVFlQRV9PRkZMSU5FEAMqnAEKCVRpbWVmcmFtZRIZChVUSU1FRlJBTUVfVU5TUEVDSUZJRUQQABIXCg9USU1FRlJBTUVfMTVNSU4QBRoCCAESFwoPVElNRUZSQU1FXzFIT1VSEAMaAggBEhIKDlRJTUVGUkFNRV8xREFZEAQSFgoOVElNRUZSQU1FXzFNSU4QARoCCAESFgoOVElNRUZSQU1FXzVNSU4QAhoCCAFCPFo6Z2l0aHViLmNvbS94c3RvY2tzdHJhdC9jb250cmFjdHMvZ2VuL2dvL2NvbW1vbi92MTtjb21tb252MWIGcHJvdG8z", [wkt_1.file_google_protobuf_timestamp]);
+exports.file_common_v1_common = (0, codegenv2_1.fileDesc)("ChZjb21tb24vdjEvY29tbW9uLnByb3RvEhV4c3RvY2tzdHJhdC5jb21tb24udjEiNAoLUGFnZVJlcXVlc3QSEQoJcGFnZV9zaXplGAEgASgFEhIKCnBhZ2VfdG9rZW4YAiABKAkiPAoMUGFnZVJlc3BvbnNlEhcKD25leHRfcGFnZV90b2tlbhgBIAEoCRITCgt0b3RhbF9jb3VudBgCIAEoBSKSAQoFRXJyb3ISDAoEY29kZRgBIAEoCRIPCgdtZXNzYWdlGAIgASgJEjoKB2RldGFpbHMYAyADKAsyKS54c3RvY2tzdHJhdC5jb21tb24udjEuRXJyb3IuRGV0YWlsc0VudHJ5Gi4KDERldGFpbHNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIjkKB0RlY2ltYWwSDQoFdW5pdHMYASABKAMSDQoFbmFub3MYAiABKAUSEAoIY3VycmVuY3kYAyABKAkiPgoFQXNzZXQSDgoGc3ltYm9sGAEgASgJEhAKCGV4Y2hhbmdlGAIgASgJEhMKC2Fzc2V0X2NsYXNzGAMgASgJIl8KCVRpbWVSYW5nZRIpCgVzdGFydBgBIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASJwoDZW5kGAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCL7AQoMVGVtcGxhdGVNZXRhEhMKC3RlbXBsYXRlX2lkGAEgASgJEjEKBGtpbmQYAiABKA4yIy54c3RvY2tzdHJhdC5jb21tb24udjEuVGVtcGxhdGVLaW5kEgwKBG5hbWUYAyABKAkSEwoLZGVzY3JpcHRpb24YBCABKAkSDwoHdmVyc2lvbhgFIAEoBRIPCgdyZXRpcmVkGAYgASgIEi4KCmNyZWF0ZWRfYXQYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnVwZGF0ZWRfYXQYCCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wInEKDlRlbXBsYXRlT3JpZ2luEhMKC3RlbXBsYXRlX2lkGAEgASgJEhgKEHRlbXBsYXRlX3ZlcnNpb24YAiABKAUSFgoObGF0ZXN0X3ZlcnNpb24YAyABKAUSGAoQdXBkYXRlX2F2YWlsYWJsZRgEIAEoCCpaCgtUcmFkaW5nTW9kZRIcChhUUkFESU5HX01PREVfVU5TUEVDSUZJRUQQABIWChJUUkFESU5HX01PREVfUEFQRVIQARIVChFUUkFESU5HX01PREVfTElWRRACKngKC0Vudmlyb25tZW50EhsKF0VOVklST05NRU5UX1VOU1BFQ0lGSUVEEAASFwoPRU5WSVJPTk1FTlRfREVWEAEaAggBEhoKFkVOVklST05NRU5UX1BST0RVQ1RJT04QAhIXChNFTlZJUk9OTUVOVF9TVEFHSU5HEAMqcAoKQnJva2VyVHlwZRIbChdCUk9LRVJfVFlQRV9VTlNQRUNJRklFRBAAEhYKEkJST0tFUl9UWVBFX0FMUEFDQRABEhQKEEJST0tFUl9UWVBFX0lCS1IQAhIXChNCUk9LRVJfVFlQRV9PRkZMSU5FEAMqnAEKCVRpbWVmcmFtZRIZChVUSU1FRlJBTUVfVU5TUEVDSUZJRUQQABIXCg9USU1FRlJBTUVfMTVNSU4QBRoCCAESFwoPVElNRUZSQU1FXzFIT1VSEAMaAggBEhIKDlRJTUVGUkFNRV8xREFZEAQSFgoOVElNRUZSQU1FXzFNSU4QARoCCAESFgoOVElNRUZSQU1FXzVNSU4QAhoCCAEquAIKBlNlY3RvchIWChJTRUNUT1JfVU5TUEVDSUZJRUQQABIRCg1TRUNUT1JfRU5FUkdZEAESFAoQU0VDVE9SX01BVEVSSUFMUxACEhYKElNFQ1RPUl9JTkRVU1RSSUFMUxADEiEKHVNFQ1RPUl9DT05TVU1FUl9ESVNDUkVUSU9OQVJZEAQSGwoXU0VDVE9SX0NPTlNVTUVSX1NUQVBMRVMQBRIWChJTRUNUT1JfSEVBTFRIX0NBUkUQBhIVChFTRUNUT1JfRklOQU5DSUFMUxAHEhUKEVNFQ1RPUl9URUNITk9MT0dZEAgSIQodU0VDVE9SX0NPTU1VTklDQVRJT05fU0VSVklDRVMQCRIUChBTRUNUT1JfVVRJTElUSUVTEAoSFgoSU0VDVE9SX1JFQUxfRVNUQVRFEAsqhQEKDFRlbXBsYXRlS2luZBIdChlURU1QTEFURV9LSU5EX1VOU1BFQ0lGSUVEEAASGgoWVEVNUExBVEVfS0lORF9TVFJBVEVHWRABEhkKFVRFTVBMQVRFX0tJTkRfRk9STVVMQRACEh8KG1RFTVBMQVRFX0tJTkRfU0lHTkFMX1NPVVJDRRADKpQBChFUZW1wbGF0ZU9wZXJhdGlvbhIiCh5URU1QTEFURV9PUEVSQVRJT05fVU5TUEVDSUZJRUQQABIdChlURU1QTEFURV9PUEVSQVRJT05fQ1JFQVRFEAESHQoZVEVNUExBVEVfT1BFUkFUSU9OX1VQREFURRACEh0KGVRFTVBMQVRFX09QRVJBVElPTl9SRVRJUkUQA0I8WjpnaXRodWIuY29tL3hzdG9ja3N0cmF0L2NvbnRyYWN0cy9nZW4vZ28vY29tbW9uL3YxO2NvbW1vbnYxYgZwcm90bzM", [wkt_1.file_google_protobuf_timestamp]);
 /**
  * Describes the message xstockstrat.common.v1.PageRequest.
  * Use `create(PageRequestSchema)` to create a new message.
@@ -40,6 +40,16 @@ exports.AssetSchema = (0, codegenv2_1.messageDesc)(exports.file_common_v1_common
  * Use `create(TimeRangeSchema)` to create a new message.
  */
 exports.TimeRangeSchema = (0, codegenv2_1.messageDesc)(exports.file_common_v1_common, 5);
+/**
+ * Describes the message xstockstrat.common.v1.TemplateMeta.
+ * Use `create(TemplateMetaSchema)` to create a new message.
+ */
+exports.TemplateMetaSchema = (0, codegenv2_1.messageDesc)(exports.file_common_v1_common, 6);
+/**
+ * Describes the message xstockstrat.common.v1.TemplateOrigin.
+ * Use `create(TemplateOriginSchema)` to create a new message.
+ */
+exports.TemplateOriginSchema = (0, codegenv2_1.messageDesc)(exports.file_common_v1_common, 7);
 /**
  * TradingMode distinguishes paper (simulated) from live (real-money) order routing.
  * Used by both xstockstrat-trading and xstockstrat-portfolio.
@@ -186,3 +196,122 @@ var Timeframe;
  * Describes the enum xstockstrat.common.v1.Timeframe.
  */
 exports.TimeframeSchema = (0, codegenv2_1.enumDesc)(exports.file_common_v1_common, 3);
+/**
+ * Sector is the closed GICS-flavored sector set (feature 217). The enum-name text minus the
+ * SECTOR_ prefix is the stored marketdata.symbol_classification.sector value.
+ *
+ * @generated from enum xstockstrat.common.v1.Sector
+ */
+var Sector;
+(function (Sector) {
+    /**
+     * @generated from enum value: SECTOR_UNSPECIFIED = 0;
+     */
+    Sector[Sector["UNSPECIFIED"] = 0] = "UNSPECIFIED";
+    /**
+     * @generated from enum value: SECTOR_ENERGY = 1;
+     */
+    Sector[Sector["ENERGY"] = 1] = "ENERGY";
+    /**
+     * @generated from enum value: SECTOR_MATERIALS = 2;
+     */
+    Sector[Sector["MATERIALS"] = 2] = "MATERIALS";
+    /**
+     * @generated from enum value: SECTOR_INDUSTRIALS = 3;
+     */
+    Sector[Sector["INDUSTRIALS"] = 3] = "INDUSTRIALS";
+    /**
+     * @generated from enum value: SECTOR_CONSUMER_DISCRETIONARY = 4;
+     */
+    Sector[Sector["CONSUMER_DISCRETIONARY"] = 4] = "CONSUMER_DISCRETIONARY";
+    /**
+     * @generated from enum value: SECTOR_CONSUMER_STAPLES = 5;
+     */
+    Sector[Sector["CONSUMER_STAPLES"] = 5] = "CONSUMER_STAPLES";
+    /**
+     * @generated from enum value: SECTOR_HEALTH_CARE = 6;
+     */
+    Sector[Sector["HEALTH_CARE"] = 6] = "HEALTH_CARE";
+    /**
+     * @generated from enum value: SECTOR_FINANCIALS = 7;
+     */
+    Sector[Sector["FINANCIALS"] = 7] = "FINANCIALS";
+    /**
+     * @generated from enum value: SECTOR_TECHNOLOGY = 8;
+     */
+    Sector[Sector["TECHNOLOGY"] = 8] = "TECHNOLOGY";
+    /**
+     * @generated from enum value: SECTOR_COMMUNICATION_SERVICES = 9;
+     */
+    Sector[Sector["COMMUNICATION_SERVICES"] = 9] = "COMMUNICATION_SERVICES";
+    /**
+     * @generated from enum value: SECTOR_UTILITIES = 10;
+     */
+    Sector[Sector["UTILITIES"] = 10] = "UTILITIES";
+    /**
+     * @generated from enum value: SECTOR_REAL_ESTATE = 11;
+     */
+    Sector[Sector["REAL_ESTATE"] = 11] = "REAL_ESTATE";
+})(Sector || (exports.Sector = Sector = {}));
+/**
+ * Describes the enum xstockstrat.common.v1.Sector.
+ */
+exports.SectorSchema = (0, codegenv2_1.enumDesc)(exports.file_common_v1_common, 4);
+/**
+ * Template catalog (feature 224): admin-curated templates instantiated into private snapshot copies.
+ *
+ * @generated from enum xstockstrat.common.v1.TemplateKind
+ */
+var TemplateKind;
+(function (TemplateKind) {
+    /**
+     * @generated from enum value: TEMPLATE_KIND_UNSPECIFIED = 0;
+     */
+    TemplateKind[TemplateKind["UNSPECIFIED"] = 0] = "UNSPECIFIED";
+    /**
+     * @generated from enum value: TEMPLATE_KIND_STRATEGY = 1;
+     */
+    TemplateKind[TemplateKind["STRATEGY"] = 1] = "STRATEGY";
+    /**
+     * @generated from enum value: TEMPLATE_KIND_FORMULA = 2;
+     */
+    TemplateKind[TemplateKind["FORMULA"] = 2] = "FORMULA";
+    /**
+     * @generated from enum value: TEMPLATE_KIND_SIGNAL_SOURCE = 3;
+     */
+    TemplateKind[TemplateKind["SIGNAL_SOURCE"] = 3] = "SIGNAL_SOURCE";
+})(TemplateKind || (exports.TemplateKind = TemplateKind = {}));
+/**
+ * Describes the enum xstockstrat.common.v1.TemplateKind.
+ */
+exports.TemplateKindSchema = (0, codegenv2_1.enumDesc)(exports.file_common_v1_common, 5);
+/**
+ * @generated from enum xstockstrat.common.v1.TemplateOperation
+ */
+var TemplateOperation;
+(function (TemplateOperation) {
+    /**
+     * @generated from enum value: TEMPLATE_OPERATION_UNSPECIFIED = 0;
+     */
+    TemplateOperation[TemplateOperation["UNSPECIFIED"] = 0] = "UNSPECIFIED";
+    /**
+     * @generated from enum value: TEMPLATE_OPERATION_CREATE = 1;
+     */
+    TemplateOperation[TemplateOperation["CREATE"] = 1] = "CREATE";
+    /**
+     * bumps version by 1
+     *
+     * @generated from enum value: TEMPLATE_OPERATION_UPDATE = 2;
+     */
+    TemplateOperation[TemplateOperation["UPDATE"] = 2] = "UPDATE";
+    /**
+     * hides from ListTemplates; existing instances are untouched
+     *
+     * @generated from enum value: TEMPLATE_OPERATION_RETIRE = 3;
+     */
+    TemplateOperation[TemplateOperation["RETIRE"] = 3] = "RETIRE";
+})(TemplateOperation || (exports.TemplateOperation = TemplateOperation = {}));
+/**
+ * Describes the enum xstockstrat.common.v1.TemplateOperation.
+ */
+exports.TemplateOperationSchema = (0, codegenv2_1.enumDesc)(exports.file_common_v1_common, 6);

@@ -116,6 +116,21 @@ class MarketDataServiceStub(object):
                 request_serializer=marketdata_dot_v1_dot_marketdata__pb2.BackfillFundamentalsRequest.SerializeToString,
                 response_deserializer=marketdata_dot_v1_dot_marketdata__pb2.BackfillFundamentalsResponse.FromString,
                 _registered_method=True)
+        self.GetCurrentSector = channel.unary_unary(
+                '/xstockstrat.marketdata.v1.MarketDataService/GetCurrentSector',
+                request_serializer=marketdata_dot_v1_dot_marketdata__pb2.GetCurrentSectorRequest.SerializeToString,
+                response_deserializer=marketdata_dot_v1_dot_marketdata__pb2.GetCurrentSectorResponse.FromString,
+                _registered_method=True)
+        self.GetSectorAsOf = channel.unary_unary(
+                '/xstockstrat.marketdata.v1.MarketDataService/GetSectorAsOf',
+                request_serializer=marketdata_dot_v1_dot_marketdata__pb2.GetSectorAsOfRequest.SerializeToString,
+                response_deserializer=marketdata_dot_v1_dot_marketdata__pb2.GetSectorAsOfResponse.FromString,
+                _registered_method=True)
+        self.GetSectorHistory = channel.unary_unary(
+                '/xstockstrat.marketdata.v1.MarketDataService/GetSectorHistory',
+                request_serializer=marketdata_dot_v1_dot_marketdata__pb2.GetSectorHistoryRequest.SerializeToString,
+                response_deserializer=marketdata_dot_v1_dot_marketdata__pb2.GetSectorHistoryResponse.FromString,
+                _registered_method=True)
 
 
 class MarketDataServiceServicer(object):
@@ -238,6 +253,26 @@ class MarketDataServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def GetCurrentSector(self, request, context):
+        """Sector classification reads (feature 217). Served only from the local Type-2 SCD store —
+        never call FMP on the read path; an unclassified symbol returns SECTOR_UNSPECIFIED, not an error.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetSectorAsOf(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetSectorHistory(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_MarketDataServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -320,6 +355,21 @@ def add_MarketDataServiceServicer_to_server(servicer, server):
                     servicer.BackfillFundamentals,
                     request_deserializer=marketdata_dot_v1_dot_marketdata__pb2.BackfillFundamentalsRequest.FromString,
                     response_serializer=marketdata_dot_v1_dot_marketdata__pb2.BackfillFundamentalsResponse.SerializeToString,
+            ),
+            'GetCurrentSector': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetCurrentSector,
+                    request_deserializer=marketdata_dot_v1_dot_marketdata__pb2.GetCurrentSectorRequest.FromString,
+                    response_serializer=marketdata_dot_v1_dot_marketdata__pb2.GetCurrentSectorResponse.SerializeToString,
+            ),
+            'GetSectorAsOf': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetSectorAsOf,
+                    request_deserializer=marketdata_dot_v1_dot_marketdata__pb2.GetSectorAsOfRequest.FromString,
+                    response_serializer=marketdata_dot_v1_dot_marketdata__pb2.GetSectorAsOfResponse.SerializeToString,
+            ),
+            'GetSectorHistory': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetSectorHistory,
+                    request_deserializer=marketdata_dot_v1_dot_marketdata__pb2.GetSectorHistoryRequest.FromString,
+                    response_serializer=marketdata_dot_v1_dot_marketdata__pb2.GetSectorHistoryResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -756,6 +806,87 @@ class MarketDataService(object):
             '/xstockstrat.marketdata.v1.MarketDataService/BackfillFundamentals',
             marketdata_dot_v1_dot_marketdata__pb2.BackfillFundamentalsRequest.SerializeToString,
             marketdata_dot_v1_dot_marketdata__pb2.BackfillFundamentalsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetCurrentSector(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.marketdata.v1.MarketDataService/GetCurrentSector',
+            marketdata_dot_v1_dot_marketdata__pb2.GetCurrentSectorRequest.SerializeToString,
+            marketdata_dot_v1_dot_marketdata__pb2.GetCurrentSectorResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetSectorAsOf(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.marketdata.v1.MarketDataService/GetSectorAsOf',
+            marketdata_dot_v1_dot_marketdata__pb2.GetSectorAsOfRequest.SerializeToString,
+            marketdata_dot_v1_dot_marketdata__pb2.GetSectorAsOfResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetSectorHistory(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.marketdata.v1.MarketDataService/GetSectorHistory',
+            marketdata_dot_v1_dot_marketdata__pb2.GetSectorHistoryRequest.SerializeToString,
+            marketdata_dot_v1_dot_marketdata__pb2.GetSectorHistoryResponse.FromString,
             options,
             channel_credentials,
             insecure,

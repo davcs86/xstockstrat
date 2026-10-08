@@ -5,6 +5,7 @@
 **Last Updated**: 2026-09-26
 **Committed to main**: `aab3fa8d` (promotion PR #1137)
 **Launched date**: 2026-09-11
+**Archived**: 2026-10-07
 
 ---
 
@@ -18,14 +19,15 @@
 | 2026-09-11 | `implementation-ready` → `launched` | /sdd-execute (#1134) | Functional steps 1,2,3,5,6,9 (server SQL grouping, UI useInfiniteQuery+Load More+CopilotRail+stat-grid removal, agent page_token/page_size, docs) merged to main-dev via #1134, promoted to main via #1137. **Status not advanced at the time** — reconciled 2026-09-26. |
 | 2026-09-26 | `in-progress` → `launched` | drift reconciliation | Bookkeeping catch-up: functional code shipped & live since 2026-09-11 but status.md stayed `in-progress`. Test steps **4, 7, 8, 10** were never completed and remain outstanding post-launch test debt (see Next Action). |
 | 2026-09-26 | `launched` (test debt back-filled) | /sdd-qa | Steps 4/7/8/10 completed: added @AC-2/3/5/8 characterization guards to `opportunities.spec.ts` (35/35 green). @AC-7 NOT covered — genuinely violated on the shipped tree (duplicate ListOpportunities RPC); filed SEV-3 defect `docs/reports/2026-09-26-copilotrail-duplicate-listopportunities-rpc-defect.md`, guard deferred until the fix lands. |
+| 2026-10-07 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(1); pruned 4 spec(s); acceptance scenarios promoted to per-service suites (C-16) |
 
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
-- [Implementation Spec](implementation-spec.md) — 10 steps, 3 services
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15); promoted to services/xstockstrat-{analysis,ui,agent}/acceptance/opportunities-pagination-drain.feature; @AC-6 withheld (not enforced) — see context.md (C-16)
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

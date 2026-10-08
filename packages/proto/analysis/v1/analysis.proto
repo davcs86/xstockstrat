@@ -54,6 +54,13 @@ service AnalysisService {
   // pairs (feature 181). Owner from x-user-id; RESOLVED rows carry inline SymbolReadiness,
   // PENDING/UNKNOWN rows resolve on a subsequent poll (the server kicks a background refresh).
   rpc GetWatchlistReadiness(GetWatchlistReadinessRequest) returns (GetWatchlistReadinessResponse);
+
+  // Template catalog (feature 224). List/read: any authenticated caller. Manage: ADMIN only.
+  rpc ListTemplates(ListTemplatesRequest) returns (ListTemplatesResponse);
+  rpc ManageTemplate(ManageTemplateRequest) returns (StrategyTemplate);
+  // Deep-copies a strategy template (and its formula templates) into private copies owned by the
+  // x-user-id caller, atomically (FR-9).
+  rpc InstantiateTemplate(InstantiateTemplateRequest) returns (StrategyDefinition);
 }
 
 message RunBacktestRequest {
@@ -238,6 +245,7 @@ message StrategyScore {
   int32 evidence_symbols = 5; // distinct symbols contributing eligible evidence cells
   int32 evidence_days = 6;    // total trading days of evidence across those symbols
   bool provisional = 7;       // true when evidence is below the symbol/day floor
+  xstockstrat.common.v1.TemplateOrigin origin = 8;  // feature 224: set when instantiated from a template
 }
 
 message StrategyReport {
@@ -365,6 +373,24 @@ message StrategyDefinition {
   // explicit universe override; signals would be redundant/contradictory). Rides definition_json;
   // maskable.
   bool signal_eligible = 14;
+
+  // Per-sector component-param overrides (feature 217). Each entry overrides one
+  // components[ref_name].params[param_name], resolved as-of each bar from the symbol's sector;
+  // an unclassified bar/symbol uses default_value. Rides definition_json; maskable.
+  repeated SectorParamOverride sector_param_overrides = 15;
+  xstockstrat.common.v1.TemplateOrigin origin = 16;  // feature 224: set when instantiated from a template
+}
+
+message SectorValue {
+  xstockstrat.common.v1.Sector sector = 1;
+  double value = 2;
+}
+
+message SectorParamOverride {
+  string component_ref = 1; // StrategyComponent.ref_name
+  string param_name = 2;    // key within StrategyComponent.params
+  double default_value = 3; // mandatory default bucket
+  repeated SectorValue by_sector = 4;
 }
 
 enum StrategyOperation {
@@ -397,12 +423,14 @@ message ManageStrategyRequest {
 
 message GetStrategyRequest {
   string strategy_id = 1;
+  string owner_user_id = 2;  // (admin-only) owner selector; ignored for a non-admin caller (feature 224)
 }
 
 message ListStrategyDefinitionsRequest {
   bool include_inactive = 1;
   int32 page_size = 2;
   int32 page_offset = 3;
+  string owner_user_id = 4;  // (admin-only) owner selector; ignored for a non-admin caller (feature 224)
 }
 
 message ListStrategyDefinitionsResponse {
@@ -874,4 +902,28 @@ message SourceAttribution {
 }
 message GetAttributionResponse {
   repeated SourceAttribution attributions = 1;
+}
+
+// feature 224 — strategy template catalog.
+message StrategyTemplate {
+  xstockstrat.common.v1.TemplateMeta meta = 1;
+  // Each component's formula_id holds a formula TEMPLATE id; instantiation deep-copies those
+  // formula templates into the caller's private formulas and rewrites the references (FR-9).
+  StrategyDefinition payload = 2;
+}
+
+message ListTemplatesRequest {}
+
+message ListTemplatesResponse {
+  repeated StrategyTemplate templates = 1;
+}
+
+message ManageTemplateRequest {
+  xstockstrat.common.v1.TemplateOperation operation = 1;
+  StrategyTemplate template = 2;
+}
+
+message InstantiateTemplateRequest {
+  string template_id = 1;
+  string strategy_id = 2;  // optional; empty = the template's strategy_id, suffixed _N on collision
 }

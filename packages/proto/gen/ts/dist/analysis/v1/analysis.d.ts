@@ -1,6 +1,6 @@
 import { BinaryReader, BinaryWriter } from "@bufbuild/protobuf/wire";
 import { type CallOptions, type ChannelCredentials, Client, type ClientOptions, type ClientUnaryCall, type handleUnaryCall, type Metadata, type ServiceError, type UntypedServiceImplementation } from "@grpc/grpc-js";
-import { PageRequest, PageResponse, Timeframe, TimeRange } from "../../common/v1/common";
+import { PageRequest, PageResponse, Sector, TemplateMeta, TemplateOperation, TemplateOrigin, Timeframe, TimeRange } from "../../common/v1/common";
 export declare const protobufPackage = "xstockstrat.analysis.v1";
 export declare enum BacktestStatus {
     BACKTEST_STATUS_UNSPECIFIED = "BACKTEST_STATUS_UNSPECIFIED",
@@ -420,6 +420,8 @@ export interface StrategyScore {
     evidenceDays: number;
     /** true when evidence is below the symbol/day floor */
     provisional: boolean;
+    /** feature 224: set when instantiated from a template */
+    origin?: TemplateOrigin | undefined;
 }
 export interface StrategyScore_ComponentScoresEntry {
     key: string;
@@ -569,6 +571,27 @@ export interface StrategyDefinition {
      * maskable.
      */
     signalEligible: boolean;
+    /**
+     * Per-sector component-param overrides (feature 217). Each entry overrides one
+     * components[ref_name].params[param_name], resolved as-of each bar from the symbol's sector;
+     * an unclassified bar/symbol uses default_value. Rides definition_json; maskable.
+     */
+    sectorParamOverrides: SectorParamOverride[];
+    /** feature 224: set when instantiated from a template */
+    origin?: TemplateOrigin | undefined;
+}
+export interface SectorValue {
+    sector: Sector;
+    value: number;
+}
+export interface SectorParamOverride {
+    /** StrategyComponent.ref_name */
+    componentRef: string;
+    /** key within StrategyComponent.params */
+    paramName: string;
+    /** mandatory default bucket */
+    defaultValue: number;
+    bySector: SectorValue[];
 }
 export interface ManageStrategyRequest {
     operation: StrategyOperation;
@@ -593,11 +616,15 @@ export interface ManageStrategyRequest {
 }
 export interface GetStrategyRequest {
     strategyId: string;
+    /** (admin-only) owner selector; ignored for a non-admin caller (feature 224) */
+    ownerUserId: string;
 }
 export interface ListStrategyDefinitionsRequest {
     includeInactive: boolean;
     pageSize: number;
     pageOffset: number;
+    /** (admin-only) owner selector; ignored for a non-admin caller (feature 224) */
+    ownerUserId: string;
 }
 export interface ListStrategyDefinitionsResponse {
     definitions: StrategyDefinition[];
@@ -1040,6 +1067,29 @@ export interface SourceAttribution {
 export interface GetAttributionResponse {
     attributions: SourceAttribution[];
 }
+/** feature 224 — strategy template catalog. */
+export interface StrategyTemplate {
+    meta?: TemplateMeta | undefined;
+    /**
+     * Each component's formula_id holds a formula TEMPLATE id; instantiation deep-copies those
+     * formula templates into the caller's private formulas and rewrites the references (FR-9).
+     */
+    payload?: StrategyDefinition | undefined;
+}
+export interface ListTemplatesRequest {
+}
+export interface ListTemplatesResponse {
+    templates: StrategyTemplate[];
+}
+export interface ManageTemplateRequest {
+    operation: TemplateOperation;
+    template?: StrategyTemplate | undefined;
+}
+export interface InstantiateTemplateRequest {
+    templateId: string;
+    /** optional; empty = the template's strategy_id, suffixed _N on collision */
+    strategyId: string;
+}
 export declare const RunBacktestRequest: MessageFns<RunBacktestRequest>;
 export declare const CoverageGap: MessageFns<CoverageGap>;
 export declare const BacktestResult: MessageFns<BacktestResult>;
@@ -1063,6 +1113,8 @@ export declare const GetStrategyReportRequest: MessageFns<GetStrategyReportReque
 export declare const StrategyComponent: MessageFns<StrategyComponent>;
 export declare const StrategyComponent_ParamsEntry: MessageFns<StrategyComponent_ParamsEntry>;
 export declare const StrategyDefinition: MessageFns<StrategyDefinition>;
+export declare const SectorValue: MessageFns<SectorValue>;
+export declare const SectorParamOverride: MessageFns<SectorParamOverride>;
 export declare const ManageStrategyRequest: MessageFns<ManageStrategyRequest>;
 export declare const GetStrategyRequest: MessageFns<GetStrategyRequest>;
 export declare const ListStrategyDefinitionsRequest: MessageFns<ListStrategyDefinitionsRequest>;
@@ -1107,6 +1159,11 @@ export declare const QueryPnLPatternsResponse: MessageFns<QueryPnLPatternsRespon
 export declare const GetAttributionRequest: MessageFns<GetAttributionRequest>;
 export declare const SourceAttribution: MessageFns<SourceAttribution>;
 export declare const GetAttributionResponse: MessageFns<GetAttributionResponse>;
+export declare const StrategyTemplate: MessageFns<StrategyTemplate>;
+export declare const ListTemplatesRequest: MessageFns<ListTemplatesRequest>;
+export declare const ListTemplatesResponse: MessageFns<ListTemplatesResponse>;
+export declare const ManageTemplateRequest: MessageFns<ManageTemplateRequest>;
+export declare const InstantiateTemplateRequest: MessageFns<InstantiateTemplateRequest>;
 export type AnalysisServiceService = typeof AnalysisServiceService;
 export declare const AnalysisServiceService: {
     readonly runBacktest: {
@@ -1327,6 +1384,38 @@ export declare const AnalysisServiceService: {
         readonly responseSerialize: (value: GetWatchlistReadinessResponse) => Buffer;
         readonly responseDeserialize: (value: Buffer) => GetWatchlistReadinessResponse;
     };
+    /** Template catalog (feature 224). List/read: any authenticated caller. Manage: ADMIN only. */
+    readonly listTemplates: {
+        readonly path: "/xstockstrat.analysis.v1.AnalysisService/ListTemplates";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: ListTemplatesRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => ListTemplatesRequest;
+        readonly responseSerialize: (value: ListTemplatesResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => ListTemplatesResponse;
+    };
+    readonly manageTemplate: {
+        readonly path: "/xstockstrat.analysis.v1.AnalysisService/ManageTemplate";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: ManageTemplateRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => ManageTemplateRequest;
+        readonly responseSerialize: (value: StrategyTemplate) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => StrategyTemplate;
+    };
+    /**
+     * Deep-copies a strategy template (and its formula templates) into private copies owned by the
+     * x-user-id caller, atomically (FR-9).
+     */
+    readonly instantiateTemplate: {
+        readonly path: "/xstockstrat.analysis.v1.AnalysisService/InstantiateTemplate";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: InstantiateTemplateRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => InstantiateTemplateRequest;
+        readonly responseSerialize: (value: StrategyDefinition) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => StrategyDefinition;
+    };
 };
 export interface AnalysisServiceServer extends UntypedServiceImplementation {
     runBacktest: handleUnaryCall<RunBacktestRequest, BacktestResult>;
@@ -1387,6 +1476,14 @@ export interface AnalysisServiceServer extends UntypedServiceImplementation {
      * PENDING/UNKNOWN rows resolve on a subsequent poll (the server kicks a background refresh).
      */
     getWatchlistReadiness: handleUnaryCall<GetWatchlistReadinessRequest, GetWatchlistReadinessResponse>;
+    /** Template catalog (feature 224). List/read: any authenticated caller. Manage: ADMIN only. */
+    listTemplates: handleUnaryCall<ListTemplatesRequest, ListTemplatesResponse>;
+    manageTemplate: handleUnaryCall<ManageTemplateRequest, StrategyTemplate>;
+    /**
+     * Deep-copies a strategy template (and its formula templates) into private copies owned by the
+     * x-user-id caller, atomically (FR-9).
+     */
+    instantiateTemplate: handleUnaryCall<InstantiateTemplateRequest, StrategyDefinition>;
 }
 export interface AnalysisServiceClient extends Client {
     runBacktest(request: RunBacktestRequest, callback: (error: ServiceError | null, response: BacktestResult) => void): ClientUnaryCall;
@@ -1487,6 +1584,20 @@ export interface AnalysisServiceClient extends Client {
     getWatchlistReadiness(request: GetWatchlistReadinessRequest, callback: (error: ServiceError | null, response: GetWatchlistReadinessResponse) => void): ClientUnaryCall;
     getWatchlistReadiness(request: GetWatchlistReadinessRequest, metadata: Metadata, callback: (error: ServiceError | null, response: GetWatchlistReadinessResponse) => void): ClientUnaryCall;
     getWatchlistReadiness(request: GetWatchlistReadinessRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: GetWatchlistReadinessResponse) => void): ClientUnaryCall;
+    /** Template catalog (feature 224). List/read: any authenticated caller. Manage: ADMIN only. */
+    listTemplates(request: ListTemplatesRequest, callback: (error: ServiceError | null, response: ListTemplatesResponse) => void): ClientUnaryCall;
+    listTemplates(request: ListTemplatesRequest, metadata: Metadata, callback: (error: ServiceError | null, response: ListTemplatesResponse) => void): ClientUnaryCall;
+    listTemplates(request: ListTemplatesRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: ListTemplatesResponse) => void): ClientUnaryCall;
+    manageTemplate(request: ManageTemplateRequest, callback: (error: ServiceError | null, response: StrategyTemplate) => void): ClientUnaryCall;
+    manageTemplate(request: ManageTemplateRequest, metadata: Metadata, callback: (error: ServiceError | null, response: StrategyTemplate) => void): ClientUnaryCall;
+    manageTemplate(request: ManageTemplateRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: StrategyTemplate) => void): ClientUnaryCall;
+    /**
+     * Deep-copies a strategy template (and its formula templates) into private copies owned by the
+     * x-user-id caller, atomically (FR-9).
+     */
+    instantiateTemplate(request: InstantiateTemplateRequest, callback: (error: ServiceError | null, response: StrategyDefinition) => void): ClientUnaryCall;
+    instantiateTemplate(request: InstantiateTemplateRequest, metadata: Metadata, callback: (error: ServiceError | null, response: StrategyDefinition) => void): ClientUnaryCall;
+    instantiateTemplate(request: InstantiateTemplateRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: StrategyDefinition) => void): ClientUnaryCall;
 }
 export declare const AnalysisServiceClient: {
     new (address: string, credentials: ChannelCredentials, options?: Partial<ClientOptions>): AnalysisServiceClient;

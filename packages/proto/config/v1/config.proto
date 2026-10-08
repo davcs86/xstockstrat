@@ -111,6 +111,7 @@ message GetSecretRequest {
   string namespace = 1;
   string key = 2;
   xstockstrat.common.v1.Environment environment = 3;  // production or staging
+  string user_id = 4;  // exact scope: empty = global row only (feature 224)
 }
 
 message GetSecretResponse {
@@ -131,7 +132,8 @@ message SetConfigRequest {
   // unregistered scope is refused with NOT_FOUND, so a typo cannot mint an orphan key.
   bool create_key = 8;
   // Optional per-user scope. Empty = the global value; a non-empty user_id writes/updates that
-  // user's per-user override. Secret keys (is_secret) are global-scope only (feature 147).
+  // user's per-user override. Secret keys may be per-user (feature 224 operator override of
+  // feature 147); redaction holds on every edge.
   string user_id = 9;
 }
 

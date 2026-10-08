@@ -1,6 +1,6 @@
 import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import type { FieldMask, Timestamp, Value } from "@bufbuild/protobuf/wkt";
-import type { TimeRange } from "../../common/v1/common_pb";
+import type { TemplateMeta, TemplateOperation, TemplateOrigin, TimeRange } from "../../common/v1/common_pb";
 import type { JsonObject, Message } from "@bufbuild/protobuf";
 /**
  * Describes the file indicators/v1/indicators.proto.
@@ -329,7 +329,10 @@ export type FormulaDefinition = Message<"xstockstrat.indicators.v1.FormulaDefini
      */
     updatedAt?: Timestamp | undefined;
     /**
-     * @generated from field: bool is_public = 8;
+     * DEPRECATED: ignored, formulas are private to their author (feature 224); always false.
+     *
+     * @generated from field: bool is_public = 8 [deprecated = true];
+     * @deprecated
      */
     isPublic: boolean;
     /**
@@ -370,6 +373,12 @@ export type FormulaDefinition = Message<"xstockstrat.indicators.v1.FormulaDefini
      * @generated from field: repeated xstockstrat.indicators.v1.FundamentalMetric fundamental_inputs = 14;
      */
     fundamentalInputs: FundamentalMetric[];
+    /**
+     * set when instantiated from a template (feature 224)
+     *
+     * @generated from field: xstockstrat.common.v1.TemplateOrigin origin = 15;
+     */
+    origin?: TemplateOrigin | undefined;
 };
 /**
  * Describes the message xstockstrat.indicators.v1.FormulaDefinition.
@@ -442,7 +451,10 @@ export type RegisterFormulaRequest = Message<"xstockstrat.indicators.v1.Register
      */
     source: string;
     /**
-     * @generated from field: bool is_public = 4;
+     * DEPRECATED: ignored, formulas are private to their author (feature 224).
+     *
+     * @generated from field: bool is_public = 4 [deprecated = true];
+     * @deprecated
      */
     isPublic: boolean;
     /**
@@ -452,9 +464,10 @@ export type RegisterFormulaRequest = Message<"xstockstrat.indicators.v1.Register
         [key: string]: string;
     };
     /**
-     * set by BFF from JWT claims; stored immutably
+     * DEPRECATED: ignored; author is the x-user-id header (feature 224).
      *
-     * @generated from field: string author = 6;
+     * @generated from field: string author = 6 [deprecated = true];
+     * @deprecated
      */
     author: string;
     /**
@@ -518,15 +531,16 @@ export declare const GetFormulaRequestSchema: GenMessage<GetFormulaRequest>;
  */
 export type ListFormulasRequest = Message<"xstockstrat.indicators.v1.ListFormulasRequest"> & {
     /**
-     * if non-empty, return only formulas where author == author_filter
+     * owner selector honoured only for an ADMIN caller; ignored otherwise (feature 224)
      *
      * @generated from field: string author_filter = 1;
      */
     authorFilter: string;
     /**
-     * if true, include all public formulas regardless of author_filter
+     * DEPRECATED: ignored, formulas are private to their author (feature 224).
      *
-     * @generated from field: bool include_public = 2;
+     * @generated from field: bool include_public = 2 [deprecated = true];
+     * @deprecated
      */
     includePublic: boolean;
     /**
@@ -593,7 +607,10 @@ export type UpdateFormulaRequest = Message<"xstockstrat.indicators.v1.UpdateForm
      */
     source: string;
     /**
-     * @generated from field: bool is_public = 6;
+     * DEPRECATED: ignored, formulas are private to their author (feature 224).
+     *
+     * @generated from field: bool is_public = 6 [deprecated = true];
+     * @deprecated
      */
     isPublic: boolean;
     /**
@@ -732,6 +749,151 @@ export type ListFundamentalMetricsResponse = Message<"xstockstrat.indicators.v1.
  * Use `create(ListFundamentalMetricsResponseSchema)` to create a new message.
  */
 export declare const ListFundamentalMetricsResponseSchema: GenMessage<ListFundamentalMetricsResponse>;
+/**
+ * feature 224 — formula template catalog.
+ *
+ * @generated from message xstockstrat.indicators.v1.FormulaTemplate
+ */
+export type FormulaTemplate = Message<"xstockstrat.indicators.v1.FormulaTemplate"> & {
+    /**
+     * @generated from field: xstockstrat.common.v1.TemplateMeta meta = 1;
+     */
+    meta?: TemplateMeta | undefined;
+    /**
+     * The deprecated is_public (4) and author (6) inside payload are ignored on instantiate: the
+     * instance is private and its author is the instantiating caller's x-user-id.
+     *
+     * @generated from field: xstockstrat.indicators.v1.RegisterFormulaRequest payload = 2;
+     */
+    payload?: RegisterFormulaRequest | undefined;
+};
+/**
+ * Describes the message xstockstrat.indicators.v1.FormulaTemplate.
+ * Use `create(FormulaTemplateSchema)` to create a new message.
+ */
+export declare const FormulaTemplateSchema: GenMessage<FormulaTemplate>;
+/**
+ * @generated from message xstockstrat.indicators.v1.ListTemplatesRequest
+ */
+export type ListTemplatesRequest = Message<"xstockstrat.indicators.v1.ListTemplatesRequest"> & {};
+/**
+ * Describes the message xstockstrat.indicators.v1.ListTemplatesRequest.
+ * Use `create(ListTemplatesRequestSchema)` to create a new message.
+ */
+export declare const ListTemplatesRequestSchema: GenMessage<ListTemplatesRequest>;
+/**
+ * @generated from message xstockstrat.indicators.v1.ListTemplatesResponse
+ */
+export type ListTemplatesResponse = Message<"xstockstrat.indicators.v1.ListTemplatesResponse"> & {
+    /**
+     * @generated from field: repeated xstockstrat.indicators.v1.FormulaTemplate templates = 1;
+     */
+    templates: FormulaTemplate[];
+};
+/**
+ * Describes the message xstockstrat.indicators.v1.ListTemplatesResponse.
+ * Use `create(ListTemplatesResponseSchema)` to create a new message.
+ */
+export declare const ListTemplatesResponseSchema: GenMessage<ListTemplatesResponse>;
+/**
+ * @generated from message xstockstrat.indicators.v1.ManageTemplateRequest
+ */
+export type ManageTemplateRequest = Message<"xstockstrat.indicators.v1.ManageTemplateRequest"> & {
+    /**
+     * @generated from field: xstockstrat.common.v1.TemplateOperation operation = 1;
+     */
+    operation: TemplateOperation;
+    /**
+     * @generated from field: xstockstrat.indicators.v1.FormulaTemplate template = 2;
+     */
+    template?: FormulaTemplate | undefined;
+};
+/**
+ * Describes the message xstockstrat.indicators.v1.ManageTemplateRequest.
+ * Use `create(ManageTemplateRequestSchema)` to create a new message.
+ */
+export declare const ManageTemplateRequestSchema: GenMessage<ManageTemplateRequest>;
+/**
+ * @generated from message xstockstrat.indicators.v1.InstantiateTemplateRequest
+ */
+export type InstantiateTemplateRequest = Message<"xstockstrat.indicators.v1.InstantiateTemplateRequest"> & {
+    /**
+     * @generated from field: string template_id = 1;
+     */
+    templateId: string;
+    /**
+     * Saga-only (internal, SAN-bound xstockstrat-analysis): copy several templates as hidden
+     * pending rows under intent_id, resolved later by ResolveTemplateIntent.
+     *
+     * @generated from field: repeated string template_ids = 2;
+     */
+    templateIds: string[];
+    /**
+     * @generated from field: string intent_id = 3;
+     */
+    intentId: string;
+};
+/**
+ * Describes the message xstockstrat.indicators.v1.InstantiateTemplateRequest.
+ * Use `create(InstantiateTemplateRequestSchema)` to create a new message.
+ */
+export declare const InstantiateTemplateRequestSchema: GenMessage<InstantiateTemplateRequest>;
+/**
+ * @generated from message xstockstrat.indicators.v1.InstantiateTemplateResponse
+ */
+export type InstantiateTemplateResponse = Message<"xstockstrat.indicators.v1.InstantiateTemplateResponse"> & {
+    /**
+     * @generated from field: xstockstrat.indicators.v1.FormulaDefinition formula = 1;
+     */
+    formula?: FormulaDefinition | undefined;
+    /**
+     * saga path: template_id -> new formula_id
+     *
+     * @generated from field: map<string, string> formula_ids_by_template = 2;
+     */
+    formulaIdsByTemplate: {
+        [key: string]: string;
+    };
+};
+/**
+ * Describes the message xstockstrat.indicators.v1.InstantiateTemplateResponse.
+ * Use `create(InstantiateTemplateResponseSchema)` to create a new message.
+ */
+export declare const InstantiateTemplateResponseSchema: GenMessage<InstantiateTemplateResponse>;
+/**
+ * @generated from message xstockstrat.indicators.v1.ResolveTemplateIntentRequest
+ */
+export type ResolveTemplateIntentRequest = Message<"xstockstrat.indicators.v1.ResolveTemplateIntentRequest"> & {
+    /**
+     * @generated from field: string intent_id = 1;
+     */
+    intentId: string;
+    /**
+     * true = make the pending copies visible; false = delete them
+     *
+     * @generated from field: bool commit = 2;
+     */
+    commit: boolean;
+};
+/**
+ * Describes the message xstockstrat.indicators.v1.ResolveTemplateIntentRequest.
+ * Use `create(ResolveTemplateIntentRequestSchema)` to create a new message.
+ */
+export declare const ResolveTemplateIntentRequestSchema: GenMessage<ResolveTemplateIntentRequest>;
+/**
+ * @generated from message xstockstrat.indicators.v1.ResolveTemplateIntentResponse
+ */
+export type ResolveTemplateIntentResponse = Message<"xstockstrat.indicators.v1.ResolveTemplateIntentResponse"> & {
+    /**
+     * @generated from field: int32 affected = 1;
+     */
+    affected: number;
+};
+/**
+ * Describes the message xstockstrat.indicators.v1.ResolveTemplateIntentResponse.
+ * Use `create(ResolveTemplateIntentResponseSchema)` to create a new message.
+ */
+export declare const ResolveTemplateIntentResponseSchema: GenMessage<ResolveTemplateIntentResponse>;
 /**
  * @generated from enum xstockstrat.indicators.v1.SandboxExitReason
  */
@@ -955,5 +1117,43 @@ export declare const IndicatorsService: GenService<{
         methodKind: "unary";
         input: typeof ListFundamentalMetricsRequestSchema;
         output: typeof ListFundamentalMetricsResponseSchema;
+    };
+    /**
+     * Template catalog (feature 224). List/read: any authenticated caller. Manage: ADMIN only.
+     *
+     * @generated from rpc xstockstrat.indicators.v1.IndicatorsService.ListTemplates
+     */
+    listTemplates: {
+        methodKind: "unary";
+        input: typeof ListTemplatesRequestSchema;
+        output: typeof ListTemplatesResponseSchema;
+    };
+    /**
+     * @generated from rpc xstockstrat.indicators.v1.IndicatorsService.ManageTemplate
+     */
+    manageTemplate: {
+        methodKind: "unary";
+        input: typeof ManageTemplateRequestSchema;
+        output: typeof FormulaTemplateSchema;
+    };
+    /**
+     * Copies a formula template into a private formula owned by the x-user-id caller.
+     *
+     * @generated from rpc xstockstrat.indicators.v1.IndicatorsService.InstantiateTemplate
+     */
+    instantiateTemplate: {
+        methodKind: "unary";
+        input: typeof InstantiateTemplateRequestSchema;
+        output: typeof InstantiateTemplateResponseSchema;
+    };
+    /**
+     * Internal (SAN-bound xstockstrat-analysis): commits or aborts a strategy-template saga's copies.
+     *
+     * @generated from rpc xstockstrat.indicators.v1.IndicatorsService.ResolveTemplateIntent
+     */
+    resolveTemplateIntent: {
+        methodKind: "unary";
+        input: typeof ResolveTemplateIntentRequestSchema;
+        output: typeof ResolveTemplateIntentResponseSchema;
     };
 }>;
