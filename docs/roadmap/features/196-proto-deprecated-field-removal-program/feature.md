@@ -1,11 +1,11 @@
 # Feature: proto-deprecated-field-removal-program
 
-**Type**: tech-debt (breaking-change program — governance-gated; NOT a bug fix)
-**Development Branch**: _unassigned_ (design-only draft; when implemented, `feature/<slug>` per SDD)
+**Type**: tech-debt (non-breaking response-edge omission — no `.proto` change; NOT a bug fix)
+**Development Branch**: `feature/proto-deprecated-field-removal-program`
 **Defect Report**: `docs/reports/2026-09-18-deprecated-fields-in-rpc-contracts-defect.md` (Defect 2)
 **Severity**: SEV-3 (planned tech-debt; no runtime misbehavior)
 **Created**: 2026-09-19
-**Last Updated**: 2026-09-19
+**Last Updated**: 2026-10-08
 
 ---
 
@@ -19,6 +19,8 @@
 | 2026-09-19 | `design-approved` (unchanged) | /sdd-review | Re-ran product-spec review (operator request). Overlap CLEAN. Criteria FAIL (spec framed removal, contradicting the approved omission design; @AC-1/@AC-4 asserted rejected behavior; no @FR-N). **Reconciled:** rewrote product-spec to the omission approach, added FR-1..FR-6, annotated @AC-1/@AC-4 out-of-scope + added @AC-5..@AC-9 with @FR tags. Ready for /sdd-spec. |
 | 2026-09-19 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 7 steps, all `blocked` on the FR-3 consumer-confirmation gate (Step 1). Encodes the response-edge omissions as gated steps per design.md: marketdata Bar.timeframe @ scanBars/stream (Steps 2-3), ingest BackfillJob.timeframe @ job_row_to_proto (Steps 4-5), KEEP guard for Watchlist.symbols (Step 6), proto-integrity/enum-retention/request-only no-op verification (Step 7). Zero-ship if the gate never clears (accepted park-equivalent). All @AC-2/3/5/6/7/8/9 covered; @AC-1/@AC-4 out-of-scope by design. |
 | 2026-09-26 | `implementation-ready` (unchanged) | /sdd-execute (sequential) | In-repo Step 1 reader audit (half a) completed & recorded in context.md: **no internal consumer** (analysis/agent/UI) reads the gated `Bar.timeframe`/`BackfillJob.timeframe` strings — all read `timeframe_enum`. Feature **parked**: Steps 1–7 stay `blocked` on the **external** half (BSR-consumer enumeration + Proto Reviewer/Platform Lead sign-off), not dischargeable autonomously. Zero code change (accepted park). |
+| 2026-10-08 | `implementation-ready` → `in-progress` | /sdd-execute (sequential, autonomous) | **FR-3 gate cleared.** Operator (repo owner, acting as Proto Reviewer + Platform Lead) attested no external BSR consumers and declared the 053/080/143 deprecation window closed; in-repo reader audit re-run on `main-dev` @ `a988b1d6` — still no consumer reads the gated strings. Step 1 `done`; Steps 2–7 unblocked → `pending`. Type header re-labelled to the approved non-breaking design. |
+| 2026-10-08 | `in-progress` → `code-completed` | /sdd-execute (sequential, autonomous) | 7/7 steps done on `feature/proto-deprecated-field-removal-program`. Deprecated `Bar.timeframe` (marketdata: `scanBars`, stream, + cold/fallback source-bar paths — D-1) and `BackfillJob.timeframe` (ingest `job_row_to_proto`) strings no longer populated in responses; enums kept; `barFromAlpaca`/`InsertBars` untouched; `Watchlist.symbols` KEEP guards added. Proto unchanged (`buf breaking` clean). Scenarios promoted (C-16). |
 
 ---
 

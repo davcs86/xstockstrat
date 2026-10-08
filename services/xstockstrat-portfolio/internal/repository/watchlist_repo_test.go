@@ -57,3 +57,15 @@ func TestBindingsByWatchlist_SingleAnyArrayQuery(t *testing.T) {
 		t.Fatalf("wl-b[0] field mismatch: %+v", got["wl-b"][0])
 	}
 }
+
+// TestBindingSymbols_MirrorsBindings_Feature196 — the repo is the real producer of the KEEP field
+// Watchlist.symbols (feature 196 @AC-2): it mirrors every binding's symbol in order.
+func TestBindingSymbols_MirrorsBindings_Feature196(t *testing.T) {
+	got := bindingSymbols([]*portfoliov1.WatchlistBinding{{Symbol: "AAPL"}, {Symbol: "MSFT", StrategyId: "s1"}})
+	if len(got) != 2 || got[0] != "AAPL" || got[1] != "MSFT" {
+		t.Fatalf("expected [AAPL MSFT], got %v", got)
+	}
+	if bindingSymbols(nil) != nil {
+		t.Fatalf("expected nil for no bindings")
+	}
+}

@@ -21,9 +21,6 @@ const (
 	// streamReadLimit lifts coder/websocket's default 32 KiB frame cap; Alpaca data
 	// frames batching many symbols can exceed it.
 	streamReadLimit = 4 << 20 // 4 MiB
-	// streamBarTimeframe labels streamed bars "1m": Alpaca's WS emits 1-minute bars only.
-	// Streamed bars are forwarded to live subscribers and never persisted (see StartBarIngestPoller).
-	streamBarTimeframe = "1m"
 )
 
 // streamMessage is one element of an Alpaca stream frame (a JSON array). The `T` field
@@ -244,7 +241,7 @@ func (m *streamManager) dispatch(msg *streamMessage) {
 			Symbol: msg.S, Time: timestamppb.New(t),
 			Open: msg.O, High: msg.H, Low: msg.L, Close: msg.C,
 			Volume: msg.V, Vwap: msg.VW, TradeCount: msg.N,
-			Timeframe: streamBarTimeframe, Source: "alpaca", //nolint:staticcheck // SA1019: deprecated string timeframe written during the one-release deprecation window (053)
+			Source: "alpaca", // deprecated string timeframe intentionally omitted (feature 196)
 			// A streamed bar genuinely IS a 1-minute bar. timeframe.FromString("1m") returns
 			// UNSPECIFIED by design (sub-15m intervals were removed so callers *requesting*
 			// them error), so route nothing through it here — label explicitly.

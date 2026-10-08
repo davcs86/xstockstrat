@@ -170,3 +170,91 @@ Replacement enum: `timeframe_enum`.
 Only then may Steps 2–7 move off `blocked`. Until then 196 ships **zero code change** (the design's accepted park-equivalent outcome — `design.md:84–86`).
 
 **Sequential run**: parked 196, advanced to feature 213. No 196 files other than this context.md changed.
+
+---
+
+## Session 2026-10-08 — sdd-execute (sequential, operator-authorized autonomous run)
+
+**Operator decisions this session (AskUserQuestion, recorded verbatim):**
+- FR-3 gate: **"Sign off, no ext consumers"** — the repo owner, acting as **Proto Reviewer + Platform
+  Lead**, attests that no external consumer reads the `buf.build/xstockstrat/contracts` BSR module and
+  declares the feature-053/080/143 deprecation window for `Bar.timeframe` / `BackfillJob.timeframe`
+  (string) **closed**. This discharges the external half of Step 1.
+- Execution mode: **fully autonomous** — the operator's reply stands in for the §5.1b/§5.4
+  confirmations and the checkpoint gates (checkpoints are still reported, not gated).
+
+### Step 1 — FR-3 consumer-confirmation gate [done]
+- In-repo half re-run against `main-dev` @ `a988b1d6` (the 2026-09-26 audit predates features 211–224):
+  - analysis / agent / ingest Python: `grep -rnE '\.timeframe\b' services/*/app --include=*.py | grep -v _enum`
+    → only `agent/app/client.py:772` (`CoverageGap.timeframe`, a `Timeframe` **enum** field) and an
+    ingest docstring. No read of the gated strings.
+  - Go: every `.Timeframe`/`GetTimeframe()` hit is a **request** field (`req.Timeframe`, out of scope
+    FR-5) or `InsertBars`' write of source bars (`marketdata_repo.go:73`, EXCLUDE edge).
+  - UI: no `.timeframe` read anywhere in `services/xstockstrat-ui/src`; backfills page binds
+    `timeframeEnum` (`page.tsx:151`).
+- External half: discharged by the operator sign-off above.
+- Visible side-effect (not a contract break): the agent's `query_bars` tool serializes bars with
+  `MessageToDict`, so its per-bar `"timeframe"` key disappears while `"timeframe_enum"` stays. No agent
+  test or strat-lab skill reads that key.
+- Files modified: `feature.md` (Development Branch assigned, Type re-labelled to the approved
+  non-breaking design — closes the 2026-09-26 review NOTE), `implementation-spec.md` (Step 1 → done,
+  Steps 2–7 → pending), `status.md` (→ in-progress), `context.md`.
+- Deviations: none.
+
+### Steps 2–3 — marketdata `Bar.timeframe` omission + tests [done]
+- `scanBars` (shared by `QueryBars`/`QueryRecentBars`/`QueryBarsBatch`) and the stream `dispatch` no
+  longer set the deprecated string; `TimeframeEnum` unchanged. The two service paths that return
+  `barFromAlpaca` bars directly now clear it after persistence (D-1). `barFromAlpaca` and `InsertBars`
+  untouched (EXCLUDE).
+- TDD red (before the change): `TestDispatchBarCarries1MinEnum` got "1m";
+  `TestScanBars_OmitsDeprecatedTimeframeString` got "1d"; `TestBatchGetBars_ColdPathOmitsDeprecatedTimeframe`
+  got "1d"; `TestTruncateBars_OmitsDeprecatedTimeframe` got "1d" (both branches). Green after.
+- Verification: `go test ./... -race` all ok; CI-scoped coverage **70.9%** (≥40%); `golangci-lint run`
+  → 0 issues.
+- Files modified: `services/xstockstrat-marketdata/internal/{repository/marketdata_repo.go,repository/marketdata_repo_test.go,alpaca/stream.go,alpaca/stream_test.go,service/marketdata_service.go,service/marketdata_service_test.go}`
+- Deviations: D-1, D-2, D-3, D-4 (Deviation Log). Steps committed together so no commit is red.
+
+### Steps 4–5 — ingest `BackfillJob.timeframe` omission + tests [done]
+- `job_row_to_proto` drops the `timeframe=` keyword; `timeframe_enum` unchanged. Request-side string
+  handling untouched (FR-5). Covers all three read paths (Get/List/Cancel) since they share the mapper.
+- TDD red: 5/6 `TestJobRowTimeframeEnum` cases failed (got the stored string); the `""` case passed
+  trivially. Green after: `pytest --cov=app` 308 passed, **79.99%**; `ruff check` / `ruff format --check` clean.
+- Files modified: `services/xstockstrat-ingest/app/handlers/servicer.py`, `services/xstockstrat-ingest/tests/test_ingest_servicer.py`
+- Deviations: D-5 (test home).
+
+### Step 6 — KEEP guard for `Watchlist.symbols` [done]
+- Added `TestWatchlistSymbolsMirror_KeptForCapAndResponses_Feature196` (service) and
+  `TestBindingSymbols_MirrorsBindings_Feature196` (repository). No production code changed.
+- TDD red by mutation (reverted, `git diff` empty): cap computed without `existing.Symbols` → add "D"
+  returned `<nil>` instead of InvalidArgument; `bindingSymbols` emptied → repo guard FAIL. Green after
+  restore. Full suite `-race` ok, CI-scoped coverage **54.4%**, `golangci-lint` 0 issues.
+- Files modified: `services/xstockstrat-portfolio/internal/service/watchlist_service_test.go`,
+  `services/xstockstrat-portfolio/internal/repository/watchlist_repo_test.go`
+- Deviations: D-6.
+
+### Step 7 — proto integrity / enum retention / request-only no-op [done]
+- `git diff origin/main-dev -- packages/proto/` empty (no `.proto`, no generated-stub change); `buf lint`
+  OK; `buf breaking --against main-dev` → no change (buf 1.72.0 installed via `go install`, D-4 style).
+- Deprecated enum members (`TIMEFRAME_1MIN/_15MIN/_1HOUR`, `ENVIRONMENT_DEV`, `VALUE_TYPE_FLOAT_MAP`)
+  still defined + `[deprecated = true]`; 38 `deprecated = true` occurrences (33 at triage + later features; none removed).
+- Request-only: trading identity is header-authoritative (`propagation.go:36` `UserID: first(md.Get("x-user-id"))`).
+- TDD: N/A (verification only).
+
+### Integration (ALL-DONE)
+- C-16 promotion: @AC-8 → `services/xstockstrat-marketdata/acceptance/proto-deprecated-field-removal-program.feature`;
+  @AC-6 → ingest suite; @AC-2/@AC-7 → portfolio suite; @AC-3/@AC-5/@AC-9 → `docs/sdd/business-rules/platform.feature`.
+  @AC-1/@AC-4 not promoted (`@out-of-scope @rejected-removal`).
+- Teardown (context drift, by hand — `/context-forge:context-constitution` is not available in this
+  session): `services/xstockstrat-marketdata/CLAUDE.md` (stream bars "carry the canonical `1m`
+  timeframe" → labelled via `timeframe_enum`, string not populated) and
+  `services/xstockstrat-marketdata/docs/context-constitution.md` MARKETDATA-1 (string written back onto
+  the **source** bar for `InsertBars`, never returned). Re-read `packages/proto/docs/context-constitution.md`
+  PROTO-2 + the `timeframe` naming note: still true (fields remain defined). Ingest/portfolio CLAUDE.md
+  do not describe the changed fields.
+- Merge-order: 196 has no row in `merge-order.md`.
+
+## Session 2026-10-08 — sdd-execute
+**Steps this session**: 1–7
+**Progress**: 7 done / 7 total
+**Stopped at**: all complete
+**Next**: merge the integration PR; then `/promote`.

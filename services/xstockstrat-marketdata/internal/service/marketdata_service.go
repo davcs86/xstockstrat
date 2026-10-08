@@ -328,12 +328,21 @@ func (s *MarketDataService) fetchAndCacheBars(ctx context.Context, symbol, tf st
 // NEWEST page when recent, else the first page — used only on the cache-write-failure fallback.
 func truncateBars(live []*marketdatav1.Bar, pageSize int, recent bool) []*marketdatav1.Bar {
 	if len(live) <= pageSize {
-		return live
+		return omitDeprecatedTimeframe(live)
 	}
 	if recent {
-		return live[len(live)-pageSize:]
+		return omitDeprecatedTimeframe(live[len(live)-pageSize:])
 	}
-	return live[:pageSize]
+	return omitDeprecatedTimeframe(live[:pageSize])
+}
+
+// omitDeprecatedTimeframe clears the deprecated string timeframe on source bars returned to a caller
+// (feature 196). Call only after InsertBars, which persists that field, and before bars are shared.
+func omitDeprecatedTimeframe(bars []*marketdatav1.Bar) []*marketdatav1.Bar {
+	for _, b := range bars {
+		b.Timeframe = "" //nolint:staticcheck // SA1019: clearing the deprecated field (feature 196)
+	}
+	return bars
 }
 
 // defaultBarLookback sizes the implicit window to cover at least `bars` bars of the timeframe,
@@ -685,6 +694,9 @@ func (s *MarketDataService) BatchGetBars(ctx context.Context, req *marketdatav1.
 						}
 					}
 				}
+			}
+			for _, bars := range coldMap {
+				omitDeprecatedTimeframe(bars)
 			}
 			return coldMap, nil
 		})

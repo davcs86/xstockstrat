@@ -1,6 +1,6 @@
 # Implementation Spec: proto-deprecated-field-removal-program
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-09-19
 **Feature**: `docs/roadmap/features/196-proto-deprecated-field-removal-program/feature.md`
 **Total Steps**: 7
@@ -73,7 +73,7 @@ omission design.
 
 ### Step 1 — docs: FR-3 per-field consumer-confirmation gate (BLOCKING prerequisite for Steps 2–7)
 
-**Status**: `blocked`
+**Status**: `done`
 **Service**: `docs/` (governance gate; recorded in `context.md`)
 **Files**:
 - `docs/roadmap/features/196-proto-deprecated-field-removal-program/context.md` — modify (record the audit result, the BSR-window-closure announcement, and sign-off)
@@ -129,7 +129,7 @@ Proto/Platform sign-off the omission steps rely on.)
 
 ### Step 2 — service: Omit deprecated `Bar.timeframe` string at the two pure response edges (marketdata)
 
-**Status**: `blocked`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/repository/marketdata_repo.go` — modify (`scanBars`, the DB→proto read edge)
@@ -178,7 +178,7 @@ BSR-published module (no field/type removal, deprecation-comment intact).
 
 ### Step 3 — test: marketdata Bar.timeframe omission + EXCLUDE / GetBars regression guard
 
-**Status**: `blocked`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/repository/marketdata_repo_test.go` — modify | create (assert `scanBars` output)
@@ -222,7 +222,7 @@ verification (a `test` step is still required). Also run
 
 ### Step 4 — service: Omit deprecated `BackfillJob.timeframe` string at `job_row_to_proto` (ingest)
 
-**Status**: `blocked`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/handlers/servicer.py` — modify (`job_row_to_proto`)
@@ -259,7 +259,7 @@ behavioral assertion runs in Step 5.
 
 ### Step 5 — test: ingest BackfillJob.timeframe omission
 
-**Status**: `blocked`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/test_backfill_jobs.py` — modify (add a `job_row_to_proto` case asserting `timeframe` unset while `timeframe_enum` stays populated)
@@ -291,7 +291,7 @@ passes. Also run `cd services/xstockstrat-ingest && ruff check . && ruff format 
 
 ### Step 6 — test: KEEP-field regression guard (portfolio Watchlist.symbols)
 
-**Status**: `blocked`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_service_test.go` — modify | create
@@ -331,7 +331,7 @@ guard; a `test` step is still required). Also run
 
 ### Step 7 — test: proto-integrity, enum-retention, and request-only no-op verification
 
-**Status**: `blocked`
+**Status**: `done`
 **Service**: `packages/proto` (+ cross-service verification)
 **Files**:
 - (verification only — no source file modified)
@@ -385,3 +385,50 @@ guard; a `test` step is still required). Also run
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### D-1 (Step 2) — two more response edges for `barFromAlpaca` bars
+- **Spec said**: change `scanBars` and the stream edge only; `barFromAlpaca` is EXCLUDE.
+- **Found**: `barFromAlpaca` bars also reach callers **directly** on two service paths —
+  `BatchGetBars`' cold path (the singleflight closure returns the source `coldMap`) and the GetBars
+  cache-write-failure fallback (`truncateBars(live, …)`). Omitting only at `scanBars` would leave the
+  deprecated string populated on cold/fallback reads, so consumers would see it intermittently.
+- **Done**: `internal/service/marketdata_service.go` — `omitDeprecatedTimeframe` clears the string on
+  those bars **after** `InsertBars` has persisted them (the EXCLUDE invariant holds: the DB write still
+  reads the populated field) and inside the singleflight closure, before the map is shared.
+- **Disposition**: in-scope completion of FR-2 ("every pure response edge", C-10); operator authorized
+  autonomous execution. Tests in `internal/service/marketdata_service_test.go`.
+
+### D-2 (Step 2) — orphaned `streamBarTimeframe` const removed
+- The stream edge was the const's only reader; it is deleted (`unused` lint) and the in-package test
+  comment that named it updated.
+
+### D-3 (Step 3) — `@AC-8` round-trip proven by unit seams, not a live DB
+- `InsertBars`/`QueryBars` run on the concrete `pgxpool` and are not mockable; no DB is started (HARD
+  CONSTRAINT). `@AC-8` is covered by: `scanBars` via pgxmock rows (`TestScanBars_OmitsDeprecatedTimeframeString`),
+  the unchanged `barFromAlpaca` guards (`client_test.go` `TestGetBars_TranslatesCanonicalTimeframe`,
+  the multi-symbol assertion at `:488` — both still assert the string is kept), and the unchanged
+  `InsertBars` arg (`b.Timeframe`). **Disposition**: offline verification; live round-trip deferred to
+  the dev deploy.
+
+### D-4 (tooling) — golangci-lint rebuilt
+- The host `golangci-lint` was built with go1.25 and refuses the go1.27 module; v2.13.1 (the pinned
+  version) was rebuilt with `GOTOOLCHAIN=go1.27.0`. **Disposition**: CI-equivalent fallback.
+
+### D-5 (Step 5) — `job_row_to_proto` assertions live in `test_ingest_servicer.py`
+- **Spec said**: modify `tests/test_backfill_jobs.py`.
+- **Found**: that file tests the asyncpg repository SQL only; the mapper's existing coverage is
+  `tests/test_ingest_servicer.py::TestJobRowTimeframeEnum`, which asserted the string was **echoed**
+  (now the superseded behaviour). Adding a parallel test in the repo-SQL file would duplicate it and
+  leave the old assertions red.
+- **Done**: rewrote the three `TestJobRowTimeframeEnum` cases to assert the string is omitted and the
+  (hardcoded) enum kept. `test_cancel_backfill.py` asserts only `timeframe_enum` — unchanged.
+- **Disposition**: test home corrected; same behaviour, C-13 single-consumer literals kept inline.
+
+### D-6 (Step 6) — guard placed beside the watchlist tests + a repo-producer guard
+- **Spec said**: `internal/service/portfolio_service_test.go`.
+- **Done**: the watchlist fakes and helpers live in `internal/service/watchlist_service_test.go`, so the
+  service guard is there; a second guard on the **real** mirror producer (`bindingSymbols`) went into
+  `internal/repository/watchlist_repo_test.go`, because the service fakes copy the mirror themselves
+  and could not catch an omission at the repo edge.
+- **Disposition**: same intent (@AC-2/@AC-7), stronger coverage; no production code changed.
+
