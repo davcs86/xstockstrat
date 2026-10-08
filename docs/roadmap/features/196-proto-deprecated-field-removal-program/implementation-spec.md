@@ -291,7 +291,7 @@ passes. Also run `cd services/xstockstrat-ingest && ruff check . && ruff format 
 
 ### Step 6 — test: KEEP-field regression guard (portfolio Watchlist.symbols)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_service_test.go` — modify | create
@@ -423,3 +423,12 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Done**: rewrote the three `TestJobRowTimeframeEnum` cases to assert the string is omitted and the
   (hardcoded) enum kept. `test_cancel_backfill.py` asserts only `timeframe_enum` — unchanged.
 - **Disposition**: test home corrected; same behaviour, C-13 single-consumer literals kept inline.
+
+### D-6 (Step 6) — guard placed beside the watchlist tests + a repo-producer guard
+- **Spec said**: `internal/service/portfolio_service_test.go`.
+- **Done**: the watchlist fakes and helpers live in `internal/service/watchlist_service_test.go`, so the
+  service guard is there; a second guard on the **real** mirror producer (`bindingSymbols`) went into
+  `internal/repository/watchlist_repo_test.go`, because the service fakes copy the mirror themselves
+  and could not catch an omission at the repo edge.
+- **Disposition**: same intent (@AC-2/@AC-7), stronger coverage; no production code changed.
+

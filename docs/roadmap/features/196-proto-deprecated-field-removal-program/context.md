@@ -221,3 +221,13 @@ Only then may Steps 2–7 move off `blocked`. Until then 196 ships **zero code c
   trivially. Green after: `pytest --cov=app` 308 passed, **79.99%**; `ruff check` / `ruff format --check` clean.
 - Files modified: `services/xstockstrat-ingest/app/handlers/servicer.py`, `services/xstockstrat-ingest/tests/test_ingest_servicer.py`
 - Deviations: D-5 (test home).
+
+### Step 6 — KEEP guard for `Watchlist.symbols` [done]
+- Added `TestWatchlistSymbolsMirror_KeptForCapAndResponses_Feature196` (service) and
+  `TestBindingSymbols_MirrorsBindings_Feature196` (repository). No production code changed.
+- TDD red by mutation (reverted, `git diff` empty): cap computed without `existing.Symbols` → add "D"
+  returned `<nil>` instead of InvalidArgument; `bindingSymbols` emptied → repo guard FAIL. Green after
+  restore. Full suite `-race` ok, CI-scoped coverage **54.4%**, `golangci-lint` 0 issues.
+- Files modified: `services/xstockstrat-portfolio/internal/service/watchlist_service_test.go`,
+  `services/xstockstrat-portfolio/internal/repository/watchlist_repo_test.go`
+- Deviations: D-6.
