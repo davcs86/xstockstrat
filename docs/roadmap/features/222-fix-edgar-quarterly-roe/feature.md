@@ -6,6 +6,8 @@
 **Severity**: SEV-2
 **Created**: 2026-10-06
 **Last Updated**: 2026-10-06
+**Committed to main**: 595bd1d4effdc73153752d8dce5cee69d1a6f656
+**Launched date**: 2026-10-08
 
 ---
 
@@ -16,6 +18,7 @@
 | 2026-10-06 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from defect report `docs/reports/2026-10-06-edgar-quarterly-roe-not-annualized-defect.md` |
 | 2026-10-06 | `draft` → `implementation-ready` → `in-progress` → `code-completed` | /sdd-spec + /sdd-execute sequential | quarterly ROE on a TTM basis (annualize-available fallback) |
 
+| 2026-10-08 | `code-completed` → `launched` | CI workflow | Promoted via PR #1233; committed 595bd1d4effdc73153752d8dce5cee69d1a6f656 |
 ---
 
 ## Artifacts

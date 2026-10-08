@@ -21,3 +21,10 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 
 - Operator chose ±0.08 muted band, two tails (AskUserQuestion). design.md written; status advanced through implementation to code-completed.
 - `compositeColor` (text-buy / text-muted-foreground / text-sell) replaces `scoreColor` at the 3 composite render sites; 199 @AC-8 e2e colour assertion superseded (C-16 CHANGE).
+
+## Session 2026-10-08 (CI: feature status automation)
+
+- Promotion PR #1233 merged to main
+- Feature promoted and committed: 595bd1d4effdc73153752d8dce5cee69d1a6f656
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-10-08

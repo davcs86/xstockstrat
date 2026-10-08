@@ -21,3 +21,10 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Operator: derivation_version column + conditional upgrade. Root cause confirmed from code (DO NOTHING pin + 216 price-only recovery ⇒ statement columns never rewritten).
 - Migration 008 (after 217's 007 — merge-order row added); stacked on 222. Status → code-completed.
 - Next operational step: one fundamentals re-backfill after 222 + 223 deploy (runbook § Re-deriving stored periods).
+
+## Session 2026-10-08 (CI: feature status automation)
+
+- Promotion PR #1233 merged to main
+- Feature promoted and committed: 595bd1d4effdc73153752d8dce5cee69d1a6f656
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-10-08

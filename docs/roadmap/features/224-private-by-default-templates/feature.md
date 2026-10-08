@@ -3,6 +3,8 @@
 **Development Branch**: `feature/private-by-default-templates`
 **Created**: 2026-10-06
 **Last Updated**: 2026-10-07
+**Committed to main**: 595bd1d4effdc73153752d8dce5cee69d1a6f656
+**Launched date**: 2026-10-08
 
 ---
 
@@ -18,6 +20,7 @@
 | 2026-10-07 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 done (sequential run started) |
 | 2026-10-07 | `in-progress` → `code-completed` | /sdd-execute | All 41 steps done; integration PR to `main-dev` |
 
+| 2026-10-08 | `code-completed` → `launched` | CI workflow | Promoted via PR #1233; committed 595bd1d4effdc73153752d8dce5cee69d1a6f656 |
 ---
 
 ## Artifacts

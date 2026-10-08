@@ -982,3 +982,10 @@ OQ-4 to OQ-6 remain for /sdd-design.
   - Per-service `acceptance/private-by-default-templates.feature` files: indicators 11, analysis 9, ingest 6, ui 1, agent 1.
   - 9 cross-service scenarios were appended to `docs/sdd/business-rules/platform.feature`: AC-6/15/18/19/23/26/32/35/36.
   - AC-23 partly overlaps `@feature-186 @AC-4`; both are kept.
+
+## Session 2026-10-08 (CI: feature status automation)
+
+- Promotion PR #1233 merged to main
+- Feature promoted and committed: 595bd1d4effdc73153752d8dce5cee69d1a6f656
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-10-08

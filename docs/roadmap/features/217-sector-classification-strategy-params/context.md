@@ -172,3 +172,10 @@
 
 - 2026-10-06 (post-merge of 223): 223 landed `008` before 217, so 217's migration renumbered
   `007_symbol_classification` → `009_symbol_classification` (007 unused); merge-order row marked resolved.
+
+## Session 2026-10-08 (CI: feature status automation)
+
+- Promotion PR #1233 merged to main
+- Feature promoted and committed: 595bd1d4effdc73153752d8dce5cee69d1a6f656
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-10-08

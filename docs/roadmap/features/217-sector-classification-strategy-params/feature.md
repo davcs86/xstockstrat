@@ -3,6 +3,8 @@
 **Development Branch**: `feature/sector-classification-strategy-params`
 **Created**: 2026-09-27
 **Last Updated**: 2026-10-06
+**Committed to main**: 595bd1d4effdc73153752d8dce5cee69d1a6f656
+**Launched date**: 2026-10-08
 
 ---
 
@@ -17,6 +19,7 @@
 | 2026-10-06 | `implementation-ready` (scope extended) | operator | Added @AC-14 (overrides reach fundamentals-input formulas); impl-spec needs re-spec — see context.md |
 | 2026-10-06 | `implementation-ready` → `in-progress` → `code-completed` | /sdd-execute sequential | All 18 steps executed on `feature/sector-classification-strategy-params`; re-spec folded into the Deviation Log; integration PR opened |
 
+| 2026-10-08 | `code-completed` → `launched` | CI workflow | Promoted via PR #1233; committed 595bd1d4effdc73153752d8dce5cee69d1a6f656 |
 ---
 
 ## Artifacts

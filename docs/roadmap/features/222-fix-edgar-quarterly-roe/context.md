@@ -22,3 +22,10 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Operator: fallback = annualize available quarters (Σ × 4/n); stored-row re-derivation via 223's derivation_version column.
 - Implemented TTM keyed on each fact's own period (avoids the 10-Q comparative-column fy/fp trap), Q4 = FY − Q1..Q3, PIT cutoff = the row's filing date. Status → code-completed.
 - The deferred fundamentals_macd_blend exit-rule backtests still wait on 223 + the re-backfill.
+
+## Session 2026-10-08 (CI: feature status automation)
+
+- Promotion PR #1233 merged to main
+- Feature promoted and committed: 595bd1d4effdc73153752d8dce5cee69d1a6f656
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-10-08
