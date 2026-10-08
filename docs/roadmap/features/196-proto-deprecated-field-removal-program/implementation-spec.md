@@ -1,6 +1,6 @@
 # Implementation Spec: proto-deprecated-field-removal-program
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-09-19
 **Feature**: `docs/roadmap/features/196-proto-deprecated-field-removal-program/feature.md`
 **Total Steps**: 7
@@ -73,7 +73,7 @@ omission design.
 
 ### Step 1 — docs: FR-3 per-field consumer-confirmation gate (BLOCKING prerequisite for Steps 2–7)
 
-**Status**: `blocked`
+**Status**: `done`
 **Service**: `docs/` (governance gate; recorded in `context.md`)
 **Files**:
 - `docs/roadmap/features/196-proto-deprecated-field-removal-program/context.md` — modify (record the audit result, the BSR-window-closure announcement, and sign-off)
@@ -129,7 +129,7 @@ Proto/Platform sign-off the omission steps rely on.)
 
 ### Step 2 — service: Omit deprecated `Bar.timeframe` string at the two pure response edges (marketdata)
 
-**Status**: `blocked`
+**Status**: `pending`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/repository/marketdata_repo.go` — modify (`scanBars`, the DB→proto read edge)
@@ -178,7 +178,7 @@ BSR-published module (no field/type removal, deprecation-comment intact).
 
 ### Step 3 — test: marketdata Bar.timeframe omission + EXCLUDE / GetBars regression guard
 
-**Status**: `blocked`
+**Status**: `pending`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/repository/marketdata_repo_test.go` — modify | create (assert `scanBars` output)
@@ -222,7 +222,7 @@ verification (a `test` step is still required). Also run
 
 ### Step 4 — service: Omit deprecated `BackfillJob.timeframe` string at `job_row_to_proto` (ingest)
 
-**Status**: `blocked`
+**Status**: `pending`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/handlers/servicer.py` — modify (`job_row_to_proto`)
@@ -259,7 +259,7 @@ behavioral assertion runs in Step 5.
 
 ### Step 5 — test: ingest BackfillJob.timeframe omission
 
-**Status**: `blocked`
+**Status**: `pending`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/test_backfill_jobs.py` — modify (add a `job_row_to_proto` case asserting `timeframe` unset while `timeframe_enum` stays populated)
@@ -291,7 +291,7 @@ passes. Also run `cd services/xstockstrat-ingest && ruff check . && ruff format 
 
 ### Step 6 — test: KEEP-field regression guard (portfolio Watchlist.symbols)
 
-**Status**: `blocked`
+**Status**: `pending`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_service_test.go` — modify | create
@@ -331,7 +331,7 @@ guard; a `test` step is still required). Also run
 
 ### Step 7 — test: proto-integrity, enum-retention, and request-only no-op verification
 
-**Status**: `blocked`
+**Status**: `pending`
 **Service**: `packages/proto` (+ cross-service verification)
 **Files**:
 - (verification only — no source file modified)

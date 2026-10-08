@@ -170,3 +170,33 @@ Replacement enum: `timeframe_enum`.
 Only then may Steps 2–7 move off `blocked`. Until then 196 ships **zero code change** (the design's accepted park-equivalent outcome — `design.md:84–86`).
 
 **Sequential run**: parked 196, advanced to feature 213. No 196 files other than this context.md changed.
+
+---
+
+## Session 2026-10-08 — sdd-execute (sequential, operator-authorized autonomous run)
+
+**Operator decisions this session (AskUserQuestion, recorded verbatim):**
+- FR-3 gate: **"Sign off, no ext consumers"** — the repo owner, acting as **Proto Reviewer + Platform
+  Lead**, attests that no external consumer reads the `buf.build/xstockstrat/contracts` BSR module and
+  declares the feature-053/080/143 deprecation window for `Bar.timeframe` / `BackfillJob.timeframe`
+  (string) **closed**. This discharges the external half of Step 1.
+- Execution mode: **fully autonomous** — the operator's reply stands in for the §5.1b/§5.4
+  confirmations and the checkpoint gates (checkpoints are still reported, not gated).
+
+### Step 1 — FR-3 consumer-confirmation gate [done]
+- In-repo half re-run against `main-dev` @ `a988b1d6` (the 2026-09-26 audit predates features 211–224):
+  - analysis / agent / ingest Python: `grep -rnE '\.timeframe\b' services/*/app --include=*.py | grep -v _enum`
+    → only `agent/app/client.py:772` (`CoverageGap.timeframe`, a `Timeframe` **enum** field) and an
+    ingest docstring. No read of the gated strings.
+  - Go: every `.Timeframe`/`GetTimeframe()` hit is a **request** field (`req.Timeframe`, out of scope
+    FR-5) or `InsertBars`' write of source bars (`marketdata_repo.go:73`, EXCLUDE edge).
+  - UI: no `.timeframe` read anywhere in `services/xstockstrat-ui/src`; backfills page binds
+    `timeframeEnum` (`page.tsx:151`).
+- External half: discharged by the operator sign-off above.
+- Visible side-effect (not a contract break): the agent's `query_bars` tool serializes bars with
+  `MessageToDict`, so its per-bar `"timeframe"` key disappears while `"timeframe_enum"` stays. No agent
+  test or strat-lab skill reads that key.
+- Files modified: `feature.md` (Development Branch assigned, Type re-labelled to the approved
+  non-breaking design — closes the 2026-09-26 review NOTE), `implementation-spec.md` (Step 1 → done,
+  Steps 2–7 → pending), `status.md` (→ in-progress), `context.md`.
+- Deviations: none.
