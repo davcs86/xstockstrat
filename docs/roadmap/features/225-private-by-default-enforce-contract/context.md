@@ -48,3 +48,21 @@
   `x-user-id: system` in analysis (`servicer.py:576` maps it to ""); (3) every in-process caller (live loop, pnl
   consumer, fundsignal producer) must be shown to send `x-user-id` or a SAN-bound grant.
 - Overlap findings: none (CLEAN).
+
+## Session 2026-10-09 — sdd-design Phase 0 + round 1 + operator gate
+
+- Phase 0 Recon: recon.md written (b82c100e). No promoted rule guarantees any removed allowance → no C-16 CHANGE.
+- Round-1 proposal: per-service identity helper first in every owner-scoped RPC (analysis 21 / indicators 10 / ingest 7;
+  exempt lists), analysis inbound `system` → PERMISSION_DENIED, bypass + body-user_id fallback + slug-holder fallback
+  removed, P&L consumer skips signals() when ownerless, 027 (D-1 + NOT NULL + drop strategy_scores, LOCK), 014 drops,
+  migration-rerun goto 26 + post-224 fixture, is_public removed from all write paths, descriptor-walk completeness test.
+- **Round-1 adversary: NEEDS WORK, no Floor breach.** (1) raising downs + golang-migrate dirty-before-down → wedged
+  dirty-recovery; `psql -f` exit check vacuous without ON_ERROR_STOP → harden test + DBA `migrate force` note;
+  (2) fail-open empty-owner defaults remain (`evaluator.for_owner("")`, pnl `()`, tick `uid==""`) and runtime header
+  guard misses 5 paths; (3) QueryPnLPatterns cross-user read; (4) 027 must also backfill child rows (026:32-42);
+  (5) take ACCESS EXCLUSIVE once + lock_timeout; (6) test churn across all 3 services incl. `IS_PUBLIC` import →
+  classification rule; (7) single identity helper per service + orphan removal; (8) AC-11 needs a real-schema proof;
+  (9) completeness test: system-without-grant case + EXEMPT equality; (10) extra doc drift sites.
+- **Operator decisions (AskUserQuestion 2026-10-09):** QueryPnLPatterns → **fix in 225** (owner-scoped,
+  headerless UNAUTHENTICATED, filter via pnl_positions.user_id, no migration; new FR + AC); AC-11 → **real-schema
+  check** in migration-rerun (rolled-back txn drops the column, executes the exact repository SQL); **run round 2**.
