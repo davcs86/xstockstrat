@@ -60,3 +60,43 @@
     (default false), so the classification refresh does not run in staging today.
 - Execution mode: fully autonomous (operator, 2026-10-08) — gates are reported, not waited on,
   except genuine forks like the one above.
+
+## Session 2026-10-08/09 — sdd-design Phase 1, round 1 (quick) + operator gate
+
+- Phase 0 Recon: recon.md written (commit ffec9b76). Key fact: analysis collapses fetch error / absence / gate-off
+  into `[]`/`None` — the guard needs an error-distinct signal.
+- Staging truth (query_fundamentals 2026-10-08): SCHD and SPY snapshots are finnhub rows with
+  missing_metrics = market_cap, pe_ratio, pb_ratio, dividend_yield, eps, roe, debt_to_equity.
+- **Round-1 proposal**: pure `app/services/fundamentals_guard.py` (requires_fundamentals; Availability
+  NOT_REQUIRED/AVAILABLE/UNAVAILABLE/UNKNOWN; `failed` set on the 4 loaders), new marketdata `GetEtfStatus`
+  RPC (FMP `isEtf`, on demand, TTL cache, no migration), `NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE = 5` +
+  `FundamentalsGap` label, backtest refusal via FormulaExecutionError-style path, live sentinel, opportunity
+  informational skip row, FR-4 eval-time.
+- **Round-1 adversary: NEEDS WORK, no Floor breach.** Objections carried into round 2:
+  1. Availability must test the metrics the strategy actually reads (formula_fund_map ∪ 198 operand metrics),
+     not a copied `hasCoreMetrics` six-list (false refusal on dividend_yield-only rows; false availability on
+     market_cap-only rows; cross-language drift) — C-16 `@AC-8 @feature-201`, C-18.
+  2. `fetch_failed` is keyed by symbol → a fundamentals outage taints non-fundamentals rows on the same
+     symbol; key per (symbol, strategy) / row-local.
+  3. Skip-before-eval suppresses exits (live `_apply_transition`, opportunities held-exit REDUCE trace) →
+     **deny entry** instead (live `deny_entry=`; opportunities skip only `rule == "entry"`).
+  4. Edgar-only/vendors-off `FailedPrecondition` reads as UNKNOWN (silent hold survives) → classify by status
+     code; absence ≠ outage (fails.md:2479).
+  5. "AVAILABLE if any channel" hides an empty required channel → UNAVAILABLE if any required channel is.
+  6. Backtest UNKNOWN still silent → add a run warning.
+  7. Live auditability/@AC-5 + set_strategy_live surface; @AC-4 wording is an operator question.
+  8. C-16 CHANGE sign-offs must be recorded.
+  9. Guard scope inconsistent across readiness writers (`:4682` vs `:3589/:3858/:5538`) → one rule, list every site,
+     per-surface positive tests (fails.md:2737).
+  10. Label over-built: single cache in marketdata, `optional bool is_etf`, negative-cache empty profiles,
+      persist `isEtf` via `source.Fundamentals` when profile already fetched.
+  11. Live WARN flood → log on state change. 12. Label nondeterminism → document best-effort / omit when unknown.
+- **Operator decisions at the round-1 gate (AskUserQuestion, 2026-10-09):**
+  - Opportunities: **non-actionable skip row** (action UNSPECIFIED, NULL composite, `fundamentals_gap` set,
+    badge); held positions keep exit/REDUCE rows. `@AC-4` text to be amended to "no actionable row".
+  - Live: **deny entry + one WARNING alert via notify and one WARN log on state change** (not per cycle);
+    `set_strategy_live` docstring-only (eval-time enforcement).
+  - **C-16 sign-off: both CHANGEs approved** — (1) `@AC-8 @feature-201` note: a symbol with no fundamentals is
+    refused / denied entry with a reason instead of silently holding; (2) `@AC-2 @feature-185` rescoped to
+    "symbols with fundamentals available" (ETF/no-filings becomes the skip row for fundamentals strategies).
+  - **Run round 2** before approval.
