@@ -35,3 +35,16 @@
   named phase; acceptance: AC-1 split per service (AC-8/AC-9), AC-2 now headered (isolates FR-2), AC-10
   non-owner, AC-3 backfill, AC-4 names every object, AC-11 is_public writes stopped, AC-12 replay-safe,
   concrete filenames in AC-5/6, AC-7 observable.
+
+## Session 2026-10-08 — sdd-review product-spec (run 2)
+
+- Product spec approved. Status: draft → spec-ready. Verdict: PASS WITH WARNINGS (no blockers, no Floor breach).
+- Warnings fixed in place: Affected Services rewritten to match FR-4/FR-6; FR-5 states `migration-rerun.sh`
+  replay-list + trigger-count changes (224/225 files only — pre-224 files out of scope); AC-12 rephrased; AC-7
+  concrete UUID; AC-11 covers seed upsert + template instantiate; AC-13 ingest down-file refusal; FR-1 wording
+  (analysis list RPCs return empty today, mutating RPCs PERMISSION_DENIED).
+- Carried to /sdd-design (reviewer NOTEs): (1) a headerless release-N `RunBacktest` history insert fails after
+  027 runs PRE_DEPLOY (best-effort insert — history row lost only); (2) FR-1 treatment of an ungranted inbound
+  `x-user-id: system` in analysis (`servicer.py:576` maps it to ""); (3) every in-process caller (live loop, pnl
+  consumer, fundsignal producer) must be shown to send `x-user-id` or a SAN-bound grant.
+- Overlap findings: none (CLEAN).

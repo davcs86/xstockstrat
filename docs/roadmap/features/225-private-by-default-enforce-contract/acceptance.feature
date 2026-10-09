@@ -57,7 +57,9 @@ Feature: private-by-default-enforce-contract
   Scenario: indicators no longer writes is_public, so the column can be dropped later
     Given a test schema where "indicators.formulas" has no "is_public" column
     When user "u-1" calls indicators "RegisterFormula" and then "UpdateFormula" for a new formula
-    Then both calls succeed
+    And indicators runs its startup formula seed upsert
+    And user "u-1" instantiates formula template "tmpl-1"
+    Then all four writes succeed
 
   @AC-5 @FR-5
   Scenario: A contract migration whose expand file is not yet on main is rejected
@@ -69,8 +71,8 @@ Feature: private-by-default-enforce-contract
   @AC-12 @FR-5
   Scenario: Contract up-files are replay-safe
     Given analysis 027 and ingest 014 have been applied once
-    When "scripts/migration-rerun.sh" replays every up-file from 001
-    Then every replay succeeds and the contracted objects stay absent
+    When "scripts/migration-rerun.sh" replays the 224 expand and 225 contract up-files
+    Then every replay succeeds, the contracted objects stay absent, and the N-1 trigger count is 0
 
   @AC-6 @FR-5
   Scenario: A contract migration's down-file refuses to run
@@ -82,7 +84,14 @@ Feature: private-by-default-enforce-contract
   @AC-7 @FR-6
   Scenario: mcp_client credentials resolve per user only
     Given an "mcp_client" source owned by user "u-1"
-    And a global config secret "ingest.mcp_credential.<uuid>" exists alongside u-1's per-user one
+    And a global config secret "ingest.mcp_credential.6f1c2a9e-3b7d-4e21-9a55-0c8d1e2f4b10" exists alongside u-1's per-user one
     When ingest resolves its bearer credential
-    Then it calls config "GetSecret" with "user_id" "u-1" on the per-user key "ingest.mcp_credential.<uuid>"
+    Then it calls config "GetSecret" with "user_id" "u-1" on the per-user key "ingest.mcp_credential.6f1c2a9e-3b7d-4e21-9a55-0c8d1e2f4b10"
     And the bearer sent is u-1's per-user value, not the global one
+
+  @AC-13 @FR-5
+  Scenario: The ingest contract down-file refuses to run
+    Given ingest migration "014_contract_signal_ownership.up.sql" is applied
+    When "014_contract_signal_ownership.down.sql" is executed
+    Then it raises an exception
+    And "to_regclass('ingest.signal_dedup_keys')" is still NULL

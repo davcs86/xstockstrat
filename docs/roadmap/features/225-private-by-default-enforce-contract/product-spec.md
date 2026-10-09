@@ -30,7 +30,7 @@ FR-1. Every owner-scoped RPC in `xstockstrat-analysis`, `xstockstrat-indicators`
 carries no `x-user-id` and no SAN-bound internal-caller grant with **`UNAUTHENTICATED`**, uniformly across
 the three services (operator decision 2026-10-08). An identified caller who does not own the object keeps
 today's code (`NOT_FOUND` / `PERMISSION_DENIED`). This removes the release-N headerless tolerance; it
-changes analysis's current `PERMISSION_DENIED` and indicators' `INVALID_ARGUMENT` for the headerless case,
+changes analysis's current headerless behaviour (`PERMISSION_DENIED` on mutating RPCs, an empty result on list RPCs) and indicators' `INVALID_ARGUMENT` for the headerless case,
 and removes ingest's slug-holder fallback for headerless calls.
 FR-2. indicators removes the `_INTERNAL_FORMULA_READERS` SAN-bound `analysis` bypass
 (`services/xstockstrat-indicators/app/handlers/servicer.py`). analysis reads formulas only as the
@@ -47,13 +47,13 @@ FR-4. The contract migrations drop exactly these release-N compatibility objects
   (superseded by `analysis.strategy_scores_v2`), plus FR-3. analysis has no N-1 trigger.
 - **indicators**: **no migration in 225.** Release-N code still writes `indicators.formulas.is_public`, and
   migrations run PRE_DEPLOY while release-N binaries still serve, so dropping the column now would fail
-  Register/UpdateFormula during rollout. 225 only stops the indicators repository from writing or reading
-  `is_public` (the column keeps its `DEFAULT FALSE`); the column drop is a follow-up contract release
+  Register/UpdateFormula during rollout. 225 stops every indicators write path from writing or reading `is_public` (Register, Update, seed
+  upsert, template instantiate) (the column keeps its `DEFAULT FALSE`); the column drop is a follow-up contract release
   (operator decision 2026-10-08). The `008` reservation is released.
 FR-5. Each contract migration carries `-- contract-of: <224 expand file>` within its first 5 lines (where
 `scripts/check-migration-contract.sh` reads it); the `migration-contract-gate` CI job accepts it only when
 that expand file is on `origin/main`. Each up-file is replay-safe (`IF EXISTS` / guarded `DO` blocks, per
-224 design §1) and is covered by `scripts/migration-rerun.sh`. Each `.down.sql` raises instead of
+224 design §1) and is added to `scripts/migration-rerun.sh`'s replay list (which replays only the 224 expand and 225 contract files — pre-224 files are not idempotent, see Out of Scope); its trigger-count check moves to expect 0 N-1 triggers after the contract. Each `.down.sql` raises instead of
 recreating dropped objects (so `migrate goto` below the contract is refused — DBA note).
 FR-6. No `LEGACY_GLOBAL` credential path exists to delete (224 did not ship `credential_scope`; ingest
 `013` header: prod had zero `mcp_client` sources). 225 keeps a regression guard that `mcp_client` bearer
@@ -69,9 +69,9 @@ resolution is per-user only.
 
 ## Affected Services
 
-- `xstockstrat-analysis` — headerless fail-closed, `backtest_runs.user_id` NOT NULL, `strategy_scores` drop, N-1 trigger drop
-- `xstockstrat-indicators` — bypass removal, headerless fail-closed, N-1 trigger/table drop
-- `xstockstrat-ingest` — headerless fail-closed, N-1 trigger drop, `LEGACY_GLOBAL` removal (if shipped)
+- `xstockstrat-analysis` — headerless fail-closed (`UNAUTHENTICATED`), `backtest_runs.user_id` D-1 re-backfill + NOT NULL, `strategy_scores` drop (contract `027`); no N-1 trigger exists here
+- `xstockstrat-indicators` — bypass removal, headerless fail-closed, stop writing `is_public` on every write path; **no migration**
+- `xstockstrat-ingest` — headerless fail-closed, drop N-1 trigger/function + `signal_dedup_keys` (contract `014`), per-user `mcp_client` credential regression guard
 
 ## Consumer Surface(s)
 
