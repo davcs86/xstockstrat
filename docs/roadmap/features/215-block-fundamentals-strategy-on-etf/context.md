@@ -100,3 +100,31 @@
     refused / denied entry with a reason instead of silently holding; (2) `@AC-2 @feature-185` rescoped to
     "symbols with fundamentals available" (ETF/no-filings becomes the skip row for fundamentals strategies).
   - **Run round 2** before approval.
+
+## Session 2026-10-09 — sdd-design Phase 1, round 2 + operator gate
+
+- Round-2 proposal (file kept at /tmp during session; summary): evaluator-reads-metric availability per channel,
+  UNAVAILABLE > UNKNOWN, marketdata edgar per-symbol FailedPrecondition → NotFound/omit, deny-entry live + opps
+  entry-only skip row, live state-change WARN + EmitAlert, readiness/series surfaces unguarded by rule,
+  `GetEtfFlags` (optional bool, single fmp.Client cache, negative caching), proto: NoTradeReason=5,
+  `FundamentalsGap`, SymbolDiagnostics.fundamentals_gap=6, Opportunity.fundamentals_unavailable=23 /
+  fundamentals_gap=24 (adversary verified free).
+- Verified: seeded fscore FUNDAMENTAL_INPUTS = PE, PB, DIVIDEND_YIELD, ROE, DEBT_TO_EQUITY, EPS
+  (`services/xstockstrat-indicators/app/formulas/fundamentals_value_quality.py`); none quote-derived.
+- **Round-2 adversary: NEEDS WORK, no Floor breach.** All round-1 objections resolved except as follows; new:
+  A `_QUOTE_DERIVED` exclusion regresses `@AC-8 @feature-201` partial-row rule (unsigned) → availability = "evaluator
+  would execute ≥1 epoch", one helper shared with `_fundamentals_formula_series`;
+  B `failed` lost on per-pass cache hits → key `(channel, symbol)` with cache lifetime;
+  C heal path never rewrites `action` (`repositories/opportunities.py:132-142`) and forcing UNSPECIFIED before the
+  `_resolve_action_tag` drop resurrects dropped rows;
+  D global FailedPrecondition (source disabled) → perpetual data_unavailable + 300s retry → new DISABLED state;
+  E "available ever" counts filings after the backtest window → only filings before the last evaluated bar;
+  F Signal-detail / watchlist-readiness show contradictory 0/N → badge from queue row, document watchlist gap;
+  G GetEtfFlags no deadline, unbounded concurrent map, widened `sectorSource` → cache-only + background fill,
+  mutex/size bound, own interface;
+  H old 0-trade ETF evidence cells keep feeding the derived grade;
+  I marketdata FailedPrecondition→NotFound needs an FR + scenario + doc update;
+  J minor: import predicates from guard module directly; keep transition-alert exception semantics; exit-only
+  fundamentals strategies are denied entry (document).
+- **Operator decisions (AskUserQuestion 2026-10-09):** run **round 3** (do not approve yet); objection H →
+  **exclude at derivation** (grade derivation skips symbols the guard refuses for that strategy).
