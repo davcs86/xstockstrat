@@ -98,3 +98,30 @@
 - Constitution touched: C-01, C-03, C-07, C-08, C-10, C-13, C-15, C-16, C-18, P-03, F-01, F-07 (DDL literals, 026 precedent).
   Floor breaches: none.
 - Status: spec-ready → design-approved.
+
+## Session 2026-10-10 — sdd-spec
+
+- Wrote implementation-spec.md with 19 steps, and status moved design-approved → implementation-ready. All 19 `@AC-*` are covered (C-15). Consumer surface is None (C-14, a recorded decision). Steps in order:
+  - 1–2: the `db-migrate.sh` contract-floor dirty guard (`scripts/migration-dirty-guard.sh`) plus its test;
+  - 3–4: analysis `027` and ingest `014` contracts;
+  - 5: `migration-rerun.sh` replay, refused downs and guard end to end;
+  - 6–7: analysis `app/identity.owner_metadata`;
+  - 8–9: analysis `owner_scoped` gate on 22 RPCs;
+  - 10–11: QueryPnLPatterns owner filter;
+  - 12–13: indicators gate and bypass removal;
+  - 14–15: indicators stops writing `is_public`;
+  - 16: AC-11 real-schema harness;
+  - 17–18: ingest gate;
+  - 19: docs, C-16 promotion/EXTENDs, teardown.
+- Key codebase findings:
+  - **Migration numbers:** last analysis is `026_owner_dimension_templates`, last ingest is `013_signal_ownership_templates`. `027` and `014` are free on all 54 `origin/*` refs (re-verified, as the product spec deferred to this phase).
+  - **Branch freshness:** `origin/main-dev` is 1 commit ahead (`80d44449`, feature 196). It edits ingest `servicer.py:252-256`, so ingest servicer lines past `:255` shift by −1 there. Merge main-dev before Step 17.
+  - **RPC counts** from the descriptor and `async def` scan: analysis 23 (22 decorated + RunFundamentalsScan), indicators 13 (10 + 3 exempt), ingest 12 (7 + 5 exempt). These match design §1.
+  - The indicators `upsert` and `update` SQL are inline today (`formulas_repository.py:144-158`, `:226-234`). Step 14 hoists them to `_UPSERT_SQL` and `_UPDATE_SQL` so the Step 16 awk harness and the Step 15 routing test can reach them.
+  - `scripts/migration-assertions/ingest-013.sql` ends in an N-1 trigger probe that cannot pass after `014`. Step 5 removes it, in the same push as Step 4 (see Step Dependencies).
+- **Spec-time correction to design.md §2 rows #4–#6 (P-03):**
+  - What the design says: the live-loop drains (`_drain_owner_signals`, `_drain_held`, `_drain_watchlist`) sit "under the per-pair try (`live_loop.py:438-445`)".
+  - What the code shows: that `try` wraps only `_eval_pair`. The drains run from the record-building loop (`live_loop.py:371-381`), which has no `try`. Only the cycle-level `except` (`:325-328`) would catch a raise there, so one ownerless strategy would abort every owner's cycle.
+  - Fix: Step 6 builds `owner_metadata` before each drain's inner `try` and adds a per-row `except ValueError` (log and skip) around the drain block. This realises design Open Risk 4 ("that unit is skipped") rather than changing it. No operator decision was needed, but `/sdd-review impl-spec` should confirm it.
+- **AC-17 / `_compose`:** this follows the round-3 `/sdd-spec` note (keep OHLCV, skip indicators and ingest) rather than design §2 row #8's `return None, [], {}, [], True`.
+- **Characterization ACs:** AC-5 (Step 2, the existing 224 contract gate), AC-7 (Step 18, FR-6 regression guard) and AC-10 (Step 13) need no production change, so they are green on their first run by design. `/sdd-execute` should record them as such and not treat them as a TDD-gate failure.
