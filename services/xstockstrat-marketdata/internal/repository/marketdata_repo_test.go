@@ -10,6 +10,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/pashagolub/pgxmock/v4"
 
+	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
+
 	"github.com/xstockstrat/marketdata/internal/source"
 )
 
@@ -499,5 +501,30 @@ func TestRederiveHistoricalFundamentals_GuardedUpgrade_feature223(t *testing.T) 
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("pgxmock expectations unmet: %v", err)
+	}
+}
+
+// TestScanBars_OmitsDeprecatedTimeframeString — feature 196 @AC-8: the DB→proto read edge shared by
+// QueryBars/QueryRecentBars/QueryBarsBatch leaves the deprecated string unset and keeps the enum.
+func TestScanBars_OmitsDeprecatedTimeframeString(t *testing.T) {
+	ts := time.Date(2024, 1, 2, 0, 0, 0, 0, time.UTC)
+	rows := pgxmock.NewRows([]string{"time", "symbol", "timeframe", "open", "high", "low", "close", "volume", "vwap", "trade_count", "source"}).
+		AddRow(ts, "AAPL", "1d", 1.0, 2.0, 0.5, 1.5, int64(100), 1.2, int32(7), "alpaca")
+
+	bars, err := scanBars(rows.Kind())
+	if err != nil {
+		t.Fatalf("scanBars: %v", err)
+	}
+	if len(bars) != 1 {
+		t.Fatalf("expected 1 bar, got %d", len(bars))
+	}
+	if got := bars[0].Timeframe; got != "" { //nolint:staticcheck // SA1019: asserting the deprecated string timeframe field is omitted (feature 196)
+		t.Errorf("expected deprecated Timeframe string omitted, got %q", got)
+	}
+	if bars[0].TimeframeEnum != commonv1.Timeframe_TIMEFRAME_1DAY {
+		t.Errorf("expected TimeframeEnum=TIMEFRAME_1DAY, got %v", bars[0].TimeframeEnum)
+	}
+	if bars[0].Symbol != "AAPL" || bars[0].Close != 1.5 || bars[0].TradeCount != 7 {
+		t.Errorf("row not mapped intact: %+v", bars[0])
 	}
 }

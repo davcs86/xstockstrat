@@ -252,9 +252,8 @@ def job_row_to_proto(row: dict) -> ingest_pb2.BackfillJob:
     job = ingest_pb2.BackfillJob(
         job_id=str(row["job_id"]),
         symbols=list(row["symbols"] or []),
-        timeframe=row["timeframe"] or "",
-        # Populate timeframe_enum too (the string field is deprecated); unknown/empty
-        # degrades to TIMEFRAME_UNSPECIFIED rather than raising.
+        # The deprecated string is omitted (feature 196); unknown/empty degrades to
+        # TIMEFRAME_UNSPECIFIED rather than raising.
         timeframe_enum=_STR_TO_ENUM.get(_row_timeframe(row["timeframe"] or ""), 0),
         status=row["status"],
         bars_processed=row["bars_processed"] or 0,
