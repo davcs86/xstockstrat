@@ -145,3 +145,23 @@
   Spec notes: FMP single-symbol no-data → NotFound; held exit UNAVAILABLE heals as today; fingerprint blind spot on
   formula input edits; restart re-alerts; NULL range_end legacy cells; @AC-10 wording; recon @AC-7 @feature-211 wording.
 - **Operator decisions (AskUserQuestion 2026-10-10):** H = **derivation-time exclusion**; **run round 4**.
+
+## Session 2026-10-10 — sdd-design (completion)
+
+- Phase 0 Recon: recon.md (services: analysis, marketdata, ui, agent; reuse: FormulaExecutionError diagnostics path,
+  `deny_entry`, provenance-marker→proto flag, `fetchProfile` + shared FMP budget).
+- Phase 1 Grilling: **4 rounds** (quick, extended by the operator at each gate). Chosen approach: pure
+  `fundamentals_guard` module with evaluator-shared "would execute" availability, error-distinct states
+  (NOT_REQUIRED/NOT_ASSESSED/AVAILABLE/UNAVAILABLE/UNKNOWN/DISABLED), backtest refusal (NoTradeReason 5),
+  live deny-entry + state-change alert, opportunity skip row + `ListOpportunitiesRequest.symbol`, derivation-time
+  evidence exclusion (filter-before-dedup), paginated PIT loaders, marketdata absence → NotFound/omit,
+  cache-only `GetEtfFlags` label. Rejected: per-bar guard, copied core-metric list, quote-metric exclusion,
+  write-time cell DELETE, persisted `is_etf` (migration 010), refusal flag migration 028.
+- Round-4 adversary SOUND; 3 fixes folded at approval (formula-level outage = UNKNOWN on derivation;
+  filter-before-dedup; no background semaphore on interactive recomputes + PIT timeout + boot recompute off the
+  live-loop startup path).
+- Constitution touched: C-04, C-08, C-10, C-13, C-14, C-15, C-16 (two CHANGEs signed off 2026-10-09; ANALYSIS-3 EXTEND
+  via H decision), C-17, C-18, P-03, F-04, F-07 (fixed TTL constant justified in design). Floor breaches: none.
+- Product spec amended: FR-2/3/4 rewritten, FR-7..FR-11 added, proto list, Open Questions closed;
+  acceptance @AC-4/@AC-6 amended, @AC-7..@AC-15 added.
+- Status: spec-ready → design-approved.

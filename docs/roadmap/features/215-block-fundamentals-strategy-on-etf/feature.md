@@ -12,6 +12,7 @@
 |---|---|---|---|
 | 2026-09-27 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-09-27 | `draft` → `spec-ready` | /sdd-review | Product spec approved (PASS, 2 warnings; render-map path corrected, Open Questions deferred to design). Overlap: clean |
+| 2026-10-10 | `spec-ready` → `design-approved` | /sdd-design | Design debated (4 rounds — quick mode extended by the operator at each gate) and approved; recon.md + design.md written. Hybrid guard (enforce on unavailable fundamentals, FMP `isEtf` label), deny-entry live, opportunity skip row, derivation-time evidence exclusion, PIT pagination, marketdata absence encoding. No migration; additive proto. |
 
 ---
 
@@ -46,4 +47,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-design block-fundamentals-strategy-on-etf` — recon + design debate (resolves the ETF-detection fork)
+`/sdd-spec block-fundamentals-strategy-on-etf` — generate implementation spec from the approved design.
