@@ -128,3 +128,20 @@
   fundamentals strategies are denied entry (document).
 - **Operator decisions (AskUserQuestion 2026-10-09):** run **round 3** (do not approve yet); objection H →
   **exclude at derivation** (grade derivation skips symbols the guard refuses for that strategy).
+
+## Session 2026-10-09/10 — sdd-design round 3 + operator gate
+
+- Round-3 proposal resolved A–G, I, J (adversary-verified); H was silently replaced by a write-time DELETE of stale
+  0-trade cells — **reverted**: operator re-confirmed **derivation-time exclusion** (grade recompute runs the guard per
+  evidence symbol over each cell's window; refused symbols dropped; UNKNOWN keeps the old grade; non-destructive).
+- **Round-3 adversary: NEEDS WORK, no Floor breach.** Remaining: (1) H divergence (now resolved above);
+  (2) both PIT loaders read only page 1 (50 periods, `servicer.py:1641-1652`, `live_loop.py:626-632`,
+  `marketdata_service.go:1736`) → newest filings lost → false UNAVAILABLE; drain pages with a bounded shared helper,
+  page-cap hit = UNKNOWN; C-16 EXTEND of @feature-198/201 results for >50-period symbols;
+  (3) empty bar window / bars outage misread as UNAVAILABLE → "not assessed"; skip and `unavailable` rows mutually
+  exclusive; (4) ETF-label background fill can starve the shared FMP budget → fill only below 80% of cap, long fixed TTL;
+  (5) backtest DISABLED unreachable (GetHistoricalFundamentals has no gate) → drop backtest branch + @AC-9 backtest clause;
+  (6) Signal-detail badge reads only first 50 queue rows → known gap or symbol filter.
+  Spec notes: FMP single-symbol no-data → NotFound; held exit UNAVAILABLE heals as today; fingerprint blind spot on
+  formula input edits; restart re-alerts; NULL range_end legacy cells; @AC-10 wording; recon @AC-7 @feature-211 wording.
+- **Operator decisions (AskUserQuestion 2026-10-10):** H = **derivation-time exclusion**; **run round 4**.
