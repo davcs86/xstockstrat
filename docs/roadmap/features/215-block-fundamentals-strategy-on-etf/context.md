@@ -165,3 +165,31 @@
 - Product spec amended: FR-2/3/4 rewritten, FR-7..FR-11 added, proto list, Open Questions closed;
   acceptance @AC-4/@AC-6 amended, @AC-7..@AC-15 added.
 - Status: spec-ready → design-approved.
+
+## Session 2026-10-10 — sdd-spec
+
+- Wrote implementation-spec.md with 26 steps. Status: design-approved → implementation-ready.
+- Key codebase findings:
+  - **Rebase first.** Feature 196 (#1237, `80d44449`) is on main-dev but not on this branch, and it moves `marketdata_service.go` by about 12 lines. The spec cites main-dev line numbers for that file.
+  - **Three descriptor-parity guards go red** as soon as the proto fields are added: analysis `test_analysis_servicer.py:6066`, agent `test_opportunity_projection.py:52`, agent `test_backtest_view.py:210`. So Steps 2–6 must land together; Steps 3 and 5 carry the fields.
+  - **Heal never writes `action`.** `replace_symbols` (`repositories/opportunities.py:113-163`) has no action column. Step 3 adds `action = COALESCE($11::int, action)`.
+  - **New structural marker.** `"fundamentals_unavailable"` joins `_PROVENANCE_STRUCTURAL_MARKERS` (`opportunities.py:26`) and the floor exemption (`:250`). The gap label rides `readiness_json`, with no column.
+  - **Opportunity fetch failures are keyed by symbol.** `_compute_opportunities` keys `fetch_failed` by symbol (`servicer.py:5104`). A fundamentals UNKNOWN is therefore row-local (`fund_unknown`), never added to `fetch_failed`.
+  - **Recompute needs a new repo method.** It reads every cell through a new `fetch_all_for_fingerprint`, which shares `_ELIGIBILITY_ORDER` with `fetch_eligible`. That is how filter-before-dedup is done.
+  - **Boot recompute currently blocks startup.** It is awaited inline before the live loop is created (`main.py:134-162`). Step 17 moves it to `create_task`.
+  - **`s.fmpBudget` is only set through `SetClassification`,** which `main.go:152` always calls. The ETF fill uses a new `etfFlagSource` interface and `SetEtfFlagSource`. The UI BFF forwards `ListOpportunitiesRequest` unchanged, so the `symbol` filter needs no BFF change.
+  - **Edgar-mode `GetFundamentalsMulti` change.** Today it returns FailedPrecondition for the whole batch on the first un-producible symbol when vendors are off (`marketdata_service.go:1337-1340`, `1537-1540`). After Step 7 it omits that symbol instead. The blend-universe resolver, the screener and `fundsignal_loop` all receive the partial list; this is within the approved FR-7 extend.
+
+## Decisions (sdd-spec, 2026-10-10)
+
+- **Gap label carrier.** `Opportunity.fundamentals_gap` is persisted in `readiness_json["fundamentals_gap"]`. That follows the `target_price` JSONB precedent, so no migration is needed.
+- **Status gate.** A backtest run with only fundamentals UNKNOWN symbols also reports INSUFFICIENT_DATA, alongside `fund_refusals`.
+- **Recompute trigger.** The grade recompute runs on `status == OK or fund_refusals > 0`, so an all-UNKNOWN run does not trigger one.
+- **NOT_ETF badge text.** NOT_ETF renders "Fundamentals unavailable", the same as UNSPECIFIED, to match the literal `@AC-4` text.
+- **No ETF label on live.** The live loop does not call `GetEtfFlags`, because the design asks for no label there (YAGNI).
+- **Fixed-invariant constants.** `etfFlagCacheMax`/`etfFlagQueueCap`, and `_FUND_PAGE_TIMEOUT_SECONDS` = 10, are fixed invariants under the same F-07 justification as `etfFlagTTL`.
+
+## Open Threads
+
+- `/sdd-review block-fundamentals-strategy-on-etf impl-spec`.
+- Step 26: measure the >50-period symbols on staging before the integration PR merges.
