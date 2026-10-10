@@ -66,3 +66,19 @@
 - **Operator decisions (AskUserQuestion 2026-10-09):** QueryPnLPatterns → **fix in 225** (owner-scoped,
   headerless UNAUTHENTICATED, filter via pnl_positions.user_id, no migration; new FR + AC); AC-11 → **real-schema
   check** in migration-rerun (rolled-back txn drops the column, executes the exact repository SQL); **run round 2**.
+
+## Session 2026-10-10 — sdd-design round 2 + operator gate
+
+- Round-2 proposal (decorator gate per owner-scoped RPC, single identity helper per service, fail-closed
+  `owner_metadata`, QueryPnLPatterns owner-scoped via pnl_positions semijoin (FR-7), AC-11 real-schema harness via
+  awk-extracted SQL in migration-rerun, 027 ACCESS EXCLUSIVE + 2s×20 retry, child backfill, refusal driven via
+  `migrate goto` + `force`, completeness test both directions + system-without-grant, test-churn rule, doc list).
+- **Round-2 adversary: SOUND, no Floor breach.** Open: (1) failed 027/014 → dirty → next deploy `force 0` replays
+  non-idempotent pre-224 files (wedge) — operator decision needed; (2) `@AC-3 @feature-042` QueryPnLPatterns is EXTEND
+  (Given gains caller ownership) — reclassify; (3) reset `lock_timeout` after the LOCK; (4) route every background
+  owner-metadata site through `owner_metadata` (6 hand-built sites) in a small identity module. Spec notes: decorator
+  must `return` after abort; ingest rpc name pinning; QueryPnLPatterns `AND symbol=$1` in subquery; parentless NULL-owner
+  child rows window; AC-11 param-count check; SetOpportunityAction INVALID_ARGUMENT→UNAUTHENTICATED (no AC);
+  RunFundamentalsScan exemption stated.
+- **Operator decisions (AskUserQuestion 2026-10-10):** dirty wedge → **add `db-migrate.sh` guard** (refuse `force 0`
+  at/above a contract version; print recovery text) in 225; **run round 3**.
