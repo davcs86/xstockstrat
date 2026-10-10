@@ -12,6 +12,7 @@
 |---|---|---|---|
 | 2026-10-07 | `idea` → `draft` | /sdd-story | Product spec generated (created by feature 224 Step 41 as its named follow-up) |
 | 2026-10-08 | `draft` → `spec-ready` | /sdd-review | Product spec approved on run 2 (PASS WITH WARNINGS; run 1 FAIL fixed: FR-4 scoped to real objects, Open Questions closed with operator decisions — `UNAUTHENTICATED`, indicators stops writing `is_public` with the drop deferred). Run-2 warnings fixed in-place (Affected Services, AC-7/11/12, AC-13 added). Overlap CLEAN. |
+| 2026-10-10 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds — quick mode extended by the operator) and approved; recon.md + design.md written. Per-service decorator identity gate (headerless → UNAUTHENTICATED), bypass/fallback removal, fail-closed `owner_metadata`, QueryPnLPatterns owner filter (FR-7), contract migrations analysis 027 / ingest 014, is_public stop-writing with real-schema proof, db-migrate dirty guard (FR-8). |
 
 ---
 
@@ -44,4 +45,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-design private-by-default-enforce-contract` — recon + design debate.
+`/sdd-spec private-by-default-enforce-contract` — generate implementation spec from the approved design.

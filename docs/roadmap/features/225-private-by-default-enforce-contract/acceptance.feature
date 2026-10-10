@@ -56,9 +56,7 @@ Feature: private-by-default-enforce-contract
   @AC-11 @FR-4
   Scenario: indicators no longer writes is_public, so the column can be dropped later
     Given a test schema where "indicators.formulas" has no "is_public" column
-    When user "u-1" calls indicators "RegisterFormula" and then "UpdateFormula" for a new formula
-    And indicators runs its startup formula seed upsert
-    And user "u-1" instantiates formula template "tmpl-1"
+    When the indicators write statements used by RegisterFormula, UpdateFormula, the startup formula seed upsert and template instantiation are executed against it
     Then all four writes succeed
 
   @AC-5 @FR-5
@@ -77,8 +75,9 @@ Feature: private-by-default-enforce-contract
   @AC-6 @FR-5
   Scenario: A contract migration's down-file refuses to run
     Given analysis migration "027_contract_owner_dimension.up.sql" is applied
-    When "027_contract_owner_dimension.down.sql" is executed
-    Then it raises an exception
+    When "migrate goto 26" is run for the analysis schema
+    Then it exits non-zero with output containing "irreversible contract"
+    And the analysis migration state is dirty
     And "analysis.backtest_runs.user_id" is still NOT NULL
 
   @AC-7 @FR-6
@@ -92,6 +91,50 @@ Feature: private-by-default-enforce-contract
   @AC-13 @FR-5
   Scenario: The ingest contract down-file refuses to run
     Given ingest migration "014_contract_signal_ownership.up.sql" is applied
-    When "014_contract_signal_ownership.down.sql" is executed
-    Then it raises an exception
+    When "migrate goto 13" is run for the ingest schema
+    Then it exits non-zero with output containing "irreversible contract"
+    And the ingest migration state is dirty
     And "to_regclass('ingest.signal_dedup_keys')" is still NULL
+
+  @AC-14 @FR-7
+  Scenario: QueryPnLPatterns returns only the caller's own pattern samples
+    Given pattern samples for AAPL from positions owned by user "u-1" and from positions owned by user "u-2", each set at least "analysis.patterns.min_sample_count"
+    And factor "sig:newsletter-b" appears only in u-2's samples
+    When user "u-1" calls analysis "QueryPnLPatterns" for symbol "AAPL" with "x-user-id: u-1"
+    Then no returned factor is "sig:newsletter-b"
+    And every returned factor's sample_count counts only u-1's samples
+
+  @AC-15 @FR-7
+  Scenario: A headerless QueryPnLPatterns is rejected
+    Given a gRPC call to analysis "QueryPnLPatterns" with no "x-user-id" header and no internal-caller grant
+    When the call is served
+    Then it fails with status "UNAUTHENTICATED"
+
+  @AC-16 @FR-1
+  Scenario: An ungranted system identity is refused by analysis
+    Given a gRPC call to analysis "ListStrategies" with "x-user-id: system" and no internal-caller grant
+    When the call is served
+    Then it fails with status "PERMISSION_DENIED"
+
+  @AC-17 @FR-1
+  Scenario: An ownerless order event issues no owner-scoped call
+    Given an "order.filled" ledger event whose payload "user_id" is empty
+    When the analysis P&L pattern consumer processes it
+    Then no call is made to ingest or indicators
+    And the order snapshot is stored marked degraded
+
+  @AC-18 @FR-8
+  Scenario: db-migrate refuses the force-0 replay for a dirty contract service
+    Given analysis migration "027_contract_owner_dimension.up.sql" is applied
+    And a refused "migrate goto 26" has left the analysis migration state dirty at version 26
+    When "scripts/db-migrate.sh up" runs
+    Then it exits non-zero with output naming "analysis" and "force 25"
+    And the analysis migration state is still dirty at version 26
+    And after "migrate force 25" for the analysis schema, "scripts/db-migrate.sh up" exits 0
+    And the analysis migration state is clean at version 27 and "analysis.backtest_runs.user_id" is NOT NULL
+
+  @AC-19 @FR-8
+  Scenario: Dirty recovery below the contract floor is unchanged
+    Given a migrations directory whose only contract file "027_x.up.sql" declares "-- contract-of: services/xstockstrat-x/migrations/026_y.up.sql"
+    When the dirty guard evaluates "20 (dirty)", and separately a directory with no contract file evaluates "27 (dirty)"
+    Then both evaluations allow the automatic force-0 recovery

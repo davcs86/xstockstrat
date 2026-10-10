@@ -59,11 +59,25 @@ FR-6. No `LEGACY_GLOBAL` credential path exists to delete (224 did not ship `cre
 `013` header: prod had zero `mcp_client` sources). 225 keeps a regression guard that `mcp_client` bearer
 resolution is per-user only.
 
+FR-1 addendum (design.md): an ungranted inbound `x-user-id: system` to analysis → `PERMISSION_DENIED`;
+`RunFundamentalsScan` is not owner-scoped (admin-scope-gated) and is a deliberate exemption; `SetOpportunityAction`
+headerless changes from `INVALID_ARGUMENT` to `UNAUTHENTICATED`; in-process analysis callers build owner identity only
+through `app/identity.owner_metadata`, which refuses an empty or `system` owner (the unit of work is skipped and no
+owner-scoped call is issued).
+
+FR-7. analysis `QueryPnLPatterns` is owner-scoped under FR-1: it returns only samples whose `position_id` belongs to an
+`analysis.pnl_positions` row whose `user_id` is the caller's `x-user-id`. No migration.
+
+FR-8. `scripts/db-migrate.sh up` refuses the automatic `force 0` dirty recovery for a service whose dirty version is ≥
+the lowest expand version named by any `-- contract-of:` header in that service's migrations directory; it exits non-zero
+and prints `migrate force <dirty-1>` recovery text without credentials. Below the floor, and for services with no
+contract file, behaviour is unchanged. The guard ships in the migrator image (`scripts/Dockerfile.migrate`).
+
 ## Out of Scope
 
 - New template kinds or template UI changes.
 - Any change to 224's per-user secret model or admin audit semantics.
-- Fixing the pre-224 non-idempotent migrations
+- Fixing the pre-224 non-idempotent migrations (and the general force-0 recovery) stays out of scope; the defect report stays `open` — FR-8 is a partial mitigation for contract services only (operator decision 2026-10-10). Original note:
   (`docs/reports/2026-10-07-db-migrate-dirty-recovery-replay-unsafe-defect.md`). They are tracked by
   that defect report.
 
@@ -72,6 +86,7 @@ resolution is per-user only.
 - `xstockstrat-analysis` — headerless fail-closed (`UNAUTHENTICATED`), `backtest_runs.user_id` D-1 re-backfill + NOT NULL, `strategy_scores` drop (contract `027`); no N-1 trigger exists here
 - `xstockstrat-indicators` — bypass removal, headerless fail-closed, stop writing `is_public` on every write path; **no migration**
 - `xstockstrat-ingest` — headerless fail-closed, drop N-1 trigger/function + `signal_dedup_keys` (contract `014`), per-user `mcp_client` credential regression guard
+- platform tooling — `scripts/db-migrate.sh`, new `scripts/migration-dirty-guard.sh`, `scripts/Dockerfile.migrate`, `scripts/migration-rerun.sh`
 
 ## Consumer Surface(s)
 
@@ -100,6 +115,8 @@ Contract migrations at the pre-reserved numbers in `merge-order.md` (indicators 
 
 Each carries `-- contract-of:` in its first 5 lines, is replay-safe, is added to `scripts/migration-rerun.sh`,
 and its down-file raises. analysis `027` requires `SEED_USER_ID` (`-- requires-env`), like `026`.
+
+`backtest_run_symbols.user_id` and `backtest_details.user_id` stay nullable after 225 (deferred to a later contract; design.md Open Risks).
 
 ## Feature Workflow Notes
 

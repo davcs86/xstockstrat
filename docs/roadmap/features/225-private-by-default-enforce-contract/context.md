@@ -82,3 +82,19 @@
   RunFundamentalsScan exemption stated.
 - **Operator decisions (AskUserQuestion 2026-10-10):** dirty wedge → **add `db-migrate.sh` guard** (refuse `force 0`
   at/above a contract version; print recovery text) in 225; **run round 3**.
+
+## Session 2026-10-10 — sdd-design (completion)
+
+- Phase 0 Recon: recon.md (analysis/indicators/ingest + platform scripts; 39 PRESERVE / 1 EXTEND, no CHANGE).
+- Phase 1 Grilling: **3 rounds** (quick, extended by operator). Chosen: per-service decorator identity gate first in
+  every owner-scoped RPC; single fail-closed `app/identity.owner_metadata`; bypass + body/slug-holder fallbacks removed;
+  QueryPnLPatterns owner-scoped (FR-7); 027 (D-1 + child backfill + NOT NULL + drop strategy_scores, ACCESS EXCLUSIVE with
+  bounded lock_timeout reset after LOCK), 014 (drop trigger/function/signal_dedup_keys), raising downs driven via
+  `migrate goto`; `db-migrate.sh` contract-floor dirty guard (FR-8) shipped in the migrator image; is_public stop-writing
+  with awk-extracted real-schema proof; descriptor-walk completeness tests. Rejected: analysis server interceptor,
+  validating outbound stub wrapper, deferring QueryPnLPatterns, per-site preamble.
+- Round-3 adversary SOUND; fixes A (Dockerfile.migrate COPY + no-mount smoke) and B (sweep meta inside try) folded.
+- C-16: `@AC-3 @feature-042` (QueryPnLPatterns) is EXTEND — Given gains caller ownership at promotion.
+- Constitution touched: C-01, C-03, C-07, C-08, C-10, C-13, C-15, C-16, C-18, P-03, F-01, F-07 (DDL literals, 026 precedent).
+  Floor breaches: none.
+- Status: spec-ready → design-approved.
