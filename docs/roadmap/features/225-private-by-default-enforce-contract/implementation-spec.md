@@ -528,7 +528,7 @@ grep -n "from tests.conftest\|from tests.test_" tests/test_identity.py tests/tes
 
 ### Step 8 — service: analysis inbound identity gate (`owner_scoped`) on 22 RPCs (FR-1)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify

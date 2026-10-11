@@ -261,3 +261,23 @@ integration PR: it is the first live proof of Steps 3–5.
   with the existing `_assert_indicators_headers(..., path="template-saga")`.
 - Files modified: `tests/test_identity.py` (new), `tests/test_owner_header_guard.py`
 - Deviations: none.
+
+### Step 8 — analysis inbound identity gate (`owner_scoped`) on 22 RPCs [done]
+- Module-level `_CallerRejected` + `owner_scoped` decorator (explicit `return None` after a non-raising abort);
+  `_caller_user_id` raises UNAUTHENTICATED (no/empty `x-user-id`) or PERMISSION_DENIED (`system`), docstring cut to a
+  2-line constraint. 22 RPCs decorated, `RunFundamentalsScan` exempt. Raw `x-user-id` readers (ScreenSymbols,
+  ListOpportunities, SetOpportunityAction — `INVALID_ARGUMENT "missing user identity"` branch deleted,
+  GetStrategyAnalytics) route through `_caller_user_id`. Orphan headerless branches deleted (RunBacktest ref lookup,
+  the three `user_id=caller_user_id or None`, ScoreStrategy, GetStrategyReport, ListBacktests, ManageStrategy,
+  GetStrategy, SetStrategyLive, ListTemplates, ManageTemplate `not caller_user_id or`, InstantiateTemplate,
+  EvaluateReadiness, GetWatchlistReadiness, GetAttribution `not caller or`, GetIndicatorSeries, GetStrategyAnalytics).
+  GetBacktest's `if not owner or owner != caller_user_id` kept. `backtest_runs.py` comment reworded, `user_id: str`
+  (keyword-only, no default). `_row_to_score` docstring names `strategy_scores_v2`.
+- TDD (paired with Step 9): red — `test_owner_scoped_completeness.py` written first: 43 failed / 5 passed on the
+  pre-Step-8 tree (descriptor walk found no `__owner_scoped__`; bodies entered → `AttributeError`; headerless
+  ListStrategies/SetOpportunityAction got PERMISSION_DENIED/INVALID_ARGUMENT; the 5 passes were `system` cases that
+  already hit an early PERMISSION_DENIED) → green 48 passed after Step 8.
+- Verification: AST check `22 decorated, exempt: {'RunFundamentalsScan'}`; `invocation_metadata()).get("x-user-id"`
+  only inside `_caller_user_id`; ruff check + format clean.
+- Files modified: `app/handlers/servicer.py`, `app/repositories/backtest_runs.py`
+- Deviations: none.

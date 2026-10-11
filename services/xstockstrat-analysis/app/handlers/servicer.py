@@ -12,6 +12,7 @@ ScoreStrategy grades backtests using Sharpe ratio, max drawdown, and win rate.
 
 import asyncio
 import base64
+import functools
 import hashlib
 import json
 import logging
@@ -403,6 +404,31 @@ def _parse_signals(raw) -> list[dict]:
     return raw if isinstance(raw, list) else []
 
 
+class _CallerRejected(Exception):
+    """An inbound identity the owner-scoped gate refuses, with the gRPC status to abort with."""
+
+    def __init__(self, code: grpc.StatusCode, message: str):
+        super().__init__(message)
+        self.code = code
+        self.message = message
+
+
+def owner_scoped(fn):
+    """Run the inbound identity gate before an owner-scoped RPC body (feature 225, FR-1)."""
+
+    @functools.wraps(fn)
+    async def wrapper(self, request, context):
+        try:
+            self._caller_user_id(context)
+        except _CallerRejected as e:
+            await context.abort(e.code, e.message)
+            return None  # a non-raising abort (test contexts) must not enter the body
+        return await fn(self, request, context)
+
+    wrapper.__owner_scoped__ = True
+    return wrapper
+
+
 class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
     def __init__(
         self,
@@ -560,19 +586,16 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
 
     @staticmethod
     def _caller_user_id(context) -> str:
-        """The owning user resolved from the propagated ``x-user-id`` header (feature 133).
-
-        The external edge (UI BFF via JWT, MCP agent via its OAuth layer) injects this header
-        after authenticating; internal services trust it. Ownership-scoped strategy RPCs resolve
-        the target row against this id and answer a miss (nonexistent or other-owner) with a
-        uniform ``PERMISSION_DENIED`` — so a caller can never learn from the response whether a
-        ``strategy_id`` exists under someone else's ownership. An empty caller id owns nothing.
-
-        An inbound ``system`` resolves to ``""`` (owns nothing): analysis has no inbound grant to
-        check, so this deliberately diverges from the ``PERMISSION_DENIED`` of design §2.
-        """
+        """The caller's ``x-user-id``; analysis grants no inbound ``system``. Raises
+        ``_CallerRejected``, which ``owner_scoped`` turns into an abort before any body runs."""
         caller = dict(context.invocation_metadata()).get("x-user-id", "")
-        return "" if caller == SYSTEM_IDENTITY else caller
+        if not caller:
+            raise _CallerRejected(grpc.StatusCode.UNAUTHENTICATED, "x-user-id required")
+        if caller == SYSTEM_IDENTITY:
+            raise _CallerRejected(
+                grpc.StatusCode.PERMISSION_DENIED, "the system identity is not granted on analysis"
+            )
+        return caller
 
     def _admin_owner_selector(self, context, caller_user_id: str, owner_user_id: str) -> str:
         """FR-13: the owner whose rows a read targets — ``owner_user_id`` only for an ADMIN."""
@@ -692,6 +715,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         except ValueError as e:
             await context.abort(grpc.StatusCode.INVALID_ARGUMENT, "; ".join([*warnings, str(e)]))
 
+    @owner_scoped
     async def RunBacktest(self, request, context):
         backtest_id = str(uuid.uuid4())
         commission = self._cfg.get_float("analysis.backtest.default_commission_pct", 0.001)
@@ -756,12 +780,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             if self._strategies_repo:
                 # A backtest against a REGISTERED strategy is owner-scoped — a caller can only run
                 # their own. Inline/legacy runs (no strategy_id_ref) are unaffected.
-                row = (
-                    await self._strategies_repo.get_by_owner_and_id(
-                        caller_user_id, request.strategy_id_ref
-                    )
-                    if caller_user_id
-                    else None
+                row = await self._strategies_repo.get_by_owner_and_id(
+                    caller_user_id, request.strategy_id_ref
                 )
                 if row:
                     active_definition = _row_to_strategy_definition(row)
@@ -1148,7 +1168,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 fingerprint=run_fingerprint,
                 range_start=range_start_dt,
                 range_end=range_end_dt,
-                user_id=caller_user_id or None,
+                user_id=caller_user_id,
             )
 
         # Grade THIS run for the run-history row only — the headline grade is derived from the
@@ -1170,12 +1190,12 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             # Record the resolved sizing model + params (None on the legacy branch).
             position_weight=resolved_position_weight,
             max_concurrent=resolved_max_concurrent,
-            user_id=caller_user_id or None,
+            user_id=caller_user_id,
         )
         # Persist full result (trades + equity + diagnostics) for OK runs only. Best-effort;
         # ordered after the summary insert so the FK (detail ⇒ listed summary) can hold.
         if result.status == analysis_pb2.BACKTEST_STATUS_OK:
-            await self._persist_backtest_detail(result, user_id=caller_user_id or None)
+            await self._persist_backtest_detail(result, user_id=caller_user_id)
 
         # Recompute the headline grade from the strategy's full evidence base. Best-effort;
         # ordered BEFORE the completion emit so a subscriber sees the post-run grade.
@@ -2303,6 +2323,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 fid, cache, propagation_meta, deleted_cache, fund_map
             )
 
+    @owner_scoped
     async def ScoreStrategy(self, request, context):
         """Manually recompute a strategy's headline grade from its evidence cells (feature 065).
 
@@ -2324,11 +2345,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             return
         # Owner-scoped — uniform PERMISSION_DENIED on a non-owned/missing strategy.
         caller_user_id = self._caller_user_id(context)
-        row = (
-            await self._strategies_repo.get_by_owner_and_id(caller_user_id, request.strategy_id)
-            if caller_user_id
-            else None
-        )
+        row = await self._strategies_repo.get_by_owner_and_id(caller_user_id, request.strategy_id)
         if row is None:
             await context.abort(
                 grpc.StatusCode.PERMISSION_DENIED, "strategy not found or not owned"
@@ -2652,6 +2669,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 log.warning("boot recompute failed for %s/%s: %s", user_id, strategy_id, e)
         return len(pairs)
 
+    @owner_scoped
     async def ListStrategies(self, request, context):
         # Owner-scoped — return only the caller's own scores, cross-checked against the repo.
         if self._strategies_repo is not None:
@@ -2671,14 +2689,13 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             strategies = list(self._strategies.values())
         return analysis_pb2.ListStrategiesResponse(strategies=strategies)
 
+    @owner_scoped
     async def GetStrategyReport(self, request, context):
         # Owner-scoped — uniform PERMISSION_DENIED for a non-owned/missing strategy.
         caller_user_id = self._caller_user_id(context)
         if self._strategies_repo is not None:
-            owned = (
-                await self._strategies_repo.get_by_owner_and_id(caller_user_id, request.strategy_id)
-                if caller_user_id
-                else None
+            owned = await self._strategies_repo.get_by_owner_and_id(
+                caller_user_id, request.strategy_id
             )
             if owned is None:
                 await context.abort(
@@ -2699,6 +2716,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             latest_backtest=result,
         )
 
+    @owner_scoped
     async def ListBacktests(self, request, context):
         """Return past backtest-run summaries for a strategy, newest first.
 
@@ -2712,10 +2730,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # Owner-scoped — resolve ownership before returning another user's run history.
         caller_user_id = self._caller_user_id(context)
         if self._strategies_repo is not None:
-            owned = (
-                await self._strategies_repo.get_by_owner_and_id(caller_user_id, request.strategy_id)
-                if caller_user_id
-                else None
+            owned = await self._strategies_repo.get_by_owner_and_id(
+                caller_user_id, request.strategy_id
             )
             if owned is None:
                 await context.abort(
@@ -2733,6 +2749,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             return analysis_pb2.ListBacktestsResponse()
         return analysis_pb2.ListBacktestsResponse(runs=[_row_to_backtest_summary(r) for r in rows])
 
+    @owner_scoped
     async def GetBacktest(self, request, context):
         """Return the persisted full result of a past run (feature 068).
 
@@ -2767,13 +2784,11 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         result.ParseFromString(row_bytes)
         return result
 
+    @owner_scoped
     async def ManageStrategy(self, request, context):
         # Ownership-gated (no admin gate). REGISTER opens to any authenticated caller under their
         # own user_id; UPDATE/DEACTIVATE/REACTIVATE require ownership. No x-user-id owns nothing.
         caller_user_id = self._caller_user_id(context)
-        if not caller_user_id:
-            await context.abort(grpc.StatusCode.PERMISSION_DENIED, "authenticated caller required")
-            return
         if self._strategies_repo is None:
             await context.abort(grpc.StatusCode.UNAVAILABLE, "strategy store unavailable")
             return
@@ -2982,6 +2997,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             return _row_to_strategy_definition(row)
         await context.abort(grpc.StatusCode.INVALID_ARGUMENT, "unknown strategy operation")
 
+    @owner_scoped
     async def GetStrategy(self, request, context):
         if self._strategies_repo is None:
             await context.abort(grpc.StatusCode.UNAVAILABLE, "strategy store unavailable")
@@ -2990,11 +3006,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # no existence probing via response code.
         caller_user_id = self._caller_user_id(context)
         owner = self._admin_owner_selector(context, caller_user_id, request.owner_user_id)
-        row = (
-            await self._strategies_repo.get_by_owner_and_id(owner, request.strategy_id)
-            if owner
-            else None
-        )
+        row = await self._strategies_repo.get_by_owner_and_id(owner, request.strategy_id)
         if row is None:
             await context.abort(
                 grpc.StatusCode.PERMISSION_DENIED,
@@ -3019,6 +3031,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         await self._fill_template_origins([definition.origin])
         return definition
 
+    @owner_scoped
     async def ListStrategyDefinitions(self, request, context):
         if self._strategies_repo is None:
             return analysis_pb2.ListStrategyDefinitionsResponse()
@@ -3046,13 +3059,11 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             definitions=definitions, total_count=total
         )
 
+    @owner_scoped
     async def SetStrategyLive(self, request, context):
         # Ownership-gated (no admin gate). Any authenticated caller may toggle live on their OWN
         # strategy; a non-owner (or empty caller) gets a uniform PERMISSION_DENIED.
         caller_user_id = self._caller_user_id(context)
-        if not caller_user_id:
-            await context.abort(grpc.StatusCode.PERMISSION_DENIED, "authenticated caller required")
-            return
 
         if self._strategies_repo is None:
             await context.abort(grpc.StatusCode.UNAVAILABLE, "strategy store unavailable")
@@ -3177,10 +3188,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             return True
         return False
 
+    @owner_scoped
     async def ListTemplates(self, request, context):
-        if not self._caller_user_id(context):
-            await context.abort(grpc.StatusCode.PERMISSION_DENIED, "authenticated caller required")
-            return
         if self._strategy_templates_repo is None:
             return analysis_pb2.ListTemplatesResponse()
         rows = await self._strategy_templates_repo.list_active()
@@ -3188,9 +3197,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             templates=[_row_to_strategy_template(r) for r in rows]
         )
 
+    @owner_scoped
     async def ManageTemplate(self, request, context):
         caller_user_id = self._caller_user_id(context)
-        if not caller_user_id or not self._has_admin_scope(context):
+        if not self._has_admin_scope(context):
             await context.abort(
                 grpc.StatusCode.PERMISSION_DENIED, "admin scope required to manage templates"
             )
@@ -3294,11 +3304,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             candidate = f"{base}_{n}"
         return candidate
 
+    @owner_scoped
     async def InstantiateTemplate(self, request, context):
         owner = self._caller_user_id(context)
-        if not owner:
-            await context.abort(grpc.StatusCode.PERMISSION_DENIED, "authenticated caller required")
-            return
         if (
             self._strategies_repo is None
             or self._strategy_templates_repo is None
@@ -3414,6 +3422,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         await self._fill_template_origins([created.origin])
         return created
 
+    @owner_scoped
     async def ScreenSymbols(self, request, context):
         """Screen a symbol universe against weighted criteria (feature 060).
 
@@ -3459,7 +3468,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(e))
             return
         # Mark rows the caller already holds (best-effort cross-ref).
-        user_id = dict(context.invocation_metadata()).get("x-user-id", "")
+        user_id = self._caller_user_id(context)
         held = await self._drain_held_symbols(user_id, propagation_meta)
         for r in resp.results:
             # _drain_held_symbols keys by normalized symbol, so normalize the membership test
@@ -3497,6 +3506,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
 
     # ── Opportunity queue + readiness (feature 083) ─────────────────────────────
 
+    @owner_scoped
     async def EvaluateReadiness(self, request, context):
         """Trace a strategy's entry- or exit-rule conditions against recent bars for each requested
         symbol (feature 083). Returns per-symbol PASS/SOFT/FAIL leaves + a deterministic
@@ -3517,11 +3527,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             return
         # Owner-scoped — uniform PERMISSION_DENIED on a non-owned/missing strategy.
         caller_user_id = self._caller_user_id(context)
-        row = (
-            await self._strategies_repo.get_by_owner_and_id(caller_user_id, request.strategy_id)
-            if caller_user_id
-            else None
-        )
+        row = await self._strategies_repo.get_by_owner_and_id(caller_user_id, request.strategy_id)
         if row is None:
             await context.abort(
                 grpc.StatusCode.PERMISSION_DENIED,
@@ -3659,6 +3665,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             resp.computed_at.FromDatetime(min(served))
         return resp
 
+    @owner_scoped
     async def GetWatchlistReadiness(self, request, context):
         """Cache-first readiness decoration for a keyset page of a watchlist's bound
         (symbol, strategy_id) pairs (feature 181). The server derives the pairs from the OWNER'S OWN
@@ -3676,9 +3683,6 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             await context.abort(grpc.StatusCode.UNAVAILABLE, "watchlist/strategy store unavailable")
             return
         caller_user_id = self._caller_user_id(context)
-        if not caller_user_id:
-            await context.abort(grpc.StatusCode.PERMISSION_DENIED, "unauthenticated")
-            return
 
         # Watchlist read over the existing analysis→portfolio stub; portfolio enforces ownership
         # server-side from the forwarded x-user-id. A portfolio failure is the RPC's own error.
@@ -3905,6 +3909,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
 
         asyncio.get_event_loop().create_task(_run())
 
+    @owner_scoped
     async def QueryPnLPatterns(self, request, context):
         """Ranked P&L-attribution factors (feature 042). Reads the raw pnl_pattern_samples for the
         symbol (optionally narrowed by strategy/time) and buckets at QUERY time (design § 3):
@@ -3958,12 +3963,13 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             return {}
         return {src.slug: (src.display_name or src.slug) for src in resp.sources}
 
+    @owner_scoped
     async def GetAttribution(self, request, context):
         """Per-source attribution over closed positions (feature 029). Aggregates
         042's analysis.pnl_positions (net = realized_pnl - fees_total) + order_snapshots.signals
         (winner-takes-all conviction). Owner-scoped via x-user-id; read-only, DB-only."""
         caller = self._caller_user_id(context)
-        if not caller or self._pnl_positions_repo is None or self._order_snapshots_repo is None:
+        if self._pnl_positions_repo is None or self._order_snapshots_repo is None:
             return analysis_pb2.GetAttributionResponse()
 
         start = request.start.ToDatetime() if request.HasField("start") else None
@@ -4045,6 +4051,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             )
         return analysis_pb2.GetAttributionResponse(attributions=attributions)
 
+    @owner_scoped
     async def GetIndicatorSeries(self, request, context):
         """Per-component historical indicator series for a strategy over the caller's own bar window
         (feature 125, FR-6). Reuses ``StrategyEvaluator._compute_component`` per declared component
@@ -4063,11 +4070,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             await context.abort(grpc.StatusCode.UNAVAILABLE, "strategy store unavailable")
             return
         caller_user_id = self._caller_user_id(context)
-        row = (
-            await self._strategies_repo.get_by_owner_and_id(caller_user_id, request.strategy_id)
-            if caller_user_id
-            else None
-        )
+        row = await self._strategies_repo.get_by_owner_and_id(caller_user_id, request.strategy_id)
         if row is None:
             await context.abort(
                 grpc.StatusCode.PERMISSION_DENIED,
@@ -4171,6 +4174,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             times=request.times, components=component_series
         )
 
+    @owner_scoped
     async def ListOpportunities(self, request, context):
         """Pure read of the materialized per-user opportunity queue (feature 097). The Universe
         (active signals ∪ held positions ∪ watchlist ``(symbol, strategy)`` bindings) is computed
@@ -4194,7 +4198,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             for k, v in context.invocation_metadata()
             if k in ("x-user-id", "x-access-scope", "x-trace-id")
         ]
-        user_id = dict(context.invocation_metadata()).get("x-user-id", "")
+        user_id = self._caller_user_id(context)
 
         if self._opportunities_repo is None:  # no-DB test path
             return analysis_pb2.ListOpportunitiesResponse(page=common_pb2.PageResponse())
@@ -5673,16 +5677,14 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         while True:
             await asyncio.sleep(await self._template_intent_sweep_tick(schedule))
 
+    @owner_scoped
     async def SetOpportunityAction(self, request, context):
         """Persist a per-user disposition (snooze/dismiss/take) for a queued opportunity
         (feature 097). ``user_id`` comes from the propagated ``x-user-id`` header; the
         ``opportunity_key`` is the server-issued key the client echoes verbatim. Unlike the
         best-effort background writes, this write is user-visible (the UI reports success), so a
         DB failure surfaces as ``UNAVAILABLE`` rather than being swallowed."""
-        metadata = dict(context.invocation_metadata())
-        user_id = metadata.get("x-user-id", "")
-        if not user_id:
-            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, "missing user identity")
+        user_id = self._caller_user_id(context)
         if not request.opportunity_key:
             await context.abort(grpc.StatusCode.INVALID_ARGUMENT, "opportunity_key required")
         if self._opportunity_actions_repo is None:
@@ -5784,6 +5786,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 break
         return held
 
+    @owner_scoped
     async def GetStrategyAnalytics(self, request, context):
         """Per-strategy analytics for the Engine → Strategies surface (feature 083).
 
@@ -5798,17 +5801,13 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             for k, v in context.invocation_metadata()
             if k in ("x-user-id", "x-access-scope", "x-trace-id")
         ]
-        user_id = dict(context.invocation_metadata()).get("x-user-id", "")
+        user_id = self._caller_user_id(context)
         strategy_id = request.strategy_id
 
         # Owner-scoped analytics: a caller may only read analytics for their OWN strategy — uniform
         # PERMISSION_DENIED otherwise (the no-DB test path, repo is None, is unaffected).
         if self._strategies_repo is not None:
-            owned = (
-                await self._strategies_repo.get_by_owner_and_id(user_id, strategy_id)
-                if user_id
-                else None
-            )
+            owned = await self._strategies_repo.get_by_owner_and_id(user_id, strategy_id)
             if owned is None:
                 await context.abort(
                     grpc.StatusCode.PERMISSION_DENIED,
@@ -6624,7 +6623,7 @@ def _row_to_strategy_template(row: dict) -> "analysis_pb2.StrategyTemplate":
 
 
 def _row_to_score(row: dict) -> "analysis_pb2.StrategyScore":
-    """Convert an analysis.strategy_scores row to a StrategyScore proto (feature 064).
+    """Convert an analysis.strategy_scores_v2 row to a StrategyScore proto (feature 064).
 
     Decodes the ``component_scores`` map (NOT ``definition_json`` — the copy-trap the design
     called out); the repo's _to_dict already JSON-decodes the JSONB column to a plain dict.
