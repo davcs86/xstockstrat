@@ -233,6 +233,8 @@ jobs:
         uses: golangci/golangci-lint-action@v9
         with:
           version: v2.13.1
+          # Prebuilt binaries lag Go patch releases' export-data format; build with the runner's Go.
+          install-mode: goinstall
           working-directory: services/${{ matrix.service }}
           args: --modules-download-mode=mod
         env:
