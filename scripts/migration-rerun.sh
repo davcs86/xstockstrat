@@ -16,6 +16,25 @@ count_n1_triggers() {
     "SELECT count(*) FROM pg_trigger WHERE tgname LIKE '%_n1_owner_fill%';"
 }
 
+FORMULAS_REPO="$REPO_ROOT/services/xstockstrat-indicators/app/services/formulas_repository.py"
+# repo_sql <NAME>: the body of a `NAME = """` module constant; max_param <sql>: its highest $n.
+repo_sql() { awk -v n="$1" '$0 ~ "^" n " = \"\"\"" {f=1; next} f && /^"""/ {exit} f' "$FORMULAS_REPO"; }
+max_param() { printf '%s' "$1" | grep -oE '\$[0-9]+' | tr -d '$' | sort -n | tail -1; }
+# check_params <NAME> <expected>: AC-11 must bind exactly the values it supplies.
+check_params() {
+  local sql n
+  sql="$(repo_sql "$1")"
+  if [ -z "$sql" ]; then
+    echo "migration-rerun: AC-11: $1 not found in $FORMULAS_REPO" >&2
+    exit 1
+  fi
+  n="$(max_param "$sql")"
+  if [ "$n" != "$2" ]; then
+    echo "migration-rerun: AC-11: $1 has $n params, harness supplies $2" >&2
+    exit 1
+  fi
+}
+
 # Same x-migrations-table rule as db-migrate.sh service_db_url.
 service_db_url() {
   case "$DATABASE_URL" in
@@ -169,5 +188,31 @@ for sql in "$assertions"/*.sql; do
   echo "==> assertion: $(basename "$sql")"
   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -v seed_user_id="$SEED_USER_ID" -f "$sql"
 done
+
+check_params _INSERT_SQL 13
+check_params _UPDATE_SQL 8
+check_params _UPSERT_SQL 10
+ac11="$(mktemp)"
+{
+  echo "BEGIN;"
+  echo "ALTER TABLE indicators.formulas DROP COLUMN is_public;"
+  printf 'PREPARE ins AS %s;\n' "$(repo_sql _INSERT_SQL)"
+  cat <<'SQL'
+EXECUTE ins('00000000-0000-4000-8225-000000000011', 'ac11', '', 'result = close', 'u-ac11', '{}', '[]', '[]', 0, '[]', NULL, NULL, NULL); -- RegisterFormula
+EXECUTE ins('00000000-0000-4000-8225-000000000012', 'ac11-tpl', '', 'result = close', 'u-ac11', '{}', '[]', '[]', 0, '[]', 'tpl-ac11', 1, '00000000-0000-4000-8225-0000000000a1'); -- template instantiate
+SQL
+  printf 'PREPARE upd AS %s;\n' "$(repo_sql _UPDATE_SQL)"
+  cat <<'SQL'
+EXECUTE upd('00000000-0000-4000-8225-000000000011', 'ac11b', '', 'result = open', '[]', '[]', 0, '[]'); -- UpdateFormula
+SQL
+  printf 'PREPARE ups AS %s;\n' "$(repo_sql _UPSERT_SQL)"
+  cat <<'SQL'
+EXECUTE ups('00000000-0000-4000-8225-000000000013', 'ac11-seed', '', 'result = close', 'system', '{}', '[]', '[]', 0, '[]'); -- seed upsert
+EXECUTE ups('00000000-0000-4000-8225-000000000013', 'ac11-seed2', '', 'result = close', 'system', '{}', '[]', '[]', 0, '[]'); -- seed upsert (conflict path)
+ROLLBACK;
+SQL
+} >"$ac11"
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$ac11"
+echo "==> AC-11: indicators write SQL runs without is_public"
 
 echo "==> migration-rerun: OK (replay idempotent, contract downs refused, dirty guard enforced)"

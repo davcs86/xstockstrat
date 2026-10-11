@@ -942,7 +942,7 @@ ruff check . && ruff format --check .
 
 ### Step 16 — test: AC-11 real-schema harness in `migration-rerun.sh`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: platform tooling (`scripts/`)
 **Files**:
 - `scripts/migration-rerun.sh` — modify
@@ -1313,3 +1313,15 @@ Other churn: five repository calls dropped their `is_public=` kwarg (3 `create` 
 and every read-back `FormulaDefinition.is_public is False` assertion is kept (PRESERVE `@AC-3 @feature-224`).
 **Reason**: the template fake never reflected the write, so the literal replacement would have been a tautology.
 **Disposition**: accepted; no test deleted.
+
+### Deviation: Step 16 — AC-11 real-schema harness (TDD red/green + authoritative run)
+**Spec said**: "`red-green required`. Against the pre-Step-14 constants, `_INSERT_SQL` still names `is_public` and the
+harness fails." and "Authoritative: the CI `migration-rerun` job on this step's PR is green."
+**Actual**: no database was started. Offline red: the harness's `repo_sql`/`max_param`/`check_params` run against the
+pre-Step-14 `formulas_repository.py` (`git show a32a210c~1:…`) fail with `AC-11: _INSERT_SQL has 14 params, harness
+supplies 13` (exit 1). Offline green: the spec's extraction smoke prints `13 / 8 / 10`; the block was rendered with the
+real constants into a temp file and all 11 statements parse with libpg_query (`pglast.parse_sql`: BEGIN, ALTER, 3 PREPARE,
+5 EXECUTE, ROLLBACK); shellcheck + `shfmt -d -i 2` + `bash -n` clean. No PR exists yet (sequential mode), so the live run
+is the integration PR's `migration-rerun` job.
+**Reason**: HARD CONSTRAINT — no database is started to verify a step; sequential mode opens no per-step PR.
+**Disposition**: offline check — live red/green deferred to CI (`migration-rerun` on the integration PR).

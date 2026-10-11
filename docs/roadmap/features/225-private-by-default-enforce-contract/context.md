@@ -402,3 +402,17 @@ integration PR: it is the first live proof of Steps 3–5.
 - Files modified: `tests/test_formulas.py`, `tests/test_private_formulas.py`, `tests/test_fundamentals_formula.py`,
   `tests/test_formula_templates.py` (`test_formula_read_authz.py` needed no change: its `is_public` uses are proto fields)
 - Deviations: template-fake assertion shape + positional renumber (Deviation Log).
+
+### Step 16 — AC-11 real-schema harness in `migration-rerun.sh` [done]
+- `FORMULAS_REPO`, one-line `repo_sql` (awk between `NAME = """` and the column-0 `"""`) and `max_param`, and
+  `check_params <NAME> <expected>` (fails naming the constant when empty, or `AC-11: <NAME> has N params, harness supplies
+  M`). After the assertion loop: `check_params` 13/8/10, then a temp file — `BEGIN; ALTER TABLE indicators.formulas DROP
+  COLUMN is_public;` + PREPARE/EXECUTE of the three extracted constants (RegisterFormula, template instantiate,
+  UpdateFormula, seed upsert ×2 incl. the conflict path) + `ROLLBACK;` — run with `psql -v ON_ERROR_STOP=1 -f`; then
+  `==> AC-11: indicators write SQL runs without is_public`.
+- TDD: offline red — `check_params` against the pre-Step-14 repository file → `AC-11: _INSERT_SQL has 14 params, harness
+  supplies 13` (exit 1); offline green — extraction smoke `13 / 8 / 10`, rendered block parses (11 statements, pglast).
+  Live red/green is CI `migration-rerun` on the integration PR (Deviation Log).
+- Verification: shellcheck + `shfmt -d -i 2` + `bash -n` clean. Coverage: N/A (`scripts/`).
+- Files modified: `scripts/migration-rerun.sh`
+- Deviations: offline substitution for the DB-backed red/green and CI run (Deviation Log).
