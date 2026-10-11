@@ -125,3 +125,19 @@
   - Fix: Step 6 builds `owner_metadata` before each drain's inner `try` and adds a per-row `except ValueError` (log and skip) around the drain block. This realises design Open Risk 4 ("that unit is skipped") rather than changing it. No operator decision was needed, but `/sdd-review impl-spec` should confirm it.
 - **AC-17 / `_compose`:** this follows the round-3 `/sdd-spec` note (keep OHLCV, skip indicators and ingest) rather than design §2 row #8's `return None, [], {}, [], True`.
 - **Characterization ACs:** AC-5 (Step 2, the existing 224 contract gate), AC-7 (Step 18, FR-6 regression guard) and AC-10 (Step 13) need no production change, so they are green on their first run by design. `/sdd-execute` should record them as such and not treat them as a TDD-gate failure.
+
+## Session 2026-10-11 — sdd-review impl-spec (advisory)
+
+- Result: **PASS WITH WARNINGS**, 0 blockers, no Floor breach. C-15 19/19, C-08 paired, C-07 027/014 next-free.
+  Flagged correction CONFIRMED: live-loop drains (`live_loop.py:370-382`) are outside the per-pair try; Step 6's
+  per-row `except ValueError: continue` is the right fix (design.md §2 boundary claim was wrong for those sites).
+- Warnings — resolution (fixed before execution, step bodies not yet frozen):
+  - [x] Step 6 verification grep matched 3-tuples / `k in (...)` filters → narrowed to 2-tuples.
+  - [x] Steps 9/11: `test_query_pnl_patterns.py` None-context churn moved into Step 9 (else Step 9's full suite fails after Step 8); Step 11 args assertion is a tuple.
+  - [x] Step 17 instruction 5 now also covers `servicer.py:1337` and `:1367-1368` (verification grep).
+  - [x] Steps 2/5/16: "Coverage: N/A (scripts/)"; Step 2 cases (a)–(i).
+  - [x] **Accepted trade-off:** Steps 9 and 13 keep a `tests/*.py` Files entry — the churned suites are only knowable from
+    the red run; each touched file is listed in the step commit and the Deviation Log (F-08 audited per commit).
+- Notes carried to execution: Step 6 states `owner_metadata` placement relative to `_drain_*` `_portfolio is None` guards;
+  NULL `pnl_pattern_samples.position_id` legacy rows are excluded for every caller (doc line in Step 19); Step 12
+  instruction 2 wording; Step 19 teardown fixes outside its 10 files go to the Deviation Log.

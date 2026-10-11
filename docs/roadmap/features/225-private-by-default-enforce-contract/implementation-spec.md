@@ -55,7 +55,7 @@ This spec implements release N+1 of feature 224, following the approved `design.
 | SetOpportunityAction headerless → UNAUTHENTICATED | 9 |
 | indicators completeness (+ grant-without-SAN, positive control), AC-1/2/10, SQL routing, static `"is_public"` absence | 13, 15 |
 | ingest completeness (+ grant-without-SAN, positive control on IngestSignal), `fn.__name__` grant pinning, AC-9, AC-7, dedup via `signal_dedup_claims` | 18 |
-| `migration-dirty-guard.test.sh` cases (a)–(h) | 2 |
+| `migration-dirty-guard.test.sh` cases (a)–(i) | 2 |
 | CI: structural-test append, `migrations` paths filter, no-mount image smoke step | 1 |
 | `migration-rerun.sh` goto 26 + post-224 fixture, replay list + 014/027, trigger count 0, refusal + guard flow, final up + assertions | 5 |
 | AC-11 harness with per-constant param-count check | 16 |
@@ -182,7 +182,7 @@ python3 -c "import yaml; yaml.safe_load(open('.github/workflows/ci.yml'))"
 - Style precedent: `scripts/check-migration-contract.test.sh:1-56`. It uses `set -uo pipefail`, a `fail()` helper, `mktemp -d` with `trap 'rm -rf …' EXIT`, and cases (a)–(c). Case (c) at `:49-54` already proves the generic "expand not on origin/main" failure.
 - The contract gate prints `contract-gate: $f contracts $target, which is not on origin/main` to stderr (`scripts/check-migration-contract.sh:22`).
 
-**TDD**: `red-green required`. Cases (a)–(h) fail before Step 1. Case (d) of the contract test is a **characterization** of the existing 224 gate and is green on its first run by design (AC-5 guards a gate that already exists); record that in the TDD evidence.
+**TDD**: `red-green required`. Cases (a)–(i) fail before Step 1. Case (d) of the contract test is a **characterization** of the existing 224 gate and is green on its first run by design (AC-5 guards a gate that already exists); record that in the TDD evidence.
 
 **Covers**: `AC-5, AC-18, AC-19` (AC-18: the refusal text and exit code; Step 5 covers the end-to-end state proof)
 
@@ -206,6 +206,7 @@ shellcheck scripts/migration-dirty-guard.test.sh scripts/check-migration-contrac
 shfmt -d -i 2 scripts/migration-dirty-guard.test.sh scripts/check-migration-contract.test.sh
 bash scripts/migration-dirty-guard.test.sh && bash scripts/check-migration-contract.test.sh
 ```
+Coverage: N/A (`scripts/` has no CI coverage gate).
 
 ---
 
@@ -406,6 +407,7 @@ grep -n "n1_owner_fill:" scripts/migration-assertions/ingest-013.sql && exit 1 |
 ls scripts/migration-assertions/{fixtures-post-224,analysis-027,ingest-014}.sql
 # Authoritative run (needs a database, so not run locally): the CI `migration-rerun` job on this step's PR must be green.
 ```
+Coverage: N/A (`scripts/` has no CI coverage gate).
 
 ---
 
@@ -465,7 +467,7 @@ ls scripts/migration-assertions/{fixtures-post-224,analysis-027,ingest-014}.sql
 **Verification**:
 ```bash
 cd services/xstockstrat-analysis
-grep -rn '("x-user-id",' app | grep -v "app/identity.py\|SYSTEM_IDENTITY"   # expect no output
+grep -rnE '\("x-user-id", [A-Za-z_][A-Za-z_.\[\]"]*\)' app | grep -v "app/identity.py\|SYSTEM_IDENTITY"   # 2-tuples only; expect no output (3-tuple header lists and `k in (...)` filters are not matches)
 grep -n "owner_metadata" app/handlers/servicer.py app/engine/live_loop.py app/engine/pnl_pattern_consumer.py app/services/evaluator.py
 ruff check . && ruff format --check .
 ```
@@ -622,6 +624,7 @@ ruff check . && ruff format --check .
 - `services/xstockstrat-analysis/tests/conftest.py` — modify (add `OWNER_HEADERS`, `OTHER_HEADERS`)
 - `services/xstockstrat-analysis/tests/test_owner_scoped_completeness.py` — create
 - `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify (churn; `test_unauthenticated_caller_denied` at `:954`)
+- `services/xstockstrat-analysis/tests/test_query_pnl_patterns.py` — modify (churn rule (ii): the `None` contexts at `:86-88,:106-108` become `ctx_with(OWNER_HEADERS)`, else the Step-8 decorator crashes them)
 - `services/xstockstrat-analysis/tests/*.py` — modify only the suites that the red run shows calling an RPC headerless (churn rule below; list each touched file in the step commit)
 
 **Reviewers**: Service owner — xstockstrat-analysis — backtest reproducibility, strategy scoring determinism
@@ -630,7 +633,7 @@ ruff check . && ruff format --check .
 - `tests/conftest.py:33-38` — `ctx_with(headers)` replays headers, and its `abort` **raises** (`AsyncMock(side_effect=Exception("aborted"))`).
 - Descriptor: `gen.analysis.v1.analysis_pb2.DESCRIPTOR.services_by_name["AnalysisService"].methods` (`packages/proto/analysis/v1/analysis.proto:12`, 23 rpcs).
 - `tests/test_analysis_servicer.py:954-967` `test_unauthenticated_caller_denied` currently asserts `PERMISSION_DENIED` for a headerless `SetStrategyLive`. That is a churn-rule (i) test.
-- `tests/test_query_pnl_patterns.py:73-108` calls `QueryPnLPatterns(…, None)` with no context. That is churn rule (ii), handled in Step 11.
+- `tests/test_query_pnl_patterns.py:73-108` calls `QueryPnLPatterns(…, None)` with no context. That is churn rule (ii), fixed **in this step** (Step 8's decorator would otherwise crash it and fail this step's full-suite run); Step 11 only adds the owner-filter fake + new tests.
 - `_BOB` in `tests/test_owner_header_guard.py:41` is a single-file constant. The new `OWNER_HEADERS` gets a second consumer here, so it moves into `conftest.py` (C-13).
 
 **TDD**: `red-green required`. Before Step 8, headerless calls get `PERMISSION_DENIED`, `INVALID_ARGUMENT` or an empty response, and `system` gets "owns nothing" rather than `PERMISSION_DENIED`.
@@ -710,7 +713,7 @@ ruff check . && ruff format --check .
 
 **Codebase Evidence**:
 - `tests/test_query_pnl_patterns.py:63-70` has `_FakeSamplesRepo.query(self, *, symbol, strategy_id="", from_ts=None, to_ts=None)`. This in-memory fake must take `user_id` (fails.md `200-symbol-opportunity-ranking` scope-creep rule).
-- `:73-108` pass a `None` context, which is churn rule (ii) → `ctx_with(OWNER_HEADERS)`.
+- `:73-108` passed a `None` context; Step 9 already converted them to `ctx_with(OWNER_HEADERS)`.
 - `_ind` and `_sig` are the row builders already in this file.
 - Config key `analysis.patterns.min_sample_count` default 5 (`servicer.py:3927`).
 
@@ -719,10 +722,10 @@ ruff check . && ruff format --check .
 **Covers**: `AC-14, AC-15`
 
 **Instructions**:
-1. Update `_FakeSamplesRepo` to store `(owner, row)` pairs and filter by `user_id` in `query(*, user_id, symbol, …)`. Pass `ctx_with(OWNER_HEADERS)` in the existing tests.
+1. Update `_FakeSamplesRepo` to store `(owner, row)` pairs and filter by `user_id` in `query(*, user_id, symbol, …)` (the existing tests already pass `ctx_with(OWNER_HEADERS)` since Step 9).
 2. **AC-14, repository level.** Add a recording-DB test. A fake whose `fetch(sql, *args)` records `sql` and `args`. Call `PnLPatternSamplesRepository(db).query(user_id="u-1", symbol="AAPL")`. Assert:
    - `sql` contains `position_id IN (SELECT position_id FROM analysis.pnl_positions WHERE user_id = $2 AND symbol = $1)`;
-   - `args == ["AAPL", "u-1"]`.
+   - `args == ("AAPL", "u-1")` (recorded `*args` tuple).
    Add one more case with `strategy_id` and both timestamps, so the `$N` index follows `len(args)` (`$5`).
 3. **AC-14, servicer level.** Seed the fake with u-1 samples on AAPL and u-2 samples on AAPL. Each set has ≥ `min_sample_count`, and `sig:newsletter-b` appears only in u-2's samples. Call as `OWNER_HEADERS` (u-1). Assert:
    - no returned factor is `sig:newsletter-b`;
@@ -983,6 +986,7 @@ shellcheck scripts/migration-rerun.sh && shfmt -d -i 2 scripts/migration-rerun.s
 bash -c 'source <(sed -n "/^repo_sql()/p;/^max_param()/p" scripts/migration-rerun.sh); FORMULAS_REPO=services/xstockstrat-indicators/app/services/formulas_repository.py; for n in _INSERT_SQL _UPDATE_SQL _UPSERT_SQL; do s="$(repo_sql $n)"; [ -n "$s" ] && echo "$n $(max_param "$s")"; done'   # expect 13 / 8 / 10
 # Authoritative: the CI `migration-rerun` job on this step's PR is green.
 ```
+Coverage: N/A (`scripts/` has no CI coverage gate).
 
 ---
 
@@ -1046,7 +1050,7 @@ bash -c 'source <(sed -n "/^repo_sql()/p;/^max_param()/p" scripts/migration-reru
    - `_abort_missing_source`: `owner != SYSTEM_OWNER`.
    - InstantiateTemplate: delete `:1598-1602`.
    - `_admin_foreign_owner(owner: str, …)`: drop `owner is None or`.
-   - Update the docstrings that mention "release N"/"headerless" at `:330-333` and `:956-957`.
+   - Update the docstrings/comments that mention "release N"/"headerless" at `:330-333`, `:956-957`, the `_register_conflict` docstring (`:1337`) and the comment above the deleted ManageSignalSource block (`:1367-1368`).
 6. `watcher.py:25-27`: change the example to `'ingest.mcp_credential.<uuid>'` / `('ingest', 'mcp_credential.<uuid>')`. This is the shape AC-7 uses.
 
 **Verification**:
