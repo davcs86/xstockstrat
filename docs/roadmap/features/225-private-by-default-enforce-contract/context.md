@@ -373,3 +373,18 @@ integration PR: it is the first live proof of Steps 3–5.
   `tests/test_formulas.py`, `tests/test_execute_formula_concurrency.py`, `tests/test_formula_templates.py`,
   `tests/test_private_formulas.py`
 - Deviations: churned-file list (Deviation Log).
+
+### Step 14 — indicators stops writing `is_public` on every write path [done]
+- `_INSERT_SQL` drops `is_public` (placeholders `$1..$13`); `_insert_args` loses the parameter. The inline upsert/update
+  SQL is hoisted to module constants `_UPSERT_SQL` (`$1..$10`, `is_public` gone from columns, VALUES and the `ON CONFLICT`
+  set list) and `_UPDATE_SQL` (`$1..$8`), each closing `"""` at column 0 next to `_INSERT_SQL`; `upsert`/`update` lose
+  `is_public` and pass the constants. Servicer: `is_public=False` removed from RegisterFormula/UpdateFormula and
+  `"is_public": False` from `_template_copy` (docstring: "the payload's deprecated author is ignored").
+  `seed_formulas.py` drops `is_public=fvq.IS_PUBLIC`; `fundamentals_value_quality.py` drops `IS_PUBLIC`.
+- TDD (paired with Step 15): red — Step 15's `TestIsPublicNotWritten` written first: 5 failed (`_UPDATE_SQL`/`_UPSERT_SQL`
+  not importable; `create`/`create_pending_copies` → `_insert_args() missing … 'is_public'`) → green under Step 15.
+- Verification: `grep -rn "is_public\|IS_PUBLIC" app` matches only gitignored `__pycache__/*.pyc` (no `.py` source hit);
+  the three `^_… = ` constants present (3); ruff check + format clean.
+- Files modified: `app/services/formulas_repository.py`, `app/handlers/servicer.py`, `app/services/seed_formulas.py`,
+  `app/formulas/fundamentals_value_quality.py`
+- Deviations: none (the column keeps `NOT NULL DEFAULT FALSE`; reads stay `SELECT *`).

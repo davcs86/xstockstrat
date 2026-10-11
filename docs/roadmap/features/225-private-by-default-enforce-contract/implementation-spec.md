@@ -848,7 +848,7 @@ grep -rn "OWNER_HEADERS\|OTHER_HEADERS" tests | grep -v "^tests/conftest.py" | h
 
 ### Step 14 — service: indicators stops writing `is_public` on every write path (FR-4)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/services/formulas_repository.py` — modify

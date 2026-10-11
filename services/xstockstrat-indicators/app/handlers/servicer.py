@@ -421,7 +421,6 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
                 description=request.description,
                 source=request.source,
                 author=author,
-                is_public=False,
                 input_schema=dict(request.input_schema),
                 parameters=param_dicts,
                 outputs=output_dicts,
@@ -571,7 +570,6 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
             name=eff_name,
             description=eff_description,
             source=eff_source,
-            is_public=False,
             parameters=eff_parameters,
             outputs=eff_outputs,
             warmup_period=eff_warmup,
@@ -747,7 +745,7 @@ def _validate_register_payload(payload) -> None:
 
 def _template_copy(row: dict, owner: str) -> dict:
     """FormulasRepository.create fields for a snapshot of a template row; the payload's
-    deprecated is_public/author are ignored (the copy is private to ``owner``)."""
+    deprecated author is ignored (the copy is private to ``owner``)."""
     payload = ParseDict(row["payload"], indicators_pb2.RegisterFormulaRequest())
     return {
         "formula_id": str(uuid.uuid4()),
@@ -755,7 +753,6 @@ def _template_copy(row: dict, owner: str) -> dict:
         "description": payload.description,
         "source": payload.source,
         "author": owner,
-        "is_public": False,
         "input_schema": dict(payload.input_schema),
         "parameters": [MessageToDict(p) for p in payload.parameters],
         "outputs": [MessageToDict(o) for o in payload.outputs],
