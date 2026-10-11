@@ -21,7 +21,7 @@ import asyncio
 import logging
 import time
 from bisect import bisect_right
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import NamedTuple
 
 from gen.analysis.v1 import analysis_pb2
@@ -37,15 +37,17 @@ from opentelemetry import metrics
 
 from app.handlers.servicer import (
     SYSTEM_IDENTITY,
-    _fundamental_periods_from_response,
+    _fetch_historical_fundamentals_paged,
     _normalize_symbol,
+    _record_pit_failure,
+    _record_snapshot_failure,
     _row_to_strategy_definition,
+    _snapshot_periods,
     blend_strategy_id,
 )
 from app.repositories.strategies import LIVE_ENABLED_PREDICATE_SQL
 from app.services import sector_params, warmup
 from app.services.cooldown import effective_cooldown_days, is_cooldown_active
-from app.services.evaluator import _FUNDAMENTAL_METRICS, FundamentalPeriod
 from app.services.fundamentals_guard import (
     _definition_has_fundamental,
     _definition_wants_fundamentals_formula,
@@ -610,7 +612,7 @@ class LiveEvaluationLoop:
                 out[sym] = bench_bars
         return out or None
 
-    async def _load_fundamentals(self, definition, symbol):
+    async def _load_fundamentals(self, definition, symbol, failures=None):
         """Feature 198 — preload the evaluated symbol's point-in-time fundamentals for the live
         path, mirroring the servicer backtest preload for backtest/live parity. Returns ``None``
         when the definition references no fundamental operand (the common case), else the full
@@ -625,17 +627,17 @@ class LiveEvaluationLoop:
         if not self._cfg.get_bool("analysis.backtest.fundamentals.enabled", False):
             return None
         try:
-            resp = await self._marketdata.GetHistoricalFundamentals(
-                marketdata_pb2.GetHistoricalFundamentalsRequest(symbol=symbol)
-            )
+            return await _fetch_historical_fundamentals_paged(self._marketdata, symbol, ())
         except Exception as e:  # noqa: BLE001 — a fundamentals fetch must never crash the loop
             log.warning("live_loop: GetHistoricalFundamentals(%s) failed: %s", symbol, e)
+            _record_pit_failure(failures, symbol, e)
             return []
-        return _fundamental_periods_from_response(resp)
 
-    async def _load_fundamentals_snapshot(self, definition, symbol, formula_fund_map):
+    async def _load_fundamentals_snapshot(
+        self, definition, symbol, formula_fund_map, failures=None
+    ):
         """Feature 200 — snapshot fundamentals for a fundamentals-only formula on the LIVE surface:
-        the current ``GetFundamentalsMulti`` row lowered into a one-element ``[FundamentalPeriod]``
+        the current ``GetFundamentals`` row lowered into a one-element ``[FundamentalPeriod]``
         with a ``filed_date`` sentinel strictly before every bar, so the evaluator broadcasts it as
         one degenerate epoch (one code shape, PIT + snapshot — servicer parity). A SEPARATE
         channel from the 198 PIT ``_load_fundamentals`` above (C-16 PRESERVE). ``None`` when a
@@ -646,19 +648,14 @@ class LiveEvaluationLoop:
         if not self._cfg.get_bool("analysis.backtest.fundamentals.enabled", False):
             return None
         try:
-            resp = await self._marketdata.GetFundamentalsMulti(
-                marketdata_pb2.GetFundamentalsMultiRequest(symbols=[symbol])
+            resp = await self._marketdata.GetFundamentals(
+                marketdata_pb2.GetFundamentalsRequest(symbol=symbol)
             )
         except Exception as e:  # noqa: BLE001 — a fundamentals fetch must never crash the loop
-            log.warning("live_loop: GetFundamentalsMulti(%s) snapshot failed: %s", symbol, e)
+            log.warning("live_loop: GetFundamentals(%s) snapshot failed: %s", symbol, e)
+            _record_snapshot_failure(failures, symbol, e)
             return []
-        row = next((f for f in resp.fundamentals if f.symbol == symbol), None)
-        if row is None:
-            return []
-        missing = set(row.missing_metrics)
-        values = {m: (None if m in missing else getattr(row, m)) for m in _FUNDAMENTAL_METRICS}
-        # date.min < every real bar date → visible on every bar (T+1 holds trivially).
-        return [FundamentalPeriod(filed_date=date.min, values=values)]
+        return _snapshot_periods(resp)
 
     async def _eval_pair(self, definition, symbol, throttle, deny_entry=False):
         bars_resp = await self._marketdata.GetBars(

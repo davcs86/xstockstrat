@@ -71,6 +71,7 @@ from app.services.evaluator import (
     referenced_refs,
 )
 from app.services.fundamentals_guard import (
+    Availability,
     _definition_has_fundamental,
     _definition_wants_fundamentals_formula,
 )
@@ -266,6 +267,13 @@ _BAR_PAGE_SIZE = 1000
 # max_range_days). Exhausting it RAISES — silently truncating would reintroduce the fixed bug.
 _MAX_BAR_PAGES = 32
 
+# PIT fundamentals pager bounds (feature 215): 8 × 200 periods covers decades of filings; a
+# stalled cursor or the cap raises so the loader reports UNKNOWN, never a truncated history.
+_FUND_PAGE_SIZE = 200
+_MAX_FUND_PAGES = 8
+# Per-page deadline: a stuck marketdata call reads as UNKNOWN instead of hanging the surface.
+_FUND_PAGE_TIMEOUT_SECONDS = 10
+
 # Recent-bar lookback for EvaluateReadiness: ~400 calendar days ≈ 280 trading bars, enough to
 # warm up long indicators (e.g. SMA/EMA up to ~200 periods) for a last-bar readiness read.
 _READINESS_LOOKBACK_DAYS = 400
@@ -314,6 +322,10 @@ def blend_strategy_id(cfg) -> str:
 
 class _BarFetchError(Exception):
     """Raised when bar pagination cannot complete safely (non-advancing cursor, page cap)."""
+
+
+class _FundamentalsPageError(Exception):
+    """Raised when PIT fundamentals pagination cannot complete safely (stalled cursor, page cap)."""
 
 
 def bucket_pnl_factors(samples, *, min_sample, bucket_count):
@@ -1614,7 +1626,15 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         return out
 
     async def _load_fundamentals(
-        self, symbol, definition, propagation_meta, *, sem=None, cache=None, formula_fund_map=None
+        self,
+        symbol,
+        definition,
+        propagation_meta,
+        *,
+        sem=None,
+        cache=None,
+        formula_fund_map=None,
+        failures=None,
     ):
         """Feature 198 — preload the evaluated symbol's point-in-time fundamentals filings for a
         backtest/live/readiness/opportunities evaluation, or ``None`` when the definition references
@@ -1642,20 +1662,19 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             return None
         if cache is not None and symbol in cache:
             return cache[symbol]
-        req = marketdata_pb2.GetHistoricalFundamentalsRequest(symbol=symbol)
         try:
             if sem is not None:
                 async with sem:
-                    resp = await self._marketdata.GetHistoricalFundamentals(
-                        req, metadata=propagation_meta
+                    out = await _fetch_historical_fundamentals_paged(
+                        self._marketdata, symbol, propagation_meta
                     )
             else:
-                resp = await self._marketdata.GetHistoricalFundamentals(
-                    req, metadata=propagation_meta
+                out = await _fetch_historical_fundamentals_paged(
+                    self._marketdata, symbol, propagation_meta
                 )
-            out = _fundamental_periods_from_response(resp)
         except Exception as e:  # noqa: BLE001 — fundamentals fetch is best-effort (degrade to hold)
             log.warning("GetHistoricalFundamentals fetch failed for %s: %s", symbol, e)
+            _record_pit_failure(failures, symbol, e)
             out = []
         # Deployable observability (fundamentals_history is usually checked via SQL): periods loaded
         # + per-metric non-None counts, so an operator sees what PIT data actually feeds the rule.
@@ -1670,7 +1689,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             cache[symbol] = out
         return out
 
-    async def _formula_fundamentals(self, definition, propagation_meta, *, cache=None):
+    async def _formula_fundamentals(
+        self, definition, propagation_meta, *, cache=None, failures=None
+    ):
         """Feature 200 — build ``{formula_id: [FundamentalMetric enum int]}`` for the definition's
         custom-formula components that declare fundamentals inputs, via one ``GetFormula`` per
         distinct formula id (``cache`` dedups across a pass — mirrors ``_load_fundamentals``'s
@@ -1695,6 +1716,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     metrics = [int(m) for m in getattr(formula, "fundamental_inputs", [])]
                 except grpc.RpcError:
                     metrics = []
+                    if failures is not None:
+                        failures[("formula", fid)] = Availability.UNKNOWN
                 if cache is not None:
                     cache[fid] = metrics
             if metrics:
@@ -1702,11 +1725,19 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         return out
 
     async def _load_fundamentals_snapshot(
-        self, definition, symbol, propagation_meta, formula_fund_map, *, sem=None, cache=None
+        self,
+        definition,
+        symbol,
+        propagation_meta,
+        formula_fund_map,
+        *,
+        sem=None,
+        cache=None,
+        failures=None,
     ):
         """Feature 200 — snapshot fundamentals for a fundamentals-only formula on a NON-backtest
         surface (live/screener/readiness/opportunities/GetIndicatorSeries): the current marketdata
-        ``GetFundamentalsMulti`` row lowered into a **one-element** ``[FundamentalPeriod]`` with a
+        ``GetFundamentals`` row lowered into a **one-element** ``[FundamentalPeriod]`` with a
         ``filed_date`` sentinel strictly before every bar, so the evaluator's epoch broadcast
         spreads it across all bars as one degenerate epoch (one code shape, PIT + snapshot).
 
@@ -1721,28 +1752,17 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             return None
         if cache is not None and symbol in cache:
             return cache[symbol]
-        req = marketdata_pb2.GetFundamentalsMultiRequest(symbols=[symbol])
+        req = marketdata_pb2.GetFundamentalsRequest(symbol=symbol)
         try:
             if sem is not None:
                 async with sem:
-                    resp = await self._marketdata.GetFundamentalsMulti(
-                        req, metadata=propagation_meta
-                    )
+                    resp = await self._marketdata.GetFundamentals(req, metadata=propagation_meta)
             else:
-                resp = await self._marketdata.GetFundamentalsMulti(req, metadata=propagation_meta)
-            row = next((f for f in resp.fundamentals if f.symbol == symbol), None)
-            if row is None:
-                out = []
-            else:
-                missing = set(row.missing_metrics)
-                values = {
-                    m: (None if m in missing else getattr(row, m)) for m in _FUNDAMENTAL_METRICS
-                }
-                # date.min is strictly before every real bar date → visible on every bar (T+1 holds
-                # trivially), so the single snapshot row broadcasts as one epoch.
-                out = [FundamentalPeriod(filed_date=date.min, values=values)]
+                resp = await self._marketdata.GetFundamentals(req, metadata=propagation_meta)
+            out = _snapshot_periods(resp)
         except Exception as e:  # noqa: BLE001 — snapshot fetch is best-effort (degrade to hold)
-            log.warning("GetFundamentalsMulti snapshot fetch failed for %s: %s", symbol, e)
+            log.warning("GetFundamentals snapshot fetch failed for %s: %s", symbol, e)
+            _record_snapshot_failure(failures, symbol, e)
             out = []
         if cache is not None:
             cache[symbol] = out
@@ -6004,7 +6024,12 @@ def _fundamentals_source_symbol_conflict(definition, formula_fund_map) -> str | 
 
 
 def _fundamental_periods_from_response(resp) -> list[FundamentalPeriod]:
-    """Map a marketdata ``GetHistoricalFundamentalsResponse`` to evaluator ``FundamentalPeriod``s
+    """``_fundamental_periods`` over one ``GetHistoricalFundamentalsResponse`` page."""
+    return _fundamental_periods(resp.periods)
+
+
+def _fundamental_periods(periods) -> list[FundamentalPeriod]:
+    """Map marketdata ``HistoricalFundamentalsPeriod``s to evaluator ``FundamentalPeriod``s
     (feature 198), shared by the servicer backtest path and the live loop so the PIT-mapping rules
     never drift between backtest and live (backtest/live parity).
 
@@ -6013,7 +6038,7 @@ def _fundamental_periods_from_response(resp) -> list[FundamentalPeriod]:
     hole). A metric listed in the proto's ``missing_metrics`` is stored as ``None`` so a genuine
     ``0.0`` reading is never confused with 'not reported' (marketdata.proto field 21)."""
     out: list[FundamentalPeriod] = []
-    for p in resp.periods:
+    for p in periods:
         if not (p.filed_date.seconds or p.filed_date.nanos):
             continue
         missing = set(p.missing_metrics)
@@ -6022,6 +6047,81 @@ def _fundamental_periods_from_response(resp) -> list[FundamentalPeriod]:
             FundamentalPeriod(filed_date=p.filed_date.ToDatetime(tzinfo=UTC).date(), values=values)
         )
     return out
+
+
+async def _fetch_historical_fundamentals_paged(stub, symbol, metadata) -> list[FundamentalPeriod]:
+    """Drain every ``GetHistoricalFundamentals`` page for ``symbol`` (feature 215).
+
+    marketdata pages ascending by ``(period_end, fiscal_period)``, so page 1 alone drops the
+    NEWEST filings. Each page's first period must sort strictly after the last one seen (a bad
+    token re-serves page 1); a stalled cursor or ``_MAX_FUND_PAGES`` raises
+    ``_FundamentalsPageError`` rather than returning a truncated history."""
+    periods: list = []
+    token = ""
+    last_seen = None
+    for _ in range(_MAX_FUND_PAGES):
+        resp = await stub.GetHistoricalFundamentals(
+            marketdata_pb2.GetHistoricalFundamentalsRequest(
+                symbol=symbol,
+                page=common_pb2.PageRequest(page_size=_FUND_PAGE_SIZE, page_token=token),
+            ),
+            metadata=metadata,
+            timeout=_FUND_PAGE_TIMEOUT_SECONDS,
+        )
+        page = list(resp.periods)
+        if page:
+            first = _period_sort_key(page[0])
+            if last_seen is not None and first <= last_seen:
+                raise _FundamentalsPageError(f"{symbol}: fundamentals cursor did not advance")
+            last_seen = _period_sort_key(page[-1])
+            periods.extend(page)
+        token = resp.pagination.next_page_token
+        if not token:
+            return _fundamental_periods(periods)
+    raise _FundamentalsPageError(
+        f"{symbol}: fundamentals pagination exceeded {_MAX_FUND_PAGES} pages"
+    )
+
+
+def _period_sort_key(p):
+    return (p.period_end.seconds, p.period_end.nanos, p.fiscal_period)
+
+
+def _rpc_code(e):
+    return e.code() if isinstance(e, grpc.RpcError) and hasattr(e, "code") else None
+
+
+def _record_pit_failure(failures, symbol, e) -> None:
+    """A PIT fetch error is UNKNOWN unless marketdata said NOT_FOUND (absence, feature 215)."""
+    if failures is not None and _rpc_code(e) != grpc.StatusCode.NOT_FOUND:
+        failures[("pit", symbol)] = Availability.UNKNOWN
+
+
+def _record_snapshot_failure(failures, symbol, e) -> None:
+    """Snapshot errors: NOT_FOUND is absence, FAILED_PRECONDITION is DISABLED, else UNKNOWN."""
+    if failures is None:
+        return
+    code = _rpc_code(e)
+    if code == grpc.StatusCode.NOT_FOUND:
+        return
+    failures[("snap", symbol)] = (
+        Availability.DISABLED
+        if code == grpc.StatusCode.FAILED_PRECONDITION
+        else Availability.UNKNOWN
+    )
+
+
+def _snapshot_periods(resp) -> list[FundamentalPeriod]:
+    """Lower a single-symbol ``GetFundamentalsResponse`` into a one-element ``[FundamentalPeriod]``
+    (feature 200), or ``[]`` when the row is absent."""
+    if not resp.HasField("fundamentals"):
+        return []
+    row = resp.fundamentals
+    missing = set(row.missing_metrics)
+    values = {m: (None if m in missing else getattr(row, m)) for m in _FUNDAMENTAL_METRICS}
+    # date.min is strictly before every real bar date → visible on every bar (T+1 holds
+    # trivially), so the single snapshot row broadcasts as one epoch.
+    return [FundamentalPeriod(filed_date=date.min, values=values)]
 
 
 def _signal_decay(sig, source_weights: dict, now_utc: datetime, half_life: float):

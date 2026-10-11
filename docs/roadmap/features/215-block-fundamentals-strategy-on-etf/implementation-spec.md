@@ -681,7 +681,7 @@ cd services/xstockstrat-analysis && uv run pytest tests/test_fundamentals_guard.
 
 ### Step 13 — service: Bounded PIT pager + error-distinct loaders
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -1542,3 +1542,8 @@ _Populated by /sdd-execute as implementation proceeds._
 **Actual**: Step 11 imports only the two predicates into `servicer.py` and `live_loop.py`; the guard names are imported by the steps that first use them (13/15/17/19/21). The import check ran with the `gen` namespace registered the same way `tests/conftest.py::_setup_gen_path` does (`sys.path.insert(0,'tests'); import conftest`).
 **Reason**: unused imports fail `ruff check` (F401), which Step 12's Verification runs. A bare `python -c` in the service dir has no `gen` package; pytest and the container provide it.
 **Disposition**: CI-equivalent fallback (import check); import timing only, no behavior change.
+
+### Deviation: Step 13 — service: Bounded PIT pager + error-distinct loaders
+**Spec said**: live_loop imports `_fetch_historical_fundamentals_paged` from `app.handlers.servicer`; each loader "record[s] failures the same way" and lowers the snapshot row as today.
+**Actual**: The NOT_FOUND / FAILED_PRECONDITION / other → state mapping and the single-row lowering live once in servicer helpers (`_record_pit_failure`, `_record_snapshot_failure`, `_snapshot_periods`), which live_loop imports alongside the pager. live_loop's now-unused `date`, `_FUNDAMENTAL_METRICS`, `FundamentalPeriod`, `_fundamental_periods_from_response` imports were dropped (ruff F401). `declared_formula_fundamentals` imports `Availability` lazily (the guard imports the evaluator).
+**Reason**: DRY guard rail (one mapping for both loaders keeps backtest/live parity); import cycle avoidance. All inside Step 13's Files.

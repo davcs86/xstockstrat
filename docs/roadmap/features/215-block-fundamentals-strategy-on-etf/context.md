@@ -308,3 +308,9 @@
 - C-13: SCHD/AAPL period literals inline (single consumer; Step 16 centralizes them).
 - Files modified: `services/xstockstrat-analysis/tests/test_fundamentals_guard.py` (new)
 - Deviations: none
+
+### Step 13 — service: Bounded PIT pager + error-distinct loaders [done]
+- servicer: `_FUND_PAGE_SIZE = 200`, `_MAX_FUND_PAGES = 8`, `_FUND_PAGE_TIMEOUT_SECONDS = 10`, `_FundamentalsPageError`; `_fundamental_periods(periods)` with the 1-line `_fundamental_periods_from_response` wrapper; module-level `_fetch_historical_fundamentals_paged` (strict `(period_end, fiscal_period)` advance of each page's first period, empty token = EOF, cap/stall raise). `_load_fundamentals(…, failures=None)` pages and records `("pit", sym) → UNKNOWN` unless NOT_FOUND; both snapshot loaders now call single-symbol `GetFundamentals` (NOT_FOUND → absent, FAILED_PRECONDITION → DISABLED, else incl. RESOURCE_EXHAUSTED → UNKNOWN); `_formula_fundamentals` / `declared_formula_fundamentals` record `("formula", fid) → UNKNOWN`. live_loop loaders page with `metadata=()` and share the servicer helpers. EvaluateReadiness / watchlist compute / GetIndicatorSeries / materializer pass no `failures`.
+- TDD (paired with Step 14): RED `ImportError: cannot import name '_FUND_PAGE_SIZE' from 'app.handlers.servicer'`. GREEN after Step 14's re-pointing: full suite 1027 passed, coverage 86.78%; ruff clean. Note: this commit alone leaves two feature-200 live tests stubbing `GetFundamentalsMulti` red until Step 14's commit re-points them (paired-step ordering).
+- Files modified: `services/xstockstrat-analysis/app/handlers/servicer.py`, `app/engine/live_loop.py`, `app/services/evaluator.py`
+- Deviations: shared failure/lowering helpers + dropped unused imports (see Deviation Log).

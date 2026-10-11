@@ -639,7 +639,7 @@ class StrategyEvaluator:
                     cache[comp.formula_id] = 0
         return cache
 
-    async def declared_formula_fundamentals(self, definition) -> dict[str, list]:
+    async def declared_formula_fundamentals(self, definition, failures=None) -> dict[str, list]:
         """Feature 200 — build ``{formula_id: [FundamentalMetric enum int]}`` for a definition's
         custom-formula components that declare ``fundamental_inputs``, via ``GetFormula``. The live
         counterpart of the servicer's ``_formula_fundamentals`` (the live loop holds no indicators
@@ -664,6 +664,11 @@ class StrategyEvaluator:
                 metrics = [int(m) for m in getattr(formula, "fundamental_inputs", [])]
             except grpc.RpcError:
                 metrics = []
+                if failures is not None:
+                    # Lazy import: fundamentals_guard imports this module.
+                    from app.services.fundamentals_guard import Availability
+
+                    failures[("formula", comp.formula_id)] = Availability.UNKNOWN
             if metrics:
                 out[comp.formula_id] = metrics
         return out
