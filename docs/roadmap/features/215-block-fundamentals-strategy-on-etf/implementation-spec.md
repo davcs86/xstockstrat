@@ -998,7 +998,7 @@ cd services/xstockstrat-analysis && grep -n "_ELIGIBILITY_ORDER\|async def fetch
 
 ### Step 18 — test: Derivation exclusion
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_grade_fundamentals_exclusion.py` — create
