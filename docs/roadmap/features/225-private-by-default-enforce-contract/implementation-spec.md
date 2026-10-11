@@ -170,7 +170,7 @@ python3 -c "import yaml; yaml.safe_load(open('.github/workflows/ci.yml'))"
 
 ### Step 2 — test: dirty-guard structural tests + AC-5 contract-gate case
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: platform tooling (`scripts/`)
 **Files**:
 - `scripts/migration-dirty-guard.test.sh` — create

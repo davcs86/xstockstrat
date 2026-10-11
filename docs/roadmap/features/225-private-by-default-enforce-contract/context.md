@@ -162,3 +162,13 @@
 - Files modified: `scripts/migration-dirty-guard.sh`, `scripts/db-migrate.sh`, `scripts/Dockerfile.migrate`,
   `.github/workflows/ci.yml`
 - Deviations: none (shfmt places the `;;` of the design §6 block on its own line — formatting only).
+
+### Step 2 — dirty-guard structural tests + AC-5 contract-gate case [done]
+- Created `scripts/migration-dirty-guard.test.sh` (cases (a)–(i), no DB; AC-18 refusal text/exit 3, AC-19 below-floor
+  and no-contract allow); added case (d) to `check-migration-contract.test.sh` with a stderr-capturing `run_check_err`.
+- TDD: AC-18/AC-19 red (pre-Step-1) `ASSERT FAIL: scripts/migration-dirty-guard.sh missing or not executable` →
+  green `migration-dirty-guard.test.sh: all assertions passed`. AC-5 case (d) is a characterization of the existing
+  224 gate — green on first run by design; proven to execute by a mutant (expected filename swapped → `ASSERT FAIL: (d)`).
+- Verification: shellcheck + shfmt clean; both suites pass. Coverage: N/A (`scripts/`).
+- Files modified: `scripts/migration-dirty-guard.test.sh`, `scripts/check-migration-contract.test.sh`
+- Deviations: none.
