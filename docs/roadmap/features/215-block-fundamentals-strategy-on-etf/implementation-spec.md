@@ -797,7 +797,7 @@ cd services/xstockstrat-analysis && uv run pytest tests/test_fundamentals_pit_pa
 
 ### Step 15 — service: Backtest refusal (FR-2)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify

@@ -65,6 +65,7 @@ from app.services.evaluator import (
     FormulaExecutionError,
     FundamentalPeriod,
     StrategyEvaluator,
+    _bar_date,
     _empty_readiness,
     _validate_definition,
     align_indicator_points,
@@ -74,6 +75,7 @@ from app.services.fundamentals_guard import (
     Availability,
     _definition_has_fundamental,
     _definition_wants_fundamentals_formula,
+    assess,
 )
 from app.services.readiness import (
     compute_readiness_row,
@@ -253,6 +255,22 @@ class _InsufficientData(Exception):
         # For a pre-window warm-up shortfall the actionable backfill span is the PREFIX
         # (start - warmup … start), not the caller's window. None → the caller's requested range.
         self.gap_range = gap_range
+
+
+class _FundamentalsUnavailable(Exception):
+    """A fundamentals strategy cannot evaluate ``symbol``: it has no usable fundamentals (FR-2)."""
+
+    def __init__(self, symbol: str):
+        super().__init__(f"{symbol}: fundamentals unavailable")
+        self.symbol = symbol
+
+
+class _FundamentalsUnknown(Exception):
+    """A fundamentals fetch for ``symbol`` failed, so availability is unknown (never a refusal)."""
+
+    def __init__(self, symbol: str):
+        super().__init__(f"{symbol}: fundamentals availability unknown")
+        self.symbol = symbol
 
 
 # marketdata's GetBars defaults to a 500-bar page ordered ASC, so an unpaginated request silently
@@ -851,6 +869,13 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # component (routing must work on any backtest). Backtest is PIT: the map only ROUTES the
         # formula onto the fundamentals channel; the data is the per-symbol PIT `fundamentals` list
         # (formula_fundamentals_data left None).
+        # Feature 215: run-level PIT cache + loader/formula failures (created before the formula-map
+        # build so a GetFormula outage reads UNKNOWN), refusal counters and refused diagnostics.
+        fund_cache: dict = {}
+        fund_failures: dict = {}
+        fund_refusals = 0
+        fund_unknown: list[str] = []
+        refused_diags: dict[str, analysis_pb2.SymbolDiagnostics] = {}
         formula_fund_map: dict[str, list] = {}
         if active_definition is not None:
             if start_set:
@@ -860,10 +885,11 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     propagation_meta,
                     formula_deleted_cache,
                     formula_fund_map,
+                    failures=fund_failures,
                 )
             else:
                 formula_fund_map = await self._formula_fundamentals(
-                    active_definition, propagation_meta
+                    active_definition, propagation_meta, failures=fund_failures
                 )
 
         # Benchmark (source_symbol) bars preloaded ONCE per run, shared across evaluated symbols.
@@ -942,6 +968,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                         formula_fund_map=formula_fund_map,  # feature 200
                         sector_rows=sector_history.get(symbol.upper()),  # feature 217
                         seed_symbols=seed_symbols,
+                        fund_cache=fund_cache,  # feature 215
+                        fund_failures=fund_failures,
                     )
                 else:
                     (
@@ -1003,6 +1031,32 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                         gap=ins.gap_range if ins.gap_range is not None else request.range,
                     )
                 )
+                continue
+            except _FundamentalsUnavailable:
+                log.warning(
+                    "backtest refused symbol=%s strategy=%s: fundamentals unavailable — "
+                    "NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE",
+                    symbol,
+                    request.strategy_id,
+                )
+                refused = analysis_pb2.SymbolDiagnostics(
+                    symbol=symbol,
+                    bars=[],
+                    no_trade_reason=analysis_pb2.NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE,
+                    bars_total=0,
+                    warmup_bars=0,
+                )
+                refused_diags[symbol] = refused
+                all_diagnostics.append(refused)
+                fund_refusals += 1
+                continue
+            except _FundamentalsUnknown:
+                log.warning(
+                    "backtest symbol=%s strategy=%s: fundamentals fetch failed — not evaluated",
+                    symbol,
+                    request.strategy_id,
+                )
+                fund_unknown.append(symbol)
                 continue
             except FormulaExecutionError as fe:
                 # A custom-formula execution/contract error stamps FORMULA_ERROR directly here —
@@ -1127,12 +1181,22 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             result.portfolio_equity_curve.extend(portfolio_equity_curve)
         # No trades + no usable curve (all symbols insufficient, or all formula-failed) →
         # INSUFFICIENT_DATA, never a fabricated flat-equity success. A partial run stays OK.
-        if not all_trades and len(daily_equity) <= 1 and (coverage_gaps or formula_errors):
+        if (
+            not all_trades
+            and len(daily_equity) <= 1
+            and (coverage_gaps or formula_errors or fund_refusals or fund_unknown)
+        ):
             result.status = analysis_pb2.BACKTEST_STATUS_INSUFFICIENT_DATA
         else:
             result.status = analysis_pb2.BACKTEST_STATUS_OK
         if coverage_gaps:
             result.coverage_gaps.extend(coverage_gaps)
+        if refused_diags:
+            labels = await self._fundamentals_gap_labels(refused_diags, propagation_meta)
+            for sym, diag in refused_diags.items():
+                diag.fundamentals_gap = labels.get(
+                    sym.upper(), analysis_pb2.FUNDAMENTALS_GAP_UNSPECIFIED
+                )
         if all_diagnostics:  # per-bar diagnostics for every simulated symbol
             result.diagnostics.extend(all_diagnostics)
         # Flag any referenced formula that was soft-deleted (run completed on its last-saved
@@ -1145,6 +1209,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             )
         if sector_warnings:
             result.warnings.extend(sector_warnings)
+        if fund_unknown:  # @AC-8: an outage is a rerun prompt, never a refusal
+            result.warnings.extend(
+                f"fundamentals fetch failed for {sym} — rerun" for sym in fund_unknown
+            )
         self._backtests[backtest_id] = result
         self._backtests[(caller_user_id, request.strategy_id)] = result
 
@@ -1830,6 +1898,28 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             )
             return []
 
+    async def _fundamentals_gap_labels(self, symbols, propagation_meta) -> dict[str, int]:
+        """Best-effort ETF / not-ETF label for refused symbols (FR-11): cache-only on marketdata,
+        and any failure returns ``{}`` so the label never affects the refusal itself."""
+        try:
+            resp = await self._marketdata.GetEtfFlags(
+                marketdata_pb2.GetEtfFlagsRequest(symbols=sorted(symbols)),
+                metadata=propagation_meta,
+            )
+        except Exception as e:  # noqa: BLE001 — label is best-effort
+            log.warning("GetEtfFlags failed for %s: %s", sorted(symbols), e)
+            return {}
+        out: dict[str, int] = {}
+        for flag in resp.flags:
+            if not flag.HasField("is_etf"):
+                gap = analysis_pb2.FUNDAMENTALS_GAP_UNSPECIFIED
+            elif flag.is_etf:
+                gap = analysis_pb2.FUNDAMENTALS_GAP_ETF
+            else:
+                gap = analysis_pb2.FUNDAMENTALS_GAP_NOT_ETF
+            out[flag.symbol.upper()] = gap
+        return out
+
     async def _backtest_symbol_evaluated(
         self,
         symbol,
@@ -1847,6 +1937,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         formula_fund_map=None,
         sector_rows=None,
         seed_symbols=None,
+        fund_cache=None,
+        fund_failures=None,
     ):
         """Run a stored/inline StrategyDefinition for one symbol via the shared evaluator.
 
@@ -1874,8 +1966,29 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # Per-symbol point-in-time fundamentals (feature 198/201) — a 198 operand or a fundamentals
         # formula (routed via formula_fund_map) loads the PIT list; else None. T+1 carry-forward.
         fundamentals = await self._load_fundamentals(
-            symbol, definition, propagation_meta, formula_fund_map=formula_fund_map
+            symbol,
+            definition,
+            propagation_meta,
+            formula_fund_map=formula_fund_map,
+            cache=fund_cache,
+            failures=fund_failures,
         )
+        # Feature 215 (FR-2): judge availability over the in-window bars only; backtest has no
+        # DISABLED state (GetHistoricalFundamentals is ungated).
+        avail = assess(
+            definition,
+            formula_fund_map or {},
+            [_bar_date(b) for b in bars[trade_start_idx:]],
+            symbol=symbol,
+            pit=fundamentals,
+            snap=None,
+            failures=fund_failures or {},
+            gate_enabled=self._cfg.get_bool("analysis.backtest.fundamentals.enabled", False),
+        )
+        if avail is Availability.UNAVAILABLE:
+            raise _FundamentalsUnavailable(symbol)
+        if avail is Availability.UNKNOWN:
+            raise _FundamentalsUnknown(symbol)
         # Capture the computed component series for diagnostics. benchmark_bars (preloaded once
         # per run, shared across symbols) resolve source_symbol components via the evaluator.
         # formula_fund_map (feature 200) routes fundamentals-only formulas onto the fundamentals
@@ -2245,7 +2358,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         return warmup
 
     async def _declared_formula_warmup(
-        self, formula_id, cache, propagation_meta, deleted_cache=None, fund_map=None
+        self, formula_id, cache, propagation_meta, deleted_cache=None, fund_map=None, failures=None
     ) -> int:
         """Declared `warmup_period` for one formula, memoized in `cache` for the whole run.
 
@@ -2277,10 +2390,12 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     deleted_cache[formula_id] = _deleted_formula_warning(formula.name, formula_id)
             except grpc.RpcError:
                 cache[formula_id] = 0
+                if fund_map is not None and failures is not None:
+                    failures[("formula", formula_id)] = Availability.UNKNOWN
         return cache[formula_id]
 
     async def _prefetch_formula_warmups(
-        self, definition, cache, propagation_meta, deleted_cache=None, fund_map=None
+        self, definition, cache, propagation_meta, deleted_cache=None, fund_map=None, failures=None
     ) -> None:
         """Fill `cache` for every referenced custom formula BEFORE the symbol loop (feature 071).
 
@@ -2325,7 +2440,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     formula_ids.append(comp.formula_id)
         for fid in formula_ids:
             await self._declared_formula_warmup(
-                fid, cache, propagation_meta, deleted_cache, fund_map
+                fid, cache, propagation_meta, deleted_cache, fund_map, failures
             )
 
     async def ScoreStrategy(self, request, context):
