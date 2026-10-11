@@ -37,11 +37,11 @@ Every change follows `design.md` § Chosen Approach (A–J, H, Fixes 2–6, roun
 | @AC-5 | Steps 16, 20, 22 |
 | @AC-6 | Step 20 |
 | @AC-7 | Step 8 |
-| @AC-8 | Steps 14, 16, 22 |
+| @AC-8 | Steps 8, 14, 16, 22 |
 | @AC-9 | Steps 14, 20, 22 |
 | @AC-10 | Steps 12, 16 |
 | @AC-11 | Step 18 |
-| @AC-12 | Steps 14, 18, 26 |
+| @AC-12 | Steps 14, 16, 18, 20, 26 |
 | @AC-13 | Steps 4, 22 |
 | @AC-14 | Step 10 |
 | @AC-15 | Steps 4, 24 |
@@ -50,7 +50,8 @@ Every change follows `design.md` § Chosen Approach (A–J, H, Fixes 2–6, roun
 
 - **Before Step 1:** rebase `feature/block-fundamentals-strategy-on-etf` onto `origin/main-dev`.
   - Feature 196 (#1237, commit `80d44449`) is on main-dev but not on the branch. It edits `services/xstockstrat-marketdata/internal/service/marketdata_service.go`, adding lines at ~L331 and ~L698.
-  - The `marketdata_service.go` line numbers below are **origin/main-dev** numbers. They read about 12 lower on the pre-rebase branch.
+  - The `marketdata_service.go` line numbers below are **origin/main-dev** numbers (re-verified 2026-10-11 via `git show origin/main-dev:…`). They read 12 lower on the pre-rebase branch.
+  - **Locate by symbol at execute time.** Every `marketdata_service.go` citation names its enclosing symbol (`GetFundamentalsMulti`, `getEdgarSnapshot`, `resolveFundamentals`, `fundamentalsEnabled`, `maybeAlertQuota`, `GetHistoricalFundamentals`, `enrichmentUnderCap`, `type MarketDataService struct`). Line numbers drift; the symbol is the anchor.
 - **Step 2 requires Step 1.** Codegen consumes the edited `.proto` files.
 - **Steps 3, 5, 9, 11, 13, 15, 17, 19, 21 and 23 require Step 2.** They use the generated stubs.
 - **Steps 2–6 must merge together**, in one PR or back-to-back in sequential mode.
@@ -133,8 +134,22 @@ grep -n "rpc GetEtfFlags\|optional bool is_etf = 2" marketdata/v1/marketdata.pro
 
 **Status**: `pending`
 **Service**: `packages/proto`
-**Files**:
-- `packages/proto/gen/` — modify (generated Go/Python/TS stubs; never hand-edited)
+**Files** (generated, never hand-edited; verified against `git ls-files packages/proto/gen`):
+- Go:
+  - `packages/proto/gen/go/analysis/v1/analysis.pb.go` — modify
+  - `packages/proto/gen/go/marketdata/v1/marketdata.pb.go` — modify
+  - `packages/proto/gen/go/marketdata/v1/marketdata_grpc.pb.go` — modify (new `GetEtfFlags` RPC)
+  - `packages/proto/gen/go/marketdata/v1/marketdatav1connect/marketdata.connect.go` — modify (new `GetEtfFlags` RPC)
+- Python:
+  - `packages/proto/gen/python/analysis/v1/analysis_pb2.py` — modify
+  - `packages/proto/gen/python/marketdata/v1/marketdata_pb2.py` — modify
+  - `packages/proto/gen/python/marketdata/v1/marketdata_pb2_grpc.py` — modify (new `GetEtfFlags` RPC)
+- TS (source + compiled `dist/`):
+  - `packages/proto/gen/ts/analysis/v1/analysis_pb.ts`, `analysis.ts` — modify
+  - `packages/proto/gen/ts/marketdata/v1/marketdata_pb.ts`, `marketdata.ts`, `marketdata_connect.ts` — modify
+  - `packages/proto/gen/ts/dist/analysis/v1/analysis_pb.{js,d.ts}`, `analysis.{js,d.ts}` — modify
+  - `packages/proto/gen/ts/dist/marketdata/v1/marketdata_pb.{js,d.ts}`, `marketdata.{js,d.ts}` — modify
+- Expected unchanged (no new analysis RPC): `analysis_grpc.pb.go`, `analysisv1connect/analysis.connect.go`, `analysis_pb2_grpc.py`, `analysis_connect.ts`, and every `__init__.py`. If codegen touches any other `gen/` path, stop and record it in the Deviation Log.
 
 **Reviewers**: Proto Reviewer — field number uniqueness per message, no breaking changes, `buf lint`/`buf breaking` pass; `packages/proto` owner — field number uniqueness, backward compatibility, naming conventions; `xstockstrat-analysis` owner — backtest reproducibility, strategy scoring determinism, no look-ahead bias; `xstockstrat-marketdata` owner — OHLCV ingestion integrity, TimescaleDB hypertable partitioning, Alpaca feed idempotency
 
@@ -146,13 +161,13 @@ grep -n "rpc GetEtfFlags\|optional bool is_etf = 2" marketdata/v1/marketdata.pro
 **Covers**: —
 
 **Instructions**:
-- Run `./scripts/buf-gen.sh` from the repo root and commit only `packages/proto/gen/**`.
+- Run `./scripts/buf-gen.sh` from the repo root and commit only the generated files listed in **Files**.
 - If Docker or GitHub egress is unavailable, follow `docs/runbooks/codegen-toolchain-host-setup.md`.
 - Expected follow-on: the three descriptor-parity guards listed in § Step Dependencies go red until Steps 3 and 5 land.
 
 **Verification**:
 ```bash
-./scripts/buf-gen.sh && git status --porcelain packages/proto/gen | head
+./scripts/buf-gen.sh && git status --porcelain packages/proto/gen | grep -Ev 'gen/(go|python|ts|ts/dist)/(analysis|marketdata)/' ; test -z "$(git status --porcelain packages/proto/gen | grep -Ev 'gen/(go|python|ts|ts/dist)/(analysis|marketdata)/')"   # only analysis/marketdata stubs changed
 grep -rl "GetEtfFlags" packages/proto/gen/go packages/proto/gen/python packages/proto/gen/ts | head -3
 grep -rl "FUNDAMENTALS_GAP_ETF" packages/proto/gen/python packages/proto/gen/ts | head -3
 ```
@@ -342,11 +357,11 @@ cd services/xstockstrat-agent && uv run pytest tests/test_opportunity_projection
 
 **Reviewers**: `xstockstrat-marketdata` owner — OHLCV ingestion integrity, TimescaleDB hypertable partitioning, Alpaca feed idempotency
 
-**Codebase Evidence** (`marketdata_service.go` line numbers are **origin/main-dev**):
+**Codebase Evidence** (`marketdata_service.go` line numbers are **origin/main-dev**; locate by the named symbol at execute time):
 - `type FundamentalsSource interface` is at `internal/source/source.go:68`.
 - The vendor single-symbol no-data paths:
-  - `fmp_client.go:166` `return nil, fmt.Errorf("fmp: no fundamentals for %q", symbol)`
-  - `finnhub_client.go:56` `return nil, fmt.Errorf("finnhub: no fundamentals for %q", symbol)`
+  - `fmp_client.go:166` `return nil, fmt.Errorf("fmp: no fundamentals for %q", symbol)` (in `(*Client).GetFundamentals`). FMP's `GetFundamentalsMulti` returns a `fetchQuotes` error as-is (L177-180) and omits only symbols the quote call did not return (L203-209). So an empty result here **is** vendor absence.
+  - `finnhub_client.go:56` `return nil, fmt.Errorf("finnhub: no fundamentals for %q", symbol)` (in `(*Client).GetFundamentals`, L50-59). It delegates to `GetFundamentalsMulti`, whose loop `continue`s on **any** `fetchOne` error (L71-75): non-200 (`getJSON` L131-134), transport failure, or decode error. A decoded symbol always yields a row (nil fields at worst). So this branch fires **only on an outage**, never on absence, and must **not** be wrapped as `ErrNoFundamentals` (FR-8: outage ≠ absence; found at /sdd-review impl-spec 2026-10-11).
 - The `GetFundamentalsMulti` edgar loop (L1331-1345): `f, err := s.getEdgarSnapshot(ctx, sym)` (L1337), then `if err != nil { return nil, err }`. One un-producible symbol therefore fails the whole batch.
 - `getEdgarSnapshot` (L1513):
   - Kill switch: `marketdata.edgar.enabled` → `CodeFailedPrecondition` (L1514-1517).
@@ -362,7 +377,9 @@ cd services/xstockstrat-agent && uv run pytest tests/test_opportunity_projection
 
 **Instructions**:
 1. `source.go`: add `var ErrNoFundamentals = errors.New("no fundamentals")`, with the comment "vendor has no fundamentals for the symbol — absence, not an outage (feature 215)".
-2. `fmp_client.go:166` and `finnhub_client.go:56`: wrap it, e.g. `fmt.Errorf("fmp: no fundamentals for %q: %w", symbol, source.ErrNoFundamentals)`.
+2. **Vendor clients.**
+   - `fmp_client.go:166`: wrap it, e.g. `fmt.Errorf("fmp: no fundamentals for %q: %w", symbol, source.ErrNoFundamentals)`.
+   - `finnhub_client.go` `(*Client).GetFundamentals` (L50-59): call `c.fetchOne(ctx, symbol, time.Now().UTC())` directly and return its error unwrapped, so a Finnhub outage reaches `resolveFundamentals`' generic `CodeUnavailable` (UNKNOWN downstream), not NotFound. Delete the `len(out) == 0` branch. Finnhub has no absence signal, so it never returns `ErrNoFundamentals`. `GetFundamentalsMulti`'s skip-on-error loop is unchanged.
 3. `marketdata_service.go`:
    - (a) Add an unexported sentinel `var errNoEdgarSnapshot = errors.New("no edgar snapshot and vendor fallback disabled")`.
      - In `getEdgarSnapshot`'s vendor-disabled branch (L1537-1540), return `connect.NewError(connect.CodeNotFound, fmt.Errorf("%s: %w", symbol, errNoEdgarSnapshot))` instead of `CodeFailedPrecondition`.
@@ -371,14 +388,14 @@ cd services/xstockstrat-agent && uv run pytest tests/test_opportunity_projection
    - (c) In the edgar branch of `GetFundamentalsMulti` (L1337-1340), skip the symbol when `connect.CodeOf(err) == connect.CodeNotFound` (omit). Every other error still aborts:
      - the global kill switch → FailedPrecondition;
      - vendor `ResourceExhausted`/`Unavailable` stay as they are (design spec note; FR-7).
-   - (d) Extract `func atQuotaAlertThreshold(count, cap int) bool { return cap > 0 && count >= (cap*8)/10 }` next to `maybeAlertQuota`, and rewrite L1628 as `if !atQuotaAlertThreshold(count, cap) { return }`. It becomes the single home of the 80% threshold (design Fix 4).
+   - (d) Extract `func atQuotaAlertThreshold(count, cap int) bool { return cap > 0 && count >= (cap*8)/10 }` next to `maybeAlertQuota`, and rewrite `maybeAlertQuota`'s first line (L1628) as `if !atQuotaAlertThreshold(count, cap) { return }`. It becomes the single home of the 80% threshold (design Fix 4).
 4. Behavioral ripple (no code change): the analysis blend-universe resolver (`live_loop.py:142-187`), the screener and `fundsignal_loop` call `GetFundamentalsMulti`. Under `snapshot_source=edgar` with vendors off, they now get a partial list (un-producible symbols omitted) instead of a FailedPrecondition for the whole chunk.
    - This is the FR-7 contract (C-16 EXTEND `@AC-7 @feature-211`).
    - `@AC-6 @feature-168` (a real resolution failure yields an empty universe) is unaffected: real failures still error.
 
 **Verification**:
 ```bash
-cd services/xstockstrat-marketdata && grep -n "ErrNoFundamentals" internal/source/source.go internal/fmp/fmp_client.go internal/finnhub/finnhub_client.go internal/service/marketdata_service.go && grep -n "errNoEdgarSnapshot\|func atQuotaAlertThreshold" internal/service/marketdata_service.go && GOWORK=off go build ./...
+cd services/xstockstrat-marketdata && grep -n "ErrNoFundamentals" internal/source/source.go internal/fmp/fmp_client.go internal/service/marketdata_service.go && ! grep -n "ErrNoFundamentals\|no fundamentals for" internal/finnhub/finnhub_client.go && grep -n "errNoEdgarSnapshot\|func atQuotaAlertThreshold" internal/service/marketdata_service.go && GOWORK=off go build ./...
 ```
 
 ---
@@ -390,6 +407,7 @@ cd services/xstockstrat-marketdata && grep -n "ErrNoFundamentals" internal/sourc
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go` — modify
 - `services/xstockstrat-marketdata/internal/fmp/fmp_client_test.go` — modify
+- `services/xstockstrat-marketdata/internal/finnhub/finnhub_client_test.go` — modify
 
 **Reviewers**: `xstockstrat-marketdata` owner — OHLCV ingestion integrity, TimescaleDB hypertable partitioning, Alpaca feed idempotency
 
@@ -402,10 +420,11 @@ cd services/xstockstrat-marketdata && grep -n "ErrNoFundamentals" internal/sourc
   - `TestGetFundamentals_EdgarKillSwitch_feature211` (L2044)
 - Quota alert tests: `TestGetFundamentals_QuotaWarningEmittedOnce` (L480) and `TestGetFundamentals_Finnhub_QuotaWarningRefiresPerWindow` (L625). These must stay green; they are the `atQuotaAlertThreshold` extraction guard.
 - FMP client tests are in `internal/fmp/fmp_client_test.go` (e.g. `TestGetFundamentals_MissingFieldStaysNil` L105).
+- Finnhub client tests are in `internal/finnhub/finnhub_client_test.go`: the `recordingRT` path-keyed stub (L15) and `newTestClient(rt)` (L46). `TestHTTPError_DoesNotLeakAPIKey` (L202) drives a 403 through `GetFundamentals` and must stay green after Step 7 (the error now comes from `getJSON`, which never includes the URL). `finnhub` is the default provider.
 
 **TDD**: `red-green required`
 
-**Covers**: `AC-7`
+**Covers**: `AC-7, AC-8`
 
 **Instructions**:
 - Add these table-driven tests:
@@ -417,12 +436,14 @@ cd services/xstockstrat-marketdata && grep -n "ErrNoFundamentals" internal/sourc
   - (d) A vendor at its cap with no cache gives `CodeResourceExhausted` on the single RPC and **aborts** Multi under edgar fallback, not omit.
   - (e) `atQuotaAlertThreshold`: `(0,0)=false`, `(79,100)=false`, `(80,100)=true`, `(100,100)=true`.
 - In `fmp_client_test.go`, add: an empty `/stable/quote` response gives `errors.Is(err, source.ErrNoFundamentals)` from `GetFundamentals`.
+- In `finnhub_client_test.go`, add `TestGetFundamentals_OutageIsNotAbsence` (`@AC-7`, `@AC-8`): a `recordingRT` answering `/stock/metric` with HTTP 503 (and a variant with 429) makes `GetFundamentals` return an error with `!errors.Is(err, source.ErrNoFundamentals)`, and the error names `/stock/metric`. A 200 response with `{"metric":{}}`, `{}` quote and `{}` profile returns a row with nil fields and `err == nil` (Finnhub has no absence signal).
+- In `marketdata_service_test.go`, extend (b): a `fakeFundSource` returning a plain (unwrapped) error gives `GetFundamentals` → `CodeUnavailable`, not `CodeNotFound`.
 - Note: the `service` package is excluded from the CI coverage measure (template COVERPKGS), so these assertions are the behavioral gate there. `fmp` is measured.
 - **C-13.** The SCHD/BABA literals have one consumer (this file), so they stay inline. Do not create `internal/testdata/`.
 
 **Verification**:
 ```bash
-cd services/xstockstrat-marketdata && GOWORK=off go test ./internal/service/... ./internal/fmp/... -race -count=1 -run 'Edgar|NotFound|NoFundamentals|Quota|AtQuota' && GOWORK=off COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:" && GOWORK=off golangci-lint run --modules-download-mode=mod
+cd services/xstockstrat-marketdata && GOWORK=off go test ./internal/service/... ./internal/fmp/... ./internal/finnhub/... -race -count=1 -run 'Edgar|NotFound|NoFundamentals|OutageIsNotAbsence|HTTPError|Quota|AtQuota' && COVERPKGS=$(GOWORK=off go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && GOWORK=off go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | awk '/^total:/{print; gsub("%","",$3); exit ($3+0<40)}' && GOWORK=off golangci-lint run --modules-download-mode=mod   # coverage ≥ 40% (CI Go threshold)
 grep -rn "\"SCHD\"" --include="*_test.go" internal | cut -d: -f1 | sort -u   # C-13: ≤1 declaring file
 ```
 
@@ -453,7 +474,8 @@ grep -rn "\"SCHD\"" --include="*_test.go" internal | cut -d: -f1 | sort -u   # C
   - `go svc.StartClassificationRefreshPoller(ctx)` (`cmd/server/main.go:159`)
   - `go svc.StartWarmQuotePoller(ctx)` (L155)
 - `enrichmentUnderCap()` (`marketdata_service.go:2085-2091`, main-dev) allows up to 100% of the cap, so it is rejected for the fill (design § Rejected).
-- The 80% helper is `atQuotaAlertThreshold` from Step 7.
+- The 80% helper is `atQuotaAlertThreshold` from Step 7. It returns **false** when `cap <= 0`, so `!atQuotaAlertThreshold(…)` alone would let the filler fetch at cap 0.
+- Cap-0 semantics (verified 2026-10-11): `(*Client).BudgetSnapshot` (`fmp_client.go:97-104`) documents "cap <= 0 = uncapped", but that holds only for a client with `limits == nil` (`currentLimits` L106-111 returns `0, 0`). Production always wires `Limits` (`cmd/server/main.go:242-245`, `marketdata.fmp.daily_request_cap`), and `reserve()` (L121-131) then refuses **every** call when `used >= dailyCap`. So an operator-set cap of 0 means **zero budget**, not unlimited.
 - The config read is `s.fundCfg.GetBool("marketdata."+…+".enabled", false)` (precedent `fundamentalsEnabled` L1457-1462).
 - Handler pattern:
   - store-only `GetCurrentSector` (`marketdata_handler.go:150-157`)
@@ -486,10 +508,11 @@ grep -rn "\"SCHD\"" --include="*_test.go" internal | cut -d: -f1 | sort -u   # C
      - A fresh entry (`now - fetchedAt < etfFlagTTL`) emits `EtfFlag{Symbol, IsEtf: entry.isEtf}`, which is unset for a negative-cached empty profile.
      - A miss emits `EtfFlag{Symbol}` with `is_etf` unset, and does a **non-blocking** enqueue: skip if already in `pending`, drop on a full channel (`select { case q <- sym: default: }`).
    - **`StartEtfFlagFiller(ctx context.Context)`** reads the queue. Per symbol:
-     - Skip (and clear `pending`) unless all three hold:
+     - Skip (and clear `pending`) unless all four hold:
        - `s.fundCfg.GetBool("marketdata.fmp.enabled", false)`
        - `s.fmpBudget != nil`
-       - `!atQuotaAlertThreshold(s.fmpBudget.BudgetSnapshot())` (design Fix 4: never spends the last 20% the snapshot path needs)
+       - `used, cap := s.fmpBudget.BudgetSnapshot()` gives `cap > 0`, gated **explicitly**. A cap of 0 is zero budget in production (see Evidence), and the label is best-effort, so an uncapped or unwired budget never earns a background fetch.
+       - `!atQuotaAlertThreshold(used, cap)` (design Fix 4: never spends the last 20% the snapshot path needs)
      - Otherwise call `src.FetchIsEtf`.
        - On `err != nil`: do not cache (the budget slot was already refunded by `getJSON`); log at Debug.
        - On success: store the entry. A `nil` result is stored too, which negative-caches an empty profile.
@@ -531,7 +554,7 @@ cd services/xstockstrat-marketdata && grep -n "IsEtf\|func (c \*Client) FetchIsE
 - In `etf_flags_test.go`, use a counting `fakeEtfSource`. It is a single consumer, so it stays inline. Add tests for:
   - (a) A miss returns `is_etf` unset, makes **0** source calls, and enqueues once. A second miss for the same symbol does not enqueue twice.
   - (b) A full queue drops the symbol without blocking.
-  - (c) The filler skips at `fakeBudget{used: 80, cap: 100}` (`@AC-14` — no FMP call and SCHD is not fetched) and when `marketdata.fmp.enabled=false`. It fetches at `used: 79`.
+  - (c) The filler skips at `fakeBudget{used: 80, cap: 100}` (`@AC-14` — no FMP call and SCHD is not fetched), at `fakeBudget{used: 0, cap: 0}` (explicit `cap > 0` gate), and when `marketdata.fmp.enabled=false`. It fetches at `used: 79`.
   - (d) A cached flag is served for <30 days with no re-fetch, and re-queued after the TTL (an injected `now`).
   - (e) An empty profile is negative-cached: unset, and not re-fetched within the TTL.
   - (f) A source error is not cached.
@@ -541,7 +564,7 @@ cd services/xstockstrat-marketdata && grep -n "IsEtf\|func (c \*Client) FetchIsE
 
 **Verification**:
 ```bash
-cd services/xstockstrat-marketdata && GOWORK=off go test ./internal/service/... ./internal/fmp/... -race -count=1 -run 'Etf|IsEtf' && GOWORK=off COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:" && GOWORK=off golangci-lint run --modules-download-mode=mod
+cd services/xstockstrat-marketdata && GOWORK=off go test ./internal/service/... ./internal/fmp/... -race -count=1 -run 'Etf|IsEtf' && COVERPKGS=$(GOWORK=off go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && GOWORK=off go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | awk '/^total:/{print; gsub("%","",$3); exit ($3+0<40)}' && GOWORK=off golangci-lint run --modules-download-mode=mod   # coverage ≥ 40% (CI Go threshold)
 ```
 
 ---
@@ -671,13 +694,17 @@ cd services/xstockstrat-analysis && uv run pytest tests/test_fundamentals_guard.
 - PIT loaders that read only page 1 (fails.md 2026-10-10 entry):
   - `servicer._load_fundamentals(self, symbol, definition, propagation_meta, *, sem=None, cache=None, formula_fund_map=None)` (L1612-1667): one `GetHistoricalFundamentals` call (L1641-1652), any exception → `out = []` (L1653-1655).
   - `live_loop._load_fundamentals` (L611-632): any exception → `[]` (L629-631).
-- Marketdata pages `pageSize := 50` (`marketdata_service.go:1748`, main-dev), ordered `ORDER BY period_end, fiscal_period` (`internal/repository/marketdata_repo.go:724`). `parseHistCursor` (L810) falls back to page 1 on a bad token.
+- Marketdata pages `pageSize := 50` (in `GetHistoricalFundamentals`, `marketdata_service.go:1748`, main-dev), ordered `ORDER BY period_end, fiscal_period` (`internal/repository/marketdata_repo.go:724`). `parseHistCursor` (L810) falls back to page 1 on a bad token.
 - `GetHistoricalFundamentalsRequest.page = 6` (`marketdata.proto:290`) and `GetHistoricalFundamentalsResponse.pagination = 2` (L295).
 - Pager precedent: `_fetch_bars_paged` (`servicer.py:1249-1303`), with `_BAR_PAGE_SIZE = 1000` (L259), `_MAX_BAR_PAGES = 32` (L263), a strict-monotonic `fresh` check (L1284-1290) and `raise _BarFetchError` (L1300). `_BarFetchError` is at L311.
 - `_fundamental_periods_from_response(resp)` (`servicer.py:6018-6036`) maps `resp.periods`, dropping periods with no `filed_date`.
 - Snapshot loaders call `GetFundamentalsMulti(symbols=[symbol])`:
   - `servicer._load_fundamentals_snapshot` (L1700-1745), exception → `[]` (L1740-1742)
   - `live_loop._load_fundamentals_snapshot` (L634-659)
+- Quota behavior differs between the two marketdata RPCs (main-dev; locate by symbol). For an uncached symbol at the vendor quota:
+  - `GetFundamentalsMulti` silently omits it: the `count >= cap` branch serves stale rows and skips the rest (L1376-1382).
+  - Single-symbol `GetFundamentals` → `resolveFundamentals` returns `CodeResourceExhausted` (L1430-1434).
+  - The default provider is `finnhub`, whose per-minute window is small, so a full opportunity compute can hit it.
 - Formula-map builders swallow `grpc.RpcError` and treat the formula as `[]`:
   - `servicer._formula_fundamentals` (L1669-1698, the except at L1694-1695)
   - `StrategyEvaluator.declared_formula_fundamentals` (`evaluator.py:622-649`, the except at L645-646)
@@ -707,6 +734,7 @@ cd services/xstockstrat-analysis && uv run pytest tests/test_fundamentals_guard.
    - `FAILED_PRECONDITION` → `failures[("snap", symbol)] = Availability.DISABLED`, `out = []`.
    - Any other error → `Availability.UNKNOWN`, `out = []`.
    - The one-element `FundamentalPeriod(filed_date=date.min, …)` lowering is unchanged.
+   - **Named ripple (Multi → single switch).** `RESOURCE_EXHAUSTED` falls under "any other error", so an uncached symbol at the vendor quota now reads **UNKNOWN**. Before, Multi silently omitted it, which read as absent. Downstream, the opportunity row is stamped `"unavailable"` and retried by the 300s heal loop; live makes no state change; backtest's formula channel is PIT, so it is unaffected. This is the intended FR-8 reading ("outage ≠ absence"), not a regression. It is pinned by Step 14 and Step 22 and documented in Step 25.
 7. **Formula maps.** Add `failures=None` to `servicer._formula_fundamentals` and `StrategyEvaluator.declared_formula_fundamentals`. On `grpc.RpcError`, also set `failures[("formula", fid)] = Availability.UNKNOWN`. The cached/returned value is unchanged (round-4 fix 1).
 8. **Unguarded surfaces stay unguarded.** `EvaluateReadiness` (L3589), `GetWatchlistReadiness` (L3858), `GetIndicatorSeries` (L4105) and the readiness materializer (L5538) must not pass `failures`. Their outputs change only through pagination completeness (C-16 EXTEND `@AC-4 @feature-198`, `@AC-2 @feature-201`; insights 071 precedent).
 
@@ -754,6 +782,7 @@ cd services/xstockstrat-analysis && grep -n "_FUND_PAGE_SIZE = 200\|_MAX_FUND_PA
   - `FAILED_PRECONDITION` → DISABLED (`@AC-9`).
   - `NOT_FOUND` → no failure and `[]`.
   - `UNAVAILABLE` → UNKNOWN.
+  - `RESOURCE_EXHAUSTED` (vendor quota, uncached symbol) → UNKNOWN with `out == []`, in both `servicer._load_fundamentals_snapshot` and `live_loop._load_fundamentals_snapshot`. This is the Multi → single-symbol ripple from Step 13.6.
   - A snapshot failure never writes a `"pit"` key.
 - **Formula map.** A `GetFormula` RpcError records `("formula", fid)`.
 - **Readiness parity.** Feed `EvaluateReadiness`, `GetWatchlistReadiness`, the materializer and `GetIndicatorSeries` an SCHD empty history plus an empty snapshot (NotFound). Their outputs equal the pre-change shape: hold, with no new fields, markers or refusals.
@@ -777,7 +806,8 @@ cd services/xstockstrat-analysis && uv run pytest tests/test_fundamentals_pit_pa
 
 **Codebase Evidence**:
 - `RunBacktest` (`servicer.py:696`):
-  - It initializes `symbol_cells: list[dict] = []` (L822) and builds `formula_fund_map` (L849).
+  - It initializes `symbol_cells: list[dict] = []` (L822) and builds `formula_fund_map` (L838-851). A prefixed run (`start_set`) fills it through `self._prefetch_formula_warmups(active_definition, formula_warmup_cache, propagation_meta, formula_deleted_cache, formula_fund_map)` (L840-847). An unprefixed run calls `self._formula_fundamentals(active_definition, propagation_meta)` (L849-851).
+  - `_prefetch_formula_warmups(self, definition, cache, propagation_meta, deleted_cache=None, fund_map=None)` (L2258) calls `_declared_formula_warmup(fid, cache, propagation_meta, deleted_cache, fund_map)` (L2223) per formula. On `except grpc.RpcError:` (L2254-2255), that sets `cache[formula_id] = 0` and leaves the formula out of `fund_map`. Today a `GetFormula` outage therefore routes the formula as indicator-only, and it lands on FORMULA_ERROR.
   - The per-symbol loop is at L903-1013. Its per-symbol channel `except FormulaExecutionError as fe:` (L991-1005) appends `analysis_pb2.SymbolDiagnostics(symbol=…, bars=[], no_trade_reason=…FORMULA_ERROR…)`, does `formula_errors += 1` and `continue`.
   - Status gate: `if not all_trades and len(daily_equity) <= 1 and (coverage_gaps or formula_errors):` → INSUFFICIENT_DATA (L1114).
   - Run warnings: `result.warnings.extend(...)` (L1124-1131, the feature-217 precedent).
@@ -805,7 +835,12 @@ cd services/xstockstrat-analysis && uv run pytest tests/test_fundamentals_pit_pa
    - UNKNOWN → `raise _FundamentalsUnknown(symbol)`.
    - There is no DISABLED state on backtest (design Fix 5).
 3. **`RunBacktest`.**
-   - Create run-level `fund_cache: dict = {}`, `fund_failures: dict = {}`, `fund_refusals = 0`, `fund_unknown: list[str] = []` and `refused_diags: dict[str, SymbolDiagnostics] = {}`, and pass the cache and failures to `_backtest_symbol_evaluated`.
+   - Create run-level `fund_cache: dict = {}`, `fund_failures: dict = {}`, `fund_refusals = 0`, `fund_unknown: list[str] = []` and `refused_diags: dict[str, SymbolDiagnostics] = {}`, and pass the cache and failures to `_backtest_symbol_evaluated`. `fund_failures` must be created **before** the formula-map build (L838).
+   - **Formula-map failures (approval fix 1, "and the guard generally").** A `GetFormula` outage while building `formula_fund_map` must read UNKNOWN on backtest too, not fall through to FORMULA_ERROR.
+     - Add `failures=None` to `_declared_formula_warmup` and `_prefetch_formula_warmups`, which threads it through.
+     - In `_declared_formula_warmup`'s `except grpc.RpcError:`, when `fund_map is not None and failures is not None`, set `failures[("formula", formula_id)] = Availability.UNKNOWN`. Keep `cache[formula_id] = 0`. Callers that pass no `fund_map` (warmup-only) are unchanged.
+     - Pass `failures=fund_failures` on both branches at L840-851: `_prefetch_formula_warmups(…, formula_fund_map, failures=fund_failures)` and `_formula_fundamentals(active_definition, propagation_meta, failures=fund_failures)` (the kwarg from Step 13.7).
+     - `assess` then sees `("formula", fid)` for every symbol of a fundamentals strategy, so each symbol raises `_FundamentalsUnknown`. The run gets the "fundamentals fetch failed — rerun" warnings and no reason 5, and no cell is written.
    - Add `except _FundamentalsUnavailable` before `except FormulaExecutionError`:
      - Log WARN: `"backtest refused symbol=%s strategy=%s: fundamentals unavailable — NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE"` (FR-6/`@AC-5`).
      - Append `SymbolDiagnostics(symbol=symbol, bars=[], no_trade_reason=analysis_pb2.NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE, bars_total=0, warmup_bars=0)`, recording it in `refused_diags`.
@@ -845,7 +880,7 @@ cd services/xstockstrat-analysis && grep -n "class _FundamentalsUnavailable\|cla
 
 **TDD**: `red-green required`
 
-**Covers**: `AC-2, AC-3, AC-5, AC-8, AC-10`
+**Covers**: `AC-2, AC-3, AC-5, AC-8, AC-10, AC-12`
 
 **Instructions**:
 1. **C-13 centralization.** This file is the **second consumer** of the SCHD/AAPL period literals from Step 12. Move them into `tests/conftest.py` as plain module-level helpers:
@@ -868,6 +903,12 @@ cd services/xstockstrat-analysis && grep -n "class _FundamentalsUnavailable\|cla
    - (e) **`@AC-10`.** SCHD's first filing is dated the window's last bar date → refused.
    - (f) `GetEtfFlags` raising → reason 5 is still set with `fundamentals_gap == UNSPECIFIED` (label is best-effort).
    - (g) Gate off → no refusal (today's hold path, `ENTRY_NEVER_TRUE`).
+   - (h) **`@AC-12` page-cap variant of (d), at backtest level.** `GetHistoricalFundamentals` returns a `next_page_token` on every page, so the pager raises `_FundamentalsPageError` after `_MAX_FUND_PAGES`. Through `RunBacktest`:
+     - no reason 5 (**never refused**);
+     - `result.warnings` contains `fundamentals fetch failed for SCHD — rerun`;
+     - the stub saw exactly `_MAX_FUND_PAGES` calls;
+     - no cell.
+   - (i) **Formula-map outage (approval fix 1, Step 15.3).** `_indicators.GetFormula` raises UNAVAILABLE for `fundamentals_macd_blend`'s formula. Test it on a prefixed run (`start` set → `_prefetch_formula_warmups`) and on an unprefixed run (`_formula_fundamentals`). On both, every symbol is reported via the `fundamentals fetch failed — rerun` warning, with no reason 5, no `NO_TRADE_REASON_FORMULA_ERROR` and no cell. With the gate **off**, the same outage keeps today's FORMULA_ERROR (`assess` → NOT_REQUIRED). With the gate on, an unreachable formula is treated as possibly-fundamentals (Step 11 `assess`), so it reads UNKNOWN, never refused.
 
 **Verification**:
 ```bash
@@ -901,7 +942,8 @@ grep -n "SCHD_PIT_PERIODS\|AAPL_PIT_PERIODS\|def fund_period" tests/conftest.py 
     - ManageStrategy UPDATE pops, then `_recompute_headline_locked` in `try/except → log.warning` (L2936-2943).
     - Boot: `recompute_unscored_pairs` (L2640-2654), capped at `_BOOT_RECOMPUTE_MAX_PAIRS = 50` (L294).
 - `_row_to_strategy_definition(row)` (module-level, `servicer.py:6665`) is used at L2944.
-- Owner-identity metadata precedent: `meta = [("x-user-id", owner)]` (`servicer.py:5474`).
+- Owner-identity metadata precedent: `meta = [("x-user-id", owner)]` (`servicer.py:5474`). It is used for background work with no inbound request.
+- Inbound-trio precedent: `_PROPAGATED_HEADERS = ("x-user-id", "x-access-scope", "x-trace-id")` (`servicer.py:303`), filtered from `context.invocation_metadata()` (L3145, L3254). `RunBacktest` builds the same trio as `propagation_meta` (L717-721).
 - The background semaphore is `self._readiness_materializer_bars_sem` (L492-497). Interactive recomputes must not use it (round-4 fix 3; the backtest's own PIT load passes no sem, L1852).
 - `main.py:134-138` awaits `servicer.recompute_unscored_pairs()` inline, **before** the live loop is created (L143-162).
 - Ledger: fails.md:617 (feature 065) "zero-trade cells count". H overrides that only through the recorded operator decision (context.md 2026-10-10).
@@ -918,7 +960,11 @@ grep -n "SCHD_PIT_PERIODS\|AAPL_PIT_PERIODS\|def fund_period" tests/conftest.py 
    - Add `class _GradeInputsUnknown(Exception)`.
    - Add `async def _exclude_refused_cells(self, user_id, definition, cells, *, fund_cache, formula_cache, failures, meta, sem) -> tuple[list[dict], list[str]]`. Per cell, in the given order:
      - **Window.** `start = range_start.date()` or `date.min`. `end = (range_end or completed_at).date()`.
-     - **Data.** Load PIT through `self._load_fundamentals(sym, definition, meta, sem=sem, cache=fund_cache, formula_fund_map=fmap, failures=failures)`, gathered once per distinct symbol. `fmap` comes from `self._formula_fundamentals(definition, meta, cache=formula_cache, failures=failures)`.
+     - **Data.** Load PIT through `self._load_fundamentals(sym, definition, meta, sem=gate_sem, cache=fund_cache, formula_fund_map=fmap, failures=failures)`, gathered once per distinct symbol. `fmap` comes from `self._formula_fundamentals(definition, meta, cache=formula_cache, failures=failures)`.
+     - **Concurrency bound (round-4 fix 3, "bounded gather").** `gate_sem = sem if sem is not None else asyncio.Semaphore(_INTERACTIVE_DERIVATION_CONCURRENCY)`. That is a fresh local semaphore per call, never `_readiness_materializer_bars_sem`.
+       - Add the module constant `_INTERACTIVE_DERIVATION_CONCURRENCY = 4` next to `_MAX_FUND_PAGES`.
+       - It is a fixed invariant (F-07, same precedent as `_MAX_BAR_PAGES`), with the ≤2-line constraint comment: "caps concurrent paged GetHistoricalFundamentals per interactive recompute; marketdata's pooled DB budget is 2 (root CLAUDE.md pool table)."
+       - The sem wraps the whole per-symbol pager (Step 13.4), and each symbol's pages are sequential. So a many-symbol strategy has at most 4 `GetHistoricalFundamentals` calls in flight, never one per symbol at once.
      - **Decision.** `assess(definition, fmap, epoch_eval_dates(start, end, pit), symbol=sym, pit=pit, snap=None, failures=failures, gate_enabled=…)`.
        - UNKNOWN → `raise _GradeInputsUnknown(sym)`.
        - UNAVAILABLE → drop the cell and log INFO `grade-derivation excluded symbol=%s strategy=%s window=%s..%s`.
@@ -928,15 +974,16 @@ grep -n "SCHD_PIT_PERIODS\|AAPL_PIT_PERIODS\|def fund_period" tests/conftest.py 
      - `definition = _row_to_strategy_definition(strategy_row)`.
      - If the gate is off, **or** the definition has neither a FUNDAMENTAL nor a CUSTOM_FORMULA component, keep today's `fetch_eligible` path, byte-identical and with zero RPCs (C-16 PRESERVE `@AC-3 @feature-149`).
      - Otherwise call `fetch_all_for_fingerprint`, then `_exclude_refused_cells`, and extend `excluded` when given. If nothing remains, return `None` (the zero-evidence clear).
-     - Default `meta` to `[("x-user-id", user_id)]`.
+     - Default `meta` to `[("x-user-id", user_id)]`. That is the boot path only, with no inbound request; it matches the L5474 precedent.
    - Thread the same kwargs through `_recompute_headline` and `_recompute_headline_locked`.
 3. **Triggers.**
-   - **RunBacktest (L1183):** trigger when `result.status == OK or fund_refusals > 0`. Pass `fund_cache=fund_cache, failures=fund_failures, meta=[("x-user-id", caller_user_id)] + [(k, v) for k, v in propagation_meta if k == "x-trace-id"]` and no sem. The existing `try/except → log.warning` keeps the old grade on `_GradeInputsUnknown`; make the warning name `fundamentals availability unknown — grade unchanged`.
+   - **C-03 decision: forward the inbound trio.** Interactive triggers pass `meta = [(k, v) for k, v in context.invocation_metadata() if k in _PROPAGATED_HEADERS]`, i.e. `x-user-id` **and `x-access-scope`** and `x-trace-id`. This supersedes the design's "owner + trace" note: dropping `x-access-scope` would make the downstream marketdata/indicators calls see a narrower scope than the caller holds (`docs/patterns/header-propagation.md`, Python per-method). Recorded at /sdd-review impl-spec 2026-10-11.
+   - **RunBacktest (L1183):** trigger when `result.status == OK or fund_refusals > 0`. Pass `fund_cache=fund_cache, failures=fund_failures, meta=propagation_meta` (the trio built at L717-721) and no sem, so the gather uses the local `_INTERACTIVE_DERIVATION_CONCURRENCY` bound. The existing `try/except → log.warning` keeps the old grade on `_GradeInputsUnknown`; make the warning name `fundamentals availability unknown — grade unchanged`.
    - **ScoreStrategy:**
-     - Pass `excluded=[]`, the trace id and no sem.
+     - Pass `excluded=[]`, `meta=` the inbound trio, and no sem.
      - Catch `_GradeInputsUnknown` **before** the generic `except` and abort UNAVAILABLE `"fundamentals availability unknown — grade unchanged"`.
      - When `score is None and excluded`, keep the existing stale-grade clear, then abort NOT_FOUND `f"no eligible evidence — all evidence symbols excluded (fundamentals unavailable: {', '.join(excluded)})"`.
-   - **ManageStrategy UPDATE:** pass the trace id, no sem. The existing `try/except` keeps the old DB grade (Open Risk 1, accepted).
+   - **ManageStrategy UPDATE:** pass `meta=` the inbound trio, no sem. The existing `try/except` keeps the old DB grade (Open Risk 1, accepted).
    - **Boot (`recompute_unscored_pairs`):** create one `fund_cache`, `formula_cache` and `failures` dict for the pass, and pass `sem=self._readiness_materializer_bars_sem`. The meta is owner-only, per pair.
 4. **`main.py`.** Replace the awaited `servicer.recompute_unscored_pairs()` block (L134-138) with `asyncio.get_event_loop().create_task(...)` around a small async wrapper that keeps the info/warning logs. Live-loop creation (L143-162) is then no longer delayed (round-4 fix 3).
 5. Nothing is ever deleted: the code adds no `DELETE` on `backtest_run_symbols`.
@@ -944,7 +991,7 @@ grep -n "SCHD_PIT_PERIODS\|AAPL_PIT_PERIODS\|def fund_period" tests/conftest.py 
 
 **Verification**:
 ```bash
-cd services/xstockstrat-analysis && grep -n "_ELIGIBILITY_ORDER\|async def fetch_all_for_fingerprint" app/repositories/backtest_run_symbols.py && grep -n "class _GradeInputsUnknown\|async def _exclude_refused_cells\|fundamentals availability unknown — grade unchanged\|all evidence symbols excluded" app/handlers/servicer.py && grep -n "create_task" app/main.py && ! grep -rn "DELETE FROM analysis.backtest_run_symbols" app
+cd services/xstockstrat-analysis && grep -n "_ELIGIBILITY_ORDER\|async def fetch_all_for_fingerprint" app/repositories/backtest_run_symbols.py && grep -n "class _GradeInputsUnknown\|async def _exclude_refused_cells\|fundamentals availability unknown — grade unchanged\|all evidence symbols excluded\|_INTERACTIVE_DERIVATION_CONCURRENCY = 4" app/handlers/servicer.py && grep -n "create_task" app/main.py && ! grep -rn "DELETE FROM analysis.backtest_run_symbols" app
 ```
 
 ---
@@ -956,11 +1003,13 @@ cd services/xstockstrat-analysis && grep -n "_ELIGIBILITY_ORDER\|async def fetch
 **Files**:
 - `services/xstockstrat-analysis/tests/test_grade_fundamentals_exclusion.py` — create
 - `services/xstockstrat-analysis/tests/test_backtest_run_symbols_repo.py` — modify
+- `services/xstockstrat-analysis/tests/test_owner_dimension.py` — modify (only if Step 17's `_fetch_and_aggregate` / boot-recompute signature changes break its `fetch_eligible` / `recompute_unscored_pairs` stubs, L404-427)
+- `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify (only if the `_eligible_cell` / `fetch_eligible` stubs at L87-123 need the new kwargs)
 
 **Reviewers**: `xstockstrat-analysis` owner — backtest reproducibility, strategy scoring determinism, no look-ahead bias
 
 **Codebase Evidence**:
-- The cell-shaped dict helper is `_cell(...)` at `tests/test_analysis_servicer.py:87-110`. Its stub is `svc._backtest_run_symbols_repo.fetch_eligible = AsyncMock(return_value=cells)` (L123).
+- The cell-shaped dict helper is `_eligible_cell(...)` at `tests/test_analysis_servicer.py:87-110`. Its stub is `svc._backtest_run_symbols_repo.fetch_eligible = AsyncMock(return_value=cells)` (L123).
 - The repo SQL test precedent is `test_fetch_eligible_traded_first_distinct_on_sql` (`tests/test_backtest_run_symbols_repo.py:71-80`).
 - Boot recompute tests: `tests/test_owner_dimension.py:404-427`.
 - The conftest helpers come from Step 16.
@@ -987,6 +1036,8 @@ cd services/xstockstrat-analysis && grep -n "_ELIGIBILITY_ORDER\|async def fetch
   - The run-level `fund_cache` is reused by the recompute: zero extra `GetHistoricalFundamentals` calls for the run's symbols.
   - A run-level `fund_failures` entry for a symbol with an older eligible cell freezes the grade.
   - The boot pass across pairs sharing symbols makes ≤ (distinct symbols) PIT calls and acquires `_readiness_materializer_bars_sem`. Interactive triggers do not acquire it.
+  - **Interactive bound.** A ScoreStrategy recompute over 10 distinct evidence symbols has a `GetHistoricalFundamentals` stub that records peak in-flight calls (an `asyncio.Event`-gated AsyncMock). The peak is `== _INTERACTIVE_DERIVATION_CONCURRENCY` (4), never 10.
+  - **C-03.** The interactive recompute's `GetHistoricalFundamentals` and `GetFormula` calls carry the inbound `x-user-id`, `x-access-scope` and `x-trace-id`. The boot pass carries `x-user-id` = owner only.
   - Concurrent `asyncio.gather` RunBacktest + ScoreStrategy runs under the per-strategy lock.
   - A non-fundamentals strategy makes zero marketdata calls and gives a byte-identical score.
 - **`@AC-12` (recompute clause).** A >50-period AAPL served across 2 pages is not excluded.
@@ -1098,6 +1149,7 @@ grep -n "from tests.conftest import\|from .conftest import\|conftest" tests/test
 - In `_compute_opportunities`:
   - The per-pass caches are `fundamentals_cache` (L5074), `formula_fund_cache` (L5077) and `fund_snap_cache` (L5078).
   - `fetch_failed: set[str]` is keyed by **symbol** (L5104). Any per-row fundamentals UNKNOWN must not use it (design objection 2).
+  - `fetch_failed` is also written **concurrently** inside the gather. Another candidate's indicators `RpcError` on the same symbol does `fetch_failed.add(sym)` (L5238-5247), and the stamp `sym_unavailable = evaluated and sym in fetch_failed` (L5280) reads it later. So a skip row (`fund_skip`, which never calls indicators) can still see SCHD in `fetch_failed` added by a sibling candidate.
 - `_row_for(c)` (L5182-5308):
   - `evaluated = bool(strat) and not (c["muted"] and not c["is_held"])` (L5190).
   - It loads `bars` (L5194), `fundamentals` (L5206-5212), `formula_fund_map` (L5214-5216) and `fund_snap` (L5217-5224).
@@ -1124,7 +1176,7 @@ grep -n "from tests.conftest import\|from .conftest import\|conftest" tests/test
    - **Row-local unknown (UNKNOWN on either rule).** Set `fund_unknown = True` and do not evaluate.
    - **Everything else.** Held (`rule == "exit"`) UNAVAILABLE, DISABLED, AVAILABLE, NOT_REQUIRED and NOT_ASSESSED evaluate exactly as today. This preserves held REDUCE (C-16 PRESERVE), applies no DISABLED marker or retry (`@AC-9`), and leaves a bars outage on today's `fetch_failed` path (`@AC-13`, mutual exclusion).
    - **Action.** Resolve it as today (L5266-5273), including the speculative-sell drop. Then, if `fund_skip`, force `action = OPPORTUNITY_ACTION_TAG_UNSPECIFIED` and `_add_provenance(c, "fundamentals_unavailable")`.
-   - **Unavailable.** `sym_unavailable = evaluated and (sym in fetch_failed or fund_unknown)`. This is row-local for `fund_unknown`, and the skip row never stamps `"unavailable"`.
+   - **Unavailable.** `sym_unavailable = evaluated and not fund_skip and (sym in fetch_failed or fund_unknown)`. `not fund_skip` guarantees the `"unavailable"` / `"fundamentals_unavailable"` mutual exclusion even when a sibling candidate concurrently adds the symbol to `fetch_failed` (Evidence). It is row-local for `fund_unknown`.
    - **Axes and composite.** A skip row gets conviction 0, signal_axis 0 and composite None. Extend the `sym_unavailable` zeroing at L5294-5308 to `sym_unavailable or fund_skip`.
 2. **ETF label.** After the gather, collect the symbols of rows whose provenance contains `"fundamentals_unavailable"`. Call `self._fundamentals_gap_labels(symbols, propagation_meta)` (Step 15) once, and set `row["readiness_json"]["fundamentals_gap"] = label` when the label is non-zero.
 3. **`_retry_unavailable_symbols` (heal).**
@@ -1155,6 +1207,8 @@ cd services/xstockstrat-analysis && grep -n "fund_skip\|fund_unknown\|\"fundamen
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_opportunities_fundamentals_guard.py` — create
+- `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify (only if Step 21's `_row_for` / `_retry_unavailable_symbols` changes break its feature-185 heal stubs, e.g. L5488, L5512, L5620)
+- `services/xstockstrat-analysis/tests/test_opportunities_latency.py` — modify (only if its `_compute_opportunities` stubs, L90-94 and L181, need the new loader kwargs)
 
 **Reviewers**: `xstockstrat-analysis` owner — backtest reproducibility, strategy scoring determinism, no look-ahead bias
 
@@ -1181,6 +1235,14 @@ cd services/xstockstrat-analysis && grep -n "fund_skip\|fund_unknown\|\"fundamen
   - `fetch_failed` does not contain SCHD.
 - **`@AC-9`.** Snapshot FAILED_PRECONDITION → rows evaluated, with no `"unavailable"` and no `"fundamentals_unavailable"`, and no retry kick.
 - **`@AC-13` (outage).** BatchGetBars failure for SCHD → the row is `"unavailable"`, the action is preserved, and there is no skip marker.
+- **Mutual exclusion vs a concurrent `fetch_failed` insert (Step 21 `not fund_skip`).** SCHD is an entry candidate for `fundamentals_macd_blend` (→ skip row) **and** for a technical strategy whose indicators call raises an `RpcError` (→ `fetch_failed.add("SCHD")` during the same gather).
+  - The fundamentals row has `"fundamentals_unavailable"` and **not** `"unavailable"`, with `action == UNSPECIFIED` and composite None.
+  - The technical row is `"unavailable"`.
+- **Snapshot quota ripple (Step 13.6).** `GetFundamentals` raises `RESOURCE_EXHAUSTED` for an uncached SCHD under a snapshot-reading formula strategy:
+  - the row is `"unavailable"` (UNKNOWN), not a skip row;
+  - its action is preserved and conviction is 0;
+  - `fetch_failed` does not contain SCHD;
+  - `_retry_unavailable_symbols` re-runs it on the next heal.
 - **`@AC-13` (heal).** Bars recover in `_retry_unavailable_symbols`:
   - `replace_symbols` receives `"action": 0`, provenance with `"fundamentals_unavailable"` and without `"unavailable"`, and composite None.
   - The readiness cache `upsert_many` is not called for it.
@@ -1255,6 +1317,10 @@ cd services/xstockstrat-analysis && uv run pytest tests/test_opportunities_funda
    - In `OpportunitySection`, when `opportunity.fundamentalsUnavailable`, render the `FUNDAMENTALS_GAP` badge, with `data-testid="detail-fundamentals-unavailable"`, in place of the action badge.
    - In `SignalReadiness`, call `useOpportunities(0, [], UNSPECIFIED, CONVICTION, symbol)`. When the `(symbol, strategyId)` row has `fundamentalsUnavailable`, render `<CardNotice data-testid="readiness-fundamentals-unavailable">This strategy requires fundamentals and {symbol} has none — entry is not evaluated.</CardNotice>` above the readiness body.
 7. **C-17.** Use only `EnumBadge`/`CardNotice` and design tokens; no new primitive and no color literals.
+8. **C-10 — intentionally unchanged consumers.**
+   - `src/components/copilot/CopilotRail.tsx` (~L36-46) tallies `o.action`, so a skip row counts under UNSPECIFIED, the same as a muted row today.
+   - `src/components/insights/WatchlistDetail.tsx` (~L90-92) marks the symbol "in queue" from its skip row, which is accurate: the row is served.
+   - Both are benign, so neither is edited. The `symbol = ''` default keeps CopilotRail's documented shared page-1 cache key (its comment at L36-37) shared with the queue page.
 
 **Verification**:
 ```bash
@@ -1370,10 +1436,11 @@ grep -n "from '../fixtures'\|from './fixtures'\|helpers/auth" services/xstockstr
    - The `ListOpportunitiesRequest.symbol` filter.
    - The backtest refusal and live deny-entry with its state-change alert.
    - The evidence-exclusion paragraph (H). It states that gate-off re-includes refused cells (Open Risk 3) and gives the post-deploy `ScoreStrategy` cleanup.
-   - The fixed constants `_FUND_PAGE_SIZE`, `_MAX_FUND_PAGES`, `_FUND_PAGE_TIMEOUT_SECONDS`.
+   - The fixed constants `_FUND_PAGE_SIZE`, `_MAX_FUND_PAGES`, `_FUND_PAGE_TIMEOUT_SECONDS`, `_INTERACTIVE_DERIVATION_CONCURRENCY`.
+   - The snapshot quota ripple, one line: the snapshot loaders use single-symbol `GetFundamentals`, so an uncached symbol at the vendor quota (`RESOURCE_EXHAUSTED`, common under the default `finnhub` per-minute cap) reads UNKNOWN. That stamps the opportunity row `"unavailable"` and retries it every 300s. It is never a skip row or a live state change.
 4. **ANALYSIS-3 (EXTEND).** Eligible = fingerprint match **and** not guard-refused at derivation; exclusion is non-destructive. It overrides the feature-065 "zero-trade cells count" decision only via the operator decision in context.md 2026-10-10. Add the fingerprint blind spot: formula `fundamental_inputs` live outside `definition_json`.
 5. **Marketdata `CLAUDE.md`.**
-   - Snapshot paragraph: no producible EDGAR snapshot with the vendor disabled → NotFound (single) / omitted (Multi); a vendor no-data → NotFound; global disables stay FailedPrecondition.
+   - Snapshot paragraph: no producible EDGAR snapshot with the vendor disabled → NotFound (single) / omitted (Multi); an FMP no-data → NotFound; a Finnhub fetch failure stays Unavailable (Finnhub has no absence signal); global disables stay FailedPrecondition.
    - Describe `GetEtfFlags` (cache-only, 30-day fixed TTL, background fill only below 80% of `marketdata.fmp.daily_request_cap`, `atQuotaAlertThreshold`).
 6. **UI `CLAUDE.md`.** Fix the Signal-detail route drift (`insights/market/[symbol]` → `trader/positions/[symbol]`), and note the skip-row badge and the `useOpportunities(..., symbol)` filter.
 7. **C-16 CHANGE texts.**
@@ -1382,6 +1449,8 @@ grep -n "from '../fixtures'\|from './fixtures'\|helpers/auth" services/xstockstr
    - Promoting the feature's `@AC-*` scenarios into the durable suites remains the `/sdd-execute` integration-PR step (C-16).
 8. **`recon.md:121,166`.** Apply the design's wording fix.
 9. **Teardown.** Run `/context-forge:context-constitution refresh` scoped to the touched context files. If the plugin is unavailable, record the manual reconciliation in the PR body.
+   - Any grounded-drift fix it reports **outside** this step's Files list is not staged silently (F-08). Examples: a `*-findings.md`, or `README.md` via `.agents/context-forge.json` `scrubberExtraTargets`.
+   - Record each such file and edit in the **Deviation Log**, then stage it, or defer it to a follow-up noted there.
 
 **Verification**:
 ```bash
@@ -1389,6 +1458,8 @@ python3 plugins/strat-lab/scripts/validate.py --self-test && python3 plugins/str
 grep -n "FUNDAMENTALS_UNAVAILABLE" plugins/strat-lab/skills/backtest/reference/output-handling.md docs/runbooks/mcp-tools.md services/xstockstrat-analysis/CLAUDE.md
 grep -c "insights/market/\[symbol\]" services/xstockstrat-ui/CLAUDE.md   # expect 0
 grep -n "feature 215" services/xstockstrat-analysis/acceptance/fundamentals-formula-inputs.feature services/xstockstrat-analysis/acceptance/opportunity-compute-robustness.feature
+grep -n "RESOURCE_EXHAUSTED" services/xstockstrat-analysis/CLAUDE.md
+(cd services/xstockstrat-agent && uv run pytest tests/test_tools_endpoint.py tests/test_list_correlation_parity.py -q)   # mcp-tools.md + strat-lab SKILL.md parity guards
 ```
 
 ---
@@ -1424,7 +1495,14 @@ grep -n "feature 215" services/xstockstrat-analysis/acceptance/fundamentals-form
 3. Any mismatch blocks `launched` and is logged in the Deviation Log.
 
 **Verification**:
-Each bullet's observed MCP output is recorded in `context.md` under a `## Session … — staging verification` heading. The pre-merge count is recorded before the integration PR merges.
+Each bullet's observed MCP output is recorded in `context.md` under a `## Session … — staging verification` heading. The pre-merge count is recorded before the integration PR merges. **No coverage threshold applies** (environment verification; the code-level red/green lives in Steps 16/18/22/24).
+```bash
+F=docs/roadmap/features/215-block-fundamentals-strategy-on-etf/context.md
+grep -n "^## Session .* — staging verification" "$F"                      # section exists
+grep -nE ">50 periods: [0-9]+" "$F"                                      # pre-merge count recorded (pre-merge gate)
+grep -nE "NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE|fundamentals_unavailable: true" "$F"   # post-deploy SCHD results recorded
+```
+Record the pre-merge count as a line `>50 periods: <N> (<symbols>)`, so the second grep matches.
 
 ---
 

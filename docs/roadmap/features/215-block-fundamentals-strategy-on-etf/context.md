@@ -193,3 +193,29 @@
 
 - `/sdd-review block-fundamentals-strategy-on-etf impl-spec`.
 - Step 26: measure the >50-period symbols on staging before the integration PR merges.
+
+## Session 2026-10-11 — sdd-review impl-spec (advisory)
+
+- Verdict: **FAIL**, with no Floor breach. There was one literal-criterion blocker plus advisory warnings. All of them are resolved below by editing step bodies before execution. Every citation was re-verified by grep/read in this worktree, and the `marketdata_service.go` lines against `git show origin/main-dev:…`.
+- [x] **BLOCKER — Step 26 had no runnable Verification.** Added bash `grep`s on this file for three things: the `## Session … — staging verification` heading, a `>50 periods: <N>` line, and the recorded SCHD reason-5 / `fundamentals_unavailable: true` results. Also stated "no coverage threshold applies (environment verification; red/green in Steps 16/18/22/24)".
+- [x] **Steps 8/10, Go coverage.** `go list`/`go test` now run with `GOWORK=off` (the template's unexported shell var did not reach `go test`). Added the `awk '/^total:/{…; exit ($3+0<40)}'` ≥40% assertion, sanity-checked on sample output.
+- [x] **Step 2, directory-only Files.** Replaced it with the per-language tracked stub files for analysis and marketdata under `packages/proto/gen/{go,python,ts,ts/dist}`, plus the expected-unchanged list. Verification now fails on any other `gen/` change.
+- [x] **F-08 file lists.**
+  - Step 18 gains `tests/test_owner_dimension.py` and `tests/test_analysis_servicer.py`.
+  - Step 22 gains `tests/test_analysis_servicer.py` and `tests/test_opportunities_latency.py`.
+  - Step 25 teardown: drift fixes outside the step's Files go to the Deviation Log.
+  - Step 25 Verification adds `uv run pytest tests/test_tools_endpoint.py tests/test_list_correlation_parity.py -q` (agent).
+- [x] **Step 15, approval fix 1 "generally".** `fund_failures` is created before the formula-map build (`servicer.py:838-851`). `failures=` is threaded through `_prefetch_formula_warmups` → `_declared_formula_warmup`, whose `except grpc.RpcError` (L2254) records `("formula", fid)` when `fund_map` is passed, and through `_formula_fundamentals`. A backtest `GetFormula` outage now reads UNKNOWN, not FORMULA_ERROR, with the gate on. Paired test: Step 16(i), on both prefixed and unprefixed runs.
+- [x] **Step 17, interactive concurrency bound.** Added the fixed invariant `_INTERACTIVE_DERIVATION_CONCURRENCY = 4`. When `sem is None` it backs a fresh local `asyncio.Semaphore`, never the materializer sem. Step 18 pins a peak in-flight count of 4 over 10 symbols.
+- [x] **Step 17, C-03.** Chose **forwarding**: interactive recompute triggers (RunBacktest, ScoreStrategy, ManageStrategy UPDATE) pass the inbound `_PROPAGATED_HEADERS` trio (`servicer.py:303`), which includes `x-access-scope`. This supersedes the design's "owner + trace" note. Boot stays owner-only (`servicer.py:5474` precedent). Step 18 pins the trio.
+- [x] **Step 21, mutual exclusion.** `sym_unavailable = evaluated and not fund_skip and (sym in fetch_failed or fund_unknown)`. This guards against a sibling candidate's concurrent `fetch_failed.add` (`servicer.py:5238-5247`, read at L5280). Step 22 has the matching case.
+- [x] **Steps 13/14/22/25, snapshot quota ripple.** Named in Step 13.6: single-symbol `GetFundamentals` → `resolveFundamentals` returns `RESOURCE_EXHAUSTED` for an uncached symbol (main-dev L1430-1434), where Multi omitted it (L1376-1382). With Step 13.6 that now reads UNKNOWN, so the row is stamped `"unavailable"` and goes through the 300s retry. Step 14 and Step 22 have cases for it, and Step 25 adds a line to the analysis `CLAUDE.md`.
+- [x] **Step 8, finnhub client test.** It surfaced a **design factual error**. `finnhub_client.go:56` ("no fundamentals") is reached **only on an outage**: `GetFundamentals` delegates to `GetFundamentalsMulti`, which `continue`s on any `fetchOne` error (L71-75). A decoded symbol always yields a row. Wrapping it as `ErrNoFundamentals` would have turned Finnhub outages into NotFound/absence, an FR-8 violation on the default provider.
+  - Step 7 now makes Finnhub `GetFundamentals` call `fetchOne` directly and return its error unwrapped (it never returns `ErrNoFundamentals`). The FMP wrap is unchanged: FMP returns quote errors and omits only true absences.
+  - Step 8 adds `TestGetFundamentals_OutageIsNotAbsence` in `internal/finnhub/finnhub_client_test.go` (503/429 → not `ErrNoFundamentals`; empty 200 → nil-field row) and a service case: an unwrapped vendor error gives `CodeUnavailable`.
+  - Step 8 Covers now includes AC-8. The Step 25 marketdata doc text says the same.
+- [x] **Step 16(d), page cap.** Added (h): a never-ending `next_page_token` through `RunBacktest` gives an UNKNOWN warning, is never refused, and writes no cell. Step 16 now Covers AC-12. The Scenario Coverage table was re-synced: AC-8 adds Step 8; AC-12 adds Step 16, and Step 20, which already covered it but was missing from the table.
+- [x] **Step 23, C-10.** One note that `CopilotRail.tsx` (~L36-46) and `WatchlistDetail.tsx` (~L90-92) are intentionally unchanged. The `symbol = ''` default keeps CopilotRail's shared page-1 cache key.
+- [x] **`marketdata_service.go` anchors.** Confirmed the citations are origin/main-dev numbers (+12 vs this branch). Step Dependencies now says to locate by symbol at execute time. Step 7 and Step 13 citations name their enclosing symbol.
+- [x] **`atQuotaAlertThreshold` with cap ≤ 0.** From code: `BudgetSnapshot`'s "cap <= 0 = uncapped" comment holds only for a nil-`Limits` client. Production always wires `Limits` (`cmd/server/main.go:242-245`), and `reserve()` then refuses every call at cap 0. So 0 means zero budget. The Step 9 filler now gates `cap > 0` explicitly, and Step 10(c) adds a `{0,0}` case.
+- Also corrected in passing (C-01): Step 18's helper is `_eligible_cell` (`tests/test_analysis_servicer.py:87`), not `_cell`.
