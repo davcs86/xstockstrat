@@ -865,7 +865,7 @@ cd services/xstockstrat-analysis && grep -n "class _FundamentalsUnavailable\|cla
 
 ### Step 16 — test: Backtest refusal
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_backtest_fundamentals_guard.py` — create
@@ -1552,3 +1552,8 @@ _Populated by /sdd-execute as implementation proceeds._
 **Spec said**: Files include `tests/test_live_loop.py` (re-point snapshot stubs); readiness parity feeds EvaluateReadiness, GetWatchlistReadiness, the materializer and GetIndicatorSeries SCHD empty history + NotFound snapshot and compares to the pre-change shape.
 **Actual**: `tests/test_live_loop.py` is unchanged: its `GetFundamentalsMulti` stubs all drive the blend-universe resolver (which keeps Multi), and the live-loader cases live in the new `test_fundamentals_pit_pager.py`. Readiness parity is behavioral for EvaluateReadiness and GetIndicatorSeries (real loaders on SCHD ≡ loaders forced to `[]`, both RPCs asserted awaited) and structural for the watchlist compute path (`_kick_readiness_refresh`) and `_materialize_readiness_for_owner` (`inspect.getsource` pins that none of the four pass `failures=`).
 **Reason**: no live snapshot-loader stub exists in `test_live_loop.py` to re-point. The watchlist/materializer harnesses live in test files outside Step 14's Files; their loader inputs are the same two loaders whose NOT_FOUND → `[]` mapping is pinned directly, so the structural pin plus the loader tests cover the rule without widening F-08 scope.
+
+### Deviation: Step 16 — test: Backtest refusal
+**Spec said**: tests run `fundamentals_macd_blend` (fscore + MACD) and `squeeze_breakout_trend` (MACD/SMA/volatility-stop) shapes.
+**Actual**: the test definitions keep the real ids and the real fscore formula inputs (`FUNDAMENTAL_INPUTS`, six metrics), but the technical leg is a single SMA builtin in both shapes; the prefixed variant of (i) starts its range 10 bars into the mocked series so the SMA warm-up prefix is covered (asserted via `not result.coverage_gaps`). `test_fundamentals_guard.py`'s operand-miss case reads `beta` (AAPL fixtures now carry all six fscore metrics, including `dividend_yield`).
+**Reason**: the guard judges only fundamentals components, so the technical indicator choice does not affect the guarded behavior; SMA≈close keeps the ComputeIndicator mock exact. The fixture change follows the C-13 centralization the step mandates.

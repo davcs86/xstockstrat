@@ -29,6 +29,7 @@ from app.services.fundamentals_guard import (
     epoch_eval_dates,
     requires_fundamentals,
 )
+from tests.conftest import AAPL_PIT_PERIODS, SCHD_PIT_PERIODS
 
 _M = indicators_pb2
 # The seeded fscore formula's declared inputs
@@ -85,15 +86,6 @@ def _squeeze():
     return _definition(_builtin("macd", "MACD"), _builtin("sma", "SMA"), _builtin("atr", "ATR"))
 
 
-def _aapl_periods():
-    return [
-        FundamentalPeriod(
-            filed_date=date(2024, 11, 1),
-            values={"pe_ratio": 30.0, "pb_ratio": 40.0, "roe": 1.5, "eps": 6.0},
-        )
-    ]
-
-
 def _assess(definition, fmap=None, eval_dates=_EVAL, **kw):
     kw.setdefault("symbol", "AAPL")
     kw.setdefault("pit", [])
@@ -116,7 +108,7 @@ class TestRequiresFundamentals:
 
 class TestAssessStates:
     def test_schd_empty_history_is_unavailable(self):
-        assert _assess(_blend(), symbol="SCHD", pit=[]) is Availability.UNAVAILABLE
+        assert _assess(_blend(), symbol="SCHD", pit=SCHD_PIT_PERIODS) is Availability.UNAVAILABLE
 
     def test_ac10_partial_row_is_available(self):
         """@AC-10 / C-16 PRESERVE @AC-8 @feature-201: a beta-only row vs {BETA, PE} executes."""
@@ -130,19 +122,21 @@ class TestAssessStates:
         assert _assess(_blend(), pit=pit) is Availability.UNAVAILABLE
 
     def test_available_with_real_history(self):
-        assert _assess(_blend(), pit=_aapl_periods()) is Availability.AVAILABLE
+        assert _assess(_blend(), pit=AAPL_PIT_PERIODS) is Availability.AVAILABLE
 
     def test_empty_eval_dates_is_not_assessed(self):
         assert _assess(_blend(), eval_dates=[]) is Availability.NOT_ASSESSED
 
     def test_bars_failed_is_not_assessed(self):
-        assert _assess(_blend(), pit=_aapl_periods(), bars_failed=True) is Availability.NOT_ASSESSED
+        assert (
+            _assess(_blend(), pit=AAPL_PIT_PERIODS, bars_failed=True) is Availability.NOT_ASSESSED
+        )
 
     def test_gate_off_is_not_required(self):
         assert _assess(_blend(), gate_enabled=False) is Availability.NOT_REQUIRED
 
     def test_ac3_technical_strategy_on_etf_is_not_required(self):
-        assert _assess(_squeeze(), symbol="SCHD", pit=[]) is Availability.NOT_REQUIRED
+        assert _assess(_squeeze(), symbol="SCHD", pit=SCHD_PIT_PERIODS) is Availability.NOT_REQUIRED
 
     def test_formula_failure_on_technical_looking_map_is_unknown(self):
         failures = {("formula", "fscore"): Availability.UNKNOWN}
@@ -153,8 +147,8 @@ class TestAssessStates:
         assert _assess(_blend(), pit=[], failures=failures) is Availability.UNKNOWN
 
     def test_operand_reads_pit(self):
-        assert _assess(_definition(_operand()), {}, pit=_aapl_periods()) is Availability.AVAILABLE
-        assert _assess(_definition(_operand("dividend_yield")), {}, pit=_aapl_periods()) is (
+        assert _assess(_definition(_operand()), {}, pit=AAPL_PIT_PERIODS) is Availability.AVAILABLE
+        assert _assess(_definition(_operand("beta")), {}, pit=AAPL_PIT_PERIODS) is (
             Availability.UNAVAILABLE
         )
 
@@ -188,7 +182,7 @@ class TestPrecedence:
         failures = {("snap", "AAPL"): Availability.DISABLED}
         snap = []
         assert (
-            _assess(definition, self._fmap(), pit=_aapl_periods(), snap=snap, failures=failures)
+            _assess(definition, self._fmap(), pit=AAPL_PIT_PERIODS, snap=snap, failures=failures)
             is Availability.DISABLED
         )
 
@@ -200,14 +194,14 @@ class TestChannelChoice:
     def test_formula_reads_snapshot_when_given(self):
         snap = [FundamentalPeriod(filed_date=date.min, values={"pe_ratio": 9.0})]
         assert _assess(_blend(), pit=[], snap=snap) is Availability.AVAILABLE
-        assert _assess(_blend(), pit=_aapl_periods(), snap=[]) is Availability.UNAVAILABLE
+        assert _assess(_blend(), pit=AAPL_PIT_PERIODS, snap=[]) is Availability.UNAVAILABLE
 
     def test_snap_failure_only_affects_formula_channel(self):
         failures = {("snap", "AAPL"): Availability.UNKNOWN}
         assert _assess(
-            _definition(_operand()), {}, pit=_aapl_periods(), snap=[], failures=failures
+            _definition(_operand()), {}, pit=AAPL_PIT_PERIODS, snap=[], failures=failures
         ) is (Availability.AVAILABLE)
-        assert _assess(_blend(), pit=_aapl_periods(), snap=[], failures=failures) is (
+        assert _assess(_blend(), pit=AAPL_PIT_PERIODS, snap=[], failures=failures) is (
             Availability.UNKNOWN
         )
 
@@ -226,7 +220,7 @@ def _ok_resp():
         [FundamentalPeriod(filed_date=date(2024, 6, 30), values={"pe_ratio": None, "eps": None})],
         [FundamentalPeriod(filed_date=date(2024, 6, 30), values={"beta": 2.0})],
         [FundamentalPeriod(filed_date=date(2025, 2, 1), values={"eps": 2.0})],
-        _aapl_periods(),
+        AAPL_PIT_PERIODS,
     ],
 )
 @pytest.mark.asyncio

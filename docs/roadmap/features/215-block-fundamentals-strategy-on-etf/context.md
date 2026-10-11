@@ -327,3 +327,9 @@
 - TDD (paired with Step 16): RED (behavioral) 8 failed, 3 passed: SCHD diagnostics `NO_TRADE_REASON_ENTRY_NEVER_TRUE` (want 5 — the original silent no-trade), `'fundamentals fetch failed for SCHD — rerun' in []`, formula outage no warnings. GREEN: 43 passed (backtest guard + guard); full suite 1038 passed, coverage 86.90%; ruff clean.
 - Files modified: `services/xstockstrat-analysis/app/handlers/servicer.py`
 - Deviations: none
+
+### Step 16 — test: Backtest refusal [done]
+- C-13: `tests/conftest.py` gains `fund_period`, `SCHD_PIT_PERIODS = []` and `AAPL_PIT_PERIODS` (three 2024 quarterly filings with all six fscore metrics); `test_fundamentals_guard.py` re-imports them (one declaration). New `tests/test_backtest_fundamentals_guard.py` (real evaluator, real `Bar` times, gate on unless stated): (a) `@AC-2/@AC-5` SCHD → reason 5 + `FUNDAMENTALS_GAP_ETF`, INSUFFICIENT_DATA, no SCHD cell, WARN with SCHD + strategy + "fundamentals unavailable", GetEtfFlags carries the inbound trio; (b) AAPL traded + cell, SCHD refused, OK; (c) `@AC-3` squeeze on SCHD untouched with no PIT call, blend on AAPL not refused; (d) `@AC-8` UNAVAILABLE → rerun warning, no reason 5, no cell; (e) `@AC-10` filing on the last bar → refused; (f) GetEtfFlags error → reason 5 + UNSPECIFIED; (g) gate off → ENTRY_NEVER_TRUE; (h) `@AC-12` endless token → rerun warning, exactly `_MAX_FUND_PAGES` calls, no cell; (i) GetFormula outage, prefixed and unprefixed → rerun warning per symbol, no reason 5, no FORMULA_ERROR, no cell; gate off → FORMULA_ERROR kept.
+- AC-2/3/5/8/10/12 red: see Step 15 (8 failed) → green: 43 passed. Full suite 1038 passed, 86.90%; ruff clean; C-13 check: 1 `AAPL_PIT_PERIODS = ` declaration.
+- Files modified: `services/xstockstrat-analysis/tests/test_backtest_fundamentals_guard.py` (new), `tests/conftest.py`, `tests/test_fundamentals_guard.py`
+- Deviations: SMA technical leg; prefixed range start; operand-miss reads `beta` (see Deviation Log).
