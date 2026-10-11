@@ -1259,7 +1259,7 @@ cd services/xstockstrat-analysis && uv run pytest tests/test_opportunities_funda
 
 ### Step 23 — service: UI surfaces (backtest reason, queue skip badge, Signal-detail)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/BacktestDiagnostics.tsx` — modify
@@ -1331,7 +1331,7 @@ cd services/xstockstrat-ui && pnpm exec tsc --noEmit && pnpm run lint && grep -n
 
 ### Step 24 — test: UI e2e + fixtures
 
-**Status**: `pending`
+**Status**: `blocked`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/fixtures/opportunities.ts` — modify
@@ -1567,3 +1567,14 @@ _Populated by /sdd-execute as implementation proceeds._
 **Spec said**: (2) after the gather, call `self._fundamentals_gap_labels(symbols, propagation_meta)` once and set the label; (3) label the healed skip rows "with one `_fundamentals_gap_labels` call"; UNKNOWN in the heal is "treated as `still_unavailable`".
 **Actual**: Both label sites call one new helper `_label_fundamentals_skip_rows(items, meta)` (items = `(symbol, readiness_json)` pairs), which makes the single `_fundamentals_gap_labels` call and writes only a non-zero label. In the heal, the existing evaluation `try` block moved one level in, under an `else` of the UNKNOWN check, so an UNKNOWN heal logs and keeps `still_unavailable` without evaluating. A healed skip row also advances `session_end_seconds` from its bars, like an evaluated heal.
 **Reason**: DRY guard rail (one labelling rule for compute and heal). The re-indent is the minimal way to skip evaluation on UNKNOWN without inventing an exception path. No design-intent change.
+
+### Deviation: Step 23 — service: UI surfaces (backtest reason, queue skip badge, Signal-detail)
+**Spec said**: Verification `pnpm exec tsc --noEmit && pnpm run lint && …`; "render `<CardNotice data-testid="readiness-fundamentals-unavailable">…`".
+**Actual**: `tsc --noEmit` still exits non-zero on two **pre-existing** errors in `e2e/insights/backfills.spec.ts:135-136` (`Property … does not exist on type 'never'`). That file is byte-identical to `origin/main-dev` and untouched by this feature; Step 23 adds no new error. `CardNotice` does not forward props, so the test id sits on a wrapping `<div>` around `<CardNotice>`.
+**Reason**: fixing an unrelated spec, or widening the shared `CardNotice` API, is outside Step 23's Files (F-08).
+
+### Deviation: Step 24 — test: UI e2e + fixtures [BLOCKED]
+**Spec said**: the `strat-fundamentals-etf-001` sentinel returns `status: 2` (INSUFFICIENT_DATA), and the `@AC-2` UI test expects `[data-testid=no-trade-reason]` to contain `requires fundamentals` and `(ETF)`.
+**Actual**: `src/app/insights/strategies/[id]/page.tsx` hides `BacktestDiagnostics` for INSUFFICIENT_DATA, and shows its INSUFFICIENT_DATA card only when there are coverage gaps. A refused-only run therefore renders nothing (verified e2e). Step 24 is not committed.
+**Reason**: an unspecced UI gate. Closing it needs a file outside the step's Files (F-08), so an operator decision is required: A) expand scope to render the diagnostics/refusal banner for INSUFFICIENT_DATA runs that carry diagnostics; B) accept the limitation and make the sentinel status 1 (asserts less than the real behavior); C) track it as a follow-up.
+**Disposition**: awaiting operator decision.
