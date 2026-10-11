@@ -1138,7 +1138,7 @@ grep -n "from tests.conftest import\|from .conftest import\|conftest" tests/test
 
 ### Step 21 — service: Opportunity skip row + heal (FR-3)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -1562,3 +1562,8 @@ _Populated by /sdd-execute as implementation proceeds._
 **Spec said**: `_exclude_refused_cells` returns `(kept, sorted(excluded_symbols))`; it did not say whether a symbol with one refused and one kept window counts as excluded.
 **Actual**: `excluded` lists only symbols left with **no** surviving cell, so ScoreStrategy's "all evidence symbols excluded (fundamentals unavailable: …)" names exactly the symbols that dropped out of the grade. `_recompute_headline` / `_recompute_headline_locked` thread the new kwargs as `**derive_kw` into `_fetch_and_aggregate`.
 **Reason**: a symbol whose eligible window survives still contributes to the grade, so naming it as excluded would be false. Clarification of an unspecified detail; no design-intent change.
+
+### Deviation: Step 21 — service: Opportunity skip row + heal (FR-3)
+**Spec said**: (2) after the gather, call `self._fundamentals_gap_labels(symbols, propagation_meta)` once and set the label; (3) label the healed skip rows "with one `_fundamentals_gap_labels` call"; UNKNOWN in the heal is "treated as `still_unavailable`".
+**Actual**: Both label sites call one new helper `_label_fundamentals_skip_rows(items, meta)` (items = `(symbol, readiness_json)` pairs), which makes the single `_fundamentals_gap_labels` call and writes only a non-zero label. In the heal, the existing evaluation `try` block moved one level in, under an `else` of the UNKNOWN check, so an UNKNOWN heal logs and keeps `still_unavailable` without evaluating. A healed skip row also advances `session_end_seconds` from its bars, like an evaluated heal.
+**Reason**: DRY guard rail (one labelling rule for compute and heal). The re-indent is the minimal way to skip evaluation on UNKNOWN without inventing an exception path. No design-intent change.

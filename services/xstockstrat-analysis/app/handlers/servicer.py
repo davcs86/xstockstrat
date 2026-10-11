@@ -1942,6 +1942,17 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             out[flag.symbol.upper()] = gap
         return out
 
+    async def _label_fundamentals_skip_rows(self, items, propagation_meta) -> None:
+        """Stamp the best-effort ETF label into each ``(symbol, readiness_json)`` of a skip row (one
+        GetEtfFlags call); an unknown label leaves the key absent ("fundamentals unavailable")."""
+        if not items:
+            return
+        labels = await self._fundamentals_gap_labels({sym for sym, _ in items}, propagation_meta)
+        for sym, readiness in items:
+            label = labels.get(sym.upper(), analysis_pb2.FUNDAMENTALS_GAP_UNSPECIFIED)
+            if label:
+                readiness["fundamentals_gap"] = label
+
     async def _backtest_symbol_evaluated(
         self,
         symbol,
@@ -4864,6 +4875,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # feature 200 — routing map keyed by formula_id (shared across strategies) + snapshot dedup.
         formula_fund_cache: dict[str, list] = {}
         fund_snap_cache: dict[str, list] = {}
+        heal_failures: dict = {}  # feature 215 — this heal's loader failures (guard input)
+        fund_gate = self._cfg.get_bool("analysis.backtest.fundamentals.enabled", False)
+        skip_labels: list[tuple[str, dict]] = []
         session_end_seconds = 0
         heal_rows: list[dict] = []
         readiness_stage: list[dict] = []
@@ -4897,9 +4911,13 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                         propagation_meta,
                         sem=self._readiness_materializer_bars_sem,
                         cache=fundamentals_cache,
+                        failures=heal_failures,
                     )
                     formula_fund_map = await self._formula_fundamentals(
-                        definition, propagation_meta, cache=formula_fund_cache
+                        definition,
+                        propagation_meta,
+                        cache=formula_fund_cache,
+                        failures=heal_failures,
                     )
                     fund_snap = await self._load_fundamentals_snapshot(
                         definition,
@@ -4908,28 +4926,67 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                         formula_fund_map,
                         sem=self._readiness_materializer_bars_sem,
                         cache=fund_snap_cache,
+                        failures=heal_failures,
                     )
-                    try:
-                        readiness = await evaluator.evaluate_conditions_traced(
-                            await self._sector_definition(definition, sym, propagation_meta),
-                            bars,
-                            sym,
-                            rule=rule,
-                            benchmark_bars=benchmark_bars,
-                            fundamentals=fundamentals,
-                            formula_fundamentals=formula_fund_map,
-                            formula_fundamentals_data=fund_snap,
+                    avail = assess(
+                        definition,
+                        formula_fund_map,
+                        [_bar_date(b) for b in bars],
+                        symbol=sym,
+                        pit=fundamentals,
+                        snap=fund_snap,
+                        failures=heal_failures,
+                        gate_enabled=fund_gate,
+                        bars_failed=not bars,
+                    )
+                    if rule == "entry" and avail is Availability.UNAVAILABLE:
+                        # Feature 215 (@AC-13): heal into the skip row; COALESCE rewrites action.
+                        skip_readiness = _empty_readiness(sym)
+                        skip_labels.append((sym, skip_readiness))
+                        heal_rows.append(
+                            {
+                                "opportunity_key": r["opportunity_key"],
+                                "action": int(analysis_pb2.OPPORTUNITY_ACTION_TAG_UNSPECIFIED),
+                                "conviction": 0.0,
+                                "readiness_json": skip_readiness,
+                                "signal_axis": 0.0,
+                                "provenance": [p for p in provenance if p != "unavailable"]
+                                + ["fundamentals_unavailable"],
+                                "thesis": r.get("thesis", ""),
+                                "valid_until": None,
+                                "composite_score": None,
+                                "_healed": True,
+                            }
                         )
-                    except (
-                        grpc.RpcError
-                    ) as e:  # transport outage only — FormulaExecutionError propagates
-                        log.warning(
-                            "surgical retry: indicator RPC still failing for %s: %s", sym, e
-                        )
-                    else:
-                        still_unavailable = False
                         if bars:
                             session_end_seconds = max(session_end_seconds, bars[-1].time.seconds)
+                        continue
+                    if avail is Availability.UNKNOWN:  # an outage stays unavailable and retries
+                        log.warning("surgical retry: fundamentals still unknown for %s", sym)
+                    else:
+                        try:
+                            readiness = await evaluator.evaluate_conditions_traced(
+                                await self._sector_definition(definition, sym, propagation_meta),
+                                bars,
+                                sym,
+                                rule=rule,
+                                benchmark_bars=benchmark_bars,
+                                fundamentals=fundamentals,
+                                formula_fundamentals=formula_fund_map,
+                                formula_fundamentals_data=fund_snap,
+                            )
+                        except (
+                            grpc.RpcError
+                        ) as e:  # transport outage only — FormulaExecutionError propagates
+                            log.warning(
+                                "surgical retry: indicator RPC still failing for %s: %s", sym, e
+                            )
+                        else:
+                            still_unavailable = False
+                            if bars:
+                                session_end_seconds = max(
+                                    session_end_seconds, bars[-1].time.seconds
+                                )
 
             if still_unavailable:
                 # Keep the sentinel + zeroed axes; replace_symbols re-stamps computed_at (cooldown),
@@ -5026,6 +5083,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         for hr in heal_rows:
             if hr.pop("_healed", False):
                 hr["valid_until"] = healed_valid_until
+        await self._label_fundamentals_skip_rows(skip_labels, propagation_meta)
 
         await self._opportunities_repo.replace_symbols(user_id, heal_rows)
         # feature 200 — the heal changed some composites, so re-fold each touched symbol's WHOLE row
@@ -5380,6 +5438,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # candidates) + per-symbol snapshot dedup; both filled lazily in _row_for (idempotent).
         formula_fund_cache: dict[str, list] = {}
         fund_snap_cache: dict[str, list] = {}
+        # Feature 215: (channel, symbol)/(formula, id) loader failures for this pass; row-local,
+        # never folded into the symbol-wide fetch_failed.
+        fund_failures: dict = {}
+        fund_gate = self._cfg.get_bool("analysis.backtest.fundamentals.enabled", False)
         session_end_seconds = 0
         window_hours = self._cfg.get_int("analysis.opportunity.valid_window_hours", 24)
 
@@ -5489,6 +5551,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 strat = c["strategy_id"]
                 readiness = _empty_readiness(sym)
                 exit_fires = False
+                fund_skip = False
+                fund_unknown = False
 
                 evaluated = bool(strat) and not (c["muted"] and not c["is_held"])
                 if evaluated:
@@ -5513,10 +5577,14 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                             propagation_meta,
                             sem=self._readiness_materializer_bars_sem,
                             cache=fundamentals_cache,
+                            failures=fund_failures,
                         )
                         # feature 200 — routing map + snapshot on the SEPARATE formula channel.
                         formula_fund_map = await self._formula_fundamentals(
-                            definition, propagation_meta, cache=formula_fund_cache
+                            definition,
+                            propagation_meta,
+                            cache=formula_fund_cache,
+                            failures=fund_failures,
                         )
                         fund_snap = await self._load_fundamentals_snapshot(
                             definition,
@@ -5525,9 +5593,28 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                             formula_fund_map,
                             sem=self._readiness_materializer_bars_sem,
                             cache=fund_snap_cache,
+                            failures=fund_failures,
                         )
                         # Held + attributed → exit-rule trace (FR-8); else entry-rule trace.
                         rule = "exit" if c["is_held"] else "entry"
+                        # Feature 215 (FR-3): an entry with no usable fundamentals is a skip row;
+                        # an outage (UNKNOWN) is row-local data-unavailable. Held exits evaluate.
+                        avail = assess(
+                            definition,
+                            formula_fund_map,
+                            [_bar_date(b) for b in bars],
+                            symbol=sym,
+                            pit=fundamentals,
+                            snap=fund_snap,
+                            failures=fund_failures,
+                            gate_enabled=fund_gate,
+                            bars_failed=(sym in fetch_failed or not bars),
+                        )
+                        if rule == "entry" and avail is Availability.UNAVAILABLE:
+                            fund_skip = True
+                        elif avail is Availability.UNKNOWN:
+                            fund_unknown = True
+                    if definition is not None and not (fund_skip or fund_unknown):
                         try:
                             readiness = await evaluator.evaluate_conditions_traced(
                                 await self._sector_definition(definition, sym, propagation_meta),
@@ -5570,6 +5657,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                         action = analysis_pb2.OPPORTUNITY_ACTION_TAG_UNSPECIFIED
                     else:
                         return None  # speculative sell-with-no-position → not actionable, drop
+                if fund_skip:
+                    action = analysis_pb2.OPPORTUNITY_ACTION_TAG_UNSPECIFIED
+                    _add_provenance(c, "fundamentals_unavailable")
 
                 # Carry the raw max ExternalSignal.conviction via readiness_json (no column).
                 # _best_sig_conv stays -1.0 with no signal → leave unset, never a fabricated 0.0.
@@ -5581,9 +5671,14 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 # "unavailable" provenance marker (rides the existing JSONB, feature-131 precedent)
                 # and zeroed on BOTH ranking axes so the read ORDER BY sinks it out of the hot
                 # path — distinct from an evaluated 0/N quiet row (which keeps its real conviction).
-                sym_unavailable = evaluated and sym in fetch_failed
+                # Feature 215: `not fund_skip` keeps the skip row exclusive of "unavailable" even
+                # when a sibling candidate adds this symbol to fetch_failed concurrently.
+                sym_unavailable = (
+                    evaluated and not fund_skip and (sym in fetch_failed or fund_unknown)
+                )
                 if sym_unavailable:
                     _add_provenance(c, "unavailable")
+                zeroed = sym_unavailable or fund_skip
 
                 # feature 199 — composite_score over the axes PRESENT at compute, evaluated on the
                 # real readiness/signal BEFORE axis-zeroing. sym_unavailable forces both absent
@@ -5591,7 +5686,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 # present iff it evaluated any condition; the signal axis iff any signal contributed
                 # it. A present sub-score of 0.0 still counts its weight (an active pull-down).
                 composite_scored: list[tuple[float, float]] = []
-                if not sym_unavailable:
+                if not zeroed:
                     if readiness["total_conditions"] > 0:
                         composite_scored.append((composite_w_readiness, readiness["conviction"]))
                     if c["_composite_sig_contribs"]:
@@ -5606,15 +5701,23 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     "symbol": sym,
                     "strategy_id": strat,
                     "action": int(action),
-                    "conviction": 0.0 if sym_unavailable else readiness["conviction"],
+                    "conviction": 0.0 if zeroed else readiness["conviction"],
                     "readiness_json": readiness,
-                    "signal_axis": 0.0 if sym_unavailable else c["signal_axis"],
+                    "signal_axis": 0.0 if zeroed else c["signal_axis"],
                     "provenance": c["provenance"],
                     "thesis": c["thesis"],
                     "composite_score": composite,
                 }
 
         rows = [r for r in await asyncio.gather(*[_row_for(c) for c in selected]) if r is not None]
+        await self._label_fundamentals_skip_rows(
+            [
+                (r["symbol"], r["readiness_json"])
+                for r in rows
+                if "fundamentals_unavailable" in r["provenance"]
+            ],
+            propagation_meta,
+        )
 
         # One session date for the whole compute → uniform valid_until; fall back to now when no
         # bars were fetched. The mixed-calendar residual is accepted (revalidated on next read).
