@@ -76,6 +76,7 @@ from app.services.fundamentals_guard import (
     _definition_has_fundamental,
     _definition_wants_fundamentals_formula,
     assess,
+    epoch_eval_dates,
 )
 from app.services.readiness import (
     compute_readiness_row,
@@ -265,6 +266,14 @@ class _FundamentalsUnavailable(Exception):
         self.symbol = symbol
 
 
+class _GradeInputsUnknown(Exception):
+    """A recompute could not tell whether an evidence symbol is refused; keep the old grade."""
+
+    def __init__(self, symbol: str):
+        super().__init__(f"{symbol}: fundamentals availability unknown")
+        self.symbol = symbol
+
+
 class _FundamentalsUnknown(Exception):
     """A fundamentals fetch for ``symbol`` failed, so availability is unknown (never a refusal)."""
 
@@ -291,6 +300,9 @@ _FUND_PAGE_SIZE = 200
 _MAX_FUND_PAGES = 8
 # Per-page deadline: a stuck marketdata call reads as UNKNOWN instead of hanging the surface.
 _FUND_PAGE_TIMEOUT_SECONDS = 10
+# Caps concurrent paged GetHistoricalFundamentals per interactive recompute; marketdata's pooled
+# DB budget is 2 (root CLAUDE.md pool table).
+_INTERACTIVE_DERIVATION_CONCURRENCY = 4
 
 # Recent-bar lookback for EvaluateReadiness: ~400 calendar days ≈ 280 trading bars, enough to
 # warm up long indicators (e.g. SMA/EMA up to ~200 periods) for a last-bar readiness read.
@@ -1264,9 +1276,19 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
 
         # Recompute the headline grade from the strategy's full evidence base. Best-effort;
         # ordered BEFORE the completion emit so a subscriber sees the post-run grade.
-        if result.status == analysis_pb2.BACKTEST_STATUS_OK:
+        # Feature 215 (@AC-11): a refused-only run still recomputes, so a legacy grade built on
+        # the refused symbol clears; the run-level PIT cache/failures are reused.
+        if result.status == analysis_pb2.BACKTEST_STATUS_OK or fund_refusals > 0:
             try:
-                await self._recompute_headline(caller_user_id, request.strategy_id)
+                await self._recompute_headline(
+                    caller_user_id,
+                    request.strategy_id,
+                    fund_cache=fund_cache,
+                    failures=fund_failures,
+                    meta=propagation_meta,
+                )
+            except _GradeInputsUnknown as e:
+                log.warning("fundamentals availability unknown — grade unchanged: %s", e)
             except Exception as e:
                 log.warning("failed to recompute headline score: %s", e)
 
@@ -2476,8 +2498,22 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             return
 
         async with self._lock_for(caller_user_id, request.strategy_id):
+            excluded: list[str] = []
             try:
-                score = await self._fetch_and_aggregate(caller_user_id, request.strategy_id, row)
+                score = await self._fetch_and_aggregate(
+                    caller_user_id,
+                    request.strategy_id,
+                    row,
+                    meta=propagation_meta,
+                    excluded=excluded,
+                )
+            except _GradeInputsUnknown as e:
+                log.warning("score: fundamentals availability unknown for %s", e.symbol)
+                await context.abort(
+                    grpc.StatusCode.UNAVAILABLE,
+                    "fundamentals availability unknown — grade unchanged",
+                )
+                return
             except Exception as e:
                 log.warning("failed to read evidence cells for score: %s", e)
                 await context.abort(grpc.StatusCode.UNAVAILABLE, "evidence store unavailable")
@@ -2493,6 +2529,13 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                         log.warning("failed to clear stale score: %s", e)
                         await context.abort(grpc.StatusCode.UNAVAILABLE, "score store unavailable")
                         return
+                if excluded:
+                    await context.abort(
+                        grpc.StatusCode.NOT_FOUND,
+                        "no eligible evidence — all evidence symbols excluded "
+                        f"(fundamentals unavailable: {', '.join(excluded)})",
+                    )
+                    return
                 await context.abort(
                     grpc.StatusCode.NOT_FOUND, "no eligible evidence — run a backtest"
                 )
@@ -2597,22 +2640,128 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             provisional=provisional,
         )
 
-    async def _fetch_and_aggregate(self, user_id, strategy_id, strategy_row):
+    async def _exclude_refused_cells(
+        self, user_id, definition, cells, *, fund_cache, formula_cache, failures, meta, sem
+    ):
+        """Drop the cells whose window the fundamentals guard refuses, then keep the first
+        surviving cell per symbol (``cells`` arrive in ``_ELIGIBILITY_ORDER``).
+
+        Returns ``(kept, excluded)`` where ``excluded`` lists symbols left with no cell. Raises
+        ``_GradeInputsUnknown`` when any window's availability is UNKNOWN (feature 215, H)."""
+        gate_sem = (
+            sem if sem is not None else asyncio.Semaphore(_INTERACTIVE_DERIVATION_CONCURRENCY)
+        )
+        fmap = await self._formula_fundamentals(
+            definition, meta, cache=formula_cache, failures=failures
+        )
+        symbols = sorted({c["symbol"] for c in cells})
+        loaded = await asyncio.gather(
+            *(
+                self._load_fundamentals(
+                    sym,
+                    definition,
+                    meta,
+                    sem=gate_sem,
+                    cache=fund_cache,
+                    formula_fund_map=fmap,
+                    failures=failures,
+                )
+                for sym in symbols
+            )
+        )
+        pit_by_symbol = dict(zip(symbols, loaded, strict=True))
+        gate_enabled = self._cfg.get_bool("analysis.backtest.fundamentals.enabled", False)
+        kept: dict[str, dict] = {}
+        for cell in cells:
+            sym = cell["symbol"]
+            if sym in kept:
+                continue
+            start = cell["range_start"].date() if cell.get("range_start") else date.min
+            end = (cell.get("range_end") or cell["completed_at"]).date()
+            pit = pit_by_symbol[sym]
+            avail = assess(
+                definition,
+                fmap,
+                epoch_eval_dates(start, end, pit or []),
+                symbol=sym,
+                pit=pit,
+                snap=None,
+                failures=failures,
+                gate_enabled=gate_enabled,
+            )
+            if avail is Availability.UNKNOWN:
+                raise _GradeInputsUnknown(sym)
+            if avail is Availability.UNAVAILABLE:
+                log.info(
+                    "grade-derivation excluded symbol=%s strategy=%s window=%s..%s",
+                    sym,
+                    definition.strategy_id,
+                    start,
+                    end,
+                )
+                continue
+            kept[sym] = cell
+        return list(kept.values()), sorted(set(symbols) - kept.keys())
+
+    async def _fetch_and_aggregate(
+        self,
+        user_id,
+        strategy_id,
+        strategy_row,
+        *,
+        fund_cache=None,
+        formula_cache=None,
+        failures=None,
+        meta=None,
+        sem=None,
+        excluded=None,
+    ):
         """Read eligible cells for the strategy's CURRENT fingerprint and derive a score.
 
         Returns the derived (unpersisted) StrategyScore, or ``None`` when there is zero eligible
         evidence. Raises on a cells-read error so callers can choose best-effort vs. abort. Does
         NOT mutate in-memory or DB state — pure read + compute.
+
+        Feature 215 (H): with the fundamentals gate on and a FUNDAMENTAL/CUSTOM_FORMULA component,
+        guard-refused cells are excluded before the per-symbol dedup (never deleted). ``meta``
+        defaults to the owner identity (the boot path has no inbound request).
         """
         fingerprint = _definition_fingerprint(strategy_row["definition_json"])
-        cells = await self._backtest_run_symbols_repo.fetch_eligible(
+        definition = _row_to_strategy_definition(strategy_row)
+        guarded = self._cfg.get_bool("analysis.backtest.fundamentals.enabled", False) and any(
+            c.kind
+            in (analysis_pb2.COMPONENT_KIND_FUNDAMENTAL, analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA)
+            for c in definition.components
+        )
+        if not guarded:
+            cells = await self._backtest_run_symbols_repo.fetch_eligible(
+                user_id, strategy_id, fingerprint
+            )
+            if not cells:
+                return None
+            return self._derive_score_from_cells(strategy_id, strategy_row, cells)
+        cells = await self._backtest_run_symbols_repo.fetch_all_for_fingerprint(
             user_id, strategy_id, fingerprint
         )
         if not cells:
             return None
+        cells, dropped = await self._exclude_refused_cells(
+            user_id,
+            definition,
+            cells,
+            fund_cache=fund_cache if fund_cache is not None else {},
+            formula_cache=formula_cache if formula_cache is not None else {},
+            failures=failures if failures is not None else {},
+            meta=meta if meta is not None else [("x-user-id", user_id)],
+            sem=sem,
+        )
+        if excluded is not None:
+            excluded.extend(dropped)
+        if not cells:
+            return None
         return self._derive_score_from_cells(strategy_id, strategy_row, cells)
 
-    async def _recompute_headline(self, user_id: str, strategy_id: str):
+    async def _recompute_headline(self, user_id: str, strategy_id: str, **derive_kw):
         """Derive + persist a strategy's headline grade from its full evidence base.
 
         Resolves the strategy row BEFORE taking the lock (no lock leak from ad-hoc/unregistered
@@ -2628,16 +2777,16 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         if row is None:
             return None
         async with self._lock_for(user_id, strategy_id):
-            return await self._recompute_headline_locked(user_id, strategy_id, row)
+            return await self._recompute_headline_locked(user_id, strategy_id, row, **derive_kw)
 
-    async def _recompute_headline_locked(self, user_id, strategy_id, strategy_row):
+    async def _recompute_headline_locked(self, user_id, strategy_id, strategy_row, **derive_kw):
         """Recompute the headline grade; the caller MUST already hold the strategy's lock.
 
         Zero eligible evidence → clear any stale grade (in-memory pop + best-effort DB delete),
         return None. Otherwise derive, persist via the shared score funnel, return the score.
         asyncio.Lock is non-reentrant, so triggers already inside the lock call ONLY this variant.
         """
-        score = await self._fetch_and_aggregate(user_id, strategy_id, strategy_row)
+        score = await self._fetch_and_aggregate(user_id, strategy_id, strategy_row, **derive_kw)
         if score is None:
             self._strategies.pop((user_id, strategy_id), None)
             if self._scores_repo is not None:
@@ -2785,9 +2934,20 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             return 0
         pairs = await self._scores_repo.list_unscored_pairs(limit=_BOOT_RECOMPUTE_MAX_PAIRS)
         pairs = pairs[:_BOOT_RECOMPUTE_MAX_PAIRS]
+        # PIT history is user-independent, so one pass-wide cache bounds marketdata calls.
+        fund_cache: dict = {}
+        formula_cache: dict = {}
+        failures: dict = {}
         for user_id, strategy_id in pairs:
             try:
-                await self._recompute_headline(user_id, strategy_id)
+                await self._recompute_headline(
+                    user_id,
+                    strategy_id,
+                    fund_cache=fund_cache,
+                    formula_cache=formula_cache,
+                    failures=failures,
+                    sem=self._readiness_materializer_bars_sem,
+                )
             except Exception as e:
                 log.warning("boot recompute failed for %s/%s: %s", user_id, strategy_id, e)
         return len(pairs)
@@ -3077,7 +3237,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             async with self._lock_for(caller_user_id, sid):
                 self._strategies.pop((caller_user_id, sid), None)
                 try:
-                    await self._recompute_headline_locked(caller_user_id, sid, row)
+                    await self._recompute_headline_locked(
+                        caller_user_id, sid, row, meta=propagation_meta
+                    )
                 except Exception as e:
                     log.warning("failed to recompute headline after update: %s", e)
             updated = _row_to_strategy_definition(row)

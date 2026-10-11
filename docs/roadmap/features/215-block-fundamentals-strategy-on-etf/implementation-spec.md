@@ -920,7 +920,7 @@ grep -n "SCHD_PIT_PERIODS\|AAPL_PIT_PERIODS\|def fund_period" tests/conftest.py 
 
 ### Step 17 — service: Derivation-time evidence exclusion (H)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -1557,3 +1557,8 @@ _Populated by /sdd-execute as implementation proceeds._
 **Spec said**: tests run `fundamentals_macd_blend` (fscore + MACD) and `squeeze_breakout_trend` (MACD/SMA/volatility-stop) shapes.
 **Actual**: the test definitions keep the real ids and the real fscore formula inputs (`FUNDAMENTAL_INPUTS`, six metrics), but the technical leg is a single SMA builtin in both shapes; the prefixed variant of (i) starts its range 10 bars into the mocked series so the SMA warm-up prefix is covered (asserted via `not result.coverage_gaps`). `test_fundamentals_guard.py`'s operand-miss case reads `beta` (AAPL fixtures now carry all six fscore metrics, including `dividend_yield`).
 **Reason**: the guard judges only fundamentals components, so the technical indicator choice does not affect the guarded behavior; SMA≈close keeps the ComputeIndicator mock exact. The fixture change follows the C-13 centralization the step mandates.
+
+### Deviation: Step 17 — service: Derivation-time evidence exclusion (H)
+**Spec said**: `_exclude_refused_cells` returns `(kept, sorted(excluded_symbols))`; it did not say whether a symbol with one refused and one kept window counts as excluded.
+**Actual**: `excluded` lists only symbols left with **no** surviving cell, so ScoreStrategy's "all evidence symbols excluded (fundamentals unavailable: …)" names exactly the symbols that dropped out of the grade. `_recompute_headline` / `_recompute_headline_locked` thread the new kwargs as `**derive_kw` into `_fetch_and_aggregate`.
+**Reason**: a symbol whose eligible window survives still contributes to the grade, so naming it as excluded would be false. Clarification of an unspecified detail; no design-intent change.

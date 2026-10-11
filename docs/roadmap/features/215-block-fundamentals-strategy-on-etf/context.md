@@ -340,3 +340,13 @@
 **Stopped at**: Step 16 (scope of this run; marketdata absence + ETF label and the analysis guard core + backtest refusal are in)
 **Next**: /sdd-execute block-fundamentals-strategy-on-etf sequential (Step 17, derivation-time evidence exclusion)
 **Open item**: PR #1239 (golangci-lint v2.14.0 CI fix) is still not on `origin/main-dev`, so CI Go lint on this branch stays red; local v2.14.0 lint is clean for every marketdata step. Merge `origin/main-dev` once it lands.
+
+## Session 2026-10-11 — sdd-execute (sequential, autonomous, Steps 17–26)
+
+- Mode: coordinator-delegated autonomous run of Steps 17–26, one commit per step on `feature/block-fundamentals-strategy-on-etf`. PR #1239 (golangci-lint v2.14.0 CI fix) was not on `origin/main-dev` at the start; checked again at each step boundary.
+
+### Step 17 — service: Derivation-time evidence exclusion (H) [done]
+- Repo: `_ELIGIBILITY_ORDER` hoisted (the `fetch_eligible` SQL is byte-identical) and `fetch_all_for_fingerprint` added (no `DISTINCT ON`, same order). Servicer: `_GradeInputsUnknown`, `_INTERACTIVE_DERIVATION_CONCURRENCY = 4`, `_exclude_refused_cells` (one `_formula_fundamentals` per call, PIT gathered once per distinct symbol under `sem` or a fresh local `Semaphore(4)`, per-cell window `range_start|date.min .. range_end|completed_at`, UNKNOWN raises, UNAVAILABLE drops with an INFO line, first surviving cell per symbol). `_fetch_and_aggregate` keeps today's `fetch_eligible` path when the gate is off or there is no FUNDAMENTAL/CUSTOM_FORMULA component; `meta` defaults to owner-only. Triggers: RunBacktest on `OK or fund_refusals > 0` with the run cache/failures + inbound trio and a `fundamentals availability unknown — grade unchanged` warning; ScoreStrategy forwards the trio, aborts UNAVAILABLE on UNKNOWN and NOT_FOUND naming the excluded symbols; UPDATE forwards the trio; boot shares one cache set per pass under `_readiness_materializer_bars_sem`. `main.py` runs the boot recompute via `create_task`. No `DELETE` added.
+- TDD (paired with Step 18): RED 1 = collection `ImportError` (`_INTERACTIVE_DERIVATION_CONCURRENCY`, `_ELIGIBILITY_ORDER`). RED 2 after adding only those declarations: 16 failed, 3 passed (e.g. SCHD still counted, `fetch_all_for_fingerprint` never awaited, the refused-only run never recomputed, peak in-flight 10 instead of 4, generic RunBacktest warning). GREEN: Step 18 suites 377 passed; full suite 1058 passed, coverage 86.95%; ruff check + format clean.
+- Files modified: `services/xstockstrat-analysis/app/handlers/servicer.py`, `app/repositories/backtest_run_symbols.py`, `app/main.py`
+- Deviations: `excluded` = symbols left with no surviving cell (see Deviation Log).
