@@ -233,6 +233,7 @@ jobs:
         uses: golangci/golangci-lint-action@v9
         with:
           version: v2.13.1
+          install-mode: goinstall
           working-directory: services/${{ matrix.service }}
           args: --modules-download-mode=mod
         env:
