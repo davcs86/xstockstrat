@@ -319,3 +319,23 @@ Feature: Platform-wide guarantees
     When the fundamentals signal loop registers its system source
     Then the registration fails with FAILED_PRECONDITION
     And the cycle emits no signal and raises an ERROR notify alert naming slug "macro-feed"
+
+  @AC-5 @FR-4 @regression @feature-196
+  Scenario: deprecating a response field never changes the proto schema
+    Given a deprecated proto field whose value is no longer populated in responses
+    When the change ships
+    Then no .proto field or enum value is removed and no reserved statement is added
+    And buf breaking reports no change and the BSR module schema is unchanged
+
+  @AC-3 @FR-6 @regression @feature-196
+  Scenario: deprecated enum values stay defined
+    Given a deprecated enum member (TIMEFRAME_*, ENVIRONMENT_DEV, VALUE_TYPE_FLOAT_MAP) with stored or wire values
+    When a field is omitted from responses
+    Then the enum member stays defined and [deprecated = true], and TIMEFRAME_1MIN is still emitted on streamed bars
+
+  @AC-9 @FR-5 @regression @feature-196
+  Scenario: request-only dead fields stay server-ignored
+    Given a dead request-body field (user_id on owner-scoped requests, is_paper, or the deprecated operation string)
+    When a service handles the request
+    Then identity and behavior are resolved from headers and environment as today, and no response carries the field
+
