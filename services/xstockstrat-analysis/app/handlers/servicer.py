@@ -41,6 +41,7 @@ from google.protobuf.timestamp_pb2 import Timestamp
 from app.admin_audit import audit_admin_read
 from app.config.watcher import ConfigWatcher
 from app.engine.durable_schedule import DurableSchedule, seconds_until_hour_utc
+from app.identity import SYSTEM_IDENTITY, owner_metadata
 from app.repositories.backtest_details import BacktestDetailsRepository
 from app.repositories.backtest_run_symbols import BacktestRunSymbolsRepository
 from app.repositories.backtest_runs import BacktestRunsRepository
@@ -292,8 +293,6 @@ _DEFAULT_OPP_PAGE_SIZE = 50
 # Fixed invariant cap (operator round-5 ruling, not a config key): ambiguous (user_id, strategy_id)
 # score pairs recomputed per boot pass, bounding boot latency against the pooled DB.
 _BOOT_RECOMPUTE_MAX_PAIRS = 50
-# Reserved platform identity (feature 224); a granted internal caller's x-user-id, never a user's.
-SYSTEM_IDENTITY = "system"
 # Fixed invariants (operator ruling, not config keys): a PENDING intent older than this is presumed
 # orphaned by a crashed request and aborted by the sweep, which runs every _INTENT_SWEEP_SECONDS.
 _INTENT_STALE_SECONDS = 900
@@ -3258,7 +3257,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
     def _saga_sweep_meta(user_id: str) -> list:
         """Sweep-path metadata: the intent's owner, the saga grant, a fresh trace id (no scope)."""
         return [
-            ("x-user-id", user_id),
+            *owner_metadata(user_id),
             ("x-internal-caller", _TEMPLATE_SAGA_CALLER),
             ("x-trace-id", uuid.uuid4().hex),
         ]
@@ -5420,10 +5419,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             await schedule.advance(retry)
             return 0.0
         for uid in user_ids:
-            # Background path: synthesize the propagation header from the user id so the
-            # per-user portfolio/ingest reads resolve ownership (C-03).
-            meta = [("x-user-id", uid)]
             try:
+                meta = owner_metadata(uid)
                 async with self._opportunity_lock(uid):
                     rows = await self._compute_opportunities(uid, meta)
                     await self._replace_and_stamp_compute_state(uid, rows, meta)
@@ -5471,7 +5468,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
     async def _materialize_readiness_for_owner(self, owner: str, live_by_id: dict) -> None:
         """Warm one owner's watchlist-bound (symbol, strategy) entry-rule readiness rows.
         Best-effort: a failure here is caught by the caller so one bad owner never halts a cycle."""
-        meta = [("x-user-id", owner)]
+        meta = owner_metadata(owner)
         bindings = await self._drain_watchlist_bindings(meta)
         # Keep only bindings to THIS owner's live strategies (FR-6). A binding to a non-live/foreign
         # strategy is skipped, never fabricated (P-03 / fails.md:1153). Group symbols per strategy.
@@ -5654,8 +5651,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             log.warning("template intent sweep: enumeration failed: %s", e)
             intents = []
         for intent in intents:
-            meta = self._saga_sweep_meta(intent["user_id"])
             try:
+                meta = self._saga_sweep_meta(intent["user_id"])
                 if intent["state"] == "COMMITTED":
                     await self._finalize_intent(intent["intent_id"], meta)
                 else:

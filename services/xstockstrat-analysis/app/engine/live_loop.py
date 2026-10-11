@@ -36,7 +36,6 @@ from google.protobuf.timestamp_pb2 import Timestamp
 from opentelemetry import metrics
 
 from app.handlers.servicer import (
-    SYSTEM_IDENTITY,
     _definition_has_fundamental,
     _definition_wants_fundamentals_formula,
     _fundamental_periods_from_response,
@@ -44,6 +43,7 @@ from app.handlers.servicer import (
     _row_to_strategy_definition,
     blend_strategy_id,
 )
+from app.identity import SYSTEM_IDENTITY, owner_metadata
 from app.repositories.strategies import LIVE_ENABLED_PREDICATE_SQL
 from app.services import sector_params, warmup
 from app.services.cooldown import effective_cooldown_days, is_cooldown_active
@@ -371,15 +371,19 @@ class LiveEvaluationLoop:
             d = dict(row)
             definition = _row_to_strategy_definition(d)
             owner = definition.user_id
-            if owner not in held_cache:
-                held_cache[owner] = await self._drain_held(owner)
-                watch_cache[owner] = await self._drain_watchlist(owner)
+            try:
+                if owner not in held_cache:
+                    held_cache[owner] = await self._drain_held(owner)
+                    watch_cache[owner] = await self._drain_watchlist(owner)
+                signal_symbols = system_signals
+                if definition.signal_eligible and definition.strategy_id != blend_id:
+                    if owner not in own_cache:
+                        own_cache[owner] = await self._drain_owner_signals(owner)
+                    signal_symbols = own_cache[owner] | system_signals
+            except ValueError as e:
+                log.warning("live_loop: strategy %s skipped — %s", definition.strategy_id, e)
+                continue
             created_at = d.get("created_at")
-            signal_symbols = system_signals
-            if definition.signal_eligible and definition.strategy_id != blend_id:
-                if owner not in own_cache:
-                    own_cache[owner] = await self._drain_owner_signals(owner)
-                signal_symbols = own_cache[owner] | system_signals
             if definition.strategy_id == blend_id:
                 # Blend strategy — fundamentals-only execution (FR-1, FR-4).
                 if not blend_active or not fundamentals_universe:
@@ -461,7 +465,7 @@ class LiveEvaluationLoop:
 
     async def _drain_owner_signals(self, owner: str) -> set:
         """Active signal symbols (normalized) the owner ingested themselves."""
-        return await self._drain_signals_with([("x-user-id", owner)], ingest_pb2.SIGNAL_SCOPE_OWN)
+        return await self._drain_signals_with(owner_metadata(owner), ingest_pb2.SIGNAL_SCOPE_OWN)
 
     async def _drain_signals_with(self, meta, scope) -> set:
         """Active-signal symbols (normalized) for one identity/scope. Best-effort — an ingest
@@ -505,6 +509,7 @@ class LiveEvaluationLoop:
         server-side (C-03; mirrors feature 133 / fundsignal_loop). Best-effort."""
         if self._portfolio is None:
             return set()
+        meta = owner_metadata(owner)
         out: set = set()
         page_token = ""
         for _ in range(_DRAIN_PAGES):
@@ -516,7 +521,7 @@ class LiveEvaluationLoop:
                             page_size=_DRAIN_PAGE_SIZE, page_token=page_token
                         ),
                     ),
-                    metadata=[("x-user-id", owner)],
+                    metadata=meta,
                 )
             except Exception as e:
                 log.warning("live_loop: ListPositions(%s) failed: %s", owner, e)
@@ -533,6 +538,7 @@ class LiveEvaluationLoop:
         ``symbols`` mirror for legacy rows. Synthetic ``x-user-id`` metadata (C-03). Best-effort."""
         if self._portfolio is None:
             return set()
+        meta = owner_metadata(owner)
         out: set = set()
         page_token = ""
         for _ in range(_DRAIN_PAGES):
@@ -543,7 +549,7 @@ class LiveEvaluationLoop:
                             page_size=_DRAIN_PAGE_SIZE, page_token=page_token
                         ),
                     ),
-                    metadata=[("x-user-id", owner)],
+                    metadata=meta,
                 )
             except Exception as e:
                 log.warning("live_loop: ListWatchlists(%s) failed: %s", owner, e)

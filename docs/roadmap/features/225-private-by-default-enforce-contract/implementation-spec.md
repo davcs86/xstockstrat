@@ -413,7 +413,7 @@ Coverage: N/A (`scripts/` has no CI coverage gate).
 
 ### Step 6 — service: analysis `app/identity.py` — one fail-closed owner-metadata builder (FR-1 addendum)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/identity.py` — create

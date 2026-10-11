@@ -220,3 +220,26 @@ integration PR: it is the first live proof of Steps 3–5.
   confirmation for everything; only stop on genuine blockers"; 225 sequencing **"Build now, hold PR"** — run
   review → design → spec → execute on this branch, do NOT open the integration PR into main-dev until the operator
   confirms 224 is launched and stable. (224 reached `main` via promotion #1233 on 2026-10-08.)
+
+## Session 2026-10-11 — sdd-execute (sequential, Steps 6–11)
+
+- Orchestrated sequential run (operator authorization record above). Python env: `uv sync --extra dev`; baseline
+  full suite 964 passed, ruff clean.
+
+### Step 6 — analysis `app/identity.py` — one fail-closed owner-metadata builder [done]
+- New `app/identity.py` (`SYSTEM_IDENTITY`, `owner_metadata` raising `ValueError` on `""`/`system`); servicer re-exports
+  `SYSTEM_IDENTITY` via import; fundsignal_loop/live_loop import it from `app.identity`. All 8 owner sites routed:
+  sweep meta built inside the per-intent `try` (advance still runs), opportunity tick meta inside the per-user `try`
+  (stale 2-line comment removed), materializer, the three live-loop drains (`_drain_held`/`_drain_watchlist` build
+  `meta` after the `_portfolio is None` guard and before the pagination loop — outside its `try`), a per-row
+  `except ValueError: continue` around the `_run_cycle` drain block, `for_owner`, and `_compose` (ownerless: OHLCV kept,
+  indicators/signals skipped, degraded).
+- TDD (paired with Step 7): red on the pre-Step-6 tree — 13 failed / 14 passed in `test_identity.py` +
+  `test_owner_header_guard.py` (`No module named 'app.identity'`; AST check listed the 8 hand-built tuples;
+  `QuerySignals sent x-user-id ['']`; sweep `'FINALIZED' == 'COMMITTED'`; materializer owners `['', 'bob']`) →
+  green 27 passed; full suite 977 passed, coverage 85.93%.
+- Verification: 2-tuple grep → no output; `owner_metadata` present in all four files; ruff check + format clean.
+- Files modified: `app/identity.py` (new), `app/handlers/servicer.py`, `app/engine/live_loop.py`,
+  `app/engine/fundsignal_loop.py`, `app/engine/pnl_pattern_consumer.py`, `app/services/evaluator.py`
+- Deviations: none. (`_compose` builds `meta = owner_metadata(owner) if owner else ()` once and returns early when
+  ownerless — same behaviour as the instructions.)
