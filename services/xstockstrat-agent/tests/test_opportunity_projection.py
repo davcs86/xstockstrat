@@ -38,6 +38,8 @@ def _full_opportunity(analysis_pb2):
         signal_confidence=0.9,
         composite_score=0.512,  # feature 199
         symbol_score=1.20,  # feature 200
+        fundamentals_unavailable=True,  # feature 215
+        fundamentals_gap=analysis_pb2.FUNDAMENTALS_GAP_ETF,  # feature 215
     )
     o.sparkline.append(analysis_pb2.SparklinePoint(close=1.0))
     o.conditions.append(analysis_pb2.ConditionEval(ref_name="c"))
@@ -87,3 +89,23 @@ def test_symbol_score_projected_with_value_and_omitted_when_unset():
     bare = analysis_pb2.Opportunity(symbol="X", opportunity_key="u1|X|s")
     projected = _opportunity_to_dict(bare, analysis_pb2)
     assert "symbol_score" not in projected
+
+
+def test_fundamentals_skip_row_projection():
+    """@AC-4 (feature 215) — a non-actionable skip row projects its marker and gap label by name,
+    keeps action UNSPECIFIED, and omits composite_score (never a fabricated 0.0)."""
+    from gen.analysis.v1 import analysis_pb2
+
+    skip = analysis_pb2.Opportunity(
+        symbol="SCHD",
+        action=analysis_pb2.OPPORTUNITY_ACTION_TAG_UNSPECIFIED,
+        strategy_id="s",
+        opportunity_key="u1|SCHD|s",
+        fundamentals_unavailable=True,
+        fundamentals_gap=analysis_pb2.FUNDAMENTALS_GAP_ETF,
+    )
+    d = _opportunity_to_dict(skip, analysis_pb2)
+    assert d["fundamentals_unavailable"] is True
+    assert d["fundamentals_gap"] == "FUNDAMENTALS_GAP_ETF"
+    assert d["action"] == "OPPORTUNITY_ACTION_TAG_UNSPECIFIED"
+    assert "composite_score" not in d

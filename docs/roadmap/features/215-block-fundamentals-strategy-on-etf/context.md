@@ -254,3 +254,16 @@
 - TDD (paired with Step 6): RED 4 failed (two descriptor-parity guards missing `fundamentals_gap` / `fundamentals_unavailable`, plus `KeyError` in the new projection/summary tests). GREEN: 21 passed; full agent suite 498 passed at 80.36% coverage; ruff clean.
 - Files modified: `services/xstockstrat-agent/app/backtest_view.py`, `services/xstockstrat-agent/app/client.py`, `services/xstockstrat-agent/app/tools.py`
 - Deviations: none
+
+### Step 6 — test: Agent projections [done]
+- `_full_opportunity` carries the two new fields. Added `test_fundamentals_skip_row_projection` (AC-4: marker + `FUNDAMENTALS_GAP_ETF`, action UNSPECIFIED, no `composite_score`) and `test_summary_keeps_fundamentals_refusal_inline` (AC-2: reason 5 + gap stay inline).
+- AC-2 red: `KeyError 'fundamentals_gap'` → green: passed. AC-4 red: `KeyError 'fundamentals_unavailable'` → green: passed. The parity guards also went red → green. C-13: single-consumer inline literals.
+- Files modified: `services/xstockstrat-agent/tests/test_opportunity_projection.py`, `services/xstockstrat-agent/tests/test_backtest_view.py`
+- Deviations: the fixture gained a `fundamentals_gap` key (see Deviation Log).
+
+## Session 2026-10-11 — sdd-execute (Steps 1–6 checkpoint)
+**Steps this session**: 1, 2, 3, 4, 5, 6
+**Progress**: 6 done / 26 total
+**Stopped at**: Step 6 (scope of this run, the Steps 2–6 contract group; three parity guards are green again)
+**Next**: /sdd-execute block-fundamentals-strategy-on-etf sequential (Step 7, marketdata)
+**Open item**: the CI fix cherry-pick (`4705cc4f` + `ff8fe0dc` from `claude/ci-golangci-goinstall`) is still not on this branch, because `git cherry-pick` was denied by the session permission classifier. It is needed before the marketdata Go steps can get green CI lint.

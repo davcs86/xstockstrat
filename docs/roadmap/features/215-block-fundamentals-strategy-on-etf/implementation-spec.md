@@ -312,7 +312,7 @@ cd services/xstockstrat-agent && grep -n "fundamentals_gap\|fundamentals_unavail
 
 ### Step 6 — test: Agent projections
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_opportunity_projection.py` — modify
@@ -1526,3 +1526,8 @@ _Populated by /sdd-execute as implementation proceeds._
 **Spec said**: Files limited to the two test files; instructions did not mention the `_FakeOpportunitiesRepo.read` signature.
 **Actual**: Added a `symbol=""` keyword to the in-file fake repo `read` in `tests/test_analysis_servicer.py`. It accepts the new kwarg but does not filter, matching the feature-190 "forwarding is asserted at the boundary" convention.
 **Reason**: After Step 3 every `ListOpportunities` call passes `symbol=`, so without the kwarg the fake raised `TypeError`. The fix stays inside a file Step 4 lists.
+
+### Deviation: Step 6 — test: Agent projections
+**Spec said**: "The existing parity assertion goes green with Step 5's `_SYMBOL_KEYS`" (no fixture change named).
+**Actual**: Also added `"fundamentals_gap": "FUNDAMENTALS_GAP_UNSPECIFIED"` to each per-symbol entry of the `_full_result` fixture in `tests/test_backtest_view.py`.
+**Reason**: `test_summary_drops_per_bar_bars_but_keeps_the_diagnosis` asserts every `_SYMBOL_KEYS` key is in each summarized entry. Real `client.run_backtest` output always prints the no-presence enum (`always_print_fields_with_no_presence=True`), so the fixture now mirrors the real shape. The change is inside a file Step 6 lists.
