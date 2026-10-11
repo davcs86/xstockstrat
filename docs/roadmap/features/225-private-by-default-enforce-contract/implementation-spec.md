@@ -288,7 +288,7 @@ grep -n "irreversible contract" services/xstockstrat-analysis/migrations/027_con
 
 ### Step 4 — migration: ingest `014_contract_signal_ownership` (FR-4, FR-5)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/migrations/014_contract_signal_ownership.up.sql` — create
@@ -1238,5 +1238,12 @@ _Populated by /sdd-execute as implementation proceeds._
 line 1 and `requires-env` within the first 5 lines, 026 present on `origin/main`, down refuses by design (FR-5),
 replay-safety by inspection (every UPDATE is `IS NULL`-guarded, `SET NOT NULL` and `DROP TABLE IF EXISTS` are no-ops on replay).
 `envsubst` is absent on this host, so the `render-migrations.sh` render was not exercised locally.
+**Reason**: HARD CONSTRAINT — no database is started to verify a step.
+**Disposition**: offline migration check — live apply deferred to CI (`migration-rerun` job).
+
+### Deviation: Step 4 — ingest `014_contract_signal_ownership` (verification substitution)
+**Spec said**: "proven by Step 5's CI rerun".
+**Actual**: verified offline only — up/down pair present, `014` next-free on every `origin/*` ref, `contract-of` on
+line 1, 013 present on `origin/main`, 3 `IF EXISTS` drops (no-ops on replay), down refuses by design (FR-5).
 **Reason**: HARD CONSTRAINT — no database is started to verify a step.
 **Disposition**: offline migration check — live apply deferred to CI (`migration-rerun` job).

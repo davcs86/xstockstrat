@@ -182,3 +182,12 @@
   027 free on all `origin/*` refs; 026 is on `origin/main` (contract gate precondition).
 - Files modified: `services/xstockstrat-analysis/migrations/027_contract_owner_dimension.{up,down}.sql`
 - Deviations: offline migration check substituted for the live apply (Deviation Log).
+
+### Step 4 — ingest `014_contract_signal_ownership` [done]
+- Created the 014 up (contract-of 013 on line 1; drops trigger `newsletter_signals_n1_owner_fill`, function
+  `ingest.n1_owner_fill_signals()`, table `ingest.signal_dedup_keys`, all `IF EXISTS`) and the raising down.
+- TDD: N/A (migration — proven by Step 5's CI rerun). App has no reference to either object (grep → none).
+- Verification: offline (ls, line-1 header, `grep -c "IF EXISTS"` = 3, down "irreversible contract").
+- Files modified: `services/xstockstrat-ingest/migrations/014_contract_signal_ownership.{up,down}.sql`
+- Deviations: offline migration check substituted for the live apply (Deviation Log). The CI `migration-rerun` job
+  is red on this commit alone until Step 5 removes the `ingest-013.sql` N-1 probe (expected — no PR opened yet).
