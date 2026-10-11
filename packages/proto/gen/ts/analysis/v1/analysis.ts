@@ -313,6 +313,8 @@ export enum NoTradeReason {
   NO_TRADE_REASON_INSUFFICIENT_CAPITAL = "NO_TRADE_REASON_INSUFFICIENT_CAPITAL",
   /** NO_TRADE_REASON_FORMULA_ERROR - a custom-formula component failed to execute / returned an out-of-contract series */
   NO_TRADE_REASON_FORMULA_ERROR = "NO_TRADE_REASON_FORMULA_ERROR",
+  /** NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE - strategy requires fundamentals and the symbol has none usable in the window — refused, not evaluated (feature 215) */
+  NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE = "NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE",
   UNRECOGNIZED = "UNRECOGNIZED",
 }
 
@@ -333,6 +335,9 @@ export function noTradeReasonFromJSON(object: any): NoTradeReason {
     case 4:
     case "NO_TRADE_REASON_FORMULA_ERROR":
       return NoTradeReason.NO_TRADE_REASON_FORMULA_ERROR;
+    case 5:
+    case "NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE":
+      return NoTradeReason.NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE;
     case -1:
     case "UNRECOGNIZED":
     default:
@@ -352,6 +357,8 @@ export function noTradeReasonToJSON(object: NoTradeReason): string {
       return "NO_TRADE_REASON_INSUFFICIENT_CAPITAL";
     case NoTradeReason.NO_TRADE_REASON_FORMULA_ERROR:
       return "NO_TRADE_REASON_FORMULA_ERROR";
+    case NoTradeReason.NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE:
+      return "NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE";
     case NoTradeReason.UNRECOGNIZED:
     default:
       return "UNRECOGNIZED";
@@ -370,7 +377,66 @@ export function noTradeReasonToNumber(object: NoTradeReason): number {
       return 3;
     case NoTradeReason.NO_TRADE_REASON_FORMULA_ERROR:
       return 4;
+    case NoTradeReason.NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE:
+      return 5;
     case NoTradeReason.UNRECOGNIZED:
+    default:
+      return -1;
+  }
+}
+
+/**
+ * feature 215 — best-effort marketdata label for a fundamentals refusal; never affects the guard
+ * decision (FR-11). UNSPECIFIED = label unknown.
+ */
+export enum FundamentalsGap {
+  FUNDAMENTALS_GAP_UNSPECIFIED = "FUNDAMENTALS_GAP_UNSPECIFIED",
+  FUNDAMENTALS_GAP_ETF = "FUNDAMENTALS_GAP_ETF",
+  FUNDAMENTALS_GAP_NOT_ETF = "FUNDAMENTALS_GAP_NOT_ETF",
+  UNRECOGNIZED = "UNRECOGNIZED",
+}
+
+export function fundamentalsGapFromJSON(object: any): FundamentalsGap {
+  switch (object) {
+    case 0:
+    case "FUNDAMENTALS_GAP_UNSPECIFIED":
+      return FundamentalsGap.FUNDAMENTALS_GAP_UNSPECIFIED;
+    case 1:
+    case "FUNDAMENTALS_GAP_ETF":
+      return FundamentalsGap.FUNDAMENTALS_GAP_ETF;
+    case 2:
+    case "FUNDAMENTALS_GAP_NOT_ETF":
+      return FundamentalsGap.FUNDAMENTALS_GAP_NOT_ETF;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return FundamentalsGap.UNRECOGNIZED;
+  }
+}
+
+export function fundamentalsGapToJSON(object: FundamentalsGap): string {
+  switch (object) {
+    case FundamentalsGap.FUNDAMENTALS_GAP_UNSPECIFIED:
+      return "FUNDAMENTALS_GAP_UNSPECIFIED";
+    case FundamentalsGap.FUNDAMENTALS_GAP_ETF:
+      return "FUNDAMENTALS_GAP_ETF";
+    case FundamentalsGap.FUNDAMENTALS_GAP_NOT_ETF:
+      return "FUNDAMENTALS_GAP_NOT_ETF";
+    case FundamentalsGap.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
+export function fundamentalsGapToNumber(object: FundamentalsGap): number {
+  switch (object) {
+    case FundamentalsGap.FUNDAMENTALS_GAP_UNSPECIFIED:
+      return 0;
+    case FundamentalsGap.FUNDAMENTALS_GAP_ETF:
+      return 1;
+    case FundamentalsGap.FUNDAMENTALS_GAP_NOT_ETF:
+      return 2;
+    case FundamentalsGap.UNRECOGNIZED:
     default:
       return -1;
   }
@@ -1383,6 +1449,8 @@ export interface SymbolDiagnostics {
   noTradeReason: NoTradeReason;
   barsTotal: number;
   warmupBars: number;
+  /** feature 215 — set only with NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE */
+  fundamentalsGap: FundamentalsGap;
 }
 
 export interface ScoreStrategyRequest {
@@ -1827,7 +1895,16 @@ export interface Opportunity {
    * NEVER a cardinal sizing/alert/risk input. Explicit-presence: unset = no score-eligible opportunity
    * for the symbol. Symbol-uniform: every row of a symbol carries the same value.
    */
-  symbolScore?: number | undefined;
+  symbolScore?:
+    | number
+    | undefined;
+  /**
+   * feature 215 — a non-actionable skip row: the strategy requires fundamentals the symbol lacks.
+   * Derived at read from the "fundamentals_unavailable" provenance marker (no column).
+   */
+  fundamentalsUnavailable: boolean;
+  /** feature 215 — best-effort ETF / NOT_ETF label for a skip row; rides readiness_json (no column). */
+  fundamentalsGap: FundamentalsGap;
 }
 
 /**
@@ -1888,6 +1965,8 @@ export interface ListOpportunitiesRequest {
   actionFilter: OpportunityActionTag;
   /** UNSPECIFIED(0) = legacy blended rank (not CONVICTION) */
   sort: OpportunitySort;
+  /** feature 215 — empty = all symbols; exact (normalized) symbol filter */
+  symbol: string;
 }
 
 export interface ListOpportunitiesResponse {
@@ -3800,6 +3879,7 @@ function createBaseSymbolDiagnostics(): SymbolDiagnostics {
     noTradeReason: NoTradeReason.NO_TRADE_REASON_UNSPECIFIED,
     barsTotal: 0,
     warmupBars: 0,
+    fundamentalsGap: FundamentalsGap.FUNDAMENTALS_GAP_UNSPECIFIED,
   };
 }
 
@@ -3819,6 +3899,9 @@ export const SymbolDiagnostics: MessageFns<SymbolDiagnostics> = {
     }
     if (message.warmupBars !== 0) {
       writer.uint32(40).int32(message.warmupBars);
+    }
+    if (message.fundamentalsGap !== FundamentalsGap.FUNDAMENTALS_GAP_UNSPECIFIED) {
+      writer.uint32(48).int32(fundamentalsGapToNumber(message.fundamentalsGap));
     }
     return writer;
   },
@@ -3870,6 +3953,14 @@ export const SymbolDiagnostics: MessageFns<SymbolDiagnostics> = {
           message.warmupBars = reader.int32();
           continue;
         }
+        case 6: {
+          if (tag !== 48) {
+            break;
+          }
+
+          message.fundamentalsGap = fundamentalsGapFromJSON(reader.int32());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -3898,6 +3989,11 @@ export const SymbolDiagnostics: MessageFns<SymbolDiagnostics> = {
         : isSet(object.warmup_bars)
         ? globalThis.Number(object.warmup_bars)
         : 0,
+      fundamentalsGap: isSet(object.fundamentalsGap)
+        ? fundamentalsGapFromJSON(object.fundamentalsGap)
+        : isSet(object.fundamentals_gap)
+        ? fundamentalsGapFromJSON(object.fundamentals_gap)
+        : FundamentalsGap.FUNDAMENTALS_GAP_UNSPECIFIED,
     };
   },
 
@@ -3918,6 +4014,9 @@ export const SymbolDiagnostics: MessageFns<SymbolDiagnostics> = {
     if (message.warmupBars !== 0) {
       obj.warmupBars = Math.round(message.warmupBars);
     }
+    if (message.fundamentalsGap !== FundamentalsGap.FUNDAMENTALS_GAP_UNSPECIFIED) {
+      obj.fundamentalsGap = fundamentalsGapToJSON(message.fundamentalsGap);
+    }
     return obj;
   },
 
@@ -3931,6 +4030,7 @@ export const SymbolDiagnostics: MessageFns<SymbolDiagnostics> = {
     message.noTradeReason = object.noTradeReason ?? NoTradeReason.NO_TRADE_REASON_UNSPECIFIED;
     message.barsTotal = object.barsTotal ?? 0;
     message.warmupBars = object.warmupBars ?? 0;
+    message.fundamentalsGap = object.fundamentalsGap ?? FundamentalsGap.FUNDAMENTALS_GAP_UNSPECIFIED;
     return message;
   },
 };
@@ -8129,6 +8229,8 @@ function createBaseOpportunity(): Opportunity {
     dataUnavailable: false,
     compositeScore: undefined,
     symbolScore: undefined,
+    fundamentalsUnavailable: false,
+    fundamentalsGap: FundamentalsGap.FUNDAMENTALS_GAP_UNSPECIFIED,
   };
 }
 
@@ -8199,6 +8301,12 @@ export const Opportunity: MessageFns<Opportunity> = {
     }
     if (message.symbolScore !== undefined) {
       writer.uint32(177).double(message.symbolScore);
+    }
+    if (message.fundamentalsUnavailable !== false) {
+      writer.uint32(184).bool(message.fundamentalsUnavailable);
+    }
+    if (message.fundamentalsGap !== FundamentalsGap.FUNDAMENTALS_GAP_UNSPECIFIED) {
+      writer.uint32(192).int32(fundamentalsGapToNumber(message.fundamentalsGap));
     }
     return writer;
   },
@@ -8386,6 +8494,22 @@ export const Opportunity: MessageFns<Opportunity> = {
           message.symbolScore = reader.double();
           continue;
         }
+        case 23: {
+          if (tag !== 184) {
+            break;
+          }
+
+          message.fundamentalsUnavailable = reader.bool();
+          continue;
+        }
+        case 24: {
+          if (tag !== 192) {
+            break;
+          }
+
+          message.fundamentalsGap = fundamentalsGapFromJSON(reader.int32());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -8479,6 +8603,16 @@ export const Opportunity: MessageFns<Opportunity> = {
         : isSet(object.symbol_score)
         ? globalThis.Number(object.symbol_score)
         : undefined,
+      fundamentalsUnavailable: isSet(object.fundamentalsUnavailable)
+        ? globalThis.Boolean(object.fundamentalsUnavailable)
+        : isSet(object.fundamentals_unavailable)
+        ? globalThis.Boolean(object.fundamentals_unavailable)
+        : false,
+      fundamentalsGap: isSet(object.fundamentalsGap)
+        ? fundamentalsGapFromJSON(object.fundamentalsGap)
+        : isSet(object.fundamentals_gap)
+        ? fundamentalsGapFromJSON(object.fundamentals_gap)
+        : FundamentalsGap.FUNDAMENTALS_GAP_UNSPECIFIED,
     };
   },
 
@@ -8550,6 +8684,12 @@ export const Opportunity: MessageFns<Opportunity> = {
     if (message.symbolScore !== undefined) {
       obj.symbolScore = message.symbolScore;
     }
+    if (message.fundamentalsUnavailable !== false) {
+      obj.fundamentalsUnavailable = message.fundamentalsUnavailable;
+    }
+    if (message.fundamentalsGap !== FundamentalsGap.FUNDAMENTALS_GAP_UNSPECIFIED) {
+      obj.fundamentalsGap = fundamentalsGapToJSON(message.fundamentalsGap);
+    }
     return obj;
   },
 
@@ -8580,6 +8720,8 @@ export const Opportunity: MessageFns<Opportunity> = {
     message.dataUnavailable = object.dataUnavailable ?? false;
     message.compositeScore = object.compositeScore ?? undefined;
     message.symbolScore = object.symbolScore ?? undefined;
+    message.fundamentalsUnavailable = object.fundamentalsUnavailable ?? false;
+    message.fundamentalsGap = object.fundamentalsGap ?? FundamentalsGap.FUNDAMENTALS_GAP_UNSPECIFIED;
     return message;
   },
 };
@@ -9118,6 +9260,7 @@ function createBaseListOpportunitiesRequest(): ListOpportunitiesRequest {
     sources: [],
     actionFilter: OpportunityActionTag.OPPORTUNITY_ACTION_TAG_UNSPECIFIED,
     sort: OpportunitySort.OPPORTUNITY_SORT_UNSPECIFIED,
+    symbol: "",
   };
 }
 
@@ -9137,6 +9280,9 @@ export const ListOpportunitiesRequest: MessageFns<ListOpportunitiesRequest> = {
     }
     if (message.sort !== OpportunitySort.OPPORTUNITY_SORT_UNSPECIFIED) {
       writer.uint32(40).int32(opportunitySortToNumber(message.sort));
+    }
+    if (message.symbol !== "") {
+      writer.uint32(50).string(message.symbol);
     }
     return writer;
   },
@@ -9188,6 +9334,14 @@ export const ListOpportunitiesRequest: MessageFns<ListOpportunitiesRequest> = {
           message.sort = opportunitySortFromJSON(reader.int32());
           continue;
         }
+        case 6: {
+          if (tag !== 50) {
+            break;
+          }
+
+          message.symbol = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -9212,6 +9366,7 @@ export const ListOpportunitiesRequest: MessageFns<ListOpportunitiesRequest> = {
         ? opportunityActionTagFromJSON(object.action_filter)
         : OpportunityActionTag.OPPORTUNITY_ACTION_TAG_UNSPECIFIED,
       sort: isSet(object.sort) ? opportunitySortFromJSON(object.sort) : OpportunitySort.OPPORTUNITY_SORT_UNSPECIFIED,
+      symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
     };
   },
 
@@ -9232,6 +9387,9 @@ export const ListOpportunitiesRequest: MessageFns<ListOpportunitiesRequest> = {
     if (message.sort !== OpportunitySort.OPPORTUNITY_SORT_UNSPECIFIED) {
       obj.sort = opportunitySortToJSON(message.sort);
     }
+    if (message.symbol !== "") {
+      obj.symbol = message.symbol;
+    }
     return obj;
   },
 
@@ -9247,6 +9405,7 @@ export const ListOpportunitiesRequest: MessageFns<ListOpportunitiesRequest> = {
     message.sources = object.sources?.map((e) => e) || [];
     message.actionFilter = object.actionFilter ?? OpportunityActionTag.OPPORTUNITY_ACTION_TAG_UNSPECIFIED;
     message.sort = object.sort ?? OpportunitySort.OPPORTUNITY_SORT_UNSPECIFIED;
+    message.symbol = object.symbol ?? "";
     return message;
   },
 };

@@ -132,7 +132,7 @@ grep -n "rpc GetEtfFlags\|optional bool is_etf = 2" marketdata/v1/marketdata.pro
 
 ### Step 2 — proto-gen: Regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files** (generated, never hand-edited; verified against `git ls-files packages/proto/gen`):
 - Go:
@@ -1515,3 +1515,9 @@ _Populated by /sdd-execute as implementation proceeds._
 **Actual**: ran `buf breaking --against "../../.git#branch=feature/block-fundamentals-strategy-on-etf,subdir=packages/proto"` (same check).
 **Reason**: `.git` is not resolvable from `packages/proto`; the input needs the repo-root path plus `subdir`. Command-path fix only, no behavior change.
 **Disposition**: CI-equivalent fallback
+
+### Deviation: Step 2 — proto-gen: Regenerate stubs
+**Spec said**: `./scripts/buf-gen.sh && …` (one invocation that generates and compiles the TS package).
+**Actual**: Generated in the pinned codegen container (`./scripts/localenv-setup.sh`), which ran buf lint, buf generate (Go + TS) and grpcio-tools (Python). Its final `tsc` step failed (`tsc: not found`) because the worktree had no workspace `node_modules`. Then ran `pnpm install --frozen-lockfile --filter @xstockstrat/proto` and `pnpm --filter @xstockstrat/proto run build` on the host (lockfile-pinned TypeScript) to produce `gen/ts/dist`. Exactly the 20 files listed in **Files** changed; every expected-unchanged file stayed unchanged.
+**Reason**: a fresh git worktree has no installed workspace deps. Re-running the full container pipeline after the install was not permitted in this session.
+**Disposition**: CI-equivalent fallback — CI `proto-freshness` re-checks byte parity.

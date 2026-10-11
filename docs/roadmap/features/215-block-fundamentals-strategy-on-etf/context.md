@@ -229,3 +229,9 @@
 - Added `NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE = 5`, the `FundamentalsGap` enum, `SymbolDiagnostics.fundamentals_gap = 6`, `Opportunity.fundamentals_unavailable = 23` / `fundamentals_gap = 24`, and `ListOpportunitiesRequest.symbol = 6`. Also added the `GetEtfFlags` RPC and the `GetEtfFlagsRequest` / `EtfFlag` / `GetEtfFlagsResponse` messages. `buf lint` and `buf breaking` both pass. TDD: N/A.
 - Files modified: `packages/proto/analysis/v1/analysis.proto`, `packages/proto/marketdata/v1/marketdata.proto`
 - Deviations: the Verification `buf breaking` input path was fixed (see Deviation Log).
+
+### Step 2 — proto-gen: Regenerate stubs [done]
+- Regenerated the Go, Python and TS stubs via the Docker codegen image, then compiled `gen/ts/dist` on the host with lockfile-pinned `tsc`. `git status` shows only the 20 analysis/marketdata stub files listed in Step 2. TDD: N/A.
+- Files modified: `packages/proto/gen/{go,python,ts,ts/dist}/{analysis,marketdata}/v1/*` (the Step 2 list)
+- Deviations: the TS compile ran on the host after a frozen-lockfile install (see Deviation Log).
+- Not done: the coordinator asked to cherry-pick CI fix `4705cc4f` (`claude/ci-golangci-goinstall`, `install-mode: goinstall`). The session permission classifier denied the `git cherry-pick` ("Modify Shared Resources"), so the commit is **not** on this branch. Operator action is needed.
