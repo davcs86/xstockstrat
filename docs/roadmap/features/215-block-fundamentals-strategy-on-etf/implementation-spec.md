@@ -266,7 +266,7 @@ grep -n "def .*fixture\|from .conftest\|conftest" tests/test_opportunities_repo.
 
 ### Step 5 — service: Agent projections + tool docstrings
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/client.py` — modify

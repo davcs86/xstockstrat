@@ -248,3 +248,9 @@
 - AC-13 red: COALESCE/bind-11 asserts failed → green: passed. AC-15 red: `KeyError: 'symbol'` / `TypeError` → green: passed. The suite ran 971 cases (coverage 85.81%). C-13: the literals are single-consumer and inline.
 - Files modified: `services/xstockstrat-analysis/tests/test_opportunities_repo.py`, `services/xstockstrat-analysis/tests/test_analysis_servicer.py`
 - Deviations: the fake repo `read` accepts `symbol=` (see Deviation Log).
+
+### Step 5 — service: Agent projections + tool docstrings [done]
+- `_SYMBOL_KEYS` gained `fundamentals_gap`. `_opportunity_to_dict` projects `fundamentals_unavailable` and the `FundamentalsGap` name. Docstrings updated, text only: `run_backtest` (refusal, reason 5 + gap, INSUFFICIENT_DATA, outage → warning), `list_opportunities` (skip-row fields) and `set_strategy_live` (not checked at enable; eval-time deny-entry, WARN + alert on state change).
+- TDD (paired with Step 6): RED 4 failed (two descriptor-parity guards missing `fundamentals_gap` / `fundamentals_unavailable`, plus `KeyError` in the new projection/summary tests). GREEN: 21 passed; full agent suite 498 passed at 80.36% coverage; ruff clean.
+- Files modified: `services/xstockstrat-agent/app/backtest_view.py`, `services/xstockstrat-agent/app/client.py`, `services/xstockstrat-agent/app/tools.py`
+- Deviations: none
