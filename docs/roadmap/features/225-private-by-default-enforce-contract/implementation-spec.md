@@ -669,7 +669,7 @@ grep -rn "OWNER_HEADERS\|OTHER_HEADERS" tests | grep -v "^tests/conftest.py" | h
 
 ### Step 10 — service: QueryPnLPatterns owner filter (FR-7)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/repositories/pnl_pattern_samples.py` — modify

@@ -3916,13 +3916,14 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         indicator
         factors into quantile buckets, signal factors by presence; drops buckets below
         ``analysis.patterns.min_sample_count``; splits positive/negative by ``avg_pnl_impact``,
-        ranking each by |impact| desc under ``request.limit``. DB-only read."""
+        ranking each by |impact| desc under ``request.limit``. Owner-scoped DB-only read (FR-7)."""
         if self._pnl_samples_repo is None:
             return analysis_pb2.QueryPnLPatternsResponse()
 
         from_ts = request.from_ts.ToDatetime() if request.HasField("from_ts") else None
         to_ts = request.to_ts.ToDatetime() if request.HasField("to_ts") else None
         samples = await self._pnl_samples_repo.query(
+            user_id=self._caller_user_id(context),
             symbol=request.symbol,
             strategy_id=request.strategy_id,
             from_ts=from_ts,

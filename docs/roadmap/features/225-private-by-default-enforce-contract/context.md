@@ -299,3 +299,14 @@ integration PR: it is the first live proof of Steps 3–5.
 - Files modified: `tests/conftest.py`, `tests/test_owner_scoped_completeness.py` (new), `tests/test_analysis_servicer.py`,
   `tests/test_query_pnl_patterns.py`, `tests/test_get_attribution.py`, `tests/test_backtest_runs_repo.py`
 - Deviations: churned-file list + the `test_backtest_runs_repo.py` signature churn (Deviation Log).
+
+### Step 10 — QueryPnLPatterns owner filter (FR-7) [done]
+- `PnLPatternSamplesRepository.query` takes required keyword-only `user_id` and appends the owner semijoin
+  `position_id IN (SELECT position_id FROM analysis.pnl_positions WHERE user_id = $N AND symbol = $1)` after the
+  optional filters (`$N` = `len(args)`). `QueryPnLPatterns` passes `user_id=self._caller_user_id(context)`; docstring
+  now "Owner-scoped DB-only read (FR-7)".
+- TDD (paired with Step 11): red — 4 failed / 4 passed in `test_query_pnl_patterns.py` (`query() got an unexpected
+  keyword argument 'user_id'`; the servicer did not pass `user_id`) → green 8 passed; full suite 1029 passed, 86.39%.
+- Verification: both greps hit; ruff clean.
+- Files modified: `app/repositories/pnl_pattern_samples.py`, `app/handlers/servicer.py`
+- Deviations: none.
