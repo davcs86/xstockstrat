@@ -141,3 +141,24 @@
 - Notes carried to execution: Step 6 states `owner_metadata` placement relative to `_drain_*` `_portfolio is None` guards;
   NULL `pnl_pattern_samples.position_id` legacy rows are excluded for every caller (doc line in Step 19); Step 12
   instruction 2 wording; Step 19 teardown fixes outside its 10 files go to the Deviation Log.
+
+## Session 2026-10-11 — sdd-execute (sequential, Steps 1–5)
+
+- Run as an orchestrated sequential execution of Steps 1–5 on `feature/private-by-default-enforce-contract`
+  (operator-authorized autonomous run, relayed by the orchestrator); one commit per step, no per-step PR.
+- TOOLING: shellcheck, shfmt (`/root/go/bin`), python3+yaml available. No database started (HARD CONSTRAINT):
+  migration steps are verified offline and the authoritative `migration-rerun` run is CI's.
+
+### Step 1 — contract-floor dirty guard for `db-migrate.sh` (FR-8) [done]
+- Created `scripts/migration-dirty-guard.sh` (exit 0 allow / 1 usage / 2 fail-closed parse or foreign target /
+  3 refuse with `force <n-1>` recovery text, `$DATABASE_URL` printed as a literal); `db-migrate.sh` up-path now
+  calls it before `force 0` (false "re-running is safe" comment replaced by the 2-line constraint); migrator image
+  COPYs it; CI: `migrations` filter (+guard, +indicators `formulas_repository.py`), structural-test append,
+  no-mount image smoke step.
+- TDD: red — `bash scripts/migration-dirty-guard.test.sh` (Step 2's test, written first) →
+  `ASSERT FAIL: scripts/migration-dirty-guard.sh missing or not executable` (exit 1); green → `all assertions passed`.
+- Verification: shellcheck + `shfmt -d -i 2` clean; greps hit db-migrate.sh/Dockerfile.migrate/ci.yml; false comment
+  gone; ci.yml parses.
+- Files modified: `scripts/migration-dirty-guard.sh`, `scripts/db-migrate.sh`, `scripts/Dockerfile.migrate`,
+  `.github/workflows/ci.yml`
+- Deviations: none (shfmt places the `;;` of the design §6 block on its own line — formatting only).

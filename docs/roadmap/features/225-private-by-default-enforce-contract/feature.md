@@ -2,7 +2,7 @@
 
 **Development Branch**: `feature/private-by-default-enforce-contract`
 **Created**: 2026-10-07
-**Last Updated**: 2026-10-10
+**Last Updated**: 2026-10-11
 
 ---
 
@@ -14,6 +14,7 @@
 | 2026-10-08 | `draft` → `spec-ready` | /sdd-review | Product spec approved on run 2 (PASS WITH WARNINGS; run 1 FAIL fixed: FR-4 scoped to real objects, Open Questions closed with operator decisions — `UNAUTHENTICATED`, indicators stops writing `is_public` with the drop deferred). Run-2 warnings fixed in-place (Affected Services, AC-7/11/12, AC-13 added). Overlap CLEAN. |
 | 2026-10-10 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds — quick mode extended by the operator) and approved; recon.md + design.md written. Per-service decorator identity gate (headerless → UNAUTHENTICATED), bypass/fallback removal, fail-closed `owner_metadata`, QueryPnLPatterns owner filter (FR-7), contract migrations analysis 027 / ingest 014, is_public stop-writing with real-schema proof, db-migrate dirty guard (FR-8). |
 | 2026-10-10 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 19 steps (tooling 1–2, contract migrations + rerun 3–5, analysis 6–11, indicators 12–16, ingest 17–18, docs/promotion 19); all 19 `@AC-*` covered |
+| 2026-10-11 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential run started (Steps 1–5 this session); Step 1 dirty guard done |
 
 ---
 

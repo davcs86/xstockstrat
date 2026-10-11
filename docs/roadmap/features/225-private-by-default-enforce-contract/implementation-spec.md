@@ -1,6 +1,6 @@
 # Implementation Spec: private-by-default-enforce-contract
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-10-10
 **Feature**: `docs/roadmap/features/225-private-by-default-enforce-contract/feature.md`
 **Total Steps**: 19
@@ -81,7 +81,7 @@ This spec implements release N+1 of feature 224, following the approved `design.
 
 ### Step 1 — service: contract-floor dirty guard for `db-migrate.sh` (FR-8)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: platform tooling (`scripts/`, `.github/workflows/`)
 **Files**:
 - `scripts/migration-dirty-guard.sh` — create
