@@ -1065,7 +1065,7 @@ ruff check . && ruff format --check .
 
 ### Step 18 — test: ingest gate completeness + AC-9, AC-7, grant pinning, dedup after 014, test churn
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/test_owner_scoped_completeness.py` — create
@@ -1335,3 +1335,32 @@ already pass `owner=`. `_CallerRejected` carries a 2-line docstring (it replaces
 merged, per Step Dependencies).
 **Reason**: Python syntax; docstring drift from the removed headerless path.
 **Disposition**: accepted; no behaviour beyond the step.
+
+### Deviation: Step 18 — ingest gate completeness + test churn (extra churned file, extra rule-(i) deletions)
+**Spec said**: Files = `test_owner_scoped_completeness.py` (create), `test_signal_ownership.py`, `test_mcp_client_loop.py`,
+`test_ingest_servicer.py` (churn; headerless register), `conftest.py` (`_ctx` docstring). Churn: delete the three
+headerless-IngestSignal tests and the headerless-unscoped QuerySignals and ListSignalSources tests under rule (i).
+**Actual**: the Step-17 red run had 37 failures in 3 files — `test_ingest_servicer.py` 25, `test_signal_ownership.py` 11,
+and **`tests/test_source_templates.py` 1** (not in the step's Files). Fixed:
+- `test_source_templates.py` (rule (i)): the `""` case of `test_instantiate_requires_a_user_owner` expects UNAUTHENTICATED
+  (was FAILED_PRECONDITION "x-user-id required to instantiate a template"; `system` keeps PERMISSION_DENIED).
+- `test_signal_ownership.py` (rule (i), deleted, covered by completeness (b) headerless → UNAUTHENTICATED per RPC):
+  `test_headerless_ingest_zero_holders_invalid_argument`, `…_ambiguous_holders_failed_precondition`,
+  `…_unique_holder_files_into_that_owner`, `test_headerless_query_keeps_unscoped_behaviour`,
+  `test_headerless_list_keeps_global_rows_with_owner_populated` (as specified) **and** the four headerless
+  ManageSignalSource tests the spec did not name — `test_headerless_register_keeps_admin_gate`,
+  `test_headerless_admin_register_never_creates`, `test_headerless_admin_mutation_resolves_unique_holder`,
+  `test_headerless_admin_mutation_acts_on_the_unique_holder` (removed behaviour: the headerless admin gate and
+  slug-holder target, Step 17 instruction 5). Section headers / module docstring lose "headerless N".
+- `test_ingest_servicer.py`: rule (i) — `test_permission_denied_without_admin_scope` /
+  `…_without_scope_header` renamed `test_headerless_register_without_admin_scope_unauthenticated` /
+  `…_without_scope_header_unauthenticated`, asserting UNAUTHENTICATED; `test_aborts_when_source_not_registered` asserts
+  NOT_FOUND (the INVALID_ARGUMENT was the headerless zero-holder path; a headered miss is NOT_FOUND, feature 224 AC-10).
+  Rule (ii) — every `MagicMock()` context on a gated RPC in TestIngestSignal…TestListSignalSources becomes `_ctx("0")`
+  (`x-user-id: u1`), including tests that were still passing on an UNAUTHENTICATED abort for the wrong reason (e.g.
+  `test_aborts_when_no_db`, `test_aborts_on_invalid_direction`, the db-error tests); `test_deactivate_not_found` gains
+  `x-user-id`. No assertion weakened.
+**Reason**: the extra file and the extra deletions are the same removed behaviour (FR-1); leaving a headerless-abort test
+green for the wrong reason would hide coverage (fails.md feature 074).
+**Disposition**: accepted (F-08 audited: `test_source_templates.py` named in the step commit). The stale "headerless
+slug-holder lookup" wording in `tests/_helpers.py transaction_conn`'s docstring is left for Step 19's drift pass.

@@ -241,6 +241,23 @@ async def test_per_owner_bearers_and_ingest_as_owner(monkeypatch):
     assert [c.args[-1] for c in inserts] == ["alice", "bob"]
 
 
+async def test_ac7_mcp_client_bearer_resolves_per_user_only(monkeypatch):
+    # feature 225 AC-7: a global row under the same key is never read for u-1's source.
+    key = "mcp_credential.6f1c2a9e-3b7d-4e21-9a55-0c8d1e2f4b10"
+    src = _mcp_source(user_id="u-1", credentials_ref=f"ingest.{key}")
+    monkeypatch.setattr(loop, "list_all_sources", AsyncMock(return_value=[src]))
+    servicer = MagicMock()
+    servicer._db = MagicMock()
+    servicer._ingest_external_signal = AsyncMock(return_value=(1, False))
+    cfg = _PerOwnerCfgWatcher({(key, ""): ("tok-global", True), (key, "u-1"): ("tok-u1", True)})
+    mcp = _FakeMcpClient(result=_FakeResult([]))
+
+    await loop.run_one_cycle(servicer, cfg, mcp)
+
+    assert cfg.scoped_calls == [(key, "u-1")]
+    assert [c["bearer"] for c in mcp.calls] == ["tok-u1"]
+
+
 async def test_empty_string_bearer_treated_as_missing(monkeypatch):
     # feature 224 AC-35: GetSecret found:true with '' plaintext is NOT a usable bearer.
     monkeypatch.setattr(

@@ -434,3 +434,31 @@ integration PR: it is the first live proof of Steps 3–5.
   in the servicer; `@owner_scoped` = 7; ruff check + format clean.
 - Files modified: `app/handlers/servicer.py`, `app/config/watcher.py`
 - Deviations: keyword-only `owner` (Deviation Log).
+
+### Step 18 — ingest gate completeness + AC-9, AC-7, grant pinning, dedup after 014, test churn [done]
+- New `tests/test_owner_scoped_completeness.py`: descriptor walk `{undecorated} == EXEMPT` (5 backfill/normalize RPCs);
+  per gated RPC × {headerless → UNAUTHENTICATED, `system` → PERMISSION_DENIED, `system` + `analysis-fundsignal` without SAN
+  → PERMISSION_DENIED} on a bare `IngestServicer.__new__` holding only a `_db` mock (body not entered, `_db.mock_calls == []`);
+  positive control (granted `system` + SAN ingests); grant pinning (`analysis-system-read` + SAN on IngestSignal →
+  PERMISSION_DENIED; inside QuerySignals `_resolve_owner` is called with `"QuerySignals"` by both gate and body).
+  `test_signal_ownership.py`: `test_ac9_headerless_ingest_signal_unauthenticated` (no `INSERT INTO
+  ingest.newsletter_signals`, no slug-holder lookup) and a static `app/**/*.py` scan for `signal_dedup_keys` /
+  `n1_owner_fill`. `test_mcp_client_loop.py`: `test_ac7_mcp_client_bearer_resolves_per_user_only`.
+- AC-9 red: headerless IngestSignal filed into the unique holder (`DID NOT RAISE`) → green UNAUTHENTICATED. AC-7 and the
+  dedup scan green before and after (characterization). Completeness/pinning 10 failed / 70 passed → 69 passed.
+- Churn RED (full suite on the Step 17 tree, before any test fix): **37 failed, 299 passed** — test_ingest_servicer 25,
+  test_signal_ownership 11, test_source_templates 1. Classified and fixed (Deviation Log); 9 rule-(i) tests deleted
+  (named in the commit).
+- GREEN: full suite 325 passed, coverage 80.57% (gate 40); ruff check + format clean; `_ctx`/`transaction_conn` imported
+  from conftest/_helpers.
+- Files modified: `tests/test_owner_scoped_completeness.py` (new), `tests/test_signal_ownership.py`,
+  `tests/test_mcp_client_loop.py`, `tests/test_ingest_servicer.py`, `tests/conftest.py`, `tests/test_source_templates.py`
+  (outside the step's Files — Deviation Log)
+- Deviations: extra churned file + 4 extra rule-(i) deletions (Deviation Log).
+
+## Session 2026-10-11 — sdd-execute (Steps 12–18)
+**Steps this session**: 12, 13, 14, 15, 16, 17, 18
+**Progress**: 18 done / 19 total
+**Stopped at**: Step 18 (scope of this run)
+**Next**: Step 19 (docs, C-16 promotion/EXTEND, teardown) — handled separately. CI `migration-rerun` on the integration PR
+is the first live proof of Steps 3–5 and 16.

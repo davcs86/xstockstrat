@@ -359,7 +359,7 @@ async def test_instantiate_missing_or_retired_template_not_found(template):
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("user_id", "want"),
-    [("", grpc.StatusCode.FAILED_PRECONDITION), ("system", grpc.StatusCode.PERMISSION_DENIED)],
+    [("", grpc.StatusCode.UNAUTHENTICATED), ("system", grpc.StatusCode.PERMISSION_DENIED)],
 )
 async def test_instantiate_requires_a_user_owner(user_id, want):
     db, _ = transaction_conn()
