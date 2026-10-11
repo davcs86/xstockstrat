@@ -7509,3 +7509,137 @@ class TestSymbolScoreRollup:
         healed = svc._opportunities_repo.rows["u1"][0]
         assert "unavailable" not in healed["provenance"]  # recovered
         assert healed["symbol_score"] == pytest.approx(ref_score)
+
+
+# ---------------------------------------------------------------------------
+# Feature 215 — unguarded readiness surfaces keep the pre-change shape
+# ---------------------------------------------------------------------------
+
+
+class TestUnguardedReadinessParity_feature215:
+    """EvaluateReadiness / GetIndicatorSeries / GetWatchlistReadiness / the materializer are NOT
+    guarded (Step 13.8): for SCHD (empty PIT history, NOT_FOUND snapshot) they return exactly what
+    they return when both loaders yield ``[]`` — hold, no new fields, markers or refusals."""
+
+    _FUND_SURFACES = (
+        "EvaluateReadiness",
+        "_kick_readiness_refresh",  # GetWatchlistReadiness's compute path
+        "GetIndicatorSeries",
+        "_materialize_readiness_for_owner",
+    )
+
+    def _definition(self):
+        return analysis_pb2.StrategyDefinition(
+            strategy_id="s1",
+            display_name="S1",
+            components=[
+                analysis_pb2.StrategyComponent(
+                    ref_name="sma",
+                    kind=analysis_pb2.COMPONENT_KIND_BUILTIN_INDICATOR,
+                    indicator="SMA",
+                    params={"period": 3.0},
+                ),
+                analysis_pb2.StrategyComponent(
+                    ref_name="pe",
+                    kind=analysis_pb2.COMPONENT_KIND_FUNDAMENTAL,
+                    fundamental_metric="pe_ratio",
+                ),
+                analysis_pb2.StrategyComponent(
+                    ref_name="fscore",
+                    kind=analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA,
+                    formula_id="fscore",
+                ),
+            ],
+            entry_rule=json.dumps(
+                {
+                    "op": "AND",
+                    "conditions": [
+                        {"fn": ">", "lhs": "sma", "rhs": 100.0},
+                        {"fn": ">", "lhs": "fscore.composite", "rhs": 0.5},
+                    ],
+                }
+            ),
+        )
+
+    def _svc(self):
+        from gen.indicators.v1 import indicators_pb2
+        from gen.marketdata.v1 import marketdata_pb2
+
+        svc = make_servicer()
+        svc._cfg.get_bool = MagicMock(side_effect=lambda key, default=False: True)
+        row = _row_for(self._definition())
+        svc._strategies_repo = AsyncMock()
+        svc._strategies_repo.get_by_id = AsyncMock(return_value=row)
+        svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=row)
+        svc._marketdata = MagicMock()
+        svc._marketdata.GetBars = AsyncMock(
+            side_effect=lambda req, metadata=None: _bars_resp([120.0, 130.0, 150.0])
+        )
+        svc._marketdata.GetHistoricalFundamentals = AsyncMock(
+            return_value=marketdata_pb2.GetHistoricalFundamentalsResponse()
+        )
+        svc._marketdata.GetFundamentals = AsyncMock(
+            side_effect=grpc.aio.AioRpcError(
+                grpc.StatusCode.NOT_FOUND, grpc.aio.Metadata(), grpc.aio.Metadata(), "absent"
+            )
+        )
+        svc._indicators = MagicMock()
+        svc._indicators.GetFormula = AsyncMock(
+            return_value=indicators_pb2.FormulaDefinition(
+                formula_id="fscore",
+                name="fscore",
+                fundamental_inputs=[indicators_pb2.FUNDAMENTAL_METRIC_PE_RATIO],
+            )
+        )
+        svc._indicators.ComputeIndicator = AsyncMock(
+            side_effect=lambda req, metadata=None: SimpleNamespace(
+                result=[SimpleNamespace(value=v, extra={}) for v in req.values]
+            )
+        )
+        svc._indicators.ExecuteFormula = AsyncMock()
+        return svc
+
+    async def _both(self, call):
+        """(real loaders, loaders forced to []) responses for the same request."""
+        real_svc = self._svc()
+        real = await call(real_svc)
+        assert real_svc._marketdata.GetHistoricalFundamentals.await_count >= 1
+        assert real_svc._marketdata.GetFundamentals.await_count >= 1
+        baseline_svc = self._svc()
+        baseline_svc._load_fundamentals = AsyncMock(return_value=[])
+        baseline_svc._load_fundamentals_snapshot = AsyncMock(return_value=[])
+        return real, await call(baseline_svc)
+
+    @pytest.mark.asyncio
+    async def test_evaluate_readiness_schd_matches_empty_baseline(self):
+        async def call(svc):
+            return await svc.EvaluateReadiness(
+                analysis_pb2.EvaluateReadinessRequest(strategy_id="s1", symbols=["SCHD"]),
+                _ctx(_HEADERS),
+            )
+
+        real, baseline = await self._both(call)
+        real.ClearField("computed_at")
+        baseline.ClearField("computed_at")
+        assert real == baseline
+        assert real.readiness[0].symbol == "SCHD"
+
+    @pytest.mark.asyncio
+    async def test_indicator_series_schd_matches_empty_baseline(self):
+        async def call(svc):
+            return await svc.GetIndicatorSeries(
+                analysis_pb2.GetIndicatorSeriesRequest(
+                    strategy_id="s1", symbol="SCHD", closes=[120.0, 130.0, 150.0]
+                ),
+                _owned_ctx(),
+            )
+
+        real, baseline = await self._both(call)
+        assert real == baseline
+
+    def test_unguarded_surfaces_never_pass_failures(self):
+        """Pagination completeness is the only change these surfaces see (C-16 EXTEND)."""
+        for name in self._FUND_SURFACES:
+            src = inspect.getsource(getattr(AnalysisServicer, name))
+            assert "_load_fundamentals" in src or "_formula_fundamentals" in src, name
+            assert "failures=" not in src, f"{name} must stay unguarded"

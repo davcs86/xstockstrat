@@ -314,3 +314,10 @@
 - TDD (paired with Step 14): RED `ImportError: cannot import name '_FUND_PAGE_SIZE' from 'app.handlers.servicer'`. GREEN after Step 14's re-pointing: full suite 1027 passed, coverage 86.78%; ruff clean. Note: this commit alone leaves two feature-200 live tests stubbing `GetFundamentalsMulti` red until Step 14's commit re-points them (paired-step ordering).
 - Files modified: `services/xstockstrat-analysis/app/handlers/servicer.py`, `app/engine/live_loop.py`, `app/services/evaluator.py`
 - Deviations: shared failure/lowering helpers + dropped unused imports (see Deviation Log).
+
+### Step 14 — test: Pager, loaders, readiness parity [done]
+- New `tests/test_fundamentals_pit_pager.py`: `@AC-12` 3-page drain (dividend only on page 3 → AVAILABLE; page 1 alone → UNAVAILABLE), page size 200 / timeout / metadata / token sequence; empty token EOF; repeated first period raises; never-ending token raises after `_MAX_FUND_PAGES`. Loaders: servicer + live UNAVAILABLE RpcError and page error → `("pit","AAPL") = UNKNOWN`, cache hit keeps the failure, NOT_FOUND → no failure; live pages with `metadata=()`. Snapshot mapping (servicer + live): NOT_FOUND → none, FAILED_PRECONDITION → DISABLED (`@AC-9`), UNAVAILABLE and RESOURCE_EXHAUSTED → UNKNOWN (`@AC-8`, the Multi → single ripple), never a `"pit"` key; row lowering + single-symbol request + metadata. Formula map: servicer and evaluator record `("formula","divf")`.
+- `test_fundamentals_formula_servicer.py`: `_multi_resp` → `_snapshot_resp` (`GetFundamentalsResponse`), live stubs re-pointed to `GetFundamentals`. `test_analysis_servicer.py`: `TestUnguardedReadinessParity_feature215`.
+- AC-8/AC-9/AC-12 red: ImportError (pager absent), then the two feature-200 live tests red on the Multi → single switch → green. Step 14 suite run 426 passed; full suite 1027 passed, 86.78%; ruff clean.
+- Files modified: `services/xstockstrat-analysis/tests/test_fundamentals_pit_pager.py` (new), `tests/test_fundamentals_formula_servicer.py`, `tests/test_analysis_servicer.py`
+- Deviations: `test_live_loop.py` unchanged; partial structural parity (see Deviation Log).

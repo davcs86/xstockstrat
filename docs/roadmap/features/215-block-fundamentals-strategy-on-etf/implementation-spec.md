@@ -747,7 +747,7 @@ cd services/xstockstrat-analysis && grep -n "_FUND_PAGE_SIZE = 200\|_MAX_FUND_PA
 
 ### Step 14 — test: Pager, loaders, readiness parity
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_fundamentals_pit_pager.py` — create
@@ -1547,3 +1547,8 @@ _Populated by /sdd-execute as implementation proceeds._
 **Spec said**: live_loop imports `_fetch_historical_fundamentals_paged` from `app.handlers.servicer`; each loader "record[s] failures the same way" and lowers the snapshot row as today.
 **Actual**: The NOT_FOUND / FAILED_PRECONDITION / other → state mapping and the single-row lowering live once in servicer helpers (`_record_pit_failure`, `_record_snapshot_failure`, `_snapshot_periods`), which live_loop imports alongside the pager. live_loop's now-unused `date`, `_FUNDAMENTAL_METRICS`, `FundamentalPeriod`, `_fundamental_periods_from_response` imports were dropped (ruff F401). `declared_formula_fundamentals` imports `Availability` lazily (the guard imports the evaluator).
 **Reason**: DRY guard rail (one mapping for both loaders keeps backtest/live parity); import cycle avoidance. All inside Step 13's Files.
+
+### Deviation: Step 14 — test: Pager, loaders, readiness parity
+**Spec said**: Files include `tests/test_live_loop.py` (re-point snapshot stubs); readiness parity feeds EvaluateReadiness, GetWatchlistReadiness, the materializer and GetIndicatorSeries SCHD empty history + NotFound snapshot and compares to the pre-change shape.
+**Actual**: `tests/test_live_loop.py` is unchanged: its `GetFundamentalsMulti` stubs all drive the blend-universe resolver (which keeps Multi), and the live-loader cases live in the new `test_fundamentals_pit_pager.py`. Readiness parity is behavioral for EvaluateReadiness and GetIndicatorSeries (real loaders on SCHD ≡ loaders forced to `[]`, both RPCs asserted awaited) and structural for the watchlist compute path (`_kick_readiness_refresh`) and `_materialize_readiness_for_owner` (`inspect.getsource` pins that none of the four pass `failures=`).
+**Reason**: no live snapshot-loader stub exists in `test_live_loop.py` to re-point. The watchlist/materializer harnesses live in test files outside Step 14's Files; their loader inputs are the same two loaders whose NOT_FOUND → `[]` mapping is pinned directly, so the structural pin plus the loader tests cover the rule without widening F-08 scope.
