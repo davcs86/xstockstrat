@@ -130,7 +130,7 @@ to the frontends and the agent.
 | pnpm | 9.15.9 | Workspace manager (`pnpm-workspace.yaml`); `npm install -g pnpm@9.15.9` |
 | buf | 1.72.0 | Proto toolchain; pinned in `Dockerfile.codegen` (`BUF_VERSION`) and `.github/workflows/ci.yml` (`buf-setup-action` in the `proto-lint` + `proto-freshness` jobs) — bump all three together; installed by `scripts/bootstrap.sh` |
 | golang-migrate | latest | DB migrations; installed by `scripts/bootstrap.sh` |
-| golangci-lint | v2.13.1 | Go lint; run via `golangci-lint-action@v9` |
+| golangci-lint | v2.14.0 | Go lint; run via `golangci-lint-action@v9` |
 | ruff | latest | Python lint + format |
 | Playwright | — | E2E tests for the consolidated `xstockstrat-ui` (all three segments) |
 | Vitest | ^3 | Unit (logic) tests for `xstockstrat-ui` — node-environment `src/**/*.test.ts`, coverage scoped to `src/lib/**` (feature 065); complements Playwright e2e |
