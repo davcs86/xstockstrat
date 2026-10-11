@@ -618,7 +618,7 @@ ruff check . && ruff format --check .
 
 ### Step 9 — test: analysis gate completeness + AC-8, AC-16, SetOpportunityAction, test churn
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/conftest.py` — modify (add `OWNER_HEADERS`, `OTHER_HEADERS`)
@@ -1261,3 +1261,20 @@ replay's `cp …/014_contract_signal_ownership.up.sql` fails, `refuse_down` find
 `migration-rerun` job first runs on the integration PR.
 **Reason**: HARD CONSTRAINT — no database is started to verify a step; sequential mode opens no per-step PR.
 **Disposition**: offline migration check — live red/green deferred to CI (`migration-rerun` on the integration PR).
+
+### Deviation: Step 9 — analysis gate completeness + test churn (churned files)
+**Spec said**: "`services/xstockstrat-analysis/tests/*.py` — modify only the suites that the red run shows calling an RPC
+headerless (churn rule below; list each touched file in the step commit)".
+**Actual**: the Step-8 red run had 19 failures in 4 files. Churned: `tests/test_analysis_servicer.py` (rule (ii): 3
+TestBacktestTechnicalOnly, 2 TestFormulaErrorSurfacing, 3 TestBacktestRangeCap, 3 TestGetBacktest contexts gain
+`OWNER_HEADERS`; rule (i): `test_unauthenticated_caller_denied` now asserts UNAUTHENTICATED and that the repo was not
+touched, `test_set_opportunity_action_missing_user_invalid` renamed `..._missing_user_unauthenticated` and asserts
+UNAUTHENTICATED), `tests/test_get_attribution.py` (rule (i): `test_inbound_system_identity_owns_nothing` →
+`test_inbound_system_identity_permission_denied`, asserts PERMISSION_DENIED), `tests/test_query_pnl_patterns.py` (rule
+(ii), as the spec lists), and `tests/test_backtest_runs_repo.py` (4 `insert` calls gain `user_id="u-1"`).
+**Reason**: the `test_backtest_runs_repo.py` churn is not a headerless RPC: Step 8 instruction 6 makes
+`BacktestRunsRepository.insert(user_id: str)` required, so the 4 direct repository calls failed with `TypeError`. It is
+the same rule-(ii) shape (incidental, no assertion weakened). No test was deleted.
+**Disposition**: accepted trade-off (the `tests/*.py` Files entry, per the impl-spec review); each file named in the
+step commit.
+

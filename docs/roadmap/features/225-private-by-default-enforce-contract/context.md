@@ -281,3 +281,21 @@ integration PR: it is the first live proof of Steps 3–5.
   only inside `_caller_user_id`; ruff check + format clean.
 - Files modified: `app/handlers/servicer.py`, `app/repositories/backtest_runs.py`
 - Deviations: none.
+
+### Step 9 — analysis gate completeness + AC-8, AC-16, SetOpportunityAction, test churn [done]
+- `tests/conftest.py` gains `OWNER_HEADERS`/`OTHER_HEADERS`. New `tests/test_owner_scoped_completeness.py`: descriptor
+  walk `{undecorated} == EXEMPT`; per-method headerless → UNAUTHENTICATED and `system` → PERMISSION_DENIED with a
+  non-raising abort awaited once, on a bare `AnalysisServicer.__new__` instance (any attribute a body touches raises,
+  so "body not entered" is enforced); `test_ac8_headerless_list_strategies_unauthenticated`,
+  `test_ac16_ungranted_system_permission_denied`, SetOpportunityAction headerless → UNAUTHENTICATED.
+- AC-8 red: headerless ListStrategies got PERMISSION_DENIED/empty → green UNAUTHENTICATED. AC-16 red: `system` owned
+  nothing (no abort) → green PERMISSION_DENIED. Completeness 43 failed → 48 passed.
+- Churn RED (full suite on the Step 8 tree, before any test fix): **19 failed, 1006 passed** — test_analysis_servicer 12,
+  test_backtest_runs_repo 4, test_get_attribution 1, test_query_pnl_patterns 2. Classified and fixed (Deviation Log);
+  no test deleted; renamed under rule (i): `test_set_opportunity_action_missing_user_invalid` →
+  `..._missing_user_unauthenticated`, `test_inbound_system_identity_owns_nothing` →
+  `test_inbound_system_identity_permission_denied`.
+- GREEN: full suite 1025 passed, coverage 86.13%; ruff clean; `OWNER_HEADERS` consumers import from conftest.
+- Files modified: `tests/conftest.py`, `tests/test_owner_scoped_completeness.py` (new), `tests/test_analysis_servicer.py`,
+  `tests/test_query_pnl_patterns.py`, `tests/test_get_attribution.py`, `tests/test_backtest_runs_repo.py`
+- Deviations: churned-file list + the `test_backtest_runs_repo.py` signature churn (Deviation Log).

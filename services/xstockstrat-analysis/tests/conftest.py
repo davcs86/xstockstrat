@@ -38,6 +38,10 @@ def ctx_with(headers):
     return ctx
 
 
+OWNER_HEADERS = [("x-user-id", "u-1"), ("x-access-scope", "1"), ("x-trace-id", "t-1")]
+OTHER_HEADERS = [("x-user-id", "u-2"), ("x-access-scope", "1"), ("x-trace-id", "t-2")]
+
+
 class RecordingStub:
     """A fake gRPC stub: every attribute is an AsyncMock recording ``(method, request, metadata)``
     into ``calls``. ``responses`` maps a method name to a return value, an exception to raise, or a

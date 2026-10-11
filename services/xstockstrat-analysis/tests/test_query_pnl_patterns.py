@@ -9,6 +9,7 @@ asyncio_mode = auto.
 from gen.analysis.v1 import analysis_pb2
 
 from app.handlers.servicer import bucket_pnl_factors
+from tests.conftest import OWNER_HEADERS, ctx_with
 from tests.test_analysis_servicer import make_servicer
 
 
@@ -84,7 +85,7 @@ async def test_ac3_query_returns_ranked_positive_and_negative():
     }.get(k, d)
 
     resp = await servicer.QueryPnLPatterns(
-        analysis_pb2.QueryPnLPatternsRequest(symbol="AAPL", limit=10), None
+        analysis_pb2.QueryPnLPatternsRequest(symbol="AAPL", limit=10), ctx_with(OWNER_HEADERS)
     )
     assert len(resp.positive_factors) >= 1
     assert len(resp.negative_factors) >= 1
@@ -104,6 +105,6 @@ async def test_ac3_query_returns_ranked_positive_and_negative():
 async def test_query_no_repo_returns_empty():
     servicer = make_servicer()  # no db → _pnl_samples_repo is None
     resp = await servicer.QueryPnLPatterns(
-        analysis_pb2.QueryPnLPatternsRequest(symbol="AAPL"), None
+        analysis_pb2.QueryPnLPatternsRequest(symbol="AAPL"), ctx_with(OWNER_HEADERS)
     )
     assert list(resp.positive_factors) == [] and list(resp.negative_factors) == []

@@ -8,6 +8,8 @@ order_snapshots repos + a fake ingest (slug→display_name) and an owner-scoped 
 
 from unittest.mock import MagicMock
 
+import grpc
+import pytest
 from gen.analysis.v1 import analysis_pb2
 
 from app.handlers.servicer import attribute_trade
@@ -302,10 +304,13 @@ async def test_ac12_foreign_source_not_attributed():
     assert list(resp.attributions) == []
 
 
-async def test_inbound_system_identity_owns_nothing():
-    # An un-granted inbound `x-user-id: system` resolves to owner "" in analysis (design §2).
+async def test_inbound_system_identity_permission_denied():
+    # feature 225: analysis grants no inbound `x-user-id: system` — the gate refuses it.
     positions = [{"position_id": "p0", "symbol": "AAPL", "realized_pnl": 9.0, "fees_total": 0.0}]
     snaps = {"p0": [{"signals": [_sig("fundamentals", 0.9)], "price": 10.0, "quantity": 1.0}]}
     servicer = _wire(make_servicer(), {"system": positions}, snaps)
 
-    assert list((await _get(servicer, user_id="system")).attributions) == []
+    ctx = _ctx("system")
+    with pytest.raises(Exception, match="aborted"):
+        await servicer.GetAttribution(analysis_pb2.GetAttributionRequest(), ctx)
+    assert ctx.abort.await_args.args[0] == grpc.StatusCode.PERMISSION_DENIED
