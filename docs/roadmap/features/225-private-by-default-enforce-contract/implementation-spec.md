@@ -476,7 +476,7 @@ ruff check . && ruff format --check .
 
 ### Step 7 — test: `owner_metadata`, the single-builder static check, background-path containment, AC-17
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_identity.py` — create

@@ -13,6 +13,7 @@ from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
 from gen.analysis.v1 import analysis_pb2
 
 from app import main as app_main
@@ -20,12 +21,14 @@ from app.engine import entry_backfill
 from app.engine.fundsignal_loop import FundamentalsSignalLoop
 from app.engine.live_loop import LiveEvaluationLoop, resolve_fundamentals_universe
 from app.engine.pnl_pattern_consumer import SnapshotComposer
+from app.handlers import servicer as servicer_mod
 from app.handlers.servicer import _row_to_strategy_definition
 from app.services.evaluator import StrategyEvaluator
 from tests.conftest import RecordingStub, ctx_with
 from tests.test_analysis_servicer import make_servicer
 from tests.test_get_attribution import _FakePositionsRepo, _FakeSnapshotsRepo, _sig
 from tests.test_pnl_pattern_consumer import ORDER_PAYLOAD, make_consumer, make_event
+from tests.test_readiness_materializer import _due_schedule, _live_row, _materializer_svc
 from tests.test_readiness_opportunities_source_symbol import _real_bars
 
 _SYSTEM_GRANTS = {"analysis-fundsignal", "analysis-system-read"}
@@ -342,3 +345,105 @@ async def test_backtest_formula_prefetch():
     await svc._formula_fundamentals(definition, list(_BOB))
     _assert_owner_headers(svc._indicators)
     _assert_indicators_headers(svc._indicators, "bob")
+
+
+# ── feature 225: an empty owner is skipped fail-closed, never sent as x-user-id "" ───────────────
+
+
+def _assert_no_empty_owner(*stubs):
+    for stub in stubs:
+        for method, _req, meta in stub.calls:
+            uids = [v for k, v in meta if k == "x-user-id"]
+            assert len(uids) == 1 and uids[0], f"{method} sent x-user-id {uids!r}: {meta}"
+
+
+async def test_opportunity_tick_skips_empty_owner():
+    svc = _svc()
+    svc._opportunities_repo = AsyncMock()
+    svc._opportunities_repo.distinct_user_ids = AsyncMock(return_value=["bob", ""])
+    schedule = _due_schedule()
+    await svc._opportunity_refresh_tick(schedule)
+    _assert_owner_headers(svc._ingest, svc._indicators)
+    calls = svc._ingest.calls + svc._indicators.calls
+    assert {dict(m)["x-user-id"] for _n, _r, m in calls} == {"bob"}
+    schedule.advance.assert_awaited_once()
+
+
+async def test_template_sweep_skips_empty_owner_and_advances():
+    # Local import: test_strategy_templates imports this module at load time.
+    from tests.test_strategy_templates import FakeIntents, _intent, _schedule
+    from tests.test_strategy_templates import _svc as _template_svc
+
+    intents = FakeIntents(
+        _intent("i-anon", "", "COMMITTED", 0), _intent("i-bob", "bob", "COMMITTED", 0)
+    )
+    svc = _template_svc(intents=intents)
+    schedule = _schedule()
+    await svc._template_intent_sweep_tick(schedule)
+    assert intents.rows["i-anon"]["state"] == "COMMITTED"
+    assert intents.rows["i-bob"]["state"] == "FINALIZED"
+    calls = svc._indicators.of("ResolveTemplateIntent")
+    assert [c[1].intent_id for c in calls] == ["i-bob"]
+    _assert_indicators_headers(svc._indicators, "bob", path="template-saga")
+    schedule.advance.assert_awaited_once_with(servicer_mod._INTENT_SWEEP_SECONDS)
+
+
+async def test_materialize_readiness_for_empty_owner_raises():
+    svc = _svc()
+    with pytest.raises(ValueError):
+        await svc._materialize_readiness_for_owner("", {"s-x": _row("s-x", "")})
+    assert not svc._indicators.calls and not svc._ingest.calls
+
+
+async def test_readiness_materializer_tick_warms_bob_despite_empty_owner():
+    live = [_live_row("", "STR-X"), _live_row("bob", "STR-B")]
+    bindings = {"": [("NVDA", "STR-X")], "bob": [("MSFT", "STR-B")]}
+    svc = _materializer_svc(live, bindings, {"MSFT": _real_bars("MSFT", [90.0, 95.0, 99.0])})
+    await svc._readiness_materializer_tick(_due_schedule())
+    owners = [
+        dict(c.kwargs["metadata"])["x-user-id"]
+        for c in svc._portfolio.ListWatchlists.await_args_list
+    ]
+    assert owners == ["bob"]
+    upserted = [r for c in svc._readiness_cache_repo.upsert_many.await_args_list for r in c.args[0]]
+    assert upserted and {r["user_id"] for r in upserted} == {"bob"}
+
+
+@pytest.mark.parametrize("drain", ["_drain_owner_signals", "_drain_held", "_drain_watchlist"])
+async def test_live_loop_drain_rejects_empty_owner(drain):
+    ingest = _ingest()
+    loop = _live_loop(ingest, RecordingStub(), [])
+    with pytest.raises(ValueError):
+        await getattr(loop, drain)("")
+    assert not ingest.calls
+    assert loop._portfolio.ListPositions.await_count == 0
+    assert loop._portfolio.ListWatchlists.await_count == 0
+
+
+async def test_live_loop_cycle_skips_ownerless_strategy():
+    ingest, indicators = _ingest(), RecordingStub()
+    loop = _live_loop(ingest, indicators, [_row("s-x", ""), _row("s-bob", "bob")])
+    await loop._run_cycle()
+    assert indicators.calls, "the owner's pair was never evaluated"
+    _assert_owner_headers(ingest, indicators)
+    _assert_indicators_headers(indicators, "bob")
+    for call in loop._portfolio.ListPositions.await_args_list:
+        assert dict(call.kwargs["metadata"])["x-user-id"] == "bob"
+
+
+def test_evaluator_for_empty_owner_raises():
+    with pytest.raises(ValueError):
+        StrategyEvaluator(RecordingStub()).for_owner("")
+
+
+async def test_ac17_ownerless_order_event_issues_no_owner_scoped_call():
+    ingest, indicators = _ingest(), RecordingStub()
+    md = MagicMock()
+    md.GetBars = AsyncMock(return_value=SimpleNamespace(bars=_real_bars("AAPL", [1.0, 2.0, 3.0])))
+    consumer, _pool, snaps, _pos, _samples, ledger = make_consumer(
+        composer=SnapshotComposer(md, indicators, ingest)
+    )
+    await consumer.process_event(make_event(1, "order.filled", {**ORDER_PAYLOAD, "user_id": ""}))
+    assert not ingest.calls and not indicators.calls
+    assert len(snaps.rows) == 1
+    assert "analysis.snapshot.degraded" in ledger.appended

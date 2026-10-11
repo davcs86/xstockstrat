@@ -243,3 +243,21 @@ integration PR: it is the first live proof of Steps 3–5.
   `app/engine/fundsignal_loop.py`, `app/engine/pnl_pattern_consumer.py`, `app/services/evaluator.py`
 - Deviations: none. (`_compose` builds `meta = owner_metadata(owner) if owner else ()` once and returns early when
   ownerless — same behaviour as the instructions.)
+
+### Step 7 — `owner_metadata`, single-builder static check, background-path containment, AC-17 [done]
+- `tests/test_identity.py` (raise/return, AST single-builder check allowing only `app/identity.py` and
+  `SYSTEM_IDENTITY`, no `app` imports in `app.identity`); `tests/test_owner_header_guard.py` adds the opportunity tick
+  (`["bob",""]` + advance), template sweep (anon intent left `COMMITTED`, bob `FINALIZED`, advance
+  `_INTENT_SWEEP_SECONDS`), materializer (`""` raises; tick still warms bob), the three drains (`ValueError`, zero stub
+  calls), `_run_cycle` skipping the ownerless row, `for_owner("")`, and
+  `test_ac17_ownerless_order_event_issues_no_owner_scoped_call`.
+- AC-17 red: the ownerless order event called ingest `QuerySignals` with `x-user-id ''` → green: zero ingest/indicators
+  calls, snapshot inserted, `analysis.snapshot.degraded` emitted. Red/green counts recorded under Step 6 (13 failed →
+  27 passed; full suite 977 passed, 85.93%).
+- Fixture reuse (C-13): `_row`, `ORDER_PAYLOAD`, `make_event`/`make_consumer`, `_materializer_svc`/`_live_row`/
+  `_due_schedule`, and the template `FakeIntents`/`_intent`/`_schedule`/`_svc` are imported from their homes. The
+  template helpers are imported inside the one test that uses them, because `test_strategy_templates.py` imports
+  `test_owner_header_guard.py` at module load (a top-level import is circular). The sweep test asserts the saga grant
+  with the existing `_assert_indicators_headers(..., path="template-saga")`.
+- Files modified: `tests/test_identity.py` (new), `tests/test_owner_header_guard.py`
+- Deviations: none.
