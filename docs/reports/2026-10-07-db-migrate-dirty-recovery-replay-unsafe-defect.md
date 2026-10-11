@@ -62,3 +62,8 @@ manual intervention.
 Feature 224's `scripts/migration-rerun.sh` no longer replays the whole chain from `0`. It
 re-applies only the feature-224 up-files (indicators 007, ingest 013, analysis 026) a second
 time to prove they are idempotent (operator decision, 2026-10-07).
+
+- **Partial mitigation (feature 225, 2026-10-10):** `db-migrate.sh up` refuses `force 0` for a
+  service whose dirty version is ≥ its lowest `contract-of` floor and prints `migrate force <n-1>`
+  recovery text (`scripts/migration-dirty-guard.sh`); the false "re-running is safe" comment is gone.
+  Still exposed: dirty states below the floor and every service with no contract file.

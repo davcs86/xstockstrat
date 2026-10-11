@@ -31,8 +31,8 @@ ingests signals via the `IngestSignal` gRPC RPC. The former HTTP/Connect-RPC ser
 **Authorization.** `TriggerBackfill` (the provider-quota-spending op) and `CancelBackfill` are
 **admin-gated** — they abort `PERMISSION_DENIED` ("admin scope required")
 unless the propagated `x-access-scope` carries the ADMIN bit (`0x04`), via the shared
-`IngestServicer._has_admin_scope`. `ManageSignalSource` is **owner-gated** for headered callers
-(feature 224, § Ownership below); only the headerless release-N path keeps the ADMIN-bit check. (`TriggerBackfill`'s gate was added by feature 092 — F-11; before
+`IngestServicer._has_admin_scope`. `ManageSignalSource` is **owner-gated** (feature 224,
+§ Ownership below). (`TriggerBackfill`'s gate was added by feature 092 — F-11; before
 that it queued paid jobs for any caller.) **Feature 143**: `TriggerBackfill` also rejects any
 timeframe other than `1d` (`INVALID_ARGUMENT`), independent of the admin gate — only daily bars are
 servable platform-wide, so a `15m`/`1h` job is refused before it is persisted or spends provider
@@ -61,10 +61,8 @@ Signal sources and signals are **private to their owner** (`user_id`, from the `
   closed `UNAVAILABLE` if the audit append fails (`app/admin_audit.py`).
 - **Dedup is per owner** — claims live in `ingest.signal_dedup_claims`, keyed
   `(user_id, source, symbol, direction)`.
-- **Headerless tolerance (release N only; the follow-up "224 enforce + contract" removes it).** A call
-  with no `x-user-id`: `IngestSignal` and non-REGISTER `ManageSignalSource` resolve the slug's unique
-  holder (0 holders → `INVALID_ARGUMENT` / `NOT_FOUND`, >1 → `FAILED_PRECONDITION`); `ManageSignalSource`
-  still needs the ADMIN bit and never REGISTERs; `QuerySignals`/`ListSignalSources` stay unscoped.
+- **Identity gate.** A call with no `x-user-id` to an owner-scoped RPC (all but the backfill RPCs and
+  `NormalizeRawData`) → `UNAUTHENTICATED` (feature 225 `owner_scoped`), before the body runs.
 - **Templates.** `ListTemplates` / `ManageTemplate` (ADMIN only) / `InstantiateTemplate` over
   `ingest.source_templates`; an instance is an independent private copy carrying
   `origin_template_id`/`origin_template_version`.
@@ -89,22 +87,19 @@ Signal sources and signals are **private to their owner** (`user_id`, from the `
   `last_seen_at`+`signals_fed` (best-effort) on a fresh signal, or `last_seen_at` only (via
   `touch_source_last_seen`) on a dedup hit; `ListSignalSources` derives LIVE/STALE/DOWN health on
   read from `last_seen_at` freshness (`signal_sources.derive_health_status`).
-- Table `ingest.signal_dedup_keys` — plain (non-hypertable) side table,
-  `PRIMARY KEY (source, symbol, direction)`; `IngestSignal` atomically claims a row per submission
-  (`INSERT ... ON CONFLICT ... DO UPDATE ... WHERE claimed_at < NOW() - dedup_window_hours OR
-  conviction/valid_until differ ... RETURNING signal_id`) inside its first explicit asyncpg
-  transaction. A claim miss (`WHERE` false) means the submission is a duplicate; the response
-  carries `deduplicated=true` and the existing `signal_id`. Migration:
-  `migrations/009_signal_dedup_keys.up.sql` (feature 111). **Feature 224:** release N claims in the
-  owner-keyed `ingest.signal_dedup_claims` (`PRIMARY KEY (user_id, source, symbol, direction)`, same
-  `ON CONFLICT … WHERE` shape) instead; `signal_dedup_keys` is kept only for N-1 and dropped by the
-  follow-up contract.
+- Table `ingest.signal_dedup_claims` — plain (non-hypertable) side table,
+  `PRIMARY KEY (user_id, source, symbol, direction)` (migration `013`, feature 224); `IngestSignal`
+  atomically claims a row per submission (`INSERT ... ON CONFLICT ... DO UPDATE ... WHERE claimed_at <
+  NOW() - dedup_window_hours OR conviction/valid_until differ ... RETURNING signal_id`) inside its
+  first explicit asyncpg transaction. A claim miss (`WHERE` false) means the submission is a
+  duplicate; the response carries `deduplicated=true` and the existing `signal_id`. Its owner-less
+  predecessor `signal_dedup_keys` (migration `009`, feature 111) was dropped by migration `014`.
 - Migration `013_signal_ownership_templates` (feature 224, `-- requires-env: SEED_USER_ID`): adds
   `user_id` to `signal_sources` (PK → `(user_id, slug)`) and `newsletter_signals` (index
   `(user_id, ingested_at DESC)`) — `derived` sources and their signals go to `system`, every other legacy
   row to `SEED_USER_ID`; creates `signal_dedup_claims` (seeded from `signal_dedup_keys`) and
-  `source_templates`; adds the `origin_template_*` columns. An N-1 BEFORE INSERT trigger on
-  `newsletter_signals` fills a missing `user_id` with the slug's unique holder, else raises.
+  `source_templates`; adds the `origin_template_*` columns. Its N-1 trigger/function were dropped by
+  `014` (feature 225, `-- contract-of` `013`; its down raises).
 - Table: `ingest.backfill_jobs` — durable backfill job state (plain table, **not** a hypertable);
   replaces the former in-memory `self._jobs` dict. Persists status, progress (`bars_processed` /
   `bars_total`), `failed_symbols`, and timestamps so jobs survive a restart. On startup the servicer

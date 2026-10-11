@@ -22,11 +22,11 @@ Feature: Order snapshots and P&L pattern attribution
     When the position closes and portfolio emits a portfolio.position.closed event to the ledger
     Then analysis consumes the ledger event and writes pnl_pattern_factors rows within 10 seconds of the close event
 
-  @AC-3 @FR-4 @feature-042
-  Scenario: QueryPnLPatterns returns ranked positive and negative factors
-    Given AAPL has at least 5 completed trades whose snapshots have been analyzed
+  @AC-3 @FR-4 @feature-042 @feature-225
+  Scenario: QueryPnLPatterns returns the caller's ranked positive and negative factors
+    Given user "u-1" owns positions on AAPL with at least 5 completed trades whose snapshots have been analyzed
     And analysis.patterns.min_sample_count is 5
-    When QueryPnLPatterns is called with symbol "AAPL" and limit 10
+    When QueryPnLPatterns is called with "x-user-id: u-1", symbol "AAPL" and limit 10
     Then the response contains at least one factor in positive_factors and at least one in negative_factors
     And each returned factor carries factor_name, factor_type (INDICATOR or SIGNAL), sample_count, and avg_pnl_impact
 

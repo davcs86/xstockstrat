@@ -462,3 +462,122 @@ integration PR: it is the first live proof of Steps 3–5.
 **Stopped at**: Step 18 (scope of this run)
 **Next**: Step 19 (docs, C-16 promotion/EXTEND, teardown) — handled separately. CI `migration-rerun` on the integration PR
 is the first live proof of Steps 3–5 and 16.
+
+## Session 2026-10-11 — sdd-execute (sequential, Step 19)
+
+### Step 19 — docs: service CLAUDE.md drift, database recovery subsection, defect mitigation, business-rule promotion, teardown [done]
+- **indicators CLAUDE.md:** no write path writes `is_public` (column keeps `DEFAULT FALSE`, dropped later). There is a new
+  identity-gate bullet (all but ComputeIndicator/ListIndicators/ListFundamentalMetrics → `UNAUTHENTICATED`).
+  Update/Delete check the header only. The `_INTERNAL_FORMULA_READERS` sentence is gone.
+- **analysis CLAUDE.md:**
+  - `strategy_scores` is named as dropped by `027`, and 026's "NOT NULL deferred" now reads "027 re-applies it and
+    sets NOT NULL".
+  - The stale "inbound `system` owns nothing" line and "release-N" are gone.
+  - The score-persistence text names `strategy_scores_v2` only.
+  - A new `### Fail-closed identity & contract (feature 225)` section covers: 22 gated RPCs with
+    `RunFundamentalsScan` exempt (admin-gated); `app/identity.owner_metadata`; owner-scoped QueryPnLPatterns (NULL
+    `position_id` legacy samples match no caller, per the impl-spec review note); and `backtest_runs.user_id` NOT NULL.
+- **ingest CLAUDE.md:** `ManageSignalSource` is owner-gated, full stop. "Headerless tolerance" is replaced by the
+  identity-gate bullet. The dedup table entry describes `signal_dedup_claims`, with `signal_dedup_keys` dropped by
+  `014`. The N-1 trigger/function are named as dropped by `014`.
+- **`docs/patterns/database.md`:** the idempotency paragraph now covers expand and contract files (replayed by
+  `migration-rerun`) and says dirty recovery is refused at/above a contract floor. The `migration-rerun` bullet now
+  lists the 225 contract replay, trigger count 0, refused downs, dirty guard and AC-11. The new
+  `### Contract migration recovery` subsection covers the guard, floor rule, `migrate force <n-1>` recovery, the
+  no-`down` note and the adjacency convention.
+- **Defect report:** dated "Partial mitigation (feature 225, 2026-10-10)" bullet; `.status` stays `open`.
+- **C-16 promotion** (each Then diffed against the shipped test; 17 scenarios copied verbatim + `@feature-225`; check
+  scripted against `acceptance.feature`):
+  - analysis AC-3/8/14/15/16;
+  - indicators AC-1/2/10/11;
+  - ingest AC-4/9/13;
+  - `platform.feature` AC-5/6/12/18/19 under a feature-225 section;
+  - EXTEND `@AC-3 @feature-042` → the design's amended scenario (+`@feature-225`);
+  - EXTEND `@AC-35 @feature-224` (+`@feature-225`, an And-step carrying 225 AC-7).
+  **AC-17 is held out** (its "stored marked degraded" claim is asserted by neither the test nor the code; Deviation Log).
+- TDD: N/A (docs). Verification block passes (drift grep empty; recovery/guard, mitigation, `open`, `@feature-225`
+  greps all hit). markdownlint clean on every changed `.md`, and ruff is clean on `_helpers.py`.
+- Files modified: `services/xstockstrat-{indicators,analysis,ingest}/CLAUDE.md`, `docs/patterns/database.md`,
+  `docs/reports/2026-10-07-db-migrate-dirty-recovery-replay-unsafe-defect.md`,
+  `services/xstockstrat-analysis/acceptance/order-snapshots-pnl-patterns.feature`, `docs/sdd/business-rules/platform.feature`,
+  `services/xstockstrat-{analysis,indicators,ingest}/acceptance/private-by-default-enforce-contract.feature` (new); outside
+  Files (Deviation Log): `CLAUDE.md`, `services/xstockstrat-ingest/tests/_helpers.py`; ledger: `docs/roadmap/ledger/insights.md`.
+- Deviations: AC-17 held out; teardown fixes outside Files; database.md subsection placement + MD012 (Deviation Log).
+
+### Teardown (manual — context-forge unavailable)
+The `/context-forge:context-constitution refresh` plugin was not available in this session, so the root `CLAUDE.md`
+§ Teardown audit was done by hand. Every claim written or kept in a touched context file was grepped against the code.
+- **Files re-read in full against the code:** `services/xstockstrat-indicators/CLAUDE.md`,
+  `services/xstockstrat-analysis/CLAUDE.md`, `services/xstockstrat-ingest/CLAUDE.md`, `docs/patterns/database.md`,
+  root `CLAUDE.md` (225-relevant sections: Header Propagation, Database, Env Vars). Also grepped:
+  `docs/patterns/header-propagation.md`, `docs/context-constitution{,-findings}.md` and
+  `services/xstockstrat-{analysis,indicators,ingest}/docs/context-constitution*.md`.
+- **Claims confirmed in code:**
+  - **`owner_scoped` RPC counts:** analysis 22, indicators 10, ingest 7 (`grep -c "^    @owner_scoped"`).
+  - **Exempt sets** (each `tests/test_owner_scoped_completeness.py` `EXEMPT`):
+    - analysis: `{RunFundamentalsScan}`, admin-gated at `servicer.py` `_has_admin_scope` → `PERMISSION_DENIED`;
+    - indicators: `{ComputeIndicator, ListIndicators, ListFundamentalMetrics}`;
+    - ingest: `{TriggerBackfill, CancelBackfill, GetBackfillStatus, ListBackfillJobs, NormalizeRawData}`.
+  - **analysis identity:**
+    - `app/identity.owner_metadata` raises `ValueError` on `""`/`system`, and is the only builder (call sites in
+      `evaluator.py`, `servicer.py`, `live_loop.py`, `pnl_pattern_consumer.py`);
+    - `_caller_user_id`: headerless → `UNAUTHENTICATED`, `system` → `PERMISSION_DENIED`;
+    - the QueryPnLPatterns semijoin on `pnl_positions.user_id` (`pnl_pattern_samples.py`);
+    - grant names `analysis-fundsignal`, `analysis-system-read` (`live_loop.py:65`) and `analysis-template-saga`.
+  - **indicators:**
+    - no `is_public` in any `app/**/*.py`, and `001` keeps `NOT NULL DEFAULT FALSE`;
+    - `_reader` is header-only, and Update/Delete compare `row["author"]` with `_reader`;
+    - `_can_read_formula` allows only the owner or `SYSTEM_AUTHOR`.
+  - **ingest:**
+    - `_SYSTEM_GRANTS` mapping;
+    - dedup SQL on `signal_dedup_claims` `(user_id, source, symbol, direction)` with the `claimed_at`/conviction/
+      `valid_until` predicate;
+    - `014` drops the trigger, the function and `signal_dedup_keys`.
+  - **Migrations:** the `027`/`014` up files and their raising downs (`irreversible contract`; recovery `force 25` /
+    `force 12`), and `027`'s `SET NOT NULL` + `DROP TABLE IF EXISTS analysis.strategy_scores`.
+  - **Dirty guard:**
+    - `scripts/migration-dirty-guard.sh` (floor = the lowest `contract-of` target version; exit 3 at/above it; exit 2
+      for an unparseable version or a foreign target);
+    - its call in `db-migrate.sh` before `force 0`, and `scripts/Dockerfile.migrate:13` COPY;
+    - `db-migrate.sh` has only `up | version | force`.
+  - **`migration-rerun.sh`:** the replay list (007, 013, 014, 026, 027), trigger count 0, pass 3 `refuse_down` /
+    `guard_blocks`, and the AC-11 block.
+- **Reconciliations made:**
+  1. indicators CLAUDE.md: removed "every write stores `is_public=false`", the body-`user_id` fallback,
+     "no header → `INVALID_ARGUMENT`" and the `_INTERNAL_FORMULA_READERS` release-N bypass sentence; added the
+     `UNAUTHENTICATED` identity gate.
+  2. analysis CLAUDE.md:
+     - `strategy_scores` "retained for N-1" → dropped by `027`;
+     - 026's "NOT NULL is deferred to the follow-up" → `027` sets it;
+     - deleted "an inbound `x-user-id: system` resolves to owner `""` (owns nothing)" (now `PERMISSION_DENIED`);
+     - "release-N `analysis` reader bypass" → "the `analysis` reader bypass";
+     - score persistence names `strategy_scores_v2` only (the `strategy_scores`/migration `005` wording is gone);
+     - added the feature-225 section.
+  3. ingest CLAUDE.md:
+     - removed "only the headerless release-N path keeps the ADMIN-bit check" and the "Headerless tolerance" bullet,
+       replaced by the `UNAUTHENTICATED` gate;
+     - the dedup table entry now describes `signal_dedup_claims` (the `signal_dedup_keys` "kept only for N-1" is
+       gone);
+     - "An N-1 BEFORE INSERT trigger … fills a missing `user_id`" → dropped by `014`.
+  4. `docs/patterns/database.md`:
+     - "Expand-only up-files … because dirty-state recovery replays from version 0" → expand and contract files are
+       replayed by `migration-rerun`, and recovery is guarded at/above the floor;
+     - the `migration-rerun` bullet ("224 up-files only, N-1 trigger count unchanged") → the 225 contract replay,
+       count 0, refused downs, dirty guard, AC-11;
+     - added `### Contract migration recovery`;
+     - removed a pre-existing double trailing newline (MD012).
+  5. Root `CLAUDE.md` § Header Propagation Convention: "analysis treats an inbound `system` as owning nothing" →
+     "analysis refuses an inbound `system` (`PERMISSION_DENIED`, feature 225)".
+  6. `services/xstockstrat-ingest/tests/_helpers.py` `transaction_conn` docstring: the "headerless slug-holder
+     lookup" wording → a 2-line constraint.
+- **Found, not changed (outside the touched set, left for the operator):** `services/xstockstrat-ingest/docs/context-constitution.md`
+  INGEST-5 says "since feature 224 a headered read is owner-scoped". The qualifier "headered" is now redundant, since
+  every QuerySignals read is headered or rejected. `scrubberExtraTargets` (`README.md`,
+  `docs/patterns/ui-ux-governance.md`) were not touched.
+
+## Session 2026-10-11 — sdd-execute (Step 19)
+**Steps this session**: 19
+**Progress**: 19 done / 19 total
+**Stopped at**: all complete
+**Next**: integration PR `feature/private-by-default-enforce-contract` → `main-dev`, held until the operator confirms 224 is
+launched and stable. Its CI `migration-rerun` is the first live run of the DB-level promoted scenarios (AC-3/4/6/11/12/13/18).

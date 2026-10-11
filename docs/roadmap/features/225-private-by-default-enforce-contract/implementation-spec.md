@@ -1,6 +1,6 @@
 # Implementation Spec: private-by-default-enforce-contract
 
-**Status**: `in-progress`
+**Status**: `complete`
 **Created**: 2026-10-10
 **Feature**: `docs/roadmap/features/225-private-by-default-enforce-contract/feature.md`
 **Total Steps**: 19
@@ -1129,7 +1129,7 @@ grep -n "from tests.conftest\|from tests._helpers\|import _ctx" tests/test_owner
 
 ### Step 19 — docs: service CLAUDE.md drift, database recovery subsection, defect mitigation, business-rule promotion, teardown
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`, service `CLAUDE.md`s, acceptance suites
 **Files**:
 - `services/xstockstrat-indicators/CLAUDE.md` — modify
@@ -1364,3 +1364,34 @@ and **`tests/test_source_templates.py` 1** (not in the step's Files). Fixed:
 green for the wrong reason would hide coverage (fails.md feature 074).
 **Disposition**: accepted (F-08 audited: `test_source_templates.py` named in the step commit). The stale "headerless
 slug-holder lookup" wording in `tests/_helpers.py transaction_conn`'s docstring is left for Step 19's drift pass.
+
+### Deviation: Step 19 — C-16 promotion: `@AC-17` not promoted
+**Spec said**: analysis gets AC-3, AC-8, AC-14, AC-15, AC-16, AC-17, copied verbatim. A scenario whose test asserts
+less than its Then must be logged, not promoted as is.
+**Actual**: AC-17's last step says "the order snapshot is stored marked degraded". The snapshot row has no
+degraded marker: `order_snapshots` (migration 016) has no such column, and `_compose`'s `degraded` flag only selects the
+`analysis.snapshot.degraded` ledger event (`pnl_pattern_consumer.py:244`).
+`test_ac17_ownerless_order_event_issues_no_owner_scoped_call` asserts zero ingest/indicators calls, one snapshot row,
+and that event. So the "marked" claim is asserted by neither the test nor the code. The other five analysis scenarios
+are promoted verbatim.
+**Reason**: verbatim promotion would make a durable rule claim more than the shipped test proves.
+**Disposition**: AC-17 is held out of `services/xstockstrat-analysis/acceptance/private-by-default-enforce-contract.feature`
+pending an operator decision. Either reword the scenario's last step to "the order snapshot is stored and an
+`analysis.snapshot.degraded` event is emitted" and then promote it, or leave it unpromoted.
+
+### Deviation: Step 19 — teardown fixes outside the step's Files
+**Spec said**: Files = the three service `CLAUDE.md`s, `database.md`, the defect report and five acceptance suites;
+teardown fixes outside them go to this log (impl-spec review note).
+**Actual**:
+
+- Root `CLAUDE.md` § Header Propagation Convention said "analysis treats an inbound `system` as owning nothing". It
+  now says "analysis refuses an inbound `system` (`PERMISSION_DENIED`, feature 225)" (Step 8 behaviour).
+- `services/xstockstrat-ingest/tests/_helpers.py` `transaction_conn` docstring: the "headerless slug-holder lookup"
+  sentence is now a 2-line constraint (`db.fetch` returns `slug_holders` so a test can assert no lookup happens). This
+  is the item Step 18's deviation handed to Step 19.
+- `docs/patterns/database.md`: the new `### Contract migration recovery` subsection sits after the `**CI jobs**` list,
+  not directly after the idempotency paragraph. Placed there, it would have swallowed the CI list under its heading.
+  The file's pre-existing double trailing newline (MD012) was also removed so markdownlint passes.
+
+**Reason**: grounded drift found by the manual teardown (context-forge unavailable), plus heading structure.
+**Disposition**: accepted; comment/doc-only, no behaviour change; each file is named in the Step 19 commit.
