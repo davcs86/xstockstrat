@@ -172,3 +172,13 @@
 - Verification: shellcheck + shfmt clean; both suites pass. Coverage: N/A (`scripts/`).
 - Files modified: `scripts/migration-dirty-guard.test.sh`, `scripts/check-migration-contract.test.sh`
 - Deviations: none.
+
+### Step 3 — analysis `027_contract_owner_dimension` [done]
+- Created the 027 up (contract-of 026 on line 1, requires-env SEED_USER_ID, seed guard, ACCESS EXCLUSIVE lock with
+  2s×20 bounded retry and `lock_timeout` restore, D-1 + seed backfill, child-row backfills, `SET NOT NULL`, drop
+  `analysis.strategy_scores`) and the unconditionally-raising down.
+- TDD: N/A (migration — proven by Step 5's CI rerun).
+- Verification: offline (ls, header greps, SET NOT NULL / DROP / lock_timeout greps, down "irreversible contract");
+  027 free on all `origin/*` refs; 026 is on `origin/main` (contract gate precondition).
+- Files modified: `services/xstockstrat-analysis/migrations/027_contract_owner_dimension.{up,down}.sql`
+- Deviations: offline migration check substituted for the live apply (Deviation Log).

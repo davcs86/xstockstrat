@@ -212,7 +212,7 @@ Coverage: N/A (`scripts/` has no CI coverage gate).
 
 ### Step 3 — migration: analysis `027_contract_owner_dimension` (FR-3, FR-4, FR-5)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/migrations/027_contract_owner_dimension.up.sql` — create
@@ -1231,3 +1231,12 @@ grep -n "@feature-225" services/xstockstrat-analysis/acceptance/order-snapshots-
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Deviation: Step 3 — analysis `027_contract_owner_dimension` (verification substitution)
+**Spec said**: replay-safety and the live apply are "proven by Step 5's CI rerun".
+**Actual**: verified offline only — up/down pair present, `027` next-free on every `origin/*` ref, `contract-of` on
+line 1 and `requires-env` within the first 5 lines, 026 present on `origin/main`, down refuses by design (FR-5),
+replay-safety by inspection (every UPDATE is `IS NULL`-guarded, `SET NOT NULL` and `DROP TABLE IF EXISTS` are no-ops on replay).
+`envsubst` is absent on this host, so the `render-migrations.sh` render was not exercised locally.
+**Reason**: HARD CONSTRAINT — no database is started to verify a step.
+**Disposition**: offline migration check — live apply deferred to CI (`migration-rerun` job).
