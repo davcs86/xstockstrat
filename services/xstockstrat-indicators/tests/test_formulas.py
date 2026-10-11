@@ -11,6 +11,7 @@ import pytest
 
 from app.handlers.servicer import IndicatorsServicer
 from app.services.formulas_repository import FormulasRepository
+from tests.conftest import OTHER_HEADERS, OWNER_HEADERS
 
 
 def _cfg_stub():
@@ -178,12 +179,12 @@ class TestIndicatorsServicerCRUD:
     async def test_list_formulas_empty_when_no_repo(self):
         servicer = self._servicer()
         req = MagicMock(author_filter="", include_public=False, page_size=0, page_offset=0)
-        resp = await servicer.ListFormulas(req, MagicMock())
+        resp = await servicer.ListFormulas(req, _ctx(OWNER_HEADERS))
         assert resp.total_count == 0
 
     async def test_update_formula_unavailable_when_no_repo(self):
         servicer = self._servicer()
-        ctx = MagicMock()
+        ctx = _ctx(OWNER_HEADERS)
         ctx.abort = AsyncMock(side_effect=Exception("aborted"))
         with pytest.raises(Exception):
             await servicer.UpdateFormula(MagicMock(), ctx)
@@ -192,7 +193,7 @@ class TestIndicatorsServicerCRUD:
 
     async def test_delete_formula_unavailable_when_no_repo(self):
         servicer = self._servicer()
-        ctx = MagicMock()
+        ctx = _ctx(OWNER_HEADERS)
         ctx.abort = AsyncMock(side_effect=Exception("aborted"))
         with pytest.raises(Exception):
             await servicer.DeleteFormula(MagicMock(), ctx)
@@ -266,7 +267,7 @@ class TestRegisterFormulaAuthorGate:
         ctx.abort = AsyncMock(side_effect=Exception("aborted"))
         with pytest.raises(Exception):
             await servicer.RegisterFormula(req, ctx)
-        assert ctx.abort.await_args.args[0] == grpc.StatusCode.INVALID_ARGUMENT
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.UNAUTHENTICATED
 
 
 # ---------------------------------------------------------------------------
@@ -473,9 +474,9 @@ class TestFormulaAdminOverride:
     async def test_owner_updates_without_admin_scope(self):
         from gen.indicators.v1 import indicators_pb2
 
-        servicer = _repo_servicer(author="user-1")
-        req = indicators_pb2.UpdateFormulaRequest(formula_id="f", user_id="user-1", name="n")
-        resp = await servicer.UpdateFormula(req, _ctx([]))
+        servicer = _repo_servicer(author="user-a")
+        req = indicators_pb2.UpdateFormulaRequest(formula_id="f", user_id="user-a", name="n")
+        resp = await servicer.UpdateFormula(req, _ctx(OWNER_HEADERS))
         assert resp.formula.formula_id == "f"
 
     async def test_non_owner_admin_update_denied(self):
@@ -483,7 +484,7 @@ class TestFormulaAdminOverride:
 
         servicer = _repo_servicer(author="owner")
         req = indicators_pb2.UpdateFormulaRequest(formula_id="f", user_id="someone-else", name="n")
-        ctx = _ctx([("x-access-scope", "7")])
+        ctx = _ctx([("x-user-id", "someone-else"), ("x-access-scope", "7")])
         ctx.abort = AsyncMock(side_effect=Exception("aborted"))
         with pytest.raises(Exception):
             await servicer.UpdateFormula(req, ctx)
@@ -495,7 +496,7 @@ class TestFormulaAdminOverride:
 
         servicer = _repo_servicer(author="owner")
         req = indicators_pb2.UpdateFormulaRequest(formula_id="f", user_id="someone-else", name="n")
-        ctx = _ctx([("x-access-scope", "1")])
+        ctx = _ctx(OTHER_HEADERS)
         ctx.abort = AsyncMock(side_effect=Exception("aborted"))
         with pytest.raises(Exception):
             await servicer.UpdateFormula(req, ctx)
@@ -506,7 +507,7 @@ class TestFormulaAdminOverride:
 
         servicer = _repo_servicer(author="owner")
         req = indicators_pb2.DeleteFormulaRequest(formula_id="f", user_id="someone-else")
-        ctx = _ctx([("x-access-scope", "7")])
+        ctx = _ctx([("x-user-id", "someone-else"), ("x-access-scope", "7")])
         ctx.abort = AsyncMock(side_effect=Exception("aborted"))
         with pytest.raises(Exception):
             await servicer.DeleteFormula(req, ctx)
@@ -518,7 +519,7 @@ class TestFormulaAdminOverride:
 
         servicer = _repo_servicer(author="owner")
         req = indicators_pb2.DeleteFormulaRequest(formula_id="f", user_id="someone-else")
-        ctx = _ctx([("x-access-scope", "0")])
+        ctx = _ctx([("x-user-id", "someone-else"), ("x-access-scope", "0")])
         ctx.abort = AsyncMock(side_effect=Exception("aborted"))
         with pytest.raises(Exception):
             await servicer.DeleteFormula(req, ctx)
@@ -633,7 +634,7 @@ class TestFormulaWarmupPeriod:
             formula_id="f", user_id="u", name="n", source="x = 1", warmup_period=-1
         )
         ctx = MagicMock()
-        ctx.invocation_metadata = MagicMock(return_value=[])
+        ctx.invocation_metadata = MagicMock(return_value=[("x-user-id", "u")])
         ctx.abort = AsyncMock(side_effect=Exception("aborted"))
         with pytest.raises(Exception):
             await servicer.UpdateFormula(req, ctx)
@@ -662,7 +663,7 @@ class TestFormulaWarmupPeriod:
             formula_id="f", user_id="u", name="n", source="x = 1", warmup_period=21
         )
         ctx = MagicMock()
-        ctx.invocation_metadata = MagicMock(return_value=[])
+        ctx.invocation_metadata = MagicMock(return_value=[("x-user-id", "u")])
         resp = await servicer.UpdateFormula(req, ctx)
         assert repo.update.await_args.kwargs["warmup_period"] == 21
         assert resp.formula.warmup_period == 21
@@ -680,7 +681,7 @@ class TestSystemFormulaReadOnly:
 
         servicer = _repo_servicer(author=SYSTEM_AUTHOR)
         req = indicators_pb2.UpdateFormulaRequest(formula_id="f", user_id="admin", name="n")
-        ctx = _ctx([("x-access-scope", "7")])  # admin scope present
+        ctx = _ctx([("x-user-id", "admin"), ("x-access-scope", "7")])  # admin scope present
         ctx.abort = AsyncMock(side_effect=Exception("aborted"))
         with pytest.raises(Exception):
             await servicer.UpdateFormula(req, ctx)
@@ -693,7 +694,7 @@ class TestSystemFormulaReadOnly:
 
         servicer = _repo_servicer(author=SYSTEM_AUTHOR)
         req = indicators_pb2.DeleteFormulaRequest(formula_id="f", user_id="admin")
-        ctx = _ctx([("x-access-scope", "7")])  # admin scope present
+        ctx = _ctx([("x-user-id", "admin"), ("x-access-scope", "7")])  # admin scope present
         ctx.abort = AsyncMock(side_effect=Exception("aborted"))
         with pytest.raises(Exception):
             await servicer.DeleteFormula(req, ctx)
@@ -743,7 +744,7 @@ class TestFormulaPartialUpdate:
             formula_id="f", user_id="user-1", description="new desc"
         )
         req.update_mask.paths.append("description")
-        await servicer.UpdateFormula(req, _ctx([]))
+        await servicer.UpdateFormula(req, _ctx([("x-user-id", "user-1")]))
         kw = repo.update.await_args.kwargs
         assert kw["description"] == "new desc"  # masked field written
         assert kw["name"] == "orig name"  # unmasked preserved
@@ -760,7 +761,7 @@ class TestFormulaPartialUpdate:
         req = indicators_pb2.UpdateFormulaRequest(
             formula_id="f", user_id="user-1", name="n2", source="y = 2"
         )
-        await servicer.UpdateFormula(req, _ctx([]))
+        await servicer.UpdateFormula(req, _ctx([("x-user-id", "user-1")]))
         kw = repo.update.await_args.kwargs
         assert kw["name"] == "n2"
         assert kw["source"] == "y = 2"
@@ -773,7 +774,7 @@ class TestFormulaPartialUpdate:
         servicer, _ = _update_servicer(_full_row())
         req = indicators_pb2.UpdateFormulaRequest(formula_id="f", user_id="user-1", source="")
         req.update_mask.paths.append("source")
-        ctx = _ctx([])
+        ctx = _ctx([("x-user-id", "user-1")])
         ctx.abort = AsyncMock(side_effect=Exception("aborted"))
         with pytest.raises(Exception):
             await servicer.UpdateFormula(req, ctx)
@@ -785,7 +786,7 @@ class TestFormulaPartialUpdate:
         servicer, _ = _update_servicer(_full_row())
         req = indicators_pb2.UpdateFormulaRequest(formula_id="f", user_id="user-1")
         req.update_mask.paths.append("bogus_field")
-        ctx = _ctx([])
+        ctx = _ctx([("x-user-id", "user-1")])
         ctx.abort = AsyncMock(side_effect=Exception("aborted"))
         with pytest.raises(Exception):
             await servicer.UpdateFormula(req, ctx)
@@ -799,7 +800,7 @@ class TestFormulaPartialUpdate:
         servicer, _ = _update_servicer(_full_row(deleted_at=datetime.datetime(2026, 1, 1)))
         req = indicators_pb2.UpdateFormulaRequest(formula_id="f", user_id="user-1", description="x")
         req.update_mask.paths.append("description")
-        ctx = _ctx([])
+        ctx = _ctx([("x-user-id", "user-1")])
         ctx.abort = AsyncMock(side_effect=Exception("aborted"))
         with pytest.raises(Exception):
             await servicer.UpdateFormula(req, ctx)

@@ -159,7 +159,7 @@ class TestRegisterPrivateAndHeaderAuthor:
         ctx = ctx_with([])
         with pytest.raises(grpc.RpcError):
             await svc.RegisterFormula(req, ctx)
-        assert ctx.abort.await_args.args[0] == grpc.StatusCode.INVALID_ARGUMENT
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.UNAUTHENTICATED
         repo.create.assert_not_awaited()
 
 

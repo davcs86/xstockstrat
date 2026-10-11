@@ -376,8 +376,11 @@ class TestInstantiation:
         assert _code(ctx) == grpc.StatusCode.NOT_FOUND
         assert svc._repo.rows == {}
 
-    @pytest.mark.parametrize("user", ["", "system"])
-    async def test_user_path_requires_a_non_system_owner(self, user):
+    @pytest.mark.parametrize(
+        "user,code",
+        [("", grpc.StatusCode.UNAUTHENTICATED), ("system", grpc.StatusCode.PERMISSION_DENIED)],
+    )
+    async def test_user_path_requires_a_non_system_owner(self, user, code):
         svc = _servicer()
         await _seed(svc)
         ctx = _user(user)
@@ -385,7 +388,7 @@ class TestInstantiation:
             await svc.InstantiateTemplate(
                 indicators_pb2.InstantiateTemplateRequest(template_id="tpl-zscore"), ctx
             )
-        assert _code(ctx) == grpc.StatusCode.PERMISSION_DENIED
+        assert _code(ctx) == code
         assert svc._repo.rows == {}
 
 
@@ -454,7 +457,7 @@ class TestSaga:
         "ctx_factory",
         [
             lambda: _saga(peer_sans=()),  # header without the analysis SAN
-            lambda: _saga(caller="analysis"),  # N-only formula-reader bypass id
+            lambda: _saga(caller="analysis"),  # the removed formula-reader bypass id
             lambda: _saga(peer_sans=("xstockstrat-ingest",)),
             lambda: _user("bob"),
         ],
@@ -474,13 +477,16 @@ class TestSaga:
             )
         assert _code(ctx) == grpc.StatusCode.PERMISSION_DENIED
 
-    @pytest.mark.parametrize("owner", ["", "system"])
-    async def test_saga_requires_a_non_system_owner(self, owner):
+    @pytest.mark.parametrize(
+        "owner,code",
+        [("", grpc.StatusCode.UNAUTHENTICATED), ("system", grpc.StatusCode.PERMISSION_DENIED)],
+    )
+    async def test_saga_requires_a_non_system_owner(self, owner, code):
         svc = await self._seeded()
         ctx = _saga(owner=owner)
         with pytest.raises(grpc.RpcError):
             await self._start(svc, ctx=ctx)
-        assert _code(ctx) == grpc.StatusCode.PERMISSION_DENIED
+        assert _code(ctx) == code
 
     @pytest.mark.parametrize("retire", [True, False])
     async def test_one_retired_or_missing_template_fails_whole_saga_with_zero_inserts(self, retire):

@@ -798,7 +798,7 @@ ruff check . && ruff format --check .
 
 ### Step 13 — test: indicators gate completeness + AC-1, AC-2, AC-10, test churn
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/conftest.py` — modify (add `OWNER_HEADERS`, `OTHER_HEADERS`)
@@ -1278,3 +1278,26 @@ the same rule-(ii) shape (incidental, no assertion weakened). No test was delete
 **Disposition**: accepted trade-off (the `tests/*.py` Files entry, per the impl-spec review); each file named in the
 step commit.
 
+### Deviation: Step 12 — indicators identity gate (stale saga-grant comment)
+**Spec said**: delete `_INTERNAL_FORMULA_READERS` and its comment (`:27-29`).
+**Actual**: also reworded the adjacent `_TEMPLATE_SAGA_GRANT` comment ("must outlive the removal of the N-only
+"analysis" reader bypass") to "Dedicated saga grant for the strategy-template saga.", since it named the deleted bypass.
+**Reason**: orphan created by instruction 4 in the same file; no behaviour change.
+**Disposition**: accepted (in-scope orphan cleanup).
+
+### Deviation: Step 13 — indicators gate completeness + test churn (churned files)
+**Spec said**: "`services/xstockstrat-indicators/tests/*.py` — modify only the suites the red run shows as headerless
+(churn rule as in Step 9; list each in the commit)".
+**Actual**: the Step-12 red run had 24 failures in 4 files. Churned: `tests/test_formulas.py` (rule (ii): 3
+TestIndicatorsServicerCRUD contexts → `OWNER_HEADERS`; the Update/Delete ownership, warm-up, system-read-only and
+partial-update contexts gain an `x-user-id` equal to the body `user_id` they relied on via the removed fallback (owner
+case moved to `user-a` + `OWNER_HEADERS`, non-owner no-admin case → `OTHER_HEADERS`); rule (i):
+`test_aborts_without_author_or_user_id` asserts UNAUTHENTICATED), `tests/test_execute_formula_concurrency.py` (rule (ii):
+3 `MagicMock()` contexts → `ctx_with(OWNER_HEADERS)`), `tests/test_formula_templates.py` (rule (i): the `""` case of
+`test_user_path_requires_a_non_system_owner` and `test_saga_requires_a_non_system_owner` now expects UNAUTHENTICATED,
+`system` keeps PERMISSION_DENIED; stale `:457` comment fixed), `tests/test_private_formulas.py` (rule (i):
+`test_body_author_without_header_is_rejected` asserts UNAUTHENTICATED). AC-1 lives in `test_owner_scoped_completeness.py`,
+AC-2/AC-10 in `test_formula_read_authz.py`. No test deleted.
+**Reason**: admin-scope and named-owner contexts could not take `OWNER_HEADERS` verbatim (scope `1`, `user-a`) without
+changing what they assert, so they keep their scope and gain the matching `x-user-id`.
+**Disposition**: accepted trade-off (the `tests/*.py` Files entry); each file named in the step commit.

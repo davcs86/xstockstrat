@@ -352,3 +352,24 @@ integration PR: it is the first live proof of Steps 3–5.
 - Files modified: `app/handlers/servicer.py`
 - Deviations: the `_TEMPLATE_SAGA_GRANT` comment named the removed "N-only analysis reader bypass"; reworded to
   "Dedicated saga grant for the strategy-template saga." (orphan of instruction 4, same file).
+
+### Step 13 — indicators gate completeness + AC-1, AC-2, AC-10, test churn [done]
+- `tests/conftest.py` gains `OWNER_HEADERS` (`user-a`) / `OTHER_HEADERS` (`user-b`). New
+  `tests/test_owner_scoped_completeness.py`: descriptor walk `{undecorated} == EXEMPT`; per gated method × {headerless →
+  UNAUTHENTICATED, `system` → PERMISSION_DENIED, `system` + `analysis-fundsignal` without SAN → PERMISSION_DENIED} on a bare
+  `IndicatorsServicer.__new__` with a non-raising abort (body not entered); positive control (granted `system` + SAN reads a
+  `SYSTEM_AUTHOR` formula); `test_ac1_headerless_list_formulas_unauthenticated` (repo never awaited).
+  `test_formula_read_authz.py`: `internal-analysis-san-bound` moved out of `test_allowed_readers` into
+  `test_ac2_san_bound_analysis_reader_bypass_removed`; `test_ac10_identified_non_owner_get_formula_not_found`.
+- AC-1 red: headerless ListFormulas reached the repo (`KeyError` building the row) → green UNAUTHENTICATED. AC-2 red: the
+  bypass served the formula (`DID NOT RAISE`) → green NOT_FOUND. AC-10 green before and after (characterization).
+  Completeness: 12 failed / 33 passed (pre-Step-12) → 45 passed.
+- Churn RED (full suite on the Step 12 tree, before any test fix): **24 failed, 252 passed** — test_formulas 18,
+  test_execute_formula_concurrency 3, test_formula_templates 2, test_private_formulas 1. Classified and fixed (Deviation
+  Log); no test deleted or renamed.
+- GREEN: full suite 276 passed, coverage 84.81% (gate 50); ruff check + format clean; consumers import
+  `OWNER_HEADERS`/`OTHER_HEADERS` from conftest.
+- Files modified: `tests/conftest.py`, `tests/test_owner_scoped_completeness.py` (new), `tests/test_formula_read_authz.py`,
+  `tests/test_formulas.py`, `tests/test_execute_formula_concurrency.py`, `tests/test_formula_templates.py`,
+  `tests/test_private_formulas.py`
+- Deviations: churned-file list (Deviation Log).
