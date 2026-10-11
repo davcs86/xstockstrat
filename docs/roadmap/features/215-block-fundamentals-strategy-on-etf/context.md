@@ -362,3 +362,9 @@
 - TDD (paired with Step 20): RED 8 failed, 2 passed — SCHD entered (`_last_state … True is False`), 0 fundamentals alerts (want 1), `AttributeError: … '_fund_unavailable'`. GREEN: `test_live_loop.py` 62 passed; full suite 1068 passed, coverage 87.00%; ruff clean.
 - Files modified: `services/xstockstrat-analysis/app/engine/live_loop.py`
 - Deviations: none
+
+### Step 20 — test: Live deny-entry [done]
+- `tests/test_live_loop.py` gains `TestLiveLoopFundamentalsDenyEntry_feature215` (gate on, blend = fscore formula with the seeded `FUNDAMENTAL_INPUTS`, live snapshot channel): `@AC-6/@AC-5` three SCHD cycles (snapshot NotFound) with entry true → no entry, exactly one WARN naming SCHD + strategy + `NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE`, exactly one WARNING alert (title/category/tag pinned); held exit still fires; recover (AAPL-shaped snapshot) then relapse → second alert; a raising `EmitAlert` is not retried next cycle; `@AC-9` snapshot FAILED_PRECONDITION (DISABLED) and UNAVAILABLE (UNKNOWN) → no fundamentals alert, no state, entry not denied; PIT UNAVAILABLE on a `pe_ratio` operand (UNKNOWN) → no alert; empty bars → `_EVAL_NO_BARS`, no alert; AAPL with fundamentals → normal entry alert; `@AC-12` a 2-page PIT history (60 empty periods + `AAPL_PIT_PERIODS`) is fully loaded (2 calls, all periods fed to the evaluator) and a `dividend_yield` operand enters.
+- AC-5/AC-6/AC-9/AC-12 red: see Step 19 (8 failed) → green: 62 passed; full suite 1068 passed, 87.00%; ruff clean. C-13: `AAPL_PIT_PERIODS` / `fund_period` from `tests/conftest.py`; SCHD needs no PIT fixture here (the blend reads the live snapshot channel, stubbed NotFound).
+- Files modified: `services/xstockstrat-analysis/tests/test_live_loop.py`
+- Deviations: none

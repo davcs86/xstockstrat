@@ -1100,7 +1100,7 @@ cd services/xstockstrat-analysis && grep -n "_fund_unavailable\|_emit_fundamenta
 
 ### Step 20 — test: Live deny-entry
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_live_loop.py` — modify
