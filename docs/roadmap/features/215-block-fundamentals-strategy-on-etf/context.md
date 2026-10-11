@@ -267,3 +267,13 @@
 **Stopped at**: Step 6 (scope of this run, the Steps 2–6 contract group; three parity guards are green again)
 **Next**: /sdd-execute block-fundamentals-strategy-on-etf sequential (Step 7, marketdata)
 **Open item**: the CI fix cherry-pick (`4705cc4f` + `ff8fe0dc` from `claude/ci-golangci-goinstall`) is still not on this branch, because `git cherry-pick` was denied by the session permission classifier. It is needed before the marketdata Go steps can get green CI lint.
+
+## Session 2026-10-11 — sdd-execute (sequential, autonomous, Steps 7–16)
+
+- Mode: coordinator-delegated autonomous run of Steps 7–16, one commit per step on `feature/block-fundamentals-strategy-on-etf`. PR #1239 (golangci-lint v2.14.0 CI fix) not yet on `origin/main-dev` at start, so Go lint is verified locally with the v2.14.0 binary; CI Go lint stays red until #1239 lands (known, not this feature's).
+
+### Step 7 — service: Marketdata absence encoding + shared 80% threshold [done]
+- Added `source.ErrNoFundamentals`; FMP single-symbol empty result wraps it; Finnhub `GetFundamentals` now calls `fetchOne` directly (outage errors unwrapped, never absence). `resolveFundamentals` maps the sentinel to NotFound; `getEdgarSnapshot` vendor-off branch returns NotFound (`errNoEdgarSnapshot`); edgar `GetFundamentalsMulti` omits NotFound symbols and still aborts on kill switch / quota / outage. `atQuotaAlertThreshold` extracted as the single 80% home.
+- TDD (paired with Step 8): RED 1 = build failure (`undefined: source.ErrNoFundamentals`, `atQuotaAlertThreshold`); RED 2 after adding only the declarations = behavioral: Multi `failed_precondition: no edgar snapshot for SCHD…`, vendor absence `unavailable` (want not_found), FMP `err … want errors.Is(ErrNoFundamentals)`, Finnhub 503 error did not name `/stock/metric`. GREEN: targeted tests ok (service/fmp/finnhub, `-race`); full module `go test ./... -race` ok; coverage 70.9% (≥40%); golangci-lint v2.14.0 0 issues; gofmt clean.
+- Files modified: `services/xstockstrat-marketdata/internal/source/source.go`, `internal/fmp/fmp_client.go`, `internal/finnhub/finnhub_client.go`, `internal/service/marketdata_service.go`
+- Deviations: none

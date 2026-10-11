@@ -163,7 +163,7 @@ func (c *Client) GetFundamentals(ctx context.Context, symbol string) (*source.Fu
 		return nil, err
 	}
 	if len(out) == 0 {
-		return nil, fmt.Errorf("fmp: no fundamentals for %q", symbol)
+		return nil, fmt.Errorf("fmp: no fundamentals for %q: %w", symbol, source.ErrNoFundamentals)
 	}
 	return out[0], nil
 }

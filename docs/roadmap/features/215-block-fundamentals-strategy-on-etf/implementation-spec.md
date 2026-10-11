@@ -347,7 +347,7 @@ cd services/xstockstrat-agent && uv run pytest tests/test_opportunity_projection
 
 ### Step 7 — service: Marketdata absence encoding + shared 80% threshold
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/source/source.go` — modify
