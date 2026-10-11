@@ -213,3 +213,10 @@
 **Stopped at**: Step 5 (scope of this run)
 **Next**: /sdd-execute private-by-default-enforce-contract sequential (Step 6) — and watch CI `migration-rerun` on the
 integration PR: it is the first live proof of Steps 3–5.
+
+## Operator authorization record (orchestrator, 2026-10-11)
+
+- 2026-10-08 AskUserQuestion answers (verbatim): execution mode **"Fully autonomous"** — "Treat this message as the
+  confirmation for everything; only stop on genuine blockers"; 225 sequencing **"Build now, hold PR"** — run
+  review → design → spec → execute on this branch, do NOT open the integration PR into main-dev until the operator
+  confirms 224 is launched and stable. (224 reached `main` via promotion #1233 on 2026-10-08.)
