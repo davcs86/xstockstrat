@@ -295,3 +295,9 @@
 - AC-14 red: build failure (symbols undefined) → green: all pass. Coverage 71.0%; lint 0 issues.
 - Files modified: `services/xstockstrat-marketdata/internal/service/etf_flags_test.go` (new), `internal/fmp/fmp_gateway_test.go`
 - Deviations: none
+
+### Step 11 — service: Pure `fundamentals_guard` module + shared evaluator helper [done]
+- `evaluator.py`: module-level `fundamental_component_inputs` (data keys + as-of series, `([], {})` when empty) and `component_would_execute`; `_fundamentals_formula_series` now calls the former (epoch loop unchanged). New `app/services/fundamentals_guard.py`: `Availability` (6 states), the two predicates moved verbatim, `requires_fundamentals`, `epoch_eval_dates`, `assess` (gate → required components → NOT_ASSESSED → per-component channel/failure/would-execute → precedence UNAVAILABLE > UNKNOWN > DISABLED > AVAILABLE). `failures` is a mapping `("pit"|"snap", symbol) → state`, `("formula", fid) → state`. servicer/live_loop import the predicates from the guard.
+- TDD (paired with Step 12): RED `ImportError: cannot import name 'component_would_execute' from 'app.services.evaluator'`. GREEN: guard + operand tests 38 passed; full suite 1003 passed, coverage 85.94%; ruff check + format clean.
+- Files modified: `services/xstockstrat-analysis/app/services/fundamentals_guard.py` (new), `app/services/evaluator.py`, `app/handlers/servicer.py`, `app/engine/live_loop.py`
+- Deviations: guard names imported where first used; import check with the conftest gen shim (see Deviation Log).

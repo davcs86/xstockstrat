@@ -37,8 +37,6 @@ from opentelemetry import metrics
 
 from app.handlers.servicer import (
     SYSTEM_IDENTITY,
-    _definition_has_fundamental,
-    _definition_wants_fundamentals_formula,
     _fundamental_periods_from_response,
     _normalize_symbol,
     _row_to_strategy_definition,
@@ -48,6 +46,10 @@ from app.repositories.strategies import LIVE_ENABLED_PREDICATE_SQL
 from app.services import sector_params, warmup
 from app.services.cooldown import effective_cooldown_days, is_cooldown_active
 from app.services.evaluator import _FUNDAMENTAL_METRICS, FundamentalPeriod
+from app.services.fundamentals_guard import (
+    _definition_has_fundamental,
+    _definition_wants_fundamentals_formula,
+)
 
 log = logging.getLogger(__name__)
 

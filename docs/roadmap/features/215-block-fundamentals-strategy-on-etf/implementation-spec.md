@@ -571,7 +571,7 @@ cd services/xstockstrat-marketdata && GOWORK=off go test ./internal/service/... 
 
 ### Step 11 — service: Pure `fundamentals_guard` module + shared evaluator helper
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/services/fundamentals_guard.py` — create
@@ -1536,3 +1536,9 @@ _Populated by /sdd-execute as implementation proceeds._
 **Spec said**: "`fakeHistRepo` holding a producible `BABA` period and **no** `SCHD` history"; client-test symbols unspecified; C-13 check "`\"SCHD\"` … ≤1 declaring file".
 **Actual**: `fakeHistRepo` returned one `latest` for every symbol, so it gained an optional `latestBy map[string]*HistoricalFundamentalsPeriod` (nil keeps the old behavior). The FMP/Finnhub client tests use `VOO` so `"SCHD"` stays in one test file.
 **Reason**: per-symbol producibility is needed for the SCHD-omitted / BABA-served case; the symbol choice keeps the step's own C-13 check green. Both changes are inside files Step 8 lists.
+
+### Deviation: Step 11 — service: Pure `fundamentals_guard` module + shared evaluator helper
+**Spec said**: (3) servicer imports the two predicates "plus `Availability, assess, epoch_eval_dates, requires_fundamentals`"; (4) live_loop imports the predicates "(and `Availability`, `assess`)". Verification: `uv run python -c "import app.engine.live_loop, app.handlers.servicer"`.
+**Actual**: Step 11 imports only the two predicates into `servicer.py` and `live_loop.py`; the guard names are imported by the steps that first use them (13/15/17/19/21). The import check ran with the `gen` namespace registered the same way `tests/conftest.py::_setup_gen_path` does (`sys.path.insert(0,'tests'); import conftest`).
+**Reason**: unused imports fail `ruff check` (F401), which Step 12's Verification runs. A bare `python -c` in the service dir has no `gen` package; pytest and the container provide it.
+**Disposition**: CI-equivalent fallback (import check); import timing only, no behavior change.

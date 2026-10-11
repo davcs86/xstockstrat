@@ -70,6 +70,10 @@ from app.services.evaluator import (
     align_indicator_points,
     referenced_refs,
 )
+from app.services.fundamentals_guard import (
+    _definition_has_fundamental,
+    _definition_wants_fundamentals_formula,
+)
 from app.services.readiness import (
     compute_readiness_row,
     is_readiness_row_fresh,
@@ -5997,25 +6001,6 @@ def _fundamentals_source_symbol_conflict(definition, formula_fund_map) -> str | 
                 f"('{comp.source_symbol}') — it reads fundamentals, not bars"
             )
     return None
-
-
-def _definition_has_fundamental(definition) -> bool:
-    """True when any component is a COMPONENT_KIND_FUNDAMENTAL operand (feature 198). Module-level
-    so both the servicer backtest path and the live loop share one definition-scan predicate."""
-    return any(c.kind == analysis_pb2.COMPONENT_KIND_FUNDAMENTAL for c in definition.components)
-
-
-def _definition_wants_fundamentals_formula(definition, formula_fund_map) -> bool:
-    """Feature 200 — True when any CUSTOM_FORMULA component's ``formula_id`` maps to a non-empty
-    fundamental-metric list in ``formula_fund_map`` (built by ``_formula_fundamentals``). Distinct
-    from ``_definition_has_fundamental`` (the feature-198 single-metric operand): a
-    fundamentals-only formula declares its inputs on the formula, not on the component."""
-    if not formula_fund_map:
-        return False
-    return any(
-        c.kind == analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA and formula_fund_map.get(c.formula_id)
-        for c in definition.components
-    )
 
 
 def _fundamental_periods_from_response(resp) -> list[FundamentalPeriod]:
