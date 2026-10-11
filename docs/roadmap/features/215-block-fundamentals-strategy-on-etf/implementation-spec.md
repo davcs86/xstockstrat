@@ -1203,7 +1203,7 @@ cd services/xstockstrat-analysis && grep -n "fund_skip\|fund_unknown\|\"fundamen
 
 ### Step 22 — test: Opportunity skip row + heal
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_opportunities_fundamentals_guard.py` — create
