@@ -402,7 +402,7 @@ cd services/xstockstrat-marketdata && grep -n "ErrNoFundamentals" internal/sourc
 
 ### Step 8 — test: Marketdata absence encoding
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go` — modify
@@ -1531,3 +1531,8 @@ _Populated by /sdd-execute as implementation proceeds._
 **Spec said**: "The existing parity assertion goes green with Step 5's `_SYMBOL_KEYS`" (no fixture change named).
 **Actual**: Also added `"fundamentals_gap": "FUNDAMENTALS_GAP_UNSPECIFIED"` to each per-symbol entry of the `_full_result` fixture in `tests/test_backtest_view.py`.
 **Reason**: `test_summary_drops_per_bar_bars_but_keeps_the_diagnosis` asserts every `_SYMBOL_KEYS` key is in each summarized entry. Real `client.run_backtest` output always prints the no-presence enum (`always_print_fields_with_no_presence=True`), so the fixture now mirrors the real shape. The change is inside a file Step 6 lists.
+
+### Deviation: Step 8 — test: Marketdata absence encoding
+**Spec said**: "`fakeHistRepo` holding a producible `BABA` period and **no** `SCHD` history"; client-test symbols unspecified; C-13 check "`\"SCHD\"` … ≤1 declaring file".
+**Actual**: `fakeHistRepo` returned one `latest` for every symbol, so it gained an optional `latestBy map[string]*HistoricalFundamentalsPeriod` (nil keeps the old behavior). The FMP/Finnhub client tests use `VOO` so `"SCHD"` stays in one test file.
+**Reason**: per-symbol producibility is needed for the SCHD-omitted / BABA-served case; the symbol choice keeps the step's own C-13 check green. Both changes are inside files Step 8 lists.

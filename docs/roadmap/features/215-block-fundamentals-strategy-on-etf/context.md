@@ -277,3 +277,9 @@
 - TDD (paired with Step 8): RED 1 = build failure (`undefined: source.ErrNoFundamentals`, `atQuotaAlertThreshold`); RED 2 after adding only the declarations = behavioral: Multi `failed_precondition: no edgar snapshot for SCHD…`, vendor absence `unavailable` (want not_found), FMP `err … want errors.Is(ErrNoFundamentals)`, Finnhub 503 error did not name `/stock/metric`. GREEN: targeted tests ok (service/fmp/finnhub, `-race`); full module `go test ./... -race` ok; coverage 70.9% (≥40%); golangci-lint v2.14.0 0 issues; gofmt clean.
 - Files modified: `services/xstockstrat-marketdata/internal/source/source.go`, `internal/fmp/fmp_client.go`, `internal/finnhub/finnhub_client.go`, `internal/service/marketdata_service.go`
 - Deviations: none
+
+### Step 8 — test: Marketdata absence encoding [done]
+- Added service tests (feature215): edgar no-snapshot → Multi omits SCHD / single NotFound (AC-7); vendor `ErrNoFundamentals` → NotFound in vendor mode and edgar fallback, omitted from Multi; unwrapped vendor error → Unavailable on single and aborts Multi (AC-8); kill switch → FailedPrecondition on both RPCs; quota exhausted → ResourceExhausted single + Multi abort; `atQuotaAlertThreshold` table. FMP empty quote → `errors.Is(ErrNoFundamentals)`; Finnhub `TestGetFundamentals_OutageIsNotAbsence` (503/429 not absence, names `/stock/metric`; empty 200 → nil-field row).
+- AC-7 red: Multi `failed_precondition` for SCHD → green. AC-8 red: vendor absence `unavailable`, Finnhub 503 → "no fundamentals for" → green. Existing quota/HTTPError guards stay green. Coverage 70.9%; golangci-lint v2.14.0 0 issues. C-13: `"SCHD"` in one test file.
+- Files modified: `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go`, `internal/fmp/fmp_client_test.go`, `internal/finnhub/finnhub_client_test.go`
+- Deviations: `fakeHistRepo.latestBy`; client tests use `VOO` (see Deviation Log).
