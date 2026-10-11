@@ -388,3 +388,17 @@ integration PR: it is the first live proof of Steps 3–5.
 - Files modified: `app/services/formulas_repository.py`, `app/handlers/servicer.py`, `app/services/seed_formulas.py`,
   `app/formulas/fundamentals_value_quality.py`
 - Deviations: none (the column keeps `NOT NULL DEFAULT FALSE`; reads stay `SELECT *`).
+
+### Step 15 — indicators `is_public` routing + static absence (AC-11 unit half), test churn [done]
+- `test_formulas.py::TestIsPublicNotWritten`: the three SQL constants omit `is_public`; with a recording pool, `create` and
+  `create_pending_copies` execute `_INSERT_SQL` with 13 args, `update` `_UPDATE_SQL` with 8, `upsert` `_UPSERT_SQL` with 10.
+- AC-11 (unit) red: 5 failed on the pre-Step-14 tree (constants missing / `_insert_args` needs `is_public`) → green 5 passed.
+- Churn RED (full suite on the Step 14 tree): **7 failed, 261 passed, 1 collection error** (`test_fundamentals_formula.py`
+  imports `IS_PUBLIC`) — test_formulas 6, test_private_formulas 1. Fixed (Deviation Log): `kw["is_public"] is False` →
+  `"is_public" not in kw`; `is_public=` kwargs dropped from repository calls; warm-up positional `args[10]` → `args[9]`;
+  `IS_PUBLIC` import/clause dropped (FORMULA_ID / `AUTHOR == "system"` kept); template fake records writes. Read-back
+  `is_public is False` assertions kept (PRESERVE `@AC-3 @feature-224`).
+- GREEN: full suite 281 passed, coverage 85.55%; ruff clean; spec grep (`kw["is_public"]|IS_PUBLIC` in tests) → none.
+- Files modified: `tests/test_formulas.py`, `tests/test_private_formulas.py`, `tests/test_fundamentals_formula.py`,
+  `tests/test_formula_templates.py` (`test_formula_read_authz.py` needed no change: its `is_public` uses are proto fields)
+- Deviations: template-fake assertion shape + positional renumber (Deviation Log).

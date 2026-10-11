@@ -110,8 +110,10 @@ class _FakeFormulas:
     def __init__(self):
         self.rows: dict[str, dict] = {}
         self.pending_batches = 0
+        self.writes: list[dict] = []
 
     def _store(self, kw, pending_intent_id=None):
+        self.writes.append(kw)
         row = {
             "formula_id": kw["formula_id"],
             "name": kw["name"],
@@ -303,7 +305,7 @@ class TestInstantiation:
         assert formula.origin.template_id == "tpl-zscore"
         assert formula.origin.template_version == 2
         row = svc._repo.rows[formula.formula_id]
-        assert row["author"] == "bob" and row["is_public"] is False
+        assert row["author"] == "bob" and "is_public" not in svc._repo.writes[-1]
         assert (row["origin_template_id"], row["origin_template_version"]) == ("tpl-zscore", 2)
         assert row["pending_intent_id"] is None
 

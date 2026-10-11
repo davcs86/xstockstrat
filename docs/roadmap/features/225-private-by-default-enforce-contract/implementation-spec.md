@@ -897,7 +897,7 @@ ruff check . && ruff format --check .
 
 ### Step 15 — test: indicators `is_public` routing + static absence (AC-11 unit half), test churn
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/test_formulas.py` — modify
@@ -1301,3 +1301,15 @@ AC-2/AC-10 in `test_formula_read_authz.py`. No test deleted.
 **Reason**: admin-scope and named-owner contexts could not take `OWNER_HEADERS` verbatim (scope `1`, `user-a`) without
 changing what they assert, so they keep their scope and gain the matching `x-user-id`.
 **Disposition**: accepted trade-off (the `tests/*.py` Files entry); each file named in the step commit.
+
+### Deviation: Step 15 — indicators `is_public` churn (shape of the template-fake assertion)
+**Spec said**: "Replace every `kw["is_public"] is False` assertion with `"is_public" not in kw`".
+**Actual**: done for the two `test_formulas.py` partial-update asserts and the `test_private_formulas.py` AC-3 register
+assert. `test_formula_templates.py:306` asserted `row["is_public"] is False` on a fake row that hard-codes the key, so it
+now asserts on the recorded write kwargs (`_FakeFormulas.writes`, new) — `"is_public" not in svc._repo.writes[-1]`.
+Other churn: five repository calls dropped their `is_public=` kwarg (3 `create` + warm-up `create` in `test_formulas.py`,
+2 `upsert` in `test_fundamentals_formula.py`), and the warm-up positional check moved from `args[10]` to `args[9]` because
+`_INSERT_SQL` renumbered. Fake DB rows keep their `"is_public"` key (the column still exists and reads are `SELECT *`),
+and every read-back `FormulaDefinition.is_public is False` assertion is kept (PRESERVE `@AC-3 @feature-224`).
+**Reason**: the template fake never reflected the write, so the literal replacement would have been a tautology.
+**Disposition**: accepted; no test deleted.

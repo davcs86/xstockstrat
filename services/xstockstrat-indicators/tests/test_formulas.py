@@ -49,7 +49,6 @@ class TestFormulasRepository:
             description="",
             source="x = 1",
             author="user-1",
-            is_public=False,
             input_schema={},
         )
         pool.fetchrow.assert_awaited_once()
@@ -75,7 +74,6 @@ class TestFormulasRepository:
             description="",
             source="x = 1",
             author="user-1",
-            is_public=False,
             input_schema={},
             parameters=[{"name": "period", "type": "PARAMETER_TYPE_INT"}],
         )
@@ -98,7 +96,6 @@ class TestFormulasRepository:
             description="",
             source="result = {'value': 1}",
             author="user-1",
-            is_public=False,
             input_schema={},
             outputs=[{"name": "upper", "description": "upper band"}],
         )
@@ -165,6 +162,75 @@ class TestFormulasRepository:
         await repo.list_visible("u", page_size=0, page_offset=0)
         assert "deleted_at IS NULL" in pool.fetch.await_args.args[0]
         assert "deleted_at IS NULL" in pool.fetchval.await_args.args[0]
+
+
+def _recording_pool():
+    pool = MagicMock()
+    pool.fetchrow = AsyncMock(return_value={"formula_id": "f", "input_schema": "{}"})
+    conn = MagicMock(fetchrow=pool.fetchrow)
+    pool.acquire.return_value.__aenter__.return_value = conn
+    return pool
+
+
+_NEW_FORMULA = {
+    "formula_id": "11111111-1111-1111-1111-111111111111",
+    "name": "F",
+    "description": "",
+    "source": "x = 1",
+    "author": "user-1",
+    "input_schema": {},
+}
+
+
+class TestIsPublicNotWritten:
+    """Feature 225 (FR-4, AC-11 unit half): no write path names is_public, so the column can be
+    dropped by a later contract."""
+
+    def test_write_sql_constants_omit_is_public(self):
+        from app.services import formulas_repository as fr
+
+        for sql in (fr._INSERT_SQL, fr._UPDATE_SQL, fr._UPSERT_SQL):
+            assert "is_public" not in sql
+
+    async def test_create_executes_insert_sql_with_13_args(self):
+        from app.services.formulas_repository import _INSERT_SQL
+
+        pool = _recording_pool()
+        await FormulasRepository(pool).create(**_NEW_FORMULA)
+        sql, *args = pool.fetchrow.await_args.args
+        assert sql == _INSERT_SQL and len(args) == 13
+
+    async def test_create_pending_copies_executes_insert_sql_with_13_args(self):
+        from app.services.formulas_repository import _INSERT_SQL
+
+        pool = _recording_pool()
+        await FormulasRepository(pool).create_pending_copies(
+            [_NEW_FORMULA], "00000000-0000-4000-8000-000000000001"
+        )
+        sql, *args = pool.fetchrow.await_args.args
+        assert sql == _INSERT_SQL and len(args) == 13
+        assert args[-1] == "00000000-0000-4000-8000-000000000001"
+
+    async def test_update_executes_update_sql_with_8_args(self):
+        from app.services.formulas_repository import _UPDATE_SQL
+
+        pool = _recording_pool()
+        await FormulasRepository(pool).update(
+            formula_id="11111111-1111-1111-1111-111111111111",
+            name="F",
+            description="",
+            source="x = 1",
+        )
+        sql, *args = pool.fetchrow.await_args.args
+        assert sql == _UPDATE_SQL and len(args) == 8
+
+    async def test_upsert_executes_upsert_sql_with_10_args(self):
+        from app.services.formulas_repository import _UPSERT_SQL
+
+        pool = _recording_pool()
+        await FormulasRepository(pool).upsert(**{**_NEW_FORMULA, "author": "system"})
+        sql, *args = pool.fetchrow.await_args.args
+        assert sql == _UPSERT_SQL and len(args) == 10
 
 
 # ---------------------------------------------------------------------------
@@ -584,12 +650,11 @@ class TestFormulaWarmupPeriod:
             description="",
             source="x = 1",
             author="u",
-            is_public=False,
             input_schema={},
             warmup_period=14,
         )
-        # warmup_period is bound as $10 (args[0] is the SQL).
-        assert pool.fetchrow.await_args.args[10] == 14
+        # warmup_period is bound as $9 (args[0] is the SQL).
+        assert pool.fetchrow.await_args.args[9] == 14
         assert result["warmup_period"] == 14
 
     async def test_register_get_round_trips_warmup_period(self):
@@ -749,7 +814,7 @@ class TestFormulaPartialUpdate:
         assert kw["description"] == "new desc"  # masked field written
         assert kw["name"] == "orig name"  # unmasked preserved
         assert kw["source"] == "x = 1"
-        assert kw["is_public"] is False
+        assert "is_public" not in kw
         assert kw["parameters"] == [{"name": "keepme"}]
         assert kw["outputs"] == [{"name": "s2"}]
         assert kw["warmup_period"] == 7
@@ -766,7 +831,7 @@ class TestFormulaPartialUpdate:
         assert kw["name"] == "n2"
         assert kw["source"] == "y = 2"
         assert kw["description"] == ""  # full-replace back-compat: omitted → default
-        assert kw["is_public"] is False
+        assert "is_public" not in kw
 
     async def test_masked_blank_source_rejected(self):
         from gen.indicators.v1 import indicators_pb2
