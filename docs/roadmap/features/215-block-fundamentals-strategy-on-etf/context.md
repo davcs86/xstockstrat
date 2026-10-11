@@ -235,3 +235,10 @@
 - Files modified: `packages/proto/gen/{go,python,ts,ts/dist}/{analysis,marketdata}/v1/*` (the Step 2 list)
 - Deviations: the TS compile ran on the host after a frozen-lockfile install (see Deviation Log).
 - Not done: the coordinator asked to cherry-pick CI fix `4705cc4f` (`claude/ci-golangci-goinstall`, `install-mode: goinstall`). The session permission classifier denied the `git cherry-pick` ("Modify Shared Resources"), so the commit is **not** on this branch. Operator action is needed.
+
+### Step 3 — service: Opportunity row contract + repository [done]
+- `"fundamentals_unavailable"` joined `_PROVENANCE_STRUCTURAL_MARKERS` and the `read()` floor exemption. `read()` gained `symbol` (`$9`, empty = all), and `replace_symbols` gained `action = COALESCE($11::int, action)`. `ListOpportunities` normalizes `request.symbol` once and forwards it to both reads, and `_row_to_opportunity` maps `fundamentals_unavailable` (marker) and `fundamentals_gap` (from `readiness_json`).
+- TDD (paired with Step 4): RED 8 failed, 353 passed (`TypeError: read() got an unexpected keyword argument 'symbol'`, the marker/floor/COALESCE asserts, and `IndexError` at bind 11). GREEN: 361 passed; full suite 971 passed at 85.81% coverage; ruff clean.
+- Files modified: `services/xstockstrat-analysis/app/handlers/servicer.py`, `services/xstockstrat-analysis/app/repositories/opportunities.py`
+- Deviations: none
+- Not done: the coordinator's updated CI-fix request (cherry-pick `4705cc4f` + `ff8fe0dc`, golangci-lint v2.14.0) was not attempted again, because the classifier had already denied `git cherry-pick` this session. Operator action is needed.

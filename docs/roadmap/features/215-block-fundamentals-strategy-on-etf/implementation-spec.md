@@ -176,7 +176,7 @@ grep -rl "FUNDAMENTALS_GAP_ETF" packages/proto/gen/python packages/proto/gen/ts 
 
 ### Step 3 — service: Opportunity row contract + repository (symbol filter, floor exemption, heal action, structural marker)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify

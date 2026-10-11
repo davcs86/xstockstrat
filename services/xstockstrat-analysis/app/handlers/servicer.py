@@ -4203,6 +4203,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         w = self._cfg.get_float("analysis.opportunity.signal_rank_weight", 0.3)
         # feature 190 — server-side filters/sort forwarded from the request into the read.
         req_sources = list(request.sources)
+        req_symbol = _normalize_symbol(request.symbol) if request.symbol else ""
         rows = await self._opportunities_repo.read(
             user_id,
             request.min_conviction,
@@ -4211,6 +4212,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             sources=req_sources,
             action_filter=request.action_filter,
             sort=request.sort,
+            symbol=req_symbol,
         )
         # feature 190 — the include_expired that actually produced the served rows (fresh=False;
         # set True in the stale branch below), so the offset==0 facet matches served freshness (O7).
@@ -4265,6 +4267,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     sources=req_sources,
                     action_filter=request.action_filter,
                     sort=request.sort,
+                    symbol=req_symbol,
                 )
 
         # feature 185 FR-5 — surgical read-time recovery. On a FRESH read (real rows were served),
@@ -6209,6 +6212,9 @@ def _row_to_opportunity(row: dict) -> "analysis_pb2.Opportunity":
         # feature 185 — data_unavailable is likewise derived from the "unavailable" provenance
         # marker (no column), so a terminal data-unavailable sentinel survives the JSONB round-trip.
         data_unavailable=("unavailable" in provenance),
+        fundamentals_unavailable=("fundamentals_unavailable" in provenance),
+        # feature 215 — the gap label rides readiness_json (no column), like target_price.
+        fundamentals_gap=int(readiness.get("fundamentals_gap", 0) or 0),
     )
     valid_until = row.get("valid_until")
     if valid_until is not None:
