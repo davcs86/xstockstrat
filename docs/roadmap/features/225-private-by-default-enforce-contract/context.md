@@ -310,3 +310,21 @@ integration PR: it is the first live proof of Steps 3–5.
 - Verification: both greps hit; ruff clean.
 - Files modified: `app/repositories/pnl_pattern_samples.py`, `app/handlers/servicer.py`
 - Deviations: none.
+
+### Step 11 — QueryPnLPatterns AC-14, AC-15 [done]
+- `_FakeSamplesRepo` stores `(owner, row)` pairs, filters on `user_id`, records each call's owner. New: repository
+  recording-DB tests (`$2` predicate, `args == ("AAPL", "u-1")`; with strategy + both timestamps → `$5`, `args` end in
+  `"u-1"`), `test_ac14_query_pnl_patterns_returns_only_callers_samples` (u-1 `sig:uw` ×5 vs u-2 `sig:uw` ×6 +
+  `sig:newsletter-b` ×5 → only `("sig:uw", 5)`), `test_ac15_headerless_query_pnl_patterns_unauthenticated`.
+- AC-14 red: `PnLPatternSamplesRepository.query() got an unexpected keyword argument 'user_id'` / the fake was called
+  without `user_id` → green. AC-15 is green on its first run: Step 8's gate already rejects headerless calls before
+  the body, so it is a characterization test here (the repo is asserted never called).
+- Verification: file 8 passed; full suite 1029 passed, 86.39%; ruff clean; `from tests.conftest` present.
+- Files modified: `tests/test_query_pnl_patterns.py`
+- Deviations: none.
+
+## Session 2026-10-11 — sdd-execute (Steps 6–11)
+**Steps this session**: 6, 7, 8, 9, 10, 11
+**Progress**: 11 done / 19 total
+**Stopped at**: Step 11 (scope of this run)
+**Next**: /sdd-execute private-by-default-enforce-contract sequential (Step 12 — indicators gate)

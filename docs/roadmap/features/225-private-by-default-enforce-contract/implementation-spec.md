@@ -704,7 +704,7 @@ ruff check . && ruff format --check .
 
 ### Step 11 — test: QueryPnLPatterns AC-14, AC-15
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_query_pnl_patterns.py` — modify

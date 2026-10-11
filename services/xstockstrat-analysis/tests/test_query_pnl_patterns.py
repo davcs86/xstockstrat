@@ -6,9 +6,12 @@ factor_type); the RPC test drives ``AnalysisServicer.QueryPnLPatterns`` with a f
 asyncio_mode = auto.
 """
 
+import grpc
+import pytest
 from gen.analysis.v1 import analysis_pb2
 
 from app.handlers.servicer import bucket_pnl_factors
+from app.repositories.pnl_pattern_samples import PnLPatternSamplesRepository
 from tests.conftest import OWNER_HEADERS, ctx_with
 from tests.test_analysis_servicer import make_servicer
 
@@ -64,11 +67,15 @@ def test_min_sample_drop_has_teeth():
 
 
 class _FakeSamplesRepo:
-    def __init__(self, rows):
-        self._rows = rows
+    """In-memory samples keyed by owner: ``pairs`` is ``[(user_id, row), ...]``."""
 
-    async def query(self, *, symbol, strategy_id="", from_ts=None, to_ts=None):
-        return self._rows
+    def __init__(self, pairs):
+        self._pairs = pairs
+        self.calls = []
+
+    async def query(self, *, user_id, symbol, strategy_id="", from_ts=None, to_ts=None):
+        self.calls.append(user_id)
+        return [row for owner, row in self._pairs if owner == user_id]
 
 
 async def test_ac3_query_returns_ranked_positive_and_negative():
@@ -78,7 +85,7 @@ async def test_ac3_query_returns_ranked_positive_and_negative():
         + [_ind(70 + i, -80) for i in range(5)]  # negative indicator bucket
         + [_sig(50) for _ in range(5)]  # positive signal factor
     )
-    servicer._pnl_samples_repo = _FakeSamplesRepo(rows)
+    servicer._pnl_samples_repo = _FakeSamplesRepo([("u-1", r) for r in rows])
     servicer._cfg.get_int = lambda k, d: {
         "analysis.patterns.min_sample_count": 3,
         "analysis.patterns.indicator_bucket_count": 2,
@@ -108,3 +115,62 @@ async def test_query_no_repo_returns_empty():
         analysis_pb2.QueryPnLPatternsRequest(symbol="AAPL"), ctx_with(OWNER_HEADERS)
     )
     assert list(resp.positive_factors) == [] and list(resp.negative_factors) == []
+
+
+# ── feature 225 FR-7: QueryPnLPatterns is owner-scoped ──────────────────────
+
+
+class _RecordingDb:
+    def __init__(self):
+        self.sql, self.args = None, None
+
+    async def fetch(self, sql, *args):
+        self.sql, self.args = sql, args
+        return []
+
+
+_OWNER_PREDICATE = (
+    "position_id IN (SELECT position_id FROM analysis.pnl_positions "
+    "WHERE user_id = ${n} AND symbol = $1)"
+)
+
+
+async def test_ac14_repository_binds_owner_predicate():
+    db = _RecordingDb()
+    await PnLPatternSamplesRepository(db).query(user_id="u-1", symbol="AAPL")
+    assert _OWNER_PREDICATE.format(n=2) in db.sql
+    assert db.args == ("AAPL", "u-1")
+
+
+async def test_ac14_repository_owner_index_follows_optional_filters():
+    db = _RecordingDb()
+    await PnLPatternSamplesRepository(db).query(
+        user_id="u-1", symbol="AAPL", strategy_id="s-1", from_ts="t0", to_ts="t1"
+    )
+    assert _OWNER_PREDICATE.format(n=5) in db.sql
+    assert db.args == ("AAPL", "s-1", "t0", "t1", "u-1")
+
+
+async def test_ac14_query_pnl_patterns_returns_only_callers_samples():
+    servicer = make_servicer()
+    pairs = [("u-1", _sig(50, name="sig:uw")) for _ in range(5)]
+    pairs += [("u-2", _sig(-10, name="sig:uw")) for _ in range(6)]
+    pairs += [("u-2", _sig(90, name="sig:newsletter-b")) for _ in range(5)]
+    servicer._pnl_samples_repo = _FakeSamplesRepo(pairs)
+    resp = await servicer.QueryPnLPatterns(
+        analysis_pb2.QueryPnLPatternsRequest(symbol="AAPL"), ctx_with(OWNER_HEADERS)
+    )
+    factors = list(resp.positive_factors) + list(resp.negative_factors)
+    assert factors and all(f.factor_name != "sig:newsletter-b" for f in factors)
+    assert [(f.factor_name, f.sample_count) for f in factors] == [("sig:uw", 5)]
+    assert servicer._pnl_samples_repo.calls == ["u-1"]
+
+
+async def test_ac15_headerless_query_pnl_patterns_unauthenticated():
+    servicer = make_servicer()
+    servicer._pnl_samples_repo = _FakeSamplesRepo([("u-1", _sig(50))])
+    ctx = ctx_with([("x-trace-id", "t")])
+    with pytest.raises(Exception, match="aborted"):
+        await servicer.QueryPnLPatterns(analysis_pb2.QueryPnLPatternsRequest(symbol="AAPL"), ctx)
+    assert ctx.abort.await_args.args[0] == grpc.StatusCode.UNAUTHENTICATED
+    assert servicer._pnl_samples_repo.calls == []
