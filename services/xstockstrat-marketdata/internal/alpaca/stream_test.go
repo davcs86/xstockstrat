@@ -1,7 +1,7 @@
 package alpaca
 
-// package alpaca (in-package, not alpaca_test) — required to reach dispatch and
-// streamBarTimeframe, neither of which is exported (feature 080 AC-7).
+// package alpaca (in-package, not alpaca_test) — required to reach dispatch, which is not
+// exported (feature 080 AC-7).
 
 import (
 	"testing"
@@ -32,9 +32,9 @@ func TestDispatchBarCarries1MinEnum(t *testing.T) {
 
 	select {
 	case bar := <-ch:
-		gotTF := bar.Timeframe //nolint:staticcheck // SA1019: asserting the deprecated string timeframe field is preserved
-		if gotTF != "1m" {
-			t.Errorf("expected Timeframe=%q, got %q", "1m", gotTF)
+		// Feature 196: the deprecated string is omitted at this response edge; the enum carries the label.
+		if gotTF := bar.Timeframe; gotTF != "" { //nolint:staticcheck // SA1019: asserting the deprecated string timeframe field is omitted (feature 196)
+			t.Errorf("expected deprecated Timeframe string omitted, got %q", gotTF)
 		}
 		if bar.TimeframeEnum != commonv1.Timeframe_TIMEFRAME_1MIN { //nolint:staticcheck // SA1019: deliberate assertion of the retained deprecated member — feature 080 FR-6
 			t.Errorf("expected TimeframeEnum=TIMEFRAME_1MIN, got %v", bar.TimeframeEnum)

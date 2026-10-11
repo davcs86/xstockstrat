@@ -1222,3 +1222,30 @@ func TestUpdateWatchlistBindings_EmptySet_InvalidArgument(t *testing.T) {
 		t.Fatalf("code = %v, want InvalidArgument for empty symbol set", connect.CodeOf(err))
 	}
 }
+
+// TestWatchlistSymbolsMirror_KeptForCapAndResponses_Feature196 — Watchlist.symbols is a KEEP field
+// (feature 196 @AC-2/@AC-7): responses still carry it and the per-list cap is enforced from it.
+func TestWatchlistSymbolsMirror_KeptForCapAndResponses_Feature196(t *testing.T) {
+	cfg := &fakeConfig{vals: map[string]int64{
+		"portfolio.watchlist.max_per_user":         1000,
+		"portfolio.watchlist.max_symbols_per_list": 3,
+	}}
+	svc := newSvc(newFakeStore(), cfg, &fakeLedger{})
+	ctx := ctxWithUser(t, "userA")
+	created, err := svc.CreateWatchlist(ctx, &portfoliov1.CreateWatchlistRequest{Name: "L", Symbols: []string{"A", "B"}})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	id := created.Watchlist.WatchlistId
+
+	added, err := svc.AddWatchlistSymbols(ctx, &portfoliov1.AddWatchlistSymbolsRequest{WatchlistId: id, Symbols: []string{"C"}})
+	if err != nil {
+		t.Fatalf("add under cap: %v", err)
+	}
+	if got := added.Watchlist.Symbols; len(got) != 3 || got[0] != "A" || got[1] != "B" || got[2] != "C" { //nolint:staticcheck // SA1019: KEEP field asserted populated (feature 196)
+		t.Fatalf("expected symbols mirror [A B C] in AddWatchlistSymbols response, got %v", got)
+	}
+	if _, err := svc.AddWatchlistSymbols(ctx, &portfoliov1.AddWatchlistSymbolsRequest{WatchlistId: id, Symbols: []string{"D"}}); connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Fatalf("cap must be enforced from existing.Symbols: want InvalidArgument, got %v", err)
+	}
+}
