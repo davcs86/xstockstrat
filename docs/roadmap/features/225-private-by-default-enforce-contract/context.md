@@ -416,3 +416,21 @@ integration PR: it is the first live proof of Steps 3–5.
 - Verification: shellcheck + `shfmt -d -i 2` + `bash -n` clean. Coverage: N/A (`scripts/`).
 - Files modified: `scripts/migration-rerun.sh`
 - Deviations: offline substitution for the DB-backed red/green and CI run (Deviation Log).
+
+### Step 17 — ingest identity gate, owner accessor, headerless fallbacks removed [done]
+- `_CallerRejected` replaces `_SystemIdentityDenied`; module `_CURRENT_RPC` contextvar + `owner_scoped` (sets the RPC name,
+  gates via `_resolve_owner(context, fn.__name__)`, `return None` after a non-raising abort, resets in `finally`).
+  `_resolve_owner` raises UNAUTHENTICATED (no `x-user-id`) / PERMISSION_DENIED (`system` without a grant for that RPC +
+  SAN); `_owner(context)` resolves under `_CURRENT_RPC.get()`. 7 RPCs decorated; `_owner_or_abort` deleted.
+- Fallbacks removed: `_ingest_external_signal` slug-holder branch + `_SignalSourceAmbiguous`; QuerySignals unscoped branch;
+  ListSignalSources `list_all_sources` branch (import dropped; `mcp_client_loop` keeps its own import); ManageSignalSource
+  headerless admin gate + slug-holder target; `_register_conflict` / `_abort_missing_source` / InstantiateTemplate /
+  `_admin_foreign_owner` `None` arms; "release N"/"headerless" comments. `watcher.py` example → `mcp_credential.<uuid>`.
+- TDD (paired with Step 18): red — Step 18's tests written first: 10 failed / 70 passed in
+  `test_owner_scoped_completeness.py` + `test_signal_ownership.py` + `test_mcp_client_loop.py` (descriptor walk found no
+  `__owner_scoped__`; 7 headerless bodies entered; `_owner` resolved once, not twice; AC-9 headerless ingest succeeded
+  via the slug holder). `system`/grant-without-SAN cases already PERMISSION_DENIED; AC-7 green (characterization of FR-6).
+- Verification: none of `_owner_or_abort|_SystemIdentityDenied|_SignalSourceAmbiguous|owner is None|release N|headerless`
+  in the servicer; `@owner_scoped` = 7; ruff check + format clean.
+- Files modified: `app/handlers/servicer.py`, `app/config/watcher.py`
+- Deviations: keyword-only `owner` (Deviation Log).

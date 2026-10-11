@@ -992,7 +992,7 @@ Coverage: N/A (`scripts/` has no CI coverage gate).
 
 ### Step 17 — service: ingest identity gate, owner accessor, headerless fallbacks removed (FR-1, FR-6)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/handlers/servicer.py` — modify
@@ -1325,3 +1325,13 @@ real constants into a temp file and all 11 statements parse with libpg_query (`p
 is the integration PR's `migration-rerun` job.
 **Reason**: HARD CONSTRAINT — no database is started to verify a step; sequential mode opens no per-step PR.
 **Disposition**: offline check — live red/green deferred to CI (`migration-rerun` on the integration PR).
+
+### Deviation: Step 17 — ingest identity gate (signature shape + docstrings)
+**Spec said**: "`_ingest_external_signal(…, owner: str)` becomes required."
+**Actual**: `owner` is keyword-only (`self, signal, propagation_meta=None, *, owner: str`): a required positional
+parameter cannot follow the defaulted `propagation_meta`. Both callers (IngestSignal, `mcp_client_loop.poll_one_source`)
+already pass `owner=`. `_CallerRejected` carries a 2-line docstring (it replaces `_SystemIdentityDenied`'s), and the
+`_admin_foreign_owner` docstring drops "headered". Line numbers were re-located by symbol (main-dev `80d44449` already
+merged, per Step Dependencies).
+**Reason**: Python syntax; docstring drift from the removed headerless path.
+**Disposition**: accepted; no behaviour beyond the step.
