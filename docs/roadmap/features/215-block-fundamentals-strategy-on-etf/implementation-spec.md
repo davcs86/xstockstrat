@@ -1051,7 +1051,7 @@ cd services/xstockstrat-analysis && uv run pytest tests/test_grade_fundamentals_
 
 ### Step 19 — service: Live deny-entry + state-change WARN/alert (FR-4)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/engine/live_loop.py` — modify

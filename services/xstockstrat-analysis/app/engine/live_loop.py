@@ -48,9 +48,12 @@ from app.handlers.servicer import (
 from app.repositories.strategies import LIVE_ENABLED_PREDICATE_SQL
 from app.services import sector_params, warmup
 from app.services.cooldown import effective_cooldown_days, is_cooldown_active
+from app.services.evaluator import _bar_date
 from app.services.fundamentals_guard import (
+    Availability,
     _definition_has_fundamental,
     _definition_wants_fundamentals_formula,
+    assess,
 )
 
 log = logging.getLogger(__name__)
@@ -288,6 +291,9 @@ class LiveEvaluationLoop:
         # All live-loop state is keyed by (user_id, strategy_id, symbol) so two owners registering
         # the same strategy_id never share transition/cooldown state.
         self._last_state: dict[tuple[str, str, str], bool] = {}  # (user, strat, sym) → in_position
+        # Feature 215: pairs currently denied entry for unavailable fundamentals. In-memory, so a
+        # restart re-alerts at most once per still-unavailable pair.
+        self._fund_unavailable: set[tuple[str, str, str]] = set()
         self._last_alert_ts: dict[tuple[str, str, str], float] = {}
         # Durable re-entry cooldown: _last_exit_at parallels _last_state; the repo (None in tests)
         # persists it so the cooldown survives a restart.
@@ -677,12 +683,46 @@ class LiveEvaluationLoop:
         benchmark_bars = await self._load_benchmark_bars(definition)
         # Preload point-in-time fundamentals (feature 198) for backtest/live parity — None unless a
         # COMPONENT_KIND_FUNDAMENTAL operand is present; the evaluator applies the per-bar T+1 gate.
-        fundamentals = await self._load_fundamentals(definition, symbol)
+        failures: dict = {}
+        fundamentals = await self._load_fundamentals(definition, symbol, failures=failures)
         # Feature 200 — fundamentals-only formula routing map + snapshot on a SEPARATE channel from
         # the 198 PIT `fundamentals` above (C-16 PRESERVE); both None in the common case.
         evaluator = self._evaluator.for_owner(definition.user_id)
-        formula_fund_map = await evaluator.declared_formula_fundamentals(definition)
-        fund_snap = await self._load_fundamentals_snapshot(definition, symbol, formula_fund_map)
+        formula_fund_map = await evaluator.declared_formula_fundamentals(
+            definition, failures=failures
+        )
+        fund_snap = await self._load_fundamentals_snapshot(
+            definition, symbol, formula_fund_map, failures=failures
+        )
+        key = (definition.user_id, definition.strategy_id, symbol)
+        # Feature 215 (FR-4): deny entry (exits still fire) while fundamentals are unavailable;
+        # WARN + alert only on entering that state. UNKNOWN/DISABLED/NOT_ASSESSED change nothing.
+        avail = assess(
+            definition,
+            formula_fund_map,
+            [_bar_date(b) for b in bars],
+            symbol=symbol,
+            pit=fundamentals,
+            snap=fund_snap,
+            failures=failures,
+            gate_enabled=self._cfg.get_bool("analysis.backtest.fundamentals.enabled", False),
+        )
+        if avail is Availability.UNAVAILABLE:
+            deny_entry = True
+            if key not in self._fund_unavailable:
+                self._fund_unavailable.add(key)
+                log.warning(
+                    "live_loop: (%s,%s) entry denied — NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE "
+                    "(fundamentals unavailable)",
+                    definition.strategy_id,
+                    symbol,
+                )
+                try:
+                    await self._emit_fundamentals_unavailable_alert(definition, symbol)
+                except Exception as e:  # noqa: BLE001 — an alert failure never re-alerts or crashes
+                    log.warning("live_loop: fundamentals-unavailable alert failed: %s", e)
+        elif avail in (Availability.AVAILABLE, Availability.NOT_REQUIRED):
+            self._fund_unavailable.discard(key)
         if sector_params.has_overrides(definition):  # feature 217: current-sector params
             sector, _ = await sector_params.fetch_current_sector(self._marketdata, symbol)
             definition = sector_params.apply_sector(definition, sector)
@@ -693,7 +733,6 @@ class LiveEvaluationLoop:
             return
 
         latest = decisions[-1]
-        key = (definition.user_id, definition.strategy_id, symbol)
 
         # Cooldown inputs use bar time (bars[-1]) — the SAME time-source the backtest gate feeds
         # the shared helper, so both call sites stay in parity.
@@ -793,6 +832,22 @@ class LiveEvaluationLoop:
                 title=f"Strategy {definition.strategy_id} {trigger} on {symbol}",
                 body=f"{definition.display_name or definition.strategy_id} "
                 f"triggered {trigger} for {symbol}",
+                source_service="xstockstrat-analysis",
+                tags=[f"strategy_id:{definition.strategy_id}"],
+                context=ctx,
+            )
+        )
+
+    async def _emit_fundamentals_unavailable_alert(self, definition, symbol):
+        ctx = Struct()
+        ctx.update({"strategy_id": definition.strategy_id, "symbol": symbol})
+        await self._notify.EmitAlert(
+            notify_pb2.EmitAlertRequest(
+                severity=notify_pb2.ALERT_SEVERITY_WARNING,
+                category="strategy",
+                title=f"Strategy {definition.strategy_id}: fundamentals unavailable for {symbol}",
+                body=f"{definition.display_name or definition.strategy_id} requires fundamentals "
+                f"and {symbol} has none usable — entry denied (exits still evaluate)",
                 source_service="xstockstrat-analysis",
                 tags=[f"strategy_id:{definition.strategy_id}"],
                 context=ctx,

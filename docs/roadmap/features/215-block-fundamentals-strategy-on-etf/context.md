@@ -356,3 +356,9 @@
 - AC-11/AC-12 red: see Step 17 (16 failed) → green: 25 passed (new file + repo); Step 18 Verification suites 377 passed; full suite 1058 passed, 86.95%; ruff clean.
 - Files modified: `services/xstockstrat-analysis/tests/test_grade_fundamentals_exclusion.py` (new), `tests/test_backtest_run_symbols_repo.py`
 - Deviations: none (`test_owner_dimension.py` and `test_analysis_servicer.py` needed no change: the new kwargs are keyword-only, so `c.args` stays `(user, strategy)`).
+
+### Step 19 — service: Live deny-entry + state-change WARN/alert (FR-4) [done]
+- `__init__` gains `_fund_unavailable` (in-memory; a restart re-alerts at most once per unavailable pair). `_eval_pair` builds a per-call `failures` dict for `_load_fundamentals`, `declared_formula_fundamentals` and `_load_fundamentals_snapshot`, computes `key` before evaluation and runs `assess` over the bar dates. UNAVAILABLE → `deny_entry = True`; on entering the state the key is added first, then one WARN (`… entry denied — NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE (fundamentals unavailable)`) and one `_emit_fundamentals_unavailable_alert` (WARNING, category `strategy`, title `Strategy <id>: fundamentals unavailable for <sym>`, `strategy_id:` tag) inside `try/except`. AVAILABLE / NOT_REQUIRED discard the key; UNKNOWN / DISABLED / NOT_ASSESSED change nothing. The exit branch and `_replay_state` are untouched.
+- TDD (paired with Step 20): RED 8 failed, 2 passed — SCHD entered (`_last_state … True is False`), 0 fundamentals alerts (want 1), `AttributeError: … '_fund_unavailable'`. GREEN: `test_live_loop.py` 62 passed; full suite 1068 passed, coverage 87.00%; ruff clean.
+- Files modified: `services/xstockstrat-analysis/app/engine/live_loop.py`
+- Deviations: none
