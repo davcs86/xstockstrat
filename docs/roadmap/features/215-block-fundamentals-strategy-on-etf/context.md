@@ -333,3 +333,10 @@
 - AC-2/3/5/8/10/12 red: see Step 15 (8 failed) → green: 43 passed. Full suite 1038 passed, 86.90%; ruff clean; C-13 check: 1 `AAPL_PIT_PERIODS = ` declaration.
 - Files modified: `services/xstockstrat-analysis/tests/test_backtest_fundamentals_guard.py` (new), `tests/conftest.py`, `tests/test_fundamentals_guard.py`
 - Deviations: SMA technical leg; prefixed range start; operand-miss reads `beta` (see Deviation Log).
+
+## Session 2026-10-11 — sdd-execute (Steps 7–16 checkpoint)
+**Steps this session**: 7, 8, 9, 10, 11, 12, 13, 14, 15, 16
+**Progress**: 16 done / 26 total
+**Stopped at**: Step 16 (scope of this run; marketdata absence + ETF label and the analysis guard core + backtest refusal are in)
+**Next**: /sdd-execute block-fundamentals-strategy-on-etf sequential (Step 17, derivation-time evidence exclusion)
+**Open item**: PR #1239 (golangci-lint v2.14.0 CI fix) is still not on `origin/main-dev`, so CI Go lint on this branch stays red; local v2.14.0 lint is clean for every marketdata step. Merge `origin/main-dev` once it lands.
