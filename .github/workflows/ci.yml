@@ -221,7 +221,8 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: "1.27"
+          # golangci-lint v2.13.1 cannot decode 1.27.2 export data; unpin once a newer release supports it
+          go-version: "1.27.1"
           cache-dependency-path: services/${{ matrix.service }}/go.sum
 
       - name: go mod download
