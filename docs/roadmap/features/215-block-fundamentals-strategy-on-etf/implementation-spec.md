@@ -451,7 +451,7 @@ grep -rn "\"SCHD\"" --include="*_test.go" internal | cut -d: -f1 | sort -u   # C
 
 ### Step 9 — service: Cache-only `GetEtfFlags` + headroom-gated background fill
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/fmp/fmp_client.go` — modify

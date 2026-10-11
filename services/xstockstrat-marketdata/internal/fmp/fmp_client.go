@@ -351,11 +351,12 @@ func (r *fmpRatios) apply(f *source.Fundamentals) {
 	f.DebtToEquity = r.DebtToEquityTTM
 }
 
-// fmpProfile is the subset of /stable/profile carrying beta + currency + sector.
+// fmpProfile is the subset of /stable/profile carrying beta + currency + sector + the ETF flag.
 type fmpProfile struct {
 	Beta     *float64 `json:"beta"`
 	Currency string   `json:"currency"`
 	Sector   string   `json:"sector"`
+	IsEtf    *bool    `json:"isEtf"`
 }
 
 // FetchSector returns the symbol's FMP profile sector free text ("" when FMP has none). Routed
@@ -366,6 +367,16 @@ func (c *Client) FetchSector(ctx context.Context, symbol string) (string, error)
 		return "", err
 	}
 	return p.Sector, nil
+}
+
+// FetchIsEtf returns the profile's isEtf flag ((nil, nil) for an empty profile). Routed through
+// getJSON, so it shares the same limiter + day budget as every other FMP call.
+func (c *Client) FetchIsEtf(ctx context.Context, symbol string) (*bool, error) {
+	p, err := c.fetchProfile(ctx, symbol)
+	if err != nil || p == nil {
+		return nil, err
+	}
+	return p.IsEtf, nil
 }
 
 func (p *fmpProfile) apply(f *source.Fundamentals) {
