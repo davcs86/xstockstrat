@@ -191,3 +191,25 @@
 - Files modified: `services/xstockstrat-ingest/migrations/014_contract_signal_ownership.{up,down}.sql`
 - Deviations: offline migration check substituted for the live apply (Deviation Log). The CI `migration-rerun` job
   is red on this commit alone until Step 5 removes the `ingest-013.sql` N-1 probe (expected — no PR opened yet).
+
+### Step 5 — `migration-rerun.sh` contract replay, refused downs, dirty-guard e2e + assertions [done]
+- `migration-rerun.sh`: pass 0b (analysis `goto 26` from the captured render + `fixtures-post-224.sql`); replay list
+  adds 014/027; trigger count must be 0 before and after replay; new pass 3 (`refuse_down` / `guard_blocks` helpers):
+  ingest `goto 13` refused + dirty + AC-13 `signal_dedup_keys` still absent + `db-migrate.sh up` refused with
+  `force 12` + still dirty + `force 12`; analysis `goto 26` refused + dirty + AC-6 `user_id` NOT NULL + `up` refused with
+  `force 25` + still dirty + `force 25`; final `db-migrate.sh up` clean at ingest 14 / analysis 27; assertion loop runs
+  after. New `fixtures-post-224.sql`, `analysis-027.sql` (AC-3 backfill incl. children, AC-4 drop + NOT NULL insert
+  probe), `ingest-014.sql` (AC-4 trigger/function/table absent); N-1 probe removed from `ingest-013.sql`.
+- TDD: red/green need a database — not run locally (HARD CONSTRAINT). Offline: shellcheck/shfmt/`bash -n` clean;
+  libpg_query parses all new/edited SQL; guard refusal/allow matrix checked against the real dirs. Authoritative
+  red→green is CI `migration-rerun` on the integration PR (Deviation Log).
+- Files modified: `scripts/migration-rerun.sh`, `scripts/migration-assertions/{fixtures-post-224,analysis-027,ingest-014}.sql`
+  (new), `scripts/migration-assertions/ingest-013.sql`
+- Deviations: offline substitution for the DB-backed red/green and CI run (Deviation Log).
+
+## Session 2026-10-11 — sdd-execute (Steps 1–5)
+**Steps this session**: 1, 2, 3, 4, 5
+**Progress**: 5 done / 19 total
+**Stopped at**: Step 5 (scope of this run)
+**Next**: /sdd-execute private-by-default-enforce-contract sequential (Step 6) — and watch CI `migration-rerun` on the
+integration PR: it is the first live proof of Steps 3–5.

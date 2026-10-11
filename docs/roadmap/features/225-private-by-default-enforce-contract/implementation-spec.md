@@ -336,7 +336,7 @@ grep -n "irreversible contract" services/xstockstrat-ingest/migrations/014_contr
 
 ### Step 5 — test: `migration-rerun.sh` contract replay, refused downs, dirty-guard e2e + assertions
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: platform tooling (`scripts/`)
 **Files**:
 - `scripts/migration-rerun.sh` — modify
@@ -1247,3 +1247,17 @@ replay-safety by inspection (every UPDATE is `IS NULL`-guarded, `SET NOT NULL` a
 line 1, 013 present on `origin/main`, 3 `IF EXISTS` drops (no-ops on replay), down refuses by design (FR-5).
 **Reason**: HARD CONSTRAINT — no database is started to verify a step.
 **Disposition**: offline migration check — live apply deferred to CI (`migration-rerun` job).
+
+### Deviation: Step 5 — `migration-rerun.sh` contract replay (TDD red/green + authoritative run)
+**Spec said**: "`red-green required`. Run against the tree before Steps 3–4, the new `analysis-027.sql`/`ingest-014.sql`
+assertions and the refusal block fail." and "the CI `migration-rerun` job on this step's PR must be green".
+**Actual**: no database was started, so neither the red nor the green run of the harness happened locally. Offline
+substitutes: `shellcheck` + `shfmt -d -i 2` + `bash -n` clean; every new/edited SQL file (027/014 up+down, the three new
+assertion/fixture files, edited `ingest-013.sql`) parses with libpg_query (`pglast.parse_sql`, plus `parse_plpgsql` on
+each `DO` body); the dirty guard run against the real migrations dirs refuses ingest 13/14 (`force 12`/`force 13`) and
+analysis 26/27 (`force 25`/`force 26`) and allows ingest 12 / analysis 25. Red by inspection: before Steps 3–4 the
+replay's `cp …/014_contract_signal_ownership.up.sql` fails, `refuse_down` finds no raising down, and
+`analysis-027.sql`/`ingest-014.sql` raise (objects still present). No PR exists yet (sequential mode), so the
+`migration-rerun` job first runs on the integration PR.
+**Reason**: HARD CONSTRAINT — no database is started to verify a step; sequential mode opens no per-step PR.
+**Disposition**: offline migration check — live red/green deferred to CI (`migration-rerun` on the integration PR).

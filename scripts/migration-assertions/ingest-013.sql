@@ -1,5 +1,5 @@
--- ingest 013 (AC-15, AC-27, N-1 trigger): run by migration-rerun.sh after pass 1 + replay, over
--- fixtures-pre-224.sql. The trigger probes run inside a transaction that is rolled back.
+-- ingest 013 (AC-15, AC-27): run by migration-rerun.sh after pass 1 + replay, over
+-- fixtures-pre-224.sql.
 SELECT set_config('migration_assert.seed_user_id', :'seed_user_id', false);
 
 DO $$
@@ -68,44 +68,3 @@ BEGIN
     RAISE EXCEPTION 'AC-15: ingest.source_templates has seed rows';
   END IF;
 END $$;
-
-BEGIN;
-
--- N-1 writer shape: no user_id column. The trigger must fill the slug's unique holder.
-INSERT INTO ingest.newsletter_signals (id, source, symbol, direction, valid_from)
-VALUES (822400901, 'fixture-website', 'N1FILL', 'buy', NOW());
-
-DO $$
-DECLARE
-  seed TEXT := current_setting('migration_assert.seed_user_id');
-BEGIN
-  IF (SELECT user_id FROM ingest.newsletter_signals WHERE id = 822400901) IS DISTINCT FROM seed THEN
-    RAISE EXCEPTION 'N-1 trigger: unique-holder insert was not filled with the holder';
-  END IF;
-END $$;
-
--- A second holder of the slug makes the owner ambiguous: the trigger must raise, never guess.
-INSERT INTO ingest.signal_sources (user_id, slug, display_name, source_type, extractor_module)
-VALUES ('user-b@example.test', 'fixture-website', 'Fixture Website (B)', 'simple_website', 'app.extractors.noop');
-
-DO $$
-DECLARE
-  msg    TEXT;
-  raised BOOLEAN := FALSE;
-BEGIN
-  BEGIN
-    INSERT INTO ingest.newsletter_signals (id, source, symbol, direction, valid_from)
-    VALUES (822400902, 'fixture-website', 'N1AMBIG', 'buy', NOW());
-  EXCEPTION WHEN raise_exception THEN
-    GET STACKED DIAGNOSTICS msg = MESSAGE_TEXT;
-    IF msg NOT LIKE 'n1_owner_fill:%' THEN
-      RAISE;
-    END IF;
-    raised := TRUE;
-  END;
-  IF NOT raised THEN
-    RAISE EXCEPTION 'N-1 trigger: ambiguous-owner insert did not raise';
-  END IF;
-END $$;
-
-ROLLBACK;
