@@ -747,7 +747,7 @@ grep -n "from tests.conftest" tests/test_query_pnl_patterns.py
 
 ### Step 12 — service: indicators identity gate + `analysis` reader-bypass removal (FR-1, FR-2)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/handlers/servicer.py` — modify

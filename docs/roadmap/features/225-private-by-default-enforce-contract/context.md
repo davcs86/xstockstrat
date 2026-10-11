@@ -328,3 +328,27 @@ integration PR: it is the first live proof of Steps 3–5.
 **Progress**: 11 done / 19 total
 **Stopped at**: Step 11 (scope of this run)
 **Next**: /sdd-execute private-by-default-enforce-contract sequential (Step 12 — indicators gate)
+
+## Session 2026-10-11 — sdd-execute (sequential, Steps 12–18)
+
+- Orchestrated sequential run (operator authorization record above). `origin/main-dev` (`80d44449`) is already an
+  ancestor of the branch; PR #1239 (golangci) not merged, so no main-dev merge this run. Baselines: indicators 242
+  passed, ingest 308 passed; ruff clean.
+
+### Step 12 — indicators identity gate + `analysis` reader-bypass removal [done]
+- Module-level `_CallerRejected` + `owner_scoped` (explicit `return None` after a non-raising abort); `_reader` is now an
+  instance method raising UNAUTHENTICATED (no/empty `x-user-id`) or PERMISSION_DENIED (`system` without the SAN-bound
+  `analysis-fundsignal` grant). 10 RPCs decorated; `_reject_ungranted_system` + its 8 call sites, `_INTERNAL_FORMULA_READERS`
+  + the bypass arm (`_can_read_formula` ends `return False`), `_caller_user_id` (body `user_id` fallback; Update/Delete
+  compare against `_reader`), and the RegisterFormula / ListTemplates headerless orphans deleted. `_template_owner` kept
+  for the `system` refusal.
+- TDD (paired with Step 13): red — Step 13's tests written first: 12 failed / 33 passed in
+  `test_owner_scoped_completeness.py` + `test_formula_read_authz.py` (descriptor walk found no `__owner_scoped__`; 9
+  headerless bodies entered; AC-1 headerless ListFormulas reached the repo; AC-2 bypass served user-a's formula). The
+  `system`/grant-without-SAN cases already passed (the old `_reject_ungranted_system`/`_template_owner` paths); AC-10 green
+  (characterization). Green counts under Step 13.
+- Verification: no `_INTERNAL_FORMULA_READERS|_reject_ungranted_system|def _caller_user_id`; `@owner_scoped` = 10; ruff
+  check + format clean.
+- Files modified: `app/handlers/servicer.py`
+- Deviations: the `_TEMPLATE_SAGA_GRANT` comment named the removed "N-only analysis reader bypass"; reworded to
+  "Dedicated saga grant for the strategy-template saga." (orphan of instruction 4, same file).
