@@ -242,3 +242,9 @@
 - Files modified: `services/xstockstrat-analysis/app/handlers/servicer.py`, `services/xstockstrat-analysis/app/repositories/opportunities.py`
 - Deviations: none
 - Not done: the coordinator's updated CI-fix request (cherry-pick `4705cc4f` + `ff8fe0dc`, golangci-lint v2.14.0) was not attempted again, because the classifier had already denied `git cherry-pick` this session. Operator action is needed.
+
+### Step 4 — test: Row contract + repository [done]
+- Parity guard `_MAPPED` gained `fundamentals_unavailable` / `fundamentals_gap`, and `test_mapper_populates_all_fields` asserts both. Six repo tests were added: `$9` symbol bind and default `""`, floor exemption, structural marker plus `_primary_source`, heal action bound at position 11, no-action-key binds `None`, and the skip-row round-trip. Also added the servicer test `test_symbol_filter_normalized_into_both_reads`: `" schd "` → `"SCHD"` on both the fresh and the stale read.
+- AC-13 red: COALESCE/bind-11 asserts failed → green: passed. AC-15 red: `KeyError: 'symbol'` / `TypeError` → green: passed. The suite ran 971 cases (coverage 85.81%). C-13: the literals are single-consumer and inline.
+- Files modified: `services/xstockstrat-analysis/tests/test_opportunities_repo.py`, `services/xstockstrat-analysis/tests/test_analysis_servicer.py`
+- Deviations: the fake repo `read` accepts `symbol=` (see Deviation Log).

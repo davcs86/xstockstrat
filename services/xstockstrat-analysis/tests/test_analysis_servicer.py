@@ -4184,7 +4184,16 @@ class _FakeOppRepo:
         return any(r["valid_until"] > now for r in self.rows.get(user_id, []))
 
     async def read(
-        self, user_id, min_conviction, w, *, include_expired, sources=None, action_filter=0, sort=0
+        self,
+        user_id,
+        min_conviction,
+        w,
+        *,
+        include_expired,
+        sources=None,
+        action_filter=0,
+        sort=0,
+        symbol="",
     ):
         # feature 190: accept the new filter/sort kwargs but do NOT re-implement them here — the
         # forwarding is asserted at the servicer→repo boundary (test_*_forwards_*), never by a fake
@@ -6057,6 +6066,9 @@ class TestOpportunityRowParity:
         "composite_score",
         # feature 200 — symbol roll-up ranking ordinal, dedicated column, explicit-presence.
         "symbol_score",
+        # feature 215 — skip-row marker (provenance) + gap label (readiness_json), no columns.
+        "fundamentals_unavailable",
+        "fundamentals_gap",
     }
     # feature 095 — live-market fields set at read time in ListOpportunities (post-ranking), not by
     # the mapper, so they join _INTENTIONALLY_UNSET rather than _MAPPED.
@@ -6083,9 +6095,13 @@ class TestOpportunityRowParity:
             "strategy_id": "sx",
             "action": int(analysis_pb2.OPPORTUNITY_ACTION_TAG_REDUCE),
             "conviction": 0.75,
-            "readiness_json": {"passing_conditions": 2, "total_conditions": 3},
+            "readiness_json": {
+                "passing_conditions": 2,
+                "total_conditions": 3,
+                "fundamentals_gap": int(analysis_pb2.FUNDAMENTALS_GAP_ETF),
+            },
             "signal_axis": 0.9,
-            "provenance": ["watchlist", "position", "uw"],
+            "provenance": ["watchlist", "position", "uw", "fundamentals_unavailable"],
             "thesis": "exit firing",
             "valid_until": valid,
         }
@@ -6098,9 +6114,11 @@ class TestOpportunityRowParity:
         assert opp.strategy_id == "sx"
         assert opp.source == "uw"  # first non-structural provenance entry
         assert opp.opportunity_key == "u1|AAPL|sx"
-        assert list(opp.provenance) == ["watchlist", "position", "uw"]
+        assert list(opp.provenance) == ["watchlist", "position", "uw", "fundamentals_unavailable"]
         assert opp.valid_until.ToDatetime(tzinfo=UTC) == valid
         assert opp.muted is False  # feature 132 — no "denied" marker → not muted
+        assert opp.fundamentals_unavailable is True  # feature 215 — provenance marker
+        assert opp.fundamentals_gap == analysis_pb2.FUNDAMENTALS_GAP_ETF  # readiness_json carrier
 
     def test_muted_derived_from_denied_provenance(self):
         """feature 132: the mapper sets Opportunity.muted from the "denied" provenance marker (the
@@ -7359,6 +7377,23 @@ class TestListOpportunitiesServerFilters190:
             svc._opportunities_repo.available_sources.await_args.kwargs["include_expired"] is False
         )
         assert list(resp.available_sources) == ["live_strategy"]
+
+    @pytest.mark.asyncio
+    async def test_symbol_filter_normalized_into_both_reads(self):
+        """feature 215 @AC-15 — request.symbol is normalized once and forwarded to the fresh AND
+        the stale read (expired rows force the stale branch, so both calls are exercised)."""
+        expired = datetime.now(UTC) - timedelta(hours=1)
+        svc = self._svc_with_row([["live_strategy"]], [0.9], expired)
+        svc._opportunities_repo.read = AsyncMock(wraps=svc._opportunities_repo.read)
+        await svc.ListOpportunities(
+            analysis_pb2.ListOpportunitiesRequest(
+                page=common_pb2.PageRequest(page_size=50), symbol=" schd "
+            ),
+            _ctx(_HEADERS),
+        )
+        calls = svc._opportunities_repo.read.await_args_list
+        assert [c.kwargs["include_expired"] for c in calls] == [False, True]
+        assert all(c.kwargs["symbol"] == "SCHD" for c in calls)
 
     @pytest.mark.asyncio
     async def test_facet_not_computed_past_page0(self):

@@ -224,7 +224,7 @@ cd services/xstockstrat-analysis && grep -n "fundamentals_unavailable" app/repos
 
 ### Step 4 — test: Row contract + repository
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_opportunities_repo.py` — modify
@@ -1521,3 +1521,8 @@ _Populated by /sdd-execute as implementation proceeds._
 **Actual**: Generated in the pinned codegen container (`./scripts/localenv-setup.sh`), which ran buf lint, buf generate (Go + TS) and grpcio-tools (Python). Its final `tsc` step failed (`tsc: not found`) because the worktree had no workspace `node_modules`. Then ran `pnpm install --frozen-lockfile --filter @xstockstrat/proto` and `pnpm --filter @xstockstrat/proto run build` on the host (lockfile-pinned TypeScript) to produce `gen/ts/dist`. Exactly the 20 files listed in **Files** changed; every expected-unchanged file stayed unchanged.
 **Reason**: a fresh git worktree has no installed workspace deps. Re-running the full container pipeline after the install was not permitted in this session.
 **Disposition**: CI-equivalent fallback — CI `proto-freshness` re-checks byte parity.
+
+### Deviation: Step 4 — test: Row contract + repository
+**Spec said**: Files limited to the two test files; instructions did not mention the `_FakeOpportunitiesRepo.read` signature.
+**Actual**: Added a `symbol=""` keyword to the in-file fake repo `read` in `tests/test_analysis_servicer.py`. It accepts the new kwarg but does not filter, matching the feature-190 "forwarding is asserted at the boundary" convention.
+**Reason**: After Step 3 every `ListOpportunities` call passes `symbol=`, so without the kwarg the fake raised `TypeError`. The fix stays inside a file Step 4 lists.
