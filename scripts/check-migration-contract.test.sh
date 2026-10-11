@@ -53,4 +53,17 @@ git_q add -A
 git_q commit -q -m c
 run_check && fail "(c) contract of a missing expand file should fail"
 
+# (d) AC-5: analysis 027 contracting a 026 that is not on origin/main fails and names the file
+run_check_err() { (cd "$work" && bash "$CHECK" "$base") >/dev/null 2>"${work}.err"; }
+trap 'rm -rf "$work" "${work}.err"' EXIT
+git_q checkout -q main
+git_q checkout -q -b case-d
+amig="services/xstockstrat-analysis/migrations"
+mkdir -p "${work}/${amig}"
+printf -- '-- contract-of: %s/026_owner_dimension_templates.up.sql\nSELECT 1;\n' "$amig" >"${work}/${amig}/027_contract_owner_dimension.up.sql"
+git_q add -A
+git_q commit -q -m d
+run_check_err && fail "(d) contract of an expand file not on origin/main should fail"
+grep -q "027_contract_owner_dimension.up.sql" "${work}.err" || fail "(d) stderr does not name 027_contract_owner_dimension.up.sql"
+
 echo "check-migration-contract.test.sh: all assertions passed"

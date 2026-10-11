@@ -34,14 +34,14 @@ class BacktestRunsRepository:
         rating: str | None,
         range_start=None,
         range_end=None,
-        user_id: str | None = None,
+        user_id: str,
         sizing_mode: str | None = None,
         position_weight: float | None = None,
         max_concurrent: int | None = None,
         fill_model: str | None = None,
     ) -> dict:
-        # user_id, sizing_mode/position_weight/max_concurrent, and fill_model are all NULLABLE:
-        # an inline/legacy run has no owner or portfolio params; pre-151 rows have no fill_model.
+        # sizing_mode/position_weight/max_concurrent and fill_model are NULLABLE: an inline/legacy
+        # run has no portfolio params; pre-151 rows have no fill_model. user_id is NOT NULL (027).
         row = await self._db.fetchrow(
             """
             INSERT INTO analysis.backtest_runs

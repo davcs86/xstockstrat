@@ -28,7 +28,7 @@ from google.protobuf.struct_pb2 import Struct
 from google.protobuf.timestamp_pb2 import Timestamp
 
 from app.engine.durable_schedule import DurableSchedule
-from app.handlers.servicer import SYSTEM_IDENTITY
+from app.identity import SYSTEM_IDENTITY
 
 log = logging.getLogger(__name__)
 

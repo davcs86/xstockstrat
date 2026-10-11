@@ -13,6 +13,9 @@ from unittest.mock import AsyncMock, MagicMock
 
 import grpc
 
+OWNER_HEADERS = [("x-user-id", "user-a"), ("x-access-scope", "1"), ("x-trace-id", "t-1")]
+OTHER_HEADERS = [("x-user-id", "user-b"), ("x-access-scope", "1"), ("x-trace-id", "t-1")]
+
 
 def ctx_with(metadata, peer_sans=()):
     """A grpc.aio servicer context replaying ``metadata``; ``peer_sans`` are the mTLS peer's SAN
