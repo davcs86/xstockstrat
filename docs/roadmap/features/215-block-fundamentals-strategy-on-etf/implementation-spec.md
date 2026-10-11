@@ -532,7 +532,7 @@ cd services/xstockstrat-marketdata && grep -n "IsEtf\|func (c \*Client) FetchIsE
 
 ### Step 10 — test: `GetEtfFlags` + fill
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/etf_flags_test.go` — create

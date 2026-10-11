@@ -289,3 +289,9 @@
 - TDD (paired with Step 10): RED = build failure (`svc.GetEtfFlags undefined`, `svc.etf undefined`, `undefined: etfFlagQueueCap`, `FetchIsEtf` undefined). GREEN: 9 Etf tests + 5 headroom subcases + FMP decode pass under `-race`; full module ok; coverage 71.0%; golangci-lint v2.14.0 0 issues. Mutation check: forcing the gate open fails the 80%-cap and cap-0 cases.
 - Files modified: `services/xstockstrat-marketdata/internal/fmp/fmp_client.go`, `internal/service/etf_flags.go` (new), `internal/service/marketdata_service.go`, `internal/handler/marketdata_handler.go`, `cmd/server/main.go`
 - Deviations: none (the per-symbol `fillEtfFlag` / `etfFillAllowed` helpers are the loop body of `StartEtfFlagFiller`, split out so tests drive one fill deterministically).
+
+### Step 10 — test: `GetEtfFlags` + fill [done]
+- `etf_flags_test.go` (new, inline counting `fakeEtfSource`): (a) miss unset / 0 source calls / one deduped enqueue; (b) full queue drops without blocking and leaves no stale pending; (c) `@AC-14` filler skips at 80/100, 0/0, fmp disabled, no budget, fetches at 79/100; (d) served <30d with no re-fetch, re-queued after TTL; (e) empty profile negative-cached; (f) source error not cached and re-queued; (g) oldest evicted at `etfFlagCacheMax`; (h) concurrent readers + running filler under `-race`, filler stops on cancel. `fmp_gateway_test.go`: `FetchIsEtf` decodes true/false and `[]` → (nil, nil).
+- AC-14 red: build failure (symbols undefined) → green: all pass. Coverage 71.0%; lint 0 issues.
+- Files modified: `services/xstockstrat-marketdata/internal/service/etf_flags_test.go` (new), `internal/fmp/fmp_gateway_test.go`
+- Deviations: none
