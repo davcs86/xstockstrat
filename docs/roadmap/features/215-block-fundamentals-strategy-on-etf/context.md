@@ -219,3 +219,13 @@
 - [x] **`marketdata_service.go` anchors.** Confirmed the citations are origin/main-dev numbers (+12 vs this branch). Step Dependencies now says to locate by symbol at execute time. Step 7 and Step 13 citations name their enclosing symbol.
 - [x] **`atQuotaAlertThreshold` with cap ≤ 0.** From code: `BudgetSnapshot`'s "cap <= 0 = uncapped" comment holds only for a nil-`Limits` client. Production always wires `Limits` (`cmd/server/main.go:242-245`), and `reserve()` then refuses every call at cap 0. So 0 means zero budget. The Step 9 filler now gates `cap > 0` explicitly, and Step 10(c) adds a `{0,0}` case.
 - Also corrected in passing (C-01): Step 18's helper is `_eligible_cell` (`tests/test_analysis_servicer.py:87`), not `_cell`.
+
+## Session 2026-10-11 — sdd-execute (sequential, autonomous, Steps 1–6)
+
+- Branch synced with `origin/main-dev` first (merge `94aca733`, which brings feature 196 `80d44449`); no conflicts.
+- Mode: operator-authorized fully autonomous sequential run, scoped to Steps 1–6 (they land together, since the new proto fields turn three parity guards red until Steps 3 and 5).
+
+### Step 1 — proto: Additive analysis + marketdata contract [done]
+- Added `NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE = 5`, the `FundamentalsGap` enum, `SymbolDiagnostics.fundamentals_gap = 6`, `Opportunity.fundamentals_unavailable = 23` / `fundamentals_gap = 24`, and `ListOpportunitiesRequest.symbol = 6`. Also added the `GetEtfFlags` RPC and the `GetEtfFlagsRequest` / `EtfFlag` / `GetEtfFlagsResponse` messages. `buf lint` and `buf breaking` both pass. TDD: N/A.
+- Files modified: `packages/proto/analysis/v1/analysis.proto`, `packages/proto/marketdata/v1/marketdata.proto`
+- Deviations: the Verification `buf breaking` input path was fixed (see Deviation Log).

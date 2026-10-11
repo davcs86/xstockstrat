@@ -1,6 +1,6 @@
 # Implementation Spec: block-fundamentals-strategy-on-etf
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-10-10
 **Feature**: `docs/roadmap/features/215-block-fundamentals-strategy-on-etf/feature.md`
 **Total Steps**: 26
@@ -81,7 +81,7 @@ Every change follows `design.md` § Chosen Approach (A–J, H, Fixes 2–6, roun
 
 ### Step 1 — proto: Additive analysis + marketdata contract
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/analysis/v1/analysis.proto` — modify
@@ -1509,3 +1509,9 @@ Record the pre-merge count as a line `>50 periods: <N> (<symbols>)`, so the seco
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Deviation: Step 1 — proto: Additive analysis + marketdata contract
+**Spec said**: `cd packages/proto && buf lint && buf breaking --against ".git#branch=feature/block-fundamentals-strategy-on-etf"`
+**Actual**: ran `buf breaking --against "../../.git#branch=feature/block-fundamentals-strategy-on-etf,subdir=packages/proto"` (same check).
+**Reason**: `.git` is not resolvable from `packages/proto`; the input needs the repo-root path plus `subdir`. Command-path fix only, no behavior change.
+**Disposition**: CI-equivalent fallback
