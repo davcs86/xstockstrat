@@ -301,3 +301,10 @@
 - TDD (paired with Step 12): RED `ImportError: cannot import name 'component_would_execute' from 'app.services.evaluator'`. GREEN: guard + operand tests 38 passed; full suite 1003 passed, coverage 85.94%; ruff check + format clean.
 - Files modified: `services/xstockstrat-analysis/app/services/fundamentals_guard.py` (new), `app/services/evaluator.py`, `app/handlers/servicer.py`, `app/engine/live_loop.py`
 - Deviations: guard names imported where first used; import check with the conftest gen shim (see Deviation Log).
+
+### Step 12 — test: Guard + evaluator parity [done]
+- New `tests/test_fundamentals_guard.py`: predicates on the real shapes (blend = fscore with the seeded `FUNDAMENTAL_INPUTS` + MACD → True; squeeze builtins → False; operand-only → True); states (SCHD empty → UNAVAILABLE; beta-only row vs {BETA, PE} → AVAILABLE; first filing on/after last eval date → UNAVAILABLE; empty eval dates / bars_failed → NOT_ASSESSED; gate off and technical-on-SCHD → NOT_REQUIRED; formula failure on an empty map → UNKNOWN; pit failure state; operand metric); precedence matrix; snapshot-vs-PIT channel choice; parity of `component_would_execute` vs ≥1 awaited `ExecuteFormula` over 6 period sets; `epoch_eval_dates` vs brute-force calendar days over 6 filing dates.
+- AC-1/AC-3/AC-10 red: ImportError (helpers absent) → green: 38 passed (guard + operand). Full suite 1003 passed, 85.94%.
+- C-13: SCHD/AAPL period literals inline (single consumer; Step 16 centralizes them).
+- Files modified: `services/xstockstrat-analysis/tests/test_fundamentals_guard.py` (new)
+- Deviations: none

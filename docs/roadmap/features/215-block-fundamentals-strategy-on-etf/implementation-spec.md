@@ -636,7 +636,7 @@ cd services/xstockstrat-analysis && grep -n "^def _definition_has_fundamental\|^
 
 ### Step 12 — test: Guard + evaluator parity
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_fundamentals_guard.py` — create
