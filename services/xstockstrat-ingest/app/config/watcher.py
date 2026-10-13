@@ -22,9 +22,9 @@ HEADER_INTERNAL_CALLER = "x-internal-caller"
 
 
 def split_credentials_ref(ref: str) -> tuple[str, str]:
-    """Split a stored credentials_ref (e.g. 'ingest.mcp_credential.<slug>') into (namespace, key) on
+    """Split a stored credentials_ref (e.g. 'ingest.mcp_credential.<uuid>') into (namespace, key) on
     the FIRST dot — config stores (namespace, key) where key may itself contain dots (cf. marketdata
-    'marketdata' / 'alpaca.api_key'). Returns ('ingest', 'mcp_credential.<slug>')."""
+    'marketdata' / 'alpaca.api_key'). Returns ('ingest', 'mcp_credential.<uuid>')."""
     namespace, _, key = ref.partition(".")
     return namespace, key
 

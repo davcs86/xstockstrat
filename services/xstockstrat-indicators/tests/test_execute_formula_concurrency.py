@@ -23,6 +23,7 @@ from gen.indicators.v1 import indicators_pb2
 from app.handlers.servicer import IndicatorsServicer
 from app.services import sandbox
 from app.services.sandbox import SandboxResult
+from tests.conftest import OWNER_HEADERS, ctx_with
 
 pytestmark = pytest.mark.asyncio
 
@@ -78,7 +79,9 @@ async def test_concurrent_formulas_run_off_loop_under_bound(monkeypatch):
     servicer = IndicatorsServicer(config_watcher=_cfg(max_concurrent=4))
 
     start = time.perf_counter()
-    await asyncio.gather(*[servicer.ExecuteFormula(_exec_req(), MagicMock()) for _ in range(4)])
+    await asyncio.gather(
+        *[servicer.ExecuteFormula(_exec_req(), ctx_with(OWNER_HEADERS)) for _ in range(4)]
+    )
     elapsed = time.perf_counter() - start
 
     # Off-loop + concurrent: ~one sleep, not the serial ~0.8s sum.
@@ -96,7 +99,9 @@ async def test_semaphore_gates_at_configured_bound(monkeypatch):
 
     servicer = IndicatorsServicer(config_watcher=_cfg(max_concurrent=2))
 
-    await asyncio.gather(*[servicer.ExecuteFormula(_exec_req(), MagicMock()) for _ in range(4)])
+    await asyncio.gather(
+        *[servicer.ExecuteFormula(_exec_req(), ctx_with(OWNER_HEADERS)) for _ in range(4)]
+    )
 
     assert tracker["peak"] == 2, tracker["peak"]
 
@@ -110,6 +115,6 @@ async def test_timeout_preserved_end_to_end():
         timeout_ms_override=200,
     )
 
-    resp = await servicer.ExecuteFormula(req, MagicMock())
+    resp = await servicer.ExecuteFormula(req, ctx_with(OWNER_HEADERS))
 
     assert resp.exit_reason == indicators_pb2.SANDBOX_EXIT_REASON_TIMEOUT

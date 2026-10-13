@@ -139,7 +139,7 @@ class TestRegisterPrivateAndHeaderAuthor:
         req = indicators_pb2.RegisterFormulaRequest(name="f", source="x = 1", is_public=True)
         resp = await svc.RegisterFormula(req, ctx_with([("x-user-id", "alice")]))
 
-        assert repo.create.await_args.kwargs["is_public"] is False
+        assert "is_public" not in repo.create.await_args.kwargs
         assert svc._formulas[resp.formula_id].is_public is False
         ctx = ctx_with([("x-user-id", "bob")])
         with pytest.raises(grpc.RpcError):
@@ -159,7 +159,7 @@ class TestRegisterPrivateAndHeaderAuthor:
         ctx = ctx_with([])
         with pytest.raises(grpc.RpcError):
             await svc.RegisterFormula(req, ctx)
-        assert ctx.abort.await_args.args[0] == grpc.StatusCode.INVALID_ARGUMENT
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.UNAUTHENTICATED
         repo.create.assert_not_awaited()
 
 

@@ -52,20 +52,43 @@ Both are read from the **first 5 lines** of an `.up.sql`:
   `scripts/check-migration-contract.sh` refuses it unless the named expand file is already on
   `origin/main` **and** is not added by the same change: ship the expand, deploy, then contract.
 
-**Expand-only up-files must be idempotent** on both the expanded and the contracted schema
-(`IF NOT EXISTS`, `to_regclass` guards, one-shot `DO` blocks), because `db-migrate.sh`'s dirty-state
-recovery replays from version 0.
+**Expand and contract up-files must be idempotent** on both the expanded and the contracted schema
+(`IF NOT EXISTS`, `to_regclass` guards, one-shot `DO` blocks, `IS NULL`-guarded backfills), because
+the `migration-rerun` job replays them. `db-migrate.sh`'s dirty-state recovery (`force 0`, a replay
+from version 0) is refused at or above a contract floor (§ Contract migration recovery).
 
 **CI jobs** (`.github/workflows/ci.yml`, on `migrations`/`ci` path changes):
 
 - `migration-rerun` — runs `scripts/migration-rerun.sh` in the `scripts/Dockerfile.migrate` image
   against a fresh TimescaleDB: migrates to the pre-224 versions, loads fixtures, applies the rest, then
-  re-applies the feature-224 up-files (indicators `007`, ingest `013`, analysis `026`) a second time
-  and asserts the N-1 trigger count is unchanged, then runs `scripts/migration-assertions/*.sql`.
+  re-applies the feature-224 expand and feature-225 contract up-files (indicators `007`, ingest
+  `013`/`014`, analysis `026`/`027`) a second time and asserts the N-1 trigger count is 0. It then
+  proves the contract downs are refused and leave the state dirty, that the dirty guard blocks
+  `db-migrate.sh up` until `migrate force <n-1>`, runs `scripts/migration-assertions/*.sql`, and
+  executes the indicators write SQL against a schema without `is_public` (feature 225 AC-11).
   Older up-files are not replayed — many are not idempotent (defect report
   `docs/reports/2026-10-07-db-migrate-dirty-recovery-replay-unsafe-defect.md`).
 - `migration-contract-gate` — PR-only; runs `scripts/check-migration-contract.sh` against the base
   branch.
+
+### Contract migration recovery
+
+- **Guard.** `db-migrate.sh up` runs `scripts/migration-dirty-guard.sh` (shipped in the migrator image
+  by `scripts/Dockerfile.migrate`) before its `force 0` on a dirty service.
+- **Floor rule.** A service's floor is the lowest version named by any `-- contract-of` header in its
+  migrations dir. The guard allows `force 0` below the floor or when the service has no contract file;
+  at or above it, it exits non-zero and prints the recovery text. An unparseable version or a
+  `contract-of` target outside the service's own dir fails closed.
+- **Recovery** for a refused service dirty at version `n` (the guard prints the exact command):
+  `migrate -path services/xstockstrat-<svc>/migrations -database
+  "$DATABASE_URL&x-migrations-table=<svc>_schema_migrations" force <n-1>` (`?` when the URL has no
+  query string), then `scripts/db-migrate.sh up`. Use `migrate force <n-1>`, never
+  `db-migrate.sh force` (it forces every service to its highest version). `db-migrate.sh` has no
+  `down`, so a contract down — which always raises (`irreversible contract`) and leaves the state
+  dirty — is reachable only via a raw `migrate goto`.
+- **Adjacency convention.** A contract migration directly follows its expand file (analysis `027`
+  contracts `026`, ingest `014` contracts `013`). Otherwise a refused down lands dirty at a
+  non-expand version, and `force <n-1>` replays a file nobody has proven replay-safe.
 
 ## Connection pooling (PgBouncer)
 
@@ -123,4 +146,3 @@ only after re-checking the ~22-slot cluster budget.
 ## Approval
 
 DB schema migrations require DBA review + service owner approval (see `docs/runbooks/approval-flow.md`).
-

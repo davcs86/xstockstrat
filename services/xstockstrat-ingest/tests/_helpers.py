@@ -30,9 +30,8 @@ def transaction_conn(
     lookup on a dedup hit, and the `mark_source_fed`/`mark_source_error`/
     `touch_source_last_seen` bookkeeping calls.
 
-    Feature 224: `db.fetch` answers the headerless slug-holder lookup (`slug_holders` — one
-    holder by default, as every pre-224 slug had); `conn.execute` absorbs the REGISTER
-    advisory lock.
+    `db.fetch` returns `slug_holders`, so a test can assert no slug-holder lookup happens;
+    `conn.execute` absorbs the REGISTER advisory lock.
 
     Returns `(db, conn)` — assign `svc._db = db` and drive `conn.fetchrow`'s call args/count
     via the returned `conn` for assertions.

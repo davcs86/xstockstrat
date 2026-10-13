@@ -12,13 +12,16 @@ Python gRPC service providing two capabilities:
 2. **Sandboxed Python formula execution** — user-defined formulas run in subprocess isolation with configurable timeout and memory cap
 
 **Formulas are private to their author (feature 224) — there is no public concept.** `is_public`
-and `ListFormulas`' `include_public` are deprecated and ignored; every write stores `is_public=false`.
+and `ListFormulas`' `include_public` are deprecated and ignored. No write path writes `is_public`;
+the column keeps `DEFAULT FALSE` and is dropped by a later contract.
 
-- **Author = the `x-user-id` header only.** `RegisterFormula` stamps it (the body `author` is ignored;
-  no header → `INVALID_ARGUMENT`). `UpdateFormula`/`DeleteFormula` check ownership via
-  `_caller_user_id` (header, falling back to the deprecated body `user_id` only when no header is
-  present — release N only). There is **no** admin override for writes, and a `SYSTEM_AUTHOR`
-  formula is read-only to every caller (`PERMISSION_DENIED`).
+- **Identity gate.** Every owner-scoped RPC (all but `ComputeIndicator`/`ListIndicators`/
+  `ListFundamentalMetrics`) rejects a call with no `x-user-id` `UNAUTHENTICATED` (feature 225
+  `owner_scoped`), before the body runs.
+- **Author = the `x-user-id` header only.** `RegisterFormula` stamps it (the body `author` is
+  ignored). `UpdateFormula`/`DeleteFormula` check ownership against the `x-user-id` header only.
+  There is **no** admin override for writes, and a `SYSTEM_AUTHOR` formula is read-only to every
+  caller (`PERMISSION_DENIED`).
 - **Reads (`_can_read_formula`).** `GetFormula`/`ExecuteFormula` serve a formula only to its author or
   when it is authored by `SYSTEM_AUTHOR` (`"system"`); otherwise `NOT_FOUND`, so the response does not
   reveal whether the id exists. `ListFormulas` returns own + system formulas.
@@ -28,9 +31,7 @@ and `ListFormulas`' `include_public` are deprecated and ignored; every write sto
   `ExecuteFormula` of a foreign formula → `PERMISSION_DENIED`.
 - **Internal grants are SAN-bound.** An `x-internal-caller` grant counts only when the mTLS peer SAN
   is `xstockstrat-analysis` (`_internal_grant`, `peer_san_matches`). `x-user-id: system` needs the
-  `analysis-fundsignal` grant, else `PERMISSION_DENIED`. `_INTERNAL_FORMULA_READERS` (`analysis`)
-  is a **release-N-only** bypass that lets N-1 analysis read any formula; the follow-up
-  "224 enforce + contract" removes it.
+  `analysis-fundsignal` grant, else `PERMISSION_DENIED`.
 - **Templates.** `ListTemplates` / `ManageTemplate` (ADMIN only) / `InstantiateTemplate` over
   `indicators.formula_templates`. The strategy-template saga's batch copy and `ResolveTemplateIntent`
   require the dedicated `analysis-template-saga` grant; its copies stay hidden

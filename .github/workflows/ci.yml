@@ -71,9 +71,11 @@ jobs:
               - 'services/*/migrations/**'
               - 'scripts/db-migrate.sh'
               - 'scripts/render-migrations.sh'
+              - 'scripts/migration-dirty-guard.sh'
               - 'scripts/migration-rerun.sh'
               - 'scripts/migration-assertions/**'
               - 'scripts/Dockerfile.migrate'
+              - 'services/xstockstrat-indicators/app/services/formulas_repository.py'
             claude-md:
               - '**/CLAUDE.md'
               - '.markdownlint.yaml'
@@ -221,7 +223,8 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: "1.27"
+          # golangci-lint v2.13.1 cannot decode 1.27.2 export data; unpin once a newer release supports it
+          go-version: "1.27.1"
           cache-dependency-path: services/${{ matrix.service }}/go.sum
 
       - name: go mod download
@@ -618,7 +621,7 @@ jobs:
         run: shfmt -d -i 2 scripts/*.sh .claude/hooks/*.sh
 
       - name: Migration tooling structural tests
-        run: bash scripts/render-migrations.test.sh && bash scripts/check-migration-contract.test.sh
+        run: bash scripts/render-migrations.test.sh && bash scripts/check-migration-contract.test.sh && bash scripts/migration-dirty-guard.test.sh
 
   # Applies every migration, then replays the chain from version 0 (the db-migrate.sh dirty-state
   # recovery path) and runs scripts/migration-assertions/*.sql — every up-file must be idempotent.
@@ -648,6 +651,9 @@ jobs:
 
       - name: Build migrator image (migrate + psql + envsubst)
         run: docker build -f scripts/Dockerfile.migrate -t xstockstrat-migrate-ci .
+
+      - name: Migrator image ships the dirty guard (no bind mount)
+        run: docker run --rm --entrypoint test xstockstrat-migrate-ci -x /repo/scripts/migration-dirty-guard.sh
 
       - name: Apply, replay and assert
         run: |

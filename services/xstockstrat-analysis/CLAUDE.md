@@ -24,8 +24,8 @@ NOT_FOUND vs PERMISSION_DENIED distinction — anti-IDOR). `ManageStrategy`/`Set
 authenticated caller acts on their **own** strategies. `ListStrategies`/`ListStrategyDefinitions`
 filter to the caller's own rows. Since feature 224 the derived-score cache is owner-keyed too:
 `analysis.strategy_scores_v2` (`PRIMARY KEY (user_id, strategy_id)`, migration `026`), as are the
-in-memory `_strategies`/recompute-lock maps; the old bare-id `strategy_scores` table is retained only
-for N-1 and dropped by the follow-up "224 enforce + contract". The live loop keys its
+in-memory `_strategies`/recompute-lock maps; the old bare-id `strategy_scores` table was dropped by
+migration `027` (feature 225). The live loop keys its
 per-`(user_id, strategy_id, symbol)` state on the owner; the owner-scoped firing **universe** union is
 deferred to feature 132's `resolve_universe` (this feature is identity-only).
 
@@ -33,7 +33,7 @@ deferred to feature 132's `resolve_universe` (this feature is identity-only).
 
 - **Migration `026_owner_dimension_templates`** (`-- requires-env: SEED_USER_ID`): backfills
   `backtest_runs.user_id` (a legacy run gets its strategy's owner when exactly one owner holds that
-  `strategy_id`, else `SEED_USER_ID`; NOT NULL is deferred to the follow-up), adds `user_id` to
+  `strategy_id`, else `SEED_USER_ID`; `027` re-applies it and sets NOT NULL), adds `user_id` to
   `backtest_run_symbols`/`backtest_details`, creates `strategy_scores_v2` (SQL-seeded only for
   unambiguous ids; ambiguous `(user_id, strategy_id)` pairs are recomputed at boot, at most
   `_BOOT_RECOMPUTE_MAX_PAIRS` = 50 per pass), `strategy_templates`, `template_intents`, and the
@@ -45,7 +45,7 @@ deferred to feature 132's `resolve_universe` (this feature is identity-only).
 - **Identity threading.** Every analysis → ingest / indicators call carries a non-empty owner
   `x-user-id`, or the SAN-bound `system` identity (fundsignal: `analysis-fundsignal`; the live loop's
   system-signal drain: `analysis-system-read`). The former whole-channel `x-internal-caller: analysis`
-  interceptor is gone. An inbound `x-user-id: system` resolves to owner `""` (owns nothing).
+  interceptor is gone.
 - **Unreadable formula.** An indicators `NOT_FOUND` for a strategy's formula is recorded in the
   evaluator's `unreadable_formulas`; a backtest raises `FormulaExecutionError` (`FORMULA_ERROR`,
   excluded from evidence), the other surfaces skip the component with a warning.
@@ -59,22 +59,33 @@ deferred to feature 132's `resolve_universe` (this feature is identity-only).
   templates as hidden pending rows → CAS `PENDING→COMMITTED` inside the strategy transaction → indicators
   `ResolveTemplateIntent` un-hides them; on failure `ABORTING` and the copies are hard-deleted. Saga
   calls to indicators carry `x-internal-caller: analysis-template-saga` (`_TEMPLATE_SAGA_CALLER` — a
-  dedicated grant that outlives the release-N `analysis` reader bypass). A `DurableSchedule` sweep
+  dedicated grant that outlives the `analysis` reader bypass). A `DurableSchedule` sweep
   (`run_template_intent_sweep_forever`, every `_INTENT_SWEEP_SECONDS` = 300) resolves `ABORTING`/
   `COMMITTED` intents and `PENDING` ones older than `_INTENT_STALE_SECONDS` = 900 (fixed invariants,
   not config keys).
+
+### Fail-closed identity & contract (feature 225)
+
+- **Inbound gate.** 22 RPCs carry `owner_scoped`: a headerless call → `UNAUTHENTICATED` and an
+  inbound `x-user-id: system` → `PERMISSION_DENIED`, before the body runs. `RunFundamentalsScan` is
+  exempt because it is admin-gated.
+- **Outbound owner metadata** is built only by `app/identity.owner_metadata`, which raises
+  `ValueError` for an empty or `system` owner; that unit (tick user, sweep intent, drain row,
+  snapshot's indicators/signals reads) is skipped, never sent headerless.
+- **`QueryPnLPatterns` returns only the caller's samples** (semijoin on `pnl_positions.user_id`);
+  legacy samples with a NULL `position_id` match no caller.
+- **`backtest_runs.user_id` is NOT NULL** (migration `027`, `-- contract-of` `026`; its down raises).
 
 ### Strategy Score Persistence (feature 064)
 
 > **Feature 065 update**: the headline `StrategyScore` is now **derived** from per-symbol evidence
 > cells rather than the latest run (see **Cross-Stock Score Derivation** below). The write-through +
-> hydrate-at-boot mechanics described here are unchanged; `strategy_scores` stays a materialized cache
+> hydrate-at-boot mechanics described here are unchanged; `strategy_scores_v2` stays a materialized cache
 > (now with `n_symbols`/`total_trading_days`/`provisional` provenance columns and a `delete` for
 > clearing a stale grade). `ScoreStrategy` is repurposed as the manual recompute-from-cells refresh.
 
-`ScoreStrategy` persists the latest `StrategyScore` per strategy to the `analysis.strategy_scores`
-table (migration `005`, upsert on the `strategy_id` primary key; since feature 224 the
-`analysis.strategy_scores_v2` table, upsert on `(user_id, strategy_id)`) in addition to the in-memory
+`ScoreStrategy` persists the latest `StrategyScore` per strategy to the `analysis.strategy_scores_v2`
+table (upsert on `(user_id, strategy_id)`) in addition to the in-memory
 `self._strategies` dict. The write is **best-effort** (FR-7): it mirrors the ledger-emit `try/except →
 log.warning`, so a DB failure never fails scoring. Reads stay in-memory — `ListStrategies` /
 `GetStrategyReport` still serve `self._strategies`; at boot `main.py` calls `servicer.hydrate_scores()`

@@ -37,7 +37,6 @@ async def seed_default_formulas(db_pool) -> None:
             description=fvq.DESCRIPTION,
             source=fvq.SOURCE,
             author=fvq.AUTHOR,
-            is_public=fvq.IS_PUBLIC,
             input_schema={},
             parameters=param_dicts,
             outputs=output_dicts,
