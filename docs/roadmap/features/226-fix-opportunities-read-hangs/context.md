@@ -40,3 +40,7 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - the D1–D4 record;
   - the worst case is now B+3.05+E;
   - G4/G7/G10 test placement.
+- **Design approved (2026-10-14):** the operator approved the round-6 design, and the status moved draft → design-approved. Open risks accepted as documented in design.md § Open Risks:
+  - a PgBouncer BEGIN/COMMIT stall is bounded only by the B+2 backstop, at the cost of a reconnect;
+  - the UI's 15s poll with retry:1 amplifies load on fast UNAVAILABLE responses.
+  Next: `/sdd-spec`.
