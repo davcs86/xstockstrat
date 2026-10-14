@@ -258,3 +258,10 @@ Only then may Steps 2–7 move off `blocked`. Until then 196 ships **zero code c
 **Progress**: 7 done / 7 total
 **Stopped at**: all complete
 **Next**: merge the integration PR; then `/promote`.
+
+## Session 2026-10-14 (CI: feature status automation)
+
+- Promotion PR #1242 merged to main
+- Feature promoted and committed: 9def6259da8da135ffb66846af06201ce4690304
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-10-14

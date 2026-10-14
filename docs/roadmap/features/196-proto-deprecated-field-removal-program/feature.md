@@ -6,6 +6,8 @@
 **Severity**: SEV-3 (planned tech-debt; no runtime misbehavior)
 **Created**: 2026-09-19
 **Last Updated**: 2026-10-08
+**Committed to main**: 9def6259da8da135ffb66846af06201ce4690304
+**Launched date**: 2026-10-14
 
 ---
 
@@ -22,6 +24,7 @@
 | 2026-10-08 | `implementation-ready` → `in-progress` | /sdd-execute (sequential, autonomous) | **FR-3 gate cleared.** Operator (repo owner, acting as Proto Reviewer + Platform Lead) attested no external BSR consumers and declared the 053/080/143 deprecation window closed; in-repo reader audit re-run on `main-dev` @ `a988b1d6` — still no consumer reads the gated strings. Step 1 `done`; Steps 2–7 unblocked → `pending`. Type header re-labelled to the approved non-breaking design. |
 | 2026-10-08 | `in-progress` → `code-completed` | /sdd-execute (sequential, autonomous) | 7/7 steps done on `feature/proto-deprecated-field-removal-program`. Deprecated `Bar.timeframe` (marketdata: `scanBars`, stream, + cold/fallback source-bar paths — D-1) and `BackfillJob.timeframe` (ingest `job_row_to_proto`) strings no longer populated in responses; enums kept; `barFromAlpaca`/`InsertBars` untouched; `Watchlist.symbols` KEEP guards added. Proto unchanged (`buf breaking` clean). Scenarios promoted (C-16). |
 
+| 2026-10-14 | `code-completed` → `launched` | CI workflow | Promoted via PR #1242; committed 9def6259da8da135ffb66846af06201ce4690304 |
 ---
 
 ## Artifacts
