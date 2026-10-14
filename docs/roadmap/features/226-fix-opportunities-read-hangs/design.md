@@ -65,7 +65,7 @@ async def budgeted_read(pool, budget_s):
                 else:
                     con.terminate()                    # sync; slot freed via holder._release_on_close
             except Exception as ce:                    # e.g. InterfaceError on a proxy detached by pool.terminate()
-                log.warning("budgeted_read: cleanup after %s failed (%s: %s); original error re-raised", ...)
+                log.warning("budgeted_read: cleanup after %s skipped/failed (%s: %s) — connection may already be released by asyncpg; original error re-raised", ...)
         raise                                          # same exception object (a 2nd CancelledError during cleanup propagates instead)
     try: await pool.release(con, timeout=_RELEASE_TIMEOUT_S)
     except Exception as re: log.warning("budgeted_read: read connection release failed (%s: %s); connection terminated", ...)
@@ -84,7 +84,7 @@ async def _rollback_then_release(pool, con, tr):
   - Stage `done` cannot raise inside the backstop, because no await follows it. A backstop expiry that races a COMMIT result is thrown in at the commit await.
   - Every non-`open` stage is therefore routed to terminate by construction.
 - **Cleanup is guarded so the original error always surfaces (H4).**
-  - After `pool.terminate()` (shutdown), the holder's terminate detaches our proxy (`pool.py:990-997,270-274,304-307,321-323,95-101`; `connection.py:1521-1525,1584-1587`).
+  - After `pool.terminate()` (shutdown) **or a lost connection** (`protocol.pyx:943-953` → `connection.py:1584-1587` → `pool.py:304-323`), our proxy is detached and the holder already freed (`pool.py:990-997,270-274,95-101`). So for a real connection loss (`ConnectionDoesNotExistError`), `con.is_closed()` raises `InterfaceError` into this guard; the `is_closed()` → terminate branch is only a defensive path.
   - From then on every wrapped proxy method, including `is_closed` and `terminate`, raises `InterfaceError` (`pool.py:39-50,61-67`), and `tr.rollback()` raises through `connresource.py:40-44`.
   - The `except Exception` guard logs those failures, and the bare `raise` re-raises the original.
   - A success-path release of a detached proxy is a no-op (`pool.py:921-923`).
@@ -264,8 +264,9 @@ These are fixed invariants, not config keys:
 | **F2 leak** | real_pg: a pool with min=max=1, `statement_cache_size=0`, `connection_class` with an empty reset query. On the same connection pid, `SHOW statement_timeout` is '0'. Negative control: a session `SET` persists. |
 | **G4** | The existing `ListOpportunities` tests (18 in `test_analysis_servicer.py`, 3 in `test_opportunity_compute_state.py`) are parametrized over `read_path` = direct or pool. In pool mode every `bc_routed` fake-repo method issues **exactly one** `bc.fetch`/`fetchval`/`fetchrow`, so the order assertion is not vacuous. Assert the order BEGIN READ ONLY → (SET LOCAL nᵢ → stmt)* → COMMIT → release, with every nᵢ ≤ the budget in ms and the sequence **non-increasing** (instant fakes may give equal values). Also assert `in_use==0` at enrichment and at the kicks, and results identical to direct mode. |
 | **G5** | `monkeypatch.setattr(read_budget, "_READ_DB_BACKSTOP_GRACE_S", 0.1)` with a 0.2s budget. Stall at BEGIN, SET LOCAL, fetch and COMMIT; each gives `UNAVAILABLE` within B+G+0.5s with terminate called exactly once. |
-| **G6** | Unit: an external cancel during a fetch propagates `CancelledError` with no abort, no "opportunities read failed" log, and one terminate. real_pg: a pool with min=max=1, a budget ≥ 10s (so `statement_timeout` cannot fire), pid recorded. `asyncio.timeout(0.3)` around `pg_sleep(30)` raises the outer `TimeoutError` (**not** `QueryCanceledError`) with elapsed < 1s. The next acquire on the single-connection pool has a **different** pid and `statement_timeout` '0'. |
-| **G7** | The original exception object is preserved, and its log is written before the rollback runs. H4: after `pool.terminate()` (proxy detached), a body error re-raises the **original** exception, not `InterfaceError`, and a "cleanup … failed" warning is logged; the same holds when `con.terminate()` / `tr.rollback()` are faked to raise `InterfaceError`. |
+| **G1** | Unit: once the deadline has passed, `_arm` raises `TimeoutError` with no `SET LOCAL` sent, and `budgeted_read` routes it to rollback + release (terminate count 0). An acquire timeout performs no terminate (stage `acquire`). |
+| **G6** | Unit: an external `task.cancel()` of the task running the handler during a fetch (no inner `wait_for`) propagates `CancelledError` with no abort, no "opportunities read failed" log, and one terminate. real_pg: a pool with min=max=1, a budget ≥ 10s (so `statement_timeout` cannot fire), pid recorded. `asyncio.timeout(0.3)` wrapping the **entire** `async with budgeted_read(...)` block (not the fetch inside it), with `pg_sleep(30)` as the body, raises the outer `TimeoutError` (**not** `QueryCanceledError`) with elapsed < 1s. The next acquire on the single-connection pool has a **different** pid and `statement_timeout` '0'. |
+| **G7** | The original exception object is preserved, and its log is written before the rollback runs. H4: after `pool.terminate()` (proxy detached), a body error re-raises the **original** exception, not `InterfaceError`, and a "cleanup … failed" warning is logged; the same holds when `con.terminate()` / `tr.rollback()` are faked to raise `InterfaceError`. The connection-lost case (`ConnectionDoesNotExistError`) is modelled as a **detached** proxy whose `is_closed()` raises `InterfaceError`: expect 0 terminate calls, the original error re-raised, and `UNAVAILABLE` at the handler. The attached-proxy `is_closed()=True` case is tested only as the defensive branch (terminate=1). |
 | **Release failure (H5)** | Unit: on the success path `FakePool.release` raises `TimeoutError`. `ListOpportunities` still returns the rows, logs `read connection release failed`, and does not abort. |
 | **Classification** | Each transient class gives `UNAVAILABLE`. 22000 `DataError`, interface `DataError`, `ClientConfigurationError`, the `Unsupported*` errors, `ValueError` and `UndefinedTableError` propagate. A `compute_state.get` `TimeoutError` gives exactly one kick, then `UNAVAILABLE`. |
 | **G3** | On both paths: failures ≥MAX gives `compute_failed`; fewer gives `computing`; a fresh empty stamp gives neither plus a kick; a stale queue gives a kick plus the include_expired facet; a fresh queue with a stale unavailable row gives a retry kick. |
@@ -313,7 +314,7 @@ These are fixed invariants, not config keys:
 
 ## Open Risks
 
-- [ ] **PgBouncer saturation stalls at BEGIN or COMMIT.** Only the client backstop at B+2 bounds this, via cancel and terminate. That costs a reconnect, and the backend runs until `statement_timeout` (G6). Accepted; handled in steps 5 and 10 (tests).
+- [ ] **PgBouncer saturation stalls at BEGIN or COMMIT.** Only the client backstop at B+2 bounds this, via cancel and terminate. That costs a reconnect, and the backend runs until `statement_timeout` (G6). Accepted; handled in steps 5, 6 and 8 (G5). Real PG cannot simulate a PgBouncer stall.
 - [ ] **G6 residual: orphaned backend.** On terminate, asyncpg's CancelRequest task is cancelled, so the backend runs until `statement_timeout` (≤ the remaining budget) and counts against the cluster's `max_connections`. Record in findings at step 13.
 - [ ] **Full-kick dedup timing.** The dedup check now happens after release, so one extra kick is possible if a prior recompute finished in that window. It is serialized by the per-user lock (:4431). Accepted.
 - [ ] **A COMMIT stall after data was read** returns `UNAVAILABLE` instead of the rows. Rare, and the behavior is consistent. Accepted.
@@ -334,7 +335,7 @@ These are fixed invariants, not config keys:
 - `P-06` (red before green): every service step is paired with a test step.
 - `F-06` (resource budgets): pool sizes are unchanged and each request holds at most one connection.
 - `F-07` (no hard-coded policy): every policy value is a config key. The three fixed mechanism constants are documented invariants, following the `_INTENT_SWEEP_SECONDS` precedent.
-- `F-11`: no Floor breach was found in rounds 1–4.
+- `F-11`: no Floor breach was found in rounds 1–5.
 
 ## Business Rules Touched (C-16)
 
@@ -359,18 +360,19 @@ These are fixed invariants, not config keys:
 Each service step is followed by its test step (red before green):
 1. config bounds → 2. bounds tests (G8)
 3. marketdata → 4. Go tests (AC-3, G10)
-5. `read_budget.py` → 6. `test_read_budget.py` (G1, G2, G5, G7, classification)
-7. handler, factories, kicks-after-release, enrichment → 8. handler tests (AC-1, G3, G4, G5, G6, O8)
+5. `read_budget.py` → 6. `test_read_budget.py` (G1, G2 unit, G5 at the `budgeted_read` level: TimeoutError plus one terminate, G7, `is_transient_db_error` classification)
+7. handler, factories, kicks-after-release, enrichment → 8. handler tests (AC-1, G3, G4, G5, G6 unit, O8, H5 release failure, handler-level classification and the `compute_state.get` single-kick case)
 9. `local_pg` fixture, marker, CI step → 10. real_pg tests (AC-4, G2, F2, G6)
 11. agent → 12. agent tests (AC-2)
 13. docs and teardown
 
 ## Rounds
 
-4 rounds (full mode).
+5 rounds (full mode, hard cap reached).
 - **Round 1:** the per-await `wait_for` was shown to be a soft bound.
 - **Round 2:** the request budget, `SET LOCAL`, the bounds registry and the real-PG test were adopted.
 - **Round 3:** the manual transaction with terminate-on-cancel and the leak/cancel test fixes were adopted.
 - **Round 4:** cancel-only terminate, bounded rollback, kicks after release, and pool-path test parametrization.
+- **Round 5:** guarded cleanup and the stage invariant (H4), the handler error path (H6), test-strength fixes (H1–H3, H5, H8), the lost-connection detach correction, G6 timeout placement, and test/step placement.
 
-Termination: _pending round-4 adversary review_.
+Termination: round-5 fixes applied; awaiting user approval (5-round cap reached).
