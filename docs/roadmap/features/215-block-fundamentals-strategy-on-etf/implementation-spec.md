@@ -1331,7 +1331,7 @@ cd services/xstockstrat-ui && pnpm exec tsc --noEmit && pnpm run lint && grep -n
 
 ### Step 24 — test: UI e2e + fixtures
 
-**Status**: `blocked`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/fixtures/opportunities.ts` — modify
@@ -1577,7 +1577,14 @@ _Populated by /sdd-execute as implementation proceeds._
 **Spec said**: the `strat-fundamentals-etf-001` sentinel returns `status: 2` (INSUFFICIENT_DATA), and the `@AC-2` UI test expects `[data-testid=no-trade-reason]` to contain `requires fundamentals` and `(ETF)`.
 **Actual**: `src/app/insights/strategies/[id]/page.tsx` hides `BacktestDiagnostics` for INSUFFICIENT_DATA, and shows its INSUFFICIENT_DATA card only when there are coverage gaps. A refused-only run therefore renders nothing (verified e2e). Step 24 is not committed.
 **Reason**: an unspecced UI gate. Closing it needs a file outside the step's Files (F-08), so an operator decision is required: A) expand scope to render the diagnostics/refusal banner for INSUFFICIENT_DATA runs that carry diagnostics; B) accept the limitation and make the sentinel status 1 (asserts less than the real behavior); C) track it as a follow-up.
-**Disposition**: awaiting operator decision.
+**Disposition**: operator approved option A (scope expanded to page.tsx, F-08 exception).
+**Resolution** (2026-10-14): `page.tsx` now also renders the existing `BacktestDiagnostics` for an INSUFFICIENT_DATA result when any diagnostic carries a `noTradeReason` other than UNSPECIFIED. The coverage-gap card and the OK-results block are unchanged, the sentinel keeps `status: 2`, and the `@AC-2` test additionally asserts no coverage-gap card, no results card and no ENTRY_NEVER_TRUE text.
+
+### Deviation: Step 24 — test: UI e2e + fixtures (verification runner)
+**Spec said**: `./scripts/run-e2e.sh --grep "fundamentals|Opportunit|backtest coverage|position detail"`.
+**Actual**: Ran Playwright locally against a production bundle (`NEXT_DISABLE_STANDALONE=1 pnpm build`, then `CI=1 E2E_PREBUILT=1 npx playwright test … --project=chromium`), as in Step 23. Ran the four Step 24 specs (`backtest-coverage`, `opportunities`, `position-detail`, `watchlists`) plus every other spec that opens `/insights/strategies/[id]`, since `page.tsx` changed. `tsc --noEmit` still reports only the two pre-existing `e2e/insights/backfills.spec.ts` errors (Step 23 deviation).
+**Reason**: Same Playwright runner, browser and mock backend as the `Dockerfile.e2e` container, without the image build. The operator authorised the local production build for this run.
+**Disposition**: CI-equivalent fallback — CI `frontend-e2e` runs the container.
 
 ### Deviation: merge of origin/main-dev (feature 225 #1238, CI #1240) — merge fix-up
 **Spec said**: n/a (post-Step-23 sync with `main-dev`).

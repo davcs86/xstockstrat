@@ -398,3 +398,30 @@
 - Merge `18586e8c`: one conflict, the `live_loop.py` servicer import list. 225 moved `SYSTEM_IDENTITY` to `app.identity`, and 215 had swapped the predicates for guard/pager imports; both sides are kept. No behavior conflict.
 - Post-merge: agent 498 passed. Analysis had 1 failure: 225's `test_single_owner_header_builder` flagged 215's owner-only default `meta` in `_fetch_and_aggregate`. The merge fix-up uses `owner_metadata(user_id)`, giving 1145 passed (see Deviation Log).
 - PR #1240 (golangci-lint goinstall) is now on the branch, so the Go-lint open item from Steps 7–16 is closed.
+
+### Operator decision (2026-10-14): Step 24 option A — render refusal for INSUFFICIENT_DATA
+- The operator chose option A for the Step 24 blocker, so Step 24 scope expands to `services/xstockstrat-ui/src/app/insights/strategies/[id]/page.tsx`. This is the F-08 exception, recorded here and in the Deviation Log.
+- Required behavior:
+  - An INSUFFICIENT_DATA result whose diagnostics carry a refusal/no-trade reason renders the Step 23 `no-trade-reason` surface.
+  - The coverage-gap card is unchanged, and no new abstraction is added.
+  - The e2e sentinel stays `status: 2`; the operator explicitly declined option B, which would set it to 1.
+
+### Step 24 — test: UI e2e + fixtures [done]
+- Kept the killed agent's uncommitted work after review:
+  - the fixture `SCHD_FUNDAMENTALS_UNAVAILABLE_OPPORTUNITY` (not in `OPPORTUNITIES`);
+  - the mock `listOpportunities` `symbol` filter, the `fundamentals_unavailable` marker and its floor exemption;
+  - the `strat-fundamentals-etf-001` sentinel (`status: 2`, SCHD reason 5 + ETF);
+  - the `@AC-4` desktop + mobile, `@AC-15` and `@AC-2` specs.
+- Comments were trimmed to constraints, and the `INVENTORY.md` fixture and sentinel rows were added.
+- `@AC-2` now also asserts no coverage-gap card, no results card and no ENTRY_NEVER_TRUE text.
+- `page.tsx` (out of Files, option A) renders `<BacktestDiagnostics>` for INSUFFICIENT_DATA when any diagnostic has a non-UNSPECIFIED `noTradeReason`. It reuses the existing component and tokens, and the Step 23 `Alert` keeps its `data-testid`.
+- TDD:
+  - RED (production build, page unchanged): `backtest-coverage.spec.ts` 1 failed, 11 passed. `@AC-2` failed with `getByTestId('no-trade-reason')` "element(s) not found".
+  - GREEN (production build): `backtest-coverage` + `opportunities` + `position-detail` + `watchlists` 109 passed. The other 9 specs that open the strategy page (incl. `backtest-fill-model` @AC-11 feature-151) gave 73 passed.
+  - `pnpm run lint` exit 0, with no findings in changed files.
+  - `tsc` shows only the 2 pre-existing `backfills.spec.ts` errors.
+  - vitest: 43 files / 228 tests passed. prettier and markdownlint are clean.
+- Files modified:
+  - `services/xstockstrat-ui/e2e/{fixtures/opportunities.ts,fixtures/INVENTORY.md,mock-backend.ts,insights/backtest-coverage.spec.ts,insights/opportunities.spec.ts,trader/position-detail.spec.ts}`
+  - `services/xstockstrat-ui/src/app/insights/strategies/[id]/page.tsx` (out-of-Files, operator option A)
+- Deviations: operator option A (F-08 exception); local production-build runner instead of `run-e2e.sh` (see Deviation Log).
