@@ -72,20 +72,21 @@ xstockstrat-ledger, xstockstrat-identity, xstockstrat-notify, xstockstrat-config
 - **FR-2** — `xstockstrat-ui` registers its Next.js instrumentation hook and exports traces the same way.
 - **FR-3** — A failed trace export is logged by the service (no silent failure).
 - **FR-4** — Local compose, the collector config, and the observability docs describe one OTLP/HTTP
-  path and the two header formats (SDK `key=value` vs collector header value).
+  export path and one header format (`Basic <base64(instanceId:apiKey)>`, which `deploy.yml`
+  prefixes with `Authorization=`; the percent-encoded `Authorization=Basic%20…` form is also accepted).
 
 ## Fix Scope
 
 - [x] No proto changes anticipated
 - [x] No database migrations anticipated
-- [x] No config key changes anticipated (env vars only; `.do/app*.yaml` keys unchanged — the HEADERS GitHub secret value format changes, operator action)
+- [x] No config key changes anticipated (env vars only; `.do/app*.yaml` keys unchanged; the HEADERS GitHub secret format is unchanged — no operator action)
 - Dependency changes: Go `otlptracehttp` (×3 go.mod), Python `opentelemetry-exporter-otlp-proto-http` (×4 pyproject + uv.lock), Node `@opentelemetry/exporter-trace-otlp-http` (×4 package.json + pnpm-lock)
 
 ## Acceptance Criteria
 
 See `acceptance.feature` — the regression scenario(s) that must fail on the buggy behavior and pass
-after the fix (Constitution **C-15**). Plus: existing tests pass; staging shows traces for every
-service in Grafana Cloud after the HEADERS secret is reformatted.
+after the fix (Constitution **C-15**). Plus: existing tests pass; after redeploy, staging shows traces
+for every service in Grafana Cloud with the existing HEADERS secret.
 
 ## Out of Scope
 
