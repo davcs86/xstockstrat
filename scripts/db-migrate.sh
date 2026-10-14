@@ -63,13 +63,15 @@ migrate_service() {
   echo "  → $svc (schema: $schema)"
   case "$COMMAND" in
   up)
-    # If a previous run failed mid-migration the state table is marked dirty.
-    # Force to version 0 (schema baseline) so migrate up re-runs from scratch.
-    # All migrations use IF NOT EXISTS / if_not_exists => TRUE so re-running is safe.
-    if migrate -path "$dir" -database "$url" version 2>&1 | grep -q "dirty"; then
+    # force 0 replays every up-file, and pre-contract files are not idempotent;
+    # the guard refuses it at or above a contract floor.
+    ver="$(migrate -path "$dir" -database "$url" version 2>&1 || true)"
+    case "$ver" in *dirty*)
+      if ! "$REPO_ROOT/scripts/migration-dirty-guard.sh" "$dir" "$schema" "$ver"; then exit 1; fi
       echo "  [dirty] force-resetting $svc to version 0"
       migrate -path "$dir" -database "$url" force 0
-    fi
+      ;;
+    esac
     # Seed-user templating for feature 133's migration 013 (analysis only). Render
     # ${SEED_USER_ID} into a scratch copy with the single-variable allowlist form of
     # envsubst — NEVER bare envsubst, which would corrupt 013's own DO $$ ... $$

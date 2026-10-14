@@ -1,6 +1,7 @@
 """Feature 224 — ingest owner-scoped sources/signals, SignalScope, reserved slugs, system grants,
-admin read (AC-7..12, AC-26, AC-28, AC-29, AC-33, AC-36) and the release-N headerless tolerance."""
+admin read (AC-7..12, AC-26, AC-28, AC-29, AC-33, AC-36); feature 225 rejects headerless callers."""
 
+import pathlib
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -113,7 +114,7 @@ def test_ctx_headerless_omits_user_id_and_adds_grant_and_sans():
 
 
 # ---------------------------------------------------------------------------
-# IngestSignal — AC-9, AC-10, AC-33, headerless N
+# IngestSignal — AC-9, AC-10, AC-33
 # ---------------------------------------------------------------------------
 
 
@@ -136,6 +137,33 @@ async def test_ac9_two_owners_ingest_same_signal_into_their_own_rows():
         assert claim_args[0] == owner
         ledger_payload = svc._ledger.AppendEvent.call_args.args[0].payload
         assert ledger_payload["user_id"] == owner
+
+
+@pytest.mark.asyncio
+async def test_ac9_headerless_ingest_signal_unauthenticated():
+    """Feature 225 AC-9: a headerless IngestSignal no longer resolves the slug's unique holder."""
+    svc, db, conn = _fresh_ingest_svc(1, slug_holders=("u-1",))
+    ctx = _ctx("0", user_id="")
+    code = await _aborted_code(svc.IngestSignal(_signal_req("newsletter-a"), ctx), ctx)
+    assert code == grpc.StatusCode.UNAUTHENTICATED
+    inserts = [
+        c
+        for c in conn.fetchrow.await_args_list
+        if "INSERT INTO ingest.newsletter_signals" in c[0][0]
+    ]
+    assert inserts == []
+    db.fetch.assert_not_called()
+
+
+def test_no_app_reference_to_objects_dropped_by_014():
+    """Feature 225: dedup runs only through signal_dedup_claims after 014 drops the N-1 objects."""
+    app_dir = pathlib.Path(__file__).resolve().parents[1] / "app"
+    hits = [
+        str(p)
+        for p in app_dir.rglob("*.py")
+        if "signal_dedup_keys" in p.read_text() or "n1_owner_fill" in p.read_text()
+    ]
+    assert hits == []
 
 
 @pytest.mark.asyncio
@@ -189,35 +217,6 @@ async def test_ac33_system_identity_with_san_bound_grant_ingests_as_system():
     resp = await svc.IngestSignal(_signal_req("fundamentals"), ctx)
     assert resp.signal_id == 5
     assert "system" in conn.fetchrow.call_args_list[0].args
-
-
-@pytest.mark.asyncio
-async def test_headerless_ingest_zero_holders_invalid_argument():
-    svc, db, conn = _fresh_ingest_svc(1, slug_holders=())
-    ctx = _ctx("0", user_id="")
-    code = await _aborted_code(svc.IngestSignal(_signal_req("nobody"), ctx), ctx)
-    assert code == grpc.StatusCode.INVALID_ARGUMENT
-    conn.fetchrow.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_headerless_ingest_ambiguous_holders_failed_precondition():
-    svc, db, conn = _fresh_ingest_svc(1, slug_holders=("alice", "bob"))
-    ctx = _ctx("0", user_id="")
-    code = await _aborted_code(svc.IngestSignal(_signal_req("motley-fool"), ctx), ctx)
-    assert code == grpc.StatusCode.FAILED_PRECONDITION
-    conn.fetchrow.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_headerless_ingest_unique_holder_files_into_that_owner():
-    svc, db, conn = _fresh_ingest_svc(9, slug_holders=("alice",))
-    resp = await svc.IngestSignal(_signal_req("alice-feed"), _ctx("0", user_id=""))
-    assert resp.signal_id == 9
-    holder_sql = db.fetch.call_args.args[0]
-    assert "user_id" in holder_sql and "slug = $1" in holder_sql
-    assert "alice" in conn.fetchrow.call_args_list[0].args
-    assert conn.fetchrow.call_args_list[1].args[1] == "alice"
 
 
 # ---------------------------------------------------------------------------
@@ -291,14 +290,6 @@ async def test_ac33_system_query_requires_san_bound_read_grant():
 
 
 @pytest.mark.asyncio
-async def test_headerless_query_keeps_unscoped_behaviour():
-    svc, db = _query_svc([_signal_row("motley-fool", "alice")])
-    resp = await svc.QuerySignals(ingest_pb2.QuerySignalsRequest(), _ctx("0", user_id=""))
-    assert "user_id =" not in db.fetch.call_args.args[0]
-    assert resp.signals[0].user_id == "alice"
-
-
-@pytest.mark.asyncio
 async def test_ac28_admin_query_owner_selector_reads_and_audits():
     svc, db = _query_svc([_signal_row("alice-feed", "alice")])
     req = ingest_pb2.QuerySignalsRequest(owner_user_id="alice")
@@ -335,7 +326,7 @@ async def test_ac28_admin_query_audit_failure_fails_closed():
 
 
 # ---------------------------------------------------------------------------
-# ListSignalSources — AC-7, AC-26, AC-28, headerless N
+# ListSignalSources — AC-7, AC-26, AC-28
 # ---------------------------------------------------------------------------
 
 
@@ -363,15 +354,6 @@ async def test_ac7_alice_list_is_queried_as_alice():
     )
     assert "my-newsletter" not in [s.slug for s in resp.sources]
     assert db.fetch.call_args.args[1] == "alice"
-
-
-@pytest.mark.asyncio
-async def test_headerless_list_keeps_global_rows_with_owner_populated():
-    svc, db = _query_svc([_source_row("motley-fool", "alice"), _source_row("motley-fool", "bob")])
-    resp = await svc.ListSignalSources(ingest_pb2.ListSignalSourcesRequest(), _ctx("0", user_id=""))
-    assert [s.user_id for s in resp.sources] == ["alice", "bob"]
-    sql = db.fetch.call_args.args[0]
-    assert "user_id" in sql.split("FROM")[0] and "WHERE user_id" not in sql
 
 
 @pytest.mark.asyncio
@@ -407,7 +389,7 @@ async def test_ac33_system_list_without_grant_denied():
 
 
 # ---------------------------------------------------------------------------
-# ManageSignalSource — AC-7, AC-8, AC-26, AC-36, headerless N (elaboration 5)
+# ManageSignalSource — AC-7, AC-8, AC-26, AC-36
 # ---------------------------------------------------------------------------
 
 
@@ -560,68 +542,3 @@ async def test_foreign_user_source_update_is_not_found():
         code = await _aborted_code(svc.ManageSignalSource(req, ctx), ctx)
     assert code == grpc.StatusCode.NOT_FOUND
     assert deact.call_args.args[1:] == ("admin1", "alice-feed")
-
-
-@pytest.mark.asyncio
-async def test_headerless_register_keeps_admin_gate():
-    svc, _ = _manage_svc()
-    ctx = _ctx("0", user_id="")
-    code = await _aborted_code(svc.ManageSignalSource(_register_req("x"), ctx), ctx)
-    assert code == grpc.StatusCode.PERMISSION_DENIED
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "holders,want",
-    [([], grpc.StatusCode.FAILED_PRECONDITION), (["alice"], grpc.StatusCode.ALREADY_EXISTS)],
-)
-async def test_headerless_admin_register_never_creates(holders, want):
-    svc, _ = _manage_svc()
-    ctx = _ctx("4", user_id="")
-    ins = AsyncMock()
-    with (
-        patch(f"{_SS}.slug_holders", AsyncMock(return_value=holders)),
-        patch(f"{_SS}.insert_source", ins),
-    ):
-        code = await _aborted_code(svc.ManageSignalSource(_register_req("x"), ctx), ctx)
-    assert code == want
-    ins.assert_not_called()
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "holders,want",
-    [([], grpc.StatusCode.NOT_FOUND), (["alice", "bob"], grpc.StatusCode.FAILED_PRECONDITION)],
-)
-async def test_headerless_admin_mutation_resolves_unique_holder(holders, want):
-    svc, _ = _manage_svc()
-    ctx = _ctx("4", user_id="")
-    req = ingest_pb2.ManageSignalSourceRequest(
-        source=ingest_pb2.SignalSource(slug="motley-fool"),
-        operation_enum=ingest_pb2.SIGNAL_SOURCE_OPERATION_DEACTIVATE,
-    )
-    deact = AsyncMock()
-    with (
-        patch(f"{_SS}.slug_holders", AsyncMock(return_value=holders)),
-        patch(f"{_SS}.deactivate_source", deact),
-    ):
-        code = await _aborted_code(svc.ManageSignalSource(req, ctx), ctx)
-    assert code == want
-    deact.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_headerless_admin_mutation_acts_on_the_unique_holder():
-    svc, _ = _manage_svc()
-    req = ingest_pb2.ManageSignalSourceRequest(
-        source=ingest_pb2.SignalSource(slug="motley-fool"),
-        operation_enum=ingest_pb2.SIGNAL_SOURCE_OPERATION_DEACTIVATE,
-    )
-    deact = AsyncMock(return_value=_source_row("motley-fool", "alice", active=False))
-    with (
-        patch(f"{_SS}.slug_holders", AsyncMock(return_value=["alice"])),
-        patch(f"{_SS}.deactivate_source", deact),
-    ):
-        resp = await svc.ManageSignalSource(req, _ctx("4", user_id=""))
-    assert deact.call_args.args[1:] == ("alice", "motley-fool")
-    assert resp.source.active is False

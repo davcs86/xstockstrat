@@ -38,6 +38,7 @@ async def test_insert_binds_metrics_symbols_and_score():
         symbols=["AAPL", "MSFT"],
         overall_score=0.72,
         rating="B",
+        user_id="u-1",
     )
 
     args = db_pool.fetchrow.call_args.args
@@ -68,6 +69,7 @@ async def test_insert_allows_null_score_for_insufficient_run():
         symbols=[],
         overall_score=None,
         rating=None,
+        user_id="u-1",
     )
 
     args = db_pool.fetchrow.call_args.args
@@ -94,6 +96,7 @@ async def test_insert_binds_sizing_mode_and_params():
         sizing_mode="SIZING_MODE_PORTFOLIO",
         position_weight=0.10,
         max_concurrent=9,
+        user_id="u-1",
     )
 
     args = db_pool.fetchrow.call_args.args
@@ -121,6 +124,7 @@ async def test_insert_sizing_params_null_on_legacy():
         overall_score=0.5,
         rating="C",
         sizing_mode="SIZING_MODE_LEGACY",
+        user_id="u-1",
     )
 
     args = db_pool.fetchrow.call_args.args

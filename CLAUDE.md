@@ -130,7 +130,7 @@ to the frontends and the agent.
 | pnpm | 9.15.9 | Workspace manager (`pnpm-workspace.yaml`); `npm install -g pnpm@9.15.9` |
 | buf | 1.72.0 | Proto toolchain; pinned in `Dockerfile.codegen` (`BUF_VERSION`) and `.github/workflows/ci.yml` (`buf-setup-action` in the `proto-lint` + `proto-freshness` jobs) — bump all three together; installed by `scripts/bootstrap.sh` |
 | golang-migrate | latest | DB migrations; installed by `scripts/bootstrap.sh` |
-| golangci-lint | v2.13.1 | Go lint; run via `golangci-lint-action@v9` |
+| golangci-lint | v2.14.0 | Go lint; run via `golangci-lint-action@v9` |
 | ruff | latest | Python lint + format |
 | Playwright | — | E2E tests for the consolidated `xstockstrat-ui` (all three segments) |
 | Vitest | ^3 | Unit (logic) tests for `xstockstrat-ui` — node-environment `src/**/*.test.ts`, coverage scoped to `src/lib/**` (feature 065); complements Playwright e2e |
@@ -333,7 +333,7 @@ xstockstrat-analysis → xstockstrat-ingest (QuerySignals for signal-weighted ba
 
 ## Header Propagation Convention
 
-Every backend service **that makes outbound per-request gRPC calls** must propagate `x-user-id`, `x-access-scope`, and `x-trace-id` from the inbound request to those calls. The external edge injects/strips them after auth (the `xstockstrat-ui` middleware — the nginx proxy that formerly did this was removed by feature 045), so platform-internal values are trusted. The Node leaf services (ledger, identity, notify, config) make no outbound per-request calls that need this trio, so the unused `src/middleware/propagation.ts` helper each carried was removed (feature 175). identity's admin-audit calls to ledger forward the trio via `ledgerAudit.ts`'s own `PROPAGATED_HEADERS` const, not that helper. **Recorded exception (feature 224):** analysis's fundamentals producer (loop and `RunFundamentalsScan`) replaces `x-user-id` with the reserved `system` identity plus `x-internal-caller: analysis-fundsignal`, keeping `x-trace-id`; ingest and indicators honour `x-user-id: system` only with an allow-listed `x-internal-caller` grant **and** an mTLS peer SAN of `xstockstrat-analysis`; analysis treats an inbound `system` as owning nothing.
+Every backend service **that makes outbound per-request gRPC calls** must propagate `x-user-id`, `x-access-scope`, and `x-trace-id` from the inbound request to those calls. The external edge injects/strips them after auth (the `xstockstrat-ui` middleware — the nginx proxy that formerly did this was removed by feature 045), so platform-internal values are trusted. The Node leaf services (ledger, identity, notify, config) make no outbound per-request calls that need this trio, so the unused `src/middleware/propagation.ts` helper each carried was removed (feature 175). identity's admin-audit calls to ledger forward the trio via `ledgerAudit.ts`'s own `PROPAGATED_HEADERS` const, not that helper. **Recorded exception (feature 224):** analysis's fundamentals producer (loop and `RunFundamentalsScan`) replaces `x-user-id` with the reserved `system` identity plus `x-internal-caller: analysis-fundsignal`, keeping `x-trace-id`; ingest and indicators honour `x-user-id: system` only with an allow-listed `x-internal-caller` grant **and** an mTLS peer SAN of `xstockstrat-analysis`; analysis refuses an inbound `system` (`PERMISSION_DENIED`, feature 225).
 
 **Language-specific patterns (Go interceptor, Python per-method, Node.js AsyncLocalStorage), code snippets, and reference implementations** → read `docs/patterns/header-propagation.md`.
 

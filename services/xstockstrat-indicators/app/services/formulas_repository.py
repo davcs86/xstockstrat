@@ -44,11 +44,40 @@ def _to_dict(row) -> dict:
 
 _INSERT_SQL = """
     INSERT INTO indicators.formulas
-        (formula_id, name, description, source, author, is_public, input_schema,
+        (formula_id, name, description, source, author, input_schema,
          parameters, outputs, warmup_period, fundamental_inputs,
          origin_template_id, origin_template_version, pending_intent_id)
-    VALUES ($1::uuid, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9::jsonb, $10, $11::jsonb,
-            $12, $13, $14::uuid)
+    VALUES ($1::uuid, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9, $10::jsonb,
+            $11, $12, $13::uuid)
+    RETURNING *
+"""
+
+_UPSERT_SQL = """
+    INSERT INTO indicators.formulas
+        (formula_id, name, description, source, author, input_schema,
+         parameters, outputs, warmup_period, fundamental_inputs)
+    VALUES ($1::uuid, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9, $10::jsonb)
+    ON CONFLICT (formula_id) DO UPDATE SET
+        name = EXCLUDED.name,
+        description = EXCLUDED.description,
+        source = EXCLUDED.source,
+        author = EXCLUDED.author,
+        input_schema = EXCLUDED.input_schema,
+        parameters = EXCLUDED.parameters,
+        outputs = EXCLUDED.outputs,
+        warmup_period = EXCLUDED.warmup_period,
+        fundamental_inputs = EXCLUDED.fundamental_inputs,
+        updated_at = NOW()
+    RETURNING *
+"""
+
+_UPDATE_SQL = """
+    UPDATE indicators.formulas
+       SET name = $2, description = $3, source = $4,
+           parameters = $5::jsonb, outputs = $6::jsonb, warmup_period = $7,
+           fundamental_inputs = $8::jsonb,
+           updated_at = NOW()
+     WHERE formula_id = $1::uuid
     RETURNING *
 """
 
@@ -59,7 +88,6 @@ def _insert_args(
     description,
     source,
     author,
-    is_public,
     input_schema,
     parameters=None,
     outputs=None,
@@ -75,7 +103,6 @@ def _insert_args(
         description or "",
         source,
         author,
-        is_public,
         json.dumps(dict(input_schema) if input_schema else {}),
         json.dumps(list(parameters) if parameters else []),
         json.dumps(list(outputs) if outputs else []),
@@ -129,7 +156,6 @@ class FormulasRepository:
         description,
         source,
         author,
-        is_public,
         input_schema,
         parameters=None,
         outputs=None,
@@ -140,31 +166,12 @@ class FormulasRepository:
         well-known id on every restart is safe.
         """
         row = await self._db.fetchrow(
-            """
-            INSERT INTO indicators.formulas
-                (formula_id, name, description, source, author, is_public, input_schema,
-                 parameters, outputs, warmup_period, fundamental_inputs)
-            VALUES ($1::uuid, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9::jsonb, $10, $11::jsonb)
-            ON CONFLICT (formula_id) DO UPDATE SET
-                name = EXCLUDED.name,
-                description = EXCLUDED.description,
-                source = EXCLUDED.source,
-                author = EXCLUDED.author,
-                is_public = EXCLUDED.is_public,
-                input_schema = EXCLUDED.input_schema,
-                parameters = EXCLUDED.parameters,
-                outputs = EXCLUDED.outputs,
-                warmup_period = EXCLUDED.warmup_period,
-                fundamental_inputs = EXCLUDED.fundamental_inputs,
-                updated_at = NOW()
-            RETURNING *
-            """,
+            _UPSERT_SQL,
             formula_id,
             name,
             description or "",
             source,
             author,
-            is_public,
             json.dumps(dict(input_schema) if input_schema else {}),
             json.dumps(list(parameters) if parameters else []),
             json.dumps(list(outputs) if outputs else []),
@@ -216,27 +223,17 @@ class FormulasRepository:
         name,
         description,
         source,
-        is_public,
         parameters=None,
         outputs=None,
         warmup_period=0,
         fundamental_inputs=None,
     ) -> dict | None:
         row = await self._db.fetchrow(
-            """
-            UPDATE indicators.formulas
-               SET name = $2, description = $3, source = $4, is_public = $5,
-                   parameters = $6::jsonb, outputs = $7::jsonb, warmup_period = $8,
-                   fundamental_inputs = $9::jsonb,
-                   updated_at = NOW()
-             WHERE formula_id = $1::uuid
-            RETURNING *
-            """,
+            _UPDATE_SQL,
             formula_id,
             name,
             description or "",
             source,
-            is_public,
             json.dumps(list(parameters) if parameters else []),
             json.dumps(list(outputs) if outputs else []),
             int(warmup_period or 0),

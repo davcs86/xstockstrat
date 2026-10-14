@@ -11,6 +11,7 @@ import pytest
 
 from app.handlers.servicer import IndicatorsServicer
 from app.services.formulas_repository import FormulasRepository
+from tests.conftest import OTHER_HEADERS, OWNER_HEADERS
 
 
 def _cfg_stub():
@@ -48,7 +49,6 @@ class TestFormulasRepository:
             description="",
             source="x = 1",
             author="user-1",
-            is_public=False,
             input_schema={},
         )
         pool.fetchrow.assert_awaited_once()
@@ -74,7 +74,6 @@ class TestFormulasRepository:
             description="",
             source="x = 1",
             author="user-1",
-            is_public=False,
             input_schema={},
             parameters=[{"name": "period", "type": "PARAMETER_TYPE_INT"}],
         )
@@ -97,7 +96,6 @@ class TestFormulasRepository:
             description="",
             source="result = {'value': 1}",
             author="user-1",
-            is_public=False,
             input_schema={},
             outputs=[{"name": "upper", "description": "upper band"}],
         )
@@ -166,6 +164,75 @@ class TestFormulasRepository:
         assert "deleted_at IS NULL" in pool.fetchval.await_args.args[0]
 
 
+def _recording_pool():
+    pool = MagicMock()
+    pool.fetchrow = AsyncMock(return_value={"formula_id": "f", "input_schema": "{}"})
+    conn = MagicMock(fetchrow=pool.fetchrow)
+    pool.acquire.return_value.__aenter__.return_value = conn
+    return pool
+
+
+_NEW_FORMULA = {
+    "formula_id": "11111111-1111-1111-1111-111111111111",
+    "name": "F",
+    "description": "",
+    "source": "x = 1",
+    "author": "user-1",
+    "input_schema": {},
+}
+
+
+class TestIsPublicNotWritten:
+    """Feature 225 (FR-4, AC-11 unit half): no write path names is_public, so the column can be
+    dropped by a later contract."""
+
+    def test_write_sql_constants_omit_is_public(self):
+        from app.services import formulas_repository as fr
+
+        for sql in (fr._INSERT_SQL, fr._UPDATE_SQL, fr._UPSERT_SQL):
+            assert "is_public" not in sql
+
+    async def test_create_executes_insert_sql_with_13_args(self):
+        from app.services.formulas_repository import _INSERT_SQL
+
+        pool = _recording_pool()
+        await FormulasRepository(pool).create(**_NEW_FORMULA)
+        sql, *args = pool.fetchrow.await_args.args
+        assert sql == _INSERT_SQL and len(args) == 13
+
+    async def test_create_pending_copies_executes_insert_sql_with_13_args(self):
+        from app.services.formulas_repository import _INSERT_SQL
+
+        pool = _recording_pool()
+        await FormulasRepository(pool).create_pending_copies(
+            [_NEW_FORMULA], "00000000-0000-4000-8000-000000000001"
+        )
+        sql, *args = pool.fetchrow.await_args.args
+        assert sql == _INSERT_SQL and len(args) == 13
+        assert args[-1] == "00000000-0000-4000-8000-000000000001"
+
+    async def test_update_executes_update_sql_with_8_args(self):
+        from app.services.formulas_repository import _UPDATE_SQL
+
+        pool = _recording_pool()
+        await FormulasRepository(pool).update(
+            formula_id="11111111-1111-1111-1111-111111111111",
+            name="F",
+            description="",
+            source="x = 1",
+        )
+        sql, *args = pool.fetchrow.await_args.args
+        assert sql == _UPDATE_SQL and len(args) == 8
+
+    async def test_upsert_executes_upsert_sql_with_10_args(self):
+        from app.services.formulas_repository import _UPSERT_SQL
+
+        pool = _recording_pool()
+        await FormulasRepository(pool).upsert(**{**_NEW_FORMULA, "author": "system"})
+        sql, *args = pool.fetchrow.await_args.args
+        assert sql == _UPSERT_SQL and len(args) == 10
+
+
 # ---------------------------------------------------------------------------
 # IndicatorsServicer CRUD — in-memory fallback (db_pool=None)
 # ---------------------------------------------------------------------------
@@ -178,12 +245,12 @@ class TestIndicatorsServicerCRUD:
     async def test_list_formulas_empty_when_no_repo(self):
         servicer = self._servicer()
         req = MagicMock(author_filter="", include_public=False, page_size=0, page_offset=0)
-        resp = await servicer.ListFormulas(req, MagicMock())
+        resp = await servicer.ListFormulas(req, _ctx(OWNER_HEADERS))
         assert resp.total_count == 0
 
     async def test_update_formula_unavailable_when_no_repo(self):
         servicer = self._servicer()
-        ctx = MagicMock()
+        ctx = _ctx(OWNER_HEADERS)
         ctx.abort = AsyncMock(side_effect=Exception("aborted"))
         with pytest.raises(Exception):
             await servicer.UpdateFormula(MagicMock(), ctx)
@@ -192,7 +259,7 @@ class TestIndicatorsServicerCRUD:
 
     async def test_delete_formula_unavailable_when_no_repo(self):
         servicer = self._servicer()
-        ctx = MagicMock()
+        ctx = _ctx(OWNER_HEADERS)
         ctx.abort = AsyncMock(side_effect=Exception("aborted"))
         with pytest.raises(Exception):
             await servicer.DeleteFormula(MagicMock(), ctx)
@@ -266,7 +333,7 @@ class TestRegisterFormulaAuthorGate:
         ctx.abort = AsyncMock(side_effect=Exception("aborted"))
         with pytest.raises(Exception):
             await servicer.RegisterFormula(req, ctx)
-        assert ctx.abort.await_args.args[0] == grpc.StatusCode.INVALID_ARGUMENT
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.UNAUTHENTICATED
 
 
 # ---------------------------------------------------------------------------
@@ -473,9 +540,9 @@ class TestFormulaAdminOverride:
     async def test_owner_updates_without_admin_scope(self):
         from gen.indicators.v1 import indicators_pb2
 
-        servicer = _repo_servicer(author="user-1")
-        req = indicators_pb2.UpdateFormulaRequest(formula_id="f", user_id="user-1", name="n")
-        resp = await servicer.UpdateFormula(req, _ctx([]))
+        servicer = _repo_servicer(author="user-a")
+        req = indicators_pb2.UpdateFormulaRequest(formula_id="f", user_id="user-a", name="n")
+        resp = await servicer.UpdateFormula(req, _ctx(OWNER_HEADERS))
         assert resp.formula.formula_id == "f"
 
     async def test_non_owner_admin_update_denied(self):
@@ -483,7 +550,7 @@ class TestFormulaAdminOverride:
 
         servicer = _repo_servicer(author="owner")
         req = indicators_pb2.UpdateFormulaRequest(formula_id="f", user_id="someone-else", name="n")
-        ctx = _ctx([("x-access-scope", "7")])
+        ctx = _ctx([("x-user-id", "someone-else"), ("x-access-scope", "7")])
         ctx.abort = AsyncMock(side_effect=Exception("aborted"))
         with pytest.raises(Exception):
             await servicer.UpdateFormula(req, ctx)
@@ -495,7 +562,7 @@ class TestFormulaAdminOverride:
 
         servicer = _repo_servicer(author="owner")
         req = indicators_pb2.UpdateFormulaRequest(formula_id="f", user_id="someone-else", name="n")
-        ctx = _ctx([("x-access-scope", "1")])
+        ctx = _ctx(OTHER_HEADERS)
         ctx.abort = AsyncMock(side_effect=Exception("aborted"))
         with pytest.raises(Exception):
             await servicer.UpdateFormula(req, ctx)
@@ -506,7 +573,7 @@ class TestFormulaAdminOverride:
 
         servicer = _repo_servicer(author="owner")
         req = indicators_pb2.DeleteFormulaRequest(formula_id="f", user_id="someone-else")
-        ctx = _ctx([("x-access-scope", "7")])
+        ctx = _ctx([("x-user-id", "someone-else"), ("x-access-scope", "7")])
         ctx.abort = AsyncMock(side_effect=Exception("aborted"))
         with pytest.raises(Exception):
             await servicer.DeleteFormula(req, ctx)
@@ -518,7 +585,7 @@ class TestFormulaAdminOverride:
 
         servicer = _repo_servicer(author="owner")
         req = indicators_pb2.DeleteFormulaRequest(formula_id="f", user_id="someone-else")
-        ctx = _ctx([("x-access-scope", "0")])
+        ctx = _ctx([("x-user-id", "someone-else"), ("x-access-scope", "0")])
         ctx.abort = AsyncMock(side_effect=Exception("aborted"))
         with pytest.raises(Exception):
             await servicer.DeleteFormula(req, ctx)
@@ -583,12 +650,11 @@ class TestFormulaWarmupPeriod:
             description="",
             source="x = 1",
             author="u",
-            is_public=False,
             input_schema={},
             warmup_period=14,
         )
-        # warmup_period is bound as $10 (args[0] is the SQL).
-        assert pool.fetchrow.await_args.args[10] == 14
+        # warmup_period is bound as $9 (args[0] is the SQL).
+        assert pool.fetchrow.await_args.args[9] == 14
         assert result["warmup_period"] == 14
 
     async def test_register_get_round_trips_warmup_period(self):
@@ -633,7 +699,7 @@ class TestFormulaWarmupPeriod:
             formula_id="f", user_id="u", name="n", source="x = 1", warmup_period=-1
         )
         ctx = MagicMock()
-        ctx.invocation_metadata = MagicMock(return_value=[])
+        ctx.invocation_metadata = MagicMock(return_value=[("x-user-id", "u")])
         ctx.abort = AsyncMock(side_effect=Exception("aborted"))
         with pytest.raises(Exception):
             await servicer.UpdateFormula(req, ctx)
@@ -662,7 +728,7 @@ class TestFormulaWarmupPeriod:
             formula_id="f", user_id="u", name="n", source="x = 1", warmup_period=21
         )
         ctx = MagicMock()
-        ctx.invocation_metadata = MagicMock(return_value=[])
+        ctx.invocation_metadata = MagicMock(return_value=[("x-user-id", "u")])
         resp = await servicer.UpdateFormula(req, ctx)
         assert repo.update.await_args.kwargs["warmup_period"] == 21
         assert resp.formula.warmup_period == 21
@@ -680,7 +746,7 @@ class TestSystemFormulaReadOnly:
 
         servicer = _repo_servicer(author=SYSTEM_AUTHOR)
         req = indicators_pb2.UpdateFormulaRequest(formula_id="f", user_id="admin", name="n")
-        ctx = _ctx([("x-access-scope", "7")])  # admin scope present
+        ctx = _ctx([("x-user-id", "admin"), ("x-access-scope", "7")])  # admin scope present
         ctx.abort = AsyncMock(side_effect=Exception("aborted"))
         with pytest.raises(Exception):
             await servicer.UpdateFormula(req, ctx)
@@ -693,7 +759,7 @@ class TestSystemFormulaReadOnly:
 
         servicer = _repo_servicer(author=SYSTEM_AUTHOR)
         req = indicators_pb2.DeleteFormulaRequest(formula_id="f", user_id="admin")
-        ctx = _ctx([("x-access-scope", "7")])  # admin scope present
+        ctx = _ctx([("x-user-id", "admin"), ("x-access-scope", "7")])  # admin scope present
         ctx.abort = AsyncMock(side_effect=Exception("aborted"))
         with pytest.raises(Exception):
             await servicer.DeleteFormula(req, ctx)
@@ -743,12 +809,12 @@ class TestFormulaPartialUpdate:
             formula_id="f", user_id="user-1", description="new desc"
         )
         req.update_mask.paths.append("description")
-        await servicer.UpdateFormula(req, _ctx([]))
+        await servicer.UpdateFormula(req, _ctx([("x-user-id", "user-1")]))
         kw = repo.update.await_args.kwargs
         assert kw["description"] == "new desc"  # masked field written
         assert kw["name"] == "orig name"  # unmasked preserved
         assert kw["source"] == "x = 1"
-        assert kw["is_public"] is False
+        assert "is_public" not in kw
         assert kw["parameters"] == [{"name": "keepme"}]
         assert kw["outputs"] == [{"name": "s2"}]
         assert kw["warmup_period"] == 7
@@ -760,12 +826,12 @@ class TestFormulaPartialUpdate:
         req = indicators_pb2.UpdateFormulaRequest(
             formula_id="f", user_id="user-1", name="n2", source="y = 2"
         )
-        await servicer.UpdateFormula(req, _ctx([]))
+        await servicer.UpdateFormula(req, _ctx([("x-user-id", "user-1")]))
         kw = repo.update.await_args.kwargs
         assert kw["name"] == "n2"
         assert kw["source"] == "y = 2"
         assert kw["description"] == ""  # full-replace back-compat: omitted → default
-        assert kw["is_public"] is False
+        assert "is_public" not in kw
 
     async def test_masked_blank_source_rejected(self):
         from gen.indicators.v1 import indicators_pb2
@@ -773,7 +839,7 @@ class TestFormulaPartialUpdate:
         servicer, _ = _update_servicer(_full_row())
         req = indicators_pb2.UpdateFormulaRequest(formula_id="f", user_id="user-1", source="")
         req.update_mask.paths.append("source")
-        ctx = _ctx([])
+        ctx = _ctx([("x-user-id", "user-1")])
         ctx.abort = AsyncMock(side_effect=Exception("aborted"))
         with pytest.raises(Exception):
             await servicer.UpdateFormula(req, ctx)
@@ -785,7 +851,7 @@ class TestFormulaPartialUpdate:
         servicer, _ = _update_servicer(_full_row())
         req = indicators_pb2.UpdateFormulaRequest(formula_id="f", user_id="user-1")
         req.update_mask.paths.append("bogus_field")
-        ctx = _ctx([])
+        ctx = _ctx([("x-user-id", "user-1")])
         ctx.abort = AsyncMock(side_effect=Exception("aborted"))
         with pytest.raises(Exception):
             await servicer.UpdateFormula(req, ctx)
@@ -799,7 +865,7 @@ class TestFormulaPartialUpdate:
         servicer, _ = _update_servicer(_full_row(deleted_at=datetime.datetime(2026, 1, 1)))
         req = indicators_pb2.UpdateFormulaRequest(formula_id="f", user_id="user-1", description="x")
         req.update_mask.paths.append("description")
-        ctx = _ctx([])
+        ctx = _ctx([("x-user-id", "user-1")])
         ctx.abort = AsyncMock(side_effect=Exception("aborted"))
         with pytest.raises(Exception):
             await servicer.UpdateFormula(req, ctx)

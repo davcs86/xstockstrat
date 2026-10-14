@@ -25,36 +25,68 @@ compatibility objects.
 
 ## Functional Requirements
 
-FR-1. Owner-scoped RPCs in `xstockstrat-analysis`, `xstockstrat-indicators` and `xstockstrat-ingest`
-reject a call with no `x-user-id` and no SAN-bound internal-caller grant. The rejection is
-`UNAUTHENTICATED`; the exact code is confirmed at design. This removes the release-N headerless
-tolerance.
-FR-2. indicators removes the `_INTERNAL_FORMULA_READERS` SAN-bound `analysis` bypass. analysis reads
-formulas only as the requesting owner or as the SAN-bound `system` identity.
-FR-3. `analysis.backtest_runs.user_id` becomes `NOT NULL` (contract migration analysis `027`).
-FR-4. The contract migrations (analysis `027`, indicators `008`, ingest `014`) drop:
-- the `*_n1_owner_fill` triggers;
-- the tables superseded by 224;
-- the bare-id `analysis.strategy_scores` cache, which `strategy_scores_v2` replaced.
-FR-5. Each contract migration declares `-- contract-of: <224 expand file>`. The
-`migration-contract-gate` CI job accepts it only when that expand file is already on `origin/main`.
-Each `.down.sql` refuses to run (it raises) instead of recreating the dropped objects.
-FR-6. Any `LEGACY_GLOBAL` credential path for `mcp_client` sources is deleted. This applies only if 224
-shipped one, which is confirmed at recon.
+FR-1. Every owner-scoped RPC in `xstockstrat-analysis`, `xstockstrat-indicators` and `xstockstrat-ingest`
+(an RPC that resolves its owner from `x-user-id`; recon enumerates them per service) rejects a call that
+carries no `x-user-id` and no SAN-bound internal-caller grant with **`UNAUTHENTICATED`**, uniformly across
+the three services (operator decision 2026-10-08). An identified caller who does not own the object keeps
+today's code (`NOT_FOUND` / `PERMISSION_DENIED`). This removes the release-N headerless tolerance; it
+changes analysis's current headerless behaviour (`PERMISSION_DENIED` on mutating RPCs, an empty result on list RPCs) and indicators' `INVALID_ARGUMENT` for the headerless case,
+and removes ingest's slug-holder fallback for headerless calls.
+FR-2. indicators removes the `_INTERNAL_FORMULA_READERS` SAN-bound `analysis` bypass
+(`services/xstockstrat-indicators/app/handlers/servicer.py`). analysis reads formulas only as the
+requesting owner or as the SAN-bound `system` identity; a headered `analysis` caller reading another
+user's formula gets the ordinary non-owner result.
+FR-3. analysis contract migration `027` first re-applies 224's D-1 owner backfill to any
+`analysis.backtest_runs` row written with `user_id IS NULL` since 224 (unique strategy owner, else
+`SEED_USER_ID`), then sets `analysis.backtest_runs.user_id NOT NULL`.
+FR-4. The contract migrations drop exactly these release-N compatibility objects:
+- **ingest `014`** (contract-of `013_signal_ownership_templates`): trigger `newsletter_signals_n1_owner_fill`
+  on `ingest.newsletter_signals`, function `ingest.n1_owner_fill_signals()`, table `ingest.signal_dedup_keys`
+  (superseded by `ingest.signal_dedup_claims`).
+- **analysis `027`** (contract-of `026_owner_dimension_templates`): table `analysis.strategy_scores`
+  (superseded by `analysis.strategy_scores_v2`), plus FR-3. analysis has no N-1 trigger.
+- **indicators**: **no migration in 225.** Release-N code still writes `indicators.formulas.is_public`, and
+  migrations run PRE_DEPLOY while release-N binaries still serve, so dropping the column now would fail
+  Register/UpdateFormula during rollout. 225 stops every indicators write path from writing or reading `is_public` (Register, Update, seed
+  upsert, template instantiate) (the column keeps its `DEFAULT FALSE`); the column drop is a follow-up contract release
+  (operator decision 2026-10-08). The `008` reservation is released.
+FR-5. Each contract migration carries `-- contract-of: <224 expand file>` within its first 5 lines (where
+`scripts/check-migration-contract.sh` reads it); the `migration-contract-gate` CI job accepts it only when
+that expand file is on `origin/main`. Each up-file is replay-safe (`IF EXISTS` / guarded `DO` blocks, per
+224 design §1) and is added to `scripts/migration-rerun.sh`'s replay list (which replays only the 224 expand and 225 contract files — pre-224 files are not idempotent, see Out of Scope); its trigger-count check moves to expect 0 N-1 triggers after the contract. Each `.down.sql` raises instead of
+recreating dropped objects (so `migrate goto` below the contract is refused — DBA note).
+FR-6. No `LEGACY_GLOBAL` credential path exists to delete (224 did not ship `credential_scope`; ingest
+`013` header: prod had zero `mcp_client` sources). 225 keeps a regression guard that `mcp_client` bearer
+resolution is per-user only.
+
+FR-1 addendum (design.md): an ungranted inbound `x-user-id: system` to analysis → `PERMISSION_DENIED`;
+`RunFundamentalsScan` is not owner-scoped (admin-scope-gated) and is a deliberate exemption; `SetOpportunityAction`
+headerless changes from `INVALID_ARGUMENT` to `UNAUTHENTICATED`; in-process analysis callers build owner identity only
+through `app/identity.owner_metadata`, which refuses an empty or `system` owner (the unit of work is skipped and no
+owner-scoped call is issued).
+
+FR-7. analysis `QueryPnLPatterns` is owner-scoped under FR-1: it returns only samples whose `position_id` belongs to an
+`analysis.pnl_positions` row whose `user_id` is the caller's `x-user-id`. No migration.
+
+FR-8. `scripts/db-migrate.sh up` refuses the automatic `force 0` dirty recovery for a service whose dirty version is ≥
+the lowest expand version named by any `-- contract-of:` header in that service's migrations directory; it exits non-zero
+and prints `migrate force <dirty-1>` recovery text without credentials. Below the floor, and for services with no
+contract file, behaviour is unchanged. The guard ships in the migrator image (`scripts/Dockerfile.migrate`).
 
 ## Out of Scope
 
 - New template kinds or template UI changes.
 - Any change to 224's per-user secret model or admin audit semantics.
-- Fixing the pre-224 non-idempotent migrations
+- Fixing the pre-224 non-idempotent migrations (and the general force-0 recovery) stays out of scope; the defect report stays `open` — FR-8 is a partial mitigation for contract services only (operator decision 2026-10-10). Original note:
   (`docs/reports/2026-10-07-db-migrate-dirty-recovery-replay-unsafe-defect.md`). They are tracked by
   that defect report.
 
 ## Affected Services
 
-- `xstockstrat-analysis` — headerless fail-closed, `backtest_runs.user_id` NOT NULL, `strategy_scores` drop, N-1 trigger drop
-- `xstockstrat-indicators` — bypass removal, headerless fail-closed, N-1 trigger/table drop
-- `xstockstrat-ingest` — headerless fail-closed, N-1 trigger drop, `LEGACY_GLOBAL` removal (if shipped)
+- `xstockstrat-analysis` — headerless fail-closed (`UNAUTHENTICATED`), `backtest_runs.user_id` D-1 re-backfill + NOT NULL, `strategy_scores` drop (contract `027`); no N-1 trigger exists here
+- `xstockstrat-indicators` — bypass removal, headerless fail-closed, stop writing `is_public` on every write path; **no migration**
+- `xstockstrat-ingest` — headerless fail-closed, drop N-1 trigger/function + `signal_dedup_keys` (contract `014`), per-user `mcp_client` credential regression guard
+- platform tooling — `scripts/db-migrate.sh`, new `scripts/migration-dirty-guard.sh`, `scripts/Dockerfile.migrate`, `scripts/migration-rerun.sh`
 
 ## Consumer Surface(s)
 
@@ -75,15 +107,16 @@ shipped one, which is confirmed at recon.
 
 ## Database Changes
 
-Contract migrations, one per service, at the pre-reserved numbers in `merge-order.md`:
+Contract migrations at the pre-reserved numbers in `merge-order.md` (indicators `008` released — FR-4):
 
-- analysis `027`
-- indicators `008`
-- ingest `014`
+- analysis `027` — D-1 re-backfill of NULL `backtest_runs.user_id`, then `SET NOT NULL`; drop `analysis.strategy_scores`.
+- ingest `014` — drop trigger `newsletter_signals_n1_owner_fill`, function `ingest.n1_owner_fill_signals()`,
+  table `ingest.signal_dedup_keys`.
 
-Each one drops 224's N-1 owner-fill triggers and superseded tables. analysis `027` also sets
-`backtest_runs.user_id NOT NULL` and drops `strategy_scores`. Each migration carries a
-`-- contract-of:` header, and its down-file refuses to run.
+Each carries `-- contract-of:` in its first 5 lines, is replay-safe, is added to `scripts/migration-rerun.sh`,
+and its down-file raises. analysis `027` requires `SEED_USER_ID` (`-- requires-env`), like `026`.
+
+`backtest_run_symbols.user_id` and `backtest_details.user_id` stay nullable after 225 (deferred to a later contract; design.md Open Risks).
 
 ## Feature Workflow Notes
 
@@ -100,12 +133,13 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 
 ## Open Questions
 
-- [ ] **Precondition:** 224 must be `launched`, with no N-1 binary still running anywhere, before
-  225 merges (see `merge-order.md`).
-- [ ] FR-1: which status code is used for a headerless call, `UNAUTHENTICATED` or `PERMISSION_DENIED`?
-  It must be consistent across the three services.
-- [ ] FR-6: did 224 ship `credential_scope=LEGACY_GLOBAL`? 224's ingest `013` has no
-  `credential_scope` column, so this is likely a no-op. Confirm at recon.
-- [ ] Re-verify the reserved numbers 027/008/014 against every remote branch at `/sdd-spec`.
-- [ ] **Known trap** (ledger `fails.md`, fail-open→fail-closed hardening): re-check every
-  "low-risk because validation lags" justification against the fail-closed behavior.
+- [x] Precondition: 224 is `launched` — promotion #1233 merged to `main` (2026-10-08); the 224 expand files
+  are on `origin/main`. Release order: 225 merges and deploys after prod has run 224 with no N-1 binary.
+- [x] FR-1 status code: `UNAUTHENTICATED` (operator decision 2026-10-08, context.md).
+- [x] FR-6: no `LEGACY_GLOBAL` path shipped → regression guard only.
+- [x] indicators contract scope: no migration in 225; stop writing `is_public`; drop later (operator decision).
+- [x] Reserved numbers: analysis `027` / ingest `014` are next-free on trunk (overlap scan 2026-10-08);
+  `/sdd-spec` re-verifies against every remote branch (deferred to that named phase).
+- [x] Known trap (fail-open→fail-closed): carried to `/sdd-design` as an adversary check — every in-process
+  caller (analysis live loop, pnl consumer, fundsignal producer) must be shown to send `x-user-id` or a
+  SAN-bound grant before FR-1 ships.

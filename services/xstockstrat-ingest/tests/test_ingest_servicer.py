@@ -97,30 +97,31 @@ def _mk_backfill_resp(bars_written: int, failed_symbols: list[str], expected_bar
 
 
 class TestJobRowTimeframeEnum:
-    """AC-2 / AC-3 — the read path must populate BOTH representations.
+    """AC-2 / AC-3 — the read path populates timeframe_enum; feature 196 @AC-6 omits the
+    deprecated string at this response edge.
 
     Expected enums are HARDCODED. Computing them from `_STR_TO_ENUM` would assert
     the mapper against itself and could never go red (fails.md 2026-07-29/074).
     """
 
     @pytest.mark.parametrize(("stored", "want_enum"), [("15m", 5), ("1h", 3), ("1d", 4)])
-    def test_supported_timeframes_pair_string_and_enum(self, stored, want_enum):
+    def test_supported_timeframes_emit_enum_and_omit_string(self, stored, want_enum):
         row = _job_row("j", ingest_pb2.BACKFILL_STATUS_COMPLETED, timeframe=stored)
         job = job_row_to_proto(row)
-        assert job.timeframe == stored
+        assert job.timeframe == ""
         assert job.timeframe_enum == want_enum
 
-    def test_legacy_alias_row_resolves_but_string_is_untouched(self):
+    def test_legacy_alias_row_resolves_and_string_is_omitted(self):
         row = _job_row("j", ingest_pb2.BACKFILL_STATUS_COMPLETED, timeframe="1Day")
         job = job_row_to_proto(row)
-        assert job.timeframe == "1Day"  # FR-2: echoed unchanged
+        assert job.timeframe == ""
         assert job.timeframe_enum == 4
 
     @pytest.mark.parametrize("stored", ["", "10Min"])
     def test_unmappable_yields_unspecified_without_raising(self, stored):
         row = _job_row("j", ingest_pb2.BACKFILL_STATUS_COMPLETED, timeframe=stored)
         job = job_row_to_proto(row)
-        assert job.timeframe == stored
+        assert job.timeframe == ""
         assert job.timeframe_enum == 0
 
 
@@ -665,7 +666,7 @@ class TestIngestSignal:
     async def test_aborts_when_no_db(self):
         svc = make_servicer()  # db_pool=None
         req = MagicMock()
-        context = MagicMock()
+        context = _ctx("0")
         context.abort = MagicMock(side_effect=Exception("aborted"))
 
         with pytest.raises(Exception, match="aborted"):
@@ -681,7 +682,7 @@ class TestIngestSignal:
         req.signal.source = ""
         req.signal.symbol = "AAPL"
         req.signal.direction = "buy"
-        context = MagicMock()
+        context = _ctx("0")
         context.abort = MagicMock(side_effect=Exception("aborted"))
 
         with pytest.raises(Exception, match="aborted"):
@@ -697,7 +698,7 @@ class TestIngestSignal:
         req.signal.source = "unusual_whales"
         req.signal.symbol = "AAPL"
         req.signal.direction = "unknown"
-        context = MagicMock()
+        context = _ctx("0")
         context.abort = MagicMock(side_effect=Exception("aborted"))
 
         with pytest.raises(Exception, match="aborted"):
@@ -736,7 +737,7 @@ class TestIngestSignal:
         svc._ledger = MagicMock()
         svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
 
-        resp = await svc.IngestSignal(self._make_signal_req(), context=MagicMock())
+        resp = await svc.IngestSignal(self._make_signal_req(), context=_ctx("0"))
         assert resp.signal_id == 42
         assert resp.deduplicated is False
 
@@ -752,7 +753,7 @@ class TestIngestSignal:
         svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
 
         resp = await svc.IngestSignal(
-            self._make_signal_req(has_valid_until=True), context=MagicMock()
+            self._make_signal_req(has_valid_until=True), context=_ctx("0")
         )
         assert resp.signal_id == 99
         assert resp.deduplicated is False
@@ -767,7 +768,7 @@ class TestIngestSignal:
             conn_fetchrow_side_effect=[Exception("db failure")],
         )
         svc._db = db
-        context = MagicMock()
+        context = _ctx("0")
         context.abort = AsyncMock(side_effect=Exception("aborted"))
 
         with pytest.raises(Exception, match="aborted"):
@@ -785,7 +786,7 @@ class TestIngestSignal:
             conn_fetchrow_side_effect=[{"id": 1}, Exception("claim failure")],
         )
         svc._db = db
-        context = MagicMock()
+        context = _ctx("0")
         context.abort = AsyncMock(side_effect=Exception("aborted"))
 
         with pytest.raises(Exception, match="aborted"):
@@ -805,7 +806,7 @@ class TestIngestSignal:
         svc._ledger = MagicMock()
         svc._ledger.AppendEvent = AsyncMock(side_effect=Exception("ledger down"))
 
-        resp = await svc.IngestSignal(self._make_signal_req(), context=MagicMock())
+        resp = await svc.IngestSignal(self._make_signal_req(), context=_ctx("0"))
         assert resp.signal_id == 7
         assert resp.deduplicated is False
 
@@ -826,7 +827,7 @@ class TestIngestSignal:
         svc._ledger = MagicMock()
         svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
 
-        resp = await svc.IngestSignal(self._make_signal_req(), context=MagicMock())
+        resp = await svc.IngestSignal(self._make_signal_req(), context=_ctx("0"))
         assert resp.deduplicated is True
         assert resp.signal_id == 42
 
@@ -843,7 +844,7 @@ class TestIngestSignal:
         svc._db = db
         svc._ledger = MagicMock()
         svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
-        context = MagicMock()
+        context = _ctx("0")
         context.abort = AsyncMock(side_effect=Exception("aborted"))
 
         with patch("app.handlers.servicer.mark_source_error", new=AsyncMock()) as mock_error:
@@ -865,7 +866,7 @@ class TestIngestSignal:
         svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
 
         with patch("app.handlers.servicer.mark_source_fed", new=AsyncMock()) as mock_fed:
-            resp = await svc.IngestSignal(self._make_signal_req(), context=MagicMock())
+            resp = await svc.IngestSignal(self._make_signal_req(), context=_ctx("0"))
 
         assert resp.deduplicated is True
         mock_fed.assert_not_called()
@@ -886,7 +887,7 @@ class TestIngestSignal:
             patch("app.handlers.servicer.mark_source_fed", new=AsyncMock()) as mock_fed,
             patch("app.handlers.servicer.touch_source_last_seen", new=AsyncMock()) as mock_touch,
         ):
-            resp = await svc.IngestSignal(self._make_signal_req(), context=MagicMock())
+            resp = await svc.IngestSignal(self._make_signal_req(), context=_ctx("0"))
 
         assert resp.deduplicated is True
         mock_fed.assert_not_called()
@@ -905,7 +906,7 @@ class TestIngestSignal:
         svc._ledger = MagicMock()
         svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
 
-        resp = await svc.IngestSignal(self._make_signal_req(), context=MagicMock())
+        resp = await svc.IngestSignal(self._make_signal_req(), context=_ctx("0"))
         assert resp.deduplicated is False
         assert resp.signal_id == 55
 
@@ -925,7 +926,7 @@ class TestIngestSignal:
 
         req = self._make_signal_req()
         req.signal.conviction = 0.95  # differs from a hypothetically-claimed 0.8
-        resp = await svc.IngestSignal(req, context=MagicMock())
+        resp = await svc.IngestSignal(req, context=_ctx("0"))
         assert resp.deduplicated is False
         assert resp.signal_id == 56
 
@@ -941,7 +942,7 @@ class TestIngestSignal:
         svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
 
         resp = await svc.IngestSignal(
-            self._make_signal_req(has_valid_until=True), context=MagicMock()
+            self._make_signal_req(has_valid_until=True), context=_ctx("0")
         )
         assert resp.deduplicated is False
         assert resp.signal_id == 57
@@ -959,7 +960,7 @@ class TestIngestSignal:
         svc._ledger = MagicMock()
         svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
 
-        resp = await svc.IngestSignal(self._make_signal_req(direction="sell"), context=MagicMock())
+        resp = await svc.IngestSignal(self._make_signal_req(direction="sell"), context=_ctx("0"))
         assert resp.deduplicated is False
         assert resp.signal_id == 58
 
@@ -975,7 +976,7 @@ class TestIngestSignal:
         svc._ledger = MagicMock()
         svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
 
-        await svc.IngestSignal(self._make_signal_req(), context=MagicMock())
+        await svc.IngestSignal(self._make_signal_req(), context=_ctx("0"))
 
         claim_call_args = conn.fetchrow.call_args_list[1]
         assert claim_call_args.args[-1] == 6
@@ -991,7 +992,7 @@ class TestQuerySignals:
     async def test_aborts_when_no_db(self):
         svc = make_servicer()
         req = MagicMock()
-        context = MagicMock()
+        context = _ctx("0")
         context.abort = MagicMock(side_effect=Exception("aborted"))
 
         with pytest.raises(Exception, match="aborted"):
@@ -1022,7 +1023,7 @@ class TestQuerySignals:
             ]
         )
         svc = make_servicer(db=db)
-        resp = await svc.QuerySignals(ingest_pb2.QuerySignalsRequest(), MagicMock())
+        resp = await svc.QuerySignals(ingest_pb2.QuerySignalsRequest(), _ctx("0"))
         assert resp.signals[0].HasField("ingested_at")
         assert resp.signals[0].ingested_at.ToDatetime(tzinfo=UTC) == ingested
 
@@ -1179,10 +1180,9 @@ class TestIngestSignalRegistryValidation:
     async def test_aborts_when_source_not_registered(self):
         svc = make_servicer()
         svc._db = MagicMock()
-        # Registry lookup returns None → unregistered source (feature 224: no slug holder)
+        # The owner's registry lookup returns None → unregistered for that owner (NOT_FOUND).
         svc._db.fetchrow = AsyncMock(return_value=None)
-        svc._db.fetch = AsyncMock(return_value=[])
-        context = MagicMock()
+        context = _ctx("0")
         context.abort = AsyncMock(side_effect=Exception("aborted"))
 
         with pytest.raises(Exception, match="aborted"):
@@ -1192,7 +1192,7 @@ class TestIngestSignalRegistryValidation:
         args = context.abort.call_args[0]
         import grpc
 
-        assert args[0] == grpc.StatusCode.INVALID_ARGUMENT
+        assert args[0] == grpc.StatusCode.NOT_FOUND
 
     @pytest.mark.asyncio
     async def test_proceeds_when_source_registered(self):
@@ -1205,7 +1205,7 @@ class TestIngestSignalRegistryValidation:
         svc._ledger = MagicMock()
         svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
 
-        resp = await svc.IngestSignal(self._make_signal_req(), context=MagicMock())
+        resp = await svc.IngestSignal(self._make_signal_req(), context=_ctx("0"))
         assert resp.signal_id == 42
 
 
@@ -1252,7 +1252,7 @@ class TestIngestSignalConvictionValidation:
         import grpc
 
         svc = self._servicer_full_happy_path()
-        context = MagicMock()
+        context = _ctx("0")
         context.abort = AsyncMock(side_effect=Exception("aborted"))
 
         with pytest.raises(Exception, match="aborted"):
@@ -1267,7 +1267,7 @@ class TestIngestSignalConvictionValidation:
         # 0.7 proceeds to INSERT; 0.0 passes the guard and falls through to the NULL
         # sentinel (stored NULL, not rejected) — both must still succeed.
         svc = self._servicer_full_happy_path()
-        resp = await svc.IngestSignal(self._make_signal_req(conviction), context=MagicMock())
+        resp = await svc.IngestSignal(self._make_signal_req(conviction), context=_ctx("0"))
         assert resp.signal_id == 42
 
 
@@ -1278,7 +1278,7 @@ class TestIngestSignalConvictionValidation:
 
 class TestManageSignalSource:
     @pytest.mark.asyncio
-    async def test_permission_denied_without_admin_scope(self):
+    async def test_headerless_register_without_admin_scope_unauthenticated(self):
         svc = make_servicer()
         svc._db = MagicMock()
 
@@ -1296,10 +1296,10 @@ class TestManageSignalSource:
 
         import grpc
 
-        assert context.abort.call_args[0][0] == grpc.StatusCode.PERMISSION_DENIED
+        assert context.abort.call_args[0][0] == grpc.StatusCode.UNAUTHENTICATED
 
     @pytest.mark.asyncio
-    async def test_permission_denied_without_scope_header(self):
+    async def test_headerless_register_without_scope_header_unauthenticated(self):
         svc = make_servicer()
         svc._db = MagicMock()
 
@@ -1316,7 +1316,7 @@ class TestManageSignalSource:
 
         import grpc
 
-        assert context.abort.call_args[0][0] == grpc.StatusCode.PERMISSION_DENIED
+        assert context.abort.call_args[0][0] == grpc.StatusCode.UNAUTHENTICATED
 
     @pytest.mark.asyncio
     async def test_register_succeeds_with_admin_scope(self):
@@ -1369,14 +1369,16 @@ class TestManageSignalSource:
         svc = make_servicer()
         svc._db = MagicMock()
         svc._db.fetchrow = AsyncMock(return_value=None)
-        svc._db.fetch = AsyncMock(return_value=[])  # feature 224: headerless → no slug holder
+        svc._db.fetch = AsyncMock(return_value=[])  # no `system` holder → NOT_FOUND
 
         req = ingest_pb2.ManageSignalSourceRequest(
             source=ingest_pb2.SignalSource(slug="missing"),
             operation="deactivate",
         )
         context = MagicMock()
-        context.invocation_metadata = MagicMock(return_value=[("x-access-scope", "7")])
+        context.invocation_metadata = MagicMock(
+            return_value=[("x-access-scope", "7"), ("x-user-id", "u1")]
+        )
         context.abort = AsyncMock(side_effect=Exception("aborted"))
 
         with pytest.raises(Exception, match="aborted"):
@@ -1413,7 +1415,7 @@ class TestListSignalSources:
         )
 
         req = ingest_pb2.ListSignalSourcesRequest(include_inactive=False)
-        resp = await svc.ListSignalSources(req, context=MagicMock())
+        resp = await svc.ListSignalSources(req, context=_ctx("0"))
         assert len(resp.sources) == 1
         assert resp.sources[0].slug == "uw"
         assert resp.sources[0].has_credentials is False
@@ -1438,7 +1440,7 @@ class TestListSignalSources:
         )
 
         req = ingest_pb2.ListSignalSourcesRequest(include_inactive=False)
-        resp = await svc.ListSignalSources(req, context=MagicMock())
+        resp = await svc.ListSignalSources(req, context=_ctx("0"))
         assert resp.sources[0].has_credentials is True
 
 
