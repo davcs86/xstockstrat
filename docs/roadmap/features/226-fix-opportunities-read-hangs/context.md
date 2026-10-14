@@ -69,10 +69,10 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Result: 1 advisory failure and 4 warnings (advisory, did not block). Floor: an F-08 risk in Step 8, not a breach.
 - Evidence baseline was verified against the feature-215 tree (post-215 lines match the spec).
 - Unresolved ✗ / ⚠ carried into execution:
-  - Step 8: the shared G4 pool-mode helper (FakePool, factories, per-FakeConn order/release assertion) has 2 consumer files. C-13 puts it in `tests/conftest.py`, which is not in Step 8 Files (F-08 risk). — [ ] unaddressed
-  - Step 8: in pool mode, `_state_repo_factory(bc)` must return None when the test's `_opportunity_compute_state_repo` is None. — [ ] unaddressed
-  - Step 5: bare `1.0` / `0.05` literals in `_rollback_then_release` (C-18, F-07-adjacent). Name them, or reuse `_RELEASE_TIMEOUT_S`. — [ ] unaddressed
-  - Step 9: Verification has no coverage threshold and no full-suite run after the conftest edit. — [ ] unaddressed
-  - Step 3: join `<-done` only when the prevClose goroutine was started. Step 4 and Step 12: RED is structural before the paired code step; use the skeleton-first approach (P-06). The patched `_agent_policy` must be async. — [ ] unaddressed
-  - Step 10: build the real servicer via `from tests.test_analysis_servicer import make_servicer` (precedent: test_opportunity_refresh.py:15). Step 9: document `XSTOCKSTRAT_PG_BIN` in analysis CLAUDE.md § Running Tests. — [ ] unaddressed
+  - Step 8: the shared G4 pool-mode helper (FakePool, factories, per-FakeConn order/release assertion) has 2 consumer files. C-13 puts it in `tests/conftest.py`, which is not in Step 8 Files (F-08 risk). — [x] resolved pre-execution (spec patched, operator choice 2026-10-14)
+  - Step 8: in pool mode, `_state_repo_factory(bc)` must return None when the test's `_opportunity_compute_state_repo` is None. — [x] resolved pre-execution (spec patched, operator choice 2026-10-14)
+  - Step 5: bare `1.0` / `0.05` literals in `_rollback_then_release` (C-18, F-07-adjacent). Name them, or reuse `_RELEASE_TIMEOUT_S`. — [x] resolved pre-execution (spec patched, operator choice 2026-10-14)
+  - Step 9: Verification has no coverage threshold and no full-suite run after the conftest edit. — [x] resolved pre-execution (spec patched, operator choice 2026-10-14)
+  - Step 3: join `<-done` only when the prevClose goroutine was started. Step 4 and Step 12: RED is structural before the paired code step; use the skeleton-first approach (P-06). The patched `_agent_policy` must be async. — [x] resolved pre-execution (spec patched, operator choice 2026-10-14)
+  - Step 10: build the real servicer via `from tests.test_analysis_servicer import make_servicer` (precedent: test_opportunity_refresh.py:15). Step 9: document `XSTOCKSTRAT_PG_BIN` in analysis CLAUDE.md § Running Tests. — [x] resolved pre-execution (spec patched, operator choice 2026-10-14)
 - Overlap findings: none (CLEAN). 215 is merged; its only open item is the Step 26 measurement, which changes no code.

@@ -251,7 +251,8 @@ cases are accepted, so the `INVALID_ARGUMENT` assertions fail.
    longer die with the first caller (design §3).
 6. Start prevClose **concurrently** with the trade fetch: if `s.prevClose != nil`, run it in a goroutine
    that writes into a closure-local result and closes a `done` channel. Join on `<-done` after the trades
-   resolve (this keeps `-race` safe, G10). On error, log `slog.Warn("BatchGetLatestPrice: previous-close
+   resolve, **only when the goroutine was started** (`s.prevClose != nil`; otherwise `done` is never closed and
+   the join blocks). This keeps `-race` safe (G10). On error, log `slog.Warn("BatchGetLatestPrice: previous-close
    lookup failed", "symbols", len(req.Symbols), "error", err)`.
 7. Trade path:
    - `registry.Get("")` error → `slog.Warn("BatchGetLatestPrice: source lookup failed", "symbols", n,
@@ -303,6 +304,11 @@ grep -n "WithoutCancel\|resolveBatchPriceBudget\|per-symbol fallback incomplete"
 **Covers**: `AC-3`
 
 **Instructions** (design §6 AC-3, G10):
+0. **RED discipline (P-06).** Before Step 3 lands, these tests reference `budgetCfg` / `intGetter` /
+   `prevCloseReader` / `resolveBatchPriceBudget`, so the package fails to compile. That is a structural RED,
+   not a behavioral one. Get a behavioral RED by stubbing first: add the seam types, the fields and a
+   `resolveBatchPriceBudget` that returns 2500ms but is not yet used in the closure. Confirm that the hang, G10,
+   AC-3 and incomplete-record tests then fail on their assertions or guards. Only then apply Step 3's behavior.
 1. Add a `recordingWarnHandler` that keeps `slog.Record` messages and attributes, in the shape of
    `countingWarnHandler`. Do not use `t.Parallel()`.
 2. **AC-3.** The `fakeBatchPriceSource` gains an injectable multi-fetch error and also implements
@@ -366,8 +372,9 @@ measurement, so no coverage threshold applies to it. The `-race` behavioral test
 **Covers**: — (the unit precursor of AC-4 is proven in Step 6, and the real driver in Step 10)
 
 **Instructions**: implement design.md §1 "New module" exactly. In outline:
-1. **Module constants.** `_READ_DB_BACKSTOP_GRACE_S = 2.0` and `_RELEASE_TIMEOUT_S = 1.0`. These are fixed
-   invariants, not config (F-07 exemption per the `_INTENT_SWEEP_SECONDS` precedent, documented in Step 13).
+1. **Module constants.** `_READ_DB_BACKSTOP_GRACE_S = 2.0`, `_RELEASE_TIMEOUT_S = 1.0`,
+   `_ROLLBACK_WINDOW_S = 1.0` (the shared rollback+release window on the error path) and
+   `_RELEASE_FLOOR_S = 0.05` (the minimum release timeout inside that window). These are fixed invariants, not config (F-07 exemption per the `_INTENT_SWEEP_SECONDS` precedent, documented in Step 13).
 2. **Transient classification** (D4). `_TRANSIENT` / `_NOT_TRANSIENT` tuples over `asyncpg.exceptions`, plus
    `is_transient_db_error(e)`, exactly as design §1 lists them.
    - Transient: `PostgresConnectionError`, `TooManyConnectionsError` (53300), `QueryCanceledError` (57014),
@@ -398,9 +405,10 @@ measurement, so no coverage threshold applies to it. The `-race` behavioral test
    - Success: `await pool.release(con, timeout=_RELEASE_TIMEOUT_S)`. On failure, log `budgeted_read: read
      connection release failed (…); connection terminated` and do not raise (H5).
 5. **`async def _rollback_then_release(pool, con, tr)`.**
-   - Bounded `tr.rollback()` under one shared `asyncio.timeout(1.0)`. Any failure → log, then
+   - Bounded `tr.rollback()` under one shared `asyncio.timeout(_ROLLBACK_WINDOW_S)`. Any failure → log, then
      `con.terminate()` (re-raise `CancelledError`).
-   - Else `pool.release(con, timeout=max(remaining, 0.05))`; a failure is logged.
+   - Else `pool.release(con, timeout=max(remaining, _RELEASE_FLOOR_S))`; a failure is logged. No bare
+     timeout literals in the module (C-18): every duration is one of the four named constants or the budget.
 6. No servicer wiring in this step (Step 7).
 
 **Verification**:
@@ -631,6 +639,8 @@ grep -n "metadata=propagation_meta" services/xstockstrat-analysis/app/handlers/s
 - `services/xstockstrat-analysis/tests/test_list_opportunities_deadlines.py` — create
 - `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify (G4 parametrization)
 - `services/xstockstrat-analysis/tests/test_opportunity_compute_state.py` — modify (G4 parametrization)
+- `services/xstockstrat-analysis/tests/conftest.py` — modify (the shared G4 `read_path` fixture and the
+  per-connection order/release assertion helper; 2 consumer files, so C-13 puts them here)
 
 **Reviewers**: xstockstrat-analysis owner — backtest reproducibility, strategy scoring determinism, no look-ahead bias
 
@@ -668,8 +678,13 @@ grep -n "metadata=propagation_meta" services/xstockstrat-analysis/app/handlers/s
      - `svc._live_enrich_memo` empty.
    - RED today: the call hangs until the 10s guard.
 2. **G4.** Parametrize every existing `ListOpportunities` test above over `read_path ∈ {direct, pool}`.
+   - Implement the switch once in `tests/conftest.py` as a `read_path` fixture, parametrized over
+     `direct`/`pool`, plus an `assert_budgeted_read_order(conn, budget_ms)` helper. Both test files consume
+     these; no per-file copies (C-13).
    - Pool mode sets `svc._db_pool = FakePool()`, `svc._opps_repo_factory = lambda bc: bc_routed(<that
-     test's fake opp repo>)`, and the same for the state repo.
+     test's fake opp repo>)`, and the same for the state repo. **When the test's
+     `_opportunity_compute_state_repo` is `None`, `_state_repo_factory` must return `None`**, so pool mode
+     matches direct mode.
    - Per acquired `FakeConn`, assert this order:
      `BEGIN READ ONLY → (SET LOCAL nᵢ → stmt)* → COMMIT → release`,
      with every nᵢ ≤ the budget in ms and the sequence non-increasing.
@@ -704,7 +719,8 @@ grep -n "metadata=propagation_meta" services/xstockstrat-analysis/app/handlers/s
 10. **Identity gate preserved** (`@AC-8/@AC-16 @feature-225`). A headerless call still gets
     `UNAUTHENTICATED` before any `FakePool.acquire`.
 11. C-13 verdict:
-    - The pool / conn / tx fakes come from `tests/conftest.py` (Step 6).
+    - The pool / conn / tx fakes come from `tests/conftest.py` (Step 6). The `read_path` fixture and the
+      order/release helper are added to `tests/conftest.py` in this step.
     - The AAPL/MSFT row dicts have one consumer (this new file), so they stay inline.
     - Existing tests keep their own fakes; parametrization adds no new domain literal.
 
@@ -778,9 +794,11 @@ real_pg runs exercise it, and their red/green covers it.)`
 ```bash
 cd services/xstockstrat-analysis && uv run pytest --markers | grep real_pg
 grep -n "install postgresql (analysis real_pg tests)" .github/workflows/ci.yml
+cd services/xstockstrat-analysis && uv run pytest --cov=app --cov-fail-under=40
 cd services/xstockstrat-analysis && uv run ruff check . && uv run ruff format --check .
 ```
-Step 10's runs prove that the fixture starts and stops.
+The full-suite run proves the conftest edit imports cleanly (coverage ≥ 40%). Step 10's runs prove that the
+fixture starts and stops.
 
 ---
 
@@ -815,7 +833,9 @@ Step 10's runs prove that the fixture starts and stops.
        route through a `bc_routed`-style factory that issues `SELECT 1`. Either is fine, since the call
        must block at acquire.
      - The test acquires and holds both connections.
-     - Use a real servicer on the pool path (`svc._db_pool = pool`) and a 300ms budget via `ConfigSnapshot`
+     - Use a real servicer built via `from tests.test_analysis_servicer import make_servicer` (the established
+       precedent: `test_opportunity_refresh.py:15`, `test_owner_header_guard.py:28`) on the pool path
+       (`svc._db_pool = pool`) and a 300ms budget via `ConfigSnapshot`
        `analysis.opportunity.read_db_budget_ms=300`.
      - Wrap `asyncpg.Connection.terminate` with a spy.
    - Assert:
@@ -971,13 +991,17 @@ grep -n 'metadata=_metadata(("x-user-id", user_id))' services/xstockstrat-agent/
        awaits forever;
      - `monkeypatch.setattr(client, "ANALYSIS_ENDPOINT", f"127.0.0.1:{port}")`;
      - `monkeypatch.setattr(client.mtls, "secure_channel", lambda ep, _svc: grpc.aio.insecure_channel(ep))`;
-     - patch `tools._agent_policy` to return 0.2.
+     - patch `tools._agent_policy` with an **async** function returning 0.2 (it is awaited under `wait_for`).
    - Invoke the registered `list_opportunities` tool (the same way existing tool tests invoke tools).
    - Assert:
      - a `RuntimeError` whose message contains "deadline", in < 1.5s;
      - the handler-entered event **is set** (reachability);
      - then `await server.stop(0)`.
    - Hang guard: `asyncio.wait_for(…, 10)`. RED today: there is no deadline, so the guard fires.
+   - RED discipline (P-06): before Step 11, `_agent_policy` and `_POLICY_READ_TIMEOUT_S` do not exist, so the
+     `monkeypatch.setattr` raises `AttributeError`, a structural RED. For the behavioral RED, patch with
+     `raising=False`, or run the AC-2 test against today's code with only the server/channel patches, and
+     confirm the 10s guard fires.
 2. **Policy fallbacks.**
    - A hung `_agent_policy` with `_POLICY_READ_TIMEOUT_S` monkeypatched to 0.1 → the call uses timeout 40
      (capture the `timeout=` passed to a patched `client.list_opportunities`).
@@ -1051,8 +1075,11 @@ cd services/xstockstrat-agent && uv run ruff check . && uv run ruff format --che
      - `value_type` must be `int` (a float reads as the default, F4);
      - unseeded (D2 waiver);
      - ≤ 0 → default.
-   - Add a fixed-invariants note (`_READ_DB_BACKSTOP_GRACE_S=2.0`, `_RELEASE_TIMEOUT_S=1.0`) following the
+   - Add a fixed-invariants note (`_READ_DB_BACKSTOP_GRACE_S=2.0`, `_RELEASE_TIMEOUT_S=1.0`,
+     `_ROLLBACK_WINDOW_S=1.0`, `_RELEASE_FLOOR_S=0.05`) following the
      `_INTENT_SWEEP_SECONDS` precedent.
+   - In § Running Tests, document the `real_pg` marker and the test-only `XSTOCKSTRAT_PG_BIN` override
+     (the PostgreSQL bin dir for `local_pg`; not an inter-service connection var).
    - In the Decide-surface section, add the constraint: the `ListOpportunities` read DB phase is strictly
      sequential on one budgeted connection, and kicks fire after release.
 2. **marketdata `CLAUDE.md`.** Add a row `marketdata.price.batch_timeout_ms` (int, `2500`, bounds
