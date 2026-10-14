@@ -36,7 +36,7 @@ tool. The observable outcome is traces per `service.name` in Grafana Cloud Tempo
 | `@AC-1` OTLP/HTTP export to a path-prefixed URL + `Authorization` header | Step 3 (Go ×3), Step 5 (Python ×4), Step 7 (Node ×4), Step 9 (UI) | Go and Python cover **both** Example rows (raw + encoded). Node and UI cover the **raw** row only, which is the form `deploy.yml:162-163` produces (design.md § Tests). |
 | `@AC-2` UI registers its hook from `src/` and exports | Step 9 (vitest `register()` + file-location assertion); Step 8 Verification (`next build` → `.next/server/instrumentation.js` + standalone boot log) | |
 | `@AC-3` failed export visible in service logs | Step 3, Step 5, Step 7, Step 9 | Go: stdlib `log` via OTel's default error handler. Python: `logging` ERROR. Node/UI: diag `console.error`. |
-| `@AC-4` local compose → `http://otel-collector:4318` | Step 10 (verification-only grep of the 12 service blocks) | |
+| `@AC-4` local compose → `http://otel-collector:4318` | Step 10 (grep of the 12 service blocks, RED recorded before the edit) | |
 
 ## Step Dependencies
 
@@ -85,7 +85,7 @@ tool. The observable outcome is traces per `service.name` in Grafana Cloud Tempo
 **Verification**:
 ```bash
 grep -n "Scenario Outline\|Examples:\|Authorization=Basic dGVzdDprZXk=\|Authorization=Basic%20dGVzdDprZXk%3D\|<otlp-receiver>" docs/roadmap/features/226-fix-otel-trace-export/acceptance.feature
-# expect: 1 Outline (AC-1), 1 Examples, both header rows; <otlp-receiver> only inside AC-2/AC-3 (plain Scenarios)
+# expect: 1 Outline (AC-1), 1 Examples, both header rows; <otlp-receiver> only inside AC-2 (a plain Scenario)
 grep -c "@AC-[1-4]" docs/roadmap/features/226-fix-otel-trace-export/acceptance.feature   # expect 4
 grep -n "@opentelemetry/api" docs/roadmap/features/226-fix-otel-trace-export/product-spec.md
 ```
@@ -106,7 +106,7 @@ grep -n "@opentelemetry/api" docs/roadmap/features/226-fix-otel-trace-export/pro
 - `services/xstockstrat-marketdata/internal/telemetry/otel.go` — modify
 - `services/xstockstrat-marketdata/go.mod` — modify
 - `services/xstockstrat-marketdata/go.sum` — modify
-- (`go.work.sum` only if `go mod tidy` changes it. Record that through the Deviation Log, never silently; design.md Open Risk.)
+- `go.work.sum` is **never staged**: every command runs with `GOWORK=off`, so any change to it is incidental — revert it with `git checkout -- go.work.sum` before committing (F-08).
 
 **Reviewers**: xstockstrat-trading owner — order execution correctness, broker API safety (startup path unaffected); xstockstrat-portfolio owner — position snapshot consistency (startup path unaffected); xstockstrat-marketdata owner — Alpaca feed idempotency (startup path unaffected)
 
@@ -144,7 +144,7 @@ for s in trading portfolio marketdata; do (cd services/xstockstrat-$s && \
   GOWORK=off go build ./... && GOWORK=off go vet ./internal/telemetry/ && \
   GOWORK=off golangci-lint run --modules-download-mode=mod ); done
 # expect: grep -c → 0 per service; go.mod lists otlptracehttp v1.45.0 and no otlptracegrpc; build/vet/lint clean
-git status --short go.work.sum   # any change → Deviation Log
+git checkout -- go.work.sum 2>/dev/null; git status --short go.work.sum   # expect empty (never staged, F-08)
 ```
 
 ---
@@ -190,9 +190,9 @@ for s in trading portfolio marketdata; do (cd services/xstockstrat-$s && \
   GOWORK=off go test ./internal/telemetry/ -run 'TestInit|TestNewResource' -count=1 -race -v && \
   COVERPKGS=$(GOWORK=off go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && \
   GOWORK=off go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && \
-  GOWORK=off go tool cover -func=coverage.out | grep "^total:" && \
+  GOWORK=off go tool cover -func=coverage.out | awk '/^total:/ {sub("%","",$3); print "total", $3; exit ($3+0 < 40)}' && \
   GOWORK=off golangci-lint run --modules-download-mode=mod ); done
-# The new logic is in an excluded package (telemetry/), so no coverage threshold applies to it. The total must stay ≥ 40%.
+# The new logic is in an excluded package (telemetry/); the awk exits non-zero if the CI total falls below 40% (C-08).
 grep -rn "dGVzdDprZXk" --include="*_test.go" services/xstockstrat-trading   # C-13: single declaration file
 ```
 
@@ -267,6 +267,7 @@ for s in indicators ingest analysis agent; do (cd services/xstockstrat-$s && \
 # expect: grep -c → 0; pyproject lists only -proto-http; lock check + import + ruff clean
 (cd services/xstockstrat-agent && uv run --no-sync pytest tests/test_telemetry.py -k non_blocking -v)   # PRESERVE @AC-2 @feature-171
 ```
+**Commit hygiene**: `services/xstockstrat-agent/tests/test_telemetry.py` is shared with Step 5, whose RED tests are already written into it at sub-step (b). Stage only the `:24` patch-target hunk for this step's commit (`git add -p`); the new test functions are committed with Step 5 (F-08, P-06).
 
 ---
 
@@ -388,12 +389,13 @@ grep -n "def otel_reset\|otel_reset" services/xstockstrat-*/tests/conftest.py se
 ```bash
 pnpm install --frozen-lockfile
 grep -n "exporter-trace-otlp-grpc" services/xstockstrat-{ledger,identity,notify,config}/package.json ; echo "expect none"
-grep -n "^      '@opentelemetry/exporter-trace-otlp-grpc':" pnpm-lock.yaml   # expect none: the 4 importer entries (today :57,:136,:227,:312) are gone; the package/snapshot entries stay as transitive deps of sdk-node (:7605, :7583)
+grep -n "^      '@opentelemetry/exporter-trace-otlp-grpc':$" pnpm-lock.yaml   # expect none: importer entries (today :57,:136,:227,:312) end the line with ':'; the sdk-node snapshot lines (:7583, :7605) carry a version after ':' and are excluded by the '$' anchor
 for s in ledger identity notify config; do (cd services/xstockstrat-$s && \
   grep -c "otlp-grpc\|otel-collector:4317\|url: endpoint" src/telemetry.ts ; \
   pnpm run lint && pnpm run build ); done
 # expect: grep -c → 0; lint + tsc build clean in all four (fails.md 2026-09-09 (171): build AND test per runner)
 ```
+**Deployment files**: the code now reads `OTEL_LOG_LEVEL`, an optional OTel spec var that nothing sets. Unset → our WARN logger applies; no `docker-compose.yml` or `.do/app*.yaml` change is needed.
 
 ---
 
@@ -432,6 +434,7 @@ for s in ledger identity notify config; do (cd services/xstockstrat-$s && \
    - ledger/identity: `const { initTelemetry } = await import('../telemetry.ts')`
    - notify/config: `await import('../telemetry')`
    - Call `initTelemetry()` once per process.
+   - **Placement**: the env setup, dynamic import and `initTelemetry()` call go inside a `before()` hook in **all four** services. notify/config compile tests as CommonJS (`tsconfig.json` `"module": "commonjs"`), where top-level `await` is TS1378 and breaks `pnpm run build`.
 5. AC-1 test:
    - End one span via `(await import('@opentelemetry/api')).trace.getTracer('t').startSpan('s').end()`.
    - Poll up to 5 s for the first `/v1/traces` request.
@@ -504,11 +507,14 @@ test ! -e instrumentation.ts && test -f src/instrumentation.ts && grep -n "NEXT_
 grep -c "otel-collector:4318\|url: endpoint" src/telemetry.ts   # expect 0
 pnpm run lint
 pnpm run build && ls .next/server/instrumentation.js            # AC-2 build proof: Next.js compiled the src/ hook
-OTEL_ENABLED=true OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 PORT=3999 HOSTNAME=127.0.0.1 \
-  timeout 20 node .next/standalone/services/xstockstrat-ui/server.js 2>&1 | grep -m1 "\[otel\] tracing enabled"
+LOG=$(mktemp); OTEL_ENABLED=true OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 PORT=3999 HOSTNAME=127.0.0.1 \
+  node .next/standalone/services/xstockstrat-ui/server.js > "$LOG" 2>&1 & PID=$!; sleep 15; kill $PID
+grep -m1 "\[otel\] tracing enabled" "$LOG"   # macOS/Linux-portable (no GNU timeout)
 # If next build or the standalone boot cannot run in-session, AC-2 rests on Step 9's register() test plus the
 # file-location assertion. Record that in the Deviation Log (design.md Open Risk 3).
 ```
+**Deployment files**: as in Step 6, `OTEL_LOG_LEVEL` is optional and unset everywhere; no compose or `.do` change.
+**Frontend e2e (B3)**: no Playwright step. The Playwright suite runs with `OTEL_ENABLED` unset, so `initTelemetry` returns at its gate and the hook move is a no-op there; existing e2e coverage applies unchanged.
 
 ---
 
@@ -574,9 +580,10 @@ grep -n "from '../fixtures'\|from './fixtures'\|helpers/auth" src/instrumentatio
 
 **TDD**: `N/A (config — local compose env + comment; non-code-bearing)`
 
-**Covers**: `AC-4` (verification-only)
+**Covers**: `AC-4` (verification grep with a recorded RED → GREEN)
 
 **Instructions**:
+0. **RED (AC-4)**: before editing, run the Verification `awk` and record its output — 7 of the 12 rows read `http://otel-collector:4317` — in the step's commit body. After the edit the same command shows 12 × `:4318`.
 1. In `docker-compose.yml`, change the 7 `http://otel-collector:4317` service values listed above to `http://otel-collector:4318`. Touch no other line.
 2. In `otel-collector-config.yaml`, rewrite the header comment `:6-8` to say that every xstockstrat service exports traces over OTLP/HTTP to `:4318`, and that the gRPC `:4317` receiver stays for other OTLP clients such as telemetrygen. Keep it to ≤3 lines and leave the receivers and exporter config unchanged.
 
@@ -618,7 +625,7 @@ grep -n "endpoint: 0.0.0.0:4317\|endpoint: 0.0.0.0:4318" packages/otel/otel-coll
   - `:13` `otel-collector:4317/4318`
   - `:106-107` "gRPC :4317 (Go + Python services connect here) / HTTP :4318 (Node.js services connect here)"
   - `:118-119` the per-language compose endpoints
-  - `:174-178` "Go services use gRPC OTLP … Python services use gRPC OTLP"
+  - `:175,:179` "Go services use gRPC OTLP … Python services use gRPC OTLP"
   - `:150,152` GitHub secret value `Basic <base64(instanceId:apiKey)>` (correct)
   - `:329` the troubleshooting header-format hint
 - `docs/setup/digitalocean.md:430`: `OTEL_EXPORTER_OTLP_HEADERS=Authorization=Basic <base64-token>`.
@@ -645,7 +652,7 @@ grep -n "endpoint: 0.0.0.0:4317\|endpoint: 0.0.0.0:4318" packages/otel/otel-coll
    - Add one sentence: exporters are constructed with no endpoint/url/insecure argument, so the SDK appends `/v1/traces` and reads headers from env.
 2. `grafana-cloud.md`:
    - `:13`, `:106-107` and `:118-119` → every service uses `:4318`. The collector still listens on `:4317` for other OTLP clients.
-   - `:174-178` → all runtimes use OTLP/HTTP, and the SDK appends `/v1/traces` to the gateway URL.
+   - `:175,:179` → all runtimes use OTLP/HTTP, and the SDK appends `/v1/traces` to the gateway URL.
    - `:329` → point at the single `Basic <…>` secret format, and note that export failures now appear in service logs.
 3. `digitalocean.md:430` → set the GitHub secret to `Basic <base64(instanceId:apiKey)>` and note that deploy adds `Authorization=`.
 4. `.env.example:81-86` → one format, `Basic <base64(instanceId:apiKey)>`. The collector uses it as the header value, and the deploy workflow prefixes `Authorization=` for the SDKs.

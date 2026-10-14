@@ -69,13 +69,18 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 
 - Result: 1 failure, 7 warnings, 5 notes (advisory — did not block). Overlap: CLEAN.
 - Unresolved ✗ / ⚠ carried into execution:
-  - Step 6: pnpm-lock "expect none" grep also matches sdk-node snapshot lines :7583/:7605 → verification cannot pass as written (F-05) — [ ] unaddressed
-  - Step 2: conditional `go.work.sum` staging via Deviation Log violates F-08 — pre-list it or revert-never-stage — [ ] unaddressed
-  - Step 4: agent `tests/test_telemetry.py` shared with Step 5 → hunk-level staging required (F-08/P-06) — [ ] unaddressed
-  - Step 7: dynamic import + init placement unspecified; top-level await in notify/config CJS tests → TS1378 — [ ] unaddressed
-  - Step 3: Go ≥40% coverage only commented, not asserted (C-08) — [ ] unaddressed
-  - Step 10: AC-4 has no RED capture (C-15) — [ ] unaddressed
-  - Steps 6/8: note that OTEL_LOG_LEVEL needs no compose/.do change — [ ] unaddressed
-  - Step 8: note that existing Playwright e2e coverage still applies (OTEL disabled in e2e) — [ ] unaddressed
+  - Step 6: pnpm-lock "expect none" grep also matches sdk-node snapshot lines :7583/:7605 → verification cannot pass as written (F-05) — [x] patched pre-execution
+  - Step 2: conditional `go.work.sum` staging via Deviation Log violates F-08 — pre-list it or revert-never-stage — [x] patched pre-execution
+  - Step 4: agent `tests/test_telemetry.py` shared with Step 5 → hunk-level staging required (F-08/P-06) — [x] patched pre-execution
+  - Step 7: dynamic import + init placement unspecified; top-level await in notify/config CJS tests → TS1378 — [x] patched pre-execution
+  - Step 3: Go ≥40% coverage only commented, not asserted (C-08) — [x] patched pre-execution
+  - Step 10: AC-4 has no RED capture (C-15) — [x] patched pre-execution
+  - Steps 6/8: note that OTEL_LOG_LEVEL needs no compose/.do change — [x] patched pre-execution
+  - Step 8: note that existing Playwright e2e coverage still applies (OTEL disabled in e2e) — [x] patched pre-execution
 - Notes: Step 1 comment wrong about AC-3 placeholder; Step 4 RED ~10 s/test (gRPC retry); Step 8 `timeout` is GNU-only; Step 11 grafana-cloud.md cites :175/:179 not :174-178.
 - Overlap findings: soft textual overlap with 084-droplet-compose-deploy (spec-ready, no impl-spec) on docker-compose.yml / docs/setup/digitalocean.md — rebase when 084 is specced; no merge-order row.
+
+## Session 2026-10-14 — impl-spec patched pre-execution (operator-approved)
+
+- Operator chose to patch the spec before `/sdd-execute` (step bodies become immutable only once execution starts, F-09). All 8 review items + Step 1/11 notes applied: Step 2 `go.work.sum` reverted-never-staged; Step 3 mechanical ≥40% awk assert; Step 4 hunk-staging note for the shared agent test; Step 6 `$`-anchored importer grep (verified: matches only :57/:136/:227/:312 today, excludes snapshot :7583/:7605) + OTEL_LOG_LEVEL deployment note; Step 7 init inside `before()` (CJS TS1378); Step 8 portable boot check (no GNU `timeout`), OTEL_LOG_LEVEL + Playwright notes; Step 10 AC-4 RED capture; Step 11 grafana-cloud.md `:175,:179`.
+- Execution mode: **sequential** on the pinned branch; integration PR #1246.
