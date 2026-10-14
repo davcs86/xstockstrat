@@ -121,7 +121,7 @@ Feature: private-by-default-enforce-contract
     Given an "order.filled" ledger event whose payload "user_id" is empty
     When the analysis P&L pattern consumer processes it
     Then no call is made to ingest or indicators
-    And the order snapshot is stored marked degraded
+    And the order snapshot is stored and an "analysis.snapshot.degraded" event is emitted
 
   @AC-18 @FR-8
   Scenario: db-migrate refuses the force-0 replay for a dirty contract service

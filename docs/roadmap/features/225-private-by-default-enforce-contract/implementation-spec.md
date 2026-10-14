@@ -1375,9 +1375,9 @@ degraded marker: `order_snapshots` (migration 016) has no such column, and `_com
 and that event. So the "marked" claim is asserted by neither the test nor the code. The other five analysis scenarios
 are promoted verbatim.
 **Reason**: verbatim promotion would make a durable rule claim more than the shipped test proves.
-**Disposition**: AC-17 is held out of `services/xstockstrat-analysis/acceptance/private-by-default-enforce-contract.feature`
-pending an operator decision. Either reword the scenario's last step to "the order snapshot is stored and an
-`analysis.snapshot.degraded` event is emitted" and then promote it, or leave it unpromoted.
+**Disposition**: operator decision (2026-10-14): reword and promote. The last step now reads "the order snapshot is
+stored and an `analysis.snapshot.degraded` event is emitted" in `acceptance.feature`, matching the shipped test, and AC-17
+is promoted to `services/xstockstrat-analysis/acceptance/private-by-default-enforce-contract.feature`.
 
 ### Deviation: Step 19 — teardown fixes outside the step's Files
 **Spec said**: Files = the three service `CLAUDE.md`s, `database.md`, the defect report and five acceptance suites;

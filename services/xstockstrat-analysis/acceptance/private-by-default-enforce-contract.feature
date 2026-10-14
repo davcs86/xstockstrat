@@ -1,5 +1,5 @@
 # Promoted from docs/roadmap/features/225-private-by-default-enforce-contract/acceptance.feature
-# Source: @AC-3, @AC-8, @AC-14, @AC-15, @AC-16 — analysis scenarios
+# Source: @AC-3, @AC-8, @AC-14, @AC-15, @AC-16, @AC-17 — analysis scenarios
 Feature: private-by-default-enforce-contract (analysis)
   Acceptance scenarios for the xstockstrat-analysis service promoted from feature 225.
   Covers the fail-closed inbound identity gate (headerless and ungranted system callers), the
@@ -38,3 +38,10 @@ Feature: private-by-default-enforce-contract (analysis)
     Given a gRPC call to analysis "ListStrategies" with "x-user-id: system" and no internal-caller grant
     When the call is served
     Then it fails with status "PERMISSION_DENIED"
+
+  @AC-17 @FR-1 @feature-225
+  Scenario: An ownerless order event issues no owner-scoped call
+    Given an "order.filled" ledger event whose payload "user_id" is empty
+    When the analysis P&L pattern consumer processes it
+    Then no call is made to ingest or indicators
+    And the order snapshot is stored and an "analysis.snapshot.degraded" event is emitted

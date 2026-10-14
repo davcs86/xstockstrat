@@ -3,6 +3,17 @@
 All production promotions from `main-dev` to `main` are recorded here.
 Each entry corresponds to one `main-dev → main` PR merge.
 
+## 2026-10-14
+
+### Features
+- proto-deprecated-field-removal-program: `grep -rn 'deprecated = true' packages/proto/*/v1/*.proto` returns **33** fields across 8 of the 11 protos.
+- private-by-default-enforce-contract: Release N+1 of feature 224 (`private-by-default-templates`).
+
+### Summary
+5 commits, 0 feature merges since last promotion.
+
+---
+
 ## 2026-10-07
 
 ### Features
