@@ -36,3 +36,19 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - R2 synthesis: spy `console.error` **before** the first OTel load and `await import()` telemetry after; add `@opentelemetry/api ^1.9.0` to 4 Node backends + UI; close receivers in `after()`; poll for `/v1/traces`; register diag logger only when `OTEL_LOG_LEVEL` unset; spy `console.info` for UI AC-2; counter receiver (200 for AC-1, 400 for AC-3) + raw and encoded header forms; ingest assert `code: 400`; Go shutdown deadline ctx; AC-4 verification-only. Child-process harness rejected (ESM-mode `require` shim cost).
 - **Empirical probe** (scratch): spy-before-load captures timer-path `OTLPExporterError` `"code":"400"` via `console.error` on 0.52.1 (ledger) and 0.218.0 (ui); receiver got POST /otlp/v1/traces non-empty. New finding: 0.52.1 also emits `Accessing resource attributes before async attributes settled` via diag once a logger is registered — potential per-boot noise; carried into R3.
 - Operator at gate: **run round 3**.
+
+## Session 2026-10-14 — sdd-design (completion)
+
+- Phase 0 Recon: wrote recon.md (services: all 12; key reuse: SDK spec env handling, already-locked `exporter-trace-otlp-http@0.52.1` / `api@1.9.1`).
+- Phase 1 Grilling: 3 rounds (quick + 2 operator-requested). R3 adversary verdict SOUND. Chosen approach: OTLP/HTTP exporters with no endpoint args + SDK env handling; Node/UI lazy WARN diag logger (only when `OTEL_LOG_LEVEL` unset); Node sync resource detectors; UI hook → `src/`, `metricReaders: []` + `logRecordProcessors: []`. Rejected: collector :4317 removal, child-process harness, encoded-header canonical, sdk-node 0.218 bump for backends (see design.md).
+- **Empirical probes** (R3): sync detectors remove the 0.52.1 boot-time `Accessing resource attributes…` diag error; export still succeeds. `sdk-node@0.218.0 sdk.js:146-177`: empty `metricReaders`/`logRecordProcessors` arrays bypass env-default OTLP metrics/logs setup.
+- Constitution rules touched: C-01, C-08, C-10, C-13, C-15, C-16, C-18, F-02..F-08, P-06. Floor breaches: none.
+- Decision: `implementation-roadmap.md` stays a historical record (its local `:4317` mentions are not updated); defect `.status` sidecar stays `triaged` until launch.
+- Status: draft → design-approved.
+
+### Open Threads
+- Possible other 0.52.1 boot-time diag warn/error tripping the Node no-console.error assertion → step 4 (narrow + Deviation Log).
+- Ingest sdk lock bump 1.41.1 → 1.42.x on `uv lock` → step 3.
+- `next build` + standalone boot feasibility in-session → step 5.
+- `go.work.sum` change on tidy → step 2 (Deviation Log).
+- Mixed resources 1.30.1/1.25.1 path proven by probe only → step 4 assertion guards it.

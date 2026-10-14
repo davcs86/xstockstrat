@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-10-14 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from defect report `docs/reports/2026-10-14-otel-trace-export-broken-defect.md` |
+| 2026-10-14 | `draft` → `design-approved` | /sdd-design | Design debated (3 rounds, quick + 2 operator-requested) and approved; recon.md + design.md written |
 
 ---
 
@@ -21,6 +22,8 @@
 
 - [Product Spec](product-spec.md) — bug description and fix scope
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
+- [Recon](recon.md) — grounded codebase dossier
+- [Design](design.md) — approved approach, rejected alternatives, open risks
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-otel-trace-export`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -33,4 +36,4 @@ options against an OTLP/HTTP-only gateway URL, and the UI's instrumentation hook
 
 ## Next Action
 
-`/sdd-design fix-otel-trace-export quick` — operator-chosen design depth (triage signal said full; see context.md)
+`/sdd-spec fix-otel-trace-export` — generate implementation spec from the approved design
