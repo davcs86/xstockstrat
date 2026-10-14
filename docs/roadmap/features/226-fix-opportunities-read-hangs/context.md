@@ -19,3 +19,10 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   saturated cluster. Not observed in production, so not escalated to Track A; noted for the operator.
 - Recommended design depth: full → `/sdd-design fix-opportunities-read-hangs` (rationale: 3 affected services).
 - Development branch: feature/fix-opportunities-read-hangs.
+
+## Session 2026-10-14 (/sdd-design — round-cap override)
+
+- Rounds 1–5 ran in full mode. Round 5 returned APPROVE WITH FIXES and the fixes were applied (ef54e88a, de432f0d).
+- **Operator override (2026-10-14):** at the round-5 approval gate, the operator chose "Do another round, override cap".
+  That is explicit sign-off to exceed the 5-round full-mode cap, recorded here per the Commandment override rule.
+  Round 6 is a whole-document adversarial re-review of the post-fix design.md.
