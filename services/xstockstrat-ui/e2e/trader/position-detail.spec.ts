@@ -767,6 +767,32 @@ test.describe('Single Position page', () => {
   });
 });
 
+// @AC-15 (feature 215): SCHD is absent from the queue fixture, so the badge can only come from the
+// symbol-filtered request this test waits for.
+test.describe('Signal-detail fundamentals skip row (feature 215)', () => {
+  test('@AC-15: badge + readiness notice render via the symbol-filtered ListOpportunities', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await watchlist(page, 'SCHD', 'fundamentals_macd_blend');
+    const filtered = page.waitForRequest(
+      (req) =>
+        req.url().includes('AnalysisService/ListOpportunities') &&
+        (req.postDataJSON() as { symbol?: string } | null)?.symbol === 'SCHD',
+    );
+    await page.goto('/trader/positions/SCHD?strategy=fundamentals_macd_blend');
+
+    await filtered;
+    await expect(page.getByTestId('detail-fundamentals-unavailable')).toBeVisible({
+      timeout: 30000,
+    });
+    await expect(page.getByTestId('detail-fundamentals-unavailable')).toHaveText(
+      'Fundamentals unavailable (ETF)',
+    );
+    await expect(page.getByTestId('readiness-fundamentals-unavailable')).toBeVisible();
+  });
+});
+
 /** Route the browser's ListWatchlists to a single watchlist containing `symbol` (bound to
  *  `strategyId`), so the FR-11 gate takes the watchlisted branch and the resolved strategy is known. */
 async function watchlist(

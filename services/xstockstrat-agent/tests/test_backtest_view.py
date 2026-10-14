@@ -77,6 +77,8 @@ def _full_result(symbols: int = 1, bars: int = 50) -> dict:
                 "bars_total": bars,
                 "warmup_bars": 20,
                 "no_trade_reason": "NO_TRADE_REASON_ENTRY_NEVER_TRUE",
+                # feature 215 — always printed by MessageToDict (no-presence enum).
+                "fundamentals_gap": "FUNDAMENTALS_GAP_UNSPECIFIED",
                 "bars": [
                     {
                         "symbol": f"SYM{s}",
@@ -146,6 +148,18 @@ def test_summary_drops_per_bar_bars_but_keeps_the_diagnosis():
         for key in _SYMBOL_KEYS:
             assert key in entry
         assert "bars" not in entry
+
+
+def test_summary_keeps_fundamentals_refusal_inline():
+    """@AC-2 (feature 215) — a refused symbol's reason and gap label survive the inline summary."""
+    result = _full_result()
+    result["diagnostics"][0] |= {
+        "no_trade_reason": "NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE",
+        "fundamentals_gap": "FUNDAMENTALS_GAP_ETF",
+    }
+    (entry,) = summarize(result)["diagnostics"]
+    assert entry["no_trade_reason"] == "NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE"
+    assert entry["fundamentals_gap"] == "FUNDAMENTALS_GAP_ETF"
 
 
 def test_summary_is_independent_of_window_length():

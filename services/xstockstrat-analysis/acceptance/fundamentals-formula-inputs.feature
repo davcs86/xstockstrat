@@ -50,4 +50,4 @@ Feature: xstockstrat-analysis - fundamentals-fed custom formula as a strategy co
     When a strategy component evaluates the formula for that symbol
     Then the input_data dict OMITS pe_ratio entirely (it is not passed as 0.0) and the formula averages only the present sub-parts
     And the resulting composite differs from the fundamentals signal producer's score for the same row, which passes pe_ratio as 0.0 and scores it a hard zero
-    # R4/R5 user decision (option b): omit-absent, neutral-drop. FR-5 parity is narrowed to fully-populated rows (@AC-4); this partial-row divergence from the producer is the accepted, signed-off behavior. A whole-row-missing symbol still holds (None), never fabricates.
+    # R4/R5 user decision (option b): omit-absent, neutral-drop. FR-5 parity is narrowed to fully-populated rows (@AC-4); this partial-row divergence from the producer is the accepted, signed-off behavior. A symbol with no usable fundamentals is refused/denied entry with `NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE` (feature 215, signed off 2026-10-09); a partial row still evaluates.

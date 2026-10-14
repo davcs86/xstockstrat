@@ -46,16 +46,10 @@ func NewClient(cfg ClientConfig) *Client {
 
 var _ source.FundamentalsSource = (*Client)(nil)
 
-// GetFundamentals fetches a single symbol (delegates to the batched path).
+// GetFundamentals fetches a single symbol. Finnhub has no absence signal, so every error is an
+// outage and must stay unwrapped, never the source absence sentinel (feature 215).
 func (c *Client) GetFundamentals(ctx context.Context, symbol string) (*source.Fundamentals, error) {
-	out, err := c.GetFundamentalsMulti(ctx, []string{symbol})
-	if err != nil {
-		return nil, err
-	}
-	if len(out) == 0 {
-		return nil, fmt.Errorf("finnhub: no fundamentals for %q", symbol)
-	}
-	return out[0], nil
+	return c.fetchOne(ctx, symbol, time.Now().UTC())
 }
 
 // GetFundamentalsMulti fetches fundamentals for every symbol in the chunk. None of Finnhub's

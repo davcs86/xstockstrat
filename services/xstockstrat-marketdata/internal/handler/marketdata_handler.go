@@ -156,6 +156,15 @@ func (h *MarketDataHandler) GetCurrentSector(ctx context.Context, req *connect.R
 	return connect.NewResponse(resp), nil
 }
 
+// GetEtfFlags serves cached FMP isEtf labels only; misses are unset (feature 215).
+func (h *MarketDataHandler) GetEtfFlags(ctx context.Context, req *connect.Request[marketdatav1.GetEtfFlagsRequest]) (*connect.Response[marketdatav1.GetEtfFlagsResponse], error) {
+	resp, err := h.svc.GetEtfFlags(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(resp), nil
+}
+
 // GetSectorAsOf serves sector classification from the local SCD store only (feature 217).
 func (h *MarketDataHandler) GetSectorAsOf(ctx context.Context, req *connect.Request[marketdatav1.GetSectorAsOfRequest]) (*connect.Response[marketdatav1.GetSectorAsOfResponse], error) {
 	resp, err := h.svc.GetSectorAsOf(ctx, req.Msg)
@@ -342,6 +351,14 @@ func (a *grpcMarketDataAdapter) BackfillFundamentals(ctx context.Context, req *m
 
 func (a *grpcMarketDataAdapter) GetCurrentSector(ctx context.Context, req *marketdatav1.GetCurrentSectorRequest) (*marketdatav1.GetCurrentSectorResponse, error) {
 	resp, err := a.h.GetCurrentSector(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, toGRPCError(err)
+	}
+	return resp.Msg, nil
+}
+
+func (a *grpcMarketDataAdapter) GetEtfFlags(ctx context.Context, req *marketdatav1.GetEtfFlagsRequest) (*marketdatav1.GetEtfFlagsResponse, error) {
+	resp, err := a.h.GetEtfFlags(ctx, connect.NewRequest(req))
 	if err != nil {
 		return nil, toGRPCError(err)
 	}

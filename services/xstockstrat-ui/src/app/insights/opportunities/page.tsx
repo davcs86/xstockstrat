@@ -30,6 +30,7 @@ import {
 import type { Opportunity } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import {
   OPPORTUNITY_ACTION,
+  FUNDAMENTALS_GAP,
   EnumBadge,
   blockingCondition,
   ConditionChip,
@@ -187,6 +188,8 @@ export default function OpportunitiesPage() {
       conviction: o.conviction,
       readiness: { passing: o.passingConditions, total: o.totalConditions },
       dataUnavailable: o.dataUnavailable,
+      fundamentalsUnavailable: o.fundamentalsUnavailable,
+      fundamentalsGap: o.fundamentalsGap,
       caption: o.thesis || undefined,
       href: reviewHref(o),
       muted: o.muted,
@@ -482,11 +485,18 @@ function OpportunityRow({
   const readyPct = hasReadiness ? Math.round((o.passingConditions / o.totalConditions) * 100) : 0;
   // A muted (deny-listed) row is informational — no act buttons, only a deny-list link.
   const muted = o.muted;
+  // Feature 215 skip row: the strategy needs fundamentals this symbol lacks — not actionable.
+  const fundUnavailable = o.fundamentalsUnavailable;
   const chips = opportunityChips(o);
   return (
     <div className="space-y-2 px-4 py-3">
       <div className="flex flex-wrap items-center gap-2">
-        {muted ? (
+        {fundUnavailable ? (
+          <EnumBadge
+            render={FUNDAMENTALS_GAP[o.fundamentalsGap]}
+            testId={`fundamentals-unavailable-${o.symbol}`}
+          />
+        ) : muted ? (
           <Badge variant="outline" className="text-[11px]" data-testid={`muted-badge-${o.symbol}`}>
             Muted
           </Badge>
@@ -532,6 +542,8 @@ function OpportunityRow({
               <TriangleAlert className="h-3 w-3" aria-hidden="true" />
               <QueryStateMessages error errorText="unavailable" />
             </span>
+          ) : fundUnavailable ? (
+            <span className="flex-1 text-xs text-muted-foreground/70">—</span>
           ) : hasReadiness ? (
             <>
               <Progress
@@ -609,7 +621,7 @@ function OpportunityRow({
         <Button asChild size="sm" variant="outline" data-testid={`manage-deny-${o.symbol}`}>
           <Link href={href}>Manage deny list</Link>
         </Button>
-      ) : (
+      ) : fundUnavailable ? null : (
         <div className="flex flex-wrap gap-2">
           <Button asChild size="sm" onClick={onTake}>
             <Link href={href}>Review &amp; add</Link>

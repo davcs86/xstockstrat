@@ -1160,6 +1160,54 @@ export type GetSectorHistoryResponse = Message<"xstockstrat.marketdata.v1.GetSec
  */
 export declare const GetSectorHistoryResponseSchema: GenMessage<GetSectorHistoryResponse>;
 /**
+ * @generated from message xstockstrat.marketdata.v1.GetEtfFlagsRequest
+ */
+export type GetEtfFlagsRequest = Message<"xstockstrat.marketdata.v1.GetEtfFlagsRequest"> & {
+    /**
+     * @generated from field: repeated string symbols = 1;
+     */
+    symbols: string[];
+};
+/**
+ * Describes the message xstockstrat.marketdata.v1.GetEtfFlagsRequest.
+ * Use `create(GetEtfFlagsRequestSchema)` to create a new message.
+ */
+export declare const GetEtfFlagsRequestSchema: GenMessage<GetEtfFlagsRequest>;
+/**
+ * @generated from message xstockstrat.marketdata.v1.EtfFlag
+ */
+export type EtfFlag = Message<"xstockstrat.marketdata.v1.EtfFlag"> & {
+    /**
+     * @generated from field: string symbol = 1;
+     */
+    symbol: string;
+    /**
+     * unset = unknown (not yet cached)
+     *
+     * @generated from field: optional bool is_etf = 2;
+     */
+    isEtf?: boolean | undefined;
+};
+/**
+ * Describes the message xstockstrat.marketdata.v1.EtfFlag.
+ * Use `create(EtfFlagSchema)` to create a new message.
+ */
+export declare const EtfFlagSchema: GenMessage<EtfFlag>;
+/**
+ * @generated from message xstockstrat.marketdata.v1.GetEtfFlagsResponse
+ */
+export type GetEtfFlagsResponse = Message<"xstockstrat.marketdata.v1.GetEtfFlagsResponse"> & {
+    /**
+     * @generated from field: repeated xstockstrat.marketdata.v1.EtfFlag flags = 1;
+     */
+    flags: EtfFlag[];
+};
+/**
+ * Describes the message xstockstrat.marketdata.v1.GetEtfFlagsResponse.
+ * Use `create(GetEtfFlagsResponseSchema)` to create a new message.
+ */
+export declare const GetEtfFlagsResponseSchema: GenMessage<GetEtfFlagsResponse>;
+/**
  * MarketDataService — sole Alpaca integration point.
  * Stores OHLCV and quote data in TimescaleDB hypertables.
  *
@@ -1355,5 +1403,16 @@ export declare const MarketDataService: GenService<{
         methodKind: "unary";
         input: typeof GetSectorHistoryRequestSchema;
         output: typeof GetSectorHistoryResponseSchema;
+    };
+    /**
+     * feature 215 — cache-only ETF label read: never calls FMP on the request path; an unknown
+     * symbol returns is_etf unset.
+     *
+     * @generated from rpc xstockstrat.marketdata.v1.MarketDataService.GetEtfFlags
+     */
+    getEtfFlags: {
+        methodKind: "unary";
+        input: typeof GetEtfFlagsRequestSchema;
+        output: typeof GetEtfFlagsResponseSchema;
     };
 }>;

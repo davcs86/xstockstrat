@@ -50,6 +50,7 @@ import {
   FILL_MODEL_SAME_BAR_CLOSE,
   FILL_MODEL_NEXT_BAR_OPEN,
   OPPORTUNITIES,
+  SCHD_FUNDAMENTALS_UNAVAILABLE_OPPORTUNITY,
   CAPR_LATEST_PRICE,
   symbolReadiness,
   READINESS_BUCKET_OVERRIDE,
@@ -857,15 +858,24 @@ export async function startMockBackend(): Promise<void> {
           const reqSources: string[] = req.sources ?? [];
           const actionFilter = req.actionFilter ?? 0;
           const sort = req.sort ?? 0;
-          const MARKERS = ['watchlist', 'position', 'denied'];
+          const MARKERS = ['watchlist', 'position', 'denied', 'fundamentals_unavailable'];
           type Opp = (typeof OPPORTUNITIES)[number];
           const expirySec = (o: Opp) =>
             o.validUntil?.seconds ? Number(o.validUntil.seconds) : Infinity;
-          const rows = OPPORTUNITIES.filter(
+          // SCHD's skip row is reachable only through the symbol filter (it is not in OPPORTUNITIES).
+          const symbol = (req.symbol ?? '').trim().toUpperCase();
+          const pool: Opp[] =
+            symbol === 'SCHD'
+              ? [SCHD_FUNDAMENTALS_UNAVAILABLE_OPPORTUNITY as unknown as Opp]
+              : OPPORTUNITIES.filter((o) => !symbol || o.symbol === symbol);
+          const rows = pool.filter(
             (o) =>
-              // feature 132/185: muted + data-unavailable rows are exempt from the CONVICTION floor
-              // only (both carry conviction 0 by design) — mirrors the backend exemption (fails.md:1547).
-              (o.muted || o.dataUnavailable || o.conviction >= min) &&
+              // feature 132/185/215: muted, data-unavailable and fundamentals-skip rows are exempt
+              // from the CONVICTION floor only (conviction 0 by design) — mirrors the backend.
+              (o.muted ||
+                o.dataUnavailable ||
+                (o as { fundamentalsUnavailable?: boolean }).fundamentalsUnavailable ||
+                o.conviction >= min) &&
               // feature 190: source/action filters apply to ALL rows (muted/unavailable NOT exempt).
               (reqSources.length === 0 || reqSources.includes(o.source)) &&
               (actionFilter === 0 || o.action === actionFilter),
@@ -1033,6 +1043,27 @@ export async function startMockBackend(): Promise<void> {
                     bar(1, 11, { sma_fast: 10.5 }, false, 2), // HOLD_FLAT
                     bar(2, 12, { sma_fast: 11.5, sma_slow: 11 }, false, 2),
                   ],
+                },
+              ],
+            };
+          }
+          if (req.strategyId === 'strat-fundamentals-etf-001') {
+            // feature 215: a fundamentals strategy refused on the ETF SCHD — reason 5 + ETF label.
+            return {
+              backtestId: 'bt-fundamentals-etf-1',
+              strategyId: req.strategyId,
+              status: 2, // BACKTEST_STATUS_INSUFFICIENT_DATA
+              totalTrades: 0,
+              trades: [],
+              coverageGaps: [],
+              diagnostics: [
+                {
+                  symbol: 'SCHD',
+                  barsTotal: 0,
+                  warmupBars: 0,
+                  noTradeReason: 5, // NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE
+                  fundamentalsGap: 1, // FUNDAMENTALS_GAP_ETF
+                  bars: [],
                 },
               ],
             };

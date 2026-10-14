@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math"
@@ -1504,6 +1505,8 @@ type fakeHistRepo struct {
 	gotPageToken string
 	dividends    []source.CashDividend                // in-memory dividend store (feature 211)
 	latest       *source.HistoricalFundamentalsPeriod // returned by LatestHistoricalFundamental (feature 211 snapshot dispatch)
+
+	latestBy map[string]*source.HistoricalFundamentalsPeriod // when non-nil, overrides latest per symbol (feature 215)
 }
 
 func (r *fakeHistRepo) InsertHistoricalFundamentals(_ context.Context, p source.HistoricalFundamentalsPeriod) error {
@@ -1546,7 +1549,10 @@ func (r *fakeHistRepo) SumDividendsInWindow(_ context.Context, symbol string, as
 	return sum, any, nil
 }
 
-func (r *fakeHistRepo) LatestHistoricalFundamental(_ context.Context, _ string, _ time.Time) (*source.HistoricalFundamentalsPeriod, error) {
+func (r *fakeHistRepo) LatestHistoricalFundamental(_ context.Context, symbol string, _ time.Time) (*source.HistoricalFundamentalsPeriod, error) {
+	if r.latestBy != nil {
+		return r.latestBy[symbol], nil
+	}
 	return r.latest, nil
 }
 
@@ -2513,6 +2519,119 @@ func TestTruncateBars_OmitsDeprecatedTimeframe(t *testing.T) {
 			if b.TimeframeEnum != commonv1.Timeframe_TIMEFRAME_1DAY {
 				t.Errorf("recent=%v: expected TimeframeEnum kept, got %v", recent, b.TimeframeEnum)
 			}
+		}
+	}
+}
+
+// ── feature 215: fundamentals absence (NotFound/omit) vs outage vs kill switch ─────────────────
+
+// absenceSvc wires an edgar-mode service whose historical store holds a producible BABA period and
+// no SCHD history; cfg/vendor vary per case.
+func absenceSvc(cfg *fakeCfg, vendor source.FundamentalsSource) (*MarketDataService, *fakeFundRepo) {
+	svc, repo := edgarSnapshotSvc(nil, &marketdatav1.Quote{Symbol: "BABA", AskPrice: 101, BidPrice: 99}, cfg, vendor, "finnhub")
+	svc.histRepo = &fakeHistRepo{latestBy: map[string]*source.HistoricalFundamentalsPeriod{"BABA": babaEdgarPeriod()}}
+	return svc, repo
+}
+
+func edgarCfg(edgarOn, finnhubOn bool) *fakeCfg {
+	cfg := enabledCfg("finnhub")
+	cfg.strings = map[string]string{"marketdata.fundamentals.snapshot_source": "edgar"}
+	cfg.bools["marketdata.edgar.enabled"] = edgarOn
+	cfg.bools["marketdata.finnhub.enabled"] = finnhubOn
+	cfg.bools["marketdata.fmp.enabled"] = false
+	return cfg
+}
+
+// @AC-7: edgar on, vendors off — an un-producible symbol is omitted from Multi (not a batch failure)
+// and is NotFound on the single RPC.
+func TestFundamentals_EdgarNoSnapshotIsNotFound_feature215(t *testing.T) {
+	svc, _ := absenceSvc(edgarCfg(true, false), nil)
+
+	multi, err := svc.GetFundamentalsMulti(context.Background(), []string{"SCHD", "BABA"})
+	if err != nil {
+		t.Fatalf("Multi: %v (an absent symbol must be omitted, not fail the batch)", err)
+	}
+	if len(multi) != 1 || multi[0].Symbol != "BABA" {
+		t.Fatalf("Multi = %+v, want only BABA", multi)
+	}
+	_, err = svc.GetFundamentals(context.Background(), "SCHD")
+	if connect.CodeOf(err) != connect.CodeNotFound {
+		t.Fatalf("single SCHD code = %v (%v), want NotFound", connect.CodeOf(err), err)
+	}
+}
+
+// Vendor absence (ErrNoFundamentals) → NotFound in vendor mode and via the edgar fallback; an
+// unwrapped vendor error stays Unavailable (outage is not absence, FR-8).
+func TestFundamentals_VendorNoFundamentalsIsNotFound_feature215(t *testing.T) {
+	absent := fmt.Errorf("vendor: no fundamentals for %q: %w", "SCHD", source.ErrNoFundamentals)
+	cases := []struct {
+		name     string
+		cfg      *fakeCfg
+		respErr  error
+		wantCode connect.Code
+	}{
+		{"vendor mode absence", enabledCfg("finnhub"), absent, connect.CodeNotFound},
+		{"edgar fallback absence", edgarCfg(true, true), absent, connect.CodeNotFound},
+		{"vendor mode outage", enabledCfg("finnhub"), fmt.Errorf("finnhub: /stock/metric returned HTTP 503"), connect.CodeUnavailable},
+		{"edgar fallback outage", edgarCfg(true, true), fmt.Errorf("finnhub: /stock/metric returned HTTP 503"), connect.CodeUnavailable},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			svc, _ := absenceSvc(tc.cfg, &fakeFundSource{respErr: tc.respErr})
+			_, err := svc.GetFundamentals(context.Background(), "SCHD")
+			if got := connect.CodeOf(err); got != tc.wantCode {
+				t.Fatalf("code = %v (%v), want %v", got, err, tc.wantCode)
+			}
+		})
+	}
+	t.Run("edgar fallback absence omitted from Multi", func(t *testing.T) {
+		svc, _ := absenceSvc(edgarCfg(true, true), &fakeFundSource{respErr: absent})
+		multi, err := svc.GetFundamentalsMulti(context.Background(), []string{"SCHD", "BABA"})
+		if err != nil || len(multi) != 1 || multi[0].Symbol != "BABA" {
+			t.Fatalf("Multi = %+v, %v; want only BABA, nil", multi, err)
+		}
+	})
+	t.Run("edgar fallback outage aborts Multi", func(t *testing.T) {
+		svc, _ := absenceSvc(edgarCfg(true, true), &fakeFundSource{respErr: errors.New("transport down")})
+		_, err := svc.GetFundamentalsMulti(context.Background(), []string{"SCHD", "BABA"})
+		if connect.CodeOf(err) != connect.CodeUnavailable {
+			t.Fatalf("Multi code = %v (%v), want Unavailable", connect.CodeOf(err), err)
+		}
+	})
+}
+
+// The global kill switch stays FailedPrecondition on both RPCs (deliberate all-off, not absence).
+func TestFundamentals_EdgarKillSwitchBothRPCs_feature215(t *testing.T) {
+	svc, _ := absenceSvc(edgarCfg(false, true), &fakeFundSource{resp: &source.Fundamentals{}})
+	if _, err := svc.GetFundamentals(context.Background(), "SCHD"); connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Fatalf("single code = %v, want FailedPrecondition", connect.CodeOf(err))
+	}
+	if _, err := svc.GetFundamentalsMulti(context.Background(), []string{"SCHD", "BABA"}); connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Fatalf("multi code = %v, want FailedPrecondition", connect.CodeOf(err))
+	}
+}
+
+// A vendor at its cap with no cached row is ResourceExhausted on the single RPC and aborts Multi under
+// the edgar fallback (quota is an outage, never omitted as absence).
+func TestFundamentals_QuotaExhaustedNotOmitted_feature215(t *testing.T) {
+	svc, repo := absenceSvc(edgarCfg(true, true), &fakeFundSource{resp: &source.Fundamentals{}})
+	repo.sinceCount = 20 // == finnhub symbols_per_minute
+	if _, err := svc.GetFundamentals(context.Background(), "SCHD"); connect.CodeOf(err) != connect.CodeResourceExhausted {
+		t.Fatalf("single code = %v, want ResourceExhausted", connect.CodeOf(err))
+	}
+	if _, err := svc.GetFundamentalsMulti(context.Background(), []string{"SCHD", "BABA"}); connect.CodeOf(err) != connect.CodeResourceExhausted {
+		t.Fatalf("multi code = %v, want ResourceExhausted (abort, not omit)", connect.CodeOf(err))
+	}
+}
+
+func TestAtQuotaAlertThreshold_feature215(t *testing.T) {
+	cases := []struct {
+		count, cap int
+		want       bool
+	}{{0, 0, false}, {79, 100, false}, {80, 100, true}, {100, 100, true}}
+	for _, tc := range cases {
+		if got := atQuotaAlertThreshold(tc.count, tc.cap); got != tc.want {
+			t.Errorf("atQuotaAlertThreshold(%d,%d) = %v, want %v", tc.count, tc.cap, got, tc.want)
 		}
 	}
 }

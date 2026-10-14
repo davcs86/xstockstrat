@@ -23,7 +23,9 @@ Feature: opportunity-compute-robustness (analysis-service guarantees)
 
   @AC-2 @FR-1 @feature-185
   Scenario: An evaluated-but-not-passing symbol is NOT marked unavailable
-    Given a candidate symbol whose bars are available and 0 of 3 conditions pass
+    # C-16 CHANGE (feature 215, signed off 2026-10-09): rescoped to symbols with fundamentals available
+    # (or strategies not requiring them); a fundamentals-gated strategy on an ETF/no-filings symbol is the skip row instead.
+    Given a candidate symbol with fundamentals available (or a strategy not requiring them) whose bars are available and 0 of 3 conditions pass
     When the queue is materialized
     Then that symbol is classified quiet/0-of-3 (evaluated), not data-unavailable
 

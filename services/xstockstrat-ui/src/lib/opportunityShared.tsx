@@ -4,7 +4,11 @@
 // Type-only phosphor import (erased at build) — this module is imported by server code (traderBff →
 // copilot), and a runtime phosphor import there breaks the production build.
 import type { Icon } from '@phosphor-icons/react';
-import { OpportunityActionTag, ConditionState } from '@xstockstrat/proto/analysis/v1/analysis_pb';
+import {
+  OpportunityActionTag,
+  ConditionState,
+  FundamentalsGap,
+} from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import type { ConditionEval } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import { PositionRiskFlag } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
 import { SourceHealthStatus } from '@xstockstrat/proto/ingest/v1/ingest_pb';
@@ -30,6 +34,13 @@ export const OPPORTUNITY_ACTION: Record<OpportunityActionTag, EnumRender> = {
   [OpportunityActionTag.ENTER]: { label: 'Enter', role: 'buy' },
   [OpportunityActionTag.ADD]: { label: 'Add', role: 'buy' },
   [OpportunityActionTag.REDUCE]: { label: 'Reduce', role: 'sell' },
+};
+
+// Feature 215 skip-row badge: "(ETF)" only when marketdata knows it, else the plain text (@AC-4).
+export const FUNDAMENTALS_GAP: Record<FundamentalsGap, EnumRender> = {
+  [FundamentalsGap.UNSPECIFIED]: { label: 'Fundamentals unavailable', role: 'secondary' },
+  [FundamentalsGap.ETF]: { label: 'Fundamentals unavailable (ETF)', role: 'secondary' },
+  [FundamentalsGap.NOT_ETF]: { label: 'Fundamentals unavailable', role: 'secondary' },
 };
 
 // PASS = gain, SOFT = paper, FAIL = loss, UNSPECIFIED = neutral.

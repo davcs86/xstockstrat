@@ -18,22 +18,26 @@ type EvaluateReadinessResult = Awaited<ReturnType<typeof analysisClient.evaluate
  * Returns `useInfiniteQuery` — consumers flatten via `data?.pages.flatMap(p => p.opportunities)`.
  * Response-level signals (`computing`, `computeFailed`) and the `availableSources` facet ride on
  * page 0 (feature 190). All four controls are folded into the query key so an in-place
- * `refetchInterval` refetch AND a filter change both re-fetch (fails.md:1648).
+ * `refetchInterval` refetch AND a filter change both re-fetch (fails.md:1648). `symbol` (feature
+ * 215) filters server-side so a per-symbol view sees its rows whatever their queue rank; the empty
+ * default keeps the shared page-1 cache key that CopilotRail relies on.
  */
 export function useOpportunities(
   minConviction = 0,
   sources: string[] = [],
   actionFilter: OpportunityActionTag = OpportunityActionTag.UNSPECIFIED,
   sort: OpportunitySort = OpportunitySort.CONVICTION,
+  symbol = '',
 ) {
   return useInfiniteQuery({
-    queryKey: ['opportunities', minConviction, [...sources].sort(), actionFilter, sort],
+    queryKey: ['opportunities', minConviction, [...sources].sort(), actionFilter, sort, symbol],
     queryFn: ({ pageParam }) =>
       analysisClient.listOpportunities({
         minConviction,
         sources,
         actionFilter,
         sort,
+        symbol,
         page: { pageSize: 50, pageToken: pageParam ?? '' },
       }),
     initialPageParam: '',
