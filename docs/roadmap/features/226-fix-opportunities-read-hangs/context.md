@@ -43,3 +43,23 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - **Design approved (2026-10-14):** the operator approved the round-6 design, and the status moved draft → design-approved. Open risks accepted as documented in design.md § Open Risks:
   - a PgBouncer BEGIN/COMMIT stall is bounded only by the B+2 backstop, at the cost of a reconnect.
   Next: `/sdd-spec`.
+
+## Session 2026-10-14 — sdd-spec
+
+- Generated `implementation-spec.md` with 13 steps (6 service/test pairs, plus the `local_pg` infra step and the docs/teardown step). Status `design-approved` → `implementation-ready`.
+- Coverage: AC-1 → Step 8, AC-2 → Step 12, AC-3 → Step 4, AC-4 → Step 10.
+- Key codebase findings:
+  - **Evidence baseline is `origin/main-dev` @ `08d63011`, not this branch.** The branch is one commit behind main-dev. That commit (feature 215) rewrote `servicer.py` (+647 lines) and touched `opportunities.py`, analysis `tests/conftest.py`, `test_analysis_servicer.py`, agent `client.py`/`tools.py`, and marketdata `marketdata_service.go`. design.md line numbers are therefore stale:
+    - `ListOpportunities` is now `servicer.py:4490-4635`, not `:4178`.
+    - `_enrich_opportunities_live` is `:4637-4703`.
+    - `owner_scoped` is `:462-475`.
+    - `BatchGetLatestPrice` is `marketdata_service.go:730-807`.
+    - The agent tool is `tools.py:1509-1546`; `_extract_policy` is `:2338`.
+
+    `/sdd-execute` BRANCH SYNC must merge main-dev before Step 1.
+  - Feature 215 added a `symbol=req_symbol` kwarg to both `opportunities_repo.read` calls in the handler. `_read_opportunity_queue` must forward it.
+  - There are 19 (not 18) `ListOpportunities` call sites in `test_analysis_servicer.py`, plus 3 in `test_opportunity_compute_state.py`, for the G4 parametrization.
+  - `intGetter` does not exist in marketdata. Step 3 creates it beside `fundamentalsConfig` (`:101-106`). Existing tests build `&MarketDataService{…}` literals with a nil cfg, so the nil fallback is load-bearing.
+  - There is no in-process `grpc.aio.server` harness in agent tests. Step 12 creates the first one.
+  - The local sandbox has PostgreSQL 16 binaries (`/usr/lib/postgresql/16/bin`) and a `postgres` user, so `local_pg` can run here via `runuser`.
+- One addition beyond design §7, flagged in Step 13: `docs/runbooks/mcp-tools.md` (`:1026` sparkline bullet, `:1045` Errors line), for parity with the `list_opportunities` docstring change. The agent reviewer focus and C-10 require it.

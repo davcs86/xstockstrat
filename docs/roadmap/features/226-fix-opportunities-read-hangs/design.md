@@ -2,7 +2,7 @@
 
 **Created**: 2026-10-14
 **Rounds**: 6 (full; round 6 by operator cap override, context.md 2026-10-14)
-**Approved by**: _pending_
+**Approved by**: operator, 2026-10-14 (round-6 gate)
 **Grounded in**: recon.md
 
 ---

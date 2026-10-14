@@ -15,6 +15,7 @@
 |---|---|---|---|
 | 2026-10-14 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-14-opportunities-read-hangs-defect.md` |
 | 2026-10-14 | `draft` → `design-approved` | /sdd-design | Full mode, 6 rounds (round 6 by operator cap override); operator approved round-6 design |
+| 2026-10-14 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 13 steps |
 
 ---
 
@@ -24,8 +25,19 @@
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
 - [Recon](recon.md) — codebase dossier, existing business rules (C-16)
 - [Design](design.md) — approved design (6 rounds), rejected alternatives, open risks
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-opportunities-read-hangs`_
+- [Implementation Spec](implementation-spec.md)
 - [Context Log](context.md) — session history, decisions, deviations
+
+---
+
+## Reviewers
+
+| Reviewer | Focus | Steps |
+|---|---|---|
+| xstockstrat-config owner | Config key naming (`<service>.<category>.<key>`), environment/global-per-user scoping, WatchConfig stream stability | 1, 2 |
+| xstockstrat-marketdata owner | OHLCV ingestion integrity, TimescaleDB hypertable partitioning, Alpaca feed idempotency | 3, 4 |
+| xstockstrat-analysis owner | Backtest reproducibility, strategy scoring determinism, no look-ahead bias | 5–10 |
+| xstockstrat-agent owner | MCP tool contract stability (name, parameters, return shape) and `docs/runbooks/mcp-tools.md` parity | 11, 12 |
 
 ---
 
@@ -36,4 +48,4 @@ timeouts with no log line. No hop on its path has a deadline, and marketdata `Ba
 
 ## Next Action
 
-`/sdd-spec fix-opportunities-read-hangs`
+`/sdd-review fix-opportunities-read-hangs impl-spec`: validate the implementation spec, then `/sdd-execute fix-opportunities-read-hangs`
