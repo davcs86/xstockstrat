@@ -1383,7 +1383,7 @@ grep -n "from '../fixtures'\|from './fixtures'\|helpers/auth" services/xstockstr
 
 ### Step 25 — docs: Strat-lab skill, MCP runbook, service docs, C-16 CHANGE texts
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/` + `plugins/strat-lab/` + service `CLAUDE.md`s
 **Files**:
 - `plugins/strat-lab/skills/backtest/reference/output-handling.md` — modify
@@ -1581,13 +1581,25 @@ _Populated by /sdd-execute as implementation proceeds._
 **Resolution** (2026-10-14): `page.tsx` now also renders the existing `BacktestDiagnostics` for an INSUFFICIENT_DATA result when any diagnostic carries a `noTradeReason` other than UNSPECIFIED. The coverage-gap card and the OK-results block are unchanged, the sentinel keeps `status: 2`, and the `@AC-2` test additionally asserts no coverage-gap card, no results card and no ENTRY_NEVER_TRUE text.
 
 ### Deviation: Step 24 — test: UI e2e + fixtures (verification runner)
+
 **Spec said**: `./scripts/run-e2e.sh --grep "fundamentals|Opportunit|backtest coverage|position detail"`.
 **Actual**: Ran Playwright locally against a production bundle (`NEXT_DISABLE_STANDALONE=1 pnpm build`, then `CI=1 E2E_PREBUILT=1 npx playwright test … --project=chromium`), as in Step 23. Ran the four Step 24 specs (`backtest-coverage`, `opportunities`, `position-detail`, `watchlists`) plus every other spec that opens `/insights/strategies/[id]`, since `page.tsx` changed. `tsc --noEmit` still reports only the two pre-existing `e2e/insights/backfills.spec.ts` errors (Step 23 deviation).
 **Reason**: Same Playwright runner, browser and mock backend as the `Dockerfile.e2e` container, without the image build. The operator authorised the local production build for this run.
 **Disposition**: CI-equivalent fallback — CI `frontend-e2e` runs the container.
 
 ### Deviation: merge of origin/main-dev (feature 225 #1238, CI #1240) — merge fix-up
+
 **Spec said**: n/a (post-Step-23 sync with `main-dev`).
 **Actual**: Merge `18586e8c` had one import-list conflict in `app/engine/live_loop.py`, resolved to 225's `app.identity` import plus 215's pager import. After the merge, 225's `tests/test_identity.py::test_single_owner_header_builder` failed on 215's hand-built `[("x-user-id", user_id)]`, the owner-only default `meta` of `_fetch_and_aggregate` (Step 17). The fix-up uses `owner_metadata(user_id)` instead. Analysis 1145 passed, agent 498 passed.
 **Reason**: 225 makes `owner_metadata` the single builder of an owner `x-user-id` header. It raises for an empty or `system` owner, and every caller of `_fetch_and_aggregate` already resolves a real owner row first. Header shape and behavior are unchanged.
 **Disposition**: merge fix-up commit (`servicer.py` is in Step 17's Files).
+
+### Deviation: Step 25 — docs: Strat-lab skill, MCP runbook, service docs, C-16 CHANGE texts
+
+**Spec said**: Instructions 3 and 6 add the listed paragraphs and fix the `insights/market/[symbol]` route.
+**Actual**: The edits stay within Step 25's Files, but the manual teardown (Instruction 9; context-forge unavailable) also fixed grounded drift in those files:
+- Analysis `CLAUDE.md`: the feature-200 snapshot channel now reads single-symbol `GetFundamentals` (Step 13), and the Decide-surface floor-exemption list gains `fundamentals_unavailable`.
+- Analysis `context-constitution.md`: ANALYSIS-3/10/12 citations were re-grounded. `_definition_fingerprint` is at `servicer.py:7059`; the predicates moved to `fundamentals_guard.py`, and the paged PIT loader is new.
+- UI `CLAUDE.md`: the Decide-screens bullet described the deleted `insights/market/[symbol]` page (its own `AccountProvider`, two-column layout). It was rewritten for `trader/positions/[symbol]`, and the dead "renders no chart" note was dropped.
+**Reason**: Root CLAUDE.md § Teardown requires fixing grounded drift in the context files a session touches. All of it sits inside Step 25's Files.
+**Disposition**: in scope (Step 25 Files). The one drift outside Files, `docs/patterns/ui-ux-governance.md` §8, is logged with the C-16 promotion.

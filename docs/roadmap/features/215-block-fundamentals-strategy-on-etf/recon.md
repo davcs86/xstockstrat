@@ -118,7 +118,7 @@ path refuse/skip that symbol with an explicit enumerated, auditable reason, dist
 - **PRESERVE** `@AC-6 @FR-5 @feature-150` "Insufficient capital skips an entry and is recorded as a capital skip" (`services/xstockstrat-analysis/acceptance/backtest-portfolio-sizing.feature`) — a fundamentals refusal is a separate record.
 - **PRESERVE** `@AC-5 @FR-4 @feature-150` "The derived grade is unchanged by portfolio mode" (`services/xstockstrat-analysis/acceptance/backtest-portfolio-sizing.feature`) — unchanged for equities.
 - **PRESERVE** `@AC-3 @regression @feature-149` "Per-symbol evidence cells and the derived grade are unchanged" (`services/xstockstrat-analysis/acceptance/fix-backtest-annualized-return.feature`) — cell metric math unchanged.
-- **PRESERVE** `@AC-7 @FR-5 @feature-211` "A non-SEC-filing symbol falls back to the vendor path" (`services/xstockstrat-marketdata/acceptance/edgar-fundamentals-enrichment.feature`) — "unavailable" must mean no served row, not no CIK. Otherwise vendor-served non-filers are refused on live (that would be a CHANGE).
+- **PRESERVE** `@AC-7 @FR-5 @feature-211` "A non-SEC-filing symbol falls back to the vendor path" (`services/xstockstrat-marketdata/acceptance/edgar-fundamentals-enrichment.feature`) — "unavailable" means the served/PIT data gives zero executable epochs for the strategy's declared metrics (a served row with none of the declared metrics is unavailable), not "no CIK". A vendor-served non-filer whose row carries a declared metric stays available on live (design § Spec notes).
 - **PRESERVE** `@AC-6 @FR-5 @FR-8 @feature-211` "The snapshot path serves the latest EDGAR filing after the vendors are disabled" (`services/xstockstrat-marketdata/acceptance/edgar-fundamentals-enrichment.feature`) — exposing isEtf must not perturb snapshot serving.
 - **PRESERVE** `@AC-9 @FR-1 @FR-2 @FR-3 @FR-4 @feature-211` "Backtest PIT composite lands in the same band as the live snapshot after enrichment" (`services/xstockstrat-marketdata/acceptance/edgar-fundamentals-enrichment.feature`) — BABA stays available and is labelled non-ETF.
 - **PRESERVE** `@AC-3 @FR-5 @feature-198` "As-of read hides a filing until the trading day after it was filed (T+1)" (`services/xstockstrat-marketdata/acceptance/historical-fundamentals-backtest.feature`) — unchanged.
@@ -163,7 +163,7 @@ path refuse/skip that symbol with an explicit enumerated, auditable reason, dist
 - Exhaustive `Record<NoTradeReason>` in UI (insights.md 071): new enum value must be mapped in the same PR.
 - `@AC-8 @feature-201` comment-level "whole-row-missing holds" → **CHANGE** (needs operator sign-off).
 - Per-bar vs per-symbol: a pre-first-filing bar is not "unavailable" (`@AC-4 @feature-198`, `@AC-2 @feature-201`).
-- `@AC-7 @feature-211`: vendor-served non-filer is "available" on live — the predicate is "no served data", not "no CIK".
+- `@AC-7 @feature-211`: vendor-served non-filer is "available" on live when its row carries a declared metric — the predicate is "zero executable epochs for the declared metrics", not "no CIK" (design § Spec notes).
 - Kill-switch `analysis.backtest.fundamentals.enabled=false` must not be labelled "unavailable".
 - Not found: seed migrations for `fscore` / `fundamentals_macd_blend`; any analysis-visible CIK-miss signal.
 

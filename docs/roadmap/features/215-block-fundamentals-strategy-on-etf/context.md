@@ -395,11 +395,13 @@
 ## Session 2026-10-14 — sdd-execute (Steps 24–26, operator-directed)
 
 ### Merge origin/main-dev (225 #1238, CI Go-lint pin #1240)
+
 - Merge `18586e8c`: one conflict, the `live_loop.py` servicer import list. 225 moved `SYSTEM_IDENTITY` to `app.identity`, and 215 had swapped the predicates for guard/pager imports; both sides are kept. No behavior conflict.
 - Post-merge: agent 498 passed. Analysis had 1 failure: 225's `test_single_owner_header_builder` flagged 215's owner-only default `meta` in `_fetch_and_aggregate`. The merge fix-up uses `owner_metadata(user_id)`, giving 1145 passed (see Deviation Log).
 - PR #1240 (golangci-lint goinstall) is now on the branch, so the Go-lint open item from Steps 7–16 is closed.
 
 ### Operator decision (2026-10-14): Step 24 option A — render refusal for INSUFFICIENT_DATA
+
 - The operator chose option A for the Step 24 blocker, so Step 24 scope expands to `services/xstockstrat-ui/src/app/insights/strategies/[id]/page.tsx`. This is the F-08 exception, recorded here and in the Deviation Log.
 - Required behavior:
   - An INSUFFICIENT_DATA result whose diagnostics carry a refusal/no-trade reason renders the Step 23 `no-trade-reason` surface.
@@ -407,6 +409,7 @@
   - The e2e sentinel stays `status: 2`; the operator explicitly declined option B, which would set it to 1.
 
 ### Step 24 — test: UI e2e + fixtures [done]
+
 - Kept the killed agent's uncommitted work after review:
   - the fixture `SCHD_FUNDAMENTALS_UNAVAILABLE_OPPORTUNITY` (not in `OPPORTUNITIES`);
   - the mock `listOpportunities` `symbol` filter, the `fundamentals_unavailable` marker and its floor exemption;
@@ -425,3 +428,34 @@
   - `services/xstockstrat-ui/e2e/{fixtures/opportunities.ts,fixtures/INVENTORY.md,mock-backend.ts,insights/backtest-coverage.spec.ts,insights/opportunities.spec.ts,trader/position-detail.spec.ts}`
   - `services/xstockstrat-ui/src/app/insights/strategies/[id]/page.tsx` (out-of-Files, operator option A)
 - Deviations: operator option A (F-08 exception); local production-build runner instead of `run-e2e.sh` (see Deviation Log).
+
+### Step 25 — docs: Strat-lab skill, MCP runbook, service docs, C-16 CHANGE texts [done]
+
+- Strat-lab (same PR as Steps 5/15, the strat-lab rule):
+  - `output-handling.md` documents `warnings[]`, `fundamentals_gap`, reason 5 (refused, not evaluated; no cell; INSUFFICIENT_DATA) and the outage rerun warning.
+  - `self-grill.md` item 6 gains the same reason and warning.
+  - `SKILL.md` says a refused symbol is never a 0-trade no-signal, and that live denies entry.
+  - `verification.md` adds the real-ETF SCHD check (reason 5 + ETF + INSUFFICIENT_DATA).
+- `mcp-tools.md` mirrors the Step 5 docstrings:
+  - `run_backtest`: the refusal paragraph, an Errors row, and `fundamentals_gap` in the example and the inline-keys list;
+  - `set_strategy_live`: not checked at enable, deny-entry plus a state-change WARN/alert;
+  - `list_opportunities`: the skip-row fields.
+- Analysis `CLAUDE.md` gains the "Fundamentals availability guard (feature 215)" section. It covers the states and precedence, backtest refusal, live deny-entry, the entry-only skip row with its mutual exclusion and heal, the snapshot quota ripple (RESOURCE_EXHAUSTED → UNKNOWN → `"unavailable"`, 300s retry), evidence exclusion H (gate-off re-include, ScoreStrategy cleanup) and the four fixed constants. A Decide-surface sub-bullet covers the skip row and the `symbol` filter.
+- ANALYSIS-3 EXTEND: eligible = fingerprint match **and** not guard-refused. The exclusion is non-destructive, overrides feature 065 via the 2026-10-10 decision, and the fingerprint has a blind spot.
+- Marketdata `CLAUDE.md` gains:
+  - the absence-vs-outage-vs-disable encoding: edgar no-snapshot → NotFound/omitted; FMP no-data → NotFound; Finnhub failure → Unavailable; global disables → FailedPrecondition;
+  - `GetEtfFlags`: cache-only, 30-day TTL, the 80% headroom gate via `atQuotaAlertThreshold`, the fixed bounds.
+- UI `CLAUDE.md`: the route drift is fixed, and the skip-row badge and `useOpportunities(…, symbol)` are noted.
+- C-16 CHANGE texts were applied: the feature-201 `@AC-8` note, and the rescoped Given of `@AC-2 @feature-185`, which carries a CHANGE comment.
+- `recon.md:121,166` wording was fixed to "zero executable epochs for the declared metrics".
+- TDD: N/A (docs).
+- Verification:
+  - `validate.py --self-test` and `validate.py` OK;
+  - the FUNDAMENTALS_UNAVAILABLE greps hit all three files;
+  - the `insights/market/[symbol]` count is 0;
+  - the "feature 215" greps hit both `.feature` files;
+  - RESOURCE_EXHAUSTED is present;
+  - agent `test_tools_endpoint.py` + `test_list_correlation_parity.py`: 18 passed.
+- markdownlint finds nothing new versus HEAD in any changed `.md`. The impl-spec drops from 15 to 13 MD022 findings: the two Deviation Log headings added this session gained a blank line, and the 13 pre-existing ones use the log's established style.
+- Files modified: the 12 Step 25 Files.
+- Deviations: teardown drift fixes inside Files (see Deviation Log).
