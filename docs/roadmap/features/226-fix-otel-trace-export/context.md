@@ -64,3 +64,18 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - Go failure visibility needs no code. `otel@v1.45.0 internal/errorhandler/errorhandler.go:36` `log.Print(err)` is reached from the BSP drain-on-shutdown path (`batch_span_processor.go:380,386`), and `otlptracehttp client.go:281` puts `resp.Status` ("400 Bad Request") in the error.
   - `packages/otel/CLAUDE.md:4` (constitution pointer) also restates the PLAT-3 split and the findings doc-lie. It was added to Step 11 alongside the design-listed docs.
   - The standalone server path for the Step 8 build proof is `.next/standalone/services/xstockstrat-ui/server.js` (`Dockerfile:25,31`).
+
+## Session 2026-10-14 — sdd-review impl-spec (advisory)
+
+- Result: 1 failure, 7 warnings, 5 notes (advisory — did not block). Overlap: CLEAN.
+- Unresolved ✗ / ⚠ carried into execution:
+  - Step 6: pnpm-lock "expect none" grep also matches sdk-node snapshot lines :7583/:7605 → verification cannot pass as written (F-05) — [ ] unaddressed
+  - Step 2: conditional `go.work.sum` staging via Deviation Log violates F-08 — pre-list it or revert-never-stage — [ ] unaddressed
+  - Step 4: agent `tests/test_telemetry.py` shared with Step 5 → hunk-level staging required (F-08/P-06) — [ ] unaddressed
+  - Step 7: dynamic import + init placement unspecified; top-level await in notify/config CJS tests → TS1378 — [ ] unaddressed
+  - Step 3: Go ≥40% coverage only commented, not asserted (C-08) — [ ] unaddressed
+  - Step 10: AC-4 has no RED capture (C-15) — [ ] unaddressed
+  - Steps 6/8: note that OTEL_LOG_LEVEL needs no compose/.do change — [ ] unaddressed
+  - Step 8: note that existing Playwright e2e coverage still applies (OTEL disabled in e2e) — [ ] unaddressed
+- Notes: Step 1 comment wrong about AC-3 placeholder; Step 4 RED ~10 s/test (gRPC retry); Step 8 `timeout` is GNU-only; Step 11 grafana-cloud.md cites :175/:179 not :174-178.
+- Overlap findings: soft textual overlap with 084-droplet-compose-deploy (spec-ready, no impl-spec) on docker-compose.yml / docs/setup/digitalocean.md — rebase when 084 is specced; no merge-order row.
