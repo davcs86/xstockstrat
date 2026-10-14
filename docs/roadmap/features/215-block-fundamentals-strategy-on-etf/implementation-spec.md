@@ -1598,8 +1598,35 @@ _Populated by /sdd-execute as implementation proceeds._
 
 **Spec said**: Instructions 3 and 6 add the listed paragraphs and fix the `insights/market/[symbol]` route.
 **Actual**: The edits stay within Step 25's Files, but the manual teardown (Instruction 9; context-forge unavailable) also fixed grounded drift in those files:
+
 - Analysis `CLAUDE.md`: the feature-200 snapshot channel now reads single-symbol `GetFundamentals` (Step 13), and the Decide-surface floor-exemption list gains `fundamentals_unavailable`.
 - Analysis `context-constitution.md`: ANALYSIS-3/10/12 citations were re-grounded. `_definition_fingerprint` is at `servicer.py:7059`; the predicates moved to `fundamentals_guard.py`, and the paged PIT loader is new.
 - UI `CLAUDE.md`: the Decide-screens bullet described the deleted `insights/market/[symbol]` page (its own `AccountProvider`, two-column layout). It was rewritten for `trader/positions/[symbol]`, and the dead "renders no chart" note was dropped.
+
 **Reason**: Root CLAUDE.md § Teardown requires fixing grounded drift in the context files a session touches. All of it sits inside Step 25's Files.
 **Disposition**: in scope (Step 25 Files). The one drift outside Files, `docs/patterns/ui-ux-governance.md` §8, is logged with the C-16 promotion.
+
+### Deviation: C-16 scenario promotion — @AC-4 not promoted
+
+**Spec said**: Promote the feature's `@AC-*` scenarios into the durable suites (Step 25 Instruction 7, `/sdd-execute` integration step).
+**Actual**: 14 of 15 scenarios were promoted verbatim with `@feature-215`:
+
+- `services/xstockstrat-analysis/acceptance/block-fundamentals-strategy-on-etf.feature`: AC-1, 2, 3, 5, 6, 8, 9, 10, 11, 12, 13;
+- `services/xstockstrat-marketdata/acceptance/…`: AC-7, 14;
+- `services/xstockstrat-ui/acceptance/…`: AC-15.
+
+`@AC-4` was **not** promoted. Its Then "the row's reason reads 'fundamentals unavailable (ETF)' when marketdata knows SCHD is an ETF, **else 'fundamentals unavailable'**" is only half asserted:
+
+- The ETF text is asserted (Step 24 e2e).
+- The plain branch is asserted only at the data level: Step 22 `test_ac4_unknown_etf_flag_leaves_label_absent`, which checks no label key. No test asserts the rendered "Fundamentals unavailable" text for UNSPECIFIED/NOT_ETF.
+
+The scenario's other Thens are fully covered (Steps 22/24).
+**Reason**: The operator's promotion rule is to log a deviation instead of promoting a scenario whose test asserts less than its Then.
+**Disposition**: follow-up. Add an e2e (or `opportunityShared` vitest) assertion that a skip row with `fundamentalsGap` UNSPECIFIED/NOT_ETF renders "Fundamentals unavailable" without "(ETF)". Then promote `@AC-4` to `docs/sdd/business-rules/platform.feature`, since it spans analysis and UI.
+
+### Deviation: teardown — `docs/patterns/ui-ux-governance.md` §8 drift deferred
+
+**Spec said**: Step 25 Instruction 9: a grounded-drift fix outside the step's Files is recorded here, then staged or deferred.
+**Actual**: Not edited. The §8 coverage-audit table (a `scrubberExtraTargets` doc) still lists "insights · signal detail (`market/[symbol]`)", a route that no longer exists, and says the UI durable suite "holds only **two** files". `services/xstockstrat-ui/acceptance/` now has 40 files, including this feature's.
+**Reason**: The drift predates 215 and covers the whole table. A one-cell route fix would leave the rest wrong, so a correct fix is a full re-audit of §8, outside 215's scope (F-08).
+**Disposition**: deferred to a follow-up §8 re-audit (`/sdd-qa audit xstockstrat-ui` or a docs-only PR).

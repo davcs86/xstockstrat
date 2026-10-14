@@ -459,3 +459,86 @@
 - markdownlint finds nothing new versus HEAD in any changed `.md`. The impl-spec drops from 15 to 13 MD022 findings: the two Deviation Log headings added this session gained a blank line, and the 13 pre-existing ones use the log's established style.
 - Files modified: the 12 Step 25 Files.
 - Deviations: teardown drift fixes inside Files (see Deviation Log).
+
+### C-16 scenario promotion (operator-requested this session, ahead of Step 26)
+
+- Each Then was diffed against the shipped test, and the scenarios were copied verbatim with an added `@feature-215` (a script checked that every line is verbatim). Promotion table:
+
+| Scenario | Target suite | Backing test(s) | Then fully asserted? | Promoted |
+|---|---|---|---|---|
+| @AC-1 | analysis | `test_fundamentals_guard.py` (real blend/squeeze shapes) | yes | yes |
+| @AC-2 | analysis | `test_backtest_fundamentals_guard.py` (a): reason 5, `!= ENTRY_NEVER_TRUE`, INSUFFICIENT_DATA; UI e2e `backtest-coverage` | yes | yes |
+| @AC-3 | analysis | `test_backtest_fundamentals_guard.py` (b)(c) | yes | yes |
+| @AC-4 | (platform) | `test_opportunities_fundamentals_guard.py` + e2e `opportunities` | **no**: the plain "fundamentals unavailable" text branch is asserted only as "no label key" | **no** (Deviation Log) |
+| @AC-5 | analysis | (a) WARN with SCHD + strategy + "fundamentals unavailable"; reason on the result | yes | yes |
+| @AC-6 | analysis | `test_live_loop.py` feature-215 class (3 cycles, 1 WARN, 1 alert, exit fires) | yes | yes |
+| @AC-7 | marketdata | `marketdata_service_test.go` feature215 cases + FMP/Finnhub client tests | yes | yes |
+| @AC-8 | analysis | backtest (d) + opportunities outage case | yes | yes |
+| @AC-9 | analysis | opportunities FAILED_PRECONDITION (no markers, so outside the 300s retry, which keys on `"unavailable"`) + live DISABLED (no state, no alert) | yes | yes |
+| @AC-10 | analysis | guard beta-only row → AVAILABLE + `component_would_execute` parity; backtest (e) | yes | yes |
+| @AC-11 | analysis | `test_grade_fundamentals_exclusion.py` (only `fetch_all_for_fingerprint` called, no delete; refused-only recompute; outage keeps grade) | yes | yes |
+| @AC-12 | analysis | `test_fundamentals_pit_pager.py`, backtest (h), grade 60-period drain, live 2-page | yes | yes |
+| @AC-13 | analysis | opportunities bars outage + heal (`action 0`, skip marker, no `"unavailable"`) | yes | yes |
+| @AC-14 | marketdata | `etf_flags_test.go` (a)(c)(d) | yes | yes |
+| @AC-15 | ui | e2e `position-detail` (SCHD only via the symbol filter) | yes | yes |
+
+- No duplicate of these scenarios existed in any target suite.
+- `platform.feature` is unchanged: @AC-4, the only cross-service scenario, is deferred.
+- Ledger: one `fails.md` entry (2026-10-14, assumption: the e2e sentinel status masked the INSUFFICIENT_DATA render gate twice).
+
+### Step 26 — test: Staging measurement (pre-merge) + real-ETF proof (post-deploy) [pending]
+
+- Left `pending`. The step's only file is this `context.md`, which records MCP observations, so the step has no code or docs part. Staging MCP calls and deploys were out of bounds for this session (operator instruction).
+- **Open item — the operator must measure on staging and record verbatim here**, under a `## Session … — staging verification` heading:
+  1. **Pre-merge (before the integration PR merges).** Call `query_fundamentals(<symbol>, historical)` for every symbol on the staging watchlists, plus the symbols of `fundamentals_macd_blend`'s evidence cells. Count the periods per symbol and record a line `>50 periods: <N> (<symbols>)`. That is the blast radius of the PIT-pagination EXTEND of the feature-198/201 results.
+  2. **Post-deploy (dev/staging, after the `main-dev` deploy), with `analysis.backtest.fundamentals.enabled` on:**
+     - (a) `run_backtest(fundamentals_macd_blend, ["SCHD"])` returns `no_trade_reason: NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE`, `fundamentals_gap` set (expect `FUNDAMENTALS_GAP_ETF` once the ETF-flag fill has run; `_UNSPECIFIED` on a cold cache), and `status: BACKTEST_STATUS_INSUFFICIENT_DATA`.
+     - (b) `run_backtest(fundamentals_macd_blend, ["AAPL"])` trades, with no reason 5.
+     - (c) `run_backtest(squeeze_breakout_trend, ["SCHD"])` evaluates normally.
+     - (d) `list_opportunities` shows the SCHD row with `fundamentals_unavailable: true` and `action: OPPORTUNITY_ACTION_TAG_UNSPECIFIED`, with SCHD in the universe (e.g. watchlisted against `fundamentals_macd_blend`).
+     - (e) A manual `ScoreStrategy` refresh of `fundamentals_macd_blend` leaves SCHD out of the grade's `evidence_symbols`.
+  3. Any mismatch blocks `launched` and goes in the Deviation Log.
+- Also visually confirm the UI: the strategy page for a refused-only SCHD run shows the "requires fundamentals … (ETF)" banner.
+
+### Teardown (manual — context-forge unavailable)
+
+Each file below was re-read against the current code; the reconciliation is listed under it.
+
+1. `CLAUDE.md` (root) — re-read. The only change on this branch is the 225 merge line from `main-dev`. 215 adds no config key, env var, port or service, so there was no drift.
+2. `services/xstockstrat-analysis/CLAUDE.md`:
+   - Reconciled the feature-200 snapshot channel: `GetFundamentalsMulti` → single-symbol `GetFundamentals` (`servicer.py:1868-1870`, `live_loop.py:663`).
+   - Added `fundamentals_unavailable` to the Decide-surface floor-exemption list (`repositories/opportunities.py:256-257`).
+   - Verified the new guard section against:
+     - `servicer.py:301-307` (constants);
+     - `fundamentals_guard.py:21-31` (states, precedence);
+     - `live_loop.py:721,854` (WARN / alert text);
+     - `servicer.py:1245,2541,2562` (warnings / ScoreStrategy messages).
+   - The `fundsignal_loop` `GetFundamentalsMulti` mentions (L119, L495) are still correct.
+3. `services/xstockstrat-analysis/docs/context-constitution.md`:
+   - Re-grounded ANALYSIS-3 citations: `_definition_fingerprint` `servicer.py:7059`, uses `:850` / `:2756`, repo filters `backtest_run_symbols.py:79` / `:99`.
+   - ANALYSIS-10/12: the predicates moved to `fundamentals_guard.py:38,44`; the pager is `servicer.py:6429`; the snapshot loader is single-symbol `GetFundamentals`.
+4. `services/xstockstrat-marketdata/CLAUDE.md`:
+   - Verified the new text against:
+     - `etf_flags.go:20-24` (TTL / bounds);
+     - `etf_flags.go:140` (`etfFillAllowed`);
+     - `marketdata_service.go:1636` (`atQuotaAlertThreshold`);
+     - `marketdata_service.go:1449` (`ErrNoFundamentals` → NotFound);
+     - `marketdata_service.go:1515-1549` (`errNoEdgarSnapshot`).
+   - The L94 `marketdata.edgar.enabled` row still holds. No other drift.
+5. `services/xstockstrat-marketdata/docs/context-constitution.md` — re-read because marketdata behavior changed. MARKETDATA-12 (one FMP client) still holds, since the ETF filler receives the same `fmpClient` via `SetEtfFlagSource`. No drift.
+6. `services/xstockstrat-ui/CLAUDE.md`:
+   - Fixed the route drift (`insights/market/[symbol]`, a deleted page) and dropped the dead "renders no chart" note.
+   - Rewrote the Decide-screens bullet against `trader/positions/[symbol]/page.tsx`: `useOpportunities` L186, `OrderForm` L427, `SignalReadiness` L556, Edge (BT) L957-1022, and `AccountProvider` from `trader/providers.tsx:13`.
+7. `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md` — re-read. Added the skip-row fixture row and the `strat-fundamentals-etf-001` sentinel row; the PLTR/`OPPORTUNITIES` row is unchanged and still true.
+8. `docs/patterns/ui-ux-governance.md` (a `scrubberExtraTargets` doc) — re-read.
+   - §1–7 hold for the `page.tsx` change: it reuses `BacktestDiagnostics`/`Alert`, adds no color literal and no new primitive.
+   - §8 table drift predates 215 (a deleted route; "two files" vs 40). Deferred and logged in the Deviation Log (out of Files, F-08).
+9. `README.md` (`scrubberExtraTargets`) — re-read. It has no 215-relevant claim and no drift.
+10. `plugins/strat-lab/skills/backtest/{SKILL.md,reference/*.md}`, `docs/runbooks/mcp-tools.md` — re-read against the Step 5 docstrings (`app/tools.py`) and the Step 15 messages. `validate.py` passes, and the agent parity guards are 18 passed.
+11. `docs/patterns/strat-lab-plugin.md` — re-read. Its guard-rail table lists example behaviors and does not claim to be complete; the skill update satisfies its same-PR rule. No drift.
+
+## Session 2026-10-14 — sdd-execute
+**Steps this session**: merge fix-up, 24, 25 (26 left pending), plus C-16 promotion and teardown
+**Progress**: 25 done / 26 total
+**Stopped at**: Step 26. It needs staging MCP measurement and a post-deploy proof, which were out of bounds for this session.
+**Next**: the operator runs the Step 26 measurements (open item above) and opens the integration PR; then `/sdd-execute block-fundamentals-strategy-on-etf 26` records the results.
