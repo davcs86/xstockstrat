@@ -418,6 +418,12 @@ export type SymbolDiagnostics = Message<"xstockstrat.analysis.v1.SymbolDiagnosti
      * @generated from field: int32 warmup_bars = 5;
      */
     warmupBars: number;
+    /**
+     * feature 215 — set only with NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE
+     *
+     * @generated from field: xstockstrat.analysis.v1.FundamentalsGap fundamentals_gap = 6;
+     */
+    fundamentalsGap: FundamentalsGap;
 };
 /**
  * Describes the message xstockstrat.analysis.v1.SymbolDiagnostics.
@@ -1483,6 +1489,19 @@ export type Opportunity = Message<"xstockstrat.analysis.v1.Opportunity"> & {
      * @generated from field: optional double symbol_score = 22;
      */
     symbolScore?: number | undefined;
+    /**
+     * feature 215 — a non-actionable skip row: the strategy requires fundamentals the symbol lacks.
+     * Derived at read from the "fundamentals_unavailable" provenance marker (no column).
+     *
+     * @generated from field: bool fundamentals_unavailable = 23;
+     */
+    fundamentalsUnavailable: boolean;
+    /**
+     * feature 215 — best-effort ETF / NOT_ETF label for a skip row; rides readiness_json (no column).
+     *
+     * @generated from field: xstockstrat.analysis.v1.FundamentalsGap fundamentals_gap = 24;
+     */
+    fundamentalsGap: FundamentalsGap;
 };
 /**
  * Describes the message xstockstrat.analysis.v1.Opportunity.
@@ -1656,6 +1675,12 @@ export type ListOpportunitiesRequest = Message<"xstockstrat.analysis.v1.ListOppo
      * @generated from field: xstockstrat.analysis.v1.OpportunitySort sort = 5;
      */
     sort: OpportunitySort;
+    /**
+     * feature 215 — empty = all symbols; exact (normalized) symbol filter
+     *
+     * @generated from field: string symbol = 6;
+     */
+    symbol: string;
 };
 /**
  * Describes the message xstockstrat.analysis.v1.ListOpportunitiesRequest.
@@ -2505,12 +2530,42 @@ export declare enum NoTradeReason {
      *
      * @generated from enum value: NO_TRADE_REASON_FORMULA_ERROR = 4;
      */
-    FORMULA_ERROR = 4
+    FORMULA_ERROR = 4,
+    /**
+     * strategy requires fundamentals and the symbol has none usable in the window — refused, not evaluated (feature 215)
+     *
+     * @generated from enum value: NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE = 5;
+     */
+    FUNDAMENTALS_UNAVAILABLE = 5
 }
 /**
  * Describes the enum xstockstrat.analysis.v1.NoTradeReason.
  */
 export declare const NoTradeReasonSchema: GenEnum<NoTradeReason>;
+/**
+ * feature 215 — best-effort marketdata label for a fundamentals refusal; never affects the guard
+ * decision (FR-11). UNSPECIFIED = label unknown.
+ *
+ * @generated from enum xstockstrat.analysis.v1.FundamentalsGap
+ */
+export declare enum FundamentalsGap {
+    /**
+     * @generated from enum value: FUNDAMENTALS_GAP_UNSPECIFIED = 0;
+     */
+    UNSPECIFIED = 0,
+    /**
+     * @generated from enum value: FUNDAMENTALS_GAP_ETF = 1;
+     */
+    ETF = 1,
+    /**
+     * @generated from enum value: FUNDAMENTALS_GAP_NOT_ETF = 2;
+     */
+    NOT_ETF = 2
+}
+/**
+ * Describes the enum xstockstrat.analysis.v1.FundamentalsGap.
+ */
+export declare const FundamentalsGapSchema: GenEnum<FundamentalsGap>;
 /**
  * @generated from enum xstockstrat.analysis.v1.ComponentKind
  */

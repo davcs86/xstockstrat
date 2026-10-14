@@ -199,6 +199,15 @@ enum NoTradeReason {
   NO_TRADE_REASON_ENTRY_NEVER_TRUE = 2;     // entry condition never satisfied
   NO_TRADE_REASON_INSUFFICIENT_CAPITAL = 3; // reserved; not emitted this version
   NO_TRADE_REASON_FORMULA_ERROR = 4;        // a custom-formula component failed to execute / returned an out-of-contract series
+  NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE = 5; // strategy requires fundamentals and the symbol has none usable in the window — refused, not evaluated (feature 215)
+}
+
+// feature 215 — best-effort marketdata label for a fundamentals refusal; never affects the guard
+// decision (FR-11). UNSPECIFIED = label unknown.
+enum FundamentalsGap {
+  FUNDAMENTALS_GAP_UNSPECIFIED = 0;
+  FUNDAMENTALS_GAP_ETF = 1;
+  FUNDAMENTALS_GAP_NOT_ETF = 2;
 }
 
 // One row of day-by-day backtest diagnostics for a single bar.
@@ -229,6 +238,7 @@ message SymbolDiagnostics {
   NoTradeReason no_trade_reason = 3;
   int32 bars_total = 4;
   int32 warmup_bars = 5;
+  FundamentalsGap fundamentals_gap = 6; // feature 215 — set only with NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE
 }
 
 message ScoreStrategyRequest {
@@ -635,6 +645,11 @@ message Opportunity {
   // NEVER a cardinal sizing/alert/risk input. Explicit-presence: unset = no score-eligible opportunity
   // for the symbol. Symbol-uniform: every row of a symbol carries the same value.
   optional double symbol_score = 22;
+  // feature 215 — a non-actionable skip row: the strategy requires fundamentals the symbol lacks.
+  // Derived at read from the "fundamentals_unavailable" provenance marker (no column).
+  bool fundamentals_unavailable = 23;
+  // feature 215 — best-effort ETF / NOT_ETF label for a skip row; rides readiness_json (no column).
+  FundamentalsGap fundamentals_gap = 24;
 }
 
 // One recent daily-bar close for the Decide-surface sparkline (feature 095). Explicit presence — an
@@ -685,6 +700,7 @@ message ListOpportunitiesRequest {
   repeated string sources = 3;              // empty = all sources; matches derived _primary_source
   OpportunityActionTag action_filter = 4;   // UNSPECIFIED(0) = any action
   OpportunitySort sort = 5;                  // UNSPECIFIED(0) = legacy blended rank (not CONVICTION)
+  string symbol = 6;                          // feature 215 — empty = all symbols; exact (normalized) symbol filter
 }
 message ListOpportunitiesResponse {
   repeated Opportunity opportunities = 1;

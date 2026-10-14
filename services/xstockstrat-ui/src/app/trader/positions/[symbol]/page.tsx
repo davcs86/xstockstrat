@@ -13,7 +13,12 @@ import { resolveChartColor } from '@/lib/chartColors';
 import { marketDataClient } from '@/lib/browserClients/marketDataClient';
 import { fmtUsd, fmtSignedUsd, fmtPct, pnlClass } from '@/lib/money';
 import { openR, fmtR, sideLabel } from '@/lib/positionRisk';
-import { POSITION_RISK_FLAG, OPPORTUNITY_ACTION, EnumBadge } from '@/lib/opportunityShared';
+import {
+  POSITION_RISK_FLAG,
+  OPPORTUNITY_ACTION,
+  FUNDAMENTALS_GAP,
+  EnumBadge,
+} from '@/lib/opportunityShared';
 import { useWatchlists } from '@/hooks/useWatchlists';
 import { useOpportunities, useStrategyAnalytics } from '@/hooks/useOpportunities';
 import { useOhlcBars } from '@/hooks/useOhlcBars';
@@ -26,7 +31,11 @@ import { useIsAdmin } from '@/hooks/useLiveStrategies';
 import { useGetStrategy } from '@/hooks/useStrategyDefinitions';
 import { useIndicatorSeries, type IndicatorSeriesInput } from '@/hooks/useIndicatorSeries';
 import { BackfillStatus } from '@xstockstrat/proto/ingest/v1/ingest_pb';
-import { BacktestStatus } from '@xstockstrat/proto/analysis/v1/analysis_pb';
+import {
+  BacktestStatus,
+  OpportunityActionTag,
+  OpportunitySort,
+} from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import { timestampToDate } from '@/lib/protoTime';
 import { OhlcBlock } from '@/components/shared/OhlcBlock';
 import { riskReward, suggestedShares } from '@/lib/orderSizing';
@@ -173,7 +182,14 @@ function PositionDetailInner() {
     window.history.replaceState(null, '', u.pathname + u.search + u.hash);
   };
 
-  const { data: oppData } = useOpportunities(0);
+  // Filtered server-side by symbol, so this symbol's rows are seen whatever their queue rank.
+  const { data: oppData } = useOpportunities(
+    0,
+    [],
+    OpportunityActionTag.UNSPECIFIED,
+    OpportunitySort.CONVICTION,
+    symbol,
+  );
   const symbolOpportunities = useMemo(
     () => (oppData?.pages.flatMap((p) => p.opportunities) ?? []).filter((o) => o.symbol === symbol),
     [oppData, symbol],
@@ -960,7 +976,14 @@ function OpportunitySection({
       <CardHeader>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <CardTitle className="text-base">Opportunity</CardTitle>
-          <EnumBadge render={OPPORTUNITY_ACTION[opportunity.action]} />
+          {opportunity.fundamentalsUnavailable ? (
+            <EnumBadge
+              render={FUNDAMENTALS_GAP[opportunity.fundamentalsGap]}
+              testId="detail-fundamentals-unavailable"
+            />
+          ) : (
+            <EnumBadge render={OPPORTUNITY_ACTION[opportunity.action]} />
+          )}
         </div>
       </CardHeader>
       <CardContent className="space-y-2">

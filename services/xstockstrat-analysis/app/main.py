@@ -131,11 +131,16 @@ async def serve():
             log.info("strategy scores hydrated from DB")
         except Exception as e:
             log.warning("failed to hydrate strategy scores: %s", e)
-        try:
-            n = await servicer.recompute_unscored_pairs()
-            log.info("boot recompute: %d ambiguous strategy score pairs", n)
-        except Exception as e:
-            log.warning("failed boot recompute of strategy scores: %s", e)
+
+        # Background: the recompute may page fundamentals, so it must not delay the live loop.
+        async def _boot_recompute():
+            try:
+                n = await servicer.recompute_unscored_pairs()
+                log.info("boot recompute: %d ambiguous strategy score pairs", n)
+            except Exception as e:
+                log.warning("failed boot recompute of strategy scores: %s", e)
+
+        asyncio.get_event_loop().create_task(_boot_recompute())
 
         from app.engine.live_loop import LiveEvaluationLoop
         from app.repositories.strategy_cooldowns import StrategyCooldownsRepository

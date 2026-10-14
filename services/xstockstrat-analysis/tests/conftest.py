@@ -29,6 +29,32 @@ def _setup_gen_path() -> None:
 
 _setup_gen_path()
 
+from datetime import date  # noqa: E402
+
+from app.services.evaluator import FundamentalPeriod  # noqa: E402
+
+
+def fund_period(filed_date, **values):
+    """One evaluator PIT filing (feature 215 fixtures)."""
+    return FundamentalPeriod(filed_date=filed_date, values=dict(values))
+
+
+# Feature 215 PIT fixtures: SCHD (an ETF) has no SEC filings; AAPL has quarterly filings carrying
+# all six seeded fscore inputs (pe, pb, dividend_yield, roe, debt_to_equity, eps).
+SCHD_PIT_PERIODS = []
+AAPL_PIT_PERIODS = [
+    fund_period(
+        filed,
+        pe_ratio=30.0,
+        pb_ratio=45.0,
+        dividend_yield=0.005,
+        roe=1.5,
+        debt_to_equity=1.8,
+        eps=6.0,
+    )
+    for filed in (date(2024, 5, 3), date(2024, 8, 2), date(2024, 11, 1))
+]
+
 
 def ctx_with(headers):
     """A gRPC servicer context replaying ``headers`` ([(key, value)]); ``abort`` raises."""

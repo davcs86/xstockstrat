@@ -66,6 +66,10 @@ service MarketDataService {
   rpc GetCurrentSector(GetCurrentSectorRequest) returns (GetCurrentSectorResponse);
   rpc GetSectorAsOf(GetSectorAsOfRequest) returns (GetSectorAsOfResponse);
   rpc GetSectorHistory(GetSectorHistoryRequest) returns (GetSectorHistoryResponse);
+
+  // feature 215 — cache-only ETF label read: never calls FMP on the request path; an unknown
+  // symbol returns is_etf unset.
+  rpc GetEtfFlags(GetEtfFlagsRequest) returns (GetEtfFlagsResponse);
 }
 
 message Bar {
@@ -383,4 +387,17 @@ message GetSectorHistoryRequest {
 
 message GetSectorHistoryResponse {
   repeated SectorHistoryRow rows = 1;
+}
+
+message GetEtfFlagsRequest {
+  repeated string symbols = 1;
+}
+
+message EtfFlag {
+  string symbol = 1;
+  optional bool is_etf = 2; // unset = unknown (not yet cached)
+}
+
+message GetEtfFlagsResponse {
+  repeated EtfFlag flags = 1;
 }

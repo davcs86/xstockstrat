@@ -23,7 +23,8 @@ _ACTION_TAKE = 3
 # skip-set for BOTH the primary-source derivation (servicer._primary_source) and the source filter /
 # facet below, bound as a `text[]` param so the SQL and Python can never drift. "unavailable" is
 # deliberately absent (parity with _primary_source: an unavailable-led row surfaces "unavailable").
-_PROVENANCE_STRUCTURAL_MARKERS = ["watchlist", "position", "denied"]
+# feature 215 — "fundamentals_unavailable" (the skip-row marker) must never become a source/facet.
+_PROVENANCE_STRUCTURAL_MARKERS = ["watchlist", "position", "denied", "fundamentals_unavailable"]
 
 # feature 190 — the sort-key → ORDER BY fragment map (OpportunitySort enum ints). Selected by a
 # constant key, never interpolated from user input (same safety class as the valid_clause f-string).
@@ -123,6 +124,8 @@ class OpportunitiesRepository:
         One transaction. Re-stamping ``computed_at`` for a still-unavailable scanned row is
         intentional — it holds the FR-5 retry cooldown so a persistently-down symbol does not
         re-kick every poll.
+
+        feature 215 — a heal row with no ``"action"`` key leaves the stored action unchanged.
         """
         if not rows:
             return
@@ -138,6 +141,7 @@ class OpportunitiesRepository:
                        valid_until = $8,
                        composite_score = $9,
                        symbol_score = $10,
+                       action = COALESCE($11::int, action),
                        computed_at = now()
                  WHERE user_id = $1 AND opportunity_key = $2
                 """,
@@ -157,6 +161,8 @@ class OpportunitiesRepository:
                         # symbol-wide by stamp_symbol_score right after this heal UPDATE, so the
                         # per-row value here is left None (NULL) and superseded there.
                         r.get("symbol_score"),
+                        # feature 215 — no "action" key binds NULL → the stored action is kept.
+                        (int(r["action"]) if r.get("action") is not None else None),
                     )
                     for r in rows
                 ],
@@ -198,6 +204,7 @@ class OpportunitiesRepository:
         sources: list[str] | None = None,
         action_filter: int = 0,
         sort: int = 0,
+        symbol: str = "",
     ) -> list[dict]:
         """The queue read: LEFT JOIN ``opportunity_actions`` to drop DISMISS + active SNOOZE.
 
@@ -245,12 +252,16 @@ class OpportunitiesRepository:
               -- (fails.md:1547 vanish trap) or the sentinel would silently vanish at the DB read.
               -- feature 190: this stays the SOLE floor; the source/action filters below are NOT
               -- exempt for muted/unavailable rows (parity with the pre-190 client).
-              AND (o.conviction >= $2 OR o.provenance ? 'denied' OR o.provenance ? 'unavailable')
+              -- feature 215: the non-actionable fundamentals skip row is exempt likewise.
+              AND (o.conviction >= $2 OR o.provenance ? 'denied' OR o.provenance ? 'unavailable'
+                   OR o.provenance ? 'fundamentals_unavailable')
               -- feature 190: source filter — an empty $7 array applies NO predicate (never = ANY of
               -- an empty array, which would return zero rows and empty the default view).
               AND (cardinality($7::text[]) = 0 OR ps.elem = ANY($7::text[]))
               -- feature 190: action filter on o.action (OpportunityActionTag), $8 = 0 → any action.
               AND ($8::int = 0 OR o.action = $8::int)
+              -- feature 215: exact (normalized) symbol filter, $9 = '' → all symbols.
+              AND ($9::text = '' OR o.symbol = $9)
               AND COALESCE(a.action, 0) <> $4
               AND NOT (
                     COALESCE(a.action, 0) = $5
@@ -270,6 +281,7 @@ class OpportunitiesRepository:
             _PROVENANCE_STRUCTURAL_MARKERS,
             srcs,
             int(action_filter),
+            symbol,
         )
         return [_to_dict(r) for r in rows]
 
