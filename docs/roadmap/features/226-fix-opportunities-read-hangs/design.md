@@ -1,7 +1,7 @@
 # Design: fix-opportunities-read-hangs
 
 **Created**: 2026-10-14
-**Rounds**: 5 (full; termination: pending round-5 review — DRAFT)
+**Rounds**: 5 (full; termination: round-5 fixes applied, awaiting approval)
 **Approved by**: _pending_
 **Grounded in**: recon.md
 
