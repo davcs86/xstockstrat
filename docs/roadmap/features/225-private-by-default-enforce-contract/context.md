@@ -593,3 +593,10 @@ launched and stable. Its CI `migration-rerun` is the first live run of the DB-le
 - Promoted verbatim (+`@feature-225`) to `services/xstockstrat-analysis/acceptance/private-by-default-enforce-contract.feature`;
   its Source header now lists `@AC-17`. Deviation Log disposition updated.
 
+
+## Session 2026-10-14 (CI: feature status automation)
+
+- Promotion PR #1242 merged to main
+- Feature promoted and committed: 9def6259da8da135ffb66846af06201ce4690304
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-10-14
