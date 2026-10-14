@@ -52,3 +52,15 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - `next build` + standalone boot feasibility in-session → step 5.
 - `go.work.sum` change on tidy → step 2 (Deviation Log).
 - Mixed resources 1.30.1/1.25.1 path proven by probe only → step 4 assertion guards it.
+
+## Session 2026-10-14 — sdd-spec
+
+- Generated implementation-spec.md with 11 steps. Status → implementation-ready.
+- Step map: 1 docs (AC-1 → Scenario Outline raw+encoded; product-spec deps reconcile) → 2/3 Go service+test → 4/5 Python service+test → 6/7 Node service+test → 8/9 UI service+test → 10 config (compose :4318, AC-4) → 11 docs + PLAT-3 + context-forge teardown. Each design runtime family became a C-08 service/test pair, so there are 11 commits rather than the design's 6 units.
+- Key codebase findings:
+  - The AC-1 Outline would turn the existing `"http://<otlp-receiver>/otlp"` text into an unbound Examples placeholder, so Step 1 rewords that one line.
+  - RED ordering: add the *new* dependency before the RED capture, and remove the *old* exporter dependency only after it. Removing `-proto-grpc` / `exporter-trace-otlp-grpc` first would make RED fail on import, not behaviour. The agent's `test_telemetry.py:24` patch-target repoint therefore moved into Step 4, because the suite breaks once `-proto-grpc` is uninstalled.
+  - `exporter-trace-otlp-grpc` stays in the root `pnpm-lock.yaml` as a transitive dependency of `sdk-node@0.52.1` (`:7605`). Only the 4 importer entries go.
+  - Go failure visibility needs no code. `otel@v1.45.0 internal/errorhandler/errorhandler.go:36` `log.Print(err)` is reached from the BSP drain-on-shutdown path (`batch_span_processor.go:380,386`), and `otlptracehttp client.go:281` puts `resp.Status` ("400 Bad Request") in the error.
+  - `packages/otel/CLAUDE.md:4` (constitution pointer) also restates the PLAT-3 split and the findings doc-lie. It was added to Step 11 alongside the design-listed docs.
+  - The standalone server path for the Step 8 build proof is `.next/standalone/services/xstockstrat-ui/server.js` (`Dockerfile:25,31`).

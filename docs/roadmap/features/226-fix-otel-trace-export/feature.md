@@ -15,6 +15,7 @@
 |---|---|---|---|
 | 2026-10-14 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from defect report `docs/reports/2026-10-14-otel-trace-export-broken-defect.md` |
 | 2026-10-14 | `draft` → `design-approved` | /sdd-design | Design debated (3 rounds, quick + 2 operator-requested) and approved; recon.md + design.md written |
+| 2026-10-14 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 11 steps |
 
 ---
 
@@ -24,10 +25,30 @@
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
 - [Recon](recon.md) — grounded codebase dossier
 - [Design](design.md) — approved approach, rejected alternatives, open risks
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-otel-trace-export`_
+- [Implementation Spec](implementation-spec.md)
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
+
+## Reviewers
+
+Snapshot from `docs/runbooks/reviewer-registry.md` at /sdd-spec time (2026-10-14).
+
+| Reviewer | Focus | Steps |
+|---|---|---|
+| xstockstrat-trading owner | Order execution correctness, broker API safety (startup path only) | 2, 3 |
+| xstockstrat-portfolio owner | Position snapshot consistency, concurrent write safety (startup path only) | 2, 3 |
+| xstockstrat-marketdata owner | OHLCV ingestion integrity, Alpaca feed idempotency (startup path only) | 2, 3 |
+| xstockstrat-indicators owner | No side-effects from formula execution, numeric precision (startup path only) | 4, 5 |
+| xstockstrat-ingest owner | Idempotent ingestion, signal normalization correctness (startup path only) | 4, 5 |
+| xstockstrat-analysis owner | Backtest reproducibility, strategy scoring determinism (startup path only) | 4, 5 |
+| xstockstrat-agent owner | MCP tool contract stability (unchanged), no secret values in tool output | 4, 5 |
+| xstockstrat-ledger owner | Append-only invariant, event ordering (startup path only) | 6, 7 |
+| xstockstrat-identity owner | Secret store integration — never plaintext secrets; JWT expiry and rotation | 6, 7 |
+| xstockstrat-notify owner | Stream delivery guarantees, backpressure handling | 6, 7 |
+| xstockstrat-config owner | WatchConfig stream stability, config key naming | 6, 7 |
+| xstockstrat-ui owner | No secret values rendered in UI, Connect-RPC call safety | 8, 9 |
+| Platform Lead | Port uniqueness, service-registry consistency (local compose) | 10 |
 
 ## Summary
 
@@ -36,4 +57,4 @@ options against an OTLP/HTTP-only gateway URL, and the UI's instrumentation hook
 
 ## Next Action
 
-`/sdd-spec fix-otel-trace-export` — generate implementation spec from the approved design
+`/sdd-review fix-otel-trace-export impl-spec` — validate implementation spec, then `/sdd-execute fix-otel-trace-export`
