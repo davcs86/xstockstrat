@@ -15,3 +15,10 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Recommended design depth: triage signal = full (affected services ≥ 2); **operator chose quick** → `/sdd-design fix-otel-trace-export quick`. Approach is already operator-decided (product-spec § Operator Decisions), so the debate stress-tests it rather than selecting one.
 - Development branch: **`ccr-3c062b89-cl8ixo`** — operator-approved deviation from `feature/fix-otel-trace-export`: the session may push only to its pinned branch. Execution is sequential-style (one commit per step) with a single integration PR to `main-dev`; no per-step PRs.
 - NNN 226 = max(existing)+1 per root CLAUDE.md numbering rule (the Track C reference's count+1 formula would disagree under gaps).
+
+## Session 2026-10-14 (/sdd-design quick — Phase 0)
+
+- Phase 0 Recon: wrote recon.md (4 runtime-family discovery passes + scenario-recon; 9 PRESERVE business rules, 0 CHANGE).
+- **Empirical probe** (scratch, not committed): at the pinned versions every SDK, constructed with no endpoint arg, POSTs to `<OTEL_EXPORTER_OTLP_ENDPOINT>/v1/traces` and sends `Authorization: Basic <tok>` from both `Authorization=Basic <tok>` and `Authorization=Basic%20<tok%3D>`.
+- **Premise correction:** `deploy.yml:162-163` prefixes `Authorization=`; the header secret was never a root cause. Product-spec Operator Decision 2 superseded (secret stays `Basic <token>`); defect report got a Correction section. Operator was told the encoded format earlier in chat — the corrected guidance must be relayed.
+- Status draft accepted at B2 (Track C has no /sdd-review step; operator chose this path).

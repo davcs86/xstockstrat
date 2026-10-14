@@ -57,6 +57,10 @@ xstockstrat-ledger, xstockstrat-identity, xstockstrat-notify, xstockstrat-config
 2. **Header format:** deployed `OTEL_EXPORTER_OTLP_HEADERS` = `Authorization=Basic%20<token>` with
    `=` padding percent-encoded as `%3D`; the local `.env` value consumed by the collector stays
    `Basic <token>`. Docs must state the split.
+   **Superseded by recon (2026-10-14):** `deploy.yml:162-163` prefixes `Authorization=`, and every
+   SDK parses the raw `Authorization=Basic <token>` form (empirical probe, recon.md § Risks). The
+   GitHub secret therefore stays `Basic <base64(instanceId:apiKey)>` — the same value the local
+   collector uses; the encoded form is also accepted. Docs state one format.
 3. **Scope:** traces only — metrics/logs pipelines are out of scope (new capability → `/sdd-story`).
 4. **Visibility:** export failures must surface in service logs (Node: OTel `diag` logger).
 5. **Tests:** an end-to-end regression test in every runtime copy (Go ×3, Python ×4, Node ×4, UI).

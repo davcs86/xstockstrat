@@ -74,3 +74,13 @@ none of the four runtime setups can consume.
 ## Confidence
 
 high
+
+## Correction (2026-10-14, /sdd-design recon)
+
+The cross-cutting claim that the documented `OTEL_EXPORTER_OTLP_HEADERS=Basic <token>` "yields no
+`Authorization` header" is **wrong for deployed environments**: `.github/workflows/deploy.yml:162-163`
+prepends `Authorization=` when the secret lacks it, and an empirical probe at the pinned SDK versions
+(Go otlptracehttp 1.45.0, Python proto-http 1.42.1, Node exporter-trace-otlp-http 0.52.1 / 0.218.0)
+shows `Authorization=Basic <token>` (raw space, raw `=` padding) and `Authorization=Basic%20<token>`
+both send `Authorization: Basic <token>`. The header secret is not a root cause; the exporter
+protocol/endpoint defects above are.
