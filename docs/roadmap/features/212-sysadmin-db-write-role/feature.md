@@ -3,6 +3,7 @@
 **Development Branch**: `feature/sysadmin-db-write-role` (deleted 2026-09-26 after import)
 **Created**: 2026-09-17
 **Last Updated**: 2026-09-26
+**Archived**: 2026-10-14
 
 > **Renumbered 193 → 212 on 2026-09-26** to resolve a collision with the launched
 > `193-fix-blend-queue-fundamentals-universe`. This feature is `demoted/canceled`; the record is
@@ -26,15 +27,16 @@
 | 2026-09-26 | `demoted/canceled` (imported + renumbered) | /sdd-sync | Imported from the `feature/sysadmin-db-write-role` branch to `main-dev` and renumbered **193 → 212** (collision with launched `193-fix-blend-queue-fundamentals-universe`). Source branch deleted. Docs-only archival record; no code. |
 | 2026-09-26 | `design-approved` → `demoted/canceled` | operator | **Demoted — architecture abandoned.** Operator swerve: postgres-mcp (crystaldba **and** pgEdge families) is deemed **inherently insecure**, so the whole premise of this feature — privilege-separating the DB tooling into a standalone psql-MCP that is *itself a hardened proxy over postgres-mcp* — is rejected. Hardening a wrapper around an insecure dependency is the wrong move; **eliminate the surface instead.** Superseded by **feature 214 (`remove-agent-postgres-mcp`)**, which removes the 9 `db_*` tools + the postgres-mcp co-process outright (no replacement service, operators use out-of-band `psql`). The DB-role teardown that this feature would have needed is carried by the rescoped **feature 208 (`psql-db-role-grant-hardening`)**. Design artifacts kept on-branch as rejected-alternative memory; key lesson distilled to the Ledger. This branch is not merged to `main-dev`. |
 | 2026-09-27 | `demoted/canceled` (unchanged) | operator | Pointer correction: the successor removal feature was first numbered **211** but renumbered to **214** after `211-edgar-fundamentals-enrichment` merged to `main-dev`/`main` and took that number. The "feature 211" references in the 2026-09-26 rows above and in `context.md` were the pre-collision number — the successor is **feature 214**. Also: feature **208** (`psql-db-role-grant-hardening`), named above as the orphaned-role teardown, was **demoted as unnecessary** — the `xstockstrat_agent` role was never created (its `db-migrate.sh` provisioning is `POSTGRES_MCP_AGENT_PASSWORD`-gated and that env was never set), and 214 removes its dead provisioning block. No status change to this feature. |
+| 2026-10-14 | `demoted/canceled` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(0)/fails(1); pruned 3 spec(s) |
 
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
-- [Recon Dossier](recon.md) — grounded codebase map + candidate architectures (/sdd-design Phase 0)
-- [Design](design.md) — chosen approach, rejected alternatives, open risks, Constitution + C-16 rules (/sdd-design Phase 1)
+- Recon Dossier — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec sysadmin-db-write-role`_
 - [Context Log](context.md) — session history, decisions, deviations
 

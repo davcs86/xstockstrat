@@ -2840,3 +2840,68 @@ ambiguity is logged here).
 - **Mistake**: Design promised in-process assertions (HALTED refuses PlaceOrder, a snapshot event self-heals, a stream survives a rotated-leaf reconnect with replay), but the shipped tests assert narrower things (one fail-soft emit; a rotated certificate handshakes on a new connection) and the Deviation Log never recorded the narrowing. Nothing opens any stream under mTLS, and CA expiry (3650 days, no expiry check or alert) is unmonitored although FR-3 required "expiry/rollover handled".
 - **Evidence**: `git show 9a1d3bea:docs/roadmap/features/210-inter-service-mtls/design.md:102-108` vs `services/xstockstrat-trading/internal/service/ledger_emit_mtls_test.go:36-58` and `services/xstockstrat-ledger/src/__tests__/mtls.test.ts:149-156`; `scripts/gen-dev-certs.sh:25-26,35`.
 - **Rule it implies**: When a design-named assertion cannot be written it must appear in the Deviation Log, otherwise a "Covers: AC-N" tag overstates coverage. Reinforces C-08/P-06.
+
+### 2026-10-14 — proto-deprecated-field-removal-program — assumption
+- **Mistake**: A user steer at the design gate (removal → response-edge omission) left the product-spec, acceptance scenarios and `feature.md` Type on the old premise, so the re-run product-spec review FAILed and a stale "breaking-change" label survived to execute. The defect report's "dead field" inventory was also treated as verified when it was only a candidate list (10 dead, not 12 — indicators `user_id` is a live header-absent fallback).
+- **Evidence**: `git show 09ec8d9a:docs/roadmap/features/196-proto-deprecated-field-removal-program/context.md:13-16,71-87,141`; `git show 09ec8d9a:docs/roadmap/features/196-proto-deprecated-field-removal-program/recon.md:98-99`.
+- **Rule it implies**: After a design-gate steer, reconcile product-spec, acceptance (append-only: tag `@out-of-scope`) and the `feature.md` Type in the same session; treat a report's inventory as candidates until a per-field reader audit confirms it.
+
+### 2026-10-14 — edgar-fundamentals-enrichment — config
+- **Mistake**: Making an unknown `provider` config value boot-fatal (`os.Exit`) inside a constructor guarded by an existing always-non-nil canary (`TestNewFundamentalsSource_AlwaysNonNil`). Local verification ran `./internal/...` only and skipped `./cmd/...`, so CI caught it. Fix: WARN plus FMP fallback.
+- **Evidence**: `git show 09ec8d9a:docs/roadmap/features/211-edgar-fundamentals-enrichment/context.md` ("CI fix 2026-09-27") and the implementation-spec Deviation Log 2026-09-27 (Step 10).
+- **Rule it implies**: A change touching `main.go`/`cmd/` wiring is verified with `go test ./...` across all packages; a spec instruction to `os.Exit` on a config typo is first checked against existing tests of that constructor — prefer a loud WARN plus a safe default.
+
+### 2026-10-14 — edgar-fundamentals-enrichment — config
+- **Mistake**: Relying on `GetBool(key)` for a gate whose intended default is `true` — a missing key returns `false` and silently disables the path (the feature-100/129 failure shape). `marketdata.edgar.enabled` needs an explicit `true` default, proven by a test that omits the key; disabling a provider also required inventorying every provider-keyed literal (`fundamentalsEnabled()` default, `fundamentalsQuota()`, repo `source==""→"fmp"`, `toProtoFundamentals`).
+- **Evidence**: `git show 09ec8d9a:docs/roadmap/features/211-edgar-fundamentals-enrichment/design.md:72-74`; `services/xstockstrat-marketdata/internal/service/marketdata_service.go:1457-1458`.
+- **Rule it implies**: A boolean gate that must default `true` is read with an explicit default and a test that omits the key; when disabling a provider, audit every provider-keyed literal.
+
+### 2026-10-14 — edgar-fundamentals-enrichment — scope-creep
+- **Mistake**: After the feature renumber 207→211, a stale `@feature-207` tag stayed in Steps 15/16 of the implementation spec; the impl-spec review flagged it as a failure because it would corrupt C-16 business-rule traceability. Separate from the collision itself (`fails.md` 2026-09-27).
+- **Evidence**: `git show 09ec8d9a:docs/roadmap/features/211-edgar-fundamentals-enrichment/context.md` (second sdd-review impl-spec session, 2026-09-26).
+- **Rule it implies**: On renumber, grep the old NNN across the whole feature directory including `@feature-NNN` scenario tags, not just paths.
+
+### 2026-10-14 — edgar-fundamentals-enrichment — assumption
+- **Mistake**: The spec-time research note claimed a dividend currency guard ("record currency ≠ trading currency → dividend_yield missing") that was never implemented: `alpaca/client.go` hardcodes `Currency: "USD"` and parses only `ex_date`, `payable_date`, `rate`. Four verify rounds also found that the shipped snapshot copies P/E, P/B and market_cap from the stored filing-date period (only `price` is live), that tests asserted less than the specs required, and that the vendor fallback goes inert once both vendors are disabled — none logged in the Deviation Log.
+- **Evidence**: `services/xstockstrat-marketdata/internal/alpaca/client.go:212-217,264`; `services/xstockstrat-marketdata/internal/service/marketdata_service.go:1529-1592`; `docs/roadmap/features/211-edgar-fundamentals-enrichment/context.md` Archive Synthesis (verify gaps).
+- **Rule it implies**: A research-note guarantee is not a shipped behaviour: before launch, diff each spec-claimed behaviour against the code, and log every divergence in the Deviation Log (reinforces C-08/P-06).
+
+### 2026-10-14 — sysadmin-db-write-role — assumption
+- **Mistake**: A core requirement (operator-controlled on/off, "no idle surface") was designed onto DO App Platform without first checking that a component can scale to zero (it cannot: `instance_count` minimum is 1). The check happened after design approval and forced a topology rewrite onto a not-yet-built substrate (084, only `spec-ready`), creating a hard `084→193` dependency. The design also assumed an `xstockstrat_agent` DB role existed; its provisioning was env-gated and never enabled.
+- **Evidence**: `git show 09ec8d9a:docs/roadmap/features/212-sysadmin-db-write-role/context.md:279-285,315-317,356-360`; `git show 09ec8d9a:docs/roadmap/features/212-sysadmin-db-write-role/design.md:94-97,171-174`.
+- **Rule it implies**: Verify platform capability limits for lifecycle requirements (scale-to-zero, on/off) and the live existence of assumed roles/secrets during recon, before the design gate; flag any dependency on an unlanded sibling up front.
+
+### 2026-10-14 — remove-agent-postgres-mcp — assumption
+- **Mistake**: A durable C-16 Gherkin scenario (feature 169 `@AC-9`) pinned a literal tool total (42) that was already stale against the live 52, and nothing executable backed it, so the drift went unnoticed until removal.
+- **Evidence**: `git show 09ec8d9a:docs/roadmap/features/214-remove-agent-postgres-mcp/recon.md:68-69`; `services/xstockstrat-agent/tests/test_tools_endpoint.py` (name-set test is the real guard).
+- **Rule it implies**: Durable Gherkin must not hard-code a mutable inventory count; reference the executable name-set guard instead, or it rots silently.
+
+### 2026-10-14 — remove-agent-postgres-mcp — scope-creep
+- **Mistake**: Removal sites were under-enumerated at three successive stages: the product-spec review found 6 (supervisord block, client module, three deploy workflows, tests), recon found 2 more test files, and the teardown found `docs/patterns/database.md` still documenting the removed role. A removal that greps only the tool name misses config, deploy, test and doc mirrors.
+- **Evidence**: `git show 09ec8d9a:docs/roadmap/features/214-remove-agent-postgres-mcp/context.md` (2026-09-27 sdd-review; teardown); `git show 09ec8d9a:docs/roadmap/features/214-remove-agent-postgres-mcp/implementation-spec.md:600-613` (DEV-2).
+- **Rule it implies**: For removals, trace the secret/env var and module name across `.github/`, `.do/`, compose, tests, docs and acceptance suites at product-spec time (the `fails.md` 1095 trace discipline) and add a final "grep removed symbols across docs/patterns and docs/runbooks" step.
+
+### 2026-10-14 — fix-historical-fundamentals-price-join — assumption
+- **Mistake**: A new fail-closed guard that depends on the wall clock (`windowStart.Before(now − lookbackYears)`) silently turned pre-existing tests with fixed historical dates red, and was then left unexercised: every 216 test sets `backfill_lookback_years: 3` so the guard never fires, and the shipped @AC-2/@AC-5/currency-mismatch tests assert less than the spec required (no nil-bar recovery run, nil `dividendSrc`, stored CNY/fresh CNY instead of stored USD/fresh CNY) — while `context.md` recorded "@AC-1..5 pass" and the Deviation Log was empty.
+- **Evidence**: `services/xstockstrat-marketdata/internal/service/marketdata_service.go:1998`; `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go:2212-2239,2313-2336,2340-2367`.
+- **Rule it implies**: Tests exercising a `now`-relative window inject a clock or derive dates from it; a test that is weaker than its spec'd assertion is a Deviation Log entry, not a "pass".
+
+### 2026-10-14 — fix-historical-fundamentals-price-join — assumption
+- **Mistake**: Design and spec required native P/E and P/B only when stored currency equals the fresh currency; the shipped code gates on the stored currency being USD alone (`storedCurrency == "USD"`), so a stored-"USD" row with a non-USD fresh fetch and no `stockholders_equity_usd` can divide USD market cap by native equity. Unlogged and untested.
+- **Evidence**: `services/xstockstrat-marketdata/internal/service/marketdata_service.go:2058,2067,1878,1918`.
+- **Rule it implies**: When a design states a guard as a comparison of two values, the implementation review checks both operands are actually compared; an unresolved divergence is recorded as an open thread.
+
+### 2026-10-14 — sector-classification-strategy-params — migration
+- **Mistake**: A feature fixed its migration number (007) at /sdd-spec time; sibling 223 then merged 008 first. golang-migrate never applies a version below the current one, so 007 would have been silently skipped on any already-migrated environment. Caught post-review and renumbered to 009, leaving 007 unused.
+- **Evidence**: `services/xstockstrat-marketdata/migrations/` (009 present, 007 intentionally absent); `git show 09ec8d9a:docs/roadmap/features/217-sector-classification-strategy-params/implementation-spec.md:732-735`.
+- **Rule it implies**: Re-verify the next-free migration number against `main-dev` and `merge-order.md` immediately before merge and renumber if a sibling landed a higher one (candidate C-07 addendum).
+
+### 2026-10-14 — sector-classification-strategy-params — assumption
+- **Mistake**: Acceptance scenarios said "RSI oversold threshold" for a per-sector param override, but in the rule grammar that is a rule `rhs` literal, not a component param. The mismatch survived review and needed a C-15 amendment (reworded to the RSI `period` param) at execute; overrides on rule-rhs literals are unsupported.
+- **Evidence**: `git show 09ec8d9a:docs/roadmap/features/217-sector-classification-strategy-params/implementation-spec.md:727-728`; `git show 09ec8d9a:docs/roadmap/features/217-sector-classification-strategy-params/context.md` (2026-10-06 execute session).
+- **Rule it implies**: At /sdd-review or /sdd-spec, check that every AC's overridable target maps to a real field in the proto or grammar.
+
+### 2026-10-14 — config-ui-usability — assumption
+- **Mistake**: Shared breadcrumb and nav components were assumed to handle a non-last, href-less crumb and dynamic child routes. In fact such a crumb fell through to `BreadcrumbPage` (a second `aria-current` link) and `/config-ui/<ns>` fell to the wrong nav group; neither was visible because no existing caller exercised the case.
+- **Evidence**: `git show 09ec8d9a:docs/roadmap/features/219-config-ui-usability/design.md:94-98,101-104`.
+- **Rule it implies**: When a feature adds the first caller of a shared-shell branch (non-link crumb, dynamic child route), read the component's fallthrough and add an e2e assertion on `aria-current`.

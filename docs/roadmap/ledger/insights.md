@@ -3597,3 +3597,68 @@ reusing.
 - **Pattern**: An inbound identity gate stays complete when it is a per-RPC decorator that sets a marker attribute, paired with a test that walks the proto service descriptor and asserts `{undecorated methods} == EXEMPT` in both directions. Each gated method is then driven on a bare `Servicer.__new__` instance with a non-raising `abort`, which proves both the status code and that the body was never entered (the decorator must `return` after aborting). The same shape held in analysis, indicators and ingest. The headerless churn it forced exposed tests that had been passing on an `UNAUTHENTICATED` abort for the wrong reason.
 - **Evidence**: `services/xstockstrat-{analysis,indicators,ingest}/tests/test_owner_scoped_completeness.py`; `owner_scoped` in each `app/handlers/servicer.py`; feature 225 Steps 8–9, 12–13 and 17–18 in `context.md`.
 - **Rule it implies**: Any server-side per-RPC guard (auth, owner scope, admin) ships with a descriptor-walk `EXEMPT`-equality test and a body-not-entered check, so a new RPC fails closed until it is classified. This is the server-side mirror of insights.md:441.
+
+### 2026-10-14 — proto-deprecated-field-removal-program — design
+- **Pattern**: When omitting a field at its "pure" response edges, also trace where the EXCLUDED persistence-path objects flow *after* persistence. `barFromAlpaca` bars are persisted by `InsertBars` (which reads `b.Timeframe`) but are also returned directly by the `BatchGetBars` cold-path singleflight closure and the `GetBars` cache-write-failure fallback, so omitting only at `scanBars` left the string populated intermittently. The fix clears AFTER the write and before the shared map is published.
+- **Evidence**: `services/xstockstrat-marketdata/internal/service/marketdata_service.go:341` (`omitDeprecatedTimeframe`); `git show 09ec8d9a:docs/roadmap/features/196-proto-deprecated-field-removal-program/implementation-spec.md:389-399` (D-1).
+- **Rule it implies**: For a partial-omission field, enumerate every route a persistence-sourced object takes to a caller; clear only after the write and before any cached/shared map is published (a C-10 completeness corollary). Clearing before persistence reintroduces the store corruption the exclusion existed to prevent.
+
+### 2026-10-14 — proto-deprecated-field-removal-program — design
+- **Pattern**: A KEEP-field regression guard must bind to the real producer, not to service-level fakes. The portfolio service fakes copy the `Watchlist.symbols` mirror themselves, so only a guard on the repo-layer producer (`bindingSymbols`) catches an edge omission; prove it red by mutation when no production code changes.
+- **Evidence**: `services/xstockstrat-portfolio/internal/repository/watchlist_repo.go:465` (`bindingSymbols`); `git show 09ec8d9a:docs/roadmap/features/196-proto-deprecated-field-removal-program/implementation-spec.md:427-433` (D-6).
+- **Rule it implies**: A "do not touch X" guard test must exercise the code that populates X, not a fake that reproduces it; otherwise it stays green while the real edge changes.
+
+### 2026-10-14 — edgar-fundamentals-enrichment — design
+- **Pattern**: Verify a design's external-schema guesses (XBRL tags, taxonomy prefixes) with one narrow direct fetch of the real external data before the spec. Here it corrected the debt-tag list (BABA's only recent financial-debt tag is `ConvertibleDebtNoncurrent`; `DebtCurrent`/`ShortTermBorrowings` stop after FY2018/19), dropped an unneeded `ifrs-full:*` branch (BABA/AXP/AAPL all report under us-gaap), and exposed stale acceptance figures.
+- **Evidence**: `git show 09ec8d9a:docs/roadmap/features/211-edgar-fundamentals-enrichment/implementation-spec.md:216` and the Deviation Log (2026-09-26); `git show 09ec8d9a:docs/roadmap/features/211-edgar-fundamentals-enrichment/design.md:30-37`.
+- **Rule it implies**: For any design depending on an external vendor schema or field set, make a direct sample fetch the first spec step and record each resulting design correction (P-03).
+
+### 2026-10-14 — edgar-fundamentals-enrichment — reuse
+- **Pattern**: When a feature changes which source serves a read RPC, add a dedicated live-read axis (`snapshot_source`) dispatched at the top of every sibling read RPC, share one builder across the single and multi RPCs, and back it with a write-through cache that self-heals by source. Cutover and rollback become a config flip with no restart. Prefer this over overloading `marketdata.fundamentals.provider`, whose semantics bundle client construction, config namespace and quota shape.
+- **Evidence**: `git show 09ec8d9a:docs/roadmap/features/211-edgar-fundamentals-enrichment/design.md:58-87,105-108`; `services/xstockstrat-marketdata/internal/service/marketdata_service.go:1529-1592`.
+- **Rule it implies**: A new serving lane gets its own axis plus a parity test (C-10(b)); do not overload an existing key whose semantics couple unrelated concerns.
+
+### 2026-10-14 — fix-copilotrail-duplicate-rpc — design
+- **Pattern**: When a shared hook's defaulted parameter feeds a React Query key, fix the default at the hook, not at the one caller that exposed the bug. A caller census (5 callers, not the 2 the product-spec assumed) showed pinning CopilotRail would only relocate the duplicate RPC to `/insights/watchlists` and `/trader/positions/[symbol]`.
+- **Evidence**: `git show 09ec8d9a:docs/roadmap/features/213-fix-copilotrail-duplicate-rpc/design.md:39-41`; `git show 09ec8d9a:docs/roadmap/features/213-fix-copilotrail-duplicate-rpc/recon.md:48`.
+- **Rule it implies**: Changing a shared-hook default needs a caller census (grep `hook(`) in recon; the census can overturn the product-spec's scope, so route the widening through the F-10 sign-off. Overlaps `fails.md` 2026-09-26 (key must fold all controls).
+
+### 2026-10-14 — remove-agent-postgres-mcp — ordering
+- **Pattern**: In a pure-removal feature that retires a secret flowing through a reusable CI workflow, remove callers first and confirm the workflow input is optional (`required: false`) and callers pass secrets by name, not `secrets: inherit`. The tree then stays deployable at every intermediate commit; the adversary disproved the "atomic single commit" framing by checking exactly this. Verify removal by symbol disappearance (name-set equality, deleted file, failed import, `bash -n`), never a substring `! grep postgres`.
+- **Evidence**: `git show 09ec8d9a:docs/roadmap/features/214-remove-agent-postgres-mcp/design.md:55-65,79`; `git show 09ec8d9a:docs/roadmap/features/214-remove-agent-postgres-mcp/recon.md:49-51`.
+- **Rule it implies**: Caller-first removal plus symbol-based verification for secrets that traverse reusable workflows. Refines `fails.md` 079 and the deploy-pipeline trace discipline.
+
+### 2026-10-14 — fix-historical-fundamentals-price-join — design
+- **Pattern**: When a design's prose invariant needs a field (`state.FiledDate`) that its own struct/symbol enumeration omits, the downstream spec resolves the gap the cheaper, wrong way — here by keying on the re-fetch's drift-fragile `p.FiledDate`, the exact path the design rejected. The impl-spec review caught it.
+- **Evidence**: `git show 09ec8d9a:docs/roadmap/features/216-fix-historical-fundamentals-price-join/design.md:36-40`; `services/xstockstrat-marketdata/internal/service/marketdata_service.go:1897` (`p.FiledDate = state.FiledDate`).
+- **Rule it implies**: Before design approval, check that every field a stated invariant depends on appears in the enumerated type or signature (design-to-spec consistency; C-01/P-03).
+
+### 2026-10-14 — sector-classification-strategy-params — design
+- **Pattern**: When a new parameter axis must reach several heterogeneous compute branches (builtin, custom formula, fundamentals formula, benchmark), resolve it by producing a sector-resolved component variant BEFORE the existing assembly seam, not by threading params into each branch. One seam covers branches added later; threading through `_compute_component` alone would have missed the early-return fundamentals branch (AC-14).
+- **Evidence**: `services/xstockstrat-analysis/app/services/evaluator.py` (`_assemble_sector_resolved`); `git show 09ec8d9a:docs/roadmap/features/217-sector-classification-strategy-params/implementation-spec.md:703-708`.
+- **Rule it implies**: When adding a per-component input axis, grep every early-return/branch around the compute seam and prefer variant substitution upstream of it.
+
+### 2026-10-14 — sector-classification-strategy-params — design
+- **Pattern**: When a design deliberately relaxes a no-look-ahead guarantee (epoch-seeded sector history), surface it where a human reads the number through an existing channel — `BacktestResult.warnings` plus a `source='seed'` provenance column — instead of a new proto field. This avoids the enum/field consumer fan-out and records the C-16 sign-off at runtime.
+- **Evidence**: `git show 09ec8d9a:docs/roadmap/features/217-sector-classification-strategy-params/design.md:109-115`.
+- **Rule it implies**: A relaxed C-16 guarantee needs a runtime-visible marker, not only a doc note.
+
+### 2026-10-14 — config-ui-usability — design
+- **Pattern**: Share one server view across a landing route and a deep-link route instead of redirecting, and key the stateful editor by its full scope tuple (`ns|env|user`) so a scope change remounts atomically and an open draft can never Save into another scope. A redirect would have broken the exact-match Settings › Config `aria-current` and seven `env-mode-switcher` gotos.
+- **Evidence**: `git show 09ec8d9a:docs/roadmap/features/219-config-ui-usability/design.md:25-49,166-171,188-189`.
+- **Rule it implies**: When two URLs must render the same screen and nav highlighting is exact-match, share the component rather than redirect; key stateful editors by their whole scope tuple.
+
+### 2026-10-14 — config-ui-usability — reuse
+- **Pattern**: Extend shell nav highlighting with explicit exact-path `aliases` on the item, never `prefix` matching, which would co-activate sibling routes such as `/config-ui/users` and `/config-ui/audit`. Limitation: the aliases come from the hand-maintained `KNOWN_NAMESPACES`, so a DB namespace missing from the list gets no highlight.
+- **Evidence**: `git show 09ec8d9a:docs/roadmap/features/219-config-ui-usability/design.md:99-104,187`.
+- **Rule it implies**: A nav item that owns a dynamic route family lists its known paths as aliases; document what happens for an unlisted path.
+
+### 2026-10-14 — config-ui-usability — design
+- **Pattern**: To add a field to a repo method that already resolves a row with `DISTINCT ON` + `ORDER BY` precedence, select the column from the same resolved row — per-user-over-global then holds for the new field with no migration. With no DB harness, prove it by SQL shape and say plainly in the AC trace that the proof is shape-only, since a mocked pool cannot execute `DISTINCT ON`.
+- **Evidence**: `git show 09ec8d9a:docs/roadmap/features/219-config-ui-usability/design.md:114-134`.
+- **Rule it implies**: State in each AC trace whether proof is SQL-shape or behavioural.
+
+### 2026-10-14 — config-ui-usability — reuse
+- **Pattern**: Generate Playwright `page.route` stub bodies with `toJson(XSchema, create(XSchema, …))` from a fixture-home helper and use per-spec stateful stubs rather than mutating shared mock state — avoiding hand-written Connect-JSON errors and `fullyParallel` races. A global stamp in the shared mock raced `value-persists-after-save.spec.ts`.
+- **Evidence**: `git show 09ec8d9a:docs/roadmap/features/219-config-ui-usability/design.md:142-148,180-186`; `fails.md` 2026-08 (hand-written Connect-JSON).
+- **Rule it implies**: Save-then-refresh behaviour gets a spec-local stateful stub; the shared mock stays immutable (C-12/C-13).

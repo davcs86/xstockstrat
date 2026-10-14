@@ -5,6 +5,7 @@
 **Last Updated**: 2026-10-06
 **Committed to main**: 595bd1d4effdc73153752d8dce5cee69d1a6f656
 **Launched date**: 2026-10-08
+**Archived**: 2026-10-14
 
 ---
 
@@ -20,15 +21,16 @@
 | 2026-10-06 | `implementation-ready` → `in-progress` → `code-completed` | /sdd-execute sequential | All 18 steps executed on `feature/sector-classification-strategy-params`; re-spec folded into the Deviation Log; integration PR opened |
 
 | 2026-10-08 | `code-completed` → `launched` | CI workflow | Promoted via PR #1233; committed 595bd1d4effdc73153752d8dce5cee69d1a6f656 |
+| 2026-10-14 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(2); pruned 4 spec(s) |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
-- [Recon Dossier](recon.md) — grounded codebase map, reuse patterns, C-16 existing business rules
-- [Design](design.md) — debated architecture (4 rounds), rejected alternatives, open risks
-- [Implementation Spec](implementation-spec.md)
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15); promoted to services/xstockstrat-{marketdata,analysis}/acceptance/ (sector-classification*.feature) and docs/sdd/business-rules/platform.feature (C-16)
+- Recon Dossier — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

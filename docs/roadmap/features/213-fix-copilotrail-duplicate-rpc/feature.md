@@ -8,6 +8,7 @@
 **Last Updated**: 2026-09-26
 **Committed to main**: 5fd9faf88fa1a93f41adced9eebff0ad0852634c
 **Launched date**: 2026-09-27
+**Archived**: 2026-10-14
 
 ---
 
@@ -21,6 +22,7 @@
 | 2026-09-26 | `implementation-ready` → `code-completed` | /sdd-execute (sequential) | Scope-widening signed off (F-10). Step 1 (hook `sort` default `UNSPECIFIED`→`CONVICTION` + CopilotRail comment) + Step 2 (single-RPC e2e regression) done. Red→green: 2→1 RPC; full `opportunities.spec.ts` 36/36 green (Open Risk resolved — set/order unchanged). |
 
 | 2026-09-27 | `code-completed` → `launched` | CI workflow | Promoted via PR #1194; committed 5fd9faf88fa1a93f41adced9eebff0ad0852634c |
+| 2026-10-14 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(0); pruned 4 spec(s) |
 ---
 
 ## Reviewers
@@ -33,11 +35,11 @@
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — bug description and fix scope
-- [Acceptance Scenarios](acceptance.feature) — regression scenario (`@AC-*`, C-15)
-- [Recon Dossier](recon.md) — codebase map, 5-caller finding, reuse patterns (C-16)
-- [Design](design.md) — chosen approach (single-source default sort), rejected alternatives, open risks
-- [Implementation Spec](implementation-spec.md) — 2 steps (align hook sort default + `@AC-1` regression e2e)
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — regression scenario (`@AC-*`, C-15); promoted to services/xstockstrat-ui/acceptance/fix-copilotrail-duplicate-rpc.feature (C-16)
+- Recon Dossier — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

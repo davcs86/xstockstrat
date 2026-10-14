@@ -8,6 +8,7 @@
 **Last Updated**: 2026-09-27
 **Committed to main**: 27f3f276b39fa79d07b4de6c023582f72539aac3
 **Launched date**: 2026-10-01
+**Archived**: 2026-10-14
 
 ---
 
@@ -21,15 +22,16 @@
 | 2026-09-27 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 4 steps (marketdata-only: repo reader/writer + source type, service recovery loop, two paired tests) |
 
 | 2026-10-01 | `code-completed` → `launched` | CI workflow | Promoted via PR #1205; committed 27f3f276b39fa79d07b4de6c023582f72539aac3 |
+| 2026-10-14 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(2); pruned 4 spec(s) |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — bug description and fix scope
-- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-1`…`@AC-5`, C-15)
-- [Recon Dossier](recon.md) — grounded codebase map, patterns to reuse, existing business rules, risks
-- [Design](design.md) — chosen approach, rejected alternatives, open risks, C-16 classification (5-round debate)
-- [Implementation Spec](implementation-spec.md) — 4 steps, marketdata-only write-path recovery
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-1`…`@AC-5`, C-15); promoted to services/xstockstrat-marketdata/acceptance/fix-historical-fundamentals-price-join.feature (C-16)
+- Recon Dossier — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
