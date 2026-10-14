@@ -7,7 +7,7 @@ Feature: fix-opportunities-read-hangs (bug fix)
     Given a user with stored opportunities "AAPL" and "MSFT"
     And marketdata BatchGetLatestPrice never responds
     When the user calls analysis "ListOpportunities"
-    Then the call returns both rows before the enrichment deadline elapses
+    Then the call returns both rows shortly after the enrichment deadline elapses, well inside the BFF's 30-second deadline
     And the rows carry no live price
     And a warning naming "BatchGetLatestPrice" is logged
 
@@ -27,4 +27,4 @@ Feature: fix-opportunities-read-hangs (bug fix)
   Scenario: An exhausted analysis DB pool fails the read fast
     Given every analysis DB pool connection is held
     When the user calls analysis "ListOpportunities"
-    Then it fails with status "UNAVAILABLE" within the pool-acquire timeout and a warning is logged
+    Then it fails with status "UNAVAILABLE" at the pool-acquire timeout (within that timeout + 0.5s) and a warning is logged

@@ -1,7 +1,7 @@
 # Design: fix-opportunities-read-hangs
 
 **Created**: 2026-10-14
-**Rounds**: 5 (full; termination: round-5 fixes applied, awaiting approval)
+**Rounds**: 6 (full; round 6 by operator cap override, context.md 2026-10-14)
 **Approved by**: _pending_
 **Grounded in**: recon.md
 
@@ -208,7 +208,7 @@ In `services/xstockstrat-marketdata/internal/service/marketdata_service.go:730-8
 - **Client.** `client.list_opportunities(..., timeout)` passes `stub.ListOpportunities(..., timeout=timeout)` (`app/client.py:862-867`).
 - **Policy reader.** `_extract_policy` is renamed to `_agent_policy` (`app/tools.py:2324-2337`; 4 call sites at :2351-2354, none referenced by tests). Its log line is generalized.
 - **Tool.**
-  - It reads `timeout_s = await asyncio.wait_for(_agent_policy("opportunities.read_timeout_seconds", 40.0, float), 3.0)`.
+  - It reads `timeout_s = await asyncio.wait_for(_agent_policy("opportunities.read_timeout_seconds", 40.0, float), _POLICY_READ_TIMEOUT_S)`. It is a module constant read at call time, so the AC-2 test can monkeypatch it to 0.1.
   - If the policy read times out, it logs `agent policy read timed out; using safe default` and uses 40.
   - A non-finite or ≤0 value also falls back to 40.
   - The shared `get_config_value` is untouched.
@@ -234,11 +234,11 @@ These are fixed invariants, not config keys:
 - agent `_POLICY_READ_TIMEOUT_S=3.0`
 
 **Worst-case arithmetic:**
-- The analysis DB phase takes at most B+3: the B+2 backstop terminates synchronously, and a near-deadline COMMIT plus release adds ≤1.0.
-- Analysis total ≤ B+3+E: 26s at the defaults and 27s at the ceilings, under the BFF's 30s.
-- The agent floor of 30 is above 27, so the agent never pre-empts analysis's own answer.
+- The analysis DB phase takes at most B+3.05. The B+2 backstop terminates synchronously. A near-deadline COMMIT plus release adds ≤1.0, and a near-deadline body error's rollback plus release adds ≤1.05 (the release floor is 0.05s).
+- Analysis total ≤ B+3.05+E: ≈26.05s at the defaults and ≈27.05s at the ceilings, under the BFF's 30s.
+- The agent floor of 30 is above 27.05, so the agent never pre-empts analysis's own answer.
 - Agent end to end ≤ 3+55 = 58s, under 60s.
-- If E ≤ M, results are always unenriched. That is a documented safe degrade.
+- If E ≤ M, a marketdata stall that runs to its own budget M always yields unenriched rows, because analysis gives up first. A healthy marketdata still enriches. That is a documented safe degrade.
 
 ### 6. Tests (AC → test)
 
@@ -254,15 +254,17 @@ These are fixed invariants, not config keys:
 - A `real_pg` marker is added in `pyproject.toml`.
 - The CI analysis `python-test` job gets a guarded step: `ls /usr/lib/postgresql/*/bin/initdb || (sudo apt-get update && sudo apt-get install -y --no-install-recommends postgresql)`.
 
+**Hang guard (red step).** pytest-timeout is not a dev dependency, and the pre-fix code has no bound. Every stall-injection test (AC-1, AC-2, AC-4, G5) therefore wraps its call in `asyncio.wait_for(…, 10)` and fails on that outer `TimeoutError`. The Go AC-3 hang and G10 tests run the call in a goroutine and `select` on `time.After(5*time.Second)` → `t.Fatal`. Without this, the P-06 red run hangs instead of failing. G6 keeps its own `asyncio.timeout(0.3)`.
+
 | Scenario / fix | Test |
 |---|---|
-| **@AC-1** | `test_list_opportunities_deadlines.py`: `BatchGetLatestPrice` never returns; `live_enrich_timeout_ms=200` via a real `ConfigSnapshot` (full-dotted key). Expect 2 rows in <1.7s, no `live_price`, `data_unavailable` false, a log naming `BatchGetLatestPrice` + `TimeoutError`, and an empty memo. |
-| **@AC-2** | agent `tests/test_list_opportunities_deadline.py`: an in-process `grpc.aio` server whose handler never returns; the policy returns 0.2. Expect a `RuntimeError` containing "deadline" in <1.5s, then `server.stop(0)`. A hung policy read with the cap at 0.1 gives timeout 40; the values 0, -1, NaN and inf all give 40; the mapper branch is checked via `_rpc_error`. |
+| **@AC-1** | `test_list_opportunities_deadlines.py`: `BatchGetLatestPrice` never returns; `live_enrich_timeout_ms=200` via a real `ConfigSnapshot` (full-dotted key). Expect 2 rows in < enrichment deadline + 1.5s (<1.7s here), no `live_price`, `data_unavailable` false, a log naming `BatchGetLatestPrice` + `TimeoutError`, and an empty memo. |
+| **@AC-2** | agent `tests/test_list_opportunities_deadline.py`: an in-process `grpc.aio` server on `add_insecure_port("127.0.0.1:0")` whose handler sets an `asyncio.Event` and then never returns. `monkeypatch` `client.ANALYSIS_ENDPOINT` to that port and `client.mtls.secure_channel` to `lambda ep, _svc: grpc.aio.insecure_channel(ep)`; otherwise conftest's dummy PEM and the `analysis-test` host fail or time out before the server is reached. The policy returns 0.2. Expect a `RuntimeError` containing "deadline" in <1.5s **and** the handler-entered event set, then `server.stop(0)`. A hung policy read with the cap at 0.1 gives timeout 40; the values 0, -1, NaN and inf all give 40; the mapper branch is checked in `tests/test_tools.py`, where `_rpc_error` lives (:929); a new file must not import a helper from another test module (C-13). |
 | **@AC-3** | Go: a multi-fetch error, captured with a recording slog handler, logs `symbols=1` and the fallback message. A hang with a 50ms budget returns in <1s, omits the symbol and logs "skipped". The incomplete, source-lookup and prevClose records are covered. The resolver is tested with 0, -5, nil and 50. |
 | **@AC-4** | real_pg, proving the **acquire timeout** fired (not the backstop): a pool with min=max=2 and `statement_cache_size=0`; the test holds both connections; a real servicer pool path; a 300ms budget; `Connection.terminate` wrapped by a spy. Expect `UNAVAILABLE` with elapsed < budget+0.5s (well under the B+2 backstop), a `budgeted_read` warning naming stage `acquire` and `TimeoutError`, the terminate spy never called, and both held connections still open. A headerless call still gets `UNAUTHENTICATED`. |
 | **G2** | real_pg: a pool with min=max=1 and `statement_cache_size=0`; record `pg_backend_pid()`. `pg_sleep(5)` under a 300ms budget raises `QueryCanceledError` with no asyncio "Resetting connection with an active transaction" record. The reacquired connection has the **same** pid (rollback + release kept it), runs `SELECT 1`, and shows `statement_timeout` '0'. Unit: rollback/release/terminate counts for each error kind. |
 | **F2 leak** | real_pg: a pool with min=max=1, `statement_cache_size=0`, `connection_class` with an empty reset query. On the same connection pid, `SHOW statement_timeout` is '0'. Negative control: a session `SET` persists. |
-| **G4** | The existing `ListOpportunities` tests (18 in `test_analysis_servicer.py`, 3 in `test_opportunity_compute_state.py`) are parametrized over `read_path` = direct or pool. In pool mode every `bc_routed` fake-repo method issues **exactly one** `bc.fetch`/`fetchval`/`fetchrow`, so the order assertion is not vacuous. Assert the order BEGIN READ ONLY → (SET LOCAL nᵢ → stmt)* → COMMIT → release, with every nᵢ ≤ the budget in ms and the sequence **non-increasing** (instant fakes may give equal values). Also assert `in_use==0` at enrichment and at the kicks, and results identical to direct mode. |
+| **G4** | The existing `ListOpportunities` tests (every test calling it: 18 call sites in `test_analysis_servicer.py`, 3 in `test_opportunity_compute_state.py`) are parametrized over `read_path` = direct or pool. In pool mode every `bc_routed` fake-repo method issues **exactly one** `bc.fetch`/`fetchval`/`fetchrow`, so the order assertion is not vacuous. Per acquired FakeConn, assert the order BEGIN READ ONLY → (SET LOCAL nᵢ → stmt)* → COMMIT → release, with every nᵢ ≤ the budget in ms and the sequence **non-increasing** (instant fakes may give equal values). Also assert that the connection *this request* acquired is released (`FakeConn.released`) at enrichment and at the kicks; do not use a global `in_use==0`, because :5897 runs 6 requests concurrently, and results identical to direct mode. |
 | **G5** | `monkeypatch.setattr(read_budget, "_READ_DB_BACKSTOP_GRACE_S", 0.1)` with a 0.2s budget. Stall at BEGIN, SET LOCAL, fetch and COMMIT; each gives `UNAVAILABLE` within B+G+0.5s with terminate called exactly once. |
 | **G1** | Unit: once the deadline has passed, `_arm` raises `TimeoutError` with no `SET LOCAL` sent, and `budgeted_read` routes it to rollback + release (terminate count 0). An acquire timeout performs no terminate (stage `acquire`). |
 | **G6** | Unit: an external `task.cancel()` of the task running the handler during a fetch (no inner `wait_for`) propagates `CancelledError` with no abort, no "opportunities read failed" log, and one terminate. real_pg: a pool with min=max=1, a budget ≥ 10s (so `statement_timeout` cannot fire), pid recorded. `asyncio.timeout(0.3)` wrapping the **entire** `async with budgeted_read(...)` block (not the fetch inside it), with `pg_sleep(30)` as the body, raises the outer `TimeoutError` (**not** `QueryCanceledError`) with elapsed < 1s. The next acquire on the single-connection pool has a **different** pid and `statement_timeout` '0'. |
@@ -271,7 +273,7 @@ These are fixed invariants, not config keys:
 | **Classification** | Each transient class gives `UNAVAILABLE`. 22000 `DataError`, interface `DataError`, `ClientConfigurationError`, the `Unsupported*` errors, `ValueError` and `UndefinedTableError` propagate. A `compute_state.get` `TimeoutError` gives exactly one kick, then `UNAVAILABLE`. |
 | **G3** | On both paths: failures ≥MAX gives `compute_failed`; fewer gives `computing`; a fresh empty stamp gives neither plus a kick; a stale queue gives a kick plus the include_expired facet; a fresh queue with a stale unavailable row gives a retry kick. |
 | **G8** | `setConfigScalarBounds.test.ts`: each key at min/max and just outside. The agent key is tested both as ns `agent` + stripped key and as the full-dotted key; the analysis keys in both forms. |
-| **G10** | Go under `-race`: the multi fetch blocks until the fake prevCloseReader has been entered. Both results are present within 50ms; a sequential implementation would drop the trade. |
+| **G10** | Go under `-race`: the multi fetch blocks until the fake prevCloseReader has been entered. With an injected 1s budget, both results are present. A sequential implementation blocks until the budget expires and drops the trade. |
 | **O8** | A realistic `ConfigSnapshot` with a float-typed or negative `*_ms` value reads as the default. |
 
 ### 7. Doc-drift edits (in scope; touched path)
@@ -294,6 +296,13 @@ These are fixed invariants, not config keys:
   - The durable feature-191 @AC-8 text still names `BatchGetBars`.
   - The seeded TTL of 10 is below the 15s poll, so the memo never hits.
   - The G6 residual.
+
+## Operator Decisions (2026-10-14)
+
+- **D1** (round-1 gate): one request-scoped DB budget, with `pool.acquire(timeout=remaining)`, a short read transaction carrying `SET LOCAL statement_timeout = <remaining ms>` (server-side abort, no CancelRequest churn), and a bounded `pool.release`. Only transient DB errors become UNAVAILABLE; always log the type and message.
+- **D2** (round-1 gate): the new keys are unseeded. This consciously deviates from feature 184's `analysis.opportunity.*` seeding convention.
+- **D3** (round-1 gate): the AC-4 proof runs against a real local Postgres binary, test-scoped, with no long-running container.
+- **D4** (round-2 gate): 57P01/57P02/57P03 are transient (UNAVAILABLE).
 
 ## Rejected Alternatives
 
@@ -328,14 +337,14 @@ These are fixed invariants, not config keys:
 ## Constitution Rules Touched
 
 - `C-01` (evidence-cited claims): every mechanism is cited to code or asyncpg source, and recon has no claims beyond what was found.
-- `C-05`/`C-10` (config governance): new keys follow `<service>.<category>.<key>`, with defaults in code and in `CLAUDE.md`, bounds in the registry, and the value_type documented. The seeding deviation is an operator waiver (D2), recorded in context.md.
-- `C-15`/`C-16`: AC-1..4 each map to a test. All 37 existing rules are PRESERVE and 1 is EXTEND; none is a CHANGE.
+- `C-05`/`C-10` (config governance): new keys follow `<service>.<category>.<key>`, with defaults in code and in `CLAUDE.md`, bounds in the registry, and the value_type documented. The seeding deviation is operator waiver D2 (§ Operator Decisions), also recorded in context.md.
+- `C-15`/`C-16`: AC-1..4 each map to a test. Of 37 existing rules, 36 are PRESERVE and 1 is EXTEND; none is a CHANGE.
 - `C-18` (design quality): a single seam for each concern; the rename stays in one file; no speculative abstractions.
 - `P-03` (no guessing): the bounds are hard by construction, and the unconfirmed trigger is recorded as a risk.
 - `P-06` (red before green): every service step is paired with a test step.
 - `F-06` (resource budgets): pool sizes are unchanged and each request holds at most one connection.
 - `F-07` (no hard-coded policy): every policy value is a config key. The three fixed mechanism constants are documented invariants, following the `_INTENT_SWEEP_SECONDS` precedent.
-- `F-11`: no Floor breach was found in rounds 1–5.
+- `F-11`: no Floor breach was found in rounds 1–6.
 
 ## Business Rules Touched (C-16)
 
@@ -360,19 +369,20 @@ These are fixed invariants, not config keys:
 Each service step is followed by its test step (red before green):
 1. config bounds → 2. bounds tests (G8)
 3. marketdata → 4. Go tests (AC-3, G10)
-5. `read_budget.py` → 6. `test_read_budget.py` (G1, G2 unit, G5 at the `budgeted_read` level: TimeoutError plus one terminate, G7, `is_transient_db_error` classification)
-7. handler, factories, kicks-after-release, enrichment → 8. handler tests (AC-1, G3, G4, G5, G6 unit, O8, H5 release failure, handler-level classification and the `compute_state.get` single-kick case)
+5. `read_budget.py` → 6. `test_read_budget.py` (G1, G2 unit, G5 at the `budgeted_read` level: TimeoutError plus one terminate, G7 at the `budgeted_read` level, `is_transient_db_error` classification)
+7. handler, factories, kicks-after-release, enrichment → 8. handler tests (AC-1, G3, G4, G5, G6 unit, G7 handler-level UNAVAILABLE for the connection-lost case, O8, H5 release failure, handler-level classification and the `compute_state.get` single-kick case)
 9. `local_pg` fixture, marker, CI step → 10. real_pg tests (AC-4, G2, F2, G6)
 11. agent → 12. agent tests (AC-2)
 13. docs and teardown
 
 ## Rounds
 
-5 rounds (full mode, hard cap reached).
+6 rounds (full mode; the 5-round cap was overridden by the operator for round 6).
 - **Round 1:** the per-await `wait_for` was shown to be a soft bound.
 - **Round 2:** the request budget, `SET LOCAL`, the bounds registry and the real-PG test were adopted.
 - **Round 3:** the manual transaction with terminate-on-cancel and the leak/cancel test fixes were adopted.
 - **Round 4:** cancel-only terminate, bounded rollback, kicks after release, and pool-path test parametrization.
 - **Round 5:** guarded cleanup and the stage invariant (H4), the handler error path (H6), test-strength fixes (H1–H3, H5, H8), the lost-connection detach correction, G6 timeout placement, and test/step placement.
+- **Round 6:** whole-document re-review: test reachability and hang guards, the AC-1 Gherkin, the D1–D4 record, and arithmetic/placement fixes.
 
-Termination: round-5 fixes applied; awaiting user approval (5-round cap reached).
+Termination: round-6 fixes applied; awaiting user approval.
