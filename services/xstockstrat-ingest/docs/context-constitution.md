@@ -5,7 +5,7 @@ refreshed 2026-09-02 (branch `claude/loaded-plugins-list-d120nl` @ `82a0549` —
 server-side `mcp_client` source; added INGEST-6/7/8, fixed INGEST-5's `ingested_at` clause); refreshed
 2026-09-03 (branch `claude/watchlist-bulk-default-strategy-zxx6su` @ `d4cd327` — added INGEST-9
 config-key-must-carry-full-namespace-prefix rule; re-grounded INGEST-8 after the mcp_client-loop config
-fix shifted anchors).
+fix shifted anchors); refreshed 2026-10-14 (branch `ccr-fe84109f-0lwin8` @ `09ec8d9` — INGEST-1 narrowed to the backfill repos; all other anchors re-verified resolving, `~L` hints drifted only).
 Captures the **non-obvious** local invariants of the ingest service (backfill orchestration, signal
 persistence, `QuerySignals` producer, gRPC 50055). Does not restate documented/CI-enforced rules
 (see `## Pointers`).
@@ -17,7 +17,7 @@ persistence, `QuerySignals` producer, gRPC 50055). Does not restate documented/C
 
 | ID | Rule | Why | Evidence | Example (canonical `path:line`) |
 |---|---|---|---|---|
-| **INGEST-1** | **Repositories are proto-free** — a repo function must not `import ingest_pb2`; the servicer owns all proto↔row conversion. Full rationale in the `backfill_jobs.py`/`backfill_chunks.py` module docstrings. | The deliberate proto isolation is what makes repos unit-testable without gen stubs. | `app/repositories/backfill_jobs.py:1-7` (module docstring, rationale `:3-6`) | `app/repositories/backfill_chunks.py:1-7` |
+| **INGEST-1** | **The BACKFILL repositories are proto-free** — `backfill_jobs.py` / `backfill_chunks.py` must not `import ingest_pb2`; the servicer owns all proto↔row conversion. **Known exception:** `signal_sources.py` imports `ingest_pb2` for `SIGNAL_SCOPE_OWN` / `SIGNAL_SCOPE_SYSTEM` in `owner_scope_predicate` (feature 224) — do not read it as precedent for the backfill repos. Full rationale in the `backfill_jobs.py`/`backfill_chunks.py` module docstrings. | The deliberate proto isolation is what makes repos unit-testable without gen stubs. | `app/repositories/backfill_jobs.py:1-7` (module docstring, rationale `:3-6`); exception `app/repositories/signal_sources.py#owner_scope_predicate` | `app/repositories/backfill_chunks.py:1-7` |
 | **INGEST-2** | **Dynamic SQL column names are allow-listed (`_UPDATABLE_COLUMNS`), never interpolated from input** — see the `backfill_jobs.py:52-70` docstring for the placeholder-tracking mechanism. | f-stringing a user value is injection. | `app/repositories/backfill_jobs.py:52-70` docstring (`_UPDATABLE_COLUMNS` `:13-25`) | `app/repositories/backfill_jobs.py:52-70` |
 | **INGEST-3** | **`page_token` is a raw integer offset, not an opaque cursor.** | Treating it as a base64/opaque token breaks pagination continuity. | `servicer.py:642` (`offset = int(request.page.page_token)`), `:988`; `list_jobs(offset=)` | `app/handlers/servicer.py:624` |
 | **INGEST-4** | **`0.0`/`0` mean "unset" for `conviction` on both write and read** — write stores `None` when `conviction <= 0`; read returns `0.0` when NULL. Consumers must read `0.0` as *unknown confidence*, not zero. (Feature 092 F-9 additionally rejects `conviction` outside `[0.0, 1.0]` up front, `servicer.py:770`.) | The proto documents the sentinel; treating 0.0 as a real confidence misweights signals. | write `servicer.py:789` (`… else None`), read `:1020` (`… else 0.0`); proto `ingest.proto:110` | `app/handlers/servicer.py:767` |

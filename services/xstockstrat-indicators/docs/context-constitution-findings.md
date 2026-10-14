@@ -1,6 +1,6 @@
 # xstockstrat-indicators — Constitution Findings
 
-Defects and drift surfaced by `/context-constitution` on 2026-07-24. For triage/fixing, not
+Defects and drift surfaced by `/context-constitution` on 2026-07-24; re-verified 2026-10-14 (branch `ccr-fe84109f-0lwin8` @ `09ec8d9`). For triage/fixing, not
 governance. The fictional ledger/notify dependency is a repeated pattern also recorded at the root.
 
 ## Documentation that lies (docs claim behavior the code lacks)
@@ -17,9 +17,18 @@ governance. The fictional ledger/notify dependency is a repeated pattern also re
 
 ## Open questions (unresolved *why* — needs a maintainer)
 
-- ⚠ **security** — The sandbox writes the wrapped formula to a `NamedTemporaryFile(delete=False)` on shared disk, and the in-process builtins sandbox has no AST allowlist, so a deliberate formula can escape `exec` and gain filesystem/network access despite the "no filesystem/network" posture. (The parent-env inheritance sub-issue was fixed 2026-09-16 — see Resolved above; the child env is now minimal.) The real remedy is OS-level isolation (nsjail/gVisor/locked container) — tracked as a design item in the 2026-09-16 security audit report. `app/services/sandbox.py:198` — status: **open (design)**
-- Sandbox failure classification greps child **stderr** for `"is not allowed in sandbox"`/`"MemoryError"` — a formula that prints/raises those exact strings is mis-tagged as `import_blocked`/`memory_exceeded`. Is string-matching the intended discriminator (vs a structured exit code)? `app/services/sandbox.py:214,231` — status: **open**
-- `SandboxResult.memory_used_bytes` is hardcoded to `0` on every path and surfaced verbatim in the RPC response — is memory accounting deliberately unimplemented, or is a consumer expecting a real number? `app/services/sandbox.py:224,250,263`, `servicer.py:170,186` — status: **open**
+- ⚠ **security** — The in-process builtins sandbox has no complete AST allowlist, so a deliberate formula can escape the language-level guard (INDICATORS-4). The temp-file sub-issue is **resolved (2026-10-14)**: the wrapper is now piped over stdin (`Popen([sys.executable, "-"], stdin=PIPE …)`, `app/services/sandbox.py#communicate`), with no `NamedTemporaryFile`. The OS layers (distinct UID, seccomp allowlist — INDICATORS-6/7) are what contain an escape; the language guard is bypassable by design. — status: **open (design), narrowed**
+- Sandbox failure classification greps child **stderr** for `"is not allowed in sandbox"`/`"MemoryError"` — a formula that prints/raises those exact strings is mis-tagged as `import_blocked`/`memory_exceeded`. Is string-matching the intended discriminator (vs a structured exit code)? `app/services/sandbox.py#"is not allowed in sandbox"` — status: **open** (re-verified 2026-10-14)
+- `SandboxResult.memory_used_bytes` is hardcoded to `0` on every path and surfaced verbatim in the RPC response — is memory accounting deliberately unimplemented, or is a consumer expecting a real number? `app/services/sandbox.py#memory_used_bytes` (3 paths), `app/handlers/servicer.py#ExecuteFormula` — status: **open** (re-verified 2026-10-14)
+- Are `timeout_ms_override` / `memory_bytes_override` meant to be unbounded for any authenticated caller? They replace config with no clamp and `RLIMIT_CPU` derives from the override; the memory rlimit is skipped when `memory_bytes <= 0`. `app/handlers/servicer.py#ExecuteFormula`, `app/services/sandbox.py#"if {memory_bytes} > 0"` — status: **open**
+- ⚠ **unverified** — `_load_formula` serves from the process-local `self._formulas` cache, invalidated only by local `pop`s; with more than one replica an Update/Delete on A leaves B executing stale (or soft-deleted) source. Replica count not checked (`.do/app*.yaml`). `app/handlers/servicer.py#_load_formula` — status: **open**
+- `_flt.add_rule` failures are swallowed (`except Exception: pass`); is there an image-level test that fails when `_SECCOMP_ALLOW` holds an unknown syscall name? `app/services/sandbox.py#_SECCOMP_ALLOW` — status: **open**
+
+## Documentation that lies — additions (2026-10-14)
+
+| What the docs say | What the code does | Evidence | Suggested action |
+|---|---|---|---|
+| `CLAUDE.md` Constitution banner still lists "⚠ sandbox env inheritance" as a defect; env block lists `TRADING_MODE=paper` | The env-inheritance defect was resolved 2026-09-16; `TRADING_MODE` is the repo-wide docs-vs-code disagreement in the root findings log | `services/xstockstrat-indicators/CLAUDE.md` banner; `app/config/watcher.py` | Refresh the banner and env block |
 
 ---
 _Surfaced by [context-forge](https://github.com/davcs86/agent-plugins). Defects to action, not rules. Re-run `/context-constitution` to refresh._
