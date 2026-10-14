@@ -23,7 +23,8 @@ def _ctx(
     Centralized here (feature 092, C-13) once a second suite (TriggerBackfill authz in
     test_ingest_servicer.py) needed the same builder that test_cancel_backfill.py had inline.
     `"4"` = ADMIN bit set (0x04); `"0"` = no admin bit. Feature 224: `user_id=""` omits the
-    `x-user-id` header (headerless N caller); `internal_caller` adds `x-internal-caller`;
+    `x-user-id` header (headerless caller, rejected UNAUTHENTICATED since feature 225);
+    `internal_caller` adds `x-internal-caller`;
     `peer_sans` is the verified mTLS peer SAN list (empty = no TLS peer identity).
     """
     metadata = [("x-access-scope", access_scope)]

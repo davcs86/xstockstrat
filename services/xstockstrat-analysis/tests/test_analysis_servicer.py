@@ -30,6 +30,7 @@ from app.config.watcher import ConfigWatcher
 from app.handlers.servicer import AnalysisServicer, _InsufficientData, _row_to_opportunity
 from app.services import warmup as warmup_sizing
 from app.services.evaluator import FormulaExecutionError, StrategyEvaluator
+from tests.conftest import OWNER_HEADERS, ctx_with
 
 
 def make_servicer() -> AnalysisServicer:
@@ -909,8 +910,12 @@ class TestBacktestTechnicalOnly:
     async def test_signal_params_do_not_change_the_score(self):
         """AC-4: a signal-weighted strategy_params produces the SAME result as one without it —
         the blend no longer affects a strategy's internal score."""
-        r_plain = await self._svc().RunBacktest(self._req(with_signals=False), MagicMock())
-        r_signal = await self._svc().RunBacktest(self._req(with_signals=True), MagicMock())
+        r_plain = await self._svc().RunBacktest(
+            self._req(with_signals=False), ctx_with(OWNER_HEADERS)
+        )
+        r_signal = await self._svc().RunBacktest(
+            self._req(with_signals=True), ctx_with(OWNER_HEADERS)
+        )
         assert r_plain.status == analysis_pb2.BACKTEST_STATUS_OK
         assert r_signal.total_trades == r_plain.total_trades
         assert abs(r_signal.total_return - r_plain.total_return) < 1e-12
@@ -927,7 +932,7 @@ class TestBacktestTechnicalOnly:
         """A signal-weighted strategy_params no longer triggers a QuerySignals call from the
         backtest path (the fetch was removed with the blend)."""
         svc = self._svc()
-        await svc.RunBacktest(self._req(with_signals=True), MagicMock())
+        await svc.RunBacktest(self._req(with_signals=True), ctx_with(OWNER_HEADERS))
         assert svc._ingest.QuerySignals.await_count == 0
 
     def test_screener_still_blends_via_scoring(self):
@@ -952,8 +957,7 @@ class TestBacktestTechnicalOnly:
 class TestSetStrategyLive:
     @pytest.mark.asyncio
     async def test_unauthenticated_caller_denied(self):
-        # feature 133: admin scope no longer gates SetStrategyLive — but an unauthenticated caller
-        # (no x-user-id) can never own a strategy, so the live toggle is PERMISSION_DENIED.
+        # feature 225: a caller without x-user-id is rejected by the identity gate before the body.
         svc = make_servicer()
         svc._strategies_repo = AsyncMock()
         req = MagicMock()
@@ -964,7 +968,8 @@ class TestSetStrategyLive:
         ctx.abort = AsyncMock(side_effect=Exception("aborted"))
         with pytest.raises(Exception, match="aborted"):
             await svc.SetStrategyLive(req, ctx)
-        assert ctx.abort.await_args.args[0] == grpc.StatusCode.PERMISSION_DENIED
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.UNAUTHENTICATED
+        svc._strategies_repo.get_by_owner_and_id.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_permits_admin_scope(self):
@@ -1663,7 +1668,7 @@ class TestFormulaErrorSurfacing:
         svc._persist_symbol_cells = AsyncMock(side_effect=_spy)
 
         result = await svc.RunBacktest(
-            self._req(self._formula_def(), ["AAPL", "MSFT"]), MagicMock()
+            self._req(self._formula_def(), ["AAPL", "MSFT"]), ctx_with(OWNER_HEADERS)
         )
 
         by_symbol = {d.symbol: d for d in result.diagnostics}
@@ -1689,7 +1694,7 @@ class TestFormulaErrorSurfacing:
         svc._persist_backtest_run = AsyncMock()
 
         result = await svc.RunBacktest(
-            self._req(self._formula_def(), ["AAPL", "MSFT"]), MagicMock()
+            self._req(self._formula_def(), ["AAPL", "MSFT"]), ctx_with(OWNER_HEADERS)
         )
 
         assert result.status == analysis_pb2.BACKTEST_STATUS_INSUFFICIENT_DATA
@@ -1753,6 +1758,7 @@ class TestBacktestRangeCap:
         # span 800 days > 730-day cap → INVALID_ARGUMENT (AC-7)
         svc = self._svc()
         ctx = MagicMock()
+        ctx.invocation_metadata.return_value = OWNER_HEADERS
         ctx.abort = AsyncMock(side_effect=Exception("aborted"))
         req = self._req(1, 800 * 86_400)
         with pytest.raises(Exception):
@@ -1764,14 +1770,14 @@ class TestBacktestRangeCap:
         svc = self._svc()
         # Start at day 4 so 4 pre-window bars exist — slow_period(3) needs 3 (feature 071).
         req = self._req(4 * 86_400, 4 * 86_400 + 700 * 86_400)  # 700-day span < 730 cap
-        result = await svc.RunBacktest(req, MagicMock())
+        result = await svc.RunBacktest(req, ctx_with(OWNER_HEADERS))
         assert result.status == analysis_pb2.BACKTEST_STATUS_OK
 
     @pytest.mark.asyncio
     async def test_unset_range_defaulted_to_cap_window(self):
         svc = self._svc()
         req = self._req(None, None)  # both unset (agent case)
-        result = await svc.RunBacktest(req, MagicMock())
+        result = await svc.RunBacktest(req, ctx_with(OWNER_HEADERS))
         assert result.status == analysis_pb2.BACKTEST_STATUS_OK
         # the range was defaulted in place to a ~730-day window ending "now"
         span = req.range.end.seconds - req.range.start.seconds
@@ -2618,6 +2624,7 @@ class TestGetBacktest:
         req = MagicMock()
         req.backtest_id = "bt-legacy"
         context = MagicMock()
+        context.invocation_metadata.return_value = OWNER_HEADERS
         context.abort = AsyncMock(side_effect=Exception("aborted"))
 
         with pytest.raises(Exception, match="aborted"):
@@ -2635,6 +2642,7 @@ class TestGetBacktest:
         req = MagicMock()
         req.backtest_id = "bt-1"
         context = MagicMock()
+        context.invocation_metadata.return_value = OWNER_HEADERS
         context.abort = AsyncMock(side_effect=Exception("aborted"))
 
         with pytest.raises(Exception, match="aborted"):
@@ -2653,6 +2661,7 @@ class TestGetBacktest:
         req = MagicMock()
         req.backtest_id = "bt-1"
         context = MagicMock()
+        context.invocation_metadata.return_value = OWNER_HEADERS
         context.abort = AsyncMock(side_effect=Exception("aborted"))
 
         with pytest.raises(Exception, match="aborted"):
@@ -6521,7 +6530,7 @@ async def test_set_opportunity_action_snooze_defaults_hours():
 
 
 @pytest.mark.asyncio
-async def test_set_opportunity_action_missing_user_invalid():
+async def test_set_opportunity_action_missing_user_unauthenticated():
     svc = make_servicer()
     svc._opportunity_actions_repo = AsyncMock()
     req = analysis_pb2.SetOpportunityActionRequest(
@@ -6529,7 +6538,7 @@ async def test_set_opportunity_action_missing_user_invalid():
     )
     with pytest.raises(_AbortError) as ei:
         await svc.SetOpportunityAction(req, _opp_ctx(user_id=None))
-    assert ei.value.code == grpc.StatusCode.INVALID_ARGUMENT
+    assert ei.value.code == grpc.StatusCode.UNAUTHENTICATED
     svc._opportunity_actions_repo.upsert.assert_not_awaited()
 
 

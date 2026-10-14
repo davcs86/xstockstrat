@@ -303,12 +303,13 @@ Feature: Platform-wide guarantees
     When docs/runbooks/mcp-tools.md and plugins/strat-lab/skills/backtest/SKILL.md are checked
     Then both list "list_templates" and "instantiate_template" and neither mentions "is_public" or "include_public"
 
-  @AC-35 @FR-14 @feature-224
+  @AC-35 @FR-14 @feature-224 @feature-225
   Scenario: Two users with the same mcp_client slug use their own credentials
     Given "alice" and "bob" each own mcp_client source "acme-mcp" with bearers "tok-a" and "tok-b"
     When the ingest poller polls both sources
     Then the request for "alice"'s source carries "Authorization: Bearer tok-a" and "bob"'s carries "Bearer tok-b"
     And GetConfig, ListKeys and WatchConfig never return "tok-a" or "tok-b" in plaintext to any caller
+    And with a global config secret under the same key alongside an owner's per-user one, ingest calls config "GetSecret" with that owner's "user_id" and sends the per-user value, not the global one
 
   @AC-36 @FR-4 @feature-224
   Scenario: System slugs are reserved in both directions
@@ -339,3 +340,44 @@ Feature: Platform-wide guarantees
     When a service handles the request
     Then identity and behavior are resolved from headers and environment as today, and no response carries the field
 
+  # ─── Private-by-default enforce + contract (feature 225) ──────────────────
+  # Platform migration tooling: the contract gate, refusing contract downs, replay-safe contract
+  # up-files, and the db-migrate.sh contract-floor dirty guard. Single-service rules live in each
+  # service's acceptance/private-by-default-enforce-contract.feature. Provenance: @feature-225.
+
+  @AC-5 @FR-5 @feature-225
+  Scenario: A contract migration whose expand file is not yet on main is rejected
+    Given a PR adds "services/xstockstrat-analysis/migrations/027_contract_owner_dimension.up.sql" whose line 1 is "-- contract-of: services/xstockstrat-analysis/migrations/026_owner_dimension_templates.up.sql"
+    And that expand file is not on "origin/main"
+    When the "migration-contract-gate" CI job runs
+    Then it exits non-zero naming "027_contract_owner_dimension.up.sql"
+
+  @AC-6 @FR-5 @feature-225
+  Scenario: A contract migration's down-file refuses to run
+    Given analysis migration "027_contract_owner_dimension.up.sql" is applied
+    When "migrate goto 26" is run for the analysis schema
+    Then it exits non-zero with output containing "irreversible contract"
+    And the analysis migration state is dirty
+    And "analysis.backtest_runs.user_id" is still NOT NULL
+
+  @AC-12 @FR-5 @feature-225
+  Scenario: Contract up-files are replay-safe
+    Given analysis 027 and ingest 014 have been applied once
+    When "scripts/migration-rerun.sh" replays the 224 expand and 225 contract up-files
+    Then every replay succeeds, the contracted objects stay absent, and the N-1 trigger count is 0
+
+  @AC-18 @FR-8 @feature-225
+  Scenario: db-migrate refuses the force-0 replay for a dirty contract service
+    Given analysis migration "027_contract_owner_dimension.up.sql" is applied
+    And a refused "migrate goto 26" has left the analysis migration state dirty at version 26
+    When "scripts/db-migrate.sh up" runs
+    Then it exits non-zero with output naming "analysis" and "force 25"
+    And the analysis migration state is still dirty at version 26
+    And after "migrate force 25" for the analysis schema, "scripts/db-migrate.sh up" exits 0
+    And the analysis migration state is clean at version 27 and "analysis.backtest_runs.user_id" is NOT NULL
+
+  @AC-19 @FR-8 @feature-225
+  Scenario: Dirty recovery below the contract floor is unchanged
+    Given a migrations directory whose only contract file "027_x.up.sql" declares "-- contract-of: services/xstockstrat-x/migrations/026_y.up.sql"
+    When the dirty guard evaluates "20 (dirty)", and separately a directory with no contract file evaluates "27 (dirty)"
+    Then both evaluations allow the automatic force-0 recovery

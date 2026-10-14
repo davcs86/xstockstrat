@@ -33,9 +33,9 @@ class PnLPatternSamplesRepository:
             )
 
     async def query(
-        self, *, symbol: str, strategy_id: str = "", from_ts=None, to_ts=None
+        self, *, user_id: str, symbol: str, strategy_id: str = "", from_ts=None, to_ts=None
     ) -> list[dict]:
-        """All samples for a symbol (optionally narrowed by strategy/time)."""
+        """The caller's samples for a symbol (optionally narrowed by strategy/time)."""
         conds = ["symbol=$1"]
         args = [symbol]
         if strategy_id:
@@ -47,6 +47,11 @@ class PnLPatternSamplesRepository:
         if to_ts is not None:
             args.append(to_ts)
             conds.append(f"closed_at <= ${len(args)}")
+        args.append(user_id)
+        conds.append(
+            "position_id IN (SELECT position_id FROM analysis.pnl_positions WHERE user_id = "
+            f"${len(args)} AND symbol = $1)"
+        )
         rows = await self._db.fetch(
             "SELECT factor_name, factor_type, indicator_value, signal_present, realized_pnl "
             "FROM analysis.pnl_pattern_samples WHERE " + " AND ".join(conds),

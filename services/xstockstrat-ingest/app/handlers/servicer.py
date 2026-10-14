@@ -4,6 +4,8 @@ normalises raw data payloads, and persists newsletter signals to TimescaleDB.
 """
 
 import asyncio
+import contextvars
+import functools
 import json
 import logging
 import uuid
@@ -30,7 +32,6 @@ from app.repositories.signal_sources import (
     derive_health_status,
     get_source,
     insert_source,
-    list_all_sources,
     list_sources,
     mark_source_error,
     mark_source_fed,
@@ -75,12 +76,14 @@ class _SignalSourceNotFound(Exception):
     """feature 224 — a headered caller holds no active source with that slug (NOT_FOUND, AC-10)."""
 
 
-class _SignalSourceAmbiguous(Exception):
-    """feature 224 — a headerless call names a slug held by several owners (FAILED_PRECONDITION)."""
+class _CallerRejected(Exception):
+    """feature 225 — no `x-user-id` (UNAUTHENTICATED), or `system` without a SAN-bound grant for the
+    RPC (PERMISSION_DENIED, AC-33)."""
 
-
-class _SystemIdentityDenied(Exception):
-    """feature 224 — `x-user-id: system` without a SAN-bound grant for the RPC (AC-33)."""
+    def __init__(self, code, message):
+        super().__init__(message)
+        self.code = code
+        self.message = message
 
 
 # `x-user-id: system` is honoured only with one of these `x-internal-caller` grants covering the
@@ -90,6 +93,27 @@ _SYSTEM_GRANTS = {
     "analysis-system-read": frozenset({"QuerySignals", "ListSignalSources"}),
 }
 _SYSTEM_GRANT_SAN = "xstockstrat-analysis"
+
+# The RPC owner_scoped is serving: _owner resolves only under that RPC's grant key.
+_CURRENT_RPC: contextvars.ContextVar[str] = contextvars.ContextVar("ingest_current_rpc")
+
+
+def owner_scoped(fn):
+    @functools.wraps(fn)
+    async def wrapper(self, request, context):
+        token = _CURRENT_RPC.set(fn.__name__)
+        try:
+            try:
+                self._resolve_owner(context, fn.__name__)
+            except _CallerRejected as e:
+                await context.abort(e.code, e.message)
+                return None
+            return await fn(self, request, context)
+        finally:
+            _CURRENT_RPC.reset(token)
+
+    wrapper.__owner_scoped__ = True
+    return wrapper
 
 
 def _resolve_ss_operation(request) -> str | None:
@@ -326,31 +350,29 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
         ]
 
     @staticmethod
-    def _resolve_owner(context, rpc: str) -> str | None:
-        """The caller's owner id: `x-user-id`, or None when headerless (release-N tolerance).
-
-        Raises _SystemIdentityDenied for `system` without a SAN-bound grant covering `rpc`.
-        """
+    def _resolve_owner(context, rpc: str) -> str:
+        """The caller's owner id (`x-user-id`). Raises _CallerRejected when it is missing, or for
+        `system` without a SAN-bound grant covering `rpc`."""
         metadata = {k: v for k, v in context.invocation_metadata()}
         user_id = metadata.get("x-user-id") or None
+        if user_id is None:
+            raise _CallerRejected(grpc.StatusCode.UNAUTHENTICATED, "x-user-id required")
         if user_id != SYSTEM_OWNER:
             return user_id
         caller = metadata.get("x-internal-caller", "")
         if rpc in _SYSTEM_GRANTS.get(caller, ()) and peer_san_matches(context, _SYSTEM_GRANT_SAN):
             return SYSTEM_OWNER
-        raise _SystemIdentityDenied(f"x-user-id '{SYSTEM_OWNER}' is not granted {rpc}")
+        raise _CallerRejected(
+            grpc.StatusCode.PERMISSION_DENIED, f"x-user-id '{SYSTEM_OWNER}' is not granted {rpc}"
+        )
 
-    async def _owner_or_abort(self, context, rpc: str) -> tuple[bool, str | None]:
-        try:
-            return True, self._resolve_owner(context, rpc)
-        except _SystemIdentityDenied as e:
-            await context.abort(grpc.StatusCode.PERMISSION_DENIED, str(e))
-            return False, None
+    def _owner(self, context) -> str:
+        return self._resolve_owner(context, _CURRENT_RPC.get())
 
-    def _admin_foreign_owner(self, context, owner: str | None, requested: str) -> str | None:
-        """FR-13: the `owner_user_id` selector, honoured only for a headered ADMIN reading another
+    def _admin_foreign_owner(self, context, owner: str, requested: str) -> str | None:
+        """FR-13: the `owner_user_id` selector, honoured only for an ADMIN reading another
         owner; anyone else's selector is ignored."""
-        if owner is None or not requested or requested == owner:
+        if not requested or requested == owner:
             return None
         return requested if self._has_admin_scope(context) else None
 
@@ -914,6 +936,7 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
         data = json.loads(raw)
         return len(data) if isinstance(data, list) else 1
 
+    @owner_scoped
     async def IngestSignal(self, request, context):
         """Persist an ExternalSignal to ingest.newsletter_signals hypertable."""
         propagation_meta = [
@@ -924,9 +947,7 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
         if self._db is None:
             await context.abort(grpc.StatusCode.UNAVAILABLE, "database not connected")
             return
-        ok, owner = await self._owner_or_abort(context, "IngestSignal")
-        if not ok:
-            return
+        owner = self._owner(context)
         try:
             signal_id, deduplicated = await self._ingest_external_signal(
                 request.signal, propagation_meta, owner=owner
@@ -937,24 +958,20 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
         except _SignalSourceNotFound as e:
             await context.abort(grpc.StatusCode.NOT_FOUND, str(e))
             return
-        except _SignalSourceAmbiguous as e:
-            await context.abort(grpc.StatusCode.FAILED_PRECONDITION, str(e))
-            return
         except _SignalIngestError as e:
             await context.abort(grpc.StatusCode.INTERNAL, str(e))
             return
         return ingest_pb2.IngestSignalResponse(signal_id=signal_id, deduplicated=deduplicated)
 
     async def _ingest_external_signal(
-        self, signal, propagation_meta=None, owner: str | None = None
+        self, signal, propagation_meta=None, *, owner: str
     ) -> tuple[int, bool]:
         """feature 166 — the validate + persist + dedup + health + ledger core of IngestSignal,
         raising _SignalValidationError / _SignalIngestError instead of aborting a gRPC context so
         both the RPC and the scheduled mcp_client loop drive one ingest path. Returns
         (signal_id, deduplicated).
 
-        feature 224: the signal is filed under `owner`; None (headerless, release N only)
-        resolves the slug's unique holder."""
+        feature 224: the signal is filed under `owner`."""
         propagation_meta = propagation_meta or []
 
         if not signal.source or not signal.symbol or not signal.direction:
@@ -969,22 +986,9 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
         if not (0.0 <= signal.conviction <= 1.0):
             raise _SignalValidationError("conviction must be between 0.0 and 1.0")
 
-        # Source slug must be registered and active — for the owner. A headered miss is NOT_FOUND
-        # (a foreign slug is indistinguishable from a missing one); headerless keeps
-        # INVALID_ARGUMENT for zero holders.
+        # Source slug must be registered and active for the owner; a miss is NOT_FOUND (a foreign
+        # slug is indistinguishable from a missing one).
         missing = _SignalSourceNotFound(f"source '{signal.source}' not found")
-        if owner is None:
-            holders = await slug_holders(self._db, signal.source)
-            if len(holders) > 1:
-                raise _SignalSourceAmbiguous(
-                    f"source slug '{signal.source}' has several owners; x-user-id required"
-                )
-            missing = _SignalValidationError(
-                f"source slug '{signal.source}' is not a registered active source"
-            )
-            if not holders:
-                raise missing
-            owner = holders[0]
         source_row = await self._db.fetchrow(
             "SELECT slug FROM ingest.signal_sources"
             " WHERE user_id = $1 AND slug = $2 AND active = TRUE",
@@ -1146,26 +1150,24 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
 
         return signal_id, deduplicated
 
+    @owner_scoped
     async def QuerySignals(self, request, context):
         """Query active signals filtered by owner scope, source/symbol/direction and time window."""
         if self._db is None:
             await context.abort(grpc.StatusCode.UNAVAILABLE, "database not connected")
             return
-        ok, owner = await self._owner_or_abort(context, "QuerySignals")
-        if not ok:
-            return
+        owner = self._owner(context)
         foreign = self._admin_foreign_owner(context, owner, request.owner_user_id)
 
         conditions = []
         params = []
         idx = 1
 
-        # Headerless (release N only) stays unscoped; headered reads are owner-scoped.
         if foreign is not None:
             conditions.append(f"user_id = ${idx}")
             params.append(foreign)
             idx += 1
-        elif owner is not None:
+        else:
             predicate, uses_param = owner_scope_predicate(request.scope, idx)
             conditions.append(predicate)
             if uses_param:
@@ -1272,13 +1274,12 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             page=common_pb2.PageResponse(next_page_token=next_token, total_count=len(signals)),
         )
 
+    @owner_scoped
     async def ListSignalSources(self, request, context):
         if self._db is None:
             await context.abort(grpc.StatusCode.UNAVAILABLE, "database not connected")
             return
-        ok, owner = await self._owner_or_abort(context, "ListSignalSources")
-        if not ok:
-            return
+        owner = self._owner(context)
         foreign = self._admin_foreign_owner(context, owner, request.owner_user_id)
         if foreign is not None:
             rows = await list_sources(
@@ -1288,12 +1289,10 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                 context, owner, "signal_source", {foreign: [row["slug"] for row in rows]}
             ):
                 return
-        elif owner is not None:
+        else:
             rows = await list_sources(
                 self._db, owner, ingest_pb2.SIGNAL_SCOPE_UNSPECIFIED, request.include_inactive
             )
-        else:  # headerless (release N only): today's global listing
-            rows = await list_all_sources(self._db, include_inactive=request.include_inactive)
         template_ids = sorted(
             {r["origin_template_id"] for r in rows if r.get("origin_template_id")}
         )
@@ -1330,44 +1329,35 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
         return None
 
     @staticmethod
-    def _register_conflict(owner: str | None, slug: str, holders: list[str]):
+    def _register_conflict(owner: str, slug: str, holders: list[str]):
         """(code, message) refusing a REGISTER of `slug` given its current holders, else None.
 
-        A slug held by `system` is reserved (AC-36); headerless N never creates (elaboration 5).
+        A slug held by `system` is reserved (AC-36).
         """
         exists = (grpc.StatusCode.ALREADY_EXISTS, f"source '{slug}' already exists")
-        if owner is None:
-            if holders:
-                return exists
-            return grpc.StatusCode.FAILED_PRECONDITION, "x-user-id required to register a source"
         if owner != SYSTEM_OWNER and SYSTEM_OWNER in holders:
             return exists
         if owner == SYSTEM_OWNER and any(h != SYSTEM_OWNER for h in holders):
             return grpc.StatusCode.FAILED_PRECONDITION, f"slug '{slug}' is already held by a user"
         return exists if owner in holders else None
 
-    async def _abort_missing_source(self, context, owner: str | None, slug: str) -> None:
+    async def _abort_missing_source(self, context, owner: str, slug: str) -> None:
         """No row for (owner, slug): a system-held slug is read-only to every non-system caller
         (AC-26); anything else is NOT_FOUND (a foreign user's slug is indistinguishable)."""
-        if owner not in (None, SYSTEM_OWNER) and SYSTEM_OWNER in await slug_holders(self._db, slug):
+        if owner != SYSTEM_OWNER and SYSTEM_OWNER in await slug_holders(self._db, slug):
             await context.abort(
                 grpc.StatusCode.PERMISSION_DENIED, f"system source '{slug}' is read-only"
             )
             return
         await context.abort(grpc.StatusCode.NOT_FOUND, f"source '{slug}' not found")
 
+    @owner_scoped
     async def ManageSignalSource(self, request, context):
         if self._db is None:
             await context.abort(grpc.StatusCode.UNAVAILABLE, "database not connected")
             return
-        ok, owner = await self._owner_or_abort(context, "ManageSignalSource")
-        if not ok:
-            return
-        # Owners manage their own sources; only the headerless (release N) path keeps the admin
-        # gate. No caller — admin included — reaches another owner's source.
-        if owner is None and not self._has_admin_scope(context):
-            await context.abort(grpc.StatusCode.PERMISSION_DENIED, "admin scope required")
-            return
+        owner = self._owner(context)
+        # Owners manage their own sources; no caller — admin included — reaches another owner's.
         op = _resolve_ss_operation(request)
         src = request.source
         if op is None:
@@ -1377,18 +1367,6 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             )
             return
         target = owner
-        if owner is None and op != "register":
-            holders = await slug_holders(self._db, src.slug)
-            if not holders:
-                await context.abort(grpc.StatusCode.NOT_FOUND, f"source '{src.slug}' not found")
-                return
-            if len(holders) > 1:
-                await context.abort(
-                    grpc.StatusCode.FAILED_PRECONDITION,
-                    f"source slug '{src.slug}' has several owners; x-user-id required",
-                )
-                return
-            target = holders[0]
         if op == "reactivate":
             row = await reactivate_source(self._db, target, src.slug)
             if row is None:
@@ -1522,23 +1500,20 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                 row = await source_templates.stamp_origin(conn, owner, src.slug, *origin)
         return row, None
 
+    @owner_scoped
     async def ListTemplates(self, request, context):
         if self._db is None:
             await context.abort(grpc.StatusCode.UNAVAILABLE, "database not connected")
             return
-        ok, _ = await self._owner_or_abort(context, "ListTemplates")
-        if not ok:
-            return
         rows = await source_templates.list_active(self._db)
         return ingest_pb2.ListTemplatesResponse(templates=[_template_to_proto(r) for r in rows])
 
+    @owner_scoped
     async def ManageTemplate(self, request, context):
         if self._db is None:
             await context.abort(grpc.StatusCode.UNAVAILABLE, "database not connected")
             return
-        ok, owner = await self._owner_or_abort(context, "ManageTemplate")
-        if not ok:
-            return
+        owner = self._owner(context)
         if not self._has_admin_scope(context):
             await context.abort(grpc.StatusCode.PERMISSION_DENIED, "admin scope required")
             return
@@ -1587,18 +1562,12 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             return
         return _template_to_proto(row)
 
+    @owner_scoped
     async def InstantiateTemplate(self, request, context):
         if self._db is None:
             await context.abort(grpc.StatusCode.UNAVAILABLE, "database not connected")
             return
-        ok, owner = await self._owner_or_abort(context, "InstantiateTemplate")
-        if not ok:
-            return
-        if owner is None:
-            await context.abort(
-                grpc.StatusCode.FAILED_PRECONDITION, "x-user-id required to instantiate a template"
-            )
-            return
+        owner = self._owner(context)
         tpl = await source_templates.get(self._db, request.template_id)
         if tpl is None or tpl["retired_at"] is not None:
             await context.abort(

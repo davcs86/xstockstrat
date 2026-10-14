@@ -27,6 +27,7 @@ from gen.ledger.v1 import ledger_pb2
 from gen.marketdata.v1 import marketdata_pb2
 from google.protobuf.json_format import MessageToDict
 
+from app.identity import owner_metadata
 from app.repositories.order_snapshots import OrderSnapshotsRepository
 from app.repositories.pnl_pattern_samples import PnLPatternSamplesRepository
 from app.repositories.pnl_positions import PnLPositionsRepository
@@ -363,13 +364,16 @@ class PnLPatternConsumer:
         ind_timeout = self._cfg.get_int("analysis.snapshot.indicator_timeout_ms", 500) / 1000.0
         sig_timeout = self._cfg.get_int("analysis.snapshot.signal_timeout_ms", 500) / 1000.0
         degraded = False
-        meta = [("x-user-id", owner)] if owner else ()
+        meta = owner_metadata(owner) if owner else ()
         bar, closes = None, []
         try:
             bar, closes = await self._composer.ohlcv_and_closes(symbol, meta)
         except Exception as e:  # noqa: BLE001
             log.warning("snapshot ohlcv compose failed for %s: %s", symbol, e)
             degraded = True
+        if not owner:
+            log.warning("snapshot for %s has no owner — indicators/signals skipped", symbol)
+            return bar, closes, {}, [], True
         try:
             indicators = await asyncio.wait_for(
                 self._composer.indicators(symbol, closes, strategy_id, meta), timeout=ind_timeout

@@ -24,6 +24,7 @@ from gen.indicators.v1 import indicators_pb2
 from google.protobuf.json_format import MessageToDict
 from google.protobuf.struct_pb2 import Struct
 
+from app.identity import owner_metadata
 from app.services import sector_params
 
 log = logging.getLogger(__name__)
@@ -241,10 +242,11 @@ class StrategyEvaluator:
         self.unreadable_formulas: set[str] = set()
 
     def for_owner(self, owner: str) -> "StrategyEvaluator":
-        """A clone whose indicators calls carry ``owner`` as ``x-user-id`` (feature 224)."""
+        """A clone whose indicators calls carry ``owner`` as ``x-user-id``; raises ValueError for an
+        empty or `system` owner."""
         return StrategyEvaluator(
             self._indicators,
-            [("x-user-id", owner)] if owner else (),
+            owner_metadata(owner),
             self._component_sem,
             self._raise_unreadable,
         )

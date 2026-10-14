@@ -11,7 +11,6 @@ from app.formulas.fundamentals_value_quality import (
     AUTHOR,
     DEFAULT_PARAMS,
     FORMULA_ID,
-    IS_PUBLIC,
     OUTPUTS,
     PARAMETERS,
     SOURCE,
@@ -141,7 +140,7 @@ def test_definitions_and_outputs_validate():
     params_validation.validate_definitions(PARAMETERS)
     params_validation.validate_outputs(OUTPUTS)
     assert "value" not in [o.name for o in OUTPUTS]
-    assert FORMULA_ID and AUTHOR == "system" and IS_PUBLIC is False
+    assert FORMULA_ID and AUTHOR == "system"
 
 
 # ── Seeding upsert idempotency (DB-less) ──────────────────────────────────────
@@ -171,7 +170,6 @@ def test_upsert_uses_on_conflict_and_is_idempotent():
             description="d",
             source=SOURCE,
             author=AUTHOR,
-            is_public=True,
             input_schema={},
             parameters=[],
             outputs=[],
@@ -182,7 +180,6 @@ def test_upsert_uses_on_conflict_and_is_idempotent():
             description="d",
             source=SOURCE,
             author=AUTHOR,
-            is_public=True,
             input_schema={},
             parameters=[],
             outputs=[],

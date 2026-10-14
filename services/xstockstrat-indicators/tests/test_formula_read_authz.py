@@ -1,6 +1,5 @@
 """Formula reads are owner-only (feature 224): a formula is readable/executable by its author or
-as a SYSTEM_AUTHOR formula; the N-only analysis bypass needs both the x-internal-caller header
-and the mTLS peer SAN xstockstrat-analysis. Regression origin:
+as a SYSTEM_AUTHOR formula; feature 225 removed the analysis reader bypass. Regression origin:
 docs/reports/2026-10-03-indicators-private-formula-cross-user-read-defect.md."""
 
 from unittest.mock import MagicMock
@@ -11,7 +10,7 @@ from gen.indicators.v1 import indicators_pb2
 
 from app.formulas import SYSTEM_AUTHOR
 from app.handlers.servicer import IndicatorsServicer
-from tests.conftest import ctx_with
+from tests.conftest import OTHER_HEADERS, ctx_with
 
 
 def _cfg():
@@ -55,19 +54,28 @@ class TestGetFormulaAuthz:
         [
             ("user-a", [("x-user-id", "user-a")], ()),
             (SYSTEM_AUTHOR, [("x-user-id", "user-b")], ()),
-            (
-                "user-a",
-                [("x-user-id", "user-b"), ("x-internal-caller", "analysis")],
-                ("xstockstrat-analysis",),
-            ),
         ],
-        ids=["owner", "system", "internal-analysis-san-bound"],
+        ids=["owner", "system"],
     )
     async def test_allowed_readers(self, author, metadata, peer_sans):
         resp = await _servicer(author).GetFormula(
             indicators_pb2.GetFormulaRequest(formula_id="f-1"), ctx_with(metadata, peer_sans)
         )
         assert resp.source == "result = close"
+
+    async def test_ac2_san_bound_analysis_reader_bypass_removed(self):
+        ctx = ctx_with(
+            [*OTHER_HEADERS, ("x-internal-caller", "analysis")], ("xstockstrat-analysis",)
+        )
+        with pytest.raises(grpc.RpcError):
+            await _servicer().GetFormula(indicators_pb2.GetFormulaRequest(formula_id="f-1"), ctx)
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.NOT_FOUND
+
+    async def test_ac10_identified_non_owner_get_formula_not_found(self):
+        ctx = ctx_with(OTHER_HEADERS)
+        with pytest.raises(grpc.RpcError):
+            await _servicer().GetFormula(indicators_pb2.GetFormulaRequest(formula_id="f-1"), ctx)
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.NOT_FOUND
 
     async def test_internal_analysis_header_without_san_is_not_trusted(self):
         ctx = ctx_with([("x-user-id", "user-b"), ("x-internal-caller", "analysis")])
