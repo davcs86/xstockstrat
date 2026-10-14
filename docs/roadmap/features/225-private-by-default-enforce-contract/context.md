@@ -581,3 +581,15 @@ The `/context-forge:context-constitution refresh` plugin was not available in th
 **Stopped at**: all complete
 **Next**: integration PR `feature/private-by-default-enforce-contract` → `main-dev`, held until the operator confirms 224 is
 launched and stable. Its CI `migration-rerun` is the first live run of the DB-level promoted scenarios (AC-3/4/6/11/12/13/18).
+
+## Session 2026-10-14 — AC-17 promotion (post-merge follow-up)
+
+- **Operator decision:** reword AC-17's last step to match the shipped behaviour and promote it (the Step 19 Deviation
+  Log held it out because `order_snapshots` has no degraded marker).
+- `acceptance.feature` `@AC-17`: "the order snapshot is stored marked degraded" → "the order snapshot is stored and an
+  `"analysis.snapshot.degraded"` event is emitted". Diffed against `test_ac17_ownerless_order_event_issues_no_owner_scoped_call`
+  (`tests/test_owner_header_guard.py`): it asserts no ingest/indicators calls, one snapshot row and that ledger event — the
+  reworded Then/And steps assert nothing more.
+- Promoted verbatim (+`@feature-225`) to `services/xstockstrat-analysis/acceptance/private-by-default-enforce-contract.feature`;
+  its Source header now lists `@AC-17`. Deviation Log disposition updated.
+
