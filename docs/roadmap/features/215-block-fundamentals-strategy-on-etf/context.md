@@ -391,3 +391,10 @@
 ### Step 24 — test: UI e2e + fixtures [blocked]
 - **Blocker (needs operator decision, gap protocol A/B/C).** `@AC-2` UI cannot pass as specced. `src/app/insights/strategies/[id]/page.tsx` renders `BacktestDiagnostics` only inside `result.status !== INSUFFICIENT_DATA` (~L565-629), and the INSUFFICIENT_DATA card renders only when `coverageGaps[0]` exists (~L519-521). Steps 15/16 make a refused single-SCHD run INSUFFICIENT_DATA with no coverage gaps, so the page renders **nothing**: the button re-enables and no banner, results or diagnostics appear. This is confirmed by the e2e snapshot against the spec's own sentinel (`status: 2`). A mixed `[AAPL, SCHD]` run (status OK) does render the reason. The same blank render already affects an all-FORMULA_ERROR run; the feature-067 sentinel avoids it by returning status 1. The fix needs `src/app/insights/strategies/[id]/page.tsx`, which is outside Steps 23/24 Files (F-08).
 - Work done but **not committed** (the step cannot pass verification): the fixture `SCHD_FUNDAMENTALS_UNAVAILABLE_OPPORTUNITY`, the mock `symbol` filter + `fundamentals_unavailable` marker + floor exemption, the `strat-fundamentals-etf-001` sentinel, and the four specs. It is left in the worktree, and saved as a patch in the session scratchpad. The `INVENTORY.md` rows are not yet written.
+
+## Session 2026-10-14 — sdd-execute (Steps 24–26, operator-directed)
+
+### Merge origin/main-dev (225 #1238, CI Go-lint pin #1240)
+- Merge `18586e8c`: one conflict, the `live_loop.py` servicer import list. 225 moved `SYSTEM_IDENTITY` to `app.identity`, and 215 had swapped the predicates for guard/pager imports; both sides are kept. No behavior conflict.
+- Post-merge: agent 498 passed. Analysis had 1 failure: 225's `test_single_owner_header_builder` flagged 215's owner-only default `meta` in `_fetch_and_aggregate`. The merge fix-up uses `owner_metadata(user_id)`, giving 1145 passed (see Deviation Log).
+- PR #1240 (golangci-lint goinstall) is now on the branch, so the Go-lint open item from Steps 7–16 is closed.

@@ -2779,7 +2779,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             fund_cache=fund_cache if fund_cache is not None else {},
             formula_cache=formula_cache if formula_cache is not None else {},
             failures=failures if failures is not None else {},
-            meta=meta if meta is not None else [("x-user-id", user_id)],
+            meta=meta if meta is not None else owner_metadata(user_id),
             sem=sem,
         )
         if excluded is not None:

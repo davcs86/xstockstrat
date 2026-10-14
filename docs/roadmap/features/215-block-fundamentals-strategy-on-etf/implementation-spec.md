@@ -1578,3 +1578,9 @@ _Populated by /sdd-execute as implementation proceeds._
 **Actual**: `src/app/insights/strategies/[id]/page.tsx` hides `BacktestDiagnostics` for INSUFFICIENT_DATA, and shows its INSUFFICIENT_DATA card only when there are coverage gaps. A refused-only run therefore renders nothing (verified e2e). Step 24 is not committed.
 **Reason**: an unspecced UI gate. Closing it needs a file outside the step's Files (F-08), so an operator decision is required: A) expand scope to render the diagnostics/refusal banner for INSUFFICIENT_DATA runs that carry diagnostics; B) accept the limitation and make the sentinel status 1 (asserts less than the real behavior); C) track it as a follow-up.
 **Disposition**: awaiting operator decision.
+
+### Deviation: merge of origin/main-dev (feature 225 #1238, CI #1240) — merge fix-up
+**Spec said**: n/a (post-Step-23 sync with `main-dev`).
+**Actual**: Merge `18586e8c` had one import-list conflict in `app/engine/live_loop.py`, resolved to 225's `app.identity` import plus 215's pager import. After the merge, 225's `tests/test_identity.py::test_single_owner_header_builder` failed on 215's hand-built `[("x-user-id", user_id)]`, the owner-only default `meta` of `_fetch_and_aggregate` (Step 17). The fix-up uses `owner_metadata(user_id)` instead. Analysis 1145 passed, agent 498 passed.
+**Reason**: 225 makes `owner_metadata` the single builder of an owner `x-user-id` header. It raises for an empty or `system` owner, and every caller of `_fetch_and_aggregate` already resolves a real owner row first. Header shape and behavior are unchanged.
+**Disposition**: merge fix-up commit (`servicer.py` is in Step 17's Files).
