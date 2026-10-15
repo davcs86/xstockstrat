@@ -4,12 +4,15 @@ pytest conftest: add the shared proto stubs to sys.path so that
 """
 
 import asyncio
+import contextvars
+import functools
 import pathlib
 import sys
 import types
 from unittest.mock import AsyncMock, MagicMock
 
 import asyncpg
+import pytest
 
 
 def _setup_gen_path() -> None:
@@ -242,3 +245,91 @@ def bc_routed(fake_repo):
     if fake_repo is None:
         return lambda bc: None
     return lambda bc: _BcRoutedRepo(bc, fake_repo)
+
+
+_SET_LOCAL = "SET LOCAL statement_timeout = "
+_BC_STATEMENTS = ("fetch", "fetchval", "fetchrow")
+
+
+def assert_budgeted_read_order(conn, budget_ms):
+    """One ``FakeConn``'s log is BEGIN READ ONLY → (SET LOCAL nᵢ → stmt)+ → COMMIT → release, with
+    every nᵢ in (0, budget_ms] and the sequence non-increasing (the shared budget only drains)."""
+    log = conn.log
+    assert log[:1] == ["BEGIN READ ONLY"] and log[-2:] == ["COMMIT", "release"], log
+    body = log[1:-2]
+    assert body and len(body) % 2 == 0, log
+    ms = []
+    for set_local, stmt in zip(body[0::2], body[1::2], strict=True):
+        assert set_local.startswith(_SET_LOCAL) and stmt in _BC_STATEMENTS, log
+        ms.append(int(set_local[len(_SET_LOCAL) :]))
+    assert all(0 < m <= budget_ms for m in ms), ms
+    assert ms == sorted(ms, reverse=True), ms
+
+
+_request_conns: contextvars.ContextVar = contextvars.ContextVar("_request_conns", default=None)
+
+
+class _RequestTrackingPool(FakePool):
+    """A shared ``FakePool`` that also files each handed-out conn under the acquiring request."""
+
+    async def acquire(self, timeout=None):
+        con = await super().acquire(timeout=timeout)
+        conns = _request_conns.get()
+        if conns is not None:
+            conns.append(con)
+        return con
+
+
+def _assert_request_conns_released(where):
+    conns = _request_conns.get()
+    if conns:
+        assert all(c.released for c in conns), f"read connection still held at {where}"
+
+
+@pytest.fixture(params=["direct", "pool"])
+def read_path(request, monkeypatch):
+    """Runs a ``ListOpportunities`` test on the injected-repo path or the budgeted pool path. Pool
+    mode routes the test's own fake repos through ``bc_routed`` and asserts, per request, exactly
+    one acquired conn, its statement order, and that it is released before enrichment and kicks."""
+    if request.param == "direct":
+        return "direct"
+    from app.handlers import servicer as servicer_mod
+
+    cls = servicer_mod.AnalysisServicer
+    orig_list = cls.ListOpportunities
+
+    @functools.wraps(orig_list)
+    async def list_opportunities(self, req, context):
+        if not isinstance(self._db_pool, _RequestTrackingPool):
+            self._db_pool = _RequestTrackingPool()
+        self._opps_repo_factory = bc_routed(self._opportunities_repo)
+        self._state_repo_factory = bc_routed(self._opportunity_compute_state_repo)
+        conns: list = []
+        token = _request_conns.set(conns)
+        try:
+            resp = await orig_list(self, req, context)
+        finally:
+            _request_conns.reset(token)
+        if self._opportunities_repo is not None and resp is not None:
+            assert len(conns) == 1, f"expected one budgeted read connection, got {len(conns)}"
+            assert_budgeted_read_order(conns[0], servicer_mod._DEFAULT_OPP_READ_DB_BUDGET_MS)
+        return resp
+
+    def _released_first(name):
+        orig = getattr(cls, name)
+
+        @functools.wraps(orig)
+        def checked(self, *args, **kwargs):
+            _assert_request_conns_released(name)
+            return orig(self, *args, **kwargs)
+
+        monkeypatch.setattr(cls, name, checked)
+
+    monkeypatch.setattr(cls, "ListOpportunities", list_opportunities)
+    for name in (
+        "_enrich_opportunities_live",
+        "_kick_opportunity_recompute",
+        "_kick_opportunity_retry",
+    ):
+        _released_first(name)
+    return "pool"

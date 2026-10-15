@@ -633,7 +633,7 @@ grep -n "metadata=propagation_meta" services/xstockstrat-analysis/app/handlers/s
 
 ### Step 8 — test: handler tests (AC-1, G3, G4, G5, G6 unit, G7, H5, O8, classification)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_list_opportunities_deadlines.py` — create
