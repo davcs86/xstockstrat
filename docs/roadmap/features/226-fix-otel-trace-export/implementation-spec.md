@@ -458,7 +458,7 @@ grep -n "__tests__/fixtures" services/xstockstrat-{ledger,identity,notify,config
 
 ### Step 8 — service: UI — register the hook from `src/`, OTLP/HTTP from env, traces-only, WARN diag
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/instrumentation.ts` — delete (via `git mv`)
@@ -520,7 +520,7 @@ grep -m1 "\[otel\] tracing enabled" "$LOG"   # macOS/Linux-portable (no GNU time
 
 ### Step 9 — test: UI — AC-2 hook registration, AC-1 (raw) export, AC-3 diag-logged 400
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/instrumentation.test.ts` — create
@@ -687,3 +687,13 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Actual**: under `--experimental-strip-types` (ledger/identity), Node emits a `(node:<pid>) [MODULE_TYPELESS_PACKAGE_JSON] Warning …` process warning through `console.error` — not OTel diag output.
 - **Disposition**: the shared `logged()` helper drops lines starting `(node:`; no OTel diag message was narrowed. All four services GREEN with the guard intact (the sync-detector fix is still guarded).
 
+### Deviation 3 — Step 9: plain console recorders instead of `vi.spyOn`
+- **Expected**: Step 9 instr. 2 — `vi.spyOn(console, 'error'|'warn'|'info')` installed before OTel loads.
+- **Actual**: vitest 5.0.3 clears spy call history before each test, so calls recorded during `beforeAll` (the `[otel] tracing enabled` line from `register()`) were wiped — a false RED on AC-2 (probe: `beforeAll calls=1` → `test calls=0`).
+- **Disposition**: the test installs plain recorder functions on `console.error/warn/info` (still before the first OTel load, restored in `afterAll`), which vitest's mock lifecycle does not touch. Assertions unchanged. Ledger: fails.md entry added.
+
+
+### Deviation 4 — Steps 8/9: commit attribution of the hook rename
+- **Expected**: the `git mv instrumentation.ts → src/instrumentation.ts` rename lands in Step 8's commit.
+- **Actual**: Step 8's `git add` errored on the already-renamed source path, so the staged 0-line rename was swept into Step 9's commit `31c0b1e` (already pushed); Step 8's content changes (import fix, `telemetry.ts`, `package.json`, lock) land in the following commit. Commit `31c0b1e` alone does not build (moved file still imports `./src/telemetry`).
+- **Disposition**: no force-push on the pushed branch; the integration PR squash-merges into `main-dev`, so no intermediate state reaches the trunk. All verification ran on the combined tree.

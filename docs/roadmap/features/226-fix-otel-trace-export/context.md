@@ -126,3 +126,14 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - RED (ledger strip-types, notify tsc→CJS): AC-1 "receiver got no /v1/traces request"; AC-3 "no logged 400 export failure". GREEN ×4: AC-1 + AC-3 pass incl. the no-OTel-`console.error` guard; suites 45/74/70/135 pass; c8 lines 98/98/92/87 % (≥ 40); lint + build exit 0.
 - Files modified: `services/xstockstrat-{ledger,identity,notify,config}/src/__tests__/telemetry.export.test.ts`
 - Deviations: Deviation 2 (exclude Node `(node:` runtime warnings from the console.error guard)
+
+### Step 8 — service: UI — hook from src/, OTLP/HTTP from env, traces-only, WARN diag [done]
+- `@opentelemetry/api ^1.9.0` added first (lock +3 lines, no churn); `git mv instrumentation.ts → src/instrumentation.ts` (import `./telemetry`, `NEXT_RUNTIME === 'nodejs'` guard kept); `telemetry.ts`: no-url exporter, fallback removed, lazy WARN diag (only when `OTEL_LOG_LEVEL` unset), `metricReaders: []` + `logRecordProcessors: []`.
+- Verification: frozen install ✓; file checks ✓; lint exit 0 (pre-existing warnings only); `next build` ✓ and `.next/server/instrumentation.js` exists (AC-2 build proof); **standalone boot with `OTEL_ENABLED=true` logs `[otel] tracing enabled → http://127.0.0.1:4318 (service=xstockstrat-ui)`** — the line absent from staging today (Open Risk 3 resolved, no fallback needed).
+- Files modified: `services/xstockstrat-ui/{instrumentation.ts → src/instrumentation.ts, src/telemetry.ts, package.json}`, `pnpm-lock.yaml`
+- Deviations: Deviation 4 (rename swept into the Step 9 commit `31c0b1e`; content in the Step 8 commit)
+
+### Step 9 — test: UI — AC-2, AC-1 (raw), AC-3 [done]
+- RED #1 (hook at root): `Cannot find module '/src/instrumentation'`. RED #2 (hook moved, telemetry unchanged): AC-2 ✓, AC-1 ✗ (5 s, no `/v1/traces` — verbatim url), AC-3 ✗ (no diag `console.error`). GREEN after Step 8(d): 3/3; full vitest 44 files / 231 tests pass; `src/lib` coverage gate holds.
+- Files modified: `services/xstockstrat-ui/src/instrumentation.test.ts`
+- Deviations: Deviation 3 (plain console recorders — vitest 5 clears spy history before each test)
