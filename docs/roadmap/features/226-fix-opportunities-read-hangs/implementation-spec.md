@@ -142,7 +142,7 @@ cd services/xstockstrat-config && pnpm run lint
 
 ### Step 2 — test: Bounds tests for the four keys (G8)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/setConfigScalarBounds.test.ts` — modify

@@ -92,3 +92,10 @@ Appended the four full-dotted timeout keys with their design §5 bounds and a 2-
 - Files modified: `services/xstockstrat-config/src/grpc/configServiceImpl.ts`
 - Deviations: none
 - TDD red: `pnpm test` with Step 2's cases before the registry entries → 9 fail (e.g. "999 must be rejected" for `opportunity.read_db_budget_ms`). Green: `pnpm run test:coverage` → 150/150 pass, lines 84.21%; `pnpm run lint` 0 errors. Node v22 locally (CI 24).
+
+### Step 2 — Bounds tests for the four keys (G8) [done]
+
+Added a feature-226 table over both key-column forms of every key (min/max accepted reach INSERT; min−1/max+1 rejected `INVALID_ARGUMENT` with the `[min, max]` message and no INSERT), plus an `intVal` case for the float agent key; `setConfig` gained an optional `namespace` arg defaulting to `NS`. Full-dotted marketdata form added alongside the specced stripped one.
+- Files modified: `services/xstockstrat-config/src/__tests__/setConfigScalarBounds.test.ts`
+- Deviations: none
+- TDD red (before Step 1): 9 fail — every out-of-range case accepted. Green: `pnpm run test:coverage && pnpm run lint` → 150/150, c8 lines 84.21% (≥40), lint 0 errors.
