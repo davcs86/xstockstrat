@@ -3,10 +3,13 @@ pytest conftest: add the shared proto stubs to sys.path so that
 `from gen.xxx.v1 import ...` works in tests without a running container.
 """
 
+import asyncio
 import pathlib
 import sys
 import types
 from unittest.mock import AsyncMock, MagicMock
+
+import asyncpg
 
 
 def _setup_gen_path() -> None:
@@ -96,3 +99,146 @@ class RecordingStub:
 
     def of(self, method):
         return [c for c in self.calls if c[0] == method]
+
+
+class FakeTx:
+    """A fake unmanaged asyncpg transaction recording BEGIN READ ONLY / COMMIT / ROLLBACK into its
+    connection's ``log``; stall/raise injection is configured on the owning ``FakeConn``."""
+
+    def __init__(self, conn):
+        self._conn = conn
+
+    async def start(self):
+        await self._conn._hook("begin")
+        self._conn.log.append("BEGIN READ ONLY")
+
+    async def commit(self):
+        await self._conn._hook("commit")
+        self._conn.log.append("COMMIT")
+
+    async def rollback(self):
+        await self._conn._hook("rollback")
+        self._conn.log.append("ROLLBACK")
+
+
+class FakeConn:
+    """A fake asyncpg pool connection. ``stall`` names stages that never return and ``raise_on``
+    maps a stage to the exception it raises; stages: begin, commit, rollback, set_local, fetch,
+    fetchval, fetchrow, terminate. ``detached`` makes every method raise ``InterfaceError``, as a
+    proxy does once asyncpg has released it (``pool.terminate()`` or a lost connection)."""
+
+    def __init__(self, *, stall=(), raise_on=None, detached=False, closed=False):
+        self.log: list[str] = []
+        self.stall = set(stall)
+        self.raise_on = dict(raise_on or {})
+        self.detached = detached
+        self.closed = closed
+        self.terminated = 0
+        self.released = False
+
+    def _check_detached(self):
+        if self.detached:
+            raise asyncpg.InterfaceError("cannot call Connection method: it has been released")
+
+    async def _hook(self, stage):
+        self._check_detached()
+        exc = self.raise_on.get(stage)
+        if exc is not None:
+            raise exc
+        if stage in self.stall:
+            await asyncio.Event().wait()
+
+    def transaction(self, readonly=False):
+        assert readonly, "the read DB phase must open a READ ONLY transaction"
+        return FakeTx(self)
+
+    async def execute(self, sql, *args):
+        await self._hook("set_local")
+        self.log.append(sql)
+
+    async def fetch(self, *args, **kwargs):
+        await self._hook("fetch")
+        self.log.append("fetch")
+        return []
+
+    async def fetchval(self, *args, **kwargs):
+        await self._hook("fetchval")
+        self.log.append("fetchval")
+        return None
+
+    async def fetchrow(self, *args, **kwargs):
+        await self._hook("fetchrow")
+        self.log.append("fetchrow")
+        return None
+
+    def is_closed(self):
+        self._check_detached()
+        return self.closed
+
+    def terminate(self):
+        self._check_detached()
+        exc = self.raise_on.get("terminate")
+        if exc is not None:
+            raise exc
+        self.terminated += 1
+
+
+class FakePool:
+    """A fake asyncpg pool handing out ``conns`` in order (a fresh ``FakeConn`` once exhausted).
+    ``acquire_stall`` never returns; ``acquire_raise`` / ``release_raise`` raise on that call.
+    ``release`` marks the connection ``released`` and appends "release" to its log."""
+
+    def __init__(self, *conns, acquire_stall=False, acquire_raise=None, release_raise=None):
+        self._pending = list(conns)
+        self.handed: list[FakeConn] = []
+        self.acquire_timeouts: list[float] = []
+        self.release_timeouts: list[float] = []
+        self.acquire_stall = acquire_stall
+        self.acquire_raise = acquire_raise
+        self.release_raise = release_raise
+
+    async def acquire(self, timeout=None):
+        self.acquire_timeouts.append(timeout)
+        if self.acquire_raise is not None:
+            raise self.acquire_raise
+        if self.acquire_stall:
+            await asyncio.Event().wait()
+        con = self._pending.pop(0) if self._pending else FakeConn()
+        self.handed.append(con)
+        return con
+
+    async def release(self, con, timeout=None):
+        self.release_timeouts.append(timeout)
+        if self.release_raise is not None:
+            raise self.release_raise
+        con.released = True
+        con.log.append("release")
+
+
+_BC_METHOD_FOR = {"count_for_user": "fetchval", "get": "fetchrow"}
+
+
+class _BcRoutedRepo:
+    def __init__(self, bc, repo):
+        self._bc = bc
+        self._repo = repo
+
+    def __getattr__(self, name):
+        target = getattr(self._repo, name)
+        if not callable(target):
+            return target
+
+        async def _routed(*args, **kwargs):
+            await getattr(self._bc, _BC_METHOD_FOR.get(name, "fetch"))(f"-- {name}")
+            return await target(*args, **kwargs)
+
+        return _routed
+
+
+def bc_routed(fake_repo):
+    """A repo factory ``bc -> wrapper``: each wrapper method issues exactly one ``bc.fetch`` /
+    ``fetchval`` / ``fetchrow`` on the ``BudgetedConn`` then delegates to ``fake_repo``. A ``None``
+    repo yields a factory returning ``None``, matching the direct path's absent state repo."""
+    if fake_repo is None:
+        return lambda bc: None
+    return lambda bc: _BcRoutedRepo(bc, fake_repo)

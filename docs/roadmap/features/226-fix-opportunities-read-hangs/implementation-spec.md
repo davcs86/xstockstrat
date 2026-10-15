@@ -421,7 +421,7 @@ cd services/xstockstrat-analysis && uv run ruff check . && uv run ruff format --
 
 ### Step 6 — test: `test_read_budget.py` (G1, G2 unit, G5, G7, classification) and the shared fakes
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/conftest.py` — modify (add the shared `FakePool` / `FakeConn` /

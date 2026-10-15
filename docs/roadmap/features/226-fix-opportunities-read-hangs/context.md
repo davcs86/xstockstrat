@@ -120,3 +120,10 @@ Created the module per design §1: the four named constants, D4 `_TRANSIENT`/`_N
 - Files modified: `services/xstockstrat-analysis/app/repositories/read_budget.py` (new)
 - Deviations: none
 - TDD: the paired behavioral test is Step 6 (later agent). Red here is the throwaway Verification import with the module absent → `ModuleNotFoundError: No module named 'app.repositories.read_budget'`; green: import ok, `ruff check` all passed, `ruff format --check` 110 files formatted. A throwaway (uncommitted) fake-driven smoke also showed: success → BEGIN/SET LOCAL/COMMIT + 1 release; stalls at BEGIN/fetch/COMMIT → `TimeoutError` (transient) + terminate=1; body `QueryCanceledError` → ROLLBACK + release, terminate=0.
+
+### Step 6 — `test_read_budget.py` (G1, G2 unit, G5, G7, classification) and the shared fakes [done]
+
+Added the shared `FakeTx`/`FakeConn`/`FakePool`/`bc_routed` fakes to `tests/conftest.py` (per-conn `log` incl. "release", stall/raise injection per stage, detached mode; `bc_routed(None)` yields a factory returning `None`) and 36 unit tests over success order, G1, G2, G5 (4 stall stages), external cancel, G7 (identity, log-before-rollback, detached, terminate/rollback raising, defensive closed branch), H5 and classification.
+- Files modified: `services/xstockstrat-analysis/tests/conftest.py`, `services/xstockstrat-analysis/tests/test_read_budget.py` (new)
+- Deviations: none. `bc_routed(repo)` is the factory itself (`bc -> wrapper`), so Step 8 assigns `svc._opps_repo_factory = bc_routed(repo)`.
+- TDD red (Step 5 code exists, so behavioral red against a stub): temporarily replaced `read_budget.py` with a naive unbudgeted stand-in exposing the same names (plain `acquire()`, no SET LOCAL/backstop, rollback+release on any error, `is_transient_db_error → False`), ran `uv run pytest tests/test_read_budget.py -q` → `28 failed, 8 passed` (G5 stalls tripped the 10s hang guard; e.g. "cleanup after begin skipped/failed (InterfaceError" absent), then restored via `git checkout` (never committed). Green: `36 passed`; full `pytest --cov=app --cov-fail-under=40` → 1181 passed, 87.88%; ruff check/format clean.
