@@ -64,8 +64,8 @@ export interface LibraryRef {
 // A short, deterministic close-price series used to seed the run cell and the
 // per-template sample inputs. Long enough that rolling windows produce output.
 const SAMPLE_CLOSE = [
-  44.5, 44.3, 44.8, 45.1, 44.9, 45.5, 46.0, 45.8, 46.2, 46.5, 45.9, 46.1, 46.8,
-  47.0, 46.5, 47.2, 47.8, 47.5, 48.1, 48.4, 47.9, 48.6, 49.0, 48.7,
+  44.5, 44.3, 44.8, 45.1, 44.9, 45.5, 46.0, 45.8, 46.2, 46.5, 45.9, 46.1, 46.8, 47.0, 46.5, 47.2,
+  47.8, 47.5, 48.1, 48.4, 47.9, 48.6, 49.0, 48.7,
 ];
 
 /**
@@ -168,13 +168,24 @@ export interface SandboxLimit {
 // Defaults from indicators.sandbox.* config keys (docs/runbooks/indicator-builder.md).
 export const SANDBOX_LIMITS: SandboxLimit[] = [
   { label: 'Time limit', value: '5 s', note: 'Per execution (indicators.sandbox.timeout_ms).' },
-  { label: 'Memory', value: '128 MiB', note: 'Hard cap (indicators.sandbox.memory_bytes).' },
+  {
+    label: 'Memory',
+    value: '128 MiB',
+    note: 'Headroom above the interpreter/library baseline (indicators.sandbox.memory_bytes).',
+  },
   { label: 'Network / disk', value: 'None', note: 'No filesystem or network access.' },
-  { label: 'print()', value: 'Captured', note: 'Output is returned as stdout, not a live console.' },
+  {
+    label: 'print()',
+    value: 'Captured',
+    note: 'Output is returned as stdout, not a live console.',
+  },
 ];
 
 /** Human-readable labels + badge intent for each sandbox exit reason. */
-export const EXIT_REASON: Record<SandboxExitReason, { label: string; tone: 'buy' | 'warning' | 'destructive' }> = {
+export const EXIT_REASON: Record<
+  SandboxExitReason,
+  { label: string; tone: 'buy' | 'warning' | 'destructive' }
+> = {
   [SandboxExitReason.UNSPECIFIED]: { label: 'Unknown', tone: 'warning' },
   [SandboxExitReason.SUCCESS]: { label: 'Success', tone: 'buy' },
   [SandboxExitReason.TIMEOUT]: { label: 'Timed out', tone: 'destructive' },

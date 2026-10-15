@@ -152,7 +152,7 @@ All values are sourced from `xstockstrat-config` namespace `indicators`:
 | Constraint | Config Key | Default |
 |---|---|---|
 | Execution timeout | `indicators.sandbox.timeout_ms` | `5000` ms |
-| Memory cap | `indicators.sandbox.memory_bytes` | `128 MiB` |
+| Memory headroom (above the interpreter/library baseline) | `indicators.sandbox.memory_bytes` | `128 MiB` |
 | Allowed imports | `indicators.sandbox.allowed_imports` | `numpy,pandas,math,statistics` |
 | Max concurrent evals | `indicators.sandbox.max_concurrent` | `4` |
 
@@ -218,7 +218,7 @@ resp = stub.ExecuteFormula(indicators_pb2.ExecuteFormulaRequest(
     formula_source=your_source,
     input_data=Struct(fields={"close": ListValue(...), "period": Value(number_value=3)}),
     timeout_ms_override=2000,  # short timeout for testing
-    memory_bytes_override=32 * 1024 * 1024,  # 32 MiB for testing
+    memory_bytes_override=64 * 1024 * 1024,  # 64 MiB formula headroom (above the baseline) for testing
 ))
 print("success:", resp.success)
 print("output:", dict(resp.output))
@@ -230,7 +230,7 @@ print("execution_ms:", resp.execution_ms)
 | Exit Reason | Cause | Fix |
 |---|---|---|
 | `TIMEOUT` | Exceeded `timeout_ms` | Optimise algorithm or increase limit via config |
-| `MEMORY_EXCEEDED` | Exceeded `memory_bytes` | Reduce data size or increase limit via config |
+| `MEMORY_EXCEEDED` | Exceeded the `memory_bytes` headroom (incl. an OpenBLAS allocation abort) | Reduce data size or increase limit via config |
 | `IMPORT_BLOCKED` | Blocked import used | Use only allowed imports |
 | `RUNTIME_ERROR` | Python exception | Fix formula logic |
 
@@ -243,8 +243,8 @@ To adjust sandbox limits for all formulas, use the config rollout process (`docs
 ```json
 {
   "changes": [
-    { "namespace": "indicators", "key": "sandbox.timeout_ms", "value": { "int_val": 10000 } },
-    { "namespace": "indicators", "key": "sandbox.memory_bytes", "value": { "int_val": 268435456 } }
+    { "namespace": "indicators", "key": "indicators.sandbox.timeout_ms", "value": { "int_val": 10000 } },
+    { "namespace": "indicators", "key": "indicators.sandbox.memory_bytes", "value": { "int_val": 268435456 } }
   ],
   "author": "platform-team",
   "reason": "Increase limits for complex ML formulas"

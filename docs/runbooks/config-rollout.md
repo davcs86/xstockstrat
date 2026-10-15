@@ -153,9 +153,9 @@ For related changes across multiple keys, use the `RolloutConfig` Connect-RPC en
 curl -X POST http://xstockstrat-config:8060/xstockstrat.config.v1.ConfigService/RolloutConfig
 {
   "changes": [
-    { "namespace": "indicators", "key": "sandbox.timeout_ms",    "value": { "int_val": 10000 } },
-    { "namespace": "indicators", "key": "sandbox.memory_bytes",  "value": { "int_val": 268435456 } },
-    { "namespace": "indicators", "key": "sandbox.allowed_imports", "value": { "string_val": "numpy,pandas,math,statistics,scipy" } }
+    { "namespace": "indicators", "key": "indicators.sandbox.timeout_ms",    "value": { "int_val": 10000 } },
+    { "namespace": "indicators", "key": "indicators.sandbox.memory_bytes",  "value": { "int_val": 268435456 } },
+    { "namespace": "indicators", "key": "indicators.sandbox.allowed_imports", "value": { "string_val": "numpy,pandas,math,statistics,scipy" } }
   ],
   "author": "platform-team",
   "reason": "Increase sandbox limits for ML formulas — TICKET-5678"
