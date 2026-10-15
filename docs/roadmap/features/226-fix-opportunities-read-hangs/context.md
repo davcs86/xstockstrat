@@ -76,3 +76,12 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - Step 3: join `<-done` only when the prevClose goroutine was started. Step 4 and Step 12: RED is structural before the paired code step; use the skeleton-first approach (P-06). The patched `_agent_policy` must be async. — [x] resolved pre-execution (spec patched, operator choice 2026-10-14)
   - Step 10: build the real servicer via `from tests.test_analysis_servicer import make_servicer` (precedent: test_opportunity_refresh.py:15). Step 9: document `XSTOCKSTRAT_PG_BIN` in analysis CLAUDE.md § Running Tests. — [x] resolved pre-execution (spec patched, operator choice 2026-10-14)
 - Overlap findings: none (CLEAN). 215 is merged; its only open item is the Step 26 measurement, which changes no code.
+
+## Session 2026-10-15 — sdd-execute sequential (entry)
+
+- The operator agreed to sequential mode and approved the 13-step plan. No re-spec: origin/main-dev @ 08d63011 was merged
+  into the branch (5b7943ea), and the spec's anchors match it.
+- Tooling setup (steps 1–13): go1.27.0 ✓ · golangci-lint v2.14.0 ✓ (the CI version, /tmp/claude-0/gl-v2.14.0; the
+  /usr/local/bin v2.5.0 cannot read Go 1.27 export data) · uv ✓ (analysis and agent synced) · ruff/pytest ✓ (uv) ·
+  pnpm 9.15.9 ✓ with config deps installed · node v22.22.0 (pinned 24; CI runs 24) · PostgreSQL 16 binaries ✓
+  (test-scoped, D3).
