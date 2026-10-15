@@ -216,3 +216,10 @@ analysis `CLAUDE.md`: the Decide-surface memo sentence now says live quote only 
   @AC-2 → `services/xstockstrat-agent/acceptance/fix-opportunities-read-hangs.feature`; @AC-3 →
   `services/xstockstrat-marketdata/acceptance/fix-opportunities-read-hangs.feature`. All are tagged `@feature-227`.
   No dedup skips.
+
+## Session 2026-10-15 — sdd-execute (sequential) summary
+**Steps this session**: 1–13
+**Progress**: 13 done / 13 total
+**Stopped at**: all complete. Integration PR https://github.com/davcs86/xstockstrat/pull/1247 is open to main-dev, with CI watched.
+**Next**: merge #1247; then, after the dev deploy, confirm staging `list_opportunities` and which dependency stalls
+(from the new warnings), then run feature 215 Step 26.
