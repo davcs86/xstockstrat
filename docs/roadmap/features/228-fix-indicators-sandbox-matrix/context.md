@@ -102,3 +102,18 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   the #1247 adjacent-row overlap noted at review.
 - The runbook examples' bare `sandbox.*` keys switch to full-dotted keys for all indicators keys in those blocks
   (C-10), not only `memory_bytes`.
+
+## Session 2026-10-15 — sdd-review impl-spec (advisory)
+
+- **Result:** 0 failures, 5 warnings, no Floor breach (advisory). All findings were resolved before execution by
+  editing the spec, since no step had started:
+  - [x] Step 1: E501. The dictated comment/docstring text is rewrapped to ≤ 100 cols. Verification uses
+    `uv run --no-sync ruff`.
+  - [x] Steps 1–4: grep "expect none" checks became `! grep`, so they exit 0 when the text is absent.
+  - [x] Step 3: a note that existing `/insights` E2E coverage still applies (B3).
+  - [x] Step 4: re-anchor the findings rows at `:10`, `:20` and `:22`. Teardown fixes are limited to the step's
+    Files, and other drift goes to the Deviation Log (F-08). The migration check is
+    `git diff origin/main-dev...HEAD` (F-01).
+  - [x] Dev smoke #2: the substitution (96 MiB at the default headroom) is accepted by the orchestrator.
+    Operator confirmation is surfaced in the session summary (P-03).
+- **Overlap:** CLEAN. This feature no longer edits the root findings file, so there is no overlap with #1247.

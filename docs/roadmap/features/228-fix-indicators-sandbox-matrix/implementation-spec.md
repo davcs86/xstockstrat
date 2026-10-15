@@ -91,7 +91,8 @@ order behind FR-1 and FR-3. It is not a scenario test.
        `np.ones(12 * 1024 * 1024)` (96 MiB) must **succeed**.
      - It fails today (measured this session: `memory_exceeded` at the 128 MiB absolute cap, because baseline + 96
        > 128) and passes only under headroom semantics.
-     - The operator confirms or replaces this substitution at review.
+     - The operator confirms or replaces this substitution at review. Accepted by the orchestrator 2026-10-15
+       (`test_formula` cannot set `memory_bytes_override`); operator confirmation surfaced in the session summary.
   3. Check the container envelope on `basic-s` (≈ 812–864 MiB worst case at `max_concurrent=4`).
   4. Check whether production has a live full-dotted `indicators.sandbox.memory_bytes` row.
 - **Overlap note.** The product-spec review flagged that PR #1247 (227) also edits the root
@@ -143,7 +144,7 @@ order behind FR-1 and FR-3. It is not a scenario test.
    failure per test, and § Step Dependencies for the venv precondition).
 2. Add a module-level constant directly after `_SANDBOX_GID` (`:57`):
    ```python
-   # Fail-closed: a missing/unparseable VmData raises (StopIteration/ValueError) before the formula runs.
+   # Fail-closed: no parseable VmData line raises StopIteration/ValueError before the formula runs.
    _VMDATA_PROBE = (
        "with open('/proc/self/status') as _st:\n"
        "    _baseline = next(int(_l.split()[1]) * 1024 for _l in _st if _l.startswith('VmData:'))\n"
@@ -161,8 +162,8 @@ order behind FR-1 and FR-3. It is not a scenario test.
 4. Replace the rlimit comment and `RLIMIT_DATA` block at `:274-278` with the following. The comment stays at most 2
    lines (root CLAUDE.md How to Act #5).
    ```
-   # RLIMIT_DATA (not RLIMIT_AS — INDICATORS-2) = pre-lockdown VmData baseline + memory_bytes headroom, so the
-   # formula budget is host-independent. CPU/NPROC derive from config; FSIZE=0/NOFILE=64 are jail constants.
+   # RLIMIT_DATA (not RLIMIT_AS, INDICATORS-2) = pre-lockdown VmData baseline + memory_bytes headroom.
+   # CPU/NPROC derive from config; FSIZE=0/NOFILE=64 are jail constants.
    {vmdata_probe}
    if {memory_bytes} > 0:
        _cap = min(_baseline + {memory_bytes}, 2**63 - 1)
@@ -175,7 +176,7 @@ order behind FR-1 and FR-3. It is not a scenario test.
 5. Re-insert the input parse immediately after `resource.setrlimit(resource.RLIMIT_NOFILE, (64, 64))` (`:282`) and
    before the `# seccomp-BPF allowlist` comment (`:284`):
    ```
-   # Parsed after the rlimits so request payloads count against the formula's headroom, not the baseline.
+   # Parsed after the rlimits so payloads count against the formula headroom, not the baseline.
    data = json.loads({input_json!r})
    params = json.loads({params_json!r})
    ```
@@ -189,8 +190,13 @@ order behind FR-1 and FR-3. It is not a scenario test.
    ```
    In the classification (`:395`), replace `elif "MemoryError" in stderr:` with
    `elif any(m in stderr for m in _MEMORY_EXHAUSTED_MARKERS):`. The `import_blocked` check stays first (design §4).
-8. Update the module docstring line at `:22` to read `Expanded rlimits: RLIMIT_DATA (memory: measured pre-lockdown
-   VmData baseline + memory_bytes headroom), RLIMIT_CPU …`. Keep `:23-24` unchanged.
+8. Rewrap `:22-24` to ≤100 cols:
+   ```
+     - Expanded rlimits: RLIMIT_DATA (memory: measured pre-lockdown VmData baseline + memory_bytes
+       headroom), RLIMIT_CPU (CPU backstop), RLIMIT_NPROC (fork-bomb), RLIMIT_FSIZE=0 (no file
+       writes), RLIMIT_NOFILE. RLIMIT_AS is deliberately NOT used (it rejects numpy/pandas virtual
+       reservations — INDICATORS-2).
+   ```
 9. Do **not** touch `servicer.py`, `watcher.py`, `_SECCOMP_ALLOW`, `_sandbox_env`, the NPROC/CPU/FSIZE/NOFILE
    values, or the eager-import loop (`:215-226`). This preserves `@AC-1/@AC-2/@AC-5 @feature-209` and
    `@AC-4 @feature-173`.
@@ -200,7 +206,7 @@ order behind FR-1 and FR-3. It is not a scenario test.
 cd services/xstockstrat-indicators
 grep -n "_VMDATA_PROBE\|vmdata_probe\|_cap = min(_baseline\|RLIMIT_DATA, (_cap, _cap)\|_MEMORY_EXHAUSTED_MARKERS" app/services/sandbox.py
 # expect: constant def + format kwarg + template placeholder; the clamp; the setrlimit; marker const + its use
-grep -c "RLIMIT_DATA, ({memory_bytes}, {memory_bytes})" app/services/sandbox.py   # expect 0
+! grep -q "RLIMIT_DATA, ({memory_bytes}, {memory_bytes})" app/services/sandbox.py   # expect absent
 uv run --no-sync python - <<'EOF'
 from app.services.sandbox import _SANDBOX_WRAPPER as w
 order = ["import pyseccomp", "{vmdata_probe}", "setrlimit(resource.RLIMIT_DATA", "json.loads(", "_flt.load()", "exec("]
@@ -208,7 +214,7 @@ idx = [w.index(s) for s in order]
 assert idx == sorted(idx), list(zip(order, idx))
 print("wrapper order OK")
 EOF
-ruff check . && ruff format --check .
+uv run --no-sync ruff check . && uv run --no-sync ruff format --check .
 ```
 
 ---
@@ -312,7 +318,7 @@ uv run --no-sync pytest tests/test_sandbox_isolation.py tests/test_sandbox.py -q
 for i in 1 2 3 4 5; do uv run --no-sync pytest "tests/test_sandbox_isolation.py::TestNumericParityGolden" "tests/test_sandbox_isolation.py::TestMemoryHeadroom" -q -p no:cacheprovider || exit 1; done
 uv run --no-sync pytest --cov=app --cov-fail-under=50
 ruff check . && ruff format --check .
-grep -n "conftest" tests/test_sandbox_isolation.py   # C-13: expect none (single-file consumers, verdict recorded above)
+! grep -n "conftest" tests/test_sandbox_isolation.py   # C-13: expect none (single-file consumers, verdict recorded above)
 ```
 (If the session runs as root under a `0700` path, invoke pytest with a world-traversable venv python, per
 § Step Dependencies.)
@@ -336,7 +342,7 @@ grep -n "conftest" tests/test_sandbox_isolation.py   # C-13: expect none (single
 - Product spec § Consumer Surface(s): the note becomes "Headroom above the interpreter/library baseline
   (indicators.sandbox.memory_bytes)". The value stays `128 MiB`.
 
-**TDD**: `N/A (UI copy string only — no behaviour or logic; xstockstrat-ui is exempt from C-08 pairing and vitest coverage is scoped to src/lib/**)`
+**TDD**: `N/A (UI copy string only — no behaviour or logic; xstockstrat-ui is exempt from C-08 pairing and vitest coverage is scoped to src/lib/**)`. Existing `/insights` formula-editor E2E coverage still renders `SANDBOX_LIMITS` unchanged in shape; no Playwright change is required (copy-only, no test asserts the note).
 
 **Covers**: —
 
@@ -349,7 +355,7 @@ grep -n "conftest" tests/test_sandbox_isolation.py   # C-13: expect none (single
 ```bash
 cd services/xstockstrat-ui
 grep -n "Headroom above the interpreter/library baseline (indicators.sandbox.memory_bytes)." src/components/insights/formulaReference.ts   # expect :171
-grep -rn "Hard cap" src   # expect nothing
+! grep -rn "Hard cap" src   # expect nothing
 [ -d node_modules ] || pnpm install --frozen-lockfile
 pnpm run lint && pnpm exec tsc --noEmit && pnpm exec prettier --check src/components/insights/formulaReference.ts
 ```
@@ -439,6 +445,8 @@ pnpm run lint && pnpm exec tsc --noEmit && pnpm exec prettier --check src/compon
      - **Wording drift.** The durable suite `acceptance/indicators-sandbox-os-isolation.feature:29` says
        "address-space for the allocation", but the cap is `RLIMIT_DATA` (data segment). Record only; C-16 forbids
        hand-editing the durable suite. Status: **open**.
+   - Re-anchor the `:10` resolved row to the post-Step-1 docstring and RLIMIT comment lines, and the `:20`/`:22`
+     open-question anchors to their current code (re-grep; never guess).
 4. `docs/runbooks/indicator-builder.md`:
    - `:155`: label "Memory headroom (above the interpreter/library baseline)".
    - `:221`: change to `memory_bytes_override=64 * 1024 * 1024,  # 64 MiB formula headroom (above the baseline) for testing`.
@@ -451,17 +459,20 @@ pnpm run lint && pnpm exec tsc --noEmit && pnpm exec prettier --check src/compon
    above plus `app/services/sandbox.py`, and fix the grounded drift it reports. If the plugin is unavailable,
    re-read every touched context file against the post-Step-1 code by hand. Then record in the integration PR body
    both that the plugin was unavailable and the manual reconciliation performed (`fails.md:670`).
+   Fix only drift inside this step's **Files**; drift in any other file is recorded in the Deviation Log and that
+   file added to **Files** (with operator acknowledgement) before staging. The root
+   `docs/context-constitution-findings.md` stays untouched.
 
 **Verification**:
 ```bash
 grep -n "headroom" services/xstockstrat-indicators/CLAUDE.md services/xstockstrat-indicators/docs/context-constitution.md docs/runbooks/indicator-builder.md
 grep -n "VmData" services/xstockstrat-indicators/CLAUDE.md services/xstockstrat-indicators/docs/context-constitution.md
 grep -n "OpenBLAS error: Memory allocation still failed" services/xstockstrat-indicators/docs/context-constitution.md services/xstockstrat-indicators/docs/context-constitution-findings.md
-grep -n "\"key\": \"sandbox\." docs/runbooks/indicator-builder.md docs/runbooks/config-rollout.md   # expect nothing
+! grep -n "\"key\": \"sandbox\." docs/runbooks/indicator-builder.md docs/runbooks/config-rollout.md   # expect nothing
 grep -n "Inert indicators seeds\|D-33\|address-space" services/xstockstrat-indicators/docs/context-constitution-findings.md
 # every sandbox.py:<n> anchor in the touched docs must resolve to the cited code after Step 1:
 grep -on "sandbox.py:[0-9-]*" services/xstockstrat-indicators/docs/context-constitution.md services/xstockstrat-indicators/docs/context-constitution-findings.md
-git diff --stat -- services/xstockstrat-config/migrations   # expect empty (F-01)
+git diff --stat origin/main-dev...HEAD -- services/xstockstrat-config/migrations   # expect empty (F-01)
 ```
 
 ---
