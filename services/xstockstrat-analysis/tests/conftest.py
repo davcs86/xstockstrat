@@ -6,8 +6,14 @@ pytest conftest: add the shared proto stubs to sys.path so that
 import asyncio
 import contextvars
 import functools
+import glob
+import os
 import pathlib
+import pwd
+import shutil
+import subprocess
 import sys
+import tempfile
 import types
 from unittest.mock import AsyncMock, MagicMock
 
@@ -333,3 +339,93 @@ def read_path(request, monkeypatch):
     ):
         _released_first(name)
     return "pool"
+
+
+_PG_HOMEBREW_GLOBS = ("/opt/homebrew/opt/postgresql@*/bin", "/usr/local/opt/postgresql@*/bin")
+
+
+def _pg_version_key(bin_dir):
+    digits = "".join(ch for ch in pathlib.Path(bin_dir).parent.name if ch.isdigit())
+    return int(digits) if digits else 0
+
+
+def _pg_bin_dir():
+    """``$XSTOCKSTRAT_PG_BIN``, else ``pg_ctl`` on PATH, else the newest Debian/Homebrew install."""
+    override = os.environ.get("XSTOCKSTRAT_PG_BIN")
+    if override:
+        return override
+    on_path = shutil.which("pg_ctl")
+    if on_path:
+        return os.path.dirname(on_path)
+    for pattern in ("/usr/lib/postgresql/*/bin", *_PG_HOMEBREW_GLOBS):
+        found = [d for d in glob.glob(pattern) if os.path.exists(os.path.join(d, "initdb"))]
+        if found:
+            return max(found, key=_pg_version_key)
+    return None
+
+
+@pytest.fixture(scope="session")
+def local_pg():
+    """A throwaway PostgreSQL on a Unix socket for the session (``real_pg`` tests); yields its DSN.
+    Skips when it cannot start, except under ``CI=true``, where it fails instead."""
+
+    def _unavailable(reason):
+        if os.environ.get("CI") == "true":
+            pytest.fail(f"local_pg: {reason}")
+        pytest.skip(f"local_pg: {reason}")
+
+    bin_dir = _pg_bin_dir()
+    if bin_dir is None:
+        _unavailable("no PostgreSQL binaries found (set XSTOCKSTRAT_PG_BIN)")
+    # Under /tmp: the Unix-socket path must stay within the ~107-byte sun_path limit.
+    root = tempfile.mkdtemp(dir="/tmp", prefix="xss-pg-")
+    prefix = []
+    if os.geteuid() == 0:  # initdb refuses to run as root
+        try:
+            pwd.getpwnam("postgres")
+        except KeyError:
+            shutil.rmtree(root, ignore_errors=True)
+            _unavailable("running as root without a postgres user")
+        shutil.chown(root, "postgres")
+        prefix = ["runuser", "-u", "postgres", "--"]
+    pgdata = os.path.join(root, "data")
+    pg_ctl = os.path.join(bin_dir, "pg_ctl")
+
+    def _run(*cmd):
+        subprocess.run([*prefix, *cmd], check=True, capture_output=True, timeout=120)
+
+    try:
+        _run(
+            os.path.join(bin_dir, "initdb"),
+            "-D",
+            pgdata,
+            "-U",
+            "postgres",
+            "-A",
+            "trust",
+            "--no-sync",
+        )
+        _run(
+            pg_ctl,
+            "-D",
+            pgdata,
+            "-l",
+            os.path.join(root, "postgres.log"),
+            "-w",
+            "start",
+            "-o",
+            f"-c fsync=off -c listen_addresses='' -k {root}",
+        )
+    except (OSError, subprocess.SubprocessError) as e:
+        stderr = getattr(e, "stderr", b"") or b""
+        shutil.rmtree(root, ignore_errors=True)
+        _unavailable(f"PostgreSQL did not start ({e}): {stderr.decode(errors='replace')[-500:]}")
+    try:
+        yield f"postgresql:///postgres?host={root}&user=postgres"
+    finally:
+        subprocess.run(
+            [*prefix, pg_ctl, "-D", pgdata, "-m", "immediate", "stop"],
+            capture_output=True,
+            timeout=60,
+        )
+        shutil.rmtree(root, ignore_errors=True)

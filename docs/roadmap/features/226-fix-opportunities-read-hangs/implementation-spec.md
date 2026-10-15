@@ -736,7 +736,7 @@ grep -n "from .conftest\|conftest\|FakePool\|bc_routed" services/xstockstrat-ana
 
 ### Step 9 — test: the `local_pg` fixture, the `real_pg` marker, and the CI PostgreSQL step (D3)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/conftest.py` — modify (session-scoped `local_pg` fixture)
