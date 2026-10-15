@@ -599,7 +599,7 @@ Runs without `start`/`end` use the rolling default window. All runs were `SIZING
   - None of the three is observable at Info level, and the gate drop is silent.
 - **Logs:** reading the run logs would tell these apart. The DO log URL carries an access token, and fetching it was denied in this session (credential materialization). DO Insights log search returned no App Platform lines.
 - Staging config is consistent with the code. `get_config("marketdata")` shows `marketdata.fmp.enabled=true` and `marketdata.fmp.daily_request_cap=250`. The secret rows `fmp.api_key`/`finnhub.api_key`/`alpaca.api_key` match `cmd/server/main.go` `resolveSecret` key strings, so this is not a CONFIG-9 mismatch.
-- **Defect filed:** `docs/reports/2026-10-15-etf-flag-fill-never-labels-defect.md` (open, untriaged).
+- **Defect filed:** `docs/reports/2026-10-15-etf-flag-fill-never-labels-defect.md`, triaged to feature `230-fix-etf-flag-fill`.
 
 **(b) `run_backtest(fundamentals_macd_blend, ["AAPL"])`: guard PASS, "trades" MISMATCH**
 - `backtest_id` `922516e2-8aa8-448c-bb30-6785820c733f`
@@ -628,3 +628,26 @@ Runs without `start`/`end` use the rolling default window. All runs were `SIZING
 ### Outcome
 
 `launched` is blocked (instruction 3). Mismatches (a)–(e) are logged in the Deviation Log. Step 26 stays `blocked` until the operator accepts or resolves each one.
+
+### Follow-up 2026-10-15 — operator dispositions and (c)/(e) investigation
+
+**Operator dispositions:**
+- (b) and (d) accepted as environmental.
+- (c) and (e) to be addressed.
+- The ETF-label defect was triaged to feature `230-fix-etf-flag-fill`.
+
+**(c) investigation:**
+
+| backtest_id | strategy | symbol | window | status | diagnostics |
+|---|---|---|---|---|---|
+| `d7892362-deb7-4c2b-88a9-abf679b7dfb1` | `squeeze_breakout_trend` | SCHD | 2026-01-01 – 2026-09-30 | `BACKTEST_STATUS_OK` | `[]` (0 trades, no gaps, no warnings) |
+| `df5d966f-f9cb-4e77-b095-6af56908f36a` | `squeeze_breakout_trend` | AAPL | 2026-01-01 – 2026-09-30 | `BACKTEST_STATUS_OK` | `[]` (0 trades, no gaps, no warnings) |
+
+- `query_bars("SCHD")` returns 3 bars (2026-10-13..15) and an empty `next_page_token`.
+- Both custom formulas succeed standalone via `test_formula`; the squeeze percentile returned `SANDBOX_EXIT_REASON_SUCCESS` in 2495 ms.
+- **Conclusion:** the empty diagnostics are a strategy-wide analysis defect, not a 215 guard issue. `servicer.py:1127-1132` drops symbols on any RPC error or exception, and the status gate reports `OK` regardless. Filed as `docs/reports/2026-10-15-backtest-silent-symbol-skip-reports-ok-defect.md` (SEV-2, open).
+
+**(e) investigation:**
+- `StrategyScore.evidence_symbols` is an `int32` count (`packages/proto/analysis/v1/analysis.proto:255`), not a symbol list. The step's wording ("excludes SCHD from `evidence_symbols`") cannot be checked as written.
+- No UI page invokes `ScoreStrategy`. Only the BFF forwarder exists (`services/xstockstrat-ui/src/lib/insightsBff.ts:40`). The strategy page shows only the count.
+- The operator's choice of how to verify is pending.

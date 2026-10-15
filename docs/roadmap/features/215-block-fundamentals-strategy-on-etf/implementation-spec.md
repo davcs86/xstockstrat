@@ -1646,25 +1646,32 @@ The scenario's other Thens are fully covered (Steps 22/24).
 - an empty FMP profile.
 
 The cause is unverified: run logs were not readable from the session.
-**Disposition**: BLOCKS `launched`. Defect `docs/reports/2026-10-15-etf-flag-fill-never-labels-defect.md`, awaiting operator triage.
+**Disposition**: BLOCKS `launched`. Defect `docs/reports/2026-10-15-etf-flag-fill-never-labels-defect.md`, triaged to feature `230-fix-etf-flag-fill` (operator, 2026-10-15). Re-run (a) after 230 deploys.
 
 ### Deviation: Step 26 (b) — AAPL does not trade
 **Spec said**: AAPL trades and gets no reason 5.
 **Actual**: `NO_TRADE_REASON_ENTRY_NEVER_TRUE` with 0 trades. `fscore.composite` is 0.333–0.393, below the 0.5 entry.
 **Reason**: Environmental. This is the strategy's entry threshold against staging data; the guard behaved correctly.
-**Disposition**: BLOCKS `launched` pending operator acceptance. Proposed: accept the guard half as the 215 proof.
+**Disposition**: ACCEPTED as environmental by the operator (2026-10-15). The guard half (no reason 5) is the 215 proof; the no-trade is strategy calibration, out of scope.
 
 ### Deviation: Step 26 (c) — `squeeze_breakout_trend` on SCHD has no diagnostics
 **Spec said**: The run evaluates normally.
 **Actual**: `BACKTEST_STATUS_OK` with 0 trades and `diagnostics: []`. An explicit-window retry timed out.
 **Reason**: Not refused, which satisfies the guard side. Normal evaluation is unconfirmed.
-**Disposition**: BLOCKS `launched` pending operator acceptance or a rerun.
+**Investigation (2026-10-15, operator asked to address)**:
+- **Rerun.** On an explicit 2026-01-01..09-30 window the result is the same: `d7892362-deb7-4c2b-88a9-abf679b7dfb1` is `OK` with `diagnostics: []`.
+- **AAPL control.** `squeeze_breakout_trend` on AAPL (`df5d966f-f9cb-4e77-b095-6af56908f36a`) gives the same `OK` with `diagnostics: []`, even though AAPL has ≥ 501 bars. The symptom is strategy-wide, not SCHD-specific, and unrelated to 215's guard.
+- **Bars.** SCHD has only 3 stored daily bars (2026-10-13..15).
+- **Formulas.** Both custom formulas succeed standalone in the staging sandbox.
+- **Root contract defect.** `servicer.py:1127-1132` drops a symbol on any `grpc.RpcError`/`Exception` with no row, and the status gate (`:1235-1242`) cannot see it. Some upstream RPC failure is hidden behind a false `OK`. Filed as `docs/reports/2026-10-15-backtest-silent-symbol-skip-reports-ok-defect.md` (SEV-2, open).
+
+**Disposition**: 215's guard side holds: SCHD is not refused by a technical-only strategy. The "evaluates normally" half cannot be shown until that defect is fixed. Proposed: accept (c) as not-215, with the defect tracked separately.
 
 ### Deviation: Step 26 (d) — SCHD not in `fundamentals_macd_blend` universe
 **Spec said**: The SCHD opportunity row shows `fundamentals_unavailable: true`.
 **Actual**: SCHD's only row is position-seeded with `fundamentals_unavailable: false`. No queue row has the flag.
 **Reason**: Environmental. Exercising the guard requires watchlisting SCHD against the strategy, a staging mutation not made in this session.
-**Disposition**: BLOCKS `launched` pending operator choice: add SCHD to the strategy's universe and re-check, or accept.
+**Disposition**: ACCEPTED as environmental by the operator (2026-10-15). The skip-row behavior is covered by the Step 22 tests and the Step 24 e2e.
 
 ### Deviation: Step 26 (e) — `ScoreStrategy` not reachable via MCP
 **Spec said**: A manual refresh excludes SCHD from `evidence_symbols`.
