@@ -106,6 +106,26 @@ without this convention, both look identical (fails.md 2026-07-01).
 
 Append-only log — one entry per feature that registered new keys. Newest first. Don't edit past entries; superseding a key's behavior gets a new entry, not a rewrite of the old one.
 
+### feature 227 — fix-opportunities-read-hangs (xstockstrat-analysis / xstockstrat-marketdata / xstockstrat-agent / xstockstrat-config)
+
+Adds **4** non-secret timeout keys that nest the `ListOpportunities` read path's deadlines (each hop's
+bound fits inside its caller's). Each is a full-dotted `SCALAR_BOUNDS_REGISTRY` entry in
+`xstockstrat-config` (`configServiceImpl.ts`), enforced at `SetConfig` even on `create_key=true`.
+**D2 seeding waiver:** all four are **unseeded** (consumed-with-default) — a conscious deviation from
+feature 184's convention of seeding `analysis.opportunity.*` keys. A `≤ 0` (or non-finite) value reads
+as the default; the three `int` keys must be stored as `int` (another `value_type` reads as the default).
+
+| Key | Type | Default | Bounds | Notes |
+|---|---|---|---|---|
+| `analysis.opportunity.read_db_budget_ms` | int | `20000` | `[1000,20000]` | Request-scoped budget for the read DB phase (acquire timeout + per-statement `SET LOCAL statement_timeout`). |
+| `analysis.opportunity.live_enrich_timeout_ms` | int | `3000` | `[500,4000]` | Deadline on the read-time `BatchGetLatestPrice` enrichment; on expiry rows are served unenriched. |
+| `marketdata.price.batch_timeout_ms` | int | `2500` | `[500,2500]` | Budget for the detached `BatchGetLatestPrice` singleflight closure. |
+| `agent.opportunities.read_timeout_seconds` (stored ns `agent`, key `opportunities.read_timeout_seconds`) | float (int accepted) | `40` | `[30,55]` | `list_opportunities` tool deadline on analysis `ListOpportunities`; its policy read is capped by the fixed 3s `_POLICY_READ_TIMEOUT_S`. |
+
+Supersedes two feature-184 rows below: `analysis.opportunity.sparkline_bars` is **inert** (no reader —
+the server-side enrichment fetches no bars), and `analysis.opportunity.live_enrich_ttl_seconds`' code
+default is `20` (migration `028` seeds `10`).
+
 ### feature 224 — private-by-default-templates (`xstockstrat-config` / `xstockstrat-ingest`)
 
 **Registers no new keys.** Changes the feature-166 secret key family: an `mcp_client` source's bearer
@@ -266,7 +286,7 @@ is a noted follow-up, next free config NNN `027`).
 |---|---|---|---|
 | `analysis.readiness.stale_after_seconds` | int | `30` | FR-1 readiness cache staleness window. Server-bounded `[0, 86399]` (`< 86400` so a served-stale verdict never crosses a daily-bar boundary). `0` = always stale. |
 | `analysis.opportunity.empty_recompute_ttl_seconds` | int | `30` | FR-3 empty-universe recompute suppression window. No-seed. |
-| `analysis.opportunity.live_enrich_ttl_seconds` | int | `10` | FR-4 TTL for the success-only per-symbol live-quote/sparkline memo. `0` disables the memo. No-seed. |
+| `analysis.opportunity.live_enrich_ttl_seconds` | int | `20` | FR-4 TTL for the success-only per-symbol live-quote/sparkline memo. `0` disables the memo. Code default `20`; seeded `10` by config migration `028` (feature 184). |
 
 ### feature 176 — analysis-concurrency-offload (`xstockstrat-analysis`)
 

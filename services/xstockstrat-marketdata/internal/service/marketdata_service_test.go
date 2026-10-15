@@ -1320,10 +1320,31 @@ func (*fakeBatchBarsSource) GetLatestTradesMulti(context.Context, []string) (map
 // fakeBatchPriceSource implements source.DataSourceClient + source.MultiSymbolSource for
 // BatchGetLatestPrice tests. Returns trades from the pre-seeded map; absent symbols are omitted.
 type fakeBatchPriceSource struct {
-	trades map[string]*source.Trade
+	trades     map[string]*source.Trade
+	multiErr   error           // returned with a nil map instead of trades
+	multiBlock bool            // multi-fetch blocks until ctx is done
+	multiGate  <-chan struct{} // multi-fetch blocks until closed (or ctx is done)
+	perSymbol  func(ctx context.Context, symbol string) (float64, time.Time, error)
 }
 
-func (f *fakeBatchPriceSource) GetLatestTradesMulti(_ context.Context, symbols []string) (map[string]*source.Trade, error) {
+func (f *fakeBatchPriceSource) GetLatestTradesMulti(ctx context.Context, symbols []string) (map[string]*source.Trade, error) {
+	if f.multiGate != nil {
+		select {
+		case <-f.multiGate:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+	if f.multiBlock {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if f.multiErr != nil {
+		return nil, f.multiErr
+	}
 	out := make(map[string]*source.Trade, len(symbols))
 	for _, s := range symbols {
 		if t, ok := f.trades[s]; ok {
@@ -1331,6 +1352,18 @@ func (f *fakeBatchPriceSource) GetLatestTradesMulti(_ context.Context, symbols [
 		}
 	}
 	return out, nil
+}
+func (f *fakeBatchPriceSource) GetLatestTrade(ctx context.Context, symbol string) (float64, time.Time, error) {
+	if f.perSymbol != nil {
+		return f.perSymbol(ctx, symbol)
+	}
+	if err := ctx.Err(); err != nil {
+		return 0, time.Time{}, err
+	}
+	if t, ok := f.trades[symbol]; ok {
+		return t.Price, t.TradeTime, nil
+	}
+	return 0, time.Time{}, fmt.Errorf("no trade for %s", symbol)
 }
 func (f *fakeBatchPriceSource) GetBarsMulti(context.Context, []string, string, time.Time, time.Time) (map[string][]*marketdatav1.Bar, error) {
 	return nil, nil
@@ -1490,6 +1523,322 @@ func TestBatchGetLatestPrice_FallbackWhenNotMultiSymbolSource(t *testing.T) {
 	googLP := bySym["GOOG"]
 	if googLP.LastPrice == nil || *googLP.LastPrice != 175.25 {
 		t.Errorf("GOOG: want LastPrice=175.25, got %v", googLP.LastPrice)
+	}
+}
+
+// ── feature 227: BatchGetLatestPrice detached budget + dropped-error logs ────────
+
+// recordingWarnHandler keeps WARN records. slog.SetDefault is process-global, so tests using it
+// must not call t.Parallel().
+type recordingWarnHandler struct {
+	mu   sync.Mutex
+	recs []recordedWarn
+}
+
+type recordedWarn struct {
+	msg   string
+	attrs map[string]string
+}
+
+func (h *recordingWarnHandler) Enabled(context.Context, slog.Level) bool { return true }
+func (h *recordingWarnHandler) Handle(_ context.Context, r slog.Record) error {
+	if r.Level != slog.LevelWarn {
+		return nil
+	}
+	rec := recordedWarn{msg: r.Message, attrs: map[string]string{}}
+	r.Attrs(func(a slog.Attr) bool {
+		rec.attrs[a.Key] = fmt.Sprint(a.Value.Resolve().Any())
+		return true
+	})
+	h.mu.Lock()
+	h.recs = append(h.recs, rec)
+	h.mu.Unlock()
+	return nil
+}
+func (h *recordingWarnHandler) WithAttrs([]slog.Attr) slog.Handler { return h }
+func (h *recordingWarnHandler) WithGroup(string) slog.Handler      { return h }
+
+func (h *recordingWarnHandler) find(msg string) *recordedWarn {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for i := range h.recs {
+		if h.recs[i].msg == msg {
+			r := h.recs[i]
+			return &r
+		}
+	}
+	return nil
+}
+
+func installWarnRecorder(t *testing.T) *recordingWarnHandler {
+	t.Helper()
+	h := &recordingWarnHandler{}
+	prev := slog.Default()
+	slog.SetDefault(slog.New(h))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	return h
+}
+
+type fakeIntGetter map[string]int64
+
+func (f fakeIntGetter) GetInt(key string, defaultVal int64) int64 {
+	if v, ok := f[key]; ok {
+		return v
+	}
+	return defaultVal
+}
+
+type fakePrevCloseReader struct {
+	closes  map[string]float64
+	err     error
+	once    sync.Once
+	entered chan struct{} // closed on first call, when non-nil
+}
+
+func (f *fakePrevCloseReader) GetPreviousDailyCloseBatch(context.Context, []string) (map[string]float64, error) {
+	if f.entered != nil {
+		f.once.Do(func() { close(f.entered) })
+	}
+	return f.closes, f.err
+}
+
+func budgetCfgMs(ms int64) fakeIntGetter {
+	return fakeIntGetter{"marketdata.price.batch_timeout_ms": ms}
+}
+
+// callBatchPriceGuarded fails the test instead of hanging when BatchGetLatestPrice never returns.
+func callBatchPriceGuarded(t *testing.T, svc *MarketDataService, ctx context.Context, symbols []string) (map[string]*marketdatav1.LatestPrice, time.Duration) {
+	t.Helper()
+	type result struct {
+		resp *marketdatav1.BatchGetLatestPriceResponse
+		err  error
+	}
+	ch := make(chan result, 1)
+	start := time.Now()
+	go func() {
+		resp, err := svc.BatchGetLatestPrice(ctx, &marketdatav1.BatchGetLatestPriceRequest{Symbols: symbols})
+		ch <- result{resp, err}
+	}()
+	select {
+	case r := <-ch:
+		elapsed := time.Since(start)
+		if r.err != nil {
+			t.Fatalf("BatchGetLatestPrice: %v", r.err)
+		}
+		bySym := map[string]*marketdatav1.LatestPrice{}
+		for _, lp := range r.resp.Results {
+			bySym[lp.Symbol] = lp
+		}
+		return bySym, elapsed
+	case <-time.After(5 * time.Second):
+		t.Fatal("BatchGetLatestPrice did not return within the 5s hang guard")
+		return nil, 0
+	}
+}
+
+func newBatchPriceSvc(src source.DataSourceClient) *MarketDataService {
+	reg := source.NewRegistry()
+	if src != nil {
+		reg.Register("alpaca", src)
+	}
+	return &MarketDataService{registry: reg, warmSymbols: map[string]struct{}{}}
+}
+
+// TestBatchGetLatestPrice_AC3_LogsMultiFetchErrorAndFallsBack — @AC-3: the vendor error behind the
+// per-symbol fallback is logged, and the fallback result is still served.
+func TestBatchGetLatestPrice_AC3_LogsMultiFetchErrorAndFallsBack(t *testing.T) {
+	rec := installWarnRecorder(t)
+	svc := newBatchPriceSvc(&fakeBatchPriceSource{
+		trades:   map[string]*source.Trade{"AAPL": {Price: 187.25, TradeTime: time.Now()}},
+		multiErr: errors.New("alpaca: 503 service unavailable"),
+	})
+
+	bySym, _ := callBatchPriceGuarded(t, svc, context.Background(), []string{"AAPL"})
+
+	r := rec.find("BatchGetLatestPrice: multi-symbol fetch failed; falling back to per-symbol")
+	if r == nil {
+		t.Fatalf("expected the multi-symbol fetch failure WARN, got %+v", rec.recs)
+	}
+	if r.attrs["symbols"] != "1" {
+		t.Errorf("symbols attr = %q, want 1", r.attrs["symbols"])
+	}
+	if !strings.Contains(r.attrs["error"], "503") {
+		t.Errorf("error attr = %q, want the vendor error", r.attrs["error"])
+	}
+	if lp := bySym["AAPL"]; lp == nil || lp.LastPrice == nil || *lp.LastPrice != 187.25 {
+		t.Fatalf("expected the per-symbol fallback price for AAPL, got %v", lp)
+	}
+}
+
+// TestBatchGetLatestPrice_StalledMultiFetchHonoursBudget — a multi-fetch that never answers is cut
+// off by the budget; the symbol is omitted and the skipped fallback is logged.
+func TestBatchGetLatestPrice_StalledMultiFetchHonoursBudget(t *testing.T) {
+	rec := installWarnRecorder(t)
+	svc := newBatchPriceSvc(&fakeBatchPriceSource{multiBlock: true})
+	svc.budgetCfg = budgetCfgMs(50)
+
+	bySym, elapsed := callBatchPriceGuarded(t, svc, context.Background(), []string{"AAPL"})
+
+	if elapsed >= time.Second {
+		t.Fatalf("returned after %v, want < 1s under a 50ms budget", elapsed)
+	}
+	if _, ok := bySym["AAPL"]; ok {
+		t.Fatal("AAPL must be omitted when the budget expires (omit-not-fabricate)")
+	}
+	r := rec.find("BatchGetLatestPrice: budget exhausted by multi-symbol fetch; per-symbol fallback skipped")
+	if r == nil {
+		t.Fatalf("expected the budget-exhausted WARN, got %+v", rec.recs)
+	}
+	if r.attrs["budget_ms"] != "50" {
+		t.Errorf("budget_ms attr = %q, want 50", r.attrs["budget_ms"])
+	}
+}
+
+// TestBatchGetLatestPrice_FallbackIncompleteRecord — per-symbol failures plus a mid-loop budget
+// expiry produce one aggregate record with the failed/fetched/skipped counts.
+func TestBatchGetLatestPrice_FallbackIncompleteRecord(t *testing.T) {
+	rec := installWarnRecorder(t)
+	ts := time.Now()
+	svc := newBatchPriceSvc(&fakeBatchPriceSource{
+		multiErr: errors.New("multi down"),
+		perSymbol: func(ctx context.Context, sym string) (float64, time.Time, error) {
+			switch sym {
+			case "AAA":
+				return 0, time.Time{}, errors.New("boom")
+			case "BBB":
+				return 101, ts, nil
+			case "CCC":
+				select {
+				case <-ctx.Done():
+					return 0, time.Time{}, ctx.Err()
+				case <-time.After(3 * time.Second):
+					return 0, time.Time{}, errors.New("stalled")
+				}
+			default:
+				return 102, ts, nil
+			}
+		},
+	})
+	svc.budgetCfg = budgetCfgMs(100)
+
+	bySym, _ := callBatchPriceGuarded(t, svc, context.Background(), []string{"AAA", "BBB", "CCC", "DDD"})
+
+	if _, ok := bySym["BBB"]; !ok {
+		t.Error("BBB was fetched before the budget expired and must be served")
+	}
+	if _, ok := bySym["DDD"]; ok {
+		t.Error("DDD comes after the budget expiry and must be skipped")
+	}
+	r := rec.find("BatchGetLatestPrice: per-symbol fallback incomplete")
+	if r == nil {
+		t.Fatalf("expected the per-symbol fallback incomplete WARN, got %+v", rec.recs)
+	}
+	want := map[string]string{"failed": "2", "fetched": "1", "skipped": "1", "total": "4", "sample_error": "boom"}
+	for k, v := range want {
+		if r.attrs[k] != v {
+			t.Errorf("%s attr = %q, want %q", k, r.attrs[k], v)
+		}
+	}
+}
+
+// TestBatchGetLatestPrice_LogsSourceLookupFailure — an unresolvable source is logged, not dropped.
+func TestBatchGetLatestPrice_LogsSourceLookupFailure(t *testing.T) {
+	rec := installWarnRecorder(t)
+	svc := newBatchPriceSvc(nil)
+
+	bySym, _ := callBatchPriceGuarded(t, svc, context.Background(), []string{"AAPL"})
+
+	if len(bySym) != 0 {
+		t.Fatalf("expected no results without a source, got %d", len(bySym))
+	}
+	r := rec.find("BatchGetLatestPrice: source lookup failed")
+	if r == nil {
+		t.Fatalf("expected the source lookup WARN, got %+v", rec.recs)
+	}
+	if r.attrs["symbols"] != "1" {
+		t.Errorf("symbols attr = %q, want 1", r.attrs["symbols"])
+	}
+}
+
+// TestBatchGetLatestPrice_LogsPrevCloseFailure — a failed previous-close read is logged and the
+// trade is still served.
+func TestBatchGetLatestPrice_LogsPrevCloseFailure(t *testing.T) {
+	rec := installWarnRecorder(t)
+	svc := newBatchPriceSvc(&fakeBatchPriceSource{
+		trades: map[string]*source.Trade{"AAPL": {Price: 190, TradeTime: time.Now()}},
+	})
+	svc.prevClose = &fakePrevCloseReader{err: errors.New("db: too many connections")}
+
+	bySym, _ := callBatchPriceGuarded(t, svc, context.Background(), []string{"AAPL"})
+
+	if r := rec.find("BatchGetLatestPrice: previous-close lookup failed"); r == nil {
+		t.Fatalf("expected the previous-close WARN, got %+v", rec.recs)
+	}
+	lp := bySym["AAPL"]
+	if lp == nil || lp.LastPrice == nil || *lp.LastPrice != 190 {
+		t.Fatalf("the trade must still be served, got %v", lp)
+	}
+	if lp.PrevClose != nil {
+		t.Errorf("prev_close must be omitted on a failed lookup, got %v", *lp.PrevClose)
+	}
+}
+
+// TestBatchGetLatestPrice_PrevCloseRunsConcurrently — G10: the trade fetch waits for the
+// previous-close read to start, so a sequential implementation stalls until the budget expires.
+func TestBatchGetLatestPrice_PrevCloseRunsConcurrently(t *testing.T) {
+	entered := make(chan struct{})
+	svc := newBatchPriceSvc(&fakeBatchPriceSource{
+		trades:    map[string]*source.Trade{"AAPL": {Price: 191, TradeTime: time.Now()}},
+		multiGate: entered,
+	})
+	svc.prevClose = &fakePrevCloseReader{closes: map[string]float64{"AAPL": 188}, entered: entered}
+	svc.budgetCfg = budgetCfgMs(1000)
+
+	bySym, _ := callBatchPriceGuarded(t, svc, context.Background(), []string{"AAPL"})
+
+	lp := bySym["AAPL"]
+	if lp == nil || lp.LastPrice == nil || *lp.LastPrice != 191 {
+		t.Fatalf("last_price must be present, got %v", lp)
+	}
+	if lp.PrevClose == nil || *lp.PrevClose != 188 {
+		t.Fatalf("prev_close must be present, got %v", lp.PrevClose)
+	}
+}
+
+// TestBatchGetLatestPrice_DetachedFromCallerCancel — the shared fetch runs on a context detached
+// from the first caller, so an already-cancelled caller still gets results.
+func TestBatchGetLatestPrice_DetachedFromCallerCancel(t *testing.T) {
+	svc := newBatchPriceSvc(&fakeBatchPriceSource{
+		trades: map[string]*source.Trade{"AAPL": {Price: 192, TradeTime: time.Now()}},
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	bySym, _ := callBatchPriceGuarded(t, svc, ctx, []string{"AAPL"})
+
+	if lp := bySym["AAPL"]; lp == nil || lp.LastPrice == nil || *lp.LastPrice != 192 {
+		t.Fatalf("a cancelled caller must still receive the detached fetch's result, got %v", lp)
+	}
+}
+
+func TestResolveBatchPriceBudget(t *testing.T) {
+	cases := []struct {
+		name string
+		cfg  intGetter
+		want time.Duration
+	}{
+		{"nil config", nil, 2500 * time.Millisecond},
+		{"unset key", fakeIntGetter{}, 2500 * time.Millisecond},
+		{"zero", budgetCfgMs(0), 2500 * time.Millisecond},
+		{"negative", budgetCfgMs(-5), 2500 * time.Millisecond},
+		{"explicit", budgetCfgMs(50), 50 * time.Millisecond},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := resolveBatchPriceBudget(tc.cfg); got != tc.want {
+				t.Fatalf("resolveBatchPriceBudget = %v, want %v", got, tc.want)
+			}
+		})
 	}
 }
 

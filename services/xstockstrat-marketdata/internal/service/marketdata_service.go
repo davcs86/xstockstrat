@@ -96,6 +96,20 @@ type MarketDataService struct {
 	// rolling window for Finnhub — see maybeAlertQuota/fundamentalsQuota).
 	quotaAlertMu     sync.Mutex
 	quotaAlertBucket string
+	// budgetCfg / prevClose are BatchGetLatestPrice's seams; nil means the 2500ms default budget and
+	// no previous-close lookup (test literals leave both unset).
+	budgetCfg intGetter
+	prevClose prevCloseReader
+}
+
+// intGetter is the slice of *config.Watcher BatchGetLatestPrice reads its budget from.
+type intGetter interface {
+	GetInt(key string, defaultVal int64) int64
+}
+
+// prevCloseReader is the repo surface BatchGetLatestPrice reads previous daily closes from.
+type prevCloseReader interface {
+	GetPreviousDailyCloseBatch(ctx context.Context, symbols []string) (map[string]float64, error)
 }
 
 // fundamentalsConfig is the slice of *config.Watcher the fundamentals RPCs read.
@@ -164,7 +178,7 @@ func NewMarketDataService(
 	if err != nil {
 		return nil, fmt.Errorf("dial notify: %w", err)
 	}
-	return &MarketDataService{
+	svc := &MarketDataService{
 		registry:         registry,
 		repo:             repo,
 		cfg:              cfgWatcher,
@@ -181,7 +195,15 @@ func NewMarketDataService(
 		histFundamentals: histFundamentals,
 		histRepo:         repo,
 		dividendSrc:      dividendSrc,
-	}, nil
+	}
+	// Assigned only when non-nil: a nil pointer in an interface field defeats the nil-seam default.
+	if cfgWatcher != nil {
+		svc.budgetCfg = cfgWatcher
+	}
+	if repo != nil {
+		svc.prevClose = repo
+	}
+	return svc, nil
 }
 
 // GetBars retrieves historical OHLCV bars, querying from TimescaleDB.
@@ -747,22 +769,68 @@ func (s *MarketDataService) BatchGetLatestPrice(ctx context.Context, req *market
 		prevClose map[string]float64
 	}
 	v, err, _ := s.priceSingleflight.Do(key, func() (interface{}, error) {
-		var trades map[string]*source.Trade
+		// Detached: coalesced waiters must not die with the first caller's cancel or deadline.
+		budget := resolveBatchPriceBudget(s.budgetCfg)
+		fctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), budget)
+		defer cancel()
+		n := len(req.Symbols)
 
+		var prevClose map[string]float64
+		var done chan struct{}
+		if s.prevClose != nil {
+			done = make(chan struct{})
+			go func() {
+				defer close(done)
+				pc, pErr := s.prevClose.GetPreviousDailyCloseBatch(fctx, req.Symbols)
+				if pErr != nil {
+					slog.Warn("BatchGetLatestPrice: previous-close lookup failed", "symbols", n, "error", pErr)
+					return
+				}
+				prevClose = pc
+			}()
+		}
+
+		var trades map[string]*source.Trade
 		src, sErr := s.registry.Get("")
-		if sErr == nil {
+		if sErr != nil {
+			slog.Warn("BatchGetLatestPrice: source lookup failed", "symbols", n, "error", sErr)
+		} else {
 			// Prefer multi-symbol trade fetch if the source supports it.
 			if ms, ok := src.(source.MultiSymbolSource); ok {
-				trades, _ = ms.GetLatestTradesMulti(ctx, req.Symbols)
+				var mErr error
+				trades, mErr = ms.GetLatestTradesMulti(fctx, req.Symbols)
+				if mErr != nil {
+					slog.Warn("BatchGetLatestPrice: multi-symbol fetch failed; falling back to per-symbol", "symbols", n, "error", mErr)
+				}
 			}
 			// Fall back to per-symbol if multi is nil or the source doesn't support it.
 			if trades == nil {
-				trades = make(map[string]*source.Trade, len(req.Symbols))
-				if lt, ok := src.(source.LatestTradeSource); ok {
-					for _, sym := range req.Symbols {
-						if price, ts, tErr := lt.GetLatestTrade(ctx, sym); tErr == nil {
-							trades[sym] = &source.Trade{Price: price, TradeTime: ts}
+				trades = make(map[string]*source.Trade, n)
+				if fctx.Err() != nil {
+					slog.Warn("BatchGetLatestPrice: budget exhausted by multi-symbol fetch; per-symbol fallback skipped",
+						"symbols", n, "budget_ms", budget.Milliseconds())
+				} else if lt, ok := src.(source.LatestTradeSource); ok {
+					failed, fetched, skipped := 0, 0, 0
+					var firstErr error
+					for i, sym := range req.Symbols {
+						if fctx.Err() != nil {
+							skipped = n - i
+							break
 						}
+						price, ts, tErr := lt.GetLatestTrade(fctx, sym)
+						if tErr != nil {
+							failed++
+							if firstErr == nil {
+								firstErr = tErr
+							}
+							continue
+						}
+						fetched++
+						trades[sym] = &source.Trade{Price: price, TradeTime: ts}
+					}
+					if failed+skipped > 0 {
+						slog.Warn("BatchGetLatestPrice: per-symbol fallback incomplete",
+							"failed", failed, "fetched", fetched, "skipped", skipped, "total", n, "sample_error", firstErr)
 					}
 				}
 			}
@@ -771,9 +839,8 @@ func (s *MarketDataService) BatchGetLatestPrice(ctx context.Context, req *market
 			trades = map[string]*source.Trade{}
 		}
 
-		var prevClose map[string]float64
-		if s.repo != nil {
-			prevClose, _ = s.repo.GetPreviousDailyCloseBatch(ctx, req.Symbols)
+		if done != nil {
+			<-done
 		}
 		if prevClose == nil {
 			prevClose = map[string]float64{}
@@ -804,6 +871,19 @@ func (s *MarketDataService) BatchGetLatestPrice(ctx context.Context, req *market
 		results = append(results, lp)
 	}
 	return &marketdatav1.BatchGetLatestPriceResponse{Results: results}, nil
+}
+
+// resolveBatchPriceBudget returns the detached BatchGetLatestPrice fetch budget.
+func resolveBatchPriceBudget(cfg intGetter) time.Duration {
+	const defaultMs = 2500
+	if cfg == nil {
+		return defaultMs * time.Millisecond
+	}
+	ms := cfg.GetInt("marketdata.price.batch_timeout_ms", defaultMs)
+	if ms <= 0 {
+		ms = defaultMs
+	}
+	return time.Duration(ms) * time.Millisecond
 }
 
 // markWarm adds a symbol to the warm set polled by StartWarmQuotePoller.

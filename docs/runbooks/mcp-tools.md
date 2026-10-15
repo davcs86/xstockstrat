@@ -1023,7 +1023,6 @@ The live-market enrichment is **omit-not-fabricate**:
   a caller can compare **which symbol** to trade across the queue. Symbol-uniform (every row of a
   symbol carries the same value); omitted when the symbol has no score-eligible opportunity. A
   **ranking aid on a non-`[0,1]` scale, NOT a cardinal** sizing/alert input.
-- `sparkline` — a list of recent daily closes; a warm-up/missing bar is JSON `null` (never `NaN`).
 - `conditions` — the traced `{ref_name, lhs_value, threshold, fn, state, distance_to_threshold}`
   leaves; an unattributed row omits the key.
 
@@ -1043,6 +1042,9 @@ Risk/reward and suggested share size are **not** returned — they are a UI-only
 client-side, carried on no wire field.
 
 **Errors** — a backend `AioRpcError` surfaces as a `RuntimeError` with the gRPC status message.
+A hung analysis read fails after the `agent.opportunities.read_timeout_seconds` deadline (default
+`40`s, bounds `[30,55]`) with `upstream did not respond within Ns (deadline exceeded); retry shortly`.
+A saturated opportunities store returns `opportunities store unavailable; retry` (`UNAVAILABLE`).
 
 ---
 

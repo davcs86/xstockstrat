@@ -30,6 +30,7 @@ packages = ["app"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+markers = ["real_pg: needs a local PostgreSQL binary (tests/conftest.py local_pg)"]
 
 [tool.ruff]
 target-version = "py312"

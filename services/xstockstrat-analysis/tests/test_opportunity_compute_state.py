@@ -53,6 +53,7 @@ def _opp_svc():
     return svc
 
 
+@pytest.mark.usefixtures("read_path")
 async def test_empty_universe_never_recomputes_synchronously():
     """AC-4 (feature 177) under feature 185 FR-4: a legitimately-empty universe is NEVER recomputed
     synchronously — every poll returns empty non-blocking and delegates the recompute to a guarded
@@ -71,6 +72,7 @@ async def test_empty_universe_never_recomputes_synchronously():
     assert svc._kick_opportunity_recompute.call_count == 4  # each poll delegates to the background
 
 
+@pytest.mark.usefixtures("read_path")
 async def test_fresh_empty_serve_kicks_self_heal_and_writes_new_row():
     """empty→non-empty within one TTL under FR-4: the cold poll kicks a background recompute that
     stamps empty; a later poll (fresh stamp) kicks a self-heal that surfaces the newly-appeared row
