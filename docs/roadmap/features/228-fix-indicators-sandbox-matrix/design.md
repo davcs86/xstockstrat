@@ -69,21 +69,23 @@ the budget the same on every host.
   expression and `setrlimit(resource.RLIMIT_DATA, (_cap, _cap))`. Also assert this order:
   pyseccomp import < probe < `setrlimit(resource.RLIMIT_DATA` < `json.loads(` < `_flt.load()` < `exec(`.
   Red today.
-- **T2 (host-independence).** Using `_run` with the default allow-set (numpy, pandas, math, statistics), set
+- **T2 (`@AC-3`, host-independence).** Using `_run` with the default allow-set (numpy, pandas, math, statistics), set
   `memory_bytes=64 MiB` and allocate a 32 MiB `np.ones`. It must succeed.
   - Red on every host today: the baseline alone is ≥ 75 MiB, which is more than 64 MiB.
   - It proves the invariant "headroom is independent of the baseline". Host-independence follows from that
     invariant plus recon's coretype measurements.
-- **T2b (`@AC-1` headroom clause).** The 800×800 golden at `memory_bytes=64 MiB` succeeds with trace 641260.869 and
+- **T2b (`@AC-1`).** The 800×800 golden at `memory_bytes=64 MiB` succeeds with trace 641260.869 and
   rank 50: it needs 42 MiB, so ≥ 22 MiB of margin remains at half the default. Red today.
 - **T3 (`@AC-2`, fail-closed).** `memory_bytes=16 MiB` with a 32 MiB allocation gives `memory_exceeded`. Green
   before and after; it is a preservation guard.
-- **T4 (`@AC-2`, classification).** A fake Popen with `returncode=1` and stderr
+- **T4 (`@AC-4`, classification).** A fake Popen with `returncode=1` and stderr
   `"OpenBLAS error: Memory allocation still failed after 10 retries, giving up."` gives `memory_exceeded`. Red
   today (`runtime_error`). The existing `_FakeProc` (`:264-272`) sets returncode 0, so lift it into a parameterized
   helper.
-- **T5 (probe parse).** Extract the probe snippet from the generated wrapper and run it standalone. It returns an
-  int > 0.
+- **T5 (`@AC-5`, probe).** Extract the probe snippet from the generated wrapper and run it standalone. It returns an
+  int > 0. Then run the generated wrapper with the `VmData` probe forced to fail (e.g. a patched status path or a
+  monkeypatched template). The result is not a success and `exit_reason` is `runtime_error`; the formula's
+  side-effect marker never prints.
 - **Unchanged and must stay green:**
   - the 800×800 golden (`:199-208`) at the default;
   - the 400 MiB memory bombs (`test_sandbox_isolation.py:157-169`, `test_sandbox.py:144-162`; 400 MiB is more than
@@ -97,7 +99,8 @@ the budget the same on every host.
 
 ### Acceptance
 
-Add `@FR-*` tags (C-15) to 228's `acceptance.feature`. Keep `@AC-1`'s headroom clause, which is satisfied by T2b.
+After the product-spec review (2026-10-15), `acceptance.feature` has @AC-1..5 with concrete values, mapped to
+FR-1..3. The test mapping is: T2b → @AC-1, T3 → @AC-2, T2 → @AC-3, T4 → @AC-4, T5 → @AC-5.
 
 ## Rejected Alternatives
 

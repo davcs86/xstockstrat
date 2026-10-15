@@ -49,3 +49,27 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - the production `indicators.sandbox.memory_bytes` row is unverified;
   - the dev smoke (400 MiB → `memory_exceeded`; 32 MiB at a 64 MiB override → ok) is owed at post-deploy.
 - Status: draft → design-approved.
+
+## Session 2026-10-15 — sdd-review product-spec (re-run at operator request)
+
+- **First pass: FAIL.**
+  - Blockers: C-14 (no Consumer Surface(s) section) and C-15 (@AC-1/@AC-2 not concrete; the OpenBLAS half of FR-2
+    was uncovered).
+  - Warnings:
+    - stale coretype root cause;
+    - unresolved Fix Scope;
+    - xstockstrat-ui missing from Affected Services;
+    - no FR for the fail-closed probe;
+    - personas, Out of Scope and Open Questions.
+- **Fixed:**
+  - Consumer Surface(s): UI `formulaReference.ts:171`; agent `test_formula` `exit_reason`.
+  - `acceptance.feature` rewritten as @AC-1..5 with concrete values; FR-3 added (probe fail-closed).
+  - Root Cause, Fix Scope, Affected Services (+ui), personas, Out of Scope, and Open Questions / Owed Verification
+    refreshed.
+  - design.md test mapping updated (T2b→1, T3→2, T2→3, T4→4, T5→5).
+- **Second pass: PASS WITH WARNINGS.** The one warning (relabel the owed post-deploy checks) has been addressed.
+- **Overlap: CLEAN.** PR #1247 (227) also edits `docs/context-constitution-findings.md`, which may cause an
+  adjacent-row text conflict only (WARN). No merge-order entry is needed.
+- Status unchanged: design-approved. The lifecycle is already past spec-ready.
+- Ledger candidate: the Track C product-spec template (`.claude/skills/sdd-triage/reference/track-c-sdd.md`) has no
+  `## Consumer Surface(s)` section, so every Track C spec fails C-14 at review.
