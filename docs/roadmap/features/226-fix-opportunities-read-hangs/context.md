@@ -99,3 +99,10 @@ Added a feature-226 table over both key-column forms of every key (min/max accep
 - Files modified: `services/xstockstrat-config/src/__tests__/setConfigScalarBounds.test.ts`
 - Deviations: none
 - TDD red (before Step 1): 9 fail — every out-of-range case accepted. Green: `pnpm run test:coverage && pnpm run lint` → 150/150, c8 lines 84.21% (≥40), lint 0 errors.
+
+### Step 3 — marketdata `BatchGetLatestPrice`, a detached budget plus logs for every dropped error [done]
+
+The singleflight closure now runs on `context.WithTimeout(context.WithoutCancel(ctx), resolveBatchPriceBudget(s.budgetCfg))`, starts prevClose concurrently (joined only when started), and logs every formerly dropped error (source lookup, multi-fetch, budget-exhausted skip, aggregate per-symbol-incomplete, previous-close); new `intGetter`/`prevCloseReader` seams are set in the constructor only when non-nil.
+- Files modified: `services/xstockstrat-marketdata/internal/service/marketdata_service.go`
+- Deviations: golangci-lint v2.14.0 binary substituted for the sandbox's v2.5.0 (Deviation Log, CI-equivalent fallback)
+- TDD red (skeleton-first per Step 4 instr. 0: seams/fields + a `resolveBatchPriceBudget` stub returning 2500ms, unused): `go test ./internal/service/ -race -run 'BatchGetLatestPrice|ResolveBatchPriceBudget'` → 8 FAIL (AC-3 "expected the multi-symbol fetch failure WARN, got []"; hang and G10 tripped the 5s guard; resolver "2.5s, want 50ms"). Green: same run → all 11 PASS; `go build` ok; golangci-lint 0 issues.

@@ -189,7 +189,7 @@ cases are accepted, so the `INVALID_ARGUMENT` assertions fail.
 
 ### Step 3 — service: marketdata `BatchGetLatestPrice`, a detached budget plus logs for every dropped error
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service.go` — modify
@@ -1129,3 +1129,9 @@ grep -c "sparkline" docs/runbooks/mcp-tools.md   # the list_opportunities bullet
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Deviation: Step 3 — marketdata `BatchGetLatestPrice` (applies to every Go Verification, Steps 3–4)
+**Spec said**: `GOWORK=off golangci-lint run --modules-download-mode=mod`
+**Actual**: ran `GOWORK=off /tmp/claude-0/gl-v2.14.0/golangci-lint run --modules-download-mode=mod` (golangci-lint v2.14.0).
+**Reason**: the sandbox's `/usr/local/bin/golangci-lint` is v2.5.0, which cannot read Go 1.27 export data; v2.14.0 is the CI version.
+**Disposition**: CI-equivalent fallback
