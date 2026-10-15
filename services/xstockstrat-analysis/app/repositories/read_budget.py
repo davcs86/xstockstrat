@@ -1,4 +1,4 @@
-"""Request-scoped DB budget for analysis read paths (feature 226, design.md §1)."""
+"""Request-scoped DB budget for analysis read paths."""
 
 import asyncio
 import logging

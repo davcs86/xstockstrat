@@ -169,3 +169,34 @@ New `test_list_opportunities_deadline.py`: AC-2 starts a `grpc.aio.server()` on 
 - Files modified: `services/xstockstrat-agent/tests/test_list_opportunities_deadline.py` (new), `services/xstockstrat-agent/tests/test_tools.py`
 - Deviations: none. The two pre-existing `list_opportunities` tool tests needed no change: their positional-args assertion still holds with `timeout=` as a kwarg, and their unpatched policy read fails fast (≈0.2s) to the default.
 - TDD red/green: see Step 11 (`9 failed` → `119 passed`). Verification: the two files → 119 passed; full `pytest --cov=app --cov-fail-under=40` → 507 passed, 80.74%; ruff check/format clean.
+
+### Step 13 — docs: key rows, doc-drift fixes, findings, and the context-forge teardown [done]
+
+analysis `CLAUDE.md`: the Decide-surface memo sentence now says live quote only / skips `BatchGetLatestPrice`; a new `ListOpportunities` sub-bullet states the constraint (read DB phase strictly sequential on one budgeted connection, kicks after release, transient → `UNAVAILABLE`, enrichment after release) plus the fixed-invariants note naming all four `read_budget` constants; `sparkline_bars` row marked inert; `live_enrich_ttl_seconds` default `20` (seeded `10` by 028); two new key rows (`value_type` int — a float reads as the default; unseeded D2; ≤ 0 → default); § Running Tests documents `-m real_pg`, `local_pg` and the test-only `XSTOCKSTRAT_PG_BIN`. marketdata and agent `CLAUDE.md` each gained their key row (agent: exact key-column string, stored ns/key, `_POLICY_READ_TIMEOUT_S` = 3s). `config-governance.md`: the feature-177 TTL row fixed, and a feature-226 entry (4 keys, D2 waiver, plus a supersede line for the two stale feature-184 rows — `sparkline_bars` inert, TTL code default `20` — since that log is append-only). Findings: one doc-lie row (feature-191 `@AC-8` still names `BatchGetBars`) and three latent-bug rows (agent `GetConfig` no deadline at `client.py:1751`, seeded TTL 10 < the 15s poll, G6 orphaned backend). `mcp-tools.md`: `sparkline` bullet removed; the `list_opportunities` Errors line now names the deadline message and the `UNAVAILABLE` "opportunities store unavailable; retry" message.
+- Files modified: `services/xstockstrat-analysis/CLAUDE.md`, `services/xstockstrat-marketdata/CLAUDE.md`, `services/xstockstrat-agent/CLAUDE.md`, `docs/patterns/config-governance.md`, `docs/context-constitution-findings.md`, `docs/runbooks/mcp-tools.md`; plus `services/xstockstrat-analysis/app/repositories/read_budget.py` (pre-authorized docstring fix)
+- Deviations: the `read_budget.py` line-1 docstring (rule 5), logged in the Deviation Log — approved by the operator at the Step-10 checkpoint. The findings G6 row was included because Step 13's instruction 5 lists it.
+- TDD: N/A (docs). Verification: all five greps hit as specified; `grep -c sparkline docs/runbooks/mcp-tools.md` → `0`. After the docstring edit: analysis `ruff check` all passed, `ruff format --check` 113 files formatted, `tests/test_read_budget.py` 36 passed.
+
+#### Teardown (manual)
+
+`/context-forge:context-constitution refresh` was **unavailable** in this session: the context-forge plugin exposes only `context-forge:context-scrubber`, which is a token audit and not the constitution refresh. The equivalent was done by hand. Each touched context file was re-read against the current code:
+- **`services/xstockstrat-analysis/CLAUDE.md`**
+  - Decide-surface memo sentence and new bounded-read bullet: checked against `servicer.py` `ListOpportunities` / `_enrich_opportunities_live` (only `BatchGetLatestPrice`, under `asyncio.wait_for(…, enrich_ms/1000)`; kicks in the `finally` after `budgeted_read` exits) and against `read_budget.py` (`_arm` re-arms `SET LOCAL statement_timeout` per statement; the four constants and their roles).
+  - Key rows: checked against `watcher.py` `get_int` (`int_val or default`, so a float reads as the default) and the `≤ 0` fallbacks.
+  - Running Tests: checked against `tests/conftest.py` `_pg_bin_dir` / `local_pg` (skip locally, fail under `CI=true`; Homebrew `postgresql@*` globs) and the `pyproject.toml` `real_pg` marker.
+  - Reconciled drift: the memo text said "quote+sparkline … skips `GetLatestPrice`/`GetBars`"; the memo-row text said "live-quote/sparkline memo" and default `10`; the `sparkline_bars` row claimed a reader.
+- **`services/xstockstrat-marketdata/CLAUDE.md`**: the new row was checked against `resolveBatchPriceBudget` (nil cfg or `≤ 0` → 2500; Go `GetInt` returns the default for a non-int value), the `WithoutCancel` closure (read per call), and the `slog.Warn` sites. No other drift.
+- **`services/xstockstrat-agent/CLAUDE.md`**: the new row was checked against `tools.py` (`_agent_policy` + `wait_for(_POLICY_READ_TIMEOUT_S)`, the 40.0 fallbacks, the `DEADLINE_EXCEEDED` message) and the config registry (`configServiceImpl.ts:133`, `[30,55]`). The tool-table row and the correlation paragraph are still accurate. No `_extract_policy` or log-text references remain in docs.
+- **`docs/patterns/config-governance.md`**: the feature-226 entry was checked against `SCALAR_BOUNDS_REGISTRY` (`configServiceImpl.ts:130-133`). The feature-177 row was fixed in place as instructed. The two feature-184 rows that are also stale (`sparkline_bars`, the TTL) were left unedited because the log is append-only, and are superseded by a line in the feature-226 entry.
+- **`docs/context-constitution-findings.md`**: each new row's evidence was re-grepped:
+  - `client.py:1751` `GetConfig`, with no `timeout=`;
+  - no `wait_for`/`asyncio.timeout` around the other `get_config_value` callers (`oauth_server.py:84,104`, `tools.py:627`);
+  - `opportunities-latency-fix.feature:24`;
+  - migration 028 `:111` seeds `10`;
+  - `useOpportunities.ts:49` polls every `15_000`.
+- **`docs/runbooks/mcp-tools.md`**: the section was checked against the tool docstring and `_grpc_error_message`, and against the analysis `UNAVAILABLE` message (`servicer.py`, "opportunities store unavailable; retry"). The agent projection still emits `sparkline` only if the server fills it, and it never does now; the bullet was removed as specified.
+- **Also scanned, no drift found (not edited)**:
+  - `services/xstockstrat-analysis/docs/context-constitution.md`: the pool budget is unchanged at 2, and `budgeted_read` acquires from the same pool;
+  - `services/xstockstrat-ui/CLAUDE.md`: its `ListOpportunities` mentions are unaffected;
+  - root `CLAUDE.md`: the Connection Pool Budget is unchanged.
+- **`.agents/context-forge.json` `scrubberExtraTargets`** (`README.md`, `docs/patterns/ui-ux-governance.md`): neither was touched, and neither describes the changed behavior.

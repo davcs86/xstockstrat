@@ -17,6 +17,7 @@
 | 2026-10-14 | `draft` → `design-approved` | /sdd-design | Full mode, 6 rounds (round 6 by operator cap override); operator approved round-6 design |
 | 2026-10-14 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 13 steps |
 | 2026-10-15 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 done |
+| 2026-10-15 | `in-progress` → `code-completed` | /sdd-execute | All 13 steps done |
 
 ---
 

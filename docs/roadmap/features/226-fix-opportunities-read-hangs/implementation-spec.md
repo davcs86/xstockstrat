@@ -1,6 +1,6 @@
 # Implementation Spec: fix-opportunities-read-hangs
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-10-14
 **Feature**: `docs/roadmap/features/226-fix-opportunities-read-hangs/feature.md`
 **Total Steps**: 13
@@ -1025,7 +1025,7 @@ cd services/xstockstrat-agent && uv run ruff check . && uv run ruff format --che
 
 ### Step 13 — docs: key rows, doc-drift fixes, findings, and the context-forge teardown
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`, plus three service `CLAUDE.md` files
 **Files**:
 - `services/xstockstrat-analysis/CLAUDE.md` — modify
@@ -1135,3 +1135,9 @@ _Populated by /sdd-execute as implementation proceeds._
 **Actual**: ran `GOWORK=off /tmp/claude-0/gl-v2.14.0/golangci-lint run --modules-download-mode=mod` (golangci-lint v2.14.0).
 **Reason**: the sandbox's `/usr/local/bin/golangci-lint` is v2.5.0, which cannot read Go 1.27 export data; v2.14.0 is the CI version.
 **Disposition**: CI-equivalent fallback
+
+### Deviation: Step 13 — docs: key rows, doc-drift fixes, findings, and the context-forge teardown
+**Spec said**: Files = the three service `CLAUDE.md` files, `docs/patterns/config-governance.md`, `docs/context-constitution-findings.md`, `docs/runbooks/mcp-tools.md`.
+**Actual**: also edited `services/xstockstrat-analysis/app/repositories/read_budget.py` line 1 — the module docstring `"""Request-scoped DB budget for analysis read paths (feature 226, design.md §1)."""` became `"""Request-scoped DB budget for analysis read paths."""`.
+**Reason**: the file is outside the Files list; this is a root `CLAUDE.md` rule-5 fix (comments state constraints, never feature/history references) to code this feature introduced in Step 5. Analysis `ruff check` / `ruff format --check` re-run clean; `tests/test_read_budget.py` 36 passed.
+**Disposition**: approved by the operator at the Step-10 checkpoint
