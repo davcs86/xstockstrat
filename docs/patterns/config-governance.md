@@ -106,7 +106,7 @@ without this convention, both look identical (fails.md 2026-07-01).
 
 Append-only log — one entry per feature that registered new keys. Newest first. Don't edit past entries; superseding a key's behavior gets a new entry, not a rewrite of the old one.
 
-### feature 226 — fix-opportunities-read-hangs (xstockstrat-analysis / xstockstrat-marketdata / xstockstrat-agent / xstockstrat-config)
+### feature 227 — fix-opportunities-read-hangs (xstockstrat-analysis / xstockstrat-marketdata / xstockstrat-agent / xstockstrat-config)
 
 Adds **4** non-secret timeout keys that nest the `ListOpportunities` read path's deadlines (each hop's
 bound fits inside its caller's). Each is a full-dotted `SCALAR_BOUNDS_REGISTRY` entry in

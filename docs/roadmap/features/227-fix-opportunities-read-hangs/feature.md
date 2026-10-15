@@ -18,6 +18,7 @@
 | 2026-10-14 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 13 steps |
 | 2026-10-15 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 done |
 | 2026-10-15 | `in-progress` → `code-completed` | /sdd-execute | All 13 steps done |
+| 2026-10-15 | `code-completed` (renumbered) | /sdd-execute | Renumbered 226 → 227 (226 taken on main-dev by fix-otel-trace-export) |
 
 ---
 

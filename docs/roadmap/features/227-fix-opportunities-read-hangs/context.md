@@ -95,7 +95,7 @@ Appended the four full-dotted timeout keys with their design §5 bounds and a 2-
 
 ### Step 2 — Bounds tests for the four keys (G8) [done]
 
-Added a feature-226 table over both key-column forms of every key (min/max accepted reach INSERT; min−1/max+1 rejected `INVALID_ARGUMENT` with the `[min, max]` message and no INSERT), plus an `intVal` case for the float agent key; `setConfig` gained an optional `namespace` arg defaulting to `NS`. Full-dotted marketdata form added alongside the specced stripped one.
+Added a feature-227 table over both key-column forms of every key (min/max accepted reach INSERT; min−1/max+1 rejected `INVALID_ARGUMENT` with the `[min, max]` message and no INSERT), plus an `intVal` case for the float agent key; `setConfig` gained an optional `namespace` arg defaulting to `NS`. Full-dotted marketdata form added alongside the specced stripped one.
 - Files modified: `services/xstockstrat-config/src/__tests__/setConfigScalarBounds.test.ts`
 - Deviations: none
 - TDD red (before Step 1): 9 fail — every out-of-range case accepted. Green: `pnpm run test:coverage && pnpm run lint` → 150/150, c8 lines 84.21% (≥40), lint 0 errors.
@@ -172,7 +172,7 @@ New `test_list_opportunities_deadline.py`: AC-2 starts a `grpc.aio.server()` on 
 
 ### Step 13 — docs: key rows, doc-drift fixes, findings, and the context-forge teardown [done]
 
-analysis `CLAUDE.md`: the Decide-surface memo sentence now says live quote only / skips `BatchGetLatestPrice`; a new `ListOpportunities` sub-bullet states the constraint (read DB phase strictly sequential on one budgeted connection, kicks after release, transient → `UNAVAILABLE`, enrichment after release) plus the fixed-invariants note naming all four `read_budget` constants; `sparkline_bars` row marked inert; `live_enrich_ttl_seconds` default `20` (seeded `10` by 028); two new key rows (`value_type` int — a float reads as the default; unseeded D2; ≤ 0 → default); § Running Tests documents `-m real_pg`, `local_pg` and the test-only `XSTOCKSTRAT_PG_BIN`. marketdata and agent `CLAUDE.md` each gained their key row (agent: exact key-column string, stored ns/key, `_POLICY_READ_TIMEOUT_S` = 3s). `config-governance.md`: the feature-177 TTL row fixed, and a feature-226 entry (4 keys, D2 waiver, plus a supersede line for the two stale feature-184 rows — `sparkline_bars` inert, TTL code default `20` — since that log is append-only). Findings: one doc-lie row (feature-191 `@AC-8` still names `BatchGetBars`) and three latent-bug rows (agent `GetConfig` no deadline at `client.py:1751`, seeded TTL 10 < the 15s poll, G6 orphaned backend). `mcp-tools.md`: `sparkline` bullet removed; the `list_opportunities` Errors line now names the deadline message and the `UNAVAILABLE` "opportunities store unavailable; retry" message.
+analysis `CLAUDE.md`: the Decide-surface memo sentence now says live quote only / skips `BatchGetLatestPrice`; a new `ListOpportunities` sub-bullet states the constraint (read DB phase strictly sequential on one budgeted connection, kicks after release, transient → `UNAVAILABLE`, enrichment after release) plus the fixed-invariants note naming all four `read_budget` constants; `sparkline_bars` row marked inert; `live_enrich_ttl_seconds` default `20` (seeded `10` by 028); two new key rows (`value_type` int — a float reads as the default; unseeded D2; ≤ 0 → default); § Running Tests documents `-m real_pg`, `local_pg` and the test-only `XSTOCKSTRAT_PG_BIN`. marketdata and agent `CLAUDE.md` each gained their key row (agent: exact key-column string, stored ns/key, `_POLICY_READ_TIMEOUT_S` = 3s). `config-governance.md`: the feature-177 TTL row fixed, and a feature-227 entry (4 keys, D2 waiver, plus a supersede line for the two stale feature-184 rows — `sparkline_bars` inert, TTL code default `20` — since that log is append-only). Findings: one doc-lie row (feature-191 `@AC-8` still names `BatchGetBars`) and three latent-bug rows (agent `GetConfig` no deadline at `client.py:1751`, seeded TTL 10 < the 15s poll, G6 orphaned backend). `mcp-tools.md`: `sparkline` bullet removed; the `list_opportunities` Errors line now names the deadline message and the `UNAVAILABLE` "opportunities store unavailable; retry" message.
 - Files modified: `services/xstockstrat-analysis/CLAUDE.md`, `services/xstockstrat-marketdata/CLAUDE.md`, `services/xstockstrat-agent/CLAUDE.md`, `docs/patterns/config-governance.md`, `docs/context-constitution-findings.md`, `docs/runbooks/mcp-tools.md`; plus `services/xstockstrat-analysis/app/repositories/read_budget.py` (pre-authorized docstring fix)
 - Deviations: the `read_budget.py` line-1 docstring (rule 5), logged in the Deviation Log — approved by the operator at the Step-10 checkpoint. The findings G6 row was included because Step 13's instruction 5 lists it.
 - TDD: N/A (docs). Verification: all five greps hit as specified; `grep -c sparkline docs/runbooks/mcp-tools.md` → `0`. After the docstring edit: analysis `ruff check` all passed, `ruff format --check` 113 files formatted, `tests/test_read_budget.py` 36 passed.
@@ -187,7 +187,7 @@ analysis `CLAUDE.md`: the Decide-surface memo sentence now says live quote only 
   - Reconciled drift: the memo text said "quote+sparkline … skips `GetLatestPrice`/`GetBars`"; the memo-row text said "live-quote/sparkline memo" and default `10`; the `sparkline_bars` row claimed a reader.
 - **`services/xstockstrat-marketdata/CLAUDE.md`**: the new row was checked against `resolveBatchPriceBudget` (nil cfg or `≤ 0` → 2500; Go `GetInt` returns the default for a non-int value), the `WithoutCancel` closure (read per call), and the `slog.Warn` sites. No other drift.
 - **`services/xstockstrat-agent/CLAUDE.md`**: the new row was checked against `tools.py` (`_agent_policy` + `wait_for(_POLICY_READ_TIMEOUT_S)`, the 40.0 fallbacks, the `DEADLINE_EXCEEDED` message) and the config registry (`configServiceImpl.ts:133`, `[30,55]`). The tool-table row and the correlation paragraph are still accurate. No `_extract_policy` or log-text references remain in docs.
-- **`docs/patterns/config-governance.md`**: the feature-226 entry was checked against `SCALAR_BOUNDS_REGISTRY` (`configServiceImpl.ts:130-133`). The feature-177 row was fixed in place as instructed. The two feature-184 rows that are also stale (`sparkline_bars`, the TTL) were left unedited because the log is append-only, and are superseded by a line in the feature-226 entry.
+- **`docs/patterns/config-governance.md`**: the feature-227 entry was checked against `SCALAR_BOUNDS_REGISTRY` (`configServiceImpl.ts:130-133`). The feature-177 row was fixed in place as instructed. The two feature-184 rows that are also stale (`sparkline_bars`, the TTL) were left unedited because the log is append-only, and are superseded by a line in the feature-227 entry.
 - **`docs/context-constitution-findings.md`**: each new row's evidence was re-grepped:
   - `client.py:1751` `GetConfig`, with no `timeout=`;
   - no `wait_for`/`asyncio.timeout` around the other `get_config_value` callers (`oauth_server.py:84,104`, `tools.py:627`);
@@ -200,3 +200,15 @@ analysis `CLAUDE.md`: the Decide-surface memo sentence now says live quote only 
   - `services/xstockstrat-ui/CLAUDE.md`: its `ListOpportunities` mentions are unaffected;
   - root `CLAUDE.md`: the Connection Pool Budget is unchanged.
 - **`.agents/context-forge.json` `scrubberExtraTargets`** (`README.md`, `docs/patterns/ui-ux-governance.md`): neither was touched, and neither describes the changed behavior.
+
+## Session 2026-10-15 — renumber 226 → 227 (numbering collision)
+
+- Feature number `226` was taken on `main-dev` by `226-fix-otel-trace-export` (#1246, merged while this branch was in
+  flight). At the operator's instruction, this feature was renumbered to the next free number, **227** (root CLAUDE.md
+  § Feature Roadmap numbering rule). origin/main-dev @ 3ea5b75b was merged into the branch (30f6e99d). Its only
+  conflict was `services/xstockstrat-analysis/tests/conftest.py`: both sides were kept (this feature's fakes and
+  `local_pg`, plus main-dev's `otel_reset`). Full suites then passed: analysis 1276, agent 510, marketdata `-race` ok.
+- Renamed the directory and rewrote every `feature 226` / `feature-226` / `226-fix-opportunities-read-hangs` reference
+  in the files this feature touches, including the defect `.status` ref. Main-dev's own feature-226 (otel) references
+  are untouched (verified: no line from main-dev that mentions 226 was changed). The Deviation Log quote of the old
+  `read_budget.py` docstring keeps its original text.

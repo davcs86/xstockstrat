@@ -143,7 +143,7 @@ hangs past client timeouts and logs nothing. No hop on the path has a deadline, 
 
 - **Doc and acceptance drift.** feature-191 @AC-8 says enrichment makes "one BatchGetLatestPrice **and one BatchGetBars**" call, but the code has
   removed the bars/sparkline fetch (analysis recon: enrichment calls only `BatchGetLatestPrice`). The analysis `CLAUDE.md:182` and
-  `:457` are stale too: they mention the memo skipping `GetBars`, and give a TTL default of `10` where the code says `20`. Design decides whether 226 fixes these
+  `:457` are stale too: they mention the memo skipping `GetBars`, and give a TTL default of `10` where the code says `20`. Design decides whether 227 fixes these
   docs (it touches this path). Do not assume a bars call exists.
 - **Memo after a timeout (open).** If a timeout is memoized as "fresh, no price", prices stay blank for the TTL after recovery. If it is not,
   every poll pays the full deadline again.

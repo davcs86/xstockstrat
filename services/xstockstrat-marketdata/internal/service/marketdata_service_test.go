@@ -1526,7 +1526,7 @@ func TestBatchGetLatestPrice_FallbackWhenNotMultiSymbolSource(t *testing.T) {
 	}
 }
 
-// ── feature 226: BatchGetLatestPrice detached budget + dropped-error logs ────────
+// ── feature 227: BatchGetLatestPrice detached budget + dropped-error logs ────────
 
 // recordingWarnHandler keeps WARN records. slog.SetDefault is process-global, so tests using it
 // must not call t.Parallel().

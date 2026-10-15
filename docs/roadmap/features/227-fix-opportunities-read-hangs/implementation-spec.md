@@ -2,7 +2,7 @@
 
 **Status**: `complete`
 **Created**: 2026-10-14
-**Feature**: `docs/roadmap/features/226-fix-opportunities-read-hangs/feature.md`
+**Feature**: `docs/roadmap/features/227-fix-opportunities-read-hangs/feature.md`
 **Total Steps**: 13
 **Feature Branch**: `feature/fix-opportunities-read-hangs`
 
@@ -127,7 +127,7 @@ breakdown assign them. Each step's **Instructions** name them.
    - `'agent.opportunities.read_timeout_seconds': { minValue: 30, maxValue: 55 }`
 2. Add a ≤2-line comment above the block stating the constraint: the ceilings keep analysis
    `B+3.05+E < 30s` (the BFF deadline), and the agent floor of 30 sits above analysis's own 27.05s worst case
-   (feature 226).
+   (feature 227).
 3. Do not seed, and add no migration (operator waiver D2).
 4. Do not change `lookupScalarBounds`.
 
@@ -161,7 +161,7 @@ cd services/xstockstrat-config && pnpm run lint
 **Covers**: — (G8, a design check. No `@AC-*` targets the config service.)
 
 **Instructions**:
-1. Add a `describe` block (or `it` cases in the existing one) for feature 226. Give `setConfig` an optional
+1. Add a `describe` block (or `it` cases in the existing one) for feature 227. Give `setConfig` an optional
    `namespace` argument that defaults to `NS`, so existing calls stay unchanged.
 2. For each of the four keys, assert:
    - min and max are accepted (each reaches `insertQuery()`);
@@ -1090,7 +1090,7 @@ cd services/xstockstrat-agent && uv run ruff check . && uv run ruff format --che
    fixed 3s policy-read invariant `_POLICY_READ_TIMEOUT_S`.
 4. **`docs/patterns/config-governance.md`.**
    - Fix the `:269` row: seeded `10` by migration 028, with a code default of `20`.
-   - Add `### feature 226 — fix-opportunities-read-hangs (xstockstrat-analysis / xstockstrat-marketdata /
+   - Add `### feature 227 — fix-opportunities-read-hangs (xstockstrat-analysis / xstockstrat-marketdata /
      xstockstrat-agent / xstockstrat-config)` above `:109`. List the four keys with type, default and bounds,
      and state the **D2 seeding waiver** (a conscious deviation from feature 184's `analysis.opportunity.*`
      seeding convention).
@@ -1120,7 +1120,7 @@ cd services/xstockstrat-agent && uv run ruff check . && uv run ruff format --che
 grep -n "read_db_budget_ms\|live_enrich_timeout_ms" services/xstockstrat-analysis/CLAUDE.md docs/patterns/config-governance.md
 grep -n "batch_timeout_ms" services/xstockstrat-marketdata/CLAUDE.md docs/patterns/config-governance.md
 grep -n "opportunities.read_timeout_seconds" services/xstockstrat-agent/CLAUDE.md docs/patterns/config-governance.md docs/runbooks/mcp-tools.md
-grep -n "### feature 226" docs/patterns/config-governance.md
+grep -n "### feature 227" docs/patterns/config-governance.md
 grep -c "sparkline" docs/runbooks/mcp-tools.md   # the list_opportunities bullet is gone (any other mention is reviewed by hand)
 ```
 

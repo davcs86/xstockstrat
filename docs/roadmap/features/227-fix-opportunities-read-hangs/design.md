@@ -290,7 +290,7 @@ These are fixed invariants, not config keys:
 - **agent `tools.py:1515`:** drop "a sparkline".
 - **`docs/patterns/config-governance.md`:**
   - :269 — the TTL/no-seed wording.
-  - A feature-226 per-feature log entry, including the D2 waiver.
+  - A feature-227 per-feature log entry, including the D2 waiver.
 - **`docs/context-constitution-findings.md`** — flag only:
   - The agent's `GetConfig` call has no deadline (`client.py:1746`), mitigated by the 3s wrapper.
   - The durable feature-191 @AC-8 text still names `BatchGetBars`.

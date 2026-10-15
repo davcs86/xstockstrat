@@ -254,7 +254,7 @@ describe('signal_decay_half_life_hours write-time scalar bounds', () => {
     assert.ok(insertQuery());
   });
 
-  // feature 226: the read-path timeout keys must be bounded under both key-column forms (G8), so the
+  // feature 227: the read-path timeout keys must be bounded under both key-column forms (G8), so the
   // nested budget (analysis B+3.05+E < 30s, agent floor 30s) survives any operator write.
   const TIMEOUT_KEY_FORMS: { ns: string; key: string; field: 'intVal' | 'floatVal'; min: number; max: number }[] = [
     { ns: 'analysis', key: 'opportunity.read_db_budget_ms', field: 'intVal', min: 1000, max: 20000 },
