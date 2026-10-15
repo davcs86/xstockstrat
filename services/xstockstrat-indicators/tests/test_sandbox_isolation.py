@@ -43,6 +43,32 @@ def _run(src, allowed=("numpy", "pandas", "math", "statistics"), data=None, **kw
     return execute_formula(source=src, input_data=data or {}, allowed_imports=list(allowed), **kw)
 
 
+_MIB = 1024 * 1024
+
+_LINALG_800_SRC = (
+    "import numpy as np\nrng = np.random.default_rng(0)\n"
+    "a = rng.standard_normal((800, 800))\nb = a @ a.T\n"
+    "result = {'trace': round(float(np.trace(b)), 3), "
+    "'rank': int(np.linalg.matrix_rank(b[:50, :50]))}"
+)
+
+_ALLOC_32MIB_SRC = (
+    "import numpy as np\na = np.ones(4 * 1024 * 1024)\nresult = {'v': float(a.sum())}"
+)
+
+
+def _fake_popen(captured, returncode=0, stdout="__OUTPUT__:{}", stderr=""):
+    class _FakeProc:
+        pid = 2**30  # nonexistent → _killpg's getpgid raises ProcessLookupError, caught
+
+        def communicate(self, input=None, timeout=None):
+            captured["wrapped"] = input
+            self.returncode = returncode
+            return (stdout, stderr)
+
+    return lambda *a, **k: _FakeProc()
+
+
 # ── @AC-1 network egress blocked ────────────────────────────────────────────────────────────────
 class TestNetworkEgressBlocked:
     def test_socket_creation_is_blocked(self):
@@ -169,6 +195,68 @@ class TestDeterministicTermination:
         assert ok.success is True and ok.output == {"value": 42}
 
 
+# ── memory headroom above the measured import baseline ─────────────────────────────────────────
+class TestMemoryHeadroom:
+    def test_headroom_is_independent_of_import_baseline(self):
+        """@AC-3 (228): the numpy/pandas import baseline alone is ≥ 75 MiB > 64 MiB, so a 32 MiB
+        allocation passes only if the cap is baseline + headroom."""
+        res = _run(_ALLOC_32MIB_SRC, memory_bytes=64 * _MIB, timeout_ms=15000)
+        assert res.success is True, res.error
+
+    def test_allocation_beyond_headroom_is_memory_exceeded(self):
+        """@AC-2 (228): a 32 MiB allocation beyond a 16 MiB headroom fails closed."""
+        res = _run(_ALLOC_32MIB_SRC, memory_bytes=16 * _MIB, timeout_ms=15000)
+        assert res.success is False
+        assert res.exit_reason == "memory_exceeded"
+
+
+class TestExitReasonClassification:
+    def test_openblas_allocation_abort_is_memory_exceeded(self, monkeypatch):
+        """@AC-4 (228): the OpenBLAS allocation abort has no "MemoryError" but is out-of-memory."""
+        monkeypatch.setattr(
+            "app.services.sandbox.subprocess.Popen",
+            _fake_popen(
+                {},
+                returncode=1,
+                stdout="",
+                stderr="OpenBLAS error: Memory allocation still failed after 10 retries, "
+                "giving up.\n",
+            ),
+        )
+        res = _run("result = {}", allowed=())
+        assert res.success is False
+        assert res.exit_reason == "memory_exceeded"
+
+
+class TestBaselineProbe:
+    def test_probe_reads_positive_vmdata(self):
+        """@AC-5 (228): the baseline probe parses a positive VmData byte count."""
+        from app.services import sandbox
+
+        ns = {}
+        exec(sandbox._VMDATA_PROBE, ns)
+        assert isinstance(ns["_baseline"], int) and ns["_baseline"] > 0
+
+    def test_failed_probe_never_runs_formula(self, monkeypatch):
+        """@AC-5 (228): an unparseable VmData fails closed before the formula runs."""
+        from app.services import sandbox
+
+        monkeypatch.setattr(
+            "app.services.sandbox._VMDATA_PROBE",
+            sandbox._VMDATA_PROBE.replace("VmData:", "VmAbsent:"),
+        )
+        res = _run(
+            "print('FORMULA_RAN')\nresult = {'v': 1}",
+            allowed=(),
+            memory_bytes=64 * _MIB,
+            timeout_ms=8000,
+        )
+        assert res.success is False
+        assert res.exit_reason == "runtime_error"
+        assert "FORMULA_RAN" not in res.stdout
+        assert "StopIteration" in res.stderr
+
+
 # ── @AC-4 numeric parity — frozen golden through the real filter ─────────────────────────────────
 class TestNumericParityGolden:
     """Frozen goldens across the breadth the allow set was finalized against (design O-1): a numpy
@@ -197,13 +285,14 @@ class TestNumericParityGolden:
         assert res.output == {"mean": 46.018, "std": 0.282966}
 
     def test_large_array_linalg_hits_mbind(self):
-        res = _run(
-            "import numpy as np\nrng = np.random.default_rng(0)\n"
-            "a = rng.standard_normal((800, 800))\nb = a @ a.T\n"
-            "result = {'trace': round(float(np.trace(b)), 3), "
-            "'rank': int(np.linalg.matrix_rank(b[:50, :50]))}",
-            timeout_ms=20000,
-        )
+        res = _run(_LINALG_800_SRC, timeout_ms=20000)
+        assert res.success is True
+        assert res.output == {"trace": 641260.869, "rank": 50}
+
+    def test_large_array_linalg_at_half_default_headroom(self):
+        """@AC-1 (228): 800×800 needs ≈42 MiB of headroom; 64 MiB (half the default) leaves margin
+        on every host."""
+        res = _run(_LINALG_800_SRC, memory_bytes=64 * _MIB, timeout_ms=20000)
         assert res.success is True
         assert res.output == {"trace": 641260.869, "rank": 50}
 
@@ -258,18 +347,10 @@ class TestForkBombCapped:
 class TestLimitsConfigured:
     def test_rlimits_derive_from_config_in_wrapper(self, monkeypatch):
         """@AC-6: the wrapper derives RLIMIT_CPU = ceil(timeout_ms/1000)+2 and RLIMIT_NPROC =
-        max_concurrent*16 from the config-supplied values (F-07), not bare literals."""
+        max_concurrent*16 from the config-supplied values (F-07), not bare literals; RLIMIT_DATA =
+        the probed VmData baseline + the config memory_bytes headroom."""
         captured = {}
-
-        class _FakeProc:
-            pid = 2**30  # nonexistent → _killpg's getpgid raises ProcessLookupError, caught
-
-            def communicate(self, input=None, timeout=None):
-                captured["wrapped"] = input
-                self.returncode = 0
-                return ("__OUTPUT__:{}", "")
-
-        monkeypatch.setattr("app.services.sandbox.subprocess.Popen", lambda *a, **k: _FakeProc())
+        monkeypatch.setattr("app.services.sandbox.subprocess.Popen", _fake_popen(captured))
         _run(
             "result = {}",
             allowed=(),
@@ -280,7 +361,20 @@ class TestLimitsConfigured:
         wrapped = captured["wrapped"]
         assert "resource.setrlimit(resource.RLIMIT_CPU, (12, 12))" in wrapped  # ceil(10000/1000)+2
         assert "resource.setrlimit(resource.RLIMIT_NPROC, (48, 48))" in wrapped  # 3 * 16
-        assert "resource.setrlimit(resource.RLIMIT_DATA, (67108864, 67108864))" in wrapped
+        assert "VmData:" in wrapped
+        assert "_cap = min(_baseline + 67108864, 2**63 - 1)" in wrapped
+        assert "resource.setrlimit(resource.RLIMIT_DATA, (_cap, _cap))" in wrapped
+        assert "RLIMIT_DATA, (67108864, 67108864)" not in wrapped
+        order = [
+            "import pyseccomp",
+            "VmData:",
+            "setrlimit(resource.RLIMIT_DATA",
+            "json.loads(",
+            "_flt.load()",
+            "exec(",
+        ]
+        idx = [wrapped.index(s) for s in order]
+        assert idx == sorted(idx) and len(set(idx)) == len(idx), list(zip(order, idx))
 
     def test_no_new_config_leaf_introduced(self):
         """@AC-6: the safety limits are jail constants derived from EXISTING config keys — no new
