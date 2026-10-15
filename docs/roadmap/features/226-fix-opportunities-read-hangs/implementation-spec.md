@@ -350,7 +350,7 @@ measurement, so no coverage threshold applies to it. The `-race` behavioral test
 
 ### Step 5 — service: analysis `read_budget.py`, the request-scoped DB budget primitive
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/repositories/read_budget.py` — create

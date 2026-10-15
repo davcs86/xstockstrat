@@ -113,3 +113,10 @@ Extended `fakeBatchPriceSource` (ctx-honouring, injectable multi-fetch error/blo
 - Files modified: `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go`
 - Deviations: none (golangci-lint substitution as Step 3)
 - TDD: AC-3 red: "expected the multi-symbol fetch failure WARN, got []" → green: PASS (red/green detail in Step 3 entry). Verification: `go test ./... -race -count=1 -coverpkg=…` all ok, total 71.0% (≥40); golangci-lint 0 issues.
+
+### Step 5 — analysis `read_budget.py`, the request-scoped DB budget primitive [done]
+
+Created the module per design §1: the four named constants, D4 `_TRANSIENT`/`_NOT_TRANSIENT` + `is_transient_db_error`, `BudgetedConn` (`_arm` re-arms `SET LOCAL statement_timeout` or raises `TimeoutError` with no statement), `budgeted_read` (backstop over acquire→BEGIN→yield→COMMIT only, log-before-await, guarded rollback-or-terminate, bare re-raise, bounded success release) and `_rollback_then_release` (shared 1.0s window, 0.05s release floor). No servicer wiring.
+- Files modified: `services/xstockstrat-analysis/app/repositories/read_budget.py` (new)
+- Deviations: none
+- TDD: the paired behavioral test is Step 6 (later agent). Red here is the throwaway Verification import with the module absent → `ModuleNotFoundError: No module named 'app.repositories.read_budget'`; green: import ok, `ruff check` all passed, `ruff format --check` 110 files formatted. A throwaway (uncommitted) fake-driven smoke also showed: success → BEGIN/SET LOCAL/COMMIT + 1 release; stalls at BEGIN/fetch/COMMIT → `TimeoutError` (transient) + terminate=1; body `QueryCanceledError` → ROLLBACK + release, terminate=0.
