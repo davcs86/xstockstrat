@@ -109,3 +109,9 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - proto-http added before RED (a), exporter swapped to `OTLPSpanExporter()` with no args + fallback removed (c), `-proto-grpc` dropped from pyproject/lock (d), agent non-blocking test repointed to `proto.http` (e). Locks: proto-http 1.42.1 (indicators/analysis/agent), **1.41.1 (ingest — SDK stayed 1.41.1, no bump)**; failure-log text `Failed to export span batch code: %s` verified identical at 1.41.1 and 1.42.1. `uv lock --check`, imports, ruff clean ×4; agent `non_blocking` PASS (PRESERVE @AC-2 @feature-171).
 - Files modified: `services/xstockstrat-{indicators,ingest,analysis,agent}/{app/telemetry.py,pyproject.toml,uv.lock}`, agent `tests/test_telemetry.py` (`:30` repoint hunk only — staged via constructed blob since `git add -p` is non-interactive-unavailable).
 - Deviations: none (service venvs resolve Python 3.12 per each pyproject's requires-python — pre-existing, unchanged)
+
+### Step 5 — test: Python ×4 — AC-1 (raw + encoded) and AC-3 [done]
+- Opt-in `otel_reset` fixture per conftest (fresh `Once()`, provider reset, `NO_PROXY`, instrumentor no-op, provider shutdown on teardown); inline `ThreadingHTTPServer` receiver; tests use `force_flush()` and leave shutdown to the fixture (avoids a double-shutdown warning — matches design.md "AC-1 … using force_flush()").
+- RED (indicators, pre-4(c)): AC-1 ×2 → `('/otlp/v1/traces', 'Basic dGVzdDprZXk=') in []`; AC-3 → only `proto.grpc … StatusCode.UNAVAILABLE` logged, no `code: 400`. GREEN ×4: telemetry tests 4/4 (agent 5/5); full suites 284/328/1148/501 pass; coverage 85.6/81.7/88.0/80.6 % (≥ 50/40/40/40); ruff clean.
+- Files modified: `services/xstockstrat-{indicators,ingest,analysis,agent}/tests/{conftest.py,test_telemetry.py}`
+- Deviations: none

@@ -273,7 +273,7 @@ for s in indicators ingest analysis agent; do (cd services/xstockstrat-$s && \
 
 ### Step 5 — test: Python ×4 — AC-1 (raw + encoded) export and AC-3 logged 400
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`, `xstockstrat-ingest`, `xstockstrat-analysis`, `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-indicators/tests/conftest.py` — modify
