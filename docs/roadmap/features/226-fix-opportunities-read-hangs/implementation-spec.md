@@ -96,7 +96,7 @@ breakdown assign them. Each step's **Instructions** name them.
 
 ### Step 1 — service: Write-bound the four new timeout keys in `SCALAR_BOUNDS_REGISTRY`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/grpc/configServiceImpl.ts` — modify

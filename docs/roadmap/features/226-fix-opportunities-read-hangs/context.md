@@ -85,3 +85,10 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   /usr/local/bin v2.5.0 cannot read Go 1.27 export data) · uv ✓ (analysis and agent synced) · ruff/pytest ✓ (uv) ·
   pnpm 9.15.9 ✓ with config deps installed · node v22.22.0 (pinned 24; CI runs 24) · PostgreSQL 16 binaries ✓
   (test-scoped, D3).
+
+### Step 1 — Write-bound the four new timeout keys in `SCALAR_BOUNDS_REGISTRY` [done]
+
+Appended the four full-dotted timeout keys with their design §5 bounds and a 2-line constraint comment; unseeded (D2), `lookupScalarBounds` unchanged.
+- Files modified: `services/xstockstrat-config/src/grpc/configServiceImpl.ts`
+- Deviations: none
+- TDD red: `pnpm test` with Step 2's cases before the registry entries → 9 fail (e.g. "999 must be rejected" for `opportunity.read_db_budget_ms`). Green: `pnpm run test:coverage` → 150/150 pass, lines 84.21%; `pnpm run lint` 0 errors. Node v22 locally (CI 24).
