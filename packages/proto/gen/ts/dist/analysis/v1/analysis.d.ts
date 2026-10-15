@@ -75,11 +75,26 @@ export declare enum NoTradeReason {
     NO_TRADE_REASON_INSUFFICIENT_CAPITAL = "NO_TRADE_REASON_INSUFFICIENT_CAPITAL",
     /** NO_TRADE_REASON_FORMULA_ERROR - a custom-formula component failed to execute / returned an out-of-contract series */
     NO_TRADE_REASON_FORMULA_ERROR = "NO_TRADE_REASON_FORMULA_ERROR",
+    /** NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE - strategy requires fundamentals and the symbol has none usable in the window — refused, not evaluated (feature 215) */
+    NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE = "NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE",
     UNRECOGNIZED = "UNRECOGNIZED"
 }
 export declare function noTradeReasonFromJSON(object: any): NoTradeReason;
 export declare function noTradeReasonToJSON(object: NoTradeReason): string;
 export declare function noTradeReasonToNumber(object: NoTradeReason): number;
+/**
+ * feature 215 — best-effort marketdata label for a fundamentals refusal; never affects the guard
+ * decision (FR-11). UNSPECIFIED = label unknown.
+ */
+export declare enum FundamentalsGap {
+    FUNDAMENTALS_GAP_UNSPECIFIED = "FUNDAMENTALS_GAP_UNSPECIFIED",
+    FUNDAMENTALS_GAP_ETF = "FUNDAMENTALS_GAP_ETF",
+    FUNDAMENTALS_GAP_NOT_ETF = "FUNDAMENTALS_GAP_NOT_ETF",
+    UNRECOGNIZED = "UNRECOGNIZED"
+}
+export declare function fundamentalsGapFromJSON(object: any): FundamentalsGap;
+export declare function fundamentalsGapToJSON(object: FundamentalsGap): string;
+export declare function fundamentalsGapToNumber(object: FundamentalsGap): number;
 export declare enum ComponentKind {
     COMPONENT_KIND_UNSPECIFIED = "COMPONENT_KIND_UNSPECIFIED",
     COMPONENT_KIND_BUILTIN_INDICATOR = "COMPONENT_KIND_BUILTIN_INDICATOR",
@@ -400,6 +415,8 @@ export interface SymbolDiagnostics {
     noTradeReason: NoTradeReason;
     barsTotal: number;
     warmupBars: number;
+    /** feature 215 — set only with NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE */
+    fundamentalsGap: FundamentalsGap;
 }
 export interface ScoreStrategyRequest {
     strategyId: string;
@@ -807,6 +824,13 @@ export interface Opportunity {
      * for the symbol. Symbol-uniform: every row of a symbol carries the same value.
      */
     symbolScore?: number | undefined;
+    /**
+     * feature 215 — a non-actionable skip row: the strategy requires fundamentals the symbol lacks.
+     * Derived at read from the "fundamentals_unavailable" provenance marker (no column).
+     */
+    fundamentalsUnavailable: boolean;
+    /** feature 215 — best-effort ETF / NOT_ETF label for a skip row; rides readiness_json (no column). */
+    fundamentalsGap: FundamentalsGap;
 }
 /**
  * One recent daily-bar close for the Decide-surface sparkline (feature 095). Explicit presence — an
@@ -862,6 +886,8 @@ export interface ListOpportunitiesRequest {
     actionFilter: OpportunityActionTag;
     /** UNSPECIFIED(0) = legacy blended rank (not CONVICTION) */
     sort: OpportunitySort;
+    /** feature 215 — empty = all symbols; exact (normalized) symbol filter */
+    symbol: string;
 }
 export interface ListOpportunitiesResponse {
     opportunities: Opportunity[];

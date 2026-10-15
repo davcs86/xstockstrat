@@ -280,7 +280,7 @@ services:
       ALPACA_DATA_URL: https://data.alpaca.markets
       SERVICE_NAME: marketdata
       DB_POOL_MAX: "2"
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
     ports:
       - "50053:50053"
     depends_on:
@@ -313,7 +313,7 @@ services:
       WAIT_FOR: "xstockstrat-config:50060 xstockstrat-ledger:50057"
       SERVICE_NAME: indicators
       DB_POOL_MAX: "2"
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
     ports:
       - "50054:50054"
     healthcheck:
@@ -351,7 +351,7 @@ services:
       WAIT_FOR: "xstockstrat-config:50060 xstockstrat-ledger:50057 xstockstrat-identity:50058"
       SERVICE_NAME: ingest
       DB_POOL_MAX: "2"
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
     ports:
       - "50055:50055"
     healthcheck:
@@ -392,7 +392,7 @@ services:
       WAIT_FOR: "xstockstrat-config:50060 xstockstrat-ledger:50057 xstockstrat-indicators:50054 xstockstrat-trading:50051"
       SERVICE_NAME: analysis
       DB_POOL_MAX: "2"
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
     ports:
       - "50056:50056"
     healthcheck:
@@ -430,7 +430,7 @@ services:
       NOTIFY_ENDPOINT: xstockstrat-notify:50059
       SERVICE_NAME: portfolio
       DB_POOL_MAX: "2"
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
     ports:
       - "50052:50052"
     depends_on:
@@ -466,7 +466,7 @@ services:
       BROKER_ACCOUNTS_ENCRYPTION_KEY: "${BROKER_ACCOUNTS_ENCRYPTION_KEY:?BROKER_ACCOUNTS_ENCRYPTION_KEY is required - copy .env.example to .env (run: openssl rand -hex 32)}"
       SERVICE_NAME: trading
       DB_POOL_MAX: "2"
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
     ports:
       - "50051:50051"
     depends_on:
@@ -565,7 +565,7 @@ services:
       TRADING_ENDPOINT: xstockstrat-trading:50051
       MARKETDATA_ENDPOINT: xstockstrat-marketdata:50053
       SERVICE_NAME: agent
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
       WAIT_FOR: "xstockstrat-config:50060 xstockstrat-identity:50058"
       MCP_TRANSPORT: http
       MCP_HTTP_PORT: "9000"

@@ -32,7 +32,11 @@ tool call to make. Report only what survives.
 
 6. **Did you hide a bad status?** Scan every result for `status` ≠ `OK`, `INSUFFICIENT_DATA`,
    `FORMULA_ERROR`, empty `bars`, or a `no_trade_reason` you did not explain. A symbol that silently
-   returned nothing must not be averaged in as a 0.
+   returned nothing must not be averaged in as a 0. In particular:
+   - `NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE` means the symbol was refused, not evaluated. It has no
+     cell, so drop it from the basket and report it, naming its `fundamentals_gap` (ETF or not).
+   - A `fundamentals fetch failed for <SYM> — rerun` warning means that symbol was never assessed.
+     Rerun before reporting anything about it.
 
 7. **Does the aggregate hide the scatter?** If you are reporting a basket number, does the per-symbol
    picture agree with it, or is one symbol (or a different best-parameter per symbol) driving it?

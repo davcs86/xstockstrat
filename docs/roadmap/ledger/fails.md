@@ -2841,6 +2841,21 @@ ambiguity is logged here).
 - **Evidence**: `git show 9a1d3bea:docs/roadmap/features/210-inter-service-mtls/design.md:102-108` vs `services/xstockstrat-trading/internal/service/ledger_emit_mtls_test.go:36-58` and `services/xstockstrat-ledger/src/__tests__/mtls.test.ts:149-156`; `scripts/gen-dev-certs.sh:25-26,35`.
 - **Rule it implies**: When a design-named assertion cannot be written it must appear in the Deviation Log, otherwise a "Covers: AC-N" tag overstates coverage. Reinforces C-08/P-06.
 
+### 2026-10-10 — block-fundamentals-strategy-on-etf — assumption
+- **Mistake**: Both point-in-time fundamentals loaders call `GetHistoricalFundamentals` once and never follow `next_page_token`; marketdata pages at 50 periods oldest-first, so any symbol with >50 stored periods silently loses its newest filings. It went unnoticed because a missing value only made the evaluator hold — a guard that turns "no data" into a refusal would have converted the truncation into false refusals. Caught by the feature-215 round-3 adversary, not by recon.
+- **Evidence**: `services/xstockstrat-analysis/app/handlers/servicer.py:1641-1652`, `services/xstockstrat-analysis/app/engine/live_loop.py:626-632`, `services/xstockstrat-marketdata/internal/service/marketdata_service.go:1736`; `docs/roadmap/features/215-block-fundamentals-strategy-on-etf/design.md` Fix 2.
+- **Rule it implies**: Before a design reads "absence" from a loader, verify the loader reads the whole result (pagination, caps, swallowed errors) — absence has page, batch, row, field and formula granularity (fails.md:2479), and each needs an outage-vs-absence fixture.
+
+### 2026-10-14 — block-fundamentals-strategy-on-etf — assumption
+- **Mistake**: Step 24 specified an `@AC-2` e2e that expects the per-symbol no-trade reason on a refused-only `BACKTEST_STATUS_INSUFFICIENT_DATA` run, but the strategy page rendered `BacktestDiagnostics` only for non-INSUFFICIENT_DATA results and its INSUFFICIENT_DATA card only for a coverage gap, so the run rendered nothing. Feature 067 had already hit the same gate and dodged it by giving its `strat-formula-error-001` sentinel status 1, an unrepresentative status that hid the gap for a second feature.
+- **Evidence**: `services/xstockstrat-ui/src/app/insights/strategies/[id]/page.tsx` (status gates); `services/xstockstrat-ui/e2e/mock-backend.ts` (`strat-formula-error-001` vs `strat-fundamentals-etf-001`); 215 Deviation Log "Step 24 … [BLOCKED]" (operator option A, 2026-10-14).
+- **Rule it implies**: An e2e sentinel returns the status the real server returns for that case; when a UI test needs a different status to render, the render gate is the defect, not the fixture.
+
+### 2026-10-15 — fix-otel-trace-export — assumption
+- **Mistake**: A vitest test asserted on `vi.spyOn(console, …)` calls made inside `beforeAll`. vitest 5.0.3 clears spy call history before each test, so the calls were gone by assertion time. The result was a false RED that looked exactly like the defect under test (hook not registering).
+- **Evidence**: `docs/roadmap/features/226-fix-otel-trace-export/implementation-spec.md` Deviation 3; probe `beforeAll calls=1` → `test calls=0`.
+- **Rule it implies**: In vitest, never assert on `vi.spyOn` call history recorded in `beforeAll`/`beforeEach`. Either trigger the behaviour inside the test, or record with a plain function you install (and restore) yourself.
+
 ### 2026-10-14 — proto-deprecated-field-removal-program — assumption
 - **Mistake**: A user steer at the design gate (removal → response-edge omission) left the product-spec, acceptance scenarios and `feature.md` Type on the old premise, so the re-run product-spec review FAILed and a stale "breaking-change" label survived to execute. The defect report's "dead field" inventory was also treated as verified when it was only a candidate list (10 dead, not 12 — indicators `user_id` is a live header-absent fallback).
 - **Evidence**: `git show 09ec8d9a:docs/roadmap/features/196-proto-deprecated-field-removal-program/context.md:13-16,71-87,141`; `git show 09ec8d9a:docs/roadmap/features/196-proto-deprecated-field-removal-program/recon.md:98-99`.

@@ -3,7 +3,12 @@ import { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Eyebrow } from '@/components/shared/Eyebrow';
 import { Progress } from '@/components/ui/progress';
-import { ReadinessRule } from '@xstockstrat/proto/analysis/v1/analysis_pb';
+import { CardNotice } from '@/components/shared/CardNotice';
+import {
+  OpportunityActionTag,
+  OpportunitySort,
+  ReadinessRule,
+} from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import { CONDITION_STATE, EnumBadge } from '@/lib/opportunityShared';
 import { READINESS_CUE } from '@/lib/readinessCue';
 import { readinessState } from '@/lib/readinessRollup';
@@ -25,15 +30,21 @@ export function SignalReadiness({
 }) {
   // Trace the EXIT rule when this (symbol, strategy) is a HELD opportunity (provenance includes
   // "position", the is_held marker), else the ENTRY rule.
-  const { data: opps } = useOpportunities();
-  const isHeld = useMemo(
+  const { data: opps } = useOpportunities(
+    0,
+    [],
+    OpportunityActionTag.UNSPECIFIED,
+    OpportunitySort.CONVICTION,
+    symbol,
+  );
+  const pairRow = useMemo(
     () =>
-      (opps?.pages.flatMap((p) => p.opportunities) ?? []).some(
-        (o) =>
-          o.symbol === symbol && o.strategyId === strategyId && o.provenance.includes('position'),
+      (opps?.pages.flatMap((p) => p.opportunities) ?? []).find(
+        (o) => o.symbol === symbol && o.strategyId === strategyId,
       ),
     [opps, symbol, strategyId],
   );
+  const isHeld = pairRow?.provenance.includes('position') ?? false;
   const rule = isHeld ? ReadinessRule.EXIT : ReadinessRule.ENTRY;
   const ruleWord = isHeld ? 'exit' : 'entry';
 
@@ -59,6 +70,13 @@ export function SignalReadiness({
         </div>
       </CardHeader>
       <CardContent>
+        {pairRow?.fundamentalsUnavailable && (
+          <div className="mb-3" data-testid="readiness-fundamentals-unavailable">
+            <CardNotice>
+              This strategy requires fundamentals and {symbol} has none — entry is not evaluated.
+            </CardNotice>
+          </div>
+        )}
         {!strategyId ? (
           <p className="text-sm text-muted-foreground">
             Select a strategy to evaluate its conditions against {symbol}.

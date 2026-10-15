@@ -1,7 +1,7 @@
 # packages/otel — CLAUDE.md
 
 <!-- context-forge:constitution-pointer:start -->
-> **Constitution:** non-obvious invariants (alerts key on the **short** `service.name`, the `rpc_server_duration_milliseconds` metric-name contract, and the confirmed OTLP port-by-runtime split `PLAT-3`) live in [`docs/context-constitution.md`](docs/context-constitution.md); defects (`observability.md` port doc-lie at root, manual `DS_*_UID` substitution) in [`docs/context-constitution-findings.md`](docs/context-constitution-findings.md). Inherits the root [`PLAT-*` constitution](../../docs/context-constitution.md).
+> **Constitution:** non-obvious invariants (alerts key on the **short** `service.name`, the `rpc_server_duration_milliseconds` metric-name contract, and the env-only OTLP/HTTP export rule `PLAT-3`) live in [`docs/context-constitution.md`](docs/context-constitution.md); defects (manual `DS_*_UID` substitution) in [`docs/context-constitution-findings.md`](docs/context-constitution-findings.md). Inherits the root [`PLAT-*` constitution](../../docs/context-constitution.md).
 <!-- context-forge:constitution-pointer:end -->
 
 The platform's OpenTelemetry Collector config plus checked-in Grafana provisioning (alert rules, mute

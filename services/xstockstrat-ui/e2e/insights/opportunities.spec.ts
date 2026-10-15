@@ -1,6 +1,9 @@
 import { test, expect, type Page } from '@playwright/test';
 import { addAuthCookie } from '../helpers/auth';
-import { OPPORTUNITIES } from '../fixtures/opportunities';
+import {
+  OPPORTUNITIES,
+  SCHD_FUNDAMENTALS_UNAVAILABLE_OPPORTUNITY,
+} from '../fixtures/opportunities';
 
 /**
  * Decide → Opportunities queue (feature 083 + feature 097).
@@ -604,5 +607,51 @@ test.describe('Opportunities — single page-1 ListOpportunities RPC (feature 21
     // Post-fix: exactly one page-1 read (both consumers share the CONVICTION-sorted key). Pre-fix:
     // two (page CONVICTION + CopilotRail UNSPECIFIED).
     expect(sorts).toHaveLength(1);
+  });
+});
+
+// @AC-4 (feature 215): the skip row is appended to the queue fixture by route, never added to it.
+async function routeWithSkipRow(page: Page): Promise<void> {
+  const skip = SCHD_FUNDAMENTALS_UNAVAILABLE_OPPORTUNITY;
+  await page.route('**/xstockstrat.analysis.v1.AnalysisService/ListOpportunities', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        opportunities: [
+          ...OPPORTUNITIES.map(toJson),
+          { ...skip, validUntil: new Date(Number(skip.validUntil.seconds) * 1000).toISOString() },
+        ],
+        availableSources: [],
+      }),
+    }),
+  );
+}
+
+test.describe('Opportunities — fundamentals skip row (feature 215)', () => {
+  test('@AC-4: the skip row shows the ETF badge and no act buttons', async ({ page }) => {
+    await addAuthCookie(page);
+    await routeWithSkipRow(page);
+    await page.goto('/insights/opportunities');
+
+    const badge = page.getByTestId('fundamentals-unavailable-SCHD');
+    await expect(badge).toBeVisible({ timeout: 15000 });
+    await expect(badge).toHaveText('Fundamentals unavailable (ETF)');
+    await expect(page.getByTestId('snooze-SCHD')).toHaveCount(0);
+    await expect(page.getByTestId('dismiss-SCHD')).toHaveCount(0);
+  });
+});
+
+test.describe('Opportunities — fundamentals skip row, mobile (feature 215)', () => {
+  test.use({ viewport: { width: 375, height: 800 } });
+
+  test('@AC-4: the mobile skip row shows the ETF badge', async ({ page }) => {
+    await addAuthCookie(page);
+    await routeWithSkipRow(page);
+    await page.goto('/insights/opportunities');
+
+    const badge = page.getByTestId('mobile-fundamentals-unavailable-SCHD');
+    await expect(badge).toBeVisible({ timeout: 15000 });
+    await expect(badge).toHaveText('Fundamentals unavailable (ETF)');
   });
 });

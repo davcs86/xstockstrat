@@ -8,6 +8,10 @@ overwritten last-run-wins, so a throwaway single-symbol run can never displace a
 grade. Mirrors the DB-query style of app/repositories/backtest_runs.py.
 """
 
+# Traded-first eligibility order shared by fetch_eligible's DISTINCT ON and the feature-215
+# derivation read, which must dedup in exactly this order after filtering refused cells.
+_ELIGIBILITY_ORDER = "(total_trades > 0) DESC, trading_days DESC, completed_at DESC"
+
 
 def _to_dict(row) -> dict | None:
     """Convert an asyncpg Record to a plain dict."""
@@ -69,11 +73,31 @@ class BacktestRunSymbolsRepository:
         one cell (zero-trade cells count as evidence).
         """
         rows = await self._db.fetch(
-            """
+            f"""
             SELECT DISTINCT ON (symbol) *
             FROM analysis.backtest_run_symbols
             WHERE strategy_id = $1 AND definition_fingerprint = $2 AND user_id = $3
-            ORDER BY symbol, (total_trades > 0) DESC, trading_days DESC, completed_at DESC
+            ORDER BY symbol, {_ELIGIBILITY_ORDER}
+            """,
+            strategy_id,
+            fingerprint,
+            user_id,
+        )
+        return [_to_dict(r) for r in rows]
+
+    async def fetch_all_for_fingerprint(
+        self, user_id: str, strategy_id: str, fingerprint: str
+    ) -> list[dict]:
+        """Every cell for an owner's (strategy, fingerprint) pair, in ``_ELIGIBILITY_ORDER``.
+
+        Feature 215: grade derivation drops guard-refused windows first, then keeps the first
+        surviving cell per symbol, so a refused window never shadows an eligible one."""
+        rows = await self._db.fetch(
+            f"""
+            SELECT *
+            FROM analysis.backtest_run_symbols
+            WHERE strategy_id = $1 AND definition_fingerprint = $2 AND user_id = $3
+            ORDER BY symbol, {_ELIGIBILITY_ORDER}
             """,
             strategy_id,
             fingerprint,

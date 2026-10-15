@@ -528,3 +528,78 @@ def test_row_to_opportunity_symbol_score_presence():
         }
     )
     assert not absent.HasField("symbol_score")
+
+
+# ── feature 215 — skip-row marker, floor exemption, symbol filter, heal action ───────────────────
+
+
+async def test_read_symbol_filter_binds_at_9():
+    """@AC-15 — ``symbol`` binds at $9 behind an empty-means-all guard; the default binds ``""``."""
+    sql, binds = await _read(symbol="SCHD")
+    assert binds[8] == "SCHD"
+    assert "$9::text = '' OR o.symbol = $9" in sql
+    _, binds_default = await _read()
+    assert binds_default[8] == ""
+
+
+async def test_read_floor_exempts_fundamentals_unavailable():
+    """@AC-13 — the non-actionable skip row (conviction 0) is exempt from the conviction floor."""
+    sql, _ = await _read()
+    assert "o.provenance ? 'fundamentals_unavailable'" in sql
+
+
+def test_fundamentals_unavailable_is_a_structural_marker():
+    """C-16 PRESERVE feature-190 — the skip marker never becomes the row's source / facet value."""
+    assert "fundamentals_unavailable" in _PROVENANCE_STRUCTURAL_MARKERS
+    assert _primary_source(["fundamentals_unavailable", "uw"]) == "uw"
+
+
+def _heal_row(**extra):
+    row = {
+        "opportunity_key": "u1|SCHD|sx",
+        "conviction": 0.0,
+        "readiness_json": {},
+        "signal_axis": 0.0,
+        "provenance": ["watchlist", "fundamentals_unavailable"],
+        "thesis": "",
+        "valid_until": datetime(2999, 1, 1, tzinfo=UTC),
+    }
+    row.update(extra)
+    return row
+
+
+async def test_replace_symbols_rewrites_action_at_11():
+    """@AC-13 — a heal row carrying ``action`` rewrites it (COALESCE bind $11)."""
+    pool, conn = _mock_pool()
+    await OpportunitiesRepository(pool).replace_symbols("u1", [_heal_row(action=0)])
+    sql, params = conn.executemany.await_args.args
+    assert "action = COALESCE($11::int, action)" in sql
+    assert params[0][10] == 0
+
+
+async def test_replace_symbols_without_action_key_leaves_action():
+    """@AC-13 — a heal row with no ``action`` key binds NULL; COALESCE keeps the stored action."""
+    pool, conn = _mock_pool()
+    await OpportunitiesRepository(pool).replace_symbols("u1", [_heal_row()])
+    _, params = conn.executemany.await_args.args
+    assert params[0][10] is None
+
+
+def test_row_to_opportunity_skip_row_round_trip():
+    """The skip marker maps to ``fundamentals_unavailable`` only — not source/data_unavailable."""
+    opp = _row_to_opportunity(
+        {
+            "opportunity_key": "u1|SCHD|sx",
+            "symbol": "SCHD",
+            "strategy_id": "sx",
+            "action": 0,
+            "conviction": 0.0,
+            "readiness_json": {},
+            "provenance": ["watchlist", "fundamentals_unavailable"],
+            "thesis": "",
+            "valid_until": datetime(2999, 1, 1, tzinfo=UTC),
+        }
+    )
+    assert opp.source == ""
+    assert opp.fundamentals_unavailable is True
+    assert opp.data_unavailable is False

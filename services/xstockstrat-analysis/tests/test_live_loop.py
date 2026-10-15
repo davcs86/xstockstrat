@@ -1324,3 +1324,214 @@ class TestLiveLoopSignalScopes:
             pass
         assert indicators.calls
         assert {dict(m).get("x-user-id") for _n, _r, m in indicators.calls} == {"bob"}
+
+
+# ── feature 215: live deny-entry + state-change WARN/alert ────────────────────────────────────
+
+
+def _rpc(code):
+    import grpc
+
+    return grpc.aio.AioRpcError(code, grpc.aio.Metadata(), grpc.aio.Metadata(), "x")
+
+
+class TestLiveLoopFundamentalsDenyEntry_feature215:
+    """@AC-6/@AC-5/@AC-9/@AC-12: a fundamentals strategy on a symbol with no usable fundamentals
+    is denied entry (exits still fire) with one WARN + one alert per unavailable episode."""
+
+    _SID = "fundamentals_macd_blend"
+
+    def _loop(self, snapshot):
+        from tests.test_backtest_fundamentals_guard import _FSCORE_INPUTS
+
+        loop = _make_loop()
+        loop._cfg.get_bool = MagicMock(
+            side_effect=lambda k, d=False: k == "analysis.backtest.fundamentals.enabled" or d
+        )
+        loop._evaluator.declared_formula_fundamentals = AsyncMock(
+            return_value={"fscore": list(_FSCORE_INPUTS)}
+        )
+        loop._marketdata.GetFundamentals = AsyncMock(side_effect=snapshot)
+        return loop
+
+    def _blend(self):
+        return analysis_pb2.StrategyDefinition(
+            strategy_id=self._SID,
+            user_id="u1",
+            display_name="Blend",
+            components=[
+                analysis_pb2.StrategyComponent(
+                    ref_name="fscore",
+                    kind=analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA,
+                    formula_id="fscore",
+                )
+            ],
+        )
+
+    @staticmethod
+    def _aapl_snapshot(*_a, **_k):
+        from tests.conftest import AAPL_PIT_PERIODS
+
+        row = marketdata_pb2.Fundamentals(symbol="AAPL", **AAPL_PIT_PERIODS[-1].values)
+        return marketdata_pb2.GetFundamentalsResponse(fundamentals=row)
+
+    @staticmethod
+    def _not_found(*_a, **_k):
+        import grpc
+
+        raise _rpc(grpc.StatusCode.NOT_FOUND)
+
+    def _fund_alerts(self, loop):
+        return [
+            c
+            for c in loop._notify.EmitAlert.await_args_list
+            if "fundamentals unavailable" in c.args[0].title
+        ]
+
+    @pytest.mark.asyncio
+    async def test_ac6_ac5_denied_three_cycles_one_warn_one_alert(self, caplog):
+        loop = self._loop(self._not_found)
+        loop._evaluator.evaluate = AsyncMock(return_value=[_decision(True, False)])
+        with caplog.at_level(logging.WARNING):
+            for _ in range(3):
+                await loop._eval_pair(self._blend(), "SCHD", throttle=0)
+        assert loop._last_state.get(("u1", self._SID, "SCHD")) is False  # no entry
+        warns = [
+            r
+            for r in caplog.records
+            if r.levelno == logging.WARNING
+            and "SCHD" in r.getMessage()
+            and self._SID in r.getMessage()
+            and "NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE" in r.getMessage()
+        ]
+        assert len(warns) == 1
+        assert loop._notify.EmitAlert.await_count == 1
+        req = loop._notify.EmitAlert.await_args.args[0]
+        assert req.title == f"Strategy {self._SID}: fundamentals unavailable for SCHD"
+        assert req.severity == live_loop_module.notify_pb2.ALERT_SEVERITY_WARNING
+        assert req.category == "strategy"
+        assert f"strategy_id:{self._SID}" in req.tags
+
+    @pytest.mark.asyncio
+    async def test_held_exit_still_fires(self):
+        loop = self._loop(self._not_found)
+        key = ("u1", self._SID, "SCHD")
+        loop._last_state[key] = True
+        loop._last_entry_at[key] = _DEFAULT_BAR_DT - timedelta(days=30)
+        loop._replayed.add(key)
+        loop._evaluator.evaluate = AsyncMock(return_value=[_decision(False, True)])
+        await loop._eval_pair(self._blend(), "SCHD", throttle=0)
+        titles = [c.args[0].title for c in loop._notify.EmitAlert.await_args_list]
+        assert f"Strategy {self._SID} exit on SCHD" in titles
+        assert loop._last_state[key] is False
+
+    @pytest.mark.asyncio
+    async def test_recover_then_relapse_realerts(self):
+        loop = self._loop(self._not_found)
+        loop._evaluator.evaluate = AsyncMock(return_value=[_decision(False, False)])
+        await loop._eval_pair(self._blend(), "SCHD", throttle=0)
+        loop._marketdata.GetFundamentals = AsyncMock(side_effect=self._aapl_snapshot)
+        await loop._eval_pair(self._blend(), "SCHD", throttle=0)
+        assert ("u1", self._SID, "SCHD") not in loop._fund_unavailable
+        loop._marketdata.GetFundamentals = AsyncMock(side_effect=self._not_found)
+        await loop._eval_pair(self._blend(), "SCHD", throttle=0)
+        assert len(self._fund_alerts(loop)) == 2
+
+    @pytest.mark.asyncio
+    async def test_failed_send_does_not_realert(self):
+        loop = self._loop(self._not_found)
+        loop._evaluator.evaluate = AsyncMock(return_value=[_decision(False, False)])
+        loop._notify.EmitAlert = AsyncMock(side_effect=RuntimeError("notify down"))
+        await loop._eval_pair(self._blend(), "SCHD", throttle=0)
+        await loop._eval_pair(self._blend(), "SCHD", throttle=0)
+        assert loop._notify.EmitAlert.await_count == 1
+
+    @pytest.mark.parametrize("code", ["FAILED_PRECONDITION", "UNAVAILABLE"])
+    @pytest.mark.asyncio
+    async def test_ac9_disabled_and_unknown_snapshot_no_state_change(self, code):
+        import grpc
+
+        def _err(*_a, **_k):
+            raise _rpc(getattr(grpc.StatusCode, code))
+
+        loop = self._loop(_err)
+        loop._evaluator.evaluate = AsyncMock(return_value=[_decision(True, False)])
+        await loop._eval_pair(self._blend(), "SCHD", throttle=0)
+        assert self._fund_alerts(loop) == []
+        assert loop._fund_unavailable == set()
+        assert loop._last_state[("u1", self._SID, "SCHD")] is True  # entry not denied
+
+    @pytest.mark.asyncio
+    async def test_pit_outage_unknown_no_alert(self):
+        import grpc
+
+        loop = self._loop(self._not_found)
+        loop._marketdata.GetHistoricalFundamentals = AsyncMock(
+            side_effect=_rpc(grpc.StatusCode.UNAVAILABLE)
+        )
+        defn = analysis_pb2.StrategyDefinition(
+            strategy_id="pe_gate",
+            user_id="u1",
+            components=[
+                analysis_pb2.StrategyComponent(
+                    ref_name="pe",
+                    kind=analysis_pb2.COMPONENT_KIND_FUNDAMENTAL,
+                    fundamental_metric="pe_ratio",
+                )
+            ],
+        )
+        loop._evaluator.declared_formula_fundamentals = AsyncMock(return_value={})
+        loop._evaluator.evaluate = AsyncMock(return_value=[_decision(False, False)])
+        await loop._eval_pair(defn, "SCHD", throttle=0)
+        assert loop._notify.EmitAlert.await_count == 0
+        assert loop._fund_unavailable == set()
+
+    @pytest.mark.asyncio
+    async def test_empty_bars_not_assessed_no_alert(self):
+        loop = self._loop(self._not_found)
+        loop._marketdata.GetBars = AsyncMock(return_value=SimpleNamespace(bars=[]))
+        assert (
+            await loop._eval_pair(self._blend(), "SCHD", throttle=0)
+            == live_loop_module._EVAL_NO_BARS
+        )
+        loop._notify.EmitAlert.assert_not_awaited()
+        assert loop._fund_unavailable == set()
+
+    @pytest.mark.asyncio
+    async def test_aapl_with_fundamentals_enters_normally(self):
+        loop = self._loop(self._aapl_snapshot)
+        loop._evaluator.evaluate = AsyncMock(return_value=[_decision(True, False)])
+        await loop._eval_pair(self._blend(), "AAPL", throttle=0)
+        titles = [c.args[0].title for c in loop._notify.EmitAlert.await_args_list]
+        assert titles == [f"Strategy {self._SID} entry on AAPL"]
+
+    @pytest.mark.asyncio
+    async def test_ac12_two_page_pit_history_loaded_and_entry_allowed(self):
+        from tests.conftest import AAPL_PIT_PERIODS, fund_period
+        from tests.test_backtest_fundamentals_guard import _proto_page
+
+        old = [fund_period(datetime(2000, 1, 1).date() + timedelta(days=30 * i)) for i in range(60)]
+        pages = {"": _proto_page(old, token="p2"), "p2": _proto_page(AAPL_PIT_PERIODS)}
+        loop = self._loop(self._not_found)
+        loop._marketdata.GetHistoricalFundamentals = AsyncMock(
+            side_effect=lambda req, metadata=None, timeout=None: pages[req.page.page_token]
+        )
+        defn = analysis_pb2.StrategyDefinition(
+            strategy_id="dy_gate",
+            user_id="u1",
+            components=[
+                analysis_pb2.StrategyComponent(
+                    ref_name="dy",
+                    kind=analysis_pb2.COMPONENT_KIND_FUNDAMENTAL,
+                    fundamental_metric="dividend_yield",
+                )
+            ],
+        )
+        loop._evaluator.declared_formula_fundamentals = AsyncMock(return_value={})
+        loop._evaluator.evaluate = AsyncMock(return_value=[_decision(True, False)])
+        await loop._eval_pair(defn, "AAPL", throttle=0)
+        assert loop._marketdata.GetHistoricalFundamentals.await_count == 2
+        fed = loop._evaluator.evaluate.await_args.args[4]
+        assert len(fed) == len(old) + len(AAPL_PIT_PERIODS)
+        assert loop._fund_unavailable == set()
+        assert loop._last_state[("u1", "dy_gate", "AAPL")] is True

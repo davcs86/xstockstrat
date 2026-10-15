@@ -17,7 +17,11 @@ import { useRunBacktest, useTriggerBackfill } from '@/hooks/useBacktest';
 import { useGetStrategy, useSetStrategyLiveInsights } from '@/hooks/useStrategyDefinitions';
 import { useStrategyAnalytics } from '@/hooks/useOpportunities';
 import { useIsAdmin } from '@/hooks/useLiveStrategies';
-import { BacktestStatus, SizingMode } from '@xstockstrat/proto/analysis/v1/analysis_pb';
+import {
+  BacktestStatus,
+  NoTradeReason,
+  SizingMode,
+} from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import {
   BacktestDiagnostics,
   SIZING_MODE_LABEL,
@@ -560,6 +564,13 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
                     )}
                   </CardContent>
                 </Card>
+              )}
+
+            {/* A refused-only run is INSUFFICIENT_DATA with no coverage gap; its reason must still render. */}
+            {result &&
+              result.status === BacktestStatus.INSUFFICIENT_DATA &&
+              result.diagnostics.some((d) => d.noTradeReason !== NoTradeReason.UNSPECIFIED) && (
+                <BacktestDiagnostics diagnostics={result.diagnostics} />
               )}
 
             {result && result.status !== BacktestStatus.INSUFFICIENT_DATA && (

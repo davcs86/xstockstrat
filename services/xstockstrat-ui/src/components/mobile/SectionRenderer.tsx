@@ -1,7 +1,8 @@
 'use client';
 import Link from 'next/link';
 import { CaretRight, Warning } from '@phosphor-icons/react';
-import { EnumBadge } from '@/lib/opportunityShared';
+import { FundamentalsGap } from '@xstockstrat/proto/analysis/v1/analysis_pb';
+import { EnumBadge, FUNDAMENTALS_GAP } from '@/lib/opportunityShared';
 import { readinessState } from '@/lib/readinessRollup';
 import { OhlcBlock } from '@/components/shared/OhlcBlock';
 import { cn } from '../ui/utils';
@@ -166,7 +167,12 @@ function SignalRow({ item: s, showSymbol = true }: { item: SignalItem; showSymbo
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           {showSymbol && <span className="font-mono font-semibold">{s.symbol}</span>}
-          {s.muted ? (
+          {s.fundamentalsUnavailable ? (
+            <EnumBadge
+              render={FUNDAMENTALS_GAP[s.fundamentalsGap ?? FundamentalsGap.UNSPECIFIED]}
+              testId={`mobile-fundamentals-unavailable-${s.symbol}`}
+            />
+          ) : s.muted ? (
             <span
               data-testid={`mobile-muted-${s.symbol}`}
               className="rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground"

@@ -161,6 +161,17 @@ sector was applied to pre-go-live history — a known, bounded look-ahead) and a
 **sector classification unavailable** warning (marketdata was unreachable; every bar used
 `default_value`). A run with either warning is not directly comparable to a clean run.
 
+**Fundamentals-gated strategies refuse un-evaluable symbols (feature 215).** A strategy that
+requires fundamentals (a `kind='fundamental'` operand, or a custom formula declaring
+`fundamental_inputs`) is **refused** on a symbol with no usable fundamentals, such as an ETF. It is
+never evaluated into a 0-trade "no signal". The symbol carries
+`no_trade_reason: NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE` plus `fundamentals_gap`, has no trades
+and no evidence cell, and makes the run `BACKTEST_STATUS_INSUFFICIENT_DATA`. Exclude it from any
+basket and report it. A fundamentals fetch outage instead leaves a
+`fundamentals fetch failed for <SYM> — rerun` warning: rerun it. `set_strategy_live` does not check
+this at enable time; the live loop denies entry on such a symbol (exits still fire). See
+`reference/output-handling.md`.
+
 ## Phase 1 — Ensure data coverage (backfill)
 
 A backtest silently reports fewer/short bars if the symbol's history is not backfilled. Before the

@@ -382,6 +382,33 @@ Feature: Platform-wide guarantees
     When the dirty guard evaluates "20 (dirty)", and separately a directory with no contract file evaluates "27 (dirty)"
     Then both evaluations allow the automatic force-0 recovery
 
+  @AC-1 @FR-1 @regression @feature-226
+  Scenario Outline: A backend service exports traces over OTLP/HTTP to a path-prefixed gateway URL
+    Given OTEL_ENABLED is "true"
+    And OTEL_EXPORTER_OTLP_ENDPOINT is the receiver's base URL with path "/otlp"
+    And OTEL_EXPORTER_OTLP_HEADERS is "<headers>"
+    When the service initialises telemetry, records a span, and flushes on shutdown
+    Then the receiver gets an HTTP POST to "/otlp/v1/traces"
+    And the request carries the header "Authorization: Basic dGVzdDprZXk="
+
+    Examples:
+      | form    | headers                              |
+      | raw     | Authorization=Basic dGVzdDprZXk=     |
+      | encoded | Authorization=Basic%20dGVzdDprZXk%3D |
+
+  @AC-3 @FR-3 @regression @feature-226
+  Scenario: A failed trace export is visible in service logs
+    Given OTEL_ENABLED is "true"
+    And OTEL_EXPORTER_OTLP_ENDPOINT points at a receiver that rejects the export
+    When the service flushes a span
+    Then the service log contains an OTel export error
+
+  @AC-4 @FR-4 @regression @feature-226
+  Scenario: Local compose routes every service to the collector's OTLP/HTTP receiver
+    Given the local docker-compose stack with OTEL_ENABLED "true"
+    When any service's OTEL_EXPORTER_OTLP_ENDPOINT is read from docker-compose.yml
+    Then it is "http://otel-collector:4318"
+
   # ─── setup-env produces a bootable .env (feature 218) ─────────────────────
 
   @AC-1 @regression @feature-218

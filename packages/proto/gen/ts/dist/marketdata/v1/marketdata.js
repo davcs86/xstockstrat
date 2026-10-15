@@ -5,7 +5,8 @@
 //   protoc               unknown
 // source: marketdata/v1/marketdata.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.MarketDataServiceClient = exports.MarketDataServiceService = exports.GetSectorHistoryResponse = exports.GetSectorHistoryRequest = exports.SectorHistoryRow = exports.GetSectorAsOfResponse = exports.GetSectorAsOfRequest = exports.GetCurrentSectorResponse = exports.GetCurrentSectorRequest = exports.SymbolSector = exports.BatchGetLatestPriceResponse = exports.BatchGetLatestPriceRequest = exports.BatchGetBarsResponse = exports.SymbolBars = exports.BatchGetBarsRequest = exports.GetLatestQuotesResponse = exports.GetLatestQuotesRequest = exports.BackfillFundamentalsResponse = exports.BackfillFundamentalsRequest = exports.GetHistoricalFundamentalsResponse = exports.GetHistoricalFundamentalsRequest = exports.HistoricalFundamentalsPeriod_ExtraMetricsEntry = exports.HistoricalFundamentalsPeriod = exports.GetFundamentalsMultiResponse = exports.GetFundamentalsMultiRequest = exports.GetFundamentalsResponse = exports.GetFundamentalsRequest = exports.Fundamentals_ExtraMetricsEntry = exports.Fundamentals = exports.DeleteBackfilledDataResponse = exports.DeleteBackfilledDataRequest = exports.ListAssetsResponse = exports.ListAssetsRequest = exports.GetDataCoverageResponse = exports.CoverageRange = exports.GetDataCoverageRequest = exports.BackfillBarsResponse = exports.BackfillBarsRequest = exports.GetLatestQuoteRequest = exports.GetBarsResponse = exports.GetBarsRequest = exports.StreamQuotesRequest = exports.StreamBarsRequest = exports.LatestPrice = exports.GetLatestPriceRequest = exports.Quote = exports.Bar = exports.protobufPackage = void 0;
+exports.MarketDataServiceService = exports.GetEtfFlagsResponse = exports.EtfFlag = exports.GetEtfFlagsRequest = exports.GetSectorHistoryResponse = exports.GetSectorHistoryRequest = exports.SectorHistoryRow = exports.GetSectorAsOfResponse = exports.GetSectorAsOfRequest = exports.GetCurrentSectorResponse = exports.GetCurrentSectorRequest = exports.SymbolSector = exports.BatchGetLatestPriceResponse = exports.BatchGetLatestPriceRequest = exports.BatchGetBarsResponse = exports.SymbolBars = exports.BatchGetBarsRequest = exports.GetLatestQuotesResponse = exports.GetLatestQuotesRequest = exports.BackfillFundamentalsResponse = exports.BackfillFundamentalsRequest = exports.GetHistoricalFundamentalsResponse = exports.GetHistoricalFundamentalsRequest = exports.HistoricalFundamentalsPeriod_ExtraMetricsEntry = exports.HistoricalFundamentalsPeriod = exports.GetFundamentalsMultiResponse = exports.GetFundamentalsMultiRequest = exports.GetFundamentalsResponse = exports.GetFundamentalsRequest = exports.Fundamentals_ExtraMetricsEntry = exports.Fundamentals = exports.DeleteBackfilledDataResponse = exports.DeleteBackfilledDataRequest = exports.ListAssetsResponse = exports.ListAssetsRequest = exports.GetDataCoverageResponse = exports.CoverageRange = exports.GetDataCoverageRequest = exports.BackfillBarsResponse = exports.BackfillBarsRequest = exports.GetLatestQuoteRequest = exports.GetBarsResponse = exports.GetBarsRequest = exports.StreamQuotesRequest = exports.StreamBarsRequest = exports.LatestPrice = exports.GetLatestPriceRequest = exports.Quote = exports.Bar = exports.protobufPackage = void 0;
+exports.MarketDataServiceClient = void 0;
 /* eslint-disable */
 const wire_1 = require("@bufbuild/protobuf/wire");
 const grpc_js_1 = require("@grpc/grpc-js");
@@ -4438,6 +4439,182 @@ exports.GetSectorHistoryResponse = {
         return message;
     },
 };
+function createBaseGetEtfFlagsRequest() {
+    return { symbols: [] };
+}
+exports.GetEtfFlagsRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        for (const v of message.symbols) {
+            writer.uint32(10).string(v);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseGetEtfFlagsRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.symbols.push(reader.string());
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            symbols: globalThis.Array.isArray(object?.symbols) ? object.symbols.map((e) => globalThis.String(e)) : [],
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.symbols?.length) {
+            obj.symbols = message.symbols;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.GetEtfFlagsRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseGetEtfFlagsRequest();
+        message.symbols = object.symbols?.map((e) => e) || [];
+        return message;
+    },
+};
+function createBaseEtfFlag() {
+    return { symbol: "", isEtf: undefined };
+}
+exports.EtfFlag = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.symbol !== "") {
+            writer.uint32(10).string(message.symbol);
+        }
+        if (message.isEtf !== undefined) {
+            writer.uint32(16).bool(message.isEtf);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseEtfFlag();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.symbol = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 16) {
+                        break;
+                    }
+                    message.isEtf = reader.bool();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
+            isEtf: isSet(object.isEtf)
+                ? globalThis.Boolean(object.isEtf)
+                : isSet(object.is_etf)
+                    ? globalThis.Boolean(object.is_etf)
+                    : undefined,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.symbol !== "") {
+            obj.symbol = message.symbol;
+        }
+        if (message.isEtf !== undefined) {
+            obj.isEtf = message.isEtf;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.EtfFlag.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseEtfFlag();
+        message.symbol = object.symbol ?? "";
+        message.isEtf = object.isEtf ?? undefined;
+        return message;
+    },
+};
+function createBaseGetEtfFlagsResponse() {
+    return { flags: [] };
+}
+exports.GetEtfFlagsResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        for (const v of message.flags) {
+            exports.EtfFlag.encode(v, writer.uint32(10).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseGetEtfFlagsResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.flags.push(exports.EtfFlag.decode(reader, reader.uint32()));
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return { flags: globalThis.Array.isArray(object?.flags) ? object.flags.map((e) => exports.EtfFlag.fromJSON(e)) : [] };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.flags?.length) {
+            obj.flags = message.flags.map((e) => exports.EtfFlag.toJSON(e));
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.GetEtfFlagsResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseGetEtfFlagsResponse();
+        message.flags = object.flags?.map((e) => exports.EtfFlag.fromPartial(e)) || [];
+        return message;
+    },
+};
 exports.MarketDataServiceService = {
     /** Stream live bar data for symbols */
     streamBars: {
@@ -4638,6 +4815,19 @@ exports.MarketDataServiceService = {
         requestDeserialize: (value) => exports.GetSectorHistoryRequest.decode(value),
         responseSerialize: (value) => Buffer.from(exports.GetSectorHistoryResponse.encode(value).finish()),
         responseDeserialize: (value) => exports.GetSectorHistoryResponse.decode(value),
+    },
+    /**
+     * feature 215 — cache-only ETF label read: never calls FMP on the request path; an unknown
+     * symbol returns is_etf unset.
+     */
+    getEtfFlags: {
+        path: "/xstockstrat.marketdata.v1.MarketDataService/GetEtfFlags",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.GetEtfFlagsRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.GetEtfFlagsRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.GetEtfFlagsResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.GetEtfFlagsResponse.decode(value),
     },
 };
 exports.MarketDataServiceClient = (0, grpc_js_1.makeGenericClientConstructor)(exports.MarketDataServiceService, "xstockstrat.marketdata.v1.MarketDataService");
