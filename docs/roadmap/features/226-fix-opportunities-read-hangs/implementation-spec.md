@@ -282,7 +282,7 @@ grep -n "WithoutCancel\|resolveBatchPriceBudget\|per-symbol fallback incomplete"
 
 ### Step 4 — test: marketdata AC-3, hang/budget, prevClose concurrency (G10), resolver
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go` — modify

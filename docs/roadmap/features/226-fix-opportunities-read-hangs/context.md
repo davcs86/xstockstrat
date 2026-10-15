@@ -106,3 +106,10 @@ The singleflight closure now runs on `context.WithTimeout(context.WithoutCancel(
 - Files modified: `services/xstockstrat-marketdata/internal/service/marketdata_service.go`
 - Deviations: golangci-lint v2.14.0 binary substituted for the sandbox's v2.5.0 (Deviation Log, CI-equivalent fallback)
 - TDD red (skeleton-first per Step 4 instr. 0: seams/fields + a `resolveBatchPriceBudget` stub returning 2500ms, unused): `go test ./internal/service/ -race -run 'BatchGetLatestPrice|ResolveBatchPriceBudget'` → 8 FAIL (AC-3 "expected the multi-symbol fetch failure WARN, got []"; hang and G10 tripped the 5s guard; resolver "2.5s, want 50ms"). Green: same run → all 11 PASS; `go build` ok; golangci-lint 0 issues.
+
+### Step 4 — marketdata AC-3, hang/budget, prevClose concurrency (G10), resolver [done]
+
+Extended `fakeBatchPriceSource` (ctx-honouring, injectable multi-fetch error/block/gate, `GetLatestTrade`), added `recordingWarnHandler`, `fakeIntGetter`, `fakePrevCloseReader` and a 5s goroutine/select guard, plus AC-3, hang, incomplete-record, source-lookup, prevClose, G10, detached-cancel and resolver tests. Fakes stay inline (C-13, one consumer).
+- Files modified: `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go`
+- Deviations: none (golangci-lint substitution as Step 3)
+- TDD: AC-3 red: "expected the multi-symbol fetch failure WARN, got []" → green: PASS (red/green detail in Step 3 entry). Verification: `go test ./... -race -count=1 -coverpkg=…` all ok, total 71.0% (≥40); golangci-lint 0 issues.
