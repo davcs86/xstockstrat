@@ -212,3 +212,7 @@ analysis `CLAUDE.md`: the Decide-surface memo sentence now says live quote only 
   in the files this feature touches, including the defect `.status` ref. Main-dev's own feature-226 (otel) references
   are untouched (verified: no line from main-dev that mentions 226 was changed). The Deviation Log quote of the old
   `read_budget.py` docstring keeps its original text.
+- C-16 promotion (operator-confirmed): @AC-1 and @AC-4 → `services/xstockstrat-analysis/acceptance/fix-opportunities-read-hangs.feature`;
+  @AC-2 → `services/xstockstrat-agent/acceptance/fix-opportunities-read-hangs.feature`; @AC-3 →
+  `services/xstockstrat-marketdata/acceptance/fix-opportunities-read-hangs.feature`. All are tagged `@feature-227`.
+  No dedup skips.
