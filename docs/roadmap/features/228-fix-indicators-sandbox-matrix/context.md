@@ -140,3 +140,23 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - TDD (paired with Step 2; per-test lines in the Step 2 entry): red: 6 failed / 33 passed on
   `test_sandbox_isolation.py` + `test_sandbox.py` (T1, T2, T2b, T4, T5×2 red; T3 green as the preservation
   guard) → green: 39 passed.
+
+### Step 2 — test: indicators sandbox — @AC-1..5 headroom, fail-closed, classification and probe [done]
+- Files: `services/xstockstrat-indicators/tests/test_sandbox_isolation.py`.
+- Added in-file helpers `_MIB`, `_LINALG_800_SRC` (now also used by `test_large_array_linalg_hits_mbind`),
+  `_ALLOC_32MIB_SRC` and `_fake_popen` (lifted from T1's inline `_FakeProc`). C-13: single-file consumers, no
+  `conftest.py` entry.
+- Tests: T1 rewritten (`TestLimitsConfigured::test_rlimits_derive_from_config_in_wrapper`); T2b
+  `TestNumericParityGolden::test_large_array_linalg_at_half_default_headroom`; `TestMemoryHeadroom` (T2, T3);
+  `TestExitReasonClassification` (T4); `TestBaselineProbe` (T5 ×2).
+- TDD red (pre-Step-1 `sandbox.py`):
+  - AC-1 red: T2b `assert False is True` (`Unable to allocate 4.88 MiB` at 64 MiB absolute cap);
+  - AC-3 red: T2 `_ArrayMemoryError: Unable to allocate 32.0 MiB` at 64 MiB;
+  - AC-4 red: T4 `'runtime_error' == 'memory_exceeded'`;
+  - AC-5 red: T5 ×2 `AttributeError: module 'app.services.sandbox' has no attribute '_VMDATA_PROBE'`;
+  - T1 red: `assert 'VmData:' in wrapped`;
+  - AC-2: T3 green before (`memory_exceeded`), the preservation guard.
+- TDD green: `test_sandbox_isolation.py` + `test_sandbox.py` 39 passed; flake guard
+  (`TestNumericParityGolden` + `TestMemoryHeadroom`) 5/5 runs × 9 passed; full suite 290 passed, coverage 85.61%
+  (≥ 50%); `ruff check` / `ruff format --check` clean; `! grep conftest` OK.
+- Deviations: none.

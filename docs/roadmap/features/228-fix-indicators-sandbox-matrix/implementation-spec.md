@@ -221,7 +221,7 @@ uv run --no-sync ruff check . && uv run --no-sync ruff format --check .
 
 ### Step 2 — test: indicators sandbox — @AC-1..5 headroom, fail-closed, classification and probe
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/test_sandbox_isolation.py` — modify
