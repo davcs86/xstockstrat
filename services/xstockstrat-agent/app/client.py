@@ -850,6 +850,7 @@ async def list_opportunities(
     min_conviction: float = 0.0,
     page_size: int = 50,
     page_token: str = "",
+    timeout: float | None = None,
 ) -> dict[str, Any]:
     """List the caller's ranked Decide-queue opportunities with live-market enrichment (feature 095,
     read-only). Caller-scoped via ``x-user-id`` (no admin ``x-access-scope``) — analysis resolves
@@ -868,6 +869,7 @@ async def list_opportunities(
                 page=common_pb2.PageRequest(page_size=page_size, page_token=page_token),
             ),
             metadata=_metadata(("x-user-id", user_id)),
+            timeout=timeout,
         )
     # feature 185 (FR-4/FR-6) — carry the response-level pending signals so a cold or persistently
     # failed queue is reported explicitly, never as a silently-empty list to a one-shot consumer.

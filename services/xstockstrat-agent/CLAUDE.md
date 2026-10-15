@@ -202,6 +202,7 @@ its docstring for the read signature and oneof-stringify behavior.
 | `agent.extract.max_bytes` | int | `5000000` | Max response body bytes read before the `extract_*` fetch aborts (feature 207) |
 | `agent.extract.connect_timeout_seconds` | float | `10.0` | Connect timeout for the `extract_*` fetch (feature 207) |
 | `agent.extract.read_timeout_seconds` | float | `30.0` | Read timeout for the `extract_*` fetch (feature 207) |
+| `agent.opportunities.read_timeout_seconds` (stored ns `agent`, key `opportunities.read_timeout_seconds`) | float (int accepted) | `40` | Feature 227 — gRPC deadline (s) the `list_opportunities` tool puts on analysis `ListOpportunities`; on expiry the tool raises "upstream did not respond within Ns (deadline exceeded); retry shortly". The policy read itself is capped by the fixed invariant `_POLICY_READ_TIMEOUT_S` = 3s (not a config key); a timed-out read, a non-finite value or `≤ 0` → `40`. Unseeded (feature 227 seeding waiver); SetConfig-bounded `[30,55]` (floor above analysis's own worst case, ceiling + 3s under the MCP client's 60s). |
 
 ## Environment Variables
 

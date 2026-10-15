@@ -55,6 +55,7 @@ from app.repositories.opportunity_compute_state import OpportunityComputeStateRe
 from app.repositories.order_snapshots import OrderSnapshotsRepository
 from app.repositories.pnl_pattern_samples import PnLPatternSamplesRepository
 from app.repositories.pnl_positions import PnLPositionsRepository
+from app.repositories.read_budget import budgeted_read, is_transient_db_error
 from app.repositories.readiness_cache import ReadinessCacheRepository
 from app.repositories.strategies import StrategiesRepository
 from app.repositories.strategy_scores import StrategyScoresRepository
@@ -333,6 +334,10 @@ _DEFAULT_WATCHLIST_READINESS_PAGE_SIZE = 25
 _MAX_DRAIN_PAGES = 50
 # Default queue page size when the request omits one.
 _DEFAULT_OPP_PAGE_SIZE = 50
+# Defaults for the opportunities read deadlines; a non-positive or float-typed config value
+# falls back here, so the analysis bound stays under the UI BFF's 30s deadline.
+_DEFAULT_OPP_READ_DB_BUDGET_MS = 20000
+_DEFAULT_OPP_LIVE_ENRICH_TIMEOUT_MS = 3000
 # Fixed invariant cap (operator round-5 ruling, not a config key): ambiguous (user_id, strategy_id)
 # score pairs recomputed per boot pass, bounding boot latency against the pooled DB.
 _BOOT_RECOMPUTE_MAX_PAIRS = 50
@@ -475,6 +480,19 @@ def owner_scoped(fn):
     return wrapper
 
 
+@dataclass
+class _OpportunityQueueRead:
+    """A ListOpportunities DB-phase result; kicks fire only after its connection is released."""
+
+    rows: list = field(default_factory=list)
+    available: list = field(default_factory=list)
+    served_include_expired: bool = False
+    computing: bool = False
+    compute_failed: bool = False
+    kick_full: bool = False
+    retry_symbols: set = field(default_factory=set)
+
+
 class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
     def __init__(
         self,
@@ -555,6 +573,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # Materialized per-user opportunity queue: ListOpportunities is a pure read of this table,
         # kept fresh by compute-on-read + stale-while-revalidate + a daily refresh. None in no-DB.
         self._opportunities_repo = OpportunitiesRepository(db_pool) if db_pool else None
+        self._opps_repo_factory = OpportunitiesRepository
         # feature 177 FR-1: per-(user,strategy,rule,symbol) readiness cache backing the FAST path.
         self._readiness_cache_repo = ReadinessCacheRepository(db_pool) if db_pool else None
         # feature 180: the readiness materializer's OWN bars-fetch semaphore — SEPARATE from
@@ -570,6 +589,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         self._opportunity_compute_state_repo = (
             OpportunityComputeStateRepository(db_pool) if db_pool else None
         )
+        self._state_repo_factory = OpportunityComputeStateRepository
         # P&L pattern attribution samples: written by the pnl_pattern_consumer, read here by
         # QueryPnLPatterns with query-time quantile bucketing.
         self._pnl_samples_repo = PnLPatternSamplesRepository(db_pool) if db_pool else None
@@ -4516,11 +4536,87 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         if self._opportunities_repo is None:  # no-DB test path
             return analysis_pb2.ListOpportunitiesResponse(page=common_pb2.PageResponse())
 
+        # Simple offset pagination (page_token = integer offset).
+        page_size = request.page.page_size if request.page.page_size > 0 else _DEFAULT_OPP_PAGE_SIZE
+        try:
+            offset = int(request.page.page_token) if request.page.page_token else 0
+        except ValueError:
+            offset = 0
+        budget_ms = self._cfg.get_int(
+            "analysis.opportunity.read_db_budget_ms", _DEFAULT_OPP_READ_DB_BUDGET_MS
+        )
+        if budget_ms <= 0:
+            budget_ms = _DEFAULT_OPP_READ_DB_BUDGET_MS
+
+        q = _OpportunityQueueRead()
+        err = None
+        try:
+            if self._db_pool is not None:
+                async with budgeted_read(self._db_pool, budget_ms / 1000) as bc:
+                    await self._read_opportunity_queue(
+                        self._opps_repo_factory(bc),
+                        self._state_repo_factory(bc),
+                        user_id,
+                        request,
+                        offset,
+                        q,
+                    )
+            else:  # injected-repo test path: no pool, no budget
+                await self._read_opportunity_queue(
+                    self._opportunities_repo,
+                    self._opportunity_compute_state_repo,
+                    user_id,
+                    request,
+                    offset,
+                    q,
+                )
+        except Exception as e:  # an external CancelledError propagates unlogged
+            err = e
+        finally:
+            if q.kick_full:
+                self._kick_opportunity_recompute(user_id, propagation_meta)
+            if q.retry_symbols:
+                self._kick_opportunity_retry(user_id, q.retry_symbols, propagation_meta)
+        if err is not None:
+            if is_transient_db_error(err):
+                log.warning(
+                    "ListOpportunities: opportunities store unavailable (%s: %s); "
+                    "returning UNAVAILABLE",
+                    type(err).__name__,
+                    err,
+                )
+                await context.abort(
+                    grpc.StatusCode.UNAVAILABLE, "opportunities store unavailable; retry"
+                )
+                return None  # a non-raising abort (test contexts) must not serve a response
+            log.error(
+                "ListOpportunities: opportunities read failed (%s: %s)", type(err).__name__, err
+            )
+            raise err
+
+        rows = q.rows
+        window = rows[offset : offset + page_size]
+        next_token = str(offset + page_size) if offset + page_size < len(rows) else ""
+        opps = [_row_to_opportunity(r) for r in window]
+        # Read-time live-market enrichment, AFTER ranking, so the live quote never enters the
+        # conviction/ORDER BY path.
+        await self._enrich_opportunities_live(opps, propagation_meta)
+        return analysis_pb2.ListOpportunitiesResponse(
+            opportunities=opps,
+            page=common_pb2.PageResponse(next_page_token=next_token),
+            computing=q.computing,
+            compute_failed=q.compute_failed,
+            available_sources=q.available,
+        )
+
+    async def _read_opportunity_queue(self, opps, state_repo, user_id, request, offset, q) -> None:
+        """The ListOpportunities DB phase, filling ``q``. Statements run strictly sequentially
+        (one budgeted connection); kicks are only recorded, never fired, here."""
         w = self._cfg.get_float("analysis.opportunity.signal_rank_weight", 0.3)
         # feature 190 — server-side filters/sort forwarded from the request into the read.
         req_sources = list(request.sources)
         req_symbol = _normalize_symbol(request.symbol) if request.symbol else ""
-        rows = await self._opportunities_repo.read(
+        rows = await opps.read(
             user_id,
             request.min_conviction,
             w,
@@ -4530,52 +4626,42 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             sort=request.sort,
             symbol=req_symbol,
         )
-        # feature 190 — the include_expired that actually produced the served rows (fresh=False;
-        # set True in the stale branch below), so the offset==0 facet matches served freshness (O7).
-        served_include_expired = False
-        # feature 185 FR-4 — response-level cold-read pending signals. Both stay False for a fresh,
-        # stale, or legitimately-empty read (the distinctness proof: an empty universe returns empty
-        # WITHOUT the flag); only a cold, never-materialized read sets computing / compute_failed.
-        computing = False
-        compute_failed = False
-        served_fresh = bool(rows)  # feature 185 FR-5 — only a fresh read is scanned for retry
-        if not rows:
-            if await self._opportunities_repo.count_for_user(user_id) == 0:
+        if rows:
+            # feature 185 FR-5 — surgical read-time recovery. On a FRESH read, a served row that
+            # is data-unavailable and older than the retry cooldown gets a per-symbol recovery
+            # (not the full universe). Not on the cold/empty or stale branches (the stale branch
+            # already fires a full recompute). Deduped by the _opportunity_retrying guard.
+            if user_id not in self._opportunity_retrying:
+                now = datetime.now(UTC)
+                q.retry_symbols = {
+                    r["symbol"]
+                    for r in rows
+                    if "unavailable" in (r.get("provenance") or [])
+                    and r.get("computed_at") is not None
+                    and (now - r["computed_at"]).total_seconds()
+                    > _OPPORTUNITY_UNAVAILABLE_RETRY_SECONDS
+                }
+        else:
+            n = await opps.count_for_user(user_id)
+            q.kick_full = True  # every no-rows branch revalidates in the background
+            if n == 0:
                 # Cold read (never materialized) OR a legitimately-empty universe. Feature 177
-                # FR-3: consult compute-state — a still-fresh empty stamp serves empty without a
-                # synchronous recompute (a background revalidate self-heals an empty→non-empty
-                # transition within ≈ one poll cycle); otherwise compute synchronously.
-                state = (
-                    await self._opportunity_compute_state_repo.get(user_id)
-                    if self._opportunity_compute_state_repo is not None
-                    else None
-                )
-                if state is not None and datetime.now(UTC) < state["valid_until"]:
-                    self._kick_opportunity_recompute(user_id, propagation_meta)
-                    # Legitimately-empty universe (a fresh empty stamp): serve empty WITHOUT a
-                    # pending flag (@AC-6 distinctness) — computing/compute_failed stay False.
-                    # rows stays [] → falls through to (empty) pagination/enrichment.
-                else:
-                    # feature 185 FR-4 — cold (never-materialized) read is NON-BLOCKING: kick a
-                    # background recompute and serve an empty page + a pending signal, instead of
-                    # computing synchronously under the per-user lock (a cold user has no cached
-                    # rows to show, so the synchronous wait bought nothing; the client polls).
-                    self._kick_opportunity_recompute(user_id, propagation_meta)
+                # FR-3: a still-fresh empty stamp serves empty WITHOUT a pending flag (@AC-6
+                # distinctness); otherwise (feature 185 FR-4) the cold read is non-blocking and
+                # reports computing, or compute_failed once the attempts are exhausted (@AC-7).
+                state = await state_repo.get(user_id) if state_repo is not None else None
+                if not (state is not None and datetime.now(UTC) < state["valid_until"]):
                     if (
                         self._opportunity_compute_failures.get(user_id, 0)
                         >= _OPPORTUNITY_COMPUTE_MAX_ATTEMPTS
                     ):
-                        # Terminal: bounded attempts exhausted — render an error, not an infinite
-                        # spinner (@AC-7). Still kicked above so it self-heals when data recovers.
-                        compute_failed = True
+                        q.compute_failed = True
                     else:
-                        computing = True  # recompute in flight (@AC-6)
-                    # rows stays [] → falls through to the (empty) pagination below.
+                        q.computing = True
             else:
                 # All rows stale: serve stale now, revalidate in the background.
-                self._kick_opportunity_recompute(user_id, propagation_meta)
-                served_include_expired = True  # feature 190 O7 — facet must match served freshness
-                rows = await self._opportunities_repo.read(
+                q.served_include_expired = True  # feature 190 O7 — facet matches served freshness
+                rows = await opps.read(
                     user_id,
                     request.min_conviction,
                     w,
@@ -4585,53 +4671,14 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     sort=request.sort,
                     symbol=req_symbol,
                 )
-
-        # feature 185 FR-5 — surgical read-time recovery. On a FRESH read (real rows were served),
-        # if any served row is data-unavailable and older than the retry cooldown, kick a background
-        # per-symbol recovery (not the full universe). NOT run on the cold/empty branches (no rows
-        # to scan) nor the stale branch (it already fired a full recompute — avoid double work +
-        # lock contention). Deduped by the _opportunity_retrying guard.
-        if served_fresh and user_id not in self._opportunity_retrying:
-            now = datetime.now(UTC)
-            stale_unavailable = {
-                r["symbol"]
-                for r in rows
-                if "unavailable" in (r.get("provenance") or [])
-                and r.get("computed_at") is not None
-                and (now - r["computed_at"]).total_seconds()
-                > _OPPORTUNITY_UNAVAILABLE_RETRY_SECONDS
-            }
-            if stale_unavailable:
-                self._kick_opportunity_retry(user_id, stale_unavailable, propagation_meta)
-
-        # Simple offset pagination (page_token = integer offset).
-        page_size = request.page.page_size if request.page.page_size > 0 else _DEFAULT_OPP_PAGE_SIZE
-        try:
-            offset = int(request.page.page_token) if request.page.page_token else 0
-        except ValueError:
-            offset = 0
-        window = rows[offset : offset + page_size]
-        next_token = str(offset + page_size) if offset + page_size < len(rows) else ""
-        opps = [_row_to_opportunity(r) for r in window]
-        # Read-time live-market enrichment, AFTER ranking, so the live quote never enters the
-        # conviction/ORDER BY path.
-        await self._enrich_opportunities_live(opps, propagation_meta)
+        q.rows = rows
         # feature 190 — the source-facet, computed only on page 0 (offset==0; the client reads it),
         # scoped to the SAME freshness that produced the served rows (O1/O7) and independent of the
         # request filters (O3) so a selected source can never vanish from the chip menu (@AC-12).
-        available = (
-            await self._opportunities_repo.available_sources(
-                user_id, include_expired=served_include_expired
-            )
+        q.available = (
+            await opps.available_sources(user_id, include_expired=q.served_include_expired)
             if offset == 0
             else []
-        )
-        return analysis_pb2.ListOpportunitiesResponse(
-            opportunities=opps,
-            page=common_pb2.PageResponse(next_page_token=next_token),
-            computing=computing,
-            compute_failed=compute_failed,
-            available_sources=available,
         )
 
     async def _enrich_opportunities_live(self, opps, propagation_meta) -> None:
@@ -4651,6 +4698,11 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # FR-4: a short success-only memo skips the live RPC for a symbol re-enriched within
         # the window (0 disables the memo → always fetch). Read once per pass (F-07).
         ttl = self._cfg.get_int_present("analysis.opportunity.live_enrich_ttl_seconds", 20)
+        enrich_ms = self._cfg.get_int(
+            "analysis.opportunity.live_enrich_timeout_ms", _DEFAULT_OPP_LIVE_ENRICH_TIMEOUT_MS
+        )
+        if enrich_ms <= 0:
+            enrich_ms = _DEFAULT_OPP_LIVE_ENRICH_TIMEOUT_MS
         # Dedup the marketdata reads per symbol — several opportunities can share one symbol.
         by_symbol: dict[str, list] = {}
         for opp in opps:
@@ -4680,16 +4732,24 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # Batch price data — one RPC for all symbols (AC-8).
         price_by_symbol: dict[str, tuple] = {}
         try:
-            price_resp = await self._marketdata.BatchGetLatestPrice(
-                marketdata_pb2.BatchGetLatestPriceRequest(symbols=needs_fetch),
-                metadata=propagation_meta,
+            price_resp = await asyncio.wait_for(
+                self._marketdata.BatchGetLatestPrice(
+                    marketdata_pb2.BatchGetLatestPriceRequest(symbols=needs_fetch),
+                    metadata=propagation_meta,
+                ),
+                timeout=enrich_ms / 1000,
             )
             for sp in price_resp.results:
                 lp = sp.last_price if sp.HasField("last_price") else None
                 pc = sp.prev_close if sp.HasField("prev_close") else None
                 price_by_symbol[sp.symbol] = (lp, pc)
         except Exception as e:
-            log.warning("_enrich_opportunities_live: BatchGetLatestPrice failed: %s", e)
+            log.warning(
+                "_enrich_opportunities_live: BatchGetLatestPrice failed (%s: %s); "
+                "serving unenriched",
+                type(e).__name__,
+                e,
+            )
 
         # Apply results per symbol, memoize full successes (AC-11 omit-not-fabricate).
         for symbol in needs_fetch:

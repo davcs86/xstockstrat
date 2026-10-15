@@ -4580,6 +4580,7 @@ async def _list_opps(svc, **kwargs):
     return {o.symbol: o for o in resp.opportunities}, resp.opportunities
 
 
+@pytest.mark.usefixtures("read_path")
 class TestListOpportunitiesMaterialized:
     @pytest.mark.asyncio
     async def test_watchlist_and_held_add_rows_with_real_readiness(self):
@@ -5415,6 +5416,7 @@ class _StampedComputeState:
         self._row = {"computed_at": datetime.now(UTC), "valid_until": valid_until}
 
 
+@pytest.mark.usefixtures("read_path")
 class TestColdReadNonBlocking:
     """feature 185 FR-4 (@AC-6/@AC-7) — a cold (never-materialized) ListOpportunities read returns
     empty + a pending signal WITHOUT computing synchronously, distinct from a legitimately-empty
@@ -5556,6 +5558,7 @@ class TestOpportunitySurgicalRecovery:
         assert svc._opportunities_repo.rows["u1"] == []  # never inserted
 
     @pytest.mark.asyncio
+    @pytest.mark.usefixtures("read_path")
     async def test_fresh_read_scan_kicks_retry_for_stale_unavailable_only(self):
         """@AC-8 scan: a FRESH read kicks the surgical retry for data-unavailable rows older than
         the cooldown ONLY — a within-cooldown unavailable row and an evaluated (non-unavailable) row
@@ -5664,6 +5667,7 @@ class TestOpportunitySurgicalRecovery:
         assert cache.upserted == []  # still-down → not staged
 
     @pytest.mark.asyncio
+    @pytest.mark.usefixtures("read_path")
     async def test_paging_stable_across_tied_unavailable_rows(self):
         """Paging determinism: several rows tied at conviction=0, signal_axis=0 paginate via the
         opportunity_key ASC tiebreak so each row is returned once across two offset polls."""
@@ -5698,6 +5702,7 @@ class TestOpportunitySurgicalRecovery:
         assert len(seen) == len(set(seen))  # each row exactly once (stable paging)
 
     @pytest.mark.asyncio
+    @pytest.mark.usefixtures("read_path")
     async def test_symbol_grouping_contiguous_across_pages(self):
         """AC-6 @feature-187: server-side symbol grouping keeps each symbol's rows contiguous,
         positioned by the group's highest-ranked member. A page boundary never splits a symbol."""
@@ -5783,6 +5788,7 @@ class TestOpportunitySurgicalRecovery:
         assert p1_convictions == [0.9, 0.8, 0.7, 0.6]
 
     @pytest.mark.asyncio
+    @pytest.mark.usefixtures("read_path")
     async def test_default_page_size_is_50(self):
         """AC-1 @feature-187: default page size is 50 — a request with no page_size returns
         at most 50 rows and a non-empty next_page_token when more exist."""
@@ -5825,6 +5831,7 @@ class TestOpportunitySurgicalRecovery:
         assert resp.page.next_page_token == "50"
 
 
+@pytest.mark.usefixtures("read_path")
 class TestOpportunityBarsFetchDedup:
     """feature 141 — per-pass bars dedup + cross-request semaphore fixing the "out of shared
     memory" (SQLSTATE 53200) bars-fetch failures caused by feature 131/132's widened candidate
@@ -7131,6 +7138,7 @@ class TestSignalConfidence:
         assert not without.HasField("signal_confidence")  # no active signal → genuine unset (P-03)
 
     @pytest.mark.asyncio
+    @pytest.mark.usefixtures("read_path")
     async def test_producer_selects_max_raw_conviction(self):
         """AC-4 — a symbol with two active signals (raw 0.30 and 0.90) yields signal_confidence 0.90
         (the max raw ExternalSignal.conviction), the sizing probability that is NOT the ordinal
@@ -7180,6 +7188,7 @@ class TestOpportunityConcurrencyFeature176:
         assert set(batch_req.symbols) == set(syms)
 
     @pytest.mark.asyncio
+    @pytest.mark.usefixtures("read_path")
     async def test_owner_scoping_preserved_under_parallel_fanout(self):
         """AC-6: user B's parallel compute never attributes A's strategy. B's watchlist binds
         AAPL→sx, but sx resolves only under A's ownership, so for B it is None (unattributed 0/0),
@@ -7219,6 +7228,7 @@ class TestOpportunityConcurrencyFeature176:
         assert live_uids == {"uB"}
 
     @pytest.mark.asyncio
+    @pytest.mark.usefixtures("read_path")
     async def test_opportunity_set_and_rank_matches_across_runs(self):
         """AC-1: a multi-candidate universe (a firing entry, a non-firing entry, a deny-listed
         muted placeholder, and a held position) yields an IDENTICAL ordered opportunity list across
@@ -7326,6 +7336,7 @@ class TestBacktestOffloadFeature176:
         ]
 
 
+@pytest.mark.usefixtures("read_path")
 class TestListOpportunitiesServerFilters190:
     """feature 190 — the servicer forwards the new filter/sort request fields into the repo read
     (not accepted-and-ignored, fails.md:577) and computes the source facet only on page 0 with the
