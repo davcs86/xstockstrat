@@ -422,13 +422,15 @@ Add both as GitHub Actions secrets (see Step 9). The deploy workflows substitute
 Required when the `broker_accounts` table is in use. Rotating this key requires re-encrypting all existing rows — do not change it after accounts have been stored.
 
 ### OpenTelemetry (Grafana Cloud)
-Set on all 13 services (or as app-level vars):
+Declared once as global app-level `envs:` in `.do/app*.yaml` (every component inherits them); the deploy workflow fills the `YOUR_*` placeholders from GitHub Secrets:
 
 ```
 OTEL_ENABLED=true
 OTEL_EXPORTER_OTLP_ENDPOINT=https://otlp-gateway-<region>.grafana.net/otlp
-OTEL_EXPORTER_OTLP_HEADERS=Authorization=Basic <base64-token>
+OTEL_EXPORTER_OTLP_HEADERS=Basic <base64(instanceId:apiKey)>
 ```
+
+Store the header as `Basic <…>`; the deploy workflow prefixes `Authorization=` for the OTel SDKs.
 
 See `docs/setup/grafana-cloud.md` for how to obtain these values.
 

@@ -2850,3 +2850,8 @@ ambiguity is logged here).
 - **Mistake**: Step 24 specified an `@AC-2` e2e that expects the per-symbol no-trade reason on a refused-only `BACKTEST_STATUS_INSUFFICIENT_DATA` run, but the strategy page rendered `BacktestDiagnostics` only for non-INSUFFICIENT_DATA results and its INSUFFICIENT_DATA card only for a coverage gap, so the run rendered nothing. Feature 067 had already hit the same gate and dodged it by giving its `strat-formula-error-001` sentinel status 1, an unrepresentative status that hid the gap for a second feature.
 - **Evidence**: `services/xstockstrat-ui/src/app/insights/strategies/[id]/page.tsx` (status gates); `services/xstockstrat-ui/e2e/mock-backend.ts` (`strat-formula-error-001` vs `strat-fundamentals-etf-001`); 215 Deviation Log "Step 24 … [BLOCKED]" (operator option A, 2026-10-14).
 - **Rule it implies**: An e2e sentinel returns the status the real server returns for that case; when a UI test needs a different status to render, the render gate is the defect, not the fixture.
+
+### 2026-10-15 — fix-otel-trace-export — assumption
+- **Mistake**: A vitest test asserted on `vi.spyOn(console, …)` calls made inside `beforeAll`. vitest 5.0.3 clears spy call history before each test, so the calls were gone by assertion time. The result was a false RED that looked exactly like the defect under test (hook not registering).
+- **Evidence**: `docs/roadmap/features/226-fix-otel-trace-export/implementation-spec.md` Deviation 3; probe `beforeAll calls=1` → `test calls=0`.
+- **Rule it implies**: In vitest, never assert on `vi.spyOn` call history recorded in `beforeAll`/`beforeEach`. Either trigger the behaviour inside the test, or record with a plain function you install (and restore) yourself.
