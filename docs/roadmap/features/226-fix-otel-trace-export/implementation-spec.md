@@ -200,7 +200,7 @@ grep -rn "dGVzdDprZXk" --include="*_test.go" services/xstockstrat-trading   # C-
 
 ### Step 4 — service: Python ×4 — OTLP/HTTP span exporter from spec env vars
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`, `xstockstrat-ingest`, `xstockstrat-analysis`, `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-indicators/app/telemetry.py` — modify

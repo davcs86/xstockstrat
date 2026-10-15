@@ -104,3 +104,8 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - RED (pre-Step-2, trading): `TestInitExportsOverOTLPHTTP/{raw,encoded}` → "receiver got no export request"; `TestInitLogsExportFailure` → log held only a gRPC `exporter export timeout … Unavailable` (no `400 Bad Request`). GREEN (post-Step-2, ×3): all PASS incl. `TestNewResourceOmitsTradingMode`; CI-equivalent coverage 72.6 / 54.4 / 71.0 % (≥ 40); lint 0 issues.
 - Files modified: `services/xstockstrat-{trading,portfolio,marketdata}/internal/telemetry/otel_test.go`
 - Deviations: none
+
+### Step 4 — service: Python ×4 — OTLP/HTTP span exporter from spec env vars [done]
+- proto-http added before RED (a), exporter swapped to `OTLPSpanExporter()` with no args + fallback removed (c), `-proto-grpc` dropped from pyproject/lock (d), agent non-blocking test repointed to `proto.http` (e). Locks: proto-http 1.42.1 (indicators/analysis/agent), **1.41.1 (ingest — SDK stayed 1.41.1, no bump)**; failure-log text `Failed to export span batch code: %s` verified identical at 1.41.1 and 1.42.1. `uv lock --check`, imports, ruff clean ×4; agent `non_blocking` PASS (PRESERVE @AC-2 @feature-171).
+- Files modified: `services/xstockstrat-{indicators,ingest,analysis,agent}/{app/telemetry.py,pyproject.toml,uv.lock}`, agent `tests/test_telemetry.py` (`:30` repoint hunk only — staged via constructed blob since `git add -p` is non-interactive-unavailable).
+- Deviations: none (service venvs resolve Python 3.12 per each pyproject's requires-python — pre-existing, unchanged)

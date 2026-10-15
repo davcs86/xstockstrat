@@ -21,7 +21,7 @@ def test_init_telemetry_non_blocking_on_error(monkeypatch):
         raise RuntimeError("exporter down")
 
     monkeypatch.setattr(
-        "opentelemetry.exporter.otlp.proto.grpc.trace_exporter.OTLPSpanExporter",
+        "opentelemetry.exporter.otlp.proto.http.trace_exporter.OTLPSpanExporter",
         _boom,
     )
     import app.telemetry as tel
