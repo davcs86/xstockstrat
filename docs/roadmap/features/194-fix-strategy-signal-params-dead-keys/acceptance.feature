@@ -1,6 +1,6 @@
 Feature: fix-strategy-signal-params-dead-keys (bug fix)
   Regression guard for Defect 1 of
-  docs/reports/2026-09-18-deprecated-fields-in-rpc-contracts-defect.md:
+  docs/reports/2026-09-18-deprecated-fields-in-rpc-contracts-defect.md (pruned 2026-10-14; `git show 09ec8d9a:docs/reports/2026-09-18-deprecated-fields-in-rpc-contracts-defect.md`):
   a served StrategyDefinition must not carry the dead feature-097 blend keys, must keep the
   load-bearing signal_params keys, and stripping them must never invalidate a strategy's scoring
   fingerprint (accumulated evidence grade).

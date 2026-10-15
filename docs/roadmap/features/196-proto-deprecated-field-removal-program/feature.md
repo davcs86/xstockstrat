@@ -2,12 +2,13 @@
 
 **Type**: tech-debt (non-breaking response-edge omission — no `.proto` change; NOT a bug fix)
 **Development Branch**: `feature/proto-deprecated-field-removal-program`
-**Defect Report**: `docs/reports/2026-09-18-deprecated-fields-in-rpc-contracts-defect.md` (Defect 2)
+**Defect Report**: `docs/reports/2026-09-18-deprecated-fields-in-rpc-contracts-defect.md` (pruned 2026-10-14; `git show 09ec8d9a:docs/reports/2026-09-18-deprecated-fields-in-rpc-contracts-defect.md`) (Defect 2)
 **Severity**: SEV-3 (planned tech-debt; no runtime misbehavior)
 **Created**: 2026-09-19
 **Last Updated**: 2026-10-08
 **Committed to main**: 9def6259da8da135ffb66846af06201ce4690304
 **Launched date**: 2026-10-14
+**Archived**: 2026-10-14
 
 ---
 
@@ -25,15 +26,16 @@
 | 2026-10-08 | `in-progress` → `code-completed` | /sdd-execute (sequential, autonomous) | 7/7 steps done on `feature/proto-deprecated-field-removal-program`. Deprecated `Bar.timeframe` (marketdata: `scanBars`, stream, + cold/fallback source-bar paths — D-1) and `BackfillJob.timeframe` (ingest `job_row_to_proto`) strings no longer populated in responses; enums kept; `barFromAlpaca`/`InsertBars` untouched; `Watchlist.symbols` KEEP guards added. Proto unchanged (`buf breaking` clean). Scenarios promoted (C-16). |
 
 | 2026-10-14 | `code-completed` → `launched` | CI workflow | Promoted via PR #1242; committed 9def6259da8da135ffb66846af06201ce4690304 |
+| 2026-10-14 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(1); pruned 4 spec(s) |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — the removal program, its constraints, and the governance gates
-- [Recon](recon.md) — grounded reader audit (verified-dead vs live) + proto/buf/BSR governance facts
-- [Design](design.md) — the chosen response-edge-omission approach, per-field verdicts, rejected alternatives, gated steps
-- [Acceptance Scenarios](acceptance.feature) — old-client safety + reserved-numbering guards
-- [Implementation Spec](implementation-spec.md) — 7 gated steps (blocked on the FR-3 consumer-confirmation gate)
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Recon — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — old-client safety + reserved-numbering guards; scenarios already promoted to services/xstockstrat-{portfolio,ingest,marketdata}/acceptance/proto-deprecated-field-removal-program.feature and docs/sdd/business-rules/platform.feature (C-16)
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — why this is a program, not a today-fix
 
 ---

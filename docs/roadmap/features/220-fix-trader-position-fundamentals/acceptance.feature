@@ -1,5 +1,5 @@
 Feature: fix-trader-position-fundamentals (bug fix)
-  Regression guard for defect report docs/reports/2026-10-06-ui-fundamentals-infinite-loading-defect.md:
+  Regression guard for defect report docs/reports/2026-10-06-ui-fundamentals-infinite-loading-defect.md (pruned 2026-10-14; `git show 09ec8d9a:docs/reports/2026-10-06-ui-fundamentals-infinite-loading-defect.md`):
   Trader position Fundamentals card stays on "Loading fundamentals…" indefinitely.
 
   @AC-1 @regression

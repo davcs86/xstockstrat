@@ -3,7 +3,7 @@ Feature: proto-deprecated-field-removal-program (tech-debt / contract-hygiene)
   [deprecated=true] field in the proto (PROTO-2 intact, no removal, no reserved, no buf-breaking/BSR
   change) and stop POPULATING genuinely-dead fields in responses, never omitting a field any consumer
   still reads. Scenarios trace to the product-spec FR-1..FR-6.
-  (docs/reports/2026-09-18-deprecated-fields-in-rpc-contracts-defect.md, Defect 2.)
+  (docs/reports/2026-09-18-deprecated-fields-in-rpc-contracts-defect.md (pruned 2026-10-14; `git show 09ec8d9a:docs/reports/2026-09-18-deprecated-fields-in-rpc-contracts-defect.md`), Defect 2.)
 
   # --- Out-of-scope record (append-only per C-15): @AC-1 and @AC-4 describe the REMOVAL + reserved
   # approach the design REJECTED (violates PROTO-2, BSR-breaking). Retained for provenance, not active
