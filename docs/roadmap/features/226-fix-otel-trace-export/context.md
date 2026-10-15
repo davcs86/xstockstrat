@@ -137,3 +137,9 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - RED #1 (hook at root): `Cannot find module '/src/instrumentation'`. RED #2 (hook moved, telemetry unchanged): AC-2 ✓, AC-1 ✗ (5 s, no `/v1/traces` — verbatim url), AC-3 ✗ (no diag `console.error`). GREEN after Step 8(d): 3/3; full vitest 44 files / 231 tests pass; `src/lib` coverage gate holds.
 - Files modified: `services/xstockstrat-ui/src/instrumentation.test.ts`
 - Deviations: Deviation 3 (plain console recorders — vitest 5 clears spy history before each test)
+
+### Step 10 — config: local compose → collector OTLP/HTTP :4318 [done]
+- RED (AC-4, pre-edit `awk` over the 12 service blocks): 7 rows `http://otel-collector:4317` (marketdata, indicators, ingest, analysis, portfolio, trading, agent), 5 rows `:4318`. GREEN: 12 × `http://otel-collector:4318`; `grep -c otel-collector:4317` → 0; collector receivers `:4317` + `:4318` both kept; header comment rewritten (2 lines).
+- `docker compose config --quiet` exit 0 with the 4 required secrets stubbed (`BROKER_ACCOUNTS_ENCRYPTION_KEY`, `CONFIG_SECRETS_ENCRYPTION_KEY`, `JWT_SECRET`, `POSTGRES_PASSWORD`) — same as baseline; without stubs it fails on those pre-existing required vars, not on this change.
+- Files modified: `docker-compose.yml`, `packages/otel/otel-collector-config.yaml`. TDD: N/A (config) — AC-4 RED→GREEN recorded above.
+- Deviations: none

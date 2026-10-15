@@ -563,7 +563,7 @@ grep -n "from '../fixtures'\|from './fixtures'\|helpers/auth" src/instrumentatio
 
 ### Step 10 — config: local compose → collector OTLP/HTTP `:4318` for every service
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docker-compose.yml`, `packages/otel/`
 **Files**:
 - `docker-compose.yml` — modify
