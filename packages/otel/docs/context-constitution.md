@@ -6,8 +6,8 @@ production pushes OTLP straight to Grafana Cloud). Does not restate documented/C
 (see `## Pointers`).
 
 > Inherits all rules of the root constitution (`../../../docs/context-constitution.md`). This file lists only
-> what is specific to **packages/otel** (chiefly the alert/dashboard metric contracts; the OTLP
-> port-by-runtime split lives in the root as PLAT-3).
+> what is specific to **packages/otel** (chiefly the alert/dashboard metric contracts; the env-only
+> OTLP/HTTP export rule lives in the root as PLAT-3).
 
 ## Rules (`OTEL-*`) — binding, easy-to-miss conventions
 
@@ -18,7 +18,7 @@ production pushes OTLP straight to Grafana Cloud). Does not restate documented/C
 
 ## Gotchas & scars
 
-- **The port-by-runtime OTLP split** (Node/Next → `:4318`, Go/Python → `:4317`) is **root PLAT-3** — see the root constitution; not restated here (CF-N3).
+- **Every service exports OTLP/HTTP to `:4318`, configured only by the spec env vars** — **root PLAT-3**; the `:4317` gRPC receiver serves other OTLP clients only. See the root constitution; not restated here (CF-N3).
 
 ## Pointers (already documented or CI-enforced — not restated here)
 

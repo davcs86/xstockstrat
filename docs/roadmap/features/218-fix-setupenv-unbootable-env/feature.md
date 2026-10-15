@@ -8,6 +8,7 @@
 **Last Updated**: 2026-10-03
 **Committed to main**: 4c996fa75644713864b512295d830401405edd26
 **Launched date**: 2026-10-03
+**Archived**: 2026-10-14
 
 ---
 
@@ -19,12 +20,13 @@
 | 2026-10-03 | `draft` → `code-completed` | bug-fix session | Single-file fix in `scripts/setup-env.sh`; `/sdd-review` + `/sdd-spec` not run (deviation recorded in context.md) |
 
 | 2026-10-03 | `code-completed` → `launched` | CI workflow | Promoted via PR #1214; committed 4c996fa75644713864b512295d830401405edd26 |
+| 2026-10-14 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(0)/fails(0); pruned 1 spec(s) |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — bug description and fix scope
-- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15); promoted to docs/sdd/business-rules/platform.feature (C-16)
 - Implementation Spec — _not generated (single-file fix; see context.md 2026-10-03)_
 - [Context Log](context.md) — session history, decisions, deviations
 

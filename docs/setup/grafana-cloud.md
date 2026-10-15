@@ -10,7 +10,7 @@ The four V1 dashboards and the alert rules are checked into the repo as the repr
 
 ```
 Local Dev:
-  Services → otel-collector:4317/4318 → Grafana Cloud OTLP gateway
+  Services → otel-collector:4318 (OTLP/HTTP) → Grafana Cloud OTLP gateway
 
 Production (DO App Platform):
   Services → Grafana Cloud OTLP gateway (direct, no collector)
@@ -27,8 +27,7 @@ Production (DO App Platform):
 
 | Attribute | Dev value | Prod value |
 |---|---|---|
-| `environment` | `dev` | `production` |
-| `trading_mode` | `paper` | `live` |
+| `deployment.environment` | `APPLICATION_ENV` (e.g. `development`) | `production` |
 | `platform` | `xstockstrat` | `xstockstrat` |
 | `service.name` | per-service | per-service |
 
@@ -103,11 +102,11 @@ docker compose up
 
 The `otel-collector` container starts automatically and reads `packages/otel/otel-collector-config.yaml`. It:
 
-- Listens for OTLP on **gRPC :4317** (Go + Python services connect here)
-- Listens for OTLP on **HTTP :4318** (Node.js services connect here)
+- Listens for OTLP on **HTTP :4318** — every xstockstrat service exports traces here
+- Also listens on **gRPC :4317** for other OTLP clients (e.g. `telemetrygen` smoke tests)
 - Applies a **memory limiter** (256 MiB max) to prevent OOM in dev
 - **Batches** spans/metrics/logs (10s window, 1000 items/batch) before forwarding
-- **Derives** `environment`, `trading_mode`, and `platform` resource attributes from each service's `APPLICATION_ENV`, `TRADING_MODE` env vars and the hardcoded constant `xstockstrat` at startup
+- Receives the `service.name`, `deployment.environment`, and `platform` resource attributes each service sets at startup (from `SERVICE_NAME`, `APPLICATION_ENV`, and the constant `xstockstrat`)
 - Forwards to Grafana Cloud via `otlphttp/grafana` exporter with gzip compression and retry
 
 Each service in docker-compose has these environment variables pre-set:
@@ -115,8 +114,7 @@ Each service in docker-compose has these environment variables pre-set:
 ```
 OTEL_ENABLED=${OTEL_ENABLED}
 SERVICE_NAME=<service>
-OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317   # Go/Python
-OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318   # Node.js
+OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318   # every service (OTLP/HTTP)
 ```
 
 ### 3c. Verify the collector is running
@@ -151,7 +149,7 @@ Add these four secrets in your GitHub repo (**Settings → Secrets and variables
 | `PROD_OTEL_EXPORTER_OTLP_ENDPOINT` | Grafana Cloud OTLP gateway URL (prod stack) | Same URL if sharing one Grafana stack |
 | `PROD_OTEL_EXPORTER_OTLP_HEADERS` | `Basic <base64(instanceId:apiKey)>` (prod stack) | Same token if sharing one Grafana stack |
 
-> If you use the **same** Grafana Cloud stack for dev and prod (differentiated by the `environment` resource attribute), set identical values for the dev and prod pairs.
+> If you use the **same** Grafana Cloud stack for dev and prod (differentiated by the `deployment.environment` resource attribute), set identical values for the dev and prod pairs.
 
 ### 4b. Enable OTel in the app spec
 
@@ -170,13 +168,9 @@ The deploy chain (`deploy-dev.yml` / `deploy-prod.yml` → `deploy.yml`) passes 
 
 Each component inherits the global `OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_EXPORTER_OTLP_HEADERS` and sets its own `SERVICE_NAME`.
 
-Resource attributes (`environment`, `trading_mode`, `platform`) are derived automatically at startup from each service's `APPLICATION_ENV` and `TRADING_MODE` env vars — no `OTEL_RESOURCE_ATTRIBUTES` setting required.
+Resource attributes (`service.name`, `deployment.environment`, `platform`) are set at startup from each service's `SERVICE_NAME` and `APPLICATION_ENV` env vars — no `OTEL_RESOURCE_ATTRIBUTES` setting required.
 
-**Go services** use gRPC OTLP — point them at the gateway's gRPC port. Grafana Cloud's OTLP gateway accepts both HTTP and gRPC on port 443. Use the same HTTPS endpoint URL.
-
-**Node.js services** use HTTP OTLP — same endpoint URL works.
-
-**Python services** use gRPC OTLP — same endpoint URL works.
+**All runtimes (Go, Python, Node.js, Next.js) use OTLP/HTTP**, configured only by these env vars: the SDK appends `/v1/traces` to the gateway URL (`…/otlp` → `…/otlp/v1/traces`), uses TLS for the `https://` scheme, and sends the `Authorization` header. Never pass an endpoint/url option to an exporter in code — it overrides all three (feature 226).
 
 > **GitHub Secret format: just `Basic <token>`** — the same format as the local-dev `.env`. The deploy workflow automatically prepends `Authorization=` before injecting the value into the DO app spec, so the OTel SDK (which expects `key=value` pairs) receives the correct `Authorization=Basic <token>` format. Both `deploy.yml` and `scripts/do-inject-prod-secrets.py` apply this transform; if the value already starts with `Authorization=` it is left as-is.
 
@@ -326,4 +320,4 @@ Enable **Derived fields** in Loki datasource settings pointing to Tempo:
 
 ### Production services not sending telemetry
 
-Verify `OTEL_EXPORTER_OTLP_HEADERS` is set **without** surrounding quotes on the value. DO App Platform sometimes requires the header string in `Key=Value` format without quotes. Check the service logs for OTLP export errors.
+Verify the `*_OTEL_EXPORTER_OTLP_HEADERS` GitHub secret is `Basic <base64(instanceId:apiKey)>` without surrounding quotes (the deploy workflow adds `Authorization=`). Export failures are logged by every service — Go: `traces export: …`; Python: `Failed to export span batch code: …`; Node/Next: `OTLPExporterError …` — and a Next.js boot logs `[otel] tracing enabled` when the hook is registered.

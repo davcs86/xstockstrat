@@ -2,7 +2,7 @@
 
 **Type**: bug
 **Development Branch**: `claude/todays-bug-triage-ubv9ag` (harness-assigned; PR targets `main-dev`)
-**Defect Report**: `docs/reports/2026-09-18-deprecated-fields-in-rpc-contracts-defect.md` (Defect 1; GitHub Issues disabled — report is the audit trail)
+**Defect Report**: `docs/reports/2026-09-18-deprecated-fields-in-rpc-contracts-defect.md` (pruned 2026-10-14; `git show 09ec8d9a:docs/reports/2026-09-18-deprecated-fields-in-rpc-contracts-defect.md`) (Defect 1; GitHub Issues disabled — report is the audit trail)
 **Severity**: SEV-3
 **Created**: 2026-09-19
 **Last Updated**: 2026-09-19

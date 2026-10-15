@@ -1,36 +1,31 @@
-# Context Log: fix-setupenv-unbootable-env
+# Context: fix-setupenv-unbootable-env  (archived 2026-10-14)
 
-Append-only. Each session appends a new ## Session entry. Never delete or edit prior entries.
+**Feature**: ./feature.md
+**Status**: launched — archived by /sdd-archiver; verbose specs pruned (recoverable via git history).
 
----
+## Archive Synthesis — 2026-10-14 — /sdd-archiver
 
-## Session 2026-10-02 (/sdd-triage)
+**What**: `scripts/setup-env.sh`, the documented first-run path called from `bootstrap.sh`, wrote a `.env` that `docker compose` rejected: it never produced the two required encryption keys (`CONFIG_SECRETS_ENCRYPTION_KEY`, `BROKER_ACCOUNTS_ENCRYPTION_KEY`) and still wrote variables removed by feature 147 (`ALPACA_API_KEY`, `ALPACA_API_SECRET`, `MCP_AGENT_SECRET`). Single-file fix: both keys are now generated in both modes (`openssl rand -hex 32`, urandom fallback; JWT at 16 bytes), a valid existing 64-hex key is kept on overwrite, and the removed variables are gone.
 
-- Bug reported via defect report docs/reports/2026-10-02-setupenv-unbootable-env-defect.md (pruned 2026-10-05; `git show 2ce8de0a:docs/reports/2026-10-02-setupenv-unbootable-env-defect.md`) (GitHub Issues disabled). Origin: repo-surveyor feature-gap G-02 (`docs/repo-surveyor/feature-gap-findings.md`).
-- Severity: SEV-3. The survey proposed one level higher; it was lowered at triage under the bug-triage rubric, because this is local onboarding tooling with no trading-path dependency.
-- Routed to SDD path (Track C).
-- Created: feature.md, product-spec.md, acceptance.feature (regression scenarios @AC-1/@AC-2), context.md.
-- Affected (from report): scripts/setup-env.sh.
-- Root cause hypothesis: the script was not updated alongside feature 147 and the broker-accounts encryption key; `.env.example` was.
-- Recommended design depth: skip → `/sdd-spec fix-setupenv-unbootable-env`. Rationale: single file, no proto, migration or config-key change, and a clear root cause.
-- NNN 218 = max(existing NNN 217) + 1, per the root CLAUDE.md numbering rule (the triage skill's count+1 formula would diverge where gaps exist).
-- Development branch: feature/fix-setupenv-unbootable-env (not created yet; /sdd-execute creates it).
+**Why (irrecoverable rationale)**:
+- Root cause: the script was not updated alongside feature 147 and the broker-accounts key, though `.env.example` was; no source records why the script was missed. It surfaced via a repo-surveyor gap scan (G-02).
+- Keep a valid existing key on overwrite because a regenerated key cannot decrypt local rows written under the old one.
+- The bug was triaged SEV-3 (lowered one level from the survey's proposal) because this is local onboarding tooling with no trading-path dependency.
 
-## Session 2026-10-03 (bug-fix implementation)
+**Rejected alternatives**:
+- Prompting for the encryption keys — the recorded decision is generate both with no prompt in both modes; no reason for rejecting prompting is recorded (not guessed here).
+- Regenerating keys on every rerun — would orphan locally encrypted rows.
 
-- Fixed in `scripts/setup-env.sh` on the harness branch (bundled with the 2026-10-02 Track A hotfixes), not on `feature/fix-setupenv-unbootable-env`.
-- **Deviation:** `/sdd-review product-spec`, `/sdd-spec` and the per-step `/sdd-execute` loop were not run. Rationale: triage set design depth `skip`, the fix is one script with no proto/migration/config-key change, and the two `@AC-*` scenarios were executed directly (RED on the original script, GREEN after).
-- Decisions:
-  - Both encryption keys are generated in both modes (no prompt) with `openssl rand -hex 32` (urandom fallback); a valid 64-hex key already in `.env` is **kept** on overwrite — a regenerated key cannot decrypt local rows written under the old one.
-  - Removed the `ALPACA_API_KEY`/`ALPACA_API_SECRET` prompts and the `MCP_AGENT_SECRET` section; `.env` carries a comment that vendor credentials are encrypted config rows (feature 147).
-  - `generate_jwt_secret` generalized to `generate_hex BYTES` (JWT stays 16 bytes).
-- Verified: `shellcheck` + `shfmt -d -i 2` clean; AC-1 (`docker compose config` exits 0, both keys 64 hex) and AC-2 (no removed vars) pass; rerun preserves keys.
-- Doc touched: `docs/setup/getting-started.md` prompt table.
-- Files modified: `scripts/setup-env.sh`, `docs/setup/getting-started.md`.
+**Scars & gotchas**:
+- Process deviation: the fix landed on the harness branch bundled with the 2026-10-02 Track A hotfixes, not on `feature/fix-setupenv-unbootable-env` (never created); `/sdd-review`, `/sdd-spec` and the `/sdd-execute` loop were skipped (design depth `skip`, a one-script fix; the two `@AC-*` scenarios were run directly, RED on the original script, GREEN after).
+- The triage skill's count+1 numbering formula diverges from `max+1` where gaps exist (already covered by the root `CLAUDE.md` numbering rule).
 
-## Session 2026-10-03 (CI: feature status automation)
+**Permanent deviations**: none (no design phase). The branch named in `feature.md` was never created.
 
-- Promotion PR #1214 merged to main
-- Feature promoted and committed: 4c996fa75644713864b512295d830401405edd26
-- Status updated: `code-completed` → `launched`
-- Launched date: 2026-10-03
+**Cross-feature signal**: feature 147 changed the env contract but updated only `.env.example`; this is the recurrence of `fails.md:1554` (setup-env/.env.example are among the three run sites).
+
+**Deferred follow-ons**: help and exit-code convention alignment across operator scripts is tracked as feature-gap I-11 in `docs/repo-surveyor/feature-gap-findings.md`.
+
+**Ledger entries written**: insights.md (0), fails.md (0 — recurrence of `fails.md:1554`) — see the existing entry.
+**Runtime-invariant recommendations (→ /context-constitution)**: none (the encryption-key requirements are in `.env.example`, `docker-compose.yml` and root `CLAUDE.md`).
+**Pruned artifacts**: product-spec.md — last present at 09ec8d9a. Defect report `docs/reports/2026-10-02-setupenv-unbootable-env-defect.md` was already pruned (`git show 2ce8de0a:…`).
