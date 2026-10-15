@@ -1,6 +1,6 @@
 # xstockstrat-indicators — Constitution Findings
 
-Defects and drift surfaced by `/context-constitution` on 2026-07-24. For triage/fixing, not
+Defects and drift surfaced by `/context-constitution` on 2026-07-24; re-verified 2026-10-14 (branch `ccr-fe84109f-0lwin8` @ `09ec8d9`). For triage/fixing, not
 governance. The fictional ledger/notify dependency is a repeated pattern also recorded at the root.
 
 ## Documentation that lies (docs claim behavior the code lacks)
@@ -23,6 +23,15 @@ governance. The fictional ledger/notify dependency is a repeated pattern also re
 - **Inert indicators seeds.** Config migrations `services/xstockstrat-config/migrations/001_config_tables.up.sql:63` and `002_config_environment.up.sql:62` seed bare `sandbox.*` keys, but the watcher reads full-dotted `indicators.sandbox.*` (`app/config/watcher.py:134,138,143`; CONFIG-9 — no namespace auto-prefix), so they never apply; production's 64 MiB seed is inert. F-01 forbids editing them; a corrective full-dotted seed is a separate feature. — status: **open**
 - **Unclamped override.** `memory_bytes_override` is unclamped (`servicer.py:278`; D-33 in `docs/repo-surveyor/debt-radar-findings.md:315`). Feature 228 only clamps the computed cap to int64 (`sandbox.py:283`); a negative override still skips the `RLIMIT_DATA` setrlimit (`sandbox.py:282`). — status: **open**
 - **Wording drift.** The durable suite `acceptance/indicators-sandbox-os-isolation.feature:29` says "address-space for the allocation", but the cap is `RLIMIT_DATA` (data segment, `sandbox.py:284`). Record only; C-16 forbids hand-editing the durable suite. — status: **open**
+- Is `timeout_ms_override` (and, per the entry above, `memory_bytes_override`) meant to be unbounded for any authenticated caller? It replaces config with no clamp and `RLIMIT_CPU` derives from it. `app/handlers/servicer.py#ExecuteFormula`, `app/handlers/servicer.py#ExecuteFormula` — status: **open**
+- ⚠ **unverified** — `_load_formula` serves from the process-local `self._formulas` cache, invalidated only by local `pop`s; with more than one replica an Update/Delete on A leaves B executing stale (or soft-deleted) source. Replica count not checked (`.do/app*.yaml`). `app/handlers/servicer.py#_load_formula` — status: **open**
+- `_flt.add_rule` failures are swallowed (`except Exception: pass`); is there an image-level test that fails when `_SECCOMP_ALLOW` holds an unknown syscall name? `app/services/sandbox.py#_SECCOMP_ALLOW` — status: **open**
+
+## Documentation that lies — additions (2026-10-14)
+
+| What the docs say | What the code does | Evidence | Suggested action |
+|---|---|---|---|
+| `CLAUDE.md` Constitution banner still lists "⚠ sandbox env inheritance" as a defect; env block lists `TRADING_MODE=paper` | The env-inheritance defect was resolved 2026-09-16; `TRADING_MODE` is the repo-wide docs-vs-code disagreement in the root findings log | `services/xstockstrat-indicators/CLAUDE.md` banner; `app/config/watcher.py` | Refresh the banner and env block |
 
 ---
 _Surfaced by [context-forge](https://github.com/davcs86/agent-plugins). Defects to action, not rules. Re-run `/context-constitution` to refresh._

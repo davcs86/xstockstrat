@@ -1,7 +1,7 @@
 # xstockstrat-trading — Constitution Findings
 
 Defects and drift surfaced by `/context-constitution` on 2026-07-24; refreshed 2026-09-02 (branch
-`claude/loaded-plugins-list-d120nl` @ `82a0549`). For triage/fixing, not
+`claude/loaded-plugins-list-d120nl` @ `82a0549`); re-verified 2026-10-14 (branch `ccr-fe84109f-0lwin8` @ `09ec8d9`). For triage/fixing, not
 governance. Repo-wide/repeated defects (Go 1.22 doc-lie) live in the root
 findings log; this file holds trading-specific defects.
 
@@ -16,6 +16,9 @@ findings log; this file holds trading-specific defects.
 | `trading.maintenance_mode` — "reject all new orders" | Code reads only `platform.maintenance_mode` | `CLAUDE.md:59` vs `trading.go:244` | Resolved — CLAUDE.md:63 and trading.go:244 agree as of 2026-08-04 (feature 100); row kept for history, not an open action |
 | `platform.ledger_endpoint` documented as a config key | Ledger address comes from `LEDGER_ENDPOINT` env | `CLAUDE.md` Config Keys vs `config.go:40` (`LedgerEndpoint: getEnv("LEDGER_ENDPOINT", …)`) | Remove the config key from docs |
 | `order.approved` listed in the emitted-events table | No emit site and no Approve RPC exists; approval dead-ends at `PENDING_APPROVAL` + alert | `CLAUDE.md:99` vs `trading.go:320-328` | Remove the row or implement approval |
+| `CLAUDE.md` § Broker State Reconciliation: "nothing in this service ever clears a halt (resuming is a manual DB edit)"; the RPC prose has no `ResumeAccount` entry | `ResumeAccountSvc` / the `ResumeAccount` RPC (admin-gated, DB-first then in-memory) clears a halt | `internal/service/trading.go#ResumeAccountSvc`, `internal/handler/trading.go` | Document `ResumeAccount` and drop the "manual DB edit" claim |
+| `CLAUDE.md` § Idempotency ties the broker de-dup of a retried submission to `trading.order.max_retries` | `submitOrder` has no retry loop; only `flattenAndHalt` reads those keys | `internal/service/trading.go#submitOrder`, `#flattenAndHalt` | Reword |
+| The constitution header / TRADING-N1 and this log cite `trading.go:422,939,2779` etc. | `trading.go` grew ~400 lines; those line cites are far off | `internal/service/trading.go` (anchor by symbol) | Cite by symbol on the next edit |
 
 **Reframed (2026-08-09 refresh):**
 - ~~`trading.order.max_retries` / `retry_delay_ms` documented as retry config; CLAUDE.md implies a general `SubmitOrder` retry loop~~ — **partially resolved, not a clean fix**: feature 030's `flattenAndHalt` (emergency bracket-protection flatten only) now reads both keys in a real retry loop (`internal/service/trading.go:2339-2340`). Ordinary `PlaceOrder`→`submitOrder` (`:523`) still calls the broker exactly once, so CLAUDE.md's Config Keys table ("Max broker submission retries", "Delay between retries") still overstates scope — reword to "used by the emergency-flatten retry loop only," not deleted.
@@ -28,6 +31,7 @@ findings log; this file holds trading-specific defects.
 | `requires_approval` column is always written `false` even for approval-required orders; `approved_by`/`approved_at` never written | The approval audit trail is write-dead | `internal/repository/trading_repo.go:85` (literal `false` in INSERT values, col list `:63`); migration 001 columns |
 | **Config accessor mismatch: `trading.broker.timeout_ms` is read via `GetFloat` at one call site and `GetInt` at another, on the same key.** `Watcher.GetInt`/`GetFloat` each decode only their own `oneof` branch of `config.v1.ConfigValue`; if the key is ever set via a path that lands as the other branch, the mismatched accessor silently returns `0` (found-but-wrong-branch), not the coded fallback. Currently latent — the key has no seed migration (grep of `services/xstockstrat-config/migrations/*.sql` finds none), so all sites only ever hit the `def` fallback today. **Widened 2026-09-02:** a THIRD reader `staleThreshold` uses `GetInt` (`order_intent.go:109`), joining `instantiateBrokerLocked`'s `GetInt` (`trading.go:3116` — note the line shifted from `:2794`) against the lone `GetFloat` site. | A future `SetConfig` on this key could silently zero out the broker HTTP timeout for the `GetFloat` call site | `internal/service/trading.go:1943` (`GetFloat`) vs `:3116` + `internal/service/order_intent.go:93` (`GetInt`) |
 | **Same class of risk: `trading.order.max_retries`/`trading.order.retry_delay_ms` are documented as `int` (CLAUDE.md Config Keys table) but read via `GetFloat`** at the `flattenAndHalt` retry loop. Also currently latent (unseeded). | A `SetConfig` write landing as `int_val` would silently read as the fallback via `GetFloat` | `internal/service/trading.go:2339-2340` |
+| `tifToWireString` (service) and `tifStr` (repository) are near-identical mappings (differ only for UNSPECIFIED: `tifStr` returns "day") — adding a TIF means editing both plus `allowedTIFs` and `parseTif` | Drift risk | `internal/service/tif_validation.go#tifToWireString` vs `internal/repository/tif.go#tifStr` |
 
 ## Dead / orphaned code
 
@@ -37,6 +41,8 @@ _None currently open._ ~~`AlpacaAsset` struct "kept for backward compatibility"~
 
 - IBKR `signRequest` builds the OAuth 1.0a signature base over the bare `endpoint` **without** the query params that `resolveConid`/`GetOrder` append after signing — is IBKR auth actually working for these GETs, or a latent signature bug masked by the paper endpoint? Confirmed still reproducing: `internal/broker/ibkr.go:95` (`resolveConid`, func `:88`) and `:330` (`GetOrder`, func `:322`) both append `q.Encode()` to `RawQuery` **after** `c.signRequest(method, endpoint)` (`:533`) on the bare endpoint string — status: **open**
 - ~~PlaceOrder-family RPCs trust `req.UserId` from the message body while broker-account RPCs enforce `x-user-id` from headers (TRADING-N1) — is the body-supplied user id an intentional trust boundary?~~ ✓ **RESOLVED (2026-09-02)** — the service `CLAUDE.md` now declares header identity canonical and the body `user_id` deprecated/ignored for `PlaceOrder`/`CancelOrder`/`ReplaceOrder`/`ConfirmOrder` (resolved via `middleware.FromContext(ctx).UserID`, `internal/service/trading.go:422,939,1332,1486,3135`); `ListOrders`/`StreamOrderUpdates` keep it as a filter. Enshrined as root PLAT-11; TRADING-N1 superseded.
+- `ReplaceOrder` validates TIF only when supplied, and the bracket/flatten paths hard-code DAY — is bypassing `validateTIF` there intentional? `tifStr` maps UNSPECIFIED to "day" on write — purely a never-reached belt? — status: **open**
+- `NewWatcher`'s `tradingMode` parameter and `resolveTradingMode` are retained though nothing sends them (feature 147) — part of the repo-wide disagreement in the root findings log — status: **open**
 
 ---
 _Surfaced by [context-forge](https://github.com/davcs86/agent-plugins). Defects to action, not rules. Re-run `/context-constitution` to refresh._

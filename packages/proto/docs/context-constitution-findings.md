@@ -1,7 +1,7 @@
 # packages/proto — Constitution Findings
 
 Defects and drift surfaced by `/context-constitution` on 2026-07-24; refreshed 2026-09-02 (branch
-`claude/loaded-plugins-list-d120nl` @ `82a0549`). For triage/fixing, not governance.
+`claude/loaded-plugins-list-d120nl` @ `82a0549`); re-verified 2026-10-14 (branch `ccr-fe84109f-0lwin8` @ `09ec8d9`). For triage/fixing, not governance.
 
 ## Documentation that lies (docs claim behavior the code lacks)
 
@@ -19,8 +19,16 @@ Defects and drift surfaced by `/context-constitution` on 2026-07-24; refreshed 2
 
 ## Open questions (unresolved *why* — needs a maintainer)
 
-- Closed-set values modeled as `string` despite the enum-preference rule and an existing enum: `analysis.TradeRecord.side` (though `trading.OrderSide` exists), `StrategyScore.rating` "A/B/C/D/F", `Order.time_in_force` — **and the set has WIDENED**: new siblings `analysis.OrderSnapshot.side` (`:747`) and `analysis.ConditionEval.fn` (`:589`, values `>,<,>=,<=,crosses_above,crosses_below`). Are these cleanup targets (convert to enums) or intentionally open? Note the counter-signal: `portfolio.proto` now uses enums freely (`POSITION_RISK_FLAG`, `POSITION_SOURCE`, `POSITION_SIDE`, `WATCHLIST_ENTRY_SOURCE`, all `_UNSPECIFIED=0`), so the asymmetry is sharper. `analysis.proto:164` (`TradeRecord.side`), `:232` (`StrategyScore.rating`), `:268` (`BacktestRunSummary.rating`), `:589,:747`; `trading.proto:58,108,188` (`time_in_force`) — status: **open**
+- Closed-set values modeled as `string` despite the enum-preference rule and an existing enum: `analysis.TradeRecord.side` (though `trading.OrderSide` exists), `StrategyScore.rating` "A/B/C/D/F", ~~`Order.time_in_force`~~ (now the `TimeInForce` enum, 2026-10-14) — **and the set has WIDENED**: new siblings `analysis.OrderSnapshot.side` (`:747`) and `analysis.ConditionEval.fn` (`:589`, values `>,<,>=,<=,crosses_above,crosses_below`). Are these cleanup targets (convert to enums) or intentionally open? Note the counter-signal: `portfolio.proto` now uses enums freely (`POSITION_RISK_FLAG`, `POSITION_SOURCE`, `POSITION_SIDE`, `WATCHLIST_ENTRY_SOURCE`, all `_UNSPECIFIED=0`), so the asymmetry is sharper. `analysis.proto:164` (`TradeRecord.side`), `:232` (`StrategyScore.rating`), `:268` (`BacktestRunSummary.rating`), `:589,:747`; `trading.proto:58,108,188` (`time_in_force`) — status: **open**
 - Is "return the bare domain type for a single natural return, wrapper only when >1 field" the intended RPC-shape rule (enabled by the buf lint exceptions), or legacy inconsistency to converge? — status: **open**
+
+## Asymmetries worth triage (2026-10-14)
+
+- `trading.proto#ListOrdersRequest.user_id` and `StreamOrderUpdatesRequest.user_id` stay un-deprecated while the sibling mutation requests deprecated theirs; no in-proto comment says whether it is an owner filter, an identity, or a pending deprecation — status: **open**
+- `trading_mode` is `[deprecated]` across `config.proto` (feature 147) but still live and un-deprecated in `portfolio.proto` and `trading.proto` — an agent copying the config pattern into those would be wrong; deliberate or pending removal? — status: **open**
+- `InstantiateTemplate` returns the bare domain type in analysis (`StrategyDefinition`) and ingest (`SignalSource`) but a wrapper (`InstantiateTemplateResponse`) in indicators — feeds the RPC-shape question above — status: **open**
+- `ConditionEval.fn` and `OrderSnapshot.side` (closed sets) are strings again after `portfolio` moved to enums — status: **open**
+- `packages/proto/CLAUDE.md` does not mention the feature-224 admin-selector convention (PROTO-10).
 
 ---
 _Surfaced by [context-forge](https://github.com/davcs86/agent-plugins). Defects to action, not rules. Re-run `/context-constitution` to refresh._

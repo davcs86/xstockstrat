@@ -3,7 +3,7 @@
 Defects and drift surfaced by `/context-constitution` on 2026-07-24; refreshed 2026-09-02 (branch
 `claude/loaded-plugins-list-d120nl` @ `82a0549`); refreshed 2026-09-03 (branch
 `claude/watchlist-bulk-default-strategy-zxx6su` @ `d4cd327` — the double-`x-user-id` header bug was
-fixed, moved to Resolved; orphan-secret anchor re-grounded). For triage/fixing, not
+fixed, moved to Resolved; orphan-secret anchor re-grounded); re-verified 2026-10-14 (branch `ccr-fe84109f-0lwin8` @ `09ec8d9`). For triage/fixing, not
 governance. The internal admin-scope self-grant (`x-access-scope=7`) is a cross-cutting ⚠ security
 question tracked in the root findings log.
 
@@ -12,6 +12,12 @@ question tracked in the root findings log.
 | What the docs say | What the code does | Evidence | Suggested action |
 |---|---|---|---|
 _None currently open_ — ~~CLAUDE.md "Config Keys Consumed" lists only `agent.oauth.*`~~ **RESOLVED** (confirmed 2026-08-09 refresh): CLAUDE.md now lists `agent.signal.alert_threshold` alongside `agent.oauth.*`; the `source.<slug>.credentials` plaintext read was removed entirely (`_CREDENTIALS_UNSUPPORTED`, `app/tools.py:49-54`) rather than documented, so there is no longer a second undocumented key to reconcile.
+
+## Documentation that lies — additions (2026-10-14)
+
+| What the docs say | What the code does | Evidence | Suggested action |
+|---|---|---|---|
+| `set_config` tool docstring: "Secret keys are global-scope only — a per-user write to a secret key is rejected INVALID_ARGUMENT by the backend" | Feature 224 allows per-user secrets; `_write_source_bearer` itself writes `user_id=<caller>, is_secret=True`. An LLM reading the tool description will avoid or misreport per-user secret writes | `app/tools.py#set_config` docstring vs `app/tools.py#_write_source_bearer` | Rewrite the docstring |
 
 ## Latent bugs (looks broken, not merely non-obvious)
 
@@ -30,8 +36,8 @@ _None currently open_ — ~~CLAUDE.md "Config Keys Consumed" lists only `agent.o
 ## Open questions (unresolved *why* — needs a maintainer)
 
 - `snapshot_offline_positions` sets **both** a request-body `user_id` (`app/client.py:1861`) **and** the `x-user-id` header (`:1910`), while the CLAUDE.md caller-identity contract does not list snapshot among the body-`user_id` builders. Is the body `user_id` on `SnapshotOfflinePositionsRequest` a deliberate target selector, or leftover caller-identity duplication to drop (like the feature-164/133 builders)? — status: **open**
-- `manage_signal_source` bearer-token orchestration writes the encrypted secret **before** registering the source, with **no compensating cleanup** on a failed register (`app/tools.py:944-958`, "leaves only a harmless redacted orphan secret"). Confirm the orphan-secret-on-partial-failure is an accepted trade-off, not a reconciliation gap. — status: **open**
-- `telemetry.py` sets a `trading_mode` OTel resource attribute from the `TRADING_MODE` env var, but feature 147 removed `trading_mode` as a config/scope axis (scope now derives from `APPLICATION_ENV`). Is the attribute still intended (mirroring `xstockstrat-trading`'s paper/live routing, which may still read `TRADING_MODE`), or stale and to be dropped/renamed to `environment`? (surfaced 2026-09-04, comment-audit) `app/telemetry.py:33` — status: **open**
+- `manage_signal_source` bearer-token orchestration writes the encrypted secret **before** registering the source, with **no compensating cleanup** on a failed register (`app/tools.py#_write_source_bearer`, docstring "only orphans a redacted secret"). Confirm the orphan-secret-on-partial-failure is an accepted trade-off, not a reconciliation gap. — status: **open**
+- `set_config` takes a caller-supplied `author` (required tool parameter) that is recorded in `config.config_audit`; feature 111 derived `emit_alert` and `manage_formula` identities from verified claims for this exact reason. Intentional free-text audit label, or leftover from before the hardening? `app/tools.py#set_config` → `app/client.py#set_config` — status: **open** (candidate identity-spoof class; derive from `_caller_user_id` if not intentional)
 
 ## MCP tool ↔ backend alignment audit (2026-08-01) — 13/13 resolved
 
@@ -44,6 +50,7 @@ return-shape contract tests over the `app/client.py` request builders + projecti
 ## Resolved
 
 - **RESOLVED 2026-09-03 — `ensure_signal_watchlist` / `add_watchlist_symbol` emitted `x-user-id` twice (latent bug, 2026-09-02).** Both sites now use the de-duplicating `_metadata(("x-user-id", user_id))` form (`app/client.py:293`, `:316`), so the header is sent exactly once under a bound caller context (AGENT-4 dedup contract honored). Confirmed by re-resolving both citations against current code plus the regression test `tests/test_watchlist_client.py:222-254` (`test_ensure_signal_watchlist_dedups_user_id_under_bound_caller`, "defect 2026-09-03") which binds a caller and asserts `x-user-id` appears exactly once on both RPCs.
+- **RESOLVED 2026-10-14 — `telemetry.py` `trading_mode` resource attribute** (was an open question): `_build_resource` now sets only `service.name`, `deployment.environment` (from `APPLICATION_ENV`) and `platform`; grep for `trading_mode|TRADING_MODE` in `app/telemetry.py` → zero hits (remaining mentions are comments/docstrings).
 
 ---
 _Surfaced by [context-forge](https://github.com/davcs86/agent-plugins). Defects to action, not rules. Re-run `/context-constitution` to refresh._

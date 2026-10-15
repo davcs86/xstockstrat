@@ -2,7 +2,7 @@
 
 Derived by `/context-constitution` (context-forge) on 2026-07-24; refreshed 2026-09-02 (branch
 `claude/loaded-plugins-list-d120nl` @ `82a0549` — feature 165 added the Web Push channel; added
-NOTIFY-5/6 (+ severity-only-gate and VAPID-fail-loud gotchas), re-grounded NOTIFY-1/3/4 as ~120 push-RPC lines shifted anchors); refreshed 2026-09-03 (branch `claude/watchlist-bulk-default-strategy-zxx6su` @ `d4cd327` — added the TTL-vs-send-timeout scar; re-grounded NOTIFY-6 prune + severity-gate/VAPID gotcha anchors after the `webPush.ts` TTL-split change). Captures the **non-obvious** local
+NOTIFY-5/6 (+ severity-only-gate and VAPID-fail-loud gotchas), re-grounded NOTIFY-1/3/4 as ~120 push-RPC lines shifted anchors); refreshed 2026-09-03 (branch `claude/watchlist-bulk-default-strategy-zxx6su` @ `d4cd327` — added the TTL-vs-send-timeout scar; re-grounded NOTIFY-6 prune + severity-gate/VAPID gotcha anchors after the `webPush.ts` TTL-split change); refreshed 2026-10-14 (branch `ccr-fe84109f-0lwin8` @ `09ec8d9` — added NOTIFY-7; all anchors re-verified resolving, `~L` hints drifted only). Captures the **non-obvious** local
 invariants of the notify service (gRPC server-streaming alert fan-out + history, gRPC 50059). Does not
 restate documented/CI-enforced rules (see `## Pointers`).
 
@@ -18,6 +18,7 @@ restate documented/CI-enforced rules (see `## Pointers`).
 | **NOTIFY-4** | **`EmitAlert` rejects an empty/whitespace-only `title` or `body` with gRPC code `3` (INVALID_ARGUMENT) *before* persisting** — proto3 strings default to `""`, so the `NOT NULL` columns would otherwise never fire on a blank alert. | A blank-alert guard must live in the handler, not the schema; the DB default masks it (feature 094, F-10 — not feature 092/F-11, which is the separate "EmitAlert is not role-gated" decision documented above). | `src/grpc/notifyServiceImpl.ts:35-36` (empty/whitespace `title` or `body` → `callback({ code: 3 })`) | `src/grpc/notifyServiceImpl.ts:35-36` |
 | **NOTIFY-5** | **`RegisterPushSubscription` resolves the owner from the `x-user-id` gRPC metadata header, never a request-body user id** (rejects code 3 if absent; root PLAT-11). | An agent adding a `userId` field to the register request/proto and trusting it lets a browser assert another user's identity, since the edge injects/strips `x-user-id`. | `src/grpc/notifyServiceImpl.ts:178-181` | `src/grpc/notifyServiceImpl.ts:178-181` |
 | **NOTIFY-6** | **Push unregister AND the 404/410-prune delete by `endpoint` ONLY, with NO user scoping** — an endpoint is a possession-proven capability and the register upsert can reassign it to another user, so a user-scoped delete would strand rows. | Adding `AND user_id = $2` to either delete strands revoked/reassigned subscriptions and defeats the upsert. (Looks wrong, is intentional.) | unregister `notifyServiceImpl.ts:228`, prune `src/fanout/webPush.ts:139`, `endpoint … UNIQUE` `migrations/002_push_subscriptions.up.sql:12` | `src/grpc/notifyServiceImpl.ts:210` |
+| **NOTIFY-7** | **`MarkAlertRead` / `ListAlerts` take the owner from the `x-user-id` header and fall back to the body `userId` — the OPPOSITE of NOTIFY-5's header-only `RegisterPushSubscription`.** Read state lives in `notify.alert_reads` with no FK to `notify.alerts`, so `MarkAlertRead`'s `JOIN notify.alerts` is the only orphan guard; with no identity at all `ListAlerts` is unscoped. | Copying the register handler's header-only/reject-if-absent shape here breaks the documented body fallback; copying this fallback into a new self-service RPC reintroduces the PLAT-11 spoofing hole. | `src/grpc/notifyServiceImpl.ts#markAlertRead`, `#listAlerts`, `migrations/003_alert_reads.up.sql` ("No FK to notify.alerts") vs `#registerPushSubscription` | `src/grpc/notifyServiceImpl.ts#markAlertRead` |
 
 ## Gotchas & scars
 
@@ -33,6 +34,7 @@ restate documented/CI-enforced rules (see `## Pointers`).
 |---|---|
 | DB pool cap 1 (light DB use — alert history) | `src/index.ts:36`; root pool budget |
 | gRPC-only, port 50059 | `CLAUDE.md:20-26` |
+| mTLS fail-closed boot (`mtls.serverCredentials()`, `targetOverride('xstockstrat-config')`); per-leaf `propagation.ts` deleted (feature 175) | `docs/patterns/inter-service-mtls.md`; `src/mtls.ts`, `src/services/configWatcher.ts` |
 | OTel gated on `OTEL_ENABLED`, non-fatal init | `src/telemetry.ts:7,39` |
 | All RPC errors collapse to a bare numeric gRPC code `13` (INTERNAL); `grpc.status` is never imported (house style, harmless deviation) | `src/grpc/notifyServiceImpl.ts:95,144,159` |
 
