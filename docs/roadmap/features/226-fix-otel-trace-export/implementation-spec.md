@@ -1,6 +1,6 @@
 # Implementation Spec: fix-otel-trace-export
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-10-14
 **Feature**: `docs/roadmap/features/226-fix-otel-trace-export/feature.md`
 **Total Steps**: 11
@@ -600,7 +600,7 @@ grep -n "endpoint: 0.0.0.0:4317\|endpoint: 0.0.0.0:4318" packages/otel/otel-coll
 
 ### Step 11 — docs: one OTLP/HTTP export path and one header format; PLAT-3; teardown
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`, `packages/otel/`, `services/xstockstrat-ui/` (CLAUDE.md only), `.env.example`
 **Files**:
 - `docs/patterns/observability.md` — modify
@@ -697,3 +697,9 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Expected**: the `git mv instrumentation.ts → src/instrumentation.ts` rename lands in Step 8's commit.
 - **Actual**: Step 8's `git add` errored on the already-renamed source path, so the staged 0-line rename was swept into Step 9's commit `31c0b1e` (already pushed); Step 8's content changes (import fix, `telemetry.ts`, `package.json`, lock) land in the following commit. Commit `31c0b1e` alone does not build (moved file still imports `./src/telemetry`).
 - **Disposition**: no force-push on the pushed branch; the integration PR squash-merges into `main-dev`, so no intermediate state reaches the trunk. All verification ran on the combined tree.
+
+### Deviation 5 — Step 11: teardown fixed adjacent drift and logged two findings
+- **Expected**: Step 11 edits only the OTLP-path/header/hook lines.
+- **Actual**: the teardown audit (context-forge `context-auditor`; the `/context-constitution refresh` command is unavailable in-session) grounded pre-existing drift inside the touched sections: a stale `trading_mode`/`environment` resource-attribute table and two `trading_mode` claims (feature 171 removed it), "Set on all 13 services" (12; vars are global `envs:`), and a straggler "port-by-runtime split" phrase in `packages/otel/docs/context-constitution.md:10`.
+- **Disposition**: corrected in place (same files, root CLAUDE.md § Teardown "fix the grounded drift"). Two behavioural contradictions were **logged, not changed**, as findings rows: metrics/logs are documented and alerted on (OTEL-1/OTEL-2) but never emitted; the `platform.otel.enabled` live switch does not exist in code.
+

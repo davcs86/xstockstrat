@@ -143,3 +143,15 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - `docker compose config --quiet` exit 0 with the 4 required secrets stubbed (`BROKER_ACCOUNTS_ENCRYPTION_KEY`, `CONFIG_SECRETS_ENCRYPTION_KEY`, `JWT_SECRET`, `POSTGRES_PASSWORD`) — same as baseline; without stubs it fails on those pre-existing required vars, not on this change.
 - Files modified: `docker-compose.yml`, `packages/otel/otel-collector-config.yaml`. TDD: N/A (config) — AC-4 RED→GREEN recorded above.
 - Deviations: none
+
+### Step 11 — docs: one OTLP/HTTP path and one header format; PLAT-3; teardown [done]
+- observability.md (single `:4318` path, env-only exporter rule, one header format, `src/instrumentation.ts`), grafana-cloud.md (all runtimes OTLP/HTTP, `:4317` kept for other clients, troubleshooting names each runtime's export-failure log line), digitalocean.md + .env.example (one `Basic <…>` format; deploy prefixes `Authorization=`), UI CLAUDE.md (hook must stay in `src/`), PLAT-3 rewritten with re-grounded citations, `packages/otel` constitution/pointer aligned, findings row RESOLVED (feature 226) — that row only (fails.md 174).
+- **Teardown**: `/context-forge:context-constitution refresh` is **unavailable** in this session (only `context-scrubber` + agents are installed). Manual equivalent performed: `context-forge:context-auditor` audit of all 9 touched context/doc files against the current code → all PLAT-3 citations resolve; no feature-226 text stale; pre-existing drift fixed in place or logged (Deviation 5). Recorded in the integration PR body.
+- Files modified: `docs/patterns/observability.md`, `docs/setup/grafana-cloud.md`, `docs/setup/digitalocean.md`, `.env.example`, `services/xstockstrat-ui/CLAUDE.md`, `docs/context-constitution.md`, `packages/otel/docs/context-constitution.md`, `packages/otel/CLAUDE.md`, `docs/context-constitution-findings.md`. TDD: N/A (docs).
+- Deviations: Deviation 5
+
+## Session 2026-10-15 — sdd-execute (summary)
+**Steps this session**: 1–11
+**Progress**: 11 done / 11 total
+**Stopped at**: all complete → `code-completed`
+**Next**: merge integration PR #1246 (C-16 scenario promotion pending operator confirmation), then `/promote`
