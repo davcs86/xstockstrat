@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { BackfillBarsRequest, BackfillBarsResponse, BackfillFundamentalsRequest, BackfillFundamentalsResponse, Bar, BatchGetBarsRequest, BatchGetBarsResponse, BatchGetLatestPriceRequest, BatchGetLatestPriceResponse, DeleteBackfilledDataRequest, DeleteBackfilledDataResponse, GetBarsRequest, GetBarsResponse, GetCurrentSectorRequest, GetCurrentSectorResponse, GetDataCoverageRequest, GetDataCoverageResponse, GetFundamentalsMultiRequest, GetFundamentalsMultiResponse, GetFundamentalsRequest, GetFundamentalsResponse, GetHistoricalFundamentalsRequest, GetHistoricalFundamentalsResponse, GetLatestPriceRequest, GetLatestQuoteRequest, GetLatestQuotesRequest, GetLatestQuotesResponse, GetSectorAsOfRequest, GetSectorAsOfResponse, GetSectorHistoryRequest, GetSectorHistoryResponse, LatestPrice, ListAssetsRequest, ListAssetsResponse, Quote, StreamBarsRequest, StreamQuotesRequest } from "./marketdata_pb.js";
+import { BackfillBarsRequest, BackfillBarsResponse, BackfillFundamentalsRequest, BackfillFundamentalsResponse, Bar, BatchGetBarsRequest, BatchGetBarsResponse, BatchGetLatestPriceRequest, BatchGetLatestPriceResponse, DeleteBackfilledDataRequest, DeleteBackfilledDataResponse, GetBarsRequest, GetBarsResponse, GetCurrentSectorRequest, GetCurrentSectorResponse, GetDataCoverageRequest, GetDataCoverageResponse, GetEtfFlagsRequest, GetEtfFlagsResponse, GetFundamentalsMultiRequest, GetFundamentalsMultiResponse, GetFundamentalsRequest, GetFundamentalsResponse, GetHistoricalFundamentalsRequest, GetHistoricalFundamentalsResponse, GetLatestPriceRequest, GetLatestQuoteRequest, GetLatestQuotesRequest, GetLatestQuotesResponse, GetSectorAsOfRequest, GetSectorAsOfResponse, GetSectorHistoryRequest, GetSectorHistoryResponse, LatestPrice, ListAssetsRequest, ListAssetsResponse, Quote, StreamBarsRequest, StreamQuotesRequest } from "./marketdata_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -222,6 +222,18 @@ export const MarketDataService = {
       name: "GetSectorHistory",
       I: GetSectorHistoryRequest,
       O: GetSectorHistoryResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * feature 215 — cache-only ETF label read: never calls FMP on the request path; an unknown
+     * symbol returns is_etf unset.
+     *
+     * @generated from rpc xstockstrat.marketdata.v1.MarketDataService.GetEtfFlags
+     */
+    getEtfFlags: {
+      name: "GetEtfFlags",
+      I: GetEtfFlagsRequest,
+      O: GetEtfFlagsResponse,
       kind: MethodKind.Unary,
     },
   }

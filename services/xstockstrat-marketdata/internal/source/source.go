@@ -2,6 +2,7 @@ package source
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -62,6 +63,9 @@ type Fundamentals struct {
 	// classification epoch-seed write-through (feature 217).
 	Sector string
 }
+
+// ErrNoFundamentals: vendor has no fundamentals for the symbol — absence, not an outage (feature 215).
+var ErrNoFundamentals = errors.New("no fundamentals")
 
 // FundamentalsSource fetches fundamental metrics for symbols. Separate from DataSourceClient
 // (OHLCV) and never registered in the OHLCV Registry (FR-2); held as its own service field.

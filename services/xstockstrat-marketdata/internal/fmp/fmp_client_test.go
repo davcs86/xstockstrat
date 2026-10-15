@@ -2,11 +2,14 @@ package fmp
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/xstockstrat/marketdata/internal/source"
 )
 
 // rtFunc adapts a function to http.RoundTripper and records request paths.
@@ -174,5 +177,16 @@ func TestHTTPError_DoesNotLeakAPIKey(t *testing.T) {
 	}
 	if strings.Contains(err.Error(), "SECRET-KEY") {
 		t.Fatalf("error leaked api key: %v", err)
+	}
+}
+
+// Feature 215: an empty /stable/quote result is vendor absence, so GetFundamentals wraps
+// source.ErrNoFundamentals (marketdata maps it to NotFound, never an outage).
+func TestGetFundamentals_EmptyQuoteIsNoFundamentals(t *testing.T) {
+	rt := &recordingRT{respond: func(path string) (int, string) { return 200, `[]` }}
+	c := newTestClient([]string{"core"}, rt)
+	_, err := c.GetFundamentals(context.Background(), "VOO")
+	if !errors.Is(err, source.ErrNoFundamentals) {
+		t.Fatalf("err = %v, want errors.Is(source.ErrNoFundamentals)", err)
 	}
 }

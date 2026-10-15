@@ -90,6 +90,9 @@ const (
 	// MarketDataServiceGetSectorHistoryProcedure is the fully-qualified name of the MarketDataService's
 	// GetSectorHistory RPC.
 	MarketDataServiceGetSectorHistoryProcedure = "/xstockstrat.marketdata.v1.MarketDataService/GetSectorHistory"
+	// MarketDataServiceGetEtfFlagsProcedure is the fully-qualified name of the MarketDataService's
+	// GetEtfFlags RPC.
+	MarketDataServiceGetEtfFlagsProcedure = "/xstockstrat.marketdata.v1.MarketDataService/GetEtfFlags"
 )
 
 // MarketDataServiceClient is a client for the xstockstrat.marketdata.v1.MarketDataService service.
@@ -134,6 +137,9 @@ type MarketDataServiceClient interface {
 	GetCurrentSector(context.Context, *connect.Request[v1.GetCurrentSectorRequest]) (*connect.Response[v1.GetCurrentSectorResponse], error)
 	GetSectorAsOf(context.Context, *connect.Request[v1.GetSectorAsOfRequest]) (*connect.Response[v1.GetSectorAsOfResponse], error)
 	GetSectorHistory(context.Context, *connect.Request[v1.GetSectorHistoryRequest]) (*connect.Response[v1.GetSectorHistoryResponse], error)
+	// feature 215 — cache-only ETF label read: never calls FMP on the request path; an unknown
+	// symbol returns is_etf unset.
+	GetEtfFlags(context.Context, *connect.Request[v1.GetEtfFlagsRequest]) (*connect.Response[v1.GetEtfFlagsResponse], error)
 }
 
 // NewMarketDataServiceClient constructs a client for the
@@ -262,6 +268,12 @@ func NewMarketDataServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			connect.WithSchema(marketDataServiceMethods.ByName("GetSectorHistory")),
 			connect.WithClientOptions(opts...),
 		),
+		getEtfFlags: connect.NewClient[v1.GetEtfFlagsRequest, v1.GetEtfFlagsResponse](
+			httpClient,
+			baseURL+MarketDataServiceGetEtfFlagsProcedure,
+			connect.WithSchema(marketDataServiceMethods.ByName("GetEtfFlags")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -286,6 +298,7 @@ type marketDataServiceClient struct {
 	getCurrentSector          *connect.Client[v1.GetCurrentSectorRequest, v1.GetCurrentSectorResponse]
 	getSectorAsOf             *connect.Client[v1.GetSectorAsOfRequest, v1.GetSectorAsOfResponse]
 	getSectorHistory          *connect.Client[v1.GetSectorHistoryRequest, v1.GetSectorHistoryResponse]
+	getEtfFlags               *connect.Client[v1.GetEtfFlagsRequest, v1.GetEtfFlagsResponse]
 }
 
 // StreamBars calls xstockstrat.marketdata.v1.MarketDataService.StreamBars.
@@ -384,6 +397,11 @@ func (c *marketDataServiceClient) GetSectorHistory(ctx context.Context, req *con
 	return c.getSectorHistory.CallUnary(ctx, req)
 }
 
+// GetEtfFlags calls xstockstrat.marketdata.v1.MarketDataService.GetEtfFlags.
+func (c *marketDataServiceClient) GetEtfFlags(ctx context.Context, req *connect.Request[v1.GetEtfFlagsRequest]) (*connect.Response[v1.GetEtfFlagsResponse], error) {
+	return c.getEtfFlags.CallUnary(ctx, req)
+}
+
 // MarketDataServiceHandler is an implementation of the xstockstrat.marketdata.v1.MarketDataService
 // service.
 type MarketDataServiceHandler interface {
@@ -427,6 +445,9 @@ type MarketDataServiceHandler interface {
 	GetCurrentSector(context.Context, *connect.Request[v1.GetCurrentSectorRequest]) (*connect.Response[v1.GetCurrentSectorResponse], error)
 	GetSectorAsOf(context.Context, *connect.Request[v1.GetSectorAsOfRequest]) (*connect.Response[v1.GetSectorAsOfResponse], error)
 	GetSectorHistory(context.Context, *connect.Request[v1.GetSectorHistoryRequest]) (*connect.Response[v1.GetSectorHistoryResponse], error)
+	// feature 215 — cache-only ETF label read: never calls FMP on the request path; an unknown
+	// symbol returns is_etf unset.
+	GetEtfFlags(context.Context, *connect.Request[v1.GetEtfFlagsRequest]) (*connect.Response[v1.GetEtfFlagsResponse], error)
 }
 
 // NewMarketDataServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -550,6 +571,12 @@ func NewMarketDataServiceHandler(svc MarketDataServiceHandler, opts ...connect.H
 		connect.WithSchema(marketDataServiceMethods.ByName("GetSectorHistory")),
 		connect.WithHandlerOptions(opts...),
 	)
+	marketDataServiceGetEtfFlagsHandler := connect.NewUnaryHandler(
+		MarketDataServiceGetEtfFlagsProcedure,
+		svc.GetEtfFlags,
+		connect.WithSchema(marketDataServiceMethods.ByName("GetEtfFlags")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/xstockstrat.marketdata.v1.MarketDataService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case MarketDataServiceStreamBarsProcedure:
@@ -590,6 +617,8 @@ func NewMarketDataServiceHandler(svc MarketDataServiceHandler, opts ...connect.H
 			marketDataServiceGetSectorAsOfHandler.ServeHTTP(w, r)
 		case MarketDataServiceGetSectorHistoryProcedure:
 			marketDataServiceGetSectorHistoryHandler.ServeHTTP(w, r)
+		case MarketDataServiceGetEtfFlagsProcedure:
+			marketDataServiceGetEtfFlagsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -673,4 +702,8 @@ func (UnimplementedMarketDataServiceHandler) GetSectorAsOf(context.Context, *con
 
 func (UnimplementedMarketDataServiceHandler) GetSectorHistory(context.Context, *connect.Request[v1.GetSectorHistoryRequest]) (*connect.Response[v1.GetSectorHistoryResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.marketdata.v1.MarketDataService.GetSectorHistory is not implemented"))
+}
+
+func (UnimplementedMarketDataServiceHandler) GetEtfFlags(context.Context, *connect.Request[v1.GetEtfFlagsRequest]) (*connect.Response[v1.GetEtfFlagsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.marketdata.v1.MarketDataService.GetEtfFlags is not implemented"))
 }

@@ -90,6 +90,8 @@ type MarketDataService struct {
 	fmpBudget fmpBudget
 	// class is the sector-classification wiring (feature 217); zero value = disabled.
 	class classificationState
+	// etf is the cache-only ETF-label state (feature 215); zero value = no source wired.
+	etf etfFlagState
 	// quotaAlert dedupes the 80%-quota WARNING to one emit per active window (UTC day for FMP,
 	// rolling window for Finnhub — see maybeAlertQuota/fundamentalsQuota).
 	quotaAlertMu     sync.Mutex
@@ -1335,6 +1337,9 @@ func (s *MarketDataService) GetFundamentalsMulti(ctx context.Context, symbols []
 				continue
 			}
 			f, err := s.getEdgarSnapshot(ctx, sym)
+			if connect.CodeOf(err) == connect.CodeNotFound {
+				continue // absence is omitted; kill switch / quota / outage still abort the batch (FR-7)
+			}
 			if err != nil {
 				return nil, err
 			}
@@ -1441,6 +1446,9 @@ func (s *MarketDataService) resolveFundamentals(ctx context.Context, symbol stri
 		}
 		return nil, connect.NewError(connect.CodeResourceExhausted, err)
 	}
+	if errors.Is(err, source.ErrNoFundamentals) {
+		return nil, connect.NewError(connect.CodeNotFound, err)
+	}
 	if err != nil {
 		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("%s fetch: %w", s.fundProvider, err))
 	}
@@ -1504,6 +1512,9 @@ func hasCoreMetrics(p *source.HistoricalFundamentalsPeriod) bool {
 		p.EPS != nil || p.ROE != nil || p.DebtToEquity != nil
 }
 
+// errNoEdgarSnapshot marks a symbol with no producible EDGAR period while vendor fallback is off (NotFound).
+var errNoEdgarSnapshot = errors.New("no edgar snapshot and vendor fallback disabled")
+
 // getEdgarSnapshot serves the EDGAR-canonical latest-filing snapshot for one symbol: the newest
 // as-of period (one indexed read) with the same financial-debt D/E + currency-consistent P/B
 // convention as the historical lane (@AC-6), overlaid with a live price. Write-through cached under
@@ -1535,8 +1546,7 @@ func (s *MarketDataService) getEdgarSnapshot(ctx context.Context, symbol string)
 		}
 		slog.WarnContext(ctx, "edgar snapshot not producible — falling back to vendor", "symbol", symbol, "reason", reason)
 		if err := s.fundamentalsEnabled(); err != nil {
-			return nil, connect.NewError(connect.CodeFailedPrecondition,
-				fmt.Errorf("no edgar snapshot for %s and vendor fallback disabled", symbol))
+			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("%s: %w", symbol, errNoEdgarSnapshot))
 		}
 		return s.resolveFundamentals(ctx, symbol)
 	}
@@ -1622,10 +1632,13 @@ func (s *MarketDataService) quotaCountAfterFetch(_ context.Context, estimate int
 	return estimate
 }
 
+// atQuotaAlertThreshold is the single home of the 80%-of-cap threshold; cap <= 0 is never "at threshold".
+func atQuotaAlertThreshold(count, cap int) bool { return cap > 0 && count >= (cap*8)/10 }
+
 // maybeAlertQuota emits one WARNING per active window once the count crosses 80% of cap. The dedup
 // bucket is a window-floor, so a short window (Finnhub) re-fires per window instead of once per UTC day.
 func (s *MarketDataService) maybeAlertQuota(ctx context.Context, count, cap int, windowSeconds int64) {
-	if cap <= 0 || count < (cap*8)/10 {
+	if !atQuotaAlertThreshold(count, cap) {
 		return
 	}
 	bucket := fmt.Sprintf("%d", time.Now().Unix()/windowSeconds)

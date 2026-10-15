@@ -2,11 +2,14 @@ package finnhub
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/xstockstrat/marketdata/internal/source"
 )
 
 // recordingRT adapts a function to http.RoundTripper and records request paths.
@@ -208,5 +211,38 @@ func TestHTTPError_DoesNotLeakAPIKey(t *testing.T) {
 	}
 	if strings.Contains(err.Error(), "SECRET-TOKEN") {
 		t.Fatalf("error leaked api token: %v", err)
+	}
+}
+
+// TestGetFundamentals_OutageIsNotAbsence (@AC-7, @AC-8, feature 215): Finnhub has no absence signal,
+// so a non-200 must surface as an outage error, never wrapped as source.ErrNoFundamentals; an empty
+// 200 is a decoded row with nil fields.
+func TestGetFundamentals_OutageIsNotAbsence(t *testing.T) {
+	for _, status := range []int{503, 429} {
+		rt := &recordingRT{respond: func(path string) (int, string) { return status, `{}` }}
+		_, err := newTestClient(rt).GetFundamentals(context.Background(), "VOO")
+		if err == nil {
+			t.Fatalf("HTTP %d: expected an error", status)
+		}
+		if errors.Is(err, source.ErrNoFundamentals) {
+			t.Fatalf("HTTP %d: outage wrapped as ErrNoFundamentals: %v", status, err)
+		}
+		if !strings.Contains(err.Error(), "/stock/metric") {
+			t.Fatalf("HTTP %d: error %q does not name /stock/metric", status, err)
+		}
+	}
+
+	rt := &recordingRT{respond: func(path string) (int, string) {
+		if path == "/stock/metric" {
+			return 200, `{"metric":{}}`
+		}
+		return 200, `{}`
+	}}
+	f, err := newTestClient(rt).GetFundamentals(context.Background(), "VOO")
+	if err != nil {
+		t.Fatalf("empty 200: %v", err)
+	}
+	if f == nil || f.Symbol != "VOO" || f.PERatio != nil || f.MarketCap != nil {
+		t.Fatalf("empty 200: got %+v, want a VOO row with nil fields", f)
 	}
 }

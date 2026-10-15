@@ -142,3 +142,24 @@ func TestFetchSector_ParsesProfileSector(t *testing.T) {
 		t.Fatalf("FetchSector = %q, %v", got, err)
 	}
 }
+
+// Feature 215: FetchIsEtf decodes the profile isEtf flag; an empty profile is (nil, nil).
+func TestFetchIsEtf_ParsesProfileIsEtf(t *testing.T) {
+	for _, tc := range []struct {
+		body string
+		want *bool
+	}{
+		{`[{"isEtf":true,"sector":""}]`, func() *bool { b := true; return &b }()},
+		{`[{"isEtf":false,"sector":"Technology"}]`, func() *bool { b := false; return &b }()},
+		{`[]`, nil},
+	} {
+		c := gatewayClient(&stampRT{status: 200, body: tc.body}, 0, 10, nil)
+		got, err := c.FetchIsEtf(context.Background(), "VOO")
+		if err != nil {
+			t.Fatalf("%s: FetchIsEtf: %v", tc.body, err)
+		}
+		if (got == nil) != (tc.want == nil) || (got != nil && *got != *tc.want) {
+			t.Fatalf("%s: FetchIsEtf = %v, want %v", tc.body, got, tc.want)
+		}
+	}
+}

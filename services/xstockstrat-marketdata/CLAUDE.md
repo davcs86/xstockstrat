@@ -143,6 +143,32 @@ gated by `marketdata.edgar.enabled`), and falls back to the enabled vendor for a
 vendor path below is the serving source only while `snapshot_source=vendor` (or as the edgar fallback).
 `marketdata.fundamentals.provider` selects only the *vendor* client and stays boot-frozen.
 
+**Absence is distinct from outage and disable (feature 215, FR-7/FR-8).** Analysis's fundamentals
+guard depends on these status codes:
+
+- With no producible EDGAR snapshot and vendor fallback off (`errNoEdgarSnapshot`), single
+  `GetFundamentals` returns **NotFound**, and edgar-mode `GetFundamentalsMulti` **omits** the symbol
+  instead of failing the batch.
+- An FMP single-symbol no-data result wraps `source.ErrNoFundamentals`, which maps to NotFound and
+  is omitted from Multi.
+- A Finnhub fetch failure stays **Unavailable**. Finnhub has no absence signal, so its
+  `GetFundamentals` returns `fetchOne`'s error unwrapped and never `ErrNoFundamentals`.
+- The global disables (`marketdata.edgar.enabled=false`, `enabled=false`) stay **FailedPrecondition**,
+  and the quota stays `ResourceExhausted`.
+
+**`GetEtfFlags` (feature 215, FR-11)** labels a symbol as an ETF or not, for analysis's
+fundamentals-refusal reason. It is **cache-only**:
+
+- A miss or an expired entry returns `is_etf` **unset** and enqueues a non-blocking, deduped
+  background fill. The RPC never calls FMP.
+- The filler (`StartEtfFlagFiller`) fetches FMP `/stable/profile` `isEtf` only while FMP is enabled,
+  the shared budget is wired, `daily_request_cap > 0`, and `!atQuotaAlertThreshold`. That means
+  below 80% of `marketdata.fmp.daily_request_cap`, the same single 80% helper as the quota alert.
+  The label therefore never spends the guard's FMP headroom.
+- Fixed invariants (not config keys): `etfFlagTTL` 30 days, `etfFlagCacheMax` 10000 (oldest
+  evicted), `etfFlagQueueCap` 256 (a full queue drops).
+- An empty profile is negative-cached; a fetch error is not cached.
+
 Both providers share the **identical** read-through DB cache (`marketdata.fundamentals` table) and
 RPC layer: cache hit within `cache_ttl_hours` → no provider call; miss/stale → quota-guarded fetch;
 at cap → serve stale (`stale=true`) or `ResourceExhausted`; `enabled=false` → `FailedPrecondition`
