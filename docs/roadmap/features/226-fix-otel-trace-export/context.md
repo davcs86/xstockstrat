@@ -115,3 +115,14 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - RED (indicators, pre-4(c)): AC-1 ×2 → `('/otlp/v1/traces', 'Basic dGVzdDprZXk=') in []`; AC-3 → only `proto.grpc … StatusCode.UNAVAILABLE` logged, no `code: 400`. GREEN ×4: telemetry tests 4/4 (agent 5/5); full suites 284/328/1148/501 pass; coverage 85.6/81.7/88.0/80.6 % (≥ 50/40/40/40); ruff clean.
 - Files modified: `services/xstockstrat-{indicators,ingest,analysis,agent}/tests/{conftest.py,test_telemetry.py}`
 - Deviations: none
+
+### Step 6 — service: Node ×4 — OTLP/HTTP exporter, WARN diag logger, sync resource detectors [done]
+- Deps added first (`@opentelemetry/api ^1.9.0` → 1.9.1, `exporter-trace-otlp-http ^0.52.0` → 0.52.1), RED captured, then `telemetry.ts`: http exporter with no url, fallback removed, lazy WARN `DiagConsoleLogger` only when `OTEL_LOG_LEVEL` unset, sync resource detectors; `exporter-trace-otlp-grpc` removed from all four package.json. Frozen install ✓; anchored importer grep → none; lint exit 0 (pre-existing warnings only, none in touched files; ledger 98 = baseline), tsc build ✓ ×4.
+- Files modified: `services/xstockstrat-{ledger,identity,notify,config}/{src/telemetry.ts,package.json}`, `pnpm-lock.yaml`
+- Deviations: Deviation 1 (reverted incidental protobufjs re-resolution)
+
+### Step 7 — test: Node ×4 — AC-1 (raw) and AC-3 diag-logged 400 [done]
+- New `src/__tests__/telemetry.export.test.ts` per service (ESM `.ts` + `require` shim for ledger/identity; CJS extensionless for notify/config); spies before first OTel load; init in `before()`; counter receiver (200 then 400); server closed in `after()`.
+- RED (ledger strip-types, notify tsc→CJS): AC-1 "receiver got no /v1/traces request"; AC-3 "no logged 400 export failure". GREEN ×4: AC-1 + AC-3 pass incl. the no-OTel-`console.error` guard; suites 45/74/70/135 pass; c8 lines 98/98/92/87 % (≥ 40); lint + build exit 0.
+- Files modified: `services/xstockstrat-{ledger,identity,notify,config}/src/__tests__/telemetry.export.test.ts`
+- Deviations: Deviation 2 (exclude Node `(node:` runtime warnings from the console.error guard)

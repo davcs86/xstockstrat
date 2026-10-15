@@ -331,7 +331,7 @@ grep -n "def otel_reset\|otel_reset" services/xstockstrat-*/tests/conftest.py se
 
 ### Step 6 — service: Node ×4 — OTLP/HTTP exporter, WARN diag logger, sync resource detectors
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ledger`, `xstockstrat-identity`, `xstockstrat-notify`, `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-ledger/src/telemetry.ts` — modify
@@ -401,7 +401,7 @@ for s in ledger identity notify config; do (cd services/xstockstrat-$s && \
 
 ### Step 7 — test: Node ×4 — AC-1 (raw) export and AC-3 diag-logged 400
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ledger`, `xstockstrat-identity`, `xstockstrat-notify`, `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-ledger/src/__tests__/telemetry.export.test.ts` — create
@@ -676,3 +676,14 @@ git diff --stat -- docs/roadmap/implementation-roadmap.md docs/roadmap/phase7-de
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Deviation 1 — Step 6: non-frozen `pnpm install` bumped an unrelated transitive pin
+- **Expected**: adding two direct deps changes only the four importer entries in the root `pnpm-lock.yaml`.
+- **Actual**: `pnpm install` also re-resolved `@opentelemetry/otlp-transformer@0.52.1`'s snapshot dependency `protobufjs: 7.5.6 → 7.6.6`.
+- **Disposition**: reverted that single line (both versions already exist in the lock); `pnpm install --frozen-lockfile` passes; the committed lock delta is importer-only.
+
+### Deviation 2 — Step 7: "no `console.error` before the 400" assertion narrowed to exclude Node runtime warnings
+- **Expected**: `console.error` sees nothing before the rejected export (design.md Open Risk 1 / Step 7 instr. 9).
+- **Actual**: under `--experimental-strip-types` (ledger/identity), Node emits a `(node:<pid>) [MODULE_TYPELESS_PACKAGE_JSON] Warning …` process warning through `console.error` — not OTel diag output.
+- **Disposition**: the shared `logged()` helper drops lines starting `(node:`; no OTel diag message was narrowed. All four services GREEN with the guard intact (the sync-detector fix is still guarded).
+
