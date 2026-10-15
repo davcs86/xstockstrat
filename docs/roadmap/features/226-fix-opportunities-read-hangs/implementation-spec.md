@@ -501,7 +501,7 @@ each assertion fails for a behavioral reason once the module skeleton exists (td
 
 ### Step 7 — service: `ListOpportunities` DB phase under the budget, kicks after release, enrichment deadline
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
