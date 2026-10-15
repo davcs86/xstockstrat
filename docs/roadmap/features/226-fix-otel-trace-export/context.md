@@ -155,3 +155,6 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 **Progress**: 11 done / 11 total
 **Stopped at**: all complete → `code-completed`
 **Next**: merge integration PR #1246 (C-16 scenario promotion pending operator confirmation), then `/promote`
+
+## Session 2026-10-15 — C-16 scenario promotion (operator-approved)
+- Promoted with `@feature-226` provenance: `@AC-1`, `@AC-3`, `@AC-4` → `docs/sdd/business-rules/platform.feature`; `@AC-2` → `services/xstockstrat-ui/acceptance/fix-otel-trace-export.feature` (new). No dedup conflicts (feature-171 telemetry scenarios cover resource attributes, a different guarantee). Merge-order gate: no entry for this slug.

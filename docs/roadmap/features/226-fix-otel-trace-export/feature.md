@@ -59,4 +59,4 @@ options against an OTLP/HTTP-only gateway URL, and the UI's instrumentation hook
 
 ## Next Action
 
-`/sdd-review fix-otel-trace-export impl-spec` — validate implementation spec, then `/sdd-execute fix-otel-trace-export`
+Merge integration PR #1246 (scenarios promoted per C-16), then `/promote`
