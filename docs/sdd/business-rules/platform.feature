@@ -408,3 +408,27 @@ Feature: Platform-wide guarantees
     Given the local docker-compose stack with OTEL_ENABLED "true"
     When any service's OTEL_EXPORTER_OTLP_ENDPOINT is read from docker-compose.yml
     Then it is "http://otel-collector:4318"
+
+  # ─── setup-env produces a bootable .env (feature 218) ─────────────────────
+
+  @AC-1 @regression @feature-218
+  Scenario: A defaults-mode setup produces a .env that docker compose accepts
+    Given no .env file exists at the repo root
+    When the operator runs "./scripts/setup-env.sh --defaults"
+    Then the generated .env defines CONFIG_SECRETS_ENCRYPTION_KEY as 64 hex characters
+    And the generated .env defines BROKER_ACCOUNTS_ENCRYPTION_KEY as 64 hex characters
+    And "docker compose config" exits 0 using that .env
+
+  @AC-2 @regression @feature-218
+  Scenario: A generated .env carries none of the variables removed by feature 147
+    Given no .env file exists at the repo root
+    When the operator runs "./scripts/setup-env.sh --defaults"
+    Then the generated .env does not define ALPACA_API_KEY, ALPACA_API_SECRET or MCP_AGENT_SECRET
+
+  # ─── Sector enum sentinel (feature 217) ───────────────────────────────────
+
+  @AC-9 @FR-9 @feature-217
+  Scenario: The Sector enum carries an unspecified sentinel
+    Given the generated Sector proto enum
+    When its zero value is inspected
+    Then the zero value is SECTOR_UNSPECIFIED
