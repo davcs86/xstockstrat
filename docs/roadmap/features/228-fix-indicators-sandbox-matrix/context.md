@@ -73,3 +73,32 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Status unchanged: design-approved. The lifecycle is already past spec-ready.
 - Ledger candidate: the Track C product-spec template (`.claude/skills/sdd-triage/reference/track-c-sdd.md`) has no
   `## Consumer Surface(s)` section, so every Track C spec fails C-14 at review.
+
+## Session 2026-10-15 — sdd-spec
+
+- Generated implementation-spec.md with 4 steps. Status → implementation-ready.
+  - Steps 1–2: the `sandbox.py` service step and its paired test step (T1–T5).
+  - Step 3: the UI `formulaReference.ts:171` copy.
+  - Step 4: docs plus the context-forge teardown.
+- Key codebase findings:
+  - All runtime change is in `services/xstockstrat-indicators/app/services/sandbox.py`:
+    - the wrapper input parse is at `:246-250`;
+    - the `RLIMIT_DATA` block is at `:274-278`;
+    - the single `.format` call site is at `:338-350`;
+    - the classification is at `:391-396`.
+    The probe becomes a module constant `_VMDATA_PROBE`, interpolated like `_SECCOMP_ALLOW`, so T5 can `exec` it
+    standalone and inject a probe failure via monkeypatch.
+  - Agent `test_formula` needs **no code step**. It forwards `exit_reason` verbatim (`agent/app/client.py:1023-1025`)
+    and exposes no memory override (`tools.py:1459-1465`).
+  - RED was measured on the current tree. A 32 MiB alloc at `memory_bytes=64 MiB` gives `memory_exceeded`, and so
+    does a 96 MiB alloc at the default 128 MiB.
+  - **Environment trap.** Running as root under a `0700` dir (`/tmp/claude-0`) fails every real-subprocess sandbox
+    test with `ModuleNotFoundError: pyseccomp`, because the uid-65534 child cannot traverse to the venv. Using a
+    world-traversable venv gives a baseline of 33 passed. This is recorded in the spec's § Step Dependencies.
+- **P-03 escalation for /sdd-review.** design.md's dev smoke "32 MiB at `memory_bytes_override=64 MiB`" cannot run
+  via the MCP, which has no override parameter. The spec substitutes a 96 MiB alloc at the default headroom, which
+  fails today and passes only under headroom semantics. The operator confirms or replaces this.
+- The findings go to the indicators findings file, not the root `docs/context-constitution-findings.md`. This removes
+  the #1247 adjacent-row overlap noted at review.
+- The runbook examples' bare `sandbox.*` keys switch to full-dotted keys for all indicators keys in those blocks
+  (C-10), not only `memory_bytes`.
