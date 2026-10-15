@@ -106,6 +106,23 @@ test.describe('Backtest data coverage', () => {
     );
   });
 
+  // @AC-2: the sentinel is a real refused-only INSUFFICIENT_DATA run (no coverage gap); keep status 2.
+  test('fundamentals-unavailable backtest renders the refusal banner with the ETF label', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await page.goto('/insights/strategies/strat-fundamentals-etf-001');
+
+    await page.getByRole('button', { name: 'Run Backtest' }).click();
+
+    const banner = page.getByTestId('no-trade-reason');
+    await expect(banner).toContainText('requires fundamentals', { timeout: 10000 });
+    await expect(banner).toContainText('(ETF)');
+    await expect(banner).not.toContainText('entry condition was never satisfied');
+    await expect(page.getByTestId('insufficient-data')).toHaveCount(0);
+    await expect(page.getByTestId('sizing-mode-badge')).toHaveCount(0);
+  });
+
   // feature 065: the derived "Strategy Grade" card and the per-run "Run score" column are BOTH
   // labelled (OQ-5 — closes the C-10(b) two-read-paths trap with distinct copy), the evidence
   // caption renders, and the legacy run (no range) shows the Range placeholder.

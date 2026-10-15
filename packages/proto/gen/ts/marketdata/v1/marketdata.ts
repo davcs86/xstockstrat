@@ -437,6 +437,20 @@ export interface GetSectorHistoryResponse {
   rows: SectorHistoryRow[];
 }
 
+export interface GetEtfFlagsRequest {
+  symbols: string[];
+}
+
+export interface EtfFlag {
+  symbol: string;
+  /** unset = unknown (not yet cached) */
+  isEtf?: boolean | undefined;
+}
+
+export interface GetEtfFlagsResponse {
+  flags: EtfFlag[];
+}
+
 function createBaseBar(): Bar {
   return {
     symbol: "",
@@ -5326,6 +5340,204 @@ export const GetSectorHistoryResponse: MessageFns<GetSectorHistoryResponse> = {
   },
 };
 
+function createBaseGetEtfFlagsRequest(): GetEtfFlagsRequest {
+  return { symbols: [] };
+}
+
+export const GetEtfFlagsRequest: MessageFns<GetEtfFlagsRequest> = {
+  encode(message: GetEtfFlagsRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.symbols) {
+      writer.uint32(10).string(v!);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetEtfFlagsRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseGetEtfFlagsRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.symbols.push(reader.string());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): GetEtfFlagsRequest {
+    return {
+      symbols: globalThis.Array.isArray(object?.symbols) ? object.symbols.map((e: any) => globalThis.String(e)) : [],
+    };
+  },
+
+  toJSON(message: GetEtfFlagsRequest): unknown {
+    const obj: any = {};
+    if (message.symbols?.length) {
+      obj.symbols = message.symbols;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<GetEtfFlagsRequest>, I>>(base?: I): GetEtfFlagsRequest {
+    return GetEtfFlagsRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GetEtfFlagsRequest>, I>>(object: I): GetEtfFlagsRequest {
+    const message = createBaseGetEtfFlagsRequest();
+    message.symbols = object.symbols?.map((e) => e) || [];
+    return message;
+  },
+};
+
+function createBaseEtfFlag(): EtfFlag {
+  return { symbol: "", isEtf: undefined };
+}
+
+export const EtfFlag: MessageFns<EtfFlag> = {
+  encode(message: EtfFlag, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.symbol !== "") {
+      writer.uint32(10).string(message.symbol);
+    }
+    if (message.isEtf !== undefined) {
+      writer.uint32(16).bool(message.isEtf);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): EtfFlag {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseEtfFlag();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.symbol = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.isEtf = reader.bool();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): EtfFlag {
+    return {
+      symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
+      isEtf: isSet(object.isEtf)
+        ? globalThis.Boolean(object.isEtf)
+        : isSet(object.is_etf)
+        ? globalThis.Boolean(object.is_etf)
+        : undefined,
+    };
+  },
+
+  toJSON(message: EtfFlag): unknown {
+    const obj: any = {};
+    if (message.symbol !== "") {
+      obj.symbol = message.symbol;
+    }
+    if (message.isEtf !== undefined) {
+      obj.isEtf = message.isEtf;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<EtfFlag>, I>>(base?: I): EtfFlag {
+    return EtfFlag.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<EtfFlag>, I>>(object: I): EtfFlag {
+    const message = createBaseEtfFlag();
+    message.symbol = object.symbol ?? "";
+    message.isEtf = object.isEtf ?? undefined;
+    return message;
+  },
+};
+
+function createBaseGetEtfFlagsResponse(): GetEtfFlagsResponse {
+  return { flags: [] };
+}
+
+export const GetEtfFlagsResponse: MessageFns<GetEtfFlagsResponse> = {
+  encode(message: GetEtfFlagsResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.flags) {
+      EtfFlag.encode(v!, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetEtfFlagsResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseGetEtfFlagsResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.flags.push(EtfFlag.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): GetEtfFlagsResponse {
+    return { flags: globalThis.Array.isArray(object?.flags) ? object.flags.map((e: any) => EtfFlag.fromJSON(e)) : [] };
+  },
+
+  toJSON(message: GetEtfFlagsResponse): unknown {
+    const obj: any = {};
+    if (message.flags?.length) {
+      obj.flags = message.flags.map((e) => EtfFlag.toJSON(e));
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<GetEtfFlagsResponse>, I>>(base?: I): GetEtfFlagsResponse {
+    return GetEtfFlagsResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GetEtfFlagsResponse>, I>>(object: I): GetEtfFlagsResponse {
+    const message = createBaseGetEtfFlagsResponse();
+    message.flags = object.flags?.map((e) => EtfFlag.fromPartial(e)) || [];
+    return message;
+  },
+};
+
 /**
  * MarketDataService — sole Alpaca integration point.
  * Stores OHLCV and quote data in TimescaleDB hypertables.
@@ -5559,6 +5771,19 @@ export const MarketDataServiceService = {
       Buffer.from(GetSectorHistoryResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): GetSectorHistoryResponse => GetSectorHistoryResponse.decode(value),
   },
+  /**
+   * feature 215 — cache-only ETF label read: never calls FMP on the request path; an unknown
+   * symbol returns is_etf unset.
+   */
+  getEtfFlags: {
+    path: "/xstockstrat.marketdata.v1.MarketDataService/GetEtfFlags" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: GetEtfFlagsRequest): Buffer => Buffer.from(GetEtfFlagsRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): GetEtfFlagsRequest => GetEtfFlagsRequest.decode(value),
+    responseSerialize: (value: GetEtfFlagsResponse): Buffer => Buffer.from(GetEtfFlagsResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): GetEtfFlagsResponse => GetEtfFlagsResponse.decode(value),
+  },
 } as const;
 
 export interface MarketDataServiceServer extends UntypedServiceImplementation {
@@ -5610,6 +5835,11 @@ export interface MarketDataServiceServer extends UntypedServiceImplementation {
   getCurrentSector: handleUnaryCall<GetCurrentSectorRequest, GetCurrentSectorResponse>;
   getSectorAsOf: handleUnaryCall<GetSectorAsOfRequest, GetSectorAsOfResponse>;
   getSectorHistory: handleUnaryCall<GetSectorHistoryRequest, GetSectorHistoryResponse>;
+  /**
+   * feature 215 — cache-only ETF label read: never calls FMP on the request path; an unknown
+   * symbol returns is_etf unset.
+   */
+  getEtfFlags: handleUnaryCall<GetEtfFlagsRequest, GetEtfFlagsResponse>;
 }
 
 export interface MarketDataServiceClient extends Client {
@@ -5908,6 +6138,25 @@ export interface MarketDataServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: GetSectorHistoryResponse) => void,
+  ): ClientUnaryCall;
+  /**
+   * feature 215 — cache-only ETF label read: never calls FMP on the request path; an unknown
+   * symbol returns is_etf unset.
+   */
+  getEtfFlags(
+    request: GetEtfFlagsRequest,
+    callback: (error: ServiceError | null, response: GetEtfFlagsResponse) => void,
+  ): ClientUnaryCall;
+  getEtfFlags(
+    request: GetEtfFlagsRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: GetEtfFlagsResponse) => void,
+  ): ClientUnaryCall;
+  getEtfFlags(
+    request: GetEtfFlagsRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: GetEtfFlagsResponse) => void,
   ): ClientUnaryCall;
 }
 

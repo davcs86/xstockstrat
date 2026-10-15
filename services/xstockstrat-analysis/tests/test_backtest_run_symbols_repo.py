@@ -9,7 +9,11 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from app.repositories.backtest_run_symbols import BacktestRunSymbolsRepository, _to_dict
+from app.repositories.backtest_run_symbols import (
+    _ELIGIBILITY_ORDER,
+    BacktestRunSymbolsRepository,
+    _to_dict,
+)
 
 
 def _cell(symbol="AAPL", trades=2, days=10, fp="fp-1"):
@@ -86,6 +90,29 @@ async def test_fetch_eligible_traded_first_distinct_on_sql():
     assert "AND user_id = $3" in sql
     assert params == ["s1", "fp-1", "alice"]
     assert [r["symbol"] for r in rows] == ["AAPL", "MSFT"]
+
+
+@pytest.mark.asyncio
+async def test_fetch_all_for_fingerprint_keeps_every_cell_in_shared_order():
+    # Feature 215: derivation filters refused cells BEFORE the traded-first dedup, so it reads
+    # every cell in the same eligibility order fetch_eligible's DISTINCT ON uses.
+    db_pool = AsyncMock()
+    db_pool.fetch = AsyncMock(return_value=[{"symbol": "AAPL"}, {"symbol": "AAPL"}])
+    repo = BacktestRunSymbolsRepository(db_pool)
+
+    rows = await repo.fetch_all_for_fingerprint("alice", "s1", "fp-1")
+
+    sql, *params = db_pool.fetch.call_args.args
+    assert "DISTINCT ON" not in sql
+    assert f"ORDER BY symbol, {_ELIGIBILITY_ORDER}" in sql
+    assert "AND user_id = $3" in sql
+    assert params == ["s1", "fp-1", "alice"]
+    assert len(rows) == 2
+
+    await repo.fetch_eligible("alice", "s1", "fp-1")
+    eligible_sql = db_pool.fetch.call_args.args[0]
+    assert "DISTINCT ON (symbol)" in eligible_sql
+    assert f"ORDER BY symbol, {_ELIGIBILITY_ORDER}" in eligible_sql
 
 
 def test_to_dict_none_row_is_none():

@@ -5,8 +5,8 @@
 //   protoc               unknown
 // source: analysis/v1/analysis.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.SetStrategyLiveResponse = exports.SetStrategyLiveRequest = exports.ListStrategyDefinitionsResponse = exports.ListStrategyDefinitionsRequest = exports.GetStrategyRequest = exports.ManageStrategyRequest = exports.SectorParamOverride = exports.SectorValue = exports.StrategyDefinition = exports.StrategyComponent_ParamsEntry = exports.StrategyComponent = exports.GetStrategyReportRequest = exports.ListStrategiesResponse = exports.ListStrategiesRequest = exports.GetBacktestRequest = exports.ListBacktestsResponse = exports.BacktestRunSummary = exports.ListBacktestsRequest = exports.StrategyReport = exports.StrategyScore_ComponentScoresEntry = exports.StrategyScore = exports.ScoreStrategyRequest = exports.SymbolDiagnostics = exports.BarDiagnostic_IndicatorsEntry = exports.BarDiagnostic = exports.TradeRecord = exports.EquityPoint = exports.PortfolioCapitalSkip = exports.BacktestResult = exports.CoverageGap = exports.RunBacktestRequest = exports.FactorType = exports.SnapshotEventType = exports.OpportunityAction = exports.ReadinessState = exports.ReadinessRule = exports.ConditionState = exports.OpportunitySort = exports.OpportunityActionTag = exports.ScreenResultStatus = exports.ScreenKind = exports.Comparator = exports.StrategyOperation = exports.ComponentKind = exports.NoTradeReason = exports.BarAction = exports.FillModel = exports.SizingMode = exports.BacktestStatus = exports.protobufPackage = void 0;
-exports.AnalysisServiceClient = exports.AnalysisServiceService = exports.InstantiateTemplateRequest = exports.ManageTemplateRequest = exports.ListTemplatesResponse = exports.ListTemplatesRequest = exports.StrategyTemplate = exports.GetAttributionResponse = exports.SourceAttribution = exports.GetAttributionRequest = exports.QueryPnLPatternsResponse = exports.QueryPnLPatternsRequest = exports.PnLPatternFactor = exports.OrderSnapshot_IndicatorValuesEntry = exports.OrderSnapshot = exports.SignalEntry = exports.IndicatorValue = exports.NamedSeries = exports.ComponentSeries = exports.GetIndicatorSeriesResponse = exports.GetIndicatorSeriesRequest = exports.GetStrategyAnalyticsRequest = exports.SetOpportunityActionResponse = exports.SetOpportunityActionRequest = exports.GetWatchlistReadinessResponse = exports.GetWatchlistReadinessRequest = exports.WatchlistReadinessRow = exports.EvaluateReadinessResponse = exports.EvaluateReadinessRequest = exports.ListOpportunitiesResponse = exports.ListOpportunitiesRequest = exports.StrategyAnalytics = exports.SymbolReadiness = exports.ConditionEval = exports.SparklinePoint = exports.Opportunity = exports.FundamentalsScanSummary = exports.RunFundamentalsScanRequest = exports.ScreenSymbolsResponse = exports.ScreenSymbolsRequest = exports.ScreenResult_CriterionPassedEntry = exports.ScreenResult_CriterionRawValuesEntry = exports.ScreenResult_CriterionScoresEntry = exports.ScreenResult = exports.ScreenCriterion = void 0;
+exports.SetStrategyLiveRequest = exports.ListStrategyDefinitionsResponse = exports.ListStrategyDefinitionsRequest = exports.GetStrategyRequest = exports.ManageStrategyRequest = exports.SectorParamOverride = exports.SectorValue = exports.StrategyDefinition = exports.StrategyComponent_ParamsEntry = exports.StrategyComponent = exports.GetStrategyReportRequest = exports.ListStrategiesResponse = exports.ListStrategiesRequest = exports.GetBacktestRequest = exports.ListBacktestsResponse = exports.BacktestRunSummary = exports.ListBacktestsRequest = exports.StrategyReport = exports.StrategyScore_ComponentScoresEntry = exports.StrategyScore = exports.ScoreStrategyRequest = exports.SymbolDiagnostics = exports.BarDiagnostic_IndicatorsEntry = exports.BarDiagnostic = exports.TradeRecord = exports.EquityPoint = exports.PortfolioCapitalSkip = exports.BacktestResult = exports.CoverageGap = exports.RunBacktestRequest = exports.FactorType = exports.SnapshotEventType = exports.OpportunityAction = exports.ReadinessState = exports.ReadinessRule = exports.ConditionState = exports.OpportunitySort = exports.OpportunityActionTag = exports.ScreenResultStatus = exports.ScreenKind = exports.Comparator = exports.StrategyOperation = exports.ComponentKind = exports.FundamentalsGap = exports.NoTradeReason = exports.BarAction = exports.FillModel = exports.SizingMode = exports.BacktestStatus = exports.protobufPackage = void 0;
+exports.AnalysisServiceClient = exports.AnalysisServiceService = exports.InstantiateTemplateRequest = exports.ManageTemplateRequest = exports.ListTemplatesResponse = exports.ListTemplatesRequest = exports.StrategyTemplate = exports.GetAttributionResponse = exports.SourceAttribution = exports.GetAttributionRequest = exports.QueryPnLPatternsResponse = exports.QueryPnLPatternsRequest = exports.PnLPatternFactor = exports.OrderSnapshot_IndicatorValuesEntry = exports.OrderSnapshot = exports.SignalEntry = exports.IndicatorValue = exports.NamedSeries = exports.ComponentSeries = exports.GetIndicatorSeriesResponse = exports.GetIndicatorSeriesRequest = exports.GetStrategyAnalyticsRequest = exports.SetOpportunityActionResponse = exports.SetOpportunityActionRequest = exports.GetWatchlistReadinessResponse = exports.GetWatchlistReadinessRequest = exports.WatchlistReadinessRow = exports.EvaluateReadinessResponse = exports.EvaluateReadinessRequest = exports.ListOpportunitiesResponse = exports.ListOpportunitiesRequest = exports.StrategyAnalytics = exports.SymbolReadiness = exports.ConditionEval = exports.SparklinePoint = exports.Opportunity = exports.FundamentalsScanSummary = exports.RunFundamentalsScanRequest = exports.ScreenSymbolsResponse = exports.ScreenSymbolsRequest = exports.ScreenResult_CriterionPassedEntry = exports.ScreenResult_CriterionRawValuesEntry = exports.ScreenResult_CriterionScoresEntry = exports.ScreenResult = exports.ScreenCriterion = exports.SetStrategyLiveResponse = void 0;
 exports.backtestStatusFromJSON = backtestStatusFromJSON;
 exports.backtestStatusToJSON = backtestStatusToJSON;
 exports.backtestStatusToNumber = backtestStatusToNumber;
@@ -22,6 +22,9 @@ exports.barActionToNumber = barActionToNumber;
 exports.noTradeReasonFromJSON = noTradeReasonFromJSON;
 exports.noTradeReasonToJSON = noTradeReasonToJSON;
 exports.noTradeReasonToNumber = noTradeReasonToNumber;
+exports.fundamentalsGapFromJSON = fundamentalsGapFromJSON;
+exports.fundamentalsGapToJSON = fundamentalsGapToJSON;
+exports.fundamentalsGapToNumber = fundamentalsGapToNumber;
 exports.componentKindFromJSON = componentKindFromJSON;
 exports.componentKindToJSON = componentKindToJSON;
 exports.componentKindToNumber = componentKindToNumber;
@@ -328,6 +331,8 @@ var NoTradeReason;
     NoTradeReason["NO_TRADE_REASON_INSUFFICIENT_CAPITAL"] = "NO_TRADE_REASON_INSUFFICIENT_CAPITAL";
     /** NO_TRADE_REASON_FORMULA_ERROR - a custom-formula component failed to execute / returned an out-of-contract series */
     NoTradeReason["NO_TRADE_REASON_FORMULA_ERROR"] = "NO_TRADE_REASON_FORMULA_ERROR";
+    /** NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE - strategy requires fundamentals and the symbol has none usable in the window — refused, not evaluated (feature 215) */
+    NoTradeReason["NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE"] = "NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE";
     NoTradeReason["UNRECOGNIZED"] = "UNRECOGNIZED";
 })(NoTradeReason || (exports.NoTradeReason = NoTradeReason = {}));
 function noTradeReasonFromJSON(object) {
@@ -347,6 +352,9 @@ function noTradeReasonFromJSON(object) {
         case 4:
         case "NO_TRADE_REASON_FORMULA_ERROR":
             return NoTradeReason.NO_TRADE_REASON_FORMULA_ERROR;
+        case 5:
+        case "NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE":
+            return NoTradeReason.NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE;
         case -1:
         case "UNRECOGNIZED":
         default:
@@ -365,6 +373,8 @@ function noTradeReasonToJSON(object) {
             return "NO_TRADE_REASON_INSUFFICIENT_CAPITAL";
         case NoTradeReason.NO_TRADE_REASON_FORMULA_ERROR:
             return "NO_TRADE_REASON_FORMULA_ERROR";
+        case NoTradeReason.NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE:
+            return "NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE";
         case NoTradeReason.UNRECOGNIZED:
         default:
             return "UNRECOGNIZED";
@@ -382,7 +392,63 @@ function noTradeReasonToNumber(object) {
             return 3;
         case NoTradeReason.NO_TRADE_REASON_FORMULA_ERROR:
             return 4;
+        case NoTradeReason.NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE:
+            return 5;
         case NoTradeReason.UNRECOGNIZED:
+        default:
+            return -1;
+    }
+}
+/**
+ * feature 215 — best-effort marketdata label for a fundamentals refusal; never affects the guard
+ * decision (FR-11). UNSPECIFIED = label unknown.
+ */
+var FundamentalsGap;
+(function (FundamentalsGap) {
+    FundamentalsGap["FUNDAMENTALS_GAP_UNSPECIFIED"] = "FUNDAMENTALS_GAP_UNSPECIFIED";
+    FundamentalsGap["FUNDAMENTALS_GAP_ETF"] = "FUNDAMENTALS_GAP_ETF";
+    FundamentalsGap["FUNDAMENTALS_GAP_NOT_ETF"] = "FUNDAMENTALS_GAP_NOT_ETF";
+    FundamentalsGap["UNRECOGNIZED"] = "UNRECOGNIZED";
+})(FundamentalsGap || (exports.FundamentalsGap = FundamentalsGap = {}));
+function fundamentalsGapFromJSON(object) {
+    switch (object) {
+        case 0:
+        case "FUNDAMENTALS_GAP_UNSPECIFIED":
+            return FundamentalsGap.FUNDAMENTALS_GAP_UNSPECIFIED;
+        case 1:
+        case "FUNDAMENTALS_GAP_ETF":
+            return FundamentalsGap.FUNDAMENTALS_GAP_ETF;
+        case 2:
+        case "FUNDAMENTALS_GAP_NOT_ETF":
+            return FundamentalsGap.FUNDAMENTALS_GAP_NOT_ETF;
+        case -1:
+        case "UNRECOGNIZED":
+        default:
+            return FundamentalsGap.UNRECOGNIZED;
+    }
+}
+function fundamentalsGapToJSON(object) {
+    switch (object) {
+        case FundamentalsGap.FUNDAMENTALS_GAP_UNSPECIFIED:
+            return "FUNDAMENTALS_GAP_UNSPECIFIED";
+        case FundamentalsGap.FUNDAMENTALS_GAP_ETF:
+            return "FUNDAMENTALS_GAP_ETF";
+        case FundamentalsGap.FUNDAMENTALS_GAP_NOT_ETF:
+            return "FUNDAMENTALS_GAP_NOT_ETF";
+        case FundamentalsGap.UNRECOGNIZED:
+        default:
+            return "UNRECOGNIZED";
+    }
+}
+function fundamentalsGapToNumber(object) {
+    switch (object) {
+        case FundamentalsGap.FUNDAMENTALS_GAP_UNSPECIFIED:
+            return 0;
+        case FundamentalsGap.FUNDAMENTALS_GAP_ETF:
+            return 1;
+        case FundamentalsGap.FUNDAMENTALS_GAP_NOT_ETF:
+            return 2;
+        case FundamentalsGap.UNRECOGNIZED:
         default:
             return -1;
     }
@@ -2732,6 +2798,7 @@ function createBaseSymbolDiagnostics() {
         noTradeReason: NoTradeReason.NO_TRADE_REASON_UNSPECIFIED,
         barsTotal: 0,
         warmupBars: 0,
+        fundamentalsGap: FundamentalsGap.FUNDAMENTALS_GAP_UNSPECIFIED,
     };
 }
 exports.SymbolDiagnostics = {
@@ -2750,6 +2817,9 @@ exports.SymbolDiagnostics = {
         }
         if (message.warmupBars !== 0) {
             writer.uint32(40).int32(message.warmupBars);
+        }
+        if (message.fundamentalsGap !== FundamentalsGap.FUNDAMENTALS_GAP_UNSPECIFIED) {
+            writer.uint32(48).int32(fundamentalsGapToNumber(message.fundamentalsGap));
         }
         return writer;
     },
@@ -2795,6 +2865,13 @@ exports.SymbolDiagnostics = {
                     message.warmupBars = reader.int32();
                     continue;
                 }
+                case 6: {
+                    if (tag !== 48) {
+                        break;
+                    }
+                    message.fundamentalsGap = fundamentalsGapFromJSON(reader.int32());
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -2822,6 +2899,11 @@ exports.SymbolDiagnostics = {
                 : isSet(object.warmup_bars)
                     ? globalThis.Number(object.warmup_bars)
                     : 0,
+            fundamentalsGap: isSet(object.fundamentalsGap)
+                ? fundamentalsGapFromJSON(object.fundamentalsGap)
+                : isSet(object.fundamentals_gap)
+                    ? fundamentalsGapFromJSON(object.fundamentals_gap)
+                    : FundamentalsGap.FUNDAMENTALS_GAP_UNSPECIFIED,
         };
     },
     toJSON(message) {
@@ -2841,6 +2923,9 @@ exports.SymbolDiagnostics = {
         if (message.warmupBars !== 0) {
             obj.warmupBars = Math.round(message.warmupBars);
         }
+        if (message.fundamentalsGap !== FundamentalsGap.FUNDAMENTALS_GAP_UNSPECIFIED) {
+            obj.fundamentalsGap = fundamentalsGapToJSON(message.fundamentalsGap);
+        }
         return obj;
     },
     create(base) {
@@ -2853,6 +2938,7 @@ exports.SymbolDiagnostics = {
         message.noTradeReason = object.noTradeReason ?? NoTradeReason.NO_TRADE_REASON_UNSPECIFIED;
         message.barsTotal = object.barsTotal ?? 0;
         message.warmupBars = object.warmupBars ?? 0;
+        message.fundamentalsGap = object.fundamentalsGap ?? FundamentalsGap.FUNDAMENTALS_GAP_UNSPECIFIED;
         return message;
     },
 };
@@ -6666,6 +6752,8 @@ function createBaseOpportunity() {
         dataUnavailable: false,
         compositeScore: undefined,
         symbolScore: undefined,
+        fundamentalsUnavailable: false,
+        fundamentalsGap: FundamentalsGap.FUNDAMENTALS_GAP_UNSPECIFIED,
     };
 }
 exports.Opportunity = {
@@ -6735,6 +6823,12 @@ exports.Opportunity = {
         }
         if (message.symbolScore !== undefined) {
             writer.uint32(177).double(message.symbolScore);
+        }
+        if (message.fundamentalsUnavailable !== false) {
+            writer.uint32(184).bool(message.fundamentalsUnavailable);
+        }
+        if (message.fundamentalsGap !== FundamentalsGap.FUNDAMENTALS_GAP_UNSPECIFIED) {
+            writer.uint32(192).int32(fundamentalsGapToNumber(message.fundamentalsGap));
         }
         return writer;
     },
@@ -6899,6 +6993,20 @@ exports.Opportunity = {
                     message.symbolScore = reader.double();
                     continue;
                 }
+                case 23: {
+                    if (tag !== 184) {
+                        break;
+                    }
+                    message.fundamentalsUnavailable = reader.bool();
+                    continue;
+                }
+                case 24: {
+                    if (tag !== 192) {
+                        break;
+                    }
+                    message.fundamentalsGap = fundamentalsGapFromJSON(reader.int32());
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -6991,6 +7099,16 @@ exports.Opportunity = {
                 : isSet(object.symbol_score)
                     ? globalThis.Number(object.symbol_score)
                     : undefined,
+            fundamentalsUnavailable: isSet(object.fundamentalsUnavailable)
+                ? globalThis.Boolean(object.fundamentalsUnavailable)
+                : isSet(object.fundamentals_unavailable)
+                    ? globalThis.Boolean(object.fundamentals_unavailable)
+                    : false,
+            fundamentalsGap: isSet(object.fundamentalsGap)
+                ? fundamentalsGapFromJSON(object.fundamentalsGap)
+                : isSet(object.fundamentals_gap)
+                    ? fundamentalsGapFromJSON(object.fundamentals_gap)
+                    : FundamentalsGap.FUNDAMENTALS_GAP_UNSPECIFIED,
         };
     },
     toJSON(message) {
@@ -7061,6 +7179,12 @@ exports.Opportunity = {
         if (message.symbolScore !== undefined) {
             obj.symbolScore = message.symbolScore;
         }
+        if (message.fundamentalsUnavailable !== false) {
+            obj.fundamentalsUnavailable = message.fundamentalsUnavailable;
+        }
+        if (message.fundamentalsGap !== FundamentalsGap.FUNDAMENTALS_GAP_UNSPECIFIED) {
+            obj.fundamentalsGap = fundamentalsGapToJSON(message.fundamentalsGap);
+        }
         return obj;
     },
     create(base) {
@@ -7090,6 +7214,8 @@ exports.Opportunity = {
         message.dataUnavailable = object.dataUnavailable ?? false;
         message.compositeScore = object.compositeScore ?? undefined;
         message.symbolScore = object.symbolScore ?? undefined;
+        message.fundamentalsUnavailable = object.fundamentalsUnavailable ?? false;
+        message.fundamentalsGap = object.fundamentalsGap ?? FundamentalsGap.FUNDAMENTALS_GAP_UNSPECIFIED;
         return message;
     },
 };
@@ -7584,6 +7710,7 @@ function createBaseListOpportunitiesRequest() {
         sources: [],
         actionFilter: OpportunityActionTag.OPPORTUNITY_ACTION_TAG_UNSPECIFIED,
         sort: OpportunitySort.OPPORTUNITY_SORT_UNSPECIFIED,
+        symbol: "",
     };
 }
 exports.ListOpportunitiesRequest = {
@@ -7602,6 +7729,9 @@ exports.ListOpportunitiesRequest = {
         }
         if (message.sort !== OpportunitySort.OPPORTUNITY_SORT_UNSPECIFIED) {
             writer.uint32(40).int32(opportunitySortToNumber(message.sort));
+        }
+        if (message.symbol !== "") {
+            writer.uint32(50).string(message.symbol);
         }
         return writer;
     },
@@ -7647,6 +7777,13 @@ exports.ListOpportunitiesRequest = {
                     message.sort = opportunitySortFromJSON(reader.int32());
                     continue;
                 }
+                case 6: {
+                    if (tag !== 50) {
+                        break;
+                    }
+                    message.symbol = reader.string();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -7670,6 +7807,7 @@ exports.ListOpportunitiesRequest = {
                     ? opportunityActionTagFromJSON(object.action_filter)
                     : OpportunityActionTag.OPPORTUNITY_ACTION_TAG_UNSPECIFIED,
             sort: isSet(object.sort) ? opportunitySortFromJSON(object.sort) : OpportunitySort.OPPORTUNITY_SORT_UNSPECIFIED,
+            symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
         };
     },
     toJSON(message) {
@@ -7689,6 +7827,9 @@ exports.ListOpportunitiesRequest = {
         if (message.sort !== OpportunitySort.OPPORTUNITY_SORT_UNSPECIFIED) {
             obj.sort = opportunitySortToJSON(message.sort);
         }
+        if (message.symbol !== "") {
+            obj.symbol = message.symbol;
+        }
         return obj;
     },
     create(base) {
@@ -7703,6 +7844,7 @@ exports.ListOpportunitiesRequest = {
         message.sources = object.sources?.map((e) => e) || [];
         message.actionFilter = object.actionFilter ?? OpportunityActionTag.OPPORTUNITY_ACTION_TAG_UNSPECIFIED;
         message.sort = object.sort ?? OpportunitySort.OPPORTUNITY_SORT_UNSPECIFIED;
+        message.symbol = object.symbol ?? "";
         return message;
     },
 };

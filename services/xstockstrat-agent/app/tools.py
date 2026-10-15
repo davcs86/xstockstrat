@@ -760,7 +760,14 @@ def register_tools(server: MCPServer) -> None:
         Fundamental operands (feature 198): if the stored strategy uses a kind='fundamental'
           component, its metric resolves point-in-time (as-of each bar, no look-ahead). The symbol's
           fundamentals history must be backfilled first (trigger_backfill data_kind='fundamentals')
-          and 'analysis.backtest.fundamentals.enabled' must be ON, else the operand reads hold."""
+          and 'analysis.backtest.fundamentals.enabled' must be ON. A strategy that requires
+          fundamentals (a fundamental operand, or a custom formula declaring fundamental_inputs)
+          REFUSES a symbol with no usable filing before each evaluated bar instead of evaluating
+          it: that symbol gets no_trade_reason NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE plus
+          fundamentals_gap (FUNDAMENTALS_GAP_ETF / _NOT_ETF / _UNSPECIFIED = label unknown), no
+          trades and no evidence cell; a single refused symbol makes the run
+          BACKTEST_STATUS_INSUFFICIENT_DATA. A fundamentals fetch OUTAGE is different: it adds a
+          `warnings` entry ("fundamentals fetch failed … — rerun") and no reason."""
         # Forward the caller's own user id so analysis resolves ownership from the header; wrap the
         # RPC so a PERMISSION_DENIED surfaces as a tool-level error, not a raw AioRpcError.
         user_id = _caller_user_id(ctx, "run_backtest")
@@ -1319,6 +1326,10 @@ def register_tools(server: MCPServer) -> None:
             enable now guarantees the strategy satisfies the live loop's firing contract
             (live_enabled AND active, with symbols). Disabling is ALWAYS allowed, even on an inert
             config, so you can always turn live off.
+        Enabling is NOT checked against fundamentals availability (the live universe is dynamic).
+            At evaluation time a strategy that requires fundamentals denies ENTRY on a symbol with
+            no usable fundamentals (exits still fire), with one WARN log and one WARNING alert when
+            the symbol becomes unavailable (feature 215).
         Returns a 4-field subset, NOT the full definition:
             {"strategy_id", "display_name", "live_enabled", "active"}."""
         access_scope = _caller_access_scope(ctx, "set_strategy_live")
@@ -1511,7 +1522,10 @@ def register_tools(server: MCPServer) -> None:
             "next_page_token": str}.
             Each opportunity carries symbol, action, conviction, thesis, strategy_id, source,
             provenance, muted, data_unavailable (true = a terminal data-unavailable row, distinct
-            from an evaluated 0/N), and (when the backend has them) the live enrichment: live_price,
+            from an evaluated 0/N), fundamentals_unavailable (true = a NON-ACTIONABLE row: action
+            UNSPECIFIED, no composite_score — the strategy needs fundamentals the symbol lacks),
+            fundamentals_gap (FUNDAMENTALS_GAP_ETF / _NOT_ETF / _UNSPECIFIED = label unknown), and
+            (when the backend has them) the live enrichment: live_price,
             change_pct, target_price, stop_price, a sparkline (recent daily closes; a gap is null),
             valid_until, signal_confidence, and the traced conditions. Unavailable values are
             OMITTED, never fabricated. Top-level computing=true means a cold queue is still

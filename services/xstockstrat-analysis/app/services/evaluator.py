@@ -158,6 +158,29 @@ _FUNDAMENTAL_METRIC_DATA_KEY: dict[int, str] = {
     indicators_pb2.FUNDAMENTAL_METRIC_YEAR_LOW: "year_low",
 }
 
+
+def fundamental_component_inputs(
+    metric_enum_ints, eval_dates: list, fundamentals: list | None
+) -> tuple[list[str], dict[str, list]]:
+    """``(data_keys, per_metric)`` a fundamentals-only formula is fed (feature 200): the declared
+    metrics lowered to data keys and their as-of series. ``([], {})`` when either is empty. Shared
+    by the evaluator and the feature-215 guard so "would execute" can never drift from execution."""
+    data_keys = [
+        _FUNDAMENTAL_METRIC_DATA_KEY[m]
+        for m in metric_enum_ints
+        if m in _FUNDAMENTAL_METRIC_DATA_KEY
+    ]
+    if not data_keys or not eval_dates:
+        return [], {}
+    return data_keys, {k: _fundamental_as_of_series(k, eval_dates, fundamentals) for k in data_keys}
+
+
+def component_would_execute(data_keys: list[str], per_metric: dict[str, list]) -> bool:
+    """True iff some epoch has a non-None value for some declared key — exactly the OR of the
+    per-epoch ``if present:`` check in ``_fundamentals_formula_series``."""
+    return any(v is not None for k in data_keys for v in per_metric.get(k, ()))
+
+
 # Canonical fundamental-metric vocabulary a COMPONENT_KIND_FUNDAMENTAL operand may reference
 # (feature 198) — DERIVED from the enum lowering map above (one list, one place).
 _FUNDAMENTAL_METRICS = frozenset(_FUNDAMENTAL_METRIC_DATA_KEY.values())
@@ -534,14 +557,11 @@ class StrategyEvaluator:
         - Otherwise the ``input_data`` **omits** the absent (``None``) metrics — omit-absent, so a
           non-reporting metric neutral-drops rather than scoring as ``0.0`` (feature-200 option b,
           @AC-8) — and every finite scalar output is broadcast (value/quality/composite)."""
-        data_keys = [
-            _FUNDAMENTAL_METRIC_DATA_KEY[m]
-            for m in metric_enum_ints
-            if m in _FUNDAMENTAL_METRIC_DATA_KEY
-        ]
+        data_keys, per_metric = fundamental_component_inputs(
+            metric_enum_ints, eval_dates, fundamentals
+        )
         if not data_keys or not eval_dates:
             return {"value": [None] * n}
-        per_metric = {k: _fundamental_as_of_series(k, eval_dates, fundamentals) for k in data_keys}
         params_struct = Struct()
         params_struct.update(dict(comp.params))
         series: dict[str, list[float | None]] = {}
@@ -621,7 +641,7 @@ class StrategyEvaluator:
                     cache[comp.formula_id] = 0
         return cache
 
-    async def declared_formula_fundamentals(self, definition) -> dict[str, list]:
+    async def declared_formula_fundamentals(self, definition, failures=None) -> dict[str, list]:
         """Feature 200 — build ``{formula_id: [FundamentalMetric enum int]}`` for a definition's
         custom-formula components that declare ``fundamental_inputs``, via ``GetFormula``. The live
         counterpart of the servicer's ``_formula_fundamentals`` (the live loop holds no indicators
@@ -646,6 +666,11 @@ class StrategyEvaluator:
                 metrics = [int(m) for m in getattr(formula, "fundamental_inputs", [])]
             except grpc.RpcError:
                 metrics = []
+                if failures is not None:
+                    # Lazy import: fundamentals_guard imports this module.
+                    from app.services.fundamentals_guard import Availability
+
+                    failures[("formula", comp.formula_id)] = Availability.UNKNOWN
             if metrics:
                 out[comp.formula_id] = metrics
         return out

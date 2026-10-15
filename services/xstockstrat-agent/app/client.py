@@ -801,6 +801,9 @@ def _opportunity_to_dict(o, analysis_pb2) -> dict[str, Any]:
         # feature 185 — a terminal data-unavailable row (bars/indicator fetch failure), distinct
         # from an evaluated 0/N; the agent (a one-shot, non-polling consumer) must surface it.
         "data_unavailable": o.data_unavailable,
+        # feature 215 — the non-actionable fundamentals skip row, distinct from data_unavailable.
+        "fundamentals_unavailable": o.fundamentals_unavailable,
+        "fundamentals_gap": analysis_pb2.FundamentalsGap.Name(o.fundamentals_gap),
     }
     if o.HasField("live_price"):
         d["live_price"] = o.live_price
