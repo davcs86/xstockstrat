@@ -117,3 +117,26 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - [x] Dev smoke #2: the substitution (96 MiB at the default headroom) is accepted by the orchestrator.
     Operator confirmation is surfaced in the session summary (P-03).
 - **Overlap:** CLEAN. This feature no longer edits the root findings file, so there is no overlap with #1247.
+
+## Session 2026-10-15 — sdd-execute sequential (Steps 1–2)
+
+- Mode: sequential, at operator request (counts as the up-front confirmation). Steps 1↔2 run as one red-green cycle:
+  Step 2's tests were authored first, unstaged, and run RED against the pre-Step-1 `sandbox.py`.
+- **Environment.** As root, the uid-65534 child must traverse to the venv. `/tmp/claude-0` is reset to `0700`
+  between shell calls, so every real-sandbox run did `chmod 711 /tmp/claude-0` in the same command. The
+  main-checkout venv (`/home/user/xstockstrat/...`) works for the sandbox files but has a stale OpenTelemetry set
+  (3 `test_telemetry.py` failures: `ProxyTracerProvider.force_flush`), so the full suite used the worktree venv.
+
+### Step 1 — service: indicators sandbox — `VmData` baseline + headroom cap, input parse after rlimits, OpenBLAS OOM marker [done]
+- Files: `services/xstockstrat-indicators/app/services/sandbox.py`.
+- Added `_VMDATA_PROBE` (after `_SANDBOX_GID`) and `_MEMORY_EXHAUSTED_MARKERS` (after `SandboxResult`). The wrapper
+  now runs `{vmdata_probe}` → `RLIMIT_DATA = min(_baseline + memory_bytes, 2**63 - 1)` → CPU/NPROC/FSIZE/NOFILE →
+  `json.loads` of `data`/`params` → seccomp `.load()` → `exec`. `.format` gained `vmdata_probe=_VMDATA_PROBE`.
+  Module docstring rewrapped as dictated.
+- Verification: grep anchors present (`:61`, `:201`, `:281`, `:283-284`, `:360`, `:406`); the old literal
+  `RLIMIT_DATA, ({memory_bytes}, {memory_bytes})` is absent; "wrapper order OK"; `ruff check` and
+  `ruff format --check` clean.
+- Deviations: none.
+- TDD (paired with Step 2; per-test lines in the Step 2 entry): red: 6 failed / 33 passed on
+  `test_sandbox_isolation.py` + `test_sandbox.py` (T1, T2, T2b, T4, T5×2 red; T3 green as the preservation
+  guard) → green: 39 passed.

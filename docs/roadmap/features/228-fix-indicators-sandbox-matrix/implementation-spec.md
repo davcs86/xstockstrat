@@ -104,7 +104,7 @@ order behind FR-1 and FR-3. It is not a scenario test.
 
 ### Step 1 — service: indicators sandbox — `VmData` baseline + headroom cap, input parse after rlimits, OpenBLAS OOM marker
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/services/sandbox.py` — modify
