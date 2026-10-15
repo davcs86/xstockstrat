@@ -886,7 +886,7 @@ is a failed verification for this step.
 
 ### Step 11 — service: agent `list_opportunities` deadline and explicit error (consumer surface)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/client.py` — modify
