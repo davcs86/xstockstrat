@@ -47,6 +47,13 @@ It is **not** a regression from #1246: a passing run and a failing run used the 
 
 (Update after investigation — remove or replace each item as needed)
 
+## Functional Requirements
+
+- **FR-1**: `indicators.sandbox.memory_bytes` bounds the formula's own allocations (headroom above the child's
+  pre-lockdown baseline), so a formula's budget is the same on every host.
+- **FR-2**: an allocation beyond the headroom still fails closed with `exit_reason` `memory_exceeded`, including
+  OpenBLAS's allocation abort.
+
 ## Acceptance Criteria
 
 See `acceptance.feature`: the regression scenario(s) must fail on the buggy behavior and pass after the fix

@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-10-15 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-15-indicators-sandbox-blas-memory-flake-defect.md` |
+| 2026-10-15 | `draft` → `design-approved` | /sdd-design | Design debated (1 round, quick) and approved; recon.md + design.md written |
 
 ---
 
@@ -21,6 +22,8 @@
 
 - [Product Spec](product-spec.md) — bug description and fix scope
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
+- [Recon](recon.md) — codebase dossier, measured memory facts, business rules (C-16)
+- [Design](design.md) — approved design (headroom semantics, 128 MiB default)
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-indicators-sandbox-matrix`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -34,4 +37,4 @@ indicators job, and it is a latent nondeterministic failure for real user formul
 
 ## Next Action
 
-`/sdd-design fix-indicators-sandbox-matrix quick` — recommended design depth (quick) from triage; see context.md
+`/sdd-spec fix-indicators-sandbox-matrix` — generate implementation spec from the approved design
