@@ -957,7 +957,7 @@ grep -n 'metadata=_metadata(("x-user-id", user_id))' services/xstockstrat-agent/
 
 ### Step 12 — test: agent AC-2, policy fallbacks, and the DEADLINE_EXCEEDED mapper
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_list_opportunities_deadline.py` — create
