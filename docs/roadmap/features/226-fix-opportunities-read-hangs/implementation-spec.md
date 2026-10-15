@@ -804,7 +804,7 @@ fixture starts and stops.
 
 ### Step 10 — test: real-Postgres proofs (AC-4, G2, F2, G6)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_read_budget_real_pg.py` — create
