@@ -94,3 +94,13 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - AC-1 → Scenario Outline with raw + encoded header Examples (tags/title unchanged); endpoint line reworded to avoid an unbound `<…>` placeholder. Product-spec "Dependency changes" now lists `@opentelemetry/api` and the gRPC-exporter removals.
 - Files modified: `acceptance.feature`, `product-spec.md`. TDD: N/A (docs).
 - Deviations: none
+
+### Step 2 — service: Go ×3 — OTLP/HTTP trace exporter from spec env vars [done]
+- `otlptracehttp.New(ctx, WithTimeout(5s))` with no endpoint/insecure options; fallback endpoint deleted; `go get otlptracehttp@v1.45.0` + `go mod tidy` removed `otlptracegrpc` from all three go.mod. Build/vet/golangci-lint v2.14.0 clean; `go.work.sum` untouched.
+- Files modified: `services/xstockstrat-{trading,portfolio,marketdata}/{internal/telemetry/otel.go,go.mod,go.sum}`
+- Deviations: none
+
+### Step 3 — test: Go ×3 — AC-1 (raw + encoded) and AC-3 [done]
+- RED (pre-Step-2, trading): `TestInitExportsOverOTLPHTTP/{raw,encoded}` → "receiver got no export request"; `TestInitLogsExportFailure` → log held only a gRPC `exporter export timeout … Unavailable` (no `400 Bad Request`). GREEN (post-Step-2, ×3): all PASS incl. `TestNewResourceOmitsTradingMode`; CI-equivalent coverage 72.6 / 54.4 / 71.0 % (≥ 40); lint 0 issues.
+- Files modified: `services/xstockstrat-{trading,portfolio,marketdata}/internal/telemetry/otel_test.go`
+- Deviations: none

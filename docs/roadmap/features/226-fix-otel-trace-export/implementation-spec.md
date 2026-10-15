@@ -94,7 +94,7 @@ grep -n "@opentelemetry/api" docs/roadmap/features/226-fix-otel-trace-export/pro
 
 ### Step 2 — service: Go ×3 — OTLP/HTTP trace exporter from spec env vars
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`, `xstockstrat-portfolio`, `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-trading/internal/telemetry/otel.go` — modify
@@ -151,7 +151,7 @@ git checkout -- go.work.sum 2>/dev/null; git status --short go.work.sum   # expe
 
 ### Step 3 — test: Go ×3 — AC-1 (raw + encoded) export and AC-3 logged 400
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`, `xstockstrat-portfolio`, `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-trading/internal/telemetry/otel_test.go` — modify
