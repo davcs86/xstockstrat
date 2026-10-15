@@ -52,4 +52,4 @@ indicators job, and it is a latent nondeterministic failure for real user formul
 
 ## Next Action
 
-`/sdd-review fix-indicators-sandbox-matrix impl-spec` — validate implementation spec, then `/sdd-execute fix-indicators-sandbox-matrix`
+Integration PR to main-dev; after the dev deploy run the owed O-3 smokes (see product-spec Open Questions / Owed Verification)

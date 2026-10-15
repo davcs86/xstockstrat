@@ -249,3 +249,20 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   Both are pre-existing, unrelated to sandbox memory, and need a design call (Deviation Log).
 - **Untouched:** the root `docs/context-constitution-findings.md`, the applied migrations (F-01) and the durable
   acceptance suite (C-16).
+
+## Session 2026-10-15 — sdd-execute (sequential) summary
+
+- Steps 1–4 are done: 651fefea, 97b5f02e, 830f8915, 4b554485. The operator confirmed both checkpoints.
+- C-16 promotion (operator-confirmed): @AC-1..5 → `services/xstockstrat-indicators/acceptance/fix-indicators-sandbox-matrix.feature`,
+  tagged `@feature-228`. No dedup skips.
+- Owed post-deploy (O-3):
+  - a 400 MiB resize gives `memory_exceeded`;
+  - a 96 MiB alloc at the default headroom succeeds (the operator was told of this substitute, since `test_formula`
+    cannot set an override);
+  - the basic-s memory envelope;
+  - whether production has a full-dotted row.
+- Follow-ups recorded, not done:
+  - `config-rollout.md` port-8060 curl and nonexistent alert;
+  - UI tsc errors in `e2e/insights/backfills.spec.ts:135-136` (pre-existing, feature 198);
+  - CI runs Python 3.12.3 instead of 3.13;
+  - Track C template lacks a Consumer Surface(s) section.
