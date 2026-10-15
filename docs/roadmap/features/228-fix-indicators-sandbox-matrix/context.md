@@ -179,3 +179,73 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - TDD: N/A (copy only, per the spec).
 - Deviations: the file was already non-prettier at base, so the reformat touched 3 extra blocks (whitespace-only).
   The tsc baseline errors are out of scope. See the Deviation Log.
+
+### Step 4 — docs: headroom semantics in indicators docs and runbooks; findings; teardown [done]
+- Files:
+  - `services/xstockstrat-indicators/CLAUDE.md`
+  - `services/xstockstrat-indicators/docs/context-constitution.md`
+  - `services/xstockstrat-indicators/docs/context-constitution-findings.md`
+  - `docs/runbooks/indicator-builder.md`
+  - `docs/runbooks/config-rollout.md`
+- Instructions 1–5 applied:
+  - the headroom wording in the config table, the lockdown order and the rlimits bullet;
+  - INDICATORS-1/-2 and the candidate row (OpenBLAS marker);
+  - the findings re-anchors (`:10`, `:20`, `:21`, `:22`) and three new open bullets (inert seeds, D-33 unclamped
+    override, `address-space` wording drift);
+  - runbook headroom wording and full-dotted `indicators.sandbox.*` keys.
+- Verification:
+  - every grep found its target;
+  - `! grep "\"key\": \"sandbox\."` passes in both runbooks;
+  - every `sandbox.py:<n>` anchor in the two indicators docs resolves to the cited code (checked line by line);
+  - `git diff origin/main-dev...HEAD -- services/xstockstrat-config/migrations` is empty (F-01).
+- TDD: N/A (docs).
+- Deviations: teardown re-grounded all stale anchors in the constitution, marked the feature-209-superseded ⚠
+  security finding resolved, and fixed the CLAUDE.md:4 pointer. `config-rollout.md` drift that is not about
+  sandbox memory (port-8060 `RolloutConfig` curl; the nonexistent `indicators.sandbox.memory_exceeded` alert) is
+  recorded and not fixed. See the Deviation Log.
+
+### Teardown (manual)
+- **Plugin unavailable.** `/context-forge:context-constitution refresh` is not installed in this session (only
+  `context-forge:context-scrubber` exists). The equivalent was done by hand, scoped to Step 4's Files plus
+  `services/xstockstrat-indicators/app/services/sandbox.py`.
+- **Re-read against the current code** (post-Step-1 `sandbox.py`, `app/handlers/servicer.py`,
+  `app/services/parameters.py`, `app/services/seed_formulas.py`, `app/main.py`, `app/config/watcher.py`, the config
+  migrations `001`/`002`, the durable suite `acceptance/indicators-sandbox-os-isolation.feature`):
+  `services/xstockstrat-indicators/CLAUDE.md`, `services/xstockstrat-indicators/docs/context-constitution.md`,
+  `services/xstockstrat-indicators/docs/context-constitution-findings.md`, `docs/runbooks/indicator-builder.md`,
+  `docs/runbooks/config-rollout.md`. The `scrubberExtraTargets` (`README.md`, `docs/patterns/ui-ux-governance.md`)
+  were grepped: no sandbox, `memory_bytes` or `RLIMIT` reference, so there was nothing to reconcile.
+- **Reconciled:**
+  1. `context-constitution.md`: re-grounded every `path:line` anchor. sandbox.py:
+     - INDICATORS-1 `:45-53` / `:125-141`;
+     - INDICATORS-2 `:61-64` / `:283-284` / `:279`;
+     - INDICATORS-4 `:239-255` / `:246`;
+     - INDICATORS-6 `:268-271`;
+     - INDICATORS-7 `:71` / `:296-302`;
+     - INDICATORS-8 `:274`;
+     - INDICATORS-9 `:316-325` / `:373`;
+     - candidate `:402-407` + `:201`.
+
+     servicer.py:
+     - INDICATORS-3 `:283`, `parameters.py:50,153`;
+     - INDICATORS-5 `:105`, `_reader` `:115-125`;
+     - gotchas `:489,592`, `:314-319`, `seed_formulas.py:35`.
+
+     Pointers: `CLAUDE.md:179,190,214`, `main.py:48`, `watcher.py:81-83`. Added a header line for the hand
+     refresh.
+  2. `context-constitution-findings.md`:
+     - re-anchored `:10` (`sandbox.py:22-25,279-280`), the stderr-classification question (`:201,402-407`, both
+       memory markers) and `memory_used_bytes` (`sandbox.py:387,414,425`, `servicer.py:325,341`);
+     - marked the ⚠ temp-file / no-OS-isolation question **resolved (feature 209)**, because the
+       `NamedTemporaryFile` is gone (stdin at `sandbox.py:363-374`) and seccomp, the distinct UID and the rlimits
+       shipped;
+     - added the three new open bullets with verified anchors.
+  3. `services/xstockstrat-indicators/CLAUDE.md:4`: the stale "⚠ sandbox env inheritance" (resolved 2026-09-16)
+     now reads "defects and open questions".
+- **Recorded, not fixed:** `docs/runbooks/config-rollout.md`:
+  - the § Step 3 `RolloutConfig` curl uses the removed Connect-RPC port `8060`;
+  - § Step 5 names a nonexistent `indicators.sandbox.memory_exceeded` alert.
+
+  Both are pre-existing, unrelated to sandbox memory, and need a design call (Deviation Log).
+- **Untouched:** the root `docs/context-constitution-findings.md`, the applied migrations (F-01) and the durable
+  acceptance suite (C-16).

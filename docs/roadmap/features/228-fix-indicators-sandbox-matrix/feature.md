@@ -18,6 +18,7 @@
 | 2026-10-15 | `design-approved` (unchanged) | /sdd-review | Product spec reviewed after design (Track C): FAIL → fixed → PASS WITH WARNINGS (1 warning addressed) |
 | 2026-10-15 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 4 steps |
 | 2026-10-15 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 done |
+| 2026-10-15 | `in-progress` → `code-completed` | /sdd-execute | All 4 steps done |
 
 ---
 

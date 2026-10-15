@@ -1,6 +1,6 @@
 # Implementation Spec: fix-indicators-sandbox-matrix
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-10-15
 **Feature**: `docs/roadmap/features/228-fix-indicators-sandbox-matrix/feature.md`
 **Total Steps**: 4
@@ -364,7 +364,7 @@ pnpm run lint && pnpm exec tsc --noEmit && pnpm exec prettier --check src/compon
 
 ### Step 4 — docs: headroom semantics in indicators docs and runbooks; findings; teardown
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs` (indicators service docs + runbooks)
 **Files**:
 - `services/xstockstrat-indicators/CLAUDE.md` — modify
@@ -485,4 +485,35 @@ _Populated by /sdd-execute as implementation proceeds._
 **Spec said**: "At `formulaReference.ts:171` change only the `note` to `'Headroom above the interpreter/library baseline (indicators.sandbox.memory_bytes).'`." Verification: `pnpm run lint && pnpm exec tsc --noEmit && pnpm exec prettier --check src/components/insights/formulaReference.ts`.
 **Actual**: The `note` change is as specified. The file at the base commit already failed `prettier --check`, and the new longer line also exceeds the print width. `prettier --write` was applied to the file, which is the same thing the `.husky` lint-staged hook (`services/xstockstrat-ui/**/*.{ts,…}: prettier --write`) does on commit. It is whitespace-only: the Memory row is now multi-line, at `:171-175`, with the note on `:174`. Prettier also re-wrapped three blocks that were already non-conforming (`SAMPLE_CLOSE`, the `print()` row, and the `EXIT_REASON` type annotation), with no token changes. `pnpm exec tsc --noEmit` exits 2 on 2 **pre-existing** errors in `e2e/insights/backfills.spec.ts:135-136` (`Property 'dataKind'/'timeframeEnum' does not exist on type 'never'`). These are identical on the unmodified base (checked by stashing the change). The changed file adds no errors, `ci.yml` runs no `tsc`, and lint and prettier pass.
 **Reason**: Lint-staged reformats any staged UI `.ts` on commit, so a "note-only" diff is impossible for this file. The tsc errors are in a file outside this step's **Files** (feature 198 e2e) and are not fixed here (touch only what the task requires); they are recorded as a concern for the integration PR.
+
+### Deviation: Step 4 — docs: headroom semantics in indicators docs and runbooks; findings; teardown
+**Spec said**:
+- "Re-anchor the `:10` resolved row … and the `:20`/`:22` open-question anchors to their current code".
+- "Fix only drift inside this step's **Files**; drift in any other file is recorded in the Deviation Log".
+
+**Actual**: Instructions 1–5 were applied as written. The manual teardown also fixed grounded drift found when
+re-reading this step's own Files:
+- (a) `context-constitution.md`: every stale `path:line` anchor was re-grounded, not only INDICATORS-2 and the
+  candidate row. That covers INDICATORS-1/3/4/5/6/7/8/9, both Gotchas and the Pointers (CLAUDE.md, `main.py`,
+  `watcher.py`). A header line records the 2026-10-15 hand refresh.
+- (b) findings `:20` (⚠ security, temp file / no OS isolation): the cited `NamedTemporaryFile` no longer exists.
+  Feature 209 feeds the source on stdin (`sandbox.py:363-374`) and shipped the OS-level isolation the item named as
+  its remedy. The item is re-anchored and marked **resolved (feature 209)** instead of keeping a dead anchor.
+- (c) `services/xstockstrat-indicators/CLAUDE.md:4`: the pointer "defects (⚠ sandbox env inheritance)" named a
+  defect resolved 2026-09-16 and now reads "defects and open questions".
+- (d) The new findings bullets carry full-path and `sandbox.py` anchors.
+
+Not fixed, but recorded:
+- `docs/runbooks/config-rollout.md` (in Files, but not a context file) still documents the removed Connect-RPC
+  `RolloutConfig` curl on port `8060` (§ Step 3 at `:150-162`; its own § "Via Connect-RPC — REMOVED" at `:127`
+  says so).
+- Its § Step 5 (`:198`) tells operators to monitor `indicators.sandbox.memory_exceeded` alerts, which no service
+  emits (repo grep: no hits).
+
+**Reason**: Root `CLAUDE.md` § Teardown requires the grounded drift in the touched context files to be fixed, not
+waved through. (a)–(c) are inside Step 4's Files and grounded by grep against the current code. The
+`config-rollout.md` items are pre-existing runbook drift unrelated to sandbox memory semantics. A correct
+replacement (a gRPC `RolloutConfig` invocation, a real alert source) needs a design decision, so it is left for a
+follow-up rather than guessed. No file outside Step 4's Files was edited, and the root
+`docs/context-constitution-findings.md` is untouched.
 

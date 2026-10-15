@@ -1,7 +1,7 @@
 # xstockstrat-indicators — CLAUDE.md
 
 <!-- context-forge:constitution-pointer:start -->
-> **Constitution:** non-obvious sandbox invariants (thread-pinning before numpy import, `RLIMIT_DATA` not `RLIMIT_AS`, `MessageToDict` not `dict()`, copy-into-fresh-builtins) live in [`docs/context-constitution.md`](docs/context-constitution.md); defects (⚠ sandbox env inheritance) in [`docs/context-constitution-findings.md`](docs/context-constitution-findings.md). Inherits the root [`PLAT-*` constitution](../../docs/context-constitution.md).
+> **Constitution:** non-obvious sandbox invariants (thread-pinning before numpy import, `RLIMIT_DATA` not `RLIMIT_AS`, `MessageToDict` not `dict()`, copy-into-fresh-builtins) live in [`docs/context-constitution.md`](docs/context-constitution.md); defects and open questions in [`docs/context-constitution-findings.md`](docs/context-constitution-findings.md). Inherits the root [`PLAT-*` constitution](../../docs/context-constitution.md).
 <!-- context-forge:constitution-pointer:end -->
 
 ## Role
@@ -98,7 +98,7 @@ Namespace: `indicators`
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `indicators.sandbox.timeout_ms` | int | `5000` | Max formula execution time in ms |
-| `indicators.sandbox.memory_bytes` | int | `134217728` | Max memory (128 MiB) per formula |
+| `indicators.sandbox.memory_bytes` | int | `134217728` | Formula memory **headroom** (128 MiB) above the child's runtime-measured pre-lockdown `VmData` baseline; `RLIMIT_DATA` = baseline + this value (feature 228) |
 | `indicators.sandbox.allowed_imports` | string | `numpy,pandas,math,statistics` | Comma-separated allowed Python imports. Read via `get_str_present` (never `get_str`): a configured `""` denies all imports rather than reverting to this permissive default (feature 173) |
 | `indicators.sandbox.max_concurrent` | int | `4` | Semaphore bound on concurrent off-loop sandbox `subprocess.run` spawns in `ExecuteFormula` (feature 176, FR-5). Read once in `IndicatorsServicer.__init__` via a new `ConfigWatcher.sandbox_max_concurrent()` accessor with a `max(1, …)` clamp. |
 
@@ -128,7 +128,8 @@ escape reaches no network, no secrets, no writable FS, and no file reads. The lo
 after** the numeric-lib import and **before** the untrusted `exec` (never `preexec_fn` — unsafe in
 this multithreaded service), in this order: eager-import allowed modules and resolve their lazy
 attributes (numpy's `fft`/`rec`/`ma`/… load on first access) → `setuid(65534)` (when the
-parent is root) → `PR_SET_NO_NEW_PRIVS` → expanded rlimits → seccomp `.load()` → `exec(source)`.
+parent is root) → `PR_SET_NO_NEW_PRIVS` → `VmData` baseline probe → expanded rlimits → parse input
+`data`/`params` → seccomp `.load()` → `exec(source)`.
 
 - **Subprocess isolation + secret-free env**: formula runs in a fresh subprocess whose env
   (`_sandbox_env`) strips every service secret and adds `PYTHONDONTWRITEBYTECODE=1` +
@@ -145,9 +146,10 @@ parent is root) → `PR_SET_NO_NEW_PRIVS` → expanded rlimits → seccomp `.loa
   the filter loads therefore fail, which is why the lazy-attribute warm-up exists.
   Fails **closed** on compat ABIs and unknown syscalls. `_SECCOMP_ALLOW` is the audited set;
   `NO_NEW_PRIVS` must stay set (pyseccomp sets it on load — never disable).
-- **Expanded rlimits**: `RLIMIT_DATA` (memory; `RLIMIT_AS` would reject numpy's virtual reservations
-  — INDICATORS-2), `RLIMIT_CPU` = `ceil(timeout_ms/1000)+2`, `RLIMIT_NPROC` = `max_concurrent*16`
-  (fork-bomb bound, derived from config — F-07), `RLIMIT_FSIZE=0`, `RLIMIT_NOFILE=64`.
+- **Expanded rlimits**: `RLIMIT_DATA` = measured baseline + `memory_bytes` headroom (memory;
+  `RLIMIT_AS` would reject numpy's virtual reservations — INDICATORS-2), `RLIMIT_CPU` =
+  `ceil(timeout_ms/1000)+2`, `RLIMIT_NPROC` = `max_concurrent*16` (fork-bomb bound, derived from
+  config — F-07), `RLIMIT_FSIZE=0`, `RLIMIT_NOFILE=64`.
 - **BLAS/OMP threads pinned to 1** (`_THREAD_LIMIT_ENV`): numeric libs otherwise spawn one
   buffer-reserving thread per core and overflow the cap.
 - **Deterministic termination**: `Popen(start_new_session=True)` + `killpg(SIGKILL)` on timeout **and
