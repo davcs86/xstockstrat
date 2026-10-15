@@ -31,16 +31,17 @@ def init_telemetry() -> None:
 
     try:
         from opentelemetry import trace
-        from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+        from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
         from opentelemetry.instrumentation.grpc import GrpcAioInstrumentorServer
         from opentelemetry.sdk.trace import TracerProvider
         from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
-        endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "otel-collector:4317")
+        endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
         svc_name = os.getenv("SERVICE_NAME", "indicators")
 
         resource = _build_resource()
-        exporter = OTLPSpanExporter(endpoint=endpoint, insecure=True)
+        # No endpoint/insecure args: they override OTEL_EXPORTER_OTLP_* (path, TLS, headers).
+        exporter = OTLPSpanExporter()
         provider = TracerProvider(resource=resource)
         provider.add_span_processor(BatchSpanProcessor(exporter))
         trace.set_tracer_provider(provider)

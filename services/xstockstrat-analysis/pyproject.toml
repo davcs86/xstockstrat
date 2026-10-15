@@ -13,7 +13,7 @@ dependencies = [
   "alembic>=1.13.1",
   "asyncpg>=0.29.0",
   "opentelemetry-sdk>=1.25.0",
-  "opentelemetry-exporter-otlp-proto-grpc>=1.25.0",
+  "opentelemetry-exporter-otlp-proto-http>=1.25.0",
   "opentelemetry-instrumentation-grpc>=0.46b0",
 ]
 

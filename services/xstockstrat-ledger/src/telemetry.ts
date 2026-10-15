@@ -1,4 +1,9 @@
-import { Resource } from '@opentelemetry/resources';
+import {
+  Resource,
+  envDetectorSync,
+  hostDetectorSync,
+  processDetectorSync,
+} from '@opentelemetry/resources';
 import {
   SEMRESATTRS_SERVICE_NAME,
   SEMRESATTRS_DEPLOYMENT_ENVIRONMENT,
@@ -27,16 +32,23 @@ export function initTelemetry(): void {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { NodeSDK } = require('@opentelemetry/sdk-node');
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-grpc');
+    const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-http');
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { GrpcInstrumentation } = require('@opentelemetry/instrumentation-grpc');
 
-    const endpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT ?? 'grpc://otel-collector:4317';
+    const endpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
     const serviceName = process.env.SERVICE_NAME ?? 'ledger';
+
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { diag, DiagConsoleLogger, DiagLogLevel } = require('@opentelemetry/api');
+    // sdk-node registers its own diag logger when OTEL_LOG_LEVEL is set.
+    if (!process.env.OTEL_LOG_LEVEL) diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.WARN);
 
     const sdk = new NodeSDK({
       resource: buildResource(),
-      traceExporter: new OTLPTraceExporter({ url: endpoint }),
+      traceExporter: new OTLPTraceExporter(),
+      // 0.52's default async detectors log a false diag.error on every boot once a logger exists.
+      resourceDetectors: [envDetectorSync, processDetectorSync, hostDetectorSync],
       instrumentations: [new GrpcInstrumentation()],
     });
 
