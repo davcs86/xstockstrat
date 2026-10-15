@@ -327,7 +327,7 @@ ruff check . && ruff format --check .
 
 ### Step 3 — service: xstockstrat-ui — `/insights` formula reference Memory row describes headroom
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/formulaReference.ts` — modify
@@ -480,3 +480,9 @@ git diff --stat origin/main-dev...HEAD -- services/xstockstrat-config/migrations
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Deviation: Step 3 — service: xstockstrat-ui — `/insights` formula reference Memory row describes headroom
+**Spec said**: "At `formulaReference.ts:171` change only the `note` to `'Headroom above the interpreter/library baseline (indicators.sandbox.memory_bytes).'`." Verification: `pnpm run lint && pnpm exec tsc --noEmit && pnpm exec prettier --check src/components/insights/formulaReference.ts`.
+**Actual**: The `note` change is as specified. The file at the base commit already failed `prettier --check`, and the new longer line also exceeds the print width. `prettier --write` was applied to the file, which is the same thing the `.husky` lint-staged hook (`services/xstockstrat-ui/**/*.{ts,…}: prettier --write`) does on commit. It is whitespace-only: the Memory row is now multi-line, at `:171-175`, with the note on `:174`. Prettier also re-wrapped three blocks that were already non-conforming (`SAMPLE_CLOSE`, the `print()` row, and the `EXIT_REASON` type annotation), with no token changes. `pnpm exec tsc --noEmit` exits 2 on 2 **pre-existing** errors in `e2e/insights/backfills.spec.ts:135-136` (`Property 'dataKind'/'timeframeEnum' does not exist on type 'never'`). These are identical on the unmodified base (checked by stashing the change). The changed file adds no errors, `ci.yml` runs no `tsc`, and lint and prettier pass.
+**Reason**: Lint-staged reformats any staged UI `.ts` on commit, so a "note-only" diff is impossible for this file. The tsc errors are in a file outside this step's **Files** (feature 198 e2e) and are not fixed here (touch only what the task requires); they are recorded as a concern for the integration PR.
+

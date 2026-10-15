@@ -160,3 +160,22 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   (`TestNumericParityGolden` + `TestMemoryHeadroom`) 5/5 runs × 9 passed; full suite 290 passed, coverage 85.61%
   (≥ 50%); `ruff check` / `ruff format --check` clean; `! grep conftest` OK.
 - Deviations: none.
+
+## Session 2026-10-15 — sdd-execute sequential (Steps 3–4)
+
+- Operator confirmed the checkpoint after Step 2. Steps 3–4 run without per-step prompts.
+- Tooling: `pnpm install --frozen-lockfile --filter xstockstrat-ui...` in the worktree (no lockfile change).
+
+### Step 3 — service: xstockstrat-ui — `/insights` formula reference Memory row describes headroom [done]
+- Files: `services/xstockstrat-ui/src/components/insights/formulaReference.ts`. The Memory `note` is now
+  `'Headroom above the interpreter/library baseline (indicators.sandbox.memory_bytes).'`; label and value unchanged.
+- Verification:
+  - the grep finds the new note (now at `:174` inside the prettier-wrapped row);
+  - `! grep -rn "Hard cap" src` passes;
+  - `pnpm run lint` passes (warnings only, all pre-existing);
+  - `prettier --check` passes after `prettier --write`;
+  - `tsc --noEmit` has 2 pre-existing errors in `e2e/insights/backfills.spec.ts:135-136`, identical at base and not
+    run by CI.
+- TDD: N/A (copy only, per the spec).
+- Deviations: the file was already non-prettier at base, so the reformat touched 3 extra blocks (whitespace-only).
+  The tsc baseline errors are out of scope. See the Deviation Log.
