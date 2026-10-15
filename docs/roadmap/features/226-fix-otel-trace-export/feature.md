@@ -16,6 +16,7 @@
 | 2026-10-14 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from defect report `docs/reports/2026-10-14-otel-trace-export-broken-defect.md` |
 | 2026-10-14 | `draft` → `design-approved` | /sdd-design | Design debated (3 rounds, quick + 2 operator-requested) and approved; recon.md + design.md written |
 | 2026-10-14 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 11 steps |
+| 2026-10-15 | `implementation-ready` → `in-progress` | /sdd-execute sequential | Step 1 done |
 
 ---
 

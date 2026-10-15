@@ -84,3 +84,13 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 
 - Operator chose to patch the spec before `/sdd-execute` (step bodies become immutable only once execution starts, F-09). All 8 review items + Step 1/11 notes applied: Step 2 `go.work.sum` reverted-never-staged; Step 3 mechanical ≥40% awk assert; Step 4 hunk-staging note for the shared agent test; Step 6 `$`-anchored importer grep (verified: matches only :57/:136/:227/:312 today, excludes snapshot :7583/:7605) + OTEL_LOG_LEVEL deployment note; Step 7 init inside `before()` (CJS TS1378); Step 8 portable boot check (no GNU `timeout`), OTEL_LOG_LEVEL + Playwright notes; Step 10 AC-4 RED capture; Step 11 grafana-cloud.md `:175,:179`.
 - Execution mode: **sequential** on the pinned branch; integration PR #1246.
+
+## Session 2026-10-15 — sdd-execute sequential
+
+- Mode-entry + up-front confirm: operator approved (sequential, pinned branch, PR #1246). Merged origin/main-dev (`08d6301`, feature 215; no file overlap) → `976662a`.
+- Tooling setup (steps 1–11): go1.27.0 ✓ · golangci-lint ⬇ v2.14.0 (rebuilt with `GOTOOLCHAIN=go1.27.0` into `/root/go/bin`; system v2.5.0/go1.25 cannot load go1.27 modules) · uv ✓ 0.11.32 · python 3.13.16 ✓ · ruff ✓ · pnpm ✓ 9.15.9 · node ⚠ v22.22.0 (repo pins 24; `--experimental-strip-types` supported ≥22.6 — CI runs 24) · docker ✓ binary present. Service deps: Go ×3 `go mod download` ✓, Python ×4 `uv sync --frozen --extra dev` ✓, root `pnpm install --frozen-lockfile` ✓.
+
+### Step 1 — docs: AC-1 Scenario Outline + product-spec dependency reconcile [done]
+- AC-1 → Scenario Outline with raw + encoded header Examples (tags/title unchanged); endpoint line reworded to avoid an unbound `<…>` placeholder. Product-spec "Dependency changes" now lists `@opentelemetry/api` and the gRPC-exporter removals.
+- Files modified: `acceptance.feature`, `product-spec.md`. TDD: N/A (docs).
+- Deviations: none

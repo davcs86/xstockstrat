@@ -80,7 +80,7 @@ xstockstrat-ledger, xstockstrat-identity, xstockstrat-notify, xstockstrat-config
 - [x] No proto changes anticipated
 - [x] No database migrations anticipated
 - [x] No config key changes anticipated (env vars only; `.do/app*.yaml` keys unchanged; the HEADERS GitHub secret format is unchanged — no operator action)
-- Dependency changes: Go `otlptracehttp` (×3 go.mod), Python `opentelemetry-exporter-otlp-proto-http` (×4 pyproject + uv.lock), Node `@opentelemetry/exporter-trace-otlp-http` (×4 package.json + pnpm-lock)
+- Dependency changes: Go `otlptracehttp` replaces `otlptracegrpc` (×3 go.mod/go.sum); Python `opentelemetry-exporter-otlp-proto-http` replaces `-proto-grpc` (×4 pyproject + uv.lock); Node `@opentelemetry/exporter-trace-otlp-http ^0.52.0` replaces `-otlp-grpc` and `@opentelemetry/api ^1.9.0` is added (×4 package.json); UI adds `@opentelemetry/api ^1.9.0`; root `pnpm-lock.yaml` updated
 
 ## Acceptance Criteria
 

@@ -53,7 +53,7 @@ tool. The observable outcome is traces per `service.name` in Grafana Cloud Tempo
 
 ### Step 1 — docs: AC-1 Scenario Outline (raw + encoded) and product-spec dependency reconcile
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/roadmap/features/226-fix-otel-trace-export/`
 **Files**:
 - `docs/roadmap/features/226-fix-otel-trace-export/acceptance.feature` — modify

@@ -3,13 +3,18 @@ Feature: fix-otel-trace-export (bug fix)
   OTel trace export fails for every service against the Grafana Cloud OTLP/HTTP gateway.
 
   @AC-1 @FR-1 @regression
-  Scenario: A backend service exports traces over OTLP/HTTP to a path-prefixed gateway URL
+  Scenario Outline: A backend service exports traces over OTLP/HTTP to a path-prefixed gateway URL
     Given OTEL_ENABLED is "true"
-    And OTEL_EXPORTER_OTLP_ENDPOINT is "http://<otlp-receiver>/otlp"
-    And OTEL_EXPORTER_OTLP_HEADERS is "Authorization=Basic%20dGVzdDprZXk%3D"
+    And OTEL_EXPORTER_OTLP_ENDPOINT is the receiver's base URL with path "/otlp"
+    And OTEL_EXPORTER_OTLP_HEADERS is "<headers>"
     When the service initialises telemetry, records a span, and flushes on shutdown
     Then the receiver gets an HTTP POST to "/otlp/v1/traces"
     And the request carries the header "Authorization: Basic dGVzdDprZXk="
+
+    Examples:
+      | form    | headers                              |
+      | raw     | Authorization=Basic dGVzdDprZXk=     |
+      | encoded | Authorization=Basic%20dGVzdDprZXk%3D |
 
   @AC-2 @FR-2 @regression
   Scenario: The UI registers its instrumentation hook and exports over OTLP/HTTP
