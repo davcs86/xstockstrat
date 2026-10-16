@@ -3,14 +3,19 @@ Feature: fix-book-portfolio-page (bug fix)
   Book → Portfolio page stuck on "Loading portfolio…".
 
   @AC-1 @regression
-  Scenario: Portfolio reads return unenriched positions when the quote fetch exceeds its deadline
+  Scenario Outline: Portfolio reads return unenriched positions when the quote fetch exceeds its deadline
     Given an offline account holds "AAPL" and "MSFT" with no broker valuation (current_price 0)
     And portfolio.marketdata.quote_timeout_ms is 2500
     And marketdata GetLatestQuotes never answers
-    When the caller reads ListPositions
+    When the caller reads <rpc>
     Then the response returns within 2500 ms + 0.5 s
     And "AAPL" and "MSFT" are returned with current_price 0 and no fabricated market value
     And a WARN "batch latest quotes unavailable" is logged with a deadline-exceeded error
+
+    Examples:
+      | rpc            |
+      | ListPositions  |
+      | ListPortfolios |
 
   @AC-2 @regression
   Scenario: The cached batch latest-quote read ignores rows outside the recency window

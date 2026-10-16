@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-10-16 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-16-portfolio-page-stuck-loading-defect.md` |
+| 2026-10-16 | `draft` → `spec-ready` | /sdd-review | Product spec approved on round 2 (7 warnings carried to design) |
 
 ---
 
@@ -34,4 +35,4 @@ marketdata's 2-connection pool.
 
 ## Next Action
 
-`/sdd-design fix-book-portfolio-page quick` — quick depth by operator choice (C-0 signals pointed to full); see context.md
+`/sdd-design fix-book-portfolio-page quick` — spec-ready; quick depth by operator choice (C-0 signals pointed to full); see context.md

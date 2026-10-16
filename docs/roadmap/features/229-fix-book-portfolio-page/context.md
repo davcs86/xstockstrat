@@ -50,3 +50,23 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
     days, above the 30-day maximum window.
   - Added a detached singleflight budget (the 227 pattern) and a Consumer Surface section.
   - Rewrote @AC-1..4 with concrete values and observable outcomes.
+
+## Session 2026-10-16 (/sdd-review product-spec — round 2 PASS WITH WARNINGS)
+
+- Product spec approved. Status: draft → spec-ready.
+- Fixed in-review:
+  - @AC-1 is now a Scenario Outline over ListPositions + ListPortfolios (C-10(b) parity).
+  - Feature 040's `marketdata.quotes` row is marked superseded by 229.
+- Warnings carried into design as **requirements**:
+  - [ ] First retention run drops in bounded batches. The staging backlog is about 1,250 hourly chunks (about 3,750
+        AccessExclusive locks), and a single call risks SQLSTATE 53200 (feature 153 class).
+  - [ ] The recency predicate ships before or with the retention loop, so unbounded readers don't contend with the drops.
+  - [ ] Confirm on staging that `drop_chunks` is available (`SHOW timescaledb.license`, `show_chunks` dry run) and that
+        marketdata's pooled role owns `marketdata.quotes`. The loop WARN-logs on failure and never crashes.
+  - [ ] Record the window lock arithmetic: about 3 locks per chunk, so 168h ≈ 504 and 720h ≈ 2,160 per scan against
+        the ~25,600 lock budget. It relies on plan-time chunk exclusion (`now() - interval` or an inlined cutoff).
+  - [ ] State the relationship between `marketdata.quotes.batch_timeout_ms` and `portfolio.marketdata.quote_timeout_ms`.
+  - [ ] Seeding: seed the three new keys or record a waiver (config existence gate; 227 precedent).
+  - [ ] Get DBA acknowledgement for automated, irreversible quote deletion. No migration means C-07 is not formally
+        triggered.
+- Overlap findings: none blocking (215 rebase-only on `marketdata_service.go`).
