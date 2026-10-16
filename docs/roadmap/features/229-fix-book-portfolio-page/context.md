@@ -70,3 +70,37 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - [ ] Get DBA acknowledgement for automated, irreversible quote deletion. No migration means C-07 is not formally
         triggered.
 - Overlap findings: none blocking (215 rebase-only on `marketdata_service.go`).
+
+## Session 2026-10-16 (/sdd-design quick — Phase 0 + round 1)
+
+- Phase 0: recon.md written; 3 codebase-discovery passes plus scenario-recon (20 relevant @AC rules, 0 CHANGE).
+- Round 1 adversary: NEEDS WORK, 0 Floor breaches. Mechanism claims verified sound:
+  - header propagation;
+  - pgx per-query `QueryExecModeExec`;
+  - unnamed-statement custom plan, so plan-time chunk exclusion;
+  - `drop_chunks` and `timescaledb_information.chunks` are Apache-licensed.
+- Synthesized resolutions:
+  1. ListPortfolios makes ONE union `latestQuotesFor` call across accounts. Per-account calls meant N × deadline and
+     cross-account valuation drift (C-10(b)).
+  2. Portfolio ListPortfolios readers move to the `r.db` pgxmock seam.
+  3. `latestQuotesFor` returns `ok`:
+     - `broadcastSnapshot` skips persist/emit/broadcast on `!ok` (no zero-equity snapshots);
+     - `GetPnL` returns Unavailable on `!ok`.
+  4. Batch reader becomes `unnest($1) CROSS JOIN LATERAL (… LIMIT 1)`. That matches the singular shape, so
+     @AC-1 @feature-178 parity holds by construction, and it reads about 1 tuple per symbol instead of every row in the
+     window (no SkipScan on Apache).
+  5. Retention:
+     - first pass after 1h;
+     - each step `BEGIN; SET LOCAL lock_timeout='2s'; drop_chunks; COMMIT`;
+     - one 24h step per run (the backlog drains in about 52h);
+     - WARN-only on failure;
+     - TOAST makes it about 5 relations per chunk, about 120 locks per step.
+  6. Pre-merge gates: staging EXPLAIN (chunk exclusion plus ordered append), a `pg_locks` count, and DBA
+     acknowledgement before retention ships.
+- **Operator decisions (2026-10-16):**
+  - `portfolio.marketdata.quote_timeout_ms` default **4000** (was 2500), bounds [500, 8000]. That is above the
+    marketdata cold budget (2500) plus warm-read headroom, and changes a product-spec default.
+  - Retention cadence (1h), first-pass delay (1h), `lock_timeout` 2s, 24h step and 30s statement backstop are
+    **documented fixed invariants** in marketdata CLAUDE.md (215 precedent). This explicitly narrows operator decision
+    2 for these operational values; `marketdata.retention.quotes_days` stays the only retention key.
+  - Run a second debate round before approval.
