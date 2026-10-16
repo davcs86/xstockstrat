@@ -24,3 +24,29 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Development branch: the harness assigned `ccr-9f55a8ac-dtw4iv` (based on `origin/main-dev` @ a8a3cfd), and the session
   must push only there. This replaces the conventional `feature/fix-book-portfolio-page`, and the final PR targets
   `main-dev` from that branch.
+
+## Session 2026-10-16 (/sdd-review product-spec — round 1 FAIL, spec revised)
+
+- spec-reviewer returned FAIL with 3 blockers:
+  1. `add_retention_policy` is TSL and unavailable on DO's Apache-edition TimescaleDB (backlog feature 040).
+  2. Migration strategy unstated.
+  3. Scenarios lacked concrete values, and @AC-4 was not observable.
+- feature-overlap returned CLEAN:
+  - No config/migration/proto collisions.
+  - 215 shares `marketdata_service.go`, but in different functions (rebase-only).
+  - It flagged feature 040's TSL constraint.
+- **Operator decisions (2026-10-16):**
+  - Retention is implemented as a marketdata background `drop_chunks` loop driven by the existing
+    `marketdata.retention.quotes_days`. **No migration.** It supersedes feature 040's `marketdata.quotes` row.
+  - Recency window: 7 days (`marketdata.quotes.latest_lookback_hours` default 168).
+  - The operator asked whether old quotes could be "promoted to bars" instead of dropped. Answered no:
+    - `marketdata.ohlcv` already holds Alpaca's authoritative, adjusted trade bars for the same warm-symbol set.
+    - Mid-quote roll-ups (30s sampling, no volume) would be a lower-fidelity, conflicting second bar source (the
+      feature 056 dual-source class).
+    - It doesn't change the newest-quote window question.
+  - The operator then chose the 7-day window.
+- Spec revised:
+  - Named 3 new keys plus the newly implemented retention key, with defaults and bounds. The retention floor is 31
+    days, above the 30-day maximum window.
+  - Added a detached singleflight budget (the 227 pattern) and a Consumer Surface section.
+  - Rewrote @AC-1..4 with concrete values and observable outcomes.

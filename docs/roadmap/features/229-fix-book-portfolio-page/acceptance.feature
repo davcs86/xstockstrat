@@ -4,26 +4,34 @@ Feature: fix-book-portfolio-page (bug fix)
 
   @AC-1 @regression
   Scenario: Portfolio reads return unenriched positions when the quote fetch exceeds its deadline
-    Given a caller holds positions with no broker valuation in an offline account
-    And marketdata GetLatestQuotes does not answer within the portfolio quote deadline
-    When the caller reads ListPortfolios or ListPositions
-    Then the response returns within the deadline plus the portfolio's own DB time
-    And those positions carry no enriched price rather than a fabricated one
+    Given an offline account holds "AAPL" and "MSFT" with no broker valuation (current_price 0)
+    And portfolio.marketdata.quote_timeout_ms is 2500
+    And marketdata GetLatestQuotes never answers
+    When the caller reads ListPositions
+    Then the response returns within 2500 ms + 0.5 s
+    And "AAPL" and "MSFT" are returned with current_price 0 and no fabricated market value
+    And a WARN "batch latest quotes unavailable" is logged with a deadline-exceeded error
 
   @AC-2 @regression
-  Scenario: The batch latest-quote read is bounded to a recency window
-    Given marketdata.quotes holds quote rows older than the latest-quote recency window
-    When marketdata GetLatestQuotes is called for a set of symbols
-    Then its cached read considers only rows inside the recency window
-    And a symbol whose only quotes are older than the window is treated as cold, not served stale
+  Scenario: The cached batch latest-quote read ignores rows outside the recency window
+    Given marketdata.quotes.latest_lookback_hours is 168
+    And "AAPL" has a stored quote 2 hours old
+    And "MSFT" has only a stored quote 200 hours old
+    When marketdata GetLatestQuotes is called for "AAPL" and "MSFT"
+    Then "AAPL" is served from the cache without a live fetch
+    And "MSFT" is treated as cold and requested from the live source
 
   @AC-3 @regression
   Scenario: Coalesced quote waiters are not failed by the first caller's cancellation
-    Given two concurrent GetLatestQuotes calls share one cold-symbol upstream fetch
-    When the first caller cancels its request
-    Then the second caller still receives the fetched quotes
+    Given "AAPL" and "MSFT" are cold
+    And two concurrent GetLatestQuotes calls for them share one upstream fetch
+    When the first caller cancels its request before the fetch returns
+    Then the second caller still receives quotes for "AAPL" and "MSFT"
 
   @AC-4 @regression
-  Scenario: Quote history is pruned by a retention policy
-    Given the marketdata migrations are applied
-    Then marketdata.quotes has a retention policy that drops chunks older than the configured retention
+  Scenario: Quote history older than the retention period is pruned
+    Given marketdata.retention.quotes_days is 90
+    And marketdata.quotes holds a chunk entirely older than 91 days and a chunk from today
+    When the quote retention job runs
+    Then the 91-day-old chunk is dropped
+    And today's chunk remains

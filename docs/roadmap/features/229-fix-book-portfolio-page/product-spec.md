@@ -45,18 +45,50 @@ A contributing factor: the `GetLatestQuotes` singleflight closure runs on the fi
 ## Affected Services
 
 - xstockstrat-portfolio — enrichment deadline
-- xstockstrat-marketdata — bounded latest-quote read, quotes retention
+- xstockstrat-marketdata — bounded latest-quote read, detached cold-fetch budget, quote retention job
 - xstockstrat-config — SetConfig scalar bounds for the new keys
 - xstockstrat-ui — surface only (`/trader/portfolio`); no change anticipated
 
 ## Fix Scope
 
-- No proto changes anticipated.
-- **DB migration:** a marketdata migration adds a TimescaleDB retention policy on `marketdata.quotes`. Operator chose
-  this scope on 2026-10-16. It needs DBA + marketdata owner approval.
-- **Config keys:** new keys for the portfolio enrichment deadline and the marketdata latest-quote recency window,
-  read live with code defaults, SetConfig-bounded, and logged in `docs/patterns/config-governance.md`. Needs owner +
-  config team approval.
+1. **Portfolio enrichment deadline.** `latestQuotesFor` (`portfolio_service.go`) calls `GetLatestQuotes` under a deadline.
+   On timeout it takes the existing missing-quote path: it logs a WARN and returns an empty map, so positions stay
+   unenriched and no price is fabricated. Because `latestQuotesFor` is the single choke point, the deadline bounds
+   every caller: `enrichPositions`, the `ListPortfolios`/`ListPositions`/`GetPortfolio`/`GetPosition` reads, and the
+   risk-check/snapshot callers. This preserves C-10(b) parity.
+2. **Bounded batch quote read.** `GetLatestQuotesBatch` gains a recency predicate (`time > now() - window`) so
+   TimescaleDB excludes chunks outside the window. A symbol with no row inside the window is cold and goes to the
+   existing live-fetch path.
+3. **Detached singleflight budget.** The `GetLatestQuotes` cold-fetch closure runs on a context detached from the
+   first caller and bounded by a budget (the 227 `BatchGetLatestPrice` pattern). A cancelled first caller then no
+   longer fails coalesced waiters.
+4. **Quote retention job.** A marketdata background loop periodically runs
+   `drop_chunks('marketdata.quotes', older_than => <N> days)`, with N read live from `marketdata.retention.quotes_days`.
+   - The mechanism is Apache-licensed, which works around the TSL `add_retention_policy` unavailable on DO (backlog
+     feature 040).
+   - It supersedes feature 040's `marketdata.quotes` row; the operator approved this on 2026-10-16.
+   - Dropped quote history is intentionally not rolled up into bars. `marketdata.ohlcv` already holds the authoritative,
+     adjusted Alpaca trade bars for the same warm-symbol set.
+
+**Proto:** none.
+
+**DB migration:** none. Retention is an application job, not a migration, so the C-07 migration gate and the DBA
+approval do not apply. Dropping chunks is irreversible by nature.
+
+**Config keys** (live per-call read, code default, SetConfig-bounded in `SCALAR_BOUNDS_REGISTRY`, logged in
+`docs/patterns/config-governance.md`; owner + config-team approval):
+
+| Key | Type | Default | Bounds | Notes |
+|---|---|---|---|---|
+| `portfolio.marketdata.quote_timeout_ms` | int | `2500` | `[500, 5000]` | New. Deadline on portfolio → marketdata `GetLatestQuotes`. |
+| `marketdata.quotes.latest_lookback_hours` | int | `168` | `[24, 720]` | New. Recency window of the cached batch read; 7 days covers 3-day weekends and holidays. |
+| `marketdata.quotes.batch_timeout_ms` | int | `2500` | `[500, 5000]` | New. Budget of the detached cold-fetch singleflight closure. |
+| `marketdata.retention.quotes_days` | int | `90` | `[31, 3650]` | Existing documented key, now implemented. The 31-day floor keeps retention longer than the maximum 720h (30-day) lookback window. |
+
+## Consumer Surface(s)
+
+- `/trader/portfolio` (Book → Portfolio). No UI change; it loads because the backend now answers within a bound.
+- MCP `get_positions` / `get_positions_by_account_id`. No contract change; they stop timing out.
 
 ## Acceptance Criteria
 
