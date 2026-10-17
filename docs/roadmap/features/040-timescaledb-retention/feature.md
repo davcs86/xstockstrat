@@ -16,7 +16,7 @@ does not include `add_retention_policy`. Without retention, all tables grow unbo
 
 | Table | Original retention | Priority | Notes |
 |---|---|---|---|
-| `marketdata.quotes` | 90 days | **High** | Real-time tick data — fastest growing table |
+| `marketdata.quotes` | 90 days | **High** | Real-time tick data — fastest growing table. **Superseded by feature 229** (`fix-book-portfolio-page`): app-level `drop_chunks` loop on `marketdata.retention.quotes_days` |
 | `ledger.events` | 2 years | Medium | Append-only but bounded domain |
 | `marketdata.ohlcv` | 5 years | Low | Bar data grows slowly |
 | `portfolio.snapshots` | 3 years | Low | Infrequent writes |
