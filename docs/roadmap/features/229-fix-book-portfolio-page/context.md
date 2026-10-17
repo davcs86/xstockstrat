@@ -104,3 +104,46 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
     **documented fixed invariants** in marketdata CLAUDE.md (215 precedent). This explicitly narrows operator decision
     2 for these operational values; `marketdata.retention.quotes_days` stays the only retention key.
   - Run a second debate round before approval.
+
+## Session 2026-10-17 (/sdd-design — round 2 synthesis + operator decisions)
+
+- Round 2 adversary: NEEDS WORK, 0 Floor breaches, 0 C-16 regressions. Verified sound:
+  - `drop_chunks(older_than => boundary)` drops exactly the chunks with `range_end <= boundary` and never the cutoff
+    chunk;
+  - `drop_chunks` works inside a tx with `SET LOCAL lock_timeout` under PgBouncer transaction mode;
+  - the `classificationDB` retype compiles (pgxmock implements Begin);
+  - the LATERAL query gets plan-time exclusion, and the PK gives batch == serial;
+  - no snapshot consumer outside portfolio; drawdown HWM reads `account_balances.peak_equity`.
+- **Operator decisions (2026-10-17):**
+  - **Cache-age guard: ADD.** A `cacheQuote(ctx, q, since)` helper skips caching a quote with `q.Time < since` (outside
+    the read window) or a zero time.
+    - It is used at all 5 insert sites (`marketdata_service.go` :523, :582, :951, :972, :1339).
+    - The quote is still returned to the caller.
+    - This stops halted or delisted symbols recreating dropped chunks every 30s, and stops year-0001 chunks from
+      `client.go:313/:501`'s ignored parse error.
+  - **GetPnL: return Unavailable** when quotes are unavailable. This is an explicit operator sign-off of a scope
+    addition.
+    - It needs a `CodeUnavailable` mapping in `toGRPCError`/the handler wrap.
+    - It must also cover symbols the batch *omits*, not just whole-RPC failure, so unrealized P&L is never a silent 0.
+    - GetPnL has no caller in ui, agent or trading (grep-verified).
+  - **Retention step: keep the 24h TIME step** (the original invariant). Each run drops
+    `older_than => min(oldest_chunk_start + 24h, cutoff)`.
+    - Progress is guaranteed, because the oldest chunk's `range_end` ≤ `start + 24h`.
+    - The cache guard removes the re-creation pin.
+    - The proposed "24 oldest chunks" refinement was **rejected**.
+  - **31-day code floor: not adopted.** SetConfig bounds `[31, 3650]` stay. For values written directly to the DB, keep
+    round 1's floor *guard*: skip the run with a WARN when `days*24 <= lookback_hours`. No silent clamp.
+  - Run a third debate round.
+- Minor fixes accepted:
+  - the retention test pins the drop arg to the computed boundary, not the cutoff;
+  - corrected lock math: about 4 relations per chunk on read (about 672 at 168h, 2,880 at 720h) and about 6 per drop
+    (about 144 per 24h step), since chunks carry the PK, `quotes_time_idx`, `idx_quotes_symbol_time` and TOAST;
+  - `balanceIDs` means "position load succeeded";
+  - rename `watchlistConfig` to `intConfig`, with the `quoteTimeout()` nil guard;
+  - record the snapshot-skip deviation;
+  - step-7 doc drift: CLAUDE.md "DISTINCT ON" wording, the `marketdata_repo.go:309-312` comment, and the
+    `quotes_days` row;
+  - note that retention holds 1 PgBouncer slot for up to 30s each hour.
+- Recorded follow-ups (out of scope):
+  - share one quote fetch for checkRiskLimits + broadcastSnapshot per fill;
+  - portfolio's other no-deadline calls (ledger QueryEvents :632, notify EmitAlert :892).
