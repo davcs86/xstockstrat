@@ -406,3 +406,9 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 **Progress**: 11 done / 11 total
 **Stopped at**: all complete. Integration PR #1251 (already open) carries every step commit.
 **Next**: operator staging gates G1–G4 → merge #1251 → dev smoke test → defect sidecar `resolved`.
+
+### C-16 promotion (operator-approved 2026-10-18)
+- `services/xstockstrat-portfolio/acceptance/fix-book-portfolio-page.feature`: @AC-1, @AC-5, @AC-6.
+- `services/xstockstrat-marketdata/acceptance/fix-book-portfolio-page.feature`: @AC-2, @AC-3, @AC-4, @AC-7, @AC-8.
+- Every promoted scenario is tagged `@feature-229`. The launched 178/182 suites are not edited: their EXTENDs are
+  covered by these scenarios plus the config bounds tests.
