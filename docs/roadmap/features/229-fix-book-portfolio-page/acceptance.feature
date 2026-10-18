@@ -40,3 +40,54 @@ Feature: fix-book-portfolio-page (bug fix)
     When the quote retention job runs
     Then the 91-day-old chunk is dropped
     And today's chunk remains
+
+  @AC-5 @regression
+  Scenario Outline: GetPnL refuses to report unrealized P&L when a needed quote is unavailable
+    Given the caller holds "AAPL" and "MSFT" with no broker valuation (current_price 0)
+    And <quote_condition>
+    When the caller requests GetPnL
+    Then the call fails with gRPC status UNAVAILABLE
+    And no PnLResponse is returned
+
+    Examples:
+      | quote_condition                                            |
+      | marketdata GetLatestQuotes never answers                   |
+      | marketdata GetLatestQuotes returns a quote for "AAPL" only |
+
+  @AC-6 @regression
+  Scenario: GetPnL values broker-synced positions from the broker price without a quote fetch
+    Given the caller holds 10 "AAPL" at avg entry 150 with broker current_price 200
+    And the caller holds no other positions
+    When the caller requests GetPnL
+    Then marketdata GetLatestQuotes is not called
+    And unrealized_pnl is 500
+
+  @AC-7 @regression
+  Scenario Outline: An out-of-window live quote is returned but not cached
+    Given marketdata.quotes.latest_lookback_hours is 168
+    And "HALT" has no stored quote inside the recency window
+    And the live source returns a "HALT" quote timestamped <quote_time>
+    When marketdata GetLatestQuotes is called for "HALT"
+    Then the "HALT" quote is returned to the caller
+    And no row is written to marketdata.quotes
+
+    Examples:
+      | quote_time           |
+      | 200 hours ago        |
+      | 0001-01-01T00:00:00Z |
+
+  @AC-8 @regression
+  Scenario Outline: A cold-fetch failure returns the warm subset instead of failing the batch
+    Given marketdata.quotes.batch_timeout_ms is 500
+    And "AAPL" has a stored quote 2 hours old
+    And "MSFT" has no stored quote inside the recency window
+    And the live multi-symbol quote fetch for "MSFT" <failure>
+    When marketdata GetLatestQuotes is called for "AAPL" and "MSFT"
+    Then the call succeeds with the stored "AAPL" quote
+    And "MSFT" is omitted from the response, never zero-priced
+    And at least one WARN "GetLatestQuotes: cold fetch failed" is logged with the cold symbol count and the error
+
+    Examples:
+      | failure                       |
+      | returns an error              |
+      | does not answer within 500 ms |

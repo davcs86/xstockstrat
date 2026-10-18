@@ -15,6 +15,7 @@
 |---|---|---|---|
 | 2026-10-16 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-16-portfolio-page-stuck-loading-defect.md` |
 | 2026-10-16 | `draft` → `spec-ready` | /sdd-review | Product spec approved on round 2 (7 warnings carried to design) |
+| 2026-10-18 | `spec-ready` → `design-approved` | /sdd-design | Design debated (4 rounds, quick extended by operator) and approved; recon.md + design.md written |
 
 ---
 
@@ -22,6 +23,8 @@
 
 - [Product Spec](product-spec.md) — bug description and fix scope
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
+- [Recon](recon.md) — codebase dossier, existing business rules (C-16)
+- [Design](design.md) — approved design (4 rounds), rejected alternatives, open risks, staging gates G1–G4
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-book-portfolio-page`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -35,4 +38,4 @@ marketdata's 2-connection pool.
 
 ## Next Action
 
-`/sdd-design fix-book-portfolio-page quick` — spec-ready; quick depth by operator choice (C-0 signals pointed to full); see context.md
+`/sdd-spec fix-book-portfolio-page` — generate implementation spec from the approved design

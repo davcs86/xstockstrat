@@ -70,7 +70,21 @@ A contributing factor: the `GetLatestQuotes` singleflight closure runs on the fi
    - Dropped quote history is intentionally not rolled up into bars. `marketdata.ohlcv` already holds the authoritative,
      adjusted Alpaca trade bars for the same warm-symbol set.
 
-**Proto:** none.
+5. **Cache-age guard** (added in design round 2). Marketdata never caches a quote older than the recency window or
+   with a zero timestamp. The quote is still returned to the caller. Without this, halted symbols would keep recreating
+   dropped chunks.
+6. **Partial result on cold failure** (added in design round 3). `GetLatestQuotes` returns the warm subset and omits
+   cold symbols it failed to fetch, never zero-priced. This reverses feature 178's all-or-nothing waiver.
+7. **GetPnL** (added in design rounds 2-3, with operator sign-off):
+   - It returns `UNAVAILABLE` instead of a silent 0 when a needed quote is unavailable, whether the fetch failed or
+     the symbol was omitted.
+   - It values broker-synced positions from the broker `current_price`, through the shared valuation helper.
+8. **Snapshot guard** (added in design round 4). `broadcastSnapshot` skips persisting when quotes are unavailable or no
+   position was priced, so it never writes a zero-equity snapshot.
+
+The design is in `design.md`.
+
+**Proto:** none. GetPnL's failure status code changes from Internal to Unavailable; the schema does not change.
 
 **DB migration:** none. Retention is an application job, not a migration, so the C-07 migration gate and the DBA
 approval do not apply. Dropping chunks is irreversible by nature.
@@ -80,7 +94,7 @@ approval do not apply. Dropping chunks is irreversible by nature.
 
 | Key | Type | Default | Bounds | Notes |
 |---|---|---|---|---|
-| `portfolio.marketdata.quote_timeout_ms` | int | `2500` | `[500, 5000]` | New. Deadline on portfolio → marketdata `GetLatestQuotes`. |
+| `portfolio.marketdata.quote_timeout_ms` | int | `4000` | `[500, 8000]` | New. Deadline on portfolio → marketdata `GetLatestQuotes`. Must exceed the marketdata cold budget + warm read so a cold timeout still returns the warm subset (design rounds 1, 4). |
 | `marketdata.quotes.latest_lookback_hours` | int | `168` | `[24, 720]` | New. Recency window of the cached batch read; 7 days covers 3-day weekends and holidays. |
 | `marketdata.quotes.batch_timeout_ms` | int | `2500` | `[500, 5000]` | New. Budget of the detached cold-fetch singleflight closure. |
 | `marketdata.retention.quotes_days` | int | `90` | `[31, 3650]` | Existing documented key, now implemented. The 31-day floor keeps retention longer than the maximum 720h (30-day) lookback window. |

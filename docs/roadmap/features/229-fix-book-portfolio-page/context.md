@@ -177,3 +177,42 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - One un-quotable offline holding makes the user's whole GetPnL permanently Unavailable. This is accepted per "never a
     silent 0".
   - Stale held symbols go live to Alpaca on every read, bounded by singleflight and the shared rate limiter.
+
+## Session 2026-10-18 — sdd-design (approved)
+
+- Round 4: the adversary verdict was SOUND/APPROVABLE, with 0 Floor breaches and 0 C-16 regressions. Three minor notes
+  were folded in:
+  1. Snapshot guard: also skip when positions exist but none was priced. This restores round 1's "no zero-equity
+     snapshots" for the all-cold partial-result case.
+  2. The test-(e) fake honours ctx, and the budget is seeded via `marketdata.quotes.batch_timeout_ms`.
+  3. The @AC-8 WARN assertion is "at least one" (coalesced waiters each log one).
+- Phase 0 Recon: recon.md (portfolio, marketdata, config; reuse the 227 detached budget, the classificationDB
+  seam, and the poller shape).
+- Phase 1 Grilling: 4 rounds, quick mode extended by operator request.
+  - **Chosen approach:**
+    - portfolio deadline 4000ms, plus one union quote batch in ListPortfolios;
+    - LATERAL `LIMIT 1` quote readers with a 168h window, in Exec mode;
+    - a detached cold-fetch budget with a partial result;
+    - a cache-age guard at all 5 insert sites;
+    - an app-level `drop_chunks` retention loop (24h step, with `lock_timeout`);
+    - GetPnL returns Unavailable and values broker positions from broker `current_price`;
+    - a snapshot skip.
+  - **Rejected:** `add_retention_policy`, quote→bar rollup, DISTINCT ON plus a window, per-account deadlines, a
+    24-oldest-chunks step, a 31-day clamp, GetPnL→Internal or a silent 0, all-or-nothing cold failure. The full list
+    is in design.md.
+- Constitution rules touched: C-01..03, C-05..08, C-10, C-13..18, P-03/P-04, F-04, F-06, F-07. Floor breaches: none.
+- product-spec.md is aligned with the design:
+  - quote_timeout default 4000, bounds [500,8000];
+  - Fix Scope items 5-8 (cache guard, partial result, GetPnL, snapshot guard).
+- acceptance.feature gains @AC-5..8.
+- **Open Threads** (carried from design.md Open Risks):
+  - [ ] Staging gates G1 (EXPLAIN), G2 (pg_locks ≤ 700), G3 (license, show_chunks, owner as the pooled role) and G4
+        (DBA ack). Required before the reader and retention steps merge. They need DB access the session does not
+        have, so the operator must run or arrange them.
+  - [ ] Follow-ups:
+    - GetPnL↔ListPortfolios unrealized parity;
+    - partial snapshot understatement;
+    - no deadline on portfolio ledger QueryEvents/notify EmitAlert;
+    - one shared quote fetch per fill.
+  - [ ] Monitor live Alpaca load from stale held symbols after deploy.
+- Status: spec-ready → design-approved.
