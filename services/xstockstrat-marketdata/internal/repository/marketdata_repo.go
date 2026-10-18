@@ -29,9 +29,9 @@ type execer interface {
 // MarketDataRepo handles TimescaleDB reads and writes for OHLCV bars and quotes.
 type MarketDataRepo struct {
 	pool *pgxpool.Pool
-	// db is the query surface UpsertFundamentals executes against — the real pool in
+	// db is the query surface for fundamentals, quote reads and quote retention — the real pool in
 	// production, a pgxmock in tests.
-	db execer
+	db classificationDB
 }
 
 // NewMarketDataRepo opens a pgx connection pool.
@@ -276,15 +276,16 @@ func (r *MarketDataRepo) InsertQuote(ctx context.Context, q *marketdatav1.Quote)
 	return err
 }
 
-// GetLatestQuote returns the most recent quote for a symbol.
-func (r *MarketDataRepo) GetLatestQuote(ctx context.Context, symbol string) (*marketdatav1.Quote, error) {
+// GetLatestQuote returns the most recent quote for a symbol at or after since.
+func (r *MarketDataRepo) GetLatestQuote(ctx context.Context, symbol string, since time.Time) (*marketdatav1.Quote, error) {
 	const sql = `
 		SELECT time, symbol, ask_price, ask_size, bid_price, bid_size, source
 		FROM marketdata.quotes
-		WHERE symbol=$1
+		WHERE symbol=$1 AND time >= $2
 		ORDER BY time DESC
 		LIMIT 1`
-	row := r.pool.QueryRow(ctx, sql, symbol)
+	// Exec mode = unnamed statement, so since is a plan-time constant and old chunks are excluded before locking.
+	row := r.db.QueryRow(ctx, sql, pgx.QueryExecModeExec, symbol, since)
 	var (
 		t                  time.Time
 		sym                string
@@ -306,21 +307,15 @@ func (r *MarketDataRepo) GetLatestQuote(ctx context.Context, symbol string) (*ma
 	}, nil
 }
 
-// GetLatestQuotesBatch returns the most recent quote per requested symbol in one query (feature
-// 178). A symbol with no stored quote is absent from the map (null-not-zero) — never a zero Quote.
-// DISTINCT ON (symbol) ORDER BY symbol, time DESC rides the existing idx_quotes_symbol_time
-// (migration 001:56), so cache hits stay index-shaped — no new migration.
-func (r *MarketDataRepo) GetLatestQuotesBatch(ctx context.Context, symbols []string) (map[string]*marketdatav1.Quote, error) {
+// GetLatestQuotesBatch returns the most recent quote at or after since per requested symbol (feature
+// 178); a symbol with none is absent from the map (null-not-zero) — never a zero Quote.
+// Same per-symbol shape as GetLatestQuote (batch == serial); since lets TimescaleDB exclude chunks at plan time.
+func (r *MarketDataRepo) GetLatestQuotesBatch(ctx context.Context, symbols []string, since time.Time) (map[string]*marketdatav1.Quote, error) {
 	out := make(map[string]*marketdatav1.Quote, len(symbols))
 	if len(symbols) == 0 {
 		return out, nil
 	}
-	const sql = `
-		SELECT DISTINCT ON (symbol) time, symbol, ask_price, ask_size, bid_price, bid_size, source
-		FROM marketdata.quotes
-		WHERE symbol = ANY($1)
-		ORDER BY symbol, time DESC`
-	rows, err := r.pool.Query(ctx, sql, symbols)
+	rows, err := r.db.Query(ctx, latestQuotesBatchSQL, pgx.QueryExecModeExec, symbols, since)
 	if err != nil {
 		return nil, fmt.Errorf("get latest quotes batch: %w", err)
 	}
@@ -350,6 +345,64 @@ func (r *MarketDataRepo) GetLatestQuotesBatch(ctx context.Context, symbols []str
 		return nil, fmt.Errorf("iterate latest quotes batch: %w", err)
 	}
 	return out, nil
+}
+
+const latestQuotesBatchSQL = `
+		SELECT q.time, q.symbol, q.ask_price, q.ask_size, q.bid_price, q.bid_size, q.source
+		FROM unnest($1::text[]) AS s(sym)
+		CROSS JOIN LATERAL (
+			SELECT time, symbol, ask_price, ask_size, bid_price, bid_size, source
+			FROM marketdata.quotes
+			WHERE symbol = s.sym AND time >= $2
+			ORDER BY time DESC
+			LIMIT 1
+		) q`
+
+// Fixed retention invariants (feature 229, operator-approved): one 24h step per run bounds the AccessExclusive
+// locks per drop (~144 for 1h chunks); a 2s lock wait keeps a contended drop from pinning a pooled connection.
+const (
+	quoteRetentionLockTimeout = "SET LOCAL lock_timeout = '2s'"
+	quoteRetentionStep        = 24 * time.Hour
+)
+
+// DropQuoteChunksBefore drops marketdata.quotes chunks that end at or before min(oldest+24h, cutoff) and returns
+// how many were dropped; 0 when the hypertable is empty or nothing is older than cutoff.
+func (r *MarketDataRepo) DropQuoteChunksBefore(ctx context.Context, cutoff time.Time) (int64, error) {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("drop quote chunks: begin: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	if _, err := tx.Exec(ctx, quoteRetentionLockTimeout); err != nil {
+		return 0, fmt.Errorf("drop quote chunks: lock timeout: %w", err)
+	}
+	var oldest *time.Time
+	if err := tx.QueryRow(ctx, `
+		SELECT min(range_start) FROM timescaledb_information.chunks
+		WHERE hypertable_schema = 'marketdata' AND hypertable_name = 'quotes'`).Scan(&oldest); err != nil {
+		return 0, fmt.Errorf("drop quote chunks: oldest chunk: %w", err)
+	}
+	if oldest == nil || !oldest.Before(cutoff) {
+		if err := tx.Commit(ctx); err != nil {
+			return 0, fmt.Errorf("drop quote chunks: commit: %w", err)
+		}
+		return 0, nil
+	}
+	boundary := oldest.Add(quoteRetentionStep)
+	if boundary.After(cutoff) {
+		boundary = cutoff
+	}
+	var dropped int64
+	if err := tx.QueryRow(ctx,
+		`SELECT count(*) FROM drop_chunks('marketdata.quotes', older_than => $1::timestamptz)`, boundary,
+	).Scan(&dropped); err != nil {
+		return 0, fmt.Errorf("drop quote chunks: drop_chunks: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return 0, fmt.Errorf("drop quote chunks: commit: %w", err)
+	}
+	return dropped, nil
 }
 
 // QueryBarsBatch returns bars for multiple symbols in a single LATERAL JOIN query (feature 183).

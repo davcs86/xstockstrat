@@ -528,3 +528,121 @@ func TestScanBars_OmitsDeprecatedTimeframeString(t *testing.T) {
 		t.Errorf("row not mapped intact: %+v", bars[0])
 	}
 }
+
+// feature 229 — SQL-shape proof only (pgxmock never plans); the live chunk-exclusion and drop proof is staging G1–G3.
+// @AC-2: both quote readers carry the same `time >= $2` window and run as unnamed statements (QueryExecModeExec).
+func TestGetLatestQuotesBatch_BoundedLateralShape(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatalf("pgxmock.NewPool: %v", err)
+	}
+	defer mock.Close()
+	repo := &MarketDataRepo{db: mock}
+	since := time.Now().Add(-168 * time.Hour)
+	quoteAt := time.Now().Add(-2 * time.Hour)
+
+	mock.ExpectQuery(`(?s)CROSS JOIN LATERAL.*time >= \$2.*LIMIT 1`).
+		WithArgs(pgx.QueryExecModeExec, []string{"AAPL", "MSFT"}, since).
+		WillReturnRows(pgxmock.NewRows([]string{"time", "symbol", "ask_price", "ask_size", "bid_price", "bid_size", "source"}).
+			AddRow(quoteAt, "AAPL", 101.0, int32(1), 100.0, int32(1), "alpaca"))
+
+	got, err := repo.GetLatestQuotesBatch(context.Background(), []string{"AAPL", "MSFT"}, since)
+	if err != nil {
+		t.Fatalf("GetLatestQuotesBatch: %v", err)
+	}
+	if _, ok := got["AAPL"]; !ok || len(got) != 1 {
+		t.Fatalf("expected AAPL only (MSFT absent, never zero), got %v", got)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("pgxmock expectations unmet: %v", err)
+	}
+}
+
+func TestGetLatestQuotesBatch_NoDistinctOn(t *testing.T) {
+	if strings.Contains(latestQuotesBatchSQL, "DISTINCT ON") {
+		t.Fatal("batch quote SQL must not use DISTINCT ON (reads every in-window row per symbol)")
+	}
+}
+
+func TestGetLatestQuote_BoundedBySince(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatalf("pgxmock.NewPool: %v", err)
+	}
+	defer mock.Close()
+	repo := &MarketDataRepo{db: mock}
+	since := time.Now().Add(-168 * time.Hour)
+
+	mock.ExpectQuery(`(?s)time >= \$2.*LIMIT 1`).
+		WithArgs(pgx.QueryExecModeExec, "AAPL", since).
+		WillReturnRows(pgxmock.NewRows([]string{"time", "symbol", "ask_price", "ask_size", "bid_price", "bid_size", "source"}).
+			AddRow(time.Now(), "AAPL", 101.0, int32(1), 100.0, int32(1), "alpaca"))
+
+	if _, err := repo.GetLatestQuote(context.Background(), "AAPL", since); err != nil {
+		t.Fatalf("GetLatestQuote: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("pgxmock expectations unmet: %v", err)
+	}
+}
+
+// @AC-4: each run drops at most one 24h step from the oldest chunk, never past the cutoff.
+func TestDropQuoteChunksBefore(t *testing.T) {
+	cutoff := time.Date(2026, 10, 18, 0, 0, 0, 0, time.UTC)
+	dropErr := fmt.Errorf("lock timeout")
+	cases := []struct {
+		name    string
+		oldest  *time.Time
+		dropArg *time.Time
+		dropErr error
+		dropped int64
+		want    int64
+		wantErr bool
+	}{
+		{name: "backlog", oldest: tp(cutoff.Add(-240 * time.Hour)), dropArg: tp(cutoff.Add(-216 * time.Hour)), dropped: 24, want: 24},
+		{name: "AC-4 literal", oldest: tp(cutoff.Add(-24 * time.Hour)), dropArg: tp(cutoff), dropped: 1, want: 1},
+		{name: "clamp", oldest: tp(cutoff.Add(-6 * time.Hour)), dropArg: tp(cutoff), dropped: 6, want: 6},
+		{name: "empty", oldest: nil, want: 0},
+		{name: "nothing expired", oldest: tp(cutoff.Add(time.Hour)), want: 0},
+		{name: "drop error", oldest: tp(cutoff.Add(-240 * time.Hour)), dropArg: tp(cutoff.Add(-216 * time.Hour)), dropErr: dropErr, wantErr: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			mock, err := pgxmock.NewPool()
+			if err != nil {
+				t.Fatalf("pgxmock.NewPool: %v", err)
+			}
+			defer mock.Close()
+			repo := &MarketDataRepo{db: mock}
+
+			mock.ExpectBegin()
+			mock.ExpectExec(`SET LOCAL lock_timeout = '2s'`).WillReturnResult(pgxmock.NewResult("SET", 0))
+			mock.ExpectQuery(`min\(range_start\).*hypertable_name = 'quotes'`).
+				WillReturnRows(pgxmock.NewRows([]string{"min"}).AddRow(tc.oldest))
+			switch {
+			case tc.dropArg != nil && tc.dropErr != nil:
+				mock.ExpectQuery(`drop_chunks\('marketdata.quotes', older_than => \$1::timestamptz\)`).
+					WithArgs(*tc.dropArg).WillReturnError(tc.dropErr)
+				mock.ExpectRollback()
+			case tc.dropArg != nil:
+				mock.ExpectQuery(`drop_chunks\('marketdata.quotes', older_than => \$1::timestamptz\)`).
+					WithArgs(*tc.dropArg).WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(tc.dropped))
+				mock.ExpectCommit()
+				mock.ExpectRollback()
+			default:
+				mock.ExpectCommit()
+				mock.ExpectRollback()
+			}
+
+			got, err := repo.DropQuoteChunksBefore(context.Background(), cutoff)
+			if (err != nil) != tc.wantErr || got != tc.want {
+				t.Fatalf("got (%d, %v), want (%d, err=%v)", got, err, tc.want, tc.wantErr)
+			}
+			if err := mock.ExpectationsWereMet(); err != nil {
+				t.Fatalf("pgxmock expectations unmet: %v", err)
+			}
+		})
+	}
+}
+
+func tp(t time.Time) *time.Time { return &t }

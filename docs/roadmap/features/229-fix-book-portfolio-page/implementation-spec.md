@@ -193,7 +193,7 @@ reach the INSERT, so the `INVALID_ARGUMENT` assertions fail.
 
 ### Step 3 — service: marketdata repo — bounded quote readers and `DropQuoteChunksBefore`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/repository/marketdata_repo.go` — modify
@@ -273,7 +273,7 @@ The module build goes green at Step 5, whose Verification runs `go build ./...`.
 
 ### Step 4 — test: marketdata repo SQL-shape tests (AC-2, AC-4)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/repository/marketdata_repo_test.go` — modify
@@ -957,3 +957,18 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Actual**: one commit for the paired service + test steps. The RED of Step 2 has to precede the Step 1 edit, and
   committing Step 2 alone would leave a red test on the branch.
 - **Disposition**: accepted. Paired TDD steps are committed as a unit for the rest of this run (3+4, 5+6, 7+8, 9+10).
+
+### D-2 — Step 4: the "no DISTINCT ON" check is on a named SQL constant
+- **Step**: 3, 4
+- **Expected**: a negative-regex or expectation-mismatch check that the batch SQL has no `DISTINCT ON`.
+- **Actual**: the first form (an expectation on `DISTINCT ON` that should go unmet) was a **false green**. It passed
+  on the old SQL because of the argument count, not the text. The batch SQL is now a package const
+  `latestQuotesBatchSQL`, and `TestGetLatestQuotesBatch_NoDistinctOn` asserts `!strings.Contains(…, "DISTINCT ON")`.
+  RED was confirmed against the old SQL.
+- **Disposition**: accepted (strictly stronger proof, same files).
+
+### D-3 — Lint toolchain
+- **Step**: 3+
+- **Actual**: golangci-lint v2.14.0 had to be rebuilt with go1.27.0 (`GOTOOLCHAIN=go1.27.0`). A go1.26 build refuses
+  the go1.27 modules. Tooling only, no code impact.
+- **Disposition**: accepted.

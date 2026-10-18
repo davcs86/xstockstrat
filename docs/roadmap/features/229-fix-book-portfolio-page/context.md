@@ -282,3 +282,17 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Lint: 0 errors. The 39 warnings in the two files are pre-existing (identical count on a stash baseline).
 - Files modified: `services/xstockstrat-config/src/__tests__/setConfigScalarBounds.test.ts`
 - Deviations: Steps 1–2 are committed together as one commit (a paired TDD unit). See Deviation Log D-1.
+
+### Steps 3–4 — marketdata repo: bounded quote readers and DropQuoteChunksBefore, plus SQL-shape tests [done]
+- `db` was retyped to `classificationDB`. Both quote readers now run on `r.db` with `time >= $2` and
+  `pgx.QueryExecModeExec`. The batch reader is the LATERAL `LIMIT 1` const `latestQuotesBatchSQL`.
+- `DropQuoteChunksBefore` runs in one tx: SET LOCAL lock_timeout '2s' → min(range_start) → boundary =
+  min(oldest+24h, cutoff) → `drop_chunks(older_than => $1::timestamptz)`. Invariants are package consts.
+- RED: after the skeleton (new signatures, old SQL, stub drop), 4 tests failed, including all 6 drop sub-cases.
+  GREEN: all pass under `-race`, and the full `./internal/repository/...` package is green. golangci-lint reports 0
+  issues.
+- Files: `internal/repository/marketdata_repo.go`, `internal/repository/marketdata_repo_test.go`.
+- Module build: still red until Step 5 updates the callers at `marketdata_service.go:509,546`. This is expected and
+  recorded in the spec.
+- Deviations: D-2 (false-green negative test replaced by a const check), D-3 (lint toolchain rebuild).
+- G1/G2 (operator, staging) are still pending. They block the merge of PR #1251, not execution.
