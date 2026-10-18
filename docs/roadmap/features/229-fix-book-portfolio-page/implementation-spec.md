@@ -261,13 +261,13 @@ reach the INSERT, so the `INVALID_ARGUMENT` assertions fail.
 
 **Verification**:
 ```bash
-cd services/xstockstrat-marketdata && GOWORK=off go build ./... 2>&1 | head -20
+cd services/xstockstrat-marketdata && GOWORK=off go build ./internal/repository/...
 cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-download-mode=mod ./internal/repository/...
 grep -n "QueryExecModeExec\|CROSS JOIN LATERAL\|time >= \$2\|drop_chunks\|classificationDB" services/xstockstrat-marketdata/internal/repository/marketdata_repo.go
 ```
-The full build fails until Step 5 updates the service callers (`marketdata_service.go:509,546`). That is expected:
-Steps 3 and 5 land green together in Step 6. The package-scoped build `GOWORK=off go build ./internal/repository/...`
-must pass.
+Verification is package-scoped (impl-spec review F-05 finding). The full module does not compile until Step 5
+updates the service callers (`marketdata_service.go:509,546`), and that intermediate state is recorded, not silent.
+The module build goes green at Step 5, whose Verification runs `go build ./...`.
 
 ---
 
@@ -317,6 +317,9 @@ must pass.
      to `cutoff` (`.WithArgs(cutoff)`), count 1. Today's chunk (range_start ≥ cutoff) cannot satisfy
      `older_than => cutoff`, by construction;
    - **empty**: a NULL min → no `drop_chunks` expectation, Commit, Rollback, returns 0;
+   - **clamp**: oldest = cutoff − 6h → oldest + 24h is past the cutoff, so the boundary clamps to
+     `.WithArgs(cutoff)` (impl-spec review P-06: proves the `boundary.After(cutoff)` branch, which the AC-4 literal
+     case does not exercise);
    - **nothing expired**: oldest = cutoff + 1h → no drop, returns 0;
    - **drop error**: `drop_chunks` returns an error → no Commit, `ExpectRollback`, a wrapped error is returned.
 4. In the test comment (≤2 lines), state that the proof is SQL shape only and that the live proof is staging gate G3.
@@ -328,6 +331,8 @@ must pass.
 cd services/xstockstrat-marketdata && GOWORK=off go test ./internal/repository/... -race -count=1 -run 'TestGetLatestQuote|TestDropQuoteChunksBefore' -v
 cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-download-mode=mod ./internal/repository/...
 ```
+No coverage threshold applies here: `internal/repository/` is excluded from CI coverage (ci.yml:256). The
+module-wide coverage gate (≥ 40%) runs in Step 6.
 The new logic is in `internal/repository/`, which is excluded from CI coverage measurement, so no threshold applies
 to it. The full-module coverage command runs in Step 6, once the service callers compile.
 
@@ -431,6 +436,9 @@ cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-dow
 grep -n "WithoutCancel\|cacheQuote(\|resolvePositiveInt\|GetLatestQuotes: cold fetch failed" services/xstockstrat-marketdata/internal/service/marketdata_service.go
 ```
 Confirm `grep -c "s.repo.InsertQuote" internal/service/marketdata_service.go` → 0 (all 5 sites use `cacheQuote`).
+The guard's behaviour is unit-tested in Step 6 on the `GetLatestQuotes` cold path and in the `cacheQuote` table. The
+other 4 sites (`:523` singular, `:951`/`:972` warm poller, `:1339` stream) are proven only by this grep plus the
+shared helper. `s.cfg *Watcher` is concrete, which blocks a direct poller test (accepted; impl-spec review).
 
 ---
 
@@ -803,9 +811,8 @@ The `r.pool.` grep must list none of :205, :444, :504, :525, :559 or :566.
 3. Add `func (f *fakeLedger) QueryEvents(context.Context, *ledgerv1.QueryEventsRequest, ...grpc.CallOption)
    (*ledgerv1.QueryEventsResponse, error)` returning an empty response. An empty `NextPageToken` ends both passes.
 4. In the new file, add a WARN recorder (the marketdata `recordingWarnHandler` shape; one consumer here, so it stays
-   inline; no `t.Parallel()`) and a 5s goroutine/select guard helper. Add a `fakeIntConfig map[string]int64`
-   implementing `GetInt`, or reuse `fakeConfig` (`watchlist_service_test.go:244`) if its shape fits; pick one, do
-   not duplicate.
+   inline; no `t.Parallel()`) and a 5s goroutine/select guard helper. Reuse `fakeConfig{vals map[string]int64}`
+   (`watchlist_service_test.go:244`) for `quoteCfg`. It already satisfies `intConfig`; do not add a new fake.
 5. **AC-1 (ListPositions).**
    - Setup: pgxmock `ListPositions` returns AAPL and MSFT with `current_price 0`; `stub.block = true`;
      `quoteCfg = {"portfolio.marketdata.quote_timeout_ms": 2500}`; `ctxWithUser(t, "u1")`.
@@ -845,10 +852,14 @@ The `r.pool.` grep must list none of :205, :444, :504, :525, :559 or :566.
 12. **Handler** (`portfolio_handler_test.go`):
     - `classifyGetPnLError(fmt.Errorf("x: %w", service.ErrQuotesUnavailable))` → `CodeUnavailable`;
     - a generic error → `CodeInternal`;
-    - `toGRPCError(connect.NewError(connect.CodeUnavailable, errors.New("q")))` → `status.Code == codes.Unavailable`.
+    - `toGRPCError(connect.NewError(connect.CodeUnavailable, errors.New("q")))` → `status.Code == codes.Unavailable`;
+    - end-to-end, if the handler harness at `internal/handler/portfolio_identity_test.go:47` can build a service whose
+      marketdata stub fails: `grpcPortfolioAdapter.GetPnL` → `codes.Unavailable`. If it cannot, record that in
+      context.md; the three-part proof above stands.
 13. C-13 verdict: the AAPL/MSFT/acc-1/acc-off rows are scenario one-offs in the new file (one consumer), so they
     stay inline. `positionCols` is reused, not copied. Confirm with `grep -rn "\"avg_entry_price\", \"cost_basis\""
-    --include="*_test.go" services/xstockstrat-portfolio` → exactly 1 declaration site.
+    --include="*_test.go" services/xstockstrat-portfolio/internal/service` → exactly 1 declaration site. The
+    `internal/repository/portfolio_repo_test.go:61` copy is a different package and out of scope.
 
 **Verification**:
 ```bash

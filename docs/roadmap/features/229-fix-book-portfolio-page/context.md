@@ -236,3 +236,29 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - C-14: no UI or agent step. The UI hooks (`usePortfolio.ts:13,25,50`) and the agent `get_positions`
   (`client.py:2354-2369`) reach the fixed RPCs. The dev smoke test is an operator check at the integration PR.
 - Operator merge gates mapped to steps: G1 + G2 before Step 3 merges; G3 + G4 before Step 7 merges.
+
+## Session 2026-10-18 — sdd-review impl-spec (advisory)
+
+- Result: 1 failure and 6 warnings (advisory; did not block). Overlap: CLEAN. 215 is rebase-only on
+  `marketdata_service.go` and the `main.go:162` neighbour line; 227 is already on trunk.
+- Resolved in the spec **before execution** (no step has started, so F-09 does not apply yet):
+  - [x] Step 3 (F-05 risk): Verification is now the package-scoped `go build ./internal/repository/...`. The module
+        does not compile until Step 5 (recorded).
+  - [x] Step 4:
+    - added a clamp case (oldest = cutoff − 6h → `WithArgs(cutoff)`) to prove the `boundary.After(cutoff)` branch
+      (P-06);
+    - stated that no coverage threshold applies (repository/ is CI-excluded) and that the gate is in Step 6.
+  - [x] Step 5: recorded that 4 of the 5 cache-guard sites are proven only by the grep plus the shared helper
+        (accepted).
+  - [x] Step 10: "reuse `fakeConfig`" (no executor guess); the C-13 grep is scoped to `internal/service`.
+  - [x] Step 10: added an optional end-to-end `grpcPortfolioAdapter.GetPnL → codes.Unavailable` assertion.
+- Unresolved, carried into execution:
+  - [ ] Step 9: the C-10(b) snapshot and risk-check mid-quote parity, and GetPnL↔ListPortfolios unrealized parity, are
+        deferred with no named follow-up feature. Name one at Step 11.
+  - [ ] Step 9: the C-18 step size (repo + service + handler, 9 instructions) is accepted as cohesive. The executor may
+        commit the handler mapping separately.
+  - [ ] Minor line drift: InsertQuote `:275`; balanceIDs `:1271`; watchlistConfig `:1375`; portfolio CLAUDE.md
+        factor_map `:83`. The executor uses the actual lines.
+  - [ ] Step 11: also fix the marketdata CLAUDE.md header blurb (line 3: "dead retention keys").
+- Staging gates G1–G4 are still pending (operator-run). They block merging the reader step (G1/G2) and the retention
+  step (G3/G4), not execution.
