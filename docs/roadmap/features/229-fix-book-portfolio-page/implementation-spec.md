@@ -638,7 +638,7 @@ applies to it.
 
 ### Step 9 — service: portfolio quote deadline, shared valuation helpers, union batch, snapshot guard, GetPnL Unavailable
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/repository/portfolio_repo.go` — modify
@@ -764,7 +764,7 @@ The `r.pool.` grep must list none of :205, :444, :504, :525, :559 or :566.
 
 ### Step 10 — test: portfolio deadline, GetPnL, snapshot guard, union batch, handler mapping (AC-1, AC-5, AC-6)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_quote_deadline_test.go` — create
@@ -972,3 +972,15 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Actual**: golangci-lint v2.14.0 had to be rebuilt with go1.27.0 (`GOTOOLCHAIN=go1.27.0`). A go1.26 build refuses
   the go1.27 modules. Tooling only, no code impact.
 - **Disposition**: accepted.
+
+### D-4 — Step 10: AC-5 end-to-end adapter assertion not added
+- **Step**: 10 (optional instruction 12, last bullet)
+- **Expected**: an optional `grpcPortfolioAdapter.GetPnL → codes.Unavailable` end-to-end test, if the handler harness
+  could build a service with a failing marketdata stub.
+- **Actual**: it cannot. `PortfolioService`'s `marketdata`/`repo` fields are unexported to the handler package, and
+  `NewPortfolioService` dials mTLS. So AC-5 rests on the three-part proof the spec names:
+  - the service `errors.Is(err, ErrQuotesUnavailable)` test (both Examples rows);
+  - the `classifyGetPnLError` table;
+  - the `toGRPCError(CodeUnavailable) → codes.Unavailable` case.
+- **Disposition**: accepted, per the spec's own fallback ("record that in context.md; the three-part proof above
+  stands").

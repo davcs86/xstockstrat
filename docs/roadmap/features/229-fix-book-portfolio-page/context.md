@@ -328,3 +328,42 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   Module: build/vet OK, coverage 71.0%, lint 0 issues.
 - Files: `internal/service/marketdata_service.go`, `cmd/server/main.go`, `internal/service/marketdata_service_test.go`.
 - Deviations: none. G3/G4 (operator) still pending; they gate the merge, not execution.
+
+### Steps 9–10 — portfolio deadline, union batch, snapshot guard, GetPnL Unavailable + tests [done]
+- **Repo.** InsertSnapshot, GetAccountBalance, ListAccountBalancesByUser, ListOfflineAccountIdsByUser and
+  ListPositionsByAccount (×2) moved to `r.db`. The remaining `r.pool` sites are out of scope.
+- **Config.**
+  - `watchlistConfig` was renamed `intConfig`.
+  - Added a `quoteCfg` field, assigned only when `cfgWatcher != nil`.
+  - `quoteTimeout()` defaults to 4000ms; nil or ≤0 also gives 4000ms.
+- **Quote fetch.**
+  - `latestQuotesFor` now runs under `context.WithTimeout` and returns `(map, ok)`.
+  - Added the helpers `unvaluedSymbols` (deduped) and `applyQuotes`.
+- **ListPortfolios.**
+  - It makes ONE union quote batch across all accounts.
+  - `buildAccountPortfolio` now only assembles.
+  - `balanceIDs` means "position load succeeded".
+- **broadcastSnapshot.** Skipped with a WARN when `!ok`, or when there are positions but none got a price.
+- **GetPnL.**
+  - `ErrQuotesUnavailable` is returned when the fetch fails or any position is left unpriced.
+  - Broker-valued positions use broker `current_price` without a quote fetch.
+- **Handler.** `classifyGetPnLError` maps the error to Unavailable, and `toGRPCError` gained an Unavailable case.
+- **RED** (shape-only skeleton): AC-1 ListPositions, AC-1 ListPortfolios and AC-5 "never answers" each sat on the 5s
+  hang guard (the Book → Portfolio bug reproduced). Also failing: the union batch (2 calls), AC-5 "AAPL only", AC-6,
+  the snapshot guard (2 rows) and the classifier.
+- **GREEN:** all pass under `-race`. AC-1 returns at 2.50s and AC-5 at 0.50s, each equal to its deadline. The full
+  suite is green, coverage is 54.4% (≥ 40), and golangci-lint reports 0 issues.
+- **Files:**
+  - `internal/repository/portfolio_repo.go`
+  - `internal/service/portfolio_service.go`
+  - `internal/handler/portfolio_handler.go`
+  - `internal/service/watchlist_service_test.go`
+  - `internal/service/portfolio_service_test.go`
+  - `internal/service/portfolio_fill_errors_test.go`
+  - `internal/service/portfolio_quote_deadline_test.go` (new)
+  - `internal/handler/portfolio_handler_test.go`
+- **Deviations:** D-4 (optional AC-5 end-to-end adapter test not feasible; three-part proof stands).
+- **Review warnings:**
+  - [x] Step 9 C-18 step size: accepted as cohesive.
+  - [ ] C-10(b) snapshot/risk mid-quote parity + GetPnL↔ListPortfolios unrealized parity: a named follow-up goes into
+        Step 11.

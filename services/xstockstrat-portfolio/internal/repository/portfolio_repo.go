@@ -202,7 +202,7 @@ func (r *PortfolioRepo) InsertSnapshot(ctx context.Context, portfolioID, userID 
 		INSERT INTO portfolio.snapshots (snapshot_time, portfolio_id, user_id, equity, cash, buying_power, day_pnl, open_positions, trading_mode)
 		VALUES (NOW(), $1, $2, $3, $4, $4, $5, $6, $7)
 		ON CONFLICT (portfolio_id, snapshot_time) DO NOTHING`
-	_, err := r.pool.Exec(ctx, q, portfolioID, userID, equity, cash, dayPnL, openPositions, mode.String())
+	_, err := r.db.Exec(ctx, q, portfolioID, userID, equity, cash, dayPnL, openPositions, mode.String())
 	return err
 }
 
@@ -441,7 +441,7 @@ func (r *PortfolioRepo) GetAccountBalance(ctx context.Context, accountID string)
 		FROM portfolio.account_balances
 		WHERE account_id=$1`
 	var b AccountBalance
-	err := r.pool.QueryRow(ctx, q, accountID).Scan(&b.Cash, &b.BuyingPower, &b.Equity, &b.LastEquity)
+	err := r.db.QueryRow(ctx, q, accountID).Scan(&b.Cash, &b.BuyingPower, &b.Equity, &b.LastEquity)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
@@ -501,7 +501,7 @@ func (r *PortfolioRepo) ListAccountBalancesByUser(ctx context.Context, userID st
 		FROM portfolio.account_balances
 		WHERE user_id=$1
 		ORDER BY account_id ASC`
-	rows, err := r.pool.Query(ctx, q, userID)
+	rows, err := r.db.Query(ctx, q, userID)
 	if err != nil {
 		return nil, fmt.Errorf("list account balances by user: %w", err)
 	}
@@ -522,7 +522,7 @@ func (r *PortfolioRepo) ListAccountBalancesByUser(ctx context.Context, userID st
 // offline_account_realized row, the offline-exclusive marker (broker accounts never get one).
 func (r *PortfolioRepo) ListOfflineAccountIdsByUser(ctx context.Context, userID string) ([]string, error) {
 	const q = `SELECT account_id FROM portfolio.offline_account_realized WHERE user_id=$1 ORDER BY account_id ASC`
-	rows, err := r.pool.Query(ctx, q, userID)
+	rows, err := r.db.Query(ctx, q, userID)
 	if err != nil {
 		return nil, fmt.Errorf("list offline account ids by user: %w", err)
 	}
@@ -556,14 +556,14 @@ func (r *PortfolioRepo) ListPositionsByAccount(ctx context.Context, accountID st
 			FROM portfolio.positions
 			WHERE account_id=$1
 			ORDER BY symbol ASC`
-		rows, err = r.pool.Query(ctx, q, accountID)
+		rows, err = r.db.Query(ctx, q, accountID)
 	} else {
 		q := `
 			SELECT ` + positionColumns + `
 			FROM portfolio.positions
 			WHERE account_id=$1 AND trading_mode=$2
 			ORDER BY symbol ASC`
-		rows, err = r.pool.Query(ctx, q, accountID, tradingMode)
+		rows, err = r.db.Query(ctx, q, accountID, tradingMode)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("list positions by account: %w", err)

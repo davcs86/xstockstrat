@@ -44,7 +44,9 @@ type PortfolioService struct {
 
 	// Watchlists — held behind interfaces so cap/ownership rules can be unit-tested with stubs.
 	watchlists WatchlistStore
-	wlCfg      watchlistConfig
+	wlCfg      intConfig
+	// quoteCfg holds the live portfolio.marketdata.quote_timeout_ms read; nil (test literals) means the 4000ms default.
+	quoteCfg intConfig
 
 	mu   sync.RWMutex
 	subs map[string]chan *portfoliov1.PortfolioSnapshot
@@ -147,6 +149,10 @@ func NewPortfolioService(cfg *config.Config, cfgWatcher *config.Watcher) (*Portf
 		wlCfg:      cfgWatcher,
 		subs:       make(map[string]chan *portfoliov1.PortfolioSnapshot),
 		stops:      newStopStore(),
+	}
+	// Assigned only when non-nil: a nil pointer in an interface field defeats the nil-seam default.
+	if cfgWatcher != nil {
+		svc.quoteCfg = cfgWatcher
 	}
 	return svc, nil
 }
@@ -381,37 +387,65 @@ func closedPositionPayload(userID, symbol, acctID, mode string, sealed, feesSeal
 	return payload
 }
 
-// latestQuotesFor fetches the latest quote for each symbol in ONE batched marketdata call and
-// re-keys the response by symbol (feature 178). On RPC error it logs a warn and returns an empty
-// map, so every symbol is then treated as missing — the same neutral outcome as N failing singular
-// calls (never a fabricated price). A symbol the batch omits is simply absent from the map.
-func (s *PortfolioService) latestQuotesFor(ctx context.Context, symbols []string) map[string]*marketdatav1.Quote {
+// latestQuotesFor fetches the latest quotes in ONE batched marketdata call bounded by quoteTimeout; ok=false only
+// when the call failed or timed out (every symbol then reads as missing — never a fabricated price).
+func (s *PortfolioService) latestQuotesFor(ctx context.Context, symbols []string) (map[string]*marketdatav1.Quote, bool) {
 	out := make(map[string]*marketdatav1.Quote, len(symbols))
 	if len(symbols) == 0 {
-		return out
+		return out, true
 	}
-	resp, err := s.marketdata.GetLatestQuotes(ctx, &marketdatav1.GetLatestQuotesRequest{Symbols: symbols})
+	qctx, cancel := context.WithTimeout(ctx, s.quoteTimeout())
+	defer cancel()
+	resp, err := s.marketdata.GetLatestQuotes(qctx, &marketdatav1.GetLatestQuotesRequest{Symbols: symbols})
 	if err != nil {
 		slog.Warn("batch latest quotes unavailable", "count", len(symbols), "error", err)
-		return out
+		return out, false
 	}
 	for _, q := range resp.Quotes {
 		out[q.Symbol] = q
+	}
+	return out, true
+}
+
+// quoteTimeout is the deadline on the marketdata quote fetch (portfolio.marketdata.quote_timeout_ms, default 4000).
+func (s *PortfolioService) quoteTimeout() time.Duration {
+	const defaultMs = 4000
+	if s.quoteCfg == nil {
+		return defaultMs * time.Millisecond
+	}
+	if ms := s.quoteCfg.GetInt("portfolio.marketdata.quote_timeout_ms", defaultMs); ms > 0 {
+		return time.Duration(ms) * time.Millisecond
+	}
+	return defaultMs * time.Millisecond
+}
+
+// unvaluedSymbols returns the deduped symbols the broker did not value (CurrentPrice <= 0), first-seen order.
+// Batching only these keeps broker-authoritative mark-to-market (@AC-12/157 short MtM, @AC-7 parity).
+func unvaluedSymbols(positions []*portfoliov1.Position) []string {
+	seen := make(map[string]struct{}, len(positions))
+	var out []string
+	for _, p := range positions {
+		if p.CurrentPrice > 0 {
+			continue
+		}
+		if _, ok := seen[p.Symbol]; ok {
+			continue
+		}
+		seen[p.Symbol] = struct{}{}
+		out = append(out, p.Symbol)
 	}
 	return out
 }
 
 func (s *PortfolioService) enrichPositions(ctx context.Context, positions []*portfoliov1.Position) {
-	// Batch only the un-broker-valued positions — a full-set batch would overwrite broker-
-	// authoritative mark-to-market (breaks @AC-12/157 short MtM, @AC-7 ListPositions↔ListPortfolios).
-	var symbols []string
-	for _, p := range positions {
-		if p.CurrentPrice > 0 {
-			continue
-		}
-		symbols = append(symbols, p.Symbol)
-	}
-	quotes := s.latestQuotesFor(ctx, symbols)
+	quotes, _ := s.latestQuotesFor(ctx, unvaluedSymbols(positions))
+	applyQuotes(positions, quotes)
+	s.enrichRisk(ctx, positions)
+}
+
+// applyQuotes mid-quote-values the positions the broker did not value; a missing or unusable quote leaves the
+// position unenriched (never a fabricated price).
+func applyQuotes(positions []*portfoliov1.Position, quotes map[string]*marketdatav1.Quote) {
 	for _, p := range positions {
 		if p.CurrentPrice > 0 {
 			continue
@@ -427,7 +461,6 @@ func (s *PortfolioService) enrichPositions(ctx context.Context, positions []*por
 		}
 		enrichPosition(p, quote.AskPrice, quote.BidPrice)
 	}
-	s.enrichRisk(ctx, positions)
 }
 
 // enrichRisk fills risk/factor fields from the learned resting stop + operator factor map, computed
@@ -599,6 +632,10 @@ func (s *PortfolioService) ListPositions(ctx context.Context, req *portfoliov1.L
 	}, nil
 }
 
+// ErrQuotesUnavailable marks a read that cannot value a position without a quote; the handler maps it to
+// Unavailable so callers can tell a transient dependency gap from a server bug.
+var ErrQuotesUnavailable = errors.New("quotes unavailable")
+
 // GetPnL computes realized + unrealized P&L over a time range. Realized uses the shared pnl package
 // (the ONE realized-P&L implementation) — no second formula lives here (the feature-056 dual-source fix).
 func (s *PortfolioService) GetPnL(ctx context.Context, req *portfoliov1.GetPnLRequest) (*portfoliov1.PnLResponse, error) {
@@ -607,17 +644,18 @@ func (s *PortfolioService) GetPnL(ctx context.Context, req *portfoliov1.GetPnLRe
 	if err != nil {
 		return nil, err
 	}
-	var unrealized float64
-	pnlSymbols := make([]string, 0, len(positions))
-	for _, p := range positions {
-		pnlSymbols = append(pnlSymbols, p.Symbol)
+	// Unrealized is never a silent 0: every position must carry a broker price or a usable quote.
+	pnlQuotes, ok := s.latestQuotesFor(ctx, unvaluedSymbols(positions))
+	if !ok {
+		return nil, fmt.Errorf("GetPnL: %w", ErrQuotesUnavailable)
 	}
-	pnlQuotes := s.latestQuotesFor(ctx, pnlSymbols)
+	applyQuotes(positions, pnlQuotes)
+	var unrealized float64
 	for _, p := range positions {
-		if quote, ok := pnlQuotes[p.Symbol]; ok {
-			price := (quote.AskPrice + quote.BidPrice) / 2
-			unrealized += (price - p.AvgEntryPrice) * p.Qty
+		if p.CurrentPrice <= 0 {
+			return nil, fmt.Errorf("GetPnL: no usable quote for %s: %w", p.Symbol, ErrQuotesUnavailable)
 		}
+		unrealized += (p.CurrentPrice - p.AvgEntryPrice) * p.Qty
 	}
 
 	// Collect fills in application order and fold once through the shared pnl package. Batching the fold
@@ -796,12 +834,19 @@ func (s *PortfolioService) broadcastSnapshot(ctx context.Context, userID string,
 	for _, p := range positions {
 		snapSymbols = append(snapSymbols, p.Symbol)
 	}
-	snapQuotes := s.latestQuotesFor(ctx, snapSymbols)
+	snapQuotes, ok := s.latestQuotesFor(ctx, snapSymbols)
+	priced := 0
 	for _, p := range positions {
 		if quote, ok := snapQuotes[p.Symbol]; ok {
 			price := (quote.AskPrice + quote.BidPrice) / 2
 			equity += price * p.Qty
+			priced++
 		}
+	}
+	// No priced position means equity is a fabricated 0 — skip rather than persist/emit it.
+	if !ok || (len(positions) > 0 && priced == 0) {
+		slog.Warn("portfolio snapshot skipped: quotes unavailable", "user_id", userID, "positions", len(positions), "quotes_ok", ok)
+		return
 	}
 	snap := &portfoliov1.PortfolioSnapshot{
 		PortfolioId:   userID,
@@ -857,7 +902,7 @@ func (s *PortfolioService) checkRiskLimits(ctx context.Context, userID string, m
 	for _, p := range positions {
 		riskSymbols = append(riskSymbols, p.Symbol)
 	}
-	riskQuotes := s.latestQuotesFor(ctx, riskSymbols)
+	riskQuotes, _ := s.latestQuotesFor(ctx, riskSymbols)
 	for _, p := range positions {
 		if quote, ok := riskQuotes[p.Symbol]; ok {
 			price := (quote.AskPrice + quote.BidPrice) / 2
@@ -1180,16 +1225,9 @@ func (s *PortfolioService) processBalanceSync(ctx context.Context, event *ledger
 	}
 }
 
-// buildAccountPortfolio assembles a Portfolio for one account. The broker is authoritative for cash,
-// buying power, and equity; when bal is nil, equity falls back to the summed position market value.
-func (s *PortfolioService) buildAccountPortfolio(ctx context.Context, accountID string, bal *repository.AccountBalance) (*portfoliov1.Portfolio, error) {
-	positions, err := s.repo.ListPositionsByAccount(ctx, accountID, "")
-	if err != nil {
-		return nil, err
-	}
-	// enrichPositions keeps broker-valued positions and mid-quote-enriches only those the broker didn't value.
-	s.enrichPositions(ctx, positions)
-
+// buildAccountPortfolio assembles a Portfolio for one account from already-enriched positions. The broker is
+// authoritative for cash, buying power, and equity; when bal is nil, equity falls back to summed market value.
+func (s *PortfolioService) buildAccountPortfolio(ctx context.Context, accountID string, positions []*portfoliov1.Position, bal *repository.AccountBalance) *portfoliov1.Portfolio {
 	var positionsValue, unrealizedPnl float64
 	for _, p := range positions {
 		positionsValue += p.MarketValue
@@ -1218,7 +1256,7 @@ func (s *PortfolioService) buildAccountPortfolio(ctx context.Context, accountID 
 	if v, ok, err := s.repo.GetOfflineRealized(ctx, accountID); err == nil && ok {
 		portfolio.RealizedPnl = proto.Float64(v)
 	}
-	return portfolio, nil
+	return portfolio
 }
 
 // ListPortfolios returns a Portfolio per broker account: a specific account_id returns just that one;
@@ -1245,12 +1283,13 @@ func (s *PortfolioService) ListPortfolios(ctx context.Context, req *portfoliov1.
 		if err != nil {
 			slog.Warn("ListPortfolios: GetAccountBalance failed", "account_id", accountID, "error", err)
 		}
-		portfolio, err := s.buildAccountPortfolio(ctx, accountID, bal)
+		positions, err := s.repo.ListPositionsByAccount(ctx, accountID, "")
 		if err != nil {
 			return nil, err
 		}
+		s.enrichPositions(ctx, positions)
 		return &portfoliov1.ListPortfoliosResponse{
-			Portfolios: []*portfoliov1.Portfolio{portfolio},
+			Portfolios: []*portfoliov1.Portfolio{s.buildAccountPortfolio(ctx, accountID, positions, bal)},
 		}, nil
 	}
 
@@ -1258,16 +1297,21 @@ func (s *PortfolioService) ListPortfolios(ctx context.Context, req *portfoliov1.
 	if err != nil {
 		return nil, err
 	}
-	portfolios := make([]*portfoliov1.Portfolio, 0, len(accounts))
+	type loaded struct {
+		id        string
+		bal       *repository.AccountBalance
+		positions []*portfoliov1.Position
+	}
+	var accts []loaded
 	balanceIDs := make([]string, 0, len(accounts))
 	for _, acct := range accounts {
-		bal := acct.Balance
-		portfolio, err := s.buildAccountPortfolio(ctx, acct.AccountID, &bal)
+		positions, err := s.repo.ListPositionsByAccount(ctx, acct.AccountID, "")
 		if err != nil {
 			slog.Warn("ListPortfolios: build account portfolio failed", "account_id", acct.AccountID, "error", err)
 			continue
 		}
-		portfolios = append(portfolios, portfolio)
+		bal := acct.Balance
+		accts = append(accts, loaded{id: acct.AccountID, bal: &bal, positions: positions})
 		balanceIDs = append(balanceIDs, acct.AccountID)
 	}
 
@@ -1277,13 +1321,26 @@ func (s *PortfolioService) ListPortfolios(ctx context.Context, req *portfoliov1.
 		slog.Warn("ListPortfolios: list offline account ids failed", "user_id", userID, "error", err)
 	} else {
 		for _, id := range offlineIDsToAppend(balanceIDs, offlineIDs) {
-			portfolio, err := s.buildAccountPortfolio(ctx, id, nil)
+			positions, err := s.repo.ListPositionsByAccount(ctx, id, "")
 			if err != nil {
 				slog.Warn("ListPortfolios: build offline account portfolio failed", "account_id", id, "error", err)
 				continue
 			}
-			portfolios = append(portfolios, portfolio)
+			accts = append(accts, loaded{id: id, positions: positions})
 		}
+	}
+
+	// One quote batch (one deadline, one price per symbol) across every account — C-10(b) parity.
+	var all []*portfoliov1.Position
+	for _, a := range accts {
+		all = append(all, a.positions...)
+	}
+	quotes, _ := s.latestQuotesFor(ctx, unvaluedSymbols(all))
+	portfolios := make([]*portfoliov1.Portfolio, 0, len(accts))
+	for _, a := range accts {
+		applyQuotes(a.positions, quotes)
+		s.enrichRisk(ctx, a.positions)
+		portfolios = append(portfolios, s.buildAccountPortfolio(ctx, a.id, a.positions, a.bal))
 	}
 	return &portfoliov1.ListPortfoliosResponse{Portfolios: portfolios}, nil
 }
@@ -1371,8 +1428,8 @@ type WatchlistStore interface {
 	ListAllSymbols(ctx context.Context) ([]string, error)
 }
 
-// watchlistConfig is the config slice the watchlist caps read (injectable in tests).
-type watchlistConfig interface {
+// intConfig is the int config slice the watchlist caps and the quote deadline read (injectable in tests).
+type intConfig interface {
 	GetInt(key string, defaultVal int64) int64
 }
 

@@ -21,10 +21,17 @@ type stubMarketData struct {
 	getLatestQuoteCalls  int
 	quotes               []*marketdatav1.Quote
 	quotesErr            error
+	block                bool       // feature 229: wait for ctx.Done (a marketdata that never answers)
+	requested            [][]string // feature 229: symbols per call
 }
 
-func (s *stubMarketData) GetLatestQuotes(_ context.Context, _ *marketdatav1.GetLatestQuotesRequest, _ ...grpc.CallOption) (*marketdatav1.GetLatestQuotesResponse, error) {
+func (s *stubMarketData) GetLatestQuotes(ctx context.Context, req *marketdatav1.GetLatestQuotesRequest, _ ...grpc.CallOption) (*marketdatav1.GetLatestQuotesResponse, error) {
 	s.getLatestQuotesCalls++
+	s.requested = append(s.requested, append([]string(nil), req.GetSymbols()...))
+	if s.block {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
 	if s.quotesErr != nil {
 		return nil, s.quotesErr
 	}
