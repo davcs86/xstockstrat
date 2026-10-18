@@ -296,3 +296,21 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   recorded in the spec.
 - Deviations: D-2 (false-green negative test replaced by a const check), D-3 (lint toolchain rebuild).
 - G1/G2 (operator, staging) are still pending. They block the merge of PR #1251, not execution.
+
+### Steps 5–6 — marketdata quote path (window, cache-age guard, detached budget, partial result) + tests [done]
+- **Resolvers:** `resolvePositiveInt`, with `resolveBatchPriceBudget` rewritten onto it (`TestResolveBatchPriceBudget`
+  unchanged and green) plus `resolveQuoteLookback`/`BatchBudget`/`RetentionDays`. `quoteSince()` computes the cutoff.
+- **Seam:** `quoteStore` (batch read + insert), assigned with `prevClose` when `repo != nil`.
+- **Cache guard:** `cacheQuote` skips nil, no-time, and out-of-window (incl. year-0001) quotes. It is used at all 5
+  insert sites; `grep -c s.repo.InsertQuote` → 0.
+- **GetLatestQuotes:** the closure is detached (`WithoutCancel` + 2500ms budget), and a cold failure now gives a
+  WARN "GetLatestQuotes: cold fetch failed" plus the warm subset. The 178 WAIVED block was removed.
+- **RED** (skeleton: unbounded since, no guard, caller ctx, all-or-nothing): AC-2, AC-3, AC-7 (both rows), the
+  cacheQuote guard and AC-8 (both rows) failed. AC-8 "no answer" sat on the 5s hang guard, reproducing the defect in
+  a unit test.
+- **GREEN:** all pass under `-race`; the existing 178/227 tests are unchanged and green.
+- **Module:** go build and vet OK; CI-filtered coverage total 71.0% (≥ 40); golangci-lint 0 issues, after fixing
+  ST1008 in the new test helper's return order.
+- **Files:** `internal/service/marketdata_service.go`, `internal/service/marketdata_service_test.go`.
+- **Deviations:** none. The guard is proven at 4 of the 5 sites only by the grep plus the shared helper, as the spec
+  records.

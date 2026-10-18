@@ -340,7 +340,7 @@ to it. The full-module coverage command runs in Step 6, once the service callers
 
 ### Step 5 — service: marketdata quote path — window, cache-age guard, detached budget, partial result
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service.go` — modify
@@ -444,7 +444,7 @@ shared helper. `s.cfg *Watcher` is concrete, which blocks a direct poller test (
 
 ### Step 6 — test: marketdata quote path (AC-2, AC-3, AC-7, AC-8, resolvers)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go` — modify

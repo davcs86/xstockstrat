@@ -96,15 +96,23 @@ type MarketDataService struct {
 	// rolling window for Finnhub — see maybeAlertQuota/fundamentalsQuota).
 	quotaAlertMu     sync.Mutex
 	quotaAlertBucket string
-	// budgetCfg / prevClose are BatchGetLatestPrice's seams; nil means the 2500ms default budget and
-	// no previous-close lookup (test literals leave both unset).
+	// budgetCfg is the live int-config seam (price/quote budgets, quote lookback, retention days); prevClose is
+	// BatchGetLatestPrice's previous-close seam. nil means code defaults / no lookup (test literals leave both unset).
 	budgetCfg intGetter
 	prevClose prevCloseReader
+	// quoteStore is the quote cache read/write seam; nil (test literals) treats every symbol as cold and caches nothing.
+	quoteStore quoteStore
 }
 
-// intGetter is the slice of *config.Watcher BatchGetLatestPrice reads its budget from.
+// intGetter is the slice of *config.Watcher the per-call tunables (budgets, lookback, retention) are read from.
 type intGetter interface {
 	GetInt(key string, defaultVal int64) int64
+}
+
+// quoteStore is the repo surface GetLatestQuotes reads warm quotes from and caches quotes into.
+type quoteStore interface {
+	GetLatestQuotesBatch(ctx context.Context, symbols []string, since time.Time) (map[string]*marketdatav1.Quote, error)
+	InsertQuote(ctx context.Context, q *marketdatav1.Quote) error
 }
 
 // prevCloseReader is the repo surface BatchGetLatestPrice reads previous daily closes from.
@@ -202,6 +210,7 @@ func NewMarketDataService(
 	}
 	if repo != nil {
 		svc.prevClose = repo
+		svc.quoteStore = repo
 	}
 	return svc, nil
 }
@@ -506,7 +515,8 @@ func (s *MarketDataService) GetLatestQuote(ctx context.Context, symbol string) (
 	// Track the symbol so the warm poller keeps its quote fresh in the DB.
 	s.markWarm(symbol)
 
-	q, err := s.repo.GetLatestQuote(ctx, symbol)
+	since := s.quoteSince()
+	q, err := s.repo.GetLatestQuote(ctx, symbol, since)
 	if err == nil {
 		return q, nil
 	}
@@ -520,17 +530,14 @@ func (s *MarketDataService) GetLatestQuote(ctx context.Context, symbol string) (
 	if liveErr != nil {
 		return nil, liveErr
 	}
-	if err := s.repo.InsertQuote(ctx, live); err != nil {
+	if err := s.cacheQuote(ctx, live, since); err != nil {
 		slog.Warn("GetLatestQuote: cache insert failed", "symbol", symbol, "error", err)
 	}
 	return live, nil
 }
 
-// GetLatestQuotes returns the latest quote for each requested symbol, cache-first and batched
-// (feature 178). Warm (cached) symbols are read in one DISTINCT ON query; the cold remainder is
-// fetched from the live source in one multi-symbol call, coalesced under singleflight on the sorted
-// cold set so concurrent callers share a single upstream fetch (@AC-3), then cached. A symbol with
-// no quote from either path is omitted from the result (null-not-zero), never a zero-price Quote.
+// GetLatestQuotes returns the latest quote per symbol: warm hits from one windowed cache read, the cold rest from one
+// coalesced, budgeted live fetch. A symbol neither path yields (incl. a failed cold fetch) is omitted, never zero-filled.
 func (s *MarketDataService) GetLatestQuotes(ctx context.Context, symbols []string) ([]*marketdatav1.Quote, error) {
 	if len(symbols) == 0 {
 		return nil, nil
@@ -540,10 +547,11 @@ func (s *MarketDataService) GetLatestQuotes(ctx context.Context, symbols []strin
 	}
 	// Warm (cached) hits in one query. s.repo is nil only on the no-DB unit-test path (feature 178
 	// @AC-3 single-flight coverage) — there every symbol is treated as cold.
+	since := s.quoteSince()
 	warm := map[string]*marketdatav1.Quote{}
-	if s.repo != nil {
+	if s.quoteStore != nil {
 		var err error
-		warm, err = s.repo.GetLatestQuotesBatch(ctx, symbols)
+		warm, err = s.quoteStore.GetLatestQuotesBatch(ctx, symbols, since)
 		if err != nil {
 			return nil, err
 		}
@@ -559,6 +567,9 @@ func (s *MarketDataService) GetLatestQuotes(ctx context.Context, symbols []strin
 		sort.Strings(sortedCold)
 		key := strings.Join(sortedCold, ",")
 		v, fetchErr, _ := s.quoteSingleflight.Do(key, func() (interface{}, error) {
+			// Detached: coalesced waiters must not die with the first caller's cancel or deadline.
+			fctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), resolveQuoteBatchBudget(s.budgetCfg))
+			defer cancel()
 			src, e := s.registry.Get("")
 			if e != nil {
 				return nil, e
@@ -567,32 +578,26 @@ func (s *MarketDataService) GetLatestQuotes(ctx context.Context, symbols []strin
 			if !ok {
 				return map[string]*marketdatav1.Quote{}, nil
 			}
-			coldMap, e := ms.GetLatestQuotesMulti(ctx, sortedCold)
+			coldMap, e := ms.GetLatestQuotesMulti(fctx, sortedCold)
 			if e != nil {
 				return nil, e
 			}
 			// Cache each cold quote independently (ON CONFLICT upsert, not one wrapping txn) —
 			// matches the singular path (:424) and the warm poller (:520). s.repo is nil only on
 			// the no-DB unit-test path.
-			if s.repo != nil {
-				for _, q := range coldMap {
-					if q == nil {
-						continue
-					}
-					if insErr := s.repo.InsertQuote(ctx, q); insErr != nil {
-						slog.Warn("GetLatestQuotes: cache insert failed", "symbol", q.Symbol, "error", insErr)
-					}
+			for _, q := range coldMap {
+				if q == nil {
+					continue
+				}
+				if insErr := s.cacheQuote(fctx, q, since); insErr != nil {
+					slog.Warn("GetLatestQuotes: cache insert failed", "symbol", q.Symbol, "error", insErr)
 				}
 			}
 			return coldMap, nil
 		})
 		if fetchErr != nil {
-			// WAIVED partial-upstream-failure divergence (design § Open Risks): a cold-batch
-			// transport error drops the whole cold set rather than per-symbol; return the error
-			// instead of substituting zero values.
-			return nil, fetchErr
-		}
-		if coldMap, ok := v.(map[string]*marketdatav1.Quote); ok {
+			slog.Warn("GetLatestQuotes: cold fetch failed", "cold", len(cold), "error", fetchErr)
+		} else if coldMap, ok := v.(map[string]*marketdatav1.Quote); ok {
 			for _, q := range coldMap {
 				if q != nil {
 					warm[q.Symbol] = q
@@ -873,17 +878,49 @@ func (s *MarketDataService) BatchGetLatestPrice(ctx context.Context, req *market
 	return &marketdatav1.BatchGetLatestPriceResponse{Results: results}, nil
 }
 
+// resolvePositiveInt reads key live from cfg; nil cfg or a value <= 0 yields def.
+func resolvePositiveInt(cfg intGetter, key string, def int64) int64 {
+	if cfg == nil {
+		return def
+	}
+	if v := cfg.GetInt(key, def); v > 0 {
+		return v
+	}
+	return def
+}
+
 // resolveBatchPriceBudget returns the detached BatchGetLatestPrice fetch budget.
 func resolveBatchPriceBudget(cfg intGetter) time.Duration {
-	const defaultMs = 2500
-	if cfg == nil {
-		return defaultMs * time.Millisecond
+	return time.Duration(resolvePositiveInt(cfg, "marketdata.price.batch_timeout_ms", 2500)) * time.Millisecond
+}
+
+// resolveQuoteLookback is the recency window of the cached quote reads (feature 229).
+func resolveQuoteLookback(cfg intGetter) time.Duration {
+	return time.Duration(resolvePositiveInt(cfg, "marketdata.quotes.latest_lookback_hours", 168)) * time.Hour
+}
+
+// resolveQuoteBatchBudget is the detached GetLatestQuotes cold-fetch budget (feature 229).
+func resolveQuoteBatchBudget(cfg intGetter) time.Duration {
+	return time.Duration(resolvePositiveInt(cfg, "marketdata.quotes.batch_timeout_ms", 2500)) * time.Millisecond
+}
+
+// resolveQuoteRetentionDays is the quote retention period in days (feature 229); never clamped here.
+func resolveQuoteRetentionDays(cfg intGetter) int64 {
+	return resolvePositiveInt(cfg, "marketdata.retention.quotes_days", 90)
+}
+
+// quoteSince is the oldest quote time the cached reads may serve.
+func (s *MarketDataService) quoteSince() time.Time {
+	return time.Now().Add(-resolveQuoteLookback(s.budgetCfg))
+}
+
+// cacheQuote upserts q unless it is older than since (or has no/zero time): such a row can never be served by the
+// windowed reads and would only recreate chunks retention already dropped. The caller still returns q.
+func (s *MarketDataService) cacheQuote(ctx context.Context, q *marketdatav1.Quote, since time.Time) error {
+	if s.quoteStore == nil || q == nil || q.Time == nil || q.Time.AsTime().Before(since) {
+		return nil
 	}
-	ms := cfg.GetInt("marketdata.price.batch_timeout_ms", defaultMs)
-	if ms <= 0 {
-		ms = defaultMs
-	}
-	return time.Duration(ms) * time.Millisecond
+	return s.quoteStore.InsertQuote(ctx, q)
 }
 
 // markWarm adds a symbol to the warm set polled by StartWarmQuotePoller.
@@ -940,6 +977,7 @@ func (s *MarketDataService) StartWarmQuotePoller(ctx context.Context) {
 			if len(symbols) == 0 {
 				continue
 			}
+			since := s.quoteSince()
 			src, err := s.registry.Get("")
 			if err != nil {
 				continue
@@ -948,7 +986,7 @@ func (s *MarketDataService) StartWarmQuotePoller(ctx context.Context) {
 			if ms, ok := src.(source.MultiSymbolSource); ok {
 				if quotes, err := ms.GetLatestQuotesMulti(ctx, symbols); err == nil {
 					for _, q := range quotes {
-						if err := s.repo.InsertQuote(ctx, q); err != nil {
+						if err := s.cacheQuote(ctx, q, since); err != nil {
 							slog.Warn("warm poller: cache insert failed", "symbol", q.Symbol, "error", err)
 						}
 					}
@@ -969,7 +1007,7 @@ func (s *MarketDataService) StartWarmQuotePoller(ctx context.Context) {
 					continue
 				}
 				fetched++
-				if err := s.repo.InsertQuote(ctx, q); err != nil {
+				if err := s.cacheQuote(ctx, q, since); err != nil {
 					slog.Warn("warm poller: cache insert failed", "symbol", sym, "error", err)
 				}
 			}
@@ -1336,7 +1374,7 @@ func (s *MarketDataService) StartQuoteStream(ctx context.Context, symbols []stri
 	}
 	go func() {
 		for q := range feed {
-			_ = s.repo.InsertQuote(ctx, q)
+			_ = s.cacheQuote(ctx, q, s.quoteSince())
 			s.mu.RLock()
 			for _, ch := range s.quoteSubs {
 				select {
