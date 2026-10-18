@@ -147,3 +147,33 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Recorded follow-ups (out of scope):
   - share one quote fetch for checkRiskLimits + broadcastSnapshot per fill;
   - portfolio's other no-deadline calls (ledger QueryEvents :632, notify EmitAlert :892).
+
+## Session 2026-10-18 (/sdd-design — round 3 synthesis + operator decisions)
+
+- Round 3 adversary: NEEDS WORK, 0 Floor breaches, 0 hard C-16 regressions.
+- Verified sound:
+  - the cache guard covers every quotes write (5 sites);
+  - GetPnL goes through `toGRPCError` (`portfolio_handler.go:276-279`), and no other RPC's code changes;
+  - no existing GetPnL behaviour test breaks;
+  - retention progress and the year-0001 sparse-chunk case are handled, with drain about 55h after the first pass;
+  - the per-message config read cost is negligible.
+- **Operator decisions (2026-10-18):**
+  - **Partial results on cold failure: return the warm map and omit the failed cold symbols**, never zero-priced. The
+    closure error is logged as WARN "GetLatestQuotes: cold fetch failed".
+    - This reverses feature 178's recorded all-or-nothing waiver (`marketdata_service.go:589-594`) and aligns with
+      the 227 omit-never-fail pattern.
+    - GetPnL is unaffected: an omitted needed symbol still gives Unavailable.
+  - **GetPnL values broker-synced positions from broker `current_price`** (no quote fetch), through the shared
+    `applyQuotes` valuation rule. This is the @AC-6 valuation-source change, and it was acknowledged.
+  - Run a fourth debate round.
+- Accepted fixes:
+  - @AC-5 traces to a service-level `errors.Is(err, ErrQuotesUnavailable)` test, a `classifyGetPnLError` table, and a
+    `toGRPCError` Unavailable case test. A direct handler-plus-stub test is impossible: `PortfolioHandler.svc` is
+    concrete.
+  - GetPnL reuses `unvaluedSymbols` → `latestQuotesFor` → `applyQuotes`. Any position left with `CurrentPrice <= 0`
+    gives `ErrQuotesUnavailable` with its symbol, and unrealized is `Σ (CurrentPrice − avg) · qty`.
+- Open Risks to record in design.md:
+  - GetPnL and ListPortfolios compute unrealized differently. This predates 229; parity is a follow-up.
+  - One un-quotable offline holding makes the user's whole GetPnL permanently Unavailable. This is accepted per "never a
+    silent 0".
+  - Stale held symbols go live to Alpaca on every read, bounded by singleflight and the shared rate limiter.
