@@ -216,3 +216,23 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
     - one shared quote fetch per fill.
   - [ ] Monitor live Alpaca load from stale held symbols after deploy.
 - Status: spec-ready → design-approved.
+
+## Session 2026-10-18 — sdd-spec
+
+- Generated implementation-spec.md with 11 steps. Status → implementation-ready.
+- Evidence baseline: `origin/main-dev` @ `a8a3cfd` (the development branch's merge-base; it adds only docs commits).
+  Feature 227 is merged at this baseline.
+- Key codebase findings:
+  - pgxmock v4.9.0 does not strip `pgx.QueryExecModeExec`; it is matched as positional argument 0
+    (`pgxmock/v4@v4.9.0/expectations.go:139-172`). Repo tests expect it explicitly. This settles design.md's F-04 note.
+  - `drop_chunks(older_than => …)` takes the polymorphic `"any"`, so the bound parameter needs `$1::timestamptz`.
+  - Portfolio repo reads still on `r.pool`: `InsertSnapshot` :205, `GetAccountBalance` :444,
+    `ListAccountBalancesByUser` :504, `ListOfflineAccountIdsByUser` :525, `ListPositionsByAccount` :559/:566.
+  - `fakeLedger` (`watchlist_service_test.go:254`) lacks `QueryEvents`, which GetPnL's ledger pass needs (AC-6), so
+    Step 10 adds it. `positionRow`'s column list (`portfolio_fill_errors_test.go:43-50`) is extracted for reuse.
+- Spec-level choices not spelled out in design.md (flagged for `/sdd-review impl-spec`):
+  - a separate one-method `quoteRetention` seam for the retention step (prevClose idiom);
+  - `runQuoteRetentionStep(ctx, now)` takes an injected clock.
+- C-14: no UI or agent step. The UI hooks (`usePortfolio.ts:13,25,50`) and the agent `get_positions`
+  (`client.py:2354-2369`) reach the fixed RPCs. The dev smoke test is an operator check at the integration PR.
+- Operator merge gates mapped to steps: G1 + G2 before Step 3 merges; G3 + G4 before Step 7 merges.

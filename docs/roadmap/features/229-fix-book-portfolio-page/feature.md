@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled) — defect report `docs/reports/2026-10-16-portfolio-page-stuck-loading-defect.md`
 **Severity**: SEV-2
 **Created**: 2026-10-16
-**Last Updated**: 2026-10-16
+**Last Updated**: 2026-10-18
 
 ---
 
@@ -16,6 +16,7 @@
 | 2026-10-16 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-16-portfolio-page-stuck-loading-defect.md` |
 | 2026-10-16 | `draft` → `spec-ready` | /sdd-review | Product spec approved on round 2 (7 warnings carried to design) |
 | 2026-10-18 | `spec-ready` → `design-approved` | /sdd-design | Design debated (4 rounds, quick extended by operator) and approved; recon.md + design.md written |
+| 2026-10-18 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 11 steps |
 
 ---
 
@@ -25,8 +26,22 @@
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
 - [Recon](recon.md) — codebase dossier, existing business rules (C-16)
 - [Design](design.md) — approved design (4 rounds), rejected alternatives, open risks, staging gates G1–G4
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-book-portfolio-page`_
+- [Implementation Spec](implementation-spec.md) — 11 steps (config bounds, marketdata repo/quote path/retention, portfolio deadline + GetPnL, docs)
 - [Context Log](context.md) — session history, decisions, deviations
+
+---
+
+## Reviewers
+
+Snapshot from `docs/runbooks/reviewer-registry.md` at `/sdd-spec` time (2026-10-18). Stable unless `/sdd-spec` re-runs.
+
+| Reviewer | Focus | Steps |
+|---|---|---|
+| xstockstrat-config owner | Config key naming (`<service>.<category>.<key>`), environment/global-per-user scoping, secret encryption + redaction, WatchConfig stream stability | 1, 2 |
+| xstockstrat-marketdata owner | OHLCV ingestion integrity, TimescaleDB hypertable partitioning, Alpaca feed idempotency | 3, 4, 5, 6, 7, 8 |
+| xstockstrat-portfolio owner | P&L calculation accuracy, position snapshot consistency, concurrent write safety | 9, 10 |
+
+Not a registry reviewer, but a merge gate: DBA acknowledgement **G4** (automated, irreversible quote deletion) is recorded in `context.md` before Step 7 merges.
 
 ---
 
@@ -38,4 +53,4 @@ marketdata's 2-connection pool.
 
 ## Next Action
 
-`/sdd-spec fix-book-portfolio-page` — generate implementation spec from the approved design
+`/sdd-review fix-book-portfolio-page impl-spec` — validate implementation spec, then `/sdd-execute fix-book-portfolio-page`
