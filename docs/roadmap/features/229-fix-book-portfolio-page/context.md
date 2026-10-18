@@ -262,3 +262,23 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - [ ] Step 11: also fix the marketdata CLAUDE.md header blurb (line 3: "dead retention keys").
 - Staging gates G1–G4 are still pending (operator-run). They block merging the reader step (G1/G2) and the retention
   step (G3/G4), not execution.
+
+## Session 2026-10-18 — sdd-execute (sequential)
+
+- The operator confirmed sequential mode (one commit per step on `ccr-9f55a8ac-dtw4iv`; PR #1251 is the integration
+  PR). No re-spec was needed: `origin/main-dev` is still at `a8a3cfd`.
+- Tooling (steps 1–11): go 1.27 ✓, golangci-lint ⬇ v2.14.0 (repo pin; v2.5.0 was present), node 22 ✓, pnpm 9.15.9 ✓,
+  config `pnpm install` ⬇.
+
+### Step 1 — Write-bound the four quote keys [done]
+- Four `SCALAR_BOUNDS_REGISTRY` entries were added after the 227 block, with a 2-line constraint comment.
+- Files modified: `services/xstockstrat-config/src/grpc/configServiceImpl.ts`
+- TDD: RED was taken from Step 2's 8 new reject cases (8 failing), then GREEN after the registry edit.
+- Deviations: none.
+
+### Step 2 — Bounds tests for the four keys [done]
+- Added 8 `TIMEOUT_KEY_FORMS` rows (stripped and full-dotted per key) and updated the comment.
+- RED: `# fail 8` (rejects … just outside [min,max]). GREEN: `# pass 168 / # fail 0`; c8 lines 86.68% (≥ 40).
+- Lint: 0 errors. The 39 warnings in the two files are pre-existing (identical count on a stash baseline).
+- Files modified: `services/xstockstrat-config/src/__tests__/setConfigScalarBounds.test.ts`
+- Deviations: Steps 1–2 are committed together as one commit (a paired TDD unit). See Deviation Log D-1.

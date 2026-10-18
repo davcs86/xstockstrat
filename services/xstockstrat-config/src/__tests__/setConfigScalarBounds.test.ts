@@ -254,8 +254,8 @@ describe('signal_decay_half_life_hours write-time scalar bounds', () => {
     assert.ok(insertQuery());
   });
 
-  // feature 227: the read-path timeout keys must be bounded under both key-column forms (G8), so the
-  // nested budget (analysis B+3.05+E < 30s, agent floor 30s) survives any operator write.
+  // features 227/229: read-path timeout + quote-window/retention keys must be bounded under both key-column
+  // forms (G8), so the nested budgets (227) and the 31d retention > 720h lookback floor (229) survive any write.
   const TIMEOUT_KEY_FORMS: { ns: string; key: string; field: 'intVal' | 'floatVal'; min: number; max: number }[] = [
     { ns: 'analysis', key: 'opportunity.read_db_budget_ms', field: 'intVal', min: 1000, max: 20000 },
     { ns: 'analysis', key: 'analysis.opportunity.read_db_budget_ms', field: 'intVal', min: 1000, max: 20000 },
@@ -265,6 +265,14 @@ describe('signal_decay_half_life_hours write-time scalar bounds', () => {
     { ns: 'marketdata', key: 'marketdata.price.batch_timeout_ms', field: 'intVal', min: 500, max: 2500 },
     { ns: 'agent', key: 'opportunities.read_timeout_seconds', field: 'floatVal', min: 30, max: 55 },
     { ns: 'agent', key: 'agent.opportunities.read_timeout_seconds', field: 'floatVal', min: 30, max: 55 },
+    { ns: 'portfolio', key: 'marketdata.quote_timeout_ms', field: 'intVal', min: 500, max: 8000 },
+    { ns: 'portfolio', key: 'portfolio.marketdata.quote_timeout_ms', field: 'intVal', min: 500, max: 8000 },
+    { ns: 'marketdata', key: 'quotes.latest_lookback_hours', field: 'intVal', min: 24, max: 720 },
+    { ns: 'marketdata', key: 'marketdata.quotes.latest_lookback_hours', field: 'intVal', min: 24, max: 720 },
+    { ns: 'marketdata', key: 'quotes.batch_timeout_ms', field: 'intVal', min: 500, max: 5000 },
+    { ns: 'marketdata', key: 'marketdata.quotes.batch_timeout_ms', field: 'intVal', min: 500, max: 5000 },
+    { ns: 'marketdata', key: 'retention.quotes_days', field: 'intVal', min: 31, max: 3650 },
+    { ns: 'marketdata', key: 'marketdata.retention.quotes_days', field: 'intVal', min: 31, max: 3650 },
   ];
 
   for (const { ns, key, field, min, max } of TIMEOUT_KEY_FORMS) {

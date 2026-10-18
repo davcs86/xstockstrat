@@ -1,6 +1,6 @@
 # Implementation Spec: fix-book-portfolio-page
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-10-18
 **Feature**: `docs/roadmap/features/229-fix-book-portfolio-page/feature.md`
 **Total Steps**: 11
@@ -111,7 +111,7 @@ pgxmock never runs Postgres, so chunk exclusion and `drop_chunks` semantics are 
 
 ### Step 1 — service: Write-bound the four quote keys in `SCALAR_BOUNDS_REGISTRY`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/grpc/configServiceImpl.ts` — modify
@@ -155,7 +155,7 @@ cd services/xstockstrat-config && pnpm run lint
 
 ### Step 2 — test: Bounds tests for the four keys, both key-column forms
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/setConfigScalarBounds.test.ts` — modify
@@ -950,3 +950,10 @@ grep -c "DISTINCT ON (symbol)" services/xstockstrat-marketdata/CLAUDE.md   # exp
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### D-1 — Steps 1 and 2 committed together
+- **Step**: 1, 2
+- **Expected**: one commit per step.
+- **Actual**: one commit for the paired service + test steps. The RED of Step 2 has to precede the Step 1 edit, and
+  committing Step 2 alone would leave a red test on the branch.
+- **Disposition**: accepted. Paired TDD steps are committed as a unit for the rest of this run (3+4, 5+6, 7+8, 9+10).

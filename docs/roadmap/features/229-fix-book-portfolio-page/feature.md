@@ -17,6 +17,7 @@
 | 2026-10-16 | `draft` → `spec-ready` | /sdd-review | Product spec approved on round 2 (7 warnings carried to design) |
 | 2026-10-18 | `spec-ready` → `design-approved` | /sdd-design | Design debated (4 rounds, quick extended by operator) and approved; recon.md + design.md written |
 | 2026-10-18 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 11 steps |
+| 2026-10-18 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential mode; Steps 1–2 done |
 
 ---
 
@@ -53,4 +54,4 @@ marketdata's 2-connection pool.
 
 ## Next Action
 
-`/sdd-review fix-book-portfolio-page impl-spec` — validate implementation spec, then `/sdd-execute fix-book-portfolio-page`
+`/sdd-execute fix-book-portfolio-page sequential` — continue from Step 3
