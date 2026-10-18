@@ -3245,3 +3245,85 @@ func TestResolveQuoteTunables(t *testing.T) {
 		}
 	}
 }
+
+// fakeRetention records the cutoff and the per-run deadline the retention step passes to the repo.
+// StartQuoteRetention's 1h ticker is not driven here; its ctx.Done exit mirrors the reviewed StartWarmQuotePoller shape.
+type fakeRetention struct {
+	calls       int
+	cutoff      time.Time
+	hadDeadline bool
+	deadline    time.Time
+	n           int64
+	err         error
+}
+
+func (f *fakeRetention) DropQuoteChunksBefore(ctx context.Context, cutoff time.Time) (int64, error) {
+	f.calls++
+	f.cutoff = cutoff
+	f.deadline, f.hadDeadline = ctx.Deadline()
+	return f.n, f.err
+}
+
+// @AC-4: the retention step drops up to now - quotes_days, never inside the read window, and never panics.
+func TestRunQuoteRetentionStep(t *testing.T) {
+	now := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
+
+	t.Run("AC-4 cutoff", func(t *testing.T) {
+		fr := &fakeRetention{n: 1}
+		svc := &MarketDataService{retention: fr, budgetCfg: fakeIntGetter{
+			"marketdata.retention.quotes_days": 90, "marketdata.quotes.latest_lookback_hours": 168}}
+		start := time.Now()
+		svc.runQuoteRetentionStep(context.Background(), now)
+		if fr.calls != 1 || !fr.cutoff.Equal(now.Add(-90*24*time.Hour)) {
+			t.Fatalf("want 1 call with cutoff now-90d, got calls=%d cutoff=%v", fr.calls, fr.cutoff)
+		}
+		if !fr.hadDeadline || fr.deadline.Sub(start) > quoteRetentionBackstop+time.Second {
+			t.Fatalf("drop must run under the 30s backstop, deadline=%v had=%v", fr.deadline, fr.hadDeadline)
+		}
+	})
+
+	for _, tc := range []struct {
+		days, lookback int64
+		wantCalls      int
+	}{{7, 168, 0}, {7, 200, 0}, {8, 168, 1}} {
+		t.Run(fmt.Sprintf("guard days=%d lookback=%d", tc.days, tc.lookback), func(t *testing.T) {
+			rec := installWarnRecorder(t)
+			fr := &fakeRetention{}
+			svc := &MarketDataService{retention: fr, budgetCfg: fakeIntGetter{
+				"marketdata.retention.quotes_days": tc.days, "marketdata.quotes.latest_lookback_hours": tc.lookback}}
+			svc.runQuoteRetentionStep(context.Background(), now)
+			if fr.calls != tc.wantCalls {
+				t.Fatalf("calls = %d, want %d", fr.calls, tc.wantCalls)
+			}
+			skipped := rec.find("quote retention skipped: retention within lookback window") != nil
+			if skipped != (tc.wantCalls == 0) {
+				t.Fatalf("skip WARN logged=%v, want %v", skipped, tc.wantCalls == 0)
+			}
+		})
+	}
+
+	t.Run("defaults", func(t *testing.T) {
+		fr := &fakeRetention{}
+		(&MarketDataService{retention: fr}).runQuoteRetentionStep(context.Background(), now)
+		if fr.calls != 1 || !fr.cutoff.Equal(now.Add(-90*24*time.Hour)) {
+			t.Fatalf("nil config must default to 90d, got calls=%d cutoff=%v", fr.calls, fr.cutoff)
+		}
+	})
+
+	t.Run("error is logged, not raised", func(t *testing.T) {
+		rec := installWarnRecorder(t)
+		fr := &fakeRetention{err: errors.New("permission denied for hypertable")}
+		(&MarketDataService{retention: fr}).runQuoteRetentionStep(context.Background(), now)
+		if rec.find("quote retention failed") == nil {
+			t.Fatal("a drop error must be logged as WARN")
+		}
+	})
+
+	t.Run("nil seam", func(t *testing.T) {
+		rec := installWarnRecorder(t)
+		(&MarketDataService{}).runQuoteRetentionStep(context.Background(), now)
+		if len(rec.recs) != 0 {
+			t.Fatalf("nil retention seam must be a silent no-op, got %+v", rec.recs)
+		}
+	})
+}

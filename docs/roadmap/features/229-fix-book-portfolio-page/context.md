@@ -314,3 +314,17 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - **Files:** `internal/service/marketdata_service.go`, `internal/service/marketdata_service_test.go`.
 - **Deviations:** none. The guard is proven at 4 of the 5 sites only by the grep plus the shared helper, as the spec
   records.
+
+### Steps 7–8 — marketdata quote retention loop + wiring, plus retention-step tests [done]
+- Added the `quoteRetention` seam (assigned when repo != nil) and the `quoteRetentionInterval` (1h) and
+  `quoteRetentionBackstop` (30s) consts.
+- `StartQuoteRetention`: an hourly ticker with the first pass after 1h; it exits on ctx.Done.
+- `runQuoteRetentionStep(ctx, now)`:
+  - skips with a WARN when `days*24 <= lookback_hours` (no clamp);
+  - drops `now − days` under the 30s backstop;
+  - on error, logs WARN "quote retention failed" and never panics.
+- Wired as `go svc.StartQuoteRetention(ctx)` in `cmd/server/main.go`, after StartEtfFlagFiller.
+- RED: with the empty-step skeleton, 6 of 7 sub-tests failed (nil-seam correctly passed). GREEN: 7/7 under `-race`.
+  Module: build/vet OK, coverage 71.0%, lint 0 issues.
+- Files: `internal/service/marketdata_service.go`, `cmd/server/main.go`, `internal/service/marketdata_service_test.go`.
+- Deviations: none. G3/G4 (operator) still pending; they gate the merge, not execution.

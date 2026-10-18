@@ -102,6 +102,8 @@ type MarketDataService struct {
 	prevClose prevCloseReader
 	// quoteStore is the quote cache read/write seam; nil (test literals) treats every symbol as cold and caches nothing.
 	quoteStore quoteStore
+	// retention drops expired quote chunks; nil (test literals) makes StartQuoteRetention a no-op.
+	retention quoteRetention
 }
 
 // intGetter is the slice of *config.Watcher the per-call tunables (budgets, lookback, retention) are read from.
@@ -113,6 +115,11 @@ type intGetter interface {
 type quoteStore interface {
 	GetLatestQuotesBatch(ctx context.Context, symbols []string, since time.Time) (map[string]*marketdatav1.Quote, error)
 	InsertQuote(ctx context.Context, q *marketdatav1.Quote) error
+}
+
+// quoteRetention is the repo surface the quote retention loop drops expired chunks through.
+type quoteRetention interface {
+	DropQuoteChunksBefore(ctx context.Context, cutoff time.Time) (int64, error)
 }
 
 // prevCloseReader is the repo surface BatchGetLatestPrice reads previous daily closes from.
@@ -211,6 +218,7 @@ func NewMarketDataService(
 	if repo != nil {
 		svc.prevClose = repo
 		svc.quoteStore = repo
+		svc.retention = repo
 	}
 	return svc, nil
 }
@@ -907,6 +915,53 @@ func resolveQuoteBatchBudget(cfg intGetter) time.Duration {
 // resolveQuoteRetentionDays is the quote retention period in days (feature 229); never clamped here.
 func resolveQuoteRetentionDays(cfg intGetter) int64 {
 	return resolvePositiveInt(cfg, "marketdata.retention.quotes_days", 90)
+}
+
+// Fixed retention invariants (feature 229, operator-approved): hourly runs match the 1h chunk width; the backstop
+// bounds how long one run can hold a pooled connection.
+const (
+	quoteRetentionInterval = time.Hour
+	quoteRetentionBackstop = 30 * time.Second
+)
+
+// StartQuoteRetention prunes marketdata.quotes chunks older than marketdata.retention.quotes_days, one bounded step
+// per hourly tick. The first pass waits a full interval so a rolling deploy's old pod has drained.
+func (s *MarketDataService) StartQuoteRetention(ctx context.Context) {
+	ticker := time.NewTicker(quoteRetentionInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			s.runQuoteRetentionStep(ctx, time.Now())
+		}
+	}
+}
+
+// runQuoteRetentionStep drops one bounded step of quote chunks older than now - quotes_days. A failure is a WARN only.
+func (s *MarketDataService) runQuoteRetentionStep(ctx context.Context, now time.Time) {
+	days := resolveQuoteRetentionDays(s.budgetCfg)
+	lookbackH := int64(resolveQuoteLookback(s.budgetCfg) / time.Hour)
+	// Direct DB writes bypass the SetConfig bounds: never drop rows the windowed reads may still serve.
+	if days*24 <= lookbackH {
+		slog.Warn("quote retention skipped: retention within lookback window",
+			"retention_days", days, "lookback_hours", lookbackH)
+		return
+	}
+	if s.retention == nil {
+		return
+	}
+	dctx, cancel := context.WithTimeout(ctx, quoteRetentionBackstop)
+	defer cancel()
+	n, err := s.retention.DropQuoteChunksBefore(dctx, now.Add(-time.Duration(days)*24*time.Hour))
+	if err != nil {
+		slog.Warn("quote retention failed", "retention_days", days, "error", err)
+		return
+	}
+	if n > 0 {
+		slog.Info("quote retention dropped chunks", "chunks", n, "retention_days", days)
+	}
 }
 
 // quoteSince is the oldest quote time the cached reads may serve.

@@ -526,7 +526,7 @@ threshold applies to it. The `-race` behavioural tests are the gate, and `./...`
 
 ### Step 7 — service: marketdata quote retention loop and wiring
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service.go` — modify
@@ -588,7 +588,7 @@ grep -n "StartQuoteRetention" services/xstockstrat-marketdata/cmd/server/main.go
 
 ### Step 8 — test: marketdata retention step (AC-4)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go` — modify
