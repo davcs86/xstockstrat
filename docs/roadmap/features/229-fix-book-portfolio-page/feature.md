@@ -18,6 +18,7 @@
 | 2026-10-18 | `spec-ready` → `design-approved` | /sdd-design | Design debated (4 rounds, quick extended by operator) and approved; recon.md + design.md written |
 | 2026-10-18 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 11 steps |
 | 2026-10-18 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential mode; Steps 1–2 done |
+| 2026-10-18 | `in-progress` → `code-completed` | /sdd-execute | All 11 steps done; staging gates G1–G4 pending (operator) before merge |
 
 ---
 
@@ -54,4 +55,4 @@ marketdata's 2-connection pool.
 
 ## Next Action
 
-`/sdd-execute fix-book-portfolio-page sequential` — continue from Step 3
+Operator: run staging gates G1–G4 and record them in context.md, then merge integration PR #1251; dev smoke-test Book → Portfolio + MCP `get_positions`; flip the defect sidecar to `resolved`.

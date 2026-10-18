@@ -1,6 +1,6 @@
 # Implementation Spec: fix-book-portfolio-page
 
-**Status**: `in-progress`
+**Status**: `complete`
 **Created**: 2026-10-18
 **Feature**: `docs/roadmap/features/229-fix-book-portfolio-page/feature.md`
 **Total Steps**: 11
@@ -873,7 +873,7 @@ Confirm total ≥ 40%. The new logic is in excluded packages (`internal/service/
 
 ### Step 11 — docs: key rows, invariants, doc-drift fixes, findings, and the context-forge teardown
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs` (+ service `CLAUDE.md` / `docs/` files)
 **Files**:
 - `services/xstockstrat-marketdata/CLAUDE.md` — modify
@@ -984,3 +984,12 @@ _Populated by /sdd-execute as implementation proceeds._
   - the `toGRPCError(CodeUnavailable) → codes.Unavailable` case.
 - **Disposition**: accepted, per the spec's own fallback ("record that in context.md; the three-part proof above
   stands").
+
+### D-5 — Step 11: also edited the PORTFOLIO-1 invariant; teardown done by hand
+- **Step**: 11
+- **Actual**: the manual context reconciliation found one grounded drift outside the step's explicit list.
+  PORTFOLIO-1 (`services/xstockstrat-portfolio/docs/context-constitution.md:20`) placed the broker-valued skip in
+  `enrichPositions`; it now lives in the shared `unvaluedSymbols`/`applyQuotes`. The file was already in the step's
+  **Files**, so this is not an F-08 breach. The `/context-forge:context-constitution refresh` skill is not available in
+  this session (only `context-scrubber` is), so the teardown was done by hand per the root CLAUDE.md rule.
+- **Disposition**: accepted.

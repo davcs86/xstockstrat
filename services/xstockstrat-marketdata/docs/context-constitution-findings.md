@@ -18,7 +18,7 @@ governance. Repo-wide defects (Go 1.22 doc-lie) live in the root findings log.
 
 | What | Why it looks dead | Evidence |
 |---|---|---|
-| `marketdata.retention.quotes_days` / `retention.ohlcv_years` config keys | read by no code — no longer a doc-lie (2026-10-14: `CLAUDE.md` labels them "Documented, not yet implemented"); still dead | `CLAUDE.md` config table (grep zero in code) |
+| `marketdata.retention.ohlcv_years` config key | read by no code — `CLAUDE.md` labels it "Documented, not yet implemented"; still dead. (`retention.quotes_days` was **RESOLVED** by feature 229 — read by `resolveQuoteRetentionDays` / `StartQuoteRetention`.) | `CLAUDE.md` config table (grep zero in code) |
 | `AlpacaAsset` struct "kept for backward compatibility" | zero references in-repo | `internal/alpaca/client.go:449-457` |
 | `Watcher.tradingMode` field + `resolveTradingMode` function | write-only — `tradingMode` assigned (`config.go:85`) but never read; `resolveTradingMode` exists only to feed it (still unit-tested at `config_test.go:299`); `stream()` no longer sends `trading_mode` (feature 147) | `internal/config/config.go:59,103` — action: remove, or document as test-only vestige |
 

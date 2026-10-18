@@ -367,3 +367,42 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - [x] Step 9 C-18 step size: accepted as cohesive.
   - [ ] C-10(b) snapshot/risk mid-quote parity + GetPnL↔ListPortfolios unrealized parity: a named follow-up goes into
         Step 11.
+
+### Step 11 — docs: key rows, invariants, doc-drift fixes, findings, teardown [done]
+- **marketdata CLAUDE.md**:
+  - 2 new key rows (`quotes.latest_lookback_hours`, `quotes.batch_timeout_ms`);
+  - the `retention.quotes_days` row marked implemented, with its skip guard;
+  - the `GetLatestQuotes` paragraph (the DISTINCT ON wording is gone; LATERAL window, detached budget, cache guard,
+    partial result reversing the 178 waiver);
+  - a new "Quote retention (feature 229)" section with the fixed invariants, the 1h-chunk assumption and G1–G4;
+  - the header blurb now says "dead `ohlcv_years`".
+- **portfolio CLAUDE.md**: the `quote_timeout_ms` row, plus a paragraph on the bounded quote reads, the ListPortfolios
+  union batch, GetPnL UNAVAILABLE (including the accepted one-unquotable-holding consequence) and the snapshot skip.
+- **config-governance.md**: a feature 229 entry above 227, with the 4-key table, the seeding waiver and the timeout
+  relationship.
+- **Findings and constitution:**
+  - marketdata findings: `quotes_days` RESOLVED; `ohlcv_years` still dead;
+  - portfolio findings: PORTFOLIO-1 parity break partially resolved (GetPnL fixed; snapshot and risk still open);
+  - portfolio constitution: the gotcha line now covers two paths, not three, and PORTFOLIO-1 points at the shared
+    helpers (D-5).
+- **Teardown:** the `/context-forge:context-constitution refresh` skill is **unavailable** in this session (only
+  `context-forge:context-scrubber` is listed). Manual reconciliation:
+  - grepped every touched context file, the config docs, the root constitution/findings, the root CLAUDE.md and
+    README.md for `DISTINCT ON`, `GetLatestQuotes`, `latestQuotesFor`, `quotes_days`, `WAIVED`, `all-or-nothing`,
+    `enrichPositions` and `GetPnL`;
+  - one grounded drift was found (PORTFOLIO-1 mechanism location) and fixed;
+  - no other stale claims (marketdata constitution has no quote-path invariants; the config CONFIG-7 `DISTINCT ON`
+    is unrelated);
+  - `scrubberExtraTargets` (README.md, ui-ux-governance.md) are untouched by this feature.
+- **Review warning resolved:**
+  - [x] Step 11 marketdata header blurb fixed.
+  - [x] C-10(b) follow-up named: a "portfolio snapshot/risk broker-valuation parity" follow-up, covering
+        broadcastSnapshot and checkRiskLimits still on mid-quotes plus GetPnL↔ListPortfolios unrealized formula
+        parity. It is recorded in the portfolio findings and in design.md Open Risks.
+- Status: in-progress → code-completed.
+
+## Session 2026-10-18 — sdd-execute (summary)
+**Steps this session**: 1–11 (sequential; paired TDD steps committed as units, D-1)
+**Progress**: 11 done / 11 total
+**Stopped at**: all complete. Integration PR #1251 (already open) carries every step commit.
+**Next**: operator staging gates G1–G4 → merge #1251 → dev smoke test → defect sidecar `resolved`.

@@ -106,6 +106,23 @@ without this convention, both look identical (fails.md 2026-07-01).
 
 Append-only log — one entry per feature that registered new keys. Newest first. Don't edit past entries; superseding a key's behavior gets a new entry, not a rewrite of the old one.
 
+### feature 229 — fix-book-portfolio-page (xstockstrat-portfolio / xstockstrat-marketdata / xstockstrat-config)
+
+Bounds the Book → Portfolio read path: a portfolio deadline on the marketdata quote fetch, a recency window on the
+cached quote reads, a detached cold-fetch budget, and an app-level quote retention loop. Each key is a full-dotted
+`SCALAR_BOUNDS_REGISTRY` entry in `xstockstrat-config` (`configServiceImpl.ts`), enforced at `SetConfig` even on
+`create_key=true`. **Seeding waiver (227 D2 precedent):** all four are **unseeded** (consumed-with-default); `≤ 0`
+reads as the default and the keys must be stored as `int`. `marketdata.retention.quotes_days` was previously
+documented-only (no reader) and is now implemented. Timeout relationship: `portfolio.marketdata.quote_timeout_ms`
+(4000) > `marketdata.quotes.batch_timeout_ms` (2500) + the warm read.
+
+| Key | Type | Default | Bounds | Notes |
+|---|---|---|---|---|
+| `portfolio.marketdata.quote_timeout_ms` | int | `4000` | `[500,8000]` | Deadline on portfolio → marketdata `GetLatestQuotes`; on expiry positions stay unenriched. |
+| `marketdata.quotes.latest_lookback_hours` | int | `168` | `[24,720]` | Recency window of both cached quote readers and the cache-age guard. |
+| `marketdata.quotes.batch_timeout_ms` | int | `2500` | `[500,5000]` | Budget of the detached `GetLatestQuotes` cold-fetch closure; failure returns the warm subset. |
+| `marketdata.retention.quotes_days` | int | `90` | `[31,3650]` | Quote retention via `StartQuoteRetention`; the 31d floor stays above the 720h lookback ceiling. |
+
 ### feature 227 — fix-opportunities-read-hangs (xstockstrat-analysis / xstockstrat-marketdata / xstockstrat-agent / xstockstrat-config)
 
 Adds **4** non-secret timeout keys that nest the `ListOpportunities` read path's deadlines (each hop's
