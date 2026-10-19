@@ -151,3 +151,42 @@
   - R11: `fmtSignedUsd` places the minus sign wrong (renders `$-50.00`).
 - C-16 flag: `@AC-4 @feature-178` ("same missing outcome under batching") may be an unsigned CHANGE
   under FR-5.
+
+## Session 2026-10-19 — sdd-design round 1 (gate)
+
+- Round 1 result: NEEDS WORK. No Floor breach; 2 C-16 blockers, 9 major and 7 minor objections. The
+  core architecture held: trading pushes absolute data on the existing sync payload, and portfolio
+  computes values at read time through one valuation step shared by every read path.
+- Operator decisions (explicit, 2026-10-19):
+  - **Frozen-window confirms keep feature 163 behaviour.** A confirm whose fill falls at or before the
+    snapshot's `as_of` is accepted and ignored (`@AC-3 @feature-163` PRESERVED). Lifetime carry is
+    fixed when the snapshot is taken; later edits to those orders do not change it. The proposed
+    `FAILED_PRECONDITION` was dropped.
+  - **C-16 sign-off for feature 178:** `@AC-4` and the third clause of `@AC-1`
+    (`services/xstockstrat-portfolio/acceptance/quote-fanout-batching.feature`) change for **offline
+    positions only**:
+    - a missing quote gets the last close;
+    - an off-session read uses the session close;
+    - a pre-session quote is ignored.
+    Batching (one `GetLatestQuotes` call) and broker positions are unchanged. Rewrite both rules at
+    promotion.
+  - **Marketdata is changed (scope change):** `BatchGetBars` degrades per symbol. A failed cold live
+    fetch returns the warm subset instead of failing the RPC (feature 229 precedent). Spec § Affected
+    Services amended.
+  - **New config key** `portfolio.marketdata.last_close_lookback_days` (default 21, bounded) instead of
+    a constant. Spec § Config Key Changes and FR-5 amended. The spec's earlier "no new config keys" is
+    superseded.
+- Engineering fixes carried into round 2:
+  - Trading emits fills from a calendar-free ~10-day window; portfolio alone owns the calendar.
+  - The calendar package lives in portfolio, not `packages/proto`.
+  - The previous session's date is derived from the bar data.
+  - A live read excludes today's still-forming bar.
+  - The same-session window gets an upper bound.
+  - A snapshot header table holds the carry (the empty-statement case), and `as_of` changes on
+    non-latest snapshots are rejected.
+  - `DISTINCT ON` runs before the status filter.
+  - The agent prints zero-valued fields (`always_print_fields_with_no_presence`).
+  - `GetPortfolio` gains an ownership gate (a pre-existing realized-P&L leak; record it in findings).
+  - The bar date mapping gets a golden test against real `ohlcv` rows.
+  - The proposer must say whether a portfolio-side close memo is still needed now that marketdata is
+    fixed.

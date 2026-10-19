@@ -92,14 +92,18 @@ so a failure can neither double-count nor lose realized. Lifetime is otherwise c
 and fee edits inside the current snapshot window.
 
 FR-5. **Mark fallback.** When an offline position has no live quote — the symbol is absent from the
-quote batch **or the quote batch fails / exceeds its deadline** — it is marked at the latest daily-bar
-close with `mark_source = MARK_SOURCE_LAST_CLOSE` and `mark_as_of` = that bar's session date. A missing
-quote never yields a 0 mark. If neither a quote nor any daily bar exists, the position is
+quote batch **or the quote batch fails / exceeds its deadline** — it is marked at the latest completed
+session's daily-bar close found within the last `portfolio.marketdata.last_close_lookback_days` days,
+with `mark_source = MARK_SOURCE_LAST_CLOSE` and `mark_as_of` = that bar's session date. A missing
+quote never yields a 0 mark. If neither a quote nor a daily bar inside the lookback exists, the position is
 `MARK_SOURCE_NONE` (unpriced): it is still listed (with its quantity) but excluded from the account's
 Equity, unrealized, Day P&L and Total P&L sums, and the read succeeds. Broker-synced marks are
 unchanged (`MARK_SOURCE_BROKER`). This **changes** the durable rule
 `services/xstockstrat-portfolio/acceptance/fix-book-portfolio-page.feature` @AC-1 (feature 229) for
-offline positions — operator sign-off recorded in `context.md` (C-16); its deadline bound still holds.
+offline positions, and changes `services/xstockstrat-portfolio/acceptance/quote-fanout-batching.feature`
+@AC-4 / @AC-1 (feature 178) for offline positions (a missing quote → last close; off-session → session
+close; a pre-session quote is ignored). Operator sign-offs recorded in `context.md` (C-16); 229's deadline
+bound and 178's single batched `GetLatestQuotes` call still hold, and broker positions are unchanged.
 
 FR-6. **Surfaces.** The FR-1..FR-5 figures are rendered on:
   - `/trader` PortfolioPanel **single-account** view: Day P&L/%, Total P&L/%, Realized since snapshot
@@ -171,8 +175,10 @@ test across these RPCs.
   for FR-1.
 - `xstockstrat-portfolio` — store lifetime/carried realized + fees; compute Day P&L, Total P&L, return %,
   short %; last-close mark fallback with provenance; read-path parity (FR-9).
-- `xstockstrat-marketdata` — consumed, not changed: `BatchGetLatestPrice` (`LatestPrice.prev_close`) and
-  `BatchGetBars` (latest / previous daily close). Exact read path chosen in recon.
+- `xstockstrat-marketdata` — `BatchGetBars` serves the latest / previous daily close to portfolio, and
+  is **changed** to degrade per symbol: a failed cold live fetch returns the stored (warm) subset instead
+  of failing the whole RPC, following feature 229's `GetLatestQuotes` precedent (operator scope decision,
+  2026-10-19).
 - `xstockstrat-ui` — render the new figures on the four `/trader` surfaces.
 - `xstockstrat-agent` — `confirm_order` `fees` arg; response mapping for new fields.
 
@@ -211,8 +217,11 @@ consumers. Exact shape decided in design.
 
 ## Config Key Changes
 
-- [x] No new config keys. The session calendar (America/New_York, regular hours) is a domain constant,
-  not tunable config.
+- New key `portfolio.marketdata.last_close_lookback_days` (int, default 21, bounded; global) — how far
+  back the FR-5 last-close fallback searches for a daily bar (operator decision, 2026-10-19; follows the
+  neighbouring `marketdata.quotes.latest_lookback_hours`). Registered per
+  `docs/patterns/config-governance.md`; default declared in `services/xstockstrat-portfolio/CLAUDE.md`.
+- The session calendar (America/New_York, regular hours) is a domain constant, not tunable config.
 
 ## Database Changes
 
