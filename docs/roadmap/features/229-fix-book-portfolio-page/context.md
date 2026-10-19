@@ -412,3 +412,14 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - `services/xstockstrat-marketdata/acceptance/fix-book-portfolio-page.feature`: @AC-2, @AC-3, @AC-4, @AC-7, @AC-8.
 - Every promoted scenario is tagged `@feature-229`. The launched 178/182 suites are not edited: their EXTENDs are
   covered by these scenarios plus the config bounds tests.
+
+### 2026-10-19 — Staging smoke after merge (PR #1251 → `a914f69`)
+- Staging runs `a914f69` for portfolio and marketdata; all components are HEALTHY.
+- Operator confirmed Book → Portfolio loads. MCP `get_positions` returned 48 positions with live quotes; the per-account
+  reads and `query_bars` all answered.
+- Portfolio logged `batch latest quotes unavailable` (DeadlineExceeded) in two bursts: 05:36 (cold cache after the
+  deploy) and 17:36–17:38 UTC (single-symbol batches included). Both degraded as designed, unenriched and never hung.
+  The marketdata-side cause was not captured: the 100-line log tail was all EDGAR noise.
+- G1–G4 were **not** recorded before the merge and are still owed (operator). G3 decides whether the hourly retention
+  loop can drop chunks; a failure shows as WARN `quote retention failed`.
+- Defect sidecar flipped `triaged` → `resolved`.
