@@ -71,3 +71,24 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Operator steer (round 1 gate): compute the mark in marketdata. Additive `optional double mark_price` on `Quote`
   (field 8), filled by GetLatestQuotes as two-sided mid, else the latest stored 1d close (one bounded query);
   livePrice reuses it in-process. This accepts a proto change (C-09, 2-owner approval).
+- Round 2 proposer: marketdata computes `Quote.mark_price` (field 8) on read from the two-sided mid, else the
+  latest stored 1d close within 168h. One bounded LATERAL query, 500ms sub-budget, cloned quotes. Portfolio
+  `markOf`; snapshot and risk use `unvaluedSymbols` with broker price first; any unpriced position → skip.
+  EDGAR purge required; run it after the deploy.
+- Round 2 adversary: NEEDS WORK. Floor: conditional F-07 on the 500ms constant. Resolutions agreed:
+  - portfolio `markOf` = mark_price if present, else two-sided mid, else unpriced. Deploy order and rollback
+    become safe: `deploy.yml:204` updates both components in one `doctl apps update`, so ordering cannot be
+    enforced.
+  - run the close lookup concurrently with the cold singleflight, so the bound is W + max(B, C); add a budget test.
+  - prefetch quotes and marks once per `GetFundamentalsMulti` edgar call (the serial loop is
+    `marketdata_service.go:1506-1512`); run the purge during market hours.
+  - scope the proto comment to "populated only by GetLatestQuotes".
+  - use a separate named staleness bound, not `latest_lookback_hours`.
+  - change posValues `=` → `+=` (`portfolio_service.go:910`).
+  - document the weekend first-query gap and `adjustment=all` as accepted risks.
+  - recon correction: `packages/proto/pnl/pnl.go` is an existing hand-written shared carve-out.
+- Operator decisions (round 2 gate):
+  - (1) new config key `marketdata.quotes.mark_timeout_ms` (default 500, SetConfig-bounded), which resolves F-07;
+  - (2) concentration: skip + WARN naming the unpriced symbols, accepting that a permanently unpriceable holding
+    disables the check for that user;
+  - (3) run round 3.
