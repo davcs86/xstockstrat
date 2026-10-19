@@ -742,7 +742,7 @@ New logic is in an excluded package (`service/`), so no coverage threshold appli
 
 ### Step 11 — service: portfolio `markOf`, broker-first snapshot and concentration, skip on any unpriced
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_service.go` — modify

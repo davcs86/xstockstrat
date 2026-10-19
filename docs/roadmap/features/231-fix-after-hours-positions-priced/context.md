@@ -354,3 +354,27 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   branch.
 - Files modified: `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go`
 - Deviations: none
+
+### Step 11 — service: portfolio `markOf`, broker-first snapshot and concentration, skip on any unpriced [done]
+- `markOf(q)`: `mark_price` (> 0), else the two-sided mid (deploy-skew fallback), else unpriced.
+- `applyQuotes` uses `markOf` (the WARN gains a `mark` attr). `enrichPosition(p, price)` drops ask/bid, so one rule
+  now covers every read path.
+- `broadcastSnapshot` and `checkRiskLimits` now run `latestQuotesFor(unvaluedSymbols)` → `applyQuotes` →
+  `unpriced := unvaluedSymbols`:
+  - snapshot: skipped, with WARN `portfolio snapshot skipped: positions unpriced` + `unpriced`, when `!ok` or
+    anything is unpriced; equity = Σ `MarketValue`, broker-first;
+  - concentration: skipped, with WARN `concentration check skipped: positions unpriced`;
+  - `posValues[sym] +=` fixes the cross-account overwrite;
+  - drawdown is unchanged.
+- Instruction 3a: `TestEnrichPosition` follows the new signature (ask/bid fields dropped; prices unchanged).
+- RED (Step 12 behavioural tests first, `TestMarkOf` held back because `markOf` was undefined): all 8 FAIL.
+  - AC-1, AC-13: 8.025.
+  - AC-14 row 2: 8.025 instead of 0.
+  - AC-6: priced 2.8.
+  - AC-2: equity 80.25.
+  - AC-8: persisted a partial snapshot.
+  - AC-3: `LYFT at 50.0%` (overwrite + MSFT dropped).
+  - AC-9: ELWT/LYFT concentration alerts fired.
+- GREEN: see Step 12. Only the two-sided branch of `markOf` computes `(Ask+Bid)/2` in `portfolio_service.go`.
+- Files modified: `internal/service/portfolio_service.go`, `internal/service/portfolio_helpers_test.go`
+- Deviations: none
