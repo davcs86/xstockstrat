@@ -285,3 +285,13 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - GREEN: see Step 6.
 - Files modified: `services/xstockstrat-marketdata/internal/repository/marketdata_repo.go`
 - Deviations: none
+
+### Step 6 — test: marketdata repo SQL shape for the close read (AC-7) [done]
+- Created `internal/testdata/marks.go` (C-13 constants for the LYFT/MSFT/ELWT givens and the 168h bound).
+- Added `TestGetLatestDailyClosesBatch_BoundedLateralShape` (regex pins LATERAL/ohlcv/'1d'/`time >= $2`/`close > 0`/
+  `ORDER BY time DESC`/`LIMIT 1`, with Exec-mode args; ELWT is absent, never 0), plus `…_EmptyNoQuery` and
+  `…_NoUnboundedScan`.
+- GREEN: `go test ./... -race` all ok; total coverage 71.0% (≥ 40, asserted); `golangci-lint` 0 issues; no `16.98`
+  literal in `*_test.go` (it comes from testdata).
+- Files modified: `internal/repository/marketdata_repo_test.go`, `internal/testdata/marks.go` (new)
+- Deviations: none

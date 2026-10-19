@@ -384,7 +384,7 @@ cd services/xstockstrat-marketdata && GOWORK=off go build ./... && GOWORK=off go
 
 ### Step 6 — test: marketdata repo SQL shape for the close read (AC-7)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/repository/marketdata_repo_test.go` — modify
