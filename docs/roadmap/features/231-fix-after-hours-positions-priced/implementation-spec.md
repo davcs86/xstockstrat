@@ -196,7 +196,7 @@ cd services/xstockstrat-config && pnpm run lint
 
 ### Step 2 — test: Bounds tests for the two keys, both key-column forms
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/setConfigScalarBounds.test.ts` — modify

@@ -254,3 +254,9 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   warnings).
 - Files modified: `services/xstockstrat-config/src/grpc/configServiceImpl.ts`
 - Deviations: none
+
+### Step 2 — test: Bounds tests for the two keys, both key-column forms [done]
+- Added four `TIMEOUT_KEY_FORMS` rows (bare and dotted forms of both keys); the comment now names 231.
+- RED/GREEN: as recorded under Step 1 (4 reject cases failed before the registry rows; 176/176 after).
+- Files modified: `services/xstockstrat-config/src/__tests__/setConfigScalarBounds.test.ts`
+- Deviations: none
