@@ -342,3 +342,15 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - GREEN: see Step 10.
 - Files modified: `services/xstockstrat-marketdata/internal/service/marketdata_service.go`
 - Deviations: none (the D-2 log entry for Steps 7–8 is committed with this step)
+
+### Step 10 — test: marketdata EDGAR pricing and Multi prefetch (AC-4, AC-10) [done]
+- Added these tests:
+  - `TestGetFundamentals_AC4_EdgarPricedFromMark` (3 rows: 16.98 cached, 17.05 cached, 14.20 not cached);
+  - `TestGetFundamentalsMulti_AC10_OnePrefetchForPending` (one call `[LYFT MSFT]`, prices 16.98 / 533.65, input order);
+  - all-cache-hit skips the prefetch; the kill switch aborts before any prefetch;
+  - `TestLivePrice_ReturnsMark`.
+- GREEN: `go test ./... -race` all ok, including every 211/215 edgar test (47 edgar/fundamentals tests pass); total
+  coverage 71.0% (≥ 40, asserted); `golangci-lint` 0 issues; the only `(Ask+Bid)/2` left is `withMark`'s two-sided
+  branch.
+- Files modified: `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go`
+- Deviations: none

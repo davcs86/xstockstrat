@@ -674,7 +674,7 @@ grep -n "AskPrice + \|BidPrice) / 2" services/xstockstrat-marketdata/internal/se
 
 ### Step 10 — test: marketdata EDGAR pricing and Multi prefetch (AC-4, AC-10)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go` — modify

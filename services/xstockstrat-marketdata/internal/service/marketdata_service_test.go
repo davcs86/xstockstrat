@@ -3599,3 +3599,133 @@ func TestResolveMarkTunables(t *testing.T) {
 		}
 	}
 }
+
+// ── feature 231: EDGAR snapshot priced from the quote mark ──
+
+func markEdgarPeriod(sym string) *source.HistoricalFundamentalsPeriod {
+	return &source.HistoricalFundamentalsPeriod{
+		Symbol: sym, FiscalPeriod: "FY2026", PeriodType: "annual",
+		PeriodEnd: hfDate(2026, 6, 30), FiledDate: hfDate(2026, 8, 1),
+		PBRatio: f64p(2.0), MarketCap: f64p(7e9), Price: f64p(testdata.LyftFiledClose), Currency: "USD", Source: "edgar",
+	}
+}
+
+func markEdgarCfg(enabled bool) *fakeCfg {
+	return &fakeCfg{
+		strings: map[string]string{"marketdata.fundamentals.snapshot_source": "edgar"},
+		bools:   map[string]bool{"marketdata.edgar.enabled": enabled},
+		ints:    map[string]int64{"marketdata.edgar.cache_ttl_hours": 24},
+	}
+}
+
+// @AC-4: the EDGAR snapshot is priced from the quote mark; a missing mark falls back to the filed close uncached.
+func TestGetFundamentals_AC4_EdgarPricedFromMark(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		ask, bid  float64
+		closeAge  time.Duration
+		wantPrice float64
+		wantUps   int
+	}{
+		{"one_sided_close_24h", testdata.LyftLoneSide, 0, 24 * time.Hour, testdata.LyftDailyClose, 1},
+		{"two_sided_mid", testdata.LyftTwoSidedAsk, testdata.LyftTwoSidedBid, 24 * time.Hour, (testdata.LyftTwoSidedAsk + testdata.LyftTwoSidedBid) / 2, 1},
+		{"one_sided_close_200h", testdata.LyftLoneSide, 0, 200 * time.Hour, testdata.LyftFiledClose, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			svc, fundRepo := edgarSnapshotSvc(markEdgarPeriod(testdata.Lyft), liveQuote(testdata.Lyft, tc.ask, tc.bid), markEdgarCfg(true), nil, "finnhub")
+			svc.dailyCloses = &fakeDailyCloseReader{rows: lyftCloseAgo(tc.closeAge)}
+			f, err := svc.GetFundamentals(context.Background(), testdata.Lyft)
+			if err != nil {
+				t.Fatalf("GetFundamentals(edgar): %v", err)
+			}
+			if math.Abs(f.Price-tc.wantPrice) > 1e-9 {
+				t.Fatalf("price = %v, want %v", f.Price, tc.wantPrice)
+			}
+			if fundRepo.upserts != tc.wantUps {
+				t.Fatalf("edgar cache upserts = %d, want %d (a filed-close fallback must not be cached)", fundRepo.upserts, tc.wantUps)
+			}
+		})
+	}
+}
+
+// @AC-10: edgar GetFundamentalsMulti prices all pending symbols with exactly one GetLatestQuotes call, matching single.
+func TestGetFundamentalsMulti_AC10_OnePrefetchForPending(t *testing.T) {
+	multi := &fakeMultiSource{quotes: map[string]*marketdatav1.Quote{
+		testdata.Lyft: liveQuote(testdata.Lyft, testdata.LyftLoneSide, 0),
+		testdata.Msft: liveQuote(testdata.Msft, testdata.MsftAsk, testdata.MsftBid),
+	}}
+	reg := source.NewRegistry()
+	reg.Register("alpaca", multi)
+	svc := &MarketDataService{
+		registry: reg, warmSymbols: map[string]struct{}{}, fundRepo: newFakeFundRepo(),
+		histRepo: &fakeHistRepo{latestBy: map[string]*source.HistoricalFundamentalsPeriod{
+			testdata.Lyft: markEdgarPeriod(testdata.Lyft), testdata.Msft: markEdgarPeriod(testdata.Msft)}},
+		fundCfg: markEdgarCfg(true), fundProvider: "finnhub", notify: &fakeNotify{},
+		dailyCloses: &fakeDailyCloseReader{rows: lyftCloseAgo(24 * time.Hour)},
+	}
+	out, err := svc.GetFundamentalsMulti(context.Background(), []string{testdata.Lyft, testdata.Msft})
+	if err != nil {
+		t.Fatalf("GetFundamentalsMulti(edgar): %v", err)
+	}
+	if multi.calls != 1 || len(multi.requested) != 1 || strings.Join(multi.requested[0], ",") != "LYFT,MSFT" {
+		t.Fatalf("expected one upstream quote call for [LYFT MSFT], got calls=%d requested=%v", multi.calls, multi.requested)
+	}
+	if len(out) != 2 || out[0].Symbol != testdata.Lyft || out[1].Symbol != testdata.Msft {
+		t.Fatalf("expected input order [LYFT MSFT], got %v", out)
+	}
+	if out[0].Price != testdata.LyftDailyClose {
+		t.Fatalf("LYFT price = %v, want %v", out[0].Price, testdata.LyftDailyClose)
+	}
+	if want := (testdata.MsftAsk + testdata.MsftBid) / 2; math.Abs(out[1].Price-want) > 1e-9 {
+		t.Fatalf("MSFT price = %v, want %v", out[1].Price, want)
+	}
+}
+
+// All symbols fresh in the edgar cache → no quote prefetch at all.
+func TestGetFundamentalsMulti_EdgarAllCacheHitsSkipPrefetch(t *testing.T) {
+	multi := &fakeMultiSource{}
+	reg := source.NewRegistry()
+	reg.Register("alpaca", multi)
+	fundRepo := newFakeFundRepo()
+	for _, sym := range []string{testdata.Lyft, testdata.Msft} {
+		fundRepo.rows[sym] = &source.Fundamentals{Symbol: sym, Price: f64p(testdata.LyftDailyClose), Source: "edgar"}
+		fundRepo.fetchedAt[sym] = time.Now()
+	}
+	svc := &MarketDataService{registry: reg, warmSymbols: map[string]struct{}{}, fundRepo: fundRepo,
+		histRepo: &fakeHistRepo{}, fundCfg: markEdgarCfg(true), fundProvider: "finnhub", notify: &fakeNotify{}}
+	out, err := svc.GetFundamentalsMulti(context.Background(), []string{testdata.Lyft, testdata.Msft})
+	if err != nil || len(out) != 2 {
+		t.Fatalf("expected both cached rows, got %v, %v", out, err)
+	}
+	if multi.calls != 0 {
+		t.Fatalf("expected no quote prefetch for all-cache-hit, got %d calls", multi.calls)
+	}
+}
+
+// The kill switch still aborts the Multi batch before any quote prefetch.
+func TestGetFundamentalsMulti_EdgarKillSwitchAbortsBeforePrefetch(t *testing.T) {
+	multi := &fakeMultiSource{}
+	reg := source.NewRegistry()
+	reg.Register("alpaca", multi)
+	svc := &MarketDataService{registry: reg, warmSymbols: map[string]struct{}{}, fundRepo: newFakeFundRepo(),
+		histRepo: &fakeHistRepo{latest: markEdgarPeriod(testdata.Lyft)}, fundCfg: markEdgarCfg(false), fundProvider: "finnhub", notify: &fakeNotify{}}
+	if _, err := svc.GetFundamentalsMulti(context.Background(), []string{testdata.Lyft}); err == nil {
+		t.Fatal("expected the edgar kill switch to abort the Multi call")
+	}
+	if multi.calls != 0 {
+		t.Fatalf("expected no quote prefetch after abort, got %d calls", multi.calls)
+	}
+}
+
+// livePrice returns the quote mark, or nil when the quote has none.
+func TestLivePrice_ReturnsMark(t *testing.T) {
+	multi := &fakeMultiSource{quotes: map[string]*marketdatav1.Quote{testdata.Lyft: liveQuote(testdata.Lyft, testdata.LyftLoneSide, 0)}}
+	withClose := newMarkSvc(multi, nil, fakeIntGetter{}, &fakeDailyCloseReader{rows: lyftCloseAgo(24 * time.Hour)})
+	if p := withClose.livePrice(context.Background(), testdata.Lyft); p == nil || *p != testdata.LyftDailyClose {
+		t.Fatalf("livePrice = %v, want %v", p, testdata.LyftDailyClose)
+	}
+	noClose := newMarkSvc(multi, nil, fakeIntGetter{}, &fakeDailyCloseReader{})
+	if p := noClose.livePrice(context.Background(), testdata.Lyft); p != nil {
+		t.Fatalf("livePrice without a mark = %v, want nil", *p)
+	}
+}
