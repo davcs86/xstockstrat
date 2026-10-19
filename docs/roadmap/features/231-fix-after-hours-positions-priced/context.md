@@ -224,3 +224,19 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - [x] N6 (accepted trade-off): an aborted Multi batch no longer caches earlier symbols; the response is unchanged.
   - [x] N7: AC-14 row 1 already passes on today's code. Row 2 is the regression guard.
 - Nothing remains `[ ] unaddressed` for /sdd-execute.
+
+## Session 2026-10-19 — sdd-execute (sequential, operator: "no checkpoints")
+
+- Operator invoked sequential mode with no checkpoints. The request is taken as the §5.1b mode-entry agreement and the
+  §5.4 up-front confirmation; the §5.5b step-cap and surface checkpoints are waived. Blockers still stop the run.
+- Dev branch: harness-assigned `ccr-9f55a8ac-dtw4iv`, the branch PR #1256 targets (same convention as feature 229).
+  `feature.md` names `feature/<slug>`, but the harness permits pushes only to the ccr branch.
+- Re-spec gate (§5.3):
+  - merged `origin/main-dev` (`ee5d50e4`, docs-only: #1254 context refresh, CHANGELOG, #1257 report distillation)
+    → `5fc309ab`. No service or proto code changed;
+  - all step evidence re-validated, and Step 13 doc anchors now match `main-dev` as the spec required;
+  - no re-spec needed.
+- Duplicate defect: #1257 recorded `docs/reports/2026-10-19-portfolio-snapshot-risk-midquote-valuation-defect.md`
+  (SEV-2, open): snapshot and risk value from mid-quotes, partial batches understate equity, concentration skew.
+  It is a strict subset of Step 11 (broker-first `applyQuotes`, skip on any unpriced, `+=`). The sidecar is stamped
+  `triaged → feature:231-fix-after-hours-positions-priced` so it is not re-routed.
