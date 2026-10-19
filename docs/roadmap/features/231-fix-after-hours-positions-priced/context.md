@@ -260,3 +260,10 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - RED/GREEN: as recorded under Step 1 (4 reject cases failed before the registry rows; 176/176 after).
 - Files modified: `services/xstockstrat-config/src/__tests__/setConfigScalarBounds.test.ts`
 - Deviations: none
+
+### Step 3 — proto: additive `Quote.mark_price = 8` [done]
+- Added `optional double mark_price = 8;` to `Quote` with the 2-line design.md §1 comment.
+- `buf lint` is clean, and `buf breaking` is clean against both `HEAD` and `main-dev` (`../../.git#…,subdir=packages/proto` forms).
+- TDD: N/A (proto).
+- Files modified: `packages/proto/marketdata/v1/marketdata.proto`
+- Deviations: D-1 (host-native codegen toolchain; see Deviation Log)

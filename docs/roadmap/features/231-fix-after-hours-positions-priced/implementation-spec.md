@@ -233,7 +233,7 @@ Confirm the c8 `--lines 40` threshold passes and every new case is green. RED be
 
 ### Step 3 — proto: additive `Quote.mark_price = 8`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/marketdata/v1/marketdata.proto` — modify
@@ -1057,4 +1057,17 @@ grep -n "feature 231" docs/patterns/test-data-inventory.md docs/roadmap/features
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### D-1 — Steps 3–4: host-native codegen toolchain instead of the Docker image
+- **Spec said**: prefer the version-pinned `Dockerfile.codegen` image (`./scripts/localenv-setup.sh`).
+- **Actual**: the image build failed twice with Docker Hub `429 Too Many Requests` on `golang:1.27-trixie`. I used
+  the sanctioned host-native fallback (`docs/runbooks/codegen-toolchain-host-setup.md`):
+  - buf 1.72.0 from GitHub releases;
+  - protoc-gen-go 1.36.11, protoc-gen-go-grpc 1.6.2 and protoc-gen-connect-go 1.19.2;
+  - ts-proto 2.11.8, protoc-gen-es 2.12.0, protoc-gen-connect-es 1.7.0, grpcio-tools 1.80.0, and
+    `gen/ts` `pnpm install`.
+  The plugins were first built with go1.24.7. That reflowed the doc comments in `analysis.pb.go`, so the baseline
+  was not clean. Rebuilding them with `GOTOOLCHAIN=go1.27.0`, matching CI `proto-freshness`
+  (`setup-go 1.27`) and `FROM golang:1.27-trixie`, gave an empty baseline diff, validated before the proto edit.
+  The local `main-dev` ref was stale (`09ec8d9a`), so I moved it to `origin/main-dev` to give the `buf-gen.sh`
+  breaking guard a current baseline.
+- **Disposition**: CI-equivalent fallback (sequential mode). CI `proto-freshness` re-verifies the stubs.
