@@ -19,59 +19,105 @@ same P&L picture a broker account gives me — today's P&L, total P&L and return
 P&L both since the last snapshot and over the account's lifetime — so that offline accounts are as
 informative as broker accounts.
 
+## Definitions
+
+- **Session** — a US-equity regular trading session, keyed by its America/New_York calendar date.
+  The **reference session** for a read is the session in progress at read time, or — on a weekend,
+  holiday, pre-open or post-close read — the most recently completed session.
+- **previous_close** — the daily-bar close of the session immediately before the reference session.
+- **Signed quantity** — `q > 0` long / buy, `q < 0` short / sell. All P&L formulas below use signed
+  quantities, so one formula covers longs, shorts, sells and covers.
+- **Overnight shares** — the signed position at the start of the reference session
+  (`q_open`). **Same-session fills** — confirmed fills with `filled_at` inside the reference session.
+- **Mark** — the price an offline position is valued at: the live mid-quote, else the FR-5 fallback.
+
 ## Functional Requirements
 
-FR-1. **Day P&L (broker-style)** per offline position and per account, for the current US-equity
-trading session (America/New_York session date):
-  - shares held from before the session: `(mark − previous_close) × qty_held_overnight`;
-  - shares acquired during the session: `(mark − fill_price) × qty_acquired_today`;
-  - plus, for sells/covers whose `filled_at` falls in the session, `(fill_price − previous_close) × qty`
-    for overnight shares (or `(fill_price − same-session buy price) × qty` for shares bought that
-    session) — i.e. the session's change, **not** realized-vs-average-cost.
-  `previous_close` is the prior session's daily-bar close from `xstockstrat-marketdata`.
-  `day_pnl_pct` = `day_pnl / |previous-session market value of the position|` (0 when that base is 0).
+FR-1. **Day P&L (broker-style)** per offline position and per offline account, for the reference
+session. Same-session fills that **reduce** the position consume **overnight shares first**; only the
+excess (and any fill that increases the position) is treated as same-session shares. With
+`q_red` = signed overnight quantity reduced in-session (same sign as `q_open`), `q_ovn = q_open − q_red`
+(overnight shares still held), and for each same-session lot `j` that remains held, signed qty `q_j` at
+fill price `p_j`; same-session lots closed in-session realize `(exit_fill − p_j) × q_j_closed`:
+  - `day_pnl = (mark − previous_close) × q_ovn`
+  - `+ Σ_reductions (fill_price − previous_close) × q_red_i`
+  - `+ Σ_held_same_session_lots (mark − p_j) × q_j`
+  - `+ Σ_closed_same_session_lots (exit_fill − p_j) × q_j_closed`
+  (e.g. a cover of an overnight short below the previous close is a gain: `(190 − 200) × (−10) = +100`).
+  Day P&L is the session change, **not** realized-vs-average-cost.
+  Position `day_pnl_pct = day_pnl / base`, where `base = |q_open × previous_close| + Σ|p_j × q_j|`
+  over same-session acquisitions; account `day_pnl_pct = Σ day_pnl / Σ base`. Either is 0 when its
+  base is 0. Outside a live session the figures are those of the most recently completed session
+  (last close vs the close before it), until the next session opens.
 
 FR-2. **Total P&L + return %** on the offline account: `total_pnl = realized_gross_since_snapshot +
-unrealized` (gross of fees; the net figure is FR-3). Account `total_pnl_pct = total_pnl / |open cost
-basis|`; position `unrealized_pnl_pct = unrealized / |cost basis|` so that **short positions report a
-non-zero, correctly signed %** (today 0%). When open cost basis is 0 (fully flat) the % is 0.
+unrealized` (gross of fees; the net figure is FR-3). Account `total_pnl_pct = total_pnl /
+Σ_i |cost_basis_i|` over open priced positions (so a mixed long/short book never nets to a 0
+denominator); 0 when that sum is 0 (fully flat). Position `unrealized_pnl_pct = unrealized /
+|cost_basis|`, so a short reports a non-zero, correctly signed %. The `|cost_basis|` fix applies
+**platform-wide** in portfolio's shared position enrichment (it also corrects order-fill-valued broker
+shorts — the one deliberate broker-visible change, carved out of FR-8).
 
-FR-3. **Fees as a separate line.** `ConfirmOrder` accepts an optional per-order total `fees` (≥ 0,
-default 0; negative rejected `INVALID_ARGUMENT`). Re-confirming an order replaces its fees along with
-the fill (existing replace semantics). Fees are **never** folded into cost basis / avg entry price.
-The account exposes `fees_since_snapshot`, `fees_lifetime`, and realized P&L **gross and net** of fees
-(`net = gross − fees`) for both the since-snapshot and lifetime scopes.
+FR-3. **Fees as a separate line.** `ConfirmOrder` accepts an optional per-order **cumulative** total
+`fees` (≥ 0, default 0; negative → `INVALID_ARGUMENT`, order unchanged). Every (re-)confirm — full or
+partial — replaces the order's fees along with its fill (existing replace semantics); FILLED vs
+PARTIALLY_FILLED status derivation is unchanged. Fees are **never** folded into cost basis or average
+entry price, and offline fees are **not** routed into the broker `fees_accum` path (no double count).
+The offline account exposes `fees_since_snapshot`, `fees_lifetime`, and realized P&L **gross and net**
+of fees (`net = gross − fees`) for both the since-snapshot and lifetime scopes. Orders read back via
+`GetOrder`/`ListOrders` echo `fees`; it is unset (not 0) for broker orders.
 
 FR-4. **Realized P&L, two scopes.** Keep the feature-163 since-snapshot realized (a new snapshot resets
-it to 0 — 163 AC-14 still holds) **and** add a lifetime realized that is carried across snapshots:
-`lifetime = carried_at_last_snapshot + since_snapshot`, where taking a snapshot adds the then-current
-since-snapshot realized (and fees) into the carried amount before resetting. Lifetime realized survives
-any number of snapshots and is only changed by fills/fee edits within the current snapshot window.
+it to 0 — 163 AC-14 still holds) **and** add a lifetime realized carried across snapshots:
+`lifetime = carried + since_snapshot`, where taking a snapshot first adds the then-current
+since-snapshot realized and fees into `carried`, then resets the since-snapshot figures — atomically,
+so a failure can neither double-count nor lose realized. Lifetime is otherwise changed only by fills
+and fee edits inside the current snapshot window.
 
-FR-5. **Mark fallback.** When marketdata has no live quote for an offline position's symbol (weekend,
-halted, delisted, non-Alpaca), mark it at the latest daily-bar close and flag the position's mark as
-stale (mark source = LAST_CLOSE, with the bar's timestamp). A position is never marked at 0 because of a
-missing quote; if neither a quote nor any bar exists, the position is flagged unpriced and excluded
-from unrealized/day/total sums (it does not zero or fail the account read). Broker-account marks are
-unchanged.
+FR-5. **Mark fallback.** When an offline position has no live quote — the symbol is absent from the
+quote batch **or the quote batch fails / exceeds its deadline** — it is marked at the latest daily-bar
+close with `mark_source = MARK_SOURCE_LAST_CLOSE` and `mark_as_of` = that bar's session date. A missing
+quote never yields a 0 mark. If neither a quote nor any daily bar exists, the position is
+`MARK_SOURCE_NONE` (unpriced): it is still listed (with its quantity) but excluded from the account's
+Equity, unrealized, Day P&L and Total P&L sums, and the read succeeds. Broker-synced marks are
+unchanged (`MARK_SOURCE_BROKER`). This **changes** the durable rule
+`services/xstockstrat-portfolio/acceptance/fix-book-portfolio-page.feature` @AC-1 (feature 229) for
+offline positions — operator sign-off recorded in `context.md` (C-16); its deadline bound still holds.
 
-FR-6. **Surfaces.** The FR-1..FR-5 figures are rendered on: the `/trader` PortfolioPanel single-account
-and combined views, the `/trader/portfolio` Book offline card, the `/trader/positions` list rows and
-`/trader/positions/[symbol]` detail (Day P&L per row, correct short %, stale-mark indicator); and
-returned by the agent tools `get_positions`/`get_positions_by_account_id` and `manage_offline_account`
-(`list_positions` fields; `confirm_order` new optional `fees` argument).
+FR-6. **Surfaces.** The FR-1..FR-5 figures are rendered on:
+  - `/trader` PortfolioPanel **single-account** view: Day P&L/%, Total P&L/%, Realized since snapshot
+    (gross + net), Realized lifetime (gross + net), Fees (since snapshot + lifetime). Cash and Buying
+    Power stay hidden.
+  - `/trader` PortfolioPanel **combined** view: Day P&L and Total P&L are the sum of each account's own
+    figures (offline per this spec, broker per broker); realized/fees rows show the offline-account sum
+    labelled as offline-only.
+  - `/trader/portfolio` Book offline card: Day P&L and Total P&L beside Equity and position count.
+  - `/trader/positions` rows and `/trader/positions/[symbol]` detail: Day P&L, signed short %, and a
+    stale-mark indicator ("Last close YYYY-MM-DD") or an "No price" indicator.
+  - Agent: `manage_offline_account` (`confirm_order` gains optional `fees`; `get_order`/`list_orders`
+    echo `fees`; `list_positions` returns `day_pnl`, `day_pnl_pct`, `unrealized_pnl_pct`, `mark_source`,
+    `mark_as_of`), `get_positions` / `get_positions_by_account_id` (same position fields). No new tool.
 
 FR-7. **Backfill.** On rollout, existing confirmed offline orders have `fees = 0`; each existing offline
-account's lifetime realized is seeded equal to its current since-snapshot realized (carried amount 0).
-No reconstruction of pre-snapshot history.
+account's lifetime realized is seeded equal to its current since-snapshot realized (`carried = 0`,
+both fee totals 0). No reconstruction of pre-snapshot history.
 
-FR-8. **No regression on broker accounts.** Broker (Alpaca/IBKR) account P&L, marks, Day P&L, and
-`GetPnL` results are unchanged.
+FR-8. **No regression on broker accounts or aggregates.** Broker (Alpaca/IBKR) marks, Day P&L, Total
+P&L and account figures are unchanged, except the platform-wide short-% correction in FR-2. `GetPnL`
+is unchanged: offline holdings are still valued only from live quotes there and feature 229 @AC-5
+(`UNAVAILABLE` when a needed quote is missing) still holds — the FR-5 fallback does not apply to
+`GetPnL`. The persisted `portfolio.snapshots` series is unchanged.
+
+FR-9. **Read-path parity.** Every portfolio read that returns offline positions or an offline account
+summary applies the same FR-1/FR-2/FR-5 rules and returns identical values for the same state:
+`GetPortfolio`, `GetPosition`, `ListPositions`, `ListPortfolios` (single-account and all-accounts), and
+the `Portfolio` messages pushed by `StreamPortfolioUpdates`. Covered by a parity test across these RPCs.
 
 ## Out of Scope
 
-- Including offline realized P&L in the `GetPnL` aggregate or `/insights` P&L Patterns
-  (`portfolio.position.closed` emission for offline closes).
+- Including offline realized P&L or the FR-5 fallback in the `GetPnL` aggregate or `/insights` P&L
+  Patterns (`portfolio.position.closed` emission for offline closes).
+- Changing the persisted `portfolio.snapshots` series (cashless mark-to-market; see fails.md 172).
 - A cash / capital-base / deposits ledger for offline accounts (Cash, Buying Power stay hidden).
 - Dividends, corporate actions, FIFO / tax lots, options or OCC symbols.
 - Per-position realized P&L history or a P&L time series.
@@ -80,56 +126,76 @@ FR-8. **No regression on broker accounts.** Broker (Alpaca/IBKR) account P&L, ma
 
 ## Affected Services
 
-- `packages/proto` — additive fields on `ConfirmOrderRequest` (trading) and `Portfolio`/`Position`
-  (portfolio); possibly on the `account.positions.synced` payload.
+- `packages/proto` — additive fields on trading `ConfirmOrderRequest`/`Order` and portfolio
+  `Portfolio`/`Position`, plus a new `MarkSource` enum.
 - `xstockstrat-trading` — persist per-order fees; offline recompute folds fees and emits since-snapshot
-  + lifetime realized/fees; `SnapshotOfflinePositions` carries realized/fees into the lifetime amount.
-- `xstockstrat-portfolio` — store lifetime realized + fees; compute broker-style Day P&L, Total P&L,
-  return %, short %; last-close mark fallback with stale flag for offline positions.
-- `xstockstrat-marketdata` — consumed for previous-session and latest daily-bar close (existing
-  `QueryBars`/latest-bar read path expected; confirm in recon — no new vendor calls).
+  realized/fees; `SnapshotOfflinePositions` triggers the FR-4 carry; same-session fill data available
+  for FR-1.
+- `xstockstrat-portfolio` — store lifetime/carried realized + fees; compute Day P&L, Total P&L, return %,
+  short %; last-close mark fallback with provenance; read-path parity (FR-9).
+- `xstockstrat-marketdata` — consumed, not changed: `BatchGetLatestPrice` (`LatestPrice.prev_close`) and
+  `BatchGetBars` (latest / previous daily close). Exact read path chosen in recon.
 - `xstockstrat-ui` — render the new figures on the four `/trader` surfaces.
-- `xstockstrat-agent` — `manage_offline_account confirm_order` `fees` arg; response mapping for new fields.
+- `xstockstrat-agent` — `confirm_order` `fees` arg; response mapping for new fields.
 
 ## Consumer Surface(s)
 
-- [x] **UI** — `xstockstrat-ui` `/trader`: PortfolioPanel (single + combined) shows Day P&L, Total
-  P&L/%, Realized (since snapshot / lifetime, gross & net), Fees for offline accounts;
-  `/trader/portfolio` Book offline card gains the same summary; `/trader/positions` and
-  `/trader/positions/[symbol]` show Day P&L, signed short %, and a stale-mark indicator. All existing
-  routes — no new subnav entry (C-10 unaffected).
-- [x] **Agent** — `xstockstrat-agent`: `manage_offline_account` (`confirm_order` gains optional `fees`;
-  `list_positions` returns day P&L / mark provenance), `get_positions`, `get_positions_by_account_id`
-  (new response fields). No new tool (tool count unchanged).
+- [x] **UI** — `xstockstrat-ui` `/trader`: PortfolioPanel single + combined, `/trader/portfolio` Book
+  offline card, `/trader/positions`, `/trader/positions/[symbol]` (details in FR-6). Existing routes
+  only — no new subnav entry (C-10(a) unaffected).
+- [x] **Agent** — `xstockstrat-agent`: `manage_offline_account`, `get_positions`,
+  `get_positions_by_account_id` (details in FR-6). No new tool; tool count unchanged.
 - [ ] **None**
 
 ## Proto Contract Changes
 
-Additive only (non-breaking); exact field numbers fixed at `/sdd-spec`:
-- `trading.v1.ConfirmOrderRequest` — `optional double fees`.
-- `trading.v1.Order` (or the offline order read shape) — `fees` so `get_order`/`list_orders` echo it.
-- `portfolio.v1.Portfolio` — `optional double realized_pnl_lifetime`, `optional double fees_since_snapshot`,
-  `optional double fees_lifetime`, `total_pnl_pct` (if not already present); existing `realized_pnl`
-  keeps since-snapshot gross semantics. Net figures derived (UI/agent) or explicit — decide in design.
-- `portfolio.v1.Position` — mark provenance (`MarkSource` enum: `MARK_SOURCE_UNSPECIFIED`, `QUOTE`,
-  `LAST_CLOSE`, `BROKER`, `NONE`) + `mark_as_of` timestamp.
+Additive only (non-breaking). Next free field numbers on trunk (verified 2026-10-19); final numbers
+fixed at `/sdd-spec`:
+- `trading.v1.ConfirmOrderRequest` (next free 6) — `optional double fees`.
+- `trading.v1.Order` (next free 23) — `optional double fees` (unset for broker orders).
+- `portfolio.v1.Portfolio` (next free 13) — `total_pnl_pct`, `optional double realized_pnl_lifetime`,
+  `optional double fees_since_snapshot`, `optional double fees_lifetime`. Existing `total_pnl = 8`,
+  `day_pnl = 6`, `day_pnl_pct = 7` are populated for offline accounts; existing `optional realized_pnl
+  = 12` keeps since-snapshot gross semantics. Net figures are derived by consumers (`gross − fees`).
+- `portfolio.v1.Position` (next free 24) — `MarkSource mark_source`, `google.protobuf.Timestamp
+  mark_as_of` (distinct from feature 163's `as_of = 22` / `source = 23`). Existing `day_pnl = 12`,
+  `day_pnl_pct = 13`, `unrealized_pnl_pct = 7` are populated.
+- New enum `portfolio.v1.MarkSource`: `MARK_SOURCE_UNSPECIFIED = 0`, `MARK_SOURCE_QUOTE`,
+  `MARK_SOURCE_LAST_CLOSE`, `MARK_SOURCE_BROKER`, `MARK_SOURCE_NONE`.
+
+**Ledger payload contract (not proto):** the hand-written JSON payload of `account.positions.synced`
+may gain offline fee / since-snapshot fields; it stays additive and backward-compatible with existing
+consumers. Exact shape decided in design.
 
 ## Config Key Changes
 
-- [x] No new config keys (session timezone is a platform constant; revisit in design if a key is needed).
+- [x] No new config keys. The session calendar (America/New_York, regular hours) is a domain constant,
+  not tunable config.
 
 ## Database Changes
 
-- `xstockstrat-trading`: new migration — `fees NUMERIC NOT NULL DEFAULT 0` on the offline fill/order
-  table (default satisfies FR-7).
-- `xstockstrat-portfolio`: new migration — lifetime/carry + fees columns on
-  `portfolio.offline_account_realized` (or a sibling table), seeded per FR-7.
-- Where the "carried at last snapshot" amount lives (trading baseline row vs portfolio table) is a
-  design decision — see Open Questions.
+Two independent migrations (separate schemas, no cross-service run-order dependency; each runs in its
+service's normal `scripts/db-migrate.sh` order):
+
+- `services/xstockstrat-trading/migrations/011_offline_order_fees.up.sql` — `ALTER TABLE trading.orders
+  ADD COLUMN fees NUMERIC(18,8)` (nullable; offline orders backfilled to 0 per FR-7, broker orders stay
+  NULL). `NUMERIC(18,8)` matches `filled_qty` / `filled_avg_price` on the same table.
+  `.down.sql` — `ALTER TABLE trading.orders DROP COLUMN IF EXISTS fees`.
+- `services/xstockstrat-portfolio/migrations/017_offline_realized_lifetime_fees.up.sql` — add to
+  `portfolio.offline_account_realized`: `realized_carried DOUBLE PRECISION NOT NULL DEFAULT 0`,
+  `fees_since_snapshot DOUBLE PRECISION NOT NULL DEFAULT 0`, `fees_carried DOUBLE PRECISION NOT NULL
+  DEFAULT 0` (`DOUBLE PRECISION` matches the existing `realized_pnl` column). Lifetime is derived
+  (`carried + since_snapshot`), so the FR-7 seed is satisfied by the defaults with no data update.
+  `.down.sql` — drops the three columns.
+- Whether the carry columns live in portfolio (above) or beside trading's baseline row is a design
+  decision (OQ-2); if design moves them, `/sdd-spec` rewrites this section before execute.
+- Next free numbers (trading 011, portfolio 017) must be re-checked across all remote branches at
+  `/sdd-spec` (ledger 081).
 
 ## Feature Workflow Notes
 
-Branch to create: `feature/offline-account-full-pnl` (branch from `main-dev`)
+Branch to create: `feature/offline-account-full-pnl` (branch from `main-dev`, after features 229 —
+merged — and 215 land; see `context.md`)
 Approval gates required (per docs/runbooks/feature-workflow.md):
 - [x] 1 service owner approval (non-breaking proto or config change)
 - [ ] 2 service owners + platform lead (breaking proto change)
@@ -142,22 +208,22 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 
 ## Open Questions
 
-- [ ] **Operator override of feature 163** — lifetime realized carried across snapshots overrides 163's
-  "no carry-forward" decision; 163's since-snapshot reset (AC-14) is preserved, not removed. Sign-off
-  recorded in `context.md` (2026-10-19).
-- [ ] **Where the carry lives.** Trading owns the fold and the baseline; portfolio owns
-  `offline_account_realized`. The carry must be written atomically with the baseline replace under the
-  per-account lock (fails.md:2029-2040, the 163 snapshot-lock entry) — design must pick the owner so a crash
-  between "carry += since" and "reset since" can neither double-count nor lose realized.
-- [ ] **Editing an order confirmed before the current snapshot** — such fills are excluded from
-  `FoldFrom` today; should a re-confirm of a pre-snapshot order adjust lifetime realized, be rejected,
-  or be silently ignored? (Default proposal: reject with `FAILED_PRECONDITION`.)
-- [ ] **Day P&L intraday basis** requires distinguishing overnight vs same-session shares under signed
-  average cost, without lots. Proposal: same-session sells consume overnight shares first. Confirm that the fold can
-  expose `qty_at_session_open` and the session's sell proceeds.
-- [ ] **Previous-close read path** — confirm marketdata exposes a batched latest/previous daily close
-  (avoid N per-symbol calls; ledger quote-fanout-batching entry: state the partial-failure aggregate).
-- [ ] **Known trap (fails.md 172):** `portfolio.snapshots.equity` is cashless mark-to-market — do not
-  reuse it as a basis for any new offline metric without reading its writer.
-- [ ] **Known trap (fails.md 157):** an agent tool-arg change must keep all six tool-inventory surfaces
-  and `docs/runbooks/mcp-tools.md` in parity; verify against the registered name-set, not a grep.
+- [x] **OQ-1 Operator override of feature 163** — resolved: lifetime realized carried across snapshots,
+  163 since-snapshot reset preserved. Sign-off in `context.md` (Session 2026-10-19 — sdd-story).
+- [x] **OQ-2 Where the carry lives** — **deferred to /sdd-design** (owner: recon/design). Trading owns
+  the fold and baseline; portfolio owns `offline_account_realized`. The carry must be applied atomically
+  with the baseline replace under the per-account lock (fails.md:2029-2040).
+- [x] **OQ-3 Re-confirming an order filled before the current snapshot** — **deferred to /sdd-design**.
+  Default proposal: reject with `FAILED_PRECONDITION` (such fills are outside `FoldFrom`).
+- [x] **OQ-4 Intraday consumption order** — resolved: reductions consume overnight shares first
+  (operator, 2026-10-19); encoded in FR-1.
+- [x] **OQ-5 Previous/latest-close read path** — **deferred to /sdd-design**. Candidates exist:
+  `BatchGetLatestPrice` → `LatestPrice.prev_close`, `BatchGetBars` for the latest daily close. Must be
+  batched and bounded within or beside `portfolio.marketdata.quote_timeout_ms`, with the
+  partial-failure aggregate stated (fails.md quote-fanout-batching entry).
+- [x] **OQ-6 Where Day P&L is computed** — **deferred to /sdd-design**. The session rolls over with no
+  event, so Day P&L must be computed at read time from session-scoped fill data, not emitted once by
+  trading; recon to pick the data path.
+- [x] **OQ-7 Known traps** — carried into design: fails.md 172 (`portfolio.snapshots.equity` is
+  cashless — not used as a basis here, FR-8), fails.md 157 (agent arg change must keep all six
+  tool-inventory surfaces and `docs/runbooks/mcp-tools.md` in parity; verify via registered name-set).
