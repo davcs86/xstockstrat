@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-10-19 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-19-after-hours-one-sided-quote-half-price-defect.md` |
+| 2026-10-19 | `draft` → `spec-ready` | /sdd-review | Product spec approved (8 warnings, carried to design) |
 
 ---
 
