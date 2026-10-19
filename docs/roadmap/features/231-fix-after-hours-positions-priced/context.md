@@ -295,3 +295,20 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   literal in `*_test.go` (it comes from testdata).
 - Files modified: `internal/repository/marketdata_repo_test.go`, `internal/testdata/marks.go` (new)
 - Deviations: none
+
+### Step 7 — service: marketdata `GetLatestQuotes` — concurrent close lookup and mark merge [done]
+- Added:
+  - the `dailyCloseReader` seam, `dailyCloses` field and nil-safe repo wiring;
+  - the `resolveQuoteMarkBudget` (500ms) and `resolveMarkCloseMaxAge` (168h) resolvers;
+  - the `needClose` set (missing or non-two-sided warm);
+  - `lookupMarkCloses`, which runs concurrently with the cold singleflight;
+  - the `withMark` clone + mark merge at the `out` loop.
+  The warm read and the singleflight closure are unchanged; raw ask/bid are never touched.
+- RED (Step 8 tests first): compile failure (`svc.dailyCloses` undefined). Then a behavioural RED with only the
+  seam/resolvers present: AC-1, AC-5, AC-7, AC-11, clone and nil-reader tests FAIL (no mark), and AC-12 hits the 5s
+  hang guard.
+- Mutation check: forcing close-first serial makes AC-12 FAIL (mark nil after the 2.5s budget), so the handshake
+  rejects both serial orders.
+- GREEN: see Step 8.
+- Files modified: `services/xstockstrat-marketdata/internal/service/marketdata_service.go`
+- Deviations: D-2

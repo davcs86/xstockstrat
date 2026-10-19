@@ -14,6 +14,7 @@ import (
 	"connectrpc.com/connect"
 	"golang.org/x/sync/singleflight"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -100,6 +101,8 @@ type MarketDataService struct {
 	// BatchGetLatestPrice's previous-close seam. nil means code defaults / no lookup (test literals leave both unset).
 	budgetCfg intGetter
 	prevClose prevCloseReader
+	// dailyCloses is GetLatestQuotes' stored-1d-close seam for one-sided marks; nil means mid-only marks.
+	dailyCloses dailyCloseReader
 	// quoteStore is the quote cache read/write seam; nil (test literals) treats every symbol as cold and caches nothing.
 	quoteStore quoteStore
 	// retention drops expired quote chunks; nil (test literals) makes StartQuoteRetention a no-op.
@@ -125,6 +128,11 @@ type quoteRetention interface {
 // prevCloseReader is the repo surface BatchGetLatestPrice reads previous daily closes from.
 type prevCloseReader interface {
 	GetPreviousDailyCloseBatch(ctx context.Context, symbols []string) (map[string]float64, error)
+}
+
+// dailyCloseReader is the repo surface GetLatestQuotes reads the newest in-bound 1d close from (feature 231).
+type dailyCloseReader interface {
+	GetLatestDailyClosesBatch(ctx context.Context, symbols []string, since time.Time) (map[string]float64, error)
 }
 
 // fundamentalsConfig is the slice of *config.Watcher the fundamentals RPCs read.
@@ -217,6 +225,7 @@ func NewMarketDataService(
 	}
 	if repo != nil {
 		svc.prevClose = repo
+		svc.dailyCloses = repo
 		svc.quoteStore = repo
 		svc.retention = repo
 	}
@@ -544,8 +553,8 @@ func (s *MarketDataService) GetLatestQuote(ctx context.Context, symbol string) (
 	return live, nil
 }
 
-// GetLatestQuotes returns the latest quote per symbol: warm hits from one windowed cache read, the cold rest from one
-// coalesced, budgeted live fetch. A symbol neither path yields (incl. a failed cold fetch) is omitted, never zero-filled.
+// GetLatestQuotes returns the latest quote per symbol (warm cache read + one coalesced, budgeted cold fetch; a symbol
+// neither yields is omitted, never zero-filled). Each returned quote is a clone carrying mark_price per the proto rule.
 func (s *MarketDataService) GetLatestQuotes(ctx context.Context, symbols []string) ([]*marketdatav1.Quote, error) {
 	if len(symbols) == 0 {
 		return nil, nil
@@ -564,12 +573,17 @@ func (s *MarketDataService) GetLatestQuotes(ctx context.Context, symbols []strin
 			return nil, err
 		}
 	}
-	var cold []string
+	var cold, needClose []string
 	for _, sym := range symbols {
-		if _, ok := warm[sym]; !ok {
+		q, ok := warm[sym]
+		if !ok {
 			cold = append(cold, sym)
 		}
+		if !ok || q.AskPrice <= 0 || q.BidPrice <= 0 {
+			needClose = append(needClose, sym)
+		}
 	}
+	closesCh := s.lookupMarkCloses(ctx, needClose)
 	if len(cold) > 0 {
 		sortedCold := append([]string(nil), cold...)
 		sort.Strings(sortedCold)
@@ -613,11 +627,46 @@ func (s *MarketDataService) GetLatestQuotes(ctx context.Context, symbols []strin
 			}
 		}
 	}
+	closes := <-closesCh
 	out := make([]*marketdatav1.Quote, 0, len(warm))
 	for _, q := range warm {
-		out = append(out, q)
+		out = append(out, withMark(q, closes))
 	}
 	return out, nil
+}
+
+// lookupMarkCloses starts the stored-1d-close read concurrently with the cold fetch (bound W + max(B, C)); the caller
+// must always receive exactly once. Per-caller, not detached: the caller's deadline also ends it.
+func (s *MarketDataService) lookupMarkCloses(ctx context.Context, symbols []string) <-chan map[string]float64 {
+	ch := make(chan map[string]float64, 1)
+	if s.dailyCloses == nil || len(symbols) == 0 {
+		ch <- nil
+		return ch
+	}
+	go func() {
+		cctx, cancel := context.WithTimeout(ctx, resolveQuoteMarkBudget(s.budgetCfg))
+		defer cancel()
+		closes, err := s.dailyCloses.GetLatestDailyClosesBatch(cctx, symbols, time.Now().Add(-resolveMarkCloseMaxAge(s.budgetCfg)))
+		if err != nil {
+			slog.Warn("GetLatestQuotes: mark lookup failed", "symbols", len(symbols), "error", err, "ctx_done", ctx.Err() != nil)
+			closes = nil
+		}
+		ch <- closes
+	}()
+	return ch
+}
+
+// withMark returns a clone of q (cold quotes are shared across singleflight waiters) with mark_price set to the
+// two-sided mid, else the stored close; a one-sided quote is never averaged and the raw sides are never touched.
+func withMark(q *marketdatav1.Quote, closes map[string]float64) *marketdatav1.Quote {
+	m := proto.Clone(q).(*marketdatav1.Quote)
+	switch {
+	case m.AskPrice > 0 && m.BidPrice > 0:
+		m.MarkPrice = proto.Float64((m.AskPrice + m.BidPrice) / 2)
+	case closes[m.Symbol] > 0:
+		m.MarkPrice = proto.Float64(closes[m.Symbol])
+	}
+	return m
 }
 
 // GetLatestPrice returns the latest trade price + prior-session daily close. Either value is left
@@ -910,6 +959,16 @@ func resolveQuoteLookback(cfg intGetter) time.Duration {
 // resolveQuoteBatchBudget is the detached GetLatestQuotes cold-fetch budget (feature 229).
 func resolveQuoteBatchBudget(cfg intGetter) time.Duration {
 	return time.Duration(resolvePositiveInt(cfg, "marketdata.quotes.batch_timeout_ms", 2500)) * time.Millisecond
+}
+
+// resolveQuoteMarkBudget is the per-caller budget of GetLatestQuotes' close lookup (feature 231).
+func resolveQuoteMarkBudget(cfg intGetter) time.Duration {
+	return time.Duration(resolvePositiveInt(cfg, "marketdata.quotes.mark_timeout_ms", 500)) * time.Millisecond
+}
+
+// resolveMarkCloseMaxAge bounds how old a stored 1d close may be and still serve as a mark (feature 231).
+func resolveMarkCloseMaxAge(cfg intGetter) time.Duration {
+	return time.Duration(resolvePositiveInt(cfg, "marketdata.quotes.mark_close_max_age_hours", 168)) * time.Hour
 }
 
 // resolveQuoteRetentionDays is the quote retention period in days (feature 229); never clamped here.

@@ -439,7 +439,7 @@ land the method stub returning an empty map first.
 
 ### Step 7 — service: marketdata `GetLatestQuotes` — concurrent close lookup and mark merge
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service.go` — modify
