@@ -10,7 +10,7 @@
 
 ## Observed
 `StreamSubscriber.severities` is declared `number[]`. Under ts-proto `stringEnums`, both the
-request's `severities` and `alert.severity` are strings (`"ALERT_SEVERITY_WARNING"`), so the
+request's `severities` and `alert.severity` are strings (the ts-proto `..._WARNING`-style constants), so the
 `includes` comparison works today only by accident of matching runtime types. The only unit test
 drives numeric values (`[1, 2]`), so a change that numeric-converts one side to "match the type"
 passes CI and silently stops severity-filtered subscribers from receiving any alert.
