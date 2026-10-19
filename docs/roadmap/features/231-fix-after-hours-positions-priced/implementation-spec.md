@@ -328,7 +328,7 @@ cd services/xstockstrat-trading && GOWORK=off go build ./...      # the other Qu
 
 ### Step 5 — service: marketdata repo — `GetLatestDailyClosesBatch`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/repository/marketdata_repo.go` — modify

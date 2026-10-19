@@ -275,3 +275,13 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - TDD: N/A (generated). Only `gen/` is committed here; the `.proto` went in with Step 3.
 - Files modified: the 8 `packages/proto/gen/**/marketdata/v1/*` files
 - Deviations: D-1
+
+### Step 5 — service: marketdata repo — `GetLatestDailyClosesBatch` [done]
+- Added `GetLatestDailyClosesBatch(ctx, symbols, since) (map[string]float64, error)` plus `latestDailyClosesBatchSQL`.
+  It is the unnest + LATERAL LIMIT 1 read on `marketdata.ohlcv`, filtered to `timeframe='1d'`, `time >= $2` and
+  `close > 0`, run with `QueryExecModeExec` on `r.db`. Empty input → empty map, no query.
+- RED (Step 6 tests first): compile failure (method undefined). Behavioural RED with a stub returning an empty map and
+  empty SQL: `BoundedLateralShape` and `NoUnboundedScan` FAIL. The stub was reverted.
+- GREEN: see Step 6.
+- Files modified: `services/xstockstrat-marketdata/internal/repository/marketdata_repo.go`
+- Deviations: none
