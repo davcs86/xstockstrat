@@ -21,6 +21,15 @@ flatten pollers) inject `x-user-id` explicitly on the outbound call
 (`metadata.AppendToOutgoingContext`). A missing header still yields `InvalidArgument "user_id
 required"`.
 
+**Quote-dependent reads are bounded and never fabricate (feature 229).** Every quote fetch goes through
+`latestQuotesFor` under `portfolio.marketdata.quote_timeout_ms`, and `ListPortfolios` makes **one** union batch
+across all accounts (one deadline, one price per symbol). `GetPnL` values broker-synced positions from the broker
+`current_price` and the rest through the shared `applyQuotes` rule; if a needed quote is unavailable it returns
+gRPC **`UNAVAILABLE`** (`ErrQuotesUnavailable` → `classifyGetPnLError`) instead of a silent 0 — so one
+un-quotable offline holding (e.g. a delisted symbol) makes that user's `GetPnL` `UNAVAILABLE` (accepted).
+`broadcastSnapshot` skips persisting/emitting when quotes are unavailable or no position was priced (no
+zero-equity snapshots).
+
 **Account/portfolio-scoped reads are ownership-gated (2026-09-16 security audit, H-3).**
 `ListPortfolios` with a caller-supplied `account_id` returns `PermissionDenied` unless the account is
 in the caller's owned universe (`callerOwnsAccount` — the same `ListAccountBalancesByUser ∪
@@ -81,6 +90,7 @@ full-dotted — **no watcher code change in this service**, the fix is entirely 
 | `portfolio.watchlist.max_per_user` | int | `50` | Max watchlists a single user may own (feature 058) |
 | `portfolio.watchlist.max_symbols_per_list` | int | `500` | Max symbols allowed in one watchlist (feature 058) |
 | `portfolio.exposure.factor_map` | string (JSON) | `"{}"` | JSON object mapping symbol → factor name for the Exposure screen's factor grouping (feature 083). marketdata exposes no sector, so this operator-defined map is the factor source; unmapped symbols group as "Unclassified". Read via `Watcher.FactorMap()`; invalid JSON → empty map. |
+| `portfolio.marketdata.quote_timeout_ms` | int | `4000` | Feature 229 — deadline on the marketdata `GetLatestQuotes` fetch (`latestQuotesFor`, the single choke point for every read and background path). On expiry the un-broker-valued positions stay unenriched (never fabricated) and the read still answers. Must exceed `marketdata.quotes.batch_timeout_ms` (2500) plus the warm read so a cold timeout still returns the warm subset. Read live; nil/`≤ 0` → `4000`. Unseeded; SetConfig-bounded `[500,8000]`. |
 
 > `platform.ledger_endpoint` was removed from this table by the 2026-08-07 config audit — no code
 > in this service reads it via the config watcher. The ledger address is the `LEDGER_ENDPOINT` env

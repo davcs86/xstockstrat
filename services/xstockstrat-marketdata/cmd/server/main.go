@@ -161,6 +161,8 @@ func main() {
 
 	go svc.StartEtfFlagFiller(ctx)
 
+	go svc.StartQuoteRetention(ctx)
+
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%s", cfg.GRPCPort))
 	if err != nil {
 		slog.Error("listen failed", "error", err)

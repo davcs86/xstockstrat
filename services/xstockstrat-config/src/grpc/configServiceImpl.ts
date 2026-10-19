@@ -131,6 +131,12 @@ const SCALAR_BOUNDS_REGISTRY: Record<string, { minValue: number; maxValue: numbe
   'analysis.opportunity.live_enrich_timeout_ms': { minValue: 500, maxValue: 4000 },
   'marketdata.price.batch_timeout_ms': { minValue: 500, maxValue: 2500 },
   'agent.opportunities.read_timeout_seconds': { minValue: 30, maxValue: 55 },
+  // feature 229: retention floor (31d) must stay above the lookback ceiling (720h); the portfolio quote
+  // deadline (default 4000) must exceed the marketdata cold budget (2500) plus the warm read.
+  'portfolio.marketdata.quote_timeout_ms': { minValue: 500, maxValue: 8000 },
+  'marketdata.quotes.latest_lookback_hours': { minValue: 24, maxValue: 720 },
+  'marketdata.quotes.batch_timeout_ms': { minValue: 500, maxValue: 5000 },
+  'marketdata.retention.quotes_days': { minValue: 31, maxValue: 3650 },
 };
 
 // feature 182: resolve a scalar-bounds entry for a config key whose DB `key` column may be full-dotted
