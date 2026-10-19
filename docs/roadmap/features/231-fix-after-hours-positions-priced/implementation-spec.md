@@ -514,7 +514,7 @@ grep -n "mark_timeout_ms\|mark_close_max_age_hours\|dailyCloses\|withMark" servi
 
 ### Step 8 — test: marketdata mark computation (AC-1, AC-5, AC-6, AC-7, AC-11, AC-12, AC-15)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go` — modify

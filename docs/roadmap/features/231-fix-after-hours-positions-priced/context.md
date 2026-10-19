@@ -312,3 +312,17 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - GREEN: see Step 8.
 - Files modified: `services/xstockstrat-marketdata/internal/service/marketdata_service.go`
 - Deviations: D-2
+
+### Step 8 — test: marketdata mark computation (AC-1, AC-5, AC-6, AC-7, AC-11, AC-12, AC-15) [done]
+- Added `fakeDailyCloseReader` (window-mirroring, with `entered`/`waitFor`/`block`/`err`), plus tests:
+  - AC-1 (both one-sided rows);
+  - AC-5, AC-6;
+  - AC-7 (167h / 169h / absent, plus the `since` ±1s pin);
+  - AC-11 (timeout and error sub-cases, with WARN + `error` attr);
+  - AC-12 (two-way handshake), AC-15 (< 1s at 100ms);
+  - clone safety, nil reader, and `TestResolveMarkTunables`.
+  Numbers come from `internal/testdata`.
+- GREEN: `go test ./... -race` all ok (178/229 tests unchanged and green); total coverage 71.0% (≥ 40, asserted);
+  `golangci-lint` 0 issues; no redeclared fixture literals.
+- Files modified: `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go`
+- Deviations: D-2
