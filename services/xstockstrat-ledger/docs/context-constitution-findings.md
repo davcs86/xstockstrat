@@ -35,5 +35,18 @@ findings log.
 - `streamExportRows` builds its `pg.Client` from `(this.pool as any).options` (`connectionString`/`ssl`) instead of `index.ts`'s `dbUrl`/`sslOption` — intentional single-source reach-in? — status: **open**
 - The NOTIFY 8KB-trim path vs the live-tail stub it produces — is the truncated live event intended (consumers expected to re-`GetEvent` on a partial row), or should `StreamEvents` re-fetch the full row before `call.write` when the NOTIFY payload was trimmed? `migrations/001_…up.sql#notify_event_inserted (~L71-80)`, `ledgerServiceImpl.ts#rowToEvent (~L371,373)` — status: **open**
 
+
+## Filed as defect reports (2026-10-19)
+
+The open rows above were re-verified against `1302e6d` and recorded as `docs/reports/` defects
+(status sidecar `open`) for `/sdd-triage --from-report`. A row stays here until its report is resolved.
+
+| Report | Title |
+|---|---|
+| [`2026-10-19-dead-config-keys-defect`](../../../docs/reports/2026-10-19-dead-config-keys-defect.md) | Documented config keys that no code reads (ledger, notify, trading, marketdata, ingest) |
+| [`2026-10-19-ledger-claude-md-drift-defect`](../../../docs/reports/2026-10-19-ledger-claude-md-drift-defect.md) | Ledger CLAUDE.md misstates the RPC list, subscriber count and compression/retention policy |
+| [`2026-10-19-ledger-stream-trimmed-notify-payload-defect`](../../../docs/reports/2026-10-19-ledger-stream-trimmed-notify-payload-defect.md) | Live StreamEvents delivers a payload-less stub for events over ~7000 chars |
+| [`2026-10-19-orphaned-code-defect`](../../../docs/reports/2026-10-19-orphaned-code-defect.md) | Orphaned modules, scripts and dependencies across services |
+
 ---
 _Surfaced by [context-forge](https://github.com/davcs86/agent-plugins). Defects to action, not rules. Re-run `/context-constitution` to refresh._

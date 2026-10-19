@@ -36,5 +36,19 @@ findings log.
 | Root `CLAUDE.md` lists `analysis.scoring.shrinkage_days` / `min_evidence_*` as config keys with no seed | 2026-10-14 | grep of root `CLAUDE.md` for `shrinkage_days` / `min_evidence_symbols` → zero hits; migrations also zero (other docs not re-checked) |
 | Dead `src/middleware/propagation.ts` (+ `.eslintrc.json` exemption) | 2026-10-14 | `src/middleware/*` glob empty; `.eslintrc.json` overrides list only `authz.ts`; feature 175 |
 
+
+## Filed as defect reports (2026-10-19)
+
+The open rows above were re-verified against `1302e6d` and recorded as `docs/reports/` defects
+(status sidecar `open`) for `/sdd-triage --from-report`. A row stays here until its report is resolved.
+
+| Report | Title |
+|---|---|
+| [`2026-10-19-config-audit-author-caller-spoofable-defect`](../../../docs/reports/2026-10-19-config-audit-author-caller-spoofable-defect.md) | SetConfig audit author is caller-supplied free text, not the verified identity |
+| [`2026-10-19-config-claude-md-drift-defect`](../../../docs/reports/2026-10-19-config-claude-md-drift-defect.md) | Config CLAUDE.md has a stale notify diagram, banner and write-gate text |
+| [`2026-10-19-config-seed-migration-late-lower-nnn-defect`](../../../docs/reports/2026-10-19-config-seed-migration-late-lower-nnn-defect.md) | A late-merging lower-numbered config seed migration never applies |
+| [`2026-10-19-cross-hop-deadline-bounds-unenforced-defect`](../../../docs/reports/2026-10-19-cross-hop-deadline-bounds-unenforced-defect.md) | Cross-hop read deadline ordering is not enforced by config bounds |
+| [`2026-10-19-orphaned-code-defect`](../../../docs/reports/2026-10-19-orphaned-code-defect.md) | Orphaned modules, scripts and dependencies across services |
+
 ---
 _Surfaced by [context-forge](https://github.com/davcs86/agent-plugins). Defects to action, not rules. Re-run `/context-constitution` to refresh._

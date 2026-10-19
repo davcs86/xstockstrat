@@ -41,5 +41,18 @@ governance. Repo-wide defects (Go 1.22 doc-lie) live in the root findings log.
 - **`config.Watcher.environment`/`.tradingMode` fields declared and sent on every `WatchConfigRequest` but never assigned (always the zero enum)** — RESOLVED 2026-08-09 (fixed by commit `1413399`, 2026-08-07): `NewWatcher` now takes `applicationEnv, tradingMode string` params and calls `resolveEnvironment()`/`resolveTradingMode()` (`internal/config/config.go:88,103`, now enshrined as constitution MARKETDATA-7); `cmd/server/main.go` wires them from `cfg.ApplicationEnv`/`cfg.TradingMode`. Confirmed by reading current `config.go` and its `TestResolveEnvironment`/`TestResolveTradingMode` unit tests. This was a repo-wide SEV-1 (root PLAT-8/Gotchas), not marketdata-specific. (Feature 147 later removed the `trading_mode` request field entirely.)
 - **RESOLVED 2026-10-14 — `newFundamentalsSource` comment naming `FMP_API_KEY`/`FINNHUB_API_KEY` env vars**: the comment now reads "selected by marketdata.fundamentals.provider (boot-only)…" and names no env vars (`cmd/server/main.go#newFundamentalsSource`).
 
+
+## Filed as defect reports (2026-10-19)
+
+The open rows above were re-verified against `1302e6d` and recorded as `docs/reports/` defects
+(status sidecar `open`) for `/sdd-triage --from-report`. A row stays here until its report is resolved.
+
+| Report | Title |
+|---|---|
+| [`2026-10-19-dead-config-keys-defect`](../../../docs/reports/2026-10-19-dead-config-keys-defect.md) | Documented config keys that no code reads (ledger, notify, trading, marketdata, ingest) |
+| [`2026-10-19-marketdata-claude-md-drift-defect`](../../../docs/reports/2026-10-19-marketdata-claude-md-drift-defect.md) | marketdata doc drift (migration 001 timeframe comment, handler Connect-RPC comment, stale CLAUDE.md line cite) |
+| [`2026-10-19-marketdata-togrpcerror-collapses-codes-defect`](../../../docs/reports/2026-10-19-marketdata-togrpcerror-collapses-codes-defect.md) | marketdata toGRPCError maps only six codes; everything else becomes INTERNAL |
+| [`2026-10-19-orphaned-code-defect`](../../../docs/reports/2026-10-19-orphaned-code-defect.md) | Orphaned modules, scripts and dependencies across services |
+
 ---
 _Surfaced by [context-forge](https://github.com/davcs86/agent-plugins). Defects to action, not rules. Re-run `/context-constitution` to refresh._

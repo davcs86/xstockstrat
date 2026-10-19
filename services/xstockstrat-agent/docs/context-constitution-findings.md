@@ -54,5 +54,19 @@ return-shape contract tests over the `app/client.py` request builders + projecti
 - **RESOLVED 2026-09-03 — `ensure_signal_watchlist` / `add_watchlist_symbol` emitted `x-user-id` twice (latent bug, 2026-09-02).** Both sites now use the de-duplicating `_metadata(("x-user-id", user_id))` form (`app/client.py#ensure_signal_watchlist` ~L298, `#add_watchlist_symbol` ~L316), so the header is sent exactly once under a bound caller context (AGENT-4 dedup contract honored). Confirmed by re-resolving both citations against current code plus the regression test `tests/test_watchlist_client.py:222-254` (`test_ensure_signal_watchlist_dedups_user_id_under_bound_caller`, "defect 2026-09-03") which binds a caller and asserts `x-user-id` appears exactly once on both RPCs.
 - **RESOLVED 2026-10-14 — `telemetry.py` `trading_mode` resource attribute** (was an open question): `_build_resource` now sets only `service.name`, `deployment.environment` (from `APPLICATION_ENV`) and `platform`; grep for `trading_mode|TRADING_MODE` in `app/telemetry.py` → zero hits (remaining mentions are comments/docstrings).
 
+
+## Filed as defect reports (2026-10-19)
+
+The open rows above were re-verified against `1302e6d` and recorded as `docs/reports/` defects
+(status sidecar `open`) for `/sdd-triage --from-report`. A row stays here until its report is resolved.
+
+| Report | Title |
+|---|---|
+| [`2026-10-19-agent-bearer-secret-orphan-on-failed-register-defect`](../../../docs/reports/2026-10-19-agent-bearer-secret-orphan-on-failed-register-defect.md) | Signal-source bearer secret is orphaned when the source register fails |
+| [`2026-10-19-agent-mcp-transport-stdio-fallthrough-defect`](../../../docs/reports/2026-10-19-agent-mcp-transport-stdio-fallthrough-defect.md) | Agent silently starts stdio transport when MCP_TRANSPORT is unset or mistyped |
+| [`2026-10-19-agent-tools-missing-grpc-error-mapping-defect`](../../../docs/reports/2026-10-19-agent-tools-missing-grpc-error-mapping-defect.md) | Six agent MCP tools leak raw gRPC errors (no `_grpc_error_message` mapping) |
+| [`2026-10-19-agent-ui-claude-md-drift-defect`](../../../docs/reports/2026-10-19-agent-ui-claude-md-drift-defect.md) | Agent and UI CLAUDE.md / tool docstring drift from current code |
+| [`2026-10-19-orphaned-code-defect`](../../../docs/reports/2026-10-19-orphaned-code-defect.md) | Orphaned modules, scripts and dependencies across services |
+
 ---
 _Surfaced by [context-forge](https://github.com/davcs86/agent-plugins). Defects to action, not rules. Re-run `/context-constitution` to refresh._

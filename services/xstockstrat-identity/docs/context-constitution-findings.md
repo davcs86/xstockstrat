@@ -43,5 +43,17 @@ findings log.
   `src/__tests__/identityServiceImpl.test.ts` ("default seed-admin lockout"). `identityServiceImpl.ts`
   (`SEED_ADMIN_PASSWORD_HASH` / `isBlockedDefaultAdmin` + the `authenticateUser` guard).
 
+
+## Filed as defect reports (2026-10-19)
+
+The open rows above were re-verified against `1302e6d` and recorded as `docs/reports/` defects
+(status sidecar `open`) for `/sdd-triage --from-report`. A row stays here until its report is resolved.
+
+| Report | Title |
+|---|---|
+| [`2026-10-19-identity-claude-md-drift-defect`](../../../docs/reports/2026-10-19-identity-claude-md-drift-defect.md) | Identity CLAUDE.md and package metadata misdescribe the RPC surface, deps and migrations |
+| [`2026-10-19-identity-refresh-rotation-not-atomic-defect`](../../../docs/reports/2026-10-19-identity-refresh-rotation-not-atomic-defect.md) | Refresh-token rotation is not atomic (double-spend and lost-token window) |
+| [`2026-10-19-identity-revoketoken-unverified-decode-defect`](../../../docs/reports/2026-10-19-identity-revoketoken-unverified-decode-defect.md) | RevokeToken trusts an unverified JWT and revokes all of the decoded user's sessions |
+
 ---
 _Surfaced by [context-forge](https://github.com/davcs86/agent-plugins). Defects to action, not rules. Re-run `/context-constitution` to refresh._

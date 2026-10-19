@@ -40,5 +40,22 @@ recorded at the root (they are cross-cutting).
 |---|---|---|
 | `CLAUDE.md` / constitution Pointers cite `_is_admin` and header-filter sites `:520,556,1932,2429` | **Resolved 2026-10-19** — `rg _is_admin CLAUDE.md` = 0; the constitution Pointers row cites `_has_admin_scope` and the re-stamped filter sites | `app/handlers/servicer.py#_has_admin_scope` (~L628), `#_PROPAGATED_HEADERS` (~L350) |
 
+
+## Filed as defect reports (2026-10-19)
+
+The open rows above were re-verified against `1302e6d` and recorded as `docs/reports/` defects
+(status sidecar `open`) for `/sdd-triage --from-report`. A row stays here until its report is resolved.
+
+| Report | Title |
+|---|---|
+| [`2026-10-19-analysis-background-tasks-unreferenced-defect`](../../../docs/reports/2026-10-19-analysis-background-tasks-unreferenced-defect.md) | Analysis background tasks are created without a retained reference |
+| [`2026-10-19-analysis-claude-md-drift-defect`](../../../docs/reports/2026-10-19-analysis-claude-md-drift-defect.md) | Analysis CLAUDE.md omits the attribution net contract and misstates _bars_fetch_sem scope |
+| [`2026-10-19-analysis-fingerprint-ignores-formula-version-defect`](../../../docs/reports/2026-10-19-analysis-fingerprint-ignores-formula-version-defect.md) | Evidence fingerprint ignores referenced formula content |
+| [`2026-10-19-analysis-fundsignal-neutral-score-fabricated-defect`](../../../docs/reports/2026-10-19-analysis-fundsignal-neutral-score-fabricated-defect.md) | Fundamentals producer emits fabricated 0.5 scores for symbols with no data |
+| [`2026-10-19-analysis-live-gate-sql-duplicated-defect`](../../../docs/reports/2026-10-19-analysis-live-gate-sql-duplicated-defect.md) | Entry-backfill re-types the live-enabled gate SQL instead of importing it |
+| [`2026-10-19-analysis-pnl-compose-system-owner-raises-defect`](../../../docs/reports/2026-10-19-analysis-pnl-compose-system-owner-raises-defect.md) | P&L snapshot compose can raise ValueError for a system-owned order event |
+| [`2026-10-19-analysis-screener-no-per-symbol-isolation-defect`](../../../docs/reports/2026-10-19-analysis-screener-no-per-symbol-isolation-defect.md) | ScreenSymbols fails entirely when one symbol raises a non-RpcError |
+| [`2026-10-19-orphaned-code-defect`](../../../docs/reports/2026-10-19-orphaned-code-defect.md) | Orphaned modules, scripts and dependencies across services |
+
 ---
 _Surfaced by [context-forge](https://github.com/davcs86/agent-plugins). Defects to action, not rules. Re-run `/context-constitution` to refresh._
