@@ -5,7 +5,7 @@ Feature: fix-after-hours-positions-priced (bug fix)
 
   @AC-1 @FR-1 @FR-3 @regression
   Scenario Outline: A one-sided quote values a position at the stored daily close
-    Given an offline account holds 10 "LYFT" at a 150.00 cost basis with no broker valuation
+    Given an offline account holds 10 "LYFT" at cost_basis 150.00 (avg_entry_price 15.00) with no broker valuation
     And the latest "LYFT" quote has ask <ask> and bid <bid>
     And the newest stored 1d "LYFT" close is 16.98, stored 24 hours ago
     When the caller reads ListPositions
@@ -44,12 +44,13 @@ Feature: fix-after-hours-positions-priced (bug fix)
     And the newest stored 1d "LYFT" close is 16.98, stored <age> ago
     When marketdata GetFundamentals is called for "LYFT"
     Then the snapshot price is <price>
+    And an edgar cache row for "LYFT" is <cached>
 
     Examples:
-      | ask   | bid   | age       | price |
-      | 16.05 | 0     | 24 hours  | 16.98 |
-      | 17.10 | 17.00 | 24 hours  | 17.05 |
-      | 16.05 | 0     | 200 hours | 14.20 |
+      | ask   | bid   | age       | price | cached      |
+      | 16.05 | 0     | 24 hours  | 16.98 | written     |
+      | 17.10 | 17.00 | 24 hours  | 17.05 | written     |
+      | 16.05 | 0     | 200 hours | 14.20 | not written |
 
   @AC-5 @FR-1
   Scenario: A two-sided quote's mark is its mid, not the stored close
@@ -71,16 +72,16 @@ Feature: fix-after-hours-positions-priced (bug fix)
   Scenario Outline: The mark comes from a close inside the staleness bound, and raw quote fields are unchanged
     Given marketdata.quotes.mark_close_max_age_hours is 168
     And the latest "LYFT" quote has ask 16.05 and bid 0
-    And the stored 1d "LYFT" close state is <close>
+    And the only stored 1d "LYFT" close is <close>
     When marketdata GetLatestQuotes is called for "LYFT"
-    Then the close lookup is issued with since equal to now minus 168 hours
-    And the "LYFT" mark_price is <mark>
+    Then the "LYFT" mark_price is <mark>
     And the "LYFT" ask_price is 16.05 and bid_price is 0
 
     Examples:
-      | close                     | mark  |
-      | 16.98 stored 24 hours ago | 16.98 |
-      | no 1d close since bound   | unset |
+      | close                      | mark  |
+      | 16.98 stored 167 hours ago | 16.98 |
+      | 16.98 stored 169 hours ago | unset |
+      | absent (never ingested)    | unset |
 
   @AC-8 @FR-4
   Scenario: Any unpriced position skips the equity snapshot and names the symbol
@@ -92,21 +93,24 @@ Feature: fix-after-hours-positions-priced (bug fix)
 
   @AC-9 @FR-5
   Scenario: Any unpriced position skips concentration but drawdown still alerts
-    Given the holdings of AC-8
+    Given an offline account holds 10 "LYFT" whose mark is 16.98
+    And the same account holds 100 "ELWT" with no mark and no two-sided quote
+    And broker-synced account "brk-1" has account balance peak equity 1000.00 and current equity 800.00
     And portfolio.risk.concentration_limit_pct is 0.20 and portfolio.risk.max_drawdown_pct is 0.10
-    And account "acc-1" has peak equity 1000.00 and current equity 800.00
     When the risk check runs
     Then no concentration alert is emitted
     And a WARN "concentration check skipped: positions unpriced" names "ELWT"
-    And the only alert is "drawdown limit breach: account acc-1 at 20.0% (peak 1000.00, current 800.00)"
+    And the only alert is "drawdown limit breach: account brk-1 at 20.0% (peak 1000.00, current 800.00)"
 
   @AC-10 @FR-6
   Scenario: EDGAR multi-symbol fundamentals price pending symbols with one quote call
-    Given marketdata.fundamentals.snapshot_source is "edgar"
-    And "LYFT" and "MSFT" both need derivation (no fresh edgar cache row)
+    Given marketdata.fundamentals.snapshot_source is "edgar" and marketdata.edgar.enabled is true
+    And "LYFT" and "MSFT" both have a latest filing and no fresh edgar cache row
+    And the latest "LYFT" quote has ask 16.05 and bid 0 with stored 1d close 16.98 from 24 hours ago
+    And the latest "MSFT" quote has ask 534.00 and bid 533.30
     When marketdata GetFundamentalsMulti is called for "LYFT" and "MSFT"
     Then exactly one GetLatestQuotes call is made, for "LYFT" and "MSFT"
-    And the "LYFT" snapshot price equals the price returned by GetFundamentals for "LYFT"
+    And the "LYFT" snapshot price is 16.98 and the "MSFT" snapshot price is 533.65 within 1e-9
 
   @AC-11 @FR-2
   Scenario: A failed close lookup keeps two-sided marks and leaves one-sided marks unset
@@ -119,21 +123,26 @@ Feature: fix-after-hours-positions-priced (bug fix)
     And a WARN "GetLatestQuotes: mark lookup failed" is logged
 
   @AC-12 @FR-2
-  Scenario Outline: The close lookup runs concurrently with the cold fetch and is bounded by its budget
-    Given <condition>
-    When marketdata GetLatestQuotes is called for a cold one-sided symbol
-    Then <outcome>
+  Scenario: The close lookup runs concurrently with the cold fetch
+    Given "LYFT" is cold and its live quote is ask 16.05 and bid 0
+    And the live cold fetch does not return until the close lookup has started
+    And the newest stored 1d "LYFT" close is 16.98, stored 24 hours ago
+    When marketdata GetLatestQuotes is called for "LYFT"
+    Then the "LYFT" quote is returned with mark_price 16.98
 
-    Examples:
-      | condition                                                                       | outcome                                                    |
-      | the cold fetch blocks until the close lookup has started                        | the call returns with both results within the 5 s guard    |
-      | marketdata.quotes.mark_timeout_ms is 100 and the close lookup never answers      | the call returns the cold quote in under 1 second          |
+  @AC-15 @FR-2
+  Scenario: A hanging close lookup is bounded by its budget
+    Given marketdata.quotes.mark_timeout_ms is 100
+    And "LYFT" is cold and its live quote is ask 16.05 and bid 0
+    And the close lookup never answers
+    When marketdata GetLatestQuotes is called for "LYFT"
+    Then the "LYFT" quote is returned in under 1 second with mark_price unset
 
   @AC-13 @FR-3
   Scenario: Every portfolio read path values the one-sided position identically
     Given the position of AC-1 with ask 16.05 and bid 0
-    When the caller reads ListPositions, ListPortfolios and GetPnL
-    Then all three value "LYFT" at 16.98
+    When the caller reads ListPositions, GetPosition, GetPortfolio, ListPortfolios and GetPnL
+    Then all five value "LYFT" at 16.98
     And GetPnL unrealized_pnl is 19.80
     And the ListPortfolios account equity is 169.80
 

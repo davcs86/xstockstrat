@@ -34,9 +34,9 @@ Five sites compute `(ask + bid) / 2` and reject only a non-positive *sum*:
 - `:908` (risk valuation, no guard);
 - `services/xstockstrat-marketdata/internal/service/marketdata_service.go:1740` (`livePrice`).
 
-The warm poller caches the one-sided after-hours quote every 30s, so every read returns it. The raw cached
-quote has not been inspected yet. Design should confirm which side is zero and whether the feed's
-last-trade price is available as a fallback.
+The warm poller caches the one-sided after-hours quote every 30s, so every read returns it. Resolved at
+design: staging confirmed the lone side is stale and the stored 1d close is correct; see design.md § Chosen
+Approach and context.md (round 1 evidence).
 
 ## Affected Services
 
@@ -79,7 +79,8 @@ The persisted equity snapshot and concentration alerts are background effects.
 - [x] Proto change: additive `optional double mark_price = 8` on `marketdata.v1.Quote` (non-breaking; C-09)
 - [x] No database migrations
 - [x] Config keys (new, unseeded, SetConfig-bounded): `marketdata.quotes.mark_timeout_ms` (500, [100,2500]),
-  `marketdata.quotes.mark_close_max_age_hours` (168, [120,720])
+  `marketdata.quotes.mark_close_max_age_hours` (168, [120,720]). Approval gate: owner + config team
+  (docs/runbooks/approval-flow.md); proto change: Proto Reviewer + marketdata/portfolio owners.
 - Rollout: operator purge of edgar cache rows in `marketdata.fundamentals`, after the marketdata deploy (design.md §5)
 
 ## Acceptance Criteria
@@ -90,6 +91,11 @@ the close.
 
 ## Out of Scope
 
+- Trading position sizing (`trading.go:3156-3169`): unchanged; it keeps its own one-sided rule
+- Serial `GetLatestQuote` and the quote stream: they do not compute `mark_price` (C-16 CHANGE to
+  `@AC-1 @feature-178`, operator-signed in context.md)
+- Repairing `marketdata.fundamentals_history` or fundamentals signals already emitted from halved prices
+- Merging the two per-fill quote fetches (`checkRiskLimits` and `broadcastSnapshot`); pre-existing
 - Refactoring unrelated to the bug
 - Quote timeout investigation (folded into feature 226 by the operator, 2026-10-19)
 - Performance improvements unrelated to the fix

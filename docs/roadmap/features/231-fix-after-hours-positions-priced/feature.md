@@ -16,6 +16,7 @@
 | 2026-10-19 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-19-after-hours-one-sided-quote-half-price-defect.md` |
 | 2026-10-19 | `draft` → `spec-ready` | /sdd-review | Product spec approved (8 warnings, carried to design) |
 | 2026-10-19 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved with conditions; recon.md + design.md written |
+| 2026-10-19 | `design-approved` (unchanged) | /sdd-review | Post-design product-spec re-review: PASS WITH WARNINGS (10), all addressed |
 
 ---
 

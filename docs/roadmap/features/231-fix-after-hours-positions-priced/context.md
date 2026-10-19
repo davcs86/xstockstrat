@@ -133,3 +133,27 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [ ] Two quote fetches per fill (pre-existing, optional) → out of scope
 - [ ] Overlap with 230-offline-account-full-pnl → whichever lands second reconciles
 - [ ] Operator EDGAR purge after the marketdata deploy, during market hours; record counts → rollout step
+
+## Session 2026-10-19 — sdd-review product-spec (re-run after design, operator-requested)
+
+- Result: PASS WITH WARNINGS, no blockers, no Floor breach. Status unchanged (design-approved).
+- Earlier warnings W1–W8 confirmed resolved.
+- Overlap re-scan: CLEAN. Quote field 8 is free; both `marketdata.quotes.mark_*` keys are new; 229 and 215 code is
+  already on trunk, so this is a rebase only.
+- Warnings addressed in this session:
+  - [x] R1: AC-1 states `avg_entry_price` 15.00. GetPnL uses `(CurrentPrice − AvgEntryPrice) × Qty` (`portfolio_service.go:658`).
+  - [x] R2: AC-7 is now an observable 167h / 169h / absent boundary outline. The `since == now − maxAge`
+        argument pin moves to the impl-spec test detail.
+  - [x] R3: AC-9 holdings are inlined, and drawdown sits on broker-synced `brk-1`. `GetAccountDrawdowns` reads only
+        `account_balances` (`portfolio_repo.go:411-415`), and offline accounts have no row.
+  - [x] R4: AC-10 is concrete: edgar enabled, LYFT 16.98, MSFT 533.65.
+  - [x] R5: AC-12 is split into AC-12 (concurrency, observable mark 16.98) and new AC-15 (100ms budget, under 1s).
+        The handshake / 5s-guard mechanics live in the impl-spec.
+  - [x] R6: AC-4 asserts the edgar cache row is written or not written. The 200h row is not written (fails.md:2289).
+  - [x] R7: stale "Design should confirm…" paragraph replaced with a pointer to design.md.
+  - [x] R8: Out of Scope now lists: trading sizing; serial GetLatestQuote / stream computing no mark (178 CHANGE);
+        no repair of `fundamentals_history` or emitted signals; the two per-fill fetches.
+  - [x] R9: approval gates noted in Fix Scope (config: owner + config team; proto: Proto Reviewer + owners).
+  - [x] R10: AC-13 is extended to GetPosition and GetPortfolio.
+- Note: AC-14 row 2 (16.05/0 with no mark → 0) is RED on current code, which yields 8.025. That makes it a real
+  regression guard.
