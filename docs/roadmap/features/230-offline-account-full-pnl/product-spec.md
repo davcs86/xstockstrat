@@ -51,8 +51,9 @@ fill price `p_j`; same-session lots closed in-session realize `(exit_fill − p_
   - `+ Σ_closed_same_session_lots (exit_fill − p_j) × q_j_closed`
   (e.g. a cover of an overnight short below the previous close is a gain: `(190 − 200) × (−10) = +100`).
   Day P&L is the session change, **not** realized-vs-average-cost. The overnight-first rule only
-  attributes shares between the terms; the position's and account's `day_pnl` totals are the same
-  under any consumption order.
+  attributes shares between the terms. The position's and account's `day_pnl` totals are the same
+  under any consumption order when every overnight term has a `previous_close`; otherwise (missing
+  reference prices, below) the overnight-first rule decides the result (AC-40).
   **Missing reference prices:** an overnight term needs `previous_close`. If the symbol has no daily
   bar for the session before the reference session (halted, newly listed, data gap), its overnight
   terms are 0 and excluded from `base`; same-session-lot terms still apply. A `MARK_SOURCE_NONE`
@@ -111,6 +112,9 @@ FR-6. **Surfaces.** The FR-1..FR-5 figures are rendered on:
     This supersedes, for these fields, the "shows only … / no Day P&L" wording of the durable UI rules
     `services/xstockstrat-ui/acceptance/fix-offline-account-ui-gaps.feature` @AC-2/@AC-4 (feature 159);
     their "no Cash / Buying Power / broker Day P&L" intent is kept. Sign-off in `context.md` (C-16).
+    The durable rule `services/xstockstrat-ui/acceptance/offline-account-portfolios.feature` @AC-13
+    (single-account "Realized P&L") is **extended**: that row is relabelled "Realized (since snapshot)"
+    beside the new lifetime row.
   - `/trader/positions` rows and `/trader/positions/[symbol]` detail: Day P&L, signed short %, and a
     stale-mark indicator ("Last close YYYY-MM-DD") or an "No price" indicator.
   - Agent: `manage_offline_account` (`confirm_order` gains optional `fees`; `get_order`/`list_orders`
@@ -195,7 +199,8 @@ fixed at `/sdd-spec`:
 - `portfolio.v1.Position` (next free 24) — `MarkSource mark_source`, `google.protobuf.Timestamp
   mark_as_of` (distinct from feature 163's `as_of = 22` / `source = 23`). For
   `MARK_SOURCE_LAST_CLOSE`, `mark_as_of` is 00:00 America/New_York of the bar's session date; for
-  `MARK_SOURCE_QUOTE`, the quote timestamp. UIs render it as a date in America/New_York. Existing `day_pnl = 12`,
+  `MARK_SOURCE_QUOTE`, the quote timestamp; unset for `MARK_SOURCE_BROKER` and `MARK_SOURCE_NONE`.
+  UIs render it as a date in America/New_York. Existing `day_pnl = 12`,
   `day_pnl_pct = 13`, `unrealized_pnl_pct = 7` are populated.
 - New enum `portfolio.v1.MarkSource`: `MARK_SOURCE_UNSPECIFIED = 0`, `MARK_SOURCE_QUOTE`,
   `MARK_SOURCE_LAST_CLOSE`, `MARK_SOURCE_BROKER`, `MARK_SOURCE_NONE`.
@@ -270,3 +275,7 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
   `quote_timeout_ms` + 0.5 s envelope as the quote batch (AC-27), so design states its concurrency and
   partial-failure aggregate. The session calendar (holidays, early closes) source must be named in
   design (F-07 awareness). Once design decides OQ-3, append a scenario for it (IDs append-only).
+  Also settle in design: for a broker account `GetPortfolio` reports `day_pnl` from broker equity while
+  its `Equity` is summed market value (`ListPortfolios` uses broker equity), so decide whether
+  `GetPortfolio` adopts broker equity too. Also decide how its `trading_mode` filter selects the accounts in
+  the aggregate.

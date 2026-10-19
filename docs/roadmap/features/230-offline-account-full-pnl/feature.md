@@ -11,6 +11,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-10-19 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-10-19 | `draft` → `spec-ready` | /sdd-review | Product spec approved after 4 review rounds (round-4 warnings addressed: 2 warnings, 5 notes) |
 
 ---
 
@@ -48,4 +49,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review offline-account-full-pnl product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-design offline-account-full-pnl` — recon + design debate (full mode recommended), then `/sdd-spec offline-account-full-pnl`

@@ -114,3 +114,24 @@
 - **C-16 extension (N2):** the durable UI rule `services/xstockstrat-ui/acceptance/offline-account-portfolios.feature`
   @AC-13 ("Realized P&L = 97.50") is **extended**, not contradicted. The row is relabelled
   "Realized (since snapshot)" next to the new lifetime row. Recon should record it as EXTEND.
+
+## Session 2026-10-19 — sdd-review product-spec (round 4: PASS WITH WARNINGS → approved)
+
+- Product spec approved. Status: draft → spec-ready.
+- Round-4 confirmation verified all round-3 items fixed and re-checked AC-1..AC-39 arithmetic (no
+  rounding ties).
+- Warnings addressed before the status change:
+  - (A) FR-1's "order-invariant" claim is qualified for the missing-`previous_close` case, and AC-40 was
+    added. The reviewer's suggested value (0) was wrong; overnight-first gives (50−48)×5 = 10.
+  - (B) AC-31 restated as a Saturday read so its `day_pnl 50.00` is reachable:
+    (180−185)×(−10) = 50.
+- Notes addressed:
+  - AC-10 and AC-11 got a read date (2026-12-01).
+  - `mark_as_of` is unset for BROKER/NONE.
+  - 157 UI @AC-13 extension named in FR-6.
+  - GetPortfolio broker `Equity` and the `trading_mode` aggregate selection are added to OQ-8 as design
+    items.
+- Overlap findings (warnings only, no merge-order row):
+  - 229 is merged; the branch includes it.
+  - Land after 215 and rebase (`app/tools.py`, `mcp-tools.md`, `positions/[symbol]/page.tsx`).
+  - Offline fees must not enter broker `fees_accum` (OQ-8).

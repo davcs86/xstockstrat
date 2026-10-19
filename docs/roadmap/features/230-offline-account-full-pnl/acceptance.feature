@@ -78,6 +78,7 @@ Feature: offline-account-full-pnl
 
   @AC-10 @FR-4
   Scenario: A snapshot resets since-snapshot realized but carries lifetime realized forward
+    Given the read happens on "2026-12-01"
     Given "acc-1" has since-snapshot realized 600.00, fees_since_snapshot 3.00, lifetime realized 600.00, and fees_lifetime 3.00
     When snapshot_positions is called with as_of "2026-10-31T23:59:59Z" and positions_json [{"symbol":"AAPL","qty":70,"avg_cost_per_share":150.00}]
     Then the account realized P&L since snapshot is 0.00 and fees_since_snapshot is 0.00
@@ -86,6 +87,7 @@ Feature: offline-account-full-pnl
 
   @AC-11 @FR-4
   Scenario: Lifetime realized accumulates across two snapshots
+    Given the read happens on "2026-12-01"
     Given "acc-1" holds AAPL qty 70 @ avg 150.00 from a snapshot with as_of "2026-10-31T23:59:59Z"
     And "acc-1" has lifetime realized 600.00 carried from that snapshot and since-snapshot realized 0.00
     And an offline SELL of 20 AAPL at filled_avg_price 155.00 with filled_at "2026-11-03T15:00:00Z" is confirmed
@@ -256,7 +258,10 @@ Feature: offline-account-full-pnl
 
   @AC-31 @FR-6
   Scenario: The position detail page shows day P&L, signed short %, and mark provenance
-    Given "acc-1" holds TSLA qty -10 @ avg 200.00 with mark 180.00 from MARK_SOURCE_LAST_CLOSE dated "2026-10-16" and day_pnl 50.00
+    Given the read happens on Saturday "2026-10-17"
+    And "acc-1" holds TSLA qty -10 @ avg 200.00 with no fills on session 2026-10-16 or since
+    And the TSLA daily closes are 185.00 for session "2026-10-15" and 180.00 for session "2026-10-16"
+    And there is no live TSLA quote
     When the trader opens /trader/positions/TSLA
     Then the page shows "Day P&L" 50.00 and unrealized 200.00 (+10.00%)
     And the page shows a stale-price indicator labelled "Last close 2026-10-16"
@@ -332,3 +337,13 @@ Feature: offline-account-full-pnl
     Then GetPortfolio for "alp-1" reports day_pnl 120.00, day_pnl_pct 0.0120, total_pnl 500.00, and no total_pnl_pct value
     And GetPortfolio for "acc-1" reports day_pnl 400.00, total_pnl 1400.00, and total_pnl_pct 0.0933
     And GetPortfolio without account_id reports day_pnl 520.00, day_pnl_pct 0.0200, total_pnl 1900.00, and no total_pnl_pct value
+
+  @AC-40 @FR-1
+  Scenario: Without a previous close, overnight-first decides the round-trip day P&L
+    Given "acc-1" holds NEWCO qty 10 from before session 2026-10-19 with no daily bar for session 2026-10-16
+    And an offline BUY of 5 NEWCO at filled_avg_price 48.00 with filled_at "2026-10-19T14:00:00Z" is confirmed
+    And an offline SELL of 5 NEWCO at filled_avg_price 51.00 with filled_at "2026-10-19T16:00:00Z" is confirmed
+    And the NEWCO live mid-quote is 50.00
+    When the trader reads the portfolio for "acc-1"
+    Then the NEWCO position qty is 10
+    And the NEWCO position day_pnl is 10.00
