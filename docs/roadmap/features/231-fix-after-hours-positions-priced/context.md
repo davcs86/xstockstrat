@@ -267,3 +267,11 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - TDD: N/A (proto).
 - Files modified: `packages/proto/marketdata/v1/marketdata.proto`
 - Deviations: D-1 (host-native codegen toolchain; see Deviation Log)
+
+### Step 4 — proto-gen: regenerate stubs [done]
+- `./scripts/buf-gen.sh` (host-native, D-1) emitted exactly the 8 files the spec listed (Go, Python, TS source and
+  `dist`). A re-run is a no-op. `GOWORK=off go build ./...` for trading passes. `Quote.MarkPrice *float64` and
+  `GetMarkPrice()` are present.
+- TDD: N/A (generated). Only `gen/` is committed here; the `.proto` went in with Step 3.
+- Files modified: the 8 `packages/proto/gen/**/marketdata/v1/*` files
+- Deviations: D-1

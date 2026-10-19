@@ -282,7 +282,7 @@ cd packages/proto && buf breaking --against "../../.git#branch=main-dev,subdir=p
 
 ### Step 4 — proto-gen: regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/marketdata/v1/marketdata.pb.go` — modify (generated)
