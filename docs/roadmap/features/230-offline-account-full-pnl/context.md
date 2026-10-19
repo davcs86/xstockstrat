@@ -135,3 +135,19 @@
   - 229 is merged; the branch includes it.
   - Land after 215 and rebase (`app/tools.py`, `mcp-tools.md`, `positions/[symbol]/page.tsx`).
   - Offline fees must not enter broker `fees_accum` (OQ-8).
+
+## Session 2026-10-19 — sdd-design (Phase 0 recon)
+
+- Wrote recon.md from six parallel recon passes: trading, portfolio, marketdata/proto, ui, agent, and
+  the business-rules scan (scenario-recon).
+- Central fork (R1): offline per-session fill data never reaches portfolio, the session rolls over
+  with no event, and a portfolio→trading edge is forbidden (boot cycle). So Day P&L must be computed at
+  read time from data trading pushes into portfolio's absolute-sync payload.
+- New risks surfaced:
+  - R2: no market calendar or America/New_York helper anywhere.
+  - R3: marketdata `prev_close` isn't session-aware.
+  - R4: `BatchGetBars` live fetch has no detached budget and fails the whole RPC on error.
+  - R5: `ListConfirmedOfflineOrdersByAccount` lacks `DISTINCT ON (order_id)`.
+  - R11: `fmtSignedUsd` places the minus sign wrong (renders `$-50.00`).
+- C-16 flag: `@AC-4 @feature-178` ("same missing outcome under batching") may be an unsigned CHANGE
+  under FR-5.
