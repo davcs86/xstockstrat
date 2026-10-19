@@ -41,3 +41,33 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
     whichever lands second reconciles.
 - Test constraint: `portfolio_service_test.go:48` asserts CurrentPrice is the byte-identical `(Ask+Bid)/2`
   (PR #735 parity guard). Update it deliberately.
+
+## Session 2026-10-19 — sdd-design (full), in progress
+
+- Phase 0: recon.md written (commit 0e6e4e68).
+- Round 1 proposer: two-sided mid → live last trade via portfolio `BatchGetLatestPrice` → unpriced.
+- Round 1 adversary: NEEDS WORK, no Floor breach. The last-trade mechanism is rejected:
+  - two detached 2.5s budgets inside 229's 4s deadline;
+  - an unbounded prev-close scan on every `BatchGetLatestPrice`;
+  - serial per-symbol live calls inside `GetFundamentalsMulti` (the 227 hang class);
+  - a live Alpaca call on every after-hours read.
+- Staging evidence, 2026-10-19 after the close. The lone quote side (×2) is stale, but the stored 1d bar close is
+  correct. This rules out trading's positive-side rule for valuation:
+
+  | Symbol | Lone side ×2 | Stored 1d close | Real price |
+  |---|---|---|---|
+  | LYFT | 16.05 | 16.98 | broker 16.98 |
+  | ICE | 141.45 | 158.32 | — |
+  | MSFT | 501.41 | 533.645 | — |
+  | ELWT | — | 5.48 (10-16, illiquid) | — |
+
+- Carried objections (round 2 must address):
+  - skip snapshot and concentration when ANY position is unpriced;
+  - snapshot and risk use the broker CurrentPrice where present (C-10(b), fails.md:38-41);
+  - required purge of the poisoned edgar cache rows;
+  - staleness bound on the fallback;
+  - AC-3 asserts the full alert set; AC-1 states cost basis;
+  - `StartSnapshotWriter` (`:813`) is dead code → findings entry.
+- Operator steer (round 1 gate): compute the mark in marketdata. Additive `optional double mark_price` on `Quote`
+  (field 8), filled by GetLatestQuotes as two-sided mid, else the latest stored 1d close (one bounded query);
+  livePrice reuses it in-process. This accepts a proto change (C-09, 2-owner approval).
