@@ -18,6 +18,7 @@
 | 2026-10-19 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved with conditions; recon.md + design.md written |
 | 2026-10-19 | `design-approved` (unchanged) | /sdd-review | Post-design product-spec re-review: PASS WITH WARNINGS (10), all addressed |
 | 2026-10-19 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 13 steps |
+| 2026-10-19 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential mode (operator: no checkpoints); Step 1 done |
 
 ---
 

@@ -240,3 +240,17 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   (SEV-2, open): snapshot and risk value from mid-quotes, partial batches understate equity, concentration skew.
   It is a strict subset of Step 11 (broker-first `applyQuotes`, skip on any unpriced, `+=`). The sidecar is stamped
   `triaged → feature:231-fix-after-hours-positions-priced` so it is not re-routed.
+- Tooling setup (steps 1–13): node v22 ✓ (CI pins 24; c8/tsc unaffected) · pnpm 9.15.9 ✓ · go1.27.0 ✓ ·
+  golangci-lint ⬇ v2.14.0 rebuilt with go1.27.0 at `/root/go/bin` (the `/usr/local/bin` v2.5.0/go1.25 binary cannot
+  load go1.27 modules; same as 229 D-3) · dockerd ✓ · codegen image ✗ for now (Docker Hub 429 on
+  `golang:1.27-trixie`) → retry before Step 4, else host-native fallback (`codegen-toolchain-host-setup.md`).
+
+### Step 1 — service: Write-bound the two mark keys in `SCALAR_BOUNDS_REGISTRY` [done]
+- Added `marketdata.quotes.mark_timeout_ms` [100,2500] and `marketdata.quotes.mark_close_max_age_hours` [120,720]
+  with a 2-line constraint comment, and amended the 229 comment to "max(batch, mark) budget".
+- RED (before Step 1, with Step 2's rows present): `node --test` 55 tests, 4 fail. These are the four "rejects …
+  mark_* just outside" cases.
+- GREEN: `pnpm run test:coverage` 176/176 pass, lines 86.73% (≥ 40). `pnpm run lint` 0 errors (158 pre-existing
+  warnings).
+- Files modified: `services/xstockstrat-config/src/grpc/configServiceImpl.ts`
+- Deviations: none

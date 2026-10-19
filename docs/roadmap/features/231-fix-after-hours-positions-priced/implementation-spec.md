@@ -151,7 +151,7 @@ Step Dependencies).
 
 ### Step 1 — service: Write-bound the two mark keys in `SCALAR_BOUNDS_REGISTRY`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/grpc/configServiceImpl.ts` — modify
