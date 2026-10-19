@@ -193,3 +193,34 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - `resolveMarkCloseMaxAge` name;
   - `edgarResolve` / `edgarFinish` signatures;
   - Multi phase-1 resolves all symbols before any upsert (an aborting batch writes no cache rows; response unchanged).
+
+## Session 2026-10-19 — sdd-review impl-spec (advisory)
+
+- Result: 1 blocker (B1), 7 warnings, 7 notes. Overlap scan (Mode B): CLEAN. Shared test and doc files were last
+  edited by 215/227/229, which are all on trunk (rebase only). The two 230 drafts have no impl-spec yet.
+- Operator instruction: address all warnings. Every item below was fixed in implementation-spec.md before execution
+  (F-09 freezes step bodies only once execution starts).
+  - [x] B1 (F-05/F-08/F-09): Step 11 Files + Evidence + Instruction 3a now update `TestEnrichPosition`
+        (`portfolio_helpers_test.go:384`) to `enrichPosition(p, price)`. Step 11's lint type-checks tests.
+  - [x] W1 (C-09): Step 3 `buf breaking` now uses `../../.git#ref=HEAD,subdir=packages/proto` and
+        `../../.git#branch=main-dev,subdir=packages/proto` (insights.md:1876).
+  - [x] W2 (C-08/P-06): AC-12 is a two-way handshake (`multi.started` ↔ `closeFake.waitFor`, `mark_timeout_ms`
+        2500). Either serial order now fails; only the concurrent implementation passes.
+  - [x] W3 (C-01/F-04): `marksPtr` is replaced by an inline `live` pointer.
+  - [x] W4 (F-08): Step 4 Files lists the 8 expected generated files (any extra emit goes to the Deviation Log).
+        Step 4 commits only `gen/`.
+  - [x] W5 (C-08): every Go test step exports `GOWORK=off` and fails on total coverage < 40%.
+  - [x] W6: Step 13 adds `docs/patterns/test-data-inventory.md` (Go row, pre-existing drift because trading's
+        `internal/testdata` exists) and anchors the marketdata `CLAUDE.md:140` snapshot paragraph.
+  - [x] W7 (C-14): the named consumer surfaces (agent `get_positions`, `get_positions_by_account_id`,
+        `query_fundamentals`; `/trader` Book → Portfolio; `/insights`) need no code change. They are declared
+        read-only in product-spec § Consumer Surface(s) and design.md, which the operator approved at the design gate
+        on 2026-10-19. The change is verified through the RPCs by Step 10 and Step 12 tests.
+  - [x] N1: stale `get_fundamentals` flag removed.
+  - [x] N2: the Step 10 AC-10 registry is built inline.
+  - [x] N3: Step 8 AC-11 quotes are built inline (`quoteAt` hardcodes 101/100).
+  - [x] N4: Step 13 adds a portfolio findings row for the stale `portfolio.proto:81` "mid-quotes" comment.
+  - [x] N5: Step 13 adds a soft `merge-order.md` WARN note for the 231 ↔ `230-offline-account-full-pnl` overlap.
+  - [x] N6 (accepted trade-off): an aborted Multi batch no longer caches earlier symbols; the response is unchanged.
+  - [x] N7: AC-14 row 1 already passes on today's code. Row 2 is the regression guard.
+- Nothing remains `[ ] unaddressed` for /sdd-execute.

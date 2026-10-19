@@ -42,9 +42,7 @@ agent code change (design.md § Chosen Approach). Each named surface reaches a f
 - agent `get_positions` / `get_positions_by_account_id` → `client.list_positions` → `PortfolioService.ListPositions`
   (`services/xstockstrat-agent/app/tools.py:2239,2260`, `app/client.py:2351-2369`);
 - agent fundamentals → MCP tool **`query_fundamentals`** (`app/tools.py:402`) → `client.get_fundamentals` →
-  `MarketDataService.GetFundamentals` (`app/client.py:1819-1825`). The product spec says "`get_fundamentals`", which
-  is the client function's name. The MCP tool is `query_fundamentals` (flag for `/sdd-review impl-spec`; wording
-  only);
+  `MarketDataService.GetFundamentals` (`app/client.py:1819-1825`);
 - `/trader` Book → Portfolio → `portfolioClient.getPortfolio` / `listPortfolios` / `listPositions`
   (`services/xstockstrat-ui/src/hooks/usePortfolio.ts:13,25,50`, `useAccountPortfolios.ts:14`);
 - `/insights` → `listPortfolios` (`services/xstockstrat-ui/src/lib/insightsBff.ts:123`).
@@ -92,7 +90,7 @@ after the close is an operator check, recorded in `context.md` at the integratio
 | `@AC-9` Unpriced skips concentration, drawdown still alerts | Step 12 | behavioural |
 | `@AC-10` GetFundamentalsMulti: one quote call for the pending symbols | Step 10 | behavioural (upstream call count) |
 | `@AC-11` Failed close lookup: two-sided kept, one-sided unset, WARN | Step 8 | behavioural |
-| `@AC-12` Close lookup concurrent with the cold fetch | Step 8 | behavioural (handshake; deadlocks under 5s guard if serial) |
+| `@AC-12` Close lookup concurrent with the cold fetch | Step 8 | behavioural (two-way handshake; either serial order fails) |
 | `@AC-13` Every portfolio read path values identically | Step 12 | behavioural (5 RPCs) |
 | `@AC-14` Deploy skew: no mark → two-sided mid only | Step 12 | behavioural |
 | `@AC-15` A hanging close lookup is bounded by its budget | Step 8 | behavioural (elapsed < 1s) |
@@ -275,8 +273,9 @@ Confirm the c8 `--lines 40` threshold passes and every new case is green. RED be
 
 **Verification**:
 ```bash
-cd packages/proto && buf lint && buf breaking --against ".git#branch=feature/fix-after-hours-positions-priced"
-cd packages/proto && buf breaking --against ".git#branch=main-dev"   # design.md C-09: also clean against main-dev
+cd packages/proto && buf lint && buf breaking --against "../../.git#ref=HEAD,subdir=packages/proto"
+cd packages/proto && buf breaking --against "../../.git#branch=main-dev,subdir=packages/proto"   # C-09: also clean vs main-dev
+# The `.git` lives at the repo root, and a branch with no commits fails `branch=` (insights.md:1876, 215 Deviation Log).
 ```
 
 ---
@@ -286,10 +285,17 @@ cd packages/proto && buf breaking --against ".git#branch=main-dev"   # design.md
 **Status**: `pending`
 **Service**: `packages/proto`
 **Files**:
-- `packages/proto/gen/` — modify (generated)
+- `packages/proto/gen/go/marketdata/v1/marketdata.pb.go` — modify (generated)
+- `packages/proto/gen/python/marketdata/v1/marketdata_pb2.py` — modify (generated)
+- `packages/proto/gen/ts/marketdata/v1/marketdata_pb.ts` — modify (generated)
+- `packages/proto/gen/ts/marketdata/v1/marketdata.ts` — modify (generated)
+- `packages/proto/gen/ts/dist/marketdata/v1/marketdata.js` — modify (generated)
+- `packages/proto/gen/ts/dist/marketdata/v1/marketdata.d.ts` — modify (generated)
+- `packages/proto/gen/ts/dist/marketdata/v1/marketdata_pb.js` — modify (generated)
+- `packages/proto/gen/ts/dist/marketdata/v1/marketdata_pb.d.ts` — modify (generated)
 
-  A generated-code directory as the Files entry is the accepted convention for a proto-gen step (feature 224
-  Step 2): the exact file set is whatever `./scripts/buf-gen.sh` emits, and CI `proto-freshness` checks it.
+  This is the expected emit set. Any other file `./scripts/buf-gen.sh` emits for this change (for example a
+  `.pyi` stub) is also in scope, and must be recorded in the Deviation Log. CI `proto-freshness` checks the set.
 
 **Reviewers**: Inherited from Step 3.
 
@@ -308,8 +314,8 @@ cd packages/proto && buf breaking --against ".git#branch=main-dev"   # design.md
 
 **Covers**: —
 
-**Instructions**: Run `./scripts/buf-gen.sh` and commit the regenerated `packages/proto/gen/` tree (Go, Python, TS)
-together with Step 3's `.proto` change.
+**Instructions**: Run `./scripts/buf-gen.sh` and commit **only** the regenerated files above. Step 3 already committed
+the `.proto`, and per-step PRs target `feature/<slug>`, so there is no proto-freshness reason to combine them (F-08).
 
 **Verification**:
 ```bash
@@ -421,7 +427,7 @@ cd services/xstockstrat-marketdata && GOWORK=off go build ./... && GOWORK=off go
 
 **Verification**:
 ```bash
-cd services/xstockstrat-marketdata && GOWORK=off COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"
+cd services/xstockstrat-marketdata && export GOWORK=off && COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | awk '/^total:/ {print; gsub("%","",$3); if ($3+0 < 40) exit 1}'   # C-08: CI threshold asserted
 cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-download-mode=mod
 grep -rn "16.98" --include="*_test.go" services/xstockstrat-marketdata   # C-13: the close literal is imported, not redeclared
 ```
@@ -556,17 +562,21 @@ grep -n "mark_timeout_ms\|mark_close_max_age_hours\|dailyCloses\|withMark" servi
    Every row also asserts `AskPrice == 16.05 && BidPrice == 0`. Pin the bound: `gotSince` is within ±1s of
    `now − 168h` (R2 note in `context.md`).
 6. **AC-11**:
-   - LYFT (16.05/0) and MSFT (534.00/533.30) are both warm in `fakeQuoteStore`;
+   - LYFT (16.05/0) and MSFT (534.00/533.30) are both warm in `fakeQuoteStore`, built inline with a recent `Time`
+     (`quoteAt`, `:3068-3070`, hardcodes 101/100);
    - the close fake has `block: true`, and `fakeIntGetter{"marketdata.quotes.mark_timeout_ms": 100}`;
    - assert MSFT mark is 533.65 ±1e-9, LYFT mark is nil, and `rec.find("GetLatestQuotes: mark lookup failed")` is
      non-nil with an `error` attr.
    - Add a second sub-case where the close fake returns `err: errors.New("pool exhausted")`, with the same assertions.
-7. **AC-12 (concurrency handshake)**:
-   - cold LYFT 16.05/0, and the close fake holds 16.98 at 24h;
-   - set `fakeMultiSource.release = closeFake.entered` with `honourCtx: false`, so the cold fetch cannot return
-     until the close lookup has started;
-   - assert the quote is returned with mark 16.98 inside the 5s guard.
-   A serial implementation deadlocks here, and the guard fails it (design.md C-08/P-06).
+7. **AC-12 (two-way concurrency handshake)**:
+   - cold LYFT 16.05/0; the close fake holds 16.98 at 24h; `mark_timeout_ms` 2500;
+   - give `fakeDailyCloseReader` a `waitFor <-chan struct{}` field. After closing `entered`, it `select`s on
+     `waitFor` / `ctx.Done()`, returning `ctx.Err()` on the latter;
+   - wire `multi := &fakeMultiSource{started: make(chan struct{}), release: closeFake.entered}` (the existing
+     `started` field, `marketdata_service_test.go:995`) and `closeFake.waitFor = multi.started`;
+   - assert LYFT is returned with mark 16.98 inside the 5s guard.
+   Only a concurrent implementation passes. Cold-first serial deadlocks, and the guard fails it. Close-first serial
+   times the close lookup out, so the mark is nil and the assertion fails (design.md C-08/P-06).
 8. **AC-15**:
    - `mark_timeout_ms` 100; cold LYFT 16.05/0 that returns immediately; the close fake has `block: true`;
    - assert the quote is returned with `MarkPrice == nil` and `elapsed < 1s`.
@@ -583,7 +593,7 @@ grep -n "mark_timeout_ms\|mark_close_max_age_hours\|dailyCloses\|withMark" servi
 
 **Verification**:
 ```bash
-cd services/xstockstrat-marketdata && GOWORK=off COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"
+cd services/xstockstrat-marketdata && export GOWORK=off && COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | awk '/^total:/ {print; gsub("%","",$3); if ($3+0 < 40) exit 1}'   # C-08: CI threshold asserted
 cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-download-mode=mod
 grep -rn "16\.98\|533\.30\|5\.48" --include="*_test.go" services/xstockstrat-marketdata   # expect no redeclared literals
 ```
@@ -647,7 +657,8 @@ New logic is in an excluded package (`service/`), so no coverage threshold appli
      `GetLatestQuotes` error means no marks (all pending are served uncached at the filed close, the same as
      `livePrice`'s nil);
    - **phase 2** walks the input order and appends either the finished result or
-     `edgarFinish(ctx, period, marksPtr(sym))`.
+     `edgarFinish(ctx, period, live)`, where `live` is built inline (no helper):
+     `var live *float64; if m, ok := marks[sym]; ok { v := m; live = &v }`.
    Keep the C-10(b) comment (:1503-1505) accurate in ≤2 lines: one builder for both RPCs, prefetch only for pending
    symbols.
 4. Do not touch the vendor path (:1525 onward) or `edgarSnapshotFromPeriod`.
@@ -675,7 +686,9 @@ grep -n "AskPrice + \|BidPrice) / 2" services/xstockstrat-marketdata/internal/se
   - `fundRepo: newFakeFundRepo()`;
   - `histRepo: &fakeHistRepo{latest: latest}`;
   - a registry with `&fakeMultiSource{quotes: q}`.
-  It sets neither `budgetCfg` nor `quoteStore` (every symbol is cold).
+  It sets neither `budgetCfg` nor `quoteStore` (every symbol is cold), and it does not return its
+  `fakeMultiSource`. AC-10 needs `calls` / `requested`, so build the registry inline in that test (or type-assert
+  `svc.registry.Get("")` to `*fakeMultiSource`).
 - `fakeFundRepo.upserts` counts `UpsertFundamentals` calls (`:178-204`). `fakeHistRepo.latestBy` overrides `latest`
   per symbol (`:1872`, `:1915-1920`). `fakeCfg{strings, bools, ints}` (`:248-271`).
 - `babaEdgarPeriod()` (`:2318-2326`) shows a period that passes `hasCoreMetrics` (`MarketCap`, `PBRatio`, …,
@@ -716,7 +729,7 @@ grep -n "AskPrice + \|BidPrice) / 2" services/xstockstrat-marketdata/internal/se
 
 **Verification**:
 ```bash
-cd services/xstockstrat-marketdata && GOWORK=off COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"
+cd services/xstockstrat-marketdata && export GOWORK=off && COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | awk '/^total:/ {print; gsub("%","",$3); if ($3+0 < 40) exit 1}'   # C-08: CI threshold asserted
 cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-download-mode=mod
 ```
 New logic is in an excluded package (`service/`), so no coverage threshold applies to it. Confirm the total stays
@@ -733,6 +746,7 @@ New logic is in an excluded package (`service/`), so no coverage threshold appli
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_service.go` — modify
+- `services/xstockstrat-portfolio/internal/service/portfolio_helpers_test.go` — modify (signature follow-up only)
 
 **Reviewers**: xstockstrat-portfolio owner — P&L calculation accuracy, position snapshot consistency, concurrent write safety
 
@@ -743,6 +757,8 @@ New logic is in an excluded package (`service/`), so no coverage threshold appli
 - `applyQuotes` (`:446-464`): broker skip `:450`; mid `:457`; guard only `price <= 0` with WARN "latest quote has no
   usable price" (`:458-461`); then `enrichPosition(p, quote.AskPrice, quote.BidPrice)` (`:462`).
 - `enrichPosition(p, askPrice, bidPrice)` (`:545-555`) recomputes the mid (`:548`). The formula is written twice.
+- `TestEnrichPosition` (`portfolio_helpers_test.go:369-391`) calls `enrichPosition(p, tc.ask, tc.bid)` (`:384`).
+  `golangci-lint` type-checks test files, so this step's lint fails unless the call follows the new signature.
 - `GetPnL` (`:641-659`): `applyQuotes` at `:652`; `CurrentPrice <= 0` → `ErrQuotesUnavailable` (`:654-657`); unrealized
   `(CurrentPrice − AvgEntryPrice) × Qty` (`:658`). No code change needed: it inherits `markOf` through `applyQuotes`.
 - `broadcastSnapshot` (`:827-871`):
@@ -776,6 +792,9 @@ New logic is in an excluded package (`service/`), so no coverage threshold appli
    to say "mark-values".
 3. **`enrichPosition(p, price float64)`** (:547): drop the ask/bid params and the mid at `:548`. Update the doc comment
    (:545-546). There is now one valuation rule per service (C-18).
+   3a. Update `TestEnrichPosition` (`portfolio_helpers_test.go:369-391`) to the new signature. Drop the `ask, bid`
+   case fields and call `enrichPosition(p, tc.wantPrice)`. The expected values do not change (ask == bid in every
+   row). This is a mechanical follow-up, not a new behaviour, so Step 11's TDD stays as stated.
 4. **`broadcastSnapshot`** (:832-850): replace the all-symbol fetch and the mid loop with:
    - `quotes, ok := s.latestQuotesFor(ctx, unvaluedSymbols(positions))`, then `applyQuotes(positions, quotes)`, then
      `unpriced := unvaluedSymbols(positions)`;
@@ -910,7 +929,7 @@ grep -n "AskPrice + \|BidPrice) / 2\|AskPrice+" services/xstockstrat-portfolio/i
 
 **Verification**:
 ```bash
-cd services/xstockstrat-portfolio && GOWORK=off COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"
+cd services/xstockstrat-portfolio && export GOWORK=off && COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | awk '/^total:/ {print; gsub("%","",$3); if ($3+0 < 40) exit 1}'   # C-08: CI threshold asserted
 cd services/xstockstrat-portfolio && GOWORK=off golangci-lint run --modules-download-mode=mod
 grep -rn "16\.98\|533\.65\|16\.05" --include="*_test.go" services/xstockstrat-portfolio   # expect no redeclared literals
 ```
@@ -936,6 +955,8 @@ New logic is in an excluded package (`service/`), so no coverage threshold appli
 - `services/xstockstrat-marketdata/docs/context-constitution-findings.md` — modify
 - `services/xstockstrat-portfolio/docs/context-constitution.md` — modify
 - `services/xstockstrat-portfolio/docs/context-constitution-findings.md` — modify
+- `docs/patterns/test-data-inventory.md` — modify
+- `docs/roadmap/features/merge-order.md` — modify
 
 **Reviewers**: none
 
@@ -977,7 +998,8 @@ New logic is in an excluded package (`service/`), so no coverage threshold appli
      with `mark_timeout_ms` (bound = max of the two)".
    - Extend the :217 `GetLatestQuotes` bullet with one sentence on `mark_price`: two-sided mid, else the newest
      stored 1d close inside the bound, else unset; computed only here, not by `GetLatestQuote` or `StreamQuotes`.
-   - Add one sentence to the fundamentals snapshot paragraph: the EDGAR price is the quote mark, else the filed-date
+   - Add one sentence to the "**Snapshot serving source is switchable (feature 211)**" paragraph (:140): the EDGAR
+     price is the quote mark, else the filed-date
      close, which is served uncached.
    - Name the accepted risks in one short line each: the weekend first-query gap; `adjustment=all` back-adjusted
      closes on ex-dates; and a lag of up to ~5 min right after the close.
@@ -1005,7 +1027,18 @@ New logic is in an excluded package (`service/`), so no coverage threshold appli
      concentration sums across accounts.
    - Add a § Dead / orphaned code row: `StartSnapshotWriter` has no caller; snapshots are per-fill only
      (`portfolio_service.go#StartSnapshotWriter`, `#processOrderFill`).
-6. **Teardown (root `CLAUDE.md` § Teardown).** Run `/context-forge:context-constitution refresh`, scoped to the files
+6. **`docs/patterns/test-data-inventory.md`**: change the Go row (:82, "Not materialized — on second consumer
+   only") to "Materialized in trading, marketdata, portfolio (feature 231)". Trading's
+   `internal/testdata/order_rows.go` already exists, so the row is pre-existing drift; Steps 6 and 12 add the other
+   two homes.
+7. **portfolio findings**: add a doc-drift row for `packages/proto/portfolio/v1/portfolio.proto:81` ("positions
+   enriched from marketdata mid-quotes"), now mark-valued. It is left unedited because Step 3 forbids other proto
+   edits.
+8. **`docs/roadmap/features/merge-order.md`**: add a soft (non-blocking) WARN note. 231 and
+   `230-offline-account-full-pnl` (`ccr-cd56ff4d-s5wkbb`) both touch `applyQuotes`, `enrichPosition` and
+   `broadcastSnapshot` in `portfolio_service.go`; whichever lands second reconciles onto `markOf` and
+   `enrichPosition(p, price)`.
+9. **Teardown (root `CLAUDE.md` § Teardown).** Run `/context-forge:context-constitution refresh`, scoped to the files
    above and the changed services (marketdata, portfolio, config), and fix the grounded drift. If the plugin is
    unavailable, re-read each touched context file against the code by hand. Record both facts (plugin unavailable,
    and the manual reconciliation done) in the integration PR body and in `context.md`.
@@ -1017,6 +1050,7 @@ grep -n "mark_timeout_ms\|any position is unpriced\|concentration" services/xsto
 grep -n "feature 231" docs/patterns/config-governance.md
 grep -n "StartSnapshotWriter\|feature 231" services/xstockstrat-portfolio/docs/context-constitution-findings.md
 grep -n "extended-hours" services/xstockstrat-marketdata/docs/context-constitution-findings.md
+grep -n "feature 231" docs/patterns/test-data-inventory.md docs/roadmap/features/merge-order.md
 ```
 
 ---
