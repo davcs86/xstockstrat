@@ -29,5 +29,20 @@ triage/fixing, not governance; re-verified 2026-10-14 (branch `ccr-fe84109f-0lwi
 - `processPositionSync` defaults `userID` to the literal `"default"` and the deregister handler does the same, and `processOrderFill` defaults the account to `"alpaca-default"` — are these legacy fallbacks still reachable? — status: **open**
 - `emitEvent` uses a fresh `uuid.NewString()` per call as the idempotency key, so dedup protects only in-flight retries, not event reprocessing — is retry-only dedup the intended scope? `portfolio_service.go#emitEvent (~L949)` (`uuid.NewString()` ~L963) — status: **open**
 
+
+## Filed as defect reports (2026-10-19)
+
+The open rows above were re-verified against `1302e6d` and recorded as `docs/reports/` defects
+(status sidecar `open`) for `/sdd-triage --from-report`. A row stays here until its report is resolved.
+
+| Report | Title |
+|---|---|
+| [`2026-10-19-cross-hop-deadline-bounds-unenforced-defect`](../../../docs/reports/2026-10-19-cross-hop-deadline-bounds-unenforced-defect.md) | Cross-hop read deadline ordering is not enforced by config bounds |
+| [`2026-10-19-orphaned-code-defect`](../../../docs/reports/2026-10-19-orphaned-code-defect.md) | Orphaned modules, scripts and dependencies across services |
+| [`2026-10-19-portfolio-concentration-logged-as-drawdown-defect`](../../../docs/reports/2026-10-19-portfolio-concentration-logged-as-drawdown-defect.md) | concentration breaches are recorded as portfolio.risk.drawdown_breach ledger events |
+| [`2026-10-19-portfolio-default-identity-fallback-defect`](../../../docs/reports/2026-10-19-portfolio-default-identity-fallback-defect.md) | portfolio consumers substitute literal "default" / "alpaca-default" for a missing user or account id |
+| [`2026-10-19-portfolio-snapshot-risk-midquote-valuation-defect`](../../../docs/reports/2026-10-19-portfolio-snapshot-risk-midquote-valuation-defect.md) | portfolio snapshot equity and risk checks value positions from mid-quotes, not broker marks |
+| [`2026-10-19-portfolio-watchlist-duplicate-returns-internal-defect`](../../../docs/reports/2026-10-19-portfolio-watchlist-duplicate-returns-internal-defect.md) | CreateWatchlist returns INTERNAL on a duplicate watchlist name |
+
 ---
 _Surfaced by [context-forge](https://github.com/davcs86/agent-plugins). Defects to action, not rules. Re-run `/context-constitution` to refresh._

@@ -41,5 +41,19 @@ Defects and drift surfaced by `/context-constitution` on 2026-07-24; refreshed 2
 |---|---|---|---|
 | Module CLAUDE.md cites `insights/market/[symbol]` as a live route in TWO places (§ "Opportunities-first shell → Decide screens": "the Signal-detail page `insights/market/[symbol]`"; § Styling charting bullet: "`insights/market/[symbol]/page.tsx` renders **no** chart") | The page was retired by feature 125 and its logic relocated onto `/trader/positions/[symbol]` — `Glob src/app/insights/market/**` returns zero files | `src/components/insights/MuteForStrategy.tsx` (documents the relocation) vs CLAUDE.md § Decide screens + § Styling; note this contradicts the *newer* "Sanctioned exception" block in the same file, which correctly names `/trader/positions/[symbol]` | **Resolved 2026-10-19** — `08d6301` rewrote both references to `trader/positions/[symbol]`; `rg insights/market services/xstockstrat-ui/CLAUDE.md` = 0 (CLAUDE.md ~L137) |
 
+
+## Filed as defect reports (2026-10-19)
+
+The open rows above were re-verified against `1302e6d` and recorded as `docs/reports/` defects
+(status sidecar `open`) for `/sdd-triage --from-report`. A row stays here until its report is resolved.
+
+| Report | Title |
+|---|---|
+| [`2026-10-19-agent-ui-claude-md-drift-defect`](../../../docs/reports/2026-10-19-agent-ui-claude-md-drift-defect.md) | Agent and UI CLAUDE.md / tool docstring drift from current code |
+| [`2026-10-19-orphaned-code-defect`](../../../docs/reports/2026-10-19-orphaned-code-defect.md) | Orphaned modules, scripts and dependencies across services |
+| [`2026-10-19-ui-audit-route-silent-empty-without-db-defect`](../../../docs/reports/2026-10-19-ui-audit-route-silent-empty-without-db-defect.md) | Config-UI audit route returns an empty log silently when DATABASE_URL is unset |
+| [`2026-10-19-ui-namespace-editor-non-admin-edit-defect`](../../../docs/reports/2026-10-19-ui-namespace-editor-non-admin-edit-defect.md) | Config-UI namespace editor shows Edit/Save to non-admins |
+| [`2026-10-19-ui-watchlist-inqueue-first-page-only-defect`](../../../docs/reports/2026-10-19-ui-watchlist-inqueue-first-page-only-defect.md) | Watchlist "in queue" flag only sees the first loaded opportunity page |
+
 ---
 _Surfaced by [context-forge](https://github.com/davcs86/agent-plugins). Defects to action, not rules. Re-run `/context-constitution` to refresh._

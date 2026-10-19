@@ -33,5 +33,19 @@ governance. The fictional ledger/notify dependency is a repeated pattern also re
 |---|---|---|---|
 | `CLAUDE.md` env block lists `TRADING_MODE=paper` (partially resolved 2026-10-19: the banner no longer lists "⚠ sandbox env inheritance" — fixed by `0aa9c04`) | `TRADING_MODE` is the repo-wide docs-vs-code disagreement in the root findings log | `services/xstockstrat-indicators/CLAUDE.md` env block (`TRADING_MODE=paper`, ~L206); `app/config/watcher.py` | Refresh the env block |
 
+
+## Filed as defect reports (2026-10-19)
+
+The open rows above were re-verified against `1302e6d` and recorded as `docs/reports/` defects
+(status sidecar `open`) for `/sdd-triage --from-report`. A row stays here until its report is resolved.
+
+| Report | Title |
+|---|---|
+| [`2026-10-19-indicators-acceptance-rlimit-wording-defect`](../../../docs/reports/2026-10-19-indicators-acceptance-rlimit-wording-defect.md) | Sandbox OS-isolation acceptance suite says "address-space" for the RLIMIT_DATA cap |
+| [`2026-10-19-indicators-sandbox-overrides-unclamped-defect`](../../../docs/reports/2026-10-19-indicators-sandbox-overrides-unclamped-defect.md) | ExecuteFormula timeout/memory overrides are unclamped (sandbox slot exhaustion) |
+| [`2026-10-19-indicators-sandbox-seed-keys-unprefixed-defect`](../../../docs/reports/2026-10-19-indicators-sandbox-seed-keys-unprefixed-defect.md) | Indicators sandbox config seeds use bare keys and never apply |
+| [`2026-10-19-sandbox-exit-reason-stderr-substring-defect`](../../../docs/reports/2026-10-19-sandbox-exit-reason-stderr-substring-defect.md) | Sandbox exit reason is classified by stderr substring match |
+| [`2026-10-19-sandbox-memory-used-bytes-always-zero-defect`](../../../docs/reports/2026-10-19-sandbox-memory-used-bytes-always-zero-defect.md) | SandboxResult.memory_used_bytes is always zero |
+
 ---
 _Surfaced by [context-forge](https://github.com/davcs86/agent-plugins). Defects to action, not rules. Re-run `/context-constitution` to refresh._

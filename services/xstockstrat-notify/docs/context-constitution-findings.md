@@ -41,5 +41,21 @@ _None currently open_ — the 3 unwired config keys (`notify.stream.max_subscrib
 
 - **RESOLVED 2026-09-03 — `WEBPUSH_HTTP_TIMEOUT_MS` was named as an HTTP timeout but consumed as the Web Push message TTL (10s), so any device offline > 10s silently missed OS alerts and no real send timeout was enforced (latent bug, 2026-09-02).** The mis-named constant is gone; current code splits it into `WEBPUSH_TTL_SECONDS = 3600` and `WEBPUSH_SEND_TIMEOUT_MS = 10000` (`src/fanout/webPush.ts:15-16`), passes both distinctly to `webpush.sendNotification({ TTL, timeout })` (`:148-151`), and adds a regression test asserting the deliberate 1h TTL + a real socket timeout (`src/__tests__/webPush.test.ts:200-224`). Both prongs — "no send timeout" and "10s TTL drops offline devices" — are fixed. Confirmed by re-resolving the citations against current code. The invariant is now captured as the TTL-vs-send-timeout scar in the constitution.
 
+
+## Filed as defect reports (2026-10-19)
+
+The open rows above were re-verified against `1302e6d` and recorded as `docs/reports/` defects
+(status sidecar `open`) for `/sdd-triage --from-report`. A row stays here until its report is resolved.
+
+| Report | Title |
+|---|---|
+| [`2026-10-19-dead-config-keys-defect`](../../../docs/reports/2026-10-19-dead-config-keys-defect.md) | Documented config keys that no code reads (ledger, notify, trading, marketdata, ingest) |
+| [`2026-10-19-notify-claude-md-drift-defect`](../../../docs/reports/2026-10-19-notify-claude-md-drift-defect.md) | Notify CLAUDE.md banner and credential note cite resolved or retired items |
+| [`2026-10-19-notify-listalerts-owner-fallback-unscoped-defect`](../../../docs/reports/2026-10-19-notify-listalerts-owner-fallback-unscoped-defect.md) | ListAlerts trusts the body userId and is unscoped with no identity |
+| [`2026-10-19-notify-severities-type-runtime-mismatch-defect`](../../../docs/reports/2026-10-19-notify-severities-type-runtime-mismatch-defect.md) | StreamAlerts severities filter typed number[] but carries string enums at runtime |
+| [`2026-10-19-notify-stream-ignores-backpressure-defect`](../../../docs/reports/2026-10-19-notify-stream-ignores-backpressure-defect.md) | StreamAlerts fan-out ignores write backpressure (unbounded buffering) |
+| [`2026-10-19-notify-untargeted-push-broadcasts-all-users-defect`](../../../docs/reports/2026-10-19-notify-untargeted-push-broadcasts-all-users-defect.md) | Untargeted alert sends a Web Push to every user's devices |
+| [`2026-10-19-orphaned-code-defect`](../../../docs/reports/2026-10-19-orphaned-code-defect.md) | Orphaned modules, scripts and dependencies across services |
+
 ---
 _Surfaced by [context-forge](https://github.com/davcs86/agent-plugins). Defects to action, not rules. Re-run `/context-constitution` to refresh._
