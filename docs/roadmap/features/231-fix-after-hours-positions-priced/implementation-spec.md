@@ -607,7 +607,7 @@ New logic is in an excluded package (`service/`), so no coverage threshold appli
 
 ### Step 9 — service: marketdata EDGAR — mark-priced snapshot, split resolve/finish, Multi prefetch
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service.go` — modify
@@ -1071,3 +1071,16 @@ grep -n "feature 231" docs/patterns/test-data-inventory.md docs/roadmap/features
   The local `main-dev` ref was stale (`09ec8d9a`), so I moved it to `origin/main-dev` to give the `buf-gen.sh`
   breaking guard a current baseline.
 - **Disposition**: CI-equivalent fallback (sequential mode). CI `proto-freshness` re-verifies the stubs.
+
+### D-2 — Steps 7–8: close-lookup goroutine in a helper; resolver test as its own func
+- **Spec said**: Step 7 Instruction 5 starts the goroutine inline in `GetLatestQuotes`. Step 8 Instruction 11 extends
+  `TestResolveQuoteTunables`.
+- **Actual**: the goroutine lives in `lookupMarkCloses(ctx, symbols) <-chan map[string]float64`, called at the same
+  point, with identical semantics:
+  - buffered cap-1 channel, always received once before return;
+  - per-caller `context.WithTimeout(ctx, resolveQuoteMarkBudget)`, not detached;
+  - WARN `GetLatestQuotes: mark lookup failed` carrying `symbols`, `error` and `ctx_done`;
+  - a nil reader or empty set sends nil immediately.
+  The resolver assertions are in a new `TestResolveMarkTunables`; the values match Instruction 11.
+- **Disposition**: in-scope structure choice within the step's Files. Behaviour and assertions are unchanged.
+  (Recorded after the Step 7/8 commits: the first insert failed on an anchor mismatch.)

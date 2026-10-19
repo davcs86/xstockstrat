@@ -326,3 +326,19 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   `golangci-lint` 0 issues; no redeclared fixture literals.
 - Files modified: `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go`
 - Deviations: D-2
+
+### Step 9 — service: marketdata EDGAR — mark-priced snapshot, split resolve/finish, Multi prefetch [done]
+- `livePrice` now returns `quotes[0].MarkPrice` (> 0) or nil; the mid computation is gone.
+- `getEdgarSnapshot` is split:
+  - `edgarResolve` covers the gate, cache hit, period read and vendor fallback, unchanged;
+  - `edgarFinish(period, live)` upserts **only when `live != nil`**, so a mark miss is served uncached at the filed
+    close.
+- `GetFundamentalsMulti` edgar path:
+  - phase 1 runs serial resolve (omit NotFound, abort otherwise);
+  - then one `GetLatestQuotes(pending)` only when something is pending;
+  - phase 2 finishes in input order with an inline `live` pointer.
+- RED (Step 10 tests first): AC-4 priced 8.025 (the halved bug) and cached it; AC-10 made 2 upstream calls
+  (`[LYFT] [MSFT]`); `livePrice` returned the averaged mid.
+- GREEN: see Step 10.
+- Files modified: `services/xstockstrat-marketdata/internal/service/marketdata_service.go`
+- Deviations: none (the D-2 log entry for Steps 7–8 is committed with this step)
