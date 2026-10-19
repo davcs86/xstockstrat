@@ -10,11 +10,11 @@ Feature: offline-account-full-pnl
   Scenario: Day P&L on shares held overnight uses the previous close
     Given "acc-1" holds AAPL qty 100 @ avg 150.00 with no fills on session 2026-10-19
     And the AAPL previous-session daily close is 160.00
-    And the AAPL live mid-quote is 163.00
+    And the AAPL live mid-quote is 164.00
     When the trader reads the portfolio for "acc-1"
-    Then the AAPL position day_pnl is 300.00
-    And the AAPL position day_pnl_pct is 0.0188
-    And the account day_pnl is 300.00 and the account day_pnl_pct is 0.0188
+    Then the AAPL position day_pnl is 400.00
+    And the AAPL position day_pnl_pct is 0.0250
+    And the account day_pnl is 400.00 and the account day_pnl_pct is 0.0250
 
   @AC-2 @FR-1
   Scenario: Day P&L on shares bought during the session uses the fill price
@@ -81,7 +81,7 @@ Feature: offline-account-full-pnl
     Given "acc-1" has since-snapshot realized 600.00, fees_since_snapshot 3.00, lifetime realized 600.00, and fees_lifetime 3.00
     When snapshot_positions is called with as_of "2026-10-31T23:59:59Z" and positions_json [{"symbol":"AAPL","qty":70,"avg_cost_per_share":150.00}]
     Then the account realized P&L since snapshot is 0.00 and fees_since_snapshot is 0.00
-    And the account lifetime realized P&L is 600.00 gross and 597.00 net
+    And the account lifetime realized P&L is 600.00
     And the account fees_lifetime is 3.00
 
   @AC-11 @FR-4
@@ -107,10 +107,11 @@ Feature: offline-account-full-pnl
   Scenario: A symbol with neither quote nor bars is flagged unpriced and does not fail the read
     Given "acc-1" holds AAPL qty 10 @ avg 150.00 with live mid-quote 160.00
     And "acc-1" holds ZZZZ qty 5 @ avg 30.00 with no quote and no daily bars
+    And "acc-1" has since-snapshot realized P&L 0.00
     When the trader reads the portfolio for "acc-1"
     Then the read succeeds
     And the ZZZZ position is listed with qty 5, current_price 0, and mark_source MARK_SOURCE_NONE
-    And the account unrealized_pnl is 100.00 and the account equity is 1600.00
+    And the account total_pnl is 100.00 and the account equity is 1600.00
 
   @AC-14 @FR-6
   Scenario: The trader account card shows full P&L for an offline account
@@ -159,8 +160,9 @@ Feature: offline-account-full-pnl
   Scenario: A sell fee yields realized P&L gross and net of fees
     Given "acc-1" holds AAPL qty 100 @ avg 150.00 bought with fees 1.50 in the current snapshot window
     When an offline SELL of 100 AAPL at filled_avg_price 156.00 is confirmed with fees 1.50
-    Then the account realized P&L since snapshot is 600.00 gross and 597.00 net
+    Then the account realized P&L since snapshot is 600.00
     And the account fees_since_snapshot is 3.00
+    And the PortfolioPanel for "acc-1" shows "Realized (since snapshot)" 600.00 with net 597.00
 
   @AC-21 @FR-3
   Scenario: Fees on a partial confirm are the order's cumulative total
@@ -191,7 +193,7 @@ Feature: offline-account-full-pnl
   @AC-24 @FR-1
   Scenario: A weekend read reports the most recently completed session
     Given the read happens on Saturday "2026-10-17"
-    And "acc-1" holds AAPL qty 100 with no fills on sessions 2026-10-16 or 2026-10-17
+    And "acc-1" holds AAPL qty 100 with no fills on session 2026-10-16 or since
     And the AAPL daily closes are 158.00 for session "2026-10-15" and 160.00 for session "2026-10-16"
     And there is no live AAPL quote
     When the trader reads the portfolio for "acc-1"
@@ -239,17 +241,18 @@ Feature: offline-account-full-pnl
   Scenario: Every portfolio read returns the same offline P&L for the same state
     Given "acc-1" holds AAPL qty 100 @ avg 150.00 with previous close 160.00 and live mid-quote 163.00
     And "acc-1" has since-snapshot realized P&L 0.00
-    When the caller reads GetPortfolio, GetPosition for AAPL, ListPositions, ListPortfolios for "acc-1", ListPortfolios for all accounts, and the next StreamPortfolioUpdates message
-    Then each response reports AAPL current_price 163.00, day_pnl 300.00, and unrealized_pnl 1300.00
+    And the caller has no other accounts
+    When the caller reads GetPortfolio for "acc-1", GetPortfolio without account_id, GetPosition for AAPL, ListPositions for "acc-1", ListPortfolios for "acc-1", and ListPortfolios for all accounts
+    Then each response that contains the AAPL position reports current_price 163.00, day_pnl 300.00, and unrealized_pnl 1300.00
     And each account-level response reports day_pnl 300.00 and total_pnl 1300.00
 
   @AC-30 @FR-6
   Scenario: The combined PortfolioPanel sums each account's own figures
-    Given offline "acc-1" has day_pnl 300.00, total_pnl 1300.00, and lifetime realized 900.00
+    Given offline "acc-1" has day_pnl 300.00, total_pnl 1300.00, since-snapshot realized 600.00, and lifetime realized 900.00
     And Alpaca account "alp-1" has day_pnl 120.00 and total_pnl 500.00
     When the trader opens /trader with the combined view
     Then the PortfolioPanel shows "Day P&L" 420.00 and "Total P&L" 1800.00
-    And the realized rows show 900.00 labelled "Offline accounts only"
+    And it shows "Realized (since snapshot)" 600.00 and "Realized (lifetime)" 900.00, both labelled "Offline accounts only"
 
   @AC-31 @FR-6
   Scenario: The position detail page shows day P&L, signed short %, and mark provenance
@@ -257,3 +260,50 @@ Feature: offline-account-full-pnl
     When the trader opens /trader/positions/TSLA
     Then the page shows Today's P/L 50.00 and unrealized 200.00 (+10.00%)
     And the page shows a stale-price indicator labelled "Last close 2026-10-16"
+
+  @AC-32 @FR-6 @FR-5
+  Scenario: The positions list shows a "No price" indicator for an unpriced position
+    Given "acc-1" holds ZZZZ qty 5 with mark_source MARK_SOURCE_NONE
+    When the trader opens /trader/positions
+    Then the ZZZZ row shows qty 5 and an indicator labelled "No price"
+    And the ZZZZ row shows no market value, unrealized P&L, or Today's P/L figure
+
+  @AC-33 @FR-6 @FR-3
+  Scenario: Agent list tools return fees and the new position fields
+    Given offline order "ord-3" for 10 MSFT in "acc-1" was confirmed at filled_avg_price 100.00 with fees 1.25
+    When the agent calls manage_offline_account with operation "list_orders" for "acc-1"
+    And the agent calls manage_offline_account with operation "list_positions" for "acc-1"
+    And the agent calls get_positions
+    Then the "ord-3" entry from list_orders has fees 1.25
+    And the MSFT entry from list_positions and from get_positions each has fields day_pnl, day_pnl_pct, unrealized_pnl_pct, mark_source, and mark_as_of
+
+  @AC-34 @FR-1
+  Scenario: A symbol fully closed during the session still counts in account day P&L
+    Given "acc-1" holds AAPL qty 100 @ avg 150.00 from before session 2026-10-19 with previous close 160.00 and no other positions
+    And an offline SELL of 100 AAPL at filled_avg_price 166.00 with filled_at "2026-10-19T15:00:00Z" is confirmed
+    When the trader reads the portfolio for "acc-1"
+    Then no AAPL position is listed
+    And the account day_pnl is 600.00 and the account day_pnl_pct is 0.0375
+
+  @AC-35 @FR-1
+  Scenario Outline: An after-close read on the session day prefers the session's daily close once it exists
+    Given the read happens at "2026-10-19T21:00:00Z" after the regular session closed
+    And "acc-1" holds AAPL qty 100 with no fills on session 2026-10-19 and previous close 160.00
+    And the AAPL live mid-quote is 163.00
+    And <bar_condition>
+    When the trader reads the portfolio for "acc-1"
+    Then the AAPL position current_price is <mark> with mark_source <source>
+    And the AAPL position day_pnl is <day_pnl>
+
+    Examples:
+      | bar_condition                                               | mark   | source                 | day_pnl |
+      | the AAPL daily bar for session 2026-10-19 closed at 162.00   | 162.00 | MARK_SOURCE_LAST_CLOSE | 200.00  |
+      | no AAPL daily bar for session 2026-10-19 is available yet    | 163.00 | MARK_SOURCE_QUOTE      | 300.00  |
+
+  @AC-36 @FR-1
+  Scenario: Shares seeded by a baseline inside the session count as overnight shares
+    Given snapshot_positions for "acc-1" was called with as_of "2026-10-19T14:00:00Z" and positions_json [{"symbol":"AAPL","qty":100,"avg_cost_per_share":150.00}]
+    And the AAPL previous-session daily close is 160.00
+    And the AAPL live mid-quote is 163.00
+    When the trader reads the portfolio for "acc-1"
+    Then the AAPL position day_pnl is 300.00

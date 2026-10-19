@@ -28,8 +28,14 @@ informative as broker accounts.
 - **Signed quantity** — `q > 0` long / buy, `q < 0` short / sell. All P&L formulas below use signed
   quantities, so one formula covers longs, shorts, sells and covers.
 - **Overnight shares** — the signed position at the start of the reference session
-  (`q_open`). **Same-session fills** — confirmed fills with `filled_at` inside the reference session.
-- **Mark** — the price an offline position is valued at: the live mid-quote, else the FR-5 fallback.
+  (`q_open`). Shares seeded by a `SnapshotOfflinePositions` baseline whose `as_of` falls inside the
+  reference session count as overnight shares (part of `q_open`). **Same-session fills** — confirmed
+  fills with `filled_at` inside the reference session.
+- **Mark** — the price an offline position is valued at. During a live session: the live mid-quote,
+  else the FR-5 fallback. Outside a live session: the reference session's daily close when that bar
+  exists (`MARK_SOURCE_LAST_CLOSE`); if it is not yet available (e.g. just after the close), the live
+  mid-quote, else the FR-5 fallback. So off-session Day P&L is always "reference-session close vs the
+  close before it" whenever that bar exists.
 
 ## Functional Requirements
 
@@ -48,7 +54,9 @@ fill price `p_j`; same-session lots closed in-session realize `(exit_fill − p_
   Position `day_pnl_pct = day_pnl / base`, where `base = |q_open × previous_close| + Σ|p_j × q_j|`
   over same-session acquisitions; account `day_pnl_pct = Σ day_pnl / Σ base`. Either is 0 when its
   base is 0. Outside a live session the figures are those of the most recently completed session
-  (last close vs the close before it), until the next session opens.
+  (last close vs the close before it), until the next session opens. A symbol fully closed during the
+  reference session no longer has a position row, but its reduction and closed-lot terms and its `base`
+  are still included in the account `day_pnl` and `day_pnl_pct`.
 
 FR-2. **Total P&L + return %** on the offline account: `total_pnl = realized_gross_since_snapshot +
 unrealized` (gross of fees; the net figure is FR-3). Account `total_pnl_pct = total_pnl /
@@ -62,8 +70,7 @@ FR-3. **Fees as a separate line.** `ConfirmOrder` accepts an optional per-order 
 `fees` (≥ 0, default 0; negative → `INVALID_ARGUMENT`, order unchanged). Every (re-)confirm — full or
 partial — replaces the order's fees along with its fill (existing replace semantics); FILLED vs
 PARTIALLY_FILLED status derivation is unchanged. Fees are **never** folded into cost basis or average
-entry price, and offline fees are **not** routed into the broker `fees_accum` path (no double count).
-The offline account exposes `fees_since_snapshot`, `fees_lifetime`, and realized P&L **gross and net**
+entry price. The offline account exposes `fees_since_snapshot`, `fees_lifetime`, and realized P&L **gross and net**
 of fees (`net = gross − fees`) for both the since-snapshot and lifetime scopes. Orders read back via
 `GetOrder`/`ListOrders` echo `fees`; it is unset (not 0) for broker orders.
 
@@ -92,11 +99,17 @@ FR-6. **Surfaces.** The FR-1..FR-5 figures are rendered on:
     figures (offline per this spec, broker per broker); realized/fees rows show the offline-account sum
     labelled as offline-only.
   - `/trader/portfolio` Book offline card: Day P&L and Total P&L beside Equity and position count.
+    This supersedes, for these fields, the "shows only … / no Day P&L" wording of the durable UI rules
+    `services/xstockstrat-ui/acceptance/fix-offline-account-ui-gaps.feature` @AC-2/@AC-4 (feature 159);
+    their "no Cash / Buying Power / broker Day P&L" intent is kept. Sign-off in `context.md` (C-16).
   - `/trader/positions` rows and `/trader/positions/[symbol]` detail: Day P&L, signed short %, and a
     stale-mark indicator ("Last close YYYY-MM-DD") or an "No price" indicator.
   - Agent: `manage_offline_account` (`confirm_order` gains optional `fees`; `get_order`/`list_orders`
     echo `fees`; `list_positions` returns `day_pnl`, `day_pnl_pct`, `unrealized_pnl_pct`, `mark_source`,
     `mark_as_of`), `get_positions` / `get_positions_by_account_id` (same position fields). No new tool.
+    No agent tool reads the account-level `Portfolio`, so account-level figures (Total P&L/%, lifetime
+    realized, fee totals, net realized) are UI-only; adding them to the agent is not in this feature.
+  - Net realized (`gross − fees`) is derived and shown by the UI; it is not a proto field.
 
 FR-7. **Backfill.** On rollout, existing confirmed offline orders have `fees = 0`; each existing offline
 account's lifetime realized is seeded equal to its current since-snapshot realized (`carried = 0`,
@@ -110,14 +123,18 @@ is unchanged: offline holdings are still valued only from live quotes there and 
 
 FR-9. **Read-path parity.** Every portfolio read that returns offline positions or an offline account
 summary applies the same FR-1/FR-2/FR-5 rules and returns identical values for the same state:
-`GetPortfolio`, `GetPosition`, `ListPositions`, `ListPortfolios` (single-account and all-accounts), and
-the `Portfolio` messages pushed by `StreamPortfolioUpdates`. Covered by a parity test across these RPCs.
+`GetPortfolio`, `GetPosition`, `ListPositions`, and `ListPortfolios` (single-account and
+all-accounts). When `GetPortfolio` is called without an `account_id`, its aggregated Day P&L and Total
+P&L are the sum of each account's own figures (same rule as the combined panel, FR-6). Covered by a
+parity test across these RPCs.
 
 ## Out of Scope
 
 - Including offline realized P&L or the FR-5 fallback in the `GetPnL` aggregate or `/insights` P&L
   Patterns (`portfolio.position.closed` emission for offline closes).
 - Changing the persisted `portfolio.snapshots` series (cashless mark-to-market; see fails.md 172).
+- `StreamPortfolioUpdates`: it pushes user-level `PortfolioSnapshot` messages built from the unchanged
+  `portfolio.snapshots` series (FR-8), so it carries no offline P&L in this feature.
 - A cash / capital-base / deposits ledger for offline accounts (Cash, Buying Power stay hidden).
 - Dividends, corporate actions, FIFO / tax lots, options or OCC symbols.
 - Per-position realized P&L history or a P&L time series.
@@ -227,3 +244,8 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 - [x] **OQ-7 Known traps** — carried into design: fails.md 172 (`portfolio.snapshots.equity` is
   cashless — not used as a basis here, FR-8), fails.md 157 (agent arg change must keep all six
   tool-inventory surfaces and `docs/runbooks/mcp-tools.md` in parity; verify via registered name-set).
+- [x] **OQ-8 Design constraints carried forward** (not observable via API, so enforced by unit tests in
+  design/spec): offline fees must not enter the broker per-position `fees_accum` path (feature 029)
+  and so cannot be double-counted. The FR-5 last-close fetch must fit within the same
+  `quote_timeout_ms` + 0.5 s envelope as the quote batch (AC-27), so design states its concurrency and
+  partial-failure aggregate.

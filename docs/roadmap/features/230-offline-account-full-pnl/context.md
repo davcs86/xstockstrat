@@ -59,3 +59,31 @@
   (`block-fundamentals-strategy-on-etf`, touches `app/tools.py`, `mcp-tools.md`,
   `positions/[symbol]/page.tsx`) and rebase. No hard merge-order row needed. Offline fees must not reach
   broker `fees_accum` (feature 029 path) — encoded in FR-3.
+
+## Session 2026-10-19 — sdd-review product-spec (round 2: FAIL → spec revised)
+
+- Round-2 verdict: FAIL on one blocker. FR-9/AC-29 named `StreamPortfolioUpdates`, which streams
+  user-level `PortfolioSnapshot` (`portfolio.proto:17,140-149`) built from the `portfolio.snapshots`
+  series that FR-8 freezes. Fixed with the reviewer's option (a): the stream was removed from FR-9/AC-29
+  and moved to Out of Scope. All 31 scenarios' arithmetic had been verified.
+- **C-16 change to durable UI rules (feature 159).** `services/xstockstrat-ui/acceptance/fix-offline-account-ui-gaps.feature`
+  @AC-2/@AC-4 say the offline card shows "only" market value, unrealized and realized, with no Day P&L.
+  The operator explicitly chose (sdd-story Q&A, 2026-10-19: "Trader account card" and "Book page
+  offline card" as surfaces for Day P&L / Total P&L / fees / lifetime realized) to show the new figures
+  on those cards. That choice supersedes the "only" wording for these fields. The rules' intent, that
+  Cash, Buying Power and *broker* Day P&L are not faked, is kept. Update that suite at launch promotion.
+- Warnings resolved:
+  - The off-session mark is now defined (reference-session daily close when it exists, else the quote;
+    AC-35).
+  - Closed-in-session symbols count in account Day P&L (AC-34).
+  - Baseline shares seeded inside the session count as overnight shares (AC-36).
+  - `GetPortfolio` without an `account_id` sums each account's own figures (FR-9, AC-29).
+  - AC-13 now asserts `total_pnl`, not the non-existent `Portfolio.unrealized_pnl`.
+  - AC-1 and AC-34 were moved off rounding ties.
+  - Net realized is UI-derived; AC-10 and AC-20 now assert gross values plus the UI net.
+  - Added AC-32 ("No price" indicator) and AC-33 (agent `list_orders` / `list_positions` /
+    `get_positions`).
+  - AC-30 now names its rows.
+  - FR-6 states that account-level figures are UI-only.
+  - "Offline fees must not enter `fees_accum`" and "fit the last-close fetch in the quote-timeout
+    envelope" moved to OQ-8 as design constraints. They can't be observed through the API.
