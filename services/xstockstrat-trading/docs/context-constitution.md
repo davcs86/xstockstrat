@@ -43,7 +43,7 @@ documented/CI-enforced rules (see `## Pointers`).
 
 | Candidate | Why suspected | What would confirm it |
 |---|---|---|
-| Fill-poller mutates shared `*tradingv1.Order` pointers outside `s.mu` while `StreamOrderUpdates` reads them — possible data race | `submitOrder` mutates `order.*` (`trading.go:684,707,713-716,724-727`) after releasing the lock at `:624` | the race detector / a concurrency review |
+| Fill-poller mutates shared `*tradingv1.Order` pointers outside `s.mu` while `StreamOrderUpdates` reads them — possible data race | `submitOrder` mutates `order.*` (`trading.go:684,707,713-716,724-727`) after releasing the lock at `:624`. > ⚠ likely refuted as of 2026-10-19: mutations now go through `internal/service/trading.go#updateOrder` (~L373), which clones the stored order under `s.mu` before mutating, so the cited lines no longer show the pattern. | the race detector / a concurrency review |
 
 ## Pointers (already documented or CI-enforced — not restated here)
 
