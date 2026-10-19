@@ -68,7 +68,7 @@ FR-7. GetPnL fails UNAVAILABLE when a needed position has no mark and no two-sid
 ## Consumer Surface(s)
 
 Read-only value correction; no UI or agent code change. These now show mark-based prices after hours:
-- agent MCP `get_positions`, `get_positions_by_account_id`, `get_fundamentals` (EDGAR mode);
+- agent MCP `get_positions`, `get_positions_by_account_id`, `query_fundamentals` (EDGAR mode);
 - `/trader` Book → Portfolio (ListPortfolios / GetPnL);
 - `/insights` P&L reads.
 

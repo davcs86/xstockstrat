@@ -157,3 +157,39 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - [x] R10: AC-13 is extended to GetPosition and GetPortfolio.
 - Note: AC-14 row 2 (16.05/0 with no mark → 0) is RED on current code, which yields 8.025. That makes it a real
   regression guard.
+
+## Session 2026-10-19 — sdd-spec
+
+- Generated implementation-spec.md with 13 steps. Status: design-approved → implementation-ready.
+- Step order (inside-out, the 229 pattern):
+  - config bounds (1–2);
+  - proto `Quote.mark_price = 8` + buf-gen (3–4);
+  - marketdata repo `GetLatestDailyClosesBatch` (5–6);
+  - `GetLatestQuotes` mark merge (7–8);
+  - EDGAR resolve/finish + Multi prefetch (9–10);
+  - portfolio `markOf` + broker-first snapshot/risk (11–12);
+  - docs + context-forge teardown (13).
+- Key codebase findings:
+  - Evidence baseline: merge-base `cd1654cc`. Service code is identical to `origin/main-dev` @ `f8ef9ab9`; only the
+    per-service `docs/context-constitution*.md` moved (`1302e6d0`). Rebase before Step 13.
+  - `SCALAR_BOUNDS_REGISTRY` ends at `configServiceImpl.ts:139-140`. `TIMEOUT_KEY_FORMS` is
+    `setConfigScalarBounds.test.ts:259-276`.
+  - `Quote` is `marketdata.proto:91-99`, and field 8 is free.
+  - `buf` is not on this session's PATH, so Step 4 may need `docs/runbooks/codegen-toolchain-host-setup.md`.
+  - Marketdata seams to copy:
+    - `prevClose` nil-safe wiring `marketdata_service.go:218-222`;
+    - `latestQuotesBatchSQL` LATERAL + `QueryExecModeExec` `marketdata_repo.go:313-359`;
+    - `GetPreviousDailyCloseBatch` (`:449-482`) is unbounded and returns the second-newest close, so it is not reused.
+  - `checkRiskLimits` needs a non-nil `*config.Watcher`; the zero value `&config.Watcher{}` is safe (precedent
+    `portfolio_fill_sync_race_test.go:65`).
+  - Portfolio tests have no notify fake (Not found), so Step 12 creates an inline `recordingNotify`.
+  - No `internal/testdata/` exists in marketdata or portfolio. Per design C-13, Steps 6/12 create one each (trading
+    precedent `internal/testdata/order_rows.go`).
+  - Consumer surface: the MCP fundamentals tool is `query_fundamentals` (`tools.py:402`), not "get_fundamentals"
+    (that is the client function). grep finds no UI/agent caller of `GetPnL`. Both are wording flags for impl-spec
+    review, non-blocking.
+- Spec-level choices flagged for `/sdd-review impl-spec`:
+  - `withMark` pure helper;
+  - `resolveMarkCloseMaxAge` name;
+  - `edgarResolve` / `edgarFinish` signatures;
+  - Multi phase-1 resolves all symbols before any upsert (an aborting batch writes no cache rows; response unchanged).

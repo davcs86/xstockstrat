@@ -17,6 +17,21 @@
 | 2026-10-19 | `draft` → `spec-ready` | /sdd-review | Product spec approved (8 warnings, carried to design) |
 | 2026-10-19 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved with conditions; recon.md + design.md written |
 | 2026-10-19 | `design-approved` (unchanged) | /sdd-review | Post-design product-spec re-review: PASS WITH WARNINGS (10), all addressed |
+| 2026-10-19 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 13 steps |
+
+---
+
+## Reviewers
+
+Snapshot from `docs/runbooks/reviewer-registry.md` at /sdd-spec time (2026-10-19). Stable unless `/sdd-spec` re-runs.
+
+| Reviewer | Focus | Steps |
+|---|---|---|
+| Proto Reviewer | Field number uniqueness per message, no breaking changes without deprecation comment, `buf lint` passes, `buf breaking` passes against dev trunk, BSR publication readiness | 3, 4 |
+| `packages/proto` owner | Field number uniqueness, backward compatibility (no field removal or type change without deprecation), naming conventions | 3, 4 |
+| `xstockstrat-config` owner | Config key naming (`<service>.<category>.<key>`), environment (`production`/`staging`) / global-per-user scoping, secret encryption + redaction, WatchConfig stream stability | 1, 2 |
+| `xstockstrat-marketdata` owner | OHLCV ingestion integrity, TimescaleDB hypertable partitioning, Alpaca feed idempotency | 3, 4, 5–10 |
+| `xstockstrat-portfolio` owner | P&L calculation accuracy, position snapshot consistency, concurrent write safety | 3, 4, 11, 12 |
 
 ---
 
@@ -26,7 +41,7 @@
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
 - [Recon](recon.md) — codebase dossier, existing business rules (C-16)
 - [Design](design.md) — approved design (3 rounds), rejected alternatives, open risks
-- [Implementation Spec](implementation-spec.md) — _not yet generated; run `/sdd-spec fix-after-hours-positions-priced`_
+- [Implementation Spec](implementation-spec.md) — 13 numbered steps with codebase evidence
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -39,4 +54,4 @@ read at about half the real price.
 
 ## Next Action
 
-`/sdd-spec fix-after-hours-positions-priced` — generate implementation spec from the approved design
+`/sdd-review fix-after-hours-positions-priced impl-spec` — validate implementation spec, then `/sdd-execute fix-after-hours-positions-priced`

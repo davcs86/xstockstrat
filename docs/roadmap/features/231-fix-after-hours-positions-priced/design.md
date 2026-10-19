@@ -18,7 +18,7 @@ broker (LYFT 16.98 = 16.98).
 **Consumer surface (C-14).** This is a read-only value correction; no UI or agent code changes. The following now
 show mark-based prices after hours:
 
-- the agent MCP tools `get_positions`, `get_positions_by_account_id` and `get_fundamentals` (EDGAR mode);
+- the agent MCP tools `get_positions`, `get_positions_by_account_id` and `query_fundamentals` (EDGAR mode);
 - `/trader` Book → Portfolio (ListPortfolios / GetPnL);
 - `/insights` P&L reads.
 
