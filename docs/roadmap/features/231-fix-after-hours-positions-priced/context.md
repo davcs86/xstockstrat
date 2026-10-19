@@ -92,3 +92,44 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - (2) concentration: skip + WARN naming the unpriced symbols, accepting that a permanently unpriceable holding
     disables the check for that user;
   - (3) run round 3.
+- Round 3 proposer: concurrent per-caller close lookup (W + max(B, C)); `markOf` with mid fallback; EDGAR
+  resolve/finish split with a pending-only Multi prefetch; staleness as a code invariant (168h).
+- Round 3 adversary: APPROVE WITH CONDITIONS. Floor: F-07 on the hardcoded 168h (a policy value; 071 precedent).
+  Cured by the config key `marketdata.quotes.mark_close_max_age_hours` (168, bounds [120,720]; the 120 floor
+  exists because 1d bars are stamped 00:00 ET, so Friday's bar is ~92h old by Monday evening).
+- Conditions folded into design.md / acceptance.feature:
+  - AC-6 uses a synthetic close aged 200h. The real ELWT 10-16 bar is ~90h old on Monday, so it would be priced.
+  - AC-12 uses a handshake concurrency proof plus a 100ms-budget timeout proof (< 1s); no 650ms wall-clock bound.
+  - AC-7 is stated as `since` argument pins plus SQL-text pins (the repo tests use pgxmock only).
+  - AC-5 / AC-11 compare floats with a tolerance.
+  - The close-lookup goroutine uses a buffered (cap 1) channel that is always received; the WARN notes whether
+    ctx was already done.
+  - `edgarFinish` does not upsert when `live == nil` (fails.md:2289).
+  - AC-10 is reworded for the pending-only prefetch. This is an accepted refinement of the operator binding
+    "prefetch once per call": cache hits need no price.
+  - AC-2 states the MSFT broker market_value of 1067.30 explicitly.
+- Operator approval @ 2026-10-19:
+  - design approved with conditions;
+  - C-16 CHANGE `@AC-1 @feature-178` accepted: batched equals serial now holds for two-sided quotes only;
+  - snapshot-skip consequence accepted: any unpriced position skips that user's per-fill snapshot, and a
+    permanently unpriceable holding stops them until it is priced.
+- Artifacts:
+  - design.md written;
+  - acceptance.feature rewritten (AC-1..AC-14, @FR-1..@FR-7);
+  - product-spec.md gained FRs, Consumer Surface(s), Fix Scope and Affected Services (+ config, proto);
+  - recon.md corrected (`packages/proto/pnl/pnl.go`).
+- sdd-review warnings W1–W8: [x] all resolved by the rewrite above.
+- Constitution rules touched: C-05, C-08/P-06, C-09, C-10(b), C-13, C-14, C-15, C-16, C-18, P-03, F-01, F-06, F-07.
+  Floor breaches: F-07 (168h const), resolved by the config key.
+- Status: spec-ready → design-approved.
+
+## Open Threads (from design.md Open Risks)
+- [ ] Freshness of the stored close right after 16:00; staging check after the close → rollout step
+- [ ] Weekend first-query gap (48h minIngestLookback, in-memory warm set) → AC-7 no-close row + docs step
+- [ ] Permanently unpriceable holding stops snapshots and concentration (operator-accepted) → docs step
+- [ ] `adjustment=all` back-adjusted prior close on ex-dates → docs step
+- [ ] IEX daily-bar extended-hours inclusion unverified → findings + staging check
+- [ ] Extra pooled query after hours (fails safe to unpriced + WARN) → monitor after deploy
+- [ ] Two quote fetches per fill (pre-existing, optional) → out of scope
+- [ ] Overlap with 230-offline-account-full-pnl → whichever lands second reconciles
+- [ ] Operator EDGAR purge after the marketdata deploy, during market hours; record counts → rollout step

@@ -80,7 +80,8 @@ position unpriced, and never fabricate one.
   - `LatestPrice` `:106-111`: symbol=1, `optional double last_price=2`, last_trade_time=3, `optional double prev_close=4`, source=5.
   - RPCs: `GetLatestPrice` `:26`, `BatchGetLatestPrice` `:54` (`:341-347`).
 - **Shared Go code**: `go.work` lists `packages/proto`, marketdata, portfolio and trading. The only shared module is
-  `github.com/xstockstrat/contracts` (`packages/proto`), which contains generated stubs only.
+  `github.com/xstockstrat/contracts` (`packages/proto`): generated stubs plus one hand-written carve-out,
+  `packages/proto/pnl/pnl.go` (realized-P&L scope; corrected in design round 2).
 
 ## Patterns to REUSE
 

@@ -42,14 +42,45 @@ last-trade price is available as a fallback.
 
 - xstockstrat-portfolio
 - xstockstrat-marketdata
+- xstockstrat-config (SetConfig bounds rows for the two new keys; added at design)
+- packages/proto (additive `Quote.mark_price`; added at design)
+
+## Functional Requirements (added at design, 2026-10-19; see design.md)
+
+FR-1. `GetLatestQuotes` sets `Quote.mark_price` (new additive proto field 8):
+  - to the two-sided mid when ask > 0 and bid > 0;
+  - otherwise to the newest stored 1d close > 0 no older than `marketdata.quotes.mark_close_max_age_hours`
+    (default 168);
+  - otherwise it leaves the field unset.
+  Raw `ask_price` and `bid_price` are unchanged, and a one-sided quote is never averaged.
+FR-2. The close lookup runs concurrently with the cold fetch under `marketdata.quotes.mark_timeout_ms` (default 500).
+  On failure, two-sided marks are kept, one-sided marks stay unset, and a WARN is logged.
+FR-3. Every portfolio read path values a non-broker position the same way: `mark_price`, else the two-sided mid,
+  else unpriced (`current_price` 0). The broker price always wins.
+FR-4. The equity snapshot values positions as Σ market value, broker price first. It is skipped, with a WARN naming
+  the symbols, when any position is unpriced or quotes are unavailable.
+FR-5. Concentration sums each symbol across accounts, broker price first. It is skipped, with a WARN naming the
+  unpriced symbols, when any position is unpriced. Drawdown is unchanged.
+FR-6. The EDGAR snapshot price is the quote mark, else the filed-date close. A missing mark is served uncached.
+  `GetFundamentalsMulti` prices its pending symbols with one `GetLatestQuotes` call.
+FR-7. GetPnL fails UNAVAILABLE when a needed position has no mark and no two-sided mid (preserves 229 AC-5).
+
+## Consumer Surface(s)
+
+Read-only value correction; no UI or agent code change. These now show mark-based prices after hours:
+- agent MCP `get_positions`, `get_positions_by_account_id`, `get_fundamentals` (EDGAR mode);
+- `/trader` Book → Portfolio (ListPortfolios / GetPnL);
+- `/insights` P&L reads.
+
+The persisted equity snapshot and concentration alerts are background effects.
 
 ## Fix Scope
 
-- [ ] No proto changes anticipated (confirm in design: a "price" field on `Quote` would be a proto change)
-- [x] No database migrations anticipated
-- [x] No config key changes anticipated
-
-(Update after investigation; remove or replace each item as needed.)
+- [x] Proto change: additive `optional double mark_price = 8` on `marketdata.v1.Quote` (non-breaking; C-09)
+- [x] No database migrations
+- [x] Config keys (new, unseeded, SetConfig-bounded): `marketdata.quotes.mark_timeout_ms` (500, [100,2500]),
+  `marketdata.quotes.mark_close_max_age_hours` (168, [120,720])
+- Rollout: operator purge of edgar cache rows in `marketdata.fundamentals`, after the marketdata deploy (design.md §5)
 
 ## Acceptance Criteria
 

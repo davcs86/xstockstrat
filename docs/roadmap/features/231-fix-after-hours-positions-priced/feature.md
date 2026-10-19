@@ -15,6 +15,7 @@
 |---|---|---|---|
 | 2026-10-19 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-19-after-hours-one-sided-quote-half-price-defect.md` |
 | 2026-10-19 | `draft` → `spec-ready` | /sdd-review | Product spec approved (8 warnings, carried to design) |
+| 2026-10-19 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved with conditions; recon.md + design.md written |
 
 ---
 
@@ -22,6 +23,8 @@
 
 - [Product Spec](product-spec.md) — bug description and fix scope
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
+- [Recon](recon.md) — codebase dossier, existing business rules (C-16)
+- [Design](design.md) — approved design (3 rounds), rejected alternatives, open risks
 - [Implementation Spec](implementation-spec.md) — _not yet generated; run `/sdd-spec fix-after-hours-positions-priced`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -35,4 +38,4 @@ read at about half the real price.
 
 ## Next Action
 
-`/sdd-design fix-after-hours-positions-priced` — full design recommended: 2 affected services; see context.md
+`/sdd-spec fix-after-hours-positions-priced` — generate implementation spec from the approved design
