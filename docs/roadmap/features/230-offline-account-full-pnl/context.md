@@ -190,3 +190,37 @@
   - The bar date mapping gets a golden test against real `ohlcv` rows.
   - The proposer must say whether a portfolio-side close memo is still needed now that marketdata is
     fixed.
+
+## Session 2026-10-19 — sdd-design round 2 (gate)
+
+- Round 2 result: NEEDS WORK. No Floor breach; 2 blockers, 7 major. The Day P&L algorithm was
+  hand-verified against 15 scenarios. The calendar, the 10-day fill window, the header table and the
+  migrations held up.
+- Operator decisions (explicit, 2026-10-19):
+  - **`BatchGetBars` degradation is opt-in.** A new `allow_partial` request flag (marketdata proto)
+    turns it on. Portfolio sets it: the cold fetch is detached, budgeted from the caller's remaining
+    deadline, and returns the warm subset. Analysis is untouched. This rejects round 2's universal
+    degrade, `unavailable_symbols`, the analysis consumer change, and the new
+    `marketdata.bars.batch_timeout_ms` key. It removes the `@AC-1 @feature-185` thin-history
+    regression.
+  - **`filled_at` is preserved on omit** when re-confirming an already-confirmed order; only a first
+    confirm defaults to now. This designs out the frozen-window double-count and keeps
+    `@AC-10 @feature-157` intact under baselines.
+  - **C-16 sign-off: snapshot rule changes**, narrowing `@AC-6 @feature-163`:
+    - (a) changing the `as_of` of a snapshot that is not the latest → `FAILED_PRECONDITION`;
+    - (b) a re-submit whose rows are all rejected is a no-op;
+    - (c) an empty position list records a full flatten.
+    FR-4 was rewritten to state the carry window `(pred.as_of, S.as_of]`.
+  - **GetPortfolio leak fixed by user-scoping reads.** Every account-keyed read (balance, offline
+    state) is scoped by `user_id`; fields are omitted for an account the caller doesn't own. There is
+    no PermissionDenied path, so new accounts keep rendering.
+- Engineering fixes folded in:
+  - the carry's predecessor lookup excludes the snapshot's own id;
+  - the bars symbol set = positions ∪ recent-fill symbols in the session;
+  - migration 017 backfills `source = ORDERS` for pre-163 offline positions;
+  - a test pins that `GetPnL` and snapshot equity are unchanged;
+  - `DeleteBaselinesByAccount` and the header purge run in one transaction;
+  - spec drift (migration names, the 4 portfolio columns) is noted for `/sdd-spec`.
+- Spec amended: FR-3 (`filled_at` preserve), FR-4 (carry window and snapshot rules), Affected Services
+  (marketdata opt-in), Proto (`BatchGetBarsRequest.allow_partial`).
+- Gate: operator chose a confirming round 3, then approval.

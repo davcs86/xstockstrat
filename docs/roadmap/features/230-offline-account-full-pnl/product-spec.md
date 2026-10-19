@@ -79,17 +79,26 @@ partial — replaces the order's fees along with its fill (existing replace sema
 PARTIALLY_FILLED status derivation is unchanged. A (re-)confirm that **omits** `fees` leaves the order's
 recorded fees unchanged (0 if none were ever recorded); only an explicit value, including 0, replaces
 them, so a fees-unaware client cannot silently wipe fees. An offline order that has never been
-confirmed (status NEW) has no fees value. Fees are **never** folded into cost basis or average
+confirmed (status NEW) has no fees value. Likewise, re-confirming an **already-confirmed** order without
+`filled_at` keeps its stored `filled_at`; only a first confirm defaults it to now, so a fee-only edit
+can never move a frozen-window order into the current window (operator decision 2026-10-19). Fees are **never** folded into cost basis or average
 entry price. The offline account exposes `fees_since_snapshot`, `fees_lifetime`, and realized P&L **gross and net**
 of fees (`net = gross − fees`) for both the since-snapshot and lifetime scopes. Orders read back via
 `GetOrder`/`ListOrders` echo `fees`; it is unset (not 0) for broker orders.
 
 FR-4. **Realized P&L, two scopes.** Keep the feature-163 since-snapshot realized (a new snapshot resets
 it to 0 — 163 AC-14 still holds) **and** add a lifetime realized carried across snapshots:
-`lifetime = carried + since_snapshot`, where taking a snapshot first adds the then-current
-since-snapshot realized and fees into `carried`, then resets the since-snapshot figures — atomically,
-so a failure can neither double-count nor lose realized. Lifetime is otherwise changed only by fills
-and fee edits inside the current snapshot window.
+`lifetime = carried + since_snapshot`. A new snapshot `S` stores
+`carried(S) = carried(pred) + realized/fees of confirmed fills with filled_at in (pred.as_of, S.as_of]`,
+folded from `pred`'s baseline (`pred` = the latest other snapshot with an earlier `as_of`; none → all
+fills up to `S.as_of`). This is computed atomically with the snapshot write. Fills after `S.as_of` are
+not carried; they stay in the new since-snapshot window, so nothing is counted twice. Lifetime is
+otherwise changed only by fills and fee edits inside the current snapshot window. Confirms whose fill
+falls at or before the effective `as_of` are accepted and ignored, as in feature 163; they change
+neither figure. Snapshot rules (operator sign-off 2026-10-19, C-16 narrowing of `@AC-6 @feature-163`):
+re-submitting the same id with the same `as_of` replaces its rows and keeps its carry; changing the
+`as_of` of a snapshot that is not the latest is rejected `FAILED_PRECONDITION`; a re-submit whose rows
+are all rejected commits nothing; an empty position list records a full flatten ("sold everything").
 
 FR-5. **Mark fallback.** When an offline position has no live quote — the symbol is absent from the
 quote batch **or the quote batch fails / exceeds its deadline** — it is marked at the latest completed
@@ -175,10 +184,11 @@ test across these RPCs.
   for FR-1.
 - `xstockstrat-portfolio` — store lifetime/carried realized + fees; compute Day P&L, Total P&L, return %,
   short %; last-close mark fallback with provenance; read-path parity (FR-9).
-- `xstockstrat-marketdata` — `BatchGetBars` serves the latest / previous daily close to portfolio, and
-  is **changed** to degrade per symbol: a failed cold live fetch returns the stored (warm) subset instead
-  of failing the whole RPC, following feature 229's `GetLatestQuotes` precedent (operator scope decision,
-  2026-10-19).
+- `xstockstrat-marketdata` — `BatchGetBars` serves the latest / previous daily close to portfolio. It
+  gains an **opt-in** `allow_partial` request flag. When set, the cold live fetch is detached, budgeted
+  from the caller's remaining deadline, and a failure returns the stored (warm) subset instead of
+  failing the RPC (feature 229 precedent). Unset (every existing caller, e.g. analysis) → behaviour is
+  unchanged. Operator scope decisions 2026-10-19.
 - `xstockstrat-ui` — render the new figures on the four `/trader` surfaces.
 - `xstockstrat-agent` — `confirm_order` `fees` arg; response mapping for new fields.
 
@@ -208,6 +218,7 @@ fixed at `/sdd-spec`:
   `MARK_SOURCE_QUOTE`, the quote timestamp; unset for `MARK_SOURCE_BROKER` and `MARK_SOURCE_NONE`.
   UIs render it as a date in America/New_York. Existing `day_pnl = 12`,
   `day_pnl_pct = 13`, `unrealized_pnl_pct = 7` are populated.
+- `marketdata.v1.BatchGetBarsRequest` — `bool allow_partial` (next free field 6); opt-in partial results.
 - New enum `portfolio.v1.MarkSource`: `MARK_SOURCE_UNSPECIFIED = 0`, `MARK_SOURCE_QUOTE`,
   `MARK_SOURCE_LAST_CLOSE`, `MARK_SOURCE_BROKER`, `MARK_SOURCE_NONE`.
 
