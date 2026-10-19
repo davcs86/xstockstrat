@@ -823,7 +823,7 @@ grep -n "AskPrice + \|BidPrice) / 2\|AskPrice+" services/xstockstrat-portfolio/i
 
 ### Step 12 — test: portfolio read paths, snapshot and risk (AC-1, AC-2, AC-3, AC-6, AC-8, AC-9, AC-13, AC-14)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/testdata/marks.go` — create

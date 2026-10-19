@@ -378,3 +378,16 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - GREEN: see Step 12. Only the two-sided branch of `markOf` computes `(Ask+Bid)/2` in `portfolio_service.go`.
 - Files modified: `internal/service/portfolio_service.go`, `internal/service/portfolio_helpers_test.go`
 - Deviations: none
+
+### Step 12 — test: portfolio read paths, snapshot and risk (AC-1, AC-2, AC-3, AC-6, AC-8, AC-9, AC-13, AC-14) [done]
+- Created `internal/testdata/marks.go` (C-13).
+- Created `portfolio_mark_test.go`: `TestMarkOf` (5 rows), AC-1, AC-14, AC-6 and AC-13 (ListPositions, GetPosition,
+  GetPortfolio, ListPortfolios, GetPnL all at 16.98; GetPnL 19.80; equity 169.80).
+- Extended `portfolio_quote_deadline_test.go` with `recordingNotify`, AC-2, AC-8, AC-3 and AC-9 (exact alert sets,
+  order-insensitive).
+- Amended the `TestEnrichPositions_OneBatchedCall` comment (signed C-16 CHANGE, two-sided only); assertions unchanged.
+- GREEN: `go test ./... -race` all ok, including the 178/229 suites; total coverage 54.4% (≥ 40, asserted);
+  `golangci-lint` 0 issues; no redeclared fixture literals.
+- Files modified: `internal/testdata/marks.go` (new), `internal/service/portfolio_mark_test.go` (new),
+  `internal/service/portfolio_quote_deadline_test.go`, `internal/service/portfolio_service_test.go`
+- Deviations: none
