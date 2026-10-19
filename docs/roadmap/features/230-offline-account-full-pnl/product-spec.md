@@ -50,7 +50,13 @@ fill price `p_j`; same-session lots closed in-session realize `(exit_fill − p_
   - `+ Σ_held_same_session_lots (mark − p_j) × q_j`
   - `+ Σ_closed_same_session_lots (exit_fill − p_j) × q_j_closed`
   (e.g. a cover of an overnight short below the previous close is a gain: `(190 − 200) × (−10) = +100`).
-  Day P&L is the session change, **not** realized-vs-average-cost.
+  Day P&L is the session change, **not** realized-vs-average-cost. The overnight-first rule only
+  attributes shares between the terms; the position's and account's `day_pnl` totals are the same
+  under any consumption order.
+  **Missing reference prices:** an overnight term needs `previous_close`. If the symbol has no daily
+  bar for the session before the reference session (halted, newly listed, data gap), its overnight
+  terms are 0 and excluded from `base`; same-session-lot terms still apply. A `MARK_SOURCE_NONE`
+  (unpriced) position contributes nothing to `day_pnl` or `base`.
   Position `day_pnl_pct = day_pnl / base`, where `base = |q_open × previous_close| + Σ|p_j × q_j|`
   over same-session acquisitions; account `day_pnl_pct = Σ day_pnl / Σ base`. Either is 0 when its
   base is 0. Outside a live session the figures are those of the most recently completed session
@@ -58,8 +64,8 @@ fill price `p_j`; same-session lots closed in-session realize `(exit_fill − p_
   reference session no longer has a position row, but its reduction and closed-lot terms and its `base`
   are still included in the account `day_pnl` and `day_pnl_pct`.
 
-FR-2. **Total P&L + return %** on the offline account: `total_pnl = realized_gross_since_snapshot +
-unrealized` (gross of fees; the net figure is FR-3). Account `total_pnl_pct = total_pnl /
+FR-2. **Total P&L + return %** on the offline account: `total_pnl = realized_gross_lifetime +
+unrealized` (gross of fees; lifetime per FR-4, so Total P&L does not drop at a snapshot). Account `total_pnl_pct = total_pnl /
 Σ_i |cost_basis_i|` over open priced positions (so a mixed long/short book never nets to a 0
 denominator); 0 when that sum is 0 (fully flat). Position `unrealized_pnl_pct = unrealized /
 |cost_basis|`, so a short reports a non-zero, correctly signed %. The `|cost_basis|` fix applies
@@ -69,7 +75,10 @@ shorts — the one deliberate broker-visible change, carved out of FR-8).
 FR-3. **Fees as a separate line.** `ConfirmOrder` accepts an optional per-order **cumulative** total
 `fees` (≥ 0, default 0; negative → `INVALID_ARGUMENT`, order unchanged). Every (re-)confirm — full or
 partial — replaces the order's fees along with its fill (existing replace semantics); FILLED vs
-PARTIALLY_FILLED status derivation is unchanged. Fees are **never** folded into cost basis or average
+PARTIALLY_FILLED status derivation is unchanged. A (re-)confirm that **omits** `fees` leaves the order's
+recorded fees unchanged (0 if none were ever recorded); only an explicit value, including 0, replaces
+them, so a fees-unaware client cannot silently wipe fees. An offline order that has never been
+confirmed (status NEW) has no fees value. Fees are **never** folded into cost basis or average
 entry price. The offline account exposes `fees_since_snapshot`, `fees_lifetime`, and realized P&L **gross and net**
 of fees (`net = gross − fees`) for both the since-snapshot and lifetime scopes. Orders read back via
 `GetOrder`/`ListOrders` echo `fees`; it is unset (not 0) for broker orders.
@@ -111,12 +120,15 @@ FR-6. **Surfaces.** The FR-1..FR-5 figures are rendered on:
     realized, fee totals, net realized) are UI-only; adding them to the agent is not in this feature.
   - Net realized (`gross − fees`) is derived and shown by the UI; it is not a proto field.
 
-FR-7. **Backfill.** On rollout, existing confirmed offline orders have `fees = 0`; each existing offline
+FR-7. **Backfill.** On rollout, existing confirmed (FILLED / PARTIALLY_FILLED) offline orders have
+`fees = 0`; NEW offline orders and all broker orders stay unset; each existing offline
 account's lifetime realized is seeded equal to its current since-snapshot realized (`carried = 0`,
 both fee totals 0). No reconstruction of pre-snapshot history.
 
 FR-8. **No regression on broker accounts or aggregates.** Broker (Alpaca/IBKR) marks, Day P&L, Total
-P&L and account figures are unchanged, except the platform-wide short-% correction in FR-2. `GetPnL`
+P&L and account figures are unchanged, except two deliberate broker-visible changes: the
+platform-wide short-% correction (FR-2), and `GetPortfolio` now populating broker `day_pnl` /
+`day_pnl_pct` / `total_pnl` with the existing `ListPortfolios` rule (FR-9). `GetPnL`
 is unchanged: offline holdings are still valued only from live quotes there and feature 229 @AC-5
 (`UNAVAILABLE` when a needed quote is missing) still holds — the FR-5 fallback does not apply to
 `GetPnL`. The persisted `portfolio.snapshots` series is unchanged.
@@ -124,9 +136,14 @@ is unchanged: offline holdings are still valued only from live quotes there and 
 FR-9. **Read-path parity.** Every portfolio read that returns offline positions or an offline account
 summary applies the same FR-1/FR-2/FR-5 rules and returns identical values for the same state:
 `GetPortfolio`, `GetPosition`, `ListPositions`, and `ListPortfolios` (single-account and
-all-accounts). When `GetPortfolio` is called without an `account_id`, its aggregated Day P&L and Total
-P&L are the sum of each account's own figures (same rule as the combined panel, FR-6). Covered by a
-parity test across these RPCs.
+all-accounts). `GetPortfolio` (which today sets no Day/Total P&L for any account) adopts the
+`ListPortfolios` per-account rule for **every** account type: broker `day_pnl = equity − last_equity`,
+`day_pnl_pct = day_pnl / last_equity`, `total_pnl = Σ unrealized`; offline per FR-1/FR-2. Aggregates
+(`GetPortfolio` without `account_id`, the combined panel) are `day_pnl = Σ account day_pnl`,
+`day_pnl_pct = Σ day_pnl / Σ prior value` (broker prior value = `last_equity`, offline = its FR-1
+`base`), `total_pnl = Σ account total_pnl`. `total_pnl_pct` is set only for an offline account or an
+aggregate made only of offline accounts (unset otherwise, never a misleading 0). Covered by a parity
+test across these RPCs.
 
 ## Out of Scope
 
@@ -170,12 +187,15 @@ Additive only (non-breaking). Next free field numbers on trunk (verified 2026-10
 fixed at `/sdd-spec`:
 - `trading.v1.ConfirmOrderRequest` (next free 6) — `optional double fees`.
 - `trading.v1.Order` (next free 23) — `optional double fees` (unset for broker orders).
-- `portfolio.v1.Portfolio` (next free 13) — `total_pnl_pct`, `optional double realized_pnl_lifetime`,
+- `portfolio.v1.Portfolio` (next free 13) — `optional double total_pnl_pct` (set only per FR-9),
+  `optional double realized_pnl_lifetime`,
   `optional double fees_since_snapshot`, `optional double fees_lifetime`. Existing `total_pnl = 8`,
   `day_pnl = 6`, `day_pnl_pct = 7` are populated for offline accounts; existing `optional realized_pnl
   = 12` keeps since-snapshot gross semantics. Net figures are derived by consumers (`gross − fees`).
 - `portfolio.v1.Position` (next free 24) — `MarkSource mark_source`, `google.protobuf.Timestamp
-  mark_as_of` (distinct from feature 163's `as_of = 22` / `source = 23`). Existing `day_pnl = 12`,
+  mark_as_of` (distinct from feature 163's `as_of = 22` / `source = 23`). For
+  `MARK_SOURCE_LAST_CLOSE`, `mark_as_of` is 00:00 America/New_York of the bar's session date; for
+  `MARK_SOURCE_QUOTE`, the quote timestamp. UIs render it as a date in America/New_York. Existing `day_pnl = 12`,
   `day_pnl_pct = 13`, `unrealized_pnl_pct = 7` are populated.
 - New enum `portfolio.v1.MarkSource`: `MARK_SOURCE_UNSPECIFIED = 0`, `MARK_SOURCE_QUOTE`,
   `MARK_SOURCE_LAST_CLOSE`, `MARK_SOURCE_BROKER`, `MARK_SOURCE_NONE`.
@@ -207,7 +227,7 @@ service's normal `scripts/db-migrate.sh` order):
 - Whether the carry columns live in portfolio (above) or beside trading's baseline row is a design
   decision (OQ-2); if design moves them, `/sdd-spec` rewrites this section before execute.
 - Next free numbers (trading 011, portfolio 017) must be re-checked across all remote branches at
-  `/sdd-spec` (ledger 081).
+  `/sdd-spec` (`docs/roadmap/ledger/fails.md:213-224`).
 
 ## Feature Workflow Notes
 
@@ -248,4 +268,5 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
   design/spec): offline fees must not enter the broker per-position `fees_accum` path (feature 029)
   and so cannot be double-counted. The FR-5 last-close fetch must fit within the same
   `quote_timeout_ms` + 0.5 s envelope as the quote batch (AC-27), so design states its concurrency and
-  partial-failure aggregate.
+  partial-failure aggregate. The session calendar (holidays, early closes) source must be named in
+  design (F-07 awareness). Once design decides OQ-3, append a scenario for it (IDs append-only).
