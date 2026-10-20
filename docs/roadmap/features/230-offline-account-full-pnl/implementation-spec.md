@@ -1128,7 +1128,7 @@ concurrent write safety
 
 ### Step 18 — test: portfolio sync consumer + offline state reads
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/repository/offline_realized_test.go` — modify

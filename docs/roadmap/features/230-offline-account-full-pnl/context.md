@@ -738,3 +738,23 @@
   service path would also have hit the nil `r.pool`. Green: all targeted tests pass with `-race`.
 - Files modified: `internal/repository/portfolio_repo.go`, `internal/service/portfolio_service.go`.
 - Deviations: none.
+
+### Step 18 — test: portfolio sync consumer + offline state reads [done]
+- Repo:
+  - `TestUpsertOfflineRealized_WritesAllFields` (5 values plus the JSON fills; absent → `[]`);
+  - `TestGetOfflineStates_UserScoped` (regex requires `WHERE user_id=$1 AND account_id = ANY($2)`;
+    the other user's id is absent);
+  - `TestGetOfflineStates_EmptyIDsNoQuery`.
+- Service: `processPositionSync` is driven end to end through `NewPortfolioRepoWithDB(syncRecorderDB)`
+  (records each `Exec`):
+  - AC-18 legacy, AC-41, AC-7, AC-20, AC-10/AC-11 (table);
+  - AC-42: full flatten purges positions and stores carried 600;
+  - a broker sync never writes offline state.
+- Payload literals are inline (C-13, single consumer).
+- Verification:
+  - targeted `-race` ✓;
+  - full `-race` total 67.2%;
+  - `golangci-lint` 0 issues.
+- Files modified: `internal/repository/offline_realized_test.go`,
+  `internal/service/portfolio_offline_test.go`.
+- Deviations: none.
