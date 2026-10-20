@@ -58,6 +58,7 @@ import {
 import { OrderType, OrderStatus } from '@xstockstrat/proto/trading/v1/trading_pb';
 import type { Order } from '@xstockstrat/proto/trading/v1/trading_pb';
 import type { Position } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
+import { MarkBadge } from '@/components/trader/MarkBadge';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -793,6 +794,7 @@ function PositionPanel({
               <span className="font-mono text-base tabular-nums">
                 {fmtUsd(position.currentPrice)}
               </span>
+              <MarkBadge position={position} />
               <span className={`font-mono text-sm tabular-nums ${pnlClass(position.dayPnl)}`}>
                 {fmtSignedUsd(position.dayPnl)} ({fmtPct(position.dayPnlPct)})
               </span>

@@ -7,7 +7,57 @@ import { Badge } from '../ui/badge';
 import { Stat } from '../shared/Stat';
 import { CardNotice } from '../shared/CardNotice';
 import { brokerLabel } from '@/lib/brokers';
+import { fmtUsd, fmtSignedUsd, fmtPct, pnlClass } from '@/lib/money';
+import { sumPortfolioTotals } from '@/lib/portfolioTotals';
 import { BrokerType } from '@xstockstrat/proto/common/v1/common_pb';
+import type { Portfolio } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
+
+/** Gross realized with its net-of-fees figure: `+$600.00 (net +$597.00)`. */
+function grossNet(gross: number, fees: number | undefined): string {
+  return `${fmtSignedUsd(gross)} (net ${fmtSignedUsd(gross - Number(fees ?? 0))})`;
+}
+
+/** Offline-only P&L rows (feature 230); each optional row renders only when the backend set it. */
+function OfflinePnlStats({ portfolio }: { portfolio: Portfolio }) {
+  return (
+    <>
+      <Stat
+        label="Day P&L"
+        value={`${fmtSignedUsd(portfolio.dayPnl)} (${fmtPct(portfolio.dayPnlPct)})`}
+        valueClass={pnlClass(portfolio.dayPnl)}
+      />
+      <Stat
+        label="Total P&L"
+        value={
+          portfolio.totalPnlPct !== undefined
+            ? `${fmtSignedUsd(portfolio.totalPnl)} (${fmtPct(portfolio.totalPnlPct)})`
+            : fmtSignedUsd(portfolio.totalPnl)
+        }
+        valueClass={pnlClass(portfolio.totalPnl)}
+      />
+      {portfolio.realizedPnl !== undefined && (
+        <Stat
+          label="Realized (since snapshot)"
+          value={grossNet(portfolio.realizedPnl, portfolio.feesSinceSnapshot)}
+          valueClass={pnlClass(portfolio.realizedPnl)}
+        />
+      )}
+      {portfolio.realizedPnlLifetime !== undefined && (
+        <Stat
+          label="Realized (lifetime)"
+          value={grossNet(portfolio.realizedPnlLifetime, portfolio.feesLifetime)}
+          valueClass={pnlClass(portfolio.realizedPnlLifetime)}
+        />
+      )}
+      {portfolio.feesSinceSnapshot !== undefined && (
+        <Stat label="Fees (since snapshot)" value={fmtUsd(portfolio.feesSinceSnapshot)} />
+      )}
+      {portfolio.feesLifetime !== undefined && (
+        <Stat label="Fees (lifetime)" value={fmtUsd(portfolio.feesLifetime)} />
+      )}
+    </>
+  );
+}
 
 export function PortfolioPanel() {
   const { accounts, selectedAccountId } = useAccountContext();
@@ -21,13 +71,9 @@ export function PortfolioPanel() {
   if (selectedAccountId) {
     const portfolio = portfolios[0];
     const account = accounts.find((a) => a.id === selectedAccountId);
-    const pnlPositive = portfolio ? Number(portfolio.dayPnl) >= 0 : true;
-    // Offline accounts have no account_balances row, so Cash / Buying Power / Day P&L are broker-only
-    // concepts that render as a misleading $0 for them — gate them off.
+    // Offline accounts have no account_balances row, so Cash / Buying Power are broker-only concepts that
+    // would render as a misleading $0 — gate them off; offline accounts show their own P&L rows instead.
     const isOffline = account?.brokerType === BrokerType.OFFLINE;
-    // Realized P&L is offline-only: the account-type gate is the primary guard against a fake $0 on
-    // broker cards; the proto `optional` presence (realizedPnl !== undefined) is secondary.
-    const showRealized = isOffline && portfolio?.realizedPnl !== undefined;
 
     return (
       <Card>
@@ -44,34 +90,24 @@ export function PortfolioPanel() {
         {portfolio ? (
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Stat
-                label="Equity"
-                value={`$${Number(portfolio.equity).toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
-              />
-              {!isOffline && (
+              <Stat label="Equity" value={fmtUsd(portfolio.equity)} />
+              {isOffline ? (
+                <OfflinePnlStats portfolio={portfolio} />
+              ) : (
                 <>
-                  <Stat
-                    label="Cash"
-                    value={`$${Number(portfolio.cash).toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
-                  />
-                  <Stat
-                    label="Buying Power"
-                    value={`$${Number(portfolio.buyingPower).toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
-                  />
+                  <Stat label="Cash" value={fmtUsd(portfolio.cash)} />
+                  <Stat label="Buying Power" value={fmtUsd(portfolio.buyingPower)} />
                   <Stat
                     label="Day P&L"
-                    value={`${pnlPositive ? '+' : ''}$${Number(portfolio.dayPnl).toFixed(2)} (${Number(portfolio.dayPnlPct * 100).toFixed(2)}%)`}
-                    valueClass={pnlPositive ? 'text-buy' : 'text-destructive'}
+                    value={`${fmtSignedUsd(portfolio.dayPnl)} (${fmtPct(portfolio.dayPnlPct)})`}
+                    valueClass={pnlClass(portfolio.dayPnl)}
                   />
-                  <Stat label="Total P&L" value={`$${Number(portfolio.totalPnl).toFixed(2)}`} />
+                  <Stat
+                    label="Total P&L"
+                    value={fmtSignedUsd(portfolio.totalPnl)}
+                    valueClass={pnlClass(portfolio.totalPnl)}
+                  />
                 </>
-              )}
-              {showRealized && (
-                <Stat
-                  label="Realized P&L"
-                  value={`$${Number(portfolio.realizedPnl).toFixed(2)}`}
-                  valueClass={Number(portfolio.realizedPnl) >= 0 ? 'text-buy' : 'text-destructive'}
-                />
               )}
             </div>
             {portfolio.positions?.length > 0 && (
@@ -114,14 +150,47 @@ export function PortfolioPanel() {
     );
   }
 
+  const isOfflineAccount = (accountId: string) =>
+    accounts.find((a) => a.id === accountId)?.brokerType === BrokerType.OFFLINE;
+  const totals = sumPortfolioTotals(portfolios, isOfflineAccount);
+  const anyOffline = portfolios.some((p) => isOfflineAccount(p.accountId));
+
   return (
     <div className="space-y-3">
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm">All accounts</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-1.5">
+          <Stat
+            label="Day P&L"
+            value={fmtSignedUsd(totals.dayPnl)}
+            valueClass={pnlClass(totals.dayPnl)}
+          />
+          <Stat
+            label="Total P&L"
+            value={fmtSignedUsd(totals.totalPnl)}
+            valueClass={pnlClass(totals.totalPnl)}
+          />
+          {anyOffline && (
+            <>
+              <Stat
+                label="Realized (since snapshot)"
+                value={fmtSignedUsd(totals.realizedSince)}
+                valueClass={pnlClass(totals.realizedSince)}
+              />
+              <Stat
+                label="Realized (lifetime)"
+                value={fmtSignedUsd(totals.realizedLifetime)}
+                valueClass={pnlClass(totals.realizedLifetime)}
+              />
+              <p className="text-xs text-muted-foreground">Offline accounts only</p>
+            </>
+          )}
+        </CardContent>
+      </Card>
       {portfolios.map((portfolio) => {
         const account = accounts.find((a) => a.id === portfolio.accountId);
-        const pnlPositive = Number(portfolio.dayPnl) >= 0;
-        // An offline account appears in the combined view with only meaningful fields — hide the
-        // broker-only Day P&L on its card.
-        const isOffline = account?.brokerType === BrokerType.OFFLINE;
         return (
           <Card key={portfolio.portfolioId ?? portfolio.accountId}>
             <CardHeader className="pb-2">
@@ -137,17 +206,12 @@ export function PortfolioPanel() {
               </div>
             </CardHeader>
             <CardContent className="space-y-1.5">
+              <Stat label="Equity" value={fmtUsd(portfolio.equity)} />
               <Stat
-                label="Equity"
-                value={`$${Number(portfolio.equity).toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
+                label="Day P&L"
+                value={fmtSignedUsd(portfolio.dayPnl)}
+                valueClass={pnlClass(portfolio.dayPnl)}
               />
-              {!isOffline && (
-                <Stat
-                  label="Day P&L"
-                  value={`${pnlPositive ? '+' : ''}$${Number(portfolio.dayPnl).toFixed(2)}`}
-                  valueClass={pnlPositive ? 'text-buy' : 'text-destructive'}
-                />
-              )}
               {portfolio.positions?.length > 0 && (
                 <p className="text-xs text-muted-foreground">
                   {portfolio.positions.length} position{portfolio.positions.length > 1 ? 's' : ''}

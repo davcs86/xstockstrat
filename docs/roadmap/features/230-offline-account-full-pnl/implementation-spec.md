@@ -1673,7 +1673,7 @@ cd services/xstockstrat-agent && uv run pytest --cov=app --cov-fail-under=40 && 
 
 ### Step 26 — service: UI — offline P&L on the four `/trader` surfaces
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/money.ts` — modify

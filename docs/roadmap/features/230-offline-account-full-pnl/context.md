@@ -941,3 +941,32 @@
   - `ruff check` clean; `ruff format --check` clean.
 - Files modified: `tests/test_offline_client.py`, `tests/test_position_parity.py`.
 - Deviations: none.
+
+### Step 26 — service: UI — offline P&L on the four `/trader` surfaces [done]
+- `fmtSignedUsd` renders `-$50.00` (sign before `$`); the docstring is true again (finding for Step 28).
+- `fmtNyDate(ts)` returns the America/New_York `YYYY-MM-DD`.
+- `lib/portfolioTotals.ts` `sumPortfolioTotals`: realized/fee sums are offline-only. It replaces the
+  Book page's inline reduce (DRY).
+- `MarkBadge`: LAST_CLOSE → "Last close YYYY-MM-DD", NONE → "No price", `warning` variant with
+  Tooltip + `aria-label` (C-17, no new variant). Live/broker marks render nothing.
+- `PortfolioPanel`:
+  - single offline view: Day P&L (%), Total P&L (%), Realized since/lifetime as `gross (net …)`, and
+    both fee scopes, each only when the optional is set; Cash/BP stay hidden;
+  - broker rows now use the shared formatters;
+  - combined view: an "All accounts" summary (Day/Total summed; the realized rows captioned "Offline
+    accounts only" when any offline account exists), and every per-account card shows Day P&L.
+- Book offline card shows Day + Total P&L (with % when `totalPnlPct` is set); Cash/BP stay
+  broker-only.
+- Positions list + sheet: `MarkBadge` beside Price. An unpriced row shows `—` for price, MV, Today's
+  and Total P/L ($ and %), never a fake $0.
+- Detail page: `MarkBadge` beside the header price.
+- `ConfirmFillDialog`: new `filled_at` copy only; no fees input (fees come from the agent).
+- Verification:
+  - tsc: same 2 pre-existing e2e errors (`backfills.spec.ts`);
+  - lint: same 6 pre-existing warnings.
+- Files modified: the 9 listed in the step.
+- Deviations: none in behaviour.
+  - `PORTFOLIO_ALPACA_AC30` (a spread of `PORTFOLIO_ALPACA` with day 120 / total 500) was added as
+    the AC-30 broker leg; it is in the Step 27 files.
+  - The combined panel renders only when no account is active (the provider auto-selects the first
+    active account). That is pre-existing UX, so AC-30's e2e uses inactive account copies.
