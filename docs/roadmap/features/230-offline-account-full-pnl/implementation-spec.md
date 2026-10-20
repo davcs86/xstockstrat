@@ -647,7 +647,7 @@ paper-only dev invariant
 
 ### Step 10 — test: trading ConfirmOrder fees, filled_at preservation and masking
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading_offline_test.go` — modify

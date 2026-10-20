@@ -8,9 +8,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pashagolub/pgxmock/v4"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
@@ -20,6 +22,7 @@ import (
 	"github.com/xstockstrat/contracts/pnl"
 	"github.com/xstockstrat/trading/internal/config"
 	"github.com/xstockstrat/trading/internal/repository"
+	"github.com/xstockstrat/trading/internal/testdata"
 )
 
 // offlineAccountRepo is a fake AccountRepository recording CreateBrokerAccount and serving a
@@ -1542,3 +1545,234 @@ func TestSnapshotOfflinePositions_Concurrency_AC10(t *testing.T) {
 // suppress unused import warning — json is used by the payload-parsing helpers above and kept as
 // insurance for any future payload-based assertion that needs raw JSON parsing.
 var _ = json.Marshal
+
+// ---------------------------------------------------------------------------
+// Feature 230 — ConfirmOrder fees, filled_at preservation and NEW-order masking
+// ---------------------------------------------------------------------------
+
+// rowCapture is a pgxmock argument matcher that records the bound value at one UpsertOrder position.
+type rowCapture struct {
+	row *[]any
+	i   int
+}
+
+func (c rowCapture) Match(v any) bool { (*c.row)[c.i] = v; return true }
+
+const upsertRequiresApprovalArg = 16 // the one UpsertOrder bind with no scanOrder column
+
+// confirmHarness round-trips every order through the real UpsertOrder/GetOrder SQL: each persisted
+// write is captured and served back as the next GetOrder row.
+type confirmHarness struct {
+	t      *testing.T
+	mock   pgxmock.PgxPoolIface
+	svc    *TradingService
+	stored []any
+}
+
+func newConfirmHarness(t *testing.T) *confirmHarness {
+	t.Helper()
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatalf("pgxmock.NewPool: %v", err)
+	}
+	t.Cleanup(mock.Close)
+	svc := newSnapshotTestService(&fakeBaselineStore{}, &recordingLedger{})
+	svc.repo = repository.NewTradingRepoWithDB(mock)
+	svc.orders = map[string]*tradingv1.Order{}
+	return &confirmHarness{t: t, mock: mock, svc: svc}
+}
+
+func (h *confirmHarness) expectUpsert() {
+	args := make([]any, 23)
+	h.stored = make([]any, 23)
+	for i := range args {
+		args[i] = rowCapture{row: &h.stored, i: i}
+	}
+	h.mock.ExpectExec(`INSERT INTO trading\.orders`).WithArgs(args...).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+}
+
+// persisted returns the last UpsertOrder write as a scanOrder row: requires_approval dropped, state
+// NULL, and nullable binds re-pointered (pgxmock scans a value into a pointer destination only as one).
+func (h *confirmHarness) persisted() []any {
+	row := append(append([]any{}, h.stored[:upsertRequiresApprovalArg]...), h.stored[upsertRequiresApprovalArg+1:]...)
+	for i, v := range row {
+		switch x := v.(type) {
+		case float64:
+			if i == 9 || i == 10 || i == 11 { // limit_price, stop_price, filled_avg_price
+				row[i] = &x
+			}
+		case time.Time:
+			if i == 20 { // filled_at
+				row[i] = &x
+			}
+		case *float64: // fees
+			if x != nil {
+				c := *x
+				row[i] = &c
+			}
+		}
+	}
+	return append(row, nil)
+}
+
+func (h *confirmHarness) seed(o *tradingv1.Order) {
+	h.t.Helper()
+	h.expectUpsert()
+	if err := h.svc.repo.UpsertOrder(context.Background(), o); err != nil {
+		h.t.Fatalf("seed UpsertOrder: %v", err)
+	}
+}
+
+func (h *confirmHarness) confirm(req *tradingv1.ConfirmOrderRequest) *tradingv1.Order {
+	h.t.Helper()
+	h.mock.ExpectQuery(`FROM trading\.orders`).WithArgs(req.OrderId).
+		WillReturnRows(pgxmock.NewRows(testdata.OrderRowColumns).AddRow(h.persisted()...))
+	h.expectUpsert()
+	resp, err := h.svc.ConfirmOrder(ctxAsUser(testdata.S1UserID), req)
+	if err != nil {
+		h.t.Fatalf("ConfirmOrder(%+v): %v", req, err)
+	}
+	return resp
+}
+
+// persistedOrder decodes the last persisted write through the real scanOrder path.
+func (h *confirmHarness) persistedOrder(id string) *tradingv1.Order {
+	h.t.Helper()
+	h.mock.ExpectQuery(`FROM trading\.orders`).WithArgs(id).
+		WillReturnRows(pgxmock.NewRows(testdata.OrderRowColumns).AddRow(h.persisted()...))
+	o, err := h.svc.repo.GetOrder(context.Background(), id)
+	if err != nil {
+		h.t.Fatalf("GetOrder: %v", err)
+	}
+	return o
+}
+
+func newOfflineOrder(id string, qty float64) *tradingv1.Order {
+	return &tradingv1.Order{
+		OrderId: id, ClientOrderId: "client-" + id, Symbol: "AAPL", Side: tradingv1.OrderSide_ORDER_SIDE_BUY,
+		OrderType: tradingv1.OrderType_ORDER_TYPE_MARKET, Status: tradingv1.OrderStatus_ORDER_STATUS_NEW,
+		Qty: qty, TimeInForce: tradingv1.TimeInForce_TIME_IN_FORCE_DAY, UserId: testdata.S1UserID,
+		TradingMode: commonv1.TradingMode_TRADING_MODE_PAPER, AccountId: testdata.S1AccountID,
+		BrokerType: commonv1.BrokerType_BROKER_TYPE_OFFLINE, CreatedAt: timestamppb.New(time.Now().Add(-time.Hour)),
+	}
+}
+
+func feesOf(o *tradingv1.Order) any {
+	if o.Fees == nil {
+		return nil
+	}
+	return *o.Fees
+}
+
+func TestConfirmOrder_AC9_NegativeFeesRejectedBeforeLoad(t *testing.T) {
+	h := newConfirmHarness(t)
+	for _, fees := range []float64{-1, math.NaN(), math.Inf(1)} {
+		_, err := h.svc.ConfirmOrder(ctxAsUser(testdata.S1UserID), &tradingv1.ConfirmOrderRequest{
+			OrderId: "ord-x", FilledQty: 10, FilledAvgPrice: 150, Fees: proto.Float64(fees),
+		})
+		if grpcstatus.Code(err) != codes.InvalidArgument || grpcstatus.Convert(err).Message() != "fees must be >= 0" {
+			t.Errorf("fees %v: err = %v, want InvalidArgument \"fees must be >= 0\"", fees, err)
+		}
+	}
+	if err := h.mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("GetOrder/UpsertOrder must not run: %v", err)
+	}
+}
+
+func TestConfirmOrder_AC8_ReconfirmReplacesFees(t *testing.T) {
+	h := newConfirmHarness(t)
+	h.seed(newOfflineOrder("ord-1", 10))
+	h.confirm(&tradingv1.ConfirmOrderRequest{OrderId: "ord-1", FilledQty: 10, FilledAvgPrice: 150, Fees: proto.Float64(5)})
+	resp := h.confirm(&tradingv1.ConfirmOrderRequest{OrderId: "ord-1", FilledQty: 10, FilledAvgPrice: 150, Fees: proto.Float64(2)})
+	if feesOf(resp) != 2.0 || feesOf(h.persistedOrder("ord-1")) != 2.0 {
+		t.Errorf("fees: resp=%v persisted=%v, want 2 (a re-confirm replaces, never adds)", feesOf(resp), feesOf(h.persistedOrder("ord-1")))
+	}
+}
+
+func TestConfirmOrder_AC37_OmittedFeesKept(t *testing.T) {
+	h := newConfirmHarness(t)
+	h.seed(newOfflineOrder("ord-1", 10))
+	h.confirm(&tradingv1.ConfirmOrderRequest{OrderId: "ord-1", FilledQty: 10, FilledAvgPrice: 150, Fees: proto.Float64(2)})
+	resp := h.confirm(&tradingv1.ConfirmOrderRequest{OrderId: "ord-1", FilledQty: 10, FilledAvgPrice: 151})
+	if feesOf(resp) != 2.0 || resp.FilledAvgPrice != 151 {
+		t.Errorf("resp fees=%v price=%v, want fees 2 kept and price 151", feesOf(resp), resp.FilledAvgPrice)
+	}
+}
+
+func TestConfirmOrder_AC21_PartialThenFullCumulative(t *testing.T) {
+	h := newConfirmHarness(t)
+	h.seed(newOfflineOrder("ord-1", 100))
+	part := h.confirm(&tradingv1.ConfirmOrderRequest{OrderId: "ord-1", FilledQty: 40, FilledAvgPrice: 150, Fees: proto.Float64(0.40)})
+	if part.Status != tradingv1.OrderStatus_ORDER_STATUS_PARTIALLY_FILLED || feesOf(part) != 0.40 {
+		t.Fatalf("partial: status=%v fees=%v, want PARTIALLY_FILLED 0.40", part.Status, feesOf(part))
+	}
+	full := h.confirm(&tradingv1.ConfirmOrderRequest{OrderId: "ord-1", FilledQty: 100, FilledAvgPrice: 150, Fees: proto.Float64(1)})
+	if full.Status != tradingv1.OrderStatus_ORDER_STATUS_FILLED || feesOf(full) != 1.0 {
+		t.Errorf("full: status=%v fees=%v, want FILLED 1.00 (cumulative, not 1.40)", full.Status, feesOf(full))
+	}
+}
+
+func TestConfirmOrder_AC47_ReconfirmKeepsFrozenFilledAt(t *testing.T) {
+	h := newConfirmHarness(t)
+	var sell *tradingv1.Order
+	for _, o := range testdata.S1HistoryOrders() {
+		if o.OrderId == testdata.S1SellID {
+			sell = o
+		}
+	}
+	h.seed(sell)
+	h.confirm(&tradingv1.ConfirmOrderRequest{OrderId: testdata.S1SellID, FilledQty: 40, FilledAvgPrice: 165, Fees: proto.Float64(2)})
+	want := time.Date(2026, 10, 20, 15, 0, 0, 0, time.UTC)
+	if got := h.persistedOrder(testdata.S1SellID).GetFilledAt().AsTime(); !got.Equal(want) {
+		t.Errorf("filled_at = %v, want %v (a re-confirm without filled_at must not move a frozen order)", got, want)
+	}
+}
+
+func TestConfirmOrder_AC48_UnconfirmHidesFeesAndFilledAt(t *testing.T) {
+	h := newConfirmHarness(t)
+	at := time.Date(2026, 10, 19, 14, 0, 0, 0, time.UTC)
+	h.seed(newOfflineOrder("ord-1", 10))
+	h.confirm(&tradingv1.ConfirmOrderRequest{OrderId: "ord-1", FilledQty: 10, FilledAvgPrice: 150, Fees: proto.Float64(2), FilledAt: timestamppb.New(at)})
+	resp := h.confirm(&tradingv1.ConfirmOrderRequest{OrderId: "ord-1", FilledQty: 0})
+
+	got, err := h.svc.GetOrder(context.Background(), &tradingv1.GetOrderRequest{OrderId: "ord-1"})
+	if err != nil {
+		t.Fatalf("GetOrder: %v", err)
+	}
+	for name, o := range map[string]*tradingv1.Order{"ConfirmOrder": resp, "GetOrder": got} {
+		if o.Status != tradingv1.OrderStatus_ORDER_STATUS_NEW || o.Fees != nil || o.FilledAt != nil {
+			t.Errorf("%s: status=%v fees=%v filled_at=%v, want NEW with fees and filled_at hidden", name, o.Status, feesOf(o), o.FilledAt)
+		}
+	}
+	if cached := h.svc.orders["ord-1"]; feesOf(cached) != 2.0 || !cached.GetFilledAt().AsTime().Equal(at) {
+		t.Errorf("cache must keep the stored values: fees=%v filled_at=%v", feesOf(cached), cached.FilledAt)
+	}
+
+	back := h.confirm(&tradingv1.ConfirmOrderRequest{OrderId: "ord-1", FilledQty: 10, FilledAvgPrice: 150})
+	if back.Status != tradingv1.OrderStatus_ORDER_STATUS_FILLED || feesOf(back) != 2.0 || !back.GetFilledAt().AsTime().Equal(at) {
+		t.Errorf("re-confirm: status=%v fees=%v filled_at=%v, want FILLED 2.00 %v", back.Status, feesOf(back), back.FilledAt, at)
+	}
+}
+
+func TestConfirmOrder_QtyZeroNeverFilledKeepsNilFilledAt(t *testing.T) {
+	h := newConfirmHarness(t)
+	h.seed(newOfflineOrder("ord-1", 10))
+	h.confirm(&tradingv1.ConfirmOrderRequest{OrderId: "ord-1", FilledQty: 0, FilledAt: timestamppb.New(time.Now().Add(-48 * time.Hour))})
+	if fa := h.persistedOrder("ord-1").FilledAt; fa != nil {
+		t.Fatalf("qty-0 confirm on a never-filled order persisted filled_at %v, want NULL", fa.AsTime())
+	}
+	before := time.Now()
+	resp := h.confirm(&tradingv1.ConfirmOrderRequest{OrderId: "ord-1", FilledQty: 10, FilledAvgPrice: 150})
+	if fa := resp.GetFilledAt().AsTime(); fa.Before(before.Add(-time.Second)) {
+		t.Errorf("first non-NEW confirm filled_at = %v, want now", fa)
+	}
+}
+
+func TestHideUnconfirmedFill_BrokerUntouched(t *testing.T) {
+	at := timestamppb.Now()
+	o := &tradingv1.Order{BrokerType: commonv1.BrokerType_BROKER_TYPE_ALPACA, Status: tradingv1.OrderStatus_ORDER_STATUS_NEW, FilledAt: at, Fees: proto.Float64(1)}
+	hideUnconfirmedFill(o)
+	if o.FilledAt != at || feesOf(o) != 1.0 {
+		t.Errorf("broker order changed: filled_at=%v fees=%v", o.FilledAt, feesOf(o))
+	}
+}

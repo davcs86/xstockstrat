@@ -568,3 +568,25 @@
   - green: 9/9 with `-race`.
 - Files modified: `internal/service/trading.go`.
 - Deviations: none.
+
+### Step 10 — test: trading ConfirmOrder fees, filled_at preservation and masking [done]
+- Added `internal/testdata/offline_history.go`: S1 history builders plus id constants, the AC-43..47
+  Background (C-13).
+- The harness `confirmHarness` (pgxmock + `NewTradingRepoWithDB`) round-trips every order through the
+  **real** `UpsertOrder` → `scanOrder` SQL:
+  - `rowCapture` arg matchers record each write, and the write is served back as the next `GetOrder`
+    row;
+  - the seed itself goes through `UpsertOrder`, so no status/side encoding is duplicated in tests;
+  - pointer columns are re-pointered for pgxmock.
+- Tests: AC-9 (−1/NaN/+Inf before load, `ExpectationsWereMet` with zero expectations), AC-8, AC-37,
+  AC-21, AC-47, AC-48 (ConfirmOrder + GetOrder masked, cache unmasked, bare re-confirm restores), the
+  qty-0 never-filled case, and broker-untouched.
+- Deviation (harness detail): the spec named a fake `ordersFn`. I used the capture/replay of
+  `UpsertOrder` binds instead, which is a stronger proof because it exercises the persisted shape.
+- Verification:
+  - targeted `-race` ✓;
+  - full `-race` coverage total 72.6% (≥ 40%);
+  - `golangci-lint` 0 issues;
+  - `ord-s1` literal guard ✓.
+- Files modified: `internal/service/trading_offline_test.go`, `internal/testdata/offline_history.go`
+  (new).
