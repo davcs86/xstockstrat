@@ -865,7 +865,7 @@ proof.
 
 ### Step 13 — service: marketdata `BatchGetBars` opt-in `allow_partial`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service.go` — modify

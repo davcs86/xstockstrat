@@ -645,3 +645,25 @@
   - full `-race` suite ✓;
   - `go vet` ✓;
   - `golangci-lint` 0 issues.
+
+### Step 13 — service: marketdata `BatchGetBars` opt-in `allow_partial` [done]
+- Seam: `barsBatchStore` (`QueryBarsBatch`, `InsertBars`) with the field `barsStore`, assigned in the
+  `if repo != nil` block. `BatchGetBars` uses it, not `s.repo`.
+- The singleflight key gains `:%t` (`AllowPartial`). The fetch body became `fetch(fctx)`.
+- The strict path is `Do(key, fetch(ctx))` with `return nil, fetchErr`: same behaviour as before.
+- The partial path is the new helper `partialColdFetch`:
+  - no deadline → caller ctx;
+  - otherwise `budget = time.Until(dl) − barsPartialMargin` (250ms):
+    - `≤ 0` → skip with WARN "no deadline budget…";
+    - else `WithTimeout(WithoutCancel(ctx), budget)`;
+  - on a fetch error, WARN "cold fetch failed; returning stored bars" (`cold`, `budget_ms`, `error`),
+    then the warm subset is returned.
+- A warm read error still fails the RPC, and a symbol without bars is still omitted.
+- TDD (with Step 14):
+  - red: compile (`barsStore` field) first, then a behavioural red once only the seam existed — 6
+    failures (cold error propagated; deadline exceeded; 1 shared flight; leader cancel killed the
+    waiter);
+  - green: 13/13 with `-race`.
+- Files modified: `internal/service/marketdata_service.go`.
+- Deviations: none. The partial branch is factored into `partialColdFetch` for readability; the
+  semantics are as specified.
