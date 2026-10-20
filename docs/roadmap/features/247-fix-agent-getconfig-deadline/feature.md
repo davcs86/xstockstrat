@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-10-20 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-19-agent-get-config-value-no-deadline-defect.md` |
+| 2026-10-20 | `draft` → `spec-ready` | /sdd-review | Product spec approved (6 warnings, 4 notes; low-cost ones resolved in-place) |
 
 ---
 
@@ -44,4 +45,4 @@ read and OAuth dynamic client registration until the MCP client times out.
 
 ## Next Action
 
-`/sdd-design fix-agent-getconfig-deadline quick` — recommended design depth (quick) from triage; see context.md
+`/sdd-design fix-agent-getconfig-deadline` (full — operator: no quick designs; see context.md)
