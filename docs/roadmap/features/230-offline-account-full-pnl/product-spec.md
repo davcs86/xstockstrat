@@ -79,7 +79,9 @@ partial — replaces the order's fees along with its fill (existing replace sema
 PARTIALLY_FILLED status derivation is unchanged. A (re-)confirm that **omits** `fees` leaves the order's
 recorded fees unchanged (0 if none were ever recorded); only an explicit value, including 0, replaces
 them, so a fees-unaware client cannot silently wipe fees. An offline order that has never been
-confirmed (status NEW) has no fees value. Likewise, re-confirming an **already-confirmed** order without
+confirmed (status NEW) has no fees value. A NEW order after an un-confirm keeps its last fees and
+`filled_at` internally; neither is shown while it is NEW; a never-filled NEW order has no `filled_at`
+(design.md §2.3, AC-48). Likewise, re-confirming an **already-confirmed** order without
 `filled_at` keeps its stored `filled_at`; only a first confirm defaults it to now, so a fee-only edit
 can never move a frozen-window order into the current window (operator decision 2026-10-19). Fees are **never** folded into cost basis or average
 entry price. The offline account exposes `fees_since_snapshot`, `fees_lifetime`, and realized P&L **gross and net**
@@ -239,20 +241,22 @@ consumers. Exact shape decided in design.
 Two independent migrations (separate schemas, no cross-service run-order dependency; each runs in its
 service's normal `scripts/db-migrate.sh` order):
 
-- `services/xstockstrat-trading/migrations/011_offline_order_fees.up.sql` — `ALTER TABLE trading.orders
-  ADD COLUMN fees NUMERIC(18,8)` (nullable; offline orders backfilled to 0 per FR-7, broker orders stay
-  NULL). `NUMERIC(18,8)` matches `filled_qty` / `filled_avg_price` on the same table.
-  `.down.sql` — `ALTER TABLE trading.orders DROP COLUMN IF EXISTS fees`.
-- `services/xstockstrat-portfolio/migrations/017_offline_realized_lifetime_fees.up.sql` — add to
-  `portfolio.offline_account_realized`: `realized_carried DOUBLE PRECISION NOT NULL DEFAULT 0`,
-  `fees_since_snapshot DOUBLE PRECISION NOT NULL DEFAULT 0`, `fees_carried DOUBLE PRECISION NOT NULL
-  DEFAULT 0` (`DOUBLE PRECISION` matches the existing `realized_pnl` column). Lifetime is derived
-  (`carried + since_snapshot`), so the FR-7 seed is satisfied by the defaults with no data update.
-  `.down.sql` — drops the three columns.
-- Whether the carry columns live in portfolio (above) or beside trading's baseline row is a design
-  decision (OQ-2); if design moves them, `/sdd-spec` rewrites this section before execute.
-- Next free numbers (trading 011, portfolio 017) must be re-checked across all remote branches at
-  `/sdd-spec` (`docs/roadmap/ledger/fails.md:213-224`).
+- `services/xstockstrat-trading/migrations/011_offline_fees_snapshot_headers.up.sql` — `ALTER TABLE
+  trading.orders ADD COLUMN fees NUMERIC(18,8)` (nullable; confirmed offline orders backfilled to 0 per
+  FR-7, NEW offline and broker orders stay NULL; `NUMERIC(18,8)` matches `filled_qty` /
+  `filled_avg_price`), plus the new plain table `trading.offline_snapshot_headers` (one row per
+  snapshot: `as_of`, frozen `realized_carried` / `fees_carried`) backfilled from the existing baselines
+  with a carry of 0 (design.md §2.1, OQ-2 resolved: the carry lives in trading). `.down.sql` — drops the
+  headers table, then the `fees` column.
+- `services/xstockstrat-portfolio/migrations/017_offline_realized_lifetime_fees.up.sql` — add **four**
+  columns to `portfolio.offline_account_realized`: `realized_carried`, `fees_since_snapshot`,
+  `fees_carried` (`DOUBLE PRECISION NOT NULL DEFAULT 0`, matching `realized_pnl`) and `recent_fills
+  JSONB NOT NULL DEFAULT '[]'`; and backfill `portfolio.positions.source = 1` (ORDERS) for pre-163
+  offline positions still at 0, so `source ≠ 0` reliably marks an offline position (design.md §4.1).
+  Lifetime is derived (`carried + since_snapshot`), so the FR-7 seed is satisfied by the defaults.
+  `.down.sql` — drops the four columns (the source backfill is not undone; `ORDERS` is correct).
+- Next free numbers re-checked across all 63 remote branches at `/sdd-spec` (2026-10-20): no branch
+  carries trading `011+` or portfolio `017+` (`docs/roadmap/ledger/fails.md:213-224`).
 
 ## Feature Workflow Notes
 

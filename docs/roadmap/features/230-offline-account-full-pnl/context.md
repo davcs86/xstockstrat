@@ -301,12 +301,73 @@
   opt-in); insights.md (push raw bounded inputs, interpret where the clock lives).
 - **Status:** spec-ready → design-approved.
 
+## Session 2026-10-20 — sdd-spec
+
+- Generated implementation-spec.md with 28 steps. Status → implementation-ready.
+- **Evidence re-anchored on `origin/main-dev` @ `7c247698`.** Feature 231
+  (`fix-after-hours-positions-priced`) merged after /sdd-design. It changed `portfolio_service.go`
+  (`markOf` `:446-456`, `enrichPosition(p, price)` `:559-566`), `marketdata_service.go` (`BatchGetBars` is
+  now `:703-812`; the cold-fetch return is `:789-791`), `marketdata.proto` (`Quote.mark_price = 8`) and
+  `SCALAR_BOUNDS_REGISTRY` (`configServiceImpl.ts:100-144`). It also added the Go fixture home
+  `services/xstockstrat-portfolio/internal/testdata/marks.go`. Trading, UI and agent code were unchanged,
+  so the design's citations there still hold.
+- **Open risk closed: golden bar-date mapping.** Staging `query_bars` (AAPL) shows 1d bars stamped 00:00
+  America/New_York: `2026-10-16T04:00Z` (EDT), `2026-01-16T05:00Z` (EST), and across the DST end
+  `2025-10-31T04:00Z` → `2025-11-03T05:00Z`. `SessionDate` = NY date of `t+6h` maps all of them correctly,
+  and Step 16 pins them as the golden vectors. The same read showed today's forming bar is stored during
+  the session, which confirms the AC-49 exclusion is needed.
+- **Open risk closed: migration numbers.** I scanned all 63 `origin/*` heads: none carries trading `011+`
+  or portfolio `017+`.
+- **Spec drift landed in product-spec.md:**
+  - migration `011_offline_fees_snapshot_headers` with the headers table (OQ-2 resolved in trading);
+  - portfolio 017 adds 4 columns plus the `source` backfill;
+  - the FR-3 NEW-order note.
+- **New design gap, escalated, not guessed (P-03): D-1.**
+  - The 231 durable rules `@AC-6`/`@AC-14 @feature-231` (offline position, one-sided quote, no in-bound
+    close → `current_price 0`) conflict with FR-5's 21-day last-close fallback once 017 routes every offline
+    position through the valuation step.
+  - The spec defaults to this: for offline positions, only a **two-sided, fresh** quote is a QUOTE mark; a
+    one-sided quote falls to the bar close (LAST_CLOSE, real date). That preserves 231 @AC-1/@AC-13 values
+    and changes @AC-6/@AC-14 row 2 for offline positions only.
+  - **Operator sign-off (C-16) or an alternative is required before Step 19 executes.**
+- **Implementation detail added (not in design):** a narrow `barsBatchStore` seam in marketdata. `s.repo`
+  is a concrete pool-backed type, so AC-53/54's warm subset is not unit-testable without it. It follows
+  231's `quoteStore`/`dailyCloseReader` nil-seam pattern (`marketdata_service.go:117-136,225-230`).
+- Other key findings:
+  - `UpsertBaselineSnapshot`/`DeleteBaselinesByAccount` run on `r.pool`, so the header transaction is
+    proven by SQL shape plus the service fake;
+  - `EffectiveBaselineByAccount` reads through `r.db`, so pgxmock can drive it;
+  - `UpsertOfflineRealized` moves to `r.db.Exec` so it can be mocked;
+  - the AC-43..47 S1 history moves to `services/xstockstrat-trading/internal/testdata/offline_history.go`
+    (two consumers, C-13).
+
 ## Open Threads
 
-- [ ] Golden test of `SessionDate` (NY date of t+6h) against real staging `ohlcv` 1d rows, covering EDT
-  and EST. Blocking. Target: the first portfolio valuation step at /sdd-spec.
-- [ ] Re-check migration numbers trading 011 / portfolio 017 across remote branches. Target: /sdd-spec.
-- [ ] Manual `buf breaking` on trading.proto (CI skips it, `ci.yml:135`). Target: the proto step.
-- [ ] Land spec drift: migration names; portfolio 017 adds 4 columns; FR-3 NEW-order note. Target: /sdd-spec.
+- [x] Golden test of `SessionDate` against real staging `ohlcv` 1d rows (EDT, EST, DST end). Verified at
+  /sdd-spec; pinned as Step 16 (blocking for Step 19).
+- [x] Re-check migration numbers trading 011 / portfolio 017 across remote branches. Done (63 heads, no
+  collision).
+- [ ] Manual `buf breaking` on trading.proto (CI skips it, `ci.yml:135`). Target: Step 1 Verification.
+- [x] Land spec drift: migration names; portfolio 017 adds 4 columns; FR-3 NEW-order note. Done in
+  product-spec.md.
 - [ ] Findings: dead `TradingService.StreamOrderUpdates` (trading); unscoped `GetOfflineRealized` leak
-  (portfolio); `fmtSignedUsd` sign placement (UI). Target: the docs step.
+  (portfolio); `fmtSignedUsd` sign placement (UI). Target: Step 28.
+- [x] **D-1: operator sign-off (C-16) on 231 `@AC-6`/`@AC-14` (row 2) for offline positions, or an
+  alternative mark rule.** Resolved 2026-10-20: the default ("fallback wins") was signed off. See the
+  session entry below. Step 19 is unblocked.
+
+## Session 2026-10-20 — D-1 decision (post sdd-spec)
+
+- **Operator decision D-1 (explicit, 2026-10-20): "fallback wins" (the spec's default). C-16 sign-off.**
+  - For **offline** positions, a quote counts as live only if it is two-sided and from the current
+    session.
+  - Anything else falls back to the daily close within `portfolio.marketdata.last_close_lookback_days`,
+    flagged `MARK_SOURCE_LAST_CLOSE`, or `MARK_SOURCE_NONE` if no bar exists.
+  - This changes the durable rules `services/xstockstrat-portfolio/acceptance/fix-after-hours-positions-priced.feature`
+    `@AC-6` (one-sided quote with a close older than 168h → price 0) and `@AC-14` row 2 (no mark →
+    price 0), **for offline positions only**. Rewrite both at promotion.
+  - `GetPnL` and broker positions keep feature 231's behaviour; 231 `@AC-1`/`@AC-13` prices are
+    unchanged.
+  - The rejected alternative (capping the offline fallback at 168h) would have narrowed the operator's
+    21-day lookback choice.
+- Step 19 is unblocked. Verified: feature 231 is on `main-dev`, promoted to `main` in #1258.
