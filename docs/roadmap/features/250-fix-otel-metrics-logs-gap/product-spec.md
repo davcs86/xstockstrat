@@ -11,15 +11,30 @@
 
 **Observed.** Every telemetry module builds only a tracer provider and trace exporter; no `MeterProvider`,
 `LoggerProvider`, metric reader or log exporter exists under `services/`. The UI passes empty pipelines
-(`services/xstockstrat-ui/src/telemetry.ts:31-32`: `metricReaders: []`, `logRecordProcessors: []`). The alert rules
-query `rpc_server_duration_milliseconds_count` / `_bucket` (`packages/otel/alerts/alert-rules.yaml:44-45`, `:88`), and
-the dashboards under `packages/otel/dashboards/` reference the same series (10 matches). Nothing produces it, so the
-error-rate and p99 latency alerts can never fire. `docs/setup/grafana-cloud.md:3` claims every workload "emits
-traces, metrics, and logs via OTLP".
+(`services/xstockstrat-ui/src/telemetry.ts:31-32`: `metricReaders: []`, `logRecordProcessors: []`). Nothing feeds
+either backend that the provisioned alerts and dashboards read:
 
-**Expected.** No provisioned alert or dashboard depends on a series that nothing produces, and the setup docs state
-the signals actually exported. Either (a) the alert/dashboard set and docs are narrowed to traces (or a documented
-Grafana-side span-metrics path), or (b) services export the RPC histogram (and logs) the alerts depend on.
+- **Metrics (Prometheus/Mimir).** The alert rules query `rpc_server_duration_milliseconds_count` / `_bucket`
+  (`packages/otel/alerts/alert-rules.yaml:44-45`, `:88`), and the dashboards under `packages/otel/dashboards/`
+  reference the same series 10 times (9 panel exprs + the `$service` variable query `service-health.json:47`).
+  Nothing produces it, so the error-rate (`xstk-error-rate-high`) and p99 latency (`xstk-p99-latency-high`) alerts
+  can never fire.
+- **Logs (Loki).** The critical alert `xstk-analysis-no-scoring` (`alert-rules.yaml:116-134`, severity `:121`)
+  queries `${DS_LOKI_UID}` (`:129`) with `count_over_time({service_name="analysis"} |~ "ScoreStrategy|RunBacktest"
+  [30m])` (`:134`), and 9 of the 18 dashboard panel exprs are LogQL (`signal-pipeline-throughput.json:59,74,104,109`;
+  `infrastructure.json:74,105`; `service-health.json:136`; `trading-service.json:92,107`). Nothing feeds Loki: no log
+  exporter under `services/`, the collector `logs` pipeline takes OTLP only
+  (`packages/otel/otel-collector-config.yaml:84-87`), and `.do/` declares no `log_destinations`. The alert and the 9
+  panels evaluate against no data, so none can detect a scoring stall, error spike or pipeline failure.
+
+`docs/setup/grafana-cloud.md:3` claims every workload "emits traces, metrics, and logs via OTLP", and `:21-24` lists
+Metrics and Logs as signal types sent.
+
+**Expected.** No provisioned alert rule, dashboard panel or variable query depends on a metric series or log stream
+that nothing produces, and the setup docs state the signals actually exported. Per operator decision 2026-10-20
+(narrow to traces): the alert/dashboard set and docs are narrowed to traces — alerts and panels on unproduced
+signals are removed or rewritten onto trace data (Tempo, or span metrics only if the Grafana stack is shown to
+generate them).
 
 ## Reproduction Steps
 
@@ -35,16 +50,16 @@ Distinct root cause from the trace-export defect.
 
 ## Affected Services
 
-- packages/otel (alerts, dashboards, collector config)
+- packages/otel (alerts, dashboards, collector config, `packages/otel` docs)
 - docs (`docs/setup/grafana-cloud.md`, `docs/patterns/observability.md`)
-- All 12 runtimes (trading, portfolio, marketdata, indicators, ingest, analysis, ledger, identity, notify, config,
-  ui, agent) — only under fix (b)
+
+No `xstockstrat-*` runtime is affected: runtime metric/log export (fix (b), `context.md`) is out of scope (see Out of Scope).
 
 ## Fix Scope
 
 - [x] No proto changes anticipated
 - [x] No database migrations anticipated
-- [ ] Config/deploy change possible under fix (b): OTLP metrics/logs exporter env in `.do/app*.yaml` and compose
+- [x] No config/deploy changes anticipated (no OTLP metrics/logs exporter env; fix (b) out of scope)
 
 (Update after investigation — remove or replace each item as needed)
 
@@ -59,3 +74,6 @@ dev.
 - Refactoring unrelated to the bug
 - Performance improvements unrelated to the fix
 - Trace export (fixed by feature 226)
+- Adding OTLP metric or log export to any runtime (fix (b), `context.md`): new capability that reverses feature 226
+  Operator Decision 3 (`docs/roadmap/features/226-fix-otel-trace-export/product-spec.md:64`); routes to a separate
+  `/sdd-story` with operator sign-off (C-11). Operator decision 2026-10-20: narrow to traces.
