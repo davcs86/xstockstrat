@@ -6,6 +6,8 @@
 **Severity**: SEV-2
 **Created**: 2026-10-16
 **Last Updated**: 2026-10-18
+**Committed to main**: 65bbc3cbf93a03f5359b60228398a25e6f297f05
+**Launched date**: 2026-10-20
 
 ---
 
@@ -20,6 +22,7 @@
 | 2026-10-18 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential mode; Steps 1–2 done |
 | 2026-10-18 | `in-progress` → `code-completed` | /sdd-execute | All 11 steps done; staging gates G1–G4 pending (operator) before merge |
 
+| 2026-10-20 | `code-completed` → `launched` | CI workflow | Promoted via PR #1258; committed 65bbc3cbf93a03f5359b60228398a25e6f297f05 |
 ---
 
 ## Artifacts

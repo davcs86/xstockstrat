@@ -423,3 +423,10 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - G1–G4 were **not** recorded before the merge and are still owed (operator). G3 decides whether the hourly retention
   loop can drop chunks; a failure shows as WARN `quote retention failed`.
 - Defect sidecar flipped `triaged` → `resolved`.
+
+## Session 2026-10-20 (CI: feature status automation)
+
+- Promotion PR #1258 merged to main
+- Feature promoted and committed: 65bbc3cbf93a03f5359b60228398a25e6f297f05
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-10-20

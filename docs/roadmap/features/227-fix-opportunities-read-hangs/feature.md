@@ -6,6 +6,8 @@
 **Severity**: SEV-2
 **Created**: 2026-10-14
 **Last Updated**: 2026-10-14
+**Committed to main**: 65bbc3cbf93a03f5359b60228398a25e6f297f05
+**Launched date**: 2026-10-20
 
 ---
 
@@ -20,6 +22,7 @@
 | 2026-10-15 | `in-progress` → `code-completed` | /sdd-execute | All 13 steps done |
 | 2026-10-15 | `code-completed` (renumbered) | /sdd-execute | Renumbered 226 → 227 (226 taken on main-dev by fix-otel-trace-export) |
 
+| 2026-10-20 | `code-completed` → `launched` | CI workflow | Promoted via PR #1258; committed 65bbc3cbf93a03f5359b60228398a25e6f297f05 |
 ---
 
 ## Artifacts

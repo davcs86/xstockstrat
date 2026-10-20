@@ -6,6 +6,8 @@
 **Severity**: SEV-2
 **Created**: 2026-10-19
 **Last Updated**: 2026-10-20
+**Committed to main**: 65bbc3cbf93a03f5359b60228398a25e6f297f05
+**Launched date**: 2026-10-20
 
 ---
 
@@ -21,6 +23,7 @@
 | 2026-10-19 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential mode (operator: no checkpoints); Step 1 done |
 | 2026-10-20 | `in-progress` → `code-completed` | /sdd-execute | All 13 steps done (sequential, one commit per step); integration PR #1256 → `main-dev` |
 
+| 2026-10-20 | `code-completed` → `launched` | CI workflow | Promoted via PR #1258; committed 65bbc3cbf93a03f5359b60228398a25e6f297f05 |
 ---
 
 ## Reviewers

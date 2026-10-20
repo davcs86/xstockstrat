@@ -431,3 +431,10 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   `marketdata.edgar.cache_ttl_hours` (24, read live per call) and are re-derived with the mark, so ratios for
   after-hours-cached symbols may be off for ≤ 24h after deploy (accepted). Supersedes the purge line in the session summary.
 - The after-close staging check is run by Claude via the staging MCP (positions vs stored `1d` closes) after the dev deploy.
+
+## Session 2026-10-20 (CI: feature status automation)
+
+- Promotion PR #1258 merged to main
+- Feature promoted and committed: 65bbc3cbf93a03f5359b60228398a25e6f297f05
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-10-20

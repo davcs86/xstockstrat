@@ -171,3 +171,10 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   would have timed the next occurrence. pgx is **not** instrumented, so a trace alone will not separate
   pool-acquire wait from query time. Verify spans actually arrive in Grafana Cloud for marketdata and
   portfolio before relying on this.
+
+## Session 2026-10-20 (CI: feature status automation)
+
+- Promotion PR #1258 merged to main
+- Feature promoted and committed: 65bbc3cbf93a03f5359b60228398a25e6f297f05
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-10-20
