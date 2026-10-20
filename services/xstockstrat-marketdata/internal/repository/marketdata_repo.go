@@ -347,6 +347,44 @@ func (r *MarketDataRepo) GetLatestQuotesBatch(ctx context.Context, symbols []str
 	return out, nil
 }
 
+// GetLatestDailyClosesBatch returns the newest 1d close > 0 at or after since per symbol (absent, never 0, when none);
+// served by the (symbol, timeframe, time) PK, run as an unnamed statement for PgBouncer.
+func (r *MarketDataRepo) GetLatestDailyClosesBatch(ctx context.Context, symbols []string, since time.Time) (map[string]float64, error) {
+	out := make(map[string]float64, len(symbols))
+	if len(symbols) == 0 {
+		return out, nil
+	}
+	rows, err := r.db.Query(ctx, latestDailyClosesBatchSQL, pgx.QueryExecModeExec, symbols, since)
+	if err != nil {
+		return nil, fmt.Errorf("get latest daily closes batch: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var (
+			sym   string
+			close float64
+		)
+		if err := rows.Scan(&sym, &close); err != nil {
+			return nil, fmt.Errorf("scan latest daily closes batch: %w", err)
+		}
+		out[sym] = close
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate latest daily closes batch: %w", err)
+	}
+	return out, nil
+}
+
+const latestDailyClosesBatchSQL = `
+		SELECT s.sym, c.close
+		FROM unnest($1::text[]) AS s(sym)
+		CROSS JOIN LATERAL (
+			SELECT close FROM marketdata.ohlcv
+			WHERE symbol = s.sym AND timeframe = '1d' AND time >= $2 AND close > 0
+			ORDER BY time DESC
+			LIMIT 1
+		) c`
+
 const latestQuotesBatchSQL = `
 		SELECT q.time, q.symbol, q.ask_price, q.ask_size, q.bid_price, q.bid_size, q.source
 		FROM unnest($1::text[]) AS s(sym)

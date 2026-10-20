@@ -443,8 +443,20 @@ func (s *PortfolioService) enrichPositions(ctx context.Context, positions []*por
 	s.enrichRisk(ctx, positions)
 }
 
-// applyQuotes mid-quote-values the positions the broker did not value; a missing or unusable quote leaves the
-// position unenriched (never a fabricated price).
+// markOf is the one valuation rule: marketdata's mark_price, else the two-sided mid, else unpriced. The mid fallback
+// exists only for deploy skew/rollback (deploy.yml updates components together, so ordering cannot be enforced).
+func markOf(q *marketdatav1.Quote) (float64, bool) {
+	if q.MarkPrice != nil && *q.MarkPrice > 0 {
+		return *q.MarkPrice, true
+	}
+	if q.AskPrice > 0 && q.BidPrice > 0 {
+		return (q.AskPrice + q.BidPrice) / 2, true
+	}
+	return 0, false
+}
+
+// applyQuotes mark-values the positions the broker did not value; a missing or unusable quote leaves the position
+// unenriched (never a fabricated price, never a one-sided average).
 func applyQuotes(positions []*portfoliov1.Position, quotes map[string]*marketdatav1.Quote) {
 	for _, p := range positions {
 		if p.CurrentPrice > 0 {
@@ -454,12 +466,12 @@ func applyQuotes(positions []*portfoliov1.Position, quotes map[string]*marketdat
 		if !ok {
 			continue // missing quote → same skip as the old per-position error path
 		}
-		price := (quote.AskPrice + quote.BidPrice) / 2
-		if price <= 0 {
-			slog.Warn("latest quote has no usable price", "symbol", p.Symbol, "ask", quote.AskPrice, "bid", quote.BidPrice)
+		price, ok := markOf(quote)
+		if !ok {
+			slog.Warn("latest quote has no usable price", "symbol", p.Symbol, "ask", quote.AskPrice, "bid", quote.BidPrice, "mark", quote.GetMarkPrice())
 			continue
 		}
-		enrichPosition(p, quote.AskPrice, quote.BidPrice)
+		enrichPosition(p, price)
 	}
 }
 
@@ -542,10 +554,9 @@ func (s *PortfolioService) HydrateStops(ctx context.Context) {
 	slog.Info("HydrateStops: replayed resting stops from ledger", "count", n)
 }
 
-// enrichPosition fills current price / market value / unrealized P&L on p from a quote's
-// ask/bid, using the mid price (Ask+Bid)/2. UnrealizedPnlPct is guarded against zero cost basis.
-func enrichPosition(p *portfoliov1.Position, askPrice, bidPrice float64) {
-	price := (askPrice + bidPrice) / 2
+// enrichPosition fills current price / market value / unrealized P&L on p from a markOf price.
+// UnrealizedPnlPct is guarded against zero cost basis.
+func enrichPosition(p *portfoliov1.Position, price float64) {
 	p.CurrentPrice = price
 	p.MarketValue = price * p.Qty
 	p.UnrealizedPnl = p.MarketValue - p.CostBasis
@@ -829,24 +840,16 @@ func (s *PortfolioService) broadcastSnapshot(ctx context.Context, userID string,
 	if err != nil {
 		return
 	}
-	var equity float64
-	snapSymbols := make([]string, 0, len(positions))
-	for _, p := range positions {
-		snapSymbols = append(snapSymbols, p.Symbol)
-	}
-	snapQuotes, ok := s.latestQuotesFor(ctx, snapSymbols)
-	priced := 0
-	for _, p := range positions {
-		if quote, ok := snapQuotes[p.Symbol]; ok {
-			price := (quote.AskPrice + quote.BidPrice) / 2
-			equity += price * p.Qty
-			priced++
-		}
-	}
-	// No priced position means equity is a fabricated 0 — skip rather than persist/emit it.
-	if !ok || (len(positions) > 0 && priced == 0) {
-		slog.Warn("portfolio snapshot skipped: quotes unavailable", "user_id", userID, "positions", len(positions), "quotes_ok", ok)
+	quotes, ok := s.latestQuotesFor(ctx, unvaluedSymbols(positions))
+	applyQuotes(positions, quotes)
+	// Any unpriced position would understate equity — skip rather than persist/emit a partial snapshot.
+	if unpriced := unvaluedSymbols(positions); !ok || len(unpriced) > 0 {
+		slog.Warn("portfolio snapshot skipped: positions unpriced", "user_id", userID, "unpriced", unpriced, "quotes_ok", ok)
 		return
+	}
+	var equity float64
+	for _, p := range positions {
+		equity += p.MarketValue
 	}
 	snap := &portfoliov1.PortfolioSnapshot{
 		PortfolioId:   userID,
@@ -898,17 +901,15 @@ func (s *PortfolioService) checkRiskLimits(ctx context.Context, userID string, m
 	}
 	var totalValue float64
 	posValues := make(map[string]float64)
-	riskSymbols := make([]string, 0, len(positions))
-	for _, p := range positions {
-		riskSymbols = append(riskSymbols, p.Symbol)
-	}
-	riskQuotes, _ := s.latestQuotesFor(ctx, riskSymbols)
-	for _, p := range positions {
-		if quote, ok := riskQuotes[p.Symbol]; ok {
-			price := (quote.AskPrice + quote.BidPrice) / 2
-			val := price * p.Qty
-			posValues[p.Symbol] = val
-			totalValue += val
+	quotes, ok := s.latestQuotesFor(ctx, unvaluedSymbols(positions))
+	applyQuotes(positions, quotes)
+	// Any unpriced position would skew the denominator — skip concentration (drawdown below still runs).
+	if unpriced := unvaluedSymbols(positions); !ok || len(unpriced) > 0 {
+		slog.Warn("concentration check skipped: positions unpriced", "user_id", userID, "unpriced", unpriced, "quotes_ok", ok)
+	} else {
+		for _, p := range positions {
+			posValues[p.Symbol] += p.MarketValue
+			totalValue += p.MarketValue
 		}
 	}
 

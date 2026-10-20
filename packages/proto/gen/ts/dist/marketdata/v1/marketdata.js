@@ -253,7 +253,16 @@ exports.Bar = {
     },
 };
 function createBaseQuote() {
-    return { symbol: "", time: undefined, askPrice: 0, askSize: 0, bidPrice: 0, bidSize: 0, source: "" };
+    return {
+        symbol: "",
+        time: undefined,
+        askPrice: 0,
+        askSize: 0,
+        bidPrice: 0,
+        bidSize: 0,
+        source: "",
+        markPrice: undefined,
+    };
 }
 exports.Quote = {
     encode(message, writer = new wire_1.BinaryWriter()) {
@@ -277,6 +286,9 @@ exports.Quote = {
         }
         if (message.source !== "") {
             writer.uint32(58).string(message.source);
+        }
+        if (message.markPrice !== undefined) {
+            writer.uint32(65).double(message.markPrice);
         }
         return writer;
     },
@@ -336,6 +348,13 @@ exports.Quote = {
                     message.source = reader.string();
                     continue;
                 }
+                case 8: {
+                    if (tag !== 65) {
+                        break;
+                    }
+                    message.markPrice = reader.double();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -369,6 +388,11 @@ exports.Quote = {
                     ? globalThis.Number(object.bid_size)
                     : 0,
             source: isSet(object.source) ? globalThis.String(object.source) : "",
+            markPrice: isSet(object.markPrice)
+                ? globalThis.Number(object.markPrice)
+                : isSet(object.mark_price)
+                    ? globalThis.Number(object.mark_price)
+                    : undefined,
         };
     },
     toJSON(message) {
@@ -394,6 +418,9 @@ exports.Quote = {
         if (message.source !== "") {
             obj.source = message.source;
         }
+        if (message.markPrice !== undefined) {
+            obj.markPrice = message.markPrice;
+        }
         return obj;
     },
     create(base) {
@@ -408,6 +435,7 @@ exports.Quote = {
         message.bidPrice = object.bidPrice ?? 0;
         message.bidSize = object.bidSize ?? 0;
         message.source = object.source ?? "";
+        message.markPrice = object.markPrice ?? undefined;
         return message;
     },
 };
