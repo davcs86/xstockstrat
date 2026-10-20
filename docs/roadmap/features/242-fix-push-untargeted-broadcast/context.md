@@ -75,3 +75,57 @@ OPERATOR DECISIONS (binding, recorded 2026-10-20):
 - Standing authorization: designs run in FULL mode only (no quick designs for automated fixes); the orchestrator auto-approves the design gate once rounds >= 2, no unresolved Floor (F-*) breach remains, no blocking objection remains, and every CHANGE to an existing @AC business rule is covered by an operator decision below.
 - Untargeted alerts (empty target_user_id) Web-Push ONLY to users holding the admin role — operator sign-off for the C-16 CHANGE reversing feature 165 FR-3 broadcast; the pinned test webPush.test.ts AC-4 broadcast case is rewritten deliberately.
 - Per-user producers (portfolio emitRiskAlert, analysis live_loop strategy/fundamentals alerts) set target_user_id to the owning user.
+
+## Session 2026-10-20 — sdd-review product-spec (re-review)
+
+- Re-review: PASS WITH WARNINGS (6 WARN, 4 NOTE; no FAIL, no Floor breach); overlap WARN, no FAIL. Status stays
+  `spec-ready` (already advanced by the prior entry). Status History records `spec-ready` (unchanged), per the
+  127/200 re-review rows, not a second `draft` → `spec-ready`.
+- Both reviewers cited the pre-review triage text (`portfolio_service.go:894`, `:934-943`; no @AC-5..@AC-7), present
+  only in `origin/ccr-f537be2d-6mwmqf`'s product-spec.md (`:18-19`). Several warnings were already fixed by the prior
+  entry.
+- Warnings (spec-reviewer) and disposition:
+  1. C-15 coverage. (a) drawdown and (b) fundamentals-unavailable already covered by @AC-6 / @AC-7. (c) Shared givens
+     were Feature-description prose; now explicit `Given` steps in @AC-1, @AC-2, @AC-5. No `Background:`: @AC-3/4/6/7
+     are portfolio/analysis producer scenarios promoted to other service suites at launch (C-16).
+  2. C-14 consumer surface. (1) Agent `emit_alert` `broadcast=true` (`services/xstockstrat-agent/app/tools.py:690-692`,
+     `:699`; `docs/runbooks/mcp-tools.md:256`) now named in Consumer Surface; wording update in-feature (adds
+     xstockstrat-agent) vs named follow-up left to /sdd-design. (2) "In-app ... unchanged" replaced: FR-3-targeted
+     alerts leave non-owners' `ListAlerts` (`services/xstockstrat-notify/src/grpc/notifyServiceImpl.ts:202`, `:210`)
+     and `StreamAlerts` (`:274`), admins included; accepted under the operator decision (matches recon.md § Risks).
+  3. FR-1 consequence for untargeted operator alerts: settled by the operator's admin audience. Consumer Surface now
+     lists them as admin-only: trading systemic `trading.go:2183-2189`, marketdata `marketdata_service.go:1567`,
+     ingest `servicer.py:473`, fundsignal `fundsignal_loop.py:618`. Trading per-account `:1938-1944`, `:2751-2757`
+     stay open for /sdd-design (extend FR-3 or name a follow-up).
+  4. Criterion 2 forks in FR text: already resolved by the prior entry (FR-1 admin-only, FR-3 scope fixed). Only the
+     admin-role resolution mechanism in notify remains for design.
+  5. Criteria 6/7/9: Fix Scope notify `004_*` line now cites F-01; config line now requires `notify.push.<key>` (C-05)
+     registered in `docs/patterns/config-governance.md` (beside `:528`) and the notify `CLAUDE.md` table.
+  6. C-01 stale lines: already corrected by the prior entry. FR-3 now states `emitRiskAlert(ctx, msg)` takes no
+     owner (signature change).
+  - NOTE criterion 1: Problem Statement now names the harmed persona (content owner).
+  - NOTE C-16 / doc drift: Fix Scope names the notify `CLAUDE.md` Web Push paragraph and
+    `services/xstockstrat-notify/docs/context-constitution-findings.md:38` as docs that change with the fix. Slack /
+    SendGrid fanout (`src/fanout/fanout.ts`, no target filter) added to Out of Scope, flagged for design. design.md
+    records the feature-165 FR-3 preserve/extend/change analysis and the operator sign-off.
+  - NOTE trading-domain C-1..C-5 not triggered; remaining criteria pass.
+- Overlap findings (feature-overlap, WARN):
+  1. New: `215-block-fundamentals-strategy-on-etf` (in-progress), same function `_emit_fundamentals_unavailable_alert`
+     (`services/xstockstrat-analysis/app/engine/live_loop.py:847-861`, already on trunk; 215 impl-spec `:1057`,
+     `:1088` stale). Whichever merges second carries `target_user_id=definition.user_id` on that alert, or the
+     broadcast returns. Re-scan at /sdd-spec.
+  2. `244-fix-python-config-zero-trap` (draft): `live_loop.py:351`, disjoint; rebase-only.
+  3. `240-offline-account-full-pnl`: already on main-dev; disjoint functions in `portfolio_service.go`; rebase-only.
+  4. `251-fix-getpnl-source-service`: same-function on `emitRiskAlert` only if 251's design touches it (251 cites
+     stale `:943`/`:958`). Re-scan at /sdd-spec.
+  - Clean: config keys (243 claims config `031`, trunk tip `030`), notify migrations (`000`-`003`, next `004`), proto.
+    No merge-order.md row required (no FAIL).
+- Next: `/sdd-design fix-push-untargeted-broadcast` (full — operator: no quick designs). recon.md (Phase 0) is on
+  the branch; Phase 1 debate next.
+
+### Operator decisions
+
+OPERATOR DECISIONS (binding, recorded 2026-10-20):
+- Standing authorization: designs run in FULL mode only (no quick designs for automated fixes); the orchestrator auto-approves the design gate once rounds >= 2, no unresolved Floor (F-*) breach remains, no blocking objection remains, and every CHANGE to an existing @AC business rule is covered by an operator decision below.
+- Untargeted alerts (empty target_user_id) Web-Push ONLY to users holding the admin role — operator sign-off for the C-16 CHANGE reversing feature 165 FR-3 broadcast; the pinned test webPush.test.ts AC-4 broadcast case is rewritten deliberately.
+- Per-user producers (portfolio emitRiskAlert, analysis live_loop strategy/fundamentals alerts) set target_user_id to the owning user.

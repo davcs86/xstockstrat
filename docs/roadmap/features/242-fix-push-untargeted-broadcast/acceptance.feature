@@ -1,13 +1,13 @@
 Feature: fix-push-untargeted-broadcast (bug fix)
   Regression guard for docs/reports/2026-10-19-notify-untargeted-push-broadcasts-all-users-defect.md:
   an untargeted alert sends a Web Push to every user's devices.
-  Shared givens: VAPID keys configured; notify.push.min_severity 2; "user-42" has 2 push subscriptions
-  ("https://push.example/one", "https://push.example/two"); "user-77" has 1 ("https://push.example/three");
-  neither "user-42" nor "user-77" holds the admin role; "user-99" holds the admin role and has 1
-  ("https://push.example/admin").
 
   @AC-1 @FR-1 @regression
   Scenario: An untargeted alert is not Web-Pushed to any non-admin user's devices
+    Given VAPID keys are configured and notify.push.min_severity is 2
+    And "user-42" does not hold the admin role and has push subscriptions "https://push.example/one" and "https://push.example/two"
+    And "user-77" does not hold the admin role and has push subscription "https://push.example/three"
+    And "user-99" holds the admin role and has push subscription "https://push.example/admin"
     When EmitAlert is called with an empty target_user_id, severity ALERT_SEVERITY_WARNING, title "portfolio risk limit breach", body "concentration limit breach: LYFT at 24.1%"
     Then no Web Push is sent to "https://push.example/one", "https://push.example/two" or "https://push.example/three"
     And EmitAlert returns an alert_id
@@ -15,6 +15,10 @@ Feature: fix-push-untargeted-broadcast (bug fix)
 
   @AC-2 @FR-2 @regression
   Scenario: A targeted alert reaches only the target user's devices
+    Given VAPID keys are configured and notify.push.min_severity is 2
+    And "user-42" does not hold the admin role and has push subscriptions "https://push.example/one" and "https://push.example/two"
+    And "user-77" does not hold the admin role and has push subscription "https://push.example/three"
+    And "user-99" holds the admin role and has push subscription "https://push.example/admin"
     When EmitAlert is called with target_user_id "user-42", severity ALERT_SEVERITY_WARNING, title "Order filled", body "AAPL 10 @ 190.00"
     Then a Web Push with title "Order filled" is sent to exactly "https://push.example/one" and "https://push.example/two"
     And no Web Push is sent to "https://push.example/three" or "https://push.example/admin"
@@ -34,6 +38,10 @@ Feature: fix-push-untargeted-broadcast (bug fix)
 
   @AC-5 @FR-1 @regression
   Scenario: An untargeted alert is Web-Pushed only to admin-role users' devices
+    Given VAPID keys are configured and notify.push.min_severity is 2
+    And "user-42" does not hold the admin role and has push subscriptions "https://push.example/one" and "https://push.example/two"
+    And "user-77" does not hold the admin role and has push subscription "https://push.example/three"
+    And "user-99" holds the admin role and has push subscription "https://push.example/admin"
     When EmitAlert is called with an empty target_user_id, severity ALERT_SEVERITY_WARNING, title "portfolio risk limit breach", body "concentration limit breach: LYFT at 24.1%"
     Then a Web Push with title "portfolio risk limit breach" is sent to exactly "https://push.example/admin"
 

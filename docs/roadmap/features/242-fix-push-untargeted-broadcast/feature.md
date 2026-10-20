@@ -15,6 +15,7 @@
 |---|---|---|---|
 | 2026-10-20 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-19-notify-untargeted-push-broadcasts-all-users-defect.md` |
 | 2026-10-20 | `draft` → `spec-ready` | /sdd-review | Product spec approved (5 warnings; overlap WARN ×3) |
+| 2026-10-20 | `spec-ready` (unchanged) | /sdd-review | Product spec re-review: PASS WITH WARNINGS (6 warnings, 4 notes; no Floor breach); overlap WARN ×4 (215 same-function, 244, 240, 251), no FAIL. Low-cost warnings fixed in product-spec.md + acceptance.feature |
 
 ---
 
