@@ -30,7 +30,7 @@ Defects and drift surfaced by `/context-constitution` on 2026-07-24; refreshed 2
 
 ## Open questions (unresolved *why* — needs a maintainer)
 
-- `config-ui/api/audit/route.ts` returns `{ entries: [] }` (200) silently when `DATABASE_URL` is unset — is a silent empty audit log the intended dev-mode behavior, or should it signal misconfiguration? `src/app/config-ui/api/audit/route.ts:52-54` — status: **open** (note: the bigger SSL-missing bug that caused "always empty" in DO was fixed; this item is about the deliberate graceful-degradation path for unset `DATABASE_URL` only)
+- `config-ui/api/audit/route.ts` returns `{ entries: [] }` (200) silently when `DATABASE_URL` is unset — is a silent empty audit log the intended dev-mode behavior, or should it signal misconfiguration? `src/app/config-ui/api/audit/route.ts:52-54` — status: **closed — unreachable in deployed envs (2026-10-20)**: `DATABASE_URL` is bound for xstockstrat-ui in `.do/app.yaml` and `.do/app.dev.yaml` (`${xstockstrat.DATABASE_URL}`), and compose injects it via the `*db-url` anchor (fails fast on a missing `POSTGRES_PASSWORD`); only a bare local `pnpm dev` reaches the branch (note: the bigger SSL-missing bug that caused "always empty" in DO was fixed; this item is about the deliberate graceful-degradation path for unset `DATABASE_URL` only)
 - Is the `>= 400` header/encoding normalization (UI gotcha) still required with `@connectrpc` 2.x, or a workaround droppable on upgrade? `src/lib/bffShared.ts#createDispatch` (~L140-145) — status: **open**
 - `insightsBff.ts#listOpportunities` hardcodes `timeoutMs: 30_000` while other deadlines use the named `FUNDAMENTALS_TIMEOUT_MS` — a deliberate separate budget, or should it be a shared named constant? — status: **open**
 - `src/lib/scoreDisplay.ts` duplicates `TRADING_DAYS_PER_YEAR = 252` from analysis's `_compute_metrics` (comment: deliberate) and encodes the composite's neutral band (`COMPOSITE_NEUTRAL_BAND = 0.08`, `COMPOSITE_NEUTRAL = 0.5`, tied to analysis's k=1 shrinkage range ≈0.25–0.83, feature 221) — is there a parity test, and should this be a documented cross-module contract with analysis? — status: **open**
@@ -51,7 +51,6 @@ The open rows above were re-verified against `1302e6d` and recorded as `docs/rep
 |---|---|
 | [`2026-10-19-agent-ui-claude-md-drift-defect`](../../../docs/reports/2026-10-19-agent-ui-claude-md-drift-defect.md) | Agent and UI CLAUDE.md / tool docstring drift from current code |
 | [`2026-10-19-orphaned-code-defect`](../../../docs/reports/2026-10-19-orphaned-code-defect.md) | Orphaned modules, scripts and dependencies across services |
-| [`2026-10-19-ui-audit-route-silent-empty-without-db-defect`](../../../docs/reports/2026-10-19-ui-audit-route-silent-empty-without-db-defect.md) | Config-UI audit route returns an empty log silently when DATABASE_URL is unset |
 | [`2026-10-19-ui-namespace-editor-non-admin-edit-defect`](../../../docs/reports/2026-10-19-ui-namespace-editor-non-admin-edit-defect.md) | Config-UI namespace editor shows Edit/Save to non-admins |
 | [`2026-10-19-ui-watchlist-inqueue-first-page-only-defect`](../../../docs/reports/2026-10-19-ui-watchlist-inqueue-first-page-only-defect.md) | Watchlist "in queue" flag only sees the first loaded opportunity page |
 
