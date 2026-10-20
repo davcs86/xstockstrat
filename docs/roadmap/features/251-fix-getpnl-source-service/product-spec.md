@@ -9,6 +9,9 @@
 
 ## Problem Statement
 
+**Who is affected.** A trader reading realized P&L through any gRPC consumer of `GetPnL` (no in-repo caller, see
+Consumer Surface(s)), and a trader inspecting a position's fill lineage in `/trader/positions`.
+
 **Observed (defect 1 — source_service filter).** `PortfolioService.GetPnL`
 (`services/xstockstrat-portfolio/internal/service/portfolio_service.go:722`) folds `order.filled` and
 `order.partially_filled` ledger events fetched with `QueryEvents{EventType: …, SourceService: "trading"}`
@@ -32,21 +35,37 @@ records the side only on the order's `order.created` / `order.submitted` events 
 `trading.go:650`, `:666`, `:843`), whose `stream_key` is the order id (`:649`, as for the fills at `:1805`); the
 `order.created` payload has no `order_id` key.
 
-**Expected.**
+**Observed (defect 1, second reader — UI fill lineage).** The `/trader/positions` fill-lineage sheet queries
+`{eventType: 'order.filled', sourceService: 'trading'}` (`services/xstockstrat-ui/src/hooks/usePositionLineage.ts:16-20`,
+called at `src/app/trader/positions/page.tsx:110`). The BFF forwards it unchanged except copilot stream keys
+(`src/lib/traderBff.ts:118-124`), so the sheet always renders its empty state (`page.tsx:680-682`). The e2e mock
+answers `sourceService: 'trading'` whatever the filter (`e2e/mock-backend.ts:456`), hiding it as the `GetPnL` fake
+does. Ledger `QueryEvents` has no user predicate (`ledgerServiceImpl.ts:124-162`; security audit
+`docs/reports/2026-09-16-trading-system-security-audit.md:175-176`) and the hook filters by symbol/account/mode
+client-side only (`usePositionLineage.ts:22-28`), so correcting the filter alone would ship every user's
+`order.filled` events to the browser.
+
+## Functional Requirements
 
 - **FR-1.** `GetPnL`'s ledger queries match the `source_service` trading actually writes (design fork: literal
   `"xstockstrat-trading"`, a shared constant, or no `SourceService` filter since the event types are trading-owned).
 - **FR-2.** Each fill folds with trading's recorded side: a SELL contributes a negative signed qty to `pnl.Fill.Qty`, a
   BUY a positive one. This holds for events in the shape trading writes today (unsigned `qty` / `filled_qty`, no
   `side` key), because ledger rows are immutable and history keeps that shape after any producer change.
+- **FR-3.** The `/trader/positions` fill lineage lists the signed-in trader's `order.filled` events for the selected
+  position as trading writes them (`source_service` `"xstockstrat-trading"`; same fork as FR-1, a Go constant does not
+  reach this TypeScript site), and the ledger response delivered to the browser carries no other user's event.
 
 Realized P&L then equals `pnl.Fold` of the user's signed fills.
 
 ## Consumer Surface(s)
 
-None. Internal/platform-only: no in-repo UI or agent caller of `GetPnL` (verified; rpc at
-`packages/proto/portfolio/v1/portfolio.proto:15`, no hit under `services/xstockstrat-ui/src` or
-`services/xstockstrat-agent/app`). Any gRPC consumer gets the wrong realized figure.
+- **`/trader` (xstockstrat-ui)** — positions page fill-lineage sheet (`page.tsx:110`, `:676-688`): goes from always
+  empty to the trader's own fills (FR-3, AC-3).
+- **`GetPnL`** — no in-repo UI or agent caller (verified; rpc at `packages/proto/portfolio/v1/portfolio.proto:15`, no
+  hit under `services/xstockstrat-ui/src` or `services/xstockstrat-agent/app`). Internal/platform-only in this repo;
+  any external gRPC consumer gets the corrected `realized_pnl` (FR-1, FR-2).
+- **Agent tools** — none: no `xstockstrat-agent` tool calls `GetPnL` or reads `order.filled`.
 
 ## Reproduction Steps
 
@@ -58,6 +77,8 @@ None. Internal/platform-only: no in-repo UI or agent caller of `GetPnL` (verifie
    then sell 10 AAPL @ 150.
 3. `GOWORK=off go test ./internal/service/ -run <test> -v` → `realized=0` (defect 1 empties the fold; with defect 1
    alone fixed, defect 2 still yields 0).
+4. UI: on dev, open `/trader/positions`, select a position with a trading fill → the sheet shows "No order.filled
+   events for this position." (`page.tsx:682`).
 
 The report's scratch test lives in a session scratchpad, not the repo, and its control fixture stores the sell as
 qty `-10` (`zz_getpnl_source_test.go:44`), a shape trading never emits (breaks PORTFOLIO-4). The `/sdd-spec` RED test
@@ -87,9 +108,16 @@ Operator-only alternative: split defect 2 into a named follow-up and restate AC-
 outcomes. That drops FR-2 from this feature (a weakening) and needs explicit operator sign-off recorded in
 `context.md`.
 
+FR-3 is in scope per C-10 (same defect, second reader); the user-scoping clause is what keeps the filter fix from
+turning an empty sheet into a cross-user read. Operator-only alternative: defer FR-3/AC-3 to a named follow-up
+feature `fix-position-lineage-source-service`, which C-14 accepts only with operator sign-off recorded in `context.md`.
+
 Open questions for design recon: every path that emits `order.filled` / `order.partially_filled` has a side-bearing
 sibling event (`submitOrder` emits `order.created` at `trading.go:649`, covering `PlaceOrder` `:544` and the bracket
-flatten `:2838`); whether any historical rows predate the `side` key; behaviour when a fill's side cannot be resolved.
+flatten `:2838`); whether any historical rows predate the `side` key; behaviour when a fill's side cannot be resolved;
+where FR-3's user scoping lives (BFF `queryEvents` `traderBff.ts:118-124` vs a dedicated read) and whether the hook's
+single 100-event page (`usePositionLineage.ts:19`) over the platform-wide `recorded_at ASC` stream
+(`ledgerServiceImpl.ts:157-162`) must paginate.
 
 ## Affected Services
 
@@ -97,6 +125,7 @@ flatten `:2838`); whether any historical rows predate the `side` key; behaviour 
 - xstockstrat-trading (writer of `source_service` and the fill payloads; fix site only if design picks (b) or a shared
   source-service constant)
 - xstockstrat-ledger (exact-match filter; read-only evidence, no change expected)
+- xstockstrat-ui (fix site for FR-3: `usePositionLineage.ts` and its BFF read path)
 
 ## Fix Scope
 
@@ -115,7 +144,13 @@ dev.
 - Refactoring unrelated to the bug
 - Performance improvements unrelated to the fix
 - Other `SourceService` literals (portfolio's own `"portfolio"` at `portfolio_service.go:1013`, a notify `EmitAlert`, and
-  `:1028`, the ledger `AppendEvent` in `emitEvent`) unless design finds a consumer mismatch
+  `:1028`, the ledger `AppendEvent` in `emitEvent`). The only runtime readers using the short name `"trading"` are
+  `portfolio_service.go:753`, `:798` and `usePositionLineage.ts:18` (repo grep 2026-10-20); all three are in scope.
+- Test-fixture uses of `'trading'` (ledger, notify and analysis unit tests, `e2e/fixtures/alerts.ts`), except the
+  lineage fixtures an FR-3 test needs (`e2e/mock-backend.ts:456`, `e2e/trader/positions.spec.ts:147`,
+  `e2e/trader/api-smoke.spec.ts:207`)
+- User-partitioning the BFF `queryEvents` for other event types or stream keys (security audit
+  `2026-09-16-trading-system-security-audit.md:175-176`); FR-3 scopes only the lineage read
 - The live position fold's identical sign loss: `processOrderFill` treats `fill.Qty > 0` as buying more
   (`portfolio_service.go:310-317`), so a trading sell `order.filled` (unsigned qty, `trading.go:1807`) grows the
   position until the next `account.positions.synced` reconciliation. Design recon verifies it; it gets its own defect
