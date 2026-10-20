@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-10-20 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-19-indicators-sandbox-seed-keys-unprefixed-defect.md` |
+| 2026-10-20 | `draft` → `spec-ready` | /sdd-review | Product spec approved (5 warnings) |
 
 ---
 
@@ -46,4 +47,4 @@ Operator decision: fix in code plus a config migration.
 
 ## Next Action
 
-`/sdd-design fix-sandbox-seed-keys` — recommended design depth (full) from triage; see context.md
+`/sdd-design fix-sandbox-seed-keys` (full — operator: no quick designs)
