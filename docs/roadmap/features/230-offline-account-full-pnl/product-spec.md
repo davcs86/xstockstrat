@@ -115,6 +115,14 @@ offline positions, and changes `services/xstockstrat-portfolio/acceptance/quote-
 @AC-4 / @AC-1 (feature 178) for offline positions (a missing quote → last close; off-session → session
 close; a pre-session quote is ignored). Operator sign-offs recorded in `context.md` (C-16); 229's deadline
 bound and 178's single batched `GetLatestQuotes` call still hold, and broker positions are unchanged.
+For offline positions a quote counts as **live** only if it is two-sided and its time is at or after the
+reference session's open. A one-sided or pre-session quote is treated as no live quote and takes the
+fallback above (operator decision D-1, 2026-10-20). This also **changes**
+`services/xstockstrat-portfolio/acceptance/fix-after-hours-positions-priced.feature` @AC-6 (one-sided
+quote, close older than 168h → price 0) and @AC-14 row 2 (no mark → price 0) for offline positions:
+those positions are now priced at the last close within the lookback, flagged `MARK_SOURCE_LAST_CLOSE`.
+`GetPnL` and non-offline positions keep feature 231's `mark_price` behaviour (C-16 sign-off in
+`context.md`).
 
 FR-6. **Surfaces.** The FR-1..FR-5 figures are rendered on:
   - `/trader` PortfolioPanel **single-account** view: Day P&L/%, Total P&L/%, Realized since snapshot

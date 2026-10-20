@@ -64,7 +64,7 @@ interacts with them:
 | `@AC-14 @feature-231` row 2: no `mark_price`, one-sided → `current_price` 0 | **CHANGE for offline positions** when a daily bar exists inside the lookback (priced `LAST_CLOSE`); unchanged when none exists |
 | `@AC-2/@AC-3/@AC-8/@AC-9 @feature-231` (snapshot and risk) | **Preserved**: `broadcastSnapshot` and `checkRiskLimits` never reach the valuation step (design §4.4) |
 
-**Default proposed (Step 19 is written to it):** for an offline (`source ≠ 0`) position, a quote counts
+**Decision (signed off 2026-10-20; Step 19 is written to it):** for an offline (`source ≠ 0`) position, a quote counts
 as a QUOTE mark only when it is **two-sided** (`ask_price > 0 && bid_price > 0`) **and fresh** (time ≥
 `Open(ref)`). The QUOTE price is `markOf(q)`, which equals the mid for a two-sided quote. A one-sided
 quote is treated as "no live quote" and goes to the FR-5 bar fallback. This keeps FR-5's honest
@@ -72,17 +72,18 @@ provenance: a stale close never gets labelled `QUOTE`. It does not need a second
 the operator's existing FR-5 sign-offs over 229 @AC-1 and 178 @AC-4 to 231 @AC-6 and @AC-14 for offline
 positions. Broker and non-offline positions keep 231's `markOf` path unchanged.
 
-The operator must either sign off this C-16 CHANGE of 231 `@AC-6` and `@AC-14` (row 2) for offline
-positions, recording it in `context.md`, or choose an alternative before Step 19 executes. The obvious
-alternative is to cap the offline fallback at `mark_close_max_age_hours`, which would preserve @AC-6 but
-narrow FR-5's operator-chosen 21-day lookback. At promotion the two 231 rules get a
-"narrowed by feature 230" note, in the same way 231 annotated `quote-fanout-batching.feature`.
+The operator signed off this C-16 CHANGE of 231 `@AC-6` and `@AC-14` (row 2) for offline positions on
+2026-10-20 (`context.md`, "D-1 decision"). The rejected alternative capped the offline fallback at
+`mark_close_max_age_hours`; it would have preserved @AC-6 but narrowed FR-5's operator-chosen 21-day
+lookback. At promotion both 231 rules are **rewritten**: the offline-position outcome becomes the
+`LAST_CLOSE` mark, while the `GetPnL` and non-offline halves stay as they are. Each rewritten rule carries a
+"changed by feature 230" note.
 
 ### Scenario Coverage (C-15)
 
 | Scenario | Step(s) | Scenario | Step(s) | Scenario | Step(s) |
 |---|---|---|---|---|---|
-| AC-1 | 20 | AC-19 | 20 | AC-37 | 10 |
+| AC-1 | 20, 22 | AC-19 | 20 | AC-37 | 10 |
 | AC-2 | 20 | AC-20 | 12, 18, 27 | AC-38 | 20, 22 |
 | AC-3 | 22 | AC-21 | 10, 12 | AC-39 | 22 |
 | AC-4 | 22 | AC-22 | 20 | AC-40 | 20 |
@@ -99,7 +100,7 @@ narrow FR-5's operator-chosen 21-day lookback. At promotion the two 231 rules ge
 | AC-15 | 27 | AC-33 | 25 | AC-51 | 20, 22 |
 | AC-16 | 27 | AC-34 | 22 | AC-52 | 22 |
 | AC-17 | 25 | AC-35 | 20 | AC-53 | 14 |
-| AC-18 | 6, 18 | AC-36 | 20 | AC-54 | 14 |
+| AC-18 | 3, 6, 18 | AC-36 | 20 | AC-54 | 14 |
 
 All 54 scenarios are covered. Some scenarios span services (e.g. AC-41..47: trading freezes the carry,
 portfolio derives `realized_pnl_lifetime = carried + since`). For those, each listed step asserts its own
@@ -131,7 +132,7 @@ service's half against the scenario's numbers. Proof that is SQL-shape only is c
 - **Promotion (C-16) at the integration PR, not a step:**
   - rewrite `fix-book-portfolio-page.feature @AC-1` and `quote-fanout-batching.feature @AC-4` / third
     clause of `@AC-1`, offline only;
-  - add the D-1 notes on the 231 `@AC-6` / `@AC-14`;
+  - rewrite the 231 `@AC-6` / `@AC-14` (row 2) offline outcomes per D-1, each with a "changed by feature 230" note;
   - narrow `@AC-6 @feature-163`;
   - update `fix-offline-account-ui-gaps.feature @AC-2/@AC-4` and extend `offline-account-portfolios.feature
     @AC-13`;
@@ -273,7 +274,7 @@ order execution correctness, fill detection
 
 **TDD**: `N/A (migration — non-code-bearing)`
 
-**Covers**: —
+**Covers**: `AC-18` (backfill half: confirmed offline orders get `fees = 0`; broker orders and NEW orders stay `NULL`). Proven by **SQL-shape review only**: there is no migration-run harness, and the repo tests (Step 6) prove the NULL-vs-0 read-back.
 
 **Instructions**:
 1. Write `011_…up.sql` exactly as design §2.1. The SQL:
@@ -434,7 +435,9 @@ Read both files and confirm the four `ADD COLUMN`s map to four `DROP COLUMN`s. N
    `(?s)DISTINCT ON \(order_id\).*WHERE account_id=\$1.*ORDER BY order_id, created_at DESC.*o\.status IN
    \('partially_filled','filled'\).*ORDER BY o\.filled_at ASC NULLS LAST`. Note in the test comment that
    this proof is SQL-shape only (a mock cannot run `DISTINCT ON`).
-4. Update the 4 existing SELECT regexes and fixtures for the new `fees` column.
+4. Update the 3 existing SELECT regexes (`GetOrder` `:20`, `ListOrders` `:56`, `ListSubmitted` `:240`) and
+   their fixtures for the new `fees` column. There is no existing `ListConfirmedOfflineOrdersByAccount` test;
+   instruction 3 adds the first one.
 5. C-13: no new domain literal. Reuse `testdata.NewOrderRow`. A single consumer means inline overrides are
    compliant.
 
@@ -455,7 +458,10 @@ measure it. The targeted tests are the proof.
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/repository/offline_baseline_repo.go` — modify
-- `services/xstockstrat-trading/internal/service/trading.go` — modify (the `offlineBaselineStore` interface only)
+- `services/xstockstrat-trading/internal/service/trading.go` — modify (the `offlineBaselineStore` interface and
+  its two call sites, adapted mechanically)
+- `services/xstockstrat-trading/internal/service/trading_offline_test.go` — modify (`fakeBaselineStore`
+  method signatures only, so the package compiles)
 
 **Reviewers**: `xstockstrat-trading` owner — order execution correctness, fill detection
 
@@ -501,10 +507,23 @@ measure it. The targeted tests are the proof.
      `len(lots)==0 && asOf.IsZero()` test at `:91-93` would report "no baseline" for it.
 4. `DeleteBaselinesByAccount`: run one transaction that deletes both `offline_position_baselines` and
    `offline_snapshot_headers` rows for the account (design §2.6, `@AC-18 @feature-163`).
-5. Update the `offlineBaselineStore` interface in `trading.go:49-55` to the new two signatures. Leave the
-   call sites to Step 11, and the fake to Step 8.
+5. Update the `offlineBaselineStore` interface in `trading.go:49-55` to the new two signatures. In the same
+   step, adapt both call sites **mechanically** so the `service` package keeps compiling. This avoids F-05:
+   otherwise Steps 8 and 10 could never pass `go vet ./...`.
+   - `trading.go:949`: `hdr, hasBaseline, err := s.baselineStore.EffectiveBaselineByAccount(ctx, accountID)`
+     with `asOf, seedLots := hdr.AsOf, hdr.Lots`. The rest of the function is unchanged.
+   - `trading.go:1125`: pass `nil` as the `carry` argument. The repo treats a nil `CarryFunc` as a carry of
+     `0, 0`. Step 11 replaces it with the real closure.
+6. Adapt `fakeBaselineStore`'s two method signatures (`trading_offline_test.go:135`, `:158`) to compile
+   only, with no behaviour change: return `repository.SnapshotHeader{AsOf: f.baselineAsOf, Lots:
+   f.baselineLots}`. Step 8 adds the header and carry behaviour.
 
-**Verification**: see Step 8.
+**Verification**:
+```bash
+cd services/xstockstrat-trading && GOWORK=off go build ./... && GOWORK=off go vet ./... && \
+  GOWORK=off go test ./internal/service/... -run 'Snapshot|OfflineRecompute' -count=1
+```
+The existing snapshot and recompute tests must stay green after the mechanical adaptation (nil carry is 0).
 
 ---
 
@@ -536,8 +555,8 @@ measure it. The targeted tests are the proof.
    - assert `hdr.RealizedCarried`/`FeesCarried`/`AsOf` and that `qty=0` rows are dropped;
    - a header with zero rows returns `ok=true` with empty `Lots` (full flatten; red against today's
      `ok=false`).
-2. Extend `fakeBaselineStore` so it models the headers and the `UpsertBaselineSnapshot` rules from Step 7
-   step 2:
+2. Extend `fakeBaselineStore` (its signatures were already adapted in Step 7) so it models the headers and
+   the `UpsertBaselineSnapshot` rules from Step 7 step 2:
    - keep the carry on same id + same `as_of`;
    - return `ErrSnapshotAsOfConflict` on a non-latest `as_of` change;
    - pick `pred` excluding its own id;
@@ -550,7 +569,7 @@ measure it. The targeted tests are the proof.
 cd services/xstockstrat-trading && GOWORK=off go test ./internal/repository/... -run EffectiveBaseline -count=1 && \
   GOWORK=off go vet ./... && GOWORK=off golangci-lint run --modules-download-mode=mod
 ```
-Service tests compile only after Step 11 wires the call sites. The full coverage run is in Step 12.
+The service package compiles from Step 7 on, so `go vet ./...` covers it. The full coverage run is in Step 12.
 
 ---
 
@@ -637,8 +656,14 @@ paper-only dev invariant
 **Reviewers**: `xstockstrat-trading` owner — order execution correctness, fill detection
 
 **Codebase Evidence**:
-- `TestConfirmOrder_Validation` `trading_offline_test.go:521` is the existing ConfirmOrder harness.
-  `recordingLedger.requestsByType` is at `:608`, and `parseSyncedPayload` at `:606-620`.
+- `TestConfirmOrder_Validation` `trading_offline_test.go:521` exits before the repo load, so no existing test
+  drives ConfirmOrder past `s.repo.GetOrder`. `s.repo` is a concrete `*repository.TradingRepo`
+  (`trading.go:114`). The fakeable constructor is `repository.NewTradingRepoWithDB(db dbQuerier)`
+  (`trading_repo.go:40-43`), with precedent at `trading_flatten_rejection_test.go:101` and
+  `trading_cancel_not_cancelable_test.go:31`.
+- `recordingLedger.requestsByType` is defined at `trading_offline_test.go:79` (called at `:608`), and
+  `parseSyncedPayload` at `:606-620`. `newSnapshotTestService` (`:543-558`) builds the service with a nil
+  `repo`.
 - C-13: the AC-43..47 `S1` history (`ord-b1` BUY 100 @150 `2026-10-01T15:00Z`, `ord-s1` SELL 40 @165
   `2026-10-20T15:00Z`, `ord-s2` SELL 20 @155 `2026-11-05T15:00Z`, `S1` as_of `2026-10-31T23:59:59Z` AAPL
   60 @150) has **two** consumers: this step (AC-47) and Step 12 (AC-43..46). It therefore goes in the
@@ -652,7 +677,13 @@ paper-only dev invariant
 1. Create `internal/testdata/offline_history.go`:
    - exported builders `S1HistoryOrders() []*tradingv1.Order` and `S1Snapshot() (asOf time.Time, rows …)`;
    - a header comment citing AC-43..47.
-2. Add these tests:
+   - also export the order ids as constants (`S1BuyID = "ord-b1"`, `S1SellID = "ord-s1"`,
+     `S2SellID = "ord-s2"`).
+2. Harness: build the service with `newSnapshotTestService`, then set
+   `repo: repository.NewTradingRepoWithDB(mock)` with a pgxmock pool. `GetOrder` is an `ExpectQuery`
+   returning a `testdata.NewOrderRow` (incl. `fees`); `UpsertOrder` is an `ExpectExec`. For AC-9, call
+   `mock.ExpectationsWereMet()` with **no** query expectations to prove `GetOrder` was never called.
+3. Add these tests:
    - `TestConfirmOrder_AC9_NegativeFeesRejectedBeforeLoad`: fees −1 → `InvalidArgument` "fees must be
      >= 0". The repo `GetOrder` must not be called and no upsert happens.
    - `TestConfirmOrder_AC8_ReconfirmReplacesFees`: 5.00 → 2.00. The response and the persisted order both
@@ -679,10 +710,10 @@ paper-only dev invariant
 cd services/xstockstrat-trading && GOWORK=off go test ./internal/service/... -run 'ConfirmOrder|HideUnconfirmed' -race -count=1 && \
   GOWORK=off COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && GOWORK=off go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:" && \
   GOWORK=off golangci-lint run --modules-download-mode=mod && \
-  grep -rn "ord-s1" --include="*_test.go" services/xstockstrat-trading | wc -l
+  test "$(grep -rn '"ord-s1"' --include='*_test.go' internal | grep -v testdata | wc -l)" -eq 0
 ```
-The total must be ≥ 40%. `service/` is excluded, so the targeted tests are the proof. The last grep must
-show **no** inline `ord-s1` order literal (the fixture comes from `internal/testdata`).
+The total must be ≥ 40%. `service/` is excluded, so the targeted tests are the proof. The last check
+**fails** if any test outside `internal/testdata` inlines the `ord-s1` literal; tests use `testdata.S1SellID`.
 
 ---
 
@@ -768,7 +799,10 @@ show **no** inline `ord-s1` order literal (the fixture comes from `internal/test
     `_AC14_RealizedReset` `:1084`, `_AC18_DeregisterPurge` `:1201`, `_Concurrency_AC10` `:1376`;
   - `TestOfflineRecompute_FromConfirmedOrders` `:397`.
 - `parseSyncedPayload` `:606-620` is the payload assertion helper (extend its struct with the new keys).
+  `recordingLedger.requestsByType` is defined at `:79`.
 - Fixture: `testdata.S1HistoryOrders()` / `S1Snapshot()` from Step 10.
+- `fakeBaselineStore.confirmedOrders` (`:110`, returned at `:192-197`) is a static slice. ConfirmOrder stores
+  the updated order in `s.orders` (`trading.go:933-935`) **before** the recompute (`:938`).
 
 **TDD**: `red-green required`
 
@@ -777,6 +811,13 @@ show **no** inline `ord-s1` order literal (the fixture comes from `internal/test
 **Instructions**:
 Each test drives the service with `fakeBaselineStore` and asserts the last `account.positions.synced`
 payload.
+0. Harness for the cases that call ConfirmOrder (AC-7/8/20/21/46/47):
+   - set `repo: repository.NewTradingRepoWithDB(mock)` (pgxmock, as in Step 10);
+   - add an optional `ordersFn func() []*tradingv1.Order` to `fakeBaselineStore`. When set,
+     `ListConfirmedOfflineOrdersByAccount` returns it instead of the static `confirmedOrders`. Wire it to a
+     helper that filters `svc.orders` to PARTIALLY_FILLED/FILLED offline orders. The recompute then sees the
+     just-confirmed fees and `filled_at` deterministically;
+   - snapshot-only cases keep seeding `confirmedOrders` directly.
 1. `AC-7`: confirm a BUY of 100 @150 with fees 1.50. Assert `avg_cost` 150, `fees_since_snapshot` 1.50.
 2. `AC-20`: a buy with fees 1.50, then a sell of 100 @156 with fees 1.50. Assert `realized_pnl` 600 and
    `fees_since_snapshot` 3.00.
@@ -839,7 +880,7 @@ proof.
   - the closure runs `ms.GetBarsMulti(ctx, …)` `:770` and `s.repo.InsertBars(ctx, bars)` `:778` on the
     **caller** ctx;
   - `if fetchErr != nil { return nil, fetchErr }` is at `:789-791`.
-- `s.repo` is the concrete `*repository.MarketDataRepo` (`:76`, assigned at `:207`). `QueryBarsBatch` uses
+- `s.repo` is the concrete `*repository.MarketDataRepo` (field `:37`, assigned at `:206`). `QueryBarsBatch` uses
   `r.pool.Query` (`marketdata_repo.go:449-472`, `ORDER BY time ASC`), so warm bars cannot be unit-mocked
   today.
 - The 231 seam pattern to reuse: the interfaces `quoteStore`/`dailyCloseReader` are at `:117-136`, and
@@ -908,9 +949,10 @@ proof.
 2. `TestBatchGetBars_AC53_PartialReturnsWarmOnColdError`: `allow_partial=true` returns only AAPL with 3
    bars and no error.
 3. `TestBatchGetBars_AC53_StrictStillErrors`: `allow_partial=false` returns the source error. Through the
-   handler adapter it becomes `codes.Internal` and the message carries the fetch error. Exercise it via
-   `toGRPCError(forwardConnectErr(err))` in a handler test, or assert at the service level plus cite the
-   mapping.
+   handler adapter it becomes `codes.Internal` and the message carries the fetch error. Assert at the
+   **service** level only: the returned error `errors.Is` the source error and is not a Connect error. The
+   `INTERNAL` mapping is unchanged handler code (`marketdata_handler.go:285-291`, `:496-516`); cite it in the
+   test comment. No handler test file is touched (F-08).
 4. `TestBatchGetBars_AC54_PartialBudgetFromDeadline`: a 1000ms ctx deadline and a hanging source → returns
    AAPL 3 bars within 1000ms.
 5. `TestBatchGetBars_PartialBelowMarginSkipsSource`: a 200ms deadline means the source is never called.
@@ -1060,8 +1102,10 @@ concurrent write safety
      `type RecentFill struct{ Symbol string; Qty, Price float64; FilledAt string }` and JSON tags
      `symbol/qty/price/filled_at`. Define it in `repository` so the repo can marshal it.
 2. Repo:
-   - Replace the `UpsertOfflineRealized` args with an `OfflineState` struct `{RealizedPnl, RealizedCarried,
-     FeesSinceSnapshot, FeesCarried float64; RecentFills []RecentFill}`. Write all five columns in one
+   - Keep `accountID, userID, tradingMode` as positional args (the table needs `user_id`/`trading_mode` NOT
+     NULL, `012_offline_account_realized.up.sql:10-11`). Replace only the trailing `realizedPnl float64` arg
+     with an `OfflineState` struct `{RealizedPnl, RealizedCarried, FeesSinceSnapshot, FeesCarried float64;
+     RecentFills []RecentFill}`. Write all five columns in one
      `INSERT … ON CONFLICT (account_id) DO UPDATE`. `recent_fills` is `json.Marshal` of a non-nil slice,
      so `[]` is stored when absent.
    - The writer must use `r.db.Exec`, not `r.pool.Exec`, so it is mockable. `queryRower` already has
@@ -1071,7 +1115,9 @@ concurrent write safety
      recent_fills FROM portfolio.offline_account_realized WHERE user_id=$1 AND account_id = ANY($2)`;
    - `recent_fills` is scanned as `[]byte` and then `json.Unmarshal`ed;
    - empty `accountIDs` returns an empty map with no query.
-   **Delete** `GetOfflineRealized`; its 2 callers move to `GetOfflineStates` in Steps 19/21.
+   **Keep** `GetOfflineRealized` in this step. Its callers (`portfolio_service.go:605`, `:1257`) and
+   `offline_realized_test.go:14,46` still compile. Step 21 moves the callers to `GetOfflineStates` and deletes
+   it together with its two tests (avoids an F-05 compile break across Steps 18–20).
 4. `processPositionSync`: when `sync.RealizedPnl != nil`, build the `OfflineState`. Absent pointers become
    0 and absent `RecentFills` becomes `[]` (FR-7 / AC-18 for old events replayed from sequence 0).
 5. The broker path is untouched: the nil `RealizedPnl` path never writes offline state.
@@ -1217,7 +1263,14 @@ The total must be ≥ 40%; the excluded packages are covered by the targeted tes
        ∪ recent-fill symbols with `filled_at ≥ D0`;
      - `applyQuotes` for non-offline positions, then `valueOffline` for offline positions, then
        `enrichRisk`.
-   - Expose a helper `valueAccounts(ctx, accts)` returning the per-account `{dayPnl, base}`, for Step 21.
+   - `GetOfflineStates` failure is **non-fatal**: WARN `"offline state unavailable"`, then use an empty map
+     (offline positions are still marked; account Day P&L terms from `RecentFills` are 0). Existing 229/231
+     tests leave that query unexpected (`portfolio_quote_deadline_test.go:115`), so it must not fail the read.
+   - Expose `valueAccounts(ctx, offlineAccountIDs, positions, marks)` returning per-account `{dayPnl, base}`.
+     It is driven by the **in-scope offline account IDs**, not by position `Source`, so an offline account with
+     no open positions is still valued from its `RecentFills` and lifetime realized (AC-34, AC-6). It
+     **reuses** the quote and bar maps that `fetchMarks` already returned for the read; it never issues a
+     second quote or bars batch (C-18).
 5. Leave `GetPnL`, `broadcastSnapshot` and `checkRiskLimits` untouched. They keep `latestQuotesFor` +
    `applyQuotes` (FR-8; `GetPnL` UNAVAILABLE preserved, 229 @AC-5, 231 @AC-6 GetPnL half).
 
@@ -1241,7 +1294,9 @@ The total must be ≥ 40%; the excluded packages are covered by the targeted tes
 - `stubMarketData` `portfolio_service_test.go:16-44` embeds a nil `MarketDataServiceClient`, so any
   un-overridden RPC panics. It has `block`, `quotesErr` and `requested` knobs.
 - The pgxmock harness `newQuoteSvc` is at `portfolio_quote_deadline_test.go:93-114`:
-  - `posRow` `:84-87` takes `source` positionally (11th from last); pass `1` for offline rows;
+  - `posRow(rows, sym, account, qty, avg, current)` `:84-87` hard-codes `source` to `0` (the `0` before the
+    final `nil`). Do **not** change it: 229/231 tests depend on it. Instead add a source-aware
+    `offlinePosRow(rows, sym, account, qty, avg, source)` helper in `offline_valuation_test.go` (listed);
   - `guard` `:70-82` is the timing helper;
   - `recordWarns` `:60`.
 - `anyArgs`/`positionCols` are at `portfolio_fill_errors_test.go:36-49`, and `fakeConfig` at
@@ -1254,7 +1309,7 @@ The total must be ≥ 40%; the excluded packages are covered by the targeted tes
 
 **TDD**: `red-green required`
 
-**Covers**: `AC-1, AC-2, AC-5, AC-12, AC-19, AC-22, AC-23, AC-24, AC-26, AC-27, AC-31, AC-35, AC-36, AC-38, AC-40, AC-49, AC-50, AC-51` (position level)
+**Covers**: `AC-1, AC-2, AC-5, AC-12, AC-13, AC-19, AC-22, AC-23, AC-24, AC-26, AC-27, AC-31, AC-35, AC-36, AC-38, AC-40, AC-49, AC-50, AC-51` (position level; AC-13: ZZZZ marked `MARK_SOURCE_NONE` with `current_price 0`)
 
 **Instructions**:
 1. `stubMarketData`:
@@ -1304,10 +1359,11 @@ cd services/xstockstrat-portfolio && GOWORK=off go test ./internal/service/... -
   (cd ../xstockstrat-trading && GOWORK=off go test ./internal/service/... -run Pnl -count=1) && \
   GOWORK=off COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && GOWORK=off go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:" && \
   GOWORK=off golangci-lint run --modules-download-mode=mod && \
-  grep -rn "160\.0\|164\.0" --include="*_test.go" internal/service | grep -v testdata | wc -l
+  test "$(grep -n 'AddRow(' internal/service/offline_valuation_test.go | grep -c '16[034]\.')" -eq 0
 ```
 The total must be ≥ 40%. The pnl fold tests in both services must stay green (the `QtyEpsilon` refactor).
-The last grep confirms the scenario prices are not re-declared inline (C-13): expect only incidental hits.
+The last check fails if a scenario price is inlined in the new test's rows instead of coming from
+`testdata/offline_pnl.go` (C-13).
 
 ---
 
@@ -1317,6 +1373,10 @@ The last grep confirms the scenario prices are not re-declared inline (C-13): ex
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_service.go` — modify
+- `services/xstockstrat-portfolio/internal/repository/portfolio_repo.go` — modify (delete `GetOfflineRealized`)
+- `services/xstockstrat-portfolio/internal/repository/offline_realized_test.go` — modify (remove
+  `TestGetOfflineRealized_FoundAndMissing` `:14` and `_EmptyAccountID` `:46` in the same step that deletes
+  the function, so the package always compiles; Step 18's `GetOfflineStates` tests replace them)
 
 **Reviewers**: `xstockstrat-portfolio` owner — P&L calculation accuracy, position snapshot consistency
 
@@ -1355,7 +1415,9 @@ The last grep confirms the scenario prices are not re-declared inline (C-13): ex
      - `FeesSinceSnapshot = proto.Float64(st.FeesSinceSnapshot)` and
        `FeesLifetime = proto.Float64(st.FeesCarried + st.FeesSinceSnapshot)`.
 2. `buildAccountPortfolio` calls `applyAccountPnL` using the `GetOfflineStates` map, fetched once per read
-   (user-scoped). This removes the unscoped `GetOfflineRealized` call at `:1257`.
+   (user-scoped). This removes the unscoped `GetOfflineRealized` call at `:1257`. Move the `:605` caller to
+   `GetOfflineStates` too, then **delete** `GetOfflineRealized` from `portfolio_repo.go` and its two repo
+   tests.
 3. `ListPortfolios` all-accounts: replace the `:1339-1345` union `latestQuotesFor`/`applyQuotes` with **one**
    shared valuation call over the union (one quote batch and one bars batch: C-10(b), 178 @AC-1, AC-27).
    Then run `enrichRisk` and `buildAccountPortfolio` per account. The single-account path already goes
@@ -1367,7 +1429,9 @@ The last grep confirms the scenario prices are not re-declared inline (C-13): ex
        ids on the user's positions.
      There is no PermissionDenied. An unowned or brand-new account shows as empty with the account-level
      optionals omitted (AC-52).
-   - Group the user-scoped positions by account and run the shared valuation once.
+   - Iterate the **in-scope account set** (not the position groups), attaching each account's positions
+     (possibly none), and run the shared valuation once. A flat offline account with no positions still gets
+     its Day P&L from `RecentFills` and its Total P&L from lifetime realized (AC-34, AC-6).
    - **Single account:** `applyAccountPnL` with its balance (`GetAccountBalance` only if the id is in
      the user's `ListAccountBalancesByUser`, which keeps it user-scoped) and its offline state.
    - **Aggregate:**
@@ -1403,15 +1467,20 @@ concurrent write safety
 
 **TDD**: `red-green required`
 
-**Covers**: `AC-3, AC-4, AC-6, AC-13, AC-25, AC-27, AC-28, AC-29, AC-34, AC-38, AC-39, AC-51, AC-52`
+**Covers**: `AC-1, AC-3, AC-4, AC-6, AC-13, AC-25, AC-27, AC-28, AC-29, AC-34, AC-38, AC-39, AC-51, AC-52`
 
 **Instructions**:
 1. `AC-3`: account day 380.
-2. `AC-34`: AAPL fully closed in session → no position, account day 600 / 0.0375.
+2. `AC-34`: AAPL fully closed in session → no position. Assert account day 600 / 0.0375 on **both**
+   `GetPortfolio(account_id)` and `ListPortfolios(account_id)` (the flat-account path in Steps 19/21).
 3. `AC-38`: account day 400 / 0.0250.
+3a. `AC-1` (account level): AAPL-only account, pc 160, quote 164 → account `day_pnl` 400, `day_pnl_pct` 0.0250.
 4. `AC-51`: account `day_pnl_pct` 0.
 5. `AC-4`: total 1300, pct 0.1238 (lifetime 600 = carried 400 + since 200).
-6. `AC-6`: flat account, lifetime 250 → total 250, pct 0.
+6. `AC-6`: flat account (no positions), lifetime 250 → total 250, pct 0, on both `GetPortfolio` and
+   `ListPortfolios`.
+6a. `GetOfflineStates` error → the read still succeeds (WARN logged), offline positions are marked, and
+   account Day P&L is 0 (non-fatal rule, Step 19).
 7. `AC-25`: total 150, pct 0.0750.
 8. `AC-13`: ZZZZ listed with qty 5 and `NONE`; total 100, equity 1600.
 9. `AC-27` row 2: `ListPortfolios` with `quotesErr` → AAPL `LAST_CLOSE` 158 within 3000ms.
@@ -1529,7 +1598,12 @@ The coverage threshold (40%) must pass, and the 4 new `last_close_lookback_days`
        shown while NEW). Pass filled_at when partial fills land on different sessions.";
      - "fees: cumulative total for the order (>= 0), kept when omitted.";
    - mention that `list_positions` returns `day_pnl`, `day_pnl_pct`, `unrealized_pnl_pct`, `mark_source`
-     and `mark_as_of`.
+     and `mark_as_of`;
+   - in the `get_positions` (`tools.py:2243`) and `get_positions_by_account_id` (`:2266`) docstrings, replace
+     "Fields with zero/default values may be absent (proto3 serialization convention)." with "All
+     non-optional fields are present, including zeros; optional fields (e.g. `mark_as_of`) are omitted when
+     unset." This keeps the docstrings in line with instruction 2 and `mcp-tools.md` (`@AC-6 @feature-197`
+     docstring↔runbook parity).
 2. `client.py`:
    - `confirm_offline_order(..., filled_at_iso=None, fees: float | None = None)`, setting `req.fees = fees`
      **only** when `fees is not None` (presence); docstring as above;
@@ -1614,6 +1688,11 @@ cd services/xstockstrat-agent && uv run pytest --cov=app --cov-fail-under=40 && 
 
 **Reviewers**: `xstockstrat-ui` owner — trading UI correctness, analytics display accuracy, Connect-RPC call
 safety, C-17 tokens/state primitives
+
+**Scope note (9 files):** kept as one step on purpose. The two new helpers (`portfolioTotals.ts`,
+`MarkBadge.tsx`) and the two formatter edits have no consumer outside these four surfaces. Splitting them
+into a separate step would leave unused exports with no test to drive them (C-08 pairing, C-18). The
+paired Step 27 covers all nine files.
 
 **Codebase Evidence**:
 - `fmtSignedUsd` `money.ts:12-16` renders `+`/`''` + `fmtUsd(n)`, so a negative becomes `$-50.00`, contradicting its
@@ -1776,6 +1855,8 @@ cd services/xstockstrat-ui && pnpm run test:coverage && pnpm run lint && \
   grep -n "from '../fixtures'\|helpers/auth" e2e/trader/offline-pnl.spec.ts e2e/trader/offline-accounts.spec.ts && \
   grep -n "PORTFOLIO_OFFLINE_FULL_PNL\|POSITION_OFFLINE_" e2e/fixtures/INVENTORY.md
 ```
+`pnpm run test:coverage` must pass the vitest coverage gate `thresholds.lines: 40` (`vitest.config.ts:29-30`,
+scoped to `src/lib/**`), which now includes `money.ts`, `protoTime.ts` and the new `portfolioTotals.ts`.
 `scripts/run-e2e.sh` / `Dockerfile.e2e` is the containerized fallback for Playwright.
 
 ---

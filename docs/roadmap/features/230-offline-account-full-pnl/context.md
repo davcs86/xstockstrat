@@ -371,3 +371,46 @@
   - The rejected alternative (capping the offline fallback at 168h) would have narrowed the operator's
     21-day lookback choice.
 - Step 19 is unblocked. Verified: feature 231 is on `main-dev`, promoted to `main` in #1258.
+
+## Session 2026-10-20 — sdd-review impl-spec (advisory)
+
+- Result: 6 ✗ and 10 ⚠ (advisory, did not block). The operator asked for all of them to be addressed
+  before execution, and every item below was fixed in `implementation-spec.md` before any step ran
+  (F-09 freezes step bodies only during execution).
+- Items found and how each was resolved:
+  - [x] Steps 7→8/10→11 (F-05): Step 7 now adapts both baseline-store call sites (`trading.go:949`, and
+    `:1125` with a nil carry meaning 0) and the fake's signatures, so `go vet ./...` passes from Step 7.
+    Step 7 has its own verification.
+  - [x] Steps 17→18/20→21 (F-05): `GetOfflineRealized` is kept until Step 21. Step 21 moves both callers,
+    deletes it and removes its two repo tests in the same step.
+  - [x] Step 20 (C-01/F-04/F-08): `posRow` is now described correctly (it hard-codes `source` 0 and is not
+    changed). A source-aware `offlinePosRow` helper goes in the listed test file. The C-13 grep check is a
+    real assertion now.
+  - [x] Step 6: "3 existing SELECT regexes" (was 4).
+  - [x] Steps 10/12: the ConfirmOrder harness is `repository.NewTradingRepoWithDB(pgxmock)`. Confirmed
+    orders reach the fake through an `ordersFn` mirror of `svc.orders`. Step 10's grep check is fixed to a
+    real `test … -eq 0` on `internal`, with exported `S1*ID` constants.
+  - [x] Step 13: line drift fixed (repo field `:37`, assigned at `:206`).
+  - [x] Step 14: the strict-path INTERNAL check is asserted at service level; no handler test file is
+    touched.
+  - [x] Step 17: `UpsertOfflineRealized` keeps `accountID/userID/tradingMode` as positional args.
+  - [x] Steps 19/21/22 (AC-34/AC-6):
+    - account valuation is driven by the in-scope offline account IDs, so flat accounts are valued;
+    - a `GetOfflineStates` error is non-fatal (WARN, empty map);
+    - `valueAccounts` reuses the fetched marks;
+    - Step 22 asserts flat accounts on both GetPortfolio and ListPortfolios, plus the error case.
+  - [x] Step 24: the `get_positions`/`get_positions_by_account_id` docstrings are updated together with
+    `mcp-tools.md` (197 parity).
+  - [x] Step 26: the 9-file scope is kept on purpose, with a justification note (no consumer outside
+    these surfaces; C-08, C-18).
+  - [x] Step 27: the vitest `thresholds.lines: 40` gate is stated.
+  - [x] Coverage: AC-13 added to Step 20 Covers; AC-1 account level asserted in Step 22; AC-18 backfill
+    half added to Step 3 (SQL-shape proof). All of AC-1..54 are covered.
+  - [x] Cross-doc:
+    - product-spec FR-5 now states the D-1 rule and the 231 @AC-6/@AC-14 change;
+    - the stale D-1 paragraph in the Execution Summary is rewritten as resolved;
+    - the promotion wording is aligned ("rewrite at promotion").
+- Overlap findings:
+  - No migration, proto or config-key collision.
+  - Feature 215's nine shared files are already on `main-dev` (#1243), so nothing needs rebasing.
+  - Merge-order row 231↔230 resolved (`b21dbc4b`).
