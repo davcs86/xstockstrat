@@ -244,3 +244,21 @@
   - a new limitation: previous-session bars that are permanently missing;
   - sqlmock pattern updates.
 - Gate: operator chose to run round 4 before approving.
+
+## Session 2026-10-20 — sdd-design round 4 (gate)
+
+- Round 4 result: APPROVE WITH NITS. 0 blockers, 0 majors, 7 minors, no Floor breach, no C-16
+  regression. The masking model was verified against the code (5 live response sites; ConfirmOrder's
+  internal repo read stays unmasked).
+- Minor fixes for round 5:
+  1. Drop the dead `TradingService.StreamOrderUpdates` masking site; log the dead method in the trading
+     findings.
+  2. Default `filled_at` to now only when the derived status is non-NEW.
+  3. Tag AC-53 and AC-54 with `@FR-5`; keep them in the feature's own acceptance file and promote them
+     at launch.
+  4. Replace the "state of @AC-41" cross-references with named preconditions. Fix AC-44's
+     Given-assertion and missing positions. Give AC-53 an explicit status code.
+  5. Reword the dialog as "(not shown while NEW)".
+  6. Add the `+6h` offset as a fifth fixed invariant, and name a CLAUDE.md home for each invariant.
+  7. Fix the citations and state `D1 = DayStart(ref + 1 calendar day)`.
+- Gate: the operator chose round 5, the last one allowed.
