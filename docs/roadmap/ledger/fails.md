@@ -2920,3 +2920,20 @@ ambiguity is logged here).
 - **Mistake**: Shared breadcrumb and nav components were assumed to handle a non-last, href-less crumb and dynamic child routes. In fact such a crumb fell through to `BreadcrumbPage` (a second `aria-current` link) and `/config-ui/<ns>` fell to the wrong nav group; neither was visible because no existing caller exercised the case.
 - **Evidence**: `git show 09ec8d9a:docs/roadmap/features/219-config-ui-usability/design.md:94-98,101-104`.
 - **Rule it implies**: When a feature adds the first caller of a shared-shell branch (non-link crumb, dynamic child route), read the component's fallthrough and add an e2e assertion on `aria-current`.
+
+### 2026-10-20 — offline-account-full-pnl — assumption
+- **Mistake**: Two design rounds treated code paths as live without tracing them from the RPC registration.
+  - Round 4 listed `TradingService.StreamOrderUpdates` as a response site that needed masking. No live
+    RPC reaches it: gRPC registers only the handler adapter, and both stream handlers call
+    `SubscribeOrderUpdates`.
+  - Round 2 put a fixed 2.5s budget on `BatchGetBars` for every caller. That would have permanently
+    starved analysis's 400-day cold fetches, because the ingester then marks those symbols warm with
+    about 48h of bars.
+- **Evidence**: `docs/roadmap/features/230-offline-account-full-pnl/context.md`, design round 2 and
+  round 4 gates; `services/xstockstrat-trading/cmd/server/main.go:143`;
+  `services/xstockstrat-trading/internal/handler/trading.go:117-134`.
+- **Rule it implies**:
+  - Before listing a service method as a response site, trace it from gRPC registration through the
+    handler.
+  - Before changing a shared RPC's failure or budget behaviour, enumerate every caller's request shape
+    (window size, deadline) and make the change opt-in when the callers differ.

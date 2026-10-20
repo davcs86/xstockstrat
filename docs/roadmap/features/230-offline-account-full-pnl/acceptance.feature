@@ -79,7 +79,8 @@ Feature: offline-account-full-pnl
   @AC-10 @FR-4
   Scenario: A snapshot resets since-snapshot realized but carries lifetime realized forward
     Given the read happens on "2026-12-01"
-    Given "acc-1" has since-snapshot realized 600.00, fees_since_snapshot 3.00, lifetime realized 600.00, and fees_lifetime 3.00
+    And "acc-1" has since-snapshot realized 600.00, fees_since_snapshot 3.00, lifetime realized 600.00, and fees_lifetime 3.00
+    And all of its fills have filled_at on or before "2026-10-31T23:59:59Z"
     When snapshot_positions is called with as_of "2026-10-31T23:59:59Z" and positions_json [{"symbol":"AAPL","qty":70,"avg_cost_per_share":150.00}]
     Then the account realized P&L since snapshot is 0.00 and fees_since_snapshot is 0.00
     And the account lifetime realized P&L is 600.00
@@ -88,7 +89,7 @@ Feature: offline-account-full-pnl
   @AC-11 @FR-4
   Scenario: Lifetime realized accumulates across two snapshots
     Given the read happens on "2026-12-01"
-    Given "acc-1" holds AAPL qty 70 @ avg 150.00 from a snapshot with as_of "2026-10-31T23:59:59Z"
+    And "acc-1" holds AAPL qty 70 @ avg 150.00 from a snapshot with as_of "2026-10-31T23:59:59Z"
     And "acc-1" has lifetime realized 600.00 carried from that snapshot and since-snapshot realized 0.00
     And an offline SELL of 20 AAPL at filled_avg_price 155.00 with filled_at "2026-11-03T15:00:00Z" is confirmed
     When snapshot_positions is called with as_of "2026-11-30T23:59:59Z" and positions_json [{"symbol":"AAPL","qty":50,"avg_cost_per_share":150.00}]
@@ -347,3 +348,154 @@ Feature: offline-account-full-pnl
     When the trader reads the portfolio for "acc-1"
     Then the NEWCO position qty is 10
     And the NEWCO position day_pnl is 10.00
+
+  # --- Added by /sdd-design (2026-10-20): AC-41..AC-54 ---
+
+  @AC-41 @FR-4
+  Scenario: A snapshot carries the realized P&L earned before its as_of into lifetime realized
+    Given the read date is 2026-12-01 and "acc-1" has no snapshot baseline
+    And an offline BUY of 100 AAPL at filled_avg_price 150.00 with filled_at "2026-10-01T15:00:00Z" is confirmed
+    And an offline SELL of 40 AAPL at filled_avg_price 165.00 with filled_at "2026-10-20T15:00:00Z" is confirmed
+    And an offline SELL of 20 AAPL at filled_avg_price 155.00 with filled_at "2026-11-05T15:00:00Z" is confirmed
+    When the trader records snapshot "S1" for "acc-1" with as_of "2026-10-31T23:59:59Z" and positions [AAPL qty 60 avg_cost_per_share 150.00]
+    And the trader reads the portfolio for "acc-1"
+    Then realized_pnl is 100.00
+    And realized_pnl_lifetime is 700.00
+    And the AAPL position qty is 40
+
+  @AC-42 @FR-4
+  Scenario: An empty statement records a full flatten and keeps the carry
+    Given an offline BUY of 100 AAPL at filled_avg_price 150.00 with filled_at "2026-10-01T15:00:00Z" is confirmed on "acc-1"
+    And an offline SELL of 100 AAPL at filled_avg_price 156.00 with filled_at "2026-10-20T15:00:00Z" is confirmed
+    When the trader records a snapshot for "acc-1" with as_of "2026-10-31T23:59:59Z" and positions_json "[]"
+    And the trader reads the portfolio for "acc-1"
+    Then "acc-1" has no positions
+    And realized_pnl is 0.00
+    And realized_pnl_lifetime is 600.00
+
+  Rule: Snapshot carry and frozen-window edits on the S1 history
+
+    Background:
+      Given the read date is 2026-12-01
+      And "acc-1" has confirmed offline orders "ord-b1" BUY 100 AAPL at 150.00 filled_at "2026-10-01T15:00:00Z", "ord-s1" SELL 40 AAPL at 165.00 filled_at "2026-10-20T15:00:00Z" and "ord-s2" SELL 20 AAPL at 155.00 filled_at "2026-11-05T15:00:00Z", none with fees
+      And "acc-1" has snapshot "S1" (as_of "2026-10-31T23:59:59Z", AAPL qty 60 @ 150.00)
+
+    @AC-43 @FR-4
+    Scenario: A snapshot whose rows are all rejected changes nothing
+      When the trader records snapshot "S2" for "acc-1" with as_of "2026-11-30T23:59:59Z" and positions_json '[{"symbol":"","qty":10,"avg_cost_per_share":1}]'
+      Then the response has committed_count 0 and 1 rejected row
+      And the AAPL position qty is 40
+      And realized_pnl is 100.00
+      And realized_pnl_lifetime is 700.00
+
+    @AC-44 @FR-4
+    Scenario: Changing the as_of of a snapshot that is not the latest is rejected
+      Given "acc-1" has snapshot "S2" (as_of "2026-11-30T23:59:59Z", AAPL qty 40 @ 150.00)
+      When the trader re-submits snapshot "S1" for "acc-1" with as_of "2026-11-15T23:59:59Z" and positions [AAPL qty 60 avg_cost_per_share 150.00]
+      Then the call fails with FAILED_PRECONDITION
+      And realized_pnl_lifetime is 700.00
+      And realized_pnl is 0.00
+      And the AAPL position qty is 40
+
+    @AC-45 @FR-4
+    Scenario: Moving the latest snapshot's as_of forward recomputes its carry without counting itself
+      When the trader re-submits snapshot "S1" with as_of "2026-11-10T23:59:59Z" and positions [AAPL qty 40 avg_cost_per_share 140.00]
+      And the trader reads the portfolio for "acc-1"
+      Then the AAPL position qty is 40 and avg_cost_per_share is 140.00
+      And realized_pnl is 0.00
+      And realized_pnl_lifetime is 700.00
+
+    @AC-46 @FR-4
+    Scenario: A confirm whose fill is inside the frozen window is accepted and ignored (preserves feature 163 rule AC-3)
+      Given a NEW offline BUY of 10 AAPL exists on "acc-1"
+      When the trader confirms it with filled_qty 10, filled_avg_price 150.00, filled_at "2026-10-15T15:00:00Z" and fees 5.00
+      Then the confirm succeeds
+      And the AAPL position qty is 40
+      And realized_pnl is 100.00 and realized_pnl_lifetime is 700.00
+      And fees_since_snapshot is 0.00 and fees_lifetime is 0.00
+
+    @AC-47 @FR-3
+    Scenario: Re-confirming without filled_at keeps a frozen order frozen
+      When the trader re-confirms "ord-s1" with filled_qty 40, filled_avg_price 165.00, fees 2.00 and no filled_at
+      Then get_order for "ord-s1" shows filled_at "2026-10-20T15:00:00Z"
+      And the AAPL position qty is 40
+      And realized_pnl is 100.00 and realized_pnl_lifetime is 700.00
+      And fees_lifetime is 0.00
+
+  Rule: Un-confirm, valuation edges, GetPortfolio scoping and partial bars
+
+    @AC-48 @FR-3
+    Scenario: Un-confirm hides fees and filled_at; a bare re-confirm restores them
+      Given offline order "ord-7" on "acc-1" for qty 10 is confirmed with filled_qty 10, filled_avg_price 150.00, filled_at "2026-10-19T14:00:00Z" and fees 2.00
+      When the trader confirms "ord-7" with filled_qty 0
+      Then the response shows status NEW with no fees value and no filled_at value
+      And get_order for "ord-7" shows status NEW with no fees value and no filled_at value
+      When the trader confirms "ord-7" with filled_qty 10 and filled_avg_price 150.00, with no fees and no filled_at
+      Then the response shows status FILLED, fees 2.00 and filled_at "2026-10-19T14:00:00Z"
+
+    @AC-49 @FR-5
+    Scenario: During a live session the forming daily bar is not used as the last close
+      Given the read time is "2026-10-19T15:00:00Z"
+      And "acc-1" holds AAPL qty 100 from before session 2026-10-19
+      And the quote batch fails
+      And AAPL has a daily bar for session 2026-10-16 with close 158.00 and a forming bar for session 2026-10-19 at 161.00
+      When the trader reads the portfolio for "acc-1"
+      Then the AAPL current_price is 158.00 with mark_source LAST_CLOSE and mark_as_of 2026-10-16
+      And the AAPL day_pnl is 0.00
+
+    @AC-50 @FR-1
+    Scenario: A weekend fill after the reference session does not change the reference session's day P&L
+      Given the read time is Saturday "2026-10-17T16:00:00Z"
+      And "acc-1" holds AAPL qty 100
+      And AAPL daily closes are 158.00 for session 2026-10-15 and 160.00 for session 2026-10-16
+      And there is no AAPL quote
+      When an offline SELL of 50 AAPL at filled_avg_price 161.00 with filled_at "2026-10-17T15:00:00Z" is confirmed
+      And the trader reads the portfolio for "acc-1"
+      Then the AAPL position qty is 50
+      And the AAPL day_pnl is 200.00
+
+    @AC-51 @FR-1 @FR-5
+    Scenario: A failed bars batch still serves a quote-marked read
+      Given the read time is "2026-10-19T15:00:00Z"
+      And "acc-1" holds AAPL qty 100 from before session 2026-10-19
+      And the AAPL live mid-quote is 164.00
+      And BatchGetBars returns an error
+      When the trader reads the portfolio for "acc-1"
+      Then the read succeeds
+      And the AAPL current_price is 164.00 with mark_source QUOTE
+      And the AAPL day_pnl is 0.00
+      And the "acc-1" day_pnl_pct is 0.0000
+
+    @AC-52 @FR-9
+    Scenario Outline: GetPortfolio reveals nothing for an account the caller has no rows in
+      Given <setup>
+      When user "u-1" calls GetPortfolio with account_id "<account>"
+      Then the call succeeds with no positions
+      And realized_pnl, realized_pnl_lifetime, fees_since_snapshot, fees_lifetime and total_pnl_pct have no value
+      And equity is 0.00, day_pnl is 0.00 and total_pnl is 0.00
+
+      Examples:
+        | setup                                                                                 | account |
+        | user "u-2" owns offline "acc-2" with realized_pnl 500.00 and an AAPL position qty 10  | acc-2   |
+        | user "u-1" has just registered offline "acc-9" and it has no rows                     | acc-9   |
+
+    @AC-53 @FR-5
+    Scenario Outline: allow_partial opts in to returning stored bars when the live fetch fails
+      Given the read time is "2026-10-19T15:00:00Z"
+      And marketdata.ohlcv holds 1d bars for AAPL on sessions 2026-10-14, 2026-10-15 and 2026-10-16, and none for ZZZZ
+      And the live bar fetch returns an error
+      When BatchGetBars is called with symbols [AAPL, ZZZZ], timeframe "1d", start "2026-10-13T00:00:00Z", end "2026-10-19T15:00:00Z" and allow_partial <flag>
+      Then <outcome>
+
+      Examples:
+        | flag  | outcome                                                                          |
+        | true  | the call succeeds with results for AAPL only, holding 3 bars                     |
+        | false | the call fails with gRPC status INTERNAL whose message carries the live-fetch error |
+
+    @AC-54 @FR-5
+    Scenario: allow_partial budgets the live fetch from the caller's deadline
+      Given the read time is "2026-10-19T15:00:00Z"
+      And marketdata.ohlcv holds 1d bars for AAPL on sessions 2026-10-14, 2026-10-15 and 2026-10-16, and none for ZZZZ
+      And the live bar fetch never answers
+      When BatchGetBars is called with symbols [AAPL, ZZZZ], timeframe "1d", start "2026-10-13T00:00:00Z", end "2026-10-19T15:00:00Z", allow_partial true and a 1000 ms caller deadline
+      Then the call succeeds within the 1000 ms deadline with results for AAPL only, holding 3 bars

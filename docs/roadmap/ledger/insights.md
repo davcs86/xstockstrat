@@ -3672,3 +3672,17 @@ reusing.
 - **Pattern**: Generate Playwright `page.route` stub bodies with `toJson(XSchema, create(XSchema, …))` from a fixture-home helper and use per-spec stateful stubs rather than mutating shared mock state — avoiding hand-written Connect-JSON errors and `fullyParallel` races. A global stamp in the shared mock raced `value-persists-after-save.spec.ts`.
 - **Evidence**: `git show 09ec8d9a:docs/roadmap/features/219-config-ui-usability/design.md:142-148,180-186`; `fails.md` 2026-08 (hand-written Connect-JSON).
 - **Rule it implies**: Save-then-refresh behaviour gets a spec-local stateful stub; the shared mock stays immutable (C-12/C-13).
+
+### 2026-10-20 — offline-account-full-pnl — design
+- **Pattern**: A consumer service needed a time-varying derived value (Day P&L, where the session rolls
+  over with no event) from data owned upstream, and a reverse RPC edge would create a boot cycle. The
+  design that worked:
+  - The producer pushes a calendar-free, bounded superset of raw inputs (fills from the last 10 days)
+    on its existing absolute-snapshot event.
+  - The consumer owns all time and calendar interpretation and computes the value at read time.
+  - Session-cutting by the producer at emit time was rejected: it couples the producer to the calendar,
+    to its clock, and to the version of the cutting logic it runs.
+- **Evidence**: `docs/roadmap/features/230-offline-account-full-pnl/design.md` (Chosen Approach §2.5,
+  §4.4–4.5; Rejected Alternatives).
+- **Rule it implies**: Push raw, bounded inputs and interpret them where the clock lives. Size the
+  window from the worst-case gap (here ~4.5 days) with slack, and record it as a fixed invariant.

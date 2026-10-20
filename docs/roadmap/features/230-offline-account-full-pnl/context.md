@@ -262,3 +262,51 @@
   6. Add the `+6h` offset as a fifth fixed invariant, and name a CLAUDE.md home for each invariant.
   7. Fix the citations and state `D1 = DayStart(ref + 1 calendar day)`.
 - Gate: the operator chose round 5, the last one allowed.
+
+## Session 2026-10-20 — sdd-design
+
+- **Phase 0 recon:** wrote recon.md.
+  - Services: trading, portfolio, marketdata, ui, agent, and the proto package.
+  - Key reuse patterns: the absolute-snapshot recompute plus per-account lock (157 and 163), and the
+    detach-and-degrade quote pattern (229).
+- **Phase 1 grilling:** 5 rounds, full mode. The approach that won:
+  - trading pushes fees, the frozen carry (a snapshot-header table) and 10-day recent fills on the
+    absolute `account.positions.synced` payload;
+  - portfolio owns the calendar and values everything at read time through one shared step for all
+    portfolio reads;
+  - marketdata `BatchGetBars` gets an opt-in `allow_partial` flag.
+- **Rejected alternatives** (full list in design.md): a portfolio→trading edge; trading cutting fills
+  by session; universal bars degradation, `unavailable_symbols` and an analysis change; a PermissionDenied
+  gate on GetPortfolio; clearing fees or `filled_at` on un-confirm.
+- **Constitution rules touched:** C-01, C-03, C-04, C-05, C-07, C-09, C-10(b), C-12, C-13, C-14, C-15,
+  C-16, C-17, C-18; F-01, F-04, F-06, F-07. Five fixed invariants plus a coalescing interval were
+  approved at the gate. No Floor breach in any round.
+- **Business rules:**
+  - CHANGE (all signed off): 229 @AC-1; 178 @AC-4 and @AC-1 (offline only); 163 @AC-6 (narrowed);
+    159 @AC-2 and @AC-4.
+  - EXTEND: 157 @AC-13; 163 @AC-14; marketdata AC-53/54, promoted at launch into a new suite.
+- **Acceptance:**
+  - AC-41..AC-54 appended. AC-43..AC-47 share a `Rule:` + `Background:`, the first use of `Rule:` in
+    the repo; it is valid Gherkin and no CI step parses `.feature` files.
+  - AC-10 clarified in place.
+  - Fixed pre-existing double `Given` slips in AC-10 and AC-11.
+- **Open risks carried to /sdd-spec:**
+  - the bar-date mapping golden test (blocking);
+  - migration-number recheck;
+  - manual `buf breaking` for trading.proto;
+  - spec drift (migration names, 4 columns, FR-3 note);
+  - findings to log.
+  All are listed in design.md § Open Risks.
+- **Ledger:** fails.md (trace response sites from RPC registration; make shared-RPC behaviour changes
+  opt-in); insights.md (push raw bounded inputs, interpret where the clock lives).
+- **Status:** spec-ready → design-approved.
+
+## Open Threads
+
+- [ ] Golden test of `SessionDate` (NY date of t+6h) against real staging `ohlcv` 1d rows, covering EDT
+  and EST. Blocking. Target: the first portfolio valuation step at /sdd-spec.
+- [ ] Re-check migration numbers trading 011 / portfolio 017 across remote branches. Target: /sdd-spec.
+- [ ] Manual `buf breaking` on trading.proto (CI skips it, `ci.yml:135`). Target: the proto step.
+- [ ] Land spec drift: migration names; portfolio 017 adds 4 columns; FR-3 NEW-order note. Target: /sdd-spec.
+- [ ] Findings: dead `TradingService.StreamOrderUpdates` (trading); unscoped `GetOfflineRealized` leak
+  (portfolio); `fmtSignedUsd` sign placement (UI). Target: the docs step.
