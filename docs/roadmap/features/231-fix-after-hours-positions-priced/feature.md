@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-19-after-hours-one-sided-quote-half-price-defect.md`
 **Severity**: SEV-2
 **Created**: 2026-10-19
-**Last Updated**: 2026-10-19
+**Last Updated**: 2026-10-20
 
 ---
 
@@ -19,6 +19,7 @@
 | 2026-10-19 | `design-approved` (unchanged) | /sdd-review | Post-design product-spec re-review: PASS WITH WARNINGS (10), all addressed |
 | 2026-10-19 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 13 steps |
 | 2026-10-19 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential mode (operator: no checkpoints); Step 1 done |
+| 2026-10-20 | `in-progress` → `code-completed` | /sdd-execute | All 13 steps done (sequential, one commit per step); integration PR #1256 → `main-dev` |
 
 ---
 
@@ -55,4 +56,4 @@ read at about half the real price.
 
 ## Next Action
 
-`/sdd-review fix-after-hours-positions-priced impl-spec` — validate implementation spec, then `/sdd-execute fix-after-hours-positions-priced`
+Merge integration PR #1256 into `main-dev`; then run the rollout actions in `context.md` (EDGAR cache purge, after-close staging check). `/promote` flips to `launched`.

@@ -1,6 +1,6 @@
 # Implementation Spec: fix-after-hours-positions-priced
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-10-19
 **Feature**: `docs/roadmap/features/231-fix-after-hours-positions-priced/feature.md`
 **Total Steps**: 13
@@ -946,7 +946,7 @@ New logic is in an excluded package (`service/`), so no coverage threshold appli
 
 ### Step 13 — docs: key rows, invariants, findings, and the context-forge teardown
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs` (+ service `CLAUDE.md` / `docs/` files)
 **Files**:
 - `services/xstockstrat-marketdata/CLAUDE.md` — modify

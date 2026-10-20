@@ -391,3 +391,28 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Files modified: `internal/testdata/marks.go` (new), `internal/service/portfolio_mark_test.go` (new),
   `internal/service/portfolio_quote_deadline_test.go`, `internal/service/portfolio_service_test.go`
 - Deviations: none
+
+### Step 13 — docs: key rows, invariants, findings, and the context-forge teardown [done]
+- marketdata `CLAUDE.md`: rows for `mark_timeout_ms`/`mark_close_max_age_hours`; `batch_timeout_ms` invariant now
+  names max(batch, mark); `GetLatestQuotes` bullet gains the `mark_price` rule and the three accepted gaps; EDGAR
+  price-join sentence (mark, else filed-date close served uncached).
+- portfolio `CLAUDE.md`: broker → `mark_price` → two-sided mid; snapshot + concentration skip-with-WARN on any
+  unpriced position (drawdown unaffected; permanently unpriceable holding accepted); quote-timeout invariant.
+- `config-governance.md` feature 231 entry; marketdata findings open question (IEX extended-hours); portfolio
+  constitution PORTFOLIO-1 rewrite + scar RESOLVED; portfolio findings: parity row RESOLVED, `StartSnapshotWriter`
+  dead-code row, proto `portfolio.proto:81` doc-lie row; test-data-inventory Go row; merge-order soft WARN 231↔230.
+- **Teardown (context-forge refresh unavailable — only `context-scrubber` is installed):** manual reconciliation.
+  Ran the read-only `context-forge:context-auditor` over the 7 touched context files against the code: no stale
+  citations, no contradicted feature-231 lines; it flagged 2 pre-existing portfolio `CLAUDE.md` lines still saying
+  "mid-quotes" (Ledger Events Consumed, Database) and 1 ambiguous "one-sided/empty" phrase in marketdata
+  `CLAUDE.md` — all 3 fixed. Duplication of the 2 key rows across service `CLAUDE.md` + config-governance kept
+  (both are the established homes).
+- Verification greps: all expected matches present.
+- Deviations: none
+
+## Session summary — 2026-10-20 (/sdd-execute sequential, no checkpoints)
+- Steps 1–13 done, one commit per step on `ccr-9f55a8ac-dtw4iv`; status → `code-completed`.
+- Deviations: D-1 (host-native codegen, Docker Hub 429), D-2 (mark lookup helper + separate resolver test).
+- Rollout (operator): after the marketdata deploy, during market hours, run
+  `DELETE FROM marketdata.fundamentals WHERE source='edgar'` and record the count (purges EDGAR snapshot rows priced
+  at a halved mid); after 16:00 ET, check a one-sided holding on staging values at the stored close.
