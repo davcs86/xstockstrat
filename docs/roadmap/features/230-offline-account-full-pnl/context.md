@@ -925,3 +925,19 @@
 - Files modified: `app/tools.py`, `app/client.py`, `docs/runbooks/mcp-tools.md`,
   `services/xstockstrat-agent/CLAUDE.md`.
 - Deviations: none.
+
+### Step 25 — test: agent fees presence + position field parity [done]
+- `test_offline_client.py` gains:
+  - `test_confirm_offline_order_fees_presence` (parametrized None / 0.0 / 1.25 → `HasField`
+    False / True / True);
+  - `test_get_order_and_list_orders_echo_fees` (`_order_to_dict` fees 1.25);
+  - `test_list_positions_prints_new_fields` (`day_pnl`, `day_pnl_pct` and `unrealized_pnl_pct` at 0,
+    plus `MARK_SOURCE_QUOTE` and `mark_as_of`, all present).
+- `test_position_parity.py`: `_POSITION_FIELD_SET` is now 25 fields ("1–25"). Guard B's fully
+  populated `Position` also sets `mark_source` / `mark_as_of`, which keeps that existing guard
+  meaningful.
+- Verification:
+  - `uv run pytest --cov=app --cov-fail-under=40`: 515 passed, 81%;
+  - `ruff check` clean; `ruff format --check` clean.
+- Files modified: `tests/test_offline_client.py`, `tests/test_position_parity.py`.
+- Deviations: none.

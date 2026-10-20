@@ -1628,7 +1628,7 @@ The coverage threshold (40%) must pass, and the 4 new `last_close_lookback_days`
 
 ### Step 25 — test: agent fees presence + position field parity
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_offline_client.py` — modify

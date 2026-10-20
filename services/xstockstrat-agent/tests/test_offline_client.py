@@ -360,3 +360,67 @@ async def test_list_positions_all_accounts():
     sent = mock_stub.ListPositions.call_args.args[0]
     assert sent.account_id == ""
     assert out == {"positions": [], "next_page_token": ""}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("fees", [None, 0.0, 1.25])
+async def test_confirm_offline_order_fees_presence(fees):
+    """Feature 230 @AC-17: fees is sent only when given; omitted keeps the stored value."""
+    from gen.trading.v1 import trading_pb2  # type: ignore
+
+    mock_stub = MagicMock()
+    mock_stub.ConfirmOrder = AsyncMock(return_value=trading_pb2.Order(order_id="ord-3"))
+    grpc_patch, stub_patch = _patch_trading_stub(mock_stub)
+    with grpc_patch as mock_grpc:
+        mock_grpc.secure_channel.return_value = _channel_cm()
+        with stub_patch:
+            await client.confirm_offline_order(
+                "user-42", "ord-3", filled_qty=10, filled_avg_price=100.0, fees=fees
+            )
+
+    sent = mock_stub.ConfirmOrder.call_args.args[0]
+    assert sent.HasField("fees") is (fees is not None)
+    if fees is not None:
+        assert sent.fees == fees
+
+
+def test_get_order_and_list_orders_echo_fees():
+    """Feature 230 @AC-17/@AC-33: an order's fees surface in the tool dict."""
+    from gen.trading.v1 import trading_pb2  # type: ignore
+
+    out = client._order_to_dict(trading_pb2.Order(order_id="ord-3", fees=1.25))
+    assert out["fees"] == 1.25
+
+
+@pytest.mark.asyncio
+async def test_list_positions_prints_new_fields():
+    """Feature 230 @AC-33: day_pnl, day_pnl_pct, unrealized_pnl_pct, mark_source and mark_as_of are
+    all present, including zero values."""
+    from gen.portfolio.v1 import portfolio_pb2  # type: ignore
+    from google.protobuf.timestamp_pb2 import Timestamp as PbTimestamp  # type: ignore
+
+    mark_as_of = PbTimestamp()
+    mark_as_of.FromJsonString("2026-10-19T14:00:00Z")
+    pos = portfolio_pb2.Position(
+        symbol="MSFT",
+        qty=10,
+        account_id="acc-1",
+        mark_source=portfolio_pb2.MARK_SOURCE_QUOTE,
+        mark_as_of=mark_as_of,
+    )
+    mock_stub = MagicMock()
+    mock_stub.ListPositions = AsyncMock(
+        return_value=portfolio_pb2.ListPositionsResponse(positions=[pos])
+    )
+    grpc_patch, stub_patch = _patch_portfolio_stub(mock_stub)
+    with grpc_patch as mock_grpc:
+        mock_grpc.secure_channel.return_value = _channel_cm()
+        with stub_patch:
+            out = await client.list_positions("user-42", "acc-1")
+
+    p = out["positions"][0]
+    assert p["day_pnl"] == 0
+    assert p["day_pnl_pct"] == 0
+    assert p["unrealized_pnl_pct"] == 0
+    assert p["mark_source"] == "MARK_SOURCE_QUOTE"
+    assert p["mark_as_of"] == "2026-10-19T14:00:00Z"
