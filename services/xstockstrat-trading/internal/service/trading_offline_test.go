@@ -132,7 +132,7 @@ type upsertBaselineCall struct {
 	rows             []repository.BaselineRow
 }
 
-func (f *fakeBaselineStore) UpsertBaselineSnapshot(_ context.Context, accountID, clientSnapshotID string, asOf time.Time, rows []repository.BaselineRow) error {
+func (f *fakeBaselineStore) UpsertBaselineSnapshot(_ context.Context, accountID, clientSnapshotID string, asOf time.Time, rows []repository.BaselineRow, _ repository.CarryFunc) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.upsertCalls = append(f.upsertCalls, upsertBaselineCall{
@@ -155,21 +155,21 @@ func (f *fakeBaselineStore) UpsertBaselineSnapshot(_ context.Context, accountID,
 	return nil
 }
 
-func (f *fakeBaselineStore) EffectiveBaselineByAccount(_ context.Context, _ string) (time.Time, map[string]pnl.Lot, bool, error) {
+func (f *fakeBaselineStore) EffectiveBaselineByAccount(_ context.Context, _ string) (repository.SnapshotHeader, bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.baselineErr != nil {
-		return time.Time{}, nil, false, f.baselineErr
+		return repository.SnapshotHeader{}, false, f.baselineErr
 	}
 	if !f.hasBaseline {
-		return time.Time{}, nil, false, nil
+		return repository.SnapshotHeader{}, false, nil
 	}
 	// Return a copy so mutations in the caller don't affect our state.
 	lots := make(map[string]pnl.Lot, len(f.baselineLots))
 	for k, v := range f.baselineLots {
 		lots[k] = v
 	}
-	return f.baselineAsOf, lots, true, nil
+	return repository.SnapshotHeader{AsOf: f.baselineAsOf, Lots: lots}, true, nil
 }
 
 func (f *fakeBaselineStore) DeleteBaselinesByAccount(_ context.Context, accountID string) error {

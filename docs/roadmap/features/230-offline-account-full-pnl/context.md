@@ -499,3 +499,28 @@
     module's 1.27 target.
 - Files modified: `internal/repository/trading_repo_test.go`.
 - Deviations: none.
+
+### Step 7 — service: trading baseline repo — snapshot headers, carry callback, atomic purge [done]
+- Added `SnapshotHeader`, `CarryFunc` and `ErrSnapshotAsOfConflict`.
+- `UpsertBaselineSnapshot(..., carry)` runs in one tx:
+  - locks the account's headers `FOR UPDATE`;
+  - keeps the stored carry on same id + same `as_of`;
+  - rejects a non-latest or backwards `as_of` change;
+  - otherwise picks `pred` (greatest `(as_of, created_at)` below `as_of`, own id excluded), loads its
+    lots, and calls `carry`; a nil carry gives 0, 0;
+  - upserts the header, then DELETE+INSERT of the rows.
+- `EffectiveBaselineByAccount` → `(hdr, ok, err)`: latest header first (`QueryRow`), then its rows
+  `qty <> 0`. A header with no rows is a full flatten (ok=true).
+- Rows load through a shared `snapshotLots(ctx, dbQuerier, …)`, used by both the read path (`r.db`) and
+  the upsert tx (`pgx.Tx` satisfies `dbQuerier`).
+- `DeleteBaselinesByAccount` purges rows and headers in one tx.
+- Interface and call sites adapted mechanically: `hdr.AsOf`/`hdr.Lots`, and `nil` carry at the snapshot
+  call site until Step 11. The fake's signatures were adapted with no behaviour change.
+- Verification:
+  - `go build` / `go vet` ✓;
+  - 21 Snapshot|OfflineRecompute tests ✓.
+- TDD: Step 8's header test was written first. Red came as a compile failure (3 vs 4 return values);
+  the old signature can't express the full-flatten case behaviourally. Green: 3/3 subtests.
+- Files modified: `internal/repository/offline_baseline_repo.go`, `internal/service/trading.go`,
+  `internal/service/trading_offline_test.go` (signatures only).
+- Deviations: none.

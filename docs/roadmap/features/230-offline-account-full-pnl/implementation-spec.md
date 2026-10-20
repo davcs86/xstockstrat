@@ -454,7 +454,7 @@ measure it. The targeted tests are the proof.
 
 ### Step 7 — service: trading baseline repo — snapshot headers, carry callback, atomic purge
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/repository/offline_baseline_repo.go` — modify

@@ -47,8 +47,8 @@ type configSetConfigForwarder interface {
 // offlineBaselineStore is the seam for offline-baseline persistence, extracted for testability.
 // *repository.TradingRepo satisfies it in production; tests inject a fake.
 type offlineBaselineStore interface {
-	UpsertBaselineSnapshot(ctx context.Context, accountID, clientSnapshotID string, asOf time.Time, rows []repository.BaselineRow) error
-	EffectiveBaselineByAccount(ctx context.Context, accountID string) (asOf time.Time, lots map[string]pnl.Lot, ok bool, err error)
+	UpsertBaselineSnapshot(ctx context.Context, accountID, clientSnapshotID string, asOf time.Time, rows []repository.BaselineRow, carry repository.CarryFunc) error
+	EffectiveBaselineByAccount(ctx context.Context, accountID string) (hdr repository.SnapshotHeader, ok bool, err error)
 	DeleteBaselinesByAccount(ctx context.Context, accountID string) error
 	HasUnconfirmedOfflineOrders(ctx context.Context, accountID string) (bool, error)
 	ListConfirmedOfflineOrdersByAccount(ctx context.Context, accountID string) ([]*tradingv1.Order, error)
@@ -946,12 +946,13 @@ func (s *TradingService) ConfirmOrder(ctx context.Context, req *tradingv1.Confir
 // account.positions.synced. Fail-closed (a query error skips the emit). Caller must hold confirmLock(accountID).
 func (s *TradingService) recomputeAndEmitOfflinePositions(ctx context.Context, accountID, userID string) error {
 	// --- Load baseline (fail-closed: error → skip emit) ---
-	asOf, seedLots, hasBaseline, err := s.baselineStore.EffectiveBaselineByAccount(ctx, accountID)
+	hdr, hasBaseline, err := s.baselineStore.EffectiveBaselineByAccount(ctx, accountID)
 	if err != nil {
 		slog.Warn("recomputeAndEmitOfflinePositions: baseline query failed; skipping positions.synced emit",
 			"account_id", accountID, "error", err)
 		return err
 	}
+	asOf, seedLots := hdr.AsOf, hdr.Lots
 
 	// --- Load confirmed orders (fail-closed: error → skip emit) ---
 	confirmed, err := s.baselineStore.ListConfirmedOfflineOrdersByAccount(ctx, accountID)
@@ -1122,7 +1123,7 @@ func (s *TradingService) SnapshotOfflinePositions(ctx context.Context, req *trad
 	lock.Lock()
 	defer lock.Unlock()
 
-	if err := s.baselineStore.UpsertBaselineSnapshot(ctx, req.AccountId, req.ClientSnapshotId, asOf, validRows); err != nil {
+	if err := s.baselineStore.UpsertBaselineSnapshot(ctx, req.AccountId, req.ClientSnapshotId, asOf, validRows, nil); err != nil {
 		return nil, grpcstatus.Errorf(codes.Internal, "persist baseline: %v", err)
 	}
 
