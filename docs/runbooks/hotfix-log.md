@@ -15,7 +15,7 @@ following the format in `docs/runbooks/bug-triage.md#hotfix-log-format`.
 - **Affected service(s)**: xstockstrat-indicators (caller: xstockstrat-agent `test_formula`)
 - **Root cause**: ExecuteFormula used `timeout_ms_override` / `memory_bytes_override` verbatim (`or` fallback only on 0): any caller could hold a sandbox slot for up to int32 ms (4 calls exhaust `max_concurrent`), and a negative memory override skipped RLIMIT_DATA.
 - **Fix summary**: `_clamp_override()` — a positive override is `min(override, configured)`; `≤ 0` falls back to the configured value.
-- **PR**: _pending_
+- **PR**: #1263
 - **Platform-lead approver**: _pending_
 - **Back-merge commit**: _pending_
 - **Maintenance mode applied**: no
