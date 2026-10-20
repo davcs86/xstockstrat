@@ -75,3 +75,49 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - Standing authorization: designs run in FULL mode only (no quick designs for automated fixes); the orchestrator auto-approves the design gate once rounds >= 2, no unresolved Floor (F-*) breach remains, no blocking objection remains, and every CHANGE to an existing @AC business rule is covered by an operator decision below.
   - Full design depth (operator overrode the triage 'quick' recommendation).
 - Next: `/sdd-design fix-agent-getconfig-deadline` (full).
+
+## Session 2026-10-20 — sdd-review product-spec (re-run)
+
+- Re-review result: PASS WITH WARNINGS (8 warnings, 3 notes). Status stays `spec-ready` (2a69273a set it).
+  feature.md has a `re-review` row, not a second `draft → spec-ready` row.
+- The verdict's line refs come from the pre-2a69273a draft (no FR-N, `@AC-n @regression` at
+  acceptance.feature:7/12/20/26, stall prose at :4, tools.py `:2360`/`:2390-2393`), not the current files.
+  Each warning checked against the current tree:
+  - crit 2/8, FR traceability: already resolved (FR-1..FR-3 at product-spec.md:28-40, `@FR-*` tags).
+  - AC-2 tool API: already resolved (`source_slug "acme-site"`, `config_json.url`, acceptance.feature:12-21).
+    A spy on `egress.build_pinned_client` proves the default limits as a supporting unit check, not a Then.
+  - AC-3/AC-4 concreteness: already resolved (acceptance.feature:23-38; 201 + `client_id` + `redirect_uris`).
+  - Shared precondition: already resolved as a per-scenario Given. A `Background:` was rejected because
+    AC-5 needs a healthy config service.
+  - Non-regression scenario: already resolved (`@AC-5 @FR-3`, acceptance.feature:40-44). Open for design:
+    freeze D (acceptance.feature:4) together with the AC-1..AC-4 bounds.
+  - C-14 consumer surface: already resolved (`extract_email_content` `urls` path, product-spec.md:19, :61).
+  - crit 1, persona: resolved this session. "Who is hit" added to the Problem Statement (MCP client /
+    Claude.ai remote connector, DCR client).
+  - C-01 evidence drift: the spec anchors match this branch. Verified tools.py:77, :543, :627, :1551-1554,
+    :2367, :2397-2400; client.py:1751-1758; oauth_server.py:84, :104; main.py:227. main-dev @ 53e27630
+    shifts tools.py lines ≥2100 by +4 (73893ec1, #1269, `record_order` UUID nonce), so `_POLICY_READ_TIMEOUT_S`
+    is :2371 and the `_fetch_url` reads are :2401-2404 there. /sdd-spec re-derives anchors on its base.
+- Notes (3):
+  - F-07/C-05: compliant. design.md must record the fixed-constant rationale and must not mint a new
+    `agent.*` key. Design must also reconcile the comment "Fixed bound on the undeadlined GetConfig policy
+    read" (tools.py:2365) and decide the 227 `wait_for` (tools.py:1550-1556). C-18 applies to the
+    optional-`timeout`-parameter fork.
+  - Criteria 3-7 and 9 PASS; 10 is N/A. Callers verified: `_agent_policy` tools.py:2374, `ingest_signal`
+    :627, DCR oauth_server.py:84 and :104. `AioRpcError` is re-raised at client.py:1755-1758.
+  - Trading-domain checks C-1..C-5 skipped (non-trading).
+- Overlap findings (feature-overlap, WARN, file-level only). Regions are disjoint, so a rebase is enough:
+  - client.py `get_config_value` :1751-1754 also collides with:
+    - 240-offline-account-full-pnl (code-completed): Step 24 `confirm_offline_order` :2245-2271.
+    - 215-block-fundamentals-strategy-on-etf (in-progress): `run_backtest` :561, `_opportunity_to_dict`
+      :782-804.
+  - tools.py :627, :1552-1553, :2367, :2397-2400 also collide with:
+    - 240: `manage_offline_account` :2035.
+    - 241-fix-config-audit-author-spoof (draft): `set_config` :1642-1694.
+    - 215: docstrings :735, :760-763 (`list_opportunities` left unextended).
+  - No config-key, proto or migration collision, so no merge-order.md entry is needed.
+- Operator decisions:
+  OPERATOR DECISIONS (binding, recorded 2026-10-20):
+  - Standing authorization: designs run in FULL mode only (no quick designs for automated fixes); the orchestrator auto-approves the design gate once rounds >= 2, no unresolved Floor (F-*) breach remains, no blocking objection remains, and every CHANGE to an existing @AC business rule is covered by an operator decision below.
+  - Full design depth (operator overrode the triage 'quick' recommendation).
+- Next: `/sdd-design fix-agent-getconfig-deadline` (full).

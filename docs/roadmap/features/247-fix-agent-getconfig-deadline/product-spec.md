@@ -20,6 +20,9 @@ blocks every caller indefinitely. The only guard is the fixed 3s `_POLICY_READ_T
 - `ingest_signal`'s post-commit `signal.alert_threshold` read (`tools.py:627`).
 - OAuth DCR `oauth.registration_enabled` / `oauth.allowed_redirect_uris` reads (`app/oauth_server.py:84,104`).
 
+**Who is hit.** An MCP client calling these tools (e.g. the Claude.ai remote connector) and an OAuth client
+registering via DCR both wait for their own client-side timeout instead of getting the degraded answer.
+
 **Expected.** See FR-1..FR-3.
 
 ## Functional Requirements
