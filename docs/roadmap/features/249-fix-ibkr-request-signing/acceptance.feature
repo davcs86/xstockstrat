@@ -26,6 +26,6 @@ Feature: fix-ibkr-request-signing (bug fix)
   Scenario: The client obtains a Live Session Token before its first regular request
     Given an IBKR account registered with valid OAuth credentials and no cached Live Session Token
     When ValidateCredentials runs
-    Then the client first requests a Live Session Token via the RSA-SHA256 / Diffie-Hellman handshake
-    And the validation request is signed with that token
-    And the account's CredentialStatus is not INVALID when IBKR accepts the signature
+    Then the test server receives an RSA-SHA256-signed Live Session Token request carrying a Diffie-Hellman challenge before "GET /portfolio/accounts"
+    And the "GET /portfolio/accounts" request is HMAC-SHA256 signed with the Live Session Token derived from that exchange
+    And the account's CredentialStatus is CREDENTIAL_STATUS_OK when the test server accepts that signature
