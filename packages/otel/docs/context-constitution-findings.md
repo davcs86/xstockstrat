@@ -16,5 +16,16 @@ governance. The `observability.md` doc-lie about the OTLP port is recorded at th
 
 - **`alerts/README.md` implies `${DS_PROMETHEUS_UID}`/`${DS_LOKI_UID}` placeholders resolve automatically** — retired 2026-08-09 (refresh): this row misdiagnosed its own evidence. `alerts/README.md:19-29` ("## Substitutions before provisioning") already explicitly instructs "replace them before applying" with a table of what to substitute; `docs/setup/grafana-cloud.md#**Apply:** substitute (~L261-264)` is equally explicit. No `envsubst`/templating tooling was ever implied or expected. Confirmed no such tooling exists (repo-wide grep for `DS_PROMETHEUS_UID|DS_LOKI_UID|envsubst`, only doc references). Not a real doc-lie — dropped.
 
+
+## Filed as defect reports (2026-10-19)
+
+The open rows above were re-verified against `1302e6d` and recorded as `docs/reports/` defects
+(status sidecar `open`) for `/sdd-triage --from-report`. A row stays here until its report is resolved.
+
+| Report | Title |
+|---|---|
+| [`2026-10-19-otel-collector-headers-comment-contradiction-defect`](../../../docs/reports/2026-10-19-otel-collector-headers-comment-contradiction-defect.md) | otel-collector config comment gives contradictory instructions for OTEL_EXPORTER_OTLP_HEADERS |
+| [`2026-10-19-otel-metrics-logs-never-exported-defect`](../../../docs/reports/2026-10-19-otel-metrics-logs-never-exported-defect.md) | No service exports OTel metrics or logs, so the Grafana alerts and dashboards read nothing |
+
 ---
 _Surfaced by [context-forge](https://github.com/davcs86/agent-plugins). Defects to action, not rules. Re-run `/context-constitution` to refresh._

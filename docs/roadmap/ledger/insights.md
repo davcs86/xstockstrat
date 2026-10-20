@@ -3673,6 +3673,11 @@ reusing.
 - **Evidence**: `git show 09ec8d9a:docs/roadmap/features/219-config-ui-usability/design.md:142-148,180-186`; `fails.md` 2026-08 (hand-written Connect-JSON).
 - **Rule it implies**: Save-then-refresh behaviour gets a spec-local stateful stub; the shared mock stays immutable (C-12/C-13).
 
+### 2026-10-20 — fix-after-hours-positions-priced — design
+- **Pattern**: When a derived value (a valuation mark) is computed wrongly in several downstream consumers, compute it once at the upstream chokepoint as an additive `optional` proto field, and keep a narrow consumer fallback (the old safe subset: two-sided mid only) for deploy skew. One rule replaces N copies, and either service can deploy first.
+- **Evidence**: `services/xstockstrat-marketdata/internal/service/marketdata_service.go#withMark`; `services/xstockstrat-portfolio/internal/service/portfolio_service.go#markOf`; `packages/proto/marketdata/v1/marketdata.proto` `mark_price = 8`.
+- **Rule it implies**: Prove the concurrency of a "runs alongside" lookup with a two-way handshake test that fails under a serial mutation (231 AC-12), not with timing.
+
 ### 2026-10-20 — offline-account-full-pnl — design
 - **Pattern**: A consumer service needed a time-varying derived value (Day P&L, where the session rolls
   over with no event) from data owned upstream, and a reverse RPC edge would create a boot cycle. The

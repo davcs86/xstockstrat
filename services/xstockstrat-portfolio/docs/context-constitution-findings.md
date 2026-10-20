@@ -6,11 +6,17 @@ Defects and drift surfaced by `/context-constitution` on 2026-07-24; refreshed 2
 `portfolio_service.go` line shifts — all rows still reproduce, none resolved). For
 triage/fixing, not governance; re-verified 2026-10-14 (branch `ccr-fe84109f-0lwin8` @ `09ec8d9`); refreshed 2026-10-19 (branch `ccr-c386317f-6vt6t6` @ `a914f69` — value-parity row narrowed (GetPnL fixed) + partial-pricing/broker-valued-fetch note; added `r.pool` half-migration row and root cross-ref for the quote-deadline bound gap; line hints re-stamped, all open rows re-verified). Repo-wide defects (Go 1.22 doc-lie) live in the root findings log.
 
+## Documentation that lies (docs claim behavior the code lacks)
+
+| Doc claim | Reality | Evidence |
+|---|---|---|
+| `packages/proto/portfolio/v1/portfolio.proto` (~L81): positions are "enriched from marketdata mid-quotes" (found 2026-10-19) | Since feature 231, un-broker-valued positions use `Quote.mark_price` (two-sided mid, else the stored `1d` close); a one-sided quote is never averaged | `internal/service/portfolio_service.go#markOf` — action: reword the proto comment in the next proto PR |
+
 ## Latent bugs (looks broken, not merely non-obvious)
 
 | Issue | Impact | Evidence |
 |---|---|---|
-| **Snapshot-equity / risk value-parity break**: `broadcastSnapshot` and `checkRiskLimits` recompute market value from mid-quotes instead of the broker-authoritative `unvaluedSymbols`/`applyQuotes` rule (PORTFOLIO-1). (partially resolved 2026-10-19: `GetPnL` now values via broker `current_price` + `unvaluedSymbols`/`applyQuotes` and fails `ErrQuotesUnavailable` — `portfolio_service.go#GetPnL`.) Also: `broadcastSnapshot` still persists when only *some* positions priced (unpriced count as 0 → understated equity), and both paths fetch quotes for broker-valued positions too. | For any broker-synced position (`CurrentPrice > 0`), snapshot equity and risk-concentration numbers diverge from what the UI is shown via `ListPositions`/`GetPortfolio`; a partial quote batch persists an understated equity snapshot. | `portfolio_service.go#broadcastSnapshot (~L827; all-symbol fetch ~L833-837, skip only when nothing priced ~L847)`, `#checkRiskLimits (~L891; ~L905)`; contract asserted `portfolio_repo.go#ListPositions` (~L165-166), `migrations/005_positions_broker_valuation.up.sql` (~L4-9) |
+| ~~**Snapshot-equity / risk value-parity break**~~ **RESOLVED 2026-10-19 (feature 231)**: both paths value via `unvaluedSymbols`/`applyQuotes`/`markOf` and skip with a WARN when any position is unpriced. Original: `broadcastSnapshot` and `checkRiskLimits` recompute market value from mid-quotes instead of the broker-authoritative `unvaluedSymbols`/`applyQuotes` rule (PORTFOLIO-1). (partially resolved 2026-10-19: `GetPnL` now values via broker `current_price` + `unvaluedSymbols`/`applyQuotes` and fails `ErrQuotesUnavailable` — `portfolio_service.go#GetPnL`.) Also: `broadcastSnapshot` still persists when only *some* positions priced (unpriced count as 0 → understated equity), and both paths fetch quotes for broker-valued positions too. | For any broker-synced position (`CurrentPrice > 0`), snapshot equity and risk-concentration numbers diverge from what the UI is shown via `ListPositions`/`GetPortfolio`; a partial quote batch persists an understated equity snapshot. | `portfolio_service.go#broadcastSnapshot (~L827; all-symbol fetch ~L833-837, skip only when nothing priced ~L847)`, `#checkRiskLimits (~L891; ~L905)`; contract asserted `portfolio_repo.go#ListPositions` (~L165-166), `migrations/005_positions_broker_valuation.up.sql` (~L4-9) |
 | **`CreateWatchlist` collapses a duplicate-name collision to `CodeInternal`** (surfaced 2026-08-26, feature 127 archive): a `UNIQUE(user_id,name)` violation returns `connect.CodeInternal`, indistinguishable from a DB outage — callers can't match `ALREADY_EXISTS`. Fix: map the unique-violation to `CodeAlreadyExists`; `EnsureSignalWatchlist`'s atomic find-or-create is the only race-safe path today. | A duplicate watchlist-name create is reported as an internal error, not a client error; callers cannot distinguish it from an outage and cannot branch/retry correctly. | `internal/service/portfolio_service.go#CreateWatchlist (~L1555)` (`CodeInternal` returns ~L1571,1579 — no `ALREADY_EXISTS` branch) |
 | **`portfolio.marketdata.quote_timeout_ms` cross-key bound gap** — see root findings "Cross-hop deadline ordering is documented but not enforced by per-key bounds" (found 2026-10-19) | see root | `../../../docs/context-constitution-findings.md` |
 
@@ -19,6 +25,7 @@ triage/fixing, not governance; re-verified 2026-10-14 (branch `ccr-fe84109f-0lwi
 | What | Why it looks dead | Evidence |
 |---|---|---|
 | ~~`portfolio.risk.max_drawdown_pct` config key~~ **RESOLVED (feature 172)**: now enforced per-account — `checkRiskLimits` fetches `GetAccountDrawdowns` and `evaluateDrawdowns` emits a WARNING alert on breach (peak_equity HWM, migration 016) | ~~read then discarded~~ now enforced | `portfolio_service.go#checkRiskLimits` (`GetFloat` ~L892, `GetAccountDrawdowns`/`evaluateDrawdowns` enforcement ~L925-927 — formerly the `_ = maxDrawdownPct` discard) |
+| **`StartSnapshotWriter` has no caller** (found 2026-10-19): `portfolio.snapshot.interval_minutes` is therefore never read on a live path — snapshots are written per fill only (`broadcastSnapshot`) — action: wire it or remove it with the key | no call site outside its definition | `internal/service/portfolio_service.go#StartSnapshotWriter (~L824)` |
 | **`PortfolioRepo` `r.pool` → `r.db` half-migration**: `GetSnapshot`, `CountPositions`, `UpdatePositionBracket`, `UpsertOfflineRealized`, `DeleteOfflineRealized` still call `r.pool`, while `NewPortfolioRepoWithDB` (pgxmock) leaves `pool` nil — action: move them to `r.db` (found 2026-10-19) | the mockable `db` surface was adopted for the other methods; these five nil-panic under the pgxmock constructor, so they are untestable that way | `internal/repository/portfolio_repo.go#NewPortfolioRepoWithDB (~L48)`; `r.pool` calls ~L216/240/340/462/486 |
 
 ## Open questions (unresolved *why* — needs a maintainer)
@@ -28,6 +35,22 @@ triage/fixing, not governance; re-verified 2026-10-14 (branch `ccr-fe84109f-0lwi
 - `UpsertPositionFromSync` sets `cost_basis = qty * avgCost` but leaves `realized_accum` / `fees_accum` untouched (CLAUDE.md calls this deliberate) — is there a plan to reconcile accumulators against broker syncs, given the restart-replay inflation? — status: **open**
 - `processPositionSync` defaults `userID` to the literal `"default"` and the deregister handler does the same, and `processOrderFill` defaults the account to `"alpaca-default"` — are these legacy fallbacks still reachable? — status: **open**
 - `emitEvent` uses a fresh `uuid.NewString()` per call as the idempotency key, so dedup protects only in-flight retries, not event reprocessing — is retry-only dedup the intended scope? `portfolio_service.go#emitEvent (~L949)` (`uuid.NewString()` ~L963) — status: **open**
+
+
+## Filed as defect reports (2026-10-19)
+
+The open rows above were re-verified against `1302e6d` and recorded as `docs/reports/` defects
+(status sidecar `open`) for `/sdd-triage --from-report`. A row stays here until its report is resolved.
+
+| Report | Title |
+|---|---|
+| [`2026-10-19-cross-hop-deadline-bounds-unenforced-defect`](../../../docs/reports/2026-10-19-cross-hop-deadline-bounds-unenforced-defect.md) | Cross-hop read deadline ordering is not enforced by config bounds |
+| [`2026-10-19-orphaned-code-defect`](../../../docs/reports/2026-10-19-orphaned-code-defect.md) | Orphaned modules, scripts and dependencies across services |
+| [`2026-10-19-portfolio-concentration-logged-as-drawdown-defect`](../../../docs/reports/2026-10-19-portfolio-concentration-logged-as-drawdown-defect.md) | concentration breaches are recorded as portfolio.risk.drawdown_breach ledger events |
+| [`2026-10-19-portfolio-default-identity-fallback-defect`](../../../docs/reports/2026-10-19-portfolio-default-identity-fallback-defect.md) | portfolio consumers substitute literal "default" / "alpaca-default" for a missing user or account id |
+| [`2026-10-20-portfolio-getpnl-source-service-mismatch-defect`](../../../docs/reports/2026-10-20-portfolio-getpnl-source-service-mismatch-defect.md) | GetPnL queries ledger fills with source_service "trading", but trading writes "xstockstrat-trading" (found 2026-10-20) |
+| [`2026-10-19-portfolio-snapshot-risk-midquote-valuation-defect`](../../../docs/reports/2026-10-19-portfolio-snapshot-risk-midquote-valuation-defect.md) | portfolio snapshot equity and risk checks value positions from mid-quotes, not broker marks |
+| [`2026-10-19-portfolio-watchlist-duplicate-returns-internal-defect`](../../../docs/reports/2026-10-19-portfolio-watchlist-duplicate-returns-internal-defect.md) | CreateWatchlist returns INTERNAL on a duplicate watchlist name |
 
 ---
 _Surfaced by [context-forge](https://github.com/davcs86/agent-plugins). Defects to action, not rules. Re-run `/context-constitution` to refresh._

@@ -30,6 +30,11 @@ export interface Quote {
     bidPrice: number;
     bidSize: number;
     source: string;
+    /**
+     * Valuation mark, set only by GetLatestQuotes: two-sided mid if ask_price>0 && bid_price>0, else the newest
+     * stored 1d close within marketdata.quotes.mark_close_max_age_hours. Unset = no usable mark (or not computed).
+     */
+    markPrice?: number | undefined;
 }
 /**
  * Latest-trade price + prior-session daily close (feature 095). last_price/prev_close are explicit

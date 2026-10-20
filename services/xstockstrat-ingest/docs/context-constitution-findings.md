@@ -40,5 +40,18 @@ also recorded at the root.
 
 - **RESOLVED 2026-09-03 — the two `ingest.mcp_client.*` config keys were read without the `ingest.` prefix (latent bug, 2026-09-02).** Both reads now carry the full prefix: `app/engine/mcp_client_loop.py#run_one_cycle` (~L135, `"ingest.mcp_client.request_timeout_seconds"`) and `#run_mcp_client_loop` (~L164, `"ingest.mcp_client.poll_interval_seconds"`), guarded by a regression test `tests/test_mcp_client_loop.py#test_cycle_reads_namespace_prefixed_request_timeout_key` (~L111) ("defect 2026-09-03"). This also un-lies the CLAUDE.md "clamped ≥1 / config-tunable" claim and gives seed migration `025_ingest_mcp_client_keys` effective readers. Confirmed by re-resolving both citations against current code (they now include the prefix) plus the new test. The generalized rule now lives as INGEST-9 in the constitution.
 
+
+## Filed as defect reports (2026-10-19)
+
+The open rows above were re-verified against `1302e6d` and recorded as `docs/reports/` defects
+(status sidecar `open`) for `/sdd-triage --from-report`. A row stays here until its report is resolved.
+
+| Report | Title |
+|---|---|
+| [`2026-10-19-dead-config-keys-defect`](../../../docs/reports/2026-10-19-dead-config-keys-defect.md) | Documented config keys that no code reads (ledger, notify, trading, marketdata, ingest) |
+| [`2026-10-19-ingest-claude-md-drift-defect`](../../../docs/reports/2026-10-19-ingest-claude-md-drift-defect.md) | Ingest CLAUDE.md banner lists fixed defects; QuerySignals docstring says "active" |
+| [`2026-10-19-ingest-mcp-loop-ledger-events-ownerless-defect`](../../../docs/reports/2026-10-19-ingest-mcp-loop-ledger-events-ownerless-defect.md) | mcp_client loop ledger events are stored with a NULL owner |
+| [`2026-10-19-orphaned-code-defect`](../../../docs/reports/2026-10-19-orphaned-code-defect.md) | Orphaned modules, scripts and dependencies across services |
+
 ---
 _Surfaced by [context-forge](https://github.com/davcs86/agent-plugins). Defects to action, not rules. Re-run `/context-constitution` to refresh._

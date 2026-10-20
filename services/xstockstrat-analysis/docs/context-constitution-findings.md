@@ -20,7 +20,7 @@ recorded at the root (they are cross-cutting).
 | **`ScreenerEngine.screen()` has no per-symbol error isolation** (surfaced 2026-08-26, feature 160 archive): the loop calls `_eval_symbol` with no surrounding `try/except`, and `_eval_symbol` catches only `grpc.RpcError` at each RPC site — so any *non-*`RpcError` (arithmetic, `float()`, `scoring.compute_signal_score`) in one symbol propagates unwrapped and fails the whole `ScreenSymbols` RPC as gRPC UNKNOWN. Feature 160 fixed the specific `bar.time` typo that triggered it but did not add the isolation. Fix: wrap the per-symbol call so one symbol's failure degrades that row (e.g. to INSUFFICIENT_DATA / skipped) instead of killing the scan. | One bad symbol takes down the entire screen instead of degrading a single row. | `app/services/screener.py#screen` (~L91; `asyncio.gather(*[self._eval_symbol(...)])` ~L115 with no `return_exceptions`; re-verified 2026-10-19) |
 | **Dead `sandbox_*` helpers** (2026-10-14): `app/config/watcher.py` defines `sandbox_timeout_ms` / `sandbox_memory_bytes` / `sandbox_allowed_imports` reading `indicators.sandbox.*` keys — copied from the indicators watcher; analysis consumes only the `analysis` namespace | Dead code; only `tests/test_analysis_servicer.py` references the first two | `app/config/watcher.py#sandbox_timeout_ms` (~L150), `#sandbox_memory_bytes` (~L154), `#sandbox_allowed_imports` (~L158) |
 | **Possible `ValueError` escape from `PnLPatternConsumer._compose`** (unverified, 2026-10-14): `owner_metadata(owner)` is called outside any `try`; if a ledger order event ever carried `user_id == "system"` the `ValueError` would escape a function documented as "never raising out of here (FR-6)" | Breaks the partial-snapshot guarantee | `app/engine/pnl_pattern_consumer.py#_compose` (~L360; `owner_metadata(owner)` ~L367) |
-| **Boot recompute task is unreferenced** (found 2026-10-19, low): `asyncio.get_event_loop().create_task(_boot_recompute())` keeps no reference, so the task can be garbage-collected mid-run (same shape as the other loops' `create_task` calls) | A one-shot recompute of ambiguous score pairs may silently not complete | `app/main.py#_boot_recompute` (~L136; `create_task` ~L143) |
+| **Boot recompute task is unreferenced** (found 2026-10-19, low): `asyncio.get_event_loop().create_task(_boot_recompute())` keeps no reference, so the task can be garbage-collected mid-run (same shape as the other loops' `create_task` calls) | ✗ **REFUTED (2026-10-20, high)**: a Python 3.13 repro collects only a task parked on an otherwise-unreferenced future; every analysis loop (and `_boot_recompute`) awaits an `asyncio.sleep` timer, a grpc.aio call or an asyncpg waiter, all anchored to the event loop. Hygiene only — becomes live if a loop ever awaits a locally-created Event/Queue/Future | `app/main.py#_boot_recompute` (~L136; `create_task` ~L143) |
 
 ## Open questions (unresolved *why* — needs a maintainer)
 
@@ -39,6 +39,22 @@ recorded at the root (they are cross-cutting).
 | What the docs said | Resolution | Evidence |
 |---|---|---|
 | `CLAUDE.md` / constitution Pointers cite `_is_admin` and header-filter sites `:520,556,1932,2429` | **Resolved 2026-10-19** — `rg _is_admin CLAUDE.md` = 0; the constitution Pointers row cites `_has_admin_scope` and the re-stamped filter sites | `app/handlers/servicer.py#_has_admin_scope` (~L628), `#_PROPAGATED_HEADERS` (~L350) |
+
+
+## Filed as defect reports (2026-10-19)
+
+The open rows above were re-verified against `1302e6d` and recorded as `docs/reports/` defects
+(status sidecar `open`) for `/sdd-triage --from-report`. A row stays here until its report is resolved.
+
+| Report | Title |
+|---|---|
+| [`2026-10-19-analysis-claude-md-drift-defect`](../../../docs/reports/2026-10-19-analysis-claude-md-drift-defect.md) | Analysis CLAUDE.md omits the attribution net contract and misstates _bars_fetch_sem scope |
+| [`2026-10-19-analysis-fingerprint-ignores-formula-version-defect`](../../../docs/reports/2026-10-19-analysis-fingerprint-ignores-formula-version-defect.md) | Evidence fingerprint ignores referenced formula content |
+| [`2026-10-19-analysis-fundsignal-neutral-score-fabricated-defect`](../../../docs/reports/2026-10-19-analysis-fundsignal-neutral-score-fabricated-defect.md) | Fundamentals producer emits fabricated 0.5 scores for symbols with no data |
+| [`2026-10-19-analysis-live-gate-sql-duplicated-defect`](../../../docs/reports/2026-10-19-analysis-live-gate-sql-duplicated-defect.md) | Entry-backfill re-types the live-enabled gate SQL instead of importing it |
+| [`2026-10-19-analysis-pnl-compose-system-owner-raises-defect`](../../../docs/reports/2026-10-19-analysis-pnl-compose-system-owner-raises-defect.md) | P&L snapshot compose can raise ValueError for a system-owned order event |
+| [`2026-10-19-analysis-screener-no-per-symbol-isolation-defect`](../../../docs/reports/2026-10-19-analysis-screener-no-per-symbol-isolation-defect.md) | ScreenSymbols fails entirely when one symbol raises a non-RpcError |
+| [`2026-10-19-orphaned-code-defect`](../../../docs/reports/2026-10-19-orphaned-code-defect.md) | Orphaned modules, scripts and dependencies across services |
 
 ---
 _Surfaced by [context-forge](https://github.com/davcs86/agent-plugins). Defects to action, not rules. Re-run `/context-constitution` to refresh._

@@ -51,5 +51,20 @@ findings log; this file holds trading-specific defects.
 - **Resolved 2026-10-19** — `order.approved` listed as emitted: `CLAUDE.md#Ledger Events Emitted` (~L148) now reads "Documented, not yet implemented — no emit site / Approve RPC exists yet". Code unchanged (rg `"order.approved"`/`ApproveOrder` in `services/xstockstrat-trading` outside docs: zero; approval still dead-ends at `PENDING_APPROVAL` + `order.approval_requested`, `trading.go#submitOrder` ~L566,655).
 - **Resolved 2026-10-19** — `platform.ledger_endpoint` documented as a config key: rg `ledger_endpoint` in `services/xstockstrat-trading/CLAUDE.md` = 0; the address comes only from `LEDGER_ENDPOINT` env (`internal/config/config.go#LedgerEndpoint` ~L41).
 
+
+## Filed as defect reports (2026-10-19)
+
+The open rows above were re-verified against `1302e6d` and recorded as `docs/reports/` defects
+(status sidecar `open`) for `/sdd-triage --from-report`. A row stays here until its report is resolved.
+
+| Report | Title |
+|---|---|
+| [`2026-10-19-dead-config-keys-defect`](../../../docs/reports/2026-10-19-dead-config-keys-defect.md) | Documented config keys that no code reads (ledger, notify, trading, marketdata, ingest) |
+| [`2026-10-19-trading-claude-md-drift-defect`](../../../docs/reports/2026-10-19-trading-claude-md-drift-defect.md) | trading CLAUDE.md drift (approval runbook, ledger events, halt resume, retry scope) plus a portfolio cross-cite |
+| [`2026-10-19-trading-config-accessor-type-mismatch-defect`](../../../docs/reports/2026-10-19-trading-config-accessor-type-mismatch-defect.md) | trading reads int-documented config keys with GetFloat (and the same key with both accessors) |
+| [`2026-10-19-trading-ibkr-oauth-signature-omits-query-defect`](../../../docs/reports/2026-10-19-trading-ibkr-oauth-signature-omits-query-defect.md) | IBKR OAuth signature base omits query parameters on GET requests |
+| [`2026-10-19-trading-ibkr-timeout-hardcoded-defect`](../../../docs/reports/2026-10-19-trading-ibkr-timeout-hardcoded-defect.md) | IBKR broker client ignores trading.broker.timeout_ms (hardcoded 10s) |
+| [`2026-10-19-trading-requires-approval-always-false-defect`](../../../docs/reports/2026-10-19-trading-requires-approval-always-false-defect.md) | trading.orders.requires_approval is always persisted false |
+
 ---
 _Surfaced by [context-forge](https://github.com/davcs86/agent-plugins). Defects to action, not rules. Re-run `/context-constitution` to refresh._

@@ -30,5 +30,16 @@ Defects and drift surfaced by `/context-constitution` on 2026-07-24; refreshed 2
 - `ConditionEval.fn` and `OrderSnapshot.side` (closed sets) are strings again after `portfolio` moved to enums — status: **open**
 - `packages/proto/CLAUDE.md` does not mention the feature-224 admin-selector convention (PROTO-10).
 
+
+## Filed as defect reports (2026-10-19)
+
+The open rows above were re-verified against `1302e6d` and recorded as `docs/reports/` defects
+(status sidecar `open`) for `/sdd-triage --from-report`. A row stays here until its report is resolved.
+
+| Report | Title |
+|---|---|
+| [`2026-10-19-proto-contract-hygiene-defect`](../../../docs/reports/2026-10-19-proto-contract-hygiene-defect.md) | Proto contract hygiene drift — stalled timeframe migration, orphaned types, closed-set strings, mislabelled user_id |
+| [`2026-10-19-trading-listorders-body-user-id-filter-defect`](../../../docs/reports/2026-10-19-trading-listorders-body-user-id-filter-defect.md) | Trading ListOrders/StreamOrderUpdates trust a body user_id filter where empty means all users |
+
 ---
 _Surfaced by [context-forge](https://github.com/davcs86/agent-plugins). Defects to action, not rules. Re-run `/context-constitution` to refresh._

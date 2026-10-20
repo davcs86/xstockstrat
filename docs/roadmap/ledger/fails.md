@@ -2921,6 +2921,18 @@ ambiguity is logged here).
 - **Evidence**: `git show 09ec8d9a:docs/roadmap/features/219-config-ui-usability/design.md:94-98,101-104`.
 - **Rule it implies**: When a feature adds the first caller of a shared-shell branch (non-link crumb, dynamic child route), read the component's fallthrough and add an e2e assertion on `aria-current`.
 
+### 2026-10-19 — fix-after-hours-positions-priced — assumption
+- **Mistake**: Five valuation sites averaged `(ask + bid) / 2` and guarded only the *sum* (or nothing). After the close
+  the IEX quote goes one-sided (one side 0), so positions, persisted equity snapshots, concentration and the EDGAR price
+  overlay all read at about half value, unnoticed since at least 2026-09. Trading's sizing path already handled
+  one-sided quotes, but nobody checked the other consumers against it. The lone surviving side is not a usable
+  fallback either: on staging it was 6–11% stale, while the stored 1d close matched the broker.
+- **Evidence**: `docs/reports/2026-10-19-after-hours-one-sided-quote-half-price-defect.md`;
+  `docs/roadmap/features/231-fix-after-hours-positions-priced/{design.md,context.md}`.
+- **Rule it implies**: Never derive a price from a quote without requiring both sides > 0; own the valuation mark in
+  one service. A staleness or data-age window that decides *whether* something is valued is policy, so it is a config
+  key, not a code invariant (F-07; same ruling as feature 071).
+
 ### 2026-10-20 — offline-account-full-pnl — assumption
 - **Mistake**: Two design rounds treated code paths as live without tracing them from the RPC registration.
   - Round 4 listed `TradingService.StreamOrderUpdates` as a response site that needed masking. No live

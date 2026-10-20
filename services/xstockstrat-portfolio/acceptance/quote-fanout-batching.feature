@@ -8,13 +8,14 @@ Feature: xstockstrat-portfolio — batched quote enrichment and watchlist bindin
   one item at a time, and a symbol with no quote keeps the same missing/neutral outcome the serial
   path produced (null-not-zero discipline).
 
+  # Narrowed by feature 231 (@AC-1 @feature-231): a one-sided quote is priced from mark_price, never averaged with 0.
   @AC-1 @FR-1 @FR-4 @feature-178
   Scenario: Position enrichment uses one batched quote call
     Given a portfolio with 30 open positions
     When ListPositions enriches those positions with latest quotes
     Then exactly one GetLatestQuotes call is made for the 30 symbols
     And no per-position GetLatestQuote call is made
-    And each position's enriched price equals the value the serial path produced
+    And each position whose quote is two-sided gets the same enriched price the serial path produced
 
   @AC-2 @FR-2 @FR-4 @feature-178
   Scenario: Watchlist bindings resolve in one query
