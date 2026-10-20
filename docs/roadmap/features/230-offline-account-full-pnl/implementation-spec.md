@@ -1369,7 +1369,7 @@ The last check fails if a scenario price is inlined in the new test's rows inste
 
 ### Step 21 — service: portfolio account-level P&L on GetPortfolio and ListPortfolios
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_service.go` — modify

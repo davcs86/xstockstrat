@@ -528,24 +528,6 @@ func (r *PortfolioRepo) GetOfflineStates(ctx context.Context, userID string, acc
 	return out, nil
 }
 
-// GetOfflineRealized returns an offline account's realized P&L. The bool is false (not an error)
-// when no row exists — a broker account, or an offline account with no confirmed orders yet.
-func (r *PortfolioRepo) GetOfflineRealized(ctx context.Context, accountID string) (float64, bool, error) {
-	if accountID == "" {
-		return 0, false, nil
-	}
-	const q = `SELECT realized_pnl FROM portfolio.offline_account_realized WHERE account_id=$1`
-	var v float64
-	err := r.db.QueryRow(ctx, q, accountID).Scan(&v)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return 0, false, nil
-		}
-		return 0, false, fmt.Errorf("get offline realized: %w", err)
-	}
-	return v, true, nil
-}
-
 // DeleteOfflineRealized removes an offline account's realized row.
 func (r *PortfolioRepo) DeleteOfflineRealized(ctx context.Context, accountID string) error {
 	_, err := r.pool.Exec(ctx, `DELETE FROM portfolio.offline_account_realized WHERE account_id=$1`, accountID)

@@ -30,6 +30,15 @@ type readValuation struct {
 	accounts map[string]accountVal
 }
 
+// state is the caller's offline state for an account; nil when it has none (a broker or brand-new account).
+func (v readValuation) state(accountID string) *repository.OfflineState {
+	st, ok := v.states[accountID]
+	if !ok {
+		return nil
+	}
+	return &st
+}
+
 // closeBar is a daily close keyed by its session date (00:00 America/New_York).
 type closeBar struct {
 	date  time.Time

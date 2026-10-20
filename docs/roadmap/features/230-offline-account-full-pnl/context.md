@@ -827,3 +827,35 @@
   equivalent check, I ran the full trading suite with `-race` (green) plus 27 portfolio PnL/fold tests.
 - Files modified: `internal/service/offline_valuation_test.go` (new), `internal/testdata/offline_pnl.go`
   (new), `internal/service/portfolio_service_test.go`, `internal/service/portfolio_helpers_test.go`.
+
+### Step 21 — service: portfolio account-level P&L on GetPortfolio and ListPortfolios [done]
+- `applyAccountPnL(p, positions, bal, st, acct)` holds the per-account rules:
+  - broker: the existing rule, with Total = Σ unrealized and no pct;
+  - offline: NONE positions are excluded from Equity/unrealized; Day = `acct.dayPnl / base`;
+    lifetime = carried + since; Total = lifetime + Σ unrealized(priced); pct = Total / Σ|cost|(priced),
+    0 if empty; the realized/fees optionals are set;
+  - neither: Σ MV / Σ unrealized only.
+- `buildAccountPortfolio` is now a pure function over `applyAccountPnL`.
+- `readValuation.state(id)` returns nil when the account has no user-scoped row.
+- `ListPortfolios`:
+  - single account: `valueRead` with the account as an offline candidate when it has no balance row;
+  - all accounts: **one** `valueRead` over the union (one quote batch, one bars batch), replacing the
+    old `latestQuotesFor` + `applyQuotes` union.
+- `GetPortfolio`:
+  - scope is `[account_id]`, or balances ∪ offline ids ∪ position accounts;
+  - offline candidates are the in-scope ids with no balance row;
+  - a single account → `applyAccountPnL`;
+  - aggregate → Σ day / Σ prior (broker `LastEquity`, offline base), Σ total, pct only when every
+    in-scope account is offline, Equity = Σ MV;
+  - the list lookups are non-fatal (WARN).
+- `GetOfflineRealized` and its 2 tests are deleted; nothing references it any more.
+- Deviation (minor):
+  - What changed: a single-account broker `GetPortfolio` takes its balance from the user-scoped
+    `ListAccountBalancesByUser` row instead of a separate `GetAccountBalance`.
+  - Effect: same data, same user scoping, one fewer query.
+- Orphan cleanup: the `portfolio_quote_deadline_test.go:115` comment now names `GetOfflineStates`. That
+  file is outside the step's list (F-08), but the comment was made stale by this step's deletion.
+- TDD (with Step 22): red was 13 behavioural failures; green: full suite with `-race`.
+- Files modified: `internal/service/portfolio_service.go`, `internal/service/offline_valuation.go`,
+  `internal/repository/portfolio_repo.go`, `internal/repository/offline_realized_test.go`,
+  `internal/service/portfolio_quote_deadline_test.go` (comment).
