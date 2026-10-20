@@ -453,3 +453,13 @@
 - TDD: N/A (generated).
 - Files modified: `packages/proto/gen/**`
 - Deviations: none.
+
+### Step 3 — migration: trading 011 — order fees + snapshot headers [done]
+- `011_offline_fees_snapshot_headers.{up,down}.sql` per design §2.1:
+  - `orders.fees NUMERIC(18,8)`, backfilled to 0 for confirmed offline orders;
+  - the `offline_snapshot_headers` table, its account/as_of index, and header rows backfilled from
+    existing baselines (carry 0).
+- Down drops the table and then the column.
+- Offline check ✓: 011 is next after 010; every ADD/CREATE in up has an inverse in down. No DB started.
+- TDD: N/A (migration).
+- Files modified: the two 011 files. Deviations: none.

@@ -251,7 +251,7 @@ The gen diff must be non-empty, and a second `./scripts/buf-gen.sh` must leave `
 
 ### Step 3 — migration: trading 011 — order fees + snapshot headers
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/migrations/011_offline_fees_snapshot_headers.up.sql` — create
