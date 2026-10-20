@@ -41,6 +41,12 @@ the NOTIFY JSON as a full row.
 - xstockstrat-analysis (live consumer; verify, no change expected)
 - xstockstrat-portfolio (live consumer; verify, no change expected)
 
+## Functional Requirements
+
+FR-1. Every live `StreamEvents` message equals the replay/`QueryEvents`/`GetEvent` form of the same event in every `LedgerEvent` field (`payload`, `occurred_at`, `metadata`, `source_service`, `correlation_id`, `user_id`), for any row size, with or without `stream_key`/`event_type` filters.
+FR-2. A NOTIFY body without `payload` (trim branch, `migrations/001_ledger_events_hypertable.up.sql:72`) is resolved to the full `ledger.events` row by `event_id` before `call.write`; that read borrows and releases the query-pool connection and is never held across `call.write` backpressure, so `AppendEvent` is not starved under ledger `DB_POOL_MAX=1`.
+FR-3. Live delivery keeps ascending `sequence` order and the `maxSeq` dedup (`src/grpc/ledgerServiceImpl.ts:196`, `:210`, `:256`) across a resolved event: each appended event reaches the subscriber exactly once, in order.
+
 ## Fix Scope
 
 - [x] No proto changes anticipated
@@ -48,6 +54,14 @@ the NOTIFY JSON as a full row.
 - [x] No config key changes anticipated
 
 (Update after investigation — remove or replace each item as needed)
+
+## Consumer Surface(s)
+
+None — internal/platform-only. The fix restores the existing `StreamEvents` contract inside xstockstrat-ledger; no
+RPC, proto field, response shape, config key or UI code changes. Values reached through unchanged surfaces become
+correct for events over the trim threshold: `/trader` positions (portfolio's live ledger subscriptions) and
+`/insights` P&L patterns (`services/xstockstrat-ui/src/app/insights/pnl-patterns/page.tsx`, fed by analysis
+`PnLPatternConsumer`). No `xstockstrat-ui` or `xstockstrat-agent` step is required.
 
 ## Acceptance Criteria
 
