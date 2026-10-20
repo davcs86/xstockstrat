@@ -118,6 +118,10 @@ type fakeBaselineStore struct {
 	deleteCalls []string
 	deleteErr   error
 
+	// snapshot headers — written by UpsertBaselineSnapshot, read by EffectiveBaselineByAccount when set
+	headers map[string]*fakeSnapshotHeader
+	seq     int
+
 	// unconfirmed orders warning — returned by HasUnconfirmedOfflineOrders
 	hasUnconfirmed    bool
 	hasUnconfirmedErr error
@@ -132,7 +136,20 @@ type upsertBaselineCall struct {
 	rows             []repository.BaselineRow
 }
 
-func (f *fakeBaselineStore) UpsertBaselineSnapshot(_ context.Context, accountID, clientSnapshotID string, asOf time.Time, rows []repository.BaselineRow, _ repository.CarryFunc) error {
+// fakeSnapshotHeader is the fake's trading.offline_snapshot_headers row; seq stands in for created_at.
+type fakeSnapshotHeader struct {
+	hdr repository.SnapshotHeader
+	seq int
+}
+
+func fakeHeaderAfter(a, b *fakeSnapshotHeader) bool {
+	return a.hdr.AsOf.After(b.hdr.AsOf) || (a.hdr.AsOf.Equal(b.hdr.AsOf) && a.seq > b.seq)
+}
+
+// UpsertBaselineSnapshot mirrors the repo's header rules (keep carry on same id + as_of, reject a
+// non-latest/backwards as_of change, pred excludes its own id); the repo's tx SQL is proven by
+// SQL-shape review only.
+func (f *fakeBaselineStore) UpsertBaselineSnapshot(_ context.Context, accountID, clientSnapshotID string, asOf time.Time, rows []repository.BaselineRow, carry repository.CarryFunc) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.upsertCalls = append(f.upsertCalls, upsertBaselineCall{
@@ -141,16 +158,69 @@ func (f *fakeBaselineStore) UpsertBaselineSnapshot(_ context.Context, accountID,
 	if f.upsertErr != nil {
 		return f.upsertErr
 	}
-	// After upsert, update the in-memory baseline state for the next EffectiveBaselineByAccount call
-	// (simulates the DB replace-in-tx semantics: the upserted rows become the effective baseline).
-	f.baselineAsOf = asOf
-	f.hasBaseline = len(rows) > 0
-	f.baselineLots = make(map[string]pnl.Lot, len(rows))
+	if f.headers == nil {
+		f.headers = make(map[string]*fakeSnapshotHeader)
+	}
+
+	var latest *fakeSnapshotHeader
+	for _, h := range f.headers {
+		if latest == nil || fakeHeaderAfter(h, latest) {
+			latest = h
+		}
+	}
+	own := f.headers[clientSnapshotID]
+	var realized, fees float64
+	if own != nil && own.hdr.AsOf.Equal(asOf) {
+		realized, fees = own.hdr.RealizedCarried, own.hdr.FeesCarried
+	} else {
+		if own != nil {
+			if latest != own {
+				return repository.ErrSnapshotAsOfConflict
+			}
+			for id, h := range f.headers {
+				if id != clientSnapshotID && h.hdr.AsOf.After(asOf) {
+					return repository.ErrSnapshotAsOfConflict
+				}
+			}
+		}
+		var pred *fakeSnapshotHeader
+		for id, h := range f.headers {
+			if id == clientSnapshotID || !h.hdr.AsOf.Before(asOf) {
+				continue
+			}
+			if pred == nil || fakeHeaderAfter(h, pred) {
+				pred = h
+			}
+		}
+		if carry != nil {
+			var predHdr *repository.SnapshotHeader
+			if pred != nil {
+				p := pred.hdr
+				predHdr = &p
+			}
+			var err error
+			if realized, fees, err = carry(predHdr, asOf); err != nil {
+				return err
+			}
+		}
+	}
+
+	lots := make(map[string]pnl.Lot, len(rows))
 	for _, r := range rows {
 		if r.Qty == 0 {
 			continue // drop qty=0 — mirrors EffectiveBaselineByAccount's AC-8/AC-15 behavior
 		}
-		f.baselineLots[r.Symbol] = pnl.Lot{Qty: r.Qty, CostBasis: r.Qty * r.AvgCostPerShare}
+		lots[r.Symbol] = pnl.Lot{Qty: r.Qty, CostBasis: r.Qty * r.AvgCostPerShare}
+	}
+	h := own
+	if h == nil {
+		f.seq++
+		h = &fakeSnapshotHeader{seq: f.seq}
+		f.headers[clientSnapshotID] = h
+	}
+	h.hdr = repository.SnapshotHeader{
+		ClientSnapshotID: clientSnapshotID, AsOf: asOf,
+		RealizedCarried: realized, FeesCarried: fees, Lots: lots,
 	}
 	return nil
 }
@@ -160,6 +230,20 @@ func (f *fakeBaselineStore) EffectiveBaselineByAccount(_ context.Context, _ stri
 	defer f.mu.Unlock()
 	if f.baselineErr != nil {
 		return repository.SnapshotHeader{}, false, f.baselineErr
+	}
+	var latest *fakeSnapshotHeader
+	for _, h := range f.headers {
+		if latest == nil || fakeHeaderAfter(h, latest) {
+			latest = h
+		}
+	}
+	if latest != nil {
+		hdr := latest.hdr
+		hdr.Lots = make(map[string]pnl.Lot, len(latest.hdr.Lots))
+		for k, v := range latest.hdr.Lots {
+			hdr.Lots[k] = v
+		}
+		return hdr, true, nil
 	}
 	if !f.hasBaseline {
 		return repository.SnapshotHeader{}, false, nil
@@ -182,6 +266,7 @@ func (f *fakeBaselineStore) DeleteBaselinesByAccount(_ context.Context, accountI
 	// Clear the in-memory baseline (simulates the DELETE).
 	f.hasBaseline = false
 	f.baselineLots = nil
+	f.headers = nil
 	return nil
 }
 

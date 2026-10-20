@@ -524,3 +524,27 @@
 - Files modified: `internal/repository/offline_baseline_repo.go`, `internal/service/trading.go`,
   `internal/service/trading_offline_test.go` (signatures only).
 - Deviations: none.
+
+### Step 8 — test: trading baseline repo — header read + fake update [done]
+- Added `offline_baseline_repo_test.go` `TestEffectiveBaseline_HeaderThenRows` with 3 subtests:
+  - header carry plus `qty=0` dropped;
+  - header without rows = full flatten, `ok=true`;
+  - no header = `ok=false`.
+- The comment there records that the upsert/purge tx SQL is proven by SQL-shape review only.
+- `fakeBaselineStore` now models headers:
+  - map + seq standing in for `created_at`;
+  - keeps the carry on same id + same `as_of`;
+  - `ErrSnapshotAsOfConflict` on a non-latest or backwards change;
+  - `pred` excludes its own id;
+  - invokes `carry`;
+  - `EffectiveBaselineByAccount` prefers the latest header; `DeleteBaselinesByAccount` clears headers.
+- Behaviour note: in the fake, an empty-rows upsert is now a full flatten (`ok=true`), matching the
+  repo. No existing service test depended on the old `hasBaseline=len(rows)>0`; the full service
+  suite is green.
+- Verification:
+  - targeted repo test ✓;
+  - `go vet` ✓;
+  - `golangci-lint` 0 issues.
+- Files modified: `internal/repository/offline_baseline_repo_test.go` (new),
+  `internal/service/trading_offline_test.go`.
+- Deviations: none.

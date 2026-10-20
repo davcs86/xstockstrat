@@ -529,7 +529,7 @@ The existing snapshot and recompute tests must stay green after the mechanical a
 
 ### Step 8 — test: trading baseline repo — header read + fake update
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/repository/offline_baseline_repo_test.go` — create
