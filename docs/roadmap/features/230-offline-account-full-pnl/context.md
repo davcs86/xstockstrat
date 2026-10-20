@@ -473,3 +473,15 @@
 - Offline check ✓: 017 is next after 016; 4 ADD ↔ 4 DROP. No DB started.
 - TDD: N/A (migration).
 - Files modified: the two 017 files. Deviations: none.
+
+### Step 5 — service: trading repo — persist/read `fees`; dedupe confirmed offline orders [done]
+- `UpsertOrder` writes `fees` as `$23` straight from `*float64`: nil → NULL, 0 → 0, no `nullableFloat`.
+  The conflict update gains `fees = EXCLUDED.fees`.
+- `intentLateralJoinSQL` became `intentLateralJoinOn(alias)`, used by every reader. `scanOrder` reads a
+  nullable `fees`, and all 4 SELECTs add it.
+- `ListConfirmedOfflineOrdersByAccount` now picks the latest row per order (`DISTINCT ON (order_id)`)
+  **before** the status filter (R5). `testdata.OrderRowColumns`/`NewOrderRow` gain `fees`.
+- TDD (with Step 6), red: 6 tests failed for the right reasons (SQL had no `fees`; no `DISTINCT ON`;
+  fixture had no `fees` column) → green: all passed.
+- Files modified: `internal/repository/trading_repo.go`, `internal/testdata/order_rows.go`.
+- Deviations: none.

@@ -353,7 +353,7 @@ Read both files and confirm the four `ADD COLUMN`s map to four `DROP COLUMN`s. N
 
 ### Step 5 — service: trading repo — persist/read `fees`; dedupe confirmed offline orders
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/repository/trading_repo.go` — modify
