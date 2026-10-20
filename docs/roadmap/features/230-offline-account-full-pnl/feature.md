@@ -15,6 +15,7 @@
 | 2026-10-20 | `spec-ready` → `design-approved` | /sdd-design | Design debated (5 rounds, full) and approved; recon.md + design.md written |
 | 2026-10-20 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 28 steps (re-anchored on main-dev post-231; operator decision D-1 gates Step 19) |
 | 2026-10-20 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential mode on `feature/offline-account-full-pnl`; Step 1 done |
+| 2026-10-20 | `in-progress` → `code-completed` | /sdd-execute | All 28 steps done and pushed (sequential); merge-order gate clear (231 resolved); integration PR to `main-dev` next |
 
 ---
 
@@ -55,5 +56,6 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review offline-account-full-pnl impl-spec` (operator decision D-1 recorded 2026-10-20) — validate implementation spec,
-then `/sdd-execute offline-account-full-pnl`
+Integration PR `feature/offline-account-full-pnl` → `main-dev` (squash). At launch, promote the `@AC-*`
+scenarios into the durable suites (C-16, operator-confirmed), including the signed CHANGEs to 157 @AC-13,
+159 @AC-2/@AC-4, 163 @AC-6, 178 @AC-1/@AC-4, 229 @AC-1 and 231 @AC-6/@AC-14 (offline positions only).
