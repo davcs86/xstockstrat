@@ -3,7 +3,7 @@ Feature: fix-otel-metrics-logs-gap (bug fix)
   no service exports OTel metrics or logs, so the Grafana alerts and dashboards read nothing.
   Scenarios state the invariant, not the mechanism; fix direction is narrow-to-traces (product-spec.md Expected).
 
-  @AC-1 @regression
+  @AC-1 @FR-1 @FR-3 @regression
   Scenario: Every alert rule queries a metric series or log stream that some workload produces
     Given the provisioned alert rules in packages/otel/alerts/alert-rules.yaml
     And the produced-signal set: the metric names and log streams exported by the 12 runtimes or the collector, plus the metric names a documented Grafana-side span-metrics path derives from exported traces
@@ -11,7 +11,7 @@ Feature: fix-otel-metrics-logs-gap (bug fix)
     Then every PromQL metric name the rule queries, including "rpc_server_duration_milliseconds_count" and "rpc_server_duration_milliseconds_bucket" if still present, is in the produced set
     And every LogQL stream selector the rule queries, including {service_name="analysis"} of "xstk-analysis-no-scoring" if still present, matches a log stream in the produced set
 
-  @AC-2 @regression
+  @AC-2 @FR-2 @FR-3 @regression
   Scenario: Every dashboard query targets a metric series or log stream that some workload produces
     Given the dashboards in packages/otel/dashboards/
     And the same produced-signal set as AC-1
@@ -19,8 +19,10 @@ Feature: fix-otel-metrics-logs-gap (bug fix)
     Then no query references a PromQL metric name outside the produced set
     And every LogQL stream selector, including those of the LogQL panels in signal-pipeline-throughput.json, infrastructure.json, service-health.json and trading-service.json if still present, matches a log stream in the produced set
 
-  @AC-3 @regression
-  Scenario: The setup docs list only the signals actually exported
-    Given docs/setup/grafana-cloud.md
-    When it states which OTLP signals each workload emits
-    Then each listed signal (traces, metrics, logs) has an exporter in every runtime's telemetry module, or the claim is scoped to the workloads that have one
+  @AC-3 @FR-4 @regression
+  Scenario: The observability docs list only the signals actually exported
+    Given docs/setup/grafana-cloud.md, docs/patterns/observability.md, packages/otel/dashboards/README.md and packages/otel/docs/context-constitution.md
+    When each states which OTLP signals the workloads emit, or which series the provisioned alerts and dashboards read
+    Then each signal type it says a workload emits (traces, metrics, logs) has an exporter in every runtime's telemetry module, or the claim is scoped to the workloads that have one
+    And each metric series or log stream it says an alert or dashboard reads is in the produced-signal set of AC-1
+    And docs/setup/grafana-cloud.md does not state that every workload "emits traces, metrics, and logs via OTLP" while no runtime exports metrics or logs

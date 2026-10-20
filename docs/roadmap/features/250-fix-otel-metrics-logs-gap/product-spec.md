@@ -27,6 +27,8 @@ either backend that the provisioned alerts and dashboards read:
   (`packages/otel/otel-collector-config.yaml:84-87`), and `.do/` declares no `log_destinations`. The alert and the 9
   panels evaluate against no data, so none can detect a scoring stall, error spike or pipeline failure.
 
+The on-call operator who relies on these alerts and dashboards gets no page and no signal for any of these failures.
+
 `docs/setup/grafana-cloud.md:3` claims every workload "emits traces, metrics, and logs via OTLP", and `:21-24` lists
 Metrics and Logs as signal types sent.
 
@@ -54,6 +56,31 @@ Distinct root cause from the trace-export defect.
 - docs (`docs/setup/grafana-cloud.md`, `docs/patterns/observability.md`)
 
 No `xstockstrat-*` runtime is affected: runtime metric/log export (fix (b), `context.md`) is out of scope (see Out of Scope).
+
+## Functional Requirements
+
+"Produced" means exported by a runtime today (traces only, feature 226), or derived from exported traces by a
+Grafana-side span-metrics path that is shown to exist for the stack.
+
+- **FR-1** — No alert rule in `packages/otel/alerts/alert-rules.yaml` queries a PromQL metric series that nothing
+  produces. Today `xstk-error-rate-high` and `xstk-p99-latency-high` query `rpc_server_duration_milliseconds_count` /
+  `_bucket` (`:44-45`, `:88`).
+- **FR-2** — No dashboard panel expr or template-variable query in `packages/otel/dashboards/*.json` references a
+  PromQL metric series that nothing produces. Today: 9 panel exprs plus the `$service` variable
+  (`service-health.json:47`) reference `rpc_server_duration_milliseconds_*`.
+- **FR-3** — No alert rule or dashboard panel queries a Loki log stream that nothing produces. Today:
+  `xstk-analysis-no-scoring` (`alert-rules.yaml:129-134`) and the 9 LogQL panel exprs listed in Problem Statement.
+- **FR-4** — The observability docs state only the signals actually exported, and only the series the provisioned
+  alerts and dashboards actually read: `docs/setup/grafana-cloud.md` (`:3`, `:21-24`, `:220-223`, `:233`),
+  `docs/patterns/observability.md:3`, `packages/otel/dashboards/README.md:30-38`, and
+  `packages/otel/docs/context-constitution.md` OTEL-2.
+
+## Consumer Surface(s)
+
+None — internal/platform-only. The change edits operator observability assets (Grafana alert rules, dashboards) and
+setup docs under `packages/otel/` and `docs/`. No UI segment (`/trader`, `/insights`, `/config-ui`) and no Agent MCP
+tool changes, and no RPC, response field, computed value or stored state changes. The only observer is the operator
+in Grafana.
 
 ## Fix Scope
 
