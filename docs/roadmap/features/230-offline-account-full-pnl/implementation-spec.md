@@ -407,7 +407,7 @@ Read both files and confirm the four `ADD COLUMN`s map to four `DROP COLUMN`s. N
 
 ### Step 6 — test: trading repo fees round-trip and dedupe
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/repository/trading_repo_test.go` — modify

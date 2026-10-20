@@ -485,3 +485,17 @@
   fixture had no `fees` column) → green: all passed.
 - Files modified: `internal/repository/trading_repo.go`, `internal/testdata/order_rows.go`.
 - Deviations: none.
+
+### Step 6 — test: trading repo fees round-trip and dedupe [done]
+- Added `TestUpsertOrder_PersistsFeesPresence` (typed-nil → NULL, explicit 0 → 0),
+  `TestScanOrder_FeesNullVsZero` (AC-18 repo half) and
+  `TestListConfirmedOfflineOrdersByAccount_DistinctOnBeforeFilter` (SQL-shape proof only).
+- The 3 existing SELECT regexes now require `filled_at, fees, li.state`. Comments renamed to
+  `intentLateralJoinOn`.
+- Verification:
+  - targeted ✓;
+  - full suite with `-race` ✓, total 72.6% (≥ 40%);
+  - `golangci-lint` v2.14.0 0 issues. Lint had to be rebuilt with go1.27: a go1.26 build refuses the
+    module's 1.27 target.
+- Files modified: `internal/repository/trading_repo_test.go`.
+- Deviations: none.
