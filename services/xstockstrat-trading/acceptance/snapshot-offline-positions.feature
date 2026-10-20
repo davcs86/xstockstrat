@@ -5,6 +5,9 @@ Feature: snapshot-offline-positions (trading)
   Covers SnapshotOfflinePositions RPC semantics: idempotent re-submission, partial-reject,
   zero-qty flatten, broker-account rejection, and unconfirmed-order warning.
 
+  # Narrowed by feature 240 (C-16, operator sign-off 2026-10-19): a re-submit that changes as_of on a non-latest
+  # snapshot is FAILED_PRECONDITION; an all-rejected re-submit is a no-op; an empty list records a full flatten
+  # (see @AC-42, @AC-43, @AC-44 @feature-240).
   @AC-6 @FR-3 @feature-163
   Scenario: Re-submitting the same client_snapshot_id replaces that snapshot's rows, never stacks
     Given account "acc-1" has a baseline created with client_snapshot_id "22222222-2222-5222-8222-222222222222" holding AAPL qty 100 @ 150.00
