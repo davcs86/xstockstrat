@@ -1070,3 +1070,23 @@
 - The spec branch `ccr-cd56ff4d-s5wkbb` (PR #1255) still carries the old `230-` directory and is
   renumbered there separately.
 - Verification: `go vet` ✓ for trading / portfolio / marketdata; `ruff check` ✓ for the agent.
+
+## Session 2026-10-20 — staging smoke: offline realized upsert fails under PgBouncer (fix)
+
+- Smoke on staging deployment `942f5f8d` found Day P&L for a same-session buy using the previous close
+  (−19.65 instead of +10.25).
+- Root cause: `UpsertOfflineRealized` bound `recent_fills` as `[]byte`. Under `DB_PGBOUNCER`
+  (`QueryExecModeExec`) that binds as bytea, so every offline recompute since the 07:50 deploy failed with
+  SQLSTATE 22P02. The whole state write was lost (realized, fees, carry, fills), not only the fills.
+- This is the same scar as `marketdata_repo.go` (fundamentals `extra_metrics`). pgxmock cannot model the
+  exec mode, and both tests pinned `[]byte`, which is why CI passed.
+- Fix:
+  - bind the JSON as text and cast `$8::jsonb` (UPDATE uses `EXCLUDED.recent_fills`);
+  - change both tests to expect the string bind.
+- Data repair: rows refresh only on the next recompute per account, so affected offline accounts need
+  one idempotent re-confirm after deploy.
+- Out of scope, reported to the operator:
+  - agent auto nonce `agent-<uuid>` vs trading's uuid column (pre-existing);
+  - PSKY bars stale since 2026-10-05.
+- Verification: RED before fix (regex `$8::jsonb` unmatched); then `go vet` ✓, `go test ./...` ✓ and
+  `golangci-lint` ✓ (portfolio).
