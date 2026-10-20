@@ -859,3 +859,32 @@
 - Files modified: `internal/service/portfolio_service.go`, `internal/service/offline_valuation.go`,
   `internal/repository/portfolio_repo.go`, `internal/repository/offline_realized_test.go`,
   `internal/service/portfolio_quote_deadline_test.go` (comment).
+
+### Step 22 — test: portfolio account-level figures + FR-9 parity [done]
+- New `offline_account_pnl_test.go`:
+  - `acctScenario` harness with `getPortfolioAcc` / `listPortfoliosAcc` / `bothReads`;
+  - AC-1 (both reads), AC-3, AC-34 (flat, both reads), AC-38, AC-51, AC-4 (both reads), AC-6 (flat,
+    both reads);
+  - fees gross/lifetime;
+  - 6a: an offline-state error is non-fatal (WARN; marked; day 0);
+  - AC-25, AC-13;
+  - AC-27 row 2 (`ListPortfolios` all accounts, quote error → LAST_CLOSE 158 ≤ 3000ms, exactly 1 quote
+    + 1 bars batch);
+  - AC-28 (`GetPnL` UNAVAILABLE, 0 bars calls);
+  - background paths make 0 bars calls;
+  - AC-29 (6-read parity: 163/300/1300 and day 300 / total 1300);
+  - AC-39 (alp-1 120/.0120/500 with no pct; acc-1 400/1400/.0933; aggregate 520/.0200/1900 with no
+    pct);
+  - AC-52 both rows (`GetOfflineStates` bound to `u-1`, `ExpectationsWereMet`).
+- Deviation (F-08):
+  - What changed: `portfolio_mark_test.go` (`TestAC13_ReadPathParity`) gains 2 mock expectations, the
+    caller's account-universe reads that an all-accounts `GetPortfolio` now makes per Step 21
+    instruction 4.
+  - Its parity assertions are unchanged. The spec's "stays green unchanged" could not hold together
+    with instruction 4 under pgxmock's consume-once expectations.
+- Verification:
+  - full `-race` (service + repository) ✓;
+  - total 67.2%;
+  - `golangci-lint` 0 issues.
+- Files modified: `internal/service/offline_account_pnl_test.go` (new),
+  `internal/service/portfolio_mark_test.go`.

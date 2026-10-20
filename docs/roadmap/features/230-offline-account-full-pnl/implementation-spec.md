@@ -1449,7 +1449,7 @@ The last check fails if a scenario price is inlined in the new test's rows inste
 
 ### Step 22 — test: portfolio account-level figures + FR-9 parity
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/offline_account_pnl_test.go` — create
