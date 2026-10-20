@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-10-20 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-19-config-audit-author-caller-spoofable-defect.md` |
+| 2026-10-20 | `draft` → `spec-ready` | /sdd-review | Product spec approved (9 warnings) |
 
 ---
 
@@ -47,4 +48,4 @@ attribute a write to someone else. The MCP `set_config` tool passes `author` str
 
 ## Next Action
 
-`/sdd-design fix-config-audit-author-spoof` — recommended design depth (full) from triage; see context.md
+`/sdd-design fix-config-audit-author-spoof` (full — operator: no quick designs)
