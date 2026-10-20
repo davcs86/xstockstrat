@@ -4,7 +4,7 @@
 **Severity**: SEV-3
 **Impact type**: orphaned-secret-rows
 **Environment**: dev (main-dev) @ 1302e6d
-**Affected service(s)**: xstockstrat-agent, xstockstrat-config, xstockstrat-ingest
+**Affected service(s)**: xstockstrat-agent, xstockstrat-config, xstockstrat-ingest, xstockstrat-ui (`src/app/config-ui/hooks/useSignalSourceMutations.ts`, same secret-first flow)
 **Config-only fix possible**: no
 **Source**: `services/xstockstrat-agent/docs/context-constitution-findings.md` § Open questions, `manage_signal_source` bearer-token orchestration
 
@@ -17,7 +17,10 @@ secret row (redacted on read, but ciphertext persists indefinitely, unreferenced
 
 ## Expected
 Either a compensating cleanup of the just-written secret on a failed register, or an explicit
-maintainer ruling that orphans are an accepted trade-off plus a sweep.
+maintainer ruling that orphans are an accepted trade-off plus a sweep. `config.proto` exposes no
+delete RPC (only WatchConfig, GetConfig, SetConfig, ListKeys, GetSecret), so a compensating delete
+needs a new config RPC; otherwise the only remedy is a sweep of `ingest.mcp_credential.*` keys that
+no source's `credentials_ref` references.
 
 ## Reproduction
 1. Call `manage_signal_source` `register` with `source_type=mcp_client`, a `bearer_token`, and a slug that already exists (ingest rejects).
@@ -41,7 +44,12 @@ maintainer ruling that orphans are an accepted trade-off plus a sweep.
 
 ## Root cause hypothesis
 No two-phase write across config and ingest; secret-first ordering was chosen so a source never
-references a missing secret, accepting orphans without cleanup. May be intentional — needs ruling.
+references a missing secret, accepting orphans without cleanup. Intentional and documented
+(`tools.py:344` docstring, from commit a988b1d, feature 224; the UI hook carries the same note).
+What remains open is a maintainer ruling on whether the orphans are acceptable.
 
 ## Confidence
-low
+high. A scratch pytest with mocked clients passed 2/2: for both `manage_signal_source` register
+and `instantiate_template` signal_source, an ingest `ALREADY_EXISTS` failure raised the mapped
+error, two retries wrote two distinct `mcp_credential.<uuid>` secret rows, and no delete was called
+(the client has no config-delete helper).
