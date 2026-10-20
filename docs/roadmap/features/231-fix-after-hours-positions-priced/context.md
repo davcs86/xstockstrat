@@ -416,3 +416,12 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Rollout (operator): after the marketdata deploy, during market hours, run
   `DELETE FROM marketdata.fundamentals WHERE source='edgar'` and record the count (purges EDGAR snapshot rows priced
   at a halved mid); after 16:00 ET, check a one-sided holding on staging values at the stored close.
+
+## Integration — 2026-10-20
+- Merge-order gate: no hard blocker for 231; soft WARN 231 ↔ `230-offline-account-full-pnl` (shared portfolio
+  helpers) recorded in `merge-order.md`.
+- C-16 promotion (scenario-promoter plan; P-04 confirmation taken from the operator's "no checkpoints" instruction,
+  stated in the PR): portfolio suite AC-1,2,3,6,8,9,13,14; marketdata suite AC-4,5,7,10,11,12,15 (AC-1 is portfolio-only
+  — its Then asserts portfolio output; marketdata's side is AC-5/AC-7). Scenarios copied verbatim with `@feature-231`.
+  CHANGE: `quote-fanout-batching.feature` `@AC-1 @feature-178` narrowed to two-sided quotes (signed off in design).
+- Ledger: one insights entry (chokepoint-computed additive field + consumer deploy-skew fallback).
