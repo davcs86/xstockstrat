@@ -130,7 +130,7 @@ Dead sandbox-helper copies in the analysis and ingest watchers (`analysis watche
   `/config-ui`)
 - [x] Config bounds re-checked per FR-6; no new keys
 - [x] Trap-dependent sites keep today's result through explicit clamps (FR-3 inventory)
-- [x] Doc updates for the new semantics: config-key rows in `services/xstockstrat-analysis/CLAUDE.md:472-474,479,488,537`
+- [x] Doc updates for the new semantics: config-key rows in `services/xstockstrat-analysis/CLAUDE.md:472-474,479,488,537`;
   `services/xstockstrat-ingest/CLAUDE.md:124,130,132-133`;
   `services/xstockstrat-indicators/CLAUDE.md:100-103`; `docs/context-constitution.md:59`;
   `docs/context-constitution-findings.md:32` (CF-N10); `services/xstockstrat-analysis/docs/context-constitution.md:37`;
