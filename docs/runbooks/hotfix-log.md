@@ -8,6 +8,20 @@ following the format in `docs/runbooks/bug-triage.md#hotfix-log-format`.
 
 <!-- New entries are prepended below this line, most-recent first -->
 
+## 2026-10-20T02:59:43Z — hotfix/fix-sandbox-overrides-unclamped
+
+- **GitHub issue**: docs/reports/2026-10-19-indicators-sandbox-overrides-unclamped-defect.md (GitHub Issues disabled on this repo)
+- **Severity**: SEV-1
+- **Affected service(s)**: xstockstrat-indicators (caller: xstockstrat-agent `test_formula`)
+- **Root cause**: ExecuteFormula used `timeout_ms_override` / `memory_bytes_override` verbatim (`or` fallback only on 0): any caller could hold a sandbox slot for up to int32 ms (4 calls exhaust `max_concurrent`), and a negative memory override skipped RLIMIT_DATA.
+- **Fix summary**: `_clamp_override()` — a positive override is `min(override, configured)`; `≤ 0` falls back to the configured value.
+- **PR**: _pending_
+- **Platform-lead approver**: _pending_
+- **Back-merge commit**: _pending_
+- **Maintenance mode applied**: no
+- **Status**: in-progress
+
+
 ## 2026-10-02T14:01:51Z — hotfix/fix-opportunity-actions-unimplemented
 
 - **GitHub issue**: docs/reports/2026-10-02-opportunity-actions-unimplemented-defect.md (pruned 2026-10-05; `git show 2ce8de0a:docs/reports/2026-10-02-opportunity-actions-unimplemented-defect.md`) (GitHub Issues disabled on this repo)
