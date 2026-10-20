@@ -20,7 +20,9 @@ Feature: fix-fundsignal-neutral-score (bug fix)
 
   @AC-2 @FR-2 @regression
   Scenario: A metric reported as zero is scored, not treated as absent
-    Given "ZRO" has pe_ratio 20.0 and roe 0.0
+    Given analysis.fundsignal.universe_source is "explicit" with explicit_symbols "ZRO"
+    And "ZRO" has pe_ratio 20.0 and roe 0.0
     And "ZRO" lists "pb_ratio", "debt_to_equity" and "eps" in missing_metrics, and not "pe_ratio" or "roe"
-    When the built-in scorer scores "ZRO"
-    Then the "ZRO" score is 0.30 within 1e-9
+    When a non-dry-run fundamentals producer cycle runs
+    Then the ExternalSignal sent to ingest for "ZRO" has conviction 0.30 within 1e-9
+    And the analysis.fundsignal_emitted row for "ZRO" has score 0.30 within 1e-9

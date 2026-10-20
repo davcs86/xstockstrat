@@ -15,6 +15,7 @@
 |---|---|---|---|
 | 2026-10-20 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-19-analysis-fundsignal-neutral-score-fabricated-defect.md` |
 | 2026-10-20 | `draft` → `spec-ready` | /sdd-review | Product spec approved (8 warnings, 3 notes; overlap PASS) |
+| 2026-10-20 | `spec-ready` (unchanged) | /sdd-review | Re-review: PASS WITH WARNINGS (7 warnings, 4 notes; 0 fails, 0 Floor breaches). Overlap WARN (244 read-side, `analysis.fundsignal.min_conviction_to_emit`); no merge-order row. AC-2 re-anchored to emitted surface; residual-signal owner added to Open for Design. |
 
 ---
 

@@ -10,8 +10,8 @@
 ## Problem Statement
 
 **Who is affected.** Traders and agents who act on fundamentals-sourced opportunities
-(`/insights/opportunities`, MCP `list_opportunities`), and the live fundamentals blend strategy, whose
-universe is every symbol carrying a fundamentals-source signal
+(`/insights/opportunities`, MCP `list_opportunities`), operators running `RunFundamentalsScan`, and the
+live fundamentals blend strategy, whose universe is every symbol carrying a fundamentals-source signal
 (`services/xstockstrat-analysis/app/engine/live_loop.py:149-192`).
 
 **Observed.** `_builtin_score` returns `0.5` when no metric is usable
@@ -19,8 +19,8 @@ universe is every symbol carrying a fundamentals-source signal
 is one example. Three things follow:
 
 - The 0.5 enters the cross-sectional quantile mapping (`_map_directions`, `:479`).
-- With the default `analysis.fundsignal.min_conviction_to_emit` of 0.0 (`:240`), the 0.5 is emitted to ingest
-  `IngestSignal` as a real `ExternalSignal` with conviction 0.5.
+- With the default `analysis.fundsignal.min_conviction_to_emit` of 0.0 (read at `:229`, filtered at `:240`),
+  the 0.5 is emitted to ingest `IngestSignal` as a real `ExternalSignal` with conviction 0.5.
 - When most of the universe has no data, `buy_cut` equals 0.5 and every data-less symbol is emitted as `buy`.
 
 Separately, every metric check tests truthiness (`if pe:`, `if f.roe:` …), so a legitimately reported 0
@@ -89,6 +89,11 @@ presence; `missing_metrics` is the existing presence signal.
   empty. Design either extends the FR-1 all-missing skip to this path or names a follow-up feature.
   Durable `@feature-201 @AC-8` (`services/xstockstrat-analysis/acceptance/fundamentals-formula-inputs.feature:47-53`)
   fixes this path's partial-row behaviour and is PRESERVE; an all-missing skip does not change it.
+- **Already-stored fabricated signals (C-14).** The fix stops new ones only. Each stored signal stays live
+  until `valid_until` = run date + `analysis.fundsignal.valid_days` (default 90, read at
+  `fundsignal_loop.py:232`), so it keeps feeding `ListOpportunities`, MCP `list_opportunities` and the blend
+  universe for up to 90 days after ship. Retraction is out of scope here; design names the operator
+  remediation or the follow-up feature that owns it.
 
 ## Acceptance Criteria
 
@@ -98,5 +103,6 @@ fix (Constitution **C-15**). Also, existing tests pass and the affected service 
 ## Out of Scope
 
 - Retracting or repairing fundamentals signals that ingest has already stored with the fabricated 0.5
+  (residual exposure and its owner: Open for Design)
 - Refactoring unrelated to the bug
 - Performance improvements unrelated to the fix

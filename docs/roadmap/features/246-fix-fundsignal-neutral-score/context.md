@@ -78,3 +78,64 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - Standing authorization: designs run in FULL mode only (no quick designs for automated fixes); the orchestrator auto-approves the design gate once rounds >= 2, no unresolved Floor (F-*) breach remains, no blocking objection remains, and every CHANGE to an existing @AC business rule is covered by an operator decision below.
   - Full design depth (operator overrode the triage 'quick' recommendation).
 - Next: `/sdd-design fix-fundsignal-neutral-score` (full).
+
+## Session 2026-10-20 — sdd-review product-spec (re-run)
+
+- Re-review; status stays spec-ready. Criteria: PASS WITH WARNINGS (0 fails, 0 Floor breaches).
+  Overlap: WARN. Reviewer line cites (`acceptance.feature:7/:15/:17`, "no FR section") match the pre-6cc60bf7
+  text, so W1/W2/W4/W5 were already resolved by the prior session.
+- Warnings (spec-reviewer), with disposition:
+  - [C-15] No FR-N / `@FR` tags. Already resolved (FR-1/FR-2; AC-1 `@FR-1`, AC-2 `@FR-2`). Reviewer flags
+    template drift: `.claude/skills/sdd-triage/reference/track-c-sdd.md` C-4/C-4b prescribes no FR section
+    and bare `@AC-1 @regression`, contradicting C-15. Ledger line not written (A4 does not call for one);
+    left for the orchestrator.
+  - Persona. Already resolved; added "operators running `RunFundamentalsScan`".
+  - [C-10/C-16] Formula path scored from wire zeros (`fundsignal_loop.py:447-467`; `score_fundamentals`
+    raises only on `success=False`). Already moved to Open for Design (prior session). Design picks (a) a
+    producer-level all-missing guard ahead of `_score` covering both scorers, or (b) keep built-in only and
+    name a follow-up; the reason to leave the formula path is preserving durable `@feature-201 @AC-8`
+    (`services/xstockstrat-analysis/acceptance/fundamentals-formula-inputs.feature:47-53`), not "already
+    skips". AC-1 Background pins only the built-in path.
+  - [C-15] AC-1 Then on internal quantile cuts. Already resolved (MSFT emitted row, direction buy). The
+    direction Then alone does not separate bug from fix (MSFT ≈0.867 either way); the first two Thens do.
+  - AC-1 MSFT pb/D-E unspecified. Already resolved (listed in `missing_metrics`).
+  - AC-2 unit-level phrasing. Resolved: AC-2 now runs a non-dry-run cycle over explicit universe "ZRO" and
+    asserts the ingest `ExternalSignal` conviction and `analysis.fundsignal_emitted.score` are 0.30 (conviction =
+    score, `fundsignal_loop.py:257-258,533`). Buggy code yields 0.6 (`if f.roe:` at `:425`), so still red.
+  - [C-14] Residual 90-day exposure of stored fabricated signals, no named owner. Resolved: Open for Design
+    bullet added (`valid_days` default 90 read at `fundsignal_loop.py:232`); design names the operator
+    remediation or follow-up. Out of Scope bullet points there. Per-surface change already in Consumer Surface(s).
+- Notes:
+  - Citation: `min_conviction_to_emit` default read at `fundsignal_loop.py:229`, filter `:240`. Fixed in spec.
+  - Citation correction (prior anchors left unedited, append-only): `toProtoFundamentals` is defined at
+    `services/xstockstrat-marketdata/internal/service/marketdata_service.go:2012`; `missing` computed `:2033-2038`,
+    assigned `:2056`.
+  - Impl-spec hazard for /sdd-spec: `_fund` (`services/xstockstrat-analysis/tests/test_fundsignal_loop.py:31-42`)
+    builds a SimpleNamespace without `missing_metrics`; a presence-based scorer raises AttributeError there.
+    Plan the fixture change under C-13 (`tests/conftest.py` once a second consumer exists). Tests mocking
+    `_builtin_score` to 0.5 (`test_fundsignal_loop.py:648-683`) are mocks, not business rules.
+  - Design forks (skip vs flag-unavailable, `symbols_done` accounting) stay for /sdd-design; any choice must
+    keep AC-1 "no `analysis.fundsignal_emitted` row" true. Partial-row fork is decided by FR-2.
+  - Verified OK: Out of Scope explicit; services match registry; no proto/config/migration change;
+    `missing_metrics` field 18 (`packages/proto/marketdata/v1/marketdata.proto:241`) consumed by
+    `screener.py:402`; `RunFundamentalsScan` (`servicer.py:3812`) and the loop share `run_once`; MCP tools at
+    `services/xstockstrat-agent/app/tools.py:1401,1518`; no existing `@AC` in `services/xstockstrat-analysis/acceptance/`
+    changed; `@AC-1`/`@AC-2` unique. Trading-domain checks skipped (non-trading).
+- Overlap findings (feature-overlap WARN):
+  - 244-fix-python-config-zero-trap: read-side overlap on `analysis.fundsignal.min_conviction_to_emit`
+    (244 `context.md:25`; changes the `or default` getters, analysis `watcher.py:97,105,134`). Neither declares
+    the key; seed 0.0 = code default 0.0. 244's design must audit the `fundsignal_loop.py:229` read. If 244
+    adds presence helpers, 246 reuses them. Coordinate; not blocking.
+  - 215 (in-progress): marketdata `GetFundamentalsMulti` omits un-producible symbols under
+    `snapshot_source=edgar`; the loop already drops absent symbols (`fundsignal_loop.py:399-400`).
+    Complementary; no shared key, file or migration.
+  - 245 (draft): same feature-144 pattern, edits `screener.py:115` only. No overlap.
+  - 242, 248, 250, 244 (ingest `watcher.py`): shared service dirs, disjoint files. 240/241/243/247/249/251/084:
+    no analysis/ingest surface. No migration or proto field overlap.
+  - Merge-order: no row (no FAIL-level collision).
+  - Process drift: the A4 overlap reference greps `feature.md` for lifecycle, but status lives in `status.md`
+    (`docs/roadmap/features/CLAUDE.md`); scan read `status.md`.
+- Operator decisions (binding, recorded 2026-10-20):
+  - Standing authorization: designs run in FULL mode only (no quick designs for automated fixes); the orchestrator auto-approves the design gate once rounds >= 2, no unresolved Floor (F-*) breach remains, no blocking objection remains, and every CHANGE to an existing @AC business rule is covered by an operator decision below.
+  - Full design depth (operator overrode the triage 'quick' recommendation).
+- Next: `/sdd-design fix-fundsignal-neutral-score` (full).
