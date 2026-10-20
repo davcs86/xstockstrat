@@ -704,3 +704,19 @@
 - TDD (with Step 16): red was compile-only (new package); green 5/5.
 - Files modified: `internal/marketsession/marketsession.go` (new).
 - Deviations: none.
+
+### Step 16 — test: calendar + golden bar-date mapping [done]
+- `TestSessionDate_GoldenStagingBars` covers the 13 staging 1d-bar vectors (EDT 04:00Z, EST 05:00Z,
+  across the 2025-11-02 DST end).
+- `TestReference` covers 6 cases: live; post-close; Saturday; pre-open; Thanksgiving; Good Friday 2027.
+- `TestPrevTradingDay`: 10-19→10-16, 07-06→07-02, 2027-12-27→12-23.
+- `TestHolidays_2026_2028` checks `IsTradingDay` for every day of each year against the expected
+  holiday list, and that 2027-12-31 trades.
+- `TestDST` checks the open at 13:30Z / 14:30Z and `DayStart` at 05:00Z.
+- Verification:
+  - `marketsession` coverage 96.4% (≥ 90%);
+  - full `-race` total 67.2% (≥ 40%);
+  - `golangci-lint` 0 issues.
+- The design blocking risk is cleared: the calendar is green before any Day P&L code (Step 19).
+- Files modified: `internal/marketsession/marketsession_test.go` (new).
+- Deviations: none.

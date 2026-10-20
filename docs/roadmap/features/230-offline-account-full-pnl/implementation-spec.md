@@ -1018,7 +1018,7 @@ The total must be ≥ 40%. The `service/` package is excluded, so the targeted t
 
 ### Step 16 — test: calendar + golden bar-date mapping
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/marketsession/marketsession_test.go` — create
