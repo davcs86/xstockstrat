@@ -590,3 +590,26 @@
   - `ord-s1` literal guard ✓.
 - Files modified: `internal/service/trading_offline_test.go`, `internal/testdata/offline_history.go`
   (new).
+
+### Step 11 — service: trading recompute payload + snapshot carry flow [done]
+- Recompute adds `fees_since_snapshot` (Σ `GetFees()` over the same window the fold uses, so
+  frozen-window fees are excluded), `realized_carried` / `fees_carried` from the header (0 without a
+  baseline), and `recent_fills` (window fills with `filled_at ≥ now−10d`, signed qty, RFC3339Nano).
+- `const offlineRecentFillsWindow = 10 * 24h`.
+- Snapshot:
+  - a non-empty, all-rejected list returns committed 0 plus the rejections before the lock (no upsert,
+    no emit); an empty list still commits a full flatten;
+  - `ErrSnapshotAsOfConflict` → `FailedPrecondition` "cannot change as_of of a snapshot that is not
+    the latest".
+- Deviation:
+  - What changed: the carry is the pure `offlineSnapshotCarry(confirmed)`. The confirmed orders are
+    loaded under the account lock just before `UpsertBaselineSnapshot`, not from inside the callback.
+  - Why: this keeps the callback DB-free while the upsert tx holds `FOR UPDATE` (no second pool
+    connection inside the tx), matching the `CarryFunc` doc comment.
+  - Effect: same result under the per-account lock, which ConfirmOrder also holds. A load error maps to
+    Internal.
+- TDD (with Step 12):
+  - red: 24 failures, all for the right reasons (payload keys absent; all-rejected persisted 1→2;
+    conflict surfaced as Internal);
+  - green: all pass with `-race`.
+- Files modified: `internal/service/trading.go` (gofmt also realigned the emit map's existing keys).

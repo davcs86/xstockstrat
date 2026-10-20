@@ -981,6 +981,7 @@ func (s *TradingService) recomputeAndEmitOfflinePositions(ctx context.Context, a
 	var result pnl.FoldResult
 	// postT0Symbols tracks which symbols had a post-T0 fill (for provenance computation).
 	postT0Symbols := make(map[string]bool)
+	window := confirmed
 	if hasBaseline {
 		// Baseline branch: filter confirmed orders to only those with filled_at > asOf.
 		var postT0Orders []*tradingv1.Order
@@ -990,10 +991,27 @@ func (s *TradingService) recomputeAndEmitOfflinePositions(ctx context.Context, a
 				postT0Symbols[o.Symbol] = true
 			}
 		}
+		window = postT0Orders
 		result = pnl.FoldFrom(seedLots, offlineFillsFromOrders(postT0Orders))
 	} else {
 		// No-baseline branch: fold ALL confirmed orders.
 		result = pnl.Fold(offlineFillsFromOrders(confirmed))
+	}
+
+	feesSince := 0.0
+	recentFills := make([]interface{}, 0)
+	recentCutoff := time.Now().Add(-offlineRecentFillsWindow)
+	for i, f := range offlineFillsFromOrders(window) {
+		o := window[i]
+		feesSince += o.GetFees()
+		if o.FilledAt != nil && !o.FilledAt.AsTime().Before(recentCutoff) {
+			recentFills = append(recentFills, map[string]interface{}{
+				"symbol":    f.Symbol,
+				"qty":       f.Qty,
+				"price":     f.Price,
+				"filled_at": o.FilledAt.AsTime().Format(time.RFC3339Nano),
+			})
+		}
 	}
 
 	// --- Build position entries with symbol-level provenance ---
@@ -1047,13 +1065,45 @@ func (s *TradingService) recomputeAndEmitOfflinePositions(ctx context.Context, a
 	// Emit account.positions.synced ONLY (never order.filled) — the disjointness invariant that keeps
 	// portfolio from double-folding. Run on the inbound request ctx for header propagation.
 	s.emitLedgerEvent(ctx, "account.positions.synced", fmt.Sprintf("account:%s", accountID), userID, map[string]interface{}{
-		"account_id":   accountID,
-		"user_id":      userID,
-		"trading_mode": tradingMode,
-		"positions":    posEntries,
-		"realized_pnl": result.Realized,
+		"account_id":          accountID,
+		"user_id":             userID,
+		"trading_mode":        tradingMode,
+		"positions":           posEntries,
+		"realized_pnl":        result.Realized,
+		"fees_since_snapshot": feesSince,
+		"realized_carried":    hdr.RealizedCarried,
+		"fees_carried":        hdr.FeesCarried,
+		"recent_fills":        recentFills,
 	})
 	return nil
+}
+
+// offlineRecentFillsWindow bounds the payload's recent_fills; it must cover the longest NYSE closure
+// gap so portfolio can always find the fills of the previous session (design §10).
+const offlineRecentFillsWindow = 10 * 24 * time.Hour
+
+// offlineSnapshotCarry folds the confirmed fills in (pred.AsOf, asOf] onto pred's lots and carry; with
+// no pred it folds every fill up to asOf (an unknown filled_at counts as before).
+func offlineSnapshotCarry(confirmed []*tradingv1.Order) repository.CarryFunc {
+	return func(pred *repository.SnapshotHeader, asOf time.Time) (float64, float64, error) {
+		var window []*tradingv1.Order
+		fees := 0.0
+		for _, o := range confirmed {
+			if o.FilledAt == nil {
+				if pred != nil {
+					continue
+				}
+			} else if t := o.FilledAt.AsTime(); t.After(asOf) || (pred != nil && !t.After(pred.AsOf)) {
+				continue
+			}
+			window = append(window, o)
+			fees += o.GetFees()
+		}
+		if pred == nil {
+			return pnl.Fold(offlineFillsFromOrders(window)).Realized, fees, nil
+		}
+		return pred.RealizedCarried + pnl.FoldFrom(pred.Lots, offlineFillsFromOrders(window)).Realized, pred.FeesCarried + fees, nil
+	}
 }
 
 // SnapshotOfflinePositions records brokerage-statement holdings as an effective-dated opening baseline
@@ -1123,6 +1173,11 @@ func (s *TradingService) SnapshotOfflinePositions(ctx context.Context, req *trad
 
 	asOf := req.AsOf.AsTime()
 
+	// A non-empty list whose rows were all rejected changes nothing (an empty list is a full flatten).
+	if len(req.Positions) > 0 && len(validRows) == 0 {
+		return &tradingv1.SnapshotOfflinePositionsResponse{AccountId: req.AccountId, Rejected: rejected}, nil
+	}
+
 	// Warn if there are unconfirmed NEW offline orders (their fills are excluded until confirmed).
 	var warnings []string
 	hasNew, warnErr := s.baselineStore.HasUnconfirmedOfflineOrders(ctx, req.AccountId)
@@ -1138,7 +1193,14 @@ func (s *TradingService) SnapshotOfflinePositions(ctx context.Context, req *trad
 	lock.Lock()
 	defer lock.Unlock()
 
-	if err := s.baselineStore.UpsertBaselineSnapshot(ctx, req.AccountId, req.ClientSnapshotId, asOf, validRows, nil); err != nil {
+	confirmed, err := s.baselineStore.ListConfirmedOfflineOrdersByAccount(ctx, req.AccountId)
+	if err != nil {
+		return nil, grpcstatus.Errorf(codes.Internal, "load confirmed orders: %v", err)
+	}
+	if err := s.baselineStore.UpsertBaselineSnapshot(ctx, req.AccountId, req.ClientSnapshotId, asOf, validRows, offlineSnapshotCarry(confirmed)); err != nil {
+		if errors.Is(err, repository.ErrSnapshotAsOfConflict) {
+			return nil, grpcstatus.Errorf(codes.FailedPrecondition, "cannot change as_of of a snapshot that is not the latest")
+		}
 		return nil, grpcstatus.Errorf(codes.Internal, "persist baseline: %v", err)
 	}
 

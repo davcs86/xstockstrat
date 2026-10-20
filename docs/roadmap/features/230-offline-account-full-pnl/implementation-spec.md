@@ -719,7 +719,7 @@ The total must be ≥ 40%. `service/` is excluded, so the targeted tests are the
 
 ### Step 11 — service: trading recompute payload + snapshot carry flow
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading.go` — modify
