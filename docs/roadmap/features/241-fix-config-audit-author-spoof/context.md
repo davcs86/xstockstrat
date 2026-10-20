@@ -90,3 +90,68 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - Standing authorization: designs run in FULL mode only (no quick designs for automated fixes); the orchestrator auto-approves the design gate once rounds >= 2, no unresolved Floor (F-*) breach remains, no blocking objection remains, and every CHANGE to an existing @AC business rule is covered by an operator decision below.
   - Author comes from verified identity only: config stamps changed_by from the verified x-user-id, or the x-internal-caller grant id for automated writers; request.author is ignored and the proto field is marked [deprecated = true] (non-breaking); the agent stops sending free-text author; trading's reconciliation-poller sentinel moves to the x-internal-caller identity.
 - Next: `/sdd-design fix-config-audit-author-spoof` (full).
+
+## Session 2026-10-20 — sdd-review product-spec (re-run of A4)
+
+- Re-run on an already `spec-ready` spec, after Phase 0 recon (`recon.md`, commit 95130ba3). Status unchanged:
+  spec-ready. Criteria verdict PASS WITH WARNINGS (0 fails, 0 Floor breaches). Overlap verdict WARN (no FAIL).
+- Both verdicts read the pre-revision triage draft. They cite `product-spec.md:22-24` either/or Expected, the
+  unchecked boxes at `:48,49,51` and `configServiceImpl.ts:388/404/507`, all fixed in the prior session.
+  Warnings (8), with resolution:
+  1. No `## Functional Requirements` and no `@FR-N` tags (C-15). Resolved:
+     - added FR-1 (human → `x-user-id`), FR-2 (authorized internal caller → grant `callerID`), FR-3 (no
+       verified identity → `INVALID_ARGUMENT`) and FR-4 (agent sends no free-text `author`);
+     - tagged AC-1 `@FR-1`, AC-2 `@FR-2`, AC-3 `@FR-3 @FR-2` and AC-4 `@FR-4`.
+     The Track C template (`.claude/skills/sdd-triage/reference/track-c-sdd.md:103-163`) prescribes neither,
+     yet C-15 requires both. That template/criteria gap is a ledger candidate. Not written: A4 calls for no
+     ledger line.
+  2. AC-1/AC-2 pre-resolve forks. Settled by the operator decision (prior session): ignore `author`, no reject;
+     credit the grant id, not the `system:` sentinel. AC-2 is kept as the kill-switch escalation guard
+     (`config.go:257-263` sends no `x-user-id`).
+  3. Coverage gaps.
+     - (a) Agent path: added AC-4 (append-only), covering `set_config`, `manage_signal_source` and
+       `instantiate_template`. It asserts the outbound `SetConfigRequest.author == ""` and `x-user-id` = the
+       claims `user_id`. It fails today: `tools.py:353` sends the tool name and `:1694` sends the caller's
+       text.
+     - (b) No-identity rejection: AC-3 (prior session).
+     - (c) Precedence: now Open Question Q1.
+     - Test pins `setConfigAuthz.test.ts:144,183-199`, `test_config_tools.py:110,133,152,171,237,255` and
+       `test_streamable_http_auth.py:86` added to § Affected Services. `client.py` was already listed.
+  4. Proto gate unclassified. Already resolved: non-breaking `[deprecated = true]`, Proto Reviewer + owner route.
+  5. Migration strategy. Moot: no migration (operator decision).
+  6. Forks only in context.md. Added `## Open Questions` Q1-Q5, owned by /sdd-design and closed before
+     `design-approved`:
+     - Q1 identity precedence;
+     - Q2 `set_config` param removed vs ignored (`mcp` 2.2.0 undeclared-arg behaviour unverified);
+     - Q3 trading `Author` line;
+     - Q4 UI BFF stamps;
+     - Q5 agent `_caller_user_id` fail-fast.
+     The last unchecked Fix Scope box is now `[x]` and points at Q2.
+  7. Stale cites (C-01). Already re-anchored. Re-verified against the tree:
+     - `configServiceImpl.ts:376,380,386,394,405,410-414`
+     - `authz.ts:46-50,82-97`
+     - `tools.py:341-360,1641-1701`
+     - `client.py:2094-2151`
+  8. Example concreteness. Integer scopes were already done. The feature description now states that a blank
+     `<target>` is `user_id ""` (global row, NULL) and that `absent` is the INSERT path.
+- Overlap findings (WARN, rebase-only, no FAIL, no `merge-order.md` row required):
+  - `configServiceImpl.ts`: this feature's `:394-513` vs 240 (SCALAR_BOUNDS row `:145`, code-completed) and 244
+    (bounds rows `:100-127`, conditional). Disjoint hunks.
+  - `tools.py`: `:353,1642-1699` vs 240 (`manage_offline_account` `:2035`) and 215 (in-progress; docstrings
+    `:735,760-763`, `set_strategy_live` `:1309-1335`). Disjoint.
+  - `client.py`: `:2094-2142` vs 240 (`confirm_offline_order` `:2245-2271`). Disjoint.
+  - `config-governance.md`: § Author-sentinel conventions `:93-103` vs 240's Per-Feature Registered Keys log.
+    Section-disjoint.
+  - `mcp-tools.md`: § `set_config` vs 240's `manage_offline_account` / `get_positions`. Conditional on Q2,
+    section-disjoint.
+  - Trading: `trading.go` is also edited by 240, 249 and 251 (conditional). Disjoint unless the poller line
+    moves (Q3).
+  - Migration `031` is pre-reserved by 243. Moot, since 241 takes no migration.
+  - Proto: clean. Config keys: clean. 247 and the other drafts are disjoint.
+  - 241 rebases onto 240, which is already in the checkout. Re-run the Mode B overlap at impl-spec.
+- Since recon predates AC-4 and the FRs, /sdd-design must fold AC-4 / FR-4 into the design and the C-16 notes.
+  Recon's "AC-1..AC-3 become the first guards" now reads AC-1..AC-4.
+- Operator decisions (binding, recorded 2026-10-20; relayed verbatim by the workflow orchestrator):
+  - Standing authorization: designs run in FULL mode only (no quick designs for automated fixes); the orchestrator auto-approves the design gate once rounds >= 2, no unresolved Floor (F-*) breach remains, no blocking objection remains, and every CHANGE to an existing @AC business rule is covered by an operator decision below.
+  - Author comes from verified identity only: config stamps changed_by from the verified x-user-id, or the x-internal-caller grant id for automated writers; request.author is ignored and the proto field is marked [deprecated = true] (non-breaking); the agent stops sending free-text author; trading's reconciliation-poller sentinel moves to the x-internal-caller identity.
+- Next: `/sdd-design fix-config-audit-author-spoof` (full; Phase 0 recon is done, Phase 1 grilling is next).

@@ -31,8 +31,22 @@ from verified identity:
 even when it passes the authz gate and carries a free-text `author`. Today the global gate accepts an admin
 write with no `x-user-id` (`:386`) and attributes it to `author` (`:410`).
 
-**Open for /sdd-design:** which identity wins when both `x-user-id` and an authorized `x-internal-caller` are
-present. The operator decision lists `x-user-id` first.
+Identity precedence when both are present is Open Question Q1.
+
+## Functional Requirements
+
+- **FR-1.** A human SetConfig write (global admin-scope, or per-user owner) records the propagated `x-user-id`
+  (`callerUserId`, `configServiceImpl.ts:376`) as `updated_by` → `config_audit.changed_by`. `request.author`
+  never reaches either column.
+- **FR-2.** An automated write with no `x-user-id`, authorized by an `x-internal-caller` grant
+  (`hasInternalCallerAuthority` true, `authz.ts:82-97`), records that grant's `callerID` as `updated_by` /
+  `changed_by`. An unauthorized `x-internal-caller` header is never credited.
+- **FR-3.** A write with neither a verified `x-user-id` nor an authorized `x-internal-caller` is rejected
+  `INVALID_ARGUMENT` (`MISSING_AUTHOR_ERROR`, `authz.ts:46-50`) before any row is written, whatever `author` it
+  carries.
+- **FR-4.** The agent sends no free-text `author` on any SetConfig it issues: `set_config` (`tools.py:1694`,
+  `client.py:2142`) and `_write_source_bearer` (`tools.py:353`). The caller rides `x-user-id` from verified
+  claims (`client.py:59-80`).
 
 ## Reproduction Steps
 
@@ -50,12 +64,15 @@ verified headers (feature 074, PR #994), but attribution never followed. `MISSIN
 
 - **xstockstrat-config.** Attribution source in `SetConfig` (`configServiceImpl.ts:410-414`, `:513`). Tests that
   pin the old attribution: `src/__tests__/internalCallerSetConfig.test.ts:73`, which sends
-  `author: 'system:reconciliation-poller'`.
+  `author: 'system:reconciliation-poller'`, and `src/__tests__/setConfigAuthz.test.ts:144,183-199` (`author`
+  default, fallback and missing-author cases). Full break-list: recon.md § Risks.
 - **xstockstrat-agent.**
   - `set_config` tool `author` parameter: `tools.py:1648,1663,1694`, forwarded through `client.set_config`
     (`app/client.py:2094,2100,2142`).
   - `_write_source_bearer` (`tools.py:341-360`, `author=tool` at `:353`), whose two callers are
     `instantiate_template` (`tools.py:1222`) and `manage_signal_source` (`tools.py:1309`).
+  - Tests that send `author`: `tests/test_config_tools.py:110,133,152,171,237,255`,
+    `tests/test_streamable_http_auth.py:86`.
 - **xstockstrat-trading.** The reconciliation poller's `escalateSystemic` SetConfig
   (`services/xstockstrat-trading/internal/service/trading.go:2168-2176`) sends
   `Author: "system:reconciliation-poller"` (`:2176`) under `x-internal-caller: trading-reconciliation-poller`.
@@ -63,9 +80,9 @@ verified headers (feature 074, PR #994), but attribution never followed. `MISSIN
     becomes inert.
   - The field becomes `[deprecated = true]`, which staticcheck (`services/xstockstrat-trading/.golangci.yml:7`)
     is likely to flag on use (SA1019).
-  - Design decides whether to remove `:2176` and the assertion at `trading_reconciliation_test.go:789-790`.
+  - Design decides whether to remove `:2176` and the assertion at `trading_reconciliation_test.go:789-790` (Q3).
 - **xstockstrat-ui.** The BFFs already send the verified id (`configUiBff.ts:53`, `insightsBff.ts:179`). Once
-  the field is deprecated, those `author` sends are inert, and design decides whether to drop them (C-10).
+  the field is deprecated, those `author` sends are inert, and design decides whether to drop them (C-10, Q4).
 
 ## Fix Scope
 
@@ -92,9 +109,24 @@ verified headers (feature 074, PR #994), but attribution never followed. `MISSIN
     - the `system` row is the indicators `Formula.author` and is unaffected.
   - `docs/runbooks/mcp-tools.md` § `set_config` (`:1096`) changes whenever the tool's `author` parameter or its
     semantics change.
-- [ ] **Agent tool contract (design fork).** The agent stops sending a free-text `author` (operator decision).
-  Design decides whether the `set_config` `author` parameter is removed, or kept as accepted-but-ignored for
-  MCP contract stability.
+- [x] **Agent stops sending a free-text `author`** (operator decision, FR-4). The `set_config` parameter shape
+  (removed vs accepted-but-ignored) is Q2.
+
+## Open Questions
+
+Owned by /sdd-design; each must be closed in design.md before `design-approved`.
+
+- **Q1. Identity precedence.** Which identity is credited when both `x-user-id` and an authorized
+  `x-internal-caller` are present. The operator decision lists `x-user-id` first. No current caller sends both
+  (recon.md § Risks).
+- **Q2. `set_config` `author` parameter.** Remove it (feature-111 `manage_formula` precedent) or keep it
+  accepted-but-ignored. This hinges on how `mcp` 2.2.0 (`services/xstockstrat-agent/uv.lock:597-598`) treats an
+  undeclared argument, which is unverified.
+- **Q3. Trading `Author`.** Delete `trading.go:2176`, or keep it under a scoped SA1019 nolint.
+- **Q4. UI BFF `author` stamps.** Drop the inert sends at `configUiBff.ts:53` and `insightsBff.ts:179`, or keep
+  them.
+- **Q5. Agent fail-fast.** Whether `set_config` resolves `_caller_user_id` (`tools.py:155-165`) and fails at the
+  edge when claims lack `user_id`, or relies on config's FR-3 `INVALID_ARGUMENT`.
 
 ## Consumer Surface(s)
 
@@ -111,9 +143,10 @@ verified headers (feature 074, PR #994), but attribution never followed. `MISSIN
 
 See `acceptance.feature` for the regression scenarios that must fail on the buggy behavior and pass after the
 fix (Constitution **C-15**):
-- AC-1: a human write;
-- AC-2: an internal-caller write;
-- AC-3: no verified identity → rejected.
+- AC-1 (FR-1): a human write;
+- AC-2 (FR-2): an internal-caller write;
+- AC-3 (FR-3, FR-2): no verified identity → rejected;
+- AC-4 (FR-4): agent SetConfig writes carry no free-text `author`.
 
 Also, existing tests pass and the affected services are smoke-tested on dev.
 

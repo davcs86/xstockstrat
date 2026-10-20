@@ -15,6 +15,7 @@
 |---|---|---|---|
 | 2026-10-20 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-19-config-audit-author-caller-spoofable-defect.md` |
 | 2026-10-20 | `draft` → `spec-ready` | /sdd-review | Product spec approved (9 warnings) |
+| 2026-10-20 | `spec-ready` (unchanged) | /sdd-review | Product spec re-reviewed, PASS WITH WARNINGS (8 warnings); FR-1..FR-4, AC-4, Open Questions Q1-Q5 added |
 
 ---
 
