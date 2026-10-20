@@ -946,6 +946,12 @@ export type BatchGetBarsRequest = Message<"xstockstrat.marketdata.v1.BatchGetBar
      * @generated from field: int32 max_bars_per_symbol = 5;
      */
     maxBarsPerSymbol: number;
+    /**
+     * opt-in: a failed/over-budget cold fetch returns the stored subset
+     *
+     * @generated from field: bool allow_partial = 6;
+     */
+    allowPartial: boolean;
 };
 /**
  * Describes the message xstockstrat.marketdata.v1.BatchGetBarsRequest.

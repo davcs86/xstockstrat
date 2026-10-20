@@ -62,6 +62,30 @@ export type Portfolio = Message<"xstockstrat.portfolio.v1.Portfolio"> & {
      * @generated from field: optional double realized_pnl = 12;
      */
     realizedPnl?: number | undefined;
+    /**
+     * Offline accounts only; total_pnl_pct is also set on an all-offline aggregate.
+     *
+     * @generated from field: optional double total_pnl_pct = 13;
+     */
+    totalPnlPct?: number | undefined;
+    /**
+     * offline accounts only
+     *
+     * @generated from field: optional double realized_pnl_lifetime = 14;
+     */
+    realizedPnlLifetime?: number | undefined;
+    /**
+     * offline accounts only
+     *
+     * @generated from field: optional double fees_since_snapshot = 15;
+     */
+    feesSinceSnapshot?: number | undefined;
+    /**
+     * offline accounts only
+     *
+     * @generated from field: optional double fees_lifetime = 16;
+     */
+    feesLifetime?: number | undefined;
 };
 /**
  * Describes the message xstockstrat.portfolio.v1.Portfolio.
@@ -196,6 +220,16 @@ export type Position = Message<"xstockstrat.portfolio.v1.Position"> & {
      * @generated from field: xstockstrat.portfolio.v1.PositionSource source = 23;
      */
     source: PositionSource;
+    /**
+     * @generated from field: xstockstrat.portfolio.v1.MarkSource mark_source = 24;
+     */
+    markSource: MarkSource;
+    /**
+     * LAST_CLOSE: 00:00 America/New_York of the bar's session; QUOTE: the quote time; unset for BROKER/NONE.
+     *
+     * @generated from field: google.protobuf.Timestamp mark_as_of = 25;
+     */
+    markAsOf?: Timestamp | undefined;
 };
 /**
  * Describes the message xstockstrat.portfolio.v1.Position.
@@ -1074,6 +1108,37 @@ export declare enum PositionSource {
  * Describes the enum xstockstrat.portfolio.v1.PositionSource.
  */
 export declare const PositionSourceSchema: GenEnum<PositionSource>;
+/**
+ * MarkSource is the provenance of a position's current_price (feature 230).
+ *
+ * @generated from enum xstockstrat.portfolio.v1.MarkSource
+ */
+export declare enum MarkSource {
+    /**
+     * @generated from enum value: MARK_SOURCE_UNSPECIFIED = 0;
+     */
+    UNSPECIFIED = 0,
+    /**
+     * @generated from enum value: MARK_SOURCE_QUOTE = 1;
+     */
+    QUOTE = 1,
+    /**
+     * @generated from enum value: MARK_SOURCE_LAST_CLOSE = 2;
+     */
+    LAST_CLOSE = 2,
+    /**
+     * @generated from enum value: MARK_SOURCE_BROKER = 3;
+     */
+    BROKER = 3,
+    /**
+     * @generated from enum value: MARK_SOURCE_NONE = 4;
+     */
+    NONE = 4
+}
+/**
+ * Describes the enum xstockstrat.portfolio.v1.MarkSource.
+ */
+export declare const MarkSourceSchema: GenEnum<MarkSource>;
 /**
  * PositionSide distinguishes a long (qty > 0) from a short (qty < 0) position.
  * Used only as an additive filter on ListPositionsRequest; the Position message itself

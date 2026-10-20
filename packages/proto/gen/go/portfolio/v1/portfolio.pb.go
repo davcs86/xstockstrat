@@ -132,6 +132,62 @@ func (PositionSource) EnumDescriptor() ([]byte, []int) {
 	return file_portfolio_v1_portfolio_proto_rawDescGZIP(), []int{1}
 }
 
+// MarkSource is the provenance of a position's current_price (feature 230).
+type MarkSource int32
+
+const (
+	MarkSource_MARK_SOURCE_UNSPECIFIED MarkSource = 0
+	MarkSource_MARK_SOURCE_QUOTE       MarkSource = 1
+	MarkSource_MARK_SOURCE_LAST_CLOSE  MarkSource = 2
+	MarkSource_MARK_SOURCE_BROKER      MarkSource = 3
+	MarkSource_MARK_SOURCE_NONE        MarkSource = 4
+)
+
+// Enum value maps for MarkSource.
+var (
+	MarkSource_name = map[int32]string{
+		0: "MARK_SOURCE_UNSPECIFIED",
+		1: "MARK_SOURCE_QUOTE",
+		2: "MARK_SOURCE_LAST_CLOSE",
+		3: "MARK_SOURCE_BROKER",
+		4: "MARK_SOURCE_NONE",
+	}
+	MarkSource_value = map[string]int32{
+		"MARK_SOURCE_UNSPECIFIED": 0,
+		"MARK_SOURCE_QUOTE":       1,
+		"MARK_SOURCE_LAST_CLOSE":  2,
+		"MARK_SOURCE_BROKER":      3,
+		"MARK_SOURCE_NONE":        4,
+	}
+)
+
+func (x MarkSource) Enum() *MarkSource {
+	p := new(MarkSource)
+	*p = x
+	return p
+}
+
+func (x MarkSource) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (MarkSource) Descriptor() protoreflect.EnumDescriptor {
+	return file_portfolio_v1_portfolio_proto_enumTypes[2].Descriptor()
+}
+
+func (MarkSource) Type() protoreflect.EnumType {
+	return &file_portfolio_v1_portfolio_proto_enumTypes[2]
+}
+
+func (x MarkSource) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use MarkSource.Descriptor instead.
+func (MarkSource) EnumDescriptor() ([]byte, []int) {
+	return file_portfolio_v1_portfolio_proto_rawDescGZIP(), []int{2}
+}
+
 // PositionSide distinguishes a long (qty > 0) from a short (qty < 0) position.
 // Used only as an additive filter on ListPositionsRequest; the Position message itself
 // continues to carry signed qty.
@@ -168,11 +224,11 @@ func (x PositionSide) String() string {
 }
 
 func (PositionSide) Descriptor() protoreflect.EnumDescriptor {
-	return file_portfolio_v1_portfolio_proto_enumTypes[2].Descriptor()
+	return file_portfolio_v1_portfolio_proto_enumTypes[3].Descriptor()
 }
 
 func (PositionSide) Type() protoreflect.EnumType {
-	return &file_portfolio_v1_portfolio_proto_enumTypes[2]
+	return &file_portfolio_v1_portfolio_proto_enumTypes[3]
 }
 
 func (x PositionSide) Number() protoreflect.EnumNumber {
@@ -181,7 +237,7 @@ func (x PositionSide) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use PositionSide.Descriptor instead.
 func (PositionSide) EnumDescriptor() ([]byte, []int) {
-	return file_portfolio_v1_portfolio_proto_rawDescGZIP(), []int{2}
+	return file_portfolio_v1_portfolio_proto_rawDescGZIP(), []int{3}
 }
 
 // Provenance of a watchlist entry (feature 127). Consumers default UNSPECIFIED→MANUAL.
@@ -218,11 +274,11 @@ func (x WatchlistEntrySource) String() string {
 }
 
 func (WatchlistEntrySource) Descriptor() protoreflect.EnumDescriptor {
-	return file_portfolio_v1_portfolio_proto_enumTypes[3].Descriptor()
+	return file_portfolio_v1_portfolio_proto_enumTypes[4].Descriptor()
 }
 
 func (WatchlistEntrySource) Type() protoreflect.EnumType {
-	return &file_portfolio_v1_portfolio_proto_enumTypes[3]
+	return &file_portfolio_v1_portfolio_proto_enumTypes[4]
 }
 
 func (x WatchlistEntrySource) Number() protoreflect.EnumNumber {
@@ -231,7 +287,7 @@ func (x WatchlistEntrySource) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use WatchlistEntrySource.Descriptor instead.
 func (WatchlistEntrySource) EnumDescriptor() ([]byte, []int) {
-	return file_portfolio_v1_portfolio_proto_rawDescGZIP(), []int{3}
+	return file_portfolio_v1_portfolio_proto_rawDescGZIP(), []int{4}
 }
 
 type Portfolio struct {
@@ -250,9 +306,14 @@ type Portfolio struct {
 	// realized_pnl is the account-grain cumulative realized P&L. Set only for OFFLINE accounts
 	// (feature 157); `optional` for proto3 explicit presence so an offline account's genuine $0
 	// is distinguishable from a broker account's unset. Broker cards leave it unset.
-	RealizedPnl   *float64 `protobuf:"fixed64,12,opt,name=realized_pnl,json=realizedPnl,proto3,oneof" json:"realized_pnl,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	RealizedPnl *float64 `protobuf:"fixed64,12,opt,name=realized_pnl,json=realizedPnl,proto3,oneof" json:"realized_pnl,omitempty"`
+	// Offline accounts only; total_pnl_pct is also set on an all-offline aggregate.
+	TotalPnlPct         *float64 `protobuf:"fixed64,13,opt,name=total_pnl_pct,json=totalPnlPct,proto3,oneof" json:"total_pnl_pct,omitempty"`
+	RealizedPnlLifetime *float64 `protobuf:"fixed64,14,opt,name=realized_pnl_lifetime,json=realizedPnlLifetime,proto3,oneof" json:"realized_pnl_lifetime,omitempty"` // offline accounts only
+	FeesSinceSnapshot   *float64 `protobuf:"fixed64,15,opt,name=fees_since_snapshot,json=feesSinceSnapshot,proto3,oneof" json:"fees_since_snapshot,omitempty"`       // offline accounts only
+	FeesLifetime        *float64 `protobuf:"fixed64,16,opt,name=fees_lifetime,json=feesLifetime,proto3,oneof" json:"fees_lifetime,omitempty"`                        // offline accounts only
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *Portfolio) Reset() {
@@ -369,6 +430,34 @@ func (x *Portfolio) GetRealizedPnl() float64 {
 	return 0
 }
 
+func (x *Portfolio) GetTotalPnlPct() float64 {
+	if x != nil && x.TotalPnlPct != nil {
+		return *x.TotalPnlPct
+	}
+	return 0
+}
+
+func (x *Portfolio) GetRealizedPnlLifetime() float64 {
+	if x != nil && x.RealizedPnlLifetime != nil {
+		return *x.RealizedPnlLifetime
+	}
+	return 0
+}
+
+func (x *Portfolio) GetFeesSinceSnapshot() float64 {
+	if x != nil && x.FeesSinceSnapshot != nil {
+		return *x.FeesSinceSnapshot
+	}
+	return 0
+}
+
+func (x *Portfolio) GetFeesLifetime() float64 {
+	if x != nil && x.FeesLifetime != nil {
+		return *x.FeesLifetime
+	}
+	return 0
+}
+
 type Position struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
 	Symbol           string                 `protobuf:"bytes,1,opt,name=symbol,proto3" json:"symbol,omitempty"`
@@ -415,7 +504,10 @@ type Position struct {
 	AsOf *timestamppb.Timestamp `protobuf:"bytes,22,opt,name=as_of,json=asOf,proto3" json:"as_of,omitempty"`
 	// source indicates how the position was constructed: ORDERS (fill-only),
 	// BASELINE (snapshot-only), or MIXED (baseline + post-T0 fills).
-	Source        PositionSource `protobuf:"varint,23,opt,name=source,proto3,enum=xstockstrat.portfolio.v1.PositionSource" json:"source,omitempty"`
+	Source     PositionSource `protobuf:"varint,23,opt,name=source,proto3,enum=xstockstrat.portfolio.v1.PositionSource" json:"source,omitempty"`
+	MarkSource MarkSource     `protobuf:"varint,24,opt,name=mark_source,json=markSource,proto3,enum=xstockstrat.portfolio.v1.MarkSource" json:"mark_source,omitempty"`
+	// LAST_CLOSE: 00:00 America/New_York of the bar's session; QUOTE: the quote time; unset for BROKER/NONE.
+	MarkAsOf      *timestamppb.Timestamp `protobuf:"bytes,25,opt,name=mark_as_of,json=markAsOf,proto3" json:"mark_as_of,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -609,6 +701,20 @@ func (x *Position) GetSource() PositionSource {
 		return x.Source
 	}
 	return PositionSource_POSITION_SOURCE_UNSPECIFIED
+}
+
+func (x *Position) GetMarkSource() MarkSource {
+	if x != nil {
+		return x.MarkSource
+	}
+	return MarkSource_MARK_SOURCE_UNSPECIFIED
+}
+
+func (x *Position) GetMarkAsOf() *timestamppb.Timestamp {
+	if x != nil {
+		return x.MarkAsOf
+	}
+	return nil
 }
 
 type PortfolioSnapshot struct {
@@ -2658,7 +2764,7 @@ var File_portfolio_v1_portfolio_proto protoreflect.FileDescriptor
 
 const file_portfolio_v1_portfolio_proto_rawDesc = "" +
 	"\n" +
-	"\x1cportfolio/v1/portfolio.proto\x12\x18xstockstrat.portfolio.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a google/protobuf/field_mask.proto\x1a\x16common/v1/common.proto\"\xc1\x03\n" +
+	"\x1cportfolio/v1/portfolio.proto\x12\x18xstockstrat.portfolio.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a google/protobuf/field_mask.proto\x1a\x16common/v1/common.proto\"\xd8\x05\n" +
 	"\tPortfolio\x12!\n" +
 	"\fportfolio_id\x18\x01 \x01(\tR\vportfolioId\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\x12\x16\n" +
@@ -2674,8 +2780,16 @@ const file_portfolio_v1_portfolio_proto_rawDesc = "" +
 	" \x03(\v2\".xstockstrat.portfolio.v1.PositionR\tpositions\x12\x1d\n" +
 	"\n" +
 	"account_id\x18\v \x01(\tR\taccountId\x12&\n" +
-	"\frealized_pnl\x18\f \x01(\x01H\x00R\vrealizedPnl\x88\x01\x01B\x0f\n" +
-	"\r_realized_pnl\"\x9a\a\n" +
+	"\frealized_pnl\x18\f \x01(\x01H\x00R\vrealizedPnl\x88\x01\x01\x12'\n" +
+	"\rtotal_pnl_pct\x18\r \x01(\x01H\x01R\vtotalPnlPct\x88\x01\x01\x127\n" +
+	"\x15realized_pnl_lifetime\x18\x0e \x01(\x01H\x02R\x13realizedPnlLifetime\x88\x01\x01\x123\n" +
+	"\x13fees_since_snapshot\x18\x0f \x01(\x01H\x03R\x11feesSinceSnapshot\x88\x01\x01\x12(\n" +
+	"\rfees_lifetime\x18\x10 \x01(\x01H\x04R\ffeesLifetime\x88\x01\x01B\x0f\n" +
+	"\r_realized_pnlB\x10\n" +
+	"\x0e_total_pnl_pctB\x18\n" +
+	"\x16_realized_pnl_lifetimeB\x16\n" +
+	"\x14_fees_since_snapshotB\x10\n" +
+	"\x0e_fees_lifetime\"\x9b\b\n" +
 	"\bPosition\x12\x16\n" +
 	"\x06symbol\x18\x01 \x01(\tR\x06symbol\x12\x10\n" +
 	"\x03qty\x18\x02 \x01(\x01R\x03qty\x12&\n" +
@@ -2704,7 +2818,11 @@ const file_portfolio_v1_portfolio_proto_rawDesc = "" +
 	"\rstop_order_id\x18\x14 \x01(\tR\vstopOrderId\x12/\n" +
 	"\x14take_profit_order_id\x18\x15 \x01(\tR\x11takeProfitOrderId\x12/\n" +
 	"\x05as_of\x18\x16 \x01(\v2\x1a.google.protobuf.TimestampR\x04asOf\x12@\n" +
-	"\x06source\x18\x17 \x01(\x0e2(.xstockstrat.portfolio.v1.PositionSourceR\x06source\"\xc9\x02\n" +
+	"\x06source\x18\x17 \x01(\x0e2(.xstockstrat.portfolio.v1.PositionSourceR\x06source\x12E\n" +
+	"\vmark_source\x18\x18 \x01(\x0e2$.xstockstrat.portfolio.v1.MarkSourceR\n" +
+	"markSource\x128\n" +
+	"\n" +
+	"mark_as_of\x18\x19 \x01(\v2\x1a.google.protobuf.TimestampR\bmarkAsOf\"\xc9\x02\n" +
 	"\x11PortfolioSnapshot\x12!\n" +
 	"\fportfolio_id\x18\x01 \x01(\tR\vportfolioId\x12?\n" +
 	"\rsnapshot_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\fsnapshotTime\x12\x16\n" +
@@ -2869,7 +2987,14 @@ const file_portfolio_v1_portfolio_proto_rawDesc = "" +
 	"\x1bPOSITION_SOURCE_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16POSITION_SOURCE_ORDERS\x10\x01\x12\x1c\n" +
 	"\x18POSITION_SOURCE_BASELINE\x10\x02\x12\x19\n" +
-	"\x15POSITION_SOURCE_MIXED\x10\x03*^\n" +
+	"\x15POSITION_SOURCE_MIXED\x10\x03*\x8a\x01\n" +
+	"\n" +
+	"MarkSource\x12\x1b\n" +
+	"\x17MARK_SOURCE_UNSPECIFIED\x10\x00\x12\x15\n" +
+	"\x11MARK_SOURCE_QUOTE\x10\x01\x12\x1a\n" +
+	"\x16MARK_SOURCE_LAST_CLOSE\x10\x02\x12\x16\n" +
+	"\x12MARK_SOURCE_BROKER\x10\x03\x12\x14\n" +
+	"\x10MARK_SOURCE_NONE\x10\x04*^\n" +
 	"\fPositionSide\x12\x1d\n" +
 	"\x19POSITION_SIDE_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12POSITION_SIDE_LONG\x10\x01\x12\x17\n" +
@@ -2910,142 +3035,145 @@ func file_portfolio_v1_portfolio_proto_rawDescGZIP() []byte {
 	return file_portfolio_v1_portfolio_proto_rawDescData
 }
 
-var file_portfolio_v1_portfolio_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
+var file_portfolio_v1_portfolio_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
 var file_portfolio_v1_portfolio_proto_msgTypes = make([]protoimpl.MessageInfo, 37)
 var file_portfolio_v1_portfolio_proto_goTypes = []any{
 	(PositionRiskFlag)(0),                   // 0: xstockstrat.portfolio.v1.PositionRiskFlag
 	(PositionSource)(0),                     // 1: xstockstrat.portfolio.v1.PositionSource
-	(PositionSide)(0),                       // 2: xstockstrat.portfolio.v1.PositionSide
-	(WatchlistEntrySource)(0),               // 3: xstockstrat.portfolio.v1.WatchlistEntrySource
-	(*Portfolio)(nil),                       // 4: xstockstrat.portfolio.v1.Portfolio
-	(*Position)(nil),                        // 5: xstockstrat.portfolio.v1.Position
-	(*PortfolioSnapshot)(nil),               // 6: xstockstrat.portfolio.v1.PortfolioSnapshot
-	(*PnLResponse)(nil),                     // 7: xstockstrat.portfolio.v1.PnLResponse
-	(*GetPortfolioRequest)(nil),             // 8: xstockstrat.portfolio.v1.GetPortfolioRequest
-	(*GetPositionRequest)(nil),              // 9: xstockstrat.portfolio.v1.GetPositionRequest
-	(*ListPositionsRequest)(nil),            // 10: xstockstrat.portfolio.v1.ListPositionsRequest
-	(*ListPositionsResponse)(nil),           // 11: xstockstrat.portfolio.v1.ListPositionsResponse
-	(*GetPnLRequest)(nil),                   // 12: xstockstrat.portfolio.v1.GetPnLRequest
-	(*GetSnapshotRequest)(nil),              // 13: xstockstrat.portfolio.v1.GetSnapshotRequest
-	(*StreamPortfolioUpdatesRequest)(nil),   // 14: xstockstrat.portfolio.v1.StreamPortfolioUpdatesRequest
-	(*ListPortfoliosRequest)(nil),           // 15: xstockstrat.portfolio.v1.ListPortfoliosRequest
-	(*ListPortfoliosResponse)(nil),          // 16: xstockstrat.portfolio.v1.ListPortfoliosResponse
-	(*WatchlistBinding)(nil),                // 17: xstockstrat.portfolio.v1.WatchlistBinding
-	(*Watchlist)(nil),                       // 18: xstockstrat.portfolio.v1.Watchlist
-	(*CreateWatchlistRequest)(nil),          // 19: xstockstrat.portfolio.v1.CreateWatchlistRequest
-	(*CreateWatchlistResponse)(nil),         // 20: xstockstrat.portfolio.v1.CreateWatchlistResponse
-	(*GetWatchlistRequest)(nil),             // 21: xstockstrat.portfolio.v1.GetWatchlistRequest
-	(*GetWatchlistResponse)(nil),            // 22: xstockstrat.portfolio.v1.GetWatchlistResponse
-	(*ListWatchlistsRequest)(nil),           // 23: xstockstrat.portfolio.v1.ListWatchlistsRequest
-	(*ListWatchlistsResponse)(nil),          // 24: xstockstrat.portfolio.v1.ListWatchlistsResponse
-	(*UpdateWatchlistRequest)(nil),          // 25: xstockstrat.portfolio.v1.UpdateWatchlistRequest
-	(*UpdateWatchlistResponse)(nil),         // 26: xstockstrat.portfolio.v1.UpdateWatchlistResponse
-	(*DeleteWatchlistRequest)(nil),          // 27: xstockstrat.portfolio.v1.DeleteWatchlistRequest
-	(*DeleteWatchlistResponse)(nil),         // 28: xstockstrat.portfolio.v1.DeleteWatchlistResponse
-	(*AddWatchlistSymbolsRequest)(nil),      // 29: xstockstrat.portfolio.v1.AddWatchlistSymbolsRequest
-	(*AddWatchlistSymbolsResponse)(nil),     // 30: xstockstrat.portfolio.v1.AddWatchlistSymbolsResponse
-	(*RemoveWatchlistSymbolsRequest)(nil),   // 31: xstockstrat.portfolio.v1.RemoveWatchlistSymbolsRequest
-	(*RemoveWatchlistSymbolsResponse)(nil),  // 32: xstockstrat.portfolio.v1.RemoveWatchlistSymbolsResponse
-	(*EnsureSignalWatchlistRequest)(nil),    // 33: xstockstrat.portfolio.v1.EnsureSignalWatchlistRequest
-	(*EnsureSignalWatchlistResponse)(nil),   // 34: xstockstrat.portfolio.v1.EnsureSignalWatchlistResponse
-	(*ListAllWatchlistSymbolsRequest)(nil),  // 35: xstockstrat.portfolio.v1.ListAllWatchlistSymbolsRequest
-	(*ListAllWatchlistSymbolsResponse)(nil), // 36: xstockstrat.portfolio.v1.ListAllWatchlistSymbolsResponse
-	(*UpdateWatchlistBindingRequest)(nil),   // 37: xstockstrat.portfolio.v1.UpdateWatchlistBindingRequest
-	(*UpdateWatchlistBindingResponse)(nil),  // 38: xstockstrat.portfolio.v1.UpdateWatchlistBindingResponse
-	(*UpdateWatchlistBindingsRequest)(nil),  // 39: xstockstrat.portfolio.v1.UpdateWatchlistBindingsRequest
-	(*UpdateWatchlistBindingsResponse)(nil), // 40: xstockstrat.portfolio.v1.UpdateWatchlistBindingsResponse
-	(*timestamppb.Timestamp)(nil),           // 41: google.protobuf.Timestamp
-	(v1.TradingMode)(0),                     // 42: xstockstrat.common.v1.TradingMode
-	(*v1.TimeRange)(nil),                    // 43: xstockstrat.common.v1.TimeRange
-	(*v1.PageRequest)(nil),                  // 44: xstockstrat.common.v1.PageRequest
-	(*v1.PageResponse)(nil),                 // 45: xstockstrat.common.v1.PageResponse
-	(*fieldmaskpb.FieldMask)(nil),           // 46: google.protobuf.FieldMask
+	(MarkSource)(0),                         // 2: xstockstrat.portfolio.v1.MarkSource
+	(PositionSide)(0),                       // 3: xstockstrat.portfolio.v1.PositionSide
+	(WatchlistEntrySource)(0),               // 4: xstockstrat.portfolio.v1.WatchlistEntrySource
+	(*Portfolio)(nil),                       // 5: xstockstrat.portfolio.v1.Portfolio
+	(*Position)(nil),                        // 6: xstockstrat.portfolio.v1.Position
+	(*PortfolioSnapshot)(nil),               // 7: xstockstrat.portfolio.v1.PortfolioSnapshot
+	(*PnLResponse)(nil),                     // 8: xstockstrat.portfolio.v1.PnLResponse
+	(*GetPortfolioRequest)(nil),             // 9: xstockstrat.portfolio.v1.GetPortfolioRequest
+	(*GetPositionRequest)(nil),              // 10: xstockstrat.portfolio.v1.GetPositionRequest
+	(*ListPositionsRequest)(nil),            // 11: xstockstrat.portfolio.v1.ListPositionsRequest
+	(*ListPositionsResponse)(nil),           // 12: xstockstrat.portfolio.v1.ListPositionsResponse
+	(*GetPnLRequest)(nil),                   // 13: xstockstrat.portfolio.v1.GetPnLRequest
+	(*GetSnapshotRequest)(nil),              // 14: xstockstrat.portfolio.v1.GetSnapshotRequest
+	(*StreamPortfolioUpdatesRequest)(nil),   // 15: xstockstrat.portfolio.v1.StreamPortfolioUpdatesRequest
+	(*ListPortfoliosRequest)(nil),           // 16: xstockstrat.portfolio.v1.ListPortfoliosRequest
+	(*ListPortfoliosResponse)(nil),          // 17: xstockstrat.portfolio.v1.ListPortfoliosResponse
+	(*WatchlistBinding)(nil),                // 18: xstockstrat.portfolio.v1.WatchlistBinding
+	(*Watchlist)(nil),                       // 19: xstockstrat.portfolio.v1.Watchlist
+	(*CreateWatchlistRequest)(nil),          // 20: xstockstrat.portfolio.v1.CreateWatchlistRequest
+	(*CreateWatchlistResponse)(nil),         // 21: xstockstrat.portfolio.v1.CreateWatchlistResponse
+	(*GetWatchlistRequest)(nil),             // 22: xstockstrat.portfolio.v1.GetWatchlistRequest
+	(*GetWatchlistResponse)(nil),            // 23: xstockstrat.portfolio.v1.GetWatchlistResponse
+	(*ListWatchlistsRequest)(nil),           // 24: xstockstrat.portfolio.v1.ListWatchlistsRequest
+	(*ListWatchlistsResponse)(nil),          // 25: xstockstrat.portfolio.v1.ListWatchlistsResponse
+	(*UpdateWatchlistRequest)(nil),          // 26: xstockstrat.portfolio.v1.UpdateWatchlistRequest
+	(*UpdateWatchlistResponse)(nil),         // 27: xstockstrat.portfolio.v1.UpdateWatchlistResponse
+	(*DeleteWatchlistRequest)(nil),          // 28: xstockstrat.portfolio.v1.DeleteWatchlistRequest
+	(*DeleteWatchlistResponse)(nil),         // 29: xstockstrat.portfolio.v1.DeleteWatchlistResponse
+	(*AddWatchlistSymbolsRequest)(nil),      // 30: xstockstrat.portfolio.v1.AddWatchlistSymbolsRequest
+	(*AddWatchlistSymbolsResponse)(nil),     // 31: xstockstrat.portfolio.v1.AddWatchlistSymbolsResponse
+	(*RemoveWatchlistSymbolsRequest)(nil),   // 32: xstockstrat.portfolio.v1.RemoveWatchlistSymbolsRequest
+	(*RemoveWatchlistSymbolsResponse)(nil),  // 33: xstockstrat.portfolio.v1.RemoveWatchlistSymbolsResponse
+	(*EnsureSignalWatchlistRequest)(nil),    // 34: xstockstrat.portfolio.v1.EnsureSignalWatchlistRequest
+	(*EnsureSignalWatchlistResponse)(nil),   // 35: xstockstrat.portfolio.v1.EnsureSignalWatchlistResponse
+	(*ListAllWatchlistSymbolsRequest)(nil),  // 36: xstockstrat.portfolio.v1.ListAllWatchlistSymbolsRequest
+	(*ListAllWatchlistSymbolsResponse)(nil), // 37: xstockstrat.portfolio.v1.ListAllWatchlistSymbolsResponse
+	(*UpdateWatchlistBindingRequest)(nil),   // 38: xstockstrat.portfolio.v1.UpdateWatchlistBindingRequest
+	(*UpdateWatchlistBindingResponse)(nil),  // 39: xstockstrat.portfolio.v1.UpdateWatchlistBindingResponse
+	(*UpdateWatchlistBindingsRequest)(nil),  // 40: xstockstrat.portfolio.v1.UpdateWatchlistBindingsRequest
+	(*UpdateWatchlistBindingsResponse)(nil), // 41: xstockstrat.portfolio.v1.UpdateWatchlistBindingsResponse
+	(*timestamppb.Timestamp)(nil),           // 42: google.protobuf.Timestamp
+	(v1.TradingMode)(0),                     // 43: xstockstrat.common.v1.TradingMode
+	(*v1.TimeRange)(nil),                    // 44: xstockstrat.common.v1.TimeRange
+	(*v1.PageRequest)(nil),                  // 45: xstockstrat.common.v1.PageRequest
+	(*v1.PageResponse)(nil),                 // 46: xstockstrat.common.v1.PageResponse
+	(*fieldmaskpb.FieldMask)(nil),           // 47: google.protobuf.FieldMask
 }
 var file_portfolio_v1_portfolio_proto_depIdxs = []int32{
-	41, // 0: xstockstrat.portfolio.v1.Portfolio.updated_at:type_name -> google.protobuf.Timestamp
-	5,  // 1: xstockstrat.portfolio.v1.Portfolio.positions:type_name -> xstockstrat.portfolio.v1.Position
-	41, // 2: xstockstrat.portfolio.v1.Position.opened_at:type_name -> google.protobuf.Timestamp
-	42, // 3: xstockstrat.portfolio.v1.Position.trading_mode:type_name -> xstockstrat.common.v1.TradingMode
+	42, // 0: xstockstrat.portfolio.v1.Portfolio.updated_at:type_name -> google.protobuf.Timestamp
+	6,  // 1: xstockstrat.portfolio.v1.Portfolio.positions:type_name -> xstockstrat.portfolio.v1.Position
+	42, // 2: xstockstrat.portfolio.v1.Position.opened_at:type_name -> google.protobuf.Timestamp
+	43, // 3: xstockstrat.portfolio.v1.Position.trading_mode:type_name -> xstockstrat.common.v1.TradingMode
 	0,  // 4: xstockstrat.portfolio.v1.Position.flag:type_name -> xstockstrat.portfolio.v1.PositionRiskFlag
-	41, // 5: xstockstrat.portfolio.v1.Position.as_of:type_name -> google.protobuf.Timestamp
+	42, // 5: xstockstrat.portfolio.v1.Position.as_of:type_name -> google.protobuf.Timestamp
 	1,  // 6: xstockstrat.portfolio.v1.Position.source:type_name -> xstockstrat.portfolio.v1.PositionSource
-	41, // 7: xstockstrat.portfolio.v1.PortfolioSnapshot.snapshot_time:type_name -> google.protobuf.Timestamp
-	42, // 8: xstockstrat.portfolio.v1.PortfolioSnapshot.trading_mode:type_name -> xstockstrat.common.v1.TradingMode
-	43, // 9: xstockstrat.portfolio.v1.PnLResponse.range:type_name -> xstockstrat.common.v1.TimeRange
-	42, // 10: xstockstrat.portfolio.v1.GetPortfolioRequest.trading_mode:type_name -> xstockstrat.common.v1.TradingMode
-	42, // 11: xstockstrat.portfolio.v1.GetPositionRequest.trading_mode:type_name -> xstockstrat.common.v1.TradingMode
-	44, // 12: xstockstrat.portfolio.v1.ListPositionsRequest.page:type_name -> xstockstrat.common.v1.PageRequest
-	42, // 13: xstockstrat.portfolio.v1.ListPositionsRequest.trading_mode:type_name -> xstockstrat.common.v1.TradingMode
-	2,  // 14: xstockstrat.portfolio.v1.ListPositionsRequest.side:type_name -> xstockstrat.portfolio.v1.PositionSide
-	5,  // 15: xstockstrat.portfolio.v1.ListPositionsResponse.positions:type_name -> xstockstrat.portfolio.v1.Position
-	45, // 16: xstockstrat.portfolio.v1.ListPositionsResponse.page:type_name -> xstockstrat.common.v1.PageResponse
-	43, // 17: xstockstrat.portfolio.v1.GetPnLRequest.range:type_name -> xstockstrat.common.v1.TimeRange
-	42, // 18: xstockstrat.portfolio.v1.GetPnLRequest.trading_mode:type_name -> xstockstrat.common.v1.TradingMode
-	41, // 19: xstockstrat.portfolio.v1.GetSnapshotRequest.at_time:type_name -> google.protobuf.Timestamp
-	42, // 20: xstockstrat.portfolio.v1.StreamPortfolioUpdatesRequest.trading_mode:type_name -> xstockstrat.common.v1.TradingMode
-	4,  // 21: xstockstrat.portfolio.v1.ListPortfoliosResponse.portfolios:type_name -> xstockstrat.portfolio.v1.Portfolio
-	3,  // 22: xstockstrat.portfolio.v1.WatchlistBinding.source:type_name -> xstockstrat.portfolio.v1.WatchlistEntrySource
-	41, // 23: xstockstrat.portfolio.v1.Watchlist.created_at:type_name -> google.protobuf.Timestamp
-	41, // 24: xstockstrat.portfolio.v1.Watchlist.updated_at:type_name -> google.protobuf.Timestamp
-	17, // 25: xstockstrat.portfolio.v1.Watchlist.bindings:type_name -> xstockstrat.portfolio.v1.WatchlistBinding
-	17, // 26: xstockstrat.portfolio.v1.CreateWatchlistRequest.bindings:type_name -> xstockstrat.portfolio.v1.WatchlistBinding
-	18, // 27: xstockstrat.portfolio.v1.CreateWatchlistResponse.watchlist:type_name -> xstockstrat.portfolio.v1.Watchlist
-	18, // 28: xstockstrat.portfolio.v1.GetWatchlistResponse.watchlist:type_name -> xstockstrat.portfolio.v1.Watchlist
-	44, // 29: xstockstrat.portfolio.v1.ListWatchlistsRequest.page:type_name -> xstockstrat.common.v1.PageRequest
-	18, // 30: xstockstrat.portfolio.v1.ListWatchlistsResponse.watchlists:type_name -> xstockstrat.portfolio.v1.Watchlist
-	45, // 31: xstockstrat.portfolio.v1.ListWatchlistsResponse.page:type_name -> xstockstrat.common.v1.PageResponse
-	17, // 32: xstockstrat.portfolio.v1.UpdateWatchlistRequest.bindings:type_name -> xstockstrat.portfolio.v1.WatchlistBinding
-	46, // 33: xstockstrat.portfolio.v1.UpdateWatchlistRequest.update_mask:type_name -> google.protobuf.FieldMask
-	18, // 34: xstockstrat.portfolio.v1.UpdateWatchlistResponse.watchlist:type_name -> xstockstrat.portfolio.v1.Watchlist
-	17, // 35: xstockstrat.portfolio.v1.AddWatchlistSymbolsRequest.bindings:type_name -> xstockstrat.portfolio.v1.WatchlistBinding
-	18, // 36: xstockstrat.portfolio.v1.AddWatchlistSymbolsResponse.watchlist:type_name -> xstockstrat.portfolio.v1.Watchlist
-	18, // 37: xstockstrat.portfolio.v1.RemoveWatchlistSymbolsResponse.watchlist:type_name -> xstockstrat.portfolio.v1.Watchlist
-	18, // 38: xstockstrat.portfolio.v1.EnsureSignalWatchlistResponse.watchlist:type_name -> xstockstrat.portfolio.v1.Watchlist
-	17, // 39: xstockstrat.portfolio.v1.UpdateWatchlistBindingResponse.binding:type_name -> xstockstrat.portfolio.v1.WatchlistBinding
-	41, // 40: xstockstrat.portfolio.v1.UpdateWatchlistBindingResponse.updated_at:type_name -> google.protobuf.Timestamp
-	17, // 41: xstockstrat.portfolio.v1.UpdateWatchlistBindingsResponse.bindings:type_name -> xstockstrat.portfolio.v1.WatchlistBinding
-	41, // 42: xstockstrat.portfolio.v1.UpdateWatchlistBindingsResponse.updated_at:type_name -> google.protobuf.Timestamp
-	8,  // 43: xstockstrat.portfolio.v1.PortfolioService.GetPortfolio:input_type -> xstockstrat.portfolio.v1.GetPortfolioRequest
-	9,  // 44: xstockstrat.portfolio.v1.PortfolioService.GetPosition:input_type -> xstockstrat.portfolio.v1.GetPositionRequest
-	10, // 45: xstockstrat.portfolio.v1.PortfolioService.ListPositions:input_type -> xstockstrat.portfolio.v1.ListPositionsRequest
-	12, // 46: xstockstrat.portfolio.v1.PortfolioService.GetPnL:input_type -> xstockstrat.portfolio.v1.GetPnLRequest
-	13, // 47: xstockstrat.portfolio.v1.PortfolioService.GetSnapshot:input_type -> xstockstrat.portfolio.v1.GetSnapshotRequest
-	14, // 48: xstockstrat.portfolio.v1.PortfolioService.StreamPortfolioUpdates:input_type -> xstockstrat.portfolio.v1.StreamPortfolioUpdatesRequest
-	15, // 49: xstockstrat.portfolio.v1.PortfolioService.ListPortfolios:input_type -> xstockstrat.portfolio.v1.ListPortfoliosRequest
-	19, // 50: xstockstrat.portfolio.v1.PortfolioService.CreateWatchlist:input_type -> xstockstrat.portfolio.v1.CreateWatchlistRequest
-	21, // 51: xstockstrat.portfolio.v1.PortfolioService.GetWatchlist:input_type -> xstockstrat.portfolio.v1.GetWatchlistRequest
-	23, // 52: xstockstrat.portfolio.v1.PortfolioService.ListWatchlists:input_type -> xstockstrat.portfolio.v1.ListWatchlistsRequest
-	25, // 53: xstockstrat.portfolio.v1.PortfolioService.UpdateWatchlist:input_type -> xstockstrat.portfolio.v1.UpdateWatchlistRequest
-	27, // 54: xstockstrat.portfolio.v1.PortfolioService.DeleteWatchlist:input_type -> xstockstrat.portfolio.v1.DeleteWatchlistRequest
-	29, // 55: xstockstrat.portfolio.v1.PortfolioService.AddWatchlistSymbols:input_type -> xstockstrat.portfolio.v1.AddWatchlistSymbolsRequest
-	31, // 56: xstockstrat.portfolio.v1.PortfolioService.RemoveWatchlistSymbols:input_type -> xstockstrat.portfolio.v1.RemoveWatchlistSymbolsRequest
-	33, // 57: xstockstrat.portfolio.v1.PortfolioService.EnsureSignalWatchlist:input_type -> xstockstrat.portfolio.v1.EnsureSignalWatchlistRequest
-	35, // 58: xstockstrat.portfolio.v1.PortfolioService.ListAllWatchlistSymbols:input_type -> xstockstrat.portfolio.v1.ListAllWatchlistSymbolsRequest
-	37, // 59: xstockstrat.portfolio.v1.PortfolioService.UpdateWatchlistBinding:input_type -> xstockstrat.portfolio.v1.UpdateWatchlistBindingRequest
-	39, // 60: xstockstrat.portfolio.v1.PortfolioService.UpdateWatchlistBindings:input_type -> xstockstrat.portfolio.v1.UpdateWatchlistBindingsRequest
-	4,  // 61: xstockstrat.portfolio.v1.PortfolioService.GetPortfolio:output_type -> xstockstrat.portfolio.v1.Portfolio
-	5,  // 62: xstockstrat.portfolio.v1.PortfolioService.GetPosition:output_type -> xstockstrat.portfolio.v1.Position
-	11, // 63: xstockstrat.portfolio.v1.PortfolioService.ListPositions:output_type -> xstockstrat.portfolio.v1.ListPositionsResponse
-	7,  // 64: xstockstrat.portfolio.v1.PortfolioService.GetPnL:output_type -> xstockstrat.portfolio.v1.PnLResponse
-	6,  // 65: xstockstrat.portfolio.v1.PortfolioService.GetSnapshot:output_type -> xstockstrat.portfolio.v1.PortfolioSnapshot
-	6,  // 66: xstockstrat.portfolio.v1.PortfolioService.StreamPortfolioUpdates:output_type -> xstockstrat.portfolio.v1.PortfolioSnapshot
-	16, // 67: xstockstrat.portfolio.v1.PortfolioService.ListPortfolios:output_type -> xstockstrat.portfolio.v1.ListPortfoliosResponse
-	20, // 68: xstockstrat.portfolio.v1.PortfolioService.CreateWatchlist:output_type -> xstockstrat.portfolio.v1.CreateWatchlistResponse
-	22, // 69: xstockstrat.portfolio.v1.PortfolioService.GetWatchlist:output_type -> xstockstrat.portfolio.v1.GetWatchlistResponse
-	24, // 70: xstockstrat.portfolio.v1.PortfolioService.ListWatchlists:output_type -> xstockstrat.portfolio.v1.ListWatchlistsResponse
-	26, // 71: xstockstrat.portfolio.v1.PortfolioService.UpdateWatchlist:output_type -> xstockstrat.portfolio.v1.UpdateWatchlistResponse
-	28, // 72: xstockstrat.portfolio.v1.PortfolioService.DeleteWatchlist:output_type -> xstockstrat.portfolio.v1.DeleteWatchlistResponse
-	30, // 73: xstockstrat.portfolio.v1.PortfolioService.AddWatchlistSymbols:output_type -> xstockstrat.portfolio.v1.AddWatchlistSymbolsResponse
-	32, // 74: xstockstrat.portfolio.v1.PortfolioService.RemoveWatchlistSymbols:output_type -> xstockstrat.portfolio.v1.RemoveWatchlistSymbolsResponse
-	34, // 75: xstockstrat.portfolio.v1.PortfolioService.EnsureSignalWatchlist:output_type -> xstockstrat.portfolio.v1.EnsureSignalWatchlistResponse
-	36, // 76: xstockstrat.portfolio.v1.PortfolioService.ListAllWatchlistSymbols:output_type -> xstockstrat.portfolio.v1.ListAllWatchlistSymbolsResponse
-	38, // 77: xstockstrat.portfolio.v1.PortfolioService.UpdateWatchlistBinding:output_type -> xstockstrat.portfolio.v1.UpdateWatchlistBindingResponse
-	40, // 78: xstockstrat.portfolio.v1.PortfolioService.UpdateWatchlistBindings:output_type -> xstockstrat.portfolio.v1.UpdateWatchlistBindingsResponse
-	61, // [61:79] is the sub-list for method output_type
-	43, // [43:61] is the sub-list for method input_type
-	43, // [43:43] is the sub-list for extension type_name
-	43, // [43:43] is the sub-list for extension extendee
-	0,  // [0:43] is the sub-list for field type_name
+	2,  // 7: xstockstrat.portfolio.v1.Position.mark_source:type_name -> xstockstrat.portfolio.v1.MarkSource
+	42, // 8: xstockstrat.portfolio.v1.Position.mark_as_of:type_name -> google.protobuf.Timestamp
+	42, // 9: xstockstrat.portfolio.v1.PortfolioSnapshot.snapshot_time:type_name -> google.protobuf.Timestamp
+	43, // 10: xstockstrat.portfolio.v1.PortfolioSnapshot.trading_mode:type_name -> xstockstrat.common.v1.TradingMode
+	44, // 11: xstockstrat.portfolio.v1.PnLResponse.range:type_name -> xstockstrat.common.v1.TimeRange
+	43, // 12: xstockstrat.portfolio.v1.GetPortfolioRequest.trading_mode:type_name -> xstockstrat.common.v1.TradingMode
+	43, // 13: xstockstrat.portfolio.v1.GetPositionRequest.trading_mode:type_name -> xstockstrat.common.v1.TradingMode
+	45, // 14: xstockstrat.portfolio.v1.ListPositionsRequest.page:type_name -> xstockstrat.common.v1.PageRequest
+	43, // 15: xstockstrat.portfolio.v1.ListPositionsRequest.trading_mode:type_name -> xstockstrat.common.v1.TradingMode
+	3,  // 16: xstockstrat.portfolio.v1.ListPositionsRequest.side:type_name -> xstockstrat.portfolio.v1.PositionSide
+	6,  // 17: xstockstrat.portfolio.v1.ListPositionsResponse.positions:type_name -> xstockstrat.portfolio.v1.Position
+	46, // 18: xstockstrat.portfolio.v1.ListPositionsResponse.page:type_name -> xstockstrat.common.v1.PageResponse
+	44, // 19: xstockstrat.portfolio.v1.GetPnLRequest.range:type_name -> xstockstrat.common.v1.TimeRange
+	43, // 20: xstockstrat.portfolio.v1.GetPnLRequest.trading_mode:type_name -> xstockstrat.common.v1.TradingMode
+	42, // 21: xstockstrat.portfolio.v1.GetSnapshotRequest.at_time:type_name -> google.protobuf.Timestamp
+	43, // 22: xstockstrat.portfolio.v1.StreamPortfolioUpdatesRequest.trading_mode:type_name -> xstockstrat.common.v1.TradingMode
+	5,  // 23: xstockstrat.portfolio.v1.ListPortfoliosResponse.portfolios:type_name -> xstockstrat.portfolio.v1.Portfolio
+	4,  // 24: xstockstrat.portfolio.v1.WatchlistBinding.source:type_name -> xstockstrat.portfolio.v1.WatchlistEntrySource
+	42, // 25: xstockstrat.portfolio.v1.Watchlist.created_at:type_name -> google.protobuf.Timestamp
+	42, // 26: xstockstrat.portfolio.v1.Watchlist.updated_at:type_name -> google.protobuf.Timestamp
+	18, // 27: xstockstrat.portfolio.v1.Watchlist.bindings:type_name -> xstockstrat.portfolio.v1.WatchlistBinding
+	18, // 28: xstockstrat.portfolio.v1.CreateWatchlistRequest.bindings:type_name -> xstockstrat.portfolio.v1.WatchlistBinding
+	19, // 29: xstockstrat.portfolio.v1.CreateWatchlistResponse.watchlist:type_name -> xstockstrat.portfolio.v1.Watchlist
+	19, // 30: xstockstrat.portfolio.v1.GetWatchlistResponse.watchlist:type_name -> xstockstrat.portfolio.v1.Watchlist
+	45, // 31: xstockstrat.portfolio.v1.ListWatchlistsRequest.page:type_name -> xstockstrat.common.v1.PageRequest
+	19, // 32: xstockstrat.portfolio.v1.ListWatchlistsResponse.watchlists:type_name -> xstockstrat.portfolio.v1.Watchlist
+	46, // 33: xstockstrat.portfolio.v1.ListWatchlistsResponse.page:type_name -> xstockstrat.common.v1.PageResponse
+	18, // 34: xstockstrat.portfolio.v1.UpdateWatchlistRequest.bindings:type_name -> xstockstrat.portfolio.v1.WatchlistBinding
+	47, // 35: xstockstrat.portfolio.v1.UpdateWatchlistRequest.update_mask:type_name -> google.protobuf.FieldMask
+	19, // 36: xstockstrat.portfolio.v1.UpdateWatchlistResponse.watchlist:type_name -> xstockstrat.portfolio.v1.Watchlist
+	18, // 37: xstockstrat.portfolio.v1.AddWatchlistSymbolsRequest.bindings:type_name -> xstockstrat.portfolio.v1.WatchlistBinding
+	19, // 38: xstockstrat.portfolio.v1.AddWatchlistSymbolsResponse.watchlist:type_name -> xstockstrat.portfolio.v1.Watchlist
+	19, // 39: xstockstrat.portfolio.v1.RemoveWatchlistSymbolsResponse.watchlist:type_name -> xstockstrat.portfolio.v1.Watchlist
+	19, // 40: xstockstrat.portfolio.v1.EnsureSignalWatchlistResponse.watchlist:type_name -> xstockstrat.portfolio.v1.Watchlist
+	18, // 41: xstockstrat.portfolio.v1.UpdateWatchlistBindingResponse.binding:type_name -> xstockstrat.portfolio.v1.WatchlistBinding
+	42, // 42: xstockstrat.portfolio.v1.UpdateWatchlistBindingResponse.updated_at:type_name -> google.protobuf.Timestamp
+	18, // 43: xstockstrat.portfolio.v1.UpdateWatchlistBindingsResponse.bindings:type_name -> xstockstrat.portfolio.v1.WatchlistBinding
+	42, // 44: xstockstrat.portfolio.v1.UpdateWatchlistBindingsResponse.updated_at:type_name -> google.protobuf.Timestamp
+	9,  // 45: xstockstrat.portfolio.v1.PortfolioService.GetPortfolio:input_type -> xstockstrat.portfolio.v1.GetPortfolioRequest
+	10, // 46: xstockstrat.portfolio.v1.PortfolioService.GetPosition:input_type -> xstockstrat.portfolio.v1.GetPositionRequest
+	11, // 47: xstockstrat.portfolio.v1.PortfolioService.ListPositions:input_type -> xstockstrat.portfolio.v1.ListPositionsRequest
+	13, // 48: xstockstrat.portfolio.v1.PortfolioService.GetPnL:input_type -> xstockstrat.portfolio.v1.GetPnLRequest
+	14, // 49: xstockstrat.portfolio.v1.PortfolioService.GetSnapshot:input_type -> xstockstrat.portfolio.v1.GetSnapshotRequest
+	15, // 50: xstockstrat.portfolio.v1.PortfolioService.StreamPortfolioUpdates:input_type -> xstockstrat.portfolio.v1.StreamPortfolioUpdatesRequest
+	16, // 51: xstockstrat.portfolio.v1.PortfolioService.ListPortfolios:input_type -> xstockstrat.portfolio.v1.ListPortfoliosRequest
+	20, // 52: xstockstrat.portfolio.v1.PortfolioService.CreateWatchlist:input_type -> xstockstrat.portfolio.v1.CreateWatchlistRequest
+	22, // 53: xstockstrat.portfolio.v1.PortfolioService.GetWatchlist:input_type -> xstockstrat.portfolio.v1.GetWatchlistRequest
+	24, // 54: xstockstrat.portfolio.v1.PortfolioService.ListWatchlists:input_type -> xstockstrat.portfolio.v1.ListWatchlistsRequest
+	26, // 55: xstockstrat.portfolio.v1.PortfolioService.UpdateWatchlist:input_type -> xstockstrat.portfolio.v1.UpdateWatchlistRequest
+	28, // 56: xstockstrat.portfolio.v1.PortfolioService.DeleteWatchlist:input_type -> xstockstrat.portfolio.v1.DeleteWatchlistRequest
+	30, // 57: xstockstrat.portfolio.v1.PortfolioService.AddWatchlistSymbols:input_type -> xstockstrat.portfolio.v1.AddWatchlistSymbolsRequest
+	32, // 58: xstockstrat.portfolio.v1.PortfolioService.RemoveWatchlistSymbols:input_type -> xstockstrat.portfolio.v1.RemoveWatchlistSymbolsRequest
+	34, // 59: xstockstrat.portfolio.v1.PortfolioService.EnsureSignalWatchlist:input_type -> xstockstrat.portfolio.v1.EnsureSignalWatchlistRequest
+	36, // 60: xstockstrat.portfolio.v1.PortfolioService.ListAllWatchlistSymbols:input_type -> xstockstrat.portfolio.v1.ListAllWatchlistSymbolsRequest
+	38, // 61: xstockstrat.portfolio.v1.PortfolioService.UpdateWatchlistBinding:input_type -> xstockstrat.portfolio.v1.UpdateWatchlistBindingRequest
+	40, // 62: xstockstrat.portfolio.v1.PortfolioService.UpdateWatchlistBindings:input_type -> xstockstrat.portfolio.v1.UpdateWatchlistBindingsRequest
+	5,  // 63: xstockstrat.portfolio.v1.PortfolioService.GetPortfolio:output_type -> xstockstrat.portfolio.v1.Portfolio
+	6,  // 64: xstockstrat.portfolio.v1.PortfolioService.GetPosition:output_type -> xstockstrat.portfolio.v1.Position
+	12, // 65: xstockstrat.portfolio.v1.PortfolioService.ListPositions:output_type -> xstockstrat.portfolio.v1.ListPositionsResponse
+	8,  // 66: xstockstrat.portfolio.v1.PortfolioService.GetPnL:output_type -> xstockstrat.portfolio.v1.PnLResponse
+	7,  // 67: xstockstrat.portfolio.v1.PortfolioService.GetSnapshot:output_type -> xstockstrat.portfolio.v1.PortfolioSnapshot
+	7,  // 68: xstockstrat.portfolio.v1.PortfolioService.StreamPortfolioUpdates:output_type -> xstockstrat.portfolio.v1.PortfolioSnapshot
+	17, // 69: xstockstrat.portfolio.v1.PortfolioService.ListPortfolios:output_type -> xstockstrat.portfolio.v1.ListPortfoliosResponse
+	21, // 70: xstockstrat.portfolio.v1.PortfolioService.CreateWatchlist:output_type -> xstockstrat.portfolio.v1.CreateWatchlistResponse
+	23, // 71: xstockstrat.portfolio.v1.PortfolioService.GetWatchlist:output_type -> xstockstrat.portfolio.v1.GetWatchlistResponse
+	25, // 72: xstockstrat.portfolio.v1.PortfolioService.ListWatchlists:output_type -> xstockstrat.portfolio.v1.ListWatchlistsResponse
+	27, // 73: xstockstrat.portfolio.v1.PortfolioService.UpdateWatchlist:output_type -> xstockstrat.portfolio.v1.UpdateWatchlistResponse
+	29, // 74: xstockstrat.portfolio.v1.PortfolioService.DeleteWatchlist:output_type -> xstockstrat.portfolio.v1.DeleteWatchlistResponse
+	31, // 75: xstockstrat.portfolio.v1.PortfolioService.AddWatchlistSymbols:output_type -> xstockstrat.portfolio.v1.AddWatchlistSymbolsResponse
+	33, // 76: xstockstrat.portfolio.v1.PortfolioService.RemoveWatchlistSymbols:output_type -> xstockstrat.portfolio.v1.RemoveWatchlistSymbolsResponse
+	35, // 77: xstockstrat.portfolio.v1.PortfolioService.EnsureSignalWatchlist:output_type -> xstockstrat.portfolio.v1.EnsureSignalWatchlistResponse
+	37, // 78: xstockstrat.portfolio.v1.PortfolioService.ListAllWatchlistSymbols:output_type -> xstockstrat.portfolio.v1.ListAllWatchlistSymbolsResponse
+	39, // 79: xstockstrat.portfolio.v1.PortfolioService.UpdateWatchlistBinding:output_type -> xstockstrat.portfolio.v1.UpdateWatchlistBindingResponse
+	41, // 80: xstockstrat.portfolio.v1.PortfolioService.UpdateWatchlistBindings:output_type -> xstockstrat.portfolio.v1.UpdateWatchlistBindingsResponse
+	63, // [63:81] is the sub-list for method output_type
+	45, // [45:63] is the sub-list for method input_type
+	45, // [45:45] is the sub-list for extension type_name
+	45, // [45:45] is the sub-list for extension extendee
+	0,  // [0:45] is the sub-list for field type_name
 }
 
 func init() { file_portfolio_v1_portfolio_proto_init() }
@@ -3066,7 +3194,7 @@ func file_portfolio_v1_portfolio_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_portfolio_v1_portfolio_proto_rawDesc), len(file_portfolio_v1_portfolio_proto_rawDesc)),
-			NumEnums:      4,
+			NumEnums:      5,
 			NumMessages:   37,
 			NumExtensions: 0,
 			NumServices:   1,

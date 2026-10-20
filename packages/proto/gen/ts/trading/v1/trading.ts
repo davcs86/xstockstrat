@@ -582,7 +582,11 @@ export interface Order {
    * offline confirmations (feature 157) use the operator-supplied time (server-defaulted to now
    * when unset). NULL for a NEW/unconfirmed order and every historical order.
    */
-  filledAt?: Date | undefined;
+  filledAt?:
+    | Date
+    | undefined;
+  /** offline orders only; unset for broker orders and while NEW */
+  fees?: number | undefined;
 }
 
 export interface PlaceOrderRequest {
@@ -666,6 +670,8 @@ export interface ConfirmOrderRequest {
    * @deprecated
    */
   userId: string;
+  /** cumulative total for the order (>= 0); omitted = keep recorded fees */
+  fees?: number | undefined;
 }
 
 export interface ListOrdersRequest {
@@ -880,6 +886,7 @@ function createBaseOrder(): Order {
     brokerType: BrokerType.BROKER_TYPE_UNSPECIFIED,
     intentState: IntentState.INTENT_STATE_UNSPECIFIED,
     filledAt: undefined,
+    fees: undefined,
   };
 }
 
@@ -950,6 +957,9 @@ export const Order: MessageFns<Order> = {
     }
     if (message.filledAt !== undefined) {
       Timestamp.encode(toTimestamp(message.filledAt), writer.uint32(178).fork()).join();
+    }
+    if (message.fees !== undefined) {
+      writer.uint32(185).double(message.fees);
     }
     return writer;
   },
@@ -1137,6 +1147,14 @@ export const Order: MessageFns<Order> = {
           message.filledAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
           continue;
         }
+        case 23: {
+          if (tag !== 185) {
+            break;
+          }
+
+          message.fees = reader.double();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1242,6 +1260,7 @@ export const Order: MessageFns<Order> = {
         : isSet(object.filled_at)
         ? fromJsonTimestamp(object.filled_at)
         : undefined,
+      fees: isSet(object.fees) ? globalThis.Number(object.fees) : undefined,
     };
   },
 
@@ -1313,6 +1332,9 @@ export const Order: MessageFns<Order> = {
     if (message.filledAt !== undefined) {
       obj.filledAt = message.filledAt.toISOString();
     }
+    if (message.fees !== undefined) {
+      obj.fees = message.fees;
+    }
     return obj;
   },
 
@@ -1343,6 +1365,7 @@ export const Order: MessageFns<Order> = {
     message.brokerType = object.brokerType ?? BrokerType.BROKER_TYPE_UNSPECIFIED;
     message.intentState = object.intentState ?? IntentState.INTENT_STATE_UNSPECIFIED;
     message.filledAt = object.filledAt ?? undefined;
+    message.fees = object.fees ?? undefined;
     return message;
   },
 };
@@ -1937,7 +1960,7 @@ export const GetOrderRequest: MessageFns<GetOrderRequest> = {
 };
 
 function createBaseConfirmOrderRequest(): ConfirmOrderRequest {
-  return { orderId: "", filledQty: 0, filledAvgPrice: 0, filledAt: undefined, userId: "" };
+  return { orderId: "", filledQty: 0, filledAvgPrice: 0, filledAt: undefined, userId: "", fees: undefined };
 }
 
 export const ConfirmOrderRequest: MessageFns<ConfirmOrderRequest> = {
@@ -1956,6 +1979,9 @@ export const ConfirmOrderRequest: MessageFns<ConfirmOrderRequest> = {
     }
     if (message.userId !== "") {
       writer.uint32(42).string(message.userId);
+    }
+    if (message.fees !== undefined) {
+      writer.uint32(49).double(message.fees);
     }
     return writer;
   },
@@ -2007,6 +2033,14 @@ export const ConfirmOrderRequest: MessageFns<ConfirmOrderRequest> = {
           message.userId = reader.string();
           continue;
         }
+        case 6: {
+          if (tag !== 49) {
+            break;
+          }
+
+          message.fees = reader.double();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -2043,6 +2077,7 @@ export const ConfirmOrderRequest: MessageFns<ConfirmOrderRequest> = {
         : isSet(object.user_id)
         ? globalThis.String(object.user_id)
         : "",
+      fees: isSet(object.fees) ? globalThis.Number(object.fees) : undefined,
     };
   },
 
@@ -2063,6 +2098,9 @@ export const ConfirmOrderRequest: MessageFns<ConfirmOrderRequest> = {
     if (message.userId !== "") {
       obj.userId = message.userId;
     }
+    if (message.fees !== undefined) {
+      obj.fees = message.fees;
+    }
     return obj;
   },
 
@@ -2076,6 +2114,7 @@ export const ConfirmOrderRequest: MessageFns<ConfirmOrderRequest> = {
     message.filledAvgPrice = object.filledAvgPrice ?? 0;
     message.filledAt = object.filledAt ?? undefined;
     message.userId = object.userId ?? "";
+    message.fees = object.fees ?? undefined;
     return message;
   },
 };

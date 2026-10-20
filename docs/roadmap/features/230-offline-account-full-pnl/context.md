@@ -443,3 +443,13 @@
 - TDD: N/A (proto).
 - Files modified: `packages/proto/{trading,portfolio,marketdata}/v1/*.proto`
 - Deviations: none.
+
+### Step 2 — proto-gen: regenerate stubs [done]
+- Regenerated Go, Python and TS stubs (plus the compiled `dist/`) with `./scripts/buf-gen.sh` inside the
+  pinned `xstockstrat-codegen` image: 24 files. Most of the churn is raw descriptor bytes and portfolio
+  enum indexes shifting because `MarkSource` was inserted.
+- A second run produced an identical tree (proto-freshness ✓). `go build ./...` passes for trading,
+  portfolio and marketdata.
+- TDD: N/A (generated).
+- Files modified: `packages/proto/gen/**`
+- Deviations: none.

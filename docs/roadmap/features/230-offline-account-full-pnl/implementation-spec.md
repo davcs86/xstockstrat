@@ -210,7 +210,7 @@ The last command is the manual trading.proto check that CI skips (C-09). All thr
 
 ### Step 2 — proto-gen: Regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/` — modify (generated)
