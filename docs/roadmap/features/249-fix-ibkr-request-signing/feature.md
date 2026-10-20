@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-10-20 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-19-trading-ibkr-oauth-signature-omits-query-defect.md` |
+| 2026-10-20 | `draft` → `spec-ready` | /sdd-review | Product spec approved (14 warnings; overlap WARN: file-level, rebase-only vs 240) |
 
 ---
 
@@ -44,8 +45,8 @@ Snapshot from `docs/runbooks/reviewer-registry.md` at /sdd-triage time (2026-10-
 
 `IBKRClient.signRequest` signs plain OAuth 1.0a: query params are excluded from the base string, the HMAC key is
 `&` + access-token secret instead of a Live Session Token, and the header has no `realm`. Every IBKR call is
-therefore expected to 401 and flip the account to INVALID (TRADING-3).
+therefore expected to 401; `ValidateCredentials` maps that to INVALID (TRADING-3).
 
 ## Next Action
 
-`/sdd-design fix-ibkr-request-signing` — recommended design depth: full (LST handshake may be new capability under C-11; credential shape spans trading/UI/agent); see context.md
+`/sdd-design fix-ibkr-request-signing` (full — operator: no quick designs). Design settles the open questions in product-spec.md § Open Questions: key-material home, brokerage session/keepalive, LST lifecycle, query-value encoding, timeout budget.

@@ -35,3 +35,65 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   above; possible credential-shape change spanning trading/UI/agent plus the `trading.proto:267` shape comment;
   Security review of new key material; LST lifecycle/caching under the IBKR client pool).
 - Development branch: feature/fix-ibkr-request-signing
+
+## Session 2026-10-20 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready. Criteria: PASS WITH WARNINGS (0 fails, 0 floor breaches).
+  Overlap: WARN (file-level only, rebase-only).
+- Warnings (14). [x] = resolved in product-spec.md / acceptance.feature this session, [ ] = carried to /sdd-design:
+  - [x] W1 C-15: no FR-N, ACs tagged `@regression` only. Added `## Functional Requirements` FR-1..FR-4 and tagged
+    AC-1 `@FR-3`, AC-2 `@FR-2`, AC-3 `@FR-1`. `@regression` kept. Upstream: the Track C template
+    (`.claude/skills/sdd-triage/reference/track-c-sdd.md:99-163`) emits no FR section, which contradicts criteria 2/8. Not fixed here.
+  - [x] W2 C-14: Consumer Surface(s). Already present at b3d5f199, so the reviewer read pre-fix text. This session
+    states that key material is required, so the UI/agent rows are expected. Existing 4-field accounts cannot
+    handshake until `UpdateBrokerAccountCredentials` runs.
+  - [x] W3 crit 9: Fix Scope checkboxes resolved and the template line removed. The C-11 fork is now recorded as
+    resolved in the spec's Open Questions, per the operator decisions below.
+  - [x] W4 crit 5: proto comment-only, non-breaking. Named the `buf lint`/`buf breaking` gate (C-09), `buf-gen.sh`
+    proto-freshness, and one `packages/proto` owner.
+  - [x] W5 crit 1: added a "Who is blocked" persona line.
+  - [x] W6 C-01: impact made precise. Only `ValidateCredentials` yields INVALID (`trading.go:2528`, `:2575`, `:2690`).
+    Repro step 3 corrected. Added a Confidence caveat (LST/realm comes from ibind and IBKR docs, not a live 401).
+    feature.md Summary corrected to match.
+  - [x] W7 stale ref `trading.go:3009-3015`. Already `3084-3097` at b3d5f199.
+  - [x] W8a C-15 scenario quality. AC-1/AC-2 now assert independent reference-signer vectors over a fixed
+    LST/nonce/timestamp instead of a self-recomputation. AC-3 Given is concrete ("credentials the test IBKR server
+    accepts") and its Then asserts OK. Added AC-4 `@FR-4`: LST handshake 401/403 gives INVALID, 503/timeout gives
+    UNKNOWN (TRADING-3, `credentialStatusFromError` `trading.go:2951-2960`).
+  - [ ] W8b C-15. Still to add at design, as Open Questions in the spec: LST expiry/refresh, concurrent pollers
+    sharing one LST, the existing 4-field account, and query-value encoding (`BRK B`). The encoding rule is not
+    asserted in the spec: RFC 5849 §3.6 gives `%20` and `url.QueryEscape` gives `+`, and IBKR/ibind behavior is
+    unverified, so design confirms the rule before adding a vector.
+  - [x] W9 trading C-2: Alpaca (`default` branch, `trading.go:3098-3110`, `alpaca.go` untouched) and OFFLINE
+    (no client, `trading.go:256`) are stated unaffected. The prior "separate branches" wording was imprecise.
+  - [x] W10 trading C-3: the `httptest` fake plus RFC 5849/ibind vectors is the primary proof. The dev smoke covers
+    trading startup and Alpaca/offline. An IBKR paper smoke is secondary.
+  - [x] W11 trading C-5: order types, status mapping and PARTIALLY_FILLED/FILLED fill handling are stated unchanged.
+  - [x] W12 trading C-1: not triggered. Fix Scope says to re-check C-1/C-05 if key material moves to env/config.
+  - [ ] W13 scope sufficiency, carried to design as Open Questions: (a) `/iserver/auth/ssodh/init` and `/tickle`
+    brokerage session/keepalive; (b) LST TTL, refresh margin and handshake timeout via `WatchConfig` (C-05/F-07);
+    (c) the handshake round trips against `validateAndRecordCredential`'s hardcoded 5s (`trading.go:2603`),
+    `IBKRRequestTimeout` (`ibkr.go:46`) and the `trading.order_intent.stale_multiplier` floor.
+  - [x] W14 crit 3: Out of Scope now names Alpaca/offline and the IBKR timeout defect
+    (`docs/reports/2026-10-19-trading-ibkr-timeout-hardcoded-defect.md`). The brokerage session is pending design (W13a).
+- Overlap findings (WARN, no FAIL; no config-key, proto field-number or migration collision):
+  - `trading.go` vs 240-offline-account-full-pnl (code-completed): disjoint regions (240: `:49-55`, `:224`,
+    ConfirmOrder `:890-943`, `:947-1041`; 249: `ibkrCreds` `:87-92`, decode `:3087`). Textual rebase only.
+  - `trading.proto` vs 240: 249 is a comment-only edit in `RegisterBrokerAccountRequest` (`:260-271`); 240 adds
+    `ConfirmOrderRequest.fees = 6` and `Order.fees = 23`. Both touch `gen/`, so the second merger re-runs
+    `./scripts/buf-gen.sh`.
+  - Low-risk context, no collision: agent `tools.py` (249 touches only `manage_account`; 240/241/247 use other
+    functions), UI `accountShared.tsx` (no peer), 251/241/250 on other trading.go regions, 084 deploy-level
+    credential provisioning (coordinate only if it changes how the IBKR blob is written).
+  - Migrations: none. The trading tip is `011` (240); any future 249 migration takes `012`.
+  - merge-order.md: no 249 row and none required. Optional soft row: 240 lands first, then 249 rebases. Not written
+    (shared file; operator call).
+- Operator decisions (as supplied by the workflow orchestrator's task text, recorded verbatim):
+
+  OPERATOR DECISIONS (binding, recorded 2026-10-20):
+  - Standing authorization: designs run in FULL mode only (no quick designs for automated fixes); the orchestrator auto-approves the design gate once rounds >= 2, no unresolved Floor (F-*) breach remains, no blocking objection remains, and every CHANGE to an existing @AC business rule is covered by an operator decision below.
+  - Scope = 'IBKR auth never worked' as one defect: sign query params in the base string, implement the Live Session Token (LST) handshake, sign regular requests with the LST, add realm. Operator explicit C-11 override recorded: the LST handshake is in scope of this bug fix, no separate /sdd-story.
+  - No live IBKR account is available: verification uses RFC 5849 / ibind reference vectors and an httptest server.
+
+- C-11 tension from the /sdd-triage session: resolved by the decision above. The LST handshake stays in this track.
+- Next: `/sdd-design fix-ibkr-request-signing` (full).
