@@ -224,3 +224,23 @@
 - Spec amended: FR-3 (`filled_at` preserve), FR-4 (carry window and snapshot rules), Affected Services
   (marketdata opt-in), Proto (`BatchGetBarsRequest.allow_partial`).
 - Gate: operator chose a confirming round 3, then approval.
+
+## Session 2026-10-20 — sdd-design round 3 (gate)
+
+- Round 3 result: APPROVE WITH NITS. No Floor breach and no unsigned C-16 regression.
+  - Verified against the code: the allow_partial mechanics (the deadline propagates
+    handler→service), all 9 UpsertOrder callers, the 017 source backfill, and the AC-39 and
+    AC-41..AC-54 arithmetic.
+  - The first round-3 adversary run completed despite the worker restart. A duplicate re-run was
+    stopped.
+- Operator decision (explicit, 2026-10-20): **un-confirm keeps fees**, mirroring the filled_at rule.
+  NEW orders never enter the fold. The RPC edge hides fees/filled_at on NEW orders. AC-48 now expects
+  fees 2.00. The "fees cleared on un-confirm" limitation is removed.
+- Fixes to fold in:
+  - the ConfirmFillDialog label (stale "defaults to now");
+  - agent `fees: float | None = None`, sent only when set;
+  - the no-deadline partial fetch runs on the caller's ctx, not detached;
+  - AC-53/54 made concrete and promoted to the marketdata @feature-191 suite;
+  - a new limitation: previous-session bars that are permanently missing;
+  - sqlmock pattern updates.
+- Gate: operator chose to run round 4 before approving.
