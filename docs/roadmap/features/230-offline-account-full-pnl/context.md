@@ -630,3 +630,18 @@
   - `golangci-lint` 0 issues after gofmt.
 - Files modified: `internal/service/trading_offline_test.go`.
 - Deviations: none.
+
+### Step 11 follow-up — operator revisited deviation 1 (checkpoint after Steps 7–12)
+- The operator chose "Revisit deviation 1". `offlineSnapshotCarry` is now a `TradingService` method
+  returning a closure that calls `ListConfirmedOfflineOrdersByAccount(ctx, accountID)` **inside** the
+  callback, exactly as Step 11 instruction 2 specifies.
+- The load runs only when a carry is actually computed; same id + same `as_of` skips it.
+- A load error returns from the callback, so the upsert tx rolls back and the RPC returns Internal.
+- The `CarryFunc` doc comment now states the real constraint: no header/row writes inside the tx.
+  Reading orders over a separate pool connection is fine.
+- New test `TestSnapshotOfflinePositions_CarryLoadErrorFailsWithoutWrite`.
+- Step 11's deviation entry is superseded. Deviation 2 (Step 10 harness) was accepted as is.
+- Verification:
+  - full `-race` suite ✓;
+  - `go vet` ✓;
+  - `golangci-lint` 0 issues.

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"math"
 	"sort"
 	"sync"
@@ -2046,5 +2047,15 @@ func TestOfflineRecompute_RecentFillsWindow(t *testing.T) {
 	at, err := time.Parse(time.RFC3339Nano, fills[0]["filled_at"].(string))
 	if fills[0]["symbol"] != "AAPL" || fills[0]["qty"] != -4.0 || fills[0]["price"] != 110.0 || err != nil || !at.Equal(recent.FilledAt.AsTime()) {
 		t.Errorf("recent fill = %v (parse err %v), want AAPL −4 @110 at %v", fills[0], err, recent.FilledAt.AsTime())
+	}
+}
+
+func TestSnapshotOfflinePositions_CarryLoadErrorFailsWithoutWrite(t *testing.T) {
+	baseline := &fakeBaselineStore{confirmedErr: errors.New("db down")}
+	svc := newSnapshotTestService(baseline, &recordingLedger{})
+	asOf, rows := testdata.S1Snapshot()
+	_, err := svc.SnapshotOfflinePositions(context.Background(), snapshotReq("acc-1", "user-1", testdata.S1SnapshotID, asOf, rows...))
+	if grpcstatus.Code(err) != codes.Internal || len(baseline.headers) != 0 {
+		t.Errorf("err=%v headers=%d, want Internal and nothing written", err, len(baseline.headers))
 	}
 }

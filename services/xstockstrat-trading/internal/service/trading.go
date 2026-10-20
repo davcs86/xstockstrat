@@ -1084,8 +1084,12 @@ const offlineRecentFillsWindow = 10 * 24 * time.Hour
 
 // offlineSnapshotCarry folds the confirmed fills in (pred.AsOf, asOf] onto pred's lots and carry; with
 // no pred it folds every fill up to asOf (an unknown filled_at counts as before).
-func offlineSnapshotCarry(confirmed []*tradingv1.Order) repository.CarryFunc {
+func (s *TradingService) offlineSnapshotCarry(ctx context.Context, accountID string) repository.CarryFunc {
 	return func(pred *repository.SnapshotHeader, asOf time.Time) (float64, float64, error) {
+		confirmed, err := s.baselineStore.ListConfirmedOfflineOrdersByAccount(ctx, accountID)
+		if err != nil {
+			return 0, 0, fmt.Errorf("load confirmed orders: %w", err)
+		}
 		var window []*tradingv1.Order
 		fees := 0.0
 		for _, o := range confirmed {
@@ -1193,11 +1197,7 @@ func (s *TradingService) SnapshotOfflinePositions(ctx context.Context, req *trad
 	lock.Lock()
 	defer lock.Unlock()
 
-	confirmed, err := s.baselineStore.ListConfirmedOfflineOrdersByAccount(ctx, req.AccountId)
-	if err != nil {
-		return nil, grpcstatus.Errorf(codes.Internal, "load confirmed orders: %v", err)
-	}
-	if err := s.baselineStore.UpsertBaselineSnapshot(ctx, req.AccountId, req.ClientSnapshotId, asOf, validRows, offlineSnapshotCarry(confirmed)); err != nil {
+	if err := s.baselineStore.UpsertBaselineSnapshot(ctx, req.AccountId, req.ClientSnapshotId, asOf, validRows, s.offlineSnapshotCarry(ctx, req.AccountId)); err != nil {
 		if errors.Is(err, repository.ErrSnapshotAsOfConflict) {
 			return nil, grpcstatus.Errorf(codes.FailedPrecondition, "cannot change as_of of a snapshot that is not the latest")
 		}

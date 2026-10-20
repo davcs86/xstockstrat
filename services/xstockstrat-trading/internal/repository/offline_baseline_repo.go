@@ -29,7 +29,7 @@ type SnapshotHeader struct {
 }
 
 // CarryFunc computes the carry for a snapshot at asOf from its predecessor (nil = none). It runs inside
-// the upsert transaction, so it must not call back into the baseline store.
+// the upsert tx, which holds the account's header locks: it must not write snapshot headers or rows.
 type CarryFunc func(pred *SnapshotHeader, asOf time.Time) (realized, fees float64, err error)
 
 // ErrSnapshotAsOfConflict rejects an as_of change on a snapshot that is not the latest, or that would
