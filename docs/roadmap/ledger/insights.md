@@ -3687,7 +3687,7 @@ reusing.
   - The consumer owns all time and calendar interpretation and computes the value at read time.
   - Session-cutting by the producer at emit time was rejected: it couples the producer to the calendar,
     to its clock, and to the version of the cutting logic it runs.
-- **Evidence**: `docs/roadmap/features/230-offline-account-full-pnl/design.md` (Chosen Approach §2.5,
+- **Evidence**: `docs/roadmap/features/240-offline-account-full-pnl/design.md` (Chosen Approach §2.5,
   §4.4–4.5; Rejected Alternatives).
 - **Rule it implies**: Push raw, bounded inputs and interpret them where the clock lives. Size the
   window from the worst-case gap (here ~4.5 days) with slack, and record it as a fixed invariant.

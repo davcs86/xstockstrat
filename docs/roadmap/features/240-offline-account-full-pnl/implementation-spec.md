@@ -2,7 +2,7 @@
 
 **Status**: `pending`
 **Created**: 2026-10-20
-**Feature**: `docs/roadmap/features/230-offline-account-full-pnl/feature.md`
+**Feature**: `docs/roadmap/features/240-offline-account-full-pnl/feature.md`
 **Total Steps**: 28
 **Feature Branch**: `feature/offline-account-full-pnl`
 
@@ -50,13 +50,13 @@ confirms that AC-49's live-session exclusion of the reference bar is needed.
 
 Feature 231 added a valuation rule (`markOf`, `portfolio_service.go:446-456`): a one-sided quote is
 valued at marketdata's `mark_price`, which is the newest stored 1d close within
-`marketdata.quotes.mark_close_max_age_hours` (default 168h). The 230 design never saw this. Its mark
+`marketdata.quotes.mark_close_max_age_hours` (default 168h). The 240 design never saw this. Its mark
 selection (§4.5) treats "a mid-quote ≤ 0" as missing and falls back to the bar-derived close with real
 provenance. The durable 231 rules are all written about **offline** accounts. With migration 017's
-`source` backfill, every offline position goes through the new valuation step in production, so 230
+`source` backfill, every offline position goes through the new valuation step in production, so 240
 interacts with them:
 
-| Durable rule (`services/xstockstrat-portfolio/acceptance/fix-after-hours-positions-priced.feature`) | Under 230 (default below) |
+| Durable rule (`services/xstockstrat-portfolio/acceptance/fix-after-hours-positions-priced.feature`) | Under 240 (default below) |
 |---|---|
 | `@AC-1 @feature-231`: one-sided quote → `current_price` 16.98 (the stored close) | **Value preserved** (the bar-derived close is the same stored `ohlcv` row), now labelled `MARK_SOURCE_LAST_CLOSE` with its real date |
 | `@AC-13 @feature-231`: all five read paths value LYFT at 16.98 | **Preserved**: the four valuation-step reads use the bar close and `GetPnL` keeps `markOf` |
@@ -77,7 +77,7 @@ The operator signed off this C-16 CHANGE of 231 `@AC-6` and `@AC-14` (row 2) for
 `mark_close_max_age_hours`; it would have preserved @AC-6 but narrowed FR-5's operator-chosen 21-day
 lookback. At promotion both 231 rules are **rewritten**: the offline-position outcome becomes the
 `LAST_CLOSE` mark, while the `GetPnL` and non-offline halves stay as they are. Each rewritten rule carries a
-"changed by feature 230" note.
+"changed by feature 240" note.
 
 ### Scenario Coverage (C-15)
 
@@ -132,12 +132,12 @@ service's half against the scenario's numbers. Proof that is SQL-shape only is c
 - **Promotion (C-16) at the integration PR, not a step:**
   - rewrite `fix-book-portfolio-page.feature @AC-1` and `quote-fanout-batching.feature @AC-4` / third
     clause of `@AC-1`, offline only;
-  - rewrite the 231 `@AC-6` / `@AC-14` (row 2) offline outcomes per D-1, each with a "changed by feature 230" note;
+  - rewrite the 231 `@AC-6` / `@AC-14` (row 2) offline outcomes per D-1, each with a "changed by feature 240" note;
   - narrow `@AC-6 @feature-163`;
   - update `fix-offline-account-ui-gaps.feature @AC-2/@AC-4` and extend `offline-account-portfolios.feature
     @AC-13`;
   - promote AC-53/AC-54 into the **new** suite `services/xstockstrat-marketdata/acceptance/offline-account-full-pnl.feature`
-    (`@feature-230`).
+    (`@feature-240`).
 - **Deferred, named follow-up:** none. The out-of-repo `trade-confirm-ingest` skill update stays out of
   scope per the product spec.
 
@@ -289,7 +289,7 @@ order execution correctness, fill detection
    - `INSERT INTO trading.offline_snapshot_headers (account_id, client_snapshot_id, as_of, created_at)
      SELECT account_id, client_snapshot_id, max(as_of), max(created_at) FROM
      trading.offline_position_baselines GROUP BY 1,2 ON CONFLICT DO NOTHING;`
-2. Add a 2-line header comment (feature 230; plain table, not a hypertable).
+2. Add a 2-line header comment (feature 240; plain table, not a hypertable).
 3. Write `011_…down.sql`: `DROP TABLE IF EXISTS trading.offline_snapshot_headers;` then
    `ALTER TABLE trading.orders DROP COLUMN IF EXISTS fees;`.
 
@@ -1301,7 +1301,7 @@ The total must be ≥ 40%; the excluded packages are covered by the targeted tes
   - `recordWarns` `:60`.
 - `anyArgs`/`positionCols` are at `portfolio_fill_errors_test.go:36-49`, and `fakeConfig` at
   `watchlist_service_test.go:244`.
-- The C-13 home `internal/testdata/marks.go` exists (feature 231). The 230 scenario prices (AAPL pc 160,
+- The C-13 home `internal/testdata/marks.go` exists (feature 231). The 240 scenario prices (AAPL pc 160,
   quote 164/163, TSLA −10 @200, XYZ 22, NEWCO) have two consumers (Steps 20 and 22), so they go in
   `internal/testdata/offline_pnl.go`.
 - Existing 231 tests use `posRow` with `source 0`, so they stay on the non-offline path and must remain
@@ -1539,7 +1539,7 @@ stream stability; `xstockstrat-portfolio` owner — consuming service
 
 **Instructions**:
 1. Add `'portfolio.marketdata.last_close_lookback_days': { minValue: 5, maxValue: 60 },` after the 231 rows,
-   with a 1-line comment: feature 230, FR-5 last-close search window, default 21.
+   with a 1-line comment: feature 240, FR-5 last-close search window, default 21.
 2. Add both name-form rows to `TIMEOUT_KEY_FORMS`:
    `{ ns: 'portfolio', key: 'marketdata.last_close_lookback_days', field: 'intVal', min: 5, max: 60 }` and the
    full-dotted form.
@@ -1901,7 +1901,7 @@ scoped to `src/lib/**`), which now includes `money.ts`, `protoTime.ts` and the n
    - extend the marketdata dependency reason with "+ `BatchGetBars` (allow_partial) daily closes for offline
      marks/Day P&L";
    - extend the `offline_account_realized` row (migration 017 columns; lifetime = carried + since);
-   - add a short "Offline valuation (feature 230)" paragraph:
+   - add a short "Offline valuation (feature 240)" paragraph:
      - `source ≠ 0` selects the shared valuation in the 4 reads, and `GetPnL`/snapshot/risk never use it;
      - D-1 mark rule;
      - fixed invariants: the NYSE calendar, `SessionDate` +6h, the 1-minute bars coalescing.
@@ -1913,7 +1913,7 @@ scoped to `src/lib/**`), which now includes `money.ts`, `protoTime.ts` and the n
 3. Marketdata `CLAUDE.md`: `BatchGetBars allow_partial` (opt-in; strict path unchanged; `barsPartialMargin`
    250ms invariant).
 4. `packages/proto/CLAUDE.md`: `pnl.QtyEpsilon` (1e-9), exported, not tuned.
-5. `config-governance.md`: a new top entry "feature 230 — offline-account-full-pnl" with the key table row
+5. `config-governance.md`: a new top entry "feature 240 — offline-account-full-pnl" with the key table row
    and the unseeded waiver.
 6. Findings:
    - trading: the dead `TradingService.StreamOrderUpdates` (`trading.go:1585`), whose snapshot loop would

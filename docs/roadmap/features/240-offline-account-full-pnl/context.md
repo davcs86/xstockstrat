@@ -1,8 +1,8 @@
 # Context: offline-account-full-pnl
 
-**Feature**: `docs/roadmap/features/230-offline-account-full-pnl/feature.md`
-**Product Spec**: `docs/roadmap/features/230-offline-account-full-pnl/product-spec.md`
-**Implementation Spec**: `docs/roadmap/features/230-offline-account-full-pnl/implementation-spec.md`
+**Feature**: `docs/roadmap/features/240-offline-account-full-pnl/feature.md`
+**Product Spec**: `docs/roadmap/features/240-offline-account-full-pnl/product-spec.md`
+**Implementation Spec**: `docs/roadmap/features/240-offline-account-full-pnl/implementation-spec.md`
 
 ---
 
@@ -413,4 +413,12 @@
 - Overlap findings:
   - No migration, proto or config-key collision.
   - Feature 215's nine shared files are already on `main-dev` (#1243), so nothing needs rebasing.
-  - Merge-order row 231↔230 resolved (`b21dbc4b`).
+  - Merge-order row 231↔240 resolved (`b21dbc4b`).
+
+## Session 2026-10-20 — feature renumbered 230 → 240 (numbering collision)
+
+- `230-fix-etf-flag-fill` (`feature/fix-etf-flag-fill`, created 2026-10-15) claimed 230 first; this feature
+  (created 2026-10-19) is the later claim, so it moves to `max(existing NNN) + 1` = **240** (232–239 are
+  claimed on `ccr-f537be2d-6mwmqf`).
+- Directory and identity references renamed here and on `feature/offline-account-full-pnl`; feature 231's
+  launched docs (a dated record of the collision) and line-number cites are left unchanged.

@@ -396,7 +396,7 @@ Appended to `acceptance.feature` as AC-41..AC-54. The AC-10 Given is also clarif
 
 **AC-10 clarification (in place):** add `And all of its fills have filled_at on or before "2026-10-31T23:59:59Z"`.
 
-AC-53 and AC-54 sit in this feature's own `acceptance.feature` with `@FR-5` tags. At launch they are promoted into a **new** marketdata suite file, `services/xstockstrat-marketdata/acceptance/offline-account-full-pnl.feature`, tagged `@feature-230`. They do not go into `opportunities-latency-fix.feature`: its file-level `@feature-191` tag would misattribute them, and its `@FR-*` numbering is 191's. AC-43..AC-47 share their fixture through a Gherkin `Rule:` + `Background:` in `acceptance.feature`. AC-46 cites `@AC-3 @feature-163` in prose, not as a tag.
+AC-53 and AC-54 sit in this feature's own `acceptance.feature` with `@FR-5` tags. At launch they are promoted into a **new** marketdata suite file, `services/xstockstrat-marketdata/acceptance/offline-account-full-pnl.feature`, tagged `@feature-240`. They do not go into `opportunities-latency-fix.feature`: its file-level `@feature-191` tag would misattribute them, and its `@FR-*` numbering is 191's. AC-43..AC-47 share their fixture through a Gherkin `Rule:` + `Background:` in `acceptance.feature`. AC-46 cites `@AC-3 @feature-163` in prose, not as a tag.
 
 **Arithmetic for the shared AC-43..47 precondition:**
 - S1's carry = 600: `ord-b1` and `ord-s1` both have `filled_at` ≤ S1's `as_of`.
@@ -520,7 +520,7 @@ Round 4:
   - `fix-offline-account-ui-gaps.feature @AC-2/@AC-4 @feature-159`.
 - **EXTEND:**
   - `offline-account-portfolios.feature @AC-13`;
-  - marketdata gains `@AC-53`/`@AC-54` in a new suite `services/xstockstrat-marketdata/acceptance/offline-account-full-pnl.feature` (`@feature-230`) at launch; `@AC-2`/`@AC-3 @feature-191` stay preserved.
+  - marketdata gains `@AC-53`/`@AC-54` in a new suite `services/xstockstrat-marketdata/acceptance/offline-account-full-pnl.feature` (`@feature-240`) at launch; `@AC-2`/`@AC-3 @feature-191` stay preserved.
 - **PRESERVE:**
   - `@AC-3` and `@AC-14 @feature-163`;
   - `@AC-10 @feature-157`;
