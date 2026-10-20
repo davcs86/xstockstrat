@@ -4193,7 +4193,16 @@ class _FakeOppRepo:
         return any(r["valid_until"] > now for r in self.rows.get(user_id, []))
 
     async def read(
-        self, user_id, min_conviction, w, *, include_expired, sources=None, action_filter=0, sort=0
+        self,
+        user_id,
+        min_conviction,
+        w,
+        *,
+        include_expired,
+        sources=None,
+        action_filter=0,
+        sort=0,
+        symbol="",
     ):
         # feature 190: accept the new filter/sort kwargs but do NOT re-implement them here — the
         # forwarding is asserted at the servicer→repo boundary (test_*_forwards_*), never by a fake
@@ -4571,6 +4580,7 @@ async def _list_opps(svc, **kwargs):
     return {o.symbol: o for o in resp.opportunities}, resp.opportunities
 
 
+@pytest.mark.usefixtures("read_path")
 class TestListOpportunitiesMaterialized:
     @pytest.mark.asyncio
     async def test_watchlist_and_held_add_rows_with_real_readiness(self):
@@ -5406,6 +5416,7 @@ class _StampedComputeState:
         self._row = {"computed_at": datetime.now(UTC), "valid_until": valid_until}
 
 
+@pytest.mark.usefixtures("read_path")
 class TestColdReadNonBlocking:
     """feature 185 FR-4 (@AC-6/@AC-7) — a cold (never-materialized) ListOpportunities read returns
     empty + a pending signal WITHOUT computing synchronously, distinct from a legitimately-empty
@@ -5547,6 +5558,7 @@ class TestOpportunitySurgicalRecovery:
         assert svc._opportunities_repo.rows["u1"] == []  # never inserted
 
     @pytest.mark.asyncio
+    @pytest.mark.usefixtures("read_path")
     async def test_fresh_read_scan_kicks_retry_for_stale_unavailable_only(self):
         """@AC-8 scan: a FRESH read kicks the surgical retry for data-unavailable rows older than
         the cooldown ONLY — a within-cooldown unavailable row and an evaluated (non-unavailable) row
@@ -5655,6 +5667,7 @@ class TestOpportunitySurgicalRecovery:
         assert cache.upserted == []  # still-down → not staged
 
     @pytest.mark.asyncio
+    @pytest.mark.usefixtures("read_path")
     async def test_paging_stable_across_tied_unavailable_rows(self):
         """Paging determinism: several rows tied at conviction=0, signal_axis=0 paginate via the
         opportunity_key ASC tiebreak so each row is returned once across two offset polls."""
@@ -5689,6 +5702,7 @@ class TestOpportunitySurgicalRecovery:
         assert len(seen) == len(set(seen))  # each row exactly once (stable paging)
 
     @pytest.mark.asyncio
+    @pytest.mark.usefixtures("read_path")
     async def test_symbol_grouping_contiguous_across_pages(self):
         """AC-6 @feature-187: server-side symbol grouping keeps each symbol's rows contiguous,
         positioned by the group's highest-ranked member. A page boundary never splits a symbol."""
@@ -5774,6 +5788,7 @@ class TestOpportunitySurgicalRecovery:
         assert p1_convictions == [0.9, 0.8, 0.7, 0.6]
 
     @pytest.mark.asyncio
+    @pytest.mark.usefixtures("read_path")
     async def test_default_page_size_is_50(self):
         """AC-1 @feature-187: default page size is 50 — a request with no page_size returns
         at most 50 rows and a non-empty next_page_token when more exist."""
@@ -5816,6 +5831,7 @@ class TestOpportunitySurgicalRecovery:
         assert resp.page.next_page_token == "50"
 
 
+@pytest.mark.usefixtures("read_path")
 class TestOpportunityBarsFetchDedup:
     """feature 141 — per-pass bars dedup + cross-request semaphore fixing the "out of shared
     memory" (SQLSTATE 53200) bars-fetch failures caused by feature 131/132's widened candidate
@@ -6066,6 +6082,9 @@ class TestOpportunityRowParity:
         "composite_score",
         # feature 200 — symbol roll-up ranking ordinal, dedicated column, explicit-presence.
         "symbol_score",
+        # feature 215 — skip-row marker (provenance) + gap label (readiness_json), no columns.
+        "fundamentals_unavailable",
+        "fundamentals_gap",
     }
     # feature 095 — live-market fields set at read time in ListOpportunities (post-ranking), not by
     # the mapper, so they join _INTENTIONALLY_UNSET rather than _MAPPED.
@@ -6092,9 +6111,13 @@ class TestOpportunityRowParity:
             "strategy_id": "sx",
             "action": int(analysis_pb2.OPPORTUNITY_ACTION_TAG_REDUCE),
             "conviction": 0.75,
-            "readiness_json": {"passing_conditions": 2, "total_conditions": 3},
+            "readiness_json": {
+                "passing_conditions": 2,
+                "total_conditions": 3,
+                "fundamentals_gap": int(analysis_pb2.FUNDAMENTALS_GAP_ETF),
+            },
             "signal_axis": 0.9,
-            "provenance": ["watchlist", "position", "uw"],
+            "provenance": ["watchlist", "position", "uw", "fundamentals_unavailable"],
             "thesis": "exit firing",
             "valid_until": valid,
         }
@@ -6107,9 +6130,11 @@ class TestOpportunityRowParity:
         assert opp.strategy_id == "sx"
         assert opp.source == "uw"  # first non-structural provenance entry
         assert opp.opportunity_key == "u1|AAPL|sx"
-        assert list(opp.provenance) == ["watchlist", "position", "uw"]
+        assert list(opp.provenance) == ["watchlist", "position", "uw", "fundamentals_unavailable"]
         assert opp.valid_until.ToDatetime(tzinfo=UTC) == valid
         assert opp.muted is False  # feature 132 — no "denied" marker → not muted
+        assert opp.fundamentals_unavailable is True  # feature 215 — provenance marker
+        assert opp.fundamentals_gap == analysis_pb2.FUNDAMENTALS_GAP_ETF  # readiness_json carrier
 
     def test_muted_derived_from_denied_provenance(self):
         """feature 132: the mapper sets Opportunity.muted from the "denied" provenance marker (the
@@ -7113,6 +7138,7 @@ class TestSignalConfidence:
         assert not without.HasField("signal_confidence")  # no active signal → genuine unset (P-03)
 
     @pytest.mark.asyncio
+    @pytest.mark.usefixtures("read_path")
     async def test_producer_selects_max_raw_conviction(self):
         """AC-4 — a symbol with two active signals (raw 0.30 and 0.90) yields signal_confidence 0.90
         (the max raw ExternalSignal.conviction), the sizing probability that is NOT the ordinal
@@ -7162,6 +7188,7 @@ class TestOpportunityConcurrencyFeature176:
         assert set(batch_req.symbols) == set(syms)
 
     @pytest.mark.asyncio
+    @pytest.mark.usefixtures("read_path")
     async def test_owner_scoping_preserved_under_parallel_fanout(self):
         """AC-6: user B's parallel compute never attributes A's strategy. B's watchlist binds
         AAPL→sx, but sx resolves only under A's ownership, so for B it is None (unattributed 0/0),
@@ -7201,6 +7228,7 @@ class TestOpportunityConcurrencyFeature176:
         assert live_uids == {"uB"}
 
     @pytest.mark.asyncio
+    @pytest.mark.usefixtures("read_path")
     async def test_opportunity_set_and_rank_matches_across_runs(self):
         """AC-1: a multi-candidate universe (a firing entry, a non-firing entry, a deny-listed
         muted placeholder, and a held position) yields an IDENTICAL ordered opportunity list across
@@ -7308,6 +7336,7 @@ class TestBacktestOffloadFeature176:
         ]
 
 
+@pytest.mark.usefixtures("read_path")
 class TestListOpportunitiesServerFilters190:
     """feature 190 — the servicer forwards the new filter/sort request fields into the repo read
     (not accepted-and-ignored, fails.md:577) and computes the source facet only on page 0 with the
@@ -7368,6 +7397,23 @@ class TestListOpportunitiesServerFilters190:
             svc._opportunities_repo.available_sources.await_args.kwargs["include_expired"] is False
         )
         assert list(resp.available_sources) == ["live_strategy"]
+
+    @pytest.mark.asyncio
+    async def test_symbol_filter_normalized_into_both_reads(self):
+        """feature 215 @AC-15 — request.symbol is normalized once and forwarded to the fresh AND
+        the stale read (expired rows force the stale branch, so both calls are exercised)."""
+        expired = datetime.now(UTC) - timedelta(hours=1)
+        svc = self._svc_with_row([["live_strategy"]], [0.9], expired)
+        svc._opportunities_repo.read = AsyncMock(wraps=svc._opportunities_repo.read)
+        await svc.ListOpportunities(
+            analysis_pb2.ListOpportunitiesRequest(
+                page=common_pb2.PageRequest(page_size=50), symbol=" schd "
+            ),
+            _ctx(_HEADERS),
+        )
+        calls = svc._opportunities_repo.read.await_args_list
+        assert [c.kwargs["include_expired"] for c in calls] == [False, True]
+        assert all(c.kwargs["symbol"] == "SCHD" for c in calls)
 
     @pytest.mark.asyncio
     async def test_facet_not_computed_past_page0(self):
@@ -7483,3 +7529,137 @@ class TestSymbolScoreRollup:
         healed = svc._opportunities_repo.rows["u1"][0]
         assert "unavailable" not in healed["provenance"]  # recovered
         assert healed["symbol_score"] == pytest.approx(ref_score)
+
+
+# ---------------------------------------------------------------------------
+# Feature 215 — unguarded readiness surfaces keep the pre-change shape
+# ---------------------------------------------------------------------------
+
+
+class TestUnguardedReadinessParity_feature215:
+    """EvaluateReadiness / GetIndicatorSeries / GetWatchlistReadiness / the materializer are NOT
+    guarded (Step 13.8): for SCHD (empty PIT history, NOT_FOUND snapshot) they return exactly what
+    they return when both loaders yield ``[]`` — hold, no new fields, markers or refusals."""
+
+    _FUND_SURFACES = (
+        "EvaluateReadiness",
+        "_kick_readiness_refresh",  # GetWatchlistReadiness's compute path
+        "GetIndicatorSeries",
+        "_materialize_readiness_for_owner",
+    )
+
+    def _definition(self):
+        return analysis_pb2.StrategyDefinition(
+            strategy_id="s1",
+            display_name="S1",
+            components=[
+                analysis_pb2.StrategyComponent(
+                    ref_name="sma",
+                    kind=analysis_pb2.COMPONENT_KIND_BUILTIN_INDICATOR,
+                    indicator="SMA",
+                    params={"period": 3.0},
+                ),
+                analysis_pb2.StrategyComponent(
+                    ref_name="pe",
+                    kind=analysis_pb2.COMPONENT_KIND_FUNDAMENTAL,
+                    fundamental_metric="pe_ratio",
+                ),
+                analysis_pb2.StrategyComponent(
+                    ref_name="fscore",
+                    kind=analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA,
+                    formula_id="fscore",
+                ),
+            ],
+            entry_rule=json.dumps(
+                {
+                    "op": "AND",
+                    "conditions": [
+                        {"fn": ">", "lhs": "sma", "rhs": 100.0},
+                        {"fn": ">", "lhs": "fscore.composite", "rhs": 0.5},
+                    ],
+                }
+            ),
+        )
+
+    def _svc(self):
+        from gen.indicators.v1 import indicators_pb2
+        from gen.marketdata.v1 import marketdata_pb2
+
+        svc = make_servicer()
+        svc._cfg.get_bool = MagicMock(side_effect=lambda key, default=False: True)
+        row = _row_for(self._definition())
+        svc._strategies_repo = AsyncMock()
+        svc._strategies_repo.get_by_id = AsyncMock(return_value=row)
+        svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=row)
+        svc._marketdata = MagicMock()
+        svc._marketdata.GetBars = AsyncMock(
+            side_effect=lambda req, metadata=None: _bars_resp([120.0, 130.0, 150.0])
+        )
+        svc._marketdata.GetHistoricalFundamentals = AsyncMock(
+            return_value=marketdata_pb2.GetHistoricalFundamentalsResponse()
+        )
+        svc._marketdata.GetFundamentals = AsyncMock(
+            side_effect=grpc.aio.AioRpcError(
+                grpc.StatusCode.NOT_FOUND, grpc.aio.Metadata(), grpc.aio.Metadata(), "absent"
+            )
+        )
+        svc._indicators = MagicMock()
+        svc._indicators.GetFormula = AsyncMock(
+            return_value=indicators_pb2.FormulaDefinition(
+                formula_id="fscore",
+                name="fscore",
+                fundamental_inputs=[indicators_pb2.FUNDAMENTAL_METRIC_PE_RATIO],
+            )
+        )
+        svc._indicators.ComputeIndicator = AsyncMock(
+            side_effect=lambda req, metadata=None: SimpleNamespace(
+                result=[SimpleNamespace(value=v, extra={}) for v in req.values]
+            )
+        )
+        svc._indicators.ExecuteFormula = AsyncMock()
+        return svc
+
+    async def _both(self, call):
+        """(real loaders, loaders forced to []) responses for the same request."""
+        real_svc = self._svc()
+        real = await call(real_svc)
+        assert real_svc._marketdata.GetHistoricalFundamentals.await_count >= 1
+        assert real_svc._marketdata.GetFundamentals.await_count >= 1
+        baseline_svc = self._svc()
+        baseline_svc._load_fundamentals = AsyncMock(return_value=[])
+        baseline_svc._load_fundamentals_snapshot = AsyncMock(return_value=[])
+        return real, await call(baseline_svc)
+
+    @pytest.mark.asyncio
+    async def test_evaluate_readiness_schd_matches_empty_baseline(self):
+        async def call(svc):
+            return await svc.EvaluateReadiness(
+                analysis_pb2.EvaluateReadinessRequest(strategy_id="s1", symbols=["SCHD"]),
+                _ctx(_HEADERS),
+            )
+
+        real, baseline = await self._both(call)
+        real.ClearField("computed_at")
+        baseline.ClearField("computed_at")
+        assert real == baseline
+        assert real.readiness[0].symbol == "SCHD"
+
+    @pytest.mark.asyncio
+    async def test_indicator_series_schd_matches_empty_baseline(self):
+        async def call(svc):
+            return await svc.GetIndicatorSeries(
+                analysis_pb2.GetIndicatorSeriesRequest(
+                    strategy_id="s1", symbol="SCHD", closes=[120.0, 130.0, 150.0]
+                ),
+                _owned_ctx(),
+            )
+
+        real, baseline = await self._both(call)
+        assert real == baseline
+
+    def test_unguarded_surfaces_never_pass_failures(self):
+        """Pagination completeness is the only change these surfaces see (C-16 EXTEND)."""
+        for name in self._FUND_SURFACES:
+            src = inspect.getsource(getattr(AnalysisServicer, name))
+            assert "_load_fundamentals" in src or "_formula_fundamentals" in src, name
+            assert "failures=" not in src, f"{name} must stay unguarded"

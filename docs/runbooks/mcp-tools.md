@@ -355,6 +355,7 @@ The summary:
     {
       "symbol": "AAPL",
       "no_trade_reason": "NO_TRADE_REASON_ENTRY_NEVER_TRUE",
+      "fundamentals_gap": "FUNDAMENTALS_GAP_UNSPECIFIED",
       "bars_total": 504,
       "warmup_bars": 50
     }
@@ -370,7 +371,8 @@ Note `"bars_have": "120"` — 64-bit integers render as JSON **strings**, 32-bit
 
 **What stays inline vs. what moves.** The summary keeps everything needed to diagnose the common
 failure — the headline metrics, any `coverage_gaps`, and per symbol its `no_trade_reason`,
-`bars_total` and `warmup_bars` — so a 0-trade run is explainable **without opening the attachment**.
+`fundamentals_gap`, `bars_total` and `warmup_bars` — so a 0-trade run is explainable **without
+opening the attachment**.
 What moves to the attachment is the bulk: the full per-bar `diagnostics` (OHLCV, computed indicator
 values, warm-up flag, per-bar decision) and the full `trades` list. The same int64-as-string rule
 applies there, e.g. `volume`.
@@ -385,6 +387,22 @@ control, so the summary always stands on its own, and `attachments` names what e
 mime type) even if your client renders no download affordance. If attachment construction fails the
 tool still **succeeds** — the backtest ran — and the summary gains an `attachments_error` string.
 
+**Fundamentals refusal (feature 215).** Applies when `analysis.backtest.fundamentals.enabled` is on
+and the strategy **requires fundamentals** (a `kind='fundamental'` operand, or a custom formula
+declaring `fundamental_inputs`). A symbol with no usable filing before each evaluated bar is then
+**refused instead of evaluated**:
+
+- Its diagnostic carries `no_trade_reason: NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE` plus
+  `fundamentals_gap`: `FUNDAMENTALS_GAP_ETF`, `FUNDAMENTALS_GAP_NOT_ETF`, or
+  `FUNDAMENTALS_GAP_UNSPECIFIED` when the label is unknown. The label comes from marketdata's
+  cache-only `GetEtfFlags`.
+- It gets no trades and no evidence cell, and one refused symbol makes the run
+  `BACKTEST_STATUS_INSUFFICIENT_DATA`.
+
+A refused symbol is never the silent `NO_TRADE_REASON_ENTRY_NEVER_TRUE` no-signal it used to be. A
+fundamentals fetch **outage** is not a refusal: the symbol gets no reason 5 and no cell, and the
+run gains a `warnings` entry `fundamentals fetch failed for <SYM> — rerun`.
+
 **Errors**
 
 | Condition | Error |
@@ -393,6 +411,7 @@ tool still **succeeds** — the backtest ran — and the summary gains an `attac
 | `start` after `end` | `ValueError` raised by the client before any RPC |
 | Window span over `analysis.backtest.max_range_days` | `INVALID_ARGUMENT` from analysis |
 | History too short to warm indicators before `start` | `BACKTEST_STATUS_INSUFFICIENT_DATA` result with `coverage_gaps` (not an RPC error) |
+| Fundamentals-requiring strategy on a symbol with no usable fundamentals (e.g. an ETF) | `BACKTEST_STATUS_INSUFFICIENT_DATA` result with `NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE` + `fundamentals_gap` on that symbol (not an RPC error) |
 | Analysis service unreachable | `httpx` connection error propagated |
 
 ---
@@ -792,6 +811,12 @@ definition).
 | Enabling an inactive strategy, or one whose `signal_params` has no `symbols` (feature 089) | FAILED_PRECONDITION — disabling is always allowed |
 | Unknown strategy | `strategy not found` (NOT_FOUND) |
 
+**Fundamentals availability is not checked at enable time (feature 215)**, because the live universe
+is dynamic. At evaluation time, a strategy that requires fundamentals **denies entry** on a symbol
+with no usable fundamentals; exits on a held position still fire. It emits one WARN log naming the
+symbol, the strategy and `NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE`, plus one WARNING alert, when
+the symbol **becomes** unavailable. This happens on the state change, not on every cycle.
+
 ---
 
 ### `run_fundamentals_scan`
@@ -969,8 +994,20 @@ Each opportunity is **snake_case** and always carries `symbol`, `action`, `convi
 `passing_conditions`, `total_conditions`, `thesis`, `strategy_id`, `source`, `opportunity_key`,
 `provenance`, `muted`, and `data_unavailable` (feature 185 — `true` for a **terminal
 data-unavailable** row: a per-symbol bars/indicator fetch failure during the compute, zeroed on both
-ranking axes and **distinct** from an evaluated 0-of-N "quiet" row). The live-market enrichment is
-**omit-not-fabricate**:
+ranking axes and **distinct** from an evaluated 0-of-N "quiet" row).
+
+Every opportunity also carries `fundamentals_unavailable` and `fundamentals_gap` (feature 215):
+
+- `fundamentals_unavailable: true` marks a **non-actionable skip row**. The strategy requires
+  fundamentals the symbol lacks (e.g. an ETF), so the entry rule was not evaluated. The row has
+  `action: OPPORTUNITY_ACTION_TAG_UNSPECIFIED`, no `composite_score`, conviction 0, and the
+  `"fundamentals_unavailable"` provenance marker. It is exempt from the `min_conviction` floor and
+  never also `data_unavailable`.
+- `fundamentals_gap` is `FUNDAMENTALS_GAP_ETF`, `FUNDAMENTALS_GAP_NOT_ETF`, or
+  `FUNDAMENTALS_GAP_UNSPECIFIED` when the label is unknown.
+- A held position on such a symbol still receives its exit-rule row.
+
+The live-market enrichment is **omit-not-fabricate**:
 
 - `live_price`, `change_pct`, `target_price`, `stop_price` — present **only** when the backend has a
   value; an unavailable field is **omitted entirely**, never a fabricated `0`.
@@ -986,7 +1023,6 @@ ranking axes and **distinct** from an evaluated 0-of-N "quiet" row). The live-ma
   a caller can compare **which symbol** to trade across the queue. Symbol-uniform (every row of a
   symbol carries the same value); omitted when the symbol has no score-eligible opportunity. A
   **ranking aid on a non-`[0,1]` scale, NOT a cardinal** sizing/alert input.
-- `sparkline` — a list of recent daily closes; a warm-up/missing bar is JSON `null` (never `NaN`).
 - `conditions` — the traced `{ref_name, lhs_value, threshold, fn, state, distance_to_threshold}`
   leaves; an unattributed row omits the key.
 
@@ -1006,6 +1042,9 @@ Risk/reward and suggested share size are **not** returned — they are a UI-only
 client-side, carried on no wire field.
 
 **Errors** — a backend `AioRpcError` surfaces as a `RuntimeError` with the gRPC status message.
+A hung analysis read fails after the `agent.opportunities.read_timeout_seconds` deadline (default
+`40`s, bounds `[30,55]`) with `upstream did not respond within Ns (deadline exceeded); retry shortly`.
+A saturated opportunities store returns `opportunities store unavailable; retry` (`UNAVAILABLE`).
 
 ---
 

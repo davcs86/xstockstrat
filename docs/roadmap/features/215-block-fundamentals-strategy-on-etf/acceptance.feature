@@ -29,12 +29,15 @@ Feature: block-fundamentals-strategy-on-etf
     Then the SCHD result is evaluated normally on its price/indicator rules with no fundamentals-unavailable reason
 
   @AC-4 @FR-3
-  Scenario: The opportunity engine excludes ETFs from a fundamentals-gated strategy's universe
+  Scenario: The opportunity engine emits a non-actionable row for an ETF on a fundamentals-gated strategy
     Given "fundamentals_macd_blend" requires fundamentals
-    And the candidate universe for a compute pass includes the ETF "SCHD" and the equity "AAPL"
+    And the candidate universe for a compute pass includes the ETF "SCHD" as an entry candidate and the equity "AAPL"
     When opportunities are computed for "fundamentals_macd_blend"
-    Then no opportunity row is emitted for "SCHD"
-    And "SCHD" is recorded as skipped with the reason "fundamentals unavailable (ETF)"
+    Then no actionable opportunity row is emitted for "SCHD"
+    And "SCHD" carries a non-actionable row with action UNSPECIFIED and no composite score, flagged fundamentals-unavailable
+    And the row's reason reads "fundamentals unavailable (ETF)" when marketdata knows SCHD is an ETF, else "fundamentals unavailable"
+    And a held "SCHD" position still receives its exit-rule row
+    And "AAPL" is evaluated normally
 
   @AC-5 @FR-6
   Scenario: The refusal is auditable
@@ -44,7 +47,83 @@ Feature: block-fundamentals-strategy-on-etf
     And the enumerated reason is present on the returned result rather than only in logs
 
   @AC-6 @FR-4
-  Scenario: A live-enabled fundamentals-gated strategy does not silently evaluate an ETF
+  Scenario: A live-enabled fundamentals-gated strategy is denied entry on an ETF, auditably
     Given "fundamentals_macd_blend" is live_enabled and requires fundamentals
-    When the live evaluation path assesses the ETF "SCHD"
-    Then "SCHD" yields the guardrail reason "NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE" rather than a silent no-signal
+    When the live evaluation path assesses the ETF "SCHD" over three cycles
+    Then "SCHD" is denied entry and a WARN log names "SCHD", the strategy id, and "NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE"
+    And exactly one WARNING alert is emitted while "SCHD" stays unavailable
+    And an exit for a held "SCHD" position still fires
+
+  @AC-7 @FR-7
+  Scenario: Marketdata reports fundamentals absence distinctly from outage and disable
+    Given snapshot_source is "edgar" and marketdata.fmp.enabled and marketdata.finnhub.enabled are false
+    When GetFundamentalsMulti is called for ["SCHD", "BABA"]
+    Then only "BABA" is returned and no error is raised
+    And GetFundamentals for "SCHD" returns NotFound
+    And a vendor "no fundamentals for symbol" response also returns NotFound
+    When marketdata.edgar.enabled is false
+    Then both RPCs return FailedPrecondition
+
+  @AC-8 @FR-8
+  Scenario: A fundamentals outage is not reported as absence
+    Given GetHistoricalFundamentals and GetFundamentals return Unavailable
+    When run_backtest is called for "fundamentals_macd_blend" on "SCHD"
+    Then no "NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE" reason is set, a "fundamentals fetch failed — rerun" warning is present, and no evidence cell is written
+    When opportunities are computed for two fundamentals strategies and one technical strategy on "SCHD"
+    Then both fundamentals rows are data-unavailable with their actions preserved
+    And the technical strategy's row is evaluated normally
+
+  @AC-9 @FR-8
+  Scenario: A globally disabled snapshot source is not reported as absence
+    Given the marketdata fundamentals snapshot source is globally disabled (FailedPrecondition)
+    When opportunities are computed and the live loop runs for "fundamentals_macd_blend"
+    Then opportunity rows are evaluated without the data-unavailable or fundamentals-unavailable marker and are not retried
+    And the live loop makes no state change and emits no alert
+
+  @AC-10 @FR-8
+  Scenario: Partial rows evaluate and filings at or after the window's last bar do not count
+    Given a formula declaring {BETA, PE_RATIO} and a "SCHD" snapshot row carrying only beta
+    Then that formula is evaluated on "SCHD", not refused
+    Given a symbol whose first filing is dated on or after the backtest window's last bar
+    When the backtest runs for a fundamentals-requiring strategy on that window
+    Then the symbol is refused with "NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE"
+
+  @AC-11 @FR-9
+  Scenario: The derived grade excludes refused symbols without deleting evidence
+    Given "fundamentals_macd_blend" has pre-existing evidence cells under its current fingerprint for "AAPL" and a 0-trade "SCHD" cell, including one with a NULL range_end
+    When the grade is recomputed
+    Then the derived grade counts "AAPL" and not "SCHD"
+    And every "SCHD" cell still exists in analysis.backtest_run_symbols
+    When run_backtest refuses "SCHD" alone with status INSUFFICIENT_DATA
+    Then the headline grade is recomputed
+    When GetHistoricalFundamentals is unavailable during a recompute
+    Then the previous headline grade is kept and a warning is logged
+
+  @AC-12 @FR-10
+  Scenario: Point-in-time fundamentals are read across all pages
+    Given "AAPL" has more than 50 stored fundamentals periods with dividend_yield present only in the newest periods
+    When a backtest, the live loop, and a grade recompute load AAPL's PIT fundamentals
+    Then every stored period is loaded and "AAPL" is not refused
+    Given marketdata keeps returning a next_page_token past the page cap
+    Then the symbol is treated as unknown (fetch-failed warning), never refused
+
+  @AC-13 @FR-3 @FR-8
+  Scenario: A bars outage on a fundamentals strategy stays a data-unavailable row and heals correctly
+    Given "fundamentals_macd_blend" and the ETF "SCHD" as an entry candidate
+    And BatchGetBars fails for "SCHD" during the compute
+    Then the "SCHD" row is data-unavailable with its resolved action preserved and is not flagged fundamentals-unavailable
+    When the 300s self-heal runs after bars recover
+    Then the row is rewritten to the non-actionable fundamentals-unavailable row with action UNSPECIFIED and no data-unavailable marker
+
+  @AC-14 @FR-11
+  Scenario: The ETF label never spends the guard's FMP headroom
+    Given the shared FMP day budget is at or above 80% of marketdata.fmp.daily_request_cap
+    When GetEtfFlags is called for an uncached "SCHD"
+    Then is_etf is unset, no FMP call is made, and the background fill does not fetch "SCHD"
+    And a cached flag is served for 30 days without re-fetch
+
+  @AC-15 @FR-3
+  Scenario: Signal-detail shows the fundamentals-unavailable state regardless of queue rank
+    Given the user's queue has more than 50 rows and the "SCHD" fundamentals-unavailable row ranks below row 50
+    When the user opens /trader/positions/SCHD with strategy "fundamentals_macd_blend" selected
+    Then the fundamentals-unavailable badge and the SignalReadiness notice are shown

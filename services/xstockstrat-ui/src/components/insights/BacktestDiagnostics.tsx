@@ -8,6 +8,7 @@ import type { SymbolDiagnostics } from '@xstockstrat/proto/analysis/v1/analysis_
 import {
   BarAction,
   FillModel,
+  FundamentalsGap,
   NoTradeReason,
   SizingMode,
 } from '@xstockstrat/proto/analysis/v1/analysis_pb';
@@ -46,6 +47,8 @@ const NO_TRADE_MESSAGE: Record<NoTradeReason, string> = {
   [NoTradeReason.INSUFFICIENT_CAPITAL]: 'No trades — insufficient capital to open a position.',
   [NoTradeReason.FORMULA_ERROR]:
     'No trades — a custom-formula component failed to execute over this range. Check the formula definition and its inputs.',
+  [NoTradeReason.FUNDAMENTALS_UNAVAILABLE]:
+    'No trades — this strategy requires fundamentals and this symbol has none usable in the range, so it was refused rather than evaluated.',
 };
 
 function fmtDate(seconds: bigint | undefined): string {
@@ -105,7 +108,11 @@ function SymbolTable({ sd }: { sd: SymbolDiagnostics }) {
 
   const cols = 3 + indicatorKeys.length + 3; // date, close, volume | indicators | warmup, action, conviction
   const gridTemplate = `110px 90px 90px ${indicatorKeys.map(() => '90px').join(' ')} 70px 70px 90px`;
-  const noTradeMsg = NO_TRADE_MESSAGE[sd.noTradeReason] ?? '';
+  const baseNoTradeMsg = NO_TRADE_MESSAGE[sd.noTradeReason] ?? '';
+  const noTradeMsg =
+    baseNoTradeMsg && sd.fundamentalsGap === FundamentalsGap.ETF
+      ? `${baseNoTradeMsg} (ETF)`
+      : baseNoTradeMsg;
 
   return (
     <div className="space-y-2">

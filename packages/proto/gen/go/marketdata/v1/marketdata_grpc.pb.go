@@ -38,6 +38,7 @@ const (
 	MarketDataService_GetCurrentSector_FullMethodName          = "/xstockstrat.marketdata.v1.MarketDataService/GetCurrentSector"
 	MarketDataService_GetSectorAsOf_FullMethodName             = "/xstockstrat.marketdata.v1.MarketDataService/GetSectorAsOf"
 	MarketDataService_GetSectorHistory_FullMethodName          = "/xstockstrat.marketdata.v1.MarketDataService/GetSectorHistory"
+	MarketDataService_GetEtfFlags_FullMethodName               = "/xstockstrat.marketdata.v1.MarketDataService/GetEtfFlags"
 )
 
 // MarketDataServiceClient is the client API for MarketDataService service.
@@ -87,6 +88,9 @@ type MarketDataServiceClient interface {
 	GetCurrentSector(ctx context.Context, in *GetCurrentSectorRequest, opts ...grpc.CallOption) (*GetCurrentSectorResponse, error)
 	GetSectorAsOf(ctx context.Context, in *GetSectorAsOfRequest, opts ...grpc.CallOption) (*GetSectorAsOfResponse, error)
 	GetSectorHistory(ctx context.Context, in *GetSectorHistoryRequest, opts ...grpc.CallOption) (*GetSectorHistoryResponse, error)
+	// feature 215 — cache-only ETF label read: never calls FMP on the request path; an unknown
+	// symbol returns is_etf unset.
+	GetEtfFlags(ctx context.Context, in *GetEtfFlagsRequest, opts ...grpc.CallOption) (*GetEtfFlagsResponse, error)
 }
 
 type marketDataServiceClient struct {
@@ -305,6 +309,16 @@ func (c *marketDataServiceClient) GetSectorHistory(ctx context.Context, in *GetS
 	return out, nil
 }
 
+func (c *marketDataServiceClient) GetEtfFlags(ctx context.Context, in *GetEtfFlagsRequest, opts ...grpc.CallOption) (*GetEtfFlagsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetEtfFlagsResponse)
+	err := c.cc.Invoke(ctx, MarketDataService_GetEtfFlags_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // MarketDataServiceServer is the server API for MarketDataService service.
 // All implementations should embed UnimplementedMarketDataServiceServer
 // for forward compatibility.
@@ -352,6 +366,9 @@ type MarketDataServiceServer interface {
 	GetCurrentSector(context.Context, *GetCurrentSectorRequest) (*GetCurrentSectorResponse, error)
 	GetSectorAsOf(context.Context, *GetSectorAsOfRequest) (*GetSectorAsOfResponse, error)
 	GetSectorHistory(context.Context, *GetSectorHistoryRequest) (*GetSectorHistoryResponse, error)
+	// feature 215 — cache-only ETF label read: never calls FMP on the request path; an unknown
+	// symbol returns is_etf unset.
+	GetEtfFlags(context.Context, *GetEtfFlagsRequest) (*GetEtfFlagsResponse, error)
 }
 
 // UnimplementedMarketDataServiceServer should be embedded to have
@@ -417,6 +434,9 @@ func (UnimplementedMarketDataServiceServer) GetSectorAsOf(context.Context, *GetS
 }
 func (UnimplementedMarketDataServiceServer) GetSectorHistory(context.Context, *GetSectorHistoryRequest) (*GetSectorHistoryResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetSectorHistory not implemented")
+}
+func (UnimplementedMarketDataServiceServer) GetEtfFlags(context.Context, *GetEtfFlagsRequest) (*GetEtfFlagsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetEtfFlags not implemented")
 }
 func (UnimplementedMarketDataServiceServer) testEmbeddedByValue() {}
 
@@ -766,6 +786,24 @@ func _MarketDataService_GetSectorHistory_Handler(srv interface{}, ctx context.Co
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MarketDataService_GetEtfFlags_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetEtfFlagsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MarketDataServiceServer).GetEtfFlags(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MarketDataService_GetEtfFlags_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MarketDataServiceServer).GetEtfFlags(ctx, req.(*GetEtfFlagsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // MarketDataService_ServiceDesc is the grpc.ServiceDesc for MarketDataService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -840,6 +878,10 @@ var MarketDataService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetSectorHistory",
 			Handler:    _MarketDataService_GetSectorHistory_Handler,
+		},
+		{
+			MethodName: "GetEtfFlags",
+			Handler:    _MarketDataService_GetEtfFlags_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

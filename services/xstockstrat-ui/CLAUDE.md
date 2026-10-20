@@ -78,8 +78,7 @@ theme values come entirely from the preset).
   remove them. `recharts` has no first-party OHLCV candlestick geometry, and
   `e2e/trader/chart-panel.spec.ts` (and the symbol-page e2e) depend on `lightweight-charts`'s own
   injected `.tv-lightweight-charts` DOM class as an async-readiness signal. Do not re-flag the
-  symbol-page charting as unconsolidated in a future audit. (Correcting prior doc-drift:
-  `insights/market/[symbol]/page.tsx` renders **no** chart — it was never a hook consumer.)
+  symbol-page charting as unconsolidated in a future audit.
 - **Sanctioned exception — the unified `/trader/positions/[symbol]` page reuses `/insights`-segment
   browser clients.** `analysisClient`, `insightsIngestClient`, and `insightsPortfolioClient` (all
   `baseUrl: '/insights/api'`) are called directly from this `/trader`-segment page rather than
@@ -135,13 +134,24 @@ The physical routes/segments above are **unchanged**; feature 083 layers an oppo
   import `NAV_GROUPS` from `PlatformHeader`** (that forms a `PlatformHeader ↔ BottomTabBar` import
   cycle → a prerender TDZ crash); import from `navGroups.tsx`.
 - **Decide screens** — `insights/opportunities` (ranked queue over analysis `ListOpportunities`)
-  and the Signal-detail page `insights/market/[symbol]`. Signal-detail is a two-column grammar:
-  **left** = "Why this fired" (`EvaluateReadiness` for an explicit strategy — via a strategy picker,
-  never a fabricated signal→strategy binding); **right** = an FR-6 order
-  ticket re-presenting `OrderForm` inside its own `AccountProvider`. The header enriches from the
-  ranked queue when the symbol is in it (action tag + Conviction from the matching `Opportunity`,
-  Edge (BT) from `GetStrategyAnalytics`); it degrades to symbol + price only when the symbol is not
-  a live opportunity (e.g. opened from Screener) — never fabricated.
+  and the Signal-detail page `trader/positions/[symbol]` (the unified symbol page).
+  - Readiness (`SignalReadiness` → `EvaluateReadiness` for an explicit strategy, watchlist-gated,
+    never a fabricated signal→strategy binding) sits beside an FR-6 order ticket (`OrderForm`, under
+    the `/trader` segment's `AccountProvider`).
+  - The header enriches from the symbol's own opportunity rows: action tag and Conviction from the
+    matching `Opportunity`, and Edge (BT) from `GetStrategyAnalytics`. The rows are fetched with
+    `useOpportunities(…, symbol)` → `ListOpportunitiesRequest.symbol` (feature 215), so they do not
+    depend on queue rank (the queue's page 1 holds ≤50 rows). The `symbol = ''` default keeps the
+    queue/CopilotRail shared page-1 cache key.
+  - The header degrades to symbol + price only when the symbol has no opportunity row (e.g. opened
+    from Screener). It is never fabricated.
+  - **Fundamentals skip row (feature 215).** A row with `fundamentalsUnavailable` is non-actionable:
+    - It renders the exhaustive `FUNDAMENTALS_GAP` badge ("Fundamentals unavailable", or
+      "Fundamentals unavailable (ETF)") in place of the action badge, with no act buttons.
+    - The badge test ids are `fundamentals-unavailable-<sym>` (desktop queue),
+      `mobile-fundamentals-unavailable-<sym>` (mobile queue) and `detail-fundamentals-unavailable`
+      (Signal-detail).
+    - `SignalReadiness` adds a `readiness-fundamentals-unavailable` notice.
 - **Single-position detail** — the row-click `Sheet` on Book → Exposure (`trader/positions`) is
   risk-framed to mirror the Exposure table: a StatTile row (Open R / Risk at stop / Stop distance /
   Weight), a "Position risk" block (factor / exit rule / flag), then the read-only broker-reported
@@ -342,7 +352,7 @@ The UI is an installable PWA that can receive OS-level Web Push notifications ev
 
 ## Observability
 
-OTel via `src/telemetry.ts`, gated by `OTEL_ENABLED`; init failures are warnings only. See
+OTel via `src/telemetry.ts`, loaded by the Next.js hook `src/instrumentation.ts` — it must stay in `src/` (a `src/` project ignores a root-level hook) with its `NEXT_RUNTIME === 'nodejs'` guard. Gated by `OTEL_ENABLED`; init failures are warnings only. See
 `docs/patterns/observability.md`.
 
 ## Testing
@@ -396,7 +406,7 @@ real services — `pnpm test:e2e` and `scripts/run-e2e.sh` are fully self-contai
 | Config-UI audit (DB) | `src/app/config-ui/api/audit/route.ts` |
 | Next config | `next.config.js` |
 | Dockerfile | `Dockerfile` |
-| OTel | `src/telemetry.ts` |
+| OTel | `src/instrumentation.ts` (hook), `src/telemetry.ts` |
 | E2E | `e2e/`, `playwright.config.ts` |
 | Shell nav model (083) | `src/components/shared/navGroups.tsx`, `src/components/shared/PlatformHeader.tsx` |
 | Enum render maps (083) | `src/lib/opportunityShared.tsx` |

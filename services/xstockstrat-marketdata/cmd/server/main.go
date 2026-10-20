@@ -150,6 +150,7 @@ func main() {
 		os.Exit(1)
 	}
 	svc.SetClassification(repository.NewClassificationRepo(repo), fmpClient, fmpClient)
+	svc.SetEtfFlagSource(fmpClient)
 	hdl := handler.NewMarketDataHandler(svc)
 
 	go svc.StartWarmQuotePoller(ctx)
@@ -157,6 +158,10 @@ func main() {
 	go svc.StartBarIngestPoller(ctx)
 
 	go svc.StartClassificationRefreshPoller(ctx)
+
+	go svc.StartEtfFlagFiller(ctx)
+
+	go svc.StartQuoteRetention(ctx)
 
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%s", cfg.GRPCPort))
 	if err != nil {

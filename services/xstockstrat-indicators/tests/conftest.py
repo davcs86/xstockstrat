@@ -12,6 +12,7 @@ import types
 from unittest.mock import AsyncMock, MagicMock
 
 import grpc
+import pytest
 
 OWNER_HEADERS = [("x-user-id", "user-a"), ("x-access-scope", "1"), ("x-trace-id", "t-1")]
 OTHER_HEADERS = [("x-user-id", "user-b"), ("x-access-scope", "1"), ("x-trace-id", "t-1")]
@@ -53,3 +54,21 @@ def _setup_gen_path() -> None:
 # Run unconditionally at import time — conftest.py is imported before
 # test modules are collected, so this executes early enough.
 _setup_gen_path()
+
+
+@pytest.fixture
+def otel_reset(monkeypatch):
+    """Isolate a test calling init_telemetry: the OTel tracer provider is set-once per process."""
+    from opentelemetry import trace
+    from opentelemetry.instrumentation.grpc import GrpcAioInstrumentorServer
+    from opentelemetry.util._once import Once
+
+    monkeypatch.setattr(trace, "_TRACER_PROVIDER_SET_ONCE", Once())
+    monkeypatch.setattr(trace, "_TRACER_PROVIDER", None)
+    monkeypatch.setenv("NO_PROXY", "127.0.0.1")
+    monkeypatch.setenv("no_proxy", "127.0.0.1")
+    monkeypatch.setattr(GrpcAioInstrumentorServer, "instrument", lambda self, **kw: None)
+    yield
+    provider = trace.get_tracer_provider()
+    if hasattr(provider, "shutdown"):
+        provider.shutdown()

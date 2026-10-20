@@ -387,6 +387,12 @@ jobs:
         if: matrix.service == 'xstockstrat-indicators'
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libseccomp2
 
+      # The analysis real_pg tests start a throwaway PostgreSQL from local binaries (tests/conftest.py
+      # local_pg) and fail rather than skip under CI, so the binaries must be present.
+      - name: install postgresql (analysis real_pg tests)
+        if: matrix.service == 'xstockstrat-analysis'
+        run: ls /usr/lib/postgresql/*/bin/initdb || (sudo apt-get update && sudo apt-get install -y --no-install-recommends postgresql)
+
       - name: pytest with coverage
         run: |
           uv run --no-sync pytest --cov=${{ matrix.cov_source }} \

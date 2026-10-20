@@ -19,9 +19,10 @@ escape yields no lateral movement):
     are absent → EPERM, so module-attribute traversal to the real `os` cannot read any file. Allowed
     modules' lazy attributes are resolved before the filter loads. Fails closed on compat
     ABIs (x86/x32 not added) and any unknown syscall.
-  - Expanded rlimits: RLIMIT_DATA (memory), RLIMIT_CPU (CPU backstop), RLIMIT_NPROC (fork-bomb),
-    RLIMIT_FSIZE=0 (no file writes), RLIMIT_NOFILE. RLIMIT_AS is deliberately NOT used (it rejects
-    numpy/pandas virtual reservations — INDICATORS-2).
+  - Expanded rlimits: RLIMIT_DATA (memory: measured pre-lockdown VmData baseline + memory_bytes
+    headroom), RLIMIT_CPU (CPU backstop), RLIMIT_NPROC (fork-bomb), RLIMIT_FSIZE=0 (no file
+    writes), RLIMIT_NOFILE. RLIMIT_AS is deliberately NOT used (it rejects numpy/pandas virtual
+    reservations — INDICATORS-2).
   - Write elimination: PYTHONDONTWRITEBYTECODE + HOME/TMPDIR=/nonexistent (no .pyc/cache writes).
   - Deterministic termination: start_new_session + killpg on timeout and on every exit (a
     fork()+sleep grandchild cannot survive to hold an NPROC slot).
@@ -55,6 +56,12 @@ _THREAD_LIMIT_ENV = {
 # A fixed constant of the jail: cross-UID isolation, not an operator tunable.
 _SANDBOX_UID = 65534
 _SANDBOX_GID = 65534
+
+# Fail-closed: no parseable VmData line raises StopIteration/ValueError before the formula runs.
+_VMDATA_PROBE = (
+    "with open('/proc/self/status') as _st:\n"
+    "    _baseline = next(int(_l.split()[1]) * 1024 for _l in _st if _l.startswith('VmData:'))\n"
+)
 
 # seccomp allowlist finalized empirically (strace of numpy/pandas compute). openat is deliberately
 # absent: the language guard is bypassable via module attributes, so nothing may open a file.
@@ -190,6 +197,10 @@ class SandboxResult:
     exit_reason: str  # "success"|"timeout"|"memory_exceeded"|"runtime_error"|"import_blocked"
 
 
+# stderr markers of a child allocation failure; OpenBLAS's abort carries no "MemoryError".
+_MEMORY_EXHAUSTED_MARKERS = ("MemoryError", "OpenBLAS error: Memory allocation still failed")
+
+
 # Restrict builtins via a fresh __builtins__ namespace, never by mutating the shared builtins
 # module — that breaks the interpreter/import machinery (e.g. delattr, KeyError, locals).
 _SANDBOX_WRAPPER = textwrap.dedent("""
@@ -243,12 +254,6 @@ for _name in dir(_builtins):
         _restricted_builtins[_name] = _obj
 _restricted_builtins['__import__'] = _safe_import
 
-# Load input data
-data = json.loads({input_json!r})
-
-# Load validated parameter values (separate namespace from `data`)
-params = json.loads({params_json!r})
-
 # Pre-cache a usable temp dir BEFORE the RLIMIT_FSIZE=0 lockdown. numpy/pandas call
 # tempfile.gettempdir() lazily during compute; it probes candidate dirs by WRITING a byte, which
 # RLIMIT_FSIZE=0 then makes raise FileNotFoundError ("No usable temporary directory"). Caching it
@@ -271,15 +276,20 @@ ctypes.CDLL(None, use_errno=True).prctl(38, 1, 0, 0, 0)  # PR_SET_NO_NEW_PRIVS
 # Import before RLIMIT_NPROC: pyseccomp's find_library forks ldconfig, which fails under the cap.
 import pyseccomp as _seccomp
 
-# Expanded rlimits. RLIMIT_DATA (heap + anon mmap) not RLIMIT_AS — numpy/pandas reserve huge virtual
-# space on import that RLIMIT_AS would reject before any real use (INDICATORS-2). CPU/NPROC derive
-# from config (timeout_ms/max_concurrent); FSIZE=0/NOFILE=64 are jail constants.
+# RLIMIT_DATA (not RLIMIT_AS, INDICATORS-2) = pre-lockdown VmData baseline + memory_bytes headroom.
+# CPU/NPROC derive from config; FSIZE=0/NOFILE=64 are jail constants.
+{vmdata_probe}
 if {memory_bytes} > 0:
-    resource.setrlimit(resource.RLIMIT_DATA, ({memory_bytes}, {memory_bytes}))
+    _cap = min(_baseline + {memory_bytes}, 2**63 - 1)
+    resource.setrlimit(resource.RLIMIT_DATA, (_cap, _cap))
 resource.setrlimit(resource.RLIMIT_CPU, ({rlimit_cpu}, {rlimit_cpu}))
 resource.setrlimit(resource.RLIMIT_NPROC, ({rlimit_nproc}, {rlimit_nproc}))
 resource.setrlimit(resource.RLIMIT_FSIZE, (0, 0))
 resource.setrlimit(resource.RLIMIT_NOFILE, (64, 64))
+
+# Parsed after the rlimits so payloads count against the formula headroom, not the baseline.
+data = json.loads({input_json!r})
+params = json.loads({params_json!r})
 
 # seccomp-BPF allowlist: ERRNO(EPERM) default; native arch only (compat x86/x32 NOT added → they
 # fail closed to EPERM). The network/exec/io_uring/ptrace/process_vm/pidfd families are absent.
@@ -347,6 +357,7 @@ def execute_formula(
         rlimit_cpu=rlimit_cpu,
         rlimit_nproc=rlimit_nproc,
         seccomp_allow=_SECCOMP_ALLOW,
+        vmdata_probe=_VMDATA_PROBE,
     )
 
     # Source is fed on stdin (an inherited fd, UID-independent) — no /tmp script the nobody child
@@ -392,7 +403,7 @@ def execute_formula(
             exit_reason = "runtime_error"
             if "is not allowed in sandbox" in stderr:
                 exit_reason = "import_blocked"
-            elif "MemoryError" in stderr:
+            elif any(m in stderr for m in _MEMORY_EXHAUSTED_MARKERS):
                 exit_reason = "memory_exceeded"
             return SandboxResult(
                 success=False,

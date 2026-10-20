@@ -66,6 +66,10 @@ service MarketDataService {
   rpc GetCurrentSector(GetCurrentSectorRequest) returns (GetCurrentSectorResponse);
   rpc GetSectorAsOf(GetSectorAsOfRequest) returns (GetSectorAsOfResponse);
   rpc GetSectorHistory(GetSectorHistoryRequest) returns (GetSectorHistoryResponse);
+
+  // feature 215 — cache-only ETF label read: never calls FMP on the request path; an unknown
+  // symbol returns is_etf unset.
+  rpc GetEtfFlags(GetEtfFlagsRequest) returns (GetEtfFlagsResponse);
 }
 
 message Bar {
@@ -92,6 +96,9 @@ message Quote {
   double bid_price = 5;
   int32 bid_size = 6;
   string source = 7;
+  // Valuation mark, set only by GetLatestQuotes: two-sided mid if ask_price>0 && bid_price>0, else the newest
+  // stored 1d close within marketdata.quotes.mark_close_max_age_hours. Unset = no usable mark (or not computed).
+  optional double mark_price = 8;
 }
 
 // Latest-trade price + prior-session daily close (feature 095). last_price/prev_close are explicit
@@ -383,4 +390,17 @@ message GetSectorHistoryRequest {
 
 message GetSectorHistoryResponse {
   repeated SectorHistoryRow rows = 1;
+}
+
+message GetEtfFlagsRequest {
+  repeated string symbols = 1;
+}
+
+message EtfFlag {
+  string symbol = 1;
+  optional bool is_etf = 2; // unset = unknown (not yet cached)
+}
+
+message GetEtfFlagsResponse {
+  repeated EtfFlag flags = 1;
 }

@@ -69,8 +69,8 @@ describe('signal_decay_half_life_hours write-time scalar bounds', () => {
     server?.forceShutdown();
   });
 
-  function setConfig(value: Record<string, unknown>, key = KEY) {
-    const request = { namespace: NS, key, value, author: 'tester', reason: 'bounds test' };
+  function setConfig(value: Record<string, unknown>, key = KEY, namespace = NS) {
+    const request = { namespace, key, value, author: 'tester', reason: 'bounds test' };
     const metadata = md({ [HEADER_ACCESS_SCOPE]: '7' }); // admin scope for a global write
     return new Promise<{ err: any; res: any }>((resolve) => {
       client.setConfig(request, metadata, (err: any, res: any) => resolve({ err, res }));
@@ -252,5 +252,60 @@ describe('signal_decay_half_life_hours write-time scalar bounds', () => {
     queries = [];
     assert.equal((await setConfig({ floatVal: 0 }, OPP_WEIGHT)).err, null, 'signal_rank_weight=0 is accepted (min inclusive)');
     assert.ok(insertQuery());
+  });
+
+  // features 227/229/231: read-path timeout, quote-window/retention and mark keys must be bounded under both
+  // key-column forms (G8), so the nested budgets and the 31d retention > 720h lookback floor survive any write.
+  const TIMEOUT_KEY_FORMS: { ns: string; key: string; field: 'intVal' | 'floatVal'; min: number; max: number }[] = [
+    { ns: 'analysis', key: 'opportunity.read_db_budget_ms', field: 'intVal', min: 1000, max: 20000 },
+    { ns: 'analysis', key: 'analysis.opportunity.read_db_budget_ms', field: 'intVal', min: 1000, max: 20000 },
+    { ns: 'analysis', key: 'opportunity.live_enrich_timeout_ms', field: 'intVal', min: 500, max: 4000 },
+    { ns: 'analysis', key: 'analysis.opportunity.live_enrich_timeout_ms', field: 'intVal', min: 500, max: 4000 },
+    { ns: 'marketdata', key: 'price.batch_timeout_ms', field: 'intVal', min: 500, max: 2500 },
+    { ns: 'marketdata', key: 'marketdata.price.batch_timeout_ms', field: 'intVal', min: 500, max: 2500 },
+    { ns: 'agent', key: 'opportunities.read_timeout_seconds', field: 'floatVal', min: 30, max: 55 },
+    { ns: 'agent', key: 'agent.opportunities.read_timeout_seconds', field: 'floatVal', min: 30, max: 55 },
+    { ns: 'portfolio', key: 'marketdata.quote_timeout_ms', field: 'intVal', min: 500, max: 8000 },
+    { ns: 'portfolio', key: 'portfolio.marketdata.quote_timeout_ms', field: 'intVal', min: 500, max: 8000 },
+    { ns: 'marketdata', key: 'quotes.latest_lookback_hours', field: 'intVal', min: 24, max: 720 },
+    { ns: 'marketdata', key: 'marketdata.quotes.latest_lookback_hours', field: 'intVal', min: 24, max: 720 },
+    { ns: 'marketdata', key: 'quotes.batch_timeout_ms', field: 'intVal', min: 500, max: 5000 },
+    { ns: 'marketdata', key: 'marketdata.quotes.batch_timeout_ms', field: 'intVal', min: 500, max: 5000 },
+    { ns: 'marketdata', key: 'retention.quotes_days', field: 'intVal', min: 31, max: 3650 },
+    { ns: 'marketdata', key: 'marketdata.retention.quotes_days', field: 'intVal', min: 31, max: 3650 },
+    { ns: 'marketdata', key: 'quotes.mark_timeout_ms', field: 'intVal', min: 100, max: 2500 },
+    { ns: 'marketdata', key: 'marketdata.quotes.mark_timeout_ms', field: 'intVal', min: 100, max: 2500 },
+    { ns: 'marketdata', key: 'quotes.mark_close_max_age_hours', field: 'intVal', min: 120, max: 720 },
+    { ns: 'marketdata', key: 'marketdata.quotes.mark_close_max_age_hours', field: 'intVal', min: 120, max: 720 },
+  ];
+
+  for (const { ns, key, field, min, max } of TIMEOUT_KEY_FORMS) {
+    it(`accepts ${ns}/${key} at its bounds [${min}, ${max}]`, async () => {
+      for (const v of [min, max]) {
+        queries = [];
+        assert.equal((await setConfig({ [field]: v }, key, ns)).err, null, `${v} is inside [${min}, ${max}]`);
+        assert.ok(insertQuery(), `an in-bounds write of ${v} must reach the INSERT`);
+      }
+    });
+
+    it(`rejects ${ns}/${key} just outside [${min}, ${max}] and writes nothing`, async () => {
+      for (const v of [min - 1, max + 1]) {
+        queries = [];
+        const { err } = await setConfig({ [field]: v }, key, ns);
+        assert.equal(err?.code, grpc.status.INVALID_ARGUMENT, `${v} must be rejected`);
+        assert.match(err.details ?? err.message, new RegExp(`\\[${min}, ${max}\\]`));
+        assert.equal(insertQuery(), undefined, `no INSERT for out-of-range ${v}`);
+      }
+    });
+  }
+
+  it('bounds the float agent timeout key when written as an intVal too', async () => {
+    queries = [];
+    assert.equal((await setConfig({ intVal: 30 }, 'opportunities.read_timeout_seconds', 'agent')).err, null);
+    assert.ok(insertQuery());
+    queries = [];
+    const { err } = await setConfig({ intVal: 56 }, 'opportunities.read_timeout_seconds', 'agent');
+    assert.equal(err?.code, grpc.status.INVALID_ARGUMENT, 'intVal 56 is above the 55s ceiling');
+    assert.equal(insertQuery(), undefined);
   });
 });

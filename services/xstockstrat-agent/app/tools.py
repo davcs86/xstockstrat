@@ -54,12 +54,14 @@ Also registers one MCP prompt (feature 197), via register_prompts():
     the tool count stays forty-five.
 """
 
+import asyncio
 import base64
 import csv
 import io
 import ipaddress
 import json
 import logging
+import math
 import uuid
 from pathlib import Path
 from typing import Literal
@@ -218,9 +220,15 @@ class CallerPropagationMiddleware:
                 client.reset_caller(token)
 
 
-def _grpc_error_message(exc: grpc.aio.AioRpcError, not_found: str = "not found") -> str:
+def _grpc_error_message(
+    exc: grpc.aio.AioRpcError, not_found: str = "not found", *, deadline_s: float | None = None
+) -> str:
     """Map a gRPC error to a concise, caller-facing message for an MCP tool."""
     code = exc.code()
+    if code == grpc.StatusCode.DEADLINE_EXCEEDED:
+        if deadline_s is None:
+            return "upstream did not respond (deadline exceeded); retry shortly"
+        return f"upstream did not respond within {deadline_s:g}s (deadline exceeded); retry shortly"
     if code == grpc.StatusCode.NOT_FOUND:
         return not_found
     if code == grpc.StatusCode.UNAUTHENTICATED:
@@ -760,7 +768,14 @@ def register_tools(server: MCPServer) -> None:
         Fundamental operands (feature 198): if the stored strategy uses a kind='fundamental'
           component, its metric resolves point-in-time (as-of each bar, no look-ahead). The symbol's
           fundamentals history must be backfilled first (trigger_backfill data_kind='fundamentals')
-          and 'analysis.backtest.fundamentals.enabled' must be ON, else the operand reads hold."""
+          and 'analysis.backtest.fundamentals.enabled' must be ON. A strategy that requires
+          fundamentals (a fundamental operand, or a custom formula declaring fundamental_inputs)
+          REFUSES a symbol with no usable filing before each evaluated bar instead of evaluating
+          it: that symbol gets no_trade_reason NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE plus
+          fundamentals_gap (FUNDAMENTALS_GAP_ETF / _NOT_ETF / _UNSPECIFIED = label unknown), no
+          trades and no evidence cell; a single refused symbol makes the run
+          BACKTEST_STATUS_INSUFFICIENT_DATA. A fundamentals fetch OUTAGE is different: it adds a
+          `warnings` entry ("fundamentals fetch failed … — rerun") and no reason."""
         # Forward the caller's own user id so analysis resolves ownership from the header; wrap the
         # RPC so a PERMISSION_DENIED surfaces as a tool-level error, not a raw AioRpcError.
         user_id = _caller_user_id(ctx, "run_backtest")
@@ -1319,6 +1334,10 @@ def register_tools(server: MCPServer) -> None:
             enable now guarantees the strategy satisfies the live loop's firing contract
             (live_enabled AND active, with symbols). Disabling is ALWAYS allowed, even on an inert
             config, so you can always turn live off.
+        Enabling is NOT checked against fundamentals availability (the live universe is dynamic).
+            At evaluation time a strategy that requires fundamentals denies ENTRY on a symbol with
+            no usable fundamentals (exits still fire), with one WARN log and one WARNING alert when
+            the symbol becomes unavailable (feature 215).
         Returns a 4-field subset, NOT the full definition:
             {"strategy_id", "display_name", "live_enabled", "active"}."""
         access_scope = _caller_access_scope(ctx, "set_strategy_live")
@@ -1511,8 +1530,11 @@ def register_tools(server: MCPServer) -> None:
             "next_page_token": str}.
             Each opportunity carries symbol, action, conviction, thesis, strategy_id, source,
             provenance, muted, data_unavailable (true = a terminal data-unavailable row, distinct
-            from an evaluated 0/N), and (when the backend has them) the live enrichment: live_price,
-            change_pct, target_price, stop_price, a sparkline (recent daily closes; a gap is null),
+            from an evaluated 0/N), fundamentals_unavailable (true = a NON-ACTIONABLE row: action
+            UNSPECIFIED, no composite_score — the strategy needs fundamentals the symbol lacks),
+            fundamentals_gap (FUNDAMENTALS_GAP_ETF / _NOT_ETF / _UNSPECIFIED = label unknown), and
+            (when the backend has them) the live enrichment: live_price,
+            change_pct, target_price, stop_price,
             valid_until, signal_confidence, and the traced conditions. Unavailable values are
             OMITTED, never fabricated. Top-level computing=true means a cold queue is still
             materializing (poll again); compute_failed=true means a persistently-failing compute
@@ -1526,9 +1548,21 @@ def register_tools(server: MCPServer) -> None:
         # Caller-scoped via x-user-id (no admin scope) — analysis resolves the owner from headers.
         user_id = _caller_user_id(ctx, "list_opportunities")
         try:
-            return await client.list_opportunities(user_id, min_conviction, page_size, page_token)
+            timeout_s = await asyncio.wait_for(
+                _agent_policy("opportunities.read_timeout_seconds", 40.0, float),
+                _POLICY_READ_TIMEOUT_S,
+            )
+        except TimeoutError:
+            log.warning("agent policy read timed out; using safe default")
+            timeout_s = 40.0
+        if not math.isfinite(timeout_s) or timeout_s <= 0:
+            timeout_s = 40.0
+        try:
+            return await client.list_opportunities(
+                user_id, min_conviction, page_size, page_token, timeout=timeout_s
+            )
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(_grpc_error_message(e)) from e
+            raise RuntimeError(_grpc_error_message(e, deadline_s=timeout_s)) from e
 
     @server.tool()
     async def get_strategy(ctx: Context, strategy_id: str) -> dict:
@@ -2321,13 +2355,18 @@ def _same_origin(a: str, b: str) -> bool:
     return pa.scheme == "http" and pb.scheme == "https"
 
 
-async def _extract_policy(key: str, default: float, cast: type) -> float:
-    """Read one `agent.extract.*` policy scalar from config (F-07), falling back to `default` only
-    on a read failure or an absent/unparseable value. No key/value is logged (FR-6)."""
+# Fixed bound on the undeadlined GetConfig policy read; looked up at call time (never bound as a
+# default argument) so tests can monkeypatch it.
+_POLICY_READ_TIMEOUT_S = 3.0
+
+
+async def _agent_policy(key: str, default: float, cast: type) -> float:
+    """Read one `agent.*` policy scalar from config (F-07), falling back to `default` only on a
+    read failure or an absent/unparseable value. No key/value is logged (FR-6)."""
     try:
         raw = await client.get_config_value(key, namespace="agent", environment=resolve_scope(""))
     except Exception:
-        log.warning("extract policy read failed; using safe default")
+        log.warning("agent policy read failed; using safe default")
         return default
     if raw is None:
         return default
@@ -2348,10 +2387,10 @@ async def _fetch_url(
     For authenticated sources, `password` becomes a Bearer token; Authorization from password wins.
     Returns raw text. On any egress refusal, raises a generic error with no internal target detail.
     """
-    max_redirects = int(await _extract_policy("extract.max_redirects", 5, int))
-    max_bytes = int(await _extract_policy("extract.max_bytes", 5_000_000, int))
-    connect_timeout = await _extract_policy("extract.connect_timeout_seconds", 10.0, float)
-    read_timeout = await _extract_policy("extract.read_timeout_seconds", 30.0, float)
+    max_redirects = int(await _agent_policy("extract.max_redirects", 5, int))
+    max_bytes = int(await _agent_policy("extract.max_bytes", 5_000_000, int))
+    connect_timeout = await _agent_policy("extract.connect_timeout_seconds", 10.0, float)
+    read_timeout = await _agent_policy("extract.read_timeout_seconds", 30.0, float)
 
     headers = {str(k): str(v) for k, v in (headers or {}).items()}
     if password:

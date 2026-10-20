@@ -21,10 +21,17 @@ type stubMarketData struct {
 	getLatestQuoteCalls  int
 	quotes               []*marketdatav1.Quote
 	quotesErr            error
+	block                bool       // feature 229: wait for ctx.Done (a marketdata that never answers)
+	requested            [][]string // feature 229: symbols per call
 }
 
-func (s *stubMarketData) GetLatestQuotes(_ context.Context, _ *marketdatav1.GetLatestQuotesRequest, _ ...grpc.CallOption) (*marketdatav1.GetLatestQuotesResponse, error) {
+func (s *stubMarketData) GetLatestQuotes(ctx context.Context, req *marketdatav1.GetLatestQuotesRequest, _ ...grpc.CallOption) (*marketdatav1.GetLatestQuotesResponse, error) {
 	s.getLatestQuotesCalls++
+	s.requested = append(s.requested, append([]string(nil), req.GetSymbols()...))
+	if s.block {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
 	if s.quotesErr != nil {
 		return nil, s.quotesErr
 	}
@@ -37,8 +44,9 @@ func (s *stubMarketData) GetLatestQuote(_ context.Context, _ *marketdatav1.GetLa
 }
 
 // TestEnrichPositions_OneBatchedCall — @AC-1: enriching N un-broker-valued positions issues exactly
-// one batched GetLatestQuotes call and zero per-position GetLatestQuote calls, and each position's
-// CurrentPrice is the byte-identical (Ask+Bid)/2 mid (PR#735 formula-parity guard, fails.md:38).
+// one batched GetLatestQuotes call and zero per-position GetLatestQuote calls, and for two-sided quotes each
+// CurrentPrice is the byte-identical (Ask+Bid)/2 mid (PR#735 parity guard; batched == serial holds for two-sided
+// quotes only — signed C-16 CHANGE of @AC-1 @feature-178, feature 231 context.md 2026-10-19).
 func TestEnrichPositions_OneBatchedCall(t *testing.T) {
 	const n = 30
 	positions := make([]*portfoliov1.Position, 0, n)

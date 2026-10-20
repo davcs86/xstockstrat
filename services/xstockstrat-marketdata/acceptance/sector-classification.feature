@@ -46,3 +46,25 @@ Feature: xstockstrat-marketdata — sector classification store and the single F
     When two refresh workers observe FMP reports "NEWCO" as "HEALTH_CARE" at the same instant
     Then exactly one open classification row exists for "NEWCO"
     And its valid_from is 1900-01-01T00:00:00Z
+
+  @feature-217 @AC-3 @FR-3
+  Scenario: An unchanged sector performs no write
+    Given symbol "XYZ" has one open classification row with sector "TECHNOLOGY"
+    When the refresh job observes FMP still reports "XYZ" as "TECHNOLOGY"
+    Then no row is inserted or updated for "XYZ"
+    And the open row's valid_from is unchanged
+
+  @feature-217 @AC-5 @FR-5
+  Scenario: As-of lookup returns the sector valid at a historical timestamp
+    Given "XYZ" was "TECHNOLOGY" from 2018-01-01 to 2018-09-30 and "COMMUNICATION_SERVICES" from 2018-10-01 onward
+    When the as-of classification is requested for "XYZ" at 2018-06-15
+    Then the returned sector is "TECHNOLOGY"
+
+  @feature-217 @AC-11 @FR-10 @FR-2
+  Scenario: The first post-go-live reclassification closes the epoch-seeded row without rewriting pre-go-live history
+    Given "XYZ" has one open classification row with sector "TECHNOLOGY" and valid_from 1900-01-01T00:00:00Z
+    When the refresh job observes FMP now reports "XYZ" as "ENERGY" at 2026-10-01T00:00:00Z
+    Then the epoch-seeded row's valid_to is set to 2026-10-01T00:00:00Z
+    And a new open row is inserted with sector "ENERGY" and valid_from 2026-10-01T00:00:00Z
+    And an as-of lookup for "XYZ" at 2015-06-15 returns "TECHNOLOGY"
+    And an as-of lookup for "XYZ" at 2026-10-02 returns "ENERGY"

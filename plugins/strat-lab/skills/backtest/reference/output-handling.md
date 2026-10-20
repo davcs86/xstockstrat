@@ -12,11 +12,23 @@ Top level of each result file:
 - `status` — `BACKTEST_STATUS_OK`, `..._INSUFFICIENT_DATA`, etc.
 - `total_trades`, `total_return`, `max_drawdown`, `win_rate`, `sharpe_ratio`, `profit_factor`
 - `trades[]` — each `{symbol, side, qty, entry_price, exit_price, pnl, entry_time, exit_time}`
-- `diagnostics[]` — per symbol: `{symbol, bars[], bars_total, warmup_bars, no_trade_reason}`;
+- `warnings[]` — run-level strings you must report, never drop (e.g. the seed-span and sector
+  warnings in SKILL.md, or `fundamentals fetch failed for <SYM> — rerun`, see below).
+- `diagnostics[]` — per symbol: `{symbol, bars[], bars_total, warmup_bars, no_trade_reason,
+  fundamentals_gap}`;
   each bar `{timestamp, close, indicators:{...}, action, ...}`. Indicator keys (e.g. `z`, `er`) are
   **omitted on warm-up/undefined bars** — absent, not null. `no_trade_reason` explains a 0-trade run
   (`NO_TRADE_REASON_ENTRY_NEVER_TRUE` = signal never fired; often a broken/edited strategy —
   see the mutation guard in SKILL.md).
+  - `NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE` = the strategy requires fundamentals (a fundamental
+    operand, or a custom formula declaring `fundamental_inputs`) and the symbol had no usable filing
+    in the range, so it was **refused, not evaluated**. The symbol gets no trades, empty `bars` and
+    no evidence cell, and a run with one refused symbol is `BACKTEST_STATUS_INSUFFICIENT_DATA`.
+    Check `fundamentals_gap`: `FUNDAMENTALS_GAP_ETF` (an ETF), `_NOT_ETF` (e.g. a non-SEC filer or an
+    un-backfilled symbol) or `_UNSPECIFIED` (label unknown). It is never a no-signal result.
+  - A fundamentals **outage** is different: the symbol gets no reason 5, no evidence cell, and a
+    `warnings` entry `fundamentals fetch failed for <SYM> — rerun`. Rerun it; do not read it as a
+    no-signal.
 
 ## Extract-summary recipe
 

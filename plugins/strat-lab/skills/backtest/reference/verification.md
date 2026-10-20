@@ -23,6 +23,15 @@ case. When verifying a `fill_model="next_bar_open"` run, the offline oracle must
 signal at `bars[i+1].open` (± slippage), not `bars[i].close` — otherwise a correct next-bar run
 looks like a mismatch. Check the run's echoed `fill_model` before picking which price to fill at.
 
+**Real-ETF check for fundamentals-gated strategies (feature 215).** Before you trust a
+fundamentals-gated strategy's numbers, run it on a known ETF (e.g. `SCHD`). The SCHD diagnostic must
+carry `no_trade_reason: NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE` (reason 5) and
+`fundamentals_gap: FUNDAMENTALS_GAP_ETF`, and the run status must be
+`BACKTEST_STATUS_INSUFFICIENT_DATA`. If SCHD instead returns `NO_TRADE_REASON_ENTRY_NEVER_TRUE`, the
+guard is off (`analysis.backtest.fundamentals.enabled`) or the strategy is not recognised as
+fundamentals-gated. Then a 0-trade equity result from the same strategy may be the same silent
+non-evaluation, not a real no-signal.
+
 ## Reconstructing an indicator formula (when you must)
 
 If you had to rebuild a custom formula (e.g. after a definition was wiped), **validate the math

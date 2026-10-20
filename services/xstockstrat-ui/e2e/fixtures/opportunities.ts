@@ -1,4 +1,4 @@
-import { OpportunityActionTag } from '@xstockstrat/proto/analysis/v1/analysis_pb';
+import { FundamentalsGap, OpportunityActionTag } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 
 /**
  * Opportunity-queue fixtures (feature 083, C-12). Connect-JSON (camelCase) shape of the
@@ -50,6 +50,24 @@ export const CAPR_LATEST_PRICE = {
   source: 'alpaca',
 };
 const CAPR_CHANGE_PCT = (12.34 - 12.09) / 12.09;
+
+/** Fundamentals skip row (feature 215). NOT in OPPORTUNITIES, so queue counts stay unchanged; the
+ *  mock serves it only for `symbol: 'SCHD'`. */
+export const SCHD_FUNDAMENTALS_UNAVAILABLE_OPPORTUNITY = {
+  symbol: 'SCHD',
+  action: OpportunityActionTag.UNSPECIFIED,
+  conviction: 0,
+  passingConditions: 0,
+  totalConditions: 0,
+  thesis: '',
+  strategyId: 'fundamentals_macd_blend',
+  source: '',
+  validUntil: VALID_UNTIL,
+  opportunityKey: 'u1|SCHD|fundamentals_macd_blend',
+  provenance: ['watchlist', 'fundamentals_unavailable'],
+  fundamentalsUnavailable: true,
+  fundamentalsGap: FundamentalsGap.ETF,
+};
 
 export const OPPORTUNITIES = [
   {

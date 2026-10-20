@@ -30,6 +30,11 @@ export interface Quote {
     bidPrice: number;
     bidSize: number;
     source: string;
+    /**
+     * Valuation mark, set only by GetLatestQuotes: two-sided mid if ask_price>0 && bid_price>0, else the newest
+     * stored 1d close within marketdata.quotes.mark_close_max_age_hours. Unset = no usable mark (or not computed).
+     */
+    markPrice?: number | undefined;
 }
 /**
  * Latest-trade price + prior-session daily close (feature 095). last_price/prev_close are explicit
@@ -336,6 +341,17 @@ export interface GetSectorHistoryRequest {
 export interface GetSectorHistoryResponse {
     rows: SectorHistoryRow[];
 }
+export interface GetEtfFlagsRequest {
+    symbols: string[];
+}
+export interface EtfFlag {
+    symbol: string;
+    /** unset = unknown (not yet cached) */
+    isEtf?: boolean | undefined;
+}
+export interface GetEtfFlagsResponse {
+    flags: EtfFlag[];
+}
 export declare const Bar: MessageFns<Bar>;
 export declare const Quote: MessageFns<Quote>;
 export declare const GetLatestPriceRequest: MessageFns<GetLatestPriceRequest>;
@@ -381,6 +397,9 @@ export declare const GetSectorAsOfResponse: MessageFns<GetSectorAsOfResponse>;
 export declare const SectorHistoryRow: MessageFns<SectorHistoryRow>;
 export declare const GetSectorHistoryRequest: MessageFns<GetSectorHistoryRequest>;
 export declare const GetSectorHistoryResponse: MessageFns<GetSectorHistoryResponse>;
+export declare const GetEtfFlagsRequest: MessageFns<GetEtfFlagsRequest>;
+export declare const EtfFlag: MessageFns<EtfFlag>;
+export declare const GetEtfFlagsResponse: MessageFns<GetEtfFlagsResponse>;
 /**
  * MarketDataService — sole Alpaca integration point.
  * Stores OHLCV and quote data in TimescaleDB hypertables.
@@ -587,6 +606,19 @@ export declare const MarketDataServiceService: {
         readonly responseSerialize: (value: GetSectorHistoryResponse) => Buffer;
         readonly responseDeserialize: (value: Buffer) => GetSectorHistoryResponse;
     };
+    /**
+     * feature 215 — cache-only ETF label read: never calls FMP on the request path; an unknown
+     * symbol returns is_etf unset.
+     */
+    readonly getEtfFlags: {
+        readonly path: "/xstockstrat.marketdata.v1.MarketDataService/GetEtfFlags";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: GetEtfFlagsRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => GetEtfFlagsRequest;
+        readonly responseSerialize: (value: GetEtfFlagsResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => GetEtfFlagsResponse;
+    };
 };
 export interface MarketDataServiceServer extends UntypedServiceImplementation {
     /** Stream live bar data for symbols */
@@ -637,6 +669,11 @@ export interface MarketDataServiceServer extends UntypedServiceImplementation {
     getCurrentSector: handleUnaryCall<GetCurrentSectorRequest, GetCurrentSectorResponse>;
     getSectorAsOf: handleUnaryCall<GetSectorAsOfRequest, GetSectorAsOfResponse>;
     getSectorHistory: handleUnaryCall<GetSectorHistoryRequest, GetSectorHistoryResponse>;
+    /**
+     * feature 215 — cache-only ETF label read: never calls FMP on the request path; an unknown
+     * symbol returns is_etf unset.
+     */
+    getEtfFlags: handleUnaryCall<GetEtfFlagsRequest, GetEtfFlagsResponse>;
 }
 export interface MarketDataServiceClient extends Client {
     /** Stream live bar data for symbols */
@@ -723,6 +760,13 @@ export interface MarketDataServiceClient extends Client {
     getSectorHistory(request: GetSectorHistoryRequest, callback: (error: ServiceError | null, response: GetSectorHistoryResponse) => void): ClientUnaryCall;
     getSectorHistory(request: GetSectorHistoryRequest, metadata: Metadata, callback: (error: ServiceError | null, response: GetSectorHistoryResponse) => void): ClientUnaryCall;
     getSectorHistory(request: GetSectorHistoryRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: GetSectorHistoryResponse) => void): ClientUnaryCall;
+    /**
+     * feature 215 — cache-only ETF label read: never calls FMP on the request path; an unknown
+     * symbol returns is_etf unset.
+     */
+    getEtfFlags(request: GetEtfFlagsRequest, callback: (error: ServiceError | null, response: GetEtfFlagsResponse) => void): ClientUnaryCall;
+    getEtfFlags(request: GetEtfFlagsRequest, metadata: Metadata, callback: (error: ServiceError | null, response: GetEtfFlagsResponse) => void): ClientUnaryCall;
+    getEtfFlags(request: GetEtfFlagsRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: GetEtfFlagsResponse) => void): ClientUnaryCall;
 }
 export declare const MarketDataServiceClient: {
     new (address: string, credentials: ChannelCredentials, options?: Partial<ClientOptions>): MarketDataServiceClient;

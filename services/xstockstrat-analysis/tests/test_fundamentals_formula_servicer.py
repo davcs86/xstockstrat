@@ -4,7 +4,7 @@ Complements the evaluator-level suite (``test_fundamentals_formula_operand.py``,
 the surface-integration guarantees:
 
 - @AC-3 (@FR-3): on the LIVE path the formula is fed the current-snapshot fundamentals
-  (``GetFundamentalsMulti``) and NO ``GetHistoricalFundamentals`` PIT lookup is issued — the 198 PIT
+  (``GetFundamentals``) and NO ``GetHistoricalFundamentals`` PIT lookup is issued — the 198 PIT
   channel stays dormant for a formula-only strategy (``_definition_has_fundamental`` is False).
 - @AC-4 (@FR-5): a fully-populated snapshot row feeds the formula the SAME input_data keys the
   fundamentals-signal producer would (the declared metrics' snake keys, none omitted) and the rule
@@ -90,15 +90,15 @@ def _make_live_loop(evaluator, *, gate=True):
     return loop
 
 
-def _multi_resp(symbol="AAPL", missing=(), **metrics):
+def _snapshot_resp(symbol="AAPL", missing=(), **metrics):
     row = marketdata_pb2.Fundamentals(symbol=symbol, missing_metrics=list(missing), **metrics)
-    return marketdata_pb2.GetFundamentalsMultiResponse(fundamentals=[row])
+    return marketdata_pb2.GetFundamentalsResponse(fundamentals=row)
 
 
 class TestLiveSnapshotNotPIT:
     @pytest.mark.asyncio
     async def test_ac3_live_path_feeds_snapshot_and_skips_pit(self):
-        """@AC-3: the live loop feeds the formula AAPL's current GetFundamentalsMulti snapshot and
+        """@AC-3: the live loop feeds the formula AAPL's current GetFundamentals snapshot and
         issues NO GetHistoricalFundamentals PIT lookup (the 198 PIT channel stays dormant for a
         formula-only strategy)."""
         fed = {}
@@ -114,14 +114,14 @@ class TestLiveSnapshotNotPIT:
         loop._marketdata.GetBars = AsyncMock(
             return_value=SimpleNamespace(bars=[_bar(1), _bar(2), _bar(3)])
         )
-        loop._marketdata.GetFundamentalsMulti = AsyncMock(
-            return_value=_multi_resp(pe_ratio=12.0, roe=0.3)
+        loop._marketdata.GetFundamentals = AsyncMock(
+            return_value=_snapshot_resp(pe_ratio=12.0, roe=0.3)
         )
         loop._marketdata.GetHistoricalFundamentals = AsyncMock()
 
         await loop._eval_pair(_formula_only_definition(), "AAPL", throttle=0)
 
-        loop._marketdata.GetFundamentalsMulti.assert_awaited()  # snapshot fetched
+        loop._marketdata.GetFundamentals.assert_awaited()  # snapshot fetched
         assert loop._marketdata.GetHistoricalFundamentals.await_count == 0  # no PIT on live path
         # The formula was fed the snapshot fundamentals (never OHLCV closes).
         assert fed == {"pe_ratio": 12.0, "roe": 0.3}
@@ -135,12 +135,12 @@ class TestLiveSnapshotNotPIT:
         ind.ExecuteFormula = exec_mock
         loop = _make_live_loop(evaluator, gate=False)
         loop._marketdata.GetBars = AsyncMock(return_value=SimpleNamespace(bars=[_bar(1), _bar(2)]))
-        loop._marketdata.GetFundamentalsMulti = AsyncMock(return_value=_multi_resp(pe_ratio=12.0))
+        loop._marketdata.GetFundamentals = AsyncMock(return_value=_snapshot_resp(pe_ratio=12.0))
         loop._marketdata.GetHistoricalFundamentals = AsyncMock()
 
         await loop._eval_pair(_formula_only_definition(), "AAPL", throttle=0)
 
-        assert loop._marketdata.GetFundamentalsMulti.await_count == 0
+        assert loop._marketdata.GetFundamentals.await_count == 0
         assert loop._marketdata.GetHistoricalFundamentals.await_count == 0
         assert exec_mock.await_count == 0  # all-None hold → formula never runs (no fabricated 0.0)
 
@@ -163,8 +163,8 @@ class TestFullRowParity:
         evaluator, _ind = _real_evaluator(_exec, [_PE, _ROE, _EPS])
         loop = _make_live_loop(evaluator)
         loop._marketdata.GetBars = AsyncMock(return_value=SimpleNamespace(bars=[_bar(1), _bar(2)]))
-        loop._marketdata.GetFundamentalsMulti = AsyncMock(
-            return_value=_multi_resp(pe_ratio=12.0, roe=0.3, eps=5.0)  # no missing_metrics
+        loop._marketdata.GetFundamentals = AsyncMock(
+            return_value=_snapshot_resp(pe_ratio=12.0, roe=0.3, eps=5.0)  # no missing_metrics
         )
         loop._marketdata.GetHistoricalFundamentals = AsyncMock()
 

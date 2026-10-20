@@ -5,6 +5,7 @@
 **Last Updated**: 2026-09-27
 **Committed to main**: 27f3f276b39fa79d07b4de6c023582f72539aac3
 **Launched date**: 2026-10-01
+**Archived**: 2026-10-14
 
 ---
 
@@ -21,15 +22,16 @@
 | 2026-09-28 | `in-progress` → `code-completed` | /sdd-execute | All 12 steps landed (sequential). db_* tools + postgres-mcp co-process + deps + deploy wiring + dead role block removed; count 52→43; direct budget 9→8; C-16 delete-and-promote; operator-db-access runbook added. |
 
 | 2026-10-01 | `code-completed` → `launched` | CI workflow | Promoted via PR #1205; committed 27f3f276b39fa79d07b4de6c023582f72539aac3 |
+| 2026-10-14 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(2); pruned 4 spec(s) |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
-- [Recon Dossier](recon.md) — grounded codebase map + removal surface (Phase 0)
-- [Design](design.md) — chosen approach, rejected alternatives, Constitution/C-16 rules touched (Phase 1)
-- [Implementation Spec](implementation-spec.md) — 12 numbered steps with codebase evidence (Phase 2)
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15); already promoted to services/xstockstrat-agent/acceptance/remove-agent-postgres-mcp.feature (C-16)
+- Recon Dossier — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

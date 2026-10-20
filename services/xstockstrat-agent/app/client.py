@@ -801,6 +801,9 @@ def _opportunity_to_dict(o, analysis_pb2) -> dict[str, Any]:
         # feature 185 — a terminal data-unavailable row (bars/indicator fetch failure), distinct
         # from an evaluated 0/N; the agent (a one-shot, non-polling consumer) must surface it.
         "data_unavailable": o.data_unavailable,
+        # feature 215 — the non-actionable fundamentals skip row, distinct from data_unavailable.
+        "fundamentals_unavailable": o.fundamentals_unavailable,
+        "fundamentals_gap": analysis_pb2.FundamentalsGap.Name(o.fundamentals_gap),
     }
     if o.HasField("live_price"):
         d["live_price"] = o.live_price
@@ -847,6 +850,7 @@ async def list_opportunities(
     min_conviction: float = 0.0,
     page_size: int = 50,
     page_token: str = "",
+    timeout: float | None = None,
 ) -> dict[str, Any]:
     """List the caller's ranked Decide-queue opportunities with live-market enrichment (feature 095,
     read-only). Caller-scoped via ``x-user-id`` (no admin ``x-access-scope``) — analysis resolves
@@ -865,6 +869,7 @@ async def list_opportunities(
                 page=common_pb2.PageRequest(page_size=page_size, page_token=page_token),
             ),
             metadata=_metadata(("x-user-id", user_id)),
+            timeout=timeout,
         )
     # feature 185 (FR-4/FR-6) — carry the response-level pending signals so a cold or persistently
     # failed queue is reported explicitly, never as a silently-empty list to a one-shot consumer.

@@ -48,7 +48,7 @@ _METRIC_KEYS = (
 
 # Per-symbol 0-trade diagnosis set. `bars` is deliberately excluded — that keeps the summary
 # O(symbols), not O(symbols x bars).
-_SYMBOL_KEYS = ("symbol", "no_trade_reason", "bars_total", "warmup_bars")
+_SYMBOL_KEYS = ("symbol", "no_trade_reason", "bars_total", "warmup_bars", "fundamentals_gap")
 
 
 def summarize(result: dict[str, Any]) -> dict[str, Any]:

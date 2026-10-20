@@ -7,7 +7,7 @@ import (
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.25.0"
@@ -20,16 +20,8 @@ func Init(ctx context.Context) (func(context.Context) error, error) {
 		return func(context.Context) error { return nil }, nil
 	}
 
-	endpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
-	if endpoint == "" {
-		endpoint = "otel-collector:4317"
-	}
-
-	exp, err := otlptracegrpc.New(ctx,
-		otlptracegrpc.WithEndpoint(endpoint),
-		otlptracegrpc.WithInsecure(),
-		otlptracegrpc.WithTimeout(5*time.Second),
-	)
+	// No endpoint/insecure options: they override OTEL_EXPORTER_OTLP_* (path, TLS, headers).
+	exp, err := otlptracehttp.New(ctx, otlptracehttp.WithTimeout(5*time.Second))
 	if err != nil {
 		return nil, err
 	}

@@ -7,7 +7,7 @@ context you load per task.
 
 1. **Don't assume — ask, and surface tradeoffs.** On ambiguity, a missing detail, or a design fork,
    stop and raise it; never paper over it with a silent guess. *(Enforced by the SDD design gate
-   **C-11** and the platform cross-module contracts **PLAT-4/PLAT-5**, where a silent guess breaks the seams.)*
+   **C-11** and the platform cross-module contracts **PLAT-4/PLAT-5/PLAT-13**, where a silent guess breaks the seams.)*
 2. **Write the minimum that solves the stated problem.** Nothing speculative — no abstraction,
    option, or "while I'm here" scaffolding the task didn't ask for. Would a senior engineer call it
    overbuilt for what was requested? Then simplify. *(Enforced by the DRY guard rail and the CF-N4 litmus.)*

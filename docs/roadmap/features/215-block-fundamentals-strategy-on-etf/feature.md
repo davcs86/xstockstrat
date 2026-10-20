@@ -2,7 +2,7 @@
 
 **Development Branch**: `feature/block-fundamentals-strategy-on-etf`
 **Created**: 2026-09-27
-**Last Updated**: 2026-09-27
+**Last Updated**: 2026-10-11
 
 ---
 
@@ -12,6 +12,9 @@
 |---|---|---|---|
 | 2026-09-27 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-09-27 | `draft` → `spec-ready` | /sdd-review | Product spec approved (PASS, 2 warnings; render-map path corrected, Open Questions deferred to design). Overlap: clean |
+| 2026-10-10 | `spec-ready` → `design-approved` | /sdd-design | Design debated (4 rounds — quick mode extended by the operator at each gate) and approved; recon.md + design.md written. Hybrid guard (enforce on unavailable fundamentals, FMP `isEtf` label), deny-entry live, opportunity skip row, derivation-time evidence exclusion, PIT pagination, marketdata absence encoding. No migration; additive proto. |
+| 2026-10-10 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 26 steps |
+| 2026-10-11 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 (proto contract) done — sequential autonomous run, Steps 1–6 |
 
 ---
 
@@ -19,7 +22,7 @@
 
 - [Product Spec](product-spec.md) — requirements and governance
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec block-fundamentals-strategy-on-etf`_
+- [Implementation Spec](implementation-spec.md)
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -40,10 +43,13 @@ re-run /sdd-spec if the registry changes.)_
 
 | Role | Review Focus |
 |---|---|
+| Proto Reviewer | Field number uniqueness per message, no breaking changes without deprecation comment, `buf lint` passes, `buf breaking` passes against dev trunk, BSR publication readiness |
+| `packages/proto` owner | Field number uniqueness, backward compatibility (no field removal or type change without deprecation), naming conventions |
 | `xstockstrat-analysis` owner | Backtest reproducibility, strategy scoring determinism, no look-ahead bias |
-| `xstockstrat-marketdata` owner | Asset-class / fundamentals-availability source of truth (how "ETF" is determined) |
-| `xstockstrat-ui` / `xstockstrat-agent` owner | The refusal/skip reason surfaces truthfully on the backtest + opportunity surfaces |
+| `xstockstrat-marketdata` owner | OHLCV ingestion integrity, TimescaleDB hypertable partitioning, Alpaca feed idempotency (feature focus: fundamentals-absence encoding + ETF label source) |
+| `xstockstrat-ui` owner | Trading UI correctness, analytics display accuracy, Connect-RPC call safety |
+| `xstockstrat-agent` owner | MCP tool contract stability (name, parameters, return shape) and `docs/runbooks/mcp-tools.md` parity |
 
 ## Next Action
 
-`/sdd-design block-fundamentals-strategy-on-etf` — recon + design debate (resolves the ETF-detection fork)
+`/sdd-review block-fundamentals-strategy-on-etf impl-spec` — validate implementation spec, then `/sdd-execute block-fundamentals-strategy-on-etf`

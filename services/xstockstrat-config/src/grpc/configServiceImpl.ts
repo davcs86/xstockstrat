@@ -125,6 +125,22 @@ const SCALAR_BOUNDS_REGISTRY: Record<string, { minValue: number; maxValue: numbe
   'analysis.opportunity.max_concurrent_candidates': { minValue: 1, maxValue: 50 },
   'analysis.opportunity.sparkline_bars': { minValue: 1, maxValue: 500 },
   'analysis.opportunity.valid_window_hours': { minValue: 1, maxValue: 168 },
+  // feature 227: ceilings keep analysis B+3.05+E < 30s (the BFF deadline); the agent floor of 30
+  // sits above analysis's own 27.05s worst case.
+  'analysis.opportunity.read_db_budget_ms': { minValue: 1000, maxValue: 20000 },
+  'analysis.opportunity.live_enrich_timeout_ms': { minValue: 500, maxValue: 4000 },
+  'marketdata.price.batch_timeout_ms': { minValue: 500, maxValue: 2500 },
+  'agent.opportunities.read_timeout_seconds': { minValue: 30, maxValue: 55 },
+  // feature 229: retention floor (31d) must stay above the lookback ceiling (720h); the portfolio quote
+  // deadline (default 4000) must exceed max(batch, mark) budget plus the warm read.
+  'portfolio.marketdata.quote_timeout_ms': { minValue: 500, maxValue: 8000 },
+  'marketdata.quotes.latest_lookback_hours': { minValue: 24, maxValue: 720 },
+  'marketdata.quotes.batch_timeout_ms': { minValue: 500, maxValue: 5000 },
+  'marketdata.retention.quotes_days': { minValue: 31, maxValue: 3650 },
+  // feature 231: mark ceiling = batch_timeout default, so it never extends the cold-path worst case; the 120h
+  // floor still covers Friday's 00:00-ET-stamped 1d bar on a holiday Monday evening.
+  'marketdata.quotes.mark_timeout_ms': { minValue: 100, maxValue: 2500 },
+  'marketdata.quotes.mark_close_max_age_hours': { minValue: 120, maxValue: 720 },
 };
 
 // feature 182: resolve a scalar-bounds entry for a config key whose DB `key` column may be full-dotted

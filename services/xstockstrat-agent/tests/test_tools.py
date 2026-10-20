@@ -1971,6 +1971,27 @@ async def test_list_opportunities_pagination_params():
     assert m.call_args.args == ("u-1", 0.0, 25, "50")
 
 
+def test_grpc_error_message_deadline_exceeded_names_the_deadline():
+    import grpc  # noqa: PLC0415
+
+    from app.tools import _grpc_error_message  # noqa: PLC0415
+
+    err = _rpc_error(grpc.StatusCode.DEADLINE_EXCEEDED, "Deadline Exceeded")
+    msg = _grpc_error_message(err, deadline_s=40.0)
+    assert "within 40s" in msg
+    assert "deadline exceeded" in msg
+
+
+def test_grpc_error_message_deadline_exceeded_without_deadline_s():
+    import grpc  # noqa: PLC0415
+
+    from app.tools import _grpc_error_message  # noqa: PLC0415
+
+    msg = _grpc_error_message(_rpc_error(grpc.StatusCode.DEADLINE_EXCEEDED, "Deadline Exceeded"))
+    assert "deadline exceeded" in msg
+    assert "within" not in msg
+
+
 # ── SSRF egress hardening (feature 207) — extract_* fetch path ────────────────
 #
 # respx patches AsyncHTTPTransport.handle_async_request, so it intercepts the pinned client ABOVE
