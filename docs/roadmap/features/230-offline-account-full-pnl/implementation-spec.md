@@ -1512,7 +1512,7 @@ tests.
 
 ### Step 23 — config: bound `portfolio.marketdata.last_close_lookback_days`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/grpc/configServiceImpl.ts` — modify

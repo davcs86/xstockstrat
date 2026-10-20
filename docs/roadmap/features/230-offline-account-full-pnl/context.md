@@ -888,3 +888,16 @@
   - `golangci-lint` 0 issues.
 - Files modified: `internal/service/offline_account_pnl_test.go` (new),
   `internal/service/portfolio_mark_test.go`.
+
+### Step 23 — config: bound `portfolio.marketdata.last_close_lookback_days` [done]
+- `SCALAR_BOUNDS_REGISTRY` gains `'portfolio.marketdata.last_close_lookback_days': { minValue: 5,
+  maxValue: 60 }` (feature 230 comment; default 21).
+- `TIMEOUT_KEY_FORMS` gains both name forms. The 4 new cases pass (accept at the bounds, reject just
+  outside under both forms).
+- No seed migration (227 D2 waiver; recorded in Step 28).
+- Verification:
+  - `pnpm run test:coverage`: 180/180, All files 86.76% (≥ 40%);
+  - `pnpm run lint`: 0 errors, 158 warnings, the same count as before the change.
+- TDD: N/A (registry entry).
+- Files modified: `src/grpc/configServiceImpl.ts`, `src/__tests__/setConfigScalarBounds.test.ts`.
+- Deviations: none.
