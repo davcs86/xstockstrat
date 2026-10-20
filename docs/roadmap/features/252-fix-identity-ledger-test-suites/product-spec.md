@@ -31,7 +31,9 @@ whose subject fails to load fails the run instead of passing. config and notify 
 2. `node --experimental-strip-types -e "import('./src/grpc/identityServiceImpl.js').catch(e=>console.log(e.code))"`
    → `ERR_MODULE_NOT_FOUND`; with `.ts` → `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX`.
 3. Compile the suite with `tsc` and run `node --test` on the output: the impl tests execute (on the hotfix #1262
-   branch the pre-fix rotation code fails 5 of them).
+   branch the pre-fix rotation code fails 5 of them). On main-dev, deleting the `refreshOAuthToken` revoke
+   (`identityServiceImpl.ts:524-527`) fails the compiled `rotates the refresh token…` test
+   (`identityServiceImpl.test.ts:403`) but not `pnpm test`.
 4. Same for `services/xstockstrat-ledger` (`ledgerServiceImpl`, `eventNotifier`).
 
 ## Root Cause Hypothesis
@@ -60,6 +62,10 @@ See `acceptance.feature` — the regression scenario(s) that must fail on the bu
 (Constitution **C-15**). Plus: existing tests pass once they actually execute (any test that fails when run for real is
 a pre-existing defect to fix or record, never to delete or skip); the c8 `--lines 40` gate still passes over the
 loaded impl files.
+
+No ordering dependency on hotfix #1262: AC-1's mutation check targets `refreshOAuthToken`, present on main-dev.
+`refreshToken` (`identityServiceImpl.ts:251-255`) has no test on main-dev; #1262's rotation tests must also execute
+once both are on the base (whichever lands second merges the other's test changes).
 
 ## Out of Scope
 

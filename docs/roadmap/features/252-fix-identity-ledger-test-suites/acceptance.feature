@@ -7,7 +7,7 @@ Feature: fix-identity-ledger-test-suites (bug fix)
     Given the identity test run used by CI ("pnpm run test:coverage" in services/xstockstrat-identity)
     When the suite runs
     Then IdentityServiceImpl is loaded and no impl test returns early because its subject is missing
-    And a deliberately broken rotation (refreshToken without the conditional revoke claim) makes at least one test fail
+    And removing the revoke UPDATE from refreshOAuthToken (services/xstockstrat-identity/src/grpc/identityServiceImpl.ts:524-527) makes the "rotates the refresh token and mints a new aud-bound access JWT" test fail
 
   @AC-2 @regression
   Scenario: the ledger suite executes against the real LedgerServiceImpl and EventNotifier
