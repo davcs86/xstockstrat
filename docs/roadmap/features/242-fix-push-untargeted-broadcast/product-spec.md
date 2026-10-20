@@ -15,12 +15,18 @@ set. For an untargeted alert it selects every row of `notify.push_subscriptions`
 body) to every installed PWA of every user. Producers that emit without a target (agent `emit_alert`, analysis
 loops, ingest backfill auto-alert, Go services) push their content to all users' devices. Two of them carry
 per-user content at WARNING: portfolio `emitRiskAlert`
-(`services/xstockstrat-portfolio/internal/service/portfolio_service.go:934-943`, called from per-user
-`checkRiskLimits` `:894`) and the analysis live loop (`services/xstockstrat-analysis/app/engine/live_loop.py:834`,
-`:850`, owner-scoped strategies). Raising `notify.push.min_severity` reduces frequency but not scoping.
+(`services/xstockstrat-portfolio/internal/service/portfolio_service.go:1004-1018`, `EmitAlertRequest` at
+`:1008-1014` without `TargetUserId`), called from per-user `checkRiskLimits` (`:964`, invoked `:375`) for
+concentration (`:991`) and per-account drawdown (`:999`); and the analysis live loop
+(`services/xstockstrat-analysis/app/engine/live_loop.py`: `_emit_alert` `:824-845`, EmitAlert `:834`;
+`_emit_fundamentals_unavailable_alert` `:847-861`, EmitAlert `:850`; owner-scoped strategies, owner =
+`definition.user_id`). Trading also emits per-account CRITICAL alerts untargeted: reconciliation mismatch
+(`services/xstockstrat-trading/internal/service/trading.go:1938-1944`) and account halt (`:2751-2757`).
+Raising `notify.push.min_severity` reduces frequency but not scoping.
 
-**Expected.** An untargeted alert skips Web Push, or reaches only an explicitly opted-in or admin audience. Device
-notifications are never cross-user by default. In-process `StreamAlerts` broadcast semantics are unchanged.
+**Expected.** An untargeted alert is Web-Pushed only to subscriptions of users holding the admin role (operator
+decision 2026-10-20). Device notifications never reach a non-admin user other than the alert's target. In-process
+`StreamAlerts` broadcast semantics are unchanged.
 
 ## Reproduction Steps
 
@@ -44,20 +50,21 @@ Per-user producers never set `target_user_id` (field 6 of `EmitAlertRequest`, `p
 
 ## Functional Requirements
 
-FR-1. Web Push for an alert with empty `target_user_id` sends to no subscription by default (opt-in/admin audience is a design fork).
+FR-1. Web Push for an alert with empty `target_user_id` sends only to subscriptions of users holding the admin role (operator decision 2026-10-20); a non-admin user's subscriptions receive none. How notify resolves the admin role is a design question.
 FR-2. A targeted alert pushes only to the target user's subscriptions (unchanged; regression guard).
-FR-3. Per-user producers set `target_user_id` to the content owner: portfolio risk alerts and analysis live-loop alerts for owner-scoped strategies (scope confirmed at design).
+FR-3. Per-user producers set `target_user_id` to the content owner: portfolio `emitRiskAlert` on both paths (concentration `:991`, drawdown `:999`; owner = `checkRiskLimits` `userID`) and analysis live-loop `_emit_alert` and `_emit_fundamentals_unavailable_alert` (owner = `definition.user_id`).
 
 ## Fix Scope
 
 - [x] No proto changes anticipated (`EmitAlertRequest.target_user_id` already exists; `Alert.target_user_id` comment "empty = broadcast" at `notify.proto:45` describes StreamAlerts and stays)
-- [ ] DB migration possible: only if design adds an opt-in/admin broadcast audience column on `notify.push_subscriptions`
-- [ ] Config key possible: only if design adds a broadcast-audience toggle (e.g. under `notify.push.*`); none if untargeted push is simply skipped
-- [x] Behaviour change to feature 165 FR-3; unit test `webPush.test.ts:147` (AC-4 broadcast) rewritten deliberately
+- [ ] DB migration possible: only if design persists the admin audience on `notify.push_subscriptions`; it would be the next notify migration `004_<desc>.up.sql` + `.down.sql` (current max `services/xstockstrat-notify/migrations/003_alert_reads.up.sql`), run in notify's normal `scripts/db-migrate.sh` order
+- [ ] Config key possible: only if design adds an audience toggle under `notify.push.*`; a seeded key takes the next free `services/xstockstrat-config/migrations/` NNN after those claimed by 243 (031) and 241, checked across remote branches at /sdd-spec; owner + config team approval
+- [x] Behaviour change to feature 165 FR-3 (operator sign-off 2026-10-20); unit test `webPush.test.ts:147` (AC-4 broadcast) rewritten deliberately
 
 ## Consumer Surface(s)
 
-- PWA device notifications (`/trader`, `/insights`, `/config-ui` installs): untargeted alerts stop appearing on other users' devices
+- PWA device notifications (`/trader`, `/insights`, `/config-ui` installs): untargeted alerts stop reaching every non-admin device, the content owner's own device included; admin-role users' devices still receive them. FR-3 producers reach their owner's devices by targeting.
+- Trading's untargeted per-account alerts (`trading.go:1938-1944`, `:2751-2757`) reach admin devices only after FR-1; the account owner loses the push for their own halt unless /sdd-design extends FR-3 to them (owner resolvable from `accountID`) or names a follow-up feature.
 - In-app alert stream / history: unchanged (StreamAlerts broadcast kept)
 
 ## Acceptance Criteria
@@ -69,6 +76,6 @@ dev.
 ## Out of Scope
 
 - `StreamAlerts` / alert-history broadcast visibility (`services/xstockstrat-notify/acceptance/alert-read-unread-persistence.feature:14`)
-- Auditing every other untargeted producer (agent `emit_alert`, ingest backfill, Go services) for per-user content beyond FR-3's two
+- Auditing other untargeted producers (agent `emit_alert`, ingest backfill, Go services) for per-user content beyond FR-3; trading's halt/reconciliation alerts are the exception, decided at /sdd-design (extend FR-3 or name a follow-up)
 - Refactoring unrelated to the bug
 - Performance improvements unrelated to the fix

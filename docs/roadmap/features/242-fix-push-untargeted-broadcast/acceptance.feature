@@ -2,10 +2,12 @@ Feature: fix-push-untargeted-broadcast (bug fix)
   Regression guard for docs/reports/2026-10-19-notify-untargeted-push-broadcasts-all-users-defect.md:
   an untargeted alert sends a Web Push to every user's devices.
   Shared givens: VAPID keys configured; notify.push.min_severity 2; "user-42" has 2 push subscriptions
-  ("https://push.example/one", "https://push.example/two"); "user-77" has 1 ("https://push.example/three").
+  ("https://push.example/one", "https://push.example/two"); "user-77" has 1 ("https://push.example/three");
+  neither "user-42" nor "user-77" holds the admin role; "user-99" holds the admin role and has 1
+  ("https://push.example/admin").
 
   @AC-1 @FR-1 @regression
-  Scenario: An untargeted alert is not Web-Pushed to any user's devices
+  Scenario: An untargeted alert is not Web-Pushed to any non-admin user's devices
     When EmitAlert is called with an empty target_user_id, severity ALERT_SEVERITY_WARNING, title "portfolio risk limit breach", body "concentration limit breach: LYFT at 24.1%"
     Then no Web Push is sent to "https://push.example/one", "https://push.example/two" or "https://push.example/three"
     And EmitAlert returns an alert_id
@@ -15,7 +17,7 @@ Feature: fix-push-untargeted-broadcast (bug fix)
   Scenario: A targeted alert reaches only the target user's devices
     When EmitAlert is called with target_user_id "user-42", severity ALERT_SEVERITY_WARNING, title "Order filled", body "AAPL 10 @ 190.00"
     Then a Web Push with title "Order filled" is sent to exactly "https://push.example/one" and "https://push.example/two"
-    And no Web Push is sent to "https://push.example/three"
+    And no Web Push is sent to "https://push.example/three" or "https://push.example/admin"
 
   @AC-3 @FR-3 @regression
   Scenario: A portfolio risk breach alert is targeted at the account owner
@@ -29,3 +31,23 @@ Feature: fix-push-untargeted-broadcast (bug fix)
     Given "user-42" owns live strategy "strat-1" that triggers "entry" on "AAPL"
     When the analysis live loop emits the strategy trigger alert
     Then notify EmitAlert receives category "strategy", severity ALERT_SEVERITY_WARNING and target_user_id "user-42"
+
+  @AC-5 @FR-1 @regression
+  Scenario: An untargeted alert is Web-Pushed only to admin-role users' devices
+    When EmitAlert is called with an empty target_user_id, severity ALERT_SEVERITY_WARNING, title "portfolio risk limit breach", body "concentration limit breach: LYFT at 24.1%"
+    Then a Web Push with title "portfolio risk limit breach" is sent to exactly "https://push.example/admin"
+
+  @AC-6 @FR-3 @regression
+  Scenario: A portfolio drawdown breach alert is targeted at the account owner
+    Given portfolio.risk.max_drawdown_pct is 0.10
+    And "user-42" account "acct-1" has peak equity 10000.00 and current equity 8500.00
+    When the portfolio risk check runs for "user-42"
+    Then notify EmitAlert receives category "risk", severity ALERT_SEVERITY_WARNING, body "drawdown limit breach: account acct-1 at 15.0% (peak 10000.00, current 8500.00)" and target_user_id "user-42"
+
+  @AC-7 @FR-3 @regression
+  Scenario: A live-loop fundamentals-unavailable alert is targeted at the strategy owner
+    Given analysis.backtest.fundamentals.enabled is true
+    And "user-42" owns live strategy "strat-2" that requires fundamentals
+    And "MSFT" has no usable fundamentals
+    When the analysis live loop denies entry for "strat-2" on "MSFT"
+    Then notify EmitAlert receives category "strategy", severity ALERT_SEVERITY_WARNING, title "Strategy strat-2: fundamentals unavailable for MSFT" and target_user_id "user-42"
