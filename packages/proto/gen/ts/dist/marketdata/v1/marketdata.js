@@ -3568,7 +3568,7 @@ exports.GetLatestQuotesResponse = {
     },
 };
 function createBaseBatchGetBarsRequest() {
-    return { symbols: [], timeframe: "", start: undefined, end: undefined, maxBarsPerSymbol: 0 };
+    return { symbols: [], timeframe: "", start: undefined, end: undefined, maxBarsPerSymbol: 0, allowPartial: false };
 }
 exports.BatchGetBarsRequest = {
     encode(message, writer = new wire_1.BinaryWriter()) {
@@ -3586,6 +3586,9 @@ exports.BatchGetBarsRequest = {
         }
         if (message.maxBarsPerSymbol !== 0) {
             writer.uint32(40).int32(message.maxBarsPerSymbol);
+        }
+        if (message.allowPartial !== false) {
+            writer.uint32(48).bool(message.allowPartial);
         }
         return writer;
     },
@@ -3631,6 +3634,13 @@ exports.BatchGetBarsRequest = {
                     message.maxBarsPerSymbol = reader.int32();
                     continue;
                 }
+                case 6: {
+                    if (tag !== 48) {
+                        break;
+                    }
+                    message.allowPartial = reader.bool();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -3650,6 +3660,11 @@ exports.BatchGetBarsRequest = {
                 : isSet(object.max_bars_per_symbol)
                     ? globalThis.Number(object.max_bars_per_symbol)
                     : 0,
+            allowPartial: isSet(object.allowPartial)
+                ? globalThis.Boolean(object.allowPartial)
+                : isSet(object.allow_partial)
+                    ? globalThis.Boolean(object.allow_partial)
+                    : false,
         };
     },
     toJSON(message) {
@@ -3669,6 +3684,9 @@ exports.BatchGetBarsRequest = {
         if (message.maxBarsPerSymbol !== 0) {
             obj.maxBarsPerSymbol = Math.round(message.maxBarsPerSymbol);
         }
+        if (message.allowPartial !== false) {
+            obj.allowPartial = message.allowPartial;
+        }
         return obj;
     },
     create(base) {
@@ -3681,6 +3699,7 @@ exports.BatchGetBarsRequest = {
         message.start = object.start ?? undefined;
         message.end = object.end ?? undefined;
         message.maxBarsPerSymbol = object.maxBarsPerSymbol ?? 0;
+        message.allowPartial = object.allowPartial ?? false;
         return message;
     },
 };

@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -451,34 +452,80 @@ func (r *PortfolioRepo) GetAccountBalance(ctx context.Context, accountID string)
 	return &b, nil
 }
 
-// UpsertOfflineRealized records an offline account's cumulative realized P&L. account_id is the PK,
-// so it survives the position-row wipe on a full close.
-func (r *PortfolioRepo) UpsertOfflineRealized(ctx context.Context, accountID, userID, tradingMode string, realizedPnl float64) error {
+// RecentFill is one offline fill from trading's 10-day recent_fills window (signed qty, RFC3339Nano).
+type RecentFill struct {
+	Symbol   string  `json:"symbol"`
+	Qty      float64 `json:"qty"`
+	Price    float64 `json:"price"`
+	FilledAt string  `json:"filled_at"`
+}
+
+// OfflineState is an offline account's account-grain P&L state from its latest recompute.
+type OfflineState struct {
+	RealizedPnl       float64
+	RealizedCarried   float64
+	FeesSinceSnapshot float64
+	FeesCarried       float64
+	RecentFills       []RecentFill
+}
+
+// UpsertOfflineRealized records an offline account's P&L state. account_id is the PK, so it survives
+// the position-row wipe on a full close.
+func (r *PortfolioRepo) UpsertOfflineRealized(ctx context.Context, accountID, userID, tradingMode string, st OfflineState) error {
+	fills := st.RecentFills
+	if fills == nil {
+		fills = []RecentFill{}
+	}
+	fillsJSON, err := json.Marshal(fills)
+	if err != nil {
+		return fmt.Errorf("marshal recent fills: %w", err)
+	}
 	const q = `
-		INSERT INTO portfolio.offline_account_realized (account_id, user_id, trading_mode, realized_pnl, updated_at)
-		VALUES ($1, $2, $3, $4, NOW())
+		INSERT INTO portfolio.offline_account_realized
+			(account_id, user_id, trading_mode, realized_pnl, realized_carried, fees_since_snapshot, fees_carried, recent_fills, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
 		ON CONFLICT (account_id) DO UPDATE
-		SET user_id=$2, trading_mode=$3, realized_pnl=$4, updated_at=NOW()`
-	_, err := r.pool.Exec(ctx, q, accountID, userID, tradingMode, realizedPnl)
+		SET user_id=$2, trading_mode=$3, realized_pnl=$4, realized_carried=$5, fees_since_snapshot=$6,
+		    fees_carried=$7, recent_fills=$8, updated_at=NOW()`
+	_, err = r.db.Exec(ctx, q, accountID, userID, tradingMode,
+		st.RealizedPnl, st.RealizedCarried, st.FeesSinceSnapshot, st.FeesCarried, fillsJSON)
 	return err
 }
 
-// GetOfflineRealized returns an offline account's realized P&L. The bool is false (not an error)
-// when no row exists — a broker account, or an offline account with no confirmed orders yet.
-func (r *PortfolioRepo) GetOfflineRealized(ctx context.Context, accountID string) (float64, bool, error) {
-	if accountID == "" {
-		return 0, false, nil
+// GetOfflineStates returns the caller's offline P&L state for the given accounts; an account with no
+// row (or owned by another user) is absent from the map.
+func (r *PortfolioRepo) GetOfflineStates(ctx context.Context, userID string, accountIDs []string) (map[string]OfflineState, error) {
+	out := make(map[string]OfflineState, len(accountIDs))
+	if len(accountIDs) == 0 {
+		return out, nil
 	}
-	const q = `SELECT realized_pnl FROM portfolio.offline_account_realized WHERE account_id=$1`
-	var v float64
-	err := r.db.QueryRow(ctx, q, accountID).Scan(&v)
+	rows, err := r.db.Query(ctx, `
+		SELECT account_id, realized_pnl, realized_carried, fees_since_snapshot, fees_carried, recent_fills
+		FROM portfolio.offline_account_realized WHERE user_id=$1 AND account_id = ANY($2)`, userID, accountIDs)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return 0, false, nil
-		}
-		return 0, false, fmt.Errorf("get offline realized: %w", err)
+		return nil, fmt.Errorf("get offline states: %w", err)
 	}
-	return v, true, nil
+	defer rows.Close()
+	for rows.Next() {
+		var (
+			id        string
+			st        OfflineState
+			fillsJSON []byte
+		)
+		if err := rows.Scan(&id, &st.RealizedPnl, &st.RealizedCarried, &st.FeesSinceSnapshot, &st.FeesCarried, &fillsJSON); err != nil {
+			return nil, fmt.Errorf("scan offline state: %w", err)
+		}
+		if len(fillsJSON) > 0 {
+			if err := json.Unmarshal(fillsJSON, &st.RecentFills); err != nil {
+				return nil, fmt.Errorf("decode recent fills for %s: %w", id, err)
+			}
+		}
+		out[id] = st
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("offline states iteration: %w", err)
+	}
+	return out, nil
 }
 
 // DeleteOfflineRealized removes an offline account's realized row.

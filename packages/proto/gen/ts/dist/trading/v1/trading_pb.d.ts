@@ -106,6 +106,12 @@ export type Order = Message<"xstockstrat.trading.v1.Order"> & {
      * @generated from field: google.protobuf.Timestamp filled_at = 22;
      */
     filledAt?: Timestamp | undefined;
+    /**
+     * offline orders only; unset for broker orders and while NEW
+     *
+     * @generated from field: optional double fees = 23;
+     */
+    fees?: number | undefined;
 };
 /**
  * Describes the message xstockstrat.trading.v1.Order.
@@ -291,6 +297,12 @@ export type ConfirmOrderRequest = Message<"xstockstrat.trading.v1.ConfirmOrderRe
      * @deprecated
      */
     userId: string;
+    /**
+     * cumulative total for the order (>= 0); omitted = keep recorded fees
+     *
+     * @generated from field: optional double fees = 6;
+     */
+    fees?: number | undefined;
 };
 /**
  * Describes the message xstockstrat.trading.v1.ConfirmOrderRequest.
