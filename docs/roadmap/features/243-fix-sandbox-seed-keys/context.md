@@ -90,3 +90,68 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - Fixed full-dotted rows hold the values prod effectively runs today: indicators.sandbox.timeout_ms = 5000 and indicators.sandbox.memory_bytes = 134217728 (128 MiB headroom per feature 228) in both environments — no behaviour change; stale 'memory cap' descriptions become 'headroom'.
   - Interacts with open hotfix #1263 (override clamp): once rows resolve, the clamp ceiling is the row value.
 - Next: `/sdd-design fix-sandbox-seed-keys` (full — operator: no quick designs).
+
+## Session 2026-10-20 — sdd-review product-spec (re-review)
+
+- Re-review result: criteria PASS WITH WARNINGS (0 fails, 0 floor breaches, 10 warnings); overlap WARN (no
+  FAIL-level collision; no merge-order write). Status was already `spec-ready` (commit 637e5533). No transition
+  occurred, so `status.md` and `feature.md` Status History are unchanged. Next Action stays
+  `/sdd-design fix-sandbox-seed-keys` (full).
+- The reviewers read the pre-637e5533 draft (main checkout). Warnings 2, part of 3, and the 3000/64 MiB parts of
+  4 were already resolved by the operator values 5000/134217728.
+- Warnings (spec-reviewer, 10) and resolution:
+  1. [Crit 2+8] No numbered FRs; no `@FR-n` tags. Resolved: `## Functional Requirements` FR-1..FR-4 added;
+     scenarios tagged @AC-1/@FR-1, @AC-2/@FR-2, @AC-3/@FR-3, @AC-4/@FR-4.
+  2. [Crit 9, C-15/P-03] Unticked "Config key value change" and AC-1 at 3000. Already resolved by 637e5533:
+     the box is ticked, and AC-1 asserts 5000/134217728, so no 3000-5000 ms timeout regression is possible.
+  3. [Crit 8, P-06] AC-2 is not red-first. Already labelled a getter-contract guard. The reviewer's
+     migrated-DB variant cannot be red-first, because the row values equal the code defaults. Added the
+     `indicators.sandbox.allowed_imports` row (`get_str_present`, `watcher.py:140-144`) with fixture "numpy,math"
+     resolving to `["numpy", "math"]` (new `resolved` column).
+  4. [Crit 8, CONFIG-10] Resolved: AC-1 now asserts value_type int/int/string and the `allowed_imports` value in
+     both environments. Staging/production values were already asserted. AC-3 already forbids "64MB".
+  5. [Crit 7, C-07/F-01] Heal conflict-safety. Resolved: FR-4 plus new @AC-4. A pre-existing full-dotted row
+     must not abort on `config_values_scope_uniq` (`017_config_secrets_and_scoping.up.sql:101-102`), and no bare
+     duplicate may remain. The Fix Scope DB line names the 029 plain-UPDATE hazard. Open for design: which value
+     wins, what the down migration restores, per-user bare rows, the 002 `default_value` column (3000/67108864),
+     and the no-`pg_notify` reload (CONFIG-4; harmless because the values equal the defaults).
+  6. [Crit 4, C-18] The indicators code scope is open-ended. Resolved: Affected Services and Fix Scope state that
+     the source already reads the full-dotted keys (`watcher.py:133-144`), so code scope is set at design under
+     C-18. Any `SCALAR_BOUNDS_REGISTRY` rows now append @AC-5+ (AC-4 is taken).
+  7. [Crit 1] No persona. Resolved: "Who is affected" line added (operator in `/config-ui`; formula authors via
+     `test_formula` and `/insights` Run).
+  8. [C-10] Duplicated bare-key surface. Resolved: Fix Scope doc bullet adds `docs/runbooks/config-rollout.md:180`
+     and `services/xstockstrat-indicators/CLAUDE.md:12`.
+  9. [C-16, for design] design.md must record durable suites
+     `services/xstockstrat-indicators/acceptance/indicators-sandbox-os-isolation.feature:46-50` (AC-6, config-read
+     limits) and `fix-indicators-sandbox-matrix.feature:17-24` (64 MiB / 16 MiB headroom) as preserved/extended.
+  10. Informational: crit 3/4/5/6/11, C-1..C-5 skipped (non-trading), no F-* breach; code claims verified.
+- Overlap findings (feature-overlap, WARN):
+  - `services/xstockstrat-indicators/app/config/watcher.py`: 244 rewrites the getter trap sites (`:96,114,130`)
+    that the 243 readers call. Soft ordering, as already recorded.
+  - `services/xstockstrat-config/src/grpc/configServiceImpl.ts` `SCALAR_BOUNDS_REGISTRY` (`:100`): conditional
+    243 rows vs 240 (row `:145`), 244 (`:115-117`), and 241 (`:388`, disjoint hunk). Textual rebase only, and
+    real only if design adopts bounds.
+  - Migration 031: no claim on this tree. Verified 2026-10-20 with `git log --remotes -- services/xstockstrat-config/migrations/`:
+    no 031+ config migration on any remote branch. 241's config migration remains an unnumbered design fork. If
+    241 claims 031, the second to merge renumbers to 032.
+  - Config keys / proto: no duplicates, no overlap.
+  - `origin/feature/fix-sandbox-memory-cap`, verified 2026-10-20: a docs-only orphan triage, draft "229" (that NNN
+    is held on main-dev by `229-fix-book-portfolio-page`), tip 6c0c36d0, not merged to main-dev. It covers a
+    different defect (RLIMIT_DATA not enforced on the deployed runtime). It has no config migration and no key
+    overlap. Its effective limits are unchanged by 243.
+  - Hotfix PR #1263 (`origin/hotfix/fix-sandbox-overrides-unclamped`, 3340a7c6, not on main-dev), verified file
+    set: `app/handlers/servicer.py`, `tests/test_execute_formula_override_clamp.py`, `docs/runbooks/hotfix-log.md`,
+    and `services/xstockstrat-indicators/CLAUDE.md` Config Keys table (~:97-103). The CLAUDE.md file overlaps
+    243's doc fix (rebase only). Behavioural: the clamp ceiling becomes the row value (5000 ms / 128 MiB), with
+    no change in effect.
+  - 247 (agent GetConfig deadline) and 250 (indicators telemetry): no code overlap. merge-order.md has no 241-251
+    row, and none is recommended now.
+- Operator decisions:
+  - Standing authorization: designs run in FULL mode only (no quick designs for automated fixes); the orchestrator auto-approves the design gate once rounds >= 2, no unresolved Floor (F-*) breach remains, no blocking objection remains, and every CHANGE to an existing @AC business rule is covered by an operator decision below.
+  - Fix in code + a config migration (not a manual SetConfig / Track B).
+  - Fixed full-dotted rows hold the values prod effectively runs today: indicators.sandbox.timeout_ms = 5000 and indicators.sandbox.memory_bytes = 134217728 (128 MiB headroom per feature 228) in both environments — no behaviour change; stale 'memory cap' descriptions become 'headroom'.
+  - Interacts with open hotfix #1263 (override clamp): once rows resolve, the clamp ceiling is the row value.
+- Files modified: product-spec.md (persona, FR-1..FR-4, Affected Services, Fix Scope DB/code/doc bullets),
+  acceptance.feature (@FR tags; AC-1 value_type + allowed_imports; AC-2 allowed_imports row; new @AC-4).
+- Next: `/sdd-design fix-sandbox-seed-keys` (full — operator: no quick designs).
