@@ -48,6 +48,7 @@ The open rows above were re-verified against `1302e6d` and recorded as `docs/rep
 | [`2026-10-19-orphaned-code-defect`](../../../docs/reports/2026-10-19-orphaned-code-defect.md) | Orphaned modules, scripts and dependencies across services |
 | [`2026-10-19-portfolio-concentration-logged-as-drawdown-defect`](../../../docs/reports/2026-10-19-portfolio-concentration-logged-as-drawdown-defect.md) | concentration breaches are recorded as portfolio.risk.drawdown_breach ledger events |
 | [`2026-10-19-portfolio-default-identity-fallback-defect`](../../../docs/reports/2026-10-19-portfolio-default-identity-fallback-defect.md) | portfolio consumers substitute literal "default" / "alpaca-default" for a missing user or account id |
+| [`2026-10-20-portfolio-getpnl-source-service-mismatch-defect`](../../../docs/reports/2026-10-20-portfolio-getpnl-source-service-mismatch-defect.md) | GetPnL queries ledger fills with source_service "trading", but trading writes "xstockstrat-trading" (found 2026-10-20) |
 | [`2026-10-19-portfolio-snapshot-risk-midquote-valuation-defect`](../../../docs/reports/2026-10-19-portfolio-snapshot-risk-midquote-valuation-defect.md) | portfolio snapshot equity and risk checks value positions from mid-quotes, not broker marks |
 | [`2026-10-19-portfolio-watchlist-duplicate-returns-internal-defect`](../../../docs/reports/2026-10-19-portfolio-watchlist-duplicate-returns-internal-defect.md) | CreateWatchlist returns INTERNAL on a duplicate watchlist name |
 
