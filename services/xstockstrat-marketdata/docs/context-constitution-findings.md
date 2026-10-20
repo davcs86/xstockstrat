@@ -31,6 +31,7 @@ governance. Repo-wide defects (Go 1.22 doc-lie) live in the root findings log.
 
 ## Open questions (unresolved *why* — needs a maintainer)
 
+- Do IEX daily bars include extended-hours prints? Feature 231 uses the stored `1d` close as the after-hours mark, so an extended-hours-inclusive close would shift it. `internal/service/marketdata_service.go#GetLatestQuotes`, `internal/repository/marketdata_repo.go#GetLatestDailyClosesBatch` — status: **open**
 - `fmp.getJSON` deliberately omits the URL from every error because it carries the `apikey` query param — confirm this "never log the URL" rule is a hard security invariant to enshrine (it also strips path/status detail from FMP errors). `internal/fmp/fmp_client.go#getJSON` (~L254) — status: **open**
 - Is `fmp.getJSON`'s "never include the URL in errors" a hard security invariant to enshrine? (carried above) — and `newFundamentalsSource` falls back to FMP on an unrecognized provider (comment: deliberate, feature 211 F-07) — confirm fail-open is intended — status: **open**
 - gRPC keepalive magic values (`MaxConnectionIdle 60s / Time 30s / Timeout 10s`) — platform-standard (belongs in root governance) or marketdata-tuned? `cmd/server/main.go#KeepaliveParams` (~L181-185) — status: **open**

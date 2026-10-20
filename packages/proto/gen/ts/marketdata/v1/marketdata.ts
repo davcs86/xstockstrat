@@ -67,6 +67,11 @@ export interface Quote {
   bidPrice: number;
   bidSize: number;
   source: string;
+  /**
+   * Valuation mark, set only by GetLatestQuotes: two-sided mid if ask_price>0 && bid_price>0, else the newest
+   * stored 1d close within marketdata.quotes.mark_close_max_age_hours. Unset = no usable mark (or not computed).
+   */
+  markPrice?: number | undefined;
 }
 
 /**
@@ -709,7 +714,16 @@ export const Bar: MessageFns<Bar> = {
 };
 
 function createBaseQuote(): Quote {
-  return { symbol: "", time: undefined, askPrice: 0, askSize: 0, bidPrice: 0, bidSize: 0, source: "" };
+  return {
+    symbol: "",
+    time: undefined,
+    askPrice: 0,
+    askSize: 0,
+    bidPrice: 0,
+    bidSize: 0,
+    source: "",
+    markPrice: undefined,
+  };
 }
 
 export const Quote: MessageFns<Quote> = {
@@ -734,6 +748,9 @@ export const Quote: MessageFns<Quote> = {
     }
     if (message.source !== "") {
       writer.uint32(58).string(message.source);
+    }
+    if (message.markPrice !== undefined) {
+      writer.uint32(65).double(message.markPrice);
     }
     return writer;
   },
@@ -801,6 +818,14 @@ export const Quote: MessageFns<Quote> = {
           message.source = reader.string();
           continue;
         }
+        case 8: {
+          if (tag !== 65) {
+            break;
+          }
+
+          message.markPrice = reader.double();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -835,6 +860,11 @@ export const Quote: MessageFns<Quote> = {
         ? globalThis.Number(object.bid_size)
         : 0,
       source: isSet(object.source) ? globalThis.String(object.source) : "",
+      markPrice: isSet(object.markPrice)
+        ? globalThis.Number(object.markPrice)
+        : isSet(object.mark_price)
+        ? globalThis.Number(object.mark_price)
+        : undefined,
     };
   },
 
@@ -861,6 +891,9 @@ export const Quote: MessageFns<Quote> = {
     if (message.source !== "") {
       obj.source = message.source;
     }
+    if (message.markPrice !== undefined) {
+      obj.markPrice = message.markPrice;
+    }
     return obj;
   },
 
@@ -876,6 +909,7 @@ export const Quote: MessageFns<Quote> = {
     message.bidPrice = object.bidPrice ?? 0;
     message.bidSize = object.bidSize ?? 0;
     message.source = object.source ?? "";
+    message.markPrice = object.markPrice ?? undefined;
     return message;
   },
 };

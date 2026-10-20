@@ -44,8 +44,9 @@ func (s *stubMarketData) GetLatestQuote(_ context.Context, _ *marketdatav1.GetLa
 }
 
 // TestEnrichPositions_OneBatchedCall — @AC-1: enriching N un-broker-valued positions issues exactly
-// one batched GetLatestQuotes call and zero per-position GetLatestQuote calls, and each position's
-// CurrentPrice is the byte-identical (Ask+Bid)/2 mid (PR#735 formula-parity guard, fails.md:38).
+// one batched GetLatestQuotes call and zero per-position GetLatestQuote calls, and for two-sided quotes each
+// CurrentPrice is the byte-identical (Ask+Bid)/2 mid (PR#735 parity guard; batched == serial holds for two-sided
+// quotes only — signed C-16 CHANGE of @AC-1 @feature-178, feature 231 context.md 2026-10-19).
 func TestEnrichPositions_OneBatchedCall(t *testing.T) {
 	const n = 30
 	positions := make([]*portfoliov1.Position, 0, n)

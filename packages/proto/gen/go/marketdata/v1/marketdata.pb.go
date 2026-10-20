@@ -160,14 +160,17 @@ func (x *Bar) GetTimeframeEnum() v1.Timeframe {
 }
 
 type Quote struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Symbol        string                 `protobuf:"bytes,1,opt,name=symbol,proto3" json:"symbol,omitempty"`
-	Time          *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=time,proto3" json:"time,omitempty"`
-	AskPrice      float64                `protobuf:"fixed64,3,opt,name=ask_price,json=askPrice,proto3" json:"ask_price,omitempty"`
-	AskSize       int32                  `protobuf:"varint,4,opt,name=ask_size,json=askSize,proto3" json:"ask_size,omitempty"`
-	BidPrice      float64                `protobuf:"fixed64,5,opt,name=bid_price,json=bidPrice,proto3" json:"bid_price,omitempty"`
-	BidSize       int32                  `protobuf:"varint,6,opt,name=bid_size,json=bidSize,proto3" json:"bid_size,omitempty"`
-	Source        string                 `protobuf:"bytes,7,opt,name=source,proto3" json:"source,omitempty"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Symbol   string                 `protobuf:"bytes,1,opt,name=symbol,proto3" json:"symbol,omitempty"`
+	Time     *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=time,proto3" json:"time,omitempty"`
+	AskPrice float64                `protobuf:"fixed64,3,opt,name=ask_price,json=askPrice,proto3" json:"ask_price,omitempty"`
+	AskSize  int32                  `protobuf:"varint,4,opt,name=ask_size,json=askSize,proto3" json:"ask_size,omitempty"`
+	BidPrice float64                `protobuf:"fixed64,5,opt,name=bid_price,json=bidPrice,proto3" json:"bid_price,omitempty"`
+	BidSize  int32                  `protobuf:"varint,6,opt,name=bid_size,json=bidSize,proto3" json:"bid_size,omitempty"`
+	Source   string                 `protobuf:"bytes,7,opt,name=source,proto3" json:"source,omitempty"`
+	// Valuation mark, set only by GetLatestQuotes: two-sided mid if ask_price>0 && bid_price>0, else the newest
+	// stored 1d close within marketdata.quotes.mark_close_max_age_hours. Unset = no usable mark (or not computed).
+	MarkPrice     *float64 `protobuf:"fixed64,8,opt,name=mark_price,json=markPrice,proto3,oneof" json:"mark_price,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -249,6 +252,13 @@ func (x *Quote) GetSource() string {
 		return x.Source
 	}
 	return ""
+}
+
+func (x *Quote) GetMarkPrice() float64 {
+	if x != nil && x.MarkPrice != nil {
+		return *x.MarkPrice
+	}
+	return 0
 }
 
 // Latest-trade price + prior-session daily close (feature 095). last_price/prev_close are explicit
@@ -2989,7 +2999,7 @@ const file_marketdata_v1_marketdata_proto_rawDesc = "" +
 	"\ttimeframe\x18\n" +
 	" \x01(\tB\x02\x18\x01R\ttimeframe\x12\x16\n" +
 	"\x06source\x18\v \x01(\tR\x06source\x12G\n" +
-	"\x0etimeframe_enum\x18\f \x01(\x0e2 .xstockstrat.common.v1.TimeframeR\rtimeframeEnum\"\xd7\x01\n" +
+	"\x0etimeframe_enum\x18\f \x01(\x0e2 .xstockstrat.common.v1.TimeframeR\rtimeframeEnum\"\x8a\x02\n" +
 	"\x05Quote\x12\x16\n" +
 	"\x06symbol\x18\x01 \x01(\tR\x06symbol\x12.\n" +
 	"\x04time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x12\x1b\n" +
@@ -2997,7 +3007,10 @@ const file_marketdata_v1_marketdata_proto_rawDesc = "" +
 	"\bask_size\x18\x04 \x01(\x05R\aaskSize\x12\x1b\n" +
 	"\tbid_price\x18\x05 \x01(\x01R\bbidPrice\x12\x19\n" +
 	"\bbid_size\x18\x06 \x01(\x05R\abidSize\x12\x16\n" +
-	"\x06source\x18\a \x01(\tR\x06source\"/\n" +
+	"\x06source\x18\a \x01(\tR\x06source\x12\"\n" +
+	"\n" +
+	"mark_price\x18\b \x01(\x01H\x00R\tmarkPrice\x88\x01\x01B\r\n" +
+	"\v_mark_price\"/\n" +
 	"\x15GetLatestPriceRequest\x12\x16\n" +
 	"\x06symbol\x18\x01 \x01(\tR\x06symbol\"\xe7\x01\n" +
 	"\vLatestPrice\x12\x16\n" +
@@ -3408,6 +3421,7 @@ func file_marketdata_v1_marketdata_proto_init() {
 	if File_marketdata_v1_marketdata_proto != nil {
 		return
 	}
+	file_marketdata_v1_marketdata_proto_msgTypes[1].OneofWrappers = []any{}
 	file_marketdata_v1_marketdata_proto_msgTypes[3].OneofWrappers = []any{}
 	file_marketdata_v1_marketdata_proto_msgTypes[44].OneofWrappers = []any{}
 	type x struct{}

@@ -13,6 +13,7 @@ import (
 	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
 
 	"github.com/xstockstrat/marketdata/internal/source"
+	"github.com/xstockstrat/marketdata/internal/testdata"
 )
 
 // TestBuildDeleteBarsQuery verifies the scoped DELETE predicate building for DeleteBars (FR-5).
@@ -555,6 +556,55 @@ func TestGetLatestQuotesBatch_BoundedLateralShape(t *testing.T) {
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("pgxmock expectations unmet: %v", err)
+	}
+}
+
+// feature 231 — @AC-7 SQL-shape half: the close read is windowed by since, skips non-positive closes, runs as
+// an unnamed statement, and leaves an out-of-window symbol absent (never zero). pgxmock never plans.
+func TestGetLatestDailyClosesBatch_BoundedLateralShape(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatalf("pgxmock.NewPool: %v", err)
+	}
+	defer mock.Close()
+	repo := &MarketDataRepo{db: mock}
+	since := time.Now().Add(-testdata.MarkCloseMaxAgeHours * time.Hour)
+
+	mock.ExpectQuery(`(?s)CROSS JOIN LATERAL.*marketdata\.ohlcv.*timeframe = '1d'.*time >= \$2.*close > 0.*ORDER BY time DESC.*LIMIT 1`).
+		WithArgs(pgx.QueryExecModeExec, []string{testdata.Lyft, testdata.Elwt}, since).
+		WillReturnRows(pgxmock.NewRows([]string{"sym", "close"}).AddRow(testdata.Lyft, testdata.LyftDailyClose))
+
+	got, err := repo.GetLatestDailyClosesBatch(context.Background(), []string{testdata.Lyft, testdata.Elwt}, since)
+	if err != nil {
+		t.Fatalf("GetLatestDailyClosesBatch: %v", err)
+	}
+	if len(got) != 1 || got[testdata.Lyft] != testdata.LyftDailyClose {
+		t.Fatalf("expected {LYFT: %v} only (ELWT absent, never 0), got %v", testdata.LyftDailyClose, got)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("pgxmock expectations unmet: %v", err)
+	}
+}
+
+func TestGetLatestDailyClosesBatch_EmptyNoQuery(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatalf("pgxmock.NewPool: %v", err)
+	}
+	defer mock.Close()
+	repo := &MarketDataRepo{db: mock}
+	got, err := repo.GetLatestDailyClosesBatch(context.Background(), nil, time.Now())
+	if err != nil || len(got) != 0 {
+		t.Fatalf("expected empty map and no error, got %v, %v", got, err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("no query expected: %v", err)
+	}
+}
+
+func TestGetLatestDailyClosesBatch_NoUnboundedScan(t *testing.T) {
+	if !strings.Contains(latestDailyClosesBatchSQL, "time >= $2") || strings.Contains(latestDailyClosesBatchSQL, "ROW_NUMBER") {
+		t.Fatal("daily close read must stay windowed by $2 and never regress to the unbounded ROW_NUMBER scan")
 	}
 }
 

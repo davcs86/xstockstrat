@@ -5,17 +5,23 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/pashagolub/pgxmock/v4"
+	"google.golang.org/grpc"
+	"google.golang.org/protobuf/proto"
 
 	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
 	marketdatav1 "github.com/xstockstrat/contracts/gen/go/marketdata/v1"
+	notifyv1 "github.com/xstockstrat/contracts/gen/go/notify/v1"
 	portfoliov1 "github.com/xstockstrat/contracts/gen/go/portfolio/v1"
+	"github.com/xstockstrat/portfolio/internal/config"
 	"github.com/xstockstrat/portfolio/internal/repository"
+	"github.com/xstockstrat/portfolio/internal/testdata"
 )
 
 // Feature 229 — portfolio quote deadline, union batch, snapshot guard and GetPnL Unavailable.
@@ -331,5 +337,145 @@ func TestBroadcastSnapshot_SkipsWhenUnpriced(t *testing.T) {
 				t.Fatalf("pgxmock: %v", err)
 			}
 		})
+	}
+}
+
+// ── feature 231: broker-first snapshot and concentration, skip on any unpriced position ──
+
+// recordingNotify records every alert body checkRiskLimits emits.
+type recordingNotify struct {
+	notifyv1.NotifyServiceClient
+	mu     sync.Mutex
+	bodies []string
+}
+
+func (n *recordingNotify) EmitAlert(_ context.Context, in *notifyv1.EmitAlertRequest, _ ...grpc.CallOption) (*notifyv1.EmitAlertResponse, error) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.bodies = append(n.bodies, in.Body)
+	return &notifyv1.EmitAlertResponse{}, nil
+}
+
+func lyftMarkQuote() *marketdatav1.Quote {
+	return &marketdatav1.Quote{Symbol: testdata.Lyft, AskPrice: testdata.LyftLoneSide, MarkPrice: proto.Float64(testdata.LyftMark)}
+}
+
+func elwtOneSidedQuote() *marketdatav1.Quote {
+	return &marketdatav1.Quote{Symbol: testdata.Elwt, AskPrice: testdata.ElwtAsk}
+}
+
+func expectDrawdowns(mock pgxmock.PgxPoolIface, rows ...[3]any) {
+	r := mock.NewRows([]string{"account_id", "equity", "peak_equity"})
+	for _, row := range rows {
+		r.AddRow(row[0], row[1], row[2])
+	}
+	mock.ExpectQuery(`FROM portfolio.account_balances`).WithArgs("u1", "TRADING_MODE_PAPER").WillReturnRows(r)
+}
+
+func sameSet(got, want []string) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	seen := map[string]int{}
+	for _, g := range got {
+		seen[g]++
+	}
+	for _, w := range want {
+		if seen[w] == 0 {
+			return false
+		}
+		seen[w]--
+	}
+	return true
+}
+
+// @AC-2: snapshot equity is broker-first (MSFT market_value) plus the mark-valued offline LYFT; only LYFT is quoted.
+func TestBroadcastSnapshot_AC2_BrokerFirstEquity(t *testing.T) {
+	stub := &stubMarketData{quotes: []*marketdatav1.Quote{lyftMarkQuote()}}
+	svc, mock, ledger := newQuoteSvc(t, stub, 0)
+	ch := svc.Subscribe("t")
+	rows := posRow(mock.NewRows(positionCols), testdata.Lyft, "acc-off", testdata.LyftQty, testdata.LyftAvgEntry, 0)
+	rows = posRow(rows, testdata.Msft, "brk-1", testdata.MsftQty, 500, testdata.MsftBrokerPrice)
+	mock.ExpectQuery(`FROM portfolio.positions`).WithArgs(anyArgs(4)...).WillReturnRows(rows)
+	mock.ExpectExec(`INSERT INTO portfolio.snapshots`).WithArgs(anyArgs(7)...).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+
+	svc.broadcastSnapshot(ctxWithUser(t, "u1"), "u1", commonv1.TradingMode_TRADING_MODE_PAPER)
+
+	if ledger.calls != 1 || len(ch) != 1 {
+		t.Fatalf("want 1 ledger emit and 1 snapshot, got %d and %d", ledger.calls, len(ch))
+	}
+	want := testdata.LyftMark*testdata.LyftQty + testdata.MsftBrokerPrice*testdata.MsftQty
+	if snap := <-ch; math.Abs(snap.Equity-want) > 1e-9 {
+		t.Fatalf("snapshot equity = %v, want %v", snap.Equity, want)
+	}
+	if len(stub.requested) != 1 || strings.Join(stub.requested[0], ",") != testdata.Lyft {
+		t.Fatalf("only the un-broker-valued LYFT may be quoted, got %v", stub.requested)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("pgxmock: %v", err)
+	}
+}
+
+// @AC-8: any unpriced position skips the snapshot entirely and the WARN names it.
+func TestBroadcastSnapshot_AC8_AnyUnpricedSkips(t *testing.T) {
+	rec := recordWarns(t)
+	stub := &stubMarketData{quotes: []*marketdatav1.Quote{lyftMarkQuote(), elwtOneSidedQuote()}}
+	svc, mock, ledger := newQuoteSvc(t, stub, 0)
+	ch := svc.Subscribe("t")
+	rows := posRow(mock.NewRows(positionCols), testdata.Lyft, "acc-off", testdata.LyftQty, testdata.LyftAvgEntry, 0)
+	rows = posRow(rows, testdata.Elwt, "acc-off", testdata.ElwtQty, 6.00, 0)
+	mock.ExpectQuery(`FROM portfolio.positions`).WithArgs(anyArgs(4)...).WillReturnRows(rows)
+
+	svc.broadcastSnapshot(ctxWithUser(t, "u1"), "u1", commonv1.TradingMode_TRADING_MODE_PAPER)
+
+	if ledger.calls != 0 || len(ch) != 0 {
+		t.Fatalf("a partially priced snapshot must be skipped, got %d ledger emits and %d snapshots", ledger.calls, len(ch))
+	}
+	w := rec.find("portfolio snapshot skipped: positions unpriced")
+	if w == nil || !strings.Contains(w["unpriced"], testdata.Elwt) {
+		t.Fatalf("want WARN naming ELWT, got %v", w)
+	}
+}
+
+// @AC-3: concentration sums a symbol across accounts and alerts on the true (broker-first) weights.
+func TestCheckRiskLimits_AC3_SumsAcrossAccounts(t *testing.T) {
+	stub := &stubMarketData{quotes: []*marketdatav1.Quote{lyftMarkQuote()}}
+	svc, mock, _ := newQuoteSvc(t, stub, 0)
+	notify := &recordingNotify{}
+	svc.cfg, svc.notify = &config.Watcher{}, notify
+	rows := posRow(mock.NewRows(positionCols), testdata.Lyft, "acc-1", testdata.LyftQty, testdata.LyftAvgEntry, 0)
+	rows = posRow(rows, testdata.Lyft, "acc-2", testdata.LyftQty, testdata.LyftAvgEntry, 0)
+	rows = posRow(rows, testdata.Msft, "brk-1", testdata.MsftQty, 500, testdata.MsftBrokerPrice)
+	mock.ExpectQuery(`FROM portfolio.positions`).WithArgs(anyArgs(4)...).WillReturnRows(rows)
+	expectDrawdowns(mock)
+
+	svc.checkRiskLimits(ctxWithUser(t, "u1"), "u1", commonv1.TradingMode_TRADING_MODE_PAPER)
+
+	want := []string{"concentration limit breach: LYFT at 24.1%", "concentration limit breach: MSFT at 75.9%"}
+	if !sameSet(notify.bodies, want) {
+		t.Fatalf("alerts = %v, want exactly %v", notify.bodies, want)
+	}
+}
+
+// @AC-9: any unpriced position skips concentration (WARN names it); drawdown still alerts on broker equity.
+func TestCheckRiskLimits_AC9_UnpricedSkipsConcentrationDrawdownStillAlerts(t *testing.T) {
+	rec := recordWarns(t)
+	stub := &stubMarketData{quotes: []*marketdatav1.Quote{lyftMarkQuote(), elwtOneSidedQuote()}}
+	svc, mock, _ := newQuoteSvc(t, stub, 0)
+	notify := &recordingNotify{}
+	svc.cfg, svc.notify = &config.Watcher{}, notify
+	rows := posRow(mock.NewRows(positionCols), testdata.Lyft, "acc-off", testdata.LyftQty, testdata.LyftAvgEntry, 0)
+	rows = posRow(rows, testdata.Elwt, "acc-off", testdata.ElwtQty, 6.00, 0)
+	mock.ExpectQuery(`FROM portfolio.positions`).WithArgs(anyArgs(4)...).WillReturnRows(rows)
+	expectDrawdowns(mock, [3]any{"brk-1", 800.0, 1000.0})
+
+	svc.checkRiskLimits(ctxWithUser(t, "u1"), "u1", commonv1.TradingMode_TRADING_MODE_PAPER)
+
+	want := []string{"drawdown limit breach: account brk-1 at 20.0% (peak 1000.00, current 800.00)"}
+	if !sameSet(notify.bodies, want) {
+		t.Fatalf("alerts = %v, want exactly %v", notify.bodies, want)
+	}
+	if w := rec.find("concentration check skipped: positions unpriced"); w == nil || !strings.Contains(w["unpriced"], testdata.Elwt) {
+		t.Fatalf("want WARN naming ELWT, got %v", w)
 	}
 }
