@@ -24,6 +24,10 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   read-only evidence), so the operator may downgrade to `/sdd-design fix-getpnl-source-service quick`; escalation
   stays warranted if design adopts a shared source-service constant spanning trading and portfolio (DRY guard rail).
   Design fork: literal `"xstockstrat-trading"` vs shared constant vs dropping the `SourceService` filter.
-- **Overlap:** open PR #1255 (`230-offline-account-full-pnl`) also touches portfolio P&L (`GetPnL` / valuation paths
+- **Overlap:** feature `240-offline-account-full-pnl` (merged to main-dev via #1266) also touches portfolio P&L (`GetPnL` / valuation paths
   in `portfolio_service.go`). Sequence or rebase against it; check merge-order before the integration PR.
 - Development branch: feature/fix-getpnl-source-service
+
+## Session 2026-10-20 (renumber 242 → 251)
+
+- Renumbered from 242 to 251 after feature 240-offline-account-full-pnl merged to main-dev (#1266) and took 240; re-verified on main-dev @ 4535695: the defect persists — `SourceService: "trading"` now at `portfolio_service.go:753` (filled) / `:798` (partially_filled); feature 240 did not touch these queries.

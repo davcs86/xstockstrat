@@ -59,6 +59,6 @@ dev.
 ## Out of Scope
 
 - `indicators.sandbox.max_concurrent` (no seed exists; not part of this defect)
-- The Python zero-trap in indicators `get_int` (feature 235)
+- The Python zero-trap in indicators `get_int` (feature 244)
 - Refactoring unrelated to the bug
 - Performance improvements unrelated to the fix

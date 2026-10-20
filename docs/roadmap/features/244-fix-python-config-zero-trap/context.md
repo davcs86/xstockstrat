@@ -27,7 +27,7 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
     seeded 0/`""` row against its call-site default before switching.
   - Config bounds (`configServiceImpl.ts:115-117`) set `minValue: 1` on keys "where 0 already collapses to the code
     default"; with the trap gone, a stored 0 could become reachable via those keys' existing rows — recheck.
-- Overlap: 234-fix-sandbox-seed-keys touches the same indicators `watcher.py` (sandbox getters use `get_int`);
+- Overlap: 243-fix-sandbox-seed-keys touches the same indicators `watcher.py` (sandbox getters use `get_int`);
   soft ordering, whichever lands second reconciles.
 - Recommended design depth: full → `/sdd-design fix-python-config-zero-trap` (rationale: SEV-2; 3 affected
   services; per-key behaviour change across every Python config read needs a debated clamp policy).
