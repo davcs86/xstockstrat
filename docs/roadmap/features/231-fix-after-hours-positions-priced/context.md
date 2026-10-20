@@ -425,3 +425,9 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   — its Then asserts portfolio output; marketdata's side is AC-5/AC-7). Scenarios copied verbatim with `@feature-231`.
   CHANGE: `quote-fanout-batching.feature` `@AC-1 @feature-178` narrowed to two-sided quotes (signed off in design).
 - Ledger: one insights entry (chokepoint-computed additive field + consumer deploy-skew fallback).
+
+## Rollout decision — 2026-10-20 (operator)
+- The EDGAR cache purge is **dropped**: the operator has no SQL access. Half-priced `source='edgar'` rows expire under
+  `marketdata.edgar.cache_ttl_hours` (24, read live per call) and are re-derived with the mark, so ratios for
+  after-hours-cached symbols may be off for ≤ 24h after deploy (accepted). Supersedes the purge line in the session summary.
+- The after-close staging check is run by Claude via the staging MCP (positions vs stored `1d` closes) after the dev deploy.

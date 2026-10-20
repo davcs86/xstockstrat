@@ -56,4 +56,4 @@ read at about half the real price.
 
 ## Next Action
 
-Merge integration PR #1256 into `main-dev`; then run the rollout actions in `context.md` (EDGAR cache purge, after-close staging check). `/promote` flips to `launched`.
+Merge integration PR #1256 into `main-dev`; then the after-close staging check (Claude, via the staging MCP); half-priced EDGAR cache rows self-expire within 24h (`context.md` § Rollout decision). `/promote` flips to `launched`.
