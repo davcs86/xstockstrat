@@ -32,3 +32,21 @@ Feature: fix-ledger-trimmed-notify-payload (bug fix)
     And a second "order.filled" event with a 100-char payload is appended
     Then the second AppendEvent returns its event_id before the subscriber resumes reading
     And after the subscriber resumes it receives both events with their full payloads in ascending sequence order
+
+  @AC-5 @FR-1 @FR-3 @regression
+  Scenario: A trimmed event appended during replay is flushed from the buffer with its full payload
+    Given the ledger holds 50 events with 100-char payloads
+    And a StreamEvents subscriber with no filters opens from sequence 0
+    When an "order.filled" event with a JSON payload of 8000 chars is appended after the subscriber's replay query has read its rows and before the subscriber goes live
+    Then the subscriber receives that event exactly once, with the appended 8000-char payload and a valid occurred_at
+    And the subscriber receives 51 messages in ascending sequence order with no duplicate sequence
+
+  @AC-6 @FR-4 @regression
+  Scenario: A trimmed live event whose full row cannot be read is never delivered as a stub
+    Given a StreamEvents subscriber with no filters is live and its last delivered sequence is N
+    And the live stream's read of the full row for the next trimmed event fails with a database error on every attempt
+    When an "order.filled" event with a JSON payload of 8000 chars is appended
+    And an event with a 100-char payload is appended after it
+    Then the subscriber receives no message for either event on that stream
+    And the stream ends with a non-OK gRPC status
+    And once the database error clears, a new StreamEvents opened from sequence N + 1 receives both events with their full payloads in ascending sequence order
