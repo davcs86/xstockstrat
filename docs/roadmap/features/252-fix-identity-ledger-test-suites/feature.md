@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-10-20 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-20-node-impl-test-suites-never-load-impl-defect.md` |
+| 2026-10-20 | `draft` → `spec-ready` | /sdd-review | Product spec approved (8 warnings, 3 notes; overlap WARN) |
 
 ---
 
@@ -45,4 +46,4 @@ therefore passes without executing, in CI and locally.
 
 ## Next Action
 
-`/sdd-design fix-identity-ledger-test-suites` — full design depth (operator: full is the minimum); see context.md
+`/sdd-design fix-identity-ledger-test-suites` (full — operator: no quick designs)
