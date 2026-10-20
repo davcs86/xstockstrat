@@ -15,7 +15,7 @@ following the format in `docs/runbooks/bug-triage.md#hotfix-log-format`.
 - **Affected service(s)**: xstockstrat-identity, xstockstrat-ui, xstockstrat-agent
 - **Root cause**: refreshToken and refreshOAuthToken rotate with SELECT (no FOR UPDATE) → unconditional revoke UPDATE → INSERT as separate autocommit queries; concurrent refreshes both succeed and a failure between revoke and insert loses the session.
 - **Fix summary**: rotateRefreshToken() — one transaction: conditional claim `UPDATE … SET revoked_at = NOW() … WHERE revoked_at IS NULL … RETURNING`, then the successor INSERT on the same client; loser of a concurrent refresh gets UNAUTHENTICATED, an INSERT failure rolls the revoke back. Used by RefreshToken and RefreshOAuthToken.
-- **PR**: _pending_
+- **PR**: #1262
 - **Platform-lead approver**: _pending_
 - **Back-merge commit**: _pending_
 - **Maintenance mode applied**: no
