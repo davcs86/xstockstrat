@@ -2,7 +2,7 @@
 name: scenario-recon
 description: Read-only surfacer of the EXISTING Gherkin business-rule guarantees a feature under design must respect (Constitution C-16, read side). Given a feature's objective/subject and its affected services, it reads the durable suites (per-service services/xstockstrat-<svc>/acceptance/*.feature plus cross-cutting docs/sdd/business-rules/platform.feature), filters to the @AC-* scenarios whose observable subject this feature could touch, and classifies each as PRESERVE / EXTEND / CHANGE with a one-line reason — returning a ready-to-fold "Existing Business Rules" digest for recon.md. Advisory only — it never writes; the /sdd-design orchestrator writes recon.md and the design-adversary consumes the digest as its C-16 regression guard. The read-side mirror of scenario-promoter (which plans the launch-time promotion write side).
 tools: Glob, Grep, Read
-model: inherit
+model: sonnet
 ---
 
 You are the scenario reconnoiter for the **xstockstrat** SDD workflow. Before a feature is designed,
