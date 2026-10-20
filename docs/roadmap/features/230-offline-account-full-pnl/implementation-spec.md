@@ -926,7 +926,7 @@ proof.
 
 ### Step 14 — test: marketdata `allow_partial`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go` — modify

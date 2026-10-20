@@ -667,3 +667,23 @@
 - Files modified: `internal/service/marketdata_service.go`.
 - Deviations: none. The partial branch is factored into `partialColdFetch` for readability; the
   semantics are as specified.
+
+### Step 14 — test: marketdata `allow_partial` [done]
+- Test-local fixtures (C-13, single consumer): `fakeBarsStore` holds AAPL's 3 bars (10/14–16 at
+  04:00Z), and `scriptedBarsSource` embeds `fakeBatchBarsSource` with a scripted `GetBarsMulti` plus a
+  call counter.
+- Tests:
+  - AC-53 partial returns the warm subset;
+  - AC-53 strict returns the plain source error, not a Connect error (handler Internal mapping cited);
+  - AC-54 1000ms deadline + hanging source → warm subset before the deadline;
+  - below-margin 200ms → 0 source calls;
+  - strict/partial take separate flights (2 calls);
+  - no deadline uses the caller ctx, and a cancelled caller still gets warm bars;
+  - a waiter survives the leader's cancel (1 call; the waiter gets AAPL+MSFT).
+- `TestBatchGetBars_OmitMissingSymbols` is unchanged.
+- Verification:
+  - targeted `-race` ✓;
+  - full `-race` coverage total 71.0% (≥ 40%);
+  - `golangci-lint` 0 issues.
+- Files modified: `internal/service/marketdata_service_test.go`.
+- Deviations: none.
