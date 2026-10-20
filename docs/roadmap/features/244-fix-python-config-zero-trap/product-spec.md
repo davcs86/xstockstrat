@@ -37,7 +37,8 @@ an explicit clamp (FR-3 inventory), e.g. ingest's backfill semaphores (`asyncio.
 
 1. `SetConfig analysis.opportunity.signal_rank_weight = 0` (accepted: bounds `[0,1]`).
 2. Call `ListOpportunities`; ranking still blends signal rank at weight 0.3.
-3. Set `analysis.backtest.default_commission_pct = 0` and run `RunBacktest`; commission 0.001 is applied.
+3. `SetConfig analysis.backtest.default_commission_pct = 0` with `create_key=true` (no migration seeds the key,
+   existence gate `configServiceImpl.ts:466-469`) and run `RunBacktest`; commission 0.001 is applied.
 
 ## Root Cause Hypothesis
 
@@ -93,7 +94,8 @@ feature changes, so `/sdd-spec` gives each a verification step.
   documents it as trap-dependent. Every other site honours the stored value.
 - **FR-4**: The report's swallowed keys take effect at 0: `analysis.backtest.default_commission_pct` and
   `default_slippage_pct` (`servicer.py:787-788`, applied at `:196-214`); `analysis.opportunity.signal_rank_weight`
-  (`servicer.py:4615` → default-sort blend `app/repositories/opportunities.py:37-38`, clamp `:224`);
+  (`servicer.py:4615` `_read_opportunity_queue` and `:4859` `_retry_unavailable_symbols` heal read, both → default-sort
+  blend `app/repositories/opportunities.py:37-38`, clamp `:224`);
   `analysis.engine.alert_throttle_seconds` (`live_loop.py:351`, check `:815`; 0 = no throttle).
 - **FR-5**: No seeded row changes its effective value unless it is an FR-4 key. Each seeded `0`/`''` row for an
   analysis, indicators or ingest key resolves at its call site to the same value as before the fix. Known rows:
@@ -139,7 +141,7 @@ Dead sandbox-helper copies in the analysis and ingest watchers (`analysis watche
 
 ## Acceptance Criteria
 
-See `acceptance.feature` (Constitution **C-15**). The FR-1/FR-4 scenarios (@AC-1, @AC-2, @AC-3) fail on the buggy
+See `acceptance.feature` (Constitution **C-15**). The FR-1/FR-4 scenarios (@AC-1, @AC-2, @AC-3, @AC-9) fail on the buggy
 behaviour and pass after the fix. The FR-2/FR-3/FR-5/FR-6 scenarios (@AC-4 to @AC-8) pass before and after, and fail
 if the fix is too broad. In addition, existing tests pass, except assertions that pin the trap (e.g.
 `services/xstockstrat-analysis/tests/test_analysis_servicer.py:594`), which are updated to the new semantics.

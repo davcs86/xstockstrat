@@ -40,10 +40,21 @@ Feature: fix-python-config-zero-trap (bug fix)
     Then "AAA" is ranked before "BBB"
 
   @AC-4 @FR-2 @regression
-  Scenario: An unset key still resolves to the coded default
-    Given the analysis ConfigWatcher snapshot has no "analysis.backtest.default_commission_pct" entry
-    When the watcher's get_float reads it with default 0.001
-    Then it returns 0.001
+  Scenario Outline: An unset or mismatched value still resolves to the coded default
+    Given the <service> ConfigWatcher <state>
+    When the watcher's <getter> reads "<key>" with default <default>
+    Then it returns <default>
+
+    Examples:
+      | service                | state                                         | getter    | key                                      | default |
+      | xstockstrat-analysis   | snapshot has no entry for the key             | get_float | analysis.backtest.default_commission_pct | 0.001   |
+      | xstockstrat-analysis   | snapshot has no entry for the key             | get_int   | analysis.engine.alert_throttle_seconds   | 300     |
+      | xstockstrat-analysis   | has received no snapshot                      | get_str   | analysis.test.unset_string               | "x"     |
+      | xstockstrat-indicators | has received no snapshot                      | get_int   | indicators.test.unset_int                | 7       |
+      | xstockstrat-indicators | snapshot holds the key as a string value "5"  | get_float | indicators.test.mismatched_float         | 0.5     |
+      | xstockstrat-indicators | snapshot has no entry for the key             | get_str   | indicators.test.unset_string             | "x"     |
+      | xstockstrat-ingest     | snapshot has no entry for the key             | get_str   | ingest.test.unset_string                 | "x"     |
+      | xstockstrat-ingest     | snapshot holds the key as a float value 2.5   | get_int   | ingest.test.mismatched_int               | 7       |
 
   @AC-5 @FR-3 @regression
   Scenario: Ingest's backfill concurrency keeps its zero clamp
@@ -85,3 +96,11 @@ Feature: fix-python-config-zero-trap (bug fix)
   Scenario: SetConfig still rejects 0 for a minValue-1 key read by a Python service
     When SetConfig writes "analysis.opportunity.max_concurrent_bars_fetches" = 0
     Then it fails with INVALID_ARGUMENT naming the bounds [1, 5]
+
+  # Throttle check is live_loop.py:815; at the trapped default 300 s the second alert is suppressed.
+  @AC-9 @FR-4 @regression
+  Scenario: A zero alert throttle lets a repeat live transition alert
+    Given "analysis.engine.alert_throttle_seconds" is stored as 0
+    And the live loop emitted an alert for user "u1", strategy "S1" on "AAPL" 10 seconds ago
+    When the next live-loop evaluation of that pair yields an ungated exit transition
+    Then a second alert is emitted for user "u1", strategy "S1" on "AAPL"
