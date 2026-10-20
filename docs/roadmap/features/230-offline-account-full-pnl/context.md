@@ -799,3 +799,31 @@
   - The spec's separate `valueAccounts(...)` is folded into `valueRead`'s returned `accounts`. It uses
     the same quote and bar maps, so there is no second batch (C-18).
   - Step 21 passes the in-scope offline account ids to it.
+
+### Step 20 — test: portfolio valuation (positions) [done]
+- `testdata/offline_pnl.go` (C-13, consumers Steps 20 and 22) holds:
+  - the scenario constants;
+  - `Session` / `DailyBar` (stamped 00:00 NY via `marketsession.DayStart`);
+  - `LiveQuote` (two-sided, timed inside the 10-19 session);
+  - the read times.
+- `stubMarketData.BatchGetBars` has `bars` / `barsErr` / `barsBlock` / `barsCalls` / `barsReqs`.
+- Pure `valueOffline` tests:
+  - AC-1, 2, 22, 23, 40, 36;
+  - AC-24+31, AC-35 (both rows), AC-49, AC-50, AC-51, AC-12, AC-38, AC-5, AC-13;
+  - AC-34 (account level);
+  - D-1 both halves;
+  - AC-26 via `applyQuotes`.
+- Service-level tests:
+  - AC-27 `ListPositions` with a hung quote → LAST_CLOSE 158 within ≤ 3000ms;
+  - bars request shape (`allow_partial`, `1d`, max 22 / start −21d; lookback 5 → max 6);
+  - AC-19: broker-only read is BROKER, keeps day 120, makes 0 bars calls and no offline-state lookup.
+- `TestEnrichPosition` → `TestMarkAt`, plus short winner/loser cases.
+- Verification:
+  - targeted `-race` 48 PASS lines;
+  - full `-race` total 67.2%;
+  - `golangci-lint` 0 issues;
+  - C-13 literal guard ✓.
+- The trading `-run Pnl` filter in the spec matches no tests (the pnl package has none). As an
+  equivalent check, I ran the full trading suite with `-race` (green) plus 27 portfolio PnL/fold tests.
+- Files modified: `internal/service/offline_valuation_test.go` (new), `internal/testdata/offline_pnl.go`
+  (new), `internal/service/portfolio_service_test.go`, `internal/service/portfolio_helpers_test.go`.

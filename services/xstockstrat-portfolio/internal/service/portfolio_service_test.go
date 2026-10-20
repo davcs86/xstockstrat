@@ -23,6 +23,31 @@ type stubMarketData struct {
 	quotesErr            error
 	block                bool       // feature 229: wait for ctx.Done (a marketdata that never answers)
 	requested            [][]string // feature 229: symbols per call
+	// feature 230: BatchGetBars serves bars per symbol; barsBlock waits for ctx.Done.
+	bars      map[string][]*marketdatav1.Bar
+	barsErr   error
+	barsBlock bool
+	barsCalls int
+	barsReqs  []*marketdatav1.BatchGetBarsRequest
+}
+
+func (s *stubMarketData) BatchGetBars(ctx context.Context, req *marketdatav1.BatchGetBarsRequest, _ ...grpc.CallOption) (*marketdatav1.BatchGetBarsResponse, error) {
+	s.barsCalls++
+	s.barsReqs = append(s.barsReqs, req)
+	if s.barsBlock {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+	if s.barsErr != nil {
+		return nil, s.barsErr
+	}
+	resp := &marketdatav1.BatchGetBarsResponse{}
+	for _, sym := range req.Symbols {
+		if b, ok := s.bars[sym]; ok {
+			resp.Results = append(resp.Results, &marketdatav1.SymbolBars{Symbol: sym, Bars: b})
+		}
+	}
+	return resp, nil
 }
 
 func (s *stubMarketData) GetLatestQuotes(ctx context.Context, req *marketdatav1.GetLatestQuotesRequest, _ ...grpc.CallOption) (*marketdatav1.GetLatestQuotesResponse, error) {

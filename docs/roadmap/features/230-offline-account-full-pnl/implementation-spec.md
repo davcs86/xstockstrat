@@ -1280,7 +1280,7 @@ The total must be ≥ 40%; the excluded packages are covered by the targeted tes
 
 ### Step 20 — test: portfolio valuation (positions)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/offline_valuation_test.go` — create
