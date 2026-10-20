@@ -1090,3 +1090,10 @@
   - PSKY bars stale since 2026-10-05.
 - Verification: RED before fix (regex `$8::jsonb` unmatched); then `go vet` ✓, `go test ./...` ✓ and
   `golangci-lint` ✓ (portfolio).
+
+## Session 2026-10-20 (CI: feature status automation)
+
+- Promotion PR #1271 merged to main
+- Feature promoted and committed: 107761265fb1232a02ccbdca0126a6aceb4462f0
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-10-20
