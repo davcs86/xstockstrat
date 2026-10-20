@@ -463,3 +463,13 @@
 - Offline check ✓: 011 is next after 010; every ADD/CREATE in up has an inverse in down. No DB started.
 - TDD: N/A (migration).
 - Files modified: the two 011 files. Deviations: none.
+
+### Step 4 — migration: portfolio 017 — lifetime/fees/recent-fills columns + source backfill [done]
+- `017_offline_realized_lifetime_fees.{up,down}.sql` per design §4.1:
+  - adds `realized_carried`, `fees_since_snapshot`, `fees_carried` (DOUBLE) and `recent_fills` (JSONB
+    `'[]'`);
+  - sets `source = 1` (ORDERS) on pre-163 offline positions.
+- Down drops the 4 columns; the source backfill is intentionally not reverted.
+- Offline check ✓: 017 is next after 016; 4 ADD ↔ 4 DROP. No DB started.
+- TDD: N/A (migration).
+- Files modified: the two 017 files. Deviations: none.

@@ -306,7 +306,7 @@ start a database.
 
 ### Step 4 — migration: portfolio 017 — lifetime/fees/recent-fills columns + source backfill
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/migrations/017_offline_realized_lifetime_fees.up.sql` — create
