@@ -15,4 +15,5 @@ float-math signed average-cost realized-P&L fold shared by `xstockstrat-trading`
 `xstockstrat-portfolio` (the feature-056 dual-source fix). It is dependency-free (no proto/DB
 imports). Its unit + cross-service golden-vector tests live in the **consuming service** test
 modules because no CI job runs `go test` inside `packages/proto/`; the `proto-freshness` gate only
-diffs `gen/`, so it never touches `pnl/`.
+diffs `gen/`, so it never touches `pnl/`. `pnl.QtyEpsilon` (`1e-9`, feature 230) is the exported flat-lot
+tolerance shared by the fold and portfolio's Day P&L walk — a fixed constant, not a tuning knob.

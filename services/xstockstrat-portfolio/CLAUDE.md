@@ -32,6 +32,16 @@ quote is never averaged, feature 231). `broadcastSnapshot` and the concentration
 **skipped with a WARN when any position is unpriced** (no understated equity); the drawdown check is unaffected. A
 permanently unpriceable holding therefore stops snapshots and concentration checks for that user (accepted).
 
+**Offline valuation (feature 230).** In the four reads (`GetPortfolio`, `GetPosition`, `ListPositions`,
+`ListPortfolios`) an offline position (`source ≠ 0`) goes through one shared valuation step (`valueRead`,
+`internal/service/offline_valuation.go`): one quote batch plus one `allow_partial` daily-bars batch, then a mark
+with provenance (`mark_source`/`mark_as_of`) and broker-style Day P&L from trading's `recent_fills`. Mark rule
+(operator D-1): a quote counts only if two-sided and from the reference session; off-session the session's own
+close wins; otherwise the last close in the lookback; else `MARK_SOURCE_NONE` (listed, excluded from sums).
+`GetPnL`, `broadcastSnapshot` and `checkRiskLimits` never use it (231 behaviour kept). Fixed invariants, not
+config: the NYSE calendar (`internal/marketsession`, rule holidays, no early closes), a bar's session date =
+NY date of `time + 6h`, and the 1-minute truncation of the bars `End` (singleflight coalescing).
+
 **Account/portfolio-scoped reads are ownership-gated (2026-09-16 security audit, H-3).**
 `ListPortfolios` with a caller-supplied `account_id` returns `PermissionDenied` unless the account is
 in the caller's owned universe (`callerOwnsAccount` — the same `ListAccountBalancesByUser ∪
@@ -73,7 +83,7 @@ HTTP/Connect-RPC server on `8052` (and its `/webhooks/n8n/portfolio-report` hand
 |---|---|---|
 | xstockstrat-config | gRPC WatchConfig | Live config |
 | xstockstrat-ledger | gRPC stream | Consume `order.filled` events to update positions |
-| xstockstrat-marketdata | gRPC read | Current prices for unrealized P&L |
+| xstockstrat-marketdata | gRPC read | Current prices for unrealized P&L + `BatchGetBars` (`allow_partial`) daily closes for offline marks/Day P&L (feature 230) |
 | xstockstrat-notify | gRPC write | Risk limit breach alerts |
 | TimescaleDB | DB (schema: `portfolio`) | Positions + snapshots hypertable |
 
@@ -92,6 +102,7 @@ full-dotted — **no watcher code change in this service**, the fix is entirely 
 | `portfolio.watchlist.max_per_user` | int | `50` | Max watchlists a single user may own (feature 058) |
 | `portfolio.watchlist.max_symbols_per_list` | int | `500` | Max symbols allowed in one watchlist (feature 058) |
 | `portfolio.exposure.factor_map` | string (JSON) | `"{}"` | JSON object mapping symbol → factor name for the Exposure screen's factor grouping (feature 083). marketdata exposes no sector, so this operator-defined map is the factor source; unmapped symbols group as "Unclassified". Read via `Watcher.FactorMap()`; invalid JSON → empty map. |
+| `portfolio.marketdata.last_close_lookback_days` | int | `21` | Feature 230 — how many calendar days back the offline-valuation `BatchGetBars` (`allow_partial`) searches for a daily close to mark an offline position that has no live quote (`MARK_SOURCE_LAST_CLOSE`), and the window for Day P&L's previous close. Read live per read; nil/`≤ 0` → `21`. Unseeded (227 D2 waiver); SetConfig-bounded `[5,60]`. |
 | `portfolio.marketdata.quote_timeout_ms` | int | `4000` | Feature 229 — deadline on the marketdata `GetLatestQuotes` fetch (`latestQuotesFor`, the single choke point for every read and background path). On expiry the un-broker-valued positions stay unenriched (never fabricated) and the read still answers. Must exceed max(`marketdata.quotes.batch_timeout_ms` (2500), `marketdata.quotes.mark_timeout_ms` (500)) plus the warm read so a cold timeout still returns the warm subset. Read live; nil/`≤ 0` → `4000`. Unseeded; SetConfig-bounded `[500,8000]`. |
 
 > `platform.ledger_endpoint` was removed from this table by the 2026-08-07 config audit — no code
@@ -114,7 +125,7 @@ full-dotted — **no watcher code change in this service**, the fix is entirely 
 - Schema: `portfolio`
 - Table: `portfolio.positions` — current open positions, including the broker's last-synced mark-to-market valuation (`current_price`, `market_value`, `unrealized_pnl`, `unrealized_pnl_pct`; migration `005`), the broker's intraday/today's P&L (`day_pnl`, `day_pnl_pct`; migration `006`), the resting bracket leg order IDs (`stop_order_id`, `take_profit_order_id`; migration `009`, feature 030) — display-only, sourced from trading's `order.bracket_updated` ledger event, and distinct from the existing ledger-derived, in-memory `stop_price`/`risk_at_stop` (feature 083), which are computed on read, not persisted — and per-position provenance (`source` INTEGER DEFAULT 0, `as_of` TIMESTAMPTZ; migration `013`, feature 163): `source` encodes how the position was seeded (`ORDERS`=1 / `BASELINE`=2 / `MIXED`=3 / `UNSPECIFIED`=0), `as_of` is the baseline effective date (NULL for pure-order positions). These are authoritative for broker-synced positions; order-fill-only positions leave the valuation fields `0` and the service enriches from the marketdata mark (`markOf`: `mark_price`, else a two-sided mid) as a fallback (intraday P&L stays `0` since marketdata marks have no previous-close basis).
 - Table: `portfolio.account_balances` — latest broker balance snapshot per account (cash, buying power, equity, last_equity); upserted from `account.balance.synced`. **Offline accounts have no row here** (feature 157) — their equity derives from position market value and cash/buying-power/day-P&L are `0`.
-- Table: `portfolio.offline_account_realized` — the offline-exclusive account marker + account-grain realized P&L (feature 157, migration `012`); broker accounts never get a row. `ListPortfolios`' **all-accounts** view enumerates `account_balances` ∪ this offline set (`ListOfflineAccountIdsByUser`, feature 159), so an offline account is **shown** in the combined view with meaningful-only fields (excluded from the summed cash/buying-power aggregates, since it contributes `0`) — closing the `ListPositions`↔`ListPortfolios` read-path parity gap (C-10(b)).
+- Table: `portfolio.offline_account_realized` — the offline-exclusive account marker + account-grain realized P&L (feature 157, migration `012`); migration `017` (feature 230) adds `realized_carried`, `fees_since_snapshot`, `fees_carried` and `recent_fills` (JSONB), written from the offline `account.positions.synced` payload — lifetime realized = `realized_carried + realized_pnl`, read user-scoped via `GetOfflineStates` (`user_id` + `account_id`); broker accounts never get a row. `ListPortfolios`' **all-accounts** view enumerates `account_balances` ∪ this offline set (`ListOfflineAccountIdsByUser`, feature 159), so an offline account is **shown** in the combined view with meaningful-only fields (excluded from the summed cash/buying-power aggregates, since it contributes `0`) — closing the `ListPositions`↔`ListPortfolios` read-path parity gap (C-10(b)).
 - Hypertable: `portfolio.snapshots` — point-in-time portfolio state (partition by `time`, chunk = 1 day)
 - Migration tool: `golang-migrate`
 

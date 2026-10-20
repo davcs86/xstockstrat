@@ -1003,3 +1003,49 @@
 - Hygiene: prettier on a glob reformatted 4 unrelated files; reverted before commit (only listed files
   are staged, F-08).
 - Files modified: the 8 listed in the step.
+
+### Step 28 — docs: CLAUDE.md invariants, config-key log, findings [done]
+- Portfolio `CLAUDE.md`:
+  - `last_close_lookback_days` row;
+  - marketdata dependency adds `BatchGetBars` (`allow_partial`);
+  - `offline_account_realized` row covers the 017 columns and lifetime = carried + since;
+  - new "Offline valuation (feature 230)" paragraph (`source ≠ 0` → `valueRead` in the 4 reads; not in
+    GetPnL/snapshot/risk; the D-1 rule; fixed invariants: NYSE calendar, +6h session date, 1-minute
+    bars `End` truncation).
+- Trading `CLAUDE.md`:
+  - `offline_snapshot_headers` row (frozen carry rules) plus `orders.fees`;
+  - the `account.positions.synced` row names the offline-only keys and the 10-day `recent_fills`
+    window;
+  - one ConfirmOrder fees / `filled_at` / NEW-masking paragraph.
+- Marketdata `CLAUDE.md`: `BatchGetBars` `allow_partial` bullet (`barsPartialMargin` 250ms invariant;
+  separate flights; strict path unchanged).
+- `packages/proto/CLAUDE.md`: `pnl.QtyEpsilon`.
+- `config-governance.md`: new top entry, feature 230 (unseeded waiver).
+- Findings, each as a row in the existing "Latent bugs" tables:
+  - trading: dead `StreamOrderUpdates` unmasked snapshot;
+  - portfolio: unscoped `GetOfflineRealized` (RESOLVED);
+  - UI: `fmtSignedUsd` (RESOLVED).
+- **Teardown:**
+  - `/context-forge:context-constitution` is not available in this session (only `context-scrubber`
+    is listed), so the reconciliation was done by hand.
+  - Method:
+    - grepped every context doc (CLAUDE.md files, constitutions, findings, plus the
+      `scrubberExtraTargets` `README.md` and `docs/patterns/ui-ux-governance.md`) for symbols this
+      feature changed or deleted (`GetOfflineRealized`, `enrichPosition`, `EffectiveBaselineByAccount`,
+      the "greatest as_of" baseline rule, the realized-label UI text);
+    - re-read each new claim against the code.
+  - Drift fixed (outside the step's file list, recorded per F-08):
+    - (1) portfolio constitution **PORTFOLIO-11** now names `GetOfflineStates` + `applyAccountPnL` +
+      `valueRead` (it cited the deleted `GetOfflineRealized`);
+    - (2) the trading `CLAUDE.md` `offline_position_baselines` row's effective-baseline rule (latest
+      header; an empty header is a full flatten);
+    - (3) `ui-ux-governance.md` e2e coverage audit lists `offline-pnl`.
+  - Left as is:
+    - `docs/reports/2026-10-19-after-hours-one-sided-quote-half-price-defect.md` names
+      `enrichPosition`, but it is a dated point-in-time report;
+    - PLAT-12 (one realized-P&L implementation) holds: portfolio's `sessionDay` computes the session
+      change (FR-1), not realized P&L.
+  - The PR body records both facts (plugin unavailable + the manual reconciliation).
+- Verification: all 7 spec greps ✓.
+- Files modified: the 8 listed, plus `services/xstockstrat-portfolio/docs/context-constitution.md` and
+  `docs/patterns/ui-ux-governance.md` (reconciliation).

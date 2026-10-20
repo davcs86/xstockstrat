@@ -1863,7 +1863,7 @@ scoped to `src/lib/**`), which now includes `money.ts`, `protoTime.ts` and the n
 
 ### Step 28 — docs: CLAUDE.md invariants, config-key log, findings
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`, service `CLAUDE.md`s
 **Files**:
 - `services/xstockstrat-portfolio/CLAUDE.md` — modify
