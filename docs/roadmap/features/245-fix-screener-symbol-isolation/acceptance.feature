@@ -2,7 +2,7 @@ Feature: fix-screener-symbol-isolation (bug fix)
   Regression guard for docs/reports/2026-10-19-analysis-screener-no-per-symbol-isolation-defect.md:
   ScreenSymbols fails entirely when one symbol raises a non-RpcError.
 
-  @AC-1 @regression
+  @AC-1 @FR-1 @regression
   Scenario Outline: One symbol's non-RPC failure degrades only that symbol's row
     Given a ScreenSymbols request over 50 symbols with signal_sources ["fundamentals"], signal_weight 1, technical_weight 1, and rank_limit 50
     And its criteria are a SCREEN_KIND_SIGNAL criterion "sig" and a SCREEN_KIND_TECHNICAL_INDICATOR criterion "rsi" with component indicator "RSI", neither a hard filter
@@ -21,15 +21,15 @@ Feature: fix-screener-symbol-isolation (bug fix)
       | ScreenerEngine._technical_value  | ArithmeticError   |
       | ScreenerEngine._latest_indicator | ValueError        |
 
-  @AC-2 @regression
+  @AC-2 @FR-2 @regression
   Scenario: The scan deadline still cancels the whole scan
     Given analysis.screener.max_duration_seconds is 1
     And one symbol's evaluation never completes
     When the caller invokes ScreenSymbols over 50 symbols
     Then ScreenSymbols fails with gRPC status DEADLINE_EXCEEDED and message "screen exceeded 1s deadline"
-    And the cancellation is not converted into a degraded row
+    And no ScreenResult rows are returned
 
-  @AC-3 @regression
+  @AC-3 @FR-3 @regression
   Scenario: An unknown fundamental metric is still rejected for the whole request
     Given a ScreenSymbols request with a FUNDAMENTAL criterion whose metric_name is "not_a_metric"
     And fundamentals are available for the universe
