@@ -613,3 +613,20 @@
     conflict surfaced as Internal);
   - green: all pass with `-race`.
 - Files modified: `internal/service/trading.go` (gofmt also realigned the emit map's existing keys).
+
+### Step 12 — test: trading payload, carry and snapshot rules [done]
+- `fakeBaselineStore.ordersFn` gives a live view of `svc.orders`. The harness helper
+  `confirmedOfflineOrders` filters FILLED/PARTIALLY_FILLED offline orders, `filled_at` ASC.
+- `parseSyncedPayload` now requires `fees_since_snapshot`, `realized_carried` and `fees_carried`, and
+  parses `recent_fills`. Every pre-existing snapshot test therefore also asserts the keys' presence.
+- New tests:
+  - AC-7, AC-20, AC-8+AC-21, AC-41, AC-42+AC-10, AC-11, AC-43, AC-44, AC-45, @AC-6 @feature-163 (carry
+    kept despite a changed history);
+  - AC-46, AC-47;
+  - the recent_fills window (11-day excluded; frozen-window excluded; signed qty / price / RFC3339Nano).
+- Verification:
+  - targeted `-race` ✓;
+  - full `-race` coverage total 72.6% (≥ 40%);
+  - `golangci-lint` 0 issues after gofmt.
+- Files modified: `internal/service/trading_offline_test.go`.
+- Deviations: none.

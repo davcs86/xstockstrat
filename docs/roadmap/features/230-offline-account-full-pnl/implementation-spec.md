@@ -786,7 +786,7 @@ The total must be ≥ 40%. `service/` is excluded, so the targeted tests are the
 
 ### Step 12 — test: trading payload, carry and snapshot rules
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading_offline_test.go` — modify
