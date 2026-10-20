@@ -1,4 +1,4 @@
--- Feature 230: per-order offline fees + one header per offline snapshot (carry of lifetime realized/fees).
+-- Feature 240: per-order offline fees + one header per offline snapshot (carry of lifetime realized/fees).
 -- offline_snapshot_headers is a plain table, not a hypertable; broker and NEW orders keep fees NULL.
 ALTER TABLE trading.orders ADD COLUMN IF NOT EXISTS fees NUMERIC(18,8);
 

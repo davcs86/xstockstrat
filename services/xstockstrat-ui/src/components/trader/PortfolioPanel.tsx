@@ -17,7 +17,7 @@ function grossNet(gross: number, fees: number | undefined): string {
   return `${fmtSignedUsd(gross)} (net ${fmtSignedUsd(gross - Number(fees ?? 0))})`;
 }
 
-/** Offline-only P&L rows (feature 230); each optional row renders only when the backend set it. */
+/** Offline-only P&L rows (feature 240); each optional row renders only when the backend set it. */
 function OfflinePnlStats({ portfolio }: { portfolio: Portfolio }) {
   return (
     <>

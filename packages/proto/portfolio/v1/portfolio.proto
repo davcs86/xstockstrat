@@ -136,7 +136,7 @@ enum PositionSource {
   POSITION_SOURCE_MIXED = 3;
 }
 
-// MarkSource is the provenance of a position's current_price (feature 230).
+// MarkSource is the provenance of a position's current_price (feature 240).
 enum MarkSource {
   MARK_SOURCE_UNSPECIFIED = 0;
   MARK_SOURCE_QUOTE = 1;

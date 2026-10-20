@@ -153,7 +153,7 @@ function positionSourceToNumber(object) {
             return -1;
     }
 }
-/** MarkSource is the provenance of a position's current_price (feature 230). */
+/** MarkSource is the provenance of a position's current_price (feature 240). */
 var MarkSource;
 (function (MarkSource) {
     MarkSource["MARK_SOURCE_UNSPECIFIED"] = "MARK_SOURCE_UNSPECIFIED";

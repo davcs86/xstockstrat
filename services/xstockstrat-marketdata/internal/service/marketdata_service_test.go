@@ -3731,7 +3731,7 @@ func TestLivePrice_ReturnsMark(t *testing.T) {
 	}
 }
 
-// ── feature 230: BatchGetBars opt-in allow_partial ──────────────────────────────
+// ── feature 240: BatchGetBars opt-in allow_partial ──────────────────────────────
 
 // fakeBarsStore serves AAPL's three stored daily bars as the warm subset.
 type fakeBarsStore struct{}

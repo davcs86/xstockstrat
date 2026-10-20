@@ -51,7 +51,7 @@ export const PORTFOLIO_OFFLINE = {
 };
 
 /**
- * Offline account with the full feature-230 P&L (AC-14/AC-20/AC-30): Day / Total P&L with return %,
+ * Offline account with the full feature-240 P&L (AC-14/AC-20/AC-30): Day / Total P&L with return %,
  * since-snapshot and lifetime realized (gross; net = gross − fees) and both fee scopes. The
  * realized/fee fields are proto3 `optional double` — set on offline portfolios only. Not in
  * PORTFOLIOS (shared defaults stay unchanged); specs inject it via page.route().

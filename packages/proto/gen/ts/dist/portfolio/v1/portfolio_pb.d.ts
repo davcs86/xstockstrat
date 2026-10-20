@@ -1109,7 +1109,7 @@ export declare enum PositionSource {
  */
 export declare const PositionSourceSchema: GenEnum<PositionSource>;
 /**
- * MarkSource is the provenance of a position's current_price (feature 230).
+ * MarkSource is the provenance of a position's current_price (feature 240).
  *
  * @generated from enum xstockstrat.portfolio.v1.MarkSource
  */

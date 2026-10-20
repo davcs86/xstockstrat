@@ -365,7 +365,7 @@ async def test_list_positions_all_accounts():
 @pytest.mark.asyncio
 @pytest.mark.parametrize("fees", [None, 0.0, 1.25])
 async def test_confirm_offline_order_fees_presence(fees):
-    """Feature 230 @AC-17: fees is sent only when given; omitted keeps the stored value."""
+    """Feature 240 @AC-17: fees is sent only when given; omitted keeps the stored value."""
     from gen.trading.v1 import trading_pb2  # type: ignore
 
     mock_stub = MagicMock()
@@ -385,7 +385,7 @@ async def test_confirm_offline_order_fees_presence(fees):
 
 
 def test_get_order_and_list_orders_echo_fees():
-    """Feature 230 @AC-17/@AC-33: an order's fees surface in the tool dict."""
+    """Feature 240 @AC-17/@AC-33: an order's fees surface in the tool dict."""
     from gen.trading.v1 import trading_pb2  # type: ignore
 
     out = client._order_to_dict(trading_pb2.Order(order_id="ord-3", fees=1.25))
@@ -394,7 +394,7 @@ def test_get_order_and_list_orders_echo_fees():
 
 @pytest.mark.asyncio
 async def test_list_positions_prints_new_fields():
-    """Feature 230 @AC-33: day_pnl, day_pnl_pct, unrealized_pnl_pct, mark_source and mark_as_of are
+    """Feature 240 @AC-33: day_pnl, day_pnl_pct, unrealized_pnl_pct, mark_source and mark_as_of are
     all present, including zero values."""
     from gen.portfolio.v1 import portfolio_pb2  # type: ignore
     from google.protobuf.timestamp_pb2 import Timestamp as PbTimestamp  # type: ignore

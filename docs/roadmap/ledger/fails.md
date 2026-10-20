@@ -2941,7 +2941,7 @@ ambiguity is logged here).
   - Round 2 put a fixed 2.5s budget on `BatchGetBars` for every caller. That would have permanently
     starved analysis's 400-day cold fetches, because the ingester then marks those symbols warm with
     about 48h of bars.
-- **Evidence**: `docs/roadmap/features/230-offline-account-full-pnl/context.md`, design round 2 and
+- **Evidence**: `docs/roadmap/features/240-offline-account-full-pnl/context.md`, design round 2 and
   round 4 gates; `services/xstockstrat-trading/cmd/server/main.go:143`;
   `services/xstockstrat-trading/internal/handler/trading.go:117-134`.
 - **Rule it implies**:

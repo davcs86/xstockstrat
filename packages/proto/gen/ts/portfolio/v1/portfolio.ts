@@ -165,7 +165,7 @@ export function positionSourceToNumber(object: PositionSource): number {
   }
 }
 
-/** MarkSource is the provenance of a position's current_price (feature 230). */
+/** MarkSource is the provenance of a position's current_price (feature 240). */
 export enum MarkSource {
   MARK_SOURCE_UNSPECIFIED = "MARK_SOURCE_UNSPECIFIED",
   MARK_SOURCE_QUOTE = "MARK_SOURCE_QUOTE",

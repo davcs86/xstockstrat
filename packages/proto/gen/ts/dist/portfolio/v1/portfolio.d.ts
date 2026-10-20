@@ -31,7 +31,7 @@ export declare enum PositionSource {
 export declare function positionSourceFromJSON(object: any): PositionSource;
 export declare function positionSourceToJSON(object: PositionSource): string;
 export declare function positionSourceToNumber(object: PositionSource): number;
-/** MarkSource is the provenance of a position's current_price (feature 230). */
+/** MarkSource is the provenance of a position's current_price (feature 240). */
 export declare enum MarkSource {
     MARK_SOURCE_UNSPECIFIED = "MARK_SOURCE_UNSPECIFIED",
     MARK_SOURCE_QUOTE = "MARK_SOURCE_QUOTE",

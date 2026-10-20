@@ -8,7 +8,7 @@ import { fmtNyDate } from '@/lib/protoTime';
 import { MarkSource, type Position } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
 
 /**
- * Stale-price marker for a position whose price is not live (feature 230, FR-5): a last-close mark
+ * Stale-price marker for a position whose price is not live (feature 240, FR-5): a last-close mark
  * names its session date, an unpriced position says so. Live quote and broker marks render nothing.
  */
 export function MarkBadge({ position }: { position: Pick<Position, 'markSource' | 'markAsOf'> }) {

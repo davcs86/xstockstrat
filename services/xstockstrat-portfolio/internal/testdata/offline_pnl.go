@@ -9,7 +9,7 @@ import (
 	"github.com/xstockstrat/portfolio/internal/marketsession"
 )
 
-// Feature 230 acceptance givens (docs/roadmap/features/230-offline-account-full-pnl/acceptance.feature);
+// Feature 240 acceptance givens (docs/roadmap/features/240-offline-account-full-pnl/acceptance.feature);
 // the reference session is Mon 2026-10-19 unless a read time says otherwise.
 const (
 	Aapl              = "AAPL"

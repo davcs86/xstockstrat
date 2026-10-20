@@ -1,8 +1,8 @@
 # Context: offline-account-full-pnl
 
-**Feature**: `docs/roadmap/features/230-offline-account-full-pnl/feature.md`
-**Product Spec**: `docs/roadmap/features/230-offline-account-full-pnl/product-spec.md`
-**Implementation Spec**: `docs/roadmap/features/230-offline-account-full-pnl/implementation-spec.md`
+**Feature**: `docs/roadmap/features/240-offline-account-full-pnl/feature.md`
+**Product Spec**: `docs/roadmap/features/240-offline-account-full-pnl/product-spec.md`
+**Implementation Spec**: `docs/roadmap/features/240-offline-account-full-pnl/implementation-spec.md`
 
 ---
 
@@ -413,7 +413,7 @@
 - Overlap findings:
   - No migration, proto or config-key collision.
   - Feature 215's nine shared files are already on `main-dev` (#1243), so nothing needs rebasing.
-  - Merge-order row 231↔230 resolved (`b21dbc4b`).
+  - Merge-order row 231↔240 resolved (`b21dbc4b`).
 
 ## Session 2026-10-20 — sdd-execute (sequential)
 
@@ -766,7 +766,7 @@
   - **Entry point:** `valueRead(ctx, positions, offlineAccountIDs) readValuation{states, accounts}` is
     the one shared step for a read.
     - Offline candidates are `Source ≠ 0` positions ∪ the given ids.
-    - With none, it runs the exact pre-230 path (`latestQuotesFor` + `applyQuotes`; 0 offline-state
+    - With none, it runs the exact pre-240 path (`latestQuotesFor` + `applyQuotes`; 0 offline-state
       or bars calls).
     - Otherwise it makes one user-scoped `GetOfflineStates` (non-fatal: WARN "offline state
       unavailable"), then `fetchMarks`, then `applyQuotes` for the others and `valueOffline` for the
@@ -891,7 +891,7 @@
 
 ### Step 23 — config: bound `portfolio.marketdata.last_close_lookback_days` [done]
 - `SCALAR_BOUNDS_REGISTRY` gains `'portfolio.marketdata.last_close_lookback_days': { minValue: 5,
-  maxValue: 60 }` (feature 230 comment; default 21).
+  maxValue: 60 }` (feature 240 comment; default 21).
 - `TIMEOUT_KEY_FORMS` gains both name forms. The 4 new cases pass (accept at the bounds, reject just
   outside under both forms).
 - No seed migration (227 D2 waiver; recorded in Step 28).
@@ -1009,7 +1009,7 @@
   - `last_close_lookback_days` row;
   - marketdata dependency adds `BatchGetBars` (`allow_partial`);
   - `offline_account_realized` row covers the 017 columns and lifetime = carried + since;
-  - new "Offline valuation (feature 230)" paragraph (`source ≠ 0` → `valueRead` in the 4 reads; not in
+  - new "Offline valuation (feature 240)" paragraph (`source ≠ 0` → `valueRead` in the 4 reads; not in
     GetPnL/snapshot/risk; the D-1 rule; fixed invariants: NYSE calendar, +6h session date, 1-minute
     bars `End` truncation).
 - Trading `CLAUDE.md`:
@@ -1020,7 +1020,7 @@
 - Marketdata `CLAUDE.md`: `BatchGetBars` `allow_partial` bullet (`barsPartialMargin` 250ms invariant;
   separate flights; strict path unchanged).
 - `packages/proto/CLAUDE.md`: `pnl.QtyEpsilon`.
-- `config-governance.md`: new top entry, feature 230 (unseeded waiver).
+- `config-governance.md`: new top entry, feature 240 (unseeded waiver).
 - Findings, each as a row in the existing "Latent bugs" tables:
   - trading: dead `StreamOrderUpdates` unmasked snapshot;
   - portfolio: unscoped `GetOfflineRealized` (RESOLVED);
@@ -1049,3 +1049,24 @@
 - Verification: all 7 spec greps ✓.
 - Files modified: the 8 listed, plus `services/xstockstrat-portfolio/docs/context-constitution.md` and
   `docs/patterns/ui-ux-governance.md` (reconciliation).
+
+## Session 2026-10-20 — feature renumbered 230 → 240 (numbering collision)
+
+- Collision: `230-fix-etf-flag-fill` (`feature/fix-etf-flag-fill`, created 2026-10-15) and this feature
+  (created 2026-10-19) both claimed 230. Per `docs/runbooks/feature-workflow.md` § Feature Numbering, the
+  later claim is renumbered to `max(existing NNN) + 1`.
+- The max across all remote branches was 239 (232–239 on `ccr-f537be2d-6mwmqf`), so this feature is now
+  **240**.
+- What changed:
+  - the directory, `git mv` to `240-offline-account-full-pnl`;
+  - every identity reference: paths, "feature 230", `@feature-230`, merge-order "(240)", the ledger
+    evidence paths, code and test comments, both migration header comments;
+  - the `portfolio.proto` `MarkSource` comment, with the stubs regenerated in the pinned
+    `xstockstrat-codegen` image (7 generated files, comment line only).
+- Left unchanged on purpose:
+  - line-number cites such as `:230` and `:225-230`, plus the unrelated `fails.md`/`insights.md` cites;
+  - feature 231's launched docs, a dated record that describes the 230 collision as it stood then.
+- Branch names do not encode the number, so `feature/offline-account-full-pnl` is unchanged.
+- The spec branch `ccr-cd56ff4d-s5wkbb` (PR #1255) still carries the old `230-` directory and is
+  renumbered there separately.
+- Verification: `go vet` ✓ for trading / portfolio / marketdata; `ruff check` ✓ for the agent.

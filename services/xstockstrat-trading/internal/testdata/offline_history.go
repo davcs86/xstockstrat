@@ -9,7 +9,7 @@ import (
 	tradingv1 "github.com/xstockstrat/contracts/gen/go/trading/v1"
 )
 
-// S1 history — the shared Background of feature 230 @AC-43..@AC-47: three confirmed offline AAPL
+// S1 history — the shared Background of feature 240 @AC-43..@AC-47: three confirmed offline AAPL
 // orders on "acc-1" (no fees) plus snapshot "S1" (as_of 2026-10-31T23:59:59Z, AAPL 60 @ 150).
 const (
 	S1AccountID  = "acc-1"

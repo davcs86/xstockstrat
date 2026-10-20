@@ -23,7 +23,7 @@ type stubMarketData struct {
 	quotesErr            error
 	block                bool       // feature 229: wait for ctx.Done (a marketdata that never answers)
 	requested            [][]string // feature 229: symbols per call
-	// feature 230: BatchGetBars serves bars per symbol; barsBlock waits for ctx.Done.
+	// feature 240: BatchGetBars serves bars per symbol; barsBlock waits for ctx.Done.
 	bars      map[string][]*marketdatav1.Bar
 	barsErr   error
 	barsBlock bool

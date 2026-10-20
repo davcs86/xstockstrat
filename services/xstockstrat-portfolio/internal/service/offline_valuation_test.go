@@ -15,7 +15,7 @@ import (
 	"github.com/xstockstrat/portfolio/internal/testdata"
 )
 
-// Feature 230 — offline position valuation: marks with provenance and broker-style Day P&L.
+// Feature 240 — offline position valuation: marks with provenance and broker-style Day P&L.
 
 const offAcct = "acc-1"
 

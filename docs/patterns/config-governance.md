@@ -106,7 +106,7 @@ without this convention, both look identical (fails.md 2026-07-01).
 
 Append-only log — one entry per feature that registered new keys. Newest first. Don't edit past entries; superseding a key's behavior gets a new entry, not a rewrite of the old one.
 
-### feature 230 — offline-account-full-pnl (xstockstrat-portfolio / xstockstrat-config)
+### feature 240 — offline-account-full-pnl (xstockstrat-portfolio / xstockstrat-config)
 
 Bounds the last-close search window behind offline marks and Day P&L. Full-dotted `SCALAR_BOUNDS_REGISTRY` entry in
 `xstockstrat-config` (`configServiceImpl.ts`). **Seeding waiver (227 D2 precedent):** **unseeded**

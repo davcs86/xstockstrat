@@ -1083,7 +1083,7 @@ type positionSyncPayload struct {
 	// RealizedPnl is the account-grain cumulative realized P&L, set ONLY by an offline ConfirmOrder
 	// recompute; a broker sync never carries it (nil) — the pointer's presence marks offline/broker.
 	RealizedPnl *float64 `json:"realized_pnl"`
-	// Offline-only P&L state (feature 230); absent on legacy events, which read as 0 / no fills.
+	// Offline-only P&L state (feature 240); absent on legacy events, which read as 0 / no fills.
 	RealizedCarried   *float64                `json:"realized_carried"`
 	FeesSinceSnapshot *float64                `json:"fees_since_snapshot"`
 	FeesCarried       *float64                `json:"fees_carried"`

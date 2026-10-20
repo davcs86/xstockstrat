@@ -1,4 +1,4 @@
--- Feature 230: lifetime realized carry, fees and the recent-fills window for offline accounts.
+-- Feature 240: lifetime realized carry, fees and the recent-fills window for offline accounts.
 ALTER TABLE portfolio.offline_account_realized
     ADD COLUMN IF NOT EXISTS realized_carried    DOUBLE PRECISION NOT NULL DEFAULT 0,
     ADD COLUMN IF NOT EXISTS fees_since_snapshot DOUBLE PRECISION NOT NULL DEFAULT 0,

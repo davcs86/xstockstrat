@@ -137,7 +137,7 @@ func TestAC13_ReadPathParity(t *testing.T) {
 		mock.ExpectQuery(`FROM portfolio.positions`).WithArgs(anyArgs(3)...).WillReturnRows(lyftRows())
 	}
 	expectAllAccounts(mock, nil, []string{"acc-off"}, map[string]*pgxmock.Rows{"acc-off": lyftRows()})
-	// GetPortfolio without account_id also reads the caller's account universe (feature 230).
+	// GetPortfolio without account_id also reads the caller's account universe (feature 240).
 	expectBalanceList(mock, "u1")
 	expectOfflineIDList(mock, "u1", "acc-off")
 	ctx := ctxWithUser(t, "u1")

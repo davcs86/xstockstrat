@@ -12,7 +12,7 @@ import {
 } from '../fixtures';
 
 /**
- * E2E for the feature-230 offline P&L surfaces (AC-14/15/16/20/30/31/32). Each test injects its own
+ * E2E for the feature-240 offline P&L surfaces (AC-14/15/16/20/30/31/32). Each test injects its own
  * responses with page.route() on the BFF Connect paths, so the shared mock-backend defaults stay
  * untouched. Domain objects come from e2e/fixtures/ (C-12); auth from e2e/helpers/auth.ts.
  */
@@ -55,7 +55,7 @@ async function statValue(card: ReturnType<Page['locator']>, label: string) {
   return (await row.innerText()).replace(/\s+/g, ' ');
 }
 
-test.describe('Offline account full P&L (feature 230)', () => {
+test.describe('Offline account full P&L (feature 240)', () => {
   test('@AC-14 the trader card shows Day, Total, realized gross/net and both fee scopes', async ({
     page,
   }) => {

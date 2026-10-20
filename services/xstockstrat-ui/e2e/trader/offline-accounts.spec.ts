@@ -68,7 +68,7 @@ test.describe('Offline account portfolios (feature 157)', () => {
     await expect(page.getByRole('option', { name: /Offline Book/ })).toBeVisible();
 
     // Selecting the offline account shows its portfolio card (via ListPortfolios) — the card's
-    // The realized row is offline-specific and unambiguous (relabelled by feature 230).
+    // The realized row is offline-specific and unambiguous (relabelled by feature 240).
     await page.getByRole('option', { name: /Offline Book/ }).click();
     await expect(page.getByText('Realized (since snapshot)')).toBeVisible({ timeout: 5000 });
   });
@@ -226,7 +226,7 @@ test.describe('Offline account UI gaps (feature 159)', () => {
     const card = page.locator('[data-slot="card"]', { hasText: 'Offline Book' });
     await expect(card.getByText('Realized (since snapshot)')).toBeVisible({ timeout: 5000 });
     await expect(card.getByText('Equity')).toBeVisible();
-    // Broker-only fields must not render on an offline card; Day P&L is offline-native since feature 230.
+    // Broker-only fields must not render on an offline card; Day P&L is offline-native since feature 240.
     await expect(card.getByText('Cash')).toHaveCount(0);
     await expect(card.getByText('Buying Power')).toHaveCount(0);
     await expect(card.getByText('Day P&L')).toBeVisible();
@@ -247,7 +247,7 @@ test.describe('Offline account UI gaps (feature 159)', () => {
     // @AC-4: the offline account is visible in the combined view as its own card…
     await expect(offlineCard).toBeVisible({ timeout: 8000 });
     await expect(offlineCard.getByText('Equity')).toBeVisible();
-    // …showing only meaningful fields (broker-only fields hidden; Day P&L shown since feature 230).
+    // …showing only meaningful fields (broker-only fields hidden; Day P&L shown since feature 240).
     await expect(offlineCard.getByText('Cash')).toHaveCount(0);
     await expect(offlineCard.getByText('Buying power')).toHaveCount(0);
     await expect(offlineCard.getByText('Day P&L')).toBeVisible();

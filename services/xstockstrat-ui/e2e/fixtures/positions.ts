@@ -52,7 +52,7 @@ export const POSITION_MSFT = {
 };
 
 /**
- * Offline positions carrying feature-230 mark provenance (AC-16/AC-31/AC-32). `markSource` is the
+ * Offline positions carrying feature-240 mark provenance (AC-16/AC-31/AC-32). `markSource` is the
  * numeric `MarkSource` enum (1 QUOTE, 2 LAST_CLOSE, 4 NONE); `markAsOf` is the Connect-JSON
  * RFC3339 form, so these are page.route() bodies only (not mock-backend message inits).
  */

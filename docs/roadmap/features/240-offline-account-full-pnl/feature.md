@@ -16,6 +16,7 @@
 | 2026-10-20 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 28 steps (re-anchored on main-dev post-231; operator decision D-1 gates Step 19) |
 | 2026-10-20 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential mode on `feature/offline-account-full-pnl`; Step 1 done |
 | 2026-10-20 | `in-progress` → `code-completed` | /sdd-execute | All 28 steps done and pushed (sequential); merge-order gate clear (231 resolved); integration PR to `main-dev` next |
+| 2026-10-20 | `code-completed` (renumber) | user request | Renumbered 230 → 240: `230-fix-etf-flag-fill` (2026-10-15) holds 230; max NNN across branches was 239 |
 
 ---
 

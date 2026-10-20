@@ -17,7 +17,7 @@ import (
 	"github.com/xstockstrat/portfolio/internal/testdata"
 )
 
-// Feature 230 — account-level offline P&L on GetPortfolio / ListPortfolios and FR-9 read parity.
+// Feature 240 — account-level offline P&L on GetPortfolio / ListPortfolios and FR-9 read parity.
 
 type posSpec struct {
 	sym      string

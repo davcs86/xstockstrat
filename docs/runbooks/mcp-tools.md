@@ -1335,7 +1335,7 @@ An offline account has no broker: orders are recorded by hand and their fills co
 | `filled_qty` | float | `confirm_order` | Confirmed fill quantity |
 | `filled_avg_price` | float | `confirm_order` | Average fill price |
 | `filled_at` | string | no | ISO-8601 fill time. Defaults to now on first confirm; otherwise the previously recorded time is kept (not shown while `NEW`). Pass it when partial fills land on different sessions |
-| `fees` | float | no | Cumulative fees for the order (≥ 0); omitted keeps the recorded value; negative → `INVALID_ARGUMENT` (feature 230) |
+| `fees` | float | no | Cumulative fees for the order (≥ 0); omitted keeps the recorded value; negative → `INVALID_ARGUMENT` (feature 240) |
 | `positions_json` | string | `snapshot_positions` | JSON array of baseline positions: `[{"symbol":"AAPL","qty":100,"avg_cost_per_share":150.00}, …]` |
 | `as_of` | string | no | ISO-8601 statement date for `snapshot_positions` (defaults to now) |
 | `client_snapshot_id` | string | no | Idempotency nonce for `snapshot_positions` (auto-generated when omitted) |
@@ -1347,7 +1347,7 @@ An offline account has no broker: orders are recorded by hand and their fills co
   The offline-only guard is enforced server-side from the persisted order — a broker account is
   rejected `FAILED_PRECONDITION`. The order carries `fees` (the cumulative total; never part of cost
   basis); a `NEW` order (e.g. after a `filled_qty 0` un-confirm) shows neither `fees` nor `filled_at`
-  (feature 230).
+  (feature 240).
 - **snapshot_positions** → `{"account_id": …, "committed_count": N, "rejected": [...], "warnings": [...]}`
   — set the effective-dated opening baseline from a brokerage statement (feature 163). The baseline
   seeds the offline fold: `position(symbol) = baseline_as_of(T0) + Σ fills(filled_at > T0)`. The
@@ -1360,7 +1360,7 @@ An offline account has no broker: orders are recorded by hand and their fills co
   echo each order's `fees` (unset for broker orders). `list_positions` also returns `day_pnl`,
   `day_pnl_pct`, `unrealized_pnl_pct` (signed over `|cost_basis|`), `mark_source`
   (`MARK_SOURCE_QUOTE`/`LAST_CLOSE`/`BROKER`/`NONE`) and `mark_as_of` (quote time or last-close
-  session date) — feature 230. All non-optional fields are present, including zeros.
+  session date) — feature 240. All non-optional fields are present, including zeros.
 
 Returns the shapes above. This is the platform capability behind a monthly statement-reconciliation
 task: correct drift by recording/confirming orders or snapshotting a brokerage statement baseline.
@@ -1440,7 +1440,7 @@ positions.
 Returns `{"positions": [...], "next_page_token": "<str>"}` — each position uses snake_case proto
 field names; all non-optional fields are present, including zeros (optional fields such as
 `mark_as_of` are omitted when unset). Each position carries `day_pnl`, `day_pnl_pct`,
-`unrealized_pnl_pct`, `mark_source` and `mark_as_of` (feature 230). An empty `next_page_token` means
+`unrealized_pnl_pct`, `mark_source` and `mark_as_of` (feature 240). An empty `next_page_token` means
 no more pages.
 
 **Errors:** `RuntimeError` → no verified caller claims.

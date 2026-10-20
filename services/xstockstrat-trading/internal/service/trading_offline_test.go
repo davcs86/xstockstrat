@@ -1571,7 +1571,7 @@ func TestSnapshotOfflinePositions_Concurrency_AC10(t *testing.T) {
 var _ = json.Marshal
 
 // ---------------------------------------------------------------------------
-// Feature 230 — ConfirmOrder fees, filled_at preservation and NEW-order masking
+// Feature 240 — ConfirmOrder fees, filled_at preservation and NEW-order masking
 // ---------------------------------------------------------------------------
 
 // rowCapture is a pgxmock argument matcher that records the bound value at one UpsertOrder position.
@@ -1821,7 +1821,7 @@ func TestHideUnconfirmedFill_BrokerUntouched(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Feature 230 — positions.synced fees/carry payload and snapshot carry rules
+// Feature 240 — positions.synced fees/carry payload and snapshot carry rules
 // ---------------------------------------------------------------------------
 
 func s1Snapshot(t *testing.T, svc *TradingService, id string, asOf time.Time, rows ...*tradingv1.PositionBaseline) {

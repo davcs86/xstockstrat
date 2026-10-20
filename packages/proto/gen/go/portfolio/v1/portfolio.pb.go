@@ -132,7 +132,7 @@ func (PositionSource) EnumDescriptor() ([]byte, []int) {
 	return file_portfolio_v1_portfolio_proto_rawDescGZIP(), []int{1}
 }
 
-// MarkSource is the provenance of a position's current_price (feature 230).
+// MarkSource is the provenance of a position's current_price (feature 240).
 type MarkSource int32
 
 const (

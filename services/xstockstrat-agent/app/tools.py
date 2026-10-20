@@ -2083,7 +2083,7 @@ def register_tools(server: MCPServer) -> None:
           'list_positions'  — list an account's positions (reconciliation). Requires account_id.
               Returns {"positions": [...]}. Each position includes source (ORDERS/BASELINE/MIXED)
               and as_of (baseline effective date) provenance fields (feature 163), plus day_pnl,
-              day_pnl_pct, unrealized_pnl_pct, mark_source and mark_as_of (feature 230).
+              day_pnl_pct, unrealized_pnl_pct, mark_source and mark_as_of (feature 240).
 
         This is the platform capability behind the monthly statement-reconciliation task: correct
         drift by recording/confirming orders (no separate set-positions path)."""
