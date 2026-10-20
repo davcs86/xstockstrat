@@ -36,3 +36,45 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - whether a partial row is scored from its present metrics only (today's behaviour, minus the zero bug);
   - logging and run accounting for skipped symbols (`symbols_done`).
 - Development branch: feature/fix-fundsignal-neutral-score
+
+## Session 2026-10-20 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready. Criteria: PASS WITH WARNINGS (0 fails, 0 Floor breaches).
+- Warnings (spec-reviewer), with disposition:
+  - [C-15] No `@FR-N` tags or numbered FRs (Track C template, `track-c-sdd.md:158`). Resolved: added FR-1
+    (built-in scorer: all-missing row gets no score, no quantile slot, no emitted row, no `IngestSignal`) and
+    FR-2 (absence read from `missing_metrics`, never a zero; partial row scored from present metrics); AC-1
+    tagged `@FR-1`, AC-2 `@FR-2`.
+  - [C-15] AC-1 Then "quantile cuts computed over MSFT only" checked internal state. Resolved: replaced by
+    "exactly one `analysis.fundsignal_emitted` row exists, for MSFT, with direction buy" (single scored
+    symbol → `buy_cut` = its score, `s >= buy_cut` at `fundsignal_loop.py:479`).
+  - AC-1 MSFT fixture non-deterministic. Resolved: MSFT lists `pb_ratio`, `debt_to_equity` in
+    `missing_metrics`, not `pe_ratio`/`roe`/`eps` → score (0.6+1.0+1.0)/3 ≈ 0.867.
+  - Shared givens in Feature description. Resolved: moved to a Gherkin `Background:`.
+  - [C-10/C-16] Formula-path exclusion rationale wrong: `fundsignal_loop.py:452-459` passes raw wire values,
+    ignoring `missing_metrics` (`marketdata.proto:218`), so a data-less ETF is scored from zeros under a
+    configured formula. Resolved in spec: bullet removed from Out of Scope; new "Open for Design" entry —
+    design extends the all-missing skip to this path or names a follow-up. Durable `@feature-201 @AC-8`
+    (`services/xstockstrat-analysis/acceptance/fundamentals-formula-inputs.feature:47-53`) is PRESERVE; an
+    all-missing skip does not change it. Blast radius limited: config `008_analysis_fundsignal_keys.up.sql:34-35`
+    seeds `scoring_formula_id` empty.
+  - Persona missing. Resolved: "Who is affected" line added.
+  - No numbered FRs; AC-2 settles the partial-row fork (Session 2026-10-20 /sdd-triage, design forks bullet 2).
+    Resolved: FR-2 states partial row scored from present metrics only. Design treats that fork as decided
+    (`@AC-*` IDs are append-only).
+  - [C-14] Consumer Surface omitted UI `/insights/opportunities`
+    (`services/xstockstrat-ui/src/app/insights/opportunities/page.tsx`) and the per-surface change. Resolved:
+    added, plus blend-universe effect (`live_loop.py:149-192`: data-less symbols drop out).
+- Notes:
+  - "Following the feature 144 `score_unavailable` pattern" mismatched (144 still ranks the flagged row
+    last). Resolved: Expected now says stricter than 144; "never scored, ranked or emitted" is binding.
+  - Stale anchor correction (prior entry left unedited, append-only): the `missing_metrics` producer is
+    `toProtoFundamentals`, `services/xstockstrat-marketdata/internal/service/marketdata_service.go:2020-2056`,
+    used by `GetFundamentalsMulti` at `:1677-1711`, not `:1976-1994`.
+  - Reviewer confirmed all other citations (`:432`, `:240`, `:479`, `:195`, proto field 18), C-05 key names,
+    unique AC IDs, AC-2 arithmetic, AC-1 red on current code (nearest-rank idx 4 → `buy_cut` 0.5).
+- Overlap findings: none (feature-overlap PASS, no collisions).
+- Operator decisions (binding, recorded 2026-10-20):
+  - Standing authorization: designs run in FULL mode only (no quick designs for automated fixes); the orchestrator auto-approves the design gate once rounds >= 2, no unresolved Floor (F-*) breach remains, no blocking objection remains, and every CHANGE to an existing @AC business rule is covered by an operator decision below.
+  - Full design depth (operator overrode the triage 'quick' recommendation).
+- Next: `/sdd-design fix-fundsignal-neutral-score` (full).

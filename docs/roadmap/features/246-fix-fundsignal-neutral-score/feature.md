@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-10-20 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-19-analysis-fundsignal-neutral-score-fabricated-defect.md` |
+| 2026-10-20 | `draft` → `spec-ready` | /sdd-review | Product spec approved (8 warnings, 3 notes; overlap PASS) |
 
 ---
 
@@ -45,4 +46,4 @@ truthiness checks also drop metrics whose real value is 0.
 
 ## Next Action
 
-`/sdd-design fix-fundsignal-neutral-score quick` — recommended design depth (quick) from triage; see context.md
+`/sdd-design fix-fundsignal-neutral-score` — full design (operator: no quick designs); see context.md
