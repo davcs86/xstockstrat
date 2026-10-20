@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"strings"
 	"sync"
 	"time"
@@ -58,6 +59,9 @@ type PortfolioService struct {
 	// stops holds resting-stop prices learned from ledger order events, in-memory and rebuilt on boot
 	// (HydrateStops) — deliberately no portfolio→trading edge, which would create a trading↔portfolio cycle.
 	stops *stopStore
+
+	// now is the offline valuation clock; nil means time.Now.
+	now func() time.Time
 }
 
 // stopNearThresholdPct — a position whose stop sits within this fraction of current price is
@@ -438,8 +442,7 @@ func unvaluedSymbols(positions []*portfoliov1.Position) []string {
 }
 
 func (s *PortfolioService) enrichPositions(ctx context.Context, positions []*portfoliov1.Position) {
-	quotes, _ := s.latestQuotesFor(ctx, unvaluedSymbols(positions))
-	applyQuotes(positions, quotes)
+	s.valueRead(ctx, positions, nil)
 	s.enrichRisk(ctx, positions)
 }
 
@@ -456,12 +459,14 @@ func markOf(q *marketdatav1.Quote) (float64, bool) {
 }
 
 // applyQuotes mark-values the positions the broker did not value; a missing or unusable quote leaves the position
-// unenriched (never a fabricated price, never a one-sided average).
+// unenriched (never a fabricated price, never a one-sided average) and labelled MARK_SOURCE_NONE.
 func applyQuotes(positions []*portfoliov1.Position, quotes map[string]*marketdatav1.Quote) {
 	for _, p := range positions {
 		if p.CurrentPrice > 0 {
+			p.MarkSource = portfoliov1.MarkSource_MARK_SOURCE_BROKER
 			continue
 		}
+		p.MarkSource = portfoliov1.MarkSource_MARK_SOURCE_NONE
 		quote, ok := quotes[p.Symbol]
 		if !ok {
 			continue // missing quote → same skip as the old per-position error path
@@ -471,7 +476,9 @@ func applyQuotes(positions []*portfoliov1.Position, quotes map[string]*marketdat
 			slog.Warn("latest quote has no usable price", "symbol", p.Symbol, "ask", quote.AskPrice, "bid", quote.BidPrice, "mark", quote.GetMarkPrice())
 			continue
 		}
-		enrichPosition(p, price)
+		markAt(p, price)
+		p.MarkSource = portfoliov1.MarkSource_MARK_SOURCE_QUOTE
+		p.MarkAsOf = quote.Time
 	}
 }
 
@@ -554,14 +561,13 @@ func (s *PortfolioService) HydrateStops(ctx context.Context) {
 	slog.Info("HydrateStops: replayed resting stops from ledger", "count", n)
 }
 
-// enrichPosition fills current price / market value / unrealized P&L on p from a markOf price.
-// UnrealizedPnlPct is guarded against zero cost basis.
-func enrichPosition(p *portfoliov1.Position, price float64) {
+// markAt values p at price. The % is over |cost basis| so a short reports a correctly signed return.
+func markAt(p *portfoliov1.Position, price float64) {
 	p.CurrentPrice = price
 	p.MarketValue = price * p.Qty
 	p.UnrealizedPnl = p.MarketValue - p.CostBasis
-	if p.CostBasis > 0 {
-		p.UnrealizedPnlPct = p.UnrealizedPnl / p.CostBasis
+	if p.CostBasis != 0 {
+		p.UnrealizedPnlPct = p.UnrealizedPnl / math.Abs(p.CostBasis)
 	}
 }
 

@@ -758,3 +758,44 @@
 - Files modified: `internal/repository/offline_realized_test.go`,
   `internal/service/portfolio_offline_test.go`.
 - Deviations: none.
+
+### Step 19 — service: portfolio shared offline valuation (marks, Day P&L, short %) [done]
+- D-1 gate satisfied (recorded 2026-10-20, "fallback wins").
+- `pnl.QtyEpsilon = 1e-9` is exported and replaces the 3 literals (behaviour identical).
+- New `offline_valuation.go`:
+  - **Entry point:** `valueRead(ctx, positions, offlineAccountIDs) readValuation{states, accounts}` is
+    the one shared step for a read.
+    - Offline candidates are `Source ≠ 0` positions ∪ the given ids.
+    - With none, it runs the exact pre-230 path (`latestQuotesFor` + `applyQuotes`; 0 offline-state
+      or bars calls).
+    - Otherwise it makes one user-scoped `GetOfflineStates` (non-fatal: WARN "offline state
+      unavailable"), then `fetchMarks`, then `applyQuotes` for the others and `valueOffline` for the
+      offline ones.
+  - **Fetching marks:** `fetchMarks` runs the quote batch and BatchGetBars concurrently, each under
+    `quoteTimeout`.
+    - The bars request is `1d`, `allow_partial`, from `DayStart(now) − L days`, with
+      `MaxBarsPerSymbol = L+1`.
+    - On a bars error it logs WARN "offline last-close bars unavailable".
+    - `indexBars` keys closes by `marketsession.SessionDate`.
+  - **Marking and Day P&L:** `valueOffline(now, …)` is pure, with the clock passed in; production uses
+    the `PortfolioService.now` seam.
+    - `pickMark` implements design §4.5 / D-1: a quote must be two-sided and from the reference
+      session.
+    - `sessionDay` implements FR-1: overnight shares are consumed first, then same-session lots FIFO;
+      the base is per FR-1.
+    - Symbols closed in session are valued at account level only (AC-34).
+    - A NONE position contributes nothing.
+- `markAt` replaces `enrichPosition`: the % is over `|CostBasis|` (FR-2 platform-wide short fix).
+- `applyQuotes` now labels `BROKER` / `QUOTE` (+`mark_as_of = q.time`) / `NONE`.
+- `enrichPositions` = `valueRead` + `enrichRisk`.
+- `GetPnL`, `broadcastSnapshot` and `checkRiskLimits` are untouched (still `latestQuotesFor` +
+  `applyQuotes`).
+- The `ListPortfolios` all-accounts union still uses `applyQuotes`; Step 21 moves it to `valueRead`.
+- TDD (with Step 20): red was compile (`accountVal` / `valueOffline` / `markAt` undefined); green: the
+  whole service suite with `-race`.
+- Files modified: `internal/service/offline_valuation.go` (new), `internal/service/portfolio_service.go`,
+  `packages/proto/pnl/pnl.go`.
+- Deviations: none in behaviour.
+  - The spec's separate `valueAccounts(...)` is folded into `valueRead`'s returned `accounts`. It uses
+    the same quote and bar maps, so there is no second batch (C-18).
+  - Step 21 passes the in-scope offline account ids to it.

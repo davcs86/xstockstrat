@@ -1174,7 +1174,7 @@ The total must be ≥ 40%; the excluded packages are covered by the targeted tes
 
 ### Step 19 — service: portfolio shared offline valuation (marks, Day P&L, short %)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/offline_valuation.go` — create
