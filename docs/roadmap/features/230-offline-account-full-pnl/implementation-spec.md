@@ -1778,7 +1778,7 @@ paired Step 27 covers all nine files.
 
 ### Step 27 — test: UI unit + e2e for the offline P&L surfaces
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/money.test.ts` — create

@@ -970,3 +970,36 @@
     the AC-30 broker leg; it is in the Step 27 files.
   - The combined panel renders only when no account is active (the provider auto-selects the first
     active account). That is pre-existing UX, so AC-30's e2e uses inactive account copies.
+
+### Step 27 — test: UI unit + e2e for the offline P&L surfaces [done]
+- Unit:
+  - `money.test.ts` (`-$50.00` was red; `+$100.00`; `—`);
+  - `protoTime.test.ts` `fmtNyDate` (EDT / EST stamps; undefined);
+  - `portfolioTotals.test.ts` (AC-30 sums; unset optionals as 0).
+- Fixtures (C-12):
+  - `PORTFOLIO_OFFLINE_FULL_PNL` and `PORTFOLIO_ALPACA_AC30`;
+  - `POSITION_OFFLINE_{AAPL,XYZ,ZZZZ,TSLA_SHORT}` (`markAsOf` is RFC3339 — `page.route` bodies only);
+  - `INVENTORY.md` rows added;
+  - `PORTFOLIOS` / `POSITIONS` unchanged.
+- `offline-accounts.spec.ts`:
+  - 'Realized P&L' → 'Realized (since snapshot)' (157 @AC-13 EXTEND);
+  - the offline card and Book offline card now expect Day P&L visible (159 @AC-2/@AC-4 CHANGE,
+    signed);
+  - the Cash/BP count-0 assertions are kept.
+- New `offline-pnl.spec.ts`: AC-14, AC-20, AC-15, AC-30, AC-16, AC-32, AC-31.
+  - The Exposure table's rows have role `button` (clickable rows), so a `positionRow` helper locates
+    `tbody tr` by its symbol link.
+- TDD:
+  - unit red (3 failures) → green;
+  - e2e red was captured by stashing only `src/` and rerunning the two offline specs against the old
+    UI: 11 failures. After restoring `src/`: green.
+- Verification:
+  - `pnpm run test:coverage`: 237 passed, All files 71.16% (≥ 40%);
+  - `pnpm run lint`: same 6 pre-existing warnings;
+  - Playwright (the 6 listed specs, `CI=1` build+start mode, chromium): 65 passed;
+  - C-12 import greps ✓; INVENTORY grep ✓.
+- Note: a local non-CI run times out in warmup on the `pnpm dev` cold compile (10s budget). `CI=1` is
+  the reliable mode here.
+- Hygiene: prettier on a glob reformatted 4 unrelated files; reverted before commit (only listed files
+  are staged, F-08).
+- Files modified: the 8 listed in the step.
