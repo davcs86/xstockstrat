@@ -14,6 +14,7 @@
 | 2026-10-19 | `draft` → `spec-ready` | /sdd-review | Product spec approved after 4 review rounds (round-4 warnings addressed: 2 warnings, 5 notes) |
 | 2026-10-20 | `spec-ready` → `design-approved` | /sdd-design | Design debated (5 rounds, full) and approved; recon.md + design.md written |
 | 2026-10-20 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 28 steps (re-anchored on main-dev post-231; operator decision D-1 gates Step 19) |
+| 2026-10-20 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential mode on `feature/offline-account-full-pnl`; Step 1 done |
 
 ---
 

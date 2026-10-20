@@ -145,7 +145,7 @@ service's half against the scenario's numbers. Proof that is SQL-shape only is c
 
 ### Step 1 — proto: Additive fees, P&L, mark-provenance and allow_partial fields
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/trading/v1/trading.proto` — modify

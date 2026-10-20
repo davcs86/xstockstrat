@@ -414,3 +414,32 @@
   - No migration, proto or config-key collision.
   - Feature 215's nine shared files are already on `main-dev` (#1243), so nothing needs rebasing.
   - Merge-order row 231↔230 resolved (`b21dbc4b`).
+
+## Session 2026-10-20 — sdd-execute (sequential)
+
+- Operator choices: **sequential mode**, development branch `feature/offline-account-full-pnl` (pushing it
+  was authorized). The branch was created from `origin/main-dev` (`37b9a562`) with the spec docs merged in
+  (a fast-forward to `1f4c8f40`).
+- Re-spec gate: no edits needed. Since the spec anchor (`7c247698`), the only `services/`/`packages/`
+  changes on main-dev are the agent dependency bump and CI sync tooling; no spec evidence moved.
+- Tooling setup (Steps 1–28):
+  - go1.27 ✓ (auto-download)
+  - golangci-lint ⬇ v2.14.0 (was 2.5.0)
+  - dockerd ⬇ started
+  - `xstockstrat-codegen` image ⬇ built (buf 1.72.0 + pinned plugins)
+  - Node ⬇ v24.22.0 at `/opt/node24` (host default was 22; CI uses 24)
+  - pnpm ⬇ 9.15.9 on Node 24; `pnpm install --frozen-lockfile` ✓
+  - agent `uv sync --extra dev` ✓; Go modules downloaded ✓
+  - No database installed (migrations are verified offline).
+
+### Step 1 — proto: additive fees, P&L, mark-provenance and allow_partial fields [done]
+- Added:
+  - `ConfirmOrderRequest.fees = 6` and `Order.fees = 23`;
+  - `Portfolio` fields 13–16;
+  - `Position.mark_source = 24` / `mark_as_of = 25`, plus the new `MarkSource` enum;
+  - `BatchGetBarsRequest.allow_partial = 6`.
+- Verified inside the pinned codegen image (buf 1.72.0): `buf lint` ✓, `buf breaking` ✓, and the manual
+  `trading.proto` `buf breaking --path` check ✓ (C-09; CI skips trading.proto).
+- TDD: N/A (proto).
+- Files modified: `packages/proto/{trading,portfolio,marketdata}/v1/*.proto`
+- Deviations: none.
