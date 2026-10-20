@@ -974,7 +974,7 @@ The total must be ≥ 40%. The `service/` package is excluded, so the targeted t
 
 ### Step 15 — service: portfolio `internal/marketsession` calendar
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/marketsession/marketsession.go` — create

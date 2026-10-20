@@ -687,3 +687,20 @@
   - `golangci-lint` 0 issues.
 - Files modified: `internal/service/marketdata_service_test.go`.
 - Deviations: none.
+
+### Step 15 — service: portfolio `internal/marketsession` calendar [done]
+- New package `marketsession`:
+  - `time/tzdata` is embedded, because the distroless image has no zoneinfo;
+  - `America/New_York` is loaded once;
+  - exports `SessionDate` (NY date of t+6h), `DayStart`, `Open` (09:30 NY), `IsTradingDay`,
+    `PrevTradingDay` (strictly before) and `Reference(now)`.
+- `Reference` gives:
+  - pre-open or a non-trading day → the previous trading day, not live;
+  - during the session → today, live;
+  - post-close → today, not live.
+- Holidays are rule-based with observance: Sat→Fri and Sun→Mon, except New Year's (Sat → none);
+  Good Friday comes from the anonymous Gregorian computus. Early closes and one-off closures are not
+  modelled (package comment).
+- TDD (with Step 16): red was compile-only (new package); green 5/5.
+- Files modified: `internal/marketsession/marketsession.go` (new).
+- Deviations: none.
