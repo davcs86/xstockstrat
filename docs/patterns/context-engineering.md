@@ -37,9 +37,19 @@ the role demands it). Return digests, never pasted files. Cite `path:line`. Neve
 agent *read* them, so the orchestrator never loads the procedure just to pass it along.
 
 **Authoring a new agent:** one Markdown file in `.claude/agents/<name>.md` with frontmatter
-(`name`, `description`, `tools`, `model: inherit`) and a body that states the operating rules, the
+(`name`, `description`, `tools`, `model`) and a body that states the operating rules, the
 method, and an **explicit output format**. The `description` is what the orchestrator matches on —
 make it say *when* to use the agent and *what it returns*.
+
+**Model tier.** Pin `model` to a tier alias by the agent's reasoning load and the cost of a wrong
+answer — never `inherit`, which lets a cheap orchestrator silently downgrade a gate. Aliases (not
+full IDs) so a model release needs no bump.
+
+| Tier | Use for | e.g. |
+|---|---|---|
+| `opus` | Open-ended synthesis/adversarial reasoning, or a verdict that gates an irreversible write | `design-adversary`, `feature-synthesizer` (gates artifact deletion) |
+| `sonnet` | Grounded judgment or classification against criteria, where an invented path/verdict propagates downstream | `spec-reviewer`, `codebase-discovery` |
+| `haiku` | Mechanical scan or summarize, output trivially checkable by the caller | `feature-overlap`, `service-briefing` |
 
 ---
 

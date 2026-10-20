@@ -552,6 +552,7 @@ function createBaseOrder() {
         brokerType: common_1.BrokerType.BROKER_TYPE_UNSPECIFIED,
         intentState: IntentState.INTENT_STATE_UNSPECIFIED,
         filledAt: undefined,
+        fees: undefined,
     };
 }
 exports.Order = {
@@ -621,6 +622,9 @@ exports.Order = {
         }
         if (message.filledAt !== undefined) {
             timestamp_1.Timestamp.encode(toTimestamp(message.filledAt), writer.uint32(178).fork()).join();
+        }
+        if (message.fees !== undefined) {
+            writer.uint32(185).double(message.fees);
         }
         return writer;
     },
@@ -785,6 +789,13 @@ exports.Order = {
                     message.filledAt = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
                     continue;
                 }
+                case 23: {
+                    if (tag !== 185) {
+                        break;
+                    }
+                    message.fees = reader.double();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -889,6 +900,7 @@ exports.Order = {
                 : isSet(object.filled_at)
                     ? fromJsonTimestamp(object.filled_at)
                     : undefined,
+            fees: isSet(object.fees) ? globalThis.Number(object.fees) : undefined,
         };
     },
     toJSON(message) {
@@ -959,6 +971,9 @@ exports.Order = {
         if (message.filledAt !== undefined) {
             obj.filledAt = message.filledAt.toISOString();
         }
+        if (message.fees !== undefined) {
+            obj.fees = message.fees;
+        }
         return obj;
     },
     create(base) {
@@ -988,6 +1003,7 @@ exports.Order = {
         message.brokerType = object.brokerType ?? common_1.BrokerType.BROKER_TYPE_UNSPECIFIED;
         message.intentState = object.intentState ?? IntentState.INTENT_STATE_UNSPECIFIED;
         message.filledAt = object.filledAt ?? undefined;
+        message.fees = object.fees ?? undefined;
         return message;
     },
 };
@@ -1536,7 +1552,7 @@ exports.GetOrderRequest = {
     },
 };
 function createBaseConfirmOrderRequest() {
-    return { orderId: "", filledQty: 0, filledAvgPrice: 0, filledAt: undefined, userId: "" };
+    return { orderId: "", filledQty: 0, filledAvgPrice: 0, filledAt: undefined, userId: "", fees: undefined };
 }
 exports.ConfirmOrderRequest = {
     encode(message, writer = new wire_1.BinaryWriter()) {
@@ -1554,6 +1570,9 @@ exports.ConfirmOrderRequest = {
         }
         if (message.userId !== "") {
             writer.uint32(42).string(message.userId);
+        }
+        if (message.fees !== undefined) {
+            writer.uint32(49).double(message.fees);
         }
         return writer;
     },
@@ -1599,6 +1618,13 @@ exports.ConfirmOrderRequest = {
                     message.userId = reader.string();
                     continue;
                 }
+                case 6: {
+                    if (tag !== 49) {
+                        break;
+                    }
+                    message.fees = reader.double();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -1634,6 +1660,7 @@ exports.ConfirmOrderRequest = {
                 : isSet(object.user_id)
                     ? globalThis.String(object.user_id)
                     : "",
+            fees: isSet(object.fees) ? globalThis.Number(object.fees) : undefined,
         };
     },
     toJSON(message) {
@@ -1653,6 +1680,9 @@ exports.ConfirmOrderRequest = {
         if (message.userId !== "") {
             obj.userId = message.userId;
         }
+        if (message.fees !== undefined) {
+            obj.fees = message.fees;
+        }
         return obj;
     },
     create(base) {
@@ -1665,6 +1695,7 @@ exports.ConfirmOrderRequest = {
         message.filledAvgPrice = object.filledAvgPrice ?? 0;
         message.filledAt = object.filledAt ?? undefined;
         message.userId = object.userId ?? "";
+        message.fees = object.fees ?? undefined;
         return message;
     },
 };

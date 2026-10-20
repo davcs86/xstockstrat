@@ -165,6 +165,76 @@ export function positionSourceToNumber(object: PositionSource): number {
   }
 }
 
+/** MarkSource is the provenance of a position's current_price (feature 240). */
+export enum MarkSource {
+  MARK_SOURCE_UNSPECIFIED = "MARK_SOURCE_UNSPECIFIED",
+  MARK_SOURCE_QUOTE = "MARK_SOURCE_QUOTE",
+  MARK_SOURCE_LAST_CLOSE = "MARK_SOURCE_LAST_CLOSE",
+  MARK_SOURCE_BROKER = "MARK_SOURCE_BROKER",
+  MARK_SOURCE_NONE = "MARK_SOURCE_NONE",
+  UNRECOGNIZED = "UNRECOGNIZED",
+}
+
+export function markSourceFromJSON(object: any): MarkSource {
+  switch (object) {
+    case 0:
+    case "MARK_SOURCE_UNSPECIFIED":
+      return MarkSource.MARK_SOURCE_UNSPECIFIED;
+    case 1:
+    case "MARK_SOURCE_QUOTE":
+      return MarkSource.MARK_SOURCE_QUOTE;
+    case 2:
+    case "MARK_SOURCE_LAST_CLOSE":
+      return MarkSource.MARK_SOURCE_LAST_CLOSE;
+    case 3:
+    case "MARK_SOURCE_BROKER":
+      return MarkSource.MARK_SOURCE_BROKER;
+    case 4:
+    case "MARK_SOURCE_NONE":
+      return MarkSource.MARK_SOURCE_NONE;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return MarkSource.UNRECOGNIZED;
+  }
+}
+
+export function markSourceToJSON(object: MarkSource): string {
+  switch (object) {
+    case MarkSource.MARK_SOURCE_UNSPECIFIED:
+      return "MARK_SOURCE_UNSPECIFIED";
+    case MarkSource.MARK_SOURCE_QUOTE:
+      return "MARK_SOURCE_QUOTE";
+    case MarkSource.MARK_SOURCE_LAST_CLOSE:
+      return "MARK_SOURCE_LAST_CLOSE";
+    case MarkSource.MARK_SOURCE_BROKER:
+      return "MARK_SOURCE_BROKER";
+    case MarkSource.MARK_SOURCE_NONE:
+      return "MARK_SOURCE_NONE";
+    case MarkSource.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
+export function markSourceToNumber(object: MarkSource): number {
+  switch (object) {
+    case MarkSource.MARK_SOURCE_UNSPECIFIED:
+      return 0;
+    case MarkSource.MARK_SOURCE_QUOTE:
+      return 1;
+    case MarkSource.MARK_SOURCE_LAST_CLOSE:
+      return 2;
+    case MarkSource.MARK_SOURCE_BROKER:
+      return 3;
+    case MarkSource.MARK_SOURCE_NONE:
+      return 4;
+    case MarkSource.UNRECOGNIZED:
+    default:
+      return -1;
+  }
+}
+
 /**
  * PositionSide distinguishes a long (qty > 0) from a short (qty < 0) position.
  * Used only as an additive filter on ListPositionsRequest; the Position message itself
@@ -297,7 +367,23 @@ export interface Portfolio {
    * (feature 157); `optional` for proto3 explicit presence so an offline account's genuine $0
    * is distinguishable from a broker account's unset. Broker cards leave it unset.
    */
-  realizedPnl?: number | undefined;
+  realizedPnl?:
+    | number
+    | undefined;
+  /** Offline accounts only; total_pnl_pct is also set on an all-offline aggregate. */
+  totalPnlPct?:
+    | number
+    | undefined;
+  /** offline accounts only */
+  realizedPnlLifetime?:
+    | number
+    | undefined;
+  /** offline accounts only */
+  feesSinceSnapshot?:
+    | number
+    | undefined;
+  /** offline accounts only */
+  feesLifetime?: number | undefined;
 }
 
 export interface Position {
@@ -361,6 +447,9 @@ export interface Position {
    * BASELINE (snapshot-only), or MIXED (baseline + post-T0 fills).
    */
   source: PositionSource;
+  markSource: MarkSource;
+  /** LAST_CLOSE: 00:00 America/New_York of the bar's session; QUOTE: the quote time; unset for BROKER/NONE. */
+  markAsOf?: Date | undefined;
 }
 
 export interface PortfolioSnapshot {
@@ -672,6 +761,10 @@ function createBasePortfolio(): Portfolio {
     positions: [],
     accountId: "",
     realizedPnl: undefined,
+    totalPnlPct: undefined,
+    realizedPnlLifetime: undefined,
+    feesSinceSnapshot: undefined,
+    feesLifetime: undefined,
   };
 }
 
@@ -712,6 +805,18 @@ export const Portfolio: MessageFns<Portfolio> = {
     }
     if (message.realizedPnl !== undefined) {
       writer.uint32(97).double(message.realizedPnl);
+    }
+    if (message.totalPnlPct !== undefined) {
+      writer.uint32(105).double(message.totalPnlPct);
+    }
+    if (message.realizedPnlLifetime !== undefined) {
+      writer.uint32(113).double(message.realizedPnlLifetime);
+    }
+    if (message.feesSinceSnapshot !== undefined) {
+      writer.uint32(121).double(message.feesSinceSnapshot);
+    }
+    if (message.feesLifetime !== undefined) {
+      writer.uint32(129).double(message.feesLifetime);
     }
     return writer;
   },
@@ -819,6 +924,38 @@ export const Portfolio: MessageFns<Portfolio> = {
           message.realizedPnl = reader.double();
           continue;
         }
+        case 13: {
+          if (tag !== 105) {
+            break;
+          }
+
+          message.totalPnlPct = reader.double();
+          continue;
+        }
+        case 14: {
+          if (tag !== 113) {
+            break;
+          }
+
+          message.realizedPnlLifetime = reader.double();
+          continue;
+        }
+        case 15: {
+          if (tag !== 121) {
+            break;
+          }
+
+          message.feesSinceSnapshot = reader.double();
+          continue;
+        }
+        case 16: {
+          if (tag !== 129) {
+            break;
+          }
+
+          message.feesLifetime = reader.double();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -880,6 +1017,26 @@ export const Portfolio: MessageFns<Portfolio> = {
         : isSet(object.realized_pnl)
         ? globalThis.Number(object.realized_pnl)
         : undefined,
+      totalPnlPct: isSet(object.totalPnlPct)
+        ? globalThis.Number(object.totalPnlPct)
+        : isSet(object.total_pnl_pct)
+        ? globalThis.Number(object.total_pnl_pct)
+        : undefined,
+      realizedPnlLifetime: isSet(object.realizedPnlLifetime)
+        ? globalThis.Number(object.realizedPnlLifetime)
+        : isSet(object.realized_pnl_lifetime)
+        ? globalThis.Number(object.realized_pnl_lifetime)
+        : undefined,
+      feesSinceSnapshot: isSet(object.feesSinceSnapshot)
+        ? globalThis.Number(object.feesSinceSnapshot)
+        : isSet(object.fees_since_snapshot)
+        ? globalThis.Number(object.fees_since_snapshot)
+        : undefined,
+      feesLifetime: isSet(object.feesLifetime)
+        ? globalThis.Number(object.feesLifetime)
+        : isSet(object.fees_lifetime)
+        ? globalThis.Number(object.fees_lifetime)
+        : undefined,
     };
   },
 
@@ -921,6 +1078,18 @@ export const Portfolio: MessageFns<Portfolio> = {
     if (message.realizedPnl !== undefined) {
       obj.realizedPnl = message.realizedPnl;
     }
+    if (message.totalPnlPct !== undefined) {
+      obj.totalPnlPct = message.totalPnlPct;
+    }
+    if (message.realizedPnlLifetime !== undefined) {
+      obj.realizedPnlLifetime = message.realizedPnlLifetime;
+    }
+    if (message.feesSinceSnapshot !== undefined) {
+      obj.feesSinceSnapshot = message.feesSinceSnapshot;
+    }
+    if (message.feesLifetime !== undefined) {
+      obj.feesLifetime = message.feesLifetime;
+    }
     return obj;
   },
 
@@ -941,6 +1110,10 @@ export const Portfolio: MessageFns<Portfolio> = {
     message.positions = object.positions?.map((e) => Position.fromPartial(e)) || [];
     message.accountId = object.accountId ?? "";
     message.realizedPnl = object.realizedPnl ?? undefined;
+    message.totalPnlPct = object.totalPnlPct ?? undefined;
+    message.realizedPnlLifetime = object.realizedPnlLifetime ?? undefined;
+    message.feesSinceSnapshot = object.feesSinceSnapshot ?? undefined;
+    message.feesLifetime = object.feesLifetime ?? undefined;
     return message;
   },
 };
@@ -970,6 +1143,8 @@ function createBasePosition(): Position {
     takeProfitOrderId: "",
     asOf: undefined,
     source: PositionSource.POSITION_SOURCE_UNSPECIFIED,
+    markSource: MarkSource.MARK_SOURCE_UNSPECIFIED,
+    markAsOf: undefined,
   };
 }
 
@@ -1043,6 +1218,12 @@ export const Position: MessageFns<Position> = {
     }
     if (message.source !== PositionSource.POSITION_SOURCE_UNSPECIFIED) {
       writer.uint32(184).int32(positionSourceToNumber(message.source));
+    }
+    if (message.markSource !== MarkSource.MARK_SOURCE_UNSPECIFIED) {
+      writer.uint32(192).int32(markSourceToNumber(message.markSource));
+    }
+    if (message.markAsOf !== undefined) {
+      Timestamp.encode(toTimestamp(message.markAsOf), writer.uint32(202).fork()).join();
     }
     return writer;
   },
@@ -1238,6 +1419,22 @@ export const Position: MessageFns<Position> = {
           message.source = positionSourceFromJSON(reader.int32());
           continue;
         }
+        case 24: {
+          if (tag !== 192) {
+            break;
+          }
+
+          message.markSource = markSourceFromJSON(reader.int32());
+          continue;
+        }
+        case 25: {
+          if (tag !== 202) {
+            break;
+          }
+
+          message.markAsOf = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1346,6 +1543,16 @@ export const Position: MessageFns<Position> = {
         ? fromJsonTimestamp(object.as_of)
         : undefined,
       source: isSet(object.source) ? positionSourceFromJSON(object.source) : PositionSource.POSITION_SOURCE_UNSPECIFIED,
+      markSource: isSet(object.markSource)
+        ? markSourceFromJSON(object.markSource)
+        : isSet(object.mark_source)
+        ? markSourceFromJSON(object.mark_source)
+        : MarkSource.MARK_SOURCE_UNSPECIFIED,
+      markAsOf: isSet(object.markAsOf)
+        ? fromJsonTimestamp(object.markAsOf)
+        : isSet(object.mark_as_of)
+        ? fromJsonTimestamp(object.mark_as_of)
+        : undefined,
     };
   },
 
@@ -1420,6 +1627,12 @@ export const Position: MessageFns<Position> = {
     if (message.source !== PositionSource.POSITION_SOURCE_UNSPECIFIED) {
       obj.source = positionSourceToJSON(message.source);
     }
+    if (message.markSource !== MarkSource.MARK_SOURCE_UNSPECIFIED) {
+      obj.markSource = markSourceToJSON(message.markSource);
+    }
+    if (message.markAsOf !== undefined) {
+      obj.markAsOf = message.markAsOf.toISOString();
+    }
     return obj;
   },
 
@@ -1451,6 +1664,8 @@ export const Position: MessageFns<Position> = {
     message.takeProfitOrderId = object.takeProfitOrderId ?? "";
     message.asOf = object.asOf ?? undefined;
     message.source = object.source ?? PositionSource.POSITION_SOURCE_UNSPECIFIED;
+    message.markSource = object.markSource ?? MarkSource.MARK_SOURCE_UNSPECIFIED;
+    message.markAsOf = object.markAsOf ?? undefined;
     return message;
   },
 };

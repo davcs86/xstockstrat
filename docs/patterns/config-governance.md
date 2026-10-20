@@ -106,6 +106,16 @@ without this convention, both look identical (fails.md 2026-07-01).
 
 Append-only log — one entry per feature that registered new keys. Newest first. Don't edit past entries; superseding a key's behavior gets a new entry, not a rewrite of the old one.
 
+### feature 240 — offline-account-full-pnl (xstockstrat-portfolio / xstockstrat-config)
+
+Bounds the last-close search window behind offline marks and Day P&L. Full-dotted `SCALAR_BOUNDS_REGISTRY` entry in
+`xstockstrat-config` (`configServiceImpl.ts`). **Seeding waiver (227 D2 precedent):** **unseeded**
+(consumed-with-default); `≤ 0` reads as the default and the key must be stored as `int`.
+
+| Key | Type | Default | Bounds | Notes |
+|---|---|---|---|---|
+| `portfolio.marketdata.last_close_lookback_days` | int | `21` | `[5,60]` | Calendar days the offline valuation's `BatchGetBars` (`allow_partial`) searches for a daily close; no bar in the window → `MARK_SOURCE_NONE`. |
+
 ### feature 231 — fix-after-hours-positions-priced (xstockstrat-marketdata / xstockstrat-config)
 
 Bounds the stored-close lookup that backs the new `Quote.mark_price` (one-sided after-hours quotes are marked at the

@@ -141,6 +141,8 @@ const SCALAR_BOUNDS_REGISTRY: Record<string, { minValue: number; maxValue: numbe
   // floor still covers Friday's 00:00-ET-stamped 1d bar on a holiday Monday evening.
   'marketdata.quotes.mark_timeout_ms': { minValue: 100, maxValue: 2500 },
   'marketdata.quotes.mark_close_max_age_hours': { minValue: 120, maxValue: 720 },
+  // feature 240: FR-5 last-close search window for offline marks (default 21 days).
+  'portfolio.marketdata.last_close_lookback_days': { minValue: 5, maxValue: 60 },
 };
 
 // feature 182: resolve a scalar-bounds entry for a config key whose DB `key` column may be full-dotted
