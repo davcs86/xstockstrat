@@ -1013,6 +1013,32 @@ type positionSyncPayload struct {
 	// RealizedPnl is the account-grain cumulative realized P&L, set ONLY by an offline ConfirmOrder
 	// recompute; a broker sync never carries it (nil) — the pointer's presence marks offline/broker.
 	RealizedPnl *float64 `json:"realized_pnl"`
+	// Offline-only P&L state (feature 230); absent on legacy events, which read as 0 / no fills.
+	RealizedCarried   *float64                `json:"realized_carried"`
+	FeesSinceSnapshot *float64                `json:"fees_since_snapshot"`
+	FeesCarried       *float64                `json:"fees_carried"`
+	RecentFills       []repository.RecentFill `json:"recent_fills"`
+}
+
+// offlineState is the offline P&L state an offline sync carries (absent fields → 0, fills → []).
+func (p *positionSyncPayload) offlineState() repository.OfflineState {
+	val := func(f *float64) float64 {
+		if f == nil {
+			return 0
+		}
+		return *f
+	}
+	fills := p.RecentFills
+	if fills == nil {
+		fills = []repository.RecentFill{}
+	}
+	return repository.OfflineState{
+		RealizedPnl:       val(p.RealizedPnl),
+		RealizedCarried:   val(p.RealizedCarried),
+		FeesSinceSnapshot: val(p.FeesSinceSnapshot),
+		FeesCarried:       val(p.FeesCarried),
+		RecentFills:       fills,
+	}
 }
 
 // ConsumePositionSyncs subscribes to ledger StreamEvents filtered on "account.positions.synced"
@@ -1130,7 +1156,7 @@ func (s *PortfolioService) processPositionSync(ctx context.Context, event *ledge
 	// Realized P&L upsert lands OUTSIDE the positions loop and AFTER DeletePositionsNotInSync so a
 	// flat/full-close recompute (positions: []) still records; the nil pointer keeps broker syncs out.
 	if sync.RealizedPnl != nil {
-		if err := s.repo.UpsertOfflineRealized(ctx, sync.AccountID, userID, sync.TradingMode, *sync.RealizedPnl); err != nil {
+		if err := s.repo.UpsertOfflineRealized(ctx, sync.AccountID, userID, sync.TradingMode, sync.offlineState()); err != nil {
 			slog.Warn("upsert offline realized failed", "account_id", sync.AccountID, "error", err)
 		}
 	}

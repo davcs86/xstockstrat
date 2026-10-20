@@ -720,3 +720,21 @@
 - The design blocking risk is cleared: the calendar is green before any Day P&L code (Step 19).
 - Files modified: `internal/marketsession/marketsession_test.go` (new).
 - Deviations: none.
+
+### Step 17 — service: portfolio sync consumer + user-scoped offline state [done]
+- `repository.RecentFill` (JSON `symbol/qty/price/filled_at`) and `repository.OfflineState` added.
+- `UpsertOfflineRealized(ctx, account, user, mode, OfflineState)`:
+  - writes all five state columns in one upsert;
+  - `recent_fills` is `json.Marshal` of a non-nil slice (`[]` when absent);
+  - now on `r.db.Exec`, so it is mockable.
+- `GetOfflineStates(ctx, userID, accountIDs)`: `WHERE user_id=$1 AND account_id = ANY($2)`; the JSONB
+  is scanned as `[]byte` and unmarshalled; empty ids → empty map, no query. `GetOfflineRealized` is kept
+  until Step 21.
+- `positionSyncPayload` gains `RealizedCarried`, `FeesSinceSnapshot` and `FeesCarried` (pointers) plus
+  `RecentFills`. The new `offlineState()` maps absent values to 0 / `[]` (FR-7 / AC-18 replay).
+- `processPositionSync` passes `sync.offlineState()` and only on the offline (`RealizedPnl != nil`)
+  path; the broker path is untouched.
+- TDD (with Step 18): red was compile (`RecentFill` / `OfflineState` undefined). Pre-change, the
+  service path would also have hit the nil `r.pool`. Green: all targeted tests pass with `-race`.
+- Files modified: `internal/repository/portfolio_repo.go`, `internal/service/portfolio_service.go`.
+- Deviations: none.

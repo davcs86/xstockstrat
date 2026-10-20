@@ -1068,7 +1068,7 @@ merge before this step is green** (design blocking risk).
 
 ### Step 17 — service: portfolio sync consumer + user-scoped offline state
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_service.go` — modify
