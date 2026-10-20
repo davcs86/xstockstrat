@@ -1555,7 +1555,7 @@ The coverage threshold (40%) must pass, and the 4 new `last_close_lookback_days`
 
 ### Step 24 — service: agent `fees` argument + new response fields
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify

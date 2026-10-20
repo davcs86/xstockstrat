@@ -901,3 +901,27 @@
 - TDD: N/A (registry entry).
 - Files modified: `src/grpc/configServiceImpl.ts`, `src/__tests__/setConfigScalarBounds.test.ts`.
 - Deviations: none.
+
+### Step 24 — service: agent `fees` argument + new response fields [done]
+- `manage_offline_account` gains `fees: float | None = None`, passed through on `confirm_order`.
+  Docstring: `filled_at` defaults to now on first confirm and is otherwise kept (hidden while NEW);
+  `fees` is cumulative and kept when omitted; `list_positions` lists the 5 new fields.
+- `client.confirm_offline_order(..., fees=None)` sets `req.fees` only when it is not None (presence).
+- `client.list_positions` uses `MessageToDict(..., always_print_fields_with_no_presence=True)`, so
+  zero-valued fields are present for all three position tools. This is the accepted design §5 change.
+- The `get_positions` / `get_positions_by_account_id` docstrings say "All non-optional fields are
+  present, including zeros; optional fields (e.g. `mark_as_of`) are omitted when unset".
+- `docs/runbooks/mcp-tools.md`:
+  - `fees` param row; reworded `filled_at`;
+  - `fees` on confirm/get/list orders;
+  - the 5 position fields on `list_positions` and both `get_positions*`;
+  - "all non-optional fields are present";
+  - Errors gain `INVALID_ARGUMENT` (negative fees) and `FAILED_PRECONDITION` (non-latest snapshot
+    `as_of` change).
+- Agent `CLAUDE.md` row 83 mentions confirm with fees. The tool count is unchanged (45);
+  `test_tools_endpoint.py` passes 9/9.
+- TDD (with Step 25): red was 4 failures (fees presence ×3; position zero fields absent); green 20/20,
+  then the full suite.
+- Files modified: `app/tools.py`, `app/client.py`, `docs/runbooks/mcp-tools.md`,
+  `services/xstockstrat-agent/CLAUDE.md`.
+- Deviations: none.

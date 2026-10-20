@@ -1334,7 +1334,8 @@ An offline account has no broker: orders are recorded by hand and their fills co
 | `client_order_id` | string | no | Idempotency nonce for `record_order` (auto-generated when omitted) |
 | `filled_qty` | float | `confirm_order` | Confirmed fill quantity |
 | `filled_avg_price` | float | `confirm_order` | Average fill price |
-| `filled_at` | string | no | ISO-8601 fill time (defaults to now) |
+| `filled_at` | string | no | ISO-8601 fill time. Defaults to now on first confirm; otherwise the previously recorded time is kept (not shown while `NEW`). Pass it when partial fills land on different sessions |
+| `fees` | float | no | Cumulative fees for the order (≥ 0); omitted keeps the recorded value; negative → `INVALID_ARGUMENT` (feature 230) |
 | `positions_json` | string | `snapshot_positions` | JSON array of baseline positions: `[{"symbol":"AAPL","qty":100,"avg_cost_per_share":150.00}, …]` |
 | `as_of` | string | no | ISO-8601 statement date for `snapshot_positions` (defaults to now) |
 | `client_snapshot_id` | string | no | Idempotency nonce for `snapshot_positions` (auto-generated when omitted) |
@@ -1344,7 +1345,9 @@ An offline account has no broker: orders are recorded by hand and their fills co
 - **confirm_order** → `{"order": …}` — status is **server-derived** (`NEW`/`PARTIALLY_FILLED`/`FILLED`),
   never echoed; re-confirming replaces the fill (idempotent recompute from all confirmed orders).
   The offline-only guard is enforced server-side from the persisted order — a broker account is
-  rejected `FAILED_PRECONDITION`.
+  rejected `FAILED_PRECONDITION`. The order carries `fees` (the cumulative total; never part of cost
+  basis); a `NEW` order (e.g. after a `filled_qty 0` un-confirm) shows neither `fees` nor `filled_at`
+  (feature 230).
 - **snapshot_positions** → `{"account_id": …, "committed_count": N, "rejected": [...], "warnings": [...]}`
   — set the effective-dated opening baseline from a brokerage statement (feature 163). The baseline
   seeds the offline fold: `position(symbol) = baseline_as_of(T0) + Σ fills(filled_at > T0)`. The
@@ -1353,14 +1356,19 @@ An offline account has no broker: orders are recorded by hand and their fills co
   to now; `client_snapshot_id` is an idempotency nonce (auto-generated when omitted).
 - **get_order** / **list_orders** / **list_positions** → read paths for statement reconciliation.
   `list_positions` returns per-position provenance: `source` (`ORDERS`/`BASELINE`/`MIXED`) and `as_of`
-  (baseline effective date, unset for pure-order positions) — feature 163.
+  (baseline effective date, unset for pure-order positions) — feature 163. `get_order` / `list_orders`
+  echo each order's `fees` (unset for broker orders). `list_positions` also returns `day_pnl`,
+  `day_pnl_pct`, `unrealized_pnl_pct` (signed over `|cost_basis|`), `mark_source`
+  (`MARK_SOURCE_QUOTE`/`LAST_CLOSE`/`BROKER`/`NONE`) and `mark_as_of` (quote time or last-close
+  session date) — feature 230. All non-optional fields are present, including zeros.
 
 Returns the shapes above. This is the platform capability behind a monthly statement-reconciliation
 task: correct drift by recording/confirming orders or snapshotting a brokerage statement baseline.
 
 **Errors:** `unknown operation '<op>'`; missing required args per operation; `account or order not
-found`; `permission denied` (non-owner); `FAILED_PRECONDITION` (confirm on a broker account);
-`RuntimeError` → no verified caller claims.
+found`; `permission denied` (non-owner); `FAILED_PRECONDITION` (confirm on a broker account, or a
+`snapshot_positions` that changes the `as_of` of a snapshot that is not the latest); `INVALID_ARGUMENT`
+(negative `fees`); `RuntimeError` → no verified caller claims.
 
 ---
 
@@ -1430,8 +1438,10 @@ positions.
 | `page_token` | string | `""` | Opaque token from a prior call's `next_page_token` |
 
 Returns `{"positions": [...], "next_page_token": "<str>"}` — each position uses snake_case proto
-field names. Fields with zero/default values may be absent (proto3 serialization convention). An
-empty `next_page_token` means no more pages.
+field names; all non-optional fields are present, including zeros (optional fields such as
+`mark_as_of` are omitted when unset). Each position carries `day_pnl`, `day_pnl_pct`,
+`unrealized_pnl_pct`, `mark_source` and `mark_as_of` (feature 230). An empty `next_page_token` means
+no more pages.
 
 **Errors:** `RuntimeError` → no verified caller claims.
 
@@ -1449,7 +1459,8 @@ the backend returns an empty list (no data leakage).
 | `limit` | int | `0` | Max positions per page; 0 = server default (100, max 500) |
 | `page_token` | string | `""` | Opaque token from a prior call's `next_page_token` |
 
-Returns `{"positions": [...], "next_page_token": "<str>"}` — same shape as `get_positions`.
+Returns `{"positions": [...], "next_page_token": "<str>"}` — same shape as `get_positions`
+(including `day_pnl`, `day_pnl_pct`, `unrealized_pnl_pct`, `mark_source` and `mark_as_of`).
 
 **Errors:** `ValueError` → `account_id` is empty; `RuntimeError` → no verified caller claims.
 
