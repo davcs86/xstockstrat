@@ -894,6 +894,9 @@ func (s *TradingService) ConfirmOrder(ctx context.Context, req *tradingv1.Confir
 	if req.FilledQty < 0 {
 		return nil, grpcstatus.Errorf(codes.InvalidArgument, "filled_qty must be >= 0")
 	}
+	if req.Fees != nil && (*req.Fees < 0 || math.IsNaN(*req.Fees) || math.IsInf(*req.Fees, 0)) {
+		return nil, grpcstatus.Errorf(codes.InvalidArgument, "fees must be >= 0")
+	}
 
 	order, err := s.repo.GetOrder(ctx, req.OrderId)
 	if err != nil {
@@ -920,11 +923,21 @@ func (s *TradingService) ConfirmOrder(ctx context.Context, req *tradingv1.Confir
 	order.FilledQty = req.FilledQty
 	order.FilledAvgPrice = req.FilledAvgPrice
 	order.Status = deriveOfflineStatus(req.FilledQty, order.Qty)
-	filledAt := time.Now()
-	if req.FilledAt != nil {
-		filledAt = req.FilledAt.AsTime()
+	// Fees are cumulative per order: a re-confirm replaces them, omitting them keeps the stored value.
+	if req.Fees != nil {
+		order.Fees = proto.Float64(*req.Fees)
+	} else if order.Fees == nil {
+		order.Fees = proto.Float64(0)
 	}
-	order.FilledAt = timestamppb.New(filledAt)
+	// filled_at survives un-confirm and bare re-confirm, so an edit never moves a fill across a snapshot.
+	isNew := order.Status == tradingv1.OrderStatus_ORDER_STATUS_NEW
+	switch {
+	case req.FilledAt != nil && !isNew:
+		order.FilledAt = req.FilledAt
+	case order.FilledAt != nil:
+	case !isNew:
+		order.FilledAt = timestamppb.Now()
+	}
 	order.UpdatedAt = timestamppb.New(time.Now())
 
 	if err := s.repo.UpsertOrder(ctx, order); err != nil {
@@ -939,7 +952,9 @@ func (s *TradingService) ConfirmOrder(ctx context.Context, req *tradingv1.Confir
 		slog.Warn("ConfirmOrder: recompute failed; positions.synced not emitted",
 			"account_id", order.AccountId, "error", err)
 	}
-	return order, nil
+	resp := proto.Clone(order).(*tradingv1.Order)
+	hideUnconfirmedFill(resp)
+	return resp, nil
 }
 
 // recomputeAndEmitOfflinePositions recomputes an offline account's net positions and emits
@@ -1494,6 +1509,7 @@ func (s *TradingService) GetOrder(ctx context.Context, req *tradingv1.GetOrderRe
 	if ok {
 		order = proto.Clone(order).(*tradingv1.Order)
 		normalizeFilledQty(order)
+		hideUnconfirmedFill(order)
 		return order, nil
 	}
 	order, err := s.repo.GetOrder(ctx, req.OrderId)
@@ -1501,6 +1517,7 @@ func (s *TradingService) GetOrder(ctx context.Context, req *tradingv1.GetOrderRe
 		return nil, fmt.Errorf("order %s not found", req.OrderId)
 	}
 	normalizeFilledQty(order)
+	hideUnconfirmedFill(order)
 	return order, nil
 }
 
@@ -1546,12 +1563,14 @@ func (s *TradingService) ListOrders(ctx context.Context, req *tradingv1.ListOrde
 		s.mu.Unlock()
 		for _, o := range mem {
 			normalizeFilledQty(o)
+			hideUnconfirmedFill(o)
 		}
 		page, pageResp := paginateOrders(mem, req.Page)
 		return &tradingv1.ListOrdersResponse{Orders: page, Page: pageResp}, nil
 	}
 	for _, o := range orders {
 		normalizeFilledQty(o)
+		hideUnconfirmedFill(o)
 	}
 	page, pageResp := paginateOrders(orders, req.Page)
 	return &tradingv1.ListOrdersResponse{Orders: page, Page: pageResp}, nil
@@ -3524,6 +3543,14 @@ func (s *TradingService) buildBrokerRequest(req *tradingv1.PlaceOrderRequest) br
 		StopPrice:    req.StopPrice,
 		TrailPrice:   req.TrailPrice,
 		TrailPercent: req.TrailPercent,
+	}
+}
+
+// hideUnconfirmedFill clears fees/filled_at on a NEW offline order; call only on a response-owned copy.
+func hideUnconfirmedFill(o *tradingv1.Order) {
+	if o != nil && o.BrokerType == commonv1.BrokerType_BROKER_TYPE_OFFLINE &&
+		o.Status == tradingv1.OrderStatus_ORDER_STATUS_NEW {
+		o.Fees, o.FilledAt = nil, nil
 	}
 }
 

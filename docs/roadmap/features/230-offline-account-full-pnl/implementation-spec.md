@@ -575,7 +575,7 @@ The service package compiles from Step 7 on, so `go vet ./...` covers it. The fu
 
 ### Step 9 — service: trading ConfirmOrder — fees, filled_at rules, NEW-order masking
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading.go` — modify

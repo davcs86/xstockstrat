@@ -548,3 +548,23 @@
 - Files modified: `internal/repository/offline_baseline_repo_test.go` (new),
   `internal/service/trading_offline_test.go`.
 - Deviations: none.
+
+### Step 9 — service: trading ConfirmOrder — fees, filled_at rules, NEW-order masking [done]
+- Fee validation runs before the load: `< 0`/NaN/±Inf → `InvalidArgument` "fees must be >= 0", so it
+  wins over the broker `FailedPrecondition`.
+- Fees: a supplied value replaces the stored one; omitted keeps it; nil defaults to 0.
+- `filled_at`:
+  - a supplied value is used only when the order isn't NEW;
+  - otherwise a stored value is kept;
+  - otherwise `now` when not NEW, else nil.
+- `hideUnconfirmedFill` sits next to `normalizeFilledQty`. It is OFFLINE+NEW only and runs at:
+  - both GetOrder paths;
+  - both ListOrders loops;
+  - the ConfirmOrder response, a clone, so `s.orders` keeps the unmasked order.
+- `StreamOrderUpdates` is untouched (finding for Step 28).
+- TDD (with Step 10):
+  - red: 7 tests failed for the right reasons. A temporary no-op `hideUnconfirmedFill` stub turned the
+    compile red into a behavioural one; the stub was removed in green.
+  - green: 9/9 with `-race`.
+- Files modified: `internal/service/trading.go`.
+- Deviations: none.
