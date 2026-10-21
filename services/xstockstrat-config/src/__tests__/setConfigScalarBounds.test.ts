@@ -277,6 +277,8 @@ describe('signal_decay_half_life_hours write-time scalar bounds', () => {
     { ns: 'marketdata', key: 'marketdata.quotes.mark_timeout_ms', field: 'intVal', min: 100, max: 2500 },
     { ns: 'marketdata', key: 'quotes.mark_close_max_age_hours', field: 'intVal', min: 120, max: 720 },
     { ns: 'marketdata', key: 'marketdata.quotes.mark_close_max_age_hours', field: 'intVal', min: 120, max: 720 },
+    { ns: 'portfolio', key: 'marketdata.last_close_lookback_days', field: 'intVal', min: 5, max: 60 },
+    { ns: 'portfolio', key: 'portfolio.marketdata.last_close_lookback_days', field: 'intVal', min: 5, max: 60 },
   ];
 
   for (const { ns, key, field, min, max } of TIMEOUT_KEY_FORMS) {

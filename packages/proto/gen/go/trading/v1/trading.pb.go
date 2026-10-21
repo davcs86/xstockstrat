@@ -448,6 +448,7 @@ type Order struct {
 	// offline confirmations (feature 157) use the operator-supplied time (server-defaulted to now
 	// when unset). NULL for a NEW/unconfirmed order and every historical order.
 	FilledAt      *timestamppb.Timestamp `protobuf:"bytes,22,opt,name=filled_at,json=filledAt,proto3" json:"filled_at,omitempty"`
+	Fees          *float64               `protobuf:"fixed64,23,opt,name=fees,proto3,oneof" json:"fees,omitempty"` // offline orders only; unset for broker orders and while NEW
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -634,6 +635,13 @@ func (x *Order) GetFilledAt() *timestamppb.Timestamp {
 		return x.FilledAt
 	}
 	return nil
+}
+
+func (x *Order) GetFees() float64 {
+	if x != nil && x.Fees != nil {
+		return *x.Fees
+	}
+	return 0
 }
 
 type PlaceOrderRequest struct {
@@ -973,7 +981,8 @@ type ConfirmOrderRequest struct {
 	FilledAvgPrice float64                `protobuf:"fixed64,3,opt,name=filled_avg_price,json=filledAvgPrice,proto3" json:"filled_avg_price,omitempty"`
 	FilledAt       *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=filled_at,json=filledAt,proto3" json:"filled_at,omitempty"` // optional; server defaults to now when unset
 	// Deprecated: Marked as deprecated in trading/v1/trading.proto.
-	UserId        string `protobuf:"bytes,5,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"` // DEPRECATED: caller identity (ownership guard) resolved from the x-user-id header; body value ignored.
+	UserId        string   `protobuf:"bytes,5,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"` // DEPRECATED: caller identity (ownership guard) resolved from the x-user-id header; body value ignored.
+	Fees          *float64 `protobuf:"fixed64,6,opt,name=fees,proto3,oneof" json:"fees,omitempty"`           // cumulative total for the order (>= 0); omitted = keep recorded fees
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1042,6 +1051,13 @@ func (x *ConfirmOrderRequest) GetUserId() string {
 		return x.UserId
 	}
 	return ""
+}
+
+func (x *ConfirmOrderRequest) GetFees() float64 {
+	if x != nil && x.Fees != nil {
+		return *x.Fees
+	}
+	return 0
 }
 
 type ListOrdersRequest struct {
@@ -2334,7 +2350,7 @@ var File_trading_v1_trading_proto protoreflect.FileDescriptor
 
 const file_trading_v1_trading_proto_rawDesc = "" +
 	"\n" +
-	"\x18trading/v1/trading.proto\x12\x16xstockstrat.trading.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x16common/v1/common.proto\"\xff\a\n" +
+	"\x18trading/v1/trading.proto\x12\x16xstockstrat.trading.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x16common/v1/common.proto\"\xa1\b\n" +
 	"\x05Order\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12&\n" +
 	"\x0fclient_order_id\x18\x02 \x01(\tR\rclientOrderId\x12\x16\n" +
@@ -2367,7 +2383,9 @@ const file_trading_v1_trading_proto_rawDesc = "" +
 	"\vbroker_type\x18\x14 \x01(\x0e2!.xstockstrat.common.v1.BrokerTypeR\n" +
 	"brokerType\x12F\n" +
 	"\fintent_state\x18\x15 \x01(\x0e2#.xstockstrat.trading.v1.IntentStateR\vintentState\x127\n" +
-	"\tfilled_at\x18\x16 \x01(\v2\x1a.google.protobuf.TimestampR\bfilledAt\"\xb2\x05\n" +
+	"\tfilled_at\x18\x16 \x01(\v2\x1a.google.protobuf.TimestampR\bfilledAt\x12\x17\n" +
+	"\x04fees\x18\x17 \x01(\x01H\x00R\x04fees\x88\x01\x01B\a\n" +
+	"\x05_fees\"\xb2\x05\n" +
 	"\x11PlaceOrderRequest\x12\x16\n" +
 	"\x06symbol\x18\x01 \x01(\tR\x06symbol\x125\n" +
 	"\x04side\x18\x02 \x01(\x0e2!.xstockstrat.trading.v1.OrderSideR\x04side\x12@\n" +
@@ -2402,14 +2420,16 @@ const file_trading_v1_trading_proto_rawDesc = "" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x123\n" +
 	"\x05order\x18\x02 \x01(\v2\x1d.xstockstrat.trading.v1.OrderR\x05order\",\n" +
 	"\x0fGetOrderRequest\x12\x19\n" +
-	"\border_id\x18\x01 \x01(\tR\aorderId\"\xcf\x01\n" +
+	"\border_id\x18\x01 \x01(\tR\aorderId\"\xf1\x01\n" +
 	"\x13ConfirmOrderRequest\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x1d\n" +
 	"\n" +
 	"filled_qty\x18\x02 \x01(\x01R\tfilledQty\x12(\n" +
 	"\x10filled_avg_price\x18\x03 \x01(\x01R\x0efilledAvgPrice\x127\n" +
 	"\tfilled_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\bfilledAt\x12\x1b\n" +
-	"\auser_id\x18\x05 \x01(\tB\x02\x18\x01R\x06userId\"\xf1\x03\n" +
+	"\auser_id\x18\x05 \x01(\tB\x02\x18\x01R\x06userId\x12\x17\n" +
+	"\x04fees\x18\x06 \x01(\x01H\x00R\x04fees\x88\x01\x01B\a\n" +
+	"\x05_fees\"\xf1\x03\n" +
 	"\x11ListOrdersRequest\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x1f\n" +
 	"\vstrategy_id\x18\x02 \x01(\tR\n" +
@@ -2709,7 +2729,9 @@ func file_trading_v1_trading_proto_init() {
 	if File_trading_v1_trading_proto != nil {
 		return
 	}
+	file_trading_v1_trading_proto_msgTypes[0].OneofWrappers = []any{}
 	file_trading_v1_trading_proto_msgTypes[1].OneofWrappers = []any{}
+	file_trading_v1_trading_proto_msgTypes[5].OneofWrappers = []any{}
 	file_trading_v1_trading_proto_msgTypes[9].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

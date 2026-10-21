@@ -2932,3 +2932,20 @@ ambiguity is logged here).
 - **Rule it implies**: Never derive a price from a quote without requiring both sides > 0; own the valuation mark in
   one service. A staleness or data-age window that decides *whether* something is valued is policy, so it is a config
   key, not a code invariant (F-07; same ruling as feature 071).
+
+### 2026-10-20 — offline-account-full-pnl — assumption
+- **Mistake**: Two design rounds treated code paths as live without tracing them from the RPC registration.
+  - Round 4 listed `TradingService.StreamOrderUpdates` as a response site that needed masking. No live
+    RPC reaches it: gRPC registers only the handler adapter, and both stream handlers call
+    `SubscribeOrderUpdates`.
+  - Round 2 put a fixed 2.5s budget on `BatchGetBars` for every caller. That would have permanently
+    starved analysis's 400-day cold fetches, because the ingester then marks those symbols warm with
+    about 48h of bars.
+- **Evidence**: `docs/roadmap/features/240-offline-account-full-pnl/context.md`, design round 2 and
+  round 4 gates; `services/xstockstrat-trading/cmd/server/main.go:143`;
+  `services/xstockstrat-trading/internal/handler/trading.go:117-134`.
+- **Rule it implies**:
+  - Before listing a service method as a response site, trace it from gRPC registration through the
+    handler.
+  - Before changing a shared RPC's failure or budget behaviour, enumerate every caller's request shape
+    (window size, deadline) and make the change opt-in when the callers differ.

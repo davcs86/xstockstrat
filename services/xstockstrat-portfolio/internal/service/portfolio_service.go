@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -58,6 +60,9 @@ type PortfolioService struct {
 	// stops holds resting-stop prices learned from ledger order events, in-memory and rebuilt on boot
 	// (HydrateStops) — deliberately no portfolio→trading edge, which would create a trading↔portfolio cycle.
 	stops *stopStore
+
+	// now is the offline valuation clock; nil means time.Now.
+	now func() time.Time
 }
 
 // stopNearThresholdPct — a position whose stop sits within this fraction of current price is
@@ -438,8 +443,7 @@ func unvaluedSymbols(positions []*portfoliov1.Position) []string {
 }
 
 func (s *PortfolioService) enrichPositions(ctx context.Context, positions []*portfoliov1.Position) {
-	quotes, _ := s.latestQuotesFor(ctx, unvaluedSymbols(positions))
-	applyQuotes(positions, quotes)
+	s.valueRead(ctx, positions, nil)
 	s.enrichRisk(ctx, positions)
 }
 
@@ -456,12 +460,14 @@ func markOf(q *marketdatav1.Quote) (float64, bool) {
 }
 
 // applyQuotes mark-values the positions the broker did not value; a missing or unusable quote leaves the position
-// unenriched (never a fabricated price, never a one-sided average).
+// unenriched (never a fabricated price, never a one-sided average) and labelled MARK_SOURCE_NONE.
 func applyQuotes(positions []*portfoliov1.Position, quotes map[string]*marketdatav1.Quote) {
 	for _, p := range positions {
 		if p.CurrentPrice > 0 {
+			p.MarkSource = portfoliov1.MarkSource_MARK_SOURCE_BROKER
 			continue
 		}
+		p.MarkSource = portfoliov1.MarkSource_MARK_SOURCE_NONE
 		quote, ok := quotes[p.Symbol]
 		if !ok {
 			continue // missing quote → same skip as the old per-position error path
@@ -471,7 +477,9 @@ func applyQuotes(positions []*portfoliov1.Position, quotes map[string]*marketdat
 			slog.Warn("latest quote has no usable price", "symbol", p.Symbol, "ask", quote.AskPrice, "bid", quote.BidPrice, "mark", quote.GetMarkPrice())
 			continue
 		}
-		enrichPosition(p, price)
+		markAt(p, price)
+		p.MarkSource = portfoliov1.MarkSource_MARK_SOURCE_QUOTE
+		p.MarkAsOf = quote.Time
 	}
 }
 
@@ -554,14 +562,13 @@ func (s *PortfolioService) HydrateStops(ctx context.Context) {
 	slog.Info("HydrateStops: replayed resting stops from ledger", "count", n)
 }
 
-// enrichPosition fills current price / market value / unrealized P&L on p from a markOf price.
-// UnrealizedPnlPct is guarded against zero cost basis.
-func enrichPosition(p *portfoliov1.Position, price float64) {
+// markAt values p at price. The % is over |cost basis| so a short reports a correctly signed return.
+func markAt(p *portfoliov1.Position, price float64) {
 	p.CurrentPrice = price
 	p.MarketValue = price * p.Qty
 	p.UnrealizedPnl = p.MarketValue - p.CostBasis
-	if p.CostBasis > 0 {
-		p.UnrealizedPnlPct = p.UnrealizedPnl / p.CostBasis
+	if p.CostBasis != 0 {
+		p.UnrealizedPnlPct = p.UnrealizedPnl / math.Abs(p.CostBasis)
 	}
 }
 
@@ -577,7 +584,8 @@ func sideOf(qty float64) portfoliov1.PositionSide {
 	}
 }
 
-// GetPortfolio aggregates all open positions with live prices.
+// GetPortfolio aggregates the caller's open positions with live prices and account-level P&L: one account
+// when account_id is set, else every account the caller has (no PermissionDenied; unowned reads empty).
 func (s *PortfolioService) GetPortfolio(ctx context.Context, req *portfoliov1.GetPortfolioRequest) (*portfoliov1.Portfolio, error) {
 	// Caller identity comes from the trusted x-user-id header, never the deprecated request-body user_id.
 	userID := middleware.FromContext(ctx).UserID
@@ -585,25 +593,87 @@ func (s *PortfolioService) GetPortfolio(ctx context.Context, req *portfoliov1.Ge
 	if err != nil {
 		return nil, err
 	}
-	s.enrichPositions(ctx, positions)
 
-	var totalValue float64
-	for _, p := range positions {
-		totalValue += p.MarketValue
+	balances := map[string]*repository.AccountBalance{}
+	if list, err := s.repo.ListAccountBalancesByUser(ctx, userID); err != nil {
+		slog.Warn("GetPortfolio: list account balances failed", "user_id", userID, "error", err)
+	} else {
+		for _, a := range list {
+			bal := a.Balance
+			balances[a.AccountID] = &bal
+		}
 	}
+	var scope []string
+	if id := req.GetAccountId(); id != "" {
+		scope = []string{id}
+	} else {
+		for id := range balances {
+			scope = append(scope, id)
+		}
+		if ids, err := s.repo.ListOfflineAccountIdsByUser(ctx, userID); err != nil {
+			slog.Warn("GetPortfolio: list offline account ids failed", "user_id", userID, "error", err)
+		} else {
+			scope = append(scope, ids...)
+		}
+		for _, p := range positions {
+			scope = append(scope, p.AccountId)
+		}
+		scope = dedupe(scope)
+		sort.Strings(scope)
+	}
+	var offlineCandidates []string
+	for _, id := range scope {
+		if balances[id] == nil {
+			offlineCandidates = append(offlineCandidates, id)
+		}
+	}
+	val := s.valueRead(ctx, positions, offlineCandidates)
+	s.enrichRisk(ctx, positions)
 
 	portfolio := &portfoliov1.Portfolio{
 		PortfolioId: userID,
 		UserId:      userID,
-		Equity:      totalValue,
 		UpdatedAt:   timestamppb.Now(),
 		Positions:   positions,
 		AccountId:   req.GetAccountId(),
 	}
-	// Offline-account realized P&L set with proto3 presence so an offline $0 differs from a broker unset.
-	// Populated on BOTH read paths (here + buildAccountPortfolio) for parity.
-	if v, ok, err := s.repo.GetOfflineRealized(ctx, req.GetAccountId()); err == nil && ok {
-		portfolio.RealizedPnl = proto.Float64(v)
+	byAccount := map[string][]*portfoliov1.Position{}
+	for _, p := range positions {
+		byAccount[p.AccountId] = append(byAccount[p.AccountId], p)
+	}
+	if len(scope) == 1 && req.GetAccountId() != "" {
+		applyAccountPnL(portfolio, positions, balances[scope[0]], val.state(scope[0]), val.accounts[scope[0]])
+		return portfolio, nil
+	}
+
+	var dayPnl, prior, totalPnl, absCost, equity float64
+	allOffline := len(scope) > 0
+	for _, id := range scope {
+		acct := &portfoliov1.Portfolio{}
+		st := val.state(id)
+		applyAccountPnL(acct, byAccount[id], balances[id], st, val.accounts[id])
+		dayPnl += acct.DayPnl
+		totalPnl += acct.TotalPnl
+		switch {
+		case balances[id] != nil:
+			prior += balances[id].LastEquity
+			allOffline = false
+		case st != nil:
+			prior += val.accounts[id].base
+			absCost += pricedAbsCost(byAccount[id])
+		default:
+			allOffline = false
+		}
+	}
+	for _, p := range positions {
+		equity += p.MarketValue
+	}
+	portfolio.Equity = equity
+	portfolio.DayPnl = dayPnl
+	portfolio.DayPnlPct = ratio(dayPnl, prior)
+	portfolio.TotalPnl = totalPnl
+	if allOffline {
+		portfolio.TotalPnlPct = proto.Float64(ratio(totalPnl, absCost))
 	}
 	return portfolio, nil
 }
@@ -1013,6 +1083,32 @@ type positionSyncPayload struct {
 	// RealizedPnl is the account-grain cumulative realized P&L, set ONLY by an offline ConfirmOrder
 	// recompute; a broker sync never carries it (nil) — the pointer's presence marks offline/broker.
 	RealizedPnl *float64 `json:"realized_pnl"`
+	// Offline-only P&L state (feature 240); absent on legacy events, which read as 0 / no fills.
+	RealizedCarried   *float64                `json:"realized_carried"`
+	FeesSinceSnapshot *float64                `json:"fees_since_snapshot"`
+	FeesCarried       *float64                `json:"fees_carried"`
+	RecentFills       []repository.RecentFill `json:"recent_fills"`
+}
+
+// offlineState is the offline P&L state an offline sync carries (absent fields → 0, fills → []).
+func (p *positionSyncPayload) offlineState() repository.OfflineState {
+	val := func(f *float64) float64 {
+		if f == nil {
+			return 0
+		}
+		return *f
+	}
+	fills := p.RecentFills
+	if fills == nil {
+		fills = []repository.RecentFill{}
+	}
+	return repository.OfflineState{
+		RealizedPnl:       val(p.RealizedPnl),
+		RealizedCarried:   val(p.RealizedCarried),
+		FeesSinceSnapshot: val(p.FeesSinceSnapshot),
+		FeesCarried:       val(p.FeesCarried),
+		RecentFills:       fills,
+	}
 }
 
 // ConsumePositionSyncs subscribes to ledger StreamEvents filtered on "account.positions.synced"
@@ -1130,7 +1226,7 @@ func (s *PortfolioService) processPositionSync(ctx context.Context, event *ledge
 	// Realized P&L upsert lands OUTSIDE the positions loop and AFTER DeletePositionsNotInSync so a
 	// flat/full-close recompute (positions: []) still records; the nil pointer keeps broker syncs out.
 	if sync.RealizedPnl != nil {
-		if err := s.repo.UpsertOfflineRealized(ctx, sync.AccountID, userID, sync.TradingMode, *sync.RealizedPnl); err != nil {
+		if err := s.repo.UpsertOfflineRealized(ctx, sync.AccountID, userID, sync.TradingMode, sync.offlineState()); err != nil {
 			slog.Warn("upsert offline realized failed", "account_id", sync.AccountID, "error", err)
 		}
 	}
@@ -1226,38 +1322,64 @@ func (s *PortfolioService) processBalanceSync(ctx context.Context, event *ledger
 	}
 }
 
-// buildAccountPortfolio assembles a Portfolio for one account from already-enriched positions. The broker is
-// authoritative for cash, buying power, and equity; when bal is nil, equity falls back to summed market value.
-func (s *PortfolioService) buildAccountPortfolio(ctx context.Context, accountID string, positions []*portfoliov1.Position, bal *repository.AccountBalance) *portfoliov1.Portfolio {
-	var positionsValue, unrealizedPnl float64
-	for _, p := range positions {
-		positionsValue += p.MarketValue
-		unrealizedPnl += p.UnrealizedPnl
-	}
-
+// buildAccountPortfolio assembles a Portfolio for one account from already-valued positions.
+func buildAccountPortfolio(accountID string, positions []*portfoliov1.Position, bal *repository.AccountBalance, st *repository.OfflineState, acct accountVal) *portfoliov1.Portfolio {
 	portfolio := &portfoliov1.Portfolio{
 		PortfolioId: accountID,
 		AccountId:   accountID,
-		Equity:      positionsValue,
-		TotalPnl:    unrealizedPnl,
 		UpdatedAt:   timestamppb.Now(),
 		Positions:   positions,
 	}
+	applyAccountPnL(portfolio, positions, bal, st, acct)
+	return portfolio
+}
+
+// applyAccountPnL sets one account's equity and P&L. A broker account is authoritative for cash, buying power,
+// equity and Day P&L; an offline account (st != nil) excludes unpriced positions and carries FR-1/FR-2/FR-3/FR-4.
+func applyAccountPnL(p *portfoliov1.Portfolio, positions []*portfoliov1.Position, bal *repository.AccountBalance, st *repository.OfflineState, acct accountVal) {
+	var positionsValue, unrealizedPnl float64
+	for _, pos := range positions {
+		if st != nil && pos.MarkSource == portfoliov1.MarkSource_MARK_SOURCE_NONE {
+			continue
+		}
+		positionsValue += pos.MarketValue
+		unrealizedPnl += pos.UnrealizedPnl
+	}
+	p.Equity = positionsValue
+	p.TotalPnl = unrealizedPnl
 	if bal != nil {
-		portfolio.Cash = bal.Cash
-		portfolio.BuyingPower = bal.BuyingPower
-		portfolio.Equity = bal.Equity
-		portfolio.DayPnl = bal.Equity - bal.LastEquity
+		p.Cash = bal.Cash
+		p.BuyingPower = bal.BuyingPower
+		p.Equity = bal.Equity
+		p.DayPnl = bal.Equity - bal.LastEquity
 		if bal.LastEquity > 0 {
-			portfolio.DayPnlPct = portfolio.DayPnl / bal.LastEquity
+			p.DayPnlPct = p.DayPnl / bal.LastEquity
+		}
+		return
+	}
+	if st == nil {
+		return
+	}
+	lifetime := st.RealizedCarried + st.RealizedPnl
+	p.DayPnl = acct.dayPnl
+	p.DayPnlPct = ratio(acct.dayPnl, acct.base)
+	p.TotalPnl = lifetime + unrealizedPnl
+	p.TotalPnlPct = proto.Float64(ratio(p.TotalPnl, pricedAbsCost(positions)))
+	p.RealizedPnl = proto.Float64(st.RealizedPnl)
+	p.RealizedPnlLifetime = proto.Float64(lifetime)
+	p.FeesSinceSnapshot = proto.Float64(st.FeesSinceSnapshot)
+	p.FeesLifetime = proto.Float64(st.FeesCarried + st.FeesSinceSnapshot)
+}
+
+// pricedAbsCost is Σ|cost_basis| over priced positions, the total-return denominator (never nets long/short).
+func pricedAbsCost(positions []*portfoliov1.Position) float64 {
+	var sum float64
+	for _, p := range positions {
+		if p.MarkSource != portfoliov1.MarkSource_MARK_SOURCE_NONE {
+			sum += math.Abs(p.CostBasis)
 		}
 	}
-	// Offline-account realized P&L set with proto3 presence so an offline $0 differs from a broker unset;
-	// populated identically in GetPortfolio for parity. Broker accounts have no row → left unset.
-	if v, ok, err := s.repo.GetOfflineRealized(ctx, accountID); err == nil && ok {
-		portfolio.RealizedPnl = proto.Float64(v)
-	}
-	return portfolio
+	return sum
 }
 
 // ListPortfolios returns a Portfolio per broker account: a specific account_id returns just that one;
@@ -1288,9 +1410,14 @@ func (s *PortfolioService) ListPortfolios(ctx context.Context, req *portfoliov1.
 		if err != nil {
 			return nil, err
 		}
-		s.enrichPositions(ctx, positions)
+		var candidates []string
+		if bal == nil {
+			candidates = []string{accountID}
+		}
+		val := s.valueRead(ctx, positions, candidates)
+		s.enrichRisk(ctx, positions)
 		return &portfoliov1.ListPortfoliosResponse{
-			Portfolios: []*portfoliov1.Portfolio{s.buildAccountPortfolio(ctx, accountID, positions, bal)},
+			Portfolios: []*portfoliov1.Portfolio{buildAccountPortfolio(accountID, positions, bal, val.state(accountID), val.accounts[accountID])},
 		}, nil
 	}
 
@@ -1317,11 +1444,13 @@ func (s *PortfolioService) ListPortfolios(ctx context.Context, req *portfoliov1.
 	}
 
 	// Offline accounts have no account_balances row, so append them separately for combined-view parity.
-	// A nil balance yields 0 cash/BP/day-P&L and equity = summed market value; a lookup failure is non-fatal.
+	// A nil balance yields 0 cash/BP and equity = summed market value; a lookup failure is non-fatal.
+	var offlineAppended []string
 	if offlineIDs, err := s.repo.ListOfflineAccountIdsByUser(ctx, userID); err != nil {
 		slog.Warn("ListPortfolios: list offline account ids failed", "user_id", userID, "error", err)
 	} else {
-		for _, id := range offlineIDsToAppend(balanceIDs, offlineIDs) {
+		offlineAppended = offlineIDsToAppend(balanceIDs, offlineIDs)
+		for _, id := range offlineAppended {
 			positions, err := s.repo.ListPositionsByAccount(ctx, id, "")
 			if err != nil {
 				slog.Warn("ListPortfolios: build offline account portfolio failed", "account_id", id, "error", err)
@@ -1331,17 +1460,16 @@ func (s *PortfolioService) ListPortfolios(ctx context.Context, req *portfoliov1.
 		}
 	}
 
-	// One quote batch (one deadline, one price per symbol) across every account — C-10(b) parity.
+	// One shared valuation (one quote batch, one bars batch) across every account — C-10(b) parity.
 	var all []*portfoliov1.Position
 	for _, a := range accts {
 		all = append(all, a.positions...)
 	}
-	quotes, _ := s.latestQuotesFor(ctx, unvaluedSymbols(all))
+	val := s.valueRead(ctx, all, offlineAppended)
 	portfolios := make([]*portfoliov1.Portfolio, 0, len(accts))
 	for _, a := range accts {
-		applyQuotes(a.positions, quotes)
 		s.enrichRisk(ctx, a.positions)
-		portfolios = append(portfolios, s.buildAccountPortfolio(ctx, a.id, a.positions, a.bal))
+		portfolios = append(portfolios, buildAccountPortfolio(a.id, a.positions, a.bal, val.state(a.id), val.accounts[a.id]))
 	}
 	return &portfoliov1.ListPortfoliosResponse{Portfolios: portfolios}, nil
 }

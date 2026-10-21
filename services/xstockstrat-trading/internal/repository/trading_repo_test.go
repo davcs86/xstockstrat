@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/pashagolub/pgxmock/v4"
+	"google.golang.org/protobuf/proto"
 
 	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
 	tradingv1 "github.com/xstockstrat/contracts/gen/go/trading/v1"
@@ -13,7 +14,7 @@ import (
 )
 
 // TestGetOrder_ExercisesIntentLateralJoin is the red-before-green regression guard for the
-// intentLateralJoinSQL ambiguous-column fix (trading_repo.go:87): the ExpectQuery regex requires
+// intentLateralJoinOn ambiguous-column fix (trading_repo.go:87): the ExpectQuery regex requires
 // the literal substring "intent_updated_at" — before the Step 1 rename, GetOrder's emitted SQL
 // text still reads bare "updated_at" and this test fails red (pgxmock: "call to QueryRow was not
 // expected"); after the rename, it matches green.
@@ -28,7 +29,7 @@ func TestGetOrder_ExercisesIntentLateralJoin(t *testing.T) {
 	updatedAt := time.Now().Truncate(time.Second)
 	rows := pgxmock.NewRows(testdata.OrderRowColumns).AddRow(testdata.NewOrderRow("order-1", updatedAt, 2)...)
 
-	mock.ExpectQuery(`(?s)LEFT JOIN LATERAL.*intent_updated_at.*WHERE order_id = \$1`).
+	mock.ExpectQuery(`(?s)filled_at, fees, li\.state.*LEFT JOIN LATERAL.*intent_updated_at.*WHERE order_id = \$1`).
 		WithArgs("order-1").
 		WillReturnRows(rows)
 
@@ -64,7 +65,7 @@ func TestListOrders_ExercisesIntentLateralJoinWithMultipleFilters(t *testing.T) 
 	updatedAt := time.Now().Truncate(time.Second)
 	rows := pgxmock.NewRows(testdata.OrderRowColumns).AddRow(testdata.NewOrderRow("order-2", updatedAt, 1)...)
 
-	mock.ExpectQuery(`(?s)LEFT JOIN LATERAL.*intent_updated_at.*AND user_id = \$1.*AND status = \$2`).
+	mock.ExpectQuery(`(?s)filled_at, fees, li\.state.*LEFT JOIN LATERAL.*intent_updated_at.*AND user_id = \$1.*AND status = \$2`).
 		WithArgs("user-1", "new").
 		WillReturnRows(rows)
 
@@ -235,8 +236,8 @@ func TestNetFilledQtyBySymbol_EmptyInputShortCircuits(t *testing.T) {
 	}
 }
 
-// TestListSubmittedOrders_ExercisesIntentLateralJoin covers the third and final caller of
-// intentLateralJoinSQL — no filter args, but the same LATERAL-join ambiguity risk.
+// TestListSubmittedOrders_ExercisesIntentLateralJoin covers the third caller of
+// intentLateralJoinOn — no filter args, but the same LATERAL-join ambiguity risk.
 func TestListSubmittedOrders_ExercisesIntentLateralJoin(t *testing.T) {
 	mock, err := pgxmock.NewPool()
 	if err != nil {
@@ -248,7 +249,7 @@ func TestListSubmittedOrders_ExercisesIntentLateralJoin(t *testing.T) {
 	updatedAt := time.Now().Truncate(time.Second)
 	rows := pgxmock.NewRows(testdata.OrderRowColumns).AddRow(testdata.NewOrderRow("order-3", updatedAt, 2)...)
 
-	mock.ExpectQuery(`(?s)LEFT JOIN LATERAL.*intent_updated_at.*status IN \('new', 'partially_filled'\)`).
+	mock.ExpectQuery(`(?s)filled_at, fees, li\.state.*LEFT JOIN LATERAL.*intent_updated_at.*status IN \('new', 'partially_filled'\)`).
 		WillReturnRows(rows)
 
 	orders, err := repo.ListSubmittedOrders(context.Background())
@@ -263,6 +264,123 @@ func TestListSubmittedOrders_ExercisesIntentLateralJoin(t *testing.T) {
 	}
 	if int16(orders[0].IntentState) != 2 {
 		t.Errorf("IntentState = %v, want 2", orders[0].IntentState)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet expectations: %v", err)
+	}
+}
+
+// upsertArgs matches UpsertOrder's 23 positional args, pinning only the trailing fees arg.
+func upsertArgs(fees any) []any {
+	args := make([]any, 22)
+	for i := range args {
+		args[i] = pgxmock.AnyArg()
+	}
+	return append(args, fees)
+}
+
+// TestUpsertOrder_PersistsFeesPresence covers the AC-18 repo half: nil fees persist as SQL NULL and an
+// explicit 0 persists as 0 (nullableFloat would have collapsed 0 to NULL).
+func TestUpsertOrder_PersistsFeesPresence(t *testing.T) {
+	cases := []struct {
+		name string
+		fees *float64
+		want any
+	}{
+		{"unset (typed nil → SQL NULL)", nil, (*float64)(nil)},
+		{"explicit zero", proto.Float64(0), proto.Float64(0)},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			mock, err := pgxmock.NewPool()
+			if err != nil {
+				t.Fatalf("pgxmock.NewPool: %v", err)
+			}
+			defer mock.Close()
+
+			repo := &TradingRepo{db: mock}
+			mock.ExpectExec(`(?s)filled_at, fees\s*\).*\$22, \$23.*fees\s+= EXCLUDED\.fees`).
+				WithArgs(upsertArgs(tc.want)...).
+				WillReturnResult(pgxmock.NewResult("INSERT", 1))
+
+			err = repo.UpsertOrder(context.Background(), &tradingv1.Order{OrderId: "ord-f", Fees: tc.fees})
+			if err != nil {
+				t.Fatalf("UpsertOrder: %v", err)
+			}
+			if err := mock.ExpectationsWereMet(); err != nil {
+				t.Errorf("unmet expectations: %v", err)
+			}
+		})
+	}
+}
+
+// TestScanOrder_FeesNullVsZero is the AC-18 broker-unset vs offline-set split on read-back.
+func TestScanOrder_FeesNullVsZero(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatalf("pgxmock.NewPool: %v", err)
+	}
+	defer mock.Close()
+
+	repo := &TradingRepo{db: mock}
+	updatedAt := time.Now().Truncate(time.Second)
+	feesIdx := -1
+	for i, c := range testdata.OrderRowColumns {
+		if c == "fees" {
+			feesIdx = i
+		}
+	}
+	if feesIdx < 0 {
+		t.Fatalf("OrderRowColumns has no fees column; scanOrder cannot read fees")
+	}
+	withFees := testdata.NewOrderRow("order-fees", updatedAt, 2)
+	withFees[feesIdx] = proto.Float64(1.5)
+	rows := pgxmock.NewRows(testdata.OrderRowColumns).
+		AddRow(testdata.NewOrderRow("order-null", updatedAt, 2)...).
+		AddRow(withFees...)
+
+	mock.ExpectQuery(`(?s)filled_at, fees, li\.state.*FROM trading\.orders`).
+		WillReturnRows(rows)
+
+	orders, err := repo.ListSubmittedOrders(context.Background())
+	if err != nil {
+		t.Fatalf("ListSubmittedOrders: %v", err)
+	}
+	if len(orders) != 2 {
+		t.Fatalf("len(orders) = %d, want 2", len(orders))
+	}
+	if orders[0].Fees != nil {
+		t.Errorf("NULL fees read back as %v, want unset", *orders[0].Fees)
+	}
+	if orders[1].Fees == nil || *orders[1].Fees != 1.5 {
+		t.Errorf("fees = %v, want 1.5", orders[1].Fees)
+	}
+}
+
+// TestListConfirmedOfflineOrdersByAccount_DistinctOnBeforeFilter pins R5: the latest row per order_id
+// is chosen before the status filter, so an un-confirmed newer row hides an older FILLED one.
+// SQL-shape proof only — pgxmock cannot execute DISTINCT ON.
+func TestListConfirmedOfflineOrdersByAccount_DistinctOnBeforeFilter(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatalf("pgxmock.NewPool: %v", err)
+	}
+	defer mock.Close()
+
+	repo := &TradingRepo{db: mock}
+	rows := pgxmock.NewRows(testdata.OrderRowColumns).
+		AddRow(testdata.NewOrderRow("order-c", time.Now().Truncate(time.Second), 2)...)
+
+	mock.ExpectQuery(`(?s)DISTINCT ON \(order_id\).*WHERE account_id\s*=\s*\$1.*ORDER BY order_id, created_at DESC\s*\) o.*WHERE order_id = o\.order_id.*o\.status IN \('partially_filled', ?'filled'\).*ORDER BY o\.filled_at ASC NULLS LAST`).
+		WithArgs("acct-1").
+		WillReturnRows(rows)
+
+	orders, err := repo.ListConfirmedOfflineOrdersByAccount(context.Background(), "acct-1")
+	if err != nil {
+		t.Fatalf("ListConfirmedOfflineOrdersByAccount: %v", err)
+	}
+	if len(orders) != 1 {
+		t.Fatalf("len(orders) = %d, want 1", len(orders))
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Errorf("unmet expectations: %v", err)

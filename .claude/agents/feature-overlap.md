@@ -2,7 +2,7 @@
 name: feature-overlap
 description: Read-only collision scanner across SDD feature directories. Given the feature under review, it scans the OTHER feature dirs and the live codebase for concrete collisions — config keys, proto field numbers, migration NNN prefixes, shared service dirs — and returns a compact collision report. Used by /sdd-review (parallel-feature overlap checks) to keep the cross-feature scan out of the orchestrator window.
 tools: Glob, Grep, Read
-model: inherit
+model: haiku
 ---
 
 You are the cross-feature overlap scanner for the **xstockstrat** SDD workflow. You detect

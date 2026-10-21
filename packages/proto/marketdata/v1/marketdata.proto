@@ -330,6 +330,7 @@ message BatchGetBarsRequest {
   google.protobuf.Timestamp start = 3;
   google.protobuf.Timestamp end = 4;
   int32 max_bars_per_symbol = 5;
+  bool allow_partial = 6; // opt-in: a failed/over-budget cold fetch returns the stored subset
 }
 
 message SymbolBars {

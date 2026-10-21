@@ -12,7 +12,7 @@ var OrderRowColumns = []string{
 	"qty", "filled_qty", "limit_price", "stop_price", "filled_avg_price",
 	"time_in_force", "strategy_id", "user_id", "trading_mode",
 	"created_at", "updated_at",
-	"account_id", "broker_type", "filled_at", "state",
+	"account_id", "broker_type", "filled_at", "fees", "state",
 }
 
 // NewOrderRow builds one fixture row (positionally matching OrderRowColumns) with a non-NULL
@@ -24,6 +24,6 @@ func NewOrderRow(orderID string, updatedAt time.Time, intentState int16) []any {
 		10.0, 0.0, nil, nil, nil,
 		"day", "strat-1", "user-1", "paper",
 		updatedAt.Add(-time.Hour), updatedAt,
-		"account-1", int32(0), nil, &intentState,
+		"account-1", int32(0), nil, nil, &intentState,
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -3727,5 +3728,186 @@ func TestLivePrice_ReturnsMark(t *testing.T) {
 	noClose := newMarkSvc(multi, nil, fakeIntGetter{}, &fakeDailyCloseReader{})
 	if p := noClose.livePrice(context.Background(), testdata.Lyft); p != nil {
 		t.Fatalf("livePrice without a mark = %v, want nil", *p)
+	}
+}
+
+// ── feature 240: BatchGetBars opt-in allow_partial ──────────────────────────────
+
+// fakeBarsStore serves AAPL's three stored daily bars as the warm subset.
+type fakeBarsStore struct{}
+
+func (fakeBarsStore) QueryBarsBatch(_ context.Context, symbols []string, _ string, _, _ time.Time, _ int32) (map[string][]*marketdatav1.Bar, error) {
+	out := map[string][]*marketdatav1.Bar{}
+	for _, s := range symbols {
+		if s == "AAPL" {
+			for _, d := range []int{14, 15, 16} {
+				out[s] = append(out[s], &marketdatav1.Bar{Symbol: "AAPL", Time: timestamppb.New(time.Date(2026, 10, d, 4, 0, 0, 0, time.UTC)), Close: 150})
+			}
+		}
+	}
+	return out, nil
+}
+
+func (fakeBarsStore) InsertBars(context.Context, []*marketdatav1.Bar) error { return nil }
+
+// scriptedBarsSource runs fn for every cold fetch and counts the calls.
+type scriptedBarsSource struct {
+	*fakeBatchBarsSource
+	calls atomic.Int32
+	fn    func(ctx context.Context) (map[string][]*marketdatav1.Bar, error)
+}
+
+func (s *scriptedBarsSource) GetBarsMulti(ctx context.Context, _ []string, _ string, _, _ time.Time) (map[string][]*marketdatav1.Bar, error) {
+	s.calls.Add(1)
+	return s.fn(ctx)
+}
+
+var errColdFetch = errors.New("alpaca: 503 upstream")
+
+func partialSvc(fn func(ctx context.Context) (map[string][]*marketdatav1.Bar, error)) (*MarketDataService, *scriptedBarsSource) {
+	src := &scriptedBarsSource{fakeBatchBarsSource: &fakeBatchBarsSource{}, fn: fn}
+	reg := source.NewRegistry()
+	reg.Register("alpaca", src)
+	return &MarketDataService{registry: reg, warmSymbols: map[string]struct{}{}, barsStore: fakeBarsStore{}}, src
+}
+
+func batchReq(allowPartial bool) *marketdatav1.BatchGetBarsRequest {
+	return &marketdatav1.BatchGetBarsRequest{
+		Symbols: []string{"AAPL", "MSFT"}, Timeframe: "1d", AllowPartial: allowPartial,
+		Start: timestamppb.New(time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)),
+		End:   timestamppb.New(time.Date(2026, 10, 17, 0, 0, 0, 0, time.UTC)),
+	}
+}
+
+func hangUntilDone(ctx context.Context) (map[string][]*marketdatav1.Bar, error) {
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
+func assertOnlyWarmAAPL(t *testing.T, resp *marketdatav1.BatchGetBarsResponse, err error) {
+	t.Helper()
+	if err != nil {
+		t.Fatalf("BatchGetBars: %v, want the warm subset with no error", err)
+	}
+	if len(resp.Results) != 1 || resp.Results[0].Symbol != "AAPL" || len(resp.Results[0].Bars) != 3 {
+		t.Fatalf("results = %v, want only AAPL with its 3 stored bars", resp.Results)
+	}
+}
+
+func TestBatchGetBars_AC53_PartialReturnsWarmOnColdError(t *testing.T) {
+	svc, _ := partialSvc(func(context.Context) (map[string][]*marketdatav1.Bar, error) { return nil, errColdFetch })
+	resp, err := svc.BatchGetBars(context.Background(), batchReq(true))
+	assertOnlyWarmAAPL(t, resp, err)
+}
+
+// The handler maps this plain error to codes.Internal (forwardConnectErr marketdata_handler.go:285-291,
+// toGRPCError :496-516), unchanged by the flag.
+func TestBatchGetBars_AC53_StrictStillErrors(t *testing.T) {
+	svc, _ := partialSvc(func(context.Context) (map[string][]*marketdatav1.Bar, error) { return nil, errColdFetch })
+	_, err := svc.BatchGetBars(context.Background(), batchReq(false))
+	var ce *connect.Error
+	if !errors.Is(err, errColdFetch) || errors.As(err, &ce) {
+		t.Fatalf("strict err = %v, want the plain source error", err)
+	}
+}
+
+func TestBatchGetBars_AC54_PartialBudgetFromDeadline(t *testing.T) {
+	svc, _ := partialSvc(hangUntilDone)
+	ctx, cancel := context.WithTimeout(context.Background(), 1000*time.Millisecond)
+	defer cancel()
+	resp, err := svc.BatchGetBars(ctx, batchReq(true))
+	assertOnlyWarmAAPL(t, resp, err)
+	if ctx.Err() != nil {
+		t.Errorf("returned after the caller deadline; the cold fetch must stop barsPartialMargin early")
+	}
+}
+
+func TestBatchGetBars_PartialBelowMarginSkipsSource(t *testing.T) {
+	svc, src := partialSvc(hangUntilDone)
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	resp, err := svc.BatchGetBars(ctx, batchReq(true))
+	assertOnlyWarmAAPL(t, resp, err)
+	if n := src.calls.Load(); n != 0 {
+		t.Errorf("source calls = %d, want 0 when the deadline leaves no budget", n)
+	}
+}
+
+func TestBatchGetBars_PartialAndStrictSeparateFlights(t *testing.T) {
+	both := make(chan struct{})
+	var arrived atomic.Int32
+	svc, src := partialSvc(func(context.Context) (map[string][]*marketdatav1.Bar, error) {
+		if arrived.Add(1) == 2 {
+			close(both)
+		}
+		select {
+		case <-both:
+		case <-time.After(2 * time.Second):
+		}
+		return map[string][]*marketdatav1.Bar{"MSFT": {{Symbol: "MSFT", Close: 300}}}, nil
+	})
+	var wg sync.WaitGroup
+	for _, partial := range []bool{false, true} {
+		wg.Add(1)
+		go func(partial bool) {
+			defer wg.Done()
+			if _, err := svc.BatchGetBars(context.Background(), batchReq(partial)); err != nil {
+				t.Errorf("allow_partial=%v: %v", partial, err)
+			}
+		}(partial)
+	}
+	wg.Wait()
+	if n := src.calls.Load(); n != 2 {
+		t.Errorf("source calls = %d, want 2 (strict and partial must not share a flight)", n)
+	}
+}
+
+func TestBatchGetBars_PartialNoDeadlineUsesCallerCtx(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	var seen context.Context
+	svc, _ := partialSvc(func(c context.Context) (map[string][]*marketdatav1.Bar, error) {
+		seen = c
+		return nil, c.Err()
+	})
+	cancel()
+	resp, err := svc.BatchGetBars(ctx, batchReq(true))
+	assertOnlyWarmAAPL(t, resp, err)
+	if seen != ctx {
+		t.Errorf("source ctx = %v, want the caller ctx when it has no deadline", seen)
+	}
+}
+
+func TestBatchGetBars_PartialWaiterSurvivesLeaderCancel(t *testing.T) {
+	called, release := make(chan struct{}), make(chan struct{})
+	svc, src := partialSvc(func(c context.Context) (map[string][]*marketdatav1.Bar, error) {
+		close(called)
+		select {
+		case <-release:
+			return map[string][]*marketdatav1.Bar{"MSFT": {{Symbol: "MSFT", Close: 300}}}, nil
+		case <-c.Done():
+			return nil, c.Err()
+		}
+	})
+	leaderCtx, cancelLeader := context.WithTimeout(context.Background(), 5*time.Second)
+	waiterCtx, cancelWaiter := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancelWaiter()
+	go func() { _, _ = svc.BatchGetBars(leaderCtx, batchReq(true)) }()
+	<-called
+
+	done := make(chan *marketdatav1.BatchGetBarsResponse, 1)
+	go func() {
+		resp, err := svc.BatchGetBars(waiterCtx, batchReq(true))
+		if err != nil {
+			t.Errorf("waiter: %v", err)
+		}
+		done <- resp
+	}()
+	time.Sleep(100 * time.Millisecond) // let the waiter join the in-flight fetch
+	cancelLeader()
+	close(release)
+
+	resp := <-done
+	if len(resp.GetResults()) != 2 || src.calls.Load() != 1 {
+		t.Errorf("waiter results = %v, calls = %d; want AAPL+MSFT from the leader's surviving fetch", resp.GetResults(), src.calls.Load())
 	}
 }

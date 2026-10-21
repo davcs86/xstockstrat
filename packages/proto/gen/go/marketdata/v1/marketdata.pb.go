@@ -2170,6 +2170,7 @@ type BatchGetBarsRequest struct {
 	Start            *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=start,proto3" json:"start,omitempty"`
 	End              *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=end,proto3" json:"end,omitempty"`
 	MaxBarsPerSymbol int32                  `protobuf:"varint,5,opt,name=max_bars_per_symbol,json=maxBarsPerSymbol,proto3" json:"max_bars_per_symbol,omitempty"`
+	AllowPartial     bool                   `protobuf:"varint,6,opt,name=allow_partial,json=allowPartial,proto3" json:"allow_partial,omitempty"` // opt-in: a failed/over-budget cold fetch returns the stored subset
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -2237,6 +2238,13 @@ func (x *BatchGetBarsRequest) GetMaxBarsPerSymbol() int32 {
 		return x.MaxBarsPerSymbol
 	}
 	return 0
+}
+
+func (x *BatchGetBarsRequest) GetAllowPartial() bool {
+	if x != nil {
+		return x.AllowPartial
+	}
+	return false
 }
 
 type SymbolBars struct {
@@ -3168,13 +3176,14 @@ const file_marketdata_v1_marketdata_proto_rawDesc = "" +
 	"\x16GetLatestQuotesRequest\x12\x18\n" +
 	"\asymbols\x18\x01 \x03(\tR\asymbols\"S\n" +
 	"\x17GetLatestQuotesResponse\x128\n" +
-	"\x06quotes\x18\x01 \x03(\v2 .xstockstrat.marketdata.v1.QuoteR\x06quotes\"\xdc\x01\n" +
+	"\x06quotes\x18\x01 \x03(\v2 .xstockstrat.marketdata.v1.QuoteR\x06quotes\"\x81\x02\n" +
 	"\x13BatchGetBarsRequest\x12\x18\n" +
 	"\asymbols\x18\x01 \x03(\tR\asymbols\x12\x1c\n" +
 	"\ttimeframe\x18\x02 \x01(\tR\ttimeframe\x120\n" +
 	"\x05start\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x05start\x12,\n" +
 	"\x03end\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x03end\x12-\n" +
-	"\x13max_bars_per_symbol\x18\x05 \x01(\x05R\x10maxBarsPerSymbol\"X\n" +
+	"\x13max_bars_per_symbol\x18\x05 \x01(\x05R\x10maxBarsPerSymbol\x12#\n" +
+	"\rallow_partial\x18\x06 \x01(\bR\fallowPartial\"X\n" +
 	"\n" +
 	"SymbolBars\x12\x16\n" +
 	"\x06symbol\x18\x01 \x01(\tR\x06symbol\x122\n" +

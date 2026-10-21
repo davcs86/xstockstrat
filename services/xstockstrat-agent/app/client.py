@@ -2248,11 +2248,14 @@ async def confirm_offline_order(
     filled_qty: float,
     filled_avg_price: float,
     filled_at_iso: str | None = None,
+    fees: float | None = None,
 ) -> dict[str, Any]:
     """Confirm the fill on an OFFLINE order via TradingService.ConfirmOrder.
 
-    The resulting status is derived server-side (NEW/PARTIALLY_FILLED/FILLED); filled_at defaults to
-    now when omitted. Rejected for broker accounts and non-owners (server-side, order-sourced).
+    The resulting status is derived server-side (NEW/PARTIALLY_FILLED/FILLED). filled_at defaults
+    to now on first confirm; otherwise the previously recorded time is kept (not shown while NEW).
+    fees is the order's cumulative total (>= 0); omitted keeps the recorded value, so it is sent
+    only when given. Rejected for broker accounts and non-owners (server-side, order-sourced).
     """
     from gen.trading.v1 import trading_pb2, trading_pb2_grpc  # noqa: PLC0415
 
@@ -2265,6 +2268,8 @@ async def confirm_offline_order(
         ts = Timestamp()
         ts.FromDatetime(datetime.fromisoformat(filled_at_iso))
         req.filled_at.CopyFrom(ts)
+    if fees is not None:
+        req.fees = fees
 
     async with mtls.secure_channel(TRADING_ENDPOINT, "xstockstrat-trading") as channel:
         stub = trading_pb2_grpc.TradingServiceStub(channel)
@@ -2368,7 +2373,13 @@ async def list_positions(
         stub = portfolio_pb2_grpc.PortfolioServiceStub(channel)
         resp = await stub.ListPositions(req, metadata=_metadata(("x-user-id", user_id)))
     return {
-        "positions": [MessageToDict(p, preserving_proto_field_name=True) for p in resp.positions],
+        # Zero-valued fields stay present (day_pnl 0, pct 0); unset optionals are omitted.
+        "positions": [
+            MessageToDict(
+                p, preserving_proto_field_name=True, always_print_fields_with_no_presence=True
+            )
+            for p in resp.positions
+        ],
         "next_page_token": resp.page.next_page_token,
     }
 

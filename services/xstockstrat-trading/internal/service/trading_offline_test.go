@@ -3,14 +3,18 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"math"
+	"sort"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/pashagolub/pgxmock/v4"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
@@ -20,6 +24,7 @@ import (
 	"github.com/xstockstrat/contracts/pnl"
 	"github.com/xstockstrat/trading/internal/config"
 	"github.com/xstockstrat/trading/internal/repository"
+	"github.com/xstockstrat/trading/internal/testdata"
 )
 
 // offlineAccountRepo is a fake AccountRepository recording CreateBrokerAccount and serving a
@@ -109,6 +114,7 @@ type fakeBaselineStore struct {
 	// confirmed orders — returned by ListConfirmedOfflineOrdersByAccount
 	confirmedOrders []*tradingv1.Order
 	confirmedErr    error
+	ordersFn        func() []*tradingv1.Order // when set, overrides confirmedOrders (live svc.orders view)
 
 	// upsert tracking — populated by UpsertBaselineSnapshot
 	upsertCalls []upsertBaselineCall
@@ -117,6 +123,10 @@ type fakeBaselineStore struct {
 	// delete tracking — populated by DeleteBaselinesByAccount
 	deleteCalls []string
 	deleteErr   error
+
+	// snapshot headers — written by UpsertBaselineSnapshot, read by EffectiveBaselineByAccount when set
+	headers map[string]*fakeSnapshotHeader
+	seq     int
 
 	// unconfirmed orders warning — returned by HasUnconfirmedOfflineOrders
 	hasUnconfirmed    bool
@@ -132,7 +142,20 @@ type upsertBaselineCall struct {
 	rows             []repository.BaselineRow
 }
 
-func (f *fakeBaselineStore) UpsertBaselineSnapshot(_ context.Context, accountID, clientSnapshotID string, asOf time.Time, rows []repository.BaselineRow) error {
+// fakeSnapshotHeader is the fake's trading.offline_snapshot_headers row; seq stands in for created_at.
+type fakeSnapshotHeader struct {
+	hdr repository.SnapshotHeader
+	seq int
+}
+
+func fakeHeaderAfter(a, b *fakeSnapshotHeader) bool {
+	return a.hdr.AsOf.After(b.hdr.AsOf) || (a.hdr.AsOf.Equal(b.hdr.AsOf) && a.seq > b.seq)
+}
+
+// UpsertBaselineSnapshot mirrors the repo's header rules (keep carry on same id + as_of, reject a
+// non-latest/backwards as_of change, pred excludes its own id); the repo's tx SQL is proven by
+// SQL-shape review only.
+func (f *fakeBaselineStore) UpsertBaselineSnapshot(_ context.Context, accountID, clientSnapshotID string, asOf time.Time, rows []repository.BaselineRow, carry repository.CarryFunc) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.upsertCalls = append(f.upsertCalls, upsertBaselineCall{
@@ -141,35 +164,102 @@ func (f *fakeBaselineStore) UpsertBaselineSnapshot(_ context.Context, accountID,
 	if f.upsertErr != nil {
 		return f.upsertErr
 	}
-	// After upsert, update the in-memory baseline state for the next EffectiveBaselineByAccount call
-	// (simulates the DB replace-in-tx semantics: the upserted rows become the effective baseline).
-	f.baselineAsOf = asOf
-	f.hasBaseline = len(rows) > 0
-	f.baselineLots = make(map[string]pnl.Lot, len(rows))
+	if f.headers == nil {
+		f.headers = make(map[string]*fakeSnapshotHeader)
+	}
+
+	var latest *fakeSnapshotHeader
+	for _, h := range f.headers {
+		if latest == nil || fakeHeaderAfter(h, latest) {
+			latest = h
+		}
+	}
+	own := f.headers[clientSnapshotID]
+	var realized, fees float64
+	if own != nil && own.hdr.AsOf.Equal(asOf) {
+		realized, fees = own.hdr.RealizedCarried, own.hdr.FeesCarried
+	} else {
+		if own != nil {
+			if latest != own {
+				return repository.ErrSnapshotAsOfConflict
+			}
+			for id, h := range f.headers {
+				if id != clientSnapshotID && h.hdr.AsOf.After(asOf) {
+					return repository.ErrSnapshotAsOfConflict
+				}
+			}
+		}
+		var pred *fakeSnapshotHeader
+		for id, h := range f.headers {
+			if id == clientSnapshotID || !h.hdr.AsOf.Before(asOf) {
+				continue
+			}
+			if pred == nil || fakeHeaderAfter(h, pred) {
+				pred = h
+			}
+		}
+		if carry != nil {
+			var predHdr *repository.SnapshotHeader
+			if pred != nil {
+				p := pred.hdr
+				predHdr = &p
+			}
+			var err error
+			if realized, fees, err = carry(predHdr, asOf); err != nil {
+				return err
+			}
+		}
+	}
+
+	lots := make(map[string]pnl.Lot, len(rows))
 	for _, r := range rows {
 		if r.Qty == 0 {
 			continue // drop qty=0 — mirrors EffectiveBaselineByAccount's AC-8/AC-15 behavior
 		}
-		f.baselineLots[r.Symbol] = pnl.Lot{Qty: r.Qty, CostBasis: r.Qty * r.AvgCostPerShare}
+		lots[r.Symbol] = pnl.Lot{Qty: r.Qty, CostBasis: r.Qty * r.AvgCostPerShare}
+	}
+	h := own
+	if h == nil {
+		f.seq++
+		h = &fakeSnapshotHeader{seq: f.seq}
+		f.headers[clientSnapshotID] = h
+	}
+	h.hdr = repository.SnapshotHeader{
+		ClientSnapshotID: clientSnapshotID, AsOf: asOf,
+		RealizedCarried: realized, FeesCarried: fees, Lots: lots,
 	}
 	return nil
 }
 
-func (f *fakeBaselineStore) EffectiveBaselineByAccount(_ context.Context, _ string) (time.Time, map[string]pnl.Lot, bool, error) {
+func (f *fakeBaselineStore) EffectiveBaselineByAccount(_ context.Context, _ string) (repository.SnapshotHeader, bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.baselineErr != nil {
-		return time.Time{}, nil, false, f.baselineErr
+		return repository.SnapshotHeader{}, false, f.baselineErr
+	}
+	var latest *fakeSnapshotHeader
+	for _, h := range f.headers {
+		if latest == nil || fakeHeaderAfter(h, latest) {
+			latest = h
+		}
+	}
+	if latest != nil {
+		hdr := latest.hdr
+		hdr.Lots = make(map[string]pnl.Lot, len(latest.hdr.Lots))
+		for k, v := range latest.hdr.Lots {
+			hdr.Lots[k] = v
+		}
+		return hdr, true, nil
 	}
 	if !f.hasBaseline {
-		return time.Time{}, nil, false, nil
+		return repository.SnapshotHeader{}, false, nil
 	}
 	// Return a copy so mutations in the caller don't affect our state.
 	lots := make(map[string]pnl.Lot, len(f.baselineLots))
 	for k, v := range f.baselineLots {
 		lots[k] = v
 	}
-	return f.baselineAsOf, lots, true, nil
+	return repository.SnapshotHeader{AsOf: f.baselineAsOf, Lots: lots}, true, nil
 }
 
 func (f *fakeBaselineStore) DeleteBaselinesByAccount(_ context.Context, accountID string) error {
@@ -182,6 +272,7 @@ func (f *fakeBaselineStore) DeleteBaselinesByAccount(_ context.Context, accountI
 	// Clear the in-memory baseline (simulates the DELETE).
 	f.hasBaseline = false
 	f.baselineLots = nil
+	f.headers = nil
 	return nil
 }
 
@@ -192,6 +283,9 @@ func (f *fakeBaselineStore) HasUnconfirmedOfflineOrders(_ context.Context, _ str
 func (f *fakeBaselineStore) ListConfirmedOfflineOrdersByAccount(_ context.Context, _ string) ([]*tradingv1.Order, error) {
 	if f.confirmedErr != nil {
 		return nil, f.confirmedErr
+	}
+	if f.ordersFn != nil {
+		return f.ordersFn(), nil
 	}
 	return f.confirmedOrders, nil
 }
@@ -589,11 +683,15 @@ func confirmedOrder(sym string, side tradingv1.OrderSide, filledQty, filledAvg f
 
 // extractPositionsSynced extracts and parses the positions from the last account.positions.synced event.
 type syncedPayload struct {
-	AccountID   string
-	UserID      string
-	TradingMode string
-	Realized    float64
-	Positions   []syncedPosition
+	AccountID       string
+	UserID          string
+	TradingMode     string
+	Realized        float64
+	FeesSince       float64
+	RealizedCarried float64
+	FeesCarried     float64
+	RecentFills     []map[string]interface{}
+	Positions       []syncedPosition
 }
 type syncedPosition struct {
 	Symbol  string
@@ -619,6 +717,20 @@ func parseSyncedPayload(t *testing.T, ledger *recordingLedger) *syncedPayload {
 	}
 	if r, ok := p["realized_pnl"]; ok {
 		result.Realized = r.(float64)
+	}
+	for key, dst := range map[string]*float64{
+		"fees_since_snapshot": &result.FeesSince, "realized_carried": &result.RealizedCarried, "fees_carried": &result.FeesCarried,
+	} {
+		v, ok := p[key]
+		if !ok {
+			t.Fatalf("account.positions.synced payload has no %q", key)
+		}
+		*dst = v.(float64)
+	}
+	if fills, ok := p["recent_fills"].([]interface{}); ok {
+		for _, f := range fills {
+			result.RecentFills = append(result.RecentFills, f.(map[string]interface{}))
+		}
 	}
 	if positions, ok := p["positions"]; ok {
 		for _, raw := range positions.([]interface{}) {
@@ -1457,3 +1569,493 @@ func TestSnapshotOfflinePositions_Concurrency_AC10(t *testing.T) {
 // suppress unused import warning — json is used by the payload-parsing helpers above and kept as
 // insurance for any future payload-based assertion that needs raw JSON parsing.
 var _ = json.Marshal
+
+// ---------------------------------------------------------------------------
+// Feature 240 — ConfirmOrder fees, filled_at preservation and NEW-order masking
+// ---------------------------------------------------------------------------
+
+// rowCapture is a pgxmock argument matcher that records the bound value at one UpsertOrder position.
+type rowCapture struct {
+	row *[]any
+	i   int
+}
+
+func (c rowCapture) Match(v any) bool { (*c.row)[c.i] = v; return true }
+
+const upsertRequiresApprovalArg = 16 // the one UpsertOrder bind with no scanOrder column
+
+// confirmHarness round-trips every order through the real UpsertOrder/GetOrder SQL: each persisted
+// write is captured and served back as the next GetOrder row.
+type confirmHarness struct {
+	t        *testing.T
+	mock     pgxmock.PgxPoolIface
+	svc      *TradingService
+	baseline *fakeBaselineStore
+	ledger   *recordingLedger
+	stored   []any
+}
+
+func newConfirmHarness(t *testing.T) *confirmHarness {
+	t.Helper()
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatalf("pgxmock.NewPool: %v", err)
+	}
+	t.Cleanup(mock.Close)
+	baseline, ledger := &fakeBaselineStore{}, &recordingLedger{}
+	svc := newSnapshotTestService(baseline, ledger)
+	svc.repo = repository.NewTradingRepoWithDB(mock)
+	svc.orders = map[string]*tradingv1.Order{}
+	baseline.ordersFn = func() []*tradingv1.Order { return confirmedOfflineOrders(svc) }
+	return &confirmHarness{t: t, mock: mock, svc: svc, baseline: baseline, ledger: ledger}
+}
+
+// confirmedOfflineOrders mirrors ListConfirmedOfflineOrdersByAccount over svc.orders (filled_at ASC).
+func confirmedOfflineOrders(svc *TradingService) []*tradingv1.Order {
+	svc.mu.Lock()
+	defer svc.mu.Unlock()
+	var out []*tradingv1.Order
+	for _, o := range svc.orders {
+		if o.BrokerType == commonv1.BrokerType_BROKER_TYPE_OFFLINE && o.FilledQty > 0 &&
+			(o.Status == tradingv1.OrderStatus_ORDER_STATUS_FILLED || o.Status == tradingv1.OrderStatus_ORDER_STATUS_PARTIALLY_FILLED) {
+			out = append(out, proto.Clone(o).(*tradingv1.Order))
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].GetFilledAt().AsTime().Before(out[j].GetFilledAt().AsTime()) })
+	return out
+}
+
+func (h *confirmHarness) expectUpsert() {
+	args := make([]any, 23)
+	h.stored = make([]any, 23)
+	for i := range args {
+		args[i] = rowCapture{row: &h.stored, i: i}
+	}
+	h.mock.ExpectExec(`INSERT INTO trading\.orders`).WithArgs(args...).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+}
+
+// persisted returns the last UpsertOrder write as a scanOrder row: requires_approval dropped, state
+// NULL, and nullable binds re-pointered (pgxmock scans a value into a pointer destination only as one).
+func (h *confirmHarness) persisted() []any {
+	row := append(append([]any{}, h.stored[:upsertRequiresApprovalArg]...), h.stored[upsertRequiresApprovalArg+1:]...)
+	for i, v := range row {
+		switch x := v.(type) {
+		case float64:
+			if i == 9 || i == 10 || i == 11 { // limit_price, stop_price, filled_avg_price
+				row[i] = &x
+			}
+		case time.Time:
+			if i == 20 { // filled_at
+				row[i] = &x
+			}
+		case *float64: // fees
+			if x != nil {
+				c := *x
+				row[i] = &c
+			}
+		}
+	}
+	return append(row, nil)
+}
+
+func (h *confirmHarness) seed(o *tradingv1.Order) {
+	h.t.Helper()
+	h.expectUpsert()
+	if err := h.svc.repo.UpsertOrder(context.Background(), o); err != nil {
+		h.t.Fatalf("seed UpsertOrder: %v", err)
+	}
+}
+
+func (h *confirmHarness) confirm(req *tradingv1.ConfirmOrderRequest) *tradingv1.Order {
+	h.t.Helper()
+	h.mock.ExpectQuery(`FROM trading\.orders`).WithArgs(req.OrderId).
+		WillReturnRows(pgxmock.NewRows(testdata.OrderRowColumns).AddRow(h.persisted()...))
+	h.expectUpsert()
+	resp, err := h.svc.ConfirmOrder(ctxAsUser(testdata.S1UserID), req)
+	if err != nil {
+		h.t.Fatalf("ConfirmOrder(%+v): %v", req, err)
+	}
+	return resp
+}
+
+// persistedOrder decodes the last persisted write through the real scanOrder path.
+func (h *confirmHarness) persistedOrder(id string) *tradingv1.Order {
+	h.t.Helper()
+	h.mock.ExpectQuery(`FROM trading\.orders`).WithArgs(id).
+		WillReturnRows(pgxmock.NewRows(testdata.OrderRowColumns).AddRow(h.persisted()...))
+	o, err := h.svc.repo.GetOrder(context.Background(), id)
+	if err != nil {
+		h.t.Fatalf("GetOrder: %v", err)
+	}
+	return o
+}
+
+func newOfflineOrder(id string, qty float64) *tradingv1.Order {
+	return &tradingv1.Order{
+		OrderId: id, ClientOrderId: "client-" + id, Symbol: "AAPL", Side: tradingv1.OrderSide_ORDER_SIDE_BUY,
+		OrderType: tradingv1.OrderType_ORDER_TYPE_MARKET, Status: tradingv1.OrderStatus_ORDER_STATUS_NEW,
+		Qty: qty, TimeInForce: tradingv1.TimeInForce_TIME_IN_FORCE_DAY, UserId: testdata.S1UserID,
+		TradingMode: commonv1.TradingMode_TRADING_MODE_PAPER, AccountId: testdata.S1AccountID,
+		BrokerType: commonv1.BrokerType_BROKER_TYPE_OFFLINE, CreatedAt: timestamppb.New(time.Now().Add(-time.Hour)),
+	}
+}
+
+func feesOf(o *tradingv1.Order) any {
+	if o.Fees == nil {
+		return nil
+	}
+	return *o.Fees
+}
+
+func TestConfirmOrder_AC9_NegativeFeesRejectedBeforeLoad(t *testing.T) {
+	h := newConfirmHarness(t)
+	for _, fees := range []float64{-1, math.NaN(), math.Inf(1)} {
+		_, err := h.svc.ConfirmOrder(ctxAsUser(testdata.S1UserID), &tradingv1.ConfirmOrderRequest{
+			OrderId: "ord-x", FilledQty: 10, FilledAvgPrice: 150, Fees: proto.Float64(fees),
+		})
+		if grpcstatus.Code(err) != codes.InvalidArgument || grpcstatus.Convert(err).Message() != "fees must be >= 0" {
+			t.Errorf("fees %v: err = %v, want InvalidArgument \"fees must be >= 0\"", fees, err)
+		}
+	}
+	if err := h.mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("GetOrder/UpsertOrder must not run: %v", err)
+	}
+}
+
+func TestConfirmOrder_AC8_ReconfirmReplacesFees(t *testing.T) {
+	h := newConfirmHarness(t)
+	h.seed(newOfflineOrder("ord-1", 10))
+	h.confirm(&tradingv1.ConfirmOrderRequest{OrderId: "ord-1", FilledQty: 10, FilledAvgPrice: 150, Fees: proto.Float64(5)})
+	resp := h.confirm(&tradingv1.ConfirmOrderRequest{OrderId: "ord-1", FilledQty: 10, FilledAvgPrice: 150, Fees: proto.Float64(2)})
+	if feesOf(resp) != 2.0 || feesOf(h.persistedOrder("ord-1")) != 2.0 {
+		t.Errorf("fees: resp=%v persisted=%v, want 2 (a re-confirm replaces, never adds)", feesOf(resp), feesOf(h.persistedOrder("ord-1")))
+	}
+}
+
+func TestConfirmOrder_AC37_OmittedFeesKept(t *testing.T) {
+	h := newConfirmHarness(t)
+	h.seed(newOfflineOrder("ord-1", 10))
+	h.confirm(&tradingv1.ConfirmOrderRequest{OrderId: "ord-1", FilledQty: 10, FilledAvgPrice: 150, Fees: proto.Float64(2)})
+	resp := h.confirm(&tradingv1.ConfirmOrderRequest{OrderId: "ord-1", FilledQty: 10, FilledAvgPrice: 151})
+	if feesOf(resp) != 2.0 || resp.FilledAvgPrice != 151 {
+		t.Errorf("resp fees=%v price=%v, want fees 2 kept and price 151", feesOf(resp), resp.FilledAvgPrice)
+	}
+}
+
+func TestConfirmOrder_AC21_PartialThenFullCumulative(t *testing.T) {
+	h := newConfirmHarness(t)
+	h.seed(newOfflineOrder("ord-1", 100))
+	part := h.confirm(&tradingv1.ConfirmOrderRequest{OrderId: "ord-1", FilledQty: 40, FilledAvgPrice: 150, Fees: proto.Float64(0.40)})
+	if part.Status != tradingv1.OrderStatus_ORDER_STATUS_PARTIALLY_FILLED || feesOf(part) != 0.40 {
+		t.Fatalf("partial: status=%v fees=%v, want PARTIALLY_FILLED 0.40", part.Status, feesOf(part))
+	}
+	full := h.confirm(&tradingv1.ConfirmOrderRequest{OrderId: "ord-1", FilledQty: 100, FilledAvgPrice: 150, Fees: proto.Float64(1)})
+	if full.Status != tradingv1.OrderStatus_ORDER_STATUS_FILLED || feesOf(full) != 1.0 {
+		t.Errorf("full: status=%v fees=%v, want FILLED 1.00 (cumulative, not 1.40)", full.Status, feesOf(full))
+	}
+}
+
+func TestConfirmOrder_AC47_ReconfirmKeepsFrozenFilledAt(t *testing.T) {
+	h := newConfirmHarness(t)
+	var sell *tradingv1.Order
+	for _, o := range testdata.S1HistoryOrders() {
+		if o.OrderId == testdata.S1SellID {
+			sell = o
+		}
+	}
+	h.seed(sell)
+	h.confirm(&tradingv1.ConfirmOrderRequest{OrderId: testdata.S1SellID, FilledQty: 40, FilledAvgPrice: 165, Fees: proto.Float64(2)})
+	want := time.Date(2026, 10, 20, 15, 0, 0, 0, time.UTC)
+	if got := h.persistedOrder(testdata.S1SellID).GetFilledAt().AsTime(); !got.Equal(want) {
+		t.Errorf("filled_at = %v, want %v (a re-confirm without filled_at must not move a frozen order)", got, want)
+	}
+}
+
+func TestConfirmOrder_AC48_UnconfirmHidesFeesAndFilledAt(t *testing.T) {
+	h := newConfirmHarness(t)
+	at := time.Date(2026, 10, 19, 14, 0, 0, 0, time.UTC)
+	h.seed(newOfflineOrder("ord-1", 10))
+	h.confirm(&tradingv1.ConfirmOrderRequest{OrderId: "ord-1", FilledQty: 10, FilledAvgPrice: 150, Fees: proto.Float64(2), FilledAt: timestamppb.New(at)})
+	resp := h.confirm(&tradingv1.ConfirmOrderRequest{OrderId: "ord-1", FilledQty: 0})
+
+	got, err := h.svc.GetOrder(context.Background(), &tradingv1.GetOrderRequest{OrderId: "ord-1"})
+	if err != nil {
+		t.Fatalf("GetOrder: %v", err)
+	}
+	for name, o := range map[string]*tradingv1.Order{"ConfirmOrder": resp, "GetOrder": got} {
+		if o.Status != tradingv1.OrderStatus_ORDER_STATUS_NEW || o.Fees != nil || o.FilledAt != nil {
+			t.Errorf("%s: status=%v fees=%v filled_at=%v, want NEW with fees and filled_at hidden", name, o.Status, feesOf(o), o.FilledAt)
+		}
+	}
+	if cached := h.svc.orders["ord-1"]; feesOf(cached) != 2.0 || !cached.GetFilledAt().AsTime().Equal(at) {
+		t.Errorf("cache must keep the stored values: fees=%v filled_at=%v", feesOf(cached), cached.FilledAt)
+	}
+
+	back := h.confirm(&tradingv1.ConfirmOrderRequest{OrderId: "ord-1", FilledQty: 10, FilledAvgPrice: 150})
+	if back.Status != tradingv1.OrderStatus_ORDER_STATUS_FILLED || feesOf(back) != 2.0 || !back.GetFilledAt().AsTime().Equal(at) {
+		t.Errorf("re-confirm: status=%v fees=%v filled_at=%v, want FILLED 2.00 %v", back.Status, feesOf(back), back.FilledAt, at)
+	}
+}
+
+func TestConfirmOrder_QtyZeroNeverFilledKeepsNilFilledAt(t *testing.T) {
+	h := newConfirmHarness(t)
+	h.seed(newOfflineOrder("ord-1", 10))
+	h.confirm(&tradingv1.ConfirmOrderRequest{OrderId: "ord-1", FilledQty: 0, FilledAt: timestamppb.New(time.Now().Add(-48 * time.Hour))})
+	if fa := h.persistedOrder("ord-1").FilledAt; fa != nil {
+		t.Fatalf("qty-0 confirm on a never-filled order persisted filled_at %v, want NULL", fa.AsTime())
+	}
+	before := time.Now()
+	resp := h.confirm(&tradingv1.ConfirmOrderRequest{OrderId: "ord-1", FilledQty: 10, FilledAvgPrice: 150})
+	if fa := resp.GetFilledAt().AsTime(); fa.Before(before.Add(-time.Second)) {
+		t.Errorf("first non-NEW confirm filled_at = %v, want now", fa)
+	}
+}
+
+func TestHideUnconfirmedFill_BrokerUntouched(t *testing.T) {
+	at := timestamppb.Now()
+	o := &tradingv1.Order{BrokerType: commonv1.BrokerType_BROKER_TYPE_ALPACA, Status: tradingv1.OrderStatus_ORDER_STATUS_NEW, FilledAt: at, Fees: proto.Float64(1)}
+	hideUnconfirmedFill(o)
+	if o.FilledAt != at || feesOf(o) != 1.0 {
+		t.Errorf("broker order changed: filled_at=%v fees=%v", o.FilledAt, feesOf(o))
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Feature 240 — positions.synced fees/carry payload and snapshot carry rules
+// ---------------------------------------------------------------------------
+
+func s1Snapshot(t *testing.T, svc *TradingService, id string, asOf time.Time, rows ...*tradingv1.PositionBaseline) {
+	t.Helper()
+	if _, err := svc.SnapshotOfflinePositions(context.Background(), snapshotReq(testdata.S1AccountID, testdata.S1UserID, id, asOf, rows...)); err != nil {
+		t.Fatalf("snapshot %s: %v", id, err)
+	}
+}
+
+// seedS1History puts the S1 history orders in the harness DB and cache, then records snapshot S1.
+func (h *confirmHarness) seedS1History() {
+	h.t.Helper()
+	for _, o := range testdata.S1HistoryOrders() {
+		h.svc.orders[o.OrderId] = o
+		if o.OrderId == testdata.S1SellID {
+			h.seed(proto.Clone(o).(*tradingv1.Order))
+		}
+	}
+	asOf, rows := testdata.S1Snapshot()
+	s1Snapshot(h.t, h.svc, testdata.S1SnapshotID, asOf, rows...)
+}
+
+func assertPayload(t *testing.T, got *syncedPayload, realized, feesSince, realizedCarried, feesCarried float64) {
+	t.Helper()
+	if got.Realized != realized || math.Abs(got.FeesSince-feesSince) > 1e-9 || got.RealizedCarried != realizedCarried || math.Abs(got.FeesCarried-feesCarried) > 1e-9 {
+		t.Errorf("payload realized=%v fees_since=%v realized_carried=%v fees_carried=%v, want %v %v %v %v",
+			got.Realized, got.FeesSince, got.RealizedCarried, got.FeesCarried, realized, feesSince, realizedCarried, feesCarried)
+	}
+}
+
+func TestOfflineRecompute_AC7_FeesSeparateFromCostBasis(t *testing.T) {
+	h := newConfirmHarness(t)
+	h.seed(newOfflineOrder("ord-1", 100))
+	h.confirm(&tradingv1.ConfirmOrderRequest{OrderId: "ord-1", FilledQty: 100, FilledAvgPrice: 150, Fees: proto.Float64(1.5)})
+	got := parseSyncedPayload(t, h.ledger)
+	if aapl, _ := findPosition(got.Positions, "AAPL"); aapl.AvgCost != 150 {
+		t.Errorf("avg_cost = %v, want 150 (fees never enter cost basis)", aapl.AvgCost)
+	}
+	assertPayload(t, got, 0, 1.5, 0, 0)
+}
+
+func TestOfflineRecompute_AC20_RealizedGrossFeesSummed(t *testing.T) {
+	h := newConfirmHarness(t)
+	h.seed(newOfflineOrder("ord-b", 100))
+	h.confirm(&tradingv1.ConfirmOrderRequest{OrderId: "ord-b", FilledQty: 100, FilledAvgPrice: 150, Fees: proto.Float64(1.5),
+		FilledAt: timestamppb.New(time.Now().Add(-2 * time.Hour))})
+	sell := newOfflineOrder("ord-s", 100)
+	sell.Side = tradingv1.OrderSide_ORDER_SIDE_SELL
+	h.seed(sell)
+	h.confirm(&tradingv1.ConfirmOrderRequest{OrderId: "ord-s", FilledQty: 100, FilledAvgPrice: 156, Fees: proto.Float64(1.5)})
+	assertPayload(t, parseSyncedPayload(t, h.ledger), 600, 3, 0, 0)
+}
+
+func TestOfflineRecompute_AC8_AC21_FeesFollowReplacedCumulative(t *testing.T) {
+	h := newConfirmHarness(t)
+	h.seed(newOfflineOrder("ord-1", 10))
+	h.confirm(&tradingv1.ConfirmOrderRequest{OrderId: "ord-1", FilledQty: 10, FilledAvgPrice: 150, Fees: proto.Float64(5)})
+	h.confirm(&tradingv1.ConfirmOrderRequest{OrderId: "ord-1", FilledQty: 10, FilledAvgPrice: 150, Fees: proto.Float64(2)})
+	assertPayload(t, parseSyncedPayload(t, h.ledger), 0, 2, 0, 0)
+
+	h2 := newConfirmHarness(t)
+	h2.seed(newOfflineOrder("ord-2", 100))
+	h2.confirm(&tradingv1.ConfirmOrderRequest{OrderId: "ord-2", FilledQty: 40, FilledAvgPrice: 150, Fees: proto.Float64(0.4)})
+	h2.confirm(&tradingv1.ConfirmOrderRequest{OrderId: "ord-2", FilledQty: 100, FilledAvgPrice: 150, Fees: proto.Float64(1)})
+	assertPayload(t, parseSyncedPayload(t, h2.ledger), 0, 1, 0, 0)
+}
+
+func TestSnapshotOfflinePositions_AC41_FirstSnapshotCarriesPriorRealized(t *testing.T) {
+	baseline, ledger := &fakeBaselineStore{confirmedOrders: testdata.S1HistoryOrders()}, &recordingLedger{}
+	svc := newSnapshotTestService(baseline, ledger)
+	asOf, rows := testdata.S1Snapshot()
+	s1Snapshot(t, svc, testdata.S1SnapshotID, asOf, rows...)
+
+	got := parseSyncedPayload(t, ledger)
+	assertPayload(t, got, 100, 0, 600, 0)
+	if aapl, _ := findPosition(got.Positions, "AAPL"); aapl.Qty != 40 {
+		t.Errorf("AAPL qty = %v, want 40", aapl.Qty)
+	}
+}
+
+// buySellRoundTrip is AC-10/AC-42's history: buy 100 @150 and sell 100 @156, 1.50 fees each.
+func buySellRoundTrip(at time.Time) []*tradingv1.Order {
+	buy := confirmedOrder("AAPL", tradingv1.OrderSide_ORDER_SIDE_BUY, 100, 150, at)
+	sell := confirmedOrder("AAPL", tradingv1.OrderSide_ORDER_SIDE_SELL, 100, 156, at.Add(time.Hour))
+	buy.Fees, sell.Fees = proto.Float64(1.5), proto.Float64(1.5)
+	return []*tradingv1.Order{buy, sell}
+}
+
+func TestSnapshotOfflinePositions_AC42_AC10_EmptySnapshotIsFullFlatten(t *testing.T) {
+	T0 := time.Date(2026, 10, 1, 15, 0, 0, 0, time.UTC)
+	baseline, ledger := &fakeBaselineStore{confirmedOrders: buySellRoundTrip(T0)}, &recordingLedger{}
+	svc := newSnapshotTestService(baseline, ledger)
+	resp, err := svc.SnapshotOfflinePositions(context.Background(), snapshotReq("acc-1", "user-1", "flat", T0.Add(24*time.Hour)))
+	if err != nil || resp.CommittedCount != 0 {
+		t.Fatalf("empty snapshot: resp=%+v err=%v, want a committed full flatten", resp, err)
+	}
+	got := parseSyncedPayload(t, ledger)
+	if len(got.Positions) != 0 {
+		t.Errorf("positions = %+v, want none", got.Positions)
+	}
+	assertPayload(t, got, 0, 0, 600, 3)
+}
+
+func TestSnapshotOfflinePositions_AC11_SecondSnapshotChainsCarry(t *testing.T) {
+	baseline, ledger := &fakeBaselineStore{confirmedOrders: testdata.S1HistoryOrders()}, &recordingLedger{}
+	svc := newSnapshotTestService(baseline, ledger)
+	asOf, rows := testdata.S1Snapshot()
+	s1Snapshot(t, svc, testdata.S1SnapshotID, asOf, rows...)
+	s1Snapshot(t, svc, "S2", time.Date(2026, 11, 30, 23, 59, 59, 0, time.UTC), posBaseline("AAPL", 40, 150))
+	assertPayload(t, parseSyncedPayload(t, ledger), 0, 0, 700, 0)
+}
+
+func TestSnapshotOfflinePositions_AC43_AllRowsRejectedIsNoop(t *testing.T) {
+	baseline, ledger := &fakeBaselineStore{confirmedOrders: testdata.S1HistoryOrders()}, &recordingLedger{}
+	svc := newSnapshotTestService(baseline, ledger)
+	asOf, rows := testdata.S1Snapshot()
+	s1Snapshot(t, svc, testdata.S1SnapshotID, asOf, rows...)
+	upserts := len(baseline.upsertCalls)
+	ledger.reset()
+
+	resp, err := svc.SnapshotOfflinePositions(context.Background(), snapshotReq("acc-1", "user-1", "S2",
+		time.Date(2026, 11, 30, 23, 59, 59, 0, time.UTC), posBaseline("", 10, 1)))
+	if err != nil || resp.CommittedCount != 0 || len(resp.Rejected) != 1 {
+		t.Fatalf("resp=%+v err=%v, want committed 0 with 1 rejection", resp, err)
+	}
+	if len(baseline.upsertCalls) != upserts || len(ledger.requestsByType("account.positions.synced")) != 0 ||
+		len(ledger.requestsByType("account.positions.baseline_set")) != 0 {
+		t.Errorf("an all-rejected snapshot must not persist or emit: upserts %d→%d, events=%d",
+			upserts, len(baseline.upsertCalls), len(ledger.requests))
+	}
+}
+
+func TestSnapshotOfflinePositions_AC44_NonLatestAsOfChangeRejected(t *testing.T) {
+	baseline, ledger := &fakeBaselineStore{confirmedOrders: testdata.S1HistoryOrders()}, &recordingLedger{}
+	svc := newSnapshotTestService(baseline, ledger)
+	asOf, rows := testdata.S1Snapshot()
+	s1Snapshot(t, svc, testdata.S1SnapshotID, asOf, rows...)
+	s1Snapshot(t, svc, "S2", time.Date(2026, 11, 30, 23, 59, 59, 0, time.UTC), posBaseline("AAPL", 40, 150))
+
+	_, err := svc.SnapshotOfflinePositions(context.Background(), snapshotReq("acc-1", "user-1", testdata.S1SnapshotID,
+		time.Date(2026, 11, 15, 23, 59, 59, 0, time.UTC), rows...))
+	if grpcstatus.Code(err) != codes.FailedPrecondition {
+		t.Fatalf("err = %v, want FailedPrecondition", err)
+	}
+	if s1, s2 := baseline.headers[testdata.S1SnapshotID].hdr, baseline.headers["S2"].hdr; !s1.AsOf.Equal(asOf) || s1.RealizedCarried != 600 || s2.RealizedCarried != 700 {
+		t.Errorf("stored carries changed: S1=%+v S2=%+v", s1, s2)
+	}
+}
+
+func TestSnapshotOfflinePositions_AC45_LatestAsOfMoveExcludesItself(t *testing.T) {
+	baseline, ledger := &fakeBaselineStore{confirmedOrders: testdata.S1HistoryOrders()}, &recordingLedger{}
+	svc := newSnapshotTestService(baseline, ledger)
+	asOf, rows := testdata.S1Snapshot()
+	s1Snapshot(t, svc, testdata.S1SnapshotID, asOf, rows...)
+	s1Snapshot(t, svc, testdata.S1SnapshotID, time.Date(2026, 11, 10, 23, 59, 59, 0, time.UTC), posBaseline("AAPL", 40, 140))
+
+	got := parseSyncedPayload(t, ledger)
+	assertPayload(t, got, 0, 0, 700, 0)
+	if aapl, _ := findPosition(got.Positions, "AAPL"); aapl.Qty != 40 || aapl.AvgCost != 140 {
+		t.Errorf("AAPL = %+v, want 40 @ 140", aapl)
+	}
+}
+
+// TestSnapshotOfflinePositions_AC6_SameIDSameAsOfKeepsCarry (@AC-6 @feature-163): a re-submit keeps the
+// stored carry even when the history before as_of has since changed.
+func TestSnapshotOfflinePositions_AC6_SameIDSameAsOfKeepsCarry(t *testing.T) {
+	baseline, ledger := &fakeBaselineStore{confirmedOrders: testdata.S1HistoryOrders()}, &recordingLedger{}
+	svc := newSnapshotTestService(baseline, ledger)
+	asOf, rows := testdata.S1Snapshot()
+	s1Snapshot(t, svc, testdata.S1SnapshotID, asOf, rows...)
+	baseline.confirmedOrders = append(baseline.confirmedOrders,
+		confirmedOrder("AAPL", tradingv1.OrderSide_ORDER_SIDE_SELL, 10, 200, time.Date(2026, 10, 25, 15, 0, 0, 0, time.UTC)))
+	s1Snapshot(t, svc, testdata.S1SnapshotID, asOf, rows...)
+	if got := parseSyncedPayload(t, ledger); got.RealizedCarried != 600 {
+		t.Errorf("realized_carried = %v, want 600 kept (carry not recomputed)", got.RealizedCarried)
+	}
+}
+
+func TestConfirmOrder_AC46_FrozenWindowFillIgnored(t *testing.T) {
+	h := newConfirmHarness(t)
+	h.seedS1History()
+	h.seed(newOfflineOrder("ord-n", 10))
+	h.confirm(&tradingv1.ConfirmOrderRequest{OrderId: "ord-n", FilledQty: 10, FilledAvgPrice: 150, Fees: proto.Float64(5),
+		FilledAt: timestamppb.New(time.Date(2026, 10, 15, 15, 0, 0, 0, time.UTC))})
+	got := parseSyncedPayload(t, h.ledger)
+	assertPayload(t, got, 100, 0, 600, 0)
+	if aapl, _ := findPosition(got.Positions, "AAPL"); aapl.Qty != 40 {
+		t.Errorf("AAPL qty = %v, want 40", aapl.Qty)
+	}
+}
+
+func TestConfirmOrder_AC47_FrozenReconfirmLeavesPayload(t *testing.T) {
+	h := newConfirmHarness(t)
+	h.seedS1History()
+	h.confirm(&tradingv1.ConfirmOrderRequest{OrderId: testdata.S1SellID, FilledQty: 40, FilledAvgPrice: 165, Fees: proto.Float64(2)})
+	got := parseSyncedPayload(t, h.ledger)
+	assertPayload(t, got, 100, 0, 600, 0)
+	if aapl, _ := findPosition(got.Positions, "AAPL"); aapl.Qty != 40 {
+		t.Errorf("AAPL qty = %v, want 40", aapl.Qty)
+	}
+}
+
+func TestOfflineRecompute_RecentFillsWindow(t *testing.T) {
+	now := time.Now()
+	old := confirmedOrder("AAPL", tradingv1.OrderSide_ORDER_SIDE_BUY, 10, 100, now.Add(-11*24*time.Hour))
+	frozen := confirmedOrder("AAPL", tradingv1.OrderSide_ORDER_SIDE_BUY, 5, 100, now.Add(-7*24*time.Hour))
+	recent := confirmedOrder("AAPL", tradingv1.OrderSide_ORDER_SIDE_SELL, 4, 110, now.Add(-2*24*time.Hour))
+	baseline, ledger := &fakeBaselineStore{confirmedOrders: []*tradingv1.Order{old, frozen, recent}}, &recordingLedger{}
+	svc := newSnapshotTestService(baseline, ledger)
+
+	if err := svc.recomputeAndEmitOfflinePositions(context.Background(), "acc-1", "user-1"); err != nil {
+		t.Fatal(err)
+	}
+	if fills := parseSyncedPayload(t, ledger).RecentFills; len(fills) != 2 {
+		t.Errorf("no-baseline recent_fills = %v, want the 7- and 2-day fills only (11 days is outside)", fills)
+	}
+
+	s1Snapshot(t, svc, "snap", now.Add(-5*24*time.Hour), posBaseline("AAPL", 15, 100))
+	fills := parseSyncedPayload(t, ledger).RecentFills
+	if len(fills) != 1 {
+		t.Fatalf("recent_fills = %v, want only the post-snapshot sell (frozen-window fill excluded)", fills)
+	}
+	at, err := time.Parse(time.RFC3339Nano, fills[0]["filled_at"].(string))
+	if fills[0]["symbol"] != "AAPL" || fills[0]["qty"] != -4.0 || fills[0]["price"] != 110.0 || err != nil || !at.Equal(recent.FilledAt.AsTime()) {
+		t.Errorf("recent fill = %v (parse err %v), want AAPL −4 @110 at %v", fills[0], err, recent.FilledAt.AsTime())
+	}
+}
+
+func TestSnapshotOfflinePositions_CarryLoadErrorFailsWithoutWrite(t *testing.T) {
+	baseline := &fakeBaselineStore{confirmedErr: errors.New("db down")}
+	svc := newSnapshotTestService(baseline, &recordingLedger{})
+	asOf, rows := testdata.S1Snapshot()
+	_, err := svc.SnapshotOfflinePositions(context.Background(), snapshotReq("acc-1", "user-1", testdata.S1SnapshotID, asOf, rows...))
+	if grpcstatus.Code(err) != codes.Internal || len(baseline.headers) != 0 {
+		t.Errorf("err=%v headers=%d, want Internal and nothing written", err, len(baseline.headers))
+	}
+}
