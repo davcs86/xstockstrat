@@ -14,7 +14,7 @@ Follows design.md § Chosen Approach and its build order. Steps 1-2 land the `hu
 harness and every RED test first. Step 3 is the only behaviour change: one constant, one `timeout=`
 kwarg, the status-code log, and two comment corrections. Steps 4-5 reconcile docs, materialize the
 three follow-up defect reports and run the teardown audit. Step 6 captures the dev `GetConfig` latency
-baseline before the integration PR (design.md §4(e)).
+baseline; it has no code dependency and runs before Step 3 is committed (design.md §4(e)).
 
 Single service (`xstockstrat-agent`). There is no proto, migration, config key, env var or port.
 recon.md:115-123 confirms this, and `grep -n "_CONFIG_READ_TIMEOUT_S\|hung_config_server" -r
@@ -72,10 +72,10 @@ Steps 1-2 test each surface.
   `tests/conftest.py`.
 - Step 4 requires Step 3, because the docs describe the shipped constant and log line.
 - Step 5 requires Step 4. The teardown audit runs last, over every context file touched in Steps 3-5.
-- Step 6 requires Step 3 to be merged into the feature branch. It measures the current dev deployment,
-  where the latency baseline is independent of the fix, and it must complete before the integration
-  PR. The post-merge dev smoke of the fix goes in the integration PR's test plan (product-spec
-  Acceptance Criteria).
+- Step 6 has no code dependency: it measures the current dev deployment, where the latency baseline is
+  independent of the fix. Run it before Step 3 is committed, so a p99 that rules out D = 3.0 s surfaces
+  before Steps 1-3 pin `== 3.0`; it must complete before the integration PR at the latest. The post-merge
+  dev smoke of the fix goes in the integration PR's test plan (product-spec Acceptance Criteria).
 - Deferred surfaces and paths (C-14, never "later"): each points at a report that Step 5 materializes.
   - `extract_email_content` N >= 5 residual → `agent-config-snapshot-read`.
   - DCR fail-open → `agent-dcr-fail-closed`.
@@ -104,8 +104,9 @@ Steps 1-2 test each surface.
 **Reviewers**: `xstockstrat-agent` owner — MCP tool contract stability (name, parameters, return shape)
 
 **Codebase Evidence**:
-- C-13 home: `tests/conftest.py`. `_setup_gen_path()` runs at module import (`:49`), so the `gen.config.v1`
-  imports inside a fixture body resolve. The autouse `set_env` (`:51`) sets only the env var
+- C-13 home: `tests/conftest.py`. `_setup_gen_path()` runs at module import (`:48`), so the `gen.config.v1`
+  imports inside a fixture body resolve. Its top-level imports are only `pathlib`, `sys`, `types`,
+  `SimpleNamespace` and `pytest` (`:3-8`); there is no `grpc` or `app` import. The autouse `set_env` (`:51-52`) sets only the env var
   `CONFIG_ENDPOINT=config-test:50060` (`:60`) and never patches `client.CONFIG_ENDPOINT`. The harness
   therefore must `monkeypatch.setattr(client, "CONFIG_ENDPOINT", …)` itself.
 - The redirect pattern to mirror is in `tests/test_list_opportunities_deadline.py`:
@@ -116,11 +117,14 @@ Steps 1-2 test each surface.
 - The servicer base is `ConfigService.GetConfig(GetConfigRequest) returns (ConfigSnapshot)`
   (`packages/proto/config/v1/config.proto:23`, package `xstockstrat.config.v1` `:3`). `ConfigValue.float_val`
   is `:64`. Import: `from gen.config.v1 import config_pb2, config_pb2_grpc` (`tests/test_client.py:816`).
+  The registrar is `config_pb2_grpc.add_ConfigServiceServicer_to_server(servicer, server)` (codegen of
+  `config.proto:23`, `packages/proto/gen/python/config/v1/config_pb2_grpc.py:119`).
+- Logger: `client.log = logging.getLogger(__name__)` (`app/client.py:19`), so `client.log.name == "app.client"`.
 - Target helper: `get_config_value` (`app/client.py:1729`). The stub call at `:1751-1754` passes no
   `timeout=`. `except grpc.aio.AioRpcError:` → `log.warning("get_config_value: GetConfig failed for %s.%s", namespace, key)`
   → `raise` (`:1755-1758`).
 - `TestGetConfigValueClient` (`tests/test_client.py:803`):
-  - it uses `_channel_cm()` (`:70`), `patch("app.client.mtls")` and `patch.object(config_pb2_grpc, "ConfigServiceStub", …)` (`:822-824`);
+  - it uses `_channel_cm()` (`:70`), `patch("app.client.mtls")` and `patch.object(config_pb2_grpc, "ConfigServiceStub", …)` (`:821-823`);
   - it asserts `GetConfig.call_args.args[0]` and `.kwargs["metadata"]` (`:844-850`);
   - the `UNAVAILABLE` propagation model is `test_transport_error_is_surfaced_not_swallowed` (`:866-879`).
 - `tests/test_client.py:1-7` imports only `AsyncMock, MagicMock, patch`, `pytest` and `client`. The step adds `asyncio`, `time` and `grpc`.
@@ -135,12 +139,14 @@ Steps 1-2 test each surface.
 **Covers**: `AC-1, AC-5`
 
 **Instructions**:
-1. In `tests/conftest.py`, add the imports `import threading` and `from concurrent.futures import ThreadPoolExecutor`,
-   and add a module constant `HANG_GUARD_S = 10`. Its one-line comment: outer bound so a missing deadline
+1. In `tests/conftest.py`, add the top-level imports `import threading` and
+   `from concurrent.futures import ThreadPoolExecutor`, and add a module constant `HANG_GUARD_S = 10`.
+   `import grpc`, `from app import client` and `from gen.config.v1 import config_pb2, config_pb2_grpc` go
+   inside the fixture body (the `gen` import only resolves after `_setup_gen_path()` at `:48`). Its one-line comment: outer bound so a missing deadline
    fails instead of hanging.
-2. In `tests/conftest.py`, add the fixture `hung_config_server(monkeypatch)`. It returns a
+2. In `tests/conftest.py`, add the fixture `hung_config_server(monkeypatch)`. Its value is a
    `start(*, answer_after_s: float | None = None, values: dict | None = None)` callable, and `start` returns a
-   handle exposing `port` and an `entered` property.
+   handle exposing `port` and an `entered` property. Tests call it as `handle = hung_config_server(...)`.
    - **Server.** `grpc.server(ThreadPoolExecutor(max_workers=8))` with `add_ConfigServiceServicer_to_server`,
      bound by `add_insecure_port("127.0.0.1:0")`, then `start()`. It is sync and threaded, not `grpc.aio`.
      The divergence from `test_list_opportunities_deadline.py:26-40` goes in the fixture docstring:
@@ -159,12 +165,12 @@ Steps 1-2 test each surface.
    `asyncio.wait_for(…, HANG_GUARD_S)`. AC-1 runs at the production D, with no monkeypatch of the constant
    (design.md §5(b)).
    - `test_ac1_stalled_config_read_raises_deadline_exceeded_within_bound(hung_config_server)` covers `@AC-1`.
-     - Call `start()`, then call `client.get_config_value("signal.alert_threshold", namespace="agent", environment="staging")`.
+     - Call `handle = hung_config_server()`, then call `client.get_config_value("signal.alert_threshold", namespace="agent", environment="staging")`.
      - Assert it raises `grpc.aio.AioRpcError` with `.code() == grpc.StatusCode.DEADLINE_EXCEEDED`.
      - Assert that `time.monotonic()` elapsed is `< 3.0 + 0.5`, a literal from acceptance.feature:4.
      - Assert `handle.entered == 1`.
    - `test_ac5_healthy_slow_config_read_is_unchanged(hung_config_server)` covers `@AC-5`.
-     - Call `start(answer_after_s=0.5, values={"signal.alert_threshold": config_pb2.ConfigValue(float_val=0.8)})`.
+     - Call `handle = hung_config_server(answer_after_s=0.5, values={"signal.alert_threshold": config_pb2.ConfigValue(float_val=0.8)})`.
      - Assert the call returns `"0.8"` and that `handle.entered == 1`.
 4. In `TestGetConfigValueClient`, add the following P-06 wiring proofs and the error-log test. All of them
    use the existing mocked-stub shape (`:818-824`).
@@ -193,12 +199,14 @@ Steps 1-2 test each surface.
 
 **Verification**:
 ```bash
-cd services/xstockstrat-agent && uv run --no-sync pytest tests/test_client.py -k "ac1 or ac5 or deadline" -v
-cd services/xstockstrat-agent && ruff check . && ruff format --check .
+(cd services/xstockstrat-agent && uv run --no-sync pytest tests/test_client.py -k "ac1 or ac5 or deadline" -v)
+(cd services/xstockstrat-agent && uv run --no-sync pytest --cov=app --cov-fail-under=40)   # C-08: agent CI gate (.github/workflows/ci.yml:358-360)
+(cd services/xstockstrat-agent && ruff check . && ruff format --check .)
 grep -n "def hung_config_server\|HANG_GUARD_S\|max_workers=8\|is_active()\|threading.Lock\|stop(0).wait()" services/xstockstrat-agent/tests/conftest.py
 grep -n "from tests.conftest import" services/xstockstrat-agent/tests/test_client.py   # C-13: harness imported, not copied
 ```
-Pre-Step-3, the four non-AC-5 tests FAIL (RED). Post-Step-3, all of them PASS.
+Pre-Step-3, the four non-AC-5 tests FAIL (RED), so the full-suite coverage run is also red. Post-Step-3,
+all of them PASS and coverage is at least 40%.
 
 ---
 
@@ -238,6 +246,12 @@ Pre-Step-3, the four non-AC-5 tests FAIL (RED). Post-Step-3, all of them PASS.
 - DCR test model: `test_register_survives_config_read_failure` (`tests/test_oauth.py:172-190`), using
   `_app()` → `build_http_app()` (`:16-19`).
 - `tests/test_oauth.py:8-13` imports `AsyncMock, patch`, `pytest`, `TestClient` and `client`.
+- `tests/test_tools.py:3-18` imports no `asyncio`, `time` or `app.tools` module (only
+  `from app.tools import _EXTRACTOR_TOOL_MAP, register_tools`, `:17`); `:18` is
+  `from tests.conftest import ADMIN, _ctx`.
+- Patch targets, as the existing tests use them: `patch.object(client, "list_signal_sources", …)`
+  (`tests/test_tools.py:99`), `patch.object(client, "ingest_signal", …)` and
+  `patch.object(client, "emit_alert", …)` (`:378-379`).
 - RED-without-hang: `client._CONFIG_READ_TIMEOUT_S` does not exist before Step 3. Therefore
   `monkeypatch.setattr(..., raising=False)` is mandatory, otherwise the RED run errors on `AttributeError`
   instead of the missing deadline.
@@ -259,7 +273,9 @@ Pre-Step-3, the four non-AC-5 tests FAIL (RED). Post-Step-3, all of them PASS.
    - set `monkeypatch.setattr(client, "_CONFIG_READ_TIMEOUT_S", 0.3, raising=False)`, so D = 0.3;
    - measure elapsed with `time.monotonic()`;
    - assert no `list_opportunities` timer ordering.
-2. Add these tests to `tests/test_tools.py`. Each awaits through `asyncio.wait_for(…, HANG_GUARD_S)`.
+2. Add these tests to `tests/test_tools.py`, plus the imports `asyncio`, `time` and `from app import tools`,
+   and extend `:18` to `from tests.conftest import ADMIN, HANG_GUARD_S, _ctx`. Each test awaits through
+   `asyncio.wait_for(…, HANG_GUARD_S)`. "Patch" below means `patch.object(client, …)` as in the Evidence.
    - `test_ac2_extract_website_content_proceeds_on_stalled_config` covers `@AC-2`.
      - Patch `client.list_signal_sources` → `_website_source("acme-site", "https://example.com/")`.
      - In `respx.mock(base_url="https://example.com")`, `get("/")` returns 200 with a roughly 1 KB HTML body
@@ -311,11 +327,12 @@ Pre-Step-3, the four non-AC-5 tests FAIL (RED). Post-Step-3, all of them PASS.
 
 **Verification**:
 ```bash
-cd services/xstockstrat-agent && uv run --no-sync pytest tests/test_tools.py tests/test_oauth.py -k "stalled_config" -v
-cd services/xstockstrat-agent && ruff check . && ruff format --check .
+(cd services/xstockstrat-agent && uv run --no-sync pytest tests/test_tools.py tests/test_oauth.py -k "stalled_config" -v)
+(cd services/xstockstrat-agent && uv run --no-sync pytest --cov=app --cov-fail-under=40)   # C-08: agent CI gate (.github/workflows/ci.yml:358-360)
+(cd services/xstockstrat-agent && ruff check . && ruff format --check .)
 grep -n "from tests.conftest import\|hung_config_server\|raising=False" services/xstockstrat-agent/tests/test_tools.py services/xstockstrat-agent/tests/test_oauth.py
 ```
-All four tests FAIL before Step 3 (RED) and PASS after it.
+All four tests FAIL before Step 3 (RED) and PASS after it; post-Step-3 coverage is at least 40%.
 
 ---
 
@@ -331,7 +348,7 @@ All four tests FAIL before Step 3 (RED) and PASS after it.
 **Reviewers**: `xstockstrat-agent` owner — MCP tool contract stability (name, parameters, return shape); OAuth 2.1 edge-auth correctness and statelessness
 
 **Codebase Evidence**:
-- Module endpoint block `app/client.py:20-28`, with `CONFIG_ENDPOINT` at `:23`. `log` is at `:19`.
+- Module endpoint block `app/client.py:21-29`, with `CONFIG_ENDPOINT` at `:24` and `MARKETDATA_ENDPOINT` at `:29`. `log` is at `:19`.
 - `get_config_value` (`app/client.py:1729-1763`):
   - the stub call `snapshot = await stub.GetConfig(config_pb2.GetConfigRequest(namespace=namespace, environment=env, user_id=user_id), metadata=_metadata(),)` is at `:1751-1754`;
   - `except grpc.aio.AioRpcError:` / `log.warning("get_config_value: GetConfig failed for %s.%s", namespace, key)` / `raise` is at `:1755-1758`;
@@ -352,7 +369,7 @@ All four tests FAIL before Step 3 (RED) and PASS after it.
 **Covers**: —
 
 **Instructions**:
-1. In `app/client.py`, insert the following directly after the endpoint block (after `:28`, `MARKETDATA_ENDPOINT`):
+1. In `app/client.py`, insert the following directly after the endpoint block (after `:29`, `MARKETDATA_ENDPOINT`):
    ```python
    # Fixed, not a config key: a config read cannot bound itself. Read at call time so tests can
    # monkeypatch it.
@@ -382,9 +399,9 @@ All four tests FAIL before Step 3 (RED) and PASS after it.
 
 **Verification**:
 ```bash
-cd services/xstockstrat-agent && uv run --no-sync pytest tests/test_client.py tests/test_tools.py tests/test_oauth.py tests/test_list_opportunities_deadline.py -v
-cd services/xstockstrat-agent && uv run --no-sync pytest --cov=app --cov-fail-under=40
-cd services/xstockstrat-agent && ruff check . && ruff format --check .
+(cd services/xstockstrat-agent && uv run --no-sync pytest tests/test_client.py tests/test_tools.py tests/test_oauth.py tests/test_list_opportunities_deadline.py -v)
+(cd services/xstockstrat-agent && uv run --no-sync pytest --cov=app --cov-fail-under=40)
+(cd services/xstockstrat-agent && ruff check . && ruff format --check .)
 grep -n "_CONFIG_READ_TIMEOUT_S" services/xstockstrat-agent/app/client.py      # exactly 2 hits: definition + GetConfig kwarg
 grep -n "_CONFIG_READ_TIMEOUT_S" services/xstockstrat-agent/app/tools.py services/xstockstrat-agent/app/oauth_server.py   # 0 hits (not a caller literal, @AC-8 @feature-207)
 sed -n '/async def get_config_value/,/return str/p' services/xstockstrat-agent/app/client.py | grep -n "secure_channel\|metadata=_metadata()\|timeout=_CONFIG_READ_TIMEOUT_S\|e.code().name"   # all four present (@AC-5 @feature-210 kept)
@@ -410,6 +427,10 @@ Steps 1-2 are GREEN, the 227 suite still passes, and coverage is at least 40%.
 - `services/xstockstrat-agent/CLAUDE.md`:
   - `:192-194` "## Config Keys Consumed — Namespace: `agent`, resolved via `client.get_config_value()` …";
   - `:205` is the `agent.opportunities.read_timeout_seconds` row, which says "The policy read itself is capped by the fixed invariant `_POLICY_READ_TIMEOUT_S` = 3s (not a config key)".
+  - The `:195-205` table is `| Key | Type | Default | Description |` of config keys. design.md §6 asks
+    for a `_CONFIG_READ_TIMEOUT_S` "row next to `_POLICY_READ_TIMEOUT_S`"; a table row would present a
+    non-key as a key, so the constant is placed in the `:205` row (where `_POLICY_READ_TIMEOUT_S` lives)
+    plus one sentence under the section heading. Same intent, recorded as a design.md §6 wording deviation.
 - `services/xstockstrat-agent/docs/context-constitution.md:40`: "`list_opportunities` gRPC deadline + the fixed policy-read cap | … `app/tools.py#_POLICY_READ_TIMEOUT_S (~L2360)`".
 - `services/xstockstrat-agent/docs/context-constitution-findings.md`:
   - the § Latent bugs table header is at `:22`;
@@ -474,15 +495,17 @@ grep -n "~L2360" services/xstockstrat-agent/docs/context-constitution.md   # 0 h
 **Status**: `pending`
 **Service**: `docs` (`docs/reports/`)
 **Files**:
-- `docs/reports/YYYY-MM-DD-agent-config-snapshot-read-defect.md` — create
-- `docs/reports/YYYY-MM-DD-agent-config-snapshot-read-defect.status` — create
-- `docs/reports/YYYY-MM-DD-agent-dcr-fail-closed-defect.md` — create
-- `docs/reports/YYYY-MM-DD-agent-dcr-fail-closed-defect.status` — create
-- `docs/reports/YYYY-MM-DD-agent-rpc-deadlines-defect.md` — create
-- `docs/reports/YYYY-MM-DD-agent-rpc-deadlines-defect.status` — create
+- `docs/reports/2026-10-21-agent-config-snapshot-read-defect.md` — create
+- `docs/reports/2026-10-21-agent-config-snapshot-read-defect.status` — create
+- `docs/reports/2026-10-21-agent-dcr-fail-closed-defect.md` — create
+- `docs/reports/2026-10-21-agent-dcr-fail-closed-defect.status` — create
+- `docs/reports/2026-10-21-agent-rpc-deadlines-defect.md` — create
+- `docs/reports/2026-10-21-agent-rpc-deadlines-defect.status` — create
 - `services/xstockstrat-agent/docs/context-constitution-findings.md` — modify (index rows)
 
-`YYYY-MM-DD` is the step's execution date, the same value for all six files.
+The date is pinned to the spec date. If the step executes on a later date, use that date for all six
+filenames and `**Recorded**`, and record the actual filenames in the Deviation Log before staging (F-08).
+Seven files exceeds the 5-file advisory; they are three report/sidecar pairs plus one index edit.
 
 **Reviewers**: none
 
@@ -496,7 +519,7 @@ grep -n "~L2360" services/xstockstrat-agent/docs/context-constitution.md   # 0 h
 - Precedent: `docs/reports/2026-10-19-agent-get-config-value-no-deadline-defect.md` (the parent report).
 - No existing report covers these follow-ups. `grep -rln "register_oauth_client\|get_config(" docs/reports/*.md`
   finds no hits, and `ls docs/reports | grep -i "snapshot\|dcr\|fail-closed"` shows nothing related.
-- Agent findings index: § "Filed as defect reports (2026-10-19)" at `services/xstockstrat-agent/docs/context-constitution-findings.md:58`, with index rows at `:65-69`.
+- Agent findings index: § "Filed as defect reports (2026-10-19)" at `services/xstockstrat-agent/docs/context-constitution-findings.md:58`, with index rows at `:65-69`. The heading carries its filing date, so rows filed on another date need their own dated section.
 - Report evidence anchors (this branch):
   - `app/tools.py:541-543` (email per-URL `_fetch_url`) and `:2397-2400` (four serial reads);
   - `packages/proto/config/v1/config.proto:49` (`ConfigSnapshot`, the whole namespace);
@@ -532,23 +555,29 @@ grep -n "~L2360" services/xstockstrat-agent/docs/context-constitution.md   # 0 h
        `register_oauth_client` (`:1355`) pass no `timeout=`, so they hang on a config or identity stall.
      - Expected: a deadline per caller shape. Cite ledger `fails.md:2936-2951`: enumerate the callers and
        make the change opt-in when their shapes differ.
-3. Append the three reports to the agent findings index table (`:65-69` row format).
+3. Add a new section `## Filed as defect reports (2026-10-21)` directly after the `:58` section (same
+   date as the filenames), with one intro line naming feature 247 `design.md` § Open Risks as the source
+   and the three reports in the `:63-69` `| Report | Title |` table format. Do not append them under the
+   `(2026-10-19)` heading.
 4. Run the teardown: `/context-forge:context-constitution refresh`, scoped to every context file touched in
    Steps 3-5, and fix the grounded drift it reports. If the plugin is unavailable, re-read each touched file
    against the code instead. Record both facts ("plugin unavailable" and the per-file reconciliation) in the
    PR body and `context.md`. A bare note does not pass (root `CLAUDE.md` § Teardown).
+   - Any drift fix in a file not listed in **Files** (Steps 3-5) is added to the Deviation Log with its path
+     before it is staged (F-08).
 
 **Verification**:
 ```bash
-for f in docs/reports/*-agent-config-snapshot-read-defect.md docs/reports/*-agent-dcr-fail-closed-defect.md docs/reports/*-agent-rpc-deadlines-defect.md; do
+for f in docs/reports/2026-10-21-agent-config-snapshot-read-defect.md docs/reports/2026-10-21-agent-dcr-fail-closed-defect.md docs/reports/2026-10-21-agent-rpc-deadlines-defect.md; do
   echo "$f: $(grep -oE 'SEV-[123]' "$f" | sort -u | tr '\n' ' ')"; grep -c '^\*\*Severity\*\*:' "$f"; head -1 "${f%.md}.status"
 done   # each: exactly "SEV-2", count 1, sidecar "open"
 grep -n "agent-config-snapshot-read\|agent-dcr-fail-closed\|agent-rpc-deadlines" services/xstockstrat-agent/docs/context-constitution-findings.md   # 3 index rows
+grep -n "^## Filed as defect reports" services/xstockstrat-agent/docs/context-constitution-findings.md   # (2026-10-19) and (2026-10-21)
 ```
 
 ---
 
-### Step 6 — docs: dev GetConfig latency baseline (D sizing) before the integration PR
+### Step 6 — docs: dev GetConfig latency baseline (D sizing), before Step 3 is committed
 
 **Status**: `pending`
 **Service**: `docs` (feature `context.md`; measurement on the dev deployment)
@@ -574,11 +603,15 @@ grep -n "agent-config-snapshot-read\|agent-dcr-fail-closed\|agent-rpc-deadlines"
 1. On the current dev deployment, query the agent's client spans for
    `/xstockstrat.config.v1.ConfigService/GetConfig` over at least 24 h, in Grafana Cloud traces
    (`docs/setup/grafana-cloud.md`). Record the count, p50, p99 and max.
-   - The baseline is independent of the fix.
-   - If dev OTel is off or no spans exist, record "Not measured" and the reason, then escalate (P-03)
-     before the integration PR. Do not guess.
-2. Append a `context.md` session entry with the numbers and their margin against D = 3.0 s.
-   - If p99 is not comfortably below D (operator judgment), stop and escalate before the integration PR.
+   - The baseline is independent of the fix, so the step runs before Step 3 is committed (Step Dependencies).
+   - If dev OTel is off, no spans exist, or the executor has no Grafana Cloud trace access, record
+     "Not measured" and the reason, then escalate (P-03) to the operator, who may run the query.
+     Do not guess.
+2. Append a `context.md` session entry headed `GetConfig latency baseline` with the query text, the time
+   window (UTC start/end), the span count, p50, p99, max and the margin against D = 3.0 s, so the
+   measurement is reproducible from the entry alone.
+   - If p99 is not comfortably below D (operator judgment), stop and escalate before Step 3 is committed
+     (or, if Step 3 has already landed, before the integration PR).
      Changing D is a design change.
 3. Add to the integration PR's test plan: a post-merge dev smoke of `ingest_signal` and
    `extract_website_content` with config healthy (product-spec Acceptance Criteria), and a check that no
@@ -586,7 +619,8 @@ grep -n "agent-config-snapshot-read\|agent-dcr-fail-closed\|agent-rpc-deadlines"
 
 **Verification**:
 ```bash
-grep -n "GetConfig latency\|p99" docs/roadmap/features/247-fix-agent-getconfig-deadline/context.md   # entry with count/p50/p99/max or "Not measured" + escalation
+grep -n "GetConfig latency baseline" docs/roadmap/features/247-fix-agent-getconfig-deadline/context.md   # entry exists
+grep -nE "window.*UTC|count|p50|p99|max|Not measured" docs/roadmap/features/247-fix-agent-getconfig-deadline/context.md   # query window + all four figures, or "Not measured" + escalation
 ```
 
 ---

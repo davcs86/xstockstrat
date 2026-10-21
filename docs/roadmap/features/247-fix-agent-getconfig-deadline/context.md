@@ -191,3 +191,41 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - `tests/test_list_opportunities_deadline.py` is not edited (keeps its private `_HANG_GUARD_S`).
   - The follow-up report filenames carry the execution date (`YYYY-MM-DD`), and each report carries the single severity token `SEV-2`.
 - Next: `/sdd-review fix-agent-getconfig-deadline impl-spec`.
+
+## Session 2026-10-21 — sdd-review impl-spec (advisory)
+
+- Result: criteria FAIL (1 failure, 7 warnings), Floor breaches none; overlap WARN (8 file-level, disjoint regions). Advisory, did not block. Status stays `implementation-ready`.
+- Deviation from `.claude/skills/sdd-review/SKILL.md` § MODE B B3 ("do not modify implementation-spec.md"): the workflow step for this run told me to fix the findings in the spec. The changes are evidence and instruction corrections only. Step count, step order and lifecycle are unchanged.
+- Addressed in implementation-spec.md (each claim re-verified on the branch @ 1d43a224):
+  - [x] C-08: Step 1 and Step 2 **Verification** blocks now run `uv run --no-sync pytest --cov=app --cov-fail-under=40`. This is the agent CI gate (`.github/workflows/ci.yml:358-360`).
+  - [x] C-01 anchors:
+    - client.py endpoint block `:21-29`, `CONFIG_ENDPOINT` `:24`, insert after `:29`;
+    - `_setup_gen_path()` call `conftest.py:48`, `set_env` `:51-52`;
+    - mocked-stub patches `test_client.py:821-823`.
+  - [x] Verification blocks: every `cd` now runs in a `( … )` subshell, so root-relative greps still resolve (Steps 1-3).
+  - [x] Step 1 fixture instructions:
+    - `import grpc`, `from app import client` and the `gen.config.v1` import go inside the fixture body (`conftest.py:3-8` has neither; the gen path resolves only after `:48`);
+    - usage unified to `handle = hung_config_server(...)`;
+    - Evidence now cites `client.log` (`client.py:19`) and `add_ConfigServiceServicer_to_server` (`config_pb2_grpc.py:119`).
+  - [x] Step 2:
+    - adds the `asyncio`, `time` and `from app import tools` imports, plus `HANG_GUARD_S` on `test_tools.py:18`;
+    - Evidence cites the patch targets `test_tools.py:99` and `:378-379`.
+  - [x] Step 5:
+    - filenames pinned to `2026-10-21`; a later execution date goes in the Deviation Log (F-08);
+    - the 7-file advisory is stated;
+    - teardown drift fixes outside **Files** must be added to the Deviation Log first;
+    - the new index rows go under a new `## Filed as defect reports (2026-10-21)` section, not the `(2026-10-19)` heading (agent findings `:58`).
+  - [x] Step 6:
+    - the conflicting "requires Step 3 merged" dependency is removed; Step 6 now runs before Step 3 is committed;
+    - a missing Grafana trace access routes to "Not measured" + P-03 escalation;
+    - the entry must record the query text, UTC window, count, p50, p99 and max, and Verification greps for them.
+  - [x] Step 4: Evidence records why `_CONFIG_READ_TIMEOUT_S` goes in the `CLAUDE.md:205` row and not a new row. The `:195-205` table lists config keys, and the constant is not one. This is a design.md §6 wording deviation with the same intent.
+- Still open, carried into execution:
+  - [ ] Step 6 ordering: the step stays numbered 6, but it must run before Step 3 is committed. `/sdd-execute next|sequential` picks steps by number, so the operator must run Step 6 out of order (or accept the Step 3-landed fallback).
+  - [ ] Step 6 Verification is still a grep of `context.md`. It proves the entry exists and has its fields; it cannot prove the query ran. The operator confirms at the checkpoint.
+  - [ ] Step 6 needs Grafana Cloud trace access the executor may not have. The fallback is "Not measured" + escalation (P-03).
+  - [ ] C-18/DRY: `conftest.HANG_GUARD_S = 10` duplicates `tests/test_list_opportunities_deadline.py:17` `_HANG_GUARD_S`, and the two 3.0 s constants stay separate. design.md accepts both (How-to-Act #3, Rejected Alternatives). The jscpd pre-commit hook may still flag them, which is an operator call at Step 1.
+  - [ ] Overlap WARN (file-level, disjoint regions). Whichever merges second rebases and re-runs `tests/test_client.py` + `tests/test_tools.py`:
+    - `app/client.py` with 240 (Step 24, `:2245-2271`), 215 and 241 (predictive);
+    - `app/tools.py` with 240, 241, 249 and 215;
+    - `services/xstockstrat-agent/CLAUDE.md` with 240 (`:83`, `:86-87`).
