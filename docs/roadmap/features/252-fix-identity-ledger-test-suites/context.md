@@ -181,3 +181,24 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - [ ] This /sdd-spec sandbox has Node `v22.22.0` only. Steps 2–5 gates require Node 24 (`ci.yml:572`). No Node 24 means stop-and-ask, never a Node 22 substitute (`design.md:219`).
   - [ ] `fails.md:2224` claims Node 24 strip-types loads these suites, contradicting `product-spec.md:12-22`. Steps 2 and 4 treat an absent pre-change RED (mutation already fails) as stop-and-ask.
   - [ ] Step 1 must land before `/sdd-review fix-identity-ledger-test-suites impl-spec` (owner: orchestrator).
+
+## Session 2026-10-20 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 6 warnings, 6 notes (criteria PASS WITH WARNINGS, no Floor breach); overlap WARN (no migration/proto/config-key collision). Advisory — did not block; status stays `implementation-ready`.
+- Addressed in `implementation-spec.md` (each claim re-verified on `011e369e`):
+  - [x] C-15 step ordering: the amendment did not land before this review (`acceptance.feature` has AC-1..AC-5). Step Dependencies now states this. Step 1 runs first in `/sdd-execute`, then § Scenario Coverage is re-checked against the amended file.
+  - [x] F-08/F-09: a runner-fallout fix outside the step's Files is now a stop-and-ask plus a Deviation Log entry with operator sign-off. This applies in § Stop-and-ask, Step 2 item 10 and Step 4 item 12. Example: `identityServiceImpl.test.ts` in Step 2.
+  - [x] C-15 anchor drift (partial, see open thread): Step 4 items 2-3 now find the AC-2 mutations by content (`if (claim.rows.length === 0) {` → matching `}` `:106`; `sub.onEvent(row);`) and note that 248 may shift them.
+  - [x] Execution environment: added that `.nvmrc:1` = `22` and `tooling-setup.md:30` "Node 22" do not apply here. Provision Node 24 before the Step 2/4 captures. The contested RED (`fails.md:2224` vs `product-spec.md:12-22`) is still handled by the existing stop-and-ask.
+  - [x] C-10 sibling: added `.claude/skills/sdd-spec/reference/spec-template.md:148` ("confirm threshold passes") to Step 6 Files, with item 3a and Verification greps.
+  - [x] Overlap: the Step 6 merge-order note now covers `084-droplet-compose-deploy` (FR-8, root `CLAUDE.md` + `ci-overview.md`; `084 product-spec.md:63-64`) and `250-fix-otel-metrics-logs-gap` (conditional, fix (b); `250 product-spec.md:40-41`).
+  - [x] Note: `lang-node.md` glob anchor is `:36`, not `:37`. Steps 6 evidence and item 2 are corrected, which supersedes sdd-spec spec-time addition (c).
+  - [x] Note: Steps 3/5 item 11 now label AC-3 GREEN by mechanism. A `tsc` TS2307 rejection is non-discriminating for the `before()` hard-fail, and AC-6 is the discriminating FR-3 evidence.
+  - [x] Note: Steps 2-5 Verification add a record-only `c8 check-coverage --lines 101` probe. It prints the check-coverage aggregate (`check-coverage.js:58-66`; Report built without `excludeNodeModules`/`excludeAfterRemap`/`allowExternal`/`src`, `:22-34` vs `report.js:21-41`). Record it next to the table's All files; both must be >= 40.
+  - [x] Note: Step 6 defect fields now include `**Recorded**: <filing-date>` (`defect-filing.md:57`), with a Verification grep.
+- Open Threads (still open, for the operator at the `/sdd-execute` checkpoint):
+  - [ ] Step 1 (C-15 amendment) is still unapplied on the branch. AC-6 and the reworded AC-1/AC-4/AC-5 have not been reviewed on-branch. Step 1 runs first, then Scenario Coverage is re-checked (owner: `/sdd-execute`).
+  - [ ] AC-2 behavioural rewording, as AC-1 was reworded: the reviewer recommends dropping the `ledgerServiceImpl.ts:84-105` / `eventNotifier.ts:132` anchors. Not applied, because `design.md:169` says "AC-2 and AC-3 stay as written". This needs operator sign-off to amend the Step 1 text. Mitigation in place: Step 4 locates by content.
+  - [ ] Step size (advisory): Step 6 lists 11 files (>5), and the preamble is longer than the template's summary. Not split: it is one docs-only teardown sharing a single `<filing-date>` basename. The operator may ask for a split before Step 6.
+  - [ ] Not evaluable by the reviewer (branch-only evidence): design.md/recon.md citations, #1262 `e69e953d` anchors and counts (67 guards / 150 asserts / 79 tests), and 248 `ddc18f6e`. `fails.md:2953-2966` exists on this branch (file is 2966 lines). Re-grep at Step 2/3/5 boot as already instructed.
+- Overlap findings: #1262 hotfix ↔ `identityServiceImpl.test.ts` (rebase-only, already planned); 248 ↔ ledger tests (conditional; AC-2 anchors re-grep after 248); 084 ↔ root `CLAUDE.md:304` + `ci-overview.md:18,:56` (added to note); 250 ↔ telemetry tests (conditional, added to note); 251 read-only, none; no migration/proto/config-key collision.

@@ -29,7 +29,7 @@ There is no proto, migration, config-key, `ci.yml`, Dockerfile or lockfile chang
 
 ### Scenario Coverage (C-15)
 
-These IDs refer to the **amended** `acceptance.feature` text (Step 1, `design.md:116-169`).
+These IDs refer to the **amended** `acceptance.feature` text (Step 1, `design.md:116-169`). At impl-spec review (`011e369e`) the on-branch file had AC-1..AC-5 only; the AC-6 rows and the reworded AC-1/AC-4/AC-5 are re-checked against this table right after Step 1.
 
 | Scenario | RED captured | GREEN / covered |
 |---|---|---|
@@ -64,7 +64,9 @@ Source: `design.md:103-114`. Each of the following is recorded in `context.md`, 
 
 For any of these, nobody deletes, skips or weakens a test, lowers the threshold, or adds tests ad hoc (operator decision 2026-10-20, `context.md`).
 
-Failures caused by the runner change itself are fixed with no assertion change. These include tooling, `tsc` type errors in test files, mtls, telemetry and hangs. If that fix would touch an assertion, stop and ask.
+Failures caused by the runner change itself are fixed with no assertion change, **inside the current step's Files only**. These include tooling, `tsc` type errors in test files, mtls, telemetry and hangs. If that fix would touch an assertion, stop and ask.
+
+`pnpm build` in Step 2 compiles `identityServiceImpl.test.ts`, and in Step 4 it compiles `ledgerServiceImpl.test.ts` and `eventNotifier.test.ts`. Those files belong to Steps 3 and 5, not to Steps 2 and 4. A fix that needs a file outside the current step's Files is a stop-and-ask: log it in the Deviation Log and get operator sign-off before staging it (F-08).
 
 The feature does not reach `code-completed` while any test fails or the aggregate is below 40.
 
@@ -74,10 +76,13 @@ Every gate capture runs on **Node 24**, matching CI (`.github/workflows/ci.yml:5
 
 The `/sdd-spec` session's sandbox had `v22.22.0`. A host without Node 24 is a stop-and-ask. Never substitute Node 22: the rejected alternative is at `design.md:219`.
 
+Two repo defaults point the wrong way for this feature's gates: `.nvmrc:1` is `22`, and `.claude/skills/sdd-execute/reference/tooling-setup.md:30` provisions "Node 22". Do not follow either. Provision Node 24 before the Step 2 and Step 4 pre-change captures.
+
 ## Step Dependencies
 
 - **Step 1 before everything else.**
-  - Steps 2–5 verify the amended AC-1/AC-4/AC-5 wording and AC-6 (`design.md:120-123`). The amendment must be on the feature branch before `/sdd-review fix-identity-ledger-test-suites impl-spec`. So the orchestrator either executes Step 1 (docs-only) before that review, or applies the identical edit first.
+  - Steps 2–5 verify the amended AC-1/AC-4/AC-5 wording and AC-6 (`design.md:120-123`). `design.md:123` wanted the amendment on the branch before impl-spec review. It was not: `/sdd-review … impl-spec` (2026-10-20) ran against `acceptance.feature` @ `011e369e` with AC-1..AC-5 only.
+  - So Step 1 is the first `/sdd-execute` step and runs before any Step 2 capture. After it, run `grep -n '@AC-' acceptance.feature` and re-check § Scenario Coverage against the amended file. A scenario with no row there is a stop-and-ask.
   - If the identical text is already present when Step 1 runs, Step 1's Verification passes with no diff and the step is marked `done` with a "no-op, already applied" note in `context.md`.
 - **Step 3 [test] covers Step 2 [service]** (C-08 pair).
   - Step 3 needs Step 2's compiled layout. The `.js` subject specifiers resolve only under `dist/` (`recon.md:110`).
@@ -286,7 +291,7 @@ git diff --stat -- "$F"                                                  # only 
     ```
     - This is a macOS-compatible wall-clock bound; exit `142` means SIGALRM, i.e. a hang. Do not pass `--test-force-exit`.
     - If the run hangs, re-run with `--test-force-exit` **only** to identify the file holding the event loop. A pass that only happens with force-exit is a hang finding: fix it with no assertion change, or stop and ask.
-    - `tsc` type errors in test files are runner fallout (`recon.md:215-218`): fix them with no assertion change, or stop and ask.
+    - `tsc` type errors in test files are runner fallout (`recon.md:215-218`). Fix them with no assertion change, and only in this step's Files. An error in `identityServiceImpl.test.ts` (Step 3's file) is a stop-and-ask plus a Deviation Log entry with operator sign-off (§ Stop-and-ask).
     - A bcrypt native-binding load failure is a finding (`design.md:231`). Record it and stop and ask.
 
 **D. Gate and GREEN.** Run the **Verification** below in full.
@@ -326,6 +331,7 @@ pnpm run lint                                     # exit 0
 OUT="${TMPDIR:-/tmp}/252-identity-step2.txt"
 pnpm run test:coverage 2>&1 | tee "$OUT"; echo "test:coverage exit=${PIPESTATUS[0]}"   # 0
 pnpm exec c8 check-coverage --lines 40; echo "check-coverage exit=$?"                   # 0; never add --all/--src/--allowExternal
+pnpm exec c8 check-coverage --lines 101 2>&1 | grep -oE 'lines \([0-9.]+%\)'           # record-only, exit ignored: c8 prints the aggregate pct only on a miss (check-coverage.js:58-66); record it next to the table's All files % Lines (check-coverage builds its Report without excludeNodeModules/excludeAfterRemap/allowExternal/src, check-coverage.js:22-34 vs report.js:21-41); both >= 40
 grep -E '^(ℹ|#) (tests|pass|fail|cancelled|skipped|todo) ' "$OUT"   # fail/cancelled/skipped/todo = 0; tests == pre-step count (same base)
 grep -E 'All files' "$OUT"                        # numeric % Lines >= 40 (not "Unknown")
 grep -E 'identityServiceImpl|authz' "$OUT"        # one row each, % Lines > 0
@@ -451,7 +457,7 @@ git status --short                                # only the 5 Files (+ feature/
 
 11. Record in `context.md`:
     - the proto RED/GREEN;
-    - the AC-6, AC-3 and AC-1 results;
+    - the AC-6, AC-3 and AC-1 results. Label the AC-3 GREEN by mechanism. If `tsc` (TS2307) rejected the `.missing` specifier, mark it "non-discriminating for the `before()` hard-fail". AC-6 is then the discriminating FR-3 evidence;
     - the counts (expected absolute counts, context only: 75 on main-dev, 79 on #1262; `design.md:89`).
 
 **Verification**:
@@ -463,6 +469,7 @@ pnpm build && pnpm run lint                       # both exit 0
 OUT="${TMPDIR:-/tmp}/252-identity-step3.txt"
 pnpm run test:coverage 2>&1 | tee "$OUT"; echo "test:coverage exit=${PIPESTATUS[0]}"   # 0
 pnpm exec c8 check-coverage --lines 40; echo "check-coverage exit=$?"                   # 0
+pnpm exec c8 check-coverage --lines 101 2>&1 | grep -oE 'lines \([0-9.]+%\)'           # record-only, exit ignored: c8 prints the aggregate pct only on a miss (check-coverage.js:58-66); record it next to the table's All files % Lines (check-coverage builds its Report without excludeNodeModules/excludeAfterRemap/allowExternal/src, check-coverage.js:22-34 vs report.js:21-41); both >= 40
 grep -E '^(ℹ|#) (tests|pass|fail|cancelled|skipped|todo) ' "$OUT"   # fail/cancelled/skipped/todo = 0; tests == pre-step count + 1
 grep -E 'All files' "$OUT"                        # numeric % Lines >= 40
 grep -E 'identityServiceImpl|authz' "$OUT"        # % Lines > 0 for each
@@ -534,12 +541,14 @@ git status --short                                # only this file (+ feature/co
    - The per-file assert counts (`grep -o 'assert\.[A-Za-z]*(' <file> | wc -l` for each `src/__tests__/*.test.ts`).
 
 2. **AC-2 RED, mutation (a).**
-   - Delete `src/grpc/ledgerServiceImpl.ts:84-106`.
+   - Find the branch by content first with `grep -n 'if (claim.rows.length === 0) {' src/grpc/ledgerServiceImpl.ts`. It is `:84`, and its closing `}` is `:106`.
+   - The AC-2 text cites `:84-105` only to point at the branch. Feature 248 may shift these lines.
+   - Delete the branch from that `if` through its matching `}` (`:84-106` at `ca8b9236`).
    - `pnpm run test:coverage; echo "exit=$?"` exits 0, and `idempotent path: returns the stored event on a duplicate key (no second insert)` is reported passed.
    - Restore with `git checkout -- src/grpc/ledgerServiceImpl.ts`.
 
 3. **AC-2 RED, mutation (b).**
-   - Delete `src/services/eventNotifier.ts:132` (`sub.onEvent(row);`).
+   - Re-grep it first with `grep -n 'sub.onEvent(row);' src/services/eventNotifier.ts`, because 248 rewrites `dispatch`. Then delete that line (`:132` at `ca8b9236`).
    - The same run exits 0, and `fans out an event to a matching subscriber` is reported passed.
    - Restore with `git checkout -- src/services/eventNotifier.ts`.
 
@@ -576,7 +585,7 @@ git status --short                                # only this file (+ feature/co
     ```
     - Exit `142` means a hang. Do not pass `--test-force-exit`, except for a diagnosis-only re-run.
     - The `eventNotifier` reconnect case is the named timing risk. If it flakes, or holds the loop, it is a finding: fix it with no assertion change, or stop and ask.
-    - `tsc` type errors in test files are runner fallout. For example, the `protected streamExportRows` override at `ledgerServiceImpl.test.ts:586` compiles only while the subject is `any` (`recon.md:76`). Fix with no assertion change, or stop and ask.
+    - `tsc` type errors in test files are runner fallout. For example, the `protected streamExportRows` override at `ledgerServiceImpl.test.ts:586` compiles only while the subject is `any` (`recon.md:76`). Fix them with no assertion change, and only in this step's Files. An error in `ledgerServiceImpl.test.ts` or `eventNotifier.test.ts` (Step 5's files) is a stop-and-ask plus a Deviation Log entry with operator sign-off (§ Stop-and-ask).
 
 **D. Gate and GREEN.** Run the **Verification** in full.
 
@@ -618,6 +627,7 @@ pnpm run lint                                     # exit 0
 OUT="${TMPDIR:-/tmp}/252-ledger-step4.txt"
 pnpm run test:coverage 2>&1 | tee "$OUT"; echo "test:coverage exit=${PIPESTATUS[0]}"   # 0
 pnpm exec c8 check-coverage --lines 40; echo "check-coverage exit=$?"                   # 0; never add --all/--src/--allowExternal
+pnpm exec c8 check-coverage --lines 101 2>&1 | grep -oE 'lines \([0-9.]+%\)'           # record-only, exit ignored: c8 prints the aggregate pct only on a miss (check-coverage.js:58-66); record it next to the table's All files % Lines (check-coverage builds its Report without excludeNodeModules/excludeAfterRemap/allowExternal/src, check-coverage.js:22-34 vs report.js:21-41); both >= 40
 grep -E '^(ℹ|#) (tests|pass|fail|cancelled|skipped|todo) ' "$OUT"   # fail/cancelled/skipped/todo = 0; tests == pre-step count
 grep -E 'All files' "$OUT"                        # numeric % Lines >= 40
 grep -E 'ledgerServiceImpl|eventNotifier' "$OUT"  # one row each, % Lines > 0
@@ -746,7 +756,7 @@ git status --short                                # only the 5 Files (+ feature/
 
 11. Record in `context.md`:
     - the proto RED/GREEN;
-    - the AC-6, AC-3 and AC-2 results;
+    - the AC-6, AC-3 and AC-2 results. Label each AC-3 GREEN by mechanism, as in Step 3 item 11. A `tsc` TS2307 rejection is non-discriminating for the `before()` hard-fail, and AC-6 is the discriminating evidence;
     - the counts (expected absolute count, context only: 47; `design.md:89`).
 
 **Verification**:
@@ -758,6 +768,7 @@ pnpm build && pnpm run lint                       # both exit 0
 OUT="${TMPDIR:-/tmp}/252-ledger-step5.txt"
 pnpm run test:coverage 2>&1 | tee "$OUT"; echo "test:coverage exit=${PIPESTATUS[0]}"   # 0
 pnpm exec c8 check-coverage --lines 40; echo "check-coverage exit=$?"                   # 0
+pnpm exec c8 check-coverage --lines 101 2>&1 | grep -oE 'lines \([0-9.]+%\)'           # record-only, exit ignored: c8 prints the aggregate pct only on a miss (check-coverage.js:58-66); record it next to the table's All files % Lines (check-coverage builds its Report without excludeNodeModules/excludeAfterRemap/allowExternal/src, check-coverage.js:22-34 vs report.js:21-41); both >= 40
 grep -E '^(ℹ|#) (tests|pass|fail|cancelled|skipped|todo) ' "$OUT"   # fail/cancelled/skipped/todo = 0; tests == pre-step count + 2
 grep -E 'All files' "$OUT"                        # numeric % Lines >= 40
 grep -E 'ledgerServiceImpl|eventNotifier' "$OUT"  # % Lines > 0 for each
@@ -778,9 +789,10 @@ git status --short                                # only these 2 files (+ featur
 ### Step 6 — docs: Teardown — narrow the coverage-enforcement claims, file the follow-up defect, add the merge-order note, run the context audit
 
 **Status**: `pending`
-**Service**: `docs/`, `.claude/skills/sdd-qa/`, root `CLAUDE.md`, the Node-leaf findings logs
+**Service**: `docs/`, `.claude/skills/sdd-qa/`, `.claude/skills/sdd-spec/`, root `CLAUDE.md`, the Node-leaf findings logs
 **Files**:
 - `.claude/skills/sdd-qa/reference/lang-node.md` — modify
+- `.claude/skills/sdd-spec/reference/spec-template.md` — modify
 - `docs/patterns/ci-overview.md` — modify
 - `CLAUDE.md` — modify
 - `services/xstockstrat-identity/docs/context-constitution-findings.md` — modify
@@ -798,12 +810,13 @@ git status --short                                # only these 2 files (+ featur
 - **`.claude/skills/sdd-qa/reference/lang-node.md`.**
   - `:9` reads "Coverage via `c8 --lines 40`.".
   - `:11-32` is the "Two different runners" section. `:13-18` wrongly lists notify as strip-types; `:16-17` is `pnpm --filter xstockstrat-<ledger|identity|notify> run test` / `node --experimental-strip-types …`.
-  - `:37` is the glob `src/__tests__/*.test.ts`, which becomes false once all four use `dist/__tests__/*.test.js`.
+  - `:36` is the glob `src/__tests__/*.test.ts` (trap 1), which becomes false once all four use `dist/__tests__/*.test.js`. `:37` is the `sub/thing.test.ts` placement example.
   - `:54` is the `test:coverage` command line and `:58` reads "Threshold is 40% lines for all four".
 - **`docs/patterns/ci-overview.md`.**
   - `:18` is the `` `node-test` (×4) `` row with `40%`.
   - `:56` reads "Node.js: `0%` shown in c8 table is a known TypeScript tooling artefact — tests do pass.".
   - `xstockstrat-ui`'s vitest threshold is enforced (`services/xstockstrat-ui/vitest.config.ts:29-33`; `ci.yml:559-562`). It is excluded from the narrowing (`design.md:186`).
+- **`.claude/skills/sdd-spec/reference/spec-template.md:148`.** The Node-leaf row of the coverage table reads `` `cd services/<name> && pnpm run test:coverage` — confirm threshold passes ``. It is another "40% enforced" instance (C-10, impl-spec review 2026-10-20). It is the only `confirm threshold passes` hit in the file.
 - **Root `CLAUDE.md:304`.** "Coverage thresholds: Go/Python/Node.js ≥40% (indicators ≥50%)." It is narrowed, not deleted (`design.md:188`).
 - **Enforcement facts.**
   - No Node-leaf script passes `--check-coverage` (Step 2/4 scripts; `recon.md:194-195`).
@@ -819,6 +832,7 @@ git status --short                                # only these 2 files (+ featur
   - Precedent: recording a report adds one row per affected service's findings log. Commit `0027fa17` added the 252 rows. The multi-service `2026-10-19-orphaned-code-defect` row appears in config `:51`, notify `:58` and ledger `:49`.
   - **Spec-time addition, not in `design.md:189`.** The follow-up defect affects all four Node leaves, so config and notify get the row too (C-10).
 - **Defect format.** `.claude/skills/sdd-qa/reference/defect-filing.md` gives the template headings, the `.status` sidecar `open`, the "exactly one severity token" rule and the format check (`grep -oE 'SEV-[123]' … | sort -u`). Parent report severity: `SEV-3` (`product-spec.md:5`).
+- **Overlap (impl-spec review 2026-10-20).** `084-droplet-compose-deploy` (`spec-ready`) FR-8 (`084 product-spec.md:63-64`) edits `docs/patterns/ci-overview.md` and root `CLAUDE.md`. `250-fix-otel-metrics-logs-gap` (`draft`) changes all 12 runtimes' telemetry only under fix (b) (`250 product-spec.md:40-41`).
 - **`docs/roadmap/features/merge-order.md:121-138`.** The rebase-only note format (`> **Note on … — rebase-only, no hard ordering row.**` plus `> - **A ↔ B on <file>.**` bullets). Insertion point: after `:138`, before the `---` at `:140`.
 - **Context audit.**
   - Root `CLAUDE.md` § Teardown requires `/context-forge:context-constitution refresh`, or a manual reconciliation recorded in the PR body.
@@ -832,6 +846,7 @@ git status --short                                # only these 2 files (+ featur
 
 1. **Defect report.** Create `docs/reports/<filing-date>-node-leaf-c8-check-coverage-unenforced-defect.md`, where `<filing-date>` is the ISO date the step runs. Use the template in `.claude/skills/sdd-qa/reference/defect-filing.md`.
    - Fields:
+     - `**Recorded**: <filing-date>` (template `defect-filing.md:57`);
      - `**Severity**: SEV-3` — the only severity token in the file;
      - `**Impact type**: test-coverage-gap`;
      - `**Environment**: dev (main-dev)`;
@@ -849,13 +864,15 @@ git status --short                                # only these 2 files (+ featur
 2. **`lang-node.md`.**
    - `:9`: append "— declared, not enforced: no script passes `--check-coverage` (see § Commands)."
    - Replace `:11-32` with a "One runner — compile first" section. All four services run `tsc && node --test dist/__tests__/*.test.js`. Keep the 074 (`fails.md` 2026-07-29) rationale sentence, and note that identity and ledger followed in feature 252. State that tests are in the `tsc` program, so a `.ts`-suffixed import (TS5097, `fails.md:2239`) or `import.meta` in a test breaks `pnpm build`.
-   - `:37`: change the glob to `dist/__tests__/*.test.js`. The placement example stays.
+   - `:36`: change the glob to `dist/__tests__/*.test.js`. The `:37` placement example stays.
    - After `:54`, add `pnpm --filter xstockstrat-<svc> exec c8 check-coverage --lines 40   # right after test:coverage — the only enforcing check`.
    - `:58`: becomes "40% lines is declared for all four but not enforced by CI; check it with the `check-coverage` line above. Follow-up: `docs/reports/<filing-date>-node-leaf-c8-check-coverage-unenforced-defect.md`. `docs/patterns/ci-overview.md` is the reference."
 
 3. **`ci-overview.md`.**
    - `:18`: change the threshold cell `40%` to `40% declared, not enforced (no \`--check-coverage\`; follow-up defect)`. Leave the other cells.
    - `:56`: becomes "Node.js leaves (config, ledger, identity, notify): tests run compiled (`tsc && c8 … node --test dist/__tests__/*.test.js`), and the c8 table has a non-zero row per impl module. `--lines 40` is unenforced without `--check-coverage`; verify with `pnpm exec c8 check-coverage --lines 40` after `test:coverage` (follow-up defect `docs/reports/<filing-date>-node-leaf-c8-check-coverage-unenforced-defect.md`)." Do not narrow the `xstockstrat-ui` vitest gate.
+
+3a. **`spec-template.md:148`.** In the Node-leaf row, change the command cell to `` `cd services/<name> && pnpm run test:coverage && pnpm exec c8 check-coverage --lines 40` — `--lines 40` in the script alone is not enforced (follow-up defect) ``. Leave the `40%` cell and the other rows unchanged.
 
 4. **Root `CLAUDE.md:304`.** Change "Coverage thresholds: Go/Python/Node.js ≥40% (indicators ≥50%)." to "Coverage thresholds: Go/Python ≥40% (indicators ≥50%); the Node.js leaves declare 40% but CI does not enforce it (no `--check-coverage` — see `docs/patterns/ci-overview.md`)." Leave the rest of the line.
 
@@ -867,7 +884,7 @@ git status --short                                # only these 2 files (+ featur
 
 6. **`merge-order.md`.** After `:138`, insert one blank line and then this blockquote:
    ```
-   > **Note on 252 `fix-identity-ledger-test-suites` ↔ hotfix #1262 / 248 / 241 — rebase-only, no hard ordering row.**
+   > **Note on 252 `fix-identity-ledger-test-suites` ↔ hotfix #1262 / 248 / 084 / 250 / 241 — rebase-only, no hard ordering row.**
    > 252 makes the identity and ledger impl suites execute (compile-then-test) and deletes every
    > `if (!<subject>) return;` skip guard. None of the overlaps is a field-number / migration / config-key collision:
    >
@@ -877,6 +894,13 @@ git status --short                                # only these 2 files (+ featur
    > - **248 `fix-ledger-trimmed-notify-payload` ↔ 252 on `ledgerServiceImpl.test.ts` / `eventNotifier.test.ts`.**
    >   248 writes its tests unguarded (a guarded case is a silent pass once 252 lands); whoever lands second
    >   de-guards and merges the other's test changes.
+   > - **084 `droplet-compose-deploy` ↔ 252 on root `CLAUDE.md` and `docs/patterns/ci-overview.md`.** 084 FR-8
+   >   rewrites both for the deploy topology; 252 narrows only the coverage sentence (`CLAUDE.md` CI/CD Overview)
+   >   and the `node-test` row + Node.js tooling bullet (`ci-overview.md`). Different sections; whoever lands
+   >   second rebases.
+   > - **250 `fix-otel-metrics-logs-gap` ↔ 252 on identity/ledger `telemetry*.test.ts` (conditional).** Only under
+   >   250's fix (b), which changes every runtime's telemetry module. 252 changes only those tests' import specifiers
+   >   and the strip-types shim; whoever lands second keeps 252's extensionless imports.
    > - **241 `fix-config-audit-author-spoof`** — no overlap (config + agent only).
    ```
 
@@ -892,12 +916,15 @@ git status --short                                # only these 2 files (+ featur
 R=docs/reports; B=$(ls $R | grep -E '^[0-9]{4}-[0-9]{2}-[0-9]{2}-node-leaf-c8-check-coverage-unenforced-defect\.md$' | sed 's/\.md$//')
 echo "$B"                                         # exactly one basename
 grep -oE 'SEV-[123]' "$R/$B.md" | sort -u         # exactly one line: SEV-3
+grep -n '^\*\*Recorded\*\*:' "$R/$B.md"                  # 1 hit
 grep -n '^\*\*Severity\*\*:' "$R/$B.md"
 grep -nE '^## (Observed|Expected|Reproduction|Evidence|Root cause hypothesis|Confidence)$' "$R/$B.md"   # 6 headings
 head -1 "$R/$B.status"                            # open
 grep -n 'experimental-strip-types --test' .claude/skills/sdd-qa/reference/lang-node.md   # no hits
 grep -n 'check-coverage' .claude/skills/sdd-qa/reference/lang-node.md docs/patterns/ci-overview.md CLAUDE.md   # >= 1 hit each
 grep -n 'tooling artefact' docs/patterns/ci-overview.md                                  # no hits
+grep -n 'confirm threshold passes' .claude/skills/sdd-spec/reference/spec-template.md    # no hits
+grep -n 'c8 check-coverage --lines 40' .claude/skills/sdd-spec/reference/spec-template.md   # 1 hit (Node-leaf row)
 grep -n 'Go/Python/Node.js ≥40%' CLAUDE.md                                               # no hits
 grep -c "$B" services/xstockstrat-identity/docs/context-constitution-findings.md services/xstockstrat-ledger/docs/context-constitution-findings.md services/xstockstrat-config/docs/context-constitution-findings.md services/xstockstrat-notify/docs/context-constitution-findings.md   # 1 line (the new row) per file
 grep -c '2026-10-20-node-impl-test-suites-never-load-impl-defect' services/xstockstrat-identity/docs/context-constitution-findings.md services/xstockstrat-ledger/docs/context-constitution-findings.md   # unchanged: 1 line each
