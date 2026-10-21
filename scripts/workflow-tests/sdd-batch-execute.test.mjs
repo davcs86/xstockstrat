@@ -9,16 +9,16 @@ const steps = (done) => [
   { n: 3, title: 'c', status: done >= 3 ? 'done' : 'pending', service: 'xstockstrat-ui', surface: 'ui' },
 ]
 const pre = (o = {}) => Object.assign({ ok: true, problems: [], dir: '300-fix-a', nnn: '300', devBranch: 'feature/fix-a', status: 'implementation-ready', severity: 'SEV-2', steps: steps(0), mergeOrderBlock: '', openPrUrl: '', promotionPlan: '' }, o)
-const impl = (o = {}) => Object.assign({ result: 'done', commit: 'c', red: 'RED', green: 'GREEN', files: ['f'], deviations: [], out_of_scope: [], open_items: [], unaddressed_warnings: [], blocker: '', options: [] }, o)
+const impl = (o = {}) => Object.assign({ result: 'done', commits: ['c-step'], red: 'RED', green: 'GREEN', files: ['f'], deviations: [], out_of_scope: [], open_items: [], unaddressed_warnings: [], blocker: '', options: [] }, o)
 const replies = (preOver, extra = {}) => Object.assign({
   'preflight:': pre(preOver),
   'validate:': { mismatches: [], tooling_blockers: [] },
-  'setup:': { commit: 'c-setup', notes: [] },
+  'setup:': { commits: ['c-setup'], notes: [] },
   'discover:': 'digest',
   'step:': impl(),
   'promotion-plan:': { plan: 'PLAN', scenarios: 2 },
-  'write-plan:': { commit: 'c-plan', notes: [] },
-  'integration-pr:': { url: 'https://pr/1', commit: 'c-pr' },
+  'write-plan:': { commits: ['c-plan'], notes: [] },
+  'integration-pr:': { url: 'https://pr/1', commits: ['c-pr'] },
 }, extra)
 let t, r
 t = await run(F, Object.assign({}, base, { modeEntryConfirmed: false }), replies())
@@ -39,6 +39,11 @@ t = await run(F, Object.assign({}, base, { approvals: { 'fix-a': { gate: 'upfron
 r = t.result[0]
 assert.equal(r.halted.gate, 'checkpoint:2'); assert.deepEqual(r.halted.steps_done, ['1: a ✓', '2: b ✓']); assert.equal(r.halted.next, 'ui (step 3)')
 assert.ok(t.calls.find((c) => c.label === 'setup:fix-a'))
+assert.deepEqual(r.commits, ['c-setup', 'c-step', 'c-step'])
+for (const c of t.calls.filter((c) => /^(setup|step|write-plan|integration-pr):/.test(c.label))) {
+  assert.ok(c.prompt.includes('Push after EACH artifact edit'), c.label)
+  assert.ok(c.prompt.includes('no commit before verification'), c.label)
+}
 console.log('2 surface-boundary checkpoint ok')
 // 3. checkpoint:2 proceed → step 3 → feature-end checkpoint
 t = await run(F, Object.assign({}, base, { approvals: { 'fix-a': { gate: 'checkpoint:2', decision: 'proceed' } } }), replies({ status: 'in-progress', steps: steps(2) }))

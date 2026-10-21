@@ -9,17 +9,17 @@ const common = (preOver, synthFn) => ({
   'preflight:': pre(preOver),
   'review-spec:': { overall: 'PASS WITH WARNINGS', fails: [], warnings: ['w'], floor_breaches: [] },
   'overlap:': { level: 'PASS', collisions: [] },
-  'write-review:': { spec_ready: true, commit: 'c-rev', product_spec_md: 'PS2', acceptance_feature: 'AC2' },
+  'write-review:': { spec_ready: true, commits: ['c-rev-1', 'c-rev-2'], product_spec_md: 'PS2', acceptance_feature: 'AC2' },
   'discover:': 'digest', 'scenario-recon:': 'rules',
-  'write-recon:': { commit: 'c-recon', content: 'RECON' },
+  'write-recon:': { commits: ['c-recon-1', 'c-recon-2'], content: 'RECON' },
   'propose:': 'PROP', 'attack:': 'ADV',
   'synth:': synthFn || synth(),
-  'write-gate:': { commit: 'c-gate', content: 'gate' },
-  'write-design:': { commit: 'c-design', content: 'DESIGN' },
-  'write-spec:': { commit: 'c-spec', content: 'SPEC', steps: 3, step_titles: ['a', 'b', 'c'] },
+  'write-gate:': { commits: ['c-gate-1', 'c-gate-2'], content: 'gate' },
+  'write-design:': { commits: ['c-design-1', 'c-design-2'], content: 'DESIGN' },
+  'write-spec:': { commits: ['c-spec-1', 'c-spec-2'], content: 'SPEC', steps: 3, step_titles: ['a', 'b', 'c'] },
   'review-impl:': { overall: 'PASS', fails: [], warnings: [], floor_breaches: [] },
   'overlap-impl:': { level: 'PASS', collisions: [] },
-  'write-implreview:': { commit: 'c-ir', addressed: [], still_open: [] },
+  'write-implreview:': { commits: ['c-ir-1', 'c-ir-2'], addressed: [], still_open: [] },
 })
 let t
 // 1. halt (default): draft → review → recon → 2 rounds → halted at design gate
@@ -71,11 +71,16 @@ t = await run(F, base, common({ demotedSimilar: ['fix-a-old'] }))
 assert.equal(t.result[0].halted.gate, 'demoted-duplicate')
 console.log('8 preflight guards ok')
 // 9. review FAIL twice → blocked, never reaches recon
-t = await run(F, base, Object.assign(common(), { 'review-spec:': { overall: 'FAIL', fails: ['c8'], warnings: [], floor_breaches: [] }, 'write-review:': { spec_ready: false, commit: 'c', product_spec_md: 'P', acceptance_feature: 'A' } }))
+t = await run(F, base, Object.assign(common(), { 'review-spec:': { overall: 'FAIL', fails: ['c8'], warnings: [], floor_breaches: [] }, 'write-review:': { spec_ready: false, commits: ['c-1', 'c-2'], product_spec_md: 'P', acceptance_feature: 'A' } }))
 assert.match(t.result[0].blocked, /still FAIL/); assert.equal(t.calls.filter((c) => c.label.startsWith('discover:')).length, 0)
 console.log('9 review fail ok')
 // 10. trailer + severity reach every writer
 t = await run(F, base, common())
 for (const c of t.calls.filter((c) => c.label.startsWith('write-'))) { assert.ok(c.prompt.includes('Co-Authored-By: X')); assert.ok(c.prompt.includes('only SEV-2 may appear')); assert.equal(c.opts.isolation, 'worktree') }
+for (const c of t.calls.filter((c) => c.label.startsWith('write-'))) assert.ok(c.prompt.includes('Push after EACH artifact edit'), c.label)
 console.log('10 writer rules ok')
+// 11. per-artifact commits from every writer are kept, in order
+t = await run(F, Object.assign({}, base, { designGate: 'auto', authorizationRef: 'x' }), common())
+assert.deepEqual(t.result[0].commits, ['c-rev-1', 'c-rev-2', 'c-recon-1', 'c-recon-2', 'c-design-1', 'c-design-2', 'c-spec-1', 'c-spec-2', 'c-ir-1', 'c-ir-2'])
+console.log('11 per-artifact commits ok')
 console.log('ALL sdd-batch tests passed')

@@ -65,14 +65,14 @@ const VALIDATE = {
 }
 const WRITE = {
   type: 'object',
-  properties: { commit: { type: 'string' }, notes: { type: 'array', items: { type: 'string' } } },
-  required: ['commit', 'notes'],
+  properties: { commits: { type: 'array', items: { type: 'string' } }, notes: { type: 'array', items: { type: 'string' } } },
+  required: ['commits', 'notes'],
 }
 const IMPL = {
   type: 'object',
   properties: {
     result: { type: 'string', enum: ['done', 'blocker'] },
-    commit: { type: 'string' },
+    commits: { type: 'array', items: { type: 'string' } },
     red: { type: 'string' },
     green: { type: 'string' },
     files: { type: 'array', items: { type: 'string' } },
@@ -83,7 +83,7 @@ const IMPL = {
     blocker: { type: 'string' },
     options: { type: 'array', items: { type: 'string' } },
   },
-  required: ['result', 'commit', 'red', 'green', 'files', 'deviations', 'out_of_scope', 'open_items', 'unaddressed_warnings', 'blocker', 'options'],
+  required: ['result', 'commits', 'red', 'green', 'files', 'deviations', 'out_of_scope', 'open_items', 'unaddressed_warnings', 'blocker', 'options'],
 }
 const PLAN = {
   type: 'object',
@@ -92,8 +92,8 @@ const PLAN = {
 }
 const PR = {
   type: 'object',
-  properties: { url: { type: 'string' }, commit: { type: 'string' } },
-  required: ['url', 'commit'],
+  properties: { url: { type: 'string' }, commits: { type: 'array', items: { type: 'string' } } },
+  required: ['url', 'commits'],
 }
 
 function approval(slug) {
@@ -104,9 +104,11 @@ function writerRules(f, p) {
   return `You are executing /sdd-execute ${f.slug} sequential for feature ${p.dir} (docs/roadmap/features/${p.dir}/), dev branch ${p.devBranch}. You run in your own git worktree and are the only writer for this unit of work (P-01). Mandatory git protocol:
 1. \`git fetch origin\` then \`git checkout --detach origin/${p.devBranch}\`. Never check out a named local branch.
 2. If \`node_modules\` is missing at the worktree root, symlink it from the main worktree (first entry of \`git worktree list --porcelain\`) so the husky pre-commit hook runs. Never use --no-verify.
-3. Commit messages end with these lines, verbatim:
+3. Commit message bodies end with these lines, verbatim:
 ${A.trailer}
-4. \`git push origin HEAD:refs/heads/${p.devBranch}\`; retry up to 4 times (2s/4s/8s/16s) on network errors only. Never push elsewhere, never force-push.
+4. \`git push origin HEAD:refs/heads/${p.devBranch}\` after every commit; retry up to 4 times (2s/4s/8s/16s) on network errors only. Never push elsewhere, never force-push.
+5. Push after EACH artifact edit: every SDD artifact or doc you create or change (status.md, feature.md, context.md, implementation-spec.md re-spec, the promotion plan, durable acceptance suites) is committed alone — subject = this task's commit message + " — <file name>" — and pushed before the next file is touched. The ONE exception is a step's implementation: its **Files** plus that step's implementation-spec.md status, feature.md and context.md updates form a single commit made only after verification passes (SKILL.md HARD CONSTRAINT: no commit before verification).
+6. Return every commit sha you created, in order, as \`commits\`.
 Use ${A.date} for history rows and session headers. Severity tokens: only ${p.severity} may appear. Every HARD CONSTRAINT of .claude/skills/sdd-execute/SKILL.md applies (no guessed paths/symbols, no commit before verification passes, migration immutability, never start a database).`
 }
 
@@ -151,9 +153,9 @@ ok = no problems.`, { phase: 'Preflight', schema: PREFLIGHT, label: `preflight:$
       return out
     }
     if (v.tooling_blockers.length) { out.blocked = `tooling: ${v.tooling_blockers.join('; ')}`; return out }
-    const ws = await agent(`${WR}\n\n${ctx}\nOperator approved the up-front plan. Do §5.3 + branch setup: \`git merge -X ours origin/main-dev\` into the detached checkout. ${v.mismatches.length ? `Re-spec ONLY these step bodies (Instructions/Codebase Evidence/Files/Verification) to match the current codebase — directive ${f.directive || 'conditional'}: ${JSON.stringify(v.mismatches)}; commit "respec(${f.slug}): align steps ${v.mismatches.map((m) => m.n).join(',')} with current codebase" with a feature.md history row and a context.md note.` : 'No re-spec needed.'} If status.md is implementation-ready, set it to in-progress with a feature.md history row and a context.md session entry "sdd-execute sequential (sdd-batch-execute)" recording the up-front confirmation. Commit, push. Return the commit sha.`, { phase: 'Gate', schema: WRITE, isolation: 'worktree', label: `setup:${f.slug}` })
+    const ws = await agent(`${WR}\n\n${ctx}\nOperator approved the up-front plan. Do §5.3 + branch setup: \`git merge -X ours origin/main-dev\` into the detached checkout. ${v.mismatches.length ? `Re-spec ONLY these step bodies (Instructions/Codebase Evidence/Files/Verification) to match the current codebase — directive ${f.directive || 'conditional'}: ${JSON.stringify(v.mismatches)}; commit "respec(${f.slug}): align steps ${v.mismatches.map((m) => m.n).join(',')} with current codebase" with a feature.md history row and a context.md note.` : 'No re-spec needed.'} If status.md is implementation-ready, set it to in-progress with a feature.md history row and a context.md session entry "sdd-execute sequential (sdd-batch-execute)" recording the up-front confirmation. Return the commits.`, { phase: 'Gate', schema: WRITE, isolation: 'worktree', label: `setup:${f.slug}` })
     if (!ws) { out.blocked = 'setup writer died'; return out }
-    out.commits.push(ws.commit)
+    out.commits.push(...ws.commits)
   }
 
   // ── Steps: one commit per step on the dev branch (§5.5) ──────────────────
@@ -172,7 +174,7 @@ ok = no problems.`, { phase: 'Preflight', schema: PREFLIGHT, label: `preflight:$
       out.halted = { gate: `blocker:${s.n}`, step: s.n, title: s.title, question: impl.blocker, options: impl.options }
       return out
     }
-    out.commits.push(impl.commit)
+    out.commits.push(...impl.commits)
     sinceCheckpoint += 1
     const next = pending[i + 1]
     const fire = !next || next.surface !== s.surface || sinceCheckpoint === STEP_CAP
@@ -207,13 +209,13 @@ ok = no problems.`, { phase: 'Preflight', schema: PREFLIGHT, label: `preflight:$
     const plan = await agent(`${ctx}\nPlan the C-16 promotion of docs/roadmap/features/${p.dir}/acceptance.feature (read it on origin/${p.devBranch}) into the durable suites per .claude/skills/sdd-execute/SKILL.md ALL-DONE PATH step 2.5: target suite per scenario, @feature-${p.nnn} provenance tags, dedup against existing suites. Return the ready-to-write plan.`, { agentType: 'scenario-promoter', phase: 'Land', schema: PLAN, label: `promotion-plan:${f.slug}` })
     if (!plan) { out.blocked = 'promotion planner died'; return out }
     const wp = await agent(`${WR}\n\n${ctx}\nAppend a context.md session entry "sdd-batch-execute promotion plan (awaiting operator confirm)" containing the plan below inside a fenced block tagged \`sdd-batch-promotion-plan\`. Change nothing else. Commit "docs(${f.slug}): C-16 promotion plan awaiting confirm (${p.nnn})", push.\n\n${plan.plan}`, { phase: 'Land', schema: WRITE, isolation: 'worktree', label: `write-plan:${f.slug}` })
-    if (wp) out.commits.push(wp.commit)
+    if (wp) out.commits.push(...wp.commits)
     out.halted = { gate: 'promotion', scenarios: plan.scenarios, plan: plan.plan, question: "Confirm the C-16 promotion plan (P-04): {gate:'promotion', decision:'proceed'}." }
     return out
   }
-  const pr = await agent(`${WR}\n\n${ctx}\nALL-DONE PATH (SKILL.md) for ${f.slug}: the operator confirmed the C-16 promotion plan recorded in context.md (block \`sdd-batch-promotion-plan\`). Apply exactly that plan to the durable suite files, make sure status.md is code-completed (history row if it changes), commit "docs(${f.slug}): promote acceptance scenarios (C-16) (${p.nnn})" and push. Then render .claude/skills/sdd-execute/templates/integration-pr-body.md (per-step one-liners from implementation-spec.md, new migrations, new env vars, Deviation Log summary, test plan), ending the body with these lines verbatim:\n${A.prFooter}\nand open the integration PR with mcp__github__create_pull_request (load via ToolSearch): base main-dev, head ${p.devBranch}. Return its URL and the commit sha.`, { phase: 'Land', schema: PR, isolation: 'worktree', label: `integration-pr:${f.slug}` })
+  const pr = await agent(`${WR}\n\n${ctx}\nALL-DONE PATH (SKILL.md) for ${f.slug}: the operator confirmed the C-16 promotion plan recorded in context.md (block \`sdd-batch-promotion-plan\`). Apply exactly that plan to the durable suite files, make sure status.md is code-completed (history row if it changes), commit "docs(${f.slug}): promote acceptance scenarios (C-16) (${p.nnn})" and push. Then render .claude/skills/sdd-execute/templates/integration-pr-body.md (per-step one-liners from implementation-spec.md, new migrations, new env vars, Deviation Log summary, test plan), ending the body with these lines verbatim:\n${A.prFooter}\nand open the integration PR with mcp__github__create_pull_request (load via ToolSearch): base main-dev, head ${p.devBranch}. Return its URL and the commits.`, { phase: 'Land', schema: PR, isolation: 'worktree', label: `integration-pr:${f.slug}` })
   if (!pr) { out.blocked = 'integration-PR writer died'; return out }
-  out.commits.push(pr.commit)
+  out.commits.push(...pr.commits)
   out.prUrl = pr.url
   out.stage = 'done'
   return out

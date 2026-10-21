@@ -71,16 +71,16 @@ const WRITER_A = {
   type: 'object',
   properties: {
     spec_ready: { type: 'boolean' },
-    commit: { type: 'string' },
+    commits: { type: 'array', items: { type: 'string' } },
     product_spec_md: { type: 'string' },
     acceptance_feature: { type: 'string' },
   },
-  required: ['spec_ready', 'commit', 'product_spec_md', 'acceptance_feature'],
+  required: ['spec_ready', 'commits', 'product_spec_md', 'acceptance_feature'],
 }
 const WRITER_DOC = {
   type: 'object',
-  properties: { commit: { type: 'string' }, content: { type: 'string' } },
-  required: ['commit', 'content'],
+  properties: { commits: { type: 'array', items: { type: 'string' } }, content: { type: 'string' } },
+  required: ['commits', 'content'],
 }
 const SYNTH = {
   type: 'object',
@@ -112,13 +112,13 @@ const SYNTH = {
 }
 const WRITER_SPEC = {
   type: 'object',
-  properties: { commit: { type: 'string' }, content: { type: 'string' }, steps: { type: 'number' }, step_titles: { type: 'array', items: { type: 'string' } } },
-  required: ['commit', 'content', 'steps', 'step_titles'],
+  properties: { commits: { type: 'array', items: { type: 'string' } }, content: { type: 'string' }, steps: { type: 'number' }, step_titles: { type: 'array', items: { type: 'string' } } },
+  required: ['commits', 'content', 'steps', 'step_titles'],
 }
 const WRITER_FINAL = {
   type: 'object',
-  properties: { commit: { type: 'string' }, addressed: { type: 'array', items: { type: 'string' } }, still_open: { type: 'array', items: { type: 'string' } } },
-  required: ['commit', 'addressed', 'still_open'],
+  properties: { commits: { type: 'array', items: { type: 'string' } }, addressed: { type: 'array', items: { type: 'string' } }, still_open: { type: 'array', items: { type: 'string' } } },
+  required: ['commits', 'addressed', 'still_open'],
 }
 
 function approval(slug, gate) {
@@ -139,9 +139,10 @@ function writerRules(f, p) {
 1. \`git fetch origin\`. If \`git ls-remote --exit-code --heads origin ${p.devBranch}\` succeeds run \`git checkout --detach origin/${p.devBranch}\`, else \`git checkout --detach origin/${BASE}\`. Never check out a named local branch (another worktree may hold it).
 2. If \`node_modules\` is missing at the worktree root, symlink it from the main worktree (first entry of \`git worktree list --porcelain\`) so the husky pre-commit hook runs. Never use --no-verify.
 3. Edit ONLY files under docs/roadmap/features/${p.dir}/ (plus docs/roadmap/ledger/insights.md or fails.md only when the skill step explicitly calls for a ledger line).
-4. Stage exactly those paths and commit. The commit message body must end with these lines, verbatim:
+4. Push after EACH artifact edit: the moment one file is created or changed, stage only that file, commit it (subject = this task's commit message + " — <file name>"; body ends with the lines below, verbatim) and push (rule 5) before touching the next file. Never batch several files into one commit and never leave an edit uncommitted, so an interrupted run loses at most the file in progress.
 ${A.trailer}
 5. \`git push origin HEAD:refs/heads/${p.devBranch}\`; retry up to 4 times (2s/4s/8s/16s) on network errors only. Never push to any other ref, never force-push.
+6. Return every commit sha you created, in order, as \`commits\`.
 Use ${A.date} for every Status History row and session header. Severity tokens: only ${p.severity} may appear (never another SEV level).`
 }
 
@@ -187,7 +188,7 @@ ok = no problems.`, { phase: 'Preflight', schema: PREFLIGHT, label: `preflight:$
       if (!verdict || !overlap) { out.blocked = 'review agent died'; return out }
       wa = await agent(`${WR}\n\n${ctx}\nYou are /sdd-review ${f.slug} product-spec step A4 (outcome); read .claude/skills/sdd-review/SKILL.md §MODE A A4 for the exact edits.\n\nCriteria verdict:\n${JSON.stringify(verdict, null, 2)}\n\nOverlap verdict:\n${JSON.stringify(overlap, null, 2)}\n\n${decisions(f)}\n\n- Any FAIL (criteria fails, floor breach, or overlap FAIL): minimally edit product-spec.md / acceptance.feature to resolve each item without weakening a requirement or dropping a regression scenario; leave status.md/feature.md history alone; commit "docs(${f.slug}): address product-spec review findings (${p.nnn})"; push; spec_ready=false.\n- Otherwise apply the A4 PASS edits (status.md → spec-ready, feature.md history row + Next Action \`/sdd-design ${f.slug}\`, context.md session entry with warnings + overlap findings, and the OPERATOR DECISIONS block verbatim); resolve clearly-correct cheap warnings; commit "docs(${f.slug}): product spec approved — draft → spec-ready (${p.nnn})"; push; spec_ready=true.\nReturn the CURRENT full product-spec.md and acceptance.feature.`, { phase: 'Review', schema: WRITER_A, isolation: 'worktree', label: `write-review:${f.slug}#${attempt}` })
       if (!wa) { out.blocked = 'review writer died'; return out }
-      out.commits.push(wa.commit)
+      out.commits.push(...wa.commits)
       specText = wa.product_spec_md
       accText = wa.acceptance_feature
       if (wa.spec_ready) break
@@ -214,7 +215,7 @@ ok = no problems.`, { phase: 'Preflight', schema: PREFLIGHT, label: `preflight:$
       if (digests.length === 0) { out.blocked = 'recon agents died'; return out }
       const wb = await agent(`${WR}\n\n${ctx}\nYou are /sdd-design ${f.slug} Phase 0 step 3. Read docs/sdd/constitution.md, docs/roadmap/ledger/{fails,insights}.md (entries relevant to the affected services), the feature's context.md and .claude/skills/sdd-design/templates/recon.md, then write docs/roadmap/features/${p.dir}/recon.md from the template using the digests below (re-grep anything you cite). Do NOT change status.md. Commit "docs(${f.slug}): sdd-design Phase 0 recon (${p.nnn})", push. Return recon.md's full content.\n\n${decisions(f)}\n\nDIGESTS:\n${digests.map((d, i) => `### digest ${i + 1}\n${d}`).join('\n\n')}`, { phase: 'Recon', schema: WRITER_DOC, isolation: 'worktree', label: `write-recon:${f.slug}` })
       if (!wb) { out.blocked = 'recon writer died'; return out }
-      out.commits.push(wb.commit)
+      out.commits.push(...wb.commits)
       recon = wb.content
     }
     const reconBlock = `--- recon.md ---\n${recon}`
@@ -248,7 +249,7 @@ ok = no problems.`, { phase: 'Preflight', schema: PREFLIGHT, label: `preflight:$
     if (!approved) {
       const persisted = JSON.stringify({ round: state.round, synth: state.synth, floor_breaches: state.floor_breaches }, null, 2)
       const wh = await agent(`${WR}\n\n${ctx}\nThe /sdd-design ${f.slug} full debate is at its approval gate after round ${state.round} (gate policy: ${GATE}). Per the grilling protocol do NOT write design.md and do NOT change status.md. Append a context.md session entry "sdd-batch design gate (round ${state.round})": a tight synthesis (approach, strongest open objection, Floor status, uncovered @AC changes) under '## Open Threads' wording, followed by a fenced block tagged \`sdd-batch-design-state\` containing exactly this JSON (so the next /sdd-batch run resumes the debate):\n\n${persisted}\n\nCommit "docs(${f.slug}): sdd-design at gate after round ${state.round} (${p.nnn})", push. Return content = the synthesis text you wrote.`, { phase: 'Design', schema: WRITER_DOC, isolation: 'worktree', label: `write-gate:${f.slug}` })
-      if (wh) out.commits.push(wh.commit)
+      if (wh) out.commits.push(...wh.commits)
       out.halted = {
         gate: 'design',
         round: state.round,
@@ -262,7 +263,7 @@ ok = no problems.`, { phase: 'Preflight', schema: PREFLIGHT, label: `preflight:$
     }
     const wc = await agent(`${WR}\n\n${ctx}\nYou are /sdd-design ${f.slug} Phase 1 'Approved' + COMPLETION (read .claude/skills/sdd-design/SKILL.md §COMPLETION and templates/design.md). Approved after ${state.round} full-mode rounds — ${decision === 'approve' ? 'operator approval at the gate' : `auto-approved under ${A.authorizationRef}`} (Floor clear). Write docs/roadmap/features/${p.dir}/design.md: Chosen Approach (cite recon.md path:line), Rejected Alternatives, Open Risks, Constitution Rules Touched, Business Rules Touched (C-16, with the operator-decision reference for each CHANGE), Rounds + termination reason. COMPLETION edits: status.md spec-ready → design-approved; feature.md history row + Next Action \`/sdd-spec ${f.slug}\` + Artifacts; context.md session entry (Open Risks into Open Threads). Ledger line only for a genuinely reusable pattern/trap. Commit "docs(${f.slug}): design approved — spec-ready → design-approved (${p.nnn})", push. Return design.md's content.\n\n${decisions(f)}\n\n--- FINAL SYNTHESIZED STATE ---\n${JSON.stringify(state.synth, null, 2)}\n\n--- FINAL PROPOSAL ---\n${prop}\n\n--- FINAL ADVERSARY ---\n${adv}`, { phase: 'Design', schema: WRITER_DOC, isolation: 'worktree', label: `write-design:${f.slug}` })
     if (!wc) { out.blocked = 'design writer died'; return out }
-    out.commits.push(wc.commit)
+    out.commits.push(...wc.commits)
     out.open_risks = state.synth.open_risks
     status = 'design-approved'
   }
@@ -272,9 +273,9 @@ ok = no problems.`, { phase: 'Preflight', schema: PREFLIGHT, label: `preflight:$
   const implExisting = p.implSpecMd
   if (status === 'design-approved') {
     out.stage = 'Spec'
-    const wd = await agent(`${WR}\n\n${ctx}\nYou are /sdd-spec ${f.slug} end to end (read .claude/skills/sdd-spec/SKILL.md + reference/spec-template.md, step-constraints.md, discovery-checklist.md). design.md's Chosen Approach is mandatory, Rejected Alternatives are off the table, recon.md's Patterns to REUSE are mandatory reuse targets. Do the Step 2 governance reads, then any discovery recon.md lacks yourself — no invented paths/functions/lines (unfound → **Not found**). Every @AC-* scenario is covered by a step's **Covers** line (C-15); every code step has a paired red-before-green test step. Proto steps verify with \`buf lint && buf breaking --against '<repo-root>/.git#branch=${p.devBranch},subdir=packages/proto'\` from packages/proto (PLAT-10: subdir= is mandatory). Migrations: next free NNN, up+down pair. Write implementation-spec.md, then Step 7/8 edits (status.md → implementation-ready, feature.md history + Reviewers + Next Action, context.md). Commit "docs(${f.slug}): implementation spec — design-approved → implementation-ready (${p.nnn})", push. Return the spec content, step count and titles.\n\n${decisions(f)}`, { phase: 'Spec', schema: WRITER_SPEC, isolation: 'worktree', label: `write-spec:${f.slug}` })
+    const wd = await agent(`${WR}\n\n${ctx}\nYou are /sdd-spec ${f.slug} end to end (read .claude/skills/sdd-spec/SKILL.md + reference/spec-template.md, step-constraints.md, discovery-checklist.md). design.md's Chosen Approach is mandatory, Rejected Alternatives are off the table, recon.md's Patterns to REUSE are mandatory reuse targets. Do the Step 2 governance reads, then any discovery recon.md lacks yourself — no invented paths/functions/lines (unfound → **Not found**). Every @AC-* scenario is covered by a step's **Covers** line (C-15); every code step has a paired red-before-green test step. Proto steps verify with \`buf lint && buf breaking --against '<repo-root>/.git#branch=${p.devBranch},subdir=packages/proto'\` from packages/proto (PLAT-10: subdir= is mandatory). Migrations: next free NNN, up+down pair. Write implementation-spec.md, then Step 7/8 edits (status.md → implementation-ready, feature.md history + Reviewers + Next Action, context.md). Commit "docs(${f.slug}): implementation spec — design-approved → implementation-ready (${p.nnn})", push. Return the spec content, step count, titles and commits.\n\n${decisions(f)}`, { phase: 'Spec', schema: WRITER_SPEC, isolation: 'worktree', label: `write-spec:${f.slug}` })
     if (!wd) { out.blocked = 'spec writer died'; return out }
-    out.commits.push(wd.commit)
+    out.commits.push(...wd.commits)
     out.steps = wd.steps
     implText = wd.content
     status = 'implementation-ready'
@@ -290,7 +291,7 @@ ok = no problems.`, { phase: 'Preflight', schema: PREFLIGHT, label: `preflight:$
     ])
     const we = await agent(`${WR}\n\n${ctx}\nYou are /sdd-review ${f.slug} impl-spec (MODE B, advisory — lifecycle unchanged; read .claude/skills/sdd-review/SKILL.md §MODE B). Address every FAIL and clearly-correct WARN by editing implementation-spec.md (re-verify each claim; never invent). Record anything left unaddressed in context.md as an Open Thread so it surfaces at the /sdd-execute checkpoint. Append a context.md session entry "sdd-review impl-spec" with addressed / still-open lists. Commit "docs(${f.slug}): address impl-spec review findings (${p.nnn})", push.\n\nCriteria verdict:\n${JSON.stringify(ir[0], null, 2)}\n\nOverlap verdict:\n${JSON.stringify(ir[1], null, 2)}`, { phase: 'ImplReview', schema: WRITER_FINAL, isolation: 'worktree', label: `write-implreview:${f.slug}` })
     if (!we) { out.blocked = 'impl-review writer died'; return out }
-    out.commits.push(we.commit)
+    out.commits.push(...we.commits)
     out.still_open = we.still_open
   }
   out.stage = 'done'

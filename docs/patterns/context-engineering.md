@@ -190,8 +190,11 @@ feature exactly one writer per stage (P-01), each in its own git worktree.
 launched feature is ambiguous), and its NNN must not be held by another slug on `main-dev` or any
 remote branch.
 
-**Operational notes.** Writers commit on a detached HEAD and push `HEAD:refs/heads/<dev-branch>`
-(a named branch can be checked out in only one worktree). `.claude/worktrees/` holds the per-agent
+**Operational notes.** Writers commit **and push after each artifact edit** — one file per commit,
+pushed before the next file is touched — so an interrupted run loses at most the file in progress;
+the only multi-file commit is an execute step's code change with its own spec/context status, made
+after verification passes (`/sdd-execute` HARD CONSTRAINT). They commit on a detached HEAD and push
+`HEAD:refs/heads/<dev-branch>` (a named branch can be checked out in only one worktree). `.claude/worktrees/` holds the per-agent
 worktrees and is git-ignored; remove clean, already-pushed ones with `git worktree remove`. A run cut
 short (e.g. by the session usage limit) resumes with `Workflow({scriptPath, resumeFromRunId})` and
 **unchanged args** — completed agents replay from cache. Read-only agents read the main checkout, so
