@@ -121,3 +121,47 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - Standing authorization: designs run in FULL mode only (no quick designs for automated fixes); the orchestrator auto-approves the design gate once rounds >= 2, no unresolved Floor (F-*) breach remains, no blocking objection remains, and every CHANGE to an existing @AC business rule is covered by an operator decision below.
   - Full design depth (operator overrode the triage 'quick' recommendation).
 - Next: `/sdd-design fix-agent-getconfig-deadline` (full).
+
+## Session 2026-10-20 — sdd-design
+
+- Phase 0 Recon: wrote recon.md.
+  - Services: xstockstrat-agent only (config is the stalled dependency and is unchanged).
+  - Key reuse patterns:
+    - the `list_opportunities` `timeout=` stub-kwarg shape (`client.py:853`, `:872`);
+    - the call-time constant shape of `_POLICY_READ_TIMEOUT_S` (`tools.py:2365-2367`).
+- Phase 1 Grilling: 2 rounds (full). The r2 adversary returned SOUND. Auto-approved under the operator standing authorization (rounds >= 2, 0 Floor breaches, 0 blocking objections, 0 CHANGEs).
+- Chosen approach:
+  - Add the `_CONFIG_READ_TIMEOUT_S = 3.0` constant in client.py, read at call time.
+  - Pass `timeout=` on `GetConfig` in `get_config_value` (`client.py:1751-1754`).
+  - Bind `as e` and log `e.code().name` in the existing `except` (`:1755-1758`). Re-raise kept.
+  - Callers are unchanged.
+  - The 227 `wait_for` is kept, and its comment at `tools.py:2365-2366` is rewritten.
+  - The false comment at `oauth_server.py:102` is corrected (comment only).
+  - A threaded `hung_config_server` is added in `tests/conftest.py`.
+- Rejected:
+  - per-call-site deadlines;
+  - D as a config key (circular, F-07);
+  - a per-call `timeout` kwarg (C-18);
+  - `asyncio.wait_for` inside the helper (breaks the `AioRpcError` contract);
+  - removing the 227 `wait_for` (C-16 CHANGE, uncovered);
+  - `gather` or a snapshot read in this feature (deferred);
+  - deadlining `get_config` too (excluded);
+  - fail-closed DCR (contradicts FR-2/AC-4).
+- Decisions:
+  - D = 3.0 s is fixed, not a config key.
+  - Serial reads use option (a): `_fetch_url` = 4×D, DCR = 2×D.
+  - Three follow-ups are to be materialized as `docs/reports/` defect reports plus `.status` sidecars (C-14): `agent-config-snapshot-read`, `agent-dcr-fail-closed`, `agent-rpc-deadlines`.
+  - The harness is sync threaded rather than `grpc.aio`, because the `TestClient` portal loop needs it.
+  - AC-1 runs at the production D.
+- Constitution rules touched: C-01, C-10, C-11, C-13, C-14, C-15, C-16, C-18, F-07, P-02, P-06, How-to-Act #3/#5, PLAT-N1. Floor breaches: none.
+- Business rules: PRESERVE `@AC-2 @feature-227`, `@AC-8 @feature-207`, `@AC-5 @feature-210` (plus recon.md:101-106). EXTEND with new `@AC-1..5 @feature-247`. No CHANGE.
+- Open Threads (from design.md Open Risks):
+  - `extract_email_content` stays over the MCP 60 s limit during a stall for N >= 5 URLs (N×4×D). Target: the docs step; materialize the `agent-config-snapshot-read` report.
+  - SECURITY POSTURE CHANGE: DCR fails open on a config stall of D or more (`registration_enabled=false` and the allowlist are bypassed; identity enforces only https). Target: the service step (`oauth_server.py:102` comment) and the docs step (`agent-dcr-fail-closed` report).
+  - D = 3.0 s is unsized; there is no healthy `GetConfig` p99. Target: the docs/smoke step; status-code log plus a dev latency capture before promotion.
+  - `client.get_config` and `register_oauth_client` are still undeadlined. Target: the docs step (`agent-rpc-deadlines` report).
+  - The RPC deadline and the 227 `wait_for` race at 3.0 s. Target: the test step; no test pins which timer fires first.
+  - Harness leak or vacuous-pass risk. Target: the harness step: `is_active()` loop, `max_workers=8`, lock-guarded `entered`, `stop(0).wait()`.
+  - Timing-bound flake on CI at D = 0.3 s; AC-1 adds about 3 s. Target: the test step.
+  - Anchor drift: `register` is at `oauth_server.py:72`; main-dev `tools.py` is +4 from about L2100. Target: `/sdd-spec` re-derives on its base.
+- Status: spec-ready → design-approved.
