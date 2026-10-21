@@ -35,6 +35,29 @@
 - D-12: the writer was scaffolded per user (its signature takes one `userID`) and never wired. Per-fill broadcasting
   hid the gap.
 
+## Functional Requirements
+
+- **FR-1 (D-24).** A gRPC `StreamPortfolioUpdates` subscriber receives only snapshots whose `portfolio_id` equals its
+  `x-user-id`. The owner check is applied in addition to the existing `TradingMode` filter, which is unchanged.
+  Covered by `@AC-1`.
+- **FR-2 (D-24).** A gRPC `StreamPortfolioUpdates` call with an empty or absent `x-user-id` fails with
+  `INVALID_ARGUMENT` and is never registered as a subscriber. Covered by `@AC-2`.
+- **FR-3 (D-24).** The Connect `StreamPortfolioUpdates` path applies the same isolation as FR-1 and the same
+  empty-caller rejection as FR-2. Covered by `@AC-3` and `@AC-6`.
+- **FR-4 (D-12).** `portfolio.snapshot.interval_minutes` stops being a dead key. Design picks exactly one branch
+  (see Open Questions): either (a) the periodic writer runs for every user with positions and honours the interval,
+  or (b) the key is retired from config and from portfolio docs and the dead writer is removed. Covered by `@AC-4`
+  for branch (a) or `@AC-5` for branch (b). The scenario for the branch design rejects is deleted at design time.
+
+Fill-handling semantics (`PARTIALLY_FILLED` vs `FILLED`) are unaffected. This fix changes only who receives the
+snapshot that the existing post-fill path already produces.
+
+## Consumer Surface(s)
+
+None (internal/platform-only). `StreamPortfolioUpdates` has no UI or agent consumer wired today, and building one is
+out of scope (feature-gap R-03). FR-1..FR-3 close a latent leak before any consumer exists. FR-4 changes only a
+config key and a background writer, which no surface reads.
+
 ## Affected Services
 
 - xstockstrat-portfolio (all fix sites)
@@ -43,11 +66,24 @@
 ## Fix Scope
 
 - [x] No proto changes anticipated
-- [ ] No database migrations anticipated. True if D-12 is fixed by wiring the writer. Retiring the key needs a new
-  `xstockstrat-config` migration (never edit applied `001`/`002`).
-- [ ] No config key changes anticipated. D-12 either makes the key live or retires it. Both are config-governance changes.
+- No portfolio database migrations. Config migration depends on the FR-4 branch:
+  - Branch (a), wire the writer: no migration.
+  - Branch (b), retire the key: one new `xstockstrat-config` migration, `NNN_retire_portfolio_snapshot_interval.up.sql`
+    plus a matching `.down.sql`. Never edit the applied `001`/`002` (F-01). The up file deletes every scope of the
+    key: the `001` global seed (value 5) and the `002` production row (value 1). The down file re-inserts both. NNN is
+    re-derived at spec time as the next free number. Trunk tip is `030`, and `031`/`032` are already claimed by
+    in-flight features 243, 244, and 248, so the number is `033` or higher. The migration runs in the normal
+    `xstockstrat-config` order via `scripts/db-migrate.sh`.
+- Config key change (C-05) on either branch. Branch (a) makes `portfolio.snapshot.interval_minutes` live. Branch (b)
+  retires it. Both add an entry to the `docs/patterns/config-governance.md` Per-Feature Registered Keys log and update
+  portfolio `CLAUDE.md:99`.
 
-(Update after investigation — remove or replace each item as needed)
+## Open Questions
+
+- **For design (C-11): wire or retire `portfolio.snapshot.interval_minutes` (FR-4).** Branch (a) needs a multi-user
+  writer that fits the portfolio pool budget (pooled, default 2). The current `StartSnapshotWriter` takes a single
+  `userID`. Branch (b) needs the config migration above. `/sdd-design` decides and deletes the losing scenario
+  (`@AC-4` or `@AC-5`).
 
 ## Acceptance Criteria
 
