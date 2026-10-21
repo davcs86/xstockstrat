@@ -116,3 +116,105 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - Standing authorization: designs run in FULL mode only (no quick designs for automated fixes); the orchestrator auto-approves the design gate once rounds >= 2, no unresolved Floor (F-*) breach remains, no blocking objection remains, and every CHANGE to an existing @AC business rule is covered by an operator decision below.
   - Full design depth.
 - Next: `/sdd-design fix-ledger-trimmed-notify-payload` (full).
+
+## Session 2026-10-21 — sdd-design
+
+- **Phase 0 Recon:** wrote recon.md (`c22716fb`).
+  - Services: xstockstrat-ledger is the fix site; analysis and portfolio are verify-only.
+  - Key reuse: `rowToEvent` as the single mapper, `call.destroy({code,message})` termination, and the existing
+    LISTEN client with its `onReconnect` path.
+- **Phase 1 Grilling:** 3 rounds (full).
+  - Chosen approach: one global FIFO in `EventNotifier` resolves each trimmed NOTIFY row once, in NOTIFY order, on
+    the dedicated LISTEN client. The read is by PK `(event_id, recorded_at)`, bounded by a startup
+    `statement_timeout` B plus `query_timeout` 2B. On failure, `onGap` → `call.destroy` with code 13 or 14.
+  - Rejected: pool-borrow resolve (options b/c), per-subscriber or per-stream resolve, end-on-every-stub,
+    `BEGIN`/`SET LOCAL` on the LISTEN session, and a trigger migration. Full list: design.md § Rejected Alternatives.
+- **Round record (P-05).** Transcribed from the orchestrator checkpoints `seeds/248/state-r1.json`, `state-r2.json`,
+  `propose-r2.md`, `attack-r2.md` and `state-r3.json`.
+  - **R1 blocking objections:**
+    1. The resolve was unbounded, so one hung read froze all fan-out.
+    2. The real-DB `recorded_at` round-trip had to be a required tier, with `log.warn` on every failure branch.
+    3. AC-4/AC-5 could not be observed from the `streamEvents` unit tier.
+  - **R1 adopted:** a required `resolveRow` callback, the queue cleared on reconnect, subscribers recomputed after the
+    await, `Number()` at the 4 sequence sites, and the cost corrected from about 6 reads to about 2.
+  - **R2 progress on R1:** R1(3) was resolved by the wired tier (ii). R1(2) was resolved for logging. R1(1) was
+    partly resolved by `SET LOCAL statement_timeout`, a WatchConfig key and a new AC-9.
+  - **R2 new blocking objections:**
+    1. The fast-path predicate `queue.length === 0` let a full row overtake an in-flight resolve, breaking AC-2 and
+       the 042 seal order.
+    2. Counting the `pool.connect()` wait inside B turned replay contention into `onGap` (`@AC-6 @feature-210`).
+    3. Tier (iv) could not be built: `tsconfig.json:22` excludes tests, `migration-rerun` has no Node toolchain, and
+       the job was not in `ci-gate.needs`.
+  - **R3 resolutions:** R2(1) by the `!this.draining && …` predicate. R2(2) by resolving on the LISTEN client, which
+    leaves the pool untouched. R2(3) by running `test:db` on 252's compile-then-test, plus the `node-test` and
+    `migration-rerun` steps and a `ci-gate` entry.
+  - **R3 adversary result:** no Floor breach. Its one blocking item (round record not on disk, P-05) was downgraded to
+    a gate-write obligation, which this entry and design.md § Rounds discharge.
+  - **R3 adopted binding refinements:**
+    - the stale-drain no-shift guard;
+    - the wedged-listener teardown on `Query read timeout`;
+    - the honest AC-9 harness scope;
+    - the `node-shared` CI filter;
+    - seed `value_type 'int'`;
+    - the `LEDGER-8` invariant;
+    - the resolver placed outside `ledgerServiceImpl.ts`.
+  - **R3 rejected:** `tsconfig.dbtest.json` (it contradicts 252 design.md:201) and relying on TCP give-up.
+- **Constitution rules touched:** C-01, C-08, C-11, C-14, C-15, C-16, C-18, P-02, P-03, P-04, P-05, P-06, F-01,
+  F-06, F-07. Floor breaches: none.
+- **Business rules:**
+  - AC-1..AC-8 @feature-248: EXTEND (tiers only).
+  - AC-9 @feature-248: new, EXTEND.
+  - Durable rules are PRESERVE: `@AC-6 @feature-210`, `@AC-1/@AC-2 @feature-042`, and the `@feature-157`,
+    `@feature-163`, `@feature-021`, `@feature-225`, `@feature-029` and `@feature-206` rules.
+  - There is no CHANGE, so no operator CHANGE cover is needed.
+- **Decisions:**
+  - Resolve on the LISTEN client, never the query pool. F-06 stays at 1 pool + 1 listener.
+  - New config key `ledger.stream.resolve_timeout_ms` (int, default 2000), seeded by config migration `031`
+    (re-derive NNN at /sdd-spec).
+    - No proto PR, following the 022 precedent; `services/xstockstrat-config/CLAUDE.md:103` is drift.
+    - Fallback: a `RESOLVE_TIMEOUT_MS` constant plus an F-07 ruling.
+  - The char-vs-byte trim mismatch is not folded in (no `004` migration); it stays a separate defect.
+  - Tier (iv) rides on 252, so 248 merges after 252.
+- **Open Threads** (from design.md § Open Risks, each with a target step):
+  - [ ] LISTEN-session assumptions — tier (iv) step. They are: a notification arrives during an in-flight query, a
+    NOTIFY is delayed rather than dropped, `statement_timeout` is honoured on `:25060`, and the `recorded_at` text
+    round-trips.
+  - [ ] 252 is unmerged, so tiers (i)-(iii) are vacuous until it lands; a merge-order row 248-after-252 is needed
+    (router) — /sdd-spec.
+  - [ ] Under 252 parity, the production `tsc` emits `src/__tests__/db/**`, so DB tests must not import test-only
+    dependencies — tier (iv) step.
+  - [ ] Head-of-line latency of K×B (K×2B on the backstop); put `queueDepth` in `log.warn` — EventNotifier step.
+  - [ ] A spurious `Query read timeout` causes an avoidable fleet-wide resync — EventNotifier step (document it).
+  - [ ] B live-ness: SET-on-change (preferred) versus documenting "applies on listener reconnect" — /sdd-spec,
+    resolver step.
+  - [ ] Config-team approval for the new key — pre-merge gate in the impl-spec.
+  - [ ] Observability: timeouts → 14, which portfolio logs at Info; a counter is deferred (accepted).
+  - [ ] ts-proto encoding of a string `sequence` on resolved rows is untraced — tier (iii).
+  - [ ] Product-spec amendment owed — /sdd-spec, before steps are written:
+    - FR-2 (`product-spec.md:51`) becomes a read on the LISTEN connection.
+    - Fix Scope (`:59`) becomes one config key.
+    - Add a Status History note.
+  - [ ] Append the AC-9 scenario to acceptance.feature (C-15, append-only) — /sdd-spec.
+  - [ ] Teardown and docs — docs step plus teardown (fails.md:670):
+    - add a `LEDGER-8` row and the LEDGER-2 resolve rule;
+    - update ledger `CLAUDE.md` § Live Streaming Architecture and fix "three" → "five";
+    - update the "Split pool" pointer;
+    - close `context-constitution-findings.md:36`;
+    - register the key in the config-governance key log;
+    - fix the config `CLAUDE.md:103` drift.
+  - [ ] Pre-existing, out of scope:
+    - the NOTIFY window between reconnect `LISTEN` and `onReconnect`;
+    - the unbounded grpc-js write buffer;
+    - data repair of analysis's pre-fix stubs (report owed, router);
+    - the char-vs-byte trim.
+  - [ ] Checkout drift: local main-dev lacks recon.md and shows 252 as `draft`. Read `origin/feature/*` or run
+    `/sdd-sync`.
+- Operator decisions (as relayed by the workflow orchestrator, recorded verbatim):
+
+  OPERATOR DECISIONS (binding, recorded 2026-10-21):
+  - Standing authorization: designs run in FULL mode only (no quick designs for automated fixes); the orchestrator auto-approves the design gate once rounds >= 2, no unresolved Floor (F-*) breach remains, no blocking objection remains, and every CHANGE to an existing @AC business rule is covered by an operator decision below.
+  - Full design depth.
+- **Approval:** auto-approved by the orchestrator under the operator standing authorization (3 rounds ≥ 2, no Floor
+  breach, no blocking objection, no `@AC` CHANGE).
+- **Status:** spec-ready → design-approved.
+- **Next:** `/sdd-spec fix-ledger-trimmed-notify-payload`.

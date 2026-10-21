@@ -2949,3 +2949,20 @@ ambiguity is logged here).
     handler.
   - Before changing a shared RPC's failure or budget behaviour, enumerate every caller's request shape
     (window size, deadline) and make the change opt-in when the callers differ.
+
+### 2026-10-21 — fix-ledger-trimmed-notify-payload — assumption
+- **Mistake**: Design round 2 bounded a per-event read by including the `pool.connect()` wait, at ledger
+  `DB_POOL_MAX=1`. A `StreamEvents` replay is one unpaged `pool.query` that holds the only connection for its whole
+  result set. Portfolio replays history on 5 streams after a restart, so the bound would have ended streams on
+  ordinary contention.
+  - The fix moved the read to the pg LISTEN client. That brings its own traps (pg@8.20.0 `lib/client.js:608-662`):
+    - a transaction on that session holds back NOTIFY delivery;
+    - `query_timeout` rejects the promise but leaves the active query on the connection, so the client stays wedged
+      until TCP gives up.
+- **Evidence**: `docs/roadmap/features/248-fix-ledger-trimmed-notify-payload/design.md` § Rounds (R2 objection 2;
+  R3 adopted 1.f); `services/xstockstrat-ledger/src/grpc/ledgerServiceImpl.ts:235-243`; `src/index.ts:44`.
+- **Rule it implies**:
+  - A time bound on a single-connection pool must exceed its longest legitimate holder. If it cannot, read on a
+    different connection.
+  - On a pg LISTEN client, run only single-statement autocommit reads bounded by `statement_timeout`.
+  - Treat a pg `query_timeout` rejection as fatal to that client: end it and reconnect.
