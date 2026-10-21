@@ -35,3 +35,38 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Recommended design depth: full → `/sdd-design fix-db-tls-fail-closed` (rationale: SEV-2 security, 5 affected
   services plus deploy-spec change — the C-0 full trigger; no proto/migration).
 - Development branch: feature/fix-db-tls-fail-closed
+
+## Session 2026-10-21 — sdd-review product-spec
+
+- Product spec approved (PASS WITH WARNINGS). Status: draft → spec-ready. Next: `/sdd-design fix-db-tls-fail-closed`.
+- OPERATOR DECISIONS (binding, recorded 2026-10-21):
+  - Grouped by service+theme from the 2026-10-20 debt-radar scan; Track C.
+  - Scope is D-32.
+- Warnings:
+  - C-15/criterion 8: FR-2 ("every affected pool") had no UI wrong-CA scenario. **Resolved:** added `@AC-7` (audit
+    route rejects a cert not signed by the configured CA). FR-2 not narrowed.
+  - Criterion 8: AC-3 (sslmode=disable) covered config only; UI route has its own path (`route.ts:13,29-30`).
+    **Resolved:** added `@AC-8` (audit route with sslmode=disable reads without a CA).
+  - Criterion 2: sslmode parse left to design; UI uses substring `includes('sslmode=disable')` (`route.ts:13`).
+    **Resolved in spec text:** FR-1 now requires one parse shared by the backends and the UI route; the exact parse
+    (edge cases such as `sslmode=disabled`, URL-encoded values) is still pinned at design.
+  - Fix Scope leftover template line. **Resolved:** removed.
+  - Criterion 5/6/7: "No config key changes" checkbox carries rationale prose (minor wording; left as-is).
+  - db-migrator job has `DATABASE_URL` without a CA; scoped out only implicitly. **Resolved:** named explicitly in
+    Out of Scope.
+  - Trading-domain checks skipped (non-trading feature).
+- Code-checkable claims verified by the reviewer: `rejectUnauthorized: !!caCert` at ledger `index.ts:37`, config
+  `:40`, identity `:39`, notify `:41`, UI `route.ts:31`; `DATABASE_CA_CERT` bound for the four backends at
+  `.do/app.yaml:434,481,528,586` and `.do/app.dev.yaml:431,478,525,583`, absent for `xstockstrat-ui`.
+- Overlap findings (WARN, no FAIL; no config-key/proto/migration collision):
+  - `services/xstockstrat-notify/src/index.ts` — also modified by `242-fix-push-untargeted-broadcast`
+    (implementation-ready).
+  - `.do/app.yaml` / `.do/app.dev.yaml` — 242 also modifies (notify `LEDGER_ENDPOINT`); different keys, same file.
+  - `services/xstockstrat-ledger/src/index.ts` — also modified by `248-fix-ledger-trimmed-notify-payload`
+    (implementation-ready).
+  - `services/xstockstrat-ui/src/app/config-ui/api/audit/route.ts` — also under change by
+    `241-fix-config-audit-author-spoof` (implementation-ready).
+  - Non-blocking merge-order recommendation: sequence 266 after 242, 248 and 241, or rebase on whichever merges
+    first. No `merge-order.md` row written (no FAIL-level overlap).
+  - Low-risk shared context only: 250 (OTEL lines in `.do`), 084 (hand-synced `.do`/compose); draft batch peers
+    name none of these files.
