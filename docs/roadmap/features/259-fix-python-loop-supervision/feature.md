@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-10-21 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-21-python-loop-supervision-defect.md` (debt-radar D-07, D-08, D-56) |
+| 2026-10-21 | `draft` → `spec-ready` | /sdd-review | Product spec approved (6 warnings; 4 resolved in spec) |
 
 ---
 
@@ -47,4 +48,4 @@ consumer skips a failed event and its monotonic cursor moves past it.
 
 ## Next Action
 
-`/sdd-design fix-python-loop-supervision` — recommended design depth: full (3 affected services); see context.md
+`/sdd-design fix-python-loop-supervision` — recommended design depth: full (3 affected services); see context.md. Then `/sdd-spec fix-python-loop-supervision`.
