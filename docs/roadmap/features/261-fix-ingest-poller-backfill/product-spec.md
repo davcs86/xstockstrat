@@ -37,10 +37,12 @@ again and spends vendor quota.
 
 ## Functional Requirements
 
-- **FR-1 (D-09).** `poll_one_source` ingests each parsed item in its own guard. An item that fails to build or ingest
-  is skipped and logged with the source slug; the remaining items of the batch are still ingested. The poll records
-  the number of skipped items per source per poll (a log line carrying slug + skipped count). A skipped item alone
-  does not mark the source errored.
+- **FR-1 (D-09).** `poll_one_source` ingests each item returned by `McpClientExtractor.extract` in its own guard. An
+  item that passed extraction but raises in `_build_external_signal` or `_ingest_external_signal` is skipped and
+  logged with the source slug; the remaining items of the batch are still ingested. The poll emits one log record per
+  source per poll carrying the slug and the skipped count, which counts only these guard-caught items (items the
+  extractor already drops, e.g. a missing `symbol`, keep their existing per-item warning and are not counted). The
+  regression test asserts that log record. A skipped item alone does not mark the source errored.
 - **FR-2 (D-34).** A backfill job (bars or fundamentals) canceled while `QUEUED` stays `CANCELED` when a
   `_backfill_sem` slot frees: it is never written `RUNNING`, emits no `ingest.backfill.running` event, and makes no
   marketdata `BackfillBars` / `BackfillFundamentals` call.
@@ -69,7 +71,8 @@ again and spends vendor quota.
 
 ## Reproduction Steps
 
-1. D-09: fetch result of three items, item 2 missing `symbol`. Only item 1 is ingested.
+1. D-09: fetch result of three valid items; `_ingest_external_signal` raises for item 2. Only item 1 is ingested,
+   item 3 is dropped, and the source is marked errored.
 2. D-34: `max_concurrent_jobs=1`. Cancel the queued job B while A runs. B becomes `RUNNING` when A ends. Separately,
    cancel a job that still has PENDING chunks and restart. The job is resumed as `RUNNING`.
 3. D-42: a `GetSecret` stub that never returns. `run_one_cycle` never completes.
