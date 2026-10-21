@@ -2988,6 +2988,21 @@ ambiguity is logged here).
   >= 8.21; confirm the version bundled by the CI action). Never flip the shared table, never use a bare `paths`
   entry, and verify with a local `gitleaks detect`.
 
+### 2026-10-20 — fix-identity-ledger-test-suites — assumption
+- **Mistake**:
+  - AC-5 required `TAP summary reports "# fail 0"` and passed `/sdd-review`. The r4-proposed AC-6 required `# pass 0`.
+    Both literals were copied from Node 22 output (`.nvmrc`).
+  - Since Node v23.0.0 the default `node --test` reporter on non-TTY stdout is `spec`, so CI's Node 24
+    (`ci.yml:572`) prints `ℹ fail 0`. A Verification that greps the TAP literal fails on correct code, or is waived.
+- **Evidence**:
+  - `docs/roadmap/features/252-fix-identity-ledger-test-suites/acceptance.feature:46` (pre-amendment AC-5);
+  - `design.md` § Requirement amendment and § Per-step gate (adversary r4, objection 2, mediator-verified against
+    the Node 24 docs);
+  - related to `fails.md:2223-2226` (Node 22 vs 24 split).
+- **Rule it implies**: an AC or step Verification that quotes runner output either pins the reporter
+  (`node --test --test-reporter=tap …`) or is worded reporter-neutrally ("0 failed tests"). Capture the evidence on
+  CI's Node version and record it. Reinforces C-15 and P-06; no new ID.
+
 ### 2026-10-21 — fix-ledger-trimmed-notify-payload — assumption
 - **Mistake**: Design round 2 bounded a per-event read by including the `pool.connect()` wait, at ledger
   `DB_POOL_MAX=1`. A `StreamEvents` replay is one unpaged `pool.query` that holds the only connection for its whole
