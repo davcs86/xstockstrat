@@ -39,6 +39,9 @@ half-enriched row for a full TTL (D-53).
   both `GetFundamentals`/`GetFundamentalsMulti` quota gates) treats the budget as uncapped: it makes the fetch, never
   returns `ResourceExhausted` for quota, and never emits the 80%-of-cap WARNING alert. The marketdata `CLAUDE.md` row
   for the key (and `docs/patterns/config-governance.md`, if it describes the key) states `<= 0` = uncapped.
+  **Blocked on OQ-1:** the uncapped reading conflicts with in-progress feature 215 and with the backfill
+  ratio-enrichment gate on trunk. FR-1 stands as written only if the user picks "uncapped". If the user picks
+  "zero budget", FR-1 is rewritten to make the docs say zero budget instead, and D-50 becomes a doc-only fix.
 - **FR-2 (D-51).** The quota counts that seed the FMP day budget at boot and drive the Finnhub rolling window
   (`marketdata.finnhub.symbols_per_minute` over `marketdata.finnhub.rate_window_seconds`) count only rows whose
   `source` is the active provider (`marketdata.fundamentals.provider`); EDGAR rows and the inactive vendor's rows are
@@ -56,6 +59,34 @@ half-enriched row for a full TTL (D-53).
   a successful session; the backoff wait is cancellable by the manager's context; and when `MaxReconnects` consecutive
   attempts fail, the manager closes every subscriber's channel (the signal subscribers observe) and logs an ERROR naming
   the exhausted reconnect budget.
+
+## Open Questions
+
+- [ ] **OQ-1 (cap-0 semantics; user decision required before spec-ready).** What does
+  `marketdata.fmp.daily_request_cap <= 0` mean?
+  - *Uncapped* (this spec's FR-1). Trunk documents this at `internal/fmp/fmp_client.go:97` (`BudgetSnapshot`,
+    "cap <= 0 = uncapped") and `marketdata_service.go:1958`.
+  - *Zero budget*. In-progress feature 215 builds on this reading
+    (`docs/roadmap/features/215-block-fundamentals-strategy-on-etf/implementation-spec.md:478`: `reserve()` refuses
+    every call at cap 0; `:514`: the filler gates `cap > 0`). Trunk's backfill ratio-enrichment gate
+    `enrichmentUnderCap()` (`marketdata_service.go:2421-2427`, `used < dailyCap`) also behaves this way. The existing test
+    `TestBackfillFundamentals_CapDegrade_AC5` (`marketdata_service_test.go:2041-2053`) pins "cap 0 → enrichment skipped",
+    and marketdata `CLAUDE.md:171` documents the `daily_request_cap > 0` gate.
+  - Under "uncapped", FR-1 must also cover `enrichmentUnderCap()` and update that test, and 215's cap-0 case and filler
+    gate must change. Under "zero budget", the `fmp_client.go:97` and `:1958` comments are the defect.
+    Neither reading can be guessed (C-11). The answer is recorded in `context.md`.
+
+## Cross-Feature Coordination
+
+- **215-block-fundamentals-strategy-on-etf (in-progress): BLOCKING.** The two features overlap on the cap-0 semantics
+  (OQ-1) and edit the same code: the quota gates and alert path in `marketdata_service.go` (215 Step 7 extracts
+  `atQuotaAlertThreshold` from `maybeAlertQuota`, and Step 9 reuses it), `fmp_client.go` (`reserve()`, the
+  `fetchProfile`/`IsEtf` region), the `cmd/server/main.go` Limits/boot-seed wiring, and `marketdata_service_test.go`
+  (215 Step 10(c) adds a `{0,0}` case). Whichever feature merges second rebases onto the first, and neither merges
+  until OQ-1 is answered. `/sdd-design` adds a BLOCKING row to `docs/roadmap/features/merge-order.md`.
+- **254-fix-marketdata-secret-exposure (draft): WARN, rebase only.** 254 edits the same `fmp_client.go` error wrap and
+  key handling (`:222`, `:243`, `:254`) and the `marketdata_service.go` `CodeUnavailable` wraps (`:1704`, `:1760`)
+  inside the resolve functions this feature changes. `/sdd-design` adds a WARN row to `merge-order.md`.
 
 ## Reproduction Steps
 
@@ -103,3 +134,5 @@ dev.
 - Performance improvements unrelated to the fix
 - Finnhub `GetFundamentalsMulti` dropping per-symbol errors (debt-radar NC-F, unconfirmed)
 - The EDGAR companyfacts decode (feature 253)
+- Broker order routing: `BrokerType` ALPACA/IBKR order and account behavior is unchanged. FR-5 touches only the
+  market-data stream manager (`internal/alpaca/stream.go`).
