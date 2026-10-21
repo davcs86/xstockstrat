@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-10-21 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-21-ledger-query-pagination-defect.md` (debt-radar D-13, D-27, D-46) |
+| 2026-10-21 | `draft` → `spec-ready` | /sdd-review | Product spec approved (7 warnings; overlap WARN with 248, 251, 263) |
 
 ---
 
@@ -48,4 +49,4 @@ is one unbounded query on ledger's single-connection pool (D-27). **Sequence bef
 
 ## Next Action
 
-`/sdd-design fix-ledger-query-pagination` — recommended design depth: full (2 affected services; cross-feature sequencing with 251); see context.md
+`/sdd-design fix-ledger-query-pagination` — recommended design depth: full (2 affected services; cross-feature sequencing with 251; same-function overlaps with 248 and 263); see context.md
