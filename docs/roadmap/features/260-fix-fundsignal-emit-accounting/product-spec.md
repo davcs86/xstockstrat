@@ -38,7 +38,8 @@ or marketdata error they silently get fewer signals, and the run record says the
   `signal_id` for the symbol it was processing. Rows already confirmed for earlier symbols in that cycle stay.
 - **FR-4.** Symbols in a `GetFundamentalsMulti` chunk that failed are counted in the run's `deferred_count`, and
   the run finishes with status `"partial"` instead of `"completed"`. A budget-only deferral keeps
-  `"budget_deferred"`; when a run has both, `"partial"` wins.
+  `"budget_deferred"`; when a run has both, `"partial"` wins. `symbols_processed` counts only the symbols whose
+  fundamentals were fetched, so a failed chunk's symbols are excluded from it (today `symbols_done=len(fetched)`).
 
 ## Consumer Surface(s)
 
@@ -77,7 +78,8 @@ ingest's dedup does not make the retry idempotent today. Options include a deter
 ## Fix Scope
 
 - [x] No proto wire changes. The `FundamentalsScanSummary.status` string comment
-  (`packages/proto/analysis/v1/analysis.proto`) gains `"partial"`; this is a comment-only edit with no field change.
+  (`packages/proto/analysis/v1/analysis.proto`) gains `"partial"`; this is a comment-only edit with no field change,
+  so no breaking-proto approval gate applies. Re-run `./scripts/buf-gen.sh` after the edit so `proto-freshness` passes.
 - [ ] Database migration: open, see Open Questions (OQ-1)
 - [x] No config key changes anticipated
 
