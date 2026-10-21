@@ -347,7 +347,7 @@ The green run is Step 3's Verification.
      returns `ScreenerEngine._seed_row(symbol)` for the other.
    - Assert `with pytest.raises(asyncio.CancelledError): await engine.screen(req)`.
    - On today's tree this passes. It is the guard that the Step 2 wrapper keeps cancel transparent, and
-     its teeth are the mutation run in instruction 7.
+     its teeth are the mutation run in instruction 8.
 4. Add `test_degraded_row_soft_only_criteria_is_not_passed(monkeypatch)`.
    - All criteria are soft (`hard_filter=False`): one `formula_criterion("f1", "fid", COMPARATOR_GT, 0.0)`.
      There is no signal blend.
