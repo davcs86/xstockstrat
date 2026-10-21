@@ -138,3 +138,33 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - Rebase-only overlap with 084 on `docs/patterns/observability.md` — docs step / integration.
 - Status: spec-ready → design-approved.
 - Next: `/sdd-spec fix-otel-metrics-logs-gap`.
+
+## Session 2026-10-21 — sdd-spec
+
+- Generated implementation-spec.md with 12 steps. Status: design-approved → implementation-ready.
+- Order follows design.md §8. Step 1 lands the follow-up `/sdd-story trace-derived-alerting` (`idea`) on main-dev,
+  then main-dev is merged into the 250 branch. Steps 2-8 make the asset/doc/constitution edits (config/docs, TDD
+  N/A, each self-checked with the guard regexes). Step 9 is Teardown. Steps 10-11 are the red-before-green pair
+  (`.test.sh` + fixtures, then the guard). Step 12 adds the `otel-signals` CI job last, because `ci.yml:3-4` runs
+  CI on every PR, step PRs included.
+- Key codebase findings:
+  - The pre-fix reference commit for the verbatim fixtures is `06faaeb5` (branch head at spec time).
+  - The Grafana provisioning keys `deleteRules` (`- orgId` / `uid`) and `deleteMuteTimes` (`- orgId` / `name`)
+    were confirmed with Context7 (`/websites/grafana_grafana`, file-provisioning docs). A live
+    `grafana/grafana` check stays optional (Step 2); the `groups: []` fallback is kept.
+  - The Tempo panel `targets` JSON keys are **Not found** in the repo. They are proven only at the Step 4
+    dev-import gate. If the dev stack is unreachable, the step blocks for the operator (P-03).
+  - The `(Watch|Stream|Export)[A-Za-z]*` exclusion matches every server-streaming RPC (8 proto lines, Step 4
+    evidence) and no unary RPC.
+  - Case rule refinement (design is silent): `service_name[[:space:]]*=`, `DS_*`, `rpc_server_duration` and
+    `P99` match case-sensitively, so `docs/setup/grafana-cloud.md:116` `SERVICE_NAME=<service>` stays green.
+    Step 10 adds that green case.
+  - 253 is now taken on main-dev (`253-fix-edgar-companyfacts-decode`), so the design's "253 today" is stale.
+    The follow-up NNN is max+1 at creation (≥ 254). Steps 3, 6 and 8 cite the resolved dir.
+  - The shell-lint job (`ci.yml:609-629`) already lints `scripts/*.sh`. The new scripts get shellcheck/shfmt
+    for free, and the test is NOT appended to `:629`.
+  - `docs/launch-pdfs/product-features.pdf` has no in-repo generator. It is not regenerated; note it in the PR body.
+- Prior progress (user question "What happened to the prior progress?"): nothing was lost. Triage, both product-spec
+  reviews, recon and the 3-round design are on `origin/feature/fix-otel-metrics-logs-gap` (head `06faaeb5`). This
+  session added the implementation spec on top of them.
+- Next: `/sdd-review fix-otel-metrics-logs-gap impl-spec`, then `/sdd-execute fix-otel-metrics-logs-gap`.
