@@ -138,3 +138,58 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - Standing authorization: designs run in FULL mode only (no quick designs for automated fixes); the orchestrator auto-approves the design gate once rounds >= 2, no unresolved Floor (F-*) breach remains, no blocking objection remains, and every CHANGE to an existing @AC business rule is covered by an operator decision below.
   - Fix the getters + audit: get_int/get_float/get_str honour a stored 0 / '' via HasField in all three Python watchers; every call site that relies on the trap gets an explicit floor clamp (e.g. ingest semaphore keys, analysis servicer.py ~790/1152/2913); seeded 0/'' rows and config SCALAR_BOUNDS minValue bounds are re-checked in the same feature.
 - Next: `/sdd-design fix-python-config-zero-trap` (full).
+
+## Session 2026-10-21 — sdd-design
+
+- Branch recovery: `feature/fix-python-config-zero-trap` was absent from origin again.
+  - GitHub branch activity records deletions at 2026-10-20T23:30:22Z and 2026-10-21T06:37:16Z.
+  - Each came about 9 s after a `ci-validate-feature-status` run on a push to `main` (runs 39515448201 and 39556526187).
+  - Cause: the orphan cleanup globs `docs/roadmap/features/*-${slug}/status.md | head -1` (`.github/workflows/ci-validate-feature-status.yml:167`). That glob resolves to launched `173-fix-python-config-zero-trap`, so `:183` deletes 244's live branch.
+  - The prior progress was intact at df3206f7 (Phase 0 recon, kept in the stale local tracking ref). This session built on df3206f7 and re-pushed, which recreated the branch.
+  - Until the slug is renamed, the branch will be deleted again on the next push to `main`.
+- Phase 0 Recon: recon.md written at df3206f7 (services: analysis, indicators, ingest, config). Key reuse patterns:
+  - the `get_bool` HasField body (analysis `watcher.py:126`, indicators `:122`, ingest `:136`)
+  - the `blend_strategy_id(cfg)` named reader (`servicer.py:353-355`)
+- Phase 1 Grilling: 3 rounds (full). Auto-approved under the operator standing authorization: rounds >= 2, no Floor breach, no blocking objection, and no CHANGE to an existing @AC.
+  - Chosen approach:
+    - The getters take the HasField body; the `*_present` names become aliases.
+    - A module-level `int_positive`/`float_positive`/`str_nonempty` clamp sits at every FR-3 read.
+    - The exhaustive list of `max(1, …)` read wrappers, plus the two inline `<=0` clamps, are converted to it.
+    - `default_cooldown_days(cfg)` and `fundsignal_source_slug(cfg)` become single named readers.
+    - Each service gets an AST guard test with these rules:
+      - it scans six read names
+      - `HONOUR_KEYS` and `FR3_KEYS` are disjoint
+      - every key is a literal
+      - each key has one default
+      - a `ZERO_IS_LEGIT` map
+      - every FR-3 key appears as a test literal
+    - One description-only config migration, numbered `max(origin/main-dev)+1` at merge.
+  - Rejected (full list in design.md § Rejected Alternatives):
+    - a watcher-method clamp (MagicMock doubles swallow it)
+    - per-site `<=0` blocks (DRY)
+    - `SCALAR_BOUNDS minValue` instead of read clamps (bounds apply on write only)
+    - an `== 0`-only floor (negatives)
+    - a hard 243→244 merge order
+    - converting the `retry_seconds` wrappers (156 AC-4 / 158 AC-9)
+    - a shared `scripts/` guard
+  - Round deltas:
+    - r1: module-level clamp and a single numbering rule.
+    - r2: the guard now covers the aliases.
+    - r3: argument binding; guard rules 5 and 6; the `retry_seconds` ruling; the inline-clamp conversion; the 027/028 mechanism rows folded into the migration.
+- Deviation (C-18): at the converted `max(1, …)` sites, a stored negative now resolves to the coded default instead of 1.
+  - `test_retention_clamped_to_at_least_one` flips from -5 → 1 to -5 → 20.
+  - No @AC pins negatives.
+  - product-spec.md FR-3 is amended to match, with a feature.md Status History row.
+- Constitution rules touched: C-01, C-02/P-05, C-07, C-08/P-06, C-11, C-14, C-15, C-16, C-18, P-02, P-03, F-01, F-04, F-07, and the DRY guard rail. Floor breaches: none.
+- Business rules: every durable @AC is PRESERVE. 244 @AC-6 is EXTEND. 244 @AC-10..AC-12 are new and covered by the operator decision "Fix the getters + audit". No CHANGE.
+- Open Threads:
+  - [ ] Wire-level zero is unproven at runtime. Target: the @AC-10 test via `ConfigServiceService` (spec config step), plus the dev `signal_rank_weight=0` smoke test (rollout).
+  - [ ] The guard's sets freeze a hand classification. Target: `/sdd-spec` emits the `HONOUR_KEYS`/`FR3_KEYS`/`ZERO_IS_LEGIT` table, and the impl-spec review audits it.
+  - [ ] Negatives change silently at the converted sites. Target: the analysis clamp step records the test flip.
+  - [ ] Stored 0/'' rows and malformed int rows change on deploy. Target: pre-deploy audit on dev, then prod, with the results recorded here.
+  - [ ] Type-mismatched unseeded FR-4 rows still fall back. Target: the rollout `value_type` check and the docs step.
+  - [ ] Migration renumbering. Target: `/sdd-execute` re-lists `origin/main-dev` before merge and adds the merge-order.md row.
+  - [ ] A bare-`MagicMock` cfg return raises `TypeError` at `v > 0`. Target: `/sdd-spec` runs the full suites and lists every double it fixes.
+  - [ ] The slug collision with 173 deletes the feature branch on each push to `main`. Target: operator slug rename before `/sdd-spec` pushes.
+  - [ ] The `sparkline_bars` description drift (028:100,103) is unlogged. Target: the docs step logs it in `services/xstockstrat-config/docs/context-constitution-findings.md`.
+- Status: spec-ready → design-approved.

@@ -100,8 +100,9 @@ feature changes, so `/sdd-spec` gives each a verification step.
   resolves to the caller's default.
 - **FR-3**: Every trap-dependent call site resolves a stored `0`/`""` to the coded default, as today, through an
   explicit clamp at the read (no clamp is needed where the coded default is itself 0, e.g. `default_fill_model`).
-  Existing `max(1, …)` negative guards stay. Recon checks the inventory below against every
-  `get_int`/`get_float`/`get_str` call in the three services. A site joins FR-3 when a stored 0/`""` would deadlock
+  Read-site `max(1, …)` guards are subsumed by the `>0` clamp, so a stored negative resolves to the default
+  (amended 2026-10-21 by /sdd-design, design.md §4); the present-aware `retry_seconds` guards stay. Recon checks
+  the inventory below against every `get_int`/`get_float`/`get_str` call in the three services. A site joins FR-3 when a stored 0/`""` would deadlock
   or busy-loop, drop a resource guardrail, degenerate a computation or halt a loop, or when a service `CLAUDE.md`
   documents it as trap-dependent. Every other site honours the stored value.
 - **FR-4**: The report's swallowed keys take effect at 0: `analysis.backtest.default_commission_pct` and

@@ -2949,3 +2949,11 @@ ambiguity is logged here).
     handler.
   - Before changing a shared RPC's failure or budget behaviour, enumerate every caller's request shape
     (window size, deadline) and make the change opt-in when the callers differ.
+
+### 2026-10-21 — fix-python-config-zero-trap — assumption
+- **Mistake**: A Track C fix reused the slug of launched feature 173 (`fix-python-config-zero-trap`).
+  - The orphan cleanup resolves a branch to its feature by a slug glob and takes the first match, which is the launched 173.
+  - It then deletes the live `feature/<slug>` branch on every push to `main`.
+  - This happened twice in 8 h (2026-10-20T23:30Z, 2026-10-21T06:37Z). Each time, the next skill silently fell back to a base without the prior SDD commits.
+- **Evidence**: `.github/workflows/ci-validate-feature-status.yml:167,183`; 244 context.md sessions 2026-10-20 (sdd-review) and 2026-10-21 (sdd-design).
+- **Rule it implies**: A new feature or bug slug must be unique across all `docs/roadmap/features/*-<slug>` dirs, including launched ones. When `feature/<slug>` is missing, check the stale local tracking ref before falling back.
