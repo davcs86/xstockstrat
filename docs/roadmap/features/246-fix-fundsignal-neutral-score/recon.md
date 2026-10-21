@@ -114,21 +114,28 @@ from its present metrics, real zeros included. No proto, migration or config cha
 
 ## Existing Business Rules (preserve / extend)
 
-- **PRESERVE** `@AC-8 @FR-5 @FR-6 @feature-201` "On a partial fundamentals row the strategy omits absent metrics (does not penalize) and diverges from the producer" (`services/xstockstrat-analysis/acceptance/fundamentals-formula-inputs.feature`) — the formula-path producer passes a missing metric as 0.0 (hard zero); partial-row behaviour must not change (spec marks PRESERVE)
-- **EXTEND** `@AC-8 @FR-5 @FR-6 @feature-201` "On a partial fundamentals row the strategy omits absent metrics (does not penalize) and diverges from the producer" (`services/xstockstrat-analysis/acceptance/fundamentals-formula-inputs.feature`) — only if design extends the all-missing skip to the formula path; it adds a new all-missing case alongside the partial-row rule
-- **PRESERVE** `@AC-4 @FR-5 @feature-201` "One formula, identical I/O in the producer and in a strategy — fully-populated rows" (`services/xstockstrat-analysis/acceptance/fundamentals-formula-inputs.feature`) — fully-populated rows score identically if the formula path is touched
-- **PRESERVE** `@AC-1 @feature-156` "The producer runs its first cycle promptly on a fresh deploy, not after a full interval" (`services/xstockstrat-analysis/acceptance/fix-fundamentals-signal-producer.feature`) — source registration and first `run_once` must still occur when the whole universe is data-less
-- **PRESERVE** `@AC-4 @feature-156` "A caught cycle error retries after retry_seconds, not a full interval" (`services/xstockstrat-analysis/acceptance/fix-fundamentals-signal-producer.feature`) — a cycle with zero scorable symbols must complete normally, not raise
-- **PRESERVE** `@AC-6 @feature-156` "A manual scan does not contaminate the scheduled cadence" (`services/xstockstrat-analysis/acceptance/fix-fundamentals-signal-producer.feature`) — `RunFundamentalsScan` shares `run_once`; `blocked_until_ms` stays unchanged
-- **PRESERVE** `@AC-37 @FR-3 @FR-6 @feature-224` "Fundamentals scan fails closed on a non-system scoring formula" (`services/xstockstrat-analysis/acceptance/private-by-default-templates.feature`) — no built-in fallback on the formula path; no emit and no `fundsignal_emitted` row on abort
-- **PRESERVE** `@AC-6 @FR-3 @FR-1 @feature-224` "The fundamentals loop still runs the system scoring formula" (`docs/sdd/business-rules/platform.feature`) — system-identity `ExecuteFormula` unchanged
-- **PRESERVE** `@AC-36 @FR-4 @feature-224` "System slugs are reserved in both directions" (`docs/sdd/business-rules/platform.feature`) — registration failure still aborts with an ERROR alert and no emit
-- **PRESERVE** `@AC-26 @FR-6 @feature-224` "System-owned fundamentals signals are visible to every user" (`docs/sdd/business-rules/platform.feature`) — symbols with data are still emitted and consumed
-- **PRESERVE** `@AC-1 @FR-1 @FR-3 @FR-4 @feature-168` "Blend strategy runs on the fundamentals universe intersection" (`services/xstockstrat-analysis/acceptance/fundamentals-blend-universe.feature`) — universe rule unchanged; data-less symbols drop out because they have no signal
+Verdicts: PRESERVE only. FR-1/FR-2 as written need no EXTEND or CHANGE (tags re-grepped 2026-10-20).
+
+- **PRESERVE** `@AC-8 @FR-5 @FR-6 @feature-201` "On a partial fundamentals row the strategy omits absent metrics (does not penalize) and diverges from the producer" (`services/xstockstrat-analysis/acceptance/fundamentals-formula-inputs.feature`) — the formula-path producer passes a missing metric as 0.0 (hard zero); partial-row behaviour must not change. An all-missing skip on the formula path does not alter it; FR-2 stays scoped to the built-in scorer
+- **PRESERVE** `@AC-4 @FR-5 @feature-201` "One formula, identical I/O in the producer and in a strategy — fully-populated rows" (`services/xstockstrat-analysis/acceptance/fundamentals-formula-inputs.feature`) — the all-missing skip never fires on a fully-populated row, so parity holds
+- **PRESERVE** `@AC-1`..`@AC-7 @feature-156` "durable, crash-safe schedule" (`services/xstockstrat-analysis/acceptance/fix-fundamentals-signal-producer.feature:11-55`) — the fix stays inside `run_once` and never touches `blocked_until_ms`:
+  - `@AC-1` "The producer runs its first cycle promptly on a fresh deploy": registration and the first `run_once` still occur when the whole universe is data-less;
+  - `@AC-4` "A caught cycle error retries after retry_seconds": an all-skipped cycle is a normal completion, not a caught error, so it takes the normal schedule advance, not the retry;
+  - `@AC-6` "A manual scan does not contaminate the scheduled cadence": `RunFundamentalsScan` (incl. `dry_run`/`symbols` override) shares `run_once` and leaves the schedule unchanged
+- **PRESERVE** `@AC-37 @FR-3 @FR-6 @feature-224` "Fundamentals scan fails closed on a non-system scoring formula" (`services/xstockstrat-analysis/acceptance/private-by-default-templates.feature:61`) — no built-in fallback on the formula path; no emit and no `fundsignal_emitted` row on abort. The fix must not add a per-symbol fall-through to the built-in scorer
+- **PRESERVE** `@AC-6 @FR-3 @FR-1 @feature-224` "The fundamentals loop still runs the system scoring formula" (`docs/sdd/business-rules/platform.feature:258`) — a formula-path symbol with data still reaches `ExecuteFormula` as `x-user-id: system` + `x-internal-caller: analysis-fundsignal`
+- **PRESERVE** `@AC-36 @FR-4 @feature-224` "System slugs are reserved in both directions" (`docs/sdd/business-rules/platform.feature:314`) — registration failure still aborts with an ERROR alert and no emit
+- **PRESERVE** `@AC-26 @FR-6 @feature-224` "System-owned fundamentals signals are visible to every user" (`docs/sdd/business-rules/platform.feature:292`) — symbols with data are still emitted, `system`-owned and visible
+- **PRESERVE** `@AC-1 @FR-1 @FR-3 @FR-4 @feature-168` "Blend strategy runs on the fundamentals universe intersection" (`services/xstockstrat-analysis/acceptance/fundamentals-blend-universe.feature:13`) — universe rule unchanged; it only shrinks, as data-less symbols lose their fabricated signal
+- **PRESERVE** `@AC-6 @FR-6 @feature-168` "Fundamentals-universe resolution failure yields an empty universe, not a broad fallback" (`services/xstockstrat-analysis/acceptance/fundamentals-blend-universe.feature:56`) — unaffected; producer-side fix
 - **PRESERVE** `@AC-2 @FR-1 @feature-186` "Blend strategy is skipped when fundamentals universe is empty" (`services/xstockstrat-analysis/acceptance/fundamentals-blend-strategy-restrictions.feature`) — more reachable after the fix; must stay a clean skip
 - **PRESERVE** `@AC-1 @regression @feature-193` "the queue attributes the blend only inside the fundamentals universe" (`services/xstockstrat-analysis/acceptance/fix-blend-queue-fundamentals-universe.feature`) — queue attribution rule unchanged under a smaller universe
-- **PRESERVE** `@AC-10 @FR-8 @feature-215` "Partial rows evaluate and filings at or after the window's last bar do not count" (`services/xstockstrat-analysis/acceptance/block-fundamentals-strategy-on-etf.feature`) — strategy-side partial rows still evaluate; do not couple FR-1 to `fundamentals_guard`
-- **PRESERVE** `@AC-33 @FR-6 @feature-224` "A user cannot write as the system owner" (`services/xstockstrat-ingest/acceptance/private-by-default-templates.feature`) — system-write grant unchanged; no ingest change anticipated
+- **PRESERVE** `@AC-3 @FR-3`, `@AC-4 @FR-4`, `@AC-5 @FR-4`, `@AC-6 @FR-5 @FR-7` `@feature-154` "Producer scores the enumerated union … (watchlists / both / explicit); the enumerated universe is capped only when FMP is the active provider" (`services/xstockstrat-analysis/acceptance/fundsignal-watchlist-universe.feature:13,22,30,39`) — resolution and cap unchanged; data-less symbols still count against the cap (applied before scoring); do not reorder
+- **PRESERVE** `@AC-2 @FR-2`, `@AC-5 @FR-6` `@feature-215` "A fundamentals-gated backtest on an ETF returns an explicit reason, not a silent no-trade" / "The refusal is auditable" (`services/xstockstrat-analysis/acceptance/block-fundamentals-strategy-on-etf.feature:24,41`) — consumer-side sibling with the same intent (absent data is never a real result); untouched
+- **PRESERVE** `@AC-10 @FR-8 @feature-215` "Partial rows evaluate and filings at or after the window's last bar do not count" (`services/xstockstrat-analysis/acceptance/block-fundamentals-strategy-on-etf.feature:72`) — strategy-side partial rows still evaluate; FR-2 producer partial-row scoring stays consistent with it; do not couple FR-1 to `fundamentals_guard`
+- **PRESERVE** `@AC-33 @FR-6 @feature-224` "A user cannot write as the system owner" (`services/xstockstrat-ingest/acceptance/private-by-default-templates.feature:40`) — system-write grant unchanged; no ingest change anticipated
+- **PRESERVE** `@AC-27 @FR-11 @feature-224` "Global signal data is backfilled to the seed user" (`services/xstockstrat-ingest/acceptance/private-by-default-templates.feature:34`) — fundamentals-producer sources stay `system`-owned; no migration touched
+- **PRESERVE** `@AC-9 @FR-1 @feature-225` "A headerless owner-scoped call is rejected in ingest" (`services/xstockstrat-ingest/acceptance/private-by-default-enforce-contract.feature:17`) — the producer's `IngestSignal` metadata must stay unchanged
 
 Ordering constraints these rules impose:
 
@@ -142,7 +149,15 @@ Notes, from scenario-recon:
   built-in scorer's partial-row behaviour, so FR-2 is not constrained by one.
 - **Conditional CHANGE.** If design makes the formula path omit absent metrics (extending FR-2 there), that alters
   `@AC-8 @feature-201` and needs explicit user sign-off in `context.md`. None is recorded: the binding operator
-  decisions of 2026-10-20 cover no `@AC` CHANGE. A silent change is a C-16 regression.
+  decisions of 2026-10-20 cover no `@AC` CHANGE. A silent change is a C-16 regression. Extending only the
+  all-missing skip to the formula path leaves `@AC-8` PRESERVE (EXTEND, no sign-off, only if a durable scenario is
+  added for it).
+- **Formula-path skip vs `@AC-37`.** If extended, the skip is per-symbol (logged), while a non-system formula still
+  aborts the whole cycle. The skip must not be built as a fallback.
+- **Idempotency.** `analysis.fundsignal_emitted` keyed `(symbol, source, as_of_date)` is covered only by analysis
+  `CLAUDE.md` prose; no promoted `@AC` covers same-day re-run or `force`. No guarantee is invented here.
+- **Provenance.** `@AC` numbers repeat across suites (platform `@AC-6 @feature-224` vs analysis `@AC-37`, both on
+  the formula path). Cite by path plus tag.
 - **Coverage gap, not a guarantee.** No durable `@AC` covers any of:
   - `_map_directions` quantile mapping;
   - `min_conviction_to_emit` or `valid_days`;
@@ -154,11 +169,21 @@ Notes, from scenario-recon:
 
 Out of scope (scenario-recon, not impacted):
 
-- Other scenarios in the analysis suites: 156 `@AC-2/3/5/7`, 158 `durable-loop-scheduler`, 154 `@AC-3..9`,
-  199 `opportunity-composite-score` (its 0.5 is the shrinkage prior), 190 `@AC-11`, 160, the 215 guard scenarios,
-  201 `@AC-1/2/3/7`, and the other blend-strategy rules.
-- The ingest suites (`private-by-default-enforce-contract`, `mcp-client-signal-source`,
-  `historical-fundamentals-backtest`).
+- Other scenarios in the analysis suites: 158 `durable-loop-scheduler`, 154 `@AC-7..9`,
+  199 `opportunity-composite-score` (its 0.5 is the shrinkage prior), `symbol-opportunity-ranking` (strategy-weight
+  prior), `signal-performance-attribution` (attribution weight), 190 `@AC-11`, 160, the other 215 guard scenarios,
+  201 `@AC-1/2/3/7`, the other blend-strategy rules, and the `ListOpportunities` read-path suites
+  (`opportunities-server-side-filters`, `fix-opportunities-read-hangs`, `opportunities-pagination-drain`,
+  `opportunity-compute-robustness`, `opportunity-live-market-enrichment`, `opportunities-latency-fix`).
+- The other ingest suites and scenarios (`private-by-default-enforce-contract` other than `@AC-9`,
+  `mcp-client-signal-source`, `historical-fundamentals-backtest`, `fix-config-watcher-client-id`,
+  `fix-python-config-zero-trap`, `proto-deprecated-field-removal-program`).
+- Coverage: read in full — `platform.feature`; analysis `fix-fundamentals-signal-producer`,
+  `fundamentals-formula-inputs`, `fundsignal-watchlist-universe`, `fundamentals-blend-universe`,
+  `fix-blend-queue-fundamentals-universe`, `block-fundamentals-strategy-on-etf`; partially
+  `fundamentals-blend-strategy-restrictions` (`:1-34`) and analysis `private-by-default-templates` (`:50-69`);
+  ingest `private-by-default-templates`, `private-by-default-enforce-contract`. The other 22 analysis and 5 ingest
+  suites were scanned by targeted grep only.
 - The other `platform.feature` rules.
 - The ui and agent `fix-fundamentals-signal-producer` suites (ui `@AC-9`, agent `@AC-8` admin gates), which are
   PRESERVE and unaffected.
@@ -211,14 +236,14 @@ Out of scope (scenario-recon, not impacted):
 5. **Formula path (Open for Design).** `_score_via_formula` (`:452-459`) ignores `missing_metrics`, so under a
    configured `scoring_formula_id` a data-less ETF is scored from wire zeros (fails.md:2724-2727). The path is
    opt-in and seeded empty (`008_analysis_fundsignal_keys.up.sql:34-35`).
-   - Extend the all-missing skip to this path: EXTEND `@AC-8`.
+   - Extend the all-missing skip to this path: `@AC-8` stays PRESERVE (EXTEND only if a durable scenario is added).
    - Make it omit absent metrics: CHANGE `@AC-8`, which needs sign-off and has none.
    - Leave it: name the follow-up feature.
 
    One placement covers both scorers: a guard between `:223` and `:226` that filters `fetched`. It interacts with
    the `symbols_done` semantics in risk 4.
-6. **Digest correction (not a risk).** The analysis digest flagged that `_score` (`:412-414`) falls back to the
-   built-in scorer when `self._indicators is None` and a formula id is set. That cannot happen from `run_once`:
+6. **Unreachable branch (not a risk).** `_score` (`:412-414`) would fall back to the built-in scorer when
+   `self._indicators is None` and a formula id is set. That cannot happen from `run_once`:
    `_scoring_formula_is_system` returns `False` when `self._indicators is None` (`:436-437`), so the cycle aborts at
    `:202-206` before `_score`.
 7. **Already-stored fabricated signals (C-14, Open for Design).** Stored rows stay live for up to `valid_days`
@@ -302,7 +327,7 @@ Advisory, not binding:
 2. **service** — `_builtin_score` reads presence from `missing_metrics` (FR-2: real 0.0 scored; partial row scored
    from present metrics). It yields "no score" when all five metrics are missing, and `_score` omits that symbol
    (FR-1), with a skip log line. Placement (inside the scorer vs. a guard ahead of `_score`) is a design fork.
-3. **design-dependent** — Formula path: either the all-missing skip (EXTEND `@AC-8`, plus a test proving partial
+3. **design-dependent** — Formula path: either the all-missing skip (`@AC-8` PRESERVE, plus a test proving partial
    rows still pass 0.0) or a named follow-up feature.
 4. **docs** — Correct the analysis `CLAUDE.md` producer bullets (idempotency and cache-call claim, stale dedup
    claim), plus the teardown (context-constitution refresh) for the touched docs.
