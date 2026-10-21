@@ -625,3 +625,54 @@ Items 3/3' and 9 of round 6 stand. Round-8 additions (portfolio paths under `ser
 - [ ] 252 soft merge-order row + 252 context note — Step 13.
 - [ ] Ship gate (i)-(iv) + dev smoke under mTLS — Step 14.
 - [ ] Scratch-tsconfig compiled run — Step 3 verification.
+
+## Session 2026-10-21 — sdd-review impl-spec
+
+- Mode B (advisory); status stays `implementation-ready`. Criteria verdict FAIL (2 blockers, 10 warnings); overlap
+  verdict WARN (11 shared-file collisions, no field/migration/key collision). Each claim was re-verified on
+  `origin/feature/fix-getpnl-source-service` @ `3581fa07` before any edit.
+- Blockers, discharged as stale (no edit): the reviewer read an older checkout
+  (`/home/user/xs-feat/251-fix-getpnl-source-service`).
+  - C-15/C-01 AC traceability: `acceptance.feature` on the branch tip carries `@AC-1`..`@AC-22`, with `@FR-1`..`@FR-5`
+    each tagged ≥ 3 times. `product-spec.md:64`/`:69` define FR-4/FR-5 (appended by sdd-spec, context.md:581).
+  - C-01/C-11 design gate: `design.md` exists (9 rounds, approved), `status.md` = `implementation-ready`, and
+    commit `2d991956` is the spec-ready → design-approved flip. The design.md § citations resolve (§1-§7, :17, :168-171).
+- Addressed in implementation-spec.md:
+  - C-08: each test step (2, 4, 6, 8, 10) now names the paired GREEN step that enforces its coverage threshold.
+  - 252 overlap: 252 is `implementation-ready` (its branch `status.md`); this branch's copy of 252 `status.md` is
+    a stale `draft`. Step Dependencies now cover 252 Step 4 (the `tsc` → `dist/__tests__` runner and the `.ts`
+    import strip, which break 251's `queryEventsPage` test imports) and 252 Step 5 (guard removal).
+  - COVERPKGS lines in Steps 5/7/9 now `export GOWORK=off` first. Verified: `GOWORK=off go list ./...` in portfolio
+    lists no testdata package, so `internal/testdata` is outside COVERPKGS, `go vet ./internal/...` and
+    golangci-lint. Step 6 vets it by explicit path. The design.md §6E/:261 "counts toward" claim is recorded as
+    design drift in the Execution Summary; design.md itself is not edited.
+  - Step 10: `LINEAGE_ORDERS` now lives in `e2e/fixtures/orders.ts`, which is added to Files (F-08). The vitest
+    test imports both lineage fixtures (C-12).
+  - Step 10 mock backend: `ORDERS` stays symbol-only, and `LINEAGE_ORDERS` is appended only for the lineage page
+    size (51). The new `queryEvents` branch is scoped to `eventType === 'order.filled'`, and the agnostic
+    fallthrough (`mock-backend.ts:450-470`) is kept, with only its source literal fixed.
+  - Step 6: dropped `TradingSourceServiceForTest`, which had no consumer (C-18).
+  - Steps 6/8 and Step Dependencies: the red-package PR CI note (P-06/F-05).
+  - Step 12: the grep now also matches ledger `CLAUDE.md:34` `order:{id}`. `order.approval_requested` (`:150`) is
+    corrected to the bare id (`trading.go:655`), and `order.approved` (`:151`, no emit site) is left alone.
+  - Step 14 → promotion gate PG-1, outside the step counter (Total Steps 13).
+  - Step 13 now writes a rebase-only merge-order blockquote covering 252/248/249/250/241 (format
+    `merge-order.md:121-138`), with the conflict at 252's `:138` anchor accepted.
+
+## Open Threads
+
+- [ ] 241 `implementation-spec.md:70-71` wrongly says 251 edits `SourceService` at `trading.go:2188`
+  (`escalateSystemic`). 251 has no such edit. Outside 251's write scope, so it must be corrected in 241 before
+  either feature executes (operator).
+- [ ] Overlap scan gaps: the 242 and 245 checkouts had no implementation-spec.md, so their overlap with 251 is
+  unverified. Re-scan before the integration PR.
+- [ ] Residual risks carried to PG-1 / the integration PR, unchanged:
+  - the uncapped platform-wide `order.filled` drain;
+  - the cold-cache side-lookup cliff on the ledger's 1-connection query pool (F-06 budget unchanged);
+  - the `(extract(epoch …)*1e6)::bigint` cursor exactness, to confirm on the prod PG version at PG-1 (iv);
+  - permanent FAILED_PRECONDITION for fills with no side-bearing sibling (immutable ledger, no backfill);
+  - sequence order reflecting racing-goroutine insert order.
+- [ ] Step 10's page-size discriminator (`pageSize === 51`) couples the mock to `LINEAGE_MAX_ORDERS`. If an existing
+  spec ever lists orders at page size 51 it would see lineage orders. Accepted; revisit at Step 10 RED if a spec
+  regresses.
+- Files written: implementation-spec.md, context.md.

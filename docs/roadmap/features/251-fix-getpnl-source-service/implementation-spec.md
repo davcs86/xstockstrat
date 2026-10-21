@@ -3,7 +3,7 @@
 **Status**: `pending`
 **Created**: 2026-10-21
 **Feature**: `docs/roadmap/features/251-fix-getpnl-source-service/feature.md`
-**Total Steps**: 14
+**Total Steps**: 13 (plus promotion gate PG-1, outside the step counter)
 **Feature Branch**: `feature/fix-getpnl-source-service`
 
 ---
@@ -22,8 +22,9 @@ Portfolio comes next (Steps 6-9):
 - the RED adapter and error-mapping tests;
 - the ctx-first `classifyGetPnLError` and `toGRPCError` change.
 
-The UI then gets the user-pinned lineage and BFF backstop (Steps 10-11). Teardown docs (Step 12), the
-merge-order/252 reconciliation (Step 13) and the post-deploy ship gate plus dev smoke (Step 14) close it out.
+The UI then gets the user-pinned lineage and BFF backstop (Steps 10-11). Teardown docs (Step 12) and the
+merge-order reconciliation (Step 13) close the step loop. The post-deploy ship gate plus dev smoke is promotion
+gate PG-1, outside the step counter: it runs on live dev/prod, so `/sdd-execute` cannot run it.
 
 Every code-bearing step has a paired test step written to fail first (P-06, C-08). Pairing:
 - Step 2 [test] covers Steps 1 and 3 [service]: RED against the Step 1 extraction, GREEN after Step 3.
@@ -55,6 +56,12 @@ therefore does not apply. Any step that touches a `.proto` is a deviation and mu
   precedent being `internal/service/pnl_fold_test.go:10-14`. The portfolio half asserts const = testdata value =
   literal. The trading half (Step 4) asserts the recorded `SourceService`. Go modules cannot import each other
   (`GOWORK=off`).
+- design.md §6E (:174-175) and Open Risks (:261) say `testdata` counts toward COVERPKGS. **Wrong**: `go list ./...`
+  skips directories named `testdata` (2026-10-21: `GOWORK=off go list ./...` in portfolio lists no testdata
+  package), so `internal/testdata/ledger.go` is not in COVERPKGS, not vetted by `go vet ./internal/...` and not
+  linted by `golangci-lint run`. Step 6 vets it by explicit path; the fake is exercised only through its importers.
+- design.md §7 lists the ship gate and dev smoke in the build order. They run against live dev/prod, so this spec
+  holds them as promotion gate PG-1 (after Step 13), not as a step.
 
 ### Scenario Coverage (C-15)
 
@@ -101,11 +108,27 @@ therefore does not apply. Any step that touches a `.proto` is a deviation and mu
   `:425`. The Step 8 RED is a compile failure for those rows, which is accepted (precedent `trading_fees_test.go`
   "compile-level RED").
 - Step 11 requires Step 10 (RED). Step 10's mock and fixture changes ship in Step 10.
-- Step 12 (teardown) requires Steps 1-11. Step 13 runs at the integration PR. Step 14 runs only after trading
+- Step 12 (teardown) requires Steps 1-11. Step 13 runs at the integration PR. PG-1 runs only after trading
   `side` is live on dev (design.md §7) and blocks promotion.
-- **Overlap.** `ledgerServiceImpl.test.ts` is shared with 252-fix-identity-ledger-test-suites (status `draft`).
-  Step 2 edits it under the existing `if (!impl) return;` guards. Step 13 adds the soft merge-order row and the
-  252 context note.
+- **Red-package PRs (P-06/F-05).** Steps 6 and 8 leave whole test packages uncompilable until Steps 7 and 9
+  (`internal/service` at Step 6; `internal/handler` and the `service_test` wire test at Step 8). Each step PR's CI
+  is red for the full package, not only the new tests; the step PR description must say so.
+- **Overlap.** 252-fix-identity-ledger-test-suites is `implementation-ready` (`origin/feature/fix-identity-ledger-test-suites`
+  `status.md`; this branch's copy of 252 `status.md` reads a stale `draft`). It collides beyond `makeRow`:
+  - 252 Step 4 switches the ledger runner to `tsc && c8 … node --test dist/__tests__/*.test.js`, deletes the
+    `src/**/*.test.ts` tsconfig exclusion and strips `.ts` extensions from test imports (`mtls.test.ts:13`). 251's
+    `queryEventsPage.test.ts` and `pg/queryEventsKeyset.test.ts` import `queryEventsPage.ts` with the extension,
+    which `tsc` rejects without `allowImportingTsExtensions`.
+  - 252 Step 5 removes every `if (!impl) return;` guard in `ledgerServiceImpl.test.ts`, the guards 251 Step 2
+    edits under.
+  - Other peers (WARN, shared files, no field/migration/key collision): 248 (`ledgerServiceImpl.ts`,
+    `ledgerServiceImpl.test.ts`, `ci.yml` `ledger-db-test` job + `ci-gate`, ledger `CLAUDE.md`); 249 (`trading.go`
+    `:86-92`/`:684`/`:1521`, trading `CLAUDE.md`, `INVENTORY.md`); 250 (`ci.yml` `otel-signals` + `ci-gate`); 241
+    (`trading.go` `escalateSystemic` `:2163-2190`).
+  - 241 `implementation-spec.md:70-71` says 251 edits the `SourceService` literal at `trading.go:2188` in
+    `escalateSystemic`. 251 has no such edit: its only `trading.go` change is `applyBrokerOrderStatus`
+    (`:1772-1829`, Step 5). The 241 claim is stale.
+  - Step 13 records all of these in `merge-order.md`.
 - **C-16 promotion.** AC-1..AC-22 are promoted into the durable suites (`services/xstockstrat-portfolio/acceptance/`,
   `services/xstockstrat-ledger/acceptance/`, `services/xstockstrat-trading/acceptance/`,
   `services/xstockstrat-ui/acceptance/`) by `/sdd-execute`'s integration PR, not by a step here. The portfolio
@@ -264,7 +287,8 @@ node --experimental-strip-types --test src/__tests__/queryEventsPage.test.ts   #
 node --experimental-strip-types --test src/__tests__/pg/queryEventsKeyset.test.ts; test $? -ne 0   # unset URL → fails, not skips
 cd ../.. && grep -n "ledger-pg-test" .github/workflows/ci.yml   # job key, ci-gate needs entry, echo line (≥ 3 hits)
 ```
-CI `ledger-pg-test` on the step PR: RED at this step (page 2 repeats page 1), GREEN after Step 3.
+CI `ledger-pg-test` on the step PR: RED at this step (page 2 repeats page 1), GREEN after Step 3. The coverage
+threshold (`c8 --lines 40`) is enforced at paired GREEN Step 3, not here.
 
 ---
 
@@ -367,6 +391,7 @@ cd services/xstockstrat-trading && GOWORK=off go test ./internal/service/ -run T
 GOWORK=off golangci-lint run --modules-download-mode=mod
 grep -rn "func notCancelableSvc" --include="*_test.go" internal/service   # 1 declaration site (C-13)
 ```
+The coverage threshold (≥ 40%, CI `ci.yml:256-257` shape) is enforced at paired GREEN Step 5, not here.
 
 ---
 
@@ -405,7 +430,7 @@ dev invariant, position limit enforcement
 **Verification**:
 ```bash
 cd services/xstockstrat-trading && GOWORK=off go test ./internal/service/ -run 'TestFillEmit251_AC10|TestCancelOrder_NotCancelable|TestFillEmitsCarryBrokerFees' -race -count=1
-GOWORK=off COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"   # ≥ 40%
+export GOWORK=off && COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"   # ≥ 40%
 GOWORK=off golangci-lint run --modules-download-mode=mod
 grep -n '"side"' internal/service/trading.go   # hits at the two fill emits plus :650, :666
 ```
@@ -492,8 +517,8 @@ safety
        `svc.watchlists = newFakeStore()`, `svc.wlCfg = wideCaps()`;
      - always register `mock.ExpectQuery(\`FROM portfolio.positions\`).WithArgs(anyArgs(3)...)` returning `posRow`
        rows for `positions`. With none, it returns an empty `positionCols` row set.
-   - `var CtxWithUser = ctxWithUser`, `var Guard = guard`, and `var TradingSourceServiceForTest = tradingSourceService`
-     (the last fails to compile until Step 7, which is part of the RED).
+   - `var CtxWithUser = ctxWithUser` and `var Guard = guard`. No source-service export: the parity test (item 3)
+     is in-package and no `service_test` file consumes one (C-18).
    - Reviewed-unchanged literals: `portfolio_quote_deadline_test.go:102`, `portfolio_fill_errors_test.go:64`,
      `watchlist_service_test.go:276`, plus `fakeLedger` / `stopLedger` / `fillEvent`.
 3. **`getpnl_source_parity_test.go`**: `TestGetPnL251_SourceServiceParity` asserts
@@ -533,10 +558,14 @@ safety
 
 **Verification**:
 ```bash
-cd services/xstockstrat-portfolio && GOWORK=off go vet ./internal/... ; GOWORK=off go test ./internal/service/ -run 'TestGetPnL251' -race -count=1   # RED: compile (tradingSourceService, ErrFillUnattributable, ErrRealizedUnavailable undefined) then behaviour (realized 0)
-GOWORK=off golangci-lint run --modules-download-mode=mod
+cd services/xstockstrat-portfolio && GOWORK=off go vet ./internal/testdata/   # explicit path: ./... skips testdata
+GOWORK=off go test ./internal/service/ -run 'TestGetPnL251' -race -count=1   # RED: compile (tradingSourceService, ErrFillUnattributable, ErrRealizedUnavailable undefined) then behaviour (realized 0)
+GOWORK=off golangci-lint run --modules-download-mode=mod   # does not lint internal/testdata (testdata dirs skipped)
 grep -rn "func FilledEvent\|func PartialEvent\|func CreatedEvent" --include="*.go" internal/   # exactly 1 declaration site each (internal/testdata/ledger.go)
 ```
+- The compile RED fails the whole `internal/service` test package until Step 7; say so in the step PR description
+  (P-06/F-05).
+- The coverage threshold (≥ 40%) is enforced at paired GREEN Step 7, not here.
 
 ---
 
@@ -617,12 +646,12 @@ safety
 **Verification**:
 ```bash
 cd services/xstockstrat-portfolio && GOWORK=off go test ./internal/service/ -run 'TestGetPnL' -race -count=1 -v   # 251 GREEN + feature-229/240 GetPnL tests green
-GOWORK=off COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"   # ≥ 40%
+export GOWORK=off && COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"   # ≥ 40%
 GOWORK=off golangci-lint run --modules-download-mode=mod
 grep -n 'SourceService: "trading"' internal/service/portfolio_service.go; test $? -eq 1
 ```
-New GetPnL logic is in `service`, which is excluded from COVERPKGS. `internal/testdata` counts toward it (accepted,
-design.md §6E).
+New GetPnL logic is in `service`, which is excluded from COVERPKGS. `internal/testdata` is not in COVERPKGS either
+(`go list ./...` skips `testdata`; the design drift is recorded in the Execution Summary).
 
 ---
 
@@ -695,6 +724,9 @@ cd services/xstockstrat-portfolio && GOWORK=off go test ./internal/... -run 'Tes
 GOWORK=off golangci-lint run --modules-download-mode=mod
 grep -rn "func FilledEvent" --include="*.go" internal/   # still 1 declaration site
 ```
+- The arity change fails the `internal/handler` test package, and the wire test fails the `service_test` package,
+  until Step 9; say so in the step PR description (P-06/F-05).
+- The coverage threshold (≥ 40%) is enforced at paired GREEN Step 9, not here.
 
 ---
 
@@ -736,7 +768,7 @@ safety
 **Verification**:
 ```bash
 cd services/xstockstrat-portfolio && GOWORK=off go test ./... -race -count=1   # Step 8 GREEN, all green
-GOWORK=off COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"   # ≥ 40%
+export GOWORK=off && COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"   # ≥ 40%
 GOWORK=off golangci-lint run --modules-download-mode=mod
 grep -n "classifyGetPnLError(" internal/handler/portfolio_handler.go   # definition + one call site, both 2-arg
 ```
@@ -752,6 +784,7 @@ The logic is in the excluded `handler` package; the Step 8 tests are the gate.
 - `services/xstockstrat-ui/src/lib/positionLineage.test.ts` — create
 - `services/xstockstrat-ui/e2e/trader/position-lineage.spec.ts` — create
 - `services/xstockstrat-ui/e2e/fixtures/ledgerEvents.ts` — modify
+- `services/xstockstrat-ui/e2e/fixtures/orders.ts` — modify
 - `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md` — modify
 - `services/xstockstrat-ui/e2e/mock-backend.ts` — modify
 - `services/xstockstrat-ui/e2e/trader/positions.spec.ts` — modify
@@ -799,6 +832,9 @@ direct DB access (except audit log)
 **Instructions**:
 1. **`src/lib/positionLineage.test.ts`** (vitest, RED: the module does not exist yet). It imports
    `{ LINEAGE_MAX_ORDERS, fetchPositionLineage, isForeignFillEvent }` from `./positionLineage`.
+   - Stub responses are built from `LINEAGE_ORDERS` (`e2e/fixtures/orders.ts`) and `LINEAGE_FILL_EVENTS`
+     (`e2e/fixtures/ledgerEvents.ts`), imported by relative path (C-12: vitest tests using domain objects). The
+     51-order and NEW-status cases are `{ ...LINEAGE_ORDERS[0], orderId }` / `{ ..., status: 1 }` spreads.
    - `fetchPositionLineage` with stub `listOrders` / `queryEvents` functions:
      - (a) it passes `{symbol, accountId, tradingMode}` plus `page.pageSize = LINEAGE_MAX_ORDERS + 1` to
        `listOrders`;
@@ -813,14 +849,24 @@ direct DB access (except audit log)
      `o-other` AAPL 5@120 acct-2; a LIVE u-1 fill; `o-stale`. All have
      `sourceService: 'xstockstrat-trading'` and bare-id `streamKey`.
    - `lineageOtherUserFills(n)`: generates 100 other-user rows for AC-19.
-   - Add the matching `LINEAGE_ORDERS` (spreads of `ORDER_FILLED` from `e2e/fixtures/orders.ts`, including
-     `o-stale` with status 1 = NEW and the LIVE order with `tradingMode: 2`).
-   - Add an `INVENTORY.md` row next to `:22-23`, and update `:81` to say the `order.filled` branch is centralized.
-3. **`e2e/mock-backend.ts`**:
-   - `listOrders` also filters `req.accountId` and `req.tradingMode` when set, over `ORDERS` plus `LINEAGE_ORDERS`.
-   - Replace the inline `order.filled` branch (`:450-470`): with `req.streamKey`, return the `LINEAGE_FILL_EVENTS`
-     rows matching it (including u-2's, so the BFF backstop is what drops it). Without a stream key, return
-     `lineageOtherUserFills(100)` and `nextPageToken: 'p2'`, so the old platform-wide read misses u-1.
+   - Add `LINEAGE_ORDERS` to `e2e/fixtures/orders.ts`, the order domain's home, as spreads of `ORDER_FILLED`. It
+     includes `o-stale` with status 1 = NEW and the LIVE order with `tradingMode: 2`. `ORDERS` (`:80`) is unchanged.
+   - Add `INVENTORY.md` rows for `LINEAGE_FILL_EVENTS` (next to `:22-23`) and `LINEAGE_ORDERS`, and update `:81` to
+     say the `order.filled` branch is centralized.
+3. **`e2e/mock-backend.ts`**. Existing specs must see unchanged default responses:
+   - `listOrders` (`:311-316`): the `ORDERS` path stays symbol-only, as today. Request shape alone cannot tell a
+     lineage call apart: `useOrders` (`src/hooks/useOrders.ts:36-45`, page size 50) always sends `tradingMode`,
+     and the per-symbol page (`src/app/trader/positions/[symbol]/page.tsx:114`) sends `symbol`. The mock therefore
+     appends `LINEAGE_ORDERS` only when `req.page?.pageSize === LINEAGE_MAX_ORDERS + 1` (the lineage call's page
+     size), filtering them by `symbol`, `accountId` and `tradingMode` when set.
+   - `queryEvents`: the final return (`:450-470`) is an event-type-agnostic fallthrough. Other callers that reach it
+     keep it. Add a new branch before it, scoped to `req.eventType === 'order.filled'`:
+     - with `req.streamKey`, it returns the matching `LINEAGE_FILL_EVENTS` rows, including u-2's, so the BFF
+       backstop is what drops them;
+     - without one, it returns `lineageOtherUserFills(100)` and `nextPageToken: 'p2'`, so the old platform-wide
+       read misses u-1.
+   - The fallthrough's literal `sourceService: 'trading'` (`:456`) becomes `'xstockstrat-trading'`. The Step 11
+     grep requires this; the payload is otherwise unchanged.
 4. **`e2e/trader/position-lineage.spec.ts`** (new), using `addAuthCookie`:
    - AC-3: the AAPL/acct position sheet lists `o-buy` qty 10 @ 100, and no intercepted QueryEvents response body
      contains u-2.
@@ -842,8 +888,9 @@ cd services/xstockstrat-ui && pnpm run test:unit -- src/lib/positionLineage.test
 pnpm exec playwright test e2e/trader/position-lineage.spec.ts   # RED on AC-3/19/20/21/22 (old hook reads the platform page; BFF unscoped)
 pnpm run lint
 grep -n "from '../fixtures'\|from './fixtures'\|helpers/auth" e2e/trader/position-lineage.spec.ts e2e/trader/positions.spec.ts e2e/mock-backend.ts
-grep -n "LINEAGE_FILL_EVENTS" e2e/fixtures/INVENTORY.md
+grep -n "LINEAGE_FILL_EVENTS\|LINEAGE_ORDERS" e2e/fixtures/INVENTORY.md
 ```
+The coverage threshold (vitest `src/lib/**` lines ≥ 40%) is enforced at paired GREEN Step 11, not here.
 
 ---
 
@@ -923,10 +970,13 @@ grep -rn "sourceService: 'trading'" src e2e; test $? -eq 1
   - The § Ledger Events Consumed `order.filled` row is at `:117` (live consumer only); the
     `order.partially_filled` row is at `:118`.
   - PORTFOLIO-16 is at `services/xstockstrat-portfolio/docs/context-constitution.md:34`.
-- Trading: `services/xstockstrat-trading/CLAUDE.md:143-156` documents `order:{order_id}` for `order.*` events, but
-  production writes the bare id (`trading.go:649`, `:665`, `:1805`, `:1822`).
-  `order_intent.resolved_by_reconciliation` (`:158`) does use the prefix (`trading.go:2223`, `:2247`, `:2278`).
-- Ledger: `services/xstockstrat-ledger/CLAUDE.md:34` and `:101` (`order:{order_id}`), and `:26` (QueryEvents).
+- Trading: `services/xstockstrat-trading/CLAUDE.md:143-156` documents `order:{order_id}` for `order.*` events.
+  Production writes the bare id (`trading.go:649`, `:665`, `:1805`, `:1822`; `order.bracket_updated` at `:1353`).
+  - `order.approval_requested` (`:150`) documents `approval:{order_id}`, but `trading.go:655` emits the bare id too.
+  - `order.approved` (`:151`) has no emit site, and the row says so.
+  - `order_intent.resolved_by_reconciliation` (`:158`) does use the prefix (`trading.go:2247`, `:2278`).
+- Ledger: `services/xstockstrat-ledger/CLAUDE.md:34` (`order:{id}`), `:101` (`order:{order_id}`), and `:26`
+  (QueryEvents).
 - Findings candidates (design.md §7): `GetPnL` ignores `req.Range` for realized (`portfolio_service.go:851`
   echoes it only); `HydrateStops` reads page 1 only (`portfolio_service.go:534`); DeleteWatchlist 500 → 400 and
   short-deadline DEADLINE_EXCEEDED are intended.
@@ -946,22 +996,25 @@ grep -rn "sourceService: 'trading'" src e2e; test $? -eq 1
    - `:118`: same side rule, plus the account-grain sequence-ordered fold.
 2. PORTFOLIO-16 (`context-constitution.md:34`): reflect `classifyGetPnLError(ctx, err)` precedence. Add findings
    entries for the `req.Range`, HydrateStops page-1 and wire-code changes.
-3. Trading `CLAUDE.md:143-156`: change the stream-key column for `order.*` rows to the bare `{order_id}`. Keep `:158`.
-4. Ledger `CLAUDE.md:34`, `:101`: bare order id for trading order events. Near `:26`, document that
+3. Trading `CLAUDE.md:143-156`: change the stream-key column of every emitted `order.*` row to the bare
+   `{order_id}`, including `order.approval_requested` (`:150`). Leave `order.approved` (`:151`, no emit site) and
+   `:158` unchanged.
+4. Ledger `CLAUDE.md:34` (`order:{id}`) and `:101`: bare order id for trading `order.*` events; `order:{order_id}`
+   stays for `order_intent.*`. Near `:26`, document that
    `QueryEvents.page.page_token` is an opaque keyset cursor and that a malformed token returns INVALID_ARGUMENT.
 5. Run `/context-forge:context-constitution refresh` scoped to these files. If unavailable, reconcile by hand and
    record both facts in the PR body (root `CLAUDE.md` § Teardown).
 
 **Verification**:
 ```bash
-grep -n "order:{order_id}" services/xstockstrat-trading/CLAUDE.md services/xstockstrat-ledger/CLAUDE.md   # only order_intent.* rows remain
+grep -n "order:{order_id}\|order:{id}\|approval:{order_id}" services/xstockstrat-trading/CLAUDE.md services/xstockstrat-ledger/CLAUDE.md   # only order_intent.* rows and order.approved (:151) remain
 grep -n "page_token" services/xstockstrat-ledger/CLAUDE.md
 grep -n "classifyGetPnLError" services/xstockstrat-portfolio/CLAUDE.md services/xstockstrat-portfolio/docs/context-constitution.md
 ```
 
 ---
 
-### Step 13 — docs: 252 reconciliation (soft merge-order row + 252 context note)
+### Step 13 — docs: peer reconciliation (rebase-only merge-order note + 252 context note)
 
 **Status**: `pending`
 **Service**: `docs/roadmap/features/`
@@ -974,18 +1027,39 @@ grep -n "classifyGetPnLError" services/xstockstrat-portfolio/CLAUDE.md services/
 **Codebase Evidence**:
 - The soft-row precedent is `docs/roadmap/features/merge-order.md:35` (`open-positions-ui` ↔ `orders-management-ui`,
   "soft/rebase dependency"). grep `252|fix-identity-ledger` finds no row today.
-- `docs/roadmap/features/252-fix-identity-ledger-test-suites/status.md` = `draft`. 252 owns the ledger runner that
-  un-guards `ledgerServiceImpl.test.ts` (design.md §1 B8).
+- 252 is `implementation-ready` (`origin/feature/fix-identity-ledger-test-suites` `status.md`). 252 owns the ledger
+  runner that un-guards `ledgerServiceImpl.test.ts` (design.md §1 B8).
+- 252 Step 6 inserts its own rebase-only blockquote after `merge-order.md:138` (before the `---` at `:140`), in
+  the `:121-138` format.
+- Peer overlaps to record: Step Dependencies § Overlap (252, 248, 249, 250, 241). None is a field-number,
+  migration or config-key collision, so none needs a hard ordering row.
 
 **TDD**: `N/A (docs)`
 
 **Covers**: —
 
 **Instructions**:
-1. Add a row: `fix-getpnl-source-service` | `fix-identity-ledger-test-suites` | soft. Both edit
-   `ledgerServiceImpl.test.ts`. Whichever merges second reconciles `makeRow.cursor_us` and the hasMore token
-   decode (251 Step 2), and keeps the `queryEvents` delegate (251 Step 1) covered. Resolved: `No`.
-2. Append a dated session note to 252's `context.md` stating the same reconciliation duty.
+1. Insert a blockquote in the `:121-138` format, titled `Note on 251 fix-getpnl-source-service ↔ 252 / 248 / 249 /
+   250 / 241 — rebase-only, no hard ordering row.`
+   - Place it after the last note before the `---` at `:140`. If 252's note is already on the base, place it after
+     that note. The textual conflict at this anchor is accepted and resolved by rebase.
+   - Bullets:
+     - **252 ↔ 251 on the ledger test runner and `ledgerServiceImpl.test.ts`.** Whichever merges second:
+       - reconciles `makeRow.cursor_us` and the hasMore token decode (251 Step 2) with 252's de-guarded file;
+       - drops the `.ts` extension from 251's `queryEventsPage` test imports once 252's `tsc` runner compiles
+         tests;
+       - keeps `ledger-pg-test` running `src/__tests__/pg/queryEventsKeyset.test.ts` in strip mode, or repoints
+         it at the compiled `dist/__tests__/pg/queryEventsKeyset.test.js`;
+       - keeps the `queryEvents` delegate (251 Step 1) covered.
+     - **248 ↔ 251 on `ledgerServiceImpl.ts`/`.test.ts`, `ci.yml` and ledger `CLAUDE.md`.** The methods are
+       disjoint (`streamEvents`/`getEvent` vs the `queryEvents` delegate), and `rowToEvent` stays in place. Both add
+       a TimescaleDB ledger job to `ci-gate.needs`; keep the union.
+     - **249 ↔ 251 on `trading.go`, trading `CLAUDE.md` and `INVENTORY.md`.** Line-disjoint; only the anchors
+       shift.
+     - **250 ↔ 251 on `ci.yml` `ci-gate`.** Keep the union of the added jobs.
+     - **241 ↔ 251 on `trading.go`.** 241 edits `escalateSystemic` (`:2163-2190`); 251 edits only
+       `applyBrokerOrderStatus`. 241's `implementation-spec.md:70-71` claim that 251 edits `:2188` is stale.
+2. Append a dated session note to 252's `context.md` stating the 252 ↔ 251 reconciliation duty.
 
 **Verification**:
 ```bash
@@ -994,7 +1068,10 @@ grep -n "fix-getpnl-source-service" docs/roadmap/features/merge-order.md docs/ro
 
 ---
 
-### Step 14 — docs: ship gate and dev smoke (post-deploy, blocks promotion)
+### Promotion gate PG-1 — ship gate and dev smoke (post-deploy, outside the step counter, blocks promotion)
+
+`/sdd-execute` does not run PG-1. It reads live dev/prod, and the access path under fail-closed mTLS is unresolved
+(escalate per P-03). PG-1 blocks the `main-dev` → `main` promotion of 251; its results go in context.md.
 
 **Status**: `pending`
 **Service**: `docs/roadmap/features/251-fix-getpnl-source-service/`
