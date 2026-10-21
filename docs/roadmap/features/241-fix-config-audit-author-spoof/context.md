@@ -155,3 +155,83 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - Standing authorization: designs run in FULL mode only (no quick designs for automated fixes); the orchestrator auto-approves the design gate once rounds >= 2, no unresolved Floor (F-*) breach remains, no blocking objection remains, and every CHANGE to an existing @AC business rule is covered by an operator decision below.
   - Author comes from verified identity only: config stamps changed_by from the verified x-user-id, or the x-internal-caller grant id for automated writers; request.author is ignored and the proto field is marked [deprecated = true] (non-breaking); the agent stops sending free-text author; trading's reconciliation-poller sentinel moves to the x-internal-caller identity.
 - Next: `/sdd-design fix-config-audit-author-spoof` (full; Phase 0 recon is done, Phase 1 grilling is next).
+
+## Session 2026-10-20 — sdd-design
+
+- Phase 0 Recon: wrote recon.md (services: config, agent, trading, ui). Key reuse patterns:
+  - hoist `internalCallerAuthorized` (`configServiceImpl.ts:380-385`);
+  - deprecate-in-place (`config.proto:129`);
+  - feature-111 no-`author` tool precedent (`tools.py:1113`).
+- Phase 1 Grilling: 2 rounds (full). Adversary r2 verdict SOUND: no Floor breach, no blocking objection. All 8
+  non-blocking objections are folded into design.md.
+- Termination: auto-approved by the orchestrator under the operator standing authorization (2026-10-20). Gate:
+  rounds ≥ 2, no F-* breach, no blocking objection, no @AC CHANGE.
+- Chosen approach: `author = callerUserId || (internalCallerAuthorized ? callerIdentity : '')`. In detail:
+  - `request.author` is ignored and field 4 is `[deprecated = true]`;
+  - `MISSING_AUTHOR_ERROR` stays code 3, before enum/bounds/existence, with the message reworded to
+    "propagated identity";
+  - trading deletes `Author`;
+  - the agent removes the `author` param from `set_config`, `client.set_config` and `_write_source_bearer`;
+  - the UI drops both BFF stamps;
+  - one PR, ordered proto → config → trading → agent → ui → docs.
+- Rejected:
+  - grant id wins over `x-user-id`;
+  - peerSan binding now (it becomes a follow-up defect);
+  - keeping the agent param ignored;
+  - nolint on `trading.go:2176`;
+  - a migration.
+- Decisions (Q1-Q5 closed; copied into product-spec § Open Questions this session, per fails.md:2860):
+  - Q1: `x-user-id` wins; `caller_identity` keeps the raw header.
+  - Q2: remove the param, no fallback. Evidence is a source read of the pinned mcp 2.2.0 wheel
+    (`func_metadata.py:112` has no `extra`; `:105` iterates `model_fields`; no server-side inputSchema
+    validation). `tests/test_streamable_http_auth.py:86` is kept on purpose as the CI probe, with
+    `isError is False` and `author` absent from kwargs.
+  - Q3: delete `trading.go:2176`, and `fakeConfigSetter` records `callerID`.
+  - Q4: drop the stamps, delete the `insightsBff.test.ts:59` fixture, assert `Headers.get(HEADER_USER_ID)`, and
+    add a new `configUiBff` vitest.
+  - Q5: `set_config` calls `_caller_user_id` as an edge fail-fast, with a ≤2-line comment.
+- Constitution rules touched: C-01, C-09, C-10, C-11, C-14, C-15, C-16, C-18, P-02, P-03, F-09.
+  Floor breaches: none.
+- Business rules:
+  - EXTEND platform `@AC-9 @feature-196`, covered by the operator decision;
+  - PRESERVE `@AC-3` and `@AC-5 @feature-196` and the config/agent/ui write-edge rules;
+  - CHANGE none.
+- Open Threads (from design.md § Open Risks; target step at /sdd-spec):
+  - [ ] Trusted-header residual (no `peerSan` on the SetConfig grant, `authz.ts:66-76`). Two obligations: file a
+    named defect report under `docs/reports/` (peerDnsSans binding to `xstockstrat-trading`), and use
+    "propagated, not authenticated" wording in FR-2/AC-1/AC-2, `acceptance.feature:3,6`, product-spec `:22-30`,
+    the error message and config CLAUDE.md #5/#7. → spec time + docs step.
+  - [ ] mcp 2.2.0 undeclared-arg confirmed by source read only. The `:86` probe is a named step with a fixed
+    expected result. → agent step.
+  - [ ] Mandatory named pins (fails.md:2810). → config / trading / agent / ui steps.
+    - AC-2 `params[6] === 'trading-reconciliation-poller'`;
+    - the trading callerID assertion;
+    - the `:86` author-not-in-kwargs line;
+    - the `configUiBff` header test;
+    - the agent removed-parameter RED.
+  - [ ] Code-only rejection tests (`setConfigScalarBounds.test.ts:103-117`, `tradingStateValidation.test.ts:115-121`)
+    gain `assert.match` on their own message. → config step.
+  - [ ] No real-DB harness: show `changed_by` via INSERT params `[6]`/`[10]` plus a SQL review of `017:66-91`.
+    → config step.
+  - [ ] Audit "By" spelling: new rows read `trading-reconciliation-poller`, historical rows keep
+    `system:reconciliation-poller`. Note it in the rewritten config-governance § Author-sentinel conventions.
+    → docs step.
+  - [ ] Browser `author` via `insightsBff.ts:176` `...req` is inert at config. Accepted; the guard is config AC-1.
+  - [ ] Deprecation markers vs linters unverified. Run golangci-lint and the UI/TS lint in the PR.
+    → trading / ui steps.
+  - [ ] Adjacent drift for the teardown → docs step / teardown:
+    - `config-rollout.md:122-124` and `:150-163` (`RolloutConfig`, which does not exist);
+    - `tools.py:1665-1667`;
+    - `config-governance.md:102` indicators row.
+  - [ ] Docs sweep (C-10). → docs step.
+    - `header-propagation.md:38-46`: the whole paragraph.
+    - `config-rollout.md:77-81`, `:95`, `:100`, `:119`, `:141`, `:210-217`, `:225-232`, including the
+      full-dotted key fix (migration 029).
+    - The `config-governance.md:93-103` rewrite.
+    - Config CLAUDE.md `:40`, `:42-56`, `:84`, `:97`.
+    - `mcp-tools.md:1096-1156`.
+    - The constitution and findings rows.
+- Ledger: no new line. The traps this debate hit are already in the ledger:
+  - fails.md:75-78, :1329, :1425, :2780, :2810, :2827, :2860;
+  - insights.md:3587.
+- Status: spec-ready → design-approved.

@@ -16,6 +16,7 @@
 | 2026-10-20 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-19-config-audit-author-caller-spoofable-defect.md` |
 | 2026-10-20 | `draft` → `spec-ready` | /sdd-review | Product spec approved (9 warnings) |
 | 2026-10-20 | `spec-ready` (unchanged) | /sdd-review | Product spec re-reviewed, PASS WITH WARNINGS (8 warnings); FR-1..FR-4, AC-4, Open Questions Q1-Q5 added |
+| 2026-10-20 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved under operator standing authorization; recon.md + design.md written |
 
 ---
 
@@ -36,6 +37,8 @@ Provisional snapshot from `docs/runbooks/reviewer-registry.md` at /sdd-triage ti
 
 - [Product Spec](product-spec.md) — bug description and fix scope
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
+- [Recon](recon.md) — Phase 0 grounded codebase dossier
+- [Design](design.md) — approved design (2 rounds, full): chosen approach, rejected alternatives, open risks
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-config-audit-author-spoof`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -49,4 +52,4 @@ attribute a write to someone else. The MCP `set_config` tool passes `author` str
 
 ## Next Action
 
-`/sdd-design fix-config-audit-author-spoof` (full — operator: no quick designs)
+`/sdd-spec fix-config-audit-author-spoof` — generate implementation spec from the approved design

@@ -116,6 +116,15 @@ verified headers (feature 074, PR #994), but attribution never followed. `MISSIN
 
 Owned by /sdd-design; each must be closed in design.md before `design-approved`.
 
+**Closed by design.md (2026-10-20, design-approved):**
+- Q1 → `x-user-id` wins; the grant id is credited only when `x-user-id` is absent; `caller_identity` keeps the raw header.
+- Q2 → remove the parameter, no fallback. mcp 2.2.0 drops an undeclared argument (`func_metadata.py:105,112`, source read); `tests/test_streamable_http_auth.py:86` is kept as the CI probe.
+- Q3 → delete `trading.go:2176`.
+- Q4 → drop both BFF stamps, delete the `insightsBff.test.ts:59` fixture, and assert the `x-user-id` header.
+- Q5 → `set_config` calls `_caller_user_id` as an edge fail-fast; config stays authoritative.
+
+The original questions follow, unchanged.
+
 - **Q1. Identity precedence.** Which identity is credited when both `x-user-id` and an authorized
   `x-internal-caller` are present. The operator decision lists `x-user-id` first. No current caller sends both
   (recon.md § Risks).
