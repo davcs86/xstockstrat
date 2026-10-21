@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-10-21 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-21-ui-transport-hardening-defect.md` (debt-radar D-37, D-38) |
+| 2026-10-21 | `draft` → `spec-ready` | /sdd-review | Product spec approved (5 warnings) |
 
 ---
 
@@ -45,4 +46,4 @@ root-level health paths, so the eight segment health routes require auth (D-38).
 
 ## Next Action
 
-`/sdd-spec fix-ui-transport-hardening` — recommended design depth: skip (single service, no proto/migration/config, clear root cause); escalate to `/sdd-design fix-ui-transport-hardening quick` if design wants the default deadline as a config key; see context.md
+`/sdd-design fix-ui-transport-hardening` — resolve Open Questions 1–3 (default deadline value, constant vs `ui.*` key, streaming opt-out) and AC-5 harness feasibility; see context.md
