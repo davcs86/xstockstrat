@@ -35,6 +35,38 @@ ambiguous shape recorded as a source error.
 unrelated error. Admins who cancel a backfill (agent `cancel_backfill`, `get_backfill_status`): the job shows `RUNNING`
 again and spends vendor quota.
 
+## Functional Requirements
+
+- **FR-1 (D-09).** `poll_one_source` ingests each parsed item in its own guard. An item that fails to build or ingest
+  is skipped and logged with the source slug; the remaining items of the batch are still ingested. The poll records
+  the number of skipped items per source per poll (a log line carrying slug + skipped count). A skipped item alone
+  does not mark the source errored.
+- **FR-2 (D-34).** A backfill job (bars or fundamentals) canceled while `QUEUED` stays `CANCELED` when a
+  `_backfill_sem` slot frees: it is never written `RUNNING`, emits no `ingest.backfill.running` event, and makes no
+  marketdata `BackfillBars` / `BackfillFundamentals` call.
+- **FR-3 (D-34).** A fundamentals job canceled while `RUNNING` keeps status `CANCELED` after its in-flight
+  `BackfillFundamentals` call returns; finalization never overwrites `CANCELED` with `COMPLETED` or `PARTIAL`.
+- **FR-4 (D-34).** `resume_incomplete_jobs` never resumes a job whose persisted status is `CANCELED`, including after
+  a restart (when the in-memory `_canceled_jobs` set is empty): its status stays `CANCELED` and none of its
+  PENDING/FAILED chunks run.
+- **FR-5 (D-42).** The `GetSecret` call made by `ConfigWatcher.resolve_secret` for an `mcp_client` source is bounded
+  by `ingest.mcp_client.request_timeout_seconds`. On expiry the source's `last_error` (`ListSignalSources`) records a
+  deadline error, and the remaining sources are still polled in the same cycle.
+- **FR-6 (D-59).** The signal list is selected from a dict result by an unambiguous rule, not "first list value". A
+  result that carries the signal list alongside other lists (e.g. `{"warnings": [], "signals": [...]}`) ingests the
+  signals. A result whose signal list cannot be determined unambiguously (e.g. two non-empty candidate lists and no
+  rule selecting one) ingests nothing and records an error in the source's `last_error`.
+
+## Consumer Surface(s)
+
+- [x] **UI — `/config-ui` signal-sources view** (feature 083 source-health list): an `mcp_client` source shows the
+  correct `last_error` (FR-5 deadline error, FR-6 ambiguous-shape error) and a `signals_fed` count that includes the
+  items no longer dropped (FR-1, FR-6). No layout or component change.
+- [x] **Agent tools** — `manage_signal_source` / `list_signal_sources` surface the same `last_error` / `signals_fed`
+  values; `get_backfill_status` and `cancel_backfill` report a canceled job as `CANCELED` instead of `RUNNING` /
+  `COMPLETED` / `PARTIAL` (FR-2..FR-4). No tool schema change unless the FR-6 design adopts a per-source `result_key`
+  (see Open Questions).
+
 ## Reproduction Steps
 
 1. D-09: fetch result of three items, item 2 missing `symbol`. Only item 1 is ingested.
@@ -56,10 +88,26 @@ cancel flag with unconditional `RUNNING` writes on the queued-start and resume p
 ## Fix Scope
 
 - [x] No proto changes anticipated
-- [ ] No database migrations anticipated — the D-34 fix can read the persisted job status; a migration is needed only if design adds a column
-- [ ] No config key changes anticipated — D-42 should reuse `ingest.mcp_client.request_timeout_seconds`; D-59 may add a per-source `result_key` inside `config_json` (not a config-service key); design decides
+- [x] No database migrations anticipated — FR-4 reads the already-persisted job status. If design instead adds a
+  column, it adds a numbered `NNN_*.up.sql` + `.down.sql` pair in `services/xstockstrat-ingest/migrations/` and amends
+  this box.
+- [x] No config-service key changes — FR-5 reuses the existing `ingest.mcp_client.request_timeout_seconds`.
 
-(Update after investigation — remove or replace each item as needed)
+## Open Questions
+
+- [x] **FR-6 selection rule** (resolved for review; mechanism deferred to `/sdd-design`): the observable contract is
+  fixed by FR-6 either way. Candidate mechanisms are a well-known key (`signals`/`items`) or a per-source `result_key`
+  inside `config_json` (not a config-service key). If design adopts `result_key`, it is a `config_json` contract
+  change and design must add the `manage_signal_source` schema and the `/config-ui` source form to Consumer
+  Surface(s).
+
+## Coordination
+
+- Feature 244 (`fix-python-config-stored-zero`) rewrites the `ingest.mcp_client.request_timeout_seconds` read in
+  `mcp_client_loop.py`; FR-5 reuses that key, so rebase onto whichever lands first.
+- Peers in this batch: `fix-python-loop-supervision` (259, ingest `ConfigWatcher` / poll loop) and
+  `fix-config-stream-resilience` (`app/config/watcher.py`) share files with FR-1 and FR-5; features 242 and 260 touch
+  disjoint regions of `app/handlers/servicer.py`. Design confirms no behavioral collision.
 
 ## Acceptance Criteria
 
