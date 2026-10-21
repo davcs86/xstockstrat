@@ -135,3 +135,117 @@ OPERATOR DECISIONS (binding, recorded 2026-10-20):
 OPERATOR DECISIONS (binding, recorded 2026-10-20):
 - Standing authorization: designs run in FULL mode only (no quick designs for automated fixes); the orchestrator auto-approves the design gate once rounds >= 2, no unresolved Floor (F-*) breach remains, no blocking objection remains, and every CHANGE to an existing @AC business rule is covered by an operator decision below.
 - Full design depth (operator: full is the minimum).
+
+## Session 2026-10-21 — sdd-design (full) halted at gate, round 5
+
+- `/sdd-design fix-getpnl-source-service` full debate ran 5 rounds (cap) on HEAD `bec15842`. Auto-approval did not
+  fire: rounds >= 2 and no Floor breach, but 2 blocking objections remain (B6, B9). Per the grilling cap rule,
+  `design.md` is NOT written and `status.md` stays `spec-ready`. Operator decision needed.
+- Relayed request "Override limit for 246" names feature 246; it is not an operator decision for 251, waives no
+  blocker and sanctions no @AC CHANGE.
+- Checkpoint: `state-r5.json` in the orchestrator scratchpad (seeds/251).
+
+## Open Threads
+
+### Current best approach (after round 5)
+
+1. **Ledger paging.** New `services/xstockstrat-ledger/src/queryEventsPage.ts` owns SQL build, keyset predicate,
+   cursor encode/decode, full `page` object (`{nextPageToken, totalCount: rows returned}`, per
+   `ledgerServiceImpl.test.ts:208-221`) and error mapping (InvalidPageTokenError/22007/22008/22P02 -> 3, else 13).
+   `ledgerServiceImpl.ts` queryEvents (`:124-176`) becomes a thin delegate. Encoder requires `row.cursor_us` as a
+   decimal string (pg int8), throws plain Error (-> 13) otherwise. Keyset compare in integer microseconds
+   (`'epoch'::timestamptz + $us * interval '1 microsecond'`, never `to_timestamp(double)`); ORDER BY
+   recorded_at, event_id. Strip/tsc dual-load: no enums, parameter properties, namespaces, or relative runtime
+   imports (`import type` only; fails.md:2239-2241). New `ledger-pg-test` CI job on the TimescaleDB image, drains
+   >= 2 pages, iteration cap, ms-tie/chunk/filter fixtures.
+2. **252 reconciliation (B8, closed).** 251 edits `ledgerServiceImpl.test.ts`: makeRow (`:88-103`) gains
+   `cursor_us: '1704067200000000'`; hasMore case (`:172-187`) decodes the token to the last row's
+   (cursor_us, event_id). One-off compiled run (scratch tsconfig excluding `mtls.test.ts`/`queryEventsPage.test.ts`,
+   `node -e` import of compiled impl, `node --test` on compiled test) recorded as evidence, not a CI guard. Soft
+   merge-order row (precedent `merge-order.md:35`) naming who reconciles; matching note appended to 252 context.md.
+3. **Portfolio GetPnL** (`portfolio_service.go:722-853`). Five-stage pipeline, fold key
+   `trading_mode|account_id|symbol`, fail-closed sentinels, seen-event_id set, `pnl.Fold` unchanged. Side
+   resolution: NO preload; for the caller's buffered side-less fills only, StreamKey lookup per distinct order
+   (order.created / order.submitted); process-local mutex-guarded cache of positive sides only (empty answers and
+   transport errors never cached — order.created can land after its fill, `trading.go:1805`); stop at first
+   unattributable order -> `ErrFillUnattributable`. Recommended sequential lookups (not `errgroup.SetLimit(2)`;
+   `golang.org/x/sync` is `// indirect`, `go.mod:34`). Every kept fill, including partials appended from the
+   latestPartials map (`:838-843`), carries its ledger `sequence`; `sort.SliceStable` by sequence before the fold.
+4. **gRPC errors (B7, closed).** `toGRPCError` (`portfolio_handler.go:432-447`) gains explicit
+   FailedPrecondition/DeadlineExceeded/Canceled cases mirroring `trading.go:223-238` (no numeric pass-through).
+   `classifyGetPnLError(ctx, err)` (`:423-430`) precedence: caller `ctx.Err()` -> DeadlineExceeded/Canceled;
+   ErrQuotesUnavailable -> Unavailable; ErrRealizedUnavailable -> Unavailable; ErrFillUnattributable ->
+   FailedPrecondition; else Internal. Table tests for both. Blast radius: only DeleteWatchlist
+   (`portfolio_service.go:1933`) — browser 500 -> 400 (`connectClients.ts:119-124`); e2e mock
+   (`watchlistMock.ts:195-205`) makes no status assumption. Platform @AC-7 brought into wire conformance + portfolio
+   findings entry.
+5. **Trading producer, UI FR-3, ship gate, build order** as round 4, except gate (iv) times a COLD-CACHE full GetPnL
+   (incl. the platform-wide order.filled drain) and AppendEvent latency under concurrent cold calls; preload drain
+   timing dropped.
+6. **Design write (when unblocked).** Append AC-4..AC-22 with @FR tags (acceptance.feature ends at AC-3) and FR-4
+   (isolation) / FR-5 (ledger paging); fold-order fixture in the sequence-ordered-fold AC; design.md records no
+   preload, positive-only cache, sequential lookups (or go.mod/go.sum listing if errgroup kept),
+   DEADLINE_EXCEEDED-under-short-deadline, DeleteWatchlist 500 -> 400.
+
+### Blocking objections
+
+- [ ] **B6** [C-10/C-14, P-03, F-04] Follow-up reports not filed. `docs/reports/` has no live-fold sign-loss
+  (`processOrderFill`, `portfolio_service.go:310-317`) or bracket-leg realized report; the round-1 warning above
+  ("Live fold sign loss ... unaddressed") is still open. Action: `/sdd-qa defect` twice, verify both paths exist,
+  cite them in product-spec Out of Scope (`:186-191`), append a closing context.md entry. Do not cite a path before
+  its file exists.
+- [ ] **B9** [P-06, F-04-adjacent] Adapter wire test has no seam. `PortfolioHandler.svc` is a concrete
+  `*service.PortfolioService` (`portfolio_handler.go:45`, `:49`) with unexported fields; `NewPortfolioService`
+  dials real deps (`portfolio_service.go:114`); handler tests only build `&PortfolioHandler{}`
+  (`portfolio_identity_test.go:28`). Operator picks one:
+  - (a) recommended: `internal/service/export_test.go` test-only constructor (precedent: in-package literals at
+    `portfolio_fill_errors_test.go:64`, `watchlist_service_test.go:276`) + external `package service_test` test via
+    `handler.NewPortfolioHandler(svc).GRPCHandler()` asserting `status.Code` for each sentinel and DeleteWatchlist.
+  - (b) fallback: pure-chain test `toGRPCError(connect.NewError(classifyGetPnLError(ctx, err), err))`, recording the
+    one-line adapter (`:276-282`) as unproven residual.
+  - Rejected: a production handler-side service interface (C-18).
+
+### Floor breaches
+
+- None.
+
+### Uncovered @AC changes
+
+- None. All business-rule impacts are PRESERVE or EXTEND (no operator coverage required):
+  - PRESERVE: 251 @AC-1, @AC-2, @AC-3; portfolio @AC-6; platform @AC-7 @feature-127 (wire brought into conformance,
+    rule text unchanged); trading @AC-10; trading offline @AC-14/@AC-7/@AC-11; ledger @AC-8.
+  - EXTEND: portfolio @AC-5 (adds FAILED_PRECONDITION / DEADLINE_EXCEEDED / CANCELED under the stated precedence;
+    ErrQuotesUnavailable stays UNAVAILABLE); 251 appended @AC-4..@AC-22 with FR-4/FR-5.
+
+### Non-blocking items carried to /sdd-spec
+
+- Fold order: map-appended partials carry their latest partial's sequence; AC fixtures: buy 10@100 filled, partial
+  sell 4@150, buy 10@200 filled -> realized 200; two opposite-side partial-only orders on one symbol -> deterministic.
+- errgroup kept -> step Files list go.mod/go.sum (F-08); escalation: process-wide semaphore, then resumable preload.
+- Ledger delegate line + 251 edits to `ledgerServiceImpl.test.ts` stay behind `if (!impl) return;` until 252 lands
+  (accepted residual; fails.md:132, :1942-1953).
+- Scratch-tsconfig compiled run unverified against ledger's module settings; /sdd-spec confirms or records failure.
+- Confirm no in-repo runtime caller of portfolio GetPnL (agent `app/`, UI `src/`).
+- P-03: update product-spec Affected Services / Fix Scope (`:152`, `:161-164`); document opaque page_token in
+  ledger CLAUDE.md.
+- Carried from round 4: dev smoke access path under fail-closed mTLS; ledger-pg-test migration scoping
+  (SEED_USER_ID, `ci.yml:667`); source-service parity on two pins; permanent FAILED_PRECONDITION counting and
+  remediation; millisecond-precision premise correction; RED hygiene.
+
+### Open risks
+
+- Cold-cache cliff after every deploy (one StreamKey per legacy order over ledger's single query connection; can
+  delay trading's fire-and-forget AppendEvent, 10s timeout, silently dropped).
+- Unresolved fills in mixed-era groups fail permanently with FAILED_PRECONDITION; immutable ledger, no backfill.
+- Cursor-expression chunk exclusion unconfirmed until gate (iv) (fallback: timestamptz text parameter).
+- Platform-wide order.filled drain has no row cap.
+- Sequence order reflects racing-goroutine insert order; interleaved partials may differ from the broker figure.
+- Bracket-leg understatement and live-fold sign loss remain until their follow-ups land (B6).
+- 251/252 collision mitigated only by the soft row.
+
+### Operator decision needed
+
+1. Execute B6 (file two `/sdd-qa defect` reports and cite them), or explicitly waive it.
+2. Choose B9 option (a) or (b).
+3. Then re-run `/sdd-design fix-getpnl-source-service` (full) from the round-5 checkpoint, or grant an explicit
+   round-limit override for 251 so a round 6 can close both blockers.
