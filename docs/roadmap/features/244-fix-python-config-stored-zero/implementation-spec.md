@@ -497,11 +497,11 @@ uv run pytest --cov=app --cov-fail-under=50 && uv run ruff check . && uv run ruf
 - Accessors: `sandbox_timeout_ms` `watcher.py:132-134`, `sandbox_memory_bytes` `:136-138`,
   `sandbox_max_concurrent()` `:147-148`.
 - Consumers:
-  - `servicer.py:102` (`asyncio.Semaphore(max(1, config_watcher.sandbox_max_concurrent()))`)
-  - `:277-278` (`request.timeout_ms_override or self._cfg.sandbox_timeout_ms` — the request `or` is out of scope)
-  - `:303` (`max_concurrent=self._cfg.sandbox_max_concurrent()`, unclamped → `sandbox.py:346` `rlimit_nproc = max_concurrent * 16`)
+  - `servicer.py:107` (`asyncio.Semaphore(max(1, config_watcher.sandbox_max_concurrent()))`)
+  - `:282-285` (`_clamp_override(request.*_override, self._cfg.sandbox_*)`, hotfix #1263 — unchanged; the accessor clamp guarantees its ceiling is ≥ 1)
+  - `:310` (`max_concurrent=self._cfg.sandbox_max_concurrent()`, unclamped → `sandbox.py:346` `rlimit_nproc = max_concurrent * 16`)
   - `sandbox.py:282` (`if {memory_bytes} > 0:` skips `RLIMIT_DATA`)
-- Clamp in the accessor so `:303` is covered without a third copy of the defaults (`sandbox.py:332-335` already holds
+- Clamp in the accessor so `:310` is covered without a third copy of the defaults (`sandbox.py:332-335` already holds
   one; recon.md:180-181, 328-330; design §3).
 - Every servicer test double sets these attributes directly (e.g. `tests/test_execute_formula_concurrency.py:31-37`,
   `tests/test_formulas.py:19-22`), so it bypasses the accessor. Dry run: 290 passed.
@@ -513,7 +513,7 @@ uv run pytest --cov=app --cov-fail-under=50 && uv run ruff check . && uv run ruf
 **Instructions**:
 1. Add the module-level `int_positive(cfg, key, default)` to `watcher.py` (same body as Step 3).
 2. `:134`, `:138` and `:148` → `return int_positive(self, "<same key>", <same default>)`.
-3. `servicer.py:102` → `asyncio.Semaphore(config_watcher.sandbox_max_concurrent())`. The `max(1, …)` is subsumed
+3. `servicer.py:107` → `asyncio.Semaphore(config_watcher.sandbox_max_concurrent())`. The `max(1, …)` is subsumed
    (design §4).
 4. `sandbox_allowed_imports` (`:140-145`) stays `get_str_present`, which honours `""` (feature-173 @AC-4).
 
@@ -538,7 +538,7 @@ Green run is Step 8's Verification.
 **Reviewers**: `xstockstrat-indicators` owner — Formula sandboxing, numeric precision, timeout enforcement (`indicators.sandbox.timeout_ms`), no side-effects from formula execution
 
 **Codebase Evidence**:
-- `IndicatorsServicer.__init__(self, config_watcher, db_pool=None, ledger_channel=None)` `servicer.py:88`. The
+- `IndicatorsServicer.__init__(self, config_watcher, db_pool=None, ledger_channel=None)` `servicer.py:93`. The
   semaphore is built at `:102`.
 - Capture double: `_blocking_execute_double` `tests/test_execute_formula_concurrency.py:40-63`. Semaphore-bound
   pattern: `test_semaphore_gates_at_configured_bound` `:93-106` (recon.md:190-191). It calls
@@ -559,7 +559,7 @@ Green run is Step 8's Verification.
    `w = snapshot_watcher(**{"indicators.sandbox.max_concurrent": 0, "indicators.sandbox.allowed_imports": ""})`:
    - `IndicatorsServicer(config_watcher=w)._sandbox_sem._value == 4`.
    - With `sandbox.execute_formula` monkeypatched to a recorder, one `ExecuteFormula` passes `max_concurrent == 4`,
-     `timeout_ms == 5000` and `memory_bytes == 134217728`. This is the `:303` / `RLIMIT_NPROC` path.
+     `timeout_ms == 5000` and `memory_bytes == 134217728`. This is the `:310` / `RLIMIT_NPROC` path.
 3. Guard file: the same structure as Step 4, with `FR3_KEYS` = the three sandbox int keys,
    `HONOUR_KEYS = {"indicators.sandbox.allowed_imports"}` and `ZERO_IS_LEGIT = {}`. The dry-run scan found the
    keyword-default call at `watcher.py:142-144` bindable.
@@ -1190,7 +1190,8 @@ cd services/xstockstrat-config && pnpm run test:coverage && pnpm run lint   # te
   2026-10-21).
 - Ingest `CLAUDE.md:124,127,130-133` (`:127` and `:131` say "Read via `get_int_present` (never `get_int`)").
 - Indicators `CLAUDE.md:100-103` (`:102` "never `get_str`"; `:103` claims a `max(1, …)` clamp, which is now in the
-  accessor). 243 rewrites the same rows; the second to land rebases.
+  accessor). 243 rewrites the same rows; the second to land rebases. In `:100`, keep hotfix #1263's `_clamp_override`
+  sentence verbatim and append only the FR-3 "a stored ≤ 0 reads as the default" text.
 - `docs/patterns/config-governance.md:251-269` (lower-bound rule and the `signal_rank_weight zero-trap` note at
   `:257-258`), plus product-spec Fix Scope `:458-461,705,713,721`. The same doc also has `:319` ("must not be
   swallowed by the `get_int` zero-trap") and `:688` (`refresh_hour_utc`: "never `get_int` … the zero-trap would
