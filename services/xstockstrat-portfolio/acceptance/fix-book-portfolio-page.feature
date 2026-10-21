@@ -11,14 +11,18 @@ Feature: xstockstrat-portfolio — quote-dependent reads are bounded and never f
   Portfolio reads answer within the quote deadline with unenriched positions, and GetPnL refuses a fabricated
   unrealized P&L.
 
-  @AC-1 @regression @feature-229
-  Scenario Outline: Portfolio reads return unenriched positions when the quote fetch exceeds its deadline
+  # Narrowed by feature 240 (C-16, operator sign-off 2026-10-19): when a daily close exists within
+  # portfolio.marketdata.last_close_lookback_days an offline position falls back to it (see
+  # @AC-27 @feature-240); this scenario now covers the no-bar case. Deadline bound and WARN are kept.
+  @AC-1 @regression @feature-229 @feature-240
+  Scenario Outline: Portfolio reads return unenriched positions when the quote fetch exceeds its deadline and no daily close exists
     Given an offline account holds "AAPL" and "MSFT" with no broker valuation (current_price 0)
+    And no daily bar exists for either symbol within portfolio.marketdata.last_close_lookback_days
     And portfolio.marketdata.quote_timeout_ms is 2500
     And marketdata GetLatestQuotes never answers
     When the caller reads <rpc>
     Then the response returns within 2500 ms + 0.5 s
-    And "AAPL" and "MSFT" are returned with current_price 0 and no fabricated market value
+    And "AAPL" and "MSFT" are returned with current_price 0, mark_source MARK_SOURCE_NONE and no fabricated market value
     And a WARN "batch latest quotes unavailable" is logged with a deadline-exceeded error
 
     Examples:

@@ -3,6 +3,8 @@
 **Development Branch**: `feature/offline-account-full-pnl`
 **Created**: 2026-10-19
 **Last Updated**: 2026-10-20
+**Committed to main**: 107761265fb1232a02ccbdca0126a6aceb4462f0
+**Launched date**: 2026-10-20
 
 ---
 
@@ -18,6 +20,7 @@
 | 2026-10-20 | `in-progress` → `code-completed` | /sdd-execute | All 28 steps done and pushed (sequential); merge-order gate clear (231 resolved); integration PR to `main-dev` next |
 | 2026-10-20 | `code-completed` (renumber) | user request | Renumbered 230 → 240: `230-fix-etf-flag-fill` (2026-10-15) holds 230; max NNN across branches was 239 |
 
+| 2026-10-20 | `code-completed` → `launched` | CI workflow | Promoted via PR #1271; committed 107761265fb1232a02ccbdca0126a6aceb4462f0 |
 ---
 
 ## Artifacts
