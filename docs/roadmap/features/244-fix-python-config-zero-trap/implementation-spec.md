@@ -159,19 +159,30 @@ Indicators: `ZERO_IS_LEGIT = {}` (its one honour key matches no pattern).
   is safe only because the per-step PRs target `feature/fix-python-config-zero-trap` (F-03), which never deploys.
   The integration PR to `main-dev` opens only after Step 12.
 - Step 16's test is authored before Step 15's files exist (RED: the glob finds no migration).
-- Step 15 requires the pre-merge re-list (design §12, Open Risk 6; fails.md:2910): immediately before the integration
-  PR merges, run `git ls-tree --name-only origin/main-dev services/xstockstrat-config/migrations/` and renumber the
-  pair to `max+1` if a sibling (243 claims `031`) landed first. The AC-11 test globs by name suffix, so renumbering
-  needs no test edit.
+- Step 15 pins the pair to `032`: trunk tip is `030`, and 243 claims `031`
+  (`origin/feature/fix-sandbox-seed-keys:…/243-fix-sandbox-seed-keys/implementation-spec.md:168-169`). It still
+  requires the pre-merge re-list (design §12, Open Risk 6; fails.md:2910). Immediately before the integration PR
+  merges, run `git ls-tree --name-only origin/main-dev services/xstockstrat-config/migrations/` and set the pair to
+  `max+1`. That is `031` if 244 merges before 243 (no gap; 243 then renumbers), or higher if another sibling landed.
+  Record any renumber in the Deviation Log (F-09). The AC-11 test globs by name suffix, so a renumber needs no test edit.
 - Step 17 requires Steps 1-16 (docs describe the shipped state). Step 18 runs after the integration PR deploys to dev
   (smoke), then repeats the audit before the prod promotion.
 - Overlaps (file-level rebase only, context.md 2026-10-20 sdd-review): 243 shares indicators `app/config/watcher.py`
   `:133-148` and `CLAUDE.md:100-103` (244 owns the read clamp for all three `indicators.sandbox.*` int keys, FR-6);
-  242 shares `live_loop.py`; 245 shares `services/screener.py`; 241 shares `configServiceImpl.ts`.
+  242 shares `live_loop.py`; 245 shares `services/screener.py` and the `servicer.py:3786-3795` `wait_for` block
+  (Step 11 wraps only the `:3786` read); 246 shares `fundsignal_loop.py` (disjoint lines); 240 and 241 share
+  `configServiceImpl.ts`.
+- **243 test-helper overlap** (`services/xstockstrat-indicators/tests/test_config_watcher.py`). 243 Step 3 generalizes
+  `_str_watcher` into `_watcher(key, field, val)` and keeps it in that file. 244 Step 6 resolves this without a hard
+  order (design rejected one): whichever helper is on the base at execute time keeps its name, signature and file,
+  and only its body delegates to the conftest `snapshot_watcher`.
 - **Branch hazard (design Open Risk 8; fails.md:2953):** the slug collides with launched 173. The orphan cleanup
-  (`.github/workflows/ci-validate-feature-status.yml:167,183`) deletes `feature/fix-python-config-zero-trap` on every
-  push to `main`. The operator rename is still open. Before each `/sdd-execute` session, confirm the branch exists on
-  origin and, if it does not, restore it from the last pushed SDD commit before starting any step.
+  (`.github/workflows/ci-validate-feature-status.yml:160-167,181-183`) maps `feature/fix-python-config-zero-trap` and
+  every `feature-steps/fix-python-config-zero-trap-step-<N>` branch to 173's `status.md` (`ls … | head -1`) and
+  deletes them on every push to `main`. **Precondition of `/sdd-execute`:** the operator slug rename lands first.
+  Until it does, `/sdd-execute` must not open per-step PRs. If it runs anyway (operator override), confirm the
+  feature branch exists on origin before each step, restore it from the last pushed SDD commit if it does not, and
+  re-push any `feature-steps/*` branch that was deleted.
 
 ---
 
@@ -239,8 +250,8 @@ Green run is Step 2's Verification.
 **Instructions**:
 1. In `tests/conftest.py` add `snapshot_watcher(**values) -> ConfigWatcher`. It builds `ConfigWatcher.__new__`
    with a `config_pb2.ConfigSnapshot()`. Each value sets one oneof member by Python type: `bool` → `bool_val`, `int`
-   → `int_val`, `float` → `float_val`, `str` → `string_val`. A `config_pb2.ConfigValue` instance is `CopyFrom`'d
-   as-is. Check `bool` before `int`, because `bool` is a subclass of `int`.
+   → `int_val`, `float` → `float_val`, `str` → `string_val`. Check `bool` before `int`, because `bool` is a subclass
+   of `int`. There is no `ConfigValue` pass-through arm here: every ingest row is a typed Python value (C-18).
 2. Replace `_int_watcher`'s body in `test_config_watcher.py:50-56` with a call to `snapshot_watcher`, keeping the
    name so the 173 test is untouched.
 3. Add `test_getters_honour_stored_zero`, parametrized over the three ingest @AC-1 rows:
@@ -439,6 +450,9 @@ Green run is Step 6's Verification.
 **Codebase Evidence**:
 - `_str_watcher(key, val)` `tests/test_config_watcher.py:51-56` (`ConfigWatcher.__new__`, string arm only; design §9
   extends it with int/float arms).
+- 243 rewrites the same helper: `origin/feature/fix-sandbox-seed-keys:docs/roadmap/features/243-fix-sandbox-seed-keys/implementation-spec.md:298-307`
+  (generalize to `_watcher(key, field, val)`; callers `:60`, `:74`; "`_watcher` stays in this file"; `conftest` grep
+  gate `:315`). 243 records this as soft ordering, where the second to land rebases (`:56-57`).
 - 173 tests that must keep passing: `test_get_str_present_honors_empty` `:59-64` and
   `test_get_str_present_defaults_when_absent` `:66-69`.
 - A second consumer arrives in Step 8 (`tests/test_execute_formula_concurrency.py`), so C-13 puts the builder in
@@ -450,7 +464,12 @@ Green run is Step 6's Verification.
 
 **Instructions**:
 1. Add the same `snapshot_watcher(**values)` builder as Step 2 to `tests/conftest.py`. It is a per-service home;
-   jscpd ignores tests. Re-point `_str_watcher` to it.
+   jscpd ignores tests. Then re-point the helper that is on the base (§ Step Dependencies, 243 test-helper overlap):
+   - 243 not landed: `_str_watcher(key, val)` → `return snapshot_watcher(**{key: val})`.
+   - 243 landed: `_watcher(key, field, val)` keeps its name, signature and file (243 Step 3 instruction 3). Its body
+     builds a `config_pb2.ConfigValue()`, runs `setattr(cv, field, val)` and returns `snapshot_watcher(**{key: cv})`.
+     Only in this case, add a `ConfigValue` arm to the indicators builder that `CopyFrom`s the value as-is.
+     243's Step 3 `conftest` grep gate was a 243-time check, and it does not apply after 244.
 2. Parametrized @AC-1 test over three rows: `indicators.test.zero_int` `0`/`get_int`/`7`,
    `indicators.test.zero_float` `0.0`/`get_float`/`0.5` and `indicators.test.zero_string` `""`/`get_str`/`"x"`.
 3. Parametrized @AC-4 test over three rows:
@@ -691,9 +710,14 @@ Green run is Step 10's Verification.
      `_read_opportunity_queue` with an `AsyncMock` `opps` (`read` returns `[]`) and assert the weight argument of
      `opps.read` is `0.0`. RED: 0.3.
    - Order (marker `real_pg`, fixture `local_pg`): execute
-     `SELECT symbol FROM (VALUES ('AAA',0.90::float8,0.00::float8,'k1'),('BBB',0.50::float8,1.00::float8,'k2')) AS o(symbol,conviction,signal_axis,opportunity_key) ORDER BY <_SORT_ORDER_BY[0]>`
-     with `$3 = 0.0` and assert `["AAA","BBB"]`. With `$3 = 0.3`, assert `["BBB","AAA"]`, the feature-file
-     comment's fail-on-bug contrast. This part needs no schema.
+     `SELECT symbol FROM (VALUES ('AAA',0.90::float8,0.00::float8,'k1'),('BBB',0.50::float8,1.00::float8,'k2')) AS o(symbol,conviction,signal_axis,opportunity_key) ORDER BY <order_by>`.
+     Here `order_by = _SORT_ORDER_BY[0].replace("$3", "$1::float8")`, with one bound arg (the weight).
+     - Why the rebind: the text references only `$3` (`opportunities.py:35-40`). Binding it as `$3` leaves `$1`/`$2`
+       unreferenced, which raises `IndeterminateDatatypeError` (fails.md:190; `tests/test_opportunities_repo.py:149-164`).
+     - Why the cast: a bare `1 - $n` infers `int4` and rejects `0.0`. Production anchors the type with
+       `$3::double precision IS NOT NULL` (`opportunities.py:243-246`).
+     - Weight `0.0` → assert `["AAA","BBB"]`. Weight `0.3` → assert `["BBB","AAA"]`, the feature-file comment's
+       fail-on-bug contrast. This part needs no schema.
 6. **AC-9** (`test_live_loop.py`), in two parts.
    - Seam: `loop = _make_loop()`; `loop._cfg = snapshot_watcher(**{"analysis.engine.alert_throttle_seconds": 0})`.
      Set `loop._eval_pair = AsyncMock()`, seed one live pair through the fair-share `_db.fetch` fixtures, then
@@ -1014,9 +1038,14 @@ change; Step 13 is comments). This is the tdd-gate escape, recorded in the PR bo
      - `analysis.test.zero_int`, `value_type: 'int'`, `value_data: '0'`
      - `analysis.test.zero_float`, `'float'`, `'0'`
      - `analysis.test.zero_string`, `'string'`, `''`
-   - SNAPSHOT: `await impl.reloadNamespace('analysis', 'production')`, then subscribe a fake call
-     (`environment: 2`, no `userId`).
-   - DELTA: `await impl.broadcastToSubscribers('analysis', 'production')`.
+   - `const impl: any = new ConfigServiceImpl(pool)`. `reloadNamespace`, `snapshotForSubscriber` and
+     `broadcastToSubscribers` are `private` (`configServiceImpl.ts:203,245,260`), and `test` runs `tsc` first, so call
+     them through the `any` cast (`configValueRoundtrip.test.ts:56-57`).
+   - SNAPSHOT: `await impl.reloadNamespace('analysis', 'production')`, then `impl.watchConfig(fakeCall)` with a fake
+     call (`environment: 2`, no `userId`). Then `await new Promise((r) => setTimeout(r, 20))`: the SNAPSHOT write and
+     `subscribers.set` happen in an async `.then` (`configServiceImpl.ts:305-309`; pattern `secretsAndScope.test.ts:250-251`).
+     Assert `writes.length === 1` before the DELTA leg, because otherwise no subscriber is registered.
+   - DELTA: `await impl.broadcastToSubscribers('analysis', 'production')`, then assert `writes.length === 2`.
    - For each captured payload:
      `const d = createConfigServiceDefinition().watchConfig.responseDeserialize(createConfigServiceDefinition().watchConfig.responseSerialize(p))`.
    - Assert, on both the SNAPSHOT payload and the DELTA payload:
@@ -1027,7 +1056,7 @@ change; Step 13 is comments). This is the tdd-gate escape, recorded in the PR bo
 
 **Verification**:
 ```bash
-cd services/xstockstrat-config && pnpm run test:coverage && pnpm run lint
+cd services/xstockstrat-config && pnpm run test:coverage && pnpm run lint   # test:coverage enforces c8 --lines 40 (package.json:13)
 grep -n "OPP_CONC" src/__tests__/setConfigScalarBounds.test.ts   # includes an intVal: 0 case
 ```
 
@@ -1038,8 +1067,8 @@ grep -n "OPP_CONC" src/__tests__/setConfigScalarBounds.test.ts   # includes an i
 **Status**: `pending`
 **Service**: `xstockstrat-config`
 **Files**:
-- `services/xstockstrat-config/migrations/<NNN>_analysis_zero_trap_descriptions.up.sql` — create
-- `services/xstockstrat-config/migrations/<NNN>_analysis_zero_trap_descriptions.down.sql` — create
+- `services/xstockstrat-config/migrations/032_analysis_zero_trap_descriptions.up.sql` — create
+- `services/xstockstrat-config/migrations/032_analysis_zero_trap_descriptions.down.sql` — create
 - `docs/roadmap/features/merge-order.md` — modify (one row)
 
 **Reviewers**: DBA — Migration NNN numbering (no gaps, no conflicts), up+down pair present, hypertable partitioning strategy, index correctness, run-order compliance with `scripts/db-migrate.sh`; `xstockstrat-config` owner — Config key naming, WatchConfig stream stability
@@ -1047,8 +1076,10 @@ grep -n "OPP_CONC" src/__tests__/setConfigScalarBounds.test.ts   # includes an i
 **Codebase Evidence**:
 - Migrations tip on `origin/main-dev`: `030_marketdata_edgar_snapshot_keys.{up,down}.sql`
   (`git ls-tree origin/main-dev services/xstockstrat-config/migrations/`, 2026-10-21). `031` is claimed by 243
-  (`243-fix-sandbox-seed-keys/product-spec.md:44`). So `<NNN>` = `max(origin/main-dev)+1` when the step is authored
-  (`031` today if 243 has not landed, else `032`), and it is re-verified before merge (§ Step Dependencies).
+  (`origin/feature/fix-sandbox-seed-keys:docs/roadmap/features/243-fix-sandbox-seed-keys/implementation-spec.md:168-169`,
+  `031_heal_indicators_sandbox_keys_full_dotted`). The pair is pinned to `032`, the next free number. The pre-merge
+  re-list (§ Step Dependencies) sets it to `max(origin/main-dev)+1`, which is `031` if 244 merges first, so no gap
+  is left. Any renumber goes in the Deviation Log (F-09).
 - Rows, stored full-dotted:
   - `028_analysis_opportunity_keys.up.sql:45-50` (`analysis.opportunity.signal_rank_weight`, description `:46`/`:49`
     ending "0 is not honored - reads as the 0.3 default (get_float).")
@@ -1083,13 +1114,14 @@ grep -n "OPP_CONC" src/__tests__/setConfigScalarBounds.test.ts   # includes an i
 3. The migration changes no `value_data`/`value_type`/`key`, does no INSERT/DELETE, writes no audit row and sends
    no `pg_notify`. It leaves 027/028 untouched (F-01; feature-184 @AC-2/@AC-3 hold).
 4. `merge-order.md` row:
-   `| \`fix-python-config-zero-trap\` | \`fix-sandbox-seed-keys\` | Soft: both add an xstockstrat-config migration (243 claims 031). No hard order — whichever merges second renumbers its pair to max(origin/main-dev)+1 immediately before merge (fails.md:2910) | No |`.
-   If the operator renames 244's slug first, use the new slug.
+   `| \`fix-python-config-zero-trap\` | \`fix-sandbox-seed-keys\` | Soft: both add an xstockstrat-config migration (243 = 031, 244 = 032) and both edit indicators tests/test_config_watcher.py (244 Step 6 delegates whichever helper is on the base). Expected order 243 → 244, which is not a hard gate (design rejected one). If 244 merges first, it renumbers to 031 and 243 to 032, each by max(origin/main-dev)+1 immediately before merge (fails.md:2910) | No |`.
+   If the operator renames 244's slug first, use the new slug. The row is written at execute time, after operator
+   confirmation (overlap recommendation; context.md Open Thread).
 
 **Verification** (offline, no DB):
 ```bash
 ls services/xstockstrat-config/migrations/*_analysis_zero_trap_descriptions.up.sql services/xstockstrat-config/migrations/*_analysis_zero_trap_descriptions.down.sql
-git ls-tree --name-only origin/main-dev services/xstockstrat-config/migrations/ | tail -2   # NNN = max+1
+git ls-tree --name-only origin/main-dev services/xstockstrat-config/migrations/ | tail -2   # 032 unless the re-list says max+1 differs (Deviation Log)
 grep -c "^UPDATE config.config_values" services/xstockstrat-config/migrations/*_analysis_zero_trap_descriptions.up.sql   # 4
 grep -niE "insert|delete|value_data|value_type" services/xstockstrat-config/migrations/*_analysis_zero_trap_descriptions.*.sql   # expect no output
 ```
@@ -1130,7 +1162,7 @@ Then read both files and confirm each `.down` statement inverts one `.up` statem
 
 **Verification**:
 ```bash
-cd services/xstockstrat-config && pnpm run test:coverage && pnpm run lint
+cd services/xstockstrat-config && pnpm run test:coverage && pnpm run lint   # test:coverage enforces c8 --lines 40 (package.json:13)
 ```
 
 ---
@@ -1147,6 +1179,7 @@ cd services/xstockstrat-config && pnpm run test:coverage && pnpm run lint
 - `docs/context-constitution.md` — modify
 - `docs/context-constitution-findings.md` — modify
 - `services/xstockstrat-analysis/docs/context-constitution.md` — modify
+- `services/xstockstrat-analysis/docs/context-constitution-findings.md` — modify
 - `services/xstockstrat-config/docs/context-constitution.md` — modify
 - `services/xstockstrat-config/docs/context-constitution-findings.md` — modify
 - `services/xstockstrat-ingest/docs/context-constitution.md` — modify
@@ -1162,7 +1195,11 @@ cd services/xstockstrat-config && pnpm run test:coverage && pnpm run lint
 - Indicators `CLAUDE.md:100-103` (`:102` "never `get_str`"; `:103` claims a `max(1, …)` clamp, which is now in the
   accessor). 243 rewrites the same rows; the second to land rebases.
 - `docs/patterns/config-governance.md:251-269` (lower-bound rule and the `signal_rank_weight zero-trap` note at
-  `:257-258`), plus product-spec Fix Scope `:458-461,705,713,721`.
+  `:257-258`), plus product-spec Fix Scope `:458-461,705,713,721`. The same doc also has `:319` ("must not be
+  swallowed by the `get_int` zero-trap") and `:688` (`refresh_hour_utc`: "never `get_int` … the zero-trap would
+  swallow it"), grep 2026-10-21.
+- Module findings preambles that point the zero-trap at the root: `services/xstockstrat-analysis/docs/context-constitution-findings.md:5`
+  and `services/xstockstrat-ingest/docs/context-constitution-findings.md:5`.
 - `docs/context-constitution.md:59` (PLAT gotcha); `docs/context-constitution-findings.md:32` (CF-N10 → resolved).
 - `services/xstockstrat-analysis/docs/context-constitution.md:37`; `services/xstockstrat-config/docs/context-constitution.md:28`
   (CONFIG-11, "never give a key read through a Python `get_int` a lower bound of `0`") and `:32`.
@@ -1181,13 +1218,15 @@ cd services/xstockstrat-config && pnpm run test:coverage && pnpm run lint
    "0 is honoured". `default_fill_model` keeps "0 = legacy, stored or absent" (fails.md:1877).
 2. Ingest/indicators: the same for their rows. Indicators `:103`: the clamp now lives in `sandbox_max_concurrent()`.
 3. `config-governance.md`: the bounds lower-edge rule now follows "legitimate 0 → lower 0; reader clamps ≤ 0 → lower
-   1"; delete the `signal_rank_weight` zero-trap note.
+   1"; delete the `signal_rank_weight` zero-trap note. At `:319` and `:688`, drop the "never `get_int` / zero-trap
+   would swallow it" mechanism and keep "0 is legitimate".
 4. Root and service constitutions:
    - PLAT gotcha `:59` becomes "Python getters honour 0 via HasField; FR-3 sites clamp via `int_positive`…"
    - CF-N10 is marked resolved by 244.
    - CONFIG-11 is reworded to the clamp model.
    - INGEST-9 line hints are re-stamped.
-5. Findings: ingest dead helpers → resolved; add the config `sparkline_bars` drift row.
+5. Findings: ingest dead helpers → resolved; add the config `sparkline_bars` drift row. In the analysis and ingest
+   findings preambles (`:5`), mark the zero-trap as resolved by 244 rather than open at the root.
 6. Run `/context-forge:context-constitution refresh`, scoped to the files above, and fix the grounded drift. If the
    plugin is unavailable, do the manual re-read and record both facts in the PR body (root CLAUDE.md § Teardown).
 
@@ -1226,7 +1265,8 @@ grep -n "CF-N10" docs/context-constitution-findings.md
 
 **Instructions**:
 1. **Pre-deploy audit**: before dev, then again before the prod promotion. If DB access is unavailable, the operator
-   runs it (P-03). Record the results in `context.md`.
+   runs it (P-03). Record the results in `context.md` under `## Session <YYYY-MM-DD> — rollout (dev)` (then
+   `(prod)`), which is the header the Verification grep keys on.
    - `SELECT namespace,key,environment,user_id,value_type,value_data FROM config.config_values WHERE namespace IN ('analysis','indicators','ingest') AND ((value_type IN ('int','float') AND value_data ~ '^-?0+(\.0+)?$') OR (value_type='string' AND value_data=''));`
      Classify each row against the § Guard classification table (FR-3 → clamped, no change; honour → takes effect).
    - `… WHERE value_type='int' AND value_data !~ '^-?[0-9]+$'`: malformed ints.
@@ -1244,9 +1284,15 @@ grep -n "CF-N10" docs/context-constitution-findings.md
    - `/config-ui` → the analysis namespace shows the four corrected descriptions (Step 15).
 3. Restore every smoke value afterwards and record before/after in `context.md`.
 
-**Verification**:
-`context.md` holds a dated rollout entry with the audit row counts and classification, the four smoke outcomes, and
-the restored values.
+**Verification**: `context.md` holds a dated rollout entry with the audit row counts and classification, the four
+smoke outcomes, and the restored values.
+```bash
+f=docs/roadmap/features/244-fix-python-config-zero-trap/context.md
+grep -nE "^## Session [0-9]{4}-[0-9]{2}-[0-9]{2} .*rollout" "$f"                          # >=1 (dev), >=2 after prod audit
+grep -niE "audit.*(rows?|count)" "$f" | grep -iE "FR-3|honour|malformed"                   # counts + classification
+grep -niE "smoke" "$f" | grep -cE "signal_rank_weight|commission|alert_throttle|config-ui" # 4
+grep -niE "restored" "$f"                                                                  # before/after values
+```
 
 ---
 

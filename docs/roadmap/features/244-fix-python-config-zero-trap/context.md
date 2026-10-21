@@ -240,3 +240,59 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
     0/'' rows and the deploy audit (Step 18), type-mismatched FR-4 rows (Step 18 and the Step 17 docs), migration
     renumbering (Step 15), and the `sparkline_bars` drift (Step 17).
 - Next: `/sdd-review fix-python-config-zero-trap impl-spec`.
+
+## Session 2026-10-21 — sdd-review impl-spec
+
+- MODE B (advisory): criteria verdict PASS WITH WARNINGS (0 FAIL, 10 WARN). Overlap verdict FAIL (243 collisions).
+  Lifecycle unchanged: `implementation-ready`.
+- Addressed (implementation-spec.md edited after re-verifying each claim):
+  - Overlap FAIL, migration `031` vs 243. 243 claims `031`
+    (`origin/feature/fix-sandbox-seed-keys:…/implementation-spec.md:168-169`), and the trunk tip is `030`.
+    - Step 15 Files are pinned to `032_analysis_zero_trap_descriptions.{up,down}.sql`.
+    - The pre-merge re-list sets the pair to `max+1`. That is `031` if 244 merges first, so no gap is left. Any
+      renumber is logged per F-09.
+    - The § Step Dependencies bullet and the Step 15 merge-order row text were updated.
+  - Overlap FAIL, `services/xstockstrat-indicators/tests/test_config_watcher.py` helper. 243 Step 3 (`:298-307,315`)
+    keeps `_watcher(key, field, val)` in that file.
+    - Step 6 now keeps whichever helper is on the base (name, signature and file) and only delegates its body to
+      conftest `snapshot_watcher`.
+    - The `ConfigValue` arm is added only for 243's `_watcher`. No hard order: design rejected one, and 243 records
+      the overlap as soft at `:56-57`.
+  - WARN C-18: the `ConfigValue` pass-through arm was dropped from Step 2, and with it Step 10, which reuses Step 2's
+    rules. It is kept only conditionally in Step 6.
+  - WARN C-07 `<NNN>` placeholder: fixed under the migration item above.
+  - WARN Step 10 AC-3 Order: now binds `_SORT_ORDER_BY[0].replace("$3", "$1::float8")` with one arg. Cited:
+    `opportunities.py:35-40,243-246`, `tests/test_opportunities_repo.py:149-164`, fails.md:190.
+  - WARN Step 14 mechanics:
+    - The `impl: any` cast for the private `reloadNamespace`/`snapshotForSubscriber`/`broadcastToSubscribers`
+      (`configServiceImpl.ts:203,245,260`).
+    - A 20 ms wait after `watchConfig`, because the subscriber registers in an async `.then`
+      (`configServiceImpl.ts:305-309`; `secretsAndScope.test.ts:250-251`).
+    - Assertions `writes.length` 1, then 2.
+  - WARN Steps 14 and 16 threshold: Verification now states that `test:coverage` enforces `c8 --lines 40`
+    (`package.json:13`).
+  - WARN Step 18 Verification: added grep commands that key on a `## Session <date> — rollout (dev|prod)` header,
+    which Instruction 1 now mandates.
+  - WARN Step 17 evidence:
+    - Added `config-governance.md:319,688`.
+    - Added the analysis and ingest findings preambles (`:5`).
+    - `services/xstockstrat-analysis/docs/context-constitution-findings.md` was added to Files.
+  - WARN branch hazard: confirmed at `ci-validate-feature-status.yml:160-167,181-183`. The `feature-steps/*` slug
+    derivation also maps to 173. § Step Dependencies now makes the slug rename a precondition of `/sdd-execute`.
+  - Overlap rebase-only items (240, 241, 242, 245, 246) are noted in § Step Dependencies. No spec change is needed.
+  - WARN C-15 (unverifiable append): verified, no edit.
+    - On the branch, `acceptance.feature` has @AC-10/@AC-11/@AC-12 (`:151,164,172`), and the @AC-6 Examples hold
+      43 rows.
+    - `design.md` is present.
+    - The design and spec sessions are logged above.
+- Still open:
+  - [ ] Step size (advisory): Steps 10 (7 files), 11 (8) and 17 (12) exceed 5 files. Splitting Step 11 by module
+    (servicer, then engine and services) was not done, because it renumbers steps and the C-15 trace. The operator
+    decides at the `/sdd-execute` checkpoint.
+  - [ ] Slug rename (collision with 173; fails.md:2953). This is an operator action and is now a precondition of
+    `/sdd-execute`. It also covers `feature-steps/*` branches.
+  - [ ] merge-order.md row (243 → 244 soft, migration 031/032, test helper). It is written by Step 15 after operator
+    confirmation, because this review may edit only the feature dir.
+  - [ ] Guard classification table audit: the reviewer raised no objection to `FR3_KEYS`/`HONOUR_KEYS`/`ZERO_IS_LEGIT`.
+    The guard's rule 2 is the executable check at Steps 4, 8 and 12.
+- Next: operator slug rename, then `/sdd-execute fix-python-config-zero-trap`.
