@@ -35,12 +35,13 @@ user and target status. A reactive reclaim logs a failure and, on success, emits
 - **FR-3.** When the `CancelOrder` final `UpsertOrder` (`trading.go:1367`) fails, trading logs it at
   error level with order id, user id and status `ORDER_STATUS_CANCELED`. → `@AC-3`
 - **FR-4.** When the `ReplaceOrder` final `UpsertOrder` (`trading.go:1550`) fails, trading logs it at
-  error level with order id, user id and the status written. → `@AC-6`
+  error level with order id, user id and the status written (the order's existing status, which a
+  replace does not change). → `@AC-6`
 - **FR-5.** A successful reactive reclaim of a stale PENDING intent (`trading.go:603`, `:1301`,
   `:1498`) emits `order_intent.reclaimed_unknown` with the sweeper's payload fields (`order_id`,
   `intent_id`, `was_pending_since`) and `trigger` set to `reactive_place`, `reactive_cancel` or
   `reactive_replace` respectively (the sweeper keeps `sweep`). The RPC still returns
-  `FailedPrecondition` "still pending". → `@AC-4`
+  `FailedPrecondition` "still pending". → `@AC-4`, `@AC-8`, `@AC-9`
 - **FR-6.** A failed reactive `ReclaimOrphanIntent` at those three sites is logged with the intent id
   and error. → `@AC-5`, `@AC-7`
 
