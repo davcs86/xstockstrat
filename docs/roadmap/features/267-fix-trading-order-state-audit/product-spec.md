@@ -90,11 +90,12 @@ events in the ledger with the new `reactive_*` trigger values beside the existin
 
 ## Open Questions
 
-- [ ] Log-only versus surfacing the `UpsertOrder` failure to the caller (the broker side effect has
-  already happened on these paths). Carried to `/sdd-design` (C-11); the FRs above are the log-only
-  floor.
-- [ ] Extract the four-way intent-lookup switch in the same change (DRY guard rail) or keep the fix to
-  the three reclaim call sites. Carried to `/sdd-design` (C-11).
+- [x] Log-only versus surfacing the `UpsertOrder` failure to the caller (the broker side effect has
+  already happened on these paths). Deferred to `/sdd-design` (C-11); the FRs above are the log-only
+  floor and hold either way.
+- [x] Extract the four-way intent-lookup switch in the same change (DRY guard rail) or keep the fix to
+  the three reclaim call sites. Deferred to `/sdd-design` (C-11); FR-5/FR-6 bind all three sites
+  either way.
 
 ## Acceptance Criteria
 
