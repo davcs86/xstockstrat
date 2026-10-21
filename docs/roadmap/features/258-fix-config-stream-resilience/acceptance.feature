@@ -15,7 +15,7 @@ Feature: fix-config-stream-resilience (bug fix)
     Given the config LISTEN client receives a "config_changed" notification for namespace "analysis"
     And the reload query for that namespace rejects with "connection terminated"
     When the notification is handled
-    Then the error is logged
+    Then a log record at error level containing "connection terminated" is captured
     And no unhandled promise rejection is raised and the process keeps serving GetConfig
 
   @AC-3 @FR-3 @regression
@@ -57,7 +57,7 @@ Feature: fix-config-stream-resilience (bug fix)
     Given a WatchConfig subscriber on namespace "analysis" user_id "u-1"
     And the per-user overlay query rejects once during a broadcast for "analysis"
     When "config_changed" is broadcast for namespace "analysis"
-    Then the error is logged with its message
+    Then a log record at error level containing the overlay query's rejection message is captured
     And that subscriber's call is ended with a gRPC error status
 
   @AC-9 @FR-1 @regression
@@ -74,4 +74,12 @@ Feature: fix-config-stream-resilience (bug fix)
     When AppendEvent is called with stream_key "account:a-1" and idempotency_key "k-2"
     Then the callback is invoked with a gRPC error status
     And the acquired pool client is released
+    And no unhandled promise rejection is raised
+
+  @AC-11 @FR-3 @regression
+  Scenario: SetConfig returns an error status when the value write fails after the existence gate passes
+    Given global key "analysis.backtest.max_duration_seconds" is registered in "staging"
+    And the INSERT/UPDATE of config.config_values for that key rejects with "connection terminated"
+    When an admin calls SetConfig for that key with value 600
+    Then the callback is invoked with a gRPC error status
     And no unhandled promise rejection is raised
