@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-10-21 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-21-analysis-backtest-bounds-defect.md` (debt-radar D-28, D-29) |
+| 2026-10-21 | `draft` → `spec-ready` | /sdd-review | Product spec approved (7 warnings; overlap WARN, no FAIL) |
 
 ---
 
@@ -47,4 +48,4 @@ but nothing reads it.
 
 ## Next Action
 
-`/sdd-design fix-analysis-backtest-bounds` — recommended design depth: full (2 affected services; retiring D-29's key needs a config migration); see context.md
+`/sdd-design fix-analysis-backtest-bounds` — recommended design depth: full (2 affected services; OQ-1 enforce-vs-retire fork; retiring D-29's key needs a config migration). Rebase on feature 244 first; see context.md
