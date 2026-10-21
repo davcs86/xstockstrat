@@ -218,3 +218,59 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   breach, no blocking objection, no `@AC` CHANGE).
 - **Status:** spec-ready → design-approved.
 - **Next:** `/sdd-spec fix-ledger-trimmed-notify-payload`.
+
+## Session 2026-10-21 — sdd-spec
+
+- Wrote implementation-spec.md with 11 steps. Status: design-approved → implementation-ready.
+- **Inputs:**
+  - Governance reads: root CLAUDE.md, constitution, reviewer-registry, phase6-deviations, config-rollout, and the
+    relevant fails.md/insights.md entries (fails.md 074/021 vacuous suites, 670 teardown, 2334-2336 full-dotted seed
+    key, 2839-2842 Deviation-Log rule).
+  - design.md § Chosen Approach was applied as binding. Rejected alternatives were not used.
+- **Product-spec amendment** (design.md § Chosen Approach 7), done in this session:
+  - FR-2 and Expected now say the PK `(event_id, recorded_at)` read runs on the LISTEN connection, never the pool,
+    bounded by `ledger.stream.resolve_timeout_ms`.
+  - Fix Scope now lists one config key (config migration `032`).
+  - The AC-6/AC-7 harness prose now names the `resolveRow` seam.
+  - No existing `@AC` text changed.
+- **acceptance.feature:** appended `@AC-9 @FR-2 @FR-4` (append-only, C-15), following design.md § 5 and adding the
+  "only matching streams" clause from its title.
+- **Key codebase findings:**
+  - Config migrations stop at `030` on every remote branch. `031` is claimed by 243 `fix-sandbox-seed-keys`
+    (`implementation-ready`), so 248 takes `032_ledger_stream_resolve_timeout`. If 243 is dropped, renumber to
+    `031` (Deviation Log).
+  - `@types/pg@8.20.0` `QueryConfig` (`index.d.ts:60-65`) has no `query_timeout` member, so the resolver widens the
+    type. The pg runtime honours it (`client.js:613,623,641`). `statement_timeout` is a typed `ClientConfig` startup
+    parameter (`index.d.ts:21`, `client.js:525-526`).
+  - Changing to the required `{ resolveRow }` constructor opts and the required `onGap` breaks `tsc` across
+    `eventNotifier.ts`, `ledgerServiceImpl.ts` and `index.ts` at once. They form one service step (Step 5). The
+    `Number()` normalisation is a separate step (Step 7), so its RED (`'100' > '99'` lexicographic drop) is
+    observable.
+  - Factories `makeListenerClient` / `makeResolveRow` live in the new `src/services/eventRowResolver.ts`, so tier (iv)
+    exercises the same closure `index.ts` wires (`main()` is not importable).
+  - `makeStreamCall`'s `on()` is a no-op (`ledgerServiceImpl.test.ts:561-563`) and is extended. C-13: no domain
+    literal has a second consumer, and no fixture home is created.
+- **Decisions:**
+  - B live-ness (design Open Risk, settled here): SET-on-change. A per-client `WeakMap` issues
+    `SET statement_timeout = B` (autocommit) when B differs from the last value applied. The startup parameter is
+    kept.
+  - Tier (iv) RED: captured locally only if `LEDGER_DB_TEST_URL` reaches a DB. Otherwise it goes in the Deviation
+    Log as CI-only, and the GREEN is the `ledger-db-test` job on the step PR. The executor never starts a container.
+  - Consumer verification is Step 10, with no code change (TDD N/A).
+  - Step 1 adds a hard merge-order row: 248 waits for 252.
+- **Open Threads update:**
+  - [x] Product-spec amendment — done this session.
+  - [x] AC-9 appended — done this session.
+  - [x] B live-ness — SET-on-change (Step 3).
+  - [ ] 252 merge precondition — impl-spec § Step Dependencies; merge-order row in Step 1.
+  - [ ] Config-team approval — pre-merge gate (feature.md Reviewers).
+  - [ ] LISTEN-session assumptions — Step 9 cases 1-2 and 4.
+  - [ ] ts-proto string `sequence` encoding — Step 8 item 3 (stop-and-ask on failure).
+  - [ ] Teardown docs — Step 11.
+  - [ ] Analysis data-repair defect report — router carry item (still open).
+- Operator decisions (as relayed by the workflow orchestrator, recorded verbatim):
+
+  OPERATOR DECISIONS (binding, recorded 2026-10-21):
+  - Standing authorization: designs run in FULL mode only (no quick designs for automated fixes); the orchestrator auto-approves the design gate once rounds >= 2, no unresolved Floor (F-*) breach remains, no blocking objection remains, and every CHANGE to an existing @AC business rule is covered by an operator decision below.
+  - Full design depth.
+- **Next:** `/sdd-review fix-ledger-trimmed-notify-payload impl-spec`.

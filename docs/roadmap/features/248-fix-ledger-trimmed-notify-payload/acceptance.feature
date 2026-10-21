@@ -69,3 +69,16 @@ Feature: fix-ledger-trimmed-notify-payload (bug fix)
     When an "order.filled" event with stream_key "order-42" and a JSON payload of 8000 chars is appended
     Then the subscriber's message payload equals the appended 8000-char payload
     And the message occurred_at equals the appended occurred_at and is a valid timestamp
+
+  @AC-9 @FR-2 @FR-4 @regression
+  Scenario: A trimmed event whose full-row read exceeds the resolve bound ends only matching streams non-OK
+    Given ledger.stream.resolve_timeout_ms is 200
+    And a StreamEvents subscriber with no filters is live and its last delivered sequence is 10
+    And a StreamEvents subscriber filtered on event_type "account.balance.synced" is live
+    And the full-row read for the next trimmed event takes longer than 200 ms
+    When an "order.filled" event with a JSON payload of 8000 chars is appended as sequence 11
+    And an event with a 100-char payload is appended as sequence 12
+    Then the unfiltered subscriber receives no message for sequence 11 or 12 on that stream
+    And that stream ends with a non-OK gRPC status within 400 ms
+    And the "account.balance.synced" subscriber's stream is not ended
+    And a new StreamEvents opened from sequence 11 receives sequences 11 and 12 with their full payloads, in that order
