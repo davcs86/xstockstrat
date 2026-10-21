@@ -42,3 +42,33 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   full trigger). Design forks: one shared supervised-loop helper vs per-loop try; where the retained task set lives;
   D-56 poison-event rule (retry count, then park table vs log-and-advance).
 - Development branch: feature/fix-python-loop-supervision
+
+## Session 2026-10-21 — sdd-review product-spec
+
+- Product spec approved (PASS WITH WARNINGS). Status: draft → spec-ready.
+- OPERATOR DECISIONS (binding, recorded 2026-10-21):
+  - Grouped by service+theme from the 2026-10-20 debt-radar scan; Track C.
+  - Scope is D-07, D-08, D-56.
+- Warnings:
+  1. AC-7 "attempted up to the retry bound" had no concrete value. **Resolved:** AC-7 now pins a 3-attempt bound as
+     its example, and FR-5 says design/spec re-points the example if it picks another value.
+  2. AC-1/AC-2 Then steps describe internals. **Partly resolved:** AC-2 now asserts a further tick runs and the error
+     is logged. AC-1 keeps `_tick` called as a regression guard; sharpen at /sdd-spec if needed.
+  3. Problem Statement named no persona. **Resolved:** added a "Who is affected" line (trader/operator).
+  4. Scope gap: the indicators/ingest/analysis watcher tasks are unretained (`watcher.py:56` / `:56` / `:69`), but no FR
+     covered it. **Resolved:** FR-3 now requires the watch task to stay referenced with an exit log; new AC-8.
+  5. FR-5 retry bound and park mechanism deferred to design. Open for design: a parked-events table needs an analysis
+     migration up/down pair and DBA review (already in Fix Scope); any knob follows C-05/F-07.
+  6. Possible overlap with batch peer `fix-config-stream-resilience` on the same `watcher.py` files. Open: confirm the
+     boundary and merge order at /sdd-design.
+- Overlap findings (WARN, no FAIL):
+  - `services/xstockstrat-analysis/app/main.py:174` — shared with `262-fix-analysis-owner-scope` (entry backfill
+    task). This feature owns the task-retention helper; 262 reuses it.
+  - `services/xstockstrat-analysis/app/engine/fundsignal_loop.py` — `run_forever`/`_tick` (`:152-165`) vs
+    `246-fix-fundsignal-neutral-score` (implementation-ready, steps 1-2) and `260-fix-fundsignal-emit-accounting`
+    (draft, `_emit_signal` `:242-256`). Disjoint lines, same file; rebase, most acute with 246.
+  - `services/xstockstrat-ingest/app/config/watcher.py` — `_watch` (`:79-93`) vs `244-fix-python-config-stored-zero`
+    (getters) and `261-fix-ingest-poller-backfill` (`resolve_secret` `:155-163`). Disjoint lines; rebase.
+  - `services/xstockstrat-indicators/app/config/watcher.py` — `_watch` (`:58-79`) vs `244-fix-python-config-stored-zero`
+    (getters). Disjoint lines; rebase.
+- Next: `/sdd-design fix-python-loop-supervision` (full depth).
