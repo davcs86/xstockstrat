@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-10-21 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-21-marketdata-secret-exposure-defect.md` (debt-radar D-39, D-40) |
+| 2026-10-21 | `draft` → `spec-ready` | /sdd-review | Product spec approved (5 warnings; 5 WARN-level file overlaps, no FAIL) |
 
 ---
 
@@ -46,4 +47,4 @@ sending `x-internal-caller: marketdata` (D-40).
 
 ## Next Action
 
-`/sdd-design fix-marketdata-secret-exposure` — recommended design depth: full (2 affected services, security); see context.md
+`/sdd-design fix-marketdata-secret-exposure` — product spec approved; recommended design depth: full (2 affected services, security); see context.md
