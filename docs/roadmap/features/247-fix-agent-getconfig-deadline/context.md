@@ -165,3 +165,29 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - Timing-bound flake on CI at D = 0.3 s; AC-1 adds about 3 s. Target: the test step.
   - Anchor drift: `register` is at `oauth_server.py:72`; main-dev `tools.py` is +4 from about L2100. Target: `/sdd-spec` re-derives on its base.
 - Status: spec-ready → design-approved.
+
+## Session 2026-10-21 — sdd-spec
+
+- Generated implementation-spec.md with 6 steps. Status: design-approved → implementation-ready.
+- Steps:
+  1. test: `hung_config_server` + `HANG_GUARD_S` in `tests/conftest.py`; AC-1/AC-5 + P-06 pins + DEADLINE_EXCEEDED log test in `tests/test_client.py`.
+  2. test: AC-2, AC-3, `extract_email_content(urls=)` in `tests/test_tools.py`; AC-4 in `tests/test_oauth.py`.
+  3. service: `_CONFIG_READ_TIMEOUT_S`, the `timeout=` kwarg, `except … as e` / `e.code().name` in `app/client.py`; comment rewrites `tools.py:2365-2366`, `oauth_server.py:102`.
+  4. docs: agent CLAUDE.md `:193-194`/`:205`, agent context-constitution `:40`, agent findings `:28`, root findings `:33`.
+  5. docs: three follow-up reports + `.status` (`open`) + agent findings index rows; teardown audit.
+  6. docs: dev `GetConfig` latency baseline from OTel client spans before the integration PR.
+- Coverage: AC-1, AC-5 → Step 1; AC-2, AC-3, AC-4 → Step 2. Each design §5 test mandate is mapped to a step in the spec's mandate table (ledger `fails.md:2810-2812`).
+- Key codebase findings (branch @ 0da14ffc):
+  - `client.py:1751-1754` is the only change site. `CONFIG_ENDPOINT` is `:23` (endpoint block `:20-28`). The only existing `timeout=` is `list_opportunities` `:853`, `:872`.
+  - The `conftest.py` autouse `set_env` patches only the env var `CONFIG_ENDPOINT`, never `client.CONFIG_ENDPOINT` (`:60`), so the harness patches the attribute itself.
+  - Before Step 3, `client._CONFIG_READ_TIMEOUT_S` is absent. The tool/endpoint tests therefore use `monkeypatch.setattr(..., raising=False)`, so RED fails on the missing deadline and not on `AttributeError`.
+  - `TestClient` is sync and cannot take an `asyncio.wait_for` guard. AC-4 runs in a worker thread with `fut.result(timeout=HANG_GUARD_S)` and `shutdown(wait=False)`. A `with ThreadPoolExecutor` exit would join the hung worker before teardown.
+  - Anchor corrections vs recon/design: `register` is at `oauth_server.py:72`; `extract_website_content` at `tools.py:549`; email `_get_source`/credentials raise at `:528`/`:530-531`; agent findings index rows at `:65-69`.
+- Decisions:
+  - Comment edits fold into the service Step 3, so every code-bearing step pairs with Steps 1-2 (C-08).
+  - The root findings `:64` index row stays until the report resolves at launch (rule at `:59-60`).
+  - `docs/runbooks/mcp-tools.md` is checked and unchanged (`:209`, `:1697`; the tool contracts do not change).
+  - AC-5 is a FR-3 characterization: red N/A, recorded via the tdd-gate escape.
+  - `tests/test_list_opportunities_deadline.py` is not edited (keeps its private `_HANG_GUARD_S`).
+  - The follow-up report filenames carry the execution date (`YYYY-MM-DD`), and each report carries the single severity token `SEV-2`.
+- Next: `/sdd-review fix-agent-getconfig-deadline impl-spec`.
