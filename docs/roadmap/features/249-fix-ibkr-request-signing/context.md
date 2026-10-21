@@ -161,3 +161,56 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - [ ] Re-grep feature-102/206 suites: no durable @AC asserts a credential-rejected `ListOrders`/`GetPositions` is systemic — /sdd-spec.
   - [ ] Accepted: a 403 permission error on an `/iserver` order call also skips the systemic count for that tick.
 - Status: spec-ready → design-approved.
+
+## Session 2026-10-21 — sdd-spec
+
+- Generated implementation-spec.md with 17 steps. Status: design-approved → implementation-ready.
+- Prior progress check (user asked "What happened to the prior progress?"): nothing was lost. Story, review, recon
+  and design are all on `origin/feature/fix-ibkr-request-signing` (b3d5f199, 280ae4d9, 4d9b1022, bae5e125,
+  df13ed8a). No implementation-spec.md existed before this session.
+- Key codebase findings:
+  - All 11 `signRequest` call sites and the `ibkr.go:580-627` internals re-verified unchanged. `ibkrCreds` is at
+    `trading.go:86-92`.
+  - The register IBKR validation slot is `trading.go:2496`→`:2500`. The update slot is after the offline guard
+    `:2549`, before `:2552`; the broker type is known only after `GetBrokerAccount`.
+  - Only two uncertain classifiers exist (`trading.go:684`, `:1521`). The spec extracts `isUncertainBrokerOutcome`
+    and adds `broker.ErrOutcomeUncertain` for the post-401 uncertain-resend rule.
+  - reconcileTick systemic increments are at `:1991-1994` and `:2076-2079`. Re-grep result: no durable suite
+    asserts a credential-rejected call is systemic, and no feature-102 suite exists (closes the design Open Thread).
+  - Service fake to extend: `fakeAccountRepo` (`trading_bracket_test.go:471`, has `listActiveFn` for
+    `LoadBrokerPool`). Config test seam: `config.NewSnapshotWatcher` (`config.go:249`).
+  - The trading config keys follow feature 102's unseeded consumed-with-default pattern
+    (`config-governance.md:610-622`). No config-service change.
+- Spec-time reference pins from ibind @ `759ec3a127accfb03e76bcd54856d1421d986e6a` (master, 2026-10-06), read
+  2026-10-21. These settle design.md's delegated pins (implementation-spec.md § Execution Summary):
+  - Encoding is `quote_plus` once over the raw joined `k=v` string, which equals Go `url.QueryEscape`. This
+    corrects design.md §1's "RFC 5849 §3.6 oauthEncode / QueryEscape removed" wording; §1's "pinned by ibind
+    vectors" clause governs.
+  - No `oauth_version`. The header is `realm` first, then pairs sorted by key; the signature value is
+    `quote_plus`-encoded.
+  - PKCS#1 v1.5 decrypt; the `to_byte_array` leading-zero rule; the LST-signature check is
+    `hex(HMAC-SHA1(LST, consumer_key))`.
+  - The `ssodh/init` body is `{publish, compete}`. ibind defaults to `compete=True`; this feature keeps `false`.
+  - The lapsed brokerage session is HTTP 400 `no bridge` (`ibkr_client.py:139-143`), now a `c.do` re-init
+    trigger (AC-6 row 7). This closes the "pin lapsed-session reply" thread.
+- Decisions:
+  - D-spec-1: fleet-wide INVALID alert → tracked follow-up `ibkr-fleet-invalid-alert` (C-18/YAGNI), not in scope.
+  - D-spec-2: gitleaks takes a unique key-body substring regex in the existing `"line"` table. The fallback is an
+    `[[allowlists]]` AND block, only after confirming the version bundled by `gitleaks-action@v3`.
+  - D-spec-3: AC-8 and AC-6 row 5 are verified via an extracted `isUncertainBrokerOutcome` predicate. A full
+    `PlaceOrder` harness is blocked by the concrete `s.repo`.
+- Open Threads (new):
+  - [ ] **Operator ruling needed before the integration PR merges.** ibind signs regular requests WITHOUT query
+    params: `_get_headers` passes no `request_params` (`ibkr_client.py:146-158`), and the URL excludes them
+    (`rest_client.py:226-231`). FR-3 and the binding operator scope require including them, and the spec follows
+    FR-3. If IBKR mirrors ibind, every GET with a query 401s. The inclusion is isolated in `buildBaseString`
+    (Step 2). A paper smoke decides.
+  - [ ] File follow-up `ibkr-fleet-invalid-alert` via `/sdd-story` (alongside `ibkr-session-keepalive`).
+  - [ ] Possible staticcheck SA1019 on `rsa.DecryptPKCS1v15` → scoped `//nolint` stating the protocol constraint
+    (Step 4).
+- Operator decisions (as supplied by the workflow orchestrator's task text, recorded verbatim):
+
+  OPERATOR DECISIONS (binding, recorded 2026-10-21):
+  - Standing authorization: designs run in FULL mode only (no quick designs for automated fixes); the orchestrator auto-approves the design gate once rounds >= 2, no unresolved Floor (F-*) breach remains, no blocking objection remains, and every CHANGE to an existing @AC business rule is covered by an operator decision below.
+  - Scope = 'IBKR auth never worked' as one defect: sign query params in the base string, implement the Live Session Token (LST) handshake, sign regular requests with the LST, add realm. Operator explicit C-11 override recorded: the LST handshake is in scope of this bug fix, no separate /sdd-story.
+  - No live IBKR account is available: verification uses RFC 5849 / ibind reference vectors and an httptest server.
