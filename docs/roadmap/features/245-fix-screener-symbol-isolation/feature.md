@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-10-20 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-19-analysis-screener-no-per-symbol-isolation-defect.md` |
+| 2026-10-20 | `draft` → `spec-ready` | /sdd-review | Product spec approved (4 warnings, 4 notes; overlap PASS) |
 
 ---
 
@@ -43,4 +44,4 @@ symbol raising a non-`grpc.RpcError` exception fails the whole `ScreenSymbols` R
 
 ## Next Action
 
-`/sdd-design fix-screener-symbol-isolation quick` — recommended design depth (quick) from triage; see context.md
+`/sdd-design fix-screener-symbol-isolation` (full — operator: no quick designs); see context.md

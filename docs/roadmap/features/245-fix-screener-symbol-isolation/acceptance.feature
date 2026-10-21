@@ -12,7 +12,7 @@ Feature: fix-screener-symbol-isolation (bug fix)
     Then the RPC returns OK
     And the response contains a result row for each of the other 49 symbols with its computed score
     And "BAD" does not rank above any of the other 49 symbols
-    And "BAD"'s row, if present, has passed false and either status SCREEN_RESULT_STATUS_INSUFFICIENT_DATA or score_unavailable true
+    And "BAD"'s row, if present, has passed false and score_unavailable true, and its status is not SCREEN_RESULT_STATUS_INSUFFICIENT_DATA
     And a WARN log names "BAD"
 
     Examples:
@@ -24,14 +24,15 @@ Feature: fix-screener-symbol-isolation (bug fix)
   @AC-2 @FR-2 @regression
   Scenario: The scan deadline still cancels the whole scan
     Given analysis.screener.max_duration_seconds is 1
-    And one symbol's evaluation never completes
+    And the marketdata GetBars call for one symbol never returns
     When the caller invokes ScreenSymbols over 50 symbols
     Then ScreenSymbols fails with gRPC status DEADLINE_EXCEEDED and message "screen exceeded 1s deadline"
     And no ScreenResult rows are returned
 
   @AC-3 @FR-3 @regression
   Scenario: An unknown fundamental metric is still rejected for the whole request
-    Given a ScreenSymbols request with a FUNDAMENTAL criterion whose metric_name is "not_a_metric"
-    And fundamentals are available for the universe
+    Given a ScreenSymbols request over symbols ["AAPL", "MSFT"] with a FUNDAMENTAL criterion whose metric_name is "not_a_metric"
+    And fundamentals are available for "AAPL" and "MSFT", and neither carries an extra_metrics key "not_a_metric"
     When the caller invokes ScreenSymbols
     Then ScreenSymbols fails with gRPC status INVALID_ARGUMENT
+    And no ScreenResult rows are returned
