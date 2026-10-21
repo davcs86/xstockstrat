@@ -77,3 +77,6 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
     `fix-agent-client-deadlines` (273) after `fix-agent-getconfig-deadline` (247), same-file overlap; also
     consider 215/241 rows at the impl-spec step. Not written by this step.
 - Next: `/sdd-design fix-agent-client-deadlines` (quick).
+- Correction to warning 1 above: @AC-8 as written has IngestSignal answer (signal_id 42) while the config read and
+  EmitAlert both stall. Both are best-effort, so the tool must still return the signal within 57 s. Stalling
+  IngestSignal itself would stop the chain at the first call, so it would not exercise a sequential sum.
