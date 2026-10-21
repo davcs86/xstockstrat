@@ -185,7 +185,6 @@ ambiguity is logged here).
   verify the **writer** guarantees that state — deriving from a column nothing canonicalizes is how
   this defect existed in the first place.
 
-
 ### 2026-07-29 — 081-qa-capability — assumption
 - **Mistake**: A capability was asserted from **advertised metadata** rather than from the producer's
   behavior, and a feature was designed on top of it. The GitHub API reports `has_issues: true` for
@@ -2950,6 +2949,24 @@ ambiguity is logged here).
   - Before changing a shared RPC's failure or budget behaviour, enumerate every caller's request shape
     (window size, deadline) and make the change opt-in when the callers differ.
 
+### 2026-10-21 — fix-push-untargeted-broadcast — header
+- **Mistake**: Two design rounds justified relaying `x-access-scope` from notify as "values from mTLS-authenticated
+  producers". That reason was wrong:
+  - `EmitAlert` is pinned as unauthenticated (`services/xstockstrat-notify/src/__tests__/notifyServiceImpl.test.ts:219-224`).
+  - mTLS authenticates the calling service, not the user or the scope it asserts.
+- **Evidence**: `docs/roadmap/features/242-fix-push-untargeted-broadcast/design.md` § Chosen Approach item 3,
+  `context.md` 2026-10-21 entry.
+- **Rule it implies**: A relayed header trio is safe only if the receiver ignores it. Pin that with a test where
+  an elevated scope on an allowed peer gives an identical response, and a test where it is denied on a
+  disallowed peer. Never cite mTLS as authentication of the forwarded scope.
+
+### 2026-10-21 — fix-push-untargeted-broadcast — assumption
+- **Mistake**: A multi-round design debate carried its state only in-band between rounds. A later round then
+  claimed an on-disk checkpoint (`seeds/242/state-r3.json`) that never existed.
+- **Evidence**: `docs/roadmap/features/242-fix-push-untargeted-broadcast/context.md` 2026-10-21 entry.
+- **Rule it implies**: Before citing a checkpoint, check that the path exists. Persist design state durably
+  (design.md, the context.md entry) before the status flip, and refuse the flip if those writes fail (P-05).
+
 ### 2026-10-20 — fix-sandbox-seed-keys — migration
 - **Mistake**: Recon flagged the 029 bare→full-dotted heal as the pattern to reuse, but that shape is unsafe to copy whenever a full-dotted twin may already exist. Two failures follow:
   - The plain `SET key = namespace||'.'||key` aborts on `config_values_scope_uniq`.
@@ -2959,3 +2976,4 @@ ambiguity is logged here).
   1. Snapshot the pre-state with `CREATE TABLE IF NOT EXISTS … AS`, which is replay-safe, and keep the snapshot in a forward-only down.
   2. DELETE the bare rows that have a twin on the full scope tuple.
   3. Rename and set any value in one UPDATE.
+
