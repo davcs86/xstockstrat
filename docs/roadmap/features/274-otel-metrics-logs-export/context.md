@@ -122,3 +122,50 @@
     status; no per-method gRPC client histogram. (Supersedes the R2 `rpc.client.duration` proposal.)
   - Identity email: "Replace with user_id everywhere" — `identityServiceImpl.ts:151-154` logs the user id instead
     of the email on stdout and OTLP (small identity behaviour change; PII removed at source).
+
+## Session 2026-10-21 — sdd-design (Round 3 checkpoint)
+
+- Proposer R3: final consolidated design (P-0 → PR-A → G1 → re-sync → PR-B) with R2 findings + R2-gate decisions;
+  py/node status rule (non-zero attr → error evidence → ERROR status → 0) + golden vectors; stream exclusion via
+  proto-derived guard Part 4; UI `http.server.duration` in `createDispatch` (`bffShared.ts:115-152`); agent
+  `ToolMetricsMiddleware` (`mcp.tool.duration`, `gen_ai.tool.name`, tool set from `list_tools()`); identity
+  `{ email }` → `{ user_id }`; Go ForceFlush → bounded GracefulStop/Stop; AC-15..AC-21 appended.
+- Orchestrator verification: Go SDK default buckets == py/node (`sdk/metric@v1.45.0/reader.go:206`); consistent Go
+  set at otel v1.45.0 = sdk/metric + otlpmetrichttp v1.45.0, log/sdk-log/otlploghttp v0.21.0, otelslog v0.20.0
+  (latest log modules need otel v1.47.0); golangci-lint v2.14.0 bundles sloglint v0.12.0 with `context` and
+  `no-mixed-args` (default true) options.
+- Adversary R3: NOT APPROVABLE as written, APPROVABLE once B1/B2 folded; no Floor breach; R2 blockers (1),(3)
+  verified resolved. B1: connect `untilFirst` (`handler-factory.js:277-280`) makes UI server-stream duration =
+  time-to-first-message (StreamAlerts idle for hours) → record unary only (`methodKind`), try/finally.
+  B2: guard Part 4 must match `(count|bucket|sum)` and exempt only templating `label_values`.
+  Non-blocking: AC-18 12 s bound > compose 10 s default → 3 s fallback; py CancelledError also covers deadline
+  (records 0 vs Go 4) → interceptor or documented divergence; proto regex tolerate `rpc Name (` + comments, fail on
+  stream/unary name collision; agent outcome=error for any exception; UI `/accounts` + ledger export unwrapped;
+  recorder duplication accepted (C-18); doc-drift waiver must be recorded in PR body with manual reconciliation.
+- Operator decisions at R3 gate (binding, 2026-10-21), verbatim answers:
+  - Gate: "Approve" — design approved with B1/B2 + folded non-blocking fixes (3 s GracefulStop fallback, agent any
+    exception → error, robust proto parser, G1 requires one real non-zero py + node status emission).
+  - Python deadlines: "Small interceptor" — grpc.aio server interceptor in the 3 py backends stamps 4 (deadline
+    expired) / 1 (cancelled) on CancelledError before re-raise; parity with Go.
+  - Doc drift: "Waive the drift" — operator waives the PR-A→PR-B docs under-statement window; PR-A teardown covers
+    services/*/docs + service CLAUDE.md; PR-A body records the waiver + manual reconciliation (fails.md:670).
+  - UI coverage: "Wrap REST routes too" — `/accounts/api/*` and `/trader/api/ledger/export` route handlers are
+    wrapped with the same recorder; every segment reports.
+
+## Session 2026-10-21 — sdd-design
+
+- Phase 0 Recon: wrote recon.md (12 runtimes + packages/otel; reuse: per-runtime resource builders + env-only
+  exporters, fake-receiver /otlp tests, 250's guard/fence/otel-signals job).
+- Phase 1 Grilling: 3 rounds (full). Chosen approach: P-0 amend 250 → PR-A runtime export (span-derived
+  rpc.server.duration for py/node, otelgrpc for Go, otelslog/LoggingHandler/winston-transport/serverLog bridges,
+  agent mcp.tool.duration, UI BFF http.server.duration, py cancel/deadline interceptor, Go *Context retrofit) →
+  G1 dev proof → re-sync → PR-B registry + proto-derived stream-exclusion guard + restored alerts/dashboards/docs.
+  Rejected: narrow-to-traces, per-language interceptors as primary recorder, instrumentation upgrade,
+  recorder-side stream exclusion, UI per-method client histogram, console monkey-patch, log_destinations.
+- Constitution rules touched: C-02, C-08, C-10, C-11, C-13, C-14, C-15, C-16, C-18, P-01..P-04, F-04, F-06, F-07,
+  F-09. Floor breaches: none.
+- Acceptance: appended AC-15..AC-22 (append-only; AC-1..AC-14 unchanged).
+- Open Threads (target): G1 label/series proof (G1); real cross-language status parity (G1 q2); DO SIGKILL grace
+  (PR-A spec step 0); UI Next.js span correlation (PR-A AC-11 ui row); unwrapped UI health/auth/oauth/audit routes
+  (accepted); cost budget (G1 q7, prod flip out of scope); P-0 F-09 re-check (P-0).
+- Status: spec-ready → design-approved.

@@ -133,3 +133,66 @@ Feature: otel-metrics-logs-export
     Then the mute timing "outside-us-market-hours" exists and is referenced by the re-derived analysis scoring-stall rule
     And the service-health dashboard's $service variable queries rpc_server_duration_milliseconds_count
     And scripts/check-otel-produced-signals.sh reports 0 panel exprs targeting an unproduced series
+
+  # Added by /sdd-design (2026-10-21, design.md § Acceptance additions)
+  @AC-15 @FR-2
+  Scenario: Python and Node RPC recorders satisfy the shared status vectors
+    Given scripts/testdata/rpc-status-vectors.json with vectors "ok", "abort NOT_FOUND", "unhandled ValueError", "bare Exception", "node error without code", "node string code" and "ERROR status only"
+    When each vector's span is ended through the Python recorder and through the Node recorder
+    Then each recorded rpc.grpc.status_code equals the vector's expected code (0, 5, 2, 2, 2, 2, 2)
+    And every histogram data point uses bucket boundaries [0,5,10,25,50,75,100,250,500,750,1000,2500,5000,7500,10000]
+
+  @AC-16 @FR-1
+  Scenario: The UI records BFF route durations for unary and REST calls only
+    Given xstockstrat-ui runs with OTEL_ENABLED="true"
+    When a unary /trader Connect call to TradingService returns 200, GET /accounts/api/profile returns 200, and a StreamAlerts subscription stays open for 60 seconds
+    Then http.server.duration has a data point with xstk.segment="trader", rpc.service="xstockstrat.trading.v1.TradingService", http.response.status_code=200
+    And a data point with xstk.segment="accounts", http.route="/accounts/api/profile", http.response.status_code=200
+    And no data point carries rpc.service="xstockstrat.notify.v1.NotifyService" for the open StreamAlerts call
+
+  @AC-17 @FR-6
+  Scenario: The guard pins the proto-derived stream exclusion on every restored selector
+    Given packages/otel/alerts/alert-rules.yaml restored by this feature
+    When a rule's rpc_server_duration_milliseconds_sum selector omits the rpc_method stream matcher
+    Then scripts/check-otel-produced-signals.sh exits non-zero
+    And adding "rpc StreamFoo(Req) returns (stream Resp);" to a proto without updating the matcher also makes it exit non-zero
+
+  @AC-18 @FR-4
+  Scenario: SIGTERM flushes telemetry even with an open server stream
+    Given xstockstrat-marketdata runs with OTEL_ENABLED="true" and a client holds a StreamQuotes stream open
+    And it has served 2 unary RPCs and logged 3 INFO records since the last export
+    When the process receives SIGTERM
+    Then the collector receives the 2 RPC data points on "/v1/metrics" and the 3 records on "/v1/logs"
+    And the process exits within 10 seconds of SIGTERM
+
+  @AC-19 @FR-1
+  Scenario Outline: Metrics and logs honour the path-prefixed gateway and both header forms
+    Given <service> runs with OTEL_ENABLED="true", OTEL_EXPORTER_OTLP_ENDPOINT="http://127.0.0.1:<port>/otlp" and OTEL_EXPORTER_OTLP_HEADERS="<headers>"
+    When it records one metric and one log record and exports
+    Then the receiver gets POST "/otlp/v1/metrics" and POST "/otlp/v1/logs", each with Authorization "Basic dGVzdDprZXk="
+
+    Examples:
+      | service                | headers                                  |
+      | xstockstrat-trading    | Authorization=Basic dGVzdDprZXk=         |
+      | xstockstrat-analysis   | Authorization=Basic%20dGVzdDprZXk%3D     |
+      | xstockstrat-ledger     | Authorization=Basic dGVzdDprZXk=         |
+      | xstockstrat-ui         | Authorization=Basic%20dGVzdDprZXk%3D     |
+
+  @AC-20 @FR-5
+  Scenario: The identity seed-admin refusal logs the user id, not the email
+    Given xstockstrat-identity runs with OTEL_ENABLED="true" and a seed admin "admin@example.com" with user_id "u-seed-1"
+    When a default-admin login is refused
+    Then the stdout line and the exported OTLP record contain "u-seed-1"
+    And neither contains "admin@example.com"
+
+  @AC-21 @FR-1
+  Scenario: The agent records MCP tool duration with outcome
+    Given xstockstrat-agent runs with OTEL_ENABLED="true"
+    When tool "get_strategy" raises an error, tool "list_formulas" returns an isError result, and tools/call names "no_such_tool"
+    Then mcp.tool.duration has data points with gen_ai.tool.name="get_strategy" outcome="error", gen_ai.tool.name="list_formulas" outcome="error", and gen_ai.tool.name="unregistered"
+
+  @AC-22 @FR-2
+  Scenario: Python deadline and cancel map to Go's status codes
+    Given xstockstrat-indicators runs with OTEL_ENABLED="true"
+    When a client calls a unary RPC with a 50 ms deadline that the handler outlives, and another client cancels an in-flight call
+    Then rpc.server.duration records rpc.grpc.status_code=4 for the first call and 1 for the second
