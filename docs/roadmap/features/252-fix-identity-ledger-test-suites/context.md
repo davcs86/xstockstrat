@@ -79,3 +79,66 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - Any existing test that fails once it actually executes is a pre-existing defect to fix or record in context.md — never delete, skip or weaken it.
   - Interacts with hotfix #1262 (identity rotation tests) and features 241/248: whichever lands second merges the other's test changes.
 - Next: `/sdd-design fix-identity-ledger-test-suites` (full — operator: no quick designs).
+
+## Session 2026-10-20 — sdd-design
+
+- Phase 0 Recon: wrote recon.md (services: xstockstrat-identity, xstockstrat-ledger; key reuse patterns: config/notify
+  compile-then-test scripts `services/xstockstrat-config/package.json:12-13` + no-test-exclusion tsconfig `:14-15`;
+  hard-fail bare `before()` import + harness case `configServiceImpl.test.ts:15-27`).
+- Phase 1 Grilling: 4 rounds (full). Termination: auto-approved by the orchestrator under the operator standing
+  authorization (above): rounds ≥ 2, no Floor breach, no blocking objection, no CHANGE to a durable `@AC`. The round-3
+  blocker (AC-4/FR-4 vacuous under path (b)) was closed by the r4 rewording. The r4 adversary verdict was SOUND, and its
+  11 non-blocking items were adopted into design.md.
+  - Chosen approach:
+    - compile-then-test, with scripts and tsconfig byte-identical to config/notify;
+    - path (b): no `--check-coverage` in the scripts; 40% proven by `c8 check-coverage --lines 40` after the wrapped run;
+    - Step A (runner) keeps the impl try/catch so AC-6 has a discriminating RED;
+    - Step B (hardening) removes it plus 103 guards, adds a harness case and a 2-line constraint comment.
+  - Rejected: tsx loader, `--experimental-transform-types`, `tsconfig.test.json`, `rewriteRelativeImportExtensions`,
+    static import + casts, `--check-coverage` in all four Node leaves. Runner-up: path (a), `--check-coverage` in
+    identity/ledger only, which needs operator sign-off (C-10).
+- Constitution rules touched: C-01, C-08, C-10, C-13, C-14, C-15, C-16, C-18, P-02, P-03, P-05, P-06, F-04, F-05,
+  F-08, F-09, F-11. Floor breaches: none.
+- Business rules (C-16): 30 durable rules, all PRESERVE; no EXTEND/CHANGE, so no operator sign-off needed.
+- **Requirement amendment (C-15).** design.md § Requirement amendment holds the verbatim text:
+  - AC-4 reworded (names `c8 check-coverage --lines 40` plus a numeric aggregate);
+  - FR-4 narrowed (`product-spec.md:66`);
+  - AC-6 appended (`@FR-3 @regression`, `--test-reporter=tap`);
+  - AC line `product-spec.md:85` gains "AC-6 (FR-3)";
+  - AC-1 last line reworded by behaviour;
+  - AC-5 Then made reporter-neutral.
+
+  **This session did not apply it.** The design-completion write set (SKILL.md COMPLETION) and the computed task
+  exclude `acceptance.feature`/`product-spec.md`. Owner: the orchestrator, on the feature-branch copy before
+  `/sdd-spec`, recorded in a feature.md history row. If that does not happen, spec step 1 owns it, with both files in
+  its **Files** (F-08). It must land before impl-spec review.
+- **Preview provenance (P-05).** "mtls passed" and `ledgerAudit.js` 38.88% are mediator-preview observations only
+  (Node 22.22.0, out of tree, try/catch kept). They are not in-tree evidence. In-tree Node 24 numbers: not yet observed.
+- **Expected absolute test counts.** These are context only, not step Verification (F-09): identity 75 (79 on a #1262
+  base), ledger 47. They are derived as the triage pre-step counts plus the harness cases (identity +1, ledger +2), and
+  are to be confirmed against observed runs at execute time.
+- Open Threads (from design.md § Open Risks):
+  - [ ] In-tree Node 24 run after hardening unobserved. A regression, stale assertion, mock/setup drift or aggregate
+    below 40 goes to stop-and-ask. Target: identity B, ledger B.
+  - [ ] Aggregate % Lines may fall below 40 once the impl enters the denominator (advisory preview: `ledgerAudit.js`
+    38.88%). Target: identity B, ledger B (gate step 5).
+  - [ ] Node 24 output shape for a root `before()` failure is unverified; AC-6 uses explicit `--test-reporter=tap`.
+    Target: identity A/B, ledger A/B (AC-6 capture).
+  - [ ] Path (b): CI enforces no 40% gate for any Node leaf until the follow-up defect lands. Target: teardown (file
+    `docs/reports/<filing-date>-node-leaf-c8-check-coverage-unenforced-defect.md` + `.status` open).
+  - [ ] #1262 anchors (`:353`, `:495`, `:530`) verified on `e69e953d` only. Target: re-grep at `/sdd-spec`;
+    identity B.
+  - [ ] Requirement amendment not yet on the feature branch. Target: orchestrator before `/sdd-spec`, else spec
+    step 1.
+  - [ ] Production `pnpm build` now type-checks and emits tests; `dist/__tests__` ships in the image
+    (`Dockerfile:24,27,32`). Accepted for parity. Target: identity A, ledger A (`pnpm build` gate).
+  - [ ] bcrypt native binding becomes a test-time dependency (low likelihood). Target: identity A (first probe).
+  - [ ] CI `node-test` has no `timeout-minutes` (`ci.yml:534-591`); eventNotifier reconnect timing
+    (`recon.md:219`). Target: ledger A (bounded probe, no force-exit).
+  - [ ] 103 guard removals (+2 on #1262). Controls: assert-count diff, relative count formula, zero
+    cancelled/skipped/todo, scoped `catch` grep. Target: identity B, ledger B.
+  - [ ] Merge order 252 / #1262 / 248: whoever lands second de-guards and merges. Target: teardown
+    (`merge-order.md` note).
+- Ledger: `fails.md` entry added (Node ≥ 23 default non-TTY `node --test` reporter is `spec`, so TAP literals in
+  ACs/evidence do not appear on CI Node 24).
+- Status: spec-ready → design-approved.
