@@ -214,3 +214,44 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - Standing authorization: designs run in FULL mode only (no quick designs for automated fixes); the orchestrator auto-approves the design gate once rounds >= 2, no unresolved Floor (F-*) breach remains, no blocking objection remains, and every CHANGE to an existing @AC business rule is covered by an operator decision below.
   - Scope = 'IBKR auth never worked' as one defect: sign query params in the base string, implement the Live Session Token (LST) handshake, sign regular requests with the LST, add realm. Operator explicit C-11 override recorded: the LST handshake is in scope of this bug fix, no separate /sdd-story.
   - No live IBKR account is available: verification uses RFC 5849 / ibind reference vectors and an httptest server.
+
+## Session 2026-10-21 — sdd-review impl-spec (advisory)
+
+- Result: criteria FAIL (2 fails, 9 warnings, 0 floor breaches); overlap WARN. Advisory; lifecycle unchanged
+  (`implementation-ready`). Findings verified against `origin/feature/fix-ibkr-request-signing` @ aad0d1e9.
+- Prior progress (user asked "What happened to the prior progress?"): nothing lost. The reviewer read a stale
+  worktree, `/home/user/xs-feat/249-fix-ibkr-request-signing`, at 4d9b1022 (`status.md` = `spec-ready`, recon only).
+  The branch holds design (bae5e125, df13ed8a) and the spec (aad0d1e9). Its `acceptance.feature` has `@AC-1..@AC-10`
+  (each `@FR-N`), AC-4 has 9 rows and AC-6 has 7, and `design.md` is present.
+- Addressed in implementation-spec.md:
+  - [x] FAIL C-15/C-01 (AC-5..AC-10, AC-4 9 rows, AC-6 7 rows, design.md): cleared, stale input. No edit needed.
+    The branch `acceptance.feature:7-123` matches the Scenario Coverage table.
+  - [x] FAIL B2 Step 12 directory in **Files**: listed the 5 generated paths
+    (`grep -rl access_token_secret packages/proto/gen/`). No Python stub carries comments. Staging is limited to
+    those paths (F-08), and verification diffs `--name-only`.
+  - [x] WARN Step 6 session-error classification: the flatten moved inside `do`. A non-sentinel `ensureSession`,
+    re-ensure or `reinit` error becomes `%v` there; `ErrInvalidCredentials` stays `%w`. Callers wrap `%w` unchanged.
+    The dangling "step 5" cross-reference is gone. Safety: `credentialStatusFromError` (`trading.go:2951-2960`)
+    checks the sentinel only, and the only deadline classifiers are `:684` and `:1521`.
+  - [x] WARN Step Dependencies: added "Steps 7 and 9 require Step 5" (`IBKRAuthHandler`).
+  - [x] WARN Step 9 coverage: added the COVERPKGS ≥ 40% command (`ci.yml:256-257`).
+  - [x] WARN Step 17 `docs/ibkr.md` evidence: two sections (`:5-16`, `:18-22`). The new section is appended after `:22`.
+  - [x] WARN C-18 joiner re-call rule: confirmed in design.md §2 (`:59-61`) and C-18 (`:301-302`). Step 4 cites
+    both and says why it is not redundant (transient-only, versus the sentinel-only negative cache and throttle).
+  - [x] WARN FR-3 vs ibind, partly addressed: the spec now says the AC-1 vectors prove self-consistency only, moves the
+    operator gate to the Step 2 checkpoint (an explicit deferral to merge is allowed and must be recorded), and says
+    how the paper smoke decides (query `GetOrder` versus no-query `ValidateCredentials`).
+  - [x] WARN Step 1 gitleaks: both gitleaks commands are now mandatory. The `regexTarget = "line"` vs multi-line
+    `private-key` uncertainty is stated (`.gitleaks.toml:34`).
+  - [x] Overlap `config-governance.md`: Step 10 notes 240 (same top slot) and 243 (Author-sentinel `:93-103`), with a
+    re-read at execute time.
+  - No action needed (reviewer-confirmed): broker symmetry note; code-grounded anchors.
+- Still open, carried into execution (`/sdd-execute` announces these at each checkpoint, C-02/P-03):
+  - [ ] Step 2: **operator ruling** on FR-3 (include query params) vs ibind (exclude). Due at the Step 2 checkpoint,
+    or an explicit recorded deferral to the integration-PR merge. No live account exists, so tests cannot decide it.
+  - [ ] Step 1: 7 files, over the advisory 5-file limit. Kept whole (the gitleaks scope exists only for these PEMs);
+    the executor may split gitleaks + PEMs from the generator + loader. Advisory, operator's call.
+  - [ ] Overlap, rebase-only: `trading.go` and `trading.proto`/gen vs 240 (whichever merges second re-runs
+    `./scripts/buf-gen.sh`); trading `CLAUDE.md` vs 240 (other sections); `tools.py`/`mcp-tools.md` vs 215 (other
+    regions); `config-governance.md` vs 240/243 (Step 10 note).
+- Overlap findings: WARN, file-level only. No migration, proto field-number or config-key collision.

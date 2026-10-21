@@ -61,6 +61,16 @@ design.md's delegated pins:
   them would 401 every GET that carries a query (`resolveConid`, `GetOrder`, `ListOrders`). The inclusion is one
   isolated call in `buildBaseString` (Step 2). Only a paper smoke can decide. Recorded in context.md Open
   Threads and the Open Risks below.
+  - **The vectors do not settle it.** The AC-1 vectors (Step 1 (c)) call ibind's `generate_base_string` with
+    `request_params`, which ibind's regular-request path never passes. They prove self-consistency with the
+    RFC 5849 base-string rule, not IBKR acceptance. If IBKR mirrors ibind, every query-carrying GET 401s while all
+    tests pass (`fails.md:481-484`).
+  - **Gate timing.** `/sdd-execute` announces this conflict at the Step 2 checkpoint, and the operator rules there:
+    include (FR-3) or exclude (ibind). The operator may instead explicitly defer the ruling to the integration-PR
+    merge, and that deferral is recorded in context.md. With no live account (operator decision, 2026-10-20), the
+    decisive smoke is a paper `GetOrder` (query) next to `ValidateCredentials` (no query). Both 200 → include. A
+    query 401 while the no-query call is 200 → exclude, which flips the single `buildBaseString` inclusion and the
+    AC-1 vector.
 
 ### Scenario Coverage (C-15)
 
@@ -92,6 +102,8 @@ Nothing is deferred. Two out-of-scope follow-ups are named in Step Dependencies.
 
 - Step 1 precedes every test step: the vectors, test keys and DH params in Step 1 are the oracles of Steps 3, 5,
   7, 9.
+- Steps 7 and 9 require Step 5: both consume `testdata.IBKRAuthHandler`, which Step 5 adds to
+  `internal/testdata/ibkr.go`.
 - Step 3 [test] covers Step 2 [service]; Step 5 [test] covers Step 4; Step 7 [test] covers Step 6; Step 9 [test]
   covers Step 8; Step 14 [test] covers Step 13; Step 16 [test] covers Step 15. `/sdd-execute` runs each test step's
   new assertions RED against the tree before its service step, then GREEN after (P-06).
@@ -110,7 +122,8 @@ Nothing is deferred. Two out-of-scope follow-ups are named in Step Dependencies.
   - `ibkr-fleet-invalid-alert` (one aggregate alert when every IBKR account reads INVALID in a tick; this spec
     chooses the follow-up over an in-scope alert, per C-18/YAGNI).
   Both are recorded in context.md Open Threads.
-- **Operator gate before the integration PR merges:** the FR-3 vs ibind query-param conflict above.
+- **Operator gate at the Step 2 checkpoint** (or an explicitly recorded deferral to the integration-PR merge): the
+  FR-3 vs ibind query-param conflict above.
 
 ---
 
@@ -192,6 +205,11 @@ Nothing is deferred. Two out-of-scope follow-ups are named in Step Dependencies.
      `condition = "AND"`, `paths = ['''services/xstockstrat-trading/internal/testdata/ibkr/.*\.pem''']` and the
      same regexes. Use it only after confirming that the gitleaks bundled by `gitleaks-action@v3` supports it, and
      record the bundled version in the Deviation Log.
+   - Unproven: whether a `regexTarget = "line"` regex suppresses a multi-line `private-key` finding
+     (`.gitleaks.toml:34`). Both gitleaks commands below are **mandatory**: the "no leaks found" scan and the
+     "new key still detected" probe. If gitleaks cannot be installed on the host, the step is not done.
+   - The step touches 7 files, over the advisory 5-file limit. It is kept whole because the gitleaks scope
+     exists only for these PEMs, and Security reviews them together.
 
 **Verification**:
 ```bash
@@ -367,10 +385,14 @@ grep -rn "nonceAAAAAAAAAAA" --include="*_test.go" internal | wc -l   # literals 
       `context.WithTimeout(context.WithoutCancel(ctx), Timing().HandshakeTimeout)`. Select on `ch` and the
       caller's `ctx.Done()`. A waiter whose ctx expires returns a transient `ctx.Err()`; the leader keeps running
       and caches its result.
-   5. **Joiner re-call rule** (design.md §2): re-call `DoChan` once only if this caller joined a flight that
+   5. **Joiner re-call rule** (design.md §2 `:59-61`; C-18 trade-off recorded at design.md:301-302): re-call
+      `DoChan` once only if this caller joined a flight that
       started before its own call and that flight returned a transient error. Track this with a flight start
       timestamp compared to the call's entry time. A leader, or a waiter on the flight that produced generation G,
       reports `mintedByMe=true`.
+      - Why it is not redundant with the negative cache or `ReauthMinInterval`: those two gate only
+        `ErrInvalidCredentials` outcomes (step 5.7) and 401 invalidations (step 6). This rule gates only a
+        **transient** result from a flight the caller did not start.
 5. `(c *IBKRClient) handshake(ctx) (session, error)`:
    1. `prepend = hex(rsa.DecryptPKCS1v15(nil, encKey, b64decode(access_token_secret)))`. On failure return
       `%w ErrInvalidCredentials` without echoing input. If staticcheck SA1019 flags the call, add
@@ -511,8 +533,19 @@ grep -rn "func ibkrAuthServer\|live_session_token" --include="*_test.go" interna
      credentials; may come from any broker call, not only ValidateCredentials".
    - Add `var ErrOutcomeUncertain = errors.New("broker outcome uncertain: request may have been processed")`.
 2. `(c *IBKRClient) do(req *http.Request, op string, noResend bool) (*http.Response, []byte, error)`:
-   1. `snap, minted, err := c.ensureSession(req.Context())`. On error return it as is. Callers decide `%v`/`%w`
-      per step 5 below.
+   1. `snap, minted, err := c.ensureSession(req.Context())`. Session errors are classified **inside `do`**,
+      because callers cannot tell a session error from the real request's transport error once both come back as
+      one `error` (design.md §5):
+      - `errors.Is(err, ErrInvalidCredentials)` → return it wrapped `%w`;
+      - any other `ensureSession` error, including a waiter's own `ctx.Err()`, → return
+        `fmt.Errorf("ibkr %s: session: %v", op, err)`. The `%v` is mandatory: nothing was sent, so the outcome is
+        definite, and `%w` would let `trading.go:684`/`:1521` misread a `context.DeadlineExceeded` as uncertain
+        (AC-8).
+      - The same rule applies to the re-`ensureSession` after `invalidate` (step 3) and to a `reinit` failure on a
+        400 no-bridge. In both cases the first send was answered (401 or 400), so it was not processed, and the
+        resend was never made.
+      - Safe for non-order callers: `credentialStatusFromError` (`trading.go:2951-2960`) checks only the sentinel,
+        and the only `DeadlineExceeded`/`Timeout()` classifiers are `:684` and `:1521`.
    2. Set `Authorization = c.authorize(req, snap.lst)` and send. The body is read and closed inside `do`.
    3. On **401**, or **400 with body containing `no bridge`** on an `/iserver/` path:
       - a 400 no-bridge runs `c.reinit(ctx, snap.gen)`, then resends once;
@@ -533,12 +566,13 @@ grep -rn "func ibkrAuthServer\|live_session_token" --include="*_test.go" interna
    - `ValidateCredentials` (`:555-577`) becomes `c.do` + a 200 check. Its sentinel now comes from `do`/
      `ensureSession`.
    - Delete `signRequest` (`:579-627`) and the `"&"+accessTokenSecret` key.
-4. Order paths (`SubmitOrder`, `ReplaceOrder`, `CancelOrder`, `SubmitBracketLegs`, and `resolveConid` as called
-   from them): when the error comes from `ensureSession` and is not `ErrInvalidCredentials`, flatten it with
-   `fmt.Errorf("ibkr %s: session: %v", op, err)`. Nothing was sent, so this is a definite REJECTED at
-   `trading.go:684`/`:1521` (design.md §5).
-   - `ErrInvalidCredentials`, the real request's transport error and the resend's error keep `%w`.
-   - `confirmReply` keeps `%w` (`:118-119`).
+4. Callers wrap every `do` error with `%w`, unchanged. The session flatten already happened inside `do`
+   (instruction 2.1), so order paths (`SubmitOrder`, `ReplaceOrder`, `CancelOrder`, `SubmitBracketLegs`,
+   `confirmReply`, and `resolveConid` as called from them) need no per-caller classification. A session failure
+   before the POST is a definite REJECTED at `trading.go:684`/`:1521` (design.md §5).
+   - `ErrInvalidCredentials`, the real request's transport error and the resend's error keep `%w` (`do` returns
+     them unflattened).
+   - `confirmReply` keeps `%w` on its transport error (`:118-119`).
 5. Broker coverage: IBKR-only. `ALPACA` unaffected; it returns the sentinel only from `ValidateCredentials`
    (`alpaca.go:493-509`).
    - Order types: unaffected (`orderTypeToIBKR` `:141-154` untouched).
@@ -551,6 +585,7 @@ grep -rn "func ibkrAuthServer\|live_session_token" --include="*_test.go" interna
 cd services/xstockstrat-trading && GOWORK=off go build ./... && GOWORK=off golangci-lint run --modules-download-mode=mod
 grep -n "signRequest\|accessTokenSecret)" internal/broker/ibkr.go   # expect no signRequest
 grep -c "c.do(" internal/broker/ibkr.go   # 11
+grep -n 'session: %v' internal/broker/ibkr*.go   # only inside do (one classification point)
 grep -n "TRADING_MODE\|TradingMode" internal/broker/ibkr.go   # expect none (no gate change)
 ```
 
@@ -752,14 +787,16 @@ HTTP), GREEN after.
    `trading.ibkr.reauth_min_interval_ms` set, which also proves the key is applied (EXTEND `@AC-3 @feature-192`).
    - The first call reads INVALID. A second call inside the interval makes zero LST requests.
    - After advancing the `Now` seam and flipping the handler, the status reads OK.
-- New logic is in `internal/service`, a package excluded from coverage measurement, so no coverage threshold
-  applies to it and the test runs are the verification.
+- New logic is in `internal/service`, a package that `ci.yml:256` excludes from coverage measurement. The
+  repo-wide ≥ 40% gate still applies to the service and is re-run below. It must stay green after this step's
+  `internal/testdata` consumers are added.
 
 **Verification**:
 ```bash
 cd services/xstockstrat-trading && GOWORK=off go test ./internal/service/ -run 'IBKR|Uncertain|InvalidCredentialsNotSystemic|LegacyIBKR' -race -count=1 -v
 GOWORK=off go test ./... -race -count=1   # whole service green, incl. feature-157/202/206 suites
 GOWORK=off golangci-lint run --modules-download-mode=mod
+GOWORK=off COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"   # ≥ 40% (ci.yml:256-257)
 grep -rn "statusWrites" --include="*_test.go" internal/service | grep "struct\|\[\]int32" | wc -l   # one declaration (fakeAccountRepo)
 ```
 
@@ -797,6 +834,10 @@ grep -rn "statusWrites" --include="*_test.go" internal/service | grep "struct\|\
 2. Prepend `### feature 249 — fix-ibkr-request-signing (\`xstockstrat-trading\`)` under
    `config-governance.md:107`, with the same three rows. State: unseeded (consumed-with-default, feature 102
    precedent); no `SCALAR_BOUNDS_REGISTRY` entry; not tied to `IBKRRequestTimeout`.
+   - Overlap: feature 240 (`offline-account-full-pnl`) prepends at the same top slot. Feature 243
+     (`fix-sandbox-seed-keys`) edits the Author-sentinel table just above it (`:93-103`). Re-read
+     `config-governance.md:93-109` at execute time and place the 249 entry newest first after whichever peers have
+     merged. This is a rebase only, with no key-name collision.
 
 **Verification**:
 ```bash
@@ -843,7 +884,11 @@ cd packages/proto && buf lint && buf breaking --against '<repo-root>/.git#branch
 **Status**: `pending`
 **Service**: `packages/proto`
 **Files**:
-- `packages/proto/gen/` — modify (generated; comment changes only)
+- `packages/proto/gen/go/trading/v1/trading.pb.go` — modify (generated; comment only)
+- `packages/proto/gen/ts/trading/v1/trading_pb.ts` — modify (generated; comment only)
+- `packages/proto/gen/ts/trading/v1/trading.ts` — modify (generated; comment only)
+- `packages/proto/gen/ts/dist/trading/v1/trading_pb.d.ts` — modify (generated; comment only)
+- `packages/proto/gen/ts/dist/trading/v1/trading.d.ts` — modify (generated; comment only)
 
 **Reviewers**: Proto Reviewer; `packages/proto` owner; `xstockstrat-trading` owner (inherited from Step 11)
 
@@ -851,18 +896,23 @@ cd packages/proto && buf lint && buf breaking --against '<repo-root>/.git#branch
 - Root `CLAUDE.md` § Generating Proto Stubs: `./scripts/buf-gen.sh`. CI `proto-freshness` enforces it.
 - Host toolchain: `docs/runbooks/codegen-toolchain-host-setup.md`. `buf` is not installed on this host
   (`which buf` → none).
+- The files that carry the `trading.proto:269` comment are found by `grep -rl access_token_secret packages/proto/gen/`.
+  That grep returns exactly the 5 **Files** above. No Python stub carries proto comments: `gen/python/trading/v1/`
+  holds only `trading_pb2.py`/`trading_pb2_grpc.py`, and neither matches.
 
 **TDD**: `N/A (codegen)`
 
 **Covers**: `—`
 
-**Instructions**: Run `./scripts/buf-gen.sh`. Commit only `gen/` diffs that carry the new comment text. If unrelated
-files churn (a toolchain-version drift; `insights.md:2444` precedent), stop and fix the toolchain pins rather than
-committing the churn.
+**Instructions**: Run `./scripts/buf-gen.sh`. Stage only the 5 listed paths (F-08). If any other `gen/` file
+changes, stop. That is toolchain-version drift (`insights.md:2444` precedent): fix the toolchain pins rather than
+committing the churn. If the generator writes the comment into a file not listed here, add the file to **Files** and
+record it in the Deviation Log.
 
 **Verification**:
 ```bash
-./scripts/buf-gen.sh && git diff --stat packages/proto/gen/ && git diff packages/proto/gen/ | grep '^[-+]' | grep -v '^[-+][-+]' | grep -v -i 'ibkr\|credentials_json\|signature_key\|encryption_key\|dh_prime\|consumer_key' | head
+./scripts/buf-gen.sh && git diff --name-only packages/proto/gen/   # exactly the 5 listed paths
+git diff --stat packages/proto/gen/ && git diff packages/proto/gen/ | grep '^[-+]' | grep -v '^[-+][-+]' | grep -v -i 'ibkr\|credentials_json\|signature_key\|encryption_key\|dh_prime\|consumer_key' | head
 # expect no non-comment changed lines
 ```
 
@@ -1062,7 +1112,8 @@ grep -n "def .*fixture\|from .conftest\|conftest" tests/test_broker_account_clie
 **Reviewers**: none
 
 **Codebase Evidence**:
-- `docs/ibkr.md` is 22 lines, covering Hedged Mode only (`:14`). No auth section exists.
+- `docs/ibkr.md` is 22 lines with two `###` sections: Hedged Mode (`:5-16`) and order-confirmation prompts
+  (`:18-22`). No auth section exists.
 - The credential-health paragraph is at `services/xstockstrat-trading/CLAUDE.md:23` ("IBKR `GET /portfolio/accounts`").
 - TRADING-3 is at `context-constitution.md:21`. It says "only for HTTP 401/403" and has the stale anchor
   `credentialStatusFromError (~L2873)`; the actual line is `trading.go:2951`.
@@ -1074,7 +1125,8 @@ grep -n "def .*fixture\|from .conftest\|conftest" tests/test_broker_account_clie
 **Covers**: `—`
 
 **Instructions**:
-1. `docs/ibkr.md`: add an "OAuth 1.0a + Live Session Token" section covering:
+1. `docs/ibkr.md`: append a new `### IBKR: OAuth 1.0a + Live Session Token` section after the
+   order-confirmation section (after `:22`). Leave both existing sections unchanged. The new section covers:
    - the 7-field blob;
    - the handshake order (LST → `ssodh/init` with `compete=false`);
    - LST-keyed HMAC-SHA256 plus `realm`, and the ibind-pinned encoding;
@@ -1105,8 +1157,9 @@ grep -n "feature 249" services/xstockstrat-trading/docs/context-constitution-fin
 ## Open Risks (carried from design.md, updated at spec time)
 
 - [ ] **FR-3 vs ibind (new, spec-time).** ibind signs regular requests without query params
-  (`ibkr_client.py:146-158`, `rest_client.py:226-231`). FR-3 includes them. Operator ruling is required before the
-  integration PR merges; the paper smoke decides.
+  (`ibkr_client.py:146-158`, `rest_client.py:226-231`). FR-3 includes them. The AC-1 vectors prove only RFC-style
+  self-consistency, not IBKR acceptance. The operator rules at the Step 2 checkpoint, or explicitly defers the
+  ruling to the integration-PR merge. The paper smoke decides it as described in the Execution Summary.
 - [ ] **Unverified external contract.** The `ssodh/init` reply fields (ibind never reads them) and whether IBKR
   validates the base string exactly as ibind builds it. All tests can pass while every real account reads INVALID
   (`fails.md:481-484`). Mitigations: ibind-pinned vectors (Step 1), and a paper smoke if an account appears.
