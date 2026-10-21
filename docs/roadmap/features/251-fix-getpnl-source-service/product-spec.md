@@ -61,6 +61,20 @@ client-side only (`usePositionLineage.ts:22-28`), so correcting the filter alone
   reach this TypeScript site), and the ledger response delivered to the browser carries no other user's event.
   Partial fills stay absent from the lineage sheet (existing behavior: the hook queries only `order.filled`,
   `usePositionLineage.ts:17`).
+- **FR-4.** *(Appended 2026-10-21 from design.md §2, §6F.)* Realized P&L isolates the caller. Only the caller's
+  fills (payload `user_id`) in the requested mode enter the fold. Side lookups and the unattributable checks run
+  only over those fills, so another user's history neither fails nor slows the caller. Fills fold per
+  `trading_mode|account_id|symbol`. A (user, mode, symbol) group that mixes fills with and without `account_id` is
+  refused with FAILED_PRECONDITION.
+- **FR-5.** *(Appended 2026-10-21 from design.md §1, §2.)* Realized P&L reads the complete fill history exactly once,
+  or fails. The ledger honours `QueryEvents.page.page_token` as an opaque keyset cursor over
+  (`recorded_at`, `event_id`) and returns INVALID_ARGUMENT for a malformed token. `GetPnL` drains every page.
+  A read gap or a replaying ledger returns UNAVAILABLE. The caller's own deadline or cancellation returns
+  DEADLINE_EXCEEDED / CANCELED. No partial figure is ever returned.
+
+**Design settlements (2026-10-21, design.md §2, §5).** An unresolvable side returns FAILED_PRECONDITION (AC-4), not a
+fold-as-buy or a skip (feature-229 never-fabricate). The lineage no longer reads a platform-wide page. It reads
+the trader's own orders and runs one point query per order (AC-19, AC-21).
 
 Realized P&L then equals `pnl.Fold` of the user's signed fills.
 
@@ -152,6 +166,10 @@ Product decisions design must settle, each as an appended FR and `@AC-*` (C-15, 
 - xstockstrat-ledger (exact-match filter; read-only evidence, no change expected)
 - xstockstrat-ui (fix site for FR-3: `usePositionLineage.ts` and its BFF read path)
 
+*Updated 2026-10-21 by /sdd-spec (design.md §1, §4):* xstockstrat-ledger **is** a fix site. FR-5 adds keyset
+`page_token` paging in a new `src/grpc/queryEventsPage.ts`, plus a new `ledger-pg-test` CI job in
+`.github/workflows/ci.yml`. xstockstrat-trading **is** a fix site: both fill payloads gain an additive `side` key.
+
 ## Fix Scope
 
 - [x] No proto changes anticipated
@@ -162,6 +180,10 @@ The proto box (and "ledger: no change expected") holds only while FR-3's user sc
 (`traderBff.ts:118-124`). `QueryEventsRequest` has no user field (`ledger.proto:60-67`), so a dedicated ledger read
 needs an additive proto field (proto approval gate) and a ledger change; design then re-opens these boxes and
 Affected Services.
+
+*Updated 2026-10-21 by /sdd-spec:* the three boxes still hold. FR-3 scoping stays in the BFF (design.md §5), and the
+ledger change is server-side paging only, with no proto field. It reads the existing `page.page_token`
+(`ledger.proto:65`). A CI workflow change is in scope (new `ledger-pg-test` job).
 
 ## Acceptance Criteria
 

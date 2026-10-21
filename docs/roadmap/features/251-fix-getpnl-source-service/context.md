@@ -573,3 +573,55 @@ Items 3/3' and 9 of round 6 stand. Round-8 additions (portfolio paths under `ser
 - [ ] Ordering deviation `:276-278` stays unresolved evidence (no step).
 - [ ] Bracket-leg and live-fold follow-ups (`docs/reports/2026-10-21-*`, `open`) — outside 251.
 - [ ] `/sdd-spec` re-greps every design.md citation (only header-listed ones spot-checked at `1d47c0a7`).
+
+## Session 2026-10-21 — sdd-spec
+
+- Generated implementation-spec.md with 14 steps. Status design-approved → implementation-ready. Grounded on
+  `feature/fix-getpnl-source-service` @ `2d991956`. Every design.md and recon.md citation the spec uses was re-grepped.
+- C-15 append done in this session (owed at the design write, Open Threads above): acceptance.feature gained
+  `@AC-4`..`@AC-22` from design.md §6F, each with ≥ 1 @FR tag, and product-spec.md gained FR-4 (isolation /
+  account grain) and FR-5 (paging contract). The append is additive only; AC-1..AC-3 are unchanged (C-15 IDs
+  append-only). Product-spec Affected Services and Fix Scope now record ledger and trading as fix sites plus the
+  `ledger-pg-test` CI job, with no proto, migration or config change. This supersedes the open thread on
+  `:152`/`:161-164` without editing it.
+- Key codebase findings:
+  - Citation corrections:
+    - `ledger.proto` `time_range = 4` is at `:64`, `page = 5` at `:65`, `from_sequence = 6` at `:66`. design.md
+      §6A cites `:64`/`:66` correctly.
+    - ci.yml: the `ci-gate` needs list is at `:773-788` (echo `:792-807`) and the ledger change filter at `:60`.
+    - The `toGRPCError` precedent is `services/xstockstrat-trading/internal/handler/trading.go:223-238`, not the
+      service file. It covers FailedPrecondition only.
+  - design.md:17 ("no … ci.yml change") conflicts with §1's `ledger-pg-test` job. The spec follows §1; COVERPKGS
+    stays unedited (P-03, recorded in the spec Execution Summary).
+  - The "extended source-service parity test" is **Not found**; none exists in portfolio. Step 6 creates
+    `TestGetPnL251_SourceServiceParity` (const = testdata = literal) and Step 4 asserts the trading half. This is
+    the two-half parity precedent of `pnl_fold_test.go:10-14`.
+  - Only GetPnL sends a non-empty `page_token`. The UI callers send `''`, and trading `:2222` and HydrateStops
+    `:534` send no page. The ledger keyset change therefore reaches no other caller.
+  - `ledger.events` PK `(event_id, recorded_at)` (`001_ledger_events_hypertable.up.sql:22`) makes the
+    `(recorded_at, event_id)` cursor unique (insights.md:3547).
+  - No UI concurrency helper exists, so Step 11 adds `src/lib/positionLineage.ts`. vitest excludes `*Bff.ts` from
+    coverage, which is why the lineage orchestration and BFF predicate live in `src/lib/`.
+  - `positions.spec.ts:129-138` keys its lineage interception on "no streamKey". After FR-3 the lineage query
+    carries one, so Step 10 re-keys it on `eventType`.
+  - The e2e mock `listOrders` (`mock-backend.ts:311-316`) filters only by symbol. Step 10 adds account and mode
+    filtering (fails.md 200 "list the e2e mock backend in Files").
+- Spec-level choices (within design.md, recorded for impl-spec review):
+  - F1/F2/drain go in `portfolio_quote_deadline_test.go`, the file holding the existing GetPnL tests
+    (TestGetPnL_AC5/AC6).
+  - 251 tests carry a `251` qualifier so they do not collide with feature 229's `AC5`/`AC6` names.
+  - Wire case (4) uses a 200ms deadline (the design Open Risks flake mitigation).
+  - The fold key goes into `pnl.Fill.Symbol` (`pnl.Fold` unchanged).
+- Files written: acceptance.feature, product-spec.md, implementation-spec.md (new), status.md, feature.md,
+  context.md.
+
+### Open threads (target step)
+
+- [x] C-15 append AC-4..AC-22 + FR-4/FR-5 — done this session.
+- [x] product-spec Affected Services / Fix Scope — done this session.
+- [x] Confirm GetPnL has no in-repo runtime caller — re-confirmed (spec Execution Summary).
+- [ ] `classifyGetPnLError` arity with `:96` and test `:40`/`:43` — Steps 8/9.
+- [ ] PORTFOLIO-16 and portfolio `CLAUDE.md:28`; stream-key doc drift; ledger opaque page_token — Step 12.
+- [ ] 252 soft merge-order row + 252 context note — Step 13.
+- [ ] Ship gate (i)-(iv) + dev smoke under mTLS — Step 14.
+- [ ] Scratch-tsconfig compiled run — Step 3 verification.
