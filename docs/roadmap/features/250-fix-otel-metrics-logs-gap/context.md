@@ -94,3 +94,47 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - Standing authorization: designs run in FULL mode only (no quick designs for automated fixes); the orchestrator auto-approves the design gate once rounds >= 2, no unresolved Floor (F-*) breach remains, no blocking objection remains, and every CHANGE to an existing @AC business rule is covered by an operator decision below.
   - Narrow to traces (bug fix, consistent with feature 226's traces-only decision): remove or rewrite alerts/dashboard panels that depend on metric/log series nothing produces (span-metrics from traces only if the Grafana stack is shown to generate them), and correct docs/setup/grafana-cloud.md, docs/patterns/observability.md and packages/otel docs. Adding metric/log export is out of scope.
 - Next: `/sdd-design fix-otel-metrics-logs-gap` (full).
+
+## Session 2026-10-21 — sdd-design
+
+- Phase 0 Recon: wrote recon.md (services: packages/otel + docs only, no `xstockstrat-*` runtime; key reuse
+  patterns: 226 findings-row NARROW convention `recon.md:62`, Tempo check + TraceQL example as doc template
+  `recon.md:60`).
+- Phase 1 Grilling: 3 rounds (full). Chosen approach: narrow to traces — alert rules removed via `deleteRules` /
+  `deleteMuteTimes` (fallback `groups: []`), `mute-timings.yaml` deleted, `service-health.json` rewritten
+  Tempo-only (uid kept), other dashboards deleted, FR-4 docs reworded to the sanctioned literal
+  `Metrics and logs are not exported (feature 226).`, plus guard `scripts/check-otel-produced-signals.sh`
+  (Parts 1-3 + removed-assets fence) with fixture-backed `.test.sh` in a dedicated `otel-signals` CI job, and a
+  `trace-derived-alerting` `/sdd-story` (`idea`) landed on main-dev first. Rejected: fix (b) metric/log export
+  (operator decision), span-metrics/TraceQL-metrics rewrite (unproven, `recon.md:94-100`), follow-up as a
+  defect report, generic-token scan over all of `docs/`, line-number-pinned findings assertions.
+- Round history: r1 blocked on C-15 (no red per AC) + AC-3 scope; r2 blocked on C-10 (dangling deleted-asset refs)
+  + C-11 (follow-up filed as defect); r3 adversary verdict SOUND, non-blocking items folded into design.md §§3-7.
+- Prior progress (user question "What happened to the prior progress?"): nothing lost — r1/r2/r3 syntheses were
+  carried forward round to round from the session scratchpad; this entry and design.md make them durable.
+- Constitution rules touched: C-10, C-11, C-13, C-14, C-15/P-06, C-16, C-18, P-02, F-04/P-03, F-11, PLAT-3,
+  OTEL-1/OTEL-2, Teardown. Floor breaches: none.
+- Business rules (C-16): PRESERVE `@AC-3 @feature-171`, `@AC-1/@AC-2 @feature-171`, `@AC-1/@AC-2/@AC-3/@AC-4
+  @feature-226`; EXTEND `@AC-1..3 @feature-250` (operator decision "Narrow to traces"). No CHANGE.
+- Approval: auto-approved under operator standing authorization (rounds 3 >= 2, no F-* breach, no blocking
+  objection, no uncovered CHANGE). Operator decisions (binding, re-recorded 2026-10-21), verbatim:
+  - Standing authorization: designs run in FULL mode only (no quick designs for automated fixes); the orchestrator auto-approves the design gate once rounds >= 2, no unresolved Floor (F-*) breach remains, no blocking objection remains, and every CHANGE to an existing @AC business rule is covered by an operator decision below.
+  - Narrow to traces (bug fix, consistent with feature 226's traces-only decision): remove or rewrite alerts/dashboard panels that depend on metric/log series nothing produces (span-metrics from traces only if the Grafana stack is shown to generate them), and correct docs/setup/grafana-cloud.md, docs/patterns/observability.md and packages/otel docs. Adding metric/log export is out of scope.
+- Open Threads (from design.md Open Risks; target step set at /sdd-spec):
+  - Guard heuristics (P3-count/P3-file) are vocabulary-bound; fixture red cases guard against relaxation —
+    guard step.
+  - Tempo `service-health.json` has no in-repo precedent and span-name regexes `.*/Method` are unverified —
+    dashboard step, dev-import gate (fallback: delete JSON, keep README, retire OTEL-1).
+  - No paging for error-rate / latency / analysis scoring until `trace-derived-alerting` lands — follow-up step
+    (first in order; land on main-dev before 250 cites it).
+  - Grafana Cloud keeps already-imported rules, mute timing and dashboards until deleted by hand;
+    `deleteRules`/`deleteMuteTimes` key names unverified (Context7 + throwaway `grafana/grafana`) — alerts step.
+  - `/sdd-archiver` will prune the defect report; basename exemption and findings assertions must not depend on
+    the file existing — guard/test step.
+  - `.feature` files stay outside the guard glob (250 ACs promoted to `platform.feature` contain "Loki") — guard
+    step.
+  - Read ACs from `origin/feature/fix-otel-metrics-logs-gap`; local main-dev `acceptance.feature` is stale —
+    /sdd-spec.
+  - Rebase-only overlap with 084 on `docs/patterns/observability.md` — docs step / integration.
+- Status: spec-ready → design-approved.
+- Next: `/sdd-spec fix-otel-metrics-logs-gap`.
