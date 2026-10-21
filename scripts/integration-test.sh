@@ -138,7 +138,7 @@ post_raw_admin() {
 }
 
 # get <url> — GET with optional auth
-# shellcheck disable=SC2317
+# shellcheck disable=SC2317,SC2329
 get() {
   curl -sf "$1" \
     ${TOKEN:+-H "Authorization: Bearer ${TOKEN}"}

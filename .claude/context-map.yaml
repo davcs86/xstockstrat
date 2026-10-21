@@ -47,6 +47,17 @@ agents:
     returns: "test plan (layer/file/RED assertion/command) + test inventory + SEV-tagged defect digest"
     used_by: [sdd-qa, sdd-execute]
 
+# --- Saved workflows: deterministic multi-feature orchestration (context-engineering.md §4) ---
+workflows:
+  - name: sdd-batch
+    path: .claude/workflows/sdd-batch.js
+    runs: "sdd-review product-spec → sdd-design (full) → sdd-spec → sdd-review impl-spec, per feature in parallel"
+    tests: scripts/workflow-tests/sdd-batch.test.mjs
+  - name: sdd-batch-execute
+    path: .claude/workflows/sdd-batch-execute.js
+    runs: "sdd-execute <slug> sequential, per feature in parallel worktrees, halting at every operator gate"
+    tests: scripts/workflow-tests/sdd-batch-execute.test.mjs
+
 # --- Skills: lean SKILL.md routers + on-demand reference/ files ---
 skills:
   - name: sdd-spec
