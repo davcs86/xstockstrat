@@ -18,6 +18,7 @@ Feature: fix-edge-owner-scope (bug fix)
     Given user "u-a" is signed in to /trader
     When "u-a" calls trader BFF LedgerService.QueryEvents with event_type "order.filled" and no stream_key
     Then the response contains no event belonging to user "u-b"
+    And the response contains no event whose user_id is NULL
 
   @AC-3 @FR-1 @FR-5 @regression
   Scenario: A trader still reads their own account and copilot streams
@@ -29,18 +30,19 @@ Feature: fix-edge-owner-scope (bug fix)
 
   @AC-4 @FR-3 @regression
   Scenario: A non-admin MCP caller cannot read another user's per-user config overrides
-    Given user "u-b" has a per-user override "analysis.backtest.max_duration_seconds" = 900 in the agent's environment
+    Given user "u-b" has a per-user config row "analysis.backtest.max_duration_seconds" = 900 in the agent's environment scope
     And non-admin user "u-a" is the verified MCP caller
     When "u-a" calls get_config with namespace "analysis" and user_id "u-b"
-    Then the tool fails with a permission error
+    Then the tool fails with PERMISSION_DENIED
     And the value 900 is not returned
 
   @AC-5 @FR-4 @regression
   Scenario: A non-admin MCP caller cannot list another user's overridden config keys
-    Given user "u-b" has a per-user override "analysis.backtest.max_duration_seconds" = 900
+    Given user "u-b" has a per-user config row "analysis.backtest.max_duration_seconds" = 900 in the agent's environment scope
     And non-admin user "u-a" is the verified MCP caller
     When "u-a" calls list_config_keys with namespace "analysis" and user_id "u-b"
-    Then the tool fails with a permission error
+    Then the tool fails with PERMISSION_DENIED
+    And no key overridden by "u-b" is revealed
 
   @AC-6 @FR-5 @regression
   Scenario: An MCP caller still reads their own per-user config overlay
@@ -48,3 +50,17 @@ Feature: fix-edge-owner-scope (bug fix)
     And non-admin user "u-a" is the verified MCP caller
     When "u-a" calls get_config with namespace "analysis" and user_id "u-a"
     Then the returned "analysis.backtest.max_duration_seconds" value is 450
+
+  @AC-7 @FR-2 @FR-5 @regression
+  Scenario: A trader still reads their own position lineage with no stream key
+    Given user "u-a" is signed in to /trader
+    And the ledger holds an "order.filled" event on stream "account:acct-a" for user "u-a" symbol "MSFT"
+    When "u-a" calls trader BFF LedgerService.QueryEvents with event_type "order.filled" and no stream_key
+    Then the "order.filled" event for user "u-a" symbol "MSFT" is returned
+
+  @AC-8 @FR-6 @regression
+  Scenario: An admin MCP caller can still read another user's per-user config overlay
+    Given user "u-b" has a per-user config row "analysis.backtest.max_duration_seconds" = 900 in the agent's environment scope
+    And admin user "u-admin" is the verified MCP caller
+    When "u-admin" calls get_config with namespace "analysis" and user_id "u-b"
+    Then the returned "analysis.backtest.max_duration_seconds" value is 900
