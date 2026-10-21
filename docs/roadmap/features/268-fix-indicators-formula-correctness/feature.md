@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-10-21 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-21-indicators-formula-correctness-defect.md` (debt-radar D-10, D-18, D-54) |
+| 2026-10-21 | `draft` → `spec-ready` | /sdd-review | Product spec approved (5 warnings) |
 
 ---
 
@@ -46,4 +47,4 @@ names (D-18); and `UpdateFormula`/`DeleteFormula` act on pending-hidden saga cop
 
 ## Next Action
 
-`/sdd-design fix-indicators-formula-correctness` — recommended design depth: full (≥2 services — analysis consumes ATR/VWAP — and a possible proto change for D-18); see context.md
+`/sdd-design fix-indicators-formula-correctness` — recommended design depth: full (≥2 services — analysis consumes ATR/VWAP — and a possible proto change for D-18); design must resolve OQ-1 (and OQ-2 if Option B), settle the conditional proto checkbox, and delete the losing `@option-*` scenario pair; see context.md
