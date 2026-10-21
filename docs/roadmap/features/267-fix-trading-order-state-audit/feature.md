@@ -15,6 +15,7 @@
 |---|---|---|---|
 | 2026-10-21 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-21-trading-order-state-audit-defect.md` (debt-radar D-04, D-62) |
 | 2026-10-21 | `draft` → `spec-ready` | /sdd-review | Product spec approved (6 warnings; 2 resolved in-place: AC-8/AC-9 added, FR-4 status clarified) |
+| 2026-10-21 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + design.md written |
 
 ---
 
@@ -33,6 +34,8 @@ Snapshot from `docs/runbooks/reviewer-registry.md` at /sdd-triage time (2026-10-
 
 - [Product Spec](product-spec.md) — bug description and fix scope
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
+- [Recon](recon.md) — grounded codebase dossier (/sdd-design Phase 0)
+- [Design](design.md) — approved design: chosen approach, rejected alternatives, open risks
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-trading-order-state-audit`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -46,4 +49,4 @@ reactive intent reclaims leave no `order_intent.reclaimed_unknown` audit event.
 
 ## Next Action
 
-`/sdd-design fix-trading-order-state-audit` — recommended design depth: quick (SEV-2, single service, no proto/migration/config); design must close both deferred Open Questions (C-11); see context.md
+`/sdd-spec fix-trading-order-state-audit` — generate implementation spec from the approved design
