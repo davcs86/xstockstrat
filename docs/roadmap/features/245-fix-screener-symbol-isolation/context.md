@@ -221,3 +221,41 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   > - Standing authorization: designs run in FULL mode only (no quick designs for automated fixes); the orchestrator auto-approves the design gate once rounds >= 2, no unresolved Floor (F-*) breach remains, no blocking objection remains, and every CHANGE to an existing @AC business rule is covered by an operator decision below.
   > - Full design depth (operator overrode the triage 'quick' recommendation).
 - Next: `/sdd-review fix-screener-symbol-isolation impl-spec`, then `/sdd-execute fix-screener-symbol-isolation`.
+
+## Session 2026-10-21 — sdd-review impl-spec
+
+- MODE B, advisory. Status unchanged: implementation-ready. Criteria FAIL 1, WARN 6, Floor breaches 0;
+  overlap WARN, rebase-only, no merge-order entry needed.
+- FAIL C-15 traceability: stale-checkout false positive. The reviewer read
+  `/home/user/xs-feat/245-fix-screener-symbol-isolation` at `2799e4f2`, the design commit. The amendments
+  are on `origin/feature/fix-screener-symbol-isolation` from `7e4a2335` onward:
+  - `acceptance.feature:41` `@AC-4 @FR-4`, `:49` `@AC-5 @FR-1`;
+  - AC-1 oracle, "is present" and the one-WARN-line wording at `:14-17`;
+  - `product-spec.md:116` FR-4, `:70-71` agent/ui under Affected Services.
+  The Execution Summary now pins these anchors and the branch to review against. design.md:190 Open Risk
+  and the Open Thread in this file's design entry are resolved by the sdd-spec entry above. design.md
+  itself is left as written.
+- Addressed in implementation-spec.md:
+  - W1: Step 3 instr 3 cancel test is deterministic. CXL cancels first; OK1 returns a local literal, so
+    there is no `_seed_row` call before Step 2.
+  - W2: Step 3 **Files** lists the scratch mutation targets. Instr 8 requires Step 2 committed, then reverts
+    with `git checkout -- ...` and a `git diff --quiet` clean check.
+  - W3: Step 3 instr 4 pins universe `["AAA","BAD"]` and fixtures. New instr 4a tests the all-failed ERROR
+    branch. Instr 5 pins GOOD/NODATA/BAD data, NODATA's sell at conviction 1.0 → 0.0
+    (`scoring.py:41-42`), and the BAD-first universe. A stable sort would otherwise pass without the
+    `eval_failed` key.
+  - W4: old Step 9 split into Step 9 (sibling defect reports, 4 files) and Step 10 (findings row,
+    constitution sort key, teardown last). Total Steps 10.
+  - W5: Completion obligations now give an owner and a verification check for the 250 handoff and the dev
+    smoke test.
+  - W6: Step 3 Verification has a separate "Mutation verification" block.
+  - Overlap: Step Dependencies corrects 246 (spec-ready; its recon cites `screener.py:152`, `:467`, `:479-480`)
+    and notes the 244 re-anchor for `screener.py:91-127`.
+- Open Threads (still open, for the /sdd-execute checkpoint):
+  - Mutation (a) premise (servicer deadline test stays green under `except BaseException`, CPython 3.13
+    gather `_cancel_requested`) comes from reading source, not a run. Target: /sdd-execute Step 3
+    mutation verification records the actual result.
+  - Feature 246 forward overlap on `screener.py:149-153`, `:439-507` is unconfirmed. Target: re-check at
+    246 `/sdd-design`, and re-run impl-spec Mode B if 244 or 246 moves to in-progress.
+  - Feature-250 alerting handoff and the dev smoke test are still owed. Each now has an owner and a
+    verification check. Target: completion / integration session.

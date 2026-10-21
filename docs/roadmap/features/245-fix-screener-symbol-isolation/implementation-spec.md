@@ -3,7 +3,7 @@
 **Status**: `pending`
 **Created**: 2026-10-21
 **Feature**: `docs/roadmap/features/245-fix-screener-symbol-isolation/feature.md`
-**Total Steps**: 9
+**Total Steps**: 10
 **Feature Branch**: `feature/fix-screener-symbol-isolation`
 
 ---
@@ -18,20 +18,21 @@ The work follows design.md items 1-8, in that numbering. It runs in three parts,
    C-10 runbook parity.
 3. **UI (Steps 7-8).** The `SymbolScreening` "Not evaluated" branch (item 6) and its Playwright test.
 
-Step 9 closes the docs and memory obligations (item 8).
+Steps 9-10 close the docs and memory obligations (item 8).
 
 There is no proto change: `ScreenResult.score_unavailable = 14` is reused (`packages/proto/analysis/v1/analysis.proto:529`).
 There is no migration (analysis last is `027_contract_owner_dimension`, unused), no config key and no env
 var or port. The orchestrator owns the feature-250 alerting handoff (item 5), as a completion-time write
 outside this spec's step PRs (see § Completion obligations).
 
-This session applied the product-spec and acceptance amendments that design.md § Open Risks owed before
-step planning (C-15, append-only IDs):
-- AC-1 is reworded (EXTEND, ID kept): the row "is present", the 49-run oracle is pinned, and one summary
-  log line names BAD.
-- `@AC-4 @FR-4` and `@AC-5 @FR-1` are appended.
-- product-spec gains FR-4, the FR-1 pin, `xstockstrat-agent` and `xstockstrat-ui` under Affected
-  Services, and a resolved Consumer Surface(s) paragraph.
+/sdd-spec applied the product-spec and acceptance amendments that design.md § Open Risks owed before
+step planning, in commit `7e4a2335` (C-15, append-only IDs). Review against
+`origin/feature/fix-screener-symbol-isolation`; a checkout at `2799e4f2` (design commit) predates them.
+- AC-1 reworded (EXTEND, ID kept) `acceptance.feature:5-23`: the 49-run oracle `:14`, BAD's row "is
+  present" `:15`, BAD ranks last `:16`, exactly one WARN line names BAD `:17`.
+- `@AC-4 @FR-4` `acceptance.feature:41`; `@AC-5 @FR-1` `:49`.
+- product-spec: FR-4 `product-spec.md:116`; `xstockstrat-agent` and `xstockstrat-ui` under Affected
+  Services `:70-71`; Consumer Surface(s) resolved `:73-101`; AC→FR map `:135-136`.
 
 ### Scenario Coverage (C-15)
 
@@ -74,14 +75,18 @@ step planning (C-15, append-only IDs):
 - Step 8 [test] covers Step 7 [service]. Its RED run is against the tree before Step 7.
 - Steps 4-8 do not depend on Steps 1-3 at the code level, because the agent and UI read existing proto
   field 14. They follow Step 2 so the documented row kinds match the shipped engine.
-- Step 9 runs last: it resolves the findings row only once the fix and its tests are green.
+- Step 9 files the sibling defect reports. Step 10 runs last: it resolves the findings row only once the
+  fix and its tests are green, then runs the teardown.
 - Cross-feature (shared analysis dir; recon.md § Risks "Overlap"):
-  - Feature 246 (`fix-fundsignal-neutral-score`, status `draft`) edits
-    `services/xstockstrat-analysis/app/engine/fundsignal_loop.py`, not `scoring.compute_signal_score`
-    (`app/services/scoring.py`), so it does not touch the AC-1 failure site.
+  - Feature 246 (`fix-fundsignal-neutral-score`, status `spec-ready`) plans its fix in
+    `services/xstockstrat-analysis/app/engine/fundsignal_loop.py`. Its recon still lists
+    `screener.py:467` and `:480` as items its design must fix or file, and cites the rank-last sort `:152`
+    (246 `recon.md:99`, `:281-284`). Unconfirmed until 246's design. If 246 edits `screener.py:149-153`
+    or `:439-507` first, re-read Step 2's anchors before executing it.
   - Feature 244 (`fix-python-config-zero-trap`) wraps `analysis.screener.max_duration_seconds` in an
     `int_positive` clamp. Step 1's AC-2 test stubs `get_int` to return `1`, which a positive clamp passes
-    unchanged, so the test survives either merge order.
+    unchanged, so the test survives either merge order. 244 also edits `screener.py:84-86`, `:92`; if it
+    merges first, re-read Step 2's anchors `screener.py:91-127`.
 
 ---
 
@@ -251,12 +256,14 @@ The green run is Step 3's Verification.
 
 ---
 
-### Step 3 — test: AC-1 outline, FR-2 cancel passthrough, fail-closed, sort tie, duplicate symbol, span attribute (engine)
+### Step 3 — test: AC-1 outline, FR-2 cancel passthrough, fail-closed, all-failed ERROR, sort tie, duplicate symbol, span attribute (engine)
 
 **Status**: `pending`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_screener.py` — modify
+- `services/xstockstrat-analysis/app/services/screener.py`, `services/xstockstrat-analysis/app/handlers/servicer.py`
+  — scratch mutation only (instruction 8); reverted, never staged
 
 **Reviewers**: `xstockstrat-analysis` owner — Backtest reproducibility, strategy scoring determinism, no look-ahead bias
 
@@ -342,27 +349,60 @@ The green run is Step 3's Verification.
      Assert `len(recs) == 1` and `f"BAD:{exc.__name__}" in recs[0].getMessage()`.
    - **RED before Step 2:** `screen()` raises `exc` out of `gather`, so every row fails.
 3. Add `test_cancelled_error_in_symbol_eval_propagates(monkeypatch)` (FR-2, @AC-2 engine-level).
-   - Use a 2-symbol universe.
-   - Monkeypatch `ScreenerEngine._eval_symbol` so it raises `asyncio.CancelledError` for one symbol and
-     returns `ScreenerEngine._seed_row(symbol)` for the other.
+   - Universe `["CXL", "OK1"]`, CXL first. One soft `formula_criterion("f1", "fid", COMPARATOR_GT, 0.0)`.
+   - Monkeypatch `ScreenerEngine._eval_symbol` with an async stub. For `"CXL"` it raises
+     `asyncio.CancelledError` before any `await`. For `"OK1"` it returns the local literal
+     `{"symbol": symbol}`.
+   - Never call `ScreenerEngine._seed_row` here. It does not exist before Step 2, and an `AttributeError`
+     from OK1 could reach `gather` first. The literal is never ranked: the cancel aborts `screen()` before
+     `_rank` (`screener.py:149`).
    - Assert `with pytest.raises(asyncio.CancelledError): await engine.screen(req)`.
-   - On today's tree this passes. It is the guard that the Step 2 wrapper keeps cancel transparent, and
-     its teeth are the mutation run in instruction 8.
+   - It passes on the pre-Step-2 tree, deterministically, since only CXL raises. It guards that the Step 2
+     wrapper keeps cancel transparent; its teeth are mutation (a) in instruction 8.
 4. Add `test_degraded_row_soft_only_criteria_is_not_passed(monkeypatch)`.
+   - Universe `["AAA", "BAD"]`. The healthy AAA keeps `len(failures) < len(per_symbol)`, so this hits the
+     WARN branch, not the all-failed ERROR branch (instruction 4a).
+   - `md.GetBars = AsyncMock(return_value=bars([1.0, 2.0, 3.0]))`,
+     `ind.ExecuteFormula = AsyncMock(return_value=formula_resp([0.5]))`,
+     `ind.ComputeIndicator = AsyncMock(return_value=SimpleNamespace(result=[]))` (pattern `:572-618`).
    - All criteria are soft (`hard_filter=False`): one `formula_criterion("f1", "fid", COMPARATOR_GT, 0.0)`.
-     There is no signal blend.
-   - `_technical_value` raises `RuntimeError` for `BAD`.
-   - Assert BAD's `passed is False` and `score_unavailable is True`. This guards against the default
-     `passed = True` `:457`.
+     No `signal_sources`, so there is no signal blend (`screener.py:316`).
+   - Monkeypatch `ScreenerEngine._technical_value` with an async wrapper. It raises `RuntimeError` when
+     `symbol == "BAD"` and otherwise delegates to the original.
+   - Assert BAD has `passed is False` and `score_unavailable is True`. Assert AAA has `passed is True` and
+     `score_unavailable is False`. This guards against the default `passed = True` `:457`.
+   - RED before Step 2: `screen()` raises.
+4a. Add `test_all_symbols_failed_logs_error_not_warning(caplog, monkeypatch)`. It covers the
+    `len(failures) == len(per_symbol)` branch (Step 2 instruction 6).
+   - Use instruction 4's fixtures with universe `["B1", "B2"]`. The `_technical_value` wrapper raises
+     `RuntimeError` for every symbol.
+   - Assert `len(resp.results) == 2`, and each row has `passed is False` and `score_unavailable is True`.
+   - Assert exactly one `logging.ERROR` record whose message contains
+     `"2/2 scanned symbols failed evaluation"`. Assert no `logging.WARNING` record contains
+     `"failed evaluation"`.
    - RED before Step 2: `screen()` raises.
 5. Add `test_degraded_row_sorts_after_feature144_zero_score_row(monkeypatch)`.
-   - Universe `["GOOD", "NODATA", "BAD"]` with `technical_weight=0.0`, `signal_weight=1.0` and
-     `signal_sources=["fundamentals"]`.
-   - NODATA gets a sell-only in-window signal and a fundamental criterion with its metric missing
-     (`marketdata_pb2.Fundamentals(symbol="NODATA", missing_metrics=["pe_ratio"])`, pattern
-     `test_screener.py:335-385`), so it is `score_unavailable=True` at score 0.0.
-   - BAD raises in `compute_signal_score`.
-   - Assert the order `[GOOD, NODATA, BAD]` and `resp.results[1].score == pytest.approx(0.0)`.
+   - Universe `["BAD", "NODATA", "GOOD"]`, BAD first. The sort is stable, so if BAD were listed after
+     NODATA the order would hold without the `eval_failed` key.
+   - Request: `technical_weight=0.0`, `signal_weight=1.0`, `signal_sources=["fundamentals"]`.
+   - One soft criterion: `ScreenCriterion(ref_name="cheap", kind=SCREEN_KIND_FUNDAMENTAL, metric_name="pe_ratio", op=COMPARATOR_LT, threshold=20.0)`
+     (pattern `:335-385`). There is no technical criterion, so the bars short-circuit at `screener.py:233`
+     does not apply.
+   - Bars: each symbol gets two `_timed_bar`s (`:566`), with the last bar inside the signal window. BAD's
+     last close is the sentinel `999.0`.
+   - `md.GetFundamentalsMulti` returns `Fundamentals(symbol="GOOD", pe_ratio=15.0)`,
+     `Fundamentals(symbol="NODATA", missing_metrics=["pe_ratio"])` and
+     `Fundamentals(symbol="BAD", pe_ratio=15.0)`.
+   - `ingest.QuerySignals` has a side_effect keyed on `req.symbol` (`screener.py:321`):
+     - GOOD gets an in-window `buy` at conviction 0.8 (score 0.9, as in `:572-618`);
+     - NODATA gets an in-window `sell` at conviction 1.0. `compute_signal_score` returns
+       `(-1 + 1) / 2 = 0.0` (`scoring.py:41-42`), and `combine_score` gives 0.0 (`scoring.py:57-58`);
+     - BAD gets any in-window signal.
+   - Monkeypatch `app.services.screener.scoring.compute_signal_score` as in instruction 2: it raises
+     `ZeroDivisionError` when `latest_bar.close == 999.0` and otherwise delegates.
+   - Assert the order `[GOOD, NODATA, BAD]`, `resp.results[1].score_unavailable is True` and
+     `resp.results[1].score == pytest.approx(0.0)`. BAD's default score is also 0.0, so only the
+     `eval_failed` key orders the tie.
    - RED before Step 2: it raises. The design rejected relying on a score of 0.0 for this ordering.
 6. Add `test_duplicate_symbol_healthy_copy_ranks_by_score(monkeypatch)`.
    - Universe `["AAA", "DUP", "DUP"]`. Only the first `_eval_symbol("DUP", ...)` call raises (use a
@@ -379,9 +419,13 @@ The green run is Step 3's Verification.
    - Assert the finished `server` span has `attributes["screener.degraded_count"] == 1` and one
      `exception` event.
    - RED before Step 2: it raises.
-8. **Mutations** (design.md item 7, Open Risk "FR-2/AC-2 teeth"). After green, apply each mutation in a
-   scratch edit, run the listed tests, record which go red in `context.md`, then revert. They are
-   recorded, not committed.
+8. **Mutations** (design.md item 7, Open Risk "FR-2/AC-2 teeth"). Precondition: Step 2 is committed, so
+   the revert cannot discard it.
+   - After green, apply each mutation as a scratch edit and run the listed tests.
+   - Record which tests go red in `context.md`.
+   - Revert with `git checkout -- app/services/screener.py app/handlers/servicer.py` and confirm the tree
+     is clean (§ Verification, "Mutation verification").
+   - The mutations are recorded, never staged or committed.
    - (a) The `_eval_symbol_isolated` catch becomes `except BaseException`. Run
      `test_cancelled_error_in_symbol_eval_propagates` (expect red) and Step 1's
      `test_scan_deadline_aborts_deadline_exceeded` (expected to stay green, because CPython 3.13 gather
@@ -397,10 +441,21 @@ The green run is Step 3's Verification.
 **Verification**:
 ```bash
 cd services/xstockstrat-analysis && uv run pytest tests/test_screener.py -q
-# RED (pre-Step-2 tree): AC-1 x3, soft-only, sort-tie, duplicate, span tests fail; cancel test passes
+# RED (pre-Step-2 tree): AC-1 x3, soft-only, all-failed, sort-tie, duplicate, span tests fail; cancel test passes
 # GREEN (post-Step-2): all pass, incl. :129 :153 :183 :215 :335 :468 :572 :625 :661
 uv run pytest --cov=app --cov-fail-under=40 && uv run ruff check . && uv run ruff format --check .
 grep -n "def _isolation_fixture\|from .conftest\|conftest" tests/test_screener.py   # C-13: one inline definition
+```
+Mutation verification (instruction 8). Run it after Step 2 is committed, once per mutation, and record the
+outcome in `context.md`:
+```bash
+cd services/xstockstrat-analysis
+# (a) _eval_symbol_isolated catches BaseException:
+uv run pytest tests/test_screener.py tests/test_analysis_servicer.py -q -k "cancelled_error_in_symbol_eval or scan_deadline_aborts"
+# (b) servicer ScreenSymbols swallows CancelledError:
+uv run pytest tests/test_analysis_servicer.py -q -k scan_deadline_aborts
+git checkout -- app/services/screener.py app/handlers/servicer.py
+git diff --quiet HEAD -- app/services/screener.py app/handlers/servicer.py && echo "mutations reverted"   # must print before staging
 ```
 
 ---
@@ -651,13 +706,11 @@ pnpm run lint
 
 ---
 
-### Step 9 — docs: resolve the findings row, constitution teardown, sibling defect reports
+### Step 9 — docs: sibling defect reports (readiness, opportunities gathers)
 
 **Status**: `pending`
-**Service**: `xstockstrat-analysis` docs, `docs/reports/`
+**Service**: `docs/reports/`
 **Files**:
-- `services/xstockstrat-analysis/docs/context-constitution-findings.md` — modify
-- `services/xstockstrat-analysis/docs/context-constitution.md` — modify
 - `docs/reports/2026-10-21-analysis-readiness-gather-no-per-symbol-isolation-defect.md` — create
 - `docs/reports/2026-10-21-analysis-readiness-gather-no-per-symbol-isolation-defect.status` — create
 - `docs/reports/2026-10-21-analysis-opportunities-row-gather-no-per-symbol-isolation-defect.md` — create
@@ -666,11 +719,6 @@ pnpm run lint
 **Reviewers**: none
 
 **Codebase Evidence**:
-- Latent-bugs row "**`ScreenerEngine.screen()` has no per-symbol error isolation**" is at
-  `services/xstockstrat-analysis/docs/context-constitution-findings.md:20`. Resolved-row precedent:
-  `~~...~~ **RESOLVED (feature 174)**` at `:19`.
-- `services/xstockstrat-analysis/docs/context-constitution.md:42` (feature 144) states the sort key
-  `results.sort(key=lambda r: (r.score_unavailable, -r.score))`. That becomes stale after Step 2.
 - Sibling un-isolated gathers in `services/xstockstrat-analysis/app/handlers/servicer.py`:
   - EvaluateReadiness `results = await asyncio.gather(*[_readiness_for(s) for s in request.symbols])` `:3983`;
   - opportunities `rows = [r for r in await asyncio.gather(*[_row_for(c) for c in selected]) if r is not None]`
@@ -681,6 +729,44 @@ pnpm run lint
   (headers `**Recorded**`/`**Severity**`/`**Impact type**`/`**Environment**`/...). Its `.status`
   sidecar holds `triaged` + `ref:`. The sidecar format is in
   `.claude/skills/sdd-qa/reference/defect-filing.md` (docs/CLAUDE.md, `reports/` row).
+
+**TDD**: `N/A (docs)`
+
+**Covers**: —
+
+**Instructions** (design.md item 8):
+1. Write the two defect reports with `/sdd-qa defect`, which classifies severity. Each `.status` sidecar
+   is `open`.
+   - The readiness report cites `servicer.py:3983`.
+   - The opportunities report cites `:5776` and `:5693`, and records feature 185's deliberate
+     `FormulaExecutionError` propagation (`:5694-5698`). It also records the divergence that this feature
+     isolates `Exception` for the screener only (design.md item 8).
+
+**Verification**:
+```bash
+ls docs/reports/2026-10-21-analysis-*-gather-no-per-symbol-isolation-defect.{md,status}
+grep -n "servicer.py:3983\|servicer.py:5776" docs/reports/2026-10-21-analysis-*-defect.md
+grep -H "" docs/reports/2026-10-21-analysis-*-gather-no-per-symbol-isolation-defect.status   # expect open
+```
+
+---
+
+### Step 10 — docs: resolve the findings row, constitution sort key, teardown
+
+**Status**: `pending`
+**Service**: `xstockstrat-analysis` docs
+**Files**:
+- `services/xstockstrat-analysis/docs/context-constitution-findings.md` — modify
+- `services/xstockstrat-analysis/docs/context-constitution.md` — modify
+
+**Reviewers**: none
+
+**Codebase Evidence**:
+- Latent-bugs row "**`ScreenerEngine.screen()` has no per-symbol error isolation**" is at
+  `services/xstockstrat-analysis/docs/context-constitution-findings.md:20`. Resolved-row precedent:
+  `~~...~~ **RESOLVED (feature 174)**` at `:19`.
+- `services/xstockstrat-analysis/docs/context-constitution.md:42` (feature 144) states the sort key
+  `results.sort(key=lambda r: (r.score_unavailable, -r.score))`. That becomes stale after Step 2.
 - Teardown rule: root `CLAUDE.md` § Teardown. `.agents/context-forge.json` → `constitutionPath`
   `docs/context-constitution.md`.
 
@@ -696,13 +782,7 @@ pnpm run lint
 2. `context-constitution.md:42`: update the stated sort key to
    `(score_unavailable, eval_failed, -score)` and add one clause: an evaluation-fault row sorts after a
    feature-144 row (feature 245). Add nothing else.
-3. Write the two defect reports with `/sdd-qa defect`, which classifies severity. Each `.status` sidecar
-   is `open`.
-   - The readiness report cites `servicer.py:3983`.
-   - The opportunities report cites `:5776` and `:5693`, and records feature 185's deliberate
-     `FormulaExecutionError` propagation (`:5694-5698`). It also records the divergence that this feature
-     isolates `Exception` for the screener only (design.md item 8).
-4. Run `/context-constitution refresh` scoped to the files touched by Steps 2-9, and fix the grounded
+3. Run `/context-constitution refresh` scoped to the files touched by Steps 2-10, and fix the grounded
    drift it reports. If the plugin is unavailable, re-read each touched context file against the code and
    record in the PR body both that the plugin was unavailable and the reconciliation done (root
    `CLAUDE.md` § Teardown; ledger `fails.md:670`).
@@ -711,8 +791,6 @@ pnpm run lint
 ```bash
 grep -n "RESOLVED (feature 245)" services/xstockstrat-analysis/docs/context-constitution-findings.md
 grep -n "eval_failed" services/xstockstrat-analysis/docs/context-constitution.md
-ls docs/reports/2026-10-21-analysis-*-gather-no-per-symbol-isolation-defect.{md,status}
-grep -n "servicer.py:3983\|servicer.py:5776" docs/reports/2026-10-21-analysis-*-defect.md
 ```
 
 ---
@@ -725,10 +803,19 @@ grep -n "servicer.py:3983\|servicer.py:5776" docs/reports/2026-10-21-analysis-*-
   - Content: (1) if logs are exported, a log rule on the ERROR line "scanned symbols failed evaluation";
     (2) if the trace or span-metrics path is used, a TraceQL query or TraceQL-metrics rate on
     `{ span.screener.degraded_count > 0 }`.
+  - Owner: orchestrator, when 245 reaches `code-completed`. Verify, and record the result in 245's
+    `context.md`:
+    `git show origin/feature/fix-otel-metrics-logs-gap:docs/roadmap/features/250-fix-otel-metrics-logs-gap/context.md | grep -n "screener.degraded_count"`
+    (expect a hit).
 - **C-16 promotion** at the integration PR: AC-1..AC-3 go to
   `services/xstockstrat-analysis/acceptance/`, AC-4 to the `xstockstrat-ui` suite and AC-5 to the
   `xstockstrat-agent` suite.
-- **Dev smoke test** of `ScreenSymbols` after deploy (product-spec § Acceptance Criteria).
+- **Dev smoke test** of `ScreenSymbols` after the main-dev deploy (product-spec § Acceptance Criteria,
+  `product-spec.md:139-140`).
+  - Owner: the `/sdd-execute` integration session.
+  - Verify: call the agent `screen_symbols` tool on dev over a small universe (e.g. `["AAPL", "MSFT"]`).
+    Expect OK with one row per symbol, each carrying a boolean `score_unavailable`. Record the result in
+    `context.md`.
 
 ## Deviation Log
 
