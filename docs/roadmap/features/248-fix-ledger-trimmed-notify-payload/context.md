@@ -274,3 +274,46 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - Standing authorization: designs run in FULL mode only (no quick designs for automated fixes); the orchestrator auto-approves the design gate once rounds >= 2, no unresolved Floor (F-*) breach remains, no blocking objection remains, and every CHANGE to an existing @AC business rule is covered by an operator decision below.
   - Full design depth.
 - **Next:** `/sdd-review fix-ledger-trimmed-notify-payload impl-spec`.
+
+## Session 2026-10-21 — sdd-review impl-spec (advisory)
+
+- Result: criteria FAIL (1 fail, 12 warnings, 0 floor breaches); overlap WARN (file-level only, no FAIL). Advisory:
+  status stays `implementation-ready`. The orchestrator directed fixes into implementation-spec.md; each claim was
+  re-verified against the branch tip (`ac3e3983`) before editing.
+- Addressed (implementation-spec.md):
+  - [x] C-15 AC-9 untraced (FAIL): cleared on re-check. `@AC-9 @FR-2 @FR-4` is at `acceptance.feature:73-84` (the
+    reviewer's checkout predated /sdd-spec). No edit.
+  - [x] design.md not verifiable: cleared on re-check. design.md is on the branch (384 lines). No edit.
+  - [x] Migration order (C-07): golang-migrate skips a lower version (`scripts/db-migrate.sh:96`). Step 1 now adds
+    a second merge-order row, 248 waits for 243 (config `031` vs `032`), precedent `merge-order.md:74`. § Step
+    Dependencies states it.
+  - [x] Step 6 `row()` has no `payload` key (`eventNotifier.test.ts:57-66`). A.1 now gives it a default
+    `payload: {}`, so existing cases stay on the fast path.
+  - [x] Execution Summary renumbered against the 11 real steps.
+  - [x] Step 9 coverage: verification now runs `test:coverage` and checks `All files` `>= 40`; `test:db` is
+    stated as outside the c8 gate.
+  - [x] C-13: the row, 8000-char payload and stub get their second consumer in Step 6. Step 6 section 0 creates
+    `src/__tests__/fixtures/ledgerEvents.ts`, `streamCall.ts` (moved `makeStreamCall`) and `INVENTORY.md`; Steps 4,
+    8 and 9 reuse them; Step 11 updates `docs/patterns/test-data-inventory.md:73-74,:83`.
+  - [x] Step 10 `GOWORK=off` was a bare assignment: now `export GOWORK=off`, with a note that `COVERPKGS` excludes
+    `/service` (`ci.yml:256`), so the total is a smoke check.
+  - [x] Replay-window `onGap` writes to a destroyed call (`ledgerServiceImpl.ts:235-243`, guard only at `:251`):
+    Step 5 item 8 adds `if (cleaned) return;` after the replay `await`; Step 6 C.6 tests it; Step 7 notes the
+    1-line shift.
+  - [x] Step 6 RED method: now explicit that subjects are `any`-bound dynamic imports, so RED is a runtime assertion
+    failure, not TS2345 under 252's `tsc && node --test`.
+  - [x] Product-spec drift: partly stale. Fix Scope already names the key and `032` (`product-spec.md:61-63`).
+    Step 2 evidence now records that the "No DB migration" bullet (`:60`) concerns the ledger trigger.
+  - [x] Overlap: `config-governance.md` adjacent-region conflict with 243 (its sentinel row, 243 impl-spec `:359`)
+    noted in Step 11 evidence; insert point is located by content.
+- Still open (carried into execution; /sdd-execute must announce at each checkpoint):
+  - [ ] C-18: the resolve bound uses two mechanisms (startup `statement_timeout` via `makeListenerClient` plus
+    SET-on-change via a module `WeakMap`). Kept per design 2.f (B live-ness); collapsing to one is a design
+    change, so the operator decides.
+  - [ ] Notifier queue has no depth cap. Sustained slow large events stall all fan-out up to 2B per stub
+    (head-of-line, accepted by design; `queueDepth` is logged). No cap is specified.
+  - [ ] Step 9 RED mutates `src/services/eventNotifier.ts`, outside Step 9's Files. Temporary, unstaged, restored
+    (F-08). The executor must log it here when it happens (instruction added to Step 9 item 4).
+  - [ ] Step 1 writes two merge-order rows (252, 243). Confirm with the user before writing (context.md:61-63).
+  - [ ] Step 10 greps assume `portfolio_service.go:185-233` is stable; 240 and 251 edit that file. Re-grep by
+    content at execute time.

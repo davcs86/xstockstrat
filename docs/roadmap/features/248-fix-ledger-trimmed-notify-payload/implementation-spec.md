@@ -15,16 +15,16 @@ order, through a serial FIFO on the dedicated LISTEN client. The read is a PK re
 and `query_timeout` 2B. On failure `onGap` makes `streamEvents` call `call.destroy({code: 13|14})`. The query pool is
 never touched. Order of work:
 
-1. merge-order row;
-2. config seed;
-3. resolver module and its tests;
-4. the notifier, `onGap` and wiring change with tiers (i), (ii) and the (iii) `onGap` cases. This is one compile
-   unit, because the required `resolveRow`/`onGap` signatures break `tsc` across `eventNotifier.ts`,
+1. Step 1: merge-order rows (248 after 252; 248 after 243);
+2. Step 2: config seed;
+3. Steps 3-4: resolver module and its tests;
+4. Steps 5-6: the notifier, `onGap` and wiring change, then tiers (i), (ii) and the (iii) `onGap` cases. Step 5 is
+   one compile unit, because the required `resolveRow`/`onGap` signatures break `tsc` across `eventNotifier.ts`,
    `ledgerServiceImpl.ts` and `index.ts` at once;
-5. the `Number()` sequence normalisation and its (iii) tests;
-6. the real-TimescaleDB tier (iv) and CI job;
-7. consumer verification;
-8. docs teardown.
+5. Steps 7-8: the `Number()` sequence normalisation and its (iii) tests;
+6. Step 9: the real-TimescaleDB tier (iv) and CI job;
+7. Step 10: consumer verification;
+8. Step 11: docs teardown.
 
 **Consumer surface (C-14):** none. The product spec marks this internal/platform-only
 (`product-spec.md` § Consumer Surface(s)); `/trader` and `/insights` values become correct through unchanged
@@ -62,7 +62,11 @@ surfaces. No `xstockstrat-ui` or `xstockstrat-agent` step is needed. This is a r
   config migration above `030`. Step 2 therefore takes `032`.
   - At execute time, re-run `ls services/xstockstrat-config/migrations/ | tail -4` on the merged-up branch.
   - If 243 was dropped (no `031` will ever land), renumber to `031` and record it in the Deviation Log (DBA: no gaps).
-- Step 1 (merge-order row) runs first so the hard ordering is on record before any code step.
+  - Merge order: 248 merges after 243. golang-migrate applies only versions above the recorded one
+    (`scripts/db-migrate.sh:96`, `migrate … up`), so an environment at `032` would silently skip 243's `031`.
+    `migration-rerun` replays from 0 and does not catch this. Precedent: `merge-order.md:74` (217/223). Step 1
+    records the row.
+- Step 1 (merge-order rows) runs first so the hard ordering is on record before any code step.
 - Step 4 [test] covers Step 3 [service].
 - Step 5 [service] requires Step 3. `index.ts` imports the resolver factories.
 - Step 6 [test] covers Step 5 [service]. Its RED is captured on the post-Step-4 tree, before Step 5's edits.
@@ -83,7 +87,7 @@ surfaces. No `xstockstrat-ui` or `xstockstrat-agent` step is needed. This is a r
 
 ---
 
-### Step 1 — docs: Record the hard merge-order dependency on 252
+### Step 1 — docs: Record the hard merge-order dependencies on 252 and 243
 
 **Status**: `pending`
 **Service**: `docs/roadmap/features/`
@@ -99,19 +103,23 @@ surfaces. No `xstockstrat-ui` or `xstockstrat-agent` step is needed. This is a r
   item 6). 248's dependency is harder than that: tier (iv) runs on 252's `tsc && node --test` runner (design.md
   § Chosen Approach 6), and P-06 RED needs non-vacuous suites.
 - `grep -n "fix-ledger-trimmed-notify-payload" docs/roadmap/features/merge-order.md` → no hit at `1fb029f7`.
+- 243 `fix-sandbox-seed-keys` claims config `031` (`implementation-ready` on `origin/feature/fix-sandbox-seed-keys`;
+  its branch tip still ends at `030`). Migration-order precedent row: `merge-order.md:74` (217/223).
 
 **TDD**: `N/A (docs)`
 
 **Covers**: —
 
 **Instructions**:
-1. Append one row after the last row of `## Blocking Dependencies`, found by content rather than line:
-   `| \`fix-ledger-trimmed-notify-payload\` | \`fix-identity-ledger-test-suites\` | 248's tier (i)-(iii) RED-before-green and tier (iv) \`test:db\` run on 252's compile-then-test runner and de-guarded ledger suites (248 design.md § Chosen Approach 6; P-06) | No |`
+1. Append two rows after the last row of `## Blocking Dependencies`, found by content rather than line:
+   - `| \`fix-ledger-trimmed-notify-payload\` (248) | \`fix-identity-ledger-test-suites\` (252) | 248's tier (i)-(iii) RED-before-green and tier (iv) \`test:db\` run on 252's compile-then-test runner and de-guarded ledger suites (248 design.md § Chosen Approach 6; P-06) | No |`
+   - `| \`fix-ledger-trimmed-notify-payload\` (248) | \`fix-sandbox-seed-keys\` (243) | **Config migration number ordering.** 243 adds config \`031_heal_indicators_sandbox_keys_full_dotted\`; 248 adds \`032_ledger_stream_resolve_timeout\`. golang-migrate applies by version, so 032 landing first leaves 031 permanently skipped on environments already at 032. Merge 243 first (merge order only). If 243 is dropped, 248 renumbers to \`031\` and this row resolves | No |`
 2. Do not edit 252's rebase-only note.
 
 **Verification**:
 ```bash
-grep -n '^| `fix-ledger-trimmed-notify-payload` | `fix-identity-ledger-test-suites`' docs/roadmap/features/merge-order.md   # 1 hit
+grep -n '^| `fix-ledger-trimmed-notify-payload` (248) | `fix-identity-ledger-test-suites` (252)' docs/roadmap/features/merge-order.md   # 1 hit
+grep -n '^| `fix-ledger-trimmed-notify-payload` (248) | `fix-sandbox-seed-keys` (243)' docs/roadmap/features/merge-order.md   # 1 hit
 git status --short   # only merge-order.md (+ feature docs)
 ```
 
@@ -144,6 +152,8 @@ git status --short   # only merge-order.md (+ feature docs)
   - fails.md:344-346 and `022:11-13`: a `'string'` row makes `getInt` return the default.
 - `migration-rerun` replays every up-file, so the up-file must be idempotent (`.github/workflows/ci.yml:631-632`).
   `ON CONFLICT DO NOTHING` satisfies that.
+- Product-spec agreement: Fix Scope names this key and migration `032` (`product-spec.md:61-63`, amended by
+  /sdd-spec). Its "No DB migration" bullet (`:60`) is about the ledger trigger (`001`/`004`), not this config seed.
 
 **TDD**: `N/A (migration)`
 
@@ -270,8 +280,9 @@ grep -n "this.pool\|Pool" src/services/eventRowResolver.ts || echo "OK: no pool"
   with no try/catch.
 - Precedent for a recording fake `query`: `makeIdempotentPool`'s SQL-routed `query`
   (`src/__tests__/ledgerServiceImpl.test.ts:56-85`).
-- C-13: the stub literal (`event_id`, `recorded_at` string) has one consumer (this file) and stays inline. No
-  `src/__tests__/fixtures/` home exists or is created.
+- C-13: at this step the stub literal (`event_id`, `recorded_at` string) has one consumer (this file) and stays
+  inline. No `src/__tests__/fixtures/` home exists yet. Step 6 adds the second consumer, creates the home and
+  migrates this file's stub to it.
 
 **TDD**: `red-green required`
 
@@ -314,7 +325,7 @@ grep -E 'eventRowResolver' "$OUT"                                           # ro
 grep -E 'All files' "$OUT"                                                  # % Lines >= 40
 node --test --test-reporter=tap dist/__tests__/eventRowResolver.test.js | grep -E '^# (pass|fail) '   # pass > 0, fail 0
 grep -n "catch\|if (!" src/__tests__/eventRowResolver.test.ts || echo "OK: unguarded"
-grep -rn "__tests__/fixtures" src/__tests__ || echo "C-13: single-consumer inline stub; no fixture home"
+ls src/__tests__/fixtures 2>/dev/null || echo "C-13: single-consumer inline stub; home created in Step 6"
 ```
 
 ---
@@ -402,6 +413,10 @@ Capture Step 6's RED on the post-Step-4 tree before any edit here.
    before `subscribers.clear()` (`:59`): `this.gen++; this.queue = [];`.
 8. **`ledgerServiceImpl.ts#streamEvents`.** Add to the subscribe literal (`:202-220`):
    `onGap: ({ notFound, message }) => { cleanup(); try { call.destroy({ code: notFound ? 13 : 14, message }); } catch { /* already closing */ } }`.
+   - `onGap` can fire while the replay `await this.pool.query(…)` (`:235-242`) is pending. Today the replay loop
+     (`:243`) then writes to the destroyed call; only the post-loop `if (cleaned) return;` (`:251`) exists. Insert
+     `if (cleaned) return;` immediately after the `await` resolves and before `for (const row of result.rows)`.
+     This adds no `await` (LEDGER-2 holds) and leaves the `:251` guard in place.
    - Change nothing else in this file in this step. `Number()` is Step 7.
 9. **`index.ts:51`.** Replace with:
    `new EventNotifier(makeListenerClient(dbUrl, sslOption, configWatcher), { resolveRow: makeResolveRow(configWatcher) })`.
@@ -415,6 +430,7 @@ pnpm build && pnpm run lint                                    # both exit 0
 grep -n "!this.draining && this.queue.length === 0 && row.payload !== undefined" src/services/eventNotifier.ts   # 1 hit
 grep -n "onGap" src/services/eventNotifier.ts src/grpc/ledgerServiceImpl.ts
 grep -n "code: notFound ? 13 : 14" src/grpc/ledgerServiceImpl.ts   # 1 hit
+awk '/async streamEvents\(/{f=1} /async getEvent\(/{f=0} f' src/grpc/ledgerServiceImpl.ts | grep -c "if (cleaned) return;"   # 3 (cleanup :225, new post-await, :251; 2 before this step)
 grep -n "makeListenerClient(dbUrl, sslOption, configWatcher)" src/index.ts
 grep -n "max: parseInt(process.env.DB_POOL_MAX ?? '1', 10)" src/index.ts   # unchanged (F-06)
 grep -n "pool" src/services/eventNotifier.ts || echo "OK: notifier holds no pool"
@@ -430,6 +446,10 @@ grep -n "pool" src/services/eventNotifier.ts || echo "OK: notifier holds no pool
 - `services/xstockstrat-ledger/src/__tests__/eventNotifier.test.ts` — modify
 - `services/xstockstrat-ledger/src/__tests__/streamResolveWired.test.ts` — create
 - `services/xstockstrat-ledger/src/__tests__/ledgerServiceImpl.test.ts` — modify
+- `services/xstockstrat-ledger/src/__tests__/eventRowResolver.test.ts` — modify (stub → fixture import only)
+- `services/xstockstrat-ledger/src/__tests__/fixtures/ledgerEvents.ts` — create
+- `services/xstockstrat-ledger/src/__tests__/fixtures/streamCall.ts` — create
+- `services/xstockstrat-ledger/src/__tests__/fixtures/INVENTORY.md` — create
 
 **Reviewers**: `xstockstrat-ledger` owner — Append-only invariant (no deletes or updates), event ordering, hypertable partition safety
 
@@ -437,7 +457,8 @@ grep -n "pool" src/services/eventNotifier.ts || echo "OK: notifier holds no pool
 - `eventNotifier.test.ts` (line numbers at `1fb029f7`; 252 shifts them):
   - `FakeClient` `:27-55` (`query` records `LISTEN` only `:42-45`, `end()` sets `ended` `:46-48`, `emit`/`notify`
     `:49-54`);
-  - `row()` `:57-66`;
+  - `row()` `:57-66`, which emits **no** `payload` key. Under Step 5's `row.payload !== undefined` stub test every
+    existing case would take the resolve path, so `row()` needs a default `payload`;
   - `tick` `:68`;
   - 7 constructions `new EventNotifier(() => client)` at `:74`, `:85`, `:98`, `:114`, `:128`, `:141`, and the
     positional `'ledger_stream_all', 1` form at `:154-162`.
@@ -451,9 +472,20 @@ grep -n "pool" src/services/eventNotifier.ts || echo "OK: notifier holds no pool
 - `LedgerServiceImpl(pool, config, notifier?)` (`src/grpc/ledgerServiceImpl.ts:20-25`).
 - Replay is `this.pool.query(SELECT … ORDER BY sequence ASC)` (`:235-242`). The buffer push while `!live` is at
   `:205-208`, and the flush at `:255-259`.
-- C-13: the trimmed-stub and full-row literals have one consumer per file, and stay inline (scenario one-offs).
-  `makeStreamCall` is a call double, not domain data. It stays in `ledgerServiceImpl.test.ts`, and
-  `streamResolveWired.test.ts` declares its own recording call. jscpd ignores `**/__tests__/**` (`.jscpd.json`).
+- C-13 (`docs/sdd/constitution.md` C-13; `docs/patterns/test-data-inventory.md:69-83`): the snake_case event row
+  (`makeRow`, `ledgerServiceImpl.test.ts:88-103`), the 8000-char payload and the trimmed stub get a second
+  consumer in this step (`eventRowResolver.test.ts`, `streamResolveWired.test.ts`, `ledgerServiceImpl.test.ts`,
+  later Steps 8-9). The second consumer forces centralization into the Node home `src/__tests__/fixtures/` plus a
+  catalog, in this step. The recording stream call (`makeStreamCall` `:545-565`) would otherwise be declared in
+  three files (Steps 6B, 6C, 9); it moves to the same home. jscpd ignores `**/__tests__/**` (`.jscpd.json`), so
+  this is enforced by review, not the hook.
+- Trigger stub keys (`migrations/001_ledger_events_hypertable.up.sql:73-79`): `event_id`, `event_type`,
+  `stream_key`, `sequence`, `recorded_at`.
+- `tsconfig.json:22` excludes only `src/**/*.test.ts`, so `fixtures/*.ts` compiles into `dist/` in the production
+  build today and after 252. Fixture modules import nothing but `node:*` and type-only `src` imports.
+- RED type safety: the test files bind subjects as `let EventNotifier: any` / `let LedgerServiceImpl: any` from a
+  dynamic `import()` (`eventNotifier.test.ts:14-19`, `ledgerServiceImpl.test.ts:18-28`; 252 keeps the `any`
+  bindings). `tsc` therefore accepts the new `{ resolveRow }` constructor shape on the post-Step-4 tree.
 - fails.md:2839-2842: any design-named assertion not written goes to the Deviation Log, not into `**Covers**`.
 
 **TDD**: `red-green required`
@@ -467,13 +499,42 @@ post-Step-4 tree before Step 5. The pre-Step-5 `EventNotifier` treats the 2nd ar
 unresolved and has no `onGap`. The resolved-payload, `onGap` and destroy assertions are the named RED. Then run GREEN
 after Step 5.
 
+RED must be a runtime assertion failure, not a compile failure (tdd-gate "right reason"). The 252 runner is
+`tsc && node --test`, so every subject in the new or edited files is bound as `any` from a dynamic `import()`, as the
+existing files do (see Codebase Evidence). A `tsc` error on the post-Step-4 tree is a wrong-reason RED: fix the
+binding, never the assertion.
+
+**0. Fixture home (C-13; new).**
+
+1. `src/__tests__/fixtures/ledgerEvents.ts`:
+   - `makeEventRow(overrides = {})`: the body of `makeRow` (`ledgerServiceImpl.test.ts:88-103`), moved verbatim;
+   - `LARGE_PAYLOAD`: a JSON object whose serialized length is 8000 chars;
+   - `TRIMMED_RECORDED_AT = '2026-10-21T12:00:00.123456+00:00'`;
+   - `toTrimmedStub(row)`: picks exactly the trigger stub keys (`001_…up.sql:73-79`) and sets `recorded_at` to
+     `TRIMMED_RECORDED_AT` unless overridden. No `payload` key.
+2. `src/__tests__/fixtures/streamCall.ts`: `makeRecordingCall(req, opts?: { userId?: string; writeReturns?: boolean })`,
+   the `makeStreamCall` double (`ledgerServiceImpl.test.ts:545-565`) moved here and extended:
+   - `on(event, cb)` records handlers;
+   - `write()` records and returns `opts.writeReturns ?? true`;
+   - `end()` / `destroy(err)` record as today.
+3. `src/__tests__/fixtures/INVENTORY.md`: one catalog row per export (symbol → module → shape source → consumers).
+   Shape sources: `migrations/001_ledger_events_hypertable.up.sql` (row, stub) and `ledgerServiceImpl.ts#streamEvents`
+   (call).
+4. In `ledgerServiceImpl.test.ts`, replace the local `makeRow` and `makeStreamCall` with imports from `./fixtures/…`
+   (keep the local names by aliasing, so the existing `exportEvents` and `rowToEvent` cases change no line other
+   than the import). In `eventRowResolver.test.ts`, replace the inline stub with `toTrimmedStub(makeEventRow())`;
+   no assertion change.
+
 **A. `eventNotifier.test.ts` (tier i).**
 
 1. Migrate all 7 constructions to `new EventNotifier(() => client, { resolveRow })`. The `:154-162` form becomes
-   `{ resolveRow, reconnectDelayMs: 1 }` (design 1.a). No assertion change.
+   `{ resolveRow, reconnectDelayMs: 1 }` (design 1.a).
+   - Give `row()` (`:57-66`) a default `payload: {}` before `...overrides`, so existing cases stay on the fast path.
+     A stub is `row({ payload: undefined, … })`: `JSON.stringify` drops the key. No existing assertion changes.
 2. Add a controllable fake `resolveRow` that records calls and returns a deferred: resolve with a row, resolve
    `null`, reject `Error('boom')`, reject `Error('Query read timeout')`, or hang. Stub notifications are
-   `row({ payload: undefined, recorded_at: '2026-10-21T12:00:00.123456+00:00' })` with no `payload` key.
+   `row({ payload: undefined, recorded_at: TRIMMED_RECORDED_AT })` (fixture import), with no `payload` key; resolved
+   rows come from `makeEventRow({ payload: LARGE_PAYLOAD, … })`.
 3. New cases:
    1. **AC-2**: full(1), stub(2), full(3) back-to-back while the resolve for 2 is held open. Nothing for 2 or 3 is
       delivered until release. Then the subscriber gets 1, then 2 (resolved, with payload) and 3, with no duplicate.
@@ -504,9 +565,9 @@ after Step 5.
 - `SET statement_timeout` → `{rows: []}`;
 - the PK SELECT → the full row.
 
-Use a borrow-counting fake pool (`query` count + `connect` count) for replay and `appendEvent`, plus a local recording
-call (`write()` returns a configurable boolean, `on(event, cb)` records handlers, and `destroy` / `end` record).
-Sequences are JS numbers here; string sequences are Step 8.
+Use a borrow-counting fake pool (`query` count + `connect` count) for replay and `appendEvent`, plus
+`makeRecordingCall` from `./fixtures/streamCall`. Rows come from `makeEventRow` / `LARGE_PAYLOAD` / `toTrimmedStub`.
+Subjects are `any`-bound dynamic imports. Sequences are JS numbers here; string sequences are Step 8.
 
 1. **AC-1**: a live unfiltered stream gets the resolved message.
    - `payload` is the 8000-char object.
@@ -528,8 +589,8 @@ Sequences are JS numbers here; string sequences are Step 8.
 
 **C. `ledgerServiceImpl.test.ts` (tier iii, `onGap` part).**
 
-1. Extend `makeStreamCall` (`:545-565`) so `on(event, cb)` records handlers. Keep `write` / `end` / `destroy`
-   behaviour, so the existing `exportEvents` cases are unaffected.
+1. Use `makeRecordingCall` (section 0.2). Its `write` / `end` / `destroy` behaviour matches the old
+   `makeStreamCall`, so the existing `exportEvents` cases are unaffected.
 2. Use a minimal fake notifier `{ subscribe(sub) { captured = sub; return () => { unsubscribed = true; }; } }` with
    `makePool([])`.
 3. **AC-7**: `captured.onGap({ notFound: true, message: 'm' })` → `destroyed` deep-equals `{ code: 13, message: 'm' }`,
@@ -537,6 +598,10 @@ Sequences are JS numbers here; string sequences are Step 8.
 4. **AC-6**: `notFound: false` → `{ code: 14, … }`, never `end()`.
 5. **AC-6 / AC-7 recovery**: a new `streamEvents({ fromSequence: 11 })` whose pool returns full rows 11 and 12 writes
    both, full, in order.
+6. **Replay-window `onGap`**: hold the pool's replay `query` open, call `captured.onGap({ notFound: false, message: 'm' })`,
+   then release it with rows 8-10. Expect `destroyed` `{ code: 14, message: 'm' }`, `unsubscribed === true` and
+   **zero** writes. RED: pre-Step-5 the subscription has no `onGap`. Without Step 5 item 8's guard the replay loop
+   would write 3 rows to the destroyed call.
 
 **Verification**:
 ```bash
@@ -550,7 +615,10 @@ grep -E 'All files' "$OUT"                                                  # % 
 for f in eventNotifier streamResolveWired ledgerServiceImpl; do node --test --test-reporter=tap dist/__tests__/$f.test.js | grep -E '^# (pass|fail) '; done   # pass > 0, fail 0
 grep -c "new EventNotifier(() => client)" src/__tests__/eventNotifier.test.ts   # 0 (all migrated to opts)
 grep -n "if (!\|catch {" src/__tests__/streamResolveWired.test.ts || echo "OK: unguarded"
-grep -rn "__tests__/fixtures" src/__tests__ || echo "C-13: single-consumer inline literals; no fixture home"
+grep -ln "from './fixtures/" src/__tests__/*.test.ts      # 4: eventNotifier, eventRowResolver, streamResolveWired, ledgerServiceImpl
+grep -n "^function makeRow\|^function makeStreamCall" src/__tests__/ledgerServiceImpl.test.ts || echo "C-13: moved to fixtures"
+grep -nE "from '(c8|typescript|eslint|ts-node|@types/)" src/__tests__/fixtures/*.ts || echo "OK: fixtures import runtime deps only"
+ls src/__tests__/fixtures/INVENTORY.md
 ```
 
 ---
@@ -570,6 +638,7 @@ grep -rn "__tests__/fixtures" src/__tests__ || echo "C-13: single-consumer inlin
   - `:196` `if (row.sequence > maxSeq) maxSeq = row.sequence;`;
   - `:210` `if (row.sequence > maxSeq) writeRow(row);`;
   - `:256` `if (row.sequence > maxSeq) writeRow(row);`.
+  - Lines are at `1fb029f7`. Step 5's post-await guard shifts `:251` and `:256` down by one; locate by content.
 - pg returns `BIGINT` as a string for replay and resolved rows, and `setTypeParser` has no hit in `src/`. NOTIFY JSON
   carries a number. String-vs-string `>` is lexicographic, so a replayed `"99"` followed by a resolved `"100"` drops
   100.
@@ -607,12 +676,14 @@ awk '/async streamEvents\(/{f=1} /async getEvent\(/{f=0} f' src/grpc/ledgerServi
 **Reviewers**: `xstockstrat-ledger` owner — Append-only invariant (no deletes or updates), event ordering, hypertable partition safety
 
 **Codebase Evidence**:
-- `makeStreamCall` was extended in Step 6. The fake-notifier pattern is from Step 6 C.2.
+- `makeStreamCall` moved to `fixtures/streamCall.ts#makeRecordingCall` in Step 6. The fake-notifier pattern is from
+  Step 6 C.2.
 - Encoding regression precedent: `describe('rowToEvent serialization (regression)')`
   (`ledgerServiceImpl.test.ts:725-753` at `1fb029f7`), which does `LedgerEvent.encode(event).finish()`. After 252 the
   import is the extensionless `'@xstockstrat/proto/ledger/v1/ledger'` (252 Step 5 item 2).
 - Design Open Risk: "ts-proto encoding of a string `sequence` on resolved rows … untraced — tier (iii)".
-- C-13: inline row literals, single consumer.
+- C-13: rows come from `makeEventRow` and calls from `makeRecordingCall` (`src/__tests__/fixtures/`, Step 6
+  section 0). Per-case overrides (`{ …, sequence: '100' }`) are scenario one-offs and stay inline.
 
 **TDD**: `red-green required`
 
@@ -644,7 +715,7 @@ pnpm run test:coverage 2>&1 | tee "$OUT"; echo "exit=${PIPESTATUS[0]}"   # 0
 grep -E '^(ℹ|#) (fail|cancelled|skipped|todo) ' "$OUT"                     # all 0
 grep -E 'All files' "$OUT"                                                  # % Lines >= 40
 node --test --test-reporter=tap dist/__tests__/ledgerServiceImpl.test.js | grep -E '^# (pass|fail) '   # pass > 0, fail 0
-grep -rn "__tests__/fixtures" src/__tests__ || echo "C-13: single-consumer inline literals; no fixture home"
+grep -n "^function makeRow\|^function makeStreamCall" src/__tests__/ledgerServiceImpl.test.ts || echo "C-13: fixtures reused"
 ```
 
 ---
@@ -656,6 +727,7 @@ grep -rn "__tests__/fixtures" src/__tests__ || echo "C-13: single-consumer inlin
 **Files**:
 - `services/xstockstrat-ledger/package.json` — modify
 - `services/xstockstrat-ledger/src/__tests__/db/streamResolve.db.test.ts` — create
+- `services/xstockstrat-ledger/src/__tests__/fixtures/INVENTORY.md` — modify (add the db test as a consumer)
 - `.github/workflows/ci.yml` — modify
 
 **Reviewers**: `xstockstrat-ledger` owner — Append-only invariant (no deletes or updates), event ordering, hypertable partition safety
@@ -698,8 +770,9 @@ grep -rn "__tests__/fixtures" src/__tests__ || echo "C-13: single-consumer inlin
      skips.
    - Build a `pg.Pool({ connectionString, max: 1 })`, a fake config `{ getInt: (k, d) => k === 'ledger.stream.resolve_timeout_ms' ? B : d, getBool: (_k, d) => d }`,
      and the real `EventNotifier(makeListenerClient(url, false, cfg), { resolveRow })`.
-   - Construct `new LedgerServiceImpl(pool, cfg, notifier)`, and use a local recording call. Close everything in
-     `after()`.
+   - Construct `new LedgerServiceImpl(pool, cfg, notifier)`, and use `makeRecordingCall` from
+     `../fixtures/streamCall`; payloads use `LARGE_PAYLOAD` from `../fixtures/ledgerEvents` (C-13; Step 6 section 0).
+     Add this file to both catalog rows' consumers. Close everything in `after()`.
    - Cases:
      1. **Trigger round-trip + AC-1.**
         - Open a live unfiltered stream. `impl.appendEvent` an `order.filled` with an 8000-char payload,
@@ -739,6 +812,8 @@ grep -rn "__tests__/fixtures" src/__tests__ || echo "C-13: single-consumer inlin
    - If `LEDGER_DB_TEST_URL` reaches a TimescaleDB in the executor environment, apply a fast-path mutation in
      `src/services/eventNotifier.ts`: make the stub test always false, so stubs fan out unresolved. Then run
      `pnpm run test:db`; case 1 must fail. Restore with `git checkout -- src/services/eventNotifier.ts`.
+   - That file is outside this step's **Files**. The mutation is temporary and never staged (F-08); record it, with
+     the post-restore `git diff --quiet -- src/services/eventNotifier.ts` exit 0, in `context.md`.
    - Otherwise record "tier (iv) RED not captured: CI-only DB" in the Deviation Log (fails.md:2839-2842). The
      unit-tier REDs of Steps 4, 6 and 8 stand for these ACs.
    - Never start a container from the executor.
@@ -750,8 +825,12 @@ pnpm build && pnpm run lint                                    # both exit 0
 ls dist/__tests__/db/streamResolve.db.test.js
 grep -n '"test:db": "tsc && node --test dist/__tests__/db/\*.test.js"' package.json
 env -u LEDGER_DB_TEST_URL node --test dist/__tests__/db/*.test.js; echo "exit=$?"   # non-zero; output names LEDGER_DB_TEST_URL (fails, never skips)
-pnpm run test:coverage 2>&1 | grep -c "streamResolve.db" || true                     # 0: unit/coverage glob excludes db/
-grep -nE "from '(c8|typescript|eslint|ts-node|@types/)" src/__tests__/db/streamResolve.db.test.ts || echo "OK: runtime deps only"
+OUT="${TMPDIR:-/tmp}/248-step9.txt"
+pnpm run test:coverage 2>&1 | tee "$OUT"; echo "exit=${PIPESTATUS[0]}"               # 0 (c8 --lines 40 gate, package.json:14)
+grep -E 'All files' "$OUT"                                                            # % Lines >= 40
+grep -c "streamResolve.db" "$OUT" || true                                             # 0: unit/coverage glob excludes db/
+# Coverage gate: test:db is intentionally outside c8. The >= 40 gate stays on the unit tier (test:coverage).
+grep -nE "from '(c8|typescript|eslint|ts-node|@types/)" src/__tests__/db/streamResolve.db.test.ts src/__tests__/fixtures/*.ts || echo "OK: runtime deps only"
 cd ../..
 grep -n "ledger-db-test:" .github/workflows/ci.yml                  # job id
 grep -n "      - ledger-db-test" .github/workflows/ci.yml           # in ci-gate.needs
@@ -797,8 +876,12 @@ grep -n 'needs.ledger-db-test.result' .github/workflows/ci.yml
 grep -n "time.Sleep(2 \* time.Second)" services/xstockstrat-portfolio/internal/service/portfolio_service.go
 grep -n "if err == io.EOF" services/xstockstrat-portfolio/internal/service/portfolio_service.go
 grep -n "await asyncio.sleep(2)" services/xstockstrat-analysis/app/engine/pnl_pattern_consumer.py
-cd services/xstockstrat-portfolio && GOWORK=off COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"   # >= 40%
-GOWORK=off golangci-lint run --modules-download-mode=mod
+cd services/xstockstrat-portfolio && export GOWORK=off   # CI sets it via env: (ci.yml:258-259); a bare assignment would not reach go
+COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//')
+go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"   # >= 40%
+# Smoke check only: COVERPKGS excludes /service (ci.yml:256), so the total is not coverage evidence for
+# portfolio_service.go; TestStreamEventsFrom_HandlerError_DoesNotAdvanceCursor must pass in the go test output.
+golangci-lint run --modules-download-mode=mod
 cd ../xstockstrat-analysis && uv run --no-sync pytest --cov=app --cov-fail-under=40 && ruff check . && ruff format --check .
 git status --short   # no service changes
 ```
@@ -816,6 +899,7 @@ git status --short   # no service changes
 - `services/xstockstrat-config/CLAUDE.md` — modify
 - `docs/patterns/config-governance.md` — modify
 - `docs/patterns/ci-overview.md` — modify
+- `docs/patterns/test-data-inventory.md` — modify
 
 **Reviewers**: none
 
@@ -838,6 +922,11 @@ git status --short   # no service changes
 - `docs/patterns/config-governance.md:56-61` (registration steps) and `:105-107` (append-only, newest-first log).
   The newest entry today is feature 240 (`:109`).
 - `docs/patterns/ci-overview.md:7-20` is the job table (`node-test` row `:18`).
+- `docs/patterns/test-data-inventory.md:73-74` ("config/ledger at two … no new home") and the Node row `:83`
+  ("Not materialized") go stale once Step 6 creates the ledger home.
+- Overlap: 243 `fix-sandbox-seed-keys` also edits `config-governance.md` (its `implementation-spec.md:329`, :359): one
+  row in the Author-sentinel table (`:100-103`), adjacent to this step's log insert (`:105-109`). Expect a rebase
+  conflict; whichever merges second rebases and keeps both edits.
 - Teardown rule: root `CLAUDE.md` § Teardown, and fails.md:670 (context-forge unavailable → manual reconciliation
   recorded in the PR body).
 
@@ -876,10 +965,13 @@ git status --short   # no service changes
 5. **`config-governance.md`.** Insert the newest-first entry before `:109`: `### feature 248 — fix-ledger-trimmed-notify-payload (xstockstrat-ledger / xstockstrat-config)`.
    Give it a one-line purpose and a table row (key, `int`, `2000`, clamp ≤0/non-finite → 2000, seeded staging +
    production by `032_ledger_stream_resolve_timeout`).
+   - Locate the insert point by content (newest entry), not by line: 243's sentinel row shifts the lines.
 6. **`ci-overview.md`.** Add the row
    `| \`ledger-db-test\` | Applies all migrations to TimescaleDB, runs ledger \`pnpm run test:db\` (trigger-stub resolve, replay recovery, resolve bound) | — |`
    after the `node-test` row.
-7. **Teardown audit.**
+7. **`test-data-inventory.md`.** Node row (`:83`) → "Materialized in ledger (feature 248):
+   `src/__tests__/fixtures/` + `INVENTORY.md`". Amend `:73-74` so it no longer predicts no ledger home.
+8. **Teardown audit.**
    - Run `/context-forge:context-constitution refresh`, scoped to the files above, and fix grounded drift.
    - If the plugin is unavailable, re-read each touched file against the code. Record "plugin unavailable" plus the
      manual reconciliation performed in the PR body (fails.md:670).
@@ -893,6 +985,7 @@ grep -c "\*\*three\*\*" services/xstockstrat-ledger/CLAUDE.md          # 0
 grep -n "RESOLVED (feature 248)" services/xstockstrat-ledger/docs/context-constitution-findings.md
 grep -n "New keys require PR to \`packages/proto/\`" services/xstockstrat-config/CLAUDE.md || echo "OK: drift removed"
 grep -n "ledger-db-test" docs/patterns/ci-overview.md
+grep -n "Materialized in ledger (feature 248)" docs/patterns/test-data-inventory.md
 ./scripts/check-context-map.sh                                          # exit 0
 ```
 
