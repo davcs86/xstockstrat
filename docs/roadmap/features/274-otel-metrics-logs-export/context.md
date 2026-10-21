@@ -50,3 +50,12 @@
   `xstk-error-rate-high`); 250's `trace-derived-alerting` placeholder is a possible duplicate (deferred to design).
 - Tooling drift noticed (not fixed here, out of scope): `.claude/skills/sdd-review/reference/overlap-check.md:12-13`
   greps `feature.md` for status, but status lives only in `status.md`.
+
+## Session 2026-10-21 — sdd-design (Phase 0 checkpoint)
+
+- Mode: full debate. Operator steer: "using 250 as base design" — design builds on 250's landed end state.
+- Phase 0 Recon written (`recon.md`). Pinned-SDK probe: Go otelgrpc v0.52 emits `rpc.server.duration` (ms);
+  Python instrumentation-grpc 0.63b1 and Node instrumentation-grpc 0.52.1 emit **no** RPC metric (R1).
+- Top risks carried into grilling: R1 (7/10 backends need a custom recorder), R2 (Grafana `service_name` label
+  promotion unproven), R3 (scoring-stall rule must be re-derived), R10 (250 guard has no produced-path mechanism),
+  R11 (250's `trace-derived-alerting` follow-up).
