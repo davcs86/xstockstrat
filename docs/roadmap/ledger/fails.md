@@ -3033,3 +3033,8 @@ ambiguity is logged here).
 - **Evidence**: `docs/roadmap/features/250-fix-otel-metrics-logs-gap/design.md` §4 Part 3 (existence set) and §5 (comment-only red case); context.md 2026-10-21 sdd-design entry.
 - **Rule it implies**: an existence/absence guard derives its "exists" set from declaration value lines only (e.g. `- uid:`, top-level `"uid":`), never from free text in the same file, and ships a red case proving a comment cannot satisfy existence.
 
+
+### 2026-10-21 — fix-trading-order-state-audit — assumption
+- **Mistake**: Two design rounds treated the sweeper's `order_intent.reclaimed_unknown` payload as a known-good template to copy into three new emit sites. That payload holds a `time.Time`, which `structpb.NewStruct` rejects, and `emitLedgerEvent` discards that error (`p, _ :=`), so the event already reaches the ledger with a nil payload. The r3 adversary caught it, not a test.
+- **Evidence**: `services/xstockstrat-trading/internal/service/trading.go:3662`; `internal/repository/order_intent_repo.go:31`; `docs/roadmap/features/267-fix-trading-order-state-audit/design.md` § D-62 (b).
+- **Rule it implies**: a ledger payload built for `structpb.NewStruct` uses only JSON-native values (timestamps as RFC3339 strings), and every new emit test asserts `req.Payload != nil` plus the field values, not just the event type.
