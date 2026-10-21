@@ -62,7 +62,7 @@ Feature: fix-agent-client-deadlines (bug fix)
     Then the tool returns that one AAPL position
 
   @AC-8 @regression @FR-3 @FR-4
-  Scenario: A tool with several sequential backend calls stays under the MCP request timeout when they all stall
+  Scenario: A tool with several sequential backend calls stays under the MCP request timeout when its follow-up calls stall
     Given an ingest gRPC server that answers IngestSignal with signal_id 42
     And a config gRPC server and a notify gRPC server that accept requests but never respond
     When an authenticated MCP caller invokes ingest_signal for symbol "AAPL" with conviction 0.9
@@ -78,4 +78,4 @@ Feature: fix-agent-client-deadlines (bug fix)
   Scenario: No agent backend stub call is issued without a deadline
     Given the source of services/xstockstrat-agent/app/client.py
     When every unary gRPC stub call in it is enumerated statically
-    Then each call passes a timeout argument
+    Then each call passes a timeout argument, including get_config_value once feature 247 has merged ahead of this one
