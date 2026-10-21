@@ -2967,6 +2967,16 @@ ambiguity is logged here).
 - **Rule it implies**: Before citing a checkpoint, check that the path exists. Persist design state durably
   (design.md, the context.md entry) before the status flip, and refuse the flip if those writes fail (P-05).
 
+### 2026-10-20 — fix-sandbox-seed-keys — migration
+- **Mistake**: Recon flagged the 029 bare→full-dotted heal as the pattern to reuse, but that shape is unsafe to copy whenever a full-dotted twin may already exist. Two failures follow:
+  - The plain `SET key = namespace||'.'||key` aborts on `config_values_scope_uniq`.
+  - 029's separate post-rename literal UPDATE cannot tell a healed row from a pre-existing twin, so it overwrites the value that is live today.
+- **Evidence**: `docs/roadmap/features/243-fix-sandbox-seed-keys/design.md` (Chosen Approach §1, Rejected Alternatives); `services/xstockstrat-config/migrations/029_heal_config_keys_full_dotted.up.sql:24-28,38-43`; `017_config_secrets_and_scoping.up.sql:101-102`.
+- **Rule it implies**: A key-heal migration orders its statements as follows:
+  1. Snapshot the pre-state with `CREATE TABLE IF NOT EXISTS … AS`, which is replay-safe, and keep the snapshot in a forward-only down.
+  2. DELETE the bare rows that have a twin on the full scope tuple.
+  3. Rename and set any value in one UPDATE.
+
 ### 2026-10-21 — fix-otel-metrics-logs-gap — assumption
 - **Mistake**: A design round built an asset-existence guard's "exists" set by running the name regex over the whole asset file. Comments and `delete*` lists in that same file then made a deleted UID count as existing, which silently disabled the dangling-reference check the guard was added for. Caught by the r3 adversary, not by a test.
 - **Evidence**: `docs/roadmap/features/250-fix-otel-metrics-logs-gap/design.md` §4 Part 3 (existence set) and §5 (comment-only red case); context.md 2026-10-21 sdd-design entry.
