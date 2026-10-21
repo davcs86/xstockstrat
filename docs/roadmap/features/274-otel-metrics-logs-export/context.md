@@ -90,3 +90,35 @@
     at feature 274 (no `trace-derived-alerting` story) and Part 2 is noted for retirement by 274.
     **C-16 CHANGE sign-off**: operator approves 274 retiring 250's guard Part 2 ("docs list only exported signals")
     — record mirrored into 250's context.md when amended.
+
+## Session 2026-10-21 — sdd-design (Round 2 checkpoint)
+
+- Proposer R2: P-0 (amend 250) → PR-A (runtime, all 12 + Go *Context retrofit via sloglint `context: scope` +
+  agent `mcp.tool.duration` ServerMiddleware + UI Connect-interceptor `rpc.client.duration` + `serverLog` +
+  analysis heartbeat + golden status vectors + egress audit; no docs/ or packages/otel/ edits) → G1 (7 fixed
+  queries on dev Grafana) → PR-B (registry/guard, alerts w/ noDataState, mute timing, per-panel dashboards, docs,
+  C-16 CHANGE). Node: explicit BatchSpanProcessor, lazy meter, transport attached after start, awaited+bounded
+  shutdown, createRequire. Python: SDK LoggingHandler pinned <1.43, atexit flush, ingest pins raised.
+- Orchestrator verification: mcp 2.3.0 `ServerMiddleware` exposes `ctx.method` + raw `ctx.params` (tool name)
+  before validation; request failures raise `MCPError` (`mcp/server/context.py:146-160`).
+- Adversary R2: NEEDS WORK, approvable once folded; no Floor breach (F-09 conditional: re-check 250 untouched
+  right before P-0). Strongest proposer risk refuted: py `context.abort` and grpc-js `callback({code})` set
+  `rpc.grpc.status_code` (`_aio_server.py:29-37`, `serverUtils.js:75-83`).
+  Blocking (folded): (1) py unhandled exception → attr 0 + exception event → record 2 (CancelledError 1);
+  (2) streaming RPCs (WatchConfig/StreamEvents/StreamOrderUpdates/StreamQuotes) end on every deploy → would fire
+  restored p99/error alerts; (3) Go SIGTERM flush blocked by open streams in GracefulStop → ForceFlush before
+  GracefulStop / bounded Stop fallback.
+  Non-blocking (folded): /otlp prefix tests for metrics+logs; agent tool set derived at runtime (no "45");
+  agent outcome=error for raise and isError; PR-A doc-drift window needs operator waiver + service-docs teardown;
+  P-0 wording "implement now; retire in 274 PR-B", re-run /sdd-review 250 impl-spec, merge-order 250→274 PR-B;
+  feature branch re-sync between PRs, status stays in-progress; sloglint no-mixed-args=false; shared bucket
+  boundaries; unsampled-traceparent asymmetry accepted; UI meter lazy; UI flush best-effort; Go otelslog/sdk-log
+  API verification at spec step 0; identity email PII decision before PR-A merges.
+- Operator decisions at R2 gate (binding, 2026-10-21), verbatim answers:
+  - Gate: "Run round 3" (not yet approved; PR-A doc-drift waiver + Part 2 timing still pending the R3 gate).
+  - Streams: "Exclude in alert/panel queries" — recorders keep recording streaming calls (FR-2 unchanged);
+    restored rules and p99/error panels exclude streaming methods via an `rpc_method` filter pinned by a guard test.
+  - UI metric: "BFF route histogram" — `http.server.duration` per Next.js BFF route (segment + service) and HTTP
+    status; no per-method gRPC client histogram. (Supersedes the R2 `rpc.client.duration` proposal.)
+  - Identity email: "Replace with user_id everywhere" — `identityServiceImpl.ts:151-154` logs the user id instead
+    of the email on stdout and OTLP (small identity behaviour change; PII removed at source).
