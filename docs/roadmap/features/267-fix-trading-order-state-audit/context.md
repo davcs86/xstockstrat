@@ -478,3 +478,60 @@ Full-mode `/sdd-design` debate halted at its approval gate after round 3 (gate p
 - [ ] Bare-orderID vs `order:` stream drift. Log in findings only. Target: the docs step.
 - [ ] Scope-widening list is at recon-time line numbers. Enumerate by grep, with one trace test per converted site. Target: /sdd-spec.
 - [ ] `trading.go` merge overlap with 241/242/249/256. Target: the integration PR, via `merge-order.md`.
+
+---
+
+## Session 2026-10-21 — sdd-spec
+
+- Generated implementation-spec.md with 7 steps: 3 RED→GREEN pairs, then docs. Status: design-approved → implementation-ready.
+  1. RED tests for D-04 (AC-1/2/3/6).
+  2. `persistOrderBestEffort` and the four D-04 sites.
+  3. RED tests for D-62 (AC-4/5/7/8/9), plus a sweeper-payload test.
+  4. `reclaimStaleIntent`, `reclaimedUnknownPayload`, the reactive sites and the sweeper swap.
+  5. RED trace-matrix tests for the scope widening.
+  6. The `WithoutCancel(ctx)` conversions.
+  7. Docs.
+- This discharges the design-session Open Threads on the timeout bound, the scope-widening grep, the downstream-reader check and the RED reach-the-branch guard. Each is handled in its step.
+- Key codebase findings:
+  - Grep found 40 `context.Background()` hits in `internal/service/trading.go`, and none in the other non-test files of the package.
+    - 31 are converted by Step 6; the table is in Step 5.
+    - `:688` and `:703` belong to Step 2. Step 2 also handles the raw-ctx writes at `:1367` and `:1550`.
+    - Three stay as they are: `:2859` and `:2907` are the background-only bracket-protection watchdog, and `:2617` is an open question (see Open Threads).
+  - `finalizeCancelIntent` (`trading.go:1400`) has no ctx parameter. Step 6 adds one, and its callers `:1368`, `:1386` and `:1396` pass the request ctx.
+  - Some functions are shared between the request path and the pollers:
+    - `applyBrokerOrderStatus` (`:1772`) is reached from a request through `reconcileNotCancelable` `:1394` → `CancelOrder`.
+    - `createBracket`/`resizeBracket` (`:3389`/`:3432`) are reached from a request through `submitOrder` `:740`.
+    - Their sites are converted. On a poller ctx, `WithoutCancel` behaves like `Background()`: there is no PropagationData and no shutdown cancel. Background behaviour is therefore unchanged.
+  - Forwarding the request headers changes no stored owner:
+    - Ledger `AppendEvent` takes the owner from `req.userId` and falls back to `x-user-id` only when that is empty (`ledgerServiceImpl.ts:37-39`).
+    - Notify `EmitAlert` uses `req.targetUserId`.
+  - The ledger and notify clients both chain `middleware.UnaryClientInterceptor` (`trading.go:184`, `:192`). `WithoutCancel(ctx)` therefore carries `x-trace-id` with no new header code.
+  - Nothing outside `order_intent.go` references `order_intent.reclaimed_unknown`. Design Open Risk 1 is discharged: no downstream reader assumes a nil payload.
+  - `go.mod` has no testify. Bounded polls follow `waitForAlert` (`trading_bracket_test.go:397`).
+  - PlaceOrder tests must set three things:
+    - `TimeInForce`, because `validateTIF` requires it (`tif_validation.go:61-64`);
+    - `platform.trading_state=ACTIVE`, because the default is HALTED (`trading.go:3496-3498`);
+    - `trading.risk.max_position_pct=0`.
+
+### Decisions
+
+- **`WithTimeout` bound (design Open Risk 2, F-07):** `persistOrderBestEffort` uses the existing `ledgerEmitTimeout` (`trading.go:3657`). `brokerCallTimeout()` was not used: it is operator-tuned for broker REST latency, so retuning it would silently change the DB-write deadline.
+- **Trace-test ordering:** the tests cancel the traced parent ctx *before* the handler runs. This is the deterministic form of design.md's requirement that the parent be cancelled before the invoker ran. It tells the three cases apart:
+  - `Background()` → trace `""`;
+  - raw ctx → `ctx.Err()!=nil`;
+  - `WithoutCancel` → trace set and `ctx.Err()==nil`.
+  - If a path aborts on `ctx.Err()`, fall back to the design's cancel-after-return ordering and add a Deviation Log entry.
+- **DRY:** the sweeper and `reclaimStaleIntent` share a `reclaimedUnknownEventType` const. This is a spec-level choice with no semantic change.
+- **Reclaim CAS:** it runs on `context.WithoutCancel(ctx)` with no extra timeout, as design.md (a) specifies. A stalled DB would hold the handler goroutine after the client disconnects, bounded only by the pool and driver. This is accepted as designed.
+
+## Open Threads
+
+- [ ] **Operator decision needed on `trading.go:2617`.** The call is `validateAndRecordCredential` → `accountRepo.UpdateCredentialStatus(context.Background(), …)`.
+  - It is request-reachable (`RegisterBrokerAccount` `:2528`, `UpdateBrokerAccountCredentials` `:2575`) and also poller-reachable (`:2690`).
+  - It is neither a ledger emit nor a finalize, and it sits outside the order-state neighbourhood. The standing rule that request-derived writes use `WithoutCancel` could still be read to cover it.
+  - It is not converted; Step 7 logs it in the findings file.
+  - Decide: convert it in this feature, or route it to a follow-up feature.
+- [ ] The sweeper payload changes from nil to populated (Step 4). Call this out in the integration PR body.
+- [ ] `trading.go` overlaps with 241/242/249/256. Sequence them through `merge-order.md` at the integration PR.
+- [ ] The reclaim CAS has no explicit timeout on `WithoutCancel` (design (a)). Revisit if a DB stall is ever observed.
+- [ ] Workflow note: the computed task gave the feature directory as `docs/roadmap/features/docs/roadmap/features/267-fix-trading-order-state-audit/`, with the prefix doubled. The real directory, `docs/roadmap/features/267-fix-trading-order-state-audit/`, was used.
