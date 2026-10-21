@@ -102,13 +102,13 @@ All `get_config_value` call sites in `app/` (grep, 2026-10-20) are `tools.py:627
 - **PRESERVE** `@AC-4` "A portfolio failure never fails the already-committed ingest" (`services/xstockstrat-agent/acceptance/consolidate-watchlist-signal.feature:11-12`, tags `@AC-4 @FR-3 @feature-127`). The post-commit tail of `ingest_signal` must never fail the committed ingest. The new threshold-read timeout joins that tail (`app/tools.py:627-635`) and must also not propagate, nor skip the watchlist auto-add (`:660-668`).
 - **PRESERVE** `@AC-5` "The tool docstring and mcp-tools.md both document the watchlist side effect" (`services/xstockstrat-agent/acceptance/consolidate-watchlist-signal.feature:19-20`, tags `@AC-5 @FR-5 @feature-127`). This applies if the `ingest_signal` docstring or runbook entry is edited for the timeout; the watchlist side-effect text must stay.
 - **PRESERVE** `@AC-5` "Header-propagation semantics are unchanged beneath mTLS" (`docs/sdd/business-rules/platform.feature:238-239`, tags `@AC-5 @FR-5 @feature-210`). The `GetConfig` call keeps `metadata=_metadata()` and `mtls.secure_channel` when `timeout=` is added (`app/client.py:1749-1754`).
+- **PRESERVE** `@AC-1`..`@AC-5`, `@AC-7` "SSRF blocks (metadata, RFC1918/loopback, DNS-rebinding, scheme, redirect, no-leak)" (`services/xstockstrat-agent/acceptance/extract-tool-ssrf-hardening.feature:11-58`, tags `@feature-207`). The fail-closed egress controls stay in force on the fallback-default path; a new catch wraps only the config read, never egress validation.
+- **PRESERVE** `@AC-9` "The agent OAuth txn round-trips signed with JWT_SECRET" (`services/xstockstrat-agent/acceptance/config-secrets-and-scoping.feature:14-15`, tags `@AC-9 @FR-7 @feature-147`). The DCR edit in `app/oauth_server.py` shares the file but must not alter txn signing or verification.
 - **Not impacted**:
-  - `extract-tool-ssrf-hardening.feature` `@AC-1/2/3/4/5/7 @feature-207`: SSRF gate and error hygiene. A new catch must wrap only the config read, never egress validation.
-  - `config-secrets-and-scoping.feature` `@AC-9 @feature-147`: OAuth txn HMAC, which shares the file but not the subject.
   - The `list_opportunities` projection and paging suites (`@feature-187/185/095/199/200`).
   - `platform.feature` `@AC-8 @feature-147`, `@AC-1/@AC-4 @feature-210` (the channel is untouched) and `@AC-35 @feature-224` (server-side redaction).
 - **No durable predecessor** for the fixed behavior. No suite covers the `get_config_value` scope/projection/error guarantees (feature 093), `/oauth/register` DCR, or the `signal.alert_threshold` path. This feature's `@AC-1..5` are promoted at launch (C-16).
-- Coverage: 134 scenarios scanned (81 across the 24 agent suites, 53 in `platform.feature`); 6 relevant; no CHANGE flagged under D ≤ 3.0 s or with the 227 `wait_for` retained.
+- Coverage: 134 scenarios scanned (81 across the 24 agent suites, 53 in `platform.feature`); 8 relevant rule groups; no CHANGE flagged under D ≤ 3.0 s or with the 227 `wait_for` retained.
 
 ## Dependencies
 
