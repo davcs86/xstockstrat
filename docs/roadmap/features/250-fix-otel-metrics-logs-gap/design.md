@@ -32,7 +32,7 @@ config, migration or collector-pipeline change (recon.md:36, recon.md:65, recon.
   (recon.md:21, recon.md:61; C-10).
 - Rewrite `packages/otel/alerts/README.md` (recon.md:33) to say:
   - no rules are provisioned, and why (226 OD-3 + 250);
-  - the manual Grafana Cloud delete steps, with the removed UIDs in a fenced list (§5);
+  - the manual Grafana Cloud delete steps, with the removed UIDs in a fenced list (§4);
   - the follow-up `/sdd-story` dir, cited by path (§6).
 - Coverage loss is made explicit, as recon.md:102-105 requires. Error-rate, p99 and scoring-stall stay undetected
   until the follow-up lands. For every removed rule, the named follow-up is `trace-derived-alerting` (§6).
@@ -54,7 +54,7 @@ config, migration or collector-pipeline change (recon.md:36, recon.md:65, recon.
 - Delete `signal-pipeline-throughput.json`, `infrastructure.json` and `trading-service.json` (recon.md:27-29,
   recon.md:130).
 - Rewrite `packages/otel/dashboards/README.md` down to the single Tempo dashboard (recon.md:33):
-  - the deleted UIDs go in a fenced list (§5);
+  - the deleted UIDs go in a fenced list (§4);
   - keep the attribute bullet `:40-42`: `service.name`, `deployment.environment`, `platform`, and no
     `trading_mode` (recon.md:69, C-16). Reword it from the "service_name label" phrasing to Tempo
     resource-attribute wording.
@@ -71,7 +71,7 @@ config, migration or collector-pipeline change (recon.md:36, recon.md:65, recon.
   - drop the Loki/Mimir verify steps, the ad-hoc Loki query and the Loki derived fields (recon.md:44,
     recon.md:48, recon.md:50);
   - fix `:3`, `:21-24`, `:108`, the dashboard table and the alert table (recon.md:41-49);
-  - the Step 6/7 cleanup uses fenced lists (§5);
+  - the Step 6/7 cleanup uses fenced lists (§4);
   - keep the Tempo check and the TraceQL example as the template (recon.md:51, recon.md:60). Rewrite the
     example's span name as `{ name =~ ".*/PlaceOrder" }`, checked at the dev import.
 - Also fix:
