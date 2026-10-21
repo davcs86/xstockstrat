@@ -67,6 +67,8 @@ Design forks:
 ## Affected Services
 
 - xstockstrat-analysis
+- xstockstrat-agent (added 2026-10-21 by design.md item 4: client forwards `score_unavailable`; C-14)
+- xstockstrat-ui (added 2026-10-21 by design.md item 6: `SymbolScreening` "Not evaluated" notice; C-14)
 
 ## Consumer Surface(s)
 
@@ -86,13 +88,17 @@ error:
   INSUFFICIENT_DATA (`:64`) and never reads `scoreUnavailable`.
 - [ ] **None**
 
-No UI or agent code change is anticipated **only if** a kept degraded row carries `passed=false` and
-`score_unavailable=true`, and never INSUFFICIENT_DATA (AC-1; see Degraded-row shape). `_build_result`
-leaves `passed=True` for an all-soft row with no raws (`screener.py:457-475`), so a `score_unavailable`-only
-row would reach these consumers as an OK, passing candidate: the `bef4258` scar
-(`services/xstockstrat-analysis/docs/context-constitution.md:41`). `/sdd-design` confirms the claim against
-the chosen shape. If the chosen shape needs agent or UI work, C-14 requires an implementation step or a
-named follow-up feature.
+Pinned by design.md (2026-10-21): the degraded row is **kept**, status OK, `passed=false`,
+`score_unavailable=true`, never INSUFFICIENT_DATA. `_build_result` leaves `passed=True` for an all-soft row
+with no raws (`screener.py:457`), so the row carries an `eval_failed` flag and `_build_result` early-returns
+before that default (the `bef4258` scar, `services/xstockstrat-analysis/docs/context-constitution.md:41`).
+The shape needs consumer work, so each surface has an implementation step (C-14):
+- Agent: `client.py:760-766` forwards `score_unavailable`; `tools.py:833-846` docstring and
+  `docs/runbooks/mcp-tools.md` describe the three `score_unavailable=true` row kinds (FR-1, AC-5).
+- UI `SymbolScreening`: renders a `scoreUnavailable` row as a "Not evaluated" `EmptyState` (FR-4, AC-4).
+- UI `/insights/screener`: tooltip copy only; it already renders `scoreUnavailable` and polls on
+  INSUFFICIENT_DATA only (`page.tsx:122`, `:128`).
+- Alerting: named follow-up feature 250 (`fix-otel-metrics-logs-gap`), design.md item 5.
 
 ## Functional Requirements
 
@@ -103,6 +109,13 @@ named follow-up feature.
   `score_unavailable=true`, so it sorts after every genuinely-scored row (`screener.py:152`) and never
   reads as a plain OK result. It is never SCREEN_RESULT_STATUS_INSUFFICIENT_DATA. One WARN log names
   the symbol. Keeping or dropping the row is a design fork; design pins it here.
+  Pinned (design.md items 1-4, 2026-10-21): the row is **kept**, with no raws, so every other row equals
+  the row the same request returns without the failing symbol. One per-scan summary line (WARN, ERROR
+  when every symbol failed) names each failing symbol with its exception type; no per-symbol WARN. The
+  agent `screen_symbols` result carries `score_unavailable` on every row.
+- **FR-4** — The `/trader/positions/[symbol]` Screening section (`SymbolScreening`) renders a
+  `scoreUnavailable` result as a "Not evaluated" notice through the shared `EmptyState`, never as the
+  per-criterion table or the "Insufficient data" notice (design.md item 6). Added 2026-10-21.
 - **FR-2** — The scan deadline (`analysis.screener.max_duration_seconds`, `servicer.py:3786-3795`)
   still cancels the whole scan. Per-symbol isolation does not absorb `asyncio.CancelledError`, and the
   RPC fails DEADLINE_EXCEEDED with no result rows.
@@ -119,8 +132,9 @@ named follow-up feature.
 
 ## Acceptance Criteria
 
-See `acceptance.feature` (Constitution **C-15**): AC-1 → FR-1, AC-2 → FR-2, AC-3 → FR-3. Red-before-green
-(**P-06**) applies to AC-1 only: it must fail on the buggy behavior and pass after the fix. AC-2 and AC-3
+See `acceptance.feature` (Constitution **C-15**): AC-1 → FR-1, AC-2 → FR-2, AC-3 → FR-3, AC-4 → FR-4,
+AC-5 → FR-1. Red-before-green (**P-06**) applies to AC-1, AC-4 and AC-5: each must fail on the buggy
+behavior and pass after the fix. AC-2 and AC-3
 are preservation guards; they pass on the current code (`servicer.py:3791-3800`) and must keep passing,
 so the `/sdd-spec` TDD gate demands no failing test for them. Also, existing tests pass and the affected
 service is smoke-tested on dev.

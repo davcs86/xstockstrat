@@ -7,13 +7,14 @@ Feature: fix-screener-symbol-isolation (bug fix)
     Given a ScreenSymbols request over 50 symbols with signal_sources ["fundamentals"], signal_weight 1, technical_weight 1, and rank_limit 50
     And its criteria are a SCREEN_KIND_SIGNAL criterion "sig" and a SCREEN_KIND_TECHNICAL_INDICATOR criterion "rsi" with component indicator "RSI", neither a hard filter
     And every symbol has at least 2 daily bars and at least one active "fundamentals" signal
+    And the symbols' signal convictions and RSI readings differ, and "BAD" holds the highest signal conviction
     And <failure_site> raises <exception> for symbol "BAD" only
     When the caller invokes ScreenSymbols
     Then the RPC returns OK
-    And the response contains a result row for each of the other 49 symbols with its computed score
-    And "BAD" does not rank above any of the other 49 symbols
-    And "BAD"'s row, if present, has passed false and score_unavailable true, and its status is not SCREEN_RESULT_STATUS_INSUFFICIENT_DATA
-    And a WARN log names "BAD"
+    And the response contains a result row for each of the other 49 symbols, each equal to that symbol's row when the same request runs over those 49 symbols without "BAD"
+    And "BAD"'s row is present with status SCREEN_RESULT_STATUS_OK, passed false, score_unavailable true and no criterion_scores
+    And "BAD" ranks after every one of the other 49 symbols
+    And exactly one WARN log line names "BAD" with its exception type
 
     Examples:
       | failure_site                     | exception         |
@@ -36,3 +37,19 @@ Feature: fix-screener-symbol-isolation (bug fix)
     When the caller invokes ScreenSymbols
     Then ScreenSymbols fails with gRPC status INVALID_ARGUMENT
     And no ScreenResult rows are returned
+
+  @AC-4 @FR-4 @regression
+  Scenario: The single-symbol Screening section shows "Not evaluated" for a score-unavailable row
+    Given a trader opens /trader/positions/AAPL and AAPL is not on any watchlist, so the Screening section renders
+    And ScreenSymbols returns one row for "AAPL" with status SCREEN_RESULT_STATUS_OK, passed false and score_unavailable true
+    When the trader runs the screen
+    Then the Screening section shows the "Not evaluated" notice
+    And it shows neither the per-criterion results table nor the "Insufficient data" notice
+
+  @AC-5 @FR-1 @regression
+  Scenario: The agent screen_symbols result carries score_unavailable on every row
+    Given ScreenSymbols returns a row for "NVDA" with passed true and score_unavailable false
+    And a row for "BAD" with status SCREEN_RESULT_STATUS_OK, passed false and score_unavailable true
+    When the agent calls screen_symbols
+    Then every result dict carries a boolean "score_unavailable"
+    And the "BAD" result has "passed" false and "score_unavailable" true

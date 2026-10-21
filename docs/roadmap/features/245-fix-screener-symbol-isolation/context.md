@@ -166,3 +166,58 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - Sibling unguarded gathers `servicer.py:3983`, `:5776` — target: defect reports (docs step).
   - Cross-branch write to `feature/fix-otel-metrics-logs-gap` may conflict — read 250 `context.md`
     immediately before appending.
+
+## Session 2026-10-21 — sdd-spec
+
+- Generated implementation-spec.md with 9 steps. Status → implementation-ready.
+- Design-owed amendments applied before step planning (design.md § Open Risks, C-15 append-only IDs):
+  - acceptance.feature AC-1 reworded (EXTEND, ID kept): "BAD"'s row is present with status OK, passed
+    false, score_unavailable true and no criterion_scores; each of the other 49 rows equals the
+    49-symbol run without BAD; BAD ranks last; exactly one WARN line names `BAD:<ExceptionType>`. A new
+    Given gives BAD the highest signal conviction, so a kept partial raw would shift the other rows.
+  - Appended `@AC-4 @FR-4` (SymbolScreening "Not evaluated") and `@AC-5 @FR-1` (agent row carries
+    `score_unavailable`).
+  - product-spec: FR-1 pin, new FR-4, Affected Services + xstockstrat-agent and xstockstrat-ui, Consumer
+    Surface(s) paragraph resolved, AC→FR map extended.
+- Step order:
+  - analysis: Step 1 preservation guards AC-2/AC-3 (green on the unfixed tree), Step 2 engine items 1-3,
+    Step 3 AC-1 outline + FR-2/soft-only/sort-tie/duplicate/span tests + the two mutation runs;
+  - agent: Steps 4-6 (client, test, `docs/runbooks/mcp-tools.md` C-10);
+  - UI: Steps 7-8 (SymbolScreening + Playwright AC-4 + INVENTORY.md:47);
+  - Step 9 docs (findings row, constitution :42 sort key, two sibling defect reports, teardown).
+- Key codebase findings:
+  - Two of the three AC-1 failure sites take no symbol arg: `_latest_indicator(self, indicator, closes, propagation_meta)`
+    `screener.py:288` and `scoring.compute_signal_score(signals_map, latest_bar, ...)` `:256-258`.
+    BAD is told apart by a sentinel last-bar close `999.0`. `_technical_value` `:331` takes `symbol`.
+  - The existing AC-3-like test `test_unknown_metric_aborts_invalid_argument` `tests/test_analysis_servicer.py:1265`
+    uses one symbol `AAA`/`pe_ration`, not AC-3's `["AAPL","MSFT"]`/`not_a_metric`. Step 1 adds a
+    two-symbol test and keeps `:1265`.
+  - `pytest-timeout` is absent from analysis `pyproject.toml`, so the AC-2 servicer test carries no
+    timeout marker.
+  - The `page.route('**/xstockstrat.analysis.v1.AnalysisService/<RPC>')` glob is already used from
+    `/trader` (`e2e/trader/position-detail.spec.ts:683`) and for ScreenSymbols in
+    `e2e/insights/screener.spec.ts:95`. This closes design Open Risk "page.route glob".
+  - `EmptyState` is already imported on the host page `src/app/trader/positions/[symbol]/page.tsx:66`,
+    so the AC-4 selector is scoped to the `symbol-screen-unevaluated` wrapper.
+  - `services/xstockstrat-analysis/docs/context-constitution.md:42` states the old sort key
+    `(r.score_unavailable, -r.score)`. Step 9 updates it.
+  - Opportunities `_row_for` deliberately lets `FormulaExecutionError` propagate (feature 185 comment
+    `servicer.py:5694-5698`). Step 9's sibling defect report must record that choice.
+  - Feature 246 edits `app/engine/fundsignal_loop.py`, not `scoring.compute_signal_score`, so there is no
+    AC-1 overlap. Feature 244's `int_positive` clamp on `max_duration_seconds` leaves Step 1's stubbed
+    `get_int → 1` intact.
+- Decisions:
+  - The design's "non-gating" span-exporter test became a normal Step 3 test. It uses a local
+    `TracerProvider` (not global) plus `InMemorySpanExporter`. Context propagates through `wait_for` and
+    the gather tasks' context copy.
+  - The mutation runs (design item 7) are recorded in context.md, not gating (F-05 applies to the
+    committed tree only).
+- Open Threads:
+  - Feature-250 handoff: orchestrator completion write on `feature/fix-otel-metrics-logs-gap` (C-02 read
+    first). Target: completion.
+  - C-16 promotion of AC-1..AC-5 into the analysis/ui/agent durable suites. Target: integration PR.
+- Operator decisions:
+  > OPERATOR DECISIONS (binding, recorded 2026-10-21):
+  > - Standing authorization: designs run in FULL mode only (no quick designs for automated fixes); the orchestrator auto-approves the design gate once rounds >= 2, no unresolved Floor (F-*) breach remains, no blocking objection remains, and every CHANGE to an existing @AC business rule is covered by an operator decision below.
+  > - Full design depth (operator overrode the triage 'quick' recommendation).
+- Next: `/sdd-review fix-screener-symbol-isolation impl-spec`, then `/sdd-execute fix-screener-symbol-isolation`.
