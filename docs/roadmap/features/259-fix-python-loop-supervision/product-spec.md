@@ -31,6 +31,32 @@ retained with a done-callback that logs an unexpected exit. `_watch` reconnects 
 backoff. A transiently failing ledger event is retried before the cursor passes it; a poison event is parked under an
 explicit, logged rule.
 
+## Functional Requirements
+
+- **FR-1 (D-07).** Each analysis background loop (`FundamentalsSignalLoop.run_forever`,
+  `run_opportunity_refresh_forever`, `run_readiness_materializer_forever`, `run_template_intent_sweep_forever`)
+  survives any exception raised in its cycle body or its schedule handling (`seed` / `next_sleep_seconds` /
+  `advance`, including the `_advance_schedule` call inside `_tick`'s `except`). It logs the error, backs off and
+  runs a further tick.
+- **FR-2 (D-07).** Every background task analysis starts at boot stays referenced for the life of the process.
+  If one ends unexpectedly, analysis logs an error that names the task and the exception.
+- **FR-3 (D-08).** `ConfigWatcher._watch` in analysis, indicators and ingest reconnects after any exception, not only
+  `grpc.aio.AioRpcError`, with a log line and a backoff. It does not freeze config at the last snapshot.
+- **FR-4 (D-56).** When `PnLPatternConsumer` fails transiently on a ledger event, it retries that event before the
+  cursor moves past its sequence.
+- **FR-5 (D-56).** After a bounded number of failed attempts, a poison event is parked under an explicit rule and the
+  park is logged with the event's sequence. The consumer then continues past it, so one bad event cannot stall the
+  stream. Design decides the retry bound and the park mechanism (a parked-events table or a structured log record).
+
+## Consumer Surface(s)
+
+None. This is internal/platform-only. The fix changes no RPC, response shape, UI route or Agent MCP tool. It keeps
+the analysis background loops, the P&L-pattern consumer and the three Python config watchers running. These are what
+produce fundamentals signals, opportunity refreshes, readiness pre-warms, P&L pattern data and live config. When they
+die, a trader or operator sees stale data or frozen config through surfaces that already exist. Those surfaces read
+the same RPCs, which this fix leaves unchanged, so they show fresh data again with no consumer-side change. No
+consumer step is needed.
+
 ## Reproduction Steps
 
 1. D-07: make `DurableSchedule.next_sleep_seconds` raise `asyncpg.PostgresConnectionError` once under
@@ -53,11 +79,13 @@ Per-cycle hardening without a shared supervised-loop helper or task registry; a 
 
 ## Fix Scope
 
-- [x] No proto changes anticipated
-- [x] No database migrations anticipated (D-56 park rule may need a parked-events table — design decides; if so, DBA review applies)
-- [ ] No config key changes anticipated — a backoff or retry-count knob for D-56 may be proposed; design decides
-
-(Update after investigation — remove or replace each item as needed)
+- No proto changes anticipated.
+- Database migrations: none anticipated. The FR-5 park rule may need a parked-events table, which design decides. If
+  so, it ships as a numbered analysis `NNN_*.up.sql` / `.down.sql` pair (re-derive NNN against the merged tree; C-07
+  run order), and DBA review applies.
+- Config keys: none anticipated. If design adds a backoff or retry-count knob, it is named
+  `analysis.<category>.<key>` (C-05), its default is declared in the service `CLAUDE.md`, and it is never hardcoded
+  (F-07).
 
 ## Acceptance Criteria
 
