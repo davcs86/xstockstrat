@@ -27,6 +27,29 @@ Source: repo-surveyor debt-radar scan @ 4535695, findings D-25, D-31 (re-verifie
 for another user's `user_id` is refused (`PERMISSION_DENIED`) or bound to the caller. Legitimate own-data reads
 (copilot thread, own position lineage, own account reconciliation status, own config overlay) keep working.
 
+## Functional Requirements
+
+- **FR-1** — The trader BFF `LedgerService.QueryEvents` forwards a non-empty `stream_key` only when it is owned by
+  the verified caller (an `account:<id>` the caller owns, or the caller's own `copilot:` thread); a foreign stream key
+  fails with `PERMISSION_DENIED` and returns no events.
+- **FR-2** — A trader BFF `QueryEvents` with an empty or unrecognised `stream_key` is either refused or owner-scoped
+  to the verified caller; it never returns an event belonging to another user.
+- **FR-3** — Agent `get_config` called by a non-admin caller with a `user_id` other than the verified caller's never
+  returns that user's per-user override values.
+- **FR-4** — Agent `list_config_keys` called by a non-admin caller with a `user_id` other than the verified caller's
+  never reveals which keys that user overrode.
+- **FR-5** — Legitimate own-data reads keep working: own copilot thread, own position lineage, own account
+  reconciliation status, and own per-user config overlay.
+
+## Consumer Surface(s)
+
+- **UI — trader segment (`/trader`)**: BFF `QueryEvents` responses become owner-scoped. `useReconciliationStatus`
+  (`account:<id>`) keeps working for owned accounts and gets `PERMISSION_DENIED` for foreign ones;
+  `usePositionLineage` (no stream key) receives only the caller's events instead of filtering client-side. No visual
+  change for a user reading their own data.
+- **Agent (MCP tools)**: `get_config` and `list_config_keys` stop returning another user's per-user overlay to a
+  non-admin caller; own-overlay reads are unchanged.
+
 ## Reproduction Steps
 
 1. D-25: as trader user A, call `/trader/api/xstockstrat.ledger.v1.LedgerService/QueryEvents` with
@@ -62,6 +85,15 @@ rather than a rule at the backend read: ledger `QueryEvents` has no owner concep
 See `acceptance.feature` — the regression scenario(s) that must fail on the buggy behavior and pass
 after the fix (Constitution **C-15**). Plus: existing tests pass; affected service(s) smoke-tested on
 dev.
+
+## Open Questions
+
+- [ ] Fix site for D-25: BFF edge-only allow-list vs a ledger-side owner predicate on `QueryEvents` (as
+  `ExportEvents` already does). Deferred to `/sdd-design` (C-11); must keep insights BFF and `ExportEvents` parity.
+- [ ] Foreign `user_id` in D-31: refuse with `PERMISSION_DENIED` vs silently bind to the caller. AC-4/AC-5 currently
+  assert refusal; design must confirm refusal or amend those Thens. Deferred to `/sdd-design`.
+- [ ] Whether admin / internal callers stay exempt from FR-3/FR-4, and how NULL-owner historical ledger rows behave
+  under FR-2. Deferred to `/sdd-design`.
 
 ## Out of Scope
 
