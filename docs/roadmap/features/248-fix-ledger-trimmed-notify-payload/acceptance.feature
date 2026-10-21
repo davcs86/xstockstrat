@@ -6,9 +6,11 @@ Feature: fix-ledger-trimmed-notify-payload (bug fix)
   Scenario: A live event whose row exceeds the NOTIFY trim threshold is delivered with its full payload
     Given a StreamEvents subscriber with no stream_key or event_type filter has caught up and is live
     And an event "order.filled" with stream_key "order-42" and a JSON payload of 8000 chars is appended
+    And that event has source_service "xstockstrat-trading", correlation_id "corr-42", metadata {"broker": "alpaca"} and user_id "user-7"
     When the subscriber receives the live message for that event
     Then the message payload equals the appended 8000-char payload
     And the message occurred_at equals the appended occurred_at and is a valid timestamp
+    And the message has source_service "xstockstrat-trading", correlation_id "corr-42", metadata {"broker": "alpaca"} and user_id "user-7"
     And the message equals GetEvent for the same event_id
 
   @AC-2 @FR-3 @regression
@@ -43,10 +45,27 @@ Feature: fix-ledger-trimmed-notify-payload (bug fix)
 
   @AC-6 @FR-4 @regression
   Scenario: A trimmed live event whose full row cannot be read is never delivered as a stub
-    Given a StreamEvents subscriber with no filters is live and its last delivered sequence is N
+    Given a StreamEvents subscriber with no filters is live and its last delivered sequence is 10
     And the live stream's read of the full row for the next trimmed event fails with a database error on every attempt
-    When an "order.filled" event with a JSON payload of 8000 chars is appended
-    And an event with a 100-char payload is appended after it
-    Then the subscriber receives no message for either event on that stream
+    When an "order.filled" event with a JSON payload of 8000 chars is appended as sequence 11
+    And an event with a 100-char payload is appended as sequence 12
+    Then the subscriber receives no message for sequence 11 or 12 on that stream
     And the stream ends with a non-OK gRPC status
-    And once the database error clears, a new StreamEvents opened from sequence N + 1 receives both events with their full payloads in ascending sequence order
+    And once the database error clears, a new StreamEvents opened from sequence 11 receives sequences 11 and 12 with their full payloads, in that order
+
+  @AC-7 @FR-4 @regression
+  Scenario: A trimmed live event whose full row is not found is never delivered as a stub
+    Given a StreamEvents subscriber with no filters is live and its last delivered sequence is 10
+    And the live stream's read of the full row by event_id for the next trimmed event returns no row
+    When an "order.filled" event with a JSON payload of 8000 chars is appended as sequence 11
+    And an event with a 100-char payload is appended as sequence 12
+    Then the subscriber receives no message for sequence 11 or 12 on that stream
+    And the stream ends with a non-OK gRPC status
+    And a new StreamEvents opened from sequence 11 receives sequences 11 and 12 with their full payloads, in that order
+
+  @AC-8 @FR-1 @regression
+  Scenario: A stream_key-filtered live subscriber receives the full payload of a trimmed event
+    Given a StreamEvents subscriber filtered on stream_key "order-42" is live
+    When an "order.filled" event with stream_key "order-42" and a JSON payload of 8000 chars is appended
+    Then the subscriber's message payload equals the appended 8000-char payload
+    And the message occurred_at equals the appended occurred_at and is a valid timestamp

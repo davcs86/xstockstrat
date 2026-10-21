@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-10-20 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-19-ledger-stream-trimmed-notify-payload-defect.md` |
+| 2026-10-20 | `draft` → `spec-ready` | /sdd-review | Product spec approved (6 warnings; overlap WARN: sequencing on 252) |
 
 ---
 
@@ -47,4 +48,4 @@ Live `StreamEvents` forwards the trigger's trimmed NOTIFY stub (no `payload`, no
 
 ## Next Action
 
-`/sdd-design fix-ledger-trimmed-notify-payload` — recommended design depth: full (3 affected services; trigger-vs-fan-out fork may need a migration); see context.md
+`/sdd-design fix-ledger-trimmed-notify-payload` (full — operator: no quick designs); see context.md session 2026-10-20 sdd-review for design carry items

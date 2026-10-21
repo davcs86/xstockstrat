@@ -47,7 +47,7 @@ the NOTIFY JSON as a full row.
 
 ## Functional Requirements
 
-FR-1. Every `StreamEvents` message sourced from a NOTIFY row — live (`src/grpc/ledgerServiceImpl.ts:210`) or flushed from the replay-window buffer (`:207`, `:255-257`) — equals the replay/`QueryEvents`/`GetEvent` form of the same event in every `LedgerEvent` field (`payload`, `occurred_at`, `metadata`, `source_service`, `correlation_id`, `user_id`), for any row size, with or without `stream_key`/`event_type` filters.
+FR-1. Every `StreamEvents` message sourced from a NOTIFY row — live (`src/grpc/ledgerServiceImpl.ts:210`) or flushed from the replay-window buffer (`:207`, `:255-257`) — equals the replay/`QueryEvents`/`GetEvent` form of the same event in every `LedgerEvent` field (`payload`, `occurred_at`, `metadata`, `source_service`, `correlation_id`, `user_id`), for any row size that `AppendEvent` commits, with or without `stream_key`/`event_type` filters.
 FR-2. A NOTIFY body without `payload` (trim branch, `migrations/001_ledger_events_hypertable.up.sql:72`) is resolved to the full `ledger.events` row by `event_id` before `call.write`; that read borrows and releases the query-pool connection and is never held across `call.write` backpressure, so `AppendEvent` is not starved under ledger `DB_POOL_MAX=1`.
 FR-3. Live delivery keeps ascending `sequence` order and the `maxSeq` dedup (`src/grpc/ledgerServiceImpl.ts:196`, `:210`, `:256`) across a resolved event: each appended event reaches the subscriber exactly once, in order.
 FR-4. If the full row cannot be read (query error, or no row for `event_id`), the ledger never writes a stub or partial `LedgerEvent` for it and writes no later-sequence event ahead of it on that stream; the event is delivered complete or the stream ends with a non-OK gRPC status, so the consumer reconnects from its last delivered sequence (`portfolio_service.go:185-201`, `pnl_pattern_consumer.py:147-162`) and replays the event complete.
@@ -74,6 +74,16 @@ dev. The ledger suites currently load nothing and pass vacuously (`services/xsto
 feature 252 `fix-identity-ledger-test-suites`), so the red-before-green proof requires a ledger test that executes the
 real `ledgerServiceImpl`.
 
+- **Sequencing on 252.** The real-impl test cannot load under the strip-types runner (`ledgerServiceImpl.ts:20-21`
+  parameter properties), and 252 rewrites the same lines (`package.json:13-14`,
+  `src/__tests__/ledgerServiceImpl.test.ts:23`). This feature merges after 252, unless /sdd-design picks a
+  feature-local harness that loads the real impl. The merge-order row (248 after 252) is a router action.
+- **AC-4 harness.** `ledgerServiceImpl.ts:197` ignores `call.write`'s return, and two small events do not fill gRPC
+  flow control, so AC-4 needs a fake `call` whose `write()` returns `false` and emits no `'drain'` until the subscriber
+  resumes. Its first `Then` also holds on the buggy code; only the second `Then` is red before the fix.
+- **AC-6/AC-7 harness.** Inject the full-row read result (error or empty) through a fake pool; sequences 11/12 assume a
+  fresh test sequence.
+
 ## Out of Scope
 
 - Refactoring unrelated to the bug
@@ -81,4 +91,10 @@ real `ledgerServiceImpl`.
 - Repairing events consumed as stubs before the fix. Portfolio's resume cursor is in-memory
   (`portfolio_service.go:186`), so a restart replays from sequence 0 through the complete replay path. Analysis's
   cursor persists in `analysis.ledger_stream_cursor` (`pnl_pattern_consumer.py:140-153`), so a pre-fix stub stays
-  consumed; repairing it is a data-repair follow-up, not this code fix.
+  consumed; repairing it is a data-repair follow-up, not this code fix. No owner yet: a defect report under
+  `docs/reports/` is owed (router carry item, `context.md` session 2026-10-20 sdd-review).
+- The trim threshold's character-vs-byte mismatch. `length(payload) > 7000` counts characters
+  (`001_ledger_events_hypertable.up.sql:72`), but `pg_notify` caps the body at 8000 bytes (`:81-82`). A multi-byte row
+  of 7000 chars or fewer that exceeds 8000 bytes makes `pg_notify` raise in the AFTER INSERT trigger, so `AppendEvent`
+  fails and no event is committed (outside FR-1). Adjacent defect: /sdd-design either folds it into a `004` trigger
+  migration (up+down) or hands it to a separate defect report.
