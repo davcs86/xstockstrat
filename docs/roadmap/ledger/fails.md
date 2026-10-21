@@ -3020,6 +3020,14 @@ ambiguity is logged here).
   - On a pg LISTEN client, run only single-statement autocommit reads bounded by `statement_timeout`.
   - Treat a pg `query_timeout` rejection as fatal to that client: end it and reconnect.
 
+### 2026-10-21 — fix-python-config-zero-trap — assumption
+- **Mistake**: A Track C fix reused the slug of launched feature 173 (`fix-python-config-zero-trap`).
+  - The orphan cleanup resolves a branch to its feature by a slug glob and takes the first match, which is the launched 173.
+  - It then deletes the live `feature/<slug>` branch on every push to `main`.
+  - This happened twice in 8 h (2026-10-20T23:30Z, 2026-10-21T06:37Z). Each time, the next skill silently fell back to a base without the prior SDD commits.
+- **Evidence**: `.github/workflows/ci-validate-feature-status.yml:167,183`; 244 context.md sessions 2026-10-20 (sdd-review) and 2026-10-21 (sdd-design).
+- **Rule it implies**: A new feature or bug slug must be unique across all `docs/roadmap/features/*-<slug>` dirs, including launched ones. When `feature/<slug>` is missing, check the stale local tracking ref before falling back.
+
 ### 2026-10-21 — fix-otel-metrics-logs-gap — assumption
 - **Mistake**: A design round built an asset-existence guard's "exists" set by running the name regex over the whole asset file. Comments and `delete*` lists in that same file then made a deleted UID count as existing, which silently disabled the dangling-reference check the guard was added for. Caught by the r3 adversary, not by a test.
 - **Evidence**: `docs/roadmap/features/250-fix-otel-metrics-logs-gap/design.md` §4 Part 3 (existence set) and §5 (comment-only red case); context.md 2026-10-21 sdd-design entry.

@@ -83,7 +83,7 @@ step planning, in commit `7e4a2335` (C-15, append-only IDs). Review against
     `screener.py:467` and `:480` as items its design must fix or file, and cites the rank-last sort `:152`
     (246 `recon.md:99`, `:281-284`). Unconfirmed until 246's design. If 246 edits `screener.py:149-153`
     or `:439-507` first, re-read Step 2's anchors before executing it.
-  - Feature 244 (`fix-python-config-zero-trap`) wraps `analysis.screener.max_duration_seconds` in an
+  - Feature 244 (`fix-python-config-stored-zero`) wraps `analysis.screener.max_duration_seconds` in an
     `int_positive` clamp. Step 1's AC-2 test stubs `get_int` to return `1`, which a positive clamp passes
     unchanged, so the test survives either merge order. 244 also edits `screener.py:84-86`, `:92`; if it
     merges first, re-read Step 2's anchors `screener.py:91-127`.
