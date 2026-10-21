@@ -24,7 +24,7 @@ Source: repo-surveyor debt-radar scan @ 4535695, findings D-25, D-31 (re-verifie
 
 **Expected.** Every edge read returns only the caller's own data. The trader BFF forwards only owned stream keys
 (and refuses empty/unknown ones) or the ledger read is owner-scoped; a non-admin `get_config` / `list_config_keys`
-for another user's `user_id` is refused (`PERMISSION_DENIED`) or bound to the caller. Legitimate own-data reads
+for another user's `user_id` is refused with `PERMISSION_DENIED`. Legitimate own-data reads
 (copilot thread, own position lineage, own account reconciliation status, own config overlay) keep working.
 
 ## Functional Requirements
@@ -33,11 +33,14 @@ for another user's `user_id` is refused (`PERMISSION_DENIED`) or bound to the ca
   the verified caller (an `account:<id>` the caller owns, or the caller's own `copilot:` thread); a foreign stream key
   fails with `PERMISSION_DENIED` and returns no events.
 - **FR-2** — A trader BFF `QueryEvents` with an empty or unrecognised `stream_key` is either refused or owner-scoped
-  to the verified caller; it never returns an event belonging to another user.
-- **FR-3** — Agent `get_config` called by a non-admin caller with a `user_id` other than the verified caller's never
-  returns that user's per-user override values.
+  to the verified caller; it never returns an event belonging to another user, nor a historical row whose `user_id`
+  is NULL (`ExportEvents` parity). An empty-`stream_key` query still returns the caller's own events (FR-5).
+- **FR-3** — Agent `get_config` called by a non-admin caller with a `user_id` other than the verified caller's fails
+  with `PERMISSION_DENIED` and never returns that user's per-user override values.
 - **FR-4** — Agent `list_config_keys` called by a non-admin caller with a `user_id` other than the verified caller's
-  never reveals which keys that user overrode.
+  fails with `PERMISSION_DENIED` and never reveals which keys that user overrode.
+- **FR-6** — A caller with admin access scope may still read another user's per-user overlay through `get_config`
+  (FR-3/FR-4 bind non-admin callers only).
 - **FR-5** — Legitimate own-data reads keep working: own copilot thread, own position lineage, own account
   reconciliation status, and own per-user config overlay.
 
@@ -78,8 +81,6 @@ rather than a rule at the backend read: ledger `QueryEvents` has no owner concep
   rows are NULL and cannot be backfilled under the append-only guard)
 - [x] No config key changes anticipated
 
-(Update after investigation — remove or replace each item as needed)
-
 ## Acceptance Criteria
 
 See `acceptance.feature` — the regression scenario(s) that must fail on the buggy behavior and pass
@@ -88,12 +89,14 @@ dev.
 
 ## Open Questions
 
-- [ ] Fix site for D-25: BFF edge-only allow-list vs a ledger-side owner predicate on `QueryEvents` (as
-  `ExportEvents` already does). Deferred to `/sdd-design` (C-11); must keep insights BFF and `ExportEvents` parity.
-- [ ] Foreign `user_id` in D-31: refuse with `PERMISSION_DENIED` vs silently bind to the caller. AC-4/AC-5 currently
-  assert refusal; design must confirm refusal or amend those Thens. Deferred to `/sdd-design`.
-- [ ] Whether admin / internal callers stay exempt from FR-3/FR-4, and how NULL-owner historical ledger rows behave
-  under FR-2. Deferred to `/sdd-design`.
+- [x] Fix site for D-25 (BFF allow-list vs ledger owner predicate on `QueryEvents`). Resolved 2026-10-21: the product
+  contract is site-agnostic. FR-1/FR-2 and AC-1/AC-2/AC-7 assert behaviour at the trader BFF surface, so either site
+  satisfies them. `/sdd-design` picks the site (C-11) and must keep insights BFF and `ExportEvents` parity.
+- [x] Foreign `user_id` in D-31: refuse vs bind to caller. Resolved 2026-10-21: refuse with `PERMISSION_DENIED`
+  (FR-3/FR-4, AC-4/AC-5). Silent rebinding would hide the error and differ from FR-1 and the `SetConfig` per-user gate.
+- [x] Admin/internal exemption and NULL-owner rows. Resolved 2026-10-21: admin-scope callers stay exempt from
+  FR-3/FR-4 (FR-6, AC-8), matching the existing "non-admin" wording. NULL-`user_id` historical ledger rows are never
+  returned by a trader BFF read (FR-2, `ExportEvents` parity, AC-2), since they cannot be attributed to the caller.
 
 ## Out of Scope
 
