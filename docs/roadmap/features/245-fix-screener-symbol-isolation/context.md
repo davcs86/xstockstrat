@@ -100,3 +100,69 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   > OPERATOR DECISIONS (binding, recorded 2026-10-20):
   > - Standing authorization: designs run in FULL mode only (no quick designs for automated fixes); the orchestrator auto-approves the design gate once rounds >= 2, no unresolved Floor (F-*) breach remains, no blocking objection remains, and every CHANGE to an existing @AC business rule is covered by an operator decision below.
   > - Full design depth (operator overrode the triage 'quick' recommendation).
+
+## Session 2026-10-21 — sdd-design
+
+- Phase 0 Recon: wrote recon.md (services: xstockstrat-analysis; consumers xstockstrat-agent, xstockstrat-ui;
+  key reuse patterns: `ScreenResult.score_unavailable` field 14 + `passed=false`, the `_eval_symbol` seed
+  dict `screener.py:207-216`).
+- Phase 1 Grilling: 4 rounds (full, per operator decision). Termination: auto-approved under operator
+  standing authorization 2026-10-21 (rounds >= 2, no Floor breach, no blocking objection, no @AC CHANGE).
+- Chosen approach (design.md items 1-8, single numbering): `_eval_symbol_isolated` wrapper with
+  `except Exception` around `_eval_symbol`; failing symbol becomes a fresh `_seed_row` (empty raws) with
+  `eval_failed=True`, exception kept in a local `failures` list only; `_build_result` early-returns
+  `OK, passed=False, score_unavailable=True`; `_rank` zips the row flag into the sort key
+  `(score_unavailable, eval_failed, -score)`; one summary WARN/ERROR line with `symbol:ExceptionType`
+  samples + `screener.degraded_count` span attribute and `record_exception`; agent client forwards
+  `score_unavailable` and docstring/runbook describe the three row kinds; SymbolScreening renders
+  "Not evaluated" via shared `EmptyState`; alerting option (i), named follow-up feature 250.
+- Round history:
+  - r1: proposer chose the wrapper + `score_unavailable` row. Blockers: SymbolScreening (C-14) never reads
+    `scoreUnavailable`; `except BaseException` mutation as AC-2 teeth found ineffective (CPython 3.13
+    gather `_cancel_requested`).
+  - r2: r1 blockers closed (UI option (a) on `EmptyState`; engine-level CancelledError test). New blockers:
+    agent client drops `score_unavailable` (`services/xstockstrat-agent/app/client.py:760-766`) so a fault
+    reads as a confident criteria fail; claim that ERROR "keeps the error-rate signal" disproved by
+    `packages/otel/alerts/alert-rules.yaml:26-45`.
+  - r3: both r2 blockers closed (agent step + AC-5; alerting option (i), feature 250 handoff). New blocker:
+    clearing the row's `error` to None before `_rank` re-opens the `passed = True` scar (`screener.py:457`).
+  - r4: r3 blocker closed (`eval_failed` bool set at creation, never cleared). Adopted adversary
+    corrections: zip instead of `failed_syms` set (`screen()` does not dedupe, `screener.py:93`); agent
+    guidance keeps "filter on `passed`" (PRESERVE feature 144, 144 `context.md:8`, `:14`), deletes the false
+    `tools.py:845-846` sentence; `min_conviction`/`rank_limit` caveat; typed failure samples; existing
+    seed-key tests instead of a bespoke identity test; TraceQL handoff form; handoff target is 250's branch.
+- Rejected (24, full list in design.md § Rejected Alternatives): `gather(return_exceptions=True)`; dropping
+  the row; new ScreenResultStatus (proto); INSUFFICIENT_DATA as degraded status; default `_build_result`
+  path; keeping partial raws; ValueError/INTERNAL escalation; storing+clearing the exception; LogQL rule;
+  metrics counter; `failed_syms` set; `.get("eval_failed", False)`; blanket agent "exclude"; per-symbol WARN;
+  hand-rolled notice; bespoke seed test; handoff in 245's worktree; alerting on span exception event.
+- Constitution rules touched: C-11, C-14, C-10, C-15, C-16, C-17, C-12/C-13, C-18, C-01, C-04/C-09,
+  C-08/P-06, C-02, F-07, F-09, P-03, P-04/P-05, P-02. Floor breaches: none.
+- Business rules: PRESERVE feature 160 AC-1/AC-2, feature 224 AC-29, this feature AC-2/AC-3; EXTEND this
+  feature AC-1, new AC-4, AC-5; feature 144 render change EXTEND, agent keep-visible decision PRESERVE.
+  No CHANGE, so no operator coverage needed.
+- Debate checkpoints (session scratchpad, not durable): `/tmp/claude-0/-home-user-xstockstrat/0e33c54d-7bf5-528d-8d50-aaa4bc92a407/scratchpad/seeds/245/state-r2.json`,
+  `state-r3.json`, `state-r4.json`. This entry + design.md are the durable record.
+- Status: spec-ready → design-approved.
+- Open Threads (from design.md § Open Risks):
+  - Product-spec/acceptance amendments owed: AC-1 wording ("is present", 49-run oracle, summary log), FR-4,
+    AC-4, AC-5, Affected Services (+agent, +ui), Consumer Surface(s), "no UI change" paragraph — target:
+    `/sdd-spec` before step planning (C-15).
+  - Feature-250 handoff not yet written: append to 250 `context.md` on `feature/fix-otel-metrics-logs-gap`
+    after reading it (C-02); ERROR log rule + TraceQL `{ span.screener.degraded_count > 0 }` — target:
+    orchestrator completion write.
+  - FR-2/AC-2 teeth rest on a gather source read — target: `/sdd-execute` runs both mutations, records reds.
+  - Span attribute landing on the GrpcAioInstrumentorServer server span unverified — target: `/sdd-spec`
+    in-memory span exporter test (non-gating).
+  - All-degraded scan stays below the error-rate threshold once 250 ships — target: feature 250.
+  - `min_conviction > 0`/`rank_limit < N` drop degraded rows (`screener.py:172-181`) — target: agent docs step.
+  - `_seed_row` drift guarded only by `test_screener.py:129/:153/:183/:215/:335` — target: engine step.
+  - Agent cannot tell a fault row from a data-less hard-filter row — accepted (no proto change).
+  - AC-2 servicer test ~1s hanging mock may flake — target: AC-2 test step.
+  - AC-4 `page.route` glob for `/insights/api` from `/trader` unverified; `EmptyState` test id collision —
+    scope selector to wrapper — target: UI step.
+  - Recon grepped 28 analysis suites by keyword only — target: engine step full-suite run.
+  - "No logs reach Loki" unverified against live Grafana — target: feature 250.
+  - Sibling unguarded gathers `servicer.py:3983`, `:5776` — target: defect reports (docs step).
+  - Cross-branch write to `feature/fix-otel-metrics-logs-gap` may conflict — read 250 `context.md`
+    immediately before appending.
