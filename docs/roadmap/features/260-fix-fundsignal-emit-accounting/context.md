@@ -41,3 +41,37 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   `/sdd-design fix-fundsignal-emit-accounting quick`; keep full if design moves idempotency into ingest or adds a
   migration.
 - Development branch: feature/fix-fundsignal-emit-accounting
+
+## Session 2026-10-21 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready. Criteria verdict: PASS WITH WARNINGS (no fails, no floor breaches).
+- OPERATOR DECISIONS (binding, recorded 2026-10-21):
+  - Grouped by service+theme from the 2026-10-20 debt-radar scan; Track C.
+  - Scope is D-43, D-57.
+- Warnings:
+  - C9: Fix Scope `- [ ] Database migration: open, see OQ-1` and OQ-1/OQ-2 are unresolved, deferred to /sdd-design. Design
+    must resolve them and tick or remove the box before the impl-spec gate.
+  - C7: the migration is conditional on OQ-1 option two. Latest analysis migration is `027_contract_owner_dimension`,
+    so the next is 028 or higher; re-derive across all in-flight batch branches (259 may add a table) before fixing it.
+  - C8: FR-4 tie-break ('partial' wins over 'budget_deferred') had no scenario. **Resolved this session**: added
+    `@AC-6` (120 symbols, budget 2, first chunk fails → `partial`, deferred 70, symbols_processed 50).
+  - C8: AC-4's `symbols_processed` 10 was unspecified. **Resolved this session**: FR-4 now states `symbols_processed`
+    counts only fetched symbols.
+  - C8 (optional): no scenario for a same-day rerun retrying a failed chunk's symbols; FR-4 does not require it. Left open.
+  - C5: **Resolved this session**: Fix Scope now states the `FundamentalsScanSummary.status` comment edit needs no
+    breaking-proto approval gate, and that `./scripts/buf-gen.sh` must be re-run for `proto-freshness`.
+  - OQ-2: the AC for the chosen idempotency behavior is added at design; the impl-spec review must confirm it exists.
+- Overlap findings (level WARN, no FAIL):
+  - Same-function collision with `246-fix-fundsignal-neutral-score` (implementation-ready) in `run_once` claim/skip/emit
+    rows (`fundsignal_loop.py`). Recommend a non-blocking merge-order row (Resolved: No), 246 first, 260 rebases onto
+    246's skip logic; /sdd-design confirms the order.
+  - Same file, disjoint regions (rebase-only): 259 `fix-python-loop-supervision` (`run_forever`/`_tick`), 244
+    `fix-python-config-stored-zero` (config read sites), 215 `block-fundamentals-strategy-on-etf` (`analysis.proto`,
+    different messages, no field-number overlap).
+  - Migration: conditional only (OQ-1 option two vs 259's possible parked-events table); neither claims an NNN yet —
+    re-derive at /sdd-spec.
+  - Context: analysis `servicer.py` touched by peers 262/272/270/245 in disjoint regions; ingest `servicer.py:1039-1066`
+    only if design moves idempotency there (244 edits `:323,749`, disjoint); 255 `fix-marketdata-fundamentals-cache`
+    may change `GetFundamentalsMulti` partial semantics D-57 relies on — re-check at 255's design.
+  - merge-order.md has no entry pairing 260 with 246/259/244.
+- Next: `/sdd-design fix-fundsignal-emit-accounting`.
