@@ -39,3 +39,33 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   with no proto, which is the C-0 quick trigger). **Escalate to full** (`/sdd-design fix-portfolio-snapshot-surface`) if
   design picks the delete-the-key path, because that adds a config-service migration and a second service.
 - Development branch: feature/fix-portfolio-snapshot-surface
+
+## Session 2026-10-21 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready. Criteria verdict: PASS WITH WARNINGS (no fails, no floor breaches).
+- Warnings (and how each was handled):
+  1. C-15: `@AC-6` (Connect empty caller) passes on the buggy code, because `portfolio_handler.go:115-118` already
+     rejects an empty caller. Only the gRPC adapter (`:292-295`) lacks the check. **Resolved:** AC-6 is relabelled
+     `@non-regression` (no longer `@regression`). The Problem Statement and FR-3 now say the empty-caller defect is
+     gRPC-only and the owner-filter gap is on both paths (Connect loop `:125-134`).
+  2. Criterion 1: no persona named. **Resolved:** the Problem Statement now names the tenant/trader whose equity would leak.
+  3. Criterion 9: AC-4 and AC-5 are mutually exclusive until design picks the FR-4 branch. **Carried to /sdd-design:**
+     design must delete the losing scenario before impl-spec review.
+  4. Criterion 8: AC-5's doc-table `Then` was not a runtime outcome, and AC-4 depended on timing. **Resolved:** the
+     doc-table check moved to the product-spec Fix Scope, and AC-4 is pinned to a fake service clock.
+  5. Branch (b) hygiene: **Resolved:** `services/xstockstrat-portfolio/docs/context-constitution-findings.md:29` is
+     added to the update list. Under branch (a) the pooled pool budget (default 2) is already stated.
+- Overlap findings (WARN only, no FAIL):
+  - Same-file, disjoint-region rebase overlap in `services/xstockstrat-portfolio/internal/service/portfolio_service.go`
+    with 242 fix-push-untargeted-broadcast, 256 fix-offline-book-consistency, 257 fix-ledger-query-pagination and
+    251 fix-getpnl-source-service.
+  - No live peer names `portfolio_handler.go`.
+  - No collision on the `portfolio.snapshot.interval_minutes` key.
+  - Branch (b) migration NNN: trunk tip is `030`, and `031`/`032` are claimed by 243/244/248, so this feature uses
+    `033` or higher (re-derive at spec time). Out of scope for this feature, to be routed separately: 244 and 248
+    both claim `032_*`.
+  - No merge-order row is recommended.
+- OPERATOR DECISIONS (binding, recorded 2026-10-21):
+  - Grouped by service+theme from the 2026-10-20 debt-radar scan; Track C.
+  - Scope is D-12, D-24.
+- Next: `/sdd-design fix-portfolio-snapshot-surface`.
