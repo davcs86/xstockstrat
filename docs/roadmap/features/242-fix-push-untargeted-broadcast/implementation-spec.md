@@ -3,7 +3,7 @@
 **Status**: `pending`
 **Created**: 2026-10-21
 **Feature**: `docs/roadmap/features/242-fix-push-untargeted-broadcast/feature.md`
-**Total Steps**: 15
+**Total Steps**: 16
 **Feature Branch**: `feature/fix-push-untargeted-broadcast`
 
 ---
@@ -18,7 +18,7 @@ split into the AdminDirectory client + env wiring (Steps 5-6) and the dispatcher
 (Steps 7-8) so the single-flight/deadline/trio seam is proven before the dispatcher depends on it.
 Portfolio and analysis owner-targeting (Steps 9-12) are independent of the identity/notify chain and
 may run in parallel with Steps 3-8. Docs, agent wording and the C-14 trading follow-up close the
-feature (Steps 13-15). No migration and no config key (`design.md:88`; product-spec Fix Scope).
+feature (Steps 13-16; platform docs Step 14, service docs Step 15, split per the 5-file advisory). No migration and no config key (`design.md:88`; product-spec Fix Scope).
 
 `acceptance.feature` already holds @AC-1..@AC-11 (design.md item 8 was applied at /sdd-design,
 `context.md` 2026-10-21 "acceptance.feature: @AC-8..@AC-11 minted from the feature branch"); no
@@ -48,8 +48,8 @@ acceptance-minting step is needed and IDs are not renumbered (C-15).
   audience is resolved server-side.
 - Agent MCP tool `emit_alert`: wording-only update in Step 13 (`design.md:218`).
 - In-app StreamAlerts/ListAlerts: unchanged by design (`design.md:217`).
-- Trading per-account CRITICAL alerts: deferred to named follow-up `fix-trading-account-alert-targeting`
-  via Step 15 (C-14, `design.md:207-212`).
+- Trading per-account CRITICAL alerts: deferred to provisional follow-up slug `fix-trading-account-alert-targeting`
+  via Step 16 (C-14, `design.md:207-212`); its `NNN` is assigned only when `/sdd-triage --from-report` runs.
 
 ### Launch gate (non-waivable, `design.md:254`)
 
@@ -66,8 +66,12 @@ Before `/promote` flips this feature to `launched`: on dev, an admin device rece
   Each test step is authored to fail against the pre-implementation tree (P-06).
 - Step 7 requires Step 5: `WebPushDispatcher` takes the `AdminDirectory` type.
 - Steps 9-12 are independent of Steps 1-8.
-- Step 14 requires Steps 3, 5, 7: docs describe the shipped notify→identity edge.
-- Step 15 must be committed before the integration PR merges (`design.md:207-210`).
+- Steps 14, 15 require Steps 3, 5, 7: docs describe the shipped notify→identity edge. Step 15 runs the
+  Teardown audit for both docs steps, so it follows Step 14.
+- Step 16 must be committed before the integration PR merges (`design.md:207-210`).
+- No `xstockstrat-ui` step (C-14): the UI only registers subscriptions (`PushToggle.tsx:80`) and the push
+  audience is resolved server-side in notify; `PushToggle.tsx` / `AlertInbox.tsx` carry no broadcast copy
+  (grep, /sdd-review impl-spec 2026-10-21).
 - Merge-order coupling (`design.md:263`; overlap re-scan 2026-10-21): `215-block-fundamentals-strategy-on-etf`
   (status `in-progress`) also edits `_emit_fundamentals_unavailable_alert`
   (`services/xstockstrat-analysis/app/engine/live_loop.py:847-861`). Whichever merges second rebases and
@@ -76,6 +80,10 @@ Before `/promote` flips this feature to `launched`: on dev, an admin device rece
   (`portfolio_service.go:1004-1018`); the later fix keeps the `userID` parameter and `TargetUserId`.
   No other in-flight feature references `identity.proto`, `webPush.ts`, `emitRiskAlert`,
   `identityServiceImpl.ts` or `identity/src/index.ts` (grep of non-terminal feature dirs, 2026-10-21).
+  `252-fix-identity-ledger-test-suites` (draft) may move identity to compile-then-test and touch
+  `services/xstockstrat-identity/src/__tests__/mtls.test.ts` (Step 4); whichever lands second re-verifies the
+  runner and import style. Step 15 files overlap open defects `docs/reports/2026-10-19-notify-claude-md-drift-defect.md`
+  and `docs/reports/2026-10-19-identity-claude-md-drift-defect.md`; expect rebases there.
   Branch vs `origin/main-dev`: no diff on any file this spec touches (`git diff HEAD origin/main-dev`).
 
 ---
@@ -114,9 +122,11 @@ Before `/promote` flips this feature to `launched`: on dev, an admin device rece
 
 **Verification**:
 ```bash
-cd packages/proto && buf lint && buf breaking --against "$(git rev-parse --show-toplevel)/.git#branch=feature/fix-push-untargeted-broadcast,subdir=packages/proto"
+cd packages/proto && buf lint && buf breaking --against "$(git rev-parse --path-format=absolute --git-common-dir)#branch=main-dev,subdir=packages/proto"
 ```
-(PLAT-10: the `subdir=packages/proto` qualifier is mandatory, `docs/context-constitution.md:44`.)
+(PLAT-10: the `subdir=packages/proto` qualifier is mandatory, `docs/context-constitution.md:44`.) Against
+`main-dev`, the trunk `scripts/buf-gen.sh:37-41` defaults to; needs a local `refs/heads/main-dev` (same
+precondition as `:38`). `--git-common-dir` because `.git` is a file in a git worktree.
 Identity-owner proto approval recorded in `context.md` before Step 2 commits (C-09, `design.md:30-31`).
 
 ---
@@ -126,14 +136,21 @@ Identity-owner proto approval recorded in `context.md` before Step 2 commits (C-
 **Status**: `pending`
 **Service**: `packages/proto`
 **Files**:
-- `packages/proto/gen/go/identity/v1/` — modify (generated)
-- `packages/proto/gen/python/identity/v1/` — modify (generated)
-- `packages/proto/gen/ts/identity/v1/` — modify (generated; includes compiled `gen/ts/dist/`)
+- `packages/proto/gen/go/identity/v1/identity.pb.go` — modify (generated)
+- `packages/proto/gen/go/identity/v1/identity_grpc.pb.go` — modify (generated)
+- `packages/proto/gen/go/identity/v1/identityv1connect/` — modify only if regenerated
+- `packages/proto/gen/python/identity/v1/identity_pb2.py` — modify (generated)
+- `packages/proto/gen/python/identity/v1/identity_pb2_grpc.py` — modify (generated)
+- `packages/proto/gen/python/identity/v1/__init__.py` — modify only if regenerated
+- `packages/proto/gen/ts/identity/v1/identity.ts` — modify (generated)
+- `packages/proto/gen/ts/identity/v1/identity_pb.ts` — modify (generated)
+- `packages/proto/gen/ts/identity/v1/identity_connect.ts` — modify (generated)
+- `packages/proto/gen/ts/dist/identity/v1/identity.js`, `identity.d.ts`, `identity_pb.js`, `identity_pb.d.ts` — modify (compiled; tracked via `.gitignore:27` `!packages/proto/gen/ts/dist/`)
 
 **Reviewers**: Proto Reviewer — field number uniqueness, no breaking change, `buf lint`/`buf breaking` pass; `xstockstrat-identity` owner — JWT expiry and rotation, API key scoping; `xstockstrat-notify` owner — stream delivery guarantees, backpressure handling, alert deduplication
 
 **Codebase Evidence**:
-- `./scripts/buf-gen.sh` runs `buf breaking … subdir=packages/proto` (`scripts/buf-gen.sh:40`) then `buf generate` (`:43-44`).
+- `./scripts/buf-gen.sh` runs `buf breaking … subdir=packages/proto` (`scripts/buf-gen.sh:41`, only when `refs/heads/main-dev` exists, `:38`) then `buf generate` (`:48`).
 - TS plugin `protoc-gen-ts_proto` with `outputServices=grpc-js`, `stringEnums=true` (`packages/proto/buf.gen.yaml:22-30`) emits `<Service>Service` + `<Service>Client`; precedents: `IdentityServiceService` import at `services/xstockstrat-identity/src/index.ts:6`, `LedgerServiceClient` at `services/xstockstrat-identity/src/grpc/ledgerAudit.ts:8`, `ConfigServiceClient` at `services/xstockstrat-config/src/__tests__/listKeysWire.test.ts:67`.
 
 **TDD**: N/A (proto-gen — generated code)
@@ -220,7 +237,7 @@ git diff --stat src/grpc/authz.ts src/index.ts   # empty
 - Test runner: `node --experimental-strip-types --test src/__tests__/*.test.ts`; coverage `c8 … --lines 40` (`services/xstockstrat-identity/package.json` `test` / `test:coverage`). Tests excluded from `tsc` (`tsconfig.json` `exclude: src/**/*.test.ts`).
 - Fake `getAuthContext` shape: config `SecretCallerCall` (`services/xstockstrat-config/src/grpc/authz.ts:129-132`).
 - Real-socket harness: `mintLeaf` (`mtls.test.ts:33-39`), `mintPki` (`:41-53`, client leaf `xstockstrat-client` at `:47`), `setEnv` (`:55-59`), passthrough descriptor `addService` (`:70-89`, `path: METHOD` at `:74` — not usable for a typed RPC, `design.md:139-140`), `call()` overwrites env at `:100`; per-leaf creds built before the call at `:136-137`.
-- Generated-stub import precedent in an identity test: `await import('@xstockstrat/proto/identity/v1/identity.js')` at `identityServiceImpl.test.ts:229`.
+- Generated-stub import: do NOT copy `await import('@xstockstrat/proto/identity/v1/identity.js')` (`identityServiceImpl.test.ts:229`, inside a swallowing `try`): the exports map `"./*": "./dist/*.js"` (`packages/proto/gen/ts/package.json:5-6`) resolves it to `identity.js.js`. Import the specifier with no `.js` suffix.
 - SAN format already proven by `services/xstockstrat-config/src/__tests__/peerSanSpike.test.ts:102-110` — cite, do not duplicate.
 - C-13: no Node fixture home exists in identity (`src/__tests__/` has no `fixtures/`). The fake pool and user rows have one consumer (this file) → inline is compliant.
 
@@ -250,7 +267,7 @@ git diff --stat src/grpc/authz.ts src/index.ts   # empty
 **Verification**:
 ```bash
 node --version   # must be v24.x (fails.md:2224-2226)
-cd services/xstockstrat-identity && pnpm run test:coverage && pnpm run build && pnpm run lint
+cd services/xstockstrat-identity && pnpm run test:coverage && pnpm run build && pnpm run lint   # coverage ≥ 40% lines (c8 --lines 40, package.json:13)
 grep -n "@AC-9\|@AC-10" src/__tests__/adminDirectory.test.ts src/__tests__/mtls.test.ts
 grep -n "__tests__/fixtures" src/__tests__/adminDirectory.test.ts   # none: single-consumer inline (C-13)
 ```
@@ -309,11 +326,13 @@ grep -n "__tests__/fixtures" src/__tests__/adminDirectory.test.ts   # none: sing
 
 **Verification**:
 ```bash
-cd services/xstockstrat-notify && pnpm run build && pnpm run lint
-grep -n "IDENTITY_ENDPOINT" docker-compose.yml .do/app.dev.yaml .do/app.yaml   # one new hit inside each notify block
-grep -n "PROPAGATED_HEADERS\|md?.get?.(h)?.\[0\]" src/services/adminDirectory.ts   # trio relayed (C-03)
-grep -n "waitForReady\|??\s*'xstockstrat-identity" src/services/adminDirectory.ts   # none
-ls src/middleware 2>/dev/null   # absent (@AC-2 @feature-175)
+(cd services/xstockstrat-notify && pnpm run build && pnpm run lint)
+# run from repo root; each count prints 1 (notify block only)
+awk '/^  xstockstrat-notify:/{f=1;next} /^  [a-z]/{f=0} f' docker-compose.yml | grep -c "IDENTITY_ENDPOINT"
+for f in .do/app.yaml .do/app.dev.yaml; do awk '/^  - name: xstockstrat-notify$/{f=1;next} /^  - name: /{f=0} f' "$f" | grep -c "key: IDENTITY_ENDPOINT"; done
+grep -n "PROPAGATED_HEADERS\|md?.get?.(h)?.\[0\]" services/xstockstrat-notify/src/services/adminDirectory.ts   # trio relayed (C-03)
+grep -n "waitForReady\|??\s*'xstockstrat-identity" services/xstockstrat-notify/src/services/adminDirectory.ts   # none
+ls services/xstockstrat-notify/src/middleware 2>/dev/null   # absent (@AC-2 @feature-175)
 ```
 
 ---
@@ -345,12 +364,12 @@ ls src/middleware 2>/dev/null   # absent (@AC-2 @feature-175)
    - deadline: recorded `opts.deadline` is a Date/number within `[now, now + ADMIN_LOOKUP_DEADLINE_MS + 50]`; `opts.waitForReady` is undefined.
    - `@AC-11` failure: fake rejects `{ code: 14 }` → `listAdminUserIds` rejects; in-flight slot is cleared (next call issues a new client call).
    - get-less metadata: `listAdminUserIds({} as any)` and `listAdminUserIds(undefined)` do not throw synchronously; outbound metadata is empty.
-   - `@AC-11` missing endpoint: `createAdminDirectory(undefined)` → `listAdminUserIds` rejects with `IDENTITY_ENDPOINT unset`.
+   - `@AC-11` missing endpoint: `createAdminDirectory('')` → `listAdminUserIds` rejects with `IDENTITY_ENDPOINT unset`. Pass `''`, not `undefined`: the default parameter would read `process.env.IDENTITY_ENDPOINT` from the runner.
 2. `mtls.test.ts` — add an `xstockstrat-identity` server leaf to `mintPki`; new `describe` standing up `IdentityServiceService` (generated) with a `listAdminUserIds` handler that captures `call.metadata` and returns `{ userIds: ['user-99'] }`; dial via `createAdminDirectory('127.0.0.1:<port>')` (real `mtls.clientCredentials()` + `targetOverride('xstockstrat-identity')`). Inbound md `x-user-id: u-1`, `x-access-scope: 7`, `x-trace-id: t-1` → all three arrive on the wire; result `['user-99']`.
 
 **Verification**:
 ```bash
-cd services/xstockstrat-notify && pnpm run test:coverage && pnpm run lint
+cd services/xstockstrat-notify && pnpm run test:coverage && pnpm run lint   # coverage ≥ 40% lines (c8 --lines 40, package.json:13)
 grep -n "@AC-8\|@AC-11" src/__tests__/adminDirectory.test.ts
 grep -n "__tests__/fixtures" src/__tests__/adminDirectory.test.ts   # none: single-consumer inline (C-13)
 ```
@@ -382,7 +401,7 @@ grep -n "__tests__/fixtures" src/__tests__/adminDirectory.test.ts   # none: sing
 **Instructions**:
 1. `webPush.ts`:
    - Import `type { Metadata } from '@grpc/grpc-js'` and `type { AdminDirectory } from '../services/adminDirectory'`.
-   - Constructor gains `private readonly admins: AdminDirectory` (3rd, required) and `private readonly now: () => number = Date.now` (4th, optional — injectable clock, `design.md:85-87`). Add `private lastLookupErrorAt = -Infinity;` and `const ADMIN_LOOKUP_ERROR_INTERVAL_MS = 60_000;` (mechanism constant).
+   - Constructor gains `private readonly admins: AdminDirectory` (3rd, required) and `private readonly now: () => number = Date.now` (4th, optional — injectable clock, `design.md:85-87`). Add `private lastLookupErrorAt = -Infinity;` and `const ADMIN_LOOKUP_ERROR_INTERVAL_MS = 60_000;` (mechanism constant, F-07 exemption like `webPush.ts:16`; ≤2-line comment saying so. Not flagged by /sdd-review impl-spec 2026-10-21, so the config-key fallback in `design.md:284` is not taken).
    - `dispatch(alert: PushAlert, md?: Metadata)`. Keep `:80-86` unchanged. Replace the ternary `:88-101` so the targeted branch stays byte-identical in SQL and params, and the untargeted branch becomes:
      ```ts
      let adminIds: string[];
@@ -427,7 +446,7 @@ grep -n "dispatch(alert, call.metadata)" src/grpc/notifyServiceImpl.ts
 **Codebase Evidence**:
 - Case to rewrite under operator sign-off: `it('AC-4: broadcast (empty targetUserId) queries all subscriptions'` at `webPush.test.ts:147-155` (context.md § Operator decisions 2026-10-21; C-16 CHANGE, `design.md:290`).
 - Targeted guard to keep and extend: `webPush.test.ts:129-145` (`/WHERE user_id = \$1/`, params `['user-42']`, `:142-143`).
-- SQL-blind fake: `capturingPool` `:33-45`; `cfg` `:47-49`; `StubbedDispatcher` `:53-60`; `alert()` `:88-98`; `SUBS` `:100-103`. Every existing `new StubbedDispatcher(pool.obj as any, cfg…)` (cases at `:110`, `:120`, `:129`, `:157`, `:168`, `:181`, `:201`) must pass a 3rd argument once the constructor requires it (tsc compiles tests).
+- SQL-blind fake: `capturingPool` `:33-45`; `cfg` `:47-49`; `StubbedDispatcher` `:53-60`; `alert()` `:88-98`; `SUBS` `:100-103`. Every existing `new StubbedDispatcher(pool.obj as any, cfg…)` (`:113`, `:123`, `:132`, `:150` (rewritten), `:160`, `:171`, `:184`) and `new ExposedDispatcher(pool.obj as any, cfg())` (`:203`, class `:194`) must pass a 3rd argument once the constructor requires it (tsc compiles tests).
 - EmitAlert harness: `recordingWebPush` (`notifyServiceImpl.test.ts:64-75`), `registerSubscriber` (`:314`), `REQ` (`:353`), push isolation (`:546-565`), unauthenticated-caller pin (`:219-224`, must stay green).
 
 **TDD**: `red-green required`
@@ -439,7 +458,7 @@ grep -n "dispatch(alert, call.metadata)" src/grpc/notifyServiceImpl.ts
    - `stubAdmins(...results: (string[] | Error)[])` — an `AdminDirectory` returning the next result per call and recording calls + received md.
    - `sqlPool(subsByUser: Record<string, Row[]>)` — SQL-aware fake: `WHERE user_id = $1` returns `subsByUser[params[0]]`; `ANY($1::text[])` returns rows for users in `params[0]`; any other `SELECT … FROM notify.push_subscriptions` throws `new Error('unfiltered audience query')`.
    - Givens (from `acceptance.feature`): `user-42` → `/one`, `/two`; `user-77` → `/three`; `user-99` (admin) → `/admin`.
-   - Pass `stubAdmins([])` (or the case's directory) as the 3rd constructor arg in every existing case.
+   - Pass `stubAdmins([])` (or the case's directory) as the 3rd constructor arg in every existing case, including `ExposedDispatcher` (`:203`).
 2. Replace `:147-155` with:
    - `@AC-5` untargeted WARNING, admins `['user-99']` → sent endpoints exactly `['https://push.example/admin']`, title `portfolio risk limit breach`; SQL matches `ANY($1::text[])`, params `[['user-99']]`.
    - `@AC-1` same dispatch → none of `/one`, `/two`, `/three` sent.
@@ -453,7 +472,7 @@ grep -n "dispatch(alert, call.metadata)" src/grpc/notifyServiceImpl.ts
 
 **Verification**:
 ```bash
-cd services/xstockstrat-notify && pnpm run test:coverage && pnpm run lint
+cd services/xstockstrat-notify && pnpm run test:coverage && pnpm run lint   # coverage ≥ 40% lines (c8 --lines 40, package.json:13)
 grep -n "broadcast (empty targetUserId) queries all subscriptions" src/__tests__/webPush.test.ts   # none: rewritten
 grep -n "@AC-1\|@AC-2\|@AC-5\|@AC-8\|@AC-11" src/__tests__/webPush.test.ts src/__tests__/notifyServiceImpl.test.ts
 grep -n "__tests__/fixtures" src/__tests__/webPush.test.ts src/__tests__/notifyServiceImpl.test.ts   # none: single-consumer inline (C-13)
@@ -526,10 +545,10 @@ grep -n "emitRiskAlert(ctx, userID" internal/service/portfolio_service.go   # 2 
 
 **Verification**:
 ```bash
-cd services/xstockstrat-portfolio && GOWORK=off go test ./internal/service/... -run 'TestCheckRiskLimits' -count=1 -v
-cd services/xstockstrat-portfolio && GOWORK=off COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"   # ≥ 40%
-cd services/xstockstrat-portfolio && GOWORK=off golangci-lint run --modules-download-mode=mod
-grep -rn '"user-42"' --include="*_test.go" services/xstockstrat-portfolio   # one declaring test (C-13)
+(cd services/xstockstrat-portfolio && GOWORK=off go test ./internal/service/... -run 'TestCheckRiskLimits' -count=1 -v)
+(cd services/xstockstrat-portfolio && export GOWORK=off && COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:")   # ≥ 40% (ci.yml:256-257 form)
+(cd services/xstockstrat-portfolio && GOWORK=off golangci-lint run --modules-download-mode=mod)
+grep -rn '"user-42"' --include="*_test.go" services/xstockstrat-portfolio   # repo root; one declaring test (C-13)
 ```
 New logic is in an excluded package (`internal/service/`) — no coverage threshold applies to it; the targeted `-run` tests are the behavioral proof.
 
@@ -614,8 +633,8 @@ grep -n "def .*fixture\|from .conftest\|conftest" tests/test_live_loop.py   # un
 
 **Codebase Evidence**:
 - Docstring `broadcast: REQUIRED, no default. True sends a system-wide broadcast (unchanged semantic — target_user_id="" on the wire)…` at `services/xstockstrat-agent/app/tools.py:690-692`; `target_user_id = "" if broadcast else _caller_user_id(ctx, "emit_alert")` at `:699` (unchanged).
-- Runbook row `| \`broadcast\` | \`bool\` | Yes | \`true\` sends a system-wide broadcast …` at `docs/runbooks/mcp-tools.md:256`.
-- No test pins the phrase "system-wide broadcast" (grep of `services/` and `docs/` outside feature dirs: only `tools.py:690`, `mcp-tools.md:256`).
+- Runbook row `| \`broadcast\` | \`bool\` | Yes | \`true\` sends a system-wide broadcast …` at `docs/runbooks/mcp-tools.md:256`; `emit_alert` intro paragraph "…or an explicit system-wide broadcast (feature 111)" at `:246`.
+- No test pins the phrase "system-wide broadcast" (grep of `services/` and `docs/` outside feature dirs: only `tools.py:690`, `mcp-tools.md:246`, `:256`).
 
 **TDD**: N/A (docs — docstring wording only, no behavior change, `design.md:218`)
 
@@ -624,27 +643,25 @@ grep -n "def .*fixture\|from .conftest\|conftest" tests/test_live_loop.py   # un
 **Instructions**:
 1. `tools.py:690-692`: keep the parameter contract; append that with `broadcast=True` the in-app stream/history reaches every user but the Web Push device notification reaches admin-role users only (feature 242).
 2. `mcp-tools.md:256`: same clause in the `broadcast` row, keeping parity with the docstring (agent owner focus: `mcp-tools.md` parity).
+3. `mcp-tools.md:246`: after "an explicit system-wide broadcast (feature 111)", add that a broadcast's Web Push reaches admin-role devices only (feature 242).
 
 **Verification**:
 ```bash
-cd services/xstockstrat-agent && ruff check . && ruff format --check . && uv run pytest tests/test_tools.py tests/test_tools_endpoint.py -q
-grep -n "admin" services/xstockstrat-agent/app/tools.py docs/runbooks/mcp-tools.md | grep -i "push"
+(cd services/xstockstrat-agent && ruff check . && ruff format --check . && uv run pytest tests/test_tools.py tests/test_tools_endpoint.py -q)
+grep -n "admin" services/xstockstrat-agent/app/tools.py docs/runbooks/mcp-tools.md | grep -i "push"   # repo root; tools.py, mcp-tools.md:246 and :256
 ```
 
 ---
 
-### Step 14 — docs: notify→identity edge, PLAT-4, header-propagation, mTLS SAN gate, notify/identity CLAUDE.md
+### Step 14 — docs: platform docs (root CLAUDE.md, PLAT-4, header-propagation, mTLS SAN gate)
 
 **Status**: `pending`
-**Service**: `docs/`, `services/xstockstrat-notify/`, `services/xstockstrat-identity/`
+**Service**: `docs/`
 **Files**:
 - `CLAUDE.md` — modify
 - `docs/context-constitution.md` — modify
 - `docs/patterns/header-propagation.md` — modify
 - `docs/patterns/inter-service-mtls.md` — modify
-- `services/xstockstrat-notify/CLAUDE.md` — modify
-- `services/xstockstrat-notify/docs/context-constitution-findings.md` — modify
-- `services/xstockstrat-identity/CLAUDE.md` — modify
 
 **Reviewers**: none
 
@@ -653,10 +670,6 @@ grep -n "admin" services/xstockstrat-agent/app/tools.py docs/runbooks/mcp-tools.
 - `docs/context-constitution.md:38` PLAT-4 ("identity is the only outbound per-request caller … ledger/notify/config make no outbound per-request calls").
 - `docs/patterns/header-propagation.md:123-125` ("none currently does" — already false per `ledgerAudit.ts:14`); AsyncLocalStorage template `:120-154`; "Request-scoped outbound edges" `:160-169`.
 - `docs/patterns/inter-service-mtls.md` (86 lines) has no peer-SAN authorization section (grep `peer`: none); the existing SAN grant is config's `peerSan: 'xstockstrat-ingest'` (`services/xstockstrat-config/src/grpc/authz.ts:124`).
-- Notify `CLAUDE.md`: Dependencies `:62-67` (config + PostgreSQL only); Web Push paragraph `:85-95` ("`target_user_id` (empty ⇒ broadcast to all subscriptions)" `:90`); Env Vars block `:109-119`.
-- Notify findings `services/xstockstrat-notify/docs/context-constitution-findings.md:38` (open ⚠ bullet on the broadcast); `## Resolved` at `:40`.
-- Identity `CLAUDE.md`: Ports text "exposing all eleven methods" (`:25-30`, "eleven methods" `:26`), Dependencies `:43-48`.
-- Teardown rule: root `CLAUDE.md` § Teardown — context files changed ⇒ `/context-forge:context-constitution refresh` scoped to touched files, or manual reconciliation recorded in the PR body.
 
 **TDD**: N/A (docs)
 
@@ -667,22 +680,60 @@ grep -n "admin" services/xstockstrat-agent/app/tools.py docs/runbooks/mcp-tools.
 2. `docs/context-constitution.md:38` PLAT-4: same correction; add Node outbound evidence `services/xstockstrat-notify/src/services/adminDirectory.ts#PROPAGATED_HEADERS`.
 3. `header-propagation.md`: correct `:123-125`; add explicit inbound-metadata threading (identity `ledgerAudit.ts:14,40-44`, notify `adminDirectory.ts`) as an accepted Node form beside the AsyncLocalStorage template; add a `xstockstrat-notify → xstockstrat-identity` bullet under "Request-scoped outbound edges" (`:160-169`) noting the RPC is header-blind (`design.md:90-99`).
 4. `inter-service-mtls.md`: add a short "Peer-SAN authorization" note listing the two SAN-gated grants (config `GetSecret` ← `xstockstrat-ingest`; identity `ListAdminUserIds` ← `xstockstrat-notify`), exact-match only, headers ignored for the latter.
-5. Notify `CLAUDE.md`: `:90` → untargeted pushes reach admin-role users only via a live, uncached identity `ListAdminUserIds` lookup (single-flight, 2s deadline, ERROR ≤1/60s on failure, no push on failure); Dependencies row `xstockstrat-identity | gRPC ListAdminUserIds | untargeted Web Push audience`; Env Vars `IDENTITY_ENDPOINT=xstockstrat-identity:50058  # feature 242; unset ⇒ startup ERROR, untargeted push disabled`.
-6. Notify findings: move the `:38` bullet to `## Resolved` with "resolved by feature 242 (admin-only untargeted audience)".
-7. Identity `CLAUDE.md`: method list/count includes `ListAdminUserIds` (SAN `xstockstrat-notify` only, header-blind); Dependencies unchanged (identity is the callee). Do not restate the full method list beyond what exists.
-8. Teardown: run `/context-forge:context-constitution refresh` scoped to the files above; fix grounded drift. If the plugin is unavailable, re-read each touched context file against the code and record both "plugin unavailable" and the manual reconciliation in the PR body.
 
 **Verification**:
 ```bash
 grep -n "notify" CLAUDE.md | grep -i "identity"
-grep -n "ListAdminUserIds" docs/context-constitution.md docs/patterns/header-propagation.md docs/patterns/inter-service-mtls.md services/xstockstrat-notify/CLAUDE.md services/xstockstrat-identity/CLAUDE.md
-grep -n "broadcast to all subscriptions" services/xstockstrat-notify/CLAUDE.md   # none
+grep -n "ListAdminUserIds" docs/context-constitution.md docs/patterns/header-propagation.md docs/patterns/inter-service-mtls.md
 grep -n "none currently does" docs/patterns/header-propagation.md   # none
 ```
 
 ---
 
-### Step 15 — docs: C-14 follow-up for trading per-account alerts
+### Step 15 — docs: service docs (notify/identity CLAUDE.md + per-module constitution) and Teardown
+
+**Status**: `pending`
+**Service**: `services/xstockstrat-notify/`, `services/xstockstrat-identity/`
+**Files**:
+- `services/xstockstrat-notify/CLAUDE.md` — modify
+- `services/xstockstrat-notify/docs/context-constitution.md` — modify
+- `services/xstockstrat-notify/docs/context-constitution-findings.md` — modify
+- `services/xstockstrat-identity/CLAUDE.md` — modify
+- `services/xstockstrat-identity/docs/context-constitution.md` — modify
+
+**Reviewers**: none
+
+**Codebase Evidence**:
+- Notify `CLAUDE.md`: Dependencies `:62-67` (config + PostgreSQL only); Web Push paragraph `:85-95` ("`target_user_id` (empty ⇒ broadcast to all subscriptions)" `:90`); Env Vars block `:109-119`.
+- Notify constitution `services/xstockstrat-notify/docs/context-constitution.md`: Pointers row `:37` (mTLS dial `targetOverride('xstockstrat-config')` only; "per-leaf `propagation.ts` deleted"); Web Push invariants NOTIFY-6 `:20`, severity-only gate `:25`. No rule covers the untargeted audience.
+- Notify findings `services/xstockstrat-notify/docs/context-constitution-findings.md:38` (open ⚠ bullet on the broadcast); `## Resolved` at `:40`.
+- Identity `CLAUDE.md`: Ports text "exposing all eleven methods" (`:25-30`, "eleven methods" `:26`) — already stale: `identity.proto` has 21 RPCs (open defect `docs/reports/2026-10-19-identity-claude-md-drift-defect.md:12`). Dependencies `:43-48`.
+- Identity constitution `services/xstockstrat-identity/docs/context-constitution.md`: IDENTITY-5 `adminGate`-first rule (`:22`) — the new RPC is deliberately NOT `adminGate`d (SAN-only, header-blind); IDENTITY-3 raw numeric codes "EXCEPT the shared `authz.ts`" (`:20`); Pointers `:44-45`.
+- Teardown rule: root `CLAUDE.md` § Teardown — context files changed ⇒ `/context-forge:context-constitution refresh` scoped to touched files, or manual reconciliation recorded in the PR body.
+
+**TDD**: N/A (docs)
+
+**Covers**: —
+
+**Instructions**:
+1. Notify `CLAUDE.md`: `:90` → untargeted pushes reach admin-role users only via a live, uncached identity `ListAdminUserIds` lookup (single-flight, 2s deadline, ERROR ≤1/60s on failure, no push on failure); Dependencies row `xstockstrat-identity | gRPC ListAdminUserIds | untargeted Web Push audience`; Env Vars `IDENTITY_ENDPOINT=xstockstrat-identity:50058  # feature 242; unset ⇒ startup ERROR, untargeted push disabled`.
+2. Notify constitution: add a NOTIFY-* rule — untargeted push audience = admin user IDs from a live, uncached `ListAdminUserIds` call; adding a TTL cache or falling back to all subscriptions on lookup failure reopens defect 242 (evidence `src/fanout/webPush.ts#dispatch`, `src/services/adminDirectory.ts`). Update Pointers `:37` to list the `targetOverride('xstockstrat-identity')` dial and `adminDirectory.ts#PROPAGATED_HEADERS`.
+3. Notify findings: move the `:38` bullet to `## Resolved` with "resolved by feature 242 (admin-only untargeted audience)".
+4. Identity `CLAUDE.md`: name `ListAdminUserIds` (SAN `xstockstrat-notify` only, header-blind). Replace "all eleven methods" with an uncounted phrase (e.g. "every `IdentityService` method") — do not state a count; the rest of the stale list stays with the open defect. Dependencies unchanged (identity is the callee).
+5. Identity constitution: add an IDENTITY-* rule — `ListAdminUserIds` (`src/grpc/adminDirectory.ts`) is authorized by exact mTLS peer SAN `xstockstrat-notify` only and ignores every header; adding `adminGate` or reading `x-access-scope` breaks notify (it calls with the alerting producer's trio). Note the `grpc.status` enum use there as a second IDENTITY-3 exception beside `authz.ts`.
+6. Teardown (covers Steps 14 and 15): run `/context-forge:context-constitution refresh` scoped to every file in both steps; fix grounded drift. If the plugin is unavailable, re-read each touched context file against the code and record both "plugin unavailable" and the manual reconciliation in the PR body.
+
+**Verification**:
+```bash
+grep -n "ListAdminUserIds" services/xstockstrat-notify/CLAUDE.md services/xstockstrat-notify/docs/context-constitution.md services/xstockstrat-identity/CLAUDE.md services/xstockstrat-identity/docs/context-constitution.md
+grep -n "broadcast to all subscriptions" services/xstockstrat-notify/CLAUDE.md   # none
+grep -n "eleven methods" services/xstockstrat-identity/CLAUDE.md   # none
+grep -n "resolved by feature 242" services/xstockstrat-notify/docs/context-constitution-findings.md
+```
+
+---
+
+### Step 16 — docs: C-14 follow-up for trading per-account alerts
 
 **Status**: `pending`
 **Service**: `docs/reports/`, feature dir
@@ -707,7 +758,7 @@ grep -n "none currently does" docs/patterns/header-propagation.md   # none
 **Instructions**:
 1. Write the defect report per `defect-filing.md`: after feature 242, both CRITICAL per-account trading alerts reach admin devices only; the account owner loses the push for their own halt/reconciliation. Severity SEV-2; affected service `xstockstrat-trading`; owner resolvable from `accountID`.
 2. Sidecar content: `open`.
-3. Append to `context.md`: named follow-up slug `fix-trading-account-alert-targeting` (route via `/sdd-triage --from-report docs/reports/2026-10-21-trading-untargeted-per-account-alerts-defect.md`), or an operator sign-off; required before the integration PR merges (C-14, `design.md:207-210`).
+3. Append to `context.md`: provisional follow-up slug `fix-trading-account-alert-targeting` (its `NNN` is assigned by `/sdd-triage`; route via `/sdd-triage --from-report docs/reports/2026-10-21-trading-untargeted-per-account-alerts-defect.md`), or an operator sign-off; required before the integration PR merges (C-14, `design.md:207-210`).
 
 **Verification**:
 ```bash

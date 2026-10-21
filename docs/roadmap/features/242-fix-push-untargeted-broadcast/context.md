@@ -249,3 +249,56 @@ OPERATOR DECISIONS (binding, recorded 2026-10-21):
 - [x] Canonical `user_id` form match: closed at spec level (evidence above).
 - [x] Merge-order coupling re-scan: done; 215 only (spec § Step Dependencies).
 - [ ] Remaining design Open Threads carry to /sdd-execute at the steps named in the spec.
+
+## Session 2026-10-21 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 12 warnings, 0 floor breaches; overlap WARN, no FAIL (advisory — did not block).
+  Status stays `implementation-ready`. Every claim re-verified against the tree before editing.
+- Addressed in implementation-spec.md (Total Steps 15 → 16):
+  - [x] Step 2 **Files** names exact generated files (go `identity.pb.go`/`identity_grpc.pb.go`; python
+    `identity_pb2.py`/`identity_pb2_grpc.py`/`__init__.py`; ts `identity.ts`/`identity_pb.ts`/`identity_connect.ts`;
+    `gen/ts/dist/identity/v1/identity{,_pb}.{js,d.ts}`, `.gitignore:27`). Evidence lines fixed to
+    `scripts/buf-gen.sh:41` (breaking, gated by `:38`) and `:48` (generate) (C-01/F-08).
+  - [x] Steps 4, 6, 8 Verification state `≥ 40% lines (c8 --lines 40, package.json:13)` (C-08).
+  - [x] Step 13 adds `docs/runbooks/mcp-tools.md:246` (emit_alert intro "system-wide broadcast") to evidence and
+    instructions (C-01).
+  - [x] Step 6 missing-endpoint case calls `createAdminDirectory('')`; `undefined` would hit the
+    `process.env.IDENTITY_ENDPOINT` default.
+  - [x] Steps 5, 10, 13 Verification: service commands in subshells, greps repo-root-relative; Step 5 env check
+    scoped to the notify block via awk (prints 1 per file); Step 10 uses `export GOWORK=off` (ci.yml:256-257 form).
+  - [x] Step 14 split (7 files → Step 14 platform docs, 4 files; Step 15 service docs, 5 files). Step 15 adds
+    `services/xstockstrat-notify/docs/context-constitution.md` (`:37` pointer, new audience rule) and
+    `services/xstockstrat-identity/docs/context-constitution.md` (SAN-only RPC vs IDENTITY-5 `:22`; IDENTITY-3 `:20`
+    exception). Identity CLAUDE.md "eleven methods" replaced by an uncounted phrase (proto has 21 RPCs; rest stays
+    with `docs/reports/2026-10-19-identity-claude-md-drift-defect.md`). Teardown runs once in Step 15 for both steps.
+  - [x] C-14: no-UI-step note mirrored in ## Step Dependencies (`PushToggle.tsx:80`; no stale copy in
+    `PushToggle.tsx`/`AlertInbox.tsx`). Follow-up slug `fix-trading-account-alert-targeting` marked provisional
+    (NNN from /sdd-triage); old Step 15 → Step 16.
+  - [x] F-07: `ADMIN_LOOKUP_ERROR_INTERVAL_MS` step text now carries the F-07 rationale; not a Floor breach, so the
+    `design.md:284` config-key fallback is not taken.
+  - [x] Step 4 evidence: `identityServiceImpl.test.ts:229` `.js` specifier marked do-not-copy (exports
+    `"./*": "./dist/*.js"`, `packages/proto/gen/ts/package.json:5-6` → `identity.js.js`).
+  - [x] Step 8 evidence: constructor sites `webPush.test.ts:113,123,132,150,160,171,184`; `ExposedDispatcher` `:203`
+    also needs the 3rd arg (instruction added).
+  - [x] Step 1 buf breaking now against `$(git rev-parse --path-format=absolute --git-common-dir)#branch=main-dev,subdir=packages/proto`
+    (worktree-safe; matches `scripts/buf-gen.sh:37-41`).
+  - [x] Overlap 252 (identity runner / `mtls.test.ts`) and the notify/identity CLAUDE.md drift defects recorded
+    in ## Step Dependencies.
+- Open Threads (still open; announce at every /sdd-execute checkpoint, P-03):
+  - [ ] Step 1: buf breaking needs a local `refs/heads/main-dev`. A detached worktree may lack it; create it
+    only where no other worktree holds `main-dev`.
+  - [ ] Step 11 vs `215-block-fundamentals-strategy-on-etf` (in-progress): same function
+    `_emit_fundamentals_unavailable_alert` (`live_loop.py:847-861`). Second to merge keeps
+    `target_user_id=definition.user_id`. Soft merge-order row (Resolved=No) recommended; not written
+    (`merge-order.md` is outside this session's write scope). Operator to decide.
+  - [ ] Step 4 vs `252-fix-identity-ledger-test-suites` (draft): may change the identity runner and
+    `mtls.test.ts`. Second to land re-verifies the strip-types static-import posture. Soft merge-order row
+    recommended, not written.
+  - [ ] Step 5 vs `084-droplet-compose-deploy` (spec-ready): `docker-compose.yml` / `.do/app.dev.yaml` edits.
+    Product-level only; rebase-only.
+  - [ ] Steps 9-10 vs 240 (on main-dev) and `251-fix-getpnl-source-service` (draft) in `portfolio_service.go`:
+    disjoint hunks, rebase-only.
+  - [ ] Step 13 vs 215/240 in `app/tools.py` and `docs/runbooks/mcp-tools.md`: docstring/section-disjoint,
+    rebase-only.
+  - [ ] Re-run Mode B overlap once 241/243-252 reach `implementation-ready` (this scan saw them only at
+    product-spec/context depth).
