@@ -3033,3 +3033,10 @@ ambiguity is logged here).
 - **Evidence**: `docs/roadmap/features/250-fix-otel-metrics-logs-gap/design.md` §4 Part 3 (existence set) and §5 (comment-only red case); context.md 2026-10-21 sdd-design entry.
 - **Rule it implies**: an existence/absence guard derives its "exists" set from declaration value lines only (e.g. `- uid:`, top-level `"uid":`), never from free text in the same file, and ships a red case proving a comment cannot satisfy existence.
 
+### 2026-10-21 — fix-getpnl-source-service — assumption
+- **Mistake**: Debate rounds 6-8 read a stale read-only checkout (`d077dcfe`) and re-raised blocker B6 (follow-up
+  reports unfiled) after `d707d239` had filed them, so a discharged blocker held the design gate for three rounds.
+- **Evidence**: `docs/roadmap/features/251-fix-getpnl-source-service/context.md` "sdd-design (full) round 9, gate"
+  and "halted at gate, round 8" (`:276-278`).
+- **Rule it implies**: Before each debate round, refresh the read-only checkout to the feature branch tip and record
+  the grounded SHA in the synthesis; a blocker whose evidence is a file's absence is re-verified at that SHA.
