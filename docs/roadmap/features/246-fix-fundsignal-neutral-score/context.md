@@ -438,3 +438,34 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Status: spec-ready -> design-approved.
 - Next: `/sdd-spec fix-fundsignal-neutral-score`. Spec must carry the F-08 Files list, gates (a)-(c), and the
   provider-boundary re-grep (design.md).
+
+## Session 2026-10-21 — sdd-spec
+
+- Generated implementation-spec.md with 3 steps. Status → implementation-ready (from design-approved).
+  - Step 1 test (RED): `fundamentals_row` factory in `tests/conftest.py` (3 consumer files), fixture migration
+    (`_fund` `test_fundsignal_loop.py:31-42`, `_FUND_VALUES` consumer `test_owner_header_guard.py:221`,
+    `_snapshot_resp` `test_fundamentals_formula_servicer.py:93-95`), AC-1/AC-2/AC-3, zero-value table, `_warn_unscored`
+    unit + `run_once` `caplog` wiring (normal, abort, formula-exception exclusion).
+  - Step 2 service (GREEN): `fundsignal_loop.py` only.
+  - Step 3 docs: analysis `CLAUDE.md:123` + new producer bullet, `docs/context-constitution.md:42`, agent
+    `tools.py:1409` docstring, `mcp-tools.md:836`, root findings row for `analysis.proto:554`, teardown.
+- Ordering: test step precedes its service step. Reason: production `f.missing_metrics` reads would raise
+  `AttributeError` on the `SimpleNamespace` fixtures (recon.md Risk 1); the migration is behaviour-neutral pre-fix.
+- Coverage: AC-1, AC-2, AC-3 → Step 1 (C-15). C-14: no ui/agent behaviour change; agent docstring touched in Step 3.
+  F-08: design.md's 10-file list mapped one-to-one onto step Files lists (spec § Files coverage).
+- Key codebase findings:
+  - `_score` has one caller (`fundsignal_loop.py:226`); `_builtin_score` is monkeypatched to `0.5` in
+    `TestScoringFailClosed` (`test_fundsignal_loop.py:649,660,672,683`), which stays scored (not `None`).
+  - `_warn_unscored` goes between `:226` and `_map_directions` `:230`, before the `try` `:235`; `total = len(fetched)`
+    = `symbols_done` at `:274` / `:289`.
+  - Abort-path harness exists: `_identity_loop(ingest_responses={"ManageSignalSource": FAILED_PRECONDITION})`
+    (`test_fundsignal_loop.py:699-717`) → `_SystemWriteRejected` (`fundsignal_loop.py:512-513`).
+  - 244 is `draft`; no `missing_metrics` presence helper exists (`app/config/watcher.py` holds config-key helpers
+    only), so Step 2 reuses the screener membership pattern (`screener.py:402-403`).
+  - Provider-boundary trace partly re-grepped (design.md flagged it UNVERIFIED):
+    `marketdata_service.go:2012,2033-2038,2056`, `finnhub_client.go:177-188`, `fmp_client.go:305-310,341-344`,
+    `edgar_client.go:560-562`, `marketdata_repo.go:537-552`. Execute re-confirms before citing in the PR.
+- Release gates (design.md): (a) discharged for staging (2026-10-21 probe, orchestrator evidence: SPY/VOO/QQQ list
+  all seven metrics in `missing_metrics`; no explicit vendor zero for pb_ratio/debt_to_equity); (b) dev smoke and
+  (c) prod parity block promotion and are recorded here at integration.
+- Next: `/sdd-review fix-fundsignal-neutral-score impl-spec`, then `/sdd-execute fix-fundsignal-neutral-score`.
