@@ -32,7 +32,8 @@ log line. Both `.do` specs give `xstockstrat-ui` `DATABASE_CA_CERT: ${xstockstra
 FR-1. xstockstrat-ledger, xstockstrat-config, xstockstrat-identity and xstockstrat-notify refuse to start (non-zero
 exit, before serving gRPC, with a log line naming `DATABASE_CA_CERT`) when `DATABASE_CA_CERT` is unset and
 `DATABASE_URL` does not explicitly set `sslmode=disable`. This includes a URL with no `sslmode` and with
-`sslmode=prefer`/`allow`/`require`; exactly how `sslmode` is parsed is pinned at design.
+`sslmode=prefer`/`allow`/`require`; exactly how `sslmode` is parsed is pinned at design, as one parse shared by
+the four backends and the UI audit route (today the route uses a substring `includes('sslmode=disable')`).
 FR-2. When `DATABASE_CA_CERT` is set, every affected pool verifies the server certificate against it
 (`rejectUnauthorized: true`); a certificate not signed by that CA is rejected, and a backend exits non-zero with a
 logged certificate verification error.
@@ -81,8 +82,6 @@ _Constitution **C-14**._
   itself reads from; a `WatchConfig` key would be circular). The change adds that env var to the UI component in
   both `.do` specs.
 
-(Update after investigation — remove or replace each item as needed)
-
 ## Acceptance Criteria
 
 See `acceptance.feature` — the regression scenario(s) that must fail on the buggy behavior and pass
@@ -94,5 +93,7 @@ dev.
 - Refactoring unrelated to the bug (a shared Node DB-pool package is debt-radar D-20; design may choose it but it is
   not required)
 - Performance improvements unrelated to the fix
-- Go/Python services on the PgBouncer pool (`sslmode` handling in pgx/asyncpg) and the `db-migrator` job — not
-  cited by D-32; record separately if design finds the same class there
+- Go/Python services on the PgBouncer pool (`sslmode` handling in pgx/asyncpg) — not cited by D-32; record
+  separately if design finds the same class there
+- The `db-migrator` job (has `DATABASE_URL` but no `DATABASE_CA_CERT` in either `.do` spec; golang-migrate, not a
+  Node `pg.Pool`) — not cited by D-32; FR-5 covers only the five affected services
