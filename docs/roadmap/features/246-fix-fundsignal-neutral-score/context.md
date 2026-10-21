@@ -392,3 +392,49 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - (A) authorise the orchestrator to perform gate writes (i)-(iii) and (v) as fixed above, then approve with
   no further round; (B) raise the cap beyond 8 for another round; or (C) redirect.
 - Next: on (A), run the `/sdd-design fix-fundsignal-neutral-score` gate step from this entry, then `/sdd-spec`.
+
+## Session 2026-10-21 — sdd-design (approved; COMPLETION)
+
+- Phase 0 Recon: recon.md (services: xstockstrat-analysis, xstockstrat-ingest; reuse: `missing_metrics`
+  membership `screener.py:402-403`, skip-by-omission seam `fundsignal_loop.py:237-238,465-466`).
+- Phase 1 Grilling: 8 rounds (full). Rounds 1-5 recorded at `context.md:143-254` (c937f066); rounds 6-8
+  at `context.md:256-394` (38ce1789). Round 6-8 closures: `symbols_unscored` dropped (no reader); smoke
+  5(b) run-attributed via `run_id`; prod-parity gate 5(c); AC-3 rewritten to NODATA/DIVONLY; pb `<= 0` +
+  `:47` comment; `total=len(fetched)`; `BUILTIN_SCORER_METRICS` module-local in `test_fundsignal_loop.py`;
+  `caplog` wiring tests (normal + abort); DIVONLY formula residual recorded; `dry_run` doc drift
+  (`tools.py:1409`, `mcp-tools.md:836`). r8 C-15 blocker (AC-1 direction Then) downgraded: B.1 drops it.
+- Chosen approach: presence from `missing_metrics` in `_builtin_score`; all-missing rows omitted from
+  `scores` in both scorers (5-key built-in, 6-key formula); one run-attributed `_warn_unscored` before the
+  source-registration `try`. Rejected: restoring the AC-1 direction Then; `symbols_unscored` payload/proto
+  field; formula-path omit-absent (CHANGE to `@AC-8`). Full list in design.md.
+- Constitution rules touched: C-08, C-10, C-11, C-13, C-14, C-15, C-16, C-18, F-01, F-04, F-06, F-07,
+  F-08, P-02..P-06. Floor breaches: none in any round.
+- Operator decisions (binding, recorded 2026-10-21):
+  - Standing authorization: designs run in FULL mode only (no quick designs for automated fixes); the
+    orchestrator auto-approves the design gate once rounds >= 2, no unresolved Floor (F-*) breach remains,
+    no blocking objection remains, and every CHANGE to an existing @AC business rule is covered by an
+    operator decision below.
+  - Full design depth (operator overrode the triage 'quick' recommendation).
+  - Operator override (2026-10-21): the full-mode 5-round debate cap was lifted to 8 for this feature.
+  - Operator approval (2026-10-21): the round-8 design is approved; the approval writer files the B.2/B.3
+    side-defect reports and applies the B.1 spec amendments.
+- Gate writes (discharge r8 blocking objection 1, `context.md:336-348`), this commit:
+  - (i) B.1: `product-spec.md` FR-3 added; Open for Design resolved (formula path -> FR-3; stored signals ->
+    B.2). `acceptance.feature`: Background keeps min-conviction + quantiles; formula-id Given opens AC-1/AC-2;
+    AC-1 last Then `And exactly one analysis.fundsignal_emitted row exists, for "MSFT"` (no `with direction
+    "buy"`); `@AC-3 @FR-3 @regression` two-ticker NODATA/DIVONLY scenario appended. AC-1/AC-2 regression
+    Thens kept.
+  - (ii) B.2 `docs/reports/2026-10-21-ingest-fundsignal-fabricated-signals-not-retracted-defect.md` + `.status`
+    (`open`), amendments (a)-(d).
+  - (iii) B.3 `docs/reports/2026-10-21-analysis-zero-conviction-read-as-neutral-defect.md` (1),
+    `docs/reports/2026-10-21-analysis-fundsignal-small-cross-section-quantile-defect.md` (2),
+    `docs/reports/2026-10-21-analysis-fundsignal-formula-partial-row-wire-zero-defect.md` (3), each + `.status`
+    (`open`). Claims re-verified at path:line on 38ce1789 (`ingest servicer.py:1006,1020-1022,1208,1252`;
+    `scoring.py:31`; `fundsignal_loop.py:232,452-459,475-480,524-525,639-640`;
+    `fundamentals_value_quality.py:146,162,174,180`).
+  - (v) design.md, the feature.md Status History row, `status.md`.
+- Citation correction (prior anchors left unedited): `scoring_formula_id` seed rows are
+  `services/xstockstrat-config/migrations/008_analysis_fundsignal_keys.up.sql:33-34`, not `:34-35`.
+- Status: spec-ready -> design-approved.
+- Next: `/sdd-spec fix-fundsignal-neutral-score`. Spec must carry the F-08 Files list, gates (a)-(c), and the
+  provider-boundary re-grep (design.md).
