@@ -6,15 +6,15 @@ Feature: fix-marketdata-secret-exposure (bug fix)
   Scenario: An FMP transport failure never reveals the API key
     Given an FMP client configured with api key "k-secret" and base URL "http://127.0.0.1:1"
     When GetFundamentalsMulti is called for "AAPL" and the HTTP transport fails
-    Then an error is returned that names "fmp" and the request path
+    Then an error is returned that names "fmp" and the request path "/stable/quote"
     And the error text does not contain "k-secret"
     And the error text does not contain "apikey="
 
   @AC-2 @FR-2 @regression
   Scenario: A Finnhub transport failure never reveals the token
     Given a Finnhub client configured with api key "k-secret" and base URL "http://127.0.0.1:1"
-    When GetFundamentalsMulti is called for "AAPL" and the HTTP transport fails
-    Then an error is returned that names "finnhub" and the request path
+    When GetFundamentals is called for "AAPL" and the HTTP transport fails
+    Then an error is returned that names "finnhub" and the request path "/stock/metric"
     And the error text does not contain "k-secret"
     And the error text does not contain "token="
 
@@ -33,8 +33,9 @@ Feature: fix-marketdata-secret-exposure (bug fix)
 
   @AC-5 @FR-3 @regression
   Scenario: The marketdata gRPC Unavailable status never carries the vendor key
-    Given marketdata uses fundamentals provider "fmp" with api key "k-secret" and the FMP HTTP transport fails
-    When GetFundamentals is called for "AAPL" with no cached row
+    Given marketdata uses fundamentals provider "fmp" with api key "k-secret" and base URL "http://127.0.0.1:1"
+    And the fundamentals cache holds no row for "AAPL"
+    When the GetFundamentals RPC is called for "AAPL"
     Then the call fails with UNAVAILABLE
     And the status message names "fmp"
     And the status message does not contain "k-secret"
@@ -47,3 +48,14 @@ Feature: fix-marketdata-secret-exposure (bug fix)
     Then the call fails with PERMISSION_DENIED
     And no plaintext value is returned
     # Replaces the "no SAN required" assertion at services/xstockstrat-config/src/__tests__/perUserSecrets.test.ts:236.
+
+  @AC-7 @FR-3 @regression
+  Scenario: The marketdata batch Unavailable status never carries the vendor key
+    Given marketdata uses fundamentals provider "fmp" with api key "k-secret" and base URL "http://127.0.0.1:1"
+    And the fundamentals cache holds no row for "AAPL"
+    When the GetFundamentalsMulti RPC is called for "AAPL"
+    Then the call fails with UNAVAILABLE
+    And the status message names "fmp"
+    And the status message does not contain "k-secret"
+    And the status message does not contain "apikey="
+    # AC-5 covers marketdata_service.go:1760 (single); AC-7 covers :1704 (batch).
