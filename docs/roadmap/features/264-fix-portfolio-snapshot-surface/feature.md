@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-10-21 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-21-portfolio-snapshot-surface-defect.md` (debt-radar D-12, D-24) |
+| 2026-10-21 | `draft` → `spec-ready` | /sdd-review | Product spec approved (5 warnings; overlap WARN only) |
 
 ---
 
@@ -47,4 +48,4 @@ with no user id. The producer is live per fill and the consumer is not wired yet
 
 ## Next Action
 
-`/sdd-design fix-portfolio-snapshot-surface quick` — recommended design depth: quick (single service, SEV-2; escalate to full if design deletes the config key via a migration); see context.md
+`/sdd-design fix-portfolio-snapshot-surface` — design the FR-4 wire-vs-retire fork and delete the losing scenario (`@AC-4` or `@AC-5`); see context.md
