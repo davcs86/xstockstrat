@@ -535,3 +535,21 @@ Full-mode `/sdd-design` debate halted at its approval gate after round 3 (gate p
 - [ ] `trading.go` overlaps with 241/242/249/256. Sequence them through `merge-order.md` at the integration PR.
 - [ ] The reclaim CAS has no explicit timeout on `WithoutCancel` (design (a)). Revisit if a DB stall is ever observed.
 - [ ] Workflow note: the computed task gave the feature directory as `docs/roadmap/features/docs/roadmap/features/267-fix-trading-order-state-audit/`, with the prefix doubled. The real directory, `docs/roadmap/features/267-fix-trading-order-state-audit/`, was used.
+
+---
+
+## Session 2026-10-21 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 8 warnings (advisory, did not block). Overlap: WARN. Lifecycle unchanged (`implementation-ready`).
+- Addressed in implementation-spec.md (each claim re-checked against the code):
+  - [x] Steps 1, 3 and 5 now state the coverage threshold as N/A: `internal/service/` is excluded from the CI coverage gate (`.github/workflows/ci.yml:259`), and the `>= 40%` gate runs in Step 6 (C-13 / B2).
+  - [x] The Step 6 coverage command now uses `export GOWORK=off && …`, so `GOWORK=off` reaches `go list` and `go test`.
+  - [x] Step 5 count corrected from 40 to 36 `context.Background()` hits in `trading.go`, grep re-run this session: 31 converted, plus `:688`/`:703` (Step 2), plus `:2617`/`:2859`/`:2907` left as is. The sdd-spec entry above says "40". It is left unedited because this log is append-only, and this line supersedes it.
+  - [x] Step 1 gains PARTIALLY_FILLED sub-cases for AC-3 (CancelOrder has no status gate, `trading.go:1237-1314`) and AC-6 (ReplaceOrder accepts PARTIALLY_FILLED at `:1435-1441`; its final `updateOrder` at `:1533-1547` keeps `Status`). This covers product-spec C-5.
+  - [x] The Execution Summary now states that STOP, STOP_LIMIT and TRAILING_STOP are unaffected (product-spec C-4).
+  - [x] The Step 6 end-state grep now spells out the expectation for each way `:2617` could be decided.
+- Still open, carried into /sdd-execute (announce these at each checkpoint, P-03):
+  - [ ] **Operator decision on `trading.go:2617`** (`validateAndRecordCredential` → `UpdateCredentialStatus(context.Background(), …)`). Resolve before Step 6, so its grep expectation is final (C-11). This is the same item as the sdd-spec Open Thread.
+  - [ ] Step 4 trade-offs (NOTE, accepted in design): the reclaim CAS has no timeout on `WithoutCancel(ctx)` and can outlive a client disconnect. Flatten-originated reclaims are labelled `reactive_place`, with no trace id and possibly an empty owner. Step 7 documents both.
+  - [ ] Overlap: `trading.go` with 249 (Step 8 `isUncertainBrokerOutcome` at the submitOrder `:684` and ReplaceOrder `:1521` classifiers, in the same function bodies as this feature's `:688`/`:1550`). That needs a manual merge, not a mechanical rebase. 241 (`:2176` escalateSystemic) is rebase-only. `services/xstockstrat-trading/CLAUDE.md` and `docs/context-constitution-findings.md` overlap with 249 in different sections. Sequence all of these via `merge-order.md` at the integration PR.
+  - [ ] Process (not a spec defect): the workflow script doubled the feature-directory prefix again. The relayed user request to "open the follow-up PR for sdd-batch.js" is outside this review step, which may edit feature docs only, and was not done here.
