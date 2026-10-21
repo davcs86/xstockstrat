@@ -41,8 +41,12 @@ account is available (context.md § Operator decisions). `/sdd-design` verifies 
 - **FR-3**: The signature base string's parameter string includes every query param actually sent, merged and
   sorted with the oauth params. The base string URI excludes the query (RFC 5849 §3.4.1.2, §3.4.1.3).
 - **FR-4**: Handshake failures follow TRADING-3. If IBKR rejects the LST request with 401/403, the client returns
-  `broker.ErrInvalidCredentials` and the account reads INVALID. Any other failure (5xx, network, timeout) is a
-  wrapped transient error, so `credentialStatusFromError` (`trading.go:2951-2960`) records UNKNOWN, never INVALID.
+  `broker.ErrInvalidCredentials` and the account reads INVALID. Deterministically unusable credentials also return
+  `broker.ErrInvalidCredentials` with no further HTTP call: missing or unparseable key material, an
+  `access_token_secret` that does not decrypt, a `live_session_token_signature` mismatch, and a 2xx
+  `/iserver/auth/ssodh/init` reply that is not authenticated (amended 2026-10-21 by /sdd-design; design.md §3).
+  Any other failure (5xx, network, timeout) is a wrapped transient error, so `credentialStatusFromError`
+  (`trading.go:2951-2960`) records UNKNOWN, never INVALID.
 
 ## Reproduction Steps
 

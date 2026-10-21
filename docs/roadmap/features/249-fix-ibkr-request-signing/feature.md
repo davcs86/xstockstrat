@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-19-trading-ibkr-oauth-signature-omits-query-defect.md`
 **Severity**: SEV-2
 **Created**: 2026-10-20
-**Last Updated**: 2026-10-20
+**Last Updated**: 2026-10-21
 
 ---
 
@@ -15,6 +15,7 @@
 |---|---|---|---|
 | 2026-10-20 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-19-trading-ibkr-oauth-signature-omits-query-defect.md` |
 | 2026-10-20 | `draft` → `spec-ready` | /sdd-review | Product spec approved (14 warnings; overlap WARN: file-level, rebase-only vs 240) |
+| 2026-10-21 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved under operator standing authorization; recon.md + design.md written |
 
 ---
 
@@ -36,6 +37,8 @@ Snapshot from `docs/runbooks/reviewer-registry.md` at /sdd-triage time (2026-10-
 
 - [Product Spec](product-spec.md) — bug description and fix scope
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
+- [Recon](recon.md) — Phase 0 codebase dossier
+- [Design](design.md) — approved design (3 rounds, full)
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-ibkr-request-signing`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -49,4 +52,4 @@ therefore expected to 401; `ValidateCredentials` maps that to INVALID (TRADING-3
 
 ## Next Action
 
-`/sdd-design fix-ibkr-request-signing` (full — operator: no quick designs). Design settles the open questions in product-spec.md § Open Questions: key-material home, brokerage session/keepalive, LST lifecycle, query-value encoding, timeout budget.
+`/sdd-spec fix-ibkr-request-signing` — generate implementation spec from the approved design.

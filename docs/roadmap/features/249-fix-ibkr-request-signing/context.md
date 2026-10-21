@@ -97,3 +97,67 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 
 - C-11 tension from the /sdd-triage session: resolved by the decision above. The LST handshake stays in this track.
 - Next: `/sdd-design fix-ibkr-request-signing` (full).
+
+## Session 2026-10-21 — sdd-design
+
+- Phase 0 Recon: wrote recon.md (4d9b1022; services: xstockstrat-trading, xstockstrat-agent, xstockstrat-ui;
+  key reuse patterns: the single status writer `credentialStatusFromError`/`validateAndRecordCredential`
+  (`trading.go:2951`, `:2602`), the `cfgW.GetInt(key, default)` config read (`trading.go:3109`), and
+  `singleflight` precedent `marketdata_service.go:15,60`).
+- Phase 1 Grilling: 3 rounds (full). Rounds 1-3 ran from scratchpad checkpoints (not committed); design.md is
+  their durable record. Termination: auto-approved by the orchestrator under the operator standing
+  authorization (rounds 3 >= 2, no F-* breach, no blocking objection, no @AC CHANGE).
+- Chosen approach: `authorize(req, sess)` signer (query params in base string, LST-keyed HMAC-SHA256, `realm`
+  first) + one `c.do` seam + `singleflight.DoChan` LST handshake incl. `ssodh/init {publish:true, compete:false}`
+  + generation-guarded retry-once on 401 (bracket legs excluded) + `reconcileTick` `ErrInvalidCredentials` skip on
+  `ListOrders` and `GetPositions` + three `trading.ibkr.*` config keys + key material in the existing encrypted
+  blob. Full detail: design.md.
+- Rejected: `compete=true` (logs out the account holder's own sessions), transient (UNKNOWN) for deterministic
+  failures (feeds systemicCount), resending bracket legs without `cOID`, deterministic leg `cOID` (no resize
+  generation exists), tying timing to `IBKRRequestTimeout`, env/config key-material homes. Full list: design.md.
+- Constitution rules touched: C-11 (operator override), C-05/F-07, F-08, F-04/P-03, P-01/P-02, C-10, C-13, C-14,
+  C-15, C-16, C-17, C-18, C-09, TRADING-3 (widened), TRADING-5. Floor breaches: none.
+- Operator decisions (as supplied by the workflow orchestrator's task text, recorded verbatim):
+
+  OPERATOR DECISIONS (binding, recorded 2026-10-21):
+  - Standing authorization: designs run in FULL mode only (no quick designs for automated fixes); the orchestrator auto-approves the design gate once rounds >= 2, no unresolved Floor (F-*) breach remains, no blocking objection remains, and every CHANGE to an existing @AC business rule is covered by an operator decision below.
+  - Scope = 'IBKR auth never worked' as one defect: sign query params in the base string, implement the Live Session Token (LST) handshake, sign regular requests with the LST, add realm. Operator explicit C-11 override recorded: the LST handshake is in scope of this bug fix, no separate /sdd-story.
+  - No live IBKR account is available: verification uses RFC 5849 / ibind reference vectors and an httptest server.
+
+- Spec amendment in this commit (in-feature, not a durable @AC, so not a C-16 CHANGE):
+  - FR-4 (`product-spec.md:43-49`) now names the deterministic INVALID cases: missing/unparseable key material,
+    decrypt failure, LST-signature mismatch, init not authenticated. Rationale: deterministic, never heal, and
+    UNKNOWN accounts are not skipped by reconciliation (`trading.go:2964-2966`), so UNKNOWN would feed
+    systemicCount and can escalate the platform to REDUCE_ONLY.
+  - acceptance.feature: AC-4 gains five rows (existing four unchanged, table re-aligned only); AC-5..AC-10 added.
+  - TRADING-3 row (`services/xstockstrat-trading/docs/context-constitution.md:21`) and the `broker.go:8` comment
+    are edited in the implementation PR (outside this feature dir).
+- Decision delegated to design.md: bracket legs are excluded from the 401 resend (no `cOID` at `ibkr.go:261-274`,
+  no resize generation in `BracketLegsRequest`); a final 401 takes the alerted FAILED-bracket path
+  (`trading.go:3416`, `:3458-3461`).
+- Tracked caveat — guessed external contract (`fails.md:481-484`). Unverified, no live account; the replay fake
+  only echoes these guesses back:
+  - `ssodh/init` body `{publish, compete}` and reply fields `authenticated`/`competing`/`connected`;
+  - K serialization (Java `toByteArray` leading-zero rule) and PKCS1v15 vs OAEP for `access_token_secret`;
+  - RFC 5849 §3.6 encoding for query values (`BRK B`, `+`, `/`, `~`, `=`);
+  - IBKR's reply on a lapsed brokerage session (401 or not).
+  The adversary's recollection of ibind (`compete=True`, those reply fields) is unverified and not a source. The
+  `/sdd-spec` vector step pins the ibind SHA, date checked and generator command before it can merge.
+- Assumption — `compete=false` self-competition cases: (a) DO rolling-deploy overlap of old and new trading
+  containers; (b) the ~24h LST refresh re-running init while the prior brokerage session is live. Each may read
+  INVALID until the next health poll (default 300000ms), with a badge that suggests rotating keys. Covered by the
+  AC-4 `competing:true` row and AC-10 heal.
+- Open Threads (from design.md § Open Risks):
+  - [ ] Pin ibind SHA/date/generator; pin lapsed-session reply; paper smoke if an account appears — /sdd-spec vector step (step 1).
+  - [ ] Non-401 lapsed-session reply → `c.do` re-init trigger, else documented REDUCE_ONLY exception (`trading.go:1991-1994`, `:2153-2154`) — step 3; AC-6 row.
+  - [ ] `compete=false` self-competition (deploy overlap, LST refresh) — step 2 fake row; AC-4/AC-10.
+  - [ ] Uncertain-resend rule at both classifiers (`trading.go:684`, `:1521`); bracket-leg no-resend — step 3; AC-6.
+  - [ ] `/tickle` keepalive follow-up `ibkr-session-keepalive`, blocked by 249; NNN assigned at `/sdd-story` (253 is taken by `253-fix-edgar-companyfacts-decode`) — file after this design.
+  - [ ] Fleet-wide INVALID alert: ship one aggregate WARN/notify when every IBKR account reads INVALID in a reconcile tick, or file follow-up `ibkr-fleet-invalid-alert` — /sdd-spec decides.
+  - [ ] gitleaks: scoped allowlist (unique-substring regex in the `"line"` table, or `[[allowlists]]` paths AND regex if gitleaks-action@v3 bundles >= 8.21, `ci.yml:754`); local `gitleaks detect` — step 1.
+  - [ ] Boot budget: handshake + init + `ListOrders` vs 5s `brokerCallTimeout` on first tick — step 2 test.
+  - [ ] Config keys `trading.ibkr.{lst_refresh_margin_ms,handshake_timeout_ms,reauth_min_interval_ms}` need owner + config-team approval — step 5.
+  - [ ] Private keys in UI textareas — Security review, step 7.
+  - [ ] Re-grep feature-102/206 suites: no durable @AC asserts a credential-rejected `ListOrders`/`GetPositions` is systemic — /sdd-spec.
+  - [ ] Accepted: a 403 permission error on an `/iserver` order call also skips the systemic count for that tick.
+- Status: spec-ready → design-approved.

@@ -2949,3 +2949,14 @@ ambiguity is logged here).
     handler.
   - Before changing a shared RPC's failure or budget behaviour, enumerate every caller's request shape
     (window size, deadline) and make the change opt-in when the callers differ.
+
+### 2026-10-21 — fix-ibkr-request-signing — assumption
+- **Mistake**: A design round proposed one `.gitleaks.toml` allowlist entry with `regexTarget = "match"` and called
+  it "consistent with the existing entries". The file has a single `[allowlist]` table whose `regexTarget = "line"`
+  applies to every regex in it, so a per-entry target is impossible, and flipping the table re-tests the four
+  existing literals against the matched secret text instead of the line.
+- **Evidence**: `.gitleaks.toml:33-40`; `docs/roadmap/features/249-fix-ibkr-request-signing/design.md` §10.
+- **Rule it implies**: To allowlist a committed test key, either add a unique key-body substring regex to the
+  existing `"line"` table, or add a separate `[[allowlists]]` block ANDing `paths` with a regex (needs gitleaks
+  >= 8.21; confirm the version bundled by the CI action). Never flip the shared table, never use a bare `paths`
+  entry, and verify with a local `gitleaks detect`.
