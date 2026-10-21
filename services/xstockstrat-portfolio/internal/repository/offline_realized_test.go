@@ -16,9 +16,9 @@ func TestUpsertOfflineRealized_WritesAllFields(t *testing.T) {
 	repo := &PortfolioRepo{db: mock}
 
 	fills := []RecentFill{{Symbol: "AAPL", Qty: -4, Price: 110, FilledAt: "2026-10-19T15:00:00Z"}}
-	mock.ExpectExec(`(?s)INSERT INTO portfolio\.offline_account_realized.*realized_carried.*fees_since_snapshot.*fees_carried.*recent_fills.*ON CONFLICT \(account_id\) DO UPDATE`).
+	mock.ExpectExec(`(?s)INSERT INTO portfolio\.offline_account_realized.*realized_carried.*fees_since_snapshot.*fees_carried.*recent_fills.*\$8::jsonb.*ON CONFLICT \(account_id\) DO UPDATE`).
 		WithArgs("off-1", "u1", "TRADING_MODE_PAPER", 100.0, 600.0, 1.5, 3.0,
-			[]byte(`[{"symbol":"AAPL","qty":-4,"price":110,"filled_at":"2026-10-19T15:00:00Z"}]`)).
+			`[{"symbol":"AAPL","qty":-4,"price":110,"filled_at":"2026-10-19T15:00:00Z"}]`).
 		WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	err = repo.UpsertOfflineRealized(context.Background(), "off-1", "u1", "TRADING_MODE_PAPER", OfflineState{
 		RealizedPnl: 100, RealizedCarried: 600, FeesSinceSnapshot: 1.5, FeesCarried: 3, RecentFills: fills,
@@ -29,7 +29,7 @@ func TestUpsertOfflineRealized_WritesAllFields(t *testing.T) {
 
 	// Absent recent fills are stored as [], never NULL.
 	mock.ExpectExec(`INSERT INTO portfolio\.offline_account_realized`).
-		WithArgs("off-1", "u1", "TRADING_MODE_PAPER", 0.0, 0.0, 0.0, 0.0, []byte(`[]`)).
+		WithArgs("off-1", "u1", "TRADING_MODE_PAPER", 0.0, 0.0, 0.0, 0.0, `[]`).
 		WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	if err := repo.UpsertOfflineRealized(context.Background(), "off-1", "u1", "TRADING_MODE_PAPER", OfflineState{}); err != nil {
 		t.Fatalf("UpsertOfflineRealized empty: %v", err)

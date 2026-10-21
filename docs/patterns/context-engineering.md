@@ -3,7 +3,8 @@
 How AI tooling in this repo curates the **optimal set of tokens** at each step of an agent's
 work — rather than relying on ever-larger prompts. This is the umbrella doc for the three
 mechanisms the repo uses: **subagent delegation**, **progressive disclosure**, and
-**structured memory**. Read it before adding or refactoring a skill, an agent, or a `CLAUDE.md`.
+**structured memory** — plus the **saved workflows** (§4) that run them across many features at once.
+Read it before adding or refactoring a skill, an agent, a workflow, or a `CLAUDE.md`.
 
 > Prompt engineering asks "what do I tell the model?" Context engineering asks "what should be
 > in the window — and what should *not* — when the model acts?" Every pattern below removes
@@ -148,6 +149,60 @@ deviation, an `insights.md` entry at integration). It is append-only, like the s
 the durable complement to the `dry-reviewer` agent (which detects duplication live but persists
 nothing). A recurring `fails.md` entry is a candidate to promote into a binding rule in
 `docs/sdd/constitution.md`.
+
+## 4. Saved workflows (`.claude/workflows/`)
+
+A **saved workflow** is a deterministic JavaScript orchestration script that Claude Code runs as a
+slash command (`/<meta.name>`; edits load on `/reload-skills` or a new session). Use one when the same
+SDD phases must run for **many features in parallel** — a job no single skill session can do, because
+**subagents cannot spawn subagents**: every SDD skill delegates to read-only agents (`spec-reviewer`,
+`feature-overlap`, `codebase-discovery`, `design-proposer`/`design-adversary`, `scenario-promoter`)
+and `/sdd-design`'s P-02 rule needs the proposer and adversary in separate windows, mediated by an
+orchestrator. In a workflow **the script is that orchestrator**: it spawns the read-only roles as
+their `agentType`, passes only its own synthesis between proposer and adversary, and gives each
+feature exactly one writer per stage (P-01), each in its own git worktree.
+
+| Workflow | Runs | Stops at |
+|---|---|---|
+| `/sdd-batch` (`.claude/workflows/sdd-batch.js`) | per feature, in parallel: preflight → `/sdd-review product-spec` → `/sdd-design` Phase 0 + full debate (2–5 rounds) → `/sdd-spec` → `/sdd-review impl-spec` | each design gate (default) · a demoted-duplicate match · any preflight problem |
+| `/sdd-batch-execute` (`.claude/workflows/sdd-batch-execute.js`) | per feature, in parallel: `/sdd-execute <slug> sequential` — re-spec validation, one commit per step on the feature branch (discovery → TDD gate → verification), C-16 promotion, integration PR | the up-front confirm · every smart checkpoint (default) · every blocker · merge-order · the promotion confirm |
+
+**Invocation contract** (both take structured `args`; required fields throw if missing):
+
+- `date` (ISO), `trailer` (the calling session's commit attribution lines, verbatim) and
+  `features: [{slug, decisions?}]` (`decisions` = binding operator constraints, recorded in
+  `context.md`). `/sdd-batch-execute` also needs `prFooter` (PR-body attribution) and
+  `modeEntryConfirmed: true` — the sequential mode-entry confirmation (`sequential-mode.md` §5.1b) is
+  asked in the main session before launch, never inside the script.
+- `approvals: {<slug>: {gate, decision}}` — how a halted gate is answered: relaunch the same
+  workflow with the operator's answer and each feature resumes from its lifecycle status (`draft` →
+  … → `implementation-ready`; spec step statuses for execution), so finished phases are never
+  re-run. The design debate's state survives between runs in a `sdd-batch-design-state` block in
+  `context.md`; the approved C-16 plan in a `sdd-batch-promotion-plan` block.
+- `designGate: 'halt'` (default — P-04 strict) or `'auto'`; `checkpoints: 'halt'` (default) or
+  `'report'`. Each unattended mode requires `authorizationRef` (where the operator's standing
+  authorization is recorded). `auto` never approves with an unresolved Floor breach (F-11), a
+  blocking objection, or a CHANGE to an existing `@AC-*` rule no operator decision covers (C-16).
+- `baseBranch` (default `main-dev`) — where a not-yet-branched feature directory must exist.
+
+**Preflight guards** run before any write: a slug must resolve to exactly one
+`docs/roadmap/features/*-<slug>` directory (skills resolve features by suffix — a reused slug of a
+launched feature is ambiguous), and its NNN must not be held by another slug on `main-dev` or any
+remote branch.
+
+**Operational notes.** Writers commit **and push after each artifact edit** — one file per commit,
+pushed before the next file is touched — so an interrupted run loses at most the file in progress;
+the only multi-file commit is an execute step's code change with its own spec/context status, made
+after verification passes (`/sdd-execute` HARD CONSTRAINT). They commit on a detached HEAD and push
+`HEAD:refs/heads/<dev-branch>` (a named branch can be checked out in only one worktree). `.claude/worktrees/` holds the per-agent
+worktrees and is git-ignored; remove clean, already-pushed ones with `git worktree remove`. A run cut
+short (e.g. by the session usage limit) resumes with `Workflow({scriptPath, resumeFromRunId})` and
+**unchanged args** — completed agents replay from cache. Read-only agents read the main checkout, so
+the preflight passes branch-only artifacts to them inline; launch from an up-to-date checkout.
+
+**Tests.** `scripts/workflow-tests/` runs each script against scripted agent replies (no tokens) and
+asserts every gate path — `node --test scripts/workflow-tests/*.test.mjs`, also in CI's
+`context-map` job. Change a gate rule → change its test first.
 
 ---
 
