@@ -78,15 +78,19 @@ verified span-metrics path, it names the exact metric names that path yields; th
   (`service-health.json:47`) reference `rpc_server_duration_milliseconds_*`.
 - **FR-3** — No alert rule or dashboard panel queries a Loki log stream that nothing produces. Today:
   `xstk-analysis-no-scoring` (`alert-rules.yaml:129-134`) and the 9 LogQL panel exprs listed in Problem Statement.
-- **FR-4** — The observability docs state only the signals actually exported, and only the series the provisioned
-  alerts and dashboards actually read. Every current instance (repo grep, excluding `docs/roadmap/` and
-  `docs/reports/`):
-  - `docs/setup/grafana-cloud.md` — `:3`, `:21-24`, the "Check Logs (Loki)" / "Check Metrics (Prometheus/Mimir)"
-    verification steps `:191-208`, `:220-223`, `:233`
+- **FR-4** — Every doc under `docs/` or `packages/otel/` (excluding `docs/roadmap/` and `docs/reports/`) that states
+  which signals are exported, or which series or datasources the provisioned alerts and dashboards read, states only
+  what is actually exported and read. Known instances (repo grep, 2026-10-20; the rule covers any other):
+  - `docs/setup/grafana-cloud.md` — `:3`, `:21-24`, collector "Batches spans/metrics/logs" `:108`, the "Check Logs
+    (Loki)" / "Check Metrics (Prometheus/Mimir)" verification steps `:191-208`, dashboard table `:220-223`, import
+    datasources `:226`, `:233`, ad-hoc Loki query `:236-241`, alert table + `${DS_LOKI_UID}` apply step `:258-261`,
+    Loki derived-fields troubleshooting `:313-319`
+  - `packages/otel/alerts/README.md:25-26` (`${DS_PROMETHEUS_UID}` / `${DS_LOKI_UID}` substitution rows)
   - `docs/setup/CLAUDE.md:10` ("verify traces/metrics/logs arrive")
   - `docs/patterns/observability.md:3`
   - `docs/launch-pdfs/product-features.md:192` ("exports OTLP traces, metrics, and logs")
-  - `packages/otel/dashboards/README.md` — `:4`, signals table `:7-12`, `:30-38`, log-derived panels `:43-45`
+  - `packages/otel/dashboards/README.md` — `:4`, signals table `:7-12`, datasource inputs `:16-26`, `:30-38`,
+    log-derived panels and scheduler Loki markers `:43-49`
   - `packages/otel/otel-collector-config.yaml:9` ("Exports all three signal types") — comment correction only; the
     `metrics`/`logs` pipelines (`:79-87`) are retained on purpose (feature 226 `design.md:24`, `:38`)
   - `packages/otel/CLAUDE.md:4` (constitution pointer: "`rpc_server_duration_milliseconds` metric-name contract")

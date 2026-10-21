@@ -68,3 +68,29 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - Narrow to traces (bug fix, consistent with feature 226's traces-only decision): remove or rewrite alerts/dashboard panels that depend on metric/log series nothing produces (span-metrics from traces only if the Grafana stack is shown to generate them), and correct docs/setup/grafana-cloud.md, docs/patterns/observability.md and packages/otel docs. Adding metric/log export is out of scope.
 - Supersedes the triage entry's "operator fork, decide at design": fix (a) chosen; fix (b) out of scope.
 - Next: `/sdd-design fix-otel-metrics-logs-gap` (full).
+
+## Session 2026-10-20 — sdd-review product-spec (re-review)
+
+- Product spec re-approved. Status: spec-ready (unchanged; the `draft` → `spec-ready` transition was recorded by the
+  prior review session). Criteria: PASS WITH WARNINGS (0 fails, 0 Floor breaches).
+- Warnings (5) and resolution:
+  - C-15: FR-4 list incomplete → FR-4 restated as a rule over every doc under `docs/`/`packages/otel/` (excl.
+    roadmap/reports) naming signals, series or datasources, with known instances widened: `grafana-cloud.md:108`,
+    `:226`, `:236-241`, `:258-261`, `:313-319`; `packages/otel/alerts/README.md:25-26`; `dashboards/README.md:16-26`,
+    `:43-49`. AC-3 Given adds `alerts/README.md`; When/Then cover datasources. `packages/otel/CLAUDE.md:4` and
+    `docs/setup/CLAUDE.md:10` were already listed.
+  - Produced-set span-metrics clause → AC-1 admits span-metric names only with recorded evidence (design.md) that the
+    path returns those series for the stack.
+  - Test mechanism unstated → left open by design: the mechanical produced-set check (static lint of alert/dashboard
+    queries against the produced set) is fixed at `/sdd-spec` and paired as a test step (C-08 / C-15).
+  - Template residue "(Update after investigation ...)" → already absent on the branch (removed in the prior review
+    session); no edit.
+  - C-11 / P-04 sign-off → the branch `context.md` records the operator decision (prior session entry); the reviewer
+    read the main working-tree copy. Re-recorded below.
+- Notes (2): Affected Services lists non-registry paths only (consistent with no runtime change); C-14 consumer surface
+  "None" justified.
+- Overlap findings: PASS, no collisions.
+- Operator decisions (binding, recorded 2026-10-20), verbatim:
+  - Standing authorization: designs run in FULL mode only (no quick designs for automated fixes); the orchestrator auto-approves the design gate once rounds >= 2, no unresolved Floor (F-*) breach remains, no blocking objection remains, and every CHANGE to an existing @AC business rule is covered by an operator decision below.
+  - Narrow to traces (bug fix, consistent with feature 226's traces-only decision): remove or rewrite alerts/dashboard panels that depend on metric/log series nothing produces (span-metrics from traces only if the Grafana stack is shown to generate them), and correct docs/setup/grafana-cloud.md, docs/patterns/observability.md and packages/otel docs. Adding metric/log export is out of scope.
+- Next: `/sdd-design fix-otel-metrics-logs-gap` (full).
