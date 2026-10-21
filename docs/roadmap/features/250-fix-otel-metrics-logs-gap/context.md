@@ -35,3 +35,36 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Recommended design depth: full → `/sdd-design fix-otel-metrics-logs-gap` (rationale: SEV-2; affected services ≥ 2
   (12 runtimes + packages/otel); the (a)/(b) fork is a scope decision touching a prior operator decision).
 - Development branch: feature/fix-otel-metrics-logs-gap
+
+## Session 2026-10-20 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready. Criteria: PASS WITH WARNINGS (0 fails, 0 Floor breaches).
+- Warnings (5) and the spec edits made this session:
+  - C-10: FR-4 / AC-3 listed 4 of the doc instances → FR-4 now enumerates every grep hit outside `docs/roadmap/`
+    and `docs/reports/` (`grafana-cloud.md:191-208`, `docs/setup/CLAUDE.md:10`, `launch-pdfs/product-features.md:192`,
+    `dashboards/README.md:4,7-12,43-45`, `otel-collector-config.yaml:9`, `packages/otel/CLAUDE.md:4`, OTEL-1 `:16`,
+    findings rows `docs/context-constitution-findings.md:18` + `packages/otel/docs/context-constitution-findings.md:13`);
+    AC-3 Given widened to the FR-4 list plus any other doc under `docs/` or `packages/otel/` outside roadmap/reports.
+  - Produced-set ambiguity: AC-1 "documented" span-metrics path → "verified to return series for the stack" (matches
+    the FR preamble); FR preamble + AC-1 now state today's set holds no metric name and no log stream (traces only).
+    `/sdd-design` names the exact span-metrics names if it adopts a verified path.
+  - Affected Services vs Fix Scope: collector config kept, scoped to the `:9` header comment (FR-4); pipelines
+    `:79-87` retained on purpose (226 `design.md:24`, `:38`); Fix Scope box annotated.
+  - Operator coverage: Expected now states removal leaves error-rate, p99 and scoring-stall undetected; `/sdd-design`
+    must record, per removed alert, its trace-based replacement or a named follow-up `/sdd-story` (trace-based
+    alerting, or fix (b)). Open for design.
+  - P-04/P-05 traceability: operator decision recorded below; feature.md Reviewers + Next Action reconciled to the
+    narrowed scope.
+- Notes (3): criteria summary (no blockers); code claims verified; spec hygiene → template line removed, Acceptance
+  Criteria pointer now names the verification (mechanical produced-set check defined at `/sdd-spec` + Grafana import
+  with no query on an unproduced series) and the Teardown trigger for touched CLAUDE.md/constitution/findings files.
+- Overlap findings: WARN — `docs/patterns/observability.md` possibly also edited by 084-droplet-compose-deploy
+  (`product-spec.md:156`, deferred to its design); rebase-only, no merge-order row. 084 also edits the
+  `docker-compose.yml` otel-collector and `.do/` specs; no clash (this feature changes no config/deploy). No config-key,
+  proto-field or migration collision. Coverage gap: remote branches feature/fix-etf-flag-fill,
+  feature/fix-sandbox-memory-cap, feature/agent-grpc-migration, feature/agent-log-query have no feature dir; not scanned.
+- Operator decisions (binding, recorded 2026-10-20), verbatim:
+  - Standing authorization: designs run in FULL mode only (no quick designs for automated fixes); the orchestrator auto-approves the design gate once rounds >= 2, no unresolved Floor (F-*) breach remains, no blocking objection remains, and every CHANGE to an existing @AC business rule is covered by an operator decision below.
+  - Narrow to traces (bug fix, consistent with feature 226's traces-only decision): remove or rewrite alerts/dashboard panels that depend on metric/log series nothing produces (span-metrics from traces only if the Grafana stack is shown to generate them), and correct docs/setup/grafana-cloud.md, docs/patterns/observability.md and packages/otel docs. Adding metric/log export is out of scope.
+- Supersedes the triage entry's "operator fork, decide at design": fix (a) chosen; fix (b) out of scope.
+- Next: `/sdd-design fix-otel-metrics-logs-gap` (full).

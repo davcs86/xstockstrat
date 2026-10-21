@@ -38,6 +38,11 @@ that nothing produces, and the setup docs state the signals actually exported. P
 signals are removed or rewritten onto trace data (Tempo, or span metrics only if the Grafana stack is shown to
 generate them).
 
+**Operator coverage after the fix.** Removal alone makes the gap honest, not closed: `xstk-error-rate-high`,
+`xstk-p99-latency-high` and the critical scoring-stall page `xstk-analysis-no-scoring` would leave those failures
+undetected. `/sdd-design` records, per removed alert, either its trace-based replacement or the named follow-up
+`/sdd-story` (trace-based alerting, or fix (b) metric/log export) that restores detection.
+
 ## Reproduction Steps
 
 1. `rg 'MeterProvider|LoggerProvider|OTLPMetricExporter|otlpmetric|PeriodicExportingMetricReader' services/` → no matches.
@@ -52,15 +57,18 @@ Distinct root cause from the trace-export defect.
 
 ## Affected Services
 
-- packages/otel (alerts, dashboards, collector config, `packages/otel` docs)
-- docs (`docs/setup/grafana-cloud.md`, `docs/patterns/observability.md`)
+- packages/otel (alerts, dashboards, `packages/otel` docs; collector config header comment only — see FR-4)
+- docs (`docs/setup/grafana-cloud.md`, `docs/setup/CLAUDE.md`, `docs/patterns/observability.md`,
+  `docs/launch-pdfs/product-features.md`, `docs/context-constitution-findings.md`)
 
 No `xstockstrat-*` runtime is affected: runtime metric/log export (fix (b), `context.md`) is out of scope (see Out of Scope).
 
 ## Functional Requirements
 
 "Produced" means exported by a runtime today (traces only, feature 226), or derived from exported traces by a
-Grafana-side span-metrics path that is shown to exist for the stack.
+Grafana-side span-metrics path that is shown to exist for the stack (verified to return series in Grafana, not merely
+documented). Today the produced set holds no PromQL metric name and no Loki log stream. If `/sdd-design` adopts a
+verified span-metrics path, it names the exact metric names that path yields; those are the only additions.
 
 - **FR-1** — No alert rule in `packages/otel/alerts/alert-rules.yaml` queries a PromQL metric series that nothing
   produces. Today `xstk-error-rate-high` and `xstk-p99-latency-high` query `rpc_server_duration_milliseconds_count` /
@@ -71,9 +79,21 @@ Grafana-side span-metrics path that is shown to exist for the stack.
 - **FR-3** — No alert rule or dashboard panel queries a Loki log stream that nothing produces. Today:
   `xstk-analysis-no-scoring` (`alert-rules.yaml:129-134`) and the 9 LogQL panel exprs listed in Problem Statement.
 - **FR-4** — The observability docs state only the signals actually exported, and only the series the provisioned
-  alerts and dashboards actually read: `docs/setup/grafana-cloud.md` (`:3`, `:21-24`, `:220-223`, `:233`),
-  `docs/patterns/observability.md:3`, `packages/otel/dashboards/README.md:30-38`, and
-  `packages/otel/docs/context-constitution.md` OTEL-2.
+  alerts and dashboards actually read. Every current instance (repo grep, excluding `docs/roadmap/` and
+  `docs/reports/`):
+  - `docs/setup/grafana-cloud.md` — `:3`, `:21-24`, the "Check Logs (Loki)" / "Check Metrics (Prometheus/Mimir)"
+    verification steps `:191-208`, `:220-223`, `:233`
+  - `docs/setup/CLAUDE.md:10` ("verify traces/metrics/logs arrive")
+  - `docs/patterns/observability.md:3`
+  - `docs/launch-pdfs/product-features.md:192` ("exports OTLP traces, metrics, and logs")
+  - `packages/otel/dashboards/README.md` — `:4`, signals table `:7-12`, `:30-38`, log-derived panels `:43-45`
+  - `packages/otel/otel-collector-config.yaml:9` ("Exports all three signal types") — comment correction only; the
+    `metrics`/`logs` pipelines (`:79-87`) are retained on purpose (feature 226 `design.md:24`, `:38`)
+  - `packages/otel/CLAUDE.md:4` (constitution pointer: "`rpc_server_duration_milliseconds` metric-name contract")
+  - `packages/otel/docs/context-constitution.md` OTEL-2 (`:17`) and OTEL-1 (`:16`, whose evidence cites the Loki
+    alert `alert-rules.yaml:134`)
+  - The findings rows `docs/context-constitution-findings.md:18` and `packages/otel/docs/context-constitution-findings.md:13`
+    carry a resolution marker citing this feature.
 
 ## Consumer Surface(s)
 
@@ -86,15 +106,16 @@ in Grafana.
 
 - [x] No proto changes anticipated
 - [x] No database migrations anticipated
-- [x] No config/deploy changes anticipated (no OTLP metrics/logs exporter env; fix (b) out of scope)
-
-(Update after investigation — remove or replace each item as needed)
+- [x] No config/deploy changes anticipated (no OTLP metrics/logs exporter env; fix (b) out of scope). The only
+  collector-config edit is the `otel-collector-config.yaml:9` header comment (FR-4); no pipeline, receiver or env change.
 
 ## Acceptance Criteria
 
 See `acceptance.feature` — the regression scenario(s) that must fail on the buggy behavior and pass
-after the fix (Constitution **C-15**). Plus: existing tests pass; affected service(s) smoke-tested on
-dev.
+after the fix (Constitution **C-15**). Plus: existing tests pass. No runtime changes, so verification is: the
+mechanical produced-set check (defined at `/sdd-spec`) passes over `alert-rules.yaml` and `dashboards/*.json`, and the
+edited alert rules and dashboards import into Grafana Cloud with no query targeting an unproduced series.
+Touching `CLAUDE.md`, constitution and findings files triggers the root `CLAUDE.md` Teardown (context-forge refresh).
 
 ## Out of Scope
 

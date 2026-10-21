@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-10-20 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-19-otel-metrics-logs-never-exported-defect.md` |
+| 2026-10-20 | `draft` → `spec-ready` | /sdd-review | Product spec approved (5 warnings, 3 notes; overlap WARN: 084 rebase-only) |
 
 ---
 
@@ -23,8 +24,8 @@ Snapshot from `docs/runbooks/reviewer-registry.md` at /sdd-triage time (2026-10-
 
 | Reviewer | Focus | Steps |
 |---|---|---|
-| Platform Lead | Cross-service architecture, service registry consistency | TBD (/sdd-spec) — cross-cutting observability contract (12 runtimes + `packages/otel`) |
-| Service owners of all 12 runtimes (trading, portfolio, marketdata, indicators, ingest, analysis, ledger, identity, notify, config, ui, agent) | Per-service focus per registry | Only under fix (b), which changes each telemetry module |
+| Platform Lead | Cross-service architecture, service registry consistency | TBD (/sdd-spec) — observability contract (`packages/otel` alerts/dashboards + docs) |
+| Service owners of all 12 runtimes | Per-service focus per registry | None — fix (b) is out of scope (operator decision 2026-10-20: narrow to traces) |
 
 ---
 
@@ -45,4 +46,5 @@ claims traces, metrics and logs. The error-rate and p99 alerts can never fire.
 
 ## Next Action
 
-`/sdd-design fix-otel-metrics-logs-gap` — recommended design depth: full (12 runtimes + `packages/otel`; fix (a) vs (b) is a C-11 scope fork); see context.md
+`/sdd-design fix-otel-metrics-logs-gap` (full — operator: no quick designs). Fix direction settled: narrow to traces
+(operator decision 2026-10-20, context.md); see context.md
