@@ -41,9 +41,11 @@ messages are unchanged.
   exercises the IBKR bracket paths `createBracket`/`resizeBracket` and the Alpaca atomic path.
 - **Paper vs live.** No trading-mode gate is touched. The fakes report `IsPaper()==true`
   (`trading_bracket_test.go:72`), and behaviour is the same in both modes.
-- **Order types.** Order-type handling is unaffected.
-- **Fills.** Step 5 asserts both FILLED and PARTIALLY_FILLED through `applyBrokerOrderStatus`. The fill
-  semantics themselves are unchanged.
+- **Order types.** Order-type handling is unaffected. MARKET and LIMIT are the types the tests drive; STOP,
+  STOP_LIMIT and TRAILING_STOP take the same write and reclaim paths and are unaffected (product-spec C-4).
+- **Fills.** Step 1 adds PARTIALLY_FILLED sub-cases for the CancelOrder and ReplaceOrder final writes
+  (product-spec C-5). Step 5 asserts both FILLED and PARTIALLY_FILLED through `applyBrokerOrderStatus`. The
+  fill semantics themselves are unchanged.
 
 ### Scenario Coverage (C-15)
 
@@ -149,6 +151,9 @@ messages are unchanged.
 
    Call `CancelOrder(ctxAsUser("u-1"), {OrderId: "o-1"})`. Assert a record with `order_id "o-1"`, `user_id "u-1"`, `status "ORDER_STATUS_CANCELED"` and `path "cancel_final"`.
 5. **AC-6 test `TestReplaceOrder_FinalWriteFailureLogged_AC6`**: the order is a LIMIT `"o-1"` in NEW, `BrokerOrderId "brk-1"`, with the ACTIVE snapshot and the broker `ReplaceOrder` succeeding (`trading_bracket_test.go:53`). Call `ReplaceOrder(ctxAsUser("u-1"), {OrderId "o-1", LimitPrice 101.00})`. Assert a record with `order_id "o-1"`, `user_id "u-1"`, `status "ORDER_STATUS_NEW"` (the existing status, FR-4) and `path "replace_final"`.
+   - **PARTIALLY_FILLED sub-cases (product-spec C-5).** Repeat AC-3 and AC-6 with the order in `ORDER_STATUS_PARTIALLY_FILLED`.
+     - CancelOrder has no status gate before the broker call (`trading.go:1237-1314`), so it reaches the final write; assert `status "ORDER_STATUS_CANCELED"`, `path "cancel_final"`.
+     - ReplaceOrder accepts PARTIALLY_FILLED (`:1435-1441`) and its final `updateOrder` (`:1533-1547`) does not touch `Status`; assert `status "ORDER_STATUS_PARTIALLY_FILLED"`, `path "replace_final"`.
 6. **Ctx assertions (binding operator rule, design.md § Binding ctx rule).** Repeat AC-1/2/3/6 with `tracedCancelledCtx("u-1")` and a `ctxCapturingDB` that succeeds. The **last** captured Exec, which is the D-04 site's write, must have `traceID == "t-267"` and `ctxErr == nil`.
    - Before the fix, `:688`/`:703` use `Background()`, so `traceID` is `""`.
    - Before the fix, `:1367`/`:1550` use the raw ctx, so `ctxErr` is `context.Canceled`.
@@ -160,6 +165,8 @@ messages are unchanged.
 cd services/xstockstrat-trading && GOWORK=off go test ./internal/service/ -run 'AC1|AC2|AC3|AC6' -race -count=1 -v
 # RED (pre-Step-2): FAIL — no "order state write failed" record; trace/ctxErr assertions fail
 ```
+Coverage threshold: N/A for this step. The new tests live in `internal/service/`, which the CI coverage
+gate excludes (`.github/workflows/ci.yml:259`); the `>= 40%` gate is run in Step 6.
 
 ---
 
@@ -210,7 +217,8 @@ cd services/xstockstrat-trading && GOWORK=off go test ./internal/service/ -run '
    helper's.
 
 **Broker/fill note:** the change covers ALPACA and IBKR alike through the shared `TradingService` sites.
-Fill handling is unaffected.
+Fill handling is unaffected; Step 1's PARTIALLY_FILLED sub-cases exercise the cancel and replace final
+writes for a partially filled order.
 
 **Verification**:
 ```bash
@@ -304,6 +312,8 @@ grep -n "_ = s.repo.UpsertOrder" services/xstockstrat-trading/internal/service/t
 cd services/xstockstrat-trading && GOWORK=off go test ./internal/service/ -run 'AC4|AC5|AC7|AC8|AC9|SweepOrderIntents_Payload|ReclaimedUnknownPayload' -race -count=1 -v
 # RED (pre-Step-4): FAIL / build failure (reclaimedUnknownPayload undefined); no reclaimed_unknown event; no reclaim-failure log
 ```
+Coverage threshold: N/A for this step (`internal/service/` is excluded from the CI coverage gate,
+`.github/workflows/ci.yml:259`); the `>= 40%` gate is run in Step 6.
 
 ---
 
@@ -397,7 +407,7 @@ grep -n "_, _, _ = s.orderIntentRepo.ReclaimOrphanIntent" services/xstockstrat-t
 **Reviewers**: `xstockstrat-trading` owner — order execution correctness, broker API safety, fill detection, paper-only dev invariant, position limit enforcement
 
 **Codebase Evidence**:
-- Full enumeration, by `grep -n "context.Background()" services/xstockstrat-trading/internal/service/trading.go` this session. This is 40 hits, so design.md Open Risk 8 is discharged.
+- Full enumeration, by `grep -n "context.Background()" services/xstockstrat-trading/internal/service/trading.go` this session. This is 36 hits (re-verified at impl-spec review): the 31 converted rows below, the two Step 2 sites `:688`/`:703`, and the three left-as-is sites. Every hit is classified, so design.md Open Risk 8 is discharged for the enumeration; the `:2617` disposition is still an open operator decision (see Left as-is).
 - `grep -rn "context.Background()" internal/service/*.go`, excluding `_test` and `trading.go`, returned nothing else.
 - Each hit is classified by its reachable callers below. Sites already owned by Steps 2 and 4 are `:688`, `:703`, `:1367`, `:1550`, `:603`, `:1301` and `:1498`; `:688` and `:703` are in the grep list and appear here only as owned elsewhere.
 
@@ -489,6 +499,8 @@ unchanged.
 cd services/xstockstrat-trading && GOWORK=off go test ./internal/service/ -run 'TestTrace_' -race -count=1 -v
 # RED (pre-Step-6): FAIL — traceID "" at every row
 ```
+Coverage threshold: N/A for this step (`internal/service/` is excluded from the CI coverage gate,
+`.github/workflows/ci.yml:259`); the `>= 40%` gate is run in Step 6.
 
 ---
 
@@ -533,8 +545,9 @@ in their ctx. Fill semantics are unchanged (C-5).
 ```bash
 cd services/xstockstrat-trading && GOWORK=off go test ./internal/service/ -run 'TestTrace_' -race -count=1 -v   # GREEN
 grep -n "context.Background()" services/xstockstrat-trading/internal/service/trading.go   # expect exactly :2617, :2859, :2907 (line numbers may shift)
+# if the operator resolves the :2617 Open Thread as 'convert in 267' before execution, expect only :2859, :2907
 cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-download-mode=mod
-cd services/xstockstrat-trading && GOWORK=off COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"
+cd services/xstockstrat-trading && export GOWORK=off && COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"
 # confirm total >= 40%. New logic is in the excluded service/ package — no coverage threshold applies to it; the full suite (including every existing PRESERVE-guarding test) must pass.
 ```
 
