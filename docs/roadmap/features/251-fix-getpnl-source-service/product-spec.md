@@ -33,7 +33,9 @@ no `side` key: `order.filled` writes `"qty": order.Qty` (`trading.go:1805-1812`)
 therefore folds as a same-direction add (`pnl.go:68-71`), so realized stays 0 even after defect 1 is fixed. Trading
 records the side only on the order's `order.created` / `order.submitted` events (`"side": order.Side.String()`,
 `trading.go:650`, `:666`, `:843`), whose `stream_key` is the order id (`:649`, as for the fills at `:1805`); the
-`order.created` payload has no `order_id` key.
+`order.created` payload has no `order_id` key. The stream key is the bare id, stored verbatim
+(`ledgerServiceImpl.ts:51`), not the `order:{order_id}` form `services/xstockstrat-trading/CLAUDE.md` and
+`services/xstockstrat-ledger/CLAUDE.md` document (doc drift, teardown audit).
 
 **Observed (defect 1, second reader — UI fill lineage).** The `/trader/positions` fill-lineage sheet queries
 `{eventType: 'order.filled', sourceService: 'trading'}` (`services/xstockstrat-ui/src/hooks/usePositionLineage.ts:16-20`,
@@ -57,6 +59,15 @@ client-side only (`usePositionLineage.ts:22-28`), so correcting the filter alone
   reach this TypeScript site), and the ledger response delivered to the browser carries no other user's event.
 
 Realized P&L then equals `pnl.Fold` of the user's signed fills.
+
+**Mode and broker scope (C-2, C-3).** `GetPnL`'s `trading_mode` filter (`portfolio_service.go:775-783`, `:820-828`)
+is unchanged: the fix changes which fills reach it and their sign, not mode scoping, so it is paper-safe (unit tests,
+dev smoke on paper). Fill events reach the ledger only from `applyBrokerOrderStatus` (`trading.go:1772`, emits
+`:1805`/`:1822`), called by `pollFills` (`:1766`) and the `CancelOrder` not-cancelable re-read (`:1394`), for ALPACA and
+IBKR alike, so the fix is broker-agnostic. OFFLINE accounts never emit `order.filled` (`pollFills` skips them,
+`:1715-1721`; `ConfirmOrder` emits `account.positions.synced` only, `:888-889`), keep the signed
+`offlineFillsFromOrders` fold (`:874-886`), and stay out of `GetPnL` realized (feature 240 `product-spec.md:177`). No
+order-execution or broker behavior changes.
 
 ## Consumer Surface(s)
 
@@ -93,7 +104,7 @@ must use the producer shape above, not that file.
 3. CI never exercised either: the `GetPnL` test double ignores the request (`watchlist_service_test.go:268-271`), and
    the only fixture that produced a non-zero realized figure used a signed sell qty the producer never writes.
 
-## Scope Decision (P-03 — escalated to operator, pending)
+## Scope Decision (P-03 — escalated to operator, pending; recorded in context.md 2026-10-20)
 
 The spec keeps FR-2 in scope so AC-1/AC-2 hold the unweakened requirement (realized = fold of the user's fills,
 history included). Fix-site fork for `/sdd-design`:
@@ -117,7 +128,17 @@ sibling event (`submitOrder` emits `order.created` at `trading.go:649`, covering
 flatten `:2838`); whether any historical rows predate the `side` key; behaviour when a fill's side cannot be resolved;
 where FR-3's user scoping lives (BFF `queryEvents` `traderBff.ts:118-124` vs a dedicated read) and whether the hook's
 single 100-event page (`usePositionLineage.ts:19`) over the platform-wide `recorded_at ASC` stream
-(`ledgerServiceImpl.ts:157-162`) must paginate.
+(`ledgerServiceImpl.ts:157-162`) must paginate; FR-3 scoping keys on `payload.user_id`, since `LedgerEvent.user_id`
+is empty for pre-migration rows (`packages/proto/ledger/v1/ledger.proto:35`); whether the side-resolution helper is
+shared with the live fold (Out of Scope, last item).
+
+Product decisions design must settle, each as an appended FR and `@AC-*` (C-15, IDs append-only):
+
+- The outcome when a fill's side cannot be resolved (no sibling `order.created`/`order.submitted`, or the sibling
+  outside the fetched page): fold as a buy, skip the fill, or return an error. Feature 229's never-fabricate precedent
+  (`UNAVAILABLE` over a silent 0, `services/xstockstrat-portfolio/CLAUDE.md`) applies.
+- A lineage scenario where the trader's fill sits beyond the first platform-wide 100-event page; AC-3 (one `u-1`
+  event, one `u-2` event) does not catch a BFF post-filter that misses it.
 
 ## Affected Services
 
@@ -132,6 +153,11 @@ single 100-event page (`usePositionLineage.ts:19`) over the platform-wide `recor
 - [x] No proto changes anticipated
 - [x] No database migrations anticipated
 - [x] No config key changes anticipated
+
+The proto box (and "ledger: no change expected") holds only while FR-3's user scoping stays in the BFF
+(`traderBff.ts:118-124`). `QueryEventsRequest` has no user field (`ledger.proto:60-67`), so a dedicated ledger read
+needs an additive proto field (proto approval gate) and a ledger change; design then re-opens these boxes and
+Affected Services.
 
 ## Acceptance Criteria
 
@@ -148,10 +174,13 @@ dev.
   `portfolio_service.go:753`, `:798` and `usePositionLineage.ts:18` (repo grep 2026-10-20); all three are in scope.
 - Test-fixture uses of `'trading'` (ledger, notify and analysis unit tests, `e2e/fixtures/alerts.ts`), except the
   lineage fixtures an FR-3 test needs (`e2e/mock-backend.ts:456`, `e2e/trader/positions.spec.ts:147`,
-  `e2e/trader/api-smoke.spec.ts:207`)
+  `e2e/trader/api-smoke.spec.ts:207`). FR-3 test fixtures centralize in the canonical home
+  `e2e/fixtures/ledgerEvents.ts` (its rows already use `xstockstrat-trading`, `:26`) with an `INVENTORY.md` entry
+  (C-12/C-13), not in-place literal edits
 - User-partitioning the BFF `queryEvents` for other event types or stream keys (security audit
   `2026-09-16-trading-system-security-audit.md:175-176`); FR-3 scopes only the lineage read
 - The live position fold's identical sign loss: `processOrderFill` treats `fill.Qty > 0` as buying more
   (`portfolio_service.go:310-317`), so a trading sell `order.filled` (unsigned qty, `trading.go:1807`) grows the
-  position until the next `account.positions.synced` reconciliation. Design recon verifies it; it gets its own defect
-  report, not a silent widening of this fix (P-03)
+  position until the next `account.positions.synced` reconciliation. Confirmed at product-spec review (2026-10-20).
+  Named follow-up: a `/sdd-qa defect` report under `docs/reports/`, filed before `/sdd-design` and carried as
+  `[ ] unaddressed` in context.md until its path is cited here; not a silent widening of this fix (P-03, C-10)

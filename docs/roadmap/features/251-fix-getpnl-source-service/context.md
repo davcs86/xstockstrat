@@ -31,3 +31,73 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 ## Session 2026-10-20 (renumber 242 → 251)
 
 - Renumbered from 242 to 251 after feature 240-offline-account-full-pnl merged to main-dev (#1266) and took 240; re-verified on main-dev @ 4535695: the defect persists — `SourceService: "trading"` now at `portfolio_service.go:753` (filled) / `:798` (partially_filled); feature 240 did not touch these queries.
+
+## Session 2026-10-20 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready. Verdict: criteria PASS WITH WARNINGS (6 warnings, 4 notes, no
+  fails, no Floor `F-*` breach); overlap WARN (10 same-file collisions, no FAIL). Severity SEV-2.
+- Prior revisions not logged before this entry: `50580963` added defect 2 (sell sign lost) + FR-1/FR-2, pinned
+  AC-1/AC-2 to the producer shape and escalated the scope decision (P-03); `0814d3ec` added the FR section, persona,
+  Consumer Surface(s), FR-3/AC-3 (C-10 second reader, user scoping) and xstockstrat-ui to Affected Services.
+- Scope decision escalated to operator, still pending (P-03/P-05). Spec default = unweakened scope: FR-2 and FR-3
+  in scope. The split alternatives (defer FR-2 to a named follow-up; defer FR-3/AC-3 to
+  `fix-position-lineage-source-service`) need explicit operator sign-off recorded here, and restated ACs appended
+  under new IDs (C-15 append-only; C-14 for FR-3). The operator decisions below do not cover this fork.
+- Line refs in the triage entry above are superseded: `SourceService: "trading"` at `portfolio_service.go:753`
+  (filled) / `:798` (partially_filled); fill emits `trading.go:1805` / `:1822`; ledger literal `:3667`.
+- product-spec.md edits this session: stream-key doc-drift note; Mode and broker scope paragraph (C-2, C-3); Fix
+  Scope proto/ledger caveat; open questions + "Product decisions design must settle"; fixture-home and named
+  follow-up wording in Out of Scope. acceptance.feature unchanged.
+
+### Operator decisions
+
+OPERATOR DECISIONS (binding, recorded 2026-10-20):
+- Standing authorization: designs run in FULL mode only (no quick designs for automated fixes); the orchestrator auto-approves the design gate once rounds >= 2, no unresolved Floor (F-*) breach remains, no blocking objection remains, and every CHANGE to an existing @AC business rule is covered by an operator decision below.
+- Full design depth (operator: full is the minimum).
+
+### Warnings (spec-reviewer), carried into /sdd-design
+
+- [ ] unaddressed — [C-10, P-03] Live fold sign loss (`processOrderFill`, `portfolio_service.go:310-317`; unsigned
+  sell qty `trading.go:1807`) confirmed; no defect report exists in `docs/reports/`. File it via `/sdd-qa defect`
+  before `/sdd-design` and cite its path in product-spec Out of Scope. Design decides whether the side-resolution
+  helper is shared with it (in product-spec open questions).
+- [x] [P-03, P-05] Scope escalation and revision history recorded in this entry.
+- [ ] unaddressed — [FR-2 gap, P-03] Unresolvable fill side (no `order.created`/`order.submitted` sibling, or sibling
+  outside a 500-event page) has no FR/AC. Product decision (fold as buy / skip / error; feature 229 never-fabricate
+  precedent). Design appends an FR and AC (next free ID). Listed in product-spec "Product decisions design must settle".
+- [x] [FR-3, C-09] Fix Scope states the proto/ledger boxes hold only while FR-3 scoping stays in the BFF
+  (`QueryEventsRequest` has no user field, `ledger.proto:60-67`); `payload.user_id` scoping (`LedgerEvent.user_id`
+  empty pre-migration, `ledger.proto:35`) added to open questions.
+- [ ] unaddressed — [FR-3, C-09] Pagination: the user's fill beyond the first platform-wide 100-event page
+  (`usePositionLineage.ts:19`, `ledgerServiceImpl.ts:157-162`) is not caught by AC-3. Design appends an AC (next free
+  ID). Listed in product-spec "Product decisions design must settle".
+- [x] [C-3] Product spec states mode scoping unchanged (`portfolio_service.go:775-783`, `:820-828`), paper-safe.
+- [x] [C-2] Product spec states broker scope: fills only via `applyBrokerOrderStatus` (`trading.go:1772`; callers
+  `pollFills` `:1766`, `reconcileNotCancelable` `:1394`), ALPACA + IBKR; OFFLINE never emits `order.filled`
+  (`:1715-1721`, `:888-889`).
+- [ ] unaddressed — [NOTE, doc drift] `order:{order_id}` stream key in `services/xstockstrat-trading/CLAUDE.md` and
+  `services/xstockstrat-ledger/CLAUDE.md:101` vs bare id in production (`trading.go:649`, `:842`, `:1805`;
+  `ledgerServiceImpl.ts:51`); trading unit tests use the prefix (`trading_ledger_userid_test.go:23`). Product spec
+  notes it; the CLAUDE.md fix belongs to the teardown audit. Design option (a) joins on the bare id.
+- [ ] unaddressed — [NOTE, C-16] Recon lists durable suites touching GetPnL / `order.filled`:
+  `services/xstockstrat-portfolio/acceptance/fix-book-portfolio-page.feature:30-48`,
+  `services/xstockstrat-portfolio/acceptance/fix-after-hours-positions-priced.feature:49-77`,
+  `docs/sdd/business-rules/platform.feature:95-98` (`fees` key). Option (b) keeps existing payload keys.
+- [x] [NOTE, C-12/C-13] Product spec Out of Scope routes FR-3 fixtures to `e2e/fixtures/ledgerEvents.ts` +
+  `INVENTORY.md`; `/sdd-spec` applies it.
+- [x] [NOTE, criterion 8] AC-1/AC-2 couple FR-1 and FR-2 by design; satisfiable only by option (a) or (a)+(b).
+
+### Overlap findings (feature-overlap, WARN)
+
+- `portfolio_service.go`: vs 240-offline-account-full-pnl (code-completed; disjoint functions, 240 keeps GetPnL
+  untouched) and 242-fix-push-untargeted-broadcast (`emitRiskAlert` `:934-943`, draft). Rebase onto post-240 trunk.
+- `watchlist_service_test.go` shared `fakeLedger` (becomes exact-match) vs 240's `TestGetPnL_AC5_QuotesUnavailable`
+  (`portfolio_quote_deadline_test.go:101`, `:268`). Design confirms 240's GetPnL tests stay green.
+- `trading.go` (conditional on option (b) or a shared constant): vs 240 (ConfirmOrder/recompute/baseline), 249
+  (`ibkrCreds` `:87`), 241 (`:2086-2094`). Disjoint regions.
+- `ledgerServiceImpl.ts` vs 248 (`rowToEvent`): only if 251 edits the ledger.
+- `page.tsx` vs 240 (positions list): conditional; FR-3 can stay in `usePositionLineage.ts` + BFF.
+- `e2e/mock-backend.ts` vs 215 (disjoint regions); `e2e/fixtures/INVENTORY.md` vs 240 and 215 (shared catalog).
+- No config/proto/migration collision. `pnl.go` read-only (240 exports `QtyEpsilon`).
+- Lifecycle: 240 `status.md` = `code-completed`, while the triage entry says merged to main-dev (#1266); verify 240
+  is on main-dev before the 251 integration PR. No merge-order row required (no FAIL); a soft 240→251 row is optional.

@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-10-20 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-20-portfolio-getpnl-source-service-mismatch-defect.md` |
+| 2026-10-20 | `draft` → `spec-ready` | /sdd-review | Product spec approved (6 warnings, 4 notes; overlap WARN, 10 same-file collisions, no FAIL) |
 
 ---
 
@@ -45,4 +46,4 @@ Snapshot from `docs/runbooks/reviewer-registry.md` at /sdd-triage time (2026-10-
 
 ## Next Action
 
-`/sdd-design fix-getpnl-source-service` — recommended design depth: full (3 affected services in the report; fix site likely portfolio-only — operator may downgrade to quick); see context.md
+`/sdd-design fix-getpnl-source-service` (full — operator: no quick designs); see context.md for carried review items
