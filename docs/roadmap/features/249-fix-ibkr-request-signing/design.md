@@ -66,7 +66,7 @@ LST-keyed signing, and `realm`. Paths below are relative to `services/xstockstra
 
 - `%w ErrInvalidCredentials`, no further HTTP call:
   - missing or unparseable signature key / encryption key / DH prime (checked locally; error text never embeds
-    key material, recon.md:301-303) — this is the legacy 4-field blob path (§5);
+    key material, recon.md:301-303) — this is the legacy 4-field blob path (§8);
   - PKCS1v15 decrypt failure (proven to mean a wrong key by a known-answer decrypt vector);
   - `live_session_token_signature` mismatch;
   - init 2xx not authenticated;
