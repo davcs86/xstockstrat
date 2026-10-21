@@ -12,20 +12,32 @@
 **Observed.** `client.get_config_value` makes a one-shot `GetConfig` call with no `timeout=`
 (`services/xstockstrat-agent/app/client.py:1751-1754`). A config service that accepts connections but stalls
 blocks every caller indefinitely. The only guard is the fixed 3s `_POLICY_READ_TIMEOUT_S` `asyncio.wait_for`
-(`app/tools.py:2360`), and it is applied only to the `list_opportunities` policy read (`:1552-1553`, feature
+(`app/tools.py:2367`), and it is applied only to the `list_opportunities` policy read (`:1552-1553`, feature
 227). These callers are unbounded:
 
-- `_fetch_url`'s four serial `_agent_policy` reads (`agent.extract.*`, `tools.py:2390-2393`). They run before
-  every `extract_website_content` fetch.
+- `_fetch_url`'s four serial `_agent_policy` reads (`agent.extract.*`, `tools.py:2397-2400`). They run before
+  every `extract_website_content` fetch and every `extract_email_content` `urls` fetch (`tools.py:543`).
 - `ingest_signal`'s post-commit `signal.alert_threshold` read (`tools.py:627`).
 - OAuth DCR `oauth.registration_enabled` / `oauth.allowed_redirect_uris` reads (`app/oauth_server.py:84,104`).
 
-**Expected.** `get_config_value` applies a default gRPC deadline for every caller. On a timeout each caller
-takes its existing fallback path, because every caller already catches `Exception`:
+**Who is hit.** An MCP client calling these tools (e.g. the Claude.ai remote connector) and an OAuth client
+registering via DCR both wait for their own client-side timeout instead of getting the degraded answer.
 
-- `_agent_policy` returns its default;
-- `ingest_signal` uses `_ALERT_THRESHOLD_DEFAULT` 0.6;
-- DCR treats registration as enabled with an empty allowlist.
+**Expected.** See FR-1..FR-3.
+
+## Functional Requirements
+
+FR-1. `get_config_value` applies a default gRPC deadline D to `GetConfig` for every caller. On a stall the call
+  raises `grpc.aio.AioRpcError` `DEADLINE_EXCEEDED` (propagated per feature 093, `client.py:1755-1758`).
+  D is a fixed constant, not a config key (see Fix Scope). D ≤ 3.0 s unless the feature-227 `wait_for`
+  (`tools.py:1551-1554`) stays: durable rule `services/xstockstrat-agent/acceptance/fix-opportunities-read-hangs.feature`
+  `@AC-2 @feature-227` budgets `list_opportunities` under the MCP client's 60 s.
+FR-2. On a timeout each caller takes its existing fallback path, because every caller already catches
+  `Exception` (`tools.py:2375`, `:633`; `oauth_server.py:87`, `:107`):
+  - `_agent_policy` returns its default;
+  - `ingest_signal` uses `_ALERT_THRESHOLD_DEFAULT` 0.6 (`tools.py:77`);
+  - DCR treats registration as enabled with an empty allowlist (https-only redirect URIs).
+FR-3. The success path is unchanged: a config service that answers within D returns the same value as today.
 
 ## Reproduction Steps
 
@@ -45,9 +57,10 @@ patched only its own call site with `wait_for`.
 
 ## Consumer Surface(s)
 
-These agent MCP tools now return within a bound when config hangs: `extract_website_content`, `ingest_signal`
-and `list_opportunities` (already bounded). The agent's OAuth `/register` endpoint also returns within a bound.
-Tool names, parameters and return shapes are unchanged.
+These agent MCP tools now return within a bound when config hangs: `extract_website_content`,
+`extract_email_content` (`urls` path), `ingest_signal` and `list_opportunities` (already bounded). The agent's
+OAuth `/oauth/register` endpoint (`app/main.py:227`) also returns within a bound. Tool names, parameters and
+return shapes are unchanged.
 
 ## Fix Scope
 
