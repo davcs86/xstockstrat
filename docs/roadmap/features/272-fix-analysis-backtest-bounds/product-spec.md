@@ -79,7 +79,7 @@ Behavior visible to traders and operators changes, so C-14 applies:
 - [x] No proto changes
 - [x] No database migrations under the proposed default (enforce). Retiring the key (the OQ-1 alternative) would
   require a new `services/xstockstrat-config/migrations/NNN_*.up.sql`/`.down.sql` pair. The next free number is 033:
-  the trunk tip is 030, 031 is claimed by feature 243, and 032 is reserved for a peer.
+  the trunk tip is 030, 031 is claimed by feature 243, and 032 is claimed by feature 248.
 - [x] No new config keys. The existing `analysis.backtest.max_duration_seconds` gains its first reader (FR-3). Its
   name, type and seeded values are unchanged.
 
