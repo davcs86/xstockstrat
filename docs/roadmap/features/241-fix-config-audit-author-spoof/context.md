@@ -303,3 +303,40 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - [ ] adjacent drift → Step 12 fixes `config-rollout.md:122-124,150-163`, Step 13 records `tools.py:1665-1667`;
   - [ ] docs sweep → Steps 12-13 + teardown.
 - Ledger: no new line.
+
+## Session 2026-10-20 — sdd-review impl-spec
+
+- Mode B, advisory. Status unchanged: `implementation-ready`. Criteria verdict PASS WITH WARNINGS (0 fails, 0 Floor
+  breaches, 11 warnings). Overlap verdict WARN, file-level only: no config key, proto field number or migration
+  NNN collision, so no `merge-order.md` row.
+- Addressed in implementation-spec.md (each claim re-verified against the tree):
+  - W1 (C-01, P-06) Step 3 self-contradiction. The new `authz.ts:46` doc comment now reads "the deprecated body
+    author field is ignored", so the strict `request\.author` Verification grep holds. Today it hits
+    `configServiceImpl.ts:410` and `authz.ts:46,49`, all removed by Step 3.
+  - W4 Step 8 `instantiate_template` case. It now states the `patch("app.client.mtls")` +
+    `secure_channel.return_value = _channel_cm()` patch that `_run` applies (`test_template_tools.py:84-85`).
+  - W5 Steps 9/10 e2e. Step 10 evidence notes that the mock `setConfig` (`e2e/mock-backend.ts:1393-1409`) never
+    reads `author`, and that no config-ui or signal-sources spec asserts it. No Playwright step is needed.
+  - W6 Step 6 Verification. `GOWORK=off` now sits on `go list` (inside `$()`), `go test` and `go tool cover`.
+  - W8 Step 13 UI-3. It also rewrites the generic `{ ...req, userId/author }` phrase to `{ ...req, userId }`, and
+    its grep checks `userId/author`.
+  - W10 Step 3 evidence links the Step 11 peerSan report path (P-03 residual).
+  - W11 / overlap. The Step Dependencies overlap note is replaced with the scan result:
+    - 251 shares `escalateSystemic` in `trading.go`; whichever merges second reconciles by hand;
+    - 244 is disjoint in `configServiceImpl.ts`, and 243 is unconfirmed there;
+    - 215 and 247 are disjoint in the agent files;
+    - 240 is on trunk and disjoint;
+    - 249 does not overlap (`ibkr.go`, `trading.proto:267` only).
+- Open Threads (accepted, not edited; for the operator at the /sdd-execute checkpoint):
+  - [ ] W2 Step 2 `**Files**` lists the generated `gen/` directories. Accepted precedent
+    (240 implementation-spec.md:216-218), since generated output cannot be enumerated.
+  - [ ] W3 Step 4 touches 8 files and Step 13 touches 6, over the 5-file split threshold. Kept: both are cohesive
+    fixture or doc sweeps.
+  - [ ] W7 `changed_by` is proven only through INSERT `params[6]` plus a SQL review of `017:66-91`. No real-DB
+    harness exists (recon.md:225-228), so the audit-trigger path stays unexecuted by tests.
+  - [ ] W9 Step 10 imports `e2e/helpers/auth.ts` into vitest with no exact precedent. The inline-`SignJWT`
+    fallback is already a recorded Deviation Log path.
+  - [ ] Overlap limitation: peers 242-251 have no implementation-spec on trunk. Re-check `trading.go` against 251
+    (which must re-anchor its stale `:1861/:2106/:2674` cites to `:1943/:2188/:2756`) and the agent files
+    against 215/247 before the integration PR.
+- Ledger: no new line.

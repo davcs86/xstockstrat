@@ -65,13 +65,18 @@ grant has no `peerSan` (`services/xstockstrat-config/src/grpc/authz.ts:66-76`). 
 - Step 12 requires Steps 3 and 7: it documents final behaviour. Step 13 runs last and closes with the CLAUDE.md
   teardown (`/context-forge:context-constitution refresh` scoped to the touched context files, or the manual
   reconciliation recorded in the PR body).
-- Overlap (context.md 2026-10-20 sdd-review): only rebases, with disjoint hunks:
-  - 240 (already on trunk), 244, 243 in `configServiceImpl.ts`;
-  - 247, 249, 215 in `tools.py` / `client.py` / `mcp-tools.md`;
-  - 240, 249, 251 in `trading.go` (251 touches the `SourceService` literal at `:2188`, in the same function as
-    Step 5's `:2176`).
+- Overlap (Mode B scan, context.md 2026-10-20 sdd-review impl-spec): WARN, file-level only. No config key,
+  proto field number or migration NNN collision.
+  - `trading.go` vs 251: same function. 251 edits the `SourceService` literal at `:2188` in `escalateSystemic`
+    (`:2163-2190`), Step 5 deletes `:2176`. Whichever merges second reconciles that function by hand.
+  - `configServiceImpl.ts` vs 244 (`:115-117,120`, scalar-bounds registry): disjoint from `setConfig`
+    (`:371-414`), rebase only. 243 is not confirmed in this file by its docs.
+  - `tools.py` / `client.py` / `mcp-tools.md` vs 215 (`_opportunity_to_dict`, other tool docstrings) and 247
+    (`client.py` `get_config`): disjoint functions, rebase only.
+  - 240 is already on trunk and disjoint (`configServiceImpl.ts:145`, `config-governance.md:109`).
+  - 249 touches only `ibkr.go:167-168` and `trading.proto:267`, so it does not overlap this feature.
 
-  No `merge-order.md` row. Re-run the Mode B overlap at `/sdd-review impl-spec`.
+  No FAIL-level overlap, so no `merge-order.md` row.
 
 ---
 
@@ -219,6 +224,9 @@ Both commands must exit 0.
   (`migrations/017_config_secrets_and_scoping.up.sql:66-91`). No migration is needed. The last migration is
   `030_marketdata_edgar_snapshot_keys.up.sql`.
 - Header propagation: no new outbound call, so the C-03 table does not apply.
+- Residual (P-03): the SetConfig grant has no `peerSan` (`authz.ts:66-76`), so any peer reaching `:50060`
+  that forges the granted `x-internal-caller` value is credited as `changed_by`. Filed by Step 11 as
+  `docs/reports/2026-10-20-config-setconfig-internal-caller-no-peersan-defect.md`.
 
 **TDD**: `red-green required` (Step 4 is the paired test)
 
@@ -246,7 +254,8 @@ Both commands must exit 0.
    (product-spec § Out of Scope).
 4. In `authz.ts:46-50`:
    - doc comment →
-     `/** Denial when a write carries no propagated identity — no x-user-id and no authorized x-internal-caller; request.author is ignored. */`
+     `/** Denial when a write carries no propagated identity — no x-user-id and no authorized x-internal-caller; the deprecated body author field is ignored. */`
+     (the wording avoids the literal `request.author` so the Verification grep stays strict).
    - message → `'propagated identity required: send x-user-id or an authorized x-internal-caller'`
    - Name and `status.INVALID_ARGUMENT` stay unchanged.
 
@@ -484,9 +493,9 @@ both trees.
 **Verification**:
 ```bash
 cd services/xstockstrat-trading && GOWORK=off go test ./internal/service/ -run 'TestReconcileTick_' -count=1 -race && \
-  GOWORK=off COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && \
-  go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && \
-  go tool cover -func=coverage.out | grep "^total:" && \
+  COVERPKGS=$(GOWORK=off go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && \
+  GOWORK=off go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && \
+  GOWORK=off go tool cover -func=coverage.out | grep "^total:" && \
   GOWORK=off golangci-lint run --modules-download-mode=mod
 grep -rn "trading-reconciliation-poller" services/xstockstrat-trading --include="*_test.go"   # ≤1 declaration site per file
 ```
@@ -646,7 +655,10 @@ cd services/xstockstrat-agent && uv run ruff check . && uv run ruff format --che
 3. **`test_template_tools.py` — `@AC-4` `instantiate_template` case.**
    - Add `test_instantiate_template_set_config_carries_no_author(bound_admin)` and import `ADMIN` from
      `tests.conftest`.
-   - Reuse `_stubs()` and `_channel_cm()`. Add a `patch.object(config_pb2_grpc, "ConfigServiceStub", ...)`
+   - Reuse `_stubs()` and `_channel_cm()`. Mirror `_run`'s transport patch explicitly
+     (`test_template_tools.py:84-85`): `with patch("app.client.mtls") as mtls:` and
+     `mtls.secure_channel.return_value = _channel_cm()`, then start the `_stubs()` patches. The real
+     `client.set_config` dials through it. Add a `patch.object(config_pb2_grpc, "ConfigServiceStub", ...)`
      capture stub, and call
      `_tool_fn("instantiate_template")(ctx=_ctx(ADMIN), kind="signal_source", template_id="t-mcp", slug="my-mcp", bearer_token="sk-live-xyz")`
      directly. Do not go through `_run`, because `_run` forces `_ctx(TRADER)` (`:79-82`).
@@ -744,6 +756,10 @@ cd services/xstockstrat-ui && pnpm run lint
   (`:101`) and requires admin (`requireAdminScope`, `bffShared.ts:47-50`; `hasAdminScope`, `auth.ts:95`).
 - No `configUiBff` unit test exists (`ls src/lib/*.test.ts`). Coverage excludes `src/lib/*Bff.ts`
   (`vitest.config.ts:28`). The e2e mock ignores identity (recon.md:270-271).
+- Existing e2e SetConfig flows are unaffected (no Playwright step). The mock `setConfig`
+  (`e2e/mock-backend.ts:1393-1409`) reads only `key`, `value`, `namespace`, `userId`, `createKey` and
+  `isSecret`, never `author`. No `e2e/config-ui/*.spec.ts` or `e2e/insights/signal-sources.spec.ts`
+  asserts `author` (grep `\.author\|author:` over them: no hits).
 - C-12: the canonical test-JWT home is `e2e/helpers/auth.ts`, which exports `signTestJwt(roles, user?)` (`:29`)
   and `TEST_JWT_SECRET` (`:20`). Its only value-level dependencies are `jose` and `../fixtures/users`
   (`TEST_USER_ID`, `e2e/fixtures/users.ts:9`). `import { type Page }` is erased under `isolatedModules`
@@ -998,7 +1014,10 @@ grep -n "request.author\` \*\*wins\*\*" docs/patterns/header-propagation.md     
 5. **Agent findings `:42`.** Status → **resolved (feature 241)**: removed; attribution comes from verified
    claims via `x-user-id`.
 6. **UI constitution UI-3 `:23`.**
-   - Remove the "author stamp" exception and its `configUiBff.ts` cite.
+   - Remove the "author stamp" exception and its `configUiBff.ts` cite (from both the rule cell and the
+     evidence cell).
+   - Rewrite the generic `{ ...req, userId/author }` phrase to `{ ...req, userId }`. The insights
+     `userId: claims.user_id` injection (`insightsBff.ts:174-184`) survives; no author injection does.
    - The surviving explicit bodies are the cross-user filters plus the config-ui `environment` fill.
 7. **Teardown.**
    - Run `/context-forge:context-constitution refresh` scoped to every context file touched in Steps 12-13, and
@@ -1013,7 +1032,7 @@ grep -n "request.author\` \*\*wins\*\*" docs/patterns/header-propagation.md     
 **Verification**:
 ```bash
 grep -n "explicit \`author\`\|attributable author\|one row with author" services/xstockstrat-config/CLAUDE.md   # expect: no hits
-grep -n "author stamp" services/xstockstrat-ui/docs/context-constitution.md                                   # expect: no hits
+grep -n "author stamp\|userId/author" services/xstockstrat-ui/docs/context-constitution.md                     # expect: no hits
 grep -n "takes a caller-supplied \`author\`" services/xstockstrat-agent/docs/context-constitution-findings.md   # line shows resolved
 ```
 The PR body must carry the teardown record.
