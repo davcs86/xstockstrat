@@ -3,12 +3,12 @@ Feature: fix-ingest-poller-backfill (bug fix)
   the ingest mcp_client poller drops or stalls signals, and canceled backfills are revived.
 
   @AC-1 @FR-1 @regression
-  Scenario: One malformed item does not drop the rest of an mcp_client batch
-    Given an active mcp_client source "src-a" for user "u-1" whose fetch returns 3 items
-    And item 2 has no "symbol" field
+  Scenario: One failing item does not drop the rest of an mcp_client batch
+    Given an active mcp_client source "src-a" for user "u-1" whose fetch returns 3 items that all pass extraction
+    And ingesting item 2 raises an error
     When one poll cycle runs
     Then the signals for item 1 and item 3 are ingested for user "u-1"
-    And the poll records a skipped count of 1 for source "src-a"
+    And the poll emits a log record for source "src-a" with a skipped count of 1
     And source "src-a" has no last_error from this poll
 
   @AC-2 @FR-2 @regression
