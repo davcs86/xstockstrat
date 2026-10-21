@@ -95,6 +95,26 @@ Feature: fix-python-config-zero-trap (bug fix)
       | xstockstrat-analysis   | analysis.opportunity.max_universe_size           | int    | 0      | the opportunity universe cap          | 100                       |
       | xstockstrat-analysis   | analysis.fundsignal.run_interval_hours           | int    | 0      | the fundsignal loop interval in hours | 24                        |
       | xstockstrat-analysis   | analysis.fundsignal.daily_call_budget            | int    | 0      | the fundsignal daily call budget      | 200                       |
+      | xstockstrat-ingest     | ingest.mcp_client.request_timeout_seconds        | int    | 0      | the mcp_client per-call timeout       | 30                        |
+      | xstockstrat-analysis   | analysis.strategy.max_concurrent_entry_backfill  | int    | 0      | the entry-backfill semaphore          | 4                         |
+      | xstockstrat-analysis   | analysis.backtest.portfolio_max_concurrent       | int    | 0      | portfolio-mode max open positions     | 9                         |
+      | xstockstrat-analysis   | analysis.series.max_concurrent_components        | int    | 0      | the series component semaphore        | 4                         |
+      | xstockstrat-analysis   | analysis.opportunity.max_concurrent_candidates   | int    | 0      | the opportunity candidate semaphore   | 4                         |
+      | xstockstrat-analysis   | analysis.compute.max_worker_threads              | int    | 0      | the compute thread pool size          | 4                         |
+      | xstockstrat-analysis   | analysis.readiness_materializer.max_concurrent_bars_fetches | int | 0 | the materializer bars semaphore | 2                         |
+      | xstockstrat-analysis   | analysis.screener.max_concurrent_formula_evals   | int    | 0      | the screener formula semaphore        | 4                         |
+      | xstockstrat-analysis   | analysis.fundsignal.source_slug                  | string | ""     | the fundamentals source slug          | "fundamentals"            |
+      | xstockstrat-analysis   | analysis.fundsignal.max_symbols_per_run          | int    | 0      | the fundsignal per-run symbol cap     | 200                       |
+      | xstockstrat-analysis   | analysis.fundsignal.valid_days                   | int    | 0      | the fundsignal signal validity days   | 90                        |
+      | xstockstrat-analysis   | analysis.snapshot.signal_timeout_ms              | int    | 0      | the snapshot signal timeout in ms     | 500                       |
+      | xstockstrat-analysis   | analysis.patterns.indicator_bucket_count         | int    | 0      | the P&L-pattern indicator buckets     | 5                         |
+      | xstockstrat-analysis   | analysis.opportunity.max_live_strategies_per_symbol | int | 0      | the per-symbol live attribution cap   | 5                         |
+      | xstockstrat-analysis   | analysis.opportunity.max_live_only_symbols_per_compute | int | 0   | the live-only symbol cap per compute  | 20                        |
+      | xstockstrat-analysis   | analysis.opportunity.max_live_held_symbols_per_compute | int | 0   | the held-symbol live cap per compute  | 20                        |
+      | xstockstrat-analysis   | analysis.opportunity.valid_window_hours          | int    | 0      | the opportunity validity window hours | 24                        |
+      | xstockstrat-analysis   | analysis.opportunity.snooze_default_hours        | int    | 0      | the default snooze hours              | 24                        |
+      | xstockstrat-analysis   | analysis.opportunity.read_db_budget_ms           | int    | 0      | the ListOpportunities DB read budget  | 20000                     |
+      | xstockstrat-analysis   | analysis.opportunity.live_enrich_timeout_ms      | int    | 0      | the live-enrich timeout in ms         | 3000                      |
 
   # Guards against over-clamping: a blanket max(1, ...) floor turns the seeded midnight hour into 1.
   # FR-5 audited fact: no seeded 0/'' row differs from its default; the 008 fundsignal rows are bare-keyed.
@@ -126,3 +146,36 @@ Feature: fix-python-config-zero-trap (bug fix)
     And the live loop emitted an alert for user "u1", strategy "S1" on "AAPL" 10 seconds ago
     When the next live-loop evaluation of that pair yields an ungated exit transition
     Then a second alert is emitted for user "u1", strategy "S1" on "AAPL"
+
+  # The ConfigValue oneof carries presence; this proves ts-proto keeps a zero member on the wire.
+  @AC-10 @FR-1 @regression
+  Scenario Outline: An explicit zero survives the WatchConfig wire
+    Given config rows hold "<key>" as the <type> value <stored>
+    When a WatchConfig <update> payload is serialized and deserialized through ConfigServiceService
+    Then the decoded ConfigValue for "<key>" holds its <type> member set to <stored>
+
+    Examples:
+      | key                       | type   | stored | update   |
+      | analysis.test.zero_int    | int    | 0      | SNAPSHOT |
+      | analysis.test.zero_float  | float  | 0.0    | SNAPSHOT |
+      | analysis.test.zero_string | string | ""     | SNAPSHOT |
+      | analysis.test.zero_int    | int    | 0      | DELTA    |
+
+  @AC-11 @FR-6 @regression
+  Scenario: The corrective description migration changes descriptions only and reverses cleanly
+    Given the 027 and 028 seeded rows whose descriptions name the zero-trap
+    When the description-only migration is applied
+    Then only the description column of those rows changes, matched on their exact old text
+    And no value_data, value_type or key changes and no row is inserted or deleted
+    And the down migration restores each old description text exactly
+
+  @AC-12 @FR-1 @regression
+  Scenario Outline: A key whose zero means "no limit" honours a stored zero
+    Given "<key>" is stored as the int value 0
+    When xstockstrat-analysis resolves it for <site>
+    Then the effective value is 0, so <effect>
+
+    Examples:
+      | key                                  | site                         | effect                                  |
+      | analysis.screener.default_rank_limit | the ScreenSymbols rank cap   | the result list is not truncated        |
+      | analysis.patterns.min_sample_count   | the P&L-pattern sample floor | no bucket is dropped for a small sample |

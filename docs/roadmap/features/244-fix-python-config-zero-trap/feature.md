@@ -18,19 +18,21 @@
 | 2026-10-20 | `spec-ready` (re-review) | /sdd-review | Product spec re-reviewed and approved (6 warnings; overlap WARN) |
 | 2026-10-21 | `spec-ready` (amended) | /sdd-design | product-spec.md FR-3 amended per design: read-site `max(1, …)` guards subsumed by the `>0` clamp; negatives resolve to the default; present-aware `retry_seconds` guards stay |
 | 2026-10-21 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved under operator standing authorization; recon.md + design.md written |
+| 2026-10-21 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 18 steps; acceptance.feature extended (20 @AC-6 rows, @AC-10..@AC-12) |
 
 ---
 
 ## Reviewers
 
-Provisional snapshot from `docs/runbooks/reviewer-registry.md` at /sdd-triage time (2026-10-20). `/sdd-spec` overwrites it with per-step assignments.
+Snapshot from `docs/runbooks/reviewer-registry.md` at /sdd-spec time (2026-10-21), deduplicated from the per-step `**Reviewers**` lines.
 
-| Reviewer | Focus |
-|---|---|
-| `xstockstrat-analysis` owner | Backtest reproducibility, strategy scoring determinism, no look-ahead bias |
-| `xstockstrat-indicators` owner | Formula sandboxing, numeric precision, timeout enforcement (`indicators.sandbox.timeout_ms`), no side-effects from formula execution |
-| `xstockstrat-ingest` owner | Signal normalization correctness, idempotent ingestion, newsletter source schema stability |
-| `xstockstrat-config` owner | Only if SetConfig bounds (`configServiceImpl.ts:112-121`) are revised once getters honour 0: config key naming, scoping, WatchConfig stream stability |
+| Reviewer | Focus | Steps |
+|---|---|---|
+| `xstockstrat-ingest` owner | Signal normalization correctness, idempotent ingestion, newsletter source schema stability | 1-4 |
+| `xstockstrat-indicators` owner | Formula sandboxing, numeric precision, timeout enforcement (`indicators.sandbox.timeout_ms`), no side-effects from formula execution | 5-8 |
+| `xstockstrat-analysis` owner | Backtest reproducibility, strategy scoring determinism, no look-ahead bias | 9-12 |
+| `xstockstrat-config` owner | Config key naming (`<service>.<category>.<key>`), environment (`production`/`staging`) / global-per-user scoping, secret encryption + redaction, WatchConfig stream stability | 13-16 |
+| DBA | Migration NNN numbering (no gaps, no conflicts), up+down pair present, hypertable partitioning strategy, index correctness, run-order compliance with `scripts/db-migrate.sh` | 15 |
 
 ---
 
@@ -40,7 +42,7 @@ Provisional snapshot from `docs/runbooks/reviewer-registry.md` at /sdd-triage ti
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
 - [Recon](recon.md) — grounded codebase dossier (call-site classification, reuse patterns, business rules)
 - [Design](design.md) — approved design: chosen approach, rejected alternatives, open risks
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-python-config-zero-trap`_
+- [Implementation Spec](implementation-spec.md)
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -53,4 +55,4 @@ or a zero signal-rank weight cannot be configured).
 
 ## Next Action
 
-`/sdd-spec fix-python-config-zero-trap` — generate implementation spec from the approved design
+`/sdd-review fix-python-config-zero-trap impl-spec` — validate implementation spec, then `/sdd-execute fix-python-config-zero-trap`

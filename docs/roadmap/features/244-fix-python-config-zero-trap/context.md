@@ -193,3 +193,50 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - [ ] The slug collision with 173 deletes the feature branch on each push to `main`. Target: operator slug rename before `/sdd-spec` pushes.
   - [ ] The `sparkline_bars` description drift (028:100,103) is unlogged. Target: the docs step logs it in `services/xstockstrat-config/docs/context-constitution-findings.md`.
 - Status: spec-ready → design-approved.
+
+## Session 2026-10-21 — sdd-spec
+
+- Branch state: `origin/feature/fix-python-config-zero-trap` was present at 459f6531 (the design-approved commit), so
+  this session built on it with no recovery needed. The slug rename is still open, so the branch remains exposed
+  to the orphan cleanup on the next push to `main` (fails.md:2953).
+- Generated implementation-spec.md with 18 steps. Status: design-approved → implementation-ready.
+- Order: for each Python service, a getter step, then a clamp step, each with its paired test step (ingest 1-4,
+  indicators 5-8, analysis 9-12). Then config comments and tests (13-14), the description migration and its test
+  (15-16), docs and teardown (17), and rollout with consumer-surface verification (18).
+- acceptance.feature extended (C-15 append-only; design §10):
+  - 20 @AC-6 rows: design's 18, plus `read_db_budget_ms` 20000 and `live_enrich_timeout_ms` 3000
+    (`servicer.py:339-340`)
+  - new @AC-10 @FR-1 (wire zero, SNAPSHOT and DELTA)
+  - new @AC-11 @FR-6 (description-only migration)
+  - new @AC-12 @FR-1 (`default_rank_limit`, `min_sample_count` honour 0)
+- Key codebase findings:
+  - Dry run of the design, in a scratch copy outside the repo. The getters were switched and 48 FR-3 call sites
+    wrapped in module clamps.
+    - Results: ingest 328 passed, indicators 290 passed, analysis 1274 passed and 2 failed. The two failures are
+      exactly the design §9 rewrites (`test_analysis_servicer.py:586-594`, `:2527-2541`).
+    - No bare-`MagicMock` cfg double needs fixing; this closes the Open Thread "bare-MagicMock cfg return raises
+      TypeError".
+  - The AST scan of the same tree: 0 unbindable calls, one default per key, and disjoint read/clamp sets.
+    - ingest: 6 FR-3, 2 honour
+    - indicators: 3 FR-3, 1 honour
+    - analysis: 34 FR-3, 36 honour, plus 3 dead-helper reads removed in Step 11
+    - The `HONOUR_KEYS`/`FR3_KEYS`/`ZERO_IS_LEGIT` table is emitted in implementation-spec.md § Guard
+      classification table for impl-spec review. That addresses the Open Thread "the guard's sets freeze a hand
+      classification" (audit pending).
+  - The config migration tip on `origin/main-dev` is `030`, and 243 claims `031`. Step 15 numbers the pair
+    `max(origin/main-dev)+1` at authoring and re-verifies before merge. The AC-11 test globs by name suffix
+    (`*_analysis_zero_trap_descriptions`), so a renumber needs no test edit.
+  - RED for the clamp tests (Steps 4, 8, 12) exists only against the getter-switched tree. Under the original trap
+    the default already comes back. That is why each service's getter step precedes its clamp step.
+  - @AC-8, @AC-10 and @AC-7 are characterization tests: they pass before and after. They are recorded per the
+    tdd-gate escape.
+- Open Threads update:
+  - [x] A bare-`MagicMock` cfg return raises `TypeError` at `v > 0`. Resolved by the dry run: none does.
+  - [ ] The guard's sets freeze a hand classification. Target: `/sdd-review impl-spec` audits § Guard classification
+    table.
+  - [ ] The slug collision with 173 deletes the feature branch on each push to `main`. Target: operator rename,
+    still pending. /sdd-execute checks that the branch exists before each session.
+  - Unchanged: wire zero (Step 14 @AC-10 plus the Step 18 smoke), negatives (Step 12 retention flip), the stored
+    0/'' rows and the deploy audit (Step 18), type-mismatched FR-4 rows (Step 18 and the Step 17 docs), migration
+    renumbering (Step 15), and the `sparkline_bars` drift (Step 17).
+- Next: `/sdd-review fix-python-config-zero-trap impl-spec`.
