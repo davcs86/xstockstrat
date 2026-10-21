@@ -52,3 +52,17 @@ Feature: fix-trading-order-state-audit (bug fix)
     When user "u-1" replaces order "o-1" with limit price 101.00
     Then the call returns FailedPrecondition "still pending"
     And a log records the failed reclaim with the replace intent id and error "db unavailable"
+
+  @AC-8 @FR-5 @regression
+  Scenario: A reactive stale-intent reclaim in CancelOrder is audited
+    Given an open order "o-1" for user "u-1" with a cancel intent in PENDING older than the stale threshold
+    When user "u-1" cancels order "o-1"
+    Then the call returns FailedPrecondition "still pending"
+    And the ledger receives an "order_intent.reclaimed_unknown" event for order "o-1" with trigger "reactive_cancel"
+
+  @AC-9 @FR-5 @regression
+  Scenario: A reactive stale-intent reclaim in ReplaceOrder is audited
+    Given an open limit order "o-1" for user "u-1" with a replace intent in PENDING older than the stale threshold
+    When user "u-1" replaces order "o-1" with limit price 101.00
+    Then the call returns FailedPrecondition "still pending"
+    And the ledger receives an "order_intent.reclaimed_unknown" event for order "o-1" with trigger "reactive_replace"
