@@ -9,6 +9,11 @@
 > **Evidence baseline.** Every `path:line` below was re-read on `origin/feature/fix-fundsignal-neutral-score` @
 > `66fb979a` (2026-10-21). Service code there matches recon.md's Codebase Map; anchors that recon.md did not carry
 > were found by grep/read in this session. Re-grep a symbol if the branch moves before execution.
+> Re-checked at branch tip `c98b2d91` (2026-10-21, sdd-review impl-spec): `product-spec.md:43` carries FR-3;
+> `acceptance.feature` Background (`:5-7`) holds only min-conviction + quantiles, the formula-id Given opens AC-1 (`:11`)
+> and AC-2 (`:23`), AC-1's last Then (`:19`) has no direction clause, `@AC-3 @FR-3` is `:31-39`; `design.md` and the
+> four B.2/B.3 reports + `.status` sidecars under `docs/reports/2026-10-21-*` exist. A checkout older than `66fb979a`
+> lacks these (B.1 gate writes landed there).
 
 ---
 
@@ -85,12 +90,24 @@ Every file design.md § Docs names is in exactly one step's **Files**:
   (`:221`) raise `AttributeError` (recon.md Risk 1). On the pre-Step-2 tree the migration is behaviour-neutral (all
   three fixtures default to an empty `missing_metrics`, and the current scorer reads only values).
 - **Step 3 [docs] requires Step 2**: the docs describe the shipped WARN and the rerun re-fetch.
-- **Overlap 244-fix-python-config-zero-trap** (status `draft` on this branch): no presence helper for
-  `missing_metrics` exists (`services/xstockstrat-analysis/app/config/watcher.py` has config-key helpers only,
-  `get_float_present` `:136`), so Step 2 reuses the screener's inline membership pattern
-  (`app/services/screener.py:402-403`). If 244 lands one first, Step 2 reuses it and records a Deviation Log row.
-  244 also reads `analysis.fundsignal.min_conviction_to_emit` (`fundsignal_loop.py:229`); this spec does not change
-  that line.
+- **Overlap 244-fix-python-config-zero-trap** (`implementation-ready` on `origin/feature/fix-python-config-zero-trap`,
+  re-checked 2026-10-21): no presence helper for `missing_metrics` exists here
+  (`services/xstockstrat-analysis/app/config/watcher.py` has config-key helpers only, `get_float_present` `:136`) and
+  244's spec adds none (its `missing_metrics` grep is empty; its conftest addition is `snapshot_watcher`, 244 spec
+  `:676`), so Step 2 reuses the screener's inline membership pattern (`app/services/screener.py:402-403`). If 244
+  lands one first, Step 2 reuses it and records a Deviation Log row. 244 classifies
+  `analysis.fundsignal.min_conviction_to_emit` (`fundsignal_loop.py:229`) and records 246 as disjoint lines (244 spec
+  `:173`); this spec does not change that line.
+- **Rebase-only overlaps (same file, disjoint regions; no `merge-order.md` row needed):** 244 also edits
+  `tests/conftest.py`, analysis `CLAUDE.md`, analysis `docs/context-constitution.md` and
+  `docs/context-constitution-findings.md` (244 spec `:626`, `:1175-1181`); 250-fix-otel-metrics-logs-gap also edits
+  `docs/context-constitution-findings.md` (table-append conflict: re-read the table before appending in Step 3);
+  247-fix-agent-getconfig-deadline and 249-fix-ibkr-request-signing edit other regions of
+  `services/xstockstrat-agent/app/tools.py`; 249 edits other rows of `docs/runbooks/mcp-tools.md`. Re-grep every
+  Step 2/3 anchor after rebasing onto whichever lands first.
+- **Consumer surfaces, no step (C-14):** `/insights/opportunities`, MCP `list_opportunities` and the live blend
+  universe get no behaviour change, only fewer fabricated rows (§ Consumer surfaces). MCP `run_fundamentals_scan` is
+  Step 3 (docstring). Already-stored fabricated signals → B.2 below.
 - **Owned elsewhere (not steps here):** stored fabricated signals and ZRO-shape partial-row signals → B.2
   (`docs/reports/2026-10-21-ingest-fundsignal-fabricated-signals-not-retracted-defect.md`); real zeros read as 0.5
   downstream → B.3(1) (`docs/reports/2026-10-21-analysis-zero-conviction-read-as-neutral-defect.md`); small-n quantile
@@ -187,7 +204,8 @@ Every file design.md § Docs names is in exactly one step's **Files**:
 4. **New test class `TestUnscoredSymbols`** (feature 246) in `test_fundsignal_loop.py`. Each cycle overrides
    `loop._marketdata.GetFundamentalsMulti` with an `AsyncMock` whose side effect returns
    `SimpleNamespace(fundamentals=[rows[s] for s in request.symbols if s in rows])` from a per-test `rows` dict of
-   `fundamentals_row(...)`.
+   `fundamentals_row(...)`. Tests that use `grpc.StatusCode` import `grpc` locally inside the test, as the file does
+   today (`:668`, `:678`, `:700`; no module-level `import grpc`).
    - `test_ac1_dataless_symbols_not_scored_ranked_or_emitted` (**AC-1**): `_identity_loop()` (built-in scorer, empty
      formula id); `rows`: SPY/QQQ/IWM/DIA/VOO with `missing=BUILTIN_SCORER_METRICS`; MSFT with `pe_ratio=20.0, roe=0.30,
      eps=10.0, missing=("pb_ratio", "debt_to_equity")`. Spy `_map_directions` with
@@ -303,6 +321,8 @@ grep -n "fundamentals_row" tests/test_fundsignal_loop.py tests/test_owner_header
    `"debt_to_equity"` (`:428`), `"eps"` (`:430`) — keeping each value branch, except pb becomes
    `0.0 if pb <= 0 else _lin(pb, *_BUILTIN_BANDS["pb_ratio"])` (matches pe `:421`). The last line becomes
    `return sum(parts) / len(parts) if parts else None`. No `getattr(..., "missing_metrics", ())` (design.md Rejected).
+   The pb `< 0` → `<= 0` change goes beyond FR-2's literal text (without it a reported pb 0.0 scores 1.0, the best
+   value); the PR body must call it out with its residual (pb=0 + de=0 averages 0.5, design.md Open Risks).
 3. `_score` (`:409-414`): return `(scores, unscored)`. Formula branch: `return await self._score_via_formula(...)`
    (which now returns the pair). Built-in branch: loop over `fundamentals_by_symbol.items()`; a `None` from
    `self._builtin_score(f)` appends `sym` to `unscored`, otherwise `scores[sym] = s`. Update the docstring to state

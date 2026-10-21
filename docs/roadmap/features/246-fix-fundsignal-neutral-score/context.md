@@ -469,3 +469,34 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   all seven metrics in `missing_metrics`; no explicit vendor zero for pb_ratio/debt_to_equity); (b) dev smoke and
   (c) prod parity block promotion and are recorded here at integration.
 - Next: `/sdd-review fix-fundsignal-neutral-score impl-spec`, then `/sdd-execute fix-fundsignal-neutral-score`.
+
+## Session 2026-10-21 — sdd-review impl-spec
+
+- MODE B (advisory; status stays `implementation-ready`). Criteria verdict FAIL (3), overlap verdict WARN. All
+  three FAILs came from a stale checkout (reviewer read HEAD `38ce1789`, before the B.1 gate writes in
+  `66fb979a`); re-verified at branch tip `c98b2d91`, they clear:
+  - C-15 FR-3/@AC-3 missing: `product-spec.md:43` has FR-3; `acceptance.feature:31-39` has `@AC-3 @FR-3`.
+  - C-15 AC-1 direction Then: `acceptance.feature:19` is `And exactly one analysis.fundsignal_emitted row exists,
+    for "MSFT"`; no direction clause, so `test_ac1_*` covers every Then.
+  - C-15/C-16 Background formula-id: Background `:5-7` holds only min-conviction + quantiles; formula-id Given is
+    in AC-1 `:11` / AC-2 `:23`; AC-3 `:33` sets a system formula without contradiction.
+- Addressed in implementation-spec.md:
+  - Baseline/staleness WARN: evidence-baseline note records the `c98b2d91` re-check (FR-3, AC-1/AC-3 shape,
+    design.md, the four `docs/reports/2026-10-21-*` reports + `.status` present).
+  - Overlap 244 stale-status NOTE: bullet refreshed (`implementation-ready`; 244 adds no `missing_metrics` helper,
+    conftest addition is `snapshot_watcher`, 244 spec `:676`; disjoint lines per 244 spec `:173`).
+  - Overlap file WARNs: new rebase-only bullet in § Step Dependencies (244 conftest/CLAUDE.md/constitution/findings,
+    250 findings table-append, 247/249 `tools.py`, 249 `mcp-tools.md`); re-grep anchors after rebase.
+  - C-14 WARN: consumer-surface "no step" disposition added to § Step Dependencies.
+  - Step 1 minor (`import grpc`): instruction added to import locally per `test_fundsignal_loop.py:668,678,700`.
+  - Step 2 pb `<= 0` note: instruction added that the PR body calls out the change and its residual.
+- No change needed: C-01 anchors (all matched); same-day re-fetch (already in Step 3 instr. 1); trading-domain
+  B2b (compliant); migrations/proto/config (no collision); merge-order (no entry required).
+
+### Open Threads (sdd-review impl-spec)
+
+- Release gate (b) depends on DO log access for the run-attributed `_warn_unscored` line; without it the smoke is
+  INCONCLUSIVE and promotion stays blocked. Skip visibility is log-only by design (design.md Rejected
+  `_emit_warning`). Operator to confirm dev DO log access before integration.
+- Overlap scan did not verify 241 and 252 (no read-only checkout); 240 overlap is conditional on whether it has
+  landed. Re-check at execute.
