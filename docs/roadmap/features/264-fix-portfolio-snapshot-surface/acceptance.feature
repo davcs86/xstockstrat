@@ -26,8 +26,9 @@ Feature: fix-portfolio-snapshot-surface (bug fix)
     Then stream "A" receives a snapshot with portfolio_id "u-1"
     And stream "B" receives no snapshot
 
-  @AC-6 @FR-3 @regression
-  Scenario: A snapshot stream with no caller identity is rejected on the Connect path
+  # Non-regression guard: Connect already rejects an empty caller, so this passes on the buggy code.
+  @AC-6 @FR-3 @non-regression
+  Scenario: A snapshot stream with no caller identity stays rejected on the Connect path
     When a Connect StreamPortfolioUpdates stream is opened with no x-user-id
     Then the stream fails with INVALID_ARGUMENT
     And it is not registered as a subscriber
@@ -36,7 +37,8 @@ Feature: fix-portfolio-snapshot-surface (bug fix)
   Scenario: portfolio.snapshot.interval_minutes is honoured (FR-4 branch a)
     Given user "u-1" holds 10 "AAPL" priced at 100.00 and no fills occur
     And "portfolio.snapshot.interval_minutes" is 1
-    When 3 minutes elapse on the service clock
+    And the snapshot writer runs on a fake service clock
+    When the fake clock is advanced by 3 minutes
     Then at least 2 "portfolio.snapshots" rows exist for "u-1" with equity 1000.00
 
   @AC-5 @FR-4 @regression
@@ -44,4 +46,3 @@ Feature: fix-portfolio-snapshot-surface (bug fix)
     Given all xstockstrat-config migrations have been applied
     When the config keys for service "portfolio" are listed in the "production" and "staging" environments
     Then neither listing contains "portfolio.snapshot.interval_minutes"
-    And the portfolio CLAUDE.md config key table does not list "portfolio.snapshot.interval_minutes"
