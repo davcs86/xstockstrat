@@ -2977,6 +2977,17 @@ ambiguity is logged here).
   2. DELETE the bare rows that have a twin on the full scope tuple.
   3. Rename and set any value in one UPDATE.
 
+### 2026-10-21 — fix-ibkr-request-signing — assumption
+- **Mistake**: A design round proposed one `.gitleaks.toml` allowlist entry with `regexTarget = "match"` and called
+  it "consistent with the existing entries". The file has a single `[allowlist]` table whose `regexTarget = "line"`
+  applies to every regex in it, so a per-entry target is impossible, and flipping the table re-tests the four
+  existing literals against the matched secret text instead of the line.
+- **Evidence**: `.gitleaks.toml:33-40`; `docs/roadmap/features/249-fix-ibkr-request-signing/design.md` §10.
+- **Rule it implies**: To allowlist a committed test key, either add a unique key-body substring regex to the
+  existing `"line"` table, or add a separate `[[allowlists]]` block ANDing `paths` with a regex (needs gitleaks
+  >= 8.21; confirm the version bundled by the CI action). Never flip the shared table, never use a bare `paths`
+  entry, and verify with a local `gitleaks detect`.
+
 ### 2026-10-21 — fix-ledger-trimmed-notify-payload — assumption
 - **Mistake**: Design round 2 bounded a per-event read by including the `pool.connect()` wait, at ledger
   `DB_POOL_MAX=1`. A `StreamEvents` replay is one unpaged `pool.query` that holds the only connection for its whole
