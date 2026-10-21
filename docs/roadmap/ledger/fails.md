@@ -3028,3 +3028,8 @@ ambiguity is logged here).
 - **Evidence**: `.github/workflows/ci-validate-feature-status.yml:167,183`; 244 context.md sessions 2026-10-20 (sdd-review) and 2026-10-21 (sdd-design).
 - **Rule it implies**: A new feature or bug slug must be unique across all `docs/roadmap/features/*-<slug>` dirs, including launched ones. When `feature/<slug>` is missing, check the stale local tracking ref before falling back.
 
+### 2026-10-21 — fix-otel-metrics-logs-gap — assumption
+- **Mistake**: A design round built an asset-existence guard's "exists" set by running the name regex over the whole asset file. Comments and `delete*` lists in that same file then made a deleted UID count as existing, which silently disabled the dangling-reference check the guard was added for. Caught by the r3 adversary, not by a test.
+- **Evidence**: `docs/roadmap/features/250-fix-otel-metrics-logs-gap/design.md` §4 Part 3 (existence set) and §5 (comment-only red case); context.md 2026-10-21 sdd-design entry.
+- **Rule it implies**: an existence/absence guard derives its "exists" set from declaration value lines only (e.g. `- uid:`, top-level `"uid":`), never from free text in the same file, and ships a red case proving a comment cannot satisfy existence.
+
