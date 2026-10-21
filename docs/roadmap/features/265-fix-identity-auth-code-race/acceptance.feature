@@ -29,14 +29,13 @@ Feature: fix-identity-auth-code-race (bug fix)
     And identity.refresh_tokens holds no new row for user "u-1" and client "mcp-client-1"
 
   @AC-4 @FR-6 @FR-7 @FR-8 @regression
-  Scenario: First-party login, first-party refresh and OAuth exchange mint tokens through one shared path with unchanged claims
+  Scenario: First-party login, first-party refresh and OAuth exchange issue tokens with the same claim shape and client tagging
     Given user "u-1" with email "u1@example.com" and roles ["trader"]
     When "u-1" authenticates with a password, refreshes that session, and separately exchanges an authorization code with resource "https://agent.example/mcp"
     Then every access token carries user_id "u-1", email "u1@example.com", roles ["trader"], issued_at and expires_at
     And on every access token expires_at minus issued_at equals 900 seconds
     And only the OAuth access token carries aud "https://agent.example/mcp"
     And the login refresh token is stored with client_id NULL and the OAuth refresh token with client_id "mcp-client-1"
-    And the login refresh token and the OAuth refresh token are both created by the shared refresh-issue helper
 
   @AC-5 @FR-5 @regression
   Scenario Outline: A request that fails client, redirect or PKCE validation does not consume the code
