@@ -16,6 +16,14 @@ Feature: fix-analysis-backtest-bounds (bug fix)
     When analysis fetches the paged daily bars for "AAPL"
     Then the returned bar times are 1, 2, 3
 
+  @AC-4 @FR-1 @regression
+  Scenario: An empty page on a token-bearing request is a loud failure, not end of data
+    Given marketdata answers the first GetBars for "AAPL" with bars at t=1 and t=2 and next_page_token "t1"
+    And answers the request with page_token "t1" with no bars and next_page_token "t1"
+    When analysis fetches the paged daily bars for "AAPL"
+    Then a bar-fetch error "refusing to return a truncated series" is raised
+    And no bar series is returned
+
   @AC-3 @FR-3 @regression
   Scenario: RunBacktest enforces the backtest wall-clock limit
     Given analysis.backtest.max_duration_seconds is set to 1
