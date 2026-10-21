@@ -69,3 +69,34 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   > - Standing authorization: designs run in FULL mode only (no quick designs for automated fixes); the orchestrator auto-approves the design gate once rounds >= 2, no unresolved Floor (F-*) breach remains, no blocking objection remains, and every CHANGE to an existing @AC business rule is covered by an operator decision below.
   > - Full design depth (operator overrode the triage 'quick' recommendation).
 - Next: `/sdd-design fix-screener-symbol-isolation` (full). This supersedes the triage `quick` recommendation.
+
+## Session 2026-10-20 — sdd-review product-spec (re-review)
+
+- Re-review of the post-approval spec. Verdict: PASS WITH WARNINGS (0 fails, 0 Floor breaches). Status was
+  already `spec-ready` (73e1ccba), so status.md is unchanged and no duplicate `draft` → `spec-ready` row was
+  added to feature.md. Next Action is unchanged: `/sdd-design fix-screener-symbol-isolation` (full).
+- Warnings (6):
+  - C-15: AC-1's "with its computed score" Then has no concrete oracle. Partial raws change min-max
+    normalisation (`screener.py:409-437`). **Open, routed to /sdd-design:** the "Partial raws" fork already
+    requires design to write the pinned oracle back into AC-1.
+  - C-15/P-06: AC-1's "row, if present" admits a passing test with no BAD row. **Partially resolved:** the
+    Degraded-row shape fork now requires design to rewrite "if present" to the chosen shape, and to assert a
+    kept row present.
+  - P-03/C-11: three design forks are still open (degraded-row shape, isolation point, partial raws). Not a
+    blocker. **Open, routed to /sdd-design;** they must be resolved before the impl-spec.
+  - C-14: Consumer Surface(s) was prose. **Resolved:** it is now a checkbox list (Agent `screen_symbols`, UI
+    `/insights/screener`, UI `/trader/positions/[symbol]`), and each item says what changes. The conditional
+    no-code-change claim still depends on the design fork, and C-14 needs a step or a named follow-up if the
+    shape requires agent or UI work.
+  - AC-3 used the shorthand "FUNDAMENTAL". **Resolved:** it now reads `SCREEN_KIND_FUNDAMENTAL`
+    (`packages/proto/analysis/v1/analysis.proto:477`).
+  - Hygiene, CancelledError vs `return_exceptions=True`. **Resolved as a design constraint:** the Isolation
+    point fork notes that `except Exception` does not catch `CancelledError` (a BaseException on 3.13), and
+    that a child `CancelledError` returned by `gather(return_exceptions=True)` must not become a degraded row.
+- Overlap findings: none (feature-overlap PASS, no collisions, no merge-order row). Low-risk context: the
+  analysis service dir is shared with 242, 244, 246 and 248, in different files. Recheck 246 at impl-spec,
+  because its scorer must not be `scoring.compute_signal_score` (`scoring.py:10`), the AC-1 failure site.
+- Operator decisions:
+  > OPERATOR DECISIONS (binding, recorded 2026-10-20):
+  > - Standing authorization: designs run in FULL mode only (no quick designs for automated fixes); the orchestrator auto-approves the design gate once rounds >= 2, no unresolved Floor (F-*) breach remains, no blocking objection remains, and every CHANGE to an existing @AC business rule is covered by an operator decision below.
+  > - Full design depth (operator overrode the triage 'quick' recommendation).

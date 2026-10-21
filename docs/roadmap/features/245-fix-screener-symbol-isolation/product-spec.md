@@ -50,10 +50,14 @@ Design forks:
   (`services/xstockstrat-ui/src/app/insights/screener/page.tsx:120-129`) and renders the "Fundamentals
   pending" badge (`:241-254`). `SymbolScreening` renders it as "Not enough data to screen"
   (`SymbolScreening.tsx:236-248`). Both are wrong for a code fault, and feature 144 kept the status for
-  transient causes only (`services/xstockstrat-analysis/docs/context-constitution.md:42`).
+  transient causes only (`services/xstockstrat-analysis/docs/context-constitution.md:42`). Design rewrites
+  AC-1's "if present" to the chosen shape (kept or dropped), wording only, AC ID kept; a kept row must
+  then be asserted present so AC-1 stays red on the buggy code (P-06).
 - **Isolation point.** Wrap per symbol (inside `_eval_symbol` or a wrapper), or use
   `return_exceptions=True`. Either way, `asyncio.CancelledError` from the scan deadline
-  (`analysis.screener.max_duration_seconds`) must not be swallowed.
+  (`analysis.screener.max_duration_seconds`) must not be swallowed. `except Exception` does not catch it
+  (`BaseException` since 3.8; repo on 3.13). Under `return_exceptions=True` a child's `CancelledError`
+  comes back as a result value, so design must not turn a returned `CancelledError` into a degraded row.
 - **Partial raws.** Whether a degraded row keeps raws set before the raise (e.g. `sig` before `rsi`
   fails). `_normalize_universe` min-max normalises over every row carrying a raw
   (`screener.py:409-437`), so kept raws change the other 49 scores; design pins AC-1's score oracle.
@@ -68,20 +72,23 @@ Design forks:
 
 Read-only behaviour change. These callers now get partial results instead of an UNKNOWN / INVALID_ARGUMENT
 error:
-- agent MCP `screen_symbols`;
-- the `xstockstrat-ui` `/insights/screener` page (`services/xstockstrat-ui/src/app/insights/screener/page.tsx`;
-  already renders `scoreUnavailable`, `:182-184`, `:256-258`);
-- the `/trader/positions/[symbol]` single-symbol Screening section (`SymbolScreening`,
+- [x] **Agent** — `xstockstrat-agent` MCP tool `screen_symbols`: gets the other symbols' rows plus, if
+  kept, a degraded row. The client drops `score_unavailable`
+  (`services/xstockstrat-agent/app/client.py:758-767`) and the tool says "Filter candidates on `passed`"
+  (`services/xstockstrat-agent/app/tools.py:846`), so the degraded row must carry `passed=false`.
+- [x] **UI** — `xstockstrat-ui` `/insights/screener`
+  (`services/xstockstrat-ui/src/app/insights/screener/page.tsx`): renders the partial result; it already
+  renders `scoreUnavailable` (`:182-184`, `:256-258`).
+- [x] **UI** — `xstockstrat-ui` `/trader/positions/[symbol]` Screening section (`SymbolScreening`,
   `services/xstockstrat-ui/src/components/trader/SymbolScreening.tsx:41-68`, mounted at
   `services/xstockstrat-ui/src/app/trader/positions/[symbol]/page.tsx:566`). Today it shows the error text
-  (`symbol-screen-error`, `:228-230`); after the fix it gets a degraded row.
+  (`symbol-screen-error`, `:228-230`); after the fix it gets a degraded row. It checks only
+  INSUFFICIENT_DATA (`:64`) and never reads `scoreUnavailable`.
+- [ ] **None**
 
 No UI or agent code change is anticipated **only if** a kept degraded row carries `passed=false` and
-`score_unavailable=true`, and never INSUFFICIENT_DATA (AC-1; see Degraded-row shape).
-The agent client drops `score_unavailable` (`services/xstockstrat-agent/app/client.py:758-767`) and the
-tool says "Filter candidates on `passed`" (`services/xstockstrat-agent/app/tools.py:846`).
-`SymbolScreening` checks only INSUFFICIENT_DATA (`:64`) and never reads `scoreUnavailable`. `_build_result`
-leaves `passed=True` for an all-soft row with no raws (`screener.py:457-475`). So a `score_unavailable`-only
+`score_unavailable=true`, and never INSUFFICIENT_DATA (AC-1; see Degraded-row shape). `_build_result`
+leaves `passed=True` for an all-soft row with no raws (`screener.py:457-475`), so a `score_unavailable`-only
 row would reach these consumers as an OK, passing candidate: the `bef4258` scar
 (`services/xstockstrat-analysis/docs/context-constitution.md:41`). `/sdd-design` confirms the claim against
 the chosen shape. If the chosen shape needs agent or UI work, C-14 requires an implementation step or a

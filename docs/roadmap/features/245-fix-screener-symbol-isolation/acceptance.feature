@@ -31,7 +31,7 @@ Feature: fix-screener-symbol-isolation (bug fix)
 
   @AC-3 @FR-3 @regression
   Scenario: An unknown fundamental metric is still rejected for the whole request
-    Given a ScreenSymbols request over symbols ["AAPL", "MSFT"] with a FUNDAMENTAL criterion whose metric_name is "not_a_metric"
+    Given a ScreenSymbols request over symbols ["AAPL", "MSFT"] with a SCREEN_KIND_FUNDAMENTAL criterion whose metric_name is "not_a_metric"
     And fundamentals are available for "AAPL" and "MSFT", and neither carries an extra_metrics key "not_a_metric"
     When the caller invokes ScreenSymbols
     Then ScreenSymbols fails with gRPC status INVALID_ARGUMENT
