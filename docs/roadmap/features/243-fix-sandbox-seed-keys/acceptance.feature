@@ -45,3 +45,11 @@ Feature: fix-sandbox-seed-keys (bug fix)
     Then the migration completes with no unique violation on config_values_scope_uniq
     And exactly one global "indicators.sandbox.timeout_ms" row exists for environment "production"
     And no "sandbox.timeout_ms" row exists for environment "production"
+
+  @AC-5 @FR-4 @regression
+  Scenario: A pre-existing full-dotted row keeps its value and the bare row is removed
+    Given config migrations up to 030 have run
+    And a global row "indicators.sandbox.timeout_ms" with value 4000 exists for environment "production" alongside the bare "sandbox.timeout_ms" row
+    When the corrective migration runs
+    Then the global "indicators.sandbox.timeout_ms" row for environment "production" has value 4000
+    And no "sandbox.timeout_ms" row exists for environment "production"

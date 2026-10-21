@@ -240,3 +240,47 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
     - `value_encrypted` exclusion.
 - **Ledger:** appended a `fails.md` migration entry: the 029 heal shape is not conflict-safe to reuse.
 - **Status:** spec-ready → design-approved.
+
+## Session 2026-10-20 — sdd-spec
+
+- Generated implementation-spec.md with 5 steps. Status: design-approved → implementation-ready.
+  1. test: `scripts/migration-assertions/config-031.sql`. Blocks AC-1 and AC-3 come first; the AC-4/AC-5
+     `BEGIN…ROLLBACK` `\ir` replay comes last.
+  2. migration: `031_heal_indicators_sandbox_keys_full_dotted.{up,down}.sql`.
+  3. test: AC-2 parametrized getter-contract test in `tests/test_config_watcher.py`.
+  4. docs: headroom wording, full-dotted key, findings row, sentinel row, teardown.
+  5. config: G1 staging gate before the main-dev merge, plus the production advisory read-back.
+- Appended `@AC-5 @FR-4 @regression` to acceptance.feature (append-only, C-15), as design.md § 4 specifies.
+  Coverage: AC-1/3/4/5 → Step 1 (implemented by Step 2); AC-2 → Step 3.
+- Key codebase findings:
+  - Last config migration is still `030_marketdata_edgar_snapshot_keys` on `origin/main-dev`. No `031*`/`032*` on
+    any remote. Feature 241 is implementation-ready with no migration (`241/design.md:43`), so 031 is uncontested.
+    Re-verify at Step 5.
+  - The migration-rerun harness runs on every `pull_request` (`ci.yml:3-4`), and config migrates with `up` at
+    pass 0 (`migration-rerun.sh:78`). So the red→green for Steps 1-2 is CI-proven on the step PR. The executor
+    never starts a DB. RED a is `AC-1:` with 031 absent. RED b is a `config_values_scope_uniq` violation from a
+    draft 031 without the twin-wins DELETE.
+  - No assertion file uses `\ir` yet (**Not found**). psql resolves `\ir` relative to the including file.
+  - The "Inert indicators seeds" findings row lives in `services/xstockstrat-indicators/docs/context-constitution-findings.md:23`,
+    not in the repo-level findings file. The defect sidecar stays `triaged` (`ref: feature:243-…`); it counts as
+    resolved at launch, so no edit is needed.
+- Spec-time refinement, within design.md § 1 attribution: every attributed write also sets `caller_identity = NULL`.
+  The BEFORE UPDATE trigger copies `NEW.caller_identity` into `config_audit` (`017:71-74`), and the column is meant
+  only for internal-caller SetConfig writes (`014:5-9`). Without the reset, a stale value would mis-attribute the
+  migration's audit rows. The sentinel row's wording in `config-governance.md` names both fields, so it holds under
+  241's rewrite of `:95-103`.
+- Snapshot column list (excludes `value_encrypted`): `id, namespace, key, value_type, value_data, is_secret,
+  description, default_value, consuming_service, updated_by, update_reason, created_at, updated_at, environment,
+  caller_identity, user_id`.
+- Design r2 objections, each landed as written:
+  - snapshot plus advisory prod read: Step 2.0 and Step 5.3;
+  - per-user rename-only: Step 2.2;
+  - step-4 attribution: Step 2.4;
+  - 029-shaped red: Step 2 TDD;
+  - Given-faithful fixture (i): Step 1.4;
+  - TEMP baseline: Step 1.4;
+  - 241 wording: Step 4.5;
+  - `value_encrypted` exclusion: Step 2.0.
+- Open threads carried: 244 and hotfix #1263 rebase-only overlaps. Main-dev `acceptance.feature` drift (AC-1 3000,
+  no AC-4/AC-5) needs `/sdd-sync` before review or promotion.
+- Next: `/sdd-review fix-sandbox-seed-keys impl-spec`.
