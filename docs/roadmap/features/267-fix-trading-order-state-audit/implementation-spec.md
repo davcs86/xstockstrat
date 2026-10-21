@@ -582,7 +582,6 @@ cd services/xstockstrat-trading && export GOWORK=off && COVERPKGS=$(go list ./..
    - mark the `:13` row resolved, citing this feature (267);
    - add a doc-lie row: lifecycle events emit on a bare `orderID` stream while CLAUDE.md says `order:{order_id}`, and the reclaim events use `order:`. Per-order queries must read both until this is reconciled. Out of scope here (design.md Rejected Alternatives).
    - add a latent-bug row: `emitLedgerEvent` discards the `structpb.NewStruct` error (`trading.go#emitLedgerEvent`), so any payload holding a non-structpb type (for example `time.Time`) reaches the ledger as nil, silently. Candidate hardening: log the error. Only the reclaim payload was fixed here.
-   - add an open row: `validateAndRecordCredential`'s `context.Background()` write (`trading.go#validateAndRecordCredential`) is request-reachable and is not converted by 267, pending an operator decision.
 3. Teardown (root CLAUDE.md): this step changes context files. Run `/context-constitution refresh` scoped to the two files, or, if the plugin is unavailable, re-read both files against the code by hand and record that in the integration PR body.
 
 **Verification**:
