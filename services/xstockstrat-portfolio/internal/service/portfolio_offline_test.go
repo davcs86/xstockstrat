@@ -269,16 +269,16 @@ func TestProcessPositionSync_OfflineState(t *testing.T) {
 		want    []any
 	}{
 		{"AC-18 legacy event: carry/fees 0, fills []", `{"account_id":"off-1","user_id":"u1","trading_mode":"TRADING_MODE_PAPER","positions":[],"realized_pnl":450}`,
-			[]any{450.0, 0.0, 0.0, 0.0, []byte(`[]`)}},
+			[]any{450.0, 0.0, 0.0, 0.0, `[]`}},
 		{"AC-41 since + carried", `{"account_id":"off-1","user_id":"u1","trading_mode":"TRADING_MODE_PAPER","positions":[{"symbol":"AAPL","qty":40,"avg_cost":150}],"realized_pnl":100,"realized_carried":600}`,
-			[]any{100.0, 600.0, 0.0, 0.0, []byte(`[]`)}},
+			[]any{100.0, 600.0, 0.0, 0.0, `[]`}},
 		{"AC-7 fees since", `{"account_id":"off-1","user_id":"u1","trading_mode":"TRADING_MODE_PAPER","positions":[],"realized_pnl":0,"fees_since_snapshot":1.5}`,
-			[]any{0.0, 0.0, 1.5, 0.0, []byte(`[]`)}},
+			[]any{0.0, 0.0, 1.5, 0.0, `[]`}},
 		{"AC-20 fees summed", `{"account_id":"off-1","user_id":"u1","trading_mode":"TRADING_MODE_PAPER","positions":[],"realized_pnl":600,"fees_since_snapshot":3}`,
-			[]any{600.0, 0.0, 3.0, 0.0, []byte(`[]`)}},
+			[]any{600.0, 0.0, 3.0, 0.0, `[]`}},
 		{"AC-10/AC-11 carried fees and realized", `{"account_id":"off-1","user_id":"u1","trading_mode":"TRADING_MODE_PAPER","positions":[],"realized_pnl":0,"realized_carried":700,"fees_carried":3,
 			"recent_fills":[{"symbol":"AAPL","qty":-20,"price":155,"filled_at":"2026-11-05T15:00:00Z"}]}`,
-			[]any{0.0, 700.0, 0.0, 3.0, []byte(`[{"symbol":"AAPL","qty":-20,"price":155,"filled_at":"2026-11-05T15:00:00Z"}]`)}},
+			[]any{0.0, 700.0, 0.0, 3.0, `[{"symbol":"AAPL","qty":-20,"price":155,"filled_at":"2026-11-05T15:00:00Z"}]`}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, got := runOfflineSync(t, tc.payload)

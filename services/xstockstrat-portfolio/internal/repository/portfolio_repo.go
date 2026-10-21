@@ -480,15 +480,17 @@ func (r *PortfolioRepo) UpsertOfflineRealized(ctx context.Context, accountID, us
 	if err != nil {
 		return fmt.Errorf("marshal recent fills: %w", err)
 	}
+	// A []byte binds as bytea under QueryExecModeExec (DB_PGBOUNCER) and fails ::jsonb with 22P02 — bind
+	// the JSON as text.
 	const q = `
 		INSERT INTO portfolio.offline_account_realized
 			(account_id, user_id, trading_mode, realized_pnl, realized_carried, fees_since_snapshot, fees_carried, recent_fills, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, NOW())
 		ON CONFLICT (account_id) DO UPDATE
 		SET user_id=$2, trading_mode=$3, realized_pnl=$4, realized_carried=$5, fees_since_snapshot=$6,
-		    fees_carried=$7, recent_fills=$8, updated_at=NOW()`
+		    fees_carried=$7, recent_fills=EXCLUDED.recent_fills, updated_at=NOW()`
 	_, err = r.db.Exec(ctx, q, accountID, userID, tradingMode,
-		st.RealizedPnl, st.RealizedCarried, st.FeesSinceSnapshot, st.FeesCarried, fillsJSON)
+		st.RealizedPnl, st.RealizedCarried, st.FeesSinceSnapshot, st.FeesCarried, string(fillsJSON))
 	return err
 }
 
