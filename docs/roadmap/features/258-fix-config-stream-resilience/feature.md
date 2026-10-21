@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-10-21 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-21-config-stream-resilience-defect.md` (debt-radar D-05, D-06, D-35, D-58) |
+| 2026-10-21 | `draft` → `spec-ready` | /sdd-review | Product spec approved (5 warnings; overlap WARN, file-level only) |
 
 ---
 
@@ -46,4 +47,4 @@ that never reconnect).
 
 ## Next Action
 
-`/sdd-design fix-config-stream-resilience` — recommended design depth: full (2 affected services); see context.md
+`/sdd-design fix-config-stream-resilience` — recommended design depth: full (2 affected services); settle the design forks and review warnings recorded in context.md
