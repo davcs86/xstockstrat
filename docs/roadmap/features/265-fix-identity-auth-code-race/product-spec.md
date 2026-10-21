@@ -45,11 +45,15 @@ paths share one mint helper and one refresh-issue helper with unchanged claim sh
 - **FR-5** — A request whose `redirect_uri`, `client_id` or PKCE `code_verifier` does not match the stored code fails
   without consuming it (`consumed_at` stays NULL), so a party holding only the code cannot burn it for the
   legitimate client. This preserves today's validate-before-consume order (`:495-502` before `:503`).
-- **FR-6** — First-party `authenticateUser`, first-party `refreshToken` and the OAuth exchange/refresh sign access
-  JWTs through one shared mint helper; no inline `jwt.sign` remains in `authenticateUser` or `refreshToken`.
-- **FR-7** — First-party `authenticateUser` and `ExchangeAuthCode` issue refresh tokens through one shared
-  refresh-issue helper (the existing `issueRefreshToken` or its successor); no inline refresh hash + INSERT remains in
-  `authenticateUser`.
+- **FR-6** — Access tokens minted by first-party `authenticateUser`, first-party `refreshToken` and the OAuth
+  exchange/refresh have an identical claim set and TTL rule (FR-8), differing only in `aud`, which only OAuth tokens
+  carry. Structurally, all four sites sign through one shared mint helper and no inline `jwt.sign` remains in
+  `authenticateUser` or `refreshToken` (verified as in Test Harness Expectations, not by a Gherkin scenario).
+- **FR-7** — Refresh tokens issued by first-party `authenticateUser` and by `ExchangeAuthCode` are stored the same
+  way (one hashed token row per issue for the user, `client_id` NULL for first-party and the client id for OAuth, per
+  FR-8). Structurally, both sites issue through one shared refresh-issue
+  helper (the existing `issueRefreshToken` or its successor) and no inline refresh hash + INSERT remains in
+  `authenticateUser` (verified as in Test Harness Expectations, not by a Gherkin scenario).
 - **FR-8** — Claim shapes are unchanged: every access token carries `user_id`, `email`, `roles`, `issued_at`,
   `expires_at` with `expires_at - issued_at` equal to `identity.jwt.access_ttl_seconds` (default 900); only OAuth
   tokens carry `aud` (the requested resource); first-party refresh rows keep `client_id` NULL, OAuth rows carry the
@@ -62,6 +66,10 @@ paths share one mint helper and one refresh-issue helper with unchanged claim sh
   (identity unit suite early-return, see overlap with 252).
 - AC-3 needs fault injection on the refresh-token INSERT; the design phase states the mechanism (e.g. a pool/client
   stub that rejects the INSERT inside the transaction).
+- The structural halves of FR-6/FR-7 (single mint helper, single refresh-issue helper, no inline `jwt.sign` or
+  refresh INSERT in `authenticateUser`/`refreshToken`) cannot be seen by a black-box scenario. They are verified
+  by an impl-spec step check (a grep showing one `jwt.sign` call site and one refresh-token INSERT site in
+  `identityServiceImpl.ts`) and by code review. AC-4 covers only their observable half.
 - New fixtures follow the C-13 test-data inventory rules.
 
 ## Reproduction Steps
