@@ -29,11 +29,16 @@ the ingest grant (`authz.ts:124`). A mismatched or absent SAN gets `PERMISSION_D
 ## Functional Requirements
 
 - **FR-1 (D-39, FMP):** when the FMP HTTP transport fails, the returned error names `fmp` and the request
-  `path`, and contains neither the API key nor the substring `apikey=`.
+  `path` (for example `/stable/quote`, the first call `GetFundamentalsMulti` makes), and contains neither the
+  API key nor the substring `apikey=`.
 - **FR-2 (D-39, Finnhub):** when the Finnhub HTTP transport fails, the returned error names `finnhub` and the
-  request `path`, and contains neither the API key nor the substring `token=`.
+  request `path` (for example `/stock/metric`, the first call `GetFundamentals` makes), and contains neither the
+  API key nor the substring `token=`. Finnhub's `GetFundamentalsMulti` skips per-symbol errors
+  (`finnhub_client.go:64-69`), so the error surfaces through `GetFundamentals`.
 - **FR-3 (D-39, gRPC edge):** the `CodeUnavailable` status message that `marketdata_service.go:1704`/`:1760`
-  build from a vendor transport failure contains no vendor key, so callers and OTel never see it.
+  build from a vendor transport failure contains no vendor key, so callers and OTel never see it. The
+  redaction happens at the client (FR-1, FR-2). The service layer keeps its `%w` wrap and needs no change,
+  because it only wraps the already-redacted client error.
 - **FR-4 (D-40, deny):** config `GetSecret` for any of the four marketdata vendor keys with
   `x-internal-caller: marketdata` returns `PERMISSION_DENIED` and no plaintext when the mTLS peer SAN is not
   `xstockstrat-marketdata` (a different SAN, or no SAN at all).
@@ -49,6 +54,10 @@ the old behavior.
 
 **Broker scope (C-2):** ALPACA and IBKR order routing is unaffected. Only the marketdata secret-read grant in
 config changes; trading's order path, order types and fills are untouched.
+
+**Paper/live (C-3):** the SAN binding (FR-4, FR-5) behaves identically in staging (paper) and production (live).
+The grant is not environment-scoped, and both environments mint the marketdata leaf with the same SAN (see Fix
+Scope).
 
 ## Reproduction Steps
 
@@ -80,6 +89,9 @@ config changes; trading's order path, order types and fills are untouched.
   `.github/workflows/deploy.yml:102` runs `gen-dev-certs.sh` off the per-env CA, and `scripts/mtls-provision.sh`
   only provisions the CA. **Pre-merge gate (execute):** re-confirm those three lines are unchanged before the SAN
   binding merges, because a leaf without the SAN would fail FR-5 at boot.
+- [x] Rollback and smoke test: after the dev deploy, confirm marketdata logs a successful vendor-credential
+  resolve at boot (no `PERMISSION_DENIED` from `GetSecret`). If it fails, revert the `authz.ts` grant change
+  alone. The D-39 client fix is independent and can stay.
 
 ## Acceptance Criteria
 
