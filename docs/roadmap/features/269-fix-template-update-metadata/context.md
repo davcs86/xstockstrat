@@ -32,3 +32,35 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   a metadata-only UPDATE bump `version`; which RETIRE and empty-id CREATE semantics win.
 - Operator decisions (2026-10-21): grouped by service+theme from the debt-radar scan; Track C for all SEV-2 (precedent #1264); batch launched via /sdd-batch with designGate halt.
 - Development branch: feature/fix-template-update-metadata
+
+## Session 2026-10-21 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready. Criteria verdict: PASS WITH WARNINGS (no fails, no floor breaches).
+- Warnings:
+  - Criterion 8 / C-15: @AC-2 asserts an observable `updated_at`. **Resolved**: `TemplateMeta.updated_at` exists
+    (`packages/proto/common/v1/common.proto` field 8), and FR-4 now cites it. Still open for `/sdd-design` and
+    `/sdd-spec`: @AC-1/@AC-2 need controlled time (clock injection or a stubbed `NOW()`) so the
+    2026-10-21T10:00:00Z/11:00:00Z assertions are deterministic.
+  - FR-3/FR-4: does a second RETIRE reach the SQL? **Resolved**: none of the three retire `UPDATE`s filters on
+    `retired_at` (`formula_templates_repository.py` retire, `strategy_templates.py:68-75`, `source_templates.py:67-75`).
+    The handlers (indicators `servicer.py:653-660`, analysis `servicer.py:3554`, ingest `servicer.py:1522-1523`)
+    return NOT_FOUND only when no row exists. FR-3 now says the second RETIRE succeeds and that no service may add a
+    `retired_at IS NULL` filter.
+  - Criterion 11 / C-14: the UI line cites `page.tsx:153-158`, `:382` and `:479` were not re-checked by the reviewer
+    (description in the payload was confirmed at `page.tsx:157`, `:173`). Re-verify them in recon.
+  - Criterion 8 (minor): "smoke-tested on dev" in Acceptance Criteria is boilerplate and not testable. Left as is.
+- Overlap findings (WARN, file-level only; no config, proto or migration collisions):
+  - `services/xstockstrat-indicators/app/handlers/servicer.py`: also modified by 244-fix-python-config-stored-zero
+    (implementation-ready).
+  - `services/xstockstrat-analysis/app/handlers/servicer.py`: also modified by 244-fix-python-config-stored-zero and
+    245-fix-screener-symbol-isolation (both implementation-ready). This carries merge-conflict risk. The router
+    decides the coordination line in `merge-order.md`; there is no entry for 244, 245, 268 or 269 today.
+  - `services/xstockstrat-ingest/app/handlers/servicer.py`: 246-fix-fundsignal-neutral-score cites it as a reference
+    only. This is a possible overlap, not a confirmed edit.
+  - Thematic only: 268-fix-indicators-formula-correctness (indicators template surface), 259-fix-python-loop-supervision
+    (`run_template_intent_sweep_forever` lives in analysis), and 241-fix-config-audit-author-spoof (agent and UI files
+    this feature does not touch).
+- OPERATOR DECISIONS (binding, recorded 2026-10-21):
+  - Grouped by service+theme from the 2026-10-20 debt-radar scan; Track C.
+  - Scope is D-41 including its RETIRE/CREATE divergences.
+- Next: `/sdd-design fix-template-update-metadata` (full depth).
