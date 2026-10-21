@@ -490,3 +490,86 @@ Items 3/3' and 9 of round 6 stand. Round-8 additions (portfolio paths under `ser
 
 - Debate continues past round 8 (cap 12) or proceeds to gate evaluation against `state-r8.json`; at design write,
   `design.md` carries approach A-F, the corrected F2 risk text, and B9 as debate-resolved.
+
+## Session 2026-10-21 — sdd-design (full) round 9, gate
+
+- Gate evaluated on `feature/fix-getpnl-source-service` @ `1d47c0a7`. The r9 synthesis was grounded at `e28cce95`;
+  the only later commit is the rounds 1-8 persistence entry above (no code change). Checkpoint: `state-r9.json`
+  (seeds/251).
+- Per-round outcomes (r1-r8 detail in "sdd-design (in progress, rounds 1-8)" above):
+  - **r6** — B9 seam converged on option (a); B10/B11/B12 opened. B6 re-raised from stale checkout `d077dcfe`.
+  - **r7** — B10/B11/B12 closed (live ctx + OnQuery, setup-owning shim, three-partial F2). B6 re-raised (stale).
+  - **r8** — no new blocker; non-blocking folds A-F. B6 re-raised (stale).
+  - **r9** — convergence round, no design change. B6 closed on verified evidence. Five non-blocking text fixes folded
+    (R9-2..R9-5): parity pin `portfolio_service.go:753`/`:798` (not `:752`, EventType); `classifyGetPnLError` call
+    site `portfolio_handler.go:96`, definition `:425`, table test `portfolio_handler_test.go:39-48` (calls `:40`,
+    `:43`); @AC-5 backing-test preservation; append-only supersession; exact F2 risk text. Adversary verdict SOUND.
+- Deviation (P-05): r6, r7 and r8 are recorded late, batched after the fact (here and in the rounds 1-8 entry). This
+  does not satisfy P-05 "as they happen" for those rounds; it is a recorded deviation, not claimed compliance.
+- The r6-r8 "reports unfiled" findings came from reading the stale checkout `d077dcfe` (orchestrator evidence). Git
+  order: `d077dcfe` (r5 halt) -> `d707d239` (filing) -> `e28cce95` (r8 halt). Whether r6 ran before `d707d239` cannot
+  be determined from read-only tools, so the "Ordering deviation" at `:276-278` stays as evidence, neither confirmed
+  nor retracted.
+- B6 CLOSED on evidence, not waived: both `docs/reports/2026-10-21-*` reports exist with `open` sidecars, cited at
+  `product-spec.md:191`, `:195-196`; filing session `:253-269`; operator decision records it "done in `d707d239`".
+- B9 RESOLVED BY THE DEBATE as option (a) under the standing authorization, NOT by an operator pick. This entry
+  supersedes, without editing, `:268` ("B9 ... remains the sole blocking objection"), `:197-200` ("Operator picks
+  one") and `:249` ("Choose B9 option (a) or (b)").
+- Relayed request "Override limit for 251" names THIS feature and is a round-limit override, consistent with the
+  recorded cap lift to 12. It is not a B9 pick, does not waive B6 (closed on evidence) and sanctions no @AC CHANGE.
+  Contrast the "246" relay at `:144-145`.
+- Gate decision: AUTO-APPROVED under the operator standing authorization (2026-10-21). Inputs: rounds 9 >= 2; Floor
+  clean; zero blocking objections; @AC impacts PRESERVE/EXTEND only (portfolio @AC-5 @feature-229 EXTEND, platform
+  @AC-7 @feature-127 PRESERVE), so no operator coverage is required. Write order (R9-4): this entry, then design.md,
+  then recon.md reconciliation, then status.md.
+
+## Session 2026-10-21 — sdd-design
+
+- Phase 0 Recon: recon.md (written 2026-10-20; services: portfolio, trading, ledger, ui; key reuse: `pnl.Fold`
+  unchanged + side→sign precedent `trading.go:876-886`; `internal/testdata/` fake home). Reconciled at this write:
+  `recon.md` portfolio @AC-5 PRESERVE → EXTEND; platform @AC-7 @feature-127 added as PRESERVE.
+- Phase 1 Grilling: 9 rounds (full; cap operator-lifted to 12). Chosen approach: ledger keyset paging in
+  `queryEventsPage.ts` + fail-closed portfolio drain with per-order side lookups, positive-only cache, account-grain
+  fold key and sequence-ordered fold; ctx-first error mapping; trading `side` key; user-pinned UI lineage; test
+  harness via `export_test.go` adapter seam (B9 (a), debate-resolved). Rejected: B9 (b) pure-chain test, order.created
+  preload, `errgroup`, dropping the `SourceService` filter, ledger proto user field.
+- Constitution rules touched: C-11, C-15, C-16, C-10/C-14, C-12, C-13, C-18, C-03, C-09, C-08, F-01, F-04, F-06, F-07,
+  F-08, F-11, P-01..P-05, PORTFOLIO-16. Floor breaches: none in any round.
+- Status: spec-ready → design-approved (auto-approved under the operator standing authorization, 2026-10-21).
+- Files written: design.md (new), recon.md, status.md, feature.md, context.md; ledger fails.md one line (stale
+  read-only checkout re-raising a discharged blocker).
+
+## Open Threads
+
+### Decisions
+
+- Design approved as design.md §1-§7: no proto/migration/config/go.mod/ci.yml change; ledger becomes a fix site
+  (FR-5); `classifyGetPnLError(ctx, err)` with call site `portfolio_handler.go:96`, test
+  `portfolio_handler_test.go:39-48`; parity pin replaces `portfolio_service.go:753`/`:798` with one const.
+
+### Open threads (target step)
+
+- [ ] C-15 append: AC-4..AC-22 into acceptance.feature + FR-4/FR-5 into product-spec, per design.md §6F, each with
+  ≥ 1 @FR tag — before `/sdd-spec` traces test steps (not written at this design write).
+- [ ] product-spec Affected Services / Fix Scope (`:152`, `:161-164`): ledger becomes a fix site, `ledger-pg-test` CI
+  job added — `/sdd-spec` (P-03).
+- [ ] `classifyGetPnLError` arity: `:96` + test `:40`/`:43` change together — portfolio handler step.
+- [ ] PORTFOLIO-16 (`services/xstockstrat-portfolio/docs/context-constitution.md:34`) and portfolio `CLAUDE.md:28`
+  ctx-first wording — teardown step.
+- [ ] Import-cycle trap / shim coupling to `newQuoteSvc` — test-harness step.
+- [ ] Case (4) 50ms window under -race (raise to 200ms if flaky) — adapter-test step.
+- [ ] F2 residual 1/8 per run, (1/8)^20 ≈ 2e-18 over 20 runs; stable iteration fails a buggy fold every run — fold
+  test step. Drain test's 2-call assertion coupled to PageSize 500 (`portfolio_service.go:754`).
+- [ ] COVERPKGS counts `testdata` (accepted, `ci.yml:256`).
+- [ ] Cold-cache cliff; cursor chunk exclusion; uncapped platform order.filled drain; AppendEvent latency — ship gate
+  (iv).
+- [ ] Permanent FAILED_PRECONDITION for mixed-era / unresolved fills: count + remediation path — ship gate (iii).
+- [ ] Ledger delegate line unguarded until 252; scratch-tsconfig compiled run; 252 merge-order soft row + note in
+  252 context.md — ledger step / integration PR.
+- [ ] DEADLINE_EXCEEDED for short-deadline callers; DeleteWatchlist 500 → 400 — findings entry (intended).
+- [ ] Dev smoke under fail-closed mTLS; ledger-pg-test SEED_USER_ID scoping (`ci.yml:667`) — ship gate / CI step.
+- [ ] Confirm GetPnL has no in-repo runtime caller; ledger CLAUDE.md opaque page_token; stream-key doc drift —
+  `/sdd-spec` / teardown.
+- [ ] Ordering deviation `:276-278` stays unresolved evidence (no step).
+- [ ] Bracket-leg and live-fold follow-ups (`docs/reports/2026-10-21-*`, `open`) — outside 251.
+- [ ] `/sdd-spec` re-greps every design.md citation (only header-listed ones spot-checked at `1d47c0a7`).

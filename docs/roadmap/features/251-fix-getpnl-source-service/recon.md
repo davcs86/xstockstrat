@@ -134,11 +134,17 @@ would ship other users' fills to the browser (FR-3).
 ## Existing Business Rules (preserve / extend)
 
 Folded from the scenario-recon digest. About 90 scenarios were scanned and 12 are relevant: 11 PRESERVE, 1 EXTEND,
-**0 CHANGE**. No existing `@AC-*` asserts the buggy `source_service: "trading"` value or an empty lineage.
+**0 CHANGE** (after the 2026-10-21 design reconciliation below: 13 relevant, 11 PRESERVE, 2 EXTEND, 0 CHANGE). No existing `@AC-*` asserts the buggy `source_service: "trading"` value or an empty lineage.
 
-- **PRESERVE** `@AC-5` "GetPnL refuses to report unrealized P&L when a needed quote is unavailable"
-  (`services/xstockstrat-portfolio/acceptance/fix-book-portfolio-page.feature`, `@feature-229`). `GetPnL` returns
-  UNAVAILABLE rather than a fabricated figure. An unresolved fill side follows the same never-fabricate posture.
+- **EXTEND** (reconciled 2026-10-21 at design write; was PRESERVE) `@AC-5` "GetPnL refuses to report unrealized P&L
+  when a needed quote is unavailable" (`services/xstockstrat-portfolio/acceptance/fix-book-portfolio-page.feature`,
+  `@feature-229`). `GetPnL` returns UNAVAILABLE rather than a fabricated figure. An unresolved fill side follows the
+  same never-fabricate posture. Design adds FAILED_PRECONDITION / DEADLINE_EXCEEDED / CANCELED under ctx-first
+  `classifyGetPnLError(ctx, err)`; the live-ctx UNAVAILABLE path and backing `TestClassifyGetPnLError` (`:6-8`) stay.
+- **PRESERVE** (added 2026-10-21 at design write) platform `@AC-7` "A system-managed watchlist cannot be deleted via
+  API or UI" (`docs/sdd/business-rules/platform.feature:34-41`, `@feature-127`). Today `toGRPCError`
+  (`portfolio_handler.go:432`) maps FailedPrecondition to INTERNAL; design brings the wire into conformance (rule text
+  unchanged), backed by adapter case `TestWire_DeleteSystemManagedWatchlist_F127AC7`.
 - **PRESERVE** `@AC-6` "GetPnL values broker-synced positions from the broker price without a quote fetch" (same file).
   Unrealized stays 500 with `GetLatestQuotes` not called; the fix is realized-only.
 - **PRESERVE** `@AC-6` "A one-sided quote with no close inside the bound leaves the position unpriced"

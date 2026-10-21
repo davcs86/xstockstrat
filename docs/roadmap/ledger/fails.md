@@ -2949,3 +2949,11 @@ ambiguity is logged here).
     handler.
   - Before changing a shared RPC's failure or budget behaviour, enumerate every caller's request shape
     (window size, deadline) and make the change opt-in when the callers differ.
+
+### 2026-10-21 — fix-getpnl-source-service — assumption
+- **Mistake**: Debate rounds 6-8 read a stale read-only checkout (`d077dcfe`) and re-raised blocker B6 (follow-up
+  reports unfiled) after `d707d239` had filed them, so a discharged blocker held the design gate for three rounds.
+- **Evidence**: `docs/roadmap/features/251-fix-getpnl-source-service/context.md` "sdd-design (full) round 9, gate"
+  and "halted at gate, round 8" (`:276-278`).
+- **Rule it implies**: Before each debate round, refresh the read-only checkout to the feature branch tip and record
+  the grounded SHA in the synthesis; a blocker whose evidence is a file's absence is re-verified at that SHA.
