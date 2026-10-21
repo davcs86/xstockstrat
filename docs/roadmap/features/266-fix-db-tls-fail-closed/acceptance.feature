@@ -64,3 +64,18 @@ Feature: fix-db-tls-fail-closed (bug fix)
     When xstockstrat-ledger starts
     Then it exits non-zero before serving gRPC
     And it logs that DATABASE_CA_CERT is required for a TLS database connection
+
+  @AC-7 @FR-2 @regression
+  Scenario: The config-ui audit route rejects a database certificate not signed by the configured CA
+    Given the xstockstrat-ui DATABASE_URL is "postgres://u:p@db.example:25060/xstockstrat?sslmode=require"
+    And DATABASE_CA_CERT holds a CA that did not sign the server's certificate
+    When an admin requests /config-ui/api/audit
+    Then the database connection is rejected with a certificate verification error
+    And the route responds with an error status and logs the certificate verification error
+
+  @AC-8 @FR-3 @regression
+  Scenario: The config-ui audit route with sslmode=disable still reads without a CA
+    Given the xstockstrat-ui DATABASE_URL is "postgres://xstockstrat:pw@timescaledb:5432/xstockstrat?sslmode=disable"
+    And DATABASE_CA_CERT is unset
+    When an admin requests /config-ui/api/audit
+    Then the route connects without TLS and responds with status 200
