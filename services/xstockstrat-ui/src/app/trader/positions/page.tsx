@@ -19,7 +19,8 @@ import { usePositionLineage } from '@/hooks/usePositionLineage';
 import { openR, fmtR, sideLabel, isExitFlag } from '@/lib/positionRisk';
 import { traderConfigClient } from '@/lib/browserClients/traderConfigClient';
 import { PositionSide } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
-import type { Position } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
+import { MarkSource, type Position } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
+import { MarkBadge } from '@/components/trader/MarkBadge';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -36,6 +37,10 @@ import { DataTable } from '@/components/ui/data-table';
 
 type TradingMode = 'paper' | 'live';
 type PnlFilter = 'all' | 'winners' | 'losers';
+
+// An unpriced position (no quote, no recent close) has no value or P&L to show — never a fake $0 (FR-5).
+const unpriced = (p: Position) => p.markSource === MarkSource.NONE;
+const dash = '—';
 
 export default function PositionsPage() {
   const { selectedAccountId, environmentMode, accounts } = useAccountContext();
@@ -164,7 +169,12 @@ export default function PositionsPage() {
         header: 'Price',
         accessorFn: (p) => p.currentPrice,
         meta: { className: 'text-right tabular-nums' },
-        cell: ({ row }) => fmtUsd(row.original.currentPrice),
+        cell: ({ row }) => (
+          <span className="inline-flex items-center justify-end gap-1.5">
+            {unpriced(row.original) ? dash : fmtUsd(row.original.currentPrice)}
+            <MarkBadge position={row.original} />
+          </span>
+        ),
       },
       {
         id: 'avgEntry',
@@ -185,47 +195,61 @@ export default function PositionsPage() {
         header: 'Market Value',
         accessorFn: (p) => p.marketValue,
         meta: { className: 'text-right tabular-nums hidden md:table-cell' },
-        cell: ({ row }) => fmtUsd(row.original.marketValue),
+        cell: ({ row }) => (unpriced(row.original) ? dash : fmtUsd(row.original.marketValue)),
       },
       {
         id: 'dayPnlUsd',
         header: "Today's P/L ($)",
         accessorFn: (p) => p.dayPnl,
         meta: { className: 'text-right tabular-nums font-semibold' },
-        cell: ({ row }) => (
-          <span className={pnlClass(row.original.dayPnl)}>{fmtSignedUsd(row.original.dayPnl)}</span>
-        ),
+        cell: ({ row }) =>
+          unpriced(row.original) ? (
+            dash
+          ) : (
+            <span className={pnlClass(row.original.dayPnl)}>
+              {fmtSignedUsd(row.original.dayPnl)}
+            </span>
+          ),
       },
       {
         id: 'dayPnlPct',
         header: "Today's P/L (%)",
         accessorFn: (p) => p.dayPnlPct,
         meta: { className: 'text-right tabular-nums hidden sm:table-cell' },
-        cell: ({ row }) => (
-          <span className={pnlClass(row.original.dayPnl)}>{fmtPct(row.original.dayPnlPct)}</span>
-        ),
+        cell: ({ row }) =>
+          unpriced(row.original) ? (
+            dash
+          ) : (
+            <span className={pnlClass(row.original.dayPnl)}>{fmtPct(row.original.dayPnlPct)}</span>
+          ),
       },
       {
         id: 'totalPnlUsd',
         header: 'Total P/L ($)',
         accessorFn: (p) => p.unrealizedPnl,
         meta: { className: 'text-right tabular-nums font-semibold' },
-        cell: ({ row }) => (
-          <span className={pnlClass(row.original.unrealizedPnl)}>
-            {fmtSignedUsd(row.original.unrealizedPnl)}
-          </span>
-        ),
+        cell: ({ row }) =>
+          unpriced(row.original) ? (
+            dash
+          ) : (
+            <span className={pnlClass(row.original.unrealizedPnl)}>
+              {fmtSignedUsd(row.original.unrealizedPnl)}
+            </span>
+          ),
       },
       {
         id: 'totalPnlPct',
         header: 'Total P/L (%)',
         accessorFn: (p) => p.unrealizedPnlPct,
         meta: { className: 'text-right tabular-nums' },
-        cell: ({ row }) => (
-          <span className={pnlClass(row.original.unrealizedPnl)}>
-            {fmtPct(row.original.unrealizedPnlPct)}
-          </span>
-        ),
+        cell: ({ row }) =>
+          unpriced(row.original) ? (
+            dash
+          ) : (
+            <span className={pnlClass(row.original.unrealizedPnl)}>
+              {fmtPct(row.original.unrealizedPnlPct)}
+            </span>
+          ),
       },
       // Exposure risk reframe (risk, not P&L).
       {
@@ -621,16 +645,25 @@ export default function PositionsPage() {
                   <dt className="text-muted-foreground">Avg entry</dt>
                   <dd className="text-right tabular-nums">{fmtUsd(selected.avgEntryPrice)}</dd>
                   <dt className="text-muted-foreground">Current price</dt>
-                  <dd className="text-right tabular-nums">{fmtUsd(selected.currentPrice)}</dd>
+                  <dd className="flex items-center justify-end gap-1.5 tabular-nums">
+                    {unpriced(selected) ? dash : fmtUsd(selected.currentPrice)}
+                    <MarkBadge position={selected} />
+                  </dd>
                   <dt className="text-muted-foreground">Market value</dt>
-                  <dd className="text-right tabular-nums">{fmtUsd(selected.marketValue)}</dd>
+                  <dd className="text-right tabular-nums">
+                    {unpriced(selected) ? dash : fmtUsd(selected.marketValue)}
+                  </dd>
                   <dt className="text-muted-foreground">Today&apos;s P/L</dt>
                   <dd className={`text-right tabular-nums ${pnlClass(selected.dayPnl)}`}>
-                    {fmtSignedUsd(selected.dayPnl)} ({fmtPct(selected.dayPnlPct)})
+                    {unpriced(selected)
+                      ? dash
+                      : `${fmtSignedUsd(selected.dayPnl)} (${fmtPct(selected.dayPnlPct)})`}
                   </dd>
                   <dt className="text-muted-foreground">Total P/L</dt>
                   <dd className={`text-right tabular-nums ${pnlClass(selected.unrealizedPnl)}`}>
-                    {fmtSignedUsd(selected.unrealizedPnl)} ({fmtPct(selected.unrealizedPnlPct)})
+                    {unpriced(selected)
+                      ? dash
+                      : `${fmtSignedUsd(selected.unrealizedPnl)} (${fmtPct(selected.unrealizedPnlPct)})`}
                   </dd>
                   <dt className="text-muted-foreground">Cost basis</dt>
                   <dd className="text-right tabular-nums">{fmtUsd(selected.costBasis)}</dd>

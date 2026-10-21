@@ -12,7 +12,7 @@ export function fmtUsd(n: number | undefined | null): string {
 /** Signed USD (`+$100.00` / `-$50.00`), or `—`. */
 export function fmtSignedUsd(n: number | undefined | null): string {
   if (n === undefined || n === null || Number.isNaN(Number(n))) return '—';
-  return `${Number(n) >= 0 ? '+' : ''}${fmtUsd(n)}`;
+  return `${Number(n) >= 0 ? '+' : '-'}${fmtUsd(Math.abs(Number(n)))}`;
 }
 
 /** Signed percentage from a 0–1 ratio (`+2.57%`), or `—`. */

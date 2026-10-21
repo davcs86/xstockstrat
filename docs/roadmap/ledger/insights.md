@@ -3677,3 +3677,17 @@ reusing.
 - **Pattern**: When a derived value (a valuation mark) is computed wrongly in several downstream consumers, compute it once at the upstream chokepoint as an additive `optional` proto field, and keep a narrow consumer fallback (the old safe subset: two-sided mid only) for deploy skew. One rule replaces N copies, and either service can deploy first.
 - **Evidence**: `services/xstockstrat-marketdata/internal/service/marketdata_service.go#withMark`; `services/xstockstrat-portfolio/internal/service/portfolio_service.go#markOf`; `packages/proto/marketdata/v1/marketdata.proto` `mark_price = 8`.
 - **Rule it implies**: Prove the concurrency of a "runs alongside" lookup with a two-way handshake test that fails under a serial mutation (231 AC-12), not with timing.
+
+### 2026-10-20 — offline-account-full-pnl — design
+- **Pattern**: A consumer service needed a time-varying derived value (Day P&L, where the session rolls
+  over with no event) from data owned upstream, and a reverse RPC edge would create a boot cycle. The
+  design that worked:
+  - The producer pushes a calendar-free, bounded superset of raw inputs (fills from the last 10 days)
+    on its existing absolute-snapshot event.
+  - The consumer owns all time and calendar interpretation and computes the value at read time.
+  - Session-cutting by the producer at emit time was rejected: it couples the producer to the calendar,
+    to its clock, and to the version of the cutting logic it runs.
+- **Evidence**: `docs/roadmap/features/240-offline-account-full-pnl/design.md` (Chosen Approach §2.5,
+  §4.4–4.5; Rejected Alternatives).
+- **Rule it implies**: Push raw, bounded inputs and interpret them where the clock lives. Size the
+  window from the worst-case gap (here ~4.5 days) with slack, and record it as a fixed invariant.

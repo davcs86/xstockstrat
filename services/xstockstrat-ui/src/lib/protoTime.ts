@@ -20,6 +20,12 @@ export function timestampToDate(ts: ProtoTimestamp | undefined): Date | undefine
 
 export type OhlcData = { date: Date; open: number; high: number; low: number; close: number };
 
+/** `YYYY-MM-DD` in America/New_York — the session date of a daily bar or quote. */
+export function fmtNyDate(ts: ProtoTimestamp | undefined): string | undefined {
+  const d = timestampToDate(ts);
+  return d?.toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+}
+
 export function fmtShortDate(d: Date): string {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
 }

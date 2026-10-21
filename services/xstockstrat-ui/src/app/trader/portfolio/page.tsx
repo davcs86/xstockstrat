@@ -15,6 +15,7 @@ import { usePortfolios, usePositions } from '@/hooks/usePortfolio';
 import { brokerLabel } from '@/lib/brokers';
 import { BrokerType } from '@xstockstrat/proto/common/v1/common_pb';
 import { fmtUsd, fmtSignedUsd, fmtPct, pnlClass } from '@/lib/money';
+import { sumPortfolioTotals } from '@/lib/portfolioTotals';
 
 /**
  * Book → Portfolio: a read-only mirror of what the brokers report — the brokers own the ledger and
@@ -34,15 +35,9 @@ export default function PortfolioPage() {
   const accountName = (accountId: string) =>
     accounts.find((a) => a.id === accountId)?.displayName ?? accountId;
 
-  const combined = portfolios.reduce(
-    (acc, p) => ({
-      equity: acc.equity + Number(p.equity ?? 0),
-      cash: acc.cash + Number(p.cash ?? 0),
-      buyingPower: acc.buyingPower + Number(p.buyingPower ?? 0),
-      dayPnl: acc.dayPnl + Number(p.dayPnl ?? 0),
-      totalPnl: acc.totalPnl + Number(p.totalPnl ?? 0),
-    }),
-    { equity: 0, cash: 0, buyingPower: 0, dayPnl: 0, totalPnl: 0 },
+  const combined = sumPortfolioTotals(
+    portfolios,
+    (accountId) => accounts.find((a) => a.id === accountId)?.brokerType === BrokerType.OFFLINE,
   );
   const cashPct = combined.equity ? combined.cash / combined.equity : 0;
 
@@ -205,18 +200,22 @@ export default function PortfolioPage() {
                               label="Buying power"
                               value={p.buyingPower ? fmtUsd(p.buyingPower) : '—'}
                             />
-                            <Field
-                              label="Day P&L"
-                              value={`${fmtSignedUsd(p.dayPnl)} (${fmtPct(p.dayPnlPct)})`}
-                              valueClass={pnlClass(p.dayPnl)}
-                            />
-                            <Field
-                              label="Total P&L"
-                              value={fmtSignedUsd(p.totalPnl)}
-                              valueClass={pnlClass(p.totalPnl)}
-                            />
                           </>
                         )}
+                        <Field
+                          label="Day P&L"
+                          value={`${fmtSignedUsd(p.dayPnl)} (${fmtPct(p.dayPnlPct)})`}
+                          valueClass={pnlClass(p.dayPnl)}
+                        />
+                        <Field
+                          label="Total P&L"
+                          value={
+                            p.totalPnlPct !== undefined
+                              ? `${fmtSignedUsd(p.totalPnl)} (${fmtPct(p.totalPnlPct)})`
+                              : fmtSignedUsd(p.totalPnl)
+                          }
+                          valueClass={pnlClass(p.totalPnl)}
+                        />
                         <Field
                           label="Positions"
                           value={

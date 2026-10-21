@@ -290,6 +290,8 @@ export interface BatchGetBarsRequest {
     start?: Date | undefined;
     end?: Date | undefined;
     maxBarsPerSymbol: number;
+    /** opt-in: a failed/over-budget cold fetch returns the stored subset */
+    allowPartial: boolean;
 }
 export interface SymbolBars {
     symbol: string;

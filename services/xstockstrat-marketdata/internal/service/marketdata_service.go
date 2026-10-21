@@ -105,6 +105,8 @@ type MarketDataService struct {
 	dailyCloses dailyCloseReader
 	// quoteStore is the quote cache read/write seam; nil (test literals) treats every symbol as cold and caches nothing.
 	quoteStore quoteStore
+	// barsStore is BatchGetBars' bar cache read/write seam; nil (test literals) treats every symbol as cold.
+	barsStore barsBatchStore
 	// retention drops expired quote chunks; nil (test literals) makes StartQuoteRetention a no-op.
 	retention quoteRetention
 }
@@ -118,6 +120,12 @@ type intGetter interface {
 type quoteStore interface {
 	GetLatestQuotesBatch(ctx context.Context, symbols []string, since time.Time) (map[string]*marketdatav1.Quote, error)
 	InsertQuote(ctx context.Context, q *marketdatav1.Quote) error
+}
+
+// barsBatchStore is the repo surface BatchGetBars reads warm bars from and caches cold bars into.
+type barsBatchStore interface {
+	QueryBarsBatch(ctx context.Context, symbols []string, tf string, start, end time.Time, max int32) (map[string][]*marketdatav1.Bar, error)
+	InsertBars(ctx context.Context, bars []*marketdatav1.Bar) error
 }
 
 // quoteRetention is the repo surface the quote retention loop drops expired chunks through.
@@ -227,6 +235,7 @@ func NewMarketDataService(
 		svc.prevClose = repo
 		svc.dailyCloses = repo
 		svc.quoteStore = repo
+		svc.barsStore = repo
 		svc.retention = repo
 	}
 	return svc, nil
@@ -739,9 +748,9 @@ func (s *MarketDataService) BatchGetBars(ctx context.Context, req *marketdatav1.
 
 	// Warm path: batch LATERAL JOIN from DB.
 	warm := map[string][]*marketdatav1.Bar{}
-	if s.repo != nil {
+	if s.barsStore != nil {
 		var err error
-		warm, err = s.repo.QueryBarsBatch(ctx, req.Symbols, canonicalTf, start, end, maxBars)
+		warm, err = s.barsStore.QueryBarsBatch(ctx, req.Symbols, canonicalTf, start, end, maxBars)
 		if err != nil {
 			return nil, fmt.Errorf("batch get bars warm: %w", err)
 		}
@@ -757,8 +766,8 @@ func (s *MarketDataService) BatchGetBars(ctx context.Context, req *marketdatav1.
 	if len(cold) > 0 {
 		sortedCold := append([]string(nil), cold...)
 		sort.Strings(sortedCold)
-		key := fmt.Sprintf("batch:%s:%s:%d:%d", strings.Join(sortedCold, ","), canonicalTf, start.Unix(), end.Unix())
-		v, fetchErr, _ := s.barsSingleflight.Do(key, func() (interface{}, error) {
+		key := fmt.Sprintf("batch:%s:%s:%d:%d:%t", strings.Join(sortedCold, ","), canonicalTf, start.Unix(), end.Unix(), req.AllowPartial)
+		fetch := func(fctx context.Context) (interface{}, error) {
 			src, e := s.registry.Get("")
 			if e != nil {
 				return nil, e
@@ -767,15 +776,15 @@ func (s *MarketDataService) BatchGetBars(ctx context.Context, req *marketdatav1.
 			if !ok {
 				return map[string][]*marketdatav1.Bar{}, nil
 			}
-			coldMap, e := ms.GetBarsMulti(ctx, sortedCold, canonicalTf, start, end)
+			coldMap, e := ms.GetBarsMulti(fctx, sortedCold, canonicalTf, start, end)
 			if e != nil {
 				return nil, e
 			}
 			// Cache each cold symbol's bars (upsert) — matches the singular GetBars cache path.
-			if s.repo != nil {
+			if s.barsStore != nil {
 				for _, bars := range coldMap {
 					if len(bars) > 0 {
-						if insErr := s.repo.InsertBars(ctx, bars); insErr != nil {
+						if insErr := s.barsStore.InsertBars(fctx, bars); insErr != nil {
 							slog.Warn("BatchGetBars: cache insert failed", "error", insErr)
 						}
 					}
@@ -785,9 +794,19 @@ func (s *MarketDataService) BatchGetBars(ctx context.Context, req *marketdatav1.
 				omitDeprecatedTimeframe(bars)
 			}
 			return coldMap, nil
-		})
-		if fetchErr != nil {
-			return nil, fetchErr
+		}
+		var v interface{}
+		var fetchErr error
+		if !req.AllowPartial {
+			v, fetchErr, _ = s.barsSingleflight.Do(key, func() (interface{}, error) { return fetch(ctx) })
+			if fetchErr != nil {
+				return nil, fetchErr
+			}
+		} else {
+			v, fetchErr = s.partialColdFetch(ctx, key, cold, fetch)
+			if fetchErr != nil {
+				v = nil
+			}
 		}
 		if coldMap, ok := v.(map[string][]*marketdatav1.Bar); ok {
 			for sym, bars := range coldMap {
@@ -809,6 +828,31 @@ func (s *MarketDataService) BatchGetBars(ctx context.Context, req *marketdatav1.
 		})
 	}
 	return &marketdatav1.BatchGetBarsResponse{Results: results}, nil
+}
+
+// barsPartialMargin is reply headroom inside the caller's deadline for an allow_partial cold fetch (design §10).
+const barsPartialMargin = 250 * time.Millisecond
+
+// partialColdFetch runs an allow_partial cold fetch on a budget detached from the caller's cancel, so a
+// leader's cancel never fails its singleflight waiters; any failure falls back to the stored bars.
+func (s *MarketDataService) partialColdFetch(ctx context.Context, key string, cold []string, fetch func(context.Context) (interface{}, error)) (interface{}, error) {
+	fctx := ctx
+	var budget time.Duration
+	if dl, ok := ctx.Deadline(); ok {
+		if budget = time.Until(dl) - barsPartialMargin; budget <= 0 {
+			slog.Warn("BatchGetBars: no deadline budget for cold fetch; returning stored bars", "cold", cold)
+			return nil, context.DeadlineExceeded
+		}
+		var cancel context.CancelFunc
+		fctx, cancel = context.WithTimeout(context.WithoutCancel(ctx), budget)
+		defer cancel()
+	}
+	v, err, _ := s.barsSingleflight.Do(key, func() (interface{}, error) { return fetch(fctx) })
+	if err != nil {
+		slog.Warn("BatchGetBars: cold fetch failed; returning stored bars",
+			"cold", cold, "budget_ms", budget.Milliseconds(), "error", err)
+	}
+	return v, err
 }
 
 // BatchGetLatestPrice returns live price + previous daily close for multiple symbols in one
