@@ -55,6 +55,8 @@ Order of work:
   (`origin/feature/fix-config-audit-author-spoof:docs/roadmap/features/241-fix-config-audit-author-spoof/design.md:43`).
 - Soft ordering with 244 (`tests/test_config_watcher.py`) and hotfix #1263 (indicators `CLAUDE.md`, module
   findings `:24`). Whichever lands second rebases. Neither needs a `merge-order.md` row.
+- C-14: no step touches `/config-ui`, `/insights` or agent `test_formula`, by recorded decision (Execution
+  Summary § Consumer surfaces; product-spec.md § Consumer Surface(s)): row values equal the code defaults.
 
 ---
 
@@ -114,7 +116,7 @@ RED and GREEN come from the `migration-rerun` job log of the step PR.
    - every description contains `headroom` and `VmData`;
    - no description matches `ILIKE '%memory cap%'` or `LIKE '%64MB%'`.
 4. **Block 3 — AC-4 and AC-5**, wrapped in `BEGIN;` … `ROLLBACK;` so no fixture persists.
-   - **Fixture (i), production, Given-faithful to "up to 030".** Columns follow `030_…up.sql:84-85`.
+   - **Fixture (i), production, Given-faithful to "up to 030".** Columns follow `030_…up.sql:22-23`.
      - `UPDATE` the global `indicators.sandbox.timeout_ms` to `'4000'`.
      - `INSERT` a bare global `sandbox.timeout_ms` = `'3000'`.
      - `DELETE` the global full-dotted `memory_bytes` and `allowed_imports`.
@@ -123,6 +125,8 @@ RED and GREEN come from the `migration-rerun` job log of the step PR.
      - `DELETE` the global `indicators.sandbox.memory_bytes`.
      - `INSERT` a bare global `sandbox.memory_bytes` = `'67108864'`.
      - `INSERT` a per-user twin `indicators.sandbox.memory_bytes` (`user_id='u-243'`) = `'100663296'`.
+     - `INSERT` a per-user bare `sandbox.memory_bytes` (`user_id='u-243'`) = `'67108864'`, so S1's
+       `COALESCE(user_id,'')` match is exercised with a non-NULL `user_id`.
      - `INSERT` a per-user bare `sandbox.timeout_ms` (`user_id='u-243b'`, no twin) = `'2500'`.
    - **Baseline:** `CREATE TEMP TABLE b031 AS SELECT * FROM config.config_values;`
    - **Replay:** `\ir ../../services/xstockstrat-config/migrations/031_heal_indicators_sandbox_keys_full_dotted.up.sql`.
@@ -132,7 +136,8 @@ RED and GREEN come from the `migration-rerun` job log of the step PR.
      - AC-4: no bare `sandbox.*` row of the three keys in any environment or scope.
      - Production global `memory_bytes` and `allowed_imports` exist with `134217728` and the seed imports.
      - Staging global `memory_bytes` exists with `134217728` (renamed and set, not deleted).
-     - The `u-243` twin still holds `100663296`.
+     - `u-243` has exactly one `memory_bytes` row: the full-dotted twin, still `100663296` (its bare row was
+       deleted by S1, not renamed into a conflict).
      - `u-243b` now has `indicators.sandbox.timeout_ms` = `2500`, renamed with its value kept.
      - Every row outside `namespace='indicators' AND key LIKE '%sandbox.%'` equals `b031`: `EXCEPT` in both
        directions, count 0.
@@ -151,6 +156,7 @@ grep -n '^\\ir ../../services/xstockstrat-config/migrations/031_heal_indicators_
 grep -c '^BEGIN;$' $f; grep -c '^ROLLBACK;$' $f              # 1 and 1
 ```
 CI: the step PR's `migration-rerun` job fails with `AC-1:` (RED a). It passes after Step 2 (GREEN).
+Coverage threshold: N/A, SQL harness, no coverage metric; gate = `migration-rerun` job.
 
 ---
 
@@ -173,10 +179,10 @@ CI: the step PR's `migration-rerun` job fails with `AC-1:` (RED a). It passes af
   - `002_config_environment.up.sql:61-63`: production 3000 / `67108864` "Formula memory cap bytes (64MB)" /
     imports, with `default_value` mirroring.
 - Rename shape: `029_heal_config_keys_full_dotted.up.sql:24-28` (`SET key = namespace || '.' || key`, `is_secret = false`).
-  As written it is not conflict-safe (ledger `fails.md`, 2026-10-20 entry).
+  As written it is not conflict-safe (ledger `fails.md:2953-2957`).
 - Snapshot precedent: `017:31-33` (`CREATE TABLE config.config_values_premigration_017 AS SELECT *`). 031 uses
   `IF NOT EXISTS` and an explicit column list instead (design.md § 1 step 0).
-- Insert idiom: `030_…up.sql:84-85,117`, including `ON CONFLICT (namespace, key, environment, COALESCE(user_id, '')) DO NOTHING`.
+- Insert idiom: `030_…up.sql:22-23,55` (also `017:121`), including `ON CONFLICT (namespace, key, environment, COALESCE(user_id, '')) DO NOTHING`.
 - Description-only update: `016_deprecate_analysis_signal_source_weights_desc.up.sql:9-14`.
 - Forward-only down: `029_…down.sql:1-19` (`SELECT 1;`).
 - Triggers:
@@ -194,7 +200,7 @@ CI: the step PR's `migration-rerun` job fails with `AC-1:` (RED a). It passes af
   BEGIN/COMMIT (`029:15`).
 
 **TDD**: `N/A (migration)`. This step implements Step 1's red→green cycle, and the evidence comes from CI (Step 1
-**TDD**). RED b: commit and push a draft up-file without statement 1. Capture the `config_values_scope_uniq`
+**TDD**). RED b: commit and push a draft up-file without S1. Capture the `config_values_scope_uniq`
 violation from the step PR's `migration-rerun` log into context.md. Then push the final file.
 
 **Covers**: —
@@ -204,17 +210,17 @@ violation from the step PR's `migration-rerun` log into context.md. Then push th
    Every other comment is a constraint of at most 2 lines (How-to-Act #5); rationale goes in the PR body.
    Every statement is re-runnable and carries `namespace = 'indicators'`. Let S = the sentinel
    `updated_by = 'system:config-migration-031'`, `update_reason = 'feature 243: heal bare sandbox seed key'`,
-   `caller_identity = NULL`. Statements, in order:
-   0. **Snapshot.** `CREATE TABLE IF NOT EXISTS config.config_values_premigration_031 AS SELECT <the explicit
+   `caller_identity = NULL`. Statements, in order (S0-S4):
+   - **S0 — Snapshot.** `CREATE TABLE IF NOT EXISTS config.config_values_premigration_031 AS SELECT <the explicit
       column list above> FROM config.config_values WHERE namespace = 'indicators' AND key LIKE '%sandbox.%';`
       Constraint comment: the snapshot excludes `value_encrypted`, the down keeps it, and `IF NOT EXISTS`
       keeps a replay from replacing the pre-state.
-   1. **Twin wins.** `DELETE FROM config.config_values b WHERE b.namespace = 'indicators' AND b.key IN
+   - **S1 — Twin wins.** `DELETE FROM config.config_values b WHERE b.namespace = 'indicators' AND b.key IN
       ('sandbox.timeout_ms','sandbox.memory_bytes','sandbox.allowed_imports') AND b.is_secret = false AND EXISTS
       (SELECT 1 FROM config.config_values t WHERE t.namespace = b.namespace AND t.key = 'indicators.' || b.key AND
       t.environment = b.environment AND COALESCE(t.user_id,'') = COALESCE(b.user_id,''));`
       The match uses the full `config_values_scope_uniq` tuple.
-   2. **Rename and set the value in one UPDATE**, over the same three bare keys with `is_secret = false`:
+   - **S2 — Rename and set the value in one UPDATE**, over the same three bare keys with `is_secret = false`:
       - `key = namespace || '.' || key`;
       - `value_data` and `default_value` = `CASE WHEN user_id IS NULL THEN CASE key WHEN 'sandbox.timeout_ms`
         `THEN '5000' WHEN 'sandbox.memory_bytes' THEN '134217728' ELSE 'numpy,pandas,math,statistics' END ELSE`
@@ -222,14 +228,14 @@ violation from the step PR's `migration-rerun` log into context.md. Then push th
       - set S.
       Never touch `value_type` (CONFIG-10). Per-user rows are only renamed, because the indicators request
       carries no `user_id` (`watcher.py:61-67`).
-   3. **Insert any missing global row**: six rows, 3 keys × `production`/`staging`.
-      - Columns: `030:84-85`'s list plus `updated_by, update_reason`, with `consuming_service = 'xstockstrat-indicators'`
+   - **S3 — Insert any missing global row**: six rows, 3 keys × `production`/`staging`.
+      - Columns: `030:22-23`'s list plus `updated_by, update_reason`, with `consuming_service = 'xstockstrat-indicators'`
         and `user_id` NULL.
-      - Values and `default_value`: the step-2 literals. `value_type`: `int`/`int`/`string`.
+      - Values and `default_value`: the S2 literals. `value_type`: `int`/`int`/`string`.
       - Descriptions: `'Formula execution timeout ms'` and `'Allowed imports'` verbatim from `001:62,64`;
-        `memory_bytes` uses the step-4 text.
+        `memory_bytes` uses the S4 text.
       - End with `ON CONFLICT (namespace, key, environment, COALESCE(user_id, '')) DO NOTHING`.
-   4. **Headroom description.** `UPDATE config.config_values SET description = 'Formula memory headroom in bytes`
+   - **S4 — Headroom description.** `UPDATE config.config_values SET description = 'Formula memory headroom in bytes`
       `above the sandbox child''s measured pre-lockdown VmData baseline; RLIMIT_DATA = baseline + this value`
       `(feature 228).'`, plus S. Scope: `WHERE namespace = 'indicators' AND key = 'indicators.sandbox.memory_bytes'`
       `AND is_secret = false AND description IS DISTINCT FROM <same text>`. This includes twins and per-user rows.
@@ -239,7 +245,7 @@ violation from the step PR's `migration-rerun` log into context.md. Then push th
    BEFORE UPDATE audit row inherits any earlier internal caller's `caller_identity` (`017:71-74`, `014:5-9`).
    It is recorded in context.md.
 4. **Down file.** A two-line header, then one constraint comment (`-- forward-only: an inverse cannot tell healed
-   rows from pre-existing twins or step-1 deletes; keeps premigration_031`), then `SELECT 1;` (029 precedent).
+   rows from pre-existing twins or S1 deletes; keeps premigration_031`), then `SELECT 1;` (029 precedent).
 5. Re-verify the NNN before the integration merge (Step 5).
 
 **Verification**:
@@ -385,7 +391,8 @@ grep -n "system:config-migration-" docs/patterns/config-governance.md           
 - Expected staging state: 3 bare global rows holding the `001:62-64` values (renamed to staging at `017:38`).
   Expected production state: 3 bare rows holding the `002:61-63` values. No full-dotted rows (recon.md:30).
 - Snapshot table `config.config_values_premigration_031` (Step 2) records the production pre-state.
-- Ledger `fails.md:642-644`: no manual pre-promotion freeze (design.md § Rejected Alternatives).
+- Ledger `fails.md:642-644`: a flagged manual AC was never run before promotion. Hence the human confirms this
+  gate before the merge, and the rejected manual prod gate with a freeze is not used (design.md:165).
 
 **TDD**: `N/A (operational read-only gate)`
 
@@ -395,24 +402,28 @@ grep -n "system:config-migration-" docs/patterns/config-governance.md           
 1. **Re-verify the NNN.** Run `git fetch origin && git ls-tree --name-only origin/main-dev services/xstockstrat-config/migrations/ | tail -2`.
    If anything at or above `031` exists, stop and renumber Step 2's files to the next free number
    (`fails.md:2909-2912`). Renaming them is a deviation, recorded in the Deviation Log.
-2. **Staging G1**, just before the integration PR merges. Run one read-only query:
+2. **Staging G1**, just before the integration PR merges. The operator runs this read-only query (the executor
+   holds no DB access; `operator-db-access.md:58`: no credentials in an agent prompt) and pastes the output into
+   context.md under `G1 staging`:
    `SELECT namespace, key, environment, user_id, is_secret, value_type, value_data, default_value, updated_by,`
    `updated_at FROM config.config_values WHERE namespace = 'indicators' AND key LIKE '%sandbox.%' ORDER BY key,`
-   `environment, user_id;` Paste the output into context.md.
+   `environment, user_id;`
    - Pass: exactly the bare global rows, with the seed values, `is_secret = false`, no full-dotted row and no
      `user_id` row.
    - If any of the following appears, escalate to the operator and do not merge: a twin, a per-user row, a secret
      row, or a bare row whose value differs from its seed (including a stored `""` for `allowed_imports`,
      feature-173 `@AC-4`). Fork 1b (overwrite the twin) needs a recorded operator decision, plus a `pg_notify` or
      config restart (design.md § Open Risks).
-3. **Production advisory read-back.** After the promotion deploy, read `config.config_values_premigration_031` and
-   the healed rows. Report any deviation from the step-2 pass shape to the operator as a follow-up (non-production
+3. **Production advisory read-back.** After the promotion deploy, the operator reads
+   `config.config_values_premigration_031` and the healed rows, and pastes the output into context.md. Report any
+   deviation from instruction 2's pass shape to the operator as a follow-up (non-production
    twin value, operator-edited bare row). Behaviour is unchanged in every state, so this step's `done` does not wait
    on it. Record the result in context.md when it happens.
 
 **Verification**:
-`grep -n "G1 staging" docs/roadmap/features/243-fix-sandbox-seed-keys/context.md` shows the pasted result with a
-PASS verdict, or a recorded operator decision. The NNN check prints `030_…` as the highest config migration on
+Pass condition: the operator's pasted staging output is in context.md and
+`grep -n "G1 staging" docs/roadmap/features/243-fix-sandbox-seed-keys/context.md` shows it with a PASS verdict, or a
+recorded operator decision. The NNN check prints `030_…` as the highest config migration on
 `origin/main-dev`.
 
 ---

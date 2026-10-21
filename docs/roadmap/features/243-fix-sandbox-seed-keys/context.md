@@ -284,3 +284,28 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Open threads carried: 244 and hotfix #1263 rebase-only overlaps. Main-dev `acceptance.feature` drift (AC-1 3000,
   no AC-4/AC-5) needs `/sdd-sync` before review or promotion.
 - Next: `/sdd-review fix-sandbox-seed-keys impl-spec`.
+
+## Session 2026-10-21 — sdd-review impl-spec
+
+- MODE B (advisory). Criteria verdict: PASS WITH WARNINGS (0 FAIL, 9 WARN). Overlap: WARN (rebase-only, no
+  FAIL collision). Status unchanged: implementation-ready.
+- Addressed in implementation-spec.md (each claim re-verified on this branch):
+  - 030 citations: `030_…up.sql:84-85,117` → `:22-23,55` (file is 55 lines; also `017:121`), Steps 1-2.
+  - Step 5 ledger cite `fails.md:642-644` re-worded to what it says (flagged manual AC never run before
+    promotion), backing the operator gate; `design.md:165` for the rejected freeze. No "freeze" in fails.md.
+  - Step 2 ledger cite → `fails.md:2953-2957`.
+  - Step 5: operator runs the staging G1 query and the prod read-back and pastes output into context.md
+    (`operator-db-access.md:58`); that paste is the pass condition.
+  - Step 1 Verification: coverage threshold N/A (SQL harness; gate = `migration-rerun`).
+  - C-14 consumer-surface note mirrored under `## Step Dependencies`.
+  - Step 2 nested statements renamed S0-S4; "step-2 literals"/"step-4 text"/"statement 1" → S2/S4/S1;
+    Step 5.3 "step-2 pass shape" → "instruction 2's pass shape".
+  - Step 1 fixture (ii): added a per-user bare `sandbox.memory_bytes` for `u-243` beside its twin, asserting
+    one row (twin, 100663296) remains; exercises S1's non-NULL `COALESCE(user_id,'')` match.
+- **Open Threads** (still open, for the /sdd-execute checkpoint):
+  - Cross-branch refs unverifiable from this checkout: hotfix #1263, 241 impl-spec Step 12 and `241/design.md:43`
+    (241 adopts no migration), 244. Soft ordering + rebase rule stand; if 241 claims 031, second to merge
+    renumbers and adds a `merge-order.md` row. Re-verify at Step 5.1.
+  - Trunk drift: the root checkout (`ccr-f537be2d-6mwmqf`) and main-dev hold only the 2026-10-20 triage state of
+    243 (status draft, AC-1 3000, no AC-4/AC-5). All progress through implementation-ready is on
+    `feature/fix-sandbox-seed-keys`; run `/sdd-sync` before promotion.
