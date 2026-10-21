@@ -21,12 +21,22 @@ Feature: fix-analysis-owner-scope (bug fix)
 
   @AC-3 @FR-3 @regression
   Scenario: One owner whose drains fail does not stop the backfill for other owners
-    Given a live strategy owned by "system" and live strategy "s-2" owned by "u-a" whose universe includes "MSFT"
+    Given live strategy "s-sys" owned by "system" and live strategy "s-2" owned by "u-a" whose universe includes "MSFT"
     And trading holds a filled BUY 5 "MSFT" on strategy "s-2" for user "u-a" at 2026-10-01T14:30:00Z
     When the boot entry-backfill runs
     Then it completes without raising
     And the live loop's entry time for ("u-a", "s-2", "MSFT") is 2026-10-01T14:30:00Z
-    And a warning naming the skipped "system" strategy is logged
+    And a warning naming strategy "s-sys" and owner "system" is logged
+
+  @AC-8 @FR-3 @regression
+  Scenario: A non-ValueError drain failure for one owner does not stop the backfill for other owners
+    Given live strategy "s-3" owned by "u-b" whose held-symbols drain raises a portfolio RPC error
+    And live strategy "s-2" owned by "u-a" whose universe includes "MSFT"
+    And trading holds a filled BUY 5 "MSFT" on strategy "s-2" for user "u-a" at 2026-10-01T14:30:00Z
+    When the boot entry-backfill runs
+    Then it completes without raising
+    And the live loop's entry time for ("u-a", "s-2", "MSFT") is 2026-10-01T14:30:00Z
+    And a warning naming strategy "s-3" and owner "u-b" is logged
 
   @AC-4 @FR-4 @regression
   Scenario: A failed live-strategies read ends the backfill quietly
