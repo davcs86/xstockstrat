@@ -50,7 +50,7 @@ fix ships with tests and two doc fixes. SEV-2, Track C.
   - Docs: `CLAUDE.md:12` still says "configurable timeout and memory cap". The Config Keys table at `CLAUDE.md:100-103` already uses full-dotted keys and says headroom.
 - **Consumer surfaces (C-14, read-only)**
   - `/insights` Sandbox limits panel: `services/xstockstrat-ui/src/components/insights/formulaReference.ts:168-175` shows "5 s", "128 MiB" and "Headroom …". It is accurate.
-  - `docs/runbooks/indicator-builder.md:152-156` is accurate.
+  - `docs/runbooks/indicator-builder.md:152-156` is accurate. Its prose at `:167` still says "memory cap", a small C-10 candidate.
   - `/config-ui` lists the raw rows; it renders the description per feature 219.
   - Agent `test_formula` calls `ExecuteFormula`. Its effective limits do not change.
 
@@ -89,23 +89,62 @@ fix ships with tests and two doc fixes. SEV-2, Track C.
 
 ## Existing Business Rules (preserve / extend)
 
-Folded from the scenario-recon digest. That digest scanned 115 scenarios (config 32, indicators 30, platform 53) plus 13 supplementary UI scenarios, and found 9 relevant. There are **no CHANGE verdicts**: no existing `@AC-*` asserts the production 3000 ms / 64 MiB seed or the bare `sandbox.*` keys. The production row change is an operator data decision recorded in `context.md` (2026-10-20), not a business-rule change.
+Folded from two scenario-recon passes. Pass 1 found 9 relevant rules in 115 scenarios. Pass 2 found 23 relevant rules (22 PRESERVE, 1 EXTEND) in about 130 scenarios. Line numbers below were re-grepped 2026-10-20 and point at each scenario's tag line. There are **no CHANGE verdicts**. No promoted `@AC-*` asserts the production 3000 ms / 64 MiB seed or the bare `sandbox.*` keys. The "64 MiB" literals in feature-228 `@AC-1` and `@AC-3` are fixture inputs, not the seed. The production row change is an operator data decision recorded in `context.md` (2026-10-20), not a business-rule change.
 
-- **PRESERVE** `@AC-1` "The 800x800 matmul fits within half the default headroom" (`services/xstockstrat-indicators/acceptance/fix-indicators-sandbox-matrix.feature:15`, `@AC-1 @FR-1 @regression @feature-228`). `memory_bytes` is headroom. The heal must not make the 64 MiB production seed effective; default headroom stays 128 MiB. A rename-only fix would halve it.
-- **PRESERVE** `@AC-2` "An allocation beyond the headroom fails closed" (`…/fix-indicators-sandbox-matrix.feature:22`, `@AC-2 @FR-2 @regression @feature-228`). Same key, same headroom semantics; the row stays a positive int.
-- **PRESERVE** `@AC-3` "The formula budget does not depend on the interpreter's import footprint" (`…/fix-indicators-sandbox-matrix.feature:28`, `@AC-3 @FR-1 @regression @feature-228`). It pins `allowed_imports` `numpy,pandas,math,statistics`. The new row-description `@AC-3` is consistent with it.
-- **PRESERVE** `@AC-3` "An infinite-loop / memory-bomb formula is terminated deterministically" (`services/xstockstrat-indicators/acceptance/indicators-sandbox-os-isolation.feature:25`, `@AC-3 @FR-3 @feature-209`). `RLIMIT_CPU` derives from `timeout_ms`, so `timeout_ms` must be 5000 after the heal; the 3000 ms production seed must not become effective.
-- **PRESERVE** `@AC-6` "Isolation limits are configured, not hardcoded magic numbers" (`…/indicators-sandbox-os-isolation.feature:46`, `@AC-6 @FR-5 @feature-209`). The limits come from config. This is the property the bug broke for the seeded rows, and the fix restores it.
-- **PRESERVE** `@AC-4` "An empty allowed_imports denies all sandbox imports instead of reverting to the permissive default" (`services/xstockstrat-indicators/acceptance/fix-python-config-zero-trap.feature:12`, `@AC-4 @FR-2 @FR-3 @regression @feature-173`). The row stays `string`, and the conflict policy must never overwrite an operator-stored `""`.
-- **PRESERVE** `@AC-5` "Concurrent formula executions are no longer serialized to one at a time" (`services/xstockstrat-indicators/acceptance/analysis-concurrency-offload.feature:9`, `@AC-5 @FR-5 @feature-176`). A formula that exceeds `indicators.sandbox.timeout_ms` is still terminated, and `max_concurrent` is untouched.
-- **PRESERVE** `@AC-11` "A per-user config value overrides the global value" (`services/xstockstrat-config/acceptance/config-secrets-and-scoping.feature:72`, `@AC-11 @FR-9 @feature-147`). The heal preserves scope (environment × `user_id`), and the FR-4 check uses the full scope tuple, so it never merges a per-user row into a global one.
-- **PRESERVE** `@AC-6` "The fundamentals loop still runs the system scoring formula" (`docs/sdd/business-rules/platform.feature:258-259`, `@AC-6 @FR-3 @FR-1 @feature-224`; the digest dropped `@FR-1`). `ExecuteFormula` of the system formula runs under the sandbox limits, and the effective limits do not change.
-- **Not impacted:**
-  - Scenarios that touch no stored row: feature-228 `@AC-4`/`@AC-5` (OpenBLAS classification, VmData probe), and feature-209 `@AC-1`/`@AC-2`/`@AC-4`/`@AC-5` (network, FS, result identity, `RLIMIT_NPROC` from the unseeded `max_concurrent`).
-  - Suites that guard other keys or schemas: the other indicators suites (`indicators` schema, not `config.config_values`); the config suites `readiness-materializer-config-keys`, `opportunity-config-operability`, `surface-signal-weight-decay-config` (`analysis.*` keys); the `config-secrets-and-scoping` secret/redaction ACs (these rows are non-secret, and the heal keeps `is_secret`); and the remaining `platform.feature` entries.
-  - UI `config-ui-usability.feature`: `@AC-4`/`@AC-5 @feature-219` render a description only when it is non-empty. The new headroom description is non-empty.
-  - The down migration must stay scoped to `indicators.sandbox.*` so it cannot touch the other suites' rows.
-- **No EXTEND verdicts.** The feature's `@AC-1`..`@AC-4` are new heal-migration guarantees that no suite covers yet. They are added to the config and indicators suites at promotion (C-16).
+**xstockstrat-indicators**
+- **PRESERVE** `@AC-6 @FR-5 @feature-209` "Isolation limits are configured, not hardcoded magic numbers" (`services/xstockstrat-indicators/acceptance/indicators-sandbox-os-isolation.feature:46`). The limits come from config, and a change takes effect on the next evaluation. The bug broke this for the seeded rows, and the fix restores it. The healed full-dotted rows must be the only source, with no hardcoding.
+- **PRESERVE** `@AC-3 @FR-3 @feature-209` "An infinite-loop / memory-bomb formula is terminated deterministically" (`…/indicators-sandbox-os-isolation.feature:25`). `RLIMIT_CPU` derives from `timeout_ms`, so it must be 5000 after the heal. The 3000 ms production seed must not become effective.
+- **PRESERVE** `@AC-4 @FR-4 @feature-209` "A legitimate formula evaluates to the identical result as before isolation" (`…/indicators-sandbox-os-isolation.feature:32`). Results stay identical because the effective limits are unchanged.
+- **PRESERVE** `@AC-1 @FR-1 @regression @feature-228` "The 800x800 matmul fits within half the default headroom" (`services/xstockstrat-indicators/acceptance/fix-indicators-sandbox-matrix.feature:15`). `memory_bytes` is headroom above the `VmData` baseline. The heal must not make the 64 MiB production seed effective, because a rename-only fix would halve the headroom. The description fix must match this rule.
+- **PRESERVE** `@AC-2 @FR-2 @regression @feature-228` "An allocation beyond the headroom fails closed" (`…/fix-indicators-sandbox-matrix.feature:22`). Same key and the same headroom semantics; the row stays a positive int.
+- **PRESERVE** `@AC-3 @FR-1 @regression @feature-228` "The formula budget does not depend on the interpreter's import footprint" (`…/fix-indicators-sandbox-matrix.feature:28`). The budget is headroom, not an absolute cap. The seed's "memory cap" wording contradicts this rule, and 243's `@AC-3` corrects it.
+- **PRESERVE** `@AC-4 @FR-2 @FR-3 @regression @feature-173` "An empty allowed_imports denies all sandbox imports instead of reverting to the permissive default" (`services/xstockstrat-indicators/acceptance/fix-python-config-zero-trap.feature:12`).
+  - The row stays `string`, seeded `numpy,pandas,math,statistics` and never `""`.
+  - The getter stays `get_str_present`.
+  - The conflict policy must never overwrite an operator-stored `""`.
+- **PRESERVE** `@AC-5 @FR-5 @feature-176` "Concurrent formula executions are no longer serialized to one at a time" (`services/xstockstrat-indicators/acceptance/analysis-concurrency-offload.feature:9`).
+  - A formula that exceeds `indicators.sandbox.timeout_ms` is still terminated.
+  - `max_concurrent` is untouched.
+  - Pass 2 marked this rule out of scope. Pass 1 kept it as PRESERVE, which costs nothing.
+
+**xstockstrat-config (seed convention and migration precedents)**
+- **PRESERVE** `@AC-1 @FR-1 @FR-3 @feature-182` "The seed migration registers all four materializer keys per environment" (`services/xstockstrat-config/acceptance/readiness-materializer-config-keys.feature:38`). The seed convention is a full-dotted `key` and one global row per `production` and per `staging`. 243 follows it in spirit and must not touch `analysis.readiness_materializer.*` rows.
+- **PRESERVE** `@AC-2 @FR-1 @FR-2 @feature-182` "Keys are seeded at their current code defaults with getter-matching value_type" (`…/readiness-materializer-config-keys.feature:49`). The healed rows keep the `int`/`int`/`string` value types and code-default values (CONFIG-10).
+- **PRESERVE** `@AC-4 @FR-3 @feature-182` "The migration is idempotent and reversible" (`…/readiness-materializer-config-keys.feature:58`). This is the precedent for the 243 up+down pair. The down must touch only 243's own `indicators.sandbox.*` rows. Fork 4 weighs this against forward-only.
+- **PRESERVE** `@AC-5 @FR-4 @feature-182` "A registered materializer key is settable via SetConfig without create_key" (`…/readiness-materializer-config-keys.feature:11`). Once seeded as `indicators.sandbox.*`, an operator write needs no `create_key`. The existence gate is unchanged.
+- **PRESERVE** `@AC-1 @FR-1 @FR-3 @feature-184` "The seed migration registers the opportunity keys per environment" (`services/xstockstrat-config/acceptance/opportunity-config-operability.feature:14`). Same seed convention.
+- **PRESERVE** `@AC-2 @FR-1 @feature-184` "Keys are seeded at their current code defaults with getter-matching value_type" (`…/opportunity-config-operability.feature:22`). Same seed convention.
+- **PRESERVE** `@AC-3 @FR-1 @feature-184` "Applying the migration changes no runtime behavior on its own" (`…/opportunity-config-operability.feature:30`). The healed values (5000 / 134217728) must equal the code defaults (`watcher.py:134,138`), so nothing changes in effect.
+- **PRESERVE** `@AC-4 @FR-2 @feature-184` "An out-of-bounds tuning write is rejected at the write edge" (`…/opportunity-config-operability.feature:37`). This applies only if the design adopts sandbox bounds (fork 9). Such bounds follow CONFIG-11.
+- **PRESERVE** `@AC-8 @FR-2 @feature-184` "A bounded key whose lower edge is a legitimate value accepts that value" (`…/opportunity-config-operability.feature:52`). This also applies only under fork 9. New bounds must not reject a legitimate edge value.
+- **PRESERVE** `@AC-8 @FR-6 @feature-161` "the dead source-weights key is gone after the removal migration" (`services/xstockstrat-config/acceptance/surface-signal-weight-decay-config.feature:15`). A key rename or removal must leave `list_config_keys` correct. After 243, the `indicators` namespace lists only full-dotted `sandbox.*` keys.
+- **PRESERVE** `@AC-12 @FR-10 @feature-147` "Existing trading_mode rows collapse deterministically onto their environment" (`services/xstockstrat-config/acceptance/config-secrets-and-scoping.feature:94`). It is a precedent that duplicate rows resolve to a documented winner, which FR-4 (fork 1) needs.
+- **PRESERVE** `@AC-11 @FR-9 @feature-147` "A per-user config value overrides the global value" (`…/config-secrets-and-scoping.feature:72`). The heal keeps scope (environment × `user_id`), and the FR-4 check matches on the full scope tuple. It must never merge a per-user row into a global one.
+- **PRESERVE** `@AC-13 @FR-9 @feature-147` "A per-user override reaches a WatchConfig subscriber through the overlay" (`…/config-secrets-and-scoping.feature:80`). The heal must not break the overlay.
+
+**platform (`docs/sdd/business-rules/platform.feature`)**
+- **PRESERVE** `@AC-6 @FR-3 @FR-1 @feature-224` "The fundamentals loop still runs the system scoring formula" (`docs/sdd/business-rules/platform.feature:258`). `ExecuteFormula` of the system formula runs under the sandbox limits, which do not change in effect.
+- **EXTEND** `@AC-6 @FR-5 @feature-182` "Docs no longer claim the readiness-materializer keys have no seed migration" (`docs/sdd/business-rules/platform.feature:181`). 243 adds its own doc-parity landing check next to it. That check covers three lines:
+  - `services/xstockstrat-indicators/CLAUDE.md:12` changes to headroom.
+  - `docs/runbooks/config-rollout.md:180` changes to `indicators.sandbox.timeout_ms`.
+  - `docs/runbooks/indicator-builder.md:167`, whose "memory cap" prose is a C-10 candidate.
+
+**Not impacted**
+- Feature-228 `@AC-4`/`@AC-5` (OpenBLAS classification, VmData probe) and feature-209 `@AC-1`/`@AC-2`/`@AC-5` (network, filesystem, `RLIMIT_NPROC` from the unseeded `max_concurrent`) touch no stored row.
+- The `config-secrets-and-scoping` secret and redaction ACs (`@AC-1`, `@AC-1b`, `@AC-2`..`@AC-5`, `@AC-10`, `@AC-14`, `@AC-16`) do not apply: the sandbox rows are non-secret, and the heal keeps `is_secret`.
+- The decay bounds in `surface-signal-weight-decay-config` `@AC-7`/`@AC-11`/`@AC-12` are a different key.
+- The formula-ownership and fundamentals suites (private-by-default, fundamentals inputs) have no config-key overlap.
+- `config-ui-usability.feature`:
+  - `@AC-4`/`@AC-5 @feature-219` render a description only when it is non-empty, and the new headroom description is non-empty.
+  - `@AC-6`/`@AC-13` (ListKeys `updated_at`) intersect fork 5 (the rename bumps `updated_at`).
+- The feature-225 contract-migration scenarios in `platform.feature` bind only to migrations whose first line is `-- contract-of:`. 031 is an ordinary heal and must not carry that header, because the contract gate makes down files refuse to run.
+
+**Notes carried to design**
+- FR-4 has no promoted winner rule to defer to. Feature-147 `@AC-12` is only a precedent, so design decides the winner and what the down restores (forks 1 and 4).
+- No promoted rule covers `pg_notify` on raw-SQL writes. The "harmless" claim rests on feature-184 `@AC-3` and CONFIG-4, not on a durable `@AC` (fork 8).
+- Per-user bare `sandbox.*` rows are not covered by any suite. Design states how they are treated (feature-147 `@AC-11`).
+- Tests inject values through the watcher or a fixture, and must not couple to the seeded production value (feature-228 `@AC-1` vs 243 `@AC-2`).
+- 243's per-feature `@AC-1`..`@AC-4` numbers collide with no other suite, because they promote with `@feature-243`.
 
 ## Dependencies
 
@@ -192,7 +231,7 @@ Advisory; input to grilling and `/sdd-spec`.
    - Shape follows forks 1 and 2.
 3. **test (indicators).** Add the AC-2 Scenario Outline (three rows) to `tests/test_config_watcher.py`. It is a getter-contract guard and is not red-first.
 4. **docs.**
-   - Edit `services/xstockstrat-indicators/CLAUDE.md:12` and `docs/runbooks/config-rollout.md:180`.
+   - Edit `services/xstockstrat-indicators/CLAUDE.md:12`, `docs/runbooks/config-rollout.md:180` and `docs/runbooks/indicator-builder.md:167` ("memory cap" prose).
    - Resolve findings `:23` narrowly.
    - Add a config-governance log row if the design rules one is owed.
    - Run the context-constitution teardown.
