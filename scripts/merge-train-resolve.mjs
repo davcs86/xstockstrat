@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Resolve an in-progress `git merge origin/<base>` (HEAD = PR branch, MERGE_HEAD = base) using only the
 // /merge-train allowlist; exit 2 and stage nothing when any conflicted path falls outside it.
-// Usage: node scripts/merge-train-resolve.mjs [--own-slug <slug>]   (prints a JSON report)
+// Usage: node scripts/merge-train-resolve.mjs --base <ref> [--own-slug <slug>]   (run after `git merge --no-commit`; prints JSON)
 import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import { pathToFileURL } from 'node:url'
@@ -94,7 +94,7 @@ const stage = (n, path) => {
   try { return execFileSync('git', ['show', `:${n}:${path}`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 64 << 20 }) } catch { return null }
 }
 
-export function resolve(ownSlug) {
+export function resolve(ownSlug, baseRef) {
   const paths = git('diff', '--name-only', '--diff-filter=U').split('\n').filter(Boolean)
   const report = { resolved: [], unresolvable: [] }
   const plan = []
@@ -118,6 +118,18 @@ export function resolve(ownSlug) {
     }
     plan.push({ path, rule, text, keep: rule === 'ours' ? ours : rule === 'theirs' ? theirs : text })
   }
+  // A squash-merged parent leaves its files in the branch's history, so a path the base later deleted
+  // comes back without a conflict; base-side paths are dropped again, anything else halts.
+  if (baseRef) {
+    const conflicted = new Set(paths)
+    const added = git('diff', '--cached', '--name-only', '--diff-filter=A', baseRef).split('\n').filter((f) => f && !conflicted.has(f))
+    for (const path of added) {
+      if (!git('log', '-1', '--format=%h', baseRef, '--', path).trim()) continue
+      const rule = classify(path, ownSlug)
+      if (rule === 'theirs') plan.push({ path, rule: 'pruned (deleted on base)', text: null, keep: null })
+      else if (rule !== 'ours') report.unresolvable.push({ path, reason: 'deleted on base, re-added by the branch' })
+    }
+  }
   if (report.unresolvable.length) return report
   for (const p of plan) {
     if (p.keep === null) git('rm', '-q', '--', p.path)
@@ -129,8 +141,9 @@ export function resolve(ownSlug) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(fs.realpathSync(process.argv[1])).href) {
-  const i = process.argv.indexOf('--own-slug')
-  const report = resolve(i > 0 ? process.argv[i + 1] : '')
+  const arg = (name) => { const i = process.argv.indexOf(name); return i > 0 ? process.argv[i + 1] : '' }
+  if (!arg('--base')) { console.error('usage: merge-train-resolve.mjs --base <ref> [--own-slug <slug>]'); process.exit(64) }
+  const report = resolve(arg('--own-slug'), arg('--base'))
   console.log(JSON.stringify(report, null, 2))
   process.exit(report.unresolvable.length ? 2 : 0)
 }

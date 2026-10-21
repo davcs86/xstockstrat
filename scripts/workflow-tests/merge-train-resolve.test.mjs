@@ -72,6 +72,33 @@ assert.deepEqual(r.resolved, [])
 assert.ok(fs.readFileSync('docs/roadmap/ledger/fails.md', 'utf8').includes('<<<<<<<'), 'nothing written when halting')
 s.done(); console.log('4 off-allowlist halt ok')
 
+// 4b. squash-merged parent: the branch still carries a dir the base later deleted → base-side path pruned, code path halts
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mt-'))
+  const g = (...a) => execFileSync('git', a, { cwd: dir, encoding: 'utf8' })
+  const put = (f, c) => { fs.mkdirSync(path.dirname(path.join(dir, f)), { recursive: true }); fs.writeFileSync(path.join(dir, f), c) }
+  g('init', '-q', '-b', 'main'); g('config', 'user.email', 't@t'); g('config', 'user.name', 't'); g('config', 'commit.gpgsign', 'false')
+  put('README', 'r\n'); g('add', '-A'); g('commit', '-qm', 'base')
+  g('checkout', '-qb', 'pr')
+  put('docs/roadmap/features/302-old-slug/status.md', 'draft\n'); put('services/x/gone.ts', 'x\n'); g('add', '-A'); g('commit', '-qm', 'triage')
+  put('docs/roadmap/features/300-fix-a/status.md', 'implementation-ready\n'); g('add', '-A'); g('commit', '-qm', 'spec')
+  g('checkout', '-q', 'main')
+  put('docs/roadmap/features/302-old-slug/status.md', 'draft\n'); put('services/x/gone.ts', 'x\n'); g('add', '-A'); g('commit', '-qm', 'squash of triage')
+  g('rm', '-rq', 'docs/roadmap/features/302-old-slug', 'services/x/gone.ts'); g('commit', '-qm', 'rename')
+  g('checkout', '-q', 'pr'); g('merge', '-q', '--no-commit', '--no-ff', 'main')
+  const prev = process.cwd(); process.chdir(dir)
+  r = resolve('fix-a', 'main')
+  assert.deepEqual(r.unresolvable, [{ path: 'services/x/gone.ts', reason: 'deleted on base, re-added by the branch' }])
+  g('rm', '-q', '--cached', 'services/x/gone.ts')
+  r = resolve('fix-a', 'main')
+  assert.deepEqual(r.unresolvable, [])
+  assert.deepEqual(r.resolved, [{ path: 'docs/roadmap/features/302-old-slug/status.md', rule: 'pruned (deleted on base)' }])
+  assert.equal(fs.existsSync('docs/roadmap/features/302-old-slug/status.md'), false)
+  assert.ok(fs.existsSync('docs/roadmap/features/300-fix-a/status.md'), 'own new files are untouched')
+  process.chdir(prev)
+}
+console.log('4b resurrected paths ok')
+
 // 5. same hotfix-log entry edited differently on both sides is ambiguous
 assert.throws(() => mergeHotfixLog(log(entry('2026-10-20T02:40:18Z', 'hotfix/a', 'deployed')), log(entry('2026-10-20T02:40:18Z', 'hotfix/a', 'in-progress'))), /differs on both sides/)
 // 6. diff3-style markers keep only the two sides

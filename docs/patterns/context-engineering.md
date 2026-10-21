@@ -197,7 +197,9 @@ merge can change what the next PR conflicts with.
   `docs/runbooks/hotfix-log.md` keeps both entries newest-first; the PR's own feature dir
   (`feature/<slug>` → `NNN-<slug>`) keeps the branch side; other feature dirs and
   `docs/reports/*.status` take the base side. Every kept text must contain both sides' non-blank lines
-  in order, or the PR halts.
+  in order, or the PR halts. A branch built on a squash-merged parent still carries that parent's
+  files, so a path the base later deleted comes back with no conflict: the resolver drops it again when
+  it is a base-side path and halts the PR otherwise.
 
 **Preflight guards** run before any write: a slug must resolve to exactly one
 `docs/roadmap/features/*-<slug>` directory (skills resolve features by suffix — a reused slug of a
