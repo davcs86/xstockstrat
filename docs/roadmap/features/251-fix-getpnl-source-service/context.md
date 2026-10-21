@@ -249,3 +249,21 @@ OPERATOR DECISIONS (binding, recorded 2026-10-20):
 2. Choose B9 option (a) or (b).
 3. Then re-run `/sdd-design fix-getpnl-source-service` (full) from the round-5 checkpoint, or grant an explicit
    round-limit override for 251 so a round 6 can close both blockers.
+
+## Session 2026-10-21 — B6 side-defect reports filed
+
+- Operator (2026-10-21) authorized filing the B6 follow-up defect reports under `docs/reports/`. Both re-verified
+  against code on `feature/fix-getpnl-source-service` @ `d077dcfe`; both SEV-2, sidecar `open`, single SEV token
+  checked by grep.
+- [x] addressed — live-fold sign loss (round-1 warning "Live fold sign loss ... unaddressed" and B6 item 1):
+  `docs/reports/2026-10-21-portfolio-live-fold-sell-sign-loss-defect.md`. Evidence: unsigned `qty`
+  `trading.go:1807`; `newQty = existing.Qty + fill.Qty` / `if fill.Qty > 0` `portfolio_service.go:310-311`;
+  signed contract `pnl.go:26`.
+- [x] addressed — bracket-leg realized understatement (B6 item 2):
+  `docs/reports/2026-10-21-trading-bracket-leg-fills-missing-from-realized-pnl-defect.md`. Evidence: `pollFills`
+  iterates only `s.orders` (`trading.go:1728`); leg ids written only to `trading.order_brackets`
+  (`trading.go:3403-3405` Alpaca, `:3411-3422` IBKR); residual noted at `services/xstockstrat-trading/CLAUDE.md:248-249`.
+- Both paths cited in product-spec.md § Out of Scope (existing live-fold bullet + new bracket-leg bullet). Paths
+  existed before citation (F-04).
+- B6 closed. B9 (adapter wire-test seam) remains the sole blocking objection; status stays `spec-ready`.
+- Files written: the two reports + `.status` sidecars, product-spec.md, context.md.

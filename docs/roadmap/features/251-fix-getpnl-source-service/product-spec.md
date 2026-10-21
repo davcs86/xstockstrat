@@ -187,4 +187,10 @@ dev.
   (`portfolio_service.go:310-317`), so a trading sell `order.filled` (unsigned qty, `trading.go:1807`) grows the
   position until the next `account.positions.synced` reconciliation. Confirmed at product-spec review (2026-10-20).
   Named follow-up: a `/sdd-qa defect` report under `docs/reports/`, filed before `/sdd-design` and carried as
-  `[ ] unaddressed` in context.md until its path is cited here; not a silent widening of this fix (P-03, C-10)
+  `[ ] unaddressed` in context.md until its path is cited here; not a silent widening of this fix (P-03, C-10).
+  Filed 2026-10-21: `docs/reports/2026-10-21-portfolio-live-fold-sell-sign-loss-defect.md` (status `open`)
+- Bracket leg fills missing from realized P&L: Alpaca/IBKR stop-loss and take-profit leg ids live only in
+  `trading.order_brackets` (`trading.go:3403-3405`, `:3411-3422`), never in `s.orders`, so `pollFills`
+  (`trading.go:1728`) never emits `order.filled` for them and `GetPnL` realized omits the bracket exit.
+  Named follow-up (P-03, C-10), filed 2026-10-21:
+  `docs/reports/2026-10-21-trading-bracket-leg-fills-missing-from-realized-pnl-defect.md` (status `open`)
