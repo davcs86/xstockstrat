@@ -210,8 +210,10 @@ admin.
 
 ## Existing Business Rules (preserve / extend)
 
-Folded from the scenario-recon digest. One conditional row (feature 175) was added by a targeted
-re-grep.
+Folded from the scenario-recon digest (23 in-scope rules). Rows for features 043, 169, 175 and
+`@AC-4 @feature-210` are conditional out-of-set additions from targeted re-greps. Scenario-recon
+classes the four portfolio/analysis rows PRESERVE; they are EXTEND here because 242 `@AC-3`/`@AC-6`
+(portfolio) and `@AC-4`/`@AC-7` (analysis) promote alongside them at launch (C-16).
 - **PRESERVE** `@AC-4 @FR-3 @feature-165` "An emitted alert is pushed to the target user's devices"
   (`services/xstockstrat-notify/acceptance/pwa-notifications.feature:24-29`).
   - This is FR-2, the regression guard. 242 `@AC-2` only adds negatives (no push to user-77 or the
@@ -232,17 +234,29 @@ re-grep.
 - **PRESERVE (conditional: admin flag persisted on `push_subscriptions`)** `@AC-2 @FR-2 @feature-165`
   "Enabling notifications persists a per-user subscription" (`pwa-notifications.feature:11-12`).
   Upsert-by-endpoint, with no duplicate rows, still holds after a `004` column is added.
+- **PRESERVE (conditional: `push_subscriptions` schema or lifecycle touched)** `@AC-3 @FR-2 @feature-165`
+  "Disabling notifications removes the subscription" (`pwa-notifications.feature:18-19`). Delete stays
+  by `endpoint` only (`notifyServiceImpl.ts:264`; NOTIFY-6).
 - **PRESERVE** `@AC-2 @FR-1 @FR-4 @feature-203` "A broadcast alert is unread for one user and read for
   another" (`services/xstockstrat-notify/acceptance/alert-read-unread-persistence.feature:13-14`).
   - Untargeted alerts stay visible in-app to every user. The persisted `target_user_id` of an
     untargeted alert is never rewritten.
   - Fanning out per-admin targeted copies would be a CHANGE here and must be blocked.
+  - Changing `ListAlerts` (`notifyServiceImpl.ts:202`, `:210`) or `matchesSubscriber` (`:273-276`) to
+    keep admin visibility of FR-3-targeted alerts would also be a CHANGE needing new sign-off.
 - **PRESERVE** `@AC-1 @FR-2 @FR-3 @feature-203` "Marking a targeted alert read flips it to read for
   that user" (`alert-read-unread-persistence.feature:6-7`). FR-3 moves portfolio and live-loop alerts
   onto this targeted path.
 - **PRESERVE** `@AC-1 @FR-1 @feature-020` "A WARNING alert is fanned out to Slack when the webhook is
   configured" (`services/xstockstrat-notify/acceptance/notify-external-fanout.feature:11-12`). The
   Slack/SendGrid audience is out of scope. Targeted alerts still go to the shared operator channel.
+  Extending the admin-audience fix to `src/fanout/fanout.ts` would make this a CHANGE needing new
+  sign-off.
+- **PRESERVE** `@AC-3 @FR-3 @FR-4 @feature-020` "A Slack webhook timeout does not delay or drop the
+  primary stream" (`notify-external-fanout.feature:28-29`), `@AC-4 @FR-6 @feature-020` "An alert below
+  the severity floor is not fanned out" (`:37-38`), `@AC-7 @FR-1 @feature-020` and `@AC-9 @FR-1
+  @feature-020` "A conviction-less alert is gated by severity alone" (`:58-59`, `:72-73`). The push
+  change shares `emitAlert`; the fanout microtask (`notifyServiceImpl.ts:100-104`) stays untouched.
 - **EXTEND** `@AC-3 @FR-5 @regression @feature-231` "Concentration sums a symbol across accounts and
   alerts on the true weights" (`services/xstockstrat-portfolio/acceptance/fix-after-hours-positions-priced.feature:35-36`).
   - 242 `@AC-3` adds `target_user_id` = the owner.
@@ -271,6 +285,10 @@ re-grep.
 - **PRESERVE** `@AC-36 @FR-4 @feature-224` "System slugs are reserved in both directions"
   (`docs/sdd/business-rules/platform.feature:314`). Same treatment: the untargeted operator ERROR
   alert still fires, and its push goes to admins only.
+- **PRESERVE** `@AC-6 @FR-3 @FR-1 @feature-224` "The fundamentals loop still runs the system scoring
+  formula" (`platform.feature:258-259`). The fundsignal loop keeps `x-user-id` `system` +
+  `x-internal-caller` `analysis-fundsignal`; FR-3 owner-targeting is not applied to `_emit_warning`
+  (`fundsignal_loop.py:614-626`).
 - **PRESERVE (conditional: new notify outbound call)** `@AC-5 @FR-5 @feature-210` "Header-propagation
   semantics are unchanged beneath mTLS" (`platform.feature:238`). The producer-to-notify hops gain a
   body field only.
@@ -300,9 +318,8 @@ re-grep.
   - At launch, 242 `@AC-1` and `@AC-5` are a C-16 ADD to `pwa-notifications.feature`.
 - **Not impacted:**
   - notify:
-    - `@AC-3 @feature-165` (unregister by endpoint).
     - `@AC-3/@AC-4/@AC-5 @feature-203`.
-    - `@AC-2..@AC-9 @feature-020`.
+    - `@AC-2/@AC-5/@AC-6/@AC-8 @feature-020`.
   - portfolio: valuation, snapshot and HWM scenarios (`@AC-1/2/6/8/13/14 @feature-231`,
     `@AC-2 @feature-172`).
   - platform: `@AC-9 @FR-5 @regression @feature-196` covers dead request-body `user_id` fields. It does
@@ -310,12 +327,12 @@ re-grep.
   - UI: `pwa-notifications.feature` and `alert-read-unread-persistence.feature`.
   - agent, marketdata and ingest suites (no push or alert guarantees).
 - **Coverage:**
-  - Read in full: 3 notify suites, 2 portfolio suites, 2 analysis suites, and `platform.feature`
-    (about 104 in-scope scenarios).
-  - The other 10 portfolio and 30 analysis suites were grep-scanned only.
-  - 18 in-scope scenarios are relevant, 3 of them conditional, plus 3 conditional out-of-set
-    scenarios (trading, identity) and the 1 re-grep row.
-  - Verdicts: 4 EXTEND and 19 PRESERVE, with no durable CHANGE.
+  - Read in full: 3 notify suites, 2 portfolio suites and `platform.feature`; the relevant regions of
+    2 analysis suites. About 140 scenarios scanned.
+  - The other 10 portfolio and 30 analysis suites (32 on disk) were keyword-scanned only.
+  - 23 in-scope rules are relevant (4 EXTEND, 19 PRESERVE; 3 of the PRESERVE conditional), plus 5
+    conditional out-of-set rows (features 043, 169, 175, 210).
+  - No durable CHANGE; the one CHANGE has no promoted `@AC` and is signed off.
 
 ## Dependencies
 
