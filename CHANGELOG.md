@@ -3,6 +3,25 @@
 All production promotions from `main-dev` to `main` are recorded here.
 Each entry corresponds to one `main-dev → main` PR merge.
 
+## 2026-10-20
+
+### Features
+- offline-account-full-pnl: Offline (`BROKER_TYPE_OFFLINE`, manually recorded) accounts show only Equity and a since-snapshot realized P&L.
+
+### Proto Changes
+- marketdata/v1/marketdata.proto
+- portfolio/v1/portfolio.proto
+- trading/v1/trading.proto
+
+### DB Migrations
+- xstockstrat-portfolio: 017_offline_realized_lifetime_fees.up.sql
+- xstockstrat-trading: 011_offline_fees_snapshot_headers.up.sql
+
+### Summary
+5 commits, 0 feature merges since last promotion.
+
+---
+
 ## 2026-10-19
 
 ### Features

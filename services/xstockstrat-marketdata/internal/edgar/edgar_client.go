@@ -102,7 +102,6 @@ type tickerEntry struct {
 }
 
 type companyFacts struct {
-	CIK        json.Number                     `json:"cik"`
 	EntityName string                          `json:"entityName"`
 	Facts      map[string]map[string]factEntry `json:"facts"` // taxonomy → tag → entry
 }
