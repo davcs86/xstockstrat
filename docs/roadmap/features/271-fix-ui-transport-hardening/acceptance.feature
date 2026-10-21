@@ -9,7 +9,7 @@ Feature: fix-ui-transport-hardening (bug fix)
     When a BFF handler issues a unary call without passing timeoutMs
     Then the call fails with DEADLINE_EXCEEDED no later than the transport's default deadline (proposed 10s)
 
-  @AC-1b @FR-1 @regression
+  @AC-6 @FR-1 @regression
   Scenario: A per-call timeout overrides the transport default
     Given the UI server transport for a backend that accepts the connection and never responds
     When a BFF handler issues a unary call with timeoutMs 2000
