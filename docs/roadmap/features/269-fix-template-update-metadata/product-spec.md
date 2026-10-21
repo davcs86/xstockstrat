@@ -39,9 +39,12 @@ xstockstrat-ingest (SIGNAL_SOURCE). The decisions behind them are listed under O
   increments `version` by exactly 1 and sets `updated_at`. All three services already do this today. The FR pins
   the behavior so the FR-1 fix does not change it.
 - **FR-3 (RETIRE is first-wins).** The first RETIRE sets `retired_at`, and a later RETIRE of an already-retired
-  template leaves `retired_at` unchanged. Indicators and analysis already do this; ingest must change.
+  template leaves `retired_at` unchanged. The second RETIRE still succeeds and returns the template: no
+  service filters its retire `UPDATE` on `retired_at IS NULL`, and none should start. Indicators and analysis
+  already do this; ingest must change.
 - **FR-4 (RETIRE sets updated_at).** A RETIRE call sets `updated_at` in every service. Analysis and ingest already
-  do this; indicators must change.
+  do this; indicators must change. `updated_at` is observable as `TemplateMeta.updated_at`
+  (`packages/proto/common/v1/common.proto`, field 8).
 - **FR-5 (empty-id CREATE is rejected).** CREATE with an empty `template_id` returns
   `INVALID_ARGUMENT` and writes no row in every service. Indicators and analysis already do this; ingest must
   change.
