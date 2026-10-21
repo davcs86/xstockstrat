@@ -17,7 +17,8 @@ Source: repo-surveyor debt-radar scan @ 4535695, finding D-16 (re-verified on ma
 issues 71 unary stub calls; only `ListOpportunities` (`:866-872`) passes `timeout=`. `mtls.secure_channel`
 (`services/xstockstrat-agent/app/mtls.py:37-43`) sets no deadline or keepalive. A backend that accepts but never
 answers (stalled handler, stuck DB pool, paused process) blocks the MCP tool until the MCP client times out, with no
-`DEADLINE_EXCEEDED` surfaced. Examples: `IngestSignal` `:242`, `EmitAlert` `:282`, `RunBacktest` `:634`,
+`DEADLINE_EXCEEDED` surfaced. The person affected is the MCP client user or operator (for example a Claude.ai
+remote-connector session), who sees a tool call hang with no error instead of a fast, retryable failure. Examples: `IngestSignal` `:242`, `EmitAlert` `:282`, `RunBacktest` `:634`,
 `ScreenSymbols` `:746`, `RunFundamentalsScan` `:1712`, `TriggerBackfill` `:1949`, the `get_config` tool's
 `GetConfig` `:2043`.
 
@@ -35,14 +36,16 @@ Budget values are grounded on the MCP client's 60 s request timeout (`services/x
 - **FR-1 — Default deadline.** Every agent → backend unary RPC in `services/xstockstrat-agent/app/client.py` that is
   not listed in FR-2, other than the excluded `get_config_value` call (see Out of Scope), carries a deadline of
   **10 seconds**. This includes the `get_config` tool's `GetConfig` (`client.py:2043`) and `register_oauth_client`
-  (`client.py:1355`).
+  (`client.py:1355`). The "every" guarantee is regression-guarded by a static check over all stub calls (@AC-10).
 - **FR-2 — Long-running budgets.** `RunBacktest`, `TriggerBackfill`, `RunFundamentalsScan` and `ScreenSymbols` each
   carry an explicit deadline of **45 seconds** in place of the default. A call that finishes inside 45 s succeeds
   unchanged.
 - **FR-3 — Nested inside the MCP request timeout (PLAT-13).** For every MCP tool, the worst-case wall-clock of one
   invocation (the sum of the deadlines of its sequential backend calls) stays at least 3 s under the MCP client's
   60 s request timeout. A tool that issues several sequential calls (for example `ingest_signal` →
-  `IngestSignal` + `EmitAlert`) must bound its total. Design chooses how.
+  `IngestSignal` + `EmitAlert`) must bound its total. Design chooses how, and must enumerate every tool with more
+  than one sequential backend call (for example `ingest_signal`, `manage_watchlist` read-modify-write,
+  `instantiate_template`, the config tools) and show its worst-case sum.
 - **FR-4 — Stalls surface as tool errors.** When a deadline expires, the MCP tool returns an error derived from
   gRPC `DEADLINE_EXCEEDED`. The error says that the upstream did not respond within the deadline, and the tool does
   not hang. The `list_opportunities` wording from feature 227 is the precedent.
