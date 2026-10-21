@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-10-21 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-21-agent-client-deadlines-defect.md` (debt-radar D-16, minus the `get_config_value` call covered by feature 247) |
+| 2026-10-21 | `draft` → `spec-ready` | /sdd-review | Product spec approved (7 warnings; overlap WARN: same-file with 247, 215, 241, 249) |
 
 ---
 
@@ -43,4 +44,4 @@ is being fixed by feature 247); every other call hangs an MCP tool indefinitely 
 
 ## Next Action
 
-`/sdd-design fix-agent-client-deadlines quick` — recommended design depth: quick (SEV-2, single service, no proto/migration); see context.md
+`/sdd-design fix-agent-client-deadlines` — recommended depth: quick (SEV-2, single service, no proto/migration); see context.md
