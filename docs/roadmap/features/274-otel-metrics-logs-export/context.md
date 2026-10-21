@@ -59,3 +59,34 @@
 - Top risks carried into grilling: R1 (7/10 backends need a custom recorder), R2 (Grafana `service_name` label
   promotion unproven), R3 (scoring-stall rule must be re-derived), R10 (250 guard has no produced-path mechanism),
   R11 (250's `trace-derived-alerting` follow-up).
+
+## Session 2026-10-21 — sdd-design (Round 1 checkpoint)
+
+- Proposer R1: span-derived `rpc.server.duration` SpanProcessor for py/node (Go native otelgrpc), env-only meter+
+  logger providers, log bridges (otelslog MultiHandler / root LoggingHandler with filter / winston-transport /
+  UI serverLog.ts), dev gate G1 before assets, 250 guard Part 1 → produced-signals registry, live-loop heartbeat
+  line as stall signal, drop 4 extra otelgrpc instruments via View.
+- Orchestrator probes: Go 1.27 has `slog.NewMultiHandler`; `@opentelemetry/winston-transport@0.5.0` deps
+  `api-logs ^0.52.0` (compatible with Node 0.52 line).
+- Adversary R1: NEEDS WORK, no Floor breach. Folded technical fixes: (1) sdk-node `spanProcessors` drops the
+  implicit traceExporter → list BatchSpanProcessor explicitly (C-16 @AC-1 @feature-226); (2) JS api 1.9.1 has no
+  proxy MeterProvider → bind histogram lazily after start; (3) Node flush must start in shutdown(), not in
+  tryShutdown (long-lived streams block it); (5) pre-250 panels use `{platform=…}` / `| json` / OTLP-failure-in-Loki
+  selectors that won't be produced → per-panel decision; (6) stall rule needs `noDataState: Alerting`;
+  (11) Python `LoggingHandler` deprecated in sdk 1.42.1; (12–13) status fix-up gaps (span ERROR status, cancel→1,
+  non-integer node codes→2); (14) shared golden status vectors; (15) guard fails if a sampler env is set;
+  (16) broader metric-identifier extraction; (17) createRequire under ESM; (18) Python atexit double-shutdown;
+  (19) stall uid meaning change recorded.
+- Open operator forks (R1 gate): AC-10 agent/ui empty-export; Go trace correlation; where G1 runs; 250 story +
+  guard Part 2 CHANGE.
+- Operator decisions at R1 gate (binding, 2026-10-21), verbatim answers:
+  - AC-10 agent/UI: "Agent should have metrics, UI should have metrics in the nextjs backend layer" — agent and the
+    UI's Next.js server (BFF/route-handler) layer each emit a real metric; AC-10 rows stay valid.
+  - Go trace correlation: "Retrofit all slog calls" — every Go slog call with a context in scope moves to its
+    `*Context` variant (trading, portfolio, marketdata).
+  - G1 location: "Two PRs via dev" — PR-A runtime export → main-dev → dev; G1 evidence on dev Grafana recorded here;
+    PR-B assets/guard/docs against proven names.
+  - Feature 250: "Amend 250 before it runs" — 250's spec is amended pre-execution so its follow-up citation points
+    at feature 274 (no `trace-derived-alerting` story) and Part 2 is noted for retirement by 274.
+    **C-16 CHANGE sign-off**: operator approves 274 retiring 250's guard Part 2 ("docs list only exported signals")
+    — record mirrored into 250's context.md when amended.
