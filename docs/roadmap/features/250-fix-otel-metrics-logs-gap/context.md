@@ -168,3 +168,57 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   reviews, recon and the 3-round design are on `origin/feature/fix-otel-metrics-logs-gap` (head `06faaeb5`). This
   session added the implementation spec on top of them.
 - Next: `/sdd-review fix-otel-metrics-logs-gap impl-spec`, then `/sdd-execute fix-otel-metrics-logs-gap`.
+
+## Session 2026-10-21 — sdd-review impl-spec (advisory)
+
+- Result: criteria FAIL (1 fail, 1 Floor breach F-03, 14 warnings); overlap WARN (4 soft file overlaps). Advisory;
+  lifecycle unchanged (`implementation-ready`). Every claim re-verified before editing implementation-spec.md.
+- Addressed (implementation-spec.md edits):
+  - F-03 Floor (old Step 1 Instruction 2 opened a main-dev PR from inside the spec): the follow-up story is now
+    **Prerequisite P-1**, outside `/sdd-execute`, with its own docs-only PR (F-02). Step 1 is a verification-only
+    marker (no Files; it records `<NNN>` here and blocks for the operator if P-1 has not landed). BRANCH SYNC
+    (`.claude/skills/sdd-execute/templates/branch-sync.md:35`) brings the dir onto the 250 branch. Total steps stay
+    12; no renumbering.
+  - Step 1 Files placeholder: P-1 lists the five `/sdd-story` files under a stated `<NNN>` rule. Re-verified
+    `253-fix-edgar-companyfacts-decode` is the highest prefix on `origin/main-dev`, so `<NNN>` ≥ 254.
+  - Step 10: the N/A coverage line is added. RED now has two runs: guard absent, plus a never-staged `exit 0` stub
+    that makes every red case fail on its own. `case_fail()` collects failures, so each case runs; `fail()` in
+    `check-migration-contract.test.sh:8-11` exits at the first failure.
+  - Step 7: the collector comment-only check is replaced by
+    `git diff -U0 … | grep -E '^[-+]' | grep -v -E '^(---|\+\+\+) ' | grep -v -E '^[-+][[:space:]]*(#|$)'`,
+    tested against sample diffs. The old regex matched indented comment edits. The fix still catches `- otlp` list
+    items, which the reviewer's suggested regex would have missed.
+  - Runtime git: the fixtures, including root findings `:18`, are extracted once and committed. The `.test.sh`
+    never calls `git`, and a grep check is added. The Step 12 `fetch-depth: 0` hedge is removed (squash-merge makes
+    `06faaeb5` unreachable on main-dev).
+  - Step 11: every tag is reported per line. Step 10 adds multi-tag cases. Corrected the reviewer's example:
+    `grafana-cloud.md:258` carries `P99` plus the xstk UIDs; `mute-timings.yaml` is on `:259`.
+  - Dashboard-fallback wording is added to Step 6 item 2 (`grafana-cloud.md:5`) and Step 7 item 2
+    (`docs/setup/CLAUDE.md:10`).
+  - Step 9: a refresh hit outside Files is escalated through the gap protocol plus a Deviation Log entry, never
+    staged (F-08). Each Files path gets a recorded `Teardown` line, and the Verification checks for it.
+  - `docs/launch-pdfs/product-features.md:198` (dashboards that no longer exist): in scope, added to Step 7, with
+    deletion on the fallback. `:312` is out of scope: it is a historical description of what feature 033 delivered.
+  - `docs/patterns/ci-overview.md`: one `otel-signals` row added to Step 12. The other omitted jobs are not
+    backfilled.
+  - Scope vs product-spec (C-11/P-03): `product-spec.md:113-114` names only the collector `:9` comment. Step 7 also
+    edits the `:35`/`:49` comments and the `scripts/setup-env.sh:213` string, under FR-4 "any other doc" and
+    design.md §3 (`design.md:81`, `:83`). These are comment/string edits only: still no pipeline, receiver or env
+    change. Recorded in Step 7 Codebase Evidence. product-spec.md is not edited.
+  - Step 8: the wording rule is restated as Instruction 7, with a grep check for removed-asset names.
+  - Overlap (226): a Step Dependencies line records 226's prior edits to the collector header and the docs
+    (226 `context.md:150`, `implementation-spec.md:570`) and the preserved attribute bullet (226 `design.md:76`).
+    084 was already recorded as rebase-only.
+- Open Threads (not addressed, carried to the `/sdd-execute` checkpoint):
+  - [ ] Step 7 still touches 6 files (reviewer: consider splitting, >5). Not split: a split would renumber
+    Steps 8-12 and every cross-reference to them, for comment/one-line edits that share one verification loop.
+    Operator call.
+  - [ ] C-18: guard heuristics (P3-count number words, P3-file resolution, the 3-separator fence grammar, ~20
+    cases) are vocabulary-bound. The reviewer requires no change; this is the first place to trim if the guard grows.
+  - [ ] P-1 has to be run by the operator (its own `/sdd-story` session and main-dev PR) before `/sdd-execute`
+    Step 1 can pass.
+- Notes: B2b trading-domain is N/A (only incidental words). C-14 consumer surface is none. No outbound gRPC.
+- Overlap findings: `084-droplet-compose-deploy` on `docs/patterns/observability.md` (rebase-only);
+  `226-fix-otel-trace-export` (launched) on the collector header, `observability.md`, `grafana-cloud.md`,
+  `packages/otel/CLAUDE.md:4`, the otel constitution, root findings `:17`/`:18` and the dashboards README attribute
+  bullet (rebase-only; the bullet is preserved by Step 5). No config-key, proto-field or migration collision.
