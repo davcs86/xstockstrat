@@ -1331,7 +1331,7 @@ An offline account has no broker: orders are recorded by hand and their fills co
 | `order_type` | string | no | `market` (default) \| `limit` \| `stop` \| `stop_limit` \| `trailing_stop` |
 | `qty` | float | `record_order` | Order quantity (> 0) |
 | `order_id` | string | confirm/get | The order to confirm or read |
-| `client_order_id` | string | no | Idempotency nonce for `record_order` (auto-generated when omitted) |
+| `client_order_id` | string | no | Idempotency nonce for `record_order`; must be a UUID (auto-generated when omitted) |
 | `filled_qty` | float | `confirm_order` | Confirmed fill quantity |
 | `filled_avg_price` | float | `confirm_order` | Average fill price |
 | `filled_at` | string | no | ISO-8601 fill time. Defaults to now on first confirm; otherwise the previously recorded time is kept (not shown while `NEW`). Pass it when partial fills land on different sessions |

@@ -185,7 +185,6 @@ ambiguity is logged here).
   verify the **writer** guarantees that state — deriving from a column nothing canonicalizes is how
   this defect existed in the first place.
 
-
 ### 2026-07-29 — 081-qa-capability — assumption
 - **Mistake**: A capability was asserted from **advertised metadata** rather than from the producer's
   behavior, and a feature was designed on top of it. The GitHub API reports `has_issues: true` for
@@ -2950,6 +2949,60 @@ ambiguity is logged here).
   - Before changing a shared RPC's failure or budget behaviour, enumerate every caller's request shape
     (window size, deadline) and make the change opt-in when the callers differ.
 
+### 2026-10-21 — fix-push-untargeted-broadcast — header
+- **Mistake**: Two design rounds justified relaying `x-access-scope` from notify as "values from mTLS-authenticated
+  producers". That reason was wrong:
+  - `EmitAlert` is pinned as unauthenticated (`services/xstockstrat-notify/src/__tests__/notifyServiceImpl.test.ts:219-224`).
+  - mTLS authenticates the calling service, not the user or the scope it asserts.
+- **Evidence**: `docs/roadmap/features/242-fix-push-untargeted-broadcast/design.md` § Chosen Approach item 3,
+  `context.md` 2026-10-21 entry.
+- **Rule it implies**: A relayed header trio is safe only if the receiver ignores it. Pin that with a test where
+  an elevated scope on an allowed peer gives an identical response, and a test where it is denied on a
+  disallowed peer. Never cite mTLS as authentication of the forwarded scope.
+
+### 2026-10-21 — fix-push-untargeted-broadcast — assumption
+- **Mistake**: A multi-round design debate carried its state only in-band between rounds. A later round then
+  claimed an on-disk checkpoint (`seeds/242/state-r3.json`) that never existed.
+- **Evidence**: `docs/roadmap/features/242-fix-push-untargeted-broadcast/context.md` 2026-10-21 entry.
+- **Rule it implies**: Before citing a checkpoint, check that the path exists. Persist design state durably
+  (design.md, the context.md entry) before the status flip, and refuse the flip if those writes fail (P-05).
+
+### 2026-10-20 — fix-sandbox-seed-keys — migration
+- **Mistake**: Recon flagged the 029 bare→full-dotted heal as the pattern to reuse, but that shape is unsafe to copy whenever a full-dotted twin may already exist. Two failures follow:
+  - The plain `SET key = namespace||'.'||key` aborts on `config_values_scope_uniq`.
+  - 029's separate post-rename literal UPDATE cannot tell a healed row from a pre-existing twin, so it overwrites the value that is live today.
+- **Evidence**: `docs/roadmap/features/243-fix-sandbox-seed-keys/design.md` (Chosen Approach §1, Rejected Alternatives); `services/xstockstrat-config/migrations/029_heal_config_keys_full_dotted.up.sql:24-28,38-43`; `017_config_secrets_and_scoping.up.sql:101-102`.
+- **Rule it implies**: A key-heal migration orders its statements as follows:
+  1. Snapshot the pre-state with `CREATE TABLE IF NOT EXISTS … AS`, which is replay-safe, and keep the snapshot in a forward-only down.
+  2. DELETE the bare rows that have a twin on the full scope tuple.
+  3. Rename and set any value in one UPDATE.
+
+### 2026-10-21 — fix-ibkr-request-signing — assumption
+- **Mistake**: A design round proposed one `.gitleaks.toml` allowlist entry with `regexTarget = "match"` and called
+  it "consistent with the existing entries". The file has a single `[allowlist]` table whose `regexTarget = "line"`
+  applies to every regex in it, so a per-entry target is impossible, and flipping the table re-tests the four
+  existing literals against the matched secret text instead of the line.
+- **Evidence**: `.gitleaks.toml:33-40`; `docs/roadmap/features/249-fix-ibkr-request-signing/design.md` §10.
+- **Rule it implies**: To allowlist a committed test key, either add a unique key-body substring regex to the
+  existing `"line"` table, or add a separate `[[allowlists]]` block ANDing `paths` with a regex (needs gitleaks
+  >= 8.21; confirm the version bundled by the CI action). Never flip the shared table, never use a bare `paths`
+  entry, and verify with a local `gitleaks detect`.
+
+### 2026-10-20 — fix-identity-ledger-test-suites — assumption
+- **Mistake**:
+  - AC-5 required `TAP summary reports "# fail 0"` and passed `/sdd-review`. The r4-proposed AC-6 required `# pass 0`.
+    Both literals were copied from Node 22 output (`.nvmrc`).
+  - Since Node v23.0.0 the default `node --test` reporter on non-TTY stdout is `spec`, so CI's Node 24
+    (`ci.yml:572`) prints `ℹ fail 0`. A Verification that greps the TAP literal fails on correct code, or is waived.
+- **Evidence**:
+  - `docs/roadmap/features/252-fix-identity-ledger-test-suites/acceptance.feature:46` (pre-amendment AC-5);
+  - `design.md` § Requirement amendment and § Per-step gate (adversary r4, objection 2, mediator-verified against
+    the Node 24 docs);
+  - related to `fails.md:2223-2226` (Node 22 vs 24 split).
+- **Rule it implies**: an AC or step Verification that quotes runner output either pins the reporter
+  (`node --test --test-reporter=tap …`) or is worded reporter-neutrally ("0 failed tests"). Capture the evidence on
+  CI's Node version and record it. Reinforces C-15 and P-06; no new ID.
+
 ### 2026-10-21 — fix-python-config-zero-trap — assumption
 - **Mistake**: A Track C fix reused the slug of launched feature 173 (`fix-python-config-zero-trap`).
   - The orphan cleanup resolves a branch to its feature by a slug glob and takes the first match, which is the launched 173.
@@ -2957,3 +3010,4 @@ ambiguity is logged here).
   - This happened twice in 8 h (2026-10-20T23:30Z, 2026-10-21T06:37Z). Each time, the next skill silently fell back to a base without the prior SDD commits.
 - **Evidence**: `.github/workflows/ci-validate-feature-status.yml:167,183`; 244 context.md sessions 2026-10-20 (sdd-review) and 2026-10-21 (sdd-design).
 - **Rule it implies**: A new feature or bug slug must be unique across all `docs/roadmap/features/*-<slug>` dirs, including launched ones. When `feature/<slug>` is missing, check the stale local tracking ref before falling back.
+

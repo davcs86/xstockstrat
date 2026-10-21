@@ -2062,8 +2062,8 @@ def register_tools(server: MCPServer) -> None:
               {"account": …}.
           'record_order'    — record a NEW order (no broker submit). Requires account_id, symbol,
               side ('buy'|'sell'), qty; order_type defaults 'market'. client_order_id is an optional
-              idempotency nonce (auto-generated when omitted). Returns {"order": …} (status NEW,
-              filled_qty 0).
+              idempotency nonce that must be a UUID (auto-generated when omitted). Returns
+              {"order": …} (status NEW, filled_qty 0).
           'confirm_order'   — write a fill. Requires order_id, filled_qty, filled_avg_price;
               filled_at is an optional ISO-8601 time: filled_at defaults to now on first confirm;
               otherwise keeps the previously recorded time (not shown while NEW). Pass filled_at
@@ -2096,7 +2096,11 @@ def register_tools(server: MCPServer) -> None:
             if operation == "record_order":
                 if not account_id or not symbol or not side or qty <= 0:
                     raise ValueError("record_order requires account_id, symbol, side, and qty > 0")
-                nonce = client_order_id or f"agent-{uuid.uuid4()}"
+                nonce = client_order_id or str(uuid.uuid4())
+                try:
+                    uuid.UUID(nonce)
+                except ValueError:
+                    raise ValueError(f"client_order_id must be a UUID, got {nonce!r}") from None
                 return await client.record_offline_order(
                     user_id, account_id, symbol, side, order_type, qty, nonce
                 )
