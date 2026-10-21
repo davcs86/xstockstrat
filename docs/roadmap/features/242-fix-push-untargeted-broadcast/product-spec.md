@@ -48,18 +48,21 @@ Per-user producers never set `target_user_id` (field 6 of `EmitAlertRequest`, `p
 - xstockstrat-notify (push audience selection in `webPush.ts`)
 - xstockstrat-portfolio (`emitRiskAlert` omits `TargetUserId` although `checkRiskLimits` has `userID`)
 - xstockstrat-analysis (live-loop strategy alerts omit `target_user_id` for owner-scoped strategies)
+- xstockstrat-identity (new SAN-gated `ListAdminUserIds` RPC; added at /sdd-design 2026-10-21, design.md)
+- xstockstrat-agent (`emit_alert` `broadcast=true` wording only, `app/tools.py:690-699`; added at /sdd-design 2026-10-21)
 
 ## Functional Requirements
 
 FR-1. Web Push for an alert with empty `target_user_id` sends only to subscriptions of users holding the admin role (operator decision 2026-10-20); a non-admin user's subscriptions receive none. How notify resolves the admin role is a design question.
 FR-2. A targeted alert pushes only to the target user's subscriptions (unchanged; regression guard).
 FR-3. Per-user producers set `target_user_id` to the content owner: portfolio `emitRiskAlert` on both paths (concentration `:991`, drawdown `:999`; owner = `checkRiskLimits` `userID`; `emitRiskAlert(ctx, msg)` takes no owner today) and analysis live-loop `_emit_alert` and `_emit_fundamentals_unavailable_alert` (owner = `definition.user_id`).
+FR-4. Notify resolves the admin audience through a live, uncached identity RPC `ListAdminUserIds` (additive, `packages/proto/identity/v1/identity.proto` beside `ListUsers` `:41`), gated on the mTLS peer SAN `xstockstrat-notify` only and header-blind; it returns active admin user IDs only (amended at /sdd-design 2026-10-21, P-03; design.md).
 
 ## Fix Scope
 
-- [x] No proto changes anticipated (`EmitAlertRequest.target_user_id` already exists; `Alert.target_user_id` comment "empty = broadcast" at `notify.proto:45` describes StreamAlerts and stays)
-- [ ] DB migration possible: only if design persists the admin audience on `notify.push_subscriptions`; it would be the next notify migration `004_<desc>.up.sql` + `.down.sql` (current max `services/xstockstrat-notify/migrations/003_alert_reads.up.sql`), run in notify's normal `scripts/db-migrate.sh` order; an applied migration is never edited (F-01)
-- [ ] Config key possible: only if design adds an audience toggle, named `notify.push.<key>` (C-05) and registered in `docs/patterns/config-governance.md` (beside `notify.push.min_severity`, `:528`) and the notify `CLAUDE.md` config table; a seeded key takes the next free `services/xstockstrat-config/migrations/` NNN after those claimed by 243 (031) and 241, checked across remote branches at /sdd-spec; owner + config team approval
+- [x] Proto change (amended 2026-10-21, FR-4): additive `IdentityService.ListAdminUserIds` in `packages/proto/identity/v1/identity.proto`; buf lint/breaking + `./scripts/buf-gen.sh`, identity-owner approval (C-09). Notify proto unchanged (`EmitAlertRequest.target_user_id` exists; `Alert.target_user_id` "empty = broadcast" at `notify.proto:45` describes StreamAlerts and stays)
+- [ ] DB migration: none (design chose the live identity lookup, 2026-10-21). Superseded conditional: only if design persists the admin audience on `notify.push_subscriptions`; it would be the next notify migration `004_<desc>.up.sql` + `.down.sql` (current max `services/xstockstrat-notify/migrations/003_alert_reads.up.sql`), run in notify's normal `scripts/db-migrate.sh` order; an applied migration is never edited (F-01)
+- [ ] Config key: none (`ADMIN_LOOKUP_DEADLINE_MS` is a mechanism constant, design.md F-07). Superseded conditional: only if design adds an audience toggle, named `notify.push.<key>` (C-05) and registered in `docs/patterns/config-governance.md` (beside `notify.push.min_severity`, `:528`) and the notify `CLAUDE.md` config table; a seeded key takes the next free `services/xstockstrat-config/migrations/` NNN after those claimed by 243 (031) and 241, checked across remote branches at /sdd-spec; owner + config team approval
 - [x] Behaviour change to feature 165 FR-3 (operator sign-off 2026-10-20); unit test `webPush.test.ts:147` (AC-4 broadcast) rewritten deliberately
 - [x] Docs that describe the broadcast change with the fix: the Web Push paragraph in `services/xstockstrat-notify/CLAUDE.md` ("empty ⇒ broadcast to all subscriptions") and the open bullet `services/xstockstrat-notify/docs/context-constitution-findings.md:38`
 

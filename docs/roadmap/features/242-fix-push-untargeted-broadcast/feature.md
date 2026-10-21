@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-19-notify-untargeted-push-broadcasts-all-users-defect.md`
 **Severity**: SEV-2
 **Created**: 2026-10-20
-**Last Updated**: 2026-10-20
+**Last Updated**: 2026-10-21
 
 ---
 
@@ -16,6 +16,7 @@
 | 2026-10-20 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-19-notify-untargeted-push-broadcasts-all-users-defect.md` |
 | 2026-10-20 | `draft` → `spec-ready` | /sdd-review | Product spec approved (5 warnings; overlap WARN ×3) |
 | 2026-10-20 | `spec-ready` (unchanged) | /sdd-review | Product spec re-review: PASS WITH WARNINGS (6 warnings, 4 notes; no Floor breach); overlap WARN ×4 (215 same-function, 244, 240, 251), no FAIL. Low-cost warnings fixed in product-spec.md + acceptance.feature |
+| 2026-10-21 | `spec-ready` → `design-approved` | /sdd-design | Design debated (5 rounds, full) and approved under operator standing authorization; recon.md + design.md written |
 
 ---
 
@@ -36,6 +37,8 @@ Provisional snapshot from `docs/runbooks/reviewer-registry.md` at /sdd-triage ti
 
 - [Product Spec](product-spec.md) — bug description and fix scope
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
+- [Recon](recon.md) — Phase 0 grounded codebase dossier
+- [Design](design.md) — debated, approved design (live SAN-gated identity `ListAdminUserIds` lookup)
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-push-untargeted-broadcast`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -49,4 +52,4 @@ Changes feature 165 FR-3 broadcast semantics for the push channel.
 
 ## Next Action
 
-`/sdd-design fix-push-untargeted-broadcast` (full — operator: no quick designs)
+`/sdd-spec fix-push-untargeted-broadcast` — generate implementation spec from the approved design

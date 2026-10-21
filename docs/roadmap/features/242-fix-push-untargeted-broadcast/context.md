@@ -129,3 +129,79 @@ OPERATOR DECISIONS (binding, recorded 2026-10-20):
 - Standing authorization: designs run in FULL mode only (no quick designs for automated fixes); the orchestrator auto-approves the design gate once rounds >= 2, no unresolved Floor (F-*) breach remains, no blocking objection remains, and every CHANGE to an existing @AC business rule is covered by an operator decision below.
 - Untargeted alerts (empty target_user_id) Web-Push ONLY to users holding the admin role — operator sign-off for the C-16 CHANGE reversing feature 165 FR-3 broadcast; the pinned test webPush.test.ts AC-4 broadcast case is rewritten deliberately.
 - Per-user producers (portfolio emitRiskAlert, analysis live_loop strategy/fundamentals alerts) set target_user_id to the owning user.
+
+## Session 2026-10-21 — sdd-design
+
+- Phase 0 Recon: recon.md was already on the branch (services: notify, portfolio, analysis). Key reuse: the
+  injected-pool audience query inside the `webPush.ts:116-118` catch-all; trading's `TargetUserId` precedent
+  (`trading.go:3348`). Added the `@AC-10 @FR-10 @feature-183` PRESERVE row this session.
+- Persistence (P-04/P-05), stated plainly: rounds r1-r4 were carried in-band only, in each round's synthesis, with
+  no on-disk checkpoint. An r4 claim of an intact checkpoint at `seeds/242/state-r3.json` was false; that file never
+  existed. No decision was lost, because each synthesis carried the full prior state forward, but none was durable
+  until r5. This entry and design.md are the first durable record.
+- Phase 1 Grilling: 5 rounds (full). Auto-approved under the operator standing authorization (`:75`, `:129`):
+  rounds 5 >= 2, no Floor breach, no blocking objection, and the only CHANGE is operator-covered.
+  - Chosen approach: a live, uncached identity `ListAdminUserIds` RPC. It is SAN-gated (`xstockstrat-notify`)
+    and header-blind. Notify's single-flight `AdminDirectory` relays the trio. The untargeted branch selects
+    `WHERE user_id = ANY($1::text[])`. Portfolio and live-loop producers set `target_user_id` to the owner.
+  - Rejected: a register-time admin bit (stale on demotion), a TTL cache, ledger-event sets, a cross-schema
+    read, a config list, loosening `adminGate` or minting scope, reusing `ListUsers`, a SAN+`x-internal-caller`
+    gate, trace-only forwarding with a C-03 exception, and ERROR only on codes 7/12/13. The full list is in
+    design.md § Rejected Alternatives.
+  - Per-round decisions:
+    - r1-r2: fork (b), a new narrow SAN-gated RPC.
+    - r3-r4: the module shape with no relative imports; test matrix (i)-(vii); real-socket case on the
+      generated descriptor; `PRIVATE_DOMAIN` env; @AC-8..11 numbering.
+    - r5: C-03 closed by trio forwarding; trio-safety rationale corrected to "the RPC is header-blind"
+      (EmitAlert is unauthenticated, `notifyServiceImpl.test.ts:219-224`), with case (vi-b) added; escalation
+      widened to any lookup failure, rate-limited to once per 60s; the `md?.get?.(h)?.[0]` idiom
+      (`notifyServiceImpl.ts:232`); `header-propagation.md` added to the same-PR docs.
+- Pre-gate amendments made this session, all in-feature:
+  - product-spec: FR-4 added; Affected Services gain identity and agent; the proto box reflects the additive RPC
+    (P-03).
+  - recon.md: the `@AC-10 @feature-183` PRESERVE row.
+  - acceptance.feature: @AC-8..@AC-11 minted from the feature branch (which held @AC-1..7).
+- Constitution rules touched: C-03, C-16, C-15, C-09, C-08, P-06, P-02/P-04/P-05, C-10, C-01/P-03, C-11, C-14,
+  C-18, F-04, F-06, F-07. Floor breaches: none.
+- Status: spec-ready → design-approved.
+
+### Decisions
+
+- The admin audience is a live identity lookup through `ListAdminUserIds`, gated on the mTLS SAN only. There is
+  no migration and no config key.
+- The C-03 trio is relayed in full. The relay is safe only because the receiving RPC ignores all headers.
+- Trading's per-account CRITICAL alerts (`trading.go:1938-1944`, `:2751-2757`) are not targeted in this
+  feature. They go to a C-14 follow-up.
+- The agent `emit_alert` wording is updated in-feature (`tools.py:690-699`, `mcp-tools.md:256`).
+
+### Open Threads
+
+- [ ] Silent fail-closed admin-push outage (SAN, endpoint or identity drift). Mitigations: rate-limited ERROR,
+  a startup ERROR, the real-socket test, `PRIVATE_DOMAIN`, and a NON-WAIVABLE dev launch gate (an admin device
+  receives an untargeted WARNING push; a non-admin device does not). Target: the notify and env steps, plus
+  the launch smoke test.
+- [ ] Header-blindness is the only guard on the relayed trio. Target: the identity step (cases vi/vi-b and the
+  constraint comment).
+- [ ] Load on identity's direct pool (max 2) from untargeted bursts. Target: the notify step (single-flight),
+  then watch in dev.
+- [ ] Single-flight joiners lose trace correlation (accepted). Target: the notify step, noted in the PR body.
+- [ ] Acceptance-ID collision from a stale checkout. Target: /sdd-spec, minting only from the feature branch.
+- [ ] Strip-types load evidence for the guarded `identityServiceImpl.test.ts` on Node 24. Target: the identity
+  test step (P-06).
+- [ ] Canonical `user_id` form match between `push_subscriptions` and `identity.users`. Target: the notify step.
+- [ ] Empty-owner producers degrade silently to an admin-only push. Target: the portfolio and analysis steps.
+- [ ] Merge-order coupling with 215 and the open `emitRiskAlert` concentration defect. Target: the /sdd-spec
+  overlap re-scan.
+- [ ] Trading halt and reconciliation alerts are admin-only until the follow-up ships. Target: before merge,
+  file the defect report with a `.status` sidecar and record a follow-up slug or operator sign-off (C-14).
+- [ ] Scope growth: 5 services plus agent wording, a proto RPC, a new edge, 3 env specs and 4+ docs. Target:
+  /sdd-spec step sizing, plus identity-owner proto approval.
+- [ ] Two Node test runners (`fails.md:2239-2241`). Target: the identity and notify test steps (both suites,
+  both `tsc` builds).
+
+### Operator decisions
+
+OPERATOR DECISIONS (binding, recorded 2026-10-21):
+- Standing authorization: designs run in FULL mode only (no quick designs for automated fixes); the orchestrator auto-approves the design gate once rounds >= 2, no unresolved Floor (F-*) breach remains, no blocking objection remains, and every CHANGE to an existing @AC business rule is covered by an operator decision below.
+- Untargeted alerts (empty target_user_id) Web-Push ONLY to users holding the admin role — operator sign-off for the C-16 CHANGE reversing feature 165 FR-3 broadcast; the pinned test webPush.test.ts AC-4 broadcast case is rewritten deliberately.
+- Per-user producers (portfolio emitRiskAlert, analysis live_loop strategy/fundamentals alerts) set target_user_id to the owning user.

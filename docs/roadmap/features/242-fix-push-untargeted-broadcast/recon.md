@@ -309,6 +309,10 @@ classes the four portfolio/analysis rows PRESERVE; they are EXTEND here because 
   assigns and removes roles" (`user-management-ui.feature:33-34`). A role change must reach the
   audience, so a stale snapshot is not acceptable. The same applies to `@AC-5` (deactivation, `:40-41`)
   and `@AC-11` (last-admin demotion, `:74-75`).
+- **PRESERVE (conditional: notify-to-identity lookup; added at /sdd-design 2026-10-21)** `@AC-10 @FR-10 @feature-183`
+  "Admin profile RPCs enforce admin gating at the identity service, not only in the agent"
+  (`services/xstockstrat-identity/acceptance/mcp-user-profile-roles.feature:10-14`). The admin metadata RPCs stay
+  untouched; a new identity RPC must likewise deny before touching the users table.
 - **CHANGE (no durable `@AC`; signed off)**: the feature 165 FR-3 rule "untargeted Web Push goes to
   every subscription" was never promoted to a suite.
   - It is pinned only by the unit test `services/xstockstrat-notify/src/__tests__/webPush.test.ts:147-155`.
