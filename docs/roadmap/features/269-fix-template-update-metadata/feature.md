@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-10-21 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-21-template-update-metadata-defect.md` (debt-radar D-41) |
+| 2026-10-21 | `draft` → `spec-ready` | /sdd-review | Product spec approved (4 warnings; overlap WARN: shared servicer.py with 244, 245) |
 
 ---
 
@@ -47,4 +48,4 @@ empty-id CREATE semantics also differ across the three template repositories.
 
 ## Next Action
 
-`/sdd-design fix-template-update-metadata` — recommended design depth: full (3 affected services; first decide whether template metadata is mutable); see context.md
+`/sdd-design fix-template-update-metadata` — recommended design depth: full (3 affected services); see context.md
