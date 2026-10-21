@@ -252,3 +252,143 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   objections 1 and 2 (remaining parts above).
 - Next: continue `/sdd-design fix-fundsignal-neutral-score` at round 6 (cap 8): commit B.1-B.3, then
   design.md stating the item-5 gates and citing the committed paths and this entry.
+
+## Session 2026-10-21 — sdd-design halted at gate (rounds 6-8)
+
+- Full debate reached round 8 (operator-raised cap, `context.md:244-245`) without meeting auto-approval.
+  Per grilling 'User stops'/cap rules: no design.md, no status.md or feature.md write. Status stays
+  `spec-ready`. Branch base verified: `origin/feature/fix-fundsignal-neutral-score` @ c937f066.
+- Relayed user request (verbatim): 'Override limit for 246'. Whether it authorises rounds beyond 8 or a
+  gate decision is for the operator; not interpreted here.
+- Auto-approve status after r8: rounds >= 2 met; no Floor (F-*) breach; no CHANGE to a durable `@AC`;
+  NOT met: blocking objection 1 below.
+
+## Open Threads
+
+### Approach (r8 synthesis; code design unchanged since r4 except r7 pb hardening)
+
+- Production code, one file `services/xstockstrat-analysis/app/engine/fundsignal_loop.py`:
+  - `_builtin_score` (`:416-432`): `missing = set(f.missing_metrics)` once; truthiness guards
+    (`:420,423,425,428,430`) -> `if "<m>" not in missing:`; pb branch `:424` -> `0.0 if pb <= 0` (matches
+    pe `:421`); empty `parts` -> `None` (was `0.5`, `:432`); `_BUILTIN_BANDS` comment `:47`
+    `<0 handled specially` -> `<=0 handled specially`.
+  - `_score` (`:409-414`) returns `(scores, unscored)`; one caller `:226`; built-in `None` -> `unscored`.
+  - `_score_via_formula` (`:447-467`): after the 6-key dict (`:452-459`),
+    `if set(f.missing_metrics).issuperset(fundamentals): unscored.append(sym); continue`. Partial rows
+    still pass wire 0.0 (`@AC-8`). Formula-exception skips (`:465-466`) keep own WARN, not counted.
+  - `_warn_unscored(run_id, unscored, total)`, `total = len(fetched)` (same denominator `_finish` `:289`
+    and `_abort_cycle` `:274` pass as `symbols_done`); one
+    `log.warning("fundsignal run %s: %d of %d symbols unscored (no fundamentals): %s", run_id,
+    len(unscored), total, ",".join(sorted(unscored)))`, `_apply_symbol_cap` shape (`:350-355`); no-op on
+    empty; called right after `:226`, before the `try`/`_ensure_source_registered` (`:235-236`), so it
+    fires on normal `_finish` (`:286`) and `_SystemWriteRejected` abort (`:270-278`); `run_id` from `:170`.
+  - `_finish`, `_abort_cycle`, `run_completed` payload unchanged. `symbols_unscored` DROPPED (reverses r4/r5;
+    no reader, `insightsBff.ts:151-156`).
+- Tests (RED first, C-13):
+  - `fundamentals_row(symbol, missing=(), **metrics)` in `tests/conftest.py` (returns real
+    `marketdata_pb2.Fundamentals`); consumers `_fund` (`test_fundsignal_loop.py:31`),
+    `test_owner_header_guard.py:197,221`, `_snapshot_resp` (`test_fundamentals_formula_servicer.py:93-95`,
+    pass-through).
+  - `BUILTIN_SCORER_METRICS = (*fundsignal_loop._BUILTIN_BANDS, "eps")` module-local in
+    `test_fundsignal_loop.py` (C-13 lazy materialisation, `docs/patterns/test-data-inventory.md:70-76`;
+    reverses r7 conftest home and the r5 production `_BUILTIN_METRICS`).
+  - AC-1: MSFT ~0.8667; keys reaching `_map_directions` == {MSFT}; no direction asserted; `caplog` asserts
+    exactly one unscored WARN with the cycle `run_id` and `DIA,IWM,QQQ,SPY,VOO`.
+  - AC-2: ZRO 0.30 (`_lin(20,10,35)=0.6`, `_lin(0,0.25,0.05)=0.0`).
+  - AC-3, one formula-path cycle, two synthetic tickers: NODATA (all six formula keys missing) and DIVONLY
+    (five missing, `dividend_yield` 0.013). `ExecuteFormula` called exactly once
+    (`fundamentals_scoring.py:52`) with dividend_yield 0.013, pe_ratio 0.0, `x-user-id: system`,
+    `x-internal-caller: analysis-fundsignal`; exactly one IngestSignal and one `fundsignal_emitted` row,
+    both DIVONLY (harness composite 0.7, `test_fundsignal_loop.py:543`); none for NODATA; no direction.
+  - Abort-path wiring test: `ManageSignalSource` rejects -> `_SystemWriteRejected` -> `_abort_cycle`; WARN
+    still logged. Fails if the call is deleted or moved inside the `try`.
+  - Zero-value table: pe->0.0, pb->0.0, roe->0.0, de->1.0, eps->0.0. `_warn_unscored` unit test (one WARN
+    with run_id + sorted symbols; none on empty). TestScoringFailClosed (`:649-683`) stays green.
+- Gates to state in design.md: (a) vendor-zero probe discharged for staging (`context.md:246-250`);
+  (b) dev smoke `run_fundamentals_scan symbols=[SPY,VOO,QQQ,IWM,DIA] force=false dry_run=false`, PASS iff
+  `symbols_processed==5`, `deferred_count==0`, `signals_emitted==0`, and the WARN whose `run_id` equals the
+  summary `run_id` lists all five; `symbols_processed<5` or no log access = INCONCLUSIVE; `force=true`
+  forbidden; FAIL blocks promotion, its signals go to B.2 (d); (c) prod parity: record prod
+  `marketdata.fundamentals.provider` and `snapshot_source` before promotion; re-run (a) if either differs.
+- design.md must also record: C-14 owner (B.2 for stored fabricated signals; residual (c) ZRO 0.6 partial-row
+  signals); sibling sweep word for word (`scoring.py:15,39` intended neutral; `scoring.py:31` owned by
+  B.3(1); `screener.py:467` unreachable; `screener.py:480` owned by 144;
+  `fundamentals_value_quality.py:162,180` owned by B.3(3)); pb `<= 0` residual (pb=0 + de=0 averages 0.5);
+  formula-path DIVONLY residual (`@AC-8`, `fails.md:2725` shape; opt-in, seeded empty
+  `008_analysis_fundsignal_keys.up.sql:34-35`; owned by B.3(3)); adversary provider-boundary trace
+  (`finnhub_client.go:176-189,209-220`, `fmp_client.go:301-352`, `edgar_client.go:560-562`,
+  `marketdata_repo.go:537-562`, `marketdata_service.go:2033-2038`) UNVERIFIED, execute must re-grep;
+  `symbols_processed` rule, C-16 dispositions, promotion target.
+- Docs / C-10 / F-08: analysis `CLAUDE.md:123` + producer bullets;
+  `services/xstockstrat-analysis/docs/context-constitution.md:42`; `services/xstockstrat-agent/app/tools.py:1409`
+  and `docs/runbooks/mcp-tools.md:836` (`dry_run` doc drift); log `packages/proto/analysis/v1/analysis.proto:554`
+  in `docs/context-constitution-findings.md` (no proto edit). Step Files list must name every touched file:
+  `fundsignal_loop.py`, `tests/conftest.py`, `tests/test_fundsignal_loop.py`, `tests/test_owner_header_guard.py`,
+  `tests/test_fundamentals_formula_servicer.py`, analysis `CLAUDE.md`, analysis `docs/context-constitution.md`,
+  agent `app/tools.py`, `docs/runbooks/mcp-tools.md`, `docs/context-constitution-findings.md`, the four
+  `docs/reports/*` files + `.status` sidecars. Root teardown (`/context-forge:context-constitution refresh`
+  or manual reconciliation in the PR).
+- Footprint: one analysis production file, tests, one agent docstring, docs, four defect reports. No proto,
+  migration, config, or ingest/indicators code.
+
+### Blocking objections
+
+1. P-05/P-04/C-15 gate writes (execution precondition, not a design question). Not on origin as of c937f066:
+   - (i) B.1 `product-spec.md`/`acceptance.feature` per `context.md:196-204`, incl. replacing
+     `acceptance.feature:19` (`with direction "buy"`) with `And exactly one analysis.fundsignal_emitted row
+     exists, for "MSFT"`, EXCEPT AC-3 is the r7 two-ticker NODATA/DIVONLY scenario (replaces the one-VOO
+     wording at `context.md:202-204`, which contradicts `@AC-8`/`@AC-26`);
+   - (ii) B.2 report `docs/reports/2026-10-21-ingest-fundsignal-fabricated-signals-not-retracted-defect.md`
+     + `.status` (`open`) with amendments (a)-(d);
+   - (iii) the three B.3 reports + `.status` (`open`);
+   - (iv) round-6/7/8 delta in `context.md` (this entry discharges it);
+   - (v) design.md citing SHAs of (i)-(iii) and c937f066, plus the `feature.md` Status History row and
+     `status.md` `spec-ready` -> `design-approved`.
+   Clears only when `git show origin/feature/fix-fundsignal-neutral-score:<path>` shows each file and
+   `acceptance.feature` no longer contains `with direction "buy"`.
+
+### Non-blocking objections (adopted in synthesis; proposer/spec must confirm)
+
+- C-15 (r8 adversary, raised blocking, downgraded): AC-1 test omits the `with direction "buy"` Then still at
+  `acceptance.feature:19`. Dropped deliberately in r3 (`context.md:158-159`; n=1 quantile lock,
+  `fundsignal_loop.py:470-480`); B.1 rewrite at `context.md:199-201`. Residual folded into blocker 1(i).
+- C-08/P-06: WARN wiring untested -> `caplog` tests on normal and abort paths (above).
+- P-03: `total` unspecified -> `len(fetched)`.
+- Formula-path all-missing rule uses the producer 6-key dict, not formula inputs; DIVONLY scored from wire
+  zeros. Accepted under `@AC-8`; owned by B.3(3); design.md lists it.
+- C-13/C-18: `BUILTIN_SCORER_METRICS` module-local; `fundamentals_row` stays in conftest (3 consumers).
+- P-05: rounds 6-8 were not persisted -> this entry.
+- F-08: `/sdd-spec` and `/sdd-review impl-spec` must check the Files list above.
+- C-14 / `fails.md:1815` sibling-sweep dispositions and C-14 owner carried word for word into design.md.
+
+### Floor breaches
+
+- None in any round (r1-r8).
+
+### Uncovered @AC changes
+
+- No CHANGE to a durable `@AC`, so operator coverage is not required. EXTEND (not operator-covered, none
+  needed): `@AC-1 @FR-1`, `@AC-2 @FR-2`, `@AC-3 @FR-3` (246, feature-local), `@AC-8 @feature-201` (formula
+  partial row passes wire 0.0, asserted durably by AC-3 DIVONLY; a B.3(3) fix would need a CHANGE sign-off).
+  PRESERVE: `@AC-6`/`@AC-26`/`@AC-36`/`@AC-37 @feature-224`, `@AC-4 @feature-201`, `@AC-1`/`@AC-4
+  @feature-156`, `@AC-6 @feature-154`.
+
+### Open risks
+
+- FR-2 trusts `missing_metrics`; after pb `<= 0`, de=0 still scores 1.0 (pb=0 + de=0 -> 0.5); gates cover
+  only probed envs/dates; pre-pointer-type cache rows unverified (24h TTL bound).
+- Provider-boundary citations not re-grepped. Probe sampled SPY/VOO/QQQ only; IWM/DIA covered by smoke (b).
+- Skip visibility is log-only; smoke (b) needs DO log access, else INCONCLUSIVE (`fails.md:2463`).
+- A failing smoke emits up to five fabricated dev signals until B.2 (d).
+- Small-n quantile: one scored symbol is labelled buy (`:470-480`, B.3(2)).
+- Stored fabricated 0.5 signals live up to `valid_days` (90) until B.2; ZRO 0.6 partial-row signals outside B.2.
+- Real zeros now score 0.0 and read as 0.5 downstream until B.3(1).
+- Same-day reruns re-fetch unscored symbols (bounded by `daily_call_budget`).
+- Overlap with 244-fix-python-config-zero-trap on `min_conviction_to_emit` (`:229`) / presence helper.
+- Round budget exhausted at r8.
+
+### Operator decision needed
+
+- (A) authorise the orchestrator to perform gate writes (i)-(iii) and (v) as fixed above, then approve with
+  no further round; (B) raise the cap beyond 8 for another round; or (C) redirect.
+- Next: on (A), run the `/sdd-design fix-fundsignal-neutral-score` gate step from this entry, then `/sdd-spec`.
