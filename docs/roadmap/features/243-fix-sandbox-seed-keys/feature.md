@@ -15,6 +15,7 @@
 |---|---|---|---|
 | 2026-10-20 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-19-indicators-sandbox-seed-keys-unprefixed-defect.md` |
 | 2026-10-20 | `draft` → `spec-ready` | /sdd-review | Product spec approved (5 warnings) |
+| 2026-10-20 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved under operator standing authorization; recon.md + design.md written |
 
 ---
 
@@ -34,6 +35,8 @@ Provisional snapshot from `docs/runbooks/reviewer-registry.md` at /sdd-triage ti
 
 - [Product Spec](product-spec.md) — bug description and fix scope
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
+- [Recon](recon.md) — grounded codebase dossier (Phase 0)
+- [Design](design.md) — approved design: twin-wins heal migration 031, rejected alternatives, open risks
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-sandbox-seed-keys`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -47,4 +50,4 @@ Operator decision: fix in code plus a config migration.
 
 ## Next Action
 
-`/sdd-design fix-sandbox-seed-keys` (full — operator: no quick designs)
+`/sdd-spec fix-sandbox-seed-keys` — generate implementation spec from the approved design

@@ -155,3 +155,88 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Files modified: product-spec.md (persona, FR-1..FR-4, Affected Services, Fix Scope DB/code/doc bullets),
   acceptance.feature (@FR tags; AC-1 value_type + allowed_imports; AC-2 allowed_imports row; new @AC-4).
 - Next: `/sdd-design fix-sandbox-seed-keys` (full — operator: no quick designs).
+
+## Session 2026-10-20 — sdd-design
+
+- **Phase 0 Recon:** wrote recon.md.
+  - Services: xstockstrat-config, xstockstrat-indicators.
+  - Consumer surfaces `/insights`, `/config-ui` and agent `test_formula` were reconned read-only. None changes.
+  - Key reuse patterns:
+    - the 029 guarded rename (`029_heal_config_keys_full_dotted.up.sql:24-28`);
+    - the 030 insert with `ON CONFLICT` (`030_…up.sql:22-23,55`);
+    - the `indicators-007.sql` assertion blocks run by `migration-rerun.sh:183-190`.
+- **Phase 1 Grilling:** 2 rounds (full).
+  - Termination: auto-approved by the orchestrator under the operator standing authorization (rounds >= 2, no
+    Floor breach, no blocking objection, no uncovered CHANGE).
+  - The round-1 blocking objection (the G1 audit had no owner) closed in r2. The r2 adversary verdict is SOUND.
+- **Chosen approach:** one forward-only config migration, 031. Full design: design.md.
+  - Up statements, in order:
+    1. pre-state snapshot;
+    2. twin-wins DELETE;
+    3. one rename-plus-literal UPDATE, with values set only where `user_id IS NULL`;
+    4. `ON CONFLICT DO NOTHING` insert;
+    5. headroom description rewrite.
+  - Writes are attributed with `updated_by = 'system:config-migration-031'`.
+  - The down is `SELECT 1;` and keeps `config.config_values_premigration_031`.
+  - No indicators source change: the getters already read full-dotted keys (`watcher.py:134,138,142`), and the
+    request carries no `user_id` (`watcher.py:61-67`).
+  - Tests:
+    - `scripts/migration-assertions/config-031.sql`: AC-1/AC-3 read-back, and an AC-4/AC-5 BEGIN…ROLLBACK `\ir`
+      replay;
+    - an AC-2 parametrized getter test.
+- **Rejected:**
+  - fork 1b twin overwrite (a behaviour change);
+  - the literal applied to per-user rows;
+  - 029's post-rename literal UPDATE;
+  - a manual prod gate with a freeze;
+  - the 017 DROP+CREATE snapshot;
+  - hand-written audit rows;
+  - rename-only;
+  - the `goto 30` fixture;
+  - a symmetric down;
+  - `SCALAR_BOUNDS_REGISTRY` bounds;
+  - a class-level seed guard;
+  - Track B SetConfig.
+- **Constitution rules touched:** F-01, F-04, F-07, C-10, C-11, C-14, C-15, C-16, C-18, P-03, P-06, CONFIG-2,
+  CONFIG-4, CONFIG-10, config invariant #6. Floor breaches: none.
+- **Business rules (C-16):**
+  - No CHANGE to any durable @AC.
+  - Feature-243 @AC-1..@AC-5 are EXTEND (operator decision 2026-10-20).
+  - The feature-173/176/182/184/209/224/228/147 rules are PRESERVE.
+- **Design confirmations** (the binding reading for impl-spec):
+  - (i) "Fix in code" means the committed migration plus tests, with no indicators source change.
+  - (ii) The operator figures "5000 / 134217728 in both environments" mean "the values prod effectively runs
+    today". If a production twin exists, twin-wins applies that reading literally.
+  - (iii) `config-031.sql` is permanent coupling. A future migration that touches these rows or the
+    `config_values` columns must update or retire it.
+  - (iv) A later migration may drop `config_values_premigration_031` after operator review. No cleanup is
+    scheduled (YAGNI).
+- **Open Threads** (from design.md Open Risks; target step in brackets):
+  - Production state is unknown until the post-promotion snapshot read. A non-default prod twin keeps its value.
+    [G1 prod advisory read-back]
+  - An operator-edited global bare prod row is overwritten to the literal. It is inert, attributed and
+    snapshotted. [G1 prod read-back]
+  - `config_values_premigration_031` is permanent, with no scheduled cleanup. [migration step]
+  - main-dev `acceptance.feature` is stale: AC-1 says 3000, and AC-4/AC-5 are missing. Append @AC-5 on the
+    feature branch, then run `/sdd-sync` before review or promotion. [/sdd-spec]
+  - Feature 241 may change how `updated_by` reaches `changed_by`, and it rewrites `config-governance.md:93-103`.
+    [impl-spec review; second to land rebases]
+  - Feature 244 shares `tests/test_config_watcher.py`. [AC-2 test step; second to land rebases]
+  - The 031 NNN can collide. [migration step; re-verify max NNN just before merge, `fails.md:2909-2912`]
+  - `config-031.sql` replays a historical up-file against the HEAD schema forever. [assertion step]
+  - Hotfix #1263 overlaps textually on the indicators `CLAUDE.md` and findings `:23`. Its clamp ceiling becomes
+    the row value. [docs step]
+  - No `pg_notify` is sent. This is safe only under twin-wins; fallback 1b needs a notify or restart.
+    [G1 escalation]
+  - Non-blocking r2 objections are adopted in the design but not yet confirmed by the proposer. Each must land in
+    impl-spec as written: [/sdd-spec, /sdd-review impl-spec]
+    - snapshot plus advisory prod read;
+    - per-user rename-only;
+    - step-4 attribution;
+    - 029-shaped red;
+    - Given-faithful fixture (i);
+    - TEMP baseline;
+    - 241 wording;
+    - `value_encrypted` exclusion.
+- **Ledger:** appended a `fails.md` migration entry: the 029 heal shape is not conflict-safe to reuse.
+- **Status:** spec-ready → design-approved.
