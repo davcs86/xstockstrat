@@ -85,7 +85,8 @@ half-copied request shape (D-45); per-call `onError` omitted with no global fall
 ## Affected Services
 
 - xstockstrat-ui (fix site for all four)
-- xstockstrat-analysis (D-45 evidence/history semantics; see Open Questions NC-D — change only if a phantom-row write is confirmed)
+- xstockstrat-analysis (read-only: the D-45 fix relies on the existing `strategy_id == strategy_id_ref`
+  fingerprint rule; NC-D resolved 2026-10-21, no change)
 - xstockstrat-trading (read-only: `TRADING_MODE_UNSPECIFIED` is derived server-side by `resolveTradingMode`;
   confirmed 2026-10-21, no change)
 
@@ -105,13 +106,21 @@ dev. D-11 needs a Playwright e2e (per the surveyor's trade-off note).
 
 ## Open Questions
 
-- [ ] **NC-D.** Does today's symbol-page run (with `strategyIdRef` but no `strategyId`) write a phantom
-  history/grade row in analysis keyed on an empty or other `strategy_id`? If yes, analysis gets a change
-  (and possibly a cleanup) in this feature. If no, analysis stays untouched and FR-4 is UI-only. Resolve in
-  `/sdd-design` recon.
+- [x] **NC-D.** Does today's symbol-page run (with `strategyIdRef` but no `strategyId`) write a phantom
+  history/grade row in analysis keyed on an empty or other `strategy_id`? **Resolved 2026-10-21 from code:
+  no grade row, but inert history rows. FR-4 is UI-only and analysis is unchanged.** `RunBacktest` keys every
+  write on `request.strategy_id` (`""` here): `_persist_backtest_run`, `_persist_backtest_detail` and
+  `_persist_symbol_cells` (fingerprint `NULL`) write rows under `(user_id, "")`
+  (`services/xstockstrat-analysis/app/handlers/servicer.py:1268-1314`). `_recompute_headline` returns early because
+  no strategy row exists for `""` (`servicer.py:2822-2826`), so no grade is written. The `""` rows are unreachable.
+  `ListBacktests` and the other run-history reader abort unless the caller owns `strategy_id`
+  (`servicer.py:3062-3075`, `:6278-6290`), and grade evidence is read by `(strategy_id, fingerprint)` only
+  (`servicer.py:2784-2792`). The orphan-row cleanup is out of scope (see below).
 
 ## Out of Scope
 
 - Refactoring unrelated to the bug
 - Performance improvements unrelated to the fix
+- Deleting the inert `strategy_id = ""` run-history, detail and evidence rows left by past symbol-page runs
+  (NC-D). No reader or grade can reach them, and removing them would need a data migration.
 - The missing unpriced guard on `/trader/portfolio` and `positions/[symbol]` (feature-gap I-15)
