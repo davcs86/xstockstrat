@@ -39,3 +39,41 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   service, no proto/migration; a config-key choice is possible, which is itself a quick trigger). Escalate to full if
   design adopts cached channels or new config keys.
 - Development branch: feature/fix-agent-client-deadlines
+
+## Session 2026-10-21 — sdd-review product-spec
+
+- Product spec approved (PASS WITH WARNINGS). Status: draft → spec-ready.
+- OPERATOR DECISIONS (binding, recorded 2026-10-21):
+  - Grouped by service+theme from the 2026-10-20 debt-radar scan; Track C.
+  - Scope is D-16 excluding the get_config_value call covered by 247-fix-agent-getconfig-deadline.
+- Warnings (7):
+  1. FR-3 coverage weak (C-15): AC-3/AC-6 each stall one call; `run_backtest` makes a single backend call
+     (`tools.py:783`, `client.py:634`). **Resolved:** added @AC-8 (`ingest_signal` with IngestSignal and EmitAlert
+     both stalled, a sequential chain).
+  2. FR-3 feasibility unproven for multi-call tools (`instantiate_template`, `manage_watchlist` read-modify-write,
+     config tools, `ingest_signal`). **Resolved in spec:** FR-3 now requires design to enumerate every tool with more
+     than one sequential backend call and show its worst-case sum. `trigger_backfill` / `run_fundamentals_scan` are
+     single-call (`tools.py:1387`, `:1416`), so 45 s fits.
+  3. AC-4 compound plus wall-clock flakiness. **Resolved:** split into @AC-4 (slow success) and @AC-9 (never
+     responds); the feature header now states the bounds are asserted with an injected/fake clock or a measured
+     tolerance, not raw sleeps.
+  4. AC-5 samples 9 of ~71 sites. **Resolved:** added @AC-10, a static (AST) check that every unary stub call in
+     `client.py` passes `timeout=`; FR-1 cites it.
+  5. FR-4 wording never asserted. **Resolved:** @AC-1 now asserts the "did not respond within" wording.
+  6. Cross-feature 247 report reconciliation (247 `implementation-spec.md:82, :502-503` still plans
+     `docs/reports/2026-10-21-agent-rpc-deadlines-defect.md`). **Open:** reconcile at 247 execute (not editable here).
+  7. No explicit persona. **Resolved:** Problem Statement names the MCP client user / operator.
+- Overlap findings (WARN only; no shared config key, proto field or migration):
+  - 247-fix-agent-getconfig-deadline: same file `app/client.py` (247 edits `get_config_value` `:1751-1758`, adds
+    `_CONFIG_READ_TIMEOUT_S`), `tests/conftest.py`, `tests/test_client.py`, comment-only `tools.py:2365-2366`.
+    247 merges first; 273 rebases and does not re-edit 247's site.
+  - 215-block-fundamentals-strategy-on-etf (in-progress): `client.py` / `tools.py` around `run_backtest`
+    (tool summary/docstring region expected); verify at 215 execute.
+  - 241-fix-config-audit-author-spoof (implementation-ready): `tools.py` / `client.py` (config-write path likely);
+    verify at spec.
+  - 249-fix-ibkr-request-signing (implementation-ready): `tools.py` broker-account tools; textual rebase only.
+  - 244 references `tools.py:715`, `:1642-1662` as reference only; 251, 274, 084, 242-253 low risk.
+  - Merge-order: no row exists. Recommended SOFT row (WARN, Resolved=No) for the router:
+    `fix-agent-client-deadlines` (273) after `fix-agent-getconfig-deadline` (247), same-file overlap; also
+    consider 215/241 rows at the impl-spec step. Not written by this step.
+- Next: `/sdd-design fix-agent-client-deadlines` (quick).
