@@ -12,6 +12,15 @@ Feature: fix-marketdata-fundamentals-cache (bug fix)
     And the response is fresh fundamentals for "AAPL", not ResourceExhausted
     And no quota WARNING alert is emitted
 
+  @AC-9 @FR-1 @regression
+  Scenario: An FMP daily cap of 0 means uncapped on the multi-symbol path
+    Given "marketdata.fundamentals.provider" is "fmp" and "marketdata.fmp.daily_request_cap" is 0
+    And the fundamentals cache has no row for "AAPL" or "MSFT"
+    When GetFundamentalsMulti is called for "AAPL" and "MSFT"
+    Then the FMP client makes the fetch
+    And the response holds fresh fundamentals for "AAPL" and "MSFT", not ResourceExhausted
+    And no quota WARNING alert is emitted
+
   @AC-2 @FR-2 @regression
   Scenario: Edgar snapshot rows do not consume the Finnhub quota
     Given "marketdata.fundamentals.provider" is "finnhub" with "marketdata.finnhub.symbols_per_minute" 20 and "marketdata.finnhub.rate_window_seconds" 60
@@ -45,7 +54,7 @@ Feature: fix-marketdata-fundamentals-cache (bug fix)
     And the quote fetch for "AAPL" succeeds but the profile fetch returns ErrFMPDailyCapExceeded
     When GetFundamentals is called for "AAPL"
     Then a WARN is logged naming "AAPL" and the profile enrichment
-    And the response's missing_metrics lists the metrics the profile call supplies
+    And the response's missing_metrics lists "beta" and "sector", the metrics the profile call supplies
     When the FMP daily quota resets and GetFundamentals is called for "AAPL" again, within "marketdata.fmp.cache_ttl_hours"
     Then the FMP client makes the profile fetch for "AAPL"
 
