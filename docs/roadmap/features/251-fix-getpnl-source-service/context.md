@@ -389,3 +389,104 @@ Items 3/3' and 9 of round 6 stand. Round-8 additions (portfolio paths under `ser
 1. Accept B6 as discharged at `d707d239`, or require the per-round r6/r7/r8 context entries first.
 2. Then evaluate the gate against `state-r8.json` (no further debate round needed) and write `design.md`
    carrying approach A-F and the corrected F2 risk text.
+
+## Session 2026-10-21 — sdd-design (in progress, rounds 1-8)
+
+- Persistence step (P-05) of the full `/sdd-design fix-getpnl-source-service` debate before it continues past
+  round 8. Source: orchestrator checkpoints `state-r1.json`..`state-r8.json` (seeds/251), read as data. Branch tip
+  at write: `e28cce95`. `design.md` NOT written; `status.md` stays `spec-ready`. Floor breaches: none in any round.
+- This entry discharges state-r8 item 6(i) (per-round records, one sub-section per round) and 6(vii) (B9 (a)
+  recorded as debate-resolved). Earlier "halted at gate" entries batched these; they are not edited (append-only).
+
+### Operator decisions (binding, recorded 2026-10-21)
+
+- Standing authorization: designs run in FULL mode only (no quick designs for automated fixes); the orchestrator
+  auto-approves the design gate once rounds >= 2, no unresolved Floor (F-*) breach remains, no blocking objection
+  remains, and every CHANGE to an existing @AC business rule is covered by an operator decision below.
+- Full design depth (operator: full is the minimum).
+- Operator override (2026-10-21): the debate cap was lifted to 8, and on 2026-10-21 lifted again to 12 for this
+  feature (relayed request "Override limit for 251").
+- Operator approval (2026-10-21): the two OPEN-B6 side-defect reports were to be filed before the debate
+  continued — done in `d707d239`.
+
+### Orchestrator evidence (verified facts, not decisions)
+
+- Verified 2026-10-21 on `origin/feature/fix-getpnl-source-service` (`e28cce95`):
+  `docs/reports/2026-10-21-portfolio-live-fold-sell-sign-loss-defect.md` and
+  `docs/reports/2026-10-21-trading-bracket-leg-fills-missing-from-realized-pnl-defect.md` exist with `open`
+  `.status` sidecars (commit `d707d239`); product-spec.md cites both under Out of Scope (`:191`, `:196`); this file
+  has the session "B6 side-defect reports filed" (`:253`). Re-checked by this step at `e28cce95`.
+- Rounds 6-8 reported B6 as unfiled only because the read-only checkout they read was stale (`d077dcfe`); it is now
+  refreshed to `e28cce95`.
+
+### Per-round objection closures
+
+- **r1** — Skeleton accepted: ledger paging fix, source-service const, merged paging helper, signed qty via side
+  lookup + producer `side`, sequence-ordered fold, fail-closed errors. 4 blockers opened: (a) unbounded ledger load
+  on the single `DB_POOL_MAX=1` query connection shared with AppendEvent; (b) permanent unresolved side surfaced as
+  retryable UNAVAILABLE (`portfolio_handler.go:423-424`); (c) deploy-order infinite loop against an old ledger that
+  ignores `page_token` (`ledgerServiceImpl.ts:171`); (d) cross-account netting, `pnl.Fold` keys by symbol only
+  (`pnl.go:67`). Corrections: ms-precision `recorded_at` (`ledgerServiceImpl.ts:35`, `:56`), bad UUID -> code 13.
+- **r2** — Closed r1 (a)-(d): user-pinned ListOrders + point lookups; FAILED_PRECONDITION for unresolved side vs
+  UNAVAILABLE for read gaps; repeated-token / repeated-event_id guards; composite `account_id|symbol` key. Opened
+  B1 (page cap in wrong unit, data-tuned permanent outage), B2 (ledger load unmeasured vs fire-and-forget 10s
+  AppendEvent, `trading.go:3663-3674`), B3 (mixed-era `''` account bucket fabricates realized).
+- **r3** — Closed B1 (cap dropped, four termination guards), B2 (lookup concurrency, ship gate (iv) thresholds),
+  B3 (three-way mixed-era rule, FR-4). Opened B4 (keyset fix has no CI-RED-able test; `ledgerServiceImpl.test.ts:21-29`
+  swallows import failure, routed to 252), B5 (side/mixed-era checks not user-scoped, preload is platform-wide
+  `portfolio_service.go:772`), B6 (live-fold sign loss + bracket-leg follow-up reports unfiled; C-10/C-14).
+- **r4** — Closed B4 (strip-safe `queryEventsPage.ts`, unguarded unit test, `ledger-pg-test` CI job), B5 (five-stage
+  pipeline, checks after user/mode filter, zero-lookup RED for other user). Opened B7 (`toGRPCError`
+  `portfolio_handler.go:432-447` maps FailedPrecondition/DeadlineExceeded/Canceled to INTERNAL), B8 (dormant
+  `ledgerServiceImpl.test.ts` cases collide with 251 once 252 lands). B6 carried.
+- **r5** — Closed B7 (explicit cases mirroring `trading.go:223-238`, ctx-first `classifyGetPnLError`; platform @AC-7
+  brought into wire conformance), B8 (`makeRow` `cursor_us`, hasMore decode, soft merge-order row). Preload dropped
+  for positive-only cache (C-18). Opened B9 (adapter wire test has no seam: concrete `*service.PortfolioService`,
+  `portfolio_handler.go:45`, `:49`). B6 carried. Halted at cap 5.
+- **r6** — Closed B9 seam: option (a) `export_test.go` + `package service_test` adapter test; sequential lookups
+  (go.mod untouched); sequence carried on map-appended partials. Opened B10 (pre-done ctx races pgxmock
+  `expectations.go:71-77`), B11 (unexported `posRow`/`positionCols`/`anyArgs` not visible to service_test), B12
+  (two-partial fixture order-invariant, cannot fail). B6 carried (stale checkout).
+- **r7** — Closed B10 (live ctx, cancel/block inside OnQuery, `Calls() >= 1`), B11 (setup-owning shim on
+  `newQuoteSvc`, always registers positions expectation), B12 (three-partial F2; adversarial Events order A,B,S,
+  buggy pass ~(1/8)^20). Folded: `seq int64` (`ledger.proto:33`), filter-only-when-set, PageSize 0 -> 100, case (4)
+  under guard, no-op AppendEvent, `driver.go:39-41` citation. B6 carried (stale checkout).
+- **r8** — No new blocker. Folded as REQUIRED (non-blocking): corrected F2 risk text (insertion-stable iteration
+  makes F2 stronger, not weaker; P-03); zero-value-safe cache field (fails.md:2710); fake returns Unimplemented for
+  `TimeRange`/`FromSequence` (`ledger.proto:64`, `:66`; fails.md:577); 501-event drain test as paging consumer
+  (PageSize 500, `portfolio_service.go:754`); wire case (7) pins portfolio @AC-5 EXTEND; no `Block` field;
+  `fillEvent` stays inline; parity test covers builders (fails.md:1708); case (5) seeded via EnsureSignalWatchlist,
+  named `_F127AC7`; COVERPKGS accepted (`ci.yml:256`). B6 reported blocking (stale checkout `d077dcfe`).
+
+### Surviving approach (state-r8)
+
+- Round-5 items 1, 2, 4, 5, 8 verbatim: ledger keyset paging in `queryEventsPage.ts` + thin delegate (integer-µs
+  compare, ORDER BY recorded_at, event_id; error map 22007/22008/22P02 -> 3); 252 reconciliation; ctx-first
+  `classifyGetPnLError`/`toGRPCError`; trading `side` key; UI FR-3; ship gate incl. cold-cache gate (iv); build order.
+- Portfolio GetPnL: five-stage pipeline, fold key `trading_mode|account_id|symbol`, fail-closed sentinels, no
+  preload, sequential per-order StreamKey side lookups for the caller's side-less fills only, positive-only cache
+  as a zero-value-safe `PortfolioService` field, `sort.SliceStable` by sequence before `pnl.Fold`.
+- Round-8 A-F as recorded in the "halted at gate, round 8" entry above: `testdata/ledger.go` fake; `export_test.go`
+  shim (`WirePosition`, `NewWireTestService`, `CtxWithUser`, `Guard`); `portfolio_grpc_wire_test.go` adapter cases
+  1-7; F1 (200), F2 (A,B,S, exactly 200 on 20 runs), FR-5 drain test; touchpoints with no proto/migration/config/
+  go.mod/ci.yml change; doc reconciliations (`recon.md:139` @AC-5 PRESERVE -> EXTEND; platform @AC-7 @feature-127
+  PRESERVE; C-15 append AC-4..AC-22 + FR-4/FR-5 with @FR tags).
+- **B9 — RESOLVED BY THE DEBATE** as option (a) under the standing authorization (converged r6, refined r7-r8). Not
+  an operator pick. Closes round-5 "Operator decision needed #2" and the B9 "Operator picks one" line.
+- @AC impacts: PRESERVE (251 @AC-1..3; portfolio @AC-6; platform @AC-7 @feature-127; trading @AC-10; trading offline
+  @AC-14/@AC-7/@AC-11; ledger @AC-8) and EXTEND (portfolio @AC-5 @feature-229; 251 @AC-4..@AC-22). No CHANGE, so
+  no operator coverage required.
+
+### Open blocking objections
+
+- [ ] **B6** — the only blocker in state-r8, raised against stale `d077dcfe`. Per the orchestrator evidence above,
+  its substance (both reports filed, sidecars `open`, cited at `product-spec.md:191`, `:196`, closing entry `:253`)
+  is discharged at `d707d239`; its residual ordering items 6(i) and 6(vii) are discharged by this entry. The gate
+  evaluator confirms closure against `e28cce95`; this persistence step does not evaluate the gate.
+- No other blocking objection is open. The r6/r7/r8 ordering deviation (rounds run against a stale checkout before
+  the filing was visible) is recorded per round above.
+
+### Next
+
+- Debate continues past round 8 (cap 12) or proceeds to gate evaluation against `state-r8.json`; at design write,
+  `design.md` carries approach A-F, the corrected F2 risk text, and B9 as debate-resolved.
