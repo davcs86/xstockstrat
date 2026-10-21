@@ -235,3 +235,71 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - fails.md:75-78, :1329, :1425, :2780, :2810, :2827, :2860;
   - insights.md:3587.
 - Status: spec-ready → design-approved.
+
+## Session 2026-10-20 — sdd-spec
+
+- Generated implementation-spec.md with 13 steps. Status → implementation-ready.
+- Order: proto (1) → proto-gen (2) → config service + test (3-4) → trading (5-6) → agent (7-8) → ui (9-10) →
+  docs (11-13).
+- Scenario coverage:
+  - AC-1 → Step 4;
+  - AC-2 → Steps 4 and 6 (the config half `params[6]`/`[10]`, the trading half callerID with no author);
+  - AC-3 → Step 4;
+  - AC-4 → Step 8.
+
+  Every design "Tests MUST" pin is mapped to a step (fails.md:2810).
+- Key codebase findings (all confirmed in the tree at this branch head):
+  - `configServiceImpl.ts`:
+    - `:376` `callerUserId`;
+    - `:378-393` global branch, with the block-scoped `internalCallerAuthorized` at `:380-385`;
+    - `:405` `callerIdentity`;
+    - `:410-414` the defect;
+    - `:513` INSERT params (`[6]` `updated_by`, `[10]` `caller_identity`);
+    - `:424`/`:438` enum and bounds messages.
+  - `authz.ts:46-50` `MISSING_AUTHOR_ERROR`; `:82-97` `hasInternalCallerAuthority`.
+  - Config's last migration is `030`; no migration is needed.
+  - A fourth vacuous-pass rejection case not in recon: `setConfigScalarBounds.test.ts:304-312` (`intVal 56`,
+    code-only). It is added to the Step 4 `assert.match` list with `/\[30, 55\]/` (`configServiceImpl.ts:133`).
+  - Agent anchors:
+    - `tools.py:1642,1648,1663-1664,1683,1694` (`set_config`);
+    - `tools.py:341,353-354,357` (`_write_source_bearer`);
+    - `client.py:2094,2100,2142,2149`.
+  - Trading:
+    - `trading.go:2176` is the only Go `Author:` site;
+    - the `fakeConfigSetter` at `trading_reconciliation_test.go:746-756` drops `callerID`;
+    - the assertion sits at `:789-790`.
+  - UI:
+    - `configUiBff.ts:53` and `insightsBff.ts:179` are the stamps;
+    - no `configUiBff` unit test exists;
+    - the canonical test-JWT home is `e2e/helpers/auth.ts:29` `signTestJwt` (C-12).
+  - Docs: `config-rollout.md:150-163` documents a `RolloutConfig` RPC that `config.proto:20-35` does not
+    declare. Bare keys at `:93`, `:213` and `:228` fail NOT_FOUND after migration 029:24-28.
+- Spec-time decisions (no design deviation; each records how a design item is realised):
+  - **P-06 RED where the design pin is green on both trees.**
+    - The trading callerID pin and the UI `x-user-id` header pins already hold before the fix.
+    - Step 6 therefore adds a proto-reflection "author unset" assertion
+      (`req.ProtoReflect().Has(…ByName("author"))`), which names no deprecated Go symbol, so there is no SA1019
+      and no nolint.
+    - Step 10 adds `expect(sent.author).toBe('')`.
+    - Both are test reads only. The rejected alternatives (keep a BFF `author: ''` stamp, keep the
+      `'user-mallory'` passthrough) stay rejected.
+  - **C-13: `bound_admin` fixture in `tests/conftest.py`.** It has two consumer files, `test_config_tools.py`
+    and `test_template_tools.py`. The existing `bound_caller` binds TRADER, while AC-4 names ADMIN `u-1`.
+  - **The follow-up peerSan defect report is a Step 11 docs step, not written at spec time.** design.md § Open
+    Risks says "address at /sdd-spec", but this session's single-writer scope (P-01) restricts writes to the
+    feature directory. Step 11 lands it in the same PR (P-03: recorded, not dropped).
+  - **"Propagated, not authenticated" wording applied now** (design.md item 6, C-15):
+    - `acceptance.feature` lines 3-5, plus the titles of the AC-1 and AC-3 scenarios (IDs unchanged);
+    - product-spec Expected, FR-3 and the AC-3 summary line.
+    - The agent "verified claims" wording is left alone: the OAuth JWT is verified.
+- Open Threads routed (from the design-session list):
+  - [ ] trusted-header residual → Step 11 (defect report) + Steps 3/12/13 (wording);
+  - [ ] mcp probe → Step 8;
+  - [ ] named pins → Steps 4, 6, 8, 10;
+  - [ ] code-only rejection tests → Step 4;
+  - [ ] no real-DB harness → the Step 4 SQL-review note;
+  - [ ] audit "By" spelling → Step 12;
+  - [ ] deprecation linters → the Steps 5/6 golangci-lint and Steps 9/10 `pnpm run lint`;
+  - [ ] adjacent drift → Step 12 fixes `config-rollout.md:122-124,150-163`, Step 13 records `tools.py:1665-1667`;
+  - [ ] docs sweep → Steps 12-13 + teardown.
+- Ledger: no new line.

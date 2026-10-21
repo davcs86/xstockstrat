@@ -21,13 +21,14 @@ user writing their own per-user row, can therefore attribute any change to anoth
 `author: claims.user_id` (`services/xstockstrat-ui/src/lib/configUiBff.ts:53`, `insightsBff.ts:179`).
 
 **Expected (operator decision 2026-10-20, context.md).** Attribution (`updated_by` / `changed_by`) comes only
-from verified identity:
+from propagated identity (propagated, not authenticated: the SetConfig grant has no `peerSan`, `authz.ts:66-76`;
+filed as a follow-up defect, implementation-spec Step 11):
 - a human write takes the propagated `x-user-id`;
 - an automated write takes the `callerID` of the `x-internal-caller` grant that actually authorized it.
   `hasInternalCallerAuthority` (`services/xstockstrat-config/src/grpc/authz.ts:82-96`) must return true; an
-  unauthorized header is not verified identity.
+  unauthorized header is not propagated identity.
 
-`SetConfigRequest.author` is ignored. A write with no verified identity is rejected with `INVALID_ARGUMENT`,
+`SetConfigRequest.author` is ignored. A write with no propagated identity is rejected with `INVALID_ARGUMENT`,
 even when it passes the authz gate and carries a free-text `author`. Today the global gate accepts an admin
 write with no `x-user-id` (`:386`) and attributes it to `author` (`:410`).
 
@@ -41,7 +42,7 @@ Identity precedence when both are present is Open Question Q1.
 - **FR-2.** An automated write with no `x-user-id`, authorized by an `x-internal-caller` grant
   (`hasInternalCallerAuthority` true, `authz.ts:82-97`), records that grant's `callerID` as `updated_by` /
   `changed_by`. An unauthorized `x-internal-caller` header is never credited.
-- **FR-3.** A write with neither a verified `x-user-id` nor an authorized `x-internal-caller` is rejected
+- **FR-3.** A write with neither a propagated `x-user-id` nor an authorized `x-internal-caller` is rejected
   `INVALID_ARGUMENT` (`MISSING_AUTHOR_ERROR`, `authz.ts:46-50`) before any row is written, whatever `author` it
   carries.
 - **FR-4.** The agent sends no free-text `author` on any SetConfig it issues: `set_config` (`tools.py:1694`,
@@ -154,7 +155,7 @@ See `acceptance.feature` for the regression scenarios that must fail on the bugg
 fix (Constitution **C-15**):
 - AC-1 (FR-1): a human write;
 - AC-2 (FR-2): an internal-caller write;
-- AC-3 (FR-3, FR-2): no verified identity → rejected;
+- AC-3 (FR-3, FR-2): no propagated identity → rejected;
 - AC-4 (FR-4): agent SetConfig writes carry no free-text `author`.
 
 Also, existing tests pass and the affected services are smoke-tested on dev.

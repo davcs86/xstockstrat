@@ -17,19 +17,25 @@
 | 2026-10-20 | `draft` → `spec-ready` | /sdd-review | Product spec approved (9 warnings) |
 | 2026-10-20 | `spec-ready` (unchanged) | /sdd-review | Product spec re-reviewed, PASS WITH WARNINGS (8 warnings); FR-1..FR-4, AC-4, Open Questions Q1-Q5 added |
 | 2026-10-20 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved under operator standing authorization; recon.md + design.md written |
+| 2026-10-20 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 13 steps |
 
 ---
 
 ## Reviewers
 
-Provisional snapshot from `docs/runbooks/reviewer-registry.md` at /sdd-triage time (2026-10-20). `/sdd-spec` overwrites it with per-step assignments.
+Canonical snapshot from `docs/runbooks/reviewer-registry.md`, written by /sdd-spec on 2026-10-20 from the
+per-step `**Reviewers**` in `implementation-spec.md`.
 
-| Reviewer | Focus |
-|---|---|
-| `xstockstrat-config` owner | Config key naming (`<service>.<category>.<key>`), environment (`production`/`staging`) / global-per-user scoping, secret encryption + redaction, WatchConfig stream stability |
-| `xstockstrat-agent` owner | MCP tool contract stability (name, parameters, return shape) and `docs/runbooks/mcp-tools.md` parity; admin `x-access-scope` forwarded only by the management tools; no secret values in tool output |
-| Security | Auth scope and audit attribution: attribution must derive from verified headers (`x-user-id` / `x-internal-caller`), never request-body free text |
-| Proto Reviewer + `packages/proto` owner | Only if design deprecates or repurposes `SetConfigRequest.author` (field 4): deprecation comment, no removal, `buf breaking` passes |
+| Reviewer | Steps | Focus |
+|---|---|---|
+| Proto Reviewer | 1, 2 | Field number uniqueness, no breaking change without a deprecation comment, `buf lint` / `buf breaking` pass |
+| `xstockstrat-config` owner | 1, 2, 3, 4 | Config key naming, environment / global-per-user scoping, secret encryption + redaction, WatchConfig stream stability |
+| Security | 3 | Auth scope and audit attribution: derived from propagated headers (`x-user-id` / authorized `x-internal-caller`), never request-body free text |
+| `xstockstrat-trading` owner | 1, 2, 5, 6 | Order execution correctness, broker API safety, fill detection, paper-only dev invariant, position limit enforcement |
+| `xstockstrat-agent` owner | 1, 2, 7, 8 | MCP tool contract stability (name, parameters, return shape) and `docs/runbooks/mcp-tools.md` parity; admin `x-access-scope` forwarded only by the management tools; no secret values in tool output |
+| `xstockstrat-ui` owner | 1, 2, 9, 10 | Config mutation safety, Connect-RPC call safety, environment scope correctness, no secret values rendered in UI |
+
+Steps 11-13 (docs) have no reviewer.
 
 ---
 
@@ -39,7 +45,7 @@ Provisional snapshot from `docs/runbooks/reviewer-registry.md` at /sdd-triage ti
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
 - [Recon](recon.md) — Phase 0 grounded codebase dossier
 - [Design](design.md) — approved design (2 rounds, full): chosen approach, rejected alternatives, open risks
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-config-audit-author-spoof`_
+- [Implementation Spec](implementation-spec.md) — 13 steps: proto → config → trading → agent → ui → docs
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -52,4 +58,4 @@ attribute a write to someone else. The MCP `set_config` tool passes `author` str
 
 ## Next Action
 
-`/sdd-spec fix-config-audit-author-spoof` — generate implementation spec from the approved design
+`/sdd-review fix-config-audit-author-spoof impl-spec` — validate implementation spec, then `/sdd-execute fix-config-audit-author-spoof`
