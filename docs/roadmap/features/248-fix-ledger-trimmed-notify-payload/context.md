@@ -81,3 +81,38 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - Standing authorization: designs run in FULL mode only (no quick designs for automated fixes); the orchestrator auto-approves the design gate once rounds >= 2, no unresolved Floor (F-*) breach remains, no blocking objection remains, and every CHANGE to an existing @AC business rule is covered by an operator decision below.
   - Full design depth.
 - Next: `/sdd-design fix-ledger-trimmed-notify-payload` (full).
+
+## Session 2026-10-20 — sdd-review product-spec (re-review, resume)
+
+- Re-run of /sdd-review product-spec against the spec as of `2279d1f6`. Criteria: PASS WITH WARNINGS (7 warnings,
+  0 fails, 0 floor breaches). Overlap: WARN (no FAIL). Status stays `spec-ready`: the `draft` → `spec-ready` row
+  was already written by the prior session, so no new Status History row is added.
+- Warnings (7) and how this session handled them:
+  - No `stream_key`-filtered scenario. Already resolved: AC-8 (`acceptance.feature:66-71`).
+  - FR-4's no-row branch had no scenario. Already resolved: AC-7 (`acceptance.feature:56-64`).
+  - AC-6 "on every attempt" implied retry semantics. Resolved: reworded to "fails with a database error until that
+    error clears". Whether to retry is still for /sdd-design to decide.
+  - AC-2 is deterministic only if the appends are back-to-back. Resolved: the When now reads "appended back-to-back,
+    without waiting for delivery". The flush at `ledgerServiceImpl.ts:255-258` is synchronous today; an async re-fetch
+    is what makes FR-3 hard.
+  - Whether 248 waits for 252 or ships its own harness (C-08, P-06). Already in product-spec § Acceptance Criteria
+    ("Sequencing on 252"). Settle at /sdd-design or /sdd-spec; impl-spec states the dependency or merge-order entry.
+  - Test feasibility: AC-4..AC-7 need fault/timing injection, and a trigger-level proof needs real Postgres. Resolved:
+    product-spec § Acceptance Criteria "Test tiers" bullet; impl-spec maps each AC to a tier.
+  - Doc drift outside this spec: `services/xstockstrat-ledger/CLAUDE.md` says portfolio holds "three" permanent
+    StreamEvents subscriptions; the correct count is five (`portfolio_service.go:168`, `:1117`, `:1129`, `:1249`,
+    `:1297`). This is outside the writer's paths, so it is added as a router carry item for the teardown audit.
+- Overlap findings: same as the prior session. [file] hard sequencing on 252 (`services/xstockstrat-ledger/package.json`
+  test script, `ledgerServiceImpl.test.ts`, `eventNotifier.test.ts`); 252 should land first. Low-risk shared context
+  only for portfolio (240/242/251), `ledgerServiceImpl.ts:138-140` (251, read-only), migrations/config (the conditional
+  `004` is unclaimed; re-derive at /sdd-spec), analysis (244/245/246) and otel (250). There is no merge-order row yet for
+  248/252 (proposed: 248 waits for 252, Resolved = No; the router asks before writing).
+- Router carry items (added):
+  - [ ] Fix the portfolio subscription count ("three" → five) in `services/xstockstrat-ledger/CLAUDE.md` during the
+    teardown audit.
+- Operator decisions (as relayed by the workflow orchestrator, recorded verbatim):
+
+  OPERATOR DECISIONS (binding, recorded 2026-10-20):
+  - Standing authorization: designs run in FULL mode only (no quick designs for automated fixes); the orchestrator auto-approves the design gate once rounds >= 2, no unresolved Floor (F-*) breach remains, no blocking objection remains, and every CHANGE to an existing @AC business rule is covered by an operator decision below.
+  - Full design depth.
+- Next: `/sdd-design fix-ledger-trimmed-notify-payload` (full).

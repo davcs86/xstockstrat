@@ -83,6 +83,9 @@ real `ledgerServiceImpl`.
   resumes. Its first `Then` also holds on the buggy code; only the second `Then` is red before the fix.
 - **AC-6/AC-7 harness.** Inject the full-row read result (error or empty) through a fake pool; sequences 11/12 assume a
   fresh test sequence.
+- **Test tiers.** AC-4..AC-7 need fault or timing injection (stalled reader, append inside the replay window, failing
+  or empty read). A mocked notifier fed a stub row covers the fan-out at unit tier. The stub itself comes from the trigger
+  (`001_ledger_events_hypertable.up.sql:72`), so a trigger-level proof needs real Postgres. impl-spec maps each AC to a tier.
 
 ## Out of Scope
 

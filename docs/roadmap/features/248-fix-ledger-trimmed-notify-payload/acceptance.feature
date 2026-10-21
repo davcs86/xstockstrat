@@ -16,7 +16,7 @@ Feature: fix-ledger-trimmed-notify-payload (bug fix)
   @AC-2 @FR-3 @regression
   Scenario: A trimmed event keeps its place in the live sequence
     Given a StreamEvents subscriber with no filters is live
-    When three events are appended with payload sizes 100, 8000 and 100 chars
+    When three events are appended back-to-back, without waiting for delivery, with payload sizes 100, 8000 and 100 chars
     Then the subscriber receives exactly three messages, in ascending sequence order, with no duplicate sequence
     And each message carries its full payload
 
@@ -46,7 +46,7 @@ Feature: fix-ledger-trimmed-notify-payload (bug fix)
   @AC-6 @FR-4 @regression
   Scenario: A trimmed live event whose full row cannot be read is never delivered as a stub
     Given a StreamEvents subscriber with no filters is live and its last delivered sequence is 10
-    And the live stream's read of the full row for the next trimmed event fails with a database error on every attempt
+    And the live stream's read of the full row for the next trimmed event fails with a database error until that error clears
     When an "order.filled" event with a JSON payload of 8000 chars is appended as sequence 11
     And an event with a 100-char payload is appended as sequence 12
     Then the subscriber receives no message for sequence 11 or 12 on that stream
