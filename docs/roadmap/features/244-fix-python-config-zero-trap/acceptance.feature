@@ -57,43 +57,56 @@ Feature: fix-python-config-zero-trap (bug fix)
       | xstockstrat-ingest     | snapshot holds the key as a float value 2.5   | get_int   | ingest.test.mismatched_int               | 7       |
 
   @AC-5 @FR-3 @regression
-  Scenario: Ingest's backfill concurrency keeps its zero clamp
-    Given "ingest.backfill.max_concurrent_jobs" is stored as 0
-    When the ingest watcher resolves backfill_max_concurrent_jobs
-    Then it returns 3
+  Scenario: Ingest's backfill job concurrency keeps its zero clamp
+    Given "ingest.backfill.max_concurrent_jobs" is stored as the int value 0
+    When the ingest servicer builds its backfill job semaphore
+    Then the semaphore admits 3 concurrent jobs
 
   @AC-6 @FR-3 @regression
   Scenario Outline: A trap-dependent site keeps the coded default for a stored zero
-    Given "<key>" is stored as a zero value
+    Given "<key>" is stored as the <type> value <stored>
     When <service> resolves it for <site>
     Then the effective value is <effective>
 
     Examples:
-      | service                | key                                              | site                                 | effective |
-      | xstockstrat-ingest     | ingest.backfill.max_concurrent_chunks            | the backfill chunk semaphore         | 3         |
-      | xstockstrat-ingest     | ingest.mcp_client.poll_interval_seconds          | the mcp_client poll loop             | 300       |
-      | xstockstrat-indicators | indicators.sandbox.timeout_ms                    | ExecuteFormula                       | 5000      |
-      | xstockstrat-indicators | indicators.sandbox.memory_bytes                  | ExecuteFormula                       | 134217728 |
-      | xstockstrat-analysis   | analysis.screener.max_duration_seconds           | the ScreenSymbols deadline           | 120       |
-      | xstockstrat-analysis   | analysis.backtest.portfolio_position_weight      | portfolio-mode sizing                | 0.10      |
-      | xstockstrat-analysis   | analysis.backtest.detail_retention_per_strategy  | backtest-detail retention            | 20        |
-      | xstockstrat-analysis   | analysis.opportunity.max_concurrent_bars_fetches | the opportunity bars-fetch semaphore | 2         |
-      | xstockstrat-analysis   | analysis.backtest.default_fill_model             | a RunBacktest without fill_model     | 0         |
+      | service                | key                                              | type   | stored | site                                  | effective                 |
+      | xstockstrat-ingest     | ingest.backfill.max_concurrent_chunks            | int    | 0      | the backfill chunk semaphore capacity | 3                         |
+      | xstockstrat-ingest     | ingest.backfill.chunk_max_bars                   | int    | 0      | the chunk planner's bar cap           | 200000                    |
+      | xstockstrat-ingest     | ingest.backfill.chunk_window_days                | int    | 0      | the chunk planner's window in days    | 90                        |
+      | xstockstrat-ingest     | ingest.mcp_client.poll_interval_seconds          | int    | 0      | the mcp_client poll loop              | 300                       |
+      | xstockstrat-indicators | indicators.sandbox.timeout_ms                    | int    | 0      | ExecuteFormula                        | 5000                      |
+      | xstockstrat-indicators | indicators.sandbox.memory_bytes                  | int    | 0      | ExecuteFormula                        | 134217728                 |
+      | xstockstrat-indicators | indicators.sandbox.max_concurrent                | int    | 0      | the sandbox semaphore capacity        | 4                         |
+      | xstockstrat-analysis   | analysis.engine.eval_interval_seconds            | int    | 0      | the live-loop sleep between cycles    | 60                        |
+      | xstockstrat-analysis   | analysis.engine.max_strategies_per_cycle         | int    | 0      | the live-loop per-cycle pair budget   | 50                        |
+      | xstockstrat-analysis   | analysis.engine.fundamentals_blend_strategy_id   | string | ""     | the blend-governed strategy id        | "fundamentals_macd_blend" |
+      | xstockstrat-analysis   | analysis.strategy.default_cooldown_days          | int    | 0      | the default re-entry cooldown in days | 31                        |
+      | xstockstrat-analysis   | analysis.scoring.shrinkage_days                  | int    | 0      | the headline-grade shrinkage k        | 250                       |
+      | xstockstrat-analysis   | analysis.screener.max_duration_seconds           | int    | 0      | the ScreenSymbols deadline            | 120                       |
+      | xstockstrat-analysis   | analysis.backtest.portfolio_position_weight      | float  | 0.0    | portfolio-mode sizing                 | 0.10                      |
+      | xstockstrat-analysis   | analysis.backtest.detail_retention_per_strategy  | int    | 0      | backtest-detail retention             | 20                        |
+      | xstockstrat-analysis   | analysis.opportunity.max_concurrent_bars_fetches | int    | 0      | the opportunity bars-fetch semaphore  | 2                         |
+      | xstockstrat-analysis   | analysis.backtest.default_fill_model             | int    | 0      | a RunBacktest without fill_model      | FILL_MODEL_SAME_BAR_CLOSE |
 
+  # Guards against over-clamping: a blanket max(1, ...) floor turns the seeded midnight hour into 1.
+  # FR-5 audited fact: no seeded 0/'' row differs from its default; the 008 fundsignal rows are bare-keyed.
   @AC-7 @FR-5 @regression
-  Scenario Outline: A seeded zero or empty row keeps its effective value
-    Given the config row "<key>" holds its seeded value <seed>
+  Scenario Outline: A stored zero whose coded default is also zero keeps its effective value
+    Given "<key>" holds the <type> value <stored> (<origin>)
     When xstockstrat-analysis reads it for <site>
     Then the effective value is <effective>
 
     Examples:
-      | key                                        | seed | site                           | effective |
-      | analysis.fundsignal.scoring_formula_id     | ""   | the fundsignal scoring formula | ""        |
-      | analysis.fundsignal.min_conviction_to_emit | 0.0  | the fundsignal emit floor      | 0.0       |
-      | analysis.opportunity.refresh_hour_utc      | 0    | the opportunity refresh hour   | 0         |
+      | key                                              | type   | stored | origin              | site                           | effective |
+      | analysis.opportunity.refresh_hour_utc            | int    | 0      | seeded by 028:51,54 | the opportunity refresh hour   | 0         |
+      | analysis.readiness_materializer.refresh_hour_utc | int    | 0      | seeded by 027:37,40 | the readiness re-warm hour     | 0         |
+      | analysis.fundsignal.min_conviction_to_emit       | float  | 0.0    | operator-set        | the fundsignal emit floor      | 0.0       |
+      | analysis.fundsignal.scoring_formula_id           | string | ""     | operator-set        | the fundsignal scoring formula | ""        |
 
   @AC-8 @FR-6 @regression
   Scenario: SetConfig still rejects 0 for a minValue-1 key read by a Python service
+    Given an ADMIN caller
+    And "analysis.opportunity.max_concurrent_bars_fetches" exists as an int config row (seeded by 028:87,90)
     When SetConfig writes "analysis.opportunity.max_concurrent_bars_fetches" = 0
     Then it fails with INVALID_ARGUMENT naming the bounds [1, 5]
 

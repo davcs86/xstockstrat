@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-10-20 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-19-python-config-zero-trap-defect.md` |
+| 2026-10-20 | `draft` → `spec-ready` | /sdd-review | Product spec approved (8 warnings, 2 notes; overlap WARN) |
 
 ---
 
@@ -47,4 +48,4 @@ or a zero signal-rank weight cannot be configured).
 
 ## Next Action
 
-`/sdd-design fix-python-config-zero-trap` — recommended design depth (full) from triage; see context.md
+`/sdd-design fix-python-config-zero-trap` (full — operator: no quick designs)
