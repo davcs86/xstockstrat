@@ -11,6 +11,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-10-21 | `idea` → `draft` | /sdd-story | Product spec generated. NNN 274 is operator-specified, not max+1 (254); see `context.md` |
+| 2026-10-21 | `draft` → `spec-ready` | /sdd-review | Product spec approved (0 warnings open; 1 FAIL + 9 warnings across two passes fixed) |
 
 ---
 
@@ -46,5 +47,5 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review otel-metrics-logs-export product-spec` — AI review of the product spec before `/sdd-design`.
+`/sdd-design otel-metrics-logs-export` — recon + design debate (run after re-reading 250's current state).
 Hard ordering: 250 (`fix-otel-metrics-logs-gap`) merges first (`merge-order.md`).

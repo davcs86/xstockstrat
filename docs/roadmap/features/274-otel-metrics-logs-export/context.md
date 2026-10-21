@@ -28,3 +28,25 @@
     change that filed this story (outside SDD, per root CLAUDE.md: docs-only edits are out of the entry-point rule).
 - Open forks deferred to `/sdd-design` (see product-spec Open Questions): FR-2 series-name parity across
   languages, cardinality budget, and whether 250's `trace-derived-alerting` follow-up should cite 274 instead.
+
+## Session 2026-10-21 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready.
+- Pass 1: FAIL on criterion 9 (7 unchecked Open Questions), plus warnings: FR-2/AC-2 series-name conflict (C-15),
+  thin AC coverage of FR-1/3/4/5/6 (C-15), AC-3 log text not in code, deployment env parity (C-1).
+  Fixed: series name is the contract (a rename needs operator sign-off and a superseding AC); design forks moved to
+  "Deferred to /sdd-design", ledger traps to "Known Traps"; AC-3 rebased on the real line
+  `servicer.py:799-800` ("running backtest id=…"); added AC-10..AC-14; env parity stated in FR-1.
+- Finding carried to design: the pre-250 scoring-stall regex `ScoreStrategy|RunBacktest` matches no line analysis
+  emits, so FR-6 must re-derive that rule (recorded in FR-3).
+- Pass 2: PASS WITH WARNINGS (5), all fixed: stale Out-of-Scope pointer; AC-6 made concrete (≤1 s startup delta);
+  AC-9 extended to PLAT-3, OTEL-1/OTEL-2, packages/otel docs + findings; AC-1/AC-10 marked representative;
+  `OTEL_ENABLED` per target stated (dev "true", prod "false", compose off) and the prod flip scoped out as a separate
+  operator rollout step after the cost budget (default chosen by reviewer-fix; operator may override).
+- Warnings remaining: none.
+- Overlap findings (no FAIL): file-level with 250 on `packages/otel/alerts/*`, dashboards, the produced-signals
+  guard and the FR-7 docs (covered by the existing `merge-order.md` row); rebase-only WARN with 252 on identity
+  `src/__tests__/telemetry*.test.ts`; soft env-file overlap with 084/242; semantic coupling with 245 (relies on
+  `xstk-error-rate-high`); 250's `trace-derived-alerting` placeholder is a possible duplicate (deferred to design).
+- Tooling drift noticed (not fixed here, out of scope): `.claude/skills/sdd-review/reference/overlap-check.md:12-13`
+  greps `feature.md` for status, but status lives only in `status.md`.

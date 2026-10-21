@@ -28,28 +28,37 @@ marketdata. Python: indicators, ingest, analysis, agent. Node: ledger, identity,
 installs a global `MeterProvider`. It exports over OTLP/HTTP with an env-only exporter: no endpoint, url or insecure
 argument, so the SDK appends `/v1/metrics` to `OTEL_EXPORTER_OTLP_ENDPOINT` and reads `OTEL_EXPORTER_OTLP_HEADERS`.
 The exporter uses the same resource attributes as traces (`service.name`, `deployment.environment`, `platform`).
-This is the PLAT-3 trace contract, extended.
+This is the PLAT-3 trace contract, extended. No new deployment env var is needed:
+`OTEL_ENABLED`, `OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_EXPORTER_OTLP_HEADERS` are already global `envs:` in
+`.do/app.yaml:25-36` and `.do/app.dev.yaml:25-36` and set per service in `docker-compose.yml`. Design verifies parity
+across these three targets for all 12 runtimes and fixes any runtime that lacks them.
 
 FR-2. **RPC server duration histogram.** Each of the 10 gRPC-serving backends records a server-side RPC duration
 histogram for every handled unary and streaming call, with the gRPC method and status code as attributes. In
 Grafana Cloud it must resolve to the series `rpc_server_duration_milliseconds_{count,bucket}`, with labels
 `service_name` and `rpc_grpc_status_code`, which is what `xstk-error-rate-high` and `xstk-p99-latency-high` query
 (pre-250 `packages/otel/alerts/alert-rules.yaml:44-45,88`). The agent and the UI are not gRPC servers and are exempt
-from FR-2. If a language's stock instrumentation can't emit this series, `/sdd-design` must choose one canonical
-name and unit used by all 10 backends and by every alert and dashboard. A per-language name split is not acceptable.
+from FR-2. This series name, unit and label set are the contract. Every backend must produce exactly this series,
+whether through its stock instrumentation or a shared interceptor (design's choice), and a per-language name split
+is not acceptable. Renaming it, for example to semconv `rpc.server.call.duration` in seconds, needs operator
+sign-off. A rename also changes every alert and panel in the same PR and adds a superseding `@AC-*`, because `@AC-2`
+is append-only.
 
 FR-3. **Logs pipeline.** With `OTEL_ENABLED=true`, each runtime installs a `LoggerProvider` with an env-only
 OTLP/HTTP log exporter (`/v1/logs`) and connects its existing logger to it: Go `log/slog`, Python `logging`, Node
 `winston`, and the UI's server-side logger. Stdout output stays the same in format and content. A record emitted
-inside an active span carries that span's `trace_id` and `span_id`. Severity maps from the native level. The
-analysis log lines that the scoring-stall query matches (`ScoreStrategy|RunBacktest`) reach Loki under
-`service_name="analysis"`.
+inside an active span carries that span's `trace_id` and `span_id`. Severity maps from the native level. Analysis
+records reach Loki under `service_name="analysis"`. The scoring-stall alert's pre-250 regex `ScoreStrategy|RunBacktest`
+does not match the real handler line (`"running backtest id=%s strategy=%s symbols=%s"`,
+`services/xstockstrat-analysis/app/handlers/servicer.py:799-800`), so FR-6 re-derives that rule against lines the
+code actually emits.
 
 FR-4. **Non-fatal, off by default when disabled.** When `OTEL_ENABLED` is anything other than `true`, no meter
 provider, logger provider or exporter is installed, and stdout logging works exactly as it does today. A metric or
 log exporter failure (endpoint unreachable, 4xx/5xx, a bad header) never blocks startup and never fails or blocks a
-request path. Export is asynchronous and batched, and failures are logged locally without recursing into the OTLP
-log exporter. Shutdown flushes all three providers within the existing shutdown path.
+request path. Export is asynchronous and batched. Failures are logged to stdout only; the OTel SDK's own diagnostic and
+exporter loggers are excluded from the OTLP log bridge, so an export failure never produces another export. Shutdown
+flushes all three providers within the existing shutdown path.
 
 FR-5. **No secret leakage through logs.** Log records exported over OTLP carry no secret plaintext. Today's stdout
 redaction invariants (feature 147: `[redacted]` at every read/broadcast edge) hold unchanged on the OTLP path, so
@@ -82,7 +91,12 @@ findings row "metrics and logs are never sent" and its otel-package counterpart 
   bridge (operator decision 2026-10-21).
 - Browser-side (client component) telemetry in `xstockstrat-ui`.
 - Span-metrics or TraceQL-metrics alerting (feature 250's `trace-derived-alerting` candidate list). This feature
-  replaces that need with directly exported metrics; see Open Questions.
+  replaces that need with directly exported metrics; see "Feature 250's follow-up story" under Deferred to
+  /sdd-design.
+- Turning telemetry on in production. Expected `OTEL_ENABLED` per target stays as today: DO dev `"true"`
+  (`.do/app.dev.yaml`), DO prod `"false"` (`.do/app.yaml:30-31`), compose off unless the shell sets it. The prod flip
+  is a separate operator rollout step, taken after design's cost budget is accepted, not a change this feature
+  makes.
 
 ## Affected Services
 
@@ -140,22 +154,33 @@ See `acceptance.feature` (scenarios `@AC-*`), the single source of acceptance tr
 
 ## Open Questions
 
-- [ ] **Series-name parity across languages (FR-2).** Go `otelgrpc` v0.52 records `rpc.server.duration` in ms.
-  Whether Python `opentelemetry-instrumentation-grpc` and Node `@opentelemetry/instrumentation-grpc` emit any server
-  RPC histogram at all is unverified, and newer semconv renames it to `rpc.server.call.duration` in seconds. Design
-  picks a shared interceptor, upgraded instrumentation, or a semconv-stable name, and rewrites alerts to match.
-- [ ] **Cardinality and cost.** Bound histogram attributes to `rpc.method`/`rpc.service`/status, never user IDs or
-  symbols. Estimate Grafana Cloud active-series and log-volume budget for 12 runtimes × 2 environments before
-  enabling in prod.
-- [ ] **Feature 250's follow-up story.** 250 `design.md` §6 creates `NNN-trace-derived-alerting` and its guard
-  asserts that directory exists. Decide whether 250's execute should cite 274 instead, to avoid a duplicate story,
-  or keep both, with 274 as the fix (b) candidate that story lists.
-- [ ] **Log-export recursion.** The exporter's own error logging must not re-enter the OTLP log handler (Python
-  `logging` and Node winston in particular).
-- [ ] **Known trap (fails.md, 2026-08-06 trading-safety-dashboard-slos):** FR-6 depends on feature 250's end state.
-  Recon must re-read 250's current status and its landed `alert-rules.yaml` and guard, not this spec's description
-  of them.
-- [ ] **Known trap (fails.md, 2026-09-09 171-fix-agent-trading-mode-otel-attr):** Node leaf services run tests under
-  two different runners (strip-types ESM vs tsc-first CJS); new imports in `src/telemetry.ts` must work under both.
-- [ ] **Known trap (fails.md, 2026-10-15 fix-otel-trace-export):** vitest clears `vi.spyOn` history before each
-  test; UI telemetry tests must trigger the behaviour inside the test.
+- [x] **Series name across languages (FR-2).** Resolved in the spec: the pre-250 alert series is the contract, and
+  a rename needs operator sign-off. How each language produces it (stock `otelgrpc` v0.52 `rpc.server.duration` in
+  ms for Go; the Python/Node instrumentations' metric support is unverified) is a design mechanism, not an open
+  requirement.
+- [x] **Log-export recursion.** Resolved as an FR-4 requirement: SDK and exporter loggers are excluded from the
+  bridge.
+
+## Deferred to /sdd-design
+
+These are design forks, not requirement gaps. `context.md` (sdd-story session) defers them to `/sdd-design`, which
+must close each one in `design.md`.
+
+- **Cardinality and cost.** Histogram attributes are limited to `rpc.service`, `rpc.method` and status code, never
+  user IDs or symbols. Design estimates the Grafana Cloud active-series and log-volume budget for 12 runtimes × 2
+  environments before prod enablement.
+- **Feature 250's follow-up story.** 250 `design.md` §6 creates `NNN-trace-derived-alerting`, and its guard asserts
+  that directory exists. Design decides, with the operator, whether 250 cites 274 instead, to avoid a duplicate
+  story, or whether both stay, with 274 as the fix (b) candidate that story lists.
+
+## Known Traps
+
+From the ledger (`docs/roadmap/ledger/fails.md`):
+
+- **2026-08-06 trading-safety-dashboard-slos.** FR-6 depends on feature 250's end state. Recon re-reads 250's
+  status and its landed `alert-rules.yaml` and guard, not this spec's description of them.
+- **2026-09-09 171-fix-agent-trading-mode-otel-attr.** Node leaf services run tests under two runners
+  (strip-types ESM and tsc-first CJS). New imports in `src/telemetry.ts` must work under both. Feature 252 edits
+  identity's telemetry tests (rebase-only overlap).
+- **2026-10-15 fix-otel-trace-export.** vitest clears `vi.spyOn` history before each test, so UI telemetry tests
+  must trigger the behaviour inside the test.
