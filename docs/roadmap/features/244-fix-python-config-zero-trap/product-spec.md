@@ -124,7 +124,7 @@ feature changes, so `/sdd-spec` gives each a verification step.
   bounds rows for `indicators.sandbox.timeout_ms`/`memory_bytes` are 243's design decision; `max_concurrent` gets
   none (guarded at the read).
 
-### FR-3 inventory (known minimum; recon completes it)
+### FR-3 inventory (recon finalises it)
 
 | Service | Key(s) | Read site | Stored 0 / `""` after a bare `HasField` switch |
 |---|---|---|---|
@@ -145,12 +145,17 @@ feature changes, so `/sdd-spec` gives each a verification step.
 | analysis | `analysis.strategy.default_cooldown_days` | `live_loop.py:748`; `servicer.py:1167,2130` | no platform cooldown instead of 31 (analysis `CLAUDE.md:488`) |
 | analysis | `analysis.scoring.shrinkage_days` | `servicer.py:2672` | no shrinkage instead of 250 (analysis `CLAUDE.md:479`) |
 | analysis | `analysis.backtest.default_fill_model` | `servicer.py:789-795` | unchanged: the default is 0 (legacy), so only the comment changes |
+| analysis | `analysis.backtest.max_range_days` | `servicer.py:874-875` | 0-day cap: every bounded `RunBacktest` range is rejected |
+| analysis | `analysis.snapshot.indicator_timeout_ms`, `signal_timeout_ms` | `app/engine/pnl_pattern_consumer.py:364-365` | immediate timeout: every snapshot degrades to empty indicators / signals |
+| analysis | `analysis.screener.max_universe_size` | `app/services/screener.py:92-93` | `ScreenSymbols` screens an empty universe |
+| analysis | `analysis.opportunity.max_universe_size` | `servicer.py:5470` | speculative candidates all cut; only curated survive |
+| analysis | `analysis.fundsignal.daily_call_budget`, `max_symbols_per_run` | `fundsignal_loop.py:222,181` | no fundamentals fetched / empty FMP-gated universe: producer emits nothing |
 
-Recon classifies these reads against the FR-3 join rule (not yet in the inventory): `analysis.fundsignal.daily_call_budget`,
-`max_symbols_per_run`, `valid_days` (`fundsignal_loop.py:222,181,232`); `analysis.screener.max_universe_size`,
-`default_rank_limit` (`app/services/screener.py:92,177-178`); `analysis.snapshot.indicator_timeout_ms`,
-`signal_timeout_ms` (`app/engine/pnl_pattern_consumer.py:364-365`); `analysis.backtest.max_range_days`
-(`servicer.py:874`); `analysis.patterns.min_sample_count`, `indicator_bucket_count` (`servicer.py:4265-4266`).
+Recon writes every `get_int`/`get_float`/`get_str` call site in the three services into `recon.md` as either
+FR-3 (with its clamp) or honour, so no site is left unclassified. Each key recon adds to FR-3 gets an @AC-6 row.
+Still to classify (0 may be a legitimate value): `analysis.fundsignal.valid_days` (`fundsignal_loop.py:232`);
+`analysis.screener.default_rank_limit` (`app/services/screener.py:177-180`, 0 = uncapped);
+`analysis.patterns.min_sample_count`, `indicator_bucket_count` (`servicer.py:4265-4266`).
 
 Dead sandbox-helper copies in the analysis and ingest watchers (`analysis watcher.py:150-162`,
 `ingest watcher.py:168-180`) follow FR-3 or are removed. Design decides which.
@@ -159,8 +164,10 @@ Dead sandbox-helper copies in the analysis and ingest watchers (`analysis watche
 
 - [x] No proto changes anticipated (`ConfigValue` oneof already distinguishes zero from unset)
 - [x] No database migrations anticipated, unless design corrects the seeded descriptions (Consumer Surface,
-  `/config-ui`). If it does, the config NNN is pre-assigned with 243-fix-sandbox-seed-keys, which claims 031
-  (`243-fix-sandbox-seed-keys/product-spec.md:44`), through a `docs/roadmap/features/merge-order.md` row (C-07, F-01).
+  `/config-ui`). If it does: a new `NNN_*.up.sql` + `.down.sql` pair in `services/xstockstrat-config/migrations/`
+  (next free number after `030`, verified then); applied `027`/`028` are never edited (F-01). The NNN is pre-assigned
+  with 243-fix-sandbox-seed-keys, which claims 031 (`243-fix-sandbox-seed-keys/product-spec.md:44`), through a
+  `docs/roadmap/features/merge-order.md` row (C-07). Design records the strategy in `design.md`.
 - [x] Config bounds re-checked per FR-6; no new keys
 - [x] Trap-dependent sites keep today's result through explicit clamps (FR-3 inventory)
 - [x] Pre-deploy audit (rollout): `SCALAR_BOUNDS_REGISTRY` checks writes only (`configServiceImpl.ts:99`), so a `0`/`''`
@@ -186,7 +193,9 @@ Dead sandbox-helper copies in the analysis and ingest watchers (`analysis watche
 See `acceptance.feature` (Constitution **C-15**). The FR-1/FR-4 scenarios (@AC-1, @AC-2, @AC-3, @AC-9) fail on the buggy
 behaviour and pass after the fix. The FR-2/FR-3/FR-6 scenarios (@AC-4, @AC-5, @AC-6, @AC-8) pass before and after,
 and fail if the fix is too broad (a site left unclamped). The FR-5 scenario (@AC-7) passes before and after, and
-fails if clamping is too broad (a floor applied to a zero-default key). In addition, existing tests pass, except
+fails if clamping is too broad (a floor applied to a zero-default key). Each Example row's `Then` in @AC-1, @AC-4,
+@AC-5 and @AC-6 maps to a concrete test assertion at `/sdd-spec` (getter return, semaphore capacity, deadline or
+interval value). In addition, existing tests pass, except
 assertions that pin the trap (e.g. `services/xstockstrat-analysis/tests/test_analysis_servicer.py:594`), which are
 updated to the new semantics.
 Affected services are smoke-tested on dev.

@@ -19,6 +19,7 @@ Feature: fix-python-config-zero-trap (bug fix)
       | xstockstrat-indicators | indicators.test.zero_float              | float  | 0.0    | get_float | 0.5     |
       | xstockstrat-indicators | indicators.test.zero_string             | string | ""     | get_str   | "x"     |
       | xstockstrat-ingest     | ingest.test.zero_int                    | int    | 0      | get_int   | 7       |
+      | xstockstrat-ingest     | ingest.test.zero_float                  | float  | 0.0    | get_float | 0.5     |
       | xstockstrat-ingest     | ingest.test.zero_string                 | string | ""     | get_str   | "x"     |
 
   @AC-2 @FR-4 @regression
@@ -55,6 +56,7 @@ Feature: fix-python-config-zero-trap (bug fix)
       | xstockstrat-indicators | snapshot has no entry for the key             | get_str   | indicators.test.unset_string             | "x"     |
       | xstockstrat-ingest     | snapshot has no entry for the key             | get_str   | ingest.test.unset_string                 | "x"     |
       | xstockstrat-ingest     | snapshot holds the key as a float value 2.5   | get_int   | ingest.test.mismatched_int               | 7       |
+      | xstockstrat-ingest     | snapshot has no entry for the key             | get_float | ingest.test.unset_float                  | 0.5     |
 
   @AC-5 @FR-3 @regression
   Scenario: Ingest's backfill job concurrency keeps its zero clamp
@@ -87,6 +89,12 @@ Feature: fix-python-config-zero-trap (bug fix)
       | xstockstrat-analysis   | analysis.backtest.detail_retention_per_strategy  | int    | 0      | backtest-detail retention             | 20                        |
       | xstockstrat-analysis   | analysis.opportunity.max_concurrent_bars_fetches | int    | 0      | the opportunity bars-fetch semaphore  | 2                         |
       | xstockstrat-analysis   | analysis.backtest.default_fill_model             | int    | 0      | a RunBacktest without fill_model      | FILL_MODEL_SAME_BAR_CLOSE |
+      | xstockstrat-analysis   | analysis.backtest.max_range_days                 | int    | 0      | the RunBacktest range cap in days     | 730                       |
+      | xstockstrat-analysis   | analysis.snapshot.indicator_timeout_ms           | int    | 0      | the snapshot indicator timeout in ms  | 500                       |
+      | xstockstrat-analysis   | analysis.screener.max_universe_size              | int    | 0      | the ScreenSymbols universe cap        | 100                       |
+      | xstockstrat-analysis   | analysis.opportunity.max_universe_size           | int    | 0      | the opportunity universe cap          | 100                       |
+      | xstockstrat-analysis   | analysis.fundsignal.run_interval_hours           | int    | 0      | the fundsignal loop interval in hours | 24                        |
+      | xstockstrat-analysis   | analysis.fundsignal.daily_call_budget            | int    | 0      | the fundsignal daily call budget      | 200                       |
 
   # Guards against over-clamping: a blanket max(1, ...) floor turns the seeded midnight hour into 1.
   # FR-5 audited fact: no seeded 0/'' row differs from its default; the 008 fundsignal rows are bare-keyed.
@@ -102,6 +110,7 @@ Feature: fix-python-config-zero-trap (bug fix)
       | analysis.readiness_materializer.refresh_hour_utc | int    | 0      | seeded by 027:37,40 | the readiness re-warm hour     | 0         |
       | analysis.fundsignal.min_conviction_to_emit       | float  | 0.0    | operator-set        | the fundsignal emit floor      | 0.0       |
       | analysis.fundsignal.scoring_formula_id           | string | ""     | operator-set        | the fundsignal scoring formula | ""        |
+      | analysis.fundsignal.explicit_symbols             | string | ""     | operator-set        | the explicit symbol universe   | ""        |
 
   @AC-8 @FR-6 @regression
   Scenario: SetConfig still rejects 0 for a minValue-1 key read by a Python service
