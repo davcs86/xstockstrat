@@ -41,16 +41,19 @@ or together with** 251. Record it in `docs/roadmap/features/merge-order.md` at s
   monotonic and indexed). Across a full page walk every matching event is returned exactly once. The token stays opaque
   to callers.
 - **FR-2 (D-13, last page).** `next_page_token` is empty if and only if no further matching events exist. A full page
-  is the only case that sets a non-empty token.
+  is the only case that can set a non-empty token. A page that is exactly full with nothing after it returns an empty
+  token, so design keeps the existing `limit+1` probe (`ledgerServiceImpl.ts:157-171`).
 - **FR-3 (D-13, page cap).** The effective page size is `min(page_size, 1000)`. When `page_size` is 0 or omitted it
   is 100, as today. An oversized `page_size` is clamped to the cap, never rejected. `total_count` is not given new
   semantics in this feature.
 - **FR-4 (backward compatibility).** An empty or omitted `page_token` returns the first page, oldest first. Existing
-  callers keep working unchanged. All of them request `page_size` ≤ 500, below the cap: portfolio `GetPnL` (500,
-  `portfolio_service.go:754`, `:799`), portfolio `HydrateStops` (`:534`), trading `resolveUnknownIntents`
-  (`trading.go:2222`), trading 500 at `trading.go:2091` and 40 at `:3221`, and the UI BFF callers (500 at most,
-  `PerformanceDashboard.tsx:65`). A first-page-only caller gets the same first page it gets today (same filter, oldest
-  first).
+  callers keep working unchanged. All of them use an effective `page_size` ≤ 500, below the cap: portfolio `GetPnL`
+  (500, `portfolio_service.go:754`, `:799`), portfolio `HydrateStops` (`:534`), trading `resolveUnknownIntents`
+  (`trading.go:2222-2225`, no `PageSize` set, so the default 100), trading 500 at `trading.go:2091` and 40 at `:3221`,
+  and the UI BFF callers (500 at most, `PerformanceDashboard.tsx:65`). A first-page-only caller gets the oldest first
+  page by `sequence`, with the same filter. Today's order is `recorded_at ASC` (`ledgerServiceImpl.ts:162`); `sequence`
+  is assigned by `nextval` at insert (migration 001:21), so the two orders can differ only for rows inserted
+  concurrently. Design records whether that difference matters to any caller.
 - **FR-5 (D-46, exactly-once fold).** `GetPnL` folds every matching `order.filled` event (pass 1) **and** every
   matching `order.partially_filled` event (pass 2) exactly once across all ledger pages. Pass 2 keeps its existing
   "last event per order ID wins" rule (`portfolio_service.go:829-830`). This relies on FR-1's ascending order, so the
