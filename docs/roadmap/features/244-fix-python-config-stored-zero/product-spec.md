@@ -1,4 +1,4 @@
-# Product Spec: fix-python-config-zero-trap
+# Product Spec: fix-python-config-stored-zero
 
 **Type**: bug
 **GitHub Issue**: none. Defect report: `docs/reports/2026-10-19-python-config-zero-trap-defect.md`

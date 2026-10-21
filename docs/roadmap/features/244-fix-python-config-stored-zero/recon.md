@@ -1,4 +1,4 @@
-# Recon: fix-python-config-zero-trap
+# Recon: fix-python-config-stored-zero
 
 **Created**: 2026-10-20
 **From**: product-spec.md

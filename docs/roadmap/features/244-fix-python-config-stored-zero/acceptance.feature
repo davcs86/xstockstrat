@@ -1,4 +1,4 @@
-Feature: fix-python-config-zero-trap (bug fix)
+Feature: fix-python-config-stored-zero (bug fix)
   Regression guard for docs/reports/2026-10-19-python-config-zero-trap-defect.md:
   Python config getters collapse a stored 0 / "" to the coded default.
 

@@ -1,10 +1,10 @@
-# Implementation Spec: fix-python-config-zero-trap
+# Implementation Spec: fix-python-config-stored-zero
 
 **Status**: `pending`
 **Created**: 2026-10-21
-**Feature**: `docs/roadmap/features/244-fix-python-config-zero-trap/feature.md`
+**Feature**: `docs/roadmap/features/244-fix-python-config-stored-zero/feature.md`
 **Total Steps**: 18
-**Feature Branch**: `feature/fix-python-config-zero-trap`
+**Feature Branch**: `feature/fix-python-config-stored-zero`
 
 ---
 
@@ -156,7 +156,7 @@ Indicators: `ZERO_IS_LEGIT = {}` (its one honour key matches no pattern).
 - Step 3 requires Step 1, Step 7 requires Step 5, Step 11 requires Step 9: the clamp tests (Steps 4, 8, 12) are RED
   only against a getter-switched tree. Against the original tree the trap already returns the default and they pass.
 - Between a getter step and its clamp step a stored 0 reaches an unclamped site (`Semaphore(0)`, `sleep(0)`). This
-  is safe only because the per-step PRs target `feature/fix-python-config-zero-trap` (F-03), which never deploys.
+  is safe only because the per-step PRs target `feature/fix-python-config-stored-zero` (F-03), which never deploys.
   The integration PR to `main-dev` opens only after Step 12.
 - Step 16's test is authored before Step 15's files exist (RED: the glob finds no migration).
 - Step 15 pins the pair to `032`: trunk tip is `030`, and 243 claims `031`
@@ -176,13 +176,10 @@ Indicators: `ZERO_IS_LEGIT = {}` (its one honour key matches no pattern).
   `_str_watcher` into `_watcher(key, field, val)` and keeps it in that file. 244 Step 6 resolves this without a hard
   order (design rejected one): whichever helper is on the base at execute time keeps its name, signature and file,
   and only its body delegates to the conftest `snapshot_watcher`.
-- **Branch hazard (design Open Risk 8; fails.md:2953):** the slug collides with launched 173. The orphan cleanup
-  (`.github/workflows/ci-validate-feature-status.yml:160-167,181-183`) maps `feature/fix-python-config-zero-trap` and
-  every `feature-steps/fix-python-config-zero-trap-step-<N>` branch to 173's `status.md` (`ls … | head -1`) and
-  deletes them on every push to `main`. **Precondition of `/sdd-execute`:** the operator slug rename lands first.
-  Until it does, `/sdd-execute` must not open per-step PRs. If it runs anyway (operator override), confirm the
-  feature branch exists on origin before each step, restore it from the last pushed SDD commit if it does not, and
-  re-push any `feature-steps/*` branch that was deleted.
+- **Branch hazard (design Open Risk 8; fails.md:2953): resolved 2026-10-21.** The slug `fix-python-config-zero-trap` collided with
+  launched 173, so the orphan cleanup (`.github/workflows/ci-validate-feature-status.yml:160-167,181-183`) deleted
+  the branch on every push to `main`. The feature is renamed to `fix-python-config-stored-zero` (branch `feature/fix-python-config-stored-zero`,
+  step branches `feature-steps/fix-python-config-stored-zero-step-<N>`), which no other feature dir matches.
 
 ---
 
@@ -1114,8 +1111,8 @@ grep -n "OPP_CONC" src/__tests__/setConfigScalarBounds.test.ts   # includes an i
 3. The migration changes no `value_data`/`value_type`/`key`, does no INSERT/DELETE, writes no audit row and sends
    no `pg_notify`. It leaves 027/028 untouched (F-01; feature-184 @AC-2/@AC-3 hold).
 4. `merge-order.md` row:
-   `| \`fix-python-config-zero-trap\` | \`fix-sandbox-seed-keys\` | Soft: both add an xstockstrat-config migration (243 = 031, 244 = 032) and both edit indicators tests/test_config_watcher.py (244 Step 6 delegates whichever helper is on the base). Expected order 243 → 244, which is not a hard gate (design rejected one). If 244 merges first, it renumbers to 031 and 243 to 032, each by max(origin/main-dev)+1 immediately before merge (fails.md:2910) | No |`.
-   If the operator renames 244's slug first, use the new slug. The row is written at execute time, after operator
+   `| \`fix-python-config-stored-zero\` | \`fix-sandbox-seed-keys\` | Soft: both add an xstockstrat-config migration (243 = 031, 244 = 032) and both edit indicators tests/test_config_watcher.py (244 Step 6 delegates whichever helper is on the base). Expected order 243 → 244, which is not a hard gate (design rejected one). If 244 merges first, it renumbers to 031 and 243 to 032, each by max(origin/main-dev)+1 immediately before merge (fails.md:2910) | No |`.
+   The row is written at execute time, after operator
    confirmation (overlap recommendation; context.md Open Thread).
 
 **Verification** (offline, no DB):
@@ -1241,9 +1238,9 @@ grep -n "CF-N10" docs/context-constitution-findings.md
 ### Step 18 — docs: rollout audit and consumer-surface verification (C-14)
 
 **Status**: `pending`
-**Service**: rollout (dev, then prod) — results recorded in `docs/roadmap/features/244-fix-python-config-zero-trap/context.md`
+**Service**: rollout (dev, then prod) — results recorded in `docs/roadmap/features/244-fix-python-config-stored-zero/context.md`
 **Files**:
-- `docs/roadmap/features/244-fix-python-config-zero-trap/context.md` — modify (audit and smoke results)
+- `docs/roadmap/features/244-fix-python-config-stored-zero/context.md` — modify (audit and smoke results)
 
 **Reviewers**: none
 
@@ -1287,7 +1284,7 @@ grep -n "CF-N10" docs/context-constitution-findings.md
 **Verification**: `context.md` holds a dated rollout entry with the audit row counts and classification, the four
 smoke outcomes, and the restored values.
 ```bash
-f=docs/roadmap/features/244-fix-python-config-zero-trap/context.md
+f=docs/roadmap/features/244-fix-python-config-stored-zero/context.md
 grep -nE "^## Session [0-9]{4}-[0-9]{2}-[0-9]{2} .*rollout" "$f"                          # >=1 (dev), >=2 after prod audit
 grep -niE "audit.*(rows?|count)" "$f" | grep -iE "FR-3|honour|malformed"                   # counts + classification
 grep -niE "smoke" "$f" | grep -cE "signal_rank_weight|commission|alert_throttle|config-ui" # 4

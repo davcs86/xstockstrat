@@ -1,4 +1,4 @@
-# Context Log: fix-python-config-zero-trap
+# Context Log: fix-python-config-stored-zero
 
 Append-only. Each session appends a new ## Session entry. Never delete or edit prior entries.
 
@@ -289,10 +289,19 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - [ ] Step size (advisory): Steps 10 (7 files), 11 (8) and 17 (12) exceed 5 files. Splitting Step 11 by module
     (servicer, then engine and services) was not done, because it renumbers steps and the C-15 trace. The operator
     decides at the `/sdd-execute` checkpoint.
-  - [ ] Slug rename (collision with 173; fails.md:2953). This is an operator action and is now a precondition of
+  - [x] Slug rename (collision with 173; fails.md:2953). Done 2026-10-21. This is an operator action and is now a precondition of
     `/sdd-execute`. It also covers `feature-steps/*` branches.
   - [ ] merge-order.md row (243 → 244 soft, migration 031/032, test helper). It is written by Step 15 after operator
     confirmation, because this review may edit only the feature dir.
   - [ ] Guard classification table audit: the reviewer raised no objection to `FR3_KEYS`/`HONOUR_KEYS`/`ZERO_IS_LEGIT`.
     The guard's rule 2 is the executable check at Steps 4, 8 and 12.
-- Next: operator slug rename, then `/sdd-execute fix-python-config-zero-trap`.
+- Next: operator slug rename, then `/sdd-execute fix-python-config-zero-trap` (rename done 2026-10-21; see the next session).
+
+## Session 2026-10-21 — slug rename
+
+- Operator action: renamed the slug `fix-python-config-zero-trap` → `fix-python-config-stored-zero` (dir `244-fix-python-config-stored-zero`, branch `feature/fix-python-config-stored-zero`).
+  The old slug collided with launched `173-fix-python-config-zero-trap`, so the orphan cleanup deleted the old branch on every push to `main`.
+- Updated live references: artifact titles, feature.md branch and Next Action, impl-spec paths, branch and merge-order row,
+  the source report `ref:`, and 242/243/245 cross-references on main-dev. Historical session entries above keep the old slug.
+- References to 173 (its dir and the `fix-python-config-zero-trap.feature` acceptance suites) are unchanged.
+- Next: `/sdd-execute fix-python-config-stored-zero`.

@@ -57,7 +57,7 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Overlap findings (feature-overlap, WARN):
   1. `services/xstockstrat-portfolio/internal/service/portfolio_service.go` shared with 251-fix-getpnl-source-service
      (GetPnL `:753`, `:798`); ~250 lines apart; 251 excludes emitRiskAlert. Rebase-only, no hard order.
-  2. `services/xstockstrat-analysis/app/engine/live_loop.py` shared conditionally with 244-fix-python-config-zero-trap
+  2. `services/xstockstrat-analysis/app/engine/live_loop.py` shared conditionally with 244-fix-python-config-stored-zero
      (`:351`; 244's primary site is `app/config/watcher.py:97,105,134`). Disjoint regions, rebase-only.
   3. Conditional config migration: 243-fix-sandbox-seed-keys claims config `031`; 241 may add one. A seeded
      `notify.push.*` key takes the next free NNN after both, checked across remote branches at /sdd-spec
@@ -114,7 +114,7 @@ OPERATOR DECISIONS (binding, recorded 2026-10-20):
      (`services/xstockstrat-analysis/app/engine/live_loop.py:847-861`, already on trunk; 215 impl-spec `:1057`,
      `:1088` stale). Whichever merges second carries `target_user_id=definition.user_id` on that alert, or the
      broadcast returns. Re-scan at /sdd-spec.
-  2. `244-fix-python-config-zero-trap` (draft): `live_loop.py:351`, disjoint; rebase-only.
+  2. `244-fix-python-config-stored-zero` (draft): `live_loop.py:351`, disjoint; rebase-only.
   3. `240-offline-account-full-pnl`: already on main-dev; disjoint functions in `portfolio_service.go`; rebase-only.
   4. `251-fix-getpnl-source-service`: same-function on `emitRiskAlert` only if 251's design touches it (251 cites
      stale `:943`/`:958`). Re-scan at /sdd-spec.

@@ -1,7 +1,7 @@
-# Feature: fix-python-config-zero-trap
+# Feature: fix-python-config-stored-zero
 
 **Type**: bug
-**Development Branch**: `feature/fix-python-config-zero-trap`
+**Development Branch**: `feature/fix-python-config-stored-zero`
 **GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-19-python-config-zero-trap-defect.md`
 **Severity**: SEV-2
 **Created**: 2026-10-20
@@ -55,4 +55,4 @@ or a zero signal-rank weight cannot be configured).
 
 ## Next Action
 
-`/sdd-review fix-python-config-zero-trap impl-spec` — validate implementation spec, then `/sdd-execute fix-python-config-zero-trap`
+`/sdd-review fix-python-config-stored-zero impl-spec` — validate implementation spec, then `/sdd-execute fix-python-config-stored-zero`

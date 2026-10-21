@@ -1,4 +1,4 @@
-# Design: fix-python-config-zero-trap
+# Design: fix-python-config-stored-zero
 
 **Created**: 2026-10-21
 **Rounds**: 3 (full; termination: approved — auto-approved under operator standing authorization 2026-10-21)
@@ -214,7 +214,7 @@ Then run the dev smoke test: set `signal_rank_weight=0` and check the `list_oppo
 - [ ] **Type-mismatched FR-4 rows still fall back.** An unseeded FR-4 row with the wrong type (an `int_val` read by `get_float`) still resolves to the default under FR-2. To be addressed at: the rollout `value_type` check, and the agent `set_config` guidance in the docs step.
 - [ ] **Migration renumbering depends on a re-list.** If `/sdd-execute` skips re-listing `origin/main-dev` before merge, golang-migrate silently skips a lower-numbered pair. To be addressed at: the migration step's pre-merge check and the `merge-order.md` row.
 - [ ] **Bare-`MagicMock` cfg returns raise `TypeError` at `v > 0`.** To be addressed at: `/sdd-spec`, which runs the full suites and lists every double it fixes.
-- [ ] **The feature branch keeps being deleted.** The slug collides with launched feature 173, so the orphan cleanup deletes `feature/fix-python-config-zero-trap` on every push to `main`. The glob at `.github/workflows/ci-validate-feature-status.yml:167` resolves to 173's `status.md`, and the delete happens at `:183`. To be addressed at: the operator slug rename, which must happen before `/sdd-spec` pushes.
+- [x] **The feature branch keeps being deleted.** Resolved 2026-10-21: renamed to `fix-python-config-stored-zero`. The slug collides with launched feature 173, so the orphan cleanup deletes `feature/fix-python-config-zero-trap` on every push to `main`. The glob at `.github/workflows/ci-validate-feature-status.yml:167` resolves to 173's `status.md`, and the delete happens at `:183`. To be addressed at: the operator slug rename, which must happen before `/sdd-spec` pushes.
 
 ## Constitution Rules Touched
 
