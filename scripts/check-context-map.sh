@@ -26,7 +26,7 @@ SRCS="$(mktemp)"
 trap 'rm -f "$REFS" "$SRCS"' EXIT
 
 # (1) Concrete paths declared in the context map.
-grep -oE '(\.claude|docs|scripts)/[A-Za-z0-9._/<>-]+\.(md|ya?ml|sh)' "$MAP" >>"$REFS"
+grep -oE '(\.claude|docs|scripts)/[A-Za-z0-9._/<>-]+\.(md|ya?ml|sh|m?js)' "$MAP" >>"$REFS"
 
 # (2) doc/skill references embedded in CLAUDE.md files, skill routers, and
 #     agent definitions. Agents point at skill reference/ files just as routers

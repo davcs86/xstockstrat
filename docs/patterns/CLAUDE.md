@@ -15,5 +15,5 @@ Reusable implementation patterns for new services. Each file is a self-contained
 | `observability.md` | Wiring OTel into a service or configuring Grafana Cloud |
 | `ci-overview.md` | Debugging CI failures, checking coverage thresholds, understanding deploys |
 | `docker-build.md` | Docker build patterns, service healthchecks, `WAIT_FOR` entrypoint, `depends_on` conditions |
-| `context-engineering.md` | Adding or refactoring a skill, subagent (`.claude/agents/`), or `CLAUDE.md` — subagent delegation, progressive disclosure, and the structured `context.md` memory schema |
+| `context-engineering.md` | Adding or refactoring a skill, subagent (`.claude/agents/`), saved workflow (`.claude/workflows/`), or `CLAUDE.md` — subagent delegation, progressive disclosure, the structured `context.md` memory schema, and the `/sdd-batch` / `/sdd-batch-execute` multi-feature contract |
 | `test-data-inventory.md` | Adding or modifying **any** service's tests that use mocked/dummy domain data — canonical fixture homes, the `INVENTORY.md` catalog, the `/sdd-qa` skill, Constitution C-12 (frontend) and C-13 (all languages) |

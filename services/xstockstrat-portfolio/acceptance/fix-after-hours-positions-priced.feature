@@ -41,13 +41,16 @@ Feature: xstockstrat-portfolio — one-sided quotes are valued from the mark, ne
     When the risk check runs
     Then the emitted concentration alerts are exactly "concentration limit breach: LYFT at 24.1%" and "concentration limit breach: MSFT at 75.9%"
 
-  @AC-6 @FR-3 @FR-7 @feature-231
-  Scenario: A one-sided quote with no close inside the bound leaves the position unpriced
+  # Changed by feature 240 (C-16, operator decision D-1, 2026-10-20): ListPositions of an OFFLINE
+  # position falls back to the daily close within portfolio.marketdata.last_close_lookback_days (21);
+  # GetPnL keeps feature 231's refusal.
+  @AC-6 @FR-3 @FR-7 @feature-231 @feature-240
+  Scenario: A one-sided quote with a close older than the mark bound is priced from the last close on ListPositions while GetPnL stays unpriced
     Given an offline account holds only 100 "ELWT" with no broker valuation
     And the latest "ELWT" quote has ask 5.60 and bid 0
     And the newest stored 1d "ELWT" close is 5.48, stored 200 hours ago
     When the caller reads ListPositions and then requests GetPnL
-    Then "ELWT" current_price is 0
+    Then "ELWT" current_price is 5.48 with mark_source MARK_SOURCE_LAST_CLOSE
     And GetPnL fails with gRPC status UNAVAILABLE
 
   @AC-8 @FR-4 @feature-231
@@ -77,14 +80,16 @@ Feature: xstockstrat-portfolio — one-sided quotes are valued from the mark, ne
     And GetPnL unrealized_pnl is 19.80
     And the ListPortfolios account equity is 169.80
 
-  @AC-14 @FR-3 @feature-231
-  Scenario Outline: Without a mark (deploy skew) portfolio falls back to the two-sided mid only
+  # Row 2 changed by feature 240 (C-16, operator decision D-1, 2026-10-20): an offline position with a
+  # one-sided quote falls back to the last daily close within the lookback, else MARK_SOURCE_NONE (0).
+  @AC-14 @FR-3 @feature-231 @feature-240
+  Scenario Outline: Without a mark (deploy skew) portfolio falls back to the two-sided mid, then the offline last close
     Given an offline account holds 10 "LYFT" with no broker valuation
     And marketdata returns a "LYFT" quote with no mark_price, ask <ask> and bid <bid>
     When the caller reads ListPositions
     Then "LYFT" current_price is <price>
 
     Examples:
-      | ask   | bid   | price |
-      | 17.10 | 17.00 | 17.05 |
-      | 16.05 | 0     | 0     |
+      | ask   | bid   | price                                                                                                   |
+      | 17.10 | 17.00 | 17.05                                                                                                   |
+      | 16.05 | 0     | the newest stored 1d "LYFT" close within portfolio.marketdata.last_close_lookback_days, else 0 (MARK_SOURCE_NONE) |
