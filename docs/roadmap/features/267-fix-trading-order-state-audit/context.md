@@ -440,3 +440,41 @@ Full-mode `/sdd-design` debate halted at its approval gate after round 3 (gate p
   "floor_breaches": []
 }
 ```
+
+---
+
+## Session 2026-10-21 — sdd-design
+
+- Phase 0 Recon: wrote recon.md (services: xstockstrat-trading, xstockstrat-ledger (no change); key reuse patterns: the sweeper's three-way reclaim handling `order_intent.go:144-157`, and `emitLedgerEvent` `trading.go:3661`).
+- Phase 1 Grilling: 3 rounds (full). The operator approved at the round-3 gate. No Floor breaches.
+  - **Chosen approach:**
+    - D-04 is log-only, through `persistOrderBestEffort`. It calls `UpsertOrder` on `WithTimeout(WithoutCancel(ctx), <existing bound>)` and logs `slog.Error` with the raw error.
+    - D-62 goes through `reclaimStaleIntent`. It runs the CAS on `WithoutCancel(ctx)`, logs Warn on error, and on success fires an async `order_intent.reclaimed_unknown` emit on `WithoutCancel(ctx)`.
+    - The emit payload comes from `reclaimedUnknownPayload(trigger, out, pendingSince)`, with an RFC3339Nano `was_pending_since`. The sweeper shares that builder.
+    - Only the reclaim branch is extracted.
+  - **Rejected:** the C-03 waiver with `Background()` emits; surfacing the write error as an RPC error; a full switch extraction; reusing the sweeper's `time.Time` payload literal.
+- Constitution rules touched: C-01, C-03, C-08, C-11, C-13, C-16, C-18, F-04, F-07, P-02, P-03, P-06. Floor breaches: none.
+- Status: spec-ready → design-approved.
+
+### Decisions
+
+- **Open Question 1 closed (C-11):** D-04 is log-only. The broker side effect has already happened at every site, so surfacing the error would invite a retry against an order the broker already holds and reopen PRESERVE @AC-1/@AC-3 @feature-202 and @AC-1 @feature-192.
+- **Open Question 2 closed (C-11):** only the reclaim branch is extracted, as `reclaimStaleIntent`. The four-way intent-lookup switch stays.
+- **Operator 2026-10-21, C-03 waiver rejected.** Every request-derived write and emit uses `context.WithoutCancel(ctx)`. x-trace-id then flows through the existing ctx-value client interceptor (`propagation.go:35-52`, `trading.go:184`).
+- **Operator 2026-10-21, design gate round 3: APPROVED as synthesized.** This includes:
+  - `was_pending_since` as an RFC3339Nano string, with a `pendingSince` parameter and a `Payload != nil` test assertion;
+  - the reclaim CAS on `WithoutCancel(ctx)`;
+  - the sweeper's ledger payload changing from nil to populated, which the operator ACCEPTED.
+- **Operator 2026-10-21, scope widening.** The neighbouring pre-existing request-path `context.Background()` ledger emits and finalize calls in `trading.go` also convert to `WithoutCancel(ctx)`, each with a test proving x-trace-id reaches the ledger. `/sdd-spec` enumerates the sites by grep. Background-only callers are left as they are. This replaces the earlier "log as a finding, do not fix" note.
+- **Flatten label (P-03):** flatten-originated reclaims are labelled `reactive_place`, and the trading CLAUDE.md row says so. No caller tag is threaded through `submitOrder`. On that path the emit carries no trace id and may carry owner `""`. The latest flatten retry starts at about 1× the broker timeout + 1.5s, while the stale threshold is at least 1.5×, so this case is rare.
+
+## Open Threads
+
+- [ ] Sweeper payload nil → populated, accepted by the operator but guarded by no AC. Check downstream readers and call it out in the PR. Target: the /sdd-spec sweeper-swap step.
+- [ ] Pick and cite the `WithTimeout` bound (`ledgerEmitTimeout` `trading.go:3657` or `trading.broker.timeout_ms`, F-07). A ledger outage still loses the reactive event with only a Warn log. Target: the D-04 helper step.
+- [ ] Bounded `Eventually` plus explicit parent-cancel ordering, and every test waits on its event so goroutines don't log after `captureLogs` restores `slog.Default`. Target: the RED test step.
+- [ ] RED tests must prove they reach the reclaim branch, not the hash-mismatch branch at `:588` or a HALTED gate. Target: the RED test step.
+- [ ] Other `emitLedgerEvent` callers may silently send nil payloads, because the `NewStruct` error is discarded at `trading.go:3662`. Out of scope; log in findings. Target: the docs step.
+- [ ] Bare-orderID vs `order:` stream drift. Log in findings only. Target: the docs step.
+- [ ] Scope-widening list is at recon-time line numbers. Enumerate by grep, with one trace test per converted site. Target: /sdd-spec.
+- [ ] `trading.go` merge overlap with 241/242/249/256. Target: the integration PR, via `merge-order.md`.
