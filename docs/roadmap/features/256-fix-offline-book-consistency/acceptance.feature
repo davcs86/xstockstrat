@@ -21,16 +21,6 @@ Feature: fix-offline-book-consistency (bug fix)
     And no realized row remains for "acct-off-1"
     And "acct-off-1" no longer appears in ListPortfolios for "u-1"
 
-  @AC-6 @FR-3 @regression
-  Scenario: A persistently failing offline sync event is parked and does not block the stream
-    Given user "u-1" has offline account "acct-off-1"
-    And UpsertOfflineRealized always fails for event "evt-1"
-    And event "evt-2" for offline account "acct-off-2" follows "evt-1" on the stream
-    When portfolio consumes "evt-1" and "evt-2"
-    Then "evt-1" is parked with an error log naming "evt-1" once the retry bound is reached
-    And the event cursor advances past "evt-1"
-    And "evt-2" is applied
-
   @AC-3 @FR-4 @regression
   Scenario Outline: Offline P&L is never reported as complete when offline state cannot be read
     Given user "u-1" has offline account "acct-off-1" with realized_pnl 500.00 and an AAPL position with unrealized_pnl 100.00
@@ -68,6 +58,16 @@ Feature: fix-offline-book-consistency (bug fix)
     When "u-1" calls ConfirmOrder for "ord-1" with filled_qty 10 and filled_avg_price 150.0
     Then either the emit is retried until "account.positions.synced" is published for the account
     Or the call returns an error, and a repeat ConfirmOrder with the same values succeeds and emits "account.positions.synced"
+
+  @AC-6 @FR-3 @regression
+  Scenario: A persistently failing offline sync event is parked and does not block the stream
+    Given user "u-1" has offline account "acct-off-1"
+    And UpsertOfflineRealized always fails for event "evt-1"
+    And event "evt-2" for offline account "acct-off-2" follows "evt-1" on the stream
+    When portfolio consumes "evt-1" and "evt-2"
+    Then "evt-1" is parked with an error log naming "evt-1" once the retry bound is reached
+    And the event cursor advances past "evt-1"
+    And "evt-2" is applied
 
   @AC-7 @FR-7 @regression
   Scenario Outline: Valid fills keep the existing offline status derivation
