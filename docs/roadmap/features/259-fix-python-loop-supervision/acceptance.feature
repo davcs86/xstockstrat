@@ -14,7 +14,9 @@ Feature: fix-python-loop-supervision (bug fix)
   Scenario: The fundamentals producer loop survives a failed cycle whose retry advance also fails
     Given a FundamentalsSignalLoop whose run_once raises a connection error and whose _advance_schedule raises once
     When one scheduler iteration runs
-    Then the loop task is still running and schedules a further tick
+    Then the loop task is still running
+    And a further tick runs
+    And the connection error was logged
 
   @AC-3 @FR-1 @regression
   Scenario Outline: Each servicer background loop survives a schedule DB error
@@ -62,9 +64,22 @@ Feature: fix-python-loop-supervision (bug fix)
   Scenario: A ledger event that keeps failing is parked and logged, and the cursor moves on
     Given the P&L-pattern consumer cursor is at 9
     And the ledger streams "portfolio.position.closed" event 10 and event 11
+    And the consumer's retry bound is 3 attempts
     And processing event 10 raises an error on every attempt
     When the consumer processes the stream
-    Then event 10 is attempted up to the retry bound and is then parked
+    Then event 10 is attempted exactly 3 times and is then parked
     And a log line records that event 10 was parked, with the reason
     And event 11 is processed successfully
     And the cursor ends at 11
+
+  @AC-8 @FR-3 @regression
+  Scenario Outline: A config watcher task that ends unexpectedly is retained and its exit is logged
+    Given the <service> ConfigWatcher has started its watch task
+    When the watch coroutine ends with RuntimeError "boom"
+    Then an error naming the watch task and "boom" is logged
+
+    Examples:
+      | service    |
+      | analysis   |
+      | indicators |
+      | ingest     |
