@@ -70,8 +70,10 @@ the scenarios for the losing option and records the choice in `context.md`.
 ## Reproduction Steps
 
 1. D-10: `ExecuteFormula` with source `raise SystemExit(0)` → `success=True`, `output={}`.
-2. D-18: `ComputeIndicator("ATR", values=[10, 12, 11, 13], period=2)` → `[None, None, 1.5, 1.5]`;
-   `ComputeIndicator("VWAP", values=[10, 20, 30])` → `[10, 15, 20]`.
+2. D-18: `ComputeIndicator("ATR", values=[10, 12, 11, 13], period=2)` → engine series `[None, None, 1.5, 1.5]`,
+   so `ComputeIndicatorResponse.result` holds 2 `IndicatorPoint`s with `value` 1.5 and 1.5 (the servicer drops
+   `None` warm-up positions, `servicer.py:215-218`); `ComputeIndicator("VWAP", values=[10, 20, 30])` → `result`
+   values `[10, 15, 20]`.
 3. D-54: a formula row with `pending_intent_id` set: `GetFormula` → `NOT_FOUND`, but its author's
    `UpdateFormula` succeeds and `DeleteFormula` soft-deletes it.
 
@@ -91,7 +93,8 @@ mutating RPCs bypass the pending-hidden read helper.
 
 - [ ] Proto change **conditional on OQ-1**. Option B adds new optional/repeated OHLCV fields to
   `ComputeIndicatorRequest` (`packages/proto/indicators/v1/indicators.proto:54-61`). Additive only:
-  new field numbers 7+, no renumbering or removal, so `buf breaking` must pass. If taken, it needs the
+  new field numbers 7+ (fields 1-6 are the only ones in use, verified at /sdd-review 2026-10-21), no
+  renumbering or removal, so `buf breaking` must pass. If taken, it needs the
   proto approval gate (root `CLAUDE.md` § Approval Flow; `docs/runbooks/proto-versioning.md`): a proto
   PR first, Proto Reviewer sign-off, then `./scripts/buf-gen.sh`. Option A needs no proto change.
 - [x] No database migrations anticipated
