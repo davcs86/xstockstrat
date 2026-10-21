@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-10-21 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-21-offline-book-consistency-defect.md` (debt-radar D-47, D-48, D-49, D-63) |
+| 2026-10-21 | `draft` → `spec-ready` | /sdd-review | Product spec approved (7 warnings) |
 
 ---
 
@@ -49,4 +50,4 @@ The offline-account books from feature 240 drift or misreport P&L in four ways:
 
 ## Next Action
 
-`/sdd-design fix-offline-book-consistency` — recommended design depth: full (2 affected services; reverses a recorded feature-240 decision); see context.md
+`/sdd-design fix-offline-book-consistency` — recommended design depth: full (2 affected services; reverses a recorded feature-240 decision). Design must resolve OQ-1/OQ-2 and the review warnings in context.md
