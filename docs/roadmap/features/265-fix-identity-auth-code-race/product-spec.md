@@ -68,8 +68,8 @@ paths share one mint helper and one refresh-issue helper with unchanged claim sh
   stub that rejects the INSERT inside the transaction).
 - The structural halves of FR-6/FR-7 (single mint helper, single refresh-issue helper, no inline `jwt.sign` or
   refresh INSERT in `authenticateUser`/`refreshToken`) cannot be seen by a black-box scenario. They are verified
-  by an impl-spec step check (a grep showing one `jwt.sign` call site and one refresh-token INSERT site in
-  `identityServiceImpl.ts`) and by code review. AC-4 covers only their observable half.
+  by an impl-spec step check (a grep of `identityServiceImpl.ts` showing no `jwt.sign` in `authenticateUser` or
+  `refreshToken` and no `refresh_tokens` INSERT in `authenticateUser`) and by code review. AC-4 covers only their observable half.
 - New fixtures follow the C-13 test-data inventory rules.
 
 ## Reproduction Steps
