@@ -42,3 +42,13 @@ Feature: fix-fundsignal-emit-accounting (bug fix)
     Then the run is aborted with signals_emitted 1
     And the fundsignal_emitted row for ("MSFT", "fundamentals", 2026-10-21) carries the signal_id ingest returned
     And no fundsignal_emitted row without a signal_id exists for ("AAPL", "fundamentals", 2026-10-21)
+
+  @AC-6 @FR-4 @regression
+  Scenario: A failed fetch chunk wins over a budget cutoff in the run status
+    Given the producer's universe is 120 symbols and its daily call budget is 2
+    And the first GetFundamentalsMulti chunk of 50 symbols fails with UNAVAILABLE
+    And the second chunk of 50 symbols succeeds
+    When run_once runs with force false
+    Then the finished run's status is "partial"
+    And the run's deferred_count is 70
+    And the run's symbols_processed is 50
