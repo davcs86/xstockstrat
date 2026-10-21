@@ -9,6 +9,9 @@
 
 ## Problem Statement
 
+**Who is affected.** A trader or operator who relies on fundamentals signals, opportunity refreshes, P&L pattern
+data or live config sees stale data or frozen config, with no error and green health, after one transient fault.
+
 **Observed.**
 
 - **D-07.** The analysis background loops guard only their cycle body. `DurableSchedule.seed` / `next_sleep_seconds` /
@@ -41,12 +44,15 @@ explicit, logged rule.
 - **FR-2 (D-07).** Every background task analysis starts at boot stays referenced for the life of the process.
   If one ends unexpectedly, analysis logs an error that names the task and the exception.
 - **FR-3 (D-08).** `ConfigWatcher._watch` in analysis, indicators and ingest reconnects after any exception, not only
-  `grpc.aio.AioRpcError`, with a log line and a backoff. It does not freeze config at the last snapshot.
+  `grpc.aio.AioRpcError`, with a log line and a backoff. It does not freeze config at the last snapshot. The watch
+  task each service starts (`watcher.py:56` / `:56` / `:69`) stays referenced for the life of the process, and if it
+  ends unexpectedly the service logs an error that names the task and the exception.
 - **FR-4 (D-56).** When `PnLPatternConsumer` fails transiently on a ledger event, it retries that event before the
   cursor moves past its sequence.
 - **FR-5 (D-56).** After a bounded number of failed attempts, a poison event is parked under an explicit rule and the
   park is logged with the event's sequence. The consumer then continues past it, so one bad event cannot stall the
   stream. Design decides the retry bound and the park mechanism (a parked-events table or a structured log record).
+  AC-7 uses a bound of 3 as its example; design/spec re-points that example if it pins a different value.
 
 ## Consumer Surface(s)
 
