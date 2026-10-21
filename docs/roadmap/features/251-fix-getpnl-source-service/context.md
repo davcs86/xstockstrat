@@ -267,3 +267,125 @@ OPERATOR DECISIONS (binding, recorded 2026-10-20):
   existed before citation (F-04).
 - B6 closed. B9 (adapter wire-test seam) remains the sole blocking objection; status stays `spec-ready`.
 - Files written: the two reports + `.status` sidecars, product-spec.md, context.md.
+
+## Session 2026-10-21 — sdd-design (full) halted at gate, round 8
+
+- `/sdd-design fix-getpnl-source-service` full debate ran to round 8 (operator-extended cap). Synthesis grounded at
+  HEAD `d077dcfe`. Auto-approval did not fire: rounds >= 2 met, Floor clean, every @AC impact PRESERVE/EXTEND, but
+  1 blocking objection (B6) remained at synthesis. `design.md` NOT written; `status.md` stays `spec-ready`.
+- Ordering deviation: rounds 6, 7, 8 ran before the B6 reports were filed, contrary to the operator's 2026-10-21
+  "file before the debate continues" directive. Recorded here in one entry; per-round r6/r7/r8 entries (P-05) are
+  still owed by the orchestrator.
+- Branch tip is now `d707d239` (B6 filing session above). The r8 synthesizer did not see it.
+- Checkpoint: `state-r8.json` in the orchestrator scratchpad (seeds/251).
+
+## Open Threads
+
+### Current best approach (after round 8)
+
+Items 1, 2, 4, 5, 8 of round 5 stand verbatim (ledger keyset paging in `queryEventsPage.ts` + delegate; B8 252
+reconciliation; ctx-first `classifyGetPnLError`/`toGRPCError`; trading `side` key; UI FR-3; ship gate; build order).
+Items 3/3' and 9 of round 6 stand. Round-8 additions (portfolio paths under `services/xstockstrat-portfolio/internal/`):
+
+- **A. Shared ledger fake** — new `testdata/ledger.go` (imports nothing from service; precedent
+  `testdata/offline_pnl.go`). `Ledger{LedgerServiceClient; Events; OnQuery func(ctx, req) error; calls atomic.Int64}`
+  + `Calls()`. No `Block` field (case 4 blocks in OnQuery on `<-ctx.Done()`). `AppendEvent` no-op (emitEvent
+  `portfolio_service.go:1043`). QueryEvents order: count; `Unimplemented` if `TimeRange`/`FromSequence` set
+  (`ledger.proto:64`, `:66`; fails.md:577); OnQuery error; `status.FromContextError`; filter EventType/
+  SourceService/StreamKey only when set (`ledgerServiceImpl.ts:130-141`); slice order = recorded_at order (`:162`),
+  may disagree with Sequence; PageSize 0 -> 100 (`:157`) with the fake's own opaque token. Builders
+  FilledEvent/PartialEvent/CreatedEvent take `seq int64`, bare-id StreamKey (`trading.go:649`, `:1805`).
+  SourceService literal covered by the extended source-service parity test (builders = GetPnL filter
+  `portfolio_service.go:752` = trading producer; fails.md:1708). In-package `fillEvent`
+  (`portfolio_fill_errors_test.go:24`) stays inline: live-fold shape owned by the live-fold follow-up.
+- **B. Test shim** — new `service/export_test.go`: `WirePosition`, `NewWireTestService(t, ledger, positions...)`
+  layered on `newQuoteSvc` (`portfolio_quote_deadline_test.go:93-112`) + `newFakeStore()`/`wideCaps()`
+  (`watchlist_service_test.go:37`, `:362`); always registers the `FROM portfolio.positions` expectation
+  (`portfolio_service.go:724-726`); exports `CtxWithUser` (`watchlist_service_test.go:280`), `Guard`
+  (`portfolio_quote_deadline_test.go:70`). 2-line import-cycle constraint comment. Positive-side cache is a
+  zero-value-safe `PortfolioService` field (lazy init under own mutex; precedent `portfolio_service.go:50-51`,
+  `:64-65`), not package-level. Literals `portfolio_quote_deadline_test.go:102`, `portfolio_fill_errors_test.go:64`,
+  `watchlist_service_test.go:276`, plus fakeLedger/stopLedger/fillEvent, listed as reviewed-unchanged.
+- **C. Adapter test** — new `service/portfolio_grpc_wire_test.go` (`package service_test`) via
+  `handler.NewPortfolioHandler(svc).GRPCHandler()` (`portfolio_handler.go:49`, `:242`, `:276-282`, `:432`):
+  (1) fill without order.created/submitted -> FAILED_PRECONDITION; (2) plain ledger error -> UNAVAILABLE;
+  (3) live ctx, OnQuery cancels -> CANCELED, `Calls() >= 1`; (4) 50ms timeout, OnQuery blocks, under `Guard` ->
+  DEADLINE_EXCEEDED, `Calls() >= 1`; (5) `TestWire_DeleteSystemManagedWatchlist_F127AC7`, seeded via
+  EnsureSignalWatchlist (`portfolio_handler.go:370`, `portfolio_service.go:1718-1727`) -> FAILED_PRECONDITION;
+  (6) no x-user-id -> INVALID_ARGUMENT; (7) `Current: 0`, zero-value `stubMarketData{}`
+  (`portfolio_service_test.go:58-63`), live ctx -> UNAVAILABLE (pins portfolio @AC-5 EXTEND). Cases 3/4 never
+  start from a pre-done ctx (pgxmock `expectations.go:71-77`). Gap: no grpc.Server, interceptors, serialization.
+- **D. Fold fixtures** — F1: filled buy 10@100 (seq 1), partial-only sell 4@150 (seq 2), filled buy 10@200 (seq 3)
+  -> 200. F2: three partial-only orders A buy 10@100 (1), S sell 4@150 (2), B buy 10@200 (3), Events slice order
+  A,B,S, fresh shim+fake per iteration, exactly 200 on all 20 runs. A sequence-dropping fold: A,B,S -> 0, B,S,A ->
+  -200, S,A,B -> 200 (coincidence, 1/8 per run under random iteration); pass probability ~(1/8)^20. Under
+  insertion-stable iteration it sees A,B,S and fails every run, so F2 is stronger, not weaker (the r8 proposer's
+  "strongest risk" text is inverted and must not reach design.md). Drain test: 501 order.filled events with
+  `side`, PageSize 500 (`portfolio_service.go:754`) -> each fill folded once, terminates under `Guard`, exactly 2
+  order.filled QueryEvents calls; named in the FR-5 AC.
+- **E. Touchpoints** — the three new files above; F1/F2/drain in the existing GetPnL test file; parity test
+  extended. No proto, migration, config, go.mod/go.sum or ci.yml change; no new runtime edge. `testdata` counted
+  in COVERPKGS (`.github/workflows/ci.yml:256`) accepted, precedent `offline_pnl.go`.
+- **F. Doc reconciliations at design write** — `recon.md:139` portfolio @AC-5 PRESERVE -> EXTEND; recon.md
+  Existing Business Rules adds platform @AC-7 @feature-127 (`platform.feature:34-41`) PRESERVE backed by case (5);
+  C-15 appends AC-4..AC-22 + FR-4/FR-5 with @FR tags (F1, F2, drain, adapter cases 1-7).
+- **B9** — debate converged on option (a) (`export_test.go` adapter test) under the standing authorization. Not
+  an operator pick. Closes round-5 "Operator decision needed #2" and the B9 "Operator picks one" line.
+
+### Blocking objections
+
+- [ ] **B6** [C-10/C-14, P-03/P-05, F-04] Blocking at the r8 synthesis (`d077dcfe`). Status at `d707d239`: both
+  reports exist (`docs/reports/2026-10-21-portfolio-live-fold-sell-sign-loss-defect.md`,
+  `docs/reports/2026-10-21-trading-bracket-leg-fills-missing-from-realized-pnl-defect.md`, sidecars `open`), cited
+  at `product-spec.md:191`, `:196`, with a closing entry ("B6 side-defect reports filed"). Substance appears
+  discharged. Residual from state-r8 item 6: (i) the per-round r6/r7/r8 deviation entries were not appended before
+  filing and are still absent (this entry batches them); (vii) the closing entry ticks B6 but records B9 as still
+  blocking, not as debate-resolved. Operator: accept B6 as closed at `d707d239`, or require the per-round entries
+  first.
+
+### Non-blocking (folded; must appear as design text)
+
+- Corrected F2 risk text (P-03); zero-value-safe cache field (fails.md:2710); fake returns Unimplemented for
+  TimeRange/FromSequence (fails.md:577); drain test gives paging a consumer (C-15/C-18, fails.md:1441); case (7)
+  pins @AC-5 EXTEND with live-ctx precondition (C-16); no Block field (C-18); fillEvent stays inline with reason
+  (C-13/C-18); parity test covers builders (fails.md:1708); case (5) seeded via EnsureSignalWatchlist, `_F127AC7`
+  (C-15); COVERPKGS accepted, no ci.yml edit (C-08).
+- Carried r5-r7: cold-cache gate (iv) latency; 252 `if (!impl) return;` delegate-guard residual; queryEventsPage.ts
+  strip-types constraint, integer-microsecond keyset, ledger-pg-test 2-page drain; product-spec Affected Services /
+  Fix Scope (`:152`, `:161-164`); document opaque page_token in ledger CLAUDE.md; scratch-tsconfig compiled run;
+  confirm no in-repo runtime GetPnL caller; dev smoke under fail-closed mTLS; ledger-pg-test SEED_USER_ID scoping
+  (`ci.yml:667`); permanent FAILED_PRECONDITION counting/remediation; ms-precision premise correction; RED hygiene;
+  /sdd-spec re-greps every citation.
+
+### Floor breaches
+
+- None.
+
+### Uncovered @AC changes
+
+- None. All impacts PRESERVE or EXTEND (no operator coverage required):
+  - PRESERVE: 251 @AC-1, @AC-2, @AC-3; portfolio @AC-6; platform @AC-7 @feature-127 (case 5); trading @AC-10;
+    trading offline @AC-14/@AC-7/@AC-11; ledger @AC-8.
+  - EXTEND: portfolio @AC-5 @feature-229 (FAILED_PRECONDITION / DEADLINE_EXCEEDED / CANCELED under ctx-first
+    precedence; ErrQuotesUnavailable stays UNAVAILABLE while ctx live; case 7); 251 appended @AC-4..@AC-22 with
+    FR-4/FR-5.
+
+### Open risks
+
+- Import-cycle trap (in-package `_test.go` importing `internal/handler`); mitigated only by the shim comment.
+- Shim coupled to `newQuoteSvc` signature. Adapter test skips grpc.Server/interceptors/serialization.
+- Case (4) relies on no internal timeout in the GetPnL ledger stage (`portfolio_service.go:751-755`); 50ms under
+  -race may flake (raise to 200ms).
+- Drain test's "exactly 2 calls" coupled to hard-coded PageSize 500.
+- Cold-cache cliff after deploy; permanent FAILED_PRECONDITION for unresolved mixed-era fills; ledger delegate line
+  unguarded until 252; cursor chunk exclusion unconfirmed until gate (iv); uncapped platform-wide order.filled
+  drain; short-deadline callers now see DEADLINE_EXCEEDED; DeleteWatchlist 500 -> 400 (intended).
+- Sequence order is racing-goroutine insert order; interleaved partials may differ from broker figure.
+- Live-fold sign loss and bracket-leg understatement remain until their follow-ups land.
+- 251/252 merge collision relies on the second merger honouring reconciliation.
+
+### Operator decision needed
+
+1. Accept B6 as discharged at `d707d239`, or require the per-round r6/r7/r8 context entries first.
+2. Then evaluate the gate against `state-r8.json` (no further debate round needed) and write `design.md`
+   carrying approach A-F and the corrected F2 risk text.
