@@ -3691,3 +3691,15 @@ reusing.
   §4.4–4.5; Rejected Alternatives).
 - **Rule it implies**: Push raw, bounded inputs and interpret them where the clock lives. Size the
   window from the worst-case gap (here ~4.5 days) with slack, and record it as a fixed invariant.
+
+### 2026-10-20 — fix-agent-getconfig-deadline — design
+- **Pattern**: Before adding a deadline to a read whose callers fall back with `except Exception`,
+  check what each fallback *permits*. A hang can be an accidental fail-closed control. In DCR, a
+  stalled config used to block `/oauth/register`. Once the read is deadlined, the fallback
+  registers clients anyway, bypassing `registration_enabled=false` and the allowlist.
+  The design labels this a security posture change and materializes a follow-up. It also
+  corrects the comment that claimed identity enforced the allowlist.
+- **Evidence**: `docs/roadmap/features/247-fix-agent-getconfig-deadline/design.md` (§4(b));
+  `services/xstockstrat-agent/app/oauth_server.py:87-110`.
+- **Rule it implies**: In a timeout or deadline fix, enumerate the fallbacks that open a security
+  gate when the read fails. Record each one as a posture change, not as a plain fallback.
