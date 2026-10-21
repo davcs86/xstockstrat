@@ -37,6 +37,8 @@ owner gets an entry backfill at all.
 
 - **FR-1 (D-44).** Every `ListOrders` call the entry-backfill makes for a live row carries that row's owner: the
   request `user_id` is the row's `user_id`, and the call is sent with `owner_metadata(user_id)` (`x-user-id` = owner).
+  A failure building that metadata or making that call affects only that `(strategy, symbol)` pair; other pairs and
+  owners are still backfilled.
 - **FR-2 (D-44).** An owner's in-memory entry state (`_last_state` / `_last_entry_at`) and durable entry cooldown are
   seeded only from that owner's orders, never from another owner's fills on the same `strategy_id`.
 - **FR-3 (D-55).** A failure while preparing one owner (its `owner_metadata` `ValueError`, or any exception from its
