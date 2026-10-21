@@ -11,11 +11,12 @@
 
 - **D-24 (latent cross-tenant leak).** **Observed:** `broadcastSnapshot` (`portfolio_service.go:908-943`) sends each
   snapshot to every entry in `s.subs` (`:936-942`). It is called after every processed fill (`:376`), so the
-  producer is live. Both `StreamPortfolioUpdates` paths filter only on `TradingMode`: Connect
-  (`portfolio_handler.go:114-138`) and the gRPC adapter (`:291-311`). The gRPC adapter also accepts an empty
-  `x-user-id`. No consumer is wired today. **Expected:** a subscriber receives only snapshots with
-  `portfolio_id == x-user-id`, and an empty caller is rejected on both paths. This matches `GetSnapshot`'s own
-  `portfolio_id == caller` rule (portfolio `CLAUDE.md:49-50`).
+  producer is live. Both `StreamPortfolioUpdates` paths filter only on `TradingMode` and have no owner check: Connect
+  (`portfolio_handler.go:114-138`, loop `:125-134`) and the gRPC adapter (`:291-311`). Only the gRPC adapter accepts
+  an empty `x-user-id`; the Connect path already rejects it (`:115-118`). No consumer is wired today, so the trader
+  whose equity would leak is any tenant once a consumer subscribes. **Expected:** a subscriber receives only
+  snapshots with `portfolio_id == x-user-id` on both paths, and an empty caller is rejected on the gRPC path as it
+  already is on Connect. This matches `GetSnapshot`'s own `portfolio_id == caller` rule (portfolio `CLAUDE.md:49-50`).
 - **D-12 (dead key).** **Observed:** `StartSnapshotWriter` (`portfolio_service.go:893-906`) has zero callers.
   `portfolio.snapshot.interval_minutes` is seeded (`xstockstrat-config/migrations/001_config_tables.up.sql:68`,
   `002_config_environment.up.sql:69`) and documented (portfolio `CLAUDE.md:99`) but does nothing. Snapshots exist
@@ -42,8 +43,9 @@
   Covered by `@AC-1`.
 - **FR-2 (D-24).** A gRPC `StreamPortfolioUpdates` call with an empty or absent `x-user-id` fails with
   `INVALID_ARGUMENT` and is never registered as a subscriber. Covered by `@AC-2`.
-- **FR-3 (D-24).** The Connect `StreamPortfolioUpdates` path applies the same isolation as FR-1 and the same
-  empty-caller rejection as FR-2. Covered by `@AC-3` and `@AC-6`.
+- **FR-3 (D-24).** The Connect `StreamPortfolioUpdates` path applies the same isolation as FR-1 (regression,
+  `@AC-3`) and keeps its existing empty-caller rejection (`portfolio_handler.go:115-118`; non-regression guard
+  `@AC-6`, which passes on the buggy code by design).
 - **FR-4 (D-12).** `portfolio.snapshot.interval_minutes` stops being a dead key. Design picks exactly one branch
   (see Open Questions): either (a) the periodic writer runs for every user with positions and honours the interval,
   or (b) the key is retired from config and from portfolio docs and the dead writer is removed. Covered by `@AC-4`
@@ -76,7 +78,8 @@ config key and a background writer, which no surface reads.
     `xstockstrat-config` order via `scripts/db-migrate.sh`.
 - Config key change (C-05) on either branch. Branch (a) makes `portfolio.snapshot.interval_minutes` live. Branch (b)
   retires it. Both add an entry to the `docs/patterns/config-governance.md` Per-Feature Registered Keys log and update
-  portfolio `CLAUDE.md:99`.
+  portfolio `CLAUDE.md:99` (branch (b) removes the key row; this doc check is not an acceptance scenario) and the
+  `StartSnapshotWriter` row in `services/xstockstrat-portfolio/docs/context-constitution-findings.md:29`.
 
 ## Open Questions
 
