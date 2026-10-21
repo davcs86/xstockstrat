@@ -142,3 +142,42 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Ledger: `fails.md` entry added (Node ≥ 23 default non-TTY `node --test` reporter is `spec`, so TAP literals in
   ACs/evidence do not appear on CI Node 24).
 - Status: spec-ready → design-approved.
+
+## Session 2026-10-20 — sdd-spec
+
+- Generated implementation-spec.md with 6 steps. Status: design-approved → implementation-ready.
+  1. docs: C-15 requirement amendment
+  2. service: identity runner
+  3. test: identity hardening
+  4. service: ledger runner
+  5. test: ledger hardening
+  6. docs: teardown
+- Requirement amendment (`design.md:116-169`) was **not** on the feature branch.
+  - At `ca8b9236`, `acceptance.feature` has AC-1..AC-5 only, with the old AC-4 at `:33-40` and the TAP-literal AC-5 at `:46`.
+  - Per `design.md:122`, spec Step 1 owns it (`acceptance.feature` + `product-spec.md` in its Files, F-08).
+  - Timing tension: `design.md:123` wants it landed before impl-spec review, which a step only achieves if executed first.
+  - Step Dependencies therefore require Step 1 to run, or the orchestrator to apply the identical text, before `/sdd-review … impl-spec`. Step 1 is a no-op if the text is already there.
+- Key codebase findings (re-grepped at `ca8b9236`):
+  - Merge base with `origin/main-dev` @ `51e3cc9b` is `45356952`. `services/xstockstrat-{identity,ledger}/src`, `ci.yml`, `lang-node.md`, `ci-overview.md`, root `CLAUDE.md` and `merge-order.md` have no diff since then. All recon anchors hold.
+  - Guard counts confirmed by grep: identity 65 (67 on #1262 `e69e953d`); ledger impl 31; eventNotifier 7. Every `if (!` line is a subject-missing guard. The only `catch`es are the subject and proto imports on both bases. The `try {` at identity `:143` is an `APPLICATION_ENV` try/finally.
+  - #1262 anchors re-verified on `e69e953d`:
+    - `rotateRefreshToken` `:340-372`;
+    - claim `AND rt.revoked_at IS NULL` `:353`;
+    - call `:530`;
+    - test regex `:495`.
+  - Base detector: `grep -c "private async rotateRefreshToken"` (0 = main-dev, 1 = #1262).
+  - AC-2 mutation precision: deleting only `ledgerServiceImpl.ts:84-105` leaves the block's `}` at `:106` orphaned, so `tsc` fails for syntax and not because of the test. Step 4 deletes `:84-106`. The scenario text is unchanged.
+  - Baseline assert counts (`grep -o 'assert\.[A-Za-z]*('`), context only (F-09):
+    - identity impl 145 (150 on #1262);
+    - ledger impl 71;
+    - eventNotifier 13.
+  - Expected absolute test counts (`design.md:89`), context only: identity 75 (79 on #1262), ledger 47.
+- Spec-time additions beyond `design.md` (recorded per P-03):
+  - (a) The follow-up defect row goes into **config and notify** findings logs too, not only identity/ledger (`design.md:189`). Precedent: one row per affected service (commit `0027fa17`; the multi-service `2026-10-19-orphaned-code-defect` rows). The defect covers all four leaves (C-10).
+  - (b) The stale "Lazy imports — guard against strip-only…" banners (identity `:18-20`, ledger `:14-16`) are deleted with the try/catch; the constraint comment supersedes them.
+  - (c) `lang-node.md:37` glob is updated with `:9,11-32,54,58`, because it becomes false once all four use `dist/__tests__/*.test.js`.
+  - (d) The follow-up defect is filed as `SEV-3` (same class as the parent, `product-spec.md:5`).
+- Open Threads added:
+  - [ ] This /sdd-spec sandbox has Node `v22.22.0` only. Steps 2–5 gates require Node 24 (`ci.yml:572`). No Node 24 means stop-and-ask, never a Node 22 substitute (`design.md:219`).
+  - [ ] `fails.md:2224` claims Node 24 strip-types loads these suites, contradicting `product-spec.md:12-22`. Steps 2 and 4 treat an absent pre-change RED (mutation already fails) as stop-and-ask.
+  - [ ] Step 1 must land before `/sdd-review fix-identity-ledger-test-suites impl-spec` (owner: orchestrator).
