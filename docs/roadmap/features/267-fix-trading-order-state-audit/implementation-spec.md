@@ -407,7 +407,7 @@ grep -n "_, _, _ = s.orderIntentRepo.ReclaimOrphanIntent" services/xstockstrat-t
 **Reviewers**: `xstockstrat-trading` owner — order execution correctness, broker API safety, fill detection, paper-only dev invariant, position limit enforcement
 
 **Codebase Evidence**:
-- Full enumeration, by `grep -n "context.Background()" services/xstockstrat-trading/internal/service/trading.go` this session. This is 36 hits (re-verified at impl-spec review): the 31 converted rows below, the two Step 2 sites `:688`/`:703`, and the three left-as-is sites. Every hit is classified, so design.md Open Risk 8 is discharged for the enumeration; the `:2617` disposition is still an open operator decision (see Left as-is).
+- Full enumeration, by `grep -n "context.Background()" services/xstockstrat-trading/internal/service/trading.go` this session. This is 36 hits (re-verified at impl-spec review): the 32 converted rows below (row 32 is `:2617`, by operator decision 2026-10-21), the two Step 2 sites `:688`/`:703`, and the two left-as-is sites. Every hit is classified, so design.md Open Risk 8 is discharged for the enumeration.
 - `grep -rn "context.Background()" internal/service/*.go`, excluding `_test` and `trading.go`, returned nothing else.
 - Each hit is classified by its reachable callers below. Sites already owned by Steps 2 and 4 are `:688`, `:703`, `:1367`, `:1550`, `:603`, `:1301` and `:1498`; `:688` and `:703` are in the grep list and appear here only as owned elsewhere.
 
@@ -446,10 +446,12 @@ grep -n "_, _, _ = s.orderIntentRepo.ReclaimOrphanIntent" services/xstockstrat-t
 | 29 | `:3425` | `createBracket` | emit `order.bracket_updated` (IBKR) | same | same |
 | 30 | `:3461` | `resizeBracket` | `emitBracketFailureAlert` | via `maybeSubmitBracket` ← #21 / #23 | same |
 | 31 | `:3467` | `resizeBracket` | emit `order.bracket_updated` | same | same |
+| 32 | `:2617` | `validateAndRecordCredential` | `accountRepo.UpdateCredentialStatus` | `RegisterBrokerAccount` `:2528`, `UpdateBrokerAccountCredentials` `:2575` | credential poller `:2690` |
+
+Row 32 was converted by operator decision on 2026-10-21 (context.md): the standing rule covers request-derived writes. Its test asserts that the repo write receives a ctx carrying the inbound `PropagationData` trace id, using a ctx-capturing `accountRepo` fake, and that the write still lands after the request ctx is cancelled.
 
 **Left as-is:**
 - `:2859` `haltAccount` in `flattenAndHalt`, and `:2907` `flattenAndHalt`. Their only caller chain is `StartBracketProtectionWatchdog` (`:2866`) → `checkBracketProtection` (`:2884`), which is background-only per the operator decision.
-- `:2617` `accountRepo.UpdateCredentialStatus` in `validateAndRecordCredential`. It is request-reachable (`RegisterBrokerAccount` `:2528`, `UpdateBrokerAccountCredentials` `:2575`) as well as poller-reachable (`:2690`). It is neither a ledger emit nor a finalize, it sits outside the order-state neighbourhood, and it carries no trace on the wire. It is **not converted**; this is surfaced as an operator Open Thread in context.md (P-03), not silently dropped.
 
 For shared functions (#19-#31), `WithoutCancel(ctx)` on a background caller's ctx behaves the same as
 today's `Background()`. The poller ctx carries no `PropagationData`, and `WithoutCancel` strips only its
@@ -535,7 +537,7 @@ Coverage threshold: N/A for this step (`internal/service/` is excluded from the 
    - Inside `submitOrder`, that is the request ctx on `PlaceOrder` and the flatten loop's own ctx on flatten (design.md § Scope widening), so the change is correct for both callers.
    - Inside `createBracket`/`resizeBracket`, `ctx` already arrives as `WithoutCancel` from #8/#21/#23. Wrapping it again is idempotent and keeps each site self-evidently correct.
 2. Change `finalizeCancelIntent` to `finalizeCancelIntent(ctx context.Context, intentID string, order *tradingv1.Order, state int16)`. Use `context.WithoutCancel(ctx)` at `:1405`, and pass `ctx` at `:1368`, `:1386` and `:1396`.
-3. Do not touch `:2617`, `:2859` or `:2907` (see Step 5, "Left as-is").
+3. Do not touch `:2859` or `:2907` (see Step 5, "Left as-is"). `:2617` is converted as row 32.
 4. Add no comments beyond what C-18/§How to Act #5 allow. The helper comments from Steps 2 and 4 carry the constraint, so the site edits need none.
 
 **Broker/fill note:** the IBKR and Alpaca bracket paths and the FILLED/PARTIALLY_FILLED branches change only
@@ -544,8 +546,7 @@ in their ctx. Fill semantics are unchanged (C-5).
 **Verification**:
 ```bash
 cd services/xstockstrat-trading && GOWORK=off go test ./internal/service/ -run 'TestTrace_' -race -count=1 -v   # GREEN
-grep -n "context.Background()" services/xstockstrat-trading/internal/service/trading.go   # expect exactly :2617, :2859, :2907 (line numbers may shift)
-# if the operator resolves the :2617 Open Thread as 'convert in 267' before execution, expect only :2859, :2907
+grep -n "context.Background()" services/xstockstrat-trading/internal/service/trading.go   # expect exactly :2859, :2907 (line numbers may shift)
 cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-download-mode=mod
 cd services/xstockstrat-trading && export GOWORK=off && COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"
 # confirm total >= 40%. New logic is in the excluded service/ package — no coverage threshold applies to it; the full suite (including every existing PRESERVE-guarding test) must pass.
