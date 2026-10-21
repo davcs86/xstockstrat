@@ -101,3 +101,37 @@ OPERATOR DECISIONS (binding, recorded 2026-10-20):
 - No config/proto/migration collision. `pnl.go` read-only (240 exports `QtyEpsilon`).
 - Lifecycle: 240 `status.md` = `code-completed`, while the triage entry says merged to main-dev (#1266); verify 240
   is on main-dev before the 251 integration PR. No merge-order row required (no FAIL); a soft 240→251 row is optional.
+
+## Session 2026-10-20 — sdd-review product-spec (resumed re-run)
+
+- Re-run of the product-spec gate on spec-ready tip `5089b229`. Verdict: criteria PASS WITH WARNINGS (8 warnings, no
+  fails, no Floor `F-*` breach); overlap WARN (no FAIL). Status stays spec-ready. A4 was already applied by the
+  entry above, so no second Status History row was added and feature.md Next Action is unchanged.
+- Warnings already carried in the entry above (no new action): live-fold sign loss `processOrderFill`
+  (`portfolio_service.go:310-317`) needs a named follow-up; scope fork (a)/(b) plus the FR-2/FR-3 deferral
+  alternatives are pending operator sign-off; `order:{order_id}` stream-key doc drift; C-2 broker scope and C-3 mode
+  scope (both already stated in the spec); C-16 durable suites
+  (`fix-after-hours-positions-priced.feature`, `fix-book-portfolio-page.feature`); unresolved-side AC.
+- New warnings this run:
+  - [x] [criterion 8] Partial-then-filled dedup: FR-2 now says the dedup is unchanged
+    (`portfolio_service.go:784`, `:838-840`).
+  - [x] [criterion 8] FR-3 now says partial fills stay absent from the lineage sheet (`usePositionLineage.ts:17`).
+  - [ ] unaddressed: [criterion 8] AC for a partially filled sell that later reaches `order.filled` (folds once,
+    from the filled event). Design appends it under the next free ID (C-15).
+  - [ ] unaddressed: [C-3, advisory] A LIVE-mode exclusion scenario (a LIVE fill must be excluded from a paper
+    GetPnL query and from the paper lineage). The spec states mode handling is unchanged. Design decides whether to
+    add the scenario.
+  - [x] [C-18, informational] Track C proportionality: four services, BFF user scoping. C-10 rationale is already in
+    the Scope Decision. No action.
+- Overlap findings (this run): `portfolio_service.go` is shared with 240 (GetPnL untouched there) and 242
+  (`emitRiskAlert`); disjoint functions, rebase only. `trading.go` collides with 249 (`ibkrCreds`) only under option (b).
+  UI files (`usePositionLineage.ts`, `traderBff.ts`) are not named by any peer. No config, proto or migration
+  collision. No 251 merge-order row is required; an optional soft 240→251 row is still possible. Re-run the Mode B
+  overlap scan once the fork is decided.
+- product-spec.md edits: FR-2 dedup sentence; FR-3 partial-fill exclusion sentence. acceptance.feature unchanged.
+
+### Operator decisions
+
+OPERATOR DECISIONS (binding, recorded 2026-10-20):
+- Standing authorization: designs run in FULL mode only (no quick designs for automated fixes); the orchestrator auto-approves the design gate once rounds >= 2, no unresolved Floor (F-*) breach remains, no blocking objection remains, and every CHANGE to an existing @AC business rule is covered by an operator decision below.
+- Full design depth (operator: full is the minimum).

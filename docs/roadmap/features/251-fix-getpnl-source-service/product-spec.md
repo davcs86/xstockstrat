@@ -53,10 +53,14 @@ client-side only (`usePositionLineage.ts:22-28`), so correcting the filter alone
   `"xstockstrat-trading"`, a shared constant, or no `SourceService` filter since the event types are trading-owned).
 - **FR-2.** Each fill folds with trading's recorded side: a SELL contributes a negative signed qty to `pnl.Fill.Qty`, a
   BUY a positive one. This holds for events in the shape trading writes today (unsigned `qty` / `filled_qty`, no
-  `side` key), because ledger rows are immutable and history keeps that shape after any producer change.
+  `side` key), because ledger rows are immutable and history keeps that shape after any producer change. The
+  per-order dedup is unchanged: an order with an `order.filled` folds once from it, and its `order.partially_filled`
+  rows are skipped (`portfolio_service.go:784`, `:838-840`).
 - **FR-3.** The `/trader/positions` fill lineage lists the signed-in trader's `order.filled` events for the selected
   position as trading writes them (`source_service` `"xstockstrat-trading"`; same fork as FR-1, a Go constant does not
   reach this TypeScript site), and the ledger response delivered to the browser carries no other user's event.
+  Partial fills stay absent from the lineage sheet (existing behavior: the hook queries only `order.filled`,
+  `usePositionLineage.ts:17`).
 
 Realized P&L then equals `pnl.Fold` of the user's signed fills.
 
