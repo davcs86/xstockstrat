@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-10-21 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-21-trading-order-state-audit-defect.md` (debt-radar D-04, D-62) |
+| 2026-10-21 | `draft` → `spec-ready` | /sdd-review | Product spec approved (6 warnings; 2 resolved in-place: AC-8/AC-9 added, FR-4 status clarified) |
 
 ---
 
@@ -45,4 +46,4 @@ reactive intent reclaims leave no `order_intent.reclaimed_unknown` audit event.
 
 ## Next Action
 
-`/sdd-design fix-trading-order-state-audit quick` — recommended design depth: quick (SEV-2, single service, no proto/migration/config); see context.md
+`/sdd-design fix-trading-order-state-audit` — recommended design depth: quick (SEV-2, single service, no proto/migration/config); design must close both deferred Open Questions (C-11); see context.md
