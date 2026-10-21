@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-10-21 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-21-analysis-owner-scope-defect.md` (debt-radar D-44, D-55, D-60) |
+| 2026-10-21 | `draft` → `spec-ready` | /sdd-review | Product spec approved (5 warnings; 3 resolved in-spec: AC-3 ids, new AC-8, FR-1 per-pair isolation). Overlap WARN (file-level: 244, 259, 215/244/245) |
 
 ---
 
@@ -46,4 +47,4 @@ contract. The strategies repository keeps an owner-agnostic, caller-less `update
 
 ## Next Action
 
-`/sdd-design fix-analysis-owner-scope` — recommended design depth: full (2 affected services, tenant isolation; trading is read-only — operator may downgrade to quick); see context.md
+`/sdd-design fix-analysis-owner-scope` — recommended design depth: full (2 affected services, tenant isolation; trading is read-only — operator may downgrade to quick); open design items in context.md (sdd-review session)
