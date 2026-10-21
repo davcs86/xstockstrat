@@ -205,3 +205,47 @@ OPERATOR DECISIONS (binding, recorded 2026-10-21):
 - Standing authorization: designs run in FULL mode only (no quick designs for automated fixes); the orchestrator auto-approves the design gate once rounds >= 2, no unresolved Floor (F-*) breach remains, no blocking objection remains, and every CHANGE to an existing @AC business rule is covered by an operator decision below.
 - Untargeted alerts (empty target_user_id) Web-Push ONLY to users holding the admin role — operator sign-off for the C-16 CHANGE reversing feature 165 FR-3 broadcast; the pinned test webPush.test.ts AC-4 broadcast case is rewritten deliberately.
 - Per-user producers (portfolio emitRiskAlert, analysis live_loop strategy/fundamentals alerts) set target_user_id to the owning user.
+
+## Session 2026-10-21 — sdd-spec
+
+- Generated implementation-spec.md with 15 steps. Status → implementation-ready.
+- Governance reads: root `CLAUDE.md`, `docs/sdd/constitution.md`, ledger (fails.md:116-125, :531-534,
+  :2224-2245; insights.md:459-473, :2144-2151), `docs/runbooks/reviewer-registry.md`,
+  `docs/runbooks/proto-versioning.md`, phase3/4/6 deviation notes (no relevant deviation).
+- Design consumed as mandatory: Chosen Approach build order (`design.md:22-23`); Rejected Alternatives
+  excluded; recon.md Patterns to REUSE cited per step. No migration, no config key.
+- Key codebase findings (beyond recon.md):
+  - Identity: `IdentityServiceImpl` is registered via the generated `IdentityServiceService`
+    (`services/xstockstrat-identity/src/index.ts:50-53`), so a delegate method suffices; `index.ts` unchanged.
+    Admin predicate at `identityServiceImpl.ts:851` (also `:893`). Identity tests run strip-types and are
+    excluded from `tsc` (`tsconfig.json` exclude); generated-stub test import precedent `identityServiceImpl.test.ts:229`.
+  - Notify: `tsconfig.json` includes tests, so a required 3rd `AdminDirectory` constructor arg forces every
+    existing `new StubbedDispatcher(...)` in `webPush.test.ts` (`:110`..`:201`) to pass a stub (Step 8). No
+    log-capture precedent in notify tests; the rate-limited ERROR is verified through a `protected
+    logAdminLookupError` seam, same rationale as `deliver` (`webPush.ts:121-122`).
+  - Env: `IDENTITY_ENDPOINT` absent from notify blocks; insert after `LEDGER_ENDPOINT`
+    (`docker-compose.yml:231`, `.do/app.yaml:521`, `.do/app.dev.yaml:518`); DO form
+    `${xstockstrat-identity.PRIVATE_DOMAIN}:50058` (`.do/app.yaml:264-265`).
+  - Canonical `user_id`: JWT `user_id` (`identityServiceImpl.ts:167`) → `x-user-id`
+    (`services/xstockstrat-ui/src/lib/bffShared.ts:39`) → register (`notifyServiceImpl.ts:232`); matches
+    `user_id::text`. No normalization needed.
+  - Portfolio: `expectDrawdowns` hard-codes `"u1"` (`portfolio_quote_deadline_test.go:367-373`); the AC-6 test
+    inlines its own `account_balances` expectation for `user-42` instead of changing the shared helper.
+  - Overlap re-scan: only 215 (`_emit_fundamentals_unavailable_alert`) among non-terminal features; the branch
+    has no diff vs `origin/main-dev` on any touched file.
+- C-14 follow-up slug named for Step 15: `fix-trading-account-alert-targeting`.
+- Non-waivable dev launch gate carried into the spec (§ Launch gate).
+
+### Decisions
+
+- Notify is split into AdminDirectory client + env (Steps 5-6) and dispatcher audience (Steps 7-8).
+- `createAdminDirectory(endpoint = process.env.IDENTITY_ENDPOINT, client?)`: optional client injection for the
+  single-flight/deadline unit tests. The on-the-wire trio test lives in notify `mtls.test.ts` to reuse its PKI
+  helpers (no duplicate `mintPki`).
+- Agent wording is a `docs` step (docstring only, `design.md:218`); reviewers none per the matrix.
+
+### Open Threads
+
+- [x] Canonical `user_id` form match: closed at spec level (evidence above).
+- [x] Merge-order coupling re-scan: done; 215 only (spec § Step Dependencies).
+- [ ] Remaining design Open Threads carry to /sdd-execute at the steps named in the spec.
