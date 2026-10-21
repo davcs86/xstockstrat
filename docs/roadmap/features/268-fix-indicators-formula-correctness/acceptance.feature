@@ -9,7 +9,7 @@ Feature: fix-indicators-formula-correctness (bug fix)
     Given a formula whose source is "raise SystemExit(0)"
     When ExecuteFormula runs it
     Then success is false
-    And the error states that the formula produced no output
+    And error contains "produced no output"
     And output is empty
     And exit_reason is not SANDBOX_EXIT_REASON_SUCCESS
 
@@ -18,7 +18,7 @@ Feature: fix-indicators-formula-correctness (bug fix)
     Given a formula whose source prints "__OUTPUT__:{" and then raises SystemExit(0)
     When ExecuteFormula runs it
     Then success is false
-    And the error states that the formula output could not be parsed
+    And error contains "could not be parsed"
     And exit_reason is not SANDBOX_EXIT_REASON_SUCCESS
 
   @AC-3 @FR-2 @regression
@@ -35,7 +35,8 @@ Feature: fix-indicators-formula-correctness (bug fix)
     Then ListIndicators still lists the key "ATR"
     And its description does not contain "Average True Range"
     And its description names the close-to-close approximation
-    And ComputeIndicator "ATR" returns [None, None, 1.5, 1.5]
+    And the ComputeIndicator "ATR" response result holds 2 IndicatorPoints with values [1.5, 1.5]
+    And the 2 warm-up positions are omitted from result
 
   @AC-5 @FR-4 @option-A @regression
   Scenario: The VWAP built-in is described as the running mean it computes
@@ -44,7 +45,7 @@ Feature: fix-indicators-formula-correctness (bug fix)
     Then ListIndicators still lists the key "VWAP"
     And its description does not contain "Volume Weighted Average Price"
     And its description names the running mean
-    And ComputeIndicator "VWAP" returns [10, 15, 20]
+    And the ComputeIndicator "VWAP" response result holds IndicatorPoints with values [10, 15, 20]
 
   @AC-6 @FR-5 @regression
   Scenario: UpdateFormula refuses a pending-hidden saga copy
@@ -64,12 +65,12 @@ Feature: fix-indicators-formula-correctness (bug fix)
   Scenario: The ATR built-in computes the Average True Range from high, low and close
     Given high values [11, 13, 12, 14], low values [9, 11, 10, 12], close values [10, 12, 11, 13] and params {"period": 2}
     When ComputeIndicator "ATR" is called with those series
-    Then the output at index 3 is 2.5, the simple mean of true ranges 2 and 3 over the last 2 bars
+    Then the last IndicatorPoint in the response result has value 2.5, the simple mean of true ranges 2 and 3 over the last 2 bars
     And ListIndicators still describes "ATR" as "Average True Range"
 
   @AC-9 @FR-4 @option-B @regression
   Scenario: The VWAP built-in weights prices by volume
     Given close values [10, 20, 30] and volume values [1, 1, 2]
     When ComputeIndicator "VWAP" is called with those series
-    Then it returns [10, 15, 22.5]
+    Then the response result holds IndicatorPoints with values [10, 15, 22.5]
     And ListIndicators still describes "VWAP" as "Volume Weighted Average Price"
