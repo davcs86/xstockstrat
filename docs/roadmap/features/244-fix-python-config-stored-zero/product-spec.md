@@ -204,6 +204,6 @@ Affected services are smoke-tested on dev.
 ## Out of Scope
 
 - Go and Node config getters (not reported as trapped)
-- Request-field `or` fallbacks such as `request.timeout_ms_override or …` (indicators `servicer.py:277-278`)
+- Request-field `or` fallbacks
 - Refactoring unrelated to the bug
 - Performance improvements unrelated to the fix
