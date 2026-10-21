@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-10-21 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-21-fundsignal-emit-accounting-defect.md` (debt-radar D-43, D-57) |
+| 2026-10-21 | `draft` → `spec-ready` | /sdd-review | Product spec approved (7 warnings; overlap WARN) |
 
 ---
 
@@ -46,4 +47,4 @@ symbols are neither fetched nor deferred, and the run still reports `completed`.
 
 ## Next Action
 
-`/sdd-design fix-fundsignal-emit-accounting` — recommended design depth: full (2 affected services; ingest is read-only unless design changes retry idempotency — operator may downgrade to quick); see context.md
+`/sdd-design fix-fundsignal-emit-accounting` — recommended design depth: full (2 affected services; ingest is read-only unless design changes retry idempotency — operator may downgrade to quick). Design must resolve OQ-1/OQ-2; see context.md
