@@ -43,3 +43,39 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   service with no proto or migration, but D-50 changes the observable semantics of config key
   `marketdata.fmp.daily_request_cap`, which is the C-0 quick trigger, and there are five D-ids with a partial-marker design fork).
 - Development branch: feature/fix-marketdata-fundamentals-cache
+
+## Session 2026-10-22 — sdd-review product-spec
+
+- Product spec approved (PASS WITH WARNINGS). Status: draft → spec-ready.
+- OPERATOR DECISIONS (binding, recorded 2026-10-22):
+  - Grouped by service+theme from the 2026-10-20 debt-radar scan; Track C (precedent #1264).
+  - Scope is D-19, D-50, D-51, D-52, D-53.
+  - Operator 2026-10-21 (standing, all features): x-trace-id must be propagated as much as possible; no C-03 waiver — request-derived emits/writes use context.WithoutCancel(ctx) (Go) / the inbound metadata (Python/Node), never a fresh background context; only work with no originating request (background sweepers/loops) may mint its own context, and it should still carry a trace id when one is available.
+  - Operator 2026-10-22 resolves OQ-1: marketdata.fmp.daily_request_cap <= 0 means ZERO BUDGET (FMP disabled), matching reserve(), enrichmentUnderCap(), TestBackfillFundamentals_CapDegrade_AC5, marketdata CLAUDE.md and feature 215. D-50 is fixed by correcting the misleading 'cap <= 0 = uncapped' comments (fmp_client.go:97, marketdata_service.go:1958) and any doc saying otherwise — no behaviour change; a large cap means effectively uncapped. Mark OQ-1 [x] and rewrite FR-1 and its @AC accordingly.
+- Warnings (6):
+  1. C-15, AC-1: the final Then (doc comments describe cap <= 0 as zero budget) was a source-text check. **Resolved
+     this session:** that Then is dropped from AC-1, and FR-1 now says the comment/doc corrections
+     (`fmp_client.go:97`, `marketdata_service.go:1958`, marketdata `CLAUDE.md:82`, config-governance) are verified by a
+     `/sdd-spec` checklist step. AC-1/AC-9 stay behavioural.
+  2. AC-3 (boot seed) and AC-8 (ERROR log) include startup/log wiring. Design must name the test seam (for example the
+     repo count stub behind `cmd/server/main.go:129`). Open for /sdd-design.
+  3. C-14: consumer surfaces (agent `tools.py:402`/`:812`, `traderBff.ts`, `insightsBff.ts`) are named; their
+     verification steps are deferred to /sdd-spec.
+  4. Scope: FR-5 (D-19, Alpaca stream manager) is unrelated to the fundamentals cache. Kept in scope per the binding
+     operator decision (scope D-19, D-50..D-53); design may sequence it as an isolated last step to limit rebase risk
+     against 215/254.
+  5. C-11: the merge-order rows for 215 and 254 are deferred to /sdd-design — they must actually be added (on user yes).
+  6. The optional `(source, fetched_at)` index (marketdata `010_*`) is conditional; design must record the decision.
+- Overlap findings (WARN, no FAIL):
+  - 215-block-fundamentals-strategy-on-etf (in-progress): same files — `internal/fmp/fmp_client.go` (fetchProfile/IsEtf,
+    `reserve()`), `internal/service/marketdata_service.go` (quota gates; 215 Step 7 extracts `atQuotaAlertThreshold`, the
+    FR-1 comment site), `cmd/server/main.go` (Limits/boot-seed wiring), `marketdata_service_test.go` (215 Step 10(c) adds a
+    `{0,0}` case). Rebase risk only; cap-0 semantics now agree (OQ-1). Recommended order: 255 after 215.
+  - 254-fix-marketdata-secret-exposure (draft): error-wrap/key sites in `fmp_client.go` (`:222`, `:243`, `:254`) and
+    `marketdata_service.go` (`:1704`, `:1760`). Rebase risk only; 254 has no implementation-spec yet.
+  - `internal/alpaca/stream.go` (FR-5): no in-flight feature touches it.
+  - 253-fix-edgar-companyfacts-decode (code-completed): edits `edgar_client.go` only; not a collision.
+  - Migration: none committed; the optional index would be marketdata `010_*` (re-derive at /sdd-spec). Proto: none.
+    Config: none (FR-1 corrects docs for the existing `marketdata.fmp.daily_request_cap`).
+  - merge-order.md has no rows for 255/215/254; propose WARN rows at /sdd-design only on user yes.
+- Next: `/sdd-design fix-marketdata-fundamentals-cache` (recommended depth quick).
