@@ -3,6 +3,8 @@ Feature: fix-ledger-query-pagination (bug fix)
   QueryEvents ignores pageToken (D-13), GetPnL loops into an inflated P&L (D-46), and StreamEvents
   replay is one unbounded query on the single-connection pool (D-27).
 
+  # "Exactly once" covers every matching event committed before the walk passes its sequence; a lower sequence
+  # committing after the walk passed it is not delivered by that walk (operator sign-off 2026-10-22, change (a)).
   @AC-1 @FR-1 @FR-2 @regression
   Scenario: Following next_page_token returns each event exactly once
     Given the ledger holds 3 events of type "t" appended in order "e1", "e2", "e3"
@@ -47,7 +49,7 @@ Feature: fix-ledger-query-pagination (bug fix)
     When QueryEvents is called with event_type "t", page_size 500 and no page_token
     Then it returns "e1" to "e150" in ascending sequence order and an empty next_page_token
 
-  # Ledger integration test against a real TimescaleDB with DB_POOL_MAX=1, not a mocked-pool unit test.
+  # Evidence: unit FIFO interleave test (CI) + one recorded real-TimescaleDB run (context.md); not a CI job.
   # The 2-second bound is the pass threshold. On the buggy code the append waits for the whole replay.
   @AC-5 @FR-7 @regression
   Scenario: StreamEvents replay does not starve AppendEvent
@@ -55,4 +57,4 @@ Feature: fix-ledger-query-pagination (bug fix)
     And a StreamEvents call is replaying from sequence 0
     When AppendEvent is called while the replay is still in progress
     Then AppendEvent commits within 2 seconds
-    And the replay still delivers every event in ascending sequence order exactly once
+    And the replay still delivers, in ascending sequence order and exactly once, every event committed before the replay passed its sequence
