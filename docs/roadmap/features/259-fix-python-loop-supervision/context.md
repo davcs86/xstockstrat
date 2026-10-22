@@ -266,3 +266,240 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   "floor_breaches": []
 }
 ```
+
+## Session 2026-10-22 — sdd-batch design gate (round 3)
+
+The full `/sdd-design fix-python-loop-supervision` debate is at its approval gate after round 3 (gate policy: halt). design.md is not written and status.md is unchanged, per the grilling protocol. The state block below lets the next /sdd-batch run resume at round 4.
+
+### Open Threads
+
+- **Approach.** The r1–r3 structure carries forward unchanged: `supervision.py` (spawn/_on_done/retry_until_ok/run_supervised), seed → jitter → run_supervised for the four `*_forever` loops, `spawn` at the eight analysis `main.py` sites, and the three identical `config/watcher.py` edits. There is no proto change, no migration and no config key. Both operator-bound r2 rules, the replay reset rule (`sequence >= _replay_seq`) and the DB-health probe at K=5, are implemented correctly in r3 and their blocking objections are closed. Round 4 must still revise the P&L consumer (`services/xstockstrat-analysis/app/engine/pnl_pattern_consumer.py`) on these points:
+  - a consumer-local positive poison allow-list `_is_poison`, covering ValueError, TypeError, KeyError, protobuf decode errors and asyncpg SQLSTATE classes 22/23. Every other error goes to replay plus the probe;
+  - the probe bounded with `asyncio.wait_for(self._cursor(), _PROBE_TIMEOUT_SECONDS)`, with a timeout treated as DB down;
+  - a `_stream_fail_count` that escalates to ERROR on the 5th consecutive outer-handler failure;
+  - the park emit bounded by a keyword-only gRPC `timeout` inside `_emit` (default None);
+  - `correlation_id=event.correlation_id` added to the existing emits at :243 and :299, under the operator's 2026-10-21 trace decision;
+  - pinned park-failure semantics: a raise in `_advance_cursor` propagates without resetting the replay pair, and the re-park is deduplicated by `pnl_park:{seq}`.
+- **Strongest open objection (BLOCKING).** Classifier inversion. `read_budget.is_transient_db_error` (:31-32) is an allow-list that defaults to non-transient. Under r3, OutOfMemoryError (53200), deadlock/serialization (class 40) and DiskFull therefore park after 3 attempts at about 1 s spacing and never reach replay or the probe. The close's realized_pnl and fees_total are then lost for good, which is a C-16 regression risk on @AC-2 @feature-042 and @AC-10 @feature-029. The synthesis pins the `_is_poison` fix, but no proposer has adopted it yet. It stays blocking until round 4 confirms the predicate and adds the OOM/deadlock-goes-to-replay test.
+- **Other open items (non-blocking).**
+  - the full-outage escalation gap, when `_cursor()` raises before StreamEvents opens (fails.md:1616);
+  - probe and attempt hangs, because pool.acquire()/fetchval have no timeout;
+  - the trace-field confirmation (`LedgerEvent.correlation_id` vs metadata, and AppendEvent with no x-user-id under mTLS);
+  - ledger replay amplification (at most 5 unpaged StreamEvents per stuck event), to coordinate with fix-ledger-query-pagination.
+- **Floor status.** No Floor breaches.
+- **Uncovered @AC changes.**
+  - All prior durable rules are PRESERVE.
+  - This feature's @AC-1..@AC-8 are EXTEND and covered by the operator decision. That includes the in-feature @AC-7 edit (poison allow-list or probe-confirmed transient-persistent, plus a recorded park ledger event).
+  - The new @AC-9 (no park while the bounded probe fails or times out, and the 5th replay logs ERROR) is also covered by the operator decision.
+  - The new **@AC-10 @feature-259** (the 5th consecutive stream/cursor failure logs ERROR) is EXTEND but **not** covered by an operator decision, which covers the reset rule and the probe but not outer-handler escalation. It falls within D-56 scope and needs operator sign-off at the gate.
+
+```sdd-batch-design-state
+{
+  "round": 3,
+  "synth": {
+    "approach": "The round-1 to round-3 structure stays as it is: supervision.py (spawn/_on_done/retry_until_ok/run_supervised), seed → jitter → run_supervised for the four *_forever loops, spawn at the eight analysis main.py sites, and the three identical config/watcher.py edits. There is no proto change, no migration and no config key. Round 3 adopts both operator-bound rules. Round 4 must still change the P&L consumer in services/xstockstrat-analysis/app/engine/pnl_pattern_consumer.py as follows.\n\n(1) Per-event retry, unchanged from r3. The per-event try at :156-159 becomes `await self._process_with_retry(event)`. It makes up to _EVENT_MAX_ATTEMPTS=3 attempts with _EVENT_RETRY_BACKOFF_SECONDS=1.0 between them, and the sleep sits outside the try. Each attempt re-reads the cursor and returns early (:165-168), so an attempt that partly committed is never applied twice.\n\n(2) Classifying an exhausted event. This replaces r3's reuse of is_transient_db_error and resolves the blocking objection. I checked read_budget.py:17-32: it is an allow-list, so anything not listed is treated as non-transient. That includes OutOfMemoryError (53200, the feature-141 SEV-2 failure), DeadlockDetectedError and SerializationError (class 40), DiskFullError and other InsufficientResourcesError.\n- The consumer gets its own predicate, `_is_poison(e)`, defined next to the constants at :37-47.\n- It is a positive allow-list of payload and logic errors: ValueError, TypeError, KeyError, google.protobuf DecodeError/ParseError, and asyncpg DataError (SQLSTATE class 22) and IntegrityConstraintViolationError (class 23).\n- Poison: park with reason=\"non-transient\".\n- Everything else goes to the replay and probe path. It must not import read_budget._TRANSIENT; the policies are opposite by design, because here a misclassification loses data.\n\n(3) Replay counter and reset rule (operator decision 1, adopted in r3). The pair is `_replay_seq` / `_replay_count`: if event.sequence == _replay_seq, add 1; otherwise set it to (seq, 1).\n- Log at warning below _REPLAY_ESCALATE_AFTER=5 and at error from 5 on, naming sequence, event_type and correlation_id.\n- Reset in run_forever right after `_process_with_retry` returns without raising, only `if self._replay_seq is not None and event.sequence >= self._replay_seq`. Also reset on park, at step (d).\n- The cursor's own row is re-delivered inclusively and has sequence == cursor < _replay_seq, so its early return never resets the counter.\n\n(4) DB-health probe at K (operator decision 2, adopted in r3, now bounded). Once _replay_count >= 5, run exactly one `await asyncio.wait_for(self._cursor(), _PROBE_TIMEOUT_SECONDS)` (:140-145) in its own try.\n- The probe raises or times out: the DB is down or the pool is exhausted. Log at error and re-raise to the reconnect handler. There is no park and no time cap.\n- The probe returns: park inline with reason=\"transient-persistent\" and continue the `async for`.\n\n(5) Outer-handler escalation (new). Add `_stream_fail_count`.\n- The outer except at :160-162 increments it and logs at warning below _REPLAY_ESCALATE_AFTER, at error from the 5th on.\n- It resets on the first event the stream delivers.\n- This covers a full outage where `_cursor()` at :151 raises before StreamEvents opens and the failing event is never re-delivered (fails.md:1616).\n\n(6) Park sequence, in fixed order:\n- (a) Structured log.error with sequence, event_id, event_type, correlation_id, attempts, reason, and the identity key when the payload has it.\n- (b) `await self._emit(\"analysis.pnl.event_parked\", f\"pnl_park:{seq}\", payload, correlation_id=event.correlation_id, idempotency_key=f\"pnl_park:{seq}\", timeout=_PARK_EMIT_TIMEOUT_SECONDS)` with the timeout set to 5. DEADLINE_EXCEEDED is swallowed by _emit's existing except at :434, so no separate TimeoutError handler is needed.\n- (c) `_advance_cursor(event.sequence)` (:399).\n- (d) Reset the replay pair.\n\nA raise in (c) propagates to the reconnect handler and (d) does not run. The re-park on replay is deduplicated by the ledger idempotency_key (ledger.proto:50). The same holds for the poison branch. The park event is self-skipped on the way back in (:170-174).\n\n(7) `_emit` (:415) gains keyword-only `correlation_id=\"\"`, `idempotency_key=\"\"` and `timeout=None`. When correlation_id is non-empty it sends `x-trace-id` call metadata. Under the operator's standing 2026-10-21 trace decision, the existing post-commit emits at :243 and :299 now pass `correlation_id=event.correlation_id`. That is a sanctioned change, and the \"byte-identical existing callers\" test is dropped. timeout stays None for those emits, so their latency is unchanged (P-03).\n\n(8) Acceptance and spec edits:\n- Edit this feature's own @AC-7 to read \"a poison error (payload/logic, SQLSTATE 22/23) on every attempt, or a non-poison error that persists while the bounded DB probe succeeds\", with a step that the park ledger event is recorded. Amend FR-5 to match.\n- Add @AC-9 @feature-259: no park while the probe fails or times out, and the 5th replay logs ERROR.\n- Add @AC-10 @feature-259: when _cursor() raises on every call, the 5th consecutive stream failure logs ERROR.\n- Add a test that OutOfMemoryError and DeadlockDetectedError go to replay, not to an immediate park.\n\n(9) Analysis CLAUDE.md § P&L pattern consumer:\n- The retry, poison, replay, probe and park rules.\n- An \"analysis.pnl.event_parked\" row in Ledger Events Emitted.\n- The fixed invariants: _EVENT_MAX_ATTEMPTS=3, _EVENT_RETRY_BACKOFF_SECONDS=1.0, _REPLAY_ESCALATE_AFTER=5, _PROBE_TIMEOUT_SECONDS (spec pins it, suggested 5), _PARK_EMIT_TIMEOUT_SECONDS=5, _LOOP_ERROR_BACKOFF_SECONDS=30.\n- Both accepted limitations: a parked position.closed leaves its window open and loses its realized_pnl, and a parked order.created/filled opens no window, so its later close no-ops (sealed is None, :281).\n\nBuild order is unchanged. Step 4 (P&L) rebases onto peer 248, which touches :147-162.",
+    "open_objections": [
+      {
+        "text": "Classifier inversion (adversary r3, BLOCKING; C-16 regression risk on @AC-2 @feature-042 and @AC-10 @feature-029; P-03). I checked the code: is_transient_db_error (read_budget.py:31-32) returns True only for listed types, so OutOfMemoryError (53200), DeadlockDetectedError/SerializationError (class 40), DiskFullError and other InsufficientResourcesError count as non-transient. Under r3 step 2 these park after 3 attempts at 1 s spacing, never reach the replay or probe path, and the close's realized_pnl and fees_total are lost for good. The synthesis pins a consumer-local positive poison allow-list, _is_poison: ValueError/TypeError/KeyError/protobuf decode errors and asyncpg SQLSTATE classes 22/23. Every other error goes through replay plus the probe. The proposer has not adopted it yet, so this stays blocking until the next proposal confirms the predicate and adds the OOM/deadlock replay test.",
+        "blocking": true
+      },
+      {
+        "text": "Full-outage escalation gap (fails.md:1616). When _cursor() at :151 raises before StreamEvents opens, _replay_count never advances, and the outer handler at :160-161 logs WARNING forever. The fix is a _stream_fail_count that logs ERROR from the 5th consecutive failure, resets on the first delivered event, and is covered by a new @AC-10 test in which _cursor() always raises.",
+        "blocking": false
+      },
+      {
+        "text": "Probe and attempt hang. pool.acquire()/fetchval have no timeout (:141, :205, :268, :400), so during pool exhaustion the probe blocks instead of raising, the task stays alive, and FR-2's done-callback never fires. Bound the probe with asyncio.wait_for(self._cursor(), _PROBE_TIMEOUT_SECONDS) and treat a timeout as DB down. Correct the r3 'inverse case' risk text. The spec should also say whether process_event attempts need the same bound.",
+        "blocking": false
+      },
+      {
+        "text": "Trace id on existing emits (operator standing decision 2026-10-21, C-03). The existing post-commit emits at :243 and :299 must pass correlation_id=event.correlation_id. The r3 'byte-identical existing callers' test is dropped. The other option is an explicit operator deferral recorded in context.md.",
+        "blocking": false
+      },
+      {
+        "text": "Bound the park emit with a gRPC deadline inside _emit (keyword-only timeout, default None), not with wait_for at the call site. DEADLINE_EXCEEDED is then caught by the existing except at :434, and existing callers keep timeout=None.",
+        "blocking": false
+      },
+      {
+        "text": "Park failure semantics. The spec must state that a raise in _advance_cursor at step (c) propagates to the reconnect handler without resetting the replay pair, and that the re-park is deduplicated by idempotency_key pnl_park:{seq}. Pin both with a test, for the poison branch and the transient-persistent branch.",
+        "blocking": false
+      },
+      {
+        "text": "Trace-field confirmation, carried over. The spec must confirm that LedgerEvent.correlation_id (ledger.proto:28) carries the originating x-trace-id and not metadata (field 8), and that ledger AppendEvent accepts a call with no x-user-id under mTLS.",
+        "blocking": false
+      },
+      {
+        "text": "Ledger replay cost. Each replay below K reopens an unpaged StreamEvents(from_sequence=cursor) on ledger's single query connection (fails.md:3006-3010). Note the bounded amplification (at most 5 per stuck event) and coordinate with peer fix-ledger-query-pagination.",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "@AC-7 @feature-158",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-9 @feature-158",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-3 @feature-156",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-4 @feature-156",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-5 @feature-156",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-173 zero-trap (@feature-173)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@feature-174 client_id prefix",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-3 @feature-171",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-2 @feature-042",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-6 @feature-042",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-7 @feature-042",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-10 @feature-029",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-3 @FR-4 @feature-042 @feature-225",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-17 @feature-225",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-5 @FR-5 @feature-210",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-1 @feature-259",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@AC-2 @feature-259",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@AC-3 @feature-259",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@AC-4 @feature-259",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@AC-5 @feature-259",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@AC-6 @feature-259",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@AC-7 @feature-259 (in-feature edit: poison allow-list or probe-confirmed transient-persistent; park ledger event recorded)",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@AC-8 @feature-259",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@AC-9 @feature-259 (new: no park while bounded probe fails or times out; 5th replay logs ERROR)",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@AC-10 @feature-259 (new: 5th consecutive stream/cursor failure logs ERROR)",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "Reusing read_budget.is_transient_db_error to classify consumer errors (r3). It is an allow-list whose default is non-transient, so OOM (53200), deadlock/serialization (class 40) and disk-full park immediately and lose data. A wrong answer there costs a 500; here it loses data permanently. A consumer-local positive poison list is required.",
+      "Widening read_budget._TRANSIENT to cover class 40/53. It changes the read-path status mapping (P-03) for a consumer-policy problem.",
+      "K=5 with two consecutive probe confirmations (r3 runner-up). It doubles the time to park real poison (about 50-60 s) and does not fix the classifier gap. The spec may revisit it if contention-driven false parks turn out to be high.",
+      "Probing the failing event's own tables (SELECT 1 FROM analysis.pnl_positions) instead of _cursor(). It is just as blind to statement timeouts, so the gain is marginal.",
+      "asyncio.wait_for around the park _emit at the call site (r3). It adds a second error path. A keyword-only gRPC timeout inside _emit, swallowed by the existing except, is simpler (C-18), and existing callers keep timeout=None.",
+      "Keeping existing post-commit emits byte-identical, with no correlation_id. This contradicts the operator's 2026-10-21 standing trace-propagation decision, and threading it through costs 2 lines.",
+      "Resetting the escalation counter on any successful process_event (r2). The inclusive cursor-row replay resets it on every reconnect (fails.md:1616).",
+      "Replaying forever on any transient error (r2). It narrows FR-5 without operator sign-off.",
+      "Parking after a wall-clock cap, or after N escalations without a probe. Both park good events during a real outage.",
+      "Order log → advance → emit for the park. A crash between the advance and the emit loses the ledger record.",
+      "A persisted per-sequence attempt table or a migration-028 parked-events table. In-memory state is enough with instance_count 1, and a table brings a DBA gate and peer number-collision risk.",
+      "Labelling the in-feature @AC-7 edit as CHANGE. It is this feature's own unlaunched scenario, so it is edited directly.",
+      "Carried over: per-seam try hardening, a new local _TRANSIENT tuple, tolerating a failed seed, moving the seed into run_supervised, capped exponential backoff, retry-by-reconnect, a per-caller backoff callable, and the analysis watcher using supervision.spawn."
+    ],
+    "open_risks": [
+      "Probe false park under load. _cursor() succeeds while a heavy valid event keeps hitting QueryCanceledError or statement timeouts from contention. The event is parked after about 25-30 s, so the close's realized_pnl is lost and its window stays open. The damage is limited because the park is recorded exactly once in the ledger with its identity key.",
+      "Poison allow-list incompleteness. A deterministic payload bug that raises an unlisted type (for example AttributeError or ZeroDivisionError) goes through the replay and probe path and is parked about 25-30 s later instead of after about 2 s. That is safe, only slower. Listing too much would bring back data loss, so the list must stay narrow.",
+      "Attempt hang. process_event's pool.acquire() has no timeout, so pool exhaustion can stall an attempt before the probe is ever reached. The spec should decide whether to bound attempts as well.",
+      "A parked order.created/filled opens no window, so its later close no-ops (sealed is None, :281). A parked position.closed leaves its window open with stale opened_at. Both are documented, accepted limitations that can be reconciled from the park payload.",
+      "Ledger replay amplification. Up to 5 unpaged StreamEvents re-queries per stuck event on ledger's single query connection (fails.md:3006-3010). Coordinate with fix-ledger-query-pagination.",
+      "Adding correlation_id and x-trace-id to the existing emits at :243 and :299 changes those requests. It is sanctioned by the operator's trace decision, but ledger must accept the metadata under mTLS. This is unverified.",
+      "Counters (replay and stream-fail) are not persisted. A restart delays escalation by K. Acceptable with instance_count 1.",
+      "Carried over: opportunity-tick full recompute every 30 s if servicer.py:5903 keeps failing; test sentinels must be BaseException with the sleep outside the try; watchers re-dial every 2 s during a long config outage."
+    ],
+    "constitution_rules_touched": [
+      "C-01",
+      "C-03",
+      "C-08",
+      "C-11",
+      "C-15",
+      "C-16",
+      "C-18",
+      "F-07",
+      "P-02",
+      "P-03",
+      "D-20"
+    ],
+    "rationale": "I checked the adversary's blocking claim against the code, and it holds. read_budget.py:31-32 returns `not isinstance(e, _NOT_TRANSIENT) and isinstance(e, _TRANSIENT)`, and _TRANSIENT (:17-27) does not include OutOfMemoryError, the class-40 errors or DiskFull. So r3 would park real transient failures within about 2 s and lose data, which is a C-16 regression risk on the P&L attribution rules. The fix is low-rework: one consumer-local predicate that defaults the other way. It stays blocking because no proposer has adopted it yet.\n\nI also confirmed the full-outage gap. _cursor() at :151 sits inside the outer try, and its failure only logs warning at :161, so I pinned a stream-fail escalation counter for it.\n\nThe other adversary items are each adopted as small, concrete hardening:\n- the bounded probe;\n- the gRPC deadline inside _emit, which supersedes r3's wait_for and the prior state's rejection of an _emit deadline, because the keyword defaults to None for existing callers;\n- correlation_id on the existing emits, required by the operator's standing trace decision, so the P-03 byte-identical argument is overridden by an explicit operator rule;\n- the park-failure semantics;\n- the parked-order limitation.\n\nBoth operator-bound r2 rules (the reset rule and the probe) are implemented correctly in r3 and are carried over unchanged. The prior blocking objections on them are closed.\n\n@AC-10 is new and is an EXTEND of this feature's own scenarios. It is not marked covered_by_operator_decision, because the operator decision covers the reset rule and the probe but not the outer-handler escalation. It does fall within the D-56 scope."
+  },
+  "floor_breaches": []
+}
+```
