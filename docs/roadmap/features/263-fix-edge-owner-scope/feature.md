@@ -16,15 +16,24 @@
 | 2026-10-21 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-21-edge-owner-scope-defect.md` (debt-radar D-25, D-31) |
 | 2026-10-22 | `draft` → `spec-ready` | /sdd-review | Product spec approved (8 warnings) |
 | 2026-10-22 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written |
+| 2026-10-22 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 12 steps |
 
 ---
 
 ## Reviewers
 
-Snapshot from `docs/runbooks/reviewer-registry.md` at /sdd-triage time (2026-10-21). `/sdd-spec` overwrites it with per-step assignments.
+Snapshot from `docs/runbooks/reviewer-registry.md` at /sdd-spec time (2026-10-22), per-step assignments.
 
 | Reviewer | Focus | Steps |
 |---|---|---|
+| Proto Reviewer | Field number uniqueness, no breaking change, `buf lint` / `buf breaking` pass, BSR readiness | 1, 2 |
+| `xstockstrat-ledger` owner | Append-only invariant, event ordering; `QueryEvents.owner_only` contract | 1, 2, 3, 4 |
+| `xstockstrat-ui` owner | Connect-RPC call safety, trader BFF IDOR guards, no regression of position lineage / reconciliation status | 1, 2, 5, 6, 7 |
+| `xstockstrat-config` owner | Global/per-user scoping on reads, secret redaction, WatchConfig stream stability | 8, 9 |
+| `xstockstrat-agent` owner | MCP tool contract stability (`get_config` / `list_config_keys` parameters and return shape), `docs/runbooks/mcp-tools.md` parity | 10, 11 |
+| Security | Auth scope: a caller reads only their own data; admin override explicit | 3, 5, 8 |
+
+---|---|---|
 | `xstockstrat-ui` owner | Connect-RPC call safety, trader BFF IDOR guards, no regression of position lineage / reconciliation status | TBD (/sdd-spec) |
 | `xstockstrat-ledger` owner | Append-only invariant, event ordering; QueryEvents contract if an owner predicate is added backend-side | TBD (/sdd-spec) |
 | `xstockstrat-agent` owner | MCP tool contract stability (`get_config` / `list_config_keys` parameters and return shape), `docs/runbooks/mcp-tools.md` parity | TBD (/sdd-spec) |
@@ -39,7 +48,7 @@ Snapshot from `docs/runbooks/reviewer-registry.md` at /sdd-triage time (2026-10-
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
 - [Recon](recon.md) — grounded codebase dossier (Phase 0)
 - [Design](design.md) — approved approach, rejected alternatives, open risks (Phase 1)
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-edge-owner-scope`_
+- [Implementation Spec](implementation-spec.md) — 12 numbered steps with codebase evidence
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -52,4 +61,4 @@ verified `x-user-id`; either lets a signed-in user read another user's data.
 
 ## Next Action
 
-`/sdd-spec fix-edge-owner-scope` — generate implementation spec from the approved design
+`/sdd-review fix-edge-owner-scope impl-spec` — validate implementation spec, then `/sdd-execute fix-edge-owner-scope`
