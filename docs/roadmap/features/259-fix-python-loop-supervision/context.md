@@ -530,3 +530,43 @@ The full `/sdd-design fix-python-loop-supervision` debate is at its approval gat
 - [ ] Carried over: the opportunity tick recomputes every 30 s if `servicer.py:5903` keeps failing; loop-test sentinels must be BaseException with the sleep outside the try; watchers re-dial every 2 s during a config outage. Target: steps 2-3 + 5.
 - [ ] Apply the `@AC-7` edit, add `@AC-9`/`@AC-10` to acceptance.feature, and amend FR-5 in product-spec.md. Target: /sdd-spec.
 - [ ] Rebase step 4 onto peer 248 (`pnl_pattern_consumer.py:147-162`); the watcher and tick steps rebase vs 244/246/260; 262 reuses `supervision.spawn`. Target: /sdd-spec merge-order.md.
+
+## Session 2026-10-22 — sdd-spec
+
+- Generated implementation-spec.md with 15 steps (7 service/test red-green pairs + 1 docs step). Status: design-approved → implementation-ready.
+- Applied the design.md §4 in-feature acceptance edits: `@AC-7` is now a Scenario Outline (poison → 3 attempts,
+  `non-transient`; persistent non-poison with the probe up → 15 attempts, `transient-persistent`) plus the
+  `analysis.pnl.event_parked` ledger step; appended `@AC-9` (no park while the probe raises/times out; 5th replay logs
+  ERROR; the re-delivered cursor row never resets the count) and `@AC-10` (5th consecutive stream/cursor failure logs
+  ERROR). FR-5 in product-spec.md amended to match. Coverage: AC-1..3 → Step 4; AC-4 → Step 2; AC-5/AC-8 → Steps 6/8/10;
+  AC-6/AC-7/AC-9/AC-10 → Step 14 (AC-7 request shape also Step 12).
+- Key codebase findings:
+  - Trace field confirmed: `AppendEventRequest.correlation_id` (`ledger.proto:41`) is the trace (identity maps
+    `x-trace-id → correlation_id`, `ledgerAudit.ts:3,49`); ledger accepts a missing `x-user-id` as an ownerless row
+    (`ledgerServiceImpl.ts:37-39`). Portfolio's emitter sets no correlation id (`portfolio_service.go:1026-1035`), so
+    close events carry no trace today; nothing is minted.
+  - `tests/test_fundsignal_loop.py:375` `_StopLoop(Exception)` must become `BaseException`, or the two `@AC-7 @feature-156`
+    jitter tests spin under `run_supervised`. `tests/test_opportunity_refresh.py:109` `_Stop(Exception)` is raised from
+    the sleep (outside the try) and stays valid.
+  - `FakeLedger.AppendEvent(req, metadata=())` (`tests/test_pnl_pattern_consumer.py:138-145`) must accept `timeout`.
+  - `docs/patterns/config-startup.md:87` ("retries … on `AioRpcError`") becomes drift; fixed in Step 15.
+  - asyncpg is not installed in the spec sandbox; the asyncpg exception names in Step 13 resolve at execute (an
+    import-time failure in Step 14 would surface a wrong name).
+
+### Decisions
+
+- `_PROBE_TIMEOUT_SECONDS = 5`, `_PARK_EMIT_TIMEOUT_SECONDS = 5` pinned (fixed invariants).
+- Attempt hang: **no per-attempt timeout** in this feature (would cancel inside an open asyncpg txn; C-18). Documented
+  as an accepted limitation; detection belongs to the out-of-scope liveness metric. Flagged for impl-spec review.
+- `supervision._on_done`: ERROR on an exception exit; silent on cancellation and one-shot completion; INFO (never
+  ERROR) when a `forever=True` task returns (the benign early returns).
+- Probe seam is a `_probe_db()` method wrapping `asyncio.wait_for(self._cursor(), _PROBE_TIMEOUT_SECONDS)` so tests can
+  drive the raise/timeout branches without breaking the other `_cursor()` reads.
+- The park reads identity keys from `event.payload.fields`, not `MessageToDict`, since the poison may be the decode.
+
+### Open Threads
+
+- [ ] Record the 259 entry in `docs/roadmap/features/merge-order.md` (248 first on `pnl_pattern_consumer.py:147-162`;
+  244/246/260 rebases; 262 reuses `spawn`; 268 test file; replay amplification vs fix-ledger-query-pagination). Target: Step 15.
+- [ ] Probe false park, allow-list incompleteness, attempt hang, parked-window limitations, unpersisted counters.
+  Target: Step 15 (analysis CLAUDE.md).
