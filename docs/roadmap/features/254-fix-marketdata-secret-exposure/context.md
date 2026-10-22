@@ -68,3 +68,151 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
     255-fix-marketdata-fundamentals-cache (draft). Different hunks.
   - No merge-order row needed. Non-blocking coordination: whichever of 254/241 and 254/255 merges second rebases onto
     the other. Do not touch the ingest grant (`authz.ts:124`); 261 defers D-40 here.
+
+## Session 2026-10-21 — sdd-batch design gate (round 2)
+
+Full debate halted at the approval gate after round 2 (gate policy: halt). design.md is not written and status.md is
+unchanged (spec-ready), per the grilling protocol. The resume state is in the `sdd-batch-design-state` block below.
+
+## Open Threads
+
+- **Approach (round 2, low-rework shape).** Two independent, surgical Track C fixes with tests that fail first (P-06).
+  No proto change, migration, config key or DB-pool change.
+  - Step 1, D-39 redaction: in the shared `getJSON` transport-error sites (`fmp_client.go:241-243`,
+    `finnhub_client.go:116-118`), unwrap `*url.Error` and wrap only its inner cause; the else-branch carries no cause.
+    `reserve()` and the refund defer stay untouched, so feature-217 @AC-4 is preserved. Real-dial tests use
+    `http://127.0.0.1:1` with the key `k-secret`. A ctx-timeout case per client proves `errors.Is(DeadlineExceeded)`.
+  - Step 2: service-edge tests only (AC-5, AC-7) against a real `*fmp.Client`.
+  - Step 3, D-40: add `peerSan: 'xstockstrat-marketdata'` to the marketdata GetSecret grant (`authz.ts:115-119`);
+    enforcement already exists at `:149-162`. A shared `mtlsTestPki.ts` helper holds only sh/mintLeaf/setEnv, and the
+    existing test files change only by import. The GetSecret describe of `secretsAndScope.test.ts` moves to an mTLS
+    wire harness. Commit order: harness green under the header-only grant, then red wire AC-3 (evidence recorded),
+    then the grant. The unit deny matrix lives only in `perUserSecrets.test.ts`, and AC-6 is tested at the unit layer
+    only.
+  - Step 4: docs, and a residuals defect report covering the build-request `%w` sites and the redirect Location residual.
+  - Step 5: a mechanical dev smoke check. Grep a post-config-healthy marketdata boot for the substring
+    `resolving vendor credential from config failed`; it passes with zero matches. Rollback is the `authz.ts` line alone.
+- **Strongest open objection (BLOCKING, C-16/P-03).** Narrowing the promoted config @AC-4 (GetSecret allow-listed
+  caller) from header-only to header plus SAN is a CHANGE, and no operator decision covers it. The user must sign off
+  explicitly, and the sign-off must be recorded here before /sdd-spec. The promotion form is already settled: promote
+  alongside @AC-4, never rewrite it.
+- **Non-blocking gate question (P-03).** Should the `build request: %w` sites (`fmp_client.go:226`,
+  `finnhub_client.go:114`) fold into Step 1, or stay in the defect report? The default is the report, per the binding
+  D-39/D-40-only scope.
+- **Floor status.** No Floor breaches.
+- **@AC changes not covered by an operator decision.**
+  - config:@AC-4 is a CHANGE and blocks the gate.
+  - These are PRESERVE and need no sign-off: 254:@AC-4, config:@AC-5, config:@AC-16, 217:@AC-4.
+  - The feature's own AC-1/2/3/5/6/7 are EXTEND and covered.
+
+```sdd-batch-design-state
+{
+  "round": 2,
+  "synth": {
+    "approach": "Two independent, surgical Track C fixes, each in its own step with tests written to fail first (P-06). No proto change, migration, config key or DB-pool change. Round 2 keeps the round-1 shape and adopts the adversary's non-blocking refinements, which lowers rework.\n\nSTEP 1: D-39 client redaction (marketdata)\n- Sites: the two transport-error sites in the shared getJSON, services/xstockstrat-marketdata/internal/fmp/fmp_client.go:241-243 and internal/finnhub/finnhub_client.go:116-118.\n- Shape, stated in full including the else-branch:\n  `var ue *url.Error; if errors.As(err, &ue) { return fmt.Errorf(\"fmp: %s request failed: %w\", path, ue.Err) }; return fmt.Errorf(\"fmp: %s request failed\", path)`\n  - The fallback carries no cause, so a future non-*url.Error path cannot reintroduce the URL.\n  - Finnhub gets the same shape.\n- reserve() and the refund defer (fmp_client.go:231-240) stay untouched, so feature-217 @AC-4 holds.\n- getJSON is the single chokepoint. It covers classification refresh (classification_service.go:205) and the fetchProfile filler.\n- Tests (AC-1, AC-2) are real-dial: fmp.NewClient / finnhub.NewClient (fmp_client.go:60, finnhub_client.go:35) with BaseURL http://127.0.0.1:1 and APIKey k-secret, calling FMP GetFundamentalsMulti, FMP fetchProfile and Finnhub GetFundamentals. Each test asserts:\n  - the vendor and path are present;\n  - `k-secret`, `apikey=` and `token=` are absent;\n  - `errors.As(err, new(*url.Error))` is false.\n- One added ctx-timeout case per client (an httptest server that blocks, plus a short ctx deadline) asserts `errors.Is(err, context.DeadlineExceeded)`. This proves the inner cause is preserved rather than just claiming it.\n\nSTEP 2: D-39 service-edge tests (AC-5, AC-7; tests only)\n- A real *fmp.Client goes into newFundSvc(enabledCfg(\"fmp\"), newFakeFundRepo(), client, …) (marketdata_service_test.go:309/290/188).\n- Assert CodeUnavailable plus a key-free message on the single and batch RPCs, using the pattern at :2930.\n- The service wraps (marketdata_service.go:1704, :1760) stay unchanged.\n\nSTEP 3: D-40 SAN-bound grant (config). Commits within the step follow the order below.\n- (3a) Shared PKI helper:\n  - New file services/xstockstrat-config/src/__tests__/mtlsTestPki.ts exports only sh, mintLeaf and setEnv, moved verbatim from peerSanSpike.test.ts:17-33 and mtls.test.ts:21-23,35-41,57-60. Both are verified identical this round.\n  - No mintCa: mtls.test.ts mintPki (:43-55) mints two CAs inline with distinct CNs (test-ca, foreign-ca).\n  - peerSanSpike.test.ts and mtls.test.ts change only by deleting their local copies and adding an import. mintPki keeps its inline CA lines.\n  - tsconfig.json:14 (src/**/*) compiles the helper. package.json:12-13 only runs *.test.js, so the helper never runs as a test. c8 excludes __tests__/**.\n- (3b) Wire harness, GetSecret describe of secretsAndScope.test.ts only (:63-136):\n  - The test CA is minted inline with one sh('req','-x509',…) line, below the jscpd floor.\n  - Three leaves via mintLeaf: xstockstrat-config (server), xstockstrat-marketdata and xstockstrat-ingest.\n  - The server binds with mtls.serverCredentials() (mtls.ts:22) in place of createInsecure() at :75.\n  - Two ConfigServiceClients use mtls.clientCredentials() (mtls.ts:28) plus mtls.targetOverride('xstockstrat-config') (mtls.ts:35), with setEnv called before each one. The adversary verified that load() runs per call (mtls.ts:11-31) and that createSsl copies the buffers.\n  - Existing AC-4 (:88), AC-5 (:98, :108) and AC-16 (:117, :127) run on the wire via the marketdata client.\n  - Commit 1: the harness switch, shown green with the grant still header-only.\n  - Commit 2: add wire AC-3 (x-internal-caller: marketdata over the ingest leaf, expecting PERMISSION_DENIED) and record the red run as evidence (fails.md:2404-2406).\n  - The SetConfig encrypt describe (:139+) stays insecure.\n  - openssl is already used by the same pnpm test:coverage job (ci.yml:587, ubuntu-latest).\n- (3c) Grant, commit 3: add peerSan: 'xstockstrat-marketdata' to the marketdata entry at src/grpc/authz.ts:115-119. Enforcement already exists at authz.ts:149-162. The ingest grant (:124) and the SetConfig grant (:66-76, owned by feature 241) are untouched. Wire AC-3 turns green, and only it changes.\n- (3d) Unit layer, in the same commit:\n  - perUserSecrets.test.ts:236-248 is replaced:\n    - AC-4: DNS:xstockstrat-marketdata gives found=true.\n    - AC-3: DNS:xstockstrat-ingest gives deny.\n    - AC-6: `() => ({})` and undefined give deny, reusing the trio at :188-196.\n    - This is the single home of the unit deny matrix.\n  - secretCallerAuthz.test.ts:57-60 only changes to callWith('marketdata','DNS:xstockstrat-marketdata'), with no added deny cases.\n  - AC-6 lives at the unit layer only, because an mTLS server rejects a peer with no certificate before the handler runs.\n\nSTEP 4: Docs and tracking\n- Config CLAUDE.md invariant #6: the marketdata grant also requires DNS SAN xstockstrat-marketdata.\n- File docs/reports/<date>-marketdata-vendor-key-url-residuals-defect.md with a .status sidecar. It covers:\n  - (a) the `build request: %w` sites (fmp_client.go:226, finnhub_client.go:114);\n  - (b) the redirect residual, where Go's \"failed to parse Location header %q\" error can embed a vendor-sent Location URL.\n  - It names key-in-header (FMP apikey header, Finnhub X-Finnhub-Token) as the fix that closes the class, and a shared redactURLError helper as the consolidation point.\n- context.md records (b) as an accepted residual with no test, pointing to the report.\n- Teardown audit (fails.md:670) also checks for drift in:\n  - root CLAUDE.md, Config Governance paragraph;\n  - services/xstockstrat-marketdata/CLAUDE.md, where the GetSecret grant is described as header-only.\n\nSTEP 5: Mechanical dev smoke check\n- Choose a marketdata boot whose timestamp is after the new config instance became healthy. Force a marketdata restart after config is up if needed.\n- Grep its boot logs for the ASCII substring `resolving vendor credential from config failed` (main.go:70).\n- Pass: zero matches. Any match fails the check.\n- Rollback: revert the Step 3c authz.ts line only.\n\nPROMOTION (P-03/C-16)\n- Narrowing config @AC-4 is a CHANGE that needs the user's explicit sign-off, recorded in context.md before /sdd-spec.\n- At launch, feature AC-3, AC-4 and AC-6 are promoted alongside config @AC-4, never rewriting it. Each new scenario names @AC-4 and states the tightening: \"allow-listed\" means header plus SAN for grants that set peerSan.\n\nDESIGN-GATE QUESTION (P-03)\n- Ask the user whether to fold the build-request sites into Step 1, since it is the same rule in the same two functions, or keep them in the defect report.\n- Default is the defect report, per the binding D-39/D-40-only scope decision.",
+    "open_objections": [
+      {
+        "text": "[C-16 / P-03] Narrowing the promoted config @AC-4 (services/xstockstrat-config/acceptance/config-secrets-and-scoping.feature, 'An allow-listed internal caller resolves a secret via GetSecret') from header-only to header plus SAN is a CHANGE. No operator decision covers it. The orchestrator must get the user's explicit sign-off at the design gate and record it in context.md before /sdd-spec. The promotion form is settled (promote alongside, each new scenario naming @AC-4 and stating the tightening); the sign-off is the only thing missing.",
+        "blocking": true
+      },
+      {
+        "text": "[P-03, operator call] Decide whether the build-request: %w sites (fmp_client.go:226, finnhub_client.go:114) fold into Step 1, which is the same rule in the same functions and fits 'low rework', or stay in the defect report. The default is the report, per the binding D-39/D-40 scope. The user must be asked; the orchestrator should not decide silently.",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "254:@AC-1",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "254:@AC-2",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "254:@AC-3",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "254:@AC-4",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "254:@AC-5",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "254:@AC-6",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "254:@AC-7",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "config:@AC-4 (config-secrets-and-scoping.feature: allow-listed internal caller resolves a secret via GetSecret; header-only -> header+SAN for marketdata)",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "config:@AC-5 (GetSecret deny cases)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "config:@AC-16 (found=false vs INTERNAL)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "feature-217:@AC-4 (FMP budget refund on failure)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "mintCa(dir) in the shared PKI helper (proposal r2): it cannot serve mtls.test.ts mintPki's second CA with a different CN (:43-55), and adopting it would break the import-only promise. Lost to extracting only sh/mintLeaf/setEnv and minting the CA inline in secretsAndScope.test.ts.",
+      "Deny cases in secretCallerAuthz.test.ts (proposal r2): they repeat the perUserSecrets.test.ts deny matrix and the wire AC-3, leaving three places to keep in sync (C-18). Lost to adding only the SAN to the existing marketdata allow case.",
+      "Step 1 fallback that %w-wraps the raw err when errors.As fails: any future non-*url.Error path would leak the URL again. Lost to an explicit cause-free else-branch.",
+      "Direct-handler-only config tests with a stubbed getAuthContext: faster, but it drops the wire-level guarantee in secretsAndScope.test.ts:8-10 (fails.md:668), and there would be no real valid-CA, wrong-SAN handshake for AC-3.",
+      "Inline a third copy of the PKI helpers: zero edits to the existing tests, but it trips jscpd (mintLeaf is above the 100-token floor, .jscpd.json:4).",
+      "Drop %w entirely: simplest, but it loses errors.Is(ctx.DeadlineExceeded/Canceled) and the dial/TLS cause.",
+      "Shared redactURLError Go helper now: about 4 lines at 2 sites in 2 packages, below the jscpd floor, and it would need a new package (YAGNI). Named in the residual defect report as the consolidation point.",
+      "String-scrubbing apikey=/token= from error text: fragile and only treats the symptom.",
+      "Key in a request header (class-closing fix): outside D-39/D-40 scope, and vendor header support (FMP apikey header, Finnhub X-Finnhub-Token) is unverified. Deferred to the defect report as the recommended fix.",
+      "Redirect-server test for the Location-header residual: the input must come from the vendor, and the fix that closes it is out of scope. Accepted residual, recorded in context.md and the report.",
+      "Smoke grep on the em-dash string or on any boot: log encoding could give a false zero, and a pre-config-deploy boot passes vacuously. Lost to the ASCII substring on a post-config-healthy boot."
+    ],
+    "open_risks": [
+      "A SAN mis-bind fails soft. If a marketdata leaf lacks DNS:xstockstrat-marketdata, GetSecret returns PERMISSION_DENIED, main.go:70 WARNs, marketdata boots with empty vendor credentials, and health checks stay green. Mitigations: deploy.yml:102 mints all leaves via gen-dev-certs.sh (which lists marketdata), and the Step 5 smoke check. Prod gets no separate check.",
+      "Switching the GetSecret describe to an mTLS harness could fail for harness reasons (targetOverride/SAN pairing for the xstockstrat-config server leaf, or env sequencing). Mitigation: commit order (harness green under the header-only grant first, then red AC-3, then the grant).",
+      "Accepted redirect residual: a malformed vendor Location header can still embed a key-bearing URL in the inner cause. Tracked in the defect report.",
+      "The build-request sites (fmp_client.go:226, finnhub_client.go:114) leak the key-bearing URL when base_url is malformed, and query-string keys reach proxy and vendor access logs. Both stay live until the defect report's fix lands, unless the user folds the build-request sites into Step 1.",
+      "Textual merge overlap in authz.ts with features 241, 263 and 255. Whichever lands second rebases. The ingest grant and the SetConfig grant (:66-76) are untouched.",
+      "The mTLS harness adds RSA key generation time (one CA, three leaves) to the config test suite."
+    ],
+    "constitution_rules_touched": [
+      "C-01",
+      "C-08",
+      "C-11",
+      "C-15",
+      "C-16",
+      "C-18",
+      "P-02",
+      "P-03",
+      "P-05",
+      "P-06"
+    ],
+    "rationale": "Round 2 answers all four prior open objections concretely:\n- The mTLS wire harness is confirmed. The helper location, the openssl CI dependency and the per-call env read (mtls.ts:11-31) were all verified.\n- The redirect residual is explicitly accepted and tracked in a defect report.\n- The smoke check is now a mechanical grep on the exact WARN text.\n- The config @AC-4 CHANGE is escalated correctly.\n\nThe adversary found no Floor breaches. I checked their mintCa objection against the code: mtls.test.ts:43-55 mints test-ca and foreign-ca inline, and sh/mintLeaf/setEnv are verbatim duplicates. So the helper is narrowed to those three functions, which keeps the existing-file edits import-only. The adversary's other refinements are adopted as-is because each lowers rework or closes a real gap, which matches the user's 'preserve as much as you can while having low rework':\n- the cause-free else-branch plus a DeadlineExceeded proof;\n- one home for the deny matrix;\n- the post-config-healthy, ASCII-substring smoke check;\n- harness-green, red AC-3, then grant, then green commit ordering with recorded red evidence;\n- the teardown drift targets.\n\nThe only blocking item is the user's explicit sign-off on narrowing the promoted config @AC-4, which no operator decision covers. Folding the build-request sites into Step 1 is a non-blocking question for the user at the gate. The default stays the defect report, per the binding scope decision.\n\nThe trace-id operator decision is not engaged, because neither fix adds an emit or write path."
+  },
+  "floor_breaches": []
+}
+```
