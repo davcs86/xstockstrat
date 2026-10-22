@@ -54,13 +54,13 @@ Feature: fix-marketdata-fundamentals-cache (bug fix)
     And the quote fetch for "AAPL" succeeds but the profile fetch returns ErrFMPDailyCapExceeded
     When GetFundamentals is called for "AAPL"
     Then a WARN is logged naming "AAPL" and the profile enrichment
-    And the response's missing_metrics lists "beta" and "sector", the metrics the profile call supplies
+    And the response's missing_metrics lists "beta", the metric the profile call supplies
     When the FMP daily quota resets and GetFundamentals is called for "AAPL" again, within "marketdata.fmp.cache_ttl_hours"
     Then the FMP client makes the profile fetch for "AAPL"
 
   @AC-6 @FR-4 @regression
   Scenario: An undecodable extra column is logged, not silently dropped
-    Given the cache holds an "AAPL" row whose extra column is the bytes "\x7b22746f74616c5f64656274223a317d" (hex-garbled jsonb)
+    Given the cache holds an "AAPL" row whose extra column is the jsonb object {"total_debt":"n/a"}, which does not decode as name-to-number metrics
     When GetFundamentals is called for "AAPL"
     Then a WARN is logged naming "AAPL" and the extra decode error
 
@@ -76,3 +76,17 @@ Feature: fix-marketdata-fundamentals-cache (bug fix)
     When three consecutive connection attempts fail without a healthy session
     Then the subscriber's receive on its bar channel reports the channel closed
     And an ERROR is logged naming the exhausted reconnect budget
+
+  @AC-10 @FR-3 @FR-4 @regression
+  Scenario: A transient FMP enrichment failure over an edgar cache row is stored already expired
+    Given "marketdata.fundamentals.snapshot_source" is "vendor", "marketdata.fundamentals.provider" is "fmp" and "marketdata.fmp.metrics" is "core,extended"
+    And the cache holds an "AAPL" row with source "edgar" fetched 1 minute ago
+    And the quote and ratios fetches for "AAPL" succeed but the profile fetch returns HTTP 503
+    When GetFundamentals is called for "AAPL"
+    Then the response carries the FMP values for "AAPL" with stale=false and missing_metrics containing "beta"
+    And the cached "AAPL" row has source "fmp" and is already past "marketdata.fmp.cache_ttl_hours"
+    When the FMP daily cap is reached and GetFundamentals is called for "AAPL" again
+    Then the FMP client makes no HTTP call
+    And the response is the cached "AAPL" row with source "fmp" and stale=true
+    When the FMP daily quota resets and GetFundamentals is called for "AAPL" again
+    Then the FMP client fetches "AAPL"
