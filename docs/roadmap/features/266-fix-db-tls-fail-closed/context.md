@@ -441,3 +441,56 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [ ] P-06: the new identity and ledger tests depend on 252. Prove that they execute. Target: the test steps.
 - [ ] Merge order: rebase after 242, 248 and 241, and watch for `ci.yml` filter conflicts with peers. Target: the
   integration PR.
+
+## Session 2026-10-22 — sdd-spec
+
+- Generated `implementation-spec.md` with 17 steps. Status: design-approved → implementation-ready.
+- Resumed after a cut session. Nothing from a prior /sdd-spec attempt existed on the branch, so recon.md and
+  design.md were reused as-is and only the gaps were re-discovered.
+- Key codebase findings:
+  - **P-03 gate closed** (pg@8.20.0 and pg-connection-string@2.12.0, read from the packed sources):
+    - The fields parsed from the URL override the explicit config (`connection-parameters.js:59-60`).
+    - Any `sslcert`, `sslkey`, `sslrootcert` or `sslmode` key replaces `ssl` with `{}` (`index.js:77-78`).
+    - `ssl=0` gives `false`. `no-verify` and `uselibpqcompat` drop verification.
+    - The **last** duplicate key wins (`index.js:39-41`).
+    - So the explicit `{ rejectUnauthorized: true, ca }` survives only if no `ssl*`/`uselibpqcompat` key stays in
+      the URL, which confirms design rules (c)+(e).
+  - **New edge case: a repeated `sslmode`** (`?sslmode=disable&sslmode=no-verify`). The resolver's `get` would see
+    `disable` while pg applies `no-verify`. The resolver now throws on any repeated `sslmode`. This adds fail-closed
+    strictness within the approved rules and changes none of them.
+  - **The boot tests spawn `node dist/index.js` for all four backends.** The design said strip-types `src/index.ts`
+    for ledger and identity, but the extensionless ESM imports (`./telemetry`, ledger `index.ts:1`) fail to resolve
+    under strip-types. This was verified with a two-file reproduction and matches the fails.md:2238 dual-runner trap.
+    `dist/index.js` is also the production `CMD`.
+  - The `ci.yml` UI filter is at `:63`, not `:62` as recon said. `yaml@2.9.0` is already in the lockfile
+    transitively.
+  - **Correction to recon.md:104 and design item 9.** These two docs are not Node pools and do not fail to boot after
+    266, so they are confirm-only (out of D-32 scope):
+    - `services/xstockstrat-identity/docs/operations.md:20` is the Python/psycopg `manage-users.py`;
+    - `docs/setup/digitalocean.md:555` is golang-migrate.
+
+### Decisions
+
+- **mTLS/DB check order:** the reorder is recorded as deliberate.
+  - The resolver is the first statement of `main()` in all four backends: before `new ConfigWatcher`, which throws
+    on `MTLS_*`, and in config before `loadMasterKey()`.
+  - With both env sets missing, the `DATABASE_CA_CERT` error is shown first.
+  - Both gates stay fail-closed, so `@AC-4 @feature-210` holds. A combined error was declined (YAGNI, C-18).
+- Every call site binds the resolver output as `dbConn`. The Step 15 wiring guard asserts that every `ssl:` in the
+  five entry files is `dbConn.ssl`, with at least 2 in ledger (Pool + EventNotifier). The only other allowed hit is
+  ledger's export cursor, `ssl: opts.ssl`.
+- Pre-declared Deviation Log entries in the spec:
+  - AC-2 narrowed for ledger, identity and notify (Pool level plus the wiring guard);
+  - AC-3 narrowed for config (plaintext startup only, "serves gRPC" not asserted);
+  - AC-7 tested with a mocked `pg`.
+
+### Open Threads
+
+- [x] P-03 pg merge precedence: closed (see above).
+- [x] mTLS/DB check order: closed (reorder recorded as deliberate).
+- [ ] Operator sign-off on the identity/notify crash-loop when the DB is down. It covers only FR-2's exit-at-boot
+  clause. This gates Steps 8 and 10.
+- [ ] Pre-merge dev canary: Step 17, before the integration PR merges.
+- [ ] Build under strip-types, CJS `tsc` and the Next bundler: Step 1 verification.
+- [ ] P-06: prove the new ledger and identity tests execute (`--test-reporter=spec`). Steps 2, 5 and 9.
+- [ ] Merge order: rebase after 242, 248 and 241, and watch the `ci.yml` filter block.
