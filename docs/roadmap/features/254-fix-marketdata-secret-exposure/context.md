@@ -302,3 +302,34 @@ unchanged (spec-ready), per the grilling protocol. The resume state is in the `s
     - `services/xstockstrat-config/docs/context-constitution.md:35` and `:51`;
     - `services/xstockstrat-marketdata/CLAUDE.md:218`;
     - root `CLAUDE.md` § Config Governance Rules.
+
+## Session 2026-10-22 — sdd-review impl-spec (advisory)
+
+- Criteria verdict: PASS WITH WARNINGS (0 FAIL, 6 WARN, no Floor breach). Overlap verdict: WARN (file-level only;
+  no migration, proto-field or config-key collision). Lifecycle unchanged (`implementation-ready`).
+- Addressed (implementation-spec.md edited):
+  - Step 2: the coverage line now runs `export GOWORK=off && COVERPKGS=…`, so `go list` and `go test` really run with
+    `GOWORK=off`. Before, the prefix only set an unexported shell variable.
+  - Step 3: states the explicit `total >= 40%` threshold and runs Step 2's coverage command in place of the bare
+    `go test ./...`.
+  - Step 5: the Verification comment now states `c8 lines >= 40` (`package.json:13` `--lines 40`).
+  - Step 6: states there is no coverage threshold at this step. It is an expected-red run, used only in the Step 6-7
+    pair; the `c8 lines >= 40` gate is at Step 7 (F-05, P-06).
+  - Step 8: the `**Service**` field now names services (`xstockstrat-config`, `xstockstrat-marketdata`, docs only).
+- Still open / accepted:
+  - Step 8 touches 7 files, over the 5-file guideline. All are docs, so it is kept as one step (accepted, low cost).
+  - Step 5 builds `ingestClient` for Step 6 without using it. This is deliberate and documented in Step Dependencies,
+    so no change (C-18 note).
+
+### Open Threads (impl-spec review)
+
+- [ ] Merge order is unrecorded. `docs/roadmap/features/merge-order.md` has no row for 254 against 215, 241, 255 or
+  263. Overlaps:
+  - `fmp_client.go` / `finnhub_client.go` and their tests vs 215 (in-progress) and 255 (draft);
+  - config `src/grpc/authz.ts`, `perUserSecrets.test.ts` and `secretsAndScope.test.ts` vs 241 (implementation-ready)
+    and 263 (draft);
+  - `services/xstockstrat-config/CLAUDE.md` vs 241 and 248, `services/xstockstrat-config/docs/context-constitution.md`
+    vs 244, `services/xstockstrat-marketdata/CLAUDE.md` vs 215, and root `CLAUDE.md` vs 242 and 252.
+  The router decides the order and owns the write. Whichever feature lands second rebases. Target: the /sdd-execute
+  checkpoint before Step 1 (marketdata) and before Step 7 (authz.ts).
+- [ ] Re-run the overlap scan once 256-260 get implementation specs (no concrete clash today). Target: /sdd-execute start.
