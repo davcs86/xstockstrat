@@ -3033,3 +3033,11 @@ ambiguity is logged here).
 - **Evidence**: `docs/roadmap/features/250-fix-otel-metrics-logs-gap/design.md` §4 Part 3 (existence set) and §5 (comment-only red case); context.md 2026-10-21 sdd-design entry.
 - **Rule it implies**: an existence/absence guard derives its "exists" set from declaration value lines only (e.g. `- uid:`, top-level `"uid":`), never from free text in the same file, and ships a red case proving a comment cannot satisfy existence.
 
+
+### 2026-10-22 — fix-ui-trader-feedback — assumption
+- **Mistake**: A design round proposed a global TanStack `MutationCache.onError` fallback that skipped any mutation whose options set `onError`, treating that as "handled".
+  - The no-op hook-level `onError`s (`return err`) in `useBacktest.ts:12-15` and `useScreenSymbols.ts:13-16` would have silently suppressed the fallback.
+  - The same round claimed the two target hooks were not built on `useInvalidatingMutation`. They are, and that factory forwards no `meta` (`:17`, `:22`).
+  - The r2 adversary caught both.
+- **Evidence**: `docs/roadmap/features/270-fix-ui-trader-feedback/design.md` § Chosen Approach 2 and § Rejected Alternatives; context.md 2026-10-22 sdd-design entry.
+- **Rule it implies**: A global error fallback opts out only through an explicit marker, such as `meta.errorHandled === true`, set only after every call site is shown to render the error. Never infer "handled" from the presence of a callback. Confirm that any wrapper factory forwards the marker.
