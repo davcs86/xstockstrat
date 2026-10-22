@@ -15,6 +15,7 @@
 |---|---|---|---|
 | 2026-10-21 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-21-ingest-poller-backfill-defect.md` (debt-radar D-09, D-34, D-42, D-59) |
 | 2026-10-22 | `draft` → `spec-ready` | /sdd-review | Product spec approved (6 warnings; overlap WARN vs 244/259) |
+| 2026-10-22 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written. FR-1 amended + `@AC-8` appended (operator gate decision) |
 
 ---
 
@@ -35,6 +36,8 @@ Snapshot from `docs/runbooks/reviewer-registry.md` at /sdd-triage time (2026-10-
 
 - [Product Spec](product-spec.md) — bug description and fix scope
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
+- [Recon](recon.md) — grounded codebase dossier (Phase 0)
+- [Design](design.md) — approved approach, rejected alternatives, open risks (Phase 1)
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-ingest-poller-backfill`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -48,4 +51,4 @@ deadline), and ingests nothing when the result's first list key is not the signa
 
 ## Next Action
 
-`/sdd-design fix-ingest-poller-backfill` — product spec approved (spec-ready); recommended design depth: full (2 affected services; config is read-only — operator may downgrade to quick); see context.md
+`/sdd-spec fix-ingest-poller-backfill` — generate implementation spec from the approved design
