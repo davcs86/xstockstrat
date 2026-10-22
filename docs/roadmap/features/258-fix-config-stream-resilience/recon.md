@@ -114,10 +114,13 @@ when the snapshot or a broadcast fails, so the client's existing reconnect path 
 - **PRESERVE** `@AC-1` "A secret written via SetConfig is persisted encrypted, not plaintext" (`services/xstockstrat-config/acceptance/config-secrets-and-scoping.feature`) — the encrypted write path is unchanged by the FR-3 `try` wrapping.
 - **PRESERVE** `@AC-3` "GetConfig and ListKeys redact secrets at the edge" (`services/xstockstrat-config/acceptance/config-secrets-and-scoping.feature`) — the FR-3 GetConfig error path must not change success-path redaction.
 - **PRESERVE** `@AC-11` "A per-user config value overrides the global value" (`services/xstockstrat-config/acceptance/config-secrets-and-scoping.feature`) — GetConfig overlay success behavior is unchanged by the FR-3 fix.
+- **PRESERVE** `@AC-16 @FR-3 @feature-147` "GetSecret distinguishes an unset secret from a decrypt failure" (`services/xstockstrat-config/acceptance/config-secrets-and-scoping.feature:56`) — GetSecret is not a fix site, but any shared catch-to-status helper introduced for FR-3 must not alter its found=false / INTERNAL mapping.
 - **PRESERVE** `@AC-5` "A registered materializer key is settable via SetConfig without create_key" (`services/xstockstrat-config/acceptance/readiness-materializer-config-keys.feature`) — the existence gate and the SetConfig→GetConfig round-trip.
+- **PRESERVE** `@AC-8 @FR-6 @feature-182` "An out-of-bounds tuning write is rejected at the write edge" (`services/xstockstrat-config/acceptance/readiness-materializer-config-keys.feature:24`) — INVALID_ARGUMENT must survive the new SetConfig catch.
 - **PRESERVE** `@AC-9` "The bounds are write-path only and change no read path" (`services/xstockstrat-config/acceptance/readiness-materializer-config-keys.feature`) — WatchConfig/GetConfig read behavior is unchanged.
 - **PRESERVE** `@AC-5` "An in-bounds tuning write is accepted without create_key" (`services/xstockstrat-config/acceptance/opportunity-config-operability.feature`) — SetConfig success path.
 - **PRESERVE** `@AC-4` "An out-of-bounds tuning write is rejected at the write edge" (`services/xstockstrat-config/acceptance/opportunity-config-operability.feature`) — INVALID_ARGUMENT must be kept and not masked by DB-error wrapping.
+- **PRESERVE** `@AC-8 @FR-2 @feature-184` "A bounded key whose lower edge is a legitimate value accepts that value" (`services/xstockstrat-config/acceptance/opportunity-config-operability.feature:52`) — SetConfig success path unchanged.
 - **PRESERVE** `@AC-11` and `@AC-12` (`services/xstockstrat-config/acceptance/surface-signal-weight-decay-config.feature`) — server-side write validation rejects without persisting. The same INVALID_ARGUMENT vs. DB-error distinction applies.
 - **PRESERVE** `@AC-6 @FR-6 @feature-210` "A long-lived streaming RPC survives a certificate rotation" (`docs/sdd/business-rules/platform.feature`) — WatchConfig continuity. The FR-5 end-call-on-error path must not fire on rotation.
 - **PRESERVE** `@AC-35 @FR-14 @feature-224 @feature-225` "Two users with the same mcp_client slug use their own credentials" (`docs/sdd/business-rules/platform.feature`) — GetConfig, ListKeys and WatchConfig never return secret plaintext, including on the reconnect re-broadcast.
@@ -127,11 +130,13 @@ when the snapshot or a broadcast fails, so the client's existing reconnect path 
 - **No CHANGE flags.** No existing guarantee is deliberately altered, so no C-16 sign-off is needed.
 - Out of scope / not impacted:
   - `config-ui-usability.feature` `@AC-6/7/13` (ListKeys `updated_at`).
-  - config-secrets `@AC-4/5/16` (GetSecret).
+  - config-secrets `@AC-4/5` (GetSecret; `@AC-16` is kept above only as a shared-error-helper guard).
   - config-secrets `@AC-10/12` (proto field and migration collapse).
   - The readiness/opportunity seed and bounds-value scenarios.
   - surface-signal-weight-decay `@AC-8`.
   - `services/xstockstrat-ledger/acceptance/ledger-event-export.feature` (ExportEvents).
+- The first message on a stream must be the SNAPSHOT (service CLAUDE.md invariant #2), but no `@AC` in any suite
+  pins that ordering. Treat it as an invariant that FR-4 must hold, not as a C-16 rule.
 - Coverage caveat: `config-secrets-and-scoping.feature` and `platform.feature` were read in full. The other four
   config suites and both ledger suites were keyword-grepped only. Several `@AC-n` numbers repeat across suites,
   so always cite the suite path with the tag.
@@ -173,8 +178,8 @@ when the snapshot or a broadcast fails, so the client's existing reconnect path 
   - Register-before-snapshot opens a window in which a DELTA could be written before the SNAPSHOT. Clients expect
     the SNAPSHOT first (service CLAUDE.md invariant #2), so registration needs a "pending until snapshot written"
     state, or a buffer/version check.
-  - The `Subscriber.lastVersion` field (`:302`) exists. Whether it is read anywhere was **not checked**; grep it
-    before designing a version gate.
+  - The `Subscriber.lastVersion` field is declared at `:93` and set to `'0'` at `:302`, and nothing in
+    `services/xstockstrat-config/src` reads it (grep). It is free to repurpose as a version gate, or it can be dropped.
   - AC-7's interleaving must be pinned with a controlled promise on the snapshot SELECT. That is a carry-over
     from the product-spec review, which judged AC-7 as worded to be non-deterministic.
 - **Design fork: status code.** `UNAVAILABLE` (14) or `INTERNAL` (13) for DB rejections and stream termination. The
