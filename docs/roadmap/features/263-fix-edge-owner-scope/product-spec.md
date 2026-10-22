@@ -22,9 +22,10 @@ Source: repo-surveyor debt-radar scan @ 4535695, findings D-25, D-31 (re-verifie
   `:527-536`) trust it over the verified `x-user-id` the agent propagates. Any MCP user can read another user's
   non-secret per-user overrides and see which keys they overrode.
 
-**Expected.** Every edge read returns only the caller's own data. The trader BFF forwards only owned stream keys
-(and refuses empty/unknown ones) or the ledger read is owner-scoped; a non-admin `get_config` / `list_config_keys`
-for another user's `user_id` is refused with `PERMISSION_DENIED`. Legitimate own-data reads
+**Expected.** Every edge read returns only the caller's own data. The trader BFF refuses foreign stream keys and
+owner-scopes empty/unrecognised ones (or the ledger read is owner-scoped); a non-admin `get_config` /
+`list_config_keys` carrying another user's `user_id` is bound to the caller (the caller's own `x-user-id` replaces
+it), so no other user's data is ever read. Legitimate own-data reads
 (copilot thread, own position lineage, own account reconciliation status, own config overlay) keep working.
 
 ## Functional Requirements
@@ -32,26 +33,27 @@ for another user's `user_id` is refused with `PERMISSION_DENIED`. Legitimate own
 - **FR-1** — The trader BFF `LedgerService.QueryEvents` forwards a non-empty `stream_key` only when it is owned by
   the verified caller (an `account:<id>` the caller owns, or the caller's own `copilot:` thread); a foreign stream key
   fails with `PERMISSION_DENIED` and returns no events.
-- **FR-2** — A trader BFF `QueryEvents` with an empty or unrecognised `stream_key` is either refused or owner-scoped
-  to the verified caller; it never returns an event belonging to another user, nor a historical row whose `user_id`
+- **FR-2** — A trader BFF `QueryEvents` with an empty or unrecognised `stream_key` is owner-scoped to the verified
+  caller; it never returns an event belonging to another user, nor a historical row whose `user_id`
   is NULL (`ExportEvents` parity). An empty-`stream_key` query still returns the caller's own events (FR-5).
-- **FR-3** — Agent `get_config` called by a non-admin caller with a `user_id` other than the verified caller's fails
-  with `PERMISSION_DENIED` and never returns that user's per-user override values.
+- **FR-3** — Agent `get_config` called by a non-admin caller with a `user_id` other than the verified caller's is
+  bound to the caller: it returns the caller's own per-user overrides and never reads or returns that user's values.
 - **FR-4** — Agent `list_config_keys` called by a non-admin caller with a `user_id` other than the verified caller's
-  fails with `PERMISSION_DENIED` and never reveals which keys that user overrode.
-- **FR-6** — A caller with admin access scope may still read another user's per-user overlay through `get_config`
-  (FR-3/FR-4 bind non-admin callers only).
+  is bound to the caller: it lists the caller's own overridden keys and never reveals which keys that user overrode.
 - **FR-5** — Legitimate own-data reads keep working: own copilot thread, own position lineage, own account
   reconciliation status, and own per-user config overlay.
+- **FR-6** — A caller with admin access scope may still read another user's per-user overlay through `get_config`
+  (FR-3/FR-4 bind non-admin callers only).
 
 ## Consumer Surface(s)
 
 - **UI — trader segment (`/trader`)**: BFF `QueryEvents` responses become owner-scoped. `useReconciliationStatus`
-  (`account:<id>`) keeps working for owned accounts and gets `PERMISSION_DENIED` for foreign ones;
+  (`account:<id>`) keeps working for owned accounts and gets `PERMISSION_DENIED` for foreign ones (surfaced through the
+  hook's existing error state, not as an empty status);
   `usePositionLineage` (no stream key) receives only the caller's events instead of filtering client-side. No visual
   change for a user reading their own data.
-- **Agent (MCP tools)**: `get_config` and `list_config_keys` stop returning another user's per-user overlay to a
-  non-admin caller; own-overlay reads are unchanged.
+- **Agent (MCP tools)**: `get_config` and `list_config_keys` called by a non-admin caller with a foreign `user_id`
+  return the caller's own overlay instead of the other user's; own-overlay reads are unchanged.
 
 ## Reproduction Steps
 
@@ -92,11 +94,15 @@ dev.
 - [x] Fix site for D-25 (BFF allow-list vs ledger owner predicate on `QueryEvents`). Resolved 2026-10-21: the product
   contract is site-agnostic. FR-1/FR-2 and AC-1/AC-2/AC-7 assert behaviour at the trader BFF surface, so either site
   satisfies them. `/sdd-design` picks the site (C-11) and must keep insights BFF and `ExportEvents` parity.
-- [x] Foreign `user_id` in D-31: refuse vs bind to caller. Resolved 2026-10-21: refuse with `PERMISSION_DENIED`
-  (FR-3/FR-4, AC-4/AC-5). Silent rebinding would hide the error and differ from FR-1 and the `SetConfig` per-user gate.
+- [x] Foreign `user_id` in D-31: refuse vs bind to caller. Resolved 2026-10-22 (operator override of the 2026-10-21
+  "refuse" resolution): bind to the caller. The caller's own `x-user-id` replaces the foreign `user_id`, the caller's
+  own overrides are returned, and no other user's data is ever read (FR-3/FR-4, AC-4/AC-5).
 - [x] Admin/internal exemption and NULL-owner rows. Resolved 2026-10-21: admin-scope callers stay exempt from
   FR-3/FR-4 (FR-6, AC-8), matching the existing "non-admin" wording. NULL-`user_id` historical ledger rows are never
   returned by a trader BFF read (FR-2, `ExportEvents` parity, AC-2), since they cannot be attributed to the caller.
+- [ ] How ownership of an `account:<id>` stream key is determined (FR-1): a trading `ListBrokerAccounts` lookup per
+  call, a cached owned-account set, or the ledger `user_id` predicate. Left to `/sdd-design` as an explicit decision
+  (C-11).
 
 ## Out of Scope
 
