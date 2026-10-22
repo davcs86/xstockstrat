@@ -18,10 +18,11 @@ Feature: fix-template-update-metadata (bug fix)
   @AC-2 @FR-3 @FR-4 @regression
   Scenario Outline: Retiring a template twice keeps the first retired_at and sets updated_at each time
     Given an admin and a <kind> template "t-1" in <service>
-    When the admin retires "t-1" at 2026-10-21T10:00:00Z
-    And the admin retires "t-1" again at 2026-10-21T11:00:00Z
-    Then "t-1" in <service> has retired_at 2026-10-21T10:00:00Z
-    And "t-1" in <service> has updated_at 2026-10-21T11:00:00Z
+    When the admin retires "t-1"
+    And the admin retires "t-1" again
+    Then the second RETIRE succeeds and returns "t-1" as retired
+    And "t-1" in <service> keeps the retired_at set by the first RETIRE
+    And "t-1" in <service> has an updated_at later than that retired_at
 
     Examples:
       | kind          | service                |
