@@ -288,3 +288,190 @@ unchanged (spec-ready), per the grilling protocol. The resume state is in the `s
   "floor_breaches": []
 }
 ```
+
+## Session 2026-10-22 — sdd-batch design gate (round 3)
+
+Full debate halted at the approval gate after round 3 (gate policy: halt). design.md is not written and status.md is
+unchanged, per the grilling protocol. The resume state is in the `sdd-batch-design-state` block below; it supersedes
+the round-2 block above.
+
+## Open Threads
+
+- **Approach (round 3).** Narrowed to @AC-2/@AC-3 by the operator, with 255 MERGED as a hard predecessor recorded in
+  `merge-order.md`. No proto, migration or config change. Edits stay in `internal/service/etf_flags.go`, its tests,
+  one exported classifier name in `internal/fmp/fmp_client.go` (added by 230 itself and listed in its step Files),
+  `services/xstockstrat-marketdata/CLAUDE.md`, and this feature's product-spec.md and acceptance.feature.
+  - Trace id (closes the round-2 C-03 blocker): queue becomes `chan etfFillItem{sym, traceID}` (`:38`, `:50`).
+    `GetEtfFlags` (`:62`) names its ctx and reads `middleware.FromContext(ctx).TraceID` once, before the lock; the
+    single admitted enqueuer (`:87-92`) is the origin. Only the string crosses over; the loop ctx keeps cancellation.
+    `fillEtfFlag(ctx, item)` adds `trace_id` only when non-empty. Test churn: the four `<-svc.etf.queue` drains
+    (`etf_flags_test.go:136,156,183,200`) compile unchanged; `:226` (`"NEW"`) becomes `etfFillItem{sym: "NEW"}`.
+  - Gate: `etfFillAllowed() bool` becomes `etfFillGate() (reason, used, cap, snap)`, same order (`not_wired` →
+    `fmp_disabled` → `BudgetSnapshot()` → `no_cap` → `budget`), run outside `etf.mu`; the skip path never calls
+    `src` (215 @AC-14).
+  - Rate limit on `etfFlagState` under `mu` (`lastSkipReason`, `budgetLoggedAt`, fail slot); config reasons log on
+    change, `budget` on change or once per `etfFlagLogEvery = time.Minute`; decide under `mu`, emit after unlock.
+    Fail slot still to pin: per-class map keyed by the returned class (recommended) or shared slot with the loss
+    stated in AC-3.
+  - Records, Info, never `err`/`err.Error()`: `etf flag fill skipped` (symbol, reason, used/cap only when snapped,
+    trace_id) and `etf flag fill failed` (symbol, `class=fmp.ErrorClass(err)`, trace_id). `class` must never be empty.
+  - Spec amendments: FR-2 gains the trace_id clause; @AC-2 rewritten as "skipped while gate closed → labelled once it
+    reopens" (210/5 seed Givens and the "fails before 255's source-filtered seed" sentence removed); @AC-3 split into
+    gate-reason, fetch-error-class (non-empty) and rate-limit scenarios.
+  - Tests (non-parallel, generalised `recordingLogHandler`/`installLogRecorder`): one `not_wired` case plus
+    fmp_disabled/no_cap/budget; ctx/cap class with an every-attribute `apikey=`/`SECRET` leak check; rate-limit
+    sequences; trace_id routed through `middleware.UnaryServerInterceptor` (not bare `metadata.NewIncomingContext`);
+    `src.total()` deltas everywhere; one @AC-2 regression guard reassigning `fakeBudget` (P-06 waiver to record).
+  - (nil, nil) visibility (proposed FR-3/@AC-4 `unlabelled` record) is NOT in the approved approach unless the
+    operator's steer is recorded verbatim here, or it is folded into AC-3 as one more reason. If adopted, the
+    `defer s.etf.mu.Unlock()` at `:130-131` must become an explicit unlock before `slog`.
+- **Strongest open objections (BLOCKING).**
+  1. P-03/P-04/P-05: the FR-3/@AC-4 `unlabelled` record claims operator direction ("steer 2") that is recorded nowhere
+     in the feature dir; context.md records only the AC-2+AC-3 narrowing. Record the steer verbatim or fold it into
+     AC-3 before /sdd-spec.
+  2. C-11/P-03: 255's `enrichmentClass` leaves stage-less errors (build-request, non-ctx limiter) unlabelled and its
+     impl-spec (`:642-644`) forbids inventing a token, so `class=""` is reachable. The operator's fallback token must
+     land in 255's Open Threads before 230's spec, and AC-3 must pin `class` as non-empty.
+- **Non-blocking objections.** `:226` test edit (folded in); pin fail-slot semantics; interceptor-routed trace test;
+  explicit unlock if anything logs at the cache write; 230 owns the `ErrorClass` export (C-18/F-08/F-09); one
+  `not_wired` case (supersedes round 2's three); record the P-06 waiver and drop the contradictory product-spec
+  sentence; 255 must be merged, and 254's `*url.Error` rewrap must still classify as transport.
+- **Open risks.** Root cause unconfirmed ((nil, nil) 30-day negative cache would stay silent; only 215 Step 26(a)
+  catches it, `fails.md:2843`); hard dependency on 255 and its fallback token; three-way `fmp_client.go` conflict
+  with 254/255; process-wide `slog.SetDefault`; suppressed records drop their trace_id; shutdown `class=ctx` noise;
+  default `fmp_disabled` gate logs once per process.
+- **Floor status.** No Floor breaches. `etfFlagLogEvery` is an FR-2-sanctioned code constant (F-07); nothing touches
+  proto, migrations, config keys or secrets.
+- **@AC changes.**
+  - Covered by the operator decision (2026-10-22): 230 @AC-1, @AC-2, @AC-3 (CHANGE).
+  - Not covered: 230 @AC-4 (proposed FR-3 `unlabelled` record) is an uncovered EXTEND. 215 @AC-14 and 217 @AC-4 are
+    PRESERVE only.
+
+```sdd-batch-design-state
+{
+  "round": 3,
+  "synth": {
+    "approach": "Round-3 synthesis for 230-fix-etf-flag-fill (SEV-3, Track C). The operator narrowed it to AC-2 and AC-3, and 255 must be MERGED as a hard predecessor that merge-order.md records. There is no proto, migration or config change. Edits are confined to services/xstockstrat-marketdata/internal/service/etf_flags.go, its tests, one exported classifier name in internal/fmp/fmp_client.go (added by 230 itself and listed in its step Files), marketdata CLAUDE.md, and this feature's product-spec.md and acceptance.feature.\n\n1. Trace id (closes the r2 C-03 blocker).\n   - Add `type etfFillItem struct{ sym, traceID string }`.\n   - The queue at etf_flags.go:38 and its make at :50 become `chan etfFillItem`.\n   - GetEtfFlags (:62) names its ctx and reads `middleware.FromContext(ctx).TraceID` once, before the lock.\n   - enqueueLocked (:83) sends `etfFillItem{sym, tid}`. Because of the pending dedup at :87-92, the admitted enqueuer is the single origin.\n   - StartEtfFlagFiller (:109-110) keeps the loop ctx for cancellation. Only the string crosses over; the request ctx never does.\n   - fillEtfFlag(ctx, item etfFillItem) adds \"trace_id\" to each record only when it is non-empty.\n   - Test churn, corrected and verified: the four drains at etf_flags_test.go:136,156,183,200 (`<-svc.etf.queue`) compile unchanged. etf_flags_test.go:226 `svc.fillEtfFlag(context.Background(), \"NEW\")` (TestEtfFlagFiller_EvictsOldestAtBound) must change to `etfFillItem{sym: \"NEW\"}`. That makes five call sites with one edit.\n\n2. Gate.\n   - `etfFillAllowed() bool` (:140-146) becomes `etfFillGate() (reason string, used, cap int, snap bool)`.\n   - The order is unchanged: not_wired, then fmp_disabled, then BudgetSnapshot(), then no_cap, then budget (atQuotaAlertThreshold, marketdata_service.go:1959). An empty reason means the gate is open.\n   - It runs OUTSIDE etf.mu, because BudgetSnapshot takes fmp.Client.mu.\n   - The skip path never calls src (215 @AC-14).\n\n3. Rate-limit state on etfFlagState (:33), guarded by mu.\n   - Fields: lastSkipReason, budgetLoggedAt, failLoggedAt.\n   - Config reasons log on change only. budget logs on change or once per etfFlagLogEvery. Every logged skip updates lastSkipReason, and an open gate clears it.\n   - The fail slot is a decision the spec must pin. Either a shared slot, accepting explicitly in the AC-3 rate-limit scenario that a class change inside the window is suppressed, or a small `map[string]time.Time` keyed by the returned class string. The map is bounded by the classifier's finite output and needs no coupling to 255's token list. Recommended: the per-class map, because diagnosis is the purpose; the shared slot is acceptable only if the AC text states the loss.\n   - Add `etfFlagLogEvery = time.Minute` to the :17-25 const block.\n   - Decide under mu with clock() (:53), release mu, then call slog.\n\n4. Records: Info level; err and err.Error() are never logged.\n   - Skip: \"etf flag fill skipped\" with symbol and reason, plus used/cap only when snap, plus trace_id.\n   - Fail: the :126 Debug call becomes \"etf flag fill failed\" with symbol, class=fmp.ErrorClass(err) and trace_id.\n   - The class must never be empty. 230 does not invent a fallback token: the operator-chosen token for stage-less errors (build-request, limiter) must be recorded before /sdd-spec, and AC-3 pins `class` as non-empty.\n\n5. (nil, nil) visibility (FetchIsEtf fmp_client.go:359,372-379). The r3 FR-3/@AC-4 'unlabelled' record has no recorded operator authority. Grep across the feature dir finds no 'unlabelled' or 'steer' entry, and context.md records the narrowing to AC-2+AC-3 only. It is NOT part of the approved approach unless one of two things happens before /sdd-spec:\n   - (a) the operator's steer is recorded verbatim in context.md; or\n   - (b) it is folded into AC-3 as an additional reason on the existing record path, keeping the AC count at two.\n   If (a) is chosen, the cache write at :130-135 currently holds mu via `defer s.etf.mu.Unlock()`. The spec must convert that to an explicit unlock after the entry write and slot decision, then emit outside the lock. Caching is unchanged either way (30-day negative cache, 215 @AC-14).\n\n6. Spec amendments in this feature.\n   - FR-2 gains 'carries the originating request's trace_id when present'.\n   - @AC-2 is rewritten as 'skipped while the gate was closed → labelled on a later call once the gate reopens'. Delete the 210/5 seed Givens (owned by 255 @AC-3) and the product-spec sentence '@AC-2 … fails before 255's source-filtered seed'.\n   - @AC-3 is split into concrete-count scenarios: gate-closed reasons, fetch-error class (non-empty), and rate-limit.\n\n7. Tests. They live in the service package and run non-parallel, because slog.SetDefault is process-wide.\n   - Capture handler: generalise recordingWarnHandler/installWarnRecorder (marketdata_service_test.go:1549,1589) into recordingLogHandler/installLogRecorder with an exact-level field. installWarnRecorder becomes a wrapper.\n   - (a) Reason table: one not_wired case, the existing :128 'no budget wired' case, which is enough because SetEtfFlagSource sets src and queue together (:44-51). Plus fmp_disabled, no_cap and budget. Each case asserts src.total()==0, pending cleared, and used/cap present only for no_cap/budget.\n   - (b) Fail class: an apikey=SECRET-wrapped context.DeadlineExceeded gives class ctx, and the same wrapping of fmp.ErrFMPDailyCapExceeded gives class cap. Assert on EVERY attribute value plus msg: none may contain 'apikey=' or 'SECRET' (fails.md:3050).\n   - (d) Rate limit, with the semantics as pinned in step 3:\n     - N budget skips give 1 record; stepping *etfClock past the window gives a second;\n     - N fmp_disabled skips give 1 record across windows;\n     - fmp_disabled → budget → fmp_disabled gives 3 records;\n     - skip and fail slots are independent;\n     - fail-class behaviour matches the pinned choice.\n   - (e) Trace: route the call through middleware.UnaryServerInterceptor, as propagation_test.go:75-82 does. Do NOT use a bare metadata.NewIncomingContext, because FromContext reads unexported propKey{} (propagation.go:10,21) and would see an empty id. Assert trace_id=t-1, and assert that a no-trace call carries no trace_id attribute.\n   - Every logging test asserts a src.total() delta, so logging never adds fetches.\n   - @AC-2 regression guard, one short test reusing fakeEtfSource/newEtfSvc/fakeBudget:\n     - fakeBudget{used:200,cap:250} gives 0 fetches;\n     - reassign to {used:5,cap:250}, which works because of the value receiver (:2037);\n     - drain, then is_etf==true;\n     - record the P-06 waiver (the test passes on trunk) in context.md.\n\n8. Docs: marketdata CLAUDE.md, GetEtfFlags paragraph.\n   - Add one bullet covering the fmp_disabled/no_cap/budget tokens (not_wired undocumented), the class-only fail record and trace_id.\n   - Add etfFlagLogEvery to Fixed invariants.\n   - The Scope step 3 staging check reads marketdata.fmp.enabled and marketdata.fundamentals.provider directly.",
+    "open_objections": [
+      {
+        "text": "P-03/P-04/P-05 scope. The proposed FR-3/@AC-4 'etf flag fill unlabelled' record claims operator direction ('steer 2'), but that direction is not recorded anywhere in the feature dir: grep for 'unlabelled'/'steer' returns nothing, and context.md records only the AC-2+AC-3 narrowing. Before /sdd-spec, either record the operator's steer verbatim in context.md or fold the (nil, nil) visibility into AC-3's existing record path as one more reason. Carrying FR-3 unrecorded is a silent scope change.",
+        "blocking": true
+      },
+      {
+        "text": "C-11/P-03 empty class token. 255's enrichmentClass leaves stage-less errors (build-request, non-ctx limiter) unlabelled, and 255's impl-spec :642-644 forbids inventing a token. FetchIsEtf can return those errors in production, so class=\"\" can occur. Testing only ctx/cap hides this. Get the operator's fallback token (e.g. 'other') into 255's Open Threads before 230's spec, and pin in AC-3 that class is never empty.",
+        "blocking": true
+      },
+      {
+        "text": "Test-compile correction (now folded into the approach). The r3 'zero churn, four sites' claim was false: etf_flags_test.go:226 passes the string literal \"NEW\" to fillEtfFlag and must become etfFillItem{sym: \"NEW\"}. The spec must list this edit and correct the Key Decision citation. It is resolved on paper and must be carried into the impl-spec.",
+        "blocking": false
+      },
+      {
+        "text": "Fail-slot semantics are still unpinned. A shared slot hides a ctx→cap→http_403 sequence inside one window. Choose one of two and state it in AC-3: a per-class map keyed by the returned string (recommended), or the shared slot with the loss explicitly accepted. Test (d) must assert the chosen behaviour.",
+        "blocking": false
+      },
+      {
+        "text": "Test (e) realism. middleware.FromContext reads unexported propKey{}, which only UnaryServerInterceptor sets (propagation.go:10,21,27-35). The spec must require routing the call through the interceptor, as propagation_test.go:75-82 does. A bare metadata.NewIncomingContext yields an empty TraceID.",
+        "blocking": false
+      },
+      {
+        "text": "Lock ordering at the cache write. fillEtfFlag holds mu through `defer s.etf.mu.Unlock()` (etf_flags.go:130-131). If any record is emitted from this point (only an approved unlabelled record would do so), the spec must convert the defer to an explicit unlock before slog. It must not log while holding mu.",
+        "blocking": false
+      },
+      {
+        "text": "C-18 coupling. 230 should add the ErrorClass export to fmp_client.go itself, after 255 merges, by renaming the function or adding one exported name, with fmp_client.go listed in its step Files (F-08). It should not ask 255 to change its spec. This avoids pushing a 230 need into a peer feature, and avoids an F-09 issue if 255 starts executing first.",
+        "blocking": false
+      },
+      {
+        "text": "C-18 YAGNI. Drop the three not_wired sub-cases. SetEtfFlagSource sets src and queue together (:44-51), and the filler returns on a nil queue (:102). Keep one not_wired case, the existing :128 one. This supersedes the r2 synthesis requirement to keep all three.",
+        "blocking": false
+      },
+      {
+        "text": "P-06. Record the @AC-2 regression-guard waiver (the test passes on trunk) in context.md. Remove the product-spec sentence '@AC-2 … fails before 255's source-filtered seed', which contradicts the rewritten scenario.",
+        "blocking": false
+      },
+      {
+        "text": "Dependency on 255. It must be merged, not just implementation-ready, and merge-order.md must record it as a hard predecessor. 254's *url.Error rewrap must still classify as transport; re-verify at the 254 merge.",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "230 @AC-1",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "230 @AC-2",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "230 @AC-3",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "230 @AC-4 (proposed FR-3 unlabelled record)",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "215 @AC-14",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "217 @AC-4",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "Treating the fill as having 'no originating request' and logging without a trace_id (r2 reading). The admitted enqueuer (etf_flags.go:87-92) is a single origin whose trace is available. Self-recording that reading would be a de facto C-03 waiver, and the operator refused one. Carrying the trace-id string is cheap.",
+      "Passing the inbound request ctx to the fill. It is cancelled when the RPC returns and would kill the background fetch. Only the trace-id string is carried.",
+      "Adding FR-3/@AC-4 'unlabelled' with no recorded operator steer (r3 as written). It is a silent scope change beyond the 2026-10-22 narrowing. It is held unless the steer is recorded, or the case is folded into AC-3.",
+      "Asking 255 to rename and export enrichmentClass as ErrorClass. It pushes a 230 need into a peer spec and risks F-09. 230 adds the export itself after 255 merges.",
+      "Driving test (e) with metadata.NewIncomingContext alone. FromContext reads the unexported propKey that only the interceptor sets, so TraceID would be empty.",
+      "Three not_wired sub-cases. Production can reach not_wired only through nil fundCfg/fmpBudget, and the token is undocumented. One case is enough.",
+      "An fmp-package httptest leak test. It duplicates 255 Step 12 over the same getJSON path and is a merge hot spot.",
+      "Service-level class assertions on stage-less synthetic errors. They depend on 255's unresolved fallback token.",
+      "A single global log timestamp. A budget flood would mask fail records and config-reason changes.",
+      "A per-symbol rate-limit key. Memory grows with the symbol count, and logs still flood.",
+      "Changing FetchIsEtf to return an exported class-bearing error type. It widens the fmp API and conflicts with 254/255.",
+      "Logging err or err.Error(). It can carry the apikey URL until 254 lands (D-39, fails.md:3050).",
+      "Keeping 230's own seed-count fix. The operator dropped it on 2026-10-22; 255 owns it.",
+      "Warn level. The label is best-effort, and analysis already warns on RPC failure.",
+      "Only raising the existing Debug line to Info. A closed gate, the likeliest live state, would stay silent."
+    ],
+    "open_risks": [
+      "Root cause unconfirmed. If staging shows an open gate and clean fetches while SCHD stays UNSPECIFIED, the cause is the (nil, nil) 30-day negative cache. Without an approved unlabelled record or an AC-3 reason, it logs nothing. Fixing it would need operator sign-off to change 215 @AC-14's 30-day clause. Only the post-deploy 215 Step 26(a) check catches this (fails.md:2843).",
+      "Hard dependency on 255: its merge, its classifier token set and the unresolved stage-less fallback token. A 255 slip blocks 230's classifier step under C-11.",
+      "Three-way conflict risk in fmp_client.go with 254/255. 254's *url.Error rewrap must still classify as transport.",
+      "slog.SetDefault is process-wide. The ETF log tests must stay non-parallel or records leak between tests.",
+      "A suppressed record drops its fill's trace_id; only the logged record's trace survives.",
+      "class=ctx records during shutdown are accepted noise, at most one per window.",
+      "An fmp_disabled closed gate (the default config) is not fixed by 255 and logs once per process. Staging config must be read directly."
+    ],
+    "constitution_rules_touched": [
+      "C-03",
+      "C-08",
+      "C-11",
+      "C-15",
+      "C-16",
+      "C-18",
+      "P-02",
+      "P-03",
+      "P-04",
+      "P-05",
+      "P-06",
+      "F-04",
+      "F-07",
+      "F-08",
+      "F-09"
+    ],
+    "rationale": "I re-read the code.\n- etf_flags_test.go:226 calls `svc.fillEtfFlag(context.Background(), \"NEW\")` with a string literal. This confirms the adversary: the r3 'zero churn' claim is false. The fix is a one-line edit, now folded into the approach. The four `<-svc.etf.queue` drains (:136,156,183,200) do compile unchanged.\n- propagation.go:10,21,27-35 confirms that FromContext reads an unexported propKey{} set only by UnaryServerInterceptor. Test (e) must route through the interceptor.\n- etf_flags.go:130-131 confirms the cache write holds mu through a defer. Any emit at that point needs an explicit unlock.\n- A grep of the feature dir for 'unlabelled'/'steer' found nothing. The claimed operator direction for FR-3/@AC-4 is unrecorded, so that objection stays blocking under P-03/P-05. The binding 2026-10-22 decision narrows 230 to AC-2+AC-3.\n\nThe r2 blocking C-03 objection is concretely resolved. The trace-id string is carried on the queue item, the loop ctx keeps cancellation, and the operator's 'carry a trace when available' rule is met.\n\nThe empty-class risk is not answered: 'tests use only ctx/cap' avoids it rather than resolving it. It stays blocking until the operator picks the fallback token and AC-3 pins class as non-empty.\n\nNon-blocking refinements are adopted: 230 owns the export, one not_wired case, an every-attribute leak check, src.total() deltas, the P-06 waiver recorded, and the contradictory product-spec sentence removed. The fail-slot choice remains a pin-it item.\n\nThere is no Floor breach. etfFlagLogEvery is an FR-2-sanctioned code constant (F-07), and nothing touches proto, migrations, config keys or secrets. The operator decision covers the AC-1/2/3 changes. The proposed @AC-4 is an uncovered EXTEND. 215 @AC-14 and 217 @AC-4 are preserved."
+  },
+  "floor_breaches": []
+}
+```
