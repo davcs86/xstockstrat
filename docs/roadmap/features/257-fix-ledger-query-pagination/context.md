@@ -351,3 +351,39 @@ Open Threads (delta):
 - [ ] The ledger real-impl tests depend on 252. It is now a hard rebase precondition and a Step 1 merge-order row.
 - [ ] `merge-order.md` rows deferred to Step 1 (see above).
 - [ ] Pass-2 magnitude comparison: confirm at `/sdd-review impl-spec`.
+
+## Session 2026-10-22 — sdd-review impl-spec
+
+Advisory review (MODE B): criteria PASS WITH WARNINGS (0 FAIL, 8 WARN); overlap WARN (same-file/same-function
+overlaps with 248, 251, 252, 263; no migration, proto field or config-key collision). Lifecycle unchanged.
+
+Addressed (implementation-spec.md edited):
+- Step 3 and Step 5 Verification now run `npx c8 check-coverage --lines 40` after `test:coverage`. The script's
+  `--lines 40` flag alone enforces nothing (252 implementation-spec FR-4), so the threshold is now explicit.
+- Step 8 now writes literal `p100_ms:` / `token_walk_count: … / seeded_matching: …` / `per_page_ms:` lines, and its
+  Verification asserts p100 < 2000 ms and count equality. It also states that no coverage threshold applies (no code)
+  and that seed/harness scripts stay uncommitted (F-08).
+- Step 6 now requires a ≤2-line constraint comment stating that `math.Abs` is load-bearing (signed sell partials),
+  so a maintainer cannot "simplify" it to `>`.
+- Step 2 Verification now starts with executable rebase-precondition checks: `grep -n "req.ownerOnly"` (263 merged)
+  and `grep -n '"test:coverage": "tsc && c8' package.json` (252 runner merged). Stop and ask if either fails.
+- Step 7 AC-6 now records the C-15 divergence explicitly: the test uses −1 … −501 where `acceptance.feature` AC-6
+  states 1 … 501. The scenario text was not reworded, because rewording it would assert a payload sign trading does
+  not emit today (`trading.go:1822-1824`).
+
+No change needed:
+- Step 4 C-18 complexity (`waitForDrain`, `max(sequence)` bound). Both are recorded operator sign-offs, and the
+  unbounded notifier buffer is documented in Step 9.
+- Overlap collisions are already handled: 248 by Step 4's `toSeq` replacement rule and Step 9's conditional
+  `LEDGER-N`, and 263/252/251 by the Step Dependencies and Step 1 rows.
+
+Still open (surface at the /sdd-execute checkpoint):
+- [ ] `merge-order.md` rows (257 after 263, 257 after 252, 251 after 257) and the rolling-deploy note are still
+  unwritten (grep finds no hit). This run was limited to the feature directory. Until Step 1 runs, product-spec's
+  "record at spec time" commitment is unmet, and 251 could merge first unguarded.
+- [ ] AC-6 sign divergence (C-15): decide whether to reword AC-6 (sell partials carry negative `filled_qty`) or to
+  keep the recorded divergence. File the underlying question with `/sdd-qa defect` before 251 lands. Fill payloads
+  carry no side, and whether trading's sell `Qty` is signed is unverified, so realized P&L may be wrong independent
+  of this bug.
+- [ ] 263's `owner_only = 7` field number and its `ownerOnly` predicate were not verifiable from trunk (263 is
+  draft there). Step 2's new precondition grep catches this at execute time.
