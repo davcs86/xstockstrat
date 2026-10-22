@@ -525,3 +525,66 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   "floor_breaches": []
 }
 ```
+
+## Session 2026-10-22 — sdd-design
+
+- Phase 0 Recon: recon.md was written earlier. It covers:
+  - xstockstrat-indicators: the fix site.
+  - xstockstrat-analysis: a consumer.
+  - packages/proto: affected only under Option B.
+- Key reuse patterns:
+  - the `_load_formula` pending-hidden predicate (`servicer.py:156`) plus the existing NOT_FOUND abort;
+  - the `SandboxResult(success=False, ...)` construction (`sandbox.py:408-417`) and the `runtime_error` → `SANDBOX_EXIT_REASON_RUNTIME_ERROR` map.
+- Phase 1 Grilling: 2 rounds (full mode), approved at the operator gate.
+- Chosen approach, built in this order:
+  1. D-54: an inline pending guard in UpdateFormula/DeleteFormula.
+  2. D-10: parent-side failure on rc==0 when the output is missing or unparseable. It uses a single `_fail` closure and leading-`\n` marker framing, and an rc≠0 failure always gets a non-empty error.
+  3. D-18: Option A descriptions in the engine and in `strategyCatalog.ts`.
+  4. Docs, plus a new defect report.
+- Rejected: Option B (OHLCV plus proto), a key rename, builtins stripping, `rfind` framing, a new enum value, a repo-SQL guard, and a marker nonce.
+- Constitution rules touched: C-01, C-03 (untouched), C-08, C-10, C-11, C-13, C-14, C-15, C-16, C-18, P-02, P-03, P-06, F-01, F-06, F-07. Floor breaches: none.
+- Status: spec-ready → design-approved.
+- OPERATOR DECISIONS (binding, recorded 2026-10-22):
+  - Features are grouped by service and theme from the 2026-10-20 debt-radar scan, and routed via Track C (precedent #1264).
+  - Scope is D-10, D-18 and D-54.
+  - Operator 2026-10-21 (standing, all features): propagate x-trace-id as much as possible, with no C-03 waiver.
+    - Request-derived emits and writes use `context.WithoutCancel(ctx)` (Go) or the inbound metadata (Python/Node), never a fresh background context.
+    - Only work with no originating request (background sweepers and loops) may mint its own context. It should still carry a trace id when one is available.
+  - Operator 2026-10-22 (design gate r2): APPROVED as synthesized.
+
+## Decisions
+
+- **OQ-1 = Option A.** Re-describe ATR/VWAP and keep the keys and math unchanged. OQ-2 is moot, and there is no proto change.
+- The losing `@option-B` scenarios, `@AC-8`/`@AC-9`, were deleted from acceptance.feature and the header was updated. AC-1..AC-7 are kept.
+- `xstockstrat-ui` joins the affected services: `strategyCatalog.ts:99`/`:104` plus a vitest. Analysis and proto become "consumer, unchanged".
+- Marker framing: the wrapper prints a leading `\n` before `__OUTPUT__:`. The parent checks each line with `startswith`, keeps the last marker line, and parses it strictly.
+- An rc≠0 run with empty stderr gets the error `formula exited with code {rc} before producing output`. This is required, not optional, because product-spec FR-1 requires a non-empty `error`.
+- **Correction to the round-2 synthesis.** The synthesis said product-spec.md has no FR-N list. It does: FR-1..FR-5 exist, and AC-1..AC-7 already carry `@FR-N` tags. No FR or tag addition is needed.
+- The consumers of `success=false` were verified to fail closed, which closes the "re-check feature 246" item:
+  - `fundamentals_scoring.py:61-63` raises `FundamentalsScoringError`, and `fundsignal_loop.py:465` turns it into a per-symbol skip;
+  - `screener.py:353-354` returns `None`;
+  - `evaluator.py:133` raises `FormulaExecutionError`.
+- **Accepted debt:** the ATR/VWAP description text is duplicated in `indicators_engine.py:141-142` and `strategyCatalog.ts:99`/`:104`. Named follow-up: source the UI catalog from `ListIndicators` (`servicer.py:355-364`).
+
+## Open Threads
+
+- [ ] D-10 is a visible behavior change: formulas that produced no output now fail with RUNTIME_ERROR.
+  - Target: the D-10 step (an indicators CLAUDE.md note and the PR body).
+- [ ] Raw stdout gains one blank line before the marker.
+  - Target: the D-10 step (the PR body).
+- [ ] A formula can still forge success with a valid marker line followed by `SystemExit(0)`. This is accepted.
+  - Target: the D-10 step (a CLAUDE.md note).
+- [ ] "ATR" now means two different numbers: the indicators approximation and trading's Wilder ATR(14) (`trading.go:3168-3235`).
+  - Target: the docs step (the indicators findings doc).
+- [ ] The duplicated ATR/VWAP description text can drift.
+  - Target: a post-launch follow-up (source the catalog from ListIndicators).
+- [ ] Re-verify by grep that the saga commit/abort never goes through UpdateFormula/DeleteFormula (`@AC-19@feature-224`).
+  - Target: `/sdd-spec`.
+- [ ] Expect rebase conflicts with 244 (`sandbox.py`) and with batch peers editing `servicer.py` (e.g. 269).
+  - Target: the merge-order entry at `/sdd-spec`, and execute.
+- [ ] The "never assigns result" gap stays a silent success.
+  - Target: the docs step (file `docs/reports/2026-10-22-indicators-missing-result-silent-success-defect.md` with an `open` sidecar), then `/sdd-triage`.
+- [ ] Product-spec housekeeping.
+  - Target: `/sdd-spec`.
+  - Affected Services: add xstockstrat-ui, and mark analysis and proto as unchanged consumers.
+  - Fix Scope: settle the proto checkbox as "no proto change (Option A)".
