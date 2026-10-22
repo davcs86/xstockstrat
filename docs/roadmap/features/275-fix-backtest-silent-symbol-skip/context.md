@@ -533,3 +533,42 @@ unchanged (spec-ready), per the grilling protocol. The resume state is in the `s
 - [ ] Out of scope: legacy-username formula authors
   (`docs/reports/2026-10-22-indicators-legacy-username-formula-authors-defect.md`).
 - Next: `/sdd-spec fix-backtest-silent-symbol-skip`.
+
+## Session 2026-10-22 — sdd-spec
+
+- Wrote implementation-spec.md with 11 steps. Status: design-approved → implementation-ready.
+- **Prerequisites have not landed.** On `origin/main-dev` `c25efbdc`, 272 and 273 are `implementation-ready` and 215
+  is `in-progress`. Every `servicer.py` line in the spec is therefore pre-272. Step 1 is a hard gate:
+  - It re-anchors every line on the merged tree.
+  - It answers design Open Risks 1-3: where the deadline sits, the GetBars error taxonomy, and whether enum 6 is free.
+  - It re-runs the exception inventory.
+  - It stops `/sdd-execute` if any prerequisite is missing.
+- Key codebase findings:
+  - 272's planned deadline is `asyncio.timeout(limit or None)` around `_run_backtest` in the wrapper, not inside the
+    loop (`272 implementation-spec.md:402-419`). Its T-inner-timeout test patches `_load_benchmark_bars`, which runs
+    before the symbol loop. The single broad arm therefore does not conflict with 272's tests, and the decision not to
+    re-raise `TimeoutError` stands, pending Step 1 confirmation on the landed code.
+  - `raise_unreadable=True` is set only at `servicer.py:2036`, the backtest evaluator. Every other
+    `StrategyEvaluator(` site uses the default (:3874, :4175, :4416, :4869, :5485, :5964, `app/main.py:156`). The
+    option (a) mapping therefore cannot reach the live, readiness or opportunities paths.
+  - `TestFormulaErrorSurfacing` (`tests/test_analysis_servicer.py:1614`) supplies the `_req`/`_formula_def`/`_wire`
+    harness. The new tests reuse it through an instance, not a subclass, so its tests are not re-collected.
+  - The `AioRpcError` builder gains a second consumer, so it moves to `tests/conftest.py` as `aio_rpc_error` (C-13).
+  - Design cites were corrected to the real lines: `_not_found` is at `test_unreadable_formula.py:33-36` (design said
+    :220-221), and `_diag` is at `test_backtest_fundamentals_guard.py:180` (recon said :320).
+  - UI: the new mock sentinel `strat-eval-failed-001` follows `mock-backend.ts:1050-1069`. The warning string moves to
+    the fixture `BACKTEST_EVAL_FAILED_WARNING` in `e2e/fixtures/backtests.ts`, because it has two consumers (C-12).
+  - `plugins/strat-lab/skills/backtest/reference/backfill.md` has no INSUFFICIENT_DATA discriminator today. Step 10
+    adds one under `## When to skip`.
+- No migration (the next free numbers would be analysis 028 and indicators 008, both unused). No config key, no new
+  env var or port, and no new outbound gRPC call: the evaluator keeps `metadata=self._meta`.
+
+## Open Threads (sdd-spec)
+
+- [ ] Merge-order rows: 275 is blocked by 272, 273 and 215. The rows are router-owned and need operator
+  confirmation. This run was restricted to the feature directory, so they were **not** written to
+  `docs/roadmap/features/merge-order.md`.
+- [ ] Step 1 gate: re-anchor, Open Risks 1-3 and the exception inventory, on the merged 272/273/215 tree.
+- [ ] The option (a) reading (the code-name warning applies only to RPC-mapped refusals) is still open for
+  `/sdd-review impl-spec`. Steps 6 and 7 encode it (`test_formula_contract_error_adds_no_eval_warning`).
+- Next: `/sdd-review fix-backtest-silent-symbol-skip impl-spec`.
