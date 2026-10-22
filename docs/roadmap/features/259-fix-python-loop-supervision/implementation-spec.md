@@ -61,13 +61,14 @@ and consumer keep producing. This is a recorded decision, not an omission. No co
   so for `portfolio.position.closed` the trace is empty and no `x-trace-id` is sent: the trace is carried when
   available, never minted (operator 2026-10-21).
 - **`_PROBE_TIMEOUT_SECONDS` — pinned at `5`.** `_PARK_EMIT_TIMEOUT_SECONDS = 5`.
-- **Attempt hang — decided: no per-attempt timeout in this feature.** `pool.acquire()`/`fetchval`
-  (`pnl_pattern_consumer.py:141,205,268,400` — all four re-verified 2026-10-22: `fetchval` `:141`, `acquire()`
-  `:205,268,400`) stay unbounded. An attempt-level `wait_for` would cancel inside an
-  open asyncpg transaction and add a fourth error path for a pool-exhaustion case the probe cannot see either (C-18).
-  The limitation (a hang stalls the consumer with no ERROR and FR-2's done-callback never fires) is documented in
-  the analysis `CLAUDE.md` (Step 15); detection belongs to the loop heartbeat/liveness metric the product spec lists
-  as Out of Scope. Flagged for `/sdd-review impl-spec`.
+- **Attempt hang — decided (operator 2026-10-22): bound every DB wait in an attempt.** Add
+  `_ATTEMPT_DB_TIMEOUT_SECONDS = 10` (a code constant like its siblings; > `_PROBE_TIMEOUT_SECONDS`). Every
+  `pool.acquire()` in the consumer (`pnl_pattern_consumer.py:205,268,400`) becomes `pool.acquire(timeout=…)`, and
+  every query on the attempt path, including `fetchval` (`:141`), passes asyncpg's per-call `timeout=…`. asyncpg
+  cancels a timed-out query server-side and the `async with` transaction rolls back, so nothing is cancelled
+  mid-transaction at the Python level (this is why no blanket `asyncio.wait_for` wraps the attempt). The resulting
+  `asyncio.TimeoutError` is non-poison, so it flows into retry → replay → probe. A pool-exhaustion hang therefore
+  surfaces as WARNING/ERROR logs instead of a silent stall.
 - **Probe false park under load — documented** (Step 15), K=5 with a single probe confirmation kept (design.md
   Rejected Alternatives: two-confirmation K).
 - **Ledger replay amplification — recorded** in `docs/roadmap/features/merge-order.md` at Step 15 against peer
@@ -726,6 +727,10 @@ ruff check . && ruff format --check .
    (d) `self._replay_seq, self._replay_count = None, 0`.
    A raise in (c) propagates to the reconnect handler without running (d); the re-park on replay is deduplicated by
    the ledger idempotency key.
+6b. Per-attempt DB bound (operator 2026-10-22): apply `_ATTEMPT_DB_TIMEOUT_SECONDS` to every `pool.acquire()`
+   (`:205,268,400` → `acquire(timeout=_ATTEMPT_DB_TIMEOUT_SECONDS)`) and every attempt-path query (`:141` `fetchval` and
+   the `execute`/`fetch` calls inside `process_event`) via asyncpg's `timeout=` argument. Do not wrap
+   `process_event` in `asyncio.wait_for`.
 7. `run_forever`: inside `async for event in stream:` first set `self._stream_fail_count = 0`, then
    `await self._process_with_retry(event)` (replacing `:156-159`), then the reset rule — only
    `if self._replay_seq is not None and event.sequence >= self._replay_seq: self._replay_seq, self._replay_count = None, 0`
@@ -739,6 +744,7 @@ cd services/xstockstrat-analysis
 grep -n "_is_poison\|_process_with_retry\|_probe_db\|_park(\|_stream_fail_count\|_replay_seq" app/engine/pnl_pattern_consumer.py
 grep -n "await asyncio.sleep(2)" app/engine/pnl_pattern_consumer.py   # still present (peer 248)
 grep -n "is_transient_db_error\|_TRANSIENT" app/engine/pnl_pattern_consumer.py   # expect none
+grep -n "acquire(" app/engine/pnl_pattern_consumer.py   # every hit passes timeout=_ATTEMPT_DB_TIMEOUT_SECONDS
 ruff check . && ruff format --check .
 ```
 
@@ -847,8 +853,7 @@ grep -n "conftest" tests/test_pnl_pattern_consumer.py   # expect none (single co
      escalation, and the log → idempotent emit → advance park order. Fixed invariants: `_EVENT_MAX_ATTEMPTS=3`,
      `_EVENT_RETRY_BACKOFF_SECONDS=1.0`, `_REPLAY_ESCALATE_AFTER=5`, `_PROBE_TIMEOUT_SECONDS=5`,
      `_PARK_EMIT_TIMEOUT_SECONDS=5`. Accepted limitations: probe false park under contention (~25-30 s); an unlisted
-     deterministic error parks after ~25-30 s, not ~2 s (keep the list narrow); an attempt can hang on an unbounded
-     `pool.acquire()`/`fetchval` with no ERROR (liveness metric is out of scope); a parked `order.created`/`filled`
+     deterministic error parks after ~25-30 s, not ~2 s (keep the list narrow); each attempt's DB waits are bounded by `_ATTEMPT_DB_TIMEOUT_SECONDS=10` (acquire + per-query `timeout=`); a parked `order.created`/`filled`
      opens no window so its later close no-ops, and a parked `position.closed` leaves its window open (reconcile from
      the park payload); the replay and stream-fail counters are in-memory (`instance_count: 1`), so a restart delays
      escalation by K; existing emits now carry `event.correlation_id` as `correlation_id` + `x-trace-id`.
