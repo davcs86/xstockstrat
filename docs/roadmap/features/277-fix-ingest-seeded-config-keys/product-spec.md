@@ -9,7 +9,7 @@
 
 ## Problem Statement
 
-**Observed.** Config migrations `005_ingest_backfill_chunking` and `025_ingest_mcp_client_keys` seed five `ingest` keys with a namespace-stripped `key` column: `backfill.chunk_max_bars`, `backfill.chunk_window_days`, `backfill.max_concurrent_chunks`, `mcp_client.poll_interval_seconds` and `mcp_client.request_timeout_seconds` (staging `list_config_keys(namespace="ingest")`, 2026-10-22). The config service builds each snapshot as `values[row.key]`, and ingest's `ConfigWatcher.get_*` does a raw `values.get(key)`, but ingest reads all five as `ingest.<key>` (`app/config/watcher.py`, `app/engine/mcp_client_loop.py`). The reads miss and the hard-coded defaults apply, so editing a seeded row has no effect and raises no error. `ingest.backfill.max_concurrent_jobs` and `ingest.backfill.retry_on_failure` are read but never seeded.
+**Observed.** Config migrations `005_ingest_backfill_chunking` and `025_ingest_mcp_client_keys` seed five `ingest` keys with a namespace-stripped `key` column: `backfill.chunk_max_bars`, `backfill.chunk_window_days`, `backfill.max_concurrent_chunks`, `mcp_client.poll_interval_seconds` and `mcp_client.request_timeout_seconds` (staging `list_config_keys(namespace="ingest")`, 2026-10-22). The config service builds each snapshot as `values[row.key]`, and ingest's `ConfigWatcher.get_*` does a raw `values.get(key)`, but ingest reads all five as `ingest.<key>` (`app/config/watcher.py`, `app/engine/mcp_client_loop.py`). The reads miss and the hard-coded defaults apply, so an operator editing a seeded row sees no effect and gets no error. `ingest.backfill.max_concurrent_jobs` and `ingest.backfill.retry_on_failure` are read but never seeded.
 
 **Expected.** Every seeded ingest key is read under the exact key the snapshot carries, so changing a seeded value changes ingest behaviour on the next snapshot. The seed form and the reader form agree, and the INGEST-9 rule states the form that is actually correct.
 
@@ -43,7 +43,7 @@ Operator-facing config surfaces: the agent `set_config` / `list_config_keys` / `
 ## Fix Scope
 
 - [x] No proto changes anticipated
-- [x] Database migration required: a new config migration (next free NNN after the config tip, currently `030_marketdata_edgar_snapshot_keys`; re-derive across remote branches at spec time) with an up/down pair that re-keys the five seeded rows in place (FR-2). Applied migrations 005 and 025 are not edited.
+- [x] Database migration required: a new config migration (NNN must be 033 or later: the config tip is `030_marketdata_edgar_snapshot_keys`, and features 243 and 244 already claim 031 and 032; re-derive across remote branches at spec time) with an up/down pair that re-keys the five seeded rows in place (FR-2). It must not blind-UPDATE onto an existing dotted row (unique key tuple; Open Question 2), and carries migration 029's guards (`is_secret=false`, `NOT LIKE` guard) with `ingest` added to scope. Seeds 005/025 cover the `dev` and `production` environment rows; reconcile with the staging wording at spec time. Applied migrations 005 and 025 are not edited.
 - [x] Config key changes required: the five keys above change from bare to full dotted form (FR-1). The re-key-seeds vs change-readers fork is open (see Open Questions).
 
 ## Open Questions (for /sdd-design)
