@@ -5,6 +5,7 @@ Feature: fix-edge-owner-scope (bug fix)
   Background:
     Given user "u-a" owns broker account "acct-a" and user "u-b" owns broker account "acct-b"
     And the ledger holds an "order.filled" event on stream "account:acct-b" for user "u-b" symbol "AAPL"
+    And the ledger holds an "order.filled" event on stream "account:acct-legacy" with a NULL user_id symbol "TSLA"
 
   @AC-1 @FR-1 @regression
   Scenario: A trader cannot read another user's account stream through the trader BFF
@@ -19,29 +20,35 @@ Feature: fix-edge-owner-scope (bug fix)
     When "u-a" calls trader BFF LedgerService.QueryEvents with event_type "order.filled" and no stream_key
     Then the response contains no event belonging to user "u-b"
     And the response contains no event whose user_id is NULL
+    And the "order.filled" event on "account:acct-legacy" symbol "TSLA" is not returned
 
   @AC-3 @FR-1 @FR-5 @regression
   Scenario: A trader still reads their own account and copilot streams
     Given user "u-a" is signed in to /trader
     And the ledger holds a "reconciliation.tick" event on stream "account:acct-a"
+    And the ledger holds a "copilot.message" event "note-a" on stream "copilot:u-a:default" for user "u-a"
+    And the ledger holds a "copilot.message" event "note-b" on stream "copilot:u-b:default" for user "u-b"
     When "u-a" calls trader BFF LedgerService.QueryEvents with stream_key "account:acct-a"
     Then the "reconciliation.tick" event on "account:acct-a" is returned
-    And a QueryEvents with stream_key "copilot:anything" returns only the "u-a" copilot thread
+    And a QueryEvents with stream_key "copilot:anything" returns exactly the "note-a" event
+    And the "note-b" event is not returned
 
   @AC-4 @FR-3 @regression
-  Scenario: A non-admin MCP caller cannot read another user's per-user config overrides
+  Scenario: A non-admin MCP get_config with a foreign user_id is bound to the caller
     Given user "u-b" has a per-user config row "analysis.backtest.max_duration_seconds" = 900 in the agent's environment scope
+    And user "u-a" has a per-user config row "analysis.backtest.max_duration_seconds" = 450 in the agent's environment scope
     And non-admin user "u-a" is the verified MCP caller
     When "u-a" calls get_config with namespace "analysis" and user_id "u-b"
-    Then the tool fails with PERMISSION_DENIED
+    Then the returned "analysis.backtest.max_duration_seconds" value is 450
     And the value 900 is not returned
 
   @AC-5 @FR-4 @regression
-  Scenario: A non-admin MCP caller cannot list another user's overridden config keys
+  Scenario: A non-admin MCP list_config_keys with a foreign user_id is bound to the caller
     Given user "u-b" has a per-user config row "analysis.backtest.max_duration_seconds" = 900 in the agent's environment scope
+    And user "u-a" has no per-user config rows in namespace "analysis"
     And non-admin user "u-a" is the verified MCP caller
     When "u-a" calls list_config_keys with namespace "analysis" and user_id "u-b"
-    Then the tool fails with PERMISSION_DENIED
+    Then "analysis.backtest.max_duration_seconds" is not reported as a per-user override
     And no key overridden by "u-b" is revealed
 
   @AC-6 @FR-5 @regression
