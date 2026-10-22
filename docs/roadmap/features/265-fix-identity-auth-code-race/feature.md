@@ -15,6 +15,7 @@
 |---|---|---|---|
 | 2026-10-21 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-21-identity-auth-code-race-defect.md` (debt-radar D-23 auth-code half, D-21 residual) |
 | 2026-10-22 | `draft` → `spec-ready` | /sdd-review | Product spec approved (7 warnings; overlap WARN with 252) |
+| 2026-10-22 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written |
 
 ---
 
@@ -33,6 +34,8 @@ Snapshot from `docs/runbooks/reviewer-registry.md` at /sdd-triage time (2026-10-
 
 - [Product Spec](product-spec.md) — bug description and fix scope
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
+- [Recon](recon.md) — grounded codebase dossier (Phase 0)
+- [Design](design.md) — approved design: chosen approach, rejected alternatives, open risks
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-identity-auth-code-race`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -46,4 +49,4 @@ duplication (D-21) is folded in so the fix covers one shared path.
 
 ## Next Action
 
-`/sdd-design fix-identity-auth-code-race` — recommended design depth: quick (SEV-2, single service, no proto/migration); see context.md
+`/sdd-spec fix-identity-auth-code-race` — generate implementation spec from the approved design
