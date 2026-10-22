@@ -109,9 +109,18 @@ Two SEV-2 defects from the 2026-10-20 debt-radar scan (D-28, D-29; Track C).
 - **PRESERVE** `@AC-2` "A data-unavailable readiness row is decorated UNKNOWN, not perpetual PENDING" (`services/xstockstrat-analysis/acceptance/readiness-caching-poll-discipline.feature`, `@feature-181`) — a bars-fetch error must still map to the `bar_epoch = -1` UNKNOWN row.
 - **PRESERVE** `@AC-1`, `@AC-2` (`@FR-1 @FR-5 @feature-177`), readiness cache FAST/SLOW and the `bar_epoch` bust (`services/xstockstrat-analysis/acceptance/readiness-caching-poll-discipline.feature`) — a successful paged fetch gives an identical `bar_epoch`, and a failed one stamps nothing truncated.
 - **PRESERVE** `@AC-10` "An unspecified request with no config override is byte-for-byte legacy" (`services/xstockstrat-analysis/acceptance/backtest-next-bar-fill.feature`, `@feature-151`) — a run inside the limit is unchanged by the deadline.
-- **PRESERVE** `@AC-32 @FR-12 @feature-224` (`docs/sdd/business-rules/platform.feature:300`) — strat-lab `backtest` skill and `docs/runbooks/mcp-tools.md` parity. They must list `list_templates`/`instantiate_template` and must not mention `is_public`/`include_public`. Adding the two new failure modes to the skill must keep this.
+- **PRESERVE** `@AC-4 @FR-3 @feature-151` "Legacy same-bar-close fill remains the default and is unchanged" (`services/xstockstrat-analysis/acceptance/backtest-next-bar-fill.feature:28`) — a run that finishes within the limit is unchanged by the FR-3 deadline wrapper.
+- **PRESERVE** `@AC-9 @FR-3 @feature-151` "The effective fill model is resolved once and round-trips" (`backtest-next-bar-fill.feature:64`) — the `default_fill_model` read (intentional `get_int` zero-trap) stays intact beside the new presence-aware `max_duration_seconds` read.
+- **PRESERVE** `@AC-1 @FR-1 @feature-176` "Opportunity compute fans out concurrently but yields the identical set" (`analysis-concurrency-offload.feature:11`) — the success path of the paged fetch is unchanged in membership and order.
+- **PRESERVE** `@AC-4 @FR-4 @feature-152` "Insufficient benchmark history names the benchmark in coverage_gaps" (`services/xstockstrat-analysis/acceptance/market-regime-benchmark-operand.feature:34`) — a genuine short history stays INSUFFICIENT_DATA, distinct from a re-served page (`_BarFetchError`).
+- **PRESERVE** `@AC-5 @FR-3 @feature-152` "Benchmark bars are warmed from before start for a reproducible window" (`market-regime-benchmark-operand.feature:42`) — multi-page warm-up loads still return the full series (FR-2).
+- **PRESERVE** `@AC-2 @FR-2 @feature-215` "A fundamentals-gated backtest on an ETF returns an explicit reason, not a silent no-trade" (`block-fundamentals-strategy-on-etf.feature:24`) — the refusal and INSUFFICIENT_DATA mapping survive the deadline wrapper.
+- **PRESERVE** `@AC-3 @regression @feature-149` "Per-symbol evidence cells and the derived grade are unchanged" (`services/xstockstrat-analysis/acceptance/fix-backtest-annualized-return.feature:22`) — a run failing by `DEADLINE_EXCEEDED` or `_BarFetchError` writes no partial evidence and does not alter the grade.
+- **EXTEND** `@AC-32 @FR-12 @feature-224` "Agent docs and strat-lab skill stay in parity with the tool contract" (`docs/sdd/business-rules/platform.feature:300`) — the strat-lab `backtest` skill and `docs/runbooks/mcp-tools.md` gain the two new failure modes (`DEADLINE_EXCEEDED`, "refusing to return a truncated series"); the existing parity checks (list `list_templates`/`instantiate_template`, no `is_public`/`include_public`) must still pass.
 - No existing acceptance suite for xstockstrat-config asserts on `analysis.backtest.max_duration_seconds`. Suites scanned: `config-secrets-and-scoping`, `opportunity-config-operability`, `surface-signal-weight-decay-config`, `readiness-materializer-config-keys`, `config-ui-usability`.
 - No CHANGE is flagged, so C-16 needs no sign-off. D-28 and D-29 are new guarantees. Only the unit test `test_warmup.py:236` is inverted (C-18; it is not a promoted `@AC-*`).
+- At promotion, this feature's `@AC-1..4` numbers repeat in existing suites (e.g. `@AC-4 @feature-151`, `@AC-4 @feature-152`); the `@feature-272` provenance tag keeps them distinct.
+- Verification gap: only `analysis-concurrency-offload.feature` was read in full; the other suites were scanned by tag/title. Verify the Then-clauses of the PRESERVE rows during design.
 
 ## Dependencies
 
@@ -171,7 +180,9 @@ Two SEV-2 defects from the 2026-10-20 debt-radar scan (D-28, D-29; Track C).
   - Per-user overrides of this key are exercised by 263's acceptance (`263-fix-edge-owner-scope/acceptance.feature:32,47`).
     Reading through `self._cfg` at call time must keep per-user resolution working.
 - **R-8 — consumer surface (C-14).** The strat-lab `backtest` skill (`plugins/strat-lab/skills/backtest/SKILL.md`,
-  which exists) must document both new failure modes in the same PR (`docs/patterns/strat-lab-plugin.md`). Recon has
+  which exists) must document both new failure modes in the same PR (`docs/patterns/strat-lab-plugin.md`). Also matching
+  `run_backtest`: `reference/output-handling.md`, `reference/aggregation.md`, `plugins/strat-lab/README.md`; and the
+  error table in `docs/runbooks/mcp-tools.md` (sibling row `:412`, `max_range_days` → `INVALID_ARGUMENT`) gains rows. Recon has
   not read whether the agent `run_backtest` tool or the `/insights` UI already renders `DEADLINE_EXCEEDED` with a
   message; settle this at design.
 - Ledger traps:
