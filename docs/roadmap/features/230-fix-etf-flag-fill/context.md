@@ -480,3 +480,61 @@ the round-2 block above.
 
 - **Round-2 gate steer (verbatim):** "Operator 2026-10-22 at the round-2 gate: (1) CARRY THE TRACE ID — adopt the synthesis's recommended fix for the open C-03 objection: GetEtfFlags reads middleware.FromContext(ctx).TraceID, the queue item widens to chan etfFillItem{sym, traceID} (only the admitted enqueuer's trace, per the pending dedup), StartEtfFlagFiller keeps the loop ctx for cancellation, and fillEtfFlag attaches trace_id to every fill record when non-empty; the 'no originating request' reading is rejected. (2) ADD the optional record: on the FetchIsEtf (nil, nil) path, emit a rate-limited Info record 'etf flag fill unlabelled' carrying the symbol (and trace_id) only, with caching behaviour unchanged; it gets its own FR + @AC scenario in product-spec.md/acceptance.feature (amend both in this feature) and its own rate-limit slot pinned in the spec, plus a test. Everything else in the round-2 synthesis stands."
 - **Round-3 gate:** the operator chose `other` as the fallback class token for stage-less errors (the request-build error and the non-ctx limiter error) in 255's classifier. AC-3 requires `class` to be non-empty. The operator approved the design after round 3.
+
+## Session 2026-10-22 — sdd-design
+
+- **Phase 0, Recon:** recon.md had already been written.
+  - Services: xstockstrat-marketdata (fix site) and xstockstrat-analysis (consumer only, unchanged).
+  - Key reuse: 255's `enrichmentClass`, exported by 230 as `fmp.ErrorClass`; the generalised `recordingWarnHandler`;
+    and the injectable `etfFlagState.clock()`.
+- **Phase 1, Grilling:** 3 rounds, full mode. The operator approved at the round-3 gate; the Floor was clear.
+- **Chosen approach:** carry the admitted enqueuer's trace id on `chan etfFillItem{sym, traceID}`. `etfFillGate()`
+  returns a reason, plus used/cap. Three rate-limited Info records, each emitted after `mu` is released:
+  - `skipped`: config reasons log on change; `budget` logs on change or once a minute.
+  - `failed`: class only, never empty, with fallback `other`, and a per-class slot.
+  - `unlabelled`: on the `(nil, nil)` path, with its own slot and caching unchanged.
+- **Spec amendments to make before or at /sdd-spec:**
+  - FR-2 gains a trace_id clause, and FR-3 is added.
+  - @AC-2 is rewritten as "gate closed, then reopened". The seed Givens and the "fails before 255" sentence are
+    removed.
+  - @AC-3 is split into reason, class and rate-limit scenarios.
+  - @AC-4 is added for the unlabelled record.
+- **Rejected:**
+  - logging without trace_id (a de facto C-03 waiver);
+  - passing the request ctx to the fill;
+  - asking 255 to export its classifier;
+  - a shared fail slot, a global slot, or a per-symbol slot;
+  - logging raw `err`;
+  - Warn level;
+  - shortening the 30-day negative TTL (a CHANGE to 215 @AC-14 with no sign-off).
+- **Constitution rules touched:** C-03, C-08, C-11, C-15, C-16, C-18, P-02, P-03, P-04, P-05, P-06, F-04, F-07,
+  F-08, F-09. No Floor breaches.
+- **Round-3 blockers resolved by recorded operator decisions:**
+  - The unlabelled steer is recorded verbatim (round-2 gate).
+  - The `other` fallback token, plus the per-class fail slot (round-3 gate).
+- **Status:** spec-ready → design-approved.
+
+### Decisions
+
+- The design follows design.md § Chosen Approach.
+- 255 is a hard predecessor and must be MERGED first.
+- 230 adds the `ErrorClass` export to `fmp_client.go` itself and lists that file in its step Files.
+- Per the operator, the `other` token resolution is recorded in 255's context.md Open Threads through the
+  merge-order/docs PR, not in this dir.
+
+### Open Threads
+
+- [ ] Root cause is unconfirmed. If the live cause is the `(nil, nil)` 30-day negative cache, changing it needs
+  operator sign-off on 215 @AC-14. Target: the post-deploy 215 Step 26(a) check.
+- [ ] Hard dependency on 255: its merge, its classifier token set, and the `other` fallback. Target: the /sdd-spec
+  merge-order row and the classifier step.
+- [ ] Three-way `fmp_client.go` conflict with 254/255. 254's `*url.Error` rewrap must still classify as `transport`.
+  Target: the classifier step, re-verified at the 254 merge.
+- [ ] `slog.SetDefault` is process-wide, so the ETF log tests stay non-parallel. Target: the test steps.
+- [ ] A suppressed record drops its trace_id. Accepted, no step.
+- [ ] Shutdown `class=ctx` noise, at most one record per window. Accepted, no step.
+- [ ] An `fmp_disabled` closed gate (default config) logs once per process. The staging check must read
+  `marketdata.fmp.enabled` and `marketdata.fundamentals.provider` directly. Target: the docs step and the
+  post-deploy check.
+- [ ] P-06 waiver for the @AC-2 regression guard, which passes on trunk. Target: record it at execute of that test
+  step.
