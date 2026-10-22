@@ -798,3 +798,77 @@ the next `/sdd-batch` run can pick it up.
   "floor_breaches": []
 }
 ```
+
+## Session 2026-10-22 — sdd-design
+
+- Phase 0 Recon: recon.md was already written (services: xstockstrat-marketdata; reuse patterns: the `cacheAxis`
+  source-aware check at `marketdata_service.go:1849-1850`, and the single `atQuotaAlertThreshold` home at `:1959`).
+- Phase 1 Grilling: 4 rounds (full). The operator approved at the r4 gate, "APPROVED as synthesized", and the Floor
+  was clear.
+  - Chosen approach: comment/doc-only cap-0 fix (D-50); source-filtered counts plus a `SeedFMPBudget` seam (D-51);
+    a vendor-axis fresh check (D-52); `decodeExtraMetrics` (D-53a); and, for D-53b, a classified enrichment failure
+    stored already-expired (an epoch `fetched_at`) with a same-source COALESCE merge. D-19 adds a stream-manager
+    ctx, a URL seam, a healthy-session reset and `closeAllLocked`.
+  - Rejected: skip-upsert, expiring on every failure, a bounded retry window, a cross-source COALESCE, logging the
+    raw error, and a phantom `SourceName` (see design.md §Rejected Alternatives).
+- Constitution rules touched: C-03, C-08, C-11, C-14, C-15, C-16, C-18, F-01, F-04, F-07, P-02, P-03, PLAT-N1.
+  Floor breaches: none.
+- Status: spec-ready → design-approved.
+- Resumed after a cut session. design.md was written from the round-4 final synthesized state recorded above.
+
+### Decisions
+
+- **Operator 2026-10-22, design gate r2:** expire-instead-of-fresh applies to enrichment failures. No residual is
+  accepted for transient failures.
+- **Operator 2026-10-22, design gate r3:** four decisions.
+  1. ADOPT step 5.5. On a flagged overwrite, last-known-good enrichment values are kept through the same-source
+     COALESCE merge, so edgar values are never relabelled as fmp. The row is still stored expired.
+  2. EXEMPT deterministic FMP 4xx (402/403/404) from expiry. These are cached fresh with an honest missing_metrics.
+     Only cap-exceeded, cancel/deadline, 5xx, transport and decode failures expire the row. This narrows the r2
+     "every failure" wording.
+  3. ADOPT the parenthesised D-51 seed predicate `source = $1 AND (fetched_at >= $d OR as_of >= $d)`, with
+     `fmp.SourceName` and the 30-edgar-rows test.
+  4. SIGN-OFF on three spec edits: the FR-4(b) rewrite reflecting (2), AC-5's first Then listing "beta" only, and
+     the new @AC-10 as rewritten in the r3 synthesis.
+- **Operator 2026-10-22, design gate r4:** APPROVED as synthesized, including S:
+  - introduce `fmp.SourceName`/`finnhub.SourceName` at the client write sites;
+  - alias `classification.SourceFMP` to `fmp.SourceName` (`go list -deps` cycle check, with a reverse-alias
+    fallback);
+  - repo count/seed methods take the source as a parameter.
+  - The @AC-10 trigger is pinned to a transient FMP HTTP 503 on profile. If the r3-synthesis @AC-10 text named a
+    402/403/404, the swap to 503 is a consistency edit required by r3 (2).
+- **Acknowledged with the r4 approval (C-11):** HTTP 400, 401 and 429 and read-body failures are in neither the
+  operator's expire list nor the exempt list. The design expires them. Changing that later is a one-line `switch`
+  edit.
+- **Accepted cost (operator r2):** under a persistent 5xx/transport failure, every request and fundsignal cycle
+  re-spends the counted quote/ratios calls. That reaches the cap earlier and starves the 215 filler and 217
+  classification. The hard cap bounds the cost. A bounded retry window remains open to the operator as a future
+  decision only.
+- **Note for feature-246 consumers (provenance):** after a flagged merge, `as_of` is today but the enrichment values
+  are prior-day, and missing_metrics is empty. This is acceptable only because the row is served `stale=true`.
+- No `010` index migration. Merge-order rows (255 after 215; a soft WARN row for 254) are still pending a user yes.
+
+### Open Threads
+
+- [ ] A 403 classed as deterministic may be transient at FMP (pinned fresh for one TTL; visible as `http_403`). →
+  Step 5 tests and PR note.
+- [ ] Unassigned 4xx codes (400/401/429/read) expire. → Step 5 PR, operator-visible.
+- [ ] Re-fetch amplification under persistent transient failures. → Step 5 PR note.
+- [ ] Possible import cycle from `classification.SourceFMP = fmp.SourceName`; the reverse alias is the fallback. →
+  `/sdd-spec` (`go list -deps`).
+- [ ] Epoch `fetched_at` shows as 1970 to display readers. → grep the fetched_at readers (repo scan sites
+  `:526`/`:569` and the C-14 consumers) before Step 5.
+- [ ] After a COALESCE merge, prior enrichment appears under today's `as_of`. → FR-4(b) note at `/sdd-spec`.
+- [ ] Class-only WARNs lose detail until 254 lands. → 254.
+- [ ] The `now() AT TIME ZONE 'UTC'` session-TZ dependence is inherited by the new as_of clause. → Step 5.8.
+- [ ] Rebase conflicts with 215/254 (`fmp_client.go:243`/`:254-255`, `marketdata_service.go:1704`/`:1760`, the
+  upsert SQL, the seed WHERE). → merge-order rows, on a user yes.
+- [ ] A source/flag/merge-aware `fakeFundRepo` may break tests that seed `todayCount` directly. → Steps 2 and 5.
+- [ ] Under the finnhub provider the FMP seed is about 0, and classification spend writes no row (floor semantics).
+  → Step 2 docs.
+- [ ] D-19 assumes Alpaca sends `subscription` only after a successful auth+subscribe. → Step 6 test.
+- [ ] A server that acks then drops reconnects forever at a fixed delay (accepted). → Step 6 PR note.
+- [ ] StreamBars RPC clients still hang after a manager give-up (`marketdata_handler.go:37-54`). → follow-up
+  feature.
+- [ ] `/sdd-spec` must apply the acceptance.feature and product-spec edits: rewrite AC-5, add @AC-10, rewrite
+  FR-4(b).
