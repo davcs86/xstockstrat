@@ -47,7 +47,7 @@ Feature: fix-ui-trader-feedback (bug fix)
 
   @AC-7 @FR-5 @regression
   Scenario: A failed ledger export is shown to the user
-    Given "/trader/api/ledger/export" returns HTTP 500 or the request rejects
+    Given "/trader/api/ledger/export" returns HTTP 500
     When the user clicks the export events button on "/trader/portfolio"
     Then an error message is shown and no unhandled promise rejection occurs
 
@@ -57,3 +57,39 @@ Feature: fix-ui-trader-feedback (bug fix)
     And the next poll returns order "o-2" with status NEW and updatedAt 2026-10-21T10:00:05Z
     When the orders table renders
     Then order "o-2" shows status CANCELED
+
+  @AC-9 @FR-2 @regression
+  Scenario: A dropped alert stream is shown to the user and reconnects
+    Given the trader is on "/trader" with the alert stream connected
+    When the alert stream errors with UNAVAILABLE
+    Then the page shows that live alerts are disconnected
+    When the alert stream becomes available again and a new alert is emitted
+    Then the disconnected indicator is no longer shown
+    And the new alert is shown without a page reload
+
+  @AC-10 @FR-5 @regression
+  Scenario: A failed mutation with no per-call error handler still shows an error
+    Given a mutation that declares no onError handler
+    When the mutation fails with UNAVAILABLE
+    Then the global mutation error fallback shows an error message
+    And no unhandled promise rejection occurs
+
+  @AC-11 @FR-5 @regression
+  Scenario: A ledger export whose request rejects is shown to the user
+    Given the request to "/trader/api/ledger/export" rejects with a network error
+    When the user clicks the export events button on "/trader/portfolio"
+    Then an error message is shown and no unhandled promise rejection occurs
+
+  @AC-12 @FR-3 @regression
+  Scenario Outline: No trader page labels the account as Paper while the environment is unknown
+    Given GetTradingEnvironment fails so the environment mode is unknown
+    When the trader opens "<page>"
+    Then the page does not label the account or order entry as Paper
+
+    Examples:
+      | page                   |
+      | /trader                |
+      | /trader/orders         |
+      | /trader/positions      |
+      | /trader/positions/AAPL |
+      | /trader/portfolio      |
