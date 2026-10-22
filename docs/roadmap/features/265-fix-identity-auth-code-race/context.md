@@ -42,3 +42,32 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Recommended design depth: quick → `/sdd-design fix-identity-auth-code-race quick` (rationale: SEV-2, single
   service, no proto/migration/config, clear root cause with a proven sibling fix pattern).
 - Development branch: feature/fix-identity-auth-code-race
+
+## Session 2026-10-22 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready. Criteria verdict: PASS WITH WARNINGS (no fails, no floor breaches).
+- Warnings:
+  - FR-1 vs FR-5 tension (validate-before-consume needs a read of the stored row). **Resolved**: FR-1 now allows a
+    validation read before the claim (or the predicates inside the claim); only the claim's row count decides redemption.
+  - FR-8 / AC-4 silent on an empty audience. **Resolved**: FR-8 now states an OAuth token with no resource keeps
+    today's `aud: ''`, first-party tokens carry no `aud`, so the shared helper's `aud` is optional.
+  - FR-6 site set. **Resolved**: FR-6 now names the four sites, including `refreshOAuthToken` (intentionally in the
+    shared-helper set; it already calls `mintOAuthAccessToken`).
+  - Test harness, fault-injection mechanism and the 252 early-return dependency are deferred to design. Partly
+    resolved: the spec now links `252-fix-identity-ledger-test-suites`; harness + mechanism remain for `/sdd-design`.
+  - FR-6/FR-7 structural halves are grep/code-review verified, not scenario verified. Open: the impl-spec must carry the grep step.
+  - AC-3's Given names a fault-injection detail. Accepted as written (Then steps are observable).
+  - The task prompt gave a doubled feature path. Noted; the review ran against `docs/roadmap/features/265-fix-identity-auth-code-race/`.
+- Overlap findings (WARN, no FAIL):
+  - [file] `services/xstockstrat-identity/src/__tests__/identityServiceImpl.test.ts`: 265's real-Postgres race and
+    fault-injection tests vs 252's impl `before()` try/catch (`:28-40`, 252 Step 3) and rotation revoke assertion
+    (`:403-417`). 252 `implementation-spec.md:95` says whichever lands second merges the other's changes. Textual only.
+  - [file] `services/xstockstrat-identity/src/grpc/identityServiceImpl.ts`: 265 `exchangeAuthCode` `:474-518` and
+    helpers `mintOAuthAccessToken` `:295`, `issueRefreshToken` `:321`, `rotateRefreshToken` `:340` vs 252
+    `implementation-spec.md:220-254` (transient mutation and restore of the `refreshOAuthToken` revoke `:524-527` and
+    the #1262 `AND rt.revoked_at IS NULL` line in `rotateRefreshToken`). Adjacent, disjoint blocks; rebase-level risk.
+- OPERATOR DECISIONS (binding, recorded 2026-10-22):
+  - Grouped by service+theme from the 2026-10-20 debt-radar scan; Track C (precedent #1264).
+  - Scope is D-23 auth-code half and D-21; refresh rotation already fixed by hotfix 5bd271d.
+  - Operator 2026-10-21 (standing, all features): x-trace-id must be propagated as much as possible; no C-03 waiver — request-derived emits/writes use context.WithoutCancel(ctx) (Go) / the inbound metadata (Python/Node), never a fresh background context; only work with no originating request (background sweepers/loops) may mint its own context, and it should still carry a trace id when one is available.
+- Next: `/sdd-design fix-identity-auth-code-race`.
