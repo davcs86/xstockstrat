@@ -459,3 +459,77 @@ unchanged (spec-ready), per the grilling protocol. The resume state is in the `s
   "floor_breaches": []
 }
 ```
+
+## Session 2026-10-22 — sdd-design
+
+- Phase 0 Recon: recon.md was written earlier. Services: analysis (the fix site), indicators (read-only), agent
+  (docs only). Key reuse patterns:
+  - the `except FormulaExecutionError` row template (`servicer.py:1112-1126`)
+  - the `fund_unknown` warning list (`:928`, `:1263-1266`)
+  - the run-scoped `propagation_meta` (`:806-810`)
+- Phase 1 Grilling: 3 rounds (full). The operator approved at the round-3 gate. Adversary verdict SOUND; Floor clear.
+- **Operator decisions at the r3 gate (2026-10-22, binding):**
+  1. SIGN-OFF on the @AC-5 @feature-150 CHANGE. Popping the buffered PORTFOLIO intent of a symbol whose
+     `_compute_metrics` raises, so that it is excluded from `_simulate_portfolio`, is an intentional correction.
+  2. Formula-refusal asymmetry: OPTION (a), not (b).
+     - On the backtest path (`_raise_unreadable`), indicators PERMISSION_DENIED maps to `FormulaExecutionError` the
+       same way NOT_FOUND does. Admin and owner runs therefore both report `NO_TRADE_REASON_FORMULA_ERROR` (4).
+     - The mapped refusal carries an FR-3-style warning with the status code name only, never `e.details()`.
+     - This EXTENDS @AC-30 @feature-224.
+- Chosen approach:
+  - Add `NO_TRADE_REASON_EVALUATION_FAILED = 6`, with the stubs and the `NO_TRADE_MESSAGE` key in one commit.
+  - Keep 272's `except _BarFetchError: raise`. Below it, add one inline `except Exception` arm that writes the row,
+    pops the intent, appends to `eval_failures`, and logs a WARN with the trace id read via `.get`.
+  - `eval_failures` joins only the `:1238` gate.
+  - Both arms share `EVAL_FAILED_WARNING`, and `FormulaExecutionError` gains an optional `code`.
+  - A Playwright spec proves the new reason renders in the UI.
+  - The strat-lab, agent and mcp-tools docs change in the same PR and carry the backfill discriminator.
+- Rejected:
+  - option (b) (record the asymmetry and leave it)
+  - reusing reason 4 for every failure
+  - two enum values
+  - two arms, or a helper
+  - a loop-level `TimeoutError` re-raise
+  - failing the whole RPC
+  - changing the `:1320` recompute condition
+  - `e.details()` in warnings
+- Amended for option (a):
+  - product-spec.md: the FR-1 example is narrowed, FR-8 is added, and FR-5 gains a run-history scope note.
+  - acceptance.feature: AC-1 now expects FORMULA_ERROR and no indicators detail in the warnings. AC-7 is added for
+    the owner NOT_FOUND path.
+- Constitution rules touched: C-03, C-10, C-11, C-12, C-13, C-14, C-15, C-16, C-18, P-02, P-03, PLAT-N1. Floor
+  breaches: none.
+- Status: spec-ready → design-approved.
+
+## Decisions
+
+- Option (a) for the formula refusal. The mapping is gated on `_raise_unreadable`, so the live loop
+  (@AC-5 @feature-224) is unchanged.
+- Signed off: the @AC-5 @feature-150 CHANGE and the @AC-30 @feature-224 EXTEND. Preserved: @AC-11 @feature-215 and
+  @AC-8.
+
+## Open Threads
+
+- [ ] Re-anchor every cited line (servicer.py, evaluator.py) on the merged 272/273/215 tree, and re-check enum value
+  6. Target: the `/sdd-spec` re-anchor step.
+- [ ] If 272's deadline lands as an in-loop `wait_for`, revisit the decision not to re-raise `TimeoutError`. Target:
+  the `/sdd-spec` re-anchor step.
+- [ ] Confirm that a `GetBars` UNAVAILABLE stays a raw `grpc.RpcError` after 272 (AC-2, AC-5). Target: the
+  `/sdd-spec` re-anchor step.
+- [ ] The broad `except Exception` arm may swallow a future sentinel exception. Guards: the grep-checklist step and
+  test (e).
+- [ ] Option (a) reading: the code-name warning applies only to RPC-mapped refusals (NOT_FOUND / PERMISSION_DENIED).
+  Formula contract errors keep no warning. Confirm at `/sdd-review impl-spec`.
+- [ ] The PERMISSION_DENIED mapping keys on the status code alone. The evaluator step re-checks indicators
+  `servicer.py:243-253`.
+- [ ] The backfill discriminator must ship in SKILL.md and reference/backfill.md. Target: the docs step.
+- [ ] INSUFFICIENT_DATA runs persist no detail, so their rows are lost on restart or a Past-Runs reload. Target: the
+  docs step.
+- [ ] A partial run whose only evaluated symbol is flat with zero trades becomes INSUFFICIENT_DATA. Accepted under
+  FR-6. Target: the AC-5 test.
+- [ ] The proto change and the UI key land in one commit, with proto-owner review and green buf lint, buf breaking
+  and proto-freshness. Target: the proto + UI step.
+- [ ] `exc_info=True` logs one stack trace per failed symbol. Accepted; bounded by the universe size.
+- [ ] Out of scope: legacy-username formula authors
+  (`docs/reports/2026-10-22-indicators-legacy-username-formula-authors-defect.md`).
+- Next: `/sdd-spec fix-backtest-silent-symbol-skip`.
