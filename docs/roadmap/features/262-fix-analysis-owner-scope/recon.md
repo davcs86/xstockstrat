@@ -97,6 +97,9 @@ mocks are retargeted (D-60). This is a SEV-2 Track C fix. Scope is D-44, D-55 an
     - a `req.user_id`-filtering fake for `@AC-2`;
     - `call.kwargs["metadata"]` assertions for `@AC-1`;
     - `db_pool.fetch = AsyncMock(side_effect=Exception(...))` for `@AC-4`.
+  - `TestRunOnce` builds `db_pool = AsyncMock()` with `db_pool.fetch = AsyncMock(return_value=[...])`
+    (`tests/test_entry_backfill.py:118-119`). The file has no `caplog` use yet; the warning assertions for
+    `@AC-3`, `@AC-4`, `@AC-5` and `@AC-8` can follow the `caplog` usage in `tests/test_live_loop.py`.
   - Python fixture home (C-13) is `tests/conftest.py`. The literals stay inline while they have a single
     consumer.
 
@@ -113,6 +116,13 @@ mocks are retargeted (D-60). This is a SEV-2 Track C fix. Scope is D-44, D-55 an
 - **PRESERVE** `@AC-11` "Live loop signal eligibility sees only the owner's signals"
   (`services/xstockstrat-analysis/acceptance/private-by-default-templates.feature`, `@AC-11 @FR-6 @feature-224`).
   Live-loop state stays owner-keyed. The backfill seeds that state and must not cross owners.
+- **PRESERVE** `@AC-20` "Strategy id collision on instantiation" and `@AC-34` "Caller-chosen strategy id on
+  instantiation" (`services/xstockstrat-analysis/acceptance/private-by-default-templates.feature`, `@FR-9 @feature-224`).
+  Both run through the strategies repository. FR-5 removes only `get_by_id` and `update`, never
+  `get_by_owner_and_id` or `update_locked`.
+- **PRESERVE** `@AC-30` "Registering a strategy that references an unreadable formula warns at write time"
+  (`services/xstockstrat-analysis/acceptance/private-by-default-templates.feature`, `@AC-30 @FR-3 @feature-224`).
+  FR-6 retargets mocks on this `ManageStrategy REGISTER` path; the behavior is unchanged.
 - **PRESERVE** `@AC-17` "An ownerless order event issues no owner-scoped call"
   (`services/xstockstrat-analysis/acceptance/private-by-default-enforce-contract.feature`, `@AC-17 @FR-1 @feature-225`).
   An empty-owner unit is skipped, never sent headerless. This is the model for FR-3.
@@ -147,7 +157,9 @@ mocks are retargeted (D-60). This is a SEV-2 Track C fix. Scope is D-44, D-55 an
 
 - Proto/RPC: none changed. Consumes `trading.v1.ListOrdersRequest.user_id` (field 1) and `strategy_id`
   (field 2), `packages/proto/trading/v1/trading.proto:168-169`.
-- Migration: none. The last analysis migration is `027_contract_owner_dimension`.
+- Migration: none. The last analysis migration is `027_contract_owner_dimension`. The analysis `CLAUDE.md:515-524`
+  config rows say "Seeded by migration `028` (feature 184)", but no `028` file exists in `migrations/`. Not
+  investigated; irrelevant here since no migration is needed.
 - Config keys: none new. The existing `analysis.strategy.max_concurrent_entry_backfill` (`entry_backfill.py:57`)
   and `analysis.engine.fundamentals_blend_enabled` (`:87`) are unchanged.
 - Inter-service edges: the existing analysis → trading `ListOrders` edge (`TRADING_ENDPOINT`, same stub
