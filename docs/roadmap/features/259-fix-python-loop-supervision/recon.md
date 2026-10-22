@@ -177,6 +177,12 @@ kills a loop or freezes config while health stays green (D-07, D-08, D-56).
 - **PRESERVE** `@AC-1/@AC-2/@AC-3 @feature-173` "present-aware config reads (0 is a value, not unset)" (`services/xstockstrat-ingest/acceptance/fix-python-config-zero-trap.feature`) — The ingest watcher snapshot and `get_int_present` semantics are untouched. Feature 244 owns the getter trap.
 - **PRESERVE** `@AC-4 @feature-173` "An empty allowed_imports denies all sandbox imports instead of reverting to the permissive default" (`services/xstockstrat-indicators/acceptance/fix-python-config-zero-trap.feature`) — The indicators snapshot and `get_str_present` semantics are untouched.
 - **PRESERVE** `@AC-6 @feature-210` "A long-lived streaming RPC survives a certificate rotation" (`docs/sdd/business-rules/platform.feature`) — The `WatchConfig` stream still re-establishes without data loss. The wider catch must keep the gRPC-error reconnect.
+- **PRESERVE** `@AC-7 @FR-6 @feature-154` "A portfolio enumeration outage does not crash the producer cycle" (`services/xstockstrat-analysis/acceptance/fundsignal-watchlist-universe.feature`) — An outage still yields an empty universe, a warning and a clean cycle. It is not a supervised failure.
+- **PRESERVE** `@AC-3 @FR-3 @feature-180` "A stale materialized row is recomputed rather than served indefinitely" (`services/xstockstrat-analysis/acceptance/watchlist-readiness-precompute.feature`) — A fingerprint change still triggers a recompute.
+- **PRESERVE** `@AC-6 @FR-6 @FR-7 @feature-042` "A snapshot-capture timeout never blocks order execution" (`services/xstockstrat-analysis/acceptance/order-snapshots-pnl-patterns.feature`) — A timeout yields a partial snapshot. It is a designed degrade, not a retryable failure, so the FR-4 retry must not stall on it.
+- **PRESERVE** `@AC-3 @FR-4 @feature-042 @feature-225` "QueryPnLPatterns returns the caller's ranked positive and negative factors" (`services/xstockstrat-analysis/acceptance/order-snapshots-pnl-patterns.feature`) — The query stays owner-scoped. A parked-events table, if chosen, must not leak into it.
+- **PRESERVE** `@AC-10 @FR-4 @feature-029` "A per-fill fee flows through the fee-capture plumbing into the net win test" (`docs/sdd/business-rules/platform.feature`) — A retried `portfolio.position.closed` event persists `fees_total` exactly once.
+- **PRESERVE** `@AC-5 @FR-5 @feature-210` "Header-propagation semantics are unchanged beneath mTLS" (`docs/sdd/business-rules/platform.feature`) — The header trio is unchanged across reconnect and retry.
 - **PRESERVE** `@AC-3 @feature-171` "Telemetry init remains non-blocking after the trading_mode attribute is removed" (`docs/sdd/business-rules/platform.feature`) — Startup must not fail because of the task registry or done-callback.
 - **PRESERVE** `@AC-4 @feature-210` (fail-closed mTLS boot) (`docs/sdd/business-rules/platform.feature`) — Boot and fail-closed semantics are unchanged.
 - **EXTEND** none. The new AC-1..AC-8 add failure-survival cases alongside the guarantees above, and none of them
@@ -220,6 +226,9 @@ kills a loop or freezes config while health stays green (D-07, D-08, D-56).
 - **Watcher reconnect duplicating snapshot state.** `_watch` sets `self._snapshot` / `self._snapshot_event` inside
   the stream loop. A wider `except` must reconnect the same single loop, not spawn a second `_watch`. The Node
   watcher's 2026-10-03 "stream doubling" defect (`69c8554`) is the recurrence shape to avoid.
+- **Watcher reconnect must keep the last good snapshot.** Resetting `self._snapshot` on an exception would
+  silently revert a stored `0` or `""` to the coded default, the zero-trap regression `@AC-1..3 @feature-173`
+  (ingest) and `@AC-4 @feature-173` (indicators) guard. Keep the snapshot until the next one arrives.
 - **Unguarded schedule `advance` on the error path.** `fundsignal_loop.py:155`, `servicer.py:5891` and `:6067` all
   call `advance` from the error branch. If that `advance` fails too, the schedule stays unadvanced (still due), and
   the loop's own backoff then decides when the retry runs.
