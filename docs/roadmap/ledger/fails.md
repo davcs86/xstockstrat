@@ -3046,6 +3046,11 @@ ambiguity is logged here).
 - **Evidence**: `docs/roadmap/features/274-otel-metrics-logs-export/context.md` Round 1–3 checkpoints; `@connectrpc/connect` `protocol-connect/handler-factory.js:277-280`; `opentelemetry/instrumentation/grpc/_aio_server.py:109-116`; `sdk-node@0.52.1 sdk.js:81-84`; `api@1.9.1 api/metrics.js:35-36`.
 - **Rule it implies**: Any design that wraps a handler or SDK to record telemetry must read the pinned library's actual resolution/exception/registration path (stream resolution, BaseException handling, default-component replacement, proxy vs no-op globals) before claiming what the number means — and add a test that would fail on the naive assumption.
 
+### 2026-10-22 — fix-marketdata-secret-exposure — assumption
+- **Mistake**: The vendor clients redacted the URL on the non-2xx branch only. They `%w`-wrapped the transport error (`http.Client.Do`) and the parse error (`http.NewRequestWithContext`) as-is. Both are `*url.Error` values whose text carries the full request URL, including the `apikey=`/`token=` query key, so the key reached gRPC statuses, logs and OTel (D-39).
+- **Evidence**: `services/xstockstrat-marketdata/internal/fmp/fmp_client.go:226`, `:243`; `internal/finnhub/finnhub_client.go:114`, `:118`; `docs/roadmap/features/254-fix-marketdata-secret-exposure/design.md` Step 1.
+- **Rule it implies**: any Go HTTP client with a credential in the URL must unwrap `*url.Error` and `%w`-wrap only `ue.Err`, with a cause-free fallback. This keeps `errors.Is(ctx.DeadlineExceeded)` working. Prove it with a test that asserts the key is absent and `errors.As(err, new(*url.Error))` is false.
+
 ### 2026-10-22 — fix-ledger-query-pagination — assumption
 - **Mistake**: node-postgres returns BIGINT columns (ledger `sequence`) as strings when no `setTypeParser` is registered. `streamEvents` therefore compares string to string, which is lexicographic (`"10" > "9"` is false), so `maxSeq` dedupe and any keyset cursor stall at a digit boundary. Every ledger unit mock passes a numeric `sequence`, so CI could not see it.
 - **Evidence**: `services/xstockstrat-ledger/src/grpc/ledgerServiceImpl.ts:191,196,210,256`; `src/__tests__/ledgerServiceImpl.test.ts:66,100,174`; `docs/roadmap/features/257-fix-ledger-query-pagination/recon.md:177-185`, design.md §2/§4.
