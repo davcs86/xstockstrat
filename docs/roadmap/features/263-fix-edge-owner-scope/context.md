@@ -425,3 +425,7 @@ Per the grilling protocol `design.md` is not written and `status.md` stays `spec
   UI `e2e/mock-backend.ts` / `INVENTORY.md` vs 215/240/245/249 (INVENTORY is append-only). Proto field 7,
   migrations and config keys are clean. Peer-only FAIL (not 263): config migration 032 claimed by both
   244 and 248.
+
+## Session 2026-10-22 (operator decision — merge order vs 257)
+
+- **Decided:** 263 merges **first**. `257-fix-ledger-query-pagination` rebases onto 263's ledger `QueryEvents` owner filter, builds its page token on top of it, and takes the next free `QueryEventsRequest` field number (no field-7 collision). This resolves the impl-spec Open Thread "merge-order direction (257 waits for 263)". Step 12 item 6 may now write the `merge-order.md` row `263 → 257`.
