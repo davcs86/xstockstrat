@@ -28,6 +28,27 @@ returns a gRPC error instead of hanging; a subscriber never misses a delta betwe
 any server-side failure on a subscriber's stream ends that call with an error status so the client's existing
 reconnect/backoff path (`69c8554`) runs.
 
+**Who is affected.** Every service that subscribes to `WatchConfig` at startup (all backend services, the UI
+and the agent) silently keeps stale config after a DB blip. Operators changing config through config-ui or the
+agent `set_config` tool see their change never take effect. Callers of `GetConfig`, `SetConfig` and ledger
+`AppendEvent` hang to their deadline instead of getting an error they can retry.
+
+## Functional Requirements
+
+- **FR-1 (D-05).** When the config LISTEN connection errors or ends, config re-establishes `LISTEN config_changed`
+  with backoff, without a process restart. On reconnect it reloads every namespace and broadcasts, so a change
+  committed during the outage still reaches open `WatchConfig` subscribers.
+- **FR-2 (D-05).** A failure inside the `config_changed` notification handler (for example a rejected reload) is
+  caught and logged. It raises no unhandled promise rejection and config keeps serving RPCs.
+- **FR-3 (D-06).** `GetConfig`, `SetConfig` and ledger `AppendEvent` (including the whole idempotent-transaction
+  branch: `pool.connect`, every `client.query` in it, and `ROLLBACK`) invoke the callback with a gRPC error status
+  on any DB rejection, release any acquired pool client, and raise no unhandled promise rejection.
+- **FR-4 (D-35).** `WatchConfig` loses no change committed between the start of the snapshot read and the
+  subscriber's registration. If the initial snapshot fails, the stream is ended with a gRPC error status and the
+  subscriber receives no later messages.
+- **FR-5 (D-58).** When a broadcast to one subscriber fails, config logs the error message and ends that
+  subscriber's call with a gRPC error status, so the client's reconnect/backoff path runs.
+
 ## Reproduction Steps
 
 1. D-05: terminate the `LISTEN config_changed` backend with `pg_terminate_backend`, then `SetConfig` a global key;
@@ -54,10 +75,16 @@ drop subscribers without signalling the client. D-06 is a repeated "await before
 
 - [x] No proto changes anticipated
 - [x] No database migrations anticipated
-- [x] No config key changes anticipated (reconnect delay is a code constant unless design decides otherwise;
+- [x] No config key changes (the reconnect backoff is a code constant whose values /sdd-design sets;
   a config key would be circular for config's own LISTEN client)
 
-(Update after investigation — remove or replace each item as needed)
+## Consumer Surface(s)
+
+- [x] **None — internal/platform-only.** No RPC, proto field, response shape or stored state changes. The
+  config-ui segment and the agent config tools (`get_config`, `set_config`, `list_config_keys`) reach config
+  through `GetConfig`/`SetConfig`/`ListKeys` unchanged. The only observable difference on a DB failure is a gRPC
+  error status in place of a hang (FR-3), and config changes keep propagating after a LISTEN drop (FR-1). No UI or
+  agent tool change is needed.
 
 ## Acceptance Criteria
 
