@@ -340,3 +340,9 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
     (which must re-anchor its stale `:1861/:2106/:2674` cites to `:1943/:2188/:2756`) and the agent files
     against 215/247 before the integration PR.
 - Ledger: no new line.
+
+## Session 2026-10-21 — overlap correction (251)
+
+- 251's approved spec (`251/implementation-spec.md:128-130`, `:1060-1061`) has no edit in `escalateSystemic`; its only
+  `trading.go` change is `applyBrokerOrderStatus` (`:1772-1829`, Step 5). The implementation-spec Overlap bullet now
+  says line-disjoint / rebase only. The open thread above (re-check `trading.go` against 251) is answered by this.
