@@ -23,12 +23,18 @@ Feature: fix-ingest-seeded-config-keys (bug fix)
       | ingest.mcp_client.request_timeout_seconds    | 5     | 30      |
 
   @AC-3 @FR-2 @regression
-  Scenario: Re-keying preserves an operator-edited seeded row
-    Given the bare row "backfill.chunk_window_days" in namespace ingest was edited to 14 in production
+  Scenario Outline: Re-keying preserves an operator-edited seeded row
+    Given the bare row "backfill.chunk_window_days" in namespace ingest was edited to 14 in the "<environment>" environment
     When the re-key migration runs
     Then the row "ingest.backfill.chunk_window_days" has value 14 and type int
     And no bare "backfill.chunk_window_days" row remains
     And no "ingest.ingest.backfill.chunk_window_days" row exists
+
+    Examples:
+      | environment |
+      | dev         |
+      | staging     |
+      | production  |
 
   @AC-4 @FR-2
   Scenario: Re-running the re-key migration is a no-op
