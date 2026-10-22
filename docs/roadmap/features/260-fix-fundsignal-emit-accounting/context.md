@@ -1,0 +1,43 @@
+# Context Log: fix-fundsignal-emit-accounting
+
+Append-only. Each session appends a new ## Session entry. Never delete or edit prior entries.
+
+---
+
+## Session 2026-10-21 (/sdd-triage)
+
+- Bug recorded as defect report `docs/reports/2026-10-21-fundsignal-emit-accounting-defect.md` (Issues disabled);
+  sidecar `triaged` / `ref: feature:260-fix-fundsignal-emit-accounting`.
+- Source: repo-surveyor debt-radar scan `docs/repo-surveyor/debt-radar-findings.md` @ 4535695, findings D-43, D-57.
+- Severity: SEV-2 (group). Impact type: silent-signal-loss. Environment: dev (main-dev) @ a053b0e. Config-only: no.
+- Operator decisions (2026-10-21): grouped by service+theme from the debt-radar scan; Track C for all SEV-2 (precedent #1264); batch launched via /sdd-batch with designGate halt.
+- Routed to SDD path (Track C).
+- Created: status.md, feature.md, product-spec.md, acceptance.feature (AC-1..4), context.md.
+- Affected services: xstockstrat-analysis (fix site), xstockstrat-ingest (dedup semantics for the retry trade-off).
+- Root cause hypothesis: one `fundsignal_emitted` row means both "claimed" and "emitted"; `_paced_fetch` has no bucket
+  for failed chunks.
+- Re-verification on a053b0e: both D-ids reproduce by reading.
+  - D-43: claim insert `fundsignal_loop.py:242-256` (scan `:243-256`); emit/update/`emitted += 1` `:257-269`
+    (scan `:269`); `_emit_signal` swallow `:541-548` (unchanged); abort `:270-278`.
+  - D-57: `_paced_fetch` `:394-407` (scan `:394-406`); status `:280` (unchanged).
+- Finding added at triage (D-43 trade-off): ingest dedup (`services/xstockstrat-ingest/app/handlers/servicer.py:1039-1066`)
+  overwrites rather than deduplicates when `valid_until` differs, and `_emit_signal` derives `valid_until` from `now`
+  (`fundsignal_loop.py:520-525`). So a retry after a lost-but-committed response is not deduplicated by ingest today.
+  Design must pick: a deterministic `valid_until` per `as_of_date`, an ingest-side idempotency key, or accept the rare
+  double row.
+- **Overlaps / merge order:**
+  - `246-fix-fundsignal-neutral-score` (implementation-ready) modifies `fundsignal_loop.py` (scoring and the `run_once`
+    path; its spec cites the claim insert args `:243-254` and `min_conviction_to_emit` `:229`) and
+    `tests/test_fundsignal_loop.py` (`_fund`, `_emitted_inserts` helpers). Same file and same test helpers as this
+    feature. **Merge 246 first, then rebase 260**; add a row to `merge-order.md` at /sdd-spec.
+  - `244-fix-python-config-stored-zero` (implementation-ready) touches `fundsignal_loop.py:143,154` (`retry_seconds`);
+    line-disjoint, rebase only.
+  - `242-fix-push-untargeted-broadcast` leaves `fundsignal_loop._emit_warning` untouched (its spec says "Do not touch
+    `fundsignal_loop.py`"); D-57 may call `_emit_warning` for failed chunks — keep it untargeted (`@AC-6 @feature-224`).
+  - `245-fix-screener-symbol-isolation` cites `fundsignal_loop.py` only as reference.
+  - `259-fix-python-loop-supervision` (D-07) edits `run_forever`/`_tick` in the same file; disjoint lines.
+- Recommended design depth: full → `/sdd-design fix-fundsignal-emit-accounting` (rationale: 2 affected services, the
+  C-0 full trigger). Ingest is likely read-only, so the operator may downgrade to
+  `/sdd-design fix-fundsignal-emit-accounting quick`; keep full if design moves idempotency into ingest or adds a
+  migration.
+- Development branch: feature/fix-fundsignal-emit-accounting
