@@ -300,3 +300,55 @@ protocol, `design.md` is not written and `status.md` stays `spec-ready`.
   "floor_breaches": []
 }
 ```
+
+## Session 2026-10-22 — sdd-design
+
+- Phase 0 Recon: wrote recon.md in an earlier session (services: xstockstrat-ui fix site; analysis and trading
+  read-only). Key reuse patterns: the `Alert`/`CardNotice` primitives with the per-call `onError` + `errMessage`
+  pattern, `timestampToMillis`, and the server-derived `resolveTradingMode` from UNSPECIFIED.
+- Phase 1 Grilling: 2 rounds (full).
+  - Operator approved at the design gate as synthesized: the `meta` passthrough in `useInvalidatingMutation`
+    (`:17`, `:22`), `meta.errorHandled` as the ONLY opt-out from the global mutation error fallback, and removal
+    of the no-op `onError`s in `useBacktest.ts:12-15` / `useScreenSymbols.ts:13-16` (or listing them in the
+    inventory).
+  - Chosen approach: a UI-only fix in this build order:
+    1. D-45 `strategyId` one-liner.
+    2. D-64 per-call handlers, the `errMessage` hoist, the export try/catch, and the `MutationCache` fallback
+       (single-slot store, meta-only skip).
+    3. D-17 `toPbTradingMode` with a null mode sending UNSPECIFIED.
+    4. D-11 `pickFresherOrder`.
+    5. D-11 `useReconnectingStream` (reconnect on any non-abort end or retryable code, terminal on
+       PermissionDenied/InvalidArgument, indicator clears on first item or `STREAM_STABLE_MS`).
+  - Rejected: inferring "handled" from `onError`, keyHash clear-on-success, `onHeader` indicator clearing,
+    error-only reconnect, opt-in `meta.globalError`, `useMutationState`, and NC-D cleanup (deferred by operator
+    decision).
+- Constitution rules touched: C-01, C-03, C-11, C-12, C-13, C-15, C-16, C-17, C-18, F-04, F-07, P-02, P-03,
+  PLAT-N1. Floor breaches: none.
+- Business rules: all twelve 270 ACs are EXTEND. @AC-10 @feature-095, @AC-5 @feature-202 and @AC-6 @feature-203
+  are PRESERVE. No CHANGE, so no additional sign-off is needed.
+- Trace: reconnects and all touched calls reuse the existing clients, so x-trace-id propagates under the standing
+  2026-10-21 operator decision (no C-03 waiver).
+- Status: spec-ready → design-approved.
+
+### Decisions
+
+- The approach recorded in design.md § Chosen Approach is binding for `/sdd-spec`.
+- The global mutation fallback's skip rule is `mutation.options.meta?.errorHandled === true` only.
+- A hook may be flagged only when every call site handles errors.
+- A per-call handler always lands before its hook is flagged.
+
+### Open Threads
+
+- [ ] `STREAM_STABLE_MS` (~3 s, unmeasured) and the optional show-side debounce. Target step: D-11 reconnect.
+- [ ] Edge (Cloudflare) idle-timeout reconnects and snapshot replays on quiet streams. Target step: D-11
+  reconnect (PR verification note).
+- [ ] TanStack v5 "MutationCache sees hook-level options only" is unverified locally. Target step: D-64 global
+  fallback (Vitest predicate test pins it).
+- [ ] Any miss in the opt-out inventory double-reports. Target step: D-64 global fallback (pinned grep check).
+- [ ] The e2e mock's ability to hold `streamOrderUpdates`/`streamAlerts` open until abort, and per-page
+  error-then-recover via `page.route`, is unproven. Target step: D-11 reconnect (lands last).
+- [ ] The fallback banner lingers after a successful retry until dismiss or navigation (accepted). Target step:
+  D-64 global fallback (documented in the PR).
+- [ ] It is not verified that OrderForm shows paper/live only via `TradingModeBadge` or the mode prop (AC-12).
+  Target step: D-17.
+- Next: `/sdd-spec fix-ui-trader-feedback`.
