@@ -47,3 +47,47 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Recommended design depth: full → `/sdd-design fix-edge-owner-scope` (rationale: SEV-2 security with 4 affected
   services — the C-0 full trigger; no proto/migration anticipated).
 - Development branch: feature/fix-edge-owner-scope
+
+## Session 2026-10-22 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready. Criteria verdict: PASS WITH WARNINGS (0 fails, 0 floor breaches).
+- Warnings (8):
+  1. AC-2 had no NULL-`user_id` fixture — **resolved**: Background seeds an `order.filled` on `account:acct-legacy`
+     with NULL `user_id` (symbol TSLA); AC-2 asserts it is not returned.
+  2. AC-3 copilot isolation loosely specified — **resolved**: seeds `note-a` (`copilot:u-a:default`) and `note-b`
+     (`copilot:u-b:default`); asserts exactly `note-a` is returned.
+  3. FR-2 "either refused or owner-scoped" contradicted AC-2/AC-7 — **resolved**: FR-2 narrowed to owner-scoping
+     (Expected paragraph aligned).
+  4. FR-6 listed before FR-5 — **resolved**: reordered.
+  5. FR-1 `account:<id>` ownership determination unnamed — **deferred to /sdd-design**: recorded as an open Open
+     Question (trading `ListBrokerAccounts` per call vs cached set vs ledger `user_id` predicate; C-11).
+  6. Consumer surface PERMISSION_DENIED mapping for `useReconciliationStatus` (advisory) — **resolved**: foreign
+     account surfaces through the hook's existing error state.
+  7. Doubled input paths from the caller — informational; real dir is `docs/roadmap/features/263-fix-edge-owner-scope/`.
+  8. Trading-domain grep matched incidentally — C-1..C-5 not applicable; no action.
+- Operator override applied (2026-10-22): FR-3/FR-4, AC-4/AC-5, Expected, Consumer Surface and the Open Questions
+  entry now assert **bind-to-caller** (the caller's own `x-user-id` replaces a foreign `user_id`; caller's own
+  overrides returned; no other user's data read), replacing the 2026-10-21 "refuse with PERMISSION_DENIED".
+- Overlap findings (WARN, file-level only; no config-key / proto-field / migration FAIL):
+  - ledger `ledgerServiceImpl.ts:124` QueryEvents vs `257-fix-ledger-query-pagination` (draft; same queryEvents
+    body `:157-171`) — high merge-conflict risk if 263 adds a backend owner predicate; 257 also flags other
+    QueryEvents callers.
+  - ledger `ledgerServiceImpl.ts` vs `248-fix-ledger-trimmed-notify-payload` (implementation-ready; `:196-257`,
+    `:364-377`) — same file, non-overlapping bands.
+  - agent `tools.py:1592`/`:1620` vs `241-fix-config-audit-author-spoof` (implementation-ready; `set_config`
+    `:1694`, `_write_source_bearer` `:353`) — same file, different functions.
+  - agent `tools.py:1592-1640` vs `247-fix-agent-getconfig-deadline` (implementation-ready; `client.py:1751`,
+    `tools.py:627`, `:2378`) — collides if 263 changes the `client.get_config` call.
+  - agent `tools.py` vs `273-fix-agent-client-deadlines` (draft; `GetConfig` `:2043`) — low-to-medium risk.
+  - config `configServiceImpl.ts` (`:78-79`, `:317-319`, `:527-536`) vs `241` (SetConfig `:376-414`, `:513`) —
+    same file, non-overlapping bands.
+  - UI `traderBff.ts:118-123` vs `270-fix-ui-trader-feedback` (draft; no anchors yet) — same-service WARN.
+
+### OPERATOR DECISIONS (binding, recorded 2026-10-22)
+
+- Grouped by service+theme from the 2026-10-20 debt-radar scan; Track C (precedent #1264).
+- Scope is D-25, D-31.
+- Operator 2026-10-21 (standing, all features): x-trace-id must be propagated as much as possible; no C-03 waiver — request-derived emits/writes use context.WithoutCancel(ctx) (Go) / the inbound metadata (Python/Node), never a fresh background context; only work with no originating request (background sweepers/loops) may mint its own context, and it should still carry a trace id when one is available.
+- Operator 2026-10-22 overrides the review writer's D-31 resolution: a non-admin get_config/list_config_keys call carrying a foreign user_id is BOUND to the caller (the caller's own x-user-id replaces it), NOT refused with PERMISSION_DENIED. Amend FR-3/FR-4 and AC-4/AC-5 (and the Open Questions entry) to assert the caller's own overrides are returned and no other user's data is ever read. Confirmed unchanged: admin-scope callers stay exempt (FR-6/AC-8); NULL-user_id ledger rows are never returned by trader-BFF reads (FR-2, ExportEvents parity). D-25 fix site remains a /sdd-design choice.
+
+- Next: `/sdd-design fix-edge-owner-scope` (full depth recommended).
