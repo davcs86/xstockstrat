@@ -30,8 +30,8 @@ Rows created before formula ownership moved from username to user id were never 
 - **FR-3.** A legacy author that maps to no user, or to more than one, is left unchanged and reported (formula id and author value) rather than guessed or deleted. The fix never assigns a formula to a user it cannot identify.
 - **FR-4.** The fix is idempotent: a re-run changes nothing and reports zero legacy authors remaining. Formulas already owned by a user id or the system author are never modified.
 - **FR-5.** The fix reports, per run, the count rewritten, the count left unmappable and the count already clean, so production can be verified before and after the change. The operator can see the production count without mutating data (dry-run or read-only report).
-- **FR-7.** C-10(c): the rewrite mutates shared rows, so the design must state who may run it and how it is protected from a concurrent formula write (an owner registering or updating a formula during the rewrite must not be lost or overwritten). Rows with the reserved system author are never touched.
 - **FR-6.** The read-guard semantics (`_can_read_formula`: owner or system author only) are unchanged; ownership is corrected, access is not loosened.
+- **FR-7.** C-10(c): the rewrite mutates shared rows, so the design must state who may run it and how it is protected from a concurrent formula write (an owner registering or updating a formula during the rewrite must not be lost or overwritten). Rows with the reserved system author are never touched.
 
 ## Affected Services
 
@@ -41,7 +41,7 @@ xstockstrat-indicators (formula store and read guard). The username-to-user-id m
 
 The owner-visible consequence is that formulas reappear for their owner, so C-14 applies:
 
-- **Agent tools:** `list_formulas` (owner's list now includes the repaired formulas; the admin `author_filter` no longer needs the legacy username), `get_formula`, `test_formula`, and `run_backtest` / `manage_strategy` for strategies that reference those formulas (they evaluate instead of failing formula evaluation). The `strat-lab` plugin's `backtest` skill is unaffected unless a quirk it documents changes (check at spec time).
+- **Agent tools:** `list_formulas` (owner's list now includes the repaired formulas; the admin `author_filter` no longer needs the legacy username), `get_formula`, `test_formula`, and `run_backtest` / `manage_strategy` for strategies that reference those formulas (they evaluate instead of failing formula evaluation). The `strat-lab` plugin's `backtest` skill is unaffected unless a quirk it documents changes (check at spec time; carried as a deferred check into `/sdd-spec`).
 - **UI:** the `/insights` and `/trader` formula pickers read the same RPC; no UI code change is expected (confirm at spec time).
 
 ## Fix Scope
