@@ -599,3 +599,37 @@ the round-2 block above.
 - [ ] Post-deploy: re-run 215 Step 26(a) on dev, reading `marketdata.fmp.enabled` and
   `marketdata.fundamentals.provider` directly. The root cause is still unconfirmed; if the live cause is the
   `(nil, nil)` 30-day negative cache, changing it needs operator sign-off on 215 @AC-14.
+
+## Session 2026-10-22 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 9 warnings, 0 floor breaches (advisory — did not block). Overlap: WARN (file-level only; no
+  migration, proto or config-key collision). Lifecycle unchanged (`implementation-ready`).
+- Addressed (implementation-spec.md edited):
+  - [x] Step 3 (and Step 1) RED lives in the next test step (P-06): Step Dependencies now requires test-first
+    execution: Step 2 table before Step 1; Step 4 tests authored and run red on the pre-Step-3 tree (without the
+    `:226` edit), then Step 3 applied.
+  - [x] Steps 3/4/5 share `etf_flags_test.go`: Step Dependencies pins sequential execution.
+  - [x] Step 7 coverage threshold: added "N/A, no code changes" note.
+  - [x] Step 6 Service field: now `xstockstrat-marketdata`, not a file path.
+  - [x] 215 file overlap (`etf_flags.go`, `etf_flags_test.go`): verified 215's marketdata code is on `main-dev`
+    (#1243, `08d63011`); only its Step 26 measurement remains. merge-order row 255 → after 215 makes 230 follow 215
+    transitively; Step Dependencies notes this and a rebase re-check.
+  - [x] B2b trading-domain checks: N/A (no env var, port, order, broker or fill handling touched). No edit needed.
+  - [x] `fmp_client.go` anchor drift after the 255 rebase: already covered (re-anchor by symbol). No edit needed.
+- Still open (carried into /sdd-execute — announce at each checkpoint, P-03):
+  - [ ] Pre-execution gate: 255 is unmerged; `enrichmentClass`/`fmp.ErrorClass` do not exist on trunk, so Steps 1
+    and 3 are blocked (C-11). Not a spec defect.
+  - [ ] Docs PR to main-dev still open: 255 context.md note that `enrichmentClass` returns `other` for stage-less
+    errors (255 impl-spec `:640-644` leaves the token open), and the merge-order.md row `fix-etf-flag-fill` (230) →
+    after `fix-marketdata-fundamentals-cache` (255) (no 230 row exists on main-dev). Must land before /sdd-execute or
+    Step 1's precondition halts. Outside this feature's directory (F-03).
+  - [ ] FR-2 wording (product-spec.md:80-81) says "at most one per one-minute window" globally, but AC-6 row 4
+    (`fmp_disabled, budget, fmp_disabled` → 3 skipped in one minute) and FR-2's own pinned keys are per-slot /
+    on-change. The impl-spec follows the pinned keys and AC-6. Reword FR-2 to "per rate-limit slot" in a later
+    product-spec touch (this review edits only implementation-spec.md).
+  - [ ] Config-driven skip reasons log once per process while unchanged (design.md Open Risks); the Step 7
+    post-deploy re-run must read the config keys directly.
+- Overlap findings: file-level WARNs on `etf_flags.go`/`etf_flags_test.go` (215), `fmp_client.go` and
+  `fmp_client_test.go` (254, 255, 215), `marketdata_service_test.go` (254, 215, 229, 231, 227 — Step 4's
+  `installWarnRecorder` wrapper keeps existing callers untouched), marketdata `CLAUDE.md` (docs-only, many).
+  Peer 275 (`fix-backtest-silent-symbol-skip`) is `draft`, analysis-only; low risk.
