@@ -352,3 +352,31 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [ ] The teardown context audit for analysis CLAUDE.md and mcp-tools.md. Target: Step 9 / the final PR.
 - [ ] Carried from design and still open: short successful chunks (owned by 255); and the accepted risks recorded in
   the @AC-8/@AC-9 descriptions (dedup window or conviction drift, boundary flips).
+
+## Session 2026-10-22 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 7 warnings; overlap WARN (file-level only, no migration/proto-field/config-key collision).
+  Advisory, lifecycle unchanged (`implementation-ready`).
+- Addressed in implementation-spec.md:
+  - [x] B2 coverage threshold: Steps 1, 3 and 5 Verification now state that they are RED by design and that the paired
+    service steps 2, 4 and 6 carry `--cov-fail-under=40`.
+  - [x] Step 7 `buf breaking` now compares against `origin/main-dev` (repo convention
+    `'../../.git#branch=origin/<base>,subdir=packages/proto'`), not against the feature branch itself.
+  - [x] Step 5/6 `_FixedClock` patch: Step 6 evidence records that `datetime.combine(...)` on the subclass returns a
+    tz-aware instance (checked: `2026-10-21 00:00:00+00:00`), plus a log-a-deviation instruction if `FromDatetime` misbehaves.
+  - [x] Line hints: `TestBudgetDefer` class at `:155` and method at `:157-164` (re-verified; the method cite was
+    already correct). Other cited test lines re-checked (`:160`, `:167`, `:179-180`) and are accurate.
+  - [x] Merge-order timing: Step Dependencies now has `/sdd-execute` land the 260-after-246 soft row before Step 1.
+    Step 9 item 4 only confirms it is present.
+  - [x] `_release_claim` swallow carve-out: Step 9's analysis CLAUDE.md bullet now documents that a failed release
+    leaves the NULL row, with the same recovery as a crash orphan.
+- Overlap findings: same-function overlap with 246 (`run_once`, `_fund`/`_emitted_inserts` helpers, analysis
+  CLAUDE.md, mcp-tools.md disjoint lines). This is already covered by the 246-first/rebase rule. Low-risk: 215 (different proto message), 259
+  (`run_forever`/`_tick`, draft).
+
+### Open Threads
+
+- [ ] Step 3 size (C-18 / P-06): a split of the real_pg file into its own paired test step was suggested. It is not
+  applied because it would renumber Steps 4-9 and their cross-references. Splitting is not required, since Step 3 touches
+  2 files. At the Step 3 checkpoint, /sdd-execute should decide whether to commit the real_pg file separately.
+  Target: /sdd-execute Step 3.
