@@ -38,8 +38,9 @@ or together with** 251. Record it in `docs/roadmap/features/merge-order.md` at s
 
 - **FR-1 (D-13, keyset resume).** `QueryEvents` honours `page.page_token`. It returns the matching events that come
   strictly after the last event of the previous page, in ascending ledger `sequence` order (`sequence` is globally
-  monotonic and indexed). Across a full page walk every matching event is returned exactly once. The token stays opaque
-  to callers.
+  monotonic and indexed). Across a full page walk, every matching event committed before the walk passes its sequence
+  is delivered exactly once, ascending; a lower sequence committing after the walk passed it is not delivered by that
+  walk (operator sign-off 2026-10-22, design gate r2, change (a)). The token stays opaque to callers.
 - **FR-2 (D-13, last page).** `next_page_token` is empty if and only if no further matching events exist. A full page
   is the only case that can set a non-empty token. A page that is exactly full with nothing after it returns an empty
   token, so design keeps the existing `limit+1` probe (`ledgerServiceImpl.ts:157-171`).
@@ -49,23 +50,27 @@ or together with** 251. Record it in `docs/roadmap/features/merge-order.md` at s
 - **FR-4 (backward compatibility).** An empty or omitted `page_token` returns the first page, oldest first. Existing
   callers keep working unchanged. All of them use an effective `page_size` ≤ 500, below the cap: portfolio `GetPnL`
   (500, `portfolio_service.go:754`, `:799`), portfolio `HydrateStops` (`:534`), trading `resolveUnknownIntents`
-  (`trading.go:2222-2225`, no `PageSize` set, so the default 100), trading 500 at `trading.go:2091` and 40 at `:3221`,
-  and the UI BFF callers (500 at most, `PerformanceDashboard.tsx:65`). A first-page-only caller gets the oldest first
+  (`trading.go:2222-2225`, no `PageSize` set, so the default 100), and the UI BFF callers (500 at most, `PerformanceDashboard.tsx:65`). A first-page-only caller gets the oldest first
   page by `sequence`, with the same filter. Today's order is `recorded_at ASC` (`ledgerServiceImpl.ts:162`); `sequence`
   is assigned by `nextval` at insert (migration 001:21), so the two orders can differ only for rows inserted
   concurrently. Design records whether that difference matters to any caller.
 - **FR-5 (D-46, exactly-once fold).** `GetPnL` folds every matching `order.filled` event (pass 1) **and** every
-  matching `order.partially_filled` event (pass 2) exactly once across all ledger pages. Pass 2 keeps its existing
-  "last event per order ID wins" rule (`portfolio_service.go:829-830`). This relies on FR-1's ascending order, so the
-  partial-fill path is covered by the same fix as the filled path (trading-domain C-5).
+  matching `order.partially_filled` event (pass 2) exactly once across all ledger pages. Pass 2 keeps, per order ID,
+  the event with the largest cumulative `filled_qty` (strict `>`, so the first one seen wins a tie) instead of the
+  former "last event per order ID wins" rule (`portfolio_service.go:829-830`), so the result does not depend on event
+  order (operator sign-off 2026-10-22, design gate r2, change (b)). The partial-fill path is covered by the same fix
+  as the filled path (trading-domain C-5).
 - **FR-6 (D-46, fail closed).** If any `QueryEvents` page call in either pass returns an error or hits the context
   deadline, `GetPnL` returns a gRPC error (`UNAVAILABLE` or `DEADLINE_EXCEEDED`) and no `PnLResponse`. It never
   returns a partial or duplicated realized sum as success. This replaces the `slog.Warn` + `break` at `:757-758` and
-  `:802-803`.
+  `:802-803`. Design (2026-10-22) meets this through `UNAVAILABLE` only: a ledger deadline is wrapped in the same
+  sentinel, and a page that returns the token it was sent is also `UNAVAILABLE`.
 - **FR-7 (D-27, bounded replay).** The `StreamEvents` history replay reads in bounded batches, either `pg-cursor` as
   ExportEvents already does (`ledgerServiceImpl.ts:342`) or keyset pages on `sequence`. It must not hold the
   `DB_POOL_MAX=1` query connection for the whole replay, so a concurrent `AppendEvent` is served between batches. The
-  replay delivers every matching event in ascending `sequence` order exactly once. The existing
+  replay delivers, in ascending `sequence` order and exactly once, every matching event committed before the walk
+  passes its sequence; a lower sequence committing after the walk passed it is not delivered by that walk (operator
+  sign-off 2026-10-22, change (a)). The existing
   subscribe → replay → buffer-flush → live hand-off (ledger constitution) is preserved.
 
 ## Consumer Surface(s)
