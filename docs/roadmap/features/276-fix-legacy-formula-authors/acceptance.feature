@@ -55,8 +55,17 @@ Feature: fix-legacy-formula-authors (bug fix)
     And the run report lists "f-ambiguous" with author "sam" as ambiguous
 
   @AC-8 @FR-7
-  Scenario: A formula written during the rewrite is not lost or overwritten
-    Given the legacy-author fix is rewriting authors
-    When the owner registers a new formula concurrently
-    Then the new formula is stored with the owner's user id as author
-    And the fix does not modify it
+  Scenario: A row written between detection and rewrite is not lost or overwritten
+    Given the formula "bbbbbbbb-0000-4000-8000-000000000001" is stored with author "alice" and the user "alice" has user id "11111111-1111-4111-8111-111111111111"
+    And the legacy-author fix has detected "bbbbbbbb-0000-4000-8000-000000000001" but not yet rewritten it
+    When user "33333333-3333-4333-8333-333333333333" registers a new formula "bbbbbbbb-0000-4000-8000-000000000002" before the rewrite applies
+    And the owner "alice" updates "bbbbbbbb-0000-4000-8000-000000000001" so its author is already "11111111-1111-4111-8111-111111111111"
+    Then "bbbbbbbb-0000-4000-8000-000000000002" keeps author "33333333-3333-4333-8333-333333333333" and its content is unchanged
+    And "bbbbbbbb-0000-4000-8000-000000000001" keeps the owner's update and author "11111111-1111-4111-8111-111111111111"
+
+  @AC-9 @FR-7
+  Scenario: Only an authorized operator can run the rewrite and system-author rows are never touched
+    Given the formula "bbbbbbbb-0000-4000-8000-000000000003" is stored with the reserved system author and "bbbbbbbb-0000-4000-8000-000000000004" is stored with author "alice"
+    When a caller without operator authority attempts to run the legacy-author fix in rewrite mode
+    Then the attempt is refused and no formula author has changed
+    And when an authorized operator then runs it, "bbbbbbbb-0000-4000-8000-000000000003" keeps the system author and its updated timestamp
