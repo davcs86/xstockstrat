@@ -211,3 +211,224 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   "floor_breaches": []
 }
 ```
+
+## Session 2026-10-22 — sdd-batch design gate (round 2)
+
+The full /sdd-design debate is at its approval gate after round 2 (gate policy: halt). Per the grilling protocol, design.md is not written and status.md stays `spec-ready`. The next /sdd-batch run resumes from the state block below.
+
+### Open Threads
+
+- **Approach.** The mechanism from round 1 is unchanged:
+  - fixed module constants `_RPC_TIMEOUT_S = 10.0` and `_LONG_RPC_TIMEOUT_S = 45.0` in services/xstockstrat-agent/app/client.py;
+  - each passed as a per-call `timeout=`, with no channel change, no helper and no config keys;
+  - LONG goes only on RunBacktest, TriggerBackfill, RunFundamentalsScan and ScreenSymbols;
+  - ListOpportunities (:872) and 247's :1751 are left as they are;
+  - ValidateToken in auth.py:39/:71 is in scope.
+
+  The grounding is corrected. The authoritative artifacts are the reviewed spec-ready revision on `origin/feature/fix-agent-client-deadlines`: FR-1..5 (product-spec.md:36-53) and @AC-1..@AC-10, all tagged @FR, with fixed 10 s / 45 s / 57 s numbers. The main-dev working tree holds a stale draft. So round 1's "drop AC-6..10" decision is reversed, and the "~54 s long budget" option is removed.
+
+  The design additions after round 2:
+  - Pass `deadline_s` at every reachable catch site. This gives FR-4's "did not respond within ..." wording.
+  - Add a keyword-only `write=True` mapper branch. Its text contains "within {N}s" and "outcome unknown, verify before retrying".
+  - Add a per-site idempotency classification table. manage_watchlist UpdateWatchlist is idempotent.
+  - Add an FR-3 worst-case table that includes the per-request auth hop.
+  - Add new mappings for ingest_signal, emit_alert and screen_symbols.
+  - Map tests one-to-one to AC-1..10, including the strict bidirectional AST guard (AC-10).
+- **Strongest open objection (blocking): wrong-artifact grounding (C-15/P-03).** Rounds 1 and 2 read the stale main-dev acceptance.feature instead of the branch revision. The next proposal must re-ground on the branch and map tests to all ten ACs, including:
+  - AC-6: run_backtest with all backends hung, ≤57 s.
+  - AC-8: IngestSignal returns 42 while config and notify hang.
+  - AC-9: a hung RunBacktest is bounded by 45.5 s.
+
+  Other blocking objections:
+  - FR-4 wording at every catch site.
+  - The FR-3 enumeration must include the auth term. list_opportunities is then a 68 s accepted exception, not 58 s.
+  - The write-safety list is incomplete. It is missing trigger_backfill, run_fundamentals_scan, the register/create/confirm writes and set_config create_key.
+  - FR-4 coverage for list_signal_sources and extract_*: map them, or record an exception with operator sign-off.
+
+  Non-blocking objections:
+  - ValidateToken carries no x-trace-id, because `auth._metadata()` returns `[]`.
+  - An auth deadline returns a 401 with WWW-Authenticate and is logged at INFO.
+  - The p99 under the 45 s long budget has not been measured, and the effect on 198 @AC-8 persistence is unknown.
+  - The ExecuteFormula 10 s budget has not been checked against the upper bound of sandbox.timeout_ms.
+  - C-18: the duplicated kwarg pair at each catch site needs a guard test.
+- **Floor status.** No Floor breaches. F-07 is not breached: the constants are fixed nesting invariants under the spec Fix Scope (product-spec.md:83-85). design.md must state that rationale.
+- **@AC changes not covered by an operator decision:**
+  - EXTEND: 273 @AC-1..6 and @AC-8..10.
+  - PRESERVE:
+    - 273 @AC-7;
+    - 127 @AC-4 (ingest_signal follow-up failures swallowed);
+    - the 227 deadline-mapper contract (test_tools.py:1974-1992);
+    - 148 @AC-5 (manage_watchlist read-modify-write).
+  - CHANGE: 198 @AC-8 (backtest evidence persistence under the 45 s cancellation).
+
+  The only operator-covered change is 210 @AC-2/@AC-5 (PRESERVE).
+
+```sdd-batch-design-state
+{
+  "round": 2,
+  "synth": {
+    "approach": "Round-2 synthesis for 273-fix-agent-client-deadlines. The r2 mechanism stays: fixed module constants passed as a per-call `timeout=`, with no channel change, no helper and no config keys. The grounding changes.\n\n**Grounding correction (decides the round).** The authoritative artifacts are the reviewed spec-ready revision on `origin/feature/fix-agent-client-deadlines` (status.md = spec-ready, commit a6ab4f7f, \"product spec approved\"). The main-dev working tree holds a stale pre-review draft. Read them with `git show origin/feature/fix-agent-client-deadlines:docs/roadmap/features/273-fix-agent-client-deadlines/{acceptance.feature,product-spec.md}`.\n- The branch revision defines FR-1..FR-5 (product-spec.md:36-53) and @AC-1..@AC-10, all tagged with @FR.\n- The round-1 synthesis's objection that \"AC-6..10 / FR-1..5 do not exist\" was wrong: it was checked against the stale working tree. It is withdrawn.\n- r2's \"drop AC-6..10\" decision is reversed.\n- The design must now satisfy fixed numbers:\n  - FR-1: 10 s default, including `get_config` at client.py:2043 and `register_oauth_client` at client.py:1355.\n  - FR-2: 45 s for RunBacktest, TriggerBackfill, RunFundamentalsScan and ScreenSymbols. The value is fixed by the spec and changes only by amendment, so the \"may rise to ~54 s\" option is removed.\n  - FR-3: every tool's worst case at most 57 s, with design enumerating every multi-call tool.\n  - FR-4: the error says the upstream \"did not respond within the deadline\".\n  - FR-5: the happy path is unchanged.\n\n**Current best approach**\n1. **Constants (services/xstockstrat-agent/app/client.py)**\n   - `_RPC_TIMEOUT_S = 10.0` and `_LONG_RPC_TIMEOUT_S = 45.0`, next to 247's `_CONFIG_READ_TIMEOUT_S`. They are read at call time so tests can monkeypatch them.\n   - Every awaited `stub.X(` and `stub_cls(channel).X(` call gets `timeout=_RPC_TIMEOUT_S`. That includes :1318/:1342, :1355 RegisterOAuthClient and :2043 GetConfig.\n   - LONG goes only on the four FR-2 RPCs.\n   - ListOpportunities keeps `timeout=timeout` (:872). 247's :1751 is not touched.\n   - design.md states the F-07 rationale in writing: these are fixed nesting invariants derived from the 60 s MCP ceiling, following the `_POLICY_READ_TIMEOUT_S` precedent (tools.py:2371). Branch product-spec Fix Scope (:83-85) already records this.\n2. **auth.py: in scope, under the spec's \"Expected\" sentence (:25) and PLAT-13**\n   - `ValidateToken` at auth.py:39 and :71 gets a deadline.\n   - Choice still open: reuse `client._RPC_TIMEOUT_S`, or add a dedicated short `_AUTH_RPC_TIMEOUT_S` (≈3 s).\n   - Either way the auth term goes into the FR-3 table. `_authorized` awaits `validate_bearer_claims` at main.py:156 inside the MCP client's 60 s clock.\n   - At 10 s: long tools 10 + 45 = 55 s ≤ 57, so it fits. ingest_signal 10 + 43 = 53 s.\n   - list_opportunities becomes 10 + 55 + 3 = 68 s. It is already out of scope and already over 57 s before this change, because auth was previously unbounded. Record it as a 68 s accepted exception, not 58 s.\n   - Correct the citation: `auth._metadata()` returns `[]` (auth.py:23-24). It is a separate function from `client._metadata()`, so ValidateToken currently carries no x-trace-id. Under the operator's trace ruling, the design either forwards the inbound `x-trace-id` from the ASGI scope headers into the ValidateToken metadata, or records why the pre-auth call has none. Forwarding is preferred, about 3 lines.\n3. **Mapper (`_grpc_error_message`, tools.py:223-231)**\n   - FR-4 and AC-1 need \"did not respond within the deadline\". The existing `deadline_s` branch, \"did not respond within {N}s (deadline exceeded)\", already gives this. It is covered by test_tools.py:1974-1982. The 227 test at :1985-1992 asserts `\"within\" not in msg` only when `deadline_s=None`, so passing `deadline_s` breaks no contract.\n   - Every catch site reachable by a deadlined call therefore passes `deadline_s=client._RPC_TIMEOUT_S` or `client._LONG_RPC_TIMEOUT_S`.\n   - Add a keyword-only `write: bool = False`. With `write=True` and DEADLINE_EXCEEDED it returns `upstream did not respond within {deadline_s:g}s (deadline exceeded); outcome unknown, verify before retrying`. That text keeps \"within\" and drops \"retry shortly\".\n   - Red/green tests per P-06.\n4. **Write-site classification table in design.md**\n   - One row per write tool with an idempotent or non-idempotent verdict.\n   - Non-idempotent, `write=True` (floor list): record_offline_order/PlaceOrder (client.py:2206), instantiate_template (:1324), create_watchlist (:384), account register, manage_watchlist_symbols assign, emit_alert, the ingest_signal primary call, trigger_backfill, run_fundamentals_scan, manage_strategy register, manage_formula register, manage_signal_source register, manage_user create, manage_offline_account confirm/snapshot, and set_config create_key.\n   - Idempotent, plain `deadline_s`: manage_watchlist replace-all `UpdateWatchlist`. It is one transaction (watchlist_repo.go:199-210), so a cancel rolls back and a lost response is a safe replay.\n   - A test asserts that every non-idempotent row's catch site passes `write=True`.\n5. **New mappings**\n   - ingest_signal (wrap only `client.ingest_signal(...)` at tools.py:612-622; the :625-669 `except Exception` follow-ups are left as they are, preserving 127 @AC-4), emit_alert and screen_symbols, using the tools.py:2266-2267 idiom plus `deadline_s`.\n   - Still uncovered: list_signal_sources and extract_email_content/extract_website_content. FR-4 applies to every tool, so they must be mapped here (preferred: 3 small wraps, which closes the SEV-3 report for those tools) or an explicit FR-4 exception must be recorded (see objections).\n6. **FR-3 table in design.md**\n   - Worst-case sums, including the auth term, for every multi-call tool:\n     - ingest_signal (IngestSignal + policy GetConfig + EmitAlert + watchlist path: 10+3+10+10+10);\n     - manage_watchlist read-modify-write;\n     - instantiate_template (`_write_source_bearer` + InstantiateTemplate, tools.py:1222-1226);\n     - the config tools;\n     - extract_* (four `_agent_policy` reads, tools.py:2401-2404, at 247's budget);\n     - run_backtest (all of its calls, for AC-6).\n   - Each row shows ≤ 57 s or a recorded exception.\n7. **Tests (services/xstockstrat-agent/tests/test_client_deadlines.py)**\n   - Reuse the hung-server harness (test_list_opportunities_deadline.py:17,34,48,50,60) and the conftest.py:51 env. AC numbers are realised by patching the constants down, with a measured elapsed time plus tolerance, as the feature preamble requires (no raw sleeps).\n   - Mapping:\n     - AC-1: get_positions, hung ListPositions; message contains \"within\".\n     - AC-2: get_config tool site :2043.\n     - AC-3: ingest_signal hung.\n     - AC-4: RunBacktest slower than default, faster than long budget, succeeds.\n     - AC-5: parametrised hung-server outline over the 9 listed RPCs at their budgets.\n     - AC-6: run_backtest with all of its backends hung, ≤ 57 s scaled.\n     - AC-7: responsive ListPositions returns the AAPL position unchanged.\n     - AC-8: IngestSignal returns 42 while config and notify hang; result within 57 s scaled.\n     - AC-9: hung RunBacktest bounded by the long budget.\n     - AC-10: the strict AST guard over client.py (both call shapes; `timeout` must be a Name in {_RPC_TIMEOUT_S, _LONG_RPC_TIMEOUT_S}; allow-list ListOpportunities→`timeout` and 247→`_CONFIG_READ_TIMEOUT_S`; bidirectional LONG mapping). It is extended to auth.py as a non-AC guard.\n   - Extra non-AC guards: the watchlist-path portfolio-hung case, and the write-flag coverage test.\n8. **Docs**\n   - mcp-tools.md line.\n   - plugins/strat-lab/skills/backtest/SKILL.md line for the run_backtest/trigger_backfill 45 s budget and its error (same-PR rule).\n   - SEV-3 report narrowed or closed, depending on item 5.\n   - merge-order SOFT row \"273 after 247\".\n   - design.md records the C-18 trade-off: per-site kwargs plus a policed `write`/`deadline_s` pair, instead of a `_unary` helper.\n   - Teardown.\n\n**Build order:** 247 merges → rebase onto the branch revision of the spec → constants and kwargs (client.py, auth.py) → mapper write branch (red/green) → catch-site `deadline_s`/`write` plus the new wraps → tests AC-1..10 → docs.",
+    "open_objections": [
+      {
+        "text": "Wrong-artifact grounding (C-15/P-03). The r2 proposal and the round-1 synthesis read the stale main-dev working-tree acceptance.feature (AC-1..5, no @FR tags) instead of the authoritative spec-ready revision on origin/feature/fix-agent-client-deadlines. That revision has FR-1..5 at product-spec.md:36-53 and @AC-1..@AC-10, every scenario @FR-tagged, with fixed 10 s / 45 s / 57 s numbers. The next proposal must re-ground on the branch revision and map tests to all ten ACs: AC-6 (run_backtest, all backends hung, ≤57 s), AC-7 (happy path unchanged), AC-8 (IngestSignal returns 42 while config and notify hang), AC-9 (hung RunBacktest bounded by 45.5 s) and AC-10 (static guard). It must drop the 'up to ~54 s' long-budget option, because FR-2 fixes 45 s.",
+        "blocking": true
+      },
+      {
+        "text": "FR-4 wording is not met under r2. The spec and AC-1 require the error to say the upstream 'did not respond within the deadline'. r2 kept the generic `deadline_s=None` text everywhere, and its write text also lacks 'within'. The fix is cheap and contract-safe: pass `deadline_s=client._RPC_TIMEOUT_S` or `_LONG_RPC_TIMEOUT_S` at every catch site, using the existing branch at tools.py:231 / test_tools.py:1974-1982. The `write=True` text must also carry `within {deadline_s:g}s`. The 227 test at test_tools.py:1985-1992 constrains only the `deadline_s=None` branch.",
+        "blocking": true
+      },
+      {
+        "text": "FR-3 enumeration is missing. The spec requires design to list every tool with more than one sequential backend call and show its worst-case sum. The table must include the per-request ValidateToken hop: `_authorized` awaits `validate_bearer_claims` at main.py:156 inside the MCP 60 s clock. At an auth budget of 10 s: long tools 55 s, ingest_signal 53 s, list_opportunities 68 s (the accepted exception must be re-recorded at 68, not 58). Also required: instantiate_template (bearer write + InstantiateTemplate), manage_watchlist read-modify-write, the config tools, extract_* (four `_agent_policy` reads at tools.py:2401-2404) and every call run_backtest makes (AC-6). Choosing a dedicated short `_AUTH_RPC_TIMEOUT_S` (≈3 s) instead of reusing 10 s is optional but must be decided and justified.",
+        "blocking": true
+      },
+      {
+        "text": "The write-safety list is incomplete and unclassified (C-10). The floor omits trigger_backfill and run_fundamentals_scan, which are non-idempotent and on the long budget, so they are the most likely to hit a deadline. It also omits manage_strategy/manage_formula/manage_signal_source register, manage_user create, manage_offline_account confirm/snapshot and set_config create_key. 'Grep-enumerated at spec' cannot decide idempotency. design.md needs a per-site idempotent/non-idempotent table; manage_watchlist UpdateWatchlist is idempotent (single transaction, watchlist_repo.go:199-210). A test must assert that every non-idempotent site passes `write=True`.",
+        "blocking": true
+      },
+      {
+        "text": "FR-4 coverage gap: list_signal_sources and extract_email_content/extract_website_content still surface a raw AioRpcError, with no 'within the deadline' text, when a now-deadlined call expires. FR-4 applies to every MCP tool, so leaving them with the SEV-3 report contradicts the approved spec. Either map them here (3 small wraps, preferred) or record an explicit FR-4 scope exception in context.md with operator sign-off.",
+        "blocking": true
+      },
+      {
+        "text": "Trace-propagation claim is false. `auth._metadata()` returns `[]` (auth.py:23-24); it is a separate function from `client._metadata()`. ValidateToken therefore carries no x-trace-id, and the r2 citation 'auth.py:40,72 carries the trio' is wrong. Under the operator's standing 'propagate x-trace-id as much as possible' ruling, the design should forward the inbound x-trace-id from the request scope into the ValidateToken metadata, or record why the pre-auth call cannot.",
+        "blocking": false
+      },
+      {
+        "text": "An auth deadline becomes a 401 with the WWW-Authenticate discovery pointer (main.py:157-169), which an MCP client may treat as invalid credentials and answer with a re-auth flow. The failure also logs at INFO (auth.py:83). Minimum: log DEADLINE_EXCEEDED/UNAVAILABLE at WARN. Returning 503 for those codes, while staying fail-closed, would change the auth contract and needs an explicit operator decision; it is not assumed here.",
+        "blocking": false
+      },
+      {
+        "text": "The 45 s long budget is a happy-path change for runs in the 45-60 s band. Agent-side cancellation now propagates to analysis. Before /sdd-spec freezes the call sites, measure the p99 of RunBacktest/RunFundamentalsScan and confirm whether analysis persists backtest evidence (198 @AC-8) before it observes cancellation. If the p99 exceeds 45 s, escalate for an FR-2 amendment rather than changing the number silently (ledger fails.md:2946-2950).",
+        "blocking": false
+      },
+      {
+        "text": "ExecuteFormula's 10 s budget is not grounded against the indicators sandbox.timeout_ms upper bound. Only the 5000 ms default is cited, at indicators watcher.py:134. Grep for a SetConfig bound or timeout_ms_override clamp during design, not at spec. If there is none, record the risk or move test_formula to LONG; FR-2 lists exactly four RPCs, so moving it needs a spec amendment.",
+        "blocking": false
+      },
+      {
+        "text": "C-18: a `deadline_s` plus `write` kwarg pair at ~15+ catch sites is duplicated knowledge. It is acceptable as the low-rework choice only if the guard test polices it: every catch site for a deadlined call passes `deadline_s`, and every non-idempotent site passes `write=True`. Otherwise the flag drifts.",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "273 @AC-1",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "273 @AC-2",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "273 @AC-3",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "273 @AC-4",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "273 @AC-5",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "273 @AC-6",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "273 @AC-7",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "273 @AC-8",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "273 @AC-9",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "273 @AC-10",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "127 @AC-4 (ingest_signal follow-up failures swallowed)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "227 deadline-mapper contract (test_tools.py:1974-1992)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "210 @AC-2/@AC-5 (header trio on outbound calls)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "198 @AC-8 (backtest evidence persistence)",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "148 @AC-5 (manage_watchlist read-modify-write)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "Grounding on the main-dev working-tree acceptance.feature (AC-1..5) and dropping AC-6..10/FR-1..5: that file is the stale pre-review draft. The authoritative reviewed revision is on origin/feature/fix-agent-client-deadlines (spec-ready), and silently picking the older artifact is a P-03 deviation.",
+      "Leaving every catch site on the generic deadline_s=None text: it fails FR-4/AC-1's 'did not respond within the deadline' wording. The existing deadline_s branch already gives that wording without touching the 227 contract.",
+      "Rewording the generic deadline_s=None branch: it breaks test_tools.py:1985-1992 (the 227 contract), and it is unnecessary because the deadline_s branch already exists.",
+      "Passing deadline_s alone at write sites, without a write flag: every write would say 'retry shortly', which invites an LLM to duplicate committed offline orders, backfill jobs, fundamentals emits, template copies or alerts.",
+      "A shared `_unary(stub_call, req, *, long=False)` helper: it would make the guard trivial but rewrites ~73 sites that features 215/240/241/245/249 also edit. Rejected under low rework, with the C-18 trade-off recorded in design.md.",
+      "A channel-level deadline or a pooled channel: AGENT-1 requires ephemeral channels, mtls.secure_channel (mtls.py:37-43) has no deadline option, and channel reuse is out of scope in the product spec.",
+      "agent.* config keys for the budgets: the spec Fix Scope (product-spec.md:83-85) resolves them as fixed constants, and a key cannot bound the config read itself (circular).",
+      "A middleware-level asyncio.wait_for(57) as the primary fix: no gRPC deadline reaches the server, no DEADLINE_EXCEEDED is surfaced (fails AC-1/2/3/5/9/10), and it hides which call stalled.",
+      "Deferring auth.py ValidateToken to a follow-up defect: the spec's 'Expected' text covers every agent→backend unary RPC, and the fix is two kwargs.",
+      "Raising the long budget toward ~54 s: FR-2 fixes 45 s, and with the 10 s auth hop 54 s would push the long tools to 64 s, past the MCP timeout."
+    ],
+    "open_risks": [
+      "R1: The 45 s budget cancels analysis-side RunBacktest/RunFundamentalsScan work that used to complete (the 45-60 s band and background completion past 60 s). That can leave 198 @AC-8 evidence unpersisted or fundamentals emits partial. A measured p99 and the handler's cancellation behaviour are needed before /sdd-spec.",
+      "R2: In a hand edit of ~75 sites, a long RPC could get the short constant, or a catch site could miss deadline_s/write. The bidirectional AC-10 AST guard plus the write-coverage test are the only protection.",
+      "R3: A DEADLINE_EXCEEDED after the server has committed is now reachable on write tools. The write text mitigates retries only at sites correctly classified as non-idempotent.",
+      "R4: The list_opportunities worst case is 68 s (10 auth + 55 + 3 policy read), above the 60 s MCP timeout. It is an out-of-scope accepted exception that must be recorded at the true number.",
+      "R5: An identity stall now turns into a 401 with WWW-Authenticate, which may make the client re-authenticate (it looks like a logout). Moving to 503 requires an operator auth-contract decision.",
+      "R6: The ingest_signal worst path is 43 s (+10 s auth = 53 s). The deadline fallbacks (_agent_policy default, 0.6 threshold, skipped auto-alert/auto-add) become reachable silently. None of them opens a security gate (insights.md:3695-3705).",
+      "R7: The ExecuteFormula 10 s budget against an operator-raised indicators sandbox.timeout_ms is unverified.",
+      "R8: Sequencing: AC-10's allow-list depends on 247's _CONFIG_READ_TIMEOUT_S. A merge-order SOFT row '273 after 247' is required.",
+      "R9: Artifact drift. The main-dev working tree carries the stale draft. /sdd-sync or the execute session must read from the feature branch, or later phases will re-ground on the wrong file."
+    ],
+    "constitution_rules_touched": [
+      "C-01",
+      "C-03",
+      "C-10",
+      "C-11",
+      "C-14",
+      "C-15",
+      "C-16",
+      "C-18",
+      "P-02",
+      "P-03",
+      "P-06",
+      "F-07 (not breached: fixed nesting-invariant constants per the spec Fix Scope; rationale must be written in design.md)",
+      "PLAT-13",
+      "AGENT-1"
+    ],
+    "rationale": "I checked the adversary's main claim against git and it holds. `origin/feature/fix-agent-client-deadlines` contains the reviewed, spec-ready acceptance.feature (@AC-1..10, all @FR-tagged) and the reviewed product-spec.md (FR-1..5, with fixed 10/45/57 s numbers and the FR-3 requirement to enumerate multi-call tools). The main-dev checkout holds an older draft. Both round 1 and the r2 proposal grounded on that stale file, so the round-1 objection \"AC-6..10 don't exist\" was an error, and it is withdrawn here.\n\nThat reversal moves three points from settled to blocking:\n- **FR-4 wording.** The fix is cheap and contract-safe: pass deadline_s at each catch site. test_tools.py:1985-1992 restricts only the deadline_s=None branch.\n- **FR-3.** The spec explicitly requires the enumeration table, and the auth hop at main.py:156 belongs in it. 45 s still fits at 55 s total, but list_opportunities becomes a 68 s exception.\n- **FR-4 for list_signal_sources and extract_*.** These can no longer be deferred to the SEV-3 report without recording a scope exception.\n\nThe adversary's write-safety point also holds. The r2 floor list leaves out the two long-budget non-idempotent writes, and grep cannot classify idempotency. manage_watchlist was confirmed safe because it runs in a single transaction.\n\nOne r2 claim was false. `auth._metadata()` returns [] (auth.py:23-24), so ValidateToken carries no trace id. That is non-blocking, but the operator's trace ruling favours forwarding it.\n\nNo Floor breach: the constants follow the precedent recorded in the spec's own Fix Scope. The mechanism and the low-rework posture survive unchanged. Every blocking objection has a concrete, small closure in the approach. Objections the proposal did not answer stay open under the mediator rule."
+  },
+  "floor_breaches": []
+}
+```
