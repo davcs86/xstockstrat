@@ -338,3 +338,49 @@ Per the grilling protocol `design.md` is not written and `status.md` stays `spec
   (`usePositionLineage.ts:18` literal). Target: the ledger and BFF test steps.
 - [ ] **Owed before spec:** the acceptance.feature AC-4/AC-5 bind amendment, new AC-7 and AC-8, product-spec FR-1/FR-2
   owned-account exception wording, and the Fix Scope "No proto changes anticipated" line. Target: /sdd-spec entry.
+
+## Session 2026-10-22 — sdd-spec
+
+- Generated implementation-spec.md with 12 steps. Status: design-approved → implementation-ready.
+- Owed-before-spec items closed at entry:
+  - product-spec FR-1 now carries the owned-account unfiltered exception (other non-empty keys fall under
+    FR-2).
+  - The Fix Scope proto line is corrected to `bool owner_only = 7`.
+  - The `account:<id>` ownership Open Question is resolved (per-call `ListBrokerAccounts`, no cache,
+    error pass-through).
+  - acceptance.feature already carried the AC-4/AC-5 bind amendment and AC-7/AC-8, so it was unchanged.
+- Key codebase findings:
+  - **Ledger vacuous-green trap applies** (`fails.md:1941-1956`). `LedgerServiceImpl` uses TS parameter
+    properties (`ledgerServiceImpl.ts:20-24`), so `pnpm run test:coverage` (`--experimental-strip-types`)
+    skips every impl case silently. Step 4 therefore takes its RED/GREEN evidence from
+    `pnpm run build && node --test dist/__tests__/ledgerServiceImpl.test.js`. Config's runner already
+    compiles first (`tsc && node --test dist`).
+  - `QueryEventsRequest` fields 1–6 are in use (`ledger.proto:60-67`), so field 7 is free. Feature 257's
+    product spec (main-dev, spec-ready) anticipates no proto change.
+  - A trader BFF unit test is feasible with no test-only export: drive `dispatchConnect`
+    (`traderBff.ts:153`) with mocked `@/lib/connectClients` and `@/lib/auth`, mirroring
+    `src/lib/__tests__/insightsBff.test.ts`. Coverage excludes `src/lib/*Bff.ts` (`vitest.config.ts`).
+  - Agent `client.py` can import `_ADMIN` from `app/scopes.py` with no cycle (scopes imports only `os`).
+    `GetConfig` returns `ConfigSnapshot` (`config.proto:23`).
+  - The e2e mock's `listBrokerAccounts` returns `alpaca-default` / `ibkr-001` (`accounts.ts:75`), so
+    `positions-reconciliation.spec.ts` (`account:alpaca-default`) stays owned under the new check.
+- **Spec-time deviation from design.md text (recorded per P-03):** design.md asks for the 241 / 247 / 273
+  collisions to be recorded in `merge-order.md`. That file's coverage note lists only hard constraints and
+  excludes textual overlap, so the spec records only the 257 row there (proto field 7 plus the same
+  `queryEvents` WHERE builder). The textual overlaps are recorded here:
+  - 241: `configServiceImpl.ts` `setConfig` vs the Step 8 `getConfig`/`listKeys` hunks
+  - 247/273: `client.py:2034-2080` vs Step 10
+  - 242: `traderBff.ts` and `authz.ts`
+  - 248: the same ledger file, in a non-overlapping band
+  257's `context.md` is not on this branch, so its side reaches it via merge-order.md and `/sdd-sync`.
+- **Confirm at `/sdd-review impl-spec`:** the merge-order direction (257 waits for 263). It is proposed
+  because 263 is SEV-2 security and owns field 7, but the operator has not decided it.
+
+### Open Threads (as of implementation-ready; supersedes the design-approval list)
+
+- [ ] C-09 approval for proto field 7 (Step 1). The fallback is the unverified peer-SAN gate, as an
+  escalation only.
+- [ ] Merge-order direction 257 → 263 (Step 12), to be confirmed at impl-spec review.
+- [ ] Rebase hygiene vs 241 / 242 / 247 / 248 / 257 / 273 at integration.
+- [ ] AC-7 evidence comes from Step 4 (SQL capture) plus Step 7 (e2e mock) only, never from a dev smoke
+  test.
