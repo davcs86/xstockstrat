@@ -398,3 +398,38 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   "floor_breaches": []
 }
 ```
+
+## Session 2026-10-22 — sdd-design
+
+- Phase 0 Recon: wrote recon.md earlier (services: xstockstrat-analysis fix site, xstockstrat-trading read-only;
+  key reuse patterns: `owner_metadata` built inside the existing per-pair `try`, `RecordingStub` header guard).
+- Phase 1 Grilling: 2 rounds (full). The operator approved at the r2 gate on 2026-10-22 "as synthesized, including
+  the deletion-first Step 3 test-mock rule". That resolves the one blocking objection.
+- Chosen approach:
+  - Step 0 adds @AC-9.
+  - Step 1 sends an owner-scoped `ListOrders` with body `user_id`, `x-user-id` and a per-pass `x-trace-id`.
+  - Step 2 splits `run_once` failures into row-scoped and owner-scoped (`failed_owners`) isolation.
+  - Step 3 deletes `get_by_id`/`update` and their test mocks.
+- Rejected: rename-style mock retargeting, a single per-row `try`, header-only scoping, and a per-pair trace id.
+  The full list is in design.md.
+- Decisions:
+  - Only a held/watch drain failure adds an owner to `failed_owners`.
+  - An owner-signal drain failure falls back to `system_signals` with a warning.
+  - A parse or resolve failure is row-scoped.
+  - The live_loop drains deliberately carry no `x-trace-id`. Adding one needs a signature change that is out of
+    scope, and this is accepted under the operator trace-id decision of 2026-10-21.
+- Constitution rules touched: C-03, C-11, C-13, C-15, C-16, C-18, F-09, P-02, P-03, P-06. Floor breaches: none.
+- Status: spec-ready → design-approved.
+
+### Open Threads
+
+- [ ] Rebase churn on `tests/test_analysis_servicer.py` (215/244/245) — target Step 3 (confirm `grep get_by_id tests/`
+  returns 0 after rebase).
+- [ ] The `_live_loop` move into `tests/conftest.py` may collide with another feature. Fall back to a side effect
+  with the real semantics. Target Step 2.
+- [ ] Adjacent textual conflict with 244 at `entry_backfill.py:56-61`. Target /sdd-spec (merge-order.md row: 244
+  before 262) and the Step 1 rebase.
+- [ ] The "no callers" claim for `get_by_id`/`update` is grep-based. Target Step 3 (full analysis test suite run).
+- [ ] The trading-side `ListOrders` report must keep accepting body `user_id` + `x-user-id` + `x-trace-id`. Tracked
+  outside this feature (`docs/reports/2026-10-19-trading-listorders-body-user-id-filter-defect.md`).
+- [ ] Record the live_loop no-trace-id acceptance in the spec. Target /sdd-spec.
