@@ -142,7 +142,7 @@ cd services/xstockstrat-indicators && ruff check . && ruff format --check .
 - There is no existing indicators test for empty-`template_id` CREATE. `grep -n "INVALID_ARGUMENT" tests/test_formula_templates.py` → only `:271` (payload validation).
 - `pyproject.toml:35` sets `asyncio_mode = "auto"`, so no `@pytest.mark.asyncio` is needed.
 
-**TDD**: `red-green required`. Red before Step 1: tests (a), (b) and (d). Tests (c) and (e) are regression pins.
+**TDD**: `red-green required`. Red before Step 1: tests (a), (b), (d) and (d′), plus the `updated_at` assertion in (c). The rest of (c) and test (e) are regression pins.
 
 **Covers**: `AC-1, AC-2, AC-3`
 
@@ -171,8 +171,12 @@ cd services/xstockstrat-indicators && ruff check . && ruff format --check .
    - Call `_manage(svc, TEMPLATE_OPERATION_UPDATE, tpl)`, where `tpl` has `meta` `name="New"`, `description="d2"`.
    - Assert `update.await_args.args[0].name == "New"`, `.description == "d2"` and `.template_id == "tpl-zscore"`.
    - Assert that the response `meta.name == "New"`, `meta.description == "d2"` and `meta.version == 2`.
-   - Then call `ListTemplates` as `_user("bob")` after restoring the fake. With the lockstep fake, run a real UPDATE
-     and assert the listed `(name, description, version) == ("New", "d2", 2)`.
+   - This test ends here. The spy is never undone; the list proof is a separate test (d′) on a fresh servicer.
+   **(d′) @AC-1 list-after-update through the lockstep fake (red).** Add `test_ac1_update_meta_visible_in_list`.
+   - Build a fresh `svc = _servicer()` (no spy, so `_FakeTemplates.update` from instruction 1 is live) and `_seed(svc)`.
+   - Call `_manage(svc, TEMPLATE_OPERATION_UPDATE, tpl)` with `meta` `name="New"`, `description="d2"`.
+   - Call `svc.ListTemplates(indicators_pb2.ListTemplatesRequest(), _user("bob"))` and assert the listed
+     `(meta.name, meta.description, meta.version) == ("New", "d2", 2)`.
 6. **(e) @AC-3 FORMULA pin (regression pin, green on both trees).** Add `test_ac3_create_with_empty_template_id_is_invalid_argument`.
    It calls `_manage`-style CREATE with `_template(template_id="")` under `_admin()`. Assert:
    - `pytest.raises(grpc.RpcError)`;
@@ -188,7 +192,7 @@ cd services/xstockstrat-indicators && uv run pytest --cov=app --cov-fail-under=5
 cd services/xstockstrat-indicators && ruff check . && ruff format --check .
 cd services/xstockstrat-indicators && grep -n "def .*fixture\|from tests.conftest\|conftest" tests/test_formula_templates.py
 ```
-Red gate: on the pre-Step-1 tree, tests (a), (b), the `updated_at` assertion in (c), and (d) fail. (e) passes on both trees.
+Red gate: on the pre-Step-1 tree, tests (a), (b), the `updated_at` assertion in (c), (d) and (d′) fail. (e) passes on both trees.
 
 ---
 
@@ -409,6 +413,7 @@ cd services/xstockstrat-ingest && ruff check . && ruff format --check .
 
 **Codebase Evidence**:
 - `tests/test_source_templates.py`:
+  - `app/repositories/source_templates.py` is a module of functions, not a class: `async def update(db_pool, ...)` at `:50` and `async def retire(db_pool, template_id)` at `:67`. Repo tests call them as module functions with a mock `db` pool; handler tests patch them by module path.
   - `_ST = "app.repositories.source_templates"` at `:23`.
   - `_template_row(...)` at `:29`.
   - `_template_msg(source_type="derived", cfg=None, **payload_over)` at `:63-77` builds `TemplateMeta(template_id="t1", name="Example feed")`.
