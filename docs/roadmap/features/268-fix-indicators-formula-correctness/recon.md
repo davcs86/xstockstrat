@@ -138,6 +138,10 @@ treat pending-hidden (`pending_intent_id` set) rows as `NOT_FOUND`, as `_load_fo
   are never re-labelled "produced no output". Fix is in the parent (track `saw_output`/`parse_ok` in `:395-400`),
   which covers `SystemExit` and any other early clean exit; stripping `SystemExit`/`KeyboardInterrupt`/
   `GeneratorExit` from builtins (`:252`) is an optional second layer (design fork from triage).
+- **D-10 unassigned `result` (design fork, C-11).** A formula that exits normally without assigning `result`
+  still prints `__OUTPUT__:{}`, because the wrapper defaults to `{}` (`sandbox.py:310`
+  `> _output = _formula_globals.get('result', {{}})`). That output parses, so FR-1 as written still reports
+  success with empty output. Design must decide whether to keep this or fail it too.
 - **D-10 behavior change.** Any existing `tests/test_sandbox.py` case expecting a no-output exit to succeed will
   break (success asserts at `:24`, `:120`, `:141`; `runtime_error` at `:36`). No existing `SystemExit` test
   (grep of `test_sandbox.py` empty). The seeded system fundamentals formula (`@AC-6 @feature-224`) must still emit
