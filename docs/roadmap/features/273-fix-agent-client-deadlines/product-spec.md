@@ -51,6 +51,13 @@ Budget values are grounded on the MCP client's 60 s request timeout (`services/x
   not hang. The `list_opportunities` wording from feature 227 is the precedent.
 - **FR-5 — No behavior change on the happy path.** A backend that answers within its deadline produces the same
   tool result as before the fix.
+- **FR-6 — Inbound token validation is bounded and fails closed without forcing re-auth.** Added by operator
+  decision at the design gate r3 (2026-10-22), amending scope beyond `client.py`. The agent's `ValidateToken` call
+  to identity (`services/xstockstrat-agent/app/auth.py:39`, `:71`, reached from `_authorized`, `app/main.py:156`)
+  carries the FR-1 10 s deadline and the request's `x-trace-id`. When identity returns `DEADLINE_EXCEEDED` or
+  `UNAVAILABLE`, the agent responds **503 without `WWW-Authenticate`**, so a brief identity slowdown never forces
+  a re-auth or logout. A genuinely invalid token still gets 401 with `WWW-Authenticate`. This is a sanctioned
+  change to the agent OAuth edge contract (`main.py:164-174`). Covered by @AC-11.
 
 ## Consumer Surface(s)
 
