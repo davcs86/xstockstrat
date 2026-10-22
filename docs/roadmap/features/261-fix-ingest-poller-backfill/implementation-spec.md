@@ -57,9 +57,17 @@ and `@AC-1/@AC-3 @feature-173`. They are covered by the existing tests that each
   **Not found** in `services/xstockstrat-ingest/app/` today (grep, 2026-10-22). If 244 has merged to `main-dev`
   first, rebase and pass 244's clamped value. If not, keep today's `max(get_int(...), 1)`. Either way the
   `timeout` variable Step 5 consumes is the value `run_one_cycle` already computes (design.md § FR-5).
-  **Proposed `docs/roadmap/features/merge-order.md` row (WARN, 244 → 261).** It is not written here, because this
-  run's write scope is the feature directory and the `/sdd-review` rule needs user confirmation. Add it at
-  `/sdd-review impl-spec` or `/sdd-sync`.
+  **Proposed `docs/roadmap/features/merge-order.md` row (WARN, 244 → 261):** `fix-ingest-poller-backfill` (blocked) |
+  `fix-python-config-stored-zero` | shared `mcp_client_loop.py` timeout read, `watcher.py`, ingest tests and INGEST
+  docs; 244 merges first, 261 rebases | No. Still **not written** (grep of `merge-order.md` finds no 244/261 row,
+  2026-10-22): `/sdd-review impl-spec` was scoped to the feature directory. Tracked as an Open Thread in
+  context.md; `/sdd-execute` must confirm 244's merge state before Step 5.
+- **Consumer surfaces (C-14) — no-change decision, smoke-checked.** No `services/xstockstrat-ui/` or
+  `services/xstockstrat-agent/` step and no deferral feature: both surfaces only read rows this fix writes (see
+  § Execution Summary). Dev smoke-check after the integration PR deploys: (a) `/config-ui` signal-sources view shows
+  the new `last_error` markers (`all <N> items failed`, `ambiguous result`, `GetSecret deadline exceeded`) for a
+  failing source; (b) agent `list_signal_sources` returns the same `last_error`, and `cancel_backfill` on a QUEUED job
+  followed by `get_backfill_status` reports `CANCELED`.
 - Step 7 is independent of Steps 1–6 (a different file, `servicer.py`). It follows them only to match design's build
   order. Features 242 (`servicer.py:473`) and 260 (`servicer.py:1039-1066`) touch disjoint regions, so they need a
   rebase only.
@@ -170,8 +178,7 @@ C-13: these item dicts have a single consumer (this module), so they stay inline
 ```bash
 cd services/xstockstrat-ingest && uv run pytest tests/test_mcp_client_loop.py -q \
   && uv run pytest --cov=app --cov-fail-under=40 \
-  && uv run ruff check . && uv run ruff format --check . \
-  && grep -n "def .*fixture\|from .conftest\|conftest" tests/test_mcp_client_loop.py || true
+  && uv run ruff check . && uv run ruff format --check .
 ```
 
 ---
@@ -412,6 +419,9 @@ cd services/xstockstrat-ingest && uv run pytest tests/test_mcp_client.py tests/t
 
 **Covers**: —
 
+If execution of this step grows large, split item 5 (resumed-job trace-id minting, C-03) into its own step; it is a
+distinct behavior covered by `test_resume_job_sends_minted_trace_id` (Step 8). Record any split in the Deviation Log.
+
 **Instructions**: Each check is synchronous. Put no `await` between a check and the write it guards (design.md
 § FR-2/3/4).
 1. **FR-2.** Make this the first statement inside `async with self._backfill_sem:` (before `:494`):
@@ -471,7 +481,8 @@ cd services/xstockstrat-ingest && grep -n "_canceled_jobs" app/handlers/servicer
 
 **TDD**: `red-green required`. On today's tree job-B is written RUNNING and its RPC is called (AC-2), the canceled
 job is resumed (AC-3), and job-D is written COMPLETED (AC-6). The O-3 test passes today. It is a regression guard,
-and its RED is shown by temporarily reordering `:896`/`:897` during the TDD gate.
+and its RED is shown by temporarily reordering `:896` (set-add) after the `:897-902` CANCELED `update_job` during the
+TDD gate. `/sdd-execute` must capture that red run's output in context.md, then restore the order (P-06).
 
 **Covers**: `AC-2, AC-3, AC-6`
 
@@ -548,8 +559,12 @@ cd services/xstockstrat-ingest && uv run pytest tests/test_ingest_servicer.py te
     (`backfill_jobs.py:123-144`) flips every RUNNING/QUEUED job.
 - `docs/context-constitution.md`: the Rules table ends at `INGEST-9` (`:28`), and `## Gotchas & scars` is at `:30`.
 - Key-form mismatch:
-  - the seed row `('ingest', 'mcp_client.request_timeout_seconds', …)` is at
-    `services/xstockstrat-config/migrations/025_ingest_mcp_client_keys.up.sql:34-39`;
+  - the seed rows `('ingest', 'mcp_client.request_timeout_seconds', …)` are at
+    `services/xstockstrat-config/migrations/025_ingest_mcp_client_keys.up.sql:34-36` (staging) and `:37-39`
+    (production), both with the bare key;
+  - config's `reloadNamespace` keys the snapshot by the raw `row.key`
+    (`services/xstockstrat-config/src/grpc/configServiceImpl.ts:203-213`), and ingest's `get_int` does
+    `self._snapshot.values.get(key)` (`app/config/watcher.py:112-118`), so the dotted read misses both rows;
   - the dotted read is at `mcp_client_loop.py:135`;
   - migration 029 excludes the `ingest` namespace (`029_heal_config_keys_full_dotted.up.sql:28`);
   - it is out of scope here (recon.md:194-207; design.md § Open Risks).
@@ -572,7 +587,8 @@ cd services/xstockstrat-ingest && uv run pytest tests/test_ingest_servicer.py te
    ingest past one instance re-opens D-34.
 3. `context-constitution-findings.md`: add a "Documentation that lies" row for the `main.py:66` and `:117-118`
    comment drift, with the suggested action "fix when `main.py` is next touched".
-4. File the key-form defect report: observed (seeded bare key vs dotted read, so the effective timeout is the 30 s
+4. Before filing, re-confirm the miss (both 025 rows bare; `reloadNamespace` raw-key snapshot; no later migration
+   renames them). Then file the key-form defect report, citing both rows: observed (seeded bare key vs dotted read, so the effective timeout is the 30 s
    code default), evidence (above), severity proposal, and suggested route (`/sdd-triage --from-report`, or a 244
    follow-up). Create its `.status` sidecar with `open`.
 5. Run `/context-forge:context-constitution refresh` scoped to the touched ingest docs. If the plugin is
