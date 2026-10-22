@@ -79,3 +79,12 @@ Feature: fix-agent-client-deadlines (bug fix)
     Given the source of services/xstockstrat-agent/app/client.py
     When every unary gRPC stub call in it is enumerated statically
     Then each call passes a timeout argument, including get_config_value once feature 247 has merged ahead of this one
+
+  @AC-11 @regression @FR-6
+  Scenario: A stalled identity yields a bounded fail-closed 503 that keeps the session
+    Given an identity gRPC server that accepts ValidateToken but never responds
+    When an MCP caller sends a request with a bearer token to the agent's MCP endpoint
+    Then the agent responds 503 within 10.5 seconds
+    And the response carries no WWW-Authenticate header
+    And the ValidateToken call carries the same x-trace-id as the rest of the request
+    And a request with a genuinely invalid token still receives 401 with a WWW-Authenticate header
