@@ -1,24 +1,25 @@
 Feature: fix-marketdata-fundamentals-cache (bug fix)
   Regression guard for docs/reports/2026-10-21-marketdata-fundamentals-cache-defect.md:
-  cap-0 disables FMP (D-50), quota counts ignore source (D-51), vendor cache ignores source (D-52),
+  cap-0 comments contradicting the enforced zero budget (D-50), quota counts ignore source (D-51), vendor cache ignores source (D-52),
   silent decode/enrichment drops (D-53), and a lifetime-cumulative Alpaca reconnect budget (D-19).
 
   @AC-1 @FR-1 @regression
-  Scenario: An FMP daily cap of 0 means uncapped
+  Scenario: An FMP daily cap of 0 is a zero budget (FMP disabled)
     Given "marketdata.fundamentals.provider" is "fmp" and "marketdata.fmp.daily_request_cap" is 0
     And the fundamentals cache has no row for "AAPL"
     When GetFundamentals is called for "AAPL"
-    Then the FMP client makes the fetch
-    And the response is fresh fundamentals for "AAPL", not ResourceExhausted
+    Then the FMP client makes no HTTP call
+    And the response is ResourceExhausted for quota
     And no quota WARNING alert is emitted
+    And the BudgetSnapshot and atQuotaAlertThreshold doc comments describe cap <= 0 as zero budget, not uncapped
 
   @AC-9 @FR-1 @regression
-  Scenario: An FMP daily cap of 0 means uncapped on the multi-symbol path
+  Scenario: An FMP daily cap of 0 is a zero budget on the multi-symbol path
     Given "marketdata.fundamentals.provider" is "fmp" and "marketdata.fmp.daily_request_cap" is 0
-    And the fundamentals cache has no row for "AAPL" or "MSFT"
+    And the cache holds an "AAPL" row with source "fmp" older than "marketdata.fmp.cache_ttl_hours" and no row for "MSFT"
     When GetFundamentalsMulti is called for "AAPL" and "MSFT"
-    Then the FMP client makes the fetch
-    And the response holds fresh fundamentals for "AAPL" and "MSFT", not ResourceExhausted
+    Then the FMP client makes no HTTP call
+    And the response holds the cached "AAPL" row with stale=true and no entry for "MSFT"
     And no quota WARNING alert is emitted
 
   @AC-2 @FR-2 @regression
