@@ -26,9 +26,9 @@ Feature: fix-ledger-query-pagination (bug fix)
     Then realized_pnl is 250.00
 
   @AC-6 @FR-5 @regression
-  Scenario: GetPnL keeps the last partial fill of an order that spans ledger pages
+  Scenario: GetPnL keeps the largest cumulative partial fill of an order that spans ledger pages
     Given the ledger holds one "order.filled" event for user "u-1" from trading buying 600 "AAPL" @ 100.00
-    And it holds 501 "order.partially_filled" events for user "u-1" from trading for sell order "o-s" on "AAPL" @ 101.00, with cumulative filled_qty 1, 2, ... 501 in append order
+    And it holds 501 "order.partially_filled" events for user "u-1" from trading for sell order "o-s" on "AAPL" @ 101.00, with sell-signed cumulative filled_qty -1, -2, ... -501 (largest magnitude -501)
     And order "o-s" has no "order.filled" event
     When GetPnL runs for user "u-1"
     Then realized_pnl is 501.00
