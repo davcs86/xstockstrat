@@ -689,3 +689,55 @@ Once the operator rules on the three gated items, the design is approvable witho
 - [ ] R9 — main-dev holds a stale draft spec; read from origin/feature/fix-agent-client-deadlines — target: /sdd-spec boot.
 - [ ] R10 — extract_* have no MCP-level cap (HTTP egress) — target: docs step (follow-up defect).
 - [ ] R11 — ~75 hand edits risk a mis-assigned constant / missed `deadline_s`/`write` — target: test step (@AC-10 bidirectional guard + catch-site guards).
+
+## Session 2026-10-22 — sdd-spec
+
+- Generated implementation-spec.md with 12 steps. Status: design-approved → implementation-ready.
+  - Step 1 (docs): latency baseline, R1/R5.
+  - Steps 2/3: client test/service.
+  - Steps 4/5: mapper test/service.
+  - Steps 6/7: tools test/service.
+  - Steps 8/9: auth test/service.
+  - Step 10: mcp-tools.md + oauth.md + strat-lab SKILL.md.
+  - Step 11: SEV-3 sidecar + merge-order rows + follow-up reports.
+  - Step 12: teardown.
+- Coverage: every @AC-1..@AC-11 maps to a test step (Scenario Coverage table in the spec, C-15).
+- Key codebase findings:
+  - **Call sites.** An AST walk over `app/client.py` (pre-247, tip 9f99103b) finds exactly 73 unary calls. Of
+    those, 67 get `_RPC_TIMEOUT_S`, 4 get LONG (RunBacktest @634, ScreenSymbols @746, RunFundamentalsScan @1712,
+    TriggerBackfill @1949), and 2 stay untouched (ListOpportunities @866/872, and 247's get_config_value GetConfig
+    @1751).
+    - The design's line cites for `:1355` / `:1324` / `:2206` / `:384` are function-`def` lines; the spec gives
+      call lines.
+  - **247 is unmerged.** 247 is `implementation-ready`, and `_CONFIG_READ_TIMEOUT_S` is absent from client.py. 273
+    execution is hard-gated on 247 merging and this branch rebasing; all lines are to be re-anchored by function
+    name.
+  - **tools.py catch sites.** tools.py has 40 `except grpc.aio.AioRpcError` catch sites. Only list_opportunities
+    passes `deadline_s`. With the 6 new wraps, Step 7's table gives `deadline_s` / `write` per site. `write` is
+    verb-derived:
+    - manage_watchlist: `operation != "update"`;
+    - manage_offline_account: `operation not in (get_order, list_orders, list_positions)`;
+    - all other mutating tools: `True`.
+  - **Test harness.** The new generic `hung_backend` conftest fixture (threaded `grpc.server` + GenericRpcHandler)
+    serves every non-config service, including identity for the TestClient-based @AC-11 test. Config paths reuse
+    247's `hung_config_server`, and 247's fixture is not modified.
+  - **R7 resolved by evidence.** indicators `_clamp_override` only tightens (`servicer.py:66-68`), and the
+    configured sandbox timeout is 5000 / 3000 ms, so the 10 s ExecuteFormula budget is safe. The residual risk (no
+    SetConfig bound on `indicators.sandbox.timeout_ms`) goes into the Step 11 follow-up report.
+  - **New R2-like inversion.** `analysis.screener.max_duration_seconds` defaults to 120
+    (analysis `servicer.py:3786`), above the agent's 45 s ScreenSymbols budget. The backend side belongs to the
+    open cross-hop PLAT-13 defect.
+  - **272 slug.** 272 is `fix-analysis-backtest-bounds`
+    (`docs/reports/2026-10-21-analysis-backtest-bounds-defect.status` on main-dev).
+  - **Trace id.** `_authorized` mints `_new_trace_id()` and stamps `claims["trace_id"]`. No claims consumer
+    serialises the dict.
+  - **Doc drift.** `services/xstockstrat-agent/docs/oauth.md:31-33` also documents the 401 and gets the 503
+    sentence (Step 10). AGENT-5 drift is fixed in Step 12.
+- R1: no p99 for the long RPCs exists in the repo. Step 1 must measure it before Step 3 is committed, and escalate
+  for an FR-2 amendment if p99 is above 45 s.
+
+### Open Threads
+
+- [ ] R1/R5: latency baseline. Target: Step 1, before Step 3 is committed.
+- [ ] 247 merge + rebase. Target: precondition before Step 2.
+- [ ] Merge-order rows 247 → 273 and 273 → 272. Target: Step 11.
