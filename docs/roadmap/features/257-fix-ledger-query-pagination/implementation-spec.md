@@ -539,12 +539,8 @@ GOWORK=off go build ./... && GOWORK=off golangci-lint run --modules-download-mod
        `order.filled` for `o-s`.
      - Assert `RealizedPnl == 501.00` with the partials served in ascending order **and** in descending order.
      - RED today: with descending order, "last wins" keeps −1, which gives 1.00.
-     - **Recorded C-15 divergence.** `acceptance.feature` AC-6 states positive cumulative `filled_qty` 1 … 501 (the
-       sign real trading payloads carry today, `trading.go:1822-1824`). This test uses −1 … −501 because
-       `pnl.Fold` treats qty as signed and the payload has no side, so a positive sell partial would fold as a buy
-       and 501.00 is unreachable. The scenario text is not reworded here: whether fill payloads should carry side or
-       sign is an open defect question (context.md Open Threads, `/sdd-qa defect` before 251 lands). Name the
-       divergence in the test title comment.
+     - AC-6 was reworded on 2026-10-22 (operator decision) to the sell-signed −1 … −501 the fold convention
+       requires, so test and scenario now agree; there is no C-15 divergence.
    - **AC-4.**
      - A first `order.filled` page of 200 events for `u-1` with a non-empty token, and the next call fails with
        `codes.DeadlineExceeded`.
