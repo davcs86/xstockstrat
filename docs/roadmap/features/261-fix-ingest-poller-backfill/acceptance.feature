@@ -62,3 +62,12 @@ Feature: fix-ingest-poller-backfill (bug fix)
     When one poll cycle runs
     Then no signal is ingested for source "src-a"
     And ListSignalSources shows an ambiguous-result error in the last_error of "src-a"
+
+  @AC-8 @FR-1 @regression
+  Scenario: A batch in which every item fails is recorded as the source's error
+    Given an active mcp_client source "src-a" for user "u-1" whose fetch returns 1 item that passes extraction
+    And ingesting that item raises an error
+    When one poll cycle runs
+    Then no signal is ingested for source "src-a"
+    And the poll emits a log record for source "src-a" with a skipped count of 1 before the error is recorded
+    And ListSignalSources shows an "all 1 items failed" error in the last_error of "src-a"
