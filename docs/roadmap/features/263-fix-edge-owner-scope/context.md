@@ -384,3 +384,44 @@ Per the grilling protocol `design.md` is not written and `status.md` stays `spec
 - [ ] Rebase hygiene vs 241 / 242 / 247 / 248 / 257 / 273 at integration.
 - [ ] AC-7 evidence comes from Step 4 (SQL capture) plus Step 7 (e2e mock) only, never from a dev smoke
   test.
+
+## Session 2026-10-22 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 9 warnings; overlap WARN (no FAIL involves 263). Advisory, did not block.
+  Lifecycle unchanged (`implementation-ready`).
+- Addressed in implementation-spec.md (commit e89dff5b):
+  - [x] Step 2 Files now lists the expected ledger stub paths (Go, Python, TS, `gen/ts/dist/`), with a
+    stated generated-output exception (B2 Files).
+  - [x] Coverage thresholds named: Step 4 (c8 `--lines 40`, ledger `package.json:14`), Step 6 (vitest
+    40% over `src/lib/**`, Bff excluded), Step 7 (Playwright, none), Step 9 (c8 `--lines 40`, config
+    `package.json:13`) (B2 test-step).
+  - [x] Step 4: the strip-types `test:coverage` number does not count as evidence; only the compiled
+    `node --test dist/...` run does (fails.md:1941).
+  - [x] Step 1 `buf breaking` is copy-runnable: `$(git rev-parse --path-format=absolute --git-common-dir)`,
+    against `origin/main-dev` like `ci.yml:125`, with `subdir=` (PLAT-10).
+  - [x] Step 12 Files (F-08): adds `services/xstockstrat-ui/CLAUDE.md` (Copilot rail paragraph `:164-170`,
+    new item 7) and lists the likely teardown targets (root and per-module constitution/findings files),
+    with any touch recorded in the Deviation Log.
+  - [x] Step 12 item 6 and the Step Dependencies 257 bullet are now gated on operator confirmation.
+  - [x] Overlap correction: feature 242's spec edits no `traderBff.ts` and only reads config
+    `authz.ts:135-142` as a copy source (`242-.../implementation-spec.md:183`). The triage-time 242
+    overlap claim is dropped from the spec. It supersedes the 242 line in the sdd-spec session above.
+  - [x] Step 5 notes an advisory dev smoke check of the `account:` poll latency. This is not acceptance
+    evidence.
+- Unresolved, carried into execution (C-02 / P-03; announce at each /sdd-execute checkpoint):
+  - [ ] **Operator decision: merge-order direction (257 waits for 263).** Step 12 item 6 must not write
+    the `merge-order.md` row until it is confirmed. 257 rebases its keyset predicate onto the owner
+    condition in the same `queryEvents` WHERE builder (`ledgerServiceImpl.ts:124-176`). 257's
+    `context.md` is not on this branch.
+  - [ ] Residual SEV-2 gaps, accepted in design and logged in the Step 12 findings row: `owner_only`
+    fails open by default; ledger `streamEvents`/`getEvent` are unscoped; `WatchConfig` and `GetSecret`
+    are unbound; header-less agent paths are unbound; `order:<id>` NULL-owned rows are hidden by branch 3.
+  - [ ] Step 10 hand-mirrors config `boundReadUserId` in `_effective_config_user_id`. Drift risk is
+    mitigated by the "must change with it" comment (C-18). Note only.
+- Overlap findings (rebase hygiene, textual only): `ledgerServiceImpl.ts` vs 248 (disjoint hunks) and
+  257 (same `queryEvents` body); config `authz.ts`/`configServiceImpl.ts` vs 241 (confirm 241's `:513`
+  hunk is outside `listKeys` `:525-534`) and 244 (comments only); agent `client.py` vs 247/241/215;
+  `tools.py`, `mcp-tools.md` and `test_config_tools.py` vs 241/242/245/246/249/215 (disjoint sections);
+  UI `e2e/mock-backend.ts` / `INVENTORY.md` vs 215/240/245/249 (INVENTORY is append-only). Proto field 7,
+  migrations and config keys are clean. Peer-only FAIL (not 263): config migration 032 claimed by both
+  244 and 248.
