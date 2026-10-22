@@ -175,3 +175,25 @@ Status unchanged (spec-ready); design.md NOT written (gate policy: halt, grillin
   "floor_breaches": []
 }
 ```
+
+---
+
+## Session 2026-10-22 — sdd-design
+
+- Phase 0 Recon: recon.md written earlier (service: xstockstrat-indicators; key reuse patterns: `resolve_intent` compare-and-set UPDATE, `manage-users.py` operator-CLI shape).
+- Phase 1 Grilling: 2 rounds (full), approved at the operator gate. Chosen approach: operator-run maintenance CLI in indicators (report then digest-confirmed apply; no migration/RPC/proto/startup hook/config). Rejected: migration 008 with requires-env, admin RPC, startup hook, DO-console run, cross-schema identity read, trusting plan values with only an author CAS.
+- Constitution rules touched: C-03, C-10(c), C-11, C-15, C-18, P-03, F-04, F-06, PLAT-N1. Floor breaches: none.
+- OPERATOR SIGN-OFF 2026-10-22 (round-2 design gate): APPROVED the maintenance-CLI design and SIGNED OFF the narrowed AC-9 (authority = DB credential holder plus the DBA change record, process not code; code enforces only integrity: apply refuses without a digest-matched, fully-confirmed plan and never touches system or UUID rows). The admin-gated RPC alternative is rejected. Spec must reword AC-9 to this meaning and state edit -> hash -> record -> apply in the AC-9 text and the runbook. Binding amendments: system/UUID predicate inside the apply UPDATE; pre-flight refusal for SYSTEM_AUTHOR/UUID old_author and non-UUID new_author; targets re-derived from the DB (plan x live detection intersection).
+- Status: spec-ready -> design-approved.
+
+### Open Threads
+
+- Prod legacy-author set and count unknown; heuristic match is suggested-only (runbook + first prod report run).
+- Restart EVERY indicators instance after apply; verify via GetFormula/ExecuteFormula, not ListFormulas (runbook + stale-cache test).
+- Plan/result files hold PII and are the only undo/audit record (runbook storage/retention step).
+- skipped_concurrent rows need a re-run (runbook + AC-8 test).
+- Wrong-DB targeting: required DATABASE_URL, no fallback, printed target (CLI step).
+- Operator workstation must reach the managed DB; runbook states which route is used.
+- Fake-table tests do not prove real Postgres WHERE behavior (full-predicate fake + SQL-text guard test).
+- Email local-part heuristic unverified on prod (OQ-2).
+- Do not touch feature 275 reporting surfaces or `_can_read_formula` (FR-6).
