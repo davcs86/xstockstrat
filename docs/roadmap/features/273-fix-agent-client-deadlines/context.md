@@ -432,3 +432,233 @@ The full /sdd-design debate is at its approval gate after round 2 (gate policy: 
   "floor_breaches": []
 }
 ```
+
+## Session 2026-10-22 — sdd-batch design gate (round 3)
+
+The full /sdd-design debate is at its approval gate after round 3 (gate policy: halt). Per the grilling protocol, design.md is not written and status.md stays `spec-ready`. The next /sdd-batch run resumes from the state block below.
+
+### Open Threads
+
+- **Approach.** Grounded on the spec-ready branch revision (`origin/feature/fix-agent-client-deadlines`: FR-1..5, @AC-1..10, 10/45/57 s). All r2 blocking objections are closed. Settled, carried forward:
+  - **client.py:** fixed constants `_RPC_TIMEOUT_S = 10.0` and `_LONG_RPC_TIMEOUT_S = 45.0`, next to 247's `_CONFIG_READ_TIMEOUT_S`, passed as `timeout=` on every unary call in both call shapes (including :1318/:1342/:1355/:2043). LONG goes only on RunBacktest :634, ScreenSymbols :746, RunFundamentalsScan :1712 and TriggerBackfill :1949. ListOpportunities :872 and 247's :1751 are untouched. No helper and no channel change (AGENT-1). design.md must state the F-07 nesting-invariant rationale.
+  - **Mapper** (`_grpc_error_message`, tools.py:223-231): new keyword `write: bool = False` with the text "upstream did not respond within {N}s (deadline exceeded); outcome unknown, verify before retrying". `deadline_s` is passed at every catch site (FR-4 "within"; the 227 contract binds only the None branch). New wraps: list_signal_sources :486, `_get_source` :2324, ingest_signal primary only :612-622 (the :625-669 follow-ups stay outside, 127 @AC-4), emit_alert :700, screen_symbols :847 (LONG), `_write_source_bearer` :347 (`write=True`). These close the 2026-10-19 missing-mapping defect report.
+  - **Write classification, simplified (C-18):** derived from the verb (`write = operation not in <read set>`). The W/I table lives in design.md as rationale only. The guard checks only that every catch site in a mutating tool passes `write=` explicitly. manage_strategy update and set_strategy_live are W unless design.md cites path:line evidence that a replay has no side effect.
+  - **Tests:** assert the exact `timeout` kwarg. Hung-server runs prove a bounded DEADLINE_EXCEEDED with an absolute budget + 0.5 s bound, replacing the ×1.05 slack. The AC-10 AST guard checks both call shapes and the LONG set in both directions, and a value test pins 10.0/45.0. Red/green mapper tests cover `write` and the pass-through. A 224 @AC-18/19 assertion covers InstantiateTemplate after `_write_source_bearer`.
+  - **Docs:** mcp-tools.md, strat-lab backtest SKILL.md (45 s, write text, same PR), the missing-mapping defect report resolved, merge-order rows "247 → 273" and "273 → 272", teardown.
+- **Strongest open objections (blocking, all operator gates under C-11):**
+  1. **auth.py has no amendment or @AC (P-03/C-15).** FR-1 is limited to client.py, yet the FR-3 table assumes an auth term. Mediator recommendation: add FR-6 plus @AC-11 ("identity stall leads to a bounded fail-closed auth response within N s"), with sign-off recorded here. Fallback: descope auth.py to a follow-up defect and record FR-3 as excluding the auth hop.
+  2. **401 vs 503 on an identity DEADLINE_EXCEEDED/UNAVAILABLE, plus the auth budget.** Today `_send_unauthorized` (main.py:164-174) sends WWW-Authenticate, which turns a slow identity into a forced re-auth and an effective logout. Recommendation: 503 without WWW-Authenticate via a three-way `validate_bearer_claims` result (still never raises), WARN logging, reuse of the 10 s budget (no ValidateToken p99 measured for 3 s), and x-trace-id carried through `auth._metadata(trace_id)`. list_opportunities becomes an accepted 68 s exception.
+  3. **272 pass-through is wider than the grant and inert today (P-03/PLAT-13).** The mapper returns `exc.details()` when they differ from "Deadline Exceeded", whatever `deadline_s` is, which goes beyond the recorded "deadline_s is None" grant. It never fires while `analysis.backtest.max_duration_seconds` is 300 (001_config_tables.up.sql:69) / 120 in production (002_config_environment.up.sql:71), above the agent's 45 s. Resolution: write a ≤ ~40 s SetConfig ceiling / nesting contract into 272's spec and the merge-order row, or record the branch as test-only.
+
+  Non-blocking: AC-6 states tool-hop scope, or adds an ASGI identity-stall test if auth stays in. Do not extend `validate_bearer_jwt`'s signature, and grep the claims consumers (tools.py:99-187) for serialisation of `trace_id`. The 45 s LONG p99 and the analysis cancellation behaviour (198 @AC-8) are still unmeasured; escalate for an FR-2 amendment if p99 > 45 s.
+- **Floor status.** No Floor breaches. F-07 is satisfied by the spec Fix Scope, provided design.md writes the rationale down.
+- **@AC changes not covered by an operator decision:**
+  - EXTEND: 273 @AC-1..6 and @AC-8..10; proposed 273 @AC-11 (needs FR-6); the 272 server-detail pass-through (widened discriminator).
+  - CHANGE: the agent OAuth edge contract (401 + WWW-Authenticate becomes 503 for backend-unavailable); 198 @AC-8 (backtest evidence persistence under the 45 s cancellation).
+  - PRESERVE: 273 @AC-7; 127 @AC-4; the 227 deadline-mapper contract (test_tools.py:1974-1992); 224 @AC-18/19; 148 @AC-5; 170 @AC-12.
+
+  The only operator-covered change is 210 @AC-2/@AC-5 (EXTEND: trace now also on ValidateToken).
+
+Once the operator rules on the three gated items, the design is approvable without another debate round.
+
+```sdd-batch-design-state
+{
+  "round": 3,
+  "synth": {
+    "approach": "Round-3 synthesis for 273-fix-agent-client-deadlines, grounded on the spec-ready branch revision (origin/feature/fix-agent-client-deadlines: FR-1..5, @AC-1..10, 10/45/57 s). The r2 grounding objections are closed. The client.py mechanism is settled. Three items still need an operator decision before approval: auth.py scope/budget/status code, 272 nesting, and the widened pass-through.\n\n**Settled (carry forward unchanged)**\n\n1. **client.py constants** (services/xstockstrat-agent/app/client.py)\n   - `_RPC_TIMEOUT_S = 10.0` and `_LONG_RPC_TIMEOUT_S = 45.0` sit next to 247's `_CONFIG_READ_TIMEOUT_S` and are read at call time.\n   - Every unary call in both shapes gets `timeout=`. That covers `await stub.X(` and `await stub_cls(channel).X(` at :1318/:1342, plus :1355 RegisterOAuthClient and :2043 GetConfig.\n   - LONG goes exactly on RunBacktest :634, ScreenSymbols :746, RunFundamentalsScan :1712 and TriggerBackfill :1949.\n   - ListOpportunities :872 and 247's :1751 are untouched.\n   - No helper and no channel change (AGENT-1; mtls.py:37-43).\n   - design.md records the F-07 nesting-invariant rationale (precedent tools.py:2371; spec Fix Scope).\n\n2. **Mapper** (`_grpc_error_message`, tools.py:223-231)\n   - New keyword `write: bool = False`. With `write=True` the text is `upstream did not respond within {deadline_s:g}s (deadline exceeded); outcome unknown, verify before retrying`.\n   - Every catch site passes `deadline_s=client._RPC_TIMEOUT_S` or `_LONG_RPC_TIMEOUT_S`. This satisfies FR-4/@AC-1 \"within\"; the 227 contract binds only the `deadline_s=None` branch (test_tools.py:1985-1992).\n   - New wraps use the tools.py:2266-2267 idiom:\n     - list_signal_sources :486\n     - `_get_source` :2324 (covers both extract_* tools)\n     - ingest_signal primary only :612-622. The :625-669 follow-ups stay in their own `except Exception`, and the step text must state that boundary (127 @AC-4).\n     - emit_alert :700\n     - screen_symbols :847 (LONG)\n     - `_write_source_bearer` :347 (`write=True`; covers instantiate_template :1222 and manage_signal_source :1309)\n   - These wraps close the 2026-10-19 SEV-3 missing-mapping report.\n\n3. **Write classification: simplified per the adversary's C-18 point**\n   - At shared catch sites, `write=` is derived from the verb: `write = operation not in <read-verb set>`. Any verb not in the read set counts as a write.\n   - The W/I table lives in design.md as rationale, not as test data.\n   - The guard becomes \"every catch site in a mutating tool passes `write=` explicitly\". It no longer checks per-row W membership.\n   - manage_strategy update and set_strategy_live move to W unless design.md cites path:line evidence that a replay emits no version bump, ledger event or alert.\n\n4. **Tests** (tests/test_client_deadlines.py; harness test_list_opportunities_deadline.py:17,34,48,50,60; conftest.py:51)\n   - Budget value: assert the exact call kwargs `timeout` (247 §5(b) style).\n   - Hung-server runs prove only \"bounded DEADLINE_EXCEEDED, no hang\", with an absolute bound of budget + 0.5 s on the patched clock. Relative 5 % slack is replaced.\n   - Mapping AC-1..AC-10 is as r3 proposed. The AST guard (AC-10) checks both call shapes, keeps the allow-list, and checks the LONG set both ways. A value test pins 10.0/45.0.\n   - Red/green mapper tests cover `write` and the pass-through (P-06).\n   - 224 @AC-18/19: assert that a deadline on InstantiateTemplate after `_write_source_bearer` does not report success.\n   - AC-6 is stated as tool-hop scope (RunBacktest 45 s), or an ASGI-level identity-stall test is added if auth stays in scope.\n\n5. **Docs**\n   - mcp-tools.md: deadline and write wording.\n   - strat-lab backtest SKILL.md: 45 s budget for run_backtest and trigger_backfill, and the write text (same PR).\n   - SEV-3 report: resolved by 273.\n   - merge-order: rows \"247 → 273\" and \"273 → 272\".\n   - Teardown.\n\n**Mediator's recommended resolution of the open items (needs operator sign-off, C-11)**\n\n6. **auth.py ValidateToken** (auth.py:39, :71)\n   - Recommended: keep it in scope via a spec amendment (FR-6 plus a new @AC-11: \"identity stalls → bounded fail-closed auth response within N s\").\n   - On DEADLINE_EXCEEDED/UNAVAILABLE, return 503 without `WWW-Authenticate`, instead of the 401 with the re-auth pointer (main.py:164-174). That 401 risks a forced re-auth or logout loop for the Claude.ai connector when identity is only slow.\n   - Implement this with a three-way result from `validate_bearer_claims`: claims, None, or a backend-unavailable sentinel. It still never raises (auth.py:58-61).\n   - Log those codes at WARN; they currently log at INFO (auth.py:83).\n   - Budget: recommend reusing `_RPC_TIMEOUT_S` (10 s) rather than an unmeasured 3 s, given the 2-connection direct pool and no ValidateToken p99.\n     - FR-3 still holds at 10 s: long tools 55 s, ingest_signal 53 s, multi-call writes 30 s, single-call tools 20 s.\n     - list_opportunities is an accepted exception at 68 s (10 + 3 + 55), with the follow-up of lowering its SetConfig ceiling.\n     - 3 s is acceptable only with a measured p99.\n   - Trace: `auth._metadata(trace_id)` carries x-trace-id (it is currently `[]`, auth.py:23-24). `_authorized` (main.py:150-161) mints `_new_trace_id()` (tools.py:173; main.py already imports app.tools) and stamps `claims[\"trace_id\"]`, which the middleware reuses (tools.py:199-214).\n     - Do not change `validate_bearer_jwt`'s signature beyond the timeout; it has no production caller.\n     - Grep the `_require_claims`/`_claims_from_context` consumers (tools.py:99-187) to confirm none serialises the claims dict.\n   - Fallback if the operator declines the amendment: auth.py goes out of scope with a follow-up defect, and FR-3 is recorded as \"excluding the auth hop\".\n\n7. **272 pass-through**\n   - The mapper returns `exc.details()` on DEADLINE_EXCEEDED when the details are non-empty and differ from grpc's client sentinel \"Deadline Exceeded\", whatever `deadline_s` is.\n   - This widens the operator's literal \"deadline_s is None\" grant. The widening is necessary because run_backtest now passes deadline_s=45, which makes the None branch dead there.\n   - It only fires if 272's server bound is below the agent's 45 s. Today `analysis.backtest.max_duration_seconds` is seeded at 300 (001_config_tables.up.sql:69) and 120 in production (002_config_environment.up.sql:71). Both are above 45 s, so the agent deadline always fires first.\n   - Recommended: put a PLAT-13 nesting contract into 272's spec (a SetConfig ceiling ≤ ~40 s on that key, or an explicit relation to the agent's 45 s) and into the merge-order row. Otherwise record the branch as test-only until 272 sets the bound.",
+    "open_objections": [
+      {
+        "text": "[P-03/C-15] auth.py scope has no amendment and no @AC. The r3 FR-3 table assumes an auth term, and the stall-to-401 behaviour is user-visible, yet FR-1 is limited to client.py and no scenario covers the auth deadline, the failure response or the shared trace id. 'Extra guards (not AC)' do not satisfy C-15. To resolve: add FR-6 plus @AC-11 (identity stall leads to a bounded fail-closed response within N s) with operator sign-off recorded in context.md, or descope auth.py to a follow-up defect and record FR-3 as excluding the auth hop.",
+        "blocking": true
+      },
+      {
+        "text": "[C-11 operator gate] 401 vs 503 on an identity DEADLINE_EXCEEDED/UNAVAILABLE must be decided before spec, not deferred as a risk. `_send_unauthorized` (main.py:164-174) sends WWW-Authenticate with the resource-metadata pointer, so a brief identity slowdown becomes a forced re-auth. The refresh also goes through identity and likely fails, which effectively logs the user out. The mediator recommends 503 without WWW-Authenticate, via a three-way `validate_bearer_claims` result that still never raises. The budget choice (3 s unmeasured vs reusing 10 s) should be decided in the same gate; the mediator leans 10 s absent a ValidateToken p99, given identity's 2-connection direct pool.",
+        "blocking": true
+      },
+      {
+        "text": "[P-03/PLAT-13] The 272 pass-through is wider than the recorded operator grant ('deadline_s is None -> exc.details()'), and nobody has agreed it will ever fire. The widening (details != 'Deadline Exceeded', whatever deadline_s is) is defensible, but it must be surfaced to the operator for sign-off. It only helps if 272's server bound is below 45 s, yet `analysis.backtest.max_duration_seconds` is 300 by default (001_config_tables.up.sql:69) and 120 in production (002_config_environment.up.sql:71). To resolve: write the agent-45 s / server-≤~40 s nesting into 272's spec (a SetConfig ceiling) and the 273→272 merge-order row, or record the branch as test-only until 272 sets a bound (C-18 speculative-branch concern).",
+        "blocking": true
+      },
+      {
+        "text": "[C-18] The write-safety apparatus is heavier than needed. Drop the AST guard that checks per-row W membership, because it couples CI to a hand-kept classification that features 215/240/241/245/249 must keep updating. Keep `write` with a verb-derived default (not in the read set means write), keep the table in design.md as rationale, and reduce the guard to 'every catch site in a mutating tool passes write= explicitly'.",
+        "blocking": false
+      },
+      {
+        "text": "[C-18] Two I verdicts lack evidence. For manage_strategy update and set_strategy_live, cite path:line showing that a replay causes no version bump, ledger event or alert, or mark both W under the approach's own conservative rule.",
+        "blocking": false
+      },
+      {
+        "text": "Scaled-timing tests will flake. Elapsed ≤ budget × 1.05 at 0.2 s / 0.9 s leaves only 10 ms / 45 ms of slack. Assert the exact `timeout` kwarg for the budget value, and use the hung-server run only to show a bounded DEADLINE_EXCEEDED with an absolute guard (budget + 0.5 s, the scenario tolerance).",
+        "blocking": false
+      },
+      {
+        "text": "AC-6 coverage gap. Tool-level tests skip `_authorized`, so the auth term in the run_backtest worst case is never exercised. Either state AC-6 as tool-hop scope or add one ASGI-level test that stalls identity (required if auth stays in scope via FR-6).",
+        "blocking": false
+      },
+      {
+        "text": "Trace plumbing hygiene. Do not extend `validate_bearer_jwt`'s signature for the trace id; it has no production caller. Grep the claims consumers (tools.py:99-187) to confirm adding `trace_id` to the claims dict is not echoed or serialised anywhere.",
+        "blocking": false
+      },
+      {
+        "text": "[C-16] Make two preserve boundaries explicit in the spec step text. For 127 @AC-4, the new ingest_signal primary wrap (:612-622) must not enclose the :625-669 follow-ups. For 224 @AC-18/19, add an assertion that a deadline on InstantiateTemplate after `_write_source_bearer` (:347) does not report success.",
+        "blocking": false
+      },
+      {
+        "text": "Carried from r2: the 45 s LONG budget cancels RunBacktest/RunFundamentalsScan runs in the 45-60 s band. A measured p99 and the analysis handler's cancellation behaviour (198 @AC-8 evidence persistence, partial fundamentals emits) are still missing. If p99 > 45 s, escalate for an FR-2 amendment and do not change the number silently.",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "273 @AC-1",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "273 @AC-2",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "273 @AC-3",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "273 @AC-4",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "273 @AC-5",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "273 @AC-6",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "273 @AC-7",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "273 @AC-8",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "273 @AC-9",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "273 @AC-10",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "273 @AC-11 (proposed: identity stall -> bounded fail-closed auth response; requires FR-6 amendment)",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "Agent OAuth edge contract (main.py:164-174 401 + WWW-Authenticate on validation failure) — 503 for backend-unavailable",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "127 @AC-4 (ingest_signal follow-up failures swallowed)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "227 deadline-mapper contract (test_tools.py:1974-1992)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "272 server-side deadline message pass-through (widened discriminator)",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "210 @AC-2/@AC-5 (header trio on outbound calls; trace now also on ValidateToken)",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "224 @AC-18/19 (source bearer write then InstantiateTemplate)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "198 @AC-8 (backtest evidence persistence)",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "148 @AC-5 (manage_watchlist read-modify-write)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "170 @AC-12 (watchlist bindings set-assignment)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "A dedicated 3 s `_AUTH_RPC_TIMEOUT_S` without a measured ValidateToken p99. It is tighter than FR-1's own 10 s and turns brief identity slowness into fail-closed rejections; the mediator prefers reusing `_RPC_TIMEOUT_S` (DRY, still within 57 s at 55 s for long tools). This stays open for the operator if a p99 justifies 3 s.",
+      "Mapping an identity deadline to the existing 401 with WWW-Authenticate. It invites the OAuth client to re-authorize against a stalled identity, effectively logging the user out; 503 without the pointer stays fail-closed without destroying the session.",
+      "Pulling auth.py in 'under Expected' without an amendment. It repeats the agent-mcp-oauth scope-creep fail (fails.md:485) and leaves the user-visible behaviour without an @AC (C-15).",
+      "An AST guard enforcing per-row W/I membership. It turns a hand-kept classification into CI coupling for unrelated features; it is replaced by a verb-derived default plus an 'explicit write= at mutating sites' guard.",
+      "Relative-tolerance (×1.05) elapsed-time assertions on scaled clocks. They flake on CI jitter; replaced by exact kwarg assertions plus an absolute +0.5 s bound.",
+      "The literal None-only pass-through. It is dead at every site that now passes deadline_s, including run_backtest, so a 272 server timeout would be mislabelled as 'did not respond within 45s'.",
+      "Grounding on the main-dev working-tree acceptance.feature (AC-1..5): stale pre-review draft (P-03).",
+      "Leaving catch sites on the generic deadline_s=None text: it fails FR-4/@AC-1 'within'.",
+      "Rewording the deadline_s=None branch: it breaks the 227 contract (test_tools.py:1985-1992).",
+      "deadline_s alone at write sites (no write flag): 'retry shortly' invites duplicate orders, backfills, emits, template copies and alerts (C-10).",
+      "A shared `_unary` helper: rework across ~73 sites that 215/240/241/245/249 also edit; the C-18 trade-off is recorded.",
+      "A channel-level deadline or pooled channel: AGENT-1, and mtls.secure_channel has no deadline option.",
+      "agent.* config keys for the budgets: the spec Fix Scope fixes them as constants, and a key cannot bound the config read itself.",
+      "Middleware asyncio.wait_for(57) as the primary fix: no gRPC deadline reaches the server, and it fails AC-1/2/3/5/9/10.",
+      "Raising the long budget toward ~54 s: FR-2 fixes 45 s."
+    ],
+    "open_risks": [
+      "R1: The 45 s LONG budget cancels RunBacktest/RunFundamentalsScan runs in the 45-60 s band. 198 @AC-8 evidence may go unpersisted and fundamentals emits may be partial. No p99 or handler-cancellation evidence exists, and if 45 s is wrong an FR-2 amendment is required.",
+      "R2: The 272 nesting is inverted today. The server bound defaults to 300 (staging) and is 120 in production, both above the agent's 45 s, so the agent always cancels first and the server-detail pass-through never fires until 272 sets a ceiling at or below ~40 s.",
+      "R3: A DEADLINE_EXCEEDED after the server commits is now reachable on write tools. The write text mitigates retries only where the verb-derived default classifies correctly; a new mutating verb added to a read set would be mislabelled.",
+      "R4: list_opportunities is an accepted out-of-scope exception at 68 s (10 s auth budget) or 61 s (3 s), above the 60 s MCP timeout. Follow-up: lower its SetConfig ceiling.",
+      "R5: Identity pool pressure. With identity a direct 2-connection pool, a slow identity under an auth deadline may produce bursts of fail-closed rejections. The status-code choice (401 vs 503) determines whether that becomes a logout loop.",
+      "R6: The ingest_signal worst path (43 s, plus auth) reaches the deadline fallbacks silently (_agent_policy default, 0.6 threshold, skipped auto-alert/auto-add); none opens a security gate (insights.md:3695-3705).",
+      "R7: ExecuteFormula at 10 s versus an operator-raised indicators sandbox.timeout_ms, for which no SetConfig upper bound was found. Raising it to 10 s or more truncates test_formula and needs an FR-2 amendment.",
+      "R8: Sequencing. AC-10's allow-list depends on 247's `_CONFIG_READ_TIMEOUT_S` (merge 247 → 273), and 272 depends on 273's mapper (273 → 272).",
+      "R9: Artifact drift. main-dev holds the stale draft spec, so later phases must read from origin/feature/fix-agent-client-deadlines.",
+      "R10: The extract_* tools have no MCP-level cap. HTTP egress and N > 2 URLs can exceed 57 s; this is recorded as an exception with a follow-up.",
+      "R11: Hand edits across ~75 sites risk a mis-assigned constant or a missed deadline_s/write. Only the AC-10 bidirectional guard and the catch-site guards protect against this."
+    ],
+    "constitution_rules_touched": [
+      "C-01",
+      "C-03",
+      "C-10",
+      "C-11",
+      "C-14",
+      "C-15",
+      "C-16",
+      "C-18",
+      "P-02",
+      "P-03",
+      "P-06",
+      "F-07 (not breached: fixed nesting-invariant constants per the spec Fix Scope; rationale must be written in design.md)",
+      "PLAT-13",
+      "AGENT-1"
+    ],
+    "rationale": "r3 closes every r2 blocking objection:\n- **Grounding:** now on the branch revision.\n- **FR-4 wording:** `deadline_s` passed at every catch site, with \"within\" also in the write text.\n- **FR-3 table:** enumerated, including the auth term.\n- **Write-safety classification:** complete.\n- **FR-4 coverage:** six new wraps, which also close the SEV-3 report.\n- **Non-blocking r2 items:** the trace-id plumbing is concrete, and the ExecuteFormula ceiling is grounded via `_clamp_override`.\n\nThe client.py mechanism is not disputed by the adversary. It is carried forward as settled.\n\nThe adversary's three blocking objections hold, and I verified their factual bases:\n1. **auth.py has no amendment.** It is real scope beyond FR-1, which is limited to client.py, and it changes user-visible behaviour: a stalled identity now gets a 401 with the WWW-Authenticate re-auth pointer (main.py:164-174). That needs an FR/AC under C-15 and an operator decision under C-11.\n2. **401 vs 503 cannot wait.** The response shape decides whether a slow identity forces a re-auth. That re-auth itself depends on identity, so it likely fails too.\n3. **The pass-through goes beyond the grant and would never fire.** It is wider than the recorded \"None-only\" grant. The config seeds also confirm it is inert today: max_duration_seconds is 300 at 001_config_tables.up.sql:69 and 120 in production at 002_config_environment.up.sql:71. I added the production 120 figure; it does not change the conclusion.\n\nThe proposal answers none of these three concretely, so under the mediator rule they stay open and blocking. Each has a small, concrete closure, given in the approach:\n- FR-6 plus @AC-11, with a 503 three-way result and 10 s reuse, or descoping auth.py.\n- A nesting ceiling written into 272's spec, or recording the branch as test-only.\n\nThe C-18 points and the test-flake points are adopted as simplifications; they are not blocking. No Floor breach: F-07 is satisfied by the spec's own Fix Scope, provided design.md writes the rationale down. Once the operator rules on the three gated items, the design is approvable without another debate round."
+  },
+  "floor_breaches": []
+}
+```
