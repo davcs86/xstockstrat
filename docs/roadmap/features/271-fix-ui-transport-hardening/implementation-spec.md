@@ -192,6 +192,7 @@ grep -n "helpers/devCerts\|from './mock-backend'" e2e/transport-deadline.spec.ts
 ```
 - Coverage thresholds: lines, functions and statements ≥ 40% over `src/lib/**` (`vitest.config.ts` `thresholds`).
 - Confirm all 4 vitest cases and both Playwright cases executed (not skipped).
+- Vitest (a), (c), (d) and the Playwright AC-6 case are preservation guards (green pre-fix). Record their RED in context.md as "red via mutation — preservation guard" (C-08/P-06): e.g. drop the per-call `timeoutMs` forward for (c)/AC-6, and apply the default in the `stream` wrapper for (d). Revert each mutation.
 
 ---
 
@@ -600,8 +601,8 @@ cd services/xstockstrat-ui && pnpm exec vitest run src/middleware.test.ts \
 **Covers**: —
 
 **Instructions**:
-1. `CLAUDE.md:235`: append one clause to the middleware row. The eight segment health paths are exempted by an exact-match `PUBLIC_HEALTH_PATHS` Set before the session check. `agent-health` keeps its own 401.
-2. `context-constitution.md:40`: rewrite the gotcha:
+1. `services/xstockstrat-ui/CLAUDE.md:235`: append one clause to the middleware row. The eight segment health paths are exempted by an exact-match `PUBLIC_HEALTH_PATHS` Set before the session check. `agent-health` keeps its own 401.
+2. `services/xstockstrat-ui/docs/context-constitution.md:40` (the UI-service file — **not** the root `docs/context-constitution.md`): rewrite the gotcha:
    - The UI transport applies `DEFAULT_UNARY_TIMEOUT_MS` (30s) to every unary call without a per-call `timeoutMs`; streams stay unbounded.
    - Per-call values (`LONG_RPC_TIMEOUT_MS` 300s, `FUNDAMENTALS_TIMEOUT_MS` 15s, `REFRESH_TIMEOUT_MS` 10s, the `listOpportunities` 30s literal) override it.
    - `forwardAdmin` takes `{ timeoutMs }`.
