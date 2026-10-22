@@ -73,10 +73,11 @@ already covers a nonzero partial fill, and Step 3 adds no new fill semantics.
   - `244-fix-python-config-stored-zero` merges **before** 262. 244 edits the semaphore clamp at
     `entry_backfill.py:56-58`. Step 4's `try` around `:59-61` re-indents the lines next to it, so
     the overlap is **ADJACENT** and a textual rebase conflict is expected.
-  - This spec cannot write `docs/roadmap/features/merge-order.md`, because only this feature's
-    directory is writable in this run. The row ("244 before 262, adjacent at
-    `entry_backfill.py:56-61`") is carried as an open thread in `context.md` for
-    `/sdd-review impl-spec` or the integration PR.
+  - The `docs/roadmap/features/merge-order.md` row ("244 before 262, adjacent at
+    `entry_backfill.py:56-61`, rebase conflict expected") is still unwritten: neither /sdd-spec
+    nor /sdd-review impl-spec could write outside this feature's directory. Add it (operator
+    yes/no) **before** `/sdd-execute` Step 2, or at the latest with the integration PR. It is an
+    open thread in `context.md`.
   - `app/main.py:174` (the unretained backfill task) stays with `259-fix-python-loop-supervision`.
     262's guards are in-function and need no supervised-task helper.
 - **Test-file rebase churn:** 215, 244 and 245 also edit `tests/test_analysis_servicer.py`. Before
@@ -401,9 +402,11 @@ Behavioural verification is Step 5.
 - caplog style: `tests/test_live_loop.py:101` / `:119`
   `with caplog.at_level(logging.WARNING, logger="app.engine.live_loop"):`. Here the logger is
   `app.engine.entry_backfill`.
-- `live_loop.py:896-906` `_write_entry_cooldown` returns early when `self._cooldowns_repo is None`.
-  That is safe on the real loop built without a cooldowns repo; confirm at execute time from the
-  constructor at `live_loop.py:267`.
+- `live_loop.py:896-906` `_write_entry_cooldown` returns early when `self._cooldowns_repo is None`
+  (`:901-902`). The constructor at `live_loop.py:267` defaults `cooldowns_repo=None` (`:276`,
+  stored at `:300`), and `_live_loop` (`test_owner_header_guard.py:139-154`) passes none. So the
+  real loop needs no cooldowns repo, and `@AC-3` fails RED on the escaped `ValueError`, not on a
+  constructor error (re-verified at /sdd-review impl-spec). Still check the RED failure message.
 
 **TDD**: `red-green required`. Against the pre-Step-4 tree:
 - `@AC-3` fails because the real `owner_metadata` `ValueError` escapes `run_once` from
@@ -421,11 +424,16 @@ Behavioural verification is Step 5.
      test-module imports; `_marketdata` needs `_real_bars`.
    - Import `LiveEvaluationLoop` and `StrategyEvaluator` inside the function or at module top
      (after `_setup_gen_path`, `# noqa: E402` as at `:44-46`).
+   - The moved body also uses the file-local `_EOF` (`test_owner_header_guard.py:46`,
+     `SimpleNamespace(next_page_token="")`) for the portfolio pages. conftest has no
+     `SimpleNamespace` import (it imports `types`, `:17`), so build the page inline as
+     `types.SimpleNamespace(next_page_token="")`. Do not import `_EOF` from the test module.
    - In `test_owner_header_guard.py`, replace the `_live_loop` body with
      `return real_live_loop(ingest, indicators, rows, config_watcher=_cfg(), marketdata_stub=_marketdata())`
      and import `real_live_loop` from `tests.conftest` (`:27`). The 4 call sites stay unchanged.
-   - **Fallback (design Open Risk):** if the conftest edit collides with another feature at
-     rebase, keep `_live_loop` where it is. For `@AC-3`, use a `_drain_held` side effect that calls
+   - **Fallback (design Open Risk), preferred on any collision:** 244 (`snapshot_watcher`) and
+     246 (`fundamentals_row`) also add conftest helpers. Rebase before this step; if the conftest
+     edit then conflicts, keep `_live_loop` where it is. For `@AC-3`, use a `_drain_held` side effect that calls
      the real `app.identity.owner_metadata(owner)` and returns `set()`. Record that in the
      Deviation Log.
 2. **`@AC-3`** (`test_system_owner_does_not_stop_other_owners`, `tests/test_entry_backfill.py`):
@@ -586,7 +594,9 @@ cd services/xstockstrat-analysis && ruff check . && ruff format --check .
 **Instructions**: apply the **deletion-first** rule (operator-approved at the design gate r2; the
 rename/retarget rules are a Rejected Alternative):
 1. **(i)** Delete each `get_by_id = AsyncMock(...)` line listed above whose next line already sets
-   `get_by_owner_and_id`. That is 24 sites in `test_analysis_servicer.py`, including `repo.` at
+   `get_by_owner_and_id`. The cited line numbers are from `5afe0c84` and will drift after the
+   rebase in instruction 7. Locate each site by `grep -n "get_by_id" <file>` on the rebased tree,
+   not by the number. That is 24 sites in `test_analysis_servicer.py`, including `repo.` at
    2175/3451, and 2 in `test_readiness_opportunities_source_symbol.py`. Delete from the bottom of
    the file upward so the cited line numbers stay valid while editing.
 2. **(ii)** At `:1975-1984` and `:2003-2012`, rename the multi-line `get_by_id = AsyncMock(` to
@@ -603,8 +613,8 @@ rename/retarget rules are a Rejected Alternative):
    `not hasattr(StrategiesRepository, "get_by_id")`, `not hasattr(StrategiesRepository, "update")`
    and `hasattr(StrategiesRepository, "get_by_owner_and_id") and hasattr(StrategiesRepository, "update_locked")`.
    Import inside the test, as `TestListLiveEnabled` does at `:6676`.
-7. Rebase onto the latest feature branch first (215/244/245 churn). Then re-run the greps below,
-   and delete any resurrected `get_by_id` line by rule (i).
+7. Do this first: rebase onto the latest feature branch (215/244/245 churn). Then re-run the
+   greps below, and delete any resurrected `get_by_id` line by rule (i).
 
 **Verification**:
 ```bash
