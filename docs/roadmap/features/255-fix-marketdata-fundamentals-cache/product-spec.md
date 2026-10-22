@@ -43,7 +43,8 @@ half-enriched row for a full TTL (D-53).
   80%-of-cap WARNING alert is emitted. The fix corrects the misleading comments at `fmp_client.go:97` (`BudgetSnapshot`)
   and `marketdata_service.go:1958` (`atQuotaAlertThreshold`) to say `<= 0` = zero budget, and the marketdata `CLAUDE.md`
   key row (`:82`) and `docs/patterns/config-governance.md` (if it describes the key) state that `<= 0` disables FMP and
-  that a large cap is effectively uncapped. `TestBackfillFundamentals_CapDegrade_AC5` stays as is.
+  that a large cap is effectively uncapped. `TestBackfillFundamentals_CapDegrade_AC5` stays as is. The comment and
+  doc corrections are verified by a `/sdd-spec` checklist step, not by an `@AC` (AC-1/AC-9 stay behavioural, C-15).
 - **FR-2 (D-51).** The quota counts that seed the FMP day budget at boot and drive the Finnhub rolling window
   (`marketdata.finnhub.symbols_per_minute` over `marketdata.finnhub.rate_window_seconds`) count only rows whose
   `source` is the active provider (`marketdata.fundamentals.provider`); EDGAR rows and the inactive vendor's rows are
