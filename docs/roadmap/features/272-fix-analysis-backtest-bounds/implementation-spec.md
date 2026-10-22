@@ -23,7 +23,7 @@ This spec follows design.md § Chosen Approach and its build order. All code lan
 - **Steps 3–4 (R-1)** rename the `RunBacktest` body to `_run_backtest` behind a thin `@owner_scoped` wrapper.
   - The per-symbol loop re-raises `_BarFetchError`; today `except Exception` at `:1130-1132` skips the symbol.
   - The wrapper maps the error to `FAILED_PRECONDITION` `backtest bar series incomplete: …`. The benchmark path
-    `:951-965` inherits this, moving from UNKNOWN to FAILED_PRECONDITION.
+    `:952-965` inherits this, moving from UNKNOWN to FAILED_PRECONDITION.
 - **Steps 5–6 (D-29)** add the wall-clock bound.
   - The limit is read with `get_int_present("analysis.backtest.max_duration_seconds", 300)`: 0 means no limit; a
     negative value logs a WARN and uses 300.
@@ -236,7 +236,7 @@ Deviation Log entry and a blocker; never patch it silently. Confirm the C-13 ver
       log.warning("backtest symbol %s error: %s — skipping", symbol, e)
       continue
   ```
-- The benchmark preload `await self._load_benchmark_bars(...)` at `:951` is outside the loop. It catches only
+- The benchmark preload `await self._load_benchmark_bars(...)` at `:952` is outside the loop. It catches only
   `except _InsufficientData as ins:` (`:959`), so a `_BarFetchError` propagates out of the body.
 - `grep -rn "RunBacktest" app/` shows no internal Python caller of `self.RunBacktest`; only the gRPC server and
   tests call it.
@@ -366,7 +366,7 @@ grep -n "from .test_backtest_source_symbol\|from .test_analysis_servicer" servic
   - `_persist_backtest_run` `:1300`
   - `_persist_backtest_detail` `:1314`
   - `_recompute_headline` `:1322`
-  - `analysis.backtest.completed` AppendEvent `:1344-1351`
+  - `analysis.backtest.completed` AppendEvent `:1344-1352` (`event_type` at `:1346`)
 - `import asyncio` is at `:13`. Python is 3.13 (`python3 --version` → 3.13.16; root CLAUDE.md), so
   `asyncio.timeout`, `Timeout.expired()` and `Timeout.reschedule(None)` are available.
 - CPU cores run via `run_in_executor(self._compute_executor, _core)` at `:1717`, `:2229` and `:2400`. They stay
@@ -420,7 +420,7 @@ grep -n "from .test_backtest_source_symbol\|from .test_analysis_servicer" servic
      re-raised unchanged; it is not the backtest deadline.
 4. Do not move any compute out of `run_in_executor`. A timed-out executor thread runs to completion (design §3,
    Open Risks); that is documented in Step 7 and not fixed here.
-5. Trace rule (C-03): the abort uses the inbound `context`. The `analysis.backtest.started` append (`:818`) stays
+5. Trace rule (C-03): the abort uses the inbound `context`. The `analysis.backtest.started` append (`:817-826`, `event_type` at `:820`) stays
    inside the bound and keeps `metadata=propagation_meta`. No new emits.
 
 **Verification**:
@@ -441,6 +441,9 @@ in Step 6.
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_backtest_bounds.py` — modify (created in Step 4)
+- `services/xstockstrat-analysis/tests/conftest.py` — modify (new shared `config_watcher(**values)`, item 0)
+- `services/xstockstrat-analysis/tests/test_list_opportunities_deadlines.py` — modify (drop local `_watcher` at
+  `:63-69`; import `config_watcher`)
 
 **Reviewers**: `xstockstrat-analysis` owner — Backtest reproducibility, strategy scoring determinism, no look-ahead bias
 
@@ -471,30 +474,44 @@ in Step 6.
 **Covers**: `AC-3, AC-5`
 
 **Instructions**:
-Add these tests to `tests/test_backtest_bounds.py`. Each sets `svc._cfg` to a `_watcher(...)` holding
-`analysis.backtest.max_duration_seconds`; define `_watcher` locally in this file. The `config_pb2` import mirrors
-`test_list_opportunities_deadlines.py`. Each test asserts elapsed time with `time.monotonic()`. Stalls use
-`asyncio.sleep`, never real compute (R-4).
+0. **C-13, first.** Before writing any test, move the `_watcher(**values)` helper
+   (`tests/test_list_opportunities_deadlines.py:63-69`) into `tests/conftest.py` as `config_watcher(**values)`
+   (or reuse an existing equivalent, if `grep -n "def _watcher\|ConfigSnapshot" tests/conftest.py` finds one;
+   none exists today). It builds `_StubWatcher` (`tests/test_analysis_servicer.py:483`); if a module-level import
+   of that test module from conftest cycles at collection, import it inside the function. In
+   `test_list_opportunities_deadlines.py`, rename the three `_watcher(` call sites (`:129`, `:210`, `:350`) to
+   `config_watcher(` and add `from tests.conftest import config_watcher` (precedent:
+   `tests/test_strategy_templates.py:26`).
+
+Then add these tests to `tests/test_backtest_bounds.py`. Each sets `svc._cfg` to a `config_watcher(...)` holding
+`analysis.backtest.max_duration_seconds`. The `config_pb2` import and `from app.handlers import servicer as servicer_mod` mirror
+`test_list_opportunities_deadlines.py:16,18`.
+Each test asserts elapsed time with `time.monotonic()`. Stalls use `asyncio.sleep`, never real compute (R-4).
+Every test that expects an abort (AC-3, AC-3b, T-executor) makes the call under
+`pytest.raises(Exception, match="aborted")`, because the `_owned_ctx()` abort mock raises (as in Step 4).
 1. **AC-3** `test_deadline_exceeded_names_limit`:
    - `int_val=1`; patch `svc._backtest_symbol_evaluated` with an async function that sleeps 3 s.
-   - Assert `ctx.abort` was awaited with `(grpc.StatusCode.DEADLINE_EXCEEDED, "backtest exceeded 1s deadline")`.
+   - Call `RunBacktest` under `pytest.raises(Exception, match="aborted")`, then assert `ctx.abort` was awaited with
+     `(grpc.StatusCode.DEADLINE_EXCEEDED, "backtest exceeded 1s deadline")`.
    - Assert elapsed < 2 s and that `_persist_symbol_cells` and `_persist_backtest_run` (both `AsyncMock`) were not
      awaited (`@AC-3 @feature-149` preserved).
    - Red before Step 5.
 2. **AC-3b** `test_deadline_fires_inside_awaited_getbars`:
    - `int_val=1`; the AAPL `GetBars` side effect sleeps 3 s.
-   - Assert DEADLINE_EXCEEDED in under 2 s. This guards against the `:1127-1132` handlers absorbing the
-     cancellation.
+   - Under `pytest.raises(Exception, match="aborted")`, assert DEADLINE_EXCEEDED in under 2 s. This guards against
+     the `:1127-1132` handlers absorbing the cancellation.
 3. **AC-5** `test_stored_zero_means_no_limit`:
    - `int_val=0`; the patched `_backtest_symbol_evaluated` sleeps 2 s, then delegates to the real method.
    - Assert a result with `status == BACKTEST_STATUS_OK` and that `ctx.abort` was not awaited.
 4. **AC-5** `test_negative_limit_falls_back_to_300_with_warn`:
-   - `int_val=-5`; patch `asyncio.timeout` in the `app.handlers.servicer` namespace with a recording wrapper
-     around the real one.
+   - `int_val=-5`; use the `monkeypatch` fixture: capture `real = asyncio.timeout`, then
+     `monkeypatch.setattr(servicer_mod.asyncio, "timeout", recorder)`, where `recorder(delay)` appends `delay` and
+     returns `real(delay)`. `servicer.py:13` is a plain `import asyncio`, so this is the global attribute;
+     `monkeypatch` restores it at teardown, so nothing leaks to other tests.
    - Assert it was entered with `300`, and that `caplog` holds a WARNING containing
      `analysis.backtest.max_duration_seconds` and `-5`.
 5. **T-inner-timeout** `test_inner_timeout_is_not_mapped_to_deadline`:
-   - `int_val=60`; patch `svc._load_benchmark_bars` (awaited at `servicer.py:951`, which catches only
+   - `int_val=60`; patch `svc._load_benchmark_bars` (awaited at `servicer.py:952`, which catches only
      `_InsufficientData`) with an `AsyncMock(side_effect=TimeoutError())`, using a `_mkt_def()` definition so the
      benchmark preload runs.
    - Assert `pytest.raises(TimeoutError)`.
@@ -505,18 +522,17 @@ Add these tests to `tests/test_backtest_bounds.py`. Each sets `svc._cfg` to a `_
    - Patch `svc._persist_backtest_run` with an async function that sleeps 2 s, then records the call.
    - Assert that a result is returned, that `ctx.abort` was not awaited, that the record is present, and that
      `svc._ledger.AppendEvent` was called with `event_type == "analysis.backtest.completed"`.
-   - This is the tripwire for `disarm()` placement against peer edits.
+   - This is the tripwire for `disarm()` placement against peer edits. A deadline that fires in the same loop tick
+     just before `disarm()` still maps to DEADLINE_EXCEEDED; that edge is accepted and not tested.
 7. **T-executor** `test_deadline_returns_while_executor_thread_finishes`:
    - `int_val=1`; patch `_backtest_symbol_evaluated` with an async function that awaits
      `asyncio.get_running_loop().run_in_executor(svc._compute_executor, blocking)`.
      `blocking` does `time.sleep(2)` and then `done.set()` on a `threading.Event`.
-   - Assert DEADLINE_EXCEEDED in under 2 s, that `done.is_set()` is False at abort time, and that
+   - Under `pytest.raises(Exception, match="aborted")`, assert DEADLINE_EXCEEDED in under 2 s, that `done.is_set()`
+     is False at abort time, and that
      `done.wait(3)` is True afterwards.
    - This documents that the thread is not interrupted (R-3).
-8. **C-13.** `_watcher` is the second local copy of the `test_list_opportunities_deadlines.py:63` helper. Move it
-   into `tests/conftest.py` as `config_watcher(**values)` (or the existing equivalent, if `grep -n "def _watcher\|
-   ConfigSnapshot" tests/conftest.py` finds one) and import it from both files in this step. Do not leave two
-   inline copies.
+8. **C-13.** Item 0 is the only declaration site of the helper; do not leave an inline `_watcher` in either file.
 
 **Verification**:
 ```bash
@@ -579,9 +595,9 @@ grep -c "Max backtest run time" services/xstockstrat-analysis/CLAUDE.md   # expe
 **Reviewers**: none
 
 **Codebase Evidence**:
-- `docs/runbooks/mcp-tools.md:405-414`, the `run_backtest` **Errors** table. Sibling row
-  `| Window span over \`analysis.backtest.max_range_days\` | \`INVALID_ARGUMENT\` from analysis |` is at `:410`;
-  the table ends with `| Analysis service unreachable | ... |` at `:414`.
+- `docs/runbooks/mcp-tools.md:406-415`, the `run_backtest` **Errors** table (heading `:406`). Sibling row
+  `| Window span over \`analysis.backtest.max_range_days\` | \`INVALID_ARGUMENT\` from analysis |` is at `:412`;
+  the table ends with `| Analysis service unreachable | ... |` at `:415`. Re-grep both anchors at execute time.
 - `plugins/strat-lab/skills/backtest/SKILL.md`: `## Phase 2 — Run, and handle the oversized output` is at `:181`,
   followed by `### Fill model (feature 151)` at `:189`.
 - `reference/output-handling.md:9-31`, `## The JSON shape`. The fundamentals-outage "rerun" bullet is at `:29-31`
@@ -599,7 +615,7 @@ grep -c "Max backtest run time" services/xstockstrat-analysis/CLAUDE.md   # expe
 **Covers**: —
 
 **Instructions**:
-1. **`mcp-tools.md`.** After the `:410` row, add two rows:
+1. **`mcp-tools.md`.** After the `max_range_days` row (`:412`), add two rows:
    - `| Backtest evaluation exceeds \`analysis.backtest.max_duration_seconds\` (prod 120 s, staging 300 s; 0 = no
      limit) | \`DEADLINE_EXCEEDED\` \`backtest exceeded Ns deadline\` — narrow the range or symbols; do not retry
      immediately (the compute thread keeps running) |`
@@ -639,8 +655,8 @@ grep -n "is_public\|include_public" docs/runbooks/mcp-tools.md plugins/strat-lab
 
 **Codebase Evidence**:
 - `rpc QueryEvents(QueryEventsRequest) returns (QueryEventsResponse);` is at `packages/proto/ledger/v1/ledger.proto:15`.
-- The `analysis.backtest.started` append is at `servicer.py:818-826`, and the `analysis.backtest.completed` append
-  at `:1344-1351`. Both use `stream_key=f"backtest:{backtest_id}"`.
+- The `analysis.backtest.started` append is at `servicer.py:817-826` (`event_type` `:820`), and the
+  `analysis.backtest.completed` append at `:1344-1352` (`event_type` `:1346`). Both use `stream_key=f"backtest:{backtest_id}"`.
 - The prod seed is `'120'`, `'production'` at `services/xstockstrat-config/migrations/002_config_environment.up.sql:71`.
   The staging and base seed is `'300'` at `001_config_tables.up.sql:69`. Since `029_heal_config_keys_full_dotted.up.sql:24-25`,
   the live key is the dotted `analysis.backtest.max_duration_seconds`.
