@@ -299,3 +299,55 @@ Mirrored from design.md § Open Risks.
 - [ ] The ledger real-impl tests depend on 252 (target: merge-order check at `/sdd-spec`).
 - [ ] The proto-loader `longs` option is unverified. The BigInt helper must accept number and string (target: step
   1).
+
+## Session 2026-10-22 — sdd-spec
+
+- Generated implementation-spec.md with 9 steps. Status → implementation-ready.
+- Restated, per operator sign-offs (a) and (b) at the design gate r2:
+  - product-spec FR-1 and FR-7 now use the late-commit delivery wording, and FR-5 pass 2 now keeps the largest
+    cumulative `filled_qty` (strict `>`, first seen wins a tie);
+  - FR-6 records that it is met through UNAVAILABLE only;
+  - FR-4 drops the stray `trading.go:2091`/`:3221` cites (recon.md fact correction);
+  - acceptance AC-1 gets a qualifying comment, the last AC-5 line is reworded, and the AC-5 harness comment becomes
+    "Evidence: unit FIFO interleave test (CI) + one recorded real-TimescaleDB run (context.md); not a CI job."
+    No `@AC` ID changed (C-15 append-only).
+- Key codebase findings:
+  - **263 composition.** 263 (`implementation-ready` on `origin/feature/fix-edge-owner-scope`) adds
+    `QueryEventsRequest.owner_only = 7` and an opt-in `if (req.ownerOnly) conditions.push('user_id = $n')` right after
+    the `fromSequence` condition (263 implementation-spec Step 3). 257's keyset `sequence > $n::bigint` is appended
+    after it. 257 adds **no** proto field, so it takes no field number.
+    - Portfolio `GetPnL` never sets `ownerOnly` (263 Step 3 evidence), so the open risk "263's owner scope may drop
+      pre-003 fills" does not reach `GetPnL`. Closed for this feature.
+  - **ts-proto longs.** `packages/proto/buf.gen.yaml:24-31` passes no `forceLong`, so int64 fields decode as ts-proto's
+    default `number`. pg BIGINT columns still arrive as strings (no `setTypeParser` in ledger `src`). `toSeq` accepts
+    number, string and bigint. This open risk is resolved by evidence.
+  - **248 overlap.** 248 Step 7 rewrites the four `maxSeq` sites with `Number(...)`, and 248 Step 11 claims `LEDGER-8`.
+    257 Step 4 replaces `Number(...)` with `toSeq` if 248 lands first. 257 Step 9 takes the next free `LEDGER-N`.
+    248 Step 9 adds a real-TimescaleDB `test:db` tier. The design rejected a CI DB job for AC-5, so Step 8 stays a
+    manual run (it may reuse 248's local harness if present).
+  - **252 is a hard prerequisite.** Without its compile-then-test runner, Steps 3 and 5 pass vacuously
+    (fails.md:1941).
+  - **Pass-2 comparison is by magnitude** (`math.Abs(FilledQty)`). Trading emits `"filled_qty": order.FilledQty` and
+    `"qty": order.Qty` with no `side` key (`services/xstockstrat-trading/internal/service/trading.go:1805-1824`), so
+    real payloads are non-negative and the magnitude rule equals the design's "largest `FilledQty`". The AC-3/AC-6
+    arithmetic (250.00 / 501.00) needs sell-signed qty in fixtures (`pnl.Fill` is signed,
+    `packages/proto/pnl/pnl.go:23-26`), and a plain `>` on −1…−501 would keep −1.
+    - This is recorded as a spec-level clarification of sign-off (b), not a design change. Flag it at
+      `/sdd-review impl-spec`.
+  - **Adjacent observation, out of scope and not filed.** The `order.filled`/`order.partially_filled` payloads carry
+    no side, while portfolio folds `Qty` as signed. Whether trading's `order.Qty` is signed for sells was **not
+    verified**. If it is unsigned, realized P&L from ledger fills is wrong independently of D-46. Worth a separate
+    `/sdd-qa defect` check before 251 lands.
+  - **Merge-order rows not yet written.** This run was limited to the feature directory, so the `merge-order.md` rows
+    are Step 1 of the spec and not written at spec time. The rows are 257 after 263, 257 after 252, 251 after 257,
+    plus the rolling-deploy note. Product-spec § Fix Scope asked for them "at /sdd-spec time". Write them via Step 1
+    before the integration PR, or earlier at `/sdd-review impl-spec` if the operator prefers.
+- Files modified: product-spec.md, acceptance.feature, implementation-spec.md (new), status.md, feature.md, context.md.
+
+Open Threads (delta):
+- [x] The proto-loader `longs` option is unverified. Resolved: ts-proto default `number` (`buf.gen.yaml:24-31`), and
+  `toSeq` accepts all three types.
+- [x] 263's owner scope may drop pre-003 fills. Not applicable to `GetPnL`, which never sets `ownerOnly`.
+- [ ] The ledger real-impl tests depend on 252. It is now a hard rebase precondition and a Step 1 merge-order row.
+- [ ] `merge-order.md` rows deferred to Step 1 (see above).
+- [ ] Pass-2 magnitude comparison: confirm at `/sdd-review impl-spec`.
