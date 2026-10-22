@@ -507,3 +507,31 @@ The full /sdd-design debate is halted at its approval gate after round 2 (gate p
 - [ ] **p99 gate:** telemetry unavailable; risk accepted under the approved r2 clause. Target: operator confirm or veto at `/sdd-review impl-spec` / `/sdd-execute`.
 - [ ] **Step 3 AC-5:** confirm the `x-trace-id` sentinel reaches the mock. Otherwise use the `categories` fallback and record a Deviation. Target: `/sdd-execute` Step 3.
 - [ ] **Step 10 teardown:** run `/context-forge:context-constitution refresh` scoped to `services/xstockstrat-ui/`, or do a manual reconciliation recorded in the PR body. Target: `/sdd-execute` Step 10.
+
+## Session 2026-10-22 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 7 warnings; overlap WARN (file-level only). Advisory, so the lifecycle is unchanged (`implementation-ready`).
+- Addressed in implementation-spec.md:
+  - Step 10 now names the full paths `services/xstockstrat-ui/CLAUDE.md:235` and `services/xstockstrat-ui/docs/context-constitution.md:40`, and says the edit is **not** to the root `docs/context-constitution.md` (re-verified: the gotcha is at the UI-service file's `:40`).
+  - Step 2 verification now requires the preservation-guard mutation RED to be recorded in context.md for vitest (a)/(c)/(d) and the Playwright AC-6 case (C-08/P-06). Step 3 already required the same for AC-5.
+- No change needed:
+  - Step 8/9 security surface: the 8 exact paths and the agent-health 401 are already verified in the spec, and Security is a reviewer on both steps.
+  - Sibling 273 deadline consistency: 273 records any divergence (advisory).
+- Unresolved ⚠ carried into execution:
+  - Design item 7 p99 gate: not run (no telemetry). The risk is accepted under the r2 clause; it is unverified for the order mutations placeOrder/replaceOrder/cancelOrder/confirmOrder (a 30s client 504 can follow a server-side commit; no UI copy, by C-18). Operator must confirm or veto at the first `/sdd-execute` confirmation (C-11, P-03). — [ ] unaddressed
+  - Step 4: the identity RefreshToken 10s bound is not telemetry-backed. A late commit after single-use rotation forces a logout, which fails closed. Operator confirm or veto with the p99 item. — [ ] unaddressed
+  - Steps 2/3/5 CI wall-clock: the real-socket and e2e cases wait ~30–35s each (AC-1 black hole, AC-5 hold) and ~10s (AC-2). They also run once per Playwright project (`chromium`, plus `firefox` when enabled, `playwright.config.ts:98-122`). Decide at execute whether to keep them, limit the browserless `transport-deadline.spec.ts` to one project, or isolate them in a slow project. That is a CI-shape decision, so the spec does not change it. — [ ] unaddressed
+  - Steps 2/3: the mutation-check RED evidence must actually be recorded in this file at execute time. — [ ] unaddressed
+- Overlap findings (WARN, textual rebase risk only; no config, proto or migration collision; no merge-order row needed):
+  - `e2e/fixtures/INVENTORY.md` (Steps 3/5) vs 251, 215, 249.
+  - `e2e/mock-backend.ts` (Steps 3/5) vs 215 (listOpportunities region) and 251 (queryEvents region): different regions.
+  - `src/lib/traderBff.ts` (Step 1) vs 251 (queryEvents).
+  - `src/lib/insightsBff.ts` (Steps 1/6) vs 241: reconcile on the second merge.
+  - Peers 263, 272 and 273 branches were not inspected by the overlap agent, so overlap with them is unverified (273 is agent-only and 272 is analysis-only, so no UI file overlap is expected).
+
+### Open Threads (sdd-review impl-spec)
+
+- [ ] **p99 / order-mutation 504 risk + RefreshToken 10s:** operator confirm or veto. Target: first `/sdd-execute` confirmation.
+- [ ] **Long wall-clock e2e (Steps 2/3/5):** keep as is, run on one project only, or move to a slow project. Target: `/sdd-execute` Step 2.
+- [ ] **Mutation RED evidence (Steps 2/3):** record it here. Target: `/sdd-execute` Steps 2–3.
+- [ ] **Rebase on peer merges:** INVENTORY.md, mock-backend.ts, traderBff.ts, insightsBff.ts (251/215/249/241). Target: integration PR.
