@@ -694,3 +694,13 @@ Each item names the step where it is resolved.
 - [ ] Optional: split Step 13 at instruction 4 if the execute checkpoint prefers fewer than 6 files per step.
 - [ ] Proto gate for Portfolio 17 and Position 26 (carried over). Target: Step 1.
 - Next: `/sdd-execute fix-offline-book-consistency`.
+
+## Session 2026-10-22 (operator decisions — execute-checkpoint items)
+
+- **Deregistration retry, option (a): ACCEPTED.** The bounded retry covers broker accounts as well as offline ones.
+  This is a recorded scope extension beyond offline-only (C-16/P-03 sign-off); no offline-set lookup is added.
+- **Step 5 `appendLedgerEvent` retry: ACCEPTED for all callers.** `emitLedgerEvent` stays the void wrapper, so the
+  26 other trading emitters also get the one bounded `Unavailable` retry with a per-emit idempotency key. The
+  no-retry alternative is rejected.
+- **Product-spec drift resolved:** Fix Scope now records the two additive proto markers, and OQ-1/OQ-2 are marked
+  resolved with the design decisions.
