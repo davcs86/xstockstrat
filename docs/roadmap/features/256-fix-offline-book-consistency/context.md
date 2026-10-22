@@ -584,3 +584,62 @@ Each item names the step where it is resolved.
 - [ ] `useInvalidatingMutation` `onSettled` forwarding: the orders list is stale after an FR-6 UNAVAILABLE. A
   recorded UX gap. Target: the UI step.
 - Next: `/sdd-spec fix-offline-book-consistency`.
+
+## Session 2026-10-22 — sdd-spec
+
+- Generated implementation-spec.md with 16 steps. Status → implementation-ready.
+  - Order: proto (1) → proto-gen (2) → trading D-49 (3–4) → trading D-63 (5–6) → portfolio D-47 (7–8) →
+    portfolio D-48 (9–12) → UI (13–14) → agent test (15) → docs (16).
+  - Every `@AC-*` is covered (Scenario Coverage table in the spec). Every service step has a paired test step.
+- acceptance.feature edits (C-15, design "AC-3 tightened at /sdd-spec"):
+  - `@AC-3`'s Then is tightened to the marker outcome: the call succeeds and carries `offline_state_unavailable`.
+  - New scenarios `@AC-8` (per-row decode isolation), `@AC-9` (transient error never parks) and `@AC-10`
+    (un-confirm with `filled_qty 0` stays valid). IDs are append-only; none renumbered.
+- Key codebase findings:
+  - The proto tags are re-verified free. Portfolio ends at `fees_lifetime = 16` (`portfolio.proto:67`) and
+    Position at `mark_as_of = 25` (`:118`). No `reserved` statement.
+  - `DeleteOfflineRealized` uses `r.pool.Exec` (`portfolio_repo.go:535`), so a pgxmock repo would nil-panic.
+    Step 7 moves it onto `r.db` (prod uses the same pool, `:45`), so the AC-2 retry is testable.
+  - `TestAccountPnL_OfflineStatesErrorIsNonFatal` (`offline_account_pnl_test.go:230`) asserts the superseded
+    feature-240 behaviour. Step 12 rewrites it as the GetPortfolio AC-3 marker test.
+  - `recordingLedger` (`trading_offline_test.go:60`) cannot fail today. Step 6 adds a `failFn` hook.
+  - `emitLedgerEvent` has 27 call sites. Only `:1067` moves to the new `appendLedgerEvent`. `emitLedgerEvent`
+    becomes its void wrapper.
+  - The SnapshotOfflinePositions response already sets `Warnings: warnings` (`trading.go:1233`).
+  - The consumer grep found one latent marker consumer outside `/trader`:
+    `src/components/insights/AccountPortfolioSelector.tsx`. It is gated in Step 13.
+  - `filled_qty` and `filled_avg_price` are `NUMERIC(18,8)`. The dev-smoke NaN query uses `'NaN'::numeric` on
+    `broker_type = 3`.
+- Decisions (spec-time; flagged for confirmation at `/sdd-review impl-spec`):
+  - **Deregistration scope: option (a).** Retry applies to every `account.deregistered`. The payload carries no
+    account type (`portfolio_service.go:1120-1123`), and both deletes are idempotent. Option (b) would add an
+    offline-set query that can itself fail. This is a recorded scope extension beyond the offline-only
+    Trading-Domain Scope. If the operator prefers (b), re-spec Step 7.
+  - FR-6 constants: `appendMaxAttempts = 2`, `appendRetryBackoff = 100ms`, `offlineRecomputeQueryBudget = 5s`,
+    `offlineRecomputeTimeout = 30s`. Rule: 30s > 2×10s + 0.1s + 5s. Step 6 tests it.
+  - ConfirmOrder FR-6 error text: UNAVAILABLE "positions not published; re-confirm to retry". Snapshot adds the
+    Warning "positions not published; re-snapshot to retry".
+  - FR-5 error texts: "filled_qty must be a finite number >= 0" and "filled_avg_price must be a finite number
+    >= 0 when filling". "fees must be >= 0" is unchanged.
+  - Error classification across an `errors.Join`: transient wins over deterministic, which wins over
+    unclassified.
+  - The `useInvalidatingMutation` `onSettled` gap is accepted. No option is added to the shared hook (C-18
+    YAGNI). After an FR-6 UNAVAILABLE the orders list may be stale until the next refetch or the re-confirm.
+- No handler UNAVAILABLE mapping, no migration, no config key and no env var (design § Spine).
+
+## Open Threads
+
+Each item names the step where it is resolved.
+
+- [ ] Proto gate (C-04/C-09) for Portfolio 17 and Position 26. If refused, stop and re-spec: the fallback needs
+  a C-16 CHANGE sign-off. Target: Step 1.
+- [x] Latent marker consumers: the consumer grep is done at spec time. Gating is Step 13, Playwright is Step 14.
+- [ ] SQLSTATE boundary table tests. Target: Step 8.
+- [ ] Boot-replay self-heal, head-of-line blocking and the log-only park, documented. Target: Step 16.
+- [ ] A park is Error-log only, with no metric. Target: launch verification (dev-smoke log grep).
+- [x] The `recomputeTimeout` value is fixed (30s). The rule test is Step 6.
+- [ ] Confirmed NaN rows. Target: the dev-smoke detection query plus re-confirm before launch.
+- [ ] Sweep of the tests that relied on non-fatal reads. Target: Step 12.
+- [x] Broker-deregistration scope: option (a) chosen at /sdd-spec (above). Confirm at impl-spec review.
+- [x] The `onSettled` UX gap is accepted and recorded (above).
+- Next: `/sdd-review fix-offline-book-consistency impl-spec`.
