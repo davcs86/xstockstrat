@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-21-ingest-poller-backfill-defect.md`
 **Severity**: SEV-2
 **Created**: 2026-10-21
-**Last Updated**: 2026-10-21
+**Last Updated**: 2026-10-22
 
 ---
 
@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-10-21 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-21-ingest-poller-backfill-defect.md` (debt-radar D-09, D-34, D-42, D-59) |
+| 2026-10-22 | `draft` → `spec-ready` | /sdd-review | Product spec approved (6 warnings; overlap WARN vs 244/259) |
 
 ---
 
@@ -47,4 +48,4 @@ deadline), and ingests nothing when the result's first list key is not the signa
 
 ## Next Action
 
-`/sdd-design fix-ingest-poller-backfill` — recommended design depth: full (2 affected services; config is read-only — operator may downgrade to quick); see context.md
+`/sdd-design fix-ingest-poller-backfill` — product spec approved (spec-ready); recommended design depth: full (2 affected services; config is read-only — operator may downgrade to quick); see context.md
