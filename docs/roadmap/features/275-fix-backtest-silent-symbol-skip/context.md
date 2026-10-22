@@ -270,3 +270,192 @@ unchanged (spec-ready), per the grilling protocol. The resume state is in the `s
   "floor_breaches": []
 }
 ```
+
+## Session 2026-10-22 — sdd-batch design gate (round 3)
+
+Full debate halted at the approval gate after round 3 (gate policy: halt). design.md is not written and status.md is
+unchanged (spec-ready), per the grilling protocol. The resume state is in the `sdd-batch-design-state` block below.
+
+## Open Threads
+
+- **Approach (round 3).** Same core as round 2: fix the silent skip and the false OK in the `RunBacktest` symbol loop
+  (`services/xstockstrat-analysis/app/handlers/servicer.py`), landing after 272 and 273, with every cited line
+  re-anchored on the merged state of 272, 273 and 215 before /sdd-spec (272 renames the body to `_run_backtest`).
+  - Proto + UI in one commit: `NO_TRADE_REASON_EVALUATION_FAILED = 6` (next free value if taken). The proto comment
+    now draws the 6-vs-4 line by mechanism: 6 = upstream RPC error (including an indicators PERMISSION_DENIED on an
+    admin-run foreign formula) or unexpected exception; 4 = errors the evaluator converts to `FormulaExecutionError`
+    (`evaluator.py:260-263`, owner-unreadable NOT_FOUND) and formula contract errors. Stubs + `NO_TRADE_MESSAGE` key.
+  - Loop: keep 272's `except _BarFetchError: raise`, then one inline `except Exception as e:` arm (code name, pop the
+    buffered intent, EVALUATION_FAILED row, `eval_failures`, server WARN with the trace id read via
+    `dict(propagation_meta).get("x-trace-id", "")` so a missing trace id cannot raise inside the arm; `exc_info=True`
+    for non-RpcError). No new context minted.
+  - Gate: `eval_failures` joins only the `:1238` INSUFFICIENT_DATA chain; `:1320` unchanged. Warnings via the
+    `EVAL_FAILED_WARNING` constant (kept only because tests import it); `e.details()` never reaches the client.
+  - Tests RED before GREEN: AC-1..AC-5 (AC-6 after 272), plus (a) per-symbol timeout row, (a') CancelledError
+    propagation, (b) mixed refused + failed recompute, (c) trace id on WARN incl. a no-trace-id variant and the
+    completed event, (d) PORTFOLIO intent pop, (e) `_BarFetchError` passes the broad arm, (f) admin PERMISSION_DENIED
+    -> EVALUATION_FAILED vs non-admin NOT_FOUND -> FORMULA_ERROR.
+  - UI: mock-backend run + fixture + INVENTORY row + a Playwright spec asserting the new message renders
+    (`page.tsx:569-574`) and the warning shows in `backtest-warnings`. C-16 verdict PRESERVE for @AC-11 @feature-151.
+  - Same-PR docs: strat-lab SKILL.md, output-handling.md, self-grill.md §6, verification.md, and now
+    reference/backfill.md, carrying the three-way discriminator (empty coverage_gaps + EVALUATION_FAILED = never
+    backfill; UNAVAILABLE/DEADLINE_EXCEEDED/RESOURCE_EXHAUSTED = rerun later; PERMISSION_DENIED/NOT_FOUND/exception
+    class name = report it); agent `run_backtest` docstring (no agent code change); mcp-tools.md; analysis CLAUDE.md
+    "null score"; Teardown.
+  - design.md must record: the formula-refusal asymmetry with option (b) recommended; handler order preserving @AC-8
+    and @AC-30; the gate touching only `:1238`; the intent pop as an intentional @AC-5 @feature-150 correction; that
+    INSUFFICIENT_DATA runs persist no detail (rows lost on restart / Past-Runs reload); the exception inventory.
+- **Strongest open objection (non-blocking).** The formula-refusal asymmetry (C-18 / P-03 / C-11, confirmed on the
+  tree): indicators `servicer.py:243-253` returns NOT_FOUND to a non-admin and PERMISSION_DENIED to an admin for the
+  same unrunnable formula, and the evaluator maps only NOT_FOUND, so a non-admin run reports FORMULA_ERROR (4) with no
+  warning while an admin run reports EVALUATION_FAILED (6) with a PERMISSION_DENIED warning. Both end in
+  INSUFFICIENT_DATA, so neither is a false OK. Recommended option (b): record and pin, do not unify. Option (a),
+  mapping PERMISSION_DENIED in `_execute_formula`, would EXTEND @AC-30 @feature-224 without operator sanction. Stays
+  open until design.md records the chosen option. Also carried, non-blocking: the backfill discriminator in
+  SKILL.md/backfill.md; the @AC-5 @feature-150 CHANGE; the Playwright reachability line; and the risk that the broad
+  arm swallows a future sentinel (grep-checklist step + test (e) are the guards).
+- **Floor status.** No Floor breaches (no migration, config key or pool change). Adversary verdict SOUND.
+- **@AC changes not covered by an operator decision.** @AC-5 @feature-150 is a CHANGE (popping the buffered intent
+  removes a failed symbol from PORTFOLIO output) with no explicit operator sanction; it is recorded as an intentional
+  correction and tested by (d), and needs operator confirmation if a reviewer reads it as beyond scope. @AC-11
+  @feature-215, @AC-30 @feature-224, @AC-8 and @AC-11 @feature-151 are PRESERVE (pinned by tests or verified by the
+  C-16 read). AC-1..AC-4 (CHANGE), AC-5 (EXTEND) and AC-6 (PRESERVE) are covered by the 2026-10-22 triage decision
+  and the "keep 272's re-raise" directive.
+- **Next.** Operator decides option (a) vs (b) for the refusal asymmetry and confirms the @AC-5 @feature-150
+  correction at the gate; the next /sdd-batch run resumes from the block below and writes design.md.
+
+```sdd-batch-design-state
+{
+  "round": 3,
+  "synth": {
+    "approach": "Fix the silent skip and the false OK status in the RunBacktest symbol loop in services/xstockstrat-analysis/app/handlers/servicer.py. Before /sdd-spec writes steps, re-anchor every cited line on the merged state of 272, 273 and 215. 272 renames the body to _run_backtest.\n\n(1) Proto and UI, one commit (fails.md:81-83).\n- Add NO_TRADE_REASON_EVALUATION_FAILED = 6 to NoTradeReason in packages/proto/analysis/v1/analysis.proto:196-203. If 6 is taken by then, use the next free value.\n- The proto comment draws the line by mechanism, not by topic (adversary objection 1): \"symbol not evaluated: an upstream RPC error (including an indicators PERMISSION_DENIED on an admin-run foreign formula) or an unexpected exception during evaluation; FORMULA_ERROR (4) is reserved for errors the evaluator converts to FormulaExecutionError (evaluator.py:260-263, owner-unreadable NOT_FOUND) and formula contract errors.\"\n- Run ./scripts/buf-gen.sh and commit the stubs.\n- In the same commit, add the NO_TRADE_MESSAGE key in BacktestDiagnostics.tsx:41-52. The copy says the symbol was not evaluated and points to the run warnings. It must not start with \"No trades —\".\n\n(2) Loop handler. Replace servicer.py:1127-1132 with `except _BarFetchError: raise` (keeping 272's re-raise), then one `except Exception as e:` arm. There is no loop-level `except TimeoutError`. The arm, written inline:\n- sets `code = e.code().name` when e is a grpc.RpcError with a callable code(), otherwise `type(e).__name__`;\n- calls `symbol_intents.pop(symbol, None)`, because :1046 buffers the intent before _compute_metrics runs at :1050;\n- appends a SymbolDiagnostics row following the :1112-1126 template (bars=[], reason EVALUATION_FAILED, bars_total=0, warmup_bars=0);\n- appends (symbol, code) to an eval_failures list declared beside formula_errors at :905;\n- logs a server WARN with symbol, request.strategy_id, code, the full e, and `dict(propagation_meta).get(\"x-trace-id\", \"\")`. Use .get, never subscripting (adversary objection 4): a KeyError inside the except arm would escape the loop. Add exc_info=True when e is not an RpcError. No new context is minted (operator C-03 directive).\n\n(3) Status gate.\n- Add eval_failures to the INSUFFICIENT_DATA or-chain at :1238 only.\n- Leave the :1320 recompute condition as `status == OK or fund_refusals > 0`.\n- Because status is no longer OK, the score is null and the detail and evidence writes are skipped (:1279-1299, :1313-1314).\n\n(4) Warnings.\n- After the fund_unknown block (:1263-1266), add `EVAL_FAILED_WARNING.format(symbol=s, code=c)` to result.warnings for each failure.\n- EVAL_FAILED_WARNING = \"backtest symbol {symbol} not evaluated: {code}\" is a module constant next to _PROPAGATED_HEADERS (:350). It stays a constant only because the tests import it (adversary objection 3 is satisfied by step 5). If /sdd-spec drops the test import, inline it as an f-string to match the fund_unknown sibling.\n- The client text never includes e.details(), because the indicators PERMISSION_DENIED detail would leak the foreign author.\n\n(5) Analysis tests, RED before GREEN.\n- AC-1 to AC-5, and AC-6 once 272 has landed.\n- (a) A per-symbol TimeoutError becomes an EVALUATION_FAILED row.\n- (a') CancelledError propagates out of _run_backtest.\n- (b) A run with both fund-refused and eval-failed symbols still recomputes, pinning @AC-11 @feature-215.\n- (c) The WARN record carries the trace id. A variant with no x-trace-id in the inbound metadata must still produce the row and must not raise. The analysis.backtest.completed AppendEvent receives metadata=propagation_meta on an all-failed run (already true at :1344-1352; the test only pins it).\n- (d) In PORTFOLIO mode, a raise from _compute_metrics after the intent was buffered leaves the failed symbol out of the _simulate_portfolio input and out of the portfolio curve.\n- (e) _BarFetchError still propagates past the broad arm (the AC-6 pin, plus the review-visibility compromise for the single-arm design).\n- (f) An admin caller whose ExecuteFormula gets PERMISSION_DENIED produces an EVALUATION_FAILED row with a `PERMISSION_DENIED` warning. A non-admin NOT_FOUND still produces FORMULA_ERROR, which pins @AC-30 @feature-224 and the recorded asymmetry.\n- Tests reference EVAL_FAILED_WARNING, never a literal. Reuse make_servicer/_owned_ctx, _diag/_bars/_squeeze, the AioRpcError stub, TestFormulaErrorSurfacing and the test_warmup.py:260 raises pattern.\n\n(6) UI, with reachability (C-10, C-12, C-14, insights.md:165-175).\n- Add an INSUFFICIENT_DATA run to e2e/mock-backend.ts with an empty coverage_gaps and one EVALUATION_FAILED row, following the :1064-1086 pattern.\n- Put its fixture in e2e/fixtures/ with an INVENTORY.md catalog row, following the :61-62 pattern.\n- Clone a Playwright spec from e2e/insights/backtest-coverage.spec.ts:97. It must assert that the new NO_TRADE_MESSAGE text renders through the page.tsx:569-574 path, and that data-testid=\"backtest-warnings\" (page.tsx:509-516) shows the warning. A passing tsc is not enough.\n- C-16 verdict for services/xstockstrat-ui/acceptance/backtest-next-bar-fill.feature (@AC-11 @feature-151): PRESERVE. The new rows have bars=[], so they add no per-bar rendering. Record this in design.md.\n\n(7) Docs, same PR (strat-lab same-PR rule, fails.md:307-309).\n- plugins/strat-lab/skills/backtest/SKILL.md:164-173 and reference/output-handling.md:21-26.\n- reference/self-grill.md:33-39 (§6): reason 6 and the `backtest symbol <SYM> not evaluated: <CODE>` warning.\n- reference/verification.md:26-33: correct the silent non-evaluation line.\n- reference/backfill.md (new, adversary objection 2). Today it only says \"a backtest never errors for missing history\", and SKILL.md:99-100 teaches \"INSUFFICIENT_DATA → trigger_backfill → re-run\". backfill.md must carry the discriminator.\n- The discriminator for SKILL.md and backfill.md:\n  - INSUFFICIENT_DATA with an empty coverage_gaps and EVALUATION_FAILED rows means never backfill.\n  - A warning code of UNAVAILABLE, DEADLINE_EXCEEDED or RESOURCE_EXHAUSTED means rerun later.\n  - A warning code of PERMISSION_DENIED or NOT_FOUND, or a Python exception class name (for example ValueError or AttributeError), means report it: a platform defect or ownership problem, not a data gap.\n- services/xstockstrat-agent/app/tools.py:739-778 docstring. :749-750 becomes: \"An INSUFFICIENT_DATA run gets no attachment. Its coverage gaps, warnings and per-symbol diagnostics are inline. An all-failed run has coverage_gaps: [] but non-empty diagnostics with NO_TRADE_REASON_EVALUATION_FAILED.\" This is grounded in backtest_view.py:73-74, :82-85 and :97-100. There is no agent code change.\n- docs/runbooks/mcp-tools.md:308-310.\n- services/xstockstrat-analysis/CLAUDE.md § Backtest Auto-Scoring: change \"0 score\" to \"null score\".\n- Record the formula-refusal asymmetry (see (8)) in SKILL.md and self-grill §6.\n- Run the Teardown (context-forge refresh, or a manual reconciliation recorded in the PR body, per fails.md:670).\n\n(8) design.md must record these decisions.\n- (i) The formula-refusal asymmetry. Option (b) is the mediator's recommendation:\n  - Indicators servicer.py:243-253 returns NOT_FOUND to a non-admin owner and PERMISSION_DENIED to an admin for a formula the owner cannot run. evaluator.py:260-263 converts only NOT_FOUND to FormulaExecutionError.\n  - So a non-admin owner's run reports FORMULA_ERROR (4) with no warning (pre-existing and unchanged). An admin's run of the same strategy reports EVALUATION_FAILED (6) with a `PERMISSION_DENIED` warning. Both runs are INSUFFICIENT_DATA, so neither is a false OK.\n  - Option (a), mapping PERMISSION_DENIED in _execute_formula, would EXTEND @AC-30 @feature-224 and add an FR-3 warning on the FORMULA_ERROR path. No operator decision sanctions that, and it reaches toward the out-of-scope root trigger. Pick (b) unless the operator chooses (a).\n- (ii) Handler order alone preserves @AC-8 and @AC-30. _FundamentalsUnknown, FormulaExecutionError, _InsufficientData and _FundamentalsUnavailable are all caught above the arm (:1065-1126).\n- (iii) The gate changes only :1238. :1320 is unchanged, so @AC-11 @feature-215 is preserved.\n- (iv) Popping the intent changes PORTFOLIO output for a symbol whose _compute_metrics raises. Record this as an intentional correction against @AC-5 @feature-150.\n- (v) INSUFFICIENT_DATA runs persist no detail (:1313-1314). The per-symbol rows live only in the in-memory _backtests (:1267-1268) and are lost on restart or a Past-Runs reload. Scope the product-spec's run-history claim to say so.\n- (vi) The inventory of exceptions reachable from the loop (adversary-verified). Only _BarFetchError and CancelledError must pass through today. /sdd-spec keeps a checklist step that re-greps the merged tree.\n\nLands after 272 and 273.",
+    "open_objections": [
+      {
+        "text": "C-18 / P-03 / C-11 (adversary r3 objection 1, confirmed on the tree). One fact, 'the owner cannot run this formula', gets two different reasons depending on the caller's scope. Indicators servicer.py:243-253 returns NOT_FOUND to a non-admin and PERMISSION_DENIED to an admin. evaluator.py:260-263 maps only NOT_FOUND, so a non-admin run reports FORMULA_ERROR (4) with no warning, while the admin run (the staging trigger) reports EVALUATION_FAILED (6) with a PERMISSION_DENIED warning. The synthesis recommends option (b): record the asymmetry in design.md and the skill docs, word the proto comment by mechanism (FORMULA_ERROR = errors the evaluator converts to FormulaExecutionError), and pin both paths with test (f). Option (a), mapping PERMISSION_DENIED in _execute_formula, would EXTEND @AC-30 @feature-224 without operator sanction. This stays open until design.md records the chosen option.",
+        "blocking": false
+      },
+      {
+        "text": "PLAT-N1 / consumer contract (adversary r3 objection 2). SKILL.md:99-100 teaches that INSUFFICIENT_DATA means trigger_backfill and re-run, and reference/backfill.md currently says 'a backtest never errors for missing history'. The docs step must add the three-way discriminator to SKILL.md:164-173 and reference/backfill.md: empty coverage_gaps plus EVALUATION_FAILED means never backfill; a transient code (UNAVAILABLE, DEADLINE_EXCEEDED, RESOURCE_EXHAUSTED) means rerun; PERMISSION_DENIED, NOT_FOUND or an exception class name means report it. backfill.md is now in the touchpoints, and /sdd-spec must carry it.",
+        "blocking": false
+      },
+      {
+        "text": "C-16 (adversary r3 objection 5). Popping the intent changes PORTFOLIO-mode output when a symbol's _compute_metrics raises after its intent was buffered at :1046. Record this against @AC-5 @feature-150 as an intentional CHANGE (a correction), not PRESERVE. Test (d) must assert that the portfolio curve excludes the failed symbol. No operator decision explicitly sanctions this change to @AC-5 @feature-150. If the reviewer reads it as beyond 'fix the silent skip', the operator must confirm.",
+        "blocking": false
+      },
+      {
+        "text": "C-14 / insights.md:165-175 (adversary r3 objection 7). The UI step must include a Playwright assertion that the new NO_TRADE_MESSAGE text actually renders for an INSUFFICIENT_DATA run with EVALUATION_FAILED rows (page.tsx:569-574 path). A passing tsc is not enough. This is adopted in approach (6), and /sdd-spec must write it as a verification line.",
+        "blocking": false
+      },
+      {
+        "text": "Strongest risk carried forward. A future deliberate re-raise inside the loop, for example a new sentinel from 215 or 272, would be swallowed by the broad `except Exception` arm. /sdd-spec must keep a checklist step that re-greps every raise and custom exception class reachable from the loop body on the merged tree. Test (e) pins _BarFetchError passing through, so the single-arm design stays visible in review.",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "AC-1",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "AC-2",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "AC-3",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "AC-4",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "AC-5",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "AC-6",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "AC-11@feature-215",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "AC-30@feature-224",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "AC-8",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "AC-5@feature-150",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "AC-11@feature-151",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "Reuse NO_TRADE_REASON_FORMULA_ERROR = 4. The meaning is wrong for GetBars and ComputeIndicator RPC failures and for generic exceptions (analysis.proto:196-203), and it blurs the skill's formula-error signal.",
+      "Two new enum values (RPC_FAILED and UNEXPECTED_ERROR). This is YAGNI: the warning code already tells them apart, and each value costs another exhaustive UI map key.",
+      "Map every error inside _execute_formula (evaluator.py:254-266). This does not cover GetBars, ComputeIndicator or generic exceptions (FR-1/FR-2), and it puts @AC-30 @feature-224 at risk.",
+      "Map only PERMISSION_DENIED to FormulaExecutionError in _execute_formula (adversary fork 1a). This would give one reason per root cause, but it EXTENDs @AC-30 @feature-224, needs a new FR-3 warning on the FORMULA_ERROR path, and has no operator sanction. Option (b), recording the asymmetry, is cheaper and in scope. The operator may still choose (a).",
+      "Let unexpected exceptions propagate as INTERNAL. This contradicts FR-2/AC-3, and one bad symbol would kill a multi-symbol run.",
+      "Fail the whole RPC (FAILED_PRECONDITION or INTERNAL) on an all-failed run, or only when every failure is a non-RpcError exception. This contradicts FR-2, FR-4 and FR-6, loses the run-history row, and adds a third outcome. The docs discriminator separates platform defects at lower cost.",
+      "A loop-level `except TimeoutError: raise`. It is redundant for 272's deadline, which arrives as CancelledError, and harmful for per-symbol timeouts, which it would escalate to a run-level UNKNOWN.",
+      "Two arms (`except grpc.RpcError` plus `except Exception`), or a _record_eval_failure helper. This duplicates the row, counter and warning bodies (C-18 DRY). Instead, one arm with an isinstance check, plus test (e) pinning _BarFetchError passing through, keeps the arm visible in review.",
+      "Add eval_failures to the :1320 recompute condition. This would CHANGE @AC-11 @feature-215 and is unnecessary, because the status gate already handles the score and the writes.",
+      "Put e.details() in the client warning. It leaks the foreign formula author from the indicators PERMISSION_DENIED detail; the full detail goes to the server log only.",
+      "Read the trace id as `dict(propagation_meta)[\"x-trace-id\"]`. A KeyError inside the except arm, when the caller sent no trace id, would escape the loop and turn a diagnosable symbol failure into a whole-RPC error. Use .get(..., \"\")."
+    ],
+    "open_risks": [
+      "Merge-order drift. 272, 273 and 215 rewrite the same RunBacktest lines. Every cited path:line (servicer.py:350, :806-810, :905, :928, :1046-1051, :1065-1132, :1238, :1263-1266, :1320, :1344-1352) must be re-anchored, and enum value 6 re-checked for a collision.",
+      "If 272's deadline lands as a wait_for inside the loop rather than an asyncio.timeout wrapped around _run_backtest, the decision not to re-raise TimeoutError must be revisited.",
+      "272 error taxonomy. A GetBars UNAVAILABLE must stay a raw grpc.RpcError, not wrapped in _BarFetchError, for AC-2 and AC-5. Re-grep 272's landed _fetch_bars_paged.",
+      "The broad `except Exception` arm. A future sentinel exception would be silently turned into a row unless it is listed above the arm. The grep checklist step and test (e) are the guards.",
+      "The formula-refusal asymmetry. Admin and non-admin runs of the same legacy-author strategy surface different reasons (EVALUATION_FAILED: PERMISSION_DENIED vs FORMULA_ERROR with no warning). This is documented, not unified, unless the operator picks option (a).",
+      "Consumers trained on 'INSUFFICIENT_DATA means backfill' (SKILL.md:99-100) may backfill needlessly on an indicators outage until the discriminator ships in SKILL.md and backfill.md.",
+      "An INSUFFICIENT_DATA run persists no detail, so the per-symbol failure rows are lost on restart or a Past-Runs reload. This is pre-existing and required by FR-5; it must be documented so the product-spec's run-history claim is not overstated.",
+      "A partial run whose only evaluated symbol is flat with zero trades becomes INSUFFICIENT_DATA. Accepted under FR-6.",
+      "Proto and UI coupling. The UI key must land in the same commit as the stubs. The change needs analysis proto-owner review and must pass buf lint, buf breaking and proto-freshness.",
+      "exc_info=True writes one stack trace per failed symbol. Bounded by the size of the universe; accepted.",
+      "Out of scope: the root trigger (formulas stored under the legacy username author) stays tracked in docs/reports/2026-10-22-indicators-legacy-username-formula-authors-defect.md. Admin-run affected backtests now surface as INSUFFICIENT_DATA with PERMISSION_DENIED warnings."
+    ],
+    "constitution_rules_touched": [
+      "C-03",
+      "C-10",
+      "C-11",
+      "C-12",
+      "C-13",
+      "C-14",
+      "C-15",
+      "C-16",
+      "C-18",
+      "P-02",
+      "P-03",
+      "PLAT-N1",
+      "fails.md:118-133",
+      "fails.md:81-83",
+      "fails.md:307-309",
+      "fails.md:670",
+      "insights.md:165-175"
+    ],
+    "rationale": "Round 3 closes the seven round-2 objections with facts checked on the tree:\n- The C-16 read of the UI suite: PRESERVE for @AC-11 @feature-151.\n- The agent docstring, grounded in backtest_view.py:73-100.\n- An enumerated inventory of the exceptions reachable from the loop.\n- Cell hygiene: only the intent needs a pop.\n- The 6-vs-4 proto comment.\n- The client-interpretation guidance.\n- The Playwright reachability spec.\nThese move out of open objections.\n\nThe adversary returned SOUND with no Floor breach: no migration, config key or pool change, and no unsanctioned @AC regression on the core path.\n\nThe mediator checked its new objection 1 on the tree and it holds:\n- Indicators servicer.py:243-253 returns NOT_FOUND to a non-admin and PERMISSION_DENIED to an admin for the same unrunnable formula.\n- evaluator.py:260-263 converts only NOT_FOUND to FormulaExecutionError.\nThe synthesis recommends option (b), recording the asymmetry, over option (a), mapping PERMISSION_DENIED:\n- (a) EXTENDs @AC-30 @feature-224 and the FORMULA_ERROR warning surface, and no operator decision covers that.\n- (b) keeps 275 inside its scope: the silent skip and the false OK.\n- Under (b) both scopes already end in INSUFFICIENT_DATA, so neither path is a false OK.\nThe proto comment is reworded to draw the 6-vs-4 line by mechanism, which removes the contradiction the adversary found. The objection stays open, non-blocking, until design.md records the choice.\n\nObjection 2 was also confirmed: SKILL.md:99-100 teaches backfill on INSUFFICIENT_DATA, and backfill.md has no failure discriminator. backfill.md is added to the docs step with a three-way rule.\n\nObjections 3, 4 and 7 are folded concretely into the approach:\n- 3: the constant stays because tests import it.\n- 4: `.get(\"x-trace-id\", \"\")`, plus a no-trace-id test.\n- 7: the Playwright assertion on the new message.\n\nObjection 5 reclassifies @AC-5 @feature-150 as an intentional CHANGE, recorded and tested. No operator decision explicitly covers it, so it is flagged for confirmation if the reviewer reads it as beyond scope.\n\nThe adversary's two-arm compromise is adopted as test (e), which pins _BarFetchError passing through. It costs no handler duplication.\n\nPer the 2026-10-21 operator directive, the trace id comes from the run-scoped propagation_meta and no context is minted. AC-1 to AC-4 (CHANGE) and AC-5 (EXTEND) are sanctioned by the 2026-10-22 triage decision. AC-6 is preserved by the 'keep 272's re-raise' directive. @AC-8, @AC-11 @feature-215 and @AC-30 @feature-224 are preserved by handler order and gate placement, and pinned by tests.\n\nNothing blocks approval. The design is ready for /sdd-spec once design.md records the option (b) decision and the @AC-5 @feature-150 correction, and every cited line is re-anchored on the merged state of 272, 273 and 215."
+  },
+  "floor_breaches": []
+}
+```
