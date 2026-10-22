@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-21-fundsignal-emit-accounting-defect.md`
 **Severity**: SEV-2
 **Created**: 2026-10-21
-**Last Updated**: 2026-10-21
+**Last Updated**: 2026-10-22
 
 ---
 
@@ -15,6 +15,7 @@
 |---|---|---|---|
 | 2026-10-21 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-21-fundsignal-emit-accounting-defect.md` (debt-radar D-43, D-57) |
 | 2026-10-21 | `draft` → `spec-ready` | /sdd-review | Product spec approved (7 warnings; overlap WARN) |
+| 2026-10-22 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written |
 
 ---
 
@@ -34,6 +35,8 @@ Snapshot from `docs/runbooks/reviewer-registry.md` at /sdd-triage time (2026-10-
 
 - [Product Spec](product-spec.md) — bug description and fix scope
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
+- [Recon](recon.md) — Phase 0 codebase dossier
+- [Design](design.md) — approved design (2 rounds, full)
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-fundsignal-emit-accounting`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -47,4 +50,4 @@ symbols are neither fetched nor deferred, and the run still reports `completed`.
 
 ## Next Action
 
-`/sdd-design fix-fundsignal-emit-accounting` — recommended design depth: full (2 affected services; ingest is read-only unless design changes retry idempotency — operator may downgrade to quick). Design must resolve OQ-1/OQ-2; see context.md
+`/sdd-spec fix-fundsignal-emit-accounting` — generate implementation spec from the approved design
