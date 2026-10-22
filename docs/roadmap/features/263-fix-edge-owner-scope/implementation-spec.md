@@ -66,13 +66,16 @@ edit (design.md D-31 "One site closes four edges").
 - **Overlap: feature 257 (`fix-ledger-query-pagination`).** 257 is spec-ready on main-dev and edits
   the same `queryEvents` body (`ledgerServiceImpl.ts:124-176`). Its product spec anticipates no proto
   change, so field 7 is not expected to collide, but a textual rebase conflict is likely. Step 12 writes
-  the `merge-order.md` row.
+  the `merge-order.md` row **only after the operator confirms the direction** (257 waits for 263). The
+  impl-spec review left that decision open (context.md Open Threads).
 - **Overlap: feature 241.** `configServiceImpl.ts` `setConfig` collides with Step 8's
   `getConfig`/`listKeys` hunks in the same file. The hunks are not expected to overlap.
 - **Overlap: features 247 and 273.** Both edit `client.py` `get_config` (:2034-2080), which collides
   with Step 10. Rebase whichever lands second.
-- **Overlap: feature 242.** It touches `traderBff.ts` and config `authz.ts`; Steps 5 and 8 touch the
-  same files. The overlap is textual only.
+- **Feature 242 is not an overlap.** Its implementation spec edits no `traderBff.ts`, and it only reads
+  config `authz.ts:135-142` (`peerDnsSans`) as a copy source
+  (`242-fix-push-untargeted-broadcast/implementation-spec.md:183`). The triage-time claim that it touches
+  both files is not supported, so no rebase is expected.
 
 ---
 
@@ -109,10 +112,10 @@ call safety
 
 **Verification**:
 ```bash
-cd packages/proto && buf lint && buf breaking --against '<repo-root>/.git#branch=feature/fix-edge-owner-scope,subdir=packages/proto'
+cd packages/proto && buf lint && buf breaking --against "$(git rev-parse --path-format=absolute --git-common-dir)#branch=origin/main-dev,subdir=packages/proto"
 ```
-- `<repo-root>` is the absolute path from `git rev-parse --show-toplevel`. Run from a worktree, use the
-  main checkout's `.git` (PLAT-10: `subdir=` is mandatory).
+- `--git-common-dir` resolves to the main checkout's `.git`, including from a worktree. `subdir=` is
+  mandatory (PLAT-10). The against-ref is `origin/main-dev`, matching CI (`ci.yml:125`).
 - Then confirm `grep -n "owner_only = 7" packages/proto/ledger/v1/ledger.proto` returns one line.
 
 ---
@@ -122,7 +125,15 @@ cd packages/proto && buf lint && buf breaking --against '<repo-root>/.git#branch
 **Status**: `pending`
 **Service**: `packages/proto`
 **Files**:
-- `packages/proto/gen/` — modify (generated ledger stubs: Go, Python, TS + `gen/ts/dist/`)
+- `packages/proto/gen/go/ledger/v1/ledger.pb.go` — modify (generated)
+- `packages/proto/gen/go/ledger/v1/ledger_grpc.pb.go`, `packages/proto/gen/go/ledger/v1/ledgerv1connect/` —
+  expected unchanged (no RPC change)
+- `packages/proto/gen/python/ledger/v1/ledger_pb2.py` — modify (generated)
+- `packages/proto/gen/ts/ledger/v1/ledger.ts`, `packages/proto/gen/ts/ledger/v1/ledger_pb.ts` — modify (generated)
+- `packages/proto/gen/ts/dist/ledger/v1/ledger.{js,d.ts}`, `packages/proto/gen/ts/dist/ledger/v1/ledger_pb.{js,d.ts}` —
+  modify (compiled)
+- Exception to the exact-paths rule: the generator decides the final set. Any other ledger file it
+  changes is accepted. A non-ledger change means the toolchain pins drifted, so stop and check.
 
 **Reviewers**: Proto Reviewer — field number uniqueness, no breaking change, buf lint/breaking pass;
 `xstockstrat-ledger` owner — append-only invariant, event ordering; `xstockstrat-ui` owner — Connect-RPC
@@ -261,7 +272,10 @@ cd services/xstockstrat-ledger && pnpm run test:coverage && pnpm run lint
 ```
 - The first command is the RED/GREEN evidence. It compiles the impl, so the tests actually run: RED
   before Step 3 (new cases a/b/d fail), GREEN after.
-- The second command is the CI-parity coverage and lint gate.
+- The second command is the CI-parity coverage and lint gate. Its threshold is **40% lines** (c8
+  `--lines 40` in `package.json:14`; the `node-test` job in `docs/patterns/ci-overview.md`).
+- That run uses `--experimental-strip-types`, so it can pass vacuously (fails.md:1941). Its coverage
+  number does not count as evidence for the new cases. Only the compiled `node --test dist/...` run does.
 - C-13: `grep -n "makeStreamCall" services/xstockstrat-ledger/src/__tests__/ledgerServiceImpl.test.ts`
   should show one declaration and reuses only.
 
@@ -329,7 +343,8 @@ position lineage / reconciliation status; Security — a caller reads only their
    sets ownerOnly server-side; account: keys are ownership-checked via trading ListBrokerAccounts
    (errors pass through)."
 5. Each `account:` poll now makes one extra trading RPC. This is accepted with no cache (design.md
-   Rejected Alternatives).
+   Rejected Alternatives). After deploy, a dev smoke check of the `/trader` reconciliation poll latency
+   is advisable. It is not acceptance evidence.
 6. Leave `appendEvent` (`:130-141`), the ConfigService block (`:144-147`) and `insightsBff.ts:148-157`
    unchanged.
 
@@ -399,6 +414,8 @@ cd services/xstockstrat-ui && pnpm exec vitest run src/lib/__tests__/traderBff.t
 cd services/xstockstrat-ui && pnpm run test:coverage && pnpm run lint
 ```
 - RED before Step 5: the AC-1, AC-2 and override cases fail. GREEN after.
+- Coverage threshold: **40%** lines/statements over `src/lib/**` (`vitest.config.ts` `thresholds`).
+  `src/lib/*Bff.ts` is excluded, so this test cannot move the number. The gate only must not regress.
 
 ---
 
@@ -477,6 +494,8 @@ cd services/xstockstrat-ui && pnpm run lint
 - RED before Step 5: AC-1 and AC-2 fail. GREEN after, with the reconciliation and api-smoke specs still
   passing.
 - C-12: confirm the fixture imports and the `INVENTORY.md` row.
+- Coverage threshold: none. Playwright is not coverage-gated (the `frontend-e2e` job in
+  `docs/patterns/ci-overview.md`).
 
 ---
 
@@ -601,6 +620,7 @@ grep -n "boundReadUserId" services/xstockstrat-config/src/grpc/authz.ts services
 cd services/xstockstrat-config && pnpm run test:coverage && pnpm run lint
 grep -n "__tests__/fixtures" services/xstockstrat-config/src/__tests__/readUserBinding.test.ts || echo "inline (single-file helper)"
 ```
+- Coverage threshold: **40% lines** (c8 `--lines 40`, `package.json:13`).
 - `test:coverage` compiles first, so the cases really run. RED before Step 8 (AC-4/AC-5 cases fail).
   GREEN after, with the existing `scopeResolution`, `listKeys*`, `secretsAndScope` and `perUserSecrets`
   suites still green.
@@ -722,7 +742,10 @@ grep -n "from tests.conftest\|conftest" services/xstockstrat-agent/tests/test_co
 - `services/xstockstrat-agent/CLAUDE.md` — modify
 - `docs/runbooks/mcp-tools.md` — modify
 - `docs/context-constitution-findings.md` — modify
-- `docs/roadmap/features/merge-order.md` — modify
+- `docs/roadmap/features/merge-order.md` — modify (only after the operator confirms the direction; item 6)
+- `services/xstockstrat-ui/CLAUDE.md` — modify (Copilot rail paragraph `:164-170`; item 7)
+- Likely teardown targets (item 8). Record each one in the Deviation Log if it is touched:
+  `docs/context-constitution.md` and `services/xstockstrat-{ledger,config,agent,ui}/docs/context-constitution{,-findings}.md`
 
 **Reviewers**: none
 
@@ -780,13 +803,18 @@ grep -n "from tests.conftest\|conftest" services/xstockstrat-agent/tests/test_co
    - the `order:<id>` NULL-owned `order_intent.*` rows are hidden by branch 3 (`trading.go:2247`,
      `:2278`)
    - `owner_only` fails open by default
-6. **`merge-order.md`.** Add a row: `fix-ledger-query-pagination` must wait for `fix-edge-owner-scope`,
+6. **`merge-order.md`.** This item is gated on the operator confirming the direction, which is still
+   open after impl-spec review. If the operator reverses it or declines a hard row, record that in the
+   Deviation Log and skip this item. Otherwise add a row: `fix-ledger-query-pagination` must wait for `fix-edge-owner-scope`,
    because both edit `QueryEventsRequest` (field 7 now claimed by 263) and the same `queryEvents` WHERE
    builder. 257 rebases its keyset predicate onto the `owner_only` condition.
    - Confirm the direction at `/sdd-review impl-spec`.
    - The 241, 242, 247 and 273 overlaps are textual only, so per the file's coverage note they are
      recorded in this feature's `context.md`, not here.
-7. **Teardown.** Run `/context-constitution refresh` scoped to the four touched modules plus root. If the
+7. **UI `CLAUDE.md` Copilot rail paragraph (`:164-170`).** It describes the "copilot-aware
+   `queryEvents`". Add at most one sentence: `account:` keys are ownership-checked via trading
+   `ListBrokerAccounts`, and every other key is forced to `owner_only` server-side.
+8. **Teardown.** Run `/context-constitution refresh` scoped to the four touched modules plus root. If the
    plugin is unavailable, reconcile by hand and record that in the PR body, per the root `CLAUDE.md`
    Teardown rule.
 
@@ -797,8 +825,9 @@ grep -n "account:{\|copilot:{" services/xstockstrat-ledger/CLAUDE.md
 grep -n "boundReadUserId\|bound" services/xstockstrat-config/CLAUDE.md
 grep -n "bound to the caller\|bound to their own" services/xstockstrat-agent/CLAUDE.md docs/runbooks/mcp-tools.md
 grep -n "263" docs/context-constitution-findings.md docs/roadmap/features/merge-order.md
+grep -n "ListBrokerAccounts" services/xstockstrat-ui/CLAUDE.md
 ```
-Each grep must return at least one line.
+Each grep must return at least one line. The exception is `merge-order.md` when item 6 was skipped.
 
 ---
 
