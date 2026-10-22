@@ -216,3 +216,50 @@ unchanged (spec-ready), per the grilling protocol. The resume state is in the `s
   "floor_breaches": []
 }
 ```
+
+## Session 2026-10-22 — sdd-design (approved, COMPLETION)
+
+- Phase 0 Recon: recon.md (services: xstockstrat-marketdata, xstockstrat-config; reuse: the non-2xx "never include
+  the URL" rule at `fmp_client.go:254-255`/`finnhub_client.go:126-127`; the ingest `peerSan` grant at `authz.ts:124`).
+- Phase 1 Grilling: 2 rounds (full), approved at the design gate. Floor clear.
+- OPERATOR DECISIONS (binding, recorded 2026-10-22, design gate r2):
+  - APPROVED as synthesized.
+  - **C-16 sign-off:** the user explicitly SIGNS OFF the CHANGE to config `@AC-4`
+    (`services/xstockstrat-config/acceptance/config-secrets-and-scoping.feature`). GetSecret allow-listing goes from
+    header-only to header plus DNS SAN for grants that set `peerSan`. Feature AC-3/AC-4/AC-6 are promoted at launch
+    alongside `@AC-4`, which is never rewritten. This closes the round-2 blocking objection.
+  - **Scope addition:** the `build request: %w` sites (`fmp_client.go:226`, `finnhub_client.go:114`) fold into Step 1
+    under the same no-URL rule, each with a test. The redirect (Location header) residual stays in the new defect
+    report. This answers the non-blocking P-03 gate question and overrides the round-2 default.
+  - Standing (2026-10-21): x-trace-id propagation / no C-03 waiver. Not engaged here, because neither fix adds an emit
+    or write path.
+- Chosen approach:
+  - D-39: unwrap `*url.Error` and wrap only `ue.Err`, with a cause-free else-branch. This applies at both transport
+    sites and both build-request sites. Real-dial plus ctx-deadline plus parse-failure tests.
+  - Service-edge tests for AC-5/AC-7.
+  - D-40: `peerSan: 'xstockstrat-marketdata'` on the marketdata GetSecret grant. Shared `mtlsTestPki.ts`
+    (sh/mintLeaf/setEnv), and the GetSecret describe moves to an mTLS wire harness. Commit order is green harness,
+    then red AC-3, then the grant.
+  - Docs plus a residuals defect report, then a mechanical dev smoke grep.
+- Rejected: mintCa helper; deny cases in secretCallerAuthz.test.ts; a raw-err fallback; direct-handler-only tests;
+  dropping %w; a redactURLError helper now; string-scrubbing; key-in-header (deferred to the report). See design.md.
+- Constitution rules touched: C-01, C-08, C-11, C-15, C-16, C-18, P-02, P-03, P-05, P-06. Floor breaches: none.
+- Status: spec-ready → design-approved.
+- The `## Open Threads` block above (round-2 gate) is superseded for the two gate questions, which are now answered.
+  The live threads are below.
+
+### Open Threads (design-approved)
+
+- [ ] SAN mis-bind fails soft. A leaf without `DNS:xstockstrat-marketdata` means marketdata WARNs at `main.go:70` and
+  boots with empty vendor credentials while health checks stay green. Target: Step 5 dev smoke grep, plus the Step 3
+  pre-merge re-check of `gen-dev-certs.sh:28`/`:50` and `deploy.yml:102`. Prod gets no separate check.
+- [ ] The mTLS harness switch could fail for harness reasons (targetOverride/SAN pairing, env sequencing). Target: Step 3
+  (3b) commit order, with the harness green under the header-only grant first.
+- [ ] Accepted residual: a malformed vendor `Location` redirect header can embed a key-bearing URL in the inner cause.
+  There is no test for it. Target: Step 4 defect report.
+- [ ] Query-string keys still reach proxy and vendor access logs until key-in-header lands. Target: Step 4 defect report.
+- [ ] Body-read wrap `fmp_client.go:251` (`read %s body: %w`): confirm whether it can embed the URL (recon.md:108).
+  Target: /sdd-spec and Step 1.
+- [ ] Textual merge overlap with 241 and 263 (`authz.ts`; 241 also touches `perUserSecrets.test.ts`) and with 255
+  (the three marketdata files). Whichever lands second rebases. Target: Steps 1 and 3.
+- [ ] The mTLS harness adds RSA keygen time (1 CA + 3 leaves) to the config suite. Target: Step 3 (watch only).
