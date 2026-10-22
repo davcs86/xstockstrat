@@ -741,3 +741,42 @@ Once the operator rules on the three gated items, the design is approvable witho
 - [ ] R1/R5: latency baseline. Target: Step 1, before Step 3 is committed.
 - [ ] 247 merge + rebase. Target: precondition before Step 2.
 - [ ] Merge-order rows 247 → 273 and 273 → 272. Target: Step 11.
+
+## Session 2026-10-22 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 9 warnings (criteria: PASS WITH WARNINGS; overlap: WARN). Advisory, so lifecycle is unchanged.
+- Addressed in implementation-spec.md (each re-verified against the tree):
+  - [x] Step 11 merge-order: `origin/main-dev` already has both rows (`merge-order.md:84-85`), and the feature tip
+    predates them. Instruction 2 now says "ensure exactly one row per pair, never duplicate". It amends the 272
+    row to Step 5's widened pass-through wording ("details non-empty and != `Deadline Exceeded`, regardless of
+    `deadline_s`") and adds the PLAT-13 note (server bound ≤ ~40 s). Verification is now two `grep -c` = 1
+    checks, a no-hit check for the stale wording, and a check for the 40 s note. The Step Dependencies merge-order
+    bullet was updated to match.
+  - [x] Step 1: added an explicit checkpoint. The entry must end `Baseline verdict: PASS` or
+    `Baseline verdict: HALT — <reason>` ("Not measured" counts as HALT until operator sign-off), with a verification
+    grep. Step 3 may not be committed unless the verdict is PASS or an operator overrides it.
+  - [x] Step 3 verification: the `metadata=` baseline is the literal 73 (measured at the current tip). A note
+    explains that `grep -c` counts lines and that the Step 2 AST guard is authoritative.
+  - [x] Step 7 verification: the `deadline_s=client._RPC_TIMEOUT_S` count expects 41. That is 36 existing
+    RPC-row catch sites (40 `except grpc.aio.AioRpcError` blocks, minus `list_opportunities`, minus 3 LONG) plus
+    5 new RPC wraps. LONG expects 4. Step 6's AST guard is named as authoritative.
+  - [x] Step 9 evidence: one sentence explains that `x-user-id`/`x-access-scope` are not forwarded on
+    ValidateToken because the call runs pre-auth.
+  - [x] Step 10: it must land in the same PR as Steps 3 and 7 (the integration PR in sequential mode).
+  - [x] Line anchors: the reviewer confirmed the pre-247 tip anchors. No edit was needed; re-anchoring by function
+    name after the rebase is already instructed.
+- Still open (carried into execution):
+  - [ ] Step 6 size: 14 test groups in one file, which depend on 247's `hung_config_server`,
+    `_CONFIG_READ_TIMEOUT_S` and `HANG_GUARD_S`. The reviewer suggested optionally splitting the AST guards
+    (items 11-14) into their own step if the file grows. This was not done, because the reviewer said no change is
+    required. The executor decides at the Step 6 checkpoint.
+  - [ ] Overlap (rebase-only, re-grep anchors after each merge):
+    - `client.py`, `conftest.py` and `test_tools.py` overlap with 247. This is the hard precondition: 247 must
+      merge and this branch be rebased first.
+    - `tools.py` overlaps with 247, 249, 246, 241, 214 and 187.
+    - `docs/runbooks/mcp-tools.md` overlaps with 249 and 246, on disjoint sections.
+    - `services/xstockstrat-agent/docs/context-constitution.md` overlaps with 247, on disjoint rows.
+  - [ ] Reconcile the agent `context-constitution-findings.md` index rows with 247's agent-rpc-deadlines defect
+    reference when both features land (Step 12 teardown).
+  - [ ] Feature 272's lifecycle state was unverified by the overlap scan. Confirm it before Step 11 amends its
+    merge-order row.
