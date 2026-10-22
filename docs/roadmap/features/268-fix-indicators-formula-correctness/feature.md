@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-21-indicators-formula-correctness-defect.md`
 **Severity**: SEV-2
 **Created**: 2026-10-21
-**Last Updated**: 2026-10-21
+**Last Updated**: 2026-10-22
 
 ---
 
@@ -15,6 +15,7 @@
 |---|---|---|---|
 | 2026-10-21 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-21-indicators-formula-correctness-defect.md` (debt-radar D-10, D-18, D-54) |
 | 2026-10-21 | `draft` → `spec-ready` | /sdd-review | Product spec approved (5 warnings) |
+| 2026-10-22 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written. OQ-1 = Option A; @option-B AC-8/AC-9 deleted |
 
 ---
 
@@ -34,6 +35,8 @@ Snapshot from `docs/runbooks/reviewer-registry.md` at /sdd-triage time (2026-10-
 
 - [Product Spec](product-spec.md) — bug description and fix scope
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
+- [Recon](recon.md) — Phase 0 grounded codebase dossier
+- [Design](design.md) — approved design (D-54 → D-10 → D-18 Option A → docs), rejected alternatives, open risks
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-indicators-formula-correctness`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -47,4 +50,4 @@ names (D-18); and `UpdateFormula`/`DeleteFormula` act on pending-hidden saga cop
 
 ## Next Action
 
-`/sdd-design fix-indicators-formula-correctness` — recommended design depth: full (≥2 services — analysis consumes ATR/VWAP — and a possible proto change for D-18); design must resolve OQ-1 (and OQ-2 if Option B), settle the conditional proto checkbox, and delete the losing `@option-*` scenario pair; see context.md
+`/sdd-spec fix-indicators-formula-correctness` — generate implementation spec from the approved design
