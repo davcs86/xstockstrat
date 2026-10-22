@@ -535,3 +535,12 @@ The full /sdd-design debate is halted at its approval gate after round 2 (gate p
 - [ ] **Long wall-clock e2e (Steps 2/3/5):** keep as is, run on one project only, or move to a slow project. Target: `/sdd-execute` Step 2.
 - [ ] **Mutation RED evidence (Steps 2/3):** record it here. Target: `/sdd-execute` Steps 2–3.
 - [ ] **Rebase on peer merges:** INVENTORY.md, mock-backend.ts, traderBff.ts, insightsBff.ts (251/215/249/241). Target: integration PR.
+
+## Session 2026-10-22 (operator decisions — deadline classes)
+
+- **Order mutations exempt from the 30s default:** `placeOrder`, `cancelOrder`, `replaceOrder` and `confirmOrder`
+  get `ORDER_MUTATION_TIMEOUT_MS = 60_000` (new constant in `deadlines.ts`, wired in `traderBff.ts`). A late 504 after a
+  server-side commit is safe to retry because trading's order intents are exactly-once.
+- **Identity `RefreshToken` 10s bound: confirmed** (fails closed; a late commit forces re-login).
+- `implementation-spec.md` updated: Step 1 constant, Step 6 `traderBff.ts` wiring (item 3b, verification grep),
+  Step 7 `it.each` over the four mutations, Step 10 docs line. The p99 telemetry gate stays an accepted risk.
