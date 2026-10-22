@@ -289,6 +289,10 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 ## Session 2026-10-22 — sdd-batch design gate (round 2)
 
 - The `/sdd-design fix-indicators-formula-correctness` full debate is halted at its approval gate after round 2 (gate policy: halt). design.md is not written and status.md is unchanged. The next /sdd-batch run resumes from the state block below.
+- (/sdd-spec 2026-10-22) The Step 2 D-54 tests reuse the module-local `_row`/`_servicer` in
+  `tests/test_private_formulas.py` (single consumer, C-13 lazy rule). No conftest builder is added.
+- (/sdd-spec 2026-10-22) Step 3 writes the wrapper marker as `"\\n__OUTPUT__:"` in source, because the
+  template is a non-raw `.format` string.
 
 ## Open Threads
 
@@ -552,6 +556,49 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
     - Only work with no originating request (background sweepers and loops) may mint its own context. It should still carry a trace id when one is available.
   - Operator 2026-10-22 (design gate r2): APPROVED as synthesized.
 
+## Session 2026-10-22 — sdd-spec
+
+- Generated implementation-spec.md with 10 steps. Status: design-approved → implementation-ready.
+- The steps follow the design's build order: D-54, then D-10, then D-18 (engine, then UI), then docs.
+- Each service step is paired with its test step: 1/2 (D-54), 3/4 (D-10), 5/6 (D-18 engine),
+  7/8 (UI catalog plus vitest). Steps 9-10 are docs.
+- Scenario coverage:
+  - AC-6/AC-7 → Step 2;
+  - AC-1/AC-2/AC-3 → Step 4;
+  - AC-4/AC-5 → Step 6, plus Step 8 for the UI text.
+- Key codebase findings (re-verified on `origin/feature/fix-indicators-formula-correctness`):
+  - The design's line numbers still hold:
+    - `servicer.py:490`/`:491` and `:593`/`:594` (the raw `get_by_id` / `if row is None:`);
+    - `sandbox.py:310-312`, `:394-400`, `:402-428`;
+    - `indicators_engine.py:141-142`;
+    - `strategyCatalog.ts:99`, `:104`.
+  - **Wrapper escape trap.** `_SANDBOX_WRAPPER` (`sandbox.py:206`) is a non-raw `textwrap.dedent("""...""")`
+    filled by `.format`. The leading-newline marker therefore has to be written as `"\\n__OUTPUT__:"` in
+    source; a single `\n` would produce a SyntaxError in every formula. This is recorded in Step 3.
+  - **Saga re-verification (Open Thread closed).** The saga does not go through UpdateFormula/DeleteFormula.
+    - Commit and abort run through `FormulasRepository.resolve_intent` (`formulas_repository.py:137-150`),
+      which is called only at `servicer.py:738`.
+    - Copies are created by `create_pending_copies`, called only at `:711`.
+  - The trading Wilder ATR is at `trading.go:3170-3198`, called at `:3233`. design.md cited `:3168-3235`,
+    so the spec uses the exact range.
+  - The `os._exit` traversal path already exists in `tests/test_sandbox_isolation.py:434`
+    (`numpy.lib._datasource.os`). Step 4 reuses it.
+  - `ListIndicators` and servicer `ComputeIndicator` have no existing tests, so Step 6 adds the first ones.
+  - The agent surfaces pass the change through, so no agent code changes:
+    - `test_formula` returns the full sandbox result (`tools.py:1488-1495`);
+    - NOT_FOUND is mapped at `tools.py:232`.
+- **C-13 reconciliation (Step 2).** design.md asked for one row builder in `tests/conftest.py`, "or an existing
+  row fixture". The existing builder is `_row(formula_id, author, pending_intent_id=None, ...)` at
+  `tests/test_private_formulas.py:29`, and that file is its only consumer. Under C-13's lazy rule it stays
+  module-local, and the new tests live in that file. Adding a conftest builder would be speculative.
+- **Product-spec housekeeping is done.**
+  - Affected Services: added xstockstrat-ui; analysis and proto are marked "consumer, unchanged".
+  - Fix Scope: the proto checkbox is settled as "No proto change (Option A)".
+- The merge-order entry for 244/269 is outside this session's write scope (feature-dir files only). It is
+  deferred to the `/sdd-execute` integration PR, as noted in the spec's Step Dependencies.
+- Verification commands run pytest through the service venv (`.venv/bin/python -m pytest`), per
+  fails.md 2026-09-28 (subprocess `sys.executable`).
+
 ## Decisions
 
 - **OQ-1 = Option A.** Re-describe ATR/VWAP and keep the keys and math unchanged. OQ-2 is moot, and there is no proto change.
@@ -578,13 +625,13 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - Target: the docs step (the indicators findings doc).
 - [ ] The duplicated ATR/VWAP description text can drift.
   - Target: a post-launch follow-up (source the catalog from ListIndicators).
-- [ ] Re-verify by grep that the saga commit/abort never goes through UpdateFormula/DeleteFormula (`@AC-19@feature-224`).
-  - Target: `/sdd-spec`.
+- [x] Re-verify by grep that the saga commit/abort never goes through UpdateFormula/DeleteFormula (`@AC-19@feature-224`).
+  - Closed at /sdd-spec 2026-10-22: the saga uses `resolve_intent` (`servicer.py:738`) and `create_pending_copies` (`:711`) only.
 - [ ] Expect rebase conflicts with 244 (`sandbox.py`) and with batch peers editing `servicer.py` (e.g. 269).
-  - Target: the merge-order entry at `/sdd-spec`, and execute.
+  - Target: the merge-order entry at the `/sdd-execute` integration PR (outside the /sdd-spec write scope), and execute.
 - [ ] The "never assigns result" gap stays a silent success.
   - Target: the docs step (file `docs/reports/2026-10-22-indicators-missing-result-silent-success-defect.md` with an `open` sidecar), then `/sdd-triage`.
-- [ ] Product-spec housekeeping.
-  - Target: `/sdd-spec`.
+- [x] Product-spec housekeeping.
+  - Done at /sdd-spec 2026-10-22.
   - Affected Services: add xstockstrat-ui, and mark analysis and proto as unchanged consumers.
   - Fix Scope: settle the proto checkbox as "no proto change (Option A)".
