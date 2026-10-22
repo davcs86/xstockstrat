@@ -296,3 +296,59 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   Target: /sdd-spec.
 - [ ] The context teardown audit is owed for analysis CLAUDE.md and `docs/runbooks/mcp-tools.md`. Target: the
   final PR.
+
+## Session 2026-10-22 — sdd-spec
+
+- Wrote implementation-spec.md with 9 steps. Status: design-approved → implementation-ready.
+- The steps are three red-before-green pairs, then proto, proto-gen and docs:
+  - 1-2: D-57 `partial` status and the failed-chunk bucket;
+  - 3-4: claim release, the run_id-scoped confirm, the accepted-only count, and the one `local_pg` real-SQL test;
+  - 5-6: the `{symbol: score}` reference set, day-wide direction cuts, and the mode-dependent `valid_until` anchor;
+  - 7: the `"partial"` proto comment;
+  - 8: buf-gen (5 generated files);
+  - 9: analysis CLAUDE.md, mcp-tools.md:845, the merge-order.md row, and the teardown audit.
+- The design is followed as approved. The rejected `signal_id IS NOT NULL` narrowing of `_already_emitted` is kept
+  out, and Step 6 greps that it is absent. There is no migration and no ingest code change.
+- OPERATOR DECISIONS (binding, carried forward): scope is D-43 and D-57, Track C. Standing 2026-10-21 trace
+  directive, with no C-03 waiver. Design gate r2: APPROVED as synthesized (2026-10-22).
+- **acceptance.feature edits (C-15):**
+  - Appended @AC-7..@AC-10 as design.md specifies. @AC-8 and @AC-9 carry the conditional/approximation descriptions
+    the design requires. @AC-10 is the mandatory pin for the force anchor.
+  - **@AC-5 body corrected, ID unchanged.** As written it said "MSFT then AAPL", with MSFT accepted and AAPL
+    NOT_FOUND. But `run_once` iterates `sorted(scores)` (`fundsignal_loop.py:238`), so AAPL is processed first and
+    that scenario cannot hold. The symbols were swapped: AAPL is accepted, MSFT gets NOT_FOUND, and a description
+    line records the sorted order. The intent is unchanged (confirmed rows survive an abort, and there is no orphan
+    for the aborting symbol). This is surfaced here per P-03 rather than worked around in the test.
+- **Re-verified ingest claims** that @AC-8 depends on (design Open Risks):
+  - one transaction, `async with self._db.acquire() as conn, conn.transaction():`
+    (`services/xstockstrat-ingest/app/handlers/servicer.py:1016`);
+  - conflict key `ON CONFLICT (user_id, source, symbol, direction)` (`:1044`), with `valid_from` excluded;
+  - the overwrite `WHERE` triggers on window expiry, or on a `conviction` or `valid_until` change (`:1048-1053`).
+  Confirmed.
+- **Loop-path trace id:** not added. Peer 259 (`fix-python-loop-supervision`) is `spec-ready` with no design.md, so
+  there is nothing to coordinate with yet. design.md records the loop path as deliberately trace-less.
+- **merge-order.md row:** /sdd-spec writes only inside this feature directory, so the row (246 first, soft/rebase)
+  is Step 9 of the spec rather than a write made now.
+- Key codebase findings:
+  - Existing tests that break by design and are updated in their paired test steps:
+    - `test_paced_fetch_respects_budget` unpacks a 3-tuple (`tests/test_fundsignal_loop.py:160`);
+    - `test_already_emitted_skips_fetch_and_emit` stubs rows without `score` (`:100`).
+  - No stateful `fundsignal_emitted` fake exists, and no test applies migration SQL. Step 3 creates an inline
+    `_EmittedTable` fake (single consumer, C-13). The new `tests/test_fundsignal_emitted_real_pg.py` applies
+    `003`/`004` up.sql on `local_pg` and imports, rather than copies, the loop helpers.
+  - The module docstring at `fundsignal_loop.py:8-9` repeats the stale "ingest does not dedup" claim. Step 4
+    corrects it. The `004_fundsignal_emitted.up.sql:4` comment says the same, but it is an applied migration and
+    stays untouched (F-01).
+  - The C-14 surfaces pass values through: `services/xstockstrat-agent/app/client.py:1724` and
+    `services/xstockstrat-ui/src/app/config-ui/fundamentals-scan/page.tsx:101,106`. Only the mcp-tools.md doc
+    changes.
+
+### Open Threads
+
+- [ ] Rebase onto 246 once it merges. Re-anchor the cited lines by symbol and record the shifts in the Deviation Log.
+  Target: /sdd-execute.
+- [ ] The real_pg test runs only where PostgreSQL binaries exist (in CI, or locally with `XSTOCKSTRAT_PG_BIN`).
+  Target: Step 3/4 verification.
+- [ ] The teardown context audit for analysis CLAUDE.md and mcp-tools.md. Target: Step 9 / the final PR.
+- [ ] Carried from design and still open: short successful chunks (owned by 255); and the accepted risks recorded in
+  the @AC-8/@AC-9 descriptions (dedup window or conviction drift, boundary flips).
