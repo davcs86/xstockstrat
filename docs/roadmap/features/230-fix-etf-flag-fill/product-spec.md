@@ -15,6 +15,10 @@
 `88b11ccc…` at 16:08:01Z), each after an earlier miss that should have enqueued the background fill. No
 Info-level log line explains why the fill did not populate the cache.
 
+**Who is affected.** A trader or analyst reading `fundamentals_gap` (agent `run_backtest` summary, UI backtest
+diagnostics, `list_opportunities`) cannot tell that an ETF was refused because it is an ETF. An operator
+reading marketdata logs at the normal Info level cannot see why the fill never labels it.
+
 **Expected.**
 - After a first miss, the best-effort fill labels the symbol once the FMP budget allows, and a later run
   reports `FUNDAMENTALS_GAP_ETF` for an ETF.
