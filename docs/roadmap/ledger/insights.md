@@ -3724,3 +3724,15 @@ reusing.
   `services/xstockstrat-portfolio/internal/service/portfolio_service.go:186`, `:205-209`.
 - **Rule it implies**: A retry bound on an event consumer must not park transient failures. Document the
   recovery path for parked events, such as a boot replay or a sweep.
+
+### 2026-10-22 — fix-identity-auth-code-race — ordering
+- **Pattern**: In a claim-then-issue redemption (a conditional `UPDATE … RETURNING` claim plus a same-transaction
+  successor INSERT), do any step that can throw but writes nothing, such as minting a JWT, *before* the claim
+  transaction. Return the result only *after* COMMIT. A throw after a durable claim burns the single-use
+  credential and leaves an orphan successor row. Minting first costs only signatures the losing racers throw away,
+  and needs no callback coupling between the transaction helper and the JWT minting.
+- **Evidence**: `docs/roadmap/features/265-fix-identity-auth-code-race/design.md` §1 Phase B (the `jwtSecret`
+  getter throws when `JWT_SECRET` is unset, IDENTITY-1). The RED test runs with `JWT_SECRET` unset and asserts
+  code 13, `consumedAt` null and 0 inserts.
+- **Rule it implies**: For every single-use claim, list which post-claim steps can throw. Move each one before the
+  claim or inside the transaction, or record it as an accepted residual.
