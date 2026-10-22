@@ -173,6 +173,9 @@ grep -n "UNAVAILABLE" docs/roadmap/features/merge-order.md                    # 
 **Verification**: see Step 3. Also:
 ```bash
 cd services/xstockstrat-ledger
+# Rebase preconditions — run BEFORE editing; if either check fails, stop and ask (Step Dependencies).
+grep -n "req.ownerOnly" src/grpc/ledgerServiceImpl.ts      # >= 1 hit in queryEvents (263 merged)
+grep -n '"test:coverage": "tsc && c8' package.json          # 1 hit (252's compile-then-test runner merged)
 grep -n "ORDER BY recorded_at" src/grpc/ledgerServiceImpl.ts           # no hit
 grep -n "sequence > \$\${p++}::bigint" src/grpc/ledgerServiceImpl.ts      # 1 hit, in queryEvents
 grep -n "QUERY_EVENTS_MAX_PAGE_SIZE\|export function toSeq\|export function parseSequenceToken" src/grpc/ledgerServiceImpl.ts
@@ -242,6 +245,7 @@ pnpm run build && pnpm run lint
 cd services/xstockstrat-ledger
 pnpm run test:coverage   # 252's compile-then-test runner; exits 0 with 0 failed tests
 # confirm the c8 table has a non-zero ledgerServiceImpl row (not a vacuous 0% run, fails.md:1941)
+npx c8 check-coverage --lines 40   # exits 0: total >= 40% lines (the script's --lines flag alone enforces nothing, 252 FR-4)
 pnpm run lint
 grep -n "function makeKeysetPool" src/__tests__/*.test.ts   # exactly 1 declaration (C-13, single consumer)
 ```
@@ -384,7 +388,8 @@ pnpm run build && pnpm run lint
 **Verification**:
 ```bash
 cd services/xstockstrat-ledger
-pnpm run test:coverage   # exits 0, 0 failed tests, non-zero ledgerServiceImpl c8 row; total >= 40% lines
+pnpm run test:coverage   # exits 0, 0 failed tests, non-zero ledgerServiceImpl c8 row
+npx c8 check-coverage --lines 40   # exits 0: total >= 40% lines (252 FR-4)
 pnpm run lint
 grep -n "function makeSingleSlotPool" src/__tests__/*.test.ts   # exactly 1 declaration (C-13)
 ```
@@ -452,7 +457,9 @@ grep -n "function makeSingleSlotPool" src/__tests__/*.test.ts   # exactly 1 decl
      the design's "largest `FilledQty`" for the non-negative values trading emits today
      (`trading.go:1822-1824`, `"filled_qty": order.FilledQty`). It also stays correct for signed (sell-negative)
      fixtures; see context.md, Session 2026-10-22 — sdd-spec.
-   - Replace the `:829-830` comment with one that states the order-independent rule.
+   - Replace the `:829-830` comment with a ≤2-line constraint comment that states the order-independent rule
+     and the signed-quantity assumption, e.g. `// Keep the largest |cumulative FilledQty| (first seen wins a tie);
+     // abs() is load-bearing: sell partials may be negative, so a plain > would keep the smallest fill.`
 4. Leave the unrealized side (`:723-740`) and `:838-851` unchanged (portfolio `@AC-5/@AC-6/@AC-13/@AC-28`, PRESERVE).
 5. In `portfolio_handler.go` `classifyGetPnLError`, add
    `if errors.Is(err, service.ErrLedgerUnavailable) { return connect.CodeUnavailable }` and update its comment (≤2
@@ -532,6 +539,12 @@ GOWORK=off go build ./... && GOWORK=off golangci-lint run --modules-download-mod
        `order.filled` for `o-s`.
      - Assert `RealizedPnl == 501.00` with the partials served in ascending order **and** in descending order.
      - RED today: with descending order, "last wins" keeps −1, which gives 1.00.
+     - **Recorded C-15 divergence.** `acceptance.feature` AC-6 states positive cumulative `filled_qty` 1 … 501 (the
+       sign real trading payloads carry today, `trading.go:1822-1824`). This test uses −1 … −501 because
+       `pnl.Fold` treats qty as signed and the payload has no side, so a positive sell partial would fold as a buy
+       and 501.00 is unreachable. The scenario text is not reworded here: whether fill payloads should carry side or
+       sign is an open defect question (context.md Open Threads, `/sdd-qa defect` before 251 lands). Name the
+       divergence in the test title comment.
    - **AC-4.**
      - A first `order.filled` page of 200 events for `u-1` with a non-empty token, and the next call fails with
        `codes.DeadlineExceeded`.
@@ -605,6 +618,9 @@ grep -rn "func pnlEvent" --include="*_test.go" internal/   # exactly 1 declarati
    - the parameters (row count, selectivity, `REPLAY_BATCH_SIZE`, `DB_POOL_MAX`, replay count);
    - the results (p100, walk counts, `per_page_ms`, `walk_ms` against the caller deadline);
    - the git sha the run used.
+   Write the results as the literal lines `p100_ms: <n>`, `token_walk_count: <n> / seeded_matching: <n>` and
+   `per_page_ms: median <n> p95 <n>` so the Verification greps can assert them. Seed and harness scripts stay
+   uncommitted (scratchpad only); this step stages `context.md` alone (F-08).
 6. **Hard stop.** If any check fails, block the integration PR, record it in `## Deviation Log`, and ask the
    operator. The remedy is a smaller `REPLAY_BATCH_SIZE` or index migration `004` (DBA + owner, C-07), and both need
    a re-spec. If `walk_ms` is more than 50% of the deadline, open the user-scoped-walk follow-up (design.md § 3)
@@ -612,9 +628,14 @@ grep -rn "func pnlEvent" --include="*_test.go" internal/   # exactly 1 declarati
 
 **Verification**:
 ```bash
-grep -n "AC-5 manual run" docs/roadmap/features/257-fix-ledger-query-pagination/context.md
-# the entry records p100 < 2s, token-walk count == seeded matching count, and per_page_ms
+F=docs/roadmap/features/257-fix-ledger-query-pagination/context.md
+grep -n "AC-5 manual run" "$F"                                                   # 1 hit
+grep -oE 'p100_ms: [0-9]+' "$F" | awk '{ exit !($2 < 2000) }'                     # exits 0: p100 < 2 s
+grep -oE 'token_walk_count: [0-9]+ / seeded_matching: [0-9]+' "$F" | awk '{ exit !($2 == $5) }'   # exits 0: counts match
+grep -n "per_page_ms: median" "$F"                                               # 1 hit
 ```
+No coverage threshold applies to this step: it adds no code. The ledger ≥ 40% lines gate is the one Step 5
+verifies.
 
 ---
 
