@@ -3073,3 +3073,8 @@ ambiguity is logged here).
   - The r2 adversary caught both.
 - **Evidence**: `docs/roadmap/features/270-fix-ui-trader-feedback/design.md` § Chosen Approach 2 and § Rejected Alternatives; context.md 2026-10-22 sdd-design entry.
 - **Rule it implies**: A global error fallback opts out only through an explicit marker, such as `meta.errorHandled === true`, set only after every call site is shown to render the error. Never infer "handled" from the presence of a callback. Confirm that any wrapper factory forwards the marker.
+
+### 2026-10-22 — fix-template-update-metadata — assumption
+- **Mistake**: A design round proposed a real-PG check that a second RETIRE "advances" `updated_at` and asserted it with `>=`. The check passes even when the fix is missing. Because Postgres `NOW()` is the transaction start time, running the calls inside one `conn.transaction()` would also make them equal by construction.
+- **Evidence**: `docs/roadmap/features/269-fix-template-update-metadata/design.md` § Chosen Approach, proof plan (b); context.md 2026-10-22 sdd-design entry.
+- **Rule it implies**: A real-DB test that proves a timestamp moved asserts strict `>` against both the prior value and the sibling timestamp. Run each write as its own autocommit statement with a short `pg_sleep` between writes, never inside one transaction.
