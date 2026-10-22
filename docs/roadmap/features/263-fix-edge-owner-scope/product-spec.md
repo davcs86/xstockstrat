@@ -30,9 +30,11 @@ it), so no other user's data is ever read. Legitimate own-data reads
 
 ## Functional Requirements
 
-- **FR-1** — The trader BFF `LedgerService.QueryEvents` forwards a non-empty `stream_key` only when it is owned by
-  the verified caller (an `account:<id>` the caller owns, or the caller's own `copilot:` thread); a foreign stream key
-  fails with `PERMISSION_DENIED` and returns no events.
+- **FR-1** — The trader BFF `LedgerService.QueryEvents` forwards a non-empty `stream_key` unfiltered only when it is
+  owned by the verified caller: an `account:<id>` the caller owns (all of that stream's rows, including its
+  NULL-`user_id` reconciliation rows), or the caller's own `copilot:` thread (any `copilot:` key is rewritten to it).
+  A foreign or empty-id `account:<id>` fails with `PERMISSION_DENIED` and returns no events. Every other non-empty
+  key falls under FR-2.
 - **FR-2** — A trader BFF `QueryEvents` with an empty or unrecognised `stream_key` is owner-scoped to the verified
   caller; it never returns an event belonging to another user, nor a historical row whose `user_id`
   is NULL (`ExportEvents` parity). An empty-`stream_key` query still returns the caller's own events (FR-5).
@@ -77,8 +79,9 @@ rather than a rule at the backend read: ledger `QueryEvents` has no owner concep
 
 ## Fix Scope
 
-- [x] No proto changes anticipated — an edge-only fix or a ledger predicate on the inbound `x-user-id` needs none;
-  revisit only if design adds an explicit owner field to `QueryEventsRequest`
+- [x] Proto change: one additive field, `bool owner_only = 7` on `ledger.v1.QueryEventsRequest` (corrected
+  2026-10-22 by `/sdd-design`: the ledger owner predicate is opt-in, set by the trader BFF, so internal callers are
+  unaffected); C-09 approval gate applies
 - [x] No database migrations anticipated — `ledger.events.user_id` already exists (migration 003, nullable; historical
   rows are NULL and cannot be backfilled under the append-only guard)
 - [x] No config key changes anticipated
@@ -100,9 +103,9 @@ dev.
 - [x] Admin/internal exemption and NULL-owner rows. Resolved 2026-10-21: admin-scope callers stay exempt from
   FR-3/FR-4 (FR-6, AC-8), matching the existing "non-admin" wording. NULL-`user_id` historical ledger rows are never
   returned by a trader BFF read (FR-2, `ExportEvents` parity, AC-2), since they cannot be attributed to the caller.
-- [ ] How ownership of an `account:<id>` stream key is determined (FR-1): a trading `ListBrokerAccounts` lookup per
-  call, a cached owned-account set, or the ledger `user_id` predicate. Left to `/sdd-design` as an explicit decision
-  (C-11).
+- [x] How ownership of an `account:<id>` stream key is determined (FR-1). Resolved 2026-10-22 by `/sdd-design`: a
+  per-call trading `ListBrokerAccounts` lookup (user-scoped by trading), no cache; a trading error is passed through
+  with its own code and no ledger read is made.
 
 ## Out of Scope
 
