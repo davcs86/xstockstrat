@@ -70,6 +70,16 @@ Step 7 pins that no change is needed. The log surface is Step 3/4.
   semantics (P-06 waiver, recorded in context.md at execute).
 - Step 6 requires Step 3, because it documents the shipped tokens.
 - Step 7 has no code dependency; run it last.
+- **Red-before-green order (P-06).** Steps 1 and 3 are `red-green required`, but their RED lives in the following
+  test step. Execute each pair test-first: author Step 2's table before Step 1's export (RED = `undefined:
+  ErrorClass`), and author Step 4's tests on the pre-Step-3 tree, without Step 3's `:226` call-site edit (RED =
+  runtime failures (a)–(e); the drains and `GetEtfFlags` calls compile against `chan string`). Capture each RED
+  output, then apply the service step and re-run to GREEN.
+- Steps 3, 4 and 5 all modify `etf_flags_test.go`; run them in order, never in parallel.
+- `block-fundamentals-strategy-on-etf` (215) is `in-progress`, but its marketdata code (`etf_flags.go`,
+  `etf_flags_test.go`) is already on `main-dev` (#1243, `08d63011`); only its Step 26 measurement remains. The
+  existing merge-order row puts 215 before 255, so 230 (after 255) follows 215 transitively. Re-check on rebase that
+  no later 215 commit touched `etf_flags.go`.
 - Line numbers cited below are from `main-dev` `c25efbdc`. After the 255 (and 215/254) rebase, re-anchor by symbol
   name. `etf_flags.go` has no drift from 255, but `fmp_client.go` does.
 - Soft overlap with `254-fix-marketdata-secret-exposure` (`fmp_client.go:226/:243`). If 254 has landed, its
@@ -436,7 +446,7 @@ cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-dow
 ### Step 6 — docs: marketdata `CLAUDE.md` — fill log records and the window invariant
 
 **Status**: `pending`
-**Service**: `services/xstockstrat-marketdata/CLAUDE.md`
+**Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/CLAUDE.md` — modify
 
@@ -486,7 +496,8 @@ grep -n "not_wired" services/xstockstrat-marketdata/CLAUDE.md   # no hits
   maps unset → `UNSPECIFIED`, true → `ETF`, false → `NOT_ETF` (`:1974-1981`).
 - The product spec states that there is no proto, UI text or agent-tool contract change.
 
-**TDD**: `N/A (read-only verification of an unchanged consumer)`
+**TDD**: `N/A (read-only verification of an unchanged consumer)`. Coverage threshold: N/A, no code changes in
+this step; the analysis ≥40% gate is untouched because no analysis file is in the diff.
 
 **Covers**: `AC-2` (consumer half: a populated `is_etf=true` reaches `FUNDAMENTALS_GAP_ETF` through the unchanged
 mapping)
