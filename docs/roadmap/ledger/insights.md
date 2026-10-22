@@ -3703,3 +3703,15 @@ reusing.
   `services/xstockstrat-agent/app/oauth_server.py:87-110`.
 - **Rule it implies**: In a timeout or deadline fix, enumerate the fallbacks that open a security
   gate when the read fails. Record each one as a posture change, not as a plain fallback.
+
+### 2026-10-22 — fix-agent-client-deadlines — design
+- **Pattern**: Deadlining an inbound token-validation call means the backend's slowness now reaches the
+  auth edge. If that failure maps to the existing 401 with `WWW-Authenticate`, an OAuth client re-authorizes.
+  The re-auth goes through the same stalled identity service, so the user is effectively logged out.
+  The design gives the validator a three-way result instead: claims, invalid, or backend-unavailable.
+  The validator still never raises. Backend-unavailable (`DEADLINE_EXCEEDED`/`UNAVAILABLE`) maps to
+  503 *without* `WWW-Authenticate`; only a genuinely invalid token gets the 401 with the re-auth pointer.
+- **Evidence**: `docs/roadmap/features/273-fix-agent-client-deadlines/design.md` (§3);
+  `services/xstockstrat-agent/app/main.py:164-174`, `app/auth.py:58-61`.
+- **Rule it implies**: When an auth-path dependency becomes able to fail fast, keep "cannot verify" separate
+  from "verified invalid". Fail closed with a retryable 5xx, not a credential-revoking 401.
