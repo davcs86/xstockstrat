@@ -112,6 +112,12 @@ bounded batches. This feature must merge before or together with 251.
 - Ledger unit tests → `makePool` (`src/__tests__/ledgerServiceImpl.test.ts:35`) ignores the SQL.
   `makeIdempotentPool` (`:56`) routes by SQL regex. Other helpers: `makeRow` (`:88`) and `describe('queryEvents')`
   (`:142`). The `totalCount`-is-a-number regression is at `:203-217`.
+- Replay-avoids-pool assertion → the export harness tracks `poolQueried` (`ledgerServiceImpl.test.ts:569-621`). It is
+  the model if FR-7 moves the replay onto a dedicated Client.
+- Classifier test → `TestClassifyGetPnLError` (`internal/handler/portfolio_handler_test.go:39`, feature 229 @AC-5).
+  It currently pins "everything else stays Internal", so FR-6 must update that assertion on purpose.
+- Fold mirror → `computeRealizedPnL` (`internal/service/portfolio_helpers_test.go:107`) mirrors the two-pass
+  collection. Keep it aligned with any change to the passes. `ctxWithUser` is at `watchlist_service_test.go:280`.
 
 ## Existing Business Rules (preserve / extend)
 
