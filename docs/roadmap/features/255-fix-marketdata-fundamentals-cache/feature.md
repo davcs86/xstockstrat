@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-21-marketdata-fundamentals-cache-defect.md`
 **Severity**: SEV-3
 **Created**: 2026-10-21
-**Last Updated**: 2026-10-21
+**Last Updated**: 2026-10-22
 
 ---
 
@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-10-21 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-21-marketdata-fundamentals-cache-defect.md` (debt-radar D-19, D-50, D-51, D-52, D-53) |
+| 2026-10-22 | `draft` → `spec-ready` | /sdd-review | Product spec approved (6 warnings); OQ-1 resolved by operator: cap `<= 0` = zero budget |
 
 ---
 
@@ -41,7 +42,7 @@ Snapshot from `docs/runbooks/reviewer-registry.md` at /sdd-triage time (2026-10-
 
 Five marketdata defects in the fundamentals path:
 
-- `daily_request_cap=0` disables FMP instead of uncapping it (D-50).
+- Comments document `daily_request_cap <= 0` as uncapped, contradicting the enforced zero budget (D-50).
 - Quota counts include edgar and inactive-vendor rows (D-51).
 - The vendor cache serves edgar rows (D-52).
 - `extra` decode and FMP enrichment errors are dropped silently (D-53).
@@ -49,4 +50,4 @@ Five marketdata defects in the fundamentals path:
 
 ## Next Action
 
-`/sdd-design fix-marketdata-fundamentals-cache quick` — recommended design depth: quick (single service, but config-key semantics change for D-50); see context.md
+`/sdd-design fix-marketdata-fundamentals-cache` — design the approved spec (recommended depth: quick; see context.md)
