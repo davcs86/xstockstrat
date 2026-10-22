@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-10-22 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from the defect report; Track C |
+| 2026-10-22 | `draft` → `spec-ready` | /sdd-review | Product spec approved (7 warnings) |
 
 ---
 
