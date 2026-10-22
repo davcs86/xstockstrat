@@ -15,6 +15,7 @@
 |---|---|---|---|
 | 2026-10-22 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-15-backtest-silent-symbol-skip-reports-ok-defect.md` (recorded during feature 215 staging verification) |
 | 2026-10-22 | `draft` → `spec-ready` | /sdd-review | Product spec approved (6 warnings; overlap WARN: 272, 215, 273, 270) |
+| 2026-10-22 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + design.md written. Operator at the r3 gate: option (a) (PERMISSION_DENIED → FORMULA_ERROR, FR-8/AC-7 added) and sign-off on the @AC-5 @feature-150 correction |
 
 ---
 
@@ -35,6 +36,8 @@ Snapshot from `docs/runbooks/reviewer-registry.md` at /sdd-triage time (2026-10-
 
 - [Product Spec](product-spec.md) — bug description and fix scope
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
+- [Recon](recon.md) — grounded codebase dossier (Phase 0)
+- [Design](design.md) — approved design: chosen approach, rejected alternatives, open risks (Phase 1)
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-backtest-silent-symbol-skip`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -49,6 +52,5 @@ diagnostics and is scored and persisted as a success. On staging this hid a PERM
 
 ## Next Action
 
-`/sdd-design fix-backtest-silent-symbol-skip` — recommended design depth: full (the report raises a possible
-`NoTradeReason` proto addition — the C-0 full trigger; the operator may downgrade to quick if the design reuses an
-existing reason plus a warning). Lands after 272, 273 and 215; see context.md
+`/sdd-spec fix-backtest-silent-symbol-skip` — generate implementation spec from the approved design. Re-anchor every
+cited line on the merged state of 272, 273 and 215 first; lands after 272 and 273 (see design.md § Open Risks).
