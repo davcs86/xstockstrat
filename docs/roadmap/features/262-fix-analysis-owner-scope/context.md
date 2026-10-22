@@ -433,3 +433,47 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [ ] The trading-side `ListOrders` report must keep accepting body `user_id` + `x-user-id` + `x-trace-id`. Tracked
   outside this feature (`docs/reports/2026-10-19-trading-listorders-body-user-id-filter-defect.md`).
 - [ ] Record the live_loop no-trace-id acceptance in the spec. Target /sdd-spec.
+
+## Session 2026-10-22 — sdd-spec
+
+- Generated implementation-spec.md with 8 steps. Status: design-approved → implementation-ready.
+- Step 1 (design Step 0) was done in this session: `@AC-9 @FR-4 @regression` was appended to
+  acceptance.feature (commit `72aea957`). It is additive, so no C-16 sign-off is needed.
+- Key codebase findings (re-verified on `origin/feature/fix-analysis-owner-scope` @ `5afe0c84`):
+  - `entry_backfill.py` line refs in recon/design hold unchanged: `:59-61` fetch, `:63-82` pair,
+    `:89-91` blend resolve, `:94` system drain, `:99-121` row loop, `:122` gather, `:123` info log.
+    Neither `uuid` nor `owner_metadata` is imported today (`:14-21`).
+  - The deletion-first Step 3 rule was re-verified line by line. Each of the 24 servicer sites
+    plus readiness `:61`/`:189` is followed by an explicit `get_by_owner_and_id` with the same
+    value. `:1984`/`:2012` are pure aliases, `:4503-4505` already holds the `(uid, sid)` mock, and
+    the `_strategies_repo\.(get_by_id|update\b)` grep returns 30 in `tests/` and 0 in `app/`.
+  - `_live_loop` (`test_owner_header_guard.py:139`) already has 4 in-file consumers and depends on
+    the file-local `_cfg`/`_marketdata`, and `_marketdata` needs `_real_bars` from a test module.
+    The spec therefore moves it to `tests/conftest.py` as
+    `real_live_loop(ingest, indicators, rows, *, config_watcher, marketdata_stub)`, with those two
+    dependencies injected, so conftest never imports a test module. The header guard keeps a
+    one-line `_live_loop` wrapper, so its 4 call sites stay untouched.
+  - The `@AC-6` assertion lands as a new class next to `TestListLiveEnabled`
+    (`tests/test_analysis_servicer.py:6667`), which is where the strategies-repo unit tests
+    already live.
+- Decisions:
+  - The live_loop drains (`_drain_held`/`_drain_watchlist`/`_drain_owner_signals`) deliberately
+    carry **no `x-trace-id`**. Adding one needs a signature change that is out of scope. This is
+    accepted under the operator trace-id decision of 2026-10-21; only the backfill's own
+    `ListOrders` carries the per-pass id, and it is logged.
+  - The consumer surface needs no UI or Agent step (C-14). `/trader` alerts change only through
+    what analysis already emits.
+
+### Open Threads
+
+- [ ] merge-order.md row "244 before 262 — ADJACENT at `entry_backfill.py:56-61`, textual rebase
+  conflict expected" was not written. This /sdd-spec run could write only this feature's directory.
+  Add it at `/sdd-review impl-spec` or with the integration PR.
+- [ ] Rebase churn on `tests/test_analysis_servicer.py` (215/244/245): handled at Step 7 by rebasing
+  first, then the grep gate.
+- [ ] Possible `tests/conftest.py` collision from moving `_live_loop`: Step 5 falls back to a
+  real-`owner_metadata` side effect and records it in the Deviation Log.
+- [ ] The "no callers" claim for `get_by_id`/`update` comes from grep: Step 7 closes it with a full
+  analysis suite run.
+- [ ] The trading-side `ListOrders` report must keep accepting body `user_id` + `x-user-id` +
+  `x-trace-id` (tracked outside this feature).
