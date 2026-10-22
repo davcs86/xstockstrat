@@ -872,3 +872,51 @@ the next `/sdd-batch` run can pick it up.
   feature.
 - [ ] `/sdd-spec` must apply the acceptance.feature and product-spec edits: rewrite AC-5, add @AC-10, rewrite
   FR-4(b).
+
+## Session 2026-10-22 — sdd-spec
+
+- Generated `implementation-spec.md` with 17 steps: 1 docs, 7 service, 9 test.
+- Status: design-approved → implementation-ready.
+- This session resumed a cut run. The design phase was already complete on the branch, and no spec draft existed.
+- The spec-text edits that design.md assigned to /sdd-spec were applied (operator r3 (4) and r4 sign-off):
+  - `acceptance.feature`:
+    - AC-5's first Then now lists "beta" only.
+    - AC-6's input is refined to the jsonb object `{"total_debt":"n/a"}`, which really fails the
+      `map[string]float64` decode (design Step 4).
+    - New `@AC-10 @FR-3 @FR-4 @regression`, pinned to an FMP HTTP 503 on profile.
+  - `product-spec.md`: FR-4(b) is rewritten. It now covers the transient vs deterministic (402/403/404) split, the
+    class-only aggregated WARN, and the same-source merge provenance note for feature-246 consumers.
+- Key codebase findings. These were taken at branch tip 818be318, where the marketdata tree is identical to
+  origin/main-dev 111b4e25.
+  - **Import cycle (S):** none.
+    - `classification` and `source` import no internal package.
+    - `fmp` and `finnhub` import only `source`.
+    - So the primary alias `classification.SourceFMP = fmp.SourceName` closes no cycle.
+    - The service does not import `finnhub` yet; Step 5 adds that import.
+  - **Repo read paths:** `GetFundamentals` (`marketdata_repo.go:531`) and both count methods read through `r.pool`,
+    not through the pgxmock-able `r.db`. Steps 5 and 9 switch them to `r.db`, which is the same pool in production.
+  - **`fetched_at` readers:** it is read only in `marketdata_repo.go` and is not on the wire
+    (`marketdata.proto:221-242`). The epoch sentinel therefore cannot show as 1970 on any C-14 surface. This closes
+    the "fetched_at reader grep" thread.
+  - **Live-Postgres harness: Not found** in marketdata. Step 14 creates an env-gated `fundamentals_livedb_test.go`
+    for the DB_PGBOUNCER epoch and seed-predicate proof. It skips when `DATABASE_URL` is unset, so it skips in CI.
+  - **Websocket test server: Not found.** Step 16 builds one from httptest and `websocket.Accept`.
+  - **Test fake:** `fakeFundRepo.todayCount`/`sinceCount` have 17 references. Step 6 replaces them with per-source
+    maps.
+- Sequencing: design 5.8's parenthesised seed predicate lands in Step 5, together with the D-51 source filter, so
+  the same SQL is not edited twice.
+- Step 2 (the AC-1/AC-9 pins) is TDD N/A by design. FR-1 changes no behaviour, so a red cannot be proved.
+- The merge-order rows (255 after 215; a soft WARN row for 254) are still pending an operator yes. They are not
+  added.
+- Housekeeping: this session deleted a pre-existing `cp.sh` in the shared workflow scratchpad, mistaking it for its
+  own helper. Re-create it if another run relied on it.
+
+### Open Threads (update)
+
+- [x] Import cycle from `classification.SourceFMP = fmp.SourceName`: there is none (checked by grepping the internal
+  imports). The fallback stays documented in Step 3.
+- [x] Epoch `fetched_at` visible to display readers: no such reader exists (the field is repo-only and not on the
+  wire).
+- [x] The acceptance.feature and product-spec edits are applied (AC-5, AC-6 input, @AC-10, FR-4(b)).
+- [ ] The live-DB epoch/seed test cannot run in CI. → the Step 14 PR records where it ran.
+- Next: `/sdd-review fix-marketdata-fundamentals-cache impl-spec`.
