@@ -351,3 +351,46 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [ ] An empty `name` on UPDATE now blanks the name in indicators and analysis. Pin it with a bind test. Target: the indicators and analysis steps.
 - [ ] Merge-order entry for features 244 and 245 on indicators `servicer.py:652` and analysis `servicer.py:3581`. Target: /sdd-spec (merge-order.md).
 - [ ] Name the promotion rule for the @AC-1..3 ID collision with feature 224: keep `@feature-269` and dedupe on (feature, AC), or renumber. Target: /sdd-spec launch step.
+
+## Session 2026-10-22 — sdd-spec
+
+- Generated implementation-spec.md with 9 steps. Status: design-approved → implementation-ready.
+  - Steps 1–6 are three service/test pairs: indicators 1–2, analysis 3–4 (with the required real-PG file `tests/test_strategy_templates_real_pg.py`), and ingest 5–6.
+  - Step 7 adds a soft entry to merge-order.md.
+  - Step 8 records the D-41 residual proof gap in the debt radar.
+  - Step 9 is the C-16 promotion at integration.
+- Key codebase findings (re-verified on `feature/fix-template-update-metadata` @ 1276acf):
+  - **Indicators:**
+    - `update` is at `formula_templates_repository.py:50` (SQL at `:55`); `retire` is at `:64` (its SET at `:68` has no `updated_at`).
+    - The only call site is `servicer.py:652`.
+    - The fake `_FakeTemplates.update` is at `tests/test_formula_templates.py:83`.
+    - There is no empty-id CREATE test, so Step 2 adds an @AC-3 pin.
+  - **Analysis:**
+    - `update` is at `strategy_templates.py:54` (SQL at `:59`); the call site is `servicer.py:3581`.
+    - The mapper at `:7138-7150` reads name/description/updated_at, so it needs no change.
+    - `local_pg` (`tests/conftest.py:367-368`) is session-scoped and shared, so the real-PG test uses distinct template_ids.
+    - The migration 026 DDL is at `:89-99`, and only `026*.up.sql` mentions `strategy_templates`.
+  - **Ingest:**
+    - The `retire` SET is at `source_templates.py:71`.
+    - In `ManageTemplate`: db gate `:1513-1515`, ADMIN gate `:1517-1519`, `meta =` at `:1521`, `validate_config_json` at `:1527`, uuid fallback at `:1540`. `uuid.uuid4` is also used at `:398`.
+- Design spec deliverables resolved:
+  - **@AC-2 is relativized** in acceptance.feature (this session). The literal 10:00Z/11:00Z became "keeps the retired_at set by the first RETIRE" and "updated_at later than that retired_at". The ID is unchanged (C-15). Per-service evidence is mapped in spec § Scenario Coverage: SQL text for indicators and ingest, runtime for analysis (regression pin only).
+  - **The merge-order entry is Step 7**, a soft/rebase row following the merge-order.md:55 precedent. This writer's scope is limited to the feature directory, so the shared file is edited at execute time.
+  - **The durable home for the gap is the debt radar D-41 entry (Step 8).** It was chosen over `docs/context-constitution-findings.md` because it is the finding's own home and does not trigger the context-forge teardown.
+  - **The C-16 promotion rule is named:** keep `@feature-269`, with identity = (feature, AC). No renumbering. Promote into a new per-service `fix-template-update-metadata.feature`, following the feature-173 `fix-python-config-zero-trap.feature` precedent, and never into `private-by-default-templates.feature` (Step 9).
+- C-14: there is no UI or agent step. Design decided that `/config-ui/templates` is reached by the backend fix with no UI edit (`page.tsx:153-158` re-read this session) and that the agent has no ManageTemplate path. Spec § Execution Summary restates this as a decision, not an omission.
+- C-03: not engaged (operator standing trace-id decision, 2026-10-21). No step adds an outbound call, emit or context.
+
+### Decisions
+
+- Empty name/description on UPDATE is full-replace in indicators and analysis. This is a deliberate behavior change that matches ingest. Bind tests pin it: Step 2(b) and Step 4(b).
+- The ingest empty-id guard is CREATE-only and sits after the ADMIN gate. Step 6(e) pins the @AC-13 ordering, and 6(c) pins that the guard runs before payload validation.
+
+### Open Threads
+
+- [x] Rewrite @AC-2 in relative form. Done in acceptance.feature (2026-10-22 sdd-spec).
+- [ ] Record the indicators/ingest real-PG gap durably. Target: Step 8 (debt radar D-41).
+- [x] State autocommit-per-call for the analysis real-PG test in the step text. Done: Step 4 instruction 7.
+- [x] Pin the empty-name full-replace with a bind test. Specced in Steps 2(b) and 4(b).
+- [ ] Add the merge-order entry for 244/245. Target: Step 7.
+- [x] Name the promotion rule for the @AC-1..3 collision. Named in Step 9; it executes at integration.
