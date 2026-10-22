@@ -54,10 +54,17 @@ half-enriched row for a full TTL (D-53).
   source-aware check on the EDGAR axis.
 - **FR-4 (D-53).** (a) A failed decode of a row's `extra` jsonb column is logged as a WARN naming the symbol and the
   error, through one shared helper used by all three read sites. (b) When an FMP enrichment call (ratios or profile)
-  fails, including `ErrFMPDailyCapExceeded`, a WARN names the symbol and the failed enrichment; the metrics that call
-  would supply are listed in the response's `Fundamentals.missing_metrics` (existing field 18 semantics, no new proto
-  field); and the row is not treated as fresh for the full `marketdata.fmp.cache_ttl_hours`, so the next request after
-  the FMP quota resets re-fetches it.
+  fails, one aggregated WARN per `GetFundamentalsMulti` call names each failed symbol, the enrichment and a failure
+  class (never the raw error text, which can carry the apikey). The metrics that call would supply are listed in the
+  response's `Fundamentals.missing_metrics` (existing field 18 semantics, no new proto field; `sector` is a string and
+  is not in that vocabulary). A **transient** failure — `ErrFMPDailyCapExceeded`, request cancel/deadline, HTTP 5xx or
+  any other non-200 except 402/403/404, transport, body-read or decode failure — stores the row **already expired**, so
+  the next request with FMP budget re-fetches it, and a request at the cap serves it `stale=true`, never
+  `ResourceExhausted` (operator design gate r2). A **deterministic** FMP HTTP 402/403/404 is cached fresh for
+  `marketdata.fmp.cache_ttl_hours` with an honest `missing_metrics` (operator design gate r3 (2)). Provenance note
+  (operator r3 (1)): on a flagged overwrite of a prior row with the same `source`, the prior enrichment values are kept
+  (never relabelling edgar values as fmp); such a row carries today's `as_of`, prior enrichment values and an empty
+  `missing_metrics`, which is acceptable only because it is served `stale=true` — feature-246 consumers take note.
 - **FR-5 (D-19).** The Alpaca stream manager's reconnect counter counts consecutive failed attempts only and resets after
   a successful session; the backoff wait is cancellable by the manager's context; and when `MaxReconnects` consecutive
   attempts fail, the manager closes every subscriber's channel (the signal subscribers observe) and logs an ERROR naming
