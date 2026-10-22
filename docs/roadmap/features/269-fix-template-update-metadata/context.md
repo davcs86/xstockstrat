@@ -394,3 +394,20 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [x] Pin the empty-name full-replace with a bind test. Specced in Steps 2(b) and 4(b).
 - [ ] Add the merge-order entry for 244/245. Target: Step 7.
 - [x] Name the promotion rule for the @AC-1..3 collision. Named in Step 9; it executes at integration.
+
+## Session 2026-10-22 — sdd-review impl-spec
+
+- `/sdd-review fix-template-update-metadata impl-spec` (MODE B, advisory). The lifecycle is unchanged (`implementation-ready`).
+- Criteria verdict: **PASS WITH WARNINGS**, with 0 FAIL and 0 floor breaches. Overlap verdict: **WARN**. Every collision is file-level and rebase-only, with disjoint line ranges against 244, 245, 262, 268 and 272. There are no migration, proto or config collisions.
+
+### Addressed
+
+- Step 2 item 5 (d) was muddled: it applied a spy and then "restored the fake". It is now split into (d), which is the wiring spy only and is never undone, and a separate test (d′) `test_ac1_update_meta_visible_in_list`. (d′) builds a fresh `_servicer()` (re-verified at `tests/test_formula_templates.py:170-175`) so the lockstep fake is live, then runs UPDATE and checks the list. The Step 2 TDD line and red gate now include (d′).
+- Step 6 Codebase Evidence now notes that ingest `source_templates.py` is a module of functions: `update` at `:50` and `retire` at `:67`, both re-verified.
+
+### Still open (surface at the /sdd-execute checkpoint)
+
+- [ ] Run Step 7 (the merge-order soft row for 244/245) before the integration PR. The overlap scan also found file-level, rebase-only overlap with 262, 268 and 272 on the indicators and analysis `servicer.py`. The executor should decide whether the Step 7 row names those features too. This review did not add them to the spec because the row text is a design deliverable.
+- [ ] Indicators and ingest have SQL-text and bind proof only, with no real-DB proof. This trade-off was accepted (C-18). It is recorded durably by Step 8 (D-41).
+- [ ] The analysis real-PG red proof (Step 4) runs only under `CI=true` and skips locally. Confirm it in CI and do not rely on a local run.
+- Accepted as-is, no action: Steps 7-9 are docs steps with grep-only verification, so no coverage or lint gate applies to them.
