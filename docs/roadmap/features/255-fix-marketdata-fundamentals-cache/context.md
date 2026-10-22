@@ -920,3 +920,42 @@ the next `/sdd-batch` run can pick it up.
 - [x] The acceptance.feature and product-spec edits are applied (AC-5, AC-6 input, @AC-10, FR-4(b)).
 - [ ] The live-DB epoch/seed test cannot run in CI. → the Step 14 PR records where it ran.
 - Next: `/sdd-review fix-marketdata-fundamentals-cache impl-spec`.
+
+## Session 2026-10-22 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 7 warnings; overlap WARN (file-level, with 215). Advisory, so the lifecycle is unchanged
+  (`implementation-ready`).
+- Addressed in `implementation-spec.md`:
+  - [x] Steps 2, 4, 8, 10 (B2 / C-08): each now runs the CI `>= 40%` total coverage command. The "no threshold
+    applies" text is replaced.
+  - [x] Step 9 (C-01): the symbol local is pinned as `sym` at all three decode sites. The var blocks are at
+    `marketdata_repo.go:534`/`:824`/`:873`, scanned at `:539`/`:830`/`:879`.
+  - [x] Step 3 (F-09): the dead import-cycle fallback is removed. A cycle at build time is now a P-03 stop.
+  - [x] Step 4: re-verification found a real test-only import cycle. An in-package `fmp` test cannot import
+    `classification` once `classification` imports `fmp`. The alias assertion moves to
+    `internal/classification/sector_test.go`, which is added to Step 4's Files.
+  - [x] Step 11 (F-09): `stageError{stage, err}` is pinned. It wraps `:243`/`:251`/`:258`, `Error()` delegates to the
+    wrapped error so the text stays byte-identical, and `Unwrap` keeps the ctx chain. `io.ReadAll` and
+    `json.Unmarshal` errors have no shared type, so the stages cannot be told apart without it.
+  - [x] Step 14 (ledger fails.md 2026-09-01): the live-DB run record in the step PR is now mandatory and part of
+    the step's verification.
+- Acknowledged, no edit:
+  - Steps 1 and 17 have no lint or coverage command. They make no code change, so this is acceptable.
+  - The file count in Steps 6 and 14 and the shared `source.go`/finnhub import edits are advisory only. The
+    design is minimal.
+
+### Open Threads (sdd-review impl-spec)
+
+- [ ] Step 11: the WARN class label for unstaged enrichment errors (`fmp_client.go:226` build request, and a non-ctx
+  limiter error at `:229`, e.g. "would exceed context deadline") is not one of the design's six classes
+  (cap/ctx/http_<code>/transport/read/decode). They still expire (rule 5). The executor must ask the operator
+  for the label (for example `other`) and must not choose one silently (C-11).
+- [ ] Merge-order rows are still pending an operator yes: `fix-marketdata-fundamentals-cache` blocked by
+  `block-fundamentals-strategy-on-etf` (215), plus a soft WARN row for `fix-marketdata-secret-exposure` (254).
+- [ ] Overlap WARN with 215, file-level only: `marketdata_service.go`, `source/source.go`, `fmp/fmp_client.go`,
+  `finnhub/finnhub_client.go` and `cmd/server/main.go`. 215 Step 7 is `done` on its branch, so re-check the line
+  anchors after the rebase. There is no proto, migration or config-key collision.
+- [ ] Peer-batch overlap is UNVERIFIED (the peer directories were not in the review worktree), and so is 254's
+  overlap (its directory and ref were not found). Re-scan before execution.
+- [ ] The Step 14 live-DB test skips in CI (carried forward). The mandatory PR record now tracks it.
+- Next: `/sdd-execute fix-marketdata-fundamentals-cache`.
