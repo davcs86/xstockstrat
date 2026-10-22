@@ -1,8 +1,8 @@
 Feature: fix-indicators-formula-correctness (bug fix)
   Regression guard for docs/reports/2026-10-21-indicators-formula-correctness-defect.md:
   silent empty formula success (D-10), misnamed ATR/VWAP (D-18), and mutation of hidden saga copies (D-54).
-  D-18 has two allowed fix paths (product-spec OQ-1). @option-A scenarios (AC-4, AC-5) and @option-B
-  scenarios (AC-8, AC-9) exclude each other. Design keeps one pair and deletes the other.
+  D-18 resolved as Option A at /sdd-design (2026-10-22, OQ-1 = A): AC-4/AC-5 kept; the @option-B pair
+  (AC-8, AC-9) was deleted as the losing option.
 
   @AC-1 @FR-1 @regression
   Scenario: A formula that exits before producing output is reported as a failure
@@ -60,17 +60,3 @@ Feature: fix-indicators-formula-correctness (bug fix)
     When "u-1" calls DeleteFormula on "f-1"
     Then the call fails with NOT_FOUND
     And "f-1" has no deleted_at timestamp
-
-  @AC-8 @FR-3 @option-B @regression
-  Scenario: The ATR built-in computes the Average True Range from high, low and close
-    Given high values [11, 13, 12, 14], low values [9, 11, 10, 12], close values [10, 12, 11, 13] and params {"period": 2}
-    When ComputeIndicator "ATR" is called with those series
-    Then the last IndicatorPoint in the response result has value 2.5, the simple mean of true ranges 2 and 3 over the last 2 bars
-    And ListIndicators still describes "ATR" as "Average True Range"
-
-  @AC-9 @FR-4 @option-B @regression
-  Scenario: The VWAP built-in weights prices by volume
-    Given close values [10, 20, 30] and volume values [1, 1, 2]
-    When ComputeIndicator "VWAP" is called with those series
-    Then the response result holds IndicatorPoints with values [10, 15, 22.5]
-    And ListIndicators still describes "VWAP" as "Volume Weighted Average Price"
