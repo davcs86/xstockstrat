@@ -70,10 +70,10 @@ Two layers (report § Root cause hypothesis):
 
 ## Functional Requirements
 
-- **FR-1** — When evaluating a requested symbol fails with a `grpc.RpcError` (for example indicators
-  `ExecuteFormula` PERMISSION_DENIED, or a marketdata `GetBars` / indicators `ComputeIndicator` call that returns a
-  gRPC status such as UNAVAILABLE), `RunBacktest` appends a `SymbolDiagnostics` row for that symbol with a typed
-  `no_trade_reason` other than `NO_TRADE_REASON_UNSPECIFIED`.
+- **FR-1** — When evaluating a requested symbol fails with a `grpc.RpcError` (for example a marketdata `GetBars` /
+  indicators `ComputeIndicator` / `ExecuteFormula` call that returns a gRPC status such as UNAVAILABLE),
+  `RunBacktest` appends a `SymbolDiagnostics` row for that symbol with a typed `no_trade_reason` other than
+  `NO_TRADE_REASON_UNSPECIFIED`. An owner-unreadable formula refusal is handled by FR-8 instead.
 - **FR-2** — When evaluating a requested symbol raises an unexpected exception (any other `Exception`), `RunBacktest`
   appends a `SymbolDiagnostics` row for that symbol with a typed `no_trade_reason` other than
   `NO_TRADE_REASON_UNSPECIFIED`.
@@ -96,6 +96,17 @@ Two layers (report § Root cause hypothesis):
   `asyncio.CancelledError` / 272's run-timeout handling are not caught. Any warning or emit this change adds keeps
   the inbound `x-trace-id` metadata (operator directive 2026-10-21; no C-03 waiver). The trace-id clause has no
   user-visible outcome, so it is verified by a unit-test step in the implementation spec, not by a Gherkin scenario.
+- **FR-8** — *(Added 2026-10-22, operator decision at the round-3 design gate, option (a); extends
+  `@AC-30 @feature-224`.)* On the backtest path, an indicators `ExecuteFormula` refusal for a formula the strategy
+  owner cannot run maps to `FormulaExecutionError`, whether indicators returns NOT_FOUND (owner caller) or
+  PERMISSION_DENIED (admin caller). Both runs report `NO_TRADE_REASON_FORMULA_ERROR` and count toward the FR-4 gate.
+  The FORMULA_ERROR row for such a refusal also adds an FR-3-style warning that names the symbol and the status
+  code name only, never the indicators error detail, which names the foreign author. The live (non-backtest)
+  evaluation path is unchanged.
+
+**Run-history scope (FR-5).** An `INSUFFICIENT_DATA` run persists its run-history row (null score, empty rating) but
+no detail row. Its per-symbol diagnostics and warnings are returned in the RPC result and held only in memory, so
+they are not available after a service restart or a Past-Runs reload.
 
 ## Dependencies / Merge Order
 
@@ -138,7 +149,7 @@ Two layers (report § Root cause hypothesis):
 ## Acceptance Criteria
 
 See `acceptance.feature` — the regression scenario(s) that must fail on the buggy behavior and pass
-after the fix (Constitution **C-15**). Each scenario is tagged with the `@FR-n` it covers (FR-1..FR-7). Plus:
+after the fix (Constitution **C-15**). Each scenario is tagged with the `@FR-n` it covers (FR-1..FR-8). Plus:
 existing tests pass; affected service(s) smoke-tested on dev.
 
 ## Out of Scope
