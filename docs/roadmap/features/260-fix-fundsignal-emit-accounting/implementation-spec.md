@@ -77,8 +77,9 @@ pass-through sites as its check.
 - **Cross-feature merge order:** `246-fix-fundsignal-neutral-score` (implementation-ready) edits the same `run_once`
   claim/skip/emit lines and the `_fund` / `_emitted_inserts` test helpers. **246 merges to `main-dev` first, then
   260 rebases onto it.** Line numbers in this spec are from `main-dev` @ the design base. After the rebase, find
-  every site by the symbol or SQL text cited next to it, and record line shifts in the Deviation Log. Step 9 adds
-  the `merge-order.md` row.
+  every site by the symbol or SQL text cited next to it, and record line shifts in the Deviation Log.
+  `/sdd-execute` lands the `merge-order.md` row (text in Step 9 item 4) **before Step 1**, so the dependency is
+  recorded for the whole execution window; Step 9 only verifies it is present.
 - **Peers, rebase only:** `259-fix-python-loop-supervision` (`run_forever`/`_tick`, still `spec-ready` with no
   design), `244-fix-python-config-stored-zero` (the `retry_seconds` reads at `:143,154`) and
   `215-block-fundamentals-strategy-on-etf` (`analysis.proto`, a different message).
@@ -107,7 +108,8 @@ pass-through sites as its check.
   - `deferred = symbols[i:]` (`:406`) and `return fetched, deferred, calls` (`:407`).
 - The status line is `status = "budget_deferred" if deferred else "completed"` (`:280`), and the budget warning is at
   `:281-285`.
-- Existing test `TestBudgetDefer.test_paced_fetch_respects_budget` (`tests/test_fundsignal_loop.py:157-164`) unpacks a
+- Existing test `TestBudgetDefer.test_paced_fetch_respects_budget` (class at `tests/test_fundsignal_loop.py:155`, method
+  at `:157-164`) unpacks a
   3-tuple: `fetched, deferred, calls = await loop._paced_fetch(symbols, budget=1, metadata=())`.
 - `test_run_marks_deferred_and_warns` (`:167-173`) asserts `status == "budget_deferred"`, `deferred_count == 70` and
   `EmitAlert.assert_awaited()`. It must stay green.
@@ -149,6 +151,7 @@ cd services/xstockstrat-analysis && uv run pytest tests/test_fundsignal_loop.py 
 # RED (pre-Step-2): test_paced_fetch_respects_budget fails (ValueError: not enough values to unpack)
 # and both TestFailedChunk tests fail (status "completed"/"budget_deferred", deferred 0/20)
 grep -n "conftest" tests/test_fundsignal_loop.py   # C-13: no new conftest fixture introduced
+# Coverage (B2): no --cov-fail-under here, since this step is RED by design; the paired Step 2 carries --cov-fail-under=40
 ```
 
 ---
@@ -342,6 +345,7 @@ cd services/xstockstrat-analysis && uv run pytest tests/test_fundsignal_loop.py 
 cd services/xstockstrat-analysis && uv run pytest tests/test_fundsignal_emitted_real_pg.py -m real_pg -q
 # RED with a local PostgreSQL (XSTOCKSTRAT_PG_BIN); skipped without one locally, run in CI
 grep -n "from tests.test_fundsignal_loop import\|conftest" tests/test_fundsignal_emitted_real_pg.py   # C-13: imports, no copy
+# Coverage (B2): no --cov-fail-under here, since this step is RED by design; the paired Step 4 carries --cov-fail-under=40
 ```
 
 ---
@@ -492,6 +496,7 @@ grep -n "signal_id IS NULL" services/xstockstrat-analysis/app/engine/fundsignal_
 cd services/xstockstrat-analysis && uv run pytest tests/test_fundsignal_loop.py -k "TestRetryStability or TestScoreDirection" -q
 # RED (pre-Step-6): test_ac8 (valid_until 15:30 anchor), test_ac9 ("buy"), test_map_directions_reference_scores
 # (TypeError: unexpected keyword) fail; test_ac10 and test_quantile_buckets pass
+# Coverage (B2): no --cov-fail-under here, since this step is RED by design; the paired Step 6 carries --cov-fail-under=40
 ```
 
 ---
@@ -515,6 +520,11 @@ cd services/xstockstrat-analysis && uv run pytest tests/test_fundsignal_loop.py 
 - `_map_directions` is at `:469-485` and its call at `:230`. `_emit_signal(self, source, symbol, direction, conviction, valid_days, metadata)`
   is at `:520`, with the `valid_until` computation at `:524-525` and its only call at `:257-259`.
 - `as_of_date` is at `:172`, and `force` is a `run_once` parameter (`:169`).
+- Under Step 5's `monkeypatch.setattr(fundsignal_module, "datetime", _FixedClock)`, `datetime.combine(...)` resolves
+  to the inherited classmethod and returns a tz-aware `_FixedClock` instance (checked on Python 3:
+  `_FixedClock.combine(date(2026, 10, 21), time.min, UTC)` gives `2026-10-21 00:00:00+00:00`), so `valid_anchor` stays
+  a usable aware datetime in both branches. If `FromDatetime` or the arithmetic misbehaves on the subclass, log it in
+  the Deviation Log rather than dropping the patch.
 
 **TDD**: `red-green required`
 
@@ -592,7 +602,7 @@ xstockstrat-analysis owner — backtest reproducibility, strategy scoring determ
 
 **Verification**:
 ```bash
-cd packages/proto && buf lint && buf breaking --against "$(git rev-parse --show-toplevel)/.git#branch=feature/fix-fundsignal-emit-accounting,subdir=packages/proto"
+git fetch origin main-dev && cd packages/proto && buf lint && buf breaking . --against '../../.git#branch=origin/main-dev,subdir=packages/proto'   # compare to trunk, not the branch itself
 ```
 
 ---
@@ -675,12 +685,14 @@ grep -rn '"budget_deferred" | "partial" | "failed"' packages/proto/gen | wc -l  
    - Non-force `valid_until` = `as_of_date` 00:00 UTC + `valid_days`, so a lost-response retry dedups at ingest.
      `force=true` keeps `now + valid_days` and re-emits fresh.
    - A crash between claim and confirm leaves a NULL row. That row is skipped until the next `as_of_date` or a
-     `force=true` run.
+     `force=true` run. A release DELETE that itself fails is logged and swallowed (`_release_claim`), leaving the
+     same NULL row with the same recovery.
    - Direction cuts include the day's stored scores. This also applies to a `budget_deferred` resume and to a
      non-force `override_symbols` scan.
 3. **`docs/runbooks/mcp-tools.md:845`.** Change it to `` `status` is `"completed"` | `"budget_deferred"` | `"partial"` | `"failed"`. ``
    and add one sentence: `partial` = a fetch chunk failed and its symbols are in `deferred_count`.
-4. **`merge-order.md`.** Append the row
+4. **`merge-order.md`.** Confirm this row is present (`/sdd-execute` lands it before Step 1; append it now if
+   it is missing):
    `` | `fix-fundsignal-emit-accounting` (260) | `fix-fundsignal-neutral-score` (246) | Soft/rebase (not blocking): both edit `run_once`'s claim/skip/emit lines and the `_fund`/`_emitted_inserts` test helpers in `services/xstockstrat-analysis/app/engine/fundsignal_loop.py` / `tests/test_fundsignal_loop.py`; 246 merges first, 260 rebases | No | ``.
 5. **Teardown (root `CLAUDE.md` § Teardown).** Run `/context-forge:context-constitution refresh` scoped to
    `services/xstockstrat-analysis/` and `docs/runbooks/mcp-tools.md`, and fix any grounded drift it reports. If the
