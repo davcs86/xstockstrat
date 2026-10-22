@@ -16,11 +16,13 @@
 Info-level log line explains why the fill did not populate the cache.
 
 **Expected.**
-- After a first miss, the best-effort fill labels the symbol, and a later run reports
-  `FUNDAMENTALS_GAP_ETF` for an ETF.
-- The FMP day-budget seed counts only rows that cost an FMP call.
+- After a first miss, the best-effort fill labels the symbol once the FMP budget allows, and a later run
+  reports `FUNDAMENTALS_GAP_ETF` for an ETF.
 - When the fill is skipped (gate closed) or fails (vendor error), the reason is visible at the service's
   normal log level, rate-limited.
+- The over-counted FMP day-budget seed (the primary hypothesis below) is fixed by
+  `255-fix-marketdata-fundamentals-cache` (D-51, its FR-2 / `@AC-3`), not by this feature. 230 lands after 255
+  (operator decision 2026-10-22).
 
 ## Reproduction Steps
 
@@ -59,18 +61,51 @@ Not confirmed: the staging run logs were not readable from the triage session. A
 
 No proto, UI text or agent-tool contract changes.
 
+## Functional Requirements
+
+- **FR-1 — An ETF missed once is labelled on a later call once budget allows.** With the FMP boot seed counting
+  only FMP-sourced rows (delivered by 255), a symbol that missed the ETF-flag cache is enqueued, the background
+  filler fetches its FMP profile while the gate is open, and a later `GetEtfFlags` call for that symbol returns
+  `is_etf = true` for an ETF. Existing gate semantics (80% of `marketdata.fmp.daily_request_cap`) are unchanged.
+- **FR-2 — A skipped or failed fill is visible at Info level, rate-limited, and never logs raw error text.** When
+  the filler skips a symbol because the gate is closed, or the FMP profile fetch fails, marketdata emits a record at
+  Info level or higher naming the symbol and the reason: `gate closed` with used/cap, or the error **class** only
+  (e.g. timeout, HTTP status, decode). It never logs the raw error string, because `FetchIsEtf` errors can carry the
+  `apikey=` URL until `254-fix-marketdata-secret-exposure` lands. Repeated records are rate-limited to at most one
+  per one-minute window. The window is a fixed code constant, not a config key.
+
+| FR | Acceptance scenarios |
+|---|---|
+| FR-1 | `@AC-2` |
+| FR-2 | `@AC-3` |
+
+The seed-count regression (the former `@AC-1`) is owned and tested by 255 `@AC-3`; 230 no longer carries it.
+215's `@AC-14` gate tests (`etf_flags_test.go`) must keep passing (C-16).
+
 ## Fix Scope
 
 - [x] No proto changes anticipated
-- [x] No database migrations anticipated (the seed query can filter on the existing `source` column)
-- [x] No config key changes anticipated
+- [x] No database migrations anticipated
+- [x] No config key changes anticipated (the rate-limit window is a code constant)
+- Changes are confined to the ETF-flag filler (`internal/service/etf_flags.go`) and its tests. The FMP boot seed,
+  `CountFundamentalsFetchedToday`, and FMP-provider quota semantics are not touched by 230 (255 owns them).
 
-(Update after investigation: confirm the cause from the marketdata logs first.)
+## Open Questions
+
+- **Rate-limit key (for /sdd-design):** is the one-minute limit per symbol, per reason, or global across the
+  filler? A global (or per-reason) limit bounds the flood when the gate is closed for every symbol; per-symbol keeps
+  each symbol visible. Design must pick one and state it in the AC-3 test.
+- **Hypothesis 3 (empty profile negative-cached for 30 days):** if confirmed from the staging logs, does the
+  30-day negative TTL for an empty profile need to change? Out of 230's narrowed scope unless design finds it is
+  the live cause; if so, raise it with the operator before widening scope.
+- **Root cause confirmation:** confirm from the marketdata logs (now visible via FR-2) whether 255's seed fix alone
+  restores labelling on staging.
 
 ## Acceptance Criteria
 
-See `acceptance.feature`: regression scenarios that must fail on the buggy behavior and pass after the
-fix (Constitution **C-15**). Also, existing tests pass, and on dev Step 26(a) of feature 215 reports
+See `acceptance.feature` (Constitution **C-15**). `@AC-3` fails on the current code (fill skips are silent and
+fetch errors are Debug-only). `@AC-2` is set up so that its gate is closed on the current code only by non-FMP rows,
+so it fails before 255's source-filtered seed and passes after it. Also, existing tests pass, and on dev Step 26(a) of feature 215 reports
 `FUNDAMENTALS_GAP_ETF` for SCHD after a first miss.
 
 ## Out of Scope
