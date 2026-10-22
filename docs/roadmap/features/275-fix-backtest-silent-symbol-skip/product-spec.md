@@ -85,13 +85,28 @@ Two layers (report § Root cause hypothesis):
 - **FR-5** — A run that FR-4 makes `INSUFFICIENT_DATA` is not scored as a success. Its run-history row records a
   null score (not 0) and an empty rating. No backtest detail row is written (`_persist_backtest_detail`). No
   per-symbol evidence cell is written. The success-driven headline recompute does not run for it (feature 215's
-  refused-only recompute rule is unchanged).
+  refused-only recompute rule is unchanged). The null score is already current behavior for `INSUFFICIENT_DATA`
+  runs (`score = None` unless status is OK, `servicer.py:1290-1299`), so FR-5 is a regression guard, not a change.
+  `services/xstockstrat-analysis/CLAUDE.md` (Backtest Auto-Scoring & Run History) still says "0 score"; the fix PR
+  corrects that drift (root Teardown rule).
 - **FR-6** — A partial run, where at least one symbol is evaluated and produces trades or a usable curve, stays
   `BACKTEST_STATUS_OK`. It still carries the FR-1 / FR-2 diagnostics row and the FR-3 warning for each failed symbol.
 - **FR-7** — The new handling must not absorb exceptions that other features re-raise on purpose. Feature 272's
   `_BarFetchError` keeps propagating (it maps to `FAILED_PRECONDITION` and is out of scope here), and
   `asyncio.CancelledError` / 272's run-timeout handling are not caught. Any warning or emit this change adds keeps
-  the inbound `x-trace-id` metadata (operator directive 2026-10-21; no C-03 waiver).
+  the inbound `x-trace-id` metadata (operator directive 2026-10-21; no C-03 waiver). The trace-id clause has no
+  user-visible outcome, so it is verified by a unit-test step in the implementation spec, not by a Gherkin scenario.
+
+## Dependencies / Merge Order
+
+- **Lands after feature 272** (`fix-analysis-backtest-bounds`, implementation-ready): same `RunBacktest` lines.
+  On `main-dev`, `_BarFetchError` is defined and raised (`servicer.py:358`, `:1445`) but not yet mapped to
+  `FAILED_PRECONDITION`. That mapping arrives with 272. FR-7's `_BarFetchError` clause and `@AC-6` can only pass
+  once 272 is in, and this fix keeps 272's `except _BarFetchError: raise` ahead of the new catch-all handling.
+- **Lands after feature 273** (`fix-agent-client-deadlines`) and **after feature 215**
+  (`block-fundamentals-strategy-on-etf`). 215 changes the same status gate and edits `analysis.proto`, so this
+  feature's gate change and any `NoTradeReason` value rebase onto 215's landed state.
+- The merge-order rows are written at `/sdd-spec` (router-owned, operator confirmation).
 
 ## Consumer Surface(s)
 
