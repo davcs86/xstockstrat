@@ -3033,3 +3033,8 @@ ambiguity is logged here).
 - **Evidence**: `docs/roadmap/features/250-fix-otel-metrics-logs-gap/design.md` §4 Part 3 (existence set) and §5 (comment-only red case); context.md 2026-10-21 sdd-design entry.
 - **Rule it implies**: an existence/absence guard derives its "exists" set from declaration value lines only (e.g. `- uid:`, top-level `"uid":`), never from free text in the same file, and ships a red case proving a comment cannot satisfy existence.
 
+
+### 2026-10-22 — fix-marketdata-secret-exposure — assumption
+- **Mistake**: The vendor clients redacted the URL on the non-2xx branch only. They `%w`-wrapped the transport error (`http.Client.Do`) and the parse error (`http.NewRequestWithContext`) as-is. Both are `*url.Error` values whose text carries the full request URL, including the `apikey=`/`token=` query key, so the key reached gRPC statuses, logs and OTel (D-39).
+- **Evidence**: `services/xstockstrat-marketdata/internal/fmp/fmp_client.go:226`, `:243`; `internal/finnhub/finnhub_client.go:114`, `:118`; `docs/roadmap/features/254-fix-marketdata-secret-exposure/design.md` Step 1.
+- **Rule it implies**: any Go HTTP client with a credential in the URL must unwrap `*url.Error` and `%w`-wrap only `ue.Err`, with a cause-free fallback. This keeps `errors.Is(ctx.DeadlineExceeded)` working. Prove it with a test that asserts the key is absent and `errors.As(err, new(*url.Error))` is false.
