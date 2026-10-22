@@ -197,3 +197,21 @@ Status unchanged (spec-ready); design.md NOT written (gate policy: halt, grillin
 - Fake-table tests do not prove real Postgres WHERE behavior (full-predicate fake + SQL-text guard test).
 - Email local-part heuristic unverified on prod (OQ-2).
 - Do not touch feature 275 reporting surfaces or `_can_read_formula` (FR-6).
+
+---
+
+## Session 2026-10-22 — sdd-spec
+
+- Generated implementation-spec.md with 9 steps. Status → implementation-ready.
+- AC-9 reworded in acceptance.feature to the operator-signed-off integrity meaning (edit -> hash -> record -> apply; authority = DB credential plus DBA change record; digest is integrity, not authority).
+- Key codebase findings:
+  - No migration: indicators tip stays `007`; no proto, config or env var. New code is `app/maintenance/legacy_authors.py` (stdlib argparse; indicators has no typer dependency) plus tests; `main.py` and `servicer.py` untouched.
+  - `scripts/manage-users.py` `list-users` (`:270-289`) is covered by 4-tuple tests (`scripts/tests/test_manage_users.py:371-411`), so `--json` uses its own `SELECT user_id, email, is_active` query rather than changing the table query.
+  - `FakeFormulasTable` has three consumers (Steps 4, 6, 7), so it lives in `tests/conftest.py` (C-13). Apply refuses a UUID `old_author`, so undo is a DBA-reviewed manual UPDATE from the result file, not an apply run.
+  - C-14 deferred checks resolved: no UI change; `strat-lab` backtest skill only mentions formula privacy (`SKILL.md:78`), unchanged.
+  - Teardown: Step 9 changes context files; run the context-forge refresh (or the manual reconciliation) before the execute PR.
+
+### Open Threads
+
+- Execute: Steps 1-9 pending; run `/sdd-review fix-legacy-formula-authors impl-spec` first.
+- Prod legacy-author set unknown; first prod run is report-only. Restart EVERY indicators instance after apply; verify via GetFormula/ExecuteFormula, not ListFormulas.
