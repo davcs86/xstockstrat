@@ -21,7 +21,8 @@ Feature: fix-backtest-silent-symbol-skip (bug fix)
 
   @AC-6 @FR-7 @regression
   Scenario: A truncated bar series still surfaces as FAILED_PRECONDITION, not as a diagnostics row
-    Given marketdata GetBars for "AAPL" returns a truncated bar series that feature 272 converts to _BarFetchError
+    Given feature 272 has landed, so _BarFetchError maps to FAILED_PRECONDITION
+    And marketdata GetBars for "AAPL" returns a truncated bar series that feature 272 converts to _BarFetchError
     When RunBacktest is called for ["AAPL"] from 2026-01-01 to 2026-09-30
     Then RunBacktest fails with gRPC status FAILED_PRECONDITION
     And no diagnostics row is written for "AAPL" by the RPC/exception handling
