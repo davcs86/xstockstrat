@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -21,6 +22,7 @@ import (
 	marketdatav1 "github.com/xstockstrat/contracts/gen/go/marketdata/v1"
 	notifyv1 "github.com/xstockstrat/contracts/gen/go/notify/v1"
 	"github.com/xstockstrat/marketdata/internal/source"
+	"github.com/xstockstrat/marketdata/internal/testdata"
 )
 
 // f64p returns a pointer to v — source.Fundamentals' metric fields are *float64 so a
@@ -989,22 +991,36 @@ func TestResolveIngestTimeframes(t *testing.T) {
 // the symbols in `quotes` (an absent symbol proves null-not-zero) and counts upstream fetches; the
 // optional started/release channels let a test force overlap to prove single-flight coalescing.
 type fakeMultiSource struct {
-	mu      sync.Mutex
-	calls   int
-	quotes  map[string]*marketdatav1.Quote
-	started chan struct{}
-	release chan struct{}
+	mu        sync.Mutex
+	calls     int
+	quotes    map[string]*marketdatav1.Quote
+	started   chan struct{}
+	release   chan struct{}
+	requested [][]string // feature 229: symbols per upstream fetch
+	err       error      // feature 229: returned after the release/ctx wait
+	honourCtx bool       // feature 229: the wait also ends on ctx.Done (nil release + honourCtx = block until ctx)
 }
 
-func (f *fakeMultiSource) GetLatestQuotesMulti(_ context.Context, symbols []string) (map[string]*marketdatav1.Quote, error) {
+func (f *fakeMultiSource) GetLatestQuotesMulti(ctx context.Context, symbols []string) (map[string]*marketdatav1.Quote, error) {
 	f.mu.Lock()
 	f.calls++
+	f.requested = append(f.requested, append([]string(nil), symbols...))
 	f.mu.Unlock()
 	if f.started != nil {
 		close(f.started) // single-flight runs the fn once (leader), so this closes exactly once
 	}
-	if f.release != nil {
+	switch {
+	case f.honourCtx:
+		select {
+		case <-f.release:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	case f.release != nil:
 		<-f.release
+	}
+	if f.err != nil {
+		return nil, f.err
 	}
 	out := map[string]*marketdatav1.Quote{}
 	for _, s := range symbols {
@@ -2982,5 +2998,916 @@ func TestAtQuotaAlertThreshold_feature215(t *testing.T) {
 		if got := atQuotaAlertThreshold(tc.count, tc.cap); got != tc.want {
 			t.Errorf("atQuotaAlertThreshold(%d,%d) = %v, want %v", tc.count, tc.cap, got, tc.want)
 		}
+	}
+}
+
+// ── feature 229: windowed quote reads, cache-age guard, detached cold budget, partial result ──
+
+// fakeQuoteStore mirrors the repo's `time >= since` window so service tests can prove AC-2 without a database.
+type fakeQuoteStore struct {
+	mu       sync.Mutex
+	rows     map[string]*marketdatav1.Quote
+	inserts  []*marketdatav1.Quote
+	gotSince time.Time
+}
+
+func (f *fakeQuoteStore) GetLatestQuotesBatch(_ context.Context, symbols []string, since time.Time) (map[string]*marketdatav1.Quote, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.gotSince = since
+	out := map[string]*marketdatav1.Quote{}
+	for _, sym := range symbols {
+		if q, ok := f.rows[sym]; ok && !q.GetTime().AsTime().Before(since) {
+			out[sym] = q
+		}
+	}
+	return out, nil
+}
+
+func (f *fakeQuoteStore) InsertQuote(_ context.Context, q *marketdatav1.Quote) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.inserts = append(f.inserts, q)
+	return nil
+}
+
+func newQuoteSvc(fake *fakeMultiSource, store *fakeQuoteStore, cfg fakeIntGetter) *MarketDataService {
+	reg := source.NewRegistry()
+	reg.Register("alpaca", fake)
+	svc := &MarketDataService{registry: reg, warmSymbols: map[string]struct{}{}, budgetCfg: cfg}
+	if store != nil {
+		svc.quoteStore = store
+	}
+	return svc
+}
+
+// guardedGetLatestQuotes fails the test instead of hanging when GetLatestQuotes never returns.
+func guardedGetLatestQuotes(t *testing.T, svc *MarketDataService, ctx context.Context, symbols []string) (map[string]*marketdatav1.Quote, time.Duration, error) {
+	t.Helper()
+	type result struct {
+		out []*marketdatav1.Quote
+		err error
+	}
+	ch := make(chan result, 1)
+	start := time.Now()
+	go func() {
+		out, err := svc.GetLatestQuotes(ctx, symbols)
+		ch <- result{out, err}
+	}()
+	select {
+	case r := <-ch:
+		bySym := map[string]*marketdatav1.Quote{}
+		for _, q := range r.out {
+			bySym[q.Symbol] = q
+		}
+		return bySym, time.Since(start), r.err
+	case <-time.After(5 * time.Second):
+		t.Fatal("GetLatestQuotes did not return within the 5s hang guard")
+		return nil, 0, nil
+	}
+}
+
+func quoteAt(sym string, at time.Time) *marketdatav1.Quote {
+	return &marketdatav1.Quote{Symbol: sym, AskPrice: 101, BidPrice: 100, Time: timestamppb.New(at)}
+}
+
+// @AC-2: a stored quote older than the 168h window is not served; the symbol goes to the live source.
+func TestGetLatestQuotes_AC2_WindowedWarmRead(t *testing.T) {
+	store := &fakeQuoteStore{rows: map[string]*marketdatav1.Quote{
+		"AAPL": quoteAt("AAPL", time.Now().Add(-2*time.Hour)),
+		"MSFT": quoteAt("MSFT", time.Now().Add(-200*time.Hour)),
+	}}
+	fake := &fakeMultiSource{quotes: map[string]*marketdatav1.Quote{}}
+	svc := newQuoteSvc(fake, store, fakeIntGetter{"marketdata.quotes.latest_lookback_hours": 168})
+
+	got, _, err := guardedGetLatestQuotes(t, svc, context.Background(), []string{"AAPL", "MSFT"})
+	if err != nil {
+		t.Fatalf("GetLatestQuotes: %v", err)
+	}
+	if got["AAPL"] == nil {
+		t.Fatal("AAPL (2h old) must be served from the cache")
+	}
+	if len(fake.requested) != 1 || len(fake.requested[0]) != 1 || fake.requested[0][0] != "MSFT" {
+		t.Fatalf("only MSFT (outside the window) should go live, got %v", fake.requested)
+	}
+	if d := store.gotSince.Sub(time.Now().Add(-168 * time.Hour)); d > time.Second || d < -time.Second {
+		t.Fatalf("warm read since = %v, want now-168h", store.gotSince)
+	}
+}
+
+// @AC-3: cancelling the first caller does not fail a second caller coalesced onto the same cold fetch.
+func TestGetLatestQuotes_AC3_DetachedFromFirstCallerCancel(t *testing.T) {
+	fake := &fakeMultiSource{
+		quotes: map[string]*marketdatav1.Quote{
+			"AAPL": quoteAt("AAPL", time.Now()), "MSFT": quoteAt("MSFT", time.Now()),
+		},
+		started:   make(chan struct{}),
+		release:   make(chan struct{}),
+		honourCtx: true,
+	}
+	svc := newQuoteSvc(fake, nil, nil)
+
+	ctx1, cancel1 := context.WithCancel(context.Background())
+	done1 := make(chan struct{})
+	go func() {
+		defer close(done1)
+		_, _ = svc.GetLatestQuotes(ctx1, []string{"AAPL", "MSFT"})
+	}()
+	<-fake.started
+	type res struct {
+		got map[string]*marketdatav1.Quote
+		err error
+	}
+	ch2 := make(chan res, 1)
+	go func() {
+		got, _, err := guardedGetLatestQuotes(t, svc, context.Background(), []string{"AAPL", "MSFT"})
+		ch2 <- res{got, err}
+	}()
+	time.Sleep(25 * time.Millisecond) // caller 2 parks in singleflight.Do
+	cancel1()
+	time.Sleep(25 * time.Millisecond)
+	close(fake.release)
+	r := <-ch2
+	<-done1
+
+	if r.err != nil || r.got["AAPL"] == nil || r.got["MSFT"] == nil {
+		t.Fatalf("second caller must get both quotes despite the leader's cancel, got %v err=%v", r.got, r.err)
+	}
+	if fake.calls != 1 {
+		t.Fatalf("expected 1 upstream fetch, got %d", fake.calls)
+	}
+}
+
+// @AC-7: a live quote outside the window (or with a zero time) is returned but never cached.
+func TestGetLatestQuotes_AC7_OldLiveQuoteNotCached(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		at   time.Time
+	}{
+		{"200h old", time.Now().Add(-200 * time.Hour)},
+		{"zero time", time.Time{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			store := &fakeQuoteStore{rows: map[string]*marketdatav1.Quote{}}
+			fake := &fakeMultiSource{quotes: map[string]*marketdatav1.Quote{"HALT": quoteAt("HALT", tc.at)}}
+			svc := newQuoteSvc(fake, store, fakeIntGetter{"marketdata.quotes.latest_lookback_hours": 168})
+
+			got, _, err := guardedGetLatestQuotes(t, svc, context.Background(), []string{"HALT"})
+			if err != nil || got["HALT"] == nil {
+				t.Fatalf("HALT must be returned to the caller, got %v err=%v", got, err)
+			}
+			if len(store.inserts) != 0 {
+				t.Fatalf("an out-of-window quote must not be cached, got %d inserts", len(store.inserts))
+			}
+		})
+	}
+	t.Run("in-window control is cached", func(t *testing.T) {
+		store := &fakeQuoteStore{rows: map[string]*marketdatav1.Quote{}}
+		fake := &fakeMultiSource{quotes: map[string]*marketdatav1.Quote{"AAPL": quoteAt("AAPL", time.Now().Add(-time.Minute))}}
+		svc := newQuoteSvc(fake, store, nil)
+		if _, _, err := guardedGetLatestQuotes(t, svc, context.Background(), []string{"AAPL"}); err != nil {
+			t.Fatalf("GetLatestQuotes: %v", err)
+		}
+		if len(store.inserts) != 1 {
+			t.Fatalf("a fresh cold quote must be cached, got %d inserts", len(store.inserts))
+		}
+	})
+}
+
+func TestCacheQuote_Guard(t *testing.T) {
+	since := time.Now().Add(-time.Hour)
+	store := &fakeQuoteStore{}
+	svc := &MarketDataService{quoteStore: store}
+	if err := svc.cacheQuote(context.Background(), &marketdatav1.Quote{Symbol: "NILT"}, since); err != nil || len(store.inserts) != 0 {
+		t.Fatalf("nil time must not be cached (err=%v inserts=%d)", err, len(store.inserts))
+	}
+	if err := svc.cacheQuote(context.Background(), nil, since); err != nil || len(store.inserts) != 0 {
+		t.Fatalf("nil quote must not be cached")
+	}
+	if err := (&MarketDataService{}).cacheQuote(context.Background(), quoteAt("X", time.Now()), since); err != nil {
+		t.Fatalf("nil store must be a no-op, got %v", err)
+	}
+}
+
+// @AC-8: a failed or timed-out cold fetch returns the warm subset with the cold symbols omitted, never an error.
+func TestGetLatestQuotes_AC8_PartialOnColdFailure(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		fake *fakeMultiSource
+	}{
+		{"error", &fakeMultiSource{err: errors.New("alpaca 503")}},
+		{"no answer", &fakeMultiSource{honourCtx: true}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := installWarnRecorder(t)
+			store := &fakeQuoteStore{rows: map[string]*marketdatav1.Quote{"AAPL": quoteAt("AAPL", time.Now().Add(-2*time.Hour))}}
+			svc := newQuoteSvc(tc.fake, store, fakeIntGetter{"marketdata.quotes.batch_timeout_ms": 500})
+
+			got, elapsed, err := guardedGetLatestQuotes(t, svc, context.Background(), []string{"AAPL", "MSFT"})
+			if err != nil {
+				t.Fatalf("cold failure must not fail the batch: %v", err)
+			}
+			if got["AAPL"] == nil || got["MSFT"] != nil || len(got) != 1 {
+				t.Fatalf("want AAPL only (MSFT omitted, never zero), got %v", got)
+			}
+			w := rec.find("GetLatestQuotes: cold fetch failed")
+			if w == nil || w.attrs["cold"] != "1" || w.attrs["error"] == "" {
+				t.Fatalf("want at least one cold-fetch WARN with cold=1 and an error, got %+v", w)
+			}
+			if elapsed > 1500*time.Millisecond {
+				t.Fatalf("cold fetch must be bounded by the 500ms budget, took %v", elapsed)
+			}
+		})
+	}
+}
+
+func TestResolveQuoteTunables(t *testing.T) {
+	if got := resolveQuoteLookback(nil); got != 168*time.Hour {
+		t.Fatalf("lookback nil = %v", got)
+	}
+	for v, want := range map[int64]time.Duration{0: 168 * time.Hour, -1: 168 * time.Hour, 24: 24 * time.Hour} {
+		if got := resolveQuoteLookback(fakeIntGetter{"marketdata.quotes.latest_lookback_hours": v}); got != want {
+			t.Fatalf("lookback %d = %v, want %v", v, got, want)
+		}
+	}
+	if got := resolveQuoteBatchBudget(nil); got != 2500*time.Millisecond {
+		t.Fatalf("budget nil = %v", got)
+	}
+	for v, want := range map[int64]time.Duration{0: 2500 * time.Millisecond, 500: 500 * time.Millisecond} {
+		if got := resolveQuoteBatchBudget(fakeIntGetter{"marketdata.quotes.batch_timeout_ms": v}); got != want {
+			t.Fatalf("budget %d = %v, want %v", v, got, want)
+		}
+	}
+	if got := resolveQuoteRetentionDays(nil); got != 90 {
+		t.Fatalf("retention nil = %d", got)
+	}
+	for v, want := range map[int64]int64{0: 90, 31: 31, 7: 7} {
+		if got := resolveQuoteRetentionDays(fakeIntGetter{"marketdata.retention.quotes_days": v}); got != want {
+			t.Fatalf("retention %d = %d, want %d (no clamp)", v, got, want)
+		}
+	}
+}
+
+// fakeRetention records the cutoff and the per-run deadline the retention step passes to the repo.
+// StartQuoteRetention's 1h ticker is not driven here; its ctx.Done exit mirrors the reviewed StartWarmQuotePoller shape.
+type fakeRetention struct {
+	calls       int
+	cutoff      time.Time
+	hadDeadline bool
+	deadline    time.Time
+	n           int64
+	err         error
+}
+
+func (f *fakeRetention) DropQuoteChunksBefore(ctx context.Context, cutoff time.Time) (int64, error) {
+	f.calls++
+	f.cutoff = cutoff
+	f.deadline, f.hadDeadline = ctx.Deadline()
+	return f.n, f.err
+}
+
+// @AC-4: the retention step drops up to now - quotes_days, never inside the read window, and never panics.
+func TestRunQuoteRetentionStep(t *testing.T) {
+	now := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
+
+	t.Run("AC-4 cutoff", func(t *testing.T) {
+		fr := &fakeRetention{n: 1}
+		svc := &MarketDataService{retention: fr, budgetCfg: fakeIntGetter{
+			"marketdata.retention.quotes_days": 90, "marketdata.quotes.latest_lookback_hours": 168}}
+		start := time.Now()
+		svc.runQuoteRetentionStep(context.Background(), now)
+		if fr.calls != 1 || !fr.cutoff.Equal(now.Add(-90*24*time.Hour)) {
+			t.Fatalf("want 1 call with cutoff now-90d, got calls=%d cutoff=%v", fr.calls, fr.cutoff)
+		}
+		if !fr.hadDeadline || fr.deadline.Sub(start) > quoteRetentionBackstop+time.Second {
+			t.Fatalf("drop must run under the 30s backstop, deadline=%v had=%v", fr.deadline, fr.hadDeadline)
+		}
+	})
+
+	for _, tc := range []struct {
+		days, lookback int64
+		wantCalls      int
+	}{{7, 168, 0}, {7, 200, 0}, {8, 168, 1}} {
+		t.Run(fmt.Sprintf("guard days=%d lookback=%d", tc.days, tc.lookback), func(t *testing.T) {
+			rec := installWarnRecorder(t)
+			fr := &fakeRetention{}
+			svc := &MarketDataService{retention: fr, budgetCfg: fakeIntGetter{
+				"marketdata.retention.quotes_days": tc.days, "marketdata.quotes.latest_lookback_hours": tc.lookback}}
+			svc.runQuoteRetentionStep(context.Background(), now)
+			if fr.calls != tc.wantCalls {
+				t.Fatalf("calls = %d, want %d", fr.calls, tc.wantCalls)
+			}
+			skipped := rec.find("quote retention skipped: retention within lookback window") != nil
+			if skipped != (tc.wantCalls == 0) {
+				t.Fatalf("skip WARN logged=%v, want %v", skipped, tc.wantCalls == 0)
+			}
+		})
+	}
+
+	t.Run("defaults", func(t *testing.T) {
+		fr := &fakeRetention{}
+		(&MarketDataService{retention: fr}).runQuoteRetentionStep(context.Background(), now)
+		if fr.calls != 1 || !fr.cutoff.Equal(now.Add(-90*24*time.Hour)) {
+			t.Fatalf("nil config must default to 90d, got calls=%d cutoff=%v", fr.calls, fr.cutoff)
+		}
+	})
+
+	t.Run("error is logged, not raised", func(t *testing.T) {
+		rec := installWarnRecorder(t)
+		fr := &fakeRetention{err: errors.New("permission denied for hypertable")}
+		(&MarketDataService{retention: fr}).runQuoteRetentionStep(context.Background(), now)
+		if rec.find("quote retention failed") == nil {
+			t.Fatal("a drop error must be logged as WARN")
+		}
+	})
+
+	t.Run("nil seam", func(t *testing.T) {
+		rec := installWarnRecorder(t)
+		(&MarketDataService{}).runQuoteRetentionStep(context.Background(), now)
+		if len(rec.recs) != 0 {
+			t.Fatalf("nil retention seam must be a silent no-op, got %+v", rec.recs)
+		}
+	})
+}
+
+// ── feature 231: valuation mark ──
+
+type closeRow struct {
+	close float64
+	at    time.Time
+}
+
+// fakeDailyCloseReader mirrors the repo's `time >= since` window; block/waitFor drive the AC-11/12/15 timing cases.
+type fakeDailyCloseReader struct {
+	mu       sync.Mutex
+	rows     map[string]closeRow
+	gotSince time.Time
+	calls    int
+	once     sync.Once
+	entered  chan struct{} // closed on the first call, when non-nil
+	waitFor  <-chan struct{}
+	block    bool
+	err      error
+}
+
+func (f *fakeDailyCloseReader) GetLatestDailyClosesBatch(ctx context.Context, symbols []string, since time.Time) (map[string]float64, error) {
+	f.mu.Lock()
+	f.calls++
+	f.gotSince = since
+	f.mu.Unlock()
+	if f.entered != nil {
+		f.once.Do(func() { close(f.entered) })
+	}
+	if f.waitFor != nil {
+		select {
+		case <-f.waitFor:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+	if f.block {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+	if f.err != nil {
+		return nil, f.err
+	}
+	out := map[string]float64{}
+	for _, sym := range symbols {
+		if r, ok := f.rows[sym]; ok && !r.at.Before(since) {
+			out[sym] = r.close
+		}
+	}
+	return out, nil
+}
+
+func liveQuote(sym string, ask, bid float64) *marketdatav1.Quote {
+	return &marketdatav1.Quote{Symbol: sym, AskPrice: ask, BidPrice: bid, Time: timestamppb.Now()}
+}
+
+func newMarkSvc(multi *fakeMultiSource, store *fakeQuoteStore, cfg fakeIntGetter, closes *fakeDailyCloseReader) *MarketDataService {
+	svc := newQuoteSvc(multi, store, cfg)
+	if closes != nil {
+		svc.dailyCloses = closes
+	}
+	return svc
+}
+
+func lyftCloseAgo(d time.Duration) map[string]closeRow {
+	return map[string]closeRow{testdata.Lyft: {close: testdata.LyftDailyClose, at: time.Now().Add(-d)}}
+}
+
+// @AC-1: a one-sided quote (either side) is marked at the stored daily close; the raw sides are untouched.
+func TestGetLatestQuotes_AC1_OneSidedMarkedAtDailyClose(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		ask, bid float64
+	}{
+		{"bid_zero", testdata.LyftLoneSide, 0},
+		{"ask_zero", 0, testdata.LyftLoneSide},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			multi := &fakeMultiSource{quotes: map[string]*marketdatav1.Quote{testdata.Lyft: liveQuote(testdata.Lyft, tc.ask, tc.bid)}}
+			svc := newMarkSvc(multi, nil, fakeIntGetter{}, &fakeDailyCloseReader{rows: lyftCloseAgo(24 * time.Hour)})
+			got, _, err := guardedGetLatestQuotes(t, svc, context.Background(), []string{testdata.Lyft})
+			if err != nil {
+				t.Fatalf("GetLatestQuotes: %v", err)
+			}
+			q := got[testdata.Lyft]
+			if q == nil || q.MarkPrice == nil || *q.MarkPrice != testdata.LyftDailyClose {
+				t.Fatalf("expected mark %v, got %+v", testdata.LyftDailyClose, q)
+			}
+			if q.AskPrice != tc.ask || q.BidPrice != tc.bid {
+				t.Fatalf("raw sides changed: ask %v bid %v", q.AskPrice, q.BidPrice)
+			}
+		})
+	}
+}
+
+// @AC-5: a two-sided quote's mark is its mid, not the stored close.
+func TestGetLatestQuotes_AC5_TwoSidedMarkIsMid(t *testing.T) {
+	multi := &fakeMultiSource{quotes: map[string]*marketdatav1.Quote{
+		testdata.Lyft: liveQuote(testdata.Lyft, testdata.LyftTwoSidedAsk, testdata.LyftTwoSidedBid)}}
+	svc := newMarkSvc(multi, nil, fakeIntGetter{}, &fakeDailyCloseReader{rows: lyftCloseAgo(24 * time.Hour)})
+	got, _, _ := guardedGetLatestQuotes(t, svc, context.Background(), []string{testdata.Lyft})
+	want := (testdata.LyftTwoSidedAsk + testdata.LyftTwoSidedBid) / 2
+	if q := got[testdata.Lyft]; q == nil || q.MarkPrice == nil || math.Abs(*q.MarkPrice-want) > 1e-9 {
+		t.Fatalf("expected mid mark %v, got %+v", want, q)
+	}
+}
+
+// @AC-6: a one-sided quote whose only close is older than the bound has no mark.
+func TestGetLatestQuotes_AC6_StaleCloseLeavesMarkUnset(t *testing.T) {
+	multi := &fakeMultiSource{quotes: map[string]*marketdatav1.Quote{testdata.Elwt: liveQuote(testdata.Elwt, testdata.ElwtAsk, 0)}}
+	closes := &fakeDailyCloseReader{rows: map[string]closeRow{testdata.Elwt: {close: testdata.ElwtDailyClose, at: time.Now().Add(-200 * time.Hour)}}}
+	svc := newMarkSvc(multi, nil, fakeIntGetter{"marketdata.quotes.mark_close_max_age_hours": testdata.MarkCloseMaxAgeHours}, closes)
+	got, _, _ := guardedGetLatestQuotes(t, svc, context.Background(), []string{testdata.Elwt})
+	if q := got[testdata.Elwt]; q == nil || q.MarkPrice != nil {
+		t.Fatalf("expected ELWT returned with no mark, got %+v", q)
+	}
+}
+
+// @AC-7: only a close inside the staleness bound becomes the mark; the bound is now − 168h.
+func TestGetLatestQuotes_AC7_StalenessBoundary(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		rows map[string]closeRow
+		want *float64
+	}{
+		{"167h", lyftCloseAgo(167 * time.Hour), f64p(testdata.LyftDailyClose)},
+		{"169h", lyftCloseAgo(169 * time.Hour), nil},
+		{"absent", nil, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			multi := &fakeMultiSource{quotes: map[string]*marketdatav1.Quote{testdata.Lyft: liveQuote(testdata.Lyft, testdata.LyftLoneSide, 0)}}
+			closes := &fakeDailyCloseReader{rows: tc.rows}
+			svc := newMarkSvc(multi, nil, fakeIntGetter{}, closes)
+			got, _, _ := guardedGetLatestQuotes(t, svc, context.Background(), []string{testdata.Lyft})
+			q := got[testdata.Lyft]
+			if q == nil || q.AskPrice != testdata.LyftLoneSide || q.BidPrice != 0 {
+				t.Fatalf("raw quote not returned intact: %+v", q)
+			}
+			if (tc.want == nil) != (q.MarkPrice == nil) || (tc.want != nil && *q.MarkPrice != *tc.want) {
+				t.Fatalf("mark = %v, want %v", q.MarkPrice, tc.want)
+			}
+			wantSince := time.Now().Add(-testdata.MarkCloseMaxAgeHours * time.Hour)
+			if d := closes.gotSince.Sub(wantSince); d > time.Second || d < -time.Second {
+				t.Fatalf("since = %v, want ≈ %v", closes.gotSince, wantSince)
+			}
+		})
+	}
+}
+
+// @AC-11: a failed close lookup keeps two-sided marks, leaves one-sided marks unset, and WARNs.
+func TestGetLatestQuotes_AC11_LookupFailureKeepsTwoSidedMarks(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		closes *fakeDailyCloseReader
+	}{
+		{"timeout", &fakeDailyCloseReader{block: true}},
+		{"error", &fakeDailyCloseReader{err: errors.New("pool exhausted")}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := installWarnRecorder(t)
+			now := timestamppb.Now()
+			store := &fakeQuoteStore{rows: map[string]*marketdatav1.Quote{
+				testdata.Lyft: {Symbol: testdata.Lyft, AskPrice: testdata.LyftLoneSide, Time: now},
+				testdata.Msft: {Symbol: testdata.Msft, AskPrice: testdata.MsftAsk, BidPrice: testdata.MsftBid, Time: now},
+			}}
+			svc := newMarkSvc(&fakeMultiSource{}, store, fakeIntGetter{"marketdata.quotes.mark_timeout_ms": 100}, tc.closes)
+			got, _, err := guardedGetLatestQuotes(t, svc, context.Background(), []string{testdata.Lyft, testdata.Msft})
+			if err != nil {
+				t.Fatalf("GetLatestQuotes: %v", err)
+			}
+			wantMsft := (testdata.MsftAsk + testdata.MsftBid) / 2
+			if q := got[testdata.Msft]; q == nil || q.MarkPrice == nil || math.Abs(*q.MarkPrice-wantMsft) > 1e-9 {
+				t.Fatalf("MSFT mark: want %v, got %+v", wantMsft, q)
+			}
+			if q := got[testdata.Lyft]; q == nil || q.MarkPrice != nil {
+				t.Fatalf("LYFT: want returned with no mark, got %+v", q)
+			}
+			w := rec.find("GetLatestQuotes: mark lookup failed")
+			if w == nil {
+				t.Fatal("expected WARN GetLatestQuotes: mark lookup failed")
+			}
+			if _, ok := w.attrs["error"]; !ok {
+				t.Fatalf("WARN missing error attr: %v", w.attrs)
+			}
+		})
+	}
+}
+
+// @AC-12: the close lookup runs concurrently with the cold fetch — each fake waits for the other to start, so
+// cold-first serial deadlocks (the guard fails it) and close-first serial times the lookup out (mark nil).
+func TestGetLatestQuotes_AC12_CloseLookupConcurrentWithColdFetch(t *testing.T) {
+	closes := &fakeDailyCloseReader{rows: lyftCloseAgo(24 * time.Hour), entered: make(chan struct{})}
+	multi := &fakeMultiSource{
+		quotes:  map[string]*marketdatav1.Quote{testdata.Lyft: liveQuote(testdata.Lyft, testdata.LyftLoneSide, 0)},
+		started: make(chan struct{}),
+		release: closes.entered,
+	}
+	closes.waitFor = multi.started
+	svc := newMarkSvc(multi, nil, fakeIntGetter{"marketdata.quotes.mark_timeout_ms": 2500}, closes)
+	got, _, err := guardedGetLatestQuotes(t, svc, context.Background(), []string{testdata.Lyft})
+	if err != nil {
+		t.Fatalf("GetLatestQuotes: %v", err)
+	}
+	if q := got[testdata.Lyft]; q == nil || q.MarkPrice == nil || *q.MarkPrice != testdata.LyftDailyClose {
+		t.Fatalf("expected LYFT mark %v, got %+v", testdata.LyftDailyClose, q)
+	}
+}
+
+// @AC-15: a hanging close lookup is bounded by mark_timeout_ms.
+func TestGetLatestQuotes_AC15_HangingLookupBounded(t *testing.T) {
+	multi := &fakeMultiSource{quotes: map[string]*marketdatav1.Quote{testdata.Lyft: liveQuote(testdata.Lyft, testdata.LyftLoneSide, 0)}}
+	svc := newMarkSvc(multi, nil, fakeIntGetter{"marketdata.quotes.mark_timeout_ms": 100}, &fakeDailyCloseReader{block: true})
+	got, elapsed, _ := guardedGetLatestQuotes(t, svc, context.Background(), []string{testdata.Lyft})
+	if q := got[testdata.Lyft]; q == nil || q.MarkPrice != nil {
+		t.Fatalf("expected LYFT with no mark, got %+v", q)
+	}
+	if elapsed >= time.Second {
+		t.Fatalf("expected < 1s with a 100ms mark budget, took %v", elapsed)
+	}
+}
+
+// Cold quotes are shared across singleflight waiters and the store returns its own pointers: never mutate them.
+func TestGetLatestQuotes_MarkDoesNotMutateSharedQuotes(t *testing.T) {
+	coldQ := liveQuote(testdata.Lyft, testdata.LyftLoneSide, 0)
+	warmQ := &marketdatav1.Quote{Symbol: testdata.Msft, AskPrice: testdata.MsftAsk, BidPrice: testdata.MsftBid, Time: timestamppb.Now()}
+	store := &fakeQuoteStore{rows: map[string]*marketdatav1.Quote{testdata.Msft: warmQ}}
+	multi := &fakeMultiSource{quotes: map[string]*marketdatav1.Quote{testdata.Lyft: coldQ}}
+	svc := newMarkSvc(multi, store, fakeIntGetter{}, &fakeDailyCloseReader{rows: lyftCloseAgo(24 * time.Hour)})
+	got, _, _ := guardedGetLatestQuotes(t, svc, context.Background(), []string{testdata.Lyft, testdata.Msft})
+	if got[testdata.Lyft].GetMarkPrice() == 0 || got[testdata.Msft].GetMarkPrice() == 0 {
+		t.Fatalf("expected both returned quotes marked, got %+v", got)
+	}
+	if coldQ.MarkPrice != nil || warmQ.MarkPrice != nil {
+		t.Fatalf("shared quote pointers mutated: cold %v warm %v", coldQ.MarkPrice, warmQ.MarkPrice)
+	}
+}
+
+// Without a close reader (test literals / no repo) marks are mid-only: two-sided → mid, one-sided → unset.
+func TestGetLatestQuotes_NilCloseReaderMidOnly(t *testing.T) {
+	multi := &fakeMultiSource{quotes: map[string]*marketdatav1.Quote{
+		testdata.Msft: liveQuote(testdata.Msft, testdata.MsftAsk, testdata.MsftBid),
+		testdata.Lyft: liveQuote(testdata.Lyft, testdata.LyftLoneSide, 0),
+	}}
+	svc := newMarkSvc(multi, nil, fakeIntGetter{}, nil)
+	got, _, _ := guardedGetLatestQuotes(t, svc, context.Background(), []string{testdata.Lyft, testdata.Msft})
+	if want := (testdata.MsftAsk + testdata.MsftBid) / 2; math.Abs(got[testdata.Msft].GetMarkPrice()-want) > 1e-9 {
+		t.Fatalf("MSFT mark %v, want %v", got[testdata.Msft].GetMarkPrice(), want)
+	}
+	if got[testdata.Lyft].MarkPrice != nil {
+		t.Fatalf("LYFT one-sided must stay unmarked without a close reader, got %v", *got[testdata.Lyft].MarkPrice)
+	}
+}
+
+func TestResolveMarkTunables(t *testing.T) {
+	if got := resolveQuoteMarkBudget(nil); got != 500*time.Millisecond {
+		t.Fatalf("mark budget nil = %v", got)
+	}
+	for v, want := range map[int64]time.Duration{0: 500 * time.Millisecond, -1: 500 * time.Millisecond, 100: 100 * time.Millisecond} {
+		if got := resolveQuoteMarkBudget(fakeIntGetter{"marketdata.quotes.mark_timeout_ms": v}); got != want {
+			t.Fatalf("mark budget %d = %v, want %v", v, got, want)
+		}
+	}
+	if got := resolveMarkCloseMaxAge(nil); got != 168*time.Hour {
+		t.Fatalf("max age nil = %v", got)
+	}
+	for v, want := range map[int64]time.Duration{0: 168 * time.Hour, 120: 120 * time.Hour} {
+		if got := resolveMarkCloseMaxAge(fakeIntGetter{"marketdata.quotes.mark_close_max_age_hours": v}); got != want {
+			t.Fatalf("max age %d = %v, want %v", v, got, want)
+		}
+	}
+}
+
+// ── feature 231: EDGAR snapshot priced from the quote mark ──
+
+func markEdgarPeriod(sym string) *source.HistoricalFundamentalsPeriod {
+	return &source.HistoricalFundamentalsPeriod{
+		Symbol: sym, FiscalPeriod: "FY2026", PeriodType: "annual",
+		PeriodEnd: hfDate(2026, 6, 30), FiledDate: hfDate(2026, 8, 1),
+		PBRatio: f64p(2.0), MarketCap: f64p(7e9), Price: f64p(testdata.LyftFiledClose), Currency: "USD", Source: "edgar",
+	}
+}
+
+func markEdgarCfg(enabled bool) *fakeCfg {
+	return &fakeCfg{
+		strings: map[string]string{"marketdata.fundamentals.snapshot_source": "edgar"},
+		bools:   map[string]bool{"marketdata.edgar.enabled": enabled},
+		ints:    map[string]int64{"marketdata.edgar.cache_ttl_hours": 24},
+	}
+}
+
+// @AC-4: the EDGAR snapshot is priced from the quote mark; a missing mark falls back to the filed close uncached.
+func TestGetFundamentals_AC4_EdgarPricedFromMark(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		ask, bid  float64
+		closeAge  time.Duration
+		wantPrice float64
+		wantUps   int
+	}{
+		{"one_sided_close_24h", testdata.LyftLoneSide, 0, 24 * time.Hour, testdata.LyftDailyClose, 1},
+		{"two_sided_mid", testdata.LyftTwoSidedAsk, testdata.LyftTwoSidedBid, 24 * time.Hour, (testdata.LyftTwoSidedAsk + testdata.LyftTwoSidedBid) / 2, 1},
+		{"one_sided_close_200h", testdata.LyftLoneSide, 0, 200 * time.Hour, testdata.LyftFiledClose, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			svc, fundRepo := edgarSnapshotSvc(markEdgarPeriod(testdata.Lyft), liveQuote(testdata.Lyft, tc.ask, tc.bid), markEdgarCfg(true), nil, "finnhub")
+			svc.dailyCloses = &fakeDailyCloseReader{rows: lyftCloseAgo(tc.closeAge)}
+			f, err := svc.GetFundamentals(context.Background(), testdata.Lyft)
+			if err != nil {
+				t.Fatalf("GetFundamentals(edgar): %v", err)
+			}
+			if math.Abs(f.Price-tc.wantPrice) > 1e-9 {
+				t.Fatalf("price = %v, want %v", f.Price, tc.wantPrice)
+			}
+			if fundRepo.upserts != tc.wantUps {
+				t.Fatalf("edgar cache upserts = %d, want %d (a filed-close fallback must not be cached)", fundRepo.upserts, tc.wantUps)
+			}
+		})
+	}
+}
+
+// @AC-10: edgar GetFundamentalsMulti prices all pending symbols with exactly one GetLatestQuotes call, matching single.
+func TestGetFundamentalsMulti_AC10_OnePrefetchForPending(t *testing.T) {
+	multi := &fakeMultiSource{quotes: map[string]*marketdatav1.Quote{
+		testdata.Lyft: liveQuote(testdata.Lyft, testdata.LyftLoneSide, 0),
+		testdata.Msft: liveQuote(testdata.Msft, testdata.MsftAsk, testdata.MsftBid),
+	}}
+	reg := source.NewRegistry()
+	reg.Register("alpaca", multi)
+	svc := &MarketDataService{
+		registry: reg, warmSymbols: map[string]struct{}{}, fundRepo: newFakeFundRepo(),
+		histRepo: &fakeHistRepo{latestBy: map[string]*source.HistoricalFundamentalsPeriod{
+			testdata.Lyft: markEdgarPeriod(testdata.Lyft), testdata.Msft: markEdgarPeriod(testdata.Msft)}},
+		fundCfg: markEdgarCfg(true), fundProvider: "finnhub", notify: &fakeNotify{},
+		dailyCloses: &fakeDailyCloseReader{rows: lyftCloseAgo(24 * time.Hour)},
+	}
+	out, err := svc.GetFundamentalsMulti(context.Background(), []string{testdata.Lyft, testdata.Msft})
+	if err != nil {
+		t.Fatalf("GetFundamentalsMulti(edgar): %v", err)
+	}
+	if multi.calls != 1 || len(multi.requested) != 1 || strings.Join(multi.requested[0], ",") != "LYFT,MSFT" {
+		t.Fatalf("expected one upstream quote call for [LYFT MSFT], got calls=%d requested=%v", multi.calls, multi.requested)
+	}
+	if len(out) != 2 || out[0].Symbol != testdata.Lyft || out[1].Symbol != testdata.Msft {
+		t.Fatalf("expected input order [LYFT MSFT], got %v", out)
+	}
+	if out[0].Price != testdata.LyftDailyClose {
+		t.Fatalf("LYFT price = %v, want %v", out[0].Price, testdata.LyftDailyClose)
+	}
+	if want := (testdata.MsftAsk + testdata.MsftBid) / 2; math.Abs(out[1].Price-want) > 1e-9 {
+		t.Fatalf("MSFT price = %v, want %v", out[1].Price, want)
+	}
+}
+
+// All symbols fresh in the edgar cache → no quote prefetch at all.
+func TestGetFundamentalsMulti_EdgarAllCacheHitsSkipPrefetch(t *testing.T) {
+	multi := &fakeMultiSource{}
+	reg := source.NewRegistry()
+	reg.Register("alpaca", multi)
+	fundRepo := newFakeFundRepo()
+	for _, sym := range []string{testdata.Lyft, testdata.Msft} {
+		fundRepo.rows[sym] = &source.Fundamentals{Symbol: sym, Price: f64p(testdata.LyftDailyClose), Source: "edgar"}
+		fundRepo.fetchedAt[sym] = time.Now()
+	}
+	svc := &MarketDataService{registry: reg, warmSymbols: map[string]struct{}{}, fundRepo: fundRepo,
+		histRepo: &fakeHistRepo{}, fundCfg: markEdgarCfg(true), fundProvider: "finnhub", notify: &fakeNotify{}}
+	out, err := svc.GetFundamentalsMulti(context.Background(), []string{testdata.Lyft, testdata.Msft})
+	if err != nil || len(out) != 2 {
+		t.Fatalf("expected both cached rows, got %v, %v", out, err)
+	}
+	if multi.calls != 0 {
+		t.Fatalf("expected no quote prefetch for all-cache-hit, got %d calls", multi.calls)
+	}
+}
+
+// The kill switch still aborts the Multi batch before any quote prefetch.
+func TestGetFundamentalsMulti_EdgarKillSwitchAbortsBeforePrefetch(t *testing.T) {
+	multi := &fakeMultiSource{}
+	reg := source.NewRegistry()
+	reg.Register("alpaca", multi)
+	svc := &MarketDataService{registry: reg, warmSymbols: map[string]struct{}{}, fundRepo: newFakeFundRepo(),
+		histRepo: &fakeHistRepo{latest: markEdgarPeriod(testdata.Lyft)}, fundCfg: markEdgarCfg(false), fundProvider: "finnhub", notify: &fakeNotify{}}
+	if _, err := svc.GetFundamentalsMulti(context.Background(), []string{testdata.Lyft}); err == nil {
+		t.Fatal("expected the edgar kill switch to abort the Multi call")
+	}
+	if multi.calls != 0 {
+		t.Fatalf("expected no quote prefetch after abort, got %d calls", multi.calls)
+	}
+}
+
+// livePrice returns the quote mark, or nil when the quote has none.
+func TestLivePrice_ReturnsMark(t *testing.T) {
+	multi := &fakeMultiSource{quotes: map[string]*marketdatav1.Quote{testdata.Lyft: liveQuote(testdata.Lyft, testdata.LyftLoneSide, 0)}}
+	withClose := newMarkSvc(multi, nil, fakeIntGetter{}, &fakeDailyCloseReader{rows: lyftCloseAgo(24 * time.Hour)})
+	if p := withClose.livePrice(context.Background(), testdata.Lyft); p == nil || *p != testdata.LyftDailyClose {
+		t.Fatalf("livePrice = %v, want %v", p, testdata.LyftDailyClose)
+	}
+	noClose := newMarkSvc(multi, nil, fakeIntGetter{}, &fakeDailyCloseReader{})
+	if p := noClose.livePrice(context.Background(), testdata.Lyft); p != nil {
+		t.Fatalf("livePrice without a mark = %v, want nil", *p)
+	}
+}
+
+// ── feature 240: BatchGetBars opt-in allow_partial ──────────────────────────────
+
+// fakeBarsStore serves AAPL's three stored daily bars as the warm subset.
+type fakeBarsStore struct{}
+
+func (fakeBarsStore) QueryBarsBatch(_ context.Context, symbols []string, _ string, _, _ time.Time, _ int32) (map[string][]*marketdatav1.Bar, error) {
+	out := map[string][]*marketdatav1.Bar{}
+	for _, s := range symbols {
+		if s == "AAPL" {
+			for _, d := range []int{14, 15, 16} {
+				out[s] = append(out[s], &marketdatav1.Bar{Symbol: "AAPL", Time: timestamppb.New(time.Date(2026, 10, d, 4, 0, 0, 0, time.UTC)), Close: 150})
+			}
+		}
+	}
+	return out, nil
+}
+
+func (fakeBarsStore) InsertBars(context.Context, []*marketdatav1.Bar) error { return nil }
+
+// scriptedBarsSource runs fn for every cold fetch and counts the calls.
+type scriptedBarsSource struct {
+	*fakeBatchBarsSource
+	calls atomic.Int32
+	fn    func(ctx context.Context) (map[string][]*marketdatav1.Bar, error)
+}
+
+func (s *scriptedBarsSource) GetBarsMulti(ctx context.Context, _ []string, _ string, _, _ time.Time) (map[string][]*marketdatav1.Bar, error) {
+	s.calls.Add(1)
+	return s.fn(ctx)
+}
+
+var errColdFetch = errors.New("alpaca: 503 upstream")
+
+func partialSvc(fn func(ctx context.Context) (map[string][]*marketdatav1.Bar, error)) (*MarketDataService, *scriptedBarsSource) {
+	src := &scriptedBarsSource{fakeBatchBarsSource: &fakeBatchBarsSource{}, fn: fn}
+	reg := source.NewRegistry()
+	reg.Register("alpaca", src)
+	return &MarketDataService{registry: reg, warmSymbols: map[string]struct{}{}, barsStore: fakeBarsStore{}}, src
+}
+
+func batchReq(allowPartial bool) *marketdatav1.BatchGetBarsRequest {
+	return &marketdatav1.BatchGetBarsRequest{
+		Symbols: []string{"AAPL", "MSFT"}, Timeframe: "1d", AllowPartial: allowPartial,
+		Start: timestamppb.New(time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)),
+		End:   timestamppb.New(time.Date(2026, 10, 17, 0, 0, 0, 0, time.UTC)),
+	}
+}
+
+func hangUntilDone(ctx context.Context) (map[string][]*marketdatav1.Bar, error) {
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
+func assertOnlyWarmAAPL(t *testing.T, resp *marketdatav1.BatchGetBarsResponse, err error) {
+	t.Helper()
+	if err != nil {
+		t.Fatalf("BatchGetBars: %v, want the warm subset with no error", err)
+	}
+	if len(resp.Results) != 1 || resp.Results[0].Symbol != "AAPL" || len(resp.Results[0].Bars) != 3 {
+		t.Fatalf("results = %v, want only AAPL with its 3 stored bars", resp.Results)
+	}
+}
+
+func TestBatchGetBars_AC53_PartialReturnsWarmOnColdError(t *testing.T) {
+	svc, _ := partialSvc(func(context.Context) (map[string][]*marketdatav1.Bar, error) { return nil, errColdFetch })
+	resp, err := svc.BatchGetBars(context.Background(), batchReq(true))
+	assertOnlyWarmAAPL(t, resp, err)
+}
+
+// The handler maps this plain error to codes.Internal (forwardConnectErr marketdata_handler.go:285-291,
+// toGRPCError :496-516), unchanged by the flag.
+func TestBatchGetBars_AC53_StrictStillErrors(t *testing.T) {
+	svc, _ := partialSvc(func(context.Context) (map[string][]*marketdatav1.Bar, error) { return nil, errColdFetch })
+	_, err := svc.BatchGetBars(context.Background(), batchReq(false))
+	var ce *connect.Error
+	if !errors.Is(err, errColdFetch) || errors.As(err, &ce) {
+		t.Fatalf("strict err = %v, want the plain source error", err)
+	}
+}
+
+func TestBatchGetBars_AC54_PartialBudgetFromDeadline(t *testing.T) {
+	svc, _ := partialSvc(hangUntilDone)
+	ctx, cancel := context.WithTimeout(context.Background(), 1000*time.Millisecond)
+	defer cancel()
+	resp, err := svc.BatchGetBars(ctx, batchReq(true))
+	assertOnlyWarmAAPL(t, resp, err)
+	if ctx.Err() != nil {
+		t.Errorf("returned after the caller deadline; the cold fetch must stop barsPartialMargin early")
+	}
+}
+
+func TestBatchGetBars_PartialBelowMarginSkipsSource(t *testing.T) {
+	svc, src := partialSvc(hangUntilDone)
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	resp, err := svc.BatchGetBars(ctx, batchReq(true))
+	assertOnlyWarmAAPL(t, resp, err)
+	if n := src.calls.Load(); n != 0 {
+		t.Errorf("source calls = %d, want 0 when the deadline leaves no budget", n)
+	}
+}
+
+func TestBatchGetBars_PartialAndStrictSeparateFlights(t *testing.T) {
+	both := make(chan struct{})
+	var arrived atomic.Int32
+	svc, src := partialSvc(func(context.Context) (map[string][]*marketdatav1.Bar, error) {
+		if arrived.Add(1) == 2 {
+			close(both)
+		}
+		select {
+		case <-both:
+		case <-time.After(2 * time.Second):
+		}
+		return map[string][]*marketdatav1.Bar{"MSFT": {{Symbol: "MSFT", Close: 300}}}, nil
+	})
+	var wg sync.WaitGroup
+	for _, partial := range []bool{false, true} {
+		wg.Add(1)
+		go func(partial bool) {
+			defer wg.Done()
+			if _, err := svc.BatchGetBars(context.Background(), batchReq(partial)); err != nil {
+				t.Errorf("allow_partial=%v: %v", partial, err)
+			}
+		}(partial)
+	}
+	wg.Wait()
+	if n := src.calls.Load(); n != 2 {
+		t.Errorf("source calls = %d, want 2 (strict and partial must not share a flight)", n)
+	}
+}
+
+func TestBatchGetBars_PartialNoDeadlineUsesCallerCtx(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	var seen context.Context
+	svc, _ := partialSvc(func(c context.Context) (map[string][]*marketdatav1.Bar, error) {
+		seen = c
+		return nil, c.Err()
+	})
+	cancel()
+	resp, err := svc.BatchGetBars(ctx, batchReq(true))
+	assertOnlyWarmAAPL(t, resp, err)
+	if seen != ctx {
+		t.Errorf("source ctx = %v, want the caller ctx when it has no deadline", seen)
+	}
+}
+
+func TestBatchGetBars_PartialWaiterSurvivesLeaderCancel(t *testing.T) {
+	called, release := make(chan struct{}), make(chan struct{})
+	svc, src := partialSvc(func(c context.Context) (map[string][]*marketdatav1.Bar, error) {
+		close(called)
+		select {
+		case <-release:
+			return map[string][]*marketdatav1.Bar{"MSFT": {{Symbol: "MSFT", Close: 300}}}, nil
+		case <-c.Done():
+			return nil, c.Err()
+		}
+	})
+	leaderCtx, cancelLeader := context.WithTimeout(context.Background(), 5*time.Second)
+	waiterCtx, cancelWaiter := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancelWaiter()
+	go func() { _, _ = svc.BatchGetBars(leaderCtx, batchReq(true)) }()
+	<-called
+
+	done := make(chan *marketdatav1.BatchGetBarsResponse, 1)
+	go func() {
+		resp, err := svc.BatchGetBars(waiterCtx, batchReq(true))
+		if err != nil {
+			t.Errorf("waiter: %v", err)
+		}
+		done <- resp
+	}()
+	time.Sleep(100 * time.Millisecond) // let the waiter join the in-flight fetch
+	cancelLeader()
+	close(release)
+
+	resp := <-done
+	if len(resp.GetResults()) != 2 || src.calls.Load() != 1 {
+		t.Errorf("waiter results = %v, calls = %d; want AAPL+MSFT from the leader's surviving fetch", resp.GetResults(), src.calls.Load())
 	}
 }

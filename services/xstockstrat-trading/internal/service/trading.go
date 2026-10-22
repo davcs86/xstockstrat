@@ -47,8 +47,8 @@ type configSetConfigForwarder interface {
 // offlineBaselineStore is the seam for offline-baseline persistence, extracted for testability.
 // *repository.TradingRepo satisfies it in production; tests inject a fake.
 type offlineBaselineStore interface {
-	UpsertBaselineSnapshot(ctx context.Context, accountID, clientSnapshotID string, asOf time.Time, rows []repository.BaselineRow) error
-	EffectiveBaselineByAccount(ctx context.Context, accountID string) (asOf time.Time, lots map[string]pnl.Lot, ok bool, err error)
+	UpsertBaselineSnapshot(ctx context.Context, accountID, clientSnapshotID string, asOf time.Time, rows []repository.BaselineRow, carry repository.CarryFunc) error
+	EffectiveBaselineByAccount(ctx context.Context, accountID string) (hdr repository.SnapshotHeader, ok bool, err error)
 	DeleteBaselinesByAccount(ctx context.Context, accountID string) error
 	HasUnconfirmedOfflineOrders(ctx context.Context, accountID string) (bool, error)
 	ListConfirmedOfflineOrdersByAccount(ctx context.Context, accountID string) ([]*tradingv1.Order, error)
@@ -894,6 +894,9 @@ func (s *TradingService) ConfirmOrder(ctx context.Context, req *tradingv1.Confir
 	if req.FilledQty < 0 {
 		return nil, grpcstatus.Errorf(codes.InvalidArgument, "filled_qty must be >= 0")
 	}
+	if req.Fees != nil && (*req.Fees < 0 || math.IsNaN(*req.Fees) || math.IsInf(*req.Fees, 0)) {
+		return nil, grpcstatus.Errorf(codes.InvalidArgument, "fees must be >= 0")
+	}
 
 	order, err := s.repo.GetOrder(ctx, req.OrderId)
 	if err != nil {
@@ -920,11 +923,21 @@ func (s *TradingService) ConfirmOrder(ctx context.Context, req *tradingv1.Confir
 	order.FilledQty = req.FilledQty
 	order.FilledAvgPrice = req.FilledAvgPrice
 	order.Status = deriveOfflineStatus(req.FilledQty, order.Qty)
-	filledAt := time.Now()
-	if req.FilledAt != nil {
-		filledAt = req.FilledAt.AsTime()
+	// Fees are cumulative per order: a re-confirm replaces them, omitting them keeps the stored value.
+	if req.Fees != nil {
+		order.Fees = proto.Float64(*req.Fees)
+	} else if order.Fees == nil {
+		order.Fees = proto.Float64(0)
 	}
-	order.FilledAt = timestamppb.New(filledAt)
+	// filled_at survives un-confirm and bare re-confirm, so an edit never moves a fill across a snapshot.
+	isNew := order.Status == tradingv1.OrderStatus_ORDER_STATUS_NEW
+	switch {
+	case req.FilledAt != nil && !isNew:
+		order.FilledAt = req.FilledAt
+	case order.FilledAt != nil:
+	case !isNew:
+		order.FilledAt = timestamppb.Now()
+	}
 	order.UpdatedAt = timestamppb.New(time.Now())
 
 	if err := s.repo.UpsertOrder(ctx, order); err != nil {
@@ -939,19 +952,22 @@ func (s *TradingService) ConfirmOrder(ctx context.Context, req *tradingv1.Confir
 		slog.Warn("ConfirmOrder: recompute failed; positions.synced not emitted",
 			"account_id", order.AccountId, "error", err)
 	}
-	return order, nil
+	resp := proto.Clone(order).(*tradingv1.Order)
+	hideUnconfirmedFill(resp)
+	return resp, nil
 }
 
 // recomputeAndEmitOfflinePositions recomputes an offline account's net positions and emits
 // account.positions.synced. Fail-closed (a query error skips the emit). Caller must hold confirmLock(accountID).
 func (s *TradingService) recomputeAndEmitOfflinePositions(ctx context.Context, accountID, userID string) error {
 	// --- Load baseline (fail-closed: error → skip emit) ---
-	asOf, seedLots, hasBaseline, err := s.baselineStore.EffectiveBaselineByAccount(ctx, accountID)
+	hdr, hasBaseline, err := s.baselineStore.EffectiveBaselineByAccount(ctx, accountID)
 	if err != nil {
 		slog.Warn("recomputeAndEmitOfflinePositions: baseline query failed; skipping positions.synced emit",
 			"account_id", accountID, "error", err)
 		return err
 	}
+	asOf, seedLots := hdr.AsOf, hdr.Lots
 
 	// --- Load confirmed orders (fail-closed: error → skip emit) ---
 	confirmed, err := s.baselineStore.ListConfirmedOfflineOrdersByAccount(ctx, accountID)
@@ -965,6 +981,7 @@ func (s *TradingService) recomputeAndEmitOfflinePositions(ctx context.Context, a
 	var result pnl.FoldResult
 	// postT0Symbols tracks which symbols had a post-T0 fill (for provenance computation).
 	postT0Symbols := make(map[string]bool)
+	window := confirmed
 	if hasBaseline {
 		// Baseline branch: filter confirmed orders to only those with filled_at > asOf.
 		var postT0Orders []*tradingv1.Order
@@ -974,10 +991,27 @@ func (s *TradingService) recomputeAndEmitOfflinePositions(ctx context.Context, a
 				postT0Symbols[o.Symbol] = true
 			}
 		}
+		window = postT0Orders
 		result = pnl.FoldFrom(seedLots, offlineFillsFromOrders(postT0Orders))
 	} else {
 		// No-baseline branch: fold ALL confirmed orders.
 		result = pnl.Fold(offlineFillsFromOrders(confirmed))
+	}
+
+	feesSince := 0.0
+	recentFills := make([]interface{}, 0)
+	recentCutoff := time.Now().Add(-offlineRecentFillsWindow)
+	for i, f := range offlineFillsFromOrders(window) {
+		o := window[i]
+		feesSince += o.GetFees()
+		if o.FilledAt != nil && !o.FilledAt.AsTime().Before(recentCutoff) {
+			recentFills = append(recentFills, map[string]interface{}{
+				"symbol":    f.Symbol,
+				"qty":       f.Qty,
+				"price":     f.Price,
+				"filled_at": o.FilledAt.AsTime().Format(time.RFC3339Nano),
+			})
+		}
 	}
 
 	// --- Build position entries with symbol-level provenance ---
@@ -1031,13 +1065,49 @@ func (s *TradingService) recomputeAndEmitOfflinePositions(ctx context.Context, a
 	// Emit account.positions.synced ONLY (never order.filled) — the disjointness invariant that keeps
 	// portfolio from double-folding. Run on the inbound request ctx for header propagation.
 	s.emitLedgerEvent(ctx, "account.positions.synced", fmt.Sprintf("account:%s", accountID), userID, map[string]interface{}{
-		"account_id":   accountID,
-		"user_id":      userID,
-		"trading_mode": tradingMode,
-		"positions":    posEntries,
-		"realized_pnl": result.Realized,
+		"account_id":          accountID,
+		"user_id":             userID,
+		"trading_mode":        tradingMode,
+		"positions":           posEntries,
+		"realized_pnl":        result.Realized,
+		"fees_since_snapshot": feesSince,
+		"realized_carried":    hdr.RealizedCarried,
+		"fees_carried":        hdr.FeesCarried,
+		"recent_fills":        recentFills,
 	})
 	return nil
+}
+
+// offlineRecentFillsWindow bounds the payload's recent_fills; it must cover the longest NYSE closure
+// gap so portfolio can always find the fills of the previous session (design §10).
+const offlineRecentFillsWindow = 10 * 24 * time.Hour
+
+// offlineSnapshotCarry folds the confirmed fills in (pred.AsOf, asOf] onto pred's lots and carry; with
+// no pred it folds every fill up to asOf (an unknown filled_at counts as before).
+func (s *TradingService) offlineSnapshotCarry(ctx context.Context, accountID string) repository.CarryFunc {
+	return func(pred *repository.SnapshotHeader, asOf time.Time) (float64, float64, error) {
+		confirmed, err := s.baselineStore.ListConfirmedOfflineOrdersByAccount(ctx, accountID)
+		if err != nil {
+			return 0, 0, fmt.Errorf("load confirmed orders: %w", err)
+		}
+		var window []*tradingv1.Order
+		fees := 0.0
+		for _, o := range confirmed {
+			if o.FilledAt == nil {
+				if pred != nil {
+					continue
+				}
+			} else if t := o.FilledAt.AsTime(); t.After(asOf) || (pred != nil && !t.After(pred.AsOf)) {
+				continue
+			}
+			window = append(window, o)
+			fees += o.GetFees()
+		}
+		if pred == nil {
+			return pnl.Fold(offlineFillsFromOrders(window)).Realized, fees, nil
+		}
+		return pred.RealizedCarried + pnl.FoldFrom(pred.Lots, offlineFillsFromOrders(window)).Realized, pred.FeesCarried + fees, nil
+	}
 }
 
 // SnapshotOfflinePositions records brokerage-statement holdings as an effective-dated opening baseline
@@ -1107,6 +1177,11 @@ func (s *TradingService) SnapshotOfflinePositions(ctx context.Context, req *trad
 
 	asOf := req.AsOf.AsTime()
 
+	// A non-empty list whose rows were all rejected changes nothing (an empty list is a full flatten).
+	if len(req.Positions) > 0 && len(validRows) == 0 {
+		return &tradingv1.SnapshotOfflinePositionsResponse{AccountId: req.AccountId, Rejected: rejected}, nil
+	}
+
 	// Warn if there are unconfirmed NEW offline orders (their fills are excluded until confirmed).
 	var warnings []string
 	hasNew, warnErr := s.baselineStore.HasUnconfirmedOfflineOrders(ctx, req.AccountId)
@@ -1122,7 +1197,10 @@ func (s *TradingService) SnapshotOfflinePositions(ctx context.Context, req *trad
 	lock.Lock()
 	defer lock.Unlock()
 
-	if err := s.baselineStore.UpsertBaselineSnapshot(ctx, req.AccountId, req.ClientSnapshotId, asOf, validRows); err != nil {
+	if err := s.baselineStore.UpsertBaselineSnapshot(ctx, req.AccountId, req.ClientSnapshotId, asOf, validRows, s.offlineSnapshotCarry(ctx, req.AccountId)); err != nil {
+		if errors.Is(err, repository.ErrSnapshotAsOfConflict) {
+			return nil, grpcstatus.Errorf(codes.FailedPrecondition, "cannot change as_of of a snapshot that is not the latest")
+		}
 		return nil, grpcstatus.Errorf(codes.Internal, "persist baseline: %v", err)
 	}
 
@@ -1493,6 +1571,7 @@ func (s *TradingService) GetOrder(ctx context.Context, req *tradingv1.GetOrderRe
 	if ok {
 		order = proto.Clone(order).(*tradingv1.Order)
 		normalizeFilledQty(order)
+		hideUnconfirmedFill(order)
 		return order, nil
 	}
 	order, err := s.repo.GetOrder(ctx, req.OrderId)
@@ -1500,6 +1579,7 @@ func (s *TradingService) GetOrder(ctx context.Context, req *tradingv1.GetOrderRe
 		return nil, fmt.Errorf("order %s not found", req.OrderId)
 	}
 	normalizeFilledQty(order)
+	hideUnconfirmedFill(order)
 	return order, nil
 }
 
@@ -1545,12 +1625,14 @@ func (s *TradingService) ListOrders(ctx context.Context, req *tradingv1.ListOrde
 		s.mu.Unlock()
 		for _, o := range mem {
 			normalizeFilledQty(o)
+			hideUnconfirmedFill(o)
 		}
 		page, pageResp := paginateOrders(mem, req.Page)
 		return &tradingv1.ListOrdersResponse{Orders: page, Page: pageResp}, nil
 	}
 	for _, o := range orders {
 		normalizeFilledQty(o)
+		hideUnconfirmedFill(o)
 	}
 	page, pageResp := paginateOrders(orders, req.Page)
 	return &tradingv1.ListOrdersResponse{Orders: page, Page: pageResp}, nil
@@ -3523,6 +3605,14 @@ func (s *TradingService) buildBrokerRequest(req *tradingv1.PlaceOrderRequest) br
 		StopPrice:    req.StopPrice,
 		TrailPrice:   req.TrailPrice,
 		TrailPercent: req.TrailPercent,
+	}
+}
+
+// hideUnconfirmedFill clears fees/filled_at on a NEW offline order; call only on a response-owned copy.
+func hideUnconfirmedFill(o *tradingv1.Order) {
+	if o != nil && o.BrokerType == commonv1.BrokerType_BROKER_TYPE_OFFLINE &&
+		o.Status == tradingv1.OrderStatus_ORDER_STATUS_NEW {
+		o.Fees, o.FilledAt = nil, nil
 	}
 }
 

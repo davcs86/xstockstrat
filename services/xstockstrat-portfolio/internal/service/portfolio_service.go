@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -44,7 +46,9 @@ type PortfolioService struct {
 
 	// Watchlists — held behind interfaces so cap/ownership rules can be unit-tested with stubs.
 	watchlists WatchlistStore
-	wlCfg      watchlistConfig
+	wlCfg      intConfig
+	// quoteCfg holds the live portfolio.marketdata.quote_timeout_ms read; nil (test literals) means the 4000ms default.
+	quoteCfg intConfig
 
 	mu   sync.RWMutex
 	subs map[string]chan *portfoliov1.PortfolioSnapshot
@@ -56,6 +60,9 @@ type PortfolioService struct {
 	// stops holds resting-stop prices learned from ledger order events, in-memory and rebuilt on boot
 	// (HydrateStops) — deliberately no portfolio→trading edge, which would create a trading↔portfolio cycle.
 	stops *stopStore
+
+	// now is the offline valuation clock; nil means time.Now.
+	now func() time.Time
 }
 
 // stopNearThresholdPct — a position whose stop sits within this fraction of current price is
@@ -147,6 +154,10 @@ func NewPortfolioService(cfg *config.Config, cfgWatcher *config.Watcher) (*Portf
 		wlCfg:      cfgWatcher,
 		subs:       make(map[string]chan *portfoliov1.PortfolioSnapshot),
 		stops:      newStopStore(),
+	}
+	// Assigned only when non-nil: a nil pointer in an interface field defeats the nil-seam default.
+	if cfgWatcher != nil {
+		svc.quoteCfg = cfgWatcher
 	}
 	return svc, nil
 }
@@ -381,53 +392,95 @@ func closedPositionPayload(userID, symbol, acctID, mode string, sealed, feesSeal
 	return payload
 }
 
-// latestQuotesFor fetches the latest quote for each symbol in ONE batched marketdata call and
-// re-keys the response by symbol (feature 178). On RPC error it logs a warn and returns an empty
-// map, so every symbol is then treated as missing — the same neutral outcome as N failing singular
-// calls (never a fabricated price). A symbol the batch omits is simply absent from the map.
-func (s *PortfolioService) latestQuotesFor(ctx context.Context, symbols []string) map[string]*marketdatav1.Quote {
+// latestQuotesFor fetches the latest quotes in ONE batched marketdata call bounded by quoteTimeout; ok=false only
+// when the call failed or timed out (every symbol then reads as missing — never a fabricated price).
+func (s *PortfolioService) latestQuotesFor(ctx context.Context, symbols []string) (map[string]*marketdatav1.Quote, bool) {
 	out := make(map[string]*marketdatav1.Quote, len(symbols))
 	if len(symbols) == 0 {
-		return out
+		return out, true
 	}
-	resp, err := s.marketdata.GetLatestQuotes(ctx, &marketdatav1.GetLatestQuotesRequest{Symbols: symbols})
+	qctx, cancel := context.WithTimeout(ctx, s.quoteTimeout())
+	defer cancel()
+	resp, err := s.marketdata.GetLatestQuotes(qctx, &marketdatav1.GetLatestQuotesRequest{Symbols: symbols})
 	if err != nil {
 		slog.Warn("batch latest quotes unavailable", "count", len(symbols), "error", err)
-		return out
+		return out, false
 	}
 	for _, q := range resp.Quotes {
 		out[q.Symbol] = q
+	}
+	return out, true
+}
+
+// quoteTimeout is the deadline on the marketdata quote fetch (portfolio.marketdata.quote_timeout_ms, default 4000).
+func (s *PortfolioService) quoteTimeout() time.Duration {
+	const defaultMs = 4000
+	if s.quoteCfg == nil {
+		return defaultMs * time.Millisecond
+	}
+	if ms := s.quoteCfg.GetInt("portfolio.marketdata.quote_timeout_ms", defaultMs); ms > 0 {
+		return time.Duration(ms) * time.Millisecond
+	}
+	return defaultMs * time.Millisecond
+}
+
+// unvaluedSymbols returns the deduped symbols the broker did not value (CurrentPrice <= 0), first-seen order.
+// Batching only these keeps broker-authoritative mark-to-market (@AC-12/157 short MtM, @AC-7 parity).
+func unvaluedSymbols(positions []*portfoliov1.Position) []string {
+	seen := make(map[string]struct{}, len(positions))
+	var out []string
+	for _, p := range positions {
+		if p.CurrentPrice > 0 {
+			continue
+		}
+		if _, ok := seen[p.Symbol]; ok {
+			continue
+		}
+		seen[p.Symbol] = struct{}{}
+		out = append(out, p.Symbol)
 	}
 	return out
 }
 
 func (s *PortfolioService) enrichPositions(ctx context.Context, positions []*portfoliov1.Position) {
-	// Batch only the un-broker-valued positions — a full-set batch would overwrite broker-
-	// authoritative mark-to-market (breaks @AC-12/157 short MtM, @AC-7 ListPositions↔ListPortfolios).
-	var symbols []string
-	for _, p := range positions {
-		if p.CurrentPrice > 0 {
-			continue
-		}
-		symbols = append(symbols, p.Symbol)
+	s.valueRead(ctx, positions, nil)
+	s.enrichRisk(ctx, positions)
+}
+
+// markOf is the one valuation rule: marketdata's mark_price, else the two-sided mid, else unpriced. The mid fallback
+// exists only for deploy skew/rollback (deploy.yml updates components together, so ordering cannot be enforced).
+func markOf(q *marketdatav1.Quote) (float64, bool) {
+	if q.MarkPrice != nil && *q.MarkPrice > 0 {
+		return *q.MarkPrice, true
 	}
-	quotes := s.latestQuotesFor(ctx, symbols)
+	if q.AskPrice > 0 && q.BidPrice > 0 {
+		return (q.AskPrice + q.BidPrice) / 2, true
+	}
+	return 0, false
+}
+
+// applyQuotes mark-values the positions the broker did not value; a missing or unusable quote leaves the position
+// unenriched (never a fabricated price, never a one-sided average) and labelled MARK_SOURCE_NONE.
+func applyQuotes(positions []*portfoliov1.Position, quotes map[string]*marketdatav1.Quote) {
 	for _, p := range positions {
 		if p.CurrentPrice > 0 {
+			p.MarkSource = portfoliov1.MarkSource_MARK_SOURCE_BROKER
 			continue
 		}
+		p.MarkSource = portfoliov1.MarkSource_MARK_SOURCE_NONE
 		quote, ok := quotes[p.Symbol]
 		if !ok {
 			continue // missing quote → same skip as the old per-position error path
 		}
-		price := (quote.AskPrice + quote.BidPrice) / 2
-		if price <= 0 {
-			slog.Warn("latest quote has no usable price", "symbol", p.Symbol, "ask", quote.AskPrice, "bid", quote.BidPrice)
+		price, ok := markOf(quote)
+		if !ok {
+			slog.Warn("latest quote has no usable price", "symbol", p.Symbol, "ask", quote.AskPrice, "bid", quote.BidPrice, "mark", quote.GetMarkPrice())
 			continue
 		}
-		enrichPosition(p, quote.AskPrice, quote.BidPrice)
+		markAt(p, price)
+		p.MarkSource = portfoliov1.MarkSource_MARK_SOURCE_QUOTE
+		p.MarkAsOf = quote.Time
 	}
-	s.enrichRisk(ctx, positions)
 }
 
 // enrichRisk fills risk/factor fields from the learned resting stop + operator factor map, computed
@@ -509,15 +562,13 @@ func (s *PortfolioService) HydrateStops(ctx context.Context) {
 	slog.Info("HydrateStops: replayed resting stops from ledger", "count", n)
 }
 
-// enrichPosition fills current price / market value / unrealized P&L on p from a quote's
-// ask/bid, using the mid price (Ask+Bid)/2. UnrealizedPnlPct is guarded against zero cost basis.
-func enrichPosition(p *portfoliov1.Position, askPrice, bidPrice float64) {
-	price := (askPrice + bidPrice) / 2
+// markAt values p at price. The % is over |cost basis| so a short reports a correctly signed return.
+func markAt(p *portfoliov1.Position, price float64) {
 	p.CurrentPrice = price
 	p.MarketValue = price * p.Qty
 	p.UnrealizedPnl = p.MarketValue - p.CostBasis
-	if p.CostBasis > 0 {
-		p.UnrealizedPnlPct = p.UnrealizedPnl / p.CostBasis
+	if p.CostBasis != 0 {
+		p.UnrealizedPnlPct = p.UnrealizedPnl / math.Abs(p.CostBasis)
 	}
 }
 
@@ -533,7 +584,8 @@ func sideOf(qty float64) portfoliov1.PositionSide {
 	}
 }
 
-// GetPortfolio aggregates all open positions with live prices.
+// GetPortfolio aggregates the caller's open positions with live prices and account-level P&L: one account
+// when account_id is set, else every account the caller has (no PermissionDenied; unowned reads empty).
 func (s *PortfolioService) GetPortfolio(ctx context.Context, req *portfoliov1.GetPortfolioRequest) (*portfoliov1.Portfolio, error) {
 	// Caller identity comes from the trusted x-user-id header, never the deprecated request-body user_id.
 	userID := middleware.FromContext(ctx).UserID
@@ -541,25 +593,87 @@ func (s *PortfolioService) GetPortfolio(ctx context.Context, req *portfoliov1.Ge
 	if err != nil {
 		return nil, err
 	}
-	s.enrichPositions(ctx, positions)
 
-	var totalValue float64
-	for _, p := range positions {
-		totalValue += p.MarketValue
+	balances := map[string]*repository.AccountBalance{}
+	if list, err := s.repo.ListAccountBalancesByUser(ctx, userID); err != nil {
+		slog.Warn("GetPortfolio: list account balances failed", "user_id", userID, "error", err)
+	} else {
+		for _, a := range list {
+			bal := a.Balance
+			balances[a.AccountID] = &bal
+		}
 	}
+	var scope []string
+	if id := req.GetAccountId(); id != "" {
+		scope = []string{id}
+	} else {
+		for id := range balances {
+			scope = append(scope, id)
+		}
+		if ids, err := s.repo.ListOfflineAccountIdsByUser(ctx, userID); err != nil {
+			slog.Warn("GetPortfolio: list offline account ids failed", "user_id", userID, "error", err)
+		} else {
+			scope = append(scope, ids...)
+		}
+		for _, p := range positions {
+			scope = append(scope, p.AccountId)
+		}
+		scope = dedupe(scope)
+		sort.Strings(scope)
+	}
+	var offlineCandidates []string
+	for _, id := range scope {
+		if balances[id] == nil {
+			offlineCandidates = append(offlineCandidates, id)
+		}
+	}
+	val := s.valueRead(ctx, positions, offlineCandidates)
+	s.enrichRisk(ctx, positions)
 
 	portfolio := &portfoliov1.Portfolio{
 		PortfolioId: userID,
 		UserId:      userID,
-		Equity:      totalValue,
 		UpdatedAt:   timestamppb.Now(),
 		Positions:   positions,
 		AccountId:   req.GetAccountId(),
 	}
-	// Offline-account realized P&L set with proto3 presence so an offline $0 differs from a broker unset.
-	// Populated on BOTH read paths (here + buildAccountPortfolio) for parity.
-	if v, ok, err := s.repo.GetOfflineRealized(ctx, req.GetAccountId()); err == nil && ok {
-		portfolio.RealizedPnl = proto.Float64(v)
+	byAccount := map[string][]*portfoliov1.Position{}
+	for _, p := range positions {
+		byAccount[p.AccountId] = append(byAccount[p.AccountId], p)
+	}
+	if len(scope) == 1 && req.GetAccountId() != "" {
+		applyAccountPnL(portfolio, positions, balances[scope[0]], val.state(scope[0]), val.accounts[scope[0]])
+		return portfolio, nil
+	}
+
+	var dayPnl, prior, totalPnl, absCost, equity float64
+	allOffline := len(scope) > 0
+	for _, id := range scope {
+		acct := &portfoliov1.Portfolio{}
+		st := val.state(id)
+		applyAccountPnL(acct, byAccount[id], balances[id], st, val.accounts[id])
+		dayPnl += acct.DayPnl
+		totalPnl += acct.TotalPnl
+		switch {
+		case balances[id] != nil:
+			prior += balances[id].LastEquity
+			allOffline = false
+		case st != nil:
+			prior += val.accounts[id].base
+			absCost += pricedAbsCost(byAccount[id])
+		default:
+			allOffline = false
+		}
+	}
+	for _, p := range positions {
+		equity += p.MarketValue
+	}
+	portfolio.Equity = equity
+	portfolio.DayPnl = dayPnl
+	portfolio.DayPnlPct = ratio(dayPnl, prior)
+	portfolio.TotalPnl = totalPnl
+	if allOffline {
+		portfolio.TotalPnlPct = proto.Float64(ratio(totalPnl, absCost))
 	}
 	return portfolio, nil
 }
@@ -599,6 +713,10 @@ func (s *PortfolioService) ListPositions(ctx context.Context, req *portfoliov1.L
 	}, nil
 }
 
+// ErrQuotesUnavailable marks a read that cannot value a position without a quote; the handler maps it to
+// Unavailable so callers can tell a transient dependency gap from a server bug.
+var ErrQuotesUnavailable = errors.New("quotes unavailable")
+
 // GetPnL computes realized + unrealized P&L over a time range. Realized uses the shared pnl package
 // (the ONE realized-P&L implementation) — no second formula lives here (the feature-056 dual-source fix).
 func (s *PortfolioService) GetPnL(ctx context.Context, req *portfoliov1.GetPnLRequest) (*portfoliov1.PnLResponse, error) {
@@ -607,17 +725,18 @@ func (s *PortfolioService) GetPnL(ctx context.Context, req *portfoliov1.GetPnLRe
 	if err != nil {
 		return nil, err
 	}
-	var unrealized float64
-	pnlSymbols := make([]string, 0, len(positions))
-	for _, p := range positions {
-		pnlSymbols = append(pnlSymbols, p.Symbol)
+	// Unrealized is never a silent 0: every position must carry a broker price or a usable quote.
+	pnlQuotes, ok := s.latestQuotesFor(ctx, unvaluedSymbols(positions))
+	if !ok {
+		return nil, fmt.Errorf("GetPnL: %w", ErrQuotesUnavailable)
 	}
-	pnlQuotes := s.latestQuotesFor(ctx, pnlSymbols)
+	applyQuotes(positions, pnlQuotes)
+	var unrealized float64
 	for _, p := range positions {
-		if quote, ok := pnlQuotes[p.Symbol]; ok {
-			price := (quote.AskPrice + quote.BidPrice) / 2
-			unrealized += (price - p.AvgEntryPrice) * p.Qty
+		if p.CurrentPrice <= 0 {
+			return nil, fmt.Errorf("GetPnL: no usable quote for %s: %w", p.Symbol, ErrQuotesUnavailable)
 		}
+		unrealized += (p.CurrentPrice - p.AvgEntryPrice) * p.Qty
 	}
 
 	// Collect fills in application order and fold once through the shared pnl package. Batching the fold
@@ -791,17 +910,16 @@ func (s *PortfolioService) broadcastSnapshot(ctx context.Context, userID string,
 	if err != nil {
 		return
 	}
-	var equity float64
-	snapSymbols := make([]string, 0, len(positions))
-	for _, p := range positions {
-		snapSymbols = append(snapSymbols, p.Symbol)
+	quotes, ok := s.latestQuotesFor(ctx, unvaluedSymbols(positions))
+	applyQuotes(positions, quotes)
+	// Any unpriced position would understate equity — skip rather than persist/emit a partial snapshot.
+	if unpriced := unvaluedSymbols(positions); !ok || len(unpriced) > 0 {
+		slog.Warn("portfolio snapshot skipped: positions unpriced", "user_id", userID, "unpriced", unpriced, "quotes_ok", ok)
+		return
 	}
-	snapQuotes := s.latestQuotesFor(ctx, snapSymbols)
+	var equity float64
 	for _, p := range positions {
-		if quote, ok := snapQuotes[p.Symbol]; ok {
-			price := (quote.AskPrice + quote.BidPrice) / 2
-			equity += price * p.Qty
-		}
+		equity += p.MarketValue
 	}
 	snap := &portfoliov1.PortfolioSnapshot{
 		PortfolioId:   userID,
@@ -853,17 +971,15 @@ func (s *PortfolioService) checkRiskLimits(ctx context.Context, userID string, m
 	}
 	var totalValue float64
 	posValues := make(map[string]float64)
-	riskSymbols := make([]string, 0, len(positions))
-	for _, p := range positions {
-		riskSymbols = append(riskSymbols, p.Symbol)
-	}
-	riskQuotes := s.latestQuotesFor(ctx, riskSymbols)
-	for _, p := range positions {
-		if quote, ok := riskQuotes[p.Symbol]; ok {
-			price := (quote.AskPrice + quote.BidPrice) / 2
-			val := price * p.Qty
-			posValues[p.Symbol] = val
-			totalValue += val
+	quotes, ok := s.latestQuotesFor(ctx, unvaluedSymbols(positions))
+	applyQuotes(positions, quotes)
+	// Any unpriced position would skew the denominator — skip concentration (drawdown below still runs).
+	if unpriced := unvaluedSymbols(positions); !ok || len(unpriced) > 0 {
+		slog.Warn("concentration check skipped: positions unpriced", "user_id", userID, "unpriced", unpriced, "quotes_ok", ok)
+	} else {
+		for _, p := range positions {
+			posValues[p.Symbol] += p.MarketValue
+			totalValue += p.MarketValue
 		}
 	}
 
@@ -967,6 +1083,32 @@ type positionSyncPayload struct {
 	// RealizedPnl is the account-grain cumulative realized P&L, set ONLY by an offline ConfirmOrder
 	// recompute; a broker sync never carries it (nil) — the pointer's presence marks offline/broker.
 	RealizedPnl *float64 `json:"realized_pnl"`
+	// Offline-only P&L state (feature 240); absent on legacy events, which read as 0 / no fills.
+	RealizedCarried   *float64                `json:"realized_carried"`
+	FeesSinceSnapshot *float64                `json:"fees_since_snapshot"`
+	FeesCarried       *float64                `json:"fees_carried"`
+	RecentFills       []repository.RecentFill `json:"recent_fills"`
+}
+
+// offlineState is the offline P&L state an offline sync carries (absent fields → 0, fills → []).
+func (p *positionSyncPayload) offlineState() repository.OfflineState {
+	val := func(f *float64) float64 {
+		if f == nil {
+			return 0
+		}
+		return *f
+	}
+	fills := p.RecentFills
+	if fills == nil {
+		fills = []repository.RecentFill{}
+	}
+	return repository.OfflineState{
+		RealizedPnl:       val(p.RealizedPnl),
+		RealizedCarried:   val(p.RealizedCarried),
+		FeesSinceSnapshot: val(p.FeesSinceSnapshot),
+		FeesCarried:       val(p.FeesCarried),
+		RecentFills:       fills,
+	}
 }
 
 // ConsumePositionSyncs subscribes to ledger StreamEvents filtered on "account.positions.synced"
@@ -1084,7 +1226,7 @@ func (s *PortfolioService) processPositionSync(ctx context.Context, event *ledge
 	// Realized P&L upsert lands OUTSIDE the positions loop and AFTER DeletePositionsNotInSync so a
 	// flat/full-close recompute (positions: []) still records; the nil pointer keeps broker syncs out.
 	if sync.RealizedPnl != nil {
-		if err := s.repo.UpsertOfflineRealized(ctx, sync.AccountID, userID, sync.TradingMode, *sync.RealizedPnl); err != nil {
+		if err := s.repo.UpsertOfflineRealized(ctx, sync.AccountID, userID, sync.TradingMode, sync.offlineState()); err != nil {
 			slog.Warn("upsert offline realized failed", "account_id", sync.AccountID, "error", err)
 		}
 	}
@@ -1180,45 +1322,64 @@ func (s *PortfolioService) processBalanceSync(ctx context.Context, event *ledger
 	}
 }
 
-// buildAccountPortfolio assembles a Portfolio for one account. The broker is authoritative for cash,
-// buying power, and equity; when bal is nil, equity falls back to the summed position market value.
-func (s *PortfolioService) buildAccountPortfolio(ctx context.Context, accountID string, bal *repository.AccountBalance) (*portfoliov1.Portfolio, error) {
-	positions, err := s.repo.ListPositionsByAccount(ctx, accountID, "")
-	if err != nil {
-		return nil, err
-	}
-	// enrichPositions keeps broker-valued positions and mid-quote-enriches only those the broker didn't value.
-	s.enrichPositions(ctx, positions)
-
-	var positionsValue, unrealizedPnl float64
-	for _, p := range positions {
-		positionsValue += p.MarketValue
-		unrealizedPnl += p.UnrealizedPnl
-	}
-
+// buildAccountPortfolio assembles a Portfolio for one account from already-valued positions.
+func buildAccountPortfolio(accountID string, positions []*portfoliov1.Position, bal *repository.AccountBalance, st *repository.OfflineState, acct accountVal) *portfoliov1.Portfolio {
 	portfolio := &portfoliov1.Portfolio{
 		PortfolioId: accountID,
 		AccountId:   accountID,
-		Equity:      positionsValue,
-		TotalPnl:    unrealizedPnl,
 		UpdatedAt:   timestamppb.Now(),
 		Positions:   positions,
 	}
+	applyAccountPnL(portfolio, positions, bal, st, acct)
+	return portfolio
+}
+
+// applyAccountPnL sets one account's equity and P&L. A broker account is authoritative for cash, buying power,
+// equity and Day P&L; an offline account (st != nil) excludes unpriced positions and carries FR-1/FR-2/FR-3/FR-4.
+func applyAccountPnL(p *portfoliov1.Portfolio, positions []*portfoliov1.Position, bal *repository.AccountBalance, st *repository.OfflineState, acct accountVal) {
+	var positionsValue, unrealizedPnl float64
+	for _, pos := range positions {
+		if st != nil && pos.MarkSource == portfoliov1.MarkSource_MARK_SOURCE_NONE {
+			continue
+		}
+		positionsValue += pos.MarketValue
+		unrealizedPnl += pos.UnrealizedPnl
+	}
+	p.Equity = positionsValue
+	p.TotalPnl = unrealizedPnl
 	if bal != nil {
-		portfolio.Cash = bal.Cash
-		portfolio.BuyingPower = bal.BuyingPower
-		portfolio.Equity = bal.Equity
-		portfolio.DayPnl = bal.Equity - bal.LastEquity
+		p.Cash = bal.Cash
+		p.BuyingPower = bal.BuyingPower
+		p.Equity = bal.Equity
+		p.DayPnl = bal.Equity - bal.LastEquity
 		if bal.LastEquity > 0 {
-			portfolio.DayPnlPct = portfolio.DayPnl / bal.LastEquity
+			p.DayPnlPct = p.DayPnl / bal.LastEquity
+		}
+		return
+	}
+	if st == nil {
+		return
+	}
+	lifetime := st.RealizedCarried + st.RealizedPnl
+	p.DayPnl = acct.dayPnl
+	p.DayPnlPct = ratio(acct.dayPnl, acct.base)
+	p.TotalPnl = lifetime + unrealizedPnl
+	p.TotalPnlPct = proto.Float64(ratio(p.TotalPnl, pricedAbsCost(positions)))
+	p.RealizedPnl = proto.Float64(st.RealizedPnl)
+	p.RealizedPnlLifetime = proto.Float64(lifetime)
+	p.FeesSinceSnapshot = proto.Float64(st.FeesSinceSnapshot)
+	p.FeesLifetime = proto.Float64(st.FeesCarried + st.FeesSinceSnapshot)
+}
+
+// pricedAbsCost is Σ|cost_basis| over priced positions, the total-return denominator (never nets long/short).
+func pricedAbsCost(positions []*portfoliov1.Position) float64 {
+	var sum float64
+	for _, p := range positions {
+		if p.MarkSource != portfoliov1.MarkSource_MARK_SOURCE_NONE {
+			sum += math.Abs(p.CostBasis)
 		}
 	}
-	// Offline-account realized P&L set with proto3 presence so an offline $0 differs from a broker unset;
-	// populated identically in GetPortfolio for parity. Broker accounts have no row → left unset.
-	if v, ok, err := s.repo.GetOfflineRealized(ctx, accountID); err == nil && ok {
-		portfolio.RealizedPnl = proto.Float64(v)
-	}
-	return portfolio, nil
+	return sum
 }
 
 // ListPortfolios returns a Portfolio per broker account: a specific account_id returns just that one;
@@ -1245,12 +1406,18 @@ func (s *PortfolioService) ListPortfolios(ctx context.Context, req *portfoliov1.
 		if err != nil {
 			slog.Warn("ListPortfolios: GetAccountBalance failed", "account_id", accountID, "error", err)
 		}
-		portfolio, err := s.buildAccountPortfolio(ctx, accountID, bal)
+		positions, err := s.repo.ListPositionsByAccount(ctx, accountID, "")
 		if err != nil {
 			return nil, err
 		}
+		var candidates []string
+		if bal == nil {
+			candidates = []string{accountID}
+		}
+		val := s.valueRead(ctx, positions, candidates)
+		s.enrichRisk(ctx, positions)
 		return &portfoliov1.ListPortfoliosResponse{
-			Portfolios: []*portfoliov1.Portfolio{portfolio},
+			Portfolios: []*portfoliov1.Portfolio{buildAccountPortfolio(accountID, positions, bal, val.state(accountID), val.accounts[accountID])},
 		}, nil
 	}
 
@@ -1258,32 +1425,51 @@ func (s *PortfolioService) ListPortfolios(ctx context.Context, req *portfoliov1.
 	if err != nil {
 		return nil, err
 	}
-	portfolios := make([]*portfoliov1.Portfolio, 0, len(accounts))
+	type loaded struct {
+		id        string
+		bal       *repository.AccountBalance
+		positions []*portfoliov1.Position
+	}
+	var accts []loaded
 	balanceIDs := make([]string, 0, len(accounts))
 	for _, acct := range accounts {
-		bal := acct.Balance
-		portfolio, err := s.buildAccountPortfolio(ctx, acct.AccountID, &bal)
+		positions, err := s.repo.ListPositionsByAccount(ctx, acct.AccountID, "")
 		if err != nil {
 			slog.Warn("ListPortfolios: build account portfolio failed", "account_id", acct.AccountID, "error", err)
 			continue
 		}
-		portfolios = append(portfolios, portfolio)
+		bal := acct.Balance
+		accts = append(accts, loaded{id: acct.AccountID, bal: &bal, positions: positions})
 		balanceIDs = append(balanceIDs, acct.AccountID)
 	}
 
 	// Offline accounts have no account_balances row, so append them separately for combined-view parity.
-	// A nil balance yields 0 cash/BP/day-P&L and equity = summed market value; a lookup failure is non-fatal.
+	// A nil balance yields 0 cash/BP and equity = summed market value; a lookup failure is non-fatal.
+	var offlineAppended []string
 	if offlineIDs, err := s.repo.ListOfflineAccountIdsByUser(ctx, userID); err != nil {
 		slog.Warn("ListPortfolios: list offline account ids failed", "user_id", userID, "error", err)
 	} else {
-		for _, id := range offlineIDsToAppend(balanceIDs, offlineIDs) {
-			portfolio, err := s.buildAccountPortfolio(ctx, id, nil)
+		offlineAppended = offlineIDsToAppend(balanceIDs, offlineIDs)
+		for _, id := range offlineAppended {
+			positions, err := s.repo.ListPositionsByAccount(ctx, id, "")
 			if err != nil {
 				slog.Warn("ListPortfolios: build offline account portfolio failed", "account_id", id, "error", err)
 				continue
 			}
-			portfolios = append(portfolios, portfolio)
+			accts = append(accts, loaded{id: id, positions: positions})
 		}
+	}
+
+	// One shared valuation (one quote batch, one bars batch) across every account — C-10(b) parity.
+	var all []*portfoliov1.Position
+	for _, a := range accts {
+		all = append(all, a.positions...)
+	}
+	val := s.valueRead(ctx, all, offlineAppended)
+	portfolios := make([]*portfoliov1.Portfolio, 0, len(accts))
+	for _, a := range accts {
+		s.enrichRisk(ctx, a.positions)
+		portfolios = append(portfolios, buildAccountPortfolio(a.id, a.positions, a.bal, val.state(a.id), val.accounts[a.id]))
 	}
 	return &portfoliov1.ListPortfoliosResponse{Portfolios: portfolios}, nil
 }
@@ -1371,8 +1557,8 @@ type WatchlistStore interface {
 	ListAllSymbols(ctx context.Context) ([]string, error)
 }
 
-// watchlistConfig is the config slice the watchlist caps read (injectable in tests).
-type watchlistConfig interface {
+// intConfig is the int config slice the watchlist caps and the quote deadline read (injectable in tests).
+type intConfig interface {
 	GetInt(key string, defaultVal int64) int64
 }
 

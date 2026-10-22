@@ -266,3 +266,10 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - UI tsc errors in `e2e/insights/backfills.spec.ts:135-136` (pre-existing, feature 198);
   - CI runs Python 3.12.3 instead of 3.13;
   - Track C template lacks a Consumer Surface(s) section.
+
+## Session 2026-10-20 (CI: feature status automation)
+
+- Promotion PR #1258 merged to main
+- Feature promoted and committed: 65bbc3cbf93a03f5359b60228398a25e6f297f05
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-10-20

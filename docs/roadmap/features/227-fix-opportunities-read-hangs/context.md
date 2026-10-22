@@ -223,3 +223,10 @@ analysis `CLAUDE.md`: the Decide-surface memo sentence now says live quote only 
 **Stopped at**: all complete. Integration PR https://github.com/davcs86/xstockstrat/pull/1247 is open to main-dev, with CI watched.
 **Next**: merge #1247; then, after the dev deploy, confirm staging `list_opportunities` and which dependency stalls
 (from the new warnings), then run feature 215 Step 26.
+
+## Session 2026-10-20 (CI: feature status automation)
+
+- Promotion PR #1258 merged to main
+- Feature promoted and committed: 65bbc3cbf93a03f5359b60228398a25e6f297f05
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-10-20

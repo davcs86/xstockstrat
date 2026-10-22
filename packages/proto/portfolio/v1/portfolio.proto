@@ -60,6 +60,11 @@ message Portfolio {
   // (feature 157); `optional` for proto3 explicit presence so an offline account's genuine $0
   // is distinguishable from a broker account's unset. Broker cards leave it unset.
   optional double realized_pnl = 12;
+  // Offline accounts only; total_pnl_pct is also set on an all-offline aggregate.
+  optional double total_pnl_pct = 13;
+  optional double realized_pnl_lifetime = 14; // offline accounts only
+  optional double fees_since_snapshot = 15;   // offline accounts only
+  optional double fees_lifetime = 16;         // offline accounts only
 }
 
 message Position {
@@ -108,6 +113,9 @@ message Position {
   // source indicates how the position was constructed: ORDERS (fill-only),
   // BASELINE (snapshot-only), or MIXED (baseline + post-T0 fills).
   PositionSource source = 23;
+  MarkSource mark_source = 24;
+  // LAST_CLOSE: 00:00 America/New_York of the bar's session; QUOTE: the quote time; unset for BROKER/NONE.
+  google.protobuf.Timestamp mark_as_of = 25;
 }
 
 // A risk cue surfaced on the Exposure surface (feature 083). Closed set → enum (C-04).
@@ -126,6 +134,15 @@ enum PositionSource {
   POSITION_SOURCE_ORDERS = 1;
   POSITION_SOURCE_BASELINE = 2;
   POSITION_SOURCE_MIXED = 3;
+}
+
+// MarkSource is the provenance of a position's current_price (feature 240).
+enum MarkSource {
+  MARK_SOURCE_UNSPECIFIED = 0;
+  MARK_SOURCE_QUOTE = 1;
+  MARK_SOURCE_LAST_CLOSE = 2;
+  MARK_SOURCE_BROKER = 3;
+  MARK_SOURCE_NONE = 4;
 }
 
 // PositionSide distinguishes a long (qty > 0) from a short (qty < 0) position.

@@ -3672,3 +3672,79 @@ reusing.
 - **Pattern**: Generate Playwright `page.route` stub bodies with `toJson(XSchema, create(XSchema, …))` from a fixture-home helper and use per-spec stateful stubs rather than mutating shared mock state — avoiding hand-written Connect-JSON errors and `fullyParallel` races. A global stamp in the shared mock raced `value-persists-after-save.spec.ts`.
 - **Evidence**: `git show 09ec8d9a:docs/roadmap/features/219-config-ui-usability/design.md:142-148,180-186`; `fails.md` 2026-08 (hand-written Connect-JSON).
 - **Rule it implies**: Save-then-refresh behaviour gets a spec-local stateful stub; the shared mock stays immutable (C-12/C-13).
+
+### 2026-10-20 — fix-after-hours-positions-priced — design
+- **Pattern**: When a derived value (a valuation mark) is computed wrongly in several downstream consumers, compute it once at the upstream chokepoint as an additive `optional` proto field, and keep a narrow consumer fallback (the old safe subset: two-sided mid only) for deploy skew. One rule replaces N copies, and either service can deploy first.
+- **Evidence**: `services/xstockstrat-marketdata/internal/service/marketdata_service.go#withMark`; `services/xstockstrat-portfolio/internal/service/portfolio_service.go#markOf`; `packages/proto/marketdata/v1/marketdata.proto` `mark_price = 8`.
+- **Rule it implies**: Prove the concurrency of a "runs alongside" lookup with a two-way handshake test that fails under a serial mutation (231 AC-12), not with timing.
+
+### 2026-10-20 — offline-account-full-pnl — design
+- **Pattern**: A consumer service needed a time-varying derived value (Day P&L, where the session rolls
+  over with no event) from data owned upstream, and a reverse RPC edge would create a boot cycle. The
+  design that worked:
+  - The producer pushes a calendar-free, bounded superset of raw inputs (fills from the last 10 days)
+    on its existing absolute-snapshot event.
+  - The consumer owns all time and calendar interpretation and computes the value at read time.
+  - Session-cutting by the producer at emit time was rejected: it couples the producer to the calendar,
+    to its clock, and to the version of the cutting logic it runs.
+- **Evidence**: `docs/roadmap/features/240-offline-account-full-pnl/design.md` (Chosen Approach §2.5,
+  §4.4–4.5; Rejected Alternatives).
+- **Rule it implies**: Push raw, bounded inputs and interpret them where the clock lives. Size the
+  window from the worst-case gap (here ~4.5 days) with slack, and record it as a fixed invariant.
+
+### 2026-10-20 — fix-agent-getconfig-deadline — design
+- **Pattern**: Before adding a deadline to a read whose callers fall back with `except Exception`,
+  check what each fallback *permits*. A hang can be an accidental fail-closed control. In DCR, a
+  stalled config used to block `/oauth/register`. Once the read is deadlined, the fallback
+  registers clients anyway, bypassing `registration_enabled=false` and the allowlist.
+  The design labels this a security posture change and materializes a follow-up. It also
+  corrects the comment that claimed identity enforced the allowlist.
+- **Evidence**: `docs/roadmap/features/247-fix-agent-getconfig-deadline/design.md` (§4(b));
+  `services/xstockstrat-agent/app/oauth_server.py:87-110`.
+- **Rule it implies**: In a timeout or deadline fix, enumerate the fallbacks that open a security
+  gate when the read fails. Record each one as a posture change, not as a plain fallback.
+### 2026-10-21 — otel-metrics-logs-export — design
+- **Pattern**: When a language's gRPC instrumentation emits spans but no RPC metric, derive the metric in-process from SERVER spans with a SpanProcessor (`on_end`) instead of adding a second interceptor stack. It reuses the status code the instrumentation already computed, needs no server-wiring edit, and one shared golden-vector file (`scripts/testdata/rpc-status-vectors.json`) keeps the per-language status rule and bucket boundaries identical to Go's native `otelgrpc`.
+- **Evidence**: `docs/roadmap/features/274-otel-metrics-logs-export/design.md` § PR-A; recon.md § SDK capability probe (py instrumentation-grpc 0.63b1 and node 0.52.1 have no meter code).
+- **Rule it implies**: Probe the pinned instrumentation for metric support before designing an RPC alert; when it is span-only, a span-derived recorder plus shared vectors beats per-language interceptors — but it inherits the span's blind spots (sampling, BaseException cancels), so pin those as explicit vectors.
+
+### 2026-10-22 — 256-fix-offline-book-consistency — design
+- **Pattern**: To give a ledger `StreamEvents` consumer a bounded retry, park according to the class of the
+  error, not after a fixed count or time.
+  - Deterministic errors (pgconn SQLSTATE class 22 or 23) park after N attempts.
+  - Transient errors (connection, deadline, or SQLSTATE 08/40/53/57) never park.
+  - Only unclassified errors fall back to the count AND elapsed bound.
+  - An error-blind bound drops events during any outage longer than the bound. It also stalls the shared stream
+    for the whole bound on a poison event.
+  - The wrapper sits around the handler, keyed by `event.Sequence`, so the shared reconnect loop is left as it
+    is.
+  - Because `lastSeq` starts at 0 on boot, every deploy replays parked events, and an absolute (idempotent)
+    handler self-heals on that replay.
+- **Evidence**: `docs/roadmap/features/256-fix-offline-book-consistency/design.md` §3;
+  `services/xstockstrat-portfolio/internal/service/portfolio_service.go:186`, `:205-209`.
+- **Rule it implies**: A retry bound on an event consumer must not park transient failures. Document the
+  recovery path for parked events, such as a boot replay or a sweep.
+
+### 2026-10-22 — fix-identity-auth-code-race — ordering
+- **Pattern**: In a claim-then-issue redemption (a conditional `UPDATE … RETURNING` claim plus a same-transaction
+  successor INSERT), do any step that can throw but writes nothing, such as minting a JWT, *before* the claim
+  transaction. Return the result only *after* COMMIT. A throw after a durable claim burns the single-use
+  credential and leaves an orphan successor row. Minting first costs only signatures the losing racers throw away,
+  and needs no callback coupling between the transaction helper and the JWT minting.
+- **Evidence**: `docs/roadmap/features/265-fix-identity-auth-code-race/design.md` §1 Phase B (the `jwtSecret`
+  getter throws when `JWT_SECRET` is unset, IDENTITY-1). The RED test runs with `JWT_SECRET` unset and asserts
+  code 13, `consumedAt` null and 0 inserts.
+- **Rule it implies**: For every single-use claim, list which post-claim steps can throw. Move each one before the
+  claim or inside the transaction, or record it as an accepted residual.
+
+### 2026-10-22 — fix-agent-client-deadlines — design
+- **Pattern**: Deadlining an inbound token-validation call means the backend's slowness now reaches the
+  auth edge. If that failure maps to the existing 401 with `WWW-Authenticate`, an OAuth client re-authorizes.
+  The re-auth goes through the same stalled identity service, so the user is effectively logged out.
+  The design gives the validator a three-way result instead: claims, invalid, or backend-unavailable.
+  The validator still never raises. Backend-unavailable (`DEADLINE_EXCEEDED`/`UNAVAILABLE`) maps to
+  503 *without* `WWW-Authenticate`; only a genuinely invalid token gets the 401 with the re-auth pointer.
+- **Evidence**: `docs/roadmap/features/273-fix-agent-client-deadlines/design.md` (§3);
+  `services/xstockstrat-agent/app/main.py:164-174`, `app/auth.py:58-61`.
+- **Rule it implies**: When an auth-path dependency becomes able to fail fast, keep "cannot verify" separate
+  from "verified invalid". Fail closed with a retryable 5xx, not a credential-revoking 401.

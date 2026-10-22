@@ -50,5 +50,34 @@ export const PORTFOLIO_OFFLINE = {
   positions: [],
 };
 
+/**
+ * Offline account with the full feature-240 P&L (AC-14/AC-20/AC-30): Day / Total P&L with return %,
+ * since-snapshot and lifetime realized (gross; net = gross − fees) and both fee scopes. The
+ * realized/fee fields are proto3 `optional double` — set on offline portfolios only. Not in
+ * PORTFOLIOS (shared defaults stay unchanged); specs inject it via page.route().
+ */
+export const PORTFOLIO_OFFLINE_FULL_PNL = {
+  portfolioId: 'port-offline-002',
+  accountId: BROKER_ACCOUNT_OFFLINE.id,
+  equity: 16300.0,
+  cash: 0.0,
+  dayPnl: 300.0,
+  dayPnlPct: 0.0188,
+  totalPnl: 1300.0,
+  totalPnlPct: 0.1238,
+  realizedPnl: 600.0,
+  feesSinceSnapshot: 3.0,
+  realizedPnlLifetime: 900.0,
+  feesLifetime: 4.5,
+  positions: [{ symbol: 'AAPL', unrealizedPnl: 1300.0 }],
+};
+
+/** Broker leg of the AC-30 combined view: Day P&L 120, Total P&L 500, no realized/fee fields. */
+export const PORTFOLIO_ALPACA_AC30 = {
+  ...PORTFOLIO_ALPACA,
+  dayPnl: 120.0,
+  totalPnl: 500.0,
+};
+
 /** One portfolio per broker account in BROKER_ACCOUNTS. */
 export const PORTFOLIOS = [PORTFOLIO_ALPACA, PORTFOLIO_IBKR];

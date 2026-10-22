@@ -79,7 +79,7 @@ signing or re-declare the secret.
   |---|---|---|
   | Next.js | `e2e/fixtures/*.ts` + `INVENTORY.md`; auth `e2e/helpers/auth.ts` | Materialized |
   | Python | `tests/conftest.py` | Exists in all four services |
-  | Go | `internal/testdata/` | Not materialized — on second consumer only |
+  | Go | `internal/testdata/` | Materialized in trading, marketdata, portfolio (feature 231) |
   | Node | `src/__tests__/fixtures/` | Not materialized — on second consumer only |
 - `scripts/integration-test.sh` posts live smoke data against real services — not mocks,
   not in scope.

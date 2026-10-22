@@ -2,7 +2,7 @@
 name: codebase-discovery
 description: Read-only codebase discovery for SDD spec/execute steps. Given a service (or set of services) and what to find, it searches the code and returns a CONDENSED, structured digest of real file paths, symbol names, and short evidence snippets — never raw file dumps. Use it to keep heavy grep/read work out of the orchestrator's context window.
 tools: Glob, Grep, Read
-model: inherit
+model: sonnet
 ---
 
 You are a discovery agent for the **xstockstrat** monorepo. Your job is to find the

@@ -2,7 +2,7 @@
 name: spec-reviewer
 description: Read-only reviewer for SDD product specs and implementation specs. Given a spec file and the review criteria, it checks the spec against the criteria and returns a STRUCTURED verdict (pass/warn/fail + findings keyed to criteria) instead of dumping the spec back into the orchestrator. Used by /sdd-review to isolate the analysis pass.
 tools: Glob, Grep, Read
-model: inherit
+model: sonnet
 ---
 
 You are a specification reviewer for the **xstockstrat** SDD workflow. The caller

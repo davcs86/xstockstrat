@@ -7,7 +7,7 @@ context you load per task.
 
 1. **Don't assume — ask, and surface tradeoffs.** On ambiguity, a missing detail, or a design fork,
    stop and raise it; never paper over it with a silent guess. *(Enforced by the SDD design gate
-   **C-11** and the platform cross-module contracts **PLAT-4/PLAT-5**, where a silent guess breaks the seams.)*
+   **C-11** and the platform cross-module contracts **PLAT-4/PLAT-5/PLAT-13**, where a silent guess breaks the seams.)*
 2. **Write the minimum that solves the stated problem.** Nothing speculative — no abstraction,
    option, or "while I'm here" scaffolding the task didn't ask for. Would a senior engineer call it
    overbuilt for what was requested? Then simplify. *(Enforced by the DRY guard rail and the CF-N4 litmus.)*
@@ -88,7 +88,7 @@ This file covers always-needed platform conventions. For larger reference sectio
 | OTel / Grafana Cloud wiring | `docs/setup/grafana-cloud.md` |
 | Feature workflow (branch, PR, promote) | `docs/runbooks/feature-workflow.md` |
 | Using or troubleshooting the agent MCP tools | `docs/runbooks/mcp-tools.md` |
-| Adding/refactoring a skill, subagent, or `CLAUDE.md`; how the AI tooling curates context (subagent delegation, progressive disclosure, structured `context.md` memory) | `docs/patterns/context-engineering.md` |
+| Adding/refactoring a skill, subagent, saved workflow (`.claude/workflows/`), or `CLAUDE.md`; how the AI tooling curates context (subagent delegation, progressive disclosure, structured `context.md` memory, multi-feature workflows) | `docs/patterns/context-engineering.md` |
 | SDD binding rules — Constitution constraint IDs (`C-*`/`P-*`/`F-*`) cited by review/design/execute | `docs/sdd/constitution.md` |
 | Acceptance scenarios & business rules (Gherkin `@AC-*`) — per-feature `acceptance.feature`, durable per-service suites read by recon/design, C-15/C-16 | `docs/sdd/business-rules/CLAUDE.md`, `docs/sdd/constitution.md` |
 | Codebase/runtime invariants (`PLAT-*`/`<MODULE>-*`) — non-obvious patterns, cross-module contracts, and scars an agent would otherwise miss; plus the defects/doc-drift log | `docs/context-constitution.md`, `docs/context-constitution-findings.md` (per-module: `services/*/docs/`, `packages/*/docs/`) |
@@ -416,7 +416,7 @@ Run `/sdd-status` for a live, computed view across all features, or `/sdd-status
 2. Read `docs/roadmap/features/<NNN-slug>/context.md` before touching any related files — it contains critical decisions from prior sessions.
 3. Do NOT rely on conversation context from a previous session. Always re-read context.md.
 
-SDD skills: `/sdd-story` → `/sdd-review product-spec` → `/sdd-design` (recon + design debate) → `/sdd-spec` → `/sdd-review impl-spec` → `/sdd-execute` (loop) | `/sdd-status` (anytime) | `/sdd-sync` (sync spec files from feature branches to main-dev) | `/sdd-distill` (compact a long-running feature's context.md mid-lifecycle) | `/sdd-archiver` (distil + prune completed features and resolved defect reports into durable memory)
+SDD skills: `/sdd-story` → `/sdd-review product-spec` → `/sdd-design` (recon + design debate) → `/sdd-spec` → `/sdd-review impl-spec` → `/sdd-execute` (loop) | `/sdd-status` (anytime) | `/sdd-sync` (sync spec files from feature branches to main-dev) | `/sdd-distill` (compact a long-running feature's context.md mid-lifecycle) | `/sdd-archiver` (distil + prune completed features and resolved defect reports into durable memory) | **many features at once:** saved workflows `/sdd-batch` (review → design → spec → impl-review in parallel) and `/sdd-batch-execute` (sequential execute in parallel worktrees), plus `/merge-train` (progressive PR merges) — gates halt by default; contract in `docs/patterns/context-engineering.md` §4
 
 ---
 

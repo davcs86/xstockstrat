@@ -1,10 +1,19 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
+	"reflect"
+	"strings"
 	"testing"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"google.golang.org/protobuf/types/known/structpb"
+
+	ledgerv1 "github.com/xstockstrat/contracts/gen/go/ledger/v1"
 	portfoliov1 "github.com/xstockstrat/contracts/gen/go/portfolio/v1"
+	"github.com/xstockstrat/portfolio/internal/config"
 	"github.com/xstockstrat/portfolio/internal/repository"
 )
 
@@ -205,4 +214,98 @@ func containsWord(s, word string) bool {
 		}
 	}
 	return false
+}
+
+// syncRecorderDB records every write processPositionSync makes; reads find no rows.
+type syncRecorderDB struct {
+	execs []recordedExec
+}
+
+type recordedExec struct {
+	sql  string
+	args []any
+}
+
+func (*syncRecorderDB) QueryRow(context.Context, string, ...any) pgx.Row { return noRow{} }
+func (*syncRecorderDB) Query(context.Context, string, ...any) (pgx.Rows, error) {
+	return nil, pgx.ErrNoRows
+}
+func (d *syncRecorderDB) Exec(_ context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
+	d.execs = append(d.execs, recordedExec{sql: sql, args: args})
+	return pgconn.CommandTag{}, nil
+}
+
+func (d *syncRecorderDB) find(substr string) *recordedExec {
+	for i := range d.execs {
+		if strings.Contains(d.execs[i].sql, substr) {
+			return &d.execs[i]
+		}
+	}
+	return nil
+}
+
+// runOfflineSync feeds one account.positions.synced payload through processPositionSync and returns
+// the offline_account_realized write's bound values (realized, carried, fees since, fees carried, fills).
+func runOfflineSync(t *testing.T, payload string) (*syncRecorderDB, []any) {
+	t.Helper()
+	st := &structpb.Struct{}
+	if err := st.UnmarshalJSON([]byte(payload)); err != nil {
+		t.Fatalf("payload: %v", err)
+	}
+	db := &syncRecorderDB{}
+	svc := &PortfolioService{repo: repository.NewPortfolioRepoWithDB(db), ledger: &fakeLedger{}, cfg: &config.Watcher{}}
+	svc.processPositionSync(context.Background(), &ledgerv1.LedgerEvent{Payload: st})
+	w := db.find("offline_account_realized")
+	if w == nil {
+		t.Fatalf("no offline_account_realized write for %s", payload)
+	}
+	return db, w.args[3:]
+}
+
+func TestProcessPositionSync_OfflineState(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		payload string
+		want    []any
+	}{
+		{"AC-18 legacy event: carry/fees 0, fills []", `{"account_id":"off-1","user_id":"u1","trading_mode":"TRADING_MODE_PAPER","positions":[],"realized_pnl":450}`,
+			[]any{450.0, 0.0, 0.0, 0.0, `[]`}},
+		{"AC-41 since + carried", `{"account_id":"off-1","user_id":"u1","trading_mode":"TRADING_MODE_PAPER","positions":[{"symbol":"AAPL","qty":40,"avg_cost":150}],"realized_pnl":100,"realized_carried":600}`,
+			[]any{100.0, 600.0, 0.0, 0.0, `[]`}},
+		{"AC-7 fees since", `{"account_id":"off-1","user_id":"u1","trading_mode":"TRADING_MODE_PAPER","positions":[],"realized_pnl":0,"fees_since_snapshot":1.5}`,
+			[]any{0.0, 0.0, 1.5, 0.0, `[]`}},
+		{"AC-20 fees summed", `{"account_id":"off-1","user_id":"u1","trading_mode":"TRADING_MODE_PAPER","positions":[],"realized_pnl":600,"fees_since_snapshot":3}`,
+			[]any{600.0, 0.0, 3.0, 0.0, `[]`}},
+		{"AC-10/AC-11 carried fees and realized", `{"account_id":"off-1","user_id":"u1","trading_mode":"TRADING_MODE_PAPER","positions":[],"realized_pnl":0,"realized_carried":700,"fees_carried":3,
+			"recent_fills":[{"symbol":"AAPL","qty":-20,"price":155,"filled_at":"2026-11-05T15:00:00Z"}]}`,
+			[]any{0.0, 700.0, 0.0, 3.0, `[{"symbol":"AAPL","qty":-20,"price":155,"filled_at":"2026-11-05T15:00:00Z"}]`}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, got := runOfflineSync(t, tc.payload)
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("offline state write = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestProcessPositionSync_AC42_FullFlattenPurgesAndKeepsCarry(t *testing.T) {
+	db, got := runOfflineSync(t, `{"account_id":"off-1","user_id":"u1","trading_mode":"TRADING_MODE_PAPER","positions":[],"realized_pnl":0,"realized_carried":600}`)
+	if db.find("DELETE FROM portfolio.positions") == nil {
+		t.Error("an offline full flatten must purge the account's positions (206 guard)")
+	}
+	if got[1] != 600.0 {
+		t.Errorf("realized_carried = %v, want 600", got[1])
+	}
+}
+
+func TestProcessPositionSync_BrokerNeverWritesOfflineState(t *testing.T) {
+	st, _ := structpb.NewStruct(map[string]interface{}{"account_id": "brk-1", "user_id": "u1", "trading_mode": "TRADING_MODE_LIVE",
+		"positions": []interface{}{map[string]interface{}{"symbol": "AAPL", "qty": 1.0, "avg_cost": 1.0}}})
+	db := &syncRecorderDB{}
+	svc := &PortfolioService{repo: repository.NewPortfolioRepoWithDB(db), ledger: &fakeLedger{}, cfg: &config.Watcher{}}
+	svc.processPositionSync(context.Background(), &ledgerv1.LedgerEvent{Payload: st})
+	if db.find("offline_account_realized") != nil {
+		t.Error("a broker sync must not write offline state")
+	}
 }
