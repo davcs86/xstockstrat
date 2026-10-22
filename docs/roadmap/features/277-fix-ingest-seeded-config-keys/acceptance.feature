@@ -37,7 +37,23 @@ Feature: fix-ingest-seeded-config-keys (bug fix)
     Then no row is changed or duplicated
 
   @AC-5 @FR-4
-  Scenario: Unseeded ingest keys have a recorded decision
+  Scenario: Unseeded ingest backfill keys have a stated outcome
     Given ingest reads "ingest.backfill.max_concurrent_jobs" and "ingest.backfill.retry_on_failure"
-    When the design is approved
-    Then context.md records whether each key is seeded or left to its code default
+    When the fix is applied
+    Then "ingest.backfill.max_concurrent_jobs" is either a seeded row of type int with value 3, or absent so that ingest uses its code default 3
+    And "ingest.backfill.retry_on_failure" is either a seeded row or absent so that ingest uses its code default, as stated in the approved design
+
+  @AC-6 @FR-5
+  Scenario: INGEST-9 and the findings entry match the real snapshot shape
+    Given the fix is applied
+    When services/xstockstrat-ingest/docs/context-constitution.md INGEST-9 is read
+    Then it states that a key is read as the stored key column served verbatim
+    And it no longer requires the namespace-prefixed form for a key stored bare
+    And the 2026-09-03 findings entry is marked reconciled
+
+  @AC-7 @FR-6
+  Scenario: The design reports a seeded-key sweep for every namespace
+    Given the design is approved
+    When design.md is read
+    Then it lists every seeded config key against its reader for all namespaces, in both snapshot key forms
+    And each mismatch found is reported as a finding, not fixed unless the operator extended scope
