@@ -249,7 +249,7 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [ ] **The down migration restores only the two global seed rows**, so per-user overrides are lost on rollback.
   Accepted (020 precedent) — target: step 3.
 - [ ] **The DELETE leaves no `config_audit` row and no pg_notify DELTA.** Accepted — target: step 3, recorded above.
-- [ ] **Gherkin edits** (@AC-4 delete, @AC-5 reword, @AC-1 When-step choice) — target: /sdd-spec.
+- [x] **Gherkin edits** (@AC-4 delete, @AC-5 reword, @AC-1 When-step choice) — done at /sdd-spec 2026-10-22 (see that session).
 
 ```sdd-batch-design-state
 {
@@ -364,3 +364,57 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   "floor_breaches": []
 }
 ```
+
+## Session 2026-10-22 — sdd-spec
+
+- Generated implementation-spec.md with 10 steps. Status: design-approved → implementation-ready.
+- Steps:
+  1. service: owner-scoped subscriber and fail-closed fan-out.
+  2. test: @AC-1/@AC-3 producer.
+  3. service: `snapshotHub` + `streamSnapshots` + gRPC empty-caller check.
+  4. test: @AC-2/@AC-6/@AC-3 Connect wiring.
+  5. service: delete `StartSnapshotWriter`.
+  6. docs: merge-order.md 034 reservation.
+  7. migration: config 034 up/down.
+  8. test: @AC-5 `node:test` static scan.
+  9. docs: drift + teardown.
+  10. test: two-sided pre-merge gate + dev-smoke `ListKeys`.
+- **Gherkin edits applied (C-15; covered by the operator's 2026-10-22 C-16 sign-off for @AC-4/@AC-5):**
+  - @AC-4 deleted (branch a).
+  - @AC-1 When step reworded to "a snapshot is broadcast for user u-1 holding 10 AAPL priced at 100.00". This was
+    the spec's pick between the two design options. Step 2 calls `broadcastSnapshot` directly (the fill path at
+    `portfolio_service.go:376` calls it unchanged).
+  - @AC-5 reworded to the static scan of the migration set, plus an applied-state line verified by the Step 10 dev
+    smoke (`scripts/db-migrate.sh`, then `ListKeys` in production and staging). The test is static because no config
+    test applies migrations.
+  - The feature header comment was updated to match.
+- **Spec-time resolutions (within design, no deviation):**
+  - The handler holds the seam as an unexported field `hub snapshotHub`, set by `NewPortfolioHandler` to `svc`. The
+    Step 4 fake therefore reaches the real Connect/gRPC entry points. No exported symbol is added.
+  - The @AC-3 isolation RED is captured at the producer (Step 2). The Step 4 Connect half is a wiring
+    characterization.
+- **RED capture protocol.** Behavioral REDs, never compile errors (tdd-gate):
+  - Step 1 splits into Part A (signature, struct, call sites, unfiltered loop) and Part B (owner skip).
+  - Step 3 splits into Part A (seam + helper refactor) and Part B (gRPC check).
+  - Step 8 runs before Step 7, so the highest match is `002`, an INSERT, and check (ii) fails.
+- **Key codebase findings:**
+  - **Correction to design.md/recon.md:** `offline_account_pnl_test.go:320` calls `broadcastSnapshot` with no
+    subscriber and builds its service through `acctSvc` → `newQuoteSvc` (`:94-96`). It needs no edit. The real call
+    sites are `portfolio_quote_deadline_test.go:106` (map literal) and `:321/:396/:424`, which become
+    `Subscribe("t", "u1")` to match their `"u1"` broadcasts and keep feature-231 @AC-2/@AC-8 green.
+  - Config migrations: the `origin/main-dev` tip is `030`, and no `031`+ file exists on any remote ref (a scan of
+    remote history). 243 claims 031; 244 and 248 both claim 032. None of the eight batch peers' branches claims a
+    config migration. 034 stands.
+  - `docs/context-constitution.md:40` (PLAT-6) cites the deleted reader as its evidence. Step 9 re-points it to
+    `portfolio_service.go:965` `s.cfg.GetFloat("portfolio.risk.max_drawdown_pct", 0.10)`.
+  - Portfolio `CLAUDE.md:21-22` ("a missing header still yields InvalidArgument") was false for the gRPC stream
+    until Step 3. Step 9 adds the stream-isolation sentence to the H-3 paragraph (`:45-52`).
+  - Deleting the writer orphans nothing: `s.cfg` is still used at `:491-492` and `:965-966`, and `time` has 11
+    other uses.
+  - Key-removal approval is config team + all consumers (`docs/runbooks/config-rollout.md:246`). The only consumer
+    was the deleted writer.
+- `merge-order.md` is a shared repo-level file. This session was restricted to the feature directory, so its 034
+  reservation row is Step 6 of the spec, not pre-written. The 244/248 032 collision is still routed outside this
+  feature.
+- Ledger: no new line. The migration-ordering and Node-reporter traps are already recorded (fails.md:613, :2909,
+  2026-10-20).
