@@ -244,3 +244,55 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   "floor_breaches": []
 }
 ```
+
+## Session 2026-10-22 — sdd-design
+
+- Phase 0 Recon: recon.md (services: xstockstrat-config, xstockstrat-ledger). Reuse patterns: the ledger
+  `EventNotifier` LISTEN lifecycle (`eventNotifier.ts:74-117`) and ledger `call.destroy({ code, message })`
+  (`ledgerServiceImpl.ts:285`).
+- Phase 1 Grilling: 2 rounds (full). Terminated approved: the operator approved at the r2 design gate
+  (2026-10-22, "APPROVED as synthesized"). That approval covers the reconnect-retry fix: `pool.connect()` inside
+  `connectListener`'s try, `scheduleReconnect()` from the catch when `connectedOnce`, and `reconnectTimer` cleared
+  before reconnecting. It also covers the reject-twice-then-succeed test. This closes the one blocking objection
+  that was pending the proposer's confirmation.
+- Chosen approach:
+  - Pooled LISTEN client (fork a) with the identity-guarded `dropListener`, a single-timer exponential backoff
+    (1000 ms doubling to a 30000 ms cap), and one `serial()` chain for reload and notification work.
+  - LISTEN runs before `reloadAll` on boot. On reconnect, `resyncAll` re-broadcasts.
+  - Narrow try blocks in `getConfig`, the `setConfig` gate queries and ledger `appendEvent` (connect inside the
+    try, and the client is released with the error).
+  - WatchConfig registers a pending subscriber with a `missedDelta` catch-up, and the idempotent `endSubscriber`
+    ends the stream with `destroy({ code: 13 })`.
+- Rejected:
+  - Fork (b), a dedicated `pg.Client`, because of the index.ts/266 overlap and F-06. It is the fallback if the
+    dev check fails.
+  - keepAlive, deferred to 266.
+  - A `SELECT 1` keepalive, version-gating, DELTA buffering, UNAVAILABLE, a shared error helper, and a soft start.
+- Constitution rules touched: C-03, C-11, C-15, C-16, C-18, F-06, F-07, P-02, P-03, P-06, PLAT-N1, CONFIG-1.
+  Floor breaches: none. F-06 and F-07 are honored.
+- C-16: AC-1..AC-10 are CHANGE, signed off by the operator decisions of 2026-10-21 (Track C, scope
+  D-05/D-06/D-35/D-58) and 2026-10-22 (r2 gate). AC-11, platform `@AC-6 @FR-6 @feature-210`, config-secrets
+  redaction/encryption and the INVALID_ARGUMENT bounds suites are PRESERVE.
+- Operator decision (standing, 2026-10-21): x-trace-id is propagated with no C-03 waiver. Each WatchConfig
+  subscriber carries its inbound trace id (via `first()`) into background logs. Only the listener/reconnect path
+  mints its own context.
+- F-07 rationale: the backoff constants are code constants, not config keys, because config cannot watch itself
+  (service invariant #1). Ledger hardcodes `reconnectDelayMs` the same way (`eventNotifier.ts:35`).
+- Status: spec-ready → design-approved.
+
+### Open Threads (from design.md Open Risks)
+
+- [ ] **Half-open socket.** Without keepAlive, a half-open socket may never emit `error`/`end`, so AC-1 and AC-9
+  could pass against the FakeClient only. Target: step 1 Verification, a required dev `pg_terminate_backend`
+  check. Fallback: fork (b).
+- [ ] **Pool contention during recovery.** The listener competes with queries for the 2 pool slots, and pg-pool's
+  `connect()` wait is unbounded. Target: step 5 docs (limitation).
+- [ ] **Stale namespaces.** A namespace whose rows were all deleted during an outage keeps a stale snapshot. This is
+  an accepted limitation. Target: step 5 docs.
+- [ ] **Merge overlaps.** 241 (`setConfig`) and 263 (`getConfig` `:317-319`) need a manual merge. 266 owns
+  `index.ts`. Target: /sdd-spec merge-order rows and the integration PR.
+- [ ] **Ledger test import-swallow.** The swallow at `ledgerServiceImpl.test.ts:23-26` and `:145` can give a
+  zero-assertion green. Target: the step 4 precondition (252 merged, or remove the swallow first) and the
+  non-zero-assertion Verification.
+- [ ] **Propagation lag.** With the 30 s backoff cap, propagation can lag by up to about 30 s after a long outage.
+  Target: step 5 (service CLAUDE.md § WatchConfig Flow).
