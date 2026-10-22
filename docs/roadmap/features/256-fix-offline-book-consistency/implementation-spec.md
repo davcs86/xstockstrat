@@ -1,6 +1,6 @@
 # Implementation Spec: fix-offline-book-consistency
 
-**Status**: `pending`
+**Status**: `pending` (spec-level template field, `.claude/skills/sdd-spec/reference/spec-template.md:8`; lifecycle lives in `status.md`)
 **Created**: 2026-10-22
 **Feature**: `docs/roadmap/features/256-fix-offline-book-consistency/feature.md`
 **Total Steps**: 16
@@ -113,6 +113,7 @@ service change for GREEN.
 **Verification**:
 ```bash
 cd packages/proto && buf lint && buf breaking --against "$(git rev-parse --show-toplevel)/.git#branch=feature/fix-offline-book-consistency,subdir=packages/proto"
+cd packages/proto && buf breaking --against "$(git rev-parse --show-toplevel)/.git#branch=origin/main-dev,subdir=packages/proto"   # integration-PR baseline (CI form, ci.yml:125)
 grep -n 'offline_state_unavailable = 17\|offline_state_unavailable = 26' portfolio/v1/portfolio.proto   # two hits
 ```
 
@@ -123,9 +124,14 @@ grep -n 'offline_state_unavailable = 17\|offline_state_unavailable = 26' portfol
 **Status**: `pending`
 **Service**: `packages/proto`
 **Files**:
-- `packages/proto/gen/go/portfolio/v1/` — modify (generated)
-- `packages/proto/gen/ts/` — modify (generated, incl. `gen/ts/dist/`)
-- `packages/proto/gen/python/portfolio/v1/` — modify (generated)
+- `packages/proto/gen/go/portfolio/v1/portfolio.pb.go` — modify (generated)
+- `packages/proto/gen/ts/portfolio/v1/portfolio_pb.ts` — modify (generated)
+- `packages/proto/gen/ts/dist/portfolio/v1/portfolio_pb.js` — modify (generated)
+- `packages/proto/gen/ts/dist/portfolio/v1/portfolio_pb.d.ts` — modify (generated)
+- `packages/proto/gen/python/portfolio/v1/portfolio_pb2.py` — modify (generated)
+
+Message-only change: `portfolio_grpc.pb.go`, `portfoliov1connect/`, `portfolio_connect.ts` and `portfolio_pb2_grpc.py`
+are expected unchanged. Generated output is never hand-edited (root `CLAUDE.md` § Key File Paths).
 
 **Reviewers**: Proto Reviewer — field number uniqueness per message, no breaking change, `buf lint`/`buf breaking` pass; `xstockstrat-portfolio` owner — P&L calculation accuracy; `xstockstrat-ui` owner — analytics display accuracy; `xstockstrat-trading` owner — order execution correctness
 
@@ -248,6 +254,12 @@ cd services/xstockstrat-trading && GOWORK=off go build ./... && GOWORK=off golan
 5. C-13: the order/fill literals are single-consumer scenario values in this one file and reuse the existing
    `newOfflineOrder` / `testdata.S1UserID` homes — inline is compliant; no new `internal/testdata/` entry.
 
+6. Broker-order sweep (design §1 consequence, Step 3 instruction 5): `grep -rn 'applies only to offline\|FailedPrecondition' services/xstockstrat-trading --include=*_test.go`
+   at spec review found no test that confirms a broker order with a bad value (the only `FailedPrecondition`
+   hits are `trading_offline_test.go:359`, credentials, and `trading_state_gate_test.go`, place-order gates), and
+   every existing `ConfirmOrderRequest` with `FilledQty > 0` sets a finite positive `FilledAvgPrice`. Re-run the
+   grep at execute time; any new hit asserting FailedPrecondition for a non-finite fill moves to InvalidArgument.
+
 **Verification**:
 ```bash
 cd services/xstockstrat-trading && GOWORK=off go test ./internal/service/ -run 'TestConfirmOrder_AC4_|TestConfirmOrder_AC7_|TestConfirmOrder_AC10_|TestConfirmOrder_AC9_|TestSnapshotOfflinePositions_AC7_|TestDeriveOfflineStatus' -count=1 -v
@@ -309,9 +321,11 @@ behavioural proof, and the coverage command guards the threshold.
    and attempts remain, sleeping `appendRetryBackoff`; returns the last error. It never touches `confirmLock`
    (the caller holds it; the lock is non-reentrant — fails.md:2028).
 3. Make `emitLedgerEvent` (`:3661`) a void wrapper: `if err := s.appendLedgerEvent(...); err != nil { slog.Warn("ledger emit failed", "event_type", eventType, "error", err) }`.
-   This keeps the other 26 callers' behaviour except that they now also get the one Unavailable retry with an
-   idempotency key — note this in the Deviation Log only if a reviewer objects; it is the design's "sibling"
-   shape (`emitLedgerEvent` is "its void wrapper").
+   This is the design's "sibling" shape (`emitLedgerEvent` is "its void wrapper"). **Recorded behaviour change
+   for the other 26 call sites** (impl-spec review, C-18 trade-off): each now gets one `codes.Unavailable` retry
+   under a fresh per-event idempotency key, so a ledger outage raises a caller's worst-case emit wait from
+   10s to 2×10s + 100ms; non-Unavailable failures are unchanged (one attempt, Warn). Pre-entered in the
+   Deviation Log; the no-retry alternative for those callers is an operator choice carried in context.md.
 4. In `recomputeAndEmitOfflinePositions`, replace the `s.emitLedgerEvent(ctx, "account.positions.synced", ...)`
    call at `:1067` with `if err := s.appendLedgerEvent(ctx, ...same args...); err != nil { return fmt.Errorf("emit account.positions.synced: %w", err) }`
    and keep the payload map verbatim — `user_id` included (fails.md:2054). The final `return nil` stays for the
@@ -373,7 +387,9 @@ cd services/xstockstrat-trading && GOWORK=off go build ./... && GOWORK=off golan
 2. `TestConfirmOrder_AC5_EmitFailureIsNotSuccess`: hook fails every `account.positions.synced` with
    `grpcstatus.Error(codes.Internal, "ledger down")`; ConfirmOrder returns `codes.Unavailable` with message
    `"positions not published; re-confirm to retry"`. Then clear the hook; a repeat ConfirmOrder with the same
-   values succeeds and one more `account.positions.synced` request is recorded.
+   values succeeds and one more `account.positions.synced` request is recorded. Table-drive it over a partial
+   fill (`4/150` on a qty-10 order, the PARTIALLY_FILLED path) and a full fill (`10/150`) so both fill states
+   prove the fail-closed emit (B2b).
 3. `TestConfirmOrder_AC5_RecomputeQueryFailureIsNotSuccess`: `baselineErr` set → `codes.Unavailable`; no
    `account.positions.synced` recorded.
 4. `TestAppendLedgerEvent_RetriesUnavailableWithSameIdempotencyKey`: hook fails the first attempt with
@@ -450,7 +466,9 @@ New logic is in `internal/service/` (excluded package); the targeted tests are t
    the `account.deregistered` payload carries no account type (`accountDeregisteredPayload`, `:1120-1123`), and
    both deletes are idempotent, so the retry applies to every deregistered account. A broker account's
    positions purge was already attempted here; retrying it is a recorded scope extension, not an offline-set
-   lookup (option (b) would add a query that can itself fail, C-18 YAGNI).
+   lookup (option (b) would add a query that can itself fail, C-18 YAGNI). **Gate**: this extends past the
+   product spec's offline-only scope, so `/sdd-execute` must obtain the operator's explicit sign-off on (a)
+   before Step 7 (C-16/P-03, Deviation Log pre-entry); a choice of (b) means re-spec this instruction.
 3. Add the bound constants next to the consumers: `syncRetryMinAttempts = 5` and
    `syncRetryFallbackElapsed = 10 * time.Minute`.
 4. Add `classifyConsumerErr(err error) retryClass` returning `retryTransient`, `retryDeterministic` or
@@ -652,8 +670,8 @@ behavioural proof.
 **Status**: `pending`
 **Service**: `xstockstrat-portfolio`
 **Files**:
-- `services/xstockstrat-portfolio/internal/service/portfolio_service.go` — modify
-- `services/xstockstrat-portfolio/internal/service/offline_valuation.go` — modify (if the position-marker helper lives beside `valueRead`)
+- `services/xstockstrat-portfolio/internal/service/portfolio_service.go` — modify (`applyAccountPnL`, `buildAccountPortfolio`, callers, aggregate)
+- `services/xstockstrat-portfolio/internal/service/offline_valuation.go` — modify (`markDegradedPositions`, beside `readValuation.degraded`)
 
 **Reviewers**: `xstockstrat-portfolio` owner — P&L calculation accuracy, position snapshot consistency
 
@@ -687,7 +705,8 @@ behavioural proof.
    `DayPnlPct` to 0; leave `TotalPnlPct`, `RealizedPnl`, `RealizedPnlLifetime`, `FeesSinceSnapshot`,
    `FeesLifetime` nil; return before the broker/offline branches. (A degraded id is never a broker id —
    Step 9 — so `bal` is nil there.)
-2. Add `func markDegradedPositions(positions []*portfoliov1.Position, v readValuation)`: for each position with
+2. Add, in `offline_valuation.go` beside `readValuation.degraded` (Step 9),
+   `func markDegradedPositions(positions []*portfoliov1.Position, v readValuation)`: for each position with
    `Source != POSITION_SOURCE_UNSPECIFIED` whose `AccountId` is degraded, set `DayPnl = 0`, `DayPnlPct = 0`,
    `OfflineStateUnavailable = true`. Broker rows are untouched.
 3. Call it in `enrichPositions` (`:445`) with the `valueRead` result (so `GetPosition`/`ListPositions` stay OK
@@ -727,6 +746,10 @@ cd services/xstockstrat-portfolio && GOWORK=off go build ./... && GOWORK=off gol
   `:79`, `acctSvc` `:94`, `getPortfolioAcc` `:102`, `listPortfoliosAcc` `:116`, `bothReads` `:131`,
   `TestAC29_OfflineReadParity` `:328`, `TestGetPortfolio_AC39_BrokerOfflineAndAggregate` `:377`,
   `TestGetPortfolio_AC52_NoRowsRevealsNothing` `:423`.
+- Supersession of the feature-240 "non-fatal state read" decision is recorded in `design.md:149` and the
+  sdd-design session of context.md, inside the design the operator approved at the r3 gate. It is a recorded
+  240 decision (`240-offline-account-full-pnl/context.md:399`, `:771`), not a durable `@AC-*` business rule:
+  `grep -rni 'non-fatal\|GetOfflineStates' docs/sdd/business-rules/` → no hit, so no C-16 CHANGE applies.
 - `portfolio_quote_deadline_test.go:114-115`: "GetOfflineStates is left unexpected (its error is non-fatal)" in
   `expectAllAccounts` — an unexpected pgxmock query now marks the offline ids degraded instead of being
   silently ignored, so callers asserting offline P&L under this helper must be swept.
@@ -787,6 +810,12 @@ New logic is in `internal/service/` (excluded package); the targeted tests are t
 - `services/xstockstrat-ui/src/components/insights/AccountPortfolioSelector.tsx` — modify
 
 **Reviewers**: `xstockstrat-ui` owner — trading UI correctness, analytics display accuracy
+
+**Scope note (impl-spec review, >5 files)**: kept as one step on purpose. All seven files consume the one
+`PNL_UNAVAILABLE_LABEL` / `incomplete` contract added in `portfolioTotals.ts`, and Step 14's Playwright run
+is the single gate for the consumer surface (C-14); a partial landing would leave some `/trader` surfaces
+rendering the zeroed figures as `$0`. If `/sdd-execute` prefers a split, cut it after instruction 4
+(totals + PortfolioPanel + OrderBook + Book page) and record that in the Deviation Log.
 
 **Codebase Evidence**:
 - Consumer grep (`grep -rln 'usePortfolios\|usePortfolio\b\|usePositions\|usePosition\b\|dayPnl\|totalPnl' src`,
@@ -1023,3 +1052,11 @@ grep -n 'filled_avg_price\|positions not published' services/xstockstrat-trading
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+- Pre-entered at impl-spec review (2026-10-22): Step 5 — `emitLedgerEvent` becomes a void wrapper over
+  `appendLedgerEvent`, so its 26 non-confirm callers gain one Unavailable retry (worst case 10s → 20.1s per
+  emit during a ledger outage). Operator to confirm, or choose a no-retry path for those callers (context.md
+  Open Threads).
+- Pre-entered at impl-spec review (2026-10-22): Step 7 — deregistration retry option (a) covers broker
+  accounts too, a scope extension beyond the product spec's offline-only Trading-Domain Scope. Needs explicit
+  operator sign-off before Step 7 runs (C-16/P-03); option (b) means a Step 7 re-spec.
