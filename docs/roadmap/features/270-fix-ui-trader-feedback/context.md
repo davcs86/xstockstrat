@@ -448,3 +448,34 @@ protocol, `design.md` is not written and `status.md` stays `spec-ready`.
 - [ ] The fallback banner stays after a successful retry until the user dismisses it or navigates. This is
   accepted and documented in the Step 7 PR.
 - Next: `/sdd-review fix-ui-trader-feedback impl-spec`.
+
+## Session 2026-10-22 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 7 warnings. Overlap: file-level WARN only, with no migration, proto or config collision.
+  Advisory, so the lifecycle stays `implementation-ready`.
+- Addressed in `implementation-spec.md`:
+  - [x] Steps 7 and 8: the `errorHandled: true` count pin is now scoped to `src/hooks src/app/config-ui/hooks`,
+    so Step 8's `*.test.ts` literals do not push it above 9 (P-03 / F-05 risk). Step 7 instruction 6 now spells
+    out the factory form `{ meta: { errorHandled: true } }`, passed as the third `options` argument.
+  - [x] Coverage thresholds (B2). Steps 4, 8, 10, 12 and 14 now state the Vitest 40% lines/functions/statements
+    floor over `src/lib/**`. Steps 2 and 6 now say no threshold applies, because they are Playwright-only and
+    touch nothing in `src/lib/**`.
+  - [x] Steps 4, 6 and 8: alert locators are now scoped by text (`getByRole('alert').filter({ hasText })`), so the
+    global fallback or an inline alert cannot trigger Playwright strict-mode violations.
+  - [x] Rebase-only overlaps. Added `e2e/trader/position-detail.spec.ts` (215, 245), `e2e/insights/opportunities.spec.ts`
+    (215), `e2e/mock-backend.ts` (215) and `e2e/fixtures/INVENTORY.md` (215, 245, 249). Dropped the unverified claim
+    that 245 edits `positions/[symbol]/page.tsx`: 245's files list does not modify it and only cites it as evidence.
+    246 on `opportunities/page.tsx` is reworded as prose-only.
+- Still open, carried into execution (announce at each `/sdd-execute` checkpoint):
+  - [ ] Step 7 touches 15 files and Step 14 touches 6, both above the 5-file guideline. The split is kept: store,
+    then wiring, then the 9 audited hooks. At execution, re-audit every flagged hook's call sites before adding
+    its flag.
+  - [ ] Step 14: it is still unproven that `page.route` can hold a fulfilled stream open. Record in the Deviation
+    Log which variant ran (held open, or the complete-body fallback). This duplicates the open thread above.
+  - [ ] Step 7: the banner stays after a successful retry, and some failures are reported twice (banner plus
+    inline). Both are accepted trade-offs (C-18) and must be noted in the Step 7 PR body.
+  - [ ] Step 13: Cloudflare idle-timeout reconnect behavior has not been measured. The PR must include the
+    5-minute dev observation. This duplicates the open thread above.
+  - [ ] Merge-order: no blocking row is needed. Optional coordination: 270 rebases after 215 (in-progress) on the
+    shared UI page, e2e mock and INVENTORY files. The `merge-order.md` row was not written, because this run may
+    only edit files under the feature directory.
