@@ -226,3 +226,175 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   "floor_breaches": []
 }
 ```
+
+## Session 2026-10-22 — sdd-batch design gate (round 2)
+
+- The /sdd-design full debate has stopped at its approval gate after round 2 (gate policy: halt). Per the grilling protocol, design.md is not written and status.md stays `spec-ready`. The round-2 debate state is below so the next /sdd-batch run resumes from it.
+
+### Open Threads
+
+- **Approach (stands).** Three code steps plus a docs step 0, all inside services/xstockstrat-analysis. There are no proto, migration, config, trading or main.py changes.
+  - Step 0 appends @AC-9 @FR-4 @regression: a failed blend-universe resolve skips only the blend pairs.
+  - Step 1 sends an owner-scoped ListOrders: body user_id, owner x-user-id, and a per-pass x-trace-id that is also logged.
+  - Step 2 isolates failures in run_once:
+    - strategies read: warn and return;
+    - blend-universe and system drains: fall back to set();
+    - each row splits into a row-scoped parse, owner-scoped held/watch prep (fills failed_owners, writes the caches atomically) and a row-scoped resolve;
+    - end of pass: a summary per failed owner, plus a warning for each gather exception.
+  - Step 3 deletes the dead get_by_id/update.
+- **Strongest open objection (blocking).** Step 3's test rule must be **deletion-first**. Every single-line get_by_id mock is already followed by an explicit get_by_owner_and_id (22 servicer sites incl. 2175/3451, plus readiness:61/189), so the rename rules from r2 would add duplicate or conflicting mocks.
+  - Delete those lines.
+  - Replace the :1984/:2012 aliases with a direct AsyncMock.
+  - Delete :4500 and reword :4501-4502, :978 and :1007.
+  - Retarget :6335 to get_by_owner_and_id.assert_not_awaited().
+  - The rule must be adopted in r3 or as a binding note to /sdd-spec before the step body is approved (F-09).
+- **Non-blocking items, adopted.**
+  - The owner-signal drain gets its own try and falls back to system_signals; only a held/watch failure poisons an owner.
+  - @AC-3 runs on the real LiveEvaluationLoop, with `_live_loop` moved to tests/conftest.py.
+  - The header-guard test asserts that trading.calls is non-empty first.
+  - The overlap with 244 is recorded as ADJACENT at entry_backfill.py:56-61.
+  - The trace-id gap in the live_loop drains is accepted on purpose and must be recorded here at spec time.
+- **Floor status.** No breaches.
+- **@AC changes not covered by an operator decision.** 262 @AC-9 (EXTEND: additive, appended at Step 0, needs no C-16 sign-off). The PRESERVE rows (193 @AC-3, analysis @AC-20/@AC-21/@AC-34) are kept unchanged. Every 262 @AC-1..@AC-8 CHANGE is covered by an operator decision.
+
+```sdd-batch-design-state
+{
+  "round": 2,
+  "synth": {
+    "approach": "Round-2 synthesis for 262-fix-analysis-owner-scope. The approach stands. Steps 0-2 are confirmed as r2 wrote them. Step 3's mock rules are replaced with a deletion-first rule, because the adversary is right and I re-verified it against the worktree. All edits are in services/xstockstrat-analysis. There are no proto, migration, config, trading or main.py changes.\n\nSTEP 0 (docs, at /sdd-spec, before code). Append @AC-9 @FR-4 @regression to docs/roadmap/features/262-fix-analysis-owner-scope/acceptance.feature after @AC-7 (line 65). Scenario: blend strategy live with blend enabled; live strategy \"s-2\" owned by \"u-a\" on \"MSFT\"; the fundamentals-universe resolve raises. Expected: the boot pass completes without raising, (\"u-a\",\"s-2\",\"MSFT\") is seeded, no ListOrders goes out for the blend strategy, and a warning names the failed resolve. This is additive, so it needs no C-16 sign-off.\n\nSTEP 1 (FR-1/FR-2), app/engine/entry_backfill.py:63-82, as in r2.\n- Mint pass_trace_id = uuid.uuid4().hex once per pass. Precedent: servicer.py:3604.\n- Inside the existing pair try (:70-76), build md = owner_metadata(user_id) + [(\"x-trace-id\", pass_trace_id)].\n- Call ListOrders(ListOrdersRequest(user_id=user_id, strategy_id=strategy_id, symbol=symbol), metadata=md).\n- Replace the comment at :64-65 with 2 lines: the 3-tuple key constraint, and \"body user_id is load-bearing: trading treats empty as all users\" (trading_repo.go:229-231).\n- Add imports for uuid and app.identity.owner_metadata; neither is imported today (:14-23).\n- NEW (adopted): include pass_trace_id in every warning this feature adds and in the \"boot pass complete\" info log at :123, so trading-side traces can be matched to the analysis pass.\n\nSTEP 2 (FR-3/FR-4), run_once.\n- (a) Wrap db_pool.fetch (:59-61): warn and return.\n- (b) Wrap _resolve_fundamentals_universe (:89-91): fall back to set(). The existing skip at :110-111 then drops the blend pairs, and it stays ahead of resolve_universe (@AC-9).\n- (c) Wrap _drain_system_signals (:94): fall back to set(). Add no comment claiming it protects production.\n- (d) Split the row loop (:99-121) into three phases:\n  - Phase 1, row-scoped: try _row_to_strategy_definition(d). On Exception, warn with strategy_id and user_id and continue; do NOT add to failed_owners. Verified: servicer.py:7193-7220 raises KeyError on a missing strategy_id/display_name/active and ParseError on a bad definition_json.\n  - Phase 2, owner-scoped: skip if owner is in failed_owners. Otherwise drain held and watchlist into locals and commit both to the caches together, which closes the partial-cache KeyError at :114. On Exception, warn, add the owner to failed_owners, and continue.\n  - Owner-signal drain (:106-109): a decision is still needed (open objection 2). The recommended answer is to put it in its own try and, on failure, fall back to system_signals with a warning, without adding the owner to failed_owners. Under this answer, held/watch failure is the only condition that poisons an owner, and that choice is recorded in context.md.\n  - Phase 3, row-scoped: the blend skip comes first. Then resolve_universe runs in its own try (warn, continue, no failed_owners), and the pairs are appended unchanged.\n  - Exception is caught; CancelledError still propagates.\n- NEW (adopted): at the end of the pass, emit one warning per failed owner listing the strategy_ids that were skipped, so no row disappears from the logs.\n- (e) Loop over the gather(return_exceptions=True) results at :122 and warn on each Exception.\n- (f) Correct the docstring at :50-53.\n\nSTEP 3 (FR-5/FR-6), last.\n- Delete StrategiesRepository.get_by_id (strategies.py:89-97) and .update (:110-124), and rewrite the :100 docstring.\n- Revised test rule, DELETION-FIRST. I verified that every single-line get_by_id assignment is already followed by an explicit get_by_owner_and_id on the next line:\n  - tests/test_analysis_servicer.py: 119, 684, 799, 812, 986, 1008, 1075, 2175 (`repo.`), 2285, 2815, 2892, 3119, 3170, 3451 (`repo.`), 4036, 4149, 6216, 6234, 6252, 6269, 6286, 6407, 6427, 7592.\n  - tests/test_readiness_opportunities_source_symbol.py: 61, 189.\n- So the rule is:\n  (i) Delete each get_by_id line whose next line already sets get_by_owner_and_id.\n  (ii) At :1975/:1984 and :2003/:2012, assign get_by_owner_and_id = AsyncMock(return_value={...}) directly and drop the alias.\n  (iii) Delete :4500. :4503-4505 already defines the (uid, sid) mock. Reword the :4501-4502 comment, which refers to \"mirror get_by_id\".\n  (iv) Retarget :6335 to get_by_owner_and_id.assert_not_awaited(). The disable path never calls it (servicer.py:3412-3415).\n  (v) Reword the stale \"get_by_id\" comments at :978 and :1007.\n- No test references _strategies_repo.update. The get_by_owner_and_id values these tests run against are already explicit, so the deletions change no test behavior and @AC-20/@AC-21/@AC-34 are preserved.\n- Also: reword the servicer.py:3174 comment, and set CLAUDE.md:230 to \"ListOrders(user_id, strategy_id, symbol) + owner x-user-id\".\n\nTESTS (P-06 red-before-green).\n- @AC-3: build it on the REAL LiveEvaluationLoop (the _live_loop helper at tests/test_owner_header_guard.py:139), moved into tests/conftest.py now that it has a second consumer (C-13). Rows: a \"system\" row ahead of a \"u-a\" row. Today the real owner_metadata ValueError escapes run_once, so the test is red. After the fix, u-a is seeded and caplog names s-sys/system. The real-semantics AsyncMock side effect from r2 is accepted only as a fallback if the conftest move collides.\n- @AC-8: an AsyncMock _drain_held that raises RuntimeError for \"u-b\" only.\n- @AC-2: an owner-filtering ListOrders fake `async def _list_orders(req, metadata=None)`; add `metadata=None` to the existing fakes at :153 and :227.\n- Row-vs-owner split: one u-a row missing display_name plus one valid u-a row; the valid row is seeded.\n- @AC-4/@AC-5/@AC-9: make the relevant call raise and assert with caplog.\n- Header guard at test_owner_header_guard.py:175: replace MagicMock with RecordingStub({\"ListOrders\": SimpleNamespace(orders=[])}). First assert trading.calls is non-empty (fails.md:2659). Then assert on each call: x-user-id == [\"bob\"], a non-empty x-trace-id, and req.user_id == \"bob\".\n\nMERGE ORDER: 244 merges first. Record its overlap as ADJACENT at entry_backfill.py:56-61, with a textual conflict expected. main.py:174 stays with 259.",
+    "open_objections": [
+      {
+        "text": "Step 3 test rule must be the deletion-first rule. Delete each get_by_id line already followed by an explicit get_by_owner_and_id: the 22 servicer sites incl. 2175 and 3451 on the local `repo`, plus readiness:61/189. Replace the :1984/:2012 aliases with a direct AsyncMock(return_value={...}). Delete :4500 (the (uid, sid) mock already exists at :4503-4505) and reword :4501-4502, :978 and :1007. Retarget :6335. The r2 rules for :684, :799 and :4500 would add duplicate or conflicting mocks, and step bodies cannot be edited once approved (F-09). The proposer must adopt this rule in r3 or at /sdd-spec, before the step body is approved.",
+        "blocking": true
+      },
+      {
+        "text": "FR-3 owner-state consistency. The owner-signal drain (:106-109) must not feed failed_owners in the same try as held/watch. If it did, the owner's earlier rows would already be queued while its later rows are dropped, and FR-3 would be only half true. Recommended: a separate try that falls back to system_signals and warns, with held/watch failure as the only owner-poisoning condition. Record the choice in context.md.",
+        "blocking": false
+      },
+      {
+        "text": "P-06/C-13 test fidelity. Run @AC-3 against the real LiveEvaluationLoop (_live_loop, test_owner_header_guard.py:139) rather than a copy of live_loop.py:522, and move _live_loop to tests/conftest.py now that it has two consumers. Keep the AsyncMock override only for @AC-8.",
+        "blocking": false
+      },
+      {
+        "text": "C-03 / operator trace-id decision. pass_trace_id must appear in this feature's new warnings and in the 'boot pass complete' log at entry_backfill.py:123. Otherwise the minted id cannot be correlated from the analysis side. Record in context.md that the live_loop drains deliberately carry no trace id, because adding one would need a signature change that is out of scope.",
+        "blocking": false
+      },
+      {
+        "text": "Observability of failed_owners skips. At the end of the pass, emit one warning per failed owner listing all the strategy_ids skipped, so later rows of a failed owner do not vanish from the logs.",
+        "blocking": false
+      },
+      {
+        "text": "Header-guard vacuity (fails.md:2659). Assert that trading.calls is non-empty before the per-call x-user-id, x-trace-id and req.user_id assertions.",
+        "blocking": false
+      },
+      {
+        "text": "Merge-order accuracy. Record the 244 overlap as adjacent, with a textual rebase conflict expected at entry_backfill.py:56-61.",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "193 @AC-3 (pair-set / blend gating)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "262 @AC-1 (owner-scoped ListOrders body user_id + x-user-id)",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "262 @AC-2",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "262 @AC-3 (system/empty owner skipped pair-locally)",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "262 @AC-4",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "262 @AC-5",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "262 @AC-6 (dead get_by_id/update removed)",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "262 @AC-7",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "262 @AC-8 (drain failure isolated per owner)",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "262 @AC-9 (blend-universe resolve failure skips only blend pairs), to be appended",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "analysis @AC-20 (strategy id collision)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "analysis @AC-21 (owner isolation)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "analysis @AC-34",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "Mechanically renaming get_by_id to get_by_owner_and_id (r2's Step 3 rules for :684, :799 and :4500). Every site already sets get_by_owner_and_id on the next line, so a rename creates duplicate assignments where the later one silently wins, and it bakes wrong line-level instructions into a step body that cannot be edited. The deletion-first rule is smaller and changes no test behavior.",
+      "Atomic cache writes without failed_owners. Simpler, but 'system' and empty owners would re-drain and re-warn on every row.",
+      "One try around the whole per-row body (recon). It cannot tell a malformed row (row-scoped) from a failed owner prep (owner-scoped): either one bad row poisons the owner, or failed_owners can never be filled.",
+      "A per-pair trace id. Finer-grained, but a boot pass is one logical unit of work. Per-pass is enough once it is logged.",
+      "Copying live_loop.py:522 into an AsyncMock side effect for @AC-3. It goes stale silently when the drain changes; the real LiveEvaluationLoop helper already exists.",
+      "Scoping the :89-91 blend-universe guard out to a follow-up. That leaves a whole-pass abort in place when the fix is one try reusing the :110-111 skip.",
+      "Owner-scoping get_by_id/update instead of deleting them. That keeps duplicates of get_by_owner_and_id/update_locked (C-18), and FR-5 settles it with 0 callers in app/.",
+      "Sending only the x-user-id header without body user_id. trading_repo.go:229-231 fails open on an empty body user_id.",
+      "Catching only ValueError. FR-3/@AC-8 require any drain failure to be isolated. Catching Exception still lets CancelledError propagate.",
+      "Adding the owner to failed_owners on a parse failure. One bad row would silently drop the owner's other valid strategies.",
+      "Recording 'no trace id available' instead of minting one. That contradicts the operator's standing trace-id decision."
+    ],
+    "open_risks": [
+      "Concurrent edits to tests/test_analysis_servicer.py from 215, 244 and 245. With deletion-first this is reduced to one-line deletion conflicts, but a rebase that resurrects a deleted get_by_id line would now hit an AttributeError on the real repo spec only if the spec is used; svc._strategies_repo is a bare AsyncMock, so a resurrected line just becomes dead again rather than failing.",
+      "Moving _live_loop into conftest.py can collide with other features that edit tests/conftest.py or test_owner_header_guard.py. If it does, fall back to the real-semantics side effect for @AC-3.",
+      "Textual rebase conflict with 244 at entry_backfill.py:56-61 (adjacent).",
+      "The 'no callers' claim for get_by_id/update rests on grep. A dynamic getattr call would not show up.",
+      "If the separate trading-side ListOrders report later scopes by header rather than body, the trading change must keep accepting this call shape (body user_id + x-user-id + x-trace-id).",
+      "The live_loop drains still carry no x-trace-id. This is accepted and must be recorded in context.md."
+    ],
+    "constitution_rules_touched": [
+      "C-03",
+      "C-11",
+      "C-13",
+      "C-15",
+      "C-16",
+      "C-18",
+      "F-09",
+      "P-02",
+      "P-03",
+      "P-06"
+    ],
+    "rationale": "The proposal concretely answers all three round-1 blocking objections, so they are closed:\n- the @AC-3 red test now reproduces the real owner_metadata ValueError;\n- failed_owners is filled only by owner-prep;\n- @AC-9 is specified for Step 0.\n\nI re-verified the adversary's main Step 3 claim against the worktree, and it holds. Every single-line get_by_id assignment in test_analysis_servicer.py and test_readiness_opportunities_source_symbol.py is followed directly by an explicit get_by_owner_and_id. That includes two sites the adversary did not list, 2175 and 3451, which use a local `repo`. :4503-4505 already holds the (uid, sid) mock, and :1984/:2012 are pure aliases. r2's retarget rules would therefore add duplicate or conflicting mocks. Because step bodies are immutable once approved (F-09), this stays the one blocking objection until the deletion-first rule is adopted. It also lowers the top risk: the deletions keep test behavior the same and shrink the rebase overlap.\n\nThe adversary also confirmed that _row_to_strategy_definition is strict (servicer.py:7193-7220), which closes that assumption. A missing display_name is the trigger for the row-split test.\n\nThe remaining non-blocking amendments are cheap and stay within the 3-step, no-proto/config/migration shape:\n- the separate try for the owner-signal drain;\n- @AC-3 on the real loop;\n- pass_trace_id in the logs;\n- per-owner skip summaries;\n- the non-empty calls assertion.\n\nThere are no Floor breaches. The design can be approved once the proposer adopts the deletion-first Step 3 rule, either in r3 or as a binding note to /sdd-spec."
+  },
+  "floor_breaches": []
+}
+```
