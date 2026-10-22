@@ -457,7 +457,8 @@ cd services/xstockstrat-ui && grep -c "LONG_RPC_TIMEOUT_MS" src/lib/insightsBff.
      - `analysisClient.{scoreStrategy, runBacktest, screenSymbols, listOpportunities, runFundamentalsScan}`
      - `ingestClient.triggerBackfill`
      - `marketDataClient.{deleteBackfilledData, getBars, getFundamentals}`
-   - Dynamically import both `insightsBff` and `configUiBff` `dispatchConnect`. Use an admin JWT cookie.
+     - `tradingClient.{placeOrder, cancelOrder, replaceOrder, confirmOrder}` (operator 2026-10-22, order-mutation class)
+   - Dynamically import `insightsBff`, `configUiBff` and `traderBff` `dispatchConnect`. Use an admin JWT cookie.
    - `it.each` over the six long methods: `AnalysisService/{ScoreStrategy,RunBacktest,ScreenSymbols}` and `IngestService/TriggerBackfill` and `MarketDataService/DeleteBackfilledData` via `/insights/api/xstockstrat.<pkg>.v1.<Service>/<Method>`, and `AnalysisService/RunFundamentalsScan` via `/config-ui/api/...`. For each, the spy's second argument has `timeoutMs === LONG_RPC_TIMEOUT_MS`.
    - `it.each` over the four order mutations (operator 2026-10-22): `TradingService/{PlaceOrder,CancelOrder,ReplaceOrder,ConfirmOrder}` via `/trader/api/xstockstrat.trading.v1.TradingService/<Method>`. For each, the spy's second argument has `timeoutMs === ORDER_MUTATION_TIMEOUT_MS`. RED pre-fix: `undefined`.
    - Preservation:
