@@ -192,35 +192,64 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 
 - The /sdd-design full debate has reached its approval gate after round 2 (gate policy: halt). design.md is not written and status.md is unchanged (`spec-ready`) until the operator approves.
 
+## Session 2026-10-22 — sdd-design (approved)
+
+- Phase 0 Recon: recon.md was already written (services: xstockstrat-portfolio, xstockstrat-config; key reuse
+  patterns: trading's owner-scoped `orderSubscriber`, and the 020 retire-key migration).
+- Phase 1 Grilling: 2 rounds (full), approved at the round-2 gate. Termination: approved, Floor clear.
+  - **Chosen approach:**
+    - Owner-scoped, fail-closed `broadcastSnapshot` fan-out.
+    - An unexported handler `snapshotHub` interface and a shared `streamSnapshots` helper.
+    - gRPC returns `InvalidArgument` on an empty caller before it subscribes.
+    - Delete `StartSnapshotWriter` and retire `portfolio.snapshot.interval_minutes` via config migration 034.
+  - **Rejected:**
+    - FR-4 branch (a) (wire the writer).
+    - An exported `SubscriberCount()` seam.
+    - A handler-side filter.
+    - An empty-means-all filter.
+    - Reserving 033 with a one-sided gate.
+    - Vitest.
+    - A real-DB migration test.
+- **Operator decision (binding, 2026-10-22, design gate r2):** "APPROVED as synthesized — D-12 branch (b): delete
+  the zero-caller StartSnapshotWriter and retire portfolio.snapshot.interval_minutes via config migration 034
+  (up/down as specified). SIGNS OFF the CHANGE to @AC-4 (deleted) and @AC-5. D-24 owner-scoped, fail-closed
+  fan-out unchanged." This is the C-16 sign-off for both CHANGE lines in design.md.
+- **Standing operator decision (2026-10-21) is honored:** `x-trace-id` is propagated, with no C-03 waiver.
+  Snapshot persist and emit stay on the fill ctx (`portfolio_service.go:376`). The only background path is deleted.
+- **Gherkin changes for /sdd-spec to apply (C-15):**
+  - Delete @AC-4.
+  - Reword @AC-5's Given/When to "the config migration set". The test is static because no config test applies
+    migrations. Add a dev-smoke step: `scripts/db-migrate.sh`, then `ListKeys` in production and staging.
+  - For @AC-1, either reword the When step to "a snapshot is broadcast for u-1" or drive the test through the fill
+    path. The spec picks one and records it here.
+- **Recorded trade-off:** the config audit triggers fire on INSERT/UPDATE only. The 034 DELETE therefore writes no
+  `config_audit` row and sends no pg_notify DELTA, and running instances keep the stale value until restart.
+  Impact is nil because nothing reads the key. This is the same trade-off as 020.
+- **Recorded fact:** the Connect `StreamPortfolioUpdates` is unmounted (`cmd/server/main.go:94` registers only the
+  gRPC handler). @AC-3/@AC-6 are kept because FR-3 is operator-fixed.
+- Constitution rules touched: C-01, C-03, C-05, C-07, C-08, C-11, C-13, C-15, C-16, C-18, F-01, F-04, F-06, F-07.
+  Floor breaches: none.
+- Ledger: no new line. The migration-ordering trap is already recorded (fails.md:2909, :613).
+- Status: spec-ready → design-approved.
+
 ## Open Threads
 
-- **Approach.**
-  - **FR-1..FR-3 (D-24): owner-scoped, fail-closed fan-out.**
-    - `subs` becomes `map[string]snapshotSubscriber{ch, userID}`, copying the trading pattern.
-    - The call becomes `Subscribe(id, userID)`.
-    - `broadcastSnapshot` keeps only subscribers whose owner strictly equals the snapshot's user, with no empty-means-all mode.
-    - Valuation, the unpriced skip, `InsertSnapshot` and `emitEvent` stay ahead of the filter, on the fill ctx.
-  - **Change this round: handler test seam.** The handler takes an unexported consumer-side `snapshotHub` interface and gets one shared `streamSnapshots` helper for both the Connect and gRPC paths.
-    - The gRPC adapter returns `InvalidArgument` on an empty caller before it subscribes.
-    - The deprecated body `user_id` is still ignored, so there is no proto change.
-    - The exported `SubscriberCount()` is dropped (C-18).
-  - **Tests.** @AC-1 isolation is a `package service` test. @AC-2, @AC-3 and @AC-6 are `package handler` tests with a test-local fake hub (C-13). The Connect stream is unmounted (`cmd/server/main.go:94`), which goes in design.md.
-  - **FR-4 (D-12): branch (b).**
-    - Delete `StartSnapshotWriter` and @AC-4.
-    - Retire `portfolio.snapshot.interval_minutes` in a new config migration, **034**. The down migration restores the staging and production global rows in the 020 layout.
-    - @AC-5 becomes a static `node:test` scan of the migration set.
-- **Strongest open objection (non-blocking).** Migration ordering is a process control.
-  - The spec's final step must run a literal two-sided pre-merge gate against `origin/main-dev` config migrations:
-    - (a) no number ≥ 034;
-    - (b) 031, 032 and 033 are each present, or that number's owner is sequenced after 264 in `merge-order.md`.
-  - The 244/248 `032` double-claim must be resolved first. If its renumber lands anywhere other than 033, re-check 034 (C-07).
-  - Other open non-blocking items: the spec picks either the @AC-1 When-step rewording or a fill-path drive (C-15), and @AC-4 deletion and @AC-5 rewording need operator acknowledgement.
-- **Floor status.** No Floor breaches in either round. C-03 and the operator trace-id decision hold, and the feature-231 and feature-210 rules are preserved.
-- **@AC changes not covered by an operator decision.**
-  - @AC-4 is a CHANGE (deleted with branch (b)).
-  - @AC-5 is a CHANGE (reworded to a static migration-set scan).
-  - These follow from the branch-(b) design choice, which scope D-12/D-24 does not explicitly sanction, so they are surfaced at this gate for operator acknowledgement.
-  - @AC-1/2/3 EXTEND and are covered by D-24. @AC-6 and the feature-231/161/210 rules are PRESERVE.
+- [ ] **Migration ordering (C-07)** — target: the impl-spec final step, plus step 3.
+  - Reserve `034_retire_portfolio_snapshot_interval` in `docs/roadmap/features/merge-order.md`, with a row
+    sequencing 264 after 243, 244 and 248.
+  - Before merge, run the literal two-sided gate on
+    `git ls-tree --name-only origin/main-dev services/xstockstrat-config/migrations/`:
+    - (a) no number ≥ 034 exists;
+    - (b) 031, 032 and 033 are each present, or that number's owner is sequenced after 264.
+  - The 244/248 `032` double-claim must be resolved first. If its renumber lands anywhere other than 033, re-check 034.
+- [ ] **@AC-5 is checked statically, not against an applied DB (C-15)** — target: step 3 and dev smoke. Fallback:
+  `db-migrate.sh` + `ListKeys` in both environments.
+- [ ] **Same-file overlap with 242/251/256/257** on `portfolio_service.go` / `portfolio_handler.go` — target: steps
+  1-2. Re-read at execute time because the line numbers drift.
+- [ ] **The down migration restores only the two global seed rows**, so per-user overrides are lost on rollback.
+  Accepted (020 precedent) — target: step 3.
+- [ ] **The DELETE leaves no `config_audit` row and no pg_notify DELTA.** Accepted — target: step 3, recorded above.
+- [ ] **Gherkin edits** (@AC-4 delete, @AC-5 reword, @AC-1 When-step choice) — target: /sdd-spec.
 
 ```sdd-batch-design-state
 {
