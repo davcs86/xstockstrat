@@ -179,8 +179,10 @@ Checklist (FR-1, review warning 1): all four sites say `<= 0` = zero budget, and
 **Verification**:
 ```bash
 cd services/xstockstrat-marketdata && GOWORK=off go test ./internal/service/ -run 'CapZeroIsZeroBudget' -count=1 -v
+cd services/xstockstrat-marketdata && GOWORK=off COVERPKGS=$(GOWORK=off go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && GOWORK=off go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"   # confirm >= 40%
 cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-download-mode=mod
 ```
+The new tests are in the excluded `service` package. The CI total must still be at least 40% (C-08).
 
 ---
 
@@ -223,9 +225,9 @@ cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-dow
    as_of >= today: AsOf must stay the fetch instant,` / `// not a vendor-reported date.`
 3. In `finnhub_client.go`, add `const SourceName = "finnhub"` with a one-line doc comment, and use it at `:94`.
 4. In `classification/sector.go`, import `github.com/xstockstrat/marketdata/internal/fmp` and change the const entry
-   to `SourceFMP = fmp.SourceName`. A const alias of an untyped const is legal Go. **Fallback**, used only if
-   `go build ./...` reports an import cycle: revert the alias, keep `SourceFMP = "fmp"`, and in `fmp` write
-   `const SourceName = classification.SourceFMP`. Record the fallback in the Deviation Log.
+   to `SourceFMP = fmp.SourceName`. A const alias of an untyped const is legal Go. The Codebase Evidence
+   cycle check shows no cycle, so there is no fallback branch. If `go build ./...` reports a cycle anyway, stop:
+   the evidence is wrong, and this is a P-03 deviation to raise with the operator.
 5. C-18 waivers, recorded and not edited (design §S): the fallback `"fmp"` at `internal/repository/marketdata_repo.go:587`,
    and the `"finnhub"` literals in the service provider switch at `marketdata_service.go:1931`/`:1951`.
 
@@ -244,10 +246,14 @@ grep -n 'Source: *"fmp"\|Source: *"finnhub"' services/xstockstrat-marketdata/int
 **Files**:
 - `services/xstockstrat-marketdata/internal/fmp/fmp_client_test.go` — modify
 - `services/xstockstrat-marketdata/internal/finnhub/finnhub_client_test.go` — modify
+- `services/xstockstrat-marketdata/internal/classification/sector_test.go` — modify
 
 **Reviewers**: xstockstrat-marketdata owner — OHLCV ingestion integrity, TimescaleDB hypertable partitioning, Alpaca feed idempotency
 
 **Codebase Evidence**:
+- `internal/classification/sector_test.go:1` is `package classification`. It can import `fmp`, because after Step 3
+  `classification` imports `fmp`. An in-package `fmp` test cannot import `classification`: Go rejects that as an
+  import cycle in test.
 - `internal/fmp/fmp_client_test.go:47` `newTestClient(metrics []string, rt *recordingRT)`, and `recordingRT`
   (`:16-45`), which maps a path to a body. Analogue: `TestGetFundamentals_MapsCoreAndExtended` (`:67`).
 - `internal/finnhub/finnhub_client_test.go` exists and imports `internal/source` (`:12`).
@@ -260,18 +266,21 @@ Step 3)
 **Instructions**:
 1. Add `TestToFundamentals_SourceAndAsOfIsFetchInstant` (in package `fmp`). Run `GetFundamentals` against a
    `recordingRT` quote body. Assert `f.Source == SourceName` and `time.Since(f.AsOf) < 5*time.Second` (this pins the
-   5.8 constraint), plus `classification.SourceFMP == SourceName` (this pins the alias). The classification import
-   in an `fmp` test is legal because `classification` imports `fmp`, not the other way round. If that import makes
-   a test-only cycle, move the alias assertion to `internal/classification` tests.
-2. In the finnhub test file, assert that the produced row's `Source == SourceName`, reusing that file's existing stub
+   5.8 constraint).
+2. Pin the alias in `internal/classification/sector_test.go`: add `TestSourceFMPAliasesFMPSourceName`, which asserts
+   `SourceFMP == fmp.SourceName`. It is not in the `fmp` test, because importing `classification` from package `fmp`
+   is an import cycle.
+3. In the finnhub test file, assert that the produced row's `Source == SourceName`, reusing that file's existing stub
    setup.
-3. C-13: no new domain literal.
+4. C-13: no new domain literal.
 
 **Verification**:
 ```bash
 cd services/xstockstrat-marketdata && GOWORK=off go test ./internal/fmp/ ./internal/finnhub/ ./internal/classification/ -count=1
+cd services/xstockstrat-marketdata && GOWORK=off COVERPKGS=$(GOWORK=off go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && GOWORK=off go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"   # confirm >= 40%
 cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-download-mode=mod
 ```
+`fmp`, `finnhub` and `classification` are counted packages, so the total must stay at least 40% (C-08).
 
 ---
 
@@ -480,10 +489,10 @@ cd services/xstockstrat-marketdata && GOWORK=off go build ./...
 **Verification**:
 ```bash
 cd services/xstockstrat-marketdata && GOWORK=off go test ./internal/service/ -run 'VendorPathRefusesEdgarRow|CacheHitNoFMP|feature211' -count=1
+cd services/xstockstrat-marketdata && GOWORK=off COVERPKGS=$(GOWORK=off go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && GOWORK=off go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"   # confirm >= 40%
 cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-download-mode=mod
 ```
-The new logic is in the excluded `service` package, so no coverage threshold applies. The full suite runs in Step 6's
-command.
+The new logic is in the excluded `service` package. The CI total must still be at least 40% (C-08).
 
 ---
 
@@ -500,6 +509,8 @@ command.
 - Three silent decodes: `:546-549` (`GetFundamentals`), `:834-837` (`QueryHistoricalFundamentals`) and `:887-890`
   (`LatestHistoricalFundamental`). Each is `extra := map[string]float64{}; if len(extraJSON) > 0 { _ =
   json.Unmarshal(extraJSON, &extra) }`.
+- The scanned symbol local is `sym` in all three functions: the `var (...)` blocks at `:534`, `:824` and `:873`, scanned
+  as `&sym` at `:539`, `:830` and `:879`.
 - `GetFundamentals` reads through `r.pool.QueryRow` (`:531`), so pgxmock cannot reach it. `r.db` is the mockable
   surface (`:32-34`).
 
@@ -514,7 +525,8 @@ command.
    the empty map. The `json.Unmarshal` error names a type mismatch and carries no secret. Add `log/slog` to the
    imports if it is absent.
 2. Replace the three blocks with `extra := decodeExtraMetrics(ctx, sym, extraJSON)`. Use the scanned symbol variable
-   at each site: `sym` at `:546` and `:834`; check the variable in scope at `:887`.
+   `sym` at all three sites. Each function scans the row's symbol into a local `sym`: `GetFundamentals` declares it
+   at `:534`, `QueryHistoricalFundamentals` at `:824` and `LatestHistoricalFundamental` at `:873`.
 3. In `GetFundamentals` (`:531`), switch `r.pool.QueryRow` to `r.db.QueryRow`. It is the same pool in production, and
    the switch makes AC-6 testable through the RPC read (Step 10).
 4. One helper, not three copies (C-18).
@@ -565,9 +577,10 @@ cd services/xstockstrat-marketdata && GOWORK=off go build ./...
 **Verification**:
 ```bash
 cd services/xstockstrat-marketdata && GOWORK=off go test ./internal/repository/ -run 'UndecodableExtra|DecodeExtraMetrics' -count=1 -v
+cd services/xstockstrat-marketdata && GOWORK=off COVERPKGS=$(GOWORK=off go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && GOWORK=off go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"   # confirm >= 40%
 cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-download-mode=mod
 ```
-The new logic is in the excluded `repository` package, so no coverage threshold applies.
+The new logic is in the excluded `repository` package. The CI total must still be at least 40% (C-08).
 
 ---
 
@@ -619,12 +632,16 @@ The new logic is in the excluded `repository` package, so no coverage threshold 
      4. `var se *statusError; errors.As(err, &se)`, then `switch se.code { case 402, 403, 404: return false }`. This
         is the only home of the exempt codes (C-18, F-07): no list and no tunable.
      5. Anything else → true.
+   - Add an unexported `type stageError struct{ stage string; err error }`. `Error()` returns `e.err.Error()` and
+     `Unwrap()` returns `e.err`. Wrap the existing `fmt.Errorf` values at `:243` (`stage: "transport"`), `:251`
+     (`"read"`) and `:258` (`"decode"`), so each error text stays byte-identical and the `%w` chain to ctx errors
+     is kept. This choice is pinned: `io.ReadAll` and `json.Unmarshal` errors share no type a classifier could
+     match without string matching.
    - Add an unexported `func enrichmentClass(err error) string`, evaluated in the same order. It returns `cap`,
-     `ctx`, `http_<code>`, `transport` (for the `:243` `request failed` wrap), `read` (`:251`) or `decode` (`:258`).
-     It must classify by `errors.Is`/`errors.As` and by unexported sentinel wrapping, not by string matching. If
-     `transport`, `read` and `decode` cannot be told apart without string matching, add a small unexported
-     `type stageError struct{ stage string; err error }` with `Unwrap`, returned at `:243`, `:251` and `:258`, and
-     keep each `Error()` text byte-identical. Record that choice in the Deviation Log.
+     `ctx`, `http_<code>`, or the `stage` of an `errors.As`-matched `*stageError` (`transport`, `read`, `decode`).
+     It classifies by `errors.Is`/`errors.As` only, never by string matching. Errors with no stage (`:226` build
+     request, and a non-ctx limiter error at `:229`) still expire under rule 5. Their class label is an open
+     operator question (context.md Open Threads); the executor must not invent one silently.
    - Rewrite the loop at `:192-200`. Call `fetchRatios` and `fetchProfile`, and apply each on success with a non-nil
      result, as today. On a non-nil error, append `SYM:ratios:<class>` or `SYM:profile:<class>` to a local
      `failures []string`. Set `f.EnrichmentFailed = true` only when `enrichmentExpires(err)`.
@@ -834,7 +851,10 @@ cd services/xstockstrat-marketdata && GOWORK=off go build ./...
    - With an epoch-stamped `fmp` row whose `as_of` is today, it is counted (`== 1`).
    - Delete the test symbols in `t.Cleanup`. Use a unique symbol prefix such as `ZZ255_`.
    - CI has no DB, so it skips there. `/sdd-execute` never starts a DB (spec-template §Migration step verification,
-     same rule). The step PR records whether it ran against a real Postgres and on which environment.
+     same rule).
+   - **Mandatory:** the step PR body records whether this test ran against a real Postgres, on which environment,
+     and its PASS/SKIP output. A Step 14 PR without that record fails this step's verification. If no DB was
+     available, record it as an unproven-in-CI Open Thread in context.md.
 10. C-13: each row literal has one consumer, so it stays inline. No second copy of a domain literal.
 
 **Verification**:
