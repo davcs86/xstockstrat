@@ -81,8 +81,9 @@ so C-10(a) does not apply. Agent: not affected (product spec § Consumer Surface
 - Steps 4, 6, 8, 10, 12 require Step 1, because they import `resolveDbConnection`.
 - Step 2 [test] covers Step 1 [service].
 - Step 15 requires Step 3: the `yaml` devDependency must exist so the RED run fails on the missing binding, not on
-  a missing module. Step 15 also requires Steps 4–14, because the wiring and hash guard asserts the final state of
-  all five call sites.
+  a missing module. Step 15 also requires Steps 4–13, because the wiring and hash guard asserts the final state of
+  all five call sites. **Step 15 executes before Step 14** (order 13 → 15 RED → 14 → 15 GREEN) so its AC-5 RED is
+  genuine; Step 14 is complete only once Step 15 re-runs GREEN (C-08/P-06).
 - Each wiring step pairs with the test step after it: Step 5 [test] covers Step 4, Step 7 covers Step 6, Step 9
   covers Step 8, Step 11 covers Step 10, Step 13 covers Step 12. Step 15 [test] covers Step 14 (and re-asserts
   Steps 1/4/6/8/10/12 wiring).
@@ -98,8 +99,11 @@ so C-10(a) does not apply. Agent: not affected (product spec § Consumer Surface
 - **P-06 / feature 252:** the new ledger and identity test files import only `../dbTls.ts` plus node built-ins and
   `pg`, with no `before()` skip-guard. Their verification must show the new test names executing (`--test-reporter=spec`),
   independent of 252's repair of the older suites.
-- **Merge order:** rebase onto 242 (notify `index.ts`, both `.do` specs), 248 (ledger `index.ts`) and 241
-  (`route.ts`) if they merge first. Watch the `ci.yml` filter block for peer-feature conflicts.
+- **Merge order:** rebase onto 242 (notify `index.ts`, both `.do` specs) and 248 (ledger `index.ts`, `ci.yml`) if
+  they merge first. Watch the `ci.yml` filter block for peer-feature conflicts (248, 250). The earlier 241 entry is
+  dropped: 241's implementation-spec modifies `configUiBff.ts`/`insightsBff.ts` and only cites `route.ts` in
+  recon (`241-.../recon.md:94`), so it does not touch the audit route. Also watch 252 on ledger/identity
+  `package.json` test globs (Steps 5/9).
 
 ---
 
@@ -158,14 +162,14 @@ so C-10(a) does not apply. Agent: not affected (product spec § Consumer Surface
      if (modes.length > 1) {
        throw new Error('db-tls: DATABASE_URL sets sslmode more than once');
      }
-     if (modes[0] === 'disable') {
-       return { connectionString: databaseUrl as string, ssl: false };
-     }
      for (const key of url.searchParams.keys()) {
        const k = key.toLowerCase();
        if ((k.startsWith('ssl') && key !== 'sslmode') || k === 'uselibpqcompat') {
          throw new Error(`db-tls: DATABASE_URL parameter "${key}" is not allowed; TLS is configured by DATABASE_CA_CERT`);
        }
+     }
+     if (modes[0] === 'disable') {
+       return { connectionString: databaseUrl as string, ssl: false };
      }
      if (!caCert) {
        throw new Error(
@@ -179,6 +183,9 @@ so C-10(a) does not apply. Agent: not affected (product spec § Consumer Surface
 2. Copy that file byte-for-byte to the other four paths in **Files**, for example with `cp`. Do not reformat a copy:
    the lint-staged prettier pass must leave every copy identical, and the Verification below checks this.
 3. The error messages never include the URL or any parameter value. They name only the key or the env var.
+   The `ssl*`/`uselibpqcompat` key scan runs **before** the `sslmode=disable` early return (impl-spec review,
+   2026-10-22), so `?sslmode=disable&ssl=...` is refused without relying on pg's intra-parse key precedence.
+   Local compose sets only `?sslmode=disable` (`docker-compose.yml:27`), so this is unaffected.
 4. Do not wire any call site in this step. Steps 4/6/8/10/12 do that.
 
 **Verification**:
@@ -236,6 +243,8 @@ for s in ledger config identity notify; do (cd services/xstockstrat-$s && pnpm r
    - `${BASE}?ssl=0`, `${BASE}?sslmode=require&sslrootcert=/x` and `${BASE}?uselibpqcompat=true&sslmode=require`,
      each with CA: each throws naming the key (`ssl`, `sslrootcert`, `uselibpqcompat`).
    - `${BASE}?sslmode=disable&sslmode=no-verify` with CA: throws (repeated `sslmode`, see § P-03).
+   - `${BASE}?sslmode=disable&ssl=true` with no CA: throws naming `ssl` (the key scan precedes the `disable`
+     carve-out).
    - `${BASE}?sslmode=disable` with no CA (**@AC-3/@AC-8**): returns `{ connectionString: input, ssl: false }`.
    - `''` and `'not a url secretpw'`: each throws `db-tls: DATABASE_URL is unset or invalid`, and the message does
      not contain `secretpw`.
@@ -248,6 +257,7 @@ cd ../xstockstrat-identity && node --experimental-strip-types --test --test-repo
 cd ../xstockstrat-config && pnpm run test:coverage && pnpm run lint
 cd ../xstockstrat-notify && pnpm run test:coverage && pnpm run lint
 cd ../xstockstrat-ui && pnpm exec vitest run src/lib/dbTls.test.ts && pnpm run test:coverage && pnpm run lint
+# coverage threshold: 40% in every service (c8 --lines 40 for the four backends; vitest src/lib 40% for UI)
 # confirm the spec reporter lists every AC-tagged test name (non-zero assertion count; P-06)
 ```
 
@@ -692,6 +702,9 @@ pnpm run lint
 - No server logger under `src/lib` (recon.md:49), so use `console.error`.
 - The e2e test at `e2e/config-ui/audit.spec.ts:66-75` mocks the route at the browser layer
   (`route.fulfill({ status: 500, ... })`), so it does not execute `route.ts` and keeps passing.
+- Deployment-file parity (B2/B2b): the route now reads `DATABASE_CA_CERT`. Both `.do` specs gain the binding in
+  Step 14. `docker-compose.yml` is **unchanged** by design: its shared `DATABASE_URL` ends in `?sslmode=disable`
+  (`docker-compose.yml:27`), so the resolver takes the no-CA path locally.
 
 **TDD**: `red-green required` (paired with Step 13)
 
@@ -842,9 +855,12 @@ git diff .do/ | grep -c MCP_AGENT_SECRET                                 # → 0
 - Wiring targets: the four `src/index.ts` files and `src/app/config-ui/api/audit/route.ts`. The only allowed
   pass-through elsewhere is ledger's export cursor, `ssl: opts.ssl` (`services/xstockstrat-ledger/src/grpc/ledgerServiceImpl.ts:339`).
 
-**TDD**: `red-green required` — RED: run the file **before Step 14** is applied. The AC-5 assertion fails for
+**TDD**: `red-green required` — **execute order is 13 → 15 (RED) → 14 → 15 (GREEN)**; Step 15 is written and
+RED-run before Step 14's `.do` edit exists (if Step 14 was applied first, revert its hunk with
+`git checkout -- .do/app.yaml .do/app.dev.yaml`, never `git stash`). RED: the AC-5 assertion fails for
 `xstockstrat-ui` in both specs. Hash and wiring are already green after Steps 1–12, which shows the guard measures
 the final state. Also capture the negative rows passing (they assert that the check detects a violation).
+GREEN: re-run after Step 14 lands.
 
 **Covers**: `AC-5, AC-2` (AC-2: per-service wiring proof for ledger Pool + EventNotifier, config, identity, notify and the UI route)
 
@@ -876,7 +892,7 @@ the final state. Also capture the negative rows passing (they assert that the ch
 **Verification**:
 ```bash
 cd services/xstockstrat-ui && pnpm exec vitest run src/lib/dbTlsPlatformGuard.test.ts
-pnpm run test:coverage && pnpm run lint
+pnpm run test:coverage && pnpm run lint   # vitest src/lib thresholds (40%) pass
 ```
 
 ---
