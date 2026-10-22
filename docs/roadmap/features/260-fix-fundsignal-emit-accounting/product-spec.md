@@ -28,6 +28,31 @@ claim survives a cycle abort.
 opportunity queue, and the agent `run_fundamentals_scan` / `list_opportunities` tools. On a day with a transient ingest
 or marketdata error they silently get fewer signals, and the run record says the run succeeded.
 
+## Functional Requirements
+
+- **FR-1.** A symbol whose `IngestSignal` call failed (any error other than the `NOT_FOUND` system-write rejection)
+  leaves no row that blocks it, so the next non-`force` run on the same day calls `IngestSignal` for it again.
+- **FR-2.** `signals_emitted` on the finished (or aborted) run counts only signals that `IngestSignal` accepted,
+  that is calls that returned a `signal_id`.
+- **FR-3.** A cycle aborted by `_SystemWriteRejected` leaves no `analysis.fundsignal_emitted` row without a
+  `signal_id` for the symbol it was processing. Rows already confirmed for earlier symbols in that cycle stay.
+- **FR-4.** Symbols in a `GetFundamentalsMulti` chunk that failed are counted in the run's `deferred_count`, and
+  the run finishes with status `"partial"` instead of `"completed"`. A budget-only deferral keeps
+  `"budget_deferred"`; when a run has both, `"partial"` wins. `symbols_processed` counts only the symbols whose
+  fundamentals were fetched, so a failed chunk's symbols are excluded from it (today `symbols_done=len(fetched)`).
+
+## Consumer Surface(s)
+
+The fix changes values an operator or analyst reads; it adds no new surface.
+
+- **Agent tool** `run_fundamentals_scan` (`services/xstockstrat-agent/app/tools.py`): returns the run summary
+  (`status`, `signals_emitted`, `deferred_count`), which now reports the corrected values and the new `"partial"`
+  status.
+- **UI** `/config-ui/fundamentals-scan` (`services/xstockstrat-ui/src/app/config-ui/fundamentals-scan/page.tsx`):
+  shows `status` verbatim and `Deferred`, so it displays the corrected values with no code change.
+- **Downstream** `list_opportunities`, the opportunity queue and signal-eligible live strategies receive the
+  signals that were previously lost on a transient error. Their own interfaces do not change.
+
 ## Reproduction Steps
 
 1. Run `run_once(force=False)` with one scored symbol `AAPL` and `IngestSignal` raising `UNAVAILABLE`. A claim row
@@ -52,11 +77,24 @@ ingest's dedup does not make the retry idempotent today. Options include a deter
 
 ## Fix Scope
 
-- [x] No proto changes anticipated
-- [ ] No database migrations anticipated — claim-then-confirm can reuse the existing nullable `signal_id`; a new state column would need a migration (design decides)
+- [x] No proto wire changes. The `FundamentalsScanSummary.status` string comment
+  (`packages/proto/analysis/v1/analysis.proto`) gains `"partial"`; this is a comment-only edit with no field change,
+  so no breaking-proto approval gate applies. Re-run `./scripts/buf-gen.sh` after the edit so `proto-freshness` passes.
+- [ ] Database migration: open, see Open Questions (OQ-1)
 - [x] No config key changes anticipated
 
-(Update after investigation — remove or replace each item as needed)
+## Open Questions
+
+Owned by `/sdd-design`; each must be resolved in `design.md`.
+
+- **OQ-1. Claim state storage.** Option one reuses the existing nullable `signal_id`: a NULL row is an unconfirmed
+  claim that a later run may retry or delete, with no migration. Option two adds a state column, which needs a new
+  migration `services/xstockstrat-analysis/migrations/NNN_<desc>.up.sql` plus `.down.sql`. `NNN` is the next number
+  above the existing analysis migrations, it runs in the normal `scripts/db-migrate.sh` order, and the column
+  takes a default so that existing rows read as confirmed.
+- **OQ-2. Retry idempotency.** A retry after a lost-but-committed `IngestSignal` response can double-emit (see
+  Root Cause Hypothesis). Design either makes `valid_until` deterministic per `as_of_date`, so that ingest's dedup
+  claim absorbs the retry, or accepts the rare double row. The choice adds an `@AC` for whichever behavior it picks.
 
 ## Acceptance Criteria
 
