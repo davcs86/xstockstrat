@@ -8,209 +8,243 @@
 
 ## Objective
 
-The background ETF-flag filler in marketdata never labels an ETF (SCHD stays `FUNDAMENTALS_GAP_UNSPECIFIED`), and at
-Info level nothing shows why. Per the operator decision of 2026-10-22, the root cause (the over-counted FMP boot seed)
-is fixed by `255-fix-marketdata-fundamentals-cache` (D-51). 230 lands after 255 and keeps only two things:
-- **FR-1 / `@AC-2`:** an ETF missed once is labelled on a later call once budget allows.
-- **FR-2 / `@AC-3`:** a skipped or failed fill emits a rate-limited log record at Info level or higher. The record
+The marketdata background ETF-flag filler never labels an ETF: SCHD stays `FUNDAMENTALS_GAP_UNSPECIFIED`, and
+nothing logged at Info level explains why. The operator decided on 2026-10-22 that the root cause, the over-counted
+FMP boot seed, is fixed by `255-fix-marketdata-fundamentals-cache` (D-51). 230 lands after 255 and keeps only two
+requirements:
+- **FR-1 / `@AC-2`:** an ETF that missed once is labelled on a later call once the budget allows.
+- **FR-2 / `@AC-3`:** a skipped or failed fill produces a rate-limited log record at Info level or higher. The record
   carries the error class only, never the raw error text.
 
 ## Codebase Map
 
 - **`xstockstrat-marketdata`** (Go)
-  - Entry point and wiring: `services/xstockstrat-marketdata/cmd/server/main.go`.
-    - Process logger is `slog.NewJSONHandler(os.Stdout, nil)` at `:35`. That is Info level, so a Debug record is invisible.
-    - Boot seed at `:129-130` (`fmpClient.SeedBudget(n)` from `repo.CountFundamentalsFetchedToday`). **255 owns it.**
-    - `svc.SetClassification(..., fmpClient, fmpClient)` sets `s.fmpBudget`. `svc.SetEtfFlagSource(fmpClient)` and
-      `go svc.StartEtfFlagFiller(ctx)` follow a few lines later (`main.go:152`, `:153`, `:162`).
+  - Entry point: `services/xstockstrat-marketdata/cmd/server/main.go`.
+    - `:35` creates the process logger with `slog.NewJSONHandler(os.Stdout, nil)`, which runs at Info level, so the
+      filler's Debug record never appears.
+    - `:126` creates `fmpClient := newFMPClient(...)`.
+    - `:129-130` runs the boot seed, `repo.CountFundamentalsFetchedToday(ctx)` → `fmpClient.SeedBudget(n)`.
+      **255 owns this; 230 does not touch it.**
+    - `:152` calls `svc.SetClassification(..., fmpClient, fmpClient)`, which sets `s.fmpBudget`.
+    - `:153` calls `svc.SetEtfFlagSource(fmpClient)`.
+    - `:162` runs `go svc.StartEtfFlagFiller(ctx)`.
   - Fix site: `internal/service/etf_flags.go`.
-    - Constants `etfFlagTTL`, `etfFlagCacheMax` and `etfFlagQueueCap` at `:17-25`.
-    - `type etfFlagState` at `:33`, with fields `src`, `mu`, `entries`, `pending`, `queue` and an injectable
-      `now func() time.Time`.
-    - `GetEtfFlags` at `:62`. It is cache-only, ignores its ctx (`_ context.Context`) and enqueues on a miss.
-    - `enqueueLocked` at `:83`. The queue carries only the symbol string.
-    - `StartEtfFlagFiller` at `:98`. It drains the queue with the loop ctx from `main.go`.
-    - `fillEtfFlag` starts at `:115`. Its `defer` clears `pending`.
-      - **Gap 1:** `:121` `if !s.etfFillAllowed() { return }` is a silent skip.
-      - **Gap 2:** `:126` `slog.DebugContext(ctx, "etf flag fill failed", "symbol", sym, "error", err)` logs at
-        Debug only, and logs the raw `err`.
-    - `etfFillAllowed` at `:140-146` returns a bare `bool`. It is false when any of these holds: nil `src`, nil
-      `fundCfg`, `marketdata.fmp.enabled` false, nil `fmpBudget`, `cap <= 0`, or
-      `atQuotaAlertThreshold(used, cap)`. The used/cap values are not returned to the caller.
-  - Threshold helper: `atQuotaAlertThreshold` at `internal/service/marketdata_service.go:1959`
-    (`cap > 0 && count >= (cap*8)/10`).
-  - Budget seam: the `fmpBudget` interface at `internal/service/classification_service.go:36`, and
-    `(*fmp.Client).BudgetSnapshot() (used, dailyCap int)` at `internal/fmp/fmp_client.go:98`
-    (`SeedBudget` is at `:88`).
-  - FMP error shapes (`internal/fmp/fmp_client.go`):
-    - `:222` sets `apikey`.
-    - `:243` `"fmp: %s request failed: %w"`. This `%w`-wraps a `*url.Error` whose text carries the full URL,
-      including `apikey=`.
-    - `:251` `"fmp: read %s body: %w"`.
-    - `:255` `"fmp: %s returned HTTP %d"`. It carries no URL (comment at `:254`).
-    - `:258` `"fmp: decode %s: %w"`.
-    - `FetchIsEtf` at `:374` goes through `fetchProfile` → `getJSON`, so it shares the limiter, the day budget and
-      every one of those error shapes. On trunk the errors are untyped.
-  - Last migration: `009_symbol_classification.up.sql` (`services/xstockstrat-marketdata/migrations/`). 230 needs none.
-  - Config-read pattern: `s.fundCfg.GetBool("marketdata.fmp.enabled", false)` (`etf_flags.go:141`). 230 adds no key.
-  - Docs touchpoint: `services/xstockstrat-marketdata/CLAUDE.md:165`, the `GetEtfFlags (feature 215, FR-11)`
-    paragraph. Its "Fixed invariants (not config keys)" list is at `:174`, and the new rate-limit window constant
-    belongs there.
-- **`xstockstrat-analysis`** (Python) is a consumer only, and no change is needed.
-  - `_fundamentals_gap_labels` calls `GetEtfFlags` with `metadata=propagation_meta`
-    (`services/xstockstrat-analysis/app/handlers/servicer.py:1962`).
-  - It maps an unset `is_etf` → `UNSPECIFIED`, true → `ETF`, false → `NOT_ETF` (`:1975-1981`). On error it logs a WARN
-    and returns `{}` (`:1970-1972`).
-  - The backtest writes `diag.fundamentals_gap` (`:1246-1248`). Opportunity skip rows use
-    `_label_fundamentals_skip_rows` (`:1984-1993`), and the value is read back at `:6739`.
-  - The proto contract is unchanged: `EtfFlag.optional bool is_etf = 2` (`packages/proto/marketdata/v1/marketdata.proto:396-407`;
-    RPC declared at `:72`). Documented behaviour is in `services/xstockstrat-analysis/CLAUDE.md:400-401`.
+    - `:17-25` is the constant block (`etfFlagTTL`, `etfFlagCacheMax`, `etfFlagQueueCap`).
+    - `:33` declares `type etfFlagState`, with fields `src`, `mu`, `entries`, `pending`, `queue` and an injectable
+      `now func() time.Time`. `clock()` is at `:53`.
+    - `:62` defines `GetEtfFlags`. It is cache-only, discards its ctx, and enqueues on a miss.
+    - `:83` defines `enqueueLocked`. A queue item is the bare symbol string.
+    - `:98` defines `StartEtfFlagFiller`. It drains the queue on the loop ctx from `main.go:162`.
+    - `fillEtfFlag` starts at `:115`. Its `defer` clears `pending`. It has two gaps:
+      - **Gap 1:** `:121-123` `if !s.etfFillAllowed() { return }` skips silently.
+      - **Gap 2:** `:126` `slog.DebugContext(ctx, "etf flag fill failed", "symbol", sym, "error", err)` logs at Debug
+        only, and it logs the raw `err`.
+    - `:135` writes the cache entry, `entries[sym] = etfFlagEntry{isEtf, fetchedAt}`. This is the write that the
+      AC-2 second call reads.
+    - `:140-146` defines `etfFillAllowed() bool`, which returns a bare bool. It returns false in any of these cases:
+      - `src` is nil;
+      - `fundCfg` is nil;
+      - `marketdata.fmp.enabled` is false;
+      - `fmpBudget` is nil;
+      - `cap <= 0`;
+      - `atQuotaAlertThreshold(used, cap)` is true.
+
+      Only the last case has meaningful used/cap values, and the function does not expose them.
+  - Threshold helper: `atQuotaAlertThreshold` at `internal/service/marketdata_service.go:1959`, defined as
+    `cap > 0 && count >= (cap*8)/10`.
+  - Budget seam:
+    - The `fmpBudget` interface is at `internal/service/classification_service.go:36` and declares
+      `BudgetSnapshot() (used, dailyCap int)`.
+    - The real implementation is `(*fmp.Client).BudgetSnapshot` at `internal/fmp/fmp_client.go:98`. `SeedBudget` is
+      at `:88`.
+  - FMP error shapes in `internal/fmp/fmp_client.go` (read-only for 230). All of them are untyped on trunk.
+    - `:222` adds the key to the query with `params.Set("apikey", c.apiKey)`.
+    - `:243` returns `fmt.Errorf("fmp: %s request failed: %w", path, err)`. It `%w`-wraps a `*url.Error` whose text
+      includes the full URL, `apikey=` included. **This is the leak path.**
+    - `:255` returns `"fmp: %s returned HTTP %d"`. It carries no URL (see the comment at `:254`).
+    - `:258` returns `"fmp: decode %s: %w"`.
+    - `FetchIsEtf` is at `:374` and goes through `fetchProfile` → `getJSON`. It therefore shares the limiter, the day
+      budget and every error shape listed here.
+  - Last migration: `009_symbol_classification.up.sql` in `services/xstockstrat-marketdata/migrations/`. 230 needs
+    no migration.
+  - Config-read pattern: `s.fundCfg.GetBool("marketdata.fmp.enabled", false)` (`etf_flags.go:141`). 230 adds no
+    config key.
+  - Docs touchpoint: `services/xstockstrat-marketdata/CLAUDE.md`, the `GetEtfFlags` (feature 215, FR-11) paragraph.
+    Its "Fixed invariants (not config keys)" list at `:174` is where the new window constant belongs.
+- **`xstockstrat-analysis`** (Python): consumer only, no change.
+  - `_fundamentals_gap_labels` (`services/xstockstrat-analysis/app/handlers/servicer.py:1962`) calls `GetEtfFlags`
+    with `metadata=propagation_meta` (`:1966-1969`).
+  - On error it logs `log.warning("GetEtfFlags failed …")` and returns `{}` (`:1970-1972`).
+  - It maps `is_etf` to the gap label at `:1974-1981`: unset → `UNSPECIFIED`, true → `ETF`, false → `NOT_ETF`.
   - Last migration: `027_contract_owner_dimension.up.sql`. None is needed.
 
 ## Patterns to REUSE
 
-- **Error class without raw text:** reuse 255's classifier. Do not write a second one.
-  - 255's implementation-spec (Step 5, `docs/roadmap/features/255-fix-marketdata-fundamentals-cache/implementation-spec.md:618-650`)
-    adds these to package `fmp`:
-    - an unexported `statusError{path, code}` at `:255`;
-    - an unexported `stageError{stage, err}` wrapping `:243`/`:251`/`:258`;
-    - an unexported `enrichmentClass(err) string` that returns `cap` / `ctx` / `http_<code>` / `transport` / `read` /
-      `decode`, using `errors.Is`/`errors.As` only.
-  - 255 lands first, so 230 can classify `FetchIsEtf` errors with the same taxonomy (C-18 DRY).
-  - **Seam question for design:** the helper is unexported in `fmp`, and the caller is in `internal/service`. The
-    options are:
-    - (a) export it from `fmp`, as a one-line rename or an exported wrapper in a 255-owned file, after 255 merges;
-    - (b) classify inside `FetchIsEtf` and return a class-bearing error.
-  - Do not use string-prefix matching. 255 pins "never string matching".
-- **Gate numbers for the skip record:** reuse `s.fmpBudget.BudgetSnapshot()` (`fmp_client.go:98`) and
+- **Error class without raw text.** Reuse 255's classifier rather than writing a second one (C-18 DRY).
+  - 255's implementation-spec Step 5 (`docs/roadmap/features/255-fix-marketdata-fundamentals-cache/implementation-spec.md:622-641`)
+    adds three unexported pieces to package `fmp`:
+    - `statusError{path, code}`, returned at `:255`;
+    - `stageError{stage, err}`, wrapping the `:243`/`:251`/`:258` errors;
+    - `enrichmentClass(err) string`, which returns `cap` / `ctx` / `http_<code>` / `transport` / `read` / `decode`
+      using `errors.Is`/`errors.As` only.
+  - **Seam for design:** `enrichmentClass` is unexported in `fmp`, and the caller sits in `internal/service`. Two
+    options:
+    - (a) export the classifier, or an exported wrapper, after 255 merges;
+    - (b) have `FetchIsEtf` return a class-bearing error.
+
+    Either way, never match on string prefixes; 255 pins "never string matching".
+- **Gate numbers for the skip record.** Reuse `s.fmpBudget.BudgetSnapshot()` (`fmp_client.go:98`) and
   `atQuotaAlertThreshold` (`marketdata_service.go:1959`).
-  - Either reshape `etfFillAllowed` (`etf_flags.go:140`) to return the reason plus used/cap, or call the snapshot
-    again on the skip path.
+  - Either reshape `etfFillAllowed` (`etf_flags.go:140`) to return a reason plus used/cap, or take the snapshot on
+    the skip path.
   - The skip path must stay non-fetching (`@AC-14`).
-- **Rate-limit clock:** reuse the injectable `etfFlagState.now` / `clock()` (`etf_flags.go:33`, `:53`). The tests
-  already drive it via `newEtfSvc` → `*etfClock` (`etf_flags_test.go:51`).
-  - Rate-limit state belongs under `s.etf.mu` or a sibling field. No new package is needed: grep found no existing
-    log rate-limit helper in marketdata `internal/`. The only `rateLimit` hits are the vendor request limiters.
-- **Window constant:** add it beside `etfFlagTTL`/`etfFlagCacheMax`/`etfFlagQueueCap` (`etf_flags.go:17-25`) and
-  document it under CLAUDE.md "Fixed invariants" (`:174`). It is not a config key (FR-2, F-07).
-- **Log capture in tests:** reuse `recordingWarnHandler` (`internal/service/marketdata_service_test.go:1547-1593`). It
-  installs itself via `slog.SetDefault`, which is process-global, so a test that uses it must not call `t.Parallel()`.
-  The ETF tests currently have no `t.Parallel()`.
-  - **Caveat:** `Handle` keeps only `r.Level == slog.LevelWarn`. If design picks Info, it needs a level-aware sibling
-    or a generalisation of this handler. Do not copy it (DRY).
-  - `countingWarnHandler` (`:804`, used at `:969`) is the other existing capture.
-- **ETF test harness:** reuse these in `internal/service/etf_flags_test.go`:
-  - `fakeEtfSource` (`:15`, with `calls`, `resp`, `err`), `newEtfSvc(src, budget, fmpOn)` (`:51`) and
-    `etfFlags(t, svc, …)` (`:62`);
-  - the gate-case table in `TestEtfFlagFiller_HeadroomGate_AC14` (`:118`), which calls
-    `svc.fillEtfFlag(ctx, <-svc.etf.queue)`;
-  - `TestEtfFlagFiller_ErrorNotCached` (`:196`);
-  - `fakeBudget{used, cap}` (`marketdata_service_test.go:2035`) and `fakeCfg` (`:250`).
-- **AC-2 seed seam:** reuse 255's `seedFMPBudget(ctx, counter, client)` (255 design.md:67; implementation-spec.md:390,
-  `TestSeedFMPBudget_CountsOnlyFMPRows_AC3` in `cmd/server/main_test.go`).
-  - `newEtfSvc` bypasses the boot seed, so an AC-2 test that honours "210 non-FMP + 5 FMP rows" must seed a real
-  `fmp.Client` through that seam, or construct the budget as 255's seed would leave it.
+- **Rate-limit clock and state.** Reuse the injectable `etfFlagState.now` / `clock()` (`etf_flags.go:33`, `:53`).
+  The tests already drive this clock through `newEtfSvc` → `*etfClock` (`etf_flags_test.go:51`).
+  - The state goes on `etfFlagState`, guarded by `mu` or a sibling field.
+  - The only rate-limit precedent in the service is the per-key `lastStaleCheck` map (`marketdata_service.go:52-55`,
+    checked through `staleCheckDue` at `:317`).
+  - No log rate-limit helper exists in marketdata `internal/`.
+- **Window constant.** Put it in the `etf_flags.go:17-25` constant block and list it under the CLAUDE.md Fixed
+  invariants (`:174`). It is not a config key (FR-2, F-07).
+- **Log capture in tests.** Reuse or generalise `recordingWarnHandler` (`internal/service/marketdata_service_test.go:1549`,
+  `installWarnRecorder` at `:1589`).
+  - It installs itself with `slog.SetDefault`, which is process-global, so a test that uses it must not call
+    `t.Parallel()`.
+  - `Handle` (`:1560-1563`) drops every record that is not Warn. If design picks Info, generalise this handler to
+    also keep Info rather than copying it (DRY).
+  - The other existing capture handler is `countingWarnHandler` (`:807`).
+- **ETF test harness** in `internal/service/etf_flags_test.go`:
+  - `fakeEtfSource` at `:15`, with `calls`, `resp` and `err`;
+  - `newEtfSvc(src, budget, fmpOn)` at `:51` and `etfFlags(t, svc, …)` at `:62`;
+  - the drain idiom `svc.fillEtfFlag(ctx, <-svc.etf.queue)`;
+  - `TestEtfFlagFiller_ErrorNotCached` at `:196`, whose error pattern AC-3 can reuse with an error text that contains
+    `apikey=`;
+  - `fakeBudget{used, cap}` at `marketdata_service_test.go:2035`.
+- **AC-2 seed seam.** Reuse 255's `seedFMPBudget(ctx, counter, client)` (255 implementation-spec `:335`, test
+  `TestSeedFMPBudget_CountsOnlyFMPRows_AC3` at `:390`, in `cmd/server/main_test.go`, `package main`).
+  - `newEtfSvc` bypasses the boot seed, and `fakeBudget` cannot express "210 non-FMP rows + 5 FMP rows".
+  - A service-level AC-2 test can therefore use only the budget that 255's seed would leave, for example
+    `fakeBudget{used:5, cap:250}`.
+  - The "fails before 255" half lives in 255's seed test.
 
 ## Existing Business Rules (preserve / extend)
 
-- **PRESERVE** `@AC-14 @FR-11 @feature-215` "The ETF label never spends the guard's FMP headroom" (`services/xstockstrat-marketdata/acceptance/block-fundamentals-strategy-on-etf.feature`).
-  - At or above 80% of `marketdata.fmp.daily_request_cap`, `GetEtfFlags` returns unset, makes no FMP call, and the
-    filler does not fetch. Cached flags last 30 days.
-  - This is the fix site. 230's gate-closed logging must not change the gate. It is backed by `etf_flags_test.go`,
-    whose tests must stay green.
-- **PRESERVE** `@AC-7 @FR-7 @feature-215` "Marketdata reports fundamentals absence distinctly from outage and disable" (`services/xstockstrat-marketdata/acceptance/block-fundamentals-strategy-on-etf.feature`). The NotFound vs FailedPrecondition semantics for SCHD and the disable flags are untouched.
-- **PRESERVE** `@AC-4` "Failed FMP calls refund the shared daily budget" (`services/xstockstrat-marketdata/acceptance/sector-classification.feature`, `@feature-217`). Filler fetch failures must keep refunding the shared FMP budget. 230 does not touch the seed or the quota (255 owns them).
-- **PRESERVE** `@AC-4` "An FMP outage does not break classification reads" (`services/xstockstrat-marketdata/acceptance/sector-classification.feature`, `@feature-217`). A filler fetch failure stays non-fatal.
-- **PRESERVE** `@AC-1` "FMP gateway never exceeds the configured rate limit under concurrency" (`services/xstockstrat-marketdata/acceptance/sector-classification.feature`, `@feature-217`). Filler fetches stay on the single throttled gateway.
-- **PRESERVE** `@AC-2 @FR-2 @feature-215` "A fundamentals-gated backtest on an ETF returns an explicit reason, not a silent no-trade" (`services/xstockstrat-analysis/acceptance/block-fundamentals-strategy-on-etf.feature`). The refusal reason is unchanged. Only the `fundamentals_gap` label moves from UNSPECIFIED to ETF, and analysis consumes `GetEtfFlags` unchanged.
-- **PRESERVE** `@AC-5 @FR-6 @feature-215` "The refusal is auditable" (`services/xstockstrat-analysis/acceptance/block-fundamentals-strategy-on-etf.feature`). The analysis WARN log and the result-borne reason stay.
-- **PRESERVE** `@AC-8 @FR-8 @feature-215` "A fundamentals outage is not reported as absence" (`services/xstockstrat-analysis/acceptance/block-fundamentals-strategy-on-etf.feature`). A `GetEtfFlags` error leaves the label UNSPECIFIED.
-- **PRESERVE** `@AC-3 @FR-5 @feature-215` "Non-ETF equities and non-fundamentals strategies are unaffected" (`services/xstockstrat-analysis/acceptance/block-fundamentals-strategy-on-etf.feature`). Labelling must not alter AAPL or technical strategies.
-- **PRESERVE** `@AC-2 @FR-1 @feature-185` "An evaluated-but-not-passing symbol is NOT marked unavailable" (`services/xstockstrat-analysis/acceptance/opportunity-compute-robustness.feature`). The opportunity skip-row classification is unchanged; only the label value changes.
-- No EXTEND or CHANGE rules found. 230's `@AC-2` and `@AC-3` are new cases alongside `@AC-14`, not alterations of it.
-- **Would-be CHANGE (out of scope):** widening or shortening the 30-day negative cache for an empty profile
-  (hypothesis 3) alters `@AC-14`'s "served for 30 days without re-fetch" clause. That needs explicit operator sign-off
-  in `context.md`.
-- **C-16 blind spot:** `services/xstockstrat-ui/acceptance/block-fundamentals-strategy-on-etf.feature` and
-  `fix-trader-position-fundamentals.feature` are consumer-surface suites for `fundamentals_gap`. They were not read.
-  The product-spec states there is no UI text change, so both are presumed PRESERVE, and design should confirm.
+- **EXTEND** `@AC-14 @FR-11 @feature-215` "The ETF label never spends the guard's FMP headroom"
+  (`services/xstockstrat-marketdata/acceptance/block-fundamentals-strategy-on-etf.feature`).
+  - At or above 80% of `marketdata.fmp.daily_request_cap`, `GetEtfFlags` leaves `is_etf` unset, no FMP call is made,
+    and the filler does not fetch. A cached flag is served for 30 days without a re-fetch.
+  - 230 adds a rate-limited, secret-free log for a gate-closed skip or a failed fetch next to this behavior. The gate,
+    the TTL and the cache-only RPC stay unchanged.
+  - The backing tests are `TestEtfFlagFiller_HeadroomGate_AC14` (`etf_flags_test.go:118`) and their siblings. The new
+    logging must add no source calls.
+- **PRESERVE** `@AC-4 @feature-217` "Failed FMP calls refund the shared daily budget"
+  (`services/xstockstrat-marketdata/acceptance/sector-classification.feature`). Filler fetches keep going through the
+  one shared `*fmp.Client` budget. 230 adds no second counter and does not skip the refund.
+- **PRESERVE** `@AC-2 @FR-2 @feature-215` "A fundamentals-gated backtest on an ETF returns an explicit reason, not a
+  silent no-trade" (`services/xstockstrat-analysis/acceptance/block-fundamentals-strategy-on-etf.feature`).
+  - The refusal and `NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE` hold whatever the label is.
+  - Only `fundamentals_gap` moves from `UNSPECIFIED` to `ETF`.
+- **PRESERVE** `@AC-5 @FR-6 @feature-215` "The refusal is auditable"
+  (`services/xstockstrat-analysis/acceptance/block-fundamentals-strategy-on-etf.feature`). The analysis-side skip log
+  and the reason on the result are untouched.
+- Not impacted:
+  - marketdata `@AC-7 @feature-215`, the NotFound vs FailedPrecondition split;
+  - `sector-classification.feature` `@AC-1`/`@AC-4` (outage) and the SCD scenarios;
+  - `historical-fundamentals-backtest.feature` `@AC-5 @feature-198`;
+  - the remaining analysis `@feature-215` scenarios. A `GetEtfFlags` error still leaves the label `UNSPECIFIED`.
+- No CHANGE rules. `docs/sdd/business-rules/platform.feature` was scanned and nothing in it is touched.
+- **Would-be CHANGE (out of scope):** shortening the 30-day negative cache for an empty profile (hypothesis 3) would
+  alter `@AC-14`'s "served for 30 days" clause. That needs explicit operator sign-off in `context.md`.
+- Coverage limits:
+  - Read in full: both affected `block-fundamentals-strategy-on-etf.feature` suites, `sector-classification.feature`,
+    `historical-fundamentals-backtest.feature` and `platform.feature`.
+  - The other 14 marketdata and 31 analysis suites were only keyword-grepped.
+  - The UI consumer suites for `fundamentals_gap` were not read. They are presumed PRESERVE because there is no UI
+    text change.
 
 ## Dependencies
 
-- Proto/RPC: none. `GetEtfFlags` / `EtfFlag.is_etf = 2` are unchanged (`marketdata.proto:396-407`).
-- Migration: none. If one were ever needed, the next free numbers are marketdata `010` and analysis `028`.
-- Config keys: none. The rate-limit window is a code constant (FR-2). `marketdata.fmp.enabled` and
-  `marketdata.fmp.daily_request_cap` are read unchanged.
-- Inter-service edges: none new. analysis → marketdata `GetEtfFlags` (gRPC) is unchanged.
+- Proto/RPC: none. `GetEtfFlags` / `EtfFlag.is_etf` are unchanged.
+- Migration: none. If one were ever needed, the next free numbers would be marketdata `010` and analysis `028`.
+- Config keys: none.
+  - The rate-limit window is a code constant (FR-2).
+  - `marketdata.fmp.enabled` and `marketdata.fmp.daily_request_cap` are read unchanged.
+- Inter-service edges: no new edges. analysis → marketdata `GetEtfFlags` (gRPC) is unchanged.
 - New env vars / ports: none.
-- **Feature ordering:**
-  - **Hard predecessor `255-fix-marketdata-fundamentals-cache`** (`implementation-ready`, not executed). It provides
-    the source-filtered seed, `seedFMPBudget` and `enrichmentClass`. `@AC-2` fails before 255 and passes after it.
-  - Predecessor **215** (in-progress) owns `etf_flags.go` and `etf_flags_test.go` (Step 9).
-  - **254** is a soft overlap: it rewraps `*url.Error` in `fmp_client.go`. Until 254 lands, raw `FetchIsEtf` errors
+- Feature ordering:
+  - **Hard predecessor `255-fix-marketdata-fundamentals-cache`** (`implementation-ready`). It supplies the
+    source-filtered seed, `seedFMPBudget` and `enrichmentClass`.
+  - **215** (in-progress) owns `etf_flags.go` and `etf_flags_test.go`.
+  - **254** is a soft overlap: it rewraps `*url.Error` in `fmp_client.go`. Until it lands, raw `FetchIsEtf` errors
     can contain `apikey=`.
 
 ## Risks / Not-found
 
-- **Root cause still unconfirmed** from staging logs. No log access was available in triage, re-verification or this
-  recon. The code-level hypotheses all still hold:
-  - Hypothesis 1 (seed over-count) is plausible via `marketdata_service.go:1864` ("edgar snapshot not producible —
-    falling back to vendor").
-  - Hypothesis 3 (empty profile negative-cached, `TestGetEtfFlags_EmptyProfileNegativeCached` `etf_flags_test.go:179`)
-    is neither confirmed nor refuted.
-  - FR-2's logging is what makes it confirmable after deploy.
-- **Rate-limit key unresolved.** The options are per symbol, per reason or global; the spec review carried this to
-  design. It must be fixed before `@AC-3` can be split into concrete gate-closed, fetch-error and rate-limit scenarios
-  with a count, for example "5 skips of SCHD in 60s → exactly 1 record".
-- **Log level vs existing capture.** `recordingWarnHandler` keeps WARN only, so the choice between Info and Warn
-  decides whether that helper must be generalised.
-- **255 classifier visibility.** `enrichmentClass` is unexported in `fmp`. 230 must pick a seam. Classes for errors
-  that have no stage (the `:226` build-request error and a non-ctx limiter error at `:229`) are an open operator
-  question in 255, so 230 must not invent a label silently.
-- **Gate-closed reasons are not all budget.** `etfFillAllowed` is also false when FMP is disabled, a source or budget
-  is nil, or `cap == 0`.
-  - With FMP disabled, every miss would log "gate closed".
-  - Design must decide whether those reasons are logged, under which reason token, and whether `used/cap` applies.
-- **Trace-id rule (operator 2026-10-21).** `fillEtfFlag` runs on the background loop ctx (`main.go:162`), with no
-  originating request, so minting its own ctx is allowed.
-  - The rule still asks for a trace id "when one is available".
-  - `GetEtfFlags` discards its request ctx (`etf_flags.go:62`), and the queue carries only the symbol (`:83`).
-  - Carrying the enqueuing request's `x-trace-id` into the fill log means widening the queue item. Design must decide
-    this and record it, not skip it silently.
-- **Raw-error trap** (ledger `fails.md` 2026-10-22 fix-marketdata-secret-exposure, D-39). A `%w`-wrapped
-  `*url.Error` carries `apikey=`. The AC-3 test must drive a `FetchIsEtf` error whose text contains `apikey=`, and
-  assert that neither that string nor the raw text appears in any captured record.
-- **Analysis-side raw log (noted, out of scope).** `servicer.py:1971` logs `GetEtfFlags` failures with the raw `e`,
-  unthrottled. That is a gRPC error from marketdata, not the FMP URL, so FR-2 does not apply.
-- **Merge conflicts.** `etf_flags.go`/`etf_flags_test.go` overlap with 215 Step 9, and `fmp_client.go` overlaps with
-  254/255 if the classifier is exported. Record merge-order rows at /sdd-spec.
+- **Root cause not confirmed from logs.** Triage, re-verification and this recon had no staging log access.
+  Hypothesis 1 is supported by code: the seed is an unfiltered `count(*)` at `internal/repository/marketdata_repo.go:656`.
+  Hypothesis 3 (empty profile negative-cached, `TestGetEtfFlags_EmptyProfileNegativeCached` `etf_flags_test.go:179`)
+  is open. FR-2's logging is what makes the cause confirmable after deploy.
+- **Rate-limit key unresolved.** Each option has a cost:
+  - A **global** key (one `lastLogAt`) is the minimum and bounds the flood.
+  - A **per-reason** key needs a small map.
+  - A **per-symbol** key grows a map that only the queue and cache bound.
+
+  Design must choose, and then split `@AC-3` into gate-closed, fetch-error and rate-limit scenarios with a concrete
+  count (review warning, criterion 8).
+- **Log level vs capture.** Choosing Info requires generalising `recordingWarnHandler`. Choosing Warn reuses it
+  as-is.
+- **Classifier visibility.** `enrichmentClass` is unexported (see the seam above). 255 leaves open an operator
+  question: how to class stage-less errors (the build-request error and a non-ctx limiter error). 230 must not invent
+  a label silently.
+- **Not every closed gate is a budget gate.** FMP disabled, a nil source or budget, and `cap == 0` also close the
+  gate. With FMP disabled, every miss would log. Design must decide:
+  - which of these reasons are logged;
+  - the token for each;
+  - when used/cap applies.
+- **Trace-id rule (operator 2026-10-21, C-03).** `fillEtfFlag` runs on the background loop ctx (`main.go:162`) with
+  no originating request, so it may mint its own context. The rule still asks for a trace id "when one is
+  available". `GetEtfFlags` discards its request ctx (`etf_flags.go:62`), and a queue item is only a symbol (`:83`),
+  so carrying the enqueuing `x-trace-id` would mean widening the queue item. Design must decide this explicitly and
+  record it.
+- **Raw-error trap** (ledger `fails.md` 2026-10-22 fix-marketdata-secret-exposure, D-39). A `%w`-wrapped `*url.Error`
+  carries `apikey=`. The AC-3 test must inject an error whose text contains `apikey=` and assert that neither the
+  string nor the raw text appears in any captured record (message plus all attributes).
+- **Analysis-side raw log (out of scope).** `servicer.py:1971` logs `GetEtfFlags` failures with the raw `e`. That is
+  a marketdata gRPC error, not the FMP URL.
+- **Merge conflicts:**
+  - `etf_flags.go` and `etf_flags_test.go` with 215;
+  - `fmp_client.go` with 254 and 255, if the classifier is exported.
+
+  Record merge-order rows at /sdd-spec.
 - **Not found:**
-  - no log rate-limit helper and no typed FMP errors on trunk;
-  - no slog capture in `etf_flags_test.go`;
-  - no other `slog` call in the filler besides `:126`.
+  - an error-classification helper on trunk (`errClass`, `classifyErr`);
+  - a log rate-limit helper (`lastWarn`, `rateLimitedLog`, `logOncePer`);
+  - an Info-level slog capture in marketdata tests;
+  - any log assertion for the ETF filler;
+  - any other `slog` call in the filler besides `:126`.
 
 ## Recommended Scope
 
-Advisory only:
-1. **Fill visibility (FR-2 / `@AC-3`).** In `etf_flags.go`:
-   - make the gate return a reason, plus used/cap when budget-gated;
-   - log the gate-closed skip and the fetch failure at the chosen level, with the class from 255's classifier and
-     never `err`;
-   - rate-limit both through one window constant on `etfFlagState`, keyed per the design decision, using the
-     injectable clock;
-   - update the marketdata CLAUDE.md `GetEtfFlags` paragraph and the Fixed-invariants list.
+These boundaries are advisory, not binding.
 
-   Tests, using a non-parallel slog capture:
-   - a gate-closed record with used/cap;
-   - a fetch-error record that carries the class and contains no `apikey=`;
-   - N repeats within the window produce one record, and a record appears again after the window.
-
-   All existing `@AC-14` tests must stay green.
-2. **Label after budget allows (FR-1 / `@AC-2`).** Add a service-level regression test:
-   - seed a real `fmp.Client` via 255's `seedFMPBudget` with 210 non-FMP rows and 5 FMP rows (cap 250);
-   - miss SCHD, drain the queue, call again, and expect `is_etf == true`.
-
-   No production code should be needed beyond 255. If the test fails after 255, that falsifies hypothesis 1 and must
-   go back to the operator.
+1. **Fill visibility (FR-2 / `@AC-3`)** in `etf_flags.go`.
+   - Production changes:
+     - the gate returns a reason, plus used/cap when the gate is budget-gated;
+     - the skip and the fetch failure are logged at the chosen level, carrying the class from 255's classifier and
+       never `err`;
+     - both are rate-limited by one window constant on `etfFlagState`, using the injectable clock and the key that
+       design picks;
+     - the marketdata CLAUDE.md `GetEtfFlags` paragraph and its Fixed invariants list are updated.
+   - Tests, using a non-parallel slog capture:
+     - a gate-closed record with used/cap;
+     - a fetch-error record that carries the class and contains no `apikey=`;
+     - N repeats inside the window produce one record, and a record appears again after the window.
+   - All `@AC-14` tests stay green.
+2. **Label after the budget allows (FR-1 / `@AC-2`).**
+   - Add a service-level regression test:
+     - start from the budget state 255's seed leaves, for example `used:5, cap:250`;
+     - miss SCHD and drain the queue;
+     - call again and expect `is_etf == true`.
+   - No production code is expected beyond 255. If the test fails after 255, go back to the operator.
 3. **Staging confirmation.** After deploy, re-run feature 215 Step 26(a) on dev and read the new marketdata log lines
    to confirm the cause (spec Open Question 3).
