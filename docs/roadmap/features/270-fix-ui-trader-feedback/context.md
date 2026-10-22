@@ -352,3 +352,99 @@ protocol, `design.md` is not written and `status.md` stays `spec-ready`.
 - [ ] It is not verified that OrderForm shows paper/live only via `TradingModeBadge` or the mode prop (AC-12).
   Target step: D-17.
 - Next: `/sdd-spec fix-ui-trader-feedback`.
+
+## Session 2026-10-22 — sdd-spec
+
+- Wrote implementation-spec.md with 14 steps: 7 `service` steps, each followed by a paired red-green `test`
+  step. Status: design-approved → implementation-ready.
+- Build order:
+  - D-45: Steps 1–2.
+  - D-64 per-call handlers: Steps 3–4.
+  - Ledger export: Steps 5–6.
+  - Global mutation fallback: Steps 7–8.
+  - D-17: Steps 9–10.
+  - D-11 freshness: Steps 11–12.
+  - D-11 reconnect: Steps 13–14.
+- Every step is in `xstockstrat-ui`. Analysis and trading are read-only.
+- C-15 coverage:
+
+  | Scenario | Step(s) |
+  |---|---|
+  | AC-1 | 12, 14 |
+  | AC-2 | 14 |
+  | AC-3 | 10 |
+  | AC-4 | 2 |
+  | AC-5 | 4 |
+  | AC-6 | 4 |
+  | AC-7 | 6 |
+  | AC-8 | 12 |
+  | AC-9 | 14 |
+  | AC-10 | 8 |
+  | AC-11 | 6 |
+  | AC-12 | 10 |
+
+- Codebase findings that correct the evidence in design.md (its binding Chosen Approach is unchanged):
+  - **AlertStream has no dedupe today.**
+    - `AlertStream.tsx:76` is `[alert, ...prev].slice(0, 50)`, and `alertId` is only the React key (`:130`).
+    - Step 13 adds the `alertId` dedupe that design.md assumed already existed. Without it, a reconnect or the
+      mock's replay would duplicate React keys.
+  - **signal-sources `saveError` renders only inside the edit card** (`:548`, `:759`).
+    - Reusing `setSaveError` would leave the AC-6 error invisible while the form is closed.
+    - Step 3 adds a dedicated `toggleError`, shown in a page-level `CardNotice`, with the same per-call
+      `onError` + `errMessage` pattern.
+  - **A third no-op `onError`** is in `useSetConfig.ts:15-18`. Step 7 deletes it together with the two in
+    `useBacktest.ts` and `useScreenSymbols.ts`.
+  - **A fifth trading-mode mapping** is in `usePositionLineage.ts:10,21,27`, as a string form that filters
+    ledger payloads. With a null mode it skips the mode clause.
+  - **Proto3 JSON omits a zero-valued enum**, so an UNSPECIFIED `tradingMode` is absent on the wire. The AC-3
+    e2e accepts either absent or `TRADING_MODE_UNSPECIFIED`, never `TRADING_MODE_PAPER`.
+  - **The mock backend has no `streamOrderUpdates` handler.**
+    - Under the new reconnect policy, every orders spec would hit a terminal `Unimplemented`.
+    - Step 14 adds a held-open handler and makes `streamAlerts` hold open too.
+  - **`OrderForm.tsx` was read in full**, closing the design Open Risk. `mode` is used only at `:139`, in the
+    request, and the form renders no Paper label.
+  - **The dashboard `OrderBook` never consumes the order stream.** `OrdersTable`, rendered only on
+    `/trader/orders`, is the sole consumer.
+- `tradingMode` request fields were verified against the proto (`fails.md:358`):
+  - Trading: `PlaceOrderRequest` field 12, `ListOrdersRequest` field 6.
+  - Portfolio: `GetPortfolioRequest` field 2, `GetPositionRequest` field 3, `ListPositionsRequest` field 3.
+  - Both servers skip the mode filter on UNSPECIFIED (`trading_repo.go:239`, `portfolio_repo.go:146`).
+
+### Decisions
+
+- **Opt-out inventory (P-03).** It is pinned by `grep -rn "errorHandled: true" src`, which must return 9 hits.
+  - Flagged hooks:
+    - `useSetOpportunityAction`, `useManageSignalSource`.
+    - `useRunBacktest`, `useScreenSymbols`.
+    - `useSetConfig`, `useSetStrategyLive`.
+    - `usePlaceOrder`, `useReplaceOrder`, `useConfirmOrder`.
+  - Each flagged hook was audited, and every one of its call sites handles errors.
+  - Every other mutation stays unflagged. Where an unflagged hook's caller also renders the error inline, the
+    error shows twice. That cosmetic double report is accepted.
+  - `useCancelOrder` stays unflagged because `OrdersTable.tsx:235` cancels with no handler. The AC-10 e2e uses
+    that path.
+- **Reconnect policy.**
+  - Retryable: non-Connect errors, plus the codes Unavailable, Unknown, Internal, DeadlineExceeded,
+    ResourceExhausted, Aborted, Canceled and Unauthenticated.
+  - Every other code is terminal.
+  - Unauthenticated is retryable because `guardStream` (`transport.ts:16`) refreshes the session and expects
+    the stream to "recover on the next reconnect". A failed refresh redirects to login.
+- **Backoff and indicator.**
+  - Backoff starts at 1 s, doubles each attempt and caps at 30 s, with no jitter. `STREAM_STABLE_MS` is 3000 ms.
+  - The indicator shows as soon as a stream drops, with no show-side debounce, because AC-2 and AC-9 need it
+    visible.
+  - It clears on the first item, or once the stream has stayed open for `STREAM_STABLE_MS`.
+- **Fallback banner placement.**
+  - Mobile: `bottom-24`, which clears the `BottomTabBar`.
+  - Desktop: `sm:bottom-4`.
+  - `z-50`, so it stays clear of the `sticky top-0 z-40` header.
+  - Mounted once per provider.
+
+### Open Threads
+
+- [ ] Edge (Cloudflare) idle-timeout reconnect churn. The Step 13 PR records a 5-minute idle observation on dev.
+- [ ] Whether `page.route` can hold a fulfilled stream open. Step 14 records a fallback variant: send a complete
+  body, then reconnect on the clean end.
+- [ ] The fallback banner stays after a successful retry until the user dismisses it or navigates. This is
+  accepted and documented in the Step 7 PR.
+- Next: `/sdd-review fix-ui-trader-feedback impl-spec`.
