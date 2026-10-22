@@ -61,11 +61,24 @@ request, logs without a trace id.
   any query for them (`configServiceImpl.ts:232`), so Step 2 holds both before and after Step 5 reorders
   `watchConfig`.
 - Steps 7–8 do not depend on Steps 1–6.
-- **Step 8 precondition (fails.md:115-134, the 074 zero-assertion trap).** On this branch,
-  `252-fix-identity-ledger-test-suites` is `implementation-ready` and not merged. The ledger suite still swallows a
-  failed import (`ledgerServiceImpl.test.ts:21-29`) and skips cases with `if (!impl) return;` (9 sites). Step 8's
-  new cases therefore must not use that skip shape. They assert the import succeeded (Step 8 instruction 1). If 252
-  has merged by the time Step 8 runs, rebase first; the instruction still applies.
+- **Step 8 hard dependency: feature 252's ledger runner change must land first (fails.md:115-134, the 074
+  zero-assertion trap).** Under today's runner, `LedgerServiceImpl` cannot load at all, so Step 8 cannot go green:
+  - `ledgerServiceImpl.ts:20-25` uses constructor parameter properties (`private readonly pool`, `config`,
+    `notifier`). The ledger suite runs `node --experimental-strip-types --test src/__tests__/*.test.ts`
+    (`package.json:13-14`). Strip-only mode rejects parameter properties on every Node version, including Node 24,
+    so the import is swallowed (`ledgerServiceImpl.test.ts:5-8` header, `:21-29` catch). The test also imports
+    `'../grpc/ledgerServiceImpl.js'`, but only a `.ts` source exists under `src/`.
+  - `252-fix-identity-ledger-test-suites` (`implementation-ready`, not merged) Step 4 moves ledger to compile-then-test.
+    It changes `test`/`test:coverage` to `tsc && … node --test dist/__tests__/*.test.js` and drops the
+    `src/**/*.test.ts` tsconfig exclusion. Its Step 5 de-guards `ledgerServiceImpl.test.ts`. This feature does not
+    change the ledger runner itself: that would collide with 252's `package.json`/`tsconfig.json` edits. A
+    per-file `--experimental-transform-types` would be a second runner beside 252's.
+  - So Step 8 starts only after 252 Steps 4–5 are merged to `main-dev` and `feature/fix-config-stream-resilience` is
+    rebased onto them. If 252 has not merged when Step 8 is reached, Step 8 is **blocked**. Record it in the
+    Deviation Log and stop and ask; do not improvise a runner change (P-03). Step 7 (service) may land first, but
+    its red/green proof waits for Step 8.
+  - Step 8's new cases still assert the import (`assert.ok(LedgerServiceImpl, …)`) and never use the
+    `if (!impl) return;` skip shape.
 - Step 9 runs after Steps 1–8 so its line references match the final code.
 - **Merge overlaps (design.md § Open Risks).** These are non-blocking and need a manual merge at the integration
   PR. The `merge-order.md` rows are added by `/sdd-execute` at integration time, because this spec's writer may
@@ -183,6 +196,8 @@ secret redaction on every broadcast
    - `if (this.listener !== c || !msg.payload) return;`
    - Parse inside `try { ({ namespace, environment } = JSON.parse(msg.payload)); } catch { return; /* malformed payload */ }`,
      following `eventNotifier.ts:119-128`.
+   - `if (typeof namespace !== 'string' || !namespace) return; /* payload without a namespace */` — dropped
+     before the chain, so `reloadNamespace(namespace: string, …)` (`:203`) is never called with `undefined`.
    - `const env = (environment ?? 'staging') as EnvStr;` (kept from `:169`).
    - `this.serial(async () => { await this.reloadNamespace(namespace, env); await this.broadcastToSubscribers(namespace, env); }).catch((err) => log.error('config_changed handling failed', { namespace, env, error: err?.message }));`
    - Reload and notification work share one chain, so a stale `reloadAll` write (`:191`) cannot overwrite a newer
@@ -213,7 +228,8 @@ docker compose logs --since 1m xstockstrat-config | grep -E "config LISTEN conne
 - Then a `SetConfig` of a registered global key must reach an open WatchConfig stream.
 - If Docker is unavailable in the executing session, the step is **blocked** on this check. Record that in the
   Deviation Log. The check then moves to the dev app (`main-dev` deploy) as a blocker on the integration PR. It is
-  never silently waived.
+  never silently waived. Step 1 cannot be marked `done` until this check has passed, locally or on the dev app.
+  Steps 2–6 may proceed while it is pending, because their fakes do not depend on it.
 
 ---
 
@@ -262,6 +278,12 @@ secret redaction on every broadcast
 **Covers**: `AC-1, AC-2, AC-9`
 
 **Instructions**:
+0. **Log-sink spike (do this first; it gates the AC-2 and AC-8 log assertions).** After `pnpm install`, read the
+   installed `node_modules/winston/lib/winston/transports/console.js` and note which writer its `log()` calls for
+   `error`-level records. Record that writer in the Deviation Log before any case is written; Step 6 reuses it.
+   Then prove the capture works: a throwaway case that calls a `getLogger('t').error('probe')` and asserts the
+   mock saw `probe`. It must pass before AC-2/AC-8 are written, and is deleted afterwards. If no writer can be
+   mocked from the test, stop and ask; do not drop the log assertions.
 1. Add a `describe('ConfigServiceImpl — LISTEN lifecycle (feature 258)')` with these local helpers:
    - `FakeClient extends EventEmitter` (from `node:events`). It needs:
      - `query(sql)`, which pushes to a shared `log: string[]` and records `LISTEN`;
@@ -599,7 +621,8 @@ hypertable partition safety
 **Covers**: —
 
 **Instructions**:
-1. Change `:1` to `import { Pool, Client, PoolClient } from 'pg';`.
+1. Leave `:1` as `import { Pool, Client } from 'pg';` and add `import type { PoolClient } from 'pg';` beside it.
+   `PoolClient` is type-only, so `import type` keeps it out of any runtime named import under every ledger runner.
 2. Replace `:74` with `let client: PoolClient | undefined; let failure: unknown;`. Make
    `client = await this.pool.connect();` the first statement inside the try at `:75`. Every later `client.` use
    inside the try is reached only after assignment, so use `client!` or a narrowed local (`const c = client`), as
@@ -612,7 +635,8 @@ hypertable partition safety
 
 **Verification**:
 ```bash
-cd services/xstockstrat-ledger && pnpm run lint
+cd services/xstockstrat-ledger && pnpm run build && pnpm run lint   # tsc checks the `client` narrowing (C-18)
+grep -n "import type { PoolClient } from 'pg'" src/grpc/ledgerServiceImpl.ts   # one hit
 grep -n "client = await this.pool.connect()" src/grpc/ledgerServiceImpl.ts   # one hit, after the `try {` line
 grep -n "client?.release(failure" src/grpc/ledgerServiceImpl.ts              # one hit
 ```
@@ -634,12 +658,20 @@ hypertable partition safety
   The `if (!impl) return;` skip appears at 9 sites (grep count).
 - `makeIdempotentPool(opts)` is at `:56-84`. It routes SQL by regex (`:63-68`). Its client has
   `release() {}` (`:73`), and its `connect()` (`:77-79`) always resolves.
-- The test script runs `node --experimental-strip-types --test src/__tests__/*.test.ts` (`package.json:13-14`).
-  Strip-only mode needs Node 24, as pinned in CI. On Node 22 the suite is a vacuous green (fails.md:2223-2226).
+- **Runner (blocking; see § Step Dependencies).** Today the script is `node --experimental-strip-types --test
+  src/__tests__/*.test.ts` (`package.json:13-14`). `LedgerServiceImpl` uses constructor parameter properties
+  (`ledgerServiceImpl.ts:20-25`). Strip-only mode rejects those on every Node version, so under the current runner
+  the import is always swallowed. This is the reason the file header gives at `ledgerServiceImpl.test.ts:5-8`.
+  Under that runner, `assert.ok(LedgerServiceImpl, …)` fails both before and after Step 7, and the step cannot go
+  green. Feature 252 Step 4 replaces the runner with `tsc && … node --test dist/__tests__/*.test.js`. The test's
+  `'../grpc/ledgerServiceImpl.js'` specifier then resolves to the compiled `dist/grpc/ledgerServiceImpl.js`.
+  Step 8 runs only on that runner.
+- Line hints above are from the pre-252 file. After rebasing onto 252 (whose Step 5 de-guards this file), re-grep
+  `makeIdempotentPool` and the `before()` import before editing.
 - No `src/__tests__/fixtures/` home exists in ledger (ls). `makeIdempotentPool` has one consumer file. C-13
   verdict: compliant inline.
 
-**TDD**: `red-green required`. Against the pre-Step-7 tree:
+**TDD**: `red-green required`, on 252's compile-then-test runner. Against the pre-Step-7 tree:
 - AC-5 fails, because `appendEvent` rejects with the connect error and the callback is never called.
 - AC-10 fails on the new assertion that `release` was called with the caught `Error`. Today `release()` is called
   with no argument.
@@ -649,12 +681,15 @@ These failing runs are the proof that the cases **execute**. A vacuous skip cann
 **Covers**: `AC-5, AC-10`
 
 **Instructions**:
-1. **Precondition (zero-assertion guard).** Put the new cases in a new
+0. **Precondition gate.** Confirm `services/xstockstrat-ledger/package.json` `test:coverage` starts with `tsc &&`
+   and runs `dist/__tests__/*.test.js` (feature 252 Step 4 merged and rebased in). If it still runs
+   `--experimental-strip-types`, Step 8 is **blocked**: record it in the Deviation Log and stop and ask.
+1. **Zero-assertion guard.** Put the new cases in a new
    `describe('LedgerServiceImpl.appendEvent — DB failures (feature 258)')`.
    - Its first statement in each case is `assert.ok(LedgerServiceImpl, 'ledgerServiceImpl must import — never skip silently');`.
    - Do **not** use `if (!impl) return;`.
-   - Leave the existing swallow at `:21-29` to `252-fix-identity-ledger-test-suites`. Editing it here would collide
-     with 252.
+   - Do not edit the `before()` import block or the runner. They belong to `252-fix-identity-ledger-test-suites`.
+   - Name the two cases with `@AC-5` and `@AC-10` in their titles, so the TAP check below can find them.
 2. Extend `makeIdempotentPool`'s `opts` with `connectThrows?: Error` and `throwOn?: RegExp`, and record releases:
    - `connect()` rejects with `connectThrows` when it is set.
    - `client.query` throws `new Error('connection terminated')` when the SQL matches `throwOn`.
@@ -675,16 +710,20 @@ These failing runs are the proof that the cases **execute**. A vacuous skip cann
 5. **Success pin.** The existing first-time and duplicate idempotent cases still pass. Their release is called with
    `undefined`.
 
-**Verification** (run on Node 24, CI's pin):
+**Verification** (on 252's compile-then-test runner):
 ```bash
-node --version   # expect v24.x — Node 22 strip-only gives a vacuous green (fails.md:2223)
-cd services/xstockstrat-ledger && pnpm run test:coverage && pnpm run lint
+cd services/xstockstrat-ledger
+grep -n '"test:coverage": "tsc &&' package.json   # precondition: one hit (252 Step 4 landed); else Step 8 is blocked
+pnpm run test:coverage && pnpm run lint
 # c8 --lines 40 passes; 0 failed tests.
+node --test --test-reporter=tap dist/__tests__/ledgerServiceImpl.test.js | grep -E '^# (pass|fail) '
+# expect: pass > 0 and fail 0 — proves the suite executed rather than skipped
+node --test --test-reporter=tap dist/__tests__/ledgerServiceImpl.test.js | grep -E '^ *ok [0-9]+ - .*@AC-(5|10)'
+# expect: exactly 2 hits — the two new cases ran and passed
 grep -n "never skip silently" src/__tests__/ledgerServiceImpl.test.ts   # the new describe asserts its import
-grep -n "AC-5\|AC-10" src/__tests__/ledgerServiceImpl.test.ts
 ```
 
-Record the red run before Step 7 (both cases failing) in the execute log. It is the non-zero-execution proof that
+Record the red run before Step 7 in the execute log: the same TAP command shows both `@AC-5`/`@AC-10` cases as `not ok`. It is the non-zero-execution proof that
 design.md § Build order requires.
 
 ---
