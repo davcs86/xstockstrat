@@ -79,3 +79,209 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - Grouped by service+theme from the 2026-10-20 debt-radar scan; Track C.
   - Scope is D-10, D-18, D-54.
 - Next: `/sdd-design fix-indicators-formula-correctness`.
+
+## Session 2026-10-22 — sdd-batch design state recovered (round 1)
+
+- The batch run that produced round 1 was cut off by the session usage limit before its gate writer persisted the debate state. This block is the round-1 synthesis restored verbatim from the run journal (`synth:fix-indicators-formula-correctness:r1`), so the next /sdd-batch run resumes from it instead of redoing the debate.
+
+```sdd-batch-design-state
+{
+  "round": 1,
+  "synth": {
+    "approach": "Round-1 synthesis. The fix stays in xstockstrat-indicators, plus one two-string UI catalog edit. No proto change, no migration, no config change, no analysis change.\n\nSTEP 1 \u2014 D-54 (services/xstockstrat-indicators/app/handlers/servicer.py)\n- In UpdateFormula (:491) and DeleteFormula (:594), widen the existing guard to `if row is None or row.get(\"pending_intent_id\") is not None:`.\n- Reuse the existing NOT_FOUND abort and message unchanged (:492-495, :595-598). This is the same predicate _load_formula uses at :156, and get_by_id runs SELECT * (formulas_repository.py:185), so the column is on the row.\n- Resulting order:\n  - Update: missing or pending \u2192 system author \u2192 owner \u2192 deleted.\n  - Delete: missing or pending \u2192 system author \u2192 owner. Delete has no deleted_at check.\n- Tests use real indicators_pb2 messages and cover every guard branch: missing, pending, system, foreign owner, ADMIN on a foreign row, and deleted (Update only).\n- The pending-row tests assert NOT_FOUND AND that repo.update / repo.delete were never called (AC-6 \"row unchanged\", AC-7 \"no deleted_at\").\n- An ADMIN or non-owner on a pending row gets NOT_FOUND. This is pinned by test and matches no-existence-leak @AC-1@feature-224. @AC-23 and @AC-28 stay PERMISSION_DENIED on non-pending rows.\n\nSTEP 2 \u2014 D-10 (services/xstockstrat-indicators/app/services/sandbox.py)\n- (a) Wrapper (:312): change the marker print to `print(\"\\n__OUTPUT__:\" + ...)`. The marker then always starts its own line, even when the formula ends with print(..., end=\"\"). That case is silently lost today. The cost is one extra newline in stdout.\n- (b) Parse loop (:394-400): keep only the LAST line starting with `__OUTPUT__:` and stop swallowing JSONDecodeError inside the loop.\n- (c) After the existing `if proc.returncode != 0:` block (:402-417), so timeout, memory_exceeded and import_blocked keep their labels:\n  - No marker line seen: fail with error=\"formula produced no output\". Drop the proposal's \"(exited before result was emitted)\" suffix, because the cause is not always an early exit.\n  - Last marker line fails json.loads: fail with error=\"formula output could not be parsed: <msg>\".\n  - Both use exit_reason=\"runtime_error\", which the servicer already maps to SANDBOX_EXIT_REASON_RUNTIME_ERROR (servicer.py:313-319). No new enum value.\n- (d) Add one local closure `_fail(error, exit_reason)` inside execute_formula. It builds `SandboxResult(success=False, output={}, stdout=stdout, stderr=stderr, execution_ms=elapsed_ms, memory_used_bytes=0, error=..., exit_reason=...)` and is used by the existing rc!=0 return and both new returns. It keeps stdout and stderr (C-01: FormulaRunResult.tsx:92-101 renders stdout). Do NOT copy the timeout shape at :381-390, which blanks stdout. No module-level helper.\n- (e) Leave the builtins at :252 as they are.\n- Tests:\n  - AC-1: `raise SystemExit(0)`.\n  - AC-2: print \"__OUTPUT__:{\" then SystemExit(0).\n  - AC-3: `result = {'x': 1}`.\n  - A formula that sets result and ends with print(\"x\", end=\"\"): success, correct output.\n  - os._exit(0): no output.\n  - One servicer-level test asserting exit_reason == SANDBOX_EXIT_REASON_RUNTIME_ERROR, using real pb2 messages.\n\nSTEP 3 \u2014 D-18 Option A (services/xstockstrat-indicators/app/services/indicators_engine.py)\n- Registry text (:141-142):\n  - ATR \u2192 \"ATR (close-to-close approximation): rolling mean of |close change| over period; not Wilder's true range\".\n  - VWAP \u2192 \"VWAP (running mean approximation): cumulative mean of closes; no volume weighting\".\n- Correct the _atr and _vwap docstrings (:104, :112) to describe the math as written.\n- Keys, the dispatch table (:30-31) and the math stay unchanged. ListIndicators reads the registry directly (servicer.py:355-364).\n- In the same step, mirror both strings into services/xstockstrat-ui/src/lib/strategyCatalog.ts:99 and :104 (C-10). Add a vitest under src/lib/** asserting the catalog no longer says 'Average True Range' / 'Volume Weighted Average Price'.\n- Correction to the proposal on the acceptance file: there is no @AC-8/@AC-9 to delete. The ATR and VWAP scenarios are @AC-4 and @AC-5 (acceptance.feature:27-39). Both are written as either/or and are satisfied by their \"Or \u2026 no longer described as \u2026 and names the close-to-close approximation / running mean\" branch. Keep them unchanged, add engine and servicer tests for them, and record OQ-1 = A (OQ-2 moot) in context.md.\n\nSTEP 4 \u2014 Docs\n- indicators CLAUDE.md: the sandbox no-output and unparseable-output failure rule, and the ATR/VWAP approximation note in \u00a7 Role.\n- docs/runbooks/indicator-builder.md:20-21: the same approximation note.\n- Indicators context-constitution findings: record that xstockstrat-trading's ATR(14) (internal/service/trading.go:3168-3235) is true Wilder ATR and differs from the indicators built-in.\n- Add xstockstrat-ui to the product-spec affected services.\n- File docs/reports/<date>-indicators-missing-result-silent-success.md with a .status sidecar for the \"formula never assigns result \u2192 success with {}\" gap (sandbox.py:311).\n\nBuild order: D-54 \u2192 D-10 \u2192 D-18 (engine + UI) \u2192 docs.",
+    "open_objections": [
+      {
+        "text": "C-10 duplicated surface: services/xstockstrat-ui/src/lib/strategyCatalog.ts:99/:104 still claim 'Average True Range' / 'Volume Weighted Average Price'. The synthesis adopts the two-string edit plus a vitest assertion, and adds xstockstrat-ui to the product-spec affected services. The proposer offered this only as a runner-up and has not committed. It stays open until the next proposal confirms the UI edit and the affected-services update, or until an operator waiver with sign-off is recorded (a context.md note alone is not a C-14 deferral).",
+        "blocking": true
+      },
+      {
+        "text": "D-10 marker framing: a legitimate formula ending in print(..., end='') produces 'x__OUTPUT__:{...}', which would now be misreported as no output. The synthesis resolves this with a leading '\\n' in the wrapper print (sandbox.py:312) and drops the '(exited before result was emitted)' suffix. The proposer must confirm both changes and the end='' test.",
+        "blocking": false
+      },
+      {
+        "text": "C-08/P-06 (ledger fails.md:76-77): the D-54 tests must cover every guard branch (missing, pending, system, foreign owner, ADMIN on foreign, deleted for Update only). The pending tests must assert that repo.update/repo.delete were not called. A pending system-authored row and a pending foreign row seen by ADMIN must also be tested, to pin the order of the merged guard. The proposal's order statement must be corrected for DeleteFormula, which has no deleted_at step.",
+        "blocking": false
+      },
+      {
+        "text": "C-01: every new failure return must keep stdout and stderr, through a single local _fail closure (C-18) rather than three copies of the SandboxResult literal. The timeout shape at sandbox.py:381-390, which blanks stdout, must not be copied. The spec step must say this explicitly.",
+        "blocking": false
+      },
+      {
+        "text": "P-03: the 'formula never assigns result' gap (sandbox.py:311, success with {}) must be filed as a defect report with a .status sidecar under docs/reports/, not left as a context.md note.",
+        "blocking": false
+      },
+      {
+        "text": "Acceptance-file handling: the proposal says to delete @AC-8/@AC-9, which do not exist. The ATR/VWAP scenarios are @AC-4/@AC-5, are written as either/or, and are satisfied by Option A. The next proposal must keep them and test them, not delete them.",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "AC-1",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "AC-2",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "AC-3",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "AC-4",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "AC-5",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "AC-6",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "AC-7",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "AC-1@feature-224",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "AC-6@feature-224",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "AC-18@feature-224",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "AC-19@feature-224",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "AC-23@feature-224",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "AC-28@feature-224",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "AC-1@feature-228",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "AC-2@feature-228",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "AC-3@feature-228",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "AC-4@feature-228",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "AC-5@feature-228",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "AC-3@feature-209",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "AC-4@feature-209",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "AC-1@feature-225",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "AC-10@feature-225",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "AC-11@feature-225",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "AC-5@feature-205",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "AC-7@feature-205",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "D-18 Option B (true Wilder ATR/VWAP from OHLCV): it needs the proto gate, OHLCV plumbing at 4 analysis sites (evaluator.py:496, screener.py:294/:360, pnl_pattern_consumer.py:98), a warm-up recheck (warmup.py:86), and it invalidates stored grades and pnl_pattern_samples (OQ-2). That is high rework, against the user's 'low rework' directive.",
+      "Renaming the keys (e.g. CLOSE_ATR): it breaks FR-3/FR-4 key stability and every stored strategy definition and fingerprint.",
+      "Stripping SystemExit/KeyboardInterrupt/GeneratorExit from the restricted builtins (sandbox.py:252): it yields a NameError with rc=1 instead of AC-1's 'produced no output', misses os._exit(0) and attribute-traversal exits, and adds nothing once the parent-side check exists.",
+      "Wrapper-only fix (catch SystemExit around exec and print a sentinel): it does not cover os._exit or traversal exits. The parent-side check is the only complete seam.",
+      "Keeping 'last parseable line' plus a saw_output flag: AC-2 would pass only when no valid line exists at all. 'Last marker line, strict' is deterministic.",
+      "Running the no-output check before the returncode!=0 branch: it would relabel timeout, memory_exceeded and import_blocked failures (@feature-228, @feature-209).",
+      "Adding a new SandboxExitReason enum value: a proto churn with no need. RUNTIME_ERROR=4 and the declared-outputs precedent (servicer.py:336) already cover it.",
+      "Deleting @AC-4/@AC-5 (the proposal's '@AC-8/@AC-9'): they are written as either/or and are satisfied by Option A, so deleting them loses regression coverage for no gain.",
+      "Recording the UI catalog drift only in context.md: it is not a C-14 deferral (no named follow-up feature), and the fix is two strings.",
+      "Error suffix '(exited before result was emitted)': it states the wrong cause for marker-framing cases. Use the neutral 'formula produced no output', which still meets AC-1."
+    ],
+    "open_risks": [
+      "Consumers that showed an empty-success run as 'Passed' (/insights workspace, agent test_formula) will now show Failed with runtime_error. The adversary verified this renders correctly (FormulaRunResult.tsx:70-77, agent client.py:1022-1027, screener.py:353-354 returns None, evaluator.py:133 raises). Strategies whose formulas were silently empty will now stop scoring instead of scoring on empty series. This is intended, but visible to users.",
+      "The leading '\\n' before the marker adds one line to stdout. Any test or consumer that asserts exact stdout equality could break. Existing tests in tests/test_sandbox.py and test_sandbox_isolation.py must be re-run; the _fake_popen default stdout '__OUTPUT__:{}' still parses.",
+      "A formula can still forge success by printing a valid marker line and then calling SystemExit(0). This is accepted: it is the author's own output and not an isolation breach.",
+      "After Option A, 'ATR' means two different numbers on the platform: indicators uses a close-to-close approximation, trading uses true Wilder ATR(14) for position sizing (trading.go:3168-3235). This is mitigated only by documentation.",
+      "Rebase conflict with feature 244, which edits other regions of sandbox.py, and with any peer feature touching servicer.py.",
+      "The 'never assigns result' gap remains a silent success until the new defect report is triaged."
+    ],
+    "constitution_rules_touched": [
+      "C-01",
+      "C-03",
+      "C-08",
+      "C-10",
+      "C-11",
+      "C-14",
+      "C-15",
+      "C-16",
+      "C-18",
+      "P-02",
+      "P-03",
+      "P-06",
+      "F-01",
+      "F-06",
+      "F-07"
+    ],
+    "rationale": "The proposal and the adversary agree on the core design: a parent-side D-10 check placed after the returncode branch, a merged pending guard for D-54, and Option A for D-18. That design has no Floor breaches and is the lowest-rework path, which is what the user asked for. Option A is enough because @AC-4/@AC-5 in acceptance.feature:27-39 are written as either/or and Option A meets their 'Or' branch. The proposal's plan to delete the non-existent @AC-8/@AC-9 is corrected to keeping and testing them, which preserves more coverage. The adversary's fixes are folded in: the leading-newline marker (it rescues legitimate end='' formulas instead of misreporting them), a neutral error text that still meets AC-1, the _fail closure that keeps stdout (C-01/C-18), per-branch D-54 tests with not-called assertions (ledger 063 trap), a filed defect report for the missing-result gap (P-03), and doc notes on the trading-ATR divergence. C-10 for the UI catalog is the only blocking item. The synthesis adopts the two-string fix, but the proposer has not yet committed to it or to the affected-services update. C-03 is not touched, since there are no new outbound calls."
+  },
+  "floor_breaches": []
+}
+```
