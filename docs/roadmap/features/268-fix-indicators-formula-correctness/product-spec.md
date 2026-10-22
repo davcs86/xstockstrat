@@ -86,21 +86,16 @@ mutating RPCs bypass the pending-hidden read helper.
 ## Affected Services
 
 - xstockstrat-indicators (fix site for all three)
-- xstockstrat-analysis (consumer of `ATR`/`VWAP`; changes if D-18 renames indicators or adds OHLCV input)
-- packages/proto (only if design adds OHLCV fields to `ComputeIndicatorRequest`)
+- xstockstrat-ui (`src/lib/strategyCatalog.ts` repeats the ATR/VWAP descriptions; added at /sdd-design, C-10)
+- xstockstrat-analysis (consumer, unchanged: Option A keeps the `ATR`/`VWAP` keys and math)
+- packages/proto (consumer, unchanged: Option A needs no proto change)
 
 ## Fix Scope
 
-- [ ] Proto change **conditional on OQ-1**. Option B adds new optional/repeated OHLCV fields to
-  `ComputeIndicatorRequest` (`packages/proto/indicators/v1/indicators.proto:54-61`). Additive only:
-  new field numbers 7+ (fields 1-6 are the only ones in use, verified at /sdd-review 2026-10-21), no
-  renumbering or removal, so `buf breaking` must pass. If taken, it needs the
-  proto approval gate (root `CLAUDE.md` § Approval Flow; `docs/runbooks/proto-versioning.md`): a proto
-  PR first, Proto Reviewer sign-off, then `./scripts/buf-gen.sh`. Option A needs no proto change.
+- [x] No proto change (OQ-1 = Option A, /sdd-design 2026-10-22). The Option B additive-field plan is rejected.
 - [x] No database migrations anticipated
 - [x] No config key changes anticipated
 
-(Update after investigation — remove or replace each item as needed)
 
 **Behavior-change note (D-18):** Option B changes the numeric output for every strategy and backtest that
 uses `ATR` or `VWAP`. Historical backtest runs and grades computed with the approximations will not
