@@ -570,3 +570,34 @@ The full `/sdd-design fix-python-loop-supervision` debate is at its approval gat
   244/246/260 rebases; 262 reuses `spawn`; 268 test file; replay amplification vs fix-ledger-query-pagination). Target: Step 15.
 - [ ] Probe false park, allow-list incompleteness, attempt hang, parked-window limitations, unpersisted counters.
   Target: Step 15 (analysis CLAUDE.md).
+
+## Session 2026-10-22 — sdd-review impl-spec
+
+- MODE B (advisory; lifecycle unchanged, stays `implementation-ready`). Criteria: PASS WITH WARNINGS (0 FAIL, 7 WARN).
+  Overlap: WARN (file-level merge-conflict risk only; no migration / proto field / config-key collision).
+- Addressed in `implementation-spec.md`:
+  - Step 1 Verification: `grep -c "create_task"` would count the `main.py:220` comment (2, not 1); now
+    `grep -c "create_task("` (the comment has no `(`).
+  - Step 1 Instructions: `functools` added to `supervision.py`'s stdlib imports (for `functools.partial`), or a closure.
+  - Step 13 Evidence: asyncpg exception names verified against the locked `asyncpg==0.31.0` wheel (`uv.lock:44-45`):
+    `PostgresConnectionError`, `DataError`, `IntegrityConstraintViolationError`, `SerializationError`,
+    `DeadlockDetectedError`, `OutOfMemoryError` all exist and are re-exported at top level. Replaces the
+    "not installed in the sandbox" note.
+  - Attempt-hang refs `pnl_pattern_consumer.py:141,205,268,400` all re-verified (`fetchval` `:141`, `acquire()` the rest).
+  - Step Dependencies: explicit rebase note — Step 13 re-greps on the post-Step-11 file, Step 14 builds on the
+    post-Step-12 test file.
+  - Step 4 item 4: added per-loop seed-failure cases (each servicer loop and fundsignal) pinning the `retry_until_ok`
+    wiring, not only the helper.
+- No change needed: Step 15 item 5 already carries the root `CLAUDE.md` Teardown (context-forge refresh, or manual
+  reconciliation recorded in the PR body). Step 13's density is a recorded C-18 design choice.
+- Overlap: peer rebases (244, 246, 248, 260, 262, 268) are already listed in § Step Dependencies and go into
+  `merge-order.md` at Step 15. The overlap scan read peers from main-worktree copies, so edits that exist only on
+  peers' feature branches were not checked.
+
+### Open Threads
+
+- [ ] Operator confirmation: accept **no per-attempt timeout** on `process_event`. A pool-exhaustion hang on
+  `pool.acquire()`/`fetchval` stalls the P&L consumer with no ERROR, and FR-2's done-callback never fires. Documented
+  at Step 15; detection deferred to the out-of-scope liveness metric. Target: `/sdd-execute` checkpoint before Step 13.
+- [ ] Re-check peer branches (`origin/feature/*` for 215, 244, 246, 248, 260, 262, 268) for line claims on the shared
+  files before each touching step. The overlap scan did not cover branch-only edits. Target: `/sdd-execute` discovery.
