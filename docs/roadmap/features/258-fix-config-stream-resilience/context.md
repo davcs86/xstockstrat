@@ -296,3 +296,51 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   non-zero-assertion Verification.
 - [ ] **Propagation lag.** With the 30 s backoff cap, propagation can lag by up to about 30 s after a long outage.
   Target: step 5 (service CLAUDE.md § WatchConfig Flow).
+
+## Session 2026-10-22 — sdd-spec
+
+- Generated implementation-spec.md with 9 steps. Status → implementation-ready.
+- The steps follow design.md § Chosen Approach and its build order:
+  - 1–2: the config LISTEN lifecycle;
+  - 3–4: the unary try blocks;
+  - 5–6: WatchConfig pending registration with catch-up, plus `endSubscriber`;
+  - 7–8: ledger `appendEvent`;
+  - 9: docs.
+- No rejected alternative is used. No proto, migration, config key, env var or `index.ts` edit.
+- C-15 mapping:
+  - AC-1, AC-2, AC-9 → Step 2
+  - AC-3, AC-4, AC-11 → Step 4
+  - AC-6, AC-7, AC-8 → Step 6
+  - AC-5, AC-10 → Step 8
+- C-14: none, internal/platform-only. This restates the product spec.
+- Key codebase findings, re-verified on this branch:
+  - Every recon.md config anchor resolves: `configServiceImpl.ts` `:162-174`, `:260-274`, `:280-313`, `:319`,
+    `:447-462`, `:500-522`.
+  - `setConfig`'s `existing`/`globalRow` are read after the gate (`:465`, `:476-482`). Step 3 therefore hoists them
+    as `let` declarations above the new try.
+  - Config ESLint extends `eslint:recommended`, whose `no-empty` rule flags an empty `catch {}`. Every
+    intentionally empty catch carries a comment.
+  - `PoolClient` is imported in neither service today. Config `:1` and ledger `:1` gain it.
+  - `t.mock.timers` precedent: `configWatcher.test.ts:139`. No `src/__tests__/fixtures/` home exists in either
+    service, so the C-13 verdict is inline.
+  - The config logger is a module-private winston Console sink (`src/services/logger.ts:10-19`). No test captures
+    logs today, and winston is not installed in this checkout. The capture method for AC-2/AC-8 is therefore
+    **Not verified**: Step 2 says to confirm the sink at execute and record it in the Deviation Log.
+  - Ledger: the import swallow is at `ledgerServiceImpl.test.ts:21-29`, with 9 `if (!impl) return;` sites.
+    `252-fix-identity-ledger-test-suites` is still implementation-ready, not merged. Step 8's new describe asserts
+    its import instead of skipping, and leaves the swallow for 252 to avoid a collision.
+- Spec-time decisions (P-03, surfaced rather than guessed):
+  - **Required check location.** Step 1's required `pg_terminate_backend` check runs on the local compose stack.
+    If Docker is unavailable, Step 1 is blocked, and the check moves to the dev app as an integration-PR blocker.
+    It is never waived.
+  - **Merge-order rows.** The non-blocking rows (258 vs 241 `setConfig`, 258 vs 263 `getConfig`) are not written
+    here, because this writer may only edit the feature directory. `/sdd-execute` adds them at the integration PR.
+    This was the open thread "Merge overlaps", and it is now retargeted.
+
+### Open Threads (updated)
+
+- [ ] Half-open socket → Step 1 required check (fallback: back to /sdd-design for fork b).
+- [ ] Log-capture sink for AC-2/AC-8 → confirm at Step 2 execute.
+- [ ] Merge-order rows 258↔241 / 258↔263 → /sdd-execute integration PR.
+- [ ] Ledger import swallow → Step 8 precondition (import assertion + red run).
+- [ ] Pool contention, stale namespaces, propagation lag → Step 9 docs.
