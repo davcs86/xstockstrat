@@ -225,3 +225,74 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   "floor_breaches": []
 }
 ```
+
+## Session 2026-10-22 — sdd-design
+
+- Phase 0 Recon: wrote recon.md earlier (services: xstockstrat-analysis, xstockstrat-ingest read-only). Patterns to
+  reuse: the force-DELETE shape for the claim release, and the `_paced_fetch` per-chunk `except` for the failed bucket.
+- Phase 1 Grilling: 2 rounds (full). Approved by the operator at the r2 design gate (2026-10-22: "APPROVED as
+  synthesized"). Floor clear.
+- OPERATOR DECISIONS (binding, recorded 2026-10-22):
+  - Scope is D-43 and D-57. Track C. The work is grouped by service and theme from the 2026-10-20 debt-radar scan.
+  - Standing directive (2026-10-21): propagate `x-trace-id` wherever possible. There is no C-03 waiver.
+    - Request-derived emits use the inbound metadata.
+    - Only work with no originating request (such as the loop) may mint its own context.
+  - Design gate r2: APPROVED as synthesized.
+- Chosen approach: analysis-only, no migration, no ingest change. The pieces are:
+  - The claim INSERT keeps `ON CONFLICT DO NOTHING` as the in-flight fence.
+  - The claim is released on any unconfirmed exit, via a `confirmed`-flag `try/finally` and a run_id-scoped DELETE.
+    Swallowed release errors are `Exception` only, never `BaseException`.
+  - The confirm UPDATE is scoped by `run_id` and `signal_id IS NULL`.
+  - `emitted += 1` runs only when ingest returned a `signal_id`.
+  - `_already_emitted` is widened to return `{symbol: score}`, and the skip predicate is unchanged.
+  - `_map_directions` cuts over the day-wide reference scores.
+  - The `valid_until` anchor depends on the run mode: `force=True` → now, `force=False` → `as_of_date` 00:00 UTC.
+  - `_paced_fetch` returns a `failed` bucket, and status precedence is `partial` > `budget_deferred` > `completed`.
+  - The proto change is a comment only (`"partial"`), followed by buf-gen.
+- OQ-1 resolved: a NULL `signal_id` marks an in-flight claim, which is released on failure. A crash orphan is
+  recovered on the next day or by `force`.
+- OQ-2 resolved: non-force runs use a date-anchored `valid_until`.
+- Product-spec C9 box resolved: **no migration**.
+- New scenarios to add at /sdd-spec:
+  - @AC-7: confirmed same-day rows are skipped, with zero fetch calls.
+  - @AC-8: a lost-response retry dedups. This is conditional on `dedup_window_hours > 0` and unchanged conviction.
+  - @AC-9: the day-wide direction holds on a retry and on the `budget_deferred` resume.
+  - @AC-10 (mandatory): force keeps a now-anchored `valid_until`.
+- Rejected:
+  - narrowing `_already_emitted` to `signal_id IS NOT NULL` (recon's recommendation; it breaks the fence and the
+    zero-cache-call guarantee);
+  - ingest-side idempotency;
+  - date-anchoring force runs;
+  - re-claim via DO UPDATE (the lock-less manual RPC);
+  - migration 028.
+- Recorded EXTEND scope effects of the reference-score cut:
+  - the `budget_deferred` resume and non-force `override_symbols` scans get full-day cuts;
+  - a mid-day `scoring_formula_id` change mixes two formulas in the reference set.
+- Loop path `run_once(metadata=())` deliberately carries no `x-trace-id`. It has no originating request, which the
+  operator directive allows.
+- Constitution rules touched: C-03, C-08, C-11, C-13, C-15, C-16, C-18, P-02, P-03, PLAT-N1. Floor breaches: none.
+- Status: spec-ready → design-approved.
+
+### Open Threads
+
+- [ ] Anchor-unification hazard. Mitigated by mandatory @AC-10 and the 2-line constraint comment. Target: the
+  /sdd-spec anchor step and its test step.
+- [ ] Boundary direction flip on a retry (when `min_conviction_to_emit > 0` or symbols failed scoring). Accepted;
+  goes into the @AC-9 description. Target: the /sdd-spec acceptance step.
+- [ ] A cache refresh or `dedup_window_hours=0` defeats @AC-8. Accepted as conditions. Target: the /sdd-spec
+  acceptance step.
+- [ ] A lost force response followed by a non-force retry can create one duplicate row. Rare; accepted. Target: docs.
+- [ ] Non-force validity shrinks by up to about 24h, matching the analysis CLAUDE.md:512 contract. Target: the docs
+  step.
+- [ ] Crash-orphan carve-out: a NULL row is skipped for the rest of the day. Target: the recovery test and the
+  analysis CLAUDE.md docs step.
+- [ ] A short successful chunk still drops symbols silently. Deferred. Target: 255-fix-marketdata-fundamentals-cache.
+- [ ] Merge order: 246 merges first and 260 rebases. Target: add a `merge-order.md` row at /sdd-spec.
+- [ ] The dict fake can drift from the real SQL. Mitigated by one `local_pg` test. Target: the test step.
+- [ ] Re-verify the ingest dedup conflict key `(user_id, source, symbol, direction)`, which excludes `valid_from`
+  (`servicer.py:1045`). Also re-verify that the signal insert and the dedup claim commit in one transaction (`:1017`).
+  Target: /sdd-spec, before the acceptance step.
+- [ ] Optional loop-path `x-trace-id` derived from `run_id`. Coordinate with 259-fix-python-loop-supervision.
+  Target: /sdd-spec.
+- [ ] The context teardown audit is owed for analysis CLAUDE.md and `docs/runbooks/mcp-tools.md`. Target: the
+  final PR.
