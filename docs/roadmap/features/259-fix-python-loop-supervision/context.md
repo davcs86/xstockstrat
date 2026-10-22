@@ -503,3 +503,30 @@ The full `/sdd-design fix-python-loop-supervision` debate is at its approval gat
   "floor_breaches": []
 }
 ```
+
+## Session 2026-10-22 — sdd-design approved
+
+- Phase 0 Recon: recon.md was written in an earlier session. Services: analysis, indicators, ingest. Reuse: the per-cycle swallow+log shape (`live_loop.py:335-338`), `_advance_cursor` for the park, and the `servicer.py:346-347` fixed-invariant precedent.
+- Phase 1 Grilling: 3 rounds (full). Resumed from the round-3 gate state recorded above.
+- OPERATOR DECISIONS (binding, recorded 2026-10-22):
+  - Design gate r2: run another round. The proposer must adopt the escalation reset rule (reset only when an event with sequence >= `_replay_seq` completes past the early return, or on park, with a fake-stream test) and the DB-health probe at K replays (`_cursor()` succeeds → park as transient-persistent; it raises → keep replaying, no time cap; the false-park risk is recorded).
+  - Design gate r3: APPROVED as synthesized, PLUS a binding positive poison allow-list. A consumer-local `_is_poison` returns True only for ValueError/TypeError/KeyError, protobuf decode errors and asyncpg SQLSTATE classes 22/23, and those park quickly. Every other error (including OutOfMemoryError 53200, class 40 DeadlockDetected/Serialization, DiskFull/InsufficientResources) goes through replay plus the DB-health probe. Add an OOM/deadlock replay test. `read_budget.is_transient_db_error` is not used to decide parking. This resolves the r3 blocking classifier-inversion objection. The r3 approval also covers the new `@AC-10 @feature-259` (outer-handler stream-fail escalation).
+  - Standing 2026-10-21: x-trace-id is propagated wherever possible, with no C-03 waiver, so the existing P&L emits at `:243`/`:299` pass `correlation_id=event.correlation_id`.
+- Chosen approach: the shared `app/supervision.py` (spawn/_on_done/retry_until_ok/run_supervised) wraps the four `*_forever` loops and the eight `main.py` boot sites. All three `ConfigWatcher._watch` copies get the same catch-widen + retain edit. The P&L consumer gets a 3-attempt in-place retry, then the `_is_poison` park, or replay with the reset rule, a bounded probe at K=5, a stream-fail escalation, and a log → idempotent ledger emit → advance park.
+- Rejected: reusing `is_transient_db_error`, widening `_TRANSIENT`, a parked-events table or migration, a wall-clock park cap, per-seam try hardening, and capped exponential backoff (full list in design.md).
+- Constitution rules touched: C-01, C-03, C-08, C-11, C-15, C-16, C-18, F-07, P-02, P-03, D-20. Floor breaches: none.
+- Business rules: all prior durable `@AC-*` are PRESERVE. `@AC-1..@AC-10 @feature-259` are EXTEND (the `@AC-7` in-feature edit and the new `@AC-9`/`@AC-10` are applied at /sdd-spec). There is no CHANGE.
+- Status: spec-ready → design-approved.
+
+### Open Threads
+
+- [ ] Probe false park under load (contention-driven statement timeouts while `_cursor()` succeeds). Target: /sdd-spec step 4 (document it; revisit two-confirmation K if it is observed).
+- [ ] Poison allow-list incompleteness (unlisted deterministic errors park about 25-30 s late; keep the list narrow). Target: step 4 + the analysis CLAUDE.md.
+- [ ] Attempt hang: `pool.acquire()`/`fetchval` are unbounded (`:141,:205,:268,:400`). Decide whether process_event attempts get a timeout. Target: /sdd-spec step 4.
+- [ ] Parked `order.created`/`filled` opens no window, and a parked `position.closed` leaves its window open. These are accepted limitations. Target: step 5 (the analysis CLAUDE.md).
+- [ ] Ledger replay amplification (up to 5 unpaged StreamEvents per stuck event). Target: /sdd-spec; coordinate with fix-ledger-query-pagination in merge-order.md.
+- [ ] Confirm that `LedgerEvent.correlation_id` (ledger.proto:28) carries x-trace-id and does not go into metadata, and that `AppendEvent` accepts x-trace-id metadata with no x-user-id under mTLS. Target: /sdd-spec step 4 discovery.
+- [ ] The replay and stream-fail counters are not persisted, so a restart delays escalation by K. Target: step 5 (docs).
+- [ ] Carried over: the opportunity tick recomputes every 30 s if `servicer.py:5903` keeps failing; loop-test sentinels must be BaseException with the sleep outside the try; watchers re-dial every 2 s during a config outage. Target: steps 2-3 + 5.
+- [ ] Apply the `@AC-7` edit, add `@AC-9`/`@AC-10` to acceptance.feature, and amend FR-5 in product-spec.md. Target: /sdd-spec.
+- [ ] Rebase step 4 onto peer 248 (`pnl_pattern_consumer.py:147-162`); the watcher and tick steps rebase vs 244/246/260; 262 reuses `supervision.spawn`. Target: /sdd-spec merge-order.md.
