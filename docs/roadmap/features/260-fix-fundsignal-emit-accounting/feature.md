@@ -16,18 +16,21 @@
 | 2026-10-21 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-21-fundsignal-emit-accounting-defect.md` (debt-radar D-43, D-57) |
 | 2026-10-21 | `draft` → `spec-ready` | /sdd-review | Product spec approved (7 warnings; overlap WARN) |
 | 2026-10-22 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written |
+| 2026-10-22 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 9 steps |
 
 ---
 
 ## Reviewers
 
-Snapshot from `docs/runbooks/reviewer-registry.md` at /sdd-triage time (2026-10-21). `/sdd-spec` overwrites it with per-step assignments.
+Snapshot from `docs/runbooks/reviewer-registry.md` at /sdd-spec time (2026-10-22), with per-step assignments.
 
 | Reviewer | Focus | Steps |
 |---|---|---|
-| `xstockstrat-analysis` owner | Backtest reproducibility, strategy scoring determinism, no look-ahead bias | TBD (/sdd-spec) — `fundsignal_loop.py` claim/emit and fetch accounting |
-| `xstockstrat-ingest` owner | Signal normalization correctness, idempotent ingestion | Read-only unless design makes the retry idempotent on ingest's side (D-43 double-emit trade-off) |
-| DBA | Migration numbering, up+down pair, index correctness | Only if design adds a column or state to `analysis.fundsignal_emitted` |
+| `xstockstrat-analysis` owner | Backtest reproducibility, strategy scoring determinism, no look-ahead bias | 1, 2, 3, 4, 5, 6 (test/service); 7, 8 (proto, proto-gen) |
+| Proto Reviewer | Field number uniqueness, no breaking change, `buf lint` / `buf breaking` pass | 7 (proto), 8 (proto-gen, inherited) |
+
+There are no steps for the `xstockstrat-ingest` owner, because ingest stays read-only: /sdd-spec re-verified the
+dedup claim at `servicer.py:1016-1066`. There are no steps for the DBA either, because there is no migration.
 
 ---
 
@@ -37,7 +40,7 @@ Snapshot from `docs/runbooks/reviewer-registry.md` at /sdd-triage time (2026-10-
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
 - [Recon](recon.md) — Phase 0 codebase dossier
 - [Design](design.md) — approved design (2 rounds, full)
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-fundsignal-emit-accounting`_
+- [Implementation Spec](implementation-spec.md) — 9 steps
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -50,4 +53,4 @@ symbols are neither fetched nor deferred, and the run still reports `completed`.
 
 ## Next Action
 
-`/sdd-spec fix-fundsignal-emit-accounting` — generate implementation spec from the approved design
+`/sdd-review fix-fundsignal-emit-accounting impl-spec` — validate implementation spec, then `/sdd-execute fix-fundsignal-emit-accounting`
