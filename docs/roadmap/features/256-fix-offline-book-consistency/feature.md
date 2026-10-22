@@ -16,18 +16,21 @@
 | 2026-10-21 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-21-offline-book-consistency-defect.md` (debt-radar D-47, D-48, D-49, D-63) |
 | 2026-10-21 | `draft` → `spec-ready` | /sdd-review | Product spec approved (7 warnings) |
 | 2026-10-22 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + design.md written |
+| 2026-10-22 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 16 steps |
 
 ---
 
 ## Reviewers
 
-Snapshot from `docs/runbooks/reviewer-registry.md` at /sdd-triage time (2026-10-21). `/sdd-spec` overwrites it with per-step assignments.
+Snapshot from `docs/runbooks/reviewer-registry.md` at /sdd-spec time (2026-10-22), collected from every step's `**Reviewers**`.
 
 | Reviewer | Focus | Steps |
 |---|---|---|
-| `xstockstrat-portfolio` owner | P&L calculation accuracy, position snapshot consistency, concurrent write safety (D-47, D-48) | TBD (/sdd-spec) |
-| `xstockstrat-trading` owner | Order execution correctness, offline fill validation and emit (D-49, D-63) | TBD (/sdd-spec) |
-| `xstockstrat-ui` owner | Book page error/degraded state for offline cards if D-48 surfaces `UNAVAILABLE` or a degraded marker | Only if design changes the read contract the UI renders |
+| Proto Reviewer | Field number uniqueness per message, no breaking change, `buf lint` / `buf breaking` pass | 1, 2 |
+| `xstockstrat-portfolio` owner | P&L calculation accuracy, position snapshot consistency, concurrent write safety | 1, 2, 7, 8, 9, 10, 11, 12 |
+| `xstockstrat-trading` owner | Order execution correctness, fill detection | 1, 2, 3, 4, 5, 6 |
+| `xstockstrat-ui` owner | Trading UI correctness, analytics display accuracy | 1, 2, 13, 14 |
+| `xstockstrat-agent` owner | MCP tool contract stability (name, parameters, return shape) | 15 |
 
 ---
 
@@ -37,7 +40,7 @@ Snapshot from `docs/runbooks/reviewer-registry.md` at /sdd-triage time (2026-10-
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
 - [Recon](recon.md) — grounded codebase dossier (Phase 0)
 - [Design](design.md) — approved design: chosen approach, rejected alternatives, open risks (Phase 1)
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-offline-book-consistency`_
+- [Implementation Spec](implementation-spec.md)
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -53,4 +56,4 @@ The offline-account books from feature 240 drift or misreport P&L in four ways:
 
 ## Next Action
 
-`/sdd-spec fix-offline-book-consistency` — generate implementation spec from the approved design
+`/sdd-review fix-offline-book-consistency impl-spec` — validate implementation spec, then `/sdd-execute fix-offline-book-consistency`
