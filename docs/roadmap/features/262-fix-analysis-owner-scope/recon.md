@@ -100,6 +100,11 @@ mocks are retargeted (D-60). This is a SEV-2 Track C fix. Scope is D-44, D-55 an
   - `TestRunOnce` builds `db_pool = AsyncMock()` with `db_pool.fetch = AsyncMock(return_value=[...])`
     (`tests/test_entry_backfill.py:118-119`). The file has no `caplog` use yet; the warning assertions for
     `@AC-3`, `@AC-4`, `@AC-5` and `@AC-8` can follow the `caplog` usage in `tests/test_live_loop.py`.
+  - The existing `_list_orders(req)` side-effect fakes (`tests/test_entry_backfill.py:153`, `:227`) take only
+    `req`. Once FR-1 passes `metadata=`, they raise `TypeError` (swallowed per pair, so the tests fail on
+    missing seeds). They need a `metadata=None` parameter in the same step. `trading_pb2.Order` has
+    `user_id = 16` (`packages/proto/trading/v1/trading.proto`, `message Order`), so the `@AC-2` fake can tag
+    orders by owner and filter on `req.user_id`.
   - Python fixture home (C-13) is `tests/conftest.py`. The literals stay inline while they have a single
     consumer.
 
@@ -216,6 +221,8 @@ mocks are retargeted (D-60). This is a SEV-2 Track C fix. Scope is D-44, D-55 an
     keep at most a 2-line constraint comment, for example "body `user_id` is load-bearing: trading treats empty
     as all users".
   - The `strategies.py:100` docstring cross-reference must be edited.
+  - `app/handlers/servicer.py:3174` comment ("raced the get_by_id check") names the removed method. Reword it
+    to the owner-scoped read it actually follows.
   - `services/xstockstrat-analysis/docs/context-constitution.md:23` (ANALYSIS-7) and
     `context-constitution-findings.md:28` mention `entry_backfill.py` only for the live-gate literal. No
     D-44/D-55/D-60 drift was found there.
@@ -256,6 +263,9 @@ These boundaries are advisory input to the grilling and /sdd-spec; they are not 
    - Retarget the 30 test mocks to `get_by_owner_and_id` / `update_locked` / `list_live_enabled`.
    - Paired test step: `@AC-6` (the grep count of 0 in `app/repositories/strategies.py`) and `@AC-7` (the grep
      count of 0 in `tests/`, with the full analysis suite green).
+     Specify the `@AC-7` grep as the regex `_strategies_repo\.(get_by_id|update\b)`. The mocks are attribute
+     assignments (`= AsyncMock(...)`), so a literal `update(` pattern would miss them; the regex counts 28 today
+     in `test_analysis_servicer.py`.
    - This step is independent of 1–2 and could be sequenced after 215/244/245 to limit rebase churn on
      `test_analysis_servicer.py`.
 4. **Docs.** Update the `services/xstockstrat-analysis/CLAUDE.md:230` dependencies row. Run the context-forge
