@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-21-edge-owner-scope-defect.md`
 **Severity**: SEV-2
 **Created**: 2026-10-21
-**Last Updated**: 2026-10-21
+**Last Updated**: 2026-10-22
 
 ---
 
@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-10-21 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-21-edge-owner-scope-defect.md` (debt-radar D-25, D-31) |
+| 2026-10-22 | `draft` → `spec-ready` | /sdd-review | Product spec approved (8 warnings) |
 
 ---
 
@@ -48,4 +49,4 @@ verified `x-user-id`; either lets a signed-in user read another user's data.
 
 ## Next Action
 
-`/sdd-design fix-edge-owner-scope` — recommended design depth: full (4 affected services, security); see context.md
+`/sdd-design fix-edge-owner-scope` — design the fix (recommended depth: full — 4 affected services, security); see context.md
