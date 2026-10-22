@@ -16,18 +16,19 @@
 | 2026-10-21 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-21-analysis-owner-scope-defect.md` (debt-radar D-44, D-55, D-60) |
 | 2026-10-21 | `draft` → `spec-ready` | /sdd-review | Product spec approved (5 warnings; 3 resolved in-spec: AC-3 ids, new AC-8, FR-1 per-pair isolation). Overlap WARN (file-level: 244, 259, 215/244/245) |
 | 2026-10-22 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written |
+| 2026-10-22 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 8 steps (Step 1 @AC-9 append done at spec time) |
 
 ---
 
 ## Reviewers
 
-Snapshot from `docs/runbooks/reviewer-registry.md` at /sdd-triage time (2026-10-21). `/sdd-spec` overwrites it with per-step assignments.
+Snapshot from `docs/runbooks/reviewer-registry.md` at /sdd-spec time (2026-10-22), per-step assignments.
 
 | Reviewer | Focus | Steps |
 |---|---|---|
-| `xstockstrat-analysis` owner | Backtest reproducibility, strategy scoring determinism, no look-ahead bias | TBD (/sdd-spec) — `entry_backfill.py` (D-44, D-55), `repositories/strategies.py` + tests (D-60) |
-| `xstockstrat-trading` owner | Order execution correctness, fill detection | Read-only: `ListOrders` empty-`user_id` semantics (trading fix tracked by `2026-10-19-trading-listorders-body-user-id-filter-defect`) |
-| Security | Auth scope | Tenant isolation: owner header + body `user_id` on the cross-service read (PLAT-11) |
+| `xstockstrat-analysis` owner | Backtest reproducibility, strategy scoring determinism, no look-ahead bias | 2, 3, 4, 5, 6, 7 |
+| Security | Auth scope — tenant isolation: owner header + body `user_id` on the cross-service read; no owner-agnostic strategy read/write remains | 2, 6 |
+| `xstockstrat-trading` owner | Order execution correctness, fill detection | None (read-only: `ListOrders` empty-`user_id` semantics; trading fix tracked by `2026-10-19-trading-listorders-body-user-id-filter-defect`) |
 
 ---
 
@@ -37,7 +38,7 @@ Snapshot from `docs/runbooks/reviewer-registry.md` at /sdd-triage time (2026-10-
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
 - [Recon](recon.md) — Phase 0 grounded codebase dossier
 - [Design](design.md) — approved design (chosen approach, rejected alternatives, open risks)
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-analysis-owner-scope`_
+- [Implementation Spec](implementation-spec.md)
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -50,4 +51,4 @@ contract. The strategies repository keeps an owner-agnostic, caller-less `update
 
 ## Next Action
 
-`/sdd-spec fix-analysis-owner-scope` — generate implementation spec from the approved design (binding: deletion-first Step 3 test-mock rule; Step 0 appends @AC-9)
+`/sdd-review fix-analysis-owner-scope impl-spec` — validate implementation spec, then `/sdd-execute fix-analysis-owner-scope`
