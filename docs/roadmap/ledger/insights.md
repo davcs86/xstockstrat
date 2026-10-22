@@ -3708,6 +3708,23 @@ reusing.
 - **Evidence**: `docs/roadmap/features/274-otel-metrics-logs-export/design.md` § PR-A; recon.md § SDK capability probe (py instrumentation-grpc 0.63b1 and node 0.52.1 have no meter code).
 - **Rule it implies**: Probe the pinned instrumentation for metric support before designing an RPC alert; when it is span-only, a span-derived recorder plus shared vectors beats per-language interceptors — but it inherits the span's blind spots (sampling, BaseException cancels), so pin those as explicit vectors.
 
+### 2026-10-22 — 256-fix-offline-book-consistency — design
+- **Pattern**: To give a ledger `StreamEvents` consumer a bounded retry, park according to the class of the
+  error, not after a fixed count or time.
+  - Deterministic errors (pgconn SQLSTATE class 22 or 23) park after N attempts.
+  - Transient errors (connection, deadline, or SQLSTATE 08/40/53/57) never park.
+  - Only unclassified errors fall back to the count AND elapsed bound.
+  - An error-blind bound drops events during any outage longer than the bound. It also stalls the shared stream
+    for the whole bound on a poison event.
+  - The wrapper sits around the handler, keyed by `event.Sequence`, so the shared reconnect loop is left as it
+    is.
+  - Because `lastSeq` starts at 0 on boot, every deploy replays parked events, and an absolute (idempotent)
+    handler self-heals on that replay.
+- **Evidence**: `docs/roadmap/features/256-fix-offline-book-consistency/design.md` §3;
+  `services/xstockstrat-portfolio/internal/service/portfolio_service.go:186`, `:205-209`.
+- **Rule it implies**: A retry bound on an event consumer must not park transient failures. Document the
+  recovery path for parked events, such as a boot replay or a sweep.
+
 ### 2026-10-22 — fix-identity-auth-code-race — ordering
 - **Pattern**: In a claim-then-issue redemption (a conditional `UPDATE … RETURNING` claim plus a same-transaction
   successor INSERT), do any step that can throw but writes nothing, such as minting a JWT, *before* the claim
