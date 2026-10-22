@@ -462,3 +462,48 @@ The full /sdd-design debate is halted at its approval gate after round 2 (gate p
 - [ ] AC-5 sentinel delivery on the server-stream path (x-trace-id vs a request field) is unverified, and the default mock stream must keep ending cleanly. Target: the spec's e2e step.
 - [ ] Sibling 273 (`fix-agent-client-deadlines`) default divergence: record why the values differ, don't force them to match. Target: `/sdd-spec`.
 - [ ] Carry the acceptance.feature edits: AC-1 → 30s, AC-2 stays 10s, AC-3 `agent-health` row → handler 401, AC-4 adds lookalikes. Target: `/sdd-spec`.
+
+## Session 2026-10-22 — sdd-spec
+
+- Generated implementation-spec.md with 10 steps. Status: design-approved → implementation-ready.
+- Steps are red-green pairs (service, then its test):
+  - **1/2**: `deadlines.ts` plus the unary default. Proven by a vitest and a real-socket black-hole spec.
+  - **1/3**: AC-5 held-open stream e2e. It is a preservation guard: RED comes from a mutation check.
+  - **4/5**: the 10s refresh bound. Proven by a vitest and a stalled-identity e2e.
+  - **6/7**: the `forwardAdmin` option and the 6 long calls. Proven by vitest.
+  - **8/9**: the health Set and the matcher-prefix deletion. Proven by a vitest and an e2e.
+  - **10**: docs plus the teardown audit.
+- acceptance.feature carries the design.md edits:
+  - AC-1 → 30s.
+  - AC-2 → "session-refresh deadline (10s)".
+  - AC-3 gains a `status` column (agent-health 401).
+  - AC-4 adds `/healthcheck-x` and `/health/anything`.
+  - No scenario was renumbered.
+- Key codebase findings:
+  - **Recon miss: `src/middleware.test.ts` exists.** It mocks `@/lib/identity`; its `matches()` helper is at `:19-22`.
+    - Its untagged assertion `expect(matches('/api/health')).toBe(false)` (`:60`) is the only pin on the dead `api/health|health` matcher prefixes.
+    - The durable suites (`ui-middleware-nodejs-runtime.feature`, `pwa-notifications.feature`) never reference health paths.
+    - So the prefixes are deleted (Step 8) and that assertion is rewritten (Step 9). No C-16 CHANGE.
+  - `connectClients.ts` has no `@/` imports, so the new `deadlines` import is relative: the Step 2 Playwright spec imports the module outside Next.
+  - The real-socket black hole uses an in-process ephemeral port. No new env var and no `playwright.config.ts` change, so the fails.md 2026-08-05 trap does not apply.
+  - **AC-5 sentinel path verified in code:**
+    - The inbound `x-trace-id` (`middleware.ts:29`, `:100-104`) passes through `createDispatch` (`bffShared.ts:126-131`) and `backendHeaders` (`:42`) to the mock's `ctx.requestHeader`.
+    - Fallback: `StreamAlertsRequest.categories`.
+    - `'Order rejected'` is both a stream and a list title, so the held alert uses a distinct fixture, `ALERT_STREAM_HELD`.
+  - **Precedents reused:**
+    - The `FUNDAMENTALS_STALL_SYMBOL` stall (`mock-backend.ts:643-650`) for `REFRESH_STALL_TOKEN`.
+    - The dispatch-level vitest pattern from `src/lib/insightsBff.test.ts`.
+  - `services/xstockstrat-ui/docs/context-constitution.md:40` ("forwardAdmin takes no options") goes stale after Step 6. Step 10 fixes it.
+- **p99 gate (design item 7): telemetry unavailable.**
+  - No Grafana Cloud query tool is attached to this session. No staging or production p99 was obtained for the provisional D rows or for the identity RefreshToken.
+  - The operator-approved r2 synthesis says: "If telemetry is unavailable, record that in context.md and treat the risk as accepted by the operator before implementation-ready". Under it, the rows stay D (30s) and the risk is recorded as accepted.
+  - The operator may veto at `/sdd-review impl-spec` or the first `/sdd-execute` confirmation.
+- **504-after-completion risk:** no new UI error copy (C-18). The existing `connectCodeToHttp` 504 mapping and the callers' error states are pre-existing behavior.
+- **Sibling 273** is still `spec-ready`, with no value chosen. If it diverges from 271's 30s/10s, 273 records why.
+- Ledger: no entry. The only new trap (a recon miss on an existing test file) is feature-local.
+
+### Open Threads (sdd-spec)
+
+- [ ] **p99 gate:** telemetry unavailable; risk accepted under the approved r2 clause. Target: operator confirm or veto at `/sdd-review impl-spec` / `/sdd-execute`.
+- [ ] **Step 3 AC-5:** confirm the `x-trace-id` sentinel reaches the mock. Otherwise use the `categories` fallback and record a Deviation. Target: `/sdd-execute` Step 3.
+- [ ] **Step 10 teardown:** run `/context-forge:context-constitution refresh` scoped to `services/xstockstrat-ui/`, or do a manual reconciliation recorded in the PR body. Target: `/sdd-execute` Step 10.
