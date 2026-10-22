@@ -11,14 +11,16 @@
 
 All citations are in `services/xstockstrat-marketdata/` at main-dev @ a053b0e.
 
-Who is hit: an operator who sets `marketdata.fmp.daily_request_cap` to 0 to lift the FMP cap finds FMP fundamentals
-switched off instead (D-50); a trader on the Finnhub provider is throttled to stale or `ResourceExhausted` fundamentals
+Who is hit: an operator who reads the code comments and sets `marketdata.fmp.daily_request_cap` to 0 to lift the FMP cap
+finds FMP fundamentals switched off instead, because the comments contradict the enforced behaviour (D-50); a trader on the Finnhub provider is throttled to stale or `ResourceExhausted` fundamentals
 by EDGAR rows that never touched Finnhub (D-51), or is served EDGAR numbers labelled as vendor data (D-52), or a
 half-enriched row for a full TTL (D-53).
 
-- **D-50 (cap 0 disables FMP).** **Observed:** `fmp_client.go:97` and `marketdata_service.go:1958` document `cap <= 0` as
-  uncapped. `reserve()` (`fmp_client.go:127`) and the quota gates (`marketdata_service.go:1688`, `:1742`) reject at
-  `count >= cap`, which is always true at 0. **Expected:** `cap <= 0` is uncapped on every path.
+- **D-50 (cap-0 comments contradict behaviour).** **Observed:** `fmp_client.go:97` documents `cap <= 0` as uncapped, and
+  `marketdata_service.go:1958` implies the same. `reserve()` (`fmp_client.go:127`), the quota gates
+  (`marketdata_service.go:1688`, `:1742`) and `enrichmentUnderCap()` reject at `count >= cap`, which is always true at 0.
+  **Expected (OQ-1, operator 2026-10-22):** `cap <= 0` is a zero budget (FMP disabled) on every path, as enforced today;
+  the comments and any doc that says otherwise are the defect.
 - **D-51 (quota counts ignore source).** **Observed:** `CountFundamentalsFetchedToday` (`marketdata_repo.go:656-659`) and
   `CountFundamentalsFetchedSince` (`:669-670`) count all rows, including edgar and the inactive vendor. They seed FMP at boot
   (`cmd/server/main.go:129-130`) and drive the Finnhub window (`marketdata_service.go:1935`). **Expected:** count only the
@@ -35,13 +37,13 @@ half-enriched row for a full TTL (D-53).
 
 ## Functional Requirements
 
-- **FR-1 (D-50).** When `marketdata.fmp.daily_request_cap` is `<= 0`, every FMP path (`reserve()` in the FMP client and
-  both `GetFundamentals`/`GetFundamentalsMulti` quota gates) treats the budget as uncapped: it makes the fetch, never
-  returns `ResourceExhausted` for quota, and never emits the 80%-of-cap WARNING alert. The marketdata `CLAUDE.md` row
-  for the key (and `docs/patterns/config-governance.md`, if it describes the key) states `<= 0` = uncapped.
-  **Blocked on OQ-1:** the uncapped reading conflicts with in-progress feature 215 and with the backfill
-  ratio-enrichment gate on trunk. FR-1 stands as written only if the user picks "uncapped". If the user picks
-  "zero budget", FR-1 is rewritten to make the docs say zero budget instead, and D-50 becomes a doc-only fix.
+- **FR-1 (D-50).** `marketdata.fmp.daily_request_cap <= 0` means **zero budget (FMP disabled)** (OQ-1). No behaviour
+  changes: `reserve()`, both `GetFundamentals`/`GetFundamentalsMulti` quota gates and `enrichmentUnderCap()` keep
+  refusing every FMP call at cap `<= 0` (a stale row is served with `stale=true`, otherwise `ResourceExhausted`), and no
+  80%-of-cap WARNING alert is emitted. The fix corrects the misleading comments at `fmp_client.go:97` (`BudgetSnapshot`)
+  and `marketdata_service.go:1958` (`atQuotaAlertThreshold`) to say `<= 0` = zero budget, and the marketdata `CLAUDE.md`
+  key row (`:82`) and `docs/patterns/config-governance.md` (if it describes the key) state that `<= 0` disables FMP and
+  that a large cap is effectively uncapped. `TestBackfillFundamentals_CapDegrade_AC5` stays as is.
 - **FR-2 (D-51).** The quota counts that seed the FMP day budget at boot and drive the Finnhub rolling window
   (`marketdata.finnhub.symbols_per_minute` over `marketdata.finnhub.rate_window_seconds`) count only rows whose
   `source` is the active provider (`marketdata.fundamentals.provider`); EDGAR rows and the inactive vendor's rows are
@@ -62,7 +64,10 @@ half-enriched row for a full TTL (D-53).
 
 ## Open Questions
 
-- [ ] **OQ-1 (cap-0 semantics; user decision required before spec-ready).** What does
+- [x] **OQ-1 (cap-0 semantics) — RESOLVED 2026-10-22 by the operator: zero budget (FMP disabled).** D-50 is fixed by
+  correcting the misleading "cap <= 0 = uncapped" comments and any doc saying otherwise; no behaviour change; a large cap
+  means effectively uncapped. This matches `reserve()`, `enrichmentUnderCap()`, `TestBackfillFundamentals_CapDegrade_AC5`,
+  marketdata `CLAUDE.md` and feature 215. Original question: What does
   `marketdata.fmp.daily_request_cap <= 0` mean?
   - *Uncapped* (this spec's FR-1). Trunk documents this at `internal/fmp/fmp_client.go:97` (`BudgetSnapshot`,
     "cap <= 0 = uncapped") and `marketdata_service.go:1958`.
@@ -78,12 +83,12 @@ half-enriched row for a full TTL (D-53).
 
 ## Cross-Feature Coordination
 
-- **215-block-fundamentals-strategy-on-etf (in-progress): BLOCKING.** The two features overlap on the cap-0 semantics
-  (OQ-1) and edit the same code: the quota gates and alert path in `marketdata_service.go` (215 Step 7 extracts
+- **215-block-fundamentals-strategy-on-etf (in-progress): rebase-level overlap.** The cap-0 semantic conflict is
+  resolved by OQ-1 (zero budget, 215's reading). The two features still edit the same code: the quota gates and alert path in `marketdata_service.go` (215 Step 7 extracts
   `atQuotaAlertThreshold` from `maybeAlertQuota`, and Step 9 reuses it), `fmp_client.go` (`reserve()`, the
   `fetchProfile`/`IsEtf` region), the `cmd/server/main.go` Limits/boot-seed wiring, and `marketdata_service_test.go`
-  (215 Step 10(c) adds a `{0,0}` case). Whichever feature merges second rebases onto the first, and neither merges
-  until OQ-1 is answered. `/sdd-design` adds a BLOCKING row to `docs/roadmap/features/merge-order.md`.
+  (215 Step 10(c) adds a `{0,0}` case, consistent with zero budget). Whichever feature merges second rebases onto the
+  first. `/sdd-design` adds a merge-order row to `docs/roadmap/features/merge-order.md`.
 - **254-fix-marketdata-secret-exposure (draft): WARN, rebase only.** 254 edits the same `fmp_client.go` error wrap and
   key handling (`:222`, `:243`, `:254`) and the `marketdata_service.go` `CodeUnavailable` wraps (`:1704`, `:1760`)
   inside the resolve functions this feature changes. `/sdd-design` adds a WARN row to `merge-order.md`.
@@ -91,12 +96,14 @@ half-enriched row for a full TTL (D-53).
 ## Reproduction Steps
 
 See the report § Reproduction (one step per D-id), for example:
-- D-50: `daily_request_cap=0` + provider `fmp` → `GetFundamentals("AAPL")` returns `ResourceExhausted`.
+- D-50: read `fmp_client.go:97` ("cap <= 0 = uncapped"), then set `daily_request_cap=0` + provider `fmp` →
+  `GetFundamentals("AAPL")` returns `ResourceExhausted` (the enforced zero budget, which the comment contradicts).
 - D-52: a fresh `source='edgar'` AAPL row with the vendor snapshot source is served without a vendor fetch.
 
 ## Root Cause Hypothesis
 
-- D-50: the `cap > 0` short-circuit is missing from the `>=` guards.
+- D-50: the `BudgetSnapshot` / `atQuotaAlertThreshold` comments were written for an uncapped reading the guards never
+  implemented.
 - D-51/D-52: the `source` column (`migrations/002_fundamentals.up.sql:23`) is read only on the edgar axis (feature 211).
 - D-53: best-effort enrichment ignores errors, and no partial marker exists.
 - D-19: the counter is scoped to the manager's lifetime, not to consecutive failures.
@@ -109,14 +116,13 @@ See the report § Reproduction (one step per D-id), for example:
 
 - [x] No proto changes anticipated (if design wants a wire-visible partial marker for D-53, it must reuse existing `Fundamentals.missing_metrics` semantics, not add a field)
 - [x] No database migrations anticipated (the `source` column already exists; a `(source, fetched_at)` index is optional — design to confirm against `idx_fundamentals_fetched_at`)
-- [x] Config semantics: `marketdata.fmp.daily_request_cap` `<= 0` changes from "disabled" in practice to "uncapped" as documented; the doc updates are part of FR-1. No new config key.
+- [x] Config semantics: unchanged — `marketdata.fmp.daily_request_cap` `<= 0` stays zero budget (FMP disabled); only the misleading comments/docs are corrected (FR-1). No new config key.
 - [x] Migration condition: if design adopts the optional `(source, fetched_at)` index, it is the next free marketdata migration (`010_<description>.up.sql` + `.down.sql` at trunk tip `009_symbol_classification`), recorded as a design decision.
 
 ## Consumer Surface(s)
 
 No surface changes request or response shape. These surfaces read `GetFundamentals`/`GetFundamentalsMulti`, whose
-served result this feature changes (FR-1 serves where `ResourceExhausted` was returned, FR-3 changes which source is
-served, FR-4 may add entries to `missing_metrics`), so `/sdd-spec` gives each a verification step:
+served result this feature changes (FR-3 changes which source is served, FR-4 may add entries to `missing_metrics`), so `/sdd-spec` gives each a verification step:
 - [x] **Agent**: `query_fundamentals` and `screen_symbols` (`services/xstockstrat-agent/app/tools.py:402`, `:812`).
 - [x] **UI**: `/trader/positions/[symbol]` fundamentals (`services/xstockstrat-ui/src/lib/traderBff.ts`) and the
   `/insights` data explorer / formula workspace (`services/xstockstrat-ui/src/lib/insightsBff.ts`). No UI code change.
