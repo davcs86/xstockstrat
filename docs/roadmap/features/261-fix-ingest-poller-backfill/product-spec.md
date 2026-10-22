@@ -102,12 +102,15 @@ cancel flag with unconditional `RUNNING` writes on the queued-start and resume p
   fixed by FR-6 either way. Candidate mechanisms are a well-known key (`signals`/`items`) or a per-source `result_key`
   inside `config_json` (not a config-service key). If design adopts `result_key`, it is a `config_json` contract
   change and design must add the `manage_signal_source` schema and the `/config-ui` source form to Consumer
-  Surface(s).
+  Surface(s). Design must confirm AC-7's `{alerts, rows}` shape stays unselected under the chosen rule.
+- [ ] **`last_error` markers** (deferred to `/sdd-design`): design pins a stable substring for the FR-5 deadline
+  error and the FR-6 ambiguous-result error; AC-4 and AC-7 assert that substring.
 
 ## Coordination
 
 - Feature 244 (`fix-python-config-stored-zero`) rewrites the `ingest.mcp_client.request_timeout_seconds` read in
-  `mcp_client_loop.py`; FR-5 reuses that key, so rebase onto whichever lands first.
+  `mcp_client_loop.py:133-138`; FR-5 reuses that key. Recommended order: 244 first, then 261 rebases FR-5 onto
+  244's `int_positive` read (merge-order row proposed at `/sdd-spec`).
 - Peers in this batch: `fix-python-loop-supervision` (259, ingest `ConfigWatcher` / poll loop) and
   `fix-config-stream-resilience` (`app/config/watcher.py`) share files with FR-1 and FR-5; features 242 and 260 touch
   disjoint regions of `app/handlers/servicer.py`. Design confirms no behavioral collision.
@@ -116,7 +119,8 @@ cancel flag with unconditional `RUNNING` writes on the queued-start and resume p
 
 See `acceptance.feature` — the regression scenario(s) that must fail on the buggy behavior and pass
 after the fix (Constitution **C-15**). Plus: existing tests pass; affected service(s) smoke-tested on
-dev.
+dev. The AC-2 / AC-3 "never called" / "no chunk executed" steps are verified at the stub/mock boundary (marketdata
+client stub, chunk runner spy).
 
 ## Out of Scope
 
