@@ -525,3 +525,62 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   "floor_breaches": []
 }
 ```
+
+## Session 2026-10-22 — sdd-design
+
+- Phase 0 Recon: recon.md was written earlier (services: xstockstrat-portfolio, xstockstrat-trading,
+  xstockstrat-ui; consumer surface xstockstrat-agent).
+  - Key reuse patterns: the `eventHandler` error contract with no-advance-on-error (`portfolio_service.go:173`,
+    `:226-231`), and a sibling helper rather than a signature change for `emitLedgerEvent` (fails.md:2092).
+- Phase 1 Grilling: 3 rounds (full). The operator approved at the r3 gate "as synthesized plus the three
+  [r4 MUST] items" (binding, 2026-10-22). Floor clear.
+- Chosen approach:
+  - `isFinite` ConfirmOrder guards that return INVALID_ARGUMENT before the load.
+  - Sibling `appendLedgerEvent` (one Unavailable retry with an idempotency_key, inside the held confirmLock).
+    ConfirmOrder returns UNAVAILABLE on an emit failure.
+  - Offline sync and deregistration handlers return errors through a `boundedRetry` wrapper that parks by
+    SQLSTATE class.
+  - Per-row `GetOfflineStates` decode, exposed as `readValuation.unavailable`.
+  - Additive `Portfolio.offline_state_unavailable = 17` and `Position.offline_state_unavailable = 26`. Position
+    reads never fail.
+  - UI gated on the markers.
+- Rejected: UNAVAILABLE on position reads, the `bal == nil` degrade inference, the error-blind park rule, a bound
+  inside `consumeEventStream`, a transactional outbox (needs a migration), and an `emitLedgerEvent` signature
+  change. The full list is in design.md.
+- Decision (supersession): this supersedes feature 240's "a `GetOfflineStates` error is non-fatal (WARN, empty
+  map)" (`240-offline-account-full-pnl/context.md:399`, `:771`). An offline-state failure now marks the account
+  degraded instead of being silently swallowed.
+- Decision: a parked event self-heals on the next deploy, because `lastSeq` starts at 0 on every boot
+  (`portfolio_service.go:186`, `:205-209`). This must also go into the portfolio CLAUDE.md `ConsumePositionSyncs`
+  row.
+- Constitution rules touched: C-03, C-04, C-09, C-10, C-11, C-14, C-15, C-16, C-18, F-07, P-02, P-03. Floor
+  breaches: none.
+- Business rules: all PRESERVE/EXTEND, no CHANGE. EXTEND covers AC-9/14/15/30 @feature-240 and AC-14
+  @feature-163.
+- Status: spec-ready → design-approved.
+
+## Open Threads
+
+Each item names the step where it is resolved.
+
+- [ ] Proto gate (C-04/C-09) for Portfolio 17 and Position 26. If either is refused, fall back to whole-call
+  UNAVAILABLE, which needs a C-16 CHANGE sign-off. Target: the proto step (first portfolio step).
+- [ ] Latent marker consumers could render zeroed P&L as $0. Target: the UI consumer-grep step (grep
+  `usePortfolio`/`usePortfolios`/`Position.dayPnl`, with a Playwright assertion per surface).
+- [ ] SQLSTATE classification boundary: a class wrongly treated as transient never parks. Target: the
+  boundedRetry step (table tests with a fake clock).
+- [ ] Boot replay re-attempts historically parked deterministic events, up to 5 × 2s each. Target: the
+  boundedRetry step (document in portfolio CLAUDE.md).
+- [ ] Head-of-line blocking during transient DB outages is accepted. Target: the boundedRetry step (record it).
+- [ ] A park is Error-log only, with no metric or alert. Accepted for SEV-2. Target: launch verification.
+- [ ] Set the `recomputeTimeout` value so that it exceeds `ledgerEmitTimeout` (10s) + the query budget + the
+  retry budget, and test the rule. Target: the FR-6 step.
+- [ ] Confirmed rows that already hold NaN/Inf. Target: the FR-5 step and the dev smoke (detection query plus
+  re-confirm).
+- [ ] Sweep the tests that relied on non-fatal state reads (`portfolio_quote_deadline_test.go:115`) and turn the
+  r3 UNAVAILABLE-mapping tests into marker tests. Target: the FR-4 test step.
+- [ ] Broker-deregistration scope is undecided: (a) a recorded scope extension, or (b) an offline-set lookup.
+  Target: /sdd-spec FR-2 step (operator choice, record it here).
+- [ ] `useInvalidatingMutation` `onSettled` forwarding: the orders list is stale after an FR-6 UNAVAILABLE. A
+  recorded UX gap. Target: the UI step.
+- Next: `/sdd-spec fix-offline-book-consistency`.
