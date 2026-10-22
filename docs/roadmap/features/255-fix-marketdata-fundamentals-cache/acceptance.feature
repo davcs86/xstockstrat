@@ -11,7 +11,6 @@ Feature: fix-marketdata-fundamentals-cache (bug fix)
     Then the FMP client makes no HTTP call
     And the response is ResourceExhausted for quota
     And no quota WARNING alert is emitted
-    And the BudgetSnapshot and atQuotaAlertThreshold doc comments describe cap <= 0 as zero budget, not uncapped
 
   @AC-9 @FR-1 @regression
   Scenario: An FMP daily cap of 0 is a zero budget on the multi-symbol path
