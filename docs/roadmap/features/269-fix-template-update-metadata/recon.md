@@ -62,8 +62,8 @@ The fix aligns all three on the FR-1..FR-5 contract in product-spec.md. It needs
     - `UniqueViolationError` → ALREADY_EXISTS at `:1546-1551`.
     - `import uuid` at `:11` is also used at `:398` (`job_id`), so the import stays after the fix.
   - Repository: `app/repositories/source_templates.py`. These are module-level functions taking `db_pool`.
-    - `update` `:48-63` writes `SET name = $2, description = $3, payload = $4, version = version + 1, updated_at = NOW() ... AND retired_at IS NULL`. This already meets FR-1 and FR-2.
-    - **`retire` `:66-74`** writes `SET retired_at = NOW(), updated_at = NOW()`. It is last-wins, which is the **FR-3 gap**.
+    - `update` `:50-64` writes `SET name = $2, description = $3, payload = $4, version = version + 1, updated_at = NOW() ... AND retired_at IS NULL`. This already meets FR-1 and FR-2.
+    - **`retire` `:67-75`** writes `SET retired_at = NOW(), updated_at = NOW()`. It is last-wins, which is the **FR-3 gap**.
   - Row→proto: `_template_to_proto` `servicer.py:159-174` maps `name`, `description`, `retired`, `created_at` and `updated_at`, so it needs no change.
   - Table: `ingest.source_templates`, `migrations/013_signal_ownership_templates.up.sql` (`name TEXT NOT NULL` at `:121`).
   - Last migration: `014_contract_signal_ownership.up.sql`. None is needed.
@@ -79,7 +79,7 @@ The fix aligns all three on the FR-1..FR-5 contract in product-spec.md. It needs
 
 ## Patterns to REUSE
 
-- **FR-1 (metadata on UPDATE)**: reuse ingest's `update(db_pool, template_id, name, description, payload)` shape (`source_templates.py:48-63`).
+- **FR-1 (metadata on UPDATE)**: reuse ingest's `update(db_pool, template_id, name, description, payload)` shape (`source_templates.py:50-64`).
   - SQL form: `SET name = $2, description = $3, payload = $4, version = version + 1, updated_at = NOW()`.
   - Keep `AND retired_at IS NULL`.
   - Indicators: change `update` at `formula_templates_repository.py:50-62` and its call at `servicer.py:652`.
