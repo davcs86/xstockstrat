@@ -49,6 +49,7 @@ Out of scope: feature 275 reporting surfaces; `_can_read_formula`; `UpdateFormul
 - Step 7 [test] depends on Step 6: it drives the real `apply` against the fake, then reads through `IndicatorsServicer`.
 - Step 8 (runbook) requires Steps 3 and 5 (flag names, file formats, refusal messages). Step 9 requires Step 8 (runbook path).
 - Feature 275 and features 268/269/244 touch `servicer.py`; this feature does not edit it (rebase-only overlap, none here).
+- Overlap scan (impl-spec review, file-level only; no migration, proto or config-key collision): Step 4 edits `services/xstockstrat-indicators/tests/conftest.py`, also edited by `244-fix-python-config-stored-zero`; Step 9 edits `services/xstockstrat-indicators/CLAUDE.md`, also edited by 268, 243 and 244 (different sections: this feature appends `## Maintenance` after `## Running Locally`). Append-only additions to both files, so the rebase is textual; whichever feature merges second re-reads the file before its step. `context-constitution.md` `INDICATORS-12` has no ID collision with any in-flight spec.
 
 ---
 
