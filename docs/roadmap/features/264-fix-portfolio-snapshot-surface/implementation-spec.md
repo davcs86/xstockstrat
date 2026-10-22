@@ -33,7 +33,7 @@ Agent tool subscribes to `StreamPortfolioUpdates`. This is a recorded decision, 
 
 | Scenario | Covered by |
 |---|---|
-| `@AC-1` A snapshot stream subscriber receives only its own snapshots | Step 2 |
+| `@AC-1` A snapshot stream subscriber receives only its own snapshots | Step 2 (producer) + Step 4 case 4b (gRPC adapter wiring) |
 | `@AC-2` A snapshot stream with no caller identity is rejected on the gRPC path | Step 4 |
 | `@AC-3` The Connect path also isolates subscribers | Step 2 (producer filter) + Step 4 (Connect helper wiring) |
 | `@AC-5` portfolio.snapshot.interval_minutes is retired | Step 8 (static scan) + Step 10 (dev-smoke `ListKeys`) |
@@ -66,9 +66,15 @@ context.md, Session 2026-10-22 — sdd-spec.
 - **Same-file overlap (rebase only).** Features 242, 251, 256 and 257 also edit `portfolio_service.go`
   (insights.md, feature 125). Re-read `broadcastSnapshot`, `Subscribe`/`Unsubscribe` and both
   `StreamPortfolioUpdates` bodies at execute time; cited line numbers may drift.
+  - 242's portfolio scope is `checkRiskLimits`/`emitRiskAlert` (`:964-1018`, its Step 9) plus new tests in
+    `portfolio_quote_deadline_test.go` (its Step 10). Both are disjoint from this feature's regions.
+  - All cited lines were re-verified on 2026-10-22 against `origin/main-dev`, which is post-231 and has no
+    portfolio diff vs this branch. `Subscribe("t")` is at `:321/:396/:424` and `broadcastSnapshot` at `:328/:402/:429`.
 - **Migration ordering.** 031 is claimed by 243. 032 is double-claimed by 244
   (`244-fix-python-config-stored-zero/implementation-spec.md:1067`) and 248
   (`248-fix-ledger-trimmed-notify-payload/implementation-spec.md:133`). 264 is sequenced after all three (Step 6).
+  No no-gap rule applies. `origin/main-dev` config migrations already skip `024`, and golang-migrate needs only
+  ascending order. So 034 stays 034 even if 033 is never used; only a lower number landing after it is a hazard.
 
 ---
 
@@ -94,6 +100,10 @@ context.md, Session 2026-10-22 — sdd-spec.
   - `InsertSnapshot` and `emitEvent` are at `:932-935`;
   - the unfiltered loop `for _, ch := range s.subs {` is at `:937`, under `s.mu.RLock()` (`:936`).
 - Live caller: `:376` `s.broadcastSnapshot(ctx, fill.UserID, mode)` (fill `ctx`; C-03).
+- **Fill-state handling unchanged (B2b).** `ConsumeOrderFills` (`:167`) feeds every `order.filled` ledger event to
+  `processOrderFill` (`:264`), which has no PARTIALLY_FILLED vs FILLED branch (no `FILLED`/`PARTIAL` match in
+  `portfolio_service.go`). It reaches `:376` once per processed fill, partial or final. This feature changes only who
+  receives that snapshot, not when one is produced (product-spec: fill semantics unaffected).
 - Pattern to REUSE (recon.md): `services/xstockstrat-trading/internal/service/trading.go:344-357`:
   ```go
   type orderSubscriber struct {
@@ -142,6 +152,11 @@ context.md, Session 2026-10-22 — sdd-spec.
    - `:106` → `subs: map[string]snapshotSubscriber{}`;
    - `:321`, `:396`, `:424` → `svc.Subscribe("t", "u1")`, matching each test's `broadcastSnapshot(..., "u1", ...)`
      owner. Otherwise the owner filter drops their updates and the feature-231 @AC-2/@AC-8 tests break.
+
+**STOP — RED capture (mandatory before Part B).** With Part A only applied, write Step 2's test file and run
+`GOWORK=off go test ./internal/service/ -run 'TestBroadcastSnapshot_' -count=1 -v`. It must build and FAIL (stream
+`b` / `anon` receives u-1's snapshot). Paste the failing output into context.md as the Step 2 RED evidence, then
+apply Part B. Do not apply Parts A and B in one edit: that loses the RED.
 
 *Part B — the fail-closed owner skip.*
 
@@ -284,6 +299,11 @@ applies to it. The suite-wide total must still meet the threshold.
    `return streamSnapshots(ctx, a.h.hub, userID, subID, req.TradingMode, grpcStream.Send)`. **Do not add the check
    yet.** This is the RED capture point.
 
+**STOP — RED capture (mandatory before Part B).** With Part A only applied, write Step 4's test file and run
+`GOWORK=off go test ./internal/handler/ -run 'TestStreamPortfolioUpdates_GRPC_AC2' -count=1 -v`. It must build and
+FAIL (no `InvalidArgument`; one recorded `Subscribe`). Paste the failing output into context.md as the Step 4 RED
+evidence, then apply Part B.
+
 *Part B — fail closed on the gRPC path.*
 
 6. In the gRPC adapter, immediately after `userID := streamUserID(ctx)` and **before** `subID` is built or anything
@@ -298,6 +318,7 @@ applies to it. The suite-wide total must still meet the threshold.
 cd services/xstockstrat-portfolio && GOWORK=off go build ./... && GOWORK=off go vet ./...
 grep -n "type snapshotHub interface\|func streamSnapshots\|hub: svc\|codes.InvalidArgument, \"user_id required\"" internal/handler/portfolio_handler.go
 grep -c "case snap, ok := <-ch" internal/handler/portfolio_handler.go   # 1: the loop exists only in streamSnapshots
+grep -c "streamSnapshots(ctx, h.hub, userID, subID, req.Msg.TradingMode, stream.Send)" internal/handler/portfolio_handler.go   # 1: Connect wiring (not drivable by a test; see Step 4)
 ```
 
 ---
@@ -324,7 +345,7 @@ grep -c "case snap, ok := <-ch" internal/handler/portfolio_handler.go   # 1: the
 recorded. @AC-6 is red N/A (`@non-regression`, by design). The @AC-3 wiring half is red N/A (characterization; its
 isolation RED is in Step 2).
 
-**Covers**: `AC-2, AC-3, AC-6`
+**Covers**: `AC-1, AC-2, AC-3, AC-6`
 
 **Instructions**:
 1. **Test-local fakes** (C-13: a single consumer, so keep them inline in this file and add no `internal/testdata/`
@@ -358,6 +379,18 @@ isolation RED is in Step 2).
    - A must receive `PortfolioId == "u-1"` within 1s. B must receive nothing in
      `select { case <-resB: t.Fatal; case <-time.After(100 * time.Millisecond): }`.
    - Cancel both ctxs. Assert each helper returns `context.Canceled` and `hub.unsubscribed` contains `a` and `b`.
+4b. **`TestStreamPortfolioUpdates_GRPC_AC1_WiresCallerIdentity`** (end to end through the mounted adapter, so a
+   wiring slip in `a.h.hub` / `Subscribe(subID, userID)` fails a test):
+   - `a := (&PortfolioHandler{hub: hub}).GRPCHandler()`. Two goroutines call `a.StreamPortfolioUpdates(&…Request{}, sA)`
+     and `(…, sB)`, where `sA`/`sB` are `fakeGRPCStream`s whose `Context()` is `context.WithCancel(ctxWithHeader("u-1"))`
+     and `(ctxWithHeader("u-2"))`.
+   - Wait for two `hub.subscribed` signals (bounded 1s); assert the recorded userIDs are exactly `{u-1, u-2}`.
+   - `hub.push("u-1", …)`: `sA` records one snapshot with `PortfolioId == "u-1"` within 1s; `sB` records none within
+     100ms. Cancel both; each call returns `context.Canceled` and both subIDs are unsubscribed.
+   - **The Connect arm cannot be driven the same way.** `connect.ServerStream` has no exported constructor
+     (`go doc connectrpc.com/connect.ServerStream`, v1.16.2), and the Connect route is unmounted (`main.go:94`). Its
+     wiring is pinned by the Step 3 grep for `streamSnapshots(ctx, h.hub, userID, subID, req.Msg.TradingMode, stream.Send)`,
+     plus case 4, which runs the helper exactly as that line calls it.
 5. **`TestStreamSnapshots_TradingModeFilterPreserved`** (non-regression for the moved filter):
    - with mode `TRADING_MODE_PAPER`, a pushed `TRADING_MODE_LIVE` snapshot is not sent;
    - a following `TRADING_MODE_PAPER` snapshot is sent.
@@ -484,6 +517,10 @@ grep -n "034_retire_portfolio_snapshot_interval" docs/roadmap/features/merge-ord
 **Covers**: —
 
 **Instructions**:
+0. **Pre-check (ordering).** Step 5 must already be committed. Run
+   `grep -rn "snapshot.interval_minutes" --include=*.go services/ ; test $? -eq 1`. If a reader still exists, stop.
+   The DELETE sends no pg_notify DELTA and writes no `config_audit` row (context.md, accepted trade-off), so a live
+   reader would silently keep a stale value.
 1. **`034_…up.sql`**:
    - Header: `-- Migration: 034_retire_portfolio_snapshot_interval.up.sql` / `-- Service: xstockstrat-config` /
      `-- Feature 264: …`. One or two lines saying the key's only reader (`StartSnapshotWriter`) was deleted with zero
@@ -667,6 +704,9 @@ grep -n "StreamPortfolioUpdates" services/xstockstrat-portfolio/CLAUDE.md
    service `portfolio` in `staging` and in `production` (`ListKeys` / the agent `list_config_keys` tool). Neither
    listing may contain `portfolio.snapshot.interval_minutes`.
 3. Record the gate output and both listings in context.md and the integration PR body.
+4. **Enforcement.** The gate is a process control; no CI job checks it. Open the integration PR as a **draft**, with
+   a gate checklist (a)/(b) in its body. Mark it ready only after the item-1 output, captured that day, passes. The
+   merge-order.md row from Step 6 stays `Resolved: No` until 243, 244 and 248 have merged.
 
 **Verification**:
 ```bash
