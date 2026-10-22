@@ -643,3 +643,54 @@ Each item names the step where it is resolved.
 - [x] Broker-deregistration scope: option (a) chosen at /sdd-spec (above). Confirm at impl-spec review.
 - [x] The `onSettled` UX gap is accepted and recorded (above).
 - Next: `/sdd-review fix-offline-book-consistency impl-spec`.
+
+## Session 2026-10-22 — sdd-review impl-spec
+
+- Result: PASS WITH WARNINGS (0 failures, 11 warnings). Overlap scan: WARN only. This review is advisory and
+  does not change the lifecycle (status stays `implementation-ready`). The previous run was cut before it
+  committed anything, so this run starts from `3fe383fb`.
+- Addressed in implementation-spec.md (each claim re-verified against the code):
+  - Step 2: the Files list now names the five generated files a message-only change touches. The gRPC and
+    Connect stubs are noted as expected unchanged.
+  - Step 1: the C-09 `buf breaking` baseline against the feature branch is confirmed as intended. A second
+    check against `origin/main-dev` was added, using the same form CI uses (`ci.yml:125`).
+  - Step 5: the behaviour change for the 26 non-confirm `emitLedgerEvent` callers is recorded in the step and
+    pre-entered in the Deviation Log. Each gets one Unavailable retry; the worst-case emit wait goes from 10s
+    to 20.1s.
+  - Step 11: `markDegradedPositions` lives in `offline_valuation.go`, next to `readValuation.degraded`. The
+    Files entry is no longer conditional.
+  - Step 13: a scope note explains why the 7-file step stays whole (one shared label contract, one C-14
+    gate) and gives the split point if execution wants one.
+  - Step 7: option (a) now carries an explicit sign-off gate before execution and a Deviation Log pre-entry.
+  - Step 12: the supersession was checked. It is in `design.md:149` and in the sdd-design session above,
+    inside the design the operator approved. The 240 rule is a recorded context decision, not a durable
+    `@AC-*` (no hit in `docs/sdd/business-rules/`), so no C-16 CHANGE applies.
+  - Step 6: the AC-5 emit-failure test is now table-driven over a partial fill (4/150) and a full fill
+    (10/150).
+  - Step 4: a sweep was added. No existing test asserts FailedPrecondition when a broker order is confirmed
+    with a bad value, and every confirm with `FilledQty > 0` already sets a finite positive price. Execute
+    re-runs the grep.
+  - Spec header `Status: pending`: confirmed as the template convention (`spec-template.md:8`) and annotated.
+  - `@AC-8..10` were checked. Each carries an `@FR` tag (FR-4, FR-3, FR-5/FR-7), and FR-1..FR-7 each have at
+    least one scenario (C-15 is complete).
+- Overlap: no migration, config-key or proto-number collision. Portfolio 17 and Position 26 are free on trunk.
+  Expect same-file rebases with 241 and 249 (`trading.go`), with 242 and 248 (`portfolio_service.go`), with
+  250 (`portfolio.proto`, a line citation only) and with 249 (`offline-accounts.spec.ts` and the e2e
+  fixtures). All touch disjoint functions. No merge-order row is needed. Peer 259 is clean; re-check it once
+  its spec exists.
+
+## Open Threads
+
+- [ ] Product-spec drift: Fix Scope still shows `- [ ] Proto changes: open (OQ-1)` (`product-spec.md:108`),
+  and OQ-1/OQ-2 are not marked resolved, even though design chose the additive markers. Update the product
+  spec to the design decision. This review only edited the implementation spec. Target: before Step 1, or
+  the next /sdd-sync.
+- [ ] Operator sign-off on deregistration option (a), which also retries broker accounts and so goes beyond
+  the product spec's offline-only scope (C-16/P-03). Get the sign-off before Step 7 and record it here. If
+  the operator chooses (b), re-spec Step 7 and note the scope change in the product spec.
+- [ ] Operator confirmation of the Step 5 wrapper behaviour change: 26 other `emitLedgerEvent` callers each
+  gain one Unavailable retry, with a worst case of 20.1s per emit. The alternative is a no-retry path for
+  those callers, which would be a design deviation. Target: the Step 5 checkpoint.
+- [ ] Optional: split Step 13 at instruction 4 if the execute checkpoint prefers fewer than 6 files per step.
+- [ ] Proto gate for Portfolio 17 and Position 26 (carried over). Target: Step 1.
+- Next: `/sdd-execute fix-offline-book-consistency`.
