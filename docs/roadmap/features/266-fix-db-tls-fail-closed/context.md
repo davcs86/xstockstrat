@@ -494,3 +494,33 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [ ] Build under strip-types, CJS `tsc` and the Next bundler: Step 1 verification.
 - [ ] P-06: prove the new ledger and identity tests execute (`--test-reporter=spec`). Steps 2, 5 and 9.
 - [ ] Merge order: rebase after 242, 248 and 241, and watch the `ci.yml` filter block.
+
+## Session 2026-10-22 — sdd-review impl-spec
+
+- Mode B (advisory; lifecycle unchanged at `implementation-ready`). Criteria verdict: PASS WITH WARNINGS (0 FAIL).
+  Overlap verdict: WARN (file-level only; no migration, proto or config-key collision).
+
+### Addressed (in `implementation-spec.md`)
+
+- Steps 2 and 15 Verification now state the 40% coverage threshold (B2).
+- Step 15 TDD order (C-08/P-06): execute order is 13 → 15 (RED) → 14 → 15 (GREEN); Step Dependencies now says
+  Step 15 requires Steps 4–13 and runs before Step 14.
+- Step 12 deployment-file parity: `docker-compose.yml` stays unchanged because its `DATABASE_URL` uses
+  `?sslmode=disable` (`docker-compose.yml:27`); `.do` bindings are Step 14.
+- Resolver edge (`?sslmode=disable&ssl=...`): pg sources could not be re-read this session, so Step 1 now runs the
+  `ssl*`/`uselibpqcompat` key scan before the `disable` early return, and Step 2 adds a
+  `?sslmode=disable&ssl=true` throws row. Fail-closed strictness within the approved rules; local compose unaffected.
+- Merge-order note: the 241 entry was removed (241's impl-spec touches `configUiBff.ts`/`insightsBff.ts`, not the
+  audit route); 248/250 `ci.yml` and 252 `package.json` overlaps are named.
+
+### Open Threads
+
+- [ ] Operator sign-off on the identity/notify crash-loop when the DB is down (Steps 8/10 boot `SELECT 1`). Still
+  pending; gates Steps 8 and 10 at the /sdd-execute checkpoint.
+- [ ] merge-order.md has no row for 266. Proposed: 266 blocked by 248 (ledger `index.ts`, `ci.yml`) and 242
+  (notify `index.ts`, `.do` specs), 266 merging second. Router-owned write; needs the operator's yes/no.
+- [ ] P-03 pg source line numbers and the UI `.eslintrc.json:17-18` banned-literal claim were not re-verified by
+  the review (pg sources absent from this checkout). Re-check at Step 1 / Step 12 discovery.
+- [ ] Re-run the overlap scan once the draft batch peers (254–273) have implementation specs.
+- Accepted as compliant (no change): the five byte-identical `dbTls.ts` copies (C-18 trade-off, hash guard + scoped
+  DRY exemption in Steps 15/16).
