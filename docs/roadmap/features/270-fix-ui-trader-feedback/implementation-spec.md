@@ -86,10 +86,16 @@ integration, `/sdd-execute` promotes AC-1..AC-12 into `services/xstockstrat-ui/a
 - Step 13 requires Step 3's `src/lib/errMessage.ts`. The terminal indicator text formats the error with it.
 - **Rebase-only overlaps** (sdd-review overlap scan; no config, proto or migration collision):
   - `src/app/trader/positions/[symbol]/page.tsx` (Steps 1, 9) is also edited by 215-block-fundamentals-strategy-on-etf
-    and 245-fix-screener-symbol-isolation.
-  - `src/app/insights/opportunities/page.tsx` (Step 3) is also edited by 215 and 246-fix-fundsignal-neutral-score.
-  - Whichever lands second rebases. This feature does not edit `src/lib/traderBff.ts`, so it does not overlap
-    with 263-fix-edge-owner-scope.
+    (in-progress). 245-fix-screener-symbol-isolation only cites it as evidence; its files list does not modify it.
+  - `src/app/insights/opportunities/page.tsx` (Step 3) is also edited by 215. 246-fix-fundsignal-neutral-score
+    names it only in prose (low risk).
+  - `e2e/trader/position-detail.spec.ts` (Step 2) is also edited by 215 and 245 (implementation-ready).
+  - `e2e/insights/opportunities.spec.ts` (Step 4) is also edited by 215.
+  - `e2e/mock-backend.ts` (Step 14) is also edited by 215.
+  - `e2e/fixtures/INVENTORY.md` (Step 14) is also edited by 215, 245 and 249-fix-ibkr-request-signing
+    (implementation-ready). Adjacent row edits conflict, so re-read the catalog after rebase.
+  - Whichever lands second rebases; 215 is in-progress, so this feature most likely rebases after it. This
+    feature does not edit `src/lib/traderBff.ts`, so it does not overlap with 263-fix-edge-owner-scope.
 
 ---
 
@@ -176,6 +182,8 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit
    captured request body is a scenario one-off, so it is exempt.
 3. Do not edit analysis. The "appears in history" clause is covered by the existing analysis fingerprint test,
    which the verification re-runs. No new analysis test is needed (C-13: no new literal).
+4. Coverage: none applies. The step adds Playwright e2e only, and the Vitest threshold covers `src/lib/**`,
+   which this step does not touch. The re-run analysis tests are existing tests, not new coverage.
 
 **Verification**:
 ```bash
@@ -299,12 +307,17 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit && pnpm ru
 2. `opportunities.spec.ts` gets `test('@AC-5 a failed Snooze shows an error', …)`:
    - Route `SetOpportunityAction` to `route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ code: 'unavailable', message: 'opportunity action unavailable' }) })`.
    - Click "Snooze" on the first `OPPORTUNITIES` row.
-   - Assert `page.getByRole('alert')` contains `opportunity action unavailable`.
+   - Assert `page.getByRole('alert').filter({ hasText: 'opportunity action unavailable' })` is visible. Scope by
+     text: the Step 7 global fallback or another inline notice may also render a `role="alert"`, and a bare
+     locator then breaks Playwright strict mode.
 3. `signal-sources.spec.ts` gets `test('@AC-6 a failed deactivate shows an error', …)`:
    - Route `MANAGE_SOURCE_BFF` with the same 503 body (`'deactivate unavailable'`).
    - Deactivate `SIGNAL_SOURCE_WEIGHTED` through its row action.
-   - Assert that a `role="alert"` element contains the message while the edit form is closed.
+   - Assert `page.getByRole('alert').filter({ hasText: 'deactivate unavailable' })` is visible while the edit
+     form is closed.
 4. C-12: rows come from the fixtures above. The error payloads are inline scenario one-offs, which is exempt.
+5. Coverage: `test:coverage` must stay at or above the Vitest 40% lines/functions/statements threshold over
+   `src/lib/**` (`vitest.config.ts`). The e2e specs carry no coverage threshold.
 
 **Verification**:
 ```bash
@@ -377,12 +390,15 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit
 1. Add two tests, each collecting `page.on('pageerror', …)` into an array and asserting it ends empty (the
    "no unhandled promise rejection" clause):
    - **`@AC-7`:** route `**/trader/api/ledger/export**` → `route.fulfill({ status: 500, body: 'boom' })`. Click
-     the export button. Expect `getByRole('alert')` to contain `Export failed (HTTP 500)`.
-   - **`@AC-11`:** route the same glob → `route.abort('failed')`. Click. Expect `getByRole('alert')` to contain
-     `Export failed`.
+     the export button. Expect `getByRole('alert').filter({ hasText: 'Export failed (HTTP 500)' })` to be visible.
+   - **`@AC-11`:** route the same glob → `route.abort('failed')`. Click. Expect
+     `getByRole('alert').filter({ hasText: 'Export failed' })` to be visible.
+   - Scope the alert locators by text, as in Step 4, so another `role="alert"` on the page cannot trip strict mode.
 2. RED on the pre-fix tree:
    - AC-7 shows no alert.
    - AC-11 shows no alert and records a pageerror for the unhandled rejection.
+3. Coverage: none applies. The step adds Playwright e2e only, and `portfolio/page.tsx` sits outside the Vitest
+   `src/lib/**` coverage scope.
 
 **Verification**:
 ```bash
@@ -510,7 +526,8 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm exec playwright test e2e/tra
    - Add `meta: options?.meta,` beside `mutationKey` at `:22`.
    - Update the JSDoc `@param options` line to name `meta.errorHandled` as the fallback opt-out (one line).
 6. **Flag the inventory hooks** with `{ errorHandled: true }`:
-   - Factory-built hooks pass it as the third argument: `useSetOpportunityAction`, `useManageSignalSource`,
+   - Factory-built hooks pass `{ meta: { errorHandled: true } }` as the factory's third `options` argument
+     (merged with any existing `mutationKey`): `useSetOpportunityAction`, `useManageSignalSource`,
      `usePlaceOrder`, `useReplaceOrder`, `useConfirmOrder`.
    - Plain-`useMutation` hooks set `meta: { errorHandled: true }` in their options: `useRunBacktest`,
      `useScreenSymbols`, `useSetConfig`, `useSetStrategyLive`.
@@ -522,7 +539,7 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm exec playwright test e2e/tra
 
 **Verification**:
 ```bash
-grep -rn "errorHandled: true" services/xstockstrat-ui/src   # exactly 9 hits: the 9 hooks in the inventory table
+grep -rn "errorHandled: true" services/xstockstrat-ui/src/hooks services/xstockstrat-ui/src/app/config-ui/hooks   # exactly 9 hits: the 9 hooks in the inventory table
 grep -rn "return err;" services/xstockstrat-ui/src           # no hits
 grep -n "MutationCache\|shouldReportMutationError" services/xstockstrat-ui/src/lib/queryClient.ts
 grep -n "MutationErrorFallback" services/xstockstrat-ui/src/app/trader/providers.tsx services/xstockstrat-ui/src/components/shared/QueryProviders.tsx
@@ -574,15 +591,17 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit && pnpm ru
 3. `orders.spec.ts` gets `test('@AC-10 a failed cancel with no per-call handler shows the global error', …)`:
    - Inside the test, override `CancelOrder` with `route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ code: 'unavailable', message: 'cancel unavailable' }) })`.
    - Confirm the cancel of `ord-new`.
-   - Assert `getByRole('alert')` contains `cancel unavailable`. Click `getByRole('button', { name: 'Dismiss error' })`
-     and assert the alert is gone.
+   - Assert `getByRole('alert').filter({ hasText: 'cancel unavailable' })` is visible (text-scoped, as in Step 4).
+     Click `getByRole('button', { name: 'Dismiss error' })` and assert that filtered alert is gone.
    - Collect `pageerror` and assert it is empty.
+4. Coverage: `test:coverage` must stay at or above the Vitest 40% lines/functions/statements threshold over
+   `src/lib/**`. The two new tests cover `mutationErrorStore.ts` and `queryClient.ts`.
 
 **Verification**:
 ```bash
 cd services/xstockstrat-ui && pnpm run lint && pnpm run test:coverage
 cd services/xstockstrat-ui && pnpm exec playwright test e2e/trader/orders.spec.ts -g "@AC-10"
-grep -rn "errorHandled: true" services/xstockstrat-ui/src | wc -l   # 9 (inventory pin, P-03)
+grep -rn "errorHandled: true" services/xstockstrat-ui/src/hooks services/xstockstrat-ui/src/app/config-ui/hooks | wc -l   # 9 (inventory pin, P-03; scoped so this step's *.test.ts literals are not counted)
 ```
 
 ---
@@ -743,6 +762,8 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit && pnpm ru
 5. RED on the pre-fix tree: the body carries `TRADING_MODE_PAPER`. The badge is already null-safe, so AC-12 is a
    regression guard. `@AC-12` stays GREEN-only and is recorded as such in the step PR.
 6. C-12: auth comes from `addAuthCookie`. The error payload is a one-off.
+7. Coverage: `test:coverage` must stay at or above the Vitest 40% lines/functions/statements threshold over
+   `src/lib/**`; `tradingMode.test.ts` covers `src/lib/tradingMode.ts`.
 
 **Verification**:
 ```bash
@@ -826,6 +847,8 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit
 2. Build the orders as `{ ...ORDER_WORKING, status, updatedAt }`. Import from `../../e2e/fixtures/orders` if the
    Vitest alias/include allows it; otherwise build `create(OrderSchema, …)` objects, the proto-shaped one-offs
    that C-12 permits.
+3. Coverage: `test:coverage` must stay at or above the Vitest 40% lines/functions/statements threshold over
+   `src/lib/**`.
 
 **Verification**:
 ```bash
@@ -1044,6 +1067,8 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit && pnpm ru
 9. **Fallback (Open Risk).** If `page.route` cannot hold a fulfilled stream open, keep attempt 2 a complete body
    (frame and no error). The client then sees a clean end and reconnects after the backoff. The indicator
    assertions still hold because they target the first item. Record whichever variant ran in the Deviation Log.
+10. Coverage: `test:coverage` must stay at or above the Vitest 40% lines/functions/statements threshold over
+    `src/lib/**`; `streamBackoff.test.ts` covers `src/lib/streamBackoff.ts`.
 
 **Verification**:
 ```bash
