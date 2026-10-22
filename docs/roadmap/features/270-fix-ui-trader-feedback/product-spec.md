@@ -96,8 +96,6 @@ half-copied request shape (D-45); per-call `onError` omitted with no global fall
 - [x] No database migrations anticipated
 - [x] No config key changes anticipated
 
-(Update after investigation — remove or replace each item as needed)
-
 ## Acceptance Criteria
 
 See `acceptance.feature` — the regression scenario(s) that must fail on the buggy behavior and pass
