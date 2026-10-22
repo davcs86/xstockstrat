@@ -1,13 +1,15 @@
 Feature: fix-ui-transport-hardening (bug fix)
   Regression guard for docs/reports/2026-10-21-ui-transport-hardening-defect.md:
   no default gRPC deadline in the UI transport (D-37), and segment health routes gated by auth (D-38).
-  The default deadline value is fixed in /sdd-design (proposed 10s, product-spec Open Question 1).
+  Deadline values fixed by /sdd-design (2026-10-22): 30s unary transport default (DEFAULT_UNARY_TIMEOUT_MS),
+  10s session refresh (REFRESH_TIMEOUT_MS). AC-3's agent-health row expects that handler's own 401 (operator
+  decision 2026-10-22, Option 2).
 
   @AC-1 @FR-1 @regression
   Scenario: A server-side gRPC call with no per-call timeout is bounded by the transport default
     Given the UI server transport for a backend that accepts the connection and never responds
     When a BFF handler issues a unary call without passing timeoutMs
-    Then the call fails with DEADLINE_EXCEEDED no later than the transport's default deadline (proposed 10s)
+    Then the call fails with DEADLINE_EXCEEDED no later than the transport's default deadline (30s)
 
   @AC-6 @FR-1 @regression
   Scenario: A per-call timeout overrides the transport default
@@ -20,7 +22,7 @@ Feature: fix-ui-transport-hardening (bug fix)
     Given an expired access token and a valid refresh-token cookie
     And an identity endpoint that accepts the connection and never responds
     When the browser requests "/trader"
-    Then the response arrives no later than the default deadline (proposed 10s)
+    Then the response arrives no later than the session-refresh deadline (10s)
     And the response is a redirect to "/auth/login?redirect=%2Ftrader"
     And the response clears the access-token and refresh-token cookies
 
@@ -28,18 +30,18 @@ Feature: fix-ui-transport-hardening (bug fix)
   Scenario Outline: Segment health routes are reachable without a session
     Given a request with no session cookies
     When the client requests "<path>"
-    Then the route handler responds (no redirect to "/auth/login")
+    Then the route handler responds with status <status> (no redirect to "/auth/login")
 
     Examples:
-      | path                        |
-      | /trader/health              |
-      | /trader/api/health          |
-      | /insights/health            |
-      | /insights/api/health        |
-      | /config-ui/health           |
-      | /config-ui/api/health       |
-      | /accounts/api/health        |
-      | /accounts/api/agent-health  |
+      | path                        | status |
+      | /trader/health              | 200    |
+      | /trader/api/health          | 200    |
+      | /insights/health            | 200    |
+      | /insights/api/health        | 200    |
+      | /config-ui/health           | 200    |
+      | /config-ui/api/health       | 200    |
+      | /accounts/api/health        | 200    |
+      | /accounts/api/agent-health  | 401    |
 
   @AC-4 @FR-3 @regression
   Scenario Outline: Non-health segment routes still require a session
@@ -52,6 +54,8 @@ Feature: fix-ui-transport-hardening (bug fix)
       | /trader/orders              |
       | /trader/healthcheck-x       |
       | /insights/api/health-extra  |
+      | /healthcheck-x              |
+      | /health/anything            |
       | /config-ui                  |
       | /accounts                   |
 
