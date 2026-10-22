@@ -553,3 +553,248 @@ the next `/sdd-batch` run can pick it up.
   "floor_breaches": []
 }
 ```
+
+## Session 2026-10-22 — sdd-batch design gate (round 4)
+
+The full-mode `/sdd-design` debate stopped at the approval gate after round 4 (gate policy: halt). `design.md` has
+not been written and `status.md` has not changed (still spec-ready). This entry records where the debate stands so
+the next `/sdd-batch` run can pick it up.
+
+### Open Threads
+
+- **Approach (round-4 synthesis):** Steps 1-4 and 6 are unchanged from r1/r2 (D-50, D-51, D-52, D-53a, D-19).
+  Step 5 (D-53b) adopts the r4 proposal, which takes in operator r3 decisions (1)-(4), with these amendments:
+  - **S, source-id constants (new):** `fmp.SourceName` and `finnhub.SourceName` do not exist today. They are
+    introduced at the client write sites (`fmp_client.go:334`, `finnhub_client.go:94`), and
+    `classification.SourceFMP` becomes an alias of `fmp.SourceName`, so one named constant remains. If `go list -deps`
+    shows an import cycle, the alias goes the other way. Repo seed/count methods take the source as a `string`
+    parameter. C-18 waivers: `marketdata_repo.go:587` and `marketdata_service.go:1931/:1951`. S applies to Step 2 as
+    well as 5.8.
+  - **Classification:** the non-200 return at `fmp_client.go:254-255` becomes an unexported `*statusError` with
+    byte-identical `Error()` text. A single `enrichmentExpires(err)` runs in this order: cap → ctx
+    (cancel/deadline) → 402/403/404 exempt (cached fresh, honest missing_metrics) → everything else expires. Empty
+    `nil, nil` stays a success.
+  - **WARN:** one aggregated WARN per call, using the same class order (`cap`/`ctx`/`http_<code>`/`transport`/
+    `read`/`decode`). The raw error is never logged.
+  - **Write path:** epoch `fetched_at` via `$17::boolean`. A same-source COALESCE merge keeps last-known-good
+    enrichment values on flagged overwrites (operator r3 (1)). One `wctx` covers the post-fetch write/emit block.
+  - **Seed query:** the parenthesised `source = $1 AND (fetched_at >= $d OR as_of >= $d)` (operator r3 (3)).
+  - **Spec text:** FR-4(b) with a provenance note. AC-5's first Then lists "beta" only. The @AC-10 trigger is pinned
+    now to an FMP HTTP 503 on profile.
+  - **Tests:** one per class, 4xx-exemption tests, a no-apikey-in-log test, pgxmock SQL tests, and one real-Postgres
+    `DB_PGBOUNCER=true` epoch-branch test.
+- **Strongest open objection (blocking):** the phantom-symbol risk (P-03/F-04, C-18). Steps 2 and 5.8 cited
+  `fmp.SourceName`/`finnhub.SourceName`, which grep shows do not exist; only `classification.SourceFMP`
+  (`sector.go:17`) does. The synthesis's fix S is not yet confirmed by the proposer, so the objection stays blocking
+  (P-02) until the next proposal adopts S, so that `/sdd-spec` cannot write a non-existent symbol into Codebase
+  Evidence.
+- **Non-blocking, to record or confirm:**
+  - C-11 wording gap: 400/401/429 and read failures fall in neither operator list. The proposal expires them. This
+    needs an explicit operator acknowledgement, and changing it is a one-line `switch` edit.
+  - The proposer must confirm the @AC-10 trigger pin to 503 (C-08/C-15).
+  - Accepted budget blast radius: a persistent 5xx re-spends quote and ratios calls on every request, which starves
+    the 215 filler and 217 classification.
+  - as_of provenance after a merge, for feature-246 consumers.
+  - The class order must be pinned by tests.
+  - Carried: the FMP seed reads about 0 under finnhub; StreamBars hangs after a give-up (follow-up); D-19
+    ack-then-drop.
+- **Floor status:** no breaches. No migration (F-01) and no tunable (F-07). F-04 would be breached only if the
+  phantom constant reached the spec.
+- **Uncovered @AC changes:** none. @AC-1, @AC-5 and @AC-9 CHANGE and @AC-10 EXTEND are all covered by operator
+  decisions. Everything else (@AC-2/3/4/6/7/8, @feature-215 @AC-5/@AC-7/@AC-14, @feature-217 @AC-4, @feature-198
+  @AC-5, @feature-196 @AC-5, @feature-211 @AC-6/@AC-7) is PRESERVE.
+- **Merge order:** 255 after 215, with a soft WARN row for 254 (which overlaps `fmp_client.go:254-255`). Rows are
+  added only after a user yes. The fetched_at reader grep must run before Step 5.
+
+```sdd-batch-design-state
+{
+  "round": 4,
+  "synth": {
+    "approach": "Round-4 synthesis. Line numbers were re-checked in the worktree.\n\n**Steps 1–4 and 6 stay as synthesized in r1/r2:**\n- D-50: comment and doc fixes, plus the cap-0 tests.\n- D-51: source-filtered counts and SeedFMPBudget.\n- D-52: vendor-axis fresh check; stale serves unchanged.\n- D-53a: decodeExtraMetrics.\n- D-19: manager ctx, URL seam, healthy flag, closeAllLocked.\n\nThere is one correction: the source constants (see S below) apply to Step 2 as well as 5.8.\n\n**Step 5 (D-53b) adopts the r4 proposal, amended as follows.**\n\n**S. Source-id constants [r4 amendment; neither constant exists today].**\n- grep finds no `SourceName` anywhere in `internal/`.\n- `fmp_client.go:334` is the bare literal `Source: \"fmp\"`, and `finnhub/finnhub_client.go:94` is the bare literal `Source: \"finnhub\"`.\n- The only named constant is `classification.SourceFMP = \"fmp\"` (`classification/sector.go:17`), used at `repository/classification_repo.go:149`.\n- Introduce `const SourceName = \"fmp\"` in package `fmp` and use it at `:334`. Introduce `const SourceName = \"finnhub\"` in package `finnhub` and use it at `finnhub_client.go:94`.\n- Make `classification.SourceFMP = fmp.SourceName`, so only one named constant remains (DRY guard rail).\n- `classification` currently imports no internal package, and `fmp` imports only `internal/source`. `/sdd-spec` must confirm with `go list -deps` that `source` does not import `classification`. If it does, there is a cycle; the fallback is to reuse `classification.SourceFMP` as the source of truth and have `fmp.SourceName` alias it.\n- The repo seed and count methods take the source id as a `string` parameter, so `repository` does not import `fmp` or `finnhub`. The service passes `fmp.SourceName` or `finnhub.SourceName`.\n- Waivers recorded under C-18: the fallback literal `\"fmp\"` at `marketdata_repo.go:587`, and the `\"finnhub\"` literals in the service provider switch at `marketdata_service.go:1931/:1951` (not on this fix's path).\n\n**5.1 Flag.** Add a transient `EnrichmentFailed bool` to `source.Fundamentals` (`source.go:62-64`). The FundamentalsSource interface does not change.\n\n**5.2′ One classification point.**\n- `getJSON`'s non-200 return (`fmp_client.go:254-255`) becomes an unexported `*statusError{path string; code int}`.\n- Its `Error()` text stays byte-identical: `\"fmp: %s returned HTTP %d\"`. It still carries no URL and no apikey.\n- The enrichment loop (`:195-200`) calls one unexported `enrichmentExpires(err) bool`, evaluated in this order (adversary r4):\n  1. nil → false.\n  2. `errors.Is(err, ErrFMPDailyCapExceeded)` → true (it arrives unwrapped from `reserve`, `:233`).\n  3. `errors.Is(err, context.Canceled)` or `errors.Is(err, context.DeadlineExceeded)` → true. This must come before any transport classification, because both the `:229` limiter wrap and the `:243` `*url.Error` wrap contain ctx errors.\n  4. `errors.As(err, &se)` with `se.code` in {402, 403, 404} → false. The row is cached fresh, the metric pointers stay nil, and missing_metrics is honest.\n  5. Everything else → true: 5xx, other non-200 codes, transport (`:243`), read (`:251`) and decode (`:258`) failures.\n- The three exempt codes live in one `switch`, not in a tunable or a list (C-18, F-07).\n- `nil, nil` (an empty array, `:280-282`, `:293-295`) is still a successful answer.\n\n**5.3′ WARN.**\n- One aggregated `slog.WarnContext` per GetFundamentalsMulti call, with entries `SYM:ratios|profile:class`.\n- `class` is one of `cap`, `ctx`, `http_<code>`, `transport`, `read`, `decode`, evaluated in the same order as 5.2′.\n- The raw `err.Error()` is never logged (the apikey is in the `:243` `*url.Error`).\n- Deterministic 4xx pairs are included under `http_40x`.\n- Tests: one per class, plus a no-apikey-in-log test.\n- 254 stays a soft rebase WARN row. Its overlap with the `:254-255` edit is listed in the merge-order notes.\n\n**5.4 Expire on write.**\n- In VALUES, `now()` (`marketdata_repo.go:593`) becomes `CASE WHEN $17::boolean THEN 'epoch'::timestamptz ELSE now() END`.\n- In the conflict branch, `fetched_at=now()` (`:600`) becomes `fetched_at=EXCLUDED.fetched_at`.\n- `$17 = f.EnrichmentFailed`. Fix the doc comment at `:572-573` in the same edit.\n\n**5.5 Keep last-known-good values on a flagged overwrite (operator r3 (1)).**\n- The enrichment columns at `:595-597` become `CASE WHEN $17::boolean AND fundamentals.source = EXCLUDED.source THEN COALESCE(EXCLUDED.<col>, fundamentals.<col>) ELSE EXCLUDED.<col> END`.\n- A deterministic 4xx row (`$17` false) is overwritten plainly.\n- [r4 note, adversary provenance] On a flagged merge, `as_of` is still overwritten. A later stale serve therefore shows prior enrichment values under today's `as_of`, with an empty missing_metrics. This is acceptable only because the row is served `stale=true`. State it in the FR-4(b) note and in context.md for feature-246 consumers.\n\n**5.6** Create one `wctx := context.WithoutCancel(ctx)` for the whole post-fetch write/emit block (`marketdata_service.go:1706-1713`, `:1762-1766`). The WARNs at `:1708/:1763` become `WarnContext(wctx, …)`.\n\n**5.7** Behaviour as stated in r3: the current call serves stale=false with an honest missing_metrics. The next call with budget re-fetches. The next call at cap serves stale=true, never ResourceExhausted (`@feature-215 @AC-7`).\n\n**5.8 Seed query (operator r3 (3)).**\n- `CountFundamentalsFetchedToday` (`marketdata_repo.go:652-662`) becomes `WHERE source = $1 AND (fetched_at >= $d OR as_of >= $d)`.\n- `$1` is the parameter passed as `fmp.SourceName` (per S). `$d` is the existing UTC-day expression, unchanged.\n- The Finnhub window query is source-filtered with `finnhub.SourceName` and gets no as_of clause.\n- Tests:\n  - 30 edgar rows with as_of today count 0.\n  - Epoch-stamped fmp rows with as_of today are counted.\n- Add a 2-line constraint comment at `:333` (`AsOf: now`) and a client test that AsOf is approximately now.\n\n**5.9 Tests.**\n- AC-5 test (cap-exceeded profile).\n- A 503-profile sibling test.\n- AC-10 test.\n- 4xx-exemption tests: a 404 profile and a 402 ratios. Each stores a row with a non-epoch fetched_at, the next call within TTL makes no FMP call, and missing_metrics lists the metrics.\n- A ctx-cancel-after-quote test showing the row persists via wctx.\n- pgxmock SQL tests for the CASE, the merge and the seed WHERE.\n- One real-Postgres `DB_PGBOUNCER=true` epoch-branch upsert test (ledger fails.md:1977-1989).\n- Make fakeFundRepo source-, flag- and merge-aware.\n\n**Spec text (operator r3 (4) sign-off).**\n- FR-4(b) as worded in the r4 proposal, plus the 5.5 provenance note.\n- AC-5: the first Then lists \"beta\" only.\n- [r4 amendment, fixed now rather than deferred to /sdd-spec] The failure trigger of @AC-10 is pinned to a transient class, an FMP HTTP 503 on profile. If the r3-synthesis text named a 402/403/404, the swap to 503 is recorded in context.md under the r3 sign-off as a consistency edit required by operator r3 (2). No new @AC is added for the 4xx exemption; unit tests pin it.\n\n**Housekeeping.**\n- Merge order: 255 after 215, with a soft WARN row for 254. Rows are added only after a user yes.\n- Read-only C-14 checks: agent `tools.py:402/:812`, `traderBff.ts`, `insightsBff.ts`.\n- The fetched_at reader grep must run before Step 5.",
+    "open_objections": [
+      {
+        "text": "[P-03/F-04 risk, C-18 DRY] Steps 2 and 5.8 cite `fmp.SourceName` and `finnhub.SourceName`, and neither exists. I verified this: grep finds no `SourceName` in `internal/`. `fmp_client.go:334` is the literal `\"fmp\"`, `finnhub_client.go:94` is the literal `\"finnhub\"`, and the only named constant is `classification.SourceFMP` (`sector.go:17`). The synthesis fixes it with S: introduce both constants at their client write sites, alias `classification.SourceFMP = fmp.SourceName` (checking for an import cycle, with a reverse-alias fallback), have the repo methods take source as a parameter, and record waivers for the literals at `:587` and `:1931/:1951`. The proposer has not yet answered it. It stays blocking until the next proposal adopts S, so that /sdd-spec does not write a phantom symbol into Codebase Evidence.",
+        "blocking": true
+      },
+      {
+        "text": "[C-11 / operator wording gap] Operator r3 (2) exempts 402/403/404 and says that only cap-exceeded, cancel/deadline, 5xx, transport and decode failures expire. HTTP 400, 401 and 429 (and the read-body failure at `:251`) fall in neither list. The proposal treats them as expiring. This is sound: 401 means a bad or rotated key, and 429 is transient. It is still an assumption on an operator-defined boundary. Record it in context.md as an explicit operator acknowledgement alongside the r3 sign-off. If the operator disagrees, it is a one-line `switch` change.",
+        "blocking": false
+      },
+      {
+        "text": "[C-08/C-15] The trigger for @AC-10 was left conditional ('/sdd-spec must check word for word'). The synthesis pins it now to an FMP HTTP 503 on profile, which is transient under operator r3 (2), and records any swap in context.md. The proposer must confirm.",
+        "blocking": false
+      },
+      {
+        "text": "[operator r2 residual, budget] Under a persistent 5xx, an epoch-expired row never caches. Every request re-spends the counted quote and ratios calls (only non-200 responses are refunded, `fmp_client.go:235-240`), which drains the shared day budget the 217 classification refresh and the 215 ETF filler also use (the filler stops at 80%). The operator r2 decision mandates expiry, so this stands, but the blast radius must be recorded in context.md as an accepted cost. A bounded retry window (`now()-ttl+N`) is open to the operator only as a future decision.",
+        "blocking": false
+      },
+      {
+        "text": "[data provenance] On a flagged merge, the 5.5 COALESCE keeps the prior enrichment values but overwrites as_of with today. A later stale serve shows old enrichment under a fresh as_of, with an empty missing_metrics. This is acceptable because the row is served stale=true, but it must be stated in the FR-4(b) note and in context.md (for feature-246 consumers).",
+        "blocking": false
+      },
+      {
+        "text": "[classification ordering] `enrichmentExpires` and the WARN class must use the same order: errors.Is(ErrFMPDailyCapExceeded), then errors.Is(context.Canceled/DeadlineExceeded), then errors.As(statusError), then transport/read/decode. Ctx errors arrive wrapped by both the limiter (`:229`) and the `*url.Error` (`:243`). Pin it with one test per class.",
+        "blocking": false
+      },
+      {
+        "text": "[ledger fails.md:1977-1989] `$17::boolean` plus one real-Postgres DB_PGBOUNCER=true epoch-branch upsert test must be named in the impl-spec test step.",
+        "blocking": false
+      },
+      {
+        "text": "[C-16 doc drift, carried] Under the finnhub provider the FMP seed counts about 0, and classification spend writes no row. Both are accepted under floor semantics and recorded in context.md.",
+        "blocking": false
+      },
+      {
+        "text": "[FR-5 scope, carried] The StreamBars RPC client still hangs after a manager give-up (marketdata_handler.go:37-54). Follow-up.",
+        "blocking": false
+      },
+      {
+        "text": "[D-19 residual, carried] A server that acks and then drops causes reconnects forever at a fixed delay. Accepted.",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "@AC-1",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@AC-9",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@AC-2",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-3",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-4",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-5",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@AC-6",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-7",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-8",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-10",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@feature-215 @AC-7",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@feature-215 @AC-14",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@feature-215 @AC-5",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@feature-217 @AC-4",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@feature-198 @AC-5",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@feature-196 @AC-5",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@feature-211 @AC-6",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@feature-211 @AC-7",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "Cite a pre-existing `fmp.SourceName` or `finnhub.SourceName` (r1–r4 text). Lost: neither exists, which would put a phantom symbol into the spec (F-04).",
+      "Create `fmp.SourceName` alongside `classification.SourceFMP`. Lost: two named constants for one vendor id (DRY guard rail). Alias one to the other.",
+      "Make the fmp client import `classification.SourceFMP` directly. Lost as the primary option because the snapshot-source id has an odd home in classification. Kept as the fallback if aliasing creates an import cycle.",
+      "Have the repo import `fmp` for the seed constant. Lost: it inverts the dependency direction. The repo takes source as a parameter instead.",
+      "Expire on every enrichment failure, including 402/403/404 (r2/r3 wording). Lost to operator r3 (2): it burns quota and starves the filler and classification.",
+      "Unexported status-error rejected as 'no consumer' (r3). Superseded: the 4xx exemption is now a real, package-internal consumer.",
+      "Exempt all 4xx except 429. Lost: it goes beyond the operator's explicit 402/403/404 list, and a 401 (bad key) would stay cached fresh for a TTL after the key is fixed.",
+      "Leave the @AC-10 trigger to be checked or swapped at /sdd-spec. Lost: it leaves an acceptance scenario's meaning open after sign-off (C-15). The trigger is pinned now.",
+      "Bounded retry window (now()-ttl+N) instead of epoch. Lost: the operator r2 decision mandates 'already expired', and the window needs a fixed invariant or a tunable (F-07). The operator may revisit it.",
+      "Skip the upsert on a transient failure (edgarFinish precedent). Lost: superseded by operator r3 (1), and never-seen symbols would get ResourceExhausted at cap.",
+      "Unconditional cross-source COALESCE. Lost: it relabels edgar values as fmp.",
+      "Unparenthesised seed OR clause. Lost: it counts edgar rows, which re-introduces D-51.",
+      "Log the raw rErr/pErr. Lost: the `:243` *url.Error text carries apikey=.",
+      "One WARN per symbol per enrichment. Lost: it floods once the cap is hit.",
+      "Detach only the upsert ctx. Lost: seedFromProfile and maybeAlertQuota would still die on a cancelled ctx (operator C-03 rule).",
+      "Make 254 a hard predecessor. Lost: class-only logging removes the leak without that dependency.",
+      "A marker in extra_metrics, a per-symbol error set, a FailedEnrichments slice, or a migration 010 index. Lost for the reasons recorded in r3: wire leak, interface churn, no consumer, not needed."
+    ],
+    "open_risks": [
+      "A 403 classed as deterministic may sometimes be transient at FMP (a suspended key, or a per-minute limit). The row would then be pinned fresh with missing metrics for one TTL. This is bounded, visible as `http_403` in the WARN, and sanctioned by the operator, but it is the classification most likely to be wrong in production.",
+      "Re-fetch amplification under a persistent transient failure (5xx or transport): counted quote and ratios calls are re-spent on every request and every fundsignal cycle, reaching the cap earlier and starving the 215 filler and 217 classification. The hard cap bounds it, and it is now limited to transient classes because deterministic 4xx responses are cached and refunded.",
+      "Aliasing `classification.SourceFMP = fmp.SourceName` adds an import edge from classification to fmp. If `internal/source` (or anything fmp imports) imports classification, it is a cycle and the reverse-alias fallback applies.",
+      "Epoch-stamped fetched_at would show as 1970 to any reader that displays it. Grep the repo scan sites and the C-14 consumers before Step 5.",
+      "After a COALESCE merge, a stale-served row carries prior-day enrichment under today's as_of, with an empty missing_metrics.",
+      "Class-only WARNs lose detailed diagnostics until 254 lands.",
+      "The pre-existing `now() AT TIME ZONE 'UTC'` timestamp/timestamptz comparison depends on the session time zone, and the new as_of clause inherits it.",
+      "Rebase conflicts with 215 and 254 at `fmp_client.go:243/:254-255` and `marketdata_service.go:1704/:1760`, plus the new upsert SQL and seed WHERE touchpoints.",
+      "Making fakeFundRepo source-, flag- and merge-aware may break existing tests that seed todayCount directly.",
+      "D-19 healthy-session detection assumes Alpaca sends 'subscription' only after a successful auth+subscribe.",
+      "StreamBars RPC clients still hang after a manager give-up (follow-up)."
+    ],
+    "constitution_rules_touched": [
+      "C-03",
+      "C-08",
+      "C-11",
+      "C-14",
+      "C-15",
+      "C-16",
+      "C-18",
+      "F-01",
+      "F-04",
+      "F-07",
+      "P-02",
+      "P-03",
+      "PLAT-N1"
+    ],
+    "rationale": "The r4 proposal adopts operator r3 decisions (1) through (4). That concretely closes the three prior blocking objections:\n- The same-source COALESCE merge is operator-approved.\n- The seed predicate is parenthesised.\n- The FR-4(b), AC-5 and AC-10 package is signed off, and it must be recorded in context.md.\n\nThe operator's 4xx exemption gives the unexported statusError a real consumer, so the r3 \"no consumer\" rejection no longer applies. The edit is confined to the single non-200 return at `fmp_client.go:254-255`, and its Error() text is unchanged.\n\nThe adversary's blocking point is correct, and I verified it:\n- grep finds no `SourceName` anywhere in `internal/`.\n- `fmp_client.go:334` and `finnhub_client.go:94` are bare literals.\n- `classification.SourceFMP` (`sector.go:17`) is the only named constant, and it is already used at `classification_repo.go:149`.\n- The r1–r3 syntheses carried the same phantom for finnhub too.\n\nThe synthesis therefore adds S: a constant at each client write site, one alias for classification, the repo taking source as a parameter, and a cycle check (`classification` imports no internal package today; `fmp` imports only `source`). Under P-02 the objection stays blocking until the next proposal adopts S.\n\nThe other adversary points are adopted directly:\n- The classification order. Ctx errors arrive wrapped at `:229` and `:243`, and the cap error arrives unwrapped from `:233`, which I verified.\n- Pinning the @AC-10 trigger to a 503 now.\n- Recording the as_of provenance note and the budget blast radius.\n\nI raised one new non-blocking C-11 gap. The operator's expire list and exempt list together leave 400, 401, 429 and read failures unassigned. The proposal's choice (expire) is sound but needs explicit acknowledgement.\n\nThere are no Floor breaches: no migration (F-01) and no tunable (F-07). F-04 becomes a breach only if the phantom constant reaches the spec.\n\nFiles (under `/home/user/xstockstrat/.claude/worktrees/wf_dcd9f6a8-fbb-47/services/xstockstrat-marketdata/internal/`):\n- `fmp/fmp_client.go`\n- `finnhub/finnhub_client.go`\n- `classification/sector.go`\n- `repository/marketdata_repo.go`\n- `repository/classification_repo.go`\n- `service/marketdata_service.go`\n- `source/source.go`"
+  },
+  "floor_breaches": []
+}
+```
