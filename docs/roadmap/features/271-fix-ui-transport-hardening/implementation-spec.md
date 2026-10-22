@@ -110,6 +110,7 @@ There are no UI page or route additions, so C-10(a) nav registration does not ap
    - `export const DEFAULT_UNARY_TIMEOUT_MS = 30_000;`
    - `export const REFRESH_TIMEOUT_MS = 10_000;`
    - `export const LONG_RPC_TIMEOUT_MS = 300_000;`
+   - `export const ORDER_MUTATION_TIMEOUT_MS = 60_000;` (operator 2026-10-22: order mutations are exempt from the 30s default).
    - `export const FUNDAMENTALS_TIMEOUT_MS = 15_000;`, carrying over the existing feature-220 constraint comment from `bffShared.ts:53-54` verbatim.
 2. In `bffShared.ts`, delete `:53-55`, which is the constant and its comment. Add no re-export.
 3. In `insightsBff.ts`, remove `FUNDAMENTALS_TIMEOUT_MS` from the `@/lib/bffShared` import (`:27`) and add `import { FUNDAMENTALS_TIMEOUT_MS } from '@/lib/deadlines';`. Do the same in `traderBff.ts` (`:24`). Leave the call sites at `insightsBff.ts:103`, `:114` and `traderBff.ts:78` unchanged.
@@ -371,10 +372,12 @@ grep -n "REFRESH_STALL_TOKEN" e2e/fixtures/INVENTORY.md
 - `services/xstockstrat-ui/src/lib/bffShared.ts` — modify
 - `services/xstockstrat-ui/src/lib/insightsBff.ts` — modify
 - `services/xstockstrat-ui/src/lib/configUiBff.ts` — modify
+- `services/xstockstrat-ui/src/lib/traderBff.ts` — modify
 
 **Reviewers**: `xstockstrat-ui` owner — Connect-RPC call safety, trading UI correctness, environment scope correctness
 
 **Codebase Evidence**:
+- `src/lib/traderBff.ts:33` `placeOrder`, `:42` `cancelOrder`, `:43` `replaceOrder`, `:45` `confirmOrder` are bare `forward(...)`.
 - `src/lib/bffShared.ts:80-84`: `forwardAdmin(call: (req, opts: { headers: Headers }) => Promise<Res>)` → `forward(call, { admin: true })`.
 - `forward()` (`:64-77`) applies `options.admin` at `:70` and sets `callOpts.timeoutMs` only when it is defined (`:74`).
 - `src/lib/insightsBff.ts`:
@@ -401,12 +404,14 @@ grep -n "REFRESH_STALL_TOKEN" e2e/fixtures/INVENTORY.md
    - Pass `{ timeoutMs: LONG_RPC_TIMEOUT_MS }` as the `forward` options for `scoreStrategy` (`:40`), `runBacktest` (`:41`), `screenSymbols` (`:42`) and `triggerBackfill` (`:80`).
    - Pass it as the `forwardAdmin` options for `deleteBackfilledData` (`:117-119`).
 3. `configUiBff.ts`: add `import { LONG_RPC_TIMEOUT_MS } from '@/lib/deadlines';` and pass `{ timeoutMs: LONG_RPC_TIMEOUT_MS }` to `runFundamentalsScan`'s `forwardAdmin` (`:69`).
+3b. `traderBff.ts` (operator 2026-10-22): add `ORDER_MUTATION_TIMEOUT_MS` to its `@/lib/deadlines` import and pass `{ timeoutMs: ORDER_MUTATION_TIMEOUT_MS }` as the `forward` options for `placeOrder` (`:33`), `cancelOrder` (`:42`), `replaceOrder` (`:43`) and `confirmOrder` (`:45`). A late 504 after a server-side commit stays safe because trading's exactly-once order intents make a client retry idempotent.
 4. Touch no other registration.
 5. Add no UI error copy. A 504 after server-side completion is pre-existing behavior for any backend error (§ Spec-time gates).
 
 **Verification**:
 ```bash
 cd services/xstockstrat-ui && grep -c "LONG_RPC_TIMEOUT_MS" src/lib/insightsBff.ts src/lib/configUiBff.ts \
+  && test "$(grep -c "ORDER_MUTATION_TIMEOUT_MS" src/lib/traderBff.ts)" -ge 5 \
   && grep -n "{ ...options, admin: true }" src/lib/bffShared.ts \
   && pnpm run lint && pnpm run format:check
 ```
@@ -454,6 +459,7 @@ cd services/xstockstrat-ui && grep -c "LONG_RPC_TIMEOUT_MS" src/lib/insightsBff.
      - `marketDataClient.{deleteBackfilledData, getBars, getFundamentals}`
    - Dynamically import both `insightsBff` and `configUiBff` `dispatchConnect`. Use an admin JWT cookie.
    - `it.each` over the six long methods: `AnalysisService/{ScoreStrategy,RunBacktest,ScreenSymbols}` and `IngestService/TriggerBackfill` and `MarketDataService/DeleteBackfilledData` via `/insights/api/xstockstrat.<pkg>.v1.<Service>/<Method>`, and `AnalysisService/RunFundamentalsScan` via `/config-ui/api/...`. For each, the spy's second argument has `timeoutMs === LONG_RPC_TIMEOUT_MS`.
+   - `it.each` over the four order mutations (operator 2026-10-22): `TradingService/{PlaceOrder,CancelOrder,ReplaceOrder,ConfirmOrder}` via `/trader/api/xstockstrat.trading.v1.TradingService/<Method>`. For each, the spy's second argument has `timeoutMs === ORDER_MUTATION_TIMEOUT_MS`. RED pre-fix: `undefined`.
    - Preservation:
      - `ListOpportunities` → `30_000` (`@AC-1 @feature-191`).
      - `GetFundamentals` → `FUNDAMENTALS_TIMEOUT_MS` (`@AC-1 @feature-220`).
@@ -604,7 +610,7 @@ cd services/xstockstrat-ui && pnpm exec vitest run src/middleware.test.ts \
 1. `services/xstockstrat-ui/CLAUDE.md:235`: append one clause to the middleware row. The eight segment health paths are exempted by an exact-match `PUBLIC_HEALTH_PATHS` Set before the session check. `agent-health` keeps its own 401.
 2. `services/xstockstrat-ui/docs/context-constitution.md:40` (the UI-service file — **not** the root `docs/context-constitution.md`): rewrite the gotcha:
    - The UI transport applies `DEFAULT_UNARY_TIMEOUT_MS` (30s) to every unary call without a per-call `timeoutMs`; streams stay unbounded.
-   - Per-call values (`LONG_RPC_TIMEOUT_MS` 300s, `FUNDAMENTALS_TIMEOUT_MS` 15s, `REFRESH_TIMEOUT_MS` 10s, the `listOpportunities` 30s literal) override it.
+   - Per-call values (`LONG_RPC_TIMEOUT_MS` 300s, `ORDER_MUTATION_TIMEOUT_MS` 60s for place/cancel/replace/confirm order, `FUNDAMENTALS_TIMEOUT_MS` 15s, `REFRESH_TIMEOUT_MS` 10s, the `listOpportunities` 30s literal) override it.
    - `forwardAdmin` takes `{ timeoutMs }`.
    - The authoritative home is `src/lib/deadlines.ts`.
    - Re-stamp the evidence pointers.
