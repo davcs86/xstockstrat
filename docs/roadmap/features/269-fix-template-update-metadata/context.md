@@ -315,3 +315,39 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   "floor_breaches": []
 }
 ```
+
+## Session 2026-10-22 — sdd-design
+
+- Phase 0 Recon: wrote recon.md for xstockstrat-indicators, xstockstrat-analysis and xstockstrat-ingest, with xstockstrat-ui as a read-only consumer. Key reuse patterns:
+  - ingest's `update` SET name/description shape;
+  - analysis's first-wins `retire` SQL (`strategy_templates.py:72`).
+- Phase 1 Grilling: 2 rounds (full). The operator approved at the r2 gate on 2026-10-22 ("APPROVED as synthesized"). Wrote design.md.
+- Chosen approach: three independent per-service steps.
+  - Indicators and analysis: `update(meta, payload_json)` persists name/description with full-replace semantics.
+  - Indicators: `retire` also stamps `updated_at`.
+  - Ingest: `retire` becomes first-wins plus `updated_at`, and CREATE gets an empty-id INVALID_ARGUMENT guard after the db and ADMIN gates; the `uuid4()` fallback is dropped.
+  - Proof: SQL text plus bound-arg repo tests, a required analysis real-PG test, and wiring-only handler tests.
+- Rejected:
+  - a shared template-repo module (D-20 scope, collides with 266);
+  - keep-prior COALESCE UPDATE semantics;
+  - an all-ops ingest guard;
+  - per-service `local_pg` copies;
+  - inline DDL;
+  - fake-based @AC-2 proof.
+- Deliberate behavior change: an empty name or description on UPDATE now blanks the stored value in indicators and analysis, matching ingest. A bind test pins it.
+- The analysis real-PG RETIRE leg is a regression pin, not FR-3 or FR-4 evidence.
+- Constitution rules touched: C-03 (not engaged), C-11, C-13, C-15, C-16, C-18, P-02, P-03, P-06, F-01, F-04, F-06, F-07. Floor breaches: none.
+- C-16:
+  - CHANGE feature-269 @AC-1..3, sanctioned by the operator's D-41 scope decision and the r2 gate approval.
+  - PRESERVE @AC-13, @AC-17 and @AC-31.
+  - EXTEND @AC-14.
+- Status: spec-ready → design-approved.
+
+### Open Threads
+
+- [ ] Rewrite @AC-2 (`acceptance.feature:20`) in relative form, then map each service to its evidence. Target: /sdd-spec.
+- [ ] Indicators and ingest have only SQL text plus bound-arg proof. File the shared real-PG fixture gap durably in `docs/context-constitution-findings.md` or the debt radar. Target: /sdd-spec deliverable.
+- [ ] Analysis real-PG timing depends on autocommit-per-call, and the step text must say so. Target: the analysis step.
+- [ ] An empty `name` on UPDATE now blanks the name in indicators and analysis. Pin it with a bind test. Target: the indicators and analysis steps.
+- [ ] Merge-order entry for features 244 and 245 on indicators `servicer.py:652` and analysis `servicer.py:3581`. Target: /sdd-spec (merge-order.md).
+- [ ] Name the promotion rule for the @AC-1..3 ID collision with feature 224: keep `@feature-269` and dedupe on (feature, AC), or renumber. Target: /sdd-spec launch step.
