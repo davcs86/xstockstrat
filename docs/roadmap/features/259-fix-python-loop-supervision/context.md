@@ -601,3 +601,13 @@ The full `/sdd-design fix-python-loop-supervision` debate is at its approval gat
   at Step 15; detection deferred to the out-of-scope liveness metric. Target: `/sdd-execute` checkpoint before Step 13.
 - [ ] Re-check peer branches (`origin/feature/*` for 215, 244, 246, 248, 260, 262, 268) for line claims on the shared
   files before each touching step. The overlap scan did not cover branch-only edits. Target: `/sdd-execute` discovery.
+
+## Session 2026-10-22 (operator decision — per-attempt timeout)
+
+- **Decided: bound each P&L-consumer attempt's DB waits** (overrides the /sdd-spec "no per-attempt timeout" call).
+  `_ATTEMPT_DB_TIMEOUT_SECONDS = 10` is applied as `pool.acquire(timeout=…)` and asyncpg per-query `timeout=…` on
+  the attempt path, not as an `asyncio.wait_for` around `process_event`, so no transaction is cancelled at the
+  Python level. A hang becomes a non-poison `TimeoutError` that flows into retry → replay → probe.
+- `implementation-spec.md` updated: the decisions bullet, Step 13 item 6b, the Step 13 verification grep and the
+  Step 15 CLAUDE.md limitation text. **Step 14 must add a test:** a fake pool whose `acquire()` never returns makes
+  the attempt fail with `TimeoutError` within the bound and reach the replay path (no silent stall).
