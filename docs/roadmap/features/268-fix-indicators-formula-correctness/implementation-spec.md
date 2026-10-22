@@ -274,10 +274,14 @@ DeleteFormula soft-deletes.
 **Verification**:
 ```bash
 grep -n '__OUTPUT__' services/xstockstrat-indicators/app/services/sandbox.py   # wrapper print carries \\n; parse uses startswith
-grep -n 'def _fail\|_fail(' services/xstockstrat-indicators/app/services/sandbox.py   # 1 def, 3 call sites (rc!=0, no output, unparseable)
+grep -n 'def _fail\|_fail(' services/xstockstrat-indicators/app/services/sandbox.py   # expect 4 lines: the def line also matches '_fail(', plus 3 call sites (rc!=0, no output, unparseable)
 grep -n 'except json.JSONDecodeError:$' services/xstockstrat-indicators/app/services/sandbox.py   # expect no hit (the swallow is gone)
 ```
 Lint and coverage are run in Step 4.
+
+**Execute-time risk (impl-spec review 2026-10-22):** the `"\\n__OUTPUT__:"` escape in instruction 1 is
+the highest-risk edit in this feature. A wrong escape breaks every formula with a `SyntaxError`. Step 4's
+AC-3 and marker-framing guard catch it, so run Step 4's suite right after this edit, before moving on.
 
 ---
 
@@ -388,7 +392,8 @@ fail. AC-3 and the framing guard pass both before and after; they are guards, no
    absolute close-to-close change; the cumulative mean of the inputs) and that it is not the
    true-range / volume-weighted indicator.
 4. Leave the keys, `"required"`, the dispatch at `:30-31` and the math unchanged. Analysis consumers
-   (`evaluator.py:141`, `:196-197`; `screener.py:285`; `warmup.py:86`, `:108`;
+   (`evaluator.py:141`, `:196-197`; `screener.py:285`, the `_latest_indicator("ATR", ...)` call, with
+   its close-only comment at `:279-284`; `warmup.py:86`, `:108`;
    `pnl_pattern_consumer.py:50`) keep resolving, with identical numbers.
 
 **Verification**:
@@ -535,9 +540,15 @@ cd services/xstockstrat-ui && pnpm run lint
 
 **Verification**:
 ```bash
-cd services/xstockstrat-ui && pnpm exec vitest run src/lib/strategyCatalog.test.ts && pnpm run test:unit && pnpm run lint
+cd services/xstockstrat-ui && pnpm exec vitest run src/lib/strategyCatalog.test.ts && pnpm run test:coverage && pnpm run lint
 ```
+Coverage threshold: `pnpm run test:coverage` (`package.json:19`) enforces the 40% platform floor on
+`src/lib/**` (lines, functions, statements) through `vitest.config.ts:29-33`, and fails below it.
 RED proof: before Step 7, the misleading-name assertion fails.
+
+**E2E (Playwright):** no Playwright step is added. Steps 7–8 change static catalog text only, with no new
+route, component or interaction, and no `e2e/` spec references the old strings (grep of
+`services/xstockstrat-ui/e2e`). This vitest covers the change; the existing E2E suite applies unchanged.
 
 ---
 
