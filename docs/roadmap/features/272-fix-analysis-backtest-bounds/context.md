@@ -234,3 +234,191 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   "floor_breaches": []
 }
 ```
+
+## Session 2026-10-22 — sdd-batch design gate (round 2)
+
+The `/sdd-design fix-analysis-backtest-bounds` full debate is halted at its approval gate after round 2 (gate policy: halt). design.md is not written and status.md is unchanged, per the grilling protocol. The next /sdd-batch run resumes from the state block below.
+
+## Open Threads
+
+- **Approach (r2 synthesis).** Rename the current `RunBacktest` body to `_run_backtest(request, context, disarm)`, behind a thin `@owner_scoped` wrapper. The wrapper reads `analysis.backtest.max_duration_seconds` with `get_int_present` (default 300; 0 = no limit; negative = 300 plus a WARN) and runs the body under `asyncio.timeout`. It maps `TimeoutError` to DEADLINE_EXCEEDED `backtest exceeded Ns deadline` only when `cm.expired()` is true, and re-raises otherwise. `disarm()` is called once, just before `self._backtests[backtest_id] = result` (:1267), so persistence always completes. `_BarFetchError` is re-raised out of the per-symbol loop and mapped to FAILED_PRECONDITION `backtest bar series incomplete:`; this also covers the benchmark path, which today escapes as UNKNOWN. **D-28 changed to adversary option (a):** `_fetch_bars_paged` raises only when a token was sent **and** the response re-issues a non-empty `next_page_token`. An empty response token is EOF. No proto, no migration, no UI change. Docs and consumer rows cover the analysis CLAUDE.md, the strat-lab skill, README.md and mcp-tools.md, including the prod 60 s MCP-cap disclosure. G-1 is a pinned launch-checklist step: ledger started/completed p50–p99, an orphan-`started` count, and an operator-input threshold. The C-10 seam I-1..I-3 is owned by fix-agent-client-deadlines.
+- **Strongest open objections (blocking):**
+  1. [P-03/C-15] D-28 discriminator. The proposer must confirm option (a) plus the new AC-7 in round 3, or take the stricter option (b) with its own AC and a recorded spec delta against product-spec.md:23.
+  2. [C-10] The I-2 fallback must be decided before `/sdd-spec`. If fix-agent-client-deadlines does not adopt the `deadline_s is None → exc.details()` pass-through (tools.py:228-231), this feature adds xstockstrat-agent to Affected Services now, pins the order in merge-order.md, and adds a C-08 agent test step. The proposer's retroactive fallback at step 4 is rejected. Ownership must be recorded in both features' context.md.
+- **Non-blocking:**
+  - grpc.aio cancellation semantics are unverified locally; AC-3b is the tripwire.
+  - The proposer has yet to confirm the `cm.expired()` check.
+  - G-1 threshold and orphan-count wording must go into the spec.
+  - Prod 60 s MCP-cap disclosure in the docs.
+  - "Do not retry immediately" (executor-thread pile-up).
+- **Floor status:** no breaches. The 300 fallback follows the existing `get_int_present` default pattern (F-07), and there is no migration (F-01).
+- **@AC changes:**
+  - Operator-covered (operator decision "Scope is D-28, D-29"): @AC-1 @feature-272 is CHANGE, @AC-3 @feature-272 is CHANGE, @AC-2 @feature-272 is PRESERVE.
+  - **Not yet covered by an operator decision:**
+    - New EXTENDs @AC-4..@AC-7 @feature-272: a token-bearing re-served page raises; stored 0 / negative semantics; FAILED_PRECONDITION for `_BarFetchError`, including the benchmark UNKNOWN → FAILED_PRECONDITION change; a sent token followed by an empty page and empty next token is EOF.
+    - EXTEND @AC-32 @feature-224.
+    - The PRESERVE set: @AC-3 @feature-149, @AC-8 @feature-215, @AC-4 @feature-152, @AC-9 @feature-151, @AC-4 @feature-176, @AC-2 @feature-181, @AC-1/@AC-5 @feature-185.
+
+```sdd-batch-design-state
+{
+  "round": 2,
+  "synth": {
+    "approach": "Round-2 synthesis. The r2 shape stands: rename plus thin wrapper, a narrow disarm callable, FAILED_PRECONDITION for `_BarFetchError`, presence-aware config read, and no proto or migration. This round changes the D-28 discriminator and folds in the adversary's cheap fixes. Paths are under services/xstockstrat-analysis/app/handlers/servicer.py unless noted.\n\n1. **D-28 (adversary option (a), adopted).**\n   - In `_fetch_bars_paged`, replace `if not fresh: return bars` (:1432-1435) with: raise only when `page_token` (the token sent) is non-empty **and** `resp.page.next_page_token` is non-empty.\n   - The error is `_BarFetchError(f\"{symbol}: page_token {page_token!r} added no newer bar and re-issued a cursor ({len(bars)} bars so far) — refusing to return a truncated series\")`.\n   - An empty-fresh page with an empty response token returns `bars` as EOF. This covers both an empty first page and \"token sent, empty terminal page\".\n   - Why this is enough: marketdata's `cursor = start` fallback re-serves the first page with its own non-empty token, because a first page is only tokened when the range exceeds 500 bars. That satisfies @AC-1, which uses token \"stuck\" on every response. It also matches the spec text \"a re-served page on a token-bearing request raises, while genuine EOF still returns\" (product-spec.md:23).\n   - The `:1441-1443` EOF exit and the `_MAX_BAR_PAGES` cap (:1445-1448) are unchanged. Update the docstring (:1401-1410) to state the two-token rule.\n   - Tests:\n     - Invert tests/test_warmup.py:236-243 to `pytest.raises(_BarFetchError, match=\"refusing to return a truncated series\")` (AC-1).\n     - Add the three-bar EOF test (AC-2).\n     - Add AC-4: a token-bearing re-served page that still carries a token raises.\n     - Add AC-7: a sent token followed by an empty page with an empty next token returns `[1, 2]`.\n   - Step 1 runs the full analysis suite, because 102 `GetBars = AsyncMock` sites may return a truthy MagicMock `next_page_token`.\n\n2. **R-1 (confirmed).**\n   - Add `except _BarFetchError: raise` before `except grpc.RpcError` (:1127).\n   - The wrapper aborts with `FAILED_PRECONDITION` and the message `backtest bar series incomplete: {e}`.\n   - The benchmark path (:951-965) catches only `_InsufficientData`, so today a benchmark `_BarFetchError` escapes as UNKNOWN. After this change it maps to FAILED_PRECONDITION.\n   - The agent passes this through verbatim via `exc.details()` (services/xstockstrat-agent/app/tools.py:240).\n   - design.md must record the insights.md:178-190 delta: (i) one bad symbol now fails the whole run, unlike the per-symbol skip at :1127-1132 and \"partial run stays OK\" at :1234; (ii) benchmark UNKNOWN becomes FAILED_PRECONDITION. It must also record the rejected skip-with-CoverageGap alternative.\n   - Other callers stay best-effort and are verified: readiness.py:66-71 sets `fetch_ok=False` (keeps @AC-2 @feature-181 and @AC-1/@AC-5 @feature-185), and the chart path catches at :1954-1960.\n\n3. **D-29 wrapper (amended).**\n   - Rename the current body to `async def _run_backtest(self, request, context, disarm)`. The public `RunBacktest` keeps `@owner_scoped`.\n   - Read `limit = self._cfg.get_int_present(\"analysis.backtest.max_duration_seconds\", 300)` (watcher.py:107). `0` means no limit. A negative value logs a WARN and uses 300.\n   - Run `async with asyncio.timeout(limit or None) as cm: return await self._run_backtest(request, context, lambda: cm.reschedule(None))`.\n   - `except TimeoutError:` if `not cm.expired()`, re-raise. This is the adversary's C-18 fix, so inner `wait_for` timeouts from peers 215/274 are not misreported. Otherwise call `await context.abort(DEADLINE_EXCEEDED, f\"backtest exceeded {limit}s deadline\")` and `return None` (idiom :475-476).\n   - `except _BarFetchError as e:` call `context.abort(FAILED_PRECONDITION, ...)`.\n   - `disarm()` is called exactly once, immediately before `self._backtests[backtest_id] = result` (:1267). The only awaited call before it is the read RPC `_fundamentals_gap_labels` (:1246).\n   - Persistence after disarm always completes: cells :1280, history :1300, detail :1314, headline :1322, completed event :1344.\n   - A run timed out during compute writes no evidence or history (keeps @AC-3 @feature-149).\n\n4. **Tests pinned in the plan.**\n   - AC-3: limit 1, a stubbed symbol awaits `asyncio.sleep(3)`. Expect DEADLINE_EXCEEDED in under 2 s, a message naming 1 s, and no cells or history.\n   - AC-3b, new for the cancellation-swallow objection: the stall sits inside an awaited `self._marketdata.GetBars` AsyncMock, and the test asserts DEADLINE_EXCEEDED. This guards against `except grpc.RpcError`/`except Exception` at :1127-1132 absorbing the cancellation.\n   - T-inner-timeout: a `TimeoutError` raised inside the body while `cm` has not expired propagates and is not mapped to the deadline message.\n   - T-commit: a slow stubbed `_recompute_headline` after `disarm()` still writes the completed event and history.\n   - T-executor: the deadline fires while awaiting `run_in_executor`. The RPC returns, and a `threading.Event` shows the thread finishes later.\n   - AC-5: a stored 0 means no deadline; a stored -5 means 300 plus a WARN.\n   - AC-6: `_BarFetchError` gives FAILED_PRECONDITION with the prefix and no cells or history.\n   - Hard verification item (fails.md:1394): grep for every RunBacktest harness whose cfg is a bare MagicMock without a `get_int_present` stub.\n\n5. **Docs.**\n   - The analysis CLAUDE.md:468 row reads: \"Wall-clock bound on backtest evaluation up to result assembly; persistence and grade recompute not bounded; 0 = no limit, negative = 300; exceeded → DEADLINE_EXCEEDED `backtest exceeded Ns deadline`; executor threads are not interrupted — do not retry immediately.\"\n   - The strat-lab skill (SKILL.md, reference/output-handling.md, reference/aggregation.md), README.md and docs/runbooks/mcp-tools.md (next to :412) each get two rows:\n     - DEADLINE_EXCEEDED: narrow the range or symbols, and do not retry immediately.\n     - FAILED_PRECONDITION `backtest bar series incomplete:`: retrying will not fix it; report it.\n   - They also state the prod fact: at 120 s the agent caller hits the MCP 60 s cap first and never sees the server message. The server message reaches agent users only when the limit is below 60 s. This extends @AC-32 @feature-224.\n\n6. **Gate G-1 (pinned launch-checklist step in implementation-spec.md).**\n   - When: after step 3 is on dev, before launch-ready.\n   - Measure: query ledger `QueryEvents` (verified at packages/proto/ledger/v1/ledger.proto:15) for `analysis.backtest.started` (:818) and `analysis.backtest.completed` (:1346) on `backtest:<id>` streams, trailing 30 days, dev and prod.\n   - Record in context.md:\n     - n, p50, p95, p99 and max for runs that completed;\n     - the count of `started` events with no `completed`, per environment. This answers the survivorship-bias objection.\n   - Threshold: an **operator input**, with default edge-origin-timeout - 10 s (90 s if the Cloudflare ~100 s assumption holds).\n   - Pass: prod p99 at or below the threshold and a trivial orphan count. Otherwise the operator either (a) raises the prod row through `set_config`/config-ui, with no migration, or (b) signs off in context.md quoting the numbers.\n\n7. **C-10 seam with fix-agent-client-deadlines (I-2 amended).**\n   - I-1: any agent client deadline on `stub.RunBacktest` (client.py:634, none today) must be either above limit + 15 s, or below the MCP 60 s cap with a distinct message. At the prod limit of 120 s only the second branch is feasible.\n   - I-2 (adversary's simpler form): in `_grpc_error_message` (tools.py:228-231), when `deadline_s is None` pass through `exc.details()`, because the server originated the error. This also covers the screener abort (:3786-3796). There is no string-prefix coupling.\n   - I-3: the UI BFF `runBacktest` (insightsBff.ts:41) must not gain `timeoutMs` at or below limit + slack.\n   - Ownership: the code belongs to fix-agent-client-deadlines.\n   - Fallback, decided before `/sdd-spec`, not retroactively: if the peer does not adopt I-2, add xstockstrat-agent to Affected Services now, pin the merge order in docs/roadmap/features/merge-order.md (this feature's agent step lands after the peer's tools.py change), and add a C-08 agent test step.\n   - Record I-1..I-3 in both features' context.md.\n\nUI: no change. Both pages render `ConnectError.rawMessage`.\n\nTrace rule (operator 2026-10-21): the abort uses the inbound context, no new emits are added, and existing emits keep `propagation_meta`/`x-trace-id`.\n\nBuild order:\n1. D-28 guard and tests, plus the full-suite run.\n2. `_BarFetchError` re-raise, the wrapper mapping and AC-6.\n3. Rename, wrapper, disarm and `expired()` check, plus AC-3/3b/5, T-commit, T-executor and T-inner-timeout.\n4. Docs and consumer rows, plus the agent fallback if needed.\n5. G-1.",
+    "open_objections": [
+      {
+        "text": "[P-03/C-15] D-28 discriminator. The synthesis adopts adversary option (a): raise only when a token was sent AND `resp.page.next_page_token` is non-empty; an empty response token means EOF. It adds AC-7 (token sent, empty page, empty next token → returns the bars so far). The proposer has not yet answered this. It must confirm (a) in r3, or choose (b): keep the stricter rule, add an AC for it, and record that the change goes beyond product-spec.md:23 in context.md.",
+        "blocking": true
+      },
+      {
+        "text": "[C-10] The I-2 fallback must be decided before /sdd-spec. If fix-agent-client-deadlines does not commit to the `deadline_s is None → exc.details()` pass-through in `_grpc_error_message` (tools.py:228-231), this feature adds xstockstrat-agent to Affected Services now, pins the merge order in docs/roadmap/features/merge-order.md, and adds a C-08 agent test step. The proposer chose a retroactive fallback at step 4, which brings back the same-file collision. Concrete ownership must be recorded in both context.md files.",
+        "blocking": true
+      },
+      {
+        "text": "[C-18] Cancellation swallowing is not proven. grpc.aio is believed to re-raise asyncio.CancelledError when a task awaiting a unary call is cancelled. That is from memory: grpc is not installed locally, so it is unverified. AC-3b, with the stall inside an awaited GetBars AsyncMock, is the pinned guard. The proposer should cite the grpc.aio `_UnaryResponseMixin.__await__` behavior or accept AC-3b as the tripwire.",
+        "blocking": false
+      },
+      {
+        "text": "[C-18] The wrapper must map TimeoutError to DEADLINE_EXCEEDED only when `cm.expired()` is true, and re-raise otherwise. The synthesis adopts this, and T-inner-timeout pins it. The proposer should confirm.",
+        "blocking": false
+      },
+      {
+        "text": "[P-03] G-1 threshold and bias. The threshold becomes an operator input (default edge timeout - 10 s), because the Cloudflare ~100 s origin timeout is not grounded in the repo. G-1 must also record per environment the count of `started` events with no `completed`. Both are adopted in the synthesis; the spec must write them into the checklist step.",
+        "blocking": false
+      },
+      {
+        "text": "[C-10] Docs must state that at the prod limit of 120 s the agent caller hits the MCP 60 s cap first and never sees `backtest exceeded 120s deadline`. I-1's first branch cannot be met in prod.",
+        "blocking": false
+      },
+      {
+        "text": "Executor-thread pile-up on retries. The skill, mcp-tools and CLAUDE.md rows must say 'do not retry immediately'. A cooperative threading.Event cancel check is recorded only as a follow-up.",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "@AC-1 @feature-272",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@AC-2 @feature-272",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@AC-3 @feature-272",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@AC-4 @feature-272 (new: token-bearing re-served page that still carries a token raises)",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-5 @feature-272 (new: stored 0 = no deadline; negative = 300 + WARN)",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-6 @feature-272 (new: _BarFetchError -> FAILED_PRECONDITION 'backtest bar series incomplete:', no history/cells; includes benchmark UNKNOWN -> FAILED_PRECONDITION)",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-7 @feature-272 (new: token sent -> empty page + empty next_page_token returns bars so far as EOF)",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-3 @feature-149",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-8 @feature-215",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-4 @feature-152",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-9 @feature-151",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-4 @feature-176",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-2 @feature-181",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-1 @feature-185",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-5 @feature-185",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-32 @feature-224",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "Stricter D-28 rule (raise whenever a token was sent and the page has no fresh bars, whatever the response token says). It goes beyond product-spec.md:23 ('genuine EOF still returns') and would need a spec amendment and a new AC. Option (a) catches the real marketdata `cursor = start` re-serve, which always carries a non-empty token.",
+      "I-2 as a `details().startswith('backtest exceeded')` prefix match in the agent. It ties the agent to analysis's message text. Replaced with 'deadline_s is None → pass through exc.details()', which needs no string contract and also covers the screener abort.",
+      "Wrapper `except TimeoutError` mapping every TimeoutError to DEADLINE_EXCEEDED. It would misreport inner wait_for timeouts, now or ones added by peers 215/274. Replaced with a `cm.expired()` check that re-raises otherwise.",
+      "Retroactive I-2 fallback at step 4. It reintroduces the same-file collision with fix-agent-client-deadlines and leaves Affected Services wrong at spec time. Replaced with a pre-spec decision plus merge-order pin.",
+      "Fixed G-1 threshold of 90 s derived from an assumed Cloudflare 100 s origin timeout. It is not grounded in the repo, so the threshold is now an operator input.",
+      "G-1 using completed started/completed pairs only. It is biased low because it drops cancelled or errored runs. The orphan `started` count is added.",
+      "Whole-body asyncio.wait_for mirroring the screener (:3786-3796). A cancellation can land between the evidence write (:1280) and the completed event (:1346), leaving a half-persisted run.",
+      "Bound only the compute section (:828-1266) as an extracted helper, or split it into _compute_backtest/_persist_backtest. Too many locals have to be threaded through, and the large diff in the region peers 215/274 edit invites collisions.",
+      "Skip the symbol with a CoverageGap instead of failing the run. It contradicts the spec's 'fails loudly' and still writes evidence from a fault the run itself detected.",
+      "UNAVAILABLE for _BarFetchError. Both causes are deterministic, and the servicer reserves UNAVAILABLE for transient store outages (:684, :2536, :2566), so a retrying caller would loop.",
+      "A SCALAR_BOUNDS_REGISTRY [0,3600] bound in xstockstrat-config. It adds config-service code scope and cannot catch the real hazard, a positive-but-small value; G-1 covers that.",
+      "Passing the asyncio Timeout object into the body. Replaced with a narrow disarm callable (C-18)."
+    ],
+    "open_risks": [
+      "The prod limit of 120 s (config migration 002:71) is enforced for the first time. Multi-symbol runs that complete today may get DEADLINE_EXCEEDED. Only the G-1 gate mitigates this.",
+      "disarm() at :1267 is correct only while nothing awaited that writes state sits before it. Peers 215/274 edit this region, and T-commit is the only tripwire.",
+      "grpc.aio cancellation semantics are unverified locally. If a cancelled GetBars surfaces as AioRpcError(CANCELLED), :1127 swallows it, and the run overruns and persists. AC-3b is meant to catch this.",
+      "Abandoned run_in_executor threads (:1717, :2229, :2400) keep their _compute_executor slots (default 4 from analysis.compute.max_worker_threads). Rapid retries can delay the screener's sync tail.",
+      "Until I-2 lands, agent users with an operator-lowered limit under 60 s still get the generic 'retry shortly' message. At prod 120 s, agent users never see the server message.",
+      "Behavior change (insights.md:178-190): runs that used to 'succeed' with one symbol truncated now fail entirely, and a benchmark UNKNOWN becomes FAILED_PRECONDITION.",
+      "FR-1 can turn existing tests red where GetBars mocks return a truthy MagicMock next_page_token (102 AsyncMock sites). The full suite must be run.",
+      "Orphan analysis.backtest.started events (:818) for timed-out or bars-failed runs become more frequent.",
+      "The rename shifts the line references that peers 215/274 cite into _run_backtest (code unchanged), which causes rebase churn.",
+      "If fix-agent-client-deadlines declines I-2, xstockstrat-agent joins this feature's scope, and merge-order coupling follows."
+    ],
+    "constitution_rules_touched": [
+      "C-03",
+      "C-08",
+      "C-10",
+      "C-11",
+      "C-14",
+      "C-15",
+      "C-16",
+      "C-18",
+      "P-02",
+      "P-03",
+      "F-01",
+      "F-07"
+    ],
+    "rationale": "The r2 proposal concretely closed both round-1 blocking objections. G-1 is now a pinned launch-checklist step, and the C-10 seam has I-1..I-3 with an owner. It also confirmed FAILED_PRECONDITION, the ≤0 semantics and the doc wording, so those are resolved.\n\nThe adversary raised one new blocking point. I verified it against the code: servicer.py:1432-1435 returns on `not fresh` without checking either token. product-spec.md:23 says only \"a re-served page on a token-bearing request raises, while genuine EOF still returns\". acceptance.feature has only AC-1..3; there is no literal FR-2 in product-spec.md, and the earlier rounds' AC-4 is not in the file yet.\n\nI adopted option (a). It satisfies AC-1 (every response carries \"stuck\"), it matches the spec literally, and it still catches the real marketdata `cursor = start` re-serve, which always comes back tokened. The proposer has not answered it, so it stays blocking until r3 confirms (a) or takes (b) with an AC.\n\nI also folded in the cheap, grounded adversary fixes:\n- the `cm.expired()` check;\n- an AC-3b cancellation test inside an awaited GetBars;\n- the I-2 `deadline_s is None` pass-through, verified at tools.py:228-231, where `deadline_s` already exists in the signature;\n- the orphan-count and operator-input threshold for G-1, with ledger QueryEvents now verified;\n- the prod 60 s MCP-cap disclosure;\n- \"do not retry immediately\".\n\nThe I-2 fallback stays blocking because the proposer's retroactive version brings back the same-file collision. Scope and merge order must be fixed before /sdd-spec.\n\nThere are no Floor breaches: the 300 fallback follows the existing get_int_present default pattern (F-07), and there is no migration (F-01).\n\nThe business-rule list is corrected against the real acceptance.feature. AC-1 and AC-3 are CHANGE and AC-2 is PRESERVE, all sanctioned by the operator's 'Scope is D-28, D-29'. AC-4..7 are new EXTENDs that no operator decision covers."
+  },
+  "floor_breaches": []
+}
+```
