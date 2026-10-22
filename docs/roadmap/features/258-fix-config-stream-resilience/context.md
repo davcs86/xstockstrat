@@ -344,3 +344,48 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [ ] Merge-order rows 258↔241 / 258↔263 → /sdd-execute integration PR.
 - [ ] Ledger import swallow → Step 8 precondition (import assertion + red run).
 - [ ] Pool contention, stale namespaces, propagation lag → Step 9 docs.
+
+## Session 2026-10-22 — sdd-review impl-spec (advisory)
+
+- Result: 1 failure, 7 warnings; overlap WARN (no FAIL for this feature). Advisory, did not block; lifecycle unchanged
+  (`implementation-ready`).
+- Re-verified the FAIL before editing:
+  - `ledgerServiceImpl.ts:20-25` uses constructor parameter properties.
+  - Ledger `package.json:13-14` runs `node --experimental-strip-types`, and the test header `:5-8` names that as the
+    skip cause.
+  - This supersedes the sdd-spec session's "Node 24 precondition" reading.
+- Addressed (implementation-spec.md edited):
+  - [x] Step 8 FAIL (C-08/P-06): Step 8 now hard-depends on feature 252 Steps 4–5 (compile-then-test ledger runner,
+    de-guarded `ledgerServiceImpl.test.ts`). This replaces the Node 24 precondition, which did not fix the
+    unsupported syntax. The step has a precondition gate (`test:coverage` starts with `tsc &&`, else blocked and
+    stop-and-ask). Its Verification now proves the cases executed: TAP `# pass` > 0 and two `ok … @AC-5/@AC-10`
+    hits. A per-file `--experimental-transform-types` was not chosen, because it would be a second runner beside
+    252's and collide with its `package.json`.
+  - [x] Step 7 WARN: Verification adds `pnpm run build` (tsc) and a grep for the import.
+  - [x] Step 7 WARN: `PoolClient` comes in through a separate `import type { PoolClient } from 'pg'`, and `:1` is
+    left unchanged.
+  - [x] Step 2 WARN: a gating log-sink spike (instruction 0) that reads the installed winston Console transport,
+    records the writer and proves capture with a probe before AC-2/AC-8 are written. Step 6 reuses it.
+  - [x] Step 1 WARN (Docker): it is now explicit that Step 1 cannot be marked `done` until the pg_terminate_backend
+    check passes, locally or on the dev app. Steps 2–6 may proceed meanwhile.
+  - [x] Step 1 WARN: `onNotification` drops a parsed payload whose `namespace` is missing or not a string, before
+    the chain.
+- Still open (carried into /sdd-execute; announce at each checkpoint, P-03):
+  - [ ] Step 8 blocked until 252 Steps 4–5 merge to `main-dev` and this branch is rebased (P-06). Step 7 may land
+    first.
+  - [ ] Merge-order rows not yet in `docs/roadmap/features/merge-order.md` (this writer may edit only the feature
+    dir). Non-blocking rows are owed at integration:
+    - 258↔241 (`setConfig`);
+    - 258↔263 (`getConfig`);
+    - 258↔248 (`ledgerServiceImpl.ts` import line and nearby hunks);
+    - a blocking dependency 258 → 252 (Step 8 runner).
+    - Add a rebase-only note for the shared config `CLAUDE.md` and `docs/context-constitution.md` (241, 244, 248).
+  - [ ] Steps 1 and 5 rewrite a large share of `configServiceImpl.ts`. The six config steps run in sequence on one
+    file. No spec change: this was advisory and the ordering is already documented.
+  - [ ] Step 9 must run last, because it re-stamps the CONFIG-1 line hints that 241 and 244 also edit.
+  - [ ] Out of scope for 258, to flag to the owners: 244 (`032_analysis_zero_trap_descriptions`) and 248
+    (`032_ledger_stream_resolve_timeout`) both claim config migration NNN 032. That is a FAIL between those two
+    peers and needs a blocking merge-order row.
+  - [ ] Batch peers with no feature directory on this checkout (fix-marketdata-secret-exposure,
+    fix-offline-book-consistency, fix-python-loop-supervision, fix-fundsignal-emit-accounting), and 257/263/266,
+    were not overlap-scanned. Re-scan them when they reach implementation-ready.
