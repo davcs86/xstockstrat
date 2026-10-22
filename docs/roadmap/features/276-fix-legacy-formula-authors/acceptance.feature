@@ -64,8 +64,10 @@ Feature: fix-legacy-formula-authors (bug fix)
     And "bbbbbbbb-0000-4000-8000-000000000001" keeps the owner's update and author "11111111-1111-4111-8111-111111111111"
 
   @AC-9 @FR-7
-  Scenario: Only an authorized operator can run the rewrite and system-author rows are never touched
+  Scenario: Apply refuses without a digest-matched, fully-confirmed plan and never touches system or UUID rows
+    # Authority to run the fix is the DB credential holder plus the DBA change record (process, not code);
+    # operator sign-off 2026-10-22. The digest is integrity, not authority. Order: edit plan -> hash -> record -> apply.
     Given the formula "bbbbbbbb-0000-4000-8000-000000000003" is stored with the reserved system author and "bbbbbbbb-0000-4000-8000-000000000004" is stored with author "alice"
-    When a caller without operator authority attempts to run the legacy-author fix in rewrite mode
-    Then the attempt is refused and no formula author has changed
-    And when an authorized operator then runs it, "bbbbbbbb-0000-4000-8000-000000000003" keeps the system author and its updated timestamp
+    When apply is run with a missing or mismatched digest, or a plan that still holds a "suggested" entry, or a confirmed entry whose old author is the system author or a user id, or a new author that is not an active user id
+    Then the run is refused with zero UPDATEs and no formula author has changed
+    And when apply is run with a digest-matched, fully-confirmed plan, "bbbbbbbb-0000-4000-8000-000000000003" keeps the system author and its updated timestamp
