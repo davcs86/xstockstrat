@@ -215,3 +215,26 @@ Status unchanged (spec-ready); design.md NOT written (gate policy: halt, grillin
 
 - Execute: Steps 1-9 pending; run `/sdd-review fix-legacy-formula-authors impl-spec` first.
 - Prod legacy-author set unknown; first prod run is report-only. Restart EVERY indicators instance after apply; verify via GetFormula/ExecuteFormula, not ListFormulas.
+
+---
+
+## Session 2026-10-22 — sdd-review impl-spec
+
+Advisory (MODE B); lifecycle unchanged (`implementation-ready`).
+
+### Addressed
+
+- Reviewer FAIL "implementation-spec.md unreadable / status draft": a stale main-dev checkout, not a spec defect. On `origin/feature/fix-legacy-formula-authors` the spec exists (9 steps) and `status.md` reads `implementation-ready`. No edit.
+- AC-9 vs `acceptance.feature` (C-15): the feature-branch AC-9 already carries the operator-signed-off integrity wording; spec Steps 5, 6, 8 agree. No edit.
+- C-18 DRY on `list-users --json`: the separate `SELECT user_id, email, is_active` query is deliberate (the existing 4-tuple query is pinned by `TestListUsersCmd`); confirmed in Step 1. No edit.
+- Overlap WARN (conftest.py with 244; indicators CLAUDE.md with 268/243/244): recorded in implementation-spec.md Step Dependencies as an append-only, rebase-only overlap.
+
+### Still open
+
+- Step 7 does not simulate the DB-backed `ListFormulas` (`list_visible`) path; FR-1 "ListFormulas includes it" is covered only by the in-memory branch plus the runbook verify step. Decide at the /sdd-execute checkpoint whether to add a fake-pool `list_visible` test.
+- Reviewer could not run `git show` against the spec; the criteria checks (paths, symbols, thresholds) were not independently re-run by a second reviewer. Spot-checked here: `list-users` at `scripts/manage-users.py:270-289` and `_can_read_formula` at `servicer.py:141`.
+
+### Open Threads
+
+- Step 7 `ListFormulas` DB-path test gap (see above).
+- Merge-order with 244/268/243 for `tests/conftest.py` and indicators `CLAUDE.md`.
