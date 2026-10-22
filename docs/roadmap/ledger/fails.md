@@ -3033,6 +3033,18 @@ ambiguity is logged here).
 - **Evidence**: `docs/roadmap/features/250-fix-otel-metrics-logs-gap/design.md` §4 Part 3 (existence set) and §5 (comment-only red case); context.md 2026-10-21 sdd-design entry.
 - **Rule it implies**: an existence/absence guard derives its "exists" set from declaration value lines only (e.g. `- uid:`, top-level `"uid":`), never from free text in the same file, and ships a red case proving a comment cannot satisfy existence.
 
+### 2026-10-21 — fix-getpnl-source-service — assumption
+- **Mistake**: Debate rounds 6-8 read a stale read-only checkout (`d077dcfe`) and re-raised blocker B6 (follow-up
+  reports unfiled) after `d707d239` had filed them, so a discharged blocker held the design gate for three rounds.
+- **Evidence**: `docs/roadmap/features/251-fix-getpnl-source-service/context.md` "sdd-design (full) round 9, gate"
+  and "halted at gate, round 8" (`:276-278`).
+- **Rule it implies**: Before each debate round, refresh the read-only checkout to the feature branch tip and record
+  the grounded SHA in the synthesis; a blocker whose evidence is a file's absence is re-verified at that SHA.
+
+### 2026-10-21 — otel-metrics-logs-export — assumption
+- **Mistake**: Two design rounds assumed telemetry wrappers measure what their names say. connect-es resolves a server-streaming handler only after the first message (`untilFirst`), so a BFF "duration" wrapper records time-to-first-alert (hours) for an idle stream; and Python `asyncio.CancelledError` (deadline/cancel) is a `BaseException` the gRPC instrumentation never catches, so those calls would record OK (0) where Go records 4/1. Separately, sdk-node 0.52 silently drops its default trace exporter once `spanProcessors` is passed, and `@opentelemetry/api` 1.9.1 has no proxy MeterProvider, so an early-bound histogram is a permanent no-op.
+- **Evidence**: `docs/roadmap/features/274-otel-metrics-logs-export/context.md` Round 1–3 checkpoints; `@connectrpc/connect` `protocol-connect/handler-factory.js:277-280`; `opentelemetry/instrumentation/grpc/_aio_server.py:109-116`; `sdk-node@0.52.1 sdk.js:81-84`; `api@1.9.1 api/metrics.js:35-36`.
+- **Rule it implies**: Any design that wraps a handler or SDK to record telemetry must read the pinned library's actual resolution/exception/registration path (stream resolution, BaseException handling, default-component replacement, proxy vs no-op globals) before claiming what the number means — and add a test that would fail on the naive assumption.
 
 ### 2026-10-22 — fix-marketdata-secret-exposure — assumption
 - **Mistake**: The vendor clients redacted the URL on the non-2xx branch only. They `%w`-wrapped the transport error (`http.Client.Do`) and the parse error (`http.NewRequestWithContext`) as-is. Both are `*url.Error` values whose text carries the full request URL, including the `apikey=`/`token=` query key, so the key reached gRPC statuses, logs and OTel (D-39).
