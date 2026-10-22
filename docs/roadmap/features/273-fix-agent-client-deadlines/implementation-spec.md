@@ -73,7 +73,8 @@ Steps 6/7) plus the MCP HTTP auth edge (`app/main.py`, Steps 8/9). There is no U
 - Step 8 requires Step 2 (`hung_backend`, with the `module=` redirect for `app.auth`) and Step 3 (the constant).
 - Step 9 requires Step 3 (`auth.py` reads `client._RPC_TIMEOUT_S`).
 - Steps 10-12 require Steps 3, 5, 7 and 9, because they document the shipped wording and behaviour.
-- **Merge order:** 247 → 273 → 272 (`fix-analysis-backtest-bounds`). Step 11 writes both rows. Features 215, 240,
+- **Merge order:** 247 → 273 → 272 (`fix-analysis-backtest-bounds`). Both rows already exist on `origin/main-dev`
+  (`merge-order.md:84-85`); Step 11 ensures they exist and amends the 272 row. Features 215, 240,
   241, 245 and 249 also edit `client.py` / `tools.py`. That is textual overlap only, so whichever merges second
   rebases and re-runs the agent suite. It is not a merge-order row.
 - **Open risks carried to execution:**
@@ -130,11 +131,16 @@ Steps 6/7) plus the MCP HTTP auth edge (`app/main.py`, Steps 8/9). There is no U
 3. Escalate before Step 3 is committed, and do not proceed, if either holds:
    - any long-RPC p99 is above 45 s, which needs an FR-2 amendment plus a 198 @AC-8 CHANGE sign-off;
    - the ValidateToken p99 is not comfortably below 10 s (operator judgment).
+4. **Checkpoint (gates Step 3's commit).** End the entry with exactly one line `Baseline verdict: PASS` or
+   `Baseline verdict: HALT — <reason>`. "Not measured" is `HALT` until the operator signs off in context.md.
+   `/sdd-execute` must not commit Step 3 unless the verdict line reads `PASS`, or a later operator sign-off line
+   in context.md overrides a `HALT`.
 
 **Verification**:
 ```bash
 grep -n "Deadline latency baseline" docs/roadmap/features/273-fix-agent-client-deadlines/context.md
 grep -n "RunBacktest\|RunFundamentalsScan\|ScreenSymbols\|TriggerBackfill\|ValidateToken" docs/roadmap/features/273-fix-agent-client-deadlines/context.md | tail -5
+grep -n "^Baseline verdict: " docs/roadmap/features/273-fix-agent-client-deadlines/context.md | tail -1   # must read PASS (or be overridden by an operator sign-off) before Step 3 is committed
 ```
 
 ---
@@ -315,7 +321,8 @@ cd services/xstockstrat-agent && ruff check . && ruff format --check . && uv run
 cd services/xstockstrat-agent && uv run --no-sync pytest tests/test_client_deadlines.py -v   # GREEN
 grep -c "timeout=_RPC_TIMEOUT_S" services/xstockstrat-agent/app/client.py      # expect 67
 grep -c "timeout=_LONG_RPC_TIMEOUT_S" services/xstockstrat-agent/app/client.py # expect 4
-grep -n "metadata=_metadata\|metadata=meta" services/xstockstrat-agent/app/client.py | wc -l   # unchanged vs pre-step (header trio untouched)
+# grep -c counts lines; valid because each kwarg sits on its own line in these multi-line calls. Step 2's AST guard is authoritative.
+grep -c "metadata=_metadata\|metadata=meta" services/xstockstrat-agent/app/client.py   # expect 73 (baseline at 9f99103b; re-capture after the 247 rebase if 247 changed it) — header trio untouched
 cd services/xstockstrat-agent && ruff check . && ruff format --check . && uv run --no-sync pytest --cov=app --cov-fail-under=40
 ```
 
@@ -615,8 +622,9 @@ cd services/xstockstrat-agent && ruff check . && ruff format --check . && uv run
 **Verification**:
 ```bash
 cd services/xstockstrat-agent && uv run --no-sync pytest tests/test_tool_deadlines.py tests/test_tools.py tests/test_ingest_signal_watchlist.py tests/test_template_tools.py tests/test_watchlist_tools.py -v   # GREEN
-grep -c "deadline_s=client._RPC_TIMEOUT_S" services/xstockstrat-agent/app/tools.py
-grep -c "deadline_s=client._LONG_RPC_TIMEOUT_S" services/xstockstrat-agent/app/tools.py   # expect 4
+grep -c "deadline_s=client._RPC_TIMEOUT_S" services/xstockstrat-agent/app/tools.py        # expect 41 (36 existing RPC-row sites + 5 new RPC wraps)
+grep -c "deadline_s=client._LONG_RPC_TIMEOUT_S" services/xstockstrat-agent/app/tools.py   # expect 4 (3 existing + screen_symbols)
+# Both are line counts; Step 6's AST guard test_every_catch_site_passes_deadline_s is authoritative.
 cd services/xstockstrat-agent && ruff check . && ruff format --check . && uv run --no-sync pytest --cov=app --cov-fail-under=40
 ```
 
@@ -716,6 +724,8 @@ cd services/xstockstrat-agent && ruff check . && ruff format --check . && uv run
 - `_new_trace_id()` is at `tools.py:173-175`.
 - No claims consumer serialises the claims dict: `grep -n "_require_claims(\|_claims_from_context(\|json.dumps(claims" app/*.py` returns only the readers at `tools.py:123`, `:142`, `:163`. So adding a `trace_id` key is safe (design §3).
 - The C-03 / operator 2026-10-21 trace decision: this request-derived call carries the request's trace id.
+  `x-user-id` / `x-access-scope` are not forwarded: ValidateToken runs pre-auth, so no verified user or scope exists
+  yet (they come from the claims it returns).
 
 **TDD**: `red-green required`
 
@@ -779,7 +789,8 @@ cd services/xstockstrat-agent && ruff check . && ruff format --check . && uv run
   … discovery pointer".
 - `plugins/strat-lab/skills/backtest/SKILL.md`: § Phase 1 (backfill, `:175-179`) and § Phase 2 (run, `:181-187`).
   Root CLAUDE.md requires a change to `run_backtest` / `trigger_backfill` behaviour to update this skill in the
-  same PR.
+  same PR. **This step must land in the same PR as Steps 3 and 7**: in `sequential` mode that is the single
+  integration PR; in per-step mode, do not merge the Step 3/7 changes to `main-dev` without it.
 - Parity to keep (C-16 PRESERVE):
   - `mcp-tools.md` and the skill keep listing `list_templates` / `instantiate_template` without `is_public` /
     `include_public` (224 @AC-32);
@@ -835,8 +846,10 @@ grep -n "is_public\|include_public" docs/runbooks/mcp-tools.md plugins/strat-lab
 - The sidecar contract is `.claude/skills/sdd-qa/reference/defect-filing.md:26-47`:
   - `triaged` + `ref: feature:<NNN-slug>`;
   - a `triaged` report whose feature reaches `launched` counts as resolved.
-- `merge-order.md` lists only hard ordering constraints (`:14-18`). There is no row for 247/272/273 yet
-  (`grep -n "fix-agent-client-deadlines\|fix-agent-getconfig-deadline\|fix-analysis-backtest-bounds" docs/roadmap/features/merge-order.md` → none).
+- `merge-order.md` lists only hard ordering constraints (`:14-18`). `origin/main-dev` already carries both rows
+  (`git show origin/main-dev:docs/roadmap/features/merge-order.md`, lines 84-85): 273 after 247, and 272 after 273.
+  The 272 row describes the pass-through as "`deadline_s is None → exc.details()`", which Step 5 widened. The
+  feature-branch tip predates those rows; the 247-precondition rebase onto `main-dev` brings them in.
 - 272 is `fix-analysis-backtest-bounds`
   (`git show origin/main-dev:docs/reports/2026-10-21-analysis-backtest-bounds-defect.status` →
   `ref: feature:272-fix-analysis-backtest-bounds`).
@@ -851,13 +864,16 @@ grep -n "is_public\|include_public" docs/runbooks/mcp-tools.md plugins/strat-lab
 **Instructions**:
 1. Overwrite the SEV-3 sidecar with `triaged` and `ref: feature:273-fix-agent-client-deadlines`, because Step 7
    adds all six wraps. Do not edit the report body (it is a point-in-time record).
-2. Append two `merge-order.md` rows, both with Resolved = `No`:
-   - `fix-agent-client-deadlines` (273) | `fix-agent-getconfig-deadline` (247). Reason: 273's @AC-10 allow-list
-     and the @AC-2/@AC-8 tests consume 247's `_CONFIG_READ_TIMEOUT_S` and `hung_config_server`.
-   - `fix-analysis-backtest-bounds` (272) | `fix-agent-client-deadlines` (273). Reason: 272's server deadline
-     detail reaches the caller only through 273's `_grpc_error_message` pass-through. Add the PLAT-13 nesting
-     note: 272's server bound on `analysis.backtest.max_duration_seconds` must sit at or below about 40 s, under
-     the agent's 45 s, or the pass-through never fires (R2).
+2. Ensure exactly one `merge-order.md` row exists for each pair, with Resolved = `No`. Add a row only if it is
+   missing; never add a duplicate.
+   - `fix-agent-client-deadlines` (273) | `fix-agent-getconfig-deadline` (247). Keep the existing reason. If the
+     row is missing, add it and also name 273's @AC-10 allow-list and the @AC-2/@AC-8 tests, which consume 247's
+     `_CONFIG_READ_TIMEOUT_S` and `hung_config_server`.
+   - `fix-analysis-backtest-bounds` (272) | `fix-agent-client-deadlines` (273). Amend the existing row:
+     - reword the pass-through to match Step 5: it "fires whenever `exc.details()` is non-empty and is not grpc's
+       client sentinel `Deadline Exceeded`, regardless of `deadline_s`";
+     - add the PLAT-13 nesting note: 272's server bound on `analysis.backtest.max_duration_seconds` must sit at
+       or below about 40 s, under the agent's 45 s, or the pass-through never fires (R2).
 3. File two follow-up defect reports with `/sdd-qa defect` (template and `open` sidecar, SEV-3):
    - R4: `list_opportunities` worst case 68 s, above the 60 s MCP timeout. Suggest lowering the
      `agent.opportunities.read_timeout_seconds` SetConfig ceiling.
@@ -869,7 +885,10 @@ grep -n "is_public\|include_public" docs/runbooks/mcp-tools.md plugins/strat-lab
 **Verification**:
 ```bash
 head -2 docs/reports/2026-10-19-agent-tools-missing-grpc-error-mapping-defect.status
-grep -n "fix-agent-client-deadlines" docs/roadmap/features/merge-order.md
+grep -c '^| `fix-agent-client-deadlines` (273) | `fix-agent-getconfig-deadline` (247)' docs/roadmap/features/merge-order.md   # expect 1
+grep -c '^| `fix-analysis-backtest-bounds` (272) | `fix-agent-client-deadlines` (273)' docs/roadmap/features/merge-order.md    # expect 1
+grep -n "deadline_s is None → exc.details()" docs/roadmap/features/merge-order.md   # expect no hits
+grep -n "about 40 s" docs/roadmap/features/merge-order.md                            # expect the 272 row
 ls docs/reports/ | grep -i "list-opportunities-over-mcp-timeout\|extract-tools-no-mcp-cap"
 ```
 
