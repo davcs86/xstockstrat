@@ -61,16 +61,23 @@ Feature: fix-python-loop-supervision (bug fix)
     And the cursor ends at 11
 
   @AC-7 @FR-5 @regression
-  Scenario: A ledger event that keeps failing is parked and logged, and the cursor moves on
+  Scenario Outline: A ledger event that keeps failing is parked and recorded, and the cursor moves on
     Given the P&L-pattern consumer cursor is at 9
     And the ledger streams "portfolio.position.closed" event 10 and event 11
-    And the consumer's retry bound is 3 attempts
-    And processing event 10 raises an error on every attempt
+    And the consumer's retry bound is 3 attempts and its replay escalation threshold is 5
+    And processing event 10 raises <error> on every attempt
+    And the bounded DB-health probe succeeds
     When the consumer processes the stream
-    Then event 10 is attempted exactly 3 times and is then parked
+    Then event 10 is attempted exactly <attempts> times and is then parked with reason "<reason>"
     And a log line records that event 10 was parked, with the reason
+    And an "analysis.pnl.event_parked" ledger event records sequence 10 with idempotency key "pnl_park:10"
     And event 11 is processed successfully
     And the cursor ends at 11
+
+    Examples:
+      | error                                                         | attempts | reason               |
+      | a poison error (ValueError, or asyncpg SQLSTATE class 22/23)  | 3        | non-transient        |
+      | a non-poison error that persists (asyncpg OutOfMemoryError)   | 15       | transient-persistent |
 
   @AC-8 @FR-3 @regression
   Scenario Outline: A config watcher task that ends unexpectedly is retained and its exit is logged
@@ -83,3 +90,26 @@ Feature: fix-python-loop-supervision (bug fix)
       | analysis   |
       | indicators |
       | ingest     |
+
+  @AC-9 @FR-5 @regression
+  Scenario Outline: A non-poison failure is replayed, not parked, while the DB-health probe fails
+    Given the P&L-pattern consumer cursor is at 9
+    And every reconnect re-delivers the cursor's own event 9 before event 10
+    And processing event 10 raises <error> on every attempt
+    And the bounded DB-health probe <probe outcome>
+    When the consumer has replayed event 10 five times
+    Then event 10 is not parked and the cursor stays at 9
+    And the 5th replay logs ERROR naming sequence 10
+    And the re-delivered event 9 never resets the replay count
+
+    Examples:
+      | error                               | probe outcome |
+      | an asyncpg OutOfMemoryError         | raises        |
+      | an asyncpg DeadlockDetectedError    | times out     |
+
+  @AC-10 @FR-5 @regression
+  Scenario: A consumer whose cursor read fails on every reconnect escalates to ERROR
+    Given the P&L-pattern consumer's cursor read raises a connection error on every call
+    When the consumer has failed to open the ledger stream 5 consecutive times
+    Then the first 4 failures log WARNING
+    And the 5th consecutive failure logs ERROR
