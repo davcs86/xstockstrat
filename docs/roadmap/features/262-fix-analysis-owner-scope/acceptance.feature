@@ -67,3 +67,15 @@ Feature: fix-analysis-owner-scope (bug fix)
     Given the analysis test suite under services/xstockstrat-analysis/tests
     Then no test references "_strategies_repo.get_by_id" or "_strategies_repo.update("
     And the analysis test suite passes
+
+  @AC-9 @FR-4 @regression
+  Scenario: A failed blend-universe resolve skips only the blend pairs
+    Given the fundamentals blend is enabled and the blend strategy is live
+    And live strategy "s-2" owned by "u-a" whose universe includes "MSFT"
+    And trading holds a filled BUY 5 "MSFT" on strategy "s-2" for user "u-a" at 2026-10-01T14:30:00Z
+    And the fundamentals-universe resolve raises
+    When the boot entry-backfill runs
+    Then it completes without raising
+    And the live loop's entry time for ("u-a", "s-2", "MSFT") is 2026-10-01T14:30:00Z
+    And no ListOrders request is sent for the blend strategy
+    And a warning naming the failed fundamentals-universe resolve is logged
