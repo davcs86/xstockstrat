@@ -477,3 +477,45 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   analysis suite run.
 - [ ] The trading-side `ListOrders` report must keep accepting body `user_id` + `x-user-id` +
   `x-trace-id` (tracked outside this feature).
+
+## Session 2026-10-22 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 6 warnings (5 WARN + 1 NOTE), 0 floor breaches. Overlap: WARN (file-level,
+  rebase-only; no migration NNN, proto field or config-key collision). Advisory: lifecycle unchanged
+  (`implementation-ready`).
+- Addressed in implementation-spec.md (commit `35d772f8`):
+  - Step 5 `@AC-3` constructor risk: re-verified. `LiveEvaluationLoop.__init__` defaults
+    `cooldowns_repo=None` (`live_loop.py:276`, stored `:300`) and `_write_entry_cooldown` returns
+    early on `None` (`:901-902`). The spec evidence now says so instead of deferring to execute time.
+  - Step 5 conftest move: added the missing `_EOF` dependency. conftest builds the page inline as
+    `types.SimpleNamespace(next_page_token="")` and does not import from the test module. The
+    fallback (keep `_live_loop`, real-`owner_metadata` side effect) is now marked preferred on any
+    conftest collision with 244/246, after a rebase before the step.
+  - Step 7 rebase churn: rule (i) now locates sites by grep on the rebased tree, not by the
+    `5afe0c84` line numbers. The rebase is instruction 7 but is marked "do this first".
+  - Merge-order bullet: updated to say the row is still unwritten and must be added before
+    `/sdd-execute` Step 2.
+- Not changed (no edit needed):
+  - Step 4 nested try/except: each branch maps to an FR/AC. Optional per-row extraction is left
+    to execute-time judgement.
+  - Step 1 NOTE (spec `Status` header `pending` vs `status.md` `implementation-ready`): the header
+    tracks execution progress and `/sdd-execute` manages it. Cosmetic.
+- Overlap findings: `entry_backfill.py` ADJACENT to 244 (`:56-61`, rebase conflict expected);
+  `tests/conftest.py` (244, 246), `tests/test_owner_header_guard.py` (246),
+  `tests/test_analysis_servicer.py` (215, 244), `app/handlers/servicer.py` (215, 244),
+  `services/xstockstrat-analysis/CLAUDE.md` (244, 246). All disjoint lines, rebase only. The other
+  batch peer branches could not be scanned (they exist only as worktree FETCH_HEADs).
+
+### Open Threads
+
+- [ ] merge-order.md soft row: `fix-analysis-owner-scope` (262) | `fix-python-config-stored-zero`
+  (244) | adjacent edit to `entry_backfill.py:56-61`, rebase conflict expected | No. Whichever
+  merges second rebases. Needs operator yes/no. This run could write only the feature directory,
+  so add it before `/sdd-execute` Step 2 or with the integration PR.
+- [ ] Batch peers (fix-marketdata-fundamentals-cache, fix-portfolio-snapshot-surface,
+  fix-db-tls-fail-closed, fix-indicators-formula-correctness, fix-template-update-metadata,
+  fix-ui-transport-hardening, fix-analysis-backtest-bounds, fix-agent-client-deadlines) were not
+  overlap-scanned. Re-check fix-analysis-backtest-bounds (same service) at the `/sdd-execute`
+  checkpoint.
+- [ ] Step 4: if the `run_once` row loop gets hard to read after the guards land, extract the
+  per-row logic into a helper (advisory, no FR impact).
