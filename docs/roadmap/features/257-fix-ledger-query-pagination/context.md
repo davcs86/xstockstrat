@@ -387,3 +387,12 @@ Still open (surface at the /sdd-execute checkpoint):
   of this bug.
 - [ ] 263's `owner_only = 7` field number and its `ownerOnly` predicate were not verifiable from trunk (263 is
   draft there). Step 2's new precondition grep catches this at execute time.
+
+## Session 2026-10-22 (operator decision — AC-6 wording)
+
+- **Decided:** reword `@AC-6` to match the fold convention instead of keeping the recorded C-15 divergence. The
+  scenario is now "GetPnL keeps the largest cumulative partial fill of an order that spans ledger pages", with
+  sell-signed cumulative `filled_qty` −1 … −501 (largest magnitude −501). `realized_pnl` stays 501.00.
+- `implementation-spec.md` Step 7 drops the "Recorded C-15 divergence" note; test and scenario now agree.
+- No `/sdd-qa defect` is filed for the fill-payload side/sign question (operator chose the reword). The adjacent
+  observation that `order.filled`/`order.partially_filled` payloads carry no side remains recorded above for context.
