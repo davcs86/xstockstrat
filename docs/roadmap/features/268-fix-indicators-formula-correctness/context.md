@@ -635,3 +635,35 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - Done at /sdd-spec 2026-10-22.
   - Affected Services: add xstockstrat-ui, and mark analysis and proto as unchanged consumers.
   - Fix Scope: settle the proto checkbox as "no proto change (Option A)".
+
+## Session 2026-10-22 — sdd-review impl-spec
+
+- Mode B (advisory). Lifecycle unchanged (`implementation-ready`). Criteria verdict: PASS WITH WARNINGS, no
+  FAIL, no floor breach. Overlap verdict: WARN (shared-file rebase risk only; no proto, migration or config
+  collision).
+- **Addressed in implementation-spec.md:**
+  - Step 8: verification now runs `pnpm run test:coverage`, and the spec states the threshold. It is the
+    40% floor on `src/lib/**`, enforced by `vitest.config.ts:29-33` (re-verified).
+  - Steps 7/8: added a note that no Playwright step is needed. The change is static catalog text covered by
+    vitest, and no `e2e/` spec references the old strings (re-verified by grep).
+  - Step 3: the `_fail` grep now expects 4 lines (the def line also matches `_fail(`, plus 3 call sites).
+  - Step 3: the `"\\n__OUTPUT__:"` escape is flagged as the highest-risk edit. Run Step 4's suite right after it.
+  - Step 5: the `screener.py` citation now gives both lines: `:285` is the `_latest_indicator("ATR", ...)` call
+    and `:279-284` is its comment (re-verified). The product-spec's `:279-284` and the spec's `:285` agree.
+- **Still open (surface at the /sdd-execute checkpoint):**
+  - C-18 accepted debt: the duplicated ATR/VWAP text has a named follow-up, but the follow-up is not filed
+    anywhere durable yet. This review's write scope is the feature dir only.
+  - merge-order.md: no rows exist for 268 vs 244 (`sandbox.py`, `servicer.py`) or 268 vs 269 (`servicer.py`).
+    Add soft rows (rebase-only, Resolved=No) at the integration PR.
+  - 269-fix-template-update-metadata has no implementation-spec yet, so its `servicer.py` overlap is
+    unverified. Re-scan when 269 reaches implementation-ready.
+
+## Open Threads (sdd-review impl-spec 2026-10-22)
+
+- [ ] File the C-18 follow-up (source the UI strategy catalog from `ListIndicators`, `servicer.py:354-363`) as a
+  durable item: a defect report or a feature idea.
+  - Target: /sdd-execute (Step 10, alongside the missing-result report) or post-launch.
+- [ ] Add soft merge-order.md rows for 268 vs 244 and 268 vs 269.
+  - Target: the /sdd-execute integration PR.
+- [ ] Re-scan the `servicer.py` overlap with 269 once its implementation-spec exists.
+  - Target: the /sdd-execute checkpoint before Step 1.
