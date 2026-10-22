@@ -273,3 +273,68 @@ Per the grilling protocol `design.md` is not written and `status.md` stays `spec
   "floor_breaches": []
 }
 ```
+
+## Session 2026-10-22 — sdd-design
+
+- Phase 0 Recon: wrote recon.md. Services: xstockstrat-ui, xstockstrat-ledger, xstockstrat-agent and
+  xstockstrat-config. Key reuse patterns: the `exportEvents` owner derivation (`ledgerServiceImpl.ts:301-311`) and the
+  `setConfig` header bind (`userIdFrom` + `hasAdminAccessScope`).
+- Phase 1 Grilling: 2 rounds (full). The operator approved at the design gate (r2), "APPROVED as synthesized,
+  including the agent echo fix". This closes the last blocking objection: the echo is kept, not dropped.
+- Chosen approach:
+  - D-31: a config-side `boundReadUserId` on `getConfig`/`listKeys`. A non-admin's foreign body id is bound to the
+    header caller. Admins and header-less callers keep the body id.
+  - Agent: `client.py:2059`/`:2080` echo the effective id, using the same rule via `_CALLER` and `scopes._ADMIN`,
+    pinned by a test.
+  - D-25: the trader BFF uses one `backendHeaders` call per request.
+    - `copilot:` keys are rewritten to the caller's own key.
+    - An `account:<id>` key is checked with `ListBrokerAccounts`. Unowned or empty → PERMISSION_DENIED; a trading
+      error has its code passed through; an owned key is forwarded unfiltered.
+    - Any other key forces `ownerOnly`, a new additive field `owner_only = 7`, enforced by a ledger predicate shared
+      with `exportEvents`.
+- Rejected:
+  - an agent-only ctx bind
+  - BFF `userId` pins
+  - refuse-with-PERMISSION_DENIED (operator override)
+  - a proto `effective_user_id` field
+  - a ledger filter keyed on whether `x-user-id` is present
+  - a `user_id` filter on `account:` streams
+  - header or peer-SAN gates
+  - BFF post-filtering
+  - a `ListBrokerAccounts` cache
+- Constitution rules touched: C-03, C-09, C-10, C-11, C-13, C-15, C-16, C-18, P-02, P-03, PLAT-4/PLAT-5/PLAT-13.
+  Floor breaches: none.
+- **C-16 CHANGE sign-off:** `@AC-9 @FR-5 @regression @feature-196` covers body `user_id` semantics for non-admin
+  callers that send a header. A non-admin's foreign `user_id` on GetConfig/ListKeys is now replaced by the caller's
+  verified `x-user-id`. Authorised by the operator decision of 2026-10-22 (bind, not refuse; OPERATOR DECISIONS
+  above) and the design-gate approval of 2026-10-22.
+- Other CHANGE kinds and their decisions:
+  - `@AC-2 @feature-263`: covered by the 2026-10-22 decision that NULL-user_id rows are never returned (FR-2).
+  - `@AC-4` and `@AC-5 @feature-263`: covered by the 2026-10-22 bind override.
+  - `@AC-1 @feature-263` is EXTEND (net-new BFF ownership check).
+- Assumption, stated explicitly: a non-admin who picks user X in config-ui `useConfigKeys` is shown their own rows. A
+  UI hint for this case is out of scope.
+- Ledger: no line added. The echo/label trap and the opt-in proto flag are specific to this feature; the
+  "overwrite client ownership fields server-side" pattern is already in `insights.md:602-604`.
+- Status: spec-ready → design-approved.
+
+### Open Threads (as of design approval; supersedes the round-2 halt list above)
+
+- [ ] **Overlap with feature 257.** `ledgerServiceImpl.ts` `queryEvents` (:124-176) and a possible collision on
+  `QueryEventsRequest` field 7. Record it in 257 context.md and in merge-order.md. Target: the /sdd-spec proto step
+  and the merge-order record.
+- [ ] **Overlap with feature 241.** `configServiceImpl.ts` (setConfig). Target: the config step and merge-order.md.
+- [ ] **Overlap with features 247/273.** `client.py:2034-2080`. Target: the agent step and merge-order.md.
+- [ ] **`owner_only` fails open by default.** Covered by the proto comment, the ledger CLAUDE.md invariant and the
+  BFF/e2e tests. Target: the proto, ledger and docs steps.
+- [ ] **The bind applies to every header-carrying non-admin caller.** Covered by a regression test and config
+  invariant #5 text. Target: the config step.
+- [ ] **Paths the bind does not cover.** It does not fire for header-less callers (agent stdio, empty-claims paths) or
+  for WatchConfig's body `user_id`, and `streamEvents`/`getEvent` remain unscoped. The `order:<id>` NULL-owned
+  `order_intent.*` rows are hidden under branch 3. All are covered by a P-03 findings entry. Target: the docs step.
+- [ ] **Extra trading RPC on each `account:` poll.** Accepted, no cache. Target: the BFF step (note).
+- [ ] **C-09 approval for proto field 7.** The fallback is the unverified peer-SAN gate. Target: the proto step.
+- [ ] **AC-7 evidence.** It must come from the SQL-capture test plus the e2e mock, not a live smoke test
+  (`usePositionLineage.ts:18` literal). Target: the ledger and BFF test steps.
+- [ ] **Owed before spec:** the acceptance.feature AC-4/AC-5 bind amendment, new AC-7 and AC-8, product-spec FR-1/FR-2
+  owned-account exception wording, and the Fix Scope "No proto changes anticipated" line. Target: /sdd-spec entry.
