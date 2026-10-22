@@ -6,6 +6,8 @@
 **Severity**: SEV-3
 **Created**: 2026-10-21
 **Last Updated**: 2026-10-21
+**Committed to main**: 38e2e104129f16dd339f9375901334a274109511
+**Launched date**: 2026-10-22
 
 ---
 
@@ -18,6 +20,7 @@
 | 2026-10-21 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential mode; test-first (Step 2 RED) then Step 1 |
 | 2026-10-21 | `in-progress` → `code-completed` | /sdd-execute | Both steps done; integration PR #1274 → `main-dev` |
 
+| 2026-10-22 | `code-completed` → `launched` | CI workflow | Promoted via PR #1295; committed 38e2e104129f16dd339f9375901334a274109511 |
 ---
 
 ## Artifacts
