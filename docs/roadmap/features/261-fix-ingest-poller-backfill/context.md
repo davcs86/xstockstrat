@@ -247,3 +247,158 @@ halt). design.md is not written and status stays `spec-ready`.
   "floor_breaches": []
 }
 ```
+
+## Session 2026-10-22 — sdd-batch design-state correction (round 2)
+
+- The previous `sdd-batch-design-state` block, under the round-2 gate entry, held feature 265's identity design (`exchangeAuthCode`, D-23/D-21) because of a cross-feature writer mix-up. The prose Open Threads in that entry are 261's and stay valid.
+- The block below is 261's real round-2 synthesis, restored verbatim from the batch run journal (`synth:fix-ingest-poller-backfill:r2`). It supersedes the earlier block. 265's own `context.md` was checked and holds its correct state.
+- Operator gate answer (2026-10-22), unchanged: APPROVED, with FR-1 amended (an all-fail batch marks the source errored, `@AC-8`).
+
+```sdd-batch-design-state
+{
+  "round": 2,
+  "synth": {
+    "approach": "The r2 proposal is the current best approach and carries forward. It resolves both r1 blocking objections at the placements the r1 synthesis specified. Changes stay in xstockstrat-ingest only, in three files, with no proto, migration, config-key or config_json change. This round adds the following amendments.\n\n1. **FR-6 `_select_signal_list(d)`** (`app/engine/mcp_client_loop.py`). It replaces the dict branch at `:41-45` and the decoded-text-dict branch at `:50-51`. A decoded list still passes through, and `JSONDecodeError` is still a source error.\n   - (a) `d[\"signals\"]` is a list \u2192 return it, even if empty.\n   - (b) Candidates are non-empty, all-dict list values. Exactly one candidate \u2192 return it.\n   - (c) Two or more candidates \u2192 `ValueError(\"ambiguous result: multiple candidate lists [<sorted keys>]\")`.\n   - (d) No candidates:\n     - **AMENDED (O-2):** if `d` has at least one list value, every list value is empty, and `\"symbol\"` is not in `d` \u2192 return `[]`. This keeps today's silent behaviour for `{\"items\": []}` and `{\"results\": [], \"count\": 0}`, which I verified: the first-list-wins loop at `:42-44` returns `[]`.\n     - Otherwise return `[d]`. A single signal object with `tags: [\"ai\"]` or `tags: []` carries `\"symbol\"`, so it wraps.\n     - design.md must record this as an **EXTEND** of `@AC-4 @feature-166`. Today such an object returns its tag strings, which I verified at `:42-44`.\n\n2. **FR-1 per-item guard** (`:124-125`).\n   - Each item is wrapped in `try/except Exception`. A failure logs a warning (`mcp_client loop: source %s item skipped: %s`), increments `skipped` and keeps `first_err`.\n   - After the loop, one summary `log.info(\"mcp_client loop: source %s polled ingested=%d skipped=%d\")`, emitted **before** any raise (O-1 ordering).\n   - Then, if `parsed` is non-empty and every item was skipped, `raise RuntimeError(f\"all {n} items failed: {first_err}\")`. The per-source catch at `:143-152` records it as `last_error`.\n   - **AMENDED (O-1):** before `/sdd-spec`, amend product-spec FR-1 with the total-failure rule. Append `@AC-8 @FR-1` to the branch copy of `acceptance.feature` (\"every parsed item fails \u2192 last_error set, summary logged\"). AC ids are append-only. Record the decision in context.md.\n\n3. **FR-5 deadline** (`app/config/watcher.py:146-164`).\n   - `resolve_secret(key, user_id=..., timeout: float | None = None)` passes `timeout=` to `self._stub.GetSecret`.\n   - Only `AioRpcError` with `code() == DEADLINE_EXCEEDED` is translated, as `raise RuntimeError(f\"GetSecret deadline exceeded after {timeout}s\") from e` (O-7 chaining).\n   - `PERMISSION_DENIED`, `INTERNAL` and `found=false` are unchanged.\n   - The call site at `mcp_client_loop.py:116` passes `float(timeout_seconds)`, the value already clamped at `:133-138`.\n   - Rebase onto feature 244's `int_positive` read when it lands. If 261 lands first, keep today's `max(get_int(...), 1)`.\n\n4. **FR-2/3/4 cancel guards** (`app/handlers/servicer.py`). Each check is synchronous, with no `await` between it and the write it protects.\n   - **FR-2:** first statement inside `async with self._backfill_sem:` (`:493`), before the RUNNING write (`:494`): `if job_id in self._canceled_jobs: discard; log.info(...canceled while queued...); return`.\n   - **FR-3:** in `_execute_fundamentals_backfill`, between the BackfillFundamentals return (`:532-540`) and `update_job` (`:544`): the same check, discard, log, return. No COMPLETED/PARTIAL write and no `.completed` emit.\n   - **FR-4:** in `_resume_job`, after `row = get_job` (`:724`) and before the RUNNING write (`:734`): `if row[\"status\"] == BACKFILL_STATUS_CANCELED: log.info(\"skipping resume of canceled job %s\"); return`.\n   - **Blanket except** (`:510`): `if job_id in self._canceled_jobs: discard; return` before the FAILED write.\n   - No new events. `_finalize_backfill`, `run_one`, `resume_incomplete_jobs` and its count are untouched.\n   - Proof that the in-memory set is authoritative (re-verified this round):\n     - The only `BACKFILL_STATUS_CANCELED` write in `app/` is `servicer.py:900`.\n     - It is preceded by the synchronous `self._canceled_jobs.add` at `:896`.\n     - Ingest runs with `instance_count: 1` (`.do/app.yaml:238`).\n   - **AMENDED (O-3):** add a guard test. A repo fake for `update_job` asserts `job_id in servicer._canceled_jobs` when the CANCELED write arrives. A future reorder, or a second CANCELED writer path, then fails CI. Cite ledger `fails.md:1688-1693` in design.md as the rule that was weighed.\n\n5. **Trace (operator 2026-10-21, C-03).**\n   - Request-derived paths keep the `propagation_meta` captured before `create_task`.\n   - **AMENDED (O-5, partial):** `_resume_job` mints `((\"x-trace-id\", str(uuid.uuid4())),)` once per resumed job and passes it to `_run_chunks`/`_finalize_backfill` instead of `()` (`servicer.py:737-738`). `uuid` is already imported at `:11`, so the change is one line with no new helper. Resumed BackfillBars calls and emits then share one correlatable id.\n   - The poll-loop GetSecret keeps internal-caller metadata only, pending the operator's call (see open objection). `resolve_secret` takes no metadata parameter, and widening it touches a file shared with in-flight features 242, 260 and fix-config-stream-resilience.\n\n6. **Tests, red first per step (P-06).**\n   - Widen existing fakes with `timeout=None`: `test_mcp_client_loop.py:65`, `:210`, and `test_mcp_client.py:27`.\n   - **AMENDED (O-6):** the `AioRpcError(DEADLINE_EXCEEDED, Metadata(), Metadata(), details=...)` builder stays inline unless both `test_mcp_client.py` and `test_mcp_client_loop.py` consume it. If they do, it goes next to `job_row` in `tests/_helpers.py`, and that home is recorded in context.md.\n   - **AMENDED (O-7):** the AC-4 fake asserts `timeout == 2.0`, does `await asyncio.sleep(timeout)`, then raises. The test asserts the marker in `last_error` for src-a and that src-b is still polled. Keep feature 247's outer hang guard.\n   - Parsing tests:\n     - AC-1 with a caplog summary;\n     - AC-5 and AC-7;\n     - a single object with `tags`;\n     - an all-empty-lists envelope \u2192 `[]` with no extractor warning (O-2);\n     - a text-fallback `{\"signals\": [...]}`;\n     - AC-8, all items failing.\n   - Cancel tests:\n     - AC-2 (bars and fundamentals queued cancel) and AC-6 run through `CancelBackfill` with repo fakes. Do not copy `test_cancel_backfill.py:52`'s private-set assertion.\n     - AC-3 runs through `resume_incomplete_jobs` with a CANCELED `job_row`, spying on the chunk runner and marketdata.\n     - The O-3 ordering test.\n     - `test_ingest_servicer.py:624` stays green.\n\n7. **Build order:** FR-6 + FR-1 \u2192 FR-5 (after 244) \u2192 FR-2/3/4 \u2192 teardown.\n   - Fix the \"no automatic resume\" drift in `services/xstockstrat-ingest/CLAUDE.md`.\n   - Log the `main.py:66` and `:117-118` comment drift in `services/xstockstrat-ingest/docs/context-constitution-findings.md`. `main.py` is untouched.\n   - Add an ingest invariant: \"single instance; `CancelBackfill` adds to `_canceled_jobs` before its CANCELED write; the guards rely on the set alone\", referencing the O-3 test.\n   - **AMENDED (O-4/O-8), design.md text:**\n     - The accepted FR-2 window spans CancelBackfill's whole `await get_job` (`:881`) as well as the RUNNING write. The outcome is still correct via the chunk guard at `:759`, the FR-3 guard and `_finalize_backfill` at `:657`. Executors must NOT add a DB read before the RUNNING write.\n     - The FR-3 interleave, a cancel during the COMPLETED `update_job` await, leaves one stale set entry per race. It also lands both `.completed` and `.canceled` in the ledger. This is accepted and is not a guard bug.",
+    "open_objections": [
+      {
+        "text": "[P-03 / C-15, O-1] The FR-1 rule 'every parsed item fails \u2192 RuntimeError \u2192 last_error' goes beyond product-spec FR-1 ('a skipped item alone does not mark the source errored'). A failing one-item batch now marks the source errored. Before design approval and /sdd-spec:\n- amend FR-1 in product-spec.md;\n- append `@AC-8 @FR-1` to the branch copy of acceptance.feature on origin/feature/fix-ingest-poller-backfill, which is append-only;\n- record the decision in context.md;\n- emit the summary log.info before the raise.\nThe r2 proposal adopted the rule but did not answer the spec drift.",
+        "blocking": true
+      },
+      {
+        "text": "[C-16, O-2] Rule (d) as proposed wraps an envelope whose lists are all empty (e.g. {\"items\": []}) as [d]. Today it returns [] silently (verified, mcp_client_loop.py:42-44). The proposed behaviour adds a missing-symbol extractor warning on every empty poll. The synthesis amendment is: return [] when d has at least one list value, every list value is empty, and \"symbol\" is not in d; otherwise wrap. It also reclassifies @AC-4 @feature-166 as EXTEND, because a single object with a tags list stops returning its tag strings. This stays open until the next proposal or the spec adopts it, with an all-empty-envelope test.",
+        "blocking": false
+      },
+      {
+        "text": "[ledger fails.md:1688-1693, O-3] The in-memory _canceled_jobs authority is proven: the only CANCELED write is servicer.py:900, after the add at :896, with instance_count 1. Nothing enforces it, though. Add a unit test in which the update_job fake asserts set membership when the CANCELED write arrives, and cite the ledger rule in design.md.",
+        "blocking": false
+      },
+      {
+        "text": "[C-03 / operator 2026-10-21, O-5] The synthesis adopts a minted uuid4 x-trace-id per resumed job (servicer.py:737-738, uuid already imported). The poll-loop GetSecret still carries no trace id. The context.md record must argue unavailability or a cost case:\n- resolve_secret has no metadata parameter;\n- widening it collides with in-flight 242/260/fix-config-stream-resilience edits to watcher.py;\n- last_error already carries the slug and owner.\nThe argument must not rest on 'there is no helper'. Otherwise, mint one id per poll cycle and pass it through a new optional metadata kwarg. The operator may decide.",
+        "blocking": false
+      },
+      {
+        "text": "[accuracy, O-4] The design.md accepted-window text must say that the FR-2 window also covers CancelBackfill's whole `await get_job` (:881), and that the outcome is still correct through the existing in-run guards. Executors must not add a DB read before the RUNNING write.",
+        "blocking": false
+      },
+      {
+        "text": "[C-18, O-8] Document the FR-3 interleave: one stale _canceled_jobs entry per race, plus both .completed and .canceled ledger events. It is accepted as rare.",
+        "blocking": false
+      },
+      {
+        "text": "[C-13, O-6] Keep the AioRpcError(DEADLINE_EXCEEDED) builder inline unless two test modules consume it. In that case put it next to job_row in tests/_helpers.py and record that home in context.md.",
+        "blocking": false
+      },
+      {
+        "text": "[test fidelity, O-7] The AC-4 fake must `await asyncio.sleep(timeout)` before raising, so the bounded-hang path is exercised. resolve_secret must use `raise ... from e`.",
+        "blocking": false
+      },
+      {
+        "text": "[C-15] The main-dev copy of acceptance.feature is stale: it has no AC-6/AC-7 and the older AC-1 text. Design and spec cite the branch copy, and /sdd-sync reconciles the two.",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "@AC-1 (261, FR-1)",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@AC-2 (261, FR-2)",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@AC-3 (261, FR-4)",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@AC-4 (261, FR-5)",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@AC-5 (261, FR-6)",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@AC-6 (261, FR-3)",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@AC-7 (261, FR-6)",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@AC-8 (261, FR-1, to be appended: all items fail -> last_error)",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-4 @feature-166",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-5 @feature-166",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-1 @feature-173",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-3 @feature-173",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-6 @feature-198",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "asyncio.wait_for as the GetSecret bound: feature 247 rejected it (design.md:22, :162-165). It raises a bare TimeoutError with an empty str(), sends no grpc-timeout, and would split the precedent.",
+      "Raw AioRpcError text as the FR-5 marker: str(AioRpcError) is multi-line debug text that would end up in last_error and the /config-ui health list. The clean translated message costs about 4 lines.",
+      "Per-source result_key in config_json for FR-6: it changes the config_json, manage_signal_source and /config-ui contracts (C-14, @AC-32 parity) for no stated need (C-18).",
+      "r1's 'sole non-empty list' / 'all empty \u2192 []' FR-6 rule: it selects or empties a single signal object's tags list and silently drops the signal.",
+      "r2's unconditional rule (d) `[d]` wrap: it turns today's silent empty-envelope polls into per-poll extractor warnings (O-2). Superseded by the 'all lists empty and no symbol \u2192 []' refinement.",
+      "r1's _is_canceled helper (set check, then awaited get_job): the await between check and write leaves a window in which a cancel is missed.",
+      "Compare-and-set terminal writes (UPDATE ... WHERE status <> CANCELED, widening backfill_jobs.update_job at :59): safe across replicas and closes the O-4/O-8 windows, but it changes a shared helper used by every status write and needs new repo-fake semantics. That rework is not justified at instance_count 1, given the user's low-rework instruction.",
+      "Filtering canceled jobs in list_jobs_with_incomplete_chunks via a join: it changes the resume count and breaks test_ingest_servicer.py:624.",
+      "Leaving the resumed BackfillBars path with `()` metadata: minting a uuid4 trace id there is one line with uuid already imported, and the operator's standing rule asks for one when available."
+    ],
+    "open_risks": [
+      "The FR-2/FR-3 guards depend on single-instance ingest, and on CancelBackfill staying the sole CANCELED writer and adding to the set before writing. The O-3 test catches a reorder or a second writer in-process. Scaling ingest above instance_count 1 would still silently bring back D-34; that is documented as an invariant but not enforced.",
+      "Accepted FR-2 window (corrected): a cancel whose `await get_job` (:881) overlaps the runner acquiring the semaphore can still produce one ingest.backfill.running emit and a marketdata call. The existing guards (:759, FR-3, _finalize_backfill :657) then stop the run.",
+      "FR-3 interleave: one stale _canceled_jobs id per race, plus both .completed and .canceled events in the ledger.",
+      "AC-4 proves the deadline value and the error translation with a sleeping fake. The real grpc-timeout behaviour on a hung channel rests on the grpc.aio contract.",
+      "Merge-order coupling: FR-5 depends on feature 244's int_positive read, and watcher.py/mcp_client_loop.py overlap with 242, 260 and fix-config-stream-resilience.",
+      "Out of scope: the seeded bare key vs the dotted read (025_\u2026up.sql:34 vs mcp_client_loop.py:135) means the effective timeout is the 30s code default. This needs its own defect report or a 244 follow-up.",
+      "Canceled bars jobs with PENDING chunks are re-listed and counted in 'resumed N' at every boot. This is bounded and explained by the skip log."
+    ],
+    "constitution_rules_touched": [
+      "C-03",
+      "C-08",
+      "C-11",
+      "C-13",
+      "C-15",
+      "C-16",
+      "C-18",
+      "P-02",
+      "P-03",
+      "P-06"
+    ],
+    "rationale": "**r1 blockers.** r2 adopted both r1 blocking fixes exactly as placed:\n- synchronous set checks at `servicer.py:493` (before `:494`) and between `:540` and `:544`;\n- the persisted-status check only in `_resume_job` (`:724-734`);\n- the dict-only candidate rule with the `[d]` fallback.\n\nSo both are closed.\n\n**Re-verified this round.**\n- `CancelBackfill` (`:881-902`) adds to `_canceled_jobs` at `:896` before its only CANCELED write at `:900`. A grep confirms there is no other `BACKFILL_STATUS_CANCELED` write in `app/`.\n- The current parser (`mcp_client_loop.py:41-45`) returns the first list, so `{\"items\": []}` returns `[]` today. That grounds O-2: r2's rule (d) would turn silent empty polls into per-poll warnings. The amended rule (\"all lists empty and no symbol \u2192 `[]`\") keeps today's behaviour at no cost. It also confirms the single-object-with-tags case is an EXTEND, not a PRESERVE.\n- `_resume_job` passes `()` metadata (`:737-738`), and `uuid` is already imported (`:11`). Under the operator's standing rule, minting a trace id there is a one-line, no-new-helper change, so I adopted it.\n- The poll-loop GetSecret trace is left as an operator-visible, non-blocking choice. `resolve_secret` has no metadata parameter, and that file is under concurrent edit by sibling features. That is a genuine rework and overlap cost, not merely the lack of a helper.\n\n**Why O-1 is blocking.** The adversary rated it non-blocking. I made it blocking because C-15 makes `acceptance.feature` the single source of acceptance truth, and the design adds a behaviour (a one-item failing batch marks the source errored) that contradicts FR-1's current wording. The fix is cheap: amend FR-1 and append `@AC-8`. It must land before design approval so `/sdd-spec` plans against consistent artifacts.\n\n**Remaining items.** The other adversary items (O-3, O-4, O-6, O-7, O-8) are adopted as low-rework amendments: one guard test, design.md wording, a fixture-placement rule, a sleeping fake, and `from e` chaining.\n\n**Rule classification.** No Floor breaches. The 261 ACs are operator-sanctioned CHANGEs under the D-09/D-34/D-42/D-59 scope. `@AC-8` and the `@AC-4 @feature-166` EXTEND are not explicitly sanctioned, so they are marked uncovered and need recording in context.md. Durable feature-166/173/198 rules are otherwise preserved.\n\n**Compare-and-set alternative.** Compare-and-set terminal writes remain the strongest alternative. They lose only because of the user's \"preserve, low rework\" instruction while ingest runs as a single instance."
+  },
+  "floor_breaches": []
+}
+```
