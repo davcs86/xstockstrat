@@ -2,13 +2,13 @@ Feature: fix-portfolio-snapshot-surface (bug fix)
   Regression guard for docs/reports/2026-10-21-portfolio-snapshot-surface-defect.md:
   StreamPortfolioUpdates fans every user's snapshot to every subscriber (D-24), and the periodic
   snapshot writer behind portfolio.snapshot.interval_minutes is never started (D-12).
-  AC-4 and AC-5 are the two FR-4 branches; /sdd-design keeps exactly one and deletes the other.
+  FR-4 takes branch (b), retire the key; the branch (a) scenario @AC-4 was deleted at design (operator, 2026-10-22).
 
   @AC-1 @FR-1 @regression
   Scenario: A snapshot stream subscriber receives only its own snapshots
     Given a gRPC StreamPortfolioUpdates stream "A" opened with x-user-id "u-1"
     And a gRPC StreamPortfolioUpdates stream "B" opened with x-user-id "u-2"
-    When portfolio processes an "order.filled" event for user "u-1" buying 10 "AAPL" @ 100.00 and the position is priced
+    When a snapshot is broadcast for user "u-1" holding 10 "AAPL" priced at 100.00
     Then stream "A" receives a snapshot with portfolio_id "u-1"
     And stream "B" receives no snapshot
 
@@ -33,16 +33,10 @@ Feature: fix-portfolio-snapshot-surface (bug fix)
     Then the stream fails with INVALID_ARGUMENT
     And it is not registered as a subscriber
 
-  @AC-4 @FR-4 @regression
-  Scenario: portfolio.snapshot.interval_minutes is honoured (FR-4 branch a)
-    Given user "u-1" holds 10 "AAPL" priced at 100.00 and no fills occur
-    And "portfolio.snapshot.interval_minutes" is 1
-    And the snapshot writer runs on a fake service clock
-    When the fake clock is advanced by 3 minutes
-    Then at least 2 "portfolio.snapshots" rows exist for "u-1" with equity 1000.00
-
   @AC-5 @FR-4 @regression
   Scenario: portfolio.snapshot.interval_minutes is retired (FR-4 branch b)
-    Given all xstockstrat-config migrations have been applied
-    When the config keys for service "portfolio" are listed in the "production" and "staging" environments
-    Then neither listing contains "portfolio.snapshot.interval_minutes"
+    Given the xstockstrat-config migration set
+    When the up migrations are scanned in numeric order for "portfolio.snapshot.interval_minutes" and "snapshot.interval_minutes"
+    Then the highest-numbered match deletes the key from config.config_values in namespace "portfolio"
+    And no migration from that one onward inserts either key form
+    And after the migrations are applied, neither the "production" nor the "staging" listing for service "portfolio" contains "portfolio.snapshot.interval_minutes"
