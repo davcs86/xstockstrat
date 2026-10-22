@@ -418,3 +418,39 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   feature.
 - Ledger: no new line. The migration-ordering and Node-reporter traps are already recorded (fails.md:613, :2909,
   2026-10-20).
+
+## Session 2026-10-22 — sdd-review impl-spec
+
+- Mode B (advisory). Lifecycle is unchanged: `implementation-ready`. Criteria verdict: PASS WITH WARNINGS (0 fails,
+  0 floor breaches). Overlap verdict: WARN (no FAIL collision; 034 is unclaimed).
+- **Addressed** (all edits are in `implementation-spec.md`, and each claim was re-verified in code):
+  1. Fill-state completeness (B2b). Step 1 Codebase Evidence now notes that fill-state handling is unchanged.
+     `processOrderFill` (`:264`) has no PARTIALLY_FILLED/FILLED branch and reaches `:376` once per `order.filled` event.
+  2. @AC-3 Connect wiring. Step 4 gains case 4b, `TestStreamPortfolioUpdates_GRPC_AC1_WiresCallerIdentity`. It drives
+     the **mounted** gRPC adapter end to end with `fakeGRPCStream` + `ctxWithHeader`, so a wiring slip in
+     `a.h.hub`/`Subscribe(subID, userID)` fails a test. The Connect arm cannot be driven: `connect.ServerStream` has
+     no exported constructor (`go doc`, v1.16.2). Its wiring is instead pinned by a new Step 3 grep for the exact
+     `streamSnapshots(ctx, h.hub, …, stream.Send)` call. The @AC-1 coverage row and Step 4 Covers were updated.
+  3. Migration ordering. The Step Dependencies section now records that no no-gap rule applies: `origin/main-dev`
+     already skips config `024`, so 034 need not become 033. Step 10 gains an enforcement item: the integration PR
+     stays a draft with an (a)/(b) checklist until that day's gate output passes, and the merge-order row stays
+     `Resolved: No` until 243/244/248 have merged.
+  4. RED capture fragility. Explicit **STOP — RED capture** blocks were added between Part A and Part B in Steps 1 and
+     3. Each one gives the exact test command and requires the failing output to be pasted into context.md.
+  5. Config DELETE with no audit row and no DELTA. Step 7 gains a pre-check (item 0): grep that no Go reader of the
+     key remains, i.e. that Step 5 has landed.
+  6. Same-file overlap. 242's real portfolio scope was confirmed as `checkRiskLimits`/`emitRiskAlert`
+     (`:964-1018`) plus added tests in `portfolio_quote_deadline_test.go`, disjoint from this feature's regions.
+     The overlap scan's "line-drift" claim is a misread: `Subscribe("t")` is at `:321/:396/:424` and
+     `broadcastSnapshot` at `:328/:402/:429`, exactly as the spec cites. `origin/main-dev` (post-231) has no
+     portfolio diff vs this branch. `offline_account_pnl_test.go:320` was confirmed to need no edit, because the
+     `broadcastSnapshot` signature is unchanged.
+- **Still open** (carried to the /sdd-execute checkpoint):
+  - [ ] **Merge gate is process-only.** No CI job enforces the two-sided 034 gate. It depends on the executor
+    keeping the PR draft (Step 10 item 4). The 244/248 `032` double claim is still unresolved outside this feature.
+  - [ ] **Connect `StreamPortfolioUpdates` is untestable end to end and likely unreachable in practice.** It is
+    unmounted (`main.go:94`). `streamUserID` (`portfolio_handler.go:28-38`) reads gRPC incoming metadata, which a
+    Connect HTTP request does not populate. It is out of scope here: FR-3 keeps the arm, and the wiring is pinned by grep.
+    Consider a debt-radar note or deleting the Connect stream arm in a later feature.
+  - [ ] **Same-file rebase with 242/251/256/257.** Re-grep the cited lines at execute time (unchanged guidance).
+- Ledger: no new line. The existing entries already cover these traps (fails.md:613, :2909).
