@@ -1,0 +1,754 @@
+# Implementation Spec: fix-config-stream-resilience
+
+**Status**: `pending`
+**Created**: 2026-10-22
+**Feature**: `docs/roadmap/features/258-fix-config-stream-resilience/feature.md`
+**Total Steps**: 9
+**Feature Branch**: `feature/fix-config-stream-resilience`
+
+---
+
+## Execution Summary
+
+This is a SEV-2 Track C fix scoped to D-05, D-06, D-35 and D-58. It follows design.md § Chosen Approach exactly.
+The design's rejected alternatives are not used: no dedicated `pg.Client`, no `EventNotifier` reuse, no keepAlive,
+no `SELECT 1` keepalive, no version gate, no DELTA buffer, no `UNAVAILABLE` code, no shared error helper, and no
+soft start. The fix adds no proto, migration, config key, env var, port or `src/index.ts` edit (recon.md
+§ Dependencies).
+
+- **Steps 1–6 (config)** all edit the same file, `services/xstockstrat-config/src/grpc/configServiceImpl.ts`, so
+  they run in order. Each service step is followed by its paired test step in
+  `src/__tests__/configServiceImpl.test.ts` (design.md § Build order).
+  - Steps 1–2: the LISTEN lifecycle (FR-1, FR-2).
+  - Steps 3–4: the unary handlers (FR-3).
+  - Steps 5–6: WatchConfig registration and broadcast termination (FR-4, FR-5).
+- **Steps 7–8 (ledger)** cover `appendEvent` (FR-3). They do not depend on the config steps.
+- **Step 9 (docs)** updates the config service docs and records the limitations.
+
+**Consumer surfaces (C-14).** None — internal/platform-only (product-spec § Consumer Surface(s)). No RPC shape, proto
+field or stored state changes. Every `WatchConfig` subscriber (backend services, UI, agent) and every
+`GetConfig`/`SetConfig`/`AppendEvent` caller picks up the error-status contract through its existing client
+reconnect or error path (`69c8554` for Node). This was decided in the product spec; it is not an omission.
+
+**C-03 (standing operator decision, 2026-10-21).** No step adds an outbound gRPC call. Request handlers keep their
+inbound metadata. Each WatchConfig subscriber carries its inbound `x-trace-id` (read once with `first()`) into
+background broadcast and termination logs (Step 5). Only the listener/reconnect path, which has no originating
+request, logs without a trace id.
+
+### Scenario Coverage (C-15)
+
+| Scenario | Covered by |
+|---|---|
+| `@AC-1` propagation resumes after the LISTEN connection drops | Step 2 |
+| `@AC-2` a failing reload inside the notification handler does not crash config | Step 2 |
+| `@AC-3` GetConfig returns an error status when the overlay query fails | Step 4 |
+| `@AC-4` SetConfig returns an error status when the existence-gate query fails | Step 4 |
+| `@AC-5` idempotent AppendEvent returns an error status when `pool.connect` rejects | Step 8 |
+| `@AC-6` a failed initial WatchConfig snapshot ends the stream with an error status | Step 6 |
+| `@AC-7` a change committed while the snapshot is in flight still reaches the new subscriber | Step 6 |
+| `@AC-8` a subscriber whose broadcast fails is told to reconnect | Step 6 |
+| `@AC-9` a change committed while LISTEN is down reaches subscribers after reconnect | Step 2 |
+| `@AC-10` idempotent AppendEvent releases its client with the error when a query in the transaction fails | Step 8 |
+| `@AC-11` SetConfig returns an error status when the value write fails (regression pin) | Step 4 |
+
+## Step Dependencies
+
+- Steps 1 → 3 → 5 run in this order because they all edit `configServiceImpl.ts`. Step 5's `broadcastToSubscribers`
+  change is also called by Step 1's `resyncAll`.
+- Step 2 [test] covers Step 1 [service]. Step 4 [test] covers Step 3. Step 6 [test] covers Step 5. Step 8 [test]
+  covers Step 7.
+- Step 2's subscriber cases use only **global** subscribers (`user_id = ''`). `resolveOverlayValues` returns before
+  any query for them (`configServiceImpl.ts:232`), so Step 2 holds both before and after Step 5 reorders
+  `watchConfig`.
+- Steps 7–8 do not depend on Steps 1–6.
+- **Step 8 precondition (fails.md:115-134, the 074 zero-assertion trap).** On this branch,
+  `252-fix-identity-ledger-test-suites` is `implementation-ready` and not merged. The ledger suite still swallows a
+  failed import (`ledgerServiceImpl.test.ts:21-29`) and skips cases with `if (!impl) return;` (9 sites). Step 8's
+  new cases therefore must not use that skip shape. They assert the import succeeded (Step 8 instruction 1). If 252
+  has merged by the time Step 8 runs, rebase first; the instruction still applies.
+- Step 9 runs after Steps 1–8 so its line references match the final code.
+- **Merge overlaps (design.md § Open Risks).** These are non-blocking and need a manual merge at the integration
+  PR. The `merge-order.md` rows are added by `/sdd-execute` at integration time, because this spec's writer may
+  only edit the feature directory.
+  - `241-fix-config-audit-author-spoof` (implementation-ready) edits `setConfig` (`:405-414`, `:513`). Step 3 wraps
+    `:446-463` of the same function.
+  - `263-fix-edge-owner-scope` touches `getConfig` `:317-319`. Step 3 wraps `:319`.
+  - `266-fix-db-tls-fail-closed` owns `src/index.ts:25-43`. No step here edits `index.ts`.
+  - `248-fix-ledger-trimmed-notify-payload` and `257-fix-ledger-query-pagination` touch other functions in
+    `ledgerServiceImpl.ts`, so they need a rebase only.
+- **Fallback (design.md § Rejected Alternatives, fork b).** If Step 1's required pg_terminate_backend check shows
+  the pooled client does not emit `error`/`end`, stop. Record it in the Deviation Log and return to `/sdd-design`
+  for the dedicated-client fallback. Do not improvise it in place (P-03).
+
+---
+
+### Step 1 — service: config LISTEN lifecycle (reconnect with backoff, serial chain, guarded notifications)
+
+**Status**: `pending`
+**Service**: `xstockstrat-config`
+**Files**:
+- `services/xstockstrat-config/src/grpc/configServiceImpl.ts` — modify
+
+**Reviewers**: `xstockstrat-config` owner — WatchConfig stream stability, environment / global-per-user scoping,
+secret redaction on every broadcast
+
+**Codebase Evidence**:
+- `configServiceImpl.ts:1` `import { Pool } from 'pg';`. `PoolClient` is not imported anywhere in config `src`
+  (grep).
+- `:19` `const log = getLogger('config:impl');`.
+- `:155` `export class ConfigServiceImpl {`. The fields are at `:156` (`subscribers`) and `:158` (`snapshots`). The
+  constructor is at `:160`: `constructor(private readonly pool: Pool) {}`.
+- **D-05**, `:162-174` `initialize()`:
+  - `:163` `await this.reloadAll();`
+  - `:164` `const pgClient = await this.pool.connect();`
+  - `:165` `await pgClient.query('LISTEN config_changed');`
+  - `:166-172` an `async` `notification` handler with no try. It does `JSON.parse(msg.payload)` (`:168`), defaults
+    env to `'staging'` (`:169`), then calls `reloadNamespace` (`:170`) and `broadcastToSubscribers` (`:171`).
+  - `:173` `log.info(...)`.
+- `reloadAll()` `:176-201` reads global rows only (`:181`) and writes snapshots at `:190-199`. It does not broadcast.
+- `reloadNamespace()` `:203-223` writes the full-namespace DELTA snapshot (`:214-222`; CONFIG-1).
+- `broadcastToSubscribers(namespace, env)` `:260-274` builds each payload through `snapshotForSubscriber` (`:265`).
+  Calling it after `reloadAll` therefore puts no `updateType: 1` on the wire (recon.md § Patterns to REUSE).
+- Reference to port (mandatory reuse, recon.md § Patterns to REUSE): ledger
+  `services/xstockstrat-ledger/src/services/eventNotifier.ts`.
+  - `:71-108` `connect()`: `connect()`/`LISTEN` sit inside one try (`:82`), and the catch reschedules
+    (`:99-107`).
+  - `:110-117` `scheduleReconnect()`: the single-timer guard `if (this.closing || this.reconnectTimer) return;`.
+    The timer callback clears `this.reconnectTimer = null` (`:114`) before reconnecting.
+  - `:119-137` `dispatch()`: a guarded `JSON.parse`, and a malformed payload is ignored.
+  - `:35` `reconnectDelayMs = 2000`, a hardcoded constant. This is the F-07 precedent for code-constant backoff.
+- Boot path: `src/index.ts:47-48` (`new ConfigServiceImpl(pool)`, `await configImpl.initialize()`). A rejection
+  from `initialize()` makes `main()` exit (recon.md:20-22). That fail-fast behaviour is kept, and `index.ts` is not
+  edited.
+- Lint: `services/xstockstrat-config/.eslintrc.json` extends `eslint:recommended`. Its `no-empty` rule flags an
+  empty `catch {}`, so every intentionally empty catch body holds a one-line comment, as at
+  `eventNotifier.ts:103-105`.
+- Header propagation: no new outbound gRPC call, so C-03 propagation does not apply. The listener path has no
+  originating request (standing operator decision).
+
+**TDD**: `red-green required` (Step 2 is the paired test)
+
+**Covers**: —
+
+**Instructions**:
+1. Change `:1` to `import { Pool, PoolClient } from 'pg';`.
+2. Next to `:156-158`, add the private fields and two module-level code constants (F-07: config cannot watch itself,
+   invariant #1; precedent `eventNotifier.ts:35`):
+   - Constants: `LISTENER_BACKOFF_INITIAL_MS = 1000` and `LISTENER_BACKOFF_MAX_MS = 30000`.
+   - Fields: `listener: PoolClient | null = null`, `connectedOnce = false`,
+     `reconnectTimer: NodeJS.Timeout | null = null`, `backoffMs = LISTENER_BACKOFF_INITIAL_MS`, and
+     `chain: Promise<void> = Promise.resolve()`.
+   - Do not add a constructor option. Step 2 drives the timers with `t.mock.timers`, as at
+     `configWatcher.test.ts:139`.
+3. Add `private serial<T>(fn: () => Promise<T>): Promise<T>`:
+   `const run = this.chain.then(fn); this.chain = run.then(() => undefined, () => undefined); return run;`.
+   The caller sees the real rejection, and the stored tail never rejects.
+4. Add `private async connectListener(): Promise<void>`. Declare `let c: PoolClient | undefined;`. The whole body is
+   one try, mirroring `eventNotifier.ts:82-107`:
+   - `c = await this.pool.connect();` runs **inside** the try (the reconnect-retry fix approved at the r2 gate).
+   - Capture `const client = c;` for the closures. Then attach:
+     - `client.on('error', (e) => this.dropListener(client, e))`
+     - `client.on('end', () => this.dropListener(client, new Error('LISTEN connection ended')))`
+     - `client.on('notification', (msg) => this.onNotification(client, msg))`
+   - `this.listener = client;`
+   - `await client.query('LISTEN config_changed');` — on boot this now runs **before** `reloadAll`, which closes
+     the lost-NOTIFY window between `:163` and `:165`.
+   - `await this.serial(() => (this.connectedOnce ? this.resyncAll() : this.reloadAll()));`
+   - `this.connectedOnce = true; this.backoffMs = LISTENER_BACKOFF_INITIAL_MS;`, then the `log.info` from `:173`.
+   - The catch handles each case as follows:
+     - If `c` is set, call `this.dropListener(c, err)`.
+     - Else, if `this.connectedOnce` is true, call `this.scheduleReconnect()`. This is the case where
+       `pool.connect()` rejected.
+     - Then, if `!this.connectedOnce`, `throw err`, so boot still fails fast.
+5. Add `private dropListener(c: PoolClient, err: Error)`:
+   - `if (this.listener !== c) return;` This identity guard means each client is released exactly once, whatever
+     the order of `error`, `end` and a resync failure.
+   - `this.listener = null; c.removeAllListeners('notification');`
+   - `try { c.release(err); } catch { /* already released */ }`. Releasing with the error makes pg-pool discard
+     the broken client.
+   - `log.error('config LISTEN connection lost', { error: err.message })`
+   - `if (this.connectedOnce) this.scheduleReconnect();`
+6. Add `private scheduleReconnect()`:
+   - `if (this.reconnectTimer) return;`
+   - `const delay = this.backoffMs; this.backoffMs = Math.min(this.backoffMs * 2, LISTENER_BACKOFF_MAX_MS);`
+   - `this.reconnectTimer = setTimeout(() => { this.reconnectTimer = null; this.connectListener().catch(() => { /* every failure path reschedules itself */ }); }, delay);`
+   - There is no jitter, because there is one listener per process.
+7. Add `private async resyncAll()`:
+   - `await this.reloadAll();`
+   - Collect the distinct `(namespace, environment)` pairs from `this.subscribers`.
+   - Call `await this.broadcastToSubscribers(ns, env)` once for each pair.
+   - A `reloadAll` rejection propagates to `connectListener`'s catch, where the client is released once and a retry
+     is scheduled.
+8. Add `private onNotification(c: PoolClient, msg: { payload?: string })`:
+   - `if (this.listener !== c || !msg.payload) return;`
+   - Parse inside `try { ({ namespace, environment } = JSON.parse(msg.payload)); } catch { return; /* malformed payload */ }`,
+     following `eventNotifier.ts:119-128`.
+   - `const env = (environment ?? 'staging') as EnvStr;` (kept from `:169`).
+   - `this.serial(async () => { await this.reloadNamespace(namespace, env); await this.broadcastToSubscribers(namespace, env); }).catch((err) => log.error('config_changed handling failed', { namespace, env, error: err?.message }));`
+   - Reload and notification work share one chain, so a stale `reloadAll` write (`:191`) cannot overwrite a newer
+     `reloadNamespace` write (`:214`).
+9. Replace the body of `initialize()` (`:162-174`) with `await this.connectListener();`.
+10. Do not touch `reloadAll`, `reloadNamespace` or `buildConfigValue`. Every row still goes through
+    `buildConfigValue`, so redaction is preserved (PRESERVE config-secrets `@AC-2`/`@AC-14`, platform `@AC-35`).
+
+**Verification**:
+```bash
+cd services/xstockstrat-config && pnpm run build && pnpm run lint
+grep -n "pool.connect()" src/grpc/configServiceImpl.ts      # expect: exactly one hit, inside connectListener's try
+grep -n "LISTENER_BACKOFF_INITIAL_MS = 1000\|LISTENER_BACKOFF_MAX_MS = 30000" src/grpc/configServiceImpl.ts
+```
+
+**Required check (design.md § Open Risks, half-open socket).** Run this before marking the step done. It proves the
+pooled client emits `error`/`end` on a terminated backend:
+
+```bash
+docker compose up -d timescaledb xstockstrat-config
+docker compose exec timescaledb psql -U postgres -c \
+  "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE query ILIKE 'LISTEN config_changed%';"
+docker compose logs --since 1m xstockstrat-config | grep -E "config LISTEN connection lost|listening for config_changed"
+```
+
+- Expect `config LISTEN connection lost`, followed within about 1 s by a new
+  `listening for config_changed`.
+- Then a `SetConfig` of a registered global key must reach an open WatchConfig stream.
+- If Docker is unavailable in the executing session, the step is **blocked** on this check. Record that in the
+  Deviation Log. The check then moves to the dev app (`main-dev` deploy) as a blocker on the integration PR. It is
+  never silently waived.
+
+---
+
+### Step 2 — test: LISTEN reconnect, retry, resync and notification-failure cases (AC-1, AC-2, AC-9)
+
+**Status**: `pending`
+**Service**: `xstockstrat-config`
+**Files**:
+- `services/xstockstrat-config/src/__tests__/configServiceImpl.test.ts` — modify
+
+**Reviewers**: `xstockstrat-config` owner — WatchConfig stream stability, environment / global-per-user scoping,
+secret redaction on every broadcast
+
+**Codebase Evidence**:
+- `configServiceImpl.test.ts` (95 lines):
+  - `before()` imports `../grpc/configServiceImpl.js` with no swallow (`:17-21`).
+  - The harness assertion is at `:23-27`.
+  - `makePool(rows)` is at `:30-38`. It is local to the `listKeys` describe, and its `connect:` (`:33`) returns an
+    inert client with no `release`/`removeAllListeners`.
+- The suite runs against compiled output: `package.json:12-13`
+  (`tsc && c8 --reporter=text --reporter=lcov --lines 40 node --test dist/__tests__/*.test.js`).
+- Fake model: ledger `FakeClient` (`services/xstockstrat-ledger/src/__tests__/eventNotifier.test.ts:27-55`). It has
+  `on`/`emit`/`notify`/`listens`/`failConnect`.
+- Timer precedent: `t.mock.timers.enable({ apis: ['setTimeout'] })` and `t.mock.timers.tick(...)`
+  (`src/__tests__/configWatcher.test.ts:139-144`).
+- AC fixture data: `buildConfigValue` maps a `value_type: 'int'` row to `{ int_val }` (`configServiceImpl.ts:582`).
+  `toProtoSnapPayload` maps that to `{ intVal }` (`:49`). The DELTA `updateType` is
+  `'CONFIG_UPDATE_TYPE_DELTA'` (string enums; `:37-41`).
+- Log capture. `log` is a module-private winston logger (`src/services/logger.ts:10-19`, a
+  `transports.Console()` sink), and no config/ledger test captures logs today (grep for `stdout.write`/`winston` in
+  `src/__tests__`: no hits). Winston is not installed in this checkout, so the sink is **Not verified** here.
+  Capture with `t.mock.method(process.stdout, 'write', …)`, which is where winston 3's Console transport writes by
+  default. At execute, confirm that against the installed `winston/lib/winston/transports/console.js`. If the sink
+  differs, mock what that file actually calls (`console._stdout`, `console.log` or `console.error`) and record the
+  choice in the Deviation Log. Assert on `"level"`/`error` plus the message text, which the Console sink output
+  carries in both its dev and prod formats.
+- C-13: the `FakeClient`, the routing pool and the `analysis.backtest.max_duration_seconds` row are used only in
+  this file. No `src/__tests__/fixtures/` home exists (ls), so the verdict is compliant inline.
+
+**TDD**: `red-green required`. Against the pre-Step-1 tree:
+- AC-1 and AC-9 fail, because there is no second `pool.connect` or LISTEN after `error`/`end`.
+- AC-2 fails, because the handler's rejection escapes (`unhandledRejection` fires).
+- The boot-order case fails, because `reloadAll`'s SELECT precedes LISTEN (`:163-165`).
+- The reject-twice case fails, because nothing reconnects.
+
+**Covers**: `AC-1, AC-2, AC-9`
+
+**Instructions**:
+1. Add a `describe('ConfigServiceImpl — LISTEN lifecycle (feature 258)')` with these local helpers:
+   - `FakeClient extends EventEmitter` (from `node:events`). It needs:
+     - `query(sql)`, which pushes to a shared `log: string[]` and records `LISTEN`;
+     - `release = (err?) => { releases.push(err) }`;
+     - the inherited `removeAllListeners`.
+   - A routing pool:
+     - `connect()` either shifts a scripted outcome (a FakeClient, or a rejection
+       `new Error('connection terminated')`) or returns a fresh FakeClient.
+     - `query(sql, params)` routes by SQL and logs each call to the same `log`:
+       - `WHERE user_id IS NULL` with no `$1` → reloadAll;
+       - `namespace = $1 AND environment = $2 AND user_id IS NULL` → reloadNamespace;
+       - `user_id = $3` → overlay.
+     - It reads rows from a mutable `rows` array, so a test can change the stored value mid-test.
+   - `fakeCall()`: an `EventEmitter` with `request`, `metadata` (a `grpc.Metadata`), a `writes: any[]` array,
+     `write(p)`, and `destroy(s)`, which records `destroyed`.
+   - `unhandled()`: installs a `process.on('unhandledRejection', …)` collector, and returns it plus a disposer.
+2. **Boot ordering.** After `await impl.initialize()`, the index of `LISTEN config_changed` in `log` is lower than
+   the index of the reloadAll SELECT.
+3. **`@AC-1`.**
+   - Setup: `t.mock.timers.enable({ apis: ['setTimeout'] })`. Initialize with the row
+     `analysis.backtest.max_duration_seconds` = `'300'` (`value_type: 'int'`, `environment: 'staging'`). Open a
+     global `watchConfig` on `analysis`/staging (`environment: 'ENVIRONMENT_STAGING'`, `user_id: ''`). Await one
+     `setImmediate`.
+   - Drop: emit `error` (`new Error('terminating connection due to administrator command')`), then `end`, on the
+     first FakeClient.
+   - Assert exactly **one** `release`, carrying that error.
+   - `tick(1000)`, then flush with `setImmediate`. Assert a second `pool.connect` and a second
+     `LISTEN config_changed`.
+   - Set the row to `'600'` and `notify` `{"namespace":"analysis","environment":"staging"}` on the **new** client.
+   - Assert the last write is a DELTA whose `values['analysis.backtest.max_duration_seconds'].intVal === 600`.
+     Assert the same `impl` instance served it (no restart).
+4. **`@AC-9`.** Same setup and drop as AC-1.
+   - Set the row to `'600'` while the listener is down, with no NOTIFY.
+   - `tick(1000)` and flush.
+   - Assert that `resyncAll` delivered a DELTA carrying 600 with no notification sent.
+5. **Reconnect `pool.connect()` rejects twice, then succeeds** (the blocking-fix test approved at the r2 gate).
+   - After the drop, script `connect` as reject, reject, FakeClient.
+   - Tick 1000 → one rejected connect, and no unhandled rejection.
+   - Tick 1999 → no new connect. Tick 1 more → the second rejection.
+   - Tick 4000 → success, `LISTEN` re-run, and a DELTA re-broadcast to the subscriber.
+   - After success, a fresh drop reconnects after 1000 ms (the backoff resets).
+6. **Reconnect `reloadAll` rejects once.**
+   - Make the reloadAll SELECT reject once, on the first reconnect.
+   - Assert the new client is released exactly once, with that error.
+   - Then tick 2000 → the retry succeeds and re-broadcasts (AC-9 retry path).
+7. **Interleave.**
+   - Hold the reloadAll SELECT of a reconnect on a controlled promise.
+   - Deliver a notification on the new client, then resolve the reloadAll.
+   - Assert that the cached snapshot (via a following `getConfig`) holds the `reloadNamespace` data, and that the
+     DELTAs arrive in chain order.
+8. **`@AC-2`.**
+   - Make the reloadNamespace SELECT reject with `new Error('connection terminated')`, and notify for `analysis`.
+   - Await two `setImmediate`s.
+   - Assert the collector saw **no** unhandled rejection.
+   - Capture the error-level record through the logger's sink and assert it contains `connection terminated`
+     (see the log-capture note in Codebase Evidence).
+   - Then `await impl.getConfig(...)` still invokes its callback with `err === null`.
+9. **Malformed payload.** `notify('not json')` → no throw, no unhandled rejection and no query.
+10. Restore timers and remove the `unhandledRejection` collector in each case (`t.after`).
+
+**Verification**:
+```bash
+cd services/xstockstrat-config && pnpm run test:coverage && pnpm run lint
+# c8 --lines 40 must pass (package.json:13); 0 failed tests (reporter-neutral, fails.md:2992-3005).
+grep -n "AC-1\|AC-2\|AC-9\|rejects twice" src/__tests__/configServiceImpl.test.ts   # each present
+grep -rn "__tests__/fixtures" src/__tests__/configServiceImpl.test.ts             # C-13: expect no hits
+```
+
+---
+
+### Step 3 — service: config `getConfig` / `setConfig` gate queries return a gRPC error on DB rejection
+
+**Status**: `pending`
+**Service**: `xstockstrat-config`
+**Files**:
+- `services/xstockstrat-config/src/grpc/configServiceImpl.ts` — modify
+
+**Reviewers**: `xstockstrat-config` owner — WatchConfig stream stability, environment / global-per-user scoping,
+secret redaction on every broadcast
+
+**Codebase Evidence**:
+- **D-06** `getConfig` `:315-328`. `const values = await this.resolveOverlayValues(namespace, env, userId);` at
+  `:319` is outside any try. The success callback is at `:321-327`.
+- **D-06** `setConfig` `:371`:
+  - `:446` `const createKey = …`
+  - `:447-451` `const existing = await this.pool.query(...)` — outside any try.
+  - `:455` `let globalRow: any = null;`
+  - `:457-462` `const globalExisting = await this.pool.query(...)` — outside any try.
+  - `:465` `keyRegistered`, which reads `existing` and `globalRow`.
+  - NOT_FOUND `code: 5` at `:466-472`.
+  - `:476-482` `isSecret`, which reads `existing.rows`.
+  - The encryption catch, `code: 13`, at `:490-493` (`encryptSecret` at `:489`).
+  - The write try at `:500-522`. Its catch `callback({ code: 13, message: err.message })` at `:521` is the reuse
+    convention (recon.md § Patterns to REUSE).
+- These checks stay **outside** the new try, so their specific codes survive:
+  - PERMISSION_DENIED `:391`/`:402`
+  - MISSING_AUTHOR `:411-414`
+  - INVALID_ARGUMENT `:418-441`
+- `getSecret` `:335-369` is not touched, and no shared helper is added (PRESERVE config-secrets `@AC-16`).
+
+**TDD**: `red-green required` (Step 4 is the paired test)
+
+**Covers**: —
+
+**Instructions**:
+1. `getConfig`: wrap `:319` in `let values: Record<string, any>; try { values = await this.resolveOverlayValues(namespace, env, userId); } catch (err: any) { log.error('getConfig failed', { namespace, env, userId, error: err.message }); callback({ code: 13, message: err.message }); return; }`.
+   Leave `:320-327` unchanged.
+2. `setConfig`: declare `let existing: any; let globalRow: any = null;` above `:447`. Then wrap only the two gate
+   queries (`:447-451` and the `if` block `:456-463`) in `try { … } catch (err: any) { log.error('setConfig existence gate failed', { namespace, key, env, error: err.message }); callback({ code: 13, message: err.message }); return; }`.
+   Remove the original `const`/`let` on those lines. `:465` onward reads the same names.
+3. Do not move the NOT_FOUND gate, the encryption catch or the write try (`:500-522`). AC-11 is a regression pin on
+   that unchanged try.
+
+**Verification**:
+```bash
+cd services/xstockstrat-config && pnpm run build && pnpm run lint
+grep -n "getConfig failed\|setConfig existence gate failed" src/grpc/configServiceImpl.ts   # one hit each
+```
+
+---
+
+### Step 4 — test: unary handlers return an error status and keep their specific codes (AC-3, AC-4, AC-11)
+
+**Status**: `pending`
+**Service**: `xstockstrat-config`
+**Files**:
+- `services/xstockstrat-config/src/__tests__/configServiceImpl.test.ts` — modify
+
+**Reviewers**: `xstockstrat-config` owner — WatchConfig stream stability, environment / global-per-user scoping,
+secret redaction on every broadcast
+
+**Codebase Evidence**:
+- Step 3's sites: `getConfig` `:319`, and the `setConfig` gates `:447-462`.
+- Admin-scope metadata shape: `setConfigAuthz.test.ts` uses `HEADER_ACCESS_SCOPE`/`HEADER_USER_ID` imported from
+  `../grpc/authz` (`authz.ts:10-11`). The inline literals are banned by `.eslintrc.json:13-27`. Scope `'4'` passes
+  `hasAdminAccessScope`.
+- The bounds registry has no entry for `analysis.backtest.max_duration_seconds` (`configServiceImpl.ts:100-146`;
+  grep), so a write of 600 reaches the existence gate.
+- INVALID_ARGUMENT source: `'analysis.scoring.signal_decay_half_life_hours': { minValue: 0, maxValue: 8760 }`
+  (`:101`).
+- NOT_FOUND source: `:466-472`.
+- C-13: inline scenario values in this file only; compliant inline.
+
+**TDD**: `red-green required`. Against the pre-Step-3 tree, AC-3 and AC-4 reject from the handler instead of
+invoking the callback, and an unhandled rejection is observed, so both fail. AC-11 and the INVALID_ARGUMENT /
+NOT_FOUND cases are **regression pins**: they are green before and after (design.md § Business Rules Touched,
+PRESERVE). The step's red evidence is AC-3 and AC-4.
+
+**Covers**: `AC-3, AC-4, AC-11`
+
+**Instructions**:
+1. Add a `describe('ConfigServiceImpl — unary DB failures (feature 258)')` with a pool whose `query` rejects with
+   `new Error('connection terminated')` when the SQL matches a configured regex. Otherwise it returns the configured
+   rows.
+2. **`@AC-3`.**
+   - Make the overlay SELECT (`user_id = $3`) reject.
+   - `await impl.getConfig({ request: { namespace: 'analysis', userId: 'u-1', environment: 'ENVIRONMENT_STAGING' } }, cb)`.
+   - Assert that `cb` was called once with `err.code === 13`, and that no `unhandledRejection` occurred.
+3. **`@AC-4`.**
+   - Make the existence-gate SELECT (`SELECT is_secret`) reject.
+   - Call `setConfig` with `{ namespace: 'analysis', key: 'analysis.backtest.max_duration_seconds', value: { intVal: 600 } }`,
+     admin metadata (`HEADER_ACCESS_SCOPE: '4'`, `HEADER_USER_ID: 'admin-7'`) and `author: 'admin-7'`.
+   - Assert `err.code === 13` and that no INSERT was issued.
+4. **`@AC-11`.**
+   - The gate returns `[{ is_secret: false }]`, and the `INSERT INTO config.config_values` rejects.
+   - Assert `err.code === 13` and no unhandled rejection.
+5. **Pins.**
+   - Bounds: the decay key with `floatVal: -1` gives `err.code === 3`, and no query is issued.
+   - NOT_FOUND: the gate returns `[]` and `createKey` is false. Assert `err.code === 5`.
+   - A global write with no admin scope still yields PERMISSION_DENIED (`ADMIN_SCOPE_ERROR`), and no query is issued.
+
+**Verification**:
+```bash
+cd services/xstockstrat-config && pnpm run test:coverage && pnpm run lint
+# c8 --lines 40 passes; 0 failed tests.
+grep -n "AC-3\|AC-4\|AC-11" src/__tests__/configServiceImpl.test.ts
+```
+
+---
+
+### Step 5 — service: WatchConfig registers pending before the snapshot; failures end the call (D-35, D-58)
+
+**Status**: `pending`
+**Service**: `xstockstrat-config`
+**Files**:
+- `services/xstockstrat-config/src/grpc/configServiceImpl.ts` — modify
+
+**Reviewers**: `xstockstrat-config` owner — WatchConfig stream stability, environment / global-per-user scoping,
+secret redaction on every broadcast
+
+**Codebase Evidence**:
+- `interface Subscriber` `:87-94`. `lastVersion: string` (`:93`) is set at `:302` and read nowhere in
+  `services/xstockstrat-config/src` (grep; recon.md:181-183).
+- **D-58** `broadcastToSubscribers` `:260-274`:
+  - The loop is at `:262`.
+  - The catch `:268-271` is `log.warn('Failed to write to subscriber', { clientId: sub.clientId })` followed by
+    `this.subscribers.delete(id)`. It drops `err` and never ends the call.
+- **D-35** `watchConfig(call)` `:280-313`:
+  - `subId` is built at `:284`.
+  - The `cancelled`/`error` handlers at `:288-294` only delete.
+  - The `Subscriber` literal is at `:296-303`.
+  - `.then(...)` at `:305-309` registers only after the snapshot write.
+  - `.catch(...)` at `:310-312` only warns.
+- `first(md, key): string` — `src/grpc/authz.ts:14`, already imported (`configServiceImpl.ts:9`). The call form is
+  at `:405` (C-18; not the array-returning `metadata.get`). There is no `x-trace-id` header constant in config
+  (grep), so the literal is used once.
+- Stream-termination pattern to reuse: ledger `call.destroy({ code: 13, message: \`Internal error: ${err.message}\` })`
+  (`services/xstockstrat-ledger/src/grpc/ledgerServiceImpl.ts:325`; also `:285`, `:297`). Config has no
+  `call.destroy` today (grep).
+- `ConfigUpdateType.CONFIG_UPDATE_TYPE_SNAPSHOT` / `_DELTA` are used at `:305` and `:265`.
+
+**TDD**: `red-green required` (Step 6 is the paired test)
+
+**Covers**: —
+
+**Instructions**:
+1. In `interface Subscriber` (`:87-94`), replace `lastVersion: string;` with `pending: boolean;`,
+   `missedDelta: boolean;` and `traceId?: string;`.
+2. Add `private endSubscriber(id: string, sub: Subscriber, err: any)`:
+   - `if (this.subscribers.get(id) !== sub) return;`
+   - `this.subscribers.delete(id);`
+   - `log.error('WatchConfig subscriber terminated', { subId: id, clientId: sub.clientId, traceId: sub.traceId, error: err?.message });`
+   - `try { sub.call.destroy({ code: 13, message: \`Internal error: ${err?.message}\` }); } catch { /* call already closed */ }`
+   - It is reachable **only** from the `watchConfig` snapshot/catch-up chain and the per-subscriber broadcast catch
+     (C-16: PRESERVE platform `@AC-6 @FR-6 @feature-210`).
+3. `broadcastToSubscribers` (`:262-271`):
+   - After the namespace/env filter, add `if (sub.pending) { sub.missedDelta = true; continue; }`.
+   - Replace the catch body (`:269-270`) with `this.endSubscriber(id, sub, err);`.
+4. `watchConfig` (`:296-312`):
+   - The literal becomes `{ namespace, environment, userId, clientId, call, pending: true, missedDelta: false, traceId: first(call.metadata, 'x-trace-id') || undefined }`.
+   - Register it **before** the snapshot read: `this.subscribers.set(subId, sub);`.
+   - Replace `:305-312` with an async chain:
+     1. `const snap = await this.snapshotForSubscriber(sub, SNAPSHOT); if (this.subscribers.get(subId) !== sub) return; call.write(snap);`
+     2. `while (sub.missedDelta && this.subscribers.get(subId) === sub) { sub.missedDelta = false; const d = await this.snapshotForSubscriber(sub, DELTA); if (this.subscribers.get(subId) !== sub) break; call.write(d); }`
+     3. `sub.pending = false;`
+     4. Route any rejection to `this.endSubscriber(subId, sub, err)`.
+5. Leave the `cancelled`/`error` handlers (`:288-294`) as delete-only. A certificate rotation therefore never
+   triggers `destroy`.
+6. All payloads still come from `snapshotForSubscriber` → `resolveOverlayValues` → `buildConfigValue`. No new SELECT
+   is added (PRESERVE `@AC-2`/`@AC-13`/`@AC-14`, platform `@AC-35`). SNAPSHOT-first (service invariant #2) holds,
+   because a pending subscriber receives no broadcast write.
+
+**Verification**:
+```bash
+cd services/xstockstrat-config && pnpm run build && pnpm run lint
+grep -n "lastVersion" src/grpc/configServiceImpl.ts     # expect: no hits
+grep -n "this.endSubscriber(" src/grpc/configServiceImpl.ts   # expect: exactly 2 call sites (watchConfig chain, broadcast catch)
+```
+
+---
+
+### Step 6 — test: snapshot failure, in-flight change, broadcast failure, cancel during catch-up (AC-6, AC-7, AC-8)
+
+**Status**: `pending`
+**Service**: `xstockstrat-config`
+**Files**:
+- `services/xstockstrat-config/src/__tests__/configServiceImpl.test.ts` — modify
+
+**Reviewers**: `xstockstrat-config` owner — WatchConfig stream stability, environment / global-per-user scoping,
+secret redaction on every broadcast
+
+**Codebase Evidence**:
+- Step 5's sites: `watchConfig` `:280-313`, `broadcastToSubscribers` `:260-274`.
+- `broadcastToSubscribers` is private. Tests drive it through the Step 1 `notification` path, using Step 2's
+  `FakeClient` and the routing pool, which are reused in this file (no second copy).
+- Fake-call model: ledger stream tests assert `call.destroyed.code` (`ledgerServiceImpl.test.ts:551-559`, `:630-631`).
+- Per-user overlay SELECT: `configServiceImpl.ts:233-238` (`user_id = $3`).
+
+**TDD**: `red-green required`. Against the pre-Step-5 tree:
+- AC-6 fails: there is no `destroy`, and the stream gets no status.
+- AC-7 fails: a DELTA broadcast during the in-flight snapshot is missed, so no write carries 600.
+- AC-8 fails: there is no `destroy`, and the log is at warn level with no `err`.
+
+**Covers**: `AC-6, AC-7, AC-8`
+
+**Instructions**:
+1. **`@AC-6`.**
+   - Make the overlay SELECT reject.
+   - Open `watchConfig` for `analysis`/`u-1`, then flush.
+   - Assert `call.destroyed.code === 13` and `call.writes.length === 0`.
+   - Set the row to 600 and notify for `analysis`. Assert `call.writes.length` is still 0.
+2. **`@AC-7`.**
+   - Hold the overlay SELECT for `u-1` on a controlled promise.
+   - Open `watchConfig`. Set the global row to 600 and notify for `analysis`. Flush, so the broadcast runs while
+     the snapshot is pending.
+   - Resolve the held SELECT; subsequent overlay SELECTs resolve immediately.
+   - Assert `writes[0].updateType === 'CONFIG_UPDATE_TYPE_SNAPSHOT'`.
+   - Assert that a following write is a DELTA whose `values['analysis.backtest.max_duration_seconds'].intVal === 600`.
+     Either form satisfies the scenario wording: the first SNAPSHOT or a following DELTA carries 600.
+3. **`@AC-8`.**
+   - Register a `u-1` subscriber and let its snapshot complete.
+   - Make the overlay SELECT reject once with `new Error('overlay rejected')`, then notify for `analysis`.
+   - Assert `call.destroyed.code === 13`.
+   - Assert a captured error-level record containing `overlay rejected` (Step 2's log capture).
+   - A second notify writes nothing to that call.
+4. **Cancel during catch-up.**
+   - With a held snapshot SELECT and a notify, emit `cancelled` on the call before releasing the SELECT.
+   - Assert there is no write after cancel, no `destroy`, and no `WatchConfig subscriber terminated` log line.
+5. **Idempotent end.** Two failures for the same subscriber produce one `destroy` and one error log.
+6. **Trace id.** A call whose metadata carries `x-trace-id: t-258` logs `traceId: 't-258'` on termination (C-03).
+
+**Verification**:
+```bash
+cd services/xstockstrat-config && pnpm run test:coverage && pnpm run lint
+# c8 --lines 40 passes; 0 failed tests.
+grep -n "AC-6\|AC-7\|AC-8\|cancel during catch-up" src/__tests__/configServiceImpl.test.ts
+```
+
+---
+
+### Step 7 — service: ledger `appendEvent` acquires the client inside the try and releases it with the error
+
+**Status**: `pending`
+**Service**: `xstockstrat-ledger`
+**Files**:
+- `services/xstockstrat-ledger/src/grpc/ledgerServiceImpl.ts` — modify
+
+**Reviewers**: `xstockstrat-ledger` owner — append-only invariant (no deletes or updates), event ordering,
+hypertable partition safety
+
+**Codebase Evidence**:
+- `ledgerServiceImpl.ts:1` `import { Pool, Client } from 'pg';`. `appendEvent(call: any, callback: any)` is at `:31`.
+- The plain no-key path is already guarded (`:61-71`). Its catch is at `:66-69`:
+  `log.error('appendEvent failed', …)` and `callback({ code: 13, message: \`Internal error: ${err.message}\` })`.
+- **D-06**: `:73` comment, then `:74` `const client = await this.pool.connect();` before `try {` at `:75`.
+- The dedup branch `ROLLBACK` is at `:86`, inside the try. The catch at `:112-115` runs
+  `await client.query('ROLLBACK').catch(() => {});`, then the log, then the code-13 callback. `finally { client.release(); }`
+  is at `:116-118`.
+- Pool budget: ledger's query pool is `DB_POOL_MAX=1` (root CLAUDE.md § Connection Pool Budget). A client that broke
+  mid-transaction must be destroyed, not returned to the pool. That is why the client is released with the error.
+- Header propagation: no new outbound call.
+
+**TDD**: `red-green required` (Step 8 is the paired test)
+
+**Covers**: —
+
+**Instructions**:
+1. Change `:1` to `import { Pool, Client, PoolClient } from 'pg';`.
+2. Replace `:74` with `let client: PoolClient | undefined; let failure: unknown;`. Make
+   `client = await this.pool.connect();` the first statement inside the try at `:75`. Every later `client.` use
+   inside the try is reached only after assignment, so use `client!` or a narrowed local (`const c = client`), as
+   lint and tsc allow.
+3. In the catch (`:112-115`): set `failure = err;`, then `if (client) await client.query('ROLLBACK').catch(() => {});`.
+   Keep the existing `log.error` and code-13 callback.
+4. Replace the finally body (`:117`) with `client?.release(failure instanceof Error ? failure : undefined);`.
+5. Do not change the success path, the idempotency dedup, the insert SQL, or sequence ordering (PRESERVE the
+   append-only semantics).
+
+**Verification**:
+```bash
+cd services/xstockstrat-ledger && pnpm run lint
+grep -n "client = await this.pool.connect()" src/grpc/ledgerServiceImpl.ts   # one hit, after the `try {` line
+grep -n "client?.release(failure" src/grpc/ledgerServiceImpl.ts              # one hit
+```
+
+---
+
+### Step 8 — test: idempotent AppendEvent connect and mid-transaction failures (AC-5, AC-10)
+
+**Status**: `pending`
+**Service**: `xstockstrat-ledger`
+**Files**:
+- `services/xstockstrat-ledger/src/__tests__/ledgerServiceImpl.test.ts` — modify
+
+**Reviewers**: `xstockstrat-ledger` owner — append-only invariant (no deletes or updates), event ordering,
+hypertable partition safety
+
+**Codebase Evidence**:
+- The import swallow is at `ledgerServiceImpl.test.ts:21-29` (`try { await import('../grpc/ledgerServiceImpl.js') … } catch { … skipped }`).
+  The `if (!impl) return;` skip appears at 9 sites (grep count).
+- `makeIdempotentPool(opts)` is at `:56-84`. It routes SQL by regex (`:63-68`). Its client has
+  `release() {}` (`:73`), and its `connect()` (`:77-79`) always resolves.
+- The test script runs `node --experimental-strip-types --test src/__tests__/*.test.ts` (`package.json:13-14`).
+  Strip-only mode needs Node 24, as pinned in CI. On Node 22 the suite is a vacuous green (fails.md:2223-2226).
+- No `src/__tests__/fixtures/` home exists in ledger (ls). `makeIdempotentPool` has one consumer file. C-13
+  verdict: compliant inline.
+
+**TDD**: `red-green required`. Against the pre-Step-7 tree:
+- AC-5 fails, because `appendEvent` rejects with the connect error and the callback is never called.
+- AC-10 fails on the new assertion that `release` was called with the caught `Error`. Today `release()` is called
+  with no argument.
+
+These failing runs are the proof that the cases **execute**. A vacuous skip cannot go red (fails.md:115-134; P-06).
+
+**Covers**: `AC-5, AC-10`
+
+**Instructions**:
+1. **Precondition (zero-assertion guard).** Put the new cases in a new
+   `describe('LedgerServiceImpl.appendEvent — DB failures (feature 258)')`.
+   - Its first statement in each case is `assert.ok(LedgerServiceImpl, 'ledgerServiceImpl must import — never skip silently');`.
+   - Do **not** use `if (!impl) return;`.
+   - Leave the existing swallow at `:21-29` to `252-fix-identity-ledger-test-suites`. Editing it here would collide
+     with 252.
+2. Extend `makeIdempotentPool`'s `opts` with `connectThrows?: Error` and `throwOn?: RegExp`, and record releases:
+   - `connect()` rejects with `connectThrows` when it is set.
+   - `client.query` throws `new Error('connection terminated')` when the SQL matches `throwOn`.
+   - `release(err?)` pushes `err` to a returned `releases` array.
+   - Existing callers pass neither option, so their behaviour is unchanged.
+3. **`@AC-5`.**
+   - `connectThrows: new Error('timeout exceeded when trying to connect')`.
+   - `await impl.appendEvent({ request: { streamKey: 'account:a-1', idempotencyKey: 'k-1', eventType: 'x', payload: {} } }, cb)`
+     must resolve, not reject.
+   - Assert that `cb` was called once with `err.code === 13` and no unhandled rejection, and that `releases` is
+     empty (nothing was acquired).
+4. **`@AC-10`.**
+   - `throwOn: /INSERT INTO ledger\.events/`, with `claimRows: [{ event_id: 'e' }]`.
+   - Call with `idempotencyKey: 'k-2'`.
+   - Assert `err.code === 13` and `releases.length === 1`, with `releases[0] instanceof Error` and
+     `releases[0].message === 'connection terminated'`.
+   - Assert that `ROLLBACK` appears in `calls`, and no unhandled rejection.
+5. **Success pin.** The existing first-time and duplicate idempotent cases still pass. Their release is called with
+   `undefined`.
+
+**Verification** (run on Node 24, CI's pin):
+```bash
+node --version   # expect v24.x — Node 22 strip-only gives a vacuous green (fails.md:2223)
+cd services/xstockstrat-ledger && pnpm run test:coverage && pnpm run lint
+# c8 --lines 40 passes; 0 failed tests.
+grep -n "never skip silently" src/__tests__/ledgerServiceImpl.test.ts   # the new describe asserts its import
+grep -n "AC-5\|AC-10" src/__tests__/ledgerServiceImpl.test.ts
+```
+
+Record the red run before Step 7 (both cases failing) in the execute log. It is the non-zero-execution proof that
+design.md § Build order requires.
+
+---
+
+### Step 9 — docs: config service docs, CONFIG-1 anchors, limitations
+
+**Status**: `pending`
+**Service**: `docs` (`services/xstockstrat-config/`, feature directory)
+**Files**:
+- `services/xstockstrat-config/CLAUDE.md` — modify
+- `services/xstockstrat-config/docs/context-constitution.md` — modify
+- `docs/roadmap/features/258-fix-config-stream-resilience/context.md` — modify
+
+**Reviewers**: none
+
+**Codebase Evidence**:
+- `services/xstockstrat-config/CLAUDE.md`:
+  - Invariant #4 at `:35`: "Config changes trigger pg_notify → reloads namespace in memory → broadcasts DELTA…".
+  - § WatchConfig Flow at `:64-89`. Its tail is "ConfigServiceImpl receives LISTEN notification → Reloads
+    namespace from DB → Broadcasts DELTA" (`:86-88`).
+- `services/xstockstrat-config/docs/context-constitution.md:18` CONFIG-1 cites
+  `configServiceImpl.ts#reloadNamespace (~L197-217; … ~L214)`. These line hints drift with Steps 1, 3 and 5.
+- The root CLAUDE.md pool-budget table needs no change. The pooled LISTEN client is unchanged (F-06; design.md
+  § Constitution Rules Touched).
+
+**TDD**: `N/A (docs — non-code-bearing)`
+
+**Covers**: —
+
+**Instructions**:
+1. Config `CLAUDE.md`:
+   - Invariant #4: add one sentence. The LISTEN client issues `LISTEN` before the boot `reloadAll`, and
+     notification/reload work runs on one serial chain. On `error`/`end` the client is released with the error,
+     and the listener reconnects with backoff (1 s doubling to a 30 s cap; code constants, because config cannot
+     watch itself). On reconnect it `reloadAll`s and re-broadcasts a full-namespace DELTA to every subscribed
+     `(namespace, environment)`.
+   - § WatchConfig Flow: add that a new subscriber is registered pending before its snapshot and gets a catch-up
+     DELTA for any change made meanwhile. A snapshot or broadcast failure ends that call with `INTERNAL` (13), so
+     the client's reconnect path runs; a cancel or transport error only unregisters.
+   - Add one limitation line each:
+     - propagation can lag up to about 30 s after a long outage;
+     - the listener competes with queries for the 2 pool slots during recovery, and pg-pool's `connect()` wait is
+       unbounded;
+     - a namespace whose rows were all deleted during an outage keeps its stale snapshot.
+2. `docs/context-constitution.md` CONFIG-1: re-stamp the `reloadNamespace` / `changedKeys` line hints against the
+   post-Step-5 file (`grep -n "private async reloadNamespace\|changedKeys: Object.keys(values)"`). Add
+   `#resyncAll` and the `watchConfig` catch-up as further producers of the full-namespace DELTA.
+3. Append to the feature `context.md`:
+   - the half-open-socket limitation and the outcome of Step 1's pg_terminate_backend check;
+   - the stale-namespace limitation;
+   - a pointer to the F-07 rationale already recorded in the sdd-design session.
+4. Teardown (root CLAUDE.md § Teardown). Run `/context-forge:context-constitution refresh` scoped to
+   `services/xstockstrat-config/`. If the plugin is unavailable, do the manual reconciliation of both touched
+   context files against the code, and record both facts in the PR body.
+
+**Verification**:
+```bash
+grep -n "reconnect\|LISTEN before\|catch-up" services/xstockstrat-config/CLAUDE.md
+cd services/xstockstrat-config && grep -n "private async reloadNamespace\|changedKeys: Object.keys(values)" src/grpc/configServiceImpl.ts
+# compare with the CONFIG-1 line hints in docs/context-constitution.md — they must match
+```
+
+---
+
+## Deviation Log
+
+_Populated by /sdd-execute as implementation proceeds._
