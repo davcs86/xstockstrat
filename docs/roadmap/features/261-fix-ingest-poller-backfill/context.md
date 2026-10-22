@@ -402,3 +402,79 @@ halt). design.md is not written and status stays `spec-ready`.
   "floor_breaches": []
 }
 ```
+
+## Session 2026-10-22 — sdd-design
+
+- Phase 0 Recon: recon.md was already written (services: xstockstrat-ingest fix site, xstockstrat-config read-only; key
+  reuse patterns: the per-source catch at `mcp_client_loop.py:143-152` as the error channel, and the `_canceled_jobs`
+  fast path plus the persisted-status check).
+- Phase 1 Grilling: 2 rounds (full). Termination: approved at the operator design gate. Built from the LAST
+  `sdd-batch-design-state` block (the design-state correction entry); the earlier block is feature 265's and was
+  ignored.
+  - Chosen approach: ingest only, 3 files.
+    - FR-6: `_select_signal_list`.
+    - FR-1: a per-item guard plus a summary log; when every item fails, the poll raises.
+    - FR-5: a gRPC `timeout=` on GetSecret, translating only DEADLINE_EXCEEDED.
+    - FR-2/3/4: synchronous `_canceled_jobs` guards, plus a persisted CANCELED check in `_resume_job`.
+    - A uuid4 trace id per resumed job.
+  - Rejected: `asyncio.wait_for`, `result_key` in `config_json`, compare-and-set terminal writes (low-rework at
+    `instance_count: 1`), the resume-query join, and the r1/r2 FR-6 rules.
+- Constitution rules touched: C-03, C-08, C-11, C-13, C-15, C-16, C-18, P-02, P-03, P-06. Floor breaches: none.
+- Status: spec-ready → design-approved.
+
+### Decisions
+
+- **Operator 2026-10-22 (design gate r2): APPROVED as synthesized. FR-1 is AMENDED.**
+  - When every parsed item in a batch fails, including a one-item batch, the poll emits the summary `log.info` first
+    and then raises `RuntimeError("all N items failed: ...")`. The source's `last_error` is set.
+  - A partial failure only logs the skipped count and does not mark the source errored.
+  - Applied this session:
+    - FR-1 amended in product-spec.md;
+    - `@AC-8 @FR-1 @regression` appended to acceptance.feature (ids stay append-only);
+    - design.md written.
+  - This resolves blocking objection O-1 (P-03/C-15).
+- **C-16 classification.** `@AC-8` (EXTEND) and the `@AC-4 @feature-166` EXTEND (a single signal object with a `tags`
+  list is wrapped, not mined for its tag strings) are covered by the operator's "APPROVED as synthesized". The 261
+  `@AC-1`..`@AC-7` CHANGEs are covered by the 2026-10-21 scope decision.
+- **Pinned `last_error` markers:**
+  - FR-5 / AC-4: `GetSecret deadline exceeded`;
+  - FR-6 / AC-7: `ambiguous result`;
+  - FR-1 / AC-8: `all <N> items failed`.
+- **O-2 adopted.** An envelope whose lists are all empty and that has no `symbol` key returns `[]`, keeping today's
+  silent empty polls. A test covers it.
+- **O-5, the cost case for the poll-loop GetSecret trace id (operator may override).** The id is not added this time:
+  - `resolve_secret` has no metadata parameter;
+  - widening it collides with in-flight `watcher.py` edits by 242, 260 and fix-config-stream-resilience;
+  - `last_error` already carries the slug and owner.
+  - The resumed-backfill path DOES mint a uuid4 `x-trace-id` per job.
+- **O-6 fixture home.** The DEADLINE_EXCEEDED `AioRpcError` builder stays inline unless both `test_mcp_client.py` and
+  `test_mcp_client_loop.py` use it. In that case it moves to `tests/_helpers.py` next to `job_row`, and that move is
+  recorded here.
+
+### Open Threads
+
+- [ ] **Single-instance dependency.** The FR-2/FR-3 guards rely on single-instance ingest and on CancelBackfill being
+  the only CANCELED writer, adding to the set first. Target: the FR-2/3/4 step (O-3 `update_job` fake asserts set
+  membership) and teardown (ingest invariant).
+- [ ] **Accepted FR-2 window.** It covers CancelBackfill's whole `await get_job` (`:881`), so at most one running emit
+  and one marketdata call can slip through, and the existing guards stop the run. Executors must NOT add a DB read
+  before the RUNNING write. Target: the FR-2/3/4 step.
+- [ ] **FR-3 interleave.** It leaves one stale set entry per race, with both `.completed` and `.canceled` in the ledger.
+  Accepted and documented. Target: the FR-2/3/4 step.
+- [ ] **AC-4 fidelity.** The sleeping fake proves the deadline value and the translation, while real hung-channel
+  behaviour rests on `grpc.aio`. Target: the FR-5 step plus the dev smoke test.
+- [ ] **Merge order.** It runs 244 → 261 (FR-5 rebases onto `int_positive`), and the work overlaps 242, 259, 260 and
+  fix-config-stream-resilience. Target: `/sdd-spec` (propose the `merge-order.md` row).
+- [ ] **Out of scope: seeded key form.** The seeded bare key and the dotted read differ (`025_…up.sql:34` vs
+  `mcp_client_loop.py:135`), so the effective timeout is the 30 s default. File a separate defect report or a 244
+  follow-up. Target: teardown.
+- [ ] **Repeated resume count.** Canceled bars jobs with PENDING chunks are re-counted in "resumed N" at every boot.
+  This is bounded and logged. Target: the FR-4 step.
+- [ ] **Stale main-dev copy.** The main-dev `acceptance.feature` lacks AC-6/AC-7/AC-8. Target: `/sdd-sync`.
+- [ ] **Teardown.**
+  - Fix the "no automatic resume" drift in `services/xstockstrat-ingest/CLAUDE.md`.
+  - Log the `main.py:66` / `:117-118` comment drift in the ingest findings doc.
+  - Run `/context-forge:context-constitution refresh`.
+- Ledger: no new line. Every reusable lesson here is already covered by `fails.md:1688-1693` and feature 247's
+  deadline precedent.
+- Next: `/sdd-spec fix-ingest-poller-backfill`.
