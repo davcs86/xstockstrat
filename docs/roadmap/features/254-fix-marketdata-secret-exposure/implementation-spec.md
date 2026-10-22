@@ -240,7 +240,7 @@ GOWORK=off golangci-lint run --modules-download-mode=mod
 **Verification**:
 ```bash
 cd services/xstockstrat-marketdata && GOWORK=off go test ./internal/fmp/ ./internal/finnhub/ -race -count=1 -run 'DoesNotLeak|PreservesDeadline|BudgetRefund' -v
-cd services/xstockstrat-marketdata && GOWORK=off COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"   # confirm >= 40%
+cd services/xstockstrat-marketdata && export GOWORK=off && COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"   # confirm >= 40%
 cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-download-mode=mod
 ```
 
@@ -290,8 +290,9 @@ cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-dow
 **Verification**:
 ```bash
 cd services/xstockstrat-marketdata && GOWORK=off go test ./internal/service/ -race -count=1 -run 'TransportErrorStatusIsKeyFree|VendorNoFundamentalsIsNotFound_feature215' -v
-# New assertions are in the excluded service/ package: no coverage threshold applies; the run above is the proof.
-cd services/xstockstrat-marketdata && GOWORK=off go test ./... -race -count=1 && GOWORK=off golangci-lint run --modules-download-mode=mod
+# Coverage threshold: total >= 40% (CI gate), measured with Step 2's command; service/ is excluded from COVERPKGS.
+cd services/xstockstrat-marketdata && export GOWORK=off && COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"   # confirm >= 40%
+cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-download-mode=mod
 ```
 
 ---
@@ -387,7 +388,7 @@ bash scripts/check-duplication.sh 2>/dev/null || (cd ../.. && bash scripts/check
 
 **Verification**:
 ```bash
-cd services/xstockstrat-config && pnpm run test:coverage   # all secretsAndScope tests green with authz.ts unchanged
+cd services/xstockstrat-config && pnpm run test:coverage   # all secretsAndScope tests green with authz.ts unchanged; c8 lines >= 40
 cd services/xstockstrat-config && pnpm run lint
 git diff --quiet -- src/grpc/authz.ts && echo "authz.ts untouched"
 ```
@@ -428,6 +429,8 @@ git diff --quiet -- src/grpc/authz.ts && echo "authz.ts untouched"
 cd services/xstockstrat-config && pnpm test 2>&1 | grep -E "AC-3 \(254\)|not ok|# fail"   # expect exactly the AC-3 (254) test failing (RED) before Step 7
 cd services/xstockstrat-config && pnpm run lint
 ```
+Coverage threshold: none at this step. The run is an expected-red, not a green gate, so run it only as the Step 6-7
+pair. The `c8 lines >= 40` gate applies at Step 7's Verification (F-05, P-06).
 
 ---
 
@@ -509,7 +512,7 @@ cd ../.. && sed -n 28p scripts/gen-dev-certs.sh | grep -q 'xstockstrat-marketdat
 ### Step 8 — docs: config/marketdata invariants, root config-governance line, residuals defect report
 
 **Status**: `pending`
-**Service**: `services/xstockstrat-config/`, `services/xstockstrat-marketdata/`, root `CLAUDE.md`, `docs/reports/`
+**Service**: `xstockstrat-config`, `xstockstrat-marketdata` (docs only; also root `CLAUDE.md` and `docs/reports/`)
 **Files**:
 - `services/xstockstrat-config/CLAUDE.md` — modify
 - `services/xstockstrat-config/docs/context-constitution.md` — modify
