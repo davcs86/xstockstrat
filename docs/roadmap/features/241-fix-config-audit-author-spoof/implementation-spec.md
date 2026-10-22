@@ -67,8 +67,8 @@ grant has no `peerSan` (`services/xstockstrat-config/src/grpc/authz.ts:66-76`). 
   reconciliation recorded in the PR body).
 - Overlap (Mode B scan, context.md 2026-10-20 sdd-review impl-spec): WARN, file-level only. No config key,
   proto field number or migration NNN collision.
-  - `trading.go` vs 251: same function. 251 edits the `SourceService` literal at `:2188` in `escalateSystemic`
-    (`:2163-2190`), Step 5 deletes `:2176`. Whichever merges second reconciles that function by hand.
+  - `trading.go` vs 251: line-disjoint. 251 edits only `applyBrokerOrderStatus` (`:1772-1829`, its Step 5 fill
+    payloads); this feature's Step 5 deletes `:2176` in `escalateSystemic` (`:2163-2190`). Rebase only.
   - `configServiceImpl.ts` vs 244 (`:115-117,120`, scalar-bounds registry): disjoint from `setConfig`
     (`:371-414`), rebase only. 243 is not confirmed in this file by its docs.
   - `tools.py` / `client.py` / `mcp-tools.md` vs 215 (`_opportunity_to_dict`, other tool docstrings) and 247

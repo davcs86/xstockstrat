@@ -9,11 +9,14 @@ review and other in-flight features. The agent returns a collision report; the *
 Find active concurrent features with a single grep (no per-file reads):
 
 ```bash
-find docs/roadmap/features -mindepth 2 -maxdepth 2 -name "feature.md" \
-  | xargs grep -El '`(spec-ready|implementation-ready|in-progress|code-completed)`' 2>/dev/null
+egrep -lx '(spec-ready|implementation-ready|in-progress|code-completed)' \
+  docs/roadmap/features/*/status.md 2>/dev/null
 ```
 
-Exclude `$FEATURE_DIR/feature.md`. Derive each other slug from its directory name (strip
+Current status lives only in `status.md` (`docs/roadmap/features/CLAUDE.md` § Key Rules); `feature.md`'s
+Status History holds every past status, so grepping it matches finished features too.
+
+Exclude `$FEATURE_DIR/status.md`. Derive each other slug from its directory name (strip
 `NNN-` prefix). For each, extract only overlap-relevant fields from its `product-spec.md` via
 targeted grep — do not load the full file:
 
@@ -39,11 +42,10 @@ Key Changes**, **Database Changes**. Apply:
 Find `implementation-ready` / `in-progress` features:
 
 ```bash
-find docs/roadmap/features -mindepth 2 -maxdepth 2 -name "feature.md" \
-  | xargs grep -El '`(implementation-ready|in-progress)`' 2>/dev/null
+egrep -lx '(implementation-ready|in-progress)' docs/roadmap/features/*/status.md 2>/dev/null
 ```
 
-Exclude `$FEATURE_DIR/feature.md`. For each, extract from its `implementation-spec.md`:
+Exclude `$FEATURE_DIR/status.md`. For each, extract from its `implementation-spec.md`:
 
 ```bash
 grep -E '^\- `[^`]+\.(go|py|ts|sql|proto|md)`' <other-feature-dir>/implementation-spec.md  # files

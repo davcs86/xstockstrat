@@ -3703,3 +3703,8 @@ reusing.
   `services/xstockstrat-agent/app/oauth_server.py:87-110`.
 - **Rule it implies**: In a timeout or deadline fix, enumerate the fallbacks that open a security
   gate when the read fails. Record each one as a posture change, not as a plain fallback.
+
+### 2026-10-21 — otel-metrics-logs-export — design
+- **Pattern**: When a language's gRPC instrumentation emits spans but no RPC metric, derive the metric in-process from SERVER spans with a SpanProcessor (`on_end`) instead of adding a second interceptor stack. It reuses the status code the instrumentation already computed, needs no server-wiring edit, and one shared golden-vector file (`scripts/testdata/rpc-status-vectors.json`) keeps the per-language status rule and bucket boundaries identical to Go's native `otelgrpc`.
+- **Evidence**: `docs/roadmap/features/274-otel-metrics-logs-export/design.md` § PR-A; recon.md § SDK capability probe (py instrumentation-grpc 0.63b1 and node 0.52.1 have no meter code).
+- **Rule it implies**: Probe the pinned instrumentation for metric support before designing an RPC alert; when it is span-only, a span-derived recorder plus shared vectors beats per-language interceptors — but it inherits the span's blind spots (sampling, BaseException cancels), so pin those as explicit vectors.
