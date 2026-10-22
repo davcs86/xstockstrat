@@ -105,15 +105,18 @@ _Constitution **C-14**._
 - [x] No database migrations anticipated
 - [x] No config key changes. Decision (2026-10-21): the FR-3 retry bound and the FR-6 emit retry are code
   constants, not config keys.
-- [ ] Proto changes: open, see Open Questions (OQ-1).
+- [x] Proto changes: additive degraded markers `Portfolio.offline_state_unavailable = 17` and
+  `Position.offline_state_unavailable = 26` (design, operator gate r3); they go through the proto approval gate.
 
 ## Open Questions
 
-- **OQ-1 (FR-4). Owner: `/sdd-design` (portfolio service owner).** Return `UNAVAILABLE`, or add a wire-visible
+- [x] **OQ-1 (FR-4). Resolved at /sdd-design (operator gate r3, 2026-10-22): wire-visible degraded markers, not
+  `UNAVAILABLE`; reads stay successful.** Original question: Return `UNAVAILABLE`, or add a wire-visible
   degraded marker? `UNAVAILABLE` needs no proto change and is preferred. A degraded marker would be an
   additive field in `packages/proto/portfolio/v1/portfolio.proto` and must go through the proto approval gate
   (`docs/runbooks/proto-versioning.md`). Design records the decision and updates the Fix Scope box.
-- **OQ-2 (FR-3). Owner: `/sdd-design` (portfolio service owner).** The bound value and the park mechanism (for
+- [x] **OQ-2 (FR-3). Resolved at /sdd-design (operator gate r3, 2026-10-22): SQLSTATE-classified park rule
+  (22/23 park after 5 attempts; transient never parks; unclassified keeps a bounded fallback).** Original question: The bound value and the park mechanism (for
   example, skip after N attempts with an error log). The bound is a constant either way.
 
 ## Acceptance Criteria
