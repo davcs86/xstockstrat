@@ -422,3 +422,75 @@ The `/sdd-design fix-analysis-backtest-bounds` full debate is halted at its appr
   "floor_breaches": []
 }
 ```
+
+## Session 2026-10-22 — sdd-design
+
+- Phase 0 Recon: wrote recon.md. Services: xstockstrat-analysis, xstockstrat-config. Key reuse patterns:
+  - `_BarFetchError` plus the "refusing to return a truncated series" message tail;
+  - the `get_int_present` presence-aware read;
+  - the screener's `context.abort(DEADLINE_EXCEEDED)` idiom.
+- Phase 1 Grilling: 2 rounds (full). Termination: the operator approved at the design gate. Floor clear.
+- OPERATOR DECISIONS (binding, recorded 2026-10-22, design gate r2):
+  - APPROVED as synthesized, with D-28 discriminator option (a): raise only when a token was sent AND
+    `resp.page.next_page_token` is non-empty. An empty next token is EOF (new @AC-7).
+  - I-2 belongs to feature 273 (fix-agent-client-deadlines): the `deadline_s is None -> exc.details()`
+    pass-through in `_grpc_error_message` (`services/xstockstrat-agent/app/tools.py:228-231`).
+    - 272 stays analysis-only; xstockstrat-agent is not in Affected Services.
+    - Merge order: 273 before 272.
+- Chosen approach:
+  - D-28: the two-token re-serve guard in `_fetch_bars_paged`, with `test_warmup.py:236-243` inverted (C-18).
+  - `_BarFetchError` is re-raised out of the per-symbol loop and mapped to FAILED_PRECONDITION
+    `backtest bar series incomplete:`. This includes the benchmark path, which was UNKNOWN before.
+  - D-29: the body is renamed to `_run_backtest(request, context, disarm)` behind a thin `@owner_scoped` wrapper.
+    - The limit is read with `get_int_present("analysis.backtest.max_duration_seconds", 300)`. 0 means no limit; a
+      negative value means 300 plus a WARN.
+    - The body runs under `asyncio.timeout`. The result is DEADLINE_EXCEEDED `backtest exceeded Ns deadline`, and
+      only when `cm.expired()` is true.
+    - `disarm()` is called just before `self._backtests[backtest_id] = result` (`:1267`), so persistence always
+      completes.
+  - No proto, no migration, no UI change.
+  - Docs plus strat-lab/mcp-tools rows, including the prod 60 s MCP-cap disclosure.
+  - G-1 is a launch-checklist gate.
+- Rejected (full list in design.md):
+  - the stricter D-28 rule (b);
+  - a whole-body `wait_for`;
+  - skip-with-CoverageGap;
+  - UNAVAILABLE as the status code;
+  - retiring the key;
+  - a config-side bounds registry;
+  - the agent prefix match;
+  - the retroactive I-2 fallback.
+- Constitution rules touched: C-03, C-08, C-10, C-11, C-14, C-15, C-16, C-18, P-02, P-03, F-01, F-07.
+  Floor breaches: none.
+- C-16:
+  - CHANGE @AC-1 / @AC-3 @feature-272: operator sign-off 2026-10-21 ("Scope is D-28, D-29") plus the 2026-10-22
+    gate approval.
+  - PRESERVE @AC-2 @feature-272 and the cross-feature set listed in design.md.
+  - EXTEND @AC-4..7 @feature-272 and @AC-32 @feature-224.
+- Status: spec-ready → design-approved.
+
+### Open Threads (from design.md § Open Risks)
+
+- [ ] Add @AC-5 (stored 0 / negative), @AC-6 (FAILED_PRECONDITION, benchmark included) and @AC-7 (token sent,
+  empty page, empty next token = EOF) to acceptance.feature. Target: /sdd-spec, before step 1 (C-15).
+- [ ] Pin "fix-analysis-backtest-bounds after fix-agent-client-deadlines (273)" in
+  `docs/roadmap/features/merge-order.md`, and record I-1..I-3 in 273's context.md. Both belong to other writers.
+  Target: before /sdd-spec.
+- [ ] Prod 120 s is enforced for the first time; runs that complete today may get DEADLINE_EXCEEDED. Target: the
+  G-1 launch-checklist step (ledger p50-p99, orphan-`started` count per environment, operator-input threshold).
+- [ ] `disarm()` placement at `:1267` is fragile against peer edits from 215/274. Target: step 3 (T-commit), and
+  re-check at each rebase.
+- [ ] grpc.aio cancellation is unverified locally. A swallowed `AioRpcError(CANCELLED)` at `:1127` would let the
+  run overrun. Target: step 3 (AC-3b).
+- [ ] Abandoned executor threads hold `_compute_executor` slots. Target: step 4 docs ("do not retry immediately").
+  A cooperative cancel is a follow-up only.
+- [ ] Agent users get the generic message until 273's I-2 lands, and never see the server message at prod 120 s
+  because the MCP 60 s cap fires first. Target: step 4 docs, plus merge order 273 → 272.
+- [ ] Behavior delta: one truncated symbol fails the whole run, and a benchmark UNKNOWN becomes FAILED_PRECONDITION
+  (insights.md:178-190). Target: step 2 (AC-6) and the PR body.
+- [ ] About 102 `GetBars` AsyncMock sites may return a truthy MagicMock `next_page_token` and turn tests red.
+  Target: step 1, with a full-suite run.
+- [ ] Orphan `analysis.backtest.started` events will increase. Target: G-1.
+- [ ] The rename shifts the line anchors cited by 215/274. Target: re-grep at /sdd-spec.
+- [ ] RunBacktest test harnesses whose cfg is a bare MagicMock lack a `get_int_present` stub (fails.md:1394).
+  Target: hard verification item at /sdd-spec.
