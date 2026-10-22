@@ -187,3 +187,151 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   "floor_breaches": []
 }
 ```
+
+## Session 2026-10-22 — sdd-batch design gate (round 2)
+
+- The /sdd-design full debate has reached its approval gate after round 2 (gate policy: halt). design.md is not written and status.md is unchanged (`spec-ready`) until the operator approves.
+
+## Open Threads
+
+- **Approach.**
+  - **FR-1..FR-3 (D-24): owner-scoped, fail-closed fan-out.**
+    - `subs` becomes `map[string]snapshotSubscriber{ch, userID}`, copying the trading pattern.
+    - The call becomes `Subscribe(id, userID)`.
+    - `broadcastSnapshot` keeps only subscribers whose owner strictly equals the snapshot's user, with no empty-means-all mode.
+    - Valuation, the unpriced skip, `InsertSnapshot` and `emitEvent` stay ahead of the filter, on the fill ctx.
+  - **Change this round: handler test seam.** The handler takes an unexported consumer-side `snapshotHub` interface and gets one shared `streamSnapshots` helper for both the Connect and gRPC paths.
+    - The gRPC adapter returns `InvalidArgument` on an empty caller before it subscribes.
+    - The deprecated body `user_id` is still ignored, so there is no proto change.
+    - The exported `SubscriberCount()` is dropped (C-18).
+  - **Tests.** @AC-1 isolation is a `package service` test. @AC-2, @AC-3 and @AC-6 are `package handler` tests with a test-local fake hub (C-13). The Connect stream is unmounted (`cmd/server/main.go:94`), which goes in design.md.
+  - **FR-4 (D-12): branch (b).**
+    - Delete `StartSnapshotWriter` and @AC-4.
+    - Retire `portfolio.snapshot.interval_minutes` in a new config migration, **034**. The down migration restores the staging and production global rows in the 020 layout.
+    - @AC-5 becomes a static `node:test` scan of the migration set.
+- **Strongest open objection (non-blocking).** Migration ordering is a process control.
+  - The spec's final step must run a literal two-sided pre-merge gate against `origin/main-dev` config migrations:
+    - (a) no number ≥ 034;
+    - (b) 031, 032 and 033 are each present, or that number's owner is sequenced after 264 in `merge-order.md`.
+  - The 244/248 `032` double-claim must be resolved first. If its renumber lands anywhere other than 033, re-check 034 (C-07).
+  - Other open non-blocking items: the spec picks either the @AC-1 When-step rewording or a fill-path drive (C-15), and @AC-4 deletion and @AC-5 rewording need operator acknowledgement.
+- **Floor status.** No Floor breaches in either round. C-03 and the operator trace-id decision hold, and the feature-231 and feature-210 rules are preserved.
+- **@AC changes not covered by an operator decision.**
+  - @AC-4 is a CHANGE (deleted with branch (b)).
+  - @AC-5 is a CHANGE (reworded to a static migration-set scan).
+  - These follow from the branch-(b) design choice, which scope D-12/D-24 does not explicitly sanction, so they are surfaced at this gate for operator acknowledgement.
+  - @AC-1/2/3 EXTEND and are covered by D-24. @AC-6 and the feature-231/161/210 rules are PRESERVE.
+
+```sdd-batch-design-state
+{
+  "round": 2,
+  "synth": {
+    "approach": "Round 2 synthesis. The round-1 design and round-2 proposal stand. The adversary's two blocking objections are adopted as fixes below, and both have concrete answers.\n\n**FR-1..FR-3 (D-24): owner-scoped fan-out, fail-closed. Unchanged.**\n- **Service, `services/xstockstrat-portfolio/internal/service/portfolio_service.go`.**\n  - `subs` (`:54`, built at `:155`) becomes `map[string]snapshotSubscriber{ch, userID}`, copying `services/xstockstrat-trading/internal/service/trading.go:344-357`.\n  - `Subscribe(id, userID string)` replaces `Subscribe(id)` (`:875`).\n  - `broadcastSnapshot` (`:908`) skips any sub where `sub.userID != userID` inside the fan-out loop (`:936-943`). This is strict equality with no empty-means-all mode.\n  - Valuation, the unpriced-skip, `InsertSnapshot` and `emitEvent` stay before the loop on the fill `ctx` from `:376`. That satisfies C-03 and the operator's trace-id decision.\n  - Call sites to update: `portfolio_quote_deadline_test.go:106,321,396,424` and `offline_account_pnl_test.go:320`.\n- **Handler, `services/xstockstrat-portfolio/internal/handler/portfolio_handler.go`. Change this round: an interface seam (adopted from objection 1).**\n  - Declare an unexported consumer-side interface in the handler package: `type snapshotHub interface { Subscribe(id, userID string) chan *portfoliov1.PortfolioSnapshot; Unsubscribe(id string) }`. `*service.PortfolioService` satisfies it.\n  - Add an unexported helper `streamSnapshots(ctx, hub snapshotHub, userID, subID string, mode commonv1.TradingMode, send func(*portfoliov1.PortfolioSnapshot) error) error`. It replaces the duplicated loops at `:119-138` (Connect) and `:293-311` (gRPC).\n  - Connect keeps its empty-caller check (`:115-118`).\n  - The gRPC adapter adds `status.Error(codes.InvalidArgument, \"user_id required\")` before it builds `subID` or calls `Subscribe`.\n  - The body `user_id` is still ignored. It is `[deprecated = true]` with \"body value ignored\" (`packages/proto/portfolio/v1/portfolio.proto:215`). No proto change.\n  - **`SubscriberCount()` is DROPPED.** No new exported symbol (C-18).\n\n**Tests.**\n- **@AC-1 owner isolation: `package service` test.**\n  - Uses `newQuoteSvc` (`portfolio_quote_deadline_test.go:93`), which is reachable only in-package, and the shape of `trading_ownership_test.go:111`.\n  - Calls `broadcastSnapshot` directly and asserts on `subs` channels.\n  - Reword @AC-1's When step to \"a snapshot is broadcast for u-1\", matching @AC-3. Alternatively, drive the test through the fill path at `:376`. The spec picks one and records it in context.md (C-15).\n- **@AC-3, @AC-2, @AC-6: `package handler` tests with a test-local fake hub (C-13).**\n  - The fake records `Subscribe` calls, signals on a channel when subscribed, and lets the test push snapshots. This replaces `Eventually` polling.\n  - @AC-2 and @AC-6 assert `codes.InvalidArgument` / `connect.CodeInvalidArgument` and zero `Subscribe` calls on the fake. No nil-service panic.\n  - @AC-3 (helper-level isolation of the delivered stream) waits on the fake's subscribed signal, then pushes a snapshot. Stream A must receive within a bound. B must receive nothing within a `select` against `time.After(100ms)`.\n- **Fake gRPC server stream:** embeds `grpc.ServerStream`, overrides `Context` and `Send`, test-local in `internal/handler/`.\n- **Record in design.md:** the Connect `StreamPortfolioUpdates` is not mounted. `cmd/server/main.go:94` registers only `hdl.GRPCHandler()`. @AC-3/@AC-6 therefore guard a dead path, and they stay because FR-3 is operator-fixed. The shared helper is what keeps them cheap.\n\n**FR-4 (D-12): branch (b), retire the key.**\n- Delete `StartSnapshotWriter` (`portfolio_service.go:893-906`). It has no callers. Delete @AC-4.\n- **Up:** `DELETE FROM config.config_values WHERE namespace='portfolio' AND key IN ('portfolio.snapshot.interval_minutes','snapshot.interval_minutes')`. It covers all environments and all `user_id`s.\n- **Down:** a literal copy of the `020_remove_analysis_signal_source_weights.down.sql:1-24` layout. Keep its header, the column list including `is_secret`, `ON CONFLICT (namespace, key, environment, COALESCE(user_id,'')) DO NOTHING`, and the clobber note. Insert exactly two rows:\n  - `('portfolio','portfolio.snapshot.interval_minutes','int','5',FALSE,'Portfolio snapshot frequency','5','xstockstrat-portfolio','staging',NULL)`. Provenance: `001_config_tables.up.sql:68`, renamed dev→staging at `017_config_secrets_and_scoping.up.sql:38`.\n  - `('portfolio','portfolio.snapshot.interval_minutes','int','1',FALSE,'Portfolio snapshot frequency (prod)','1','xstockstrat-portfolio','production',NULL)`. Provenance: `002_config_environment.up.sql:69`.\n  - 029 rewrites only `key` (`029:24-28`), which is confirmed.\n- **Migration number (change this round, objection 2).**\n  - Verified on disk: the latest file is `030`. 031 is claimed by 243 (`docs/roadmap/features/243-fix-sandbox-seed-keys/design.md:13`). 032 is double-claimed by 244 (`244…/implementation-spec.md:1067`) and 248 (`248…/implementation-spec.md:133`). The resolution of that collision will most likely move one of them to 033.\n  - Reserve **034**: `034_retire_portfolio_snapshot_interval.{up,down}.sql`. Record it in `docs/roadmap/features/merge-order.md`, following the pre-assignment note at `:197-199`. Add a row sequencing 264 after 243, 244 and 248.\n  - Add a **two-sided** pre-merge gate to the impl-spec's final step and to context.md. After `git fetch`, `git ls-tree --name-only origin/main-dev services/xstockstrat-config/migrations/` must show:\n    - (a) no number ≥ 034;\n    - (b) every number below 034 (031, 032, 033) present, or its owner explicitly sequenced after 264 in merge-order.md.\n  - If either condition fails, renumber or hold the merge.\n- **@AC-5 harness (change this round, objections 4 and 5).**\n  - Write it as a `node:test` test (not Vitest) in `services/xstockstrat-config/src/__tests__/`. It runs via `tsc && node --test dist/__tests__/*.test.js` (`services/xstockstrat-config/package.json:12`). Resolve `migrations/` from `__dirname` (`dist/__tests__`) as `../../migrations`.\n  - It scans `*.up.sql` sorted by numeric prefix and matches both quoted key forms. It asserts:\n    - (i) at least one up file matches;\n    - (ii) the highest-numbered match contains a `DELETE FROM config.config_values` **statement** that itself contains both `namespace = 'portfolio'` and a key literal;\n    - (iii) no later file INSERTs either form.\n  - Record in context.md: the reworded Given/When (\"the config migration set\"), why the test is static (no config test applies migrations), and the dev-smoke step (`scripts/db-migrate.sh`, then `ListKeys` in both environments).\n  - Also record the objection-9 trade-off: config audit triggers fire on INSERT/UPDATE only, so the DELETE writes no `config_audit` row and sends no pg_notify DELTA. Running instances keep the stale value until restart. Impact is nil because nothing reads the key. Same trade-off as 020.\n\n**Build order.**\n1. Service scoping, call sites, `package service` isolation test.\n2. `snapshotHub` interface and helper, gRPC empty-caller check, fake-hub handler tests.\n3. Delete the writer, add migration 034 and the `node:test` @AC-5 scan, add the merge-order.md reservation and sequencing row.\n4. Docs: portfolio `CLAUDE.md:99` and `:139`, `services/xstockstrat-portfolio/docs/context-constitution-findings.md:29`, `docs/repo-surveyor/debt-radar-findings.md:236`, the `config-governance.md` Removes log (`:423-427` form), and a check of `docs/context-constitution.md:40`. Then the context-constitution teardown refresh.\n5. Re-read `broadcastSnapshot` and the handlers at execute time. 242/251/256/257 touch the same files (insights, feature 125).",
+    "open_objections": [
+      {
+        "text": "Pre-merge migration gate must be two-sided and actually executed: (a) no config migration >= 034 on origin/main-dev, (b) 031/032/033 all present on origin/main-dev or their owners explicitly sequenced after 264 in merge-order.md. The 244/248 032 double-claim must be resolved (expected: one moves to 033) before 264 merges; if it moves elsewhere, re-check 034. Spec must encode this as a literal command in the final step and record it in context.md (C-07; fails.md:2909, :613).",
+        "blocking": false
+      },
+      {
+        "text": "@AC-1 traceability: either reword the When step to 'a snapshot is broadcast for u-1' or drive the service test through the fill path (portfolio_service.go:376). Spec picks one and records the Gherkin change in context.md (C-15).",
+        "blocking": false
+      },
+      {
+        "text": "@AC-4 deletion and @AC-5 rewording (static migration-set scan instead of applied-DB ListKeys) follow from choosing branch (b), which the operator decision (scope D-12/D-24) does not explicitly sanction. They must be recorded in context.md and surfaced at the design gate for operator acknowledgement.",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "@AC-1",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@AC-2",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@AC-3",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@AC-6",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-4",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-5",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "feature-231 @AC-2 (single event + single update per fill)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "feature-231 @AC-8 (unpriced skip: no event, no update)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "feature-161 @AC-8 (retired key not reintroduced)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "feature-210 platform @AC-5 (x-user-id identity read)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "Exported `(*PortfolioService) SubscriberCount()` accessor as a test seam. Lost under C-18: it is a production symbol that exists only for tests. The handler-side `snapshotHub` interface with a fake hub gives the same 'never registered' proof (zero Subscribe calls) and needs no export.",
+      "Handler tests using `newQuoteSvc` or a real service. Not buildable: `newQuoteSvc` is in a `package service` _test.go file (portfolio_quote_deadline_test.go:1,93), `NewPortfolioService` (:114) dials mTLS dependencies, `broadcastSnapshot` (:908) is unexported, and a bare struct panics on its nil map in Subscribe.",
+      "Reserving migration 033 with a one-sided '>= ours' gate. Lost because 033 is the likely landing spot for the 244/248 032 collision, and a one-sided gate misses the case where 264 merges first and peers' lower-numbered migrations are silently skipped.",
+      "Vitest for the @AC-5 scan. Lost because xstockstrat-config uses `node --test` over compiled dist (package.json:12).",
+      "@AC-5 check (ii) as 'a DELETE scoped to namespace=portfolio'. Too weak: it would pass a namespace-wide or wrong-key DELETE. Replaced by a statement-level key+namespace match.",
+      "Defense-in-depth `snap.PortfolioId == userID` check in the helper on top of the producer filter. Rejected as DRY/YAGNI; the producer filter at broadcastSnapshot is sufficient.",
+      "Real-DB migration-apply test for @AC-5. The config service has no harness that applies migrations, so this is out of proportion for a SEV-2 key retirement. The static scan, the dev-smoke ListKeys step and the two-sided merge gate are enough.",
+      "Filter in the handler instead of the producer. Lost because snapshots would still reach every channel and each consumer would have to re-implement the check.",
+      "Trading-style empty-means-all filter (trading.go:390). Lost because fail-closed is required and portfolio has no internal cross-user subscriber.",
+      "Delete the unmounted Connect StreamPortfolioUpdates and drop @AC-3/@AC-6. Lost as scope creep, since FR-3 is operator-fixed; the shared helper makes keeping it cheap.",
+      "FR-4 branch (a), wire StartSnapshotWriter. Lost under C-18/YAGNI and F-06: it needs a new all-users query, a clock seam and periodic PgBouncer writes, and nothing consumes the rows."
+    ],
+    "open_risks": [
+      "Migration ordering is still a process control. If the two-sided gate is skipped, or the 244/248 renumber lands on 034, golang-migrate silently skips a migration on environments that are already migrated, and the static @AC-5 scan cannot detect it.",
+      "@AC-5 is checked statically. A C-15 reviewer may still want applied-state proof. Fallback: the dev-smoke db-migrate.sh + ListKeys step in both environments.",
+      "Same-file overlap with 242/251/256/257 on portfolio_service.go and portfolio_handler.go. Line numbers cited here will drift, so re-read at execute time.",
+      "Down migration restores only the two global seed rows. Any per-user operator overrides are lost on rollback (accepted, same as 020).",
+      "The DELETE produces no config_audit row and no pg_notify DELTA. There is no audit trail of the retirement beyond the migration file. Accepted; record in context.md."
+    ],
+    "constitution_rules_touched": [
+      "C-01",
+      "C-03",
+      "C-05",
+      "C-07",
+      "C-08",
+      "C-11",
+      "C-13",
+      "C-15",
+      "C-16",
+      "C-18",
+      "F-01",
+      "F-04",
+      "F-06",
+      "F-07"
+    ],
+    "rationale": "Both blocking objections are concrete and verified, so both are adopted rather than left open.\n\n**Objection 1 (handler-test harness).** Confirmed from the code:\n- `newQuoteSvc` is in `package service` (`portfolio_quote_deadline_test.go:1,93`).\n- `broadcastSnapshot` is unexported (`portfolio_service.go:908`).\n- `NewPortfolioService` (`:114`) dials real dependencies.\n\nThe proposal's handler tests therefore could not compile. The fix splits the tests by package: owner-filter isolation stays a `package service` test, and the handler helper takes a narrow unexported `snapshotHub` interface that a test-local fake satisfies. This also makes the exported `SubscriberCount()` unnecessary. That resolves the non-blocking C-18 objection, and the handler tests become deterministic.\n\n**Objection 2 (migration ordering).** Confirmed: 030 is the latest file on disk, 243 claims 031, and 244 and 248 both claim 032. Reserving 034 keeps clear of the likely 033 renumber. The two-sided gate plus a merge-order.md sequencing row covers both failure directions. It is still a process control, so it stays an open non-blocking objection and risk, but it now has a concrete, executable answer.\n\n**Smaller fixes.** The non-blocking factual fixes are folded in:\n- `node:test` instead of Vitest, with the path resolved from `dist`;\n- a statement-level check for the DELETE;\n- the 017:38 citation for the dev→staging rename;\n- confirmation that 029 changes only `key`;\n- the note that Connect is unmounted;\n- the no-audit-row and no-DELTA trade-off on delete.\n\n**Holds from earlier rounds.**\n- No Floor breach.\n- C-03 and the operator trace-id decision hold: emits stay on the fill ctx, and the only background path is deleted.\n- feature-231 and feature-210 rules are preserved.\n\n**Business-rule impact.** Changes to @AC-1/2/3 fall under the D-24 scope decision. Deleting @AC-4 and rewording @AC-5 follow from the branch-(b) design choice, which the operator did not explicitly sanction, so they are flagged for acknowledgement.\n\nThe design is ready for approval, provided the remaining items are encoded in the spec and context.md."
+  },
+  "floor_breaches": []
+}
+```
