@@ -40,6 +40,7 @@ The fix adds a bounded, per-call-overridable default deadline for unary calls (s
   - Streams that must stay open:
     - Server proxy: `traderBff.ts:85-91` (`async *streamAlerts` → `yield* notifyClient.streamAlerts(…, { headers, signal: ctx.signal })`).
     - Browser consumer: `src/components/trader/AlertStream.tsx:37`. It uses a browser connect-web client, not `connectClients.ts`.
+    - Second server stream: `src/app/trader/api/ledger/export/route.ts:115` (`ledgerClient.exportEvents(request, { headers })`, no `timeoutMs`). It goes through the same `stream` wrapper, so the unary-only default must leave it unbounded too.
   - Health route handlers (all `export async function GET`):
     - `src/app/trader/health/route.ts:3`
     - `src/app/trader/api/health/route.ts:3`
@@ -80,10 +81,12 @@ The fix adds a bounded, per-call-overridable default deadline for unary calls (s
 - **PRESERVE** `@AC-7 @FR-5 @feature-153` "The redirect does not loop on the login page itself" (same file): `/auth/login` stays reachable, and the matcher edit must not gate it.
 - **PRESERVE** `@AC-1 @FR-1 @feature-191` "BFF enforces a 30s gRPC deadline on ListOpportunities" (`services/xstockstrat-ui/acceptance/opportunities-latency-fix.feature`): the per-call 30s `timeoutMs` still overrides the transport default and is not shortened to the default.
 - **PRESERVE** `@AC-1 @regression @feature-220` "A stalled fundamentals request resolves to the error state instead of loading forever" (`services/xstockstrat-ui/acceptance/fix-trader-position-fundamentals.feature`): the per-call `GetFundamentals` deadline (15s) still applies and still yields the deadline-exceeded error card.
+- **PRESERVE** `@AC-6 @FR-5 @feature-021` "An unauthenticated request is rejected" (`services/xstockstrat-ui/acceptance/ledger-event-export.feature`): an unauthenticated `/trader/api/ledger/export` still gets a 401 or a login redirect and makes no `ExportEvents` call. The health exemption must not widen to it.
+- **PRESERVE** `@AC-7 @FR-6 @feature-021` "A one-million-row export streams without buffering the full result set" (`docs/sdd/business-rules/platform.feature`): `ExportEvents` is a server stream through the UI transport (`ledger/export/route.ts:115`), so a default deadline on streams would cut it off.
 - **PRESERVE** `@AC-1 @FR-1 @feature-165` "The app is installable and serves a standalone manifest" (`services/xstockstrat-ui/acceptance/pwa-notifications.feature`): `/manifest.webmanifest`, `sw.js` and `icon-*.png` stay public after the matcher change.
 - **PRESERVE** `@AC-2 @FR-1 @FR-2 @feature-210` "A mutually-authenticated peer with a valid platform-issued identity is accepted" (`docs/sdd/business-rules/platform.feature`): the UI-to-backend mTLS channel and the honoured header trio are unchanged by a transport-level deadline.
 - **PRESERVE** `@AC-5 @FR-5 @feature-210` "Header-propagation semantics are unchanged beneath mTLS" (same file): `x-user-id`, `x-access-scope` and `x-trace-id` are still propagated.
-- **PRESERVE** `@AC-6 @FR-6 @FR-3 @feature-210` "A long-lived streaming RPC survives a certificate rotation" (same file): the default must be unary-only or opt-out so streams stay open (cf. the new AC-5 for `streamAlerts`). The ledger export server stream (`@feature-021`) is protected by the same rule.
+- **PRESERVE** `@AC-6 @FR-6 @FR-3 @feature-210` "A long-lived streaming RPC survives a certificate rotation" (same file): the default must be unary-only or opt-out so streams stay open (cf. the new AC-5 for `streamAlerts`). The ledger export server stream (`@AC-7 @feature-021`, above) is protected by the same rule.
 
 Net-new coverage: no existing suite pins the segment health routes or the shape of the matcher's health exclusion. The new AC-3, AC-4 and FR-3 (exact paths only) do not conflict with any guarantee.
 
