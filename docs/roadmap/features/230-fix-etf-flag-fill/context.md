@@ -78,3 +78,38 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   later call once budget allows) and **AC-3** (rate-limited Info-level fill logging, error class only — no raw error
   text, since `FetchIsEtf` errors can carry the `apikey=` URL until 254 lands). Its own seed-count fix is dropped.
   `/sdd-review product-spec` amends FRs/ACs accordingly; 215's @AC-14 tests must keep passing.
+
+## Session 2026-10-22 — sdd-review product-spec
+
+- Product spec approved (PASS WITH WARNINGS). Status: draft → spec-ready.
+- Warnings:
+  - Criterion 8 (C-15): `@AC-3` has a disjunctive Given (gate closed, or fetch error containing `apikey=`) and no
+    concrete rate-limit count (e.g. 5 skips of SCHD within 60s emit exactly 1 record), and it depends on the open
+    rate-limit key. **Carry to /sdd-design:** split `@AC-3` into gate-closed, fetch-error and rate-limit scenarios once
+    the key (per symbol, per reason, or global) is chosen.
+  - Criterion 9 (C-11): three Open Questions remain unresolved (rate-limit key; whether the 30-day empty-profile
+    negative TTL changes; root-cause confirmation). The rate-limit key blocks a well-formed `@AC-3` — resolve at /sdd-design.
+  - Criterion 1: Problem Statement named no persona — **resolved in this session** (added a "Who is affected" paragraph
+    naming the trader/analyst reading `fundamentals_gap` and the operator reading marketdata logs).
+  - Note (sequencing): FR-1 / `@AC-2` depend on 255's source-filtered boot seed (`CountFundamentalsFetchedToday` at
+    `services/xstockstrat-marketdata/cmd/server/main.go:129`, still unfiltered on this branch); FR-2 references 254 for
+    the `apikey=` exposure. Keep the "lands after 255" ordering in `merge-order.md`.
+  - Note (root cause): primary hypothesis still unconfirmed, as the spec states. Code claims verified:
+    `fillEtfFlag` returns silently when `etfFillAllowed()` is false (`internal/service/etf_flags.go:121-123`), fetch
+    errors log only at `slog.DebugContext` (`etf_flags.go:126`).
+- Overlap findings (level WARN):
+  - [file] `services/xstockstrat-marketdata/internal/service/etf_flags.go` — 230 Fix Scope vs
+    `215-block-fundamentals-strategy-on-etf` (in-progress) implementation-spec `:458`/`:493` (Step 9 owns the file).
+    Merge-conflict risk; 230 `@AC-2`/`@AC-3` must preserve 215 `@AC-14` gate behaviour.
+  - [file] `services/xstockstrat-marketdata/internal/service/etf_flags_test.go` — 230 test changes vs 215
+    implementation-spec `:538`/`:554` (215 owns the `@AC-14` gate tests). Merge-conflict risk.
+  - [behavioural dependency] `255-fix-marketdata-fundamentals-cache` (implementation-ready) product-spec `:24-26`
+    (D-51 source-filtered FMP seed count in `cmd/server/main.go:129-130`) vs 230 `@AC-2` precondition. 230 lands after
+    255; no shared file edit in 230 scope.
+- OPERATOR DECISIONS (binding, recorded 2026-10-22):
+  - Triaged 2026-10-15 (docs/reports/2026-10-15-etf-flag-fill-never-labels-defect.md); Track C; re-verified 2026-10-22.
+  - Operator 2026-10-21 (standing, all features): x-trace-id must be propagated as much as possible; no C-03 waiver — request-derived emits/writes use context.WithoutCancel(ctx) (Go) / the inbound metadata (Python/Node), never a fresh background context; only work with no originating request (background sweepers/loops) may mint its own context, and it should still carry a trace id when one is available.
+  - Operator 2026-10-22: NARROW 230 to land after 255-fix-marketdata-fundamentals-cache, which already fixes the root cause (D-51 source-filtered FMP seed count + SeedFMPBudget). Keep only AC-2 (an ETF is labelled on a later call once budget allows) and AC-3 (rate-limited Info-level fill logging, error class only — never the raw error text, since FetchIsEtf errors can carry the apikey URL until 254 lands). Drop 230's own seed-count fix. The product-spec review amends FRs/ACs accordingly; 215's @AC-14 tests must keep passing.
+- Spec already reflected the narrowing (FR-1/FR-2, `@AC-2`/`@AC-3`, former `@AC-1` delegated to 255 `@AC-3`); no
+  FR/AC change needed in this session.
+- Next: `/sdd-design fix-etf-flag-fill`.
