@@ -3033,3 +3033,8 @@ ambiguity is logged here).
 - **Evidence**: `docs/roadmap/features/250-fix-otel-metrics-logs-gap/design.md` §4 Part 3 (existence set) and §5 (comment-only red case); context.md 2026-10-21 sdd-design entry.
 - **Rule it implies**: an existence/absence guard derives its "exists" set from declaration value lines only (e.g. `- uid:`, top-level `"uid":`), never from free text in the same file, and ships a red case proving a comment cannot satisfy existence.
 
+
+### 2026-10-22 — fix-python-loop-supervision — assumption
+- **Mistake**: A design round reused the read-path classifier `read_budget.is_transient_db_error` to decide when a stream consumer should park (skip) an event. That classifier is an allow-list of transient types and defaults to non-transient, so OutOfMemoryError (53200), class-40 deadlock/serialization and DiskFull would have parked real transient failures within about 2 s and lost P&L data permanently. A wrong answer on the read path costs a 500; on the consumer path it costs data. Caught by the r3 adversary.
+- **Evidence**: `services/xstockstrat-analysis/app/repositories/read_budget.py:17-32`; `docs/roadmap/features/259-fix-python-loop-supervision/design.md` §3.2; context.md 2026-10-22 operator decision r3.
+- **Rule it implies**: a consumer that drops or parks events on exhaustion classifies with a narrow, consumer-local **positive poison** allow-list (payload/logic errors, SQLSTATE 22/23), and everything unlisted defaults to retry/replay. Never reuse a transient allow-list, whose default points the other way.
