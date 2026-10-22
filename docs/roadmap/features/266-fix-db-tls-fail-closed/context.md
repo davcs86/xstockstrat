@@ -524,3 +524,8 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [ ] Re-run the overlap scan once the draft batch peers (254–273) have implementation specs.
 - Accepted as compliant (no change): the five byte-identical `dbTls.ts` copies (C-18 trade-off, hash guard + scoped
   DRY exemption in Steps 15/16).
+
+## Session 2026-10-22 (operator decision — fail-closed boot)
+
+- **Signed off:** when DB TLS cannot be verified, identity and notify fail their boot `SELECT 1` and crash-loop rather
+  than start against an unverified database (gates Steps 8/10). The deploy smoke check is the detection point.
