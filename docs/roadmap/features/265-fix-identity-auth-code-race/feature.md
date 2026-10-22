@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-21-identity-auth-code-race-defect.md`
 **Severity**: SEV-2
 **Created**: 2026-10-21
-**Last Updated**: 2026-10-21
+**Last Updated**: 2026-10-22
 
 ---
 
@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-10-21 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-21-identity-auth-code-race-defect.md` (debt-radar D-23 auth-code half, D-21 residual) |
+| 2026-10-22 | `draft` → `spec-ready` | /sdd-review | Product spec approved (7 warnings; overlap WARN with 252) |
 
 ---
 
@@ -45,4 +46,4 @@ duplication (D-21) is folded in so the fix covers one shared path.
 
 ## Next Action
 
-`/sdd-design fix-identity-auth-code-race quick` — recommended design depth: quick (SEV-2, single service, no proto/migration); see context.md
+`/sdd-design fix-identity-auth-code-race` — recommended design depth: quick (SEV-2, single service, no proto/migration); see context.md
