@@ -41,7 +41,8 @@ the config service's actual snapshot shape.
    against a slow endpoint.
 3. The per-call timeout stays 30 seconds, because `cfg_watcher.get_int("ingest.mcp_client.request_timeout_seconds", 30)` returns the default.
 
-Step 3 is inferred from the code paths below and has not been run against a live deployment.
+Step 3 is inferred from the code paths below and has not been run against a live deployment. The snapshot shape it depends on was
+confirmed live (see Evidence).
 
 ## Evidence
 
@@ -55,6 +56,11 @@ Step 3 is inferred from the code paths below and has not been run against a live
 - `services/xstockstrat-ingest/docs/context-constitution.md` INGEST-9 and `context-constitution-findings.md` (2026-09-03 entry) state the
   prefixed form is required.
 - Staging `list_config_keys(namespace="ingest")` on 2026-10-22: five bare keys, none prefixed.
+- Staging `get_config(namespace="ingest")` on 2026-10-22 (the namespace snapshot the config service serves): `values` is keyed
+  `mcp_client.poll_interval_seconds`, `mcp_client.request_timeout_seconds`, `backfill.chunk_window_days`,
+  `backfill.max_concurrent_chunks`, `backfill.chunk_max_bars`. No `ingest.`-prefixed key is present, so ingest's
+  `values.get("ingest.…")` cannot hit. Asking for `key="ingest.mcp_client.request_timeout_seconds"` returns the same whole snapshot,
+  with no prefixed entry.
 
 ## Root cause hypothesis
 
@@ -68,4 +74,5 @@ correct the INGEST-9 wording.
 
 ## Confidence
 
-high on the key mismatch (live registry plus code); low on the runtime effect until a live set_config test is run
+high on the key mismatch and on the snapshot shape (live snapshot plus code); the end-to-end effect on ingest behaviour (an edited
+value being ignored) is inferred and was not observed, because no ingest log or metric exposes the effective timeout
