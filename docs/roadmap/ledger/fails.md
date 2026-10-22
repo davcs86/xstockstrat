@@ -3033,3 +3033,8 @@ ambiguity is logged here).
 - **Evidence**: `docs/roadmap/features/250-fix-otel-metrics-logs-gap/design.md` §4 Part 3 (existence set) and §5 (comment-only red case); context.md 2026-10-21 sdd-design entry.
 - **Rule it implies**: an existence/absence guard derives its "exists" set from declaration value lines only (e.g. `- uid:`, top-level `"uid":`), never from free text in the same file, and ships a red case proving a comment cannot satisfy existence.
 
+
+### 2026-10-22 — fix-ledger-query-pagination — assumption
+- **Mistake**: node-postgres returns BIGINT columns (ledger `sequence`) as strings when no `setTypeParser` is registered. `streamEvents` therefore compares string to string, which is lexicographic (`"10" > "9"` is false), so `maxSeq` dedupe and any keyset cursor stall at a digit boundary. Every ledger unit mock passes a numeric `sequence`, so CI could not see it.
+- **Evidence**: `services/xstockstrat-ledger/src/grpc/ledgerServiceImpl.ts:191,196,210,256`; `src/__tests__/ledgerServiceImpl.test.ts:66,100,174`; `docs/roadmap/features/257-fix-ledger-query-pagination/recon.md:177-185`, design.md §2/§4.
+- **Rule it implies**: Any Node code that compares or encodes a pg BIGINT normalises it through one BigInt helper that accepts number, string and bigint. Its tests use pg-style string values that cross a digit boundary (`"9"`, `"10"`, `"11"`), not numeric mocks.
