@@ -302,3 +302,226 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   "floor_breaches": []
 }
 ```
+
+## Session 2026-10-22 — sdd-batch design gate (round 3)
+
+- `/sdd-design fix-offline-book-consistency` (full) is halted at its approval gate after round 3 (gate policy: halt).
+  design.md was not written and status.md was not changed (grilling protocol). Severity: SEV-2.
+
+## Open Threads
+
+- **Approach (r3 synthesis):** r3 adopted every r2 [r3 MUST] and SHOULD item, so the r2 objections are closed. The
+  spine is unchanged: no migration, no config change, and nothing in `consumeEventStream`
+  (`portfolio_service.go:185-202`, feature 248) or on the order.filled path. The wire changes are additive.
+  - D-49/FR-5: accepted as in r3 (`isFinite` guards, INVALID_ARGUMENT before GetOrder, NaN/Inf detection query).
+  - D-63/FR-6: accepted as in r3 (sibling `appendLedgerEvent`, ConfirmOrder UNAVAILABLE, Snapshot Warnings line,
+    `WithTimeout(WithoutCancel(ctx), recomputeTimeout)`).
+  - D-47/FR-1..3: try-all plus `errors.Join`, `boundedRetry` replaces ackAlways, and a single "event parked" log.
+    [r4 MUST] the park rule becomes error-class-aware (see objection 3).
+  - D-48/FR-4: `Portfolio.offline_state_unavailable = 17` with the aggregate exclusion as in r3. [r4 MUST] decode
+    per account in `GetOfflineStates`, exposing `readValuation.unavailable map[string]bool`. [r4 MUST] position
+    reads never fail: add an additive `Position.offline_state_unavailable = 26` and drop the UNAVAILABLE mapping
+    at `portfolio_handler.go:60/:84/:416/:432`.
+  - Consumers: the r3 UI gating stays (CardNotice `variant="muted"` is verified at `CardNotice.tsx:10`). [r4 MUST]
+    the positions surfaces show `PNL_UNAVAILABLE_LABEL` when the Position marker is set. Agent: no code change.
+- **Strongest open objections (blocking, r4 MUST):**
+  1. [C-16 @AC-14/@AC-3 @feature-157, C-10(b), fails.md:39] r3 maps the sentinel to UNAVAILABLE on
+     GetPosition/ListPositions. An offline-state fault on an unscoped ListPositions therefore hides every broker row
+     (`positions/page.tsx:506`) and breaks trading REDUCE_ONLY (`trading.go:3535`) even though Qty is valid. Fix:
+     keep position reads successful, zero DayPnl/DayPnlPct only on the degraded offline positions, add
+     `Position.offline_state_unavailable = 26`, and gate the positions UI on it. The field cannot be 20, because
+     tag 20 is stop_order_id and the highest tag is mark_as_of = 25.
+  2. [C-10(b)/C-18] `GetOfflineStates` fails the whole batch on one undecodable recent_fills row. A corrupt row
+     persists, so every offline account of that user is marked degraded until the row is rewritten. Inferring the
+     state from the `bal == nil` proxy also causes r3's two broker side effects (`:1405-1416`, `:598-626`). Fix:
+     decode per account, treating an Unmarshal failure as a per-id failure and a Query/Scan/rows.Err failure as
+     whole-call. Callers look up `rv.unavailable[acctID]`.
+  3. [FR-2/FR-3] The error-blind park rule (≥5 attempts AND ≥10 min) drops events, account.deregistered included,
+     during any DB outage longer than 10 min. It also stalls the shared stream for ≥10 min on deterministic poison.
+     Fix: an SQLSTATE class 22/23 error parks after 5 attempts. Transient errors (connection, deadline,
+     08/40/53/57) never park. Unclassified errors keep the r3 bound. Document the lastSeq=0 boot replay
+     (`:186`, `:205-209`) as the self-heal in design.md and the portfolio CLAUDE.md row.
+- **Non-blocking (r4 SHOULD):**
+  - one bounded `codes.Unavailable` retry with a per-emit idempotency_key inside `appendLedgerEvent`, held under the
+    existing confirmLock and never re-taking it (fails.md:2028, :2092);
+  - state the `recomputeTimeout > ledgerEmitTimeout (10s) + query budget (+ retry budget)` invariant and test it;
+  - enumerate trading's portfolio callers (`trading.go:2089`, `:2793`, `:3158`, `:3535`) in the spec;
+  - broker deregistration retry: either record it in 256 context.md as a scope extension or keep it warn-only behind
+    an offline-set check;
+  - make a numbered spec step that greps the usePortfolio/usePortfolios/Position.dayPnl consumers, with a
+    Playwright assertion per gated surface (C-14).
+- **Floor status:** no breaches. The code-constant bounds are covered by the recorded operator decision and the
+  ledgerEmitTimeout precedent. Both proto fields (Portfolio 17, Position 26) go through the C-04/C-09 gate.
+- **Uncovered @AC changes:** none, provided the position-read fix lands. All 14 touched business rules are PRESERVE
+  or EXTEND, so no operator sign-off is needed. Without that fix, @AC-14/@AC-3 @feature-157 would become a de facto
+  CHANGE that no operator decision covers.
+  - EXTEND: @AC-9, @AC-30, @AC-14 and @AC-15 @feature-240; @AC-14 @feature-163.
+  - PRESERVE: @AC-14, @AC-3 and @AC-10 @feature-157; @AC-3 @feature-159; @AC-29 and @AC-43 @feature-240; @AC-7, @AC-8
+    and @AC-15 @feature-163.
+  - Whole-call UNAVAILABLE stays only as the fallback if the proto gate refuses field 17 or 26.
+- **Next:** the next `/sdd-batch` run resumes the debate at round 4 from the state below.
+
+```sdd-batch-design-state
+{
+  "round": 3,
+  "synth": {
+    "approach": "Round-3 synthesis for 256-fix-offline-book-consistency (D-47, D-48, D-49, D-63). r3 adopted every r2 [r3 MUST] item and every SHOULD item concretely, so the r2 open objections are closed. Three new blocking objections stand after I checked them against the worktree. The base is unchanged: no migration, no config change, nothing in consumeEventStream (portfolio_service.go:185-202, feature 248) and nothing on the order.filled path. The wire changes are additive. Items marked [r4 MUST] answer this round's blocking objections and still need the proposer to adopt them.\n\n1. D-49 / FR-5 (trading.go): accepted as in r3.\n- Add `isFinite`.\n- ConfirmOrder returns INVALID_ARGUMENT before GetOrder (:901) for:\n  - a non-finite or negative filled_qty;\n  - a non-finite or negative filled_avg_price when filled_qty > 0.\n- The fees guard (:897) and the snapshot checks (:1156, :1160) switch to isFinite. Sign rules do not change.\n- The read-only NaN/Inf detection query goes in verification and the dev smoke. Any rows found are re-confirmed through the RPC before launch.\n\n2. D-63 / FR-6 (trading.go): accepted as in r3.\n- Add sibling `appendLedgerEvent(...) error`; `emitLedgerEvent` (:3661) becomes its void wrapper, so its other 26 callers are untouched.\n- The recompute emit (:1067) moves its payload verbatim, user_id included.\n- ConfirmOrder (:951-954) returns UNAVAILABLE \"positions not published; re-confirm to retry\".\n- Snapshot (:1224) appends a line to Warnings.\n- Both recompute call sites use `context.WithTimeout(context.WithoutCancel(ctx), recomputeTimeout)`.\n- [r4 SHOULD] State the value of recomputeTimeout and the rule it must satisfy: recomputeTimeout > ledgerEmitTimeout (10s, :3663) + the baseline/orders query budget, plus any retry budget. Add a test that checks the rule.\n- [r4 SHOULD] Inside appendLedgerEvent only: one bounded retry on codes.Unavailable with a per-emit idempotency_key (ledger.proto:50, AppendEventRequest field 8), matching portfolio's emitEvent precedent.\n  - The retry runs inside the caller's already-held confirmLock and never re-takes it (fails.md:2028).\n  - The other 26 callers are unchanged (fails.md:2092).\n- Add a test asserting user_id is in the appendLedgerEvent payload (fails.md:2054).\n\n3. D-47 / FR-1..3 (portfolio_service.go).\n- Kept from r3:\n  - try-all writes with errors.Join on the offline branch;\n  - broker branch is warn-and-continue;\n  - parse failures and a nil payload are acked;\n  - processAccountDeregistered (:1132) returns error;\n  - `boundedRetry` replaces ackAlways (:176, :1117, :1129);\n  - a single \"event parked\" Error log with event_id, sequence, stream_key and consumer.\n- [r4 MUST] Make the park rule error-class-aware.\n  - The current rule (attempts ≥ 5 AND elapsed ≥ 10m, regardless of error) drops events during any DB outage longer than 10 min. That includes account.deregistered, which is the orphan FR-2 exists to prevent.\n  - It also stalls the shared stream for ≥10 min on a deterministic poison event.\n  - Proposed classification via `errors.As(err, *pgconn.PgError)`:\n    - Deterministic, SQLSTATE class 22 (data exception) or 23 (integrity violation): park after retryMinAttempts (5), with no elapsed floor.\n    - Transient (connection/network errors, context deadline, SQLSTATE classes 08/40/53/57): never park; retry as order.filled does today.\n    - Unclassified: fall back to the r3 count AND time bound (5 attempts and 10m).\n  - Why this answers the r2 \"classification is fragile\" concern:\n    - A misclassified transient error only lands in the bounded fallback, never in a fast park.\n    - A transient outage blocks every write anyway, so head-of-line blocking costs nothing during it.\n- [r4 MUST] Record in design.md and in the portfolio CLAUDE.md ConsumePositionSyncs row that lastSeq starts at 0 on every boot (:186, :205-209), so the next deploy replays and self-heals a parked event. This is the documented recovery path.\n- Deregistration scope: the account.deregistered payload carries no account type (:1132-1160), so the retry cannot be limited to offline accounts without a new lookup.\n  - Record the broker-deregistration retry as an explicit scope extension in 256 context.md.\n  - Alternatively, keep broker deregistration warn-only by checking the offline-account set first. The proposer must pick one.\n\n4. D-48 / FR-4 (portfolio).\n- [r4 MUST, replaces the bal==nil proxy, C-18 / C-10(b)] Decode per account.\n  - `GetOfflineStates` (portfolio_repo.go:~500-530) now returns the whole error on any single undecodable recent_fills row (verified at the `decode recent fills for %s` return).\n  - Change it to return `(map[string]OfflineState, map[string]error /*failed*/, error)`:\n    - a Query, Scan or rows.Err failure stays a whole-call error;\n    - a json.Unmarshal failure records failed[id] and continues.\n  - `valueRead` exposes `readValuation.unavailable map[string]bool`. A whole-call error marks every requested offline id; a per-row failure marks only that id.\n  - Callers look up `degraded := rv.unavailable[acctID]` instead of inferring it from `bal == nil`.\n  - Effects:\n    - a poison row degrades only its own account;\n    - r3's two accepted side effects (broker accounts with a failed balance read getting marked, :1405-1416, :598-626) disappear, because only ids passed to GetOfflineStates can be marked.\n  - The ErrOfflineStateUnavailable sentinel is kept for logging and tests. Reads no longer fail on it (see next item).\n- applyAccountPnL (:1339): r3's degraded handling is kept as is:\n  - set Portfolio.offline_state_unavailable = 17;\n  - zero TotalPnl, DayPnl and DayPnlPct, and the DayPnl/DayPnlPct of embedded positions;\n  - leave the optional realized and fee fields and TotalPnlPct nil;\n  - keep Equity = positionsValue.\n  - Only the source of `degraded` changes, to the per-account lookup above.\n- The GetPortfolio aggregate (:651-677) is kept as in r3: set the marker, exclude the degraded account from the dayPnl/totalPnl/prior/absCost sums, force allOffline = false, and still sum Equity.\n- [r4 MUST, C-16 @AC-14/@AC-3 @feature-157, C-10(b) read-path parity, fails.md:39] Position reads never fail on offline-state unavailability.\n  - enrichPositions (:445), GetPosition (:688) and ListPositions (:709) keep succeeding.\n  - For each offline position whose account is in rv.unavailable:\n    - zero DayPnl and DayPnlPct;\n    - set a new additive `bool offline_state_unavailable = 26;` on Position, carrying the same field comment as Portfolio field 17.\n  - Tag correction: the adversary's suggested tag 20 is taken by stop_order_id. Position's highest tag is mark_as_of = 25 and the message has no `reserved` statement, so 26 is the next free tag.\n  - Drop the UNAVAILABLE mapping at portfolio_handler.go:60, :84, :416 and :432.\n  - Benefits:\n    - broker rows stay visible on positions/page.tsx:506;\n    - trading's GetPosition callers are unaffected, because Qty and marks are valid;\n    - the asymmetry between the account reads and the position reads disappears.\n  - The runner-up fallback (whole-call UNAVAILABLE) applies only if the proto gate refuses fields 17/26.\n- 256 context.md records that this supersedes 240's non-fatal decision (240 context.md:399).\n\n5. Consumer surfaces (UI and agent).\n- UI as in r3:\n  - OrderBook.tsx:100-131 is gated on offlineStateUnavailable;\n  - portfolioTotals.ts gets `incomplete`, `PNL_UNAVAILABLE_LABEL`, and per-account gating in PortfolioPanel and portfolio/page.tsx;\n  - CardNotice uses `variant=\"muted\"`. Verified: CardNotice.tsx:10 is `'muted' | 'error'`, which settles r3's open assumption.\n- [r4 MUST] Positions surfaces: positions/page.tsx and any per-position Day P&L cell show PNL_UNAVAILABLE_LABEL when `position.offlineStateUnavailable` is set.\n- [r4 SHOULD, spec step] Grep every consumer of usePortfolio / usePortfolios / Position.dayPnl as a numbered spec step, with a Playwright assertion for each gated surface.\n- Trading callers: list them in the spec (trading.go:2089, :2793, :3158, :3535) per fails.md:2935.\n  - With position reads non-failing they need no change. :3535 REDUCE_ONLY reads only Qty.\n  - :3158 resolveAccountEquity reads only equity and buyingPower.\n- Agent: no code change.\n- Tests:\n  - r3's list;\n  - plus per-row decode failure marks only that account;\n  - plus ListPositions returns OK with the Position marker and zeroed DayPnl for a degraded offline account while broker rows are intact;\n  - plus park-classification table tests (class 22/23 parks after 5 attempts; a connection or deadline error never parks; an unknown error uses the fallback bound) with a fake clock;\n  - plus the recomputeTimeout invariant test.\n  - Remove the planned UNAVAILABLE ListPositions/GetPosition mapping tests and Playwright case; replace them with the marker case.",
+    "open_objections": [
+      {
+        "text": "[C-16 @AC-14/@AC-3 @feature-157, C-10(b) read-path parity, fails.md:39] r3 still maps ErrOfflineStateUnavailable to UNAVAILABLE on GetPosition/ListPositions (portfolio_handler.go:60/:84/:416/:432). So an offline-state fault on an unscoped ListPositions hides every broker row (positions/page.tsx:506). r3 said no @AC covers this; AC-14 does: offline state must not affect what broker accounts show. Only the offline positions' DayPnl is corrupted (offline_valuation.go:242-246). The proposal must:\n- keep position reads successful;\n- zero DayPnl/DayPnlPct only on the degraded offline positions;\n- add an additive `Position.offline_state_unavailable = 26`. Not 20: tag 20 is stop_order_id, and the highest tag is mark_as_of = 25. It goes through the same C-04/C-09 gate as field 17;\n- gate the positions UI on it.\nThis also resolves the trading-caller impact at trading.go:3535/:2793/:2089.",
+        "blocking": true
+      },
+      {
+        "text": "[C-10(b) blast radius / C-18] Verified that GetOfflineStates (portfolio_repo.go, `decode recent fills for %s` return inside the rows loop) fails the whole batch on a single undecodable recent_fills row. A corrupt row is persistent, so `degraded := errors.Is(...) && bal == nil` marks every offline account of that user until the row is rewritten. The bal==nil proxy also produces r3's two accepted broker side effects (:1405-1416, :598-626). The proposal must:\n- decode per account: a Query, Scan or rows.Err failure stays whole-call; an Unmarshal failure goes into a failed-ids set;\n- expose `readValuation.unavailable map[string]bool`;\n- have callers look up the account instead of inferring degraded from bal==nil.\nThis reverses the r2 YAGNI rejection, because the persistence argument and the C-18 proxy problem are new evidence.",
+        "blocking": true
+      },
+      {
+        "text": "[FR-2/FR-3 correctness] The park rule (≥5 attempts AND ≥10m elapsed, regardless of error) drops events during any DB outage longer than 10 min, account.deregistered included, which is the orphan FR-2 prevents. It also stalls the shared account.positions.synced stream for every user for ≥10 min on a deterministic poison event (:188-199, ~300 retries). The proposal must classify errors:\n- pgconn SQLSTATE class 22/23: park after 5 attempts, with no elapsed floor;\n- transient (connection, deadline, 08/40/53/57): never park;\n- unclassified: keep the r3 bound as the fallback.\nIt must also document the lastSeq=0 boot replay (:186, :205-209) as the self-heal for parked events in design.md and in the portfolio CLAUDE.md row.",
+        "blocking": true
+      },
+      {
+        "text": "[FR-6 robustness] appendLedgerEvent has no retry, so a ledger deploy GOAWAY fails ConfirmOrder after UpsertOrder has committed. Advised fix: one bounded retry on codes.Unavailable with a per-emit idempotency_key (ledger.proto:50), inside the already-held confirmLock and never re-taking it (fails.md:2028), applied only in the sibling helper (fails.md:2092).",
+        "blocking": false
+      },
+      {
+        "text": "[FR-6 deadline] The value of recomputeTimeout is not given. State recomputeTimeout > ledgerEmitTimeout (10s, trading.go:3663) + the baseline/orders query budget (+ any retry budget) and test it. Otherwise the emit deadline is silently truncated.",
+        "blocking": false
+      },
+      {
+        "text": "[fails.md:2935] Enumerate trading's portfolio callers in the spec (trading.go:2089, :2793, :3158, :3535) with their expected behaviour under degrade. If position reads stay successful, record each one as unaffected: :3535 reads Qty only, :3158 reads equity/buyingPower only.",
+        "blocking": false
+      },
+      {
+        "text": "[Trading-Domain Scope] Making broker deregistration return errors extends the scope. The product spec says broker sync consumers are unchanged, and the account.deregistered payload carries no account type (portfolio_service.go:1132-1160). Either record the extension in 256 context.md, or keep broker deregistration warn-only by checking the offline-account set first.",
+        "blocking": false
+      },
+      {
+        "text": "[C-14] Make the grep of usePortfolio/usePortfolios/Position.dayPnl consumers a numbered spec step, with a Playwright assertion per gated surface. Without it, an unenumerated consumer renders the zeroed P&L as a real $0.",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "@AC-14 @feature-157",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-3 @feature-157",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-3 @feature-159",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-10 @feature-157",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-29 @feature-240",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-9 @feature-240",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-30 @feature-240",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-14 @feature-240",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-15 @feature-240",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-7 @feature-163",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-43 @feature-240",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-8 @feature-163",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-15 @feature-163",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-14 @feature-163",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "UNAVAILABLE on GetPosition/ListPositions under an offline-state fault (r1-r3). Lost because it hides broker rows on an unscoped ListPositions, breaks @AC-14/@AC-3 @feature-157, and creates an account-vs-position read-path asymmetry (fails.md:39). It also fails trading REDUCE_ONLY (trading.go:3535) even though Qty is valid. Replaced by the Position.offline_state_unavailable = 26 marker.",
+      "Position marker at tag 20 (adversary's suggestion). Lost because tag 20 is already stop_order_id. Position's highest tag is mark_as_of = 25, so 26 is next.",
+      "Inferring degraded from `errors.Is(valErr, sentinel) && bal == nil` at each caller (r3). Lost on C-18 grounds: one concept spread across three sites, which also produced two accepted broker side effects (:1405-1416, :598-626). Replaced by readValuation.unavailable[acctID].",
+      "Whole-batch failure on one undecodable recent_fills row (status quo; r2 YAGNI rejection). Lost because a corrupt row is persistent and degrades every offline account of the user. Per-row decode with a failed-ids set is a small, local change.",
+      "Error-blind park rule, attempts ≥ 5 AND elapsed ≥ 10m (r3). Lost because it drops events during any outage over 10 min (FR-2 orphan) and imposes a 10-min global stall on deterministic poison. Replaced by an SQLSTATE-class-aware park with the r3 bound kept only for unclassified errors.",
+      "Parking only on deterministic errors and retrying everything else without limit (adversary's pure form). Lost to the variant that keeps the r3 count AND time bound as the fallback for unclassified errors, so a misclassification never parks an event fast and never stalls forever.",
+      "Per-account / per-stream_key park with a later sweep. Lost because it is new durable state outside an in-memory wrapper (YAGNI).",
+      "Transactional outbox for account.positions.synced. It fixes D-63 at the root but needs a migration and a relay worker, which is outside the Fix Scope ('no migrations'). Record it in design.md as the long-term option.",
+      "Whole-call UNAVAILABLE on every read with operator C-16 CHANGE sign-off. Lost because it hides broker cards; kept only as the fallback if the proto gate refuses fields 17/26.",
+      "Presence-only marker (absent realized_pnl). Lost because it is ambiguous with a brand-new offline account that has no state row.",
+      "Omitting degraded offline accounts from all-accounts ListPortfolios. Lost because the combined total looks complete, which violates @AC-30 @feature-240.",
+      "Retry bound inside consumeEventStream. Lost because it edits feature 248's :185-202 region and pulls order.filled into scope.",
+      "Changing emitLedgerEvent's signature. Lost because it has 26 callers (fails.md:2092); the sibling appendLedgerEvent wins.",
+      "Re-taking confirmLock for an emit retry. Lost because the lock is non-reentrant (fails.md:2028). Any retry stays inside the helper under the already-held lock.",
+      "Early return on the first offline upsert error. Lost to try-all plus errors.Join.",
+      "Bare context.WithoutCancel for the recompute. Lost because the queries under confirmLock are unbounded; it is wrapped in WithTimeout.",
+      "A reason enum for the marker. Lost on YAGNI (C-04); a bool plus a field comment is enough.",
+      "A combined 'finite and non-negative' helper. Lost because Snapshot qty legitimately accepts 0 and negative values (@AC-8/@AC-15 @feature-163)."
+    ],
+    "open_risks": [
+      "Two additive proto fields (Portfolio 17, Position 26) now go through the C-04/C-09 approval gate. If either is refused, the fallback is whole-call UNAVAILABLE, which loses the broker-card @AC preservation.",
+      "Latent consumers: any Portfolio or Position reader that ignores the marker shows zeroed P&L as a real $0. Mitigated by the field comments and the consumer-grep spec step.",
+      "SQLSTATE classification boundary: an error class wrongly treated as transient never parks and can stall the shared stream indefinitely. The unclassified fallback bound limits only errors that are not classified at all.",
+      "Boot replay from seq 0 (:186, :205-209) re-attempts every historically parked deterministic event on each deploy. That is up to 5 attempts × 2s each, a short stall, and it is visible in logs.",
+      "Same-stream head-of-line blocking remains during transient DB outages. It is harmless, because all writes fail anyway.",
+      "Parks are visible only as an Error log, with no metric or alert.",
+      "A per-emit idempotency_key retry, if adopted, extends confirmLock hold time up to the retry budget. recomputeTimeout must cover it.",
+      "Pre-existing NaN/Inf confirmed rows keep emitting NaN positions until they are re-confirmed.",
+      "The sweep of tests that relied on non-fatal state reads (portfolio_quote_deadline_test.go:115) may be larger than estimated, and the r3 UNAVAILABLE-mapping tests must be reworked into marker tests.",
+      "Broker deregistration retry is either a recorded scope extension or needs an offline-set lookup. Not yet decided.",
+      "If useInvalidatingMutation cannot forward onSettled, the orders list stays stale after an FR-6 UNAVAILABLE. This is a recorded UX gap."
+    ],
+    "constitution_rules_touched": [
+      "C-03",
+      "C-04",
+      "C-09",
+      "C-10",
+      "C-11",
+      "C-14",
+      "C-15",
+      "C-16",
+      "C-18",
+      "F-07",
+      "P-02",
+      "P-03"
+    ],
+    "rationale": "r3 concretely adopted every r2 [r3 MUST] item:\n- the explicit degraded input;\n- the aggregate exclusion with allOffline forced to false;\n- DayPnl zeroing and OrderBook gating;\n- try-all errors.Join;\n- WithTimeout around WithoutCancel;\n- the NaN detection query;\n- the \"event parked\" log;\n- the proto comment;\n- the citation fix.\nThe r2 objections are therefore closed and not carried forward.\n\nI checked the adversary's r3 claims against the worktree.\n\n1. Per-row decode. GetOfflineStates returns the whole-call error from json.Unmarshal inside the rows loop (`decode recent fills for %s`). One corrupt row therefore poisons every offline account the user has, and it persists. This is new evidence against the r2 YAGNI rejection. Combined with the C-18 problem of inferring degraded via bal==nil, which created r3's two accepted broker side effects, it justifies per-account decode with readValuation.unavailable. Blocking.\n\n2. Position-read parity. AC-14 @feature-157 does cover broker visibility under offline-state faults. r3 keeps broker accounts visible but fails broker positions, which is an inconsistent read path (fails.md:39). It also breaks trading REDUCE_ONLY: trading.go:3535 maps any GetPosition non-NotFound error to Unavailable, even though Qty is valid. The fix is a Position marker. The adversary's tag 20 is wrong: 20 is stop_order_id, Position's highest tag is mark_as_of = 25, and the message has no reserved range. So I specify 26. Blocking.\n\n3. Park rule. consumeEventStream (:185-202) retries every 2s from lastSeq+1 on one shared consumer, so the stall and drop analysis holds. The r2 synthesis rejected pure deterministic-only parking as fragile. I mediate with SQLSTATE-class parking plus the r3 bound as the fallback for unclassified errors: no event is dropped during an outage, and deterministic poison clears in about 10s. The lastSeq=0 boot replay is verified (:186, :205-209) and is the self-heal path, which must be documented. Blocking.\n\nSettled or non-blocking:\n- CardNotice is verified as 'muted' | 'error' (CardNotice.tsx:10), which settles r3's assumption.\n- The account.deregistered handler has no account type in scope (:1132-1160), so 'limit the retry to offline accounts' needs either a lookup or a recorded scope extension; left as non-blocking.\n- The emit retry and the recomputeTimeout invariant are advised, cheap and local.\n\nNo Floor breach: the code-constant bounds are covered by the recorded operator decision with the ledgerEmitTimeout precedent, and the proto fields go through C-04/C-09.\n\nAll business rules remain PRESERVE/EXTEND without operator sign-off, provided the position-read fix lands. Without it, @AC-14/@AC-3 @feature-157 would become a de facto CHANGE that no operator decision covers."
+  },
+  "floor_breaches": []
+}
+```
