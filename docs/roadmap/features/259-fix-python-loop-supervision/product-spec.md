@@ -49,10 +49,15 @@ explicit, logged rule.
   ends unexpectedly the service logs an error that names the task and the exception.
 - **FR-4 (D-56).** When `PnLPatternConsumer` fails transiently on a ledger event, it retries that event before the
   cursor moves past its sequence.
-- **FR-5 (D-56).** After a bounded number of failed attempts, a poison event is parked under an explicit rule and the
-  park is logged with the event's sequence. The consumer then continues past it, so one bad event cannot stall the
-  stream. Design decides the retry bound and the park mechanism (a parked-events table or a structured log record).
-  AC-7 uses a bound of 3 as its example; design/spec re-points that example if it pins a different value.
+- **FR-5 (D-56).** After the bounded retry (3 attempts), an event is parked only under an explicit rule:
+  (a) its error is a poison error, meaning a payload/logic error (`ValueError`, `TypeError`, `KeyError`, a protobuf
+  decode error) or an asyncpg SQLSTATE class 22/23 error; or (b) a non-poison error persists across 5 replays of the
+  same sequence while a bounded DB-health probe succeeds. Every other failure is replayed, never parked, so a DB
+  outage cannot park good events. A park is logged with the event's sequence and reason and recorded as an
+  idempotent `analysis.pnl.event_parked` ledger event before the cursor moves past it, so one bad event cannot stall
+  the stream. The 5th replay of one sequence, and the 5th consecutive stream failure, log at ERROR. (Amended
+  2026-10-22 by /sdd-spec per design.md §3-§4 and the operator design-gate decisions r2/r3; AC-7 edited, AC-9 and
+  AC-10 added.)
 
 ## Consumer Surface(s)
 
