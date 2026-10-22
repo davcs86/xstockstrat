@@ -26,8 +26,9 @@ Feature: fix-offline-book-consistency (bug fix)
     Given user "u-1" has offline account "acct-off-1" with realized_pnl 500.00 and an AAPL position with unrealized_pnl 100.00
     And GetOfflineStates returns an error
     When <read> is called for "u-1"
-    Then the call does not return total_pnl 100.00 as a complete figure
-    And it either fails with UNAVAILABLE or marks the "acct-off-1" valuation as degraded
+    Then the call succeeds
+    And the "acct-off-1" figures it returns carry offline_state_unavailable true
+    And it does not return total_pnl 100.00, a day_pnl, or a position day_pnl for "acct-off-1" as a complete figure
 
     Examples:
       | read           |
@@ -80,3 +81,29 @@ Feature: fix-offline-book-consistency (bug fix)
       | qty | status           |
       | 4   | PARTIALLY_FILLED |
       | 10  | FILLED           |
+
+  @AC-8 @FR-4 @regression
+  Scenario: One undecodable offline state degrades only its own account
+    Given user "u-1" has offline account "acct-off-1" whose stored recent_fills cannot be decoded
+    And user "u-1" has offline account "acct-off-2" with realized_pnl 200.00 and no open positions
+    And user "u-1" has broker account "acct-alp-1" with day_pnl 120.00
+    When ListPortfolios is called for "u-1"
+    Then the call succeeds
+    And the "acct-off-1" portfolio carries offline_state_unavailable true
+    And the "acct-off-2" portfolio has total_pnl 200.00 and offline_state_unavailable false
+    And the "acct-alp-1" portfolio has day_pnl 120.00 and offline_state_unavailable false
+
+  @AC-9 @FR-3 @regression
+  Scenario: A transient write failure never parks the offline sync event
+    Given user "u-1" has offline account "acct-off-1"
+    And UpsertOfflineRealized fails with a connection error on every attempt for 15 minutes, then succeeds
+    When portfolio consumes an offline "account.positions.synced" event "evt-1" for "acct-off-1"
+    Then "evt-1" is never parked and the event cursor does not advance past it while the write fails
+    And "evt-1" is applied once the write succeeds
+
+  @AC-10 @FR-5 @FR-7 @regression
+  Scenario: An un-confirm with filled_qty 0 stays valid without a fill price
+    Given an offline BUY order "ord-1" for 10 "AAPL" owned by "u-1" confirmed with filled_qty 10 and filled_avg_price 150.0
+    When "u-1" calls ConfirmOrder for "ord-1" with filled_qty 0 and filled_avg_price 0
+    Then the call succeeds and order "ord-1" has status NEW
+    And "account.positions.synced" is emitted for the account of "ord-1"
