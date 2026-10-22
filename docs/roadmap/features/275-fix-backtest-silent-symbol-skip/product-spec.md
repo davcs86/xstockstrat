@@ -66,22 +66,65 @@ Two layers (report § Root cause hypothesis):
 
 - xstockstrat-analysis (fix site)
 - xstockstrat-indicators (read-only: the PERMISSION_DENIED / NOT_FOUND contract the mapping relies on)
-- xstockstrat-agent / strat-lab plugin (docs only, if the surfaced reason or warnings change — `docs/patterns/strat-lab-plugin.md`)
+- xstockstrat-agent (docs only: the `run_backtest` tool description and the strat-lab `backtest` skill, if the surfaced reason or warnings change — `docs/patterns/strat-lab-plugin.md`)
+
+## Functional Requirements
+
+- **FR-1** — When evaluating a requested symbol fails with a `grpc.RpcError` (for example indicators
+  `ExecuteFormula` PERMISSION_DENIED, or a marketdata `GetBars` / indicators `ComputeIndicator` call that returns a
+  gRPC status such as UNAVAILABLE), `RunBacktest` appends a `SymbolDiagnostics` row for that symbol with a typed
+  `no_trade_reason` other than `NO_TRADE_REASON_UNSPECIFIED`.
+- **FR-2** — When evaluating a requested symbol raises an unexpected exception (any other `Exception`), `RunBacktest`
+  appends a `SymbolDiagnostics` row for that symbol with a typed `no_trade_reason` other than
+  `NO_TRADE_REASON_UNSPECIFIED`.
+- **FR-3** — Each FR-1 / FR-2 failure adds a result warning that names the symbol and, for an RPC error, the gRPC
+  status code name (for example `PERMISSION_DENIED`, `UNAVAILABLE`).
+- **FR-4** — FR-1 / FR-2 failures count toward the `INSUFFICIENT_DATA` status gate, alongside `coverage_gaps`,
+  `formula_errors` and feature 215's `fund_refusals` / `fund_unknown`. A run with no trades and no usable curve in
+  which every requested symbol failed this way returns `BACKTEST_STATUS_INSUFFICIENT_DATA`, not `BACKTEST_STATUS_OK`.
+- **FR-5** — A run that FR-4 makes `INSUFFICIENT_DATA` is not scored as a success. Its run-history row records a
+  null score (not 0) and an empty rating. No backtest detail row is written (`_persist_backtest_detail`). No
+  per-symbol evidence cell is written. The success-driven headline recompute does not run for it (feature 215's
+  refused-only recompute rule is unchanged).
+- **FR-6** — A partial run, where at least one symbol is evaluated and produces trades or a usable curve, stays
+  `BACKTEST_STATUS_OK`. It still carries the FR-1 / FR-2 diagnostics row and the FR-3 warning for each failed symbol.
+- **FR-7** — The new handling must not absorb exceptions that other features re-raise on purpose. Feature 272's
+  `_BarFetchError` keeps propagating (it maps to `FAILED_PRECONDITION` and is out of scope here), and
+  `asyncio.CancelledError` / 272's run-timeout handling are not caught. Any warning or emit this change adds keeps
+  the inbound `x-trace-id` metadata (operator directive 2026-10-21; no C-03 waiver).
+
+## Consumer Surface(s)
+
+- [x] **Agent MCP tool `run_backtest`** (`xstockstrat-agent`): the result now shows the failed symbol's diagnostics
+  row and warning, and an all-failed run returns `BACKTEST_STATUS_INSUFFICIENT_DATA` instead of OK. The tool passes
+  the result through, so no tool code change is expected. `docs/runbooks/mcp-tools.md` is updated if its
+  `run_backtest` status / diagnostics description changes.
+- [x] **strat-lab `backtest` skill** (`plugins/strat-lab/skills/backtest/SKILL.md`): it must stop reading "OK, zero
+  trades, empty diagnostics" as "no signal". It documents the new reason and warnings and the all-failed
+  `INSUFFICIENT_DATA` outcome, in the same PR (`docs/patterns/strat-lab-plugin.md`).
+- [x] **UI backtest view** (`xstockstrat-ui`, `/insights` segment): the backtest result and run history show the
+  diagnostics row and warning. An all-failed run shows the existing `INSUFFICIENT_DATA` state with no score. No new
+  UI component is expected; design confirms the view already renders `diagnostics`, `warnings` and
+  `INSUFFICIENT_DATA`, or adds a step if it does not.
 
 ## Fix Scope
 
-- [ ] No proto changes anticipated — open: the design may add a `NoTradeReason` value for an RPC/unexpected failure
-      instead of reusing `NO_TRADE_REASON_FORMULA_ERROR` plus a warning
+- [x] Proto: the typed reason is a design-phase decision (closed here as a bounded choice). Either the design reuses
+  an existing `NoTradeReason` value (no proto change), or it adds one new value for an RPC/unexpected evaluation
+  failure. A new value is an **additive, non-breaking** change ("Adding a new enum value",
+  `docs/runbooks/proto-versioning.md`). It is made on `analysis/v1` with no v2. It must take number **6 or later**:
+  5 is `NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE` from feature 215. It goes through the standard proto-contract PR
+  gate (root `CLAUDE.md` § Proto Contract Governance: `buf lint` + `buf breaking` green, `./scripts/buf-gen.sh`
+  stubs committed, `proto-freshness` green) and needs the analysis proto owner's review. It needs no
+  breaking-change approval (2 owners + platform lead).
 - [x] No database migrations anticipated
 - [x] No config key changes anticipated
-
-(Update after investigation — remove or replace each item as needed)
 
 ## Acceptance Criteria
 
 See `acceptance.feature` — the regression scenario(s) that must fail on the buggy behavior and pass
-after the fix (Constitution **C-15**). Plus: existing tests pass; affected service(s) smoke-tested on
-dev.
+after the fix (Constitution **C-15**). Each scenario is tagged with the `@FR-n` it covers (FR-1..FR-7). Plus:
+existing tests pass; affected service(s) smoke-tested on dev.
 
 ## Out of Scope
 
@@ -90,4 +133,5 @@ dev.
 - Fixing the trigger (b): rewriting legacy username `author` values in `indicators.formulas` (a separate data-defect
   report is needed; production exposure is unchecked)
 - Client deadlines on backtest-path RPCs (feature 272 bounds the run wall-clock; feature 273 bounds agent calls)
-- The truncated-bar-series failure surface (`_BarFetchError` → `FAILED_PRECONDITION`), owned by feature 272
+- The truncated-bar-series failure surface (`_BarFetchError` → `FAILED_PRECONDITION`), owned by feature 272. Only a
+  `GetBars` call that itself returns a gRPC error status (for example UNAVAILABLE) is in scope (AC-2, AC-5)
