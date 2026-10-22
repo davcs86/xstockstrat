@@ -264,3 +264,52 @@ halt). design.md is not written and status.md is unchanged (`spec-ready`).
   60 s auth-code TTL `:459` (F-07) — target: none here; operator to decide on follow-ups.
 - Teardown: re-anchor IDENTITY-2/IDENTITY-4 line hints and re-check the "single-use" wording in
   `services/xstockstrat-identity/CLAUDE.md:38` — target: teardown / context-constitution refresh step.
+
+## Session 2026-10-22 — sdd-spec
+
+- Generated implementation-spec.md with 6 steps. Status → implementation-ready.
+  - Step 1 [service] D-23 `exchangeAuthCode` Phase B plus the new `redeemAuthCode`.
+  - Step 2 [test] AC-1/2/3/5/6.
+  - Step 3 [service] D-21 `mintAccessToken` plus first-party routing.
+  - Step 4 [test] AC-4 plus the FR-6/FR-7 structural grep.
+  - Step 5 [test] the manual real-PG AC-1 repro.
+  - Step 6 [docs] teardown refresh of IDENTITY-1/2/4.
+- Key codebase findings:
+  - Recon's line map re-verified on `origin/feature/fix-identity-auth-code-race` @ 481d4742:
+    - `exchangeAuthCode` `:474-518`, unconditional UPDATE `:503-506`, pool-level `issueRefreshToken` `:511`;
+    - `mintOAuthAccessToken` `:295-315`, `issueRefreshToken` `:321-334`, `rotateRefreshToken` `:340-374`;
+    - `jwtSecret` getter `:112-119`;
+    - `jwt.sign` sites `:174`, `:247`, `:311`; refresh INSERT sites `:182`, `:329`.
+  - **Evidence-route finding (beyond design.md).** Design's run guard assumed Node 24 strip-types loads the impl
+    (fails.md:2223). Feature 252's product spec (`252 product-spec.md:12-22`) says the `../grpc/*.js` import fails on
+    Node 24 too (`ERR_MODULE_NOT_FOUND`). 252 has not landed: `package.json` `test` is unchanged on
+    `origin/main-dev` and on `origin/feature/fix-identity-ledger-test-suites`.
+    - The spec therefore takes RED/GREEN evidence from the compiled run that fails.md:2223's own rule prescribes:
+      `tsc` src plus tests into the git-ignored `.verify/dist/`, then `node --test --test-reporter=tap`, with the TAP
+      reporter pinned per fails.md:2991.
+    - The design's run guard (Node 24, `typeof IdentityServiceImpl === 'function'`, non-zero test count) sits
+      inside that run.
+    - `pnpm run test:coverage` stays as CI parity only.
+    - No `package.json`/`tsconfig.json` change, because that is 252's scope.
+  - AC-4's RED discriminator is first-party **login** only: today's 3-param INSERT leaves `params[3]` undefined.
+    First-party refresh already writes `client_id` NULL via `issueRefreshToken`, and no first-party token carries
+    `aud` today, so those assertions are guards. The claim-time-expiry test is also RED on today's code, because
+    the unconditional UPDATE succeeds.
+  - Login fixture: reuse the exported `SEED_ADMIN_PASSWORD_HASH` (password `'admin'`, accepted when `APPLICATION_ENV`
+    is not production), so no new bcrypt dependency is needed. The new D-23 tests reuse `storedRow`/`exchangeCall`
+    inside `describe('exchangeAuthCode')` (C-13 single consumer). No `src/__tests__/fixtures/` home exists.
+  - The jscpd guard rail is report-only outside `xstockstrat-ui` (`.husky/pre-commit` step 3), so the
+    `redeemAuthCode`/`rotateRefreshToken` stop-and-ask is a manual inspection of the
+    `DUP_REPORT_ONLY=1 scripts/check-duplication.sh` report in Step 1.
+  - Step 6 is not only line drift. IDENTITY-4 names `#mintOAuthAccessToken`, which Step 3 renames to
+    `mintAccessToken`.
+- Open-risk coverage:
+  - Fake versus Postgres serialisation → Step 5.
+  - 252 overlap → Step Dependencies plus every test step's compiled-run guard.
+  - `JWT_SECRET` restore → Step 2.
+  - jscpd → Step 1.
+  - Stale context hints → Step 6.
+  - Lost COMMIT acknowledgement → accepted, no step.
+  - Out-of-scope asymmetries (`is_active` on exchange, `:507` vs `:535` fallbacks, 60 s TTL) → not stepped. The
+    operator decides whether follow-ups are needed.
+- Next: `/sdd-review fix-identity-auth-code-race impl-spec`.
