@@ -538,3 +538,64 @@ the round-2 block above.
   post-deploy check.
 - [ ] P-06 waiver for the @AC-2 regression guard, which passes on trunk. Target: record it at execute of that test
   step.
+
+## Session 2026-10-22 — sdd-spec
+
+- Generated implementation-spec.md with 7 steps. Status: design-approved → implementation-ready.
+  1. service: export `fmp.ErrorClass`.
+  2. test: `ErrorClass` classes and the `other` fallback.
+  3. service: the ETF filler gets the trace-id queue item, the reason gate, three rate-limit slots and three Info
+     records.
+  4. test: AC-3/4/5/6/7, plus generalising the log-capture handler.
+  5. test: the AC-2 regression guard.
+  6. docs: marketdata CLAUDE.md.
+  7. test: read-only C-14 consumer check.
+- **Spec amendments made at /sdd-spec** (design.md § Chosen Approach 5; operator round-2 and round-3 gate decisions
+  above):
+  - acceptance.feature:
+    - @AC-2 is rewritten as gate closed → reopened, and the 210/5 seed Givens are removed;
+    - the former @AC-3 is split into @AC-3 (skip reason), @AC-5 (fail class: never empty, no `apikey=`) and
+      @AC-6 (per-slot rate limit, concrete counts);
+    - @AC-4 is added for FR-3 (unlabelled);
+    - @AC-7 is added for the FR-2 trace_id clause;
+    - @AC-1 is retired and never reused (C-15).
+  - product-spec.md:
+    - FR-2 gains the trace_id clause and the pinned rate-limit keys;
+    - FR-3 is added;
+    - the FR table is updated;
+    - the "fails before 255's source-filtered seed" sentence is removed;
+    - the rate-limit-key Open Question is marked resolved;
+    - Fix Scope now lists `fmp_client.go` and CLAUDE.md.
+- Key codebase findings (main-dev `c25efbdc`, no marketdata drift against this branch):
+  - `etf_flags.go` is unchanged since triage: `queue chan string` (`:38,:50`), `GetEtfFlags(_ context.Context…)`
+    (`:62`), the silent skip at `:121-123`, the raw-error Debug at `:126`, and the deferred unlock at the cache write
+    (`:130-131`).
+  - `etfFillAllowed`'s check order is `src`/`fundCfg` nil, then `fmp.enabled`, then `fmpBudget` nil
+    (`:141`). So `not_wired` is reachable both before and after `fmp_disabled`; the spec keeps that order.
+  - The only test call site that passes a bare string to `fillEtfFlag` is `etf_flags_test.go:226`.
+  - `installWarnRecorder` has 10 callers and `rec.recs` is read at 6 sites. A wrapper keeps them all untouched.
+  - The service package already imports `internal/fmp` and `internal/middleware`.
+  - The trace test must go through `middleware.UnaryServerInterceptor` (`propagation_test.go:70-82`).
+  - `internal/service` is excluded from CI coverage measurement, so the new logic gets no threshold there.
+  - 255 is still `implementation-ready` (not merged). `enrichmentClass` does not exist on trunk yet.
+
+### Decisions
+
+- The fail-record class comes only from 255's classifier, through `fmp.ErrorClass`. If 255's merged
+  `enrichmentClass` does not return `other` for stage-less errors, Step 1 stops (C-11). 230 adds no fallback.
+- The merge-order.md row (230 → 255) and the 255 context.md `other` note are not 230 steps, because a step PR
+  cannot target main-dev (F-03). Per the operator they land through the merge-order/docs PR.
+- The C-14 consumer surfaces need no code step. Step 7 pins the unchanged analysis mapping, and the end-to-end check
+  is the post-deploy re-run of 215 Step 26(a).
+
+### Open Threads
+
+- [ ] The docs PR to main-dev: the `merge-order.md` row "`fix-etf-flag-fill` (230) must wait for
+  `fix-marketdata-fundamentals-cache` (255)", plus the 255 context.md Open Threads note that `enrichmentClass`
+  returns `other` for stage-less errors (operator 2026-10-22). Owner: the merge-order/docs PR, before /sdd-execute.
+- [ ] Pre-execution gate: 255 merged and this branch rebased (Step Dependencies). Re-anchor the `fmp_client.go`
+  line references after the rebase.
+- [ ] Step 5 P-06 waiver (the regression guard passes on trunk). Record it when Step 5 executes.
+- [ ] Post-deploy: re-run 215 Step 26(a) on dev, reading `marketdata.fmp.enabled` and
+  `marketdata.fundamentals.provider` directly. The root cause is still unconfirmed; if the live cause is the
+  `(nil, nil)` 30-day negative cache, changing it needs operator sign-off on 215 @AC-14.
