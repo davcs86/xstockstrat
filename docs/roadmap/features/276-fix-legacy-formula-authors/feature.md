@@ -15,6 +15,7 @@
 |---|---|---|---|
 | 2026-10-22 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from the defect report; Track C |
 | 2026-10-22 | `draft` → `spec-ready` | /sdd-review | Product spec approved (9 warnings) |
+| 2026-10-22 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written |
 
 ---
 
@@ -22,6 +23,8 @@
 
 - [Product Spec](product-spec.md) — bug description and fix scope
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
+- [Recon](recon.md) — grounded codebase dossier
+- [Design](design.md) — approved design (operator-run maintenance CLI)
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-legacy-formula-authors`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -33,4 +36,4 @@ Six staging formulas store the legacy username `davcs86` as `author` instead of 
 
 ## Next Action
 
-`/sdd-design fix-legacy-formula-authors` — recommended design depth: full (data rewrite on ownership rows, production unchecked); resolve OQ-1 to OQ-4 at design before `/sdd-spec`; see context.md
+`/sdd-spec fix-legacy-formula-authors` — generate implementation spec from the approved design
