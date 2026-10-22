@@ -562,3 +562,33 @@ The `/sdd-design fix-analysis-backtest-bounds` full debate is halted at its appr
   writer's scope (router / 273's writer); it is not on this branch.
 - [ ] G-1 measurements and the operator threshold. Target: Step 9, after Step 5 is on dev.
 - [ ] Re-grep `self._backtests[backtest_id] = result` and the loop handlers at every rebase onto peers 215/274/244.
+
+## Session 2026-10-22 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 7 warnings, 0 floor breaches (advisory; did not block). Overlap: WARN (file-level only; no
+  migration, proto or config-key collision for 272). Lifecycle unchanged (`implementation-ready`).
+- Addressed in implementation-spec.md (each claim re-verified against the tree):
+  - Step 6 **Files** now lists `tests/conftest.py` and `tests/test_list_opportunities_deadlines.py`. The helper move
+    is item 0 (done first, as `config_watcher` in conftest); the "define `_watcher` locally" preamble is gone and
+    item 8 just says there is one declaration site (C-13).
+  - Line hints re-grepped and corrected: `_load_benchmark_bars` awaited at `:952` (was :951, three places);
+    `analysis.backtest.started` append `:817-826`, `event_type` `:820`; `analysis.backtest.completed` append
+    `:1344-1352`, `event_type` `:1346`; `mcp-tools.md` Errors table `:406-415`, `max_range_days` row `:412`, last
+    row `:415`.
+  - Step 6 AC-3, AC-3b and T-executor now call under `pytest.raises(Exception, match="aborted")` (the
+    `_owned_ctx()` abort mock raises), matching Step 4.
+  - Step 6 negative-limit test now uses `monkeypatch.setattr(servicer_mod.asyncio, "timeout", recorder)`, with the
+    recorder delegating to the real `asyncio.timeout`; it is restored at teardown, so the global patch cannot leak.
+  - Step 6 T-commit notes the accepted same-tick edge: a deadline firing just before `disarm()` still maps to
+    DEADLINE_EXCEEDED. No code change; it is informational.
+- Still open (carried to the /sdd-execute checkpoint):
+  - [ ] C-10 merge order: the "272 after 273 (fix-agent-client-deadlines)" Blocking Dependencies row in
+    `docs/roadmap/features/merge-order.md`, and the I-1..I-3 record in 273's context.md, are not written. They are
+    outside this writer's scope (router / 273's writer). Close before /sdd-execute, or the order is advisory only.
+  - [ ] Step 9 G-1 gate: the 90 s / Cloudflare ~100 s assumption is ungrounded (P-03). The operator threshold and the
+    measurements are still owed; the gate must not be skipped before `launch-ready`.
+  - [ ] Overlap rebase churn on `servicer.py` (215, 244; 244's anchors at `:787-788` and `_backtest_symbol_evaluated`
+    move behind the Step 3 wrapper), `tests/conftest.py` (244, 246, 215 also add helpers; names differ, merge
+    conflict only), analysis `CLAUDE.md` (246, 244, 215; different sections) and `mcp-tools.md` (249; different
+    row). Re-grep anchors at every rebase.
+  - Router note, not 272's: peers 244 and 248 both claim config migration `032`.
