@@ -475,3 +475,8 @@ the round-2 block above.
   "floor_breaches": []
 }
 ```
+
+### Operator decisions at the design gate (2026-10-22)
+
+- **Round-2 gate steer (verbatim):** "Operator 2026-10-22 at the round-2 gate: (1) CARRY THE TRACE ID — adopt the synthesis's recommended fix for the open C-03 objection: GetEtfFlags reads middleware.FromContext(ctx).TraceID, the queue item widens to chan etfFillItem{sym, traceID} (only the admitted enqueuer's trace, per the pending dedup), StartEtfFlagFiller keeps the loop ctx for cancellation, and fillEtfFlag attaches trace_id to every fill record when non-empty; the 'no originating request' reading is rejected. (2) ADD the optional record: on the FetchIsEtf (nil, nil) path, emit a rate-limited Info record 'etf flag fill unlabelled' carrying the symbol (and trace_id) only, with caching behaviour unchanged; it gets its own FR + @AC scenario in product-spec.md/acceptance.feature (amend both in this feature) and its own rate-limit slot pinned in the spec, plus a test. Everything else in the round-2 synthesis stands."
+- **Round-3 gate:** the operator chose `other` as the fallback class token for stage-less errors (the request-build error and the non-ctx limiter error) in 255's classifier. AC-3 requires `class` to be non-empty. The operator approved the design after round 3.
