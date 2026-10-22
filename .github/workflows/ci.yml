@@ -83,6 +83,9 @@ jobs:
               - '.claude/context-map.yaml'
               - '.claude/agents/**'
               - '.claude/skills/**'
+              - '.claude/workflows/**'
+              - 'scripts/workflow-tests/**'
+              - 'scripts/merge-train-resolve.mjs'
               - 'scripts/check-context-map.sh'
               - 'docs/**'
               - '**/CLAUDE.md'
@@ -716,6 +719,9 @@ jobs:
 
       - name: Validate context map and doc cross-references
         run: ./scripts/check-context-map.sh
+
+      - name: Saved-workflow gate tests (no agents, no tokens)
+        run: node --test scripts/workflow-tests/*.test.mjs
 
   secret-scan:
     name: Secret scan (trufflehog + gitleaks)
