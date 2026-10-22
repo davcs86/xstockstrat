@@ -93,7 +93,7 @@ func (h *PortfolioHandler) GetPnL(ctx context.Context, req *connect.Request[port
 	}
 	resp, err := h.svc.GetPnL(ctx, req.Msg)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(classifyGetPnLError(err), err)
 	}
 	return connect.NewResponse(resp), nil
 }
@@ -420,6 +420,15 @@ func classifyGetPositionError(err error) connect.Code {
 	return connect.CodeInternal
 }
 
+// classifyGetPnLError maps GetPnL errors: Unavailable only for service.ErrQuotesUnavailable (a transient quote
+// gap, retryable), else Internal.
+func classifyGetPnLError(err error) connect.Code {
+	if errors.Is(err, service.ErrQuotesUnavailable) {
+		return connect.CodeUnavailable
+	}
+	return connect.CodeInternal
+}
+
 func toGRPCError(err error) error {
 	var connectErr *connect.Error
 	if errors.As(err, &connectErr) {
@@ -430,6 +439,8 @@ func toGRPCError(err error) error {
 			return status.Error(codes.NotFound, connectErr.Message())
 		case connect.CodePermissionDenied:
 			return status.Error(codes.PermissionDenied, connectErr.Message())
+		case connect.CodeUnavailable:
+			return status.Error(codes.Unavailable, connectErr.Message())
 		}
 	}
 	return status.Error(codes.Internal, err.Error())

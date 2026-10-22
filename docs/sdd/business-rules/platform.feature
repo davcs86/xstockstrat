@@ -432,3 +432,11 @@ Feature: Platform-wide guarantees
     Given the generated Sector proto enum
     When its zero value is inspected
     Then the zero value is SECTOR_UNSPECIFIED
+
+  @AC-18 @FR-7 @feature-240
+  Scenario: Rollout backfills fees to zero and seeds lifetime realized
+    Given before migration "acc-1" has since-snapshot realized 450.00 and two confirmed offline orders
+    And Alpaca account "alp-1" has one filled broker order
+    When the feature's migrations are applied
+    Then both "acc-1" orders have fees 0.00 and the "alp-1" order has no fees value
+    And "acc-1" lifetime realized P&L is 450.00, fees_since_snapshot is 0.00, and fees_lifetime is 0.00

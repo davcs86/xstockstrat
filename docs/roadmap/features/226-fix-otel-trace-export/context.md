@@ -158,3 +158,23 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 
 ## Session 2026-10-15 — C-16 scenario promotion (operator-approved)
 - Promoted with `@feature-226` provenance: `@AC-1`, `@AC-3`, `@AC-4` → `docs/sdd/business-rules/platform.feature`; `@AC-2` → `services/xstockstrat-ui/acceptance/fix-otel-trace-export.feature` (new). No dedup conflicts (feature-171 telemetry scenarios cover resource attributes, a different guarantee). Merge-order gate: no entry for this slug.
+
+## 2026-10-19 — Follow-up observation folded in from feature 229's staging smoke (operator decision)
+- Staging portfolio logged `batch latest quotes unavailable` (DeadlineExceeded, 4s) about 10 times at
+  17:36–17:38 UTC, including single-symbol batches. Positions degraded to unenriched as designed. Cause not determined.
+- Narrowed by code: marketdata `GetLatestQuotes` has one unbounded segment, the warm DB read (pool acquire +
+  PgBouncer queue + query) on the caller's context. The cold fetch is capped at 2.5s, so a >4s call means
+  the warm read took ≥1.5s. A warm-read failure is returned unlogged, so no marketdata log line exists for it.
+- Logs could not answer it: the DO API exposes the last 100 lines, and the analysis live loop's EDGAR
+  `zero_history` WARN (~52/min) rotates them in about 2 minutes. No log forwarding is configured.
+- Tie to this feature: with OTLP export working, the `otelgrpc` server span on marketdata `GetLatestQuotes`
+  would have timed the next occurrence. pgx is **not** instrumented, so a trace alone will not separate
+  pool-acquire wait from query time. Verify spans actually arrive in Grafana Cloud for marketdata and
+  portfolio before relying on this.
+
+## Session 2026-10-20 (CI: feature status automation)
+
+- Promotion PR #1258 merged to main
+- Feature promoted and committed: 65bbc3cbf93a03f5359b60228398a25e6f297f05
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-10-20

@@ -265,6 +265,9 @@ function makeSpyPool(rows: any[] = []) {
       queries.push(sql);
       return { rows };
     },
+    async connect() {
+      return { query: this.query, release() {} };
+    },
   };
 }
 
@@ -399,6 +402,81 @@ describe('exchangeAuthCode', () => {
   });
 });
 
+// One stored refresh token with transactional semantics: a revoke takes effect only on COMMIT, and an
+// open claim holds the row the way Postgres' row lock does, so a concurrent conditional claim loses.
+function makeTokenDb(row: any, opts: { failInsert?: boolean } = {}) {
+  const db: { revoked: boolean; inserts: number; lockedBy: object | null } = { revoked: false, inserts: 0, lockedBy: null };
+  const run = async (sql: string, tx?: { revoke: boolean }) => {
+    await Promise.resolve();
+    if (/^\s*(BEGIN|COMMIT|ROLLBACK)/.test(sql)) {
+      if (tx && /COMMIT/.test(sql) && tx.revoke) db.revoked = true;
+      if (tx && db.lockedBy === tx) db.lockedBy = null;
+      if (tx) tx.revoke = false;
+      return { rows: [] };
+    }
+    if (/^\s*SELECT/.test(sql)) return { rows: db.revoked ? [] : [row] };
+    if (/INSERT INTO identity\.refresh_tokens/.test(sql)) {
+      if (opts.failInsert) throw new Error('insert failed');
+      db.inserts++;
+      return { rows: [] };
+    }
+    if (/SET revoked_at = NOW\(\)/.test(sql)) {
+      const conditional = /revoked_at IS NULL/.test(sql);
+      if (conditional && (db.revoked || (db.lockedBy && db.lockedBy !== tx))) return { rows: [] };
+      if (tx) {
+        tx.revoke = true;
+        db.lockedBy = tx;
+      } else db.revoked = true;
+      return { rows: [row] };
+    }
+    return { rows: [] };
+  };
+  return {
+    db,
+    query: (sql: string) => run(sql),
+    async connect() {
+      const tx = { revoke: false };
+      return { query: (sql: string) => run(sql, tx), release() {} };
+    },
+  };
+}
+
+function refresh(impl: any, method: string, req: any): Promise<{ err?: number; token?: string }> {
+  return new Promise((resolve) =>
+    impl[method](makeCall(req), (err: any, r: any) => resolve(err ? { err: err.code } : { token: r.refreshToken })),
+  );
+}
+
+for (const [method, req] of [
+  ['refreshToken', { refreshToken: 'r1' }],
+  ['refreshOAuthToken', { refreshToken: 'r1', resource: 'https://agent.example/agent' }],
+] as const) {
+  describe(`${method} rotation is single-use`, () => {
+    const row = { token_id: 't1', user_id: 'u1', client_id: null, email: 'u@example.com', roles: ['trader'] };
+
+    it('lets exactly one of two concurrent refreshes of the same token win', async () => {
+      process.env.JWT_SECRET = 'rotation-secret';
+      const pool = makeTokenDb(row);
+      const impl = implWithPool(pool);
+      if (!impl) return;
+      const results = await Promise.all([refresh(impl, method, req), refresh(impl, method, req)]);
+      assert.strictEqual(results.filter((r) => r.token).length, 1);
+      assert.deepStrictEqual(results.filter((r) => r.err).map((r) => r.err), [16]);
+      assert.strictEqual(pool.db.inserts, 1);
+    });
+
+    it('keeps the presented token valid when issuing its successor fails', async () => {
+      process.env.JWT_SECRET = 'rotation-secret';
+      const pool = makeTokenDb(row, { failInsert: true });
+      const impl = implWithPool(pool);
+      if (!impl) return;
+      const res = await refresh(impl, method, req);
+      assert.strictEqual(res.err, 13);
+      assert.strictEqual(pool.db.revoked, false);
+    });
+  });
+}
+
 describe('refreshOAuthToken', () => {
   it('rotates the refresh token and mints a new aud-bound access JWT', async () => {
     process.env.JWT_SECRET = 'oauth-test-secret';
@@ -413,8 +491,8 @@ describe('refreshOAuthToken', () => {
     assert.ok(res.refreshToken);
     const decoded: any = (jwt as any).verify(res.accessToken, process.env.JWT_SECRET);
     assert.strictEqual(decoded.aud, 'https://agent.example/agent');
-    // Rotation: a revoked_at UPDATE must have been issued (AC-B5).
-    assert.ok(pool.queries.some((q) => /UPDATE identity\.refresh_tokens SET revoked_at/.test(q)));
+    // Rotation: a conditional revoked_at claim must have been issued (AC-B5).
+    assert.ok(pool.queries.some((q) => /SET revoked_at = NOW\(\)[\s\S]*revoked_at IS NULL/.test(q)));
   });
 
   it('rejects an unknown refresh token', async () => {

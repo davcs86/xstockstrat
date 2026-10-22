@@ -265,9 +265,14 @@ func (f *fakeLedger) AppendEvent(_ context.Context, _ *ledgerv1.AppendEventReque
 	return &ledgerv1.AppendEventResponse{}, nil
 }
 
+// QueryEvents returns an empty page, which ends GetPnL's ledger passes.
+func (f *fakeLedger) QueryEvents(_ context.Context, _ *ledgerv1.QueryEventsRequest, _ ...grpc.CallOption) (*ledgerv1.QueryEventsResponse, error) {
+	return &ledgerv1.QueryEventsResponse{}, nil
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-func newSvc(store WatchlistStore, cfg watchlistConfig, ledger ledgerv1.LedgerServiceClient) *PortfolioService {
+func newSvc(store WatchlistStore, cfg intConfig, ledger ledgerv1.LedgerServiceClient) *PortfolioService {
 	return &PortfolioService{watchlists: store, wlCfg: cfg, ledger: ledger}
 }
 

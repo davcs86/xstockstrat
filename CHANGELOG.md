@@ -3,6 +3,52 @@
 All production promotions from `main-dev` to `main` are recorded here.
 Each entry corresponds to one `main-dev → main` PR merge.
 
+## 2026-10-22
+
+### Features
+- fix-edgar-companyfacts-decode: The EDGAR companyfacts decode fails for filers whose `cik` SEC serves as a zero-padded string (CRCL, ELWT, PSKY, RDDT), so their fundamentals history is never stored and every snapshot read falls back to the vendor.
+
+### Summary
+26 commits, 3 feature merges since last promotion.
+
+---
+
+## 2026-10-20
+
+### Features
+- offline-account-full-pnl: Offline (`BROKER_TYPE_OFFLINE`, manually recorded) accounts show only Equity and a since-snapshot realized P&L.
+
+### Proto Changes
+- marketdata/v1/marketdata.proto
+- portfolio/v1/portfolio.proto
+- trading/v1/trading.proto
+
+### DB Migrations
+- xstockstrat-portfolio: 017_offline_realized_lifetime_fees.up.sql
+- xstockstrat-trading: 011_offline_fees_snapshot_headers.up.sql
+
+### Summary
+5 commits, 0 feature merges since last promotion.
+
+---
+
+## 2026-10-19
+
+### Features
+- fix-otel-trace-export: No service exports traces to Grafana Cloud: Go/Python/Node exporters use gRPC with explicit endpoint options against an OTLP/HTTP-only gateway URL, and the UI's instrumentation hook is never registered.
+- fix-opportunities-read-hangs: The Decide-queue read (`ListOpportunities`, via the agent's `list_opportunities` tool and the UI) hangs past client timeouts with no log line.
+- fix-indicators-sandbox-matrix: The indicators formula sandbox runs within a few MiB of its 128 MiB `RLIMIT_DATA` cap, so an 800×800 numpy matmul passes or fails depending on the host (4 of 6 CI runs on identical code failed).
+- fix-book-portfolio-page: Book → Portfolio stays on "Loading portfolio…" forever.
+
+### Proto Changes
+- analysis/v1/analysis.proto
+- marketdata/v1/marketdata.proto
+
+### Summary
+9 commits, 0 feature merges since last promotion.
+
+---
+
 ## 2026-10-14
 
 ### Features

@@ -106,6 +106,46 @@ without this convention, both look identical (fails.md 2026-07-01).
 
 Append-only log — one entry per feature that registered new keys. Newest first. Don't edit past entries; superseding a key's behavior gets a new entry, not a rewrite of the old one.
 
+### feature 240 — offline-account-full-pnl (xstockstrat-portfolio / xstockstrat-config)
+
+Bounds the last-close search window behind offline marks and Day P&L. Full-dotted `SCALAR_BOUNDS_REGISTRY` entry in
+`xstockstrat-config` (`configServiceImpl.ts`). **Seeding waiver (227 D2 precedent):** **unseeded**
+(consumed-with-default); `≤ 0` reads as the default and the key must be stored as `int`.
+
+| Key | Type | Default | Bounds | Notes |
+|---|---|---|---|---|
+| `portfolio.marketdata.last_close_lookback_days` | int | `21` | `[5,60]` | Calendar days the offline valuation's `BatchGetBars` (`allow_partial`) searches for a daily close; no bar in the window → `MARK_SOURCE_NONE`. |
+
+### feature 231 — fix-after-hours-positions-priced (xstockstrat-marketdata / xstockstrat-config)
+
+Bounds the stored-close lookup that backs the new `Quote.mark_price` (one-sided after-hours quotes are marked at the
+newest stored `1d` close, never averaged with 0). Both keys are full-dotted `SCALAR_BOUNDS_REGISTRY` entries in
+`xstockstrat-config` (`configServiceImpl.ts`). **Seeding waiver (227 D2 precedent):** both are **unseeded**
+(consumed-with-default); `≤ 0` reads as the default and the keys must be stored as `int`. Timeout relationship:
+`portfolio.marketdata.quote_timeout_ms` (4000) > max(`marketdata.quotes.batch_timeout_ms`, `mark_timeout_ms`) + the warm read.
+
+| Key | Type | Default | Bounds | Notes |
+|---|---|---|---|---|
+| `marketdata.quotes.mark_timeout_ms` | int | `500` | `[100,2500]` | Per-caller budget of the stored-close lookup in `GetLatestQuotes`; on expiry those symbols return without `mark_price`. |
+| `marketdata.quotes.mark_close_max_age_hours` | int | `168` | `[120,720]` | Max age of a stored `1d` close usable as a mark; older/absent → `mark_price` unset. |
+
+### feature 229 — fix-book-portfolio-page (xstockstrat-portfolio / xstockstrat-marketdata / xstockstrat-config)
+
+Bounds the Book → Portfolio read path: a portfolio deadline on the marketdata quote fetch, a recency window on the
+cached quote reads, a detached cold-fetch budget, and an app-level quote retention loop. Each key is a full-dotted
+`SCALAR_BOUNDS_REGISTRY` entry in `xstockstrat-config` (`configServiceImpl.ts`), enforced at `SetConfig` even on
+`create_key=true`. **Seeding waiver (227 D2 precedent):** all four are **unseeded** (consumed-with-default); `≤ 0`
+reads as the default and the keys must be stored as `int`. `marketdata.retention.quotes_days` was previously
+documented-only (no reader) and is now implemented. Timeout relationship: `portfolio.marketdata.quote_timeout_ms`
+(4000) > `marketdata.quotes.batch_timeout_ms` (2500) + the warm read.
+
+| Key | Type | Default | Bounds | Notes |
+|---|---|---|---|---|
+| `portfolio.marketdata.quote_timeout_ms` | int | `4000` | `[500,8000]` | Deadline on portfolio → marketdata `GetLatestQuotes`; on expiry positions stay unenriched. |
+| `marketdata.quotes.latest_lookback_hours` | int | `168` | `[24,720]` | Recency window of both cached quote readers and the cache-age guard. |
+| `marketdata.quotes.batch_timeout_ms` | int | `2500` | `[500,5000]` | Budget of the detached `GetLatestQuotes` cold-fetch closure; failure returns the warm subset. |
+| `marketdata.retention.quotes_days` | int | `90` | `[31,3650]` | Quote retention via `StartQuoteRetention`; the 31d floor stays above the 720h lookback ceiling. |
+
 ### feature 227 — fix-opportunities-read-hangs (xstockstrat-analysis / xstockstrat-marketdata / xstockstrat-agent / xstockstrat-config)
 
 Adds **4** non-secret timeout keys that nest the `ListOpportunities` read path's deadlines (each hop's

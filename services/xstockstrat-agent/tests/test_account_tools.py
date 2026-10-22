@@ -5,6 +5,7 @@ validation, the offline-creation steer, gRPC error mapping, ownership forwarding
 registration. Mirrors the test_watchlist_tools harness (patch module-level client coroutines).
 """
 
+import uuid
 from unittest.mock import AsyncMock, patch
 
 import grpc
@@ -233,3 +234,37 @@ async def test_list_accounts_returns_broker_and_offline():
     by_id = {a["id"]: a for a in out["accounts"]}
     assert by_id["acct-7"]["broker_type"] == "BROKER_TYPE_ALPACA"
     assert by_id["acct-9"]["broker_type"] == "BROKER_TYPE_OFFLINE"
+
+
+@pytest.mark.asyncio
+async def test_record_order_default_nonce_is_a_bare_uuid():
+    """trading keys the order intent by client_order_id (a UUID column): the default must be one."""
+    mock = AsyncMock(return_value={"order": {}})
+    with patch.object(client, "record_offline_order", mock):
+        await _tool_fn(_make_server(), "manage_offline_account")(
+            _ctx(TRADER),
+            operation="record_order",
+            account_id="off-1",
+            symbol="AAPL",
+            side="buy",
+            qty=1,
+        )
+    nonce = mock.await_args.args[-1]
+    assert str(uuid.UUID(nonce)) == nonce
+
+
+@pytest.mark.asyncio
+async def test_record_order_rejects_non_uuid_nonce_before_any_rpc():
+    mock = AsyncMock()
+    with patch.object(client, "record_offline_order", mock):
+        with pytest.raises(ValueError, match="client_order_id must be a UUID"):
+            await _tool_fn(_make_server(), "manage_offline_account")(
+                _ctx(TRADER),
+                operation="record_order",
+                account_id="off-1",
+                symbol="AAPL",
+                side="buy",
+                qty=1,
+                client_order_id="smoke-1",
+            )
+    mock.assert_not_awaited()

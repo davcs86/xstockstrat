@@ -2046,6 +2046,7 @@ def register_tools(server: MCPServer) -> None:
         filled_qty: float = 0.0,
         filled_avg_price: float = 0.0,
         filled_at: str = "",
+        fees: float | None = None,
         as_of: str = "",
         client_snapshot_id: str = "",
         positions_json: str = "",
@@ -2061,11 +2062,14 @@ def register_tools(server: MCPServer) -> None:
               {"account": …}.
           'record_order'    — record a NEW order (no broker submit). Requires account_id, symbol,
               side ('buy'|'sell'), qty; order_type defaults 'market'. client_order_id is an optional
-              idempotency nonce (auto-generated when omitted). Returns {"order": …} (status NEW,
-              filled_qty 0).
+              idempotency nonce that must be a UUID (auto-generated when omitted). Returns
+              {"order": …} (status NEW, filled_qty 0).
           'confirm_order'   — write a fill. Requires order_id, filled_qty, filled_avg_price;
-              filled_at is an optional ISO-8601 time (defaults to now). Status is derived
-              server-side (NEW/PARTIALLY_FILLED/FILLED). Returns {"order": …}. Re-confirming
+              filled_at is an optional ISO-8601 time: filled_at defaults to now on first confirm;
+              otherwise keeps the previously recorded time (not shown while NEW). Pass filled_at
+              when partial fills land on different sessions. fees: cumulative total for the order
+              (>= 0), kept when omitted. Status is derived server-side
+              (NEW/PARTIALLY_FILLED/FILLED). Returns {"order": …} (with fees). Re-confirming
               replaces the fill (idempotent recompute from all confirmed orders); brokers rejected.
           'snapshot_positions' — set the effective-dated opening baseline from a brokerage statement
               (feature 163). Requires account_id and positions_json (a JSON array
@@ -2078,7 +2082,8 @@ def register_tools(server: MCPServer) -> None:
               Returns {"orders": [...]}.
           'list_positions'  — list an account's positions (reconciliation). Requires account_id.
               Returns {"positions": [...]}. Each position includes source (ORDERS/BASELINE/MIXED)
-              and as_of (baseline effective date) provenance fields (feature 163).
+              and as_of (baseline effective date) provenance fields (feature 163), plus day_pnl,
+              day_pnl_pct, unrealized_pnl_pct, mark_source and mark_as_of (feature 240).
 
         This is the platform capability behind the monthly statement-reconciliation task: correct
         drift by recording/confirming orders (no separate set-positions path)."""
@@ -2091,7 +2096,11 @@ def register_tools(server: MCPServer) -> None:
             if operation == "record_order":
                 if not account_id or not symbol or not side or qty <= 0:
                     raise ValueError("record_order requires account_id, symbol, side, and qty > 0")
-                nonce = client_order_id or f"agent-{uuid.uuid4()}"
+                nonce = client_order_id or str(uuid.uuid4())
+                try:
+                    uuid.UUID(nonce)
+                except ValueError:
+                    raise ValueError(f"client_order_id must be a UUID, got {nonce!r}") from None
                 return await client.record_offline_order(
                     user_id, account_id, symbol, side, order_type, qty, nonce
                 )
@@ -2099,7 +2108,7 @@ def register_tools(server: MCPServer) -> None:
                 if not order_id:
                     raise ValueError("confirm_order requires an order_id")
                 return await client.confirm_offline_order(
-                    user_id, order_id, filled_qty, filled_avg_price, filled_at or None
+                    user_id, order_id, filled_qty, filled_avg_price, filled_at or None, fees
                 )
             if operation == "get_order":
                 if not order_id:
@@ -2240,7 +2249,8 @@ def register_tools(server: MCPServer) -> None:
         """List ALL positions for the calling user across all accounts — broker and offline
         (read-only). User-bound: forwards only the caller's x-user-id; admins
         see only their own positions.
-        Fields with zero/default values may be absent (proto3 serialization convention).
+        All non-optional fields are present, including zeros; optional fields
+        (e.g. `mark_as_of`) are omitted when unset.
         limit: max positions per page; 0 = server default (100, max 500).
         page_token: opaque token from a prior call's next_page_token; "" starts at first page.
         Returns {"positions": [...], "next_page_token": <str>}. Each position uses snake_case
@@ -2263,7 +2273,8 @@ def register_tools(server: MCPServer) -> None:
         """List positions for a SINGLE ACCOUNT owned by the calling user (read-only).
         User-bound: forwards only the caller's x-user-id. If the caller does
         not own the account, the backend returns an empty list (no data leakage).
-        Fields with zero/default values may be absent (proto3 serialization convention).
+        All non-optional fields are present, including zeros; optional fields
+        (e.g. `mark_as_of`) are omitted when unset.
         account_id: the account to query (required, non-empty).
         limit: max positions per page; 0 = server default (100, max 500).
         page_token: opaque token from a prior call's next_page_token; "" starts at first page.
