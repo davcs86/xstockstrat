@@ -36,7 +36,8 @@ paths share one mint helper and one refresh-issue helper with unchanged claim sh
 
 - **FR-1** — `ExchangeAuthCode` consumes the code with a single conditional claim (`UPDATE … WHERE code = $1 AND
   consumed_at IS NULL AND expires_at > NOW() RETURNING …`); the redemption decision is the claim's row count, never
-  a prior unlocked SELECT plus a JS `consumed_at` check.
+  a prior unlocked SELECT plus a JS `consumed_at` check. A read of the stored row for the FR-5 validation may precede
+  the claim (or the validation predicates may sit inside the claim); either way only the claim decides redemption.
 - **FR-2** — The claim and the successor refresh-token INSERT run in one transaction: if the INSERT (or anything
   after the claim) fails, the transaction rolls back and the code's `consumed_at` stays NULL.
 - **FR-3** — Of N concurrent `ExchangeAuthCode` calls for one valid code, exactly one returns tokens; the other N-1
@@ -47,7 +48,8 @@ paths share one mint helper and one refresh-issue helper with unchanged claim sh
   legitimate client. This preserves today's validate-before-consume order (`:495-502` before `:503`).
 - **FR-6** — Access tokens minted by first-party `authenticateUser`, first-party `refreshToken` and the OAuth
   exchange/refresh have an identical claim set and TTL rule (FR-8), differing only in `aud`, which only OAuth tokens
-  carry. Structurally, all four sites sign through one shared mint helper and no inline `jwt.sign` remains in
+  carry. The four sites are `authenticateUser`, `refreshToken`, `exchangeAuthCode` and `refreshOAuthToken` (the last
+  two already call `mintOAuthAccessToken`). Structurally, all four sites sign through one shared mint helper and no inline `jwt.sign` remains in
   `authenticateUser` or `refreshToken` (verified as in Test Harness Expectations, not by a Gherkin scenario).
 - **FR-7** — Refresh tokens issued by first-party `authenticateUser` and by `ExchangeAuthCode` are stored the same
   way (one hashed token row per issue for the user, `client_id` NULL for first-party and the client id for OAuth, per
@@ -56,14 +58,16 @@ paths share one mint helper and one refresh-issue helper with unchanged claim sh
   `authenticateUser` (verified as in Test Harness Expectations, not by a Gherkin scenario).
 - **FR-8** — Claim shapes are unchanged: every access token carries `user_id`, `email`, `roles`, `issued_at`,
   `expires_at` with `expires_at - issued_at` equal to `identity.jwt.access_ttl_seconds` (default 900); only OAuth
-  tokens carry `aud` (the requested resource); first-party refresh rows keep `client_id` NULL, OAuth rows carry the
+  tokens carry `aud` (the requested resource). An OAuth token with no requested or stored resource keeps today's
+  `aud: ''`, and first-party tokens carry no `aud` claim at all, so the shared helper treats `aud` as optional; first-party refresh rows keep `client_id` NULL, OAuth rows carry the
   client id.
 
 ## Test Harness Expectations
 
 - FR-1..FR-3 (AC-1) are proven only against a real Postgres (the harness the `5bd271d` hotfix used); a mocked-pool
   unit test cannot show the race is closed. The design phase names the harness and confirms the new tests execute
-  (identity unit suite early-return, see overlap with 252).
+  (identity unit suite early-return, see overlap with `docs/roadmap/features/252-fix-identity-ledger-test-suites/`;
+  its impl-spec says whichever lands second merges the other's changes to `identityServiceImpl.test.ts`).
 - AC-3 needs fault injection on the refresh-token INSERT; the design phase states the mechanism (e.g. a pool/client
   stub that rejects the INSERT inside the transaction).
 - The structural halves of FR-6/FR-7 (single mint helper, single refresh-issue helper, no inline `jwt.sign` or
