@@ -177,8 +177,10 @@ merge can change what the next PR conflicts with.
   `context.md`). `/sdd-batch-execute` also needs `prFooter` (PR-body attribution) and
   `modeEntryConfirmed: true` — the sequential mode-entry confirmation (`sequential-mode.md` §5.1b) is
   asked in the main session before launch, never inside the script.
-- `approvals: {<slug>: {gate, decision}}` — how a halted gate is answered: relaunch the same
-  workflow with the operator's answer and each feature resumes from its lifecycle status (`draft` →
+- `approvals: {<slug>: {gate, decision} | [{gate, decision}, …]}` — how a halted gate is answered:
+  relaunch the same workflow with the operator's answer (an array when one slug answers several
+  gates, e.g. `demoted-duplicate` and `design`, since preflight re-asks every gate on each run) and
+  each feature resumes from its lifecycle status (`draft` →
   … → `implementation-ready`; spec step statuses for execution), so finished phases are never
   re-run. The design debate's state survives between runs in a `sdd-batch-design-state` block in
   `context.md`; the approved C-16 plan in a `sdd-batch-promotion-plan` block.

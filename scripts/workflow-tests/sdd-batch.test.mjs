@@ -83,4 +83,10 @@ console.log('10 writer rules ok')
 t = await run(F, Object.assign({}, base, { designGate: 'auto', authorizationRef: 'x' }), common())
 assert.deepEqual(t.result[0].commits, ['c-rev-1', 'c-rev-2', 'c-recon-1', 'c-recon-2', 'c-design-1', 'c-design-2', 'c-spec-1', 'c-spec-2', 'c-ir-1', 'c-ir-2'])
 console.log('11 per-artifact commits ok')
+// 12. a slug may answer several gates at once: demoted-duplicate cleared AND design steered in one relaunch
+t = await run(F, Object.assign({}, base, { approvals: { 'fix-a': [{ gate: 'demoted-duplicate', decision: 'not-a-duplicate' }, { gate: 'design', decision: 'steer: keep x-trace-id' }] } }), common({ demotedSimilar: ['fix-a-old'], status: 'spec-ready', branchExists: true, reconMd: 'RECON', priorDesignState: prior }))
+r = t.result[0]
+assert.equal(r.halted.gate, 'design'); assert.equal(r.halted.round, 3)
+assert.ok(t.calls.find((c) => c.label.startsWith('propose:fix-a:r3')).prompt.includes('OPERATOR STEER for this round: keep x-trace-id'))
+console.log('12 multi-gate approvals ok')
 console.log('ALL sdd-batch tests passed')
