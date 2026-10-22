@@ -535,3 +535,40 @@ halt). design.md is not written and status stays `spec-ready`.
 - Ledger: no new line. The lessons are already covered by `fails.md:1688-1693` and the 2026-08-06
   durable-observable-backfills entry.
 - Next: `/sdd-review fix-ingest-poller-backfill impl-spec`, then `/sdd-execute fix-ingest-poller-backfill`.
+
+## Session 2026-10-22 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 7 warnings (advisory — did not block; lifecycle unchanged, `implementation-ready`). Overlap
+  level: WARN (file-level only with 244-fix-python-config-stored-zero; no proto, migration or config-key collision).
+- Addressed in implementation-spec.md (commit 19c8c101):
+  - [x] C-14 consumer surfaces: added a Step Dependencies no-change note plus a dev smoke-check for `/config-ui`
+    signal-sources and the agent `list_signal_sources` / `cancel_backfill` + `get_backfill_status` tools.
+  - [x] Step 2 Verification: dropped the assert-nothing `grep ... || true`.
+  - [x] Step 8 / P-06: the O-3 guard's RED (temporarily move the `:896` set-add after the `:897-902` CANCELED write)
+    must be captured in context.md by `/sdd-execute`, then the order restored.
+  - [x] Step 7: added a conditional split note for the `_resume_job` trace-id minting (C-03) if execution grows large.
+  - [x] Step 9: cites both 025 seed rows (`:34-36` staging, `:37-39` production) and the raw-key snapshot
+    (`configServiceImpl.ts:203-213` → `watcher.py:112-118`), with a re-confirm-before-filing instruction. No later
+    config migration renames the key (grep, 2026-10-22).
+  - [x] Merge-order row text made concrete in § Step Dependencies (row itself still unwritten — see below).
+- No change needed:
+  - FR-1 / AC-8 scope drift: already resolved. product-spec.md FR-1 (`:40-48`) carries the all-fail clause and
+    `@AC-8`, amended at the design gate 2026-10-22; the reviewer was handed the pre-amendment text.
+- Unresolved ⚠ carried into execution:
+  - Merge-order: `docs/roadmap/features/merge-order.md` row 244 → 261 (WARN) — [ ] unaddressed (outside this run's
+    write scope; write at `/sdd-sync` or at the integration PR, after operator confirmation).
+  - Step 5: verify feature 244's merge state on `main-dev` before executing; rebase onto its timeout read if merged —
+    [ ] unaddressed.
+  - Step 9 / INGEST docs: 244 Step 17 also edits the INGEST rules table near `context-constitution.md:28`; expect a
+    doc-merge conflict on INGEST-9/INGEST-10 — [ ] unaddressed.
+- Overlap findings: 244 shares `mcp_client_loop.py`, `watcher.py`, `test_ingest_servicer.py`,
+  `test_mcp_client_loop.py`, ingest `CLAUDE.md` and both ingest constitution docs. Awareness only: config migration
+  NNN 032 is claimed by both 244 and 248 (not caused by 261).
+
+### Open Threads
+
+- [ ] Add the `merge-order.md` row 244 → 261 (WARN) once confirmed.
+- [ ] Confirm 244 merge state before Step 5.
+- [ ] Step 8: record the O-3 RED run.
+- Ledger: no new line.
+- Next: `/sdd-execute fix-ingest-poller-backfill`.
