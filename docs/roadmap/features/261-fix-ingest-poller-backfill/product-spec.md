@@ -42,7 +42,10 @@ again and spends vendor quota.
   logged with the source slug; the remaining items of the batch are still ingested. The poll emits one log record per
   source per poll carrying the slug and the skipped count, which counts only these guard-caught items (items the
   extractor already drops, e.g. a missing `symbol`, keep their existing per-item warning and are not counted). The
-  regression test asserts that log record. A skipped item alone does not mark the source errored.
+  regression test asserts that log record. A partial failure (at least one item of the batch ingested) only logs the
+  skipped count and does not mark the source errored. When every parsed item fails, including a one-item batch, the
+  poll emits the summary log record first and then raises, so the source's `last_error` records
+  `all <N> items failed: <first error>` (`@AC-8`; FR-1 amended by operator decision at the design gate, 2026-10-22).
 - **FR-2 (D-34).** A backfill job (bars or fundamentals) canceled while `QUEUED` stays `CANCELED` when a
   `_backfill_sem` slot frees: it is never written `RUNNING`, emits no `ingest.backfill.running` event, and makes no
   marketdata `BackfillBars` / `BackfillFundamentals` call.
