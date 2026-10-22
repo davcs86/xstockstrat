@@ -3033,3 +3033,30 @@ ambiguity is logged here).
 - **Evidence**: `docs/roadmap/features/250-fix-otel-metrics-logs-gap/design.md` §4 Part 3 (existence set) and §5 (comment-only red case); context.md 2026-10-21 sdd-design entry.
 - **Rule it implies**: an existence/absence guard derives its "exists" set from declaration value lines only (e.g. `- uid:`, top-level `"uid":`), never from free text in the same file, and ships a red case proving a comment cannot satisfy existence.
 
+### 2026-10-21 — fix-getpnl-source-service — assumption
+- **Mistake**: Debate rounds 6-8 read a stale read-only checkout (`d077dcfe`) and re-raised blocker B6 (follow-up
+  reports unfiled) after `d707d239` had filed them, so a discharged blocker held the design gate for three rounds.
+- **Evidence**: `docs/roadmap/features/251-fix-getpnl-source-service/context.md` "sdd-design (full) round 9, gate"
+  and "halted at gate, round 8" (`:276-278`).
+- **Rule it implies**: Before each debate round, refresh the read-only checkout to the feature branch tip and record
+  the grounded SHA in the synthesis; a blocker whose evidence is a file's absence is re-verified at that SHA.
+
+### 2026-10-21 — otel-metrics-logs-export — assumption
+- **Mistake**: Two design rounds assumed telemetry wrappers measure what their names say. connect-es resolves a server-streaming handler only after the first message (`untilFirst`), so a BFF "duration" wrapper records time-to-first-alert (hours) for an idle stream; and Python `asyncio.CancelledError` (deadline/cancel) is a `BaseException` the gRPC instrumentation never catches, so those calls would record OK (0) where Go records 4/1. Separately, sdk-node 0.52 silently drops its default trace exporter once `spanProcessors` is passed, and `@opentelemetry/api` 1.9.1 has no proxy MeterProvider, so an early-bound histogram is a permanent no-op.
+- **Evidence**: `docs/roadmap/features/274-otel-metrics-logs-export/context.md` Round 1–3 checkpoints; `@connectrpc/connect` `protocol-connect/handler-factory.js:277-280`; `opentelemetry/instrumentation/grpc/_aio_server.py:109-116`; `sdk-node@0.52.1 sdk.js:81-84`; `api@1.9.1 api/metrics.js:35-36`.
+- **Rule it implies**: Any design that wraps a handler or SDK to record telemetry must read the pinned library's actual resolution/exception/registration path (stream resolution, BaseException handling, default-component replacement, proxy vs no-op globals) before claiming what the number means — and add a test that would fail on the naive assumption.
+
+### 2026-10-22 — fix-marketdata-secret-exposure — assumption
+- **Mistake**: The vendor clients redacted the URL on the non-2xx branch only. They `%w`-wrapped the transport error (`http.Client.Do`) and the parse error (`http.NewRequestWithContext`) as-is. Both are `*url.Error` values whose text carries the full request URL, including the `apikey=`/`token=` query key, so the key reached gRPC statuses, logs and OTel (D-39).
+- **Evidence**: `services/xstockstrat-marketdata/internal/fmp/fmp_client.go:226`, `:243`; `internal/finnhub/finnhub_client.go:114`, `:118`; `docs/roadmap/features/254-fix-marketdata-secret-exposure/design.md` Step 1.
+- **Rule it implies**: any Go HTTP client with a credential in the URL must unwrap `*url.Error` and `%w`-wrap only `ue.Err`, with a cause-free fallback. This keeps `errors.Is(ctx.DeadlineExceeded)` working. Prove it with a test that asserts the key is absent and `errors.As(err, new(*url.Error))` is false.
+
+### 2026-10-22 — fix-ledger-query-pagination — assumption
+- **Mistake**: node-postgres returns BIGINT columns (ledger `sequence`) as strings when no `setTypeParser` is registered. `streamEvents` therefore compares string to string, which is lexicographic (`"10" > "9"` is false), so `maxSeq` dedupe and any keyset cursor stall at a digit boundary. Every ledger unit mock passes a numeric `sequence`, so CI could not see it.
+- **Evidence**: `services/xstockstrat-ledger/src/grpc/ledgerServiceImpl.ts:191,196,210,256`; `src/__tests__/ledgerServiceImpl.test.ts:66,100,174`; `docs/roadmap/features/257-fix-ledger-query-pagination/recon.md:177-185`, design.md §2/§4.
+- **Rule it implies**: Any Node code that compares or encodes a pg BIGINT normalises it through one BigInt helper that accepts number, string and bigint. Its tests use pg-style string values that cross a digit boundary (`"9"`, `"10"`, `"11"`), not numeric mocks.
+
+### 2026-10-22 — fix-python-loop-supervision — assumption
+- **Mistake**: A design round reused the read-path classifier `read_budget.is_transient_db_error` to decide when a stream consumer should park (skip) an event. That classifier is an allow-list of transient types and defaults to non-transient, so OutOfMemoryError (53200), class-40 deadlock/serialization and DiskFull would have parked real transient failures within about 2 s and lost P&L data permanently. A wrong answer on the read path costs a 500; on the consumer path it costs data. Caught by the r3 adversary.
+- **Evidence**: `services/xstockstrat-analysis/app/repositories/read_budget.py:17-32`; `docs/roadmap/features/259-fix-python-loop-supervision/design.md` §3.2; context.md 2026-10-22 operator decision r3.
+- **Rule it implies**: a consumer that drops or parks events on exhaustion classifies with a narrow, consumer-local **positive poison** allow-list (payload/logic errors, SQLSTATE 22/23), and everything unlisted defaults to retry/replay. Never reuse a transient allow-list, whose default points the other way.
