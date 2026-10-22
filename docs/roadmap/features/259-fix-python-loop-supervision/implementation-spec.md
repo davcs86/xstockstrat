@@ -62,7 +62,8 @@ and consumer keep producing. This is a recorded decision, not an omission. No co
   available, never minted (operator 2026-10-21).
 - **`_PROBE_TIMEOUT_SECONDS` — pinned at `5`.** `_PARK_EMIT_TIMEOUT_SECONDS = 5`.
 - **Attempt hang — decided: no per-attempt timeout in this feature.** `pool.acquire()`/`fetchval`
-  (`pnl_pattern_consumer.py:141,205,268,400`) stay unbounded. An attempt-level `wait_for` would cancel inside an
+  (`pnl_pattern_consumer.py:141,205,268,400` — all four re-verified 2026-10-22: `fetchval` `:141`, `acquire()`
+  `:205,268,400`) stay unbounded. An attempt-level `wait_for` would cancel inside an
   open asyncpg transaction and add a fourth error path for a pool-exhaustion case the probe cannot see either (C-18).
   The limitation (a hang stalls the consumer with no ERROR and FR-2's done-callback never fires) is documented in
   the analysis `CLAUDE.md` (Step 15); detection belongs to the loop heartbeat/liveness metric the product spec lists
@@ -77,7 +78,9 @@ and consumer keep producing. This is a recorded decision, not an omission. No co
 - Step 2 [test] covers Step 1 [service]; Step 4 covers Step 3; Step 6 covers Step 5; Step 8 covers Step 7; Step 10
   covers Step 9; Step 12 covers Step 11; Step 14 covers Step 13 (C-08). Each pair is red-before-green (P-06).
 - Step 3 requires Step 1: the loops import `retry_until_ok` / `run_supervised` from `app/supervision.py`.
-- Step 13 requires Step 11: the park emit uses the new `_emit` keywords.
+- Step 13 requires Step 11: the park emit uses the new `_emit` keywords. Steps 11/13 share
+  `pnl_pattern_consumer.py` and Steps 12/14 share `tests/test_pnl_pattern_consumer.py`: Step 13 re-greps its anchors
+  on the post-Step-11 file and Step 14 builds on the post-Step-12 test file (line numbers shift).
 - Steps 5, 7, 9 (watchers) are independent of Steps 1-4 and of each other; they share one edit shape (D-20).
 - Step 15 requires Steps 1-14 (documents the shipped behaviour; runs the teardown last).
 - **Peer rebases** (record in `merge-order.md` at Step 15; all line-disjoint today):
@@ -127,7 +130,8 @@ and consumer keep producing. This is a recorded decision, not an omission. No co
 **Covers**: —
 
 **Instructions**:
-1. Create `services/xstockstrat-analysis/app/supervision.py` (stdlib only: `asyncio`, `logging`) with:
+1. Create `services/xstockstrat-analysis/app/supervision.py` (stdlib only: `asyncio`, `functools`, `logging` — import `functools` for the
+   `partial` below, or use a closure and drop it) with:
    - `_LOOP_ERROR_BACKOFF_SECONDS = 30` — a fixed invariant, not a config key (design.md §3.8).
    - `_BACKGROUND_TASKS: set[asyncio.Task] = set()` — module-level retention set.
    - `def spawn(coro, name: str, *, forever: bool) -> asyncio.Task`: `task = asyncio.get_running_loop().create_task(coro,
@@ -158,7 +162,7 @@ and consumer keep producing. This is a recorded decision, not an omission. No co
 **Verification**:
 ```bash
 cd services/xstockstrat-analysis
-grep -c "create_task" app/main.py   # expect 1 (the :120 shutdown task only)
+grep -c "create_task(" app/main.py   # expect 1 (the :120 shutdown task; the :220 comment has no "(")
 grep -n "spawn(" app/main.py          # expect 8 call sites
 ruff check . && ruff format --check .
 ```
@@ -315,6 +319,10 @@ ruff check . && ruff format --check .
    `.next_sleep_seconds` to raise `asyncpg.PostgresConnectionError` once then return `3600.0`, `random.uniform` → 0,
    and `asyncio.sleep` with a `BaseException` sentinel recorder that stops after the post-error tick. Assert the loop
    did not die on the error, `next_sleep_seconds` was awaited twice (the tick ran again), and an ERROR was logged.
+   Add a second parametrized case per loop (and one for the fundsignal loop with `_seed_schedule =
+   AsyncMock(side_effect=[asyncpg.PostgresConnectionError("seed"), None])`) where `DurableSchedule.seed` raises
+   `asyncpg.PostgresConnectionError` once then returns: assert `seed` was awaited twice, a `30` backoff sleep was
+   recorded before the first tick, and an ERROR was logged — pins the per-loop `retry_until_ok` wiring.
 5. Re-run the existing scheduler suites unchanged as the PRESERVE guard: `tests/test_fundsignal_loop.py::TestScheduler`
    (`@AC-1..@AC-7 @feature-156`), `tests/test_opportunity_refresh.py` (`@AC-7/@AC-8/@AC-9 @feature-158`),
    `tests/test_readiness_materializer.py`, `tests/test_durable_schedule.py`.
@@ -667,8 +675,11 @@ ruff check . && ruff format --check .
 - asyncpg exception import idiom `import asyncpg.exceptions as apg` (`app/repositories/read_budget.py:8`);
   `asyncpg.DataError` is already used in this repo (2 hits). `read_budget.is_transient_db_error` / `_TRANSIENT` are
   **not** used (operator r3; fails.md 2026-10-22 entry).
-- asyncpg is not installed in the spec sandbox, so `IntegrityConstraintViolationError`, `OutOfMemoryError`,
-  `DeadlockDetectedError` resolve at execute time; a wrong name fails at import in Step 14 (no silent pass).
+- asyncpg exception names verified 2026-10-22 against the locked `asyncpg==0.31.0` wheel
+  (`services/xstockstrat-analysis/uv.lock:44-45`), `asyncpg/exceptions/__init__.py`: `PostgresConnectionError`,
+  `DataError`, `IntegrityConstraintViolationError`, `SerializationError`, `DeadlockDetectedError` (both
+  `TransactionRollbackError` subclasses), `OutOfMemoryError` (an `InsufficientResourcesError` subclass, as is
+  `DiskFullError`); all re-exported at top level by `from .exceptions import *`. Re-confirm if the lock is bumped.
 
 **TDD**: `red-green required`
 
