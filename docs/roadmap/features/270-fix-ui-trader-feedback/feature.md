@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-21-ui-trader-feedback-defect.md`
 **Severity**: SEV-2
 **Created**: 2026-10-21
-**Last Updated**: 2026-10-21
+**Last Updated**: 2026-10-22
 
 ---
 
@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-10-21 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-21-ui-trader-feedback-defect.md` (debt-radar D-11, D-17, D-45, D-64) |
+| 2026-10-22 | `draft` → `spec-ready` | /sdd-review | Product spec approved (7 warnings; 5 resolved by adding AC-9..AC-12, splitting AC-7 and removing the Fix Scope template note) |
 
 ---
 
