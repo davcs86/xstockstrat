@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-21-template-update-metadata-defect.md`
 **Severity**: SEV-2
 **Created**: 2026-10-21
-**Last Updated**: 2026-10-21
+**Last Updated**: 2026-10-22
 
 ---
 
@@ -15,6 +15,7 @@
 |---|---|---|---|
 | 2026-10-21 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-21-template-update-metadata-defect.md` (debt-radar D-41) |
 | 2026-10-21 | `draft` → `spec-ready` | /sdd-review | Product spec approved (4 warnings; overlap WARN: shared servicer.py with 244, 245) |
+| 2026-10-22 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written |
 
 ---
 
@@ -35,6 +36,8 @@ Snapshot from `docs/runbooks/reviewer-registry.md` at /sdd-triage time (2026-10-
 
 - [Product Spec](product-spec.md) — bug description and fix scope
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
+- [Recon](recon.md) — grounded codebase dossier (Phase 0)
+- [Design](design.md) — debated, operator-approved approach (Phase 1)
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-template-update-metadata`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -48,4 +51,4 @@ empty-id CREATE semantics also differ across the three template repositories.
 
 ## Next Action
 
-`/sdd-design fix-template-update-metadata` — recommended design depth: full (3 affected services); see context.md
+`/sdd-spec fix-template-update-metadata` — generate implementation spec from the approved design
