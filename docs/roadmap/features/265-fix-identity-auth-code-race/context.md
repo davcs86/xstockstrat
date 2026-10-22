@@ -313,3 +313,35 @@ halt). design.md is not written and status.md is unchanged (`spec-ready`).
   - Out-of-scope asymmetries (`is_active` on exchange, `:507` vs `:535` fallbacks, 60 s TTL) → not stepped. The
     operator decides whether follow-ups are needed.
 - Next: `/sdd-review fix-identity-auth-code-race impl-spec`.
+
+## Session 2026-10-22 — sdd-review impl-spec
+
+- Result: 0 failures, 6 warnings, overlap WARN (3 file collisions). This review is advisory, so lifecycle stays
+  `implementation-ready`.
+- Addressed:
+  - Step 4 Verification now states the coverage threshold (`c8 --lines 40`, line coverage >= 40%). Re-verified
+    against `services/xstockstrat-identity/package.json:13`.
+- Accepted as is (verified, no edit needed):
+  - Steps 1 and 3 have no test command of their own. GREEN comes from the paired Steps 2 and 4 (C-08 pairing in
+    Step Dependencies), and each step still runs `pnpm run lint`.
+  - The line hints in `identityServiceImpl.ts` and the test file resolve. The stale Step 6 hints are already
+    flagged in the spec.
+  - C-18: `redeemAuthCode` mirrors `rotateRefreshToken` under the jscpd stop-and-ask guard, with no speculative
+    `withTransaction` extraction.
+
+### Open Threads
+
+- Step 5 (P-03): the AC-1 real-Postgres 20-caller repro is manual and cannot be machine-asserted. At the
+  `/sdd-execute` checkpoint, the operator must confirm that this recorded repro counts as the AC-1 harness, and the
+  before/after counts must be logged here. — [ ] unaddressed
+- Step 2: RED/GREEN depends on the scratch `tsc` compile until feature 252 lands, and `tsc` emits even when there
+  are type errors. Log the diagnostics in this file on each run. — [ ] unaddressed
+- Overlap with `252-fix-identity-ledger-test-suites` Step 3 on `src/__tests__/identityServiceImpl.test.ts`: 252
+  removes the `before()` guard (:28-40, lazy import :30) that 265 relies on as its skip guard. Whichever feature
+  lands second merges the other's changes and re-checks the guard semantics. — [ ] unaddressed
+- Overlap with `242-fix-push-untargeted-broadcast` on `src/grpc/identityServiceImpl.ts`: 242 adds an import at :9
+  and a method after `setUserActive`. The blocks don't overlap, so the only risk is a textual rebase conflict.
+  — [ ] unaddressed
+- `#1262 hotfix/fix-refresh-token-rotation` also touches both identity files. Before Step 1, check whether
+  `rotateRefreshToken` (:340-374, hotfix 5bd271d) is on `main-dev`, and re-anchor the line hints if it is not.
+  — [ ] unaddressed
