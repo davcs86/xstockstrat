@@ -16,19 +16,21 @@
 | 2026-10-21 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-21-python-loop-supervision-defect.md` (debt-radar D-07, D-08, D-56) |
 | 2026-10-21 | `draft` → `spec-ready` | /sdd-review | Product spec approved (6 warnings; 4 resolved in spec) |
 | 2026-10-22 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + design.md written |
+| 2026-10-22 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 15 steps |
 
 ---
 
 ## Reviewers
 
-Snapshot from `docs/runbooks/reviewer-registry.md` at /sdd-triage time (2026-10-21). `/sdd-spec` overwrites it with per-step assignments.
+Snapshot from `docs/runbooks/reviewer-registry.md` written by `/sdd-spec` (2026-10-22); stable unless `/sdd-spec` re-runs.
 
 | Reviewer | Focus | Steps |
 |---|---|---|
-| `xstockstrat-analysis` owner | Backtest reproducibility, strategy scoring determinism, no look-ahead bias | TBD (/sdd-spec) — background loops (D-07), config watcher (D-08), P&L-pattern consumer (D-56) |
-| `xstockstrat-indicators` owner | Formula sandboxing, numeric precision, timeout enforcement, no side-effects | TBD (/sdd-spec) — config watcher copy (D-08) |
-| `xstockstrat-ingest` owner | Signal normalization correctness, idempotent ingestion | TBD (/sdd-spec) — config watcher copy (D-08) |
-| `xstockstrat-config` owner | WatchConfig stream stability | Read-only: client-side reconnect only; no server change expected |
+| `xstockstrat-analysis` owner | Backtest reproducibility, strategy scoring determinism, no look-ahead bias | 1-6, 11-14 (supervision helper + boot retention, loop survival, analysis config watcher, P&L consumer) |
+| `xstockstrat-indicators` owner | Formula sandboxing, numeric precision, timeout enforcement (`indicators.sandbox.timeout_ms`), no side-effects from formula execution | 7-8 (config watcher copy) |
+| `xstockstrat-ingest` owner | Signal normalization correctness, idempotent ingestion, newsletter source schema stability | 9-10 (config watcher copy) |
+
+Step 15 (docs) has no reviewer per the governance matrix.
 
 ---
 
@@ -38,7 +40,7 @@ Snapshot from `docs/runbooks/reviewer-registry.md` at /sdd-triage time (2026-10-
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
 - [Recon](recon.md) — grounded codebase dossier (Phase 0)
 - [Design](design.md) — approved design: chosen approach, rejected alternatives, open risks
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-python-loop-supervision`_
+- [Implementation Spec](implementation-spec.md)
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -51,4 +53,4 @@ consumer skips a failed event and its monotonic cursor moves past it.
 
 ## Next Action
 
-`/sdd-spec fix-python-loop-supervision` — generate implementation spec from the approved design
+`/sdd-review fix-python-loop-supervision impl-spec` — validate implementation spec, then `/sdd-execute fix-python-loop-supervision`
