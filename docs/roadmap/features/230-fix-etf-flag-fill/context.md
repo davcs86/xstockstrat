@@ -70,3 +70,11 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
     out-of-scope list leaves rate-limiting that WARN open.
 - Recommended design depth unchanged: quick → `/sdd-design fix-etf-flag-fill quick`, with the 255 rescope as the
   first design question.
+
+## Session 2026-10-22 (operator decision — narrow scope after 255)
+
+- **Decided:** 230 lands **after** `255-fix-marketdata-fundamentals-cache`, which already fixes the root cause
+  (D-51: source-filtered FMP seed count + `SeedFMPBudget`). 230 is narrowed to **AC-2** (an ETF is labelled on a
+  later call once budget allows) and **AC-3** (rate-limited Info-level fill logging, error class only — no raw error
+  text, since `FetchIsEtf` errors can carry the `apikey=` URL until 254 lands). Its own seed-count fix is dropped.
+  `/sdd-review product-spec` amends FRs/ACs accordingly; 215's @AC-14 tests must keep passing.
