@@ -66,3 +66,40 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - `262-fix-analysis-owner-scope`, `268-fix-indicators-formula-correctness` — same services, different code paths
     (entry backfill; indicators sandbox/`ExecuteFormula` config reads). No line overlap found.
 - Development branch: feature/fix-backtest-silent-symbol-skip
+
+## Session 2026-10-22 — sdd-review product-spec
+
+- Product spec approved (criteria: PASS WITH WARNINGS; overlap: WARN). Status: draft → spec-ready.
+- Warnings:
+  1. Dependency on unmerged 272 (C-11): `_BarFetchError` is only defined/raised on main-dev (`servicer.py:358`,
+     `:1445`) and never mapped; the bare `except Exception` (`:1130-1132`) would swallow it today. **Resolved**: added
+     product-spec § Dependencies / Merge Order and an AC-6 `Given feature 272 has landed` precondition.
+  2. FR-7 trace-id clause had no observable scenario. **Resolved**: FR-7 now says it is verified by a unit-test step
+     in the implementation spec.
+  3. Doc drift: `services/xstockstrat-analysis/CLAUDE.md` says INSUFFICIENT runs record a "0 score"; the code records
+     `score = None` (`servicer.py:1290-1299`). **Resolved in spec**: FR-5 now states the null score is current
+     behavior (regression guard) and that the fix PR corrects the CLAUDE.md drift.
+  4. AC-4 / AC-6 Then clauses lean on storage/handler internals. Open — acceptable as a regression guard; consider
+     phrasing via `ListBacktests` / `GetBacktest` / run-history output at /sdd-spec.
+  5. UI backtest view consumer surface is hedged. Open — must be resolved at design (C-14).
+  6. A partial run whose single evaluated symbol has no trades and a flat curve becomes INSUFFICIENT_DATA under the
+     `:1235-1241` gate; consistent with FR-4/FR-6 wording (FR-6 requires trades or a usable curve). Confirm at design.
+- Overlap findings (WARN, no FAIL):
+  - 272 `fix-analysis-backtest-bounds` (implementation-ready): same `RunBacktest` body (272 renames to `_run_backtest`
+    behind `@owner_scoped`); 275 depends on 272's `_BarFetchError` handling. Expected impl-level merge conflict.
+  - 215 `block-fundamentals-strategy-on-etf` (in-progress): same status-gate expression and refused-only recompute
+    rule; both edit `analysis.proto` (215 adds `SymbolDiagnostics.fundamentals_gap = 6`, not a `NoTradeReason` value).
+    No `NoTradeReason` number above 5 is claimed, so 6 is free today; second to merge regenerates stubs + re-runs
+    `buf breaking`.
+  - 273 `fix-agent-client-deadlines` (implementation-ready): shared agent `run_backtest` / `tools.py` surface only; 275
+    makes no tools.py code change.
+  - Low-risk: 270 (reads `_recompute_headline` region, analysis unchanged), 230 `fix-etf-flag-fill` (draft peer; joint
+    review of the agent run_backtest summary text), 268 / 244 (shared run_backtest context), 262 (same file, other
+    ranges).
+  - Merge-order: no 275 row yet. Recommended rows (router-owned, operator confirmation at /sdd-spec): 275 blocked by
+    272 (same RunBacktest lines, `_BarFetchError` surface) and by 215 (status gate + analysis.proto). 275 merges second.
+- OPERATOR DECISIONS (binding, recorded 2026-10-22):
+  - Triaged 2026-10-22 from docs/reports/2026-10-15-backtest-silent-symbol-skip-reports-ok-defect.md; Track C; same triage-to-spec workflow as the debt-radar batch (254-273).
+  - Operator 2026-10-21 (standing, all features): x-trace-id must be propagated as much as possible; no C-03 waiver — request-derived emits/writes use context.WithoutCancel(ctx) (Go) / the inbound metadata (Python/Node), never a fresh background context; only work with no originating request (background sweepers/loops) may mint its own context, and it should still carry a trace id when one is available.
+  - Scope boundary: the root trigger (formulas stored under the legacy username author) is tracked separately in docs/reports/2026-10-22-indicators-legacy-username-formula-authors-defect.md and is NOT fixed here; 275 fixes the silent skip and the false-OK status. 275 lands after 272 (same RunBacktest lines; keep 272's `_BarFetchError` re-raise) and after 273; any run_backtest behaviour change updates the strat-lab backtest skill in the same PR.
+- Next: `/sdd-design fix-backtest-silent-symbol-skip`.
