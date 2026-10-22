@@ -263,3 +263,42 @@ unchanged (spec-ready), per the grilling protocol. The resume state is in the `s
 - [ ] Textual merge overlap with 241 and 263 (`authz.ts`; 241 also touches `perUserSecrets.test.ts`) and with 255
   (the three marketdata files). Whichever lands second rebases. Target: Steps 1 and 3.
 - [ ] The mTLS harness adds RSA keygen time (1 CA + 3 leaves) to the config suite. Target: Step 3 (watch only).
+
+## Session 2026-10-22 — sdd-spec
+
+- Generated implementation-spec.md with 9 steps. Status: design-approved → implementation-ready.
+- Steps:
+  - 1 service: D-39 client redaction, covering both the transport and build-request sites in both vendors.
+  - 2 test: client tests (AC-1, AC-2).
+  - 3 test: service-edge tests (AC-5, AC-7).
+  - 4 test: `mtlsTestPki.ts` extraction.
+  - 5 test: mTLS wire harness for the GetSecret describe (AC-4).
+  - 6 test: wire wrong-SAN negative, the red evidence (AC-3).
+  - 7 service: `peerSan: 'xstockstrat-marketdata'` plus the unit deny matrix (AC-3, AC-4, AC-6).
+  - 8 docs: invariants, the root config-governance line and the residuals defect report.
+  - 9 dev smoke grep.
+- Design-step numbering maps to spec steps as follows: design Step 3 (3a-3d) is spec Steps 4-7, design Step 4 is
+  spec Step 8, and design Step 5 is spec Step 9. The Open Threads "Target" step numbers above refer to the
+  design-step numbering.
+- No proto, migration, config-key, env-var or port step. marketdata's last migration is `009` and config's is `030`;
+  both are untouched.
+- Key codebase findings:
+  - **Body-read open thread resolved: no change and no test.** A `*url.Error` is built only by `Client.do`'s `uerr`
+    (`$GOROOT/src/net/http/client.go:665`, go1.27.0). `cancelTimerBody.Read` (`client.go:997-1009`) returns the raw
+    read error, or a `timeoutError` built from that error's text, with no URL. So `fmp_client.go:249-251` and
+    `finnhub_client.go:121-123` carry no key.
+  - `finnhub_client.go` does not import `"errors"` (`:5-16`); Step 1 adds it. `fmp_client.go` already imports it.
+  - Package `service` tests already import `internal/fmp` (`classification_service_test.go`), so Step 3 can pass a real
+    `*fmp.Client` into `newFundSvc` with no import cycle.
+  - The Steps 1-3 red-green cycle: Steps 2 and 3 are authored and run RED before Step 1's code. Two of the new tests
+    are characterization tests with "red N/A", recorded as such:
+    - the deadline-cause test, because raw `%w` already satisfies `errors.Is`;
+    - the transport-failure budget-refund test, which preserves feature-217 @AC-4.
+  - Step 7 must flip `perUserSecrets.test.ts:236-248` in the same commit as the grant, or the suite goes red between
+    steps (F-05). Step 6 [test] is the paired RED for Step 7 [service].
+  - The pre-merge SAN-material gate (`gen-dev-certs.sh:28`/`:50`, `deploy.yml:102`) is in Step 7's Verification.
+  - Docs drift targets confirmed by grep:
+    - `services/xstockstrat-config/CLAUDE.md:41`;
+    - `services/xstockstrat-config/docs/context-constitution.md:35` and `:51`;
+    - `services/xstockstrat-marketdata/CLAUDE.md:218`;
+    - root `CLAUDE.md` § Config Governance Rules.
