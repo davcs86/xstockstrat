@@ -417,3 +417,48 @@ The full /sdd-design debate is halted at its approval gate after round 2 (gate p
   "floor_breaches": []
 }
 ```
+
+## Session 2026-10-22 — sdd-design (approved + COMPLETION)
+
+- Phase 0 Recon: recon.md was written in an earlier session (services: xstockstrat-ui). Key reuse patterns:
+  - the `unary` wrapper in `makeTransport` (`connectClients.ts:67-68`);
+  - the existing fail-closed `refreshSession` → `null` path (`identity.ts:20-21`).
+- Phase 1 Grilling: 2 rounds, full mode. Resumed from the round-2 gate state above; no new debate round was run.
+  - Chosen approach: a 30s unary default at the transport wrapper, a 10s `REFRESH_TIMEOUT_MS` on `refreshSession`, and a 300s `LONG_RPC_TIMEOUT_MS` for 6 long calls.
+    - All four UI deadline constants live in a new leaf `src/lib/deadlines.ts`, and `FUNDAMENTALS_TIMEOUT_MS` moves there.
+    - `forwardAdmin` gains an additive `{ timeoutMs }` option.
+    - D-38 uses an exact-match `PUBLIC_HEALTH_PATHS` Set (all 8 paths), checked before `getSessionFromRequest`.
+    - Deleting the dead `api/health|health` matcher prefixes is recommended, pending re-confirmation against the feature-128/165 suites.
+  - Rejected:
+    - `createGrpcTransport({defaultTimeoutMs})`, because its effect on streams is unverified;
+    - a matcher regex rewrite;
+    - a 10s default with or without a coverage vitest;
+    - a 5s refresh bound;
+    - a `ui.*` config key;
+    - unit-only proof of AC-1/AC-6.
+- Constitution rules touched: F-07, P-02, P-03, C-03, C-11, C-12, C-13, C-15, C-16, C-18. Floor breaches: none.
+- **OPERATOR DECISION (binding, 2026-10-22, design gate r2):** APPROVED, choosing **Option 2**.
+  - KEEP `/accounts/api/agent-health` in FR-2 and the AC-3 Examples, exempt from the auth middleware like the other health routes.
+  - AC-3 expects that route's own handler 401 for anonymous probes.
+  - **Accepted risk:** the bare fetch at `authorized-apps/page.tsx:59` loses the middleware silent refresh for that path. An access token that expired after page load gets a 401, and the page shows the agent as unreachable until the next navigation refreshes the session.
+- **F-07 record.** `DEFAULT_UNARY_TIMEOUT_MS`, `REFRESH_TIMEOUT_MS`, `LONG_RPC_TIMEOUT_MS` and `FUNDAMENTALS_TIMEOUT_MS` are code constants, not config keys, because:
+  - the UI has no `WatchConfig`;
+  - the `ui` namespace is a one-shot `GetConfig`;
+  - these are untuned transport mechanics (precedent: `FUNDAMENTALS_TIMEOUT_MS`).
+- No C-16 CHANGE: durable ACs are PRESERVE, plus EXTEND of `@AC-4 @feature-128`.
+- Status: spec-ready → design-approved.
+- Ledger: no entry. Nothing beyond existing fails.md:2946-2950 / 2026-08-05 entries proved reusable.
+
+### Open Threads
+
+- [ ] agent-health exemption loses the silent refresh for `authorized-apps/page.tsx:59` (accepted by the operator, Option 2). Target: the spec's middleware step and the AC-3 `agent-health` row expecting 401.
+- [ ] Mandatory Grafana p99 gate (staging and production) on the D/provisional rows: the analysis/marketdata/ledger/indicators reads and the order mutations. p99 above 15s → class L or an explicit per-call bound. If there is no telemetry, record the operator's risk acceptance before implementation-ready. Target: `/sdd-spec`, before finalizing the table.
+- [ ] Refresh rotation-loss forced logout (`identityServiceImpl.ts:228-241`) across `middleware.ts:40`, `middleware.ts:76` and `api/auth/refresh/route.ts:10`. Accepted as fail-closed; cite identity RefreshToken p99 if available. Target: `/sdd-spec`.
+- [ ] A client deadline does not cancel server work (deleteBackfilledData, runBacktest, triggerBackfill, runFundamentalsScan, order mutations), so a 504 must not read as "nothing happened". A `replaceOrder` retry is rejected by the broker. Target: the spec's BFF step.
+- [ ] 300s LONG bound unmeasured; the DO edge HTTP timeout may cut the browser hop first. Target: the `/sdd-spec` p99 gate.
+- [ ] 30s default pins a BFF request for up to 30s on a hung backend. Accepted trade-off.
+- [ ] Delete the `api/health|health` matcher prefixes only after re-reading the feature-128/165 suites; otherwise keep them as deliberate dead prefixes. AC-4 gains `/healthcheck-x` and `/health/anything`. Target: the spec's middleware step.
+- [ ] Wire the black-hole h2 listener port/env var in both `mock-backend.ts` and `playwright.config.ts` (fails.md 2026-08-05). Target: the spec's e2e step.
+- [ ] AC-5 sentinel delivery on the server-stream path (x-trace-id vs a request field) is unverified, and the default mock stream must keep ending cleanly. Target: the spec's e2e step.
+- [ ] Sibling 273 (`fix-agent-client-deadlines`) default divergence: record why the values differ, don't force them to match. Target: `/sdd-spec`.
+- [ ] Carry the acceptance.feature edits: AC-1 → 30s, AC-2 stays 10s, AC-3 `agent-health` row → handler 401, AC-4 adds lookalikes. Target: `/sdd-spec`.
