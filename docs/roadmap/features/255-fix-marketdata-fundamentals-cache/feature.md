@@ -16,17 +16,20 @@
 | 2026-10-21 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-21-marketdata-fundamentals-cache-defect.md` (debt-radar D-19, D-50, D-51, D-52, D-53) |
 | 2026-10-22 | `draft` → `spec-ready` | /sdd-review | Product spec approved (6 warnings); OQ-1 resolved by operator: cap `<= 0` = zero budget |
 | 2026-10-22 | `spec-ready` → `design-approved` | /sdd-design | Design debated (4 rounds, full) and approved; recon.md + design.md written |
+| 2026-10-22 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 17 steps; AC-5/AC-6 refined, @AC-10 added, FR-4(b) rewritten per operator r3/r4 sign-off |
 
 ---
 
 ## Reviewers
 
-Snapshot from `docs/runbooks/reviewer-registry.md` at /sdd-triage time (2026-10-21). `/sdd-spec` overwrites it with per-step assignments.
+Snapshot from `docs/runbooks/reviewer-registry.md`, taken by `/sdd-spec` on 2026-10-22.
 
 | Reviewer | Focus | Steps |
 |---|---|---|
-| `xstockstrat-marketdata` owner | OHLCV/fundamentals ingestion integrity, vendor quota correctness, Alpaca feed reconnect behaviour | All steps |
-| `xstockstrat-analysis` owner | Downstream consumer of fundamentals (fundsignal scoring); read-only, informed of changed partial-row semantics | Only if design adds a partial marker visible on the wire |
+| `xstockstrat-marketdata` owner | OHLCV ingestion integrity, TimescaleDB hypertable partitioning, Alpaca feed idempotency | 2–16 (`service`/`test`) |
+| `xstockstrat-agent` owner | MCP tool contract stability (name, parameters, return shape) | 17 (read-only verification) |
+| `xstockstrat-ui` owner | Analytics display accuracy, Connect-RPC call safety | 17 (read-only verification) |
+| none | `docs` step | 1 |
 
 ---
 
@@ -36,7 +39,7 @@ Snapshot from `docs/runbooks/reviewer-registry.md` at /sdd-triage time (2026-10-
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
 - [Recon](recon.md) — grounded codebase dossier (Phase 0)
 - [Design](design.md) — approved design: chosen approach, rejected alternatives, open risks
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-marketdata-fundamentals-cache`_
+- [Implementation Spec](implementation-spec.md) — 17 numbered steps with codebase evidence
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -53,4 +56,4 @@ Five marketdata defects in the fundamentals path:
 
 ## Next Action
 
-`/sdd-spec fix-marketdata-fundamentals-cache` — generate implementation spec from the approved design
+`/sdd-review fix-marketdata-fundamentals-cache impl-spec` — validate implementation spec, then `/sdd-execute fix-marketdata-fundamentals-cache`
