@@ -232,3 +232,70 @@ OPERATOR DECISIONS (binding, recorded 2026-10-21):
   "floor_breaches": []
 }
 ```
+
+## Session 2026-10-22 — sdd-design
+
+- Phase 0 Recon: wrote recon.md (services: xstockstrat-ledger, xstockstrat-portfolio; key reuse patterns: the
+  `EXPORT_BATCH_SIZE` constant precedent and the `conditions[]` WHERE builder for keyset paging; the
+  `ErrQuotesUnavailable` sentinel and `classifyGetPnLError` for fail-closed).
+- Phase 1 Grilling: 2 rounds (full). Termination: approved.
+  - Chosen approach, three narrow edits with no proto, migration or config change:
+    - ledger `queryEvents` gets a keyset token (decimal `sequence`), `ORDER BY sequence`, and a 100/1000 clamp;
+    - ledger `streamEvents` replays in bounded batches on the pool, up to a `max(sequence)` bound captured after
+      subscribe, with a drain helper and a BigInt `maxSeq`;
+    - portfolio `GetPnL` fails closed through `ErrLedgerUnavailable` → UNAVAILABLE, rejects a repeated token,
+      uses PageSize 1000, and keeps the max cumulative `FilledQty` in pass 2.
+  - Rejected:
+    - a dedicated Cursor client (F-06);
+    - a `pg_snapshot_xmin` bound (kept as the named follow-up);
+    - an open-ended replay loop;
+    - a CI TimescaleDB job;
+    - a buffer cap;
+    - config keys now;
+    - absorbing 251.
+- Constitution rules touched: C-03, C-05, C-07, C-11, C-15, C-16, C-18, P-02, P-03, F-01, F-06, F-07, LEDGER-2,
+  LEDGER-3, PLAT-N1. Floor breaches: none.
+- Status: spec-ready → design-approved.
+
+OPERATOR DECISIONS (binding, recorded 2026-10-22):
+- Standing, 2026-10-21, all features: `x-trace-id` is propagated as far as possible. There is no C-03 waiver.
+  Request-derived emits and writes use `context.WithoutCancel(ctx)` (Go) or the inbound metadata (Python/Node), never
+  a fresh background context. Only work with no originating request may mint its own context, and it should still
+  carry a trace id when one is available. GetPnL keeps the request `ctx` on every page call.
+- Design gate r2: APPROVED as synthesized. The operator SIGNS OFF both spec changes:
+  - **(a)** FR-1, FR-7 and AC-5 "exactly once" are restated as "every matching event committed before the walk passes
+    its sequence is delivered exactly once, ascending; a lower sequence committing after the walk passed it is not
+    delivered by that walk".
+  - **(b)** FR-5 pass 2 uses the max cumulative `FilledQty` (strict `>`, first seen wins a tie) instead of last-wins.
+  - The manual run must include the string-typed sequence tests (`'9'`, `'10'`, `'11'`) and the real-pg token walk.
+    This closes the string-sequence blocking objection and accepts the AC-5 evidence plan.
+- `263-fix-edge-owner-scope` merges FIRST. 257 rebases onto 263's ledger `QueryEvents` owner filter and builds the
+  page token on top of it, so the token must work with the owner predicate. If a `QueryEventsRequest` field is
+  needed, 257 takes the next free field number after 263's `owner_only`. The current design adds none.
+
+Decisions:
+- FR-6 is met through UNAVAILABLE only. A ledger deadline is wrapped in `ErrLedgerUnavailable`, and no
+  DEADLINE_EXCEEDED mapping is added (recon.md:186-189).
+- 251's `SourceService` fix is not absorbed. `/sdd-spec` writes the `merge-order.md` row 257 ≤ 251, plus the 263
+  note and the rolling-deploy note.
+- `/sdd-spec` restates product-spec FR-1, FR-5 and FR-7 and acceptance AC-1 and AC-5 per sign-offs (a) and (b).
+
+## Open Threads
+
+Mirrored from design.md § Open Risks.
+- [ ] Late-commit skip: the window widens to the whole bounded replay. Document it in the LEDGER-* invariant, with
+  `pg_snapshot_xmin` as the follow-up (target: docs step).
+- [ ] AC-5 rests on one manual TimescaleDB run (`DB_POOL_MAX=1`, 200k rows, 5 replays). A failed run is a hard stop
+  before merge, and its remedy is a smaller `REPLAY_BATCH_SIZE` or migration 004 with DBA approval (target: manual
+  AC-5 step).
+- [ ] GetPnL availability scales with the platform fill count. Measure `per_page_ms`; the user-scoped walk follows
+  once `walk_ms` is more than 50% of the deadline (target: manual AC-5 step).
+- [ ] Realized P&L changes on purpose once there are more than 500 fills and 251 lands. Communicate it as a
+  correction (target: PR description and merge-order note).
+- [ ] The per-stream notifier buffer is unbounded and accepted as a limit (target: LEDGER-* invariant, docs step).
+- [ ] Rolling-deploy skew: old tokens or repeated pages give UNAVAILABLE (target: merge-order note, docs step).
+- [ ] Rebase coupling with 248 in `streamEvents`: the BigInt comparison must cover trimmed rows (target: replay step).
+- [ ] 263's owner scope may drop fills written before migration 003 (target: the rebase onto 263, before step 1).
+- [ ] The ledger real-impl tests depend on 252 (target: merge-order check at `/sdd-spec`).
+- [ ] The proto-loader `longs` option is unverified. The BigInt helper must accept number and string (target: step
+  1).
