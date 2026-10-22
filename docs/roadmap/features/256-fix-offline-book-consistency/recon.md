@@ -14,7 +14,8 @@ offline sync and deregistration consumers ack failed writes. D-48: a `GetOffline
 unrealized-only P&L that looks complete. D-49: `ConfirmOrder` accepts NaN, Inf or negative fill values.
 D-63: `ConfirmOrder` returns success when the `account.positions.synced` emit fails. The fix makes these
 paths fail closed and surface the failure. Redelivery is bounded so a poison event cannot block the stream.
-All four defects reproduce at the cited lines, re-grepped on this branch on 2026-10-21.
+All four defects reproduce at the cited lines, re-grepped on this branch on 2026-10-21. D-63 also has a
+second, deeper swallow inside trading's `emitLedgerEvent`.
 
 ## Codebase Map
 
@@ -84,7 +85,13 @@ All four defects reproduce at the cited lines, re-grepped on this branch on 2026
     - `recomputeAndEmitOfflinePositions(ctx, accountID, userID) error` (`:962`):
       - Its doc comment at `:961` reads "Fail-closed (a query error skips the emit). Caller must hold confirmLock".
       - It returns an error when the baseline or confirmed-orders query fails (`:964-978`).
-      - The emit/ledger-append tail was **not read** (see Risks).
+      - The emit is `s.emitLedgerEvent(ctx, "account.positions.synced", ...)` at `:1067`. An unconditional
+        `return nil` follows at `:1077`. There is no no-op or early-success path between `:978` and `:1077`,
+        so every successful recompute emits, a frozen-window confirm included.
+    - `emitLedgerEvent` (`:3661`) is **void**. It drops the `structpb.NewStruct` error (`:3662`) and bounds
+      `AppendEvent` with `ledgerEmitTimeout = 10 * time.Second` (`:3657`). On failure it only logs Warn
+      `"ledger emit failed"` (`:3671-3673`) and does not retry. It has 27 call sites in `trading.go`.
+      So an `AppendEvent` failure is swallowed **inside** the helper and never reaches ConfirmOrder's check at `:951`.
     - `SnapshotOfflinePositions` (`:1116`):
       - Per-row finite checks: `math.IsInf(pos.Qty, 0) || math.IsNaN(pos.Qty)` at `:1156` and the same for
         `AvgCostPerShare` at `:1160`. Negative cost is rejected at `:1164`.
@@ -97,9 +104,18 @@ All four defects reproduce at the cited lines, re-grepped on this branch on 2026
   - `src/components/trader/ConfirmFillDialog.tsx`:
     - `onError` (`:47-49`) puts `ConnectError.rawMessage` into local error state, which renders in a destructive `Alert`.
     - The form sends `filledQty: filledQty ? parseFloat(filledQty) : 0` and the same for price (`:36-37`).
-  - `src/hooks/useConfirmOrder.ts`: `useInvalidatingMutation` (`:3`, `:9`). Queries are invalidated only on success.
-  - `src/app/trader/portfolio/page.tsx:147`: `{error && <CardNotice variant="error">Portfolio unavailable</CardNotice>}`.
+    - Inputs are `type="number" min="0"`, so the browser form cannot send NaN or Inf. D-49 reaches trading
+      through the agent or a direct RPC.
+  - `src/hooks/useConfirmOrder.ts`: `useInvalidatingMutation`. It invalidates `['orders']`, `['order', id]`,
+    `['portfolios']` and `['positions']`, only on success (`:13-14`).
+  - Generic error states that an UNAVAILABLE read already reaches. None has code-specific text.
+    - `src/app/trader/portfolio/page.tsx:147`: `{error && <CardNotice variant="error">Portfolio unavailable</CardNotice>}`.
+    - `src/components/trader/PortfolioPanel.tsx:67`: `if (error || !data) return <CardNotice variant="error">Portfolio unavailable</CardNotice>;`
+      (from `usePortfolios` at `:64`).
+    - `src/app/trader/positions/page.tsx:506`: `Failed to load positions` (from `usePositions` at `:62`).
   - `src/hooks/usePortfolio.ts`: `usePortfolio` `:7`, `usePortfolios` `:21`, `usePositions` `:39`, `usePosition` `:63`.
+    `usePosition` retries any error except NotFound once (`:81`), so an UNAVAILABLE retries once and then errors.
+  - No e2e test covers a ConfirmOrder error path. `e2e/trader/offline-accounts.spec.ts` stubs only the happy path.
 
 - **`xstockstrat-agent`** (Python): consumer surface (C-14).
   - `app/tools.py`:
@@ -132,9 +148,12 @@ All four defects reproduce at the cited lines, re-grepped on this branch on 2026
   - Each caller keeps its own error shape: `INVALID_ARGUMENT` in ConfirmOrder, a per-row reject reason in Snapshot.
   - insights.md:1936 notes that the inverted range form also rejects NaN.
 - **Emit failure is not success (FR-6).**
-  - `recomputeAndEmitOfflinePositions` already returns `error` (`:962`), and `SnapshotOfflinePositions`
-    (`:1224`) already acts on it.
-  - ConfirmOrder only has to stop discarding that error at `:951-954`.
+  - `recomputeAndEmitOfflinePositions` already returns `error` (`:962`) for query failures, and
+    `SnapshotOfflinePositions` (`:1224`) already acts on it.
+  - Stopping the discard at `:951-954` is necessary but **not sufficient**. The ledger-append failure is
+    swallowed inside the void `emitLedgerEvent` (`:3661`, `:3671-3673`). FR-6 needs an emit that returns an
+    error for this call site, such as a sibling of `emitLedgerEvent` that returns the `AppendEvent` and
+    `NewStruct` errors. The helper's other 26 callers should stay unchanged (fails.md:2092, feature 021).
   - Confirm is absolute (it replaces `FilledQty`, `FilledAvgPrice` and `Fees`), so a client re-confirm under
     `confirmLock` is idempotent (AC-10 @feature-157).
 - **Error surfacing in the UI and agent (C-14).** Reuse the existing paths. `ConfirmFillDialog` `onError`
@@ -171,25 +190,31 @@ All four defects reproduce at the cited lines, re-grepped on this branch on 2026
 - **PRESERVE** `@AC-11 @FR-6 @feature-157`, `@AC-12 @FR-6 @feature-157` (`services/xstockstrat-portfolio/acceptance/offline-account-portfolios.feature`) — sell-to-close and sell-to-open reach the same end states through the sync write path.
 - **PRESERVE** `@AC-14 @FR-6 @feature-157` "A broker account's P&L is unaffected by the presence of an offline account" (`services/xstockstrat-portfolio/acceptance/offline-account-portfolios.feature`) — an offline-state failure must not change broker cards or totals.
 - **PRESERVE** `@AC-4 @regression @feature-206` "An empty broker position snapshot does not delete order-fill-derived positions" (`services/xstockstrat-portfolio/acceptance/fix-reconciliation-false-halt.feature`) — FR-1 changes only ack and retry; the `shouldReconcileSyncDeletions` guard stays.
-- **PRESERVE** `@AC-9 @FR-3 @feature-240` "Negative fees are rejected" (`services/xstockstrat-trading/acceptance/offline-account-full-pnl.feature`) — negative fees still get INVALID_ARGUMENT "fees must be >= 0" and the order is unchanged; FR-5 follows the same pre-load pattern.
+- **EXTEND** `@AC-9 @FR-3 @feature-240` "Negative fees are rejected" (`services/xstockstrat-trading/acceptance/offline-account-full-pnl.feature`) — FR-5 adds INVALID_ARGUMENT for a non-finite or negative `filled_qty`/`filled_avg_price` alongside it. Keep the "fees must be >= 0" message and the before-load ordering.
 - **PRESERVE** `@AC-48 @FR-3 @feature-240` "Un-confirm hides fees and filled_at; a bare re-confirm restores them" (`services/xstockstrat-trading/acceptance/offline-account-full-pnl.feature`) — `filled_qty 0` must stay valid, and the price is validated only when filling.
 - **PRESERVE** `@AC-8 @FR-3 @feature-240`, `@AC-21 @FR-3 @feature-240`, `@AC-37 @FR-3 @feature-240` (`services/xstockstrat-trading/acceptance/offline-account-full-pnl.feature`) — re-confirm and partial-to-full semantics, fee replace/keep and derived status (FR-7) stay.
 - **PRESERVE** `@AC-46 @FR-4 @feature-240`, `@AC-47 @FR-3 @feature-240` (`services/xstockstrat-trading/acceptance/offline-account-full-pnl.feature`) — a confirm inside the frozen window still succeeds; FR-6 must not fail it for lack of an emit.
 - **PRESERVE** `@AC-7 @FR-5 @feature-163` "One malformed baseline row is rejected while the valid rows commit" and `@AC-43 @FR-4 @feature-240` "A snapshot whose rows are all rejected changes nothing" (`services/xstockstrat-trading/acceptance/snapshot-offline-positions.feature`, `.../offline-account-full-pnl.feature`) — sharing the finite guard with `SnapshotOfflinePositions` must keep per-row reject-with-reason, not a whole-call error.
 - **PRESERVE** `@AC-5 @FR-4 @feature-157` "Editing an offline order confirmation from the UI marks it filled" (`services/xstockstrat-trading/acceptance/offline-account-portfolios.feature`) — this is the FILLED baseline for a valid fill (FR-7).
 - **PRESERVE** `@AC-9 @FR-8 @feature-157` "Order-confirmation edits are rejected for broker accounts" (`services/xstockstrat-trading/acceptance/offline-account-portfolios.feature`) — a broker order still gets FailedPrecondition; check the ordering against the new pre-load INVALID_ARGUMENT.
-- **PRESERVE** `@AC-15 @FR-1 @feature-157` "Deregistering an offline account purges its positions and realized P&L" (`docs/sdd/business-rules/platform.feature`) — FR-2 makes this purge reliable; the end state is unchanged.
+- **EXTEND** `@AC-15 @FR-1 @feature-157` "Deregistering an offline account purges its positions and realized P&L" (`docs/sdd/business-rules/platform.feature`) — FR-2 makes the purge survive a transient `DeleteOfflineRealized` failure through redelivery. The end state is unchanged.
+- **PRESERVE** `@AC-18 @FR-8 @feature-163` "Deregistering an offline account purges its baseline rows" (`docs/sdd/business-rules/platform.feature`) — same `account.deregistered` event. The baseline purge is trading-side and unchanged.
+- **PRESERVE** `@AC-14 @FR-3 @FR-4 @feature-163` "A later full-close snapshot reseats account realized P&L from 600.00 to 0.00" and `@AC-12 @FR-7 @feature-163` "Provenance is consistent across every portfolio read path" (`services/xstockstrat-portfolio/acceptance/snapshot-offline-positions.feature`) — the realized upsert from a sync event must still reseat under retry and park, and read-path parity holds.
+- **PRESERVE** `@AC-1 @regression @feature-229 @feature-240` and `@AC-5 @regression @feature-229` (`services/xstockstrat-portfolio/acceptance/fix-book-portfolio-page.feature`) — the quote-deadline bound and WARN stay, and GetPnL stays UNAVAILABLE without a quote.
+- **PRESERVE** `@AC-8 @FR-5 @feature-163` "A zero-qty baseline row flattens that symbol" and `@AC-15 @FR-5 @feature-163` (`services/xstockstrat-trading/acceptance/snapshot-offline-positions.feature`) — a shared finite guard must keep accepting qty 0 and avg 0.
 - **PRESERVE** `@AC-13 @FR-6 @feature-157 @feature-240` "Offline realized P&L survives a full position close and is shown on the account card" (`services/xstockstrat-ui/acceptance/offline-account-portfolios.feature`) — a healthy card still shows both realized rows.
-- **PRESERVE** `@AC-15 @FR-6 @feature-240`, `@AC-14 @FR-6 @feature-240`, `@AC-30 @FR-6 @feature-240` (`services/xstockstrat-ui/acceptance/offline-account-full-pnl.feature`) — healthy P&L cards and the combined sum are unchanged, and a degraded offline account must not produce a combined total that looks complete.
-- **PRESERVE** `@AC-16 @FR-6 @feature-240`, `@AC-32 @FR-6 @FR-5 @feature-240` (`services/xstockstrat-ui/acceptance/offline-account-full-pnl.feature`) — the existing stale-mark and "No price" indicators stay; any degraded state is additive.
+- **EXTEND** `@AC-15 @FR-6 @feature-240` "The Book page offline card shows the P&L summary" and `@AC-14 @FR-6 @feature-240` "The trader account card shows full P&L for an offline account" (`services/xstockstrat-ui/acceptance/offline-account-full-pnl.feature`) — FR-4 adds an error or degraded state for these cards. The healthy summary is unchanged, and an unrealized-only figure is never shown as the account total.
+- **PRESERVE** `@AC-30 @FR-6 @feature-240` "The combined PortfolioPanel sums each account's own figures" (`services/xstockstrat-ui/acceptance/offline-account-full-pnl.feature`) — a degraded offline account must not produce a combined total that looks complete. See the ListPortfolios fork in Risks.
+- **PRESERVE** `@AC-16 @FR-6 @feature-240`, `@AC-31 @FR-6 @feature-240`, `@AC-32 @FR-6 @FR-5 @feature-240` (`services/xstockstrat-ui/acceptance/offline-account-full-pnl.feature`) — the existing stale-mark and "No price" indicators stay; any degraded state is additive.
 - **PRESERVE** `@AC-2 @FR-3 @feature-159 @feature-240 @regression`, `@AC-3 @FR-4 @feature-159 @regression`, `@AC-4 @FR-4 @feature-159 @feature-240 @regression` (`services/xstockstrat-ui/acceptance/fix-offline-account-ui-gaps.feature`) — the offline card never shows Cash or Buying Power, and offline balances never blend into broker aggregates, including in the error or degraded state.
 - **PRESERVE** `@AC-3 @FR-2 @feature-157` "Offline accounts appear alongside broker accounts in the account selector" (`services/xstockstrat-ui/acceptance/offline-account-portfolios.feature`) — one failing offline account must not drop the broker accounts from the selector or the Book page.
-- **EXTEND** (no existing `@AC-*` covers these cases). The feature adds, alongside the guarantees above:
+- **EXTEND** (net-new cases with no existing `@AC-*` to attach to). The feature also adds:
   - (a) rejection of a non-finite or negative `filled_qty`/`filled_avg_price` (FR-5);
   - (b) an emit failure is not reported as success (FR-6);
   - (c) bounded redelivery of failed offline sync and deregistration events (FR-1..3);
   - (d) UNAVAILABLE or a degraded valuation when `GetOfflineStates` fails (FR-4).
   - No existing scenario asserts the buggy behaviour, so there is **no CHANGE**.
+  - `@AC-*` numbers repeat across features and suites. Cite them by suite path plus `@feature-*`, as above.
 - No existing acceptance suite for xstockstrat-agent yet. The agent and `ConfirmFillDialog` error displays are new EXTEND coverage under C-14.
 - **Superseded design decision (not an `@AC`).** Feature 240 recorded "a `GetOfflineStates` error is non-fatal
   (WARN, empty map)" in `docs/roadmap/features/240-offline-account-full-pnl/context.md:399`. FR-4 supersedes it.
@@ -242,15 +267,23 @@ All four defects reproduce at the cited lines, re-grepped on this branch on 2026
     the choice.
   - `filled_qty 0` with price 0 must stay valid (AC-48 @feature-240). The UI form can send `0` but not NaN
     (`ConfirmFillDialog.tsx:36-37`), so the NaN case mainly reaches trading from the agent or direct gRPC callers.
-- **FR-6 frozen-window confirm (AC-46 @feature-240).** A confirm that needs no emit must still succeed. The
-  `recomputeAndEmitOfflinePositions` tail past `:978` (the emit and ledger-append, and whether a no-op recompute
-  returns nil) was **not read**. Verify it before choosing between in-call retry and returning the error.
-  - Also confirm whether the ledger append already retries (portfolio's `emitEvent` does, per its CLAUDE.md;
-    trading's was not checked).
-- **Not opened:** `packages/proto/portfolio/v1/portfolio.proto` and the UI consumers `PortfolioPanel.tsx`,
-  `app/trader/positions/page.tsx`, `positions/[symbol]/page.tsx` and `orders/[id]/page.tsx`.
-  - Their error rendering under UNAVAILABLE is unverified.
-  - `usePosition` special-cases only NotFound and retries once (`usePortfolio.ts:63`, per digest).
+- **The FR-6 emit failure is swallowed one level deeper than the spec cites.** `emitLedgerEvent`
+  (`trading.go:3661`) is void and Warn-only (`:3671-3673`), with no retry. `recomputeAndEmitOfflinePositions`
+  then returns `nil` unconditionally (`:1077`). Fixing only `:951-954` would leave D-63 open whenever the
+  ledger is down.
+  - Shared-helper trap (fails.md:2092, feature 021): changing `emitLedgerEvent`'s signature touches 27 call
+    sites. Prefer a narrow variant that returns an error for this one emit. Design records the choice.
+  - `SnapshotOfflinePositions` (`:1224-1227`) has the same swallow pattern around the same function. It is
+    outside the spec's D-63 wording, but an emit that returns errors changes what it receives. Design states
+    whether it is in scope.
+- **FR-6 frozen-window confirm (AC-46 @feature-240).** Verified: there is no no-op path in `:962-1077`, so a
+  frozen-window confirm still recomputes and emits. With a healthy ledger, returning the emit error does not
+  turn AC-46 into a failure. The confirm fails only when the ledger append itself fails, which is FR-6's intent.
+- **Not opened:**
+  - `packages/proto/portfolio/v1/portfolio.proto`. A grep for `degraded` in it found nothing, so no marker
+    exists today.
+  - `positions/[symbol]/page.tsx` and `orders/[id]/page.tsx`. Their rendering under UNAVAILABLE is unverified.
+  - `src/lib/connectClients.ts`. Its `Code.Unavailable` handling at `:138` is unread.
 - **Ledger traps that apply:**
   - `fails.md:2028` (163, confirmLock): any retry of the recompute and emit must stay inside the same per-account
     `confirmLock`, which is non-reentrant. Do not re-acquire it in a retry helper.
@@ -275,6 +308,8 @@ Advisory input to the debate and /sdd-spec. Not binding.
    - Refactor `SnapshotOfflinePositions` `:1156-1160` onto the helper with no behaviour change.
    - Tests: extend `TestConfirmOrder_Validation`, `TestDeriveOfflineStatus` and the AC9 template.
 2. **Trading FR-6 (D-63).**
+   - Add an emit that returns an error for the `account.positions.synced` append, leaving `emitLedgerEvent`'s
+     other callers alone, and have `recomputeAndEmitOfflinePositions` return that error.
    - Make ConfirmOrder return an error on a recompute or emit failure at `:951`; a bounded in-lock retry is optional.
    - Test with a failing `fakeBaselineStore` or `recordingLedger`, then show that a re-confirm succeeds and emits.
    - Verify frozen-window AC-46.
