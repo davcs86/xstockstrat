@@ -478,3 +478,60 @@ halt). design.md is not written and status stays `spec-ready`.
 - Ledger: no new line. Every reusable lesson here is already covered by `fails.md:1688-1693` and feature 247's
   deadline precedent.
 - Next: `/sdd-spec fix-ingest-poller-backfill`.
+
+## Session 2026-10-22 — sdd-spec
+
+- Generated implementation-spec.md with 9 steps: 4 `service` + 4 paired `test` + 1 `docs` teardown.
+  Status: design-approved → implementation-ready.
+- Inputs:
+  - design.md § Chosen Approach (mandatory); its Rejected Alternatives were excluded.
+  - recon.md § Patterns to REUSE (cited directly).
+  - The LAST `sdd-batch-design-state` block (the design-state correction entry). The earlier block is feature 265's
+    and was ignored.
+- Scenario coverage (C-15):
+  - AC-1, AC-8 → Step 4;
+  - AC-5, AC-7 → Step 2;
+  - AC-4 → Step 6;
+  - AC-2 (bars + fundamentals outline), AC-3, AC-6 → Step 8.
+  - The `@AC-4 @feature-166` EXTEND (single object with `tags`) is asserted in Step 2.
+- Consumer surfaces (C-14): no `xstockstrat-ui` / `xstockstrat-agent` step. The surfaces read the persisted rows
+  the fix corrects, and no schema changes (no `result_key`). Recorded in § Execution Summary.
+- Key codebase findings (re-verified on branch @ 2f6411ca; recon line anchors all still resolve):
+  - `mcp_client_loop.py`: `_extract_result_items` `:34-52`, unguarded loop `:124-125`, `resolve_secret` call
+    `:116`, timeout read `:133-138`, per-source catch `:143-152`.
+  - `watcher.py`: `resolve_secret` `:146-164`, with `GetSecret` at `:155-163` and no `timeout=`. `import grpc` is
+    at `:10`.
+  - `servicer.py`:
+    - semaphore `:493` → RUNNING `:494-499`;
+    - blanket except `:510-524`;
+    - fundamentals `update_job` `:544-551`;
+    - `_resume_job` `:723-738` (`()` meta `:737-738`);
+    - `CancelBackfill` set-add `:896` before the only CANCELED write `:900`.
+  - Test fakes that must widen with `timeout=None`:
+    - `_FakeSecretStub.GetSecret` `test_mcp_client.py:27`;
+    - `_FakeCfgWatcher.resolve_secret` `test_mcp_client_loop.py:65`;
+    - `_PerOwnerCfgWatcher.resolve_secret` `:210`.
+  - `_mcp_source` default owner is `seed-user` (`test_mcp_client_loop.py:72`).
+  - `int_positive` is **Not found** in `app/`, so feature 244 has not landed. Step 5 keeps
+    `max(get_int(...), 1)` unless 244 merges first.
+  - No migration (last ingest migration `014_contract_signal_ownership`, untouched). No proto, no config key.
+
+### Decisions
+
+- **Cancel tests go in `tests/test_ingest_servicer.py`, not `tests/test_cancel_backfill.py`.**
+  - `make_servicer(max_concurrent=...)` (`:31`), `patch_chunk_repo` (`:431`) and the fundamentals helpers
+    (`:1724-1737`) live there.
+  - `test_cancel_backfill._make_servicer` hardcodes `backfill_max_concurrent_jobs = 5`.
+  - This is a placement choice only; the tests are still driven through `CancelBackfill` plus repo fakes.
+- **O-3 guard test RED.** It passes on today's tree (the ordering is already correct). Its RED is demonstrated at the
+  TDD gate by temporarily reordering `CancelBackfill` `:896`/`:897`.
+- **Merge-order row 244 → 261 (WARN) is proposed, not written.** This run's write scope is the feature directory, and
+  the row needs user confirmation. Pick it up at `/sdd-review impl-spec` or `/sdd-sync`.
+
+### Open Threads
+
+- [ ] Add the `merge-order.md` row 244 → 261 (WARN) once confirmed.
+- [ ] Step 9 files the seeded key-form defect report (`docs/reports/2026-10-22-ingest-mcp-client-timeout-seed-key-form-defect.md`).
+- Ledger: no new line. The lessons are already covered by `fails.md:1688-1693` and the 2026-08-06
+  durable-observable-backfills entry.
+- Next: `/sdd-review fix-ingest-poller-backfill impl-spec`, then `/sdd-execute fix-ingest-poller-backfill`.
