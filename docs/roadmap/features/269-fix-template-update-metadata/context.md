@@ -176,3 +176,142 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   "floor_breaches": []
 }
 ```
+
+## Session 2026-10-22 — sdd-batch design gate (round 2)
+
+- The `/sdd-design fix-template-update-metadata` full debate is at its approval gate after round 2, and the gate policy is halt. Per the grilling protocol, design.md is not written and status.md stays `spec-ready`. The state block below lets the next /sdd-batch run pick up from here.
+
+### Open Threads
+
+- **Approach (r2 synthesis).** The r1 code repair is unchanged. It has three independent steps, and each lands its code, fakes and tests together. No proto, migration or config change and no new service edge.
+  - **Indicators (FR-1, FR-4):** `update(meta, payload_json)` now writes name/description, binding `meta.description or ""`. `retire` adds `updated_at = NOW()` and keeps first-wins `COALESCE(retired_at, NOW())`. Call site: `servicer.py:652`.
+  - **Analysis (FR-1):** same `update` change, binding raw `meta.description`. `retire` is unchanged. Call site: `servicer.py:3581`.
+  - **Ingest (FR-3, FR-5):** `retire` becomes first-wins plus `updated_at`. CREATE gets an empty-`template_id` guard returning INVALID_ARGUMENT, placed after the db gate, the ADMIN gate and `meta =`, and before `validate_config_json`. The `uuid4()` fallback at `:1540` is dropped.
+  - **UPDATE semantics:** an empty name or description fully replaces the stored value in all three services. This is a deliberate change for indicators and analysis, pinned by a bind test.
+  - **Proof:**
+    - Red-first repo tests on SQL text plus bound args. These are the @AC evidence for indicators and ingest.
+    - A required analysis real-PG file:
+      - DDL is read from migration 026 with an anchored regex, plus a guard that no other migration mentions the table.
+      - Each repo call runs as its own autocommit statement.
+      - RETIRE assertions are strict: second `updated_at` > first `updated_at` and > `retired_at`. This leg is a regression pin, not FR-3/FR-4 evidence.
+    - Wiring-only handler tests.
+    - Every fake and broken test is listed in the step Files.
+  - **Agent assumption closed:** the agent has no ManageTemplate path.
+  - **Trace-id:** not engaged.
+- **Strongest open objection (non-blocking, [C-15]).** @AC-2 (`acceptance.feature:17-22`) binds the literal retire times 10:00Z and 11:00Z, and no planned test can bind to them. The spec must rewrite it in relative form: a second RETIRE leaves `retired_at` unchanged and moves `updated_at` past `retired_at`. It must also map each service to its evidence: SQL plus bound args for indicators and ingest, runtime for analysis.
+  - **Other open spec-level items:**
+    - strict `>` and autocommit-per-call for the real-PG check;
+    - the 026 DDL anchor and the no-other-migration guard;
+    - a C-16 launch promotion rule for the @AC-1..3 collision with feature 224 (keep `@feature-269` and dedupe on the (feature, AC) pair, or renumber, named explicitly);
+    - a durable home for the indicators/ingest real-PG gap in `docs/context-constitution-findings.md` or the debt radar.
+  - All three r1 blocking objections are closed by the r2 proposer's confirmation.
+- **Floor status:** no breaches. The adversary returned SOUND.
+- **@AC changes:**
+  - Feature-269 @AC-1, @AC-2 and @AC-3 are CHANGE, covered by the operator's D-41 scope decision. @AC-2 is still to be relativized.
+  - Durable @AC-13, @AC-17 and @AC-31 are PRESERVE.
+  - @AC-14 is EXTEND: UPDATE still bumps the version and now also writes name/description.
+  - No @AC change is left uncovered.
+
+```sdd-batch-design-state
+{
+  "round": 2,
+  "synth": {
+    "approach": "Current best approach (r2 synthesis). The r1 code repair stands unchanged and the r2 proposer has confirmed all three r1 blocking objections. The r2 adversary's proof refinements are folded in. There are three independent per-service steps, and each lands its code, fakes and tests together. No proto, migration, config or new service edge is involved.\n\n1. Indicators (FR-1, FR-4) — services/xstockstrat-indicators/app/services/formula_templates_repository.py\n   - `update(template_id, payload_json)` becomes `update(meta, payload_json)`.\n   - SQL: `SET name=$2, description=$3, payload=$4::jsonb, version=version+1, updated_at=NOW() WHERE template_id=$1 AND retired_at IS NULL`.\n   - Binds `meta.description or \"\"`, mirroring this class's own `create`.\n   - `retire` adds `, updated_at = NOW()` and keeps `COALESCE(retired_at, NOW())` with the WHERE unfiltered.\n   - Call site: app/handlers/servicer.py:652 becomes `update(meta, payload)`.\n\n2. Analysis (FR-1) — services/xstockstrat-analysis/app/repositories/strategy_templates.py:54-66\n   - Same signature and SQL change. Binds `meta.description` raw, as its `create` does at :48.\n   - `retire` (:68-78) is unchanged.\n   - Call site: app/handlers/servicer.py:3581.\n\n3. Ingest (FR-3, FR-5)\n   - In app/repositories/source_templates.py, `retire` becomes `SET retired_at = COALESCE(retired_at, NOW()), updated_at = NOW()` with the WHERE unfiltered. The SQL is copied from analysis strategy_templates.py:72.\n   - In app/handlers/servicer.py `ManageTemplate`, add a CREATE-only empty-`template_id` guard that returns INVALID_ARGUMENT. Required order, written into the step text: after the db gate (:1513-1515), after the ADMIN gate (:1517-1519) and after `meta =` (:1521), and before `validate_config_json` (:1527).\n   - Drop `or str(uuid.uuid4())` at :1540. `import uuid` stays because :398 still uses it.\n\nEmpty name/description on UPDATE fully replaces the stored value in all three services. This is a deliberate behavior change for indicators and analysis. Record it in context.md and pin it with a bind test.\n\nProof plan (final form):\n- (a) Each service gets red-first repo tests that assert the SQL clauses and the bound args (`fetchrow.call_args.args`). For indicators and ingest these are the @AC-1/@AC-2/@AC-3 evidence.\n- (b) Required file services/xstockstrat-analysis/tests/test_strategy_templates_real_pg.py, with `pytestmark = pytest.mark.real_pg`:\n  - It uses the session `local_pg` fixture (tests/conftest.py:368-375, which fails under CI=true; ci.yml:393-397 installs PG) and the `_pool()` pattern of tests/test_read_budget_real_pg.py:25-28.\n  - It runs `CREATE SCHEMA analysis`, then the DDL read from migrations/026_owner_dimension_templates.up.sql:89-99. The regex is anchored on `CREATE TABLE IF NOT EXISTS analysis.strategy_templates` and ends at the first `\\n);`, not a lazy `\\)`, because `DEFAULT NOW()` sits at :97-98.\n  - It asserts the statement was found, and asserts that no other `migrations/*.up.sql` mentions `strategy_templates`. Verified today: only 026 does. This makes the test fail loudly when a later ALTER lands.\n  - Each repo call runs as its own autocommit statement through the pool, never inside one `conn.transaction()`, because `NOW()` is the transaction start time.\n  - It proves: UPDATE persists name/description with version 1 to 2; UPDATE of a retired row returns None; double RETIRE keeps the first `retired_at` and has second `updated_at` strictly greater than first `updated_at` and strictly greater than `retired_at` (`pg_sleep(0.01)` between calls, no wall-clock literals); bind order with distinct name/description/payload values.\n  - The RETIRE leg is a regression pin for analysis. It is not FR-3 or FR-4 evidence.\n- (c) Handler tests check wiring only: they spy at the repo boundary for method, args and response mapping. No clock and no first-wins logic go into the fakes.\n- (d) Fakes and broken tests are listed in the step Files:\n  - analysis tests/test_strategy_templates.py: `FakeTemplates.create` (:99-103) gains description; `.update` (:105-110) takes the new signature; `.retire` (:112-116) is listed; :686 is rewritten.\n  - indicators tests/test_formula_templates.py: `_FakeTemplates.update` (:83-89); SQL tests at :535 and :545; handler test :241.\n  - ingest tests/test_source_templates.py: :445 is rewritten, and @AC-2/@AC-3 tests are added.\n\nSpec deliverables:\n- Rewrite @AC-2 in relative form. Today acceptance.feature:20 binds the literal times 10:00Z/11:00Z. New Then-clauses: \"a second RETIRE leaves retired_at unchanged and moves updated_at past retired_at\". Then map each service to its evidence: indicators and ingest are SQL text plus bound args; analysis is runtime.\n- A merge-order.md entry for the overlap with features 244/245 on the indicators servicer.py (:652) and analysis servicer.py (:3581).\n- A launch-step promotion rule for the @AC-1..3 ID collision with the feature-224 scenarios in each private-by-default-templates.feature suite. Keep the `@feature-269` tag and dedupe on the (feature, AC) pair, or renumber. State which one explicitly.\n- File the indicators/ingest real-PG harness gap durably in docs/context-constitution-findings.md or the debt radar, not only in context.md.\n\nClosed assumption: the agent has no ManageTemplate path; only the three servicers and the UI call it. So FR-5 and empty-name full-replace have no agent consumer.\n\nTrace-id standing decision: not engaged. No new outbound calls, emits or contexts are added, and inbound metadata is untouched.",
+    "open_objections": [
+      {
+        "text": "[C-15] @AC-2 (acceptance.feature:17-22) binds literal retire times 2026-10-21T10:00Z/11:00Z that no planned test can bind to. Rewrite it in relative form: second RETIRE leaves retired_at unchanged; updated_at advances past retired_at. In the spec, map each service to its evidence: indicators/ingest = SQL text plus bound args, analysis = runtime. Adopted in the synthesis; stays open until the spec makes the edit.",
+        "blocking": false
+      },
+      {
+        "text": "[C-18 / fails.md:2253] Real-PG check (c) must be strict: second updated_at > first updated_at AND > retired_at. The proposal's '>=' passes even when the fix is missing. The step text must state that each repo call is its own autocommit statement via the pool (test_read_budget_real_pg.py:25-28), never one conn.transaction(), because NOW() is the transaction start time. context.md must say the analysis RETIRE leg is a regression pin, not FR-3/FR-4 evidence. Adopted in the synthesis; the proposer has not yet confirmed.",
+        "blocking": false
+      },
+      {
+        "text": "[C-18 DRY] Reading the DDL from migration 026 drifts silently once a later migration alters the table. The regex must anchor on `CREATE TABLE IF NOT EXISTS analysis.strategy_templates` and end at the first `\\n);`, because DEFAULT NOW() sits at 026:97-98. The test must also assert that no other migrations/*.up.sql mentions strategy_templates; verified today that only 026 does. Adopted in the synthesis; the proposer has not yet confirmed.",
+        "blocking": false
+      },
+      {
+        "text": "[C-16] @AC-1..3 share numbers with the feature-224 scenarios in each private-by-default-templates.feature suite. The spec launch step must name the promotion rule: keep @feature-269 and dedupe on the (feature, AC) pair, or renumber. The r1 synthesis named tagging, but r2 did not carry it into a step.",
+        "blocking": false
+      },
+      {
+        "text": "[C-18 / fails.md:2716] The accepted runtime-proof gap for indicators and ingest (no real-PG harness) needs a durable home: an entry in docs/context-constitution-findings.md or the debt radar, not only context.md, which gets archived and pruned.",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "@AC-1 (feature-269: UPDATE persists name/description, full-replace)",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@AC-2 (feature-269: RETIRE first-wins retired_at + updated_at stamp; scenario text to be relativized)",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@AC-3 (feature-269: ingest CREATE requires template_id, INVALID_ARGUMENT)",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@AC-13 (admin gate before template writes; ingest guard placed after it)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-14 (UPDATE bumps version; now also writes name/description)",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-17 (retire does not touch instance rows)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-31 (retire WHERE unfiltered / repeat retire returns row)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "update(template_id, name, description, payload) signature: lost to update(meta, payload_json). meta matches the sibling create(meta, ...) and keeps each call-site diff to one line.",
+      "Shared Python template-repo module (D-20): it would give one SQL source and one real-PG test for all three services, but it crosses service package boundaries, is out of spec scope, and would collide with 266-fix-db-tls-fail-closed.",
+      "COALESCE(NULLIF($2,''), name) keep-prior UPDATE semantics: adds a second UPDATE rule that diverges from ingest, and nothing asks for it.",
+      "Empty template_id guard for all ingest ops: changes UPDATE/RETIRE from NOT_FOUND to INVALID_ARGUMENT with no @AC asking for it.",
+      "Copying local_pg into the indicators and ingest conftests for real-PG tests: would close the runtime gap, but copies about 50 lines of fixture per service, the per-feature rig fails.md:2253 rules out. Replaced by a durable findings/debt-radar follow-up.",
+      "Inline DDL copy in the analysis real-PG test: it drifts from the real schema. Lost to reading migration 026 plus a no-other-migration-mentions-the-table assertion.",
+      "Running every analysis migration in order for the real-PG test: not viable, because 026 depends on SEED_USER_ID and earlier tables.",
+      "Handler-level @AC-2 proof through injectable-clock or first-wins fakes: it proves only the fake (fails.md:2253).",
+      "SQL text plus bind-arg proof everywhere, with no analysis real-PG test: it repeats the vacuous-green pattern in the one service where a harness already exists."
+    ],
+    "open_risks": [
+      "Indicators and ingest have only SQL text plus bound-arg proof. A column or bind-order mistake mirrored in both the SQL and its assertion would pass. Accepted, and to be filed durably (findings or debt radar) as a shared real-PG fixture follow-up.",
+      "Analysis real-PG RETIRE timing depends on separate autocommit statements. A future refactor that wraps the calls in one transaction makes the strict assertion fail falsely; mitigated by the step text.",
+      "Direct gRPC callers that send name=\"\" on UPDATE now blank the name in indicators and analysis. Intentional; the UI always sends both fields and the agent has no ManageTemplate path.",
+      "Merge conflicts with features 244/245 on the indicators servicer.py:652 and analysis servicer.py:3581 until merge-order.md sequences them.",
+      "Promoting @AC-1..3 could collide with the feature-224 IDs in the durable suites if the launch step does not name a dedupe or renumber rule."
+    ],
+    "constitution_rules_touched": [
+      "C-11",
+      "C-13",
+      "C-15",
+      "C-16",
+      "C-18",
+      "P-02",
+      "P-03",
+      "P-06",
+      "F-01",
+      "F-04",
+      "F-06",
+      "F-07",
+      "C-03 (not engaged: no new outbound/emit contexts)"
+    ],
+    "rationale": "The r2 proposer explicitly confirmed all three r1 blocking objections:\n- @AC-2 proof comes from repo SQL text plus bound args, and handler tests check wiring only;\n- the analysis real-PG test is required;\n- the fakes and broken tests are listed in the step Files.\n\nThe process objection (merge-order.md as a deliverable) was also accepted, so all r1 objections close. The adversary returned SOUND with no Floor breaches and five non-blocking objections. I verified two of its claims:\n- `grep strategy_templates migrations/*.up.sql` hits only 026, so the drift guard passes today and is cheap.\n- acceptance.feature:20 binds literal 10:00Z/11:00Z retire times, so the @AC-2 text does need relativizing.\n\nThe `>=` comparison in check (c) is a real vacuous-pass hole, and the transaction-scoped NOW() trap is real. Both are folded into the approach as strict assertions and autocommit-per-call. The adversary also closed the proposer's agent assumption: no agent ManageTemplate path exists.\n\nThe remaining objections are spec-level edits: the @AC-2 rewrite, the C-16 promotion rule, and a durable home for the gap. None of them changes the code repair, so none blocks design approval. They stay open because the r2 proposal did not concretely answer them. The feature-269 @AC-1..3 changes are sanctioned by the operator's D-41 scope decision. Durable @AC-13/17/31 are preserved, and @AC-14 is extended."
+  },
+  "floor_breaches": []
+}
+```
