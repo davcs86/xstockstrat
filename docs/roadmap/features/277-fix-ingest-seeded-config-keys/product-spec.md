@@ -43,7 +43,7 @@ Operator-facing config surfaces: the agent `set_config` / `list_config_keys` / `
 ## Fix Scope
 
 - [x] No proto changes anticipated
-- [x] Database migration required: a new config migration (NNN must be 033 or later: the config tip is `030_marketdata_edgar_snapshot_keys`, and features 243 and 244 already claim 031 and 032; re-derive across remote branches at spec time) with an up/down pair that re-keys the five seeded rows in place (FR-2). It must not blind-UPDATE onto an existing dotted row (unique key tuple; Open Question 2), and carries migration 029's guards (`is_secret=false`, `NOT LIKE` guard) with `ingest` added to scope. Seeds 005/025 cover the `dev` and `production` environment rows; reconcile with the staging wording at spec time. Applied migrations 005 and 025 are not edited.
+- [x] Database migration required: a new config migration (NNN must be 033 or later: the config tip is `030_marketdata_edgar_snapshot_keys`, and features 243 and 244 already claim 031 and 032; re-derive across remote branches at spec time) with an up/down pair that re-keys the five seeded rows in place (FR-2). It must not blind-UPDATE onto an existing dotted row (unique key tuple; Open Question 2), and carries migration 029's guards (`is_secret=false`, `NOT LIKE` guard) with `ingest` added to scope. Seed 005 covers `dev` and `production` (trading_mode `all`); seed 025 covers `staging` and `production` (user_id NULL). The re-key must cover dev, staging and production rows. Run order is explicit: 277's migration runs after 243's (031) and 244's (032) by numeric file order, so it claims 033 (or the next free number at spec time; 248 also claims 032, a peer-only slot clash that does not involve 277). Applied migrations 005 and 025 are not edited.
 - [x] Config key changes required: the five keys above change from bare to full dotted form (FR-1). The re-key-seeds vs change-readers fork is open (see Open Questions).
 
 ## Open Questions (for /sdd-design)
@@ -56,6 +56,13 @@ Operator-facing config surfaces: the agent `set_config` / `list_config_keys` / `
 ## Acceptance Criteria
 
 See `acceptance.feature` — the regression scenario(s) that must fail on the buggy behavior and pass after the fix (Constitution **C-15**). Plus: existing tests pass; affected service(s) smoke-tested on dev.
+
+## Coordination with Overlapping Features
+
+- **244 `fix-python-config-stored-zero`** (implementation-ready) rewrites the `watcher.py` and `mcp_client_loop.py` reads of these keys (incl. `ingest.backfill.max_concurrent_jobs`) to `int_positive`. Ownership split: 277 owns the stored key form and seeds; 244 owns reader value semantics. 277 changes readers only if Open Question 1 selects the readers option, and then only after agreeing the exact key strings with 244 to avoid a merge conflict. A seed decision for `max_concurrent_jobs` (FR-4) must be recorded against 244's zero-trap test (default 3).
+- **261 `fix-ingest-poller-backfill`** (implementation-ready) reuses `ingest.mcp_client.request_timeout_seconds` for its GetSecret timeout and references the bare 025 seed row. 277 re-keys that row to the dotted form; 261's step must be re-checked against the final key form at 277's design.
+- **INGEST-9** in `services/xstockstrat-ingest/docs/context-constitution.md` is edited by 277 (FR-5), 261 and 244; expect a doc merge conflict, resolved by merging in `merge-order.md` order.
+- Open Question 1 is settled with 244 and 261 before `/sdd-spec`; AC-1 to AC-3 assume the seeds-re-keyed outcome and are revised if the readers option is chosen.
 
 ## Out of Scope
 
