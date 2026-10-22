@@ -45,3 +45,43 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   freshness by `updatedAt` vs dropping stream records on each poll.
 - Operator decisions (2026-10-21): grouped by service+theme from the debt-radar scan; Track C for all SEV-2 (precedent #1264); batch launched via /sdd-batch with designGate halt.
 - Development branch: feature/fix-ui-trader-feedback
+
+## Session 2026-10-22 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready. Criteria verdict PASS WITH WARNINGS (0 fails, 0 floor
+  breaches); overlap verdict WARN (file-level only).
+- Warnings (resolved in this session unless noted):
+  - C-15: FR-2 alert stream had no scenario. **Resolved:** added AC-9 (alert stream disconnect + reconnect).
+  - C-15: FR-5 global mutation `onError` fallback (`lib/queryClient.ts`) had no scenario. **Resolved:** added AC-10.
+  - AC-3 checked the Paper label only on `/trader`. **Resolved:** added AC-12 (Scenario Outline over `/trader`,
+    `orders`, `positions`, `positions/AAPL`, `portfolio`). AC-3's `tradingMode` request assertion is kept as an
+    API-boundary check. **Open:** none.
+  - AC-7 disjunction. **Resolved:** AC-7 is now HTTP 500 only; the rejected-request case is AC-11.
+  - AC-5..AC-7/AC-11 say only "an error message is shown" with no concrete text or location. **Open:** design
+    picks the error surface (global toast vs per-site handlers, a fork already listed for D-64); the e2e then
+    asserts that surface.
+  - AC-4's history Then relies on the existing analysis fingerprint rule (NC-D, unchanged). **Open:** the e2e/mock
+    must assert the RunBacktest request shape (`strategyId` and `strategyIdRef` both `s-1`).
+  - Fix Scope template note `(Update after investigation...)`. **Resolved:** removed.
+  - Reviewer verified against code: `resolveTradingMode` (`trading.go:3573-3577`), the five `environmentMode ??
+    'paper'` defaults, `OrdersTable.tsx:66`, and the `strategyIdRef` senders. Not re-verified: the analysis
+    `servicer.py` NC-D cites, the hook, `AlertStream`, `queryClient` and the portfolio export cites — recon
+    re-checks them.
+- Overlap findings (WARN, rebase-only; no config, proto or migration collision; no merge-order entry):
+  - `services/xstockstrat-ui/src/app/trader/positions/[symbol]/page.tsx` — 215-block-fundamentals-strategy-on-etf
+    (in-progress, `implementation-spec.md:1271`, `:1288`); different regions.
+  - `services/xstockstrat-ui/src/app/insights/opportunities/page.tsx` — 215 (`implementation-spec.md:1267`, `:1281`)
+    and 246-fix-fundsignal-neutral-score (implementation-ready, `implementation-spec.md:59`); whichever lands second
+    rebases.
+  - `services/xstockstrat-ui/src/lib/traderBff.ts` — candidate only (270 does not yet name a BFF edit) vs
+    263-fix-edge-owner-scope (draft, D-25, `traderBff.ts:118-126`); flag at impl-spec time if 270 edits the BFF.
+  - Low-risk shared context, no collision: 271, 245, 244, 256, 267, 262, 255, 261, 265.
+- NC-D: the product spec records a code-read resolution (no grade row; inert `""` history rows; FR-4 UI-only).
+  Per the operator decision below, that is treated as the floor and `/sdd-design` recon confirms or overturns it
+  (C-11); an analysis guard or cleanup migration would re-open scope.
+- OPERATOR DECISIONS (binding, recorded 2026-10-22):
+  - Grouped by service+theme from the 2026-10-20 debt-radar scan; Track C (precedent #1264).
+  - Scope is D-11, D-17, D-45, D-64.
+  - Operator 2026-10-21 (standing, all features): x-trace-id must be propagated as much as possible; no C-03 waiver — request-derived emits/writes use context.WithoutCancel(ctx) (Go) / the inbound metadata (Python/Node), never a fresh background context; only work with no originating request (background sweepers/loops) may mint its own context, and it should still carry a trace id when one is available.
+  - NC-D (strategy_id='' phantom rows) is deferred to /sdd-design recon per C-11; the review may mark it [x] Deferred with FR-4 scoped to the UI fix as the floor.
+- Next: `/sdd-design fix-ui-trader-feedback`.
