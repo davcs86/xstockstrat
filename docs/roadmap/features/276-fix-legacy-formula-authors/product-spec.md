@@ -21,19 +21,41 @@
 
 ## Root Cause Hypothesis
 
-Rows created before formula ownership moved from username to user id were never backfilled. A data fix (rewrite `author` from the username to the matching user id) plus a check that no other legacy-username authors remain is likely needed. Production must be checked for the same rows before choosing the fix shape.
+Rows created before formula ownership moved from username to user id were never backfilled. The production row count is **unknown**: production has not been checked, and the six staging ids are a floor, not a bound (OQ-2).
+
+## Functional Requirements
+
+- **FR-1.** Every formula whose `author` is a legacy username that maps to exactly one known user has its `author` rewritten to that user's id. The owner can then list, read and execute it (no PERMISSION_DENIED from `_can_read_formula`).
+- **FR-2.** Detection is not limited to the six staging ids: the fix finds every formula row whose `author` is neither a user id nor the reserved system author, in every environment it runs against, including soft-deleted rows.
+- **FR-3.** A legacy author that maps to no user, or to more than one, is left unchanged and reported (formula id and author value) rather than guessed or deleted. The fix never assigns a formula to a user it cannot identify.
+- **FR-4.** The fix is idempotent: a re-run changes nothing and reports zero legacy authors remaining. Formulas already owned by a user id or the system author are never modified.
+- **FR-5.** The fix reports, per run, the count rewritten, the count left unmappable and the count already clean, so production can be verified before and after the change. The operator can see the production count without mutating data (dry-run or read-only report).
+- **FR-6.** The read-guard semantics (`_can_read_formula`: owner or system author only) are unchanged; ownership is corrected, access is not loosened.
 
 ## Affected Services
 
-xstockstrat-indicators (formula store and read guard).
+xstockstrat-indicators (formula store and read guard). The username-to-user-id mapping source is not in indicators (no identity dependency today); see OQ-1.
+
+## Consumer Surface(s)
+
+The owner-visible consequence is that formulas reappear for their owner, so C-14 applies:
+
+- **Agent tools:** `list_formulas` (owner's list now includes the repaired formulas; the admin `author_filter` no longer needs the legacy username), `get_formula`, `test_formula`, and `run_backtest` / `manage_strategy` for strategies that reference those formulas (they evaluate instead of failing with PERMISSION_DENIED). The `strat-lab` plugin's `backtest` skill is unaffected unless a quirk it documents changes (check at spec time).
+- **UI:** the `/insights` and `/trader` formula pickers read the same RPC; no UI code change is expected.
 
 ## Fix Scope
 
-- [ ] No proto changes anticipated
-- [ ] No database migrations anticipated (the fix is a data rewrite; whether it ships as a migration, a one-off script or an admin RPC is a design question)
-- [ ] No config key changes anticipated
+- No proto changes anticipated.
+- No config key changes anticipated.
+- Database: the fix is a data rewrite of `indicators.formulas.author`. Whether it ships as a migration (indicators tip is `007`; next free is `008` and must be re-derived at spec time), a one-off script or an admin RPC is a design decision. If a migration, it needs `NNN_description.up.sql` plus `.down.sql` and the DBA gate. A migration cannot call identity, so the mapping source (OQ-1) constrains this choice. C-10(c): the rewrite mutates shared rows, so the design names who may run it and how it is protected from concurrent formula writes.
+- Overlap: `servicer.py` is also touched by features 268 and 275 (rebase-only risk); this feature must not edit the read guard (FR-6).
 
-(Update after investigation — remove or replace each item as needed)
+## Open Questions
+
+- **OQ-1.** What is the username-to-user-id mapping source (identity `ListUsers`/`GetUser`, a table copy, or an operator-supplied map), and which service owns the lookup? Design decides.
+- **OQ-2.** Do production rows carry legacy authors, and which usernames? Unknown; the design must not assume the staging set. Checking is read-only and part of verification, not speccing.
+- **OQ-3.** What is the disposition of unmappable authors (FR-3) beyond report-and-leave: operator-supplied mapping, or a follow-up? Design decides.
+- **OQ-4.** Is a guard needed so new rows can never be written with a non-user-id author? Out of scope unless design finds a live write path still doing so.
 
 ## Acceptance Criteria
 
@@ -41,6 +63,6 @@ See `acceptance.feature` — the regression scenario(s) that must fail on the bu
 
 ## Out of Scope
 
-- Refactoring unrelated to the bug
-- Performance improvements unrelated to the fix
-- The silent skip and false OK status in backtests (feature 275)
+- Changing read-guard semantics or the admin `author_filter` behavior
+- Running any production or staging data change during speccing
+- The silent skip and false OK status in backtests (feature 275, which owns the reporting; this feature removes the cause)
