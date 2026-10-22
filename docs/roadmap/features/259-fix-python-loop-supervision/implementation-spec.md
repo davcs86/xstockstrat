@@ -800,6 +800,11 @@ ruff check . && ruff format --check .
    truth table (True: `ValueError`, `TypeError`, `KeyError`, `DecodeError`, `ParseError`, `DataError`,
    `IntegrityConstraintViolationError`; False: `OutOfMemoryError`, `DeadlockDetectedError`, `SerializationError`,
    `TimeoutError`, `RuntimeError`).
+6c. Per-attempt DB bound (operator 2026-10-22): with `_ATTEMPT_DB_TIMEOUT_SECONDS` monkeypatched to 0.05, a fake
+   pool whose `acquire(timeout=…)` honours the timeout (raises `asyncio.TimeoutError`) makes `_process_with_retry`
+   fail each attempt within the bound and reach the replay path (WARNING logged, replay pair updated), never a
+   silent stall. Assert `acquire` was called with `timeout=_ATTEMPT_DB_TIMEOUT_SECONDS`. RED today: `acquire()`
+   takes no timeout.
 7. Re-run the existing consumer tests unchanged as the PRESERVE guard (`@AC-2/@AC-6/@AC-7 @feature-042`,
    `@AC-10 @feature-029`, `@AC-17 @feature-225`).
 - C-13: `FakeLedger.StreamEvents` and the event literals have one consumer (this file) — inline is compliant.
