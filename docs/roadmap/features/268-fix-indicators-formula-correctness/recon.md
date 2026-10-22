@@ -87,7 +87,7 @@ treat pending-hidden (`pending_intent_id` set) rows as `NOT_FOUND`, as `_load_fo
 
 ## Existing Business Rules (preserve / extend)
 
-- **PRESERVE** `@AC-3 @FR-1 @regression @feature-228` "The 800x800 matmul fits within half the default headroom" (`services/xstockstrat-indicators/acceptance/fix-indicators-sandbox-matrix.feature`) — a normal formula still returns success=true with its output (the D-10 FR-2 guard).
+- **PRESERVE** `@AC-1 @FR-1 @regression @feature-228` "The 800x800 matmul fits within half the default headroom" (`services/xstockstrat-indicators/acceptance/fix-indicators-sandbox-matrix.feature`) — a normal formula still returns success=true with its output (the D-10 FR-2 guard).
 - **PRESERVE** `@AC-2 @FR-2 @regression @feature-228` "An allocation beyond the headroom fails closed" (`services/xstockstrat-indicators/acceptance/fix-indicators-sandbox-matrix.feature`) — exit_reason stays `memory_exceeded`. The no-output failure must not overwrite a classified reason.
 - **PRESERVE** `@AC-3 @FR-1 @regression @feature-228` "The formula budget does not depend on the interpreter's import footprint" (`services/xstockstrat-indicators/acceptance/fix-indicators-sandbox-matrix.feature`) — a 32 MiB numpy-ones formula still succeeds.
 - **PRESERVE** `@AC-4 @FR-2 @regression @feature-228` "An OpenBLAS allocation abort is classified as out-of-memory" (`services/xstockstrat-indicators/acceptance/fix-indicators-sandbox-matrix.feature`) — stderr-based classification runs before or beside the new no-output failure.
@@ -105,6 +105,8 @@ treat pending-hidden (`pending_intent_id` set) rows as `NOT_FOUND`, as `_load_fo
 - **PRESERVE** `@AC-19 @FR-9 @feature-224` "A failed deep copy leaves nothing behind" (`docs/sdd/business-rules/platform.feature`) — pending rows stay hidden and cannot be mutated before commit or abort.
 - **PRESERVE** `@AC-23 @FR-11 @feature-224` "System special-cases are unchanged" (`docs/sdd/business-rules/platform.feature`) — UpdateFormula on the system formula stays `PERMISSION_DENIED`, not NOT_FOUND.
 - **PRESERVE** `@AC-6 @FR-3 @FR-1 @feature-224` "The fundamentals loop still runs the system scoring formula" (`docs/sdd/business-rules/platform.feature`) — the seeded system formula still returns success=true.
+- **PRESERVE** `@AC-7 @FR-6 @feature-205` "An authored fundamentals formula behaves identically as a strategy component" (`docs/sdd/business-rules/platform.feature`) — a successful `test_formula` score stays equal to the component output; only output-less runs change.
+- **PRESERVE** `@AC-5 @FR-4 @feature-205` "Test a fundamentals-scoring formula with supplied values" (`services/xstockstrat-agent/acceptance/formula-fundamental-inputs-authoring.feature`) — `test_formula` still returns the computed score; a consumer surface of FR-1 whose failure rendering was not inspected.
 - **PRESERVE** `@AC-3 @FR-3 @feature-176` "Per-component indicator calls run concurrently with deterministic output" (`services/xstockstrat-analysis/acceptance/analysis-concurrency-offload.feature`) — ComputeIndicator/ExecuteFormula consumer path stays deterministic.
 - **PRESERVE** `@AC-7 @FR-1 @feature-201` "A technical (non-fundamentals) formula component is byte-for-byte unaffected" (`services/xstockstrat-analysis/acceptance/fundamentals-formula-inputs.feature`) — formula inputs for technical components are unchanged.
 - **PRESERVE** `@AC-1 @FR-1 @FR-2 @feature-042` "Filling an order captures a snapshot with indicator and signal context" (`services/xstockstrat-analysis/acceptance/order-snapshots-pnl-patterns.feature`) — the snapshot's default `RSI`/`ATR` indicators map stays non-empty. The `ATR` key keeps resolving. Option B must supply OHLCV at that call site.
@@ -177,7 +179,8 @@ recompute/communication decision.
 1. **service — D-10 (indicators `sandbox.py`)**: on `returncode == 0`, fail with `runtime_error` when no
    `__OUTPUT__:` line was seen ("produced no output") or none parsed ("could not be parsed"); optionally drop
    `SystemExit`/`KeyboardInterrupt`/`GeneratorExit` from builtins. Paired **test** in `tests/test_sandbox.py`
-   (AC-1/AC-2 + preserve `@feature-228` matrix).
+   (AC-1/AC-2 + preserve `@feature-228` matrix). The error text must contain "produced no output" (AC-1) and
+   "could not be parsed" (AC-2) — `acceptance.feature:12`, `:21`.
 2. **service — D-54 (indicators `servicer.py`)**: inline pending-hidden → NOT_FOUND after `get_by_id` in
    `UpdateFormula` (`:490`) and `DeleteFormula` (`:593`). Paired **test** in `tests/test_formulas.py` /
    `tests/test_private_formulas.py` (AC-6/AC-7 + system/ADMIN order).
