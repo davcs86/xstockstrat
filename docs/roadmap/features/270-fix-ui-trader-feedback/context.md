@@ -85,3 +85,218 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - Operator 2026-10-21 (standing, all features): x-trace-id must be propagated as much as possible; no C-03 waiver — request-derived emits/writes use context.WithoutCancel(ctx) (Go) / the inbound metadata (Python/Node), never a fresh background context; only work with no originating request (background sweepers/loops) may mint its own context, and it should still carry a trace id when one is available.
   - NC-D (strategy_id='' phantom rows) is deferred to /sdd-design recon per C-11; the review may mark it [x] Deferred with FR-4 scoped to the UI fix as the floor.
 - Next: `/sdd-design fix-ui-trader-feedback`.
+
+## Session 2026-10-22 — sdd-batch design gate (round 2)
+
+Full-mode `/sdd-design` debate halted at the approval gate after round 2 (gate policy: halt). Per the grilling
+protocol, `design.md` is not written and `status.md` stays `spec-ready`.
+
+### Open Threads
+
+- **Approach (synthesis r2):** UI-only fix in `services/xstockstrat-ui`. No proto, config, migration or backend
+  change. Build order is D-45 → D-64 → D-17 → D-11 freshness → D-11 reconnect.
+  - FR-4: one-liner at `[symbol]/page.tsx:1149-1155`.
+  - FR-3: `toPbTradingMode` in `lib/tradingMode.ts`. Mode widens to `EnvironmentMode|null`, the `?? 'paper'`
+    defaults are removed, and reads send UNSPECIFIED.
+  - FR-1: `pickFresherOrder` in `lib/orderFreshness.ts` with a Vitest sibling, applied in `OrdersTable.tsx:65-68`.
+  - FR-5 / D-64: per-call handlers in signal-sources and opportunities, plus an `errMessage` hoist to
+    `src/lib/errMessage.ts` (3 consumers).
+    - The global `MutationCache.onError` fallback writes a single-slot `mutationErrorStore`. A newer error
+      overwrites the slot, and the slot clears on dismiss or pathname change.
+    - `MutationErrorFallback` uses `useSyncExternalStore` with a null server snapshot. It is mounted once per
+      provider.
+    - The only opt-out is `meta.errorHandled === true`. A hook may carry it only when every one of its call sites
+      handles errors.
+    - `useInvalidatingMutation.ts:17,22` gains a `meta` passthrough.
+    - The no-op `onError`s in `useBacktest`/`useScreenSymbols` are deleted.
+  - AC-7/AC-11: ledger export try/catch plus CardNotice.
+  - FR-2 / D-11: new `useReconnectingStream` with `nextBackoffMs` (capped at 30 s).
+    - It reconnects on any non-abort end (clean OK or a retryable code) and stops terminally on
+      PermissionDenied/InvalidArgument.
+    - The indicator clears on the first item or after `STREAM_STABLE_MS`. Clearing on `onHeader` was rejected.
+    - The e2e mock streams stay open until abort.
+- **Strongest open objections (BLOCKING, 2):**
+  - **(a) C-01/F-04 evidence:** r2 claimed that neither flagged hook is built on `useInvalidatingMutation`. That
+    is false (`useOpportunities.ts:65-69`, `useSignalSourceMutations.ts:10-14`), and the factory has no `meta`
+    (`:17`, `:22`). The proposer must accept the passthrough step, and spec must cite those lines.
+  - **(b) Silent guard (fails.md:116-132):** the predicate "onError set ⇒ handled" would be fooled by the no-op
+    `onError`s at `useBacktest.ts:12-15` and `useScreenSymbols.ts:13-16`. The proposer must commit to the
+    meta-only predicate.
+  - Both fixes are one-liners already folded into the synthesis. They stay blocking only until the proposer states
+    them. The 7 non-blocking items (clean-end reconnect, retryable-code gating, keyHash drop, SSR snapshot, C-17
+    placement, P-03 inventory check, C-16 PRESERVE guards) are recorded in the state block below.
+- **Floor status:** no breaches. F-07 was checked, and the UI-local constants have precedent.
+- **@AC changes not covered by an operator decision:** all twelve 270 ACs (AC-1..AC-12) are EXTEND. The guards
+  @AC-10 @feature-095, @AC-5 @feature-202 and @AC-6 @feature-203 are PRESERVE. There is no CHANGE, so no operator
+  sign-off is needed.
+- **Trace:** reconnects reuse `tradingClient`/`notifyClient`, so x-trace-id is still forwarded under the standing
+  operator decision (no C-03 waiver).
+- **Next:** re-run `/sdd-batch` to resume the debate at round 3 from the state below, or have the operator
+  approve once the proposer accepts (a) and (b).
+
+```sdd-batch-design-state
+{
+  "round": 2,
+  "synth": {
+    "approach": "UI-only fix in services/xstockstrat-ui, with no proto, config, migration or backend change. The build order stays D-45 → D-64 → D-17 → D-11 freshness → D-11 reconnect. D-45, D-17 and D-11 freshness are unchanged from the r1 synthesis:\n- FR-4: the one-liner at [symbol]/page.tsx:1149-1155.\n- FR-3: toPbTradingMode in lib/tradingMode.ts, mode widened to EnvironmentMode|null, the `?? 'paper'` defaults removed, and reads send UNSPECIFIED.\n- FR-1: pickFresherOrder in lib/orderFreshness.ts, with a Vitest sibling, applied in OrdersTable.tsx:65-68.\n- AC-7/AC-11: the ledger export try/catch plus CardNotice.\n\nr2 changes below. They adopt r2's answers to the three earlier blocking items and the adversary's r2 corrections. Each correction is checked against the wf_dcd9f6a8 worktree.\n\n1. D-64 per-call handlers (AC-5, AC-6).\n- signal-sources/page.tsx:257-260: handleToggle gets `{ onError: (e) => setSaveError(errMessage(e)) }`.\n- opportunities/page.tsx:155-156: `act` gets a per-call onError that writes a local actionError, shown in a CardNotice error.\n- errMessage moves to a new src/lib/errMessage.ts in this feature. It has three consumers: signal-sources/page.tsx:137, config-ui/[namespace]/NamespaceEditor.tsx:24, and opportunities (DRY guard rail).\n\n2. Opt-out flag: meta-only, no inference from onError.\n- The MutationCache skip rule is `mutation.options.meta?.errorHandled === true` and nothing else. The branch \"mutation.options.onError is set ⇒ handled\" is dropped. useBacktest.ts:12-15 and useScreenSymbols.ts:13-16 have no-op onError bodies (`return err`), and inferring \"handled\" from them would silence their callers.\n- Binding rule: a hook may carry meta.errorHandled only when every call site handles errors. Handling means a per-call onError, a hook-level onError that actually displays, or inline .error/.isError rendering. Spec lists each flagged hook with its call sites.\n- Order of work: the per-call handler lands first, the flag second.\n- useInvalidatingMutation passthrough is now a required step. useSetOpportunityAction (useOpportunities.ts:65-69) and useManageSignalSource (useSignalSourceMutations.ts:10-14) are both built on useInvalidatingMutation. Change useInvalidatingMutation.ts:17 to `options?: { mutationKey?: QueryKey; meta?: Record<string, unknown> }` and pass `meta: options?.meta` at :22. Then flag both hooks.\n- No-op onErrors: delete them from useBacktest.ts and useScreenSymbols.ts. Their callers render .error inline ([symbol]/page.tsx:1109, insights/strategies/[id]/page.tsx:65 runErrorObj, SymbolScreening.tsx:66-68, screener/page.tsx:92-94), so both hooks qualify for the flag under the rule. Spec decides between flagging them and leaving them unflagged and double-reporting.\n- The inventory also carries LiveStrategiesPanel.tsx:99 and NamespaceEditor.tsx.\n\n3. Global fallback (AC-10).\n- createQueryClient (lib/queryClient.ts:11-17) gets `new MutationCache({ onError })`.\n- onError writes a single-slot module store, src/lib/mutationErrorStore.ts, holding `{ message } | null`. The newest error overwrites the slot. The slot clears on dismiss and on pathname change.\n- The keyHash clear-on-success logic is dropped. Only watchlists set mutationKey (useWatchlists.ts:86-170), so key matching meant \"any keyless success clears\", which is under-reporting against FR-5. A lingering banner is the safer, visible failure.\n- components/shared/MutationErrorFallback.tsx reads the store with useSyncExternalStore and provides a getServerSnapshot that returns null, so SSR does not throw. It renders Alert variant=\"destructive\" with role=\"alert\" and a dismiss button.\n- It is mounted once in trader/providers.tsx and once in shared/QueryProviders.tsx. Spec confirms the trader/insights/config-ui/accounts layouts mount exactly one provider each, never nested. Spec names the placement relative to PlatformHeader and BottomTabBar pb-20 against docs/patterns/ui-ux-governance.md.\n- The store and the skip predicate are pure and get a Vitest test. That test also pins the TanStack v5 assumption that MutationCache sees hook-level options only.\n- mutateAsync: zero sites in src (grep), so the \"no unhandled rejection\" scope is mutate() only.\n\n4. D-11 reconnect (AC-2, AC-9).\n- New src/hooks/useReconnectingStream.ts:\n  - onItem is held in a ref, and the effect is keyed on one primitive key (filterKey in useOrderUpdates.ts:12).\n  - nextBackoffMs in src/lib/streamBackoff.ts: exponential, capped at 30 s, unit-tested.\n- Reconnect policy:\n  - Reconnect on any non-abort end, whether a clean OK or a retryable error (Unavailable, Unknown/network, Internal, DeadlineExceeded). Both streams are meant to run forever (trading.go:1684-1685, notifyServiceImpl.ts:119).\n  - Stop with a terminal error state on PermissionDenied, InvalidArgument and other non-retryable codes.\n  - Unauthenticated stays with the existing makeBrowserTransport interceptor.\n  - Never reconnect on unmount or abort.\n- e2e mock change: e2e mock-backend streamAlerts (:530) stays open until abort after it yields ALERT_STREAM_ALL, replacing the clean end. A new streamOrderUpdates mock handler holds open until abort, in the canonical fixture home (C-12/C-13).\n- Indicator:\n  - It clears on the first item of the new attempt, or after that attempt stays alive with no error for STREAM_STABLE_MS (~3 s, a UI constant in streamBackoff.ts, precedent useScreenSymbols.ts:24-27).\n  - onHeader is rejected: the BFF opens the backend stream lazily inside generators (traderBff.ts:46-52, 85-91).\n  - Spec may add a show-side debounce: show the indicator only once the first reconnect attempt fails, to damp edge idle-timeout flicker.\n- Other preserved behavior:\n  - The AlertStream merge dedupes on alertId (:42, :96).\n  - The bell-badge fetch stays in its own mount-only effect (AlertStream.tsx:18-31).\n  - Reconnects reuse tradingClient/notifyClient, so x-trace-id is still forwarded by the middleware and BFF backendHeaders, per the operator's trace decision and C-03 with no waiver.",
+    "open_objections": [
+      {
+        "text": "[BLOCKING, C-01/F-04 evidence, fails.md:358] r2 claimed neither flagged hook is built on useInvalidatingMutation. That is false: useOpportunities.ts:65-69 and useSignalSourceMutations.ts:10-14 both return useInvalidatingMutation, and its options type at :17 accepts only mutationKey and passes no meta at :22. The synthesis makes the meta passthrough (useInvalidatingMutation.ts:17,22) a required step. The proposer has not yet accepted this, and spec must cite those lines. Resolution is a one-line change and stays inside the approach.",
+        "blocking": true
+      },
+      {
+        "text": "[BLOCKING, fails.md:116-132 silent guard, FR-5/AC-10] The skip predicate 'mutation.options.onError set ⇒ handled' silences hooks whose onError is a no-op: useBacktest.ts:12-15 and useScreenSymbols.ts:13-16 both just return err. The synthesis adopts the fix: meta.errorHandled is the only opt-out, and the no-op onErrors are deleted or the two hooks go into the inventory. All four current callers render .error inline (verified), so today's risk is latent. The proposer must commit to the meta-only predicate before approval.",
+        "blocking": true
+      },
+      {
+        "text": "[Non-blocking, FR-2] Reconnect on a clean non-abort end, not only on error. The synthesis adopts this together with a mock-backend.ts:530 streamAlerts change that holds the stream open until abort. It reverses r1's rejected alternative, because an OK end on a forever-stream (trading.go:1684-1685) recreates D-11 silently. The proposer should confirm. alert-stream.spec.ts needs only the first 3 items.",
+        "blocking": false
+      },
+      {
+        "text": "[Non-blocking, FR-2] Gate reconnect on retryable codes and give a terminal error on PermissionDenied/InvalidArgument. Optionally debounce the show side so Cloudflare idle cuts do not flash the indicator. Spec fixes the code list.",
+        "blocking": false
+      },
+      {
+        "text": "[Non-blocking, C-18/FR-5] Drop keyHash clear-on-success in favour of overwrite plus clear on dismiss/pathname change. The synthesis adopts this. Lingering is visible and under-reporting is silent.",
+        "blocking": false
+      },
+      {
+        "text": "[Non-blocking, SSR] MutationErrorFallback must supply a getServerSnapshot that returns null. Spec must confirm one provider per segment layout with no nesting.",
+        "blocking": false
+      },
+      {
+        "text": "[Non-blocking, C-17] Spec names the fallback Alert's placement relative to PlatformHeader and the mobile BottomTabBar pb-20 clearance, citing docs/patterns/ui-ux-governance.md.",
+        "blocking": false
+      },
+      {
+        "text": "[Non-blocking, P-03] The opt-out inventory greps for onError, .isError, .error &&, mutation.error and inline rendering, and covers LiveStrategiesPanel.tsx:99, insights/strategies/[id]/page.tsx:65/327, NamespaceEditor.tsx, SymbolScreening.tsx:66, screener/page.tsx:92. Spec pins the list with a check.",
+        "blocking": false
+      },
+      {
+        "text": "[Non-blocking, C-16] PRESERVE guards are spec constraints: @AC-10 @feature-095 (known mode still sends LIVE/PAPER), @AC-5 @feature-202 (UNSPECIFIED sent as the NAME string), @AC-6 @feature-203 (bell badge fetched once on mount, and reconnect must not re-run that effect).",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "@AC-1 @FR-1 (270)",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-2 @FR-2 (270)",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-3 @FR-3 (270)",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-4 @FR-4 (270)",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-5 @FR-5 (270)",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-6 @FR-5 (270)",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-7 @FR-5 (270)",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-8 @FR-1 (270)",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-9 @FR-2 (270)",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-10 @FR-5 (270)",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-11 @FR-5 (270)",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-12 @FR-3 (270)",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-10 @FR-5 @feature-095",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-5 @feature-202",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-6 @feature-203",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "Inferring 'handled' from mutation.options.onError in the MutationCache skip predicate: lost because no-op onErrors (useBacktest.ts:12-15, useScreenSymbols.ts:13-16) would silently suppress the fallback (fails.md:116-132).",
+      "Setting meta.errorHandled on the two hooks without changing useInvalidatingMutation: impossible, because the factory's options type (:17) has no meta and it passes none (:22).",
+      "keyHash-matched clear-on-success in the fallback store: lost because only watchlists have mutationKeys, so any keyless success clears an unrelated error. That is silent under-reporting against FR-5, plus matching logic to maintain (C-18).",
+      "Clearing the disconnected indicator on connect onHeader: lost because the BFF opens the backend stream lazily inside a generator (traderBff.ts:46-52, 85-91), so headers prove only that the BFF was reached. It would clear falsely and then flicker.",
+      "Clearing the indicator only on the first message: lost because quiet streams (no orders, no alerts) never clear.",
+      "Error-only reconnect that treats a clean end as final: lost because both streams are meant to run forever (trading.go:1684-1685, notifyServiceImpl.ts:119), so a clean end is the D-11 silent stop. The bounded mock is a one-line fix.",
+      "Retrying every error code forever: lost because PermissionDenied/InvalidArgument never succeed. Unauthenticated already has a transport interceptor.",
+      "Opt-in global fallback (meta.globalError): lost because it contradicts AC-10's wording ('a mutation that declares no onError handler').",
+      "useMutationState cache-predicate fallback: lost because failed mutations persist until gcTime and show stale errors.",
+      "Hook-level flag on useManageSignalSource with no per-call handleToggle handler: lost because it silences AC-6. The per-call handler must land first.",
+      "Deferring the errMessage hoist to spec: lost because opportunities is the third consumer now (signal-sources:137, NamespaceEditor:24).",
+      "Gating D-17 reads on a known mode: lost because it adds a dead loading state, and separate per-environment DBs make the unfiltered read safe.",
+      "Fixing NC-D phantom rows here: deferred by operator decision. The FR-4 floor is the D-45 one-liner."
+    ],
+    "open_risks": [
+      "STREAM_STABLE_MS (~3 s, unmeasured) is a heuristic. A late BFF→backend failure clears and then re-shows the indicator. A long window leaves quiet healthy streams marked 'disconnected' after reconnect. The optional show-side debounce mitigates this.",
+      "Edge (Cloudflare) idle timeouts on quiet streams will cause periodic reconnects and full snapshot replays. This is acceptable with dedupe and debounce, but unmeasured.",
+      "TanStack v5 behaviour (MutationCache sees hook-level options only) is unverified locally because node_modules is absent. It is pinned by the Vitest predicate test.",
+      "Double reporting from any flagged-or-not inventory miss is cosmetic but spread across the UI. It needs a pinned grep check.",
+      "Unproven e2e infrastructure: the in-process mock may not hold streamOrderUpdates/streamAlerts open until abort, and page.route may not be able to inject error-then-recover per page.",
+      "A lingering fallback banner after a successful retry, until dismiss or navigation. This is the accepted visible trade-off.",
+      "Not verified line by line: that OrderForm shows paper/live only through TradingModeBadge or the mode prop (AC-12)."
+    ],
+    "constitution_rules_touched": [
+      "C-01",
+      "C-03",
+      "C-11",
+      "C-12",
+      "C-13",
+      "C-15",
+      "C-16",
+      "C-17",
+      "C-18",
+      "F-04",
+      "F-07",
+      "P-02",
+      "P-03",
+      "PLAT-N1"
+    ],
+    "rationale": "This follows the user directive to preserve as much as possible with low rework. r2 concretely answered all three earlier blocking items:\n- per-call handlers plus a call-site-audited flag;\n- a single-slot show-once store with no gcTime staleness;\n- a transport-independent indicator clear on first item or a stable window, with onHeader correctly rejected after the BFF analysis.\n\nThose items close. The adversary's two new blocking objections are both confirmed in the worktree:\n- useInvalidatingMutation.ts:17,22 has no meta, and both flagged hooks are built on it.\n- useBacktest.ts and useScreenSymbols.ts have no-op onErrors that the onError-inference predicate would treat as handled.\n\nEach fix is a one-line change inside the existing approach, and the synthesis folds both in. They stay blocking only because the proposer has not yet stated them.\n\nNon-blocking refinements are adopted where they reduce code or close a silent-failure path. Reconnect on a clean end with a one-line mock change, retryable-code gating, the getServerSnapshot null, and dismiss/navigation clearing in place of keyHash all close silent-failure risks. Dropping keyHash also cuts logic. The mutateAsync concern is closed by grep (zero sites).\n\nNo Floor breach: F-07 is checked, and the constants are UI-local with precedent. All 270 ACs are EXTEND, and the feature-095/202/203 rules are PRESERVE with no sanctioned CHANGE. Reconnects reuse the existing clients, so x-trace-id propagation follows the operator's standing decision with no C-03 waiver."
+  },
+  "floor_breaches": []
+}
+```
