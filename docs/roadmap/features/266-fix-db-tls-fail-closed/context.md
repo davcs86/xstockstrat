@@ -387,3 +387,57 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   "floor_breaches": []
 }
 ```
+
+## Session 2026-10-22 — sdd-design
+
+- Phase 0 Recon: recon.md was written in an earlier session and reused as-is. Services: ledger, config, identity,
+  notify, ui. Key reuse patterns: the per-service `mtls.ts` fail-closed throw, and the existing `main().catch → exit(1)`.
+- Phase 1 Grilling: 2 rounds (full). The operator approved at the design gate on 2026-10-22 ("APPROVED as synthesized,
+  including both folded-in fixes").
+  - Chosen approach: five byte-identical `dbTls.ts` resolvers.
+    - Throw-on-present `ssl*` allow-list; an exact `sslmode=disable` is the only opt-out; a missing CA throws.
+    - The resolver runs first in `main()`. Identity and notify get a boot probe.
+    - The UI audit route fails at the route level with a generic 500.
+    - `.do` adds a UI `DATABASE_CA_CERT`.
+    - One UI vitest guard covers the AC-5 YAML parse, the hash check and the static wiring check, with `.do/**` added
+      to the UI CI filter.
+  - Rejected: a shared workspace package, strip-instead-of-throw, a substring parse, failing the Next.js boot, and
+    workflow-tests or grep guards.
+- Both round-2 blocking objections are resolved by the operator's approval of the folded-in fixes:
+  - the `'.do/**'` UI filter plus a negative AC-5 fixture row;
+  - the config AC-2 test through `main()` plus the static wiring assertion, covering the ledger Pool and the
+    EventNotifier.
+- Constitution rules touched: C-03, C-08, C-11, C-15, C-16, C-18, F-06, F-07, P-02, P-03, P-06. Floor breaches: none
+  (F-06 and F-07 honored).
+- C-16: AC-1, 2, 4, 6 and 7 are CHANGE and AC-5 is EXTEND, all covered by the D-32 scope decision and the 2026-10-22
+  gate approval. AC-3, AC-8, `@AC-4 @feature-210` and `@AC-8 @feature-147` are PRESERVE.
+- Ledger: no new line. The traps applied here (parse not grep, allow-list fail-closed, Deviation Log for a narrowed
+  assertion) are already recorded in `fails.md`.
+- Status: spec-ready → design-approved.
+
+### Decisions
+
+- The design in `design.md` § Chosen Approach (items 1–9) is binding for `/sdd-spec`.
+- The adversary's non-blocking refinements are adopted:
+  - erasable TypeScript only, with zero imports;
+  - the trace id is read via `HEADER_TRACE_ID`, and only `err.code`/`err.message` are logged;
+  - the canary is re-aimed at the UI route, with a value-free verification log line.
+
+### Open Threads
+
+- [ ] P-03: read the pg / `pg-connection-string` URL-versus-`ssl` merge precedence after `pnpm install` and record it
+  here. Target: `/sdd-spec` (resolver step).
+- [ ] mTLS/DB check order: record the reorder as deliberate, or throw one combined error. Target: `/sdd-spec`
+  (backend wiring step).
+- [ ] Operator sign-off on the identity/notify crash-loop when the DB is down. It covers only FR-2's exit-at-boot
+  clause. Target: the `/sdd-spec` gate.
+- [ ] Pre-merge dev canary: confirm `${xstockstrat.CA_CERT}` is non-empty and verifies, and that
+  `${xstockstrat.DATABASE_URL}` carries only `sslmode=require`. Target: the rollout step, before the backend PR merges.
+- [ ] UI route SAN/hostname verification against the managed DB. Target: the UI route step and canary.
+- [ ] Byte-identical copy must build under strip-types, CJS `tsc` and the Next bundler. Target: the resolver step
+  (build all five).
+- [ ] Deviation Log: the narrowed AC-2 (ledger, identity and notify at Pool level plus the wiring check) and the
+  mocked-pg UI AC-7. Target: the test steps.
+- [ ] P-06: the new identity and ledger tests depend on 252. Prove that they execute. Target: the test steps.
+- [ ] Merge order: rebase after 242, 248 and 241, and watch for `ci.yml` filter conflicts with peers. Target: the
+  integration PR.
