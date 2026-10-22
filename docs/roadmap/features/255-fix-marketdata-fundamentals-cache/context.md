@@ -959,3 +959,8 @@ the next `/sdd-batch` run can pick it up.
   overlap (its directory and ref were not found). Re-scan before execution.
 - [ ] The Step 14 live-DB test skips in CI (carried forward). The mandatory PR record now tracks it.
 - Next: `/sdd-execute fix-marketdata-fundamentals-cache`.
+
+## Session 2026-10-22 (operator decision — unstaged error class)
+
+- **Decided:** enrichment errors with no stage (the `build request` error at `fmp_client.go:226` and a non-ctx limiter
+  error at `:229`) get the WARN class label `other`. They still expire the row under rule 5. Step 11 uses `other`.
