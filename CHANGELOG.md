@@ -3,6 +3,16 @@
 All production promotions from `main-dev` to `main` are recorded here.
 Each entry corresponds to one `main-dev → main` PR merge.
 
+## 2026-10-22
+
+### Features
+- fix-edgar-companyfacts-decode: The EDGAR companyfacts decode fails for filers whose `cik` SEC serves as a zero-padded string (CRCL, ELWT, PSKY, RDDT), so their fundamentals history is never stored and every snapshot read falls back to the vendor.
+
+### Summary
+26 commits, 3 feature merges since last promotion.
+
+---
+
 ## 2026-10-20
 
 ### Features
