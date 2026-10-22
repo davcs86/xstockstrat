@@ -438,7 +438,7 @@ grep -E '^# (tests|pass|fail)' .verify/run.tap   # tests > 0; RED: the AC-4 logi
 # FR-6/FR-7 structural half: exactly one jwt.sign (inside mintAccessToken) and one refresh_tokens INSERT (inside issueRefreshToken)
 grep -n "(jwt as any).sign" src/grpc/identityServiceImpl.ts            # exactly 1 hit, within mintAccessToken
 grep -n "INSERT INTO identity.refresh_tokens" src/grpc/identityServiceImpl.ts   # exactly 1 hit, within issueRefreshToken
-pnpm run lint && pnpm run test:coverage   # CI parity; not RED/GREEN evidence until feature 252 lands
+pnpm run lint && pnpm run test:coverage   # CI parity (c8 --lines 40, i.e. line coverage >= 40%); not RED/GREEN evidence until feature 252 lands
 rm -rf .verify
 ```
 
