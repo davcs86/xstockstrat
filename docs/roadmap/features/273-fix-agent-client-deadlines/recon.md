@@ -93,6 +93,8 @@ must surface as a `DEADLINE_EXCEEDED`-derived tool error rather than a hang (FR-
 - **PRESERVE** `@AC-32 @FR-12 @feature-224` (`docs/sdd/business-rules/platform.feature`). `mcp-tools.md` and the strat-lab skill keep listing `list_templates` and `instantiate_template` and keep omitting `is_public` and `include_public`. Any edit for deadline errors must keep this parity.
 - **PRESERVE** `@AC-2 @FR-3 @feature-210`, `@AC-5 @FR-5 @feature-210` (`docs/sdd/business-rules/platform.feature`). Adding `timeout=` must not change mTLS channel setup or the propagated header trio.
 
+- **EXTEND** `@AC-2 @regression @feature-227` "A hung analysis read fails fast at the agent instead of hanging" (`services/xstockstrat-agent/acceptance/fix-opportunities-read-hangs.feature`). This feature's @AC-1 to @AC-10 add the same fail-fast guarantee for the other unary RPCs alongside it, leaving `ListOpportunities` unchanged.
+
 No CHANGE rows. Every new `@AC-*` in this feature's `acceptance.feature` is additive. The scenario-recon pass read
 three agent suites in full and `mcp-watchlist-tools.feature` up to line 50. It scanned the others by tag and title
 only, so the rows for features 161, 164, 170, 198 and 204 are inferred and should be re-read at spec.
