@@ -220,3 +220,47 @@ halt). design.md is not written and status.md is unchanged (`spec-ready`).
   "floor_breaches": []
 }
 ```
+
+## Session 2026-10-22 — sdd-design
+
+- Phase 0 Recon: wrote recon.md (services: xstockstrat-identity; key reuse patterns: `rotateRefreshToken`
+  conditional claim + same-txn `issueRefreshToken`; generalise `mintOAuthAccessToken`).
+- Phase 1 Grilling: 2 rounds (full); termination: approved. Chosen approach: keep `exchangeAuthCode`'s validation
+  as reject-only pre-filters, then compute audience → `mintAccessToken` → new private `redeemAuthCode` (BEGIN;
+  conditional `UPDATE … WHERE consumed_at IS NULL AND expires_at > NOW() RETURNING`; `issueRefreshToken` in-txn;
+  COMMIT) → return tokens after COMMIT; D-21 renames the mint helper to `mintAccessToken(…, audience?)` and routes
+  `authenticateUser`/`refreshToken` through it and `issueRefreshToken`. Rejected: mint after COMMIT, mint inside the
+  txn helper, deleting the JS early-outs, `withTransaction`, CTE claim, `FOR UPDATE`, predicates-in-WHERE, committed
+  real-PG test, separate first-party mint helper, a third test fake.
+- Operator decision 2026-10-22 (design gate r2): APPROVED as synthesized, including the mint-before-claim order with
+  the RED test that runs with `JWT_SECRET` unset and asserts code 13, `consumedAt` null and 0 inserts. This closes
+  the round-2 blocking objection.
+- FR-1 reading (recorded per design): the JS consumed/expiry early-outs are best-effort pre-filters on a stale read
+  and can only reject; only the claim's row count grants. The claim predicates `consumed_at IS NULL` and
+  `expires_at > NOW()` are load-bearing — never drop them as "redundant with the JS checks".
+- AC-1 real-Postgres proof: the harness is the manual 20-caller local repro (the one hotfix `5bd271d` used). At
+  execute, record here the script verbatim, a single local command with the `DB_POOL_MAX=20` env override, and the
+  before/after grant counts. Local only; never set DB_POOL_MAX for identity in .do/app*.yaml (direct :25060,
+  budget 2). The operator confirms here that the recorded repro counts as the harness.
+- Constitution rules touched: C-03, C-11, C-13, C-15, C-16, C-18, F-06, F-07, F-09, P-02, P-03, P-04, P-06,
+  IDENTITY-1..4. Floor breaches: none.
+- Business rules: CHANGE 265:@AC-1, @AC-3 (D-23 scope + r2 approval), @AC-4 (D-21 scope); PRESERVE 265:@AC-2,
+  @AC-5, @AC-6 and durable `user-management-ui.feature` @AC-2..@AC-6.
+- Status: spec-ready → design-approved.
+
+### Open Threads
+
+- Fake proves ordering/txn structure, not Postgres serialisation; AC-1 rests on the manual repro run with
+  `DB_POOL_MAX` > 2 — target: impl-spec exchangeAuthCode step (repro + counts recorded here).
+- Overlap with 252 on `identityServiceImpl.test.ts` (whichever lands second merges); until then the run guard
+  (Node 24, `typeof IdentityServiceImpl === 'function'`, non-zero executed-test count) is the only P-06 protection —
+  target: every test step's verification + final integration PR.
+- Lost COMMIT acknowledgement residual (code consumed, refresh row written, caller sees 13) — same as
+  `rotateRefreshToken`; accepted, no step.
+- `JWT_SECRET`-unset test mutates `process.env`; must restore in `finally` — target: AC-3 test step.
+- jscpd may trip on the duplicated transaction tail; fallback touches hotfix code — stop and ask the user —
+  target: exchangeAuthCode step pre-commit.
+- Out of scope, flagged only: no `is_active` check on exchange; audience fallbacks `:507` vs `:535`; hard-coded
+  60 s auth-code TTL `:459` (F-07) — target: none here; operator to decide on follow-ups.
+- Teardown: re-anchor IDENTITY-2/IDENTITY-4 line hints and re-check the "single-use" wording in
+  `services/xstockstrat-identity/CLAUDE.md:38` — target: teardown / context-constitution refresh step.
