@@ -494,3 +494,71 @@ The `/sdd-design fix-analysis-backtest-bounds` full debate is halted at its appr
 - [ ] The rename shifts the line anchors cited by 215/274. Target: re-grep at /sdd-spec.
 - [ ] RunBacktest test harnesses whose cfg is a bare MagicMock lack a `get_int_present` stub (fails.md:1394).
   Target: hard verification item at /sdd-spec.
+
+## Session 2026-10-22 — sdd-spec
+
+- Generated implementation-spec.md with 9 steps. Status: design-approved → implementation-ready. This session
+  resumed after a cut session; it reused recon.md, design.md and the round-2 gate state, with no re-debate.
+- **Added** @AC-5 (stored 0 = no limit; negative = 300 + WARN), @AC-6 (FAILED_PRECONDITION
+  `backtest bar series incomplete:`, no persistence, benchmark included) and @AC-7 (a sent token followed by an
+  empty page with an empty `next_page_token` is EOF) to acceptance.feature before any step (C-15). Coverage:
+  - AC-1, AC-2, AC-4, AC-7 → Step 2;
+  - AC-6 → Step 4;
+  - AC-3, AC-5 → Step 6.
+- **Steps:**
+  1. D-28 two-token guard.
+  2. Pager tests and the full-suite tripwire.
+  3. Rename to `_run_backtest`, a thin `@owner_scoped` wrapper, `except _BarFetchError: raise` in the loop, and
+     the FAILED_PRECONDITION map.
+  4. AC-6 tests (new `tests/test_backtest_bounds.py`).
+  5. `asyncio.timeout(limit or None)`, the `cm.expired()` check, and `disarm()` before
+     `self._backtests[backtest_id] = result`.
+  6. AC-3, AC-3b, AC-5, T-inner-timeout, T-commit and T-executor.
+  7. The analysis `CLAUDE.md:468` row.
+  8. strat-lab skill, README and references, plus the `mcp-tools.md` rows (@AC-32 @feature-224 parity kept).
+  9. The G-1 launch gate.
+- **Key codebase findings:**
+  - All design anchors still hold on the branch tip:
+    - `_fetch_bars_paged` `:1394`, terminal `:1432-1435`;
+    - `_BarFetchError` `:358`;
+    - `RunBacktest` `:784-785`;
+    - loop handlers `:1127-1132`;
+    - disarm anchor `:1267`;
+    - completed emit `:1344-1351`;
+    - screener `:3786-3796`.
+  - **The design's "~102 truthy-MagicMock GetBars" risk is retired.** A scratch prototype of the option (a) guard
+    against the full analysis suite (`uv run pytest -m 'not real_pg'`, 1272 tests) turned exactly one test red:
+    the bug-locking `test_warmup.py::test_identical_page_with_identical_token_terminates`. Step 2 keeps the full
+    suite as its tripwire.
+  - **Harness audit (fails.md:1394):** every RunBacktest harness stubs `get_int_present`:
+    - `make_servicer` `test_analysis_servicer.py:49`;
+    - `test_owner_dimension.py:34`;
+    - `test_fundamentals_formula_servicer.py:185`;
+    - `test_blend_guard.py:34`.
+
+    The remaining RunBacktest suites derive from `make_servicer`. No bare-MagicMock harness exists.
+  - Reuse targets:
+    - `_wire_per_symbol`, `_sym_bars` and `_mkt_def` (`tests/test_backtest_source_symbol.py:29-56`) for AC-6/AC-3;
+    - the `_watcher` real-ConfigWatcher pattern (`tests/test_list_opportunities_deadlines.py:63-69`).
+
+    A second consumer of `_watcher` moves it into `tests/conftest.py` in Step 6 (C-13).
+  - No internal `self.RunBacktest` caller in `app/`, so the rename is safe. The `_BACKTEST_MAX_DURATION_DEFAULT_S =
+    300` module constant serves both the getter default and the negative fallback.
+  - UI consumer is verified: `insights/strategies/[id]/page.tsx:89-92`, `:484` and `trader/positions/[symbol]/page.tsx:1141`
+    render `ConnectError.rawMessage`, so no UI step is needed (C-14 restated in the spec).
+
+### Decisions (sdd-spec)
+
+- T-inner-timeout injects the inner `TimeoutError` through `_load_benchmark_bars` (`:951`, which catches only
+  `_InsufficientData`). A per-symbol injection would be swallowed by the loop's `except Exception`, so it could not
+  exercise the wrapper's `cm.expired()` re-raise.
+- G-1 is spec'd as a `config`-category operational gate (Step 9). Its only file is this context.md (measurements +
+  operator threshold/sign-off).
+
+### Open Threads (carried)
+
+- [ ] Pin "fix-analysis-backtest-bounds after fix-agent-client-deadlines (273)" in
+  `docs/roadmap/features/merge-order.md`, and record I-1..I-3 in 273's context.md. This is still outside this
+  writer's scope (router / 273's writer); it is not on this branch.
+- [ ] G-1 measurements and the operator threshold. Target: Step 9, after Step 5 is on dev.
+- [ ] Re-grep `self._backtests[backtest_id] = result` and the loop handlers at every rebase onto peers 215/274/244.
