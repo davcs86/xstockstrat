@@ -662,3 +662,30 @@ Once the operator rules on the three gated items, the design is approvable witho
   "floor_breaches": []
 }
 ```
+
+## Session 2026-10-22 — sdd-design
+
+- Phase 0 Recon: recon.md (written earlier; services: xstockstrat-agent; reuse: `_POLICY_READ_TIMEOUT_S` fixed-float constant style, `tools.py:2266-2267` AioRpcError→`_grpc_error_message` idiom, `test_list_opportunities_deadline.py` hung-server harness).
+- Phase 1 Grilling: 3 rounds (full). Chosen approach: fixed `_RPC_TIMEOUT_S = 10.0` / `_LONG_RPC_TIMEOUT_S = 45.0` passed as per-call `timeout=` at all 73 unary sites (LONG on RunBacktest/ScreenSymbols/RunFundamentalsScan/TriggerBackfill only); `deadline_s` at every catch site plus a `write` flag ("outcome unknown, verify before retrying"); six new wraps; ValidateToken bounded with a three-way result → 503 without WWW-Authenticate on identity DEADLINE_EXCEEDED/UNAVAILABLE. Rejected: shared `_unary` helper, channel-level deadline, `agent.*` config keys, middleware `wait_for`, per-row W/I AST guard, None-only pass-through, dedicated 3 s auth budget.
+- OPERATOR DECISIONS (binding, recorded 2026-10-22, design gate r3) — APPROVED as synthesized with three binding additions:
+  - (a) SCOPE: the agent's ValidateToken call to identity (auth.py / `validate_bearer_claims`, main.py:156) gets a deadline. Added FR-6 to product-spec.md and @AC-11 to acceptance.feature (an identity stall yields a bounded fail-closed response within 10.5 s, sharing the request trace id).
+  - (b) On identity DEADLINE_EXCEEDED/UNAVAILABLE during token validation the agent returns 503 WITHOUT WWW-Authenticate (three-way validation result), not 401; a genuinely invalid token still returns 401 with WWW-Authenticate. Sanctions the CHANGE to the agent OAuth edge contract (main.py:164-174).
+  - (c) The widened 272 pass-through (returns `exc.details()` when details != 'Deadline Exceeded', regardless of `deadline_s`) is SIGNED OFF.
+  - Carried: r2 gate — 273 owns the pass-through in `_grpc_error_message` (tools.py:228-231) for 272; merge order 273 before 272. 2026-10-21 standing — x-trace-id propagated as much as possible, no C-03 waiver.
+- Constitution rules touched: C-01, C-03, C-10, C-11, C-14, C-15, C-16, C-18, P-02, P-03, P-06, F-07, PLAT-13, AGENT-1. Floor breaches: none (F-07 honored by the Fix Scope's fixed nesting-invariant constants; rationale in design.md §1).
+- Business rules: CHANGE agent OAuth edge contract (signed off r3 (b)); EXTEND 227 @AC-2, 273 @AC-11 (r3 (a)), 272 pass-through (r2 + r3 (c)), 210 @AC-2/@AC-5 (2026-10-21 trace decision); PRESERVE 127 @AC-4, 227 mapper contract, 224 @AC-18/19, 148 @AC-5, 170 @AC-12, 198 @AC-8 (at risk, R1 — not signed off as a CHANGE; spec must show p99 ≤ 45 s or escalate).
+- Status: spec-ready → design-approved.
+
+### Open Threads
+
+- [ ] R1 — 45 s LONG budget may cancel 45-60 s RunBacktest/RunFundamentalsScan runs (198 @AC-8 evidence persistence, partial fundamentals emits); measure/cite p99, escalate for FR-2 amendment if > 45 s — target: /sdd-spec, long-budget kwargs step.
+- [ ] R2 — 272 nesting inverted today (`analysis.backtest.max_duration_seconds` 300 staging / 120 prod > 45 s); pass-through inert until 272 sets a ≤ ~40 s ceiling — target: merge-order 273 → 272 row + 272 spec.
+- [ ] R3 — post-commit DEADLINE_EXCEEDED on writes; verb-derived `write` default can mislabel a mutating verb added to the read set — target: mapper step + explicit-`write=` guard.
+- [ ] R4 — list_opportunities accepted exception at 68 s; follow-up to lower its SetConfig ceiling — target: docs step (follow-up defect).
+- [ ] R5 — identity 2-connection pool: slow identity → bursts of fail-closed 503s — target: auth step (WARN logging), dev observation.
+- [ ] R6 — ingest_signal worst path (53 s with auth) hits silent fallbacks; none opens a security gate — target: ingest_signal wrap step (state posture).
+- [ ] R7 — ExecuteFormula 10 s vs operator-raised `sandbox.timeout_ms` (no SetConfig ceiling found) — target: /sdd-spec, verify `_clamp_override` ceiling.
+- [ ] R8 — sequencing 247 → 273 → 272 — target: merge-order rows.
+- [ ] R9 — main-dev holds a stale draft spec; read from origin/feature/fix-agent-client-deadlines — target: /sdd-spec boot.
+- [ ] R10 — extract_* have no MCP-level cap (HTTP egress) — target: docs step (follow-up defect).
+- [ ] R11 — ~75 hand edits risk a mis-assigned constant / missed `deadline_s`/`write` — target: test step (@AC-10 bidirectional guard + catch-site guards).
