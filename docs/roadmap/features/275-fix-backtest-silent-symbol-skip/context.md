@@ -572,3 +572,35 @@ unchanged (spec-ready), per the grilling protocol. The resume state is in the `s
 - [ ] The option (a) reading (the code-name warning applies only to RPC-mapped refusals) is still open for
   `/sdd-review impl-spec`. Steps 6 and 7 encode it (`test_formula_contract_error_adds_no_eval_warning`).
 - Next: `/sdd-review fix-backtest-silent-symbol-skip impl-spec`.
+
+## Session 2026-10-22 — sdd-review impl-spec
+
+- Result: PASS WITH WARNINGS. 0 failures, 8 warnings, no Floor breaches. Overlap: WARN, with no field-number,
+  migration or config-key collision. This review is advisory, and the lifecycle stays `implementation-ready`.
+- Addressed in `implementation-spec.md`:
+  - Step 2 `buf breaking`: the baseline is now `origin/main-dev`, the PR target, as in CI. The absolute path is now
+    `$(git rev-parse --git-common-dir)`. The `subdir=` form is kept (PLAT-10).
+  - Step 3 `packages/proto/gen/**`: `/sdd-execute` records the concrete generated files in the Deviation Log.
+  - Step 8: the coverage threshold is stated as N/A. Playwright has no coverage gate, and the Vitest 40% gate covers
+    `src/lib/**` only.
+  - Step 4 PERMISSION_DENIED breadth: the Step 2 value-4 proto comment and the Step 9 doc wording now say
+    "indicators refused", not only "owner cannot run". Step 1 gains item 5 to list every other `ExecuteFormula`
+    PERMISSION_DENIED (today `_reader`'s system-identity grant check, indicators `servicer.py:126-129`).
+  - Step 7 AC-4 `score` positional assertion: Step 1 gains item 6 to re-check the `_persist_backtest_run` signature
+    (`servicer.py:2848-2858`) after 272 and 215 land.
+- No change needed:
+  - Step 1 pre-272 anchors: the reviewer confirmed them, and the hard gate already handles this. 215 being partly in
+    the tree (value 5, `fund_refusals`, `fund_unknown`) is already a Step 1 check.
+  - Step 6 inline arm size: consistent with C-18. Re-check readability if 272 or 215 add more arms.
+- Still open:
+  - [ ] Merge-order rows (275 after 272, 273 and 215) are not yet in `docs/roadmap/features/merge-order.md`. They are
+    router-owned, need operator confirmation, and are outside this run's write scope. They must be written before
+    `/sdd-execute` or before the PR opens: the `RunBacktest` lines, `analysis.proto`, `BacktestDiagnostics.tsx`, the
+    e2e mocks, `tools.py`, `mcp-tools.md`, the strat-lab skill and the analysis `CLAUDE.md` all collide.
+  - [ ] Overlap rebase hot spots for Step 1: `tests/conftest.py` and `tests/test_analysis_servicer.py` (215, 244, 262,
+    227, 272); e2e `INVENTORY.md` and `mock-backend.ts` (215, 251, 256, 270); agent `tools.py` and `mcp-tools.md`
+    (273, 215, 246, 242, 240).
+  - [ ] Peer `fix-etf-flag-fill` (230) is `draft` with no implementation spec, so there is no collision today. Re-scan
+    if it reaches `implementation-ready` first.
+- Next: operator writes or confirms the merge-order rows, then `/sdd-execute fix-backtest-silent-symbol-skip` after
+  272, 273 and 215 land.
