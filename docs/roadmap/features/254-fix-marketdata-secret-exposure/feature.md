@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-21-marketdata-secret-exposure-defect.md`
 **Severity**: SEV-2
 **Created**: 2026-10-21
-**Last Updated**: 2026-10-21
+**Last Updated**: 2026-10-22
 
 ---
 
@@ -14,18 +14,21 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-10-21 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-21-marketdata-secret-exposure-defect.md` (debt-radar D-39, D-40) |
+| 2026-10-21 | `draft` → `spec-ready` | /sdd-review | Product spec approved (5 warnings; 5 WARN-level file overlaps, no FAIL) |
+| 2026-10-22 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written. Operator signed off the config @AC-4 CHANGE (header → header+SAN) and folded the `build request: %w` sites into Step 1 |
+| 2026-10-22 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 9 steps |
 
 ---
 
 ## Reviewers
 
-Snapshot from `docs/runbooks/reviewer-registry.md` at /sdd-triage time (2026-10-21). `/sdd-spec` overwrites it with per-step assignments.
+Snapshot from `docs/runbooks/reviewer-registry.md` at /sdd-spec time (2026-10-22), collected from each step's `**Reviewers**`.
 
 | Reviewer | Focus | Steps |
 |---|---|---|
-| `xstockstrat-marketdata` owner | Vendor client error handling (D-39); the marketdata leaf SAN the D-40 grant will bind to | TBD (/sdd-spec) |
-| `xstockstrat-config` owner | Secret encryption + redaction, `GetSecret` allow-list (D-40) | TBD (/sdd-spec) |
-| Security | Secrets decryptable only via `GetSecret` gated by the `x-internal-caller` allow-list; no plaintext secret in errors or logs | All steps |
+| `xstockstrat-marketdata` owner | Vendor client error handling (D-39); the marketdata leaf SAN the D-40 grant binds to | 1, 2, 3, 7 |
+| `xstockstrat-config` owner | Secret encryption + redaction, `GetSecret` allow-list (D-40) | 4, 5, 6, 7 |
+| Security | No plaintext secret in errors, logs or OTel; `GetSecret` gated by verified caller identity (header + mTLS SAN) | 1, 6, 7 |
 
 ---
 
@@ -33,7 +36,9 @@ Snapshot from `docs/runbooks/reviewer-registry.md` at /sdd-triage time (2026-10-
 
 - [Product Spec](product-spec.md) — bug description and fix scope
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-marketdata-secret-exposure`_
+- [Recon](recon.md) — grounded codebase dossier (Phase 0)
+- [Design](design.md) — approved design: chosen approach, rejected alternatives, open risks (Phase 1)
+- [Implementation Spec](implementation-spec.md)
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -46,4 +51,4 @@ sending `x-internal-caller: marketdata` (D-40).
 
 ## Next Action
 
-`/sdd-design fix-marketdata-secret-exposure` — recommended design depth: full (2 affected services, security); see context.md
+`/sdd-review fix-marketdata-secret-exposure impl-spec` — validate implementation spec, then `/sdd-execute fix-marketdata-secret-exposure`
