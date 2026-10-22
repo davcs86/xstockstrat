@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-10-22 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from the defect report; Track C |
+| 2026-10-22 | `draft` → `spec-ready` | /sdd-review | Product spec approved (9 warnings) |
 
 ---
 
@@ -32,4 +33,4 @@ Six staging formulas store the legacy username `davcs86` as `author` instead of 
 
 ## Next Action
 
-`/sdd-design fix-legacy-formula-authors` — recommended design depth: full (data rewrite on ownership rows, production unchecked); see context.md
+`/sdd-design fix-legacy-formula-authors` — recommended design depth: full (data rewrite on ownership rows, production unchecked); resolve OQ-1 to OQ-4 at design before `/sdd-spec`; see context.md
