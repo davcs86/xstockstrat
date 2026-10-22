@@ -3033,3 +3033,8 @@ ambiguity is logged here).
 - **Evidence**: `docs/roadmap/features/250-fix-otel-metrics-logs-gap/design.md` §4 Part 3 (existence set) and §5 (comment-only red case); context.md 2026-10-21 sdd-design entry.
 - **Rule it implies**: an existence/absence guard derives its "exists" set from declaration value lines only (e.g. `- uid:`, top-level `"uid":`), never from free text in the same file, and ships a red case proving a comment cannot satisfy existence.
 
+
+### 2026-10-22 — fix-template-update-metadata — assumption
+- **Mistake**: A design round proposed a real-PG check that a second RETIRE "advances" `updated_at` and asserted it with `>=`. The check passes even when the fix is missing. Because Postgres `NOW()` is the transaction start time, running the calls inside one `conn.transaction()` would also make them equal by construction.
+- **Evidence**: `docs/roadmap/features/269-fix-template-update-metadata/design.md` § Chosen Approach, proof plan (b); context.md 2026-10-22 sdd-design entry.
+- **Rule it implies**: A real-DB test that proves a timestamp moved asserts strict `>` against both the prior value and the sibling timestamp. Run each write as its own autocommit statement with a short `pg_sleep` between writes, never inside one transaction.
