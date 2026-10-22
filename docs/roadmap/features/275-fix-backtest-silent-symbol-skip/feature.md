@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-10-22 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-15-backtest-silent-symbol-skip-reports-ok-defect.md` (recorded during feature 215 staging verification) |
+| 2026-10-22 | `draft` → `spec-ready` | /sdd-review | Product spec approved (6 warnings; overlap WARN: 272, 215, 273, 270) |
 
 ---
 
@@ -50,4 +51,4 @@ diagnostics and is scored and persisted as a success. On staging this hid a PERM
 
 `/sdd-design fix-backtest-silent-symbol-skip` — recommended design depth: full (the report raises a possible
 `NoTradeReason` proto addition — the C-0 full trigger; the operator may downgrade to quick if the design reuses an
-existing reason plus a warning); see context.md
+existing reason plus a warning). Lands after 272, 273 and 215; see context.md
