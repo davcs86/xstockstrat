@@ -67,3 +67,10 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   companyfacts `cik` field) — nothing to reconcile.
 - Post-deploy: re-run the fundamentals backfill for CRCL, ELWT, PSKY, RDDT; AARD failed the 2026-10-21 watchlist
   backfill (`aa5804de`) too, cause unconfirmed — include it.
+
+## Session 2026-10-22 (CI: feature status automation)
+
+- Promotion PR #1295 merged to main
+- Feature promoted and committed: 38e2e104129f16dd339f9375901334a274109511
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-10-22

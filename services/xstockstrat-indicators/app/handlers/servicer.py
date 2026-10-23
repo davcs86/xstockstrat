@@ -63,6 +63,11 @@ _FUNDAMENTAL_METRIC_MEANING: dict[int, str] = {
 }
 
 
+def _clamp_override(override: int, configured: int) -> int:
+    # A request may only tighten a sandbox limit, never raise or disable it (bounds slot hold time).
+    return min(override, configured) if override > 0 else configured
+
+
 class _CallerRejected(Exception):
     def __init__(self, code, message):
         super().__init__(message)
@@ -274,8 +279,10 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
                 ],
             )
 
-        timeout_ms = request.timeout_ms_override or self._cfg.sandbox_timeout_ms
-        memory_bytes = request.memory_bytes_override or self._cfg.sandbox_memory_bytes
+        timeout_ms = _clamp_override(request.timeout_ms_override, self._cfg.sandbox_timeout_ms)
+        memory_bytes = _clamp_override(
+            request.memory_bytes_override, self._cfg.sandbox_memory_bytes
+        )
         allowed_imports = self._cfg.sandbox_allowed_imports
 
         # MessageToDict, not dict(): dict() leaves nested list/struct fields as protobuf objects

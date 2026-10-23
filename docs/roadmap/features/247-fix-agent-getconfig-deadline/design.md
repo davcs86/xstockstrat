@@ -63,7 +63,7 @@ Each caller's existing `except Exception` already yields its FR-2 fallback, and 
 
 **(b) DCR — SECURITY POSTURE CHANGE.**
 - Before this fix, a stalled config hung `/oauth/register`, so it failed closed by accident.
-- After it, a stall of D or more registers the client anyway. Two controls are skipped: `registration_enabled=false` (`oauth_server.py:87-89`) and the operator allowlist (`:107-110`). Identity enforces only `https://` (`services/xstockstrat-identity/src/grpc/identityServiceImpl.ts:363-366`).
+- After it, a stall of D or more registers the client anyway. Two controls are skipped: `registration_enabled=false` (`oauth_server.py:87-89`) and the operator allowlist (`:107-110`). Identity enforces only `https://` (`services/xstockstrat-identity/src/grpc/identityServiceImpl.ts:385-388`).
 - FR-2 and AC-4 (201) sanction this, so it is labelled here, not reversed.
 - [r2] Materialize `agent-dcr-fail-closed` as a `docs/reports/` defect report plus `.status` sidecar. Whether to return 503 on a read failure is that report's decision.
 - [r2] Correct the false comment at `oauth_server.py:102` ("identity enforces the same allowlist / https rule server-side") in this diff, to: "Pre-check only: identity enforces https:// alone, not this allowlist."
@@ -184,7 +184,7 @@ Then run `/context-forge:context-constitution refresh` scoped to what was touche
 - [ ] **`extract_email_content` stays over the MCP 60 s limit during a stall when N >= 5 URLs.** The cost is N×4×D, i.e. 12 s per URL, and no AC covers it. To be addressed by the materialized `agent-config-snapshot-read` report, written at the docs step.
 - [ ] **DCR fails open on every config stall of D or more.**
   - `registration_enabled=false` and the allowlist are bypassed.
-  - Any `https` redirect URI registers (`identityServiceImpl.ts:363-366`).
+  - Any `https` redirect URI registers (`identityServiceImpl.ts:385-388`).
   - FR-2 sanctions this.
   - To be addressed by the materialized `agent-dcr-fail-closed` report (docs step) and the `oauth_server.py:102` comment correction (service step).
 - [ ] **D = 3.0 s is not sized against a measured healthy `GetConfig` p99**, and it must cover per-call DNS, TCP and the mTLS handshake. A slow but healthy config falls back with only a warning:
