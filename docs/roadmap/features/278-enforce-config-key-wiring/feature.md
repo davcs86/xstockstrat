@@ -11,6 +11,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-10-23 | `idea` → `draft` | /sdd-story | Product spec generated; follow-up created by the operator when demoting 277-fix-ingest-seeded-config-keys |
+| 2026-10-23 | `draft` → `spec-ready` | /sdd-review | Product spec approved (7 warnings) |
 
 ---
 
@@ -38,4 +39,4 @@ _(Auto-populated from docs/runbooks/reviewer-registry.md based on affected servi
 
 ## Next Action
 
-`/sdd-review enforce-config-key-wiring product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-design enforce-config-key-wiring`
