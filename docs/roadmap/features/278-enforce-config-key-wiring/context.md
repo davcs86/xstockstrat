@@ -173,3 +173,25 @@ Status unchanged (`spec-ready`); design.md NOT written. The /sdd-design full deb
   - Config-wiring tests live in `scripts/config-wiring.test.mjs` (not under `workflow-tests/`, which the `context-map` job globs), run by the new `config-wiring` CI job.
 - Decisions: `policy.envReadUnseeded` defaults to `reported` in `scripts/config-wiring.json` until the operator rules at Step 10, so CI never depends on the ruling; Step 13 (CI job) is ordered after Step 11/12.
 - Open Threads carried into steps: env-baseline gate (10), unmodelled-rewrite shapes check (9), extras ownership "feature 278" (11), env-list ratchet (7/8), forwarders/dynamic registry (3/11), merge-order coupling with 243/244/261 and PR #1322 (18).
+
+## Session 2026-10-23 — sdd-review impl-spec
+
+Verdict: PASS WITH WARNINGS (no FAIL). Overlap: WARN (file-level only; no key/proto/migration collision owned by 278).
+
+### Addressed (implementation-spec.md)
+
+- B2 Files: Steps 2, 4, 6, 8 now enumerate fixture files/directories.
+- Step ordering: Step Dependencies now states how red is manufactured for Steps 12 and 17 (scratch root from Step 7 empty shape; pre-Step-14 skill text via git show) rather than renumbering.
+- Verification dependency on `config-wiring.test.mjs` (created in Step 2): stated that paired test steps run first.
+- Step 11 retyped `config` -> `docs`.
+- Step 13 scan-root/filter-root equality: instruction added, plus Step 12 test (5).
+- Step 18 context-map: resolved at spec time to no edit (map registers only workflow helpers); removed from Files.
+- Step 9: added re-run instruction if 243/244/248/264 migrations land first (stored-set drift).
+- Reader evidence re-verified: watcher.py:104, fundsignal_loop.py:136/148, config.go:112, marketdata_service.go:982-987, sequential-mode.md:80/145, merge-order.md:82, ci.yml:676.
+
+### Still open (Open Threads for the /sdd-execute checkpoint)
+
+- Design quality (C-18): `policy.envReadUnseeded` toggle and env-list partial-stale ratchet are the most speculative mechanisms; executor should confirm they are justified by the Step 9 first-run data, and drop either if the data does not need it.
+- Not individually re-read: remaining watcher getters (analysis `:136`, indicators `:98`), TS configWatcher lines; re-verify during Steps 3-4.
+- Migration collisions between other features (244 vs 248 both 032) are not 278's; Step 9 baseline must be re-read after any of 243/244/248/264 lands.
+- Merge-order row for 243/244/261 coupling is recorded only on the 278 side until Step 18 adds it (both directions in the row text).
