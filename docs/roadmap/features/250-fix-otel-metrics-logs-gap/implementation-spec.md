@@ -257,7 +257,7 @@ uv run --no-project --with pyyaml python3 -I -c "import yaml;d=yaml.safe_load(op
    ```
 
 4. Cite the follow-up by path: `docs/roadmap/features/274-otel-metrics-logs-export/` (Step 1 confirms the dir). It restores
-   error-rate, latency and analysis-scoring detection.
+   error-rate, latency and analysis-scoring detection. Keep that line free of generic Part 2 tokens (never write "metrics and logs" on it).
 5. Keep `## Notification routing` (`:48-53`) unchanged.
 6. Wording rule (design.md §3): never state a removed count in prose. Never name an xstk UID, the mute timing
    or a deleted file outside the fence.
@@ -654,9 +654,9 @@ shellcheck scripts/setup-env.sh && shfmt -d -i 2 scripts/setup-env.sh
    - Evidence and example: `dashboards/service-health.json#resource.service.name = "analysis"` (panel (c),
      Step 4).
    - **Fallback branch** (no dashboard): retire OTEL-1, the same way as OTEL-2.
-2. OTEL-2 (`:17`): retire it. Replace the row with a one-line retired marker that cites feature 250 and the
-   basename `otel-metrics-logs-never-exported-defect`. The marker text must not contain
-   `rpc_server_duration`; the guard exemption covers only the findings files.
+2. OTEL-2 (`:17`): retire it. Replace the row with a one-line retired marker that cites feature 250 only. The
+   marker text must not contain `rpc_server_duration` or the defect basename: that basename contains `metrics-logs`
+   (generic Part 2 token), and the guard exemption covers only the two findings files (P-0 review fix, 2026-10-23).
 3. `:29`: repoint to `alerts/README.md`, `dashboards/README.md`. Drop `alerts/mute-timings.yaml`.
 4. `:9`: drop "chiefly the alert/dashboard metric contracts", in favor of "the short-`service.name` addressing
    rule".

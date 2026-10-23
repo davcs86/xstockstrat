@@ -249,3 +249,7 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   greps `sed`-strip it first; Step 10 gains a follow-up-path case (exact green; recased and trailing-prose red).
   Warnings fixed: stale `## Prerequisite` heading renamed; design.md `:38` and §8 step 1 annotated; 274's number is
   immutable so Step 10's dir-exists dependency is durable. Re-run of the review after the fix is the gate to push.
+- Second re-review (same day): the OTEL-2 retired marker in `packages/otel/docs/context-constitution.md` (Step 8
+  item 2) was specced to cite the defect basename, whose `metrics-logs` trips the generic token outside the two
+  exempt findings files. Pre-existing in 250's spec, not caused by P-0. Fixed: marker cites feature 250 only. Step 3
+  item 4 gains a wording caution for the cite line.
