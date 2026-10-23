@@ -316,7 +316,7 @@ Add tests (red against the Step 5-less tree: `run_apply` is absent):
 
 **Instructions**:
 The runbook must contain, in order (macOS/Homebrew-compatible commands, `uv run`, no GNU-only flags; `shasum -a 256` on macOS):
-1. Purpose, scope, and the statement that prod row count and usernames are UNKNOWN; the six staging ids are a floor, not a bound. Never run against prod before step 3 (report) and DBA approval.
+1. Purpose, scope, and the statement that the row count and usernames beyond the six known staging ids are UNKNOWN; the six are a floor, not a bound. There is no production deployment today (operator, 2026-10-23), so the target is staging; if a production environment is created, never run against it before step 3 (report) and DBA approval.
 2. Authority statement (AC-9, operator sign-off 2026-10-22): authority to run is the DB credential holder plus the DBA change record (process, not code). The digest is integrity, not authority; the code enforces only a digest-matched, fully-confirmed plan and never touches `system` or UUID rows.
 3. Prerequisites and connection: required `DATABASE_URL`, no fallback; use the pooled `:25061` URL with `DB_PGBOUNCER=true` (F-06, off the direct `:25060` budget); workstation must be in the cluster's trusted sources; a DO-console session is NOT used (no file durability).
 4. Step A, users export: `uv run scripts/manage-users.py list-users --json > users.json`.
@@ -325,7 +325,7 @@ The runbook must contain, in order (macOS/Homebrew-compatible commands, `uv run`
 7. After apply: attach `plan.json` and the `*.result.json` to the DBA change record BEFORE the redeploy; they are the only undo/audit record and contain email local parts (PII): name the storage location and retention, and delete the local `users.json`.
 8. Restart and verify: redeploy/restart EVERY indicators instance (cache has no TTL); re-run report mode (0 rewritable for the confirmed authors); verify AC-1 as the owner through `get_formula`/`test_formula` (or `ExecuteFormula`) on one rewritten id, NOT `list_formulas` alone; analysis needs no restart; `skipped_concurrent` rows need a re-run.
 9. Undo: apply cannot undo (it refuses a UUID `old_author`). Use the result file to build a DBA-reviewed manual `UPDATE indicators.formulas SET author=<old> WHERE formula_id=<id> AND author=<new>` per row via `docs/runbooks/operator-db-access.md`, recorded in the change record, followed by the restart-and-verify step.
-10. Staging first, then prod; record the observed prod row count in the change record.
+10. Run on staging (the only environment today); record the observed row count in the change record. If a production environment is created later, run staging first, then production, report-first, and record its observed row count too.
 
 Add to `docs/runbooks/CLAUDE.md` a row: `legacy-formula-authors.md | Report and repair indicators formulas whose author is a legacy username (operator CLI, digest-confirmed apply, restart-and-verify) | Owner cannot see/execute their formulas; non-UUID authors in indicators.formulas`.
 

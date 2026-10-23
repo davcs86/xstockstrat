@@ -195,3 +195,9 @@ Verdict: PASS WITH WARNINGS (no FAIL). Overlap: WARN (file-level only; no key/pr
 - Not individually re-read: remaining watcher getters (analysis `:136`, indicators `:98`), TS configWatcher lines; re-verify during Steps 3-4.
 - Migration collisions between other features (244 vs 248 both 032) are not 278's; Step 9 baseline must be re-read after any of 243/244/248/264 lands.
 - Merge-order row for 243/244/261 coupling is recorded only on the 278 side until Step 18 adds it (both directions in the row text).
+
+## Session 2026-10-23 — environment-baseline decision (operator)
+
+- **Fact from the operator:** there is no production deployment. Step 10's production sampling is therefore not applicable; the production-only gap it was designed to probe has no running deployment behind it.
+- **Samples read on staging (read-only `get_config`, nothing written):** `get_config(namespace="ledger")` has `stream.notify_enabled` = true, stored **bare** (the other ledger keys are dotted: `ledger.export.enabled`, `ledger.export.max_window_days`). `get_config(namespace="trading")` has `trading.fill_poller.interval_ms` = 5000.0, stored **dotted** (the 029 heal), alongside the dotted `trading.risk.*` and `trading.approval.*` keys. `get_config(namespace="platform")` has `platform.maintenance_mode` = false, stored **dotted**, alongside `platform.log_level` and `platform.trading_state`. All three match what the offline model predicts for staging. `ledger.stream.notify_enabled` being bare supports the 277 finding that it is a dead seed with no reader.
+- **environment-baseline decision (operator ruling): reported-only.** Findings that exist only in the `production` environment (a key the migrations seed for `staging` but not for `production`) are printed as `REPORTED:` and kept out of the ratchet. Staging findings are blocking. `policy.envReadUnseeded` stays `reported`. Re-open Step 10 and run the production sampling when a production environment exists.

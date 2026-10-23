@@ -238,3 +238,9 @@ Advisory (MODE B); lifecycle unchanged (`implementation-ready`).
 
 - Step 7 `ListFormulas` DB-path test gap (see above).
 - Merge-order with 244/268/243 for `tests/conftest.py` and indicators `CLAUDE.md`.
+
+## Session 2026-10-23 — no production (operator)
+
+- **Fact from the operator:** there is no production deployment. The `Prod legacy-author set and count unknown` risk, OQ-2 and the first-prod-run wording earlier in this log therefore apply to staging: the only database in scope is staging, and its legacy-author set beyond the six known ids is still unknown (the six came from one admin selector, `author_filter="davcs86"`).
+- **Spec edits (wording only, no design change):** product-spec Root cause and OQ-2, and the runbook outline items 1 and 10 in implementation-spec. The CLI, plan/digest flow, restart requirement and the narrowed AC-9 are unchanged. If a production environment is created, the runbook is run there report-first after staging.
+- **Next:** the first staging report run (read-only) answers OQ-2; it is part of verification, not speccing.
