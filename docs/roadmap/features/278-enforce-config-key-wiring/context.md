@@ -161,3 +161,15 @@ Status unchanged (`spec-ready`); design.md NOT written. The /sdd-design full deb
 - Go/TS regex mis-resolution (cross-file constants, aliased watchers, 244 helpers) handled via same-service constant resolution and registry.forwarders `file:symbol`; gate on false-dynamic-read = 0.
 - Ratchet couples 243, 244, 261 to editing config-wiring.json; ordering vs PR #1322 and merge-order.md.
 - Accepted: --final finds missing legs only at completion; runtime-created rows invisible offline (documented by design).
+
+
+## Session 2026-10-23 — sdd-spec
+
+- Generated implementation-spec.md with 18 steps. Status → implementation-ready.
+- Key codebase findings:
+  - Seed side: 002 re-inserts production rows only for platform, trading (4 approval/risk keys), indicators, marketdata, portfolio, analysis; `ledger stream.notify_enabled` and `trading fill_poller.interval_ms` are staging-only offline. They are the sampled keys in the Step 10 operator gate. Migrations are 000-030 with no 024; only 001, 009, 010, 016, 017, 020, 029 contain UPDATE/DELETE.
+  - `get_config` takes only `namespace` (+ `user_id`) and reads its own deployment's environment, so the production sample must be run by the operator against the production-deployed agent; the staging session cannot.
+  - `reference/sequential-mode.md:112` (design's gate-mirror cite) is inside §5.5b checkpoints; the correct mirror anchors are §5.5 (`:80-93`) and §5.6 (`:145`). `.jscpd.json` / `check-duplication.sh` are threshold-only, no per-entry owner baseline, so the owner ratchet is built new.
+  - Config-wiring tests live in `scripts/config-wiring.test.mjs` (not under `workflow-tests/`, which the `context-map` job globs), run by the new `config-wiring` CI job.
+- Decisions: `policy.envReadUnseeded` defaults to `reported` in `scripts/config-wiring.json` until the operator rules at Step 10, so CI never depends on the ruling; Step 13 (CI job) is ordered after Step 11/12.
+- Open Threads carried into steps: env-baseline gate (10), unmodelled-rewrite shapes check (9), extras ownership "feature 278" (11), env-list ratchet (7/8), forwarders/dynamic registry (3/11), merge-order coupling with 243/244/261 and PR #1322 (18).
