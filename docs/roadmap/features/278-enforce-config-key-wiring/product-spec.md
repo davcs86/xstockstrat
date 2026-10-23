@@ -21,7 +21,7 @@ FR-4. CI runs the check on every pull request and fails on a finding that is not
 
 ## Out of Scope
 
-- Fixing the existing mismatched keys: that is the open defect `docs/reports/2026-10-22-ingest-seeded-config-keys-never-read-defect.md` (277 was demoted, not completed).
+- Fixing the existing mismatched keys: the operator closed the defect report `docs/reports/2026-10-22-ingest-seeded-config-keys-never-read-defect.md` as `wont-fix` when demoting 277. The findings stay recorded in 277's `context.md` and become the CI baseline here.
 - Changing the config service, its snapshot key shape, or the readers' lookup behavior.
 - Runtime enforcement (a service refusing to start on an unread key).
 

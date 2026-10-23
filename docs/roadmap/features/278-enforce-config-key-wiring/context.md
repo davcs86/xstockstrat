@@ -13,3 +13,7 @@
 - **Consumer surface (C-14):** None (internal tooling and process). Stated in the product spec.
 - **Evidence to reuse:** 277's recon.md and context.md (the sweep: 5 ingest and 13 analysis keys seeded bare but read dotted, `indicators.sandbox.*` owned by 243, dead seeds `analysis backtest.max_duration_seconds` and `ledger stream.notify_enabled`, unseeded `ingest.backfill.max_concurrent_jobs` and `retry_on_failure`). The CI baseline in FR-4 is that list.
 - **Open for review:** the five questions in the product spec, especially which form (migration column vs live snapshot) the check treats as authoritative.
+
+## Session 2026-10-23 — sdd-story (follow-up)
+
+- The operator marked the ingest seeded-key defect report `wont-fix` (ref `feature:277-fix-ingest-seeded-config-keys`). The 18 known findings therefore have no open owner: they live only in 277's `context.md`, and FR-4's baseline entries must name 277 (or 278) as the owning feature, not a defect report.

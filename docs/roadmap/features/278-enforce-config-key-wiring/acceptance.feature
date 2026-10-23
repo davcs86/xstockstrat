@@ -46,7 +46,7 @@ Feature: enforce-config-key-wiring
 
   @AC-7 @FR-4
   Scenario: CI fails on a new finding that is not in the baseline
-    Given the baseline lists the 18 findings tracked by the open ingest seeded-key defect report
+    Given the baseline lists the 18 findings recorded in feature 277's context.md
     And a pull request seeds a key that no code reads
     When the CI wiring-check job runs
     Then the job fails and names the new finding
