@@ -253,3 +253,6 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   item 2) was specced to cite the defect basename, whose `metrics-logs` trips the generic token outside the two
   exempt findings files. Pre-existing in 250's spec, not caused by P-0. Fixed: marker cites feature 250 only. Step 3
   item 4 gains a wording caution for the cite line.
+- Third re-review (spec-reviewer, 2026-10-23): PASS, 0 blockers, 0 warnings. Non-blocking notes carried to
+  `/sdd-execute`: Step 3 and Step 8 verification lack the sed-stripped generic-token grep (Step 11 is the backstop).
+  P-0 is complete: 250 may now execute; 274 `/sdd-spec` follows 250's merge.
