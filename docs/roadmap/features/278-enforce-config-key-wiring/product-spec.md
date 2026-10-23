@@ -14,8 +14,12 @@ As a platform maintainer, I want the execution/validation loop and CI to prove t
 
 ## Functional Requirements
 
-FR-1. A wiring check lists, from the config migrations and the service code, every config key by its stored form and its read form, and reports each of: a key seeded but read by no code, a key read by code but never seeded, and a key whose stored form differs from the string the reader looks up, and a read whose key is built at runtime and cannot be resolved (`dynamic-read`).
-FR-2. The `/sdd-execute` validation of any step that adds or changes a config key (a `config` step, or a migration that inserts into `config.config_values`) runs the check and does not mark the step done while it reports a finding for a key that feature declared.
+FR-1. A wiring check lists, from the config migrations and the service code, every config key by its stored form and its read form, and reports each of these finding kinds:
+  - `seeded-unread`: a key seeded but read by no code.
+  - `read-unseeded`: a key read by code but never seeded.
+  - `form-mismatch`: a key whose stored form differs from the string the reader looks up.
+  - `dynamic-read`: a read whose key is built at runtime and cannot be resolved.
+FR-2. The `/sdd-execute` validation of any step that adds or changes a config key (a `config` step, or a migration that inserts into `config.config_values`) runs the check and does not mark the step done while it reports a finding for a key that feature declared. A feature declares a key in the product spec's `Config Key Changes` or by inserting it in a migration step; design pins the exact source.
 FR-3. The `/sdd-review impl-spec` criteria require, for every config key in the product spec's `Config Key Changes`, a step that names its reader (file and symbol) and a test that builds a config snapshot from the seeded key and asserts the real reader returns the seeded value.
 FR-4. CI runs the check on every pull request and fails on a finding that is not in a tracked baseline; each baseline entry names the defect or feature that owns it, so existing debt (the 277 findings) does not block new work but cannot grow silently.
 
@@ -55,9 +59,10 @@ No runtime service. Touches repo tooling and process only:
 
 Branch to create: `feature/enforce-config-key-wiring` (branch from `main-dev`)
 Approval gates required (per docs/runbooks/feature-workflow.md):
-- [ ] 1 service owner approval (non-breaking proto or config change)
-- [ ] 2 service owners + platform lead (breaking proto change)
-- [ ] DBA review + service owner (schema migration)
+- [x] None apply: no proto, schema or config key change (struck by /sdd-review 2026-10-23)
+- [ ] ~~1 service owner approval (non-breaking proto or config change)~~
+- [ ] ~~2 service owners + platform lead (breaking proto change)~~
+- [ ] ~~DBA review + service owner (schema migration)~~
 
 ## Acceptance Criteria
 
