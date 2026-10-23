@@ -142,3 +142,22 @@ Status unchanged (`spec-ready`); design.md NOT written. The /sdd-design full deb
   "floor_breaches": []
 }
 ```
+
+## Session 2026-10-23 — sdd-design
+
+- Phase 0 Recon: wrote recon.md (services: none at runtime, tooling only: scripts/, ci.yml, sdd-execute, sdd-review, config-governance.md; key reuse patterns: migration-contract-gate job shape, node --test precedent).
+- Phase 1 Grilling: 2 rounds (full), operator approval at the round-2 gate. Chosen approach: zero-dependency Node `scripts/check-config-wiring.mjs` + `scripts/config-wiring.json` (findings, registry), per-environment join collapsed by (ns, key, kind), stdlib ast for Python and regex for Go/TS, non-final mode at step time and a single `--final` at the completion gate and in CI, CI job `config-wiring` in ci-gate. Rejected: env-partial kind, per-key --final, B2 third clause, regex-only Python, env union, registry-as-truth, shape-keyed allow-list, in-code annotations.
+- Constitution rules touched: C-11, C-15, C-16, C-18, F-08, F-09, P-03 (C-14 precedent, C-03 n/a). Floor breaches: none.
+- Business rules: PRESERVE 182:@AC-1, 278:@AC-3/@AC-5/@AC-10; EXTEND 278:@AC-1; no CHANGE.
+- Status: spec-ready → design-approved.
+
+### Open Threads (from design.md Open Risks)
+
+- Env-baseline decision gate: OPERATOR step in the impl-spec (first-run `read-unseeded env=` list, read-only production `get_config` on 2-3 sampled 001-era keys, operator rules blocking vs reported-only) before `findings` freezes; CI must not depend on it until ruled.
+- First-run step must test: no migration after 017 renames environments; 002/005/025 do not trip the fail-closed trigger (add shapes with fixtures, never weaken).
+- Ownership of backfill.max_retry_attempts, signals.dedup_window_hours, fundsignal.retry_seconds, fundsignal.startup_jitter_seconds set to "feature 278"; operator may overrule (record here).
+- /sdd-spec must verify sequential-mode.md:112, check-duplication.sh and .jscpd.json before citing lines.
+- Env-list ratchet validator + fixture (entry shrinks when one environment is fixed).
+- Go/TS regex mis-resolution (cross-file constants, aliased watchers, 244 helpers) handled via same-service constant resolution and registry.forwarders `file:symbol`; gate on false-dynamic-read = 0.
+- Ratchet couples 243, 244, 261 to editing config-wiring.json; ordering vs PR #1322 and merge-order.md.
+- Accepted: --final finds missing legs only at completion; runtime-created rows invisible offline (documented by design).
