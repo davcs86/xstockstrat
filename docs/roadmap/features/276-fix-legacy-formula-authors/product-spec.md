@@ -21,7 +21,7 @@
 
 ## Root Cause Hypothesis
 
-Rows created before formula ownership moved from username to user id were never backfilled. The production row count is **unknown**: production has not been checked, and the six staging ids are a floor, not a bound (OQ-2).
+Rows created before formula ownership moved from username to user id were never backfilled. There is **no production deployment** (operator, 2026-10-23), so the only database in scope is staging. Its row count beyond the six known ids is still **unknown**: the six were found through the single admin selector `author_filter="davcs86"`, so they are a floor, not a bound (OQ-2).
 
 ## Functional Requirements
 
@@ -54,7 +54,7 @@ The owner-visible consequence is that formulas reappear for their owner, so C-14
 ## Open Questions
 
 - **OQ-1.** What is the username-to-user-id mapping source (identity `ListUsers`/`GetUser`, a table copy, or an operator-supplied map), and which service owns the lookup? Design decides; it gates FR-1 and FR-3, so design must resolve it (C-11) before spec.
-- **OQ-2.** Do production rows carry legacy authors, and which usernames? Unknown; the design must not assume the staging set. Checking is read-only and part of verification, not speccing.
+- **OQ-2.** Do other formulas carry legacy authors, and which usernames? There is no production (operator, 2026-10-23), so this is a staging question: the report mode run against staging answers it. Still unknown; the design must not assume the six known ids are complete. Checking is read-only and part of verification, not speccing. If a production environment is created later, the same procedure runs there report-first.
 - **OQ-3.** What is the disposition of unmappable authors (FR-3) beyond report-and-leave: operator-supplied mapping, or a follow-up? Design decides.
 - **OQ-4.** Is a guard needed so new rows can never be written with a non-user-id author? Out of scope unless design finds a live write path still doing so.
 
