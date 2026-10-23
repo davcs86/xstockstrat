@@ -14,14 +14,14 @@ As a platform maintainer, I want the execution/validation loop and CI to prove t
 
 ## Functional Requirements
 
-FR-1. A wiring check lists, from the config migrations and the service code, every config key by its stored form and its read form, and reports each of: a key seeded but read by no code, a key read by code but never seeded, and a key whose stored form differs from the string the reader looks up.
+FR-1. A wiring check lists, from the config migrations and the service code, every config key by its stored form and its read form, and reports each of: a key seeded but read by no code, a key read by code but never seeded, and a key whose stored form differs from the string the reader looks up, and a read whose key is built at runtime and cannot be resolved (`dynamic-read`).
 FR-2. The `/sdd-execute` validation of any step that adds or changes a config key (a `config` step, or a migration that inserts into `config.config_values`) runs the check and does not mark the step done while it reports a finding for a key that feature declared.
 FR-3. The `/sdd-review impl-spec` criteria require, for every config key in the product spec's `Config Key Changes`, a step that names its reader (file and symbol) and a test that builds a config snapshot from the seeded key and asserts the real reader returns the seeded value.
 FR-4. CI runs the check on every pull request and fails on a finding that is not in a tracked baseline; each baseline entry names the defect or feature that owns it, so existing debt (the 277 findings) does not block new work but cannot grow silently.
 
 ## Out of Scope
 
-- Fixing the existing mismatched keys: the operator closed the defect report `docs/reports/2026-10-22-ingest-seeded-config-keys-never-read-defect.md` as `wont-fix` when demoting 277. The findings stay recorded in 277's `context.md` and become the CI baseline here.
+- Fixing the existing mismatched keys: the operator closed the defect report `docs/reports/2026-10-22-ingest-seeded-config-keys-never-read-defect.md` as `wont-fix` when demoting 277. The findings stay recorded in 277's `context.md` and become the CI baseline here (see Open Questions for its exact contents).
 - Changing the config service, its snapshot key shape, or the readers' lookup behavior.
 - Runtime enforcement (a service refusing to start on an unread key).
 
@@ -65,8 +65,10 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 
 ## Open Questions
 
-- [ ] Where does the check live and how does it find readers across Go, Python and TypeScript (literal extraction from getter calls vs a per-service registry)? Literal extraction misses keys built at runtime; the design must say how those are handled.
-- [ ] Is the stored form defined by the migration `key` column alone, or by the live snapshot (`values[row.key]`)? 277 showed the two conventions coexist (full dotted for newer seeds, namespace-stripped for older ones); the check must state which it treats as authoritative.
-- [ ] Baseline or fix-first: CI gating with a baseline of the 18 known 277 keys, or wait until they are fixed? FR-4 assumes a baseline; confirm at design.
-- [ ] Interaction with in-flight work: feature 243 (indicators.sandbox.* heal), 244 (moves reader literals into helpers; the check must survive that refactor) and 261.
-- [ ] Known traps (ledger): the stored key must be read back against the reader string, not just counted (`fails.md:2335`), and a heal must snapshot first (`fails.md:2970-2978`); an earlier literal-string audit missed config reads outside the touched code (`fails.md:1040`).
+All five are resolved or explicitly deferred below; the decisions are also recorded in `context.md`.
+
+- [x] **Check location and reader discovery** — Resolved as a requirement, mechanism deferred to `/sdd-design`. The check is a script under `scripts/` and must cover Go, Python and TypeScript readers and survive feature 244's move of reader literals into helpers. Keys built at runtime (non-literal getter arguments) are never silently skipped: each is reported as a finding of kind `dynamic-read` unless a baseline entry or an explicit in-code annotation names the key set it can produce. Design chooses literal extraction vs a per-service registry within that constraint.
+- [x] **Authoritative stored form** — Resolved: the stored form is the string the live snapshot serves, `values[row.key]`, and the migration `key` column is its source (namespace-prefixed or not as the row stores it). The reader string must equal that stored key verbatim; the check never normalizes a bare key into a dotted one, so a bare seed read dotted is a `form-mismatch` (@AC-1).
+- [x] **Baseline or fix-first** — Resolved: baseline (FR-4). Feature 277 was demoted and its defect report closed `wont-fix`, so nothing fixes the existing findings. The baseline is every finding the first check run produces, reconciled against feature 277's recorded sweep: the 5 `ingest` and 13 `analysis` form mismatches (18), the dead seeds `analysis` `backtest.max_duration_seconds` and `ledger` `stream.notify_enabled`, the unseeded `ingest.backfill.max_concurrent_jobs` and `ingest.backfill.retry_on_failure`, and `indicators.sandbox.*` (owned by feature 243). Each entry names 277, 278 or 243 as owner. Design records the exact final count.
+- [x] **In-flight work (243, 244, 261)** — Deferred to `/sdd-design` with the constraint stated here: the check must tolerate 244's reader refactor, treat 243's `indicators.sandbox.*` entries as baseline owned by 243 until it lands, and not depend on 261's key (`ingest.mcp_client.request_timeout_seconds`) being healed. Merge-order is design's call.
+- [x] **Known traps (ledger)** — Adopted as acceptance constraints: the stored key is read back against the reader string, not just counted (`fails.md:2335`, @AC-1); the check is read-only and never heals or rewrites a seed, so the snapshot-first heal trap (`fails.md:2970-2978`) does not apply; reads outside the touched code are covered because the check scans every service, not the diff (`fails.md:1040`).
