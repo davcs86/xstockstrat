@@ -521,3 +521,189 @@ Synthesis (round 3, gate policy halt; design.md not written, status.md unchanged
   "floor_breaches": []
 }
 ```
+
+## Session 2026-10-23 — sdd-batch design gate (round 4)
+
+### Open Threads
+
+Synthesis (round 4, gate policy halt; design.md not written, status.md unchanged):
+
+- Approach: one forward config migration (number re-derived across all remote branches at spec time; 033 or next free, 031/032 are claimed) re-keys 18 bare seeds to the exact string each reader uses: 5 ingest keys (005, 025), 12 analysis fundsignal.* keys (008) and analysis scoring.signal_decay_half_life_hours (019). No reader, proto or RPC change; migrations 005/008/019/025 stay unedited (F-01). The r4 UP SQL is adopted as-is (enumerated targets VALUES list, value_type RAISE guard, single-statement CTE with disjoint DELETE-twin and UPDATE-rename rows, is_secret=false and NOT LIKE guards, operator twin policy of preserve-then-delete-bare, rename in place keeping row id, no pg_notify, FR-4 seeds nothing).
+- Required changes for r5: (1) DOWN is driven by a migration-owned log table config.rekey_033_log holding full rows (renamed / twin_removed), created in UP per the config_values_premigration_017 precedent and 243's snapshot-first rule; config_audit rows are visibility-only, tagged caller_identity='migration-033', and the twin-removed row is keyed by the BARE key; (2) the assertions harness gets a dedicated config goto-032 pass with fixtures-pre-033.sql (using \ir), because migration-rerun.sh:86 migrates to head before assertions run; shared pass 0 is untouched; (3) product-spec/acceptance widen before /sdd-spec (FR-1b for the 13 analysis keys, new analysis-reader @ACs, loop-level ingest AC-1 test, drop 'dev' from AC-3, analysis added to Affected Services, re-run /sdd-review product-spec); (4) the pre-deploy gate becomes an explicit step plus an AC, run before the merge to main-dev (staging db-migrator is PRE_DEPLOY) and again before promotion to main: read-only listing of edited non-default rows and differing bare/dotted twin pairs with per-row operator sign-off, recorded as a P-04 artifact.
+- Strongest open objection: B2/B1 pair, DOWN reversibility. Audit-table replay contradicts the snapshot-first heal rule (fails.md:2970-2978, insights.md:1215-1217) and 243's mechanism, and the assertions harness would never exercise the rename path because fixtures become twins after migrate-to-head. B3 (spec widening) and B4 (gate on the wrong merge) are equally blocking but are process fixes, not design forks.
+- Floor status: no breach (floor_breaches empty); F-01 and F-04 hold.
+- Uncovered @AC changes: INGEST-9 CHANGE, CONFIG-9 CHANGE and the new analysis-reader AC-8 EXTEND are covered by the operator decision. AC-3 (drop 'dev', a correction) is NOT covered and needs review. All other touched scenarios (277 AC-5/6/7, feature-182 AC-4, feature-166 AC-2 FR-2, features 224/225 AC-35, analysis fundsignal feature files, private-by-default-templates:64, feature-161 decay suites) are PRESERVE and need no sanction.
+- Non-blocking items adopted as binding spec requirements: RAISE NOTICE with skipped-scope count in DOWN; name the dirty-state recovery for the UP RAISE in PRE_DEPLOY (correct the row, then force 32); document that a concurrent SetConfig create_key fails the migration dirty rather than corrupting; add the system:migration-033 sentinel to config-governance.md:93-103; record analysis.backtest.max_duration_seconds doc drift (analysis CLAUDE.md:468) in the FR-6 sweep; coordinate with 243 (031), 244, 261 and 248; keep/edit the test literals as listed in the state block.
+
+```sdd-batch-design-state
+{
+  "round": 4,
+  "synth": {
+    "approach": "One forward config migration, services/xstockstrat-config/migrations/033_rekey_inert_seeded_keys_full_dotted.{up,down}.sql (number re-derived across all remote branches at spec time, since 031/032 are claimed). It re-keys 18 bare seeds to the exact string each reader uses: 5 ingest keys (005, 025), 12 analysis fundsignal.* keys (008_analysis_fundsignal_keys.up.sql:13-47) and analysis scoring.signal_decay_half_life_hours (019:11,17). No reader, proto or RPC change. Migrations 005/008/019/025 stay unedited (F-01). Adopt from r4 as-is: the enumerated targets VALUES list (identical in UP, DOWN and assertions, cross-checked); the UP value_type RAISE guard; the single-statement CTE (DELETE twins and UPDATE-rename on disjoint rows, so the 017:101-102 unique index cannot collide); is_secret=false and NOT LIKE guards (029:26-27); the operator twin policy (preserve bare twin in audit/log, delete bare, dotted twin wins); rename in place keeping row id; no pg_notify (db-migrator is PRE_DEPLOY); FR-4 seeds nothing.\n\nChanges required for r5 (resolve the adversary's four blockers):\n1. DOWN source of truth becomes a migration-owned snapshot/remediation log table config.rekey_033_log (full rows: namespace, key, bare_key, environment, user_id, value_type, value_data, description, default_value, consuming_service, updated_by, updated_at, action in {renamed, twin_removed}), created in UP, precedent config_values_premigration_017 (017:31-33), matching 243's snapshot-first rule (fails.md:2970-2978, insights.md:1215-1217). DOWN restores exact rows from the log (exact value_type, description, updated_at; no reason-vocabulary parsing, no DISTINCT ON replay, no targets-derived value_type workaround) and marks entries restored so DOWN-after-DOWN and the B2 operator-dotted-row case are trivial. config_audit rows are kept only for human visibility, tagged caller_identity='migration-033' (column exists on both tables, 014_config_caller_identity.up.sql:9,12). The twin-removed audit row is keyed by the BARE key (the row actually removed), not the dotted key. The log table is dropped by a later cleanup, not by DOWN, or DOWN drops it only after a successful full restore (spec decides; state it).\n2. Assertions harness fix: scripts/migration-rerun.sh:86 runs db-migrate.sh up before migration-assertions/*.sql (:183-190), so real seed rows are already dotted and bare fixtures would become twins (AC-3 rename path never exercised, DOWN1 would also replay real markers). Add a config pass that migrates to 032 (goto, like analysis goto 25 at :75), loads fixtures-pre-033.sql, runs up/rerun/down/rerun/up/operator-insert/down inside the script, then restores to head; use \\ir not \\i. Do not change shared pass 0. Keep fixtures F1-F7 including per-user F3/F5 and the secret F7.\n3. Product-spec/acceptance widening is a gate item before /sdd-spec: add FR-1b for the 13 analysis keys, new @AC rows for the analysis readers (fundsignal_loop.py:136-232, servicer.py:4879,5213) and a loop-level ingest AC-1 test, drop 'dev' from AC-3 (017:41 CHECK rejects it), add analysis to Affected Services, and re-run /sdd-review product-spec.\n4. Pre-deploy gate becomes an explicit step AND an AC, and runs before the merge to main-dev (staging deploys on main-dev push via db-migrator PRE_DEPLOY, .do/app.yaml:662-664), then again before promotion to main: a read-only check on each environment listing every edited non-default row of the 18 keys and every bare/dotted twin pair whose values differ, with operator sign-off per row (analysis.fundsignal.enabled=true would start the system-identity producer). Where the operator wants current behaviour preserved, apply 029's per-row precedent (029:30-43). Record as a P-04 artifact. No data/config change on staging or production during speccing.\n\nNon-blocking items adopted as binding spec requirements: RAISE NOTICE with skipped-scope count in DOWN (ON CONFLICT DO NOTHING / NOT EXISTS skips); name the dirty-state recovery for the RAISE in PRE_DEPLOY (correct the row, then force 32); document that a concurrent SetConfig create_key fails the migration (dirty) rather than corrupting (insights.md:1220-1222); add the system:migration-033 sentinel to docs/patterns/config-governance.md:93-103; add the analysis.backtest.max_duration_seconds doc drift (analysis CLAUDE.md:468, no reader in app/) to the FR-6 sweep findings; keep config_values_premigration-style naming consistent with 243; coordinate with 243 (031), 244 (reader rewrite, zero-trap test), 261 (request_timeout_seconds string) and 248.\n\nTest literals: KEEP configServiceImpl.test.ts:45, listKeysWire.test.ts:44,88-123, setConfigScalarBounds.test.ts:30 (plus one dotted-key sibling case), ui e2e/config-ui/audit.spec.ts:25 (historical audit row); edit the stale decay example in the comment at configServiceImpl.ts:98. Reader-link tests (tests/test_config_watcher.py:56, tests/test_mcp_client_loop.py:122, analysis tests/test_analysis_servicer.py:4724) must fail loudly when unreachable and survive 244's helper refactor (assert on the snapshot built from the seeds, not on a regex over source). Docs to update: INGEST-9, 2026-09-03 findings entry, CONFIG-9, ingest CLAUDE.md, config-governance.md:375-376.",
+    "open_objections": [
+      {
+        "text": "[adversary B1, r4] Assertion harness ordering: migration-rerun.sh:86 migrates to head before migration-assertions/*.sql (:183-190), so bare fixtures become twins, the AC-3 rename path is never exercised, and DOWN1 replays real pass-1 markers. Proposal must add a goto-032 pass with fixtures-pre-033.sql (or in-transaction deletion of dotted real rows) and use \\ir. Unanswered by r4.",
+        "blocking": true
+      },
+      {
+        "text": "[adversary B2, r4] DOWN replays config_audit (free-text-ish reason vocabulary, DISTINCT ON, value_type-from-targets, loses description/updated_at), contradicting the snapshot-first heal rule (fails.md:2970-2978, insights.md:1215-1217) and 243's mechanism (C-18). Replace with migration-owned config.rekey_033_log restoring full rows; keep audit for visibility only. Unanswered by r4.",
+        "blocking": true
+      },
+      {
+        "text": "[adversary B3, r4] Scope grew to 13 analysis keys but product-spec FRs/ACs did not: add FR-1b, analysis-reader @ACs (fundsignal_loop.py:136-232, servicer.py:4879,5213), drop 'dev' from AC-3, re-review product-spec (C-15/P-04).",
+        "blocking": true
+      },
+      {
+        "text": "[adversary B4, r4] Read-and-halt gate is only an Assumption and guards the wrong merge: staging db-migrator is PRE_DEPLOY on main-dev push (.do/app.yaml:662-664). Make it an explicit step plus AC before the main-dev merge, listing edited non-default rows and differing twin pairs with operator sign-off per row (P-03/C-15).",
+        "blocking": true
+      },
+      {
+        "text": "twin-removed audit row keyed by the dotted key with new_value NULL reads as deletion of the live dotted key in config-ui; key it by the bare key.",
+        "blocking": false
+      },
+      {
+        "text": "UP RAISE leaves golang-migrate dirty inside PRE_DEPLOY, blocking every service deploy; spec must name recovery (force 32 after correcting the row) and the gate must make it unreachable.",
+        "blocking": false
+      },
+      {
+        "text": "DOWN skips scopes silently (ON CONFLICT DO NOTHING / NOT EXISTS); emit RAISE NOTICE with skipped count (P-03).",
+        "blocking": false
+      },
+      {
+        "text": "Docs: add system:migration-033 to the author-sentinel table (config-governance.md:93-103); record analysis.backtest.max_duration_seconds documented-but-unread drift (analysis CLAUDE.md:468) in the FR-6 sweep.",
+        "blocking": false
+      },
+      {
+        "text": "243 alignment (031 twin/down/log convention) and 261 request_timeout_seconds seam unverified on their branches; coordination check required at spec time.",
+        "blocking": false
+      },
+      {
+        "text": "Spec-time verifications remain: no x-multi-statement flag in scripts/ (DO block plus CTE is two statements), secretCallerAuthz.test.ts:38, ui e2e/fixtures/configKeys.ts:97, analysis ConfigWatcher snapshot fixture.",
+        "blocking": false
+      },
+      {
+        "text": "Production values for the 18 keys unread; P-04 artifact required before promotion to main.",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "INGEST-9",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "CONFIG-9",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "AC-8 (feature 277, new: analysis fundsignal.* and decay readers see seeded values)",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "AC-3 (feature 277, drop 'dev' environment example)",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "AC-5 (feature 277)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "AC-6 (feature 277)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "AC-7 (feature 277)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "AC-4 @feature-182 readiness-materializer-config-keys.feature (idempotent and reversible)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "AC-2 FR-2 feature-166 (ingest.mcp_credential.* secret rows untouched)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "AC-35 @feature-224 and 225 (per-user scope, system identity, secret rows)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "analysis fix-fundamentals-signal-producer.feature (lines 13,38,42,57) and fundsignal-watchlist-universe.feature (lines 9-73)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "private-by-default-templates.feature:64 (analysis.fundsignal.scoring_formula_id)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "config surface-signal-weight-decay-config.feature @AC-7, @AC-11, @AC-12 @feature-161",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "ui surface-signal-weight-decay-config.feature @AC-6 @feature-161 (bounds 0-8760 on ListKeys)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "Make readers prefix-tolerant or change readers to the bare form: collides with 244's reader rewrite and 261's key string, touches feature-173 surfaces",
+      "Two migrations (one per namespace): no benefit, doubles number allocation and harness passes",
+      "Blanket per-namespace heal (029 shape) for analysis: would re-key dead backtest.max_duration_seconds and obsolete signals.source_weights; enumerated targets win",
+      "Keep the bare twin (r3 policy): leaves the FR-3 defect and diverges from 243; superseded by operator twin policy",
+      "Audit-table replay for DOWN (r4 DISTINCT ON over config_audit with four-word reason vocabulary): couples reversibility to an operator-visible table, needs value_type workaround, loses description/updated_at, diverges from 243's snapshot rule",
+      "DOWN ordering by config_audit changed_at: ties inside one transaction; id (BIGSERIAL) would be required if audit replay were kept",
+      "Forward-only DOWN (SELECT 1): breaks @AC-4 @feature-182 reversibility unless operator waives it",
+      "pg_notify in the migration: db-migrator is PRE_DEPLOY and services reload on restart",
+      "Delete the bare row and INSERT a dotted one: loses row id, description, updated_at",
+      "Changing shared pass 0 of migration-rerun.sh: blast radius across all services; use a dedicated config goto-032 pass",
+      "Seeding ingest.backfill.max_concurrent_jobs / retry_on_failure: code defaults apply (watcher.py:185-191) and it would collide with 244's zero-trap test",
+      "Reader-link regex anchored to get_*( calls in named files: fragile under 244 refactor; assert on a snapshot built from the seeds instead"
+    ],
+    "open_risks": [
+      "Production values for all 18 keys are unread: an edited bare analysis.fundsignal.enabled=true, or extreme chunk_max_bars / poll interval, goes live after the migration; mitigation is the explicit pre-main-dev and pre-main gate with per-row operator sign-off.",
+      "Deleting twins discards their live value except in the log/audit row; the bare=5/dotted=30 case silently keeps 30; gate must list differing twin pairs.",
+      "UP RAISE on value_type mismatch leaves migrate state dirty in PRE_DEPLOY and blocks all service deploys; recovery must be documented.",
+      "Divergent heal semantics versus 243's 031 would be C-18 duplication; align on snapshot-log convention.",
+      "Merge-order collisions with 244, 261 and 248 (migration number, reader strings).",
+      "Assertion harness extension (goto 032 pass) must not disturb other services' passes; reader-link tests may be unreachable in Docker-only contexts and must fail loudly.",
+      "Concurrent SetConfig create_key during the migration makes it fail dirty rather than corrupt.",
+      "Analysis ConfigWatcher snapshot fixture and caller_identity on config_values not yet traced in code (adversary cites 014:9,12).",
+      "Sweep may reveal further inert seeds outside scope (report-only); indicators.sandbox.* stays with 243."
+    ],
+    "constitution_rules_touched": [
+      "C-01",
+      "C-03",
+      "C-05",
+      "C-08",
+      "C-10(c)",
+      "C-11",
+      "C-13",
+      "C-15",
+      "C-16",
+      "C-18",
+      "F-01",
+      "P-03",
+      "P-04",
+      "INGEST-9",
+      "CONFIG-9",
+      "PLAT-N1"
+    ],
+    "rationale": "No Floor breach: F-01 holds (005/008/019/025 untouched, new migration), F-04 paths verified by the adversary. The r4 SQL for UP is sound and adopted, but four adversary blockers are not answered by the proposal and stay open: the assertions harness runs after migrate-to-head so its fixtures take the twin path (B1); DOWN via audit replay contradicts the recorded snapshot-first heal rule and 243's mechanism and should use a migration-owned log table (B2); the widened analysis scope has no FR/AC and AC-3 still lists 'dev' (B3); the read-and-halt gate is only an assumption and sits on the wrong merge, since main-dev push deploys staging via PRE_DEPLOY (B4). The log-table change also makes the twin-removed audit-key and DOWN skip-notice items cheap, so they are folded in as binding spec requirements. Business-rule impact: INGEST-9 and CONFIG-9 changes are sanctioned by the 2026-10-23 scope decision and the sweep instruction; the new analysis AC is an EXTEND under the same decision; AC-3 'dev' removal is a correction not covered by an operator decision and must be reviewed."
+  },
+  "floor_breaches": []
+}
+```
