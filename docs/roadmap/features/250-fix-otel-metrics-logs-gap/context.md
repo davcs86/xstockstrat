@@ -242,3 +242,10 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - `merge-order.md` row for 250 → 274 updated on the same branch (250 → 274 PR-B hard on file overlap; PR-A follows
   250 by operator order).
 - Open Threads: `/sdd-review fix-otel-metrics-logs-gap impl-spec` re-run required (recorded below once run).
+- `/sdd-review impl-spec` re-run (spec-reviewer, 2026-10-23): FAIL on one blocker, fixed in the same P-0 change. The
+  literal `274-otel-metrics-logs-export` contains `metrics-logs`, which the guard's generic Part 2 token
+  `metrics.{0,12}logs` matches, so the cites required by Steps 3/6/8 would fail the guard's own green case. Fix: the
+  guard strips the case-exact 274 path alongside the sanctioned literal (Step 11 item 4); Step 3/6/7 verification
+  greps `sed`-strip it first; Step 10 gains a follow-up-path case (exact green; recased and trailing-prose red).
+  Warnings fixed: stale `## Prerequisite` heading renamed; design.md `:38` and §8 step 1 annotated; 274's number is
+  immutable so Step 10's dir-exists dependency is durable. Re-run of the review after the fix is the gate to push.

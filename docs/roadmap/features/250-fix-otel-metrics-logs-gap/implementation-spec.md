@@ -56,7 +56,7 @@ Business rules (C-16):
 - At integration, `/sdd-execute` promotes `@AC-1..3 @feature-250` into `docs/sdd/business-rules/platform.feature`.
   `.feature` files stay outside the guard glob (design.md §4).
 
-## Prerequisite (outside `/sdd-execute`)
+## Prerequisite (retired)
 
 ### P-1 — Retired (P-0 amendment, 2026-10-23)
 
@@ -421,7 +421,7 @@ Plus the dev-import gate outcome recorded in `context.md`.
 **Verification**:
 ```bash
 f=packages/otel/dashboards/README.md
-! grep -n -i -E 'loki|mimir|prometheus|promql|logql|all three signal|metrics.{0,12}logs|logs.{0,12}metrics|log error|error logs' "$f" | grep -v -F 'Metrics and logs are not exported (feature 226).'
+! sed 's#docs/roadmap/features/274-otel-metrics-logs-export/##g' "$f" | grep -n -i -E 'loki|mimir|prometheus|promql|logql|all three signal|metrics.{0,12}logs|logs.{0,12}metrics|log error|error logs' | grep -v -F 'Metrics and logs are not exported (feature 226).'
 ! grep -n -E 'DS_LOKI|DS_PROMETHEUS|rpc_server_duration|service_name|P99|trading_mode' "$f"
 ! grep -n -i -E '(one|two|three|four|five|six|[0-9]+)[[:space:]]+(V1[[:space:]]+)?(dashboards?|alert rules?)' "$f"
 grep -c -E 'service\.name' "$f" && grep -c 'deployment.environment' "$f" && grep -c 'platform' "$f"
@@ -506,7 +506,7 @@ grep -c -E 'service\.name' "$f" && grep -c 'deployment.environment' "$f" && grep
 f=docs/setup/grafana-cloud.md
 ! grep -n -i -E 'loki|mimir|prometheus|promql|logql|all three signal' "$f"
 ! grep -n -E 'DS_LOKI|DS_PROMETHEUS|rpc_server_duration|service_name[[:space:]]*=|P99' "$f"
-! grep -n -i -E 'metrics.{0,12}logs|logs.{0,12}metrics|(traces|spans)[^.]{0,15}metrics|\*\*(metrics|logs)\*\*|log error|error logs' "$f" | grep -v -F 'Metrics and logs are not exported (feature 226).'
+! sed 's#docs/roadmap/features/274-otel-metrics-logs-export/##g' "$f" | grep -n -i -E 'metrics.{0,12}logs|logs.{0,12}metrics|(traces|spans)[^.]{0,15}metrics|\*\*(metrics|logs)\*\*|log error|error logs' | grep -v -F 'Metrics and logs are not exported (feature 226).'
 ! grep -n -i -E '(one|two|three|four|five|six|[0-9]+)[[:space:]]+(V1[[:space:]]+)?(dashboards?|alert rules?)' "$f"
 grep -c -F 'Metrics and logs are not exported (feature 226).' "$f"   # → 1
 grep -n -E 'docs/roadmap/features/274-otel-metrics-logs-export/' "$f"
@@ -598,7 +598,7 @@ grep -n -F '.*/PlaceOrder' "$f"
 **Verification**:
 ```bash
 for f in docs/patterns/observability.md docs/setup/CLAUDE.md docs/launch-pdfs/product-features.md packages/otel/CLAUDE.md packages/otel/otel-collector-config.yaml; do
-  grep -n -i -E 'loki|mimir|prometheus|promql|logql|all three signal|metrics.{0,12}logs|logs.{0,12}metrics|(traces|spans)[^.]{0,15}metrics|\*\*(metrics|logs)\*\*|log error|error logs' "$f" | grep -v -F 'Metrics and logs are not exported (feature 226).' && echo "HIT $f"
+  sed 's#docs/roadmap/features/274-otel-metrics-logs-export/##g' "$f" | grep -n -i -E 'loki|mimir|prometheus|promql|logql|all three signal|metrics.{0,12}logs|logs.{0,12}metrics|(traces|spans)[^.]{0,15}metrics|\*\*(metrics|logs)\*\*|log error|error logs' | grep -v -F 'Metrics and logs are not exported (feature 226).' && echo "HIT $f"
   grep -n -E 'DS_LOKI|DS_PROMETHEUS|rpc_server_duration|service_name[[:space:]]*=|P99' "$f" && echo "HIT $f"
 done   # → no HIT lines
 git diff -U0 06faaeb5 -- packages/otel/otel-collector-config.yaml | grep -E '^[-+]' | grep -v -E '^(---|\+\+\+) ' | grep -v -E '^[-+][[:space:]]*(#|$)' && echo "NON-COMMENT CHANGE" || true   # → nothing (YAML list items like `- otlp` still count as non-comment)
@@ -823,6 +823,10 @@ GREEN comes at Step 11.
      guard must not stop at the first tag.
    - **Strip case**: an appended recased copy, `metrics and logs are not exported (feature 226).`, trips
      `P2-generic`. The exact literal does not.
+   - **Follow-up path strip (P-0 amendment)**: a line carrying the exact `docs/roadmap/features/274-otel-metrics-logs-export/`
+     is green in `alerts/README.md` and `grafana-cloud.md`; a recased copy
+     (`docs/roadmap/features/274-OTEL-metrics-logs-export/`) and a path with trailing prose such as
+     `... 274-otel-metrics-logs-export/ restores metrics and logs` still trip `AC-3 P2-generic`.
    - **Fence cases**:
      - a fenced `` - `xstk-error-rate-high` — alert rule `` passes, and the same line unfenced trips `P3-name`;
      - prose inside a fence trips `P3-fence`;
@@ -839,7 +843,7 @@ GREEN comes at Step 11.
      `platform`, and does not contain `trading_mode`.
    - **Follow-up citation**: extract `docs/roadmap/features/274-otel-metrics-logs-export/` from
      `packages/otel/alerts/README.md`, `docs/setup/grafana-cloud.md` and both findings files. All 4 must be
-     present and identical, and `"$REPO_ROOT/<that dir>"` must exist.
+     present and identical, and `"$REPO_ROOT/<that dir>"` must exist. Feature 274's number is immutable (root `CLAUDE.md` § Feature Roadmap) and `/sdd-archiver` keeps the dir, so this dependency is durable.
    - **Defect report independence**: delete `docs/reports/2026-10-19-otel-metrics-logs-never-exported-defect.md`
      from a copy, if it was copied. The tree stays green.
    - **`.feature` exclusion**: `platform.feature` containing "Loki" does not trip.
@@ -907,7 +911,9 @@ No coverage threshold applies to bash. The fixture-backed cases are the coverage
      plus case-sensitive `P99`.
    - Allowlist:
      - before matching, strip the case-exact sanctioned literal with
-       `line=${line//"Metrics and logs are not exported (feature 226)."/}`;
+       `line=${line//"Metrics and logs are not exported (feature 226)."/}`, and the case-exact follow-up path with
+       `line=${line//"docs/roadmap/features/274-otel-metrics-logs-export/"/}` (its `metrics-logs` would otherwise
+       match the generic token; P-0 amendment 2026-10-23);
      - exempt whole lines carrying `otel-metrics-logs-never-exported-defect`, only in
        `docs/context-constitution-findings.md` and `packages/otel/docs/context-constitution-findings.md`.
 5. **Part 3** (C-10):

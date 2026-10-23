@@ -35,7 +35,7 @@ config, migration or collector-pipeline change (recon.md:36, recon.md:65, recon.
   - the manual Grafana Cloud delete steps, with the removed UIDs in a fenced list (§4);
   - the follow-up feature dir (274), cited by path (§6).
 - Coverage loss is made explicit, as recon.md:102-105 requires. Error-rate, p99 and scoring-stall stay undetected
-  until the follow-up lands. For every removed rule, the named follow-up is `trace-derived-alerting` (§6).
+  until the follow-up lands. For every removed rule, the named follow-up is feature 274 `otel-metrics-logs-export` (§6, Amendment 2026-10-23).
 
 ### 2. Dashboards: rewrite one as Tempo-only, delete the rest
 
@@ -215,7 +215,7 @@ in the repo.
 
 ### 8. Order
 
-1. Land the follow-up `/sdd-story` dir on main-dev.
+1. ~~Land the follow-up `/sdd-story` dir on main-dev.~~ Retired (§6 Amendment 2026-10-23): feature 274 is the follow-up and is already on main-dev.
 2. Asset, doc and constitution edits.
 3. Teardown: `/context-constitution refresh` (root CLAUDE.md § Teardown; fails.md:670).
 4. The guard and `.test.sh` run last, as the final verification, so a Teardown rewording cannot leave CI red.
