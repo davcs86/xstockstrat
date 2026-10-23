@@ -222,3 +222,23 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   `226-fix-otel-trace-export` (launched) on the collector header, `observability.md`, `grafana-cloud.md`,
   `packages/otel/CLAUDE.md:4`, the otel constitution, root findings `:17`/`:18` and the dashboards README attribute
   bullet (rebase-only; the bullet is preserved by Step 5). No config-key, proto-field or migration collision.
+
+## Session 2026-10-23 — P-0 amendment (feature 274 prerequisite)
+
+- Applied before any step started: F-09 re-check passed (`status.md` = `implementation-ready`; all 13
+  `implementation-spec.md` steps `**Status**: pending`).
+- Branch synced with `origin/main-dev` (it carried no unique content; conflicts in `ci.yml`/`CLAUDE.md` took
+  main-dev, ledger files kept both sides).
+- **P-1 retired**: no `trace-derived-alerting` `/sdd-story`. Follow-up is feature
+  `274-otel-metrics-logs-export`. Every citation literal and the Step 10/11 4-site regex now use
+  `docs/roadmap/features/274-otel-metrics-logs-export/`. Step 1 kept (number unchanged, so no renumbering) as a
+  verification marker that the 274 dir is on the branch.
+- **Guard Part 2 annotated** "implement now; retire in 274 PR-B" in `design.md` and `implementation-spec.md`
+  Step 11. 250 still implements it.
+- **C-16 CHANGE sign-off mirrored** from 274 `context.md` (R1 gate, 2026-10-21, operator): approves 274
+  retiring 250's guard Part 2 ("docs list only exported signals"). Verbatim operator answer there: "Amend 250
+  before it runs".
+- `design.md` §6 carries a dated amendment block; its original text is unchanged below it.
+- `merge-order.md` row for 250 → 274 updated on the same branch (250 → 274 PR-B hard on file overlap; PR-A follows
+  250 by operator order).
+- Open Threads: `/sdd-review fix-otel-metrics-logs-gap impl-spec` re-run required (recorded below once run).
