@@ -348,3 +348,176 @@ Gate policy: halt. design.md NOT written; status.md unchanged. This entry supers
   "floor_breaches": []
 }
 ```
+
+## Session 2026-10-23 — sdd-batch design gate (round 3)
+
+### Open Threads
+
+Synthesis (round 3, gate policy halt; design.md not written, status.md unchanged):
+
+- Approach: one forward config migration (NNN re-derived across all remote branches at spec time; 033 or next free, 031/032 are claimed) re-keys the 5 ingest seeds (005/025) and 13 analysis seeds (008 fundsignal.* x12, 019 scoring.signal_decay_half_life_hours) from bare to `<namespace>.<key>`, the literal the readers use. Explicit (namespace, bare_key) targets list; one data-modifying CTE renames non-secret rows and audits only renamed rows (replay is a no-op, feature-182 @AC-4). No pg_notify (db-migrator is PRE_DEPLOY in both app specs). No reader, proto or RPC change; 005/008/019/025 stay unedited (F-01). indicators.sandbox.* stays with 243.
+- Binding changes for round 4 (adversary answers): DOWN orders by config_audit.id DESC, never changed_at; UP and DOWN audit rows keyed by the dotted key so a post-DOWN operator-created dotted row survives a second DOWN; twin policy switches to preserve-in-audit then DELETE the bare twin (DOWN restores from audit; RAISE EXCEPTION fail-loud is the operator alternative); DOWN limited to targets, is_secret=false and migration-owned audit rows; per-key per-environment read-back verification (18 keys, at least 36 global rows plus per-user rows, never a count); reader-link tests per service plus a loop-level AC-1 test plus a sibling BEGIN...ROLLBACK assertions script; verdicts for the bare decay-key mock fixtures and a widened C-16 PRESERVE list (feature-161 decay suites); pre-deploy gate (e) reads all 18 keys and halts on any non-default value (P-04 artifact in this file before main promotion); FR-4 seeds nothing (C-18).
+- Strongest open objection: B3, the twin policy. Keeping a bare twin leaves the editable inert seeded row FR-3 forbids and diverges from feature 243 (ledger fails.md:2970-2978); the proposer must show concrete preserve-then-delete SQL and a twin-restoring DOWN fixture. B1 (DOWN ordering), B2 (audit-key symmetry) and B4 (bare literals in mock fixtures, C-16 list) are also blocking with prescribed fixes.
+- Floor status: no breach (floor_breaches empty).
+- Uncovered @AC changes: INGEST-9 and CONFIG-9 CHANGE are covered by the operator decision. All other touched scenarios are PRESERVE and need no sanction (AC-5/AC-6/AC-7 of 277, feature-182 @AC-4, feature-166 AC-2 FR-2 secrets untouched, features 224/225 AC-35, analysis fundsignal feature files, private-by-default-templates.feature:64, config and ui surface-signal-weight-decay-config.feature). Nothing uncovered.
+
+```sdd-batch-design-state
+{
+  "round": 3,
+  "synth": {
+    "approach": "One forward config migration, services/xstockstrat-config/migrations/NNN_rekey_inert_seeded_keys_full_dotted.{up,down}.sql (NNN re-derived across all remote branches at spec time; 033 or next free, since 031/032 are claimed). It re-keys the 5 ingest seeds (005/025) and the 13 analysis seeds (008 fundsignal.* x12, 019 scoring.signal_decay_half_life_hours) from bare to <namespace>.<key>, the literal the readers use. Scope is per the 2026-10-23 operator decision. Every analysis key was verified against its raw-lookup reader (analysis app/config/watcher.py getters; fundsignal_loop.py, live_loop.py:162, handlers/servicer.py:4879,5213), so all 13 are re-keyed. No reader, proto or RPC change. 005/008/019/025 stay unedited (F-01). indicators.sandbox.* stays with 243. Dead seeds (analysis backtest.max_duration_seconds, ledger stream.notify_enabled) and the unseeded analysis.fundsignal.retry_seconds / startup_jitter_seconds are report-only findings.\n\nUP: an explicit (namespace, bare_key) targets VALUES list (single source for the tests), then one data-modifying CTE. renamed = UPDATE config.config_values SET key = namespace||'.'||key for non-secret rows with no dotted twin in the same namespace/environment/COALESCE(user_id,'') (029 guard shape, 029_heal_config_keys_full_dotted.up.sql:24-28), RETURNING feeding an INSERT into config.config_audit (changed_by='system:migration-NNN'). Only renamed rows are audited, so a replay is a no-op (feature-182 @AC-4). No pg_notify: db-migrator is PRE_DEPLOY in .do/app.yaml:662-664 and .do/app.dev.yaml:664-666, so config reload-on-restart covers it.\n\nChanges required from the r3 proposal (answers to the adversary, binding on r4):\n1. DOWN ordering: config_audit.changed_at is NOW() (001:34), a transaction-start time, so same-transaction rows tie (ledger fails.md:3078). DISTINCT ON must order by config_audit.id DESC (BIGSERIAL, 001:27), never by timestamp.\n2. Audit-row key symmetry: both the UP 'renamed' row and the DOWN 'reverted' row are keyed by the DOTTED key (or by config_values row id), so they fall in one DISTINCT ON group. The assertions script adds the case: DOWN, then operator create_key of the dotted key, then second DOWN must NOT strip it.\n3. Twin policy: adopt the runner-up, matching feature 243 and ledger fails.md:2970-2978. Write the bare twin's value_data/old_value to a config_audit row (reason 'twin-removed; value preserved'), DELETE the bare twin, then rename. The DOWN restores the twin from that audit row. This removes the inert-but-editable row that FR-3 says must end, drops the RAISE NOTICE block (and its duplicated twin predicate), and keeps 031 and 033 consistent. The proposer must show the concrete SQL and a twin-restoring DOWN fixture. Alternative if the operator prefers fail-loud: RAISE EXCEPTION when a twin's value differs. That is an operator gate item.\n4. DOWN also stays joined to the targets list, is_secret=false, and 'owned' by the migration's audit trail, so pre-existing dotted rows are never touched.\n5. Verification is per-key, per-environment read-back of the stored key against the getter string, never a count. 18 is the key count; rows are at least 36 globals plus per-user rows (008:13-47; same for 005/019/025).\n6. Tests: (a) reader-link test per service (ingest, analysis) takes the NNN up file's targets as input and matches quoted full key literals across all of app/** (no file or call-shape anchor, tolerant of line-split literals, excluding event/table names like analysis.fundsignal.run_started and analysis.fundsignal_emitted), asserting target set is a subset of the literal set. It builds the ConfigSnapshot from NNN-derived strings with non-default values and asserts the real getters return them. A bare-keyed control snapshot returns code defaults, proving the defect by unit test and not by a staging write. (b) A loop-level AC-1 assertion (MCP loop 5 s timeout via _FakeCfgWatcher / tests/test_mcp_client_loop.py:122). (c) Sibling script scripts/migration-assertions/config-rekey-NNN.sql under BEGIN...ROLLBACK (up, down, up) with fixtures: bare default, edited, per-user decay, twin, pre-existing dotted no-twin, ingest.mcp_credential.* secret. Assertions: dotted-no-twin survives DOWN; replay leaves audit count unchanged; secret byte-identical; per-user row keeps id and value; twin restored by DOWN; no double-prefixed key. Shared pass 0 of migration-rerun.sh is unchanged. The test must fail, not skip, if the migration file is unreachable. Coordinate with 244, which moves literals into helpers.\n7. C-16/C-01 completeness: give each bare decay-key mock fixture a verdict (keep as stripped-probe coverage or move to dotted): config/src/__tests__/listKeysWire.test.ts:44,88,104,113,123; configServiceImpl.test.ts:45; setConfigScalarBounds.test.ts:30; ui e2e/config-ui/audit.spec.ts:25. Add to the PRESERVE list: config acceptance/surface-signal-weight-decay-config.feature @AC-7 (settable without create_key, so the existence gate must resolve the renamed row), @AC-11, @AC-12 @feature-161; ui acceptance/surface-signal-weight-decay-config.feature @AC-6 @feature-161 (bounds 0-8760 still served on ListKeys). The bounds registry needs no change (it probes the bare key first, configServiceImpl.ts:96-101). Its stale 'decay' comment is a findings entry.\n8. Pre-deploy gate (e): read all 18 keys (staging via read-only get_config; production by the operator) and HALT if any value differs from its code default, especially fundsignal.enabled (a bare true would switch the producer on). Record who/when/each value in context.md as a P-04 artifact before the main promotion. Do not run any staging/production write during speccing.\n9. FR-4: do not seed ingest.backfill.max_concurrent_jobs / retry_on_failure (C-18). Runner-up: seed at int 3 / bool true (watcher.py:185-191 Semaphore(0) trap).\n10. Spec text: widen description in product-spec.md and acceptance.feature; add xstockstrat-analysis to Affected Services; add FR-1b plus AC-8 Scenario Outline over the 13 analysis keys; AC-3 staging/production only plus per-user and twin examples (twin now deleted-and-preserved); AC-4 both namespaces. Docs to fix: INGEST-9 and the 2026-09-03 findings entry (ingest context-constitution.md:28, findings:41), CONFIG-9 (:26), ingest CLAUDE.md:124-133, config-governance.md:375-376, historical-backfill.md:259-261. Register system:migration-NNN in the Author-sentinel table (config-governance.md:93-103). The design.md sweep table covers all namespaces, both snapshot key forms, and the analysis verdicts plus the two unseeded fundsignal keys.\n11. Coordination: 243's 031 uses the same twin-skip/delete, id-ordered trail down and sentinel semantics (explicit spec-time check); 244 (reader literals/INGEST rules table); 261 (its step references the bare 025 mcp_client.request_timeout_seconds row, re-check against the dotted form); 248.",
+    "open_objections": [
+      {
+        "text": "[adversary B1] DOWN DISTINCT ON must order by config_audit.id DESC (001:27), not changed_at (NOW() ties within one transaction, 001:34; fails.md:3078). Proposer must show the concrete DOWN SQL and an up/down/up fixture within one BEGIN...ROLLBACK.",
+        "blocking": true
+      },
+      {
+        "text": "[adversary B2] 'renamed' and 'reverted' audit rows must be keyed by the same (dotted) key or row id; otherwise a post-DOWN operator-created dotted row is stripped by a second DOWN. Proposer must add this fixture case and the SQL.",
+        "blocking": true
+      },
+      {
+        "text": "[adversary B3] Twin policy 'keep bare twin' leaves the FR-3 defect (editable inert seeded row) and diverges from feature 243 (fails.md:2970-2978). Not yet answered concretely: proposer must switch to preserve-in-audit then delete the bare twin (down restores it from audit), or justify the alternative RAISE EXCEPTION fail-loud, with SQL and fixture. Operator gate item.",
+        "blocking": true
+      },
+      {
+        "text": "[adversary B4] The 'no bare literal outside migrations' claim is false. Bare scoring.signal_decay_half_life_hours appears in config listKeysWire.test.ts, configServiceImpl.test.ts, setConfigScalarBounds.test.ts and ui e2e/config-ui/audit.spec.ts. Each needs a verdict, and the C-16 PRESERVE list must add the config and ui surface-signal-weight-decay-config.feature scenarios (@AC-7/@AC-11/@AC-12, ui @AC-6).",
+        "blocking": true
+      },
+      {
+        "text": "Row-count misstatement: 'exactly 18 rows' is wrong (18 keys; at least 36 global rows plus per-user). Verification must be per-key per-env read-back, never a count.",
+        "blocking": false
+      },
+      {
+        "text": "Reader-link regex fragility: match quoted full key literals across app/** (no file or call anchor); exclude event/table names (fundsignal_loop.py:186,192,212,244); handle the line-split literal at :149; must survive feature 244's helper refactor regardless of merge order.",
+        "blocking": false
+      },
+      {
+        "text": "AC-1 lacks a behavioural test: add a loop-level assertion (MCP loop uses 5 s timeout) via _FakeCfgWatcher or a real-watcher test.",
+        "blocking": false
+      },
+      {
+        "text": "C-18: audit-driven DOWN depends on free-text reason LIKE matching. Prefer a structured marker (changed_by plus a fixed reason prefix) or the premigration snapshot-table alternative (new schema object, DBA entry); proposer to justify the choice.",
+        "blocking": false
+      },
+      {
+        "text": "Production read-and-halt is the only guard on fundsignal.enabled: record the read as a P-04 gate artifact in context.md before the main promotion.",
+        "blocking": false
+      },
+      {
+        "text": "261 seam (bare 025 mcp_client.request_timeout_seconds reference) and the 243 031 twin/down alignment are unaddressed; add as explicit coordination checks.",
+        "blocking": false
+      },
+      {
+        "text": "Spec-time verifications remain: no x-multi-statement in scripts/; secretCallerAuthz.test.ts:38 unaffected; ui e2e/fixtures/configKeys.ts holds no bare ingest or fundsignal keys; analysis ConfigWatcher snapshot fixture exists. Already verified and dropped from Assumptions: audit column names and changed_at (001:26-35, 017:27-28,71); a key-only UPDATE writes no audit row (017:69,76); PRE_DEPLOY in both app specs.",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "INGEST-9",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "CONFIG-9",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "AC-5 (feature 277)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "AC-6 (feature 277)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "AC-7 (feature 277)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "AC-4 feature-182 readiness-materializer-config-keys.feature (idempotent and reversible)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "AC-2 FR-2 feature-166 (ingest.mcp_credential.* secret rows untouched)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "AC-35 features 224/225 (system identity and secret rows)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "analysis fix-fundamentals-signal-producer.feature (lines 13,38,42,57) and fundsignal-watchlist-universe.feature (lines 9-73): scenarios already state the dotted keys",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "private-by-default-templates.feature:64 (analysis.fundsignal.scoring_formula_id)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "config surface-signal-weight-decay-config.feature @AC-7, @AC-11, @AC-12 @feature-161",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "ui surface-signal-weight-decay-config.feature @AC-6 @feature-161 (bounds 0-8760 on ListKeys)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "Make readers prefix-tolerant or change readers to the bare form: collides with 244 and 261 and the full-dotted convention, and pushes dual-key ambiguity onto all readers.",
+      "Two migrations (one per namespace): duplicates CTE and down logic (C-18); one targets list is the single source for the reader-link tests.",
+      "Blanket per-namespace UPDATE: would capture ingest.mcp_credential.* secrets, dead seeds and indicators.sandbox.* (243).",
+      "Keep the bare twin (r3 twin policy): leaves an editable inert seeded row (FR-3 defect) and conflicts with 243's recorded fix, so replaced by preserve-in-audit then delete.",
+      "DOWN ordering by audit changed_at: ties inside one transaction (NOW() is transaction start, fails.md:3078); replaced by id DESC.",
+      "pg_notify in the migration: unneeded since db-migrator is PRE_DEPLOY in both app specs.",
+      "Delete the bare row and INSERT a dotted one: loses id and updated_at and double-audits via the 010 AFTER INSERT trigger.",
+      "Changing shared pass 0 of migration-rerun.sh: hard-wires one feature into a shared harness; a sibling assertions script is used instead.",
+      "Seeding ingest.backfill.max_concurrent_jobs / retry_on_failure: new keys the defect does not need (C-18); runner-up only.",
+      "Premigration snapshot table config_values_premigration_NNN: deterministic but adds a schema object and DBA entry; kept as a fallback if the audit-trail DOWN cannot be made unambiguous.",
+      "Reader-link regex anchored to get_*( calls in named files: breaks when 244 refactors literals into helpers."
+    ],
+    "open_risks": [
+      "Production values for all 18 keys are unread: a bare fundsignal.enabled=true or extreme chunk_max_bars / poll interval goes live when config restarts after the migration. The mitigation is the operator read-and-halt gate, which depends on a human doing it.",
+      "Deleting twins discards their live value except in the audit row; the DOWN restore from audit must be proven by the fixture.",
+      "Audit-trail-driven DOWN remains ambiguous if the audit reason convention is loose; structured markers and id ordering are required.",
+      "Divergent heal semantics versus 243's 031 would make two consecutive heals C-18 duplication.",
+      "Merge-order collisions with 244 (reader literals, INGEST rules table), 261 (bare 025 reference) and 248.",
+      "Reader-link tests read the config migrations dir from a service test run and may be unreachable in Docker-only contexts; they must fail loudly rather than skip.",
+      "Bounds-registry comment naming decay as a namespace-stripped example becomes stale; tracked as a findings entry.",
+      "Analysis ConfigWatcher snapshot fixture comparable to ingest's is not yet traced.",
+      "The sweep may reveal other inert seeds outside scope; these stay report-only findings."
+    ],
+    "constitution_rules_touched": [
+      "C-01",
+      "C-03",
+      "C-08",
+      "C-10(c)",
+      "C-11",
+      "C-13",
+      "C-15",
+      "C-16",
+      "C-18",
+      "F-01",
+      "P-03",
+      "P-04",
+      "INGEST-9",
+      "CONFIG-9",
+      "PLAT-N1"
+    ],
+    "rationale": "No Floor breach: the seeds are untouched, nothing is hardcoded, and no path is invented. The r3 shape (one migration, explicit 18-key list, CTE-audited renames, no pg_notify, PRE_DEPLOY ordering confirmed in both app specs) holds, and the adversary's four blocking objections are valid. The DISTINCT ON ordering and the audit-key symmetry are concrete and cheap to fix, and the proposal did not answer either. The twin policy contradicts FR-3 and the recorded 243 fix, so it stays blocking with a prescribed switch. The 'no bare literal' claim is demonstrably false (mock fixtures), and the C-16 list lacks the feature-161 decay suites, so both stay open. Non-blocking items (row-count wording, regex robustness, AC-1 loop test, C-18 simplicity, P-04 gate artifact, 261 and 243 coordination) are adopted as binding spec-time requirements. Operator-decision coverage is limited to the INGEST-9 and CONFIG-9 rewrites. Every other touched scenario is PRESERVE and needs no sanction."
+  },
+  "floor_breaches": []
+}
+```
