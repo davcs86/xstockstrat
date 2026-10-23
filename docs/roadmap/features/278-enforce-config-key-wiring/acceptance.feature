@@ -60,7 +60,7 @@ Feature: enforce-config-key-wiring
 
   @AC-9 @FR-1
   Scenario: A read whose key is built at runtime is reported, not skipped
-    Given service code reads a config key built from a variable that the check cannot resolve
+    Given analysis code reads a config key built with the expression f"analysis.{name}.enabled" where "name" is a function parameter
     And no baseline entry or annotation names the key set
     When the wiring check runs
     Then it reports one finding of kind "dynamic-read" naming the file and symbol
@@ -69,8 +69,10 @@ Feature: enforce-config-key-wiring
   Scenario: A migration that inserts a config row triggers the check
     Given an execute step adds a migration inserting key "analysis.fundsignal.enabled" into "config.config_values"
     And the step is not typed "config"
+    And the wiring check reports a finding for "analysis.fundsignal.enabled"
     When /sdd-execute validates the step
-    Then the wiring check runs for that key
+    Then the step stays not-done
+    And the output names the check result for that key
 
   @AC-11 @FR-3
   Scenario: An impl-spec reader step without a snapshot-built test fails review
