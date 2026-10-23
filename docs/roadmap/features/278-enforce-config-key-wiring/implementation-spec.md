@@ -33,6 +33,8 @@ The environment-baseline gate (Step 10) is performed by the operator: this sessi
 ## Step Dependencies
 
 - Step 2 [test] covers Step 1 [service]; Step 4 covers Step 3; Step 6 covers Step 5; Step 8 covers Step 7. Each test is authored to fail against the pre-implementation tree (P-06) and `/sdd-execute` captures red before the paired service step.
+- Verification commands of the service steps (1, 3, 5, 7) run `node --test scripts/config-wiring.test.mjs`, a file first created in Step 2. `/sdd-execute` runs each test step's red capture first (paired test authored before its service step, P-06), so by the time a service step's Verification runs the paired tests exist; do not run a service step's Verification before its paired test step.
+- Step 12 and Step 17 are numbered after the data/text they cover but their red proof is manufactured: Step 12 captures red by running against the empty-shape `config-wiring.json` from Step 7 (`git show <Step-7-sha>:scripts/config-wiring.json` into a scratch root), Step 17 against the pre-Step-14..16 skill files (`git show <sha-before-Step-14>:<path>`); neither step is moved.
 - Step 3 requires Step 1 (reuses the stored-set types); Step 5 requires Steps 1 and 3; Step 7 requires Step 5.
 - Step 9 requires Steps 1-8 (the script must exist to run).
 - Step 10 requires Step 9 (it consumes the first-run `read-unseeded env=` list). It is an OPERATOR step.
@@ -85,7 +87,15 @@ node --check scripts/check-config-wiring.mjs && node --test scripts/config-wirin
 **Service**: `scripts/` (repo tooling)
 **Files**:
 - `scripts/config-wiring.test.mjs` — create
-- `scripts/config-wiring-fixtures/seed/` — create (fixture migration trees as `services/xstockstrat-config/migrations/*.up.sql` under a `root`)
+- `scripts/config-wiring-fixtures/seed/bare-insert/services/xstockstrat-config/migrations/001_seed.up.sql` — create
+- `scripts/config-wiring-fixtures/seed/heal-029/services/xstockstrat-config/migrations/001_seed.up.sql` — create
+- `scripts/config-wiring-fixtures/seed/heal-029/services/xstockstrat-config/migrations/002_heal.up.sql` — create
+- `scripts/config-wiring-fixtures/seed/rename-017/services/xstockstrat-config/migrations/001_seed.up.sql` — create
+- `scripts/config-wiring-fixtures/seed/rename-017/services/xstockstrat-config/migrations/002_rename.up.sql` — create
+- `scripts/config-wiring-fixtures/seed/unmodelled/services/xstockstrat-config/migrations/001_seed.up.sql` — create
+- `scripts/config-wiring-fixtures/seed/unmodelled/services/xstockstrat-config/migrations/002_delete.up.sql` — create
+- `scripts/config-wiring-fixtures/seed/scope-and-secret/services/xstockstrat-config/migrations/001_seed.up.sql` — create (also a `001_seed.down.sql` sibling, to prove exclusion)
+- `scripts/config-wiring-fixtures/seed/multi-row/services/xstockstrat-config/migrations/001_seed.up.sql` — create
 
 **Reviewers**: Platform Lead — cross-service tooling and SDD process
 
@@ -157,7 +167,12 @@ node --check scripts/check-config-wiring.mjs && python3 -I -m py_compile scripts
 **Service**: `scripts/` (repo tooling)
 **Files**:
 - `scripts/config-wiring.test.mjs` — modify
-- `scripts/config-wiring-fixtures/readers/` — create (small `services/<svc>/...` Python, Go, TS source files)
+- `scripts/config-wiring-fixtures/readers/services/xstockstrat-analysis/app/literal_and_const.py` — create (multi-line call, same-file constant)
+- `scripts/config-wiring-fixtures/readers/services/xstockstrat-analysis/app/dynamic_fstring.py` — create (`f"analysis.{name}.enabled"`)
+- `scripts/config-wiring-fixtures/readers/services/xstockstrat-analysis/tests/ignored_test_reader.py` — create (must not be scanned)
+- `scripts/config-wiring-fixtures/readers/services/xstockstrat-marketdata/internal/service/forwarder.go` — create (`resolvePositiveInt`-shaped helper and two callers)
+- `scripts/config-wiring-fixtures/readers/services/xstockstrat-marketdata/internal/config/split_literal.go` — create (literal split over two lines, constant, `GetSecret`)
+- `scripts/config-wiring-fixtures/readers/services/xstockstrat-ui/src/lib/index_reads.ts` — create (`values['...']` literal and `values[key]` dynamic)
 
 **Reviewers**: Platform Lead — cross-service tooling and SDD process
 
@@ -220,7 +235,13 @@ node --check scripts/check-config-wiring.mjs && node --test scripts/config-wirin
 **Service**: `scripts/` (repo tooling)
 **Files**:
 - `scripts/config-wiring.test.mjs` — modify
-- `scripts/config-wiring-fixtures/join/` — create
+- `scripts/config-wiring-fixtures/join/mismatch/` — create (one `services/xstockstrat-config/migrations/001_seed.up.sql` plus one reader file under `services/xstockstrat-ingest/app/`)
+- `scripts/config-wiring-fixtures/join/seeded-unread/` — create (seed file only)
+- `scripts/config-wiring-fixtures/join/read-unseeded/` — create (reader file only)
+- `scripts/config-wiring-fixtures/join/env-collapse/` — create (seed files for both-env-missing and production-only cases)
+- `scripts/config-wiring-fixtures/join/negative-matches/` — create (dotted seeds, ui `performance.*`, agent `signal.alert_threshold` with matching readers)
+- `scripts/config-wiring-fixtures/join/secret/` — create (secret seed row and a `GetSecret` reader)
+(Each directory is a self-contained `--root`; exact file names inside follow the `seed/` and `readers/` layouts above.)
 
 **Reviewers**: Platform Lead — cross-service tooling and SDD process
 
@@ -283,7 +304,14 @@ node --check scripts/check-config-wiring.mjs && node -e "JSON.parse(require('fs'
 **Service**: `scripts/` (repo tooling)
 **Files**:
 - `scripts/config-wiring.test.mjs` — modify
-- `scripts/config-wiring-fixtures/ratchet/` — create
+- `scripts/config-wiring-fixtures/ratchet/new-finding/` — create (`--root` tree: seed with no reader, plus a `config-wiring.json` with empty `findings`)
+- `scripts/config-wiring-fixtures/ratchet/no-owner/config-wiring.json` — create
+- `scripts/config-wiring-fixtures/ratchet/stale-in-part/` — create (tree plus `config-wiring.json` with an oversized `envs` list)
+- `scripts/config-wiring-fixtures/ratchet/step-time/` — create (tree with a `form-mismatch` for `analysis.fundsignal.enabled` and an unrelated `ledger` `stream.notify_enabled` finding)
+- `scripts/config-wiring-fixtures/ratchet/two-step/` — create (seed-only and reader-only variants)
+- `scripts/config-wiring-fixtures/ratchet/declared/product-spec.md` — create (backticked keys inside and outside `## Config Key Changes`)
+- `scripts/config-wiring-fixtures/ratchet/declared/migration.up.sql` — create
+- `scripts/config-wiring-fixtures/ratchet/policy/` — create (tree plus two `config-wiring.json` files, `reported` and `blocking`)
 
 **Reviewers**: Platform Lead — cross-service tooling and SDD process
 
@@ -326,7 +354,8 @@ No coverage threshold applies (tooling). Lint: `node --check scripts/config-wiri
 **Instructions**:
 1. Run `node scripts/check-config-wiring.mjs --final --json > <scratchpad>/first-run.json` with `findings` empty. Do not run any staging or production read or write.
 2. Append a `## Session 2026-10-23 — sdd-execute 278 step 9` block to `context.md` with: total finding counts per kind; the list of `read-unseeded env=` entries (count and keys); the reconciliation of the produced list against the 277 sweep (18 + 2 + 2 + the four extras + `indicators.sandbox.*`), stating any difference and its cause; the result of the two open-risk checks above. Any new migration shape that trips `unmodelled-rewrite` is added to the closed model with a fixture in Step 2's suite, never allow-listed by weakening the trigger (log it in the `## Deviation Log`).
-3. Record the proposed owner for each group: 277/278 for the 18 form mismatches, the two dead seeds and the two named unseeded ingest keys; "feature 278" for the four extras (operator may overrule); 243 for `indicators.sandbox.*`.
+3. If 243 (`031_heal_indicators_sandbox_keys_full_dotted`), 248 (`032_ledger_stream_resolve_timeout`), 244 (`032_analysis_zero_trap_descriptions`) or 264 (`034`) migrations have landed on the base by now, the stored set differs from this spec's; re-run and record the difference before Step 10/11.
+4. Record the proposed owner for each group: 277/278 for the 18 form mismatches, the two dead seeds and the two named unseeded ingest keys; "feature 278" for the four extras (operator may overrule); 243 for `indicators.sandbox.*`.
 
 **Verification**:
 ```
@@ -368,7 +397,7 @@ The execute loop leaves this step `pending` until the operator's entry exists (a
 
 ---
 
-### Step 11 — config: Freeze baseline `findings` and `registry`
+### Step 11 — docs: Freeze baseline `findings` and `registry`
 
 **Status**: `pending`
 **Service**: `scripts/` (repo tooling)
@@ -414,12 +443,12 @@ node scripts/check-config-wiring.mjs --final && echo OK
 - Acceptance wording @AC-7 (baseline lists every 277-sweep finding with owner) and @AC-8 in `acceptance.feature`.
 - The CI job (Step 13) runs `node --test scripts/config-wiring.test.mjs`, so these tests are what keeps a stale baseline from merging.
 
-**TDD**: `red-green required` (authored before Step 11's data lands: it fails against the empty-shape `config-wiring.json` created in Step 7)
+**TDD**: `red-green required` (red proof: run the new tests against the empty-shape `config-wiring.json` from Step 7, restored from git into a scratch `--root`, since Step 11's data already exists in the tree when this step is executed)
 
 **Covers**: `AC-7, AC-8`
 
 **Instructions**:
-Add: (1) a test running the CLI with `--final` against the real repo root, asserting exit 0 (committed baseline equals the tree); (2) every committed `findings[]` entry has a non-empty `owner` and a `kind` among the four; (3) the committed baseline contains at least the 277-sweep set reconciled in Step 9 (asserted by key lists copied from `context.md`, not recomputed); (4) the committed JSON has no value text and no secret-class key.
+Add: (1) a test running the CLI with `--final` against the real repo root, asserting exit 0 (committed baseline equals the tree); (2) every committed `findings[]` entry has a non-empty `owner` and a `kind` among the four; (3) the committed baseline contains at least the 277-sweep set reconciled in Step 9 (asserted by key lists copied from `context.md`, not recomputed); (4) the committed JSON has no value text and no secret-class key; (5) the extractors' scan roots (exported constant) equal the `config-wiring` path filter globs parsed from `.github/workflows/ci.yml`, so a reader outside the filter cannot change without triggering the job.
 
 **Verification**:
 ```
@@ -453,7 +482,8 @@ No coverage threshold applies (tooling). Lint: `node --check scripts/config-wiri
 1. Add a `config-wiring` filter to `changes`: `services/xstockstrat-config/migrations/**`, `services/*/app/**`, `services/*/internal/**`, `services/*/src/**`, `scripts/check-config-wiring.mjs`, `scripts/config-wiring-py-reads.py`, `scripts/config-wiring.json`, `scripts/config-wiring.test.mjs`, `scripts/config-wiring-fixtures/**`.
 2. Add job `config-wiring` ("Config key wiring (whole-tree)"): `needs: changes`, `if:` matched `config-wiring` or `ci`, steps: `actions/checkout@v7`, `actions/setup-node` pinned to the Node 24 line used by other jobs (copy the exact step from `node-lint`), `node --test scripts/config-wiring.test.mjs`, `node scripts/check-config-wiring.mjs --final`.
 3. Add `config-wiring` to `ci-gate` `needs:` and add `echo "config-wiring: ${{ needs.config-wiring.result }}"`.
-4. Only after Step 11's ruling is recorded does this step run; the job is a whole-tree scan, never the diff.
+4. The filter roots must equal the extractors' scan roots (`services/*/app`, `services/*/internal`, `services/*/src`, covering the ui reader `services/xstockstrat-ui/src/lib/performanceMetrics.ts`); Step 12 test (5) asserts this.
+5. Only after Step 11's ruling is recorded does this step run; the job is a whole-tree scan, never the diff.
 
 **Verification**:
 ```
@@ -564,7 +594,7 @@ grep -n "Config key wiring" .claude/skills/sdd-review/reference/impl-spec-criter
 **Codebase Evidence**:
 - Process behavior (@AC-4/5/6/10/11) is executed by an LLM following skill text, so the only deterministic proof is that the load-bearing text is present; the script half is proven in Steps 8 and 12. Precedent for text-structure tests of skills/workflows: `scripts/workflow-tests/*.test.mjs`.
 
-**TDD**: `red-green required` (authored to fail against the pre-Step-14..16 skill text)
+**TDD**: `red-green required` (red proof: point the assertions at the skill files as of the commit before Step 14, via `git show`; green is the committed text from Steps 14-16)
 
 **Covers**: `AC-4, AC-5, AC-6, AC-10, AC-11`
 
@@ -586,7 +616,6 @@ No coverage threshold applies (tooling). Lint: `node --check scripts/config-wiri
 **Files**:
 - `docs/patterns/config-governance.md` — modify (append-only; keep feature 182's registered-keys entries)
 - `docs/roadmap/features/merge-order.md` — modify
-- `.claude/context-map.yaml` — modify (register `scripts/check-config-wiring.mjs` only if the map lists tooling scripts; otherwise no change)
 
 **Reviewers**: none
 
@@ -603,7 +632,7 @@ No coverage threshold applies (tooling). Lint: `node --check scripts/config-wiri
 **Instructions**:
 1. In `config-governance.md` add a section `## Wiring check (config key must be read under its stored key)` after `## Registering a new config key`: the stored key must equal the reader string verbatim; the four finding kinds; the step-time versus `--final` split; the baseline in `scripts/config-wiring.json` (owner required, entries may only shrink); keys created at runtime (`SetConfig create_key=true`, config-ui) surface as `read-unseeded` by design and must be seeded in a migration; secrets are excluded and values are never printed. Add one line to the registering list pointing at the section. Do not touch the registered-keys log.
 2. Add a `merge-order.md` row: 278 lands before 243/244/261 edit `scripts/config-wiring.json`; the feature artifacts live on `ccr-fac38b1f-6m24q2` (PR #1322, not yet merged to `main-dev`).
-3. Run `./scripts/check-context-map.sh`.
+3. `.claude/context-map.yaml` is not edited: it registers only workflow helpers/tests (`merge-train-resolve.mjs`, `workflow-tests/*`, lines 55-64), not tooling scripts. Run `./scripts/check-context-map.sh`.
 4. Teardown: run `/context-forge:context-constitution refresh` scoped to `docs/patterns/config-governance.md` and the touched skill files; fix grounded drift. If the plugin is unavailable, re-read each touched context file against the current code and record in the PR body both that the plugin was unavailable and the manual reconciliation performed (a bare "plugin unavailable" does not pass).
 
 **Verification**:
