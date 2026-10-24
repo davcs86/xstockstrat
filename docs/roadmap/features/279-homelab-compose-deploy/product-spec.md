@@ -53,7 +53,12 @@ documents the xstockstrat specifics.
 
 - Retiring or changing the DigitalOcean deploys (`deploy.yml`, `.do/app*.yaml`).
 - A homelab OTel collector or Grafana Cloud export.
-- Adding the Go healthcheck to local `docker-compose.yml`.
+- Adding the Go healthcheck to local `docker-compose.yml`. Local `docker-compose.yml` and `.do/app*.yaml` need no
+  change; the homelab target's values live only in `deploy/homelab/compose.yml` and the pipeline.
+- Docs that change with it: `docs/patterns/ci-overview.md` (deploy table), `docs/patterns/docker-build.md` and
+  `docs/context-constitution.md` PLAT-N2 (Go healthcheck), `docs/patterns/inter-service-mtls.md` (homelab CA path).
+- Any trading behaviour: no broker (Alpaca, IBKR), order-type or fill change. Paper vs live stays derived from
+  `APPLICATION_ENV` (staging `development` = paper, production `production` = live).
 - Provisioning the VMs, the shared Postgres roles/databases, PgBouncer entries, or the 1Password vaults (operator
   steps in homelab-edge's runbook).
 
@@ -109,8 +114,11 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 
 - [x] Run alongside DO or replace it → alongside (operator, 2026-10-24).
 - [x] Go readiness → real `grpc.health.v1` service (operator, 2026-10-24).
-- [ ] A rollback restores images, not schema: a migration that succeeded stays applied after an unhealthy release
-  is rolled back. Acceptable under the existing "never edit an applied migration / additive migrations" practice?
+- [x] A rollback restores images, not schema → **accepted** (operator, 2026-10-24): migrations must work with the
+  previous release (expand/contract), under the existing never-edit-an-applied-migration rule. Recorded in
+  homelab-edge `docs/decisions.md`.
+- [x] Overlap with `084-droplet-compose-deploy` (same dev deploy path) → 084 demoted as superseded by this feature
+  (operator, 2026-10-24).
 - **Known trap** (`fails.md` remove-x-mcp-secret-header, frontend-reverse-proxy — Docker-unavailable family): the
   authoring sandbox has no Docker daemon. Verification must name non-daemon fallbacks (`docker compose config`,
   the gate's fake-docker test, a headscale binary for policy tests) and label them "not a live-boot proof"; the

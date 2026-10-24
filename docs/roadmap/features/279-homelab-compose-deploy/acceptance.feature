@@ -33,20 +33,32 @@ Feature: homelab-compose-deploy
     Given release "abc123def456-1" is current and healthy
     And release "abc123def456-2" whose db-migrator exits 1
     When the gate runs "deploy abc123def456-2"
-    Then "docker compose up --wait" fails because no service that depends on db-migrator with service_completed_successfully starts
-    And the gate switches "current" back to "abc123def456-1" and exits 1
+    Then the deploy exits 1 with "release abc123def456-2 did not become healthy"
+    And "status" reports "current: abc123def456-1" and no application container from abc123def456-2 is running
 
   @AC-6 @FR-5
-  Scenario: The Go healthcheck succeeds against its own SERVING health service over mTLS
-    Given a trading server on 127.0.0.1 presenting the "xstockstrat-trading" leaf and reporting SERVING
+  Scenario Outline: The Go healthcheck succeeds against its own SERVING health service over mTLS
+    Given a <service> server on 127.0.0.1 presenting the "<service>" leaf and reporting SERVING
     When "service healthcheck" runs with the same MTLS_CERT, MTLS_KEY and MTLS_CA_CERT
     Then it exits 0
 
+    Examples:
+      | service                |
+      | xstockstrat-trading    |
+      | xstockstrat-portfolio  |
+      | xstockstrat-marketdata |
+
   @AC-7 @FR-5
-  Scenario: The Go healthcheck fails while the server is not serving or not listening
-    Given a server reporting NOT_SERVING, or nothing listening on 127.0.0.1:50051
+  Scenario Outline: The Go healthcheck fails while the server reports NOT_SERVING
+    Given a <service> server on 127.0.0.1 reporting NOT_SERVING
     When the healthcheck probe runs
     Then it exits 1
+
+    Examples:
+      | service                |
+      | xstockstrat-trading    |
+      | xstockstrat-portfolio  |
+      | xstockstrat-marketdata |
 
   @AC-8 @FR-6
   Scenario: APP_ENV cannot override pipeline-generated values
@@ -97,3 +109,45 @@ Feature: homelab-compose-deploy
     When the gate deploys a release
     Then "up" runs with "--wait-timeout 300"
     And a pinned value of 5 or "1;id" is rejected with exit 2
+
+  @AC-16 @FR-3
+  Scenario: Production uses its own database and role
+    Given TARGET_ENV=production and DB_PASSWORD=pw in APP_ENV
+    When the release .env is built and the compose file rendered
+    Then xstockstrat-config has DATABASE_URL "postgresql://xstockstrat:pw@db.ts.natanddavehouse.com:5432/xstockstrat?sslmode=require"
+
+  @AC-17 @FR-5
+  Scenario: A Go service is not healthy before its init has finished
+    Given xstockstrat-trading is still waiting for its config snapshot
+    When "service healthcheck" runs inside the container
+    Then it exits 1, because nothing listens on 127.0.0.1:50051 until init completes
+
+  @AC-18 @FR-7
+  Scenario: A push to main deploys homelab production only after a reviewer approves
+    Given HOMELAB_DEPLOY_ENABLED is "true" and the "production" environment requires reviewers
+    When main is pushed
+    Then "Deploy to prod" (DigitalOcean) runs immediately and "Deploy to homelab production" waits for approval
+
+  @AC-19 @FR-7
+  Scenario: A manual run redeploys an already-built SHA
+    Given images tagged "98c78d3" exist for all 13 repositories
+    When "Deploy homelab" is dispatched with environment "staging" and image_tag "98c78d3"
+    Then every IMAGE_* line in the run summary is the digest of the "98c78d3" tag
+
+  @AC-20 @FR-6
+  Scenario: The runner joins the tailnet as an ephemeral CI node and leaves it afterwards
+    Given a valid TS_AUTHKEY minted with tags tag:ci, --reusable and --ephemeral
+    When the homelab deploy runs, whether it succeeds or fails
+    Then the runner registers as "gha-xstockstrat-<run id>-<attempt>" and the "Leave the tailnet" step logs it out
+
+  @AC-21 @FR-5
+  Scenario Outline: The Go healthcheck fails when nothing listens on the service port
+    Given nothing listening on 127.0.0.1:<port>
+    When the <service> healthcheck probe runs
+    Then it exits 1
+
+    Examples:
+      | service                | port  |
+      | xstockstrat-trading    | 50051 |
+      | xstockstrat-portfolio  | 50052 |
+      | xstockstrat-marketdata | 50053 |

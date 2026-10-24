@@ -11,6 +11,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-10-24 | `idea` → `draft` | /sdd-story | Product spec generated; operator decisions captured in-session (see context.md) |
+| 2026-10-24 | `draft` → `spec-ready` | /sdd-review | Product spec approved (4 warnings) after one FAIL round; 084 demoted as superseded |
 
 ---
 
@@ -45,4 +46,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review homelab-compose-deploy product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-design homelab-compose-deploy quick` — recon + one adversarial round
