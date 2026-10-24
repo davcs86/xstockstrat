@@ -46,8 +46,15 @@ Some guard rails run **locally** (git hooks / Claude subagent), deliberately **n
 |---|---|---|
 | `main-dev` | push | DigitalOcean App Platform **dev** (`DO_DEV_APP_ID` / `.do/app.dev.yaml`) |
 | `main` | push | DigitalOcean App Platform **prod** (`DO_APP_ID` / `.do/app.yaml`) |
+| `main-dev` | push | Homelab **staging** VM (`deploy-homelab.yml`, GitHub environment `staging`) |
+| `main` | push | Homelab **production** VM (`deploy-homelab.yml`, GitHub environment `production`, required reviewers) |
 
-Deployment waits up to 15 minutes for the DO App Platform phase to reach `ACTIVE`.
+DO deployment waits up to 15 minutes for the App Platform phase to reach `ACTIVE`.
+
+The homelab jobs run beside the DO deploy from the same `docker-build.yml` images (which include `xstockstrat-db-migrator`) and
+only while the repository variable `HOMELAB_DEPLOY_ENABLED` is `true`. Each tag is resolved to a digest, the release
+(`deploy/homelab/compose.yml` + a generated `.env`) goes over the tailnet to homelab-edge's forced-command gate, and the VM
+rolls back on its own if the release is not healthy. Setup and operation → homelab-edge `docs/runbooks/deploy-compose-app.md` § 4.1.
 
 ## Coverage notes
 

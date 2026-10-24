@@ -47,6 +47,8 @@ jobs:
             dockerfile: services/xstockstrat-notify/Dockerfile
           - service: xstockstrat-ui
             dockerfile: services/xstockstrat-ui/Dockerfile
+          - service: xstockstrat-db-migrator
+            dockerfile: scripts/Dockerfile.migrate
     steps:
       - uses: actions/checkout@v7
 
