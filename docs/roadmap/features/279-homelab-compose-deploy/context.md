@@ -87,3 +87,9 @@
   pin `ubuntu-24.04`. Orchestrator synthesis: accept all; keep the separate checker (guard contract untouched).
 - Operator decisions after round 3 (2026-10-25): **pipeline owns APPLICATION_ENV and TRADING_MODE** (removed from
   the operator-held APP_ENV contract; runbook §4.1 updated accordingly). Gate: **run another round** (round 4 of 5).
+- Round 4 proposer: line-level design (checker script, `db-migrate.sh` insertion with `|| ahead=$?` → `return 0` /
+  `exit 1`, `homelab-release-env.sh` with `mktemp`+`trap` and APP_ENV key stripping, project-then-assert
+  `render-assert.jq` emitting labels only, `env -i` isolation, pass 4 on marketdata 008/009, AC-22..AC-30) and four
+  more WIP defects: G1 no `defaults.run.shell: bash` (no pipefail); G2 re-run attempts reuse the release name
+  (rollback to itself); G3 D1/D2 not yet in compose; G4 homelab-edge runbook still lists APPLICATION_ENV in APP_ENV
+  and lacks the live-account warning.
