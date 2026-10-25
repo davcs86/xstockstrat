@@ -72,3 +72,4 @@
   - Dirty-and-ahead → **refuse, fail closed** before `force 0` (explicit sign-off to change the dirty branch, C-11/P-03).
   - Ahead-tolerance applies **everywhere incl. DO** PRE_DEPLOY migrators (listed as an affected surface).
   - **Add a PR-time CI render test** (fixture .env + shared `deploy/homelab/render-assert.jq`).
+- Gate after round 2: operator chose **run another round** (round 3 of max 5).
