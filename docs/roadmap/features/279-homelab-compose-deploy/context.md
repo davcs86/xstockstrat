@@ -73,3 +73,8 @@
   - Ahead-tolerance applies **everywhere incl. DO** PRE_DEPLOY migrators (listed as an affected surface).
   - **Add a PR-time CI render test** (fixture .env + shared `deploy/homelab/render-assert.jq`).
 - Gate after round 2: operator chose **run another round** (round 3 of max 5).
+- Round 3 proposer: release .env build moves into `scripts/homelab-release-env.sh` (single mapping; CI tests the
+  real artifact); `render-assert.jq` asserts 13 services + 12 named app services + ui HOSTNAME; ahead-check exit
+  codes 0 proceed / 10 clean-ahead skip / 4 dirty-ahead refuse / 1 usage, called BEFORE the dirty case so any
+  checker crash fails closed; real-DB pass 4 in `migration-rerun.sh`; new `homelab-render` CI job + `homelab` paths
+  filter; scenarios AC-22..AC-28.
