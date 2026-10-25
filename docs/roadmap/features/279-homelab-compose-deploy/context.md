@@ -106,3 +106,11 @@
   `scripts/homelab-render-check.sh` filters stderr to `required variable … is missing a value` lines (+ test case 8).
   H2 malformed `TS_AUTHKEY_EXPIRES` validated. Owner calls, not applied: H1b same filter in the homelab-edge gate
   (`app-deploy.sh:42`); H3 restrict the `production` environment's deployment branches to `main`.
+- Round 5 adversary: **READY**, no Floor breach, no blocking defect, no @AC regression. Fold-ins: (1) A4 verifies the
+  MTLS_CA key matches its certificate before minting (gen-dev-certs.sh has no -e and hides openssl errors, so a
+  mismatch could yield 0-byte leaves and a "successful" build); (2) H1 wording: an unexpected-character error quotes the
+  offending line, an unterminated quote quotes the rest of the file — add an unclosed-quote case; (3) optional
+  "APP_ENV line N" hint (digits only); (4) migration-rerun.sh header/OK line + `rm -rf "$old"`; (5) spell out the
+  A11 `env -i` helper; (6) keep migration-ahead-check.test.sh in the step's Files. Accepted risks: H1b (gate stderr),
+  H3 (production deployment branches), DO blast radius (guarded by the image-contents step), compose-go dotenv
+  behaviour proven only by step-3 red/green, AC-24 live rollback.
