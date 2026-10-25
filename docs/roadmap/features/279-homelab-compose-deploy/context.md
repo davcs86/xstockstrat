@@ -78,3 +78,10 @@
   codes 0 proceed / 10 clean-ahead skip / 4 dirty-ahead refuse / 1 usage, called BEFORE the dirty case so any
   checker crash fails closed; real-DB pass 4 in `migration-rerun.sh`; new `homelab-render` CI job + `homelab` paths
   filter; scenarios AC-22..AC-28.
+- Round 3 adversary: NEEDS WORK, no Floor breach; all implementation-level: invalid `test -x a -x b`; octal trap on
+  `008`/`009` (strip zeros, `[ -gt ]`); checker must reuse the guard's dirty regex and fail closed (exit 2) on an
+  unparsable dirty string, else `force 0` reopens; render test must unset TRADING_MODE/APPLICATION_ENV (shell env
+  overrides --env-file); gitleaks-safe dummies (allowlisted `00112233…eeff`); FR-4/FR-6 + DO migrator surface to be
+  amended in the spec; keep an early target guard in the workflow; `trap` CA-key cleanup, jq `2>/dev/null` +
+  `pipefail`; portable python base64; pass 4 `|| rc=$?` and assert rc 4; runbook rollback outcome marked unverified;
+  pin `ubuntu-24.04`. Orchestrator synthesis: accept all; keep the separate checker (guard contract untouched).
