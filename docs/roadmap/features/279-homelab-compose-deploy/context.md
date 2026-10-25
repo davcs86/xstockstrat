@@ -93,3 +93,9 @@
   more WIP defects: G1 no `defaults.run.shell: bash` (no pipefail); G2 re-run attempts reuse the release name
   (rollback to itself); G3 D1/D2 not yet in compose; G4 homelab-edge runbook still lists APPLICATION_ENV in APP_ENV
   and lacks the live-account warning.
+- Round 4 adversary: NEEDS WORK, no Floor breach, "fold in and approve": AC-29 jq `//` swallows the error (assert
+  non-`[]` + no probe value); key-strip regex must end `[=:]` (compose-go accepts `KEY: value`) + runbook: APP_ENV is
+  single-line `KEY=value`; pass 4 computes marketdata's top version instead of hard-coding 009; call the checker via
+  `bash` (no exec-bit blast radius on DO), image check `test -f`; zero `.up.sql` files + numeric version → exit 2;
+  release name stays `${GITHUB_SHA::12}-$((RUN_ID*100+ATTEMPT))` with `ATTEMPT<100` check, manual `image_tag`
+  validated `^[0-9a-f]{7,40}$` before the tailnet; `: "${EXPIRES:?}"` in this repo's workflow. Orchestrator: accept all.
