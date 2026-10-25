@@ -53,3 +53,10 @@
   - Homelab production = **live**, alongside DO prod live; runbook warns never to register one live broker account
     on both stacks (double execution, reconciliation halts).
   - App VMs run the same Docker pins as the edge (engine 29.8.2, compose 5.5.1); runbook records compose ≥ v2.17.0.
+- Gate after round 1: operator chose **run another round**.
+- Round 2 proposer (2026-10-25): D3 as a pure, offline-testable `scripts/migration-ahead-check.sh <dir> <version>`
+  (exit 0 = DB ahead → skip service; digits-only version > highest local `.up.sql`; dirty untouched), called in
+  `db-migrate.sh` after the dirty `esac`; real-DB proof added to `scripts/migration-rerun.sh`; CI filter/test wiring.
+  D1 `appenv`/`mode` from `case "$TARGET_ENV"`, written after APP_ENV, asserted by a silent `jq -e` over every
+  service + ui HOSTNAME. New scenarios proposed: AC-22..AC-26. Two live stacks: runbook only.
+  Orchestrator-verified: golang-migrate `Migrate.Version()` reads only the DB driver (`migrate.go:385-396`).
