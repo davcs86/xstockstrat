@@ -35,3 +35,21 @@
 - Round 2: PASS WITH WARNINGS. Status: draft → spec-ready.
 - Warnings carried to design: homelab Postgres/PgBouncer connection budget unstated (F-06 context); the code predates
   the review (C-11 ordering, recorded in the sdd-story session above).
+
+## Session 2026-10-25T00:00Z — sdd-design quick (in progress)
+
+- Phase 0 Recon: wrote recon.md (6 read-only digests). Defects found in the WIP: D1 `TRADING_MODE` absent from the
+  homelab compose (trading broker default `trading.go:2597`, marketdata Alpaca `main.go:107` would run paper in
+  production); D2 ui binds to Docker's `HOSTNAME` (proved: next@15.5.27 `dist/build/utils.js:1316`
+  `const hostname = process.env.HOSTNAME || '0.0.0.0'`), so `nc -z localhost 3000` never passes.
+- Phase 1 round 1: proposer endorsed the WIP + 5 changes; adversary NEEDS WORK, no Floor breach. New defect D3:
+  a rollback after a release that applied a migration re-runs the previous migrator, and golang-migrate v4.17.1
+  `readUp` → `versionExists(from)` fails when the DB version is newer than the image's files (verified in source),
+  so the old stack never starts.
+- Verified by the orchestrator: compose `getDependencyCondition` (one-shot counts toward `--wait`) exists from
+  v2.17.0 through v5.5.1.
+- Operator decisions (2026-10-25):
+  - D3 → `scripts/db-migrate.sh` tolerates a DB version newer than its files (not dirty): log and skip that service.
+  - Homelab production = **live**, alongside DO prod live; runbook warns never to register one live broker account
+    on both stacks (double execution, reconciliation halts).
+  - App VMs run the same Docker pins as the edge (engine 29.8.2, compose 5.5.1); runbook records compose ≥ v2.17.0.
