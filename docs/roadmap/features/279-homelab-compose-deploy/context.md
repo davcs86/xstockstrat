@@ -60,3 +60,15 @@
   D1 `appenv`/`mode` from `case "$TARGET_ENV"`, written after APP_ENV, asserted by a silent `jq -e` over every
   service + ui HOSTNAME. New scenarios proposed: AC-22..AC-26. Two live stacks: runbook only.
   Orchestrator-verified: golang-migrate `Migrate.Version()` reads only the DB driver (`migrate.go:385-396`).
+- Round 2 adversary: NEEDS WORK, no Floor breach. (1) dirty-AND-ahead (a migration that failed part-way leaves
+  N+1 dirty) → the old release's `migration-dirty-guard.sh` computes its contract floor from its own files only, so a
+  new contract file at N+1 is invisible → `force 0` + full replay, the exact path `@AC-18 @feature-225` forbids;
+  without a contract file the non-idempotent replay most likely fails. (2) `scripts/Dockerfile.migrate` is also DO's
+  PRE_DEPLOY migrator (`.do/app.yaml:669`, `.do/app.dev.yaml:671`), so D3 changes DO behaviour — unlisted surface.
+  (3) `jq` `all()` is vacuously true on an empty set — assert the 12 services explicitly. (4) `trading.broker.paper`
+  config overrides `TRADING_MODE` (`trading.go:2595-2597`) — the guard proves the env default only. (5) AC-22/23/26
+  have no PR-time test; AC-24 gate part is live-run evidence. (6) write APPENV/MODE once to `$GITHUB_ENV`.
+- Operator decisions after round 2 (2026-10-25):
+  - Dirty-and-ahead → **refuse, fail closed** before `force 0` (explicit sign-off to change the dirty branch, C-11/P-03).
+  - Ahead-tolerance applies **everywhere incl. DO** PRE_DEPLOY migrators (listed as an affected surface).
+  - **Add a PR-time CI render test** (fixture .env + shared `deploy/homelab/render-assert.jq`).
