@@ -85,3 +85,5 @@
   amended in the spec; keep an early target guard in the workflow; `trap` CA-key cleanup, jq `2>/dev/null` +
   `pipefail`; portable python base64; pass 4 `|| rc=$?` and assert rc 4; runbook rollback outcome marked unverified;
   pin `ubuntu-24.04`. Orchestrator synthesis: accept all; keep the separate checker (guard contract untouched).
+- Operator decisions after round 3 (2026-10-25): **pipeline owns APPLICATION_ENV and TRADING_MODE** (removed from
+  the operator-held APP_ENV contract; runbook §4.1 updated accordingly). Gate: **run another round** (round 4 of 5).
