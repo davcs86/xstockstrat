@@ -100,3 +100,9 @@
   release name stays `${GITHUB_SHA::12}-$((RUN_ID*100+ATTEMPT))` with `ATTEMPT<100` check, manual `image_tag`
   validated `^[0-9a-f]{7,40}$` before the tailnet; `: "${EXPIRES:?}"` in this repo's workflow. Orchestrator: accept all.
 - Gate after round 4: operator chose **run round 5 (final)**.
+- Round 5 (final) proposer: consolidated executable design (A1–A11, ci.yml, spec amendments, AC-22..AC-31, homelab-edge
+  edits, ordered red-before-green steps, non-Docker evidence plan). New defect H1: a compose dotenv *parse* error quotes
+  the rest of the .env (incl. runtime-minted mTLS keys, unmasked) into the job log → shared
+  `scripts/homelab-render-check.sh` filters stderr to `required variable … is missing a value` lines (+ test case 8).
+  H2 malformed `TS_AUTHKEY_EXPIRES` validated. Owner calls, not applied: H1b same filter in the homelab-edge gate
+  (`app-deploy.sh:42`); H3 restrict the `production` environment's deployment branches to `main`.
