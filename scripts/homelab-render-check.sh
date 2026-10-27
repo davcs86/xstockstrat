@@ -17,7 +17,8 @@ if ! r "$1" -q 2>"$err"; then
     echo "homelab-render-check: compose could not render the .env (details suppressed; APP_ENV must be single-line KEY=value)" >&2
   exit 1
 fi
-fails="$(r "$1" --format json 2>/dev/null | jq -c --arg target "$2" -f "$REPO_ROOT/deploy/homelab/render-assert.jq" 2>/dev/null)" || fails=""
+host="$(sed -n 's/^DB_HOST=//p' "$1" | tail -n 1)"
+fails="$(r "$1" --format json 2>/dev/null | jq -c --arg target "$2" --arg host "$host" -f "$REPO_ROOT/deploy/homelab/render-assert.jq" 2>/dev/null)" || fails=""
 if [ "$fails" != "[]" ]; then
   echo "homelab-render-check: render check failed: ${fails:-could not evaluate (details suppressed)}" >&2
   exit 1

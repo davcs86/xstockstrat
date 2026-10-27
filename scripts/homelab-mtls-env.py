@@ -7,21 +7,6 @@ Values are double-quoted with \\n escapes, which compose's dotenv parser turns b
 import os
 import sys
 
-SERVICES = (
-    "trading",
-    "portfolio",
-    "marketdata",
-    "indicators",
-    "ingest",
-    "analysis",
-    "ledger",
-    "identity",
-    "notify",
-    "config",
-    "ui",
-    "agent",
-)
-
 
 def quoted(path: str) -> str:
     with open(path) as f:
@@ -36,8 +21,13 @@ def main() -> None:
         "homelab-mtls-env: CERTS_DIR is required"
     )
     paths = {"MTLS_CA_CERT": os.path.join(certs, "_ca", "ca.pem")}
-    for svc in SERVICES:
-        leaf = os.path.join(certs, f"xstockstrat-{svc}")
+    # gen-dev-certs.sh's SERVICES is the one service list; compose's :? vars catch a missing leaf.
+    leaves = sorted(d for d in os.listdir(certs) if d.startswith("xstockstrat-"))
+    if not leaves:
+        sys.exit(f"homelab-mtls-env: no xstockstrat-* leaves under {certs}")
+    for leaf_dir in leaves:
+        svc = leaf_dir.removeprefix("xstockstrat-").replace("-", "_")
+        leaf = os.path.join(certs, leaf_dir)
         paths[f"{svc.upper()}_MTLS_CERT"] = os.path.join(leaf, "cert.pem")
         paths[f"{svc.upper()}_MTLS_KEY"] = os.path.join(leaf, "key.pem")
     missing = sorted(p for p in paths.values() if not os.path.isfile(p))

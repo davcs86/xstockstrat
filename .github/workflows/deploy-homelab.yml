@@ -16,12 +16,12 @@ on:
   workflow_dispatch:
     inputs:
       environment:
-        description: Target environment (production runs only from main and needs the environment's reviewers)
+        description: Target environment (production runs only from main, for a commit on main, and needs the environment's reviewers)
         type: choice
         options: [staging, production]
         default: staging
       image_tag:
-        description: 'Short SHA of already-built images (default: this ref)'
+        description: 'Short SHA of already-built images (default: this ref); that commit''s compose file and scripts are deployed'
         type: string
         required: false
 
@@ -58,27 +58,44 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
 
-      - name: Resolve every image tag to its digest; the VM pulls by digest only
+      - name: Check out the images' own commit (production only from main)
         env:
-          GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.image_tag || '' }}
         run: |
           [ "$TARGET_ENV" = staging ] || [ "$TARGET_ENV" = production ] || { echo "::error::environment must be staging or production"; exit 1; }
           [ "$GITHUB_RUN_ATTEMPT" -lt 100 ] || { echo "::error::run attempt $GITHUB_RUN_ATTEMPT would collide with another run's release name"; exit 1; }
           tag="${TAG:-${GITHUB_SHA::7}}"
           [[ "$tag" =~ ^[0-9a-f]{7,40}$ ]] || { echo "::error::image_tag must be a 7-40 character lowercase hex git SHA"; exit 1; }
+          src=$(git rev-parse --verify --quiet "$tag^{commit}") || { echo "::error::$tag is not a unique commit in this repository"; exit 1; }
+          if [ "$TARGET_ENV" = production ]; then
+            [ "$GITHUB_REF" = refs/heads/main ] || { echo "::error::production deploys run only from main (this run: $GITHUB_REF)"; exit 1; }
+            git merge-base --is-ancestor "$src" origin/main || { echo "::error::$tag is not on main"; exit 1; }
+          fi
+          git checkout --quiet --detach "$src"
+          [ -f deploy/homelab/compose.yml ] && [ -f scripts/homelab-release-env.sh ] \
+            || { echo "::error::$tag predates the homelab deploy; it has no deploy/homelab/compose.yml"; exit 1; }
+          { echo "IMAGE_TAG=$tag"; echo "SRC_SHA=$src"; } >>"$GITHUB_ENV"
+
+      - name: Resolve every image tag to its digest; the VM pulls by digest only
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="$IMAGE_TAG"
           printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
           out="$RUNNER_TEMP/images.env"
           : >"$out"
-          for svc in config ledger identity notify marketdata portfolio indicators ingest trading analysis ui agent db-migrator; do
+          while read -r var; do
+            svc="$(printf '%s' "${var#IMAGE_}" | tr 'A-Z_' 'a-z-')"
             ref="$REGISTRY/xstockstrat-$svc:$tag"
             digest=$(docker buildx imagetools inspect "$ref" --format '{{json .Manifest}}' | jq -r .digest) \
               || { echo "::error::$ref not found; was docker-build.yml run for $tag?"; exit 1; }
             [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::$ref resolved to '$digest'"; exit 1; }
-            var="IMAGE_$(printf '%s' "$svc" | tr 'a-z-' 'A-Z_')"
             printf '%s=%s@%s\n' "$var" "$REGISTRY/xstockstrat-$svc" "$digest" >>"$out"
-          done
+          done < <(grep -oE '[$][{]IMAGE_[A-Z_]+' deploy/homelab/compose.yml | cut -c3- | sort -u)
+          [ "$(wc -l <"$out")" -ge 13 ] || { echo "::error::deploy/homelab/compose.yml names only $(wc -l <"$out") images"; exit 1; }
           { echo "### Images ($tag)"; echo; sed 's/^/- /' "$out"; } >>"$GITHUB_STEP_SUMMARY"
           echo "IMAGES_ENV=$out" >>"$GITHUB_ENV"
 
@@ -204,13 +221,15 @@ jobs:
           install -d -m 0700 ~/.ssh
           printf '%s\n' "$DEPLOY_SSH_KEY" >~/.ssh/deploy && chmod 600 ~/.ssh/deploy
           printf '%s\n' "$DEPLOY_KNOWN_HOSTS" >~/.ssh/known_hosts
-          echo "VM_IP=$(sudo tailscale ip -4 "$DEPLOY_HOST")" >>"$GITHUB_ENV"
+          ip=$(sudo tailscale ip -4 "$DEPLOY_HOST") && [ -n "$ip" ] \
+            || { echo "::error::$DEPLOY_HOST is not on the tailnet (check DEPLOY_HOST and the VM)"; exit 1; }
+          echo "VM_IP=$ip" >>"$GITHUB_ENV"
 
       - name: Ship the release and deploy it; the VM rolls back if it is not healthy
         env:
           GHCR_TOKEN: ${{ github.token }}
         run: |
-          rel="${GITHUB_SHA::12}-$((GITHUB_RUN_ID * 100 + GITHUB_RUN_ATTEMPT))"
+          rel="${SRC_SHA::12}-$((GITHUB_RUN_ID * 100 + GITHUB_RUN_ATTEMPT))"
           gate() { ssh -i ~/.ssh/deploy -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o HostKeyAlias="$DEPLOY_HOST" "deploy@$VM_IP" "$@"; }
           gate put "$rel" compose.yml <deploy/homelab/compose.yml
           gate put "$rel" .env <"$RELEASE_ENV"

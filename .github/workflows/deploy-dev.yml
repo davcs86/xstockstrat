@@ -38,6 +38,7 @@ jobs:
     with:
       image_tag: ${{ needs.prepare.outputs.short_sha }}
       latest_tag: latest-dev
+      build_migrator: ${{ vars.HOMELAB_STAGING_ENABLED == 'true' }}
 
   deploy:
     name: Deploy to dev
@@ -65,7 +66,7 @@ jobs:
   deploy-homelab:
     name: Deploy to homelab staging
     needs: [prepare, build-images]
-    if: vars.HOMELAB_DEPLOY_ENABLED == 'true'
+    if: vars.HOMELAB_STAGING_ENABLED == 'true'
     uses: ./.github/workflows/deploy-homelab.yml
     secrets: inherit
     with:

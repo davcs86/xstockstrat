@@ -27,9 +27,12 @@ probe=SECRETPROBE
 CERTS_DIR="$work/ca" CA_CN=xstockstrat-homelab-test-ca bash "$REPO_ROOT/scripts/gen-dev-certs.sh" >/dev/null
 ca_b64="$(python3 -I -c 'import base64,json,sys; d=sys.argv[1]; print(base64.b64encode(json.dumps({"ca_cert":open(d+"/_ca/ca.pem").read(),"ca_key":open(d+"/_ca/ca-key.pem").read()}).encode()).decode())' "$work/ca")"
 
-for svc in config ledger identity notify marketdata portfolio indicators ingest trading analysis ui agent db-migrator; do
-  printf 'IMAGE_%s=ghcr.io/davcs86/xstockstrat/xstockstrat-%s@sha256:%s\n' "$(printf '%s' "$svc" | tr 'a-z-' 'A-Z_')" "$svc" "$hex"
+host=db.ts.natanddavehouse.com
+grep -oE '[$][{]IMAGE_[A-Z_]+' "$REPO_ROOT/deploy/homelab/compose.yml" | cut -c3- | sort -u | while read -r var; do
+  svc="$(printf '%s' "${var#IMAGE_}" | tr 'A-Z_' 'a-z-')"
+  printf '%s=ghcr.io/davcs86/xstockstrat/xstockstrat-%s@sha256:%s\n' "$var" "$svc" "$hex"
 done >"$work/images.env"
+[ "$(wc -l <"$work/images.env")" -eq 13 ] || fail "0: compose.yml does not name 13 images"
 
 base_env="DB_PASSWORD=pw
 JWT_SECRET=$hex
@@ -50,9 +53,9 @@ envv() { jq -r --arg s "$2" --arg k "$3" '.services[$s].environment[$k] // "MISS
 no_probe() { if grep -q "$probe" "$work/err"; then fail "$1: output carries the probe value"; fi; }
 tmp_clean() { [ -z "$(ls -A "$work/tmp")" ] || fail "$1: temp files left behind"; }
 mode_all() {
-  for s in config ledger identity notify marketdata portfolio indicators ingest trading analysis ui agent; do
-    [ "$(envv "$1" "xstockstrat-$s" APPLICATION_ENV)" = "$2" ] || fail "$4: $s APPLICATION_ENV != $2"
-    [ "$(envv "$1" "xstockstrat-$s" TRADING_MODE)" = "$3" ] || fail "$4: $s TRADING_MODE != $3"
+  for s in $(jq -r '.services | keys[] | select(. != "db-migrator")' "$1"); do
+    [ "$(envv "$1" "$s" APPLICATION_ENV)" = "$2" ] || fail "$4: $s APPLICATION_ENV != $2"
+    [ "$(envv "$1" "$s" TRADING_MODE)" = "$3" ] || fail "$4: $s TRADING_MODE != $3"
   done
 }
 
@@ -134,13 +137,16 @@ if grep -q "PRIVATE KEY" "$work/err"; then fail "6: key material printed"; fi
 tmp_clean "6 mismatched CA"
 
 # 7. the oracle names every broken render, never passes an empty one, never prints a value
-[ "$(jq -c --arg target production -f "$JQ" "$work/prod.json")" = "[]" ] || fail "7: unmodified production render does not pass"
+[ "$(jq -c --arg target production --arg host "$host" -f "$JQ" "$work/prod.json")" = "[]" ] || fail "7: unmodified production render does not pass"
 mutate() { # mutate <label> <jq filter> [target]
-  out="$(jq "$2" "$work/prod.json" | jq -c --arg target "${3:-production}" -f "$JQ" 2>/dev/null)" || out="ERR"
+  out="$(jq "$2" "$work/prod.json" | jq -c --arg target "${3:-production}" --arg host "$host" -f "$JQ" 2>/dev/null)" || out="ERR"
   case "$out" in *"\"$1"*) ;; *) fail "7: '$2' did not report $1 (got $out)" ;; esac
   case "$out" in *"$probe"*) fail "7: '$2' printed a value" ;; esac
 }
-mutate services 'del(.services["xstockstrat-agent"])'
+mutate services 'del(.services["db-migrator"])'
+mutate unclassified:xstockstrat-new '.services["xstockstrat-new"] = .services["xstockstrat-trading"]'
+mutate depends-migrator:xstockstrat-config 'del(.services["xstockstrat-config"].depends_on["db-migrator"])'
+mutate depends-migrator:xstockstrat-trading 'del(.services["xstockstrat-config"].depends_on["db-migrator"])'
 mutate ui-hostname 'del(.services["xstockstrat-ui"].environment.HOSTNAME)'
 mutate trading-mode:xstockstrat-trading '.services["xstockstrat-trading"].environment.TRADING_MODE = "paper"'
 mutate image:xstockstrat-config '.services["xstockstrat-config"].image = "ghcr.io/davcs86/xstockstrat/xstockstrat-config:latest"'
@@ -157,7 +163,10 @@ mutate pool-budget 'del(.services["xstockstrat-notify"].environment.DB_POOL_MAX)
 mutate pool-budget:xstockstrat-trading '.services["xstockstrat-trading"].environment.DB_POOL_MAX = "2"'
 mutate application-env: '.' staging
 mutate target '.' qa
-out="$(printf '"%s"' "$probe" | jq -c --arg target production -f "$JQ" 2>/dev/null)" || out=""
+out="$(jq -c --arg target production --arg host "x/$probe" -f "$JQ" "$work/prod.json" 2>/dev/null)" || out="ERR"
+case "$out" in *'"db-host"'*) ;; *) fail "7: a malformed DB host was not reported (got $out)" ;; esac
+case "$out" in *"$probe"*) fail "7: a malformed DB host printed its value" ;; esac
+out="$(printf '"%s"' "$probe" | jq -c --arg target production --arg host "$host" -f "$JQ" 2>/dev/null)" || out=""
 [ -n "$out" ] && [ "$out" != "[]" ] || fail "7: a non-object input passed"
 case "$out" in *"$probe"*) fail "7: a non-object input printed its value" ;; esac
 

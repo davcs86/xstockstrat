@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # scripts/migration-rerun.sh — CI-only (job: migration-rerun). Requires DATABASE_URL and SEED_USER_ID.
 # Replays the 224 expand + 225 contract up-files over fixtures (each must be idempotent), then proves the
-# contract downs are refused and the db-migrate.sh dirty guard blocks `force 0` above the contract floor; pass 4 proves an
-# older migrator skips a schema newer than its files when clean and refuses it when dirty (feature 279).
+# contract downs are refused and the db-migrate.sh dirty guard blocks `force 0` above the contract floor.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

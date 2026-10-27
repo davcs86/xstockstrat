@@ -50,9 +50,11 @@ written after it; the CA key is deleted whatever the outcome. `scripts/homelab-r
 renders and that `deploy/homelab/render-assert.jq` passes, printing check labels and variable names, never a value.
 The job then joins the tailnet as an ephemeral `tag:ci` node and ships `compose.yml` + `.env` through the gate.
 FR-7. `deploy-dev.yml` calls it for `staging` and `deploy-prod.yml` for `production`, as jobs independent of the DO
-deploy and fed by the same `build-images` job; both run only while the repository variable `HOMELAB_DEPLOY_ENABLED`
-is `true`. `production` is a GitHub environment with required reviewers and deployment branches `main` only. A manual run takes an environment and an
-already-built short SHA.
+deploy and fed by the same `build-images` job; staging runs only while the repository variable `HOMELAB_STAGING_ENABLED` is `true`, production only while
+`HOMELAB_PRODUCTION_ENABLED` is `true`, and the migrator image is built only when the calling environment's switch is on.
+`production` is a GitHub environment with required reviewers and deployment branches `main` only, and the workflow itself
+refuses a production run from any other ref or for a commit not on `main`. A manual run takes an environment and an
+already-built short SHA, and deploys that commit's compose file and scripts under a release named after it.
 FR-8. Secrets come from 1Password when the environment has `OP_SERVICE_ACCOUNT_TOKEN`, else from the same-named
 GitHub secrets (homelab-edge template behaviour), and the run summary lists each secret's source.
 FR-9. OTel is off on the homelab (`OTEL_ENABLED=false`, no collector).

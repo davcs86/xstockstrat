@@ -11,7 +11,8 @@ fi
 images="$1"
 out="$2"
 : "${APP_ENV:?APP_ENV is required}" "${MTLS_CA:?MTLS_CA is required}"
-# Database and role names are homelab-edge's db_workloads; change both repos together.
+# Database host, names and roles are homelab-edge's db_host / db_workloads; change both repos together.
+DB_HOST=db.ts.natanddavehouse.com
 case "${TARGET_ENV:-}" in
 production) db=xstockstrat-production role=xstockstrat_production appenv=production mode=live ;;
 staging) db=xstockstrat-staging role=xstockstrat_staging appenv=development mode=paper ;;
@@ -28,27 +29,12 @@ esac
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 certs="$(mktemp -d)"
 trap 'rm -rf "$certs" "$out.tmp"' EXIT
-mkdir "$certs/_ca"
-if ! CERTS_DIR="$certs" python3 -I -c 'import base64, json, os
-d = json.loads(base64.b64decode(os.environ["MTLS_CA"]))
-ca = os.path.join(os.environ["CERTS_DIR"], "_ca")
-open(os.path.join(ca, "ca.pem"), "w").write(d["ca_cert"])
-open(os.path.join(ca, "ca-key.pem"), "w").write(d["ca_key"])' 2>/dev/null; then
-  echo "homelab-release-env: MTLS_CA is not a base64 JSON {ca_cert, ca_key}" >&2
-  exit 1
-fi
-# gen-dev-certs.sh hides openssl errors, so a mismatched CA key would mint empty leaves.
-if ! ca_pub="$(openssl x509 -in "$certs/_ca/ca.pem" -noout -pubkey 2>/dev/null)" ||
-  ! key_pub="$(openssl pkey -in "$certs/_ca/ca-key.pem" -pubout 2>/dev/null)" ||
-  [ "$ca_pub" != "$key_pub" ]; then
-  echo "homelab-release-env: MTLS_CA ca_key does not match its ca_cert" >&2
-  exit 1
-fi
+bash "$REPO_ROOT/scripts/mtls-provision.sh" decode-ca "$certs"
 CERTS_DIR="$certs" bash "$REPO_ROOT/scripts/gen-dev-certs.sh" >/dev/null
 owned='^[[:space:]]*(export[[:space:]]+)?(DB_HOST|DB_NAME|DB_USER|APPLICATION_ENV|TRADING_MODE|IMAGE_[A-Z_]+|MTLS_CA_CERT|[A-Z]+_MTLS_(CERT|KEY))[[:space:]]*[=:]'
 {
   printf '%s\n' "$APP_ENV" | { grep -Ev "$owned" || true; }
-  printf 'DB_HOST=db.ts.natanddavehouse.com\nDB_NAME=%s\nDB_USER=%s\n' "$db" "$role"
+  printf 'DB_HOST=%s\nDB_NAME=%s\nDB_USER=%s\n' "$DB_HOST" "$db" "$role"
   printf 'APPLICATION_ENV=%s\nTRADING_MODE=%s\n' "$appenv" "$mode"
   cat "$images"
   CERTS_DIR="$certs" python3 "$REPO_ROOT/scripts/homelab-mtls-env.py"

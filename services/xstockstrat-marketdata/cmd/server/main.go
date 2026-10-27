@@ -192,7 +192,8 @@ func main() {
 		}),
 	)
 	marketdatav1.RegisterMarketDataServiceServer(grpcServer, hdl.GRPCHandler())
-	healthpb.RegisterHealthServer(grpcServer, health.NewServer())
+	hs := health.NewServer()
+	healthpb.RegisterHealthServer(grpcServer, hs)
 	reflection.Register(grpcServer)
 
 	slog.Info("marketdata service starting", "grpc_port", cfg.GRPCPort)
@@ -202,6 +203,7 @@ func main() {
 	go func() {
 		<-quit
 		slog.Info("shutting down marketdata service")
+		hs.Shutdown()
 		grpcServer.GracefulStop()
 		cancel()
 	}()

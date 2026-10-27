@@ -210,9 +210,9 @@
 
 - Result: 0 failures, 16 warnings across 11 steps (advisory — did not block). Spec↔code drift: none (~60 citations spot-checked). Floor: none.
 - Unresolved ✗ / ⚠ carried into execution:
-  - Step 8: AC-5 (every service waits on db-migrator) not CI-enforced; add a `depends-migrator` oracle label + mutation case (C-15, D-2) — [ ] unaddressed
+  - Step 8: AC-5 (every service waits on db-migrator) not CI-enforced; add a `depends-migrator` oracle label + mutation case (C-15, D-2) — [x] resolved (D-4, AC-43)
   - Step 1: coverage ≥40% not asserted explicitly (B2) — [ ] unaddressed
-  - Step 10: `homelab-mtls-env.py` has no ruff gate in the step (B2) — [ ] unaddressed
+  - Step 10: `homelab-mtls-env.py` has no ruff gate in the step (B2) — [x] ruff clean (D-4)
   - Steps 7, 12/13, 16: test step after service step (P-06; retroactive spec) — [ ] unaddressed
   - Step 9: docker-compose.yml / .do/app*.yaml not in Files (justified: unchanged by design) — [ ] unaddressed
   - Step 12: actionlint not a CI job — [ ] unaddressed
@@ -223,3 +223,16 @@
 - Overlap findings (WARN, no FAIL): ci.yml (278, 266, 251, 250, 248 — different jobs); ci-overview.md (250, 252, 248);
   database.md (266); inter-service-mtls.md (242); context-constitution.md (242, 244, 264); marketdata `cmd/server/main.go`
   (255 implementation-ready, 215 in-progress) — highest risk, no merge-order row written (WARN per overlap rules).
+
+## Session 2026-10-27 — code review (backwards) + fixes
+
+- `/code-review high` on homelab-edge #39 (8 findings) then xstockstrat #1327 (10 findings).
+- Operator decisions: split the homelab switch per environment; a manual old-tag run checks out the image's commit;
+  pin the DB probe to a postgres 18 digest; do the DRY/migrator-build cleanups in this PR.
+- Fixed (impl-spec D-4): see D-4. homelab-edge 78d4d82: octal wait bypass, render guard on rollback, refused releases
+  pruned, single tailnet anchor with ignore-redirect, probe image pinned (18.6-alpine digest is the 2026-10-26 rebuild;
+  Hub lists no older digest — recorded in docs/versions.md), tailnet-devices.md grant list.
+- Declined, with reason: UI probes red until 271 (operator: keep alerting); dirty-ahead refusal blocks auto-rollback
+  (operator: refuse, fail closed).
+- impl-spec review items now resolved: Step 8 AC-5 chain [x] (depends-migrator, AC-43); Step 10 ruff [x] (ruff check/format clean).
+- **Not verified live:** the switches, the commit checkout and the production guard run only in Actions.

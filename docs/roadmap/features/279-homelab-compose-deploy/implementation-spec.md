@@ -41,8 +41,10 @@ proof. The first staging deploy is the live-boot proof (design.md Open Risks).
 | AC-10, AC-11, AC-12, AC-18, AC-19, AC-20 | 13 | Static workflow assertions (grep) + live evidence on the first run |
 | AC-34, AC-38 | 13 | Live evidence, checked once by hand (scenario says so) |
 | AC-14, AC-15, AC-33, AC-37, AC-39, AC-40 | 15 | homelab-edge `policy-test.sh`, `app-deploy-test.sh`, `gatus-config-test.py`, `verify.yml` |
+| AC-41, AC-42 | 13 | Static workflow assertions (per-environment switches, `refs/heads/main` + `merge-base --is-ancestor` guard) + live evidence |
+| AC-43 | 8 | `homelab-render.test.sh` mutations `depends-migrator:*` |
 
-All 40 scenarios are covered.
+All 43 scenarios are covered.
 
 ## Step Dependencies
 
@@ -572,11 +574,22 @@ hand; context-forge plugin unavailable).
 - **D-2 (2026-10-27, /sdd-spec):** Finding: the render oracle (`render-assert.jq`) and `homelab-render.test.sh` do not
   assert that every service waits on `db-migrator`. Today the chain holds (only config names the migrator,
   `compose.yml:53-55`; every other service reaches config via `service_healthy`), checked by Step 8's extra jq command.
-  A future edit that drops a `depends_on` would pass CI. Not fixed here; a candidate `depends-migrator` label for
-  `render-assert.jq`.
+  A future edit that drops a `depends_on` would pass CI. **Resolved by D-4** (`depends-migrator` label, AC-43).
 - **D-3 (2026-10-27, /sdd-spec):** Live-only scenarios (AC-11/18/19/20 run behaviour, AC-34, AC-38, AC-40, AC-24's gate
   rollback) are unproven until the first staging/production deploy, as context.md already records.
 - **Re-run 2026-10-27 (/sdd-spec):** `migration-ahead-check.test.sh` all passed; Go `TestProbe*` ok in all three
   services; `homelab-render.test.sh` all passed (docker compose v5.6.1, no daemon); homelab-edge `app-deploy-test.sh`
   PASS, `gatus-config-test.py` OK. Not re-run: `policy-test.sh` (no headscale binary in this sandbox), CI
   `migration-rerun` (needs Postgres), `actionlint` (not installed here), golangci-lint/coverage.
+- **D-4 (2026-10-27, code review → fixes):** `/code-review high` on PR #1327 and homelab-edge #39; operator chose
+  per-environment switches, checkout-the-image-commit, a digest-pinned 18.6 probe image and doing the DRY cleanups now.
+  Changes beyond Steps 1–16 as written: `HOMELAB_DEPLOY_ENABLED` → `HOMELAB_STAGING_ENABLED` / `HOMELAB_PRODUCTION_ENABLED`
+  (deploy-dev/prod; `docker-build.yml` `build_migrator` input gates the migrator image); `deploy-homelab.yml` checks out the
+  image tag's commit (`fetch-depth: 0`), refuses production unless `GITHUB_REF=refs/heads/main` and the commit is on
+  `origin/main`, names the release after that commit, derives the image list from `compose.yml`, and fails on an empty
+  `VM_IP`; Go services keep the health server and call `Shutdown()` before `GracefulStop()`; `mtls-provision.sh decode-ca`
+  is the one CA-bundle decoder (DO `deploy.yml` + `homelab-release-env.sh`, now also checking key↔cert for DO);
+  `homelab-mtls-env.py` derives services from the cert tree; `render-assert.jq` takes `--arg host` from the release
+  `.env`, derives apps from the render, adds `db-host`, `unclassified:*` and `depends-migrator:*`. New AC-41..43.
+  Declined (operator decisions stand): Gatus UI probes red until 271; dirty-ahead refusal blocking auto-rollback.
+

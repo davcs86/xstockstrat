@@ -81,9 +81,9 @@ Feature: homelab-compose-deploy
 
   @AC-11 @FR-7
   Scenario: Homelab deploys run beside the DO deploy only when enabled
-    Given repository variable HOMELAB_DEPLOY_ENABLED is unset
+    Given repository variable HOMELAB_STAGING_ENABLED is unset
     When main-dev is pushed
-    Then the "Deploy to dev" job runs and the "Deploy to homelab staging" job is skipped
+    Then the "Deploy to dev" job runs, the "Deploy to homelab staging" job is skipped and no xstockstrat-db-migrator image is built
 
   @AC-12 @FR-8
   Scenario: The run summary names each secret's source and a missing secret fails the job
@@ -124,7 +124,7 @@ Feature: homelab-compose-deploy
 
   @AC-18 @FR-7
   Scenario: A push to main deploys homelab production only after a reviewer approves
-    Given HOMELAB_DEPLOY_ENABLED is "true" and the "production" environment requires reviewers
+    Given HOMELAB_PRODUCTION_ENABLED is "true" and the "production" environment requires reviewers
     When main is pushed
     Then "Deploy to prod" (DigitalOcean) runs immediately and "Deploy to homelab production" waits for approval
 
@@ -133,6 +133,7 @@ Feature: homelab-compose-deploy
     Given images tagged "98c78d3" exist for all 13 repositories
     When "Deploy homelab" is dispatched with environment "staging" and image_tag "98c78d3"
     Then every IMAGE_* line in the run summary is the digest of the "98c78d3" tag
+    And the shipped compose.yml and release scripts are those of commit 98c78d3, and the release name starts with its 12-character SHA
 
   @AC-20 @FR-6
   Scenario: The runner joins the tailnet as an ephemeral CI node and leaves it afterwards
@@ -275,3 +276,21 @@ Feature: homelab-compose-deploy
     Given the public edge
     When GET https://xstockstrat.natanddavehouse.com/trader/api/health is requested
     Then it answers 404 (homelab-edge verify.yml)
+
+  @AC-41 @FR-7
+  Scenario: Homelab production cannot be enabled by the staging switch
+    Given HOMELAB_STAGING_ENABLED is "true" and HOMELAB_PRODUCTION_ENABLED is unset
+    When main is pushed
+    Then the "Deploy to homelab production" job is skipped and no xstockstrat-db-migrator image is built
+
+  @AC-42 @FR-7
+  Scenario: A manual production run must come from main and deploy a commit on main
+    Given "Deploy homelab" is dispatched from branch "feature/foo" with environment "production"
+    When the job starts
+    Then it fails with "production deploys run only from main" before any secret is loaded
+
+  @AC-43 @FR-3
+  Scenario: Every app service waits on the migrator
+    Given a homelab compose render where xstockstrat-config no longer depends on db-migrator
+    When render-assert.jq evaluates it
+    Then it reports "depends-migrator:xstockstrat-config" and "depends-migrator:xstockstrat-trading"

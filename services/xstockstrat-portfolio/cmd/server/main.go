@@ -99,7 +99,8 @@ func main() {
 		}),
 	)
 	portfoliov1.RegisterPortfolioServiceServer(grpcServer, hdl.GRPCHandler())
-	healthpb.RegisterHealthServer(grpcServer, health.NewServer())
+	hs := health.NewServer()
+	healthpb.RegisterHealthServer(grpcServer, hs)
 	reflection.Register(grpcServer)
 
 	slog.Info("portfolio service starting", "grpc_port", cfg.GRPCPort)
@@ -109,6 +110,7 @@ func main() {
 	go func() {
 		<-quit
 		slog.Info("shutting down portfolio service")
+		hs.Shutdown()
 		grpcServer.GracefulStop()
 		cancel()
 	}()

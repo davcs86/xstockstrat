@@ -11,6 +11,11 @@ on:
         description: 'Floating tag (latest-dev or latest)'
         required: true
         type: string
+      build_migrator:
+        description: 'Also build xstockstrat-db-migrator (only the homelab deploy pulls it)'
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   build:
@@ -51,11 +56,14 @@ jobs:
             dockerfile: scripts/Dockerfile.migrate
     steps:
       - uses: actions/checkout@v7
+        if: matrix.service != 'xstockstrat-db-migrator' || inputs.build_migrator
 
       - name: Set up Docker Buildx
+        if: matrix.service != 'xstockstrat-db-migrator' || inputs.build_migrator
         uses: docker/setup-buildx-action@v4
 
       - name: Log in to GHCR
+        if: matrix.service != 'xstockstrat-db-migrator' || inputs.build_migrator
         uses: docker/login-action@v4
         with:
           registry: ghcr.io
@@ -63,12 +71,14 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Compute image tags
+        if: matrix.service != 'xstockstrat-db-migrator' || inputs.build_migrator
         id: tags
         run: |
           REPO="ghcr.io/davcs86/xstockstrat/${{ matrix.service }}"
           echo "tags=${REPO}:${{ inputs.image_tag }},${REPO}:${{ inputs.latest_tag }}" >> "$GITHUB_OUTPUT"
 
       - name: Build and push
+        if: matrix.service != 'xstockstrat-db-migrator' || inputs.build_migrator
         uses: docker/build-push-action@v7
         with:
           context: .

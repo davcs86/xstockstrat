@@ -81,6 +81,7 @@ jobs:
               - 'deploy/homelab/**'
               - 'scripts/homelab-*'
               - 'scripts/gen-dev-certs.sh'
+              - 'scripts/mtls-provision.sh'
               - '.github/workflows/deploy-homelab.yml'
             claude-md:
               - '**/CLAUDE.md'
