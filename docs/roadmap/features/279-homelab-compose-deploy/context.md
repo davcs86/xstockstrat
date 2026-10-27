@@ -205,3 +205,21 @@
     (no headscale), CI migration-rerun (Postgres), golangci-lint/coverage.
 - Reviewers snapshot finalized in feature.md (adds DBA for the migrator change).
 - Open thread: add a `depends-migrator` label to `render-assert.jq` (+ a mutation case) — owner's call; not done here.
+
+## Session 2026-10-27 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 16 warnings across 11 steps (advisory — did not block). Spec↔code drift: none (~60 citations spot-checked). Floor: none.
+- Unresolved ✗ / ⚠ carried into execution:
+  - Step 8: AC-5 (every service waits on db-migrator) not CI-enforced; add a `depends-migrator` oracle label + mutation case (C-15, D-2) — [ ] unaddressed
+  - Step 1: coverage ≥40% not asserted explicitly (B2) — [ ] unaddressed
+  - Step 10: `homelab-mtls-env.py` has no ruff gate in the step (B2) — [ ] unaddressed
+  - Steps 7, 12/13, 16: test step after service step (P-06; retroactive spec) — [ ] unaddressed
+  - Step 9: docker-compose.yml / .do/app*.yaml not in Files (justified: unchanged by design) — [ ] unaddressed
+  - Step 12: actionlint not a CI job — [ ] unaddressed
+  - Step 14: 8 files; split CI wiring from docs — [ ] unaddressed
+  - Step 15: Files omits homelab-edge `policy/policy.hujson` — [ ] unaddressed
+  - Step 16: `tag:ci → tag:db:22` grant needs Security reviewer confirmation — [ ] unaddressed
+  - Live-only AC-11/18/19/20/34/38/40 unproven until first deploy (D-3) — [ ] unaddressed
+- Overlap findings (WARN, no FAIL): ci.yml (278, 266, 251, 250, 248 — different jobs); ci-overview.md (250, 252, 248);
+  database.md (266); inter-service-mtls.md (242); context-constitution.md (242, 244, 264); marketdata `cmd/server/main.go`
+  (255 implementation-ready, 215 in-progress) — highest risk, no merge-order row written (WARN per overlap rules).
