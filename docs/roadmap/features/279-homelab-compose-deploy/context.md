@@ -119,3 +119,11 @@
   branches = `main`, documented) against latest homelab-edge. The skill caps the debate at 5 rounds, so this runs as a
   delta recon against latest homelab-edge + one targeted adversarial review of the delta, then returns to the gate.
 - **Operator override (2026-10-27): the 5-round debate cap is lifted** for this feature; round 6 runs as a full proposer/adversary round against latest homelab-edge (sign-off recorded here, P-04).
+- Round 6 proposer (2026-10-27, against homelab-edge 488d0c4): **E1 supersedes the 2026-10-24 names** — DB_NAME
+  `xstockstrat-<env>`, DB_USER `xstockstrat_<env>` mapped and asserted separately; DB_PASSWORD from homelab-edge SOPS
+  `db_role_xstockstrat_<env>_password` (runbook); render check guards the 8-direct-connection budget; verify-full →
+  follow-up feature. **R6-1 (verified by orchestrator):** homelab-edge Gatus probes `http://<vm>:3000/api/health`
+  (`gatus-config.yaml.j2:77,95`) but xstockstrat-ui has no root `/api/health` (only segment routes); the middleware
+  matcher already exempts it (`middleware.ts:22`, `middleware.test.ts:60`) → add `src/app/api/health/route.ts` + test.
+  R6-2 runbook ordering (VM on tailnet before db-host run); R6-3 container DNS probe in runbook. H1b gate filter +
+  fake-docker test; H3 documented. Line-number hint: recommend NO. New scenarios AC-32..AC-38.
