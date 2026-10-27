@@ -127,3 +127,12 @@
   matcher already exempts it (`middleware.ts:22`, `middleware.test.ts:60`) → add `src/app/api/health/route.ts` + test.
   R6-2 runbook ordering (VM on tailnet before db-host run); R6-3 container DNS probe in runbook. H1b gate filter +
   fake-docker test; H3 documented. Line-number hint: recommend NO. New scenarios AC-32..AC-38.
+- Round 6 adversary: **READY provided B1 is folded in**; no Floor breach, no @AC regression. **B1 (verified by
+  orchestrator):** feature 271 (`implementation-ready`) deletes the `api/health|health` matcher alternatives
+  (`271/implementation-spec.md:47,520`) and its exact `PUBLIC_HEALTH_PATHS` lists only the 8 segment paths, so the new
+  root `/api/health` would 307 to `/auth/login` and Gatus (follows redirects) would show a false green → behavioural
+  middleware test for `/api/health`, a merge-order row 279↔271 (`'/api/health'` joins `PUBLIC_HEALTH_PATHS`), a note in
+  271's context.md. Fold-ins: O1 runbook DB probe uses public `postgres:16-alpine` `psql … -c 'select 1'` with
+  `-e PGPASSWORD` (pg_isready does not check pg_hba; migrator image is private); O2 path-side swap mutation; O3 `(add // 99)`
+  + comment says 8 is a floor; O4 runbook §6 row for the gate's exit 2; O5 dispatch description "production: main only"
+  + note that `image_tag` is reviewer-gated, not branch-gated.
