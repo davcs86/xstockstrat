@@ -2,7 +2,7 @@
 
 **Development Branch**: `feature/homelab-compose-deploy`
 **Created**: 2026-10-24
-**Last Updated**: 2026-10-24
+**Last Updated**: 2026-10-27
 
 ---
 
@@ -12,12 +12,15 @@
 |---|---|---|---|
 | 2026-10-24 | `idea` → `draft` | /sdd-story | Product spec generated; operator decisions captured in-session (see context.md) |
 | 2026-10-24 | `draft` → `spec-ready` | /sdd-review | Product spec approved (4 warnings) after one FAIL round; 084 demoted as superseded |
+| 2026-10-27 | `spec-ready` → `design-approved` | /sdd-design | Design debated (7 rounds, quick; operator lifted the 5-round cap) and approved; recon.md + design.md written |
 
 ---
 
 ## Artifacts
 
 - [Product Spec](product-spec.md) — requirements and governance
+- [Recon](recon.md) — grounded codebase dossier (incl. homelab-edge addendum)
+- [Design](design.md) — approved design, rejected alternatives, open risks
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec homelab-compose-deploy`_
 - [Context Log](context.md) — session history, decisions, deviations
@@ -46,4 +49,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-design homelab-compose-deploy quick` — recon + one adversarial round
+`/sdd-spec homelab-compose-deploy` — generate implementation spec from the approved design

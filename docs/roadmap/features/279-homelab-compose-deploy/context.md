@@ -157,3 +157,17 @@
   (key verified in v5.37.0 `client/config.go:57`) with the tailnet resolver restated; E-G1..E-G6 get an execute step
   (red E-G2, green E-G1, verify gatus-config-test.py); E-G5 says AGENT_PUBLIC_URL is derived, do not set; §6 rows fit
   Failure|Effect|Handling; design.md records rejected alternatives (root route, /auth/login probe, jq APP_URL check).
+- **Gate after round 7 (2026-10-27): operator APPROVED the design.** Staging `APP_URL` confirmed:
+  `https://xstockstrat-staging-ui.ts.natanddavehouse.com:8443`. Merge-order 279↔271 recorded as a **prose note**
+  (non-blocking). Gatus UI probes: **add `ignore-redirect: true`** (body condition kept) and **keep alerting**.
+
+## Session 2026-10-27 — sdd-design (completion)
+
+- Phase 0 Recon: recon.md (services: trading, portfolio, marketdata + 9 deployed unchanged; reuse: gen-dev-certs.sh,
+  migration-dirty-guard.sh idiom, homelab-edge app-deploy template) + Addendum 2026-10-27 against homelab-edge 488d0c4.
+- Phase 1 Grilling: 7 rounds (quick; cap lifted by operator). Chosen: digest-pinned homelab compose + reusable
+  workflow with pipeline-owned env, Go grpc.health.v1 self-probe, migrator ahead/dirty-ahead check (DO too), shared
+  render check, Gatus following 271. Rejected: see design.md.
+- Constitution rules touched: C-01, C-08, C-10, C-11, C-14, C-15, C-16, C-18, P-03, F-01, F-06, F-07. Floor breaches: none.
+- Ledger: insights.md "2026-10-27 — homelab-compose-deploy — design". merge-order.md prose note + 271 context note written.
+- Status: spec-ready → design-approved.

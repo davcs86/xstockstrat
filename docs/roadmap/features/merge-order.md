@@ -273,3 +273,13 @@ proto-field collisions, but re-run `./scripts/buf-gen.sh` after each merge.
 >   `bar_epoch`-aware (must keep 177's `@AC-1/@AC-2` green). No field/config/migration collision
 >   (its keys are `analysis.readiness_materializer.*`, new; no migration). **Run 176 → 177 → 180.**
 >   180's `/sdd-spec` writes against 176's post-restructure + 177's cache signatures.
+
+## Homelab monitoring ↔ UI health exemption (279 ↔ 271, 2026-10-27, non-blocking)
+
+`homelab-compose-deploy` (279) points homelab-edge Gatus at `http://<vm>:3000/trader/api/health` (no redirect
+followed, `[STATUS] == 200` and `[BODY].status == ok`). That path is public only through
+`fix-ui-transport-hardening` (271)'s exact `PUBLIC_HEALTH_PATHS` (`@AC-3`); until 271 is deployed the middleware
+answers 307, so both homelab UI probes stay red (never falsely green). **Either may merge first**; each environment's UI
+probe turns green once 271 reaches `main-dev` (staging) / `main` (production). 279 adds no UI route and no
+`PUBLIC_HEALTH_PATHS` entry. The path is pinned by 271 `@AC-3`; the `status: 'ok'` body only by 271's e2e step — keep both.
+Operator-approved as a prose note so it does not gate either integration PR.
