@@ -146,3 +146,7 @@
   backend health already gated); Gatus pins `[BODY].resource` to the env's `$APP_URL/agent`; compose healthcheck stays
   TCP. N1 homelab-edge `gatus-config-test.py` pins the old URLs; N2 staging `APP_URL` documented nowhere (owner to
   confirm `https://xstockstrat-staging-ui.ts.natanddavehouse.com:8443`). Merge-order row + 271 note text drafted.
+- Orchestrator-verified in Gatus v5.37.0 source (homelab-edge pin): redirects are followed by default
+  (`client/config.go:35,56`, `IgnoreRedirect: false`); an unresolvable `[BODY]` placeholder (non-JSON body) becomes
+  `"<element> (INVALID)"` (`config/endpoint/condition.go:181-186`) and fails an `==` comparison — so the pre-271
+  login-redirect is red, never a false green.
