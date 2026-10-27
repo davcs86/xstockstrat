@@ -114,3 +114,7 @@
   A11 `env -i` helper; (6) keep migration-ahead-check.test.sh in the step's Files. Accepted risks: H1b (gate stderr),
   H3 (production deployment branches), DO blast radius (guarded by the image-contents step), compose-go dotenv
   behaviour proven only by step-3 red/green, AC-24 live rollback.
+- Final gate (2026-10-27): operator asked to **pull the latest homelab-edge and run another round to fix any gap**,
+  and to apply owner items **H1b** (filter the gate's `compose config` stderr) and **H3** (production deployment
+  branches = `main`, documented) against latest homelab-edge. The skill caps the debate at 5 rounds, so this runs as a
+  delta recon against latest homelab-edge + one targeted adversarial review of the delta, then returns to the gate.
