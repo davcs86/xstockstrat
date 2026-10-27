@@ -119,3 +119,29 @@ All PRESERVE; no CHANGE.
 2. Keep the Go health change as is (registration after init is already true by construction); decide on NOT_SERVING-on-shutdown.
 3. Tests already present for `Probe`; add a compose-render check for D1/D2.
 4. homelab-edge PR unchanged unless the debate finds a gate issue.
+
+## Addendum 2026-10-27 — latest homelab-edge (`origin/main` 488d0c4, merged into the session branch)
+
+homelab-edge now provisions the database host itself (`roles/db_host`, `playbooks/db.yml`, `docs/runbooks/db-host.md`).
+Facts that bind this feature (all `path:line` in homelab-edge):
+- **E1 Names (design is wrong).** `inventories/prod/group_vars/all/main.yml:118-133` `db_workloads`: database
+  `xstockstrat-production` / role `xstockstrat_production`; database `xstockstrat-staging` / role `xstockstrat_staging`.
+  The design hardcodes `xstockstrat` / `xstockstrat_staging` for both. `pg_hba.conf.j2` admits exactly one
+  `hostssl "<database>" "<role>" <workload tailnet IP>/32` per workload, so a wrong name fails authentication.
+- **E2 Passwords** live in homelab-edge SOPS `secrets/edge.sops.yaml` keys `db_role_xstockstrat_<env>_password`
+  (`db-host.md` role table); xstockstrat's `APP_ENV` `DB_PASSWORD` must carry that value (operator copies it; 1Password item).
+- **E3 TLS.** PostgreSQL `ssl = on` (`templates/10-xs.conf.j2`) and PgBouncer `client_tls_sslmode = require`
+  (`templates/pgbouncer.ini.j2`), server cert from its own CA `db_tls_ca_crt` named `db.ts.natanddavehouse.com`
+  (`db-host.md` Manual access). `sslmode=require` works; `verify-full` is possible with that CA (operator chose require).
+- **E4 Host/ports.** `db_tailnet_hostname: db` → `db.ts.natanddavehouse.com` (`main.yml:101-102`, `magicdns_base_domain`
+  `ts.{{ domain }}` `:6`); 5432 direct (config, ledger, identity, notify, ui, migrator), 6432 PgBouncer transaction mode
+  for the six stateless services (`db-host.md` port table) — matches the design's split. PgBouncer pool name = database name.
+- **E5 Budget (resolves the F-06 warning).** `max_connections 60`, 25 per workload role, PgBouncer pool 5 per database;
+  `main.yml:117` sizes 25 as "8 direct pools doubled by a rolling deploy, 2 migrator, 1 pool of 5 (23)".
+- **E6 Role settings.** `idle_in_transaction_session_timeout = 10min`, no `statement_timeout`; the migrator shares the
+  owner role. TimescaleDB is the Apache build (same as DO); no xstockstrat migration calls compression (grep: none).
+- **E7 Policy.** main added `tag:ci → tag:db:22` (db-host playbook); merged with this feature's staging grant as a
+  union and re-verified with `scripts/policy-test.sh` (headscale v0.29.4) — passes. `db-host.md` notes `tag:ci` can
+  become root on the DB host (owner-accepted).
+- **E8 DNS from containers (unverified).** `pg_hba` admits only the workload VM's tailnet IP; container egress is
+  NATed to the VM's address, and containers must resolve `db.ts.…` through the VM's MagicDNS resolver. Live-run evidence.
