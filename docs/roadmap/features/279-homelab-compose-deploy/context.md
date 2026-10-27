@@ -136,3 +136,7 @@
   `-e PGPASSWORD` (pg_isready does not check pg_hba; migrator image is private); O2 path-side swap mutation; O3 `(add // 99)`
   + comment says 8 is a floor; O4 runbook §6 row for the gate's exit 2; O5 dispatch description "production: main only"
   + note that `image_tag` is reviewer-gated, not branch-gated.
+- Gate after round 6 (2026-10-27): operator chose **run round 7** — "Follow 271 for UI, but what about agent?" —
+  and **approved writing a merge-order row + a note in 271's context.md** (271's spec text untouched).
+  Orchestrator reading: the UI health exemption must follow 271's exact-path `PUBLIC_HEALTH_PATHS` mechanism (not
+  the regex alternative 271 deletes); round 7 must also settle the agent's Gatus probe and health contract.
