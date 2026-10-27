@@ -236,3 +236,10 @@
   (operator: refuse, fail closed).
 - impl-spec review items now resolved: Step 8 AC-5 chain [x] (depends-migrator, AC-43); Step 10 ruff [x] (ruff check/format clean).
 - **Not verified live:** the switches, the commit checkout and the production guard run only in Actions.
+
+## Session 2026-10-27 (CI: feature status automation)
+
+- Promotion PR #1328 merged to main
+- Feature promoted and committed: 497eaa01296f7d8df1e3203e5bdd8534e3cc9eb9
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-10-27

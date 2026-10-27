@@ -3,6 +3,8 @@
 **Development Branch**: `feature/homelab-compose-deploy`
 **Created**: 2026-10-24
 **Last Updated**: 2026-10-27
+**Committed to main**: 497eaa01296f7d8df1e3203e5bdd8534e3cc9eb9
+**Launched date**: 2026-10-27
 
 ---
 
@@ -16,6 +18,7 @@
 | 2026-10-27 | `design-approved` → `code-completed` | implementation session | Implemented from the line-level design.md (no implementation-spec.md); homelab-edge companion changes on its own PR |
 | 2026-10-27 | `code-completed` (unchanged) | /sdd-spec | Retroactive implementation spec, 16 steps, all `done`; status not reset to `implementation-ready` (spec D-1) |
 
+| 2026-10-27 | `code-completed` → `launched` | CI workflow | Promoted via PR #1328; committed 497eaa01296f7d8df1e3203e5bdd8534e3cc9eb9 |
 ---
 
 ## Artifacts
