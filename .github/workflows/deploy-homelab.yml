@@ -16,7 +16,7 @@ on:
   workflow_dispatch:
     inputs:
       environment:
-        description: Target environment (production needs the environment's reviewers)
+        description: Target environment (production runs only from main and needs the environment's reviewers)
         type: choice
         options: [staging, production]
         default: staging
@@ -53,6 +53,9 @@ jobs:
       TARGET_ENV: ${{ inputs.environment }}
       DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
       LOGIN_SERVER: ${{ vars.TAILNET_LOGIN_SERVER }}
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
@@ -62,7 +65,9 @@ jobs:
           TAG: ${{ inputs.image_tag || '' }}
         run: |
           [ "$TARGET_ENV" = staging ] || [ "$TARGET_ENV" = production ] || { echo "::error::environment must be staging or production"; exit 1; }
+          [ "$GITHUB_RUN_ATTEMPT" -lt 100 ] || { echo "::error::run attempt $GITHUB_RUN_ATTEMPT would collide with another run's release name"; exit 1; }
           tag="${TAG:-${GITHUB_SHA::7}}"
+          [[ "$tag" =~ ^[0-9a-f]{7,40}$ ]] || { echo "::error::image_tag must be a 7-40 character lowercase hex git SHA"; exit 1; }
           printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
           out="$RUNNER_TEMP/images.env"
           : >"$out"
@@ -155,35 +160,22 @@ jobs:
         env:
           EXPIRES: ${{ steps.op.outputs.TS_AUTHKEY_EXPIRES || vars.TS_AUTHKEY_EXPIRES }}
         run: |
-          left=$(( ($(date -d "$EXPIRES" +%s) - $(date +%s)) / 86400 ))
+          : "${EXPIRES:?TS_AUTHKEY_EXPIRES is required}"
+          exp=$(date -d "$EXPIRES" +%s) || { echo "::error::TS_AUTHKEY_EXPIRES is not a date"; exit 1; }
+          left=$(( (exp - $(date +%s)) / 86400 ))
           [ "$left" -ge 0 ] || { echo "::error::TS_AUTHKEY expired; mint a new tag:ci key (homelab-edge runbook)"; exit 1; }
           [ "$left" -ge 14 ] || echo "::warning::TS_AUTHKEY expires in $left days"
 
-      - name: Build the release .env (generated values last, so APP_ENV cannot override them)
+      - name: Build the release .env (pipeline-owned keys replace any APP_ENV copy)
         env:
           APP_ENV: ${{ steps.op.outputs.APP_ENV || secrets.APP_ENV }}
           MTLS_CA: ${{ steps.op.outputs.MTLS_CA || secrets.MTLS_CA }}
         run: |
-          case "$TARGET_ENV" in
-            production) db=xstockstrat ;;
-            staging) db=xstockstrat_staging ;;
-          esac
-          certs="$RUNNER_TEMP/mtls"
-          mkdir -p "$certs/_ca"
-          umask 077
-          CERTS_DIR="$certs" python3 -c 'import base64, json, os; d = json.loads(base64.b64decode(os.environ["MTLS_CA"])); ca = os.path.join(os.environ["CERTS_DIR"], "_ca"); open(os.path.join(ca, "ca.pem"), "w").write(d["ca_cert"]); open(os.path.join(ca, "ca-key.pem"), "w").write(d["ca_key"])'
-          CERTS_DIR="$certs" bash scripts/gen-dev-certs.sh >/dev/null
-          env_file="$RUNNER_TEMP/release.env"
-          { printf '%s\n' "$APP_ENV"
-            printf 'DB_HOST=db.ts.natanddavehouse.com\nDB_NAME=%s\nDB_USER=%s\n' "$db" "$db"
-            cat "$IMAGES_ENV"
-            CERTS_DIR="$certs" python3 scripts/homelab-mtls-env.py
-          } >"$env_file"
-          rm -rf "$certs"
-          echo "RELEASE_ENV=$env_file" >>"$GITHUB_ENV"
+          bash scripts/homelab-release-env.sh "$IMAGES_ENV" "$RUNNER_TEMP/release.env"
+          echo "RELEASE_ENV=$RUNNER_TEMP/release.env" >>"$GITHUB_ENV"
 
-      - name: Compose file must render with this .env
-        run: docker compose --project-name "$APP_NAME" --env-file "$RELEASE_ENV" -f deploy/homelab/compose.yml config -q
+      - name: Compose file must render, and the render must match the target
+        run: bash scripts/homelab-render-check.sh "$RELEASE_ENV" "$TARGET_ENV"
 
       - name: Tailscale (pinned, checksum-verified)
         run: |
@@ -218,7 +210,7 @@ jobs:
         env:
           GHCR_TOKEN: ${{ github.token }}
         run: |
-          rel="${GITHUB_SHA::12}-${GITHUB_RUN_ID}"
+          rel="${GITHUB_SHA::12}-$((GITHUB_RUN_ID * 100 + GITHUB_RUN_ATTEMPT))"
           gate() { ssh -i ~/.ssh/deploy -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o HostKeyAlias="$DEPLOY_HOST" "deploy@$VM_IP" "$@"; }
           gate put "$rel" compose.yml <deploy/homelab/compose.yml
           gate put "$rel" .env <"$RELEASE_ENV"

@@ -72,10 +72,16 @@ jobs:
               - 'scripts/db-migrate.sh'
               - 'scripts/render-migrations.sh'
               - 'scripts/migration-dirty-guard.sh'
+              - 'scripts/migration-ahead-check.sh'
               - 'scripts/migration-rerun.sh'
               - 'scripts/migration-assertions/**'
               - 'scripts/Dockerfile.migrate'
               - 'services/xstockstrat-indicators/app/services/formulas_repository.py'
+            homelab:
+              - 'deploy/homelab/**'
+              - 'scripts/homelab-*'
+              - 'scripts/gen-dev-certs.sh'
+              - '.github/workflows/deploy-homelab.yml'
             claude-md:
               - '**/CLAUDE.md'
               - '.markdownlint.yaml'
@@ -629,7 +635,7 @@ jobs:
         run: shfmt -d -i 2 scripts/*.sh .claude/hooks/*.sh
 
       - name: Migration tooling structural tests
-        run: bash scripts/render-migrations.test.sh && bash scripts/check-migration-contract.test.sh && bash scripts/migration-dirty-guard.test.sh
+        run: bash scripts/render-migrations.test.sh && bash scripts/check-migration-contract.test.sh && bash scripts/migration-dirty-guard.test.sh && bash scripts/migration-ahead-check.test.sh
 
   # Applies every migration, then replays the chain from version 0 (the db-migrate.sh dirty-state
   # recovery path) and runs scripts/migration-assertions/*.sql — every up-file must be idempotent.
@@ -660,8 +666,8 @@ jobs:
       - name: Build migrator image (migrate + psql + envsubst)
         run: docker build -f scripts/Dockerfile.migrate -t xstockstrat-migrate-ci .
 
-      - name: Migrator image ships the dirty guard (no bind mount)
-        run: docker run --rm --entrypoint test xstockstrat-migrate-ci -x /repo/scripts/migration-dirty-guard.sh
+      - name: Migrator image ships the dirty guard and the ahead check (no bind mount)
+        run: docker run --rm --entrypoint sh xstockstrat-migrate-ci -c 'test -x /repo/scripts/migration-dirty-guard.sh && test -f /repo/scripts/migration-ahead-check.sh'
 
       - name: Apply, replay and assert
         run: |
@@ -773,6 +779,19 @@ jobs:
   # and fails only when an upstream job truly failed or was cancelled.
   # Skipped jobs are treated as passing (no relevant paths changed).
   # ──────────────────────────────────────────────────────────────────────
+  homelab-render:
+    name: Homelab release .env + render check
+    needs: changes
+    if: >-
+      contains(fromJson(needs.changes.outputs.matched), 'homelab') ||
+      contains(fromJson(needs.changes.outputs.matched), 'ci')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build and render staging/production, override, mTLS and broken-render cases
+        run: bash scripts/homelab-render.test.sh
+
   ci-gate:
     name: CI Gate
     if: always()
@@ -789,6 +808,7 @@ jobs:
       - shell-lint
       - migration-rerun
       - migration-contract-gate
+      - homelab-render
       - markdown-lint
       - context-map
       - secret-scan
@@ -808,6 +828,7 @@ jobs:
           echo "shell-lint:      ${{ needs.shell-lint.result }}"
           echo "migration-rerun: ${{ needs.migration-rerun.result }}"
           echo "migration-contract-gate: ${{ needs.migration-contract-gate.result }}"
+          echo "homelab-render:  ${{ needs.homelab-render.result }}"
           echo "markdown-lint:   ${{ needs.markdown-lint.result }}"
           echo "context-map:     ${{ needs.context-map.result }}"
           echo "secret-scan:     ${{ needs.secret-scan.result }}"
