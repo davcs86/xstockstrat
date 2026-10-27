@@ -140,3 +140,9 @@
   and **approved writing a merge-order row + a note in 271's context.md** (271's spec text untouched).
   Orchestrator reading: the UI health exemption must follow 271's exact-path `PUBLIC_HEALTH_PATHS` mechanism (not
   the regex alternative 271 deletes); round 7 must also settle the agent's Gatus probe and health contract.
+- Round 7 proposer: **UI option (b)** — xstockstrat adds no UI route; homelab-edge Gatus probes `/trader/api/health`
+  (in 271's exact `PUBLIC_HEALTH_PATHS`, `@AC-3`) with `[BODY].status == ok`, so a followed login redirect is red, never
+  falsely green, until 271 deploys; round-6 D6 withdrawn. **Agent:** metadata liveness is enough (per-call channels;
+  backend health already gated); Gatus pins `[BODY].resource` to the env's `$APP_URL/agent`; compose healthcheck stays
+  TCP. N1 homelab-edge `gatus-config-test.py` pins the old URLs; N2 staging `APP_URL` documented nowhere (owner to
+  confirm `https://xstockstrat-staging-ui.ts.natanddavehouse.com:8443`). Merge-order row + 271 note text drafted.
