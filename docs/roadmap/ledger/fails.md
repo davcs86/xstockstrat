@@ -3045,3 +3045,41 @@ ambiguity is logged here).
 - **Mistake**: Two design rounds assumed telemetry wrappers measure what their names say. connect-es resolves a server-streaming handler only after the first message (`untilFirst`), so a BFF "duration" wrapper records time-to-first-alert (hours) for an idle stream; and Python `asyncio.CancelledError` (deadline/cancel) is a `BaseException` the gRPC instrumentation never catches, so those calls would record OK (0) where Go records 4/1. Separately, sdk-node 0.52 silently drops its default trace exporter once `spanProcessors` is passed, and `@opentelemetry/api` 1.9.1 has no proxy MeterProvider, so an early-bound histogram is a permanent no-op.
 - **Evidence**: `docs/roadmap/features/274-otel-metrics-logs-export/context.md` Round 1–3 checkpoints; `@connectrpc/connect` `protocol-connect/handler-factory.js:277-280`; `opentelemetry/instrumentation/grpc/_aio_server.py:109-116`; `sdk-node@0.52.1 sdk.js:81-84`; `api@1.9.1 api/metrics.js:35-36`.
 - **Rule it implies**: Any design that wraps a handler or SDK to record telemetry must read the pinned library's actual resolution/exception/registration path (stream resolution, BaseException handling, default-component replacement, proxy vs no-op globals) before claiming what the number means — and add a test that would fail on the naive assumption.
+
+### 2026-10-22 — fix-marketdata-secret-exposure — assumption
+- **Mistake**: The vendor clients redacted the URL on the non-2xx branch only. They `%w`-wrapped the transport error (`http.Client.Do`) and the parse error (`http.NewRequestWithContext`) as-is. Both are `*url.Error` values whose text carries the full request URL, including the `apikey=`/`token=` query key, so the key reached gRPC statuses, logs and OTel (D-39).
+- **Evidence**: `services/xstockstrat-marketdata/internal/fmp/fmp_client.go:226`, `:243`; `internal/finnhub/finnhub_client.go:114`, `:118`; `docs/roadmap/features/254-fix-marketdata-secret-exposure/design.md` Step 1.
+- **Rule it implies**: any Go HTTP client with a credential in the URL must unwrap `*url.Error` and `%w`-wrap only `ue.Err`, with a cause-free fallback. This keeps `errors.Is(ctx.DeadlineExceeded)` working. Prove it with a test that asserts the key is absent and `errors.As(err, new(*url.Error))` is false.
+
+### 2026-10-22 — fix-ledger-query-pagination — assumption
+- **Mistake**: node-postgres returns BIGINT columns (ledger `sequence`) as strings when no `setTypeParser` is registered. `streamEvents` therefore compares string to string, which is lexicographic (`"10" > "9"` is false), so `maxSeq` dedupe and any keyset cursor stall at a digit boundary. Every ledger unit mock passes a numeric `sequence`, so CI could not see it.
+- **Evidence**: `services/xstockstrat-ledger/src/grpc/ledgerServiceImpl.ts:191,196,210,256`; `src/__tests__/ledgerServiceImpl.test.ts:66,100,174`; `docs/roadmap/features/257-fix-ledger-query-pagination/recon.md:177-185`, design.md §2/§4.
+- **Rule it implies**: Any Node code that compares or encodes a pg BIGINT normalises it through one BigInt helper that accepts number, string and bigint. Its tests use pg-style string values that cross a digit boundary (`"9"`, `"10"`, `"11"`), not numeric mocks.
+
+### 2026-10-22 — fix-python-loop-supervision — assumption
+- **Mistake**: A design round reused the read-path classifier `read_budget.is_transient_db_error` to decide when a stream consumer should park (skip) an event. That classifier is an allow-list of transient types and defaults to non-transient, so OutOfMemoryError (53200), class-40 deadlock/serialization and DiskFull would have parked real transient failures within about 2 s and lost P&L data permanently. A wrong answer on the read path costs a 500; on the consumer path it costs data. Caught by the r3 adversary.
+- **Evidence**: `services/xstockstrat-analysis/app/repositories/read_budget.py:17-32`; `docs/roadmap/features/259-fix-python-loop-supervision/design.md` §3.2; context.md 2026-10-22 operator decision r3.
+- **Rule it implies**: a consumer that drops or parks events on exhaustion classifies with a narrow, consumer-local **positive poison** allow-list (payload/logic errors, SQLSTATE 22/23), and everything unlisted defaults to retry/replay. Never reuse a transient allow-list, whose default points the other way.
+
+### 2026-10-21 — fix-trading-order-state-audit — assumption
+- **Mistake**: Two design rounds treated the sweeper's `order_intent.reclaimed_unknown` payload as a known-good template to copy into three new emit sites. That payload holds a `time.Time`, which `structpb.NewStruct` rejects, and `emitLedgerEvent` discards that error (`p, _ :=`), so the event already reaches the ledger with a nil payload. The r3 adversary caught it, not a test.
+- **Evidence**: `services/xstockstrat-trading/internal/service/trading.go:3662`; `internal/repository/order_intent_repo.go:31`; `docs/roadmap/features/267-fix-trading-order-state-audit/design.md` § D-62 (b).
+- **Rule it implies**: a ledger payload built for `structpb.NewStruct` uses only JSON-native values (timestamps as RFC3339 strings), and every new emit test asserts `req.Payload != nil` plus the field values, not just the event type.
+
+### 2026-10-22 — fix-ui-trader-feedback — assumption
+- **Mistake**: A design round proposed a global TanStack `MutationCache.onError` fallback that skipped any mutation whose options set `onError`, treating that as "handled".
+  - The no-op hook-level `onError`s (`return err`) in `useBacktest.ts:12-15` and `useScreenSymbols.ts:13-16` would have silently suppressed the fallback.
+  - The same round claimed the two target hooks were not built on `useInvalidatingMutation`. They are, and that factory forwards no `meta` (`:17`, `:22`).
+  - The r2 adversary caught both.
+- **Evidence**: `docs/roadmap/features/270-fix-ui-trader-feedback/design.md` § Chosen Approach 2 and § Rejected Alternatives; context.md 2026-10-22 sdd-design entry.
+- **Rule it implies**: A global error fallback opts out only through an explicit marker, such as `meta.errorHandled === true`, set only after every call site is shown to render the error. Never infer "handled" from the presence of a callback. Confirm that any wrapper factory forwards the marker.
+
+### 2026-10-22 — fix-template-update-metadata — assumption
+- **Mistake**: A design round proposed a real-PG check that a second RETIRE "advances" `updated_at` and asserted it with `>=`. The check passes even when the fix is missing. Because Postgres `NOW()` is the transaction start time, running the calls inside one `conn.transaction()` would also make them equal by construction.
+- **Evidence**: `docs/roadmap/features/269-fix-template-update-metadata/design.md` § Chosen Approach, proof plan (b); context.md 2026-10-22 sdd-design entry.
+- **Rule it implies**: A real-DB test that proves a timestamp moved asserts strict `>` against both the prior value and the sibling timestamp. Run each write as its own autocommit statement with a short `pg_sleep` between writes, never inside one transaction.
+
+### 2026-10-22 — fix-backtest-silent-symbol-skip — assumption
+- **Mistake**: A client mapped an upstream refusal by a single gRPC status code. Indicators `ExecuteFormula` reports the same refusal ("the owner cannot run this formula") as NOT_FOUND to a non-admin caller and as PERMISSION_DENIED to an admin caller. Analysis `_execute_formula` mapped only NOT_FOUND. As a result, the admin-run case fell through to a catch-all and disappeared, and the round-3 design would have given the two cases different `NoTradeReason` values.
+- **Evidence**: `services/xstockstrat-indicators/app/handlers/servicer.py:243-253`; `services/xstockstrat-analysis/app/services/evaluator.py:260-263`; `docs/roadmap/features/275-fix-backtest-silent-symbol-skip/design.md` § Chosen Approach 2 (operator option (a)).
+- **Rule it implies**: Before a caller maps an owner-scoped RPC's error, enumerate every status code that RPC can return for one refusal across all caller scopes (admin, owner, system). Map all of them to one outcome, and use only the status code name in client-visible text.
