@@ -118,3 +118,4 @@
   and to apply owner items **H1b** (filter the gate's `compose config` stderr) and **H3** (production deployment
   branches = `main`, documented) against latest homelab-edge. The skill caps the debate at 5 rounds, so this runs as a
   delta recon against latest homelab-edge + one targeted adversarial review of the delta, then returns to the gate.
+- **Operator override (2026-10-27): the 5-round debate cap is lifted** for this feature; round 6 runs as a full proposer/adversary round against latest homelab-edge (sign-off recorded here, P-04).
