@@ -186,3 +186,22 @@
 - UI probes stay red with 307 until feature 271 deploys (merge-order prose note).
 - Teardown: context-forge plugin unavailable in this session; manual reconciliation of every touched context doc
   (context-constitution PLAT-N2 anchors, ci-overview, database, docker-build, inter-service-mtls) against the code — no drift found.
+
+## Session 2026-10-27 — sdd-spec (retroactive)
+
+- Generated implementation-spec.md with 16 steps, all `done`, citing the shipped code and commits. **Status kept at
+  `code-completed`** rather than set to `implementation-ready`: the code already shipped, and resetting would tell
+  `/sdd-execute` to redo it (spec Deviation Log D-1). The header's Implementation Spec link is no longer dangling.
+- All 40 `@AC-*` scenarios mapped to a step (`## Scenario Coverage`). Live-only: AC-11/18/19/20 run behaviour, AC-34,
+  AC-38, AC-40, AC-24's gate rollback (D-3).
+- Key codebase findings:
+  - Only `xstockstrat-config` names `db-migrator` (`deploy/homelab/compose.yml:53-55`); every other service waits on
+    it transitively through `service_healthy`. Neither `render-assert.jq` nor `homelab-render.test.sh` asserts that
+    chain, so dropping a `depends_on` would pass CI (D-2, open thread). Spec Step 8 adds a jq check, verified true on
+    the current file and false with config's `depends_on` removed.
+  - No `actionlint` job in `ci.yml`; workflow scenarios rest on grep assertions (Step 13) and the first live run.
+  - Re-ran offline: migration-ahead-check.test.sh, Go `TestProbe*` (3 services), homelab-render.test.sh (compose
+    v5.6.1, no daemon), homelab-edge app-deploy-test.sh + gatus-config-test.py — all pass. Not run: policy-test.sh
+    (no headscale), CI migration-rerun (Postgres), golangci-lint/coverage.
+- Reviewers snapshot finalized in feature.md (adds DBA for the migrator change).
+- Open thread: add a `depends-migrator` label to `render-assert.jq` (+ a mutation case) — owner's call; not done here.
