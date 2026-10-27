@@ -150,3 +150,10 @@
   (`client/config.go:35,56`, `IgnoreRedirect: false`); an unresolvable `[BODY]` placeholder (non-JSON body) becomes
   `"<element> (INVALID)"` (`config/endpoint/condition.go:181-186`) and fails an `==` comparison — so the pre-271
   login-redirect is red, never a false green.
+- Round 7 adversary: **READY with fold-ins**, no Floor breach, no @AC regression. Fold-ins: merge-order as a prose
+  note (a table row blocks 279's own integration PR / halts sdd-batch-execute); "@AC-3 pins the path, `status:'ok'` body
+  only by 271's e2e" (accepted risk); alert cost is one standing alert per probe (default-alert failure-threshold 3, no
+  repeat) — do not suppress (decisions.md:79-80); optional `client.ignore-redirect: true` on the UI probes
+  (key verified in v5.37.0 `client/config.go:57`) with the tailnet resolver restated; E-G1..E-G6 get an execute step
+  (red E-G2, green E-G1, verify gatus-config-test.py); E-G5 says AGENT_PUBLIC_URL is derived, do not set; §6 rows fit
+  Failure|Effect|Handling; design.md records rejected alternatives (root route, /auth/login probe, jq APP_URL check).
