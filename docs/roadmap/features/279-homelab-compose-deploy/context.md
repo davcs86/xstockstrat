@@ -171,3 +171,18 @@
 - Constitution rules touched: C-01, C-08, C-10, C-11, C-14, C-15, C-16, C-18, P-03, F-01, F-06, F-07. Floor breaches: none.
 - Ledger: insights.md "2026-10-27 — homelab-compose-deploy — design". merge-order.md prose note + 271 context note written.
 - Status: spec-ready → design-approved.
+
+## Session 2026-10-27 — implementation (design-approved → code-completed)
+
+- Implemented straight from design.md's line-level steps; **no implementation-spec.md was written** (the header link
+  above is dangling on purpose). Commits e733297 (migrator ahead/dirty-ahead), f42ae86 (release env, render check, jq
+  oracle, compose fixes), 89d96d3 (workflow + CI `homelab-render` job + docs).
+- homelab-edge companion (branch `ccr-9bdbcd90-kgj5ev`, 9305497): gate refuses an unrenderable release printing only
+  missing-variable names (H1b), Gatus UI probes `/trader/api/health` + `ignore-redirect` + body check, agent probes pin
+  `[BODY].resource`, verify.yml asserts `/trader/api/health` is 404 publicly, runbook §4.1/§6, home-side, decisions.
+- Verified offline: homelab-render.test.sh, migration-ahead-check.test.sh, Go mtls Probe tests (3 services),
+  shellcheck, actionlint; homelab-edge app-deploy-test.sh 19/19, gatus-config-test.py OK, yamllint. **Not verified:** a
+  real deploy to either VM, a real rollback against an ahead schema, and the DB probe — these need the VMs and secrets.
+- UI probes stay red with 307 until feature 271 deploys (merge-order prose note).
+- Teardown: context-forge plugin unavailable in this session; manual reconciliation of every touched context doc
+  (context-constitution PLAT-N2 anchors, ci-overview, database, docker-build, inter-service-mtls) against the code — no drift found.

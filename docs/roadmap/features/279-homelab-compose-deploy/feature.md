@@ -13,6 +13,7 @@
 | 2026-10-24 | `idea` → `draft` | /sdd-story | Product spec generated; operator decisions captured in-session (see context.md) |
 | 2026-10-24 | `draft` → `spec-ready` | /sdd-review | Product spec approved (4 warnings) after one FAIL round; 084 demoted as superseded |
 | 2026-10-27 | `spec-ready` → `design-approved` | /sdd-design | Design debated (7 rounds, quick; operator lifted the 5-round cap) and approved; recon.md + design.md written |
+| 2026-10-27 | `design-approved` → `code-completed` | implementation session | Implemented from the line-level design.md (no implementation-spec.md); homelab-edge companion changes on its own PR |
 
 ---
 
