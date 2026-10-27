@@ -3,6 +3,7 @@
 
 x-common-env: &common-env
   APPLICATION_ENV: ${APPLICATION_ENV:?APPLICATION_ENV is required}
+  TRADING_MODE: ${TRADING_MODE:?TRADING_MODE is required}
   OTEL_ENABLED: "false"
   MTLS_CA_CERT: ${MTLS_CA_CERT:?MTLS_CA_CERT is required}
 
@@ -20,11 +21,12 @@ x-svc: &svc
     driver: local
     options: {max-size: 10m, max-file: "3"}
 
+# start_period exceeds the Go/Node/Python 90 s config-snapshot wait.
 x-hc: &hc
-  interval: 10s
+  interval: 5s
   timeout: 5s
   retries: 6
-  start_period: 30s
+  start_period: 120s
 
 services:
   db-migrator:
@@ -47,7 +49,7 @@ services:
       CONFIG_SECRETS_ENCRYPTION_KEY: ${CONFIG_SECRETS_ENCRYPTION_KEY:?CONFIG_SECRETS_ENCRYPTION_KEY is required}
     healthcheck:
       <<: *hc
-      test: ["CMD", "nc", "-z", "localhost", "50060"]
+      test: ["CMD", "nc", "-z", "127.0.0.1", "50060"]
     depends_on:
       db-migrator:
         condition: service_completed_successfully
@@ -61,13 +63,12 @@ services:
       MTLS_KEY: ${LEDGER_MTLS_KEY:?LEDGER_MTLS_KEY is required}
       GRPC_PORT: "50057"
       CONFIG_ENDPOINT: xstockstrat-config:50060
-      NOTIFY_ENDPOINT: xstockstrat-notify:50059
       WAIT_FOR: "xstockstrat-config:50060"
       SERVICE_NAME: ledger
       DB_POOL_MAX: "1"
     healthcheck:
       <<: *hc
-      test: ["CMD", "nc", "-z", "localhost", "50057"]
+      test: ["CMD", "nc", "-z", "127.0.0.1", "50057"]
     depends_on:
       xstockstrat-config:
         condition: service_healthy
@@ -82,14 +83,13 @@ services:
       GRPC_PORT: "50058"
       CONFIG_ENDPOINT: xstockstrat-config:50060
       LEDGER_ENDPOINT: xstockstrat-ledger:50057
-      NOTIFY_ENDPOINT: xstockstrat-notify:50059
       WAIT_FOR: "xstockstrat-config:50060 xstockstrat-ledger:50057"
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       SERVICE_NAME: identity
       DB_POOL_MAX: "2"
     healthcheck:
       <<: *hc
-      test: ["CMD", "nc", "-z", "localhost", "50058"]
+      test: ["CMD", "nc", "-z", "127.0.0.1", "50058"]
     depends_on:
       xstockstrat-ledger:
         condition: service_healthy
@@ -103,7 +103,6 @@ services:
       MTLS_KEY: ${NOTIFY_MTLS_KEY:?NOTIFY_MTLS_KEY is required}
       GRPC_PORT: "50059"
       CONFIG_ENDPOINT: xstockstrat-config:50060
-      LEDGER_ENDPOINT: xstockstrat-ledger:50057
       WAIT_FOR: "xstockstrat-config:50060 xstockstrat-ledger:50057"
       SERVICE_NAME: notify
       DB_POOL_MAX: "1"
@@ -114,7 +113,7 @@ services:
       VAPID_SUBJECT: ${VAPID_SUBJECT:-}
     healthcheck:
       <<: *hc
-      test: ["CMD", "nc", "-z", "localhost", "50059"]
+      test: ["CMD", "nc", "-z", "127.0.0.1", "50059"]
     depends_on:
       xstockstrat-ledger:
         condition: service_healthy
@@ -167,12 +166,11 @@ services:
       GRPC_PORT: "50054"
       CONFIG_ENDPOINT: xstockstrat-config:50060
       LEDGER_ENDPOINT: xstockstrat-ledger:50057
-      NOTIFY_ENDPOINT: xstockstrat-notify:50059
       WAIT_FOR: "xstockstrat-config:50060 xstockstrat-ledger:50057"
       SERVICE_NAME: indicators
     healthcheck:
       <<: *hc
-      test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/50054"]
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/127.0.0.1/50054"]
     depends_on:
       xstockstrat-ledger:
         condition: service_healthy
@@ -189,12 +187,11 @@ services:
       LEDGER_ENDPOINT: xstockstrat-ledger:50057
       NOTIFY_ENDPOINT: xstockstrat-notify:50059
       MARKETDATA_ENDPOINT: xstockstrat-marketdata:50053
-      IDENTITY_ENDPOINT: xstockstrat-identity:50058
       WAIT_FOR: "xstockstrat-config:50060 xstockstrat-ledger:50057 xstockstrat-identity:50058"
       SERVICE_NAME: ingest
     healthcheck:
       <<: *hc
-      test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/50055"]
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/127.0.0.1/50055"]
     depends_on:
       xstockstrat-identity:
         condition: service_healthy
@@ -248,7 +245,7 @@ services:
       SERVICE_NAME: analysis
     healthcheck:
       <<: *hc
-      test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/50056"]
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/127.0.0.1/50056"]
     depends_on:
       xstockstrat-ingest:
         condition: service_healthy
@@ -276,14 +273,16 @@ services:
       APP_URL: ${APP_URL:?APP_URL is required}
       AGENT_PUBLIC_URL: ${APP_URL}/agent
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
-      JWT_SECRET: ${JWT_SECRET}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       SERVICE_NAME: xstockstrat-ui
       DB_POOL_MAX: "1"
+      # Next binds $HOSTNAME, which Docker sets to the container id; the 127.0.0.1 healthcheck needs 0.0.0.0.
+      HOSTNAME: "0.0.0.0"
     ports:
       - "3000:3000"
     healthcheck:
       <<: *hc
-      test: ["CMD", "nc", "-z", "localhost", "3000"]
+      test: ["CMD", "nc", "-z", "127.0.0.1", "3000"]
     depends_on:
       xstockstrat-analysis:
         condition: service_healthy
@@ -308,14 +307,14 @@ services:
       SERVICE_NAME: agent
       MCP_TRANSPORT: http
       MCP_HTTP_PORT: "9000"
-      JWT_SECRET: ${JWT_SECRET}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       UI_BASE_URL: ${APP_URL}
       AGENT_PUBLIC_URL: ${APP_URL}/agent
     ports:
       - "9000:9000"
     healthcheck:
       <<: *hc
-      test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/9000"]
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/127.0.0.1/9000"]
     depends_on:
       xstockstrat-analysis:
         condition: service_healthy
