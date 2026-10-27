@@ -230,7 +230,7 @@ jobs:
           GHCR_TOKEN: ${{ github.token }}
         run: |
           rel="${SRC_SHA::12}-$((GITHUB_RUN_ID * 100 + GITHUB_RUN_ATTEMPT))"
-          gate() { ssh -i ~/.ssh/deploy -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o HostKeyAlias="$DEPLOY_HOST" "deploy@$VM_IP" "$@"; }
+          gate() { ssh -i ~/.ssh/deploy -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o HostKeyAlias="$DEPLOY_HOST" "app@$VM_IP" "$@"; }
           gate put "$rel" compose.yml <deploy/homelab/compose.yml
           gate put "$rel" .env <"$RELEASE_ENV"
           rm -f "$RELEASE_ENV"
