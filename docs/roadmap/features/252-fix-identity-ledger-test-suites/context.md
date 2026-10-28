@@ -252,3 +252,14 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Post-Step-2 AC-3 bogus import: rejected at compile time by `tsc` (TS2307 at `identityServiceImpl.test.ts(30,30)`), exit 2, before the runner starts. Context only.
 - Deviations: none. The spec preamble's `ci.yml:572` is stale (Node 24 is at `ci.yml:582`); it is outside the step body and was left alone.
 
+
+## Session 2026-10-28 — sdd-execute sequential: Step 3 (identity hard-fail imports)
+
+- Tooling: Node v24.20.0 · pnpm 9.15.9 · `pnpm install --frozen-lockfile` (root, proto, identity filters; no lockfile change). Base: `origin/feature/fix-identity-ledger-test-suites` @ `a59a7418`; `grep -c "private async rotateRefreshToken"` = 1 (#1262 base).
+- Pre-step baselines: `tests` 78 (fail/cancelled/skipped/todo 0); `identityServiceImpl.test.ts` asserts 150, `if (!` guards 67.
+- Proto RED: with the try/catch removed and the `.js` specifier kept, `tsc` accepted it and the runtime failed `returns Date timestamps that ts-proto encodes without throwing` with `MODULE_NOT_FOUND` (`…/@xstockstrat/proto/dist/identity/v1/identity.js.js`), exit 1, 77/78. GREEN: extensionless specifier, 78/78.
+- AC-6 GREEN (identity): positive control `node --test --test-reporter=tap dist/__tests__/identityServiceImpl.test.js` → exit 0, `# pass 71`. After `rm dist/grpc/identityServiceImpl.js` → exit 1, `# pass 0`, `# fail 0`, `# cancelled 71` (the `before()` hook failure cancels every subtest; `not ok 1 - imports the implementation under test`, `Cannot find module '../grpc/identityServiceImpl.js'`). `dist/` rebuilt. AC-6 is the discriminating FR-3 evidence.
+- AC-3 GREEN (identity): specifier `'../grpc/identityServiceImpl.missing'` → `test:coverage` exit 2, rejected at compile time by `tsc` (TS2307 at `identityServiceImpl.test.ts(16,28)`); no test ran. Non-discriminating for the `before()` hard-fail. Restored.
+- AC-1 re-confirm: deleted the `rotateRefreshToken` claim line `:353` (`AND rt.revoked_at IS NULL`) → exit 1; `not ok` for `rotates the refresh token and mints a new aud-bound access JWT` and also for both `lets exactly one of two concurrent refreshes of the same token win` cases (the `rotation is single-use` suites, which now run unguarded). Restored.
+- Verification: build 0, lint 0 errors (183 warnings), `test:coverage` exit 0, `c8 check-coverage --lines 40` exit 0, check-coverage aggregate 81.88% = table All files 81.88%; rows `authz.js` 100% and `identityServiceImpl.js` 85.02% lines. Tests 79/79 (78 + harness case; matches the expected 79). Asserts 152 (150 + 2). Guards 0; `try {` only `:127` (APPLICATION_ENV try/finally); `await import(` = 2 subject `.js` + 1 extensionless proto; no skip/todo; no strip-types/lazy-import text.
+- Deviations (logged in implementation-spec.md § Deviation Log): `prefer-const` forced `const { TokenClaims } = …` instead of the kept `let` + assignment; `grep -n 'catch'` hits only the spec's own constraint comment.

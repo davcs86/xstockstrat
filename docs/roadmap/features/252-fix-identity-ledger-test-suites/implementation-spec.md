@@ -344,7 +344,7 @@ git status --short                                # only the 5 Files (+ feature/
 
 ### Step 3 — test: identity — hard-fail subject imports, remove skip guards, add harness case
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/src/__tests__/identityServiceImpl.test.ts` — modify
@@ -927,3 +927,6 @@ git status --short                                # only this step's Files (+ fe
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+- **2026-10-28 — Step 3, item 2 (proto import form).** The spec keeps `let TokenClaims: any;` (`:227`) and the `({ TokenClaims } = await import(…))` assignment (`:229`). With the try/catch gone both sit in one scope, and eslint `prefer-const` fails the Verification `pnpm run lint` (`error 'TokenClaims' is never reassigned`). Collapsed to `const { TokenClaims } = await import('@xstockstrat/proto/identity/v1/identity');`. Same file, same specifier, no assertion change.
+- **2026-10-28 — Step 3, Verification `grep -n 'catch' "$F"`.** One hit remains: `:13`, the item 3 constraint comment ("never wrap it in try/catch"), which is the spec's own verbatim text. No `catch` clause remains in the file, so the line's stated intent (no catch wraps a subject/proto import) holds.
