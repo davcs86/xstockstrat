@@ -35,6 +35,7 @@
 | 2026-10-28 | `in-progress` (step 12 done) | /sdd-execute sequential | Step 12: analysis AST read-classification guard (34 `FR3_KEYS`, 36 `HONOUR_KEYS`, 8 `ZERO_IS_LEGIT`, `collect()` exposed); @AC-6 table (34 rows, defaults resolved via `collect()`, -5 row) and site seams (`__init__` semaphores/pool, named readers, screener sem, fundsignal `_tick`, `default_fill_model` legacy); @AC-7 honour rows + over-clamp tripwire; retention test flipped to `test_retention_non_positive_reads_as_default` (-5, 0 → 20) (TDD red → green) |
 | 2026-10-28 | `in-progress` (step 13 done) | /sdd-execute sequential | Step 13: config `SCALAR_BOUNDS_REGISTRY` comments (`configServiceImpl.ts`) restated for the new getter semantics — min 1 because a Python reader clamps ≤ 0 to the default; lower 0 only where 0 is a legitimate value; no registry row changed (comment-only, TDD red N/A) |
 | 2026-10-28 | `in-progress` (step 14 done) | /sdd-execute sequential | Step 14: config @AC-8 `intVal: 0` → `INVALID_ARGUMENT` `[1, 5]` for `analysis.opportunity.max_concurrent_bars_fetches`, no INSERT; new `watchConfigWireZero.test.ts` proves a stored 0 / 0.0 / "" survives `responseSerialize`→`responseDeserialize` on SNAPSHOT and DELTA (characterization, TDD red N/A) |
+| 2026-10-28 | `in-progress` (step 15 done) | /sdd-execute sequential | Step 15: config migration `032_analysis_zero_trap_descriptions.{up,down}.sql`, four description-guarded `UPDATE`s that restate the 027/028 zero-trap descriptions for `signal_rank_weight`, both `opportunity.max_concurrent_*` keys and `readiness_materializer.max_concurrent_bars_fetches`; `.down` restores the verbatim text; merge-order row 244 ↔ 243 added (migration, TDD N/A) |
 
 ---
 
@@ -71,4 +72,4 @@ or a zero signal-rank weight cannot be configured).
 
 ## Next Action
 
-`/sdd-execute fix-python-config-stored-zero sequential` — Step 15 (migration: description-only correction of the 027/028 zero-trap descriptions)
+`/sdd-execute fix-python-config-stored-zero sequential` — Step 16 (test: the description migration is description-only and reversible (@AC-11))

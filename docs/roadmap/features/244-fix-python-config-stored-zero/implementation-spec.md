@@ -1073,7 +1073,7 @@ grep -n "OPP_CONC" src/__tests__/setConfigScalarBounds.test.ts   # includes an i
 
 ### Step 15 — migration: description-only correction of the 027/028 zero-trap descriptions
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/migrations/032_analysis_zero_trap_descriptions.up.sql` — create

@@ -658,3 +658,28 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Deviations: evidence harness only. See the Deviation Log.
 - Husky pre-commit: `pnpm install` created the worktree's root `node_modules`, so the hook runs (never `--no-verify`).
 - Next: Step 15.
+
+## Session 2026-10-28 — sdd-execute sequential, Step 15
+
+### Step 15 — migration: description-only correction of the 027/028 zero-trap descriptions [done]
+- `services/xstockstrat-config/migrations/032_analysis_zero_trap_descriptions.up.sql`: four
+  `UPDATE config.config_values SET description = '<new>' WHERE namespace = 'analysis' AND key = '<full dotted>' AND
+  description = '<old>'` statements (no BEGIN/COMMIT, 029 shape). `<old>` was extracted programmatically from the
+  027/028 seed rows (each appears exactly twice, staging + production) and `<new>` replaces only the mechanism clause
+  named in Instruction 1. `.down.sql` holds the four inverse `UPDATE`s (`<old>` where `description = '<new>'`).
+- No `value_data`/`value_type`/`key` change, no INSERT/DELETE, no audit row or `pg_notify`; 027/028 untouched.
+- `docs/roadmap/features/merge-order.md`: the Instruction-4 row (244 waits softly for 243; 031/032 renumber rule)
+  appended to § Blocking Dependencies after the 230 row.
+- TDD: N/A (migration).
+- Verification (offline, no DB): both files listed; `origin/main-dev` tip is still `030_marketdata_edgar_snapshot_keys`
+  (243's branch holds `031_heal_indicators_sandbox_keys_full_dotted`), so `032` holds; `^UPDATE` count 4; the
+  `insert|delete|value_data|value_type` grep returned no output; each `.down` statement inverts one `.up` statement
+  (SET/WHERE descriptions swapped, same key).
+- Open: 248 `fix-ledger-trimmed-notify-payload` (`implementation-ready`) also pins config `032_` in its spec
+  (`032_ledger_stream_resolve_timeout`, no file on its branch yet). Whichever of 244/248 merges second renumbers by
+  `max(origin/main-dev)+1` immediately before merge; the 244 merge-order row covers only 243, so a 244 ↔ 248 row is
+  still needed (outside this step's Files).
+- Files modified: `services/xstockstrat-config/migrations/032_analysis_zero_trap_descriptions.{up,down}.sql` (new),
+  `docs/roadmap/features/merge-order.md`
+- Deviations: none.
+- Next: Step 16.
