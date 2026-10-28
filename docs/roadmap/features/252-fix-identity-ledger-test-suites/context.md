@@ -213,3 +213,14 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - Step 4: the `node-test` job is now at `ci.yml:544-601`. The other CI anchors moved as in Step 2, and the ledger anchors are unchanged.
   - Step 6: the `ci-overview.md` tooling-artefact line is at `:68`. The `node-test` matrix is at `ci.yml:562-572`, the threshold readers at `:276/:411`, and the ui vitest entry at `:569-572`. The merge-order note format is at `:137-154`; insert after `:155`, before the `---` at `:156`. The overlaps changed: 084 is `demoted/canceled`, 250 put fix (b) out of scope (`250 product-spec.md:64`, `:129`), and #1262 has landed. The merge-order note text was updated to match. 248 is still `implementation-ready` and still overlaps the ledger tests.
 - Lines outside the step bodies, such as the preamble's `ci.yml:572` and the #1262 `e69e953d` reference, were left alone because the re-spec scope covered step bodies only.
+
+## Session 2026-10-28 — sdd-execute sequential (sdd-batch-execute)
+
+- Status: implementation-ready → in-progress.
+- Up-front confirmation: the operator approved the plan by standing authorization in operator chat on 2026-10-28 (session_01NpS3HShZK6pSnogA7CFo2f): "Start executing features 241-276" via batch-execute. The answers given were:
+  - checkpoints are unattended, mode "report";
+  - C-16 promotion is auto-confirmed unless it changes an existing @AC rule;
+  - merge-train is authorized;
+  - 255 and 275 are deferred;
+  - operator-only DB/prod steps: open the PR and hold the merge.
+- Mode: one commit per step on `feature/fix-identity-ledger-test-suites`, with no per-step PRs. A single integration PR opens at the end and its merge is held for the operator.
